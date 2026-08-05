@@ -22,6 +22,7 @@ import {
 	isStateLive,
 	isProgressLive,
 	STATE_PREFIX,
+	readQaStateRaw,
 	listOthers,
 	adopt,
 	writeFileNoCreate,
@@ -1309,6 +1310,68 @@ describe("ensureSeed ↔ bash seed parity (ES-parity)", () => {
 	}
 });
 
+describe("qa seed chain parity", () => {
+	let omtDir: string;
+	const origOmtDir = process.env.OMT_DIR;
+	beforeEach(() => {
+		omtDir = makeOmtDir();
+		process.env.OMT_DIR = omtDir;
+	});
+	afterEach(() => {
+		if (origOmtDir === undefined) delete process.env.OMT_DIR;
+		else process.env.OMT_DIR = origOmtDir;
+		rmSync(omtDir, { recursive: true, force: true });
+	});
+
+	test("qa seed carries empty chain and derived gate flags", () => {
+		ensureSeed("qa", "S");
+		const state = readState(omtDir, "qa-state-S.json") as Record<string, any>;
+		expect(state.actors).toEqual([]);
+		expect(state.stories).toEqual([]);
+		expect(state.cells).toEqual([]);
+		expect(state.run_checks).toBeNull();
+		expect(state.phase_max).toBe(0);
+		expect(state.derived).toEqual({
+			chain_complete: false,
+			record_complete: false,
+			approve_ok: false,
+			comment_ok: false,
+			driver_gate_armed: true,
+		});
+		expect(isPristine("qa", state)).toBe(true);
+	});
+
+	test("legacy qa state without phase_max remains PRE-FLIGHT/pristine", () => {
+		const state = { active: true, phase: "PRE-FLIGHT", cycle: 0, target: "" };
+		expect(isPristine("qa", state)).toBe(true);
+	});
+
+	test("qa chain write makes state non-pristine", () => {
+		ensureSeed("qa", "S");
+		const path = join(omtDir, "qa-state-S.json");
+		const state = readState(omtDir, "qa-state-S.json") as Record<string, any>;
+		state.actors = [{ id: "dev", name: "Developer", boundary: "app", driver: "bash" }];
+		writeFileSync(path, JSON.stringify(state));
+		expect(isPristine("qa", state)).toBe(false);
+	});
+
+	test("touch preserves qa chain fields", () => {
+		const path = join(omtDir, "qa-state-S.json");
+		const before = {
+			active: true, phase: "PLAN", phase_max: 1, cycle: 1, target: "app",
+			actors: [{ id: "dev" }], stories: [{ id: "s1", actor: "dev" }], cells: [],
+			run_checks: { stale_state: { status: "pass", cycle: 1 } },
+			derived: { driver_gate_armed: true }, started_at: "x", last_touched_at: "x",
+		};
+		writeState(omtDir, "qa-state-S.json", before);
+		touchSessionStates("S");
+		const after = readState(omtDir, "qa-state-S.json") as Record<string, any>;
+		for (const key of ["phase_max", "actors", "stories", "cells", "run_checks", "derived"] as const) {
+			expect(after[key]).toEqual(before[key]);
+		}
+	});
+});
+
 // ---------------------------------------------------------------------------
 // touchSessionStates (family-agnostic Stop-hook session-state heartbeat)
 // ---------------------------------------------------------------------------
@@ -1699,5 +1762,33 @@ describe("touchSessionStates", () => {
 		expect(afterSecond["progress_touched_at"]).not.toBe(firstLastTouchedAt);
 		// And it must be stable across the second heartbeat (already backfilled once).
 		expect(afterSecond["progress_touched_at"]).toBe(afterFirst["progress_touched_at"]);
+	});
+});
+
+describe("readQaStateRaw", () => {
+	let omtDir: string;
+	const original = process.env.OMT_DIR;
+
+	beforeEach(() => {
+		omtDir = mkdtempSync(join(tmpdir(), "state-core-qa-raw-"));
+		process.env.OMT_DIR = omtDir;
+	});
+
+	afterEach(() => {
+		if (original === undefined) delete process.env.OMT_DIR;
+		else process.env.OMT_DIR = original;
+		rmSync(omtDir, { recursive: true, force: true });
+	});
+
+	test("returns inactive QA state instead of folding it to null", () => {
+		writeState(omtDir, "qa-state-session.json", { active: false, actors: [{ id: "actor" }] });
+		expect(readQaStateRaw("session")).toMatchObject({ active: false });
+	});
+
+	test("returns null for missing, malformed, or unsafe state", () => {
+		expect(readQaStateRaw("missing")).toBeNull();
+		writeFileSync(join(omtDir, "qa-state-session.json"), "not-json");
+		expect(readQaStateRaw("session")).toBeNull();
+		expect(readQaStateRaw("../escape")).toBeNull();
 	});
 });

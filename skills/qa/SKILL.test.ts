@@ -15,7 +15,7 @@ import { join } from "path";
 // because the cycle vocabulary/delegation lines do not exist yet in the old
 // 3-trigger SKILL.md. The "strip" blocks FAIL because the static-audit
 // sections they assert absent are still present. The "preserved" blocks PASS
-// on both old and new (invariants: 6-category matrix, inline drivers, binary
+// on both old and new (invariants: adversarial matrix with 6 coverage axes + 3 per-run checks, inline drivers, binary
 // APPROVE/REQUEST_CHANGES contract).
 // ---------------------------------------------------------------------------
 
@@ -352,7 +352,7 @@ describe("strip: qa's PLAN/Overview no longer disclaim reading the change", () =
 // PRESERVED (must PASS before AND after the rewrite — invariant)
 // ---------------------------------------------------------------------------
 
-describe("preserved: 6-category adversarial matrix intent", () => {
+describe("preserved: 6 coverage axes adversarial matrix intent", () => {
 	test("all 6 category names are present", () => {
 		expect(skillMd).toContain("failure paths");
 		expect(skillMd).toContain("boundary/malformed input");
@@ -426,7 +426,7 @@ describe("preserved: non-blocking command execution policy", () => {
 	});
 });
 
-describe("preserved: stage3-handson.md 6-category adversarial matrix anchor", () => {
+describe("preserved: stage3-handson.md 6 coverage axes adversarial matrix anchor", () => {
 	test('"## Adversarial Scenario Matrix" heading is present', () => {
 		expect(stage3Md).toContain("## Adversarial Scenario Matrix");
 	});

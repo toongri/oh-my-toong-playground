@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, writeFile, rm, readFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { execFileSync } from "child_process";
+import { approveOk } from "@lib/qa-chain-core";
 
 describe("makeDecision", () => {
 	const testDir = join(tmpdir(), "persistent-mode-decision-test-" + Date.now());
@@ -2655,5 +2656,241 @@ describe("makeDecision", () => {
 			expect(after.iteration).toBe(4);
 			expect(Math.abs(Date.now() - Date.parse(after.progress_touched_at))).toBeLessThan(5000);
 		});
+	});
+});
+
+describe("QA Stop-gate decision table", () => {
+	const testDir = join(tmpdir(), "persistent-mode-qa-stop-test-" + Date.now());
+	const projectRoot = join(testDir, "project");
+	const omtDir = join(testDir, "omt");
+	const stateDir = join(omtDir, "state");
+	const sid = "qa-stop-session";
+	const evidencePath = join(import.meta.dir, "decision.test.ts");
+
+	beforeAll(async () => {
+		await mkdir(stateDir, { recursive: true });
+	});
+	afterAll(async () => {
+		await rm(testDir, { recursive: true, force: true });
+	});
+
+	function cell(story: string, cls: number, sub?: "hang-timeout" | "flaky-green", status: "pass" | "fail" | "na" | null = "pass"): Record<string, any> {
+		return {
+			story,
+			cls,
+			...(sub ? { sub } : {}),
+			attack_point: `attack ${cls}${sub ? ` ${sub}` : ""}`,
+			priority: cls === 1 ? "H" : "M",
+			status,
+			cycle: 0,
+			...(status === "pass" ? { evidence: { path: evidencePath, surface: "bash" } } : {}),
+		};
+	}
+
+	function completeQa(verdict: "APPROVE" | "COMMENT" | "REQUEST_CHANGES" = "APPROVE"): Record<string, any> {
+		return {
+			active: true,
+			phase: "BASELINE",
+			phase_max: 2,
+			cycle: 0,
+			actors: [{ id: "actor-1", name: "Actor", boundary: "local boundary", driver: "bash", reachable: "yes" }],
+			stories: [
+				{
+					id: "story-1",
+					actor: "actor-1",
+					baseline: {
+						result: "pass",
+						cycle: 0,
+						evidence: { path: evidencePath, surface: "bash" },
+					},
+				},
+			],
+			cells: [
+				cell("story-1", 1),
+				cell("story-1", 2),
+				cell("story-1", 3),
+				cell("story-1", 4),
+				cell("story-1", 5),
+				cell("story-1", 6),
+				cell("story-1", 1, "hang-timeout"),
+				cell("story-1", 5, "flaky-green"),
+			],
+			run_checks: {
+				stale_state: { result: "pass", cycle: 0 },
+				dirty_worktree: { result: "fail", cycle: 0, note: "pre-existing changes" },
+				flaky_rerun: { result: "pass", cycle: 0 },
+			},
+			verdict,
+		};
+	}
+
+	function writeQaState(state: Record<string, unknown>, session = sid) {
+		fs.writeFileSync(join(omtDir, `qa-state-${session}.json`), JSON.stringify(state));
+	}
+
+	function context(session = sid): DecisionContext {
+		return {
+			projectRoot,
+			sessionId: session,
+			lastAssistantMessage: null,
+			incompleteTodoCount: 0,
+			activeBackgroundTaskCount: 0,
+		};
+	}
+
+	beforeEach(async () => {
+		process.env.OMT_DIR = omtDir;
+		await rm(omtDir, { recursive: true, force: true });
+		await mkdir(stateDir, { recursive: true });
+	});
+
+	it("qa approve allow: active APPROVE with approveOk falls through", () => {
+		const state = completeQa("APPROVE");
+		writeQaState(state);
+		expect(approveOk(state as never, (path) => ({ exists: fs.existsSync(path), size: fs.statSync(path).size }))).toBe(true);
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("qa inactive completed APPROVE with approveOk allows stop", () => {
+		const state = completeQa("APPROVE");
+		state.active = false;
+		writeQaState(state);
+		expect(approveOk(state as never, (path) => ({ exists: fs.existsSync(path), size: fs.statSync(path).size }))).toBe(true);
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("qa inactive completed COMMENT with commentOk allows stop", () => {
+		const state = completeQa("COMMENT");
+		state.active = false;
+		writeQaState(state);
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("qa inactive completed REQUEST_CHANGES with recordComplete allows stop", () => {
+		const state = completeQa("REQUEST_CHANGES");
+		state.active = false;
+		writeQaState(state);
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("qa inactive untouched REQUEST_CHANGES allows stop", () => {
+		writeQaState({ active: false, phase: "PRE-FLIGHT", phase_max: 0, cycle: 0, verdict: "REQUEST_CHANGES", actors: [], stories: [], cells: [], run_checks: {} });
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("qa comment allow: active COMMENT with commentOk falls through", () => {
+		writeQaState(completeQa("COMMENT"));
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("qa request-changes allow: recordComplete plus REQUEST_CHANGES", () => {
+		writeQaState(completeQa("REQUEST_CHANGES"));
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("qa request-changes allow: cycleUntouched pre-flight fail-fast", () => {
+		writeQaState({ active: true, phase: "PRE-FLIGHT", phase_max: 0, cycle: 0, verdict: "REQUEST_CHANGES", actors: [], stories: [], cells: [], run_checks: {} });
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("qa wedge: block-count >= MAX_BLOCK_COUNT allows stop without making approveOk true", async () => {
+		const state = completeQa("APPROVE");
+		(state.cells as Array<Record<string, unknown>>)[0].status = null;
+		writeQaState(state);
+		await writeFile(join(stateDir, `block-count-qa-${sid}`), "5");
+		expect(approveOk(state as never, (path) => ({ exists: fs.existsSync(path), size: fs.statSync(path).size }))).toBe(false);
+		expect(makeDecision(context())).toEqual({ continue: true });
+		expect(fs.existsSync(join(stateDir, `block-count-qa-${sid}`))).toBe(false);
+	});
+
+	it("qa awaiting-user yield resets the QA namespace counter", async () => {
+		writeQaState(completeQa("APPROVE"));
+		await writeFile(join(stateDir, `block-count-qa-${sid}`), "3");
+		expect(makeDecision({ ...context(), lastAssistantMessage: "pause <awaiting-user/>" })).toEqual({ continue: true });
+		expect(fs.existsSync(join(stateDir, `block-count-qa-${sid}`))).toBe(false);
+	});
+
+	for (const verdict of [null, "APPROVE", "COMMENT", "REQUEST_CHANGES"] as const) {
+		it(`qa default block: ${verdict ?? "null"} verdict with false predicate`, () => {
+			const state = completeQa(verdict ?? "APPROVE");
+			state.verdict = verdict;
+			(state.cells as Array<Record<string, unknown>>)[0].status = null;
+			writeQaState(state);
+			const result = makeDecision(context());
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("qa");
+		});
+	}
+
+	it("qa empty-chain false APPROVE: recorded run checks do not make an empty chain approvable", () => {
+		writeQaState({
+			active: true,
+			phase: "PRE-FLIGHT",
+			phase_max: 0,
+			cycle: 0,
+			actors: [],
+			stories: [],
+			cells: [],
+			run_checks: {
+				stale_state: { result: "pass", cycle: 0 },
+				dirty_worktree: { result: "pass", cycle: 0 },
+				flaky_rerun: { result: "pass", cycle: 0 },
+			},
+			verdict: "APPROVE",
+		});
+		expect(makeDecision(context())).toMatchObject({ decision: "block" });
+	});
+
+	it("qa inactive forged: touched inactive state with no allow arm blocks", () => {
+		const state = completeQa("REQUEST_CHANGES");
+		state.active = false;
+		(state.cells as Array<Record<string, unknown>>)[0].status = null;
+		writeQaState(state);
+		expect(makeDecision(context())).toMatchObject({ decision: "block" });
+	});
+
+	it("qa inactive legacy: inactive untouched state does not block", () => {
+		writeQaState({ active: false, phase: "PRE-FLIGHT", cycle: 0, actors: [], stories: [], cells: [], run_checks: {}, verdict: null });
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("qa no state file: never-invoked qa has no block", () => {
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("qa reset: partial work cannot claim REQUEST_CHANGES fail-fast", () => {
+		const state = completeQa("REQUEST_CHANGES");
+		state.stories = [{ id: "story-1", actor: "actor-1", baseline: null }];
+		state.cells = [cell("story-1", 1)];
+		writeQaState(state);
+		expect(makeDecision(context())).toMatchObject({ decision: "block" });
+	});
+
+	it("qa authored but unrecorded: phase rewind and APPROVE still block", () => {
+		const state = completeQa("APPROVE");
+		state.phase = "PLAN";
+		state.phase_max = 1;
+		for (const current of state.cells as Array<Record<string, unknown>>) current.status = null;
+		writeQaState(state);
+		expect(makeDecision(context())).toMatchObject({ decision: "block" });
+	});
+
+	it("qa partial: recorded work with incomplete chain blocks under REQUEST_CHANGES", () => {
+		const state = completeQa("REQUEST_CHANGES");
+		state.stories = [{ id: "story-1", actor: "actor-1", baseline: null }];
+		state.cells = [cell("story-1", 1)];
+		writeQaState(state);
+		expect(makeDecision(context())).toMatchObject({ decision: "block" });
+	});
+
+	it("qa evidence: deleting recorded evidence after state write blocks stop", () => {
+		const tempEvidence = join(omtDir, "qa-evidence.txt");
+		fs.writeFileSync(tempEvidence, "evidence");
+		const state = completeQa("APPROVE");
+		state.stories = [{ id: "story-1", actor: "actor-1", baseline: { result: "pass", cycle: 0, evidence: { path: tempEvidence, surface: "bash" } } }];
+		state.cells = (state.cells as Array<Record<string, unknown>>).map((current) => ({ ...current, evidence: { path: tempEvidence, surface: "bash" } }));
+		writeQaState(state);
+		fs.unlinkSync(tempEvidence);
+		expect(makeDecision(context())).toMatchObject({ decision: "block" });
 	});
 });

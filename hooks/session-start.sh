@@ -325,8 +325,10 @@ if [ -f "$OMT_DIR/qa-state-${SESSION_ID}.json" ]; then
       # invocation. Skip the restore block; GC reaps the orphan by TTL.
       QA_CYCLE_RAW=$(echo "$QA_STATE" | jq -r '.cycle // 0' 2>/dev/null)
       QA_TARGET_RAW=$(echo "$QA_STATE" | jq -r '.target // ""' 2>/dev/null)
+      QA_PHASE_MAX_RAW=$(echo "$QA_STATE" | jq -r '.phase_max // 0' 2>/dev/null)
+      QA_CHAIN_EMPTY=$(echo "$QA_STATE" | jq -r '((.actors // []) | length) == 0 and ((.stories // []) | length) == 0 and ((.cells // []) | length) == 0 and ((.run_checks // {}) | length) == 0' 2>/dev/null)
       QA_IS_PRISTINE=false
-      if [ "$QA_PHASE" = "PRE-FLIGHT" ] && [ "$QA_CYCLE_RAW" = "0" ] && [ "$QA_TARGET_RAW" = "" ]; then
+      if [ "$QA_PHASE" = "PRE-FLIGHT" ] && [ "$QA_CYCLE_RAW" = "0" ] && [ "$QA_PHASE_MAX_RAW" = "0" ] && [ "$QA_TARGET_RAW" = "" ] && [ "$QA_CHAIN_EMPTY" = "true" ]; then
         QA_IS_PRISTINE=true
       fi
 

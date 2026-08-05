@@ -121,7 +121,7 @@ skills:
 | clarify | Requirements clarification | MANDATORY gate before implementation |
 | git-master | Git conventions (commits + branch naming) | Korean messages, 50-char limit, atomic commits |
 | agent-council | Multi-AI advisory body | For trade-offs and subjective decisions |
-| qa | Quality Assurance verification | Comprehensive quality verification - nothing escapes |
+| qa | Quality Assurance verification | Enforced actor-roster → story → cell → record → verdict → complete chain; runtime gates block unrecorded drivers and Stop |
 | agent-browser | Web and Electron E2E | Load this skill before using its driver CLI |
 | agent-device | iOS, tvOS, macOS, Android, Vega OS TV E2E | Load this skill before using its driver CLI; delegates runtime help |
 | dogfood | Mobile exploratory QA | Load this skill before using its driver CLI |
@@ -140,6 +140,8 @@ skills:
 - **pre-tool-enforcer.sh** / **codex-write-guard.sh**: PreToolUse gates — TaskOutput blocking, session-ledger write guard, code-review artifact identity guard, user-only ultragoal-state command guard (`approve-review-dispatch-renewal` / `dismiss-review-finding` / `resume-pursuit` — each is user-authorized; the AI's Bash path is denied and the user runs them); Codex twin additionally denies dangerous commands (`rm -rf`, `git push --force`)
 - **review-dispatch-gate-core.sh** / **pre-tool-enforcer.sh** / **codex-review-dispatch-gate.sh**: Shared final-review dispatch budget — Claude/Codex shims atomically claim only active `phase=pursuing` `code-reviewer` dispatches; the initial five-dispatch window denies cap exhaustion or completion-eligible re-dispatch until explicit user approval renews the cap by 5.
 - **review-exec-guard.sh** / **codex-review-exec-guard.sh**: Review-context PreToolUse guards — enforce the shared static-review execution invariant for `orchestrate-review`; block tests, builds, installs, and linters only while member or conductor review context is active
+- **qa-driver-guard.sh** / **codex-qa-driver-guard.sh**: QA PreToolUse driver guards — block `agent-device`/`agent-browser`/`curl`/`bash` while the roster is incomplete or BASELINE+ has an incomplete chain (PLAN reachability probes remain available); consume `derived.driver_gate_armed` and fail open without `jq`
+- **codex-qa-seed.sh**: Codex QA invocation seed — creates the qa state skeleton and arms the same runtime gates on Codex, which has no native Skill invocation signal
 - **codex-spawn-depth-gate.sh**: Codex PreToolUse gate capping subagent spawn depth at 2 (Claude enforces the same cap natively via `claude.yaml`'s `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`)
 
 ### Key Workflows

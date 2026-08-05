@@ -1,4 +1,5 @@
 import { HookOutput, UltragoalState } from "./types.ts";
+import { statSync } from "fs";
 import {
 	readDeepInterviewStateRaw,
 	cleanupDeepInterviewState,
@@ -19,7 +20,15 @@ import {
 import { generateAttemptId, ensureDir } from "./utils.ts";
 import { join } from "path";
 import { getOmtDir } from "@lib/omt-dir";
-import { isPristine, isProgressLive, touchSessionStates } from "@lib/state-core";
+import { isPristine, isProgressLive, touchSessionStates, readQaStateRaw } from "@lib/state-core";
+import {
+	approveOk,
+	chainComplete,
+	commentOk,
+	cycleUntouched,
+	recordComplete,
+	type QaChainState,
+} from "@lib/qa-chain-core";
 import { evaluateProgress } from "./progress.ts";
 
 export interface DecisionContext {
@@ -222,6 +231,33 @@ ${continuationContract("preferred", askToolName)}
 `;
 }
 
+function probeQaEvidence(path: string): { exists: boolean; size: number } {
+	try {
+		const stat = statSync(path);
+		return { exists: true, size: stat.size };
+	} catch {
+		return { exists: false, size: 0 };
+	}
+}
+
+function buildQaContinuationMessage(
+	state: QaChainState,
+	verdict: string | null,
+	probe: (path: string) => { exists: boolean; size: number },
+	askToolName: string,
+): string {
+	const unmet = !chainComplete(state)
+		? "chainComplete=false — run qa-state.ts add-actor/add-story/author-cell"
+		: !recordComplete(state, probe)
+			? "recordComplete=false — run qa-state.ts record-baseline/record-cell/record-run-check"
+			: verdict === "APPROVE"
+				? "approveOk=false — run qa-state.ts set-verdict REQUEST_CHANGES or complete the failed cells"
+				: verdict === "COMMENT"
+					? "commentOk=false — run qa-state.ts record-cell for every H-priority cell"
+					: "no QA Stop-gate arm matched — run qa-state.ts get and record the missing outcome";
+	return `<qa-continuation>\n\n[QA STOP-GATE]\n\nThe recorded QA session cannot stop yet. Unmet predicate: ${unmet}.\n\n${continuationContract("preferred", askToolName)}\n\n</qa-continuation>\n\n---\n`;
+}
+
 // The ultragoal continuation uses the autonomous loop envelope (iteration header,
 // untrusted_objective wrap, tokens-not-measured line, behavioral A/B branches),
 // but names the ultragoal skill and its two-lane completion gate: a per-story
@@ -358,6 +394,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 		cleanupBlockCountFiles(stateDir, attemptId);
 		cleanupBlockCountFiles(stateDir, `prometheus-${attemptId}`);
 		cleanupBlockCountFiles(stateDir, `skill-chain-${attemptId}`);
+		cleanupBlockCountFiles(stateDir, `qa-${attemptId}`);
 		return formatContinueOutput();
 	}
 
@@ -614,6 +651,36 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			}
 			incrementBlockCount(stateDir, prometheusAttemptId);
 			return formatBlockOutput(buildPrometheusContinuationMessage(askToolName));
+		}
+	}
+
+	// Priority 1.75: QA Stop-gate. Unlike the low-stakes shell driver gate,
+	// this branch reads raw state (including active:false) and recomputes every
+	// predicate against the live filesystem evidence. Persisted `derived` flags
+	// are deliberately not trusted here.
+	const qaState = readQaStateRaw(sessionId);
+	if (qaState) {
+		const qaAttemptId = `qa-${attemptId}`;
+		const qaProbe = probeQaEvidence;
+		const untouched = cycleUntouched(qaState);
+		const approve = approveOk(qaState, qaProbe);
+		const comment = commentOk(qaState, qaProbe);
+		const complete = recordComplete(qaState, qaProbe);
+		const verdict = qaState.verdict ?? null;
+		const allowApprove = verdict === "APPROVE" && approve;
+		const allowComment = verdict === "COMMENT" && comment;
+		const allowRequestChanges =
+			verdict === "REQUEST_CHANGES" && (complete || untouched);
+		const escaped = getBlockCount(stateDir, qaAttemptId) >= MAX_BLOCK_COUNT;
+
+		if (allowApprove || allowComment || allowRequestChanges) {
+			cleanupBlockCountFiles(stateDir, qaAttemptId);
+		} else if (escaped) {
+			cleanupBlockCountFiles(stateDir, qaAttemptId);
+			return formatContinueOutput();
+		} else if (qaState.active === true || !untouched) {
+			incrementBlockCount(stateDir, qaAttemptId);
+			return formatBlockOutput(buildQaContinuationMessage(qaState, verdict, qaProbe, askToolName));
 		}
 	}
 
