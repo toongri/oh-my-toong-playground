@@ -210,11 +210,11 @@ export function chainComplete(state: QaChainState): boolean {
 	return stories.every((story) => {
 		const required = requiredCells({ ...state, stories: [story] });
 		const authored = required.every((cell) => {
-			const actual = (state.cells ?? []).find((candidate) => key(candidate) === key(cell));
+			const actual = currentCell(state, cell);
 			return !!actual && typeof actual.attack_point === "string" && actual.attack_point.trim() !== "" && !!actual.priority;
 		});
 		return authored && required.some((cell) => {
-			const actual = (state.cells ?? []).find((candidate) => key(candidate) === key(cell));
+			const actual = currentCell(state, cell);
 			return actual?.priority === "H";
 		});
 	});

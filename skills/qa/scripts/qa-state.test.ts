@@ -415,6 +415,13 @@ describe("qa-state CLI wiring", () => {
 		expect(view.prior_cycle_cells.some((cell: any) => cell.cls === 1 && cell.cycle === 0)).toBe(true);
 	});
 
+	test("inc-cycle invalidates chain completion until current-cycle cells are authored", () => {
+		authorCompleteChain();
+		expect(rawState().derived.chain_complete).toBe(true);
+		run("inc-cycle");
+		expect(rawState().derived.chain_complete).toBe(false);
+	});
+
 	test("byte-identical: unknown actor and invalid authoring are refused before write", () => {
 		run("set --phase PLAN");
 		const before = readFileSync(resolveStatePath(S), "utf8");

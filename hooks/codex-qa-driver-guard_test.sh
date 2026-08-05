@@ -46,7 +46,7 @@ run_hook() {
 
 assert_denied() {
     local out="$1" label="$2"
-    printf '%s' "$out" | jq -e '.hookSpecificOutput.permissionDecision == "deny" and (.hookSpecificOutput.permissionDecisionReason | test("QA driver gate"; "i"))' >/dev/null \
+    printf '%s' "$out" | jq -e '.hookSpecificOutput.permissionDecision == "deny" and (.hookSpecificOutput.permissionDecisionReason | test("QA driver gate"; "i") and test("agent-device"; "i") and test("agent-browser"; "i") and test("curl"; "i") and test("bash"; "i"))' >/dev/null \
         || { echo "ASSERTION FAILED $label: expected Codex deny, got '$out'"; return 1; }
 }
 
@@ -68,8 +68,23 @@ test_all_codex_shell_tools_denied_when_armed() {
             assert_denied "$out" "$tool_name-$key-browser" || result=1
             out=$(run_hook "$tool_name" "$key" 'agent-device --version')
             assert_denied "$out" "$tool_name-$key-device" || result=1
+            out=$(run_hook "$tool_name" "$key" 'curl https://example.test')
+            assert_denied "$out" "$tool_name-$key-curl" || result=1
+            out=$(run_hook "$tool_name" "$key" 'bash --version')
+            assert_denied "$out" "$tool_name-$key-bash" || result=1
         done
     done
+    cleanup_sandbox
+    return "$result"
+}
+
+test_argument_token_is_not_driver_invocation() {
+    new_sandbox
+    write_state true true
+    local out rc=0
+    out=$(run_hook exec_command cmd 'printf %s agent-device') || rc=$?
+    assert_allowed "$out" "$rc" argument-token
+    local result=$?
     cleanup_sandbox
     return "$result"
 }
@@ -105,6 +120,7 @@ test_jq_absent_fails_open() {
 
 for test_name in \
     test_all_codex_shell_tools_denied_when_armed \
+    test_argument_token_is_not_driver_invocation \
     test_allow_arms_are_silent \
     test_jq_absent_fails_open; do
     run_test "$test_name"

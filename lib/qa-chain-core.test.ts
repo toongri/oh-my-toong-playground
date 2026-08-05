@@ -98,6 +98,12 @@ describe("qa chain core", () => {
 		expect(chainComplete(state)).toBe(false);
 	});
 
+	test("chainComplete false-case: previous-cycle cells do not author the current cycle", () => {
+		const state = authoredState();
+		state.cycle = 3;
+		expect(chainComplete(state)).toBe(false);
+	});
+
 	test("approveOk false-case: all-unrecorded chain", () => {
 		const state = authoredState();
 		state.stories[0].baseline = null;
