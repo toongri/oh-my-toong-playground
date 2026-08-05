@@ -22,6 +22,7 @@ import {
 	isStateLive,
 	isProgressLive,
 	STATE_PREFIX,
+	readQaStateRaw,
 	listOthers,
 	adopt,
 	writeFileNoCreate,
@@ -1699,5 +1700,33 @@ describe("touchSessionStates", () => {
 		expect(afterSecond["progress_touched_at"]).not.toBe(firstLastTouchedAt);
 		// And it must be stable across the second heartbeat (already backfilled once).
 		expect(afterSecond["progress_touched_at"]).toBe(afterFirst["progress_touched_at"]);
+	});
+});
+
+describe("readQaStateRaw", () => {
+	let omtDir: string;
+	const original = process.env.OMT_DIR;
+
+	beforeEach(() => {
+		omtDir = mkdtempSync(join(tmpdir(), "state-core-qa-raw-"));
+		process.env.OMT_DIR = omtDir;
+	});
+
+	afterEach(() => {
+		if (original === undefined) delete process.env.OMT_DIR;
+		else process.env.OMT_DIR = original;
+		rmSync(omtDir, { recursive: true, force: true });
+	});
+
+	test("returns inactive QA state instead of folding it to null", () => {
+		writeState(omtDir, "qa-state-session.json", { active: false, actors: [{ id: "actor" }] });
+		expect(readQaStateRaw("session")).toMatchObject({ active: false });
+	});
+
+	test("returns null for missing, malformed, or unsafe state", () => {
+		expect(readQaStateRaw("missing")).toBeNull();
+		writeFileSync(join(omtDir, "qa-state-session.json"), "not-json");
+		expect(readQaStateRaw("session")).toBeNull();
+		expect(readQaStateRaw("../escape")).toBeNull();
 	});
 });
