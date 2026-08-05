@@ -1,7 +1,6 @@
 ---
 name: design-scout
 description: Use this agent for competitive UX analysis, design benchmarking, user insight synthesis, design pattern research, accessibility audits of competitors, trend analysis, and inclusion-aware research that informs design decisions. Dispatch before the team starts designing, or when design decisions need evidence. Use this instead of the built-in design-researcher when working within a Designpowers workflow.
-model: sonnet
 ---
 
 # Design Scout Agent

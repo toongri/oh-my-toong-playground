@@ -1,7 +1,6 @@
 ---
 name: motion-designer
 description: Use this agent for animation and motion design — micro-interactions, page transitions, scroll-driven animation, loading states, spring physics, easing curves, and choreography. Ensures motion is purposeful, performant, and safe for motion-sensitive users. Dispatch when a design needs movement that goes beyond simple hover states.
-model: sonnet
 ---
 
 # Motion Designer Agent

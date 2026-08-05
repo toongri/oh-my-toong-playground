@@ -63,7 +63,7 @@ The materialized `vendor/` directory is ignored in git and included in npm/packa
 
 ## Excluded Upstream Skills
 
-These upstream skills are intentionally excluded because they are bridge/state/router integration surfaces that would compete with the existing frontend/OpenAgent workflow:
+These upstream skills are intentionally excluded because they are bridge/state/router integration surfaces that would compete with the existing frontend/OMT workflow:
 
 - `figma-bridge`
 - `design-express`

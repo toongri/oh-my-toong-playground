@@ -8,7 +8,7 @@ A `DESIGN.md` whose every token, interaction state, and motion value was read fr
 
 ## Phase 1 — Extract the runtime truth (never guess a value)
 
-Drive a real browser: Codex `browser:control-in-app-browser` first, otherwise the project's `agent-browser` / playwright / dev-browser tooling. Do NOT parse CSS files — minification, CORS, CSS-in-JS, and Tailwind utilities make source unreliable. `getComputedStyle` returns what the browser ACTUALLY rendered, so it is the only source of truth.
+Drive a real browser: load the `agent-browser` skill before using its CLI, then use the project's `agent-browser` tooling. Do NOT parse CSS files — minification, CORS, CSS-in-JS, and Tailwind utilities make source unreliable. `getComputedStyle` returns what the browser ACTUALLY rendered, so it is the only source of truth.
 
 Sweep the page and read, for every meaningful element and every repeated pattern:
 

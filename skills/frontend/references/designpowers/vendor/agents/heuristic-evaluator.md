@@ -1,7 +1,6 @@
 ---
 name: heuristic-evaluator
 description: Use this agent to evaluate a design against established usability heuristics (Nielsen's 10) and conduct cognitive walkthroughs of key tasks. Dispatch after design-builder completes, alongside design-critic and accessibility-reviewer. Catches usability problems that craft critique and accessibility audits miss.
-model: sonnet
 ---
 
 # Heuristic Evaluator Agent

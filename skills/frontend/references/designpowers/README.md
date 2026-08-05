@@ -9,7 +9,7 @@ The purpose of this ruleset is to enrich the existing frontend workflow while pr
 - `references/design/README.md` still owns the `DESIGN.md` contract, taste routing, brand references, React dev tooling, and browser-based design QA expectations.
 - `references/perfection/README.md` still owns Lighthouse, performance, SEO, accessibility audit mechanics, and real-browser verification.
 - `/visual-qa` still owns objective rendered evidence for visual claims.
-- `/ulw-plan`, `/start-work`, and `/review-work` still own planning, execution, and final implementation review when those phases apply.
+- `prometheus`, `sisyphus`, and `code-review` still own planning, execution, and final implementation review when those phases apply.
 
 ## Load Order
 
@@ -45,4 +45,4 @@ Designpowers-enhanced frontend work is complete only when:
 - visual claims cite objective visual evidence;
 - the current design state, if used, names the brief, personas, taste constraints, accessibility constraints, and accepted debt;
 - remaining accessibility or persona debt is explicit, located, and user-accepted before closeout;
-- significant implementation work routes through `/review-work`.
+- significant implementation work routes through `code-review`.

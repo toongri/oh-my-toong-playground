@@ -193,7 +193,7 @@ New debt is recorded here at the moment it is accepted — never silently.
 
 ### For New Projects
 
-1. **Select references before taste** — no visual reference means `_INDEX.md` shortlist of 2-3 Layer B candidates, then exactly one Layer A style skill and one Layer B brand/design-system reference. Use `open-design` only when the curated set has no fit.
+1. **Select references before taste** — no visual reference means `_INDEX.md` shortlist of 2-3 Layer B candidates, then exactly one Layer A style skill and one Layer B brand/design-system reference.
 2. **Assemble from references** — extract tokens, layout grammar, component anatomy, states, motion, and taste decisions, then recombine them into project-specific primitives. Customize for the user's product; never copy logos, trademarked assets, or brand-specific copy.
 3. **Define the system** — atmosphere, palette, typography, spacing, and one depth strategy, grounded in the selected references and product semantics. Sanity-check the palette and type pairing with one `ui-ux-db` domain search (CLI in `references/ui-ux-db/README.md`).
 4. **Document initial primitives** — only components you are about to build, including variants and states.

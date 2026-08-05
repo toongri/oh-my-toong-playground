@@ -1,7 +1,6 @@
 ---
 name: accessibility-reviewer
 description: Use this agent to review any design output — code, mockups, specifications, or prototypes — for inclusive design compliance. Evaluates against WCAG, COGA, and inclusive design principles. Dispatch after design work and before handoff.
-model: sonnet
 ---
 
 # Accessibility Reviewer Agent

@@ -1,7 +1,6 @@
 ---
 name: design-strategist
 description: Use this agent for upstream design thinking — user flows, information architecture, journey mapping, persona development, design principles, experience mapping, and setting design direction before visual work begins. Dispatch during discovery and strategy phases. Use this instead of the built-in ux-lead when working within a Designpowers workflow.
-model: sonnet
 ---
 
 # Design Strategist Agent

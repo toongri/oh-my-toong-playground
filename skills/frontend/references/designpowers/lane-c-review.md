@@ -1,18 +1,18 @@
 # Lane C: Review & Repair
 
-Lane C runs after implementation and before final sign-off. It requires objective `visual-qa` evidence first, then applies designpowers judgment to the same artifact, then hands the reconciled context to `review-work`. The order matters: measurements and screenshots anchor the review; designpowers adds the human-centered judgment does not fully encode.
+Lane C runs after implementation and before final sign-off. It requires objective `visual-qa` evidence first, then applies designpowers judgment to the same artifact, then hands the reconciled context to `code-review`. The order matters: measurements and screenshots anchor the review; designpowers adds the human-centered judgment does not fully encode.
 
 ## Phase Owner
 
 | Capability | Materialized designpowers source | owner | Mapping |
 |---|---|---|---|
-| Review an existing surface without rerunning discovery | `design-review` | `visual-qa` plus `review-work` | Use only for critique context; still captures objective artifacts and final review. |
-| Critique against brief, plan, personas, design principles, taste, and craft | `designpowers-critique` | `visual-qa` evidence, then `review-work` | Run after screenshots and objective checks exist, so findings cite the built surface. |
-| WCAG, COGA, keyboard, screen reader, motion, content, and adaptive needs | agent `accessibility-reviewer` | `visual-qa` evidence, then `review-work` | Treat the materialized agent file as reviewer-role guidance. Name who is affected and exact fixes. |
-| Nielsen heuristics and cognitive walkthroughs | `heuristic-evaluation` plus agent `heuristic-evaluator` | `visual-qa` evidence, then `review-work` | Walk every key task and classify H1-H10 findings with severity. |
-| Persona and task walkthroughs | `synthetic-user-testing` | `visual-qa` evidence, then `review-work` | Validate that inclusive-personas can complete real tasks under their assistive or situational contexts. |
-| Human testing plan when needed | `usability-testing` | `review-work` context | Produce a test plan or follow-up recommendation when synthetic testing is insufficient. |
-| Completion evidence discipline | `verification-before-shipping` | `review-work` | Summarize plan completion, accessibility results, persona walkthrough, content status, and debt status. |
+| Review an existing surface without rerunning discovery | `design-review` | `visual-qa` plus `code-review` | Use only for critique context; still captures objective artifacts and final review. |
+| Critique against brief, plan, personas, design principles, taste, and craft | `designpowers-critique` | `visual-qa` evidence, then `code-review` | Run after screenshots and objective checks exist, so findings cite the built surface. |
+| WCAG, COGA, keyboard, screen reader, motion, content, and adaptive needs | agent `accessibility-reviewer` | `visual-qa` evidence, then `code-review` | Treat the materialized agent file as reviewer-role guidance. Name who is affected and exact fixes. |
+| Nielsen heuristics and cognitive walkthroughs | `heuristic-evaluation` plus agent `heuristic-evaluator` | `visual-qa` evidence, then `code-review` | Walk every key task and classify H1-H10 findings with severity. |
+| Persona and task walkthroughs | `synthetic-user-testing` | `visual-qa` evidence, then `code-review` | Validate that inclusive-personas can complete real tasks under their assistive or situational contexts. |
+| Human testing plan when needed | `usability-testing` | `code-review` context | Produce a test plan or follow-up recommendation when synthetic testing is insufficient. |
+| Completion evidence discipline | `verification-before-shipping` | `code-review` | Summarize plan completion, accessibility results, persona walkthrough, content status, and debt status. |
 
 Materialized agent references for this lane: `design-critic`, `accessibility-reviewer`, and `heuristic-evaluator`.
 
@@ -33,7 +33,7 @@ Then apply Lane C Review & Repair to the same artifact:
 
 Reconcile conflicts by this priority: accessibility over aesthetics, usability over style, brief over opinion, personas to break ties, user escalation for unresolved trade-offs.
 
-Pass the reconciled Lane C report, objective visual-qa artifacts, open findings, and accepted design debt to `review-work` for final implementation review.
+Pass the reconciled Lane C report, objective visual-qa artifacts, open findings, and accepted design debt to `code-review` for final implementation review.
 ```
 
 ## Evidence Requirements
@@ -47,7 +47,7 @@ Lane C requires all of the following before pass:
 - `synthetic-user-testing` results with persona, task, steps, outcome, and barrier matrix.
 - A repair decision for every Critical and Major issue: fixed and reverified, escalated to user, or blocking.
 - Deferred Minor or Note findings routed to Lane D's design-debt-tracker flow.
-- Final context handed to `review-work`, including objective artifacts and designpowers judgments for the same build.
+- Final context handed to `code-review`, including objective artifacts and designpowers judgments for the same build.
 
 ## Guardrails
 
@@ -55,11 +55,11 @@ Lane C requires all of the following before pass:
 - A high numeric visual score cannot override an open accessibility, usability, or persona-blocking finding.
 - Critical accessibility or critical H1/H3 usability findings block auto progress and require repair or explicit user decision.
 - Minor findings may be deferred only when recorded as debt with affected users and suggested fix.
-- The final sign-off owner is `review-work`; Lane C supplies review input, not final approval.
+- The final sign-off owner is `code-review`; Lane C supplies review input, not final approval.
 - Static screenshots can support visual critique, but interaction, keyboard, and screen reader findings must be labeled inferred unless they were actually exercised.
 
 ## Pass / Fail Behavior
 
-PASS when objective `visual-qa` evidence exists, designpowers review lanes pass or have explicit accepted debt, and the reconciled context is handed to `review-work`.
+PASS when objective `visual-qa` evidence exists, designpowers review lanes pass or have explicit accepted debt, and the reconciled context is handed to `code-review`.
 
-FAIL when review runs without real artifacts, skips heuristic-evaluation, skips synthetic-user-testing for persona-critical flows, treats accessibility as optional, leaves Critical or Major issues unrepaired, or sends final context to `review-work` without the design findings.
+FAIL when review runs without real artifacts, skips heuristic-evaluation, skips synthetic-user-testing for persona-critical flows, treats accessibility as optional, leaves Critical or Major issues unrepaired, or sends final context to `code-review` without the design findings.

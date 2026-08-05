@@ -16,8 +16,6 @@ The correct path:
 3. Run Lighthouse against the Playwright-controlled page via `playwright-lighthouse` OR via `chrome-launcher` + the `lighthouse` Node API, attaching to the Playwright CDP endpoint so cookies, auth state, and warmed caches mirror what a real returning user sees.
 4. Use the **mobile** preset (4x CPU throttle, Fast 3G) for the primary number, AND the **desktop** preset for the secondary number. Report both.
 
-If the `playwright` skill is not loaded in this session, load it now via the `skill` tool.
-
 ### 2. 100 IN EVERY CATEGORY IS THE FLOOR.
 
 A 99 is a regression. A 95 is a fire. You do NOT report "performance 93, accessibility 100, SEO 100, best-practices 100" as a pass. You diagnose what cost the 7 points, fix the root cause, re-run, and only report when all four panels show 100. On mobile AND desktop.
@@ -88,9 +86,9 @@ For initial install of react-scan + react-doctor (and react-grab) in a fresh Rea
 Quick audit via the cross-platform Python CLI (macOS, Linux, Windows):
 
 ```bash
-uv run $SKILL_DIR/scripts/perfection/lighthouse-audit.py https://localhost:3000
-uv run $SKILL_DIR/scripts/perfection/lighthouse-audit.py https://localhost:3000 --threshold 95
-uv run $SKILL_DIR/scripts/perfection/lighthouse-audit.py https://localhost:3000 --desktop-only
+uv run ${CLAUDE_SKILL_DIR}/scripts/perfection/lighthouse-audit.py https://localhost:3000
+uv run ${CLAUDE_SKILL_DIR}/scripts/perfection/lighthouse-audit.py https://localhost:3000 --threshold 95
+uv run ${CLAUDE_SKILL_DIR}/scripts/perfection/lighthouse-audit.py https://localhost:3000 --desktop-only
 ```
 
 Or use the TypeScript approach directly in your test suite:

@@ -1,29 +1,7 @@
 ---
 name: visual-qa
-description: "MUST USE after building/changing any UI or when asked whether a page, component, or TUI looks right. Rigorous visual QA across web/page and terminal UIs. Prefer browser:control-in-app-browser for unauthenticated browser/page QA in Codex, then Playwright/agent-browser/dev-browser. Captures screenshot/TUI evidence with bundled diff scripts, runs design-system/functional and visual-fidelity/CJK reviewer passes, then synthesizes a good/bad verdict. Triggers: visual QA, screenshot/pixel diff, UI looks wrong, reference fidelity, design system check, responsive check, CJK text clipping, TUI alignment, box-drawing drift."
+description: "MUST USE after building/changing any UI or when asked whether a page, component, or TUI looks right. Rigorous visual QA across web/page and terminal UIs. Load the agent-browser skill before using its CLI, then use agent-browser for browser/page driving. Captures screenshot/TUI evidence with bundled diff scripts, runs design-system/functional and visual-fidelity/CJK reviewer passes, then synthesizes a good/bad verdict. Triggers: visual QA, screenshot/pixel diff, UI looks wrong, reference fidelity, design system check, responsive check, CJK text clipping, TUI alignment, box-drawing drift."
 ---
-
-## Codex Harness Tool Compatibility
-
-This skill may include examples copied from the OpenCode harness. In Codex, do not call OpenCode-only tools such as `call_omo_agent(...)`, `task(...)`, `background_output(...)`, or `team_*(...)` literally. Translate those examples to Codex native tools:
-
-| OpenCode example | Codex tool to use |
-| --- | --- |
-| `call_omo_agent(subagent_type="explore", ...)` | `multi_agent_v1.spawn_agent({"message":"TASK: act as an explorer. ...","agent_type":"explorer","fork_context":false})` |
-| `call_omo_agent(subagent_type="librarian", ...)` | `multi_agent_v1.spawn_agent({"message":"TASK: act as a librarian. ...","agent_type":"librarian","fork_context":false})` |
-| `task(subagent_type="plan", ...)` | `multi_agent_v1.spawn_agent({"message":"TASK: act as a planning agent. ...","agent_type":"plan","fork_context":false})` |
-| `task(subagent_type="oracle", ...)` for final verification | `multi_agent_v1.spawn_agent({"message":"TASK: act as a rigorous reviewer. ...","agent_type":"lazycodex-gate-reviewer","fork_context":false})` |
-| `task(category="...", ...)` for implementation or QA | `multi_agent_v1.spawn_agent({"message":"TASK: act as an implementation or QA worker. ...","fork_context":false})` |
-| `background_output(task_id="...")` | `multi_agent_v1.wait_agent(...)` for mailbox signals |
-| `team_*(...)` | Use Codex native subagents via `multi_agent_v1.spawn_agent` and `multi_agent_v1.wait_agent`; use `multi_agent_v1.send_input` and `multi_agent_v1.close_agent` only when exposed in the active tools list |
-
-Role-specific behavior must be described in a self-contained `message`. Use `fork_context: false` to start the child with only the initial prompt (no parent history); use `fork_context: true` only when full parent history is truly required. Include any required conversation context, files, diffs, constraints, and requested skill names directly in the spawned agent's `message`. OMO installs these selectable agent roles into `~/.codex/agents/`: `explorer`, `librarian`, `plan`, `momus`, `metis`, `lazycodex-code-reviewer`, `lazycodex-qa-executor`, and `lazycodex-gate-reviewer` - pass the matching name as `agent_type` so the child gets that role's model and instructions. If the spawn tool exposes no `agent_type` parameter, omit it and describe the role inside `message`. If a code block below conflicts with this section, this section wins.
-
-Codex exposes ONE of two subagent tool surfaces per session; check your own tool list and route accordingly. If `multi_agent_v1.*` tools exist, use the table above as written. If instead a flat `spawn_agent` with a required `task_name` exists (`multi_agent_v2`), rewrite every `multi_agent_v1.*` example: `multi_agent_v1.spawn_agent({...,"fork_context":false})` becomes `spawn_agent({"task_name":"<lowercase_digits_underscores>","message":...,"agent_type":...,"fork_turns":"none"})` (`"all"` only when full parent history is truly required); `send_input` becomes `send_message`; do not call `close_agent`/`resume_agent` (finished agents end on their own; `followup_task` re-tasks one, `interrupt_agent` stops one); `wait_agent` takes only `timeout_ms` and returns on any child mailbox activity. On the v2 surface `agent_type` may be ABSENT from the spawn schema (verified 2026-07-11: only `fork_turns`/`message`/`task_name`) — when absent, omit it and describe the role inside `message`; installed role TOMLs cannot be selected on that surface. If a code block below conflicts with this section, this section wins.
-
-When translating `load_skills=[...]`, include the requested skill names in the spawned agent's `message`. If a code block below conflicts with this section, this section wins.
-
-For work likely to exceed one wait cycle, require the child to send `WORKING: <task> - <current phase>` before long passes and `BLOCKED: <reason>` only when progress stops. A `multi_agent_v1.wait_agent` timeout only means no new mailbox update arrived; back off between waits (double the timeout up to ~5 minutes) instead of spinning short cycles. Treat a running child as alive. Fallback only when the child is completed without the deliverable, ack-only after followup, explicitly `BLOCKED:`, or no longer running.
 
 # Visual QA - Dual-Oracle Web and TUI Verification
 
@@ -33,9 +11,9 @@ Verify a rendered UI against intent using objective script evidence plus two par
 
 - Use after you build or change any UI, before calling it done. Covers web/page UIs and TUI/terminal UIs.
 - Use when output must match a mock, a baseline, or a stated design intent; when you suspect a regression; when CJK (Korean/Japanese/Chinese) text may clip, misalign, or wrap awkwardly; when a claimed design system might actually be a flat image; when a terminal layout may overflow or its borders may break.
-- Skip when there is no rendered surface (pure backend or library logic with no visual or terminal output). For broad post-implementation review use review-work; this skill is the visual specialist.
+- Skip when there is no rendered surface (pure backend or library logic with no visual or terminal output). For broad post-implementation review use `code-review`; this skill is the visual specialist.
 
-In the commands below, `$SKILL_DIR` is this skill's own directory (the folder containing this SKILL.md). The bundled Node evidence CLI lives at `scripts/visual-qa.mjs` inside it; the TypeScript source in `scripts/cli.ts` is for development.
+In the commands below, `${CLAUDE_SKILL_DIR}` is this skill's own directory (the folder containing this SKILL.md). The bundled Node evidence CLI lives at `scripts/visual-qa.mjs` inside it; the TypeScript source in `scripts/cli.ts` is for development.
 
 ## Step 1 - Detect the surface
 
@@ -70,11 +48,11 @@ Before any reviewer sees an image, verify each capture yourself: the file signat
 ### Web
 
 1. Capture a REFERENCE image: the user's mock/target, generated page snapshot, Figma export, source-site capture, or known-good baseline. Save as PNG. If the user provided overview text or annotations, save them next to the image and treat them as part of the reference packet.
-2. Capture the ACTUAL rendered screenshot at the same viewport size. In Codex, when `browser:control-in-app-browser` is available and the page does not need an authenticated user browser session, use that Browser plugin first for navigation, page state inspection, and screenshots. If it is unavailable or lacks the needed capture action, use the project's configured browser tooling (the playwright, agent-browser, or dev-browser skill). Save as PNG. If none is configured or available, install [agent-browser](https://github.com/vercel-labs/agent-browser) (`npm install -g agent-browser && agent-browser install`) and capture with it — see `$SKILL_DIR/references/agent-browser-setup.md` for the full setup, including how to shoot a fixed-viewport screenshot.
+2. Capture the ACTUAL rendered screenshot at the same viewport size. Load the `agent-browser` skill before using its CLI, then use [agent-browser](https://github.com/vercel-labs/agent-browser) for navigation, page state inspection, and screenshots. Save as PNG. If the CLI is not installed, install it (`npm install -g agent-browser && agent-browser install`) and capture with it — see `${CLAUDE_SKILL_DIR}/references/agent-browser-setup.md` for the full setup, including how to shoot a fixed-viewport screenshot.
 3. Run the diff and keep the JSON:
 
 ```
-node "$SKILL_DIR/scripts/visual-qa.mjs" image-diff <reference.png> <actual.png>
+node "${CLAUDE_SKILL_DIR}/scripts/visual-qa.mjs" image-diff <reference.png> <actual.png>
 ```
 
 Key fields: `dimensionsMatch`, `diffRatio` (0..1), `similarityScore` (0..100), `alphaChannelIntact`, `hotspots[]` (grid regions ranked by `diffRatio`).
@@ -85,26 +63,19 @@ For reference-fidelity work, repeat the capture and diff for every referenced vi
 
 1. Render the TUI through the REAL xterm.js web terminal and screenshot it -
    NEVER `tmux capture-pane`, which degrades truecolor and misaligns wide (CJK)
-   glyphs. Run the command in a real pty and capture the browser render from the
-   repository root:
-
-```
-node script/qa/web-terminal-visual-qa.mjs --title "TUI Visual QA" \
-  --command "<tui-command>" \
-  --input "{ArrowDown}" --input "{Enter}" \
-  --evidence-dir .omo/evidence/<slug>/tui-web-terminal
-```
-
-   Replay a saved raw stream with `--from-file <capture.ansi>` instead of
-   `--command`. This produces `terminal.png` (the true-color artifact),
-   `terminal.txt`, `terminal-ansi.txt`, and `metadata.json`. Treat this as the
-   standard TUI visual artifact pattern. Outside this repo, copy the pattern:
-   real pty -> xterm.js in a browser -> PNG + metadata with cleanup receipt.
+   glyphs. Run the TUI command in a real pty, drive the xterm.js browser render,
+   and capture it from the repository root. Replay a saved raw stream with the
+   capture tool's `--from-file <capture.ansi>` option instead of rerunning the
+   command. This produces `terminal.png`
+   (the true-color artifact), `terminal.txt`, `terminal-ansi.txt`, and
+   `metadata.json`. Treat this as the standard TUI visual artifact pattern.
+   Outside this skill's origin repository, copy the same pattern: real pty ->
+   xterm.js in a browser -> PNG + metadata with cleanup receipt.
 
 2. Run the width check on the produced text and keep the JSON:
 
 ```
-node "$SKILL_DIR/scripts/visual-qa.mjs" tui-check .omo/evidence/<slug>/tui-web-terminal/terminal.txt --cols <N>
+node "${CLAUDE_SKILL_DIR}/scripts/visual-qa.mjs" tui-check "$OMT_DIR/evidence/<slug>/tui-web-terminal/terminal.txt" --cols <N>
 ```
 
 Key fields: `maxWidth`, `overflowLines[]`, `borderMisaligned`, `wideCharColumns[]`, `hasAnsi`.
@@ -125,7 +96,10 @@ Static screenshots miss what moves. For every interactive element and every anim
 
 This independent review is REQUIRED before any "done" claim. Do not self-review inside the main agent and call the UI verified - a self-graded pass is the failure mode this step exists to stop. Dispatch it yourself, every time, without waiting to be told. Give each reviewer the captures for every enumerated page from Step 2, not a sample, and tell it the page count so it can confirm none were skipped.
 
-Dispatch through your harness's own subagent tool. In OpenCode: `task(subagent_type="oracle", ...)`. In Codex: `multi_agent_v1.spawn_agent({"message": "...", "agent_type": "lazycodex-gate-reviewer", "fork_context": false})` (the code blocks below are written in OpenCode `task(...)` form; translate them to that `spawn_agent` call, putting the full prompt in `message`).
+Dispatch both reviewers with OMT's native `spawn_agent` call. Give each call a
+distinct `task_name`, set `agent_type: "oracle"`, put the complete role
+instructions in `message`, and use `fork_turns: "none"` so the oracle receives
+only the evidence in its prompt.
 
 Send BOTH calls in a single message so they run concurrently. Each oracle is read-only: it reviews and reports, it cannot modify files. Each returns PASS, REVISE, or FAIL with concrete, located findings. Pass A proves the surface is a real design-system implementation, not a mock-only or faked-image substitute. Pass B directly opens screenshots and inspects source/content for visual and CJK defects.
 
@@ -133,12 +107,14 @@ Paste evidence directly into each prompt: source code, the plain-text TUI captur
 
 ### Pass A - Design-system and functional integrity (deeper, strict)
 
-```
-task(subagent_type="oracle",
-  run_in_background=true,
-  load_skills=[],
-  description="Visual QA pass A: design-system and functional integrity",
-  prompt="""
+```js
+spawn_agent({
+  "task_name": "visual_qa_pass_a",
+  "agent_type": "oracle",
+  "message": """
+TASK: Act as the oracle reviewer for visual QA pass A. Read-only; do not modify files.
+DESCRIPTION: Visual QA pass A: design-system and functional integrity.
+
 REVIEW TYPE: DESIGN-SYSTEM AND FUNCTIONAL INTEGRITY (read-only)
 TIER INTENT: Treat this as the deeper, stricter pass. Reason exhaustively before concluding. Assume a plausible-looking surface may be faked or mock-only until the source proves otherwise.
 
@@ -176,18 +152,21 @@ SUMMARY: 1-3 sentences
 FINDINGS: for each, [product|evidence] [dimension] [severity] what is wrong, where (file/line or capture region), and the concrete fix
 WHAT IS GOOD: correct aspects that must not regress
 BLOCKING: items that must be fixed; empty if PASS
-"""
-)
+""",
+  "fork_turns": "none"
+})
 ```
 
 ### Pass B - Visual fidelity and CJK precision (focused)
 
-```
-task(subagent_type="oracle",
-  run_in_background=true,
-  load_skills=[],
-  description="Visual QA pass B: visual fidelity and CJK precision",
-  prompt="""
+```js
+spawn_agent({
+  "task_name": "visual_qa_pass_b",
+  "agent_type": "oracle",
+  "message": """
+TASK: Act as the oracle reviewer for visual QA pass B. Read-only; do not modify files.
+DESCRIPTION: Visual QA pass B: visual fidelity and CJK precision.
+
 REVIEW TYPE: VISUAL FIDELITY AND CJK PRECISION (read-only)
 TIER INTENT: Treat this as the focused visual pass. Directly open the screenshots with the available image-viewing tool (`view_image`, `look_at`, or browser inspection) before judging. Anchor every claim to the script evidence, source code, and captures.
 
@@ -231,8 +210,9 @@ SUMMARY: 1-3 sentences
 EVIDENCE TRACE: each hotspot or overflow line mapped to its visual cause
 FINDINGS: for each, [product|evidence] [severity] what is wrong, where (hotspot grid or capture line:col), and the concrete fix
 BLOCKING: items that must be fixed; empty if PASS
-"""
-)
+""",
+  "fork_turns": "none"
+})
 ```
 
 ## Step 4 - Synthesize one verdict
@@ -275,27 +255,25 @@ If any page fails, you are not done - but treat the two blocker kinds differentl
 
 Run this step IN ADDITION to Steps 1-4 when the original user task has a concrete visual target: "clone this site", "move this Figma design to code", "rebuild this screen", "make it look exactly like X", or "build this Imagen/Stitch/generated mockup and overview". For these tasks the normal dual-oracle is necessary but NOT sufficient. After it returns, run the following TWO additional MANDATORY verifications and LOOP until BOTH pass.
 
-1. Pixel-perfect design-compare subagent (visual oracle). Dispatch a focused, read-only design-compare reviewer (recommend `gpt-5.6-sol` with xhigh reasoning). It must crop/zoom BOTH the reference (target / Figma export / source-site screenshot / generated page snapshot) and the ACTUAL screenshot into matching regions and read them **pixel-by-pixel** - header, nav, each card, spacing, type ramp, color tokens - not at a glance. It must also compare the overview text or annotations against the rendered content and DOM text. Anchor every claim with the bundled tool:
+1. Pixel-perfect design-compare subagent (visual oracle). Dispatch a focused, read-only design-compare reviewer with the oracle role. It must crop/zoom BOTH the reference (target / Figma export / source-site screenshot / generated page snapshot) and the ACTUAL screenshot into matching regions and read them **pixel-by-pixel** - header, nav, each card, spacing, type ramp, color tokens - not at a glance. It must also compare the overview text or annotations against the rendered content and DOM text. Anchor every claim with the bundled tool:
 
 ```
-node "$SKILL_DIR/scripts/visual-qa.mjs" image-diff <reference.png> <actual.png>
+node "${CLAUDE_SKILL_DIR}/scripts/visual-qa.mjs" image-diff <reference.png> <actual.png>
 ```
 
    It judges whether layout geometry, spacing, design tokens (color, type, radius, shadow), and the design itself are identical to the target, region by region. Anything off by more than rounding is a finding.
 
-2. Code-level design-system fidelity (code oracle). Dispatch through your harness's own subagent tool.
+2. Code-level design-system fidelity (code oracle). Dispatch an OMT oracle with the
+   native `spawn_agent` call:
 
-   **OpenCode:**
+   ```js
+   spawn_agent({
+     "task_name": "clone_fidelity_review",
+     "agent_type": "oracle",
+     "message": """
+   TASK: Act as a clone / design-system fidelity oracle. Read-only; do not modify files.
 
-   `````
-   task(subagent_type="oracle",
-     run_in_background=true,
-     load_skills=[],
-     description="Clone/design-system fidelity review",
-     prompt="""
-   TASK: Act as a clone / design-system fidelity reviewer. Read-only.
-
-   Be skeptical but fair. The executor may have overstated success and may have faked the design — inspect the diff, source code, and reference artifacts before approving.
+   Be skeptical but fair. The executor may have overstated success and may have faked the design - inspect the diff, source code, and reference artifacts before approving.
 
    Input: goal, success criteria, changed files, full diff, reference/target design (screenshots, Figma exports, source-site captures), evidence paths.
 
@@ -311,11 +289,10 @@ node "$SKILL_DIR/scripts/visual-qa.mjs" image-diff <reference.png> <actual.png>
    - reportPath: evidence artifacts you inspected.
 
    Do NOT suggest or implement fixes.
-   """
-   )
-   `````
-
-   **Codex:** `multi_agent_v1.spawn_agent({"message":"TASK: Act as a clone / design-system fidelity reviewer. ...","agent_type":"lazycodex-clone-fidelity-reviewer","fork_context":false})`
+   """,
+     "fork_turns": "none"
+   })
+   ```
 
 RULE (mandatory, non-negotiable): the reference-fidelity task is NOT done until BOTH the pixel-compare AND the code-level design-system fidelity reviewer confirm that the **layer structure, the design system, and the design itself** match the target. If EITHER fails, it is a MANDATORY retry: re-implement the gaps and re-run BOTH verifications from the top. Repeat the retry loop until both pass on the same revision. Never declare reference-fidelity complete on a single pass, on visual-only evidence, or on code-only evidence - both oracles must confirm on the same build.
 
