@@ -40,6 +40,8 @@ export default defineConfig(
       "skills/insane-browsing/engine/templates/**",
       // superpowers에서 벤더링한 그래프 렌더 스크립트(CJS)도 같은 이유로 제외.
       "skills/writing-skills/render-graphs.js",
+      // 포팅된 서드파티 CLI 소스는 이 TypeScript 린트 기준으로 작성된 것이 아니므로 제외.
+      "skills/visual-qa/scripts/**",
     ],
   },
 
