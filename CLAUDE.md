@@ -128,6 +128,8 @@ skills:
 
 ### Hooks
 
+- **Husky v9 lifecycle**: `package.json` declares `prepare: husky`; installation activates `.husky/_/` wrappers that route to the tracked plain `.husky/pre-commit` and `.husky/pre-push` files. `pre-commit` runs `bun run lint`; `pre-push` runs `bun run lint` followed by `make test`.
+
 - **session-start.sh**: Restores persistent mode state and garbage-collects `$OMT_DIR` on session start
 - **orphan-reaper.sh**: SessionStart hook — reaps `orchestrate-review` worker process groups left behind when a conductor never reached teardown
 - **hooks/lib/state-liveness.sh**: Shared TTL/liveness definitions for state-file and session-artifact garbage collection

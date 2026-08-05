@@ -111,6 +111,10 @@ The details of the library's skills (45) and agents (13) live under `docs/`.
 
    `make sync` fails unless the current branch is the default branch and the working tree has no staged, unstaged, or untracked changes — synchronization only runs after a commit. There is no dedicated env var or CLI flag that turns the gate off, though redirecting `HOME` can still bypass it via your ambient global git config. `make sync-dry` is exempt from this gate, so it stays usable as a preview even before committing. See `docs/sync-deploy-targets.md` (Korean) for the gate's exact scope and trade-offs.
 
+### Git lifecycle hooks (Husky)
+
+This repository uses Husky v9. Dependency installation runs `prepare: husky`, activating `.husky/_/` wrappers that route to the tracked plain hook files. `pre-commit` runs `bun run lint`; `pre-push` runs `bun run lint` and then `make test` only when lint succeeds.
+
 ### Per-Project Convention Differentiation
 
 Different projects' languages and frameworks sometimes call for different judgment criteria, even under the same convention name. The `projects/` directory expresses this with a project-scoped `rules/` and `docs/`: `rules/` is the thin always-loaded layer; `docs/` holds the actual grounding — judgment criteria, examples, rationale. Splitting the two lets an agent open only what a situation needs instead of reading everything every time. How thin the rules stay is the project's call: `loopers-kotlin-spring-template` keeps them a pure index that only says "open this document for this situation," so the criteria live in docs alone, while `loop-pack-fe-l2-vol1` puts frequently-used criteria directly in the rules and defers only the deeper grounding.
