@@ -18,7 +18,7 @@ import {
 	cmdReap,
 	classifyReapedOrphans,
 } from "./job.ts";
-import { extractDenySkills } from "@lib/generic-job";
+import { extractDenySkills, extractDenySubagents } from "@lib/generic-job";
 import * as GenericJob from "@lib/generic-job";
 import * as JobUtils from "@lib/job-utils";
 import { getOmtDir } from "@lib/omt-dir";
@@ -354,11 +354,11 @@ describe("parseChunkReviewConfig", () => {
 	test("모든 멤버의 해석된 명령이 `-c agents.enabled=false` 를 포함한다", async () => {
 		const realPath = path.join(import.meta.dirname, "..", "orchestrate-review.config.yaml");
 		const result = await parseChunkReviewConfig(realPath);
-		const denySkills = extractDenySkills(
-			result["chunk-review"].settings as unknown as Record<string, unknown>,
-		);
+		const settings = result["chunk-review"].settings as unknown as Record<string, unknown>;
+		const denySkills = extractDenySkills(settings);
+		const denySubagents = extractDenySubagents(settings);
 		for (const member of result["chunk-review"].members as { name: string; command: unknown }[]) {
-			const entity = { ...member, deny: denySkills };
+			const entity = { ...member, deny: denySkills, denySubagents };
 			const cliType = detectCliType(entity.command as string);
 			const { command } = buildAugmentedCommand(entity, cliType);
 			expect(command.includes("-c agents.enabled=false")).toBe(true);
@@ -4561,11 +4561,11 @@ describe("start: assertDenyEnforceable gate wiring", () => {
 			],
 			{ stdio: "pipe", env: { ...process.env, PATH: `${sharedStubDir}:${process.env.PATH}` } },
 		);
-		// stdout must be pure JSON — the informational "no skill deny declared"
+		// stdout must be pure JSON — the informational "declares no deny"
 		// note (deny is not declared here) must not leak into the same stream.
 		const stdout = result.toString();
 		expect(() => JSON.parse(stdout)).not.toThrow();
-		expect(stdout).not.toContain("no skill deny declared");
+		expect(stdout).not.toContain("declares no deny");
 
 		const output = JSON.parse(stdout);
 		expect(output.settings.denySkills).toEqual([]);

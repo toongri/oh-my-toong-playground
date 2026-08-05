@@ -37,6 +37,9 @@ import {
 	cmdResumeMember,
 	assertMembersOrExit,
 	assertDenyEnforceable,
+	assertDenyShape,
+	extractDenySkills,
+	extractDenySubagents,
 	assertMcpAllowShape,
 	enumerateConfiguredMcpServers,
 	computeMcpBlockList,
@@ -548,6 +551,107 @@ describe("buildAugmentedCommand", () => {
 			const withEmptyDeny = buildAugmentedCommand({ command, deny: [] }, cliType);
 			expect(withUndefinedDeny).toEqual(withoutDeny);
 			expect(withEmptyDeny).toEqual(withoutDeny);
+		}
+	});
+
+	// ---------------------------------------------------------------------------
+	// denySubagents — the subagent axis of settings.deny. Same "declarable =
+	// enforceable" shape as deny.skills, but a different lever per CLI: codex
+	// strips the spawn tools from the session, claude denies the spawn tool by
+	// name, opencode denies the `task` permission.
+	// ---------------------------------------------------------------------------
+
+	test("codex: denySubagents translates to -c agents.enabled=false", () => {
+		const result = buildAugmentedCommand({ command: "codex exec", denySubagents: true }, "codex");
+		expect(result.command).toContain("-c agents.enabled=false");
+	});
+
+	test("claude: denySubagents translates to --settings permissions.deny of the spawn tool", () => {
+		const result = buildAugmentedCommand({ command: "claude -p", denySubagents: true }, "claude");
+		const tokens = splitCommand(result.command);
+		expect(tokens).not.toBeNull();
+		const settingsIndex = tokens!.indexOf("--settings");
+		expect(settingsIndex).toBeGreaterThanOrEqual(0);
+		const parsed = JSON.parse(tokens![settingsIndex + 1]);
+		// Both names: the spawn tool is `Agent` on current claude, `Task` on older builds.
+		expect(parsed.permissions.deny).toEqual(["Agent", "Task"]);
+	});
+
+	// claude accepts a single --settings argument; a second one replaces the first rather
+	// than merging, so emitting one token per axis would silently drop the skill deny.
+	test("claude: denySubagents + deny skills share ONE --settings token", () => {
+		const result = buildAugmentedCommand(
+			{ command: "claude -p", deny: ["a"], denySubagents: true },
+			"claude",
+		);
+		const tokens = splitCommand(result.command);
+		expect(tokens!.filter((t) => t === "--settings").length).toBe(1);
+		const settingsIndex = tokens!.indexOf("--settings");
+		const parsed = JSON.parse(tokens![settingsIndex + 1]);
+		expect(parsed.skillOverrides.a).toBe("off");
+		expect(parsed.permissions.deny).toEqual(["Agent", "Task"]);
+	});
+
+	test("opencode: denySubagents translates to OPENCODE_CONFIG_CONTENT permission.task deny", () => {
+		const result = buildAugmentedCommand(
+			{ command: "opencode run", denySubagents: true },
+			"opencode",
+		);
+		expect(result.command).toBe("opencode run");
+		const parsed = JSON.parse(result.env.OPENCODE_CONFIG_CONTENT);
+		expect(parsed.permission.task).toBe("deny");
+	});
+
+	test("opencode: denySubagents + deny skills land in the same permission object", () => {
+		const result = buildAugmentedCommand(
+			{ command: "opencode run", deny: ["a"], denySubagents: true },
+			"opencode",
+		);
+		const parsed = JSON.parse(result.env.OPENCODE_CONFIG_CONTENT);
+		expect(parsed.permission.task).toBe("deny");
+		expect(parsed.permission.skill.a).toBe("deny");
+		expect(parsed.permission.skill["*"]).toBe("allow");
+	});
+
+	test("opencode: denySubagents preserves an inherited OPENCODE_CONFIG_CONTENT", () => {
+		const result = buildAugmentedCommand(
+			{
+				command: "opencode run",
+				denySubagents: true,
+				env: {
+					OPENCODE_CONFIG_CONTENT: JSON.stringify({
+						model: "provider/model",
+						permission: { bash: "allow" },
+					}),
+				},
+			},
+			"opencode",
+		);
+		const parsed = JSON.parse(result.env.OPENCODE_CONFIG_CONTENT);
+		expect(parsed.model).toBe("provider/model");
+		expect(parsed.permission.bash).toBe("allow");
+		expect(parsed.permission.task).toBe("deny");
+	});
+
+	test("gemini/unknown: denySubagents is a no-op (no lever — enforceability is the start gate's job)", () => {
+		for (const [command, cliType] of [
+			["gemini", "gemini"],
+			["mycli run", "unknown"],
+		] as const) {
+			const result = buildAugmentedCommand({ command, denySubagents: true }, cliType);
+			expect(result).toEqual(buildAugmentedCommand({ command }, cliType));
+		}
+	});
+
+	test("denySubagents absent or false is byte-identical to not passing it (codex/claude/opencode)", () => {
+		for (const [command, cliType] of [
+			["codex exec", "codex"],
+			["claude -p", "claude"],
+			["opencode run", "opencode"],
+		] as const) {
+			const without = buildAugmentedCommand({ command }, cliType);
+			expect(buildAugmentedCommand({ command, denySubagents: undefined }, cliType)).toEqual(without);
+			expect(buildAugmentedCommand({ command, denySubagents: false }, cliType)).toEqual(without);
 		}
 	});
 
@@ -2419,7 +2523,7 @@ describe("assertDenyEnforceable", () => {
 				"/path/to/config.yaml",
 			),
 		).not.toThrow();
-		expect(stderrOutput).toContain("no skill deny declared");
+		expect(stderrOutput).toContain("declares no deny");
 		expect(stdoutOutput).toBe("");
 	});
 
@@ -2441,7 +2545,7 @@ describe("assertDenyEnforceable", () => {
 		expect(stderrOutput).toContain("Enforceable CLIs: codex, claude, opencode");
 		// (d) 고치는 방법 2가지 — 대체 / deny 제거
 		expect(stderrOutput).toContain("(1) replacing these members with an enforceable CLI");
-		expect(stderrOutput).toContain("(2) removing this job's settings.deny.skills declaration");
+		expect(stderrOutput).toContain("(2) removing this job's settings.deny declaration");
 	});
 
 	test("deny 선언 + unknown cliType member는 exit 1이다", () => {
@@ -2515,7 +2619,7 @@ describe("assertDenyEnforceable", () => {
 				"/path/to/config.yaml",
 			),
 		).not.toThrow();
-		expect(stderrOutput).toContain("no skill deny declared");
+		expect(stderrOutput).toContain("declares no deny");
 		expect(stdoutOutput).toBe("");
 	});
 
@@ -2528,8 +2632,106 @@ describe("assertDenyEnforceable", () => {
 				"/path/to/config.yaml",
 			),
 		).not.toThrow();
-		expect(stderrOutput).toContain("no skill deny declared");
+		expect(stderrOutput).toContain("declares no deny");
 		expect(stdoutOutput).toBe("");
+	});
+
+	// subagent 축도 skills 축과 같은 "선언가능 = 집행가능" 게이트를 통과해야 한다 —
+	// skills를 하나도 선언하지 않고 subagents만 켠 job이 gemini member로 조용히
+	// 통과하면 선언은 있는데 집행은 없는 상태가 된다.
+	test("subagents만 선언 + gemini member는 exit 1이다 (skills는 비어있음)", () => {
+		expect(() =>
+			assertDenyEnforceable(
+				[{ name: "bob", command: "gemini -p" }],
+				[],
+				councilConfig,
+				"/path/to/config.yaml",
+				true,
+			),
+		).toThrow("process.exit(1)");
+		expect(stderrOutput).toContain("bob (gemini)");
+	});
+
+	test("subagents만 선언 + 전 member가 집행 가능 CLI면 통과하고 미선언 경고도 남기지 않는다", () => {
+		expect(() =>
+			assertDenyEnforceable(
+				[
+					{ name: "codex-member", command: "codex exec" },
+					{ name: "claude-member", command: "claude -p" },
+					{ name: "opencode-member", command: "opencode run" },
+				],
+				[],
+				councilConfig,
+				"/path/to/config.yaml",
+				true,
+			),
+		).not.toThrow();
+		expect(stderrOutput).not.toContain("declares no deny");
+	});
+
+	test("subagents=false + skills 비어있음은 미선언 경고 경로 그대로다", () => {
+		expect(() =>
+			assertDenyEnforceable(
+				[{ name: "gemini-member", command: "gemini -p" }],
+				[],
+				councilConfig,
+				"/path/to/config.yaml",
+				false,
+			),
+		).not.toThrow();
+		expect(stderrOutput).toContain("declares no deny");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// assertDenyShape / extractDenySubagents — settings.deny.subagents 축
+// ---------------------------------------------------------------------------
+
+describe("settings.deny.subagents 형식 검증과 추출", () => {
+	let originalExit: typeof process.exit;
+	let originalStderrWrite: typeof process.stderr.write;
+
+	beforeEach(() => {
+		originalExit = process.exit;
+		originalStderrWrite = process.stderr.write;
+		(process as any).exit = (code?: number) => {
+			throw new Error(`process.exit(${code})`);
+		};
+		(process.stderr.write as any) = () => true;
+	});
+
+	afterEach(() => {
+		process.exit = originalExit;
+		process.stderr.write = originalStderrWrite;
+	});
+
+	test("subagents가 boolean이 아니면 exit 1이다", () => {
+		for (const bad of ["true", 1, [], {}]) {
+			expect(() =>
+				assertDenyShape({ deny: { subagents: bad } }, councilConfig, "/path/to/config.yaml"),
+			).toThrow("process.exit(1)");
+		}
+	});
+
+	test("subagents가 boolean이거나 없으면 통과한다", () => {
+		for (const good of [true, false, undefined, null]) {
+			expect(() =>
+				assertDenyShape({ deny: { subagents: good } }, councilConfig, "/path/to/config.yaml"),
+			).not.toThrow();
+		}
+	});
+
+	test("extractDenySubagents는 선언된 boolean을 그대로, 미선언은 false로 읽는다", () => {
+		expect(extractDenySubagents({ deny: { subagents: true } })).toBe(true);
+		expect(extractDenySubagents({ deny: { subagents: false } })).toBe(false);
+		expect(extractDenySubagents({ deny: { skills: ["a"] } })).toBe(false);
+		expect(extractDenySubagents({})).toBe(false);
+		expect(extractDenySubagents({ deny: null })).toBe(false);
+	});
+
+	test("두 축은 서로를 지우지 않는다 — 한쪽만 선언해도 다른 쪽 추출은 중립값이다", () => {
+		expect(extractDenySkills({ deny: { subagents: true } })).toEqual([]);
+		expect(extractDenySubagents({ deny: { skills: ["a", "b"] } })).toBe(false);
 	});
 });
 

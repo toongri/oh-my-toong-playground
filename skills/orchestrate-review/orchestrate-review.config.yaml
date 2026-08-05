@@ -25,13 +25,15 @@ chunk-review:
     # 입증된 우위가 아니며, 비용 지속 가능성이 더 중요하므로 correctness도
     # luna/xhigh로 전환한다. regression·cleanup은 luna/xhigh, requirement는
     # luna/max를 유지한다.
-    # `model` + `effort_level` + `output_format` (below) plus
-    # `settings.deny.skills` (below) resolve (via buildAugmentedCommand) to:
-    #   codex exec -c agents.enabled=false -m <this member's model> \
+    # `model` + `effort_level` + `output_format` (below) plus `settings.deny.skills` and
+    # `settings.deny.subagents` (below) resolve (via buildAugmentedCommand) to:
+    #   codex exec -m <this member's model> \
     #     -c skills.config=[…from settings.deny.skills below…] \
+    #     -c agents.enabled=false \
     #     -c model_reasoning_effort=<this member's effort_level> --json --skip-git-repo-check
-    # `agents.enabled=false` strips codex's subagent tool descriptions (spawn_agent etc.)
-    # from the session entirely, so a finder can't spawn subagents even if asked to.
+    # `settings.deny.subagents: true` is what emits `agents.enabled=false`, which strips codex's
+    # subagent tool descriptions (spawn_agent etc.) from the session entirely, so a finder can't
+    # spawn subagents even if asked to.
     # Note: codex uses bare model ids (no `openai/` prefix). 2026-08-02 스모크로
     # gpt-5.6-sol(low/medium)·gpt-5.6-luna(xhigh/max)·gpt-5.6-terra(high/xhigh)
     # 전 조합의 codex 수용을 확인했다. codex에는 unsupported model id의 자동
@@ -45,28 +47,28 @@ chunk-review:
     # `cleanup` (is this more than necessary), `requirement` (was what was
     # asked for actually done, and is it actually verified).
     - name: correctness
-      command: codex exec -c agents.enabled=false
+      command: codex exec
       model: gpt-5.6-luna
       emoji: "\U0001F517"
       color: "CYAN"
       effort_level: xhigh
       output_format: json
     - name: regression
-      command: codex exec -c agents.enabled=false
+      command: codex exec
       model: gpt-5.6-luna
       emoji: "\U0001F5D1"
       color: "MAGENTA"
       effort_level: xhigh
       output_format: json
     - name: cleanup
-      command: codex exec -c agents.enabled=false
+      command: codex exec
       model: gpt-5.6-luna
       emoji: "\U0001F9F9"
       color: "YELLOW"
       effort_level: xhigh
       output_format: json
     - name: requirement
-      command: codex exec -c agents.enabled=false
+      command: codex exec
       model: gpt-5.6-luna
       emoji: "\U0001F4CB"
       color: "GREEN"
@@ -81,6 +83,11 @@ chunk-review:
     # for compatibility if a claude-hosted angle is added later.
     exclude_chairman_from_members: false
     deny:
+      # Subagent axis: a finder answers its own angle alone. Spawning is a second fan-out
+      # beneath this one — unbudgeted cost, and candidates no angle prompt shaped. Translated
+      # per member CLI by `buildAugmentedCommand` (codex: `-c agents.enabled=false`); a member
+      # on a CLI with no such lever fails `start` rather than running unguarded.
+      subagents: true
       # Three separate reasons, not one list: (1) self-recursion fan-out guard, 3 skills — each
       # angle runs `codex exec`, which could otherwise invoke a review/council skill and spawn
       # another fan-out beneath this one; already live since `code-review` deploys to codex via
@@ -93,9 +100,12 @@ chunk-review:
       # `codex-skill-deny-efficacy.test.ts`, not restated here.
       #
       # List stops at 40: further items are OpenAI-bundled plugin skills outside this repo,
-      # named in `plugin:skill` colon form, which `lib/generic-job.ts`'s `assertDenySkillsShape`
+      # named in `plugin:skill` colon form, which `lib/generic-job.ts`'s `assertDenyShape`
       # rejects outright. Fail-open by design: a skill added later stays loadable — unlisted
       # means visible, the safe direction.
+      # Kept in lockstep with the other job configs (`orchestrate-review`, `agent-council`,
+      # `design-review`, `diagnose`) — `codex-skill-deny-efficacy.test.ts` asserts all four
+      # declare the same set.
       skills:
         - agent-browser
         - agent-council
