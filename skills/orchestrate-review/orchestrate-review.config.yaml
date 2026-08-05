@@ -15,34 +15,19 @@ chunk-review:
     #
     # Per-angle model: each member carries its own command/model, so any angle
     # can run on a different CLI/model. 현재 배정은 앵글별 이종 구성이다:
-    #   correctness=sol/medium · regression=luna/xhigh · cleanup=luna/xhigh ·
+    #   correctness=luna/xhigh · regression=luna/xhigh · cleanup=luna/xhigh ·
     #   requirement=luna/max
-    # 근거는 2026-08-02~03 2차 실측 (리포트:
-    # `~/.omt/oh-my-toong-playground/reports/code-review-finder-impact-per-cost-20260803.md`,
-    # 판정식 = 앵글별 Σimpact(유효 finding, 블라인드 Claude 채점) ÷ USD, 6구성 ×
-    # 4앵글 × acme-home PR 5개):
-    #   · luna/xhigh가 4앵글 전부 임팩트/$1 1위(총괄 52.9 대 sol/medium 4.8)이고,
-    #     구성 단위 중복 제거 후 절대 임팩트도 luna 103 ≥ sol 97. 고임팩트(≥5)
-    #     결함 6종 커버리지는 luna/xhigh = sol/medium = 6/6.
-    #   · correctness만 sol 유지: sol correctness의 단독 포착(업데이트 게이트 도달
-    #     불가 등)이 luna 두 구성에 없고, 절대 임팩트 37 대 30/25로 우위.
-    #   · requirement만 luna/max: 유효 5/6·임팩트 19로 전 구성 1위(sol 10, luna/xhigh
-    #     11). 이 혼합이 실측 합집합 112점으로 전-luna/max(115)에 근접하면서
-    #     regression·cleanup 레인은 xhigh로 wall을 아낀다. 단 requirement 레인이
-    #     luna/max인 이상 라운드 wall은 그 레인이 지배한다(~20분, 현행 sol 단일
-    #     구성 대비 약 4배) — 시간보다 임팩트를 우선한 의도적 트레이드다.
-    # 1차 실측(2026-07-31~08-01, `code-review-finder-tiering-verification-20260731.md`)은
-    # 같은 하향을 전부 기각했었다. 뒤집힌 원인은 모델이 아니라 측정 축 셋이다:
-    # ① 1차 비용 축에 달러 환산이 없었다(sol:luna output 단가 25배), ② 1차 collect
-    # 18분 예산이 luna를 절단시켰다(2차는 완주), ③ 판정자가 sol/high → 구성 은닉
-    # Claude로 바뀌었다("하향=requirement 침묵"도 미재현: luna/max requirement가
-    # 절대 1위). 축을 바꾸면 결론이 바뀐다 — 다음 재평가 때 두 리포트를 같이 볼 것.
-    # 미해소 유보: OMT 레포(하네스 코드) 교차 재현 없음 — 2차 검증 PR은 전부
-    # acme-home 제품 코드다. 1차가 찾은 진짜 병목(차단 3앵글의 수렴: 28파일
-    # diff 6회에도 차단 집합 78%)은 luna 전환으로 재검하지 않았다.
+    # 최신 11-PR 재현 실측에서 correctness aggregate impact는 sol/medium 73 대
+    # luna/xhigh 75로 사실상 동률이었다. 측정 비용은 sol/medium 약 $18.40 대
+    # luna/xhigh 약 $2.05였고, 고임팩트 결함 커버리지는 sol/medium 8/8 대
+    # luna/xhigh 7/8이었다. luna가 놓친 유일한 고임팩트 항목은 PR #2595의
+    # migration/backfill rollback impact 6이었다. 이 1/8 recall 격차는 아직
+    # 입증된 우위가 아니며, 비용 지속 가능성이 더 중요하므로 correctness도
+    # luna/xhigh로 전환한다. regression·cleanup은 luna/xhigh, requirement는
+    # luna/max를 유지한다.
     # `model` + `effort_level` + `output_format` (below) plus
     # `settings.deny.skills` (below) resolve (via buildAugmentedCommand) to:
-    #   codex exec -c agents.enabled=false -m gpt-5.6-sol \
+    #   codex exec -c agents.enabled=false -m <this member's model> \
     #     -c skills.config=[…from settings.deny.skills below…] \
     #     -c model_reasoning_effort=<this member's effort_level> --json --skip-git-repo-check
     # `agents.enabled=false` strips codex's subagent tool descriptions (spawn_agent etc.)
@@ -61,10 +46,10 @@ chunk-review:
     # asked for actually done, and is it actually verified).
     - name: correctness
       command: codex exec -c agents.enabled=false
-      model: gpt-5.6-sol
+      model: gpt-5.6-luna
       emoji: "\U0001F517"
       color: "CYAN"
-      effort_level: medium
+      effort_level: xhigh
       output_format: json
     - name: regression
       command: codex exec -c agents.enabled=false
