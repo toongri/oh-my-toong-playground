@@ -195,3 +195,32 @@ describe("frontend upstream provenance and CLI paths", () => {
 		);
 	});
 });
+
+describe("ui-ux-db search runtime", () => {
+	test("web focus search returns JSON results from web-interface.csv", async () => {
+		const searchCli = join(
+			frontendDir,
+			"references/ui-ux-db/scripts/search.py",
+		);
+		const proc = Bun.spawn(
+			["python3", searchCli, "focus", "--domain", "web", "--json"],
+			{
+				env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
+				stdout: "pipe",
+				stderr: "pipe",
+			},
+		);
+		const [stdout, stderr] = await Promise.all([
+			new Response(proc.stdout).text(),
+			new Response(proc.stderr).text(),
+		]);
+
+		expect(await proc.exited).toBe(0);
+		expect(stderr).toBe("");
+		const result = JSON.parse(stdout);
+		expect(result).not.toHaveProperty("error");
+		expect(result.domain).toBe("web");
+		expect(result.file).toBe("web-interface.csv");
+		expect(result.results.length).toBeGreaterThan(0);
+	});
+});

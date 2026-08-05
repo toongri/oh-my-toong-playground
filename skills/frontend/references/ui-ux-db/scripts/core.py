@@ -61,7 +61,7 @@ CSV_CONFIG = {
         "output_cols": ["Category", "Issue", "Platform", "Description", "Do", "Don't", "Code Example Good", "Code Example Bad", "Severity"]
     },
     "web": {
-        "file": "app-interface.csv",
+        "file": "web-interface.csv",
         "search_cols": ["Category", "Issue", "Keywords", "Description"],
         "output_cols": ["Category", "Issue", "Platform", "Description", "Do", "Don't", "Code Example Good", "Code Example Bad", "Severity"]
     },
