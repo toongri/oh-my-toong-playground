@@ -28,9 +28,10 @@ import {
 	type OrphanJob,
 	assertMembersOrExit,
 	assertDenyEnforceable,
-	assertDenySkillsShape,
+	assertDenyShape,
 	assertMcpAllowShape,
 	extractDenySkills,
+	extractDenySubagents,
 	enumerateConfiguredMcpServers,
 	computeMcpBlockList,
 	detectCliType,
@@ -392,7 +393,7 @@ function parseChunkReviewConfig(configPath: string): ChunkReviewConfig {
 		};
 	}
 
-	assertDenySkillsShape(merged["chunk-review"].settings, CHUNK_REVIEW_JOB_CONFIG, configPath);
+	assertDenyShape(merged["chunk-review"].settings, CHUNK_REVIEW_JOB_CONFIG, configPath);
 	assertMcpAllowShape(merged["chunk-review"].settings, CHUNK_REVIEW_JOB_CONFIG, configPath);
 
 	return merged;
@@ -581,7 +582,8 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	assertMembersOrExit(members, CHUNK_REVIEW_JOB_CONFIG, configPath);
 
 	const denySkills = extractDenySkills(config["chunk-review"].settings);
-	assertDenyEnforceable(members, denySkills, CHUNK_REVIEW_JOB_CONFIG, configPath);
+	const denySubagents = extractDenySubagents(config["chunk-review"].settings);
+	assertDenyEnforceable(members, denySkills, CHUNK_REVIEW_JOB_CONFIG, configPath, denySubagents);
 
 	// The block list is per-member, not per-job: a member's own `env:` may set
 	// CODEX_HOME, and that override does reach the spawned codex process
@@ -659,6 +661,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 			excludeChairmanFromMembers,
 			timeoutSec: timeoutSec || null,
 			denySkills,
+			denySubagents,
 		},
 		members: members.map((r, i) => ({
 			name: String(r.name),
@@ -677,7 +680,12 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
 
 	const spawned: SpawnedWorker[] = _spawnWorkers({
-		entities: members.map((r, i) => ({ ...r, deny: denySkills, mcpBlock: mcpBlockByMember[i] })),
+		entities: members.map((r, i) => ({
+			...r,
+			deny: denySkills,
+			denySubagents,
+			mcpBlock: mcpBlockByMember[i],
+		})),
 		workerPath: WORKER_PATH,
 		jobDir,
 		entitiesDir: membersDir,
