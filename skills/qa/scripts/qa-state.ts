@@ -39,24 +39,11 @@ import {
 	ensureSeed,
 	STATE_PREFIX,
 } from "@lib/state-core";
+import { BASELINE_INDEX, QA_PHASES, type QaPhase } from "@lib/qa-chain-core";
 
-/** Phases of the qa cycle: PRE-FLIGHT → PLAN → BASELINE → ADVERSARIAL E2E → CHECK →
- * [DIAGNOSIS→FIX→RE-VERIFY loop] → EXIT → CLEANUP → ROLLBACK → STATE. */
-const QA_PHASES = [
-	"PRE-FLIGHT",
-	"PLAN",
-	"BASELINE",
-	"ADVERSARIAL E2E",
-	"CHECK",
-	"DIAGNOSIS",
-	"FIX",
-	"RE-VERIFY",
-	"EXIT",
-	"CLEANUP",
-	"ROLLBACK",
-	"STATE",
-] as const;
-export type QaPhase = (typeof QA_PHASES)[number];
+// Imported with the phase order for the shared phase-index contract; the phase
+// funnel consumes this index in the subsequent QA state extension.
+void BASELINE_INDEX;
 
 const DEFAULT_MAX_CYCLES = 5;
 
