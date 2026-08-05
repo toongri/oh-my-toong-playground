@@ -7,9 +7,9 @@
 #
 # 1. Unconditional deny (codex-ledger-parity plan, TODO 2) --
 #    write_guard_core_run. Full-path EXACT match on the resolved
-#    current-session ledger, PLUS a glob candidate (contains *, ?, or [)
-#    whose pattern matches that resolved ledger path -- NEVER a bare
-#    "session-ledger-" substring (that loose match is
+#    current-session ledger or QA state, PLUS a glob candidate (contains *, ?,
+#    or [) whose pattern matches one of those resolved protected paths -- NEVER
+#    a bare "session-ledger-" substring (that loose match is
 #    hooks/pre-tool-enforcer.sh's superseded _wg_ledger_target_in_segment
 #    classifier, hooks/pre-tool-enforcer.sh:42-77).
 #
@@ -143,11 +143,12 @@ _wg_core_pathwise_glob_match() {
 # write_guard_core_run <OMT_DIR> <session_id>
 # Reads newline-separated already-absolutized candidate target paths on
 # stdin. Emits the deny JSON to stdout iff any candidate is FULL-PATH EXACT
-# equal to "$OMT_DIR/session-ledger-<session_id>.md", OR is a glob pattern
-# (contains *, ?, or [) that, used as a shell pattern, matches that resolved
-# ledger path (e.g. `rm "$OMT_DIR"/session-ledger-*.md` never EXACT-matches
-# but would still destroy the current-session ledger); else emits nothing
-# (allow).
+# equal to either current-session protected path (the ledger or
+# "$OMT_DIR/qa-state-<session_id>.json"), OR is a glob pattern (contains *, ?,
+# or [) that, used as a shell pattern, matches one of those resolved paths
+# (e.g. `rm "$OMT_DIR"/session-ledger-*.md` or
+# `rm "$OMT_DIR"/qa-state-*.json` never EXACT-matches but would still destroy
+# current-session state); else emits nothing (allow).
 # Claude<->Codex parity story 9/9: the second deny reason this core owns,
 # alongside the ledger deny above. Claude enforces this same policy natively
 # via claude.yaml's declarative `permissions.deny` glob list (own product-UI
@@ -303,11 +304,12 @@ write_guard_core_run() {
             _wg_core_drain_stdin
             return 0
         fi
-        # Glob candidate (e.g. `rm session-ledger-*.md`): never EXACT-matches,
-        # but if the pattern matches the resolved ledger path, running the
-        # command destroys the current ledger -> deny. Only globs that
-        # ACTUALLY match the single known ledger path are denied; a
-        # non-matching glob stays allow, so no false block.
+        # Glob candidate (e.g. `rm session-ledger-*.md` or
+        # `rm qa-state-*.json`): never EXACT-matches, but if the pattern
+        # matches either resolved protected path, running the command destroys
+        # the current ledger/QA state -> deny. Only globs that ACTUALLY match
+        # one of the two known current-session paths are denied; a non-matching
+        # glob stays allow, so no false block.
         #
         # Match is component-wise WITH depth (segment-count) equality (see
         # _wg_core_pathwise_glob_match above): each candidate path segment is
@@ -324,6 +326,10 @@ write_guard_core_run() {
             *[*?[]*)
                 if _wg_core_pathwise_glob_match "$norm_candidate" "$ledger_path"; then
                     printf '%s\n' "$_wg_core_deny_json"
+                    _wg_core_drain_stdin
+                    return 0
+                elif _wg_core_pathwise_glob_match "$norm_candidate" "$qa_state_path"; then
+                    printf '%s\n' "$_wg_core_qa_state_deny_json"
                     _wg_core_drain_stdin
                     return 0
                 fi
