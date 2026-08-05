@@ -70,6 +70,12 @@ hooks:
     - component: codex-write-guard.sh
       type: command
       matcher: "Bash|bash|apply_patch|exec_command|shell_command|Edit|Write|edit|write|multiedit|multi_edit"
+    # Claude<->Codex hook-parity: the QA driver gate consumes the same
+    # persisted active/derived booleans and blocks agent-browser/device on all
+    # three Codex shell-tool spellings.
+    - component: codex-qa-driver-guard.sh
+      type: command
+      matcher: "Bash|bash|exec_command|shell_command"
     # Claude<->Codex hook-parity: root claude.yaml registers label-commit-gate.sh
     # globally (PreToolUse, matcher "Bash"), so its Codex analog is global too --
     # see hooks/codex-label-commit-gate.sh + shared hooks/label-commit-gate-core.sh.
