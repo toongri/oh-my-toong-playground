@@ -101,6 +101,14 @@ skills:
       platforms: [claude, codex]
     - component: writing-skills
       platforms: [claude, codex]
+    # frontend는 웹 UI 작업의 공통 진입점이므로 프로젝트별 중복 없이 전역 배포해야 한다.
+    # 이식본이 Claude·Codex 스킬 루트만 지원하므로 Gemini/OpenCode 과배포를 막기 위해 플랫폼을 좁힌다.
+    - component: frontend
+      platforms: [claude, codex]
+    # visual-qa는 모든 UI 변경의 독립 검증 게이트라 전역 호출 가능해야 한다.
+    # agent-browser 기반 Claude·Codex 이식본만 검증되었으므로 Gemini/OpenCode 배포는 제외한다.
+    - component: visual-qa
+      platforms: [claude, codex]
 
 scripts:
   items:
