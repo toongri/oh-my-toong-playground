@@ -581,6 +581,54 @@ test_user_authorized_approve_renewal_denies() {
     fi
 }
 
+test_user_authorized_resume_pursuit_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "$UGCLI resume-pursuit")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED user-authorized-resume-pursuit: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+test_user_authorized_resume_pursuit_variable_indirection_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "sub=resume-pursuit; $UGCLI \"\$sub\"")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED user-authorized-resume-pursuit-variable-indirection: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+test_user_authorized_resume_pursuit_reverse_order_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "s=resume-pursuit && $UGCLI \"\$s\"")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED user-authorized-resume-pursuit-reverse-order: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+test_user_authorized_resume_pursuit_whitespace_run_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "$UGCLI  resume-pursuit   --reason x")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED user-authorized-resume-pursuit-whitespace-run: expected deny, got '$out'"
+        return 1
+    fi
+}
+
 # Whitespace-run tolerance, same hazard the dangerous-command guard fixed: a
 # real shell treats any run of spaces/tabs as one separator, so a literal
 # single-space pattern would silently ALLOW the identical command.
@@ -1046,6 +1094,10 @@ main() {
     run_test test_dangerous_git_push_force_multispace_denies
     run_test test_user_authorized_dismiss_review_finding_denies
     run_test test_user_authorized_approve_renewal_denies
+    run_test test_user_authorized_resume_pursuit_denies
+    run_test test_user_authorized_resume_pursuit_variable_indirection_denies
+    run_test test_user_authorized_resume_pursuit_reverse_order_denies
+    run_test test_user_authorized_resume_pursuit_whitespace_run_denies
     run_test test_user_authorized_variable_indirection_denies
     run_test test_user_authorized_reverse_order_denies
     run_test test_user_authorized_whitespace_run_denies

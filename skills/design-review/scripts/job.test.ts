@@ -27,6 +27,48 @@ function writeConfig(configPath: string) {
 	);
 }
 
+const ACTIVE_STATES = new Set(["queued", "running", "retrying", "awaiting_resume"]);
+
+/**
+ * Detached workers can still be in their queued startup window after `stop`
+ * returns. Keep the job directory until the terminal state has been stable
+ * long enough for that worker process to exit, then `clean` can safely enforce
+ * its active-member guard without racing the worker's final status write.
+ */
+async function waitForStableTerminal(jobDir: string, stableMs = 500): Promise<void> {
+	const deadline = Date.now() + 15_000;
+	let terminalSince: number | null = null;
+	while (Date.now() < deadline) {
+		const membersDir = path.join(jobDir, "reviewers");
+		let allTerminal = fs.existsSync(membersDir);
+		if (allTerminal) {
+			for (const entry of fs.readdirSync(membersDir)) {
+				try {
+					const status = JSON.parse(
+						fs.readFileSync(path.join(membersDir, entry, "status.json"), "utf8"),
+					);
+					if (ACTIVE_STATES.has(String(status.state))) {
+						allTerminal = false;
+						break;
+					}
+				} catch {
+					allTerminal = false;
+					break;
+				}
+			}
+		}
+
+		if (allTerminal) {
+			terminalSince ??= Date.now();
+			if (Date.now() - terminalSince >= stableMs) return;
+		} else {
+			terminalSince = null;
+		}
+		await new Promise<void>((resolve) => setTimeout(resolve, 50));
+	}
+	throw new Error(`worker did not reach a stable terminal state: ${jobDir}`);
+}
+
 describe("design-review job lifecycle", () => {
 	let tmpDir: string;
 
@@ -38,7 +80,7 @@ describe("design-review job lifecycle", () => {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
 
-	test("start creates jobDir and job.json with expected fields", () => {
+	test("start creates jobDir and job.json with expected fields", async () => {
 		const configPath = path.join(tmpDir, "diagnose.config.yaml");
 		writeConfig(configPath);
 		const jobsDir = path.join(tmpDir, "jobs");
@@ -84,6 +126,7 @@ describe("design-review job lifecycle", () => {
 		try {
 			execFileSync(process.execPath, [SCRIPT, "stop", output.jobDir], { stdio: "pipe" });
 		} catch {}
+		await waitForStableTerminal(output.jobDir);
 		try {
 			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir, "--jobs-dir", jobsDir], {
 				stdio: "pipe",
@@ -91,7 +134,7 @@ describe("design-review job lifecycle", () => {
 		} catch {}
 	});
 
-	test("clean removes jobDir", () => {
+	test("clean removes jobDir", async () => {
 		const configPath = path.join(tmpDir, "diagnose.config.yaml");
 		writeConfig(configPath);
 		const jobsDir = path.join(tmpDir, "jobs");
@@ -119,6 +162,7 @@ describe("design-review job lifecycle", () => {
 		try {
 			execFileSync(process.execPath, [SCRIPT, "stop", jobDir], { stdio: "pipe" });
 		} catch {}
+		await waitForStableTerminal(jobDir);
 		execFileSync(process.execPath, [SCRIPT, "clean", jobDir, "--jobs-dir", jobsDir], {
 			stdio: "pipe",
 		});
@@ -126,7 +170,46 @@ describe("design-review job lifecycle", () => {
 		expect(fs.existsSync(jobDir)).toBe(false);
 	});
 
-	test("start returns plain jobDir path without --json flag", () => {
+	test("queued stop cleanup waits for terminal worker before deleting jobDir", async () => {
+		const configPath = path.join(tmpDir, "slow.config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"review:",
+				"  members:",
+				"    - name: tester",
+				"      command: sleep 0.5",
+				"  settings:",
+				"    timeout: 10",
+			].join("\n"),
+			"utf8",
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+
+		const { jobDir } = JSON.parse(
+			execFileSync(
+				process.execPath,
+				[SCRIPT, "start", "--config", configPath, "--jobs-dir", jobsDir, "--json", "queued race"],
+				{ stdio: "pipe" },
+			).toString(),
+		);
+
+		// `stop` may observe the freshly-written queued state and return without
+		// signaling. Waiting for a stable terminal state is therefore required
+		// before clean; clean's queued-member refusal remains intentional.
+		try {
+			execFileSync(process.execPath, [SCRIPT, "stop", jobDir], { stdio: "pipe" });
+		} catch {}
+		await waitForStableTerminal(jobDir);
+		execFileSync(process.execPath, [SCRIPT, "clean", jobDir, "--jobs-dir", jobsDir], {
+			stdio: "pipe",
+		});
+
+		expect(fs.existsSync(jobDir)).toBe(false);
+	});
+
+	test("start returns plain jobDir path without --json flag", async () => {
 		const configPath = path.join(tmpDir, "diagnose.config.yaml");
 		writeConfig(configPath);
 		const jobsDir = path.join(tmpDir, "jobs");
@@ -146,6 +229,7 @@ describe("design-review job lifecycle", () => {
 		try {
 			execFileSync(process.execPath, [SCRIPT, "stop", jobDir], { stdio: "pipe" });
 		} catch {}
+		await waitForStableTerminal(jobDir);
 		try {
 			execFileSync(process.execPath, [SCRIPT, "clean", jobDir, "--jobs-dir", jobsDir], {
 				stdio: "pipe",
@@ -193,7 +277,7 @@ describe("design-review job lifecycle", () => {
 		expect(anyJobJson).toBe(false);
 	});
 
-	test("status returns JSON with members after start", () => {
+	test("status returns JSON with members after start", async () => {
 		const configPath = path.join(tmpDir, "diagnose.config.yaml");
 		writeConfig(configPath);
 		const jobsDir = path.join(tmpDir, "jobs");
@@ -219,6 +303,7 @@ describe("design-review job lifecycle", () => {
 		try {
 			execFileSync(process.execPath, [SCRIPT, "stop", jobDir], { stdio: "pipe" });
 		} catch {}
+		await waitForStableTerminal(jobDir);
 		try {
 			execFileSync(process.execPath, [SCRIPT, "clean", jobDir, "--jobs-dir", jobsDir], {
 				stdio: "pipe",

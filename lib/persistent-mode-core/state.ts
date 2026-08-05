@@ -1,6 +1,7 @@
 import { DeepInterviewState, PrometheusState, GoalState, UltragoalState } from "./types.ts";
 import { readFileOrNull, writeFileSafe, deleteFile, ensureDir } from "./utils.ts";
 import { writeFileNoCreate, backfillProgressTouchedAt } from "@lib/state-core";
+import { withStateLock } from "./state-lock.ts";
 import { join } from "path";
 import { getOmtDir } from "@lib/omt-dir";
 
@@ -202,28 +203,32 @@ export function readUltragoalStateRaw(sessionId: string): UltragoalState | null 
 // — including the empty-partial-vs-genuine-write progress_touched_at split).
 export function updateUltragoalState(sessionId: string, partial: Partial<UltragoalState>): void {
 	const path = join(getOmtDir(), `ultragoal-state-${sessionId}.json`);
-	const content = readFileOrNull(path);
-	if (!content) return;
+	withStateLock(path, () => {
+		const content = readFileOrNull(path);
+		if (!content) return;
 
-	let raw: Record<string, unknown>;
-	try {
-		raw = JSON.parse(content);
-	} catch {
-		return;
-	}
+		let raw: Record<string, unknown>;
+		try {
+			raw = JSON.parse(content);
+		} catch {
+			return;
+		}
 
-	const ts = nowStamp();
-	const progressPatch =
-		Object.keys(partial).length === 0 ? backfillProgressTouchedAt(raw) : { progress_touched_at: ts };
-	try {
-		writeFileNoCreate(
-			path,
-			JSON.stringify({ ...raw, ...partial, ...progressPatch, last_touched_at: ts }, null, 2),
-		);
-	} catch (err) {
-		if (err !== null && typeof err === "object" && "code" in err && err.code === "ENOENT") return;
-		throw err;
-	}
+		const ts = nowStamp();
+		const progressPatch =
+			Object.keys(partial).length === 0
+				? backfillProgressTouchedAt(raw)
+				: { progress_touched_at: ts };
+		try {
+			writeFileNoCreate(
+				path,
+				JSON.stringify({ ...raw, ...partial, ...progressPatch, last_touched_at: ts }, null, 2),
+			);
+		} catch (err) {
+			if (err !== null && typeof err === "object" && "code" in err && err.code === "ENOENT") return;
+			throw err;
+		}
+	});
 }
 
 // Block counting for stuck agent escape hatch
