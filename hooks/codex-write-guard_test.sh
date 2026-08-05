@@ -2633,7 +2633,7 @@ test_qa_state_direct_write_denied() {
     local qa="$(dirname "$LED")/qa-state-cx.json" out rc=0
     out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo {} > %s"},"session_id":"cx","cwd":"%s"}' "$qa" "$GITDIR" | run_hook) || rc=$?
     rm -rf "$SBX"
-    if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"' && printf '%s' "$out" | grep -q 'qa state'; then return 0; fi
+    if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"' && printf '%s' "$out" | grep -q 'QA state'; then return 0; fi
     echo "ASSERTION FAILED qa-state-direct-write: rc=$rc out='$out'"
     return 1
 }
