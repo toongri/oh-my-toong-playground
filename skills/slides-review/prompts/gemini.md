@@ -55,6 +55,7 @@ Example:
 ```
 
 ## Rules
+- Review this deck alone — do not spawn any subagents
 - Maximum 10 directives, prioritized by visual impact
 - Focus on CSS-only fixes where possible (no structural HTML rewrites)
 - Do NOT suggest adding external libraries or frameworks
