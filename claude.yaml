@@ -17,6 +17,12 @@ hooks:
   PreToolUse:
     - component: pre-tool-enforcer.sh
       timeout: 5
+    # QA mid-loop gate: while the persisted chain is incomplete, deny the two
+    # registered E2E driver CLIs. The shim reads only derived booleans; the
+    # predicate arithmetic remains in lib/qa-chain-core.ts.
+    - component: qa-driver-guard.sh
+      matcher: "Bash"
+      timeout: 5
     - component: review-exec-guard.sh
       matcher: "Bash"
       timeout: 5
