@@ -30,14 +30,14 @@ Every implementation must choose one of these branches before UI code changes:
    - **Live site or URL reference** (the user names a site to clone or gives a URL): load `references/design/clone-from-url.md`. Drive a real browser and extract the runtime truth via `getComputedStyle` — tokens, layout geometry, default/hover/focus/active states, transitions and keyframes, and downloaded assets — into `DESIGN.md`, then clone-code reusable primitives against that contract.
    Final QA for both runs `/visual-qa` in reference-fidelity mode: compare the actual UI against the reference pixel-by-pixel and verify the code is an extensible design-system implementation, not a screenshot-matched one-off.
 2. **Greenfield or fresh setup:** if the user gave no concrete visual reference, design research is a build step with named deliverables — not exploration to be budgeted. Exploration-stop instincts ("enough exploration", two-wave caps) do not apply here. Fire every research lane IN PARALLEL before `DESIGN.md` is written, and open `DESIGN.md` with a `## 0. Research Log` section recording each lane's deliverable — a lane with no Research Log line did not run. Skip a lane only when its tool or network is genuinely unavailable, and name the skip in `DESIGN.md`:
-   - **Embedded references:** use `references/design/_INDEX.md` to shortlist 2-3 plausible Layer B references, then read exactly one Layer A style skill and one Layer B reference in full — every line, no partial reads (they are 200-500 lines; a sliced read produces the flattened token set this gate exists to prevent). Log the shortlist, the pick, and why. Use `open-design` only when the curated set has no fit; add `ui-ux-db` lookups for palette/type/domain questions.
+   - **Embedded references:** use `references/design/_INDEX.md` to shortlist 2-3 plausible Layer B references, then read exactly one Layer A style skill and one Layer B reference in full — every line, no partial reads (they are 200-500 lines; a sliced read produces the flattened token set this gate exists to prevent). Log the shortlist, the pick, and why. Add `ui-ux-db` lookups for palette/type/domain questions when needed.
    - **Lazyweb real-product screens:** READ `references/design/lazyweb.md` FIRST and run its recipe verbatim — do not improvise curl calls against lazyweb.com; the recipe mints its own anonymous token. Log the queries run, how many screens you actually VIEWED, and the layout grammar harvested — never pixel copies.
    - **Imagen concept drafts:** generate 2-3 imagen concept drafts, each seeded with the loaded Layer A + Layer B tokens (palette, type, material); pick the strongest and treat the chosen draft as the reference-fidelity contract. Log the draft paths and the pick.
    Synthesize every lane into `DESIGN.md`. Treat sources as source material, not mood labels: extract tokens, layout grammar, component anatomy, interaction states, motion, and taste decisions, then recombine them into project-specific primitives. Before laying out sections, inventory the content blocks and assign each a job — hook, explain, prove, compare, convert, navigate, retain — then order sections by the visitor's decision path, not by visual symmetry. Never freestyle past the selected references, never copy logos or brand-specific copy. Then run the Primitive Showcase Gate (`references/design/README.md` Phase 0) before any product screen.
 3. **Existing project with `DESIGN.md` or a component system:** read it, follow it, and update it before implementation only when the requested work needs a new token, primitive, state, motion rule, accessibility constraint, accepted debt, or reference-fidelity requirement.
 4. **Existing project with UI but no `DESIGN.md` and no reusable component layer:** STOP and ask the user one focused question: should you preserve the current look with copy-nearby styling, or extract a real `DESIGN.md` plus reusable components before continuing? Do not silently choose.
 
-For implementation, redesign, or design-system work that creates or updates `DESIGN.md`, `references/designpowers/README.md` + `lane-c-review.md` are part of the default load — feed their personas, accessibility, critique, debt, handoff, and role-reference guidance into the branch above. The resulting `DESIGN.md` is the implementation contract: tokens, typography, spacing, primitives, motion, responsive behavior, accessibility constraints, and accepted debt must be named there before code uses them. Verify component primitives, states, and final screens with real visual QA evidence; pass design-system decisions, implementation evidence, and unresolved debt into `/review-work` for significant implementation work.
+For implementation, redesign, or design-system work that creates or updates `DESIGN.md`, `references/designpowers/README.md` + `lane-c-review.md` are part of the default load — feed their personas, accessibility, critique, debt, handoff, and role-reference guidance into the branch above. The resulting `DESIGN.md` is the implementation contract: tokens, typography, spacing, primitives, motion, responsive behavior, accessibility constraints, and accepted debt must be named there before code uses them. Verify component primitives, states, and final screens with real visual QA evidence; pass design-system decisions, implementation evidence, and unresolved debt into `code-review` for significant implementation work.
 
 ## Ruleset 1 — design (`references/design/`)
 
@@ -67,7 +67,7 @@ The reference library has one architecture file, 12 taste skills (Layer A — *h
 
 ### Layer B — brand design systems (orthogonal to Layer A; stack freely)
 
-When the user names a brand or site — "Linear-style", "like Stripe's landing", "Aside-style browser agent" — load `references/design/<brand>.md` as the token source of truth (palette, type scale, components, do/don'ts). Coverage includes `aside` `apple` `stripe` `linear.app` `notion` `vercel` `claude` `figma` `airbnb` `nike` `tesla` `spotify` `raycast` `revolut` and ~56 more; the full list with mood shortcuts is in `_INDEX.md`. Extract the tokens and apply them to the project's own content — never copy logos or trademarked imagery. If the named brand is missing, fall back to a Layer A mood match or the `open-design` skill.
+When the user names a brand or site — "Linear-style", "like Stripe's landing", "Aside-style browser agent" — load `references/design/<brand>.md` as the token source of truth (palette, type scale, components, do/don'ts). Coverage includes `aside` `apple` `stripe` `linear.app` `notion` `vercel` `claude` `figma` `airbnb` `nike` `tesla` `spotify` `raycast` `revolut` and ~56 more; the full list with mood shortcuts is in `_INDEX.md`. Extract the tokens and apply them to the project's own content — never copy logos or trademarked imagery. If the named brand is missing, fall back to a Layer A mood match.
 
 ### React dev tooling
 
@@ -85,7 +85,7 @@ When the user names a brand or site — "Linear-style", "like Stripe's landing",
 Audit CLI (build for production first; never measure a dev server):
 
 ```bash
-uv run $SKILL_DIR/scripts/perfection/lighthouse-audit.py https://localhost:3000
+uv run ${CLAUDE_SKILL_DIR}/scripts/perfection/lighthouse-audit.py https://localhost:3000
 ```
 
 Run mobile AND desktop presets, 3–5 runs, take the median, diagnose from the JSON report.
@@ -95,16 +95,16 @@ Run mobile AND desktop presets, 3–5 runs, take the median, diagnose from the J
 `README.md` documents the search CLI and the master-plus-overrides persistence pattern. The CLI (run from the ruleset directory so it finds `data/`):
 
 ```bash
-python3 $SKILL_DIR/references/ui-ux-db/scripts/search.py "<query>" --design-system -p "Project"   # full design-system generation
-python3 $SKILL_DIR/references/ui-ux-db/scripts/search.py "<query>" --domain <domain>             # targeted lookup
-python3 $SKILL_DIR/references/ui-ux-db/scripts/search.py "<query>" --stack <stack>               # stack best practices
+python3 ${CLAUDE_SKILL_DIR}/references/ui-ux-db/scripts/search.py "<query>" --design-system -p "Project"   # full design-system generation
+python3 ${CLAUDE_SKILL_DIR}/references/ui-ux-db/scripts/search.py "<query>" --domain <domain>             # targeted lookup
+python3 ${CLAUDE_SKILL_DIR}/references/ui-ux-db/scripts/search.py "<query>" --stack <stack>               # stack best practices
 ```
 
 Domains: `product` `style` `typography` `color` `landing` `chart` `ux` `react` `web` `prompt`. Stacks: `html-tailwind` (default) `react` `nextjs` `vue` `svelte` `astro` `swiftui` `react-native` `flutter` `shadcn` `jetpack-compose`.
 
 ## Ruleset 4 — designpowers (`references/designpowers/`)
 
-`README.md` routes design operating-layer guidance from the pinned `Owl-Listener/designpowers` reference corpus into the existing frontend workflow. Load it — together with `lane-c-review.md` — for every implementation or redesign that creates or updates `DESIGN.md`, and additionally when a task needs explicit personas, accessibility and cognitive constraints, design critique, design debt, handoff, synthetic user testing, motion guidance, or role-reference prompts. It does not replace this frontend skill, `/visual-qa`, `/ulw-plan`, `/start-work`, or `/review-work`; it supplies richer design context that must first be distilled into the project `DESIGN.md`, then used as the design-system contract for implementation and verification.
+`README.md` routes design operating-layer guidance from the pinned `Owl-Listener/designpowers` reference corpus into the existing frontend workflow. Load it — together with `lane-c-review.md` — for every implementation or redesign that creates or updates `DESIGN.md`, and additionally when a task needs explicit personas, accessibility and cognitive constraints, design critique, design debt, handoff, synthetic user testing, motion guidance, or role-reference prompts. It does not replace this frontend skill, `/visual-qa`, `prometheus`, `sisyphus`, or `code-review`; it supplies richer design context that must first be distilled into the project `DESIGN.md`, then used as the design-system contract for implementation and verification.
 
 ## Quick routes — most common requests
 
@@ -138,9 +138,9 @@ Domains: `product` `style` `typography` `color` `landing` `chart` `ux` `react` `
 
 | Situation | Load |
 |---|---|
-| Brand/style not among the 70 in `references/design/`, or the user says "Open Design" | `open-design` skill — the local nexu-io/open-design library (137+ design skills, 150+ design systems) |
+| Brand/style not among the 70 in `references/design/` | Layer A mood match from the curated references |
 | Driving a browser for the Design QA phase | `agent-browser` skill |
-| Pure TypeScript/logic work with zero visual surface | `programming` skill alone — this skill adds nothing there |
+| Pure TypeScript/logic work with zero visual surface | `sisyphus-junior` agent — this skill adds nothing there |
 
 ## Activation
 

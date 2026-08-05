@@ -1,7 +1,8 @@
 # agent-browser setup (Web capture fallback)
 
 Use this when the project has **no** browser tooling configured or available for the Web
-capture path in Step 2 (no playwright / dev-browser skill, no usable headless browser).
+capture path in Step 2. Load the `agent-browser` skill before using its CLI; this
+fallback provides a usable headless browser when none is available.
 [agent-browser](https://github.com/vercel-labs/agent-browser) is a standalone CLI that
 drives a real Chromium and can screenshot a page at a fixed viewport — exactly what the
 `image-diff` evidence step needs.
@@ -16,7 +17,7 @@ npm install -g agent-browser && agent-browser install
 
 `npm install -g agent-browser` installs the CLI globally; `agent-browser install` downloads the
 managed browser it drives. If Bun is already available, `bun add -g agent-browser && agent-browser install`
-is equivalent, but npm is the default because LazyCodex/Codex installations do not require Bun.
+is equivalent, but npm is the default for broad runtime compatibility.
 
 Confirm it is ready and discover the current flags:
 
@@ -37,7 +38,7 @@ agent-browser screenshot actual.png      # add --full for full-page, --screensho
 Then feed the PNG into the diff exactly as in Step 2:
 
 ```
-node "$SKILL_DIR/scripts/visual-qa.mjs" image-diff <reference.png> actual.png
+node "${CLAUDE_SKILL_DIR}/scripts/visual-qa.mjs" image-diff <reference.png> actual.png
 ```
 
 Match the viewport numbers to whatever the reference/mock was captured at; mismatched

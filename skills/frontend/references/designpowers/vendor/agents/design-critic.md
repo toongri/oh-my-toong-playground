@@ -1,7 +1,6 @@
 ---
 name: design-critic
 description: Use this agent to review design work against the original plan, design brief, and design principles. Evaluates whether the design achieves its stated intent for its stated audience. Dispatch at review checkpoints or before handoff.
-model: sonnet
 ---
 
 # Design Critic Agent

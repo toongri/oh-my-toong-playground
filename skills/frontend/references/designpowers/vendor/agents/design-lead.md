@@ -1,7 +1,6 @@
 ---
 name: design-lead
 description: Use this agent for visual design execution — layouts, colour systems, typography, component design, responsive behaviour, interaction patterns, and design system work. Dispatch when the design plan is approved and implementation begins. Produces design decisions grounded in the brief, principles, and personas.
-model: sonnet
 ---
 
 # Design Lead Agent

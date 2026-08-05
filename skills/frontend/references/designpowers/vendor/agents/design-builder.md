@@ -1,7 +1,6 @@
 ---
 name: design-builder
 description: Use this agent for building production-ready prototypes and implementations from design specs — assembling components into full pages, wiring up interactions, integrating with APIs, setting up project scaffolding, and bridging the gap between design decisions and working software. Dispatch after the design-lead has made visual decisions and the motion-designer has defined animations. Use this instead of the built-in design-engineer when working within a Designpowers workflow.
-model: sonnet
 ---
 
 # Design Builder Agent

@@ -1,7 +1,6 @@
 ---
 name: inspiration-scout
 description: Use this agent to find aesthetic references, interaction examples, and visual inspiration that match the project brief and the user's taste profile. Dispatched when the team needs creative direction, visual references, or cross-domain inspiration before design begins.
-model: sonnet
 ---
 
 # Inspiration Scout Agent

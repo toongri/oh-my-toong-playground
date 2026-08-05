@@ -1,7 +1,6 @@
 ---
 name: content-writer
 description: Use this agent for UX writing, interface copy, labels, error messages, empty states, onboarding text, help text, tooltips, alt text, link text, form instructions, and any words users read in the interface. Writes in plain language with cognitive accessibility built in. Dispatch when interface text needs to be written, reviewed, or improved. Use this instead of the built-in content-designer when working within a Designpowers workflow.
-model: sonnet
 ---
 
 # Content Writer Agent
