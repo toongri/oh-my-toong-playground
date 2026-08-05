@@ -1366,7 +1366,7 @@ describe("qa seed chain parity", () => {
 		writeState(omtDir, "qa-state-S.json", before);
 		touchSessionStates("S");
 		const after = readState(omtDir, "qa-state-S.json") as Record<string, any>;
-		for (const key of ["phase_max", "actors", "stories", "cells", "run_checks", "derived"]) {
+		for (const key of ["phase_max", "actors", "stories", "cells", "run_checks", "derived"] as const) {
 			expect(after[key]).toEqual(before[key]);
 		}
 	});
