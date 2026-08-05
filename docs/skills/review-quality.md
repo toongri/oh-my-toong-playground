@@ -123,7 +123,11 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 
 **목적**: 구현 정확성을 검증하는 품질 보증 가디언입니다. 이 스킬은 "아무것도 증명 없이 출시되지 않는다"는 원칙 아래 동작합니다.
 
-**사이클**: PRE-FLIGHT(계약 게이트) → PLAN(액터 로스터 + 시나리오 도출) → BASELINE(빌드·테스트·린트) → ADVERSARIAL E2E(실제 구동 + 6범주 적대적 매트릭스) → CHECK → 실패 시 DIAGNOSIS→FIX→RE-VERIFY 루프(최대 5회) → EXIT → CLEANUP → ROLLBACK → STATE. 한 번의 호출이 탐지부터 수정·재검증까지 전부 소유하며, 수정자(`sisyphus-junior`)는 자기 수정을 인증하지 못합니다.
+**사이클**: PRE-FLIGHT(계약 게이트) → PLAN(액터 로스터 + 시나리오 도출) → BASELINE(빌드·테스트·린트) → ADVERSARIAL E2E(실제 구동 + 6개 커버리지 축) → CHECK → 실패 시 DIAGNOSIS→FIX→RE-VERIFY 루프(최대 5회) → EXIT → CLEANUP → ROLLBACK → STATE. 한 번의 호출이 탐지부터 수정·재검증까지 전부 소유하며, 수정자(`sisyphus-junior`)는 자기 수정을 인증하지 못합니다. 7–9번은 stale-state·dirty-worktree·flaky-rerun **실행 단위 점검**으로 별도 기록합니다.
+
+**강제되는 기록 사슬**: PLAN에서 액터 로스터를 고정한 뒤 액터마다 스토리를 만들고, 각 스토리에서 6개 커버리지 축과 `hang-timeout`(1번 축), `flaky-green`(5번 축) 하위 셀을 파생합니다. 셀의 공격 지점·우선순위와 baseline·셀·실행 단위 결과를 상태 CLI에 기록해야 다음 단계로 진행할 수 있습니다. 이 사슬의 완결성·참조 무결성·현재 사이클 증거는 phase funnel과 Claude/Codex Stop 게이트가 검사하며, 로스터가 없거나 BASELINE 이후 기록이 비어 있으면 드라이버도 차단합니다(PLAN 도달성 탐색은 허용).
+
+**종료와 예외**: `APPROVE`/`COMMENT`는 모든 필수 기록과 증거가 predicate를 통과해야 하며, `REQUEST_CHANGES`는 정직한 실패 기록 또는 실제 실행 전 fail-fast에 열려 있습니다. 셀 waive는 사유가 필요한 사용자 전용 명령이고 AI 경로에서 거부됩니다. `qa-state-*.json` 직접 쓰기도 차단되며, `set-verdict` → `complete` 순서로 상태를 닫은 뒤에만 결과를 보고합니다. Codex는 자체 시드 훅으로 같은 상태 파일과 런타임 게이트를 확보합니다.
 
 **액터 경계 원칙**: 시나리오를 쓰기 전에 먼저 **Actor Roster**를 고정합니다 — 액터 · 그 액터가 실제로 손대는 경계(화면·엔드포인트·CLI 명령) · 그 경계에 닿는 드라이버 · 도달 가능 여부. 함수·클래스·내부 모듈은 경계가 아닙니다. **직접 작성한(self-authored)** 시나리오는 모두 액터의 경계에서 진입해 실행하고, 경계에 도달할 수 없으면 **닿지 않는 마지막 홉만 fake로 대체**해 그 위 계층은 전부 실행합니다. 그것마저 불가능하면 PASS가 아니라 `NOT-RUN`이며, `H` 우선순위 시나리오가 `NOT-RUN`으로 남으면 APPROVE가 막힙니다. **호출자가 준(caller-provided)** 시나리오는 이 재배치에서 면제되어 호출자가 고른 계층 그대로 verbatim 실행하지만, 공개 의무까지 면제되지는 않습니다 — 실제 진입한 계층을 `driven-at`에 기록하고 그 위 계층에 대해서는 아무것도 주장하지 않습니다.
 

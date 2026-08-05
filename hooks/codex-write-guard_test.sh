@@ -2628,6 +2628,45 @@ test_sigpipe_codereview_shell_command_no_agent_type_large_candidates_denied() {
     return "$result"
 }
 
+test_qa_state_direct_write_denied() {
+    new_sandbox
+    local qa="$(dirname "$LED")/qa-state-cx.json" out rc=0
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo {} > %s"},"session_id":"cx","cwd":"%s"}' "$qa" "$GITDIR" | run_hook) || rc=$?
+    rm -rf "$SBX"
+    if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"' && printf '%s' "$out" | grep -q 'qa state'; then return 0; fi
+    echo "ASSERTION FAILED qa-state-direct-write: rc=$rc out='$out'"
+    return 1
+}
+
+test_qa_cli_path_allowed() {
+    new_sandbox
+    local out rc=0
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"bun skills/qa/scripts/qa-state.ts add-actor --id dev --name Developer"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook) || rc=$?
+    rm -rf "$SBX"
+    assert_allow "$out" "$rc" "qa-cli-path"
+}
+
+test_qa_waive_denied_jq() {
+    new_sandbox
+    local out rc=0
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"bun skills/qa/scripts/qa-state.ts waive --story s1 --cls 1 --reason blocked"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook) || rc=$?
+    rm -rf "$SBX"
+    if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then return 0; fi
+    echo "ASSERTION FAILED qa-waive-jq: rc=$rc out='$out'"
+    return 1
+}
+
+test_qa_waive_denied_nojq() {
+    new_sandbox
+    local out rc=0
+    new_jq_less_bin
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"bun skills/qa/scripts/qa-state.ts waive --story s1 --cls 1 --reason blocked"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook_nojq) || rc=$?
+    rm -rf "$SBX"
+    if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then return 0; fi
+    echo "ASSERTION FAILED qa-waive-nojq: rc=$rc out='$out'"
+    return 1
+}
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -2763,6 +2802,10 @@ main() {
     run_test test_codereview_nested_agent_type_in_tool_input_denies
     run_test test_sigpipe_codereview_shell_command_code_reviewer_large_candidates_allowed
     run_test test_sigpipe_codereview_shell_command_no_agent_type_large_candidates_denied
+    run_test test_qa_state_direct_write_denied
+    run_test test_qa_cli_path_allowed
+    run_test test_qa_waive_denied_jq
+    run_test test_qa_waive_denied_nojq
     run_test test_codereview_shell_command_mv_source_denies
     run_test test_codereview_shell_command_cp_source_allows
     run_test test_ledger_shell_command_mv_source_denies

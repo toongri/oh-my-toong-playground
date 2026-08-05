@@ -29,8 +29,9 @@
  *   status
  */
 
-import { readFileSync } from "fs";
+import { mkdirSync, readFileSync, rmSync, statSync } from "fs";
 import { execSync } from "child_process";
+import { resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
 import {
 	mergeWithHeartbeat,
@@ -39,28 +40,34 @@ import {
 	ensureSeed,
 	STATE_PREFIX,
 } from "@lib/state-core";
-
-/** Phases of the qa cycle: PRE-FLIGHT → PLAN → BASELINE → ADVERSARIAL E2E → CHECK →
- * [DIAGNOSIS→FIX→RE-VERIFY loop] → EXIT → CLEANUP → ROLLBACK → STATE. */
-const QA_PHASES = [
-	"PRE-FLIGHT",
-	"PLAN",
-	"BASELINE",
-	"ADVERSARIAL E2E",
-	"CHECK",
-	"DIAGNOSIS",
-	"FIX",
-	"RE-VERIFY",
-	"EXIT",
-	"CLEANUP",
-	"ROLLBACK",
-	"STATE",
-] as const;
-export type QaPhase = (typeof QA_PHASES)[number];
+import {
+	BASELINE_INDEX,
+	QA_PHASES,
+	approveOk,
+	chainComplete,
+	commentOk,
+	cycleUntouched,
+	driverGateArmed,
+	recordComplete,
+	rosterComplete,
+	type QaActor,
+	type QaBaseline,
+	type QaCell,
+	type QaChainState,
+	type QaDriver,
+	type QaPhase,
+	type QaPriority,
+	type QaResult,
+	type QaRunCheck,
+	type QaRunChecks,
+	type QaStory,
+	type QaWaive,
+	type QaInert,
+} from "@lib/qa-chain-core";
 
 const DEFAULT_MAX_CYCLES = 5;
 
-export interface QaState {
+export interface QaState extends QaChainState {
 	active: boolean;
 	phase: QaPhase;
 	/** Pursuit-cycle counter; incremented at FIX dispatch only (inc-cycle). Base 0. */
@@ -81,6 +88,44 @@ export interface QaState {
 	started_at: string;
 	/** Refreshed on every write (heartbeat). */
 	last_touched_at: string;
+}
+
+type ChainState = QaState & QaChainState;
+
+const DRIVERS = ["agent-device", "agent-browser", "curl", "bash"] as const;
+const PRIORITIES = ["H", "M", "L"] as const;
+const RESULTS = ["pass", "fail", "na"] as const;
+const CHECKS = ["stale-state", "dirty-worktree", "flaky-rerun"] as const;
+type CheckName = (typeof CHECKS)[number];
+
+function nonEmpty(value: unknown, field: string): string {
+	if (typeof value !== "string" || value.trim() === "") throw new Error(`${field} is required`);
+	return value;
+}
+
+function currentCycle(state: Partial<ChainState>): number {
+	return typeof state.cycle === "number" && Number.isInteger(state.cycle) ? state.cycle : 0;
+}
+
+function probeEvidence(path: string, surface: string, driver: QaDriver): string {
+	const absolute = resolve(path);
+	if (surface !== driver) throw new Error(`evidence-surface must match actor driver "${driver}"`);
+	let size = 0;
+	try {
+		size = statSync(absolute).size;
+	} catch {
+		throw new Error(`evidence-path does not exist: ${absolute}`);
+	}
+	if (size <= 0) throw new Error(`evidence-path is empty: ${absolute}`);
+	return absolute;
+}
+
+function stateProbe(path: string): { exists: boolean; size: number } {
+	try {
+		return { exists: true, size: statSync(path).size };
+	} catch {
+		return { exists: false, size: 0 };
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -145,6 +190,31 @@ function readPrior(sessionId: string): Partial<QaState> {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// State-file lock (mkdir is atomic across the CLI processes used by QA).
+// ---------------------------------------------------------------------------
+
+const STATE_LOCK_RETRIES = 200;
+const STATE_LOCK_SLEEP = new Int32Array(new SharedArrayBuffer(4));
+
+function withStateLock<T>(stateFilePath: string, callback: () => T): T {
+	const lockPath = `${stateFilePath}.lock`;
+	for (let attempt = 0; attempt < STATE_LOCK_RETRIES; attempt += 1) {
+		try {
+			mkdirSync(lockPath);
+			try {
+				return callback();
+			} finally {
+				rmSync(lockPath, { recursive: true, force: true });
+				}
+		} catch (err) {
+			if (!isErrnoException(err) || err.code !== "EEXIST") throw err;
+			Atomics.wait(STATE_LOCK_SLEEP, 0, 0, 5);
+		}
+	}
+	throw new Error("qa-state: state lock contended; refusing unlocked write");
+}
+
 /**
  * Merge `next` over the prior on-disk state, seeding `started_at` once and
  * supplying field defaults on first write. Persists and returns the result.
@@ -152,7 +222,7 @@ function readPrior(sessionId: string): Partial<QaState> {
  * Strict no-create: refuses and exits non-zero when the state file is absent
  * AND ensureSeed's self-heal did not create it (e.g. adopted-away sid).
  */
-function mergeWrite(sessionId: string, next: Partial<QaState>): QaState {
+function mergeWriteUnlocked(sessionId: string, next: Partial<ChainState>): QaState {
 	// Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
 	// (e.g. slash-command entry). No-op when the file already exists.
 	ensureSeed("qa", sessionId);
@@ -176,7 +246,21 @@ function mergeWrite(sessionId: string, next: Partial<QaState>): QaState {
 		target: next.target ?? prior.target ?? "",
 		started_at: prior.started_at ?? seedStartedAt(),
 	};
-	const state: QaState = mergeWithHeartbeat(partial, {});
+	const merged: Record<string, unknown> = { ...prior, ...partial };
+	for (const [key, value] of Object.entries(next)) {
+		if (value !== undefined) merged[key] = value;
+	}
+	const chain = merged as ChainState;
+	const derived = {
+		chain_complete: chainComplete(chain),
+		record_complete: recordComplete(chain, stateProbe),
+		approve_ok: approveOk(chain, stateProbe),
+		comment_ok: commentOk(chain, stateProbe),
+		roster_complete: rosterComplete(chain),
+		driver_gate_armed: driverGateArmed(chain),
+	};
+	chain.derived = derived;
+	const state: QaState = mergeWithHeartbeat(chain, {});
 	try {
 		writeFileNoCreate(stateFilePath, JSON.stringify(state, null, 2));
 	} catch (err) {
@@ -191,6 +275,10 @@ function mergeWrite(sessionId: string, next: Partial<QaState>): QaState {
 		throw err;
 	}
 	return state;
+}
+
+function mergeWrite(sessionId: string, next: Partial<ChainState>): QaState {
+	return withStateLock(resolveStatePath(sessionId), () => mergeWriteUnlocked(sessionId, next));
 }
 
 // ---------------------------------------------------------------------------
@@ -228,16 +316,24 @@ export interface SetQaOpts {
 	target?: string;
 }
 
+function writePhase(sessionId: string, phase: QaPhase, target?: string): void {
+	const prior = readPrior(sessionId) as ChainState;
+	const index = QA_PHASES.indexOf(phase);
+	if (index >= BASELINE_INDEX && !chainComplete(prior)) {
+		throw new Error(`phase funnel: ${phase} requires a complete actor/story/scenario chain`);
+	}
+	const priorMax = Number.isInteger(prior.phase_max) && (prior.phase_max as number) >= 0 ? (prior.phase_max as number) : 0;
+	mergeWrite(sessionId, { phase, phase_max: Math.max(priorMax, index), target });
+}
+
 /** General setter: phase + target. Refuses an out-of-enum phase. */
 export function setQaState(sessionId: string, opts: SetQaOpts): void {
 	const phase = opts.phase;
 	if (phase !== undefined && !isOneOf(phase, QA_PHASES)) {
 		throw new Error(`set: phase must be one of ${QA_PHASES.join("|")} (got "${phase}")`);
 	}
-	mergeWrite(sessionId, {
-		phase,
-		target: opts.target,
-	});
+	if (phase === undefined) mergeWrite(sessionId, { target: opts.target });
+	else writePhase(sessionId, phase, opts.target);
 }
 
 /** Advances phase only (does not touch target). Refuses an out-of-enum phase. */
@@ -245,7 +341,7 @@ export function advancePhase(sessionId: string, phase: string): void {
 	if (!isOneOf(phase, QA_PHASES)) {
 		throw new Error(`advance-phase: phase must be one of ${QA_PHASES.join("|")} (got "${phase}")`);
 	}
-	mergeWrite(sessionId, { phase });
+	writePhase(sessionId, phase);
 }
 
 /**
@@ -297,6 +393,276 @@ export function noteFailure(
 	return { same_failure_count: count, terminate: count >= 3 };
 }
 
+export interface AddActorOpts {
+	id: string;
+	name?: string;
+	boundary?: string;
+	driver?: string;
+	reachable: string;
+}
+
+export function addActor(sessionId: string, opts: AddActorOpts): void {
+	const id = nonEmpty(opts.id, "id");
+	const reachable = nonEmpty(opts.reachable, "reachable");
+	const prior = readPrior(sessionId) as ChainState;
+	const actors = [...(prior.actors ?? [])];
+	const index = actors.findIndex((candidate) => candidate.id === id);
+	const existing = index >= 0 ? actors[index] : undefined;
+	const name = opts.name ?? existing?.name;
+	const boundary = opts.boundary ?? existing?.boundary;
+	const driver = opts.driver ?? existing?.driver;
+	if (!name || !boundary) throw new Error("name and boundary are required for a new actor");
+	if (!isOneOf(driver, DRIVERS)) throw new Error(`driver must be one of ${DRIVERS.join("|")}`);
+	const actor: QaActor = { id, name, boundary, driver, reachable };
+	if (index >= 0) actors[index] = actor;
+	else actors.push(actor);
+	mergeWrite(sessionId, { actors });
+}
+
+export interface AddStoryOpts {
+	id: string;
+	actor: string;
+}
+
+export function addStory(sessionId: string, opts: AddStoryOpts): void {
+	const id = nonEmpty(opts.id, "id");
+	const actor = nonEmpty(opts.actor, "actor");
+	const prior = readPrior(sessionId) as ChainState;
+	if (!(prior.actors ?? []).some((candidate) => candidate.id === actor)) {
+		throw new Error(`add-story: unknown actor "${actor}"`);
+	}
+	const stories = [...(prior.stories ?? [])];
+	const next: QaStory = { id, actor };
+	const index = stories.findIndex((candidate) => candidate.id === id);
+	if (index >= 0) stories[index] = { ...stories[index], ...next };
+	else stories.push(next);
+	mergeWrite(sessionId, { stories });
+}
+
+function validateCellSelector(story: string, cls: unknown, sub: string | undefined): { story: string; cls: number; sub?: "hang-timeout" | "flaky-green" } {
+	const storyId = nonEmpty(story, "story");
+	const classNumber = typeof cls === "number" ? cls : Number(cls);
+	if (!Number.isInteger(classNumber) || classNumber < 1 || classNumber > 6) throw new Error("cls must be an integer from 1 to 6");
+	if (sub !== undefined && sub !== "hang-timeout" && sub !== "flaky-green") throw new Error("invalid sub");
+	if (sub === "hang-timeout" && classNumber !== 1) throw new Error("hang-timeout requires cls 1");
+	if (sub === "flaky-green" && classNumber !== 5) throw new Error("flaky-green requires cls 5");
+	return { story: storyId, cls: classNumber, ...(sub ? { sub } : {}) };
+}
+
+function sameCell(left: Pick<QaCell, "story" | "cls" | "sub">, right: Pick<QaCell, "story" | "cls" | "sub">): boolean {
+	return left.story === right.story && left.cls === right.cls && left.sub === right.sub;
+}
+
+export interface AuthorCellOpts {
+	story: string;
+	cls: number;
+	sub?: string;
+	attackPoint: string;
+	priority: string;
+}
+
+export function authorCell(sessionId: string, opts: AuthorCellOpts): void {
+	const selector = validateCellSelector(opts.story, opts.cls, opts.sub);
+	const attackPoint = nonEmpty(opts.attackPoint, "attack-point");
+	if (!isOneOf(opts.priority, PRIORITIES)) throw new Error(`priority must be one of ${PRIORITIES.join("|")}`);
+	const prior = readPrior(sessionId) as ChainState;
+	if (!(prior.stories ?? []).some((story) => story.id === selector.story)) throw new Error(`author-cell: unknown story "${selector.story}"`);
+	const cycle = currentCycle(prior);
+	const cells = [...(prior.cells ?? [])];
+	const next: QaCell = { ...selector, attack_point: attackPoint, priority: opts.priority as QaPriority, cycle };
+	const index = cells.findIndex((cell) => cell.cycle === cycle && sameCell(cell, selector));
+	if (index >= 0) cells[index] = next;
+	else cells.push(next);
+	mergeWrite(sessionId, { cells });
+}
+
+function actorDriver(state: ChainState, storyId: string): QaDriver {
+	const story = (state.stories ?? []).find((candidate) => candidate.id === storyId);
+	if (!story) throw new Error(`unknown story "${storyId}"`);
+	const actorId = story.actor ?? story.actor_id;
+	const actor = (state.actors ?? []).find((candidate) => candidate.id === actorId);
+	if (!actor || !actor.driver || !isOneOf(actor.driver, DRIVERS)) throw new Error(`story "${storyId}" has no valid actor driver`);
+	return actor.driver;
+}
+
+export interface RecordBaselineOpts {
+	story: string;
+	result: string;
+	note?: string;
+	evidencePath?: string;
+	evidenceSurface?: string;
+}
+
+export function recordBaseline(sessionId: string, opts: RecordBaselineOpts): void {
+	const storyId = nonEmpty(opts.story, "story");
+	if (!isOneOf(opts.result, RESULTS.filter((result): result is "pass" | "fail" => result !== "na"))) throw new Error("result must be pass or fail");
+	const prior = readPrior(sessionId) as ChainState;
+	const story = (prior.stories ?? []).find((candidate) => candidate.id === storyId);
+	if (!story) throw new Error(`record-baseline: unknown story "${storyId}"`);
+	const cycle = currentCycle(prior);
+	let evidence: { path: string; surface: string } | undefined;
+	if (opts.result === "pass") {
+		if (!opts.evidencePath || !opts.evidenceSurface) throw new Error("pass baseline requires evidence-path and evidence-surface");
+		evidence = { path: probeEvidence(opts.evidencePath, opts.evidenceSurface, actorDriver(prior, storyId)), surface: opts.evidenceSurface };
+	}
+	const baseline: QaBaseline = { result: opts.result as "pass" | "fail", ...(opts.note !== undefined ? { note: opts.note } : {}), ...(evidence ? { evidence, cycle } : { cycle }) };
+	const stories = [...(prior.stories ?? [])];
+	const index = stories.findIndex((candidate) => candidate.id === storyId);
+	const existing = stories[index];
+	const priorHistory = Array.isArray((existing as unknown as Record<string, unknown>).baseline_history)
+		? ([...(existing as unknown as Record<string, unknown>).baseline_history as QaBaseline[]])
+		: [];
+	if (existing.baseline && existing.baseline.cycle !== cycle) priorHistory.push(existing.baseline);
+	stories[index] = { ...existing, baseline, ...(priorHistory.length ? { baseline_history: priorHistory } : {}) } as QaStory;
+	mergeWrite(sessionId, { stories });
+}
+
+export interface RecordCellOpts {
+	story: string;
+	cls: number;
+	sub?: string;
+	status: string;
+	naReason?: string;
+	evidencePath?: string;
+	evidenceSurface?: string;
+}
+
+export function recordCell(sessionId: string, opts: RecordCellOpts): void {
+	const selector = validateCellSelector(opts.story, opts.cls, opts.sub);
+	if (!isOneOf(opts.status, RESULTS)) throw new Error(`status must be one of ${RESULTS.join("|")}`);
+	const prior = readPrior(sessionId) as ChainState;
+	const cycle = currentCycle(prior);
+	const authored = (prior.cells ?? []).find((cell) => cell.cycle === cycle && sameCell(cell, selector));
+	if (!authored || !authored.attack_point || !authored.priority) throw new Error("record-cell requires an authored current-cycle cell");
+	if (opts.status === "na" && !opts.naReason?.trim()) throw new Error("na status requires na-reason");
+	let evidence: { path: string; surface: string } | undefined;
+	if (opts.status === "pass") {
+		if (!opts.evidencePath || !opts.evidenceSurface) throw new Error("pass cell requires evidence-path and evidence-surface");
+		evidence = { path: probeEvidence(opts.evidencePath, opts.evidenceSurface, actorDriver(prior, selector.story)), surface: opts.evidenceSurface };
+	}
+	const next: QaCell = {
+		...selector,
+		attack_point: authored.attack_point,
+		priority: authored.priority,
+		status: opts.status as QaResult,
+		cycle,
+		...(opts.naReason !== undefined ? { na_reason: opts.naReason } : {}),
+		...(evidence ? { evidence } : {}),
+	};
+	const cells = [...(prior.cells ?? [])];
+	const index = cells.findIndex((cell) => cell.cycle === cycle && sameCell(cell, selector));
+	cells[index] = next;
+	mergeWrite(sessionId, { cells });
+}
+
+export interface RecordRunCheckOpts {
+	check: string;
+	result: string;
+	note?: string;
+}
+
+export function recordRunCheck(sessionId: string, opts: RecordRunCheckOpts): void {
+	if (!isOneOf(opts.check, CHECKS)) throw new Error(`check must be one of ${CHECKS.join("|")}`);
+	if (!isOneOf(opts.result, ["pass", "fail"] as const)) throw new Error("result must be pass or fail");
+	if (opts.result === "fail" && !opts.note?.trim()) throw new Error("fail result requires note");
+	const prior = readPrior(sessionId) as ChainState;
+	const cycle = currentCycle(prior);
+	const key = opts.check as CheckName;
+	const existingChecks = { ...(prior.run_checks ?? {}) } as QaRunChecks;
+	const history = { ...((prior as unknown as Record<string, unknown>).run_checks_history as Record<string, QaRunCheck[]> | undefined) };
+	const field = key.replace("-", "_") as keyof QaRunChecks;
+	const old = existingChecks[field];
+	if (old && typeof old !== "string" && old.cycle !== cycle) {
+		history[key] = [...(history[key] ?? []), old];
+	}
+	existingChecks[field] = { result: opts.result as "pass" | "fail", ...(opts.note !== undefined ? { note: opts.note } : {}), cycle };
+	mergeWrite(sessionId, { run_checks: existingChecks, ...(Object.keys(history).length ? { run_checks_history: history } : {}) } as Partial<ChainState>);
+}
+
+export function setVerdict(sessionId: string, verdict: string): void {
+	if (!isOneOf(verdict, ["APPROVE", "COMMENT", "REQUEST_CHANGES"] as const)) {
+		throw new Error("set-verdict: verdict must be APPROVE, COMMENT, or REQUEST_CHANGES");
+	}
+	withStateLock(resolveStatePath(sessionId), () => {
+		ensureSeed("qa", sessionId);
+		const prior = readPrior(sessionId) as ChainState;
+		if (verdict === "APPROVE" && !approveOk(prior, stateProbe)) {
+			throw new Error("set-verdict: APPROVE refused — approveOk is false; record/waive cells or use REQUEST_CHANGES");
+		}
+		if (verdict === "COMMENT" && !commentOk(prior, stateProbe)) {
+			throw new Error("set-verdict: COMMENT refused — commentOk is false; resolve all H-priority cells");
+		}
+		mergeWriteUnlocked(sessionId, { verdict });
+	});
+}
+
+type QaWaiveWithReason = QaWaive & { reason: string };
+
+export function waiveCell(sessionId: string, opts: { story: string; cls: number; sub?: string; reason: string }): void {
+	const selector = validateCellSelector(opts.story, opts.cls, opts.sub);
+	const reason = nonEmpty(opts.reason, "reason");
+	const prior = readPrior(sessionId) as ChainState;
+	const cycle = currentCycle(prior);
+	if (!(prior.stories ?? []).some((story) => story.id === selector.story)) throw new Error(`waive: unknown story "${selector.story}"`);
+	if (!(prior.cells ?? []).some((cell) => cell.cycle === cycle && sameCell(cell, selector))) {
+		throw new Error("waive: cell must be authored in the current cycle");
+	}
+	const waives = ([...(prior.waives ?? [])] as QaWaiveWithReason[]);
+	const next: QaWaiveWithReason = { ...selector, cycle, reason };
+	const index = waives.findIndex((item) => item.cycle === cycle && sameCell(item, selector));
+	if (index >= 0) waives[index] = next;
+	else waives.push(next);
+	mergeWrite(sessionId, { waives });
+}
+
+export function declareInert(sessionId: string, reason: string): void {
+	mergeWrite(sessionId, { inert: { declared: true, reason: nonEmpty(reason, "reason"), cycle: currentCycle(readPrior(sessionId)) } });
+}
+
+/** Re-enters a session with a fresh, empty QA cycle. */
+export function startQa(sessionId: string, target: string): void {
+	const stateFilePath = resolveStatePath(sessionId);
+	withStateLock(stateFilePath, () => {
+		ensureSeed("qa", sessionId);
+		const prior = readPrior(sessionId) as ChainState;
+		if (prior.active !== false && !cycleUntouched(prior)) {
+			throw new Error("start: refused — active cycle has work; run gated complete first");
+		}
+		const reset: Record<string, unknown> = {
+			...prior,
+			active: true,
+			phase: "PRE-FLIGHT",
+			phase_max: 0,
+			cycle: 0,
+			max_cycles: prior.max_cycles ?? DEFAULT_MAX_CYCLES,
+			same_failure_key: "",
+			same_failure_count: 0,
+			fix_head_before: "",
+			user_dirty_set: [],
+			target: nonEmpty(target, "target"),
+			actors: [],
+			stories: [],
+			cells: [],
+			run_checks: null,
+			waives: [],
+			verdict: null,
+		};
+		delete reset.inert;
+		delete reset.run_checks_history;
+		const chain = reset as ChainState;
+		chain.derived = {
+			chain_complete: chainComplete(chain),
+			record_complete: recordComplete(chain, stateProbe),
+			approve_ok: approveOk(chain, stateProbe),
+			comment_ok: commentOk(chain, stateProbe),
+			roster_complete: rosterComplete(chain),
+			driver_gate_armed: driverGateArmed(chain),
+		};
+		const state = mergeWithHeartbeat(chain, {});
+		writeFileNoCreate(stateFilePath, JSON.stringify(state, null, 2));
+	});
+}
+
 /**
  * Marks the qa cycle inactive at the terminal STATE phase (Goal Met / max_cycles /
  * Same-Failure-3x / Safety). Without this, `active` stays `true` forever (mergeWrite
@@ -304,7 +670,43 @@ export function noteFailure(
  * session-start restore banner on the next session.
  */
 export function completeQa(sessionId: string): void {
-	mergeWrite(sessionId, { active: false });
+	withStateLock(resolveStatePath(sessionId), () => {
+		ensureSeed("qa", sessionId);
+		const prior = readPrior(sessionId) as ChainState;
+		const verdict = prior.verdict;
+		const canComplete =
+			(verdict === "APPROVE" && approveOk(prior, stateProbe)) ||
+			(verdict === "COMMENT" && commentOk(prior, stateProbe)) ||
+			(verdict === "REQUEST_CHANGES" && (recordComplete(prior, stateProbe) || cycleUntouched(prior)));
+		if (!canComplete) {
+			throw new Error("complete: refused — unmet verdict/record predicate; run set-verdict after recording the current cycle");
+		}
+		mergeWriteUnlocked(sessionId, { active: false });
+	});
+}
+
+type QaView = QaState & {
+	prior_cycle_cells: QaCell[];
+	prior_cycle_waives: QaWaiveWithReason[];
+	verdict_report: { verdict: QaState["verdict"]; cycle: number; waives: QaWaiveWithReason[]; inert?: QaInert };
+};
+
+function readQaView(sessionId: string): QaView | null {
+	const state = readQaState(sessionId);
+	if (!state) return null;
+	const cycle = currentCycle(state);
+	const cells = (state.cells ?? []) as QaCell[];
+	const waives = (state.waives ?? []) as QaWaiveWithReason[];
+	const currentWaives = waives.filter((waive) => waive.cycle === cycle);
+	const currentInert = state.inert?.cycle === undefined || state.inert.cycle === cycle ? state.inert : undefined;
+	return {
+		...state,
+		cells: cells.filter((cell) => cell.cycle === cycle),
+		waives: currentWaives,
+		prior_cycle_cells: cells.filter((cell) => cell.cycle !== cycle),
+		prior_cycle_waives: waives.filter((waive) => waive.cycle !== cycle),
+		verdict_report: { verdict: state.verdict, cycle, waives: currentWaives, ...(currentInert ? { inert: currentInert } : {}) },
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -333,6 +735,12 @@ function parseArgs(args: string[]): Record<string, string | boolean> {
 
 function str(v: string | boolean | undefined): string | undefined {
 	return v !== undefined ? String(v) : undefined;
+}
+
+function requiredArg(args: Record<string, string | boolean>, name: string): string {
+	const value = str(args[name]);
+	if (!value || value.trim() === "") throw new Error(`${name} is required`);
+	return value;
 }
 
 function main(): void {
@@ -384,24 +792,84 @@ function main(): void {
 				process.exit(1);
 			}
 			captureDirtySet(sessionId, parsed);
-		} else if (subcommand === "note-failure") {
+			} else if (subcommand === "note-failure") {
 			const key = process.argv.slice(3).find((a) => !a.startsWith("--"));
 			if (!key) {
 				process.stderr.write("note-failure: <key> argument is required\n");
 				process.exit(1);
 			}
-			const result = noteFailure(sessionId, key);
-			process.stdout.write(JSON.stringify(result) + "\n");
-		} else if (subcommand === "complete") {
+				const result = noteFailure(sessionId, key);
+				process.stdout.write(JSON.stringify(result) + "\n");
+			} else if (subcommand === "add-actor") {
+				addActor(sessionId, {
+					id: requiredArg(args, "id"),
+					name: str(args["name"]),
+					boundary: str(args["boundary"]),
+					driver: str(args["driver"]),
+					reachable: requiredArg(args, "reachable"),
+				});
+			} else if (subcommand === "add-story") {
+				addStory(sessionId, { id: requiredArg(args, "id"), actor: str(args["actor"]) ?? str(args["actor-id"]) ?? "" });
+			} else if (subcommand === "author-cell") {
+				authorCell(sessionId, {
+					story: requiredArg(args, "story"),
+					cls: Number(requiredArg(args, "cls")),
+					sub: str(args["sub"]),
+					attackPoint: requiredArg(args, "attack-point"),
+					priority: requiredArg(args, "priority"),
+				});
+			} else if (subcommand === "record-baseline") {
+				recordBaseline(sessionId, {
+					story: requiredArg(args, "story"),
+					result: requiredArg(args, "result"),
+					note: str(args["note"]),
+					evidencePath: str(args["evidence-path"]),
+					evidenceSurface: str(args["evidence-surface"]),
+				});
+			} else if (subcommand === "record-cell") {
+				recordCell(sessionId, {
+					story: requiredArg(args, "story"),
+					cls: Number(requiredArg(args, "cls")),
+					sub: str(args["sub"]),
+					status: requiredArg(args, "status"),
+					naReason: str(args["na-reason"]),
+					evidencePath: str(args["evidence-path"]),
+					evidenceSurface: str(args["evidence-surface"]),
+				});
+			} else if (subcommand === "record-run-check") {
+				recordRunCheck(sessionId, {
+					check: requiredArg(args, "check"),
+					result: requiredArg(args, "result"),
+					note: str(args["note"]),
+				});
+			} else if (subcommand === "set-verdict") {
+				const verdict = process.argv.slice(3).find((arg) => !arg.startsWith("--"));
+				if (!verdict) {
+					process.stderr.write("set-verdict: <APPROVE|COMMENT|REQUEST_CHANGES> argument is required\n");
+					process.exit(1);
+				}
+				setVerdict(sessionId, verdict);
+			} else if (subcommand === "start") {
+				startQa(sessionId, requiredArg(args, "target"));
+			} else if (subcommand === "waive") {
+				waiveCell(sessionId, {
+					story: requiredArg(args, "story"),
+					cls: Number(requiredArg(args, "cls")),
+					sub: str(args["sub"]),
+					reason: requiredArg(args, "reason"),
+				});
+			} else if (subcommand === "declare-inert") {
+				declareInert(sessionId, requiredArg(args, "reason"));
+			} else if (subcommand === "complete") {
 			completeQa(sessionId);
 		} else if (subcommand === "get") {
-			process.stdout.write(JSON.stringify(readQaState(sessionId)) + "\n");
+			process.stdout.write(JSON.stringify(readQaView(sessionId)) + "\n");
 		} else if (subcommand === "status") {
 			const state = readQaState(sessionId);
 			process.stdout.write((state ? state.phase : "absent") + "\n");
 		} else {
 			process.stderr.write(
-				"Usage: qa-state.ts <set|advance-phase|inc-cycle|record-fix-head|capture-dirty-set|note-failure|complete|get|status> [options]\n",
+				"Usage: qa-state.ts <set|advance-phase|inc-cycle|record-fix-head|capture-dirty-set|note-failure|add-actor|add-story|author-cell|record-baseline|record-cell|record-run-check|set-verdict|start|waive|declare-inert|complete|get|status> [options]\n",
 			);
 			process.exit(1);
 		}
