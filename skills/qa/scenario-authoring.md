@@ -91,6 +91,8 @@ Every self-authored scenario is written in this six-field shape, in this order:
 
 Omitting any of the six fields, or leaving `why-needed` blank, makes the scenario non-conformant — go back and fill it before running it.
 
+When the scenario is committed to the qa state chain, its `priority` and attack content are recorded with `qa-state.ts author-cell --story <story-id> --cls <1..6> [--sub hang-timeout|flaky-green] --attack-point "<hostile probe>" --priority H|M|L`. The six bare classes are supplemented by `cls 1 / hang-timeout` and `cls 5 / flaky-green`; the state CLI is the machine-checkable record of the authored shape, while this document remains the derivation guide.
+
 ---
 
 ## Worked Example (algocare high-risk domain)
@@ -110,4 +112,4 @@ Omitting any of the six fields, or leaving `why-needed` blank, makes the scenari
 
 ## Breadth Then Depth
 
-Author in two passes, in this order. **Breadth first**: walk Layer A → B → C → D for the change under review to derive the full set of risk-covering and use-case-covering scenarios — this is what guarantees the scenario set covers the risk surface and the product's real usage, not just the files that changed. **Depth second**: once a scenario is derived with its six fields, subject it to the 6-category `Adversarial Scenario Matrix` in `stage3-handson.md` — that matrix is the hostile-**depth** dimension applied to each scenario this file derives, not a replacement for derivation. Do not skip straight to the matrix on an undifferentiated changed-file list; derive first, then harden each derived scenario against the matrix's categories.
+Author in two passes, in this order. **Breadth first**: walk Layer A → B → C → D for the change under review to derive the full set of risk-covering and use-case-covering scenarios — this is what guarantees the scenario set covers the risk surface and the product's real usage, not just the files that changed. **Depth second**: once a scenario is derived with its six fields, subject it to the 6-axis `Adversarial Scenario Matrix` in `stage3-handson.md` — that matrix is the hostile-**depth** dimension applied to each scenario this file derives, not a replacement for derivation. Do not skip straight to the matrix on an undifferentiated changed-file list; derive first, then harden each derived scenario against the matrix's categories. Rows 7–9 are per-run checks and are recorded with `record-run-check`, not added as coverage axes.

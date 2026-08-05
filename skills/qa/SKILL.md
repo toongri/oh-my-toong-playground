@@ -1,6 +1,6 @@
 ---
 name: qa
-description: Use when verifying a code change through a standalone adversarial e2e cycle — drives the changed surface for real (curl/agent-browser/agent-device/bash) and attacks it across the 6-category matrix (failure/boundary/injection/interruption/misleading-success/idempotency), owning diagnosis→fix→re-verify to green via `oracle` (diagnosis) and `sisyphus-junior` (fix) before issuing a binary APPROVE/REQUEST_CHANGES verdict.
+description: Use when verifying a code change through a standalone adversarial e2e cycle — drives the changed surface for real (curl/agent-browser/agent-device/bash) and attacks it across 6 coverage axes + 3 per-run checks (failure/boundary/injection/interruption/misleading-success/idempotency), owning diagnosis→fix→re-verify to green via `oracle` (diagnosis) and `sisyphus-junior` (fix) before issuing a binary APPROVE/REQUEST_CHANGES verdict.
 ---
 
 <Role>
@@ -13,7 +13,7 @@ description: Use when verifying a code change through a standalone adversarial e
 
 Pure dynamic adversarial-e2e verification skill. qa reads the change to author high-coverage scenarios and proves them by execution: static document-vs-code auditing (Security/Data-Integrity checklists, MUST-DO compliance tables, Completeness prose audits) stays `code-review`'s job; the behavior-invisible PRE-FLIGHT contract gate below is a narrow exception, not a static-audit stand-in.
 
-qa is **standalone and stateful**. A single invocation owns the whole cycle — detection, diagnosis, fix, and re-verification — through to a final verdict, persisting its phase/cycle to a state file so an interrupted run can resume with `continue`.
+qa is **standalone and stateful**. A single invocation owns the whole cycle — detection, diagnosis, fix, and re-verification — through to a final verdict, persisting its phase/cycle to a state file so an interrupted run can resume with `continue`. Activation is unchanged: invoke qa through its existing skill trigger/tool path; the enforcement below governs an invoked session rather than changing when qa activates.
 
 **Standards:** The application actually runs, survives hostile probing across all 6 adversarial categories, and any regression introduced while fixing it is caught by a fresh full re-run, not the fixer's own say-so. Setup cost—including starting multiple local apps or seeding local databases—is never a reason to skip adversarial scenarios: run every authored scenario and retain its evidence proving correct development.
 
@@ -68,6 +68,8 @@ A **behavior-invisible contract check** — a narrow exception to qa's dynamic-o
 
 **PRE-FLIGHT also captures the ROLLBACK safety baseline** (used only if the loop below runs): snapshot `git status --porcelain` as `user_dirty_set` (the user's pre-existing dirty/uncommitted files) plus current `HEAD` — each entry is a porcelain status line (`XY <path>`); the file path is the portion after the status code (accounting for rename `old -> new` syntax).
 
+At cycle entry, create or re-enter the guarded state with `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts start --target "<what is being verified>"`. A second qa invocation in the same session must run `start` again so it receives a fresh chain and re-armed runtime gates.
+
 ### PLAN
 
 Two ordered outputs. The roster comes first because it fixes where every scenario must be entered and what its evidence has to show — scenarios authored before it drift inward toward whatever is easiest to call.
@@ -83,6 +85,8 @@ Enumerate every actor the changed surface serves and pin each one's boundary, as
 
 A change with no UI still has actors. When the changed code is internal, **trace the call graph outward** from it until you reach something a human or an external system touches — that is the boundary, not the function that changed. Emit the result as the `## Actor Roster` output section.
 
+Record the roster in state before authoring scenarios. Add each actor with `qa-state.ts add-actor --id … --name … --boundary … --driver agent-device|agent-browser|curl|bash --reachable unknown`, then update `--reachable` after the PLAN.1 probe. Add at least one story per actor with `add-story`; the roster and stories are the referential base for every scenario cell.
+
 **The roster spans the actor's journey, not the diff (CRITICAL).** Never QA only the platform where the change landed. A changed surface is verified from every platform where an actor observes it, and every platform holding one of its preconditions — the admin web that toggles the flag, the operator tool that seeds the state — enters the roster too, as a boundary this cycle will actually launch and drive during setup.
 
 #### PLAN.2 — Scenarios, per actor
@@ -90,6 +94,8 @@ A change with no UI still has actors. When the changed code is internal, **trace
 Parse the QA REQUEST's Spec/AC into concrete verification targets: what BASELINE must run green, what ADVERSARIAL E2E must attack from each actor's boundary, and what CHECK will judge against. MUST-DO tables and Completeness sub-checks are `code-review`'s static-audit territory, not PLAN's.
 
 See [scenario-authoring.md] for the risk/coverage-gap derivation framework.
+
+Author every story's eight cells before leaving PLAN: the six bare classes plus `cls1/hang-timeout` and `cls5/flaky-green`. Use `qa-state.ts author-cell --story … --cls … [--sub …] --attack-point "…" --priority H|M|L`. `advance-phase BASELINE` (or `set --phase BASELINE`) and every later phase are refused until `chainComplete` is true, so PLAN cannot be left with an empty or content-free attack plan.
 
 ### BASELINE
 
@@ -107,9 +113,13 @@ Build/test/lint green baseline.
 Drive the changed surface for real and attack it. Two parts, both required when the change touches a risk surface — user-facing OR an internal risk surface (feature-flag-gated logic, payment/notification resolver internals, permission/state transitions), per [stage3-handson.md] `### Decision Logic`; only a genuinely inert refactor that touches no risk surface skips:
 
 1. **Execute caller-provided scenarios verbatim**, with per-scenario evidence. ANY provided-scenario failure = immediate REQUEST_CHANGES. Caller-provided scenarios always run verbatim, unchanged — the derivation framework below governs only scenarios qa self-authors; it never rewrites what the caller handed in.
-2. **Self-author the 6-category adversarial matrix** for the changed surface, in this order — breadth before depth:
+2. **Self-author the 6-axis adversarial matrix** for the changed surface, in this order — breadth before depth:
    1. **Derive candidate scenarios by breadth** via [scenario-authoring.md]: Layer A impact-map → coverage-gap → H/M/L priority, then Layer D product use-case breadth (arrival paths · adjacent state transitions · lifecycle stances) from a product-context map built from the repo.
-   2. **Attack each derived scenario with the applicable depth rows, working highest-priority (H) first**, from the 6-category matrix: failure paths, boundary/malformed input, injection, interruption-resume + dirty state, misleading success, idempotency. See [stage3-handson.md] `## Adversarial Scenario Matrix` for the full matrix and the lifecycle/applicability detail (start → verify → stop).
+   2. **Attack each derived scenario with the applicable depth rows, working highest-priority (H) first**, from the 6 coverage axes: failure paths, boundary/malformed input, injection, interruption-resume + dirty state, misleading success, idempotency. See [stage3-handson.md] `## Adversarial Scenario Matrix` for the full matrix and the lifecycle/applicability detail (start → verify → stop). Rows 7–9 (stale-state, dirty-worktree, flaky-rerun) are per-run checks recorded separately with `record-run-check`.
+
+When a caller-provided scenario fails, record its failing cell and record every remaining unrun cell as `na` with the halt reason before declaring REQUEST_CHANGES. Apply the same sweep after any EXIT fired following a FIX dispatch (max-cycles, Same-Failure-3x, or Safety): `inc-cycle` invalidates prior-cycle records, so record the current cycle's remaining cells explicitly rather than leaving the gate with unrecorded work.
+
+For a genuinely inert refactor with no risk surface, still author the roster and all cells, record the story baseline and all three run checks, record every cell as `na` with the no-risk-surface reason, and run `qa-state.ts declare-inert --reason "<why nothing is reachable>"` once. Without that declaration an H-priority `na` blocks APPROVE.
 
 **Inline modality drivers, no tmux.** qa itself drives the modality-appropriate tool inline — it is not delegated to a separate driver subagent:
 
@@ -214,7 +224,7 @@ Loop back to CHECK. Continue until an EXIT condition below fires.
 
 ### CLEANUP
 
-Kill every process and remove every artifact this cycle spawned (background servers, simulators/emulators started for ADVERSARIAL E2E, temp files) — regardless of whether the cycle ended in PASS or an EXIT condition. A leaked process corrupts the next run.
+Kill every process and remove every artifact this cycle spawned (background servers, simulators/emulators started for ADVERSARIAL E2E, temp files) — regardless of whether the cycle ended in PASS or an EXIT condition. A leaked process corrupts the next run. **Never remove a path supplied through `--evidence-path`**, regardless of whether it came from a caller, a required-verification entry, or a self-authored scenario; completion re-probes every passing cell and baseline evidence path.
 
 ### ROLLBACK
 
@@ -237,7 +247,9 @@ bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts <sub>
 
 A `continue` invocation reads this state and resumes at the last recorded phase/cycle rather than restarting the cycle from PRE-FLIGHT. (The CLI itself is authored elsewhere — this section only pins the invocation contract qa's cycle relies on.)
 
-Once the cycle concludes (any EXIT outcome — Goal Met, max_cycles, Same-Failure-3x, or Safety), run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts complete` before reporting the verdict. This marks the state inactive so the finished cycle is not resurrected as "in progress" in a later session.
+The chain-recording surface is: `add-actor`, `add-story`, `author-cell`, `record-baseline`, `record-cell`, and `record-run-check`. Use `set-verdict APPROVE|COMMENT|REQUEST_CHANGES` to persist the verdict; `waive --story … --cls … --reason "…"` is a **user-only** exception and is denied on the AI Bash path. For a no-risk-surface cycle, use `declare-inert --reason "…"`. Runtime gates consume the persisted chain/record predicates: the phase funnel blocks BASELINE until the roster→story→cell chain is complete, the driver guards block `agent-device`/`agent-browser`/`curl`/`bash` while the roster is incomplete or once BASELINE has been reached with an incomplete chain (PLAN reachability probes remain available), and the Stop gate validates the raw state on both Claude and Codex. Direct writes to `qa-state-*.json` are denied; use the CLI.
+
+Once the cycle concludes (any EXIT outcome — Goal Met, max_cycles, Same-Failure-3x, or Safety), first run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts set-verdict <APPROVE|COMMENT|REQUEST_CHANGES>`, then run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts complete`, and only then report the verdict prose. `complete` is gated by the same predicates as Stop and refuses an unrecorded or falsely approved cycle; it marks an earned terminal state inactive so the finished cycle is not resurrected as "in progress" in a later session.
 
 ---
 
