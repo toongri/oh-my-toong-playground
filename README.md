@@ -111,6 +111,10 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 
    `make sync`는 현재 브랜치가 default 브랜치가 아니거나 워킹트리에 staged/unstaged/untracked 변경이 하나라도 있으면 실패합니다 — 즉 커밋 후에만 동기화할 수 있습니다. 게이트를 끄는 전용 환경변수나 CLI 플래그는 없지만, `HOME`을 갈아끼우면 전역 git 설정을 통해 우회할 수 있습니다. `make sync-dry`는 이 게이트 대상이 아니므로 커밋 전에도 미리보기용으로 쓸 수 있습니다. 게이트가 실제로 막는 범위와 트레이드오프는 `docs/sync-deploy-targets.md` 참고.
 
+### Git lifecycle hooks (Husky)
+
+이 저장소는 Husky v9를 사용합니다. 의존성 설치 시 `prepare: husky`가 `.husky/_/` 래퍼를 활성화하고, 래퍼는 추적된 plain hook 파일로 라우팅됩니다. `pre-commit`은 `bun run lint`를 실행하며, `pre-push`는 `bun run lint` 성공 후 `make test`를 실행합니다.
+
 ### 프로젝트별 컨벤션 분화
 
 같은 컨벤션이라도 프로젝트의 언어/프레임워크에 따라 판단 기준이 달라질 때가 있습니다. `projects/` 디렉토리는 프로젝트 스코프의 `rules/`와 `docs/`로 이걸 표현합니다: `rules/`는 항상 로드되는 얇은 층이고 `docs/`가 판단 기준·예시·근거를 담는 근거 문서입니다. 둘로 나누면 에이전트가 매번 전량을 읽지 않고 상황에 필요한 문서만 열 수 있습니다. rules를 어디까지 얇게 둘지는 프로젝트가 정합니다 — `loopers-kotlin-spring-template`은 "이런 상황이면 이 문서를 열어라"만 남긴 순수 인덱스라 판단 기준이 docs 한 곳에만 있고, `loop-pack-fe-l2-vol1`은 자주 쓰는 기준을 rules에 직접 두고 깊은 근거만 docs로 미룹니다.

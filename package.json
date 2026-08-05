@@ -8,7 +8,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
-    "format:check": "prettier --check \"**/*.{ts,tsx}\""
+    "format:check": "prettier --check \"**/*.{ts,tsx}\"",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "^4.7.1",
@@ -18,6 +19,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.6.0",
+    "husky": "^9.1.7",
     "picomatch": "4.0.4",
     "prettier": "^3.8.4",
     "typescript": "^5.9.3",
