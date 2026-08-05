@@ -213,7 +213,7 @@ flowchart TB
 
 **Purpose**: Provide architecture analysis, bug debugging, root-cause identification, and technical recommendations.
 
-**Core constraint**: **It is read-only — it diagnoses but never implements.** It delegates the analysis request to a detached worker (Hephaestus) and collects results by polling. If the worker is unavailable, it falls back to in-session analysis.
+**Core constraint**: **It is read-only — it diagnoses but never implements.** It delegates the analysis request to a detached worker (Hephaestus) and collects results by polling. The worker runs with subagent spawning and OMT skill loading blocked (`settings.deny`). If the worker is unavailable, it falls back to in-session analysis.
 
 **When to use**: Use it for requests like "root cause", "what's wrong", "architecture review", "investigate" — when you need an analysis report, not a PASS/FAIL verdict. (When delegated, it is invoked as the oracle agent.)
 
@@ -221,7 +221,7 @@ flowchart TB
 
 **Purpose**: Gather multiple AI perspectives to help with uncertain decisions.
 
-**Core constraint**: **The council provides opinions; the caller makes the final decision.** It is not used for problems with an objective answer (compile errors, code style, clear specs). If all members are unavailable, it falls back to a single-voice in-session advisory.
+**Core constraint**: **The council provides opinions; the caller makes the final decision.** It is not used for problems with an objective answer (compile errors, code style, clear specs). Each member argues its own perspective with subagent spawning and OMT skill loading blocked (`settings.deny`). If all members are unavailable, it falls back to a single-voice in-session advisory.
 
 **When to use**: Use it for decisions without a single right answer — architecture trade-offs, subjective quality judgments, disagreements in risk assessment.
 
