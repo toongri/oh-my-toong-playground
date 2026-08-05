@@ -556,6 +556,65 @@ test_negative_double_space_nondangerous_allows() {
 # ultragoal-state invocation".
 # =============================================================================
 UGCLI="bun /Users/x/.claude/skills/ultragoal/scripts/ultragoal-state.ts"
+QACLI="bun /Users/x/.claude/skills/qa/scripts/qa-state.ts"
+
+test_user_authorized_qa_waive_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "$QACLI waive --story s1 --cls 1 --reason 'blocked'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED qa-waive: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+test_user_authorized_qa_waive_reverse_order_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "sub=waive; $QACLI \"\$sub\" --story s1 --cls 1 --reason blocked")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED qa-waive-reverse: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+test_user_authorized_qa_record_cell_noncollision_allows() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "$QACLI record-cell --story s1 --cls 1 --status na --na-reason 'device unreachable'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED qa-record-cell: expected allow, got '$out'"
+    return 1
+}
+
+test_user_authorized_qa_record_cell_waive_collision_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "$QACLI record-cell --story s1 --cls 1 --status na --na-reason 'waive requested upstream'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then return 0; fi
+    echo "ASSERTION FAILED qa-record-cell-collision: expected deny, got '$out'"
+    return 1
+}
+
+test_qa_state_exact_path_denies() {
+    local out
+    out=$(printf '%s\n' "$OD/qa-state-$SID.json" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -qi 'qa-state'; then return 0; fi
+    echo "ASSERTION FAILED qa-state-path: expected deny, got '$out'"
+    return 1
+}
+
+test_qa_state_other_session_allows() {
+    local out
+    out=$(printf '%s\n' "$OD/qa-state-other.json" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED qa-state-other: expected allow, got '$out'"
+    return 1
+}
 
 test_user_authorized_dismiss_review_finding_denies() {
     local out
@@ -1098,6 +1157,12 @@ main() {
     run_test test_user_authorized_resume_pursuit_variable_indirection_denies
     run_test test_user_authorized_resume_pursuit_reverse_order_denies
     run_test test_user_authorized_resume_pursuit_whitespace_run_denies
+    run_test test_user_authorized_qa_waive_denies
+    run_test test_user_authorized_qa_waive_reverse_order_denies
+    run_test test_user_authorized_qa_record_cell_noncollision_allows
+    run_test test_user_authorized_qa_record_cell_waive_collision_denies
+    run_test test_qa_state_exact_path_denies
+    run_test test_qa_state_other_session_allows
     run_test test_user_authorized_variable_indirection_denies
     run_test test_user_authorized_reverse_order_denies
     run_test test_user_authorized_whitespace_run_denies

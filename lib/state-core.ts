@@ -49,6 +49,7 @@ import { join } from "path";
 // (the sync alias-rewriter skips lib/** files). Relative imports let `make sync`'s dep collector
 // follow the path and deploy omt-dir alongside this module.
 import { getOmtDir, resolveOmtDir } from "./omt-dir";
+import { chainComplete, commentOk, approveOk, driverGateArmed, recordComplete } from "./qa-chain-core";
 import type { QaChainState } from "./qa-chain-core";
 
 // ---------------------------------------------------------------------------
@@ -483,7 +484,16 @@ export function isPristine(type: StateType, parsed: Record<string, unknown>): bo
 		return parsed["state"] === undefined || parsed["state"] === null;
 	}
 	if (type === "qa") {
-		return parsed["phase"] === "PRE-FLIGHT" && parsed["cycle"] === 0 && parsed["target"] === "";
+		return (
+			parsed["phase"] === "PRE-FLIGHT" &&
+			(parsed["cycle"] === 0 || parsed["cycle"] === undefined) &&
+			(parsed["phase_max"] === 0 || parsed["phase_max"] === undefined) &&
+			parsed["target"] === "" &&
+			(!Array.isArray(parsed["actors"]) || parsed["actors"].length === 0) &&
+			(!Array.isArray(parsed["stories"]) || parsed["stories"].length === 0) &&
+			(!Array.isArray(parsed["cells"]) || parsed["cells"].length === 0) &&
+			(parsed["run_checks"] == null || Object.keys(parsed["run_checks"] as object).length === 0)
+		);
 	}
 	return false;
 }
@@ -771,6 +781,7 @@ function seedSkeleton(type: StateType, ts: string): Record<string, unknown> {
 		};
 	}
 	if (type === "qa") {
+		const empty: QaChainState = { actors: [], stories: [], cells: [], run_checks: null, cycle: 0, phase_max: 0 };
 		return {
 			active: true,
 			phase: "PRE-FLIGHT",
@@ -781,6 +792,21 @@ function seedSkeleton(type: StateType, ts: string): Record<string, unknown> {
 			fix_head_before: "",
 			user_dirty_set: [],
 			target: "",
+			actors: [],
+			stories: [],
+			cells: [],
+			run_checks: null,
+			waives: [],
+			inert: null,
+			verdict: null,
+			phase_max: 0,
+			derived: {
+				chain_complete: chainComplete(empty),
+				record_complete: recordComplete(empty, () => ({ exists: false, size: 0 })),
+				approve_ok: approveOk(empty, () => ({ exists: false, size: 0 })),
+				comment_ok: commentOk(empty, () => ({ exists: false, size: 0 })),
+				driver_gate_armed: driverGateArmed(empty),
+			},
 			started_at: ts,
 			last_touched_at: ts,
 		};
