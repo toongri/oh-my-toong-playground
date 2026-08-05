@@ -396,6 +396,10 @@ export const OUT_OF_SCOPE_TOKENS: readonly { token: string; reason: string }[] =
 		reason:
 			"Spring Boot Test API (`@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)`); appears in the project-local `testing` skill's e2e-test.md reference, duplicated in both projects/loopers-kotlin-spring-template and projects/toong-java-spring-template (Kotlin/Java variants of the same test-setup snippet). Not enumerated by the original corpus scan — found by running the G4-2 scanner itself against the full (unfiltered) project set.",
 	},
+	{
+		token: "Skill (",
+		reason: "real invocations require no space before `(`, so this spaced prose cannot be an invocation.",
+	},
 ];
 
 /**
