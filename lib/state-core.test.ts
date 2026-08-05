@@ -1310,6 +1310,68 @@ describe("ensureSeed ↔ bash seed parity (ES-parity)", () => {
 	}
 });
 
+describe("qa seed chain parity", () => {
+	let omtDir: string;
+	const origOmtDir = process.env.OMT_DIR;
+	beforeEach(() => {
+		omtDir = makeOmtDir();
+		process.env.OMT_DIR = omtDir;
+	});
+	afterEach(() => {
+		if (origOmtDir === undefined) delete process.env.OMT_DIR;
+		else process.env.OMT_DIR = origOmtDir;
+		rmSync(omtDir, { recursive: true, force: true });
+	});
+
+	test("qa seed carries empty chain and derived gate flags", () => {
+		ensureSeed("qa", "S");
+		const state = readState(omtDir, "qa-state-S.json") as Record<string, any>;
+		expect(state.actors).toEqual([]);
+		expect(state.stories).toEqual([]);
+		expect(state.cells).toEqual([]);
+		expect(state.run_checks).toBeNull();
+		expect(state.phase_max).toBe(0);
+		expect(state.derived).toEqual({
+			chain_complete: false,
+			record_complete: false,
+			approve_ok: false,
+			comment_ok: false,
+			driver_gate_armed: true,
+		});
+		expect(isPristine("qa", state)).toBe(true);
+	});
+
+	test("legacy qa state without phase_max remains PRE-FLIGHT/pristine", () => {
+		const state = { active: true, phase: "PRE-FLIGHT", cycle: 0, target: "" };
+		expect(isPristine("qa", state)).toBe(true);
+	});
+
+	test("qa chain write makes state non-pristine", () => {
+		ensureSeed("qa", "S");
+		const path = join(omtDir, "qa-state-S.json");
+		const state = readState(omtDir, "qa-state-S.json") as Record<string, any>;
+		state.actors = [{ id: "dev", name: "Developer", boundary: "app", driver: "bash" }];
+		writeFileSync(path, JSON.stringify(state));
+		expect(isPristine("qa", state)).toBe(false);
+	});
+
+	test("touch preserves qa chain fields", () => {
+		const path = join(omtDir, "qa-state-S.json");
+		const before = {
+			active: true, phase: "PLAN", phase_max: 1, cycle: 1, target: "app",
+			actors: [{ id: "dev" }], stories: [{ id: "s1", actor: "dev" }], cells: [],
+			run_checks: { stale_state: { status: "pass", cycle: 1 } },
+			derived: { driver_gate_armed: true }, started_at: "x", last_touched_at: "x",
+		};
+		writeState(omtDir, "qa-state-S.json", before);
+		touchSessionStates("S");
+		const after = readState(omtDir, "qa-state-S.json") as Record<string, any>;
+		for (const key of ["phase_max", "actors", "stories", "cells", "run_checks", "derived"]) {
+			expect(after[key]).toEqual(before[key]);
+		}
+	});
+});
+
 // ---------------------------------------------------------------------------
 // touchSessionStates (family-agnostic Stop-hook session-state heartbeat)
 // ---------------------------------------------------------------------------

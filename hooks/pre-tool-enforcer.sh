@@ -549,6 +549,21 @@ if [[ "$toolName" == "Skill" ]]; then
   "fix_head_before": "",
   "user_dirty_set": [],
   "target": "",
+  "actors": [],
+  "stories": [],
+  "cells": [],
+  "run_checks": null,
+  "waives": [],
+  "inert": null,
+  "verdict": null,
+  "phase_max": 0,
+  "derived": {
+    "chain_complete": false,
+    "record_complete": false,
+    "approve_ok": false,
+    "comment_ok": false,
+    "driver_gate_armed": true
+  },
   "started_at": "'"${ts}"'",
   "last_touched_at": "'"${ts}"'"
 }'

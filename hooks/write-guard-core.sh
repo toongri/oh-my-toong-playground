@@ -61,6 +61,8 @@ _wg_core_codereview_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUs
 # byte-identical deny text.
 _wg_core_user_authorized_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: 이 명령은 사용자만 실행할 수 있습니다. AI는 실행하지 말고, 근거와 함께 명령어 전문을 제시한 뒤 사용자가 직접 실행하도록 요청하세요 (터미널에서 직접, 또는 프롬프트에 ! 를 붙여서)."}}'
 
+_wg_core_qa_state_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the current session QA state (qa-state-*.json). Use the qa-state.ts CLI instead."}}'
+
 # _wg_core_normpath <path>
 # Pure LEXICAL path normalization (os.path.normpath semantics): collapse
 # empty (//), '.' and '..' segments WITHOUT touching the filesystem. This
@@ -251,6 +253,16 @@ write_guard_core_check_user_authorized_command() {
             esac
             ;;
     esac
+    case "$seg" in
+        *"qa-state.ts"*)
+            case "$seg" in
+                *"waive"*)
+                    printf '%s\n' "$_wg_core_user_authorized_deny_json"
+                    return 0
+                    ;;
+            esac
+            ;;
+    esac
     return 0
 }
 
@@ -276,9 +288,16 @@ write_guard_core_run() {
     local session_id="$2"
     local ledger_path
     ledger_path="$(_wg_core_normpath "$omt_dir/session-ledger-$session_id.md")"
+    local qa_state_path
+    qa_state_path="$(_wg_core_normpath "$omt_dir/qa-state-$session_id.json")"
     local candidate norm_candidate
     while IFS= read -r candidate; do
         norm_candidate="$(_wg_core_normpath "$candidate")"
+        if [ "$norm_candidate" = "$qa_state_path" ]; then
+            printf '%s\n' "$_wg_core_qa_state_deny_json"
+            _wg_core_drain_stdin
+            return 0
+        fi
         if [ "$norm_candidate" = "$ledger_path" ]; then
             printf '%s\n' "$_wg_core_deny_json"
             _wg_core_drain_stdin
