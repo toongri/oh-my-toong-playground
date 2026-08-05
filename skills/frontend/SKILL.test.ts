@@ -23,6 +23,10 @@ const files = (readdirSync(frontendDir, { recursive: true }) as string[])
 
 const skillMd = readFileSync(join(frontendDir, "SKILL.md"), "utf8");
 const attributionMd = readFileSync(join(frontendDir, "ATTRIBUTION.md"), "utf8");
+const uiUxDbReadme = readFileSync(
+	join(frontendDir, "references/ui-ux-db/README.md"),
+	"utf8",
+);
 const designpowersText = files
 	.filter(({ path }) => path.startsWith("references/designpowers/"))
 	.map(({ text }) => text)
@@ -178,6 +182,15 @@ describe("frontend upstream provenance and CLI paths", () => {
 
 	test("SKILL.md uses ${CLAUDE_SKILL_DIR} for the ui-ux-db CLI", () => {
 		expect(skillMd).toContain(
+			"python3 ${CLAUDE_SKILL_DIR}/references/ui-ux-db/scripts/search.py",
+		);
+	});
+
+	test("ui-ux-db README uses the shipped CLI path for executable examples", () => {
+		expect(uiUxDbReadme).not.toContain(
+			"python3 skills/ui-ux-pro-max/scripts/search.py",
+		);
+		expect(uiUxDbReadme).toContain(
 			"python3 ${CLAUDE_SKILL_DIR}/references/ui-ux-db/scripts/search.py",
 		);
 	});
