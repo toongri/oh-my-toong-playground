@@ -781,7 +781,7 @@ function seedSkeleton(type: StateType, ts: string): Record<string, unknown> {
 		};
 	}
 	if (type === "qa") {
-		const empty: QaChainState = { actors: [], stories: [], cells: [], run_checks: null, cycle: 0, phase_max: 0 };
+		const empty: QaChainState = { actors: [], stories: [], cells: [], cycle: 0, phase_max: 0 };
 		return {
 			active: true,
 			phase: "PRE-FLIGHT",
