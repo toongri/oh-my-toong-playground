@@ -86,7 +86,6 @@ rules:
   # 배포하므로 self-sync에서 재나열하지 않는다 — 중복 로드 방지. 여기엔 프로젝트
   # 전용 rule만 둔다.
   items:
-    - private-component-management
     - documentation-currency
     - rules-docs-authoring
     - sync-operations
