@@ -667,10 +667,10 @@ export function makeDecision(context: DecisionContext): HookOutput {
 		const comment = commentOk(qaState, qaProbe);
 		const complete = recordComplete(qaState, qaProbe);
 		const verdict = qaState.verdict ?? null;
-		const allowApprove = qaState.active === true && verdict === "APPROVE" && approve;
-		const allowComment = qaState.active === true && verdict === "COMMENT" && comment;
+		const allowApprove = verdict === "APPROVE" && approve;
+		const allowComment = verdict === "COMMENT" && comment;
 		const allowRequestChanges =
-			qaState.active === true && verdict === "REQUEST_CHANGES" && (complete || untouched);
+			verdict === "REQUEST_CHANGES" && (complete || untouched);
 		const escaped = getBlockCount(stateDir, qaAttemptId) >= MAX_BLOCK_COUNT;
 
 		if (allowApprove || allowComment || allowRequestChanges) {
