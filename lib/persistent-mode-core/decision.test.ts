@@ -2751,6 +2751,33 @@ describe("QA Stop-gate decision table", () => {
 		expect(makeDecision(context())).toEqual({ continue: true });
 	});
 
+	it("qa inactive completed APPROVE with approveOk allows stop", () => {
+		const state = completeQa("APPROVE");
+		state.active = false;
+		writeQaState(state);
+		expect(approveOk(state as never, (path) => ({ exists: fs.existsSync(path), size: fs.statSync(path).size }))).toBe(true);
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("qa inactive completed COMMENT with commentOk allows stop", () => {
+		const state = completeQa("COMMENT");
+		state.active = false;
+		writeQaState(state);
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("qa inactive completed REQUEST_CHANGES with recordComplete allows stop", () => {
+		const state = completeQa("REQUEST_CHANGES");
+		state.active = false;
+		writeQaState(state);
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("qa inactive untouched REQUEST_CHANGES allows stop", () => {
+		writeQaState({ active: false, phase: "PRE-FLIGHT", phase_max: 0, cycle: 0, verdict: "REQUEST_CHANGES", actors: [], stories: [], cells: [], run_checks: {} });
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
 	it("qa comment allow: active COMMENT with commentOk falls through", () => {
 		writeQaState(completeQa("COMMENT"));
 		expect(makeDecision(context())).toEqual({ continue: true });
