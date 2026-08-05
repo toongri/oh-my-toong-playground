@@ -103,11 +103,11 @@ chunk-review:
       # (2) role-boundary guard, `diagnose` alone — a finder must surface un-judged candidates,
       # not verify them (that's the upstream code-review skill's job), and `diagnose` (a
       # READ-ONLY root-cause consultant) would pull a finder across that line.
-      # (3) prompt-budget guard, the remaining 34 — none help a finder read code and surface
+      # (3) prompt-budget guard, the remaining 36 — none help a finder read code and surface
       # candidates, so each is dead prompt weight; the size this saves is pinned by
       # `codex-skill-deny-efficacy.test.ts`, not restated here.
       #
-      # List stops at 38: further items are OpenAI-bundled plugin skills outside this repo,
+      # List stops at 40: further items are OpenAI-bundled plugin skills outside this repo,
       # named in `plugin:skill` colon form, which `lib/generic-job.ts`'s `assertDenySkillsShape`
       # rejects outright. Fail-open by design: a skill added later stays loadable — unlisted
       # means visible, the safe direction.
@@ -124,6 +124,7 @@ chunk-review:
         - design-review
         - diagnose
         - dogfood
+        - frontend
         - git-master
         - hud
         - humanizer
@@ -149,6 +150,7 @@ chunk-review:
         - test-driven-development
         - ultragoal
         - ultraresearch
+        - visual-qa
         - writing-skills
     mcps:
       # A review worker's codex process inherits every MCP server declared in
