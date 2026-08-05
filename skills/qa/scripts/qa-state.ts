@@ -29,7 +29,7 @@
  *   status
  */
 
-import { readFileSync, statSync } from "fs";
+import { mkdirSync, readFileSync, rmSync, statSync } from "fs";
 import { execSync } from "child_process";
 import { resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
@@ -46,6 +46,7 @@ import {
 	approveOk,
 	chainComplete,
 	commentOk,
+	cycleUntouched,
 	driverGateArmed,
 	recordComplete,
 	rosterComplete,
@@ -60,6 +61,8 @@ import {
 	type QaRunCheck,
 	type QaRunChecks,
 	type QaStory,
+	type QaWaive,
+	type QaInert,
 } from "@lib/qa-chain-core";
 
 const DEFAULT_MAX_CYCLES = 5;
@@ -187,6 +190,31 @@ function readPrior(sessionId: string): Partial<QaState> {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// State-file lock (mkdir is atomic across the CLI processes used by QA).
+// ---------------------------------------------------------------------------
+
+const STATE_LOCK_RETRIES = 200;
+const STATE_LOCK_SLEEP = new Int32Array(new SharedArrayBuffer(4));
+
+function withStateLock<T>(stateFilePath: string, callback: () => T): T {
+	const lockPath = `${stateFilePath}.lock`;
+	for (let attempt = 0; attempt < STATE_LOCK_RETRIES; attempt += 1) {
+		try {
+			mkdirSync(lockPath);
+			try {
+				return callback();
+			} finally {
+				rmSync(lockPath, { recursive: true, force: true });
+				}
+		} catch (err) {
+			if (!isErrnoException(err) || err.code !== "EEXIST") throw err;
+			Atomics.wait(STATE_LOCK_SLEEP, 0, 0, 5);
+		}
+	}
+	throw new Error("qa-state: state lock contended; refusing unlocked write");
+}
+
 /**
  * Merge `next` over the prior on-disk state, seeding `started_at` once and
  * supplying field defaults on first write. Persists and returns the result.
@@ -194,7 +222,7 @@ function readPrior(sessionId: string): Partial<QaState> {
  * Strict no-create: refuses and exits non-zero when the state file is absent
  * AND ensureSeed's self-heal did not create it (e.g. adopted-away sid).
  */
-function mergeWrite(sessionId: string, next: Partial<ChainState>): QaState {
+function mergeWriteUnlocked(sessionId: string, next: Partial<ChainState>): QaState {
 	// Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
 	// (e.g. slash-command entry). No-op when the file already exists.
 	ensureSeed("qa", sessionId);
@@ -247,6 +275,10 @@ function mergeWrite(sessionId: string, next: Partial<ChainState>): QaState {
 		throw err;
 	}
 	return state;
+}
+
+function mergeWrite(sessionId: string, next: Partial<ChainState>): QaState {
+	return withStateLock(resolveStatePath(sessionId), () => mergeWriteUnlocked(sessionId, next));
 }
 
 // ---------------------------------------------------------------------------
@@ -547,6 +579,90 @@ export function recordRunCheck(sessionId: string, opts: RecordRunCheckOpts): voi
 	mergeWrite(sessionId, { run_checks: existingChecks, ...(Object.keys(history).length ? { run_checks_history: history } : {}) } as Partial<ChainState>);
 }
 
+export function setVerdict(sessionId: string, verdict: string): void {
+	if (!isOneOf(verdict, ["APPROVE", "COMMENT", "REQUEST_CHANGES"] as const)) {
+		throw new Error("set-verdict: verdict must be APPROVE, COMMENT, or REQUEST_CHANGES");
+	}
+	withStateLock(resolveStatePath(sessionId), () => {
+		ensureSeed("qa", sessionId);
+		const prior = readPrior(sessionId) as ChainState;
+		if (verdict === "APPROVE" && !approveOk(prior, stateProbe)) {
+			throw new Error("set-verdict: APPROVE refused — approveOk is false; record/waive cells or use REQUEST_CHANGES");
+		}
+		if (verdict === "COMMENT" && !commentOk(prior, stateProbe)) {
+			throw new Error("set-verdict: COMMENT refused — commentOk is false; resolve all H-priority cells");
+		}
+		mergeWriteUnlocked(sessionId, { verdict });
+	});
+}
+
+type QaWaiveWithReason = QaWaive & { reason: string };
+
+export function waiveCell(sessionId: string, opts: { story: string; cls: number; sub?: string; reason: string }): void {
+	const selector = validateCellSelector(opts.story, opts.cls, opts.sub);
+	const reason = nonEmpty(opts.reason, "reason");
+	const prior = readPrior(sessionId) as ChainState;
+	const cycle = currentCycle(prior);
+	if (!(prior.stories ?? []).some((story) => story.id === selector.story)) throw new Error(`waive: unknown story "${selector.story}"`);
+	if (!(prior.cells ?? []).some((cell) => cell.cycle === cycle && sameCell(cell, selector))) {
+		throw new Error("waive: cell must be authored in the current cycle");
+	}
+	const waives = ([...(prior.waives ?? [])] as QaWaiveWithReason[]);
+	const next: QaWaiveWithReason = { ...selector, cycle, reason };
+	const index = waives.findIndex((item) => item.cycle === cycle && sameCell(item, selector));
+	if (index >= 0) waives[index] = next;
+	else waives.push(next);
+	mergeWrite(sessionId, { waives });
+}
+
+export function declareInert(sessionId: string, reason: string): void {
+	mergeWrite(sessionId, { inert: { declared: true, reason: nonEmpty(reason, "reason"), cycle: currentCycle(readPrior(sessionId)) } });
+}
+
+/** Re-enters a session with a fresh, empty QA cycle. */
+export function startQa(sessionId: string, target: string): void {
+	const stateFilePath = resolveStatePath(sessionId);
+	withStateLock(stateFilePath, () => {
+		ensureSeed("qa", sessionId);
+		const prior = readPrior(sessionId) as ChainState;
+		if (prior.active !== false && !cycleUntouched(prior)) {
+			throw new Error("start: refused — active cycle has work; run gated complete first");
+		}
+		const reset: Record<string, unknown> = {
+			...prior,
+			active: true,
+			phase: "PRE-FLIGHT",
+			phase_max: 0,
+			cycle: 0,
+			max_cycles: prior.max_cycles ?? DEFAULT_MAX_CYCLES,
+			same_failure_key: "",
+			same_failure_count: 0,
+			fix_head_before: "",
+			user_dirty_set: [],
+			target: nonEmpty(target, "target"),
+			actors: [],
+			stories: [],
+			cells: [],
+			run_checks: null,
+			waives: [],
+			verdict: null,
+		};
+		delete reset.inert;
+		delete reset.run_checks_history;
+		const chain = reset as ChainState;
+		chain.derived = {
+			chain_complete: chainComplete(chain),
+			record_complete: recordComplete(chain, stateProbe),
+			approve_ok: approveOk(chain, stateProbe),
+			comment_ok: commentOk(chain, stateProbe),
+			roster_complete: rosterComplete(chain),
+			driver_gate_armed: driverGateArmed(chain),
+		};
+		const state = mergeWithHeartbeat(chain, {});
+		writeFileNoCreate(stateFilePath, JSON.stringify(state, null, 2));
+	});
+}
+
 /**
  * Marks the qa cycle inactive at the terminal STATE phase (Goal Met / max_cycles /
  * Same-Failure-3x / Safety). Without this, `active` stays `true` forever (mergeWrite
@@ -554,7 +670,43 @@ export function recordRunCheck(sessionId: string, opts: RecordRunCheckOpts): voi
  * session-start restore banner on the next session.
  */
 export function completeQa(sessionId: string): void {
-	mergeWrite(sessionId, { active: false });
+	withStateLock(resolveStatePath(sessionId), () => {
+		ensureSeed("qa", sessionId);
+		const prior = readPrior(sessionId) as ChainState;
+		const verdict = prior.verdict;
+		const canComplete =
+			(verdict === "APPROVE" && approveOk(prior, stateProbe)) ||
+			(verdict === "COMMENT" && commentOk(prior, stateProbe)) ||
+			(verdict === "REQUEST_CHANGES" && (recordComplete(prior, stateProbe) || cycleUntouched(prior)));
+		if (!canComplete) {
+			throw new Error("complete: refused — unmet verdict/record predicate; run set-verdict after recording the current cycle");
+		}
+		mergeWriteUnlocked(sessionId, { active: false });
+	});
+}
+
+type QaView = QaState & {
+	prior_cycle_cells: QaCell[];
+	prior_cycle_waives: QaWaiveWithReason[];
+	verdict_report: { verdict: QaState["verdict"]; cycle: number; waives: QaWaiveWithReason[]; inert?: QaInert };
+};
+
+function readQaView(sessionId: string): QaView | null {
+	const state = readQaState(sessionId);
+	if (!state) return null;
+	const cycle = currentCycle(state);
+	const cells = (state.cells ?? []) as QaCell[];
+	const waives = (state.waives ?? []) as QaWaiveWithReason[];
+	const currentWaives = waives.filter((waive) => waive.cycle === cycle);
+	const currentInert = state.inert?.cycle === undefined || state.inert.cycle === cycle ? state.inert : undefined;
+	return {
+		...state,
+		cells: cells.filter((cell) => cell.cycle === cycle),
+		waives: currentWaives,
+		prior_cycle_cells: cells.filter((cell) => cell.cycle !== cycle),
+		prior_cycle_waives: waives.filter((waive) => waive.cycle !== cycle),
+		verdict_report: { verdict: state.verdict, cycle, waives: currentWaives, ...(currentInert ? { inert: currentInert } : {}) },
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -690,16 +842,34 @@ function main(): void {
 					result: requiredArg(args, "result"),
 					note: str(args["note"]),
 				});
+			} else if (subcommand === "set-verdict") {
+				const verdict = process.argv.slice(3).find((arg) => !arg.startsWith("--"));
+				if (!verdict) {
+					process.stderr.write("set-verdict: <APPROVE|COMMENT|REQUEST_CHANGES> argument is required\n");
+					process.exit(1);
+				}
+				setVerdict(sessionId, verdict);
+			} else if (subcommand === "start") {
+				startQa(sessionId, requiredArg(args, "target"));
+			} else if (subcommand === "waive") {
+				waiveCell(sessionId, {
+					story: requiredArg(args, "story"),
+					cls: Number(requiredArg(args, "cls")),
+					sub: str(args["sub"]),
+					reason: requiredArg(args, "reason"),
+				});
+			} else if (subcommand === "declare-inert") {
+				declareInert(sessionId, requiredArg(args, "reason"));
 			} else if (subcommand === "complete") {
 			completeQa(sessionId);
 		} else if (subcommand === "get") {
-			process.stdout.write(JSON.stringify(readQaState(sessionId)) + "\n");
+			process.stdout.write(JSON.stringify(readQaView(sessionId)) + "\n");
 		} else if (subcommand === "status") {
 			const state = readQaState(sessionId);
 			process.stdout.write((state ? state.phase : "absent") + "\n");
 		} else {
 			process.stderr.write(
-				"Usage: qa-state.ts <set|advance-phase|inc-cycle|record-fix-head|capture-dirty-set|note-failure|add-actor|add-story|author-cell|record-baseline|record-cell|record-run-check|complete|get|status> [options]\n",
+				"Usage: qa-state.ts <set|advance-phase|inc-cycle|record-fix-head|capture-dirty-set|note-failure|add-actor|add-story|author-cell|record-baseline|record-cell|record-run-check|set-verdict|start|waive|declare-inert|complete|get|status> [options]\n",
 			);
 			process.exit(1);
 		}

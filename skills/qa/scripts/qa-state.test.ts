@@ -12,6 +12,7 @@ import {
 	recordFixHead,
 	captureDirtySet,
 	completeQa,
+	setVerdict,
 	resolveStatePath,
 	type QaState,
 } from "./qa-state.ts";
@@ -225,6 +226,7 @@ describe("qa state: terminal completion (P2 finding 1 — no active:false resurr
 		setQaState(S, { phase: "PRE-FLIGHT" });
 		advancePhase(S, "PLAN");
 		expect(readQaState(S)).not.toBeNull();
+		setVerdict(S, "REQUEST_CHANGES");
 		completeQa(S);
 		expect(readQaState(S)).toBeNull();
 		// but the underlying file still exists (inactive, not deleted)
@@ -281,10 +283,136 @@ describe("qa-state CLI wiring", () => {
 
 	test("CLI complete deactivates the session; get then reports absent", () => {
 		run("set --phase PRE-FLIGHT");
+		run("set-verdict REQUEST_CHANGES");
 		run("complete");
 		expect(rawState().active).toBe(false);
 		const out = run("get").trim();
 		expect(out).toBe("null");
+	});
+
+	test("set-verdict refuses APPROVE with a fail cell, then accepts after a waiver", () => {
+		authorCompleteChain();
+		run("record-baseline --story story-1 --result pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash");
+		for (const [cls, sub] of [[1, ""], [2, ""], [3, ""], [4, ""], [5, ""], [6, ""], [1, "hang-timeout"], [5, "flaky-green"]] as const) {
+			const suffix = sub ? ` --sub ${sub}` : "";
+			run(`record-cell --story story-1 --cls ${cls}${suffix} --status pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash`);
+		}
+		run("record-run-check --check stale-state --result pass");
+		run("record-run-check --check dirty-worktree --result fail --note debris");
+		run("record-run-check --check flaky-rerun --result pass");
+		run("record-cell --story story-1 --cls 1 --status fail --na-reason ignored");
+		const before = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => run("set-verdict APPROVE")).toThrow();
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+		run('waive --story story-1 --cls 1 --reason "not applicable"');
+		run("set-verdict APPROVE");
+		expect(rawState().verdict).toBe("APPROVE");
+	});
+
+	test("start resets a completed cycle and refuses to launder active work", () => {
+		run("set-verdict REQUEST_CHANGES");
+		run("complete");
+		run('start --target "second cycle"');
+		const reset = rawState();
+		expect(reset.active).toBe(true);
+		expect(reset.derived.chain_complete).toBe(false);
+		expect(reset.derived.driver_gate_armed).toBe(true);
+		expect(reset.verdict).toBeNull();
+		expect(reset.phase_max).toBe(0);
+		expect(reset.cycle).toBe(0);
+		expect(reset.same_failure_key).toBe("");
+		expect(reset.same_failure_count).toBe(0);
+		expect(reset.fix_head_before).toBe("");
+		expect(reset.user_dirty_set).toEqual([]);
+		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
+		const before = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => run('start --target "launder"')).toThrow();
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+	});
+
+	test("complete is gated and accepts the four normative arms", () => {
+		run("set-verdict REQUEST_CHANGES");
+		run("complete");
+		// Re-enter, author a complete but failing chain, and close with RC.
+		run('start --target "recorded failure"');
+		authorCompleteChain();
+		run("record-baseline --story story-1 --result fail --note broken");
+		for (const [cls, sub] of [[1, ""], [2, ""], [3, ""], [4, ""], [5, ""], [6, ""], [1, "hang-timeout"], [5, "flaky-green"]] as const) {
+			const suffix = sub ? ` --sub ${sub}` : "";
+			run(`record-cell --story story-1 --cls ${cls}${suffix} --status fail --na-reason failure`);
+		}
+		run("record-run-check --check stale-state --result fail --note stale");
+		run("record-run-check --check dirty-worktree --result fail --note debris");
+		run("record-run-check --check flaky-rerun --result fail --note flaky");
+		run("set-verdict REQUEST_CHANGES");
+		run("complete");
+		expect(rawState().active).toBe(false);
+	});
+
+	test("waive and declare-inert require reasons and are surfaced in get report", () => {
+		authorCompleteChain();
+		expect(() => run("waive --story story-1 --cls 1")).toThrow();
+		run('waive --story story-1 --cls 1 --reason "user approved exception"');
+		expect(() => run("declare-inert")).toThrow();
+		run('declare-inert --reason "refactor has no reachable risk surface"');
+		const view = JSON.parse(run("get"));
+		expect(view.verdict_report.waives[0].reason).toBe("user approved exception");
+		expect(view.verdict_report.inert.reason).toContain("no reachable");
+	});
+
+	test("declare-inert all-na arm permits APPROVE but mixed pass/H-na does not", () => {
+		authorCompleteChain();
+		run("record-baseline --story story-1 --result pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash");
+		for (const [cls, sub] of [[1, ""], [2, ""], [3, ""], [4, ""], [5, ""], [6, ""], [1, "hang-timeout"], [5, "flaky-green"]] as const) {
+			const suffix = sub ? ` --sub ${sub}` : "";
+			run(`record-cell --story story-1 --cls ${cls}${suffix} --status na --na-reason "no risk surface"`);
+		}
+		run("record-run-check --check stale-state --result pass");
+		run("record-run-check --check dirty-worktree --result fail --note debris");
+		run("record-run-check --check flaky-rerun --result pass");
+		run('declare-inert --reason "nothing reachable"');
+		run("set-verdict APPROVE");
+		expect(rawState().verdict).toBe("APPROVE");
+		run("complete");
+		run('start --target "mixed inert"');
+		authorCompleteChain();
+		run("record-baseline --story story-1 --result pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash");
+		for (const [cls, sub] of [[1, ""], [2, ""], [3, ""], [4, ""], [5, ""], [6, ""], [1, "hang-timeout"], [5, "flaky-green"]] as const) {
+			const suffix = sub ? ` --sub ${sub}` : "";
+			const status = cls === 2 && !sub ? "pass" : "na";
+			const evidence = status === "pass" ? " --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash" : " --na-reason \"no risk surface\"";
+			run(`record-cell --story story-1 --cls ${cls}${suffix} --status ${status}${evidence}`);
+		}
+		run("record-run-check --check stale-state --result pass");
+		run("record-run-check --check dirty-worktree --result fail --note debris");
+		run("record-run-check --check flaky-rerun --result pass");
+		run('declare-inert --reason "mixed should fail"');
+		const before = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => run("set-verdict APPROVE")).toThrow();
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+	});
+
+	test("lock serializes concurrent waive and record-cell writes", () => {
+		authorCompleteChain();
+		const scriptPath = join(import.meta.dir, "qa-state.ts");
+		execSync(
+			`(bun ${scriptPath} waive --story story-1 --cls 1 --reason "parallel waiver" & bun ${scriptPath} record-cell --story story-1 --cls 2 --status pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash & wait)`,
+			{ encoding: "utf8", env: process.env, shell: "/bin/sh" },
+		);
+		const state = rawState();
+		expect(state.waives).toEqual([expect.objectContaining({ story: "story-1", cls: 1, reason: "parallel waiver" })]);
+		expect(state.cells.find((cell: any) => cell.story === "story-1" && cell.cls === 2).status).toBe("pass");
+	});
+
+	test("get separates prior-cycle cell records from the current-cycle view", () => {
+		authorCompleteChain();
+		run("record-cell --story story-1 --cls 1 --status na --na-reason first-cycle");
+		run("inc-cycle");
+		run("author-cell --story story-1 --cls 1 --attack-point corrected --priority H");
+		const view = JSON.parse(run("get"));
+		expect(view.cycle).toBe(1);
+		expect(view.cells.some((cell: any) => cell.cls === 1 && cell.cycle === 1)).toBe(true);
+		expect(view.prior_cycle_cells.some((cell: any) => cell.cls === 1 && cell.cycle === 0)).toBe(true);
 	});
 
 	test("byte-identical: unknown actor and invalid authoring are refused before write", () => {
