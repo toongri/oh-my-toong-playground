@@ -33,6 +33,7 @@ oh-my-toong is an **agent central-management project**. It keeps skills, agents,
 - **Orphan cleanup** — components removed from the library disappear from targets on the next sync
 - **Multi-platform support** — Claude / Gemini / Codex / OpenCode abstracted via adapters
 - **Surface-specific E2E routing** — validate web/Electron with `agent-browser`, and iOS, tvOS, macOS, Android, and Vega OS TV with `agent-device`
+- **QA enforcement gates** — qa blocks phase transitions, drivers, Stop, and completion until the actor-roster → story → cell → record → verdict → complete chain is satisfied (PLAN reachability probing remains available); Claude/Codex `qa-driver-guard.sh` / `codex-qa-driver-guard.sh` and the Codex `codex-qa-seed.sh` enforce the same state
 - **Ultragoal final-review convergence** — allow cleanup-only completion while bounding active pursuing `code-reviewer` dispatches to a five-dispatch window and surfacing user mediation through Claude/Codex hook parity
 
 ## Philosophy — Why This Design
