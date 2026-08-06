@@ -59,7 +59,7 @@ function isSourceFile(relPath: string): boolean {
 
 function isExcludedContext(content: string, index: number): boolean {
 	const left = content.slice(0, index);
-	return /:\/\/\S*$/.test(left) || /\.claude\/$/.test(left);
+	return /:\/\/\S*$/.test(left) || /\.(?:agents|claude)\/$/.test(left);
 }
 
 function collectCandidates(content: string, relPath: string): Candidate[] {
