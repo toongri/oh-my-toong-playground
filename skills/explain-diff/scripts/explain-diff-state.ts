@@ -269,6 +269,14 @@ function ask(sessionId: string): void {
 function grade(sessionId: string, concept: string, missing: string[], docDigest: string): void {
 	withLock(statePath(sessionId), () => {
 		const s = mustRead(sessionId);
+		// No pending question means no reader answer exists to grade — reject before
+		// any mutation so a grade attempted without `ask` leaves the state untouched,
+		// not just leaves `passed` false.
+		if (s.awaiting_answer !== true) {
+			throw new Error(
+				"채점할 수 없습니다: 먼저 `ask` 로 문항을 내고 독자의 답을 받아야 합니다.",
+			);
+		}
 		s.awaiting_answer = false;
 		const c = s.concepts.find((x) => x.id === concept);
 		if (!c) throw new Error(`알 수 없는 개념: ${concept}`);
