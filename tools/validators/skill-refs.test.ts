@@ -16,9 +16,7 @@ function writeFixture(rootDir: string, relPath: string, content: string): void {
 	writeFileSync(filePath, content, "utf8");
 }
 
-async function withRoot(
-	seed: (rootDir: string) => void,
-	): Promise<string[]> {
+async function withRoot(seed: (rootDir: string) => void): Promise<string[]> {
 	const rootDir = makeRoot();
 	try {
 		seed(rootDir);
@@ -164,7 +162,9 @@ describe("skill 경로 참조 검증기", () => {
 			const reduced = ALLOWLIST.filter((candidate) => candidate !== item);
 			const violations = await findSkillRefViolations(rootDir as string, reduced);
 			expect(
-				violations.some((violation) => violation.startsWith(`${item.file}:`) && violation.includes(item.name)),
+				violations.some(
+					(violation) => violation.startsWith(`${item.file}:`) && violation.includes(item.name),
+				),
 			).toBe(true);
 		}
 	});
