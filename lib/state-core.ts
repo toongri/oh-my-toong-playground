@@ -51,6 +51,8 @@ import { join } from "path";
 import { getOmtDir, resolveOmtDir } from "./omt-dir";
 import { chainComplete, commentOk, approveOk, driverGateArmed, recordComplete } from "./qa-chain-core";
 import type { QaChainState } from "./qa-chain-core";
+import { normalizeExplainDiffState } from "./explain-diff-core";
+import type { ExplainDiffState } from "./explain-diff-core";
 
 // ---------------------------------------------------------------------------
 // Timestamp
@@ -248,7 +250,13 @@ export function isProgressLive(
 // State-type prefix map
 // ---------------------------------------------------------------------------
 
-export type StateType = "goal" | "ultragoal" | "prometheus" | "deep-interview" | "qa";
+export type StateType =
+	| "goal"
+	| "ultragoal"
+	| "prometheus"
+	| "deep-interview"
+	| "qa"
+	| "explain-diff";
 
 /** Maps each stateful skill type to its state-file filename prefix. */
 export const STATE_PREFIX: Record<StateType, string> = {
@@ -257,6 +265,7 @@ export const STATE_PREFIX: Record<StateType, string> = {
 	prometheus: "prometheus-state-",
 	"deep-interview": "deep-interview-active-state-",
 	qa: "qa-state-",
+	"explain-diff": "explain-diff-state-",
 };
 
 /**
@@ -271,6 +280,22 @@ export function readQaStateRaw(sessionId: string): QaChainState | null {
 	try {
 		const parsed: unknown = JSON.parse(readFileSync(statePath("qa", sessionId), "utf8"));
 		return isPlainObject(parsed) ? parsed : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Reads the explain-diff state for the Stop gate, normalized through the same
+ * rebuilder the state CLI uses. The gate recomputes `stop_allowed` from these
+ * fields rather than reading the persisted `derived` block — a stale or edited
+ * flag must not be able to open the gate on its own.
+ */
+export function readExplainDiffStateRaw(sessionId: string): ExplainDiffState | null {
+	if (!isSafeSessionId(sessionId)) return null;
+	try {
+		const raw = readFileSync(statePath("explain-diff", sessionId), "utf8");
+		return normalizeExplainDiffState(JSON.parse(raw));
 	} catch {
 		return null;
 	}

@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "linkedom": "^0.18.12",
+    "marked": "^18.0.9",
     "smol-toml": "^1.6.0",
     "yaml": "^2.8.2"
   }
