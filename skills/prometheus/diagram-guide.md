@@ -46,9 +46,8 @@ a lying `drawn` row (fence count mismatch), while a wrong `trigger FALSE`
 reason is caught by human review. A blank Status cell is a defect, not an
 acceptable omission.
 
-Note: this coverage table is prometheus-specific and deliberately differs
-in lens composition from deep-interview's (prometheus includes
-`classDiagram` and excludes `erDiagram`; deep-interview does the reverse).
+Note: this coverage table follows the lens composition defined by this guide's
+taxonomy: it includes `classDiagram` and excludes `erDiagram`.
 
 ## 1. Diagram Types
 
