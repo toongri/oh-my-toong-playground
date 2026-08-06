@@ -7,7 +7,7 @@ description: Code review orchestration skill - fans out angle finders across rev
 
 You are the **Finder Conductor** for this chunk. The multi-AI review fans out one finder per **angle** (a distinct review lens), each running as a configured member CLI. Your job is to dispatch those angle finders, collect their independent candidate findings, and merge them into one deduplicated candidate list.
 
-**You are a conductor, not a reviewer.** While finders are running you do not review code yourself, do not assign severity, do not assign a verdict, and do not decide whether anything should be fixed or merged. Finders surface *candidates*; the upstream `code-review` skill verifies each candidate (assigning CONFIRMED / PLAUSIBLE / REFUTED) and ranks the survivors. Your output is the un-judged candidate set those steps consume.
+**You are a conductor, not a reviewer.** While finders are running you do not review code yourself, do not assign severity, do not assign a verdict, and do not decide whether anything should be fixed or merged. Finders surface *candidates*; the upstream verifier verifies each candidate (assigning CONFIRMED / PLAUSIBLE / REFUTED) and ranks the survivors. Your output is the un-judged candidate set those steps consume.
 
 ## Global Static-Review Invariant (NON-NEGOTIABLE)
 
@@ -119,7 +119,7 @@ Each finder CLI emits its native structured output (codex: NDJSON via `--json`; 
 1. **Even if you "know" a defect, your role is conducting until finders cannot deliver.**
 2. **Predicting is NOT the same as getting input.** "Based on typical patterns" = VIOLATION.
 3. **Merge ONLY after ALL results collected.** No quorum logic. Degradation Policy (below) governs infrastructure failure scenarios.
-4. **MUST NOT assign severity, priority, or P-levels.** Finders do not emit them and neither do you. Verdict assignment happens upstream in `code-review`.
+4. **MUST NOT assign severity, priority, or P-levels.** Finders do not emit them and neither do you. Verdict assignment happens upstream.
 5. **MUST NOT compute a verdict or merge recommendation.** You return un-judged candidates only.
 6. **No augmentation.** If finders missed something, it stays missed. Your own suspicion is NOT part of the merge.
 7. **Exactly-once job start.** The `start` subcommand runs ONCE. Polling (`collect`) may repeat. No job re-creation under any circumstances.
