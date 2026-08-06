@@ -67,6 +67,19 @@ describe("skill 경로 참조 검증기", () => {
 		expect(violations).toHaveLength(0);
 	});
 
+	test("project-local skill paths resolve within their project", async () => {
+		const violations = await withRoot((root) => {
+			writeFixture(
+				root,
+				"projects/demo/agents/example.md",
+				"projects/demo/skills/local-only/scripts/job.ts\n",
+			);
+			writeFixture(root, "projects/demo/skills/local-only/SKILL.md", "# local skill\n");
+		});
+
+		expect(violations).toHaveLength(0);
+	});
+
 	test("URL-internal and deployed .claude skill paths are excluded without losing a same-line bare violation", async () => {
 		const violations = await withRoot((root) => {
 			writeFixture(
