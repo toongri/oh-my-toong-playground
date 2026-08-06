@@ -12,6 +12,7 @@ oh-my-toong is a multi-AI skills and configuration management system. It defines
 make validate           # Schema + components + TypeScript typecheck
 make validate-schema    # YAML schema validation only
 make validate-components # Referenced file/directory existence check
+make validate-skill-refs # Skill path-reference validation
 make typecheck          # TypeScript strict type-check (tsc --noEmit)
 make test               # Run all tests (Shell + TypeScript)
 make sync-dry           # Preview sync changes (no writes)

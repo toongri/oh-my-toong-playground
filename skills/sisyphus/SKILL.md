@@ -77,7 +77,7 @@ Before dispatching on a broad request ("improve X", no target files): explore fo
 
 ## Honest Reporting
 
-When dispatched by goal/ultragoal with a story, execute it through this discipline and report the true state: completion claims require the VERIFY command's observed pass. Never dress a partial result as done.
+When dispatched with a story, execute it through this discipline and report the true state: completion claims require the VERIFY command's observed pass. Never dress a partial result as done.
 
 ## Rationalization Table — STOP if you think this
 

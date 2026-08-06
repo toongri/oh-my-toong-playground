@@ -241,6 +241,113 @@ describe("new-prose: fix-loop nesting contract", () => {
 });
 
 // ---------------------------------------------------------------------------
+// REVERSE-REFERENCE: caller examples stay caller-agnostic while preserving
+// the nesting contract's semantic atoms (must FAIL before the rewrite — RED)
+// ---------------------------------------------------------------------------
+
+describe("reverse-reference: fix-loop nesting examples are caller-agnostic", () => {
+	test("the body names the retry hazard without naming a caller", () => {
+		const bodyStart = skillMd.indexOf("## Fix-Loop Nesting Contract");
+		expect(bodyStart).not.toBe(-1);
+		const bodyEnd = skillMd.indexOf("## Evidence Saving Protocol", bodyStart + 1);
+		expect(bodyEnd).not.toBe(-1);
+		const bodySection = skillMd.slice(bodyStart, bodyEnd);
+		expect(bodySection).not.toMatch(/\bultragoal\b/);
+		expect(bodySection).toContain("double-loops retries");
+		expect(bodySection).toContain("fix-loop-owning caller");
+	});
+
+	test("the quick reference keeps the doc contract and YAGNI atoms without a caller name", () => {
+		const quickRefStart = skillMd.indexOf("## Quick Reference");
+		expect(quickRefStart).not.toBe(-1);
+		const quickReference = skillMd.slice(quickRefStart);
+		expect(quickReference).not.toMatch(/\bultragoal\b/);
+		expect(quickReference).toContain("doc contract, YAGNI");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// REVERSE-REFERENCE: dead Prometheus links are inlined with the canonical
+// evidence/variable contracts (must FAIL before the rewrite — RED)
+// ---------------------------------------------------------------------------
+
+describe("reverse-reference: QA contracts do not depend on Prometheus links", () => {
+	test("the evidence path contract is inline and canonical", () => {
+		const deadPrometheusPath = "../" + "prometheus/";
+		const evidenceStart = skillMd.indexOf("## Evidence Saving Protocol");
+		expect(evidenceStart).not.toBe(-1);
+		const evidenceEnd = skillMd.indexOf("## Evidence Files", evidenceStart + 1);
+		expect(evidenceEnd).not.toBe(-1);
+		const evidenceSection = skillMd.slice(evidenceStart, evidenceEnd);
+		expect(evidenceSection).not.toContain(deadPrometheusPath);
+		expect(evidenceSection).toContain("Plan QA Scenario Evidence field");
+		expect(evidenceSection).toContain(
+			"$OMT_DIR/evidence/{plan-name}/{task-slug}/{scenario-slug}.{ext}",
+		);
+	});
+
+	test("the hands-on executor variables are inline", () => {
+		const deadPrometheusPath = "../" + "prometheus/";
+		const lifecycleStart = stage3Md.indexOf("## Step 3.2: Server / Application Lifecycle");
+		expect(lifecycleStart).not.toBe(-1);
+		const lifecycleEnd = stage3Md.indexOf("## Step 3.3: API Verification", lifecycleStart + 1);
+		expect(lifecycleEnd).not.toBe(-1);
+		const lifecycleSection = stage3Md.slice(lifecycleStart, lifecycleEnd);
+		expect(lifecycleSection).not.toContain(deadPrometheusPath);
+		expect(lifecycleSection).toContain("export API_BASE_URL=");
+		expect(lifecycleSection).toContain("$API_BASE_URL");
+		expect(lifecycleSection).toContain("$IOS_UDID");
+		expect(lifecycleSection).toContain("$ANDROID_SERIAL");
+		expect(lifecycleSection).toContain("$evidence_xml");
+	});
+
+	test("iOS executor discovers, assigns, and exports IOS_UDID before use", () => {
+		const lifecycleStart = stage3Md.indexOf("## Step 3.2: Server / Application Lifecycle");
+		const lifecycleEnd = stage3Md.indexOf("## Step 3.3: API Verification", lifecycleStart + 1);
+		const lifecycleSection = stage3Md.slice(lifecycleStart, lifecycleEnd);
+		const discovery = lifecycleSection.indexOf("xcrun simctl list devices available");
+		const assignment = lifecycleSection.indexOf("IOS_UDID=");
+		const exportStep = lifecycleSection.indexOf("export IOS_UDID");
+		const firstUse = lifecycleSection.indexOf('xcrun simctl bootstatus "$IOS_UDID" -b');
+
+		expect(discovery).toBeGreaterThanOrEqual(0);
+		expect(assignment).toBeGreaterThan(discovery);
+		expect(exportStep).toBeGreaterThan(assignment);
+		expect(firstUse).toBeGreaterThan(exportStep);
+	});
+
+	test("Android executor discovers, assigns, and exports ANDROID_SERIAL before use", () => {
+		const lifecycleStart = stage3Md.indexOf("## Step 3.2: Server / Application Lifecycle");
+		const lifecycleEnd = stage3Md.indexOf("## Step 3.3: API Verification", lifecycleStart + 1);
+		const lifecycleSection = stage3Md.slice(lifecycleStart, lifecycleEnd);
+		const discovery = lifecycleSection.indexOf("adb devices");
+		const assignment = lifecycleSection.indexOf("ANDROID_SERIAL=");
+		const exportStep = lifecycleSection.indexOf("export ANDROID_SERIAL");
+		const firstUse = lifecycleSection.indexOf('adb -s "$ANDROID_SERIAL" get-state');
+
+		expect(discovery).toBeGreaterThanOrEqual(0);
+		expect(assignment).toBeGreaterThan(discovery);
+		expect(exportStep).toBeGreaterThan(assignment);
+		expect(firstUse).toBeGreaterThan(exportStep);
+	});
+
+	test("evidence_xml is resolved and exported separately before each AC", () => {
+		const lifecycleStart = stage3Md.indexOf("## Step 3.2: Server / Application Lifecycle");
+		const lifecycleEnd = stage3Md.indexOf("## Step 3.3: API Verification", lifecycleStart + 1);
+		const lifecycleSection = stage3Md.slice(lifecycleStart, lifecycleEnd);
+		const perAc = lifecycleSection.indexOf("Per-AC");
+		const resolution = lifecycleSection.indexOf("evidence_xml=", perAc);
+		const exportStep = lifecycleSection.indexOf("export evidence_xml", perAc);
+		const use = lifecycleSection.indexOf("$evidence_xml", exportStep);
+
+		expect(perAc).toBeGreaterThanOrEqual(0);
+		expect(resolution).toBeGreaterThan(perAc);
+		expect(exportStep).toBeGreaterThan(resolution);
+		expect(use).toBeGreaterThan(exportStep);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // NEW-PROSE: scenario-authoring.md risk/coverage-gap derivation framework
 // ---------------------------------------------------------------------------
 
