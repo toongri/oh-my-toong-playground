@@ -19,7 +19,7 @@ This is an **umbrella skill**: pre-work grounding is a POSTURE of this engine, n
 
 - **Engine**: ported from oh-my-openagent's `ultraresearch` saturation-research skill. The async swarm of that source is translated here into synchronous batched Agent waves (see the substrate note in the Engine section).
 - **Claim-graph / verification gate**: EviBound (arXiv:2511.05524) — the graph-lock idea (a paraphrase of the paper's Claims Ledger dual-gate) that only graph-cleared claims may enter synthesis. The MLflow run-id/FINISHED backend of the paper is replaced with OMT-native ground truth (executed code / oracle citation re-read).
-- **Socratic lineage**: Q00 + ouroboros (the [Q00/ouroboros](https://github.com/Q00/ouroboros) project) — specification-quality-first questioning, inherited via deep-interview, which is this engine's CLEAR-posture interactive partner.
+- **Socratic lineage**: Q00 + ouroboros (the [Q00/ouroboros](https://github.com/Q00/ouroboros) project) — specification-quality-first questioning that serves as this engine's CLEAR-posture interactive partner.
 - **Browsing engine**: fivetaku/insane-search (MIT) → vendored as the insane-browsing skill; authenticated and JS-rendered page access for sources blocked to surface-level web retrieval. (Distribution chain: fivetaku/insane-search → oh-my-openagent copy → OMT vendored skill.)
 
 </Attribution>
@@ -31,7 +31,7 @@ This is an **umbrella skill**: pre-work grounding is a POSTURE of this engine, n
 Run this engine when one of the following holds:
 
 - The user explicitly demands research: the word "ultraresearch" (also `/ultraresearch`), or an explicit request for research, deep research, or an ultra-precise investigation — in any language. → **explicit-research posture**.
-- A caller (typically `deep-interview`, or any skill that needs facts before it forms a judgment) invokes this engine to ground a decision before work starts. → **pre-work CLEAR posture**.
+- A caller (typically a skill that needs facts before it forms a judgment) invokes this engine to ground a decision before work starts. → **pre-work CLEAR posture**.
 
 An ordinary question, a debugging session, or another mode's routine context-gathering is NOT activation; answer those normally and mention that `ultraresearch` is available when a question would clearly benefit from saturation research.
 
@@ -170,7 +170,7 @@ The same engine runs in one of two postures, selected in Phase 0. The posture ch
 | Posture | Selected when | Emits |
 |---|---|---|
 | **explicit research** | the user explicitly demanded research (`/ultraresearch <question>`) | terminal `REPORT.md` + `REPORT.html` (self-contained), citing `SYNTHESIS.md` |
-| **pre-work CLEAR** | invoked by `deep-interview` (or a caller) to ground facts while a human is in the loop answering the decisions; the goal/decisions are clear, only the facts are missing | grounded facts returned to the caller; `SYNTHESIS.md` as backing |
+| **pre-work CLEAR** | invoked by a caller to ground facts while a human is in the loop answering the decisions; the goal/decisions are clear, only the facts are missing | grounded facts returned to the caller; `SYNTHESIS.md` as backing |
 
 CLEAR is the primary interactive pre-work path (a human answers the decisions via deep-interview; the engine fills the facts).
 
@@ -193,11 +193,11 @@ A Scoped in-interview single-fact call (deep-interview asking this engine to gro
 
 ## Pre-work handoff conformance
 
-On the pre-work postures, the prometheus/ultragoal-facing handoff **conforms to the existing deep-interview handoff schema** at `$OMT_DIR/deep-interview/{slug}.md`. This keeps the Phase 5 consumer contract untouched: the deep-interview Phase 5 router routes both deep-interview-authored and ultraresearch-authored handoffs unchanged. `SYNTHESIS.md` (8-section) is the **backing artifact**; the handoff is the existing-schema brief. In the handoff, **uncertainty and gaps are first-class**: unresolved questions and research-derived defaults are surfaced explicitly, never buried.
+On the pre-work postures, the caller-facing handoff **conforms to the existing handoff schema** at `$OMT_DIR/deep-interview/{slug}.md`. This keeps the Phase 5 consumer contract untouched: its router routes handoffs unchanged. `SYNTHESIS.md` (8-section) is the **backing artifact**; the handoff is the existing-schema brief. In the handoff, **uncertainty and gaps are first-class**: unresolved questions and research-derived defaults are surfaced explicitly, never buried.
 
 ## Human end-gate
 
-The grounding handoff must NOT silently unlock execution: it is presented for human approval before it unlocks `prometheus`/`ultragoal`. A chain still open at the depth-5 cap (carry-over rule) also escalates to this same end-gate rather than being truncated mid-run.
+The grounding handoff must NOT silently unlock execution: it is presented for human approval before execution is unlocked. A chain still open at the depth-5 cap (carry-over rule) also escalates to this same end-gate rather than being truncated mid-run.
 
 </Postures>
 

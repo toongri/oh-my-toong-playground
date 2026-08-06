@@ -24,6 +24,10 @@ function count(token: string): number {
 	return n;
 }
 
+function lineContaining(token: string): string {
+	return skill.split("\n").find((line) => line.includes(token)) ?? "";
+}
+
 // ---------------------------------------------------------------------------
 // Frontmatter description — the surface read before the body loads and that
 // stays resident in context. It must name the actual final deliverable
@@ -369,6 +373,71 @@ describe("pre-work handoff conformance", () => {
 
 	test("uncertainty and gaps first-class is present", () => {
 		expect(skill).toContain("uncertainty and gaps are first-class");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Caller-name prose contract — designated caller references only. The
+// surrounding semantic atoms stay stable while concrete caller names are
+// removed from the attribution, activation, posture-row, handoff, and gate
+// surfaces. Explicitly excluded references remain pinned in their own rows.
+// ---------------------------------------------------------------------------
+
+describe("호출자 이름 제거 계약", () => {
+	test("`Socratic lineage` row omits `deep-interview` while retaining its semantic atoms", () => {
+		const row = lineContaining("**Socratic lineage**");
+		expect(row).toContain("Socratic lineage");
+		expect(row).toContain("CLEAR-posture interactive partner");
+		expect(row).not.toContain("deep-interview");
+	});
+
+	test("`pre-work CLEAR` activation row omits `deep-interview` while retaining caller routing", () => {
+		const row = lineContaining("A caller (typically");
+		expect(row).toContain("A caller");
+		expect(row).toContain("pre-work CLEAR posture");
+		expect(row).not.toContain("deep-interview");
+	});
+
+	test("`pre-work CLEAR` table row omits `deep-interview` and retains grounded facts returned to the caller", () => {
+		const row = lineContaining("**pre-work CLEAR**");
+		expect(row).toContain("grounded facts returned to the caller");
+		expect(row).not.toContain("deep-interview");
+	});
+
+	test("`Pre-work handoff conformance` keeps one path-only `deep-interview` occurrence and drops named caller wording", () => {
+		const start = skill.indexOf("## Pre-work handoff conformance");
+		const end = skill.indexOf("## Human end-gate", start);
+		expect(start).toBeGreaterThan(-1);
+		expect(end).toBeGreaterThan(start);
+		const section = skill.slice(start, end);
+		expect((section.match(/deep-interview/g) ?? []).length).toBe(1);
+		expect(section).toContain("$OMT_DIR/deep-interview/{slug}.md");
+		expect(section).not.toContain("prometheus");
+		expect(section).not.toContain("ultragoal");
+		expect(section).toContain("backing artifact");
+		expect(section).toContain("uncertainty and gaps are first-class");
+	});
+
+	test("`Human end-gate` row omits named callers while retaining human approval and depth-cap escalation", () => {
+		const row = lineContaining("The grounding handoff must NOT");
+		expect(row).toContain("human approval");
+		expect(row).toContain("depth-5 cap");
+		expect(row).toContain("end-gate");
+		expect(row).not.toContain("prometheus");
+		expect(row).not.toContain("ultragoal");
+	});
+
+	test("frontmatter keeps the named `deep-interview` activation reference", () => {
+		const frontmatter = skill.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? "";
+		expect(frontmatter).toContain("deep-interview");
+	});
+
+	test("`excluded caller rows` retain their named references", () => {
+		expect(lineContaining("CLEAR is the primary interactive pre-work path")).toContain("deep-interview");
+		expect(lineContaining("The tier signal comes from:")).toContain("prometheus");
+		expect(lineContaining("| Scoped | 2 | 1 | 0 | 2-3")).toContain("deep-interview");
+		expect(lineContaining("A Scoped in-interview single-fact call")).toContain("deep-interview");
+		expect(lineContaining("The deep-interview-schema handoff is written only")).toContain("deep-interview-schema");
 	});
 });
 
@@ -1037,4 +1106,3 @@ describe("coverage table is persisted, positioned, and single-authority — not 
 		);
 	});
 });
-
