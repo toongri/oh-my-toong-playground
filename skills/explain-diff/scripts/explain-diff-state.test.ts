@@ -207,7 +207,7 @@ describe("render 산출물 검사", () => {
 	});
 
 	test("evidence 부터 render 까지 전 스텝을 통과시키고 필수 개념을 채우면 complete 가 성공한다", async () => {
-		const { start, submitStep, passStep, addConcept, grade, complete } = await cli();
+		const { start, submitStep, passStep, addConcept, ask, grade, complete } = await cli();
 		start(SID, "r", "s");
 		const doc = docFile(GOOD_DOC);
 		const quote = "락을 공용 모듈로 뽑아낸다";
@@ -221,6 +221,7 @@ describe("render 산출물 검사", () => {
 		passStep(SID, "render", doc, []);
 		expect(state().step).toBe("quiz");
 		addConcept(SID, "c1", true);
+		ask(SID);
 		grade(SID, "c1", [], "digest-final");
 		expect(complete(SID)).toBe(0);
 	});
@@ -238,30 +239,36 @@ describe("퀴즈 완료 게이트", () => {
 
 describe("무진전 카운터", () => {
 	test("같은 항목·같은 문서로 두 번 실패하면 소프트 정지한다", async () => {
-		const { start, addConcept, grade } = await cli();
+		const { start, addConcept, ask, grade } = await cli();
 		start(SID, "r", "s");
 		addConcept(SID, "c1", true);
+		ask(SID);
 		grade(SID, "c1", ["R3 근거"], "digest-a");
 		expect(state().stalled).toBeUndefined();
+		ask(SID);
 		grade(SID, "c1", ["R3 근거"], "digest-a");
 		expect(state().stalled).toBe(true);
 	});
 
 	test("문서가 바뀌면 카운터가 초기화된다", async () => {
-		const { start, addConcept, grade } = await cli();
+		const { start, addConcept, ask, grade } = await cli();
 		start(SID, "r", "s");
 		addConcept(SID, "c1", true);
+		ask(SID);
 		grade(SID, "c1", ["R3 근거"], "digest-a");
+		ask(SID);
 		grade(SID, "c1", ["R3 근거"], "digest-b");
 		expect(state().no_progress.count).toBe(1);
 		expect(state().stalled).toBeUndefined();
 	});
 
 	test("정답이면 카운터가 초기화되고 개념이 통과한다", async () => {
-		const { start, addConcept, grade } = await cli();
+		const { start, addConcept, ask, grade } = await cli();
 		start(SID, "r", "s");
 		addConcept(SID, "c1", true);
+		ask(SID);
 		grade(SID, "c1", ["R3 근거"], "digest-a");
+		ask(SID);
 		grade(SID, "c1", [], "digest-a");
 		expect(state().no_progress.count).toBe(0);
 		expect(state().concepts[0].passed).toBe(true);
@@ -273,5 +280,44 @@ describe("무진전 카운터", () => {
 		ask(SID);
 		expect(state().awaiting_answer).toBe(true);
 		expect(state().derived.stop_allowed).toBe(true);
+	});
+});
+
+describe("ask 없이 grade 를 부르면", () => {
+	test("거부되고 개념은 passed:false 로 남는다", async () => {
+		const { start, addConcept, grade } = await cli();
+		start(SID, "r", "s");
+		addConcept(SID, "c1", true);
+		expect(() => grade(SID, "c1", [], "digest-a")).toThrow(/ask/);
+		expect(state().concepts[0].passed).toBe(false);
+	});
+
+	test("거부는 awaiting_answer 를 원래 값에서 바꾸지 않는다", async () => {
+		const { start, addConcept, grade } = await cli();
+		start(SID, "r", "s");
+		addConcept(SID, "c1", true);
+		expect(state().awaiting_answer).toBe(false);
+		expect(() => grade(SID, "c1", [], "digest-a")).toThrow();
+		expect(state().awaiting_answer).toBe(false);
+	});
+
+	test("ask 이후에는 missing 없는 grade 가 정상적으로 통과한다", async () => {
+		const { start, addConcept, ask, grade } = await cli();
+		start(SID, "r", "s");
+		addConcept(SID, "c1", true);
+		ask(SID);
+		grade(SID, "c1", [], "digest-a");
+		expect(state().concepts[0].passed).toBe(true);
+		expect(state().awaiting_answer).toBe(false);
+	});
+
+	test("ask 이후 missing 이 있으면 통과하지 않고 무진전 카운터가 1이 된다", async () => {
+		const { start, addConcept, ask, grade } = await cli();
+		start(SID, "r", "s");
+		addConcept(SID, "c1", true);
+		ask(SID);
+		grade(SID, "c1", ["R3 근거"], "digest-a");
+		expect(state().concepts[0].passed).toBe(false);
+		expect(state().no_progress.count).toBe(1);
 	});
 });
