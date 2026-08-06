@@ -1,5 +1,5 @@
 /**
- * ultragoal skill state CLI. Adapted from goal-state.ts (skills/goal/scripts/goal-state.ts)
+ * ultragoal skill state CLI. Adapted from goal-state.ts
  * with its own artifact namespace (ultragoal-state-/ultragoal-verdict-/ultragoal-codereview-)
  * plus two story affordances for ultragoal's auto-generate + bulk-approve decomposition flow:
  * confirm-all-stories (bulk confirm-story over every unconfirmed story) and reorder-stories
