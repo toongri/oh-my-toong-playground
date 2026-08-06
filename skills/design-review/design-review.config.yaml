@@ -28,11 +28,11 @@ review:
       # root `sync.yaml`'s `platforms: [claude, codex]`.
       # (2) role-boundary guard, `diagnose` alone — this reviewer gives advisory design counsel,
       # not a root-cause verdict, and `diagnose` would pull it across that line.
-      # (3) prompt-budget guard, the remaining 36 — none help reason about a design's tradeoffs,
+      # (3) prompt-budget guard, the remaining 37 — none help reason about a design's tradeoffs,
       # so each is dead prompt weight; the size this saves is pinned by
       # `codex-skill-deny-efficacy.test.ts`, not restated here.
       #
-      # List stops at 40: further items are OpenAI-bundled plugin skills outside this repo,
+      # List stops at 41: further items are OpenAI-bundled plugin skills outside this repo,
       # named in `plugin:skill` colon form, which `lib/generic-job.ts`'s `assertDenyShape`
       # rejects outright. Fail-open by design: a skill added later stays loadable — unlisted
       # means visible, the safe direction. Kept in lockstep with the other job configs
@@ -51,6 +51,7 @@ review:
         - design-review
         - diagnose
         - dogfood
+        - explain-diff
         - frontend
         - git-master
         - hud
