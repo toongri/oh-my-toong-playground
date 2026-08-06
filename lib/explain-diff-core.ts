@@ -19,6 +19,24 @@ export type Step = (typeof STEP_ORDER)[number];
  */
 export const AUTHORING_STEPS = ["evidence", "background", "intuition", "code"] as const;
 
+/**
+ * Judge rubric items each step's judge review must certify before `pass-step`
+ * may advance it. SKILL.md and references/judge-prompt.md assign the judge
+ * exactly two items — R6 at `intuition`, R7 at `code` — everything else in the
+ * rubric (R1..R5) is scripted in explain-diff-structure.ts. An empty required
+ * set is deliberate at the other four steps, not an oversight: their coverage
+ * is already earned before the judge ever runs, so a judge payload with
+ * nothing in it is correctly a no-op there, not a bypass.
+ */
+export const REQUIRED_JUDGE_IDS: Record<Step, readonly string[]> = {
+	evidence: [],
+	background: [],
+	intuition: ["R6"],
+	code: ["R7"],
+	render: [],
+	quiz: [],
+};
+
 export interface Concept {
 	id: string;
 	required: boolean;
