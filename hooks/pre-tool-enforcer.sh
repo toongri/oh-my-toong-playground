@@ -437,7 +437,7 @@ fi
 if [[ "$toolName" == "Skill" ]]; then
     skillName=$(extract_json_field "skill" "")
     case "$skillName" in
-        prometheus|goal|ultragoal|deep-interview|qa)
+        prometheus|goal|ultragoal|deep-interview|qa|explain-diff)
             # BASH_SOURCE-relative sourcing for resolve_omt_dir (mirrors session-start.sh:49-53)
             _PTE_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -566,6 +566,40 @@ if [[ "$toolName" == "Skill" ]]; then
   },
   "started_at": "'"${ts}"'",
   "last_touched_at": "'"${ts}"'"
+}'
+                        ;;
+                    explain-diff)
+                        # The artifact guard for this skill fails CLOSED, so the seed is
+                        # what lets the very first evidence-step write land at all. The
+                        # skeleton matches what explain-diff-state.ts `start` writes.
+                        write_seed_if_absent \
+                            "$omt_dir/explain-diff-state-${sid}.json" \
+                            "explain-diff" \
+                            '{
+  "active": true,
+  "step": "evidence",
+  "passed": [],
+  "structural_ok": [],
+  "concepts": [],
+  "bank": [],
+  "awaiting_answer": false,
+  "no_progress": {
+    "key": "",
+    "count": 0,
+    "doc_digest": ""
+  },
+  "last_failure": null,
+  "range": "",
+  "slug": "",
+  "started_at": "'"${ts}"'",
+  "last_touched_at": "'"${ts}"'",
+  "derived": {
+    "artifact_write_allowed": true,
+    "quiz_passed": false,
+    "stop_allowed": false,
+    "no_progress_tripped": false,
+    "block_reason": ""
+  }
 }'
                         ;;
                 esac

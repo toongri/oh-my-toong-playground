@@ -1910,17 +1910,17 @@ test_harmless_conditions_do_not_trip_set_e() {
 # which asserted the same thing about the pre-relocation inline glob list)
 # =============================================================================
 
-test_state_prefixes_exactly_five_managed() {
+test_state_prefixes_exactly_six_managed() {
   local count
   count=$(printf '%s\n' $STATE_PREFIXES | grep -c '.' 2>/dev/null || true)
-  if [ "$count" -ne 5 ]; then
-    echo "  ASSERTION FAILED: STATE_PREFIXES must have exactly 5 entries, found $count"
+  if [ "$count" -ne 6 ]; then
+    echo "  ASSERTION FAILED: STATE_PREFIXES must have exactly 6 entries, found $count"
     echo "  STATE_PREFIXES=$STATE_PREFIXES"
     return 1
   fi
 
   local prefix
-  for prefix in goal-state- ultragoal-state- prometheus-state- deep-interview-active-state- qa-state-; do
+  for prefix in goal-state- ultragoal-state- prometheus-state- deep-interview-active-state- qa-state- explain-diff-state-; do
     local n
     n=$(printf '%s\n' $STATE_PREFIXES | grep -c "^${prefix}\$" 2>/dev/null || true)
     if [ "$n" -ne 1 ]; then
@@ -1939,7 +1939,7 @@ test_state_prefixes_exactly_five_managed() {
 
 # =============================================================================
 # SESSION_ARTIFACT_PREFIXES structural assertion — symmetric with
-# test_state_prefixes_exactly_five_managed above. SESSION_ARTIFACT_PREFIXES
+# test_state_prefixes_exactly_six_managed above. SESSION_ARTIFACT_PREFIXES
 # is the whitelist that actually drives reap_session_artifacts's deletions,
 # yet had no pinning test at all: a family silently dropped from it would go
 # unnoticed by every other test in this file.
@@ -2116,7 +2116,7 @@ run_test test_reap_session_artifacts_space_in_filename_still_correctly_judged
 run_test test_reap_dead_state_files_rm_failure_not_echoed_and_reported
 run_test test_reap_session_artifacts_rm_failure_not_echoed_and_reported
 run_test test_harmless_conditions_do_not_trip_set_e
-run_test test_state_prefixes_exactly_five_managed
+run_test test_state_prefixes_exactly_six_managed
 run_test test_session_artifact_prefixes_exactly_six_managed
 run_test test_ttl_parity_with_state_core_ts
 run_test test_ttl_allowlist_no_stray_literals

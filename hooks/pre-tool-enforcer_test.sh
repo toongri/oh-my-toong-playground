@@ -462,6 +462,47 @@ test_seed_ultragoal_does_not_seed_goal_state() {
 }
 
 # =============================================================================
+# seed-explain-diff — Skill(explain-diff) seeds a state that is already armed:
+# the artifact guard must let the first evidence-step write through, and the
+# Stop gate must already refuse to let the session end before the quiz.
+# =============================================================================
+
+test_seed_explain_diff_creates_armed_skeleton() {
+    local state_file="$OMT_DIR/explain-diff-state-test-sid.json"
+
+    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"explain-diff"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+
+    assert_file_exists "$state_file" "explain-diff state file should be created" || return 1
+
+    jq -e '.active == true and .step == "evidence" and (.passed | length) == 0
+        and .derived.artifact_write_allowed == true
+        and .derived.stop_allowed == false
+        and .derived.quiz_passed == false
+        and (.started_at | length > 0) and (.last_touched_at | length > 0)' \
+        "$state_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED: explain-diff seed is not an armed skeleton"; return 1; }
+}
+
+test_seed_explain_diff_is_idempotent() {
+    local state_file="$OMT_DIR/explain-diff-state-test-sid.json"
+
+    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"explain-diff"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+    assert_file_exists "$state_file" "explain-diff state file should exist after first seed" || return 1
+
+    local tmp
+    tmp=$(mktemp)
+    jq '.step = "quiz"' "$state_file" > "$tmp" && mv "$tmp" "$state_file"
+
+    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"explain-diff"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+
+    jq -e '.step == "quiz"' "$state_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED: re-fire seed must not reset step (create-if-absent only)"; return 1; }
+}
+
+# =============================================================================
 # B1 — [CONTRACT-INVERTED] session_id absent from env: derive from stdin or fail loudly
 #
 # New contract (two sub-cases):
@@ -1980,6 +2021,10 @@ main() {
     run_test test_rdg_unset_omt_dir_malformed_current_state_denies_safely
     run_test test_rdg_jq_absent_follows_allow_posture
     run_test test_regression_ambient_claude_env_file_not_leaked_by_unscrubbed_call
+
+    # explain-diff seed (arms the artifact guard from skill invocation)
+    run_test test_seed_explain_diff_creates_armed_skeleton
+    run_test test_seed_explain_diff_is_idempotent
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

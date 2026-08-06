@@ -1,0 +1,45 @@
+{
+  "note": "explain-diff eval fixtures. Each entry is a detached worktree pinned at `sha`, so the model reads the code as it stood at that commit. `range` is what the skill (or baseline prompt) is given.",
+  "fixtures": [
+    {
+      "id": "coordinate-render",
+      "scenario": "좌표계·렌더링 변경",
+      "source_repo": "/Users/toong/repos/pi/main",
+      "sha": "068ab5d19b9c7a17e14bde90bcbc4fc4c78da1b1",
+      "range": "068ab5d1^..068ab5d1",
+      "subject": "fix(coding-agent): horizontally pan tree selector",
+      "size": "2 files, +64/-5",
+      "why_this_one": "수평 패닝 = 오프셋/클램프 기하 연산. 숫자만 봐서는 이해가 안 되고 그림이 필요한 전형. '왜'는 이슈 #5830 뒤에 있고 diff 안에 없어 Unknown / not supplied 경로를 시험한다."
+    },
+    {
+      "id": "refactor-invariant",
+      "scenario": "동작 불변 리팩터링",
+      "source_repo": "/Users/toong/repos/oh-my-toong-playground/curious-hammer",
+      "sha": "bcd493b1610613a9fc5b7d77c7bacc9bad4712e4",
+      "range": "bcd493b1^..bcd493b1",
+      "subject": "fix: ultragoal 상태 갱신 락 통합",
+      "size": "6 files, +305/-170",
+      "why_this_one": "ultragoal-state.ts 의 락 로직이 lib/persistent-mode-core/state-lock.ts 로 이동. '무엇이 실제로 달라졌나' vs '어디로 옮겨갔나'를 가르지 못하면 설명이 무너진다. Change Group 순서(추출 → 재배선 → 테스트)도 시험한다."
+    },
+    {
+      "id": "crosscutting-small",
+      "scenario": "크로스커팅 소변경",
+      "source_repo": "/Users/toong/repos/oh-my-toong-playground/curious-hammer",
+      "sha": "1c4e029260b153b5d18abdb33bc8646a28ae7a44",
+      "range": "1c4e0292^..1c4e0292",
+      "subject": "chore: 잡 워커 프롬프트에 단독 수행 지시 추가",
+      "size": "7 files, +10/-3",
+      "why_this_one": "7개 파일에 사실상 같은 한 줄. 파일별 나열로 가면 7번 같은 말을 반복한다. 하나의 Change Group 으로 묶고 한 번만 설명하는지를 시험한다."
+    },
+    {
+      "id": "giant-pr",
+      "scenario": "거대 PR",
+      "source_repo": "/Users/toong/repos/oh-my-toong-playground/curious-hammer",
+      "sha": "acd90900234fa633264264414400f4dc10323df0",
+      "range": "acd90900^..acd90900",
+      "subject": "feat: ultragoal 무진전 실행 제어 추가 (PR #243)",
+      "size": "29 files, +1858/-274",
+      "why_this_one": "로직·테스트·문서가 섞인 진짜 큰 PR. 묶기와 순서, signal/noise 분류, 개념 상한 절단이 전부 압박받는다."
+    }
+  ]
+}
