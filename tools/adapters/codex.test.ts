@@ -578,6 +578,18 @@ describe("CodexAdapter", () => {
 				.catch(() => false);
 			expect(exists).toBe(false);
 		});
+
+		it("serializes a nested map as a dotted TOML table header via `syncConfig`", async () => {
+			await adapter.syncConfig(
+				tmpDir,
+				{ features: { multi_agent_v2: { max_concurrent_threads_per_session: 20 } } },
+				false,
+			);
+			const configFile = path.join(tmpDir, ".codex", "config.toml");
+			const content = await fs.readFile(configFile, "utf-8");
+			expect(content).toContain("[features.multi_agent_v2]");
+			expect(content).toContain("max_concurrent_threads_per_session = 20");
+		});
 	});
 
 	// ---------------------------------------------------------------------------
