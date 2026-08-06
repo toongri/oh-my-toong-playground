@@ -3613,15 +3613,16 @@ describe("cmdCollect", () => {
 		expect(parsed).not.toHaveProperty("members");
 	});
 
-	test("hardcap: timeout-ms=999999 → COLLECT_TIMEOUT_HARDCAP_MS(600000)로 정확히 클램프", async () => {
-		// The clamp (`Math.min(requested, COLLECT_TIMEOUT_HARDCAP_MS)`) can't be observed by
-		// actually waiting it out — even the clamped value is 10 minutes. Instead this drives
+	test("hardcap: timeout-ms=999999 → COLLECT_MAX_WAIT_MS(20000)로 정확히 클램프", async () => {
+		// The clamp (`Math.min(requested, COLLECT_MAX_WAIT_MS)`) is asserted here through the
+		// real poll loop rather than by waiting it out, so the loop's own arithmetic — not just
+		// the constant — is what the assertion pins. This drives
 		// cmdCollect's real poll loop against a fully fake clock: `sleepMs` (the only thing the
 		// loop awaits between polls) is replaced so each call advances a fake `Date.now()` by the
 		// requested ms and resolves immediately — no real delay. The loop then runs its true
 		// iteration count in near-zero real time, and the fake-elapsed accumulated at the moment
 		// it hits the timeout branch (sleepCallCount * pollIntervalMs) equals exactly whatever
-		// COLLECT_TIMEOUT_HARDCAP_MS currently is — changing the constant changes this number,
+		// COLLECT_MAX_WAIT_MS currently is — changing the constant changes this number,
 		// without ever reading it directly (lib/generic-job.ts stays untouched, per this
 		// pursuit's non-goal). A member left in a non-terminal state (never "done") keeps the
 		// loop from returning before it ever reaches the timeout comparison.
@@ -3666,7 +3667,7 @@ describe("cmdCollect", () => {
 		// Sanity: the fake-sleep path actually ran — guards against the assertion below
 		// passing vacuously if the mock silently failed to intercept.
 		expect(sleepCallCount).toBeGreaterThan(0);
-		expect(sleepCallCount * observedPollIntervalMs).toBe(600000);
+		expect(sleepCallCount * observedPollIntervalMs).toBe(20000);
 	});
 
 	test("collect: jobDir 누락 시 에러", () => {

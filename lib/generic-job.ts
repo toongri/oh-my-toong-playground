@@ -2067,21 +2067,86 @@ export function doctorOrphanJobs(
 // ---------------------------------------------------------------------------
 
 const COLLECT_POLL_INTERVAL_MS = 5000;
-const COLLECT_TIMEOUT_HARDCAP_MS = 600000;
+
+/**
+ * Upper bound on a single `collect` wait — deliberately below every host's
+ * output-snapshot window.
+ *
+ * A host agent does not always own the spawned process for its full lifetime.
+ * Claude's Bash tool does (it returns the process's final stdout), but codex's
+ * unified exec attaches to a session and returns a SNAPSHOT after ~30s while the
+ * process keeps running detached. A collect that is still blocking at that
+ * moment hands the conductor an empty-but-successful response, which reads as
+ * "no result" — and the conductor then re-runs collect, orphaning the first
+ * process and burning its poll budget. Measured 2026-08-06: four of nine codex
+ * conductor runs died this way, killing finders at ~210s that needed 590-1107s.
+ *
+ * Keeping every wait under the snapshot window makes the response visible on
+ * both hosts, so one poll protocol serves both. Measured end-to-end at 21s of
+ * wall time (interpreter startup included), which keeps ~9s of margin against
+ * the 30s window under machine-load variance.
+ */
+export const COLLECT_MAX_WAIT_MS = 20000;
+
+/** Clamp a requested wait to the snapshot-safe bound. 0 ("infinite") clamps too
+ *  — an unbounded wait is precisely the case whose output is never seen. */
+export function resolveCollectWaitMs(raw: unknown): number {
+	const n = Number(raw);
+	if (!Number.isFinite(n) || n <= 0) return COLLECT_MAX_WAIT_MS;
+	return Math.min(Math.trunc(n), COLLECT_MAX_WAIT_MS);
+}
+
+export type CollectBudget = {
+	nextAction: "poll_again" | "stop_and_degrade";
+	elapsedSec: number | null;
+	deadlineSec: number | null;
+};
+
+/**
+ * The poll budget belongs to the script, not to a call counter in a prompt.
+ *
+ * A prompt-side cap ("at most 6 collect calls") silently assumes how long one
+ * call blocks; once the per-call wait shrinks, the same counter becomes a
+ * minutes-long budget for a job that needs tens of minutes. Deriving the budget
+ * from the job's own clock keeps it correct at any poll cadence.
+ *
+ * Absent metadata means keep polling: members carry their own timeouts and end
+ * up terminal on their own, so "no deadline recorded" must never read as "give up".
+ */
+export function resolveCollectNextAction(
+	meta: { createdAt?: unknown; timeoutSec?: unknown },
+	now: number,
+): CollectBudget {
+	const createdAt = Date.parse(String(meta.createdAt ?? ""));
+	const deadlineSec = Number(meta.timeoutSec);
+	if (!Number.isFinite(createdAt) || !Number.isFinite(deadlineSec) || deadlineSec <= 0)
+		return { nextAction: "poll_again", elapsedSec: null, deadlineSec: null };
+	const elapsedSec = Math.round((now - createdAt) / 1000);
+	return {
+		nextAction: elapsedSec >= deadlineSec ? "stop_and_degrade" : "poll_again",
+		elapsedSec,
+		deadlineSec,
+	};
+}
+
+function readCollectBudgetMeta(jobDir: string): { createdAt?: unknown; timeoutSec?: unknown } {
+	try {
+		const meta = JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8"));
+		return {
+			createdAt: meta?.createdAt,
+			timeoutSec: isRecord(meta?.settings) ? meta.settings.timeoutSec : undefined,
+		};
+	} catch {
+		return {};
+	}
+}
 
 export async function cmdCollect(
 	options: Record<string, unknown>,
 	jobDir: string,
 	config: JobConfig,
 ): Promise<void> {
-	const timeoutMsRaw =
-		options["timeout-ms"] !== undefined && options["timeout-ms"] !== null
-			? Number(options["timeout-ms"])
-			: 150000;
-	const timeoutMs = Math.min(
-		Math.max(0, Number.isFinite(timeoutMsRaw) ? Math.trunc(timeoutMsRaw) : 150000),
-		COLLECT_TIMEOUT_HARDCAP_MS,
-	);
+	const timeoutMs = resolveCollectWaitMs(options["timeout-ms"]);
 
 	const start = Date.now();
 	while (true) {
@@ -2094,9 +2159,23 @@ export async function cmdCollect(
 			);
 			return;
 		}
-		if (timeoutMs > 0 && Date.now() - start >= timeoutMs) {
+		if (Date.now() - start >= timeoutMs) {
+			const budget = resolveCollectNextAction(readCollectBudgetMeta(jobDir), Date.now());
 			process.stdout.write(
-				`${JSON.stringify({ overallState: status.overallState, id: status.id, counts: status.counts }, null, 2)}\n`,
+				`${JSON.stringify(
+					{
+						overallState: status.overallState,
+						id: status.id,
+						counts: status.counts,
+						...budget,
+						note:
+							budget.nextAction === "poll_again"
+								? `Workers are still running — this is a poll result, not a failure. Run the SAME collect command again. Never re-start the job.`
+								: `Budget spent (${budget.elapsedSec}s of ${budget.deadlineSec}s). Stop polling and apply the degradation path.`,
+					},
+					null,
+					2,
+				)}\n`,
 			);
 			return;
 		}

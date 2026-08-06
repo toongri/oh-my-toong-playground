@@ -34,6 +34,9 @@ import {
 	cmdStop,
 	cmdClean,
 	cmdCollect,
+	COLLECT_MAX_WAIT_MS,
+	resolveCollectWaitMs,
+	resolveCollectNextAction,
 	cmdResumeMember,
 	assertMembersOrExit,
 	assertDenyEnforceable,
@@ -2237,6 +2240,68 @@ describe("cmdCollect", () => {
 		const result = JSON.parse(output[0]);
 		expect(result.overallState).toBe("done");
 	}, 15000);
+});
+
+// ---------------------------------------------------------------------------
+// resolveCollectWaitMs — no collect call may outlive a host's output-snapshot window
+// ---------------------------------------------------------------------------
+
+describe("resolveCollectWaitMs", () => {
+	test("스냅샷 창을 넘는 요청은 상한으로 클램프됨", () => {
+		expect(resolveCollectWaitMs(540000)).toBe(COLLECT_MAX_WAIT_MS);
+		expect(resolveCollectWaitMs(150000)).toBe(COLLECT_MAX_WAIT_MS);
+	});
+
+	test("0(무한 대기)도 상한으로 클램프됨 — 무한 블로킹은 출력이 영영 안 보이는 경로", () => {
+		expect(resolveCollectWaitMs(0)).toBe(COLLECT_MAX_WAIT_MS);
+	});
+
+	test("상한 이하 요청은 그대로 통과", () => {
+		expect(resolveCollectWaitMs(5000)).toBe(5000);
+	});
+
+	test("누락·비수치 요청은 상한으로 수렴", () => {
+		expect(resolveCollectWaitMs(undefined)).toBe(COLLECT_MAX_WAIT_MS);
+		expect(resolveCollectWaitMs(Number.NaN)).toBe(COLLECT_MAX_WAIT_MS);
+	});
+
+	test("상한은 codex exec 스냅샷 창(30s)보다 확실히 작음", () => {
+		expect(COLLECT_MAX_WAIT_MS).toBeLessThan(30000);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// resolveCollectNextAction — the poll budget lives in the script, not in a prompt counter
+// ---------------------------------------------------------------------------
+
+describe("resolveCollectNextAction", () => {
+	const createdAt = "2026-08-06T00:00:00.000Z";
+	const deadlineSec = 600;
+
+	test("데드라인 이전이면 계속 폴", () => {
+		const now = Date.parse(createdAt) + 100_000;
+		expect(resolveCollectNextAction({ createdAt, timeoutSec: deadlineSec }, now)).toEqual({
+			nextAction: "poll_again",
+			elapsedSec: 100,
+			deadlineSec,
+		});
+	});
+
+	test("데드라인 도달이면 stop 신호", () => {
+		const now = Date.parse(createdAt) + 600_000;
+		expect(resolveCollectNextAction({ createdAt, timeoutSec: deadlineSec }, now).nextAction).toBe(
+			"stop_and_degrade",
+		);
+	});
+
+	test("메타데이터가 없으면 폴 계속 — 데드라인 없음이 조기 중단을 뜻하지 않음", () => {
+		const now = Date.parse(createdAt) + 100_000;
+		expect(resolveCollectNextAction({}, now)).toEqual({
+			nextAction: "poll_again",
+			elapsedSec: null,
+			deadlineSec: null,
+		});
+	});
 });
 
 // ---------------------------------------------------------------------------
