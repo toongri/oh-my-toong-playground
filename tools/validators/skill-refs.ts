@@ -26,11 +26,23 @@ export type SkillRefAllowlistEntry = {
 
 export const ALLOWLIST: SkillRefAllowlistEntry[] = [
 	// Upstream taste-skill attribution intentionally names materialized source skills.
-	{ file: "skills/frontend/ATTRIBUTION.md", name: "brandkit", reason: "vendored upstream attribution" },
+	{
+		file: "skills/frontend/ATTRIBUTION.md",
+		name: "brandkit",
+		reason: "vendored upstream attribution",
+	},
 	// Upstream taste-skill attribution intentionally names the source DESIGN document.
-	{ file: "skills/frontend/ATTRIBUTION.md", name: "stitch-skill", reason: "vendored upstream attribution" },
+	{
+		file: "skills/frontend/ATTRIBUTION.md",
+		name: "stitch-skill",
+		reason: "vendored upstream attribution",
+	},
 	// This assertion must retain the old path as the negative case under test.
-	{ file: "skills/frontend/SKILL.test.ts", name: "ui-ux-pro-max", reason: "negative path assertion" },
+	{
+		file: "skills/frontend/SKILL.test.ts",
+		name: "ui-ux-pro-max",
+		reason: "negative path assertion",
+	},
 	// The documentation example uses a metavariable path, not a repository skill.
 	{ file: "skills/writing-skills/SKILL.md", name: "path", reason: "metavariable example" },
 	// These two anti-pattern examples deliberately show the path form being rejected.
@@ -41,8 +53,7 @@ type Candidate = { index: number; name: string; token: string };
 
 function isSourceFile(relPath: string): boolean {
 	return (
-		SOURCE_EXTENSIONS.some((extension) => relPath.endsWith(extension)) &&
-		!relPath.endsWith(".d.ts")
+		SOURCE_EXTENSIONS.some((extension) => relPath.endsWith(extension)) && !relPath.endsWith(".d.ts")
 	);
 }
 
