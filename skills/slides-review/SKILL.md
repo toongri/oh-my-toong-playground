@@ -7,7 +7,7 @@ description: Gemini CLI를 활용한 HTML 디자인 리뷰 스킬. 생성된 HTM
 
 ## Overview
 
-HTML 파일의 시각 디자인 품질을 Gemini CLI로 검토하고, 반환된 개선 지침을 메인 세션(Claude)이 직접 적용하는 스킬이다.
+HTML 파일의 시각 디자인 품질을 Gemini CLI로 검토하고, 반환된 개선 지침을 메인 세션에서 직접 적용하는 스킬이다.
 다른 스킬(예: `create-slides`)의 후처리 단계로 호출되거나, 사용자가 직접 호출할 수 있다.
 에이전트(Gemini CLI)가 불가하거나 전원 실패하면 in-session fallback으로 직접 리뷰한다.
 
