@@ -1,6 +1,6 @@
 BUN_MIN := 1.2.21
 
-.PHONY: sync sync-dry install-frozen validate validate-schema validate-components validate-lib-imports validate-ac-rules-ssot validate-tests typecheck lint test help
+.PHONY: sync sync-dry install-frozen validate validate-schema validate-components validate-lib-imports validate-ac-rules-ssot validate-skill-refs validate-tests typecheck lint test help
 
 help:
 	@echo "사용 가능한 명령어:"
@@ -11,6 +11,7 @@ help:
 	@echo "  make validate-components - 컴포넌트 검증 (파일 존재 여부)"
 	@echo "  make validate-lib-imports - lib import 검증 (@lib 별칭 강제)"
 	@echo "  make validate-ac-rules-ssot - AC 규칙 SSOT byte-identity 검증"
+	@echo "  make validate-skill-refs - skill 경로 참조 검증"
 	@echo "  make typecheck          - TypeScript strict 타입 검사 (tsc --noEmit)"
 	@echo "  make lint               - ESLint 정적 검사 (eslint .)"
 	@echo "  make test               - 전체 테스트 실행 (Shell + TypeScript)"
@@ -24,7 +25,7 @@ install-frozen:
 sync-dry: validate
 	@bun run tools/sync.ts --dry-run
 
-validate: install-frozen validate-schema validate-components validate-lib-imports validate-ac-rules-ssot typecheck lint
+validate: install-frozen validate-schema validate-components validate-lib-imports validate-ac-rules-ssot validate-skill-refs typecheck lint
 	@bun -e 'process.exit(Bun.semver.satisfies(Bun.version, ">=$(BUN_MIN)") ? 0 : 1)' \
 	  || { printf '\033[0;31m[ERROR]\033[0m bun >= $(BUN_MIN) 필요 (현재: %s)\n' "$$(bun --version)" >&2; exit 1; }
 
@@ -39,6 +40,9 @@ validate-lib-imports:
 
 validate-ac-rules-ssot:
 	@bun run tools/validators/ac-rules-ssot.ts
+
+validate-skill-refs:
+	@bun run tools/validators/skill-refs.ts
 
 validate-tests:
 	@./tools/run-tests.sh
