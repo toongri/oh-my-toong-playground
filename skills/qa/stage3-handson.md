@@ -48,7 +48,7 @@ ADVERSARIAL E2E Result: SKIPPED (internal logic only / non-code change)
 2. Run the server/application in background using `run_in_background`
 3. Wait for readiness (health check endpoint, port listening, or startup log message)
 4. If startup fails after reasonable timeout, report as ADVERSARIAL E2E FAIL
-5. After successful readiness, export `$API_BASE_URL` (e.g., `export API_BASE_URL=http://localhost:${PORT:?PORT must be set after server start}`) so AC verification commands referencing the [Executor-Provided Variables](../prometheus/acceptance-criteria.md#executor-provided-variables) contract resolve correctly.
+5. After successful readiness, export `$API_BASE_URL` (e.g., `export API_BASE_URL=http://localhost:${PORT:?PORT must be set after server start}`) so AC verification commands using the executor-provided variables — `$API_BASE_URL`, `$IOS_UDID`, `$ANDROID_SERIAL`, and `$evidence_xml` — resolve correctly.
 
 ### Stop
 
