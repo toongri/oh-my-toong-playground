@@ -2894,3 +2894,123 @@ describe("QA Stop-gate decision table", () => {
 		expect(makeDecision(context())).toMatchObject({ decision: "block" });
 	});
 });
+
+describe("explain-diff Stop-gate decision table", () => {
+	const testDir = join(tmpdir(), "persistent-mode-ed-stop-test-" + Date.now());
+	const projectRoot = join(testDir, "project");
+	const omtDir = join(testDir, "omt");
+	const stateDir = join(omtDir, "state");
+	const sid = "ed-stop-session";
+
+	beforeAll(async () => {
+		await mkdir(stateDir, { recursive: true });
+	});
+	afterAll(async () => {
+		await rm(testDir, { recursive: true, force: true });
+	});
+	beforeEach(async () => {
+		process.env.OMT_DIR = omtDir;
+		await rm(omtDir, { recursive: true, force: true });
+		await mkdir(stateDir, { recursive: true });
+	});
+
+	function writeEdState(state: Record<string, unknown>, session = sid) {
+		fs.writeFileSync(join(omtDir, `explain-diff-state-${session}.json`), JSON.stringify(state));
+	}
+
+	function context(session = sid): DecisionContext {
+		return {
+			projectRoot,
+			sessionId: session,
+			lastAssistantMessage: null,
+			incompleteTodoCount: 0,
+			activeBackgroundTaskCount: 0,
+		};
+	}
+
+	const midSession = {
+		active: true,
+		step: "code",
+		passed: ["evidence", "background", "intuition"],
+		concepts: [],
+		bank: [],
+		awaiting_answer: false,
+		no_progress: { key: "", count: 0, doc_digest: "" },
+		last_failure: null,
+	};
+
+	it("문서를 아직 만드는 중이면 정지를 막는다", () => {
+		writeEdState(midSession);
+		expect(makeDecision(context())).toMatchObject({ decision: "block" });
+	});
+
+	it("퀴즈 답을 기다리는 중이면 정지를 허용한다 — 사람이 답할 차례다", () => {
+		writeEdState({
+			...midSession,
+			step: "quiz",
+			passed: ["evidence", "background", "intuition", "code", "render"],
+			concepts: [{ id: "c1", required: true, passed: false }],
+			awaiting_answer: true,
+		});
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("필수 개념이 전부 통과되면 정지를 허용한다", () => {
+		writeEdState({
+			...midSession,
+			step: "quiz",
+			passed: ["evidence", "background", "intuition", "code", "render"],
+			concepts: [{ id: "c1", required: true, passed: true }],
+		});
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("필수 개념이 남아 있으면 퀴즈 스텝에서도 정지를 막는다", () => {
+		writeEdState({
+			...midSession,
+			step: "quiz",
+			passed: ["evidence", "background", "intuition", "code", "render"],
+			concepts: [
+				{ id: "c1", required: true, passed: true },
+				{ id: "c2", required: true, passed: false },
+			],
+		});
+		expect(makeDecision(context())).toMatchObject({ decision: "block" });
+	});
+
+	it("필수 개념이 하나도 없으면 퀴즈 스텝이어도 정지를 막는다 — 빈 집합의 공허참을 막는다", () => {
+		writeEdState({
+			...midSession,
+			step: "quiz",
+			passed: ["evidence", "background", "intuition", "code", "render"],
+			concepts: [{ id: "c1", required: false, passed: true }],
+		});
+		expect(makeDecision(context())).toMatchObject({ decision: "block" });
+	});
+
+	it("stalled 로 표시되면 정지를 허용한다 — 사용자만 풀 수 있는 교착이다", () => {
+		writeEdState({ ...midSession, stalled: true });
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("비활성 상태는 정지를 막지 않는다", () => {
+		writeEdState({ ...midSession, active: false });
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("상태 파일이 없으면 이 게이트는 관여하지 않는다", () => {
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("차단 횟수가 상한에 닿으면 탈출한다 — 게이트가 세션을 영구히 묶지 않는다", async () => {
+		writeEdState(midSession);
+		await writeFile(join(stateDir, `block-count-explain-diff-${sid}`), "5");
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("차단 메시지는 어느 스텝이 남았는지 이름을 대준다", () => {
+		writeEdState(midSession);
+		const out = makeDecision(context());
+		expect(JSON.stringify(out)).toContain("code");
+	});
+});

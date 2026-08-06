@@ -650,6 +650,37 @@ test_qa_state_glob_nonmatching_allows() {
     return 1
 }
 
+# =============================================================================
+# explain-diff state -- a third anchor alongside the ledger and the QA state.
+# The step machine's only writer is the explain-diff-state.ts CLI; a direct
+# write here would let a session mark its own steps complete and reach a
+# finished document without passing the quiz.
+# =============================================================================
+test_explain_diff_state_exact_path_denies() {
+    local out
+    out=$(printf '%s\n' "$OD/explain-diff-state-$SID.json" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -qi 'explain-diff-state'; then return 0; fi
+    echo "ASSERTION FAILED explain-diff-state-path: expected deny, got '$out'"
+    return 1
+}
+
+test_explain_diff_state_other_session_allows() {
+    local out
+    out=$(printf '%s\n' "$OD/explain-diff-state-other.json" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED explain-diff-state-other: expected allow, got '$out'"
+    return 1
+}
+
+test_explain_diff_state_glob_current_session_denies() {
+    local out cand
+    cand="$OD/explain-diff-state-*.json"
+    out=$(printf '%s\n' "$cand" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -qi 'explain-diff-state'; then return 0; fi
+    echo "ASSERTION FAILED explain-diff-state-glob-current: expected deny for '$cand', got '$out'"
+    return 1
+}
+
 test_user_authorized_dismiss_review_finding_denies() {
     local out
     out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
@@ -1200,6 +1231,9 @@ main() {
     run_test test_qa_state_glob_current_session_denies
     run_test test_qa_state_glob_other_session_allows
     run_test test_qa_state_glob_nonmatching_allows
+    run_test test_explain_diff_state_exact_path_denies
+    run_test test_explain_diff_state_other_session_allows
+    run_test test_explain_diff_state_glob_current_session_denies
     run_test test_user_authorized_variable_indirection_denies
     run_test test_user_authorized_reverse_order_denies
     run_test test_user_authorized_whitespace_run_denies
