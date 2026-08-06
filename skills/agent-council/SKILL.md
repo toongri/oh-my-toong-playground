@@ -92,7 +92,7 @@ For programmatic use within Claude Code sessions:
 
 **Hard Constraints:**
 0. **Each Bash call MUST run in FOREGROUND.** All subcommands (start, collect) run synchronously. No background execution. No `run_in_background`.
-1. **Do NOT use `sleep`.** The `collect` subcommand polls internally (5-second intervals, 150-second default timeout). External sleep is redundant and wastes time.
+1. **Do NOT use `sleep`.** The `collect` subcommand polls internally (5-second intervals, 20-second wait per call). External sleep is redundant and wastes time.
 2. **Exactly-once job start.** The `start` subcommand runs ONCE. Polling (`collect`) may repeat. No job re-creation.
 
 **1. Start council (Bash, timeout: 180000)**
@@ -117,16 +117,16 @@ Output: JOB_DIR path (one line on stdout).
 
 > **Important**: Write prompts in English for consistent cross-model communication.
 
-**2. Collect results (Bash, timeout: 180000)**
+**2. Collect results (Bash)**
 
-`collect` polls internally every 5 seconds until all members complete or its internal timeout (default 150s) expires. No external sleep needed.
+One `collect` call is one poll: it polls internally every 5 seconds and answers within 20 seconds either way. Members take minutes, so repeated polls are the normal path. No external sleep needed.
 
 ```bash
 bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect "$JOB_DIR"
 ```
 
 - If response shows `"overallState": "done"` → proceed to Step 3.
-- Otherwise (`"running"`, `"queued"`, etc.) → call `collect` again (same command, foreground, timeout: 180000).
+- Otherwise (`"running"`, `"queued"`, etc.) → call `collect` again (same command, foreground).
 
 **3. Read raw outputs**
 
