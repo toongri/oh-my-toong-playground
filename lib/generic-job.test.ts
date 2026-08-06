@@ -4333,14 +4333,16 @@ describe("findOrphanJobs / reapOrphanJobs / doctorOrphanJobs", () => {
 		// jobsDir은 비어 있다 — findOrphanJobs가 0개를 판정하는 경로. 죽일 것이
 		// 없는데도 SIGTERM/SIGKILL 사이의 유예를 기다리는 것은 세션 시작마다 백그
 		// 라운드 bun 프로세스가 아무 이유 없이 노는 것과 같다.
+		const graceMs = 5000;
 		const start = Date.now();
-		const { reaped } = await reapOrphanJobs(jobsDir, chunkReviewConfig, { graceMs: 5000 });
+		const { reaped } = await reapOrphanJobs(jobsDir, chunkReviewConfig, { graceMs });
 		const elapsed = Date.now() - start;
 
 		expect(reaped.length).toBe(0);
-		// 5000ms 유예를 기다렸다면 이 값에 근접했을 것이다 — 훨씬 못 미쳐야 RED가
-		// 아니라 GREEN이다.
-		expect(elapsed).toBeLessThan(500);
+		// 이 경계는 "유예를 기다렸는가"만 가른다 — 머신 속도를 재는 것이 아니다.
+		// 유예를 기다렸다면 graceMs에 근접하므로 그 절반 미만이면 안 기다린 것이다.
+		// 절대값(500ms)으로 두면 부하가 걸린 머신에서 간헐 실패한다(실측 538ms).
+		expect(elapsed).toBeLessThan(graceMs / 2);
 	});
 
 	test("고아가 1개 이상이면 유예를 여전히 기다린다 (음성 대조군)", async () => {
