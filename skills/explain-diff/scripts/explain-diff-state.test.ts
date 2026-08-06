@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { STEP_ORDER, type Step } from "@lib/explain-diff-core";
 
 const SID = "explain-diff-cli-test";
 let sandbox: string;
@@ -106,6 +107,133 @@ describe("구조 검사 게이트", () => {
 	});
 });
 
+// Evidence 절만 있고 signal 경로가 표에만 적힌, 문서화된 흐름의 실제 첫 호출 모양의 문서.
+const EVIDENCE_ONLY_DOC = `# 설명
+
+## Evidence
+
+| 파일 | 분류 |
+|---|---|
+| \`lib/state-lock.ts\` | signal |
+`;
+
+const WITH_BACKGROUND_DOC = `${EVIDENCE_ONLY_DOC}
+## Background
+
+### 깊은 배경
+이미 익숙하면 건너뛰세요.
+
+### 좁은 배경
+내용
+`;
+
+/**
+ * evidence 부터 `step` 직전까지 `docAtStep`이 준 문서로 통과시켜 그 스텝에 진입시킨다.
+ * 도달한 스텝의 `submitStep`/`passStep` 은 호출자가 직접 실행해 검증한다.
+ */
+async function advanceTo(
+	step: Step,
+	docAtStep: (s: Step) => string,
+): Promise<{
+	submitStep: Awaited<ReturnType<typeof cli>>["submitStep"];
+	passStep: Awaited<ReturnType<typeof cli>>["passStep"];
+}> {
+	const { start, submitStep, passStep } = await cli();
+	start(SID, "r", "s");
+	for (const s of STEP_ORDER) {
+		if (s === step) break;
+		const doc = docFile(docAtStep(s));
+		submitStep(SID, s, doc, ["lib/state-lock.ts"], []);
+		passStep(SID, s, doc, [{ id: "R6", pass: true, quote: "state-lock" }]);
+	}
+	return { submitStep, passStep };
+}
+
+describe("스텝 스코핑 — 스텝마다 다른 슬롯만 본다", () => {
+	test("Evidence 절만 있는 문서는 evidence 스텝을 통과한다 — 문서화된 흐름의 첫 호출", async () => {
+		const { start, submitStep } = await cli();
+		start(SID, "r", "s");
+		const rc = submitStep(SID, "evidence", docFile(EVIDENCE_ONLY_DOC), ["lib/state-lock.ts"], []);
+		expect(rc).toBe(0);
+	});
+
+	test("같은 문서를 background 스텝으로 제출하면 R4 미충족으로 실패한다", async () => {
+		const { submitStep } = await advanceTo("background", () => EVIDENCE_ONLY_DOC);
+		const rc = submitStep(SID, "background", docFile(EVIDENCE_ONLY_DOC), ["lib/state-lock.ts"], []);
+		expect(rc).toBe(1);
+		expect(state().last_failure.items.join(" ")).toContain("R4");
+	});
+
+	test("Background 까지 채운 문서는 background 스텝을 통과하고, code 스텝은 실패한다", async () => {
+		// WITH_BACKGROUND_DOC 은 evidence 의 R1(등재형)과 background 의 R4 를 모두
+		// 만족시키므로 그대로 evidence·background·intuition 을 통과해 code 에 진입한다.
+		const { submitStep } = await advanceTo("code", () => WITH_BACKGROUND_DOC);
+		// Change Group이 없는 같은 문서를 code 스텝에 그대로 제출한다 — R2가 슬롯 부재로
+		// 실패하고, R1(커버리지형)도 signal 파일이 어느 그룹에도 없어 실패한다.
+		const rc = submitStep(SID, "code", docFile(WITH_BACKGROUND_DOC), ["lib/state-lock.ts"], []);
+		expect(rc).toBe(1);
+		const items = state().last_failure.items.join(" ");
+		expect(items).toContain("R2");
+		expect(items).toContain("lib/state-lock.ts");
+	});
+
+	test("signal 파일이 Evidence 표에만 있고 Change Group 파일 블록이 없으면 code 스텝이 실패하고 사유에 경로가 나온다", async () => {
+		const { submitStep } = await advanceTo("code", () => WITH_BACKGROUND_DOC);
+		const noGroupDoc = `${WITH_BACKGROUND_DOC}
+## Change Group 1: 관련 없는 변경
+> 예고: 다른 파일을 다룬다.
+> 순서: 순서상 이유가 있다.
+
+### \`lib/other.ts\`
+**왜 필요한가** — [근거: "다른 이유"]
+**추적성** — \`base:lib/other.ts:1\` \`head:lib/other.ts:2\`
+`;
+		const rc = submitStep(SID, "code", docFile(noGroupDoc), ["lib/state-lock.ts"], []);
+		expect(rc).toBe(1);
+		expect(state().last_failure.items.join(" ")).toContain("lib/state-lock.ts");
+	});
+
+	test("같은 signal 파일의 파일 블록이 두 Change Group에 각각 있으면 code 스텝이 실패하고 사유가 중복임을 밝힌다", async () => {
+		const { submitStep } = await advanceTo("code", () => WITH_BACKGROUND_DOC);
+		const duplicatedDoc = `${WITH_BACKGROUND_DOC}
+## Change Group 1: 락을 공용 모듈로 뽑아낸다
+> 예고: 먼저 락 자체를 옮겨 놓아야 호출부 정리가 의미를 갖는다.
+> 순서: 추출이 먼저다.
+
+### \`lib/state-lock.ts\`
+**왜 필요한가** — [근거: "첫 번째 이유"]
+**추적성** — \`base:lib/state-lock.ts:1\` \`head:lib/state-lock.ts:14\`
+
+## Change Group 2: 같은 파일을 또 다룬다
+> 예고: 같은 파일이 다시 등장한다.
+> 순서: 두 번째 손질이 필요하다.
+
+### \`lib/state-lock.ts\`
+**왜 필요한가** — [근거: "두 번째 이유"]
+**추적성** — \`base:lib/state-lock.ts:14\` \`head:lib/state-lock.ts:20\`
+`;
+		const rc = submitStep(SID, "code", docFile(duplicatedDoc), ["lib/state-lock.ts"], []);
+		expect(rc).toBe(1);
+		const items = state().last_failure.items.join(" ");
+		expect(items).toContain("lib/state-lock.ts");
+		expect(items).toContain("중복");
+	});
+
+	test("intuition 스텝은 최소 문서로도 구조 검사를 통과한다", async () => {
+		const { submitStep } = await advanceTo("intuition", () => WITH_BACKGROUND_DOC);
+		const rc = submitStep(SID, "intuition", docFile("본질만 적힌 한 줄."), ["lib/state-lock.ts"], []);
+		expect(rc).toBe(0);
+	});
+
+	test("평가되지 않은 항목은 실패 사유에 등장하지 않는다 — background 실패는 R4만 담는다", async () => {
+		const { submitStep } = await advanceTo("background", () => EVIDENCE_ONLY_DOC);
+		submitStep(SID, "background", docFile(EVIDENCE_ONLY_DOC), ["lib/state-lock.ts"], []);
+		const items = state().last_failure.items;
+		expect(items.length).toBe(1);
+		expect(items[0]).toContain("R4");
+	});
+});
+
 describe("심사 인용 검증", () => {
 	test("인용 없는 pass 는 자동 실패다", async () => {
 		const { start, submitStep, passStep } = await cli();
@@ -144,8 +272,9 @@ describe("심사 인용 검증", () => {
 	});
 });
 
-// evidence 부터 code 까지는 같은 문서·같은 인용으로 매 스텝을 통과시킨다 — 구조 검사가
-// 스텝별로 다른 슬롯을 요구하지 않으므로(R1..R5는 스텝 무관) GOOD_DOC 하나로 충분하다.
+// evidence 부터 code 까지는 같은 문서·같은 인용으로 매 스텝을 통과시킨다 — 구조 검사는
+// 스텝마다 다른 항목만 보지만, GOOD_DOC 은 Evidence·Background·Change Group을 전부
+// 갖추고 있어 스텝이 바뀔 때마다 그 스텝이 보는 슬롯이 이미 채워져 있다.
 async function driveToRender(): Promise<{
 	passStep: Awaited<ReturnType<typeof cli>>["passStep"];
 	submitStep: Awaited<ReturnType<typeof cli>>["submitStep"];

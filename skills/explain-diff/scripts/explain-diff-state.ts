@@ -175,7 +175,7 @@ function submitStep(
 		const result =
 			step === "render"
 				? checkRenderOutput(htmlPath)
-				: checkStructure(readFileSync(docPath, "utf8"), { signalFiles, addedFiles });
+				: checkStructure(readFileSync(docPath, "utf8"), { signalFiles, addedFiles, step });
 		if (!result.pass) {
 			s.last_failure = { step, items: result.failedItems };
 			s.structural_ok = s.structural_ok.filter((x) => x !== step);
