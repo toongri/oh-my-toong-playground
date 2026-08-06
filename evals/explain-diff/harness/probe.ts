@@ -46,6 +46,7 @@ const NOISE = /(^|\/)(bun\.lock|package-lock\.json|.*\.snap|dist\/|.*\.generated
 
 function changedFiles(fixtureId: string): string[] {
 	const f = fixtures().find((x) => x.id === fixtureId);
+	if (f === undefined) throw new Error(`manifest.json에 fixture가 없습니다: ${fixtureId}`);
 	const wt = path.join(EVAL, "fixtures", fixtureId);
 	const out = execFileSync("git", ["-C", wt, "diff", "--name-only", ...f.range.split("..").join("..").split(" ")], {
 		encoding: "utf8",
