@@ -132,6 +132,16 @@ $CLI submit-step --step <step> --doc "<문서 경로>" \
   --signal-files "a.ts,b.ts" --added-files "b.ts"
 ```
 
+이 관문이 실제로 보는 것은 스텝마다 다르다 — 그 스텝이 채워야 할 슬롯만 검사한다.
+
+| 스텝 | 검사 |
+|---|---|
+| evidence | signal 파일 전부가 문서 어딘가에 등장하는가 |
+| background | 깊은/좁은 배경 2단 + 건너뛰기 마커 |
+| intuition | 없음 — 구조 검사는 통과만 시키면 되고, 실질 판정은 심사(R6)가 맡는다 |
+| code | Change Group 제목·예고·순서 근거 3슬롯, 모든 "왜 필요한가"의 출처 표시, base/head 추적성, signal 파일이 Change Group에 정확히 한 번씩 들어갔는가 |
+| render | Step 5를 보라 — 마크다운 구조가 아니라 `--html`로 넘긴 산출물의 존재·비어있지 않음을 본다 |
+
 실패하면 실패 항목이 그대로 출력된다. 문서를 고치고 다시 제출한다.
 
 ```bash
@@ -141,7 +151,9 @@ $CLI pass-step --step <step> --doc "<문서 경로>" --judge-json '<판정 JSON>
 
 판정 JSON은 심사 서브에이전트가 내놓는다. 심사자에게는 `references/judge-prompt.md`의 **고정 템플릿**을 그대로 준다. 직접 지어내지 않는다.
 
-심사자가 맡는 것은 루브릭 중 두 항목뿐이다 — `R6`(Intuition의 구체 예시가 실제로 있고 본문에서 다시 쓰이는가)과 `R7`(그룹 N의 예고문이 그룹 N-1을 전제하는가). 나머지는 구조 검사가 이미 판정했다.
+심사자가 판정하는 항목은 전체 루브릭 중 두 개뿐이다 — `R6`(Intuition의 구체 예시가 실제로 있고 본문에서 다시 쓰이는가)과 `R7`(그룹 N의 예고문이 그룹 N-1을 전제하는가). 나머지는 구조 검사가 이미 판정했다.
+
+이 두 항목이 **필수인 스텝은 각각 하나뿐이다** — `intuition`은 `R6`, `code`는 `R7`. 그 외 네 스텝(evidence·background·render·quiz)은 필수 심사 ID가 없으므로 `--judge-json '[]'`로 통과시킨다. 필수 ID가 페이로드에 없으면 그 자체로 거부되고, 관련 없는 ID에 실재하는 인용을 붙여도 필수 ID 누락을 대신 채우지 못한다.
 
 ```json
 [{"id":"R6","pass":true,"quote":"문서에서 그대로 따온 문장"}]
@@ -195,7 +207,7 @@ $CLI add-concept --id <concept> --required
 $CLI ask
 ```
 
-답이 오면 루브릭과 대조해 채점한다.
+답이 오면 루브릭과 대조해 채점한다. `grade`는 `ask`로 문항을 낸 뒤(응답 대기 상태)에만 받아들인다 — `ask` 없이 부르면 상태를 건드리지 않고 그대로 거부된다.
 
 ```bash
 $CLI grade --concept <id> --doc-digest "<문서 해시>" [--missing "<빠진 루브릭 항목>"]…

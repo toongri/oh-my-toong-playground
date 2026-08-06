@@ -152,7 +152,7 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 
 **여섯 스텝**: `evidence`(변경 파일을 signal/noise로 분류) → `background`(깊은 배경 + 좁은 배경 2단, 이미 아는 독자를 위한 건너뛰기 마커 포함) → `intuition`(비유·그림으로 감 잡기) → `code`(Change Group 단위 코드 해설) → `render`(자기완결 HTML 생성) → `quiz`(서술형 출제·채점).
 
-**문서 형식 계약**: 각 스텝은 슬롯을 채우는 방식으로 검사됩니다 — signal 파일 전수 등장, Change Group의 제목·예고·순서 근거 3슬롯, 모든 "왜 필요한가"의 출처 표시(`[근거: "…"]` / `[추론: …]` / `Unknown / not supplied`), Background 2단 + 건너뛰기 마커, 파일별 `base:`/`head:` 양쪽 위치. 이 다섯은 스크립트가 판정하고(`lib/explain-diff-structure.ts`), 서사 흐름과 인용 정확성 두 항목만 심사자가 봅니다. 심사자가 "통과"라고 하면서 인용을 붙이지 않거나, 붙인 인용이 문서에 문자열로 존재하지 않으면 자동 실패입니다.
+**문서 형식 계약**: 각 스텝은 그 스텝이 채워야 할 슬롯만 검사받습니다 — `evidence`는 signal 파일이 문서 어딘가에 전부 등장하는지, `background`는 깊은/좁은 배경 2단과 건너뛰기 마커, `code`는 Change Group의 제목·예고·순서 근거 3슬롯 + 모든 "왜 필요한가"의 출처 표시(`[근거: "…"]` / `[추론: …]` / `Unknown / not supplied`) + 파일별 `base:`/`head:` 양쪽 위치 + signal 파일이 Change Group에 정확히 한 번씩 들어갔는지(evidence에서는 "등장"만 보지만 code에서는 "정확히 한 번"까지 봅니다)를 스크립트가 판정합니다(`lib/explain-diff-structure.ts`). 심사자는 `intuition` 스텝의 구체 예시(R6)와 `code` 스텝의 Change Group 순서 정합(R7) 두 항목만 보고, 나머지 네 스텝은 필수 심사 항목이 없어 빈 배열로 통과합니다. 심사자가 "통과"라고 하면서 인용을 붙이지 않거나, 붙인 인용이 문서에 문자열로 존재하지 않으면 자동 실패입니다. `render` 스텝은 이 구조 검사를 거치지 않고, 대신 산출물 HTML 파일의 존재와 비어있지 않음만 확인합니다.
 
 **3층 강제 게이팅**: (1) 상태 CLI(`explain-diff-state.ts`)가 상태 파일의 유일한 writer이고, (2) PreToolUse 아티팩트 가드가 `$OMT_DIR/explain-diff/` 쓰기를 막으며, (3) Stop 게이트가 퀴즈 통과 전 세션 종료를 막습니다. 아티팩트 가드는 OMT의 다른 가드와 반대로 **fail-closed** 입니다 — 상태가 없거나 만료됐거나 `jq`가 없으면 거부합니다. 이 반전은 그 디렉터리 하나에만 적용되고 나머지 경로는 전부 fail-open으로 남습니다.
 
