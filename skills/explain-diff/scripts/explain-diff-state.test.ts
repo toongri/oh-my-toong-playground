@@ -144,6 +144,88 @@ describe("심사 인용 검증", () => {
 	});
 });
 
+// evidence 부터 code 까지는 같은 문서·같은 인용으로 매 스텝을 통과시킨다 — 구조 검사가
+// 스텝별로 다른 슬롯을 요구하지 않으므로(R1..R5는 스텝 무관) GOOD_DOC 하나로 충분하다.
+async function driveToRender(): Promise<{
+	passStep: Awaited<ReturnType<typeof cli>>["passStep"];
+	submitStep: Awaited<ReturnType<typeof cli>>["submitStep"];
+	doc: string;
+}> {
+	const { start, submitStep, passStep } = await cli();
+	start(SID, "r", "s");
+	const doc = docFile(GOOD_DOC);
+	const quote = "락을 공용 모듈로 뽑아낸다";
+	for (const step of ["evidence", "background", "intuition", "code"] as const) {
+		submitStep(SID, step, doc, ["lib/state-lock.ts"], []);
+		passStep(SID, step, doc, [{ id: "R6", pass: true, quote }]);
+	}
+	return { passStep, submitStep, doc };
+}
+
+describe("render 산출물 검사", () => {
+	test("--html 없이 제출하면 실패한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const rc = submitStep(SID, "render", doc, [], []);
+		expect(rc).toBe(1);
+		expect(state().step).toBe("render");
+		expect(state().last_failure.step).toBe("render");
+	});
+
+	test("존재하지 않는 HTML 경로는 실패한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const rc = submitStep(SID, "render", doc, [], [], join(sandbox, "없음.html"));
+		expect(rc).toBe(1);
+		expect(state().last_failure.items.join(" ")).toContain("찾을 수 없습니다");
+	});
+
+	test("빈 HTML 파일은 실패한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, "", "utf8");
+		const rc = submitStep(SID, "render", doc, [], [], htmlPath);
+		expect(rc).toBe(1);
+		expect(state().last_failure.items.join(" ")).toContain("비어 있습니다");
+	});
+
+	test("정상 HTML 은 통과하고 render 를 구조 통과 목록에 남긴다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, "<html></html>", "utf8");
+		const rc = submitStep(SID, "render", doc, [], [], htmlPath);
+		expect(rc).toBe(0);
+		expect(state().structural_ok).toContain("render");
+	});
+
+	test("render 통과 후 pass-step 은 심사 항목 없이 quiz 로 넘긴다", async () => {
+		const { submitStep, passStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, "<html></html>", "utf8");
+		submitStep(SID, "render", doc, [], [], htmlPath);
+		const rc = passStep(SID, "render", doc, []);
+		expect(rc).toBe(0);
+		expect(state().step).toBe("quiz");
+	});
+
+	test("evidence 부터 render 까지 전 스텝을 통과시키고 필수 개념을 채우면 complete 가 성공한다", async () => {
+		const { start, submitStep, passStep, addConcept, grade, complete } = await cli();
+		start(SID, "r", "s");
+		const doc = docFile(GOOD_DOC);
+		const quote = "락을 공용 모듈로 뽑아낸다";
+		for (const step of ["evidence", "background", "intuition", "code"] as const) {
+			submitStep(SID, step, doc, ["lib/state-lock.ts"], []);
+			passStep(SID, step, doc, [{ id: "R6", pass: true, quote }]);
+		}
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, "<html></html>", "utf8");
+		submitStep(SID, "render", doc, [], [], htmlPath);
+		passStep(SID, "render", doc, []);
+		expect(state().step).toBe("quiz");
+		addConcept(SID, "c1", true);
+		grade(SID, "c1", [], "digest-final");
+		expect(complete(SID)).toBe(0);
+	});
+});
+
 describe("퀴즈 완료 게이트", () => {
 	test("필수 개념이 남아 있으면 완료할 수 없다", async () => {
 		const { start, addConcept, complete } = await cli();

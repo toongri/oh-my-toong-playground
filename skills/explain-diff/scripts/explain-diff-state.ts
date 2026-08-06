@@ -9,7 +9,7 @@
  * structural checks in lib/explain-diff-structure.ts passed and a judge backed
  * every existence claim with a quote this CLI found in the document.
  */
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { getOmtDir } from "@lib/omt-dir";
 import { nowStamp, resolveSessionIdOrThrow, STATE_PREFIX } from "@lib/state-core";
 import {
@@ -133,6 +133,27 @@ function start(sessionId: string, range: string, slug: string): void {
 }
 
 /**
+ * render is a derivation, not authoring — the markdown structure slots (R1..R5)
+ * were already earned at `code`, so this checks the artifact itself exists and
+ * is not empty rather than re-running a check aimed at prose.
+ */
+function checkRenderOutput(htmlPath: string | undefined): { pass: boolean; failedItems: string[] } {
+	if (!htmlPath) {
+		return { pass: false, failedItems: ["render 산출물 경로(--html)가 없습니다."] };
+	}
+	let size: number;
+	try {
+		size = statSync(htmlPath).size;
+	} catch {
+		return { pass: false, failedItems: [`render 산출물을 찾을 수 없습니다: ${htmlPath}`] };
+	}
+	if (size === 0) {
+		return { pass: false, failedItems: [`render 산출물이 비어 있습니다: ${htmlPath}`] };
+	}
+	return { pass: true, failedItems: [] };
+}
+
+/**
  * Runs the script-decidable rubric items against the section just authored.
  * A failure is recorded, not just reported: `last_failure` is what the artifact
  * guard's deny message quotes back, so the author reads the same sentence the
@@ -144,14 +165,17 @@ function submitStep(
 	docPath: string,
 	signalFiles: string[],
 	addedFiles: string[],
+	htmlPath?: string,
 ): number {
 	return withLock(statePath(sessionId), () => {
 		const s = mustRead(sessionId);
 		if (s.step !== step) {
 			throw new Error(`현재 스텝은 ${s.step} 입니다. ${step} 을 제출할 수 없습니다.`);
 		}
-		const text = readFileSync(docPath, "utf8");
-		const result = checkStructure(text, { signalFiles, addedFiles });
+		const result =
+			step === "render"
+				? checkRenderOutput(htmlPath)
+				: checkStructure(readFileSync(docPath, "utf8"), { signalFiles, addedFiles });
 		if (!result.pass) {
 			s.last_failure = { step, items: result.failedItems };
 			s.structural_ok = s.structural_ok.filter((x) => x !== step);
@@ -370,6 +394,7 @@ function main(): void {
 						req(args, "doc"),
 						csv(req(args, "signal-files")),
 						csv(typeof args["added-files"] === "string" ? args["added-files"] : ""),
+						typeof args["html"] === "string" ? args["html"] : undefined,
 					),
 				);
 				break;
