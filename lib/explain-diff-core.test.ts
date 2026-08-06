@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
 	AUTHORING_STEPS,
+	REQUIRED_JUDGE_IDS,
 	STEP_ORDER,
 	computeDerived,
 	nextStep,
@@ -35,6 +36,23 @@ describe("스텝 순서", () => {
 		expect(nextStep("evidence")).toBe("background");
 		expect(nextStep("code")).toBe("render");
 		expect(nextStep("quiz")).toBeNull();
+	});
+});
+
+describe("필수 심사 ID 배정", () => {
+	test("intuition은 R6, code는 R7을 요구하고 나머지 네 스텝은 아무 것도 요구하지 않는다", () => {
+		expect(REQUIRED_JUDGE_IDS).toEqual({
+			evidence: [],
+			background: [],
+			intuition: ["R6"],
+			code: ["R7"],
+			render: [],
+			quiz: [],
+		});
+	});
+
+	test("여섯 스텝 전부에 배정이 있다 — 빠진 스텝이 무자격 통과를 만들지 않는다", () => {
+		for (const s of STEP_ORDER) expect(REQUIRED_JUDGE_IDS[s]).toBeDefined();
 	});
 });
 

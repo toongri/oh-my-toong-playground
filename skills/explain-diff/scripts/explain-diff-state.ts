@@ -16,6 +16,7 @@ import {
 	computeDerived,
 	nextStep,
 	normalizeExplainDiffState,
+	REQUIRED_JUDGE_IDS,
 	STEP_ORDER,
 	type ExplainDiffState,
 	type Step,
@@ -213,6 +214,13 @@ function passStep(sessionId: string, step: Step, docPath: string, judge: JudgeIt
 		}
 		const text = readFileSync(docPath, "utf8");
 		const bad: string[] = [];
+		// A required id missing from the payload entirely is refused before the
+		// per-item loop runs — an empty (or off-topic) judge array must not
+		// vacuously satisfy a step whose rubric depends on the judge's review.
+		const presentIds = new Set(judge.map((item) => item.id));
+		for (const id of REQUIRED_JUDGE_IDS[step]) {
+			if (!presentIds.has(id)) bad.push(`${id}: 심사 판정이 없습니다`);
+		}
 		for (const item of judge) {
 			if (!item.pass) {
 				bad.push(`${item.id}: 심사 실패`);
