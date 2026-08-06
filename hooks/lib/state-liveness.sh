@@ -10,14 +10,14 @@
 ACTIVE_IDLE_TTL=21600   # 6 hours — active session idle window
 TERMINAL_TTL=1800       # 30 minutes — terminal (active:false) grace period
 
-# STATE_PREFIXES — the 5 managed state-file prefixes. This is the single
+# STATE_PREFIXES — the 6 managed state-file prefixes. This is the single
 # definition site for bash; the out-of-scope *seeding* point is
 # hooks/pre-tool-enforcer.sh. No GC caller keeps its own copy of this list.
 # Every prefix expansion below is anchored to `*.json`, never bare `*` — that
 # anchor is what keeps `list_live_session_ids` and `reap_dead_state_files`
 # from treating a `...-<sid>.json.closed.bak` backup as a state file (it does
 # not end in `.json`, so it is invisible to `<prefix>*.json`).
-STATE_PREFIXES="goal-state- ultragoal-state- prometheus-state- deep-interview-active-state- qa-state-"
+STATE_PREFIXES="goal-state- ultragoal-state- prometheus-state- deep-interview-active-state- qa-state- explain-diff-state-"
 
 # SESSION_ARTIFACT_PREFIXES — the 6 whitelisted session-artifact families
 # reap_session_artifacts is allowed to reap. An enumerated whitelist (over a
