@@ -938,8 +938,8 @@ function typeFromStateFilename(filename: string): StateType | null {
  * file — the code review on PR #209 flagged this as a lost-update risk, and the
  * invariant that closes it is measured, not assumed: no agent definition under
  * agents/ invokes a state CLI, and no dispatch prompt instructs a subagent to. The
- * state-writing commands in skills/{goal,ultragoal}/references/{planning,
- * completion-gate}.md (`set`, `set-stories`, `set-verdict`, `confirm-*`,
+ * state-writing commands in the Ultragoal planning and completion-gate
+ * references (`set`, `set-stories`, `set-verdict`, `confirm-*`,
  * `request-complete`) all live in skill body prose that only the orchestrator (main
  * thread) executes; what crosses into the code-reviewer subagent is a serialized
  * payload and an artifact path, never a state CLI call. Every state-writing skill
