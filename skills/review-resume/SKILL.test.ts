@@ -19,6 +19,18 @@ import { join } from "path";
 
 const skillMd = readFileSync(join(import.meta.dir, "SKILL.md"), "utf8");
 
+function extractSection(markdown: string, heading: string): string {
+  const headingMatch = markdown.match(new RegExp(`^### ${heading}\\s*$`, "m"));
+  if (!headingMatch || headingMatch.index === undefined) return "";
+
+  const sectionStart = headingMatch.index + headingMatch[0].length;
+  const remainder = markdown.slice(sectionStart);
+  const nextHeadingOffset = remainder.search(/^###\s+/m);
+  return remainder.slice(0, nextHeadingOffset === -1 ? remainder.length : nextHeadingOffset);
+}
+
+const approvalGateSection = extractSection(skillMd, "Approval Gate");
+
 describe("review-resume pre-submission self-check prose contract", () => {
   test("pins the self-check heading marker", () => {
     expect(skillMd).toContain("제출 전 셀프 점검");
@@ -41,5 +53,14 @@ describe("review-resume pre-submission self-check prose contract", () => {
 
   test("pins the authority-separation phrasing between the self-check and the examiner APPROVE gate", () => {
     expect(skillMd).toContain("does NOT invalidate the examiner APPROVE");
+  });
+});
+
+describe("Approval Gate 섹션 호출자 중립성 prose 계약", () => {
+  test("`removes upstream caller naming while preserving approval-gate norms`", () => {
+    expect(approvalGateSection).not.toContain("resume-apply workflow");
+    expect(approvalGateSection).toContain("ask the user to review");
+    expect(approvalGateSection).toContain("Do not proceed");
+    expect(approvalGateSection).toContain("no feedback");
   });
 });

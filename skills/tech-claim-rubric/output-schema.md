@@ -1,9 +1,14 @@
+# 역할 어휘 — 이 문서 전용 정의
+
+- **orchestrator**: 이 schema의 INTERNAL 필드를 읽고 판정·라우팅 로직을 수행하는 downstream 소비자. 모든 내부 필드와 구현 세부사항에 접근할 수 있다.
+- **blackbox consumer**: 이 schema의 PUBLIC 필드만 읽어 안정된 계약을 사용하는 downstream 소비자. INTERNAL 필드와 구현 세부사항에는 접근하지 않는다.
+
 # Examiner Output Schema (v4.1)
 
 <!-- schema_version: "v4.1" -->
 <!-- v4.0 changes:
   - structural_verdict (PUBLIC) 필드 추가: A5 scanability 축의 PASS/P1/FAIL을 PUBLIC으로 노출.
-    review-resume readability-fix routing trigger 및 resume-forge Loop 2 gate에서 사용.
+    blackbox consumer readability-fix routing trigger 및 orchestrator Loop 2 gate에서 사용.
   - final_verdict 도출 기준: A1-A4 no FAIL AND count(P1 across A1-A4) < 3 AND structural_verdict ∈ {PASS, P1} → APPROVE.
     (v3까지는 A1-A5 모두 PASS 조건; v4는 P1 최대 2개까지 허용하는 permissive 기준)
   - ownership-scope critical_rule_flag 제거: A4 ownership-scope axis의 P1 verdict로 대체됨.
@@ -17,7 +22,7 @@
 
 ## Purpose
 
-이 문서는 `tech-claim-examiner` agent의 output contract를 정의. resume-forge / review-resume 등 downstream skill이 이 schema를 참조해 examiner output을 parsing.
+이 문서는 `tech-claim-examiner` agent의 output contract를 정의. blackbox consumer / orchestrator 등 downstream skill이 이 schema를 참조해 examiner output을 parsing.
 
 ---
 
@@ -25,7 +30,7 @@
 
 ### Top-level fields
 
-모든 필드에 PUBLIC / INTERNAL 태그 부여. INTERNAL 필드는 orchestrator(resume-forge)만 접근 가능.
+모든 필드에 PUBLIC / INTERNAL 태그 부여. INTERNAL 필드는 orchestrator만 접근 가능.
 
 ```yaml
 schema_version: string              # PUBLIC. ex: "v4.1"
@@ -71,9 +76,9 @@ critical_rule_flags:                # INTERNAL (orchestrator-only)
 final_verdict: APPROVE | REQUEST_CHANGES   # PUBLIC
 structural_verdict: PASS | P1 | FAIL       # PUBLIC. A5 scanability axis의 verdict를 직접 노출.
                                            # consumer contract:
-                                           #   - review-resume: readability-fix routing trigger
+                                           #   - blackbox consumer: readability-fix routing trigger
                                            #     (structural_verdict == FAIL AND {a1,a2,a3,a4} 모두 PASS/P1 AND count(P1 across A1-A4) < 3)
-                                           #   - resume-forge: Loop 2 gate readability-fix path
+                                           #   - orchestrator: Loop 2 gate readability-fix path
                                            #     (A1-A4 no FAIL AND count(P1 across A1-A4) < 3 AND structural_verdict ∈ {PASS, P1} → APPROVE)
 interview_hints: string[]                  # PUBLIC (APPROVE/REQUEST_CHANGES 모두 user-facing — P1 hints는 항상 surface)
                                            # language constraint: source bullet의 언어 = hint 언어 — 4-라벨 + hint 본문 모두.
@@ -88,8 +93,8 @@ interview_hints: string[]                  # PUBLIC (APPROVE/REQUEST_CHANGES 모
 
 | Tag | Meaning | Consumer |
 |-----|---------|----------|
-| PUBLIC | Stable contract, blackbox consumer 안심 접근 | review-resume (and any future blackbox consumer) |
-| INTERNAL | May change without notice, orchestrator-only | resume-forge (axis-aware orchestrator) |
+| PUBLIC | Stable contract, blackbox consumer 안심 접근 | blackbox consumer (and any future blackbox consumer) |
+| INTERNAL | May change without notice, orchestrator-only | orchestrator (axis-aware role) |
 
 **Promotion procedure**: INTERNAL → PUBLIC 승격 시:
 1. 신규 plan 수립

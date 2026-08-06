@@ -84,7 +84,7 @@ export interface PrometheusState {
 
 /**
  * Minimal contract the persistent-mode hook reads from the goal-state file
- * written by `skills/goal/scripts/goal-state.ts`. The on-disk file carries
+ * written by the goal-state CLI. The on-disk file carries
  * many additional SKILL-only fields (outcome, verification_surface, etc.);
  * the hook only consults this subset.
  *
@@ -121,7 +121,7 @@ export interface GoalState {
 /**
  * Minimal contract the persistent-mode hook reads from the ultragoal-state file
  * written by `skills/ultragoal/scripts/ultragoal-state.ts`. That CLI is a
- * structural copy of `skills/goal/scripts/goal-state.ts` (identical on-disk
+ * structural copy of the goal-state CLI (identical on-disk
  * shape, separate file prefix `ultragoal-state-${sessionId}.json`), so the
  * hook's minimal contract is identical to GoalState's — including the
  * active-fold semantics (readUltragoalState vs readUltragoalStateRaw) GoalState's

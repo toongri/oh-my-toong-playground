@@ -2299,8 +2299,8 @@ test_session_start_hook_exits_zero_when_reaper_rm_fails() {
 # =============================================================================
 # Tests: deep-interview restore block (plan TODO 6)
 # di's seed schema (hooks/pre-tool-enforcer.sh) is minimal -- {active,
-# started_at, last_touched_at} only, unlike prometheus/goal/qa which also
-# carry .phase (and prometheus/goal carry .plan_path). The restore block must
+# started_at, last_touched_at} only, unlike prometheus/qa which also carry
+# .phase (and prometheus carries .plan_path). The restore block must
 # emit only an active-session re-read instruction and must never emit a blank
 # "Phase:" line, since di has no phase field to source one from.
 # =============================================================================
@@ -2346,7 +2346,7 @@ EOF
 
 # AC: di has no .phase field in its seed schema -- the restore block must
 # never emit a "Phase:" line (blank or otherwise). Only di is active here
-# (no prometheus/goal/qa state), so any "Phase:" occurrence would prove the
+# (no prometheus/qa state), so any "Phase:" occurrence would prove the
 # prometheus block was copied verbatim instead of mirrored to di's schema.
 test_session_start_deep_interview_no_blank_phase_line() {
     local sid="di-restore-no-phase"
