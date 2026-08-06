@@ -300,6 +300,51 @@ describe("reverse-reference: QA contracts do not depend on Prometheus links", ()
 		expect(lifecycleSection).toContain("$ANDROID_SERIAL");
 		expect(lifecycleSection).toContain("$evidence_xml");
 	});
+
+	test("iOS executor discovers, assigns, and exports IOS_UDID before use", () => {
+		const lifecycleStart = stage3Md.indexOf("## Step 3.2: Server / Application Lifecycle");
+		const lifecycleEnd = stage3Md.indexOf("## Step 3.3: API Verification", lifecycleStart + 1);
+		const lifecycleSection = stage3Md.slice(lifecycleStart, lifecycleEnd);
+		const discovery = lifecycleSection.indexOf("xcrun simctl list devices available");
+		const assignment = lifecycleSection.indexOf("IOS_UDID=");
+		const exportStep = lifecycleSection.indexOf("export IOS_UDID");
+		const firstUse = lifecycleSection.indexOf('xcrun simctl bootstatus "$IOS_UDID" -b');
+
+		expect(discovery).toBeGreaterThanOrEqual(0);
+		expect(assignment).toBeGreaterThan(discovery);
+		expect(exportStep).toBeGreaterThan(assignment);
+		expect(firstUse).toBeGreaterThan(exportStep);
+	});
+
+	test("Android executor discovers, assigns, and exports ANDROID_SERIAL before use", () => {
+		const lifecycleStart = stage3Md.indexOf("## Step 3.2: Server / Application Lifecycle");
+		const lifecycleEnd = stage3Md.indexOf("## Step 3.3: API Verification", lifecycleStart + 1);
+		const lifecycleSection = stage3Md.slice(lifecycleStart, lifecycleEnd);
+		const discovery = lifecycleSection.indexOf("adb devices");
+		const assignment = lifecycleSection.indexOf("ANDROID_SERIAL=");
+		const exportStep = lifecycleSection.indexOf("export ANDROID_SERIAL");
+		const firstUse = lifecycleSection.indexOf('adb -s "$ANDROID_SERIAL" get-state');
+
+		expect(discovery).toBeGreaterThanOrEqual(0);
+		expect(assignment).toBeGreaterThan(discovery);
+		expect(exportStep).toBeGreaterThan(assignment);
+		expect(firstUse).toBeGreaterThan(exportStep);
+	});
+
+	test("evidence_xml is resolved and exported separately before each AC", () => {
+		const lifecycleStart = stage3Md.indexOf("## Step 3.2: Server / Application Lifecycle");
+		const lifecycleEnd = stage3Md.indexOf("## Step 3.3: API Verification", lifecycleStart + 1);
+		const lifecycleSection = stage3Md.slice(lifecycleStart, lifecycleEnd);
+		const perAc = lifecycleSection.indexOf("Per-AC");
+		const resolution = lifecycleSection.indexOf("evidence_xml=", perAc);
+		const exportStep = lifecycleSection.indexOf("export evidence_xml", perAc);
+		const use = lifecycleSection.indexOf("$evidence_xml", exportStep);
+
+		expect(perAc).toBeGreaterThanOrEqual(0);
+		expect(resolution).toBeGreaterThan(perAc);
+		expect(exportStep).toBeGreaterThan(resolution);
+		expect(use).toBeGreaterThan(exportStep);
+	});
 });
 
 // ---------------------------------------------------------------------------

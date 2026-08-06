@@ -50,6 +50,14 @@ ADVERSARIAL E2E Result: SKIPPED (internal logic only / non-code change)
 4. If startup fails after reasonable timeout, report as ADVERSARIAL E2E FAIL
 5. After successful readiness, export `$API_BASE_URL` (e.g., `export API_BASE_URL=http://localhost:${PORT:?PORT must be set after server start}`) so AC verification commands using the executor-provided variables — `$API_BASE_URL`, `$IOS_UDID`, `$ANDROID_SERIAL`, and `$evidence_xml` — resolve correctly.
 
+### Executor Variable Setup
+
+The QA executor owns target selection and variable export; do not assume a caller has already set these values. Complete the applicable setup before invoking the first modality primitive:
+
+- **iOS Simulator**: discover a compatible target with `xcrun simctl list devices available`, assign its selected identifier (`IOS_UDID="<selected simulator UDID>"`), verify it is non-empty, then run `export IOS_UDID`. Only after this assignment/export may the executor run `xcrun simctl bootstatus "$IOS_UDID" -b`.
+- **Android Emulator**: discover an available AVD/device with `emulator -list-avds` and `adb devices`, assign the selected emulator serial (`ANDROID_SERIAL="emulator-<port>"`), verify it is non-empty, then run `export ANDROID_SERIAL`. Only after this assignment/export may the executor run `adb -s "$ANDROID_SERIAL" get-state` or other serial-scoped commands.
+- **Per-AC evidence output**: before each AC that emits a report, resolve a fresh path using QA's Evidence Path Priority, assign it (`evidence_xml="<resolved evidence path>"`), verify its parent directory, then run `export evidence_xml`. Execute that AC with `$evidence_xml`; repeat resolution/export for every AC so one AC never inherits another AC's evidence path.
+
 ### Stop
 
 After ALL verification completes (pass or fail):
