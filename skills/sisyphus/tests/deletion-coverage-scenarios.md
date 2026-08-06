@@ -60,7 +60,7 @@ done > /tmp/head-body.md
 
 최종본이 규칙을 어긴 것이 아니다. 최종본의 Inline Verify가 "AC는 통과했으나 스펙 요구에
 증거가 매핑되지 않은" 케이스를 blocking으로 규정하지 않았을 뿐이다. 결과적으로 사용자
-요구 4건 중 2건이 미이행인 채로 verify 태스크가 완료로 닫힌다 — goal/ultragoal 체인이
+요구 4건 중 2건이 미이행인 채로 verify 태스크가 완료로 닫힌다 — 이 체인이
 story 완료를 이 verdict로 판정하므로 방치할 수 없다.
 
 변동성 없음: B 3판 전부 COMMENT, A 2판 전부 REQUEST_CHANGES.
