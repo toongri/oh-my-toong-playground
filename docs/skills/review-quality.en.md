@@ -17,6 +17,7 @@ oh-my-toong's review and quality skills systematically verify the completeness o
 | `design-review` | Tradeoff tension analysis of designs and plans | Design question, plan doc, architectural concerns | Reviewing an architecture decision or implementation plan |
 | `slides-review` | Visual design review of HTML slides | HTML file path | After create-slides, or when improving HTML slide aesthetics |
 | `qa` | Implementation correctness verification guardian | QA REQUEST (Spec + Scope + verification method) | After implementation is done and needs independent QA |
+| `explain-diff` | Turns a diff into teaching material and measures the reader with a quiz | A git range (e.g. `main..HEAD`) | Understanding an unfamiliar PR, or handing a large agent-authored diff to a human |
 
 ---
 
@@ -145,6 +146,24 @@ oh-my-toong's review and quality skills systematically verify the completeness o
 
 ---
 
+### explain-diff
+
+**Purpose**: Makes a code change *understood*. Where code-review asks "does this diff have bugs", explain-diff asks "did the person reading this diff actually understand it". The completion condition is a person, not a document — writing the explanation does not finish the job; the reader passing a written quiz does.
+
+**Six steps**: `evidence` (classify changed files as signal or noise) → `background` (two tiers — deep and narrow — with a skip marker for readers who already know it) → `intuition` (analogy and figures) → `code` (walkthrough by Change Group) → `render` (self-contained HTML) → `quiz` (written questions, graded).
+
+**Document format contract**: Each step is checked as a set of slots to fill — every signal file appears, a Change Group carries its title plus a "what's coming" and an "why this order" slot, every "why is this needed" block carries its provenance (`[근거: "…"]` quote / `[추론: …]` inference / `Unknown / not supplied`), Background has both tiers plus the skip marker, and each file block anchors both `base:` and `head:` locations. A script decides those five (`lib/explain-diff-structure.ts`); only narrative flow and quote accuracy go to a judge. A judge that passes an item without a quote — or whose quote is not a literal substring of the document — fails automatically.
+
+**Three-layer enforcement**: (1) the state CLI (`explain-diff-state.ts`) is the only writer of the state file, (2) a PreToolUse artifact guard gates writes under `$OMT_DIR/explain-diff/`, and (3) a Stop gate refuses to let the session end before the quiz passes. Unlike every other OMT guard, the artifact guard is **fail-closed**: absent, expired, or unreadable state (no `jq`) all deny. That inversion is scoped to that one directory; every other path stays fail-open.
+
+**No quiz exemption**: No reason — time pressure, a user request, exhausted retries, "we only need the document" — reaches a completed state without the quiz being solved. A state with zero required concepts does not count as complete either (the empty set is not vacuously satisfied). Failing the same item twice with an unchanged document marks the session `stalled`, a deadlock only the user can clear.
+
+**How it is called**: Explicitly by the user (`disable-model-invocation: true` — the model never triggers it on its own). Codex gets the same state file and runtime gates through its own seed hook, which watches for a `$explain-diff` mention or the skill file being opened.
+
+**When to use**: Before reviewing an unfamiliar PR, when onboarding onto a subsystem through its history, or when handing a large agent-authored diff to a human.
+
+---
+
 ## Skill Selection Guide
 
 ```
@@ -153,6 +172,9 @@ What is the review target?
   |-- Design or architecture plan   -> design-review
   |-- HTML slides                   -> slides-review
   |-- Implementation done, need QA  -> qa
+
+Need to understand it first?
+  |-- A human must understand the change -> explain-diff (then code-review)
 
 When you run code-review:
   orchestrate-review coordinates multi-AI finders internally.
