@@ -82,6 +82,19 @@ describe("skill 경로 참조 검증기", () => {
 		expect(violations[0]).not.toContain("debugging");
 	});
 
+	test("deployed .agents skill paths are excluded without losing a same-line bare violation", async () => {
+		const violations = await withRoot((root) => {
+			writeFixture(
+				root,
+				"agents/paths.md",
+				".agents/skills/nonexistent-xyz/ and skills/nonexistent-xyz/\n",
+			);
+		});
+
+		expect(violations).toHaveLength(1);
+		expect(violations[0]).toContain("skills/nonexistent-xyz/");
+	});
+
 	test("test TypeScript files are scanned but declaration files are skipped", async () => {
 		const violations = await withRoot((root) => {
 			writeFixture(root, "skills/x/SKILL.test.ts", "skills/nonexistent-xyz/\n");
