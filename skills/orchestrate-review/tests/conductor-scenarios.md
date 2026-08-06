@@ -117,17 +117,17 @@
 
 ## Manifest Workflow Scenarios (MA-*)
 
-> Tests the data-acquisition mechanism: start → collect (poll, cap 6 calls; an `awaiting_resume` state routes to `resume-member` first) → Read each outputFile → merge. `collect` uses Bash `timeout: 600000` with `--timeout-ms 540000`.
+> Tests the data-acquisition mechanism: start → collect (poll until the response's own `nextAction` says otherwise; an `awaiting_resume` state routes to `resume-member` first) → Read each outputFile → merge. Each `collect` answers within 20s, so no extended Bash timeout is involved.
 
 ### MA-1: Full success (4/4)
 
-**Given**: `job.ts start --prompt-file "$PROMPT_FILE"` returns JOB_DIR; `collect --timeout-ms 540000 "$JOB_DIR"` polls and returns a done manifest with all four angles' `outputFilePath` non-null.
+**Given**: `job.ts start --prompt-file "$PROMPT_FILE"` returns JOB_DIR; `collect "$JOB_DIR"` polls and returns a done manifest with all four angles' `outputFilePath` non-null.
 
 **Then**:
 | ID | Expected Behavior |
 |----|-------------------|
 | V1 | `start` runs exactly once → JOB_DIR extracted |
-| V2 | `collect --timeout-ms 540000 "$JOB_DIR"` repeated (Bash `timeout: 600000`) until `overallState: "done"` |
+| V2 | `collect "$JOB_DIR"` repeated until `overallState: "done"` — a `nextAction: "poll_again"` response is never treated as a failure |
 | V3 | Each angle's `outputFilePath` is Read via the Read tool (not `cat`) |
 | V4 | Only non-null `outputFilePath` entries are Read |
 | V5 | After collecting candidates, the conductor merges them (CD-* logic) |
@@ -161,7 +161,7 @@
 **Then**:
 | ID | Expected Behavior |
 |----|-------------------|
-| V1 | `start` < 5s; each `collect` completes within its Bash `timeout: 600000` (internal `--timeout-ms 540000`) |
+| V1 | `start` < 5s; each `collect` answers within its 20s wait bound, so no call is ever cut off mid-poll |
 | V2 | `collect` done-stdout is small (manifest only, no inlined candidate text) |
 | V3 | The full candidate text is retrieved per-finder via Read of `outputFilePath` |
 

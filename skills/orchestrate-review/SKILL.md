@@ -29,7 +29,7 @@ When finders cannot deliver — none configured/available after filtering, or al
 
 You may ONLY execute these commands via Bash:
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --prompt-file "$PROMPT_FILE"` — start a review job
-- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 540000 "$JOB_DIR"` — collect results (blocks until done or the 540000ms timeout; no external sleep needed)
+- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect "$JOB_DIR"` — one poll: waits up to 20s, then always answers with JSON (no external sleep needed)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member <member> --prompt "..."` — dispatch a resume turn for an incomplete finder; returns immediately with a dispatch ack, then poll via `collect` to observe it (see Member Resume Policy; cap 3 attempts)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" results --manifest "$JOB_DIR"` — fetch the manifest directly (see Step 2)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" stop "$JOB_DIR"` — SIGTERM any still-`running` finder (see Step 2)
@@ -37,7 +37,7 @@ You may ONLY execute these commands via Bash:
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"` — remove the job dir and reap each worker's process group when its identity can still be verified; teardown step, run only after usage-summary and everything else is complete
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean --force "$JOB_DIR"` — same as `clean`, but skips the active-member guard; use it when an ordinary `clean` is refused for active members
 
-**CRITICAL**: Set `timeout: 600000` on `collect` Bash calls — the Bash tool's default timeout would kill it mid-poll. `resume-member` returns immediately with a dispatch ack and does not need this extended timeout.
+Every subcommand answers within seconds, so none of them needs an extended Bash timeout.
 
 ### Allowed Read Usage
 
@@ -64,18 +64,27 @@ bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --prompt-file "$PROMPT_FILE"
 ```
 Output: JOB_DIR path (one line on stdout). Each configured angle is dispatched as one finder; the angle's role prompt (`scripts/prompts/<angle>.md`) is injected automatically by member name.
 
-### Step 2 — Collect (Bash, timeout: 600000)
+### Step 2 — Collect (Bash)
 
-`collect` polls internally every 5 seconds until all finders complete or its internal timeout (540000ms, passed explicitly below) expires. No external sleep needed.
+One `collect` call is one poll: it waits up to 20 seconds, then answers with the job's current state. Finders run far longer than a single poll, so repeating is the normal path, not a symptom that something is wrong. No external sleep needed, and **no call budget of your own to keep** — the response itself tells you when to stop.
 
 ```bash
-bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 540000 "$JOB_DIR"
+bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect "$JOB_DIR"
 ```
 
-- If response shows `"overallState": "done"` → proceed to Step 3.
-- If response shows `"overallState": "awaiting_resume"` → that response already carries the full manifest; find each entry whose `errorMessage` is `"awaiting_resume"` and run `resume-member` on that member per Member Resume Policy. `resume-member` returns immediately with a dispatch ack; the resume turn itself runs in the background. After dispatching, call `collect` again (same command) to poll for it — this counts as one of the calls in the cap below.
-- Otherwise (`"running"`, `"queued"`, etc., excluding `awaiting_resume` above), or if the Bash tool itself times out/force-kills the call with no JSON returned at all → call `collect` again (same command, foreground, timeout: 600000). **Cap: 6 calls total**, counting all cases (including post-resume-dispatch polls).
-- If the 6th call still does not report `"done"`:
+Branch on the response:
+
+| Response carries | Do this |
+|------------------|---------|
+| `"overallState": "done"` | Proceed to Step 3. |
+| `"overallState": "awaiting_resume"` | That response already carries the full manifest; find each entry whose `errorMessage` is `"awaiting_resume"` and run `resume-member` on it per Member Resume Policy. `resume-member` returns immediately with a dispatch ack while the resume turn runs in the background — resume polling to observe it. |
+| `"nextAction": "poll_again"` | Run the SAME `collect` command again. |
+| `"nextAction": "stop_and_degrade"` | The job's own wall-clock budget is spent — run the teardown sequence below. |
+| Nothing — empty output, no JSON at all | The previous poll's process is still alive and its output has not surfaced yet. Run `results --manifest "$JOB_DIR"` (answers instantly) to read current state, then resume polling. |
+
+**No branch above re-runs `start`.** A poll that reports work still in flight is the protocol working, not a failure to route around.
+
+Teardown sequence for `stop_and_degrade`:
   1. Run `stop "$JOB_DIR"` to SIGTERM any finder still `running`, and read `outputFilePath` per finder from the manifest JSON it prints per Allowed Read Usage.
   2. Apply the Degradation Policy table below to the resulting responded/N ratio — treating every finder that never produced a non-null `outputFilePath` as not-responded (denominator stays N = total dispatched).
   3. Run `usage-summary.ts "$JOB_DIR"` and append the result as a `### Find Token Usage` block to the merged candidate text.
@@ -85,9 +94,9 @@ Response JSON (done):
 ```json
 { "overallState": "done", "id": "...", "members": [{ "member": "correctness", "outputFilePath": "/path/to/output.txt", "errorMessage": null }] }
 ```
-Response JSON (not done — re-run this step):
+Response JSON (not done — poll again):
 ```json
-{ "overallState": "running", "id": "...", "counts": { "total": 4, "done": 1, "running": 3, "queued": 0 } }
+{ "overallState": "running", "id": "...", "counts": { "total": 4, "done": 1, "running": 3, "queued": 0 }, "nextAction": "poll_again", "elapsedSec": 312, "deadlineSec": 2700 }
 ```
 
 ### Step 3 — Read Outputs
@@ -154,7 +163,7 @@ Each finder returns candidates shaped as `file` / `line` / `summary` / `failure_
 
 **NEVER re-start the job regardless of results.** Accept whatever output the manifest reports. Apply degradation rules to the result as-is.
 
-Finders may fail due to CLI unavailability, timeout, or errors. This is NOT quorum logic — this is infrastructure failure handling. Reaching the 6-call collect poll cap without `"done"` (Step 2 — Collect) also routes here: still-incomplete finders count as not-responded against this same table.
+Finders may fail due to CLI unavailability, timeout, or errors. This is NOT quorum logic — this is infrastructure failure handling. A `"nextAction": "stop_and_degrade"` poll — the job's wall-clock budget spent without `"done"` (Step 2 — Collect) — also routes here: still-incomplete finders count as not-responded against this same table.
 
 | Responses | Action | Output Modification |
 |-----------|--------|---------------------|

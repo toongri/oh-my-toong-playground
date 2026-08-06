@@ -122,10 +122,10 @@ describe("F3-flow: usage-summary 하베스트는 clean보다 먼저 실행돼야
 		expect(cleanPos).toBeLessThan(returnPos);
 	});
 
-	test('SKILL.md 타임아웃 폴백 분기에서도 "Find Token Usage"는 `clean` 앞에 위치한다', () => {
+	test('SKILL.md 예산소진 폴백 분기에서도 "Find Token Usage"는 `clean` 앞에 위치한다', () => {
 		const fallback = sliceRegion(
 			fs.readFileSync(SKILL_MD_PATH, "utf8"),
-			"If the 6th call still does not report",
+			"Teardown sequence for `stop_and_degrade`",
 			"Response JSON (done)",
 		);
 
