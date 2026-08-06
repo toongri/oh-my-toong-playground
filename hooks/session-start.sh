@@ -341,8 +341,8 @@ fi
 
 # Check for active deep-interview state (session-specific, plan TODO 6). The
 # di seed schema (hooks/pre-tool-enforcer.sh) is minimal -- {active,
-# started_at, last_touched_at} only, unlike prometheus/goal/qa above which
-# also carry .phase (and prometheus/goal carry .plan_path). This block
+# started_at, last_touched_at} only, unlike prometheus/qa above which also
+# carry .phase (and prometheus carries .plan_path). This block
 # therefore mirrors the per-skill restore pattern in a restrained form: an
 # active-session re-read instruction only, with no "Phase:" line, since di
 # has no phase field to source one from.
