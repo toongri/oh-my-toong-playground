@@ -109,6 +109,14 @@ skills:
     # agent-browser 기반 Claude·Codex 이식본만 검증되었으므로 Gemini/OpenCode 배포는 제외한다.
     - component: visual-qa
       platforms: [claude, codex]
+    # explain-diff의 강제 게이트는 양 플랫폼에 이미 깔려 있다 — 시드 훅
+    # (pre-tool-enforcer.sh의 explain-diff 케이스 / codex-explain-diff-seed.sh)과
+    # fail-closed 아티팩트 가드 twin이 claude.yaml·codex.yaml에 등록돼 있으므로,
+    # 스킬만 한쪽에 배포하면 다른 쪽 게이트가 대상 없이 남는다.
+    # ${CLAUDE_SKILL_DIR} 는 claude가 런타임 확장, codex는 sync 시점
+    # bakeSkillDirToken이 절대경로로 굽는다 — 그래서 이 둘로만 좁힌다.
+    - component: explain-diff
+      platforms: [claude, codex]
 
 scripts:
   items:

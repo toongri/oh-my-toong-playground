@@ -63,6 +63,9 @@ hooks:
     - component: codex-qa-seed.sh
       type: command
       timeout: 10
+    - component: codex-explain-diff-seed.sh
+      type: command
+      timeout: 10
     # Claude<->Codex hook-parity: root claude.yaml registers keyword-detector.sh
     # globally (UserPromptSubmit), so its Codex analog is global too -- see
     # hooks/codex-keyword-detector.sh + shared hooks/keyword-detector-core.sh.
@@ -74,6 +77,17 @@ hooks:
       type: command
       matcher: "Bash|bash|exec_command|shell_command"
       timeout: 10
+    - component: codex-explain-diff-seed.sh
+      type: command
+      matcher: "Bash|bash|exec_command|shell_command"
+      timeout: 10
+    # The artifact gate itself. Unlike every sibling guard here it fails CLOSED
+    # on its own directory. Matcher covers exactly the Codex write-tool
+    # spellings the shim handles; shell redirects into the guarded directory are
+    # out of scope on both platforms (see claude.yaml's twin registration).
+    - component: codex-explain-diff-artifact-guard.sh
+      type: command
+      matcher: "apply_patch|write_file|edit_file|create_file"
     - component: codex-write-guard.sh
       type: command
       matcher: "Bash|bash|apply_patch|exec_command|shell_command|Edit|Write|edit|write|multiedit|multi_edit"

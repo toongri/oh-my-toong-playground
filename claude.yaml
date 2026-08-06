@@ -29,6 +29,16 @@ hooks:
     - component: label-commit-gate.sh
       matcher: "Bash"
       timeout: 5
+    # explain-diff 산출물 게이트. 다른 가드와 달리 자기 디렉터리에서만
+    # fail-closed라 상태를 못 읽으면 거부한다.
+    #
+    # 스코프는 파일 쓰기 도구뿐이다. `cat > $OMT_DIR/explain-diff/x.md` 같은 셸
+    # 리다이렉트는 이 게이트를 통과한다 — 스펙이 정한 범위이고, 넓히려면 셸
+    # 세그먼트 경로 추출(pre-tool-enforcer.sh의 _wg_extract_bash_targets)을
+    # 재사용해 양 플랫폼 shim을 같이 고쳐야 한다.
+    - component: explain-diff-artifact-guard.sh
+      matcher: "Write|Edit|MultiEdit|NotebookEdit"
+      timeout: 5
   PostToolUse:
     - component: label-edit-warn.sh
       matcher: "Write|Edit|MultiEdit"

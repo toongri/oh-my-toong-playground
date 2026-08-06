@@ -20,7 +20,14 @@ import {
 import { generateAttemptId, ensureDir } from "./utils.ts";
 import { join } from "path";
 import { getOmtDir } from "@lib/omt-dir";
-import { isPristine, isProgressLive, touchSessionStates, readQaStateRaw } from "@lib/state-core";
+import {
+	isPristine,
+	isProgressLive,
+	touchSessionStates,
+	readQaStateRaw,
+	readExplainDiffStateRaw,
+} from "@lib/state-core";
+import { computeDerived, type ExplainDiffState } from "@lib/explain-diff-core";
 import {
 	approveOk,
 	chainComplete,
@@ -256,6 +263,25 @@ function buildQaContinuationMessage(
 					? "commentOk=false — run qa-state.ts record-cell for every H-priority cell"
 					: "no QA Stop-gate arm matched — run qa-state.ts get and record the missing outcome";
 	return `<qa-continuation>\n\n[QA STOP-GATE]\n\nThe recorded QA session cannot stop yet. Unmet predicate: ${unmet}.\n\n${continuationContract("preferred", askToolName)}\n\n</qa-continuation>\n\n---\n`;
+}
+
+/**
+ * Names what is still owed, so the block is actionable rather than a bare refusal.
+ * The quiz branch lists the concept ids the reader has not yet demonstrated — the
+ * whole point of the gate is that those, not the document, are the finish line.
+ */
+function buildExplainDiffContinuationMessage(
+	state: ExplainDiffState,
+	askToolName: string,
+): string {
+	const remaining = state.concepts.filter((c) => c.required && !c.passed).map((c) => c.id);
+	const unmet =
+		state.step !== "quiz"
+			? `문서가 ${state.step} 스텝에서 멈춰 있습니다 — explain-diff-state.ts submit-step / pass-step 으로 ${state.step} 를 통과시키세요.`
+			: remaining.length > 0
+				? `퀴즈가 끝나지 않았습니다 — 아직 통과하지 못한 필수 개념: ${remaining.join(", ")}.`
+				: "퀴즈에 필수 개념이 하나도 없습니다 — explain-diff-state.ts add-concept --required 로 개념을 먼저 등록하세요.";
+	return `<explain-diff-continuation>\n\n[EXPLAIN-DIFF STOP-GATE]\n\n${unmet}\n\n${continuationContract("preferred", askToolName)}\n\n</explain-diff-continuation>\n\n---\n`;
 }
 
 // The ultragoal continuation uses the autonomous loop envelope (iteration header,
@@ -681,6 +707,25 @@ export function makeDecision(context: DecisionContext): HookOutput {
 		} else if (qaState.active === true || !untouched) {
 			incrementBlockCount(stateDir, qaAttemptId);
 			return formatBlockOutput(buildQaContinuationMessage(qaState, verdict, qaProbe, askToolName));
+		}
+	}
+
+	// Priority 1.8: explain-diff Stop-gate. The document is not the deliverable —
+	// the reader passing the quiz is. Without this branch a session could author a
+	// perfect explanation, render it, and stop, which is exactly the outcome the
+	// skill exists to prevent. `stop_allowed` is recomputed here rather than read
+	// from the persisted `derived` block, so a stale flag cannot open the gate.
+	const edState = readExplainDiffStateRaw(sessionId);
+	if (edState && edState.active === true) {
+		const edAttemptId = `explain-diff-${attemptId}`;
+		if (computeDerived(edState).stop_allowed) {
+			cleanupBlockCountFiles(stateDir, edAttemptId);
+		} else if (getBlockCount(stateDir, edAttemptId) >= MAX_BLOCK_COUNT) {
+			cleanupBlockCountFiles(stateDir, edAttemptId);
+			return formatContinueOutput();
+		} else {
+			incrementBlockCount(stateDir, edAttemptId);
+			return formatBlockOutput(buildExplainDiffContinuationMessage(edState, askToolName));
 		}
 	}
 

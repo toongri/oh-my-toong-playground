@@ -63,6 +63,12 @@ _wg_core_user_authorized_deny_json='{"hookSpecificOutput":{"hookEventName":"PreT
 
 _wg_core_qa_state_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the current session QA state (qa-state-*.json). Use the qa-state.ts CLI instead."}}'
 
+# Deny JSON for the explain-diff step machine's state. Same anchor treatment as
+# the QA state above and for the same reason: the CLI is the only writer, and a
+# direct write here would let a session mark its own steps complete -- reaching
+# a finished explanation document without the reader ever passing the quiz.
+_wg_core_explain_diff_state_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the current session explain-diff state (explain-diff-state-*.json). Use the explain-diff-state.ts CLI instead."}}'
+
 # _wg_core_normpath <path>
 # Pure LEXICAL path normalization (os.path.normpath semantics): collapse
 # empty (//), '.' and '..' segments WITHOUT touching the filesystem. This
@@ -291,11 +297,18 @@ write_guard_core_run() {
     ledger_path="$(_wg_core_normpath "$omt_dir/session-ledger-$session_id.md")"
     local qa_state_path
     qa_state_path="$(_wg_core_normpath "$omt_dir/qa-state-$session_id.json")"
+    local explain_diff_state_path
+    explain_diff_state_path="$(_wg_core_normpath "$omt_dir/explain-diff-state-$session_id.json")"
     local candidate norm_candidate
     while IFS= read -r candidate; do
         norm_candidate="$(_wg_core_normpath "$candidate")"
         if [ "$norm_candidate" = "$qa_state_path" ]; then
             printf '%s\n' "$_wg_core_qa_state_deny_json"
+            _wg_core_drain_stdin
+            return 0
+        fi
+        if [ "$norm_candidate" = "$explain_diff_state_path" ]; then
+            printf '%s\n' "$_wg_core_explain_diff_state_deny_json"
             _wg_core_drain_stdin
             return 0
         fi
@@ -330,6 +343,10 @@ write_guard_core_run() {
                     return 0
                 elif _wg_core_pathwise_glob_match "$norm_candidate" "$qa_state_path"; then
                     printf '%s\n' "$_wg_core_qa_state_deny_json"
+                    _wg_core_drain_stdin
+                    return 0
+                elif _wg_core_pathwise_glob_match "$norm_candidate" "$explain_diff_state_path"; then
+                    printf '%s\n' "$_wg_core_explain_diff_state_deny_json"
                     _wg_core_drain_stdin
                     return 0
                 fi
