@@ -159,6 +159,16 @@ bun ${CLAUDE_SKILL_DIR}/scripts/render.ts --in "<문서.md>" --out "<문서.html
 
 HTML은 단일 self-contained 파일이며 런타임 JS도 외부 참조도 없다.
 
+render도 다른 스텝과 같은 두 관문을 통과해야 quiz로 넘어간다 — 이 전이를 건너뛰면 완료가 영원히 불가능해진다.
+
+```bash
+# 관문 1 — 산출물 검사 (마크다운 구조가 아니라 HTML 파일의 존재와 비어있지 않음을 확인한다)
+$CLI submit-step --step render --doc "<문서.md>" --signal-files "a.ts,b.ts" --html "<문서.html>"
+
+# 관문 2 — 심사 (render 스텝에는 심사 항목이 없으므로 빈 배열로 통과시킨다)
+$CLI pass-step --step render --doc "<문서.md>" --judge-json '[]'
+```
+
 렌더가 끝나면 사용자에게 두 경로를 알리고 문서를 읽어달라고 요청한다.
 
 ## Step 6 — quiz
