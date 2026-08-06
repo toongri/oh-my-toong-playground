@@ -49,7 +49,7 @@ export const ALLOWLIST: SkillRefAllowlistEntry[] = [
 	{ file: "skills/writing-skills/SKILL.md", name: "testing", reason: "anti-pattern example" },
 ];
 
-type Candidate = { index: number; name: string; token: string };
+type Candidate = { index: number; name: string; token: string; project?: string };
 
 function isSourceFile(relPath: string): boolean {
 	return (
@@ -68,11 +68,12 @@ function collectCandidates(content: string, relPath: string): Candidate[] {
 	// The one-character lookbehind is the path-segment boundary: a suffix such
 	// as `shared-skills/skills/...` must not manufacture a candidate at its first
 	// `skills/` occurrence.
-	const skillPath = /(?<![a-z0-9-])skills\/([a-z][a-z0-9-]*)\//g;
+	const skillPath =
+		/(?<![a-z0-9-])(?:projects\/([a-z][a-z0-9-]*)\/)?skills\/([a-z][a-z0-9-]*)\//g;
 	for (const match of content.matchAll(skillPath)) {
 		const index = match.index ?? 0;
 		if (isExcludedContext(content, index)) continue;
-		candidates.push({ index, name: match[1], token: match[0] });
+		candidates.push({ index, name: match[2], project: match[1], token: match[0] });
 	}
 
 	if (!relPath.startsWith("skills/")) return candidates;
@@ -95,6 +96,16 @@ function collectCandidates(content: string, relPath: string): Candidate[] {
 	}
 
 	return candidates;
+}
+
+function sourceProject(relPath: string): string | undefined {
+	return /^projects\/([a-z][a-z0-9-]*)\//.exec(relPath)?.[1];
+}
+
+function skillExists(rootDir: string, name: string, project?: string): boolean {
+	return project
+		? existsSync(join(rootDir, "projects", project, "skills", name))
+		: existsSync(join(rootDir, "skills", name));
 }
 
 function isAllowlisted(
@@ -122,8 +133,22 @@ export async function findSkillRefViolations(
 			const filePath = join(base, rel);
 			const content = readFileSync(filePath, "utf8");
 			const rootRelative = `${dir}/${rel}`;
+			const currentProject = sourceProject(rootRelative);
 			for (const candidate of collectCandidates(content, rootRelative)) {
-				if (existsSync(join(rootDir, "skills", candidate.name))) continue;
+				if (candidate.project) {
+					// A project-scoped source may only resolve its own project path.
+					if (
+						(!currentProject || candidate.project === currentProject) &&
+						skillExists(rootDir, candidate.name, candidate.project)
+					) {
+						continue;
+					}
+				} else if (
+					(currentProject && skillExists(rootDir, candidate.name, currentProject)) ||
+					skillExists(rootDir, candidate.name)
+				) {
+					continue;
+				}
 				if (isAllowlisted(rootRelative, candidate.name, allowlist)) continue;
 
 				const line = content.slice(0, candidate.index).split("\n").length;
