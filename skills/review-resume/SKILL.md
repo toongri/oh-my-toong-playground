@@ -627,7 +627,7 @@ Fallback: when the resume has no evaluable project entries, emit 평가 대상 �
 ### Approval Gate
 
 <critical>
-Open the HTML report and ask the user to review it. Do not proceed to any next step until the user explicitly declares "no feedback." This rule applies even when called from within a resume-apply workflow.
+Open the HTML report and ask the user to review it. Do not proceed to any next step until the user explicitly declares "no feedback." This rule applies regardless of invocation context.
 </critical>
 
 After opening the report, use `AskUserQuestion` to collect feedback. Ambiguous responses → re-ask. Section-specific feedback → re-enter Phase 9 for that section. Apply feedback → regenerate HTML → loop until explicit "no feedback."
