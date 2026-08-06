@@ -45,6 +45,7 @@ const NOISE = /(^|\/)(bun\.lock|package-lock\.json|.*\.snap|dist\/|.*\.generated
 
 function nameStatus(fixtureId: string): Array<{ status: string; file: string }> {
 	const f = fixtures().find((x) => x.id === fixtureId);
+	if (f === undefined) throw new Error(`manifest.json에 fixture가 없습니다: ${fixtureId}`);
 	const wt = path.join(EVAL, "fixtures", fixtureId);
 	const out = execFileSync("git", ["-C", wt, "diff", "--name-status", ...f.range.split(" ")], {
 		encoding: "utf8",
@@ -76,10 +77,19 @@ for (const platform of ["claude", "codex"]) {
 			if (!file) continue;
 			const text = fs.readFileSync(path.join(dir, file), "utf8");
 			const ns = nameStatus(fx.id);
-			const r = checkStructure(text, {
-				signalFiles: ns.map((e) => e.file),
-				addedFiles: ns.filter((e) => e.status.startsWith("A")).map((e) => e.file),
-			});
+			const signalFiles = ns.map((e) => e.file);
+			const addedFiles = ns.filter((e) => e.status.startsWith("A")).map((e) => e.file);
+			// A finished document has no single "step" — it is the union of every
+			// authoring step's output. `code` covers R2/R3/R5/R1(coverage form);
+			// `background` covers R4. Together that is exactly the original
+			// unconditional five-item rubric, with no id scored twice.
+			const codeResult = checkStructure(text, { signalFiles, addedFiles, step: "code" });
+			const backgroundResult = checkStructure(text, { signalFiles, addedFiles, step: "background" });
+			const r = {
+				pass: codeResult.pass && backgroundResult.pass,
+				items: [...codeResult.items, ...backgroundResult.items],
+				failedItems: [...codeResult.failedItems, ...backgroundResult.failedItems],
+			};
 			total += 1;
 			if (r.pass) passed += 1;
 			const failed = r.items.filter((i) => !i.pass).map((i) => i.id);

@@ -15,5 +15,12 @@
       "@lib/*": ["lib/*"]
     }
   },
-  "include": ["lib/**/*.ts", "scripts/**/*.ts", "hooks/**/*.ts", "skills/*/scripts/**/*.ts", "tools/**/*.ts"]
+  "include": [
+    "lib/**/*.ts",
+    "scripts/**/*.ts",
+    "hooks/**/*.ts",
+    "skills/*/scripts/**/*.ts",
+    "tools/**/*.ts",
+    "evals/*/harness/**/*.ts"
+  ]
 }
