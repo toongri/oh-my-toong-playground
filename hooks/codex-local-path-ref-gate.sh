@@ -63,7 +63,8 @@ _lpr_check_text() {
 
 _lpr_check_text_from_segment_cwd() {
     local text="$1" inspectable="${2-$1}"
-    local base_cwd="${_LPR_ACTIVE_CWD-${effective_cwd-$PWD}}" canonical_repo_root line token candidate absolute rc=0
+    local base_cwd="${_LPR_ACTIVE_CWD-${effective_cwd-$PWD}}" canonical_repo_root line candidate absolute rc=0
+    local start end joined
     local -a words
 
     base_cwd=$(cd "$base_cwd" 2>/dev/null && pwd -P) || return 0
@@ -81,31 +82,56 @@ _lpr_check_text_from_segment_cwd() {
     while IFS= read -r line || [ -n "$line" ]; do
         words=()
         read -r -a words <<< "$line" || continue
-        for token in "${words[@]}"; do
-            candidate="$token"
-            candidate="${candidate#@}"
-            candidate="${candidate#<}"
-            candidate="${candidate#\"}"
-            candidate="${candidate#'}"
-            candidate="${candidate%,}"
-            candidate="${candidate%.}"
-            candidate="${candidate%\"}"
-            candidate="${candidate%'}"
-            case "$candidate" in
-                /*|./*|../*|*//*|*:*|*'\\'*|*'\"'*|*'?'*|*'*'*|*'{'*|*'}'*) continue ;;
-                */*|*.md|*.markdown|*.yaml|*.yml|*.json|*.toml|*.txt|*.sh|*.ts|*.tsx|*.js|*.jsx) ;;
-                *) continue ;;
-            esac
-            absolute="$base_cwd/$candidate"
-            [ -f "$absolute" ] && [ -r "$absolute" ] || continue
-            case "$absolute" in
-                "$canonical_repo_root"/*)
-                    git -C "$canonical_repo_root" ls-files --error-unmatch -- "${absolute#"$canonical_repo_root"/}" >/dev/null 2>&1 && continue
-                    ;;
-            esac
-            _lpr_check_text "$absolute" "$inspectable"
-            rc=$?
-            [ "$rc" -eq 2 ] && return 2
+        # Keep trying word spans instead of inspecting individual words. A
+        # concrete relative filename may contain spaces or colons; splitting
+        # first and rejecting `*:*` loses exactly those paths. Check each
+        # literal span before stripping prose punctuation.
+        for ((start = 0; start < ${#words[@]}; start++)); do
+            joined=""
+            for ((end = start; end < ${#words[@]}; end++)); do
+                [[ -n "$joined" ]] && joined="$joined "
+                joined="${joined}${words[$end]}"
+                candidate="$joined"
+                candidate="${candidate#@}"
+                candidate="${candidate#<}"
+                candidate="${candidate#\"}"
+                candidate="${candidate#'}"
+                candidate="${candidate%\"}"
+                candidate="${candidate%'}"
+                case "$candidate" in
+                    /*|*'://'*) continue ;;
+                    *//*|*'\\'*|*'"'*|*'?'*|*'*'*|*'{'*|*'}'*) continue ;;
+                    */*|*.md|*.markdown|*.yaml|*.yml|*.json|*.toml|*.txt|*.sh|*.ts|*.tsx|*.js|*.jsx) ;;
+                    *) continue ;;
+                esac
+                absolute="$base_cwd/$candidate"
+                if [ ! -f "$absolute" ] || [ ! -r "$absolute" ]; then
+                    # A sentence may put punctuation directly after a path;
+                    # retry the normalized spelling without discarding a
+                    # concrete colon in the filename itself.
+                    case "$candidate" in
+                        \(*\)|\[*\]|\{*\}|\`*\`)
+                            candidate="${candidate#?}"
+                            candidate="${candidate%?}"
+                            ;;
+                    esac
+                    candidate="${candidate%,}"
+                    candidate="${candidate%;}"
+                    candidate="${candidate%.}"
+                    candidate="${candidate%)}"
+                    absolute="$base_cwd/$candidate"
+                fi
+                [ -f "$absolute" ] && [ -r "$absolute" ] || continue
+                case "$absolute" in
+                    "$canonical_repo_root"/*)
+                        git -C "$canonical_repo_root" ls-files --error-unmatch -- "${absolute#"$canonical_repo_root"/}" >/dev/null 2>&1 && continue
+                        ;;
+                esac
+                _lpr_check_text "$absolute" "$inspectable"
+                rc=$?
+                [ "$rc" -eq 2 ] && return 2
+                break
+            done
         done
     done <<EOF
 $text
@@ -413,7 +439,9 @@ _lpr_inspect_gh() {
                 *) continue ;;
             esac
             value="${value#=}"
-            _lpr_gh_body_value "$value" "$body_file" || { segment_bad=1; break; }
+            # An unreadable body belongs to this option only. Continue parsing
+            # later payload options in the same gh command and later commands.
+            _lpr_gh_body_value "$value" "$body_file" || continue
             _lpr_check_text_from_segment_cwd "$_LPR_VALUE" "$_LPR_VALUE" || rc=$?
             [ "$rc" -eq 2 ] && return 2
             rc=0
@@ -577,16 +605,16 @@ _lpr_inspect_curl() {
                     form_rc=0
                     _lpr_curl_form_payload "$value" || form_rc=$?
                     [ "$form_rc" -eq 2 ] && return 2
-                    [ "$form_rc" -eq 0 ] || { segment_bad=1; break; }
+                    [ "$form_rc" -eq 0 ] || continue
                     ;;
                 --upload-file|-T)
                     form_rc=0
                     _lpr_curl_file_attachment "$value" || form_rc=$?
                     [ "$form_rc" -eq 2 ] && return 2
-                    [ "$form_rc" -eq 0 ] || { segment_bad=1; break; }
+                    [ "$form_rc" -eq 0 ] || continue
                     ;;
                 *)
-                    _lpr_curl_payload_value "$value" "$option" || { segment_bad=1; break; }
+                    _lpr_curl_payload_value "$value" "$option" || continue
                     curl_text=$(printf '%s' "$_LPR_VALUE" | tr '{}\",' '    ') || { segment_bad=1; break; }
                     _lpr_check_text_from_segment_cwd "$curl_text" "$curl_text" || rc=$?
                     [ "$rc" -eq 2 ] && return 2

@@ -246,6 +246,24 @@ test_shell_cwd_relative_payload_classification() {
     printf '%s' "$RUN_OUTPUT" | grep -F 'docs/local.md' >/dev/null || return 1
 }
 
+test_shell_cwd_fallback_preserves_spaces_and_colons() {
+    local command payload
+    mkdir -p "$REPO/subdir/docs"
+    printf 'local fixture\n' > "$REPO/subdir/docs/local file:with-colon.md"
+
+    command='cd subdir && gh pr create --body "See docs/local file:with-colon.md"'
+    payload=$(shell_payload bash "$command")
+    run_payload "$payload"
+    assert_codex_deny "$RUN_OUTPUT" || return 1
+    printf '%s' "$RUN_OUTPUT" | grep -F 'docs/local file:with-colon.md' >/dev/null || return 1
+
+    command='cd subdir && curl -X POST https://api.notion.com/v1/pages --data "{\"text\":\"See docs/local file:with-colon.md\"}"'
+    payload=$(shell_payload bash "$command")
+    run_payload "$payload"
+    assert_codex_deny "$RUN_OUTPUT" || return 1
+    printf '%s' "$RUN_OUTPUT" | grep -F 'docs/local file:with-colon.md' >/dev/null || return 1
+}
+
 test_gh_and_curl_paths_follow_shell_cd() {
     local command payload
     mkdir -p "$REPO/subdir/docs"
@@ -347,6 +365,18 @@ test_missing_payload_segment_does_not_hide_later_segment() {
         'gh pr create --body -; gh pr create --body "See docs/untracked.md"' \
         'curl -X POST https://api.notion.com/v1/pages --data @docs/missing-curl.json; curl -X POST https://api.notion.com/v1/pages --data "{\"text\":\"See docs/untracked.md\"}"' \
         'curl -X POST https://api.notion.com/v1/pages --data -; curl -X POST https://api.notion.com/v1/pages --data "{\"text\":\"See docs/untracked.md\"}"'; do
+        payload=$(shell_payload bash "$command")
+        run_payload "$payload"
+        assert_codex_deny "$RUN_OUTPUT" || return 1
+        printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
+    done
+}
+
+test_unreadable_payload_does_not_hide_later_payload_option() {
+    local command payload
+    for command in \
+        'gh pr create --body-file docs/missing-gh.md --body "See docs/untracked.md"' \
+        'curl -X POST https://api.notion.com/v1/pages --data @docs/missing-curl.json --data-raw "{\"text\":\"See docs/untracked.md\"}"'; do
         payload=$(shell_payload bash "$command")
         run_payload "$payload"
         assert_codex_deny "$RUN_OUTPUT" || return 1
@@ -692,6 +722,7 @@ main() {
     run_test test_gh_global_repo_flags_and_attached_body_equals_deny
     run_test test_leading_env_assignments_route_gh_and_curl
     run_test test_shell_cwd_relative_payload_classification
+    run_test test_shell_cwd_fallback_preserves_spaces_and_colons
     run_test test_gh_and_curl_paths_follow_shell_cd
     run_test test_target_curl_payloads_deny
     run_test test_target_curl_api_root_endpoints_deny
@@ -700,6 +731,7 @@ main() {
     run_test test_target_curl_attached_json_payload_deny
     run_test test_target_curl_case_normalized_hosts_and_webhook
     run_test test_missing_payload_segment_does_not_hide_later_segment
+    run_test test_unreadable_payload_does_not_hide_later_payload_option
     run_test test_target_curl_form_string_payload_deny
     run_test test_target_curl_equals_url_routes_payload
     run_test test_target_curl_explicit_ports_and_multipart_text_content_deny
