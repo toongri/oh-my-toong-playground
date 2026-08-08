@@ -15,10 +15,6 @@
 # insertManagedBlock replaces the block wholesale each sync, so the deployed
 # block always matches exactly what's declared here, never a stale carryover.
 config:
-  # "Fast" mode. The valid config id is `priority` (models_cache.json lists
-  # service_tiers [{ id: "priority", name: "Fast" }]) -- writing the display
-  # name "fast" here would silently miss. 1.5x speed, increased usage.
-  service_tier: priority
   features:
     multi_agent_v2:
       # MultiAgentV2 defaults to 4 concurrent threads per session (root
