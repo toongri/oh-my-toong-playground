@@ -202,6 +202,7 @@ test_target_curl_multipart_file_attachment_denies() {
     local host command payload stderr_out exit_code=0
     host='https://api.notion.com/v1/pages'
     for command in \
+        "curl -X POST $host -Ffile=@docs/untracked.png" \
         "curl -X POST $host -F 'file=@docs/untracked.png'" \
         "curl -X POST $host --form \"file=@docs/untracked.png\""; do
         payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
@@ -225,6 +226,106 @@ test_target_curl_multiple_payloads_inspect_all() {
     stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
     [[ "$exit_code" -eq 2 ]] || return 1
     printf '%s' "$stderr_out" | jq -e '.decision == "deny"' >/dev/null || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null
+}
+
+test_composite_commands_inspect_later_git_and_gh_bodies() {
+    local target_repo command payload stderr_out exit_code=0
+    target_repo=$(mktemp -d "$REPO/git-composite.XXXXXX")
+    git -C "$target_repo" init -q
+    git -C "$target_repo" config user.email test@example.invalid
+    git -C "$target_repo" config user.name test
+    printf 'safe baseline\n' > "$target_repo/notes.md"
+    git -C "$target_repo" add notes.md
+    git -C "$target_repo" commit -q -m baseline
+    mkdir -p "$target_repo/docs"
+    printf 'citation: docs/untracked.md\n' >> "$target_repo/notes.md"
+    printf 'fixture\n' > "$target_repo/docs/untracked.md"
+    git -C "$target_repo" add notes.md
+
+    command="git commit -m first && git -C \"$target_repo\" commit -m later"
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null || return 1
+
+    command='gh pr create --body "safe"; gh pr comment --body "See docs/untracked.md"'
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    exit_code=0
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null
+}
+
+test_git_c_config_before_commit_inspects_staged_additions() {
+    local command payload stderr_out exit_code=0
+    printf 'citation: docs/untracked.md\n' >> "$REPO/docs/notes.md"
+    git -C "$REPO" add docs/notes.md
+
+    command='git -c user.name=gate-test commit -m configured'
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    git -C "$REPO" reset -q HEAD -- docs/notes.md
+    git -C "$REPO" checkout -q -- docs/notes.md
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null
+}
+
+test_gh_short_body_option_denies() {
+    local command payload stderr_out exit_code=0
+    command='gh pr edit 123 -b "See docs/untracked.md"'
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null
+}
+
+test_target_curl_additional_data_option_forms_deny() {
+    local host command payload stderr_out exit_code=0
+    host='https://api.notion.com/v1/pages'
+    for command in \
+        "curl -X POST $host -d'{\"text\":\"See docs/untracked.md\"}'" \
+        "curl -X POST $host --data-ascii '{\"text\":\"See docs/untracked.md\"}'" \
+        "curl -X POST $host --json '{\"text\":\"See docs/untracked.md\"}'"; do
+        payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+            '{cwd:$cwd,tool_input:{command:$command}}')
+        exit_code=0
+        stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+        [[ "$exit_code" -eq 2 ]] || return 1
+        printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null || return 1
+    done
+
+    printf 'See docs/untracked.md\n' > "$REPO/docs/urlencoded.txt"
+    command="curl -X POST $host --data-urlencode note@docs/urlencoded.txt"
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    exit_code=0
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null
+}
+
+test_target_curl_multipart_text_and_attached_forms_deny() {
+    local host command payload stderr_out exit_code=0
+    host='https://api.notion.com/v1/pages'
+    printf 'fixture\n' > "$REPO/docs/path with spaces.png"
+    command="curl -X POST $host -F 'text=safe baseline' -F 'file=@docs/path with spaces.png'"
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/path with spaces.png' >/dev/null || return 1
+
+    command="curl -X POST $host -F 'file=@docs/notes.md' -F 'text=See docs/untracked.md'"
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    exit_code=0
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
     printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null
 }
 
@@ -292,6 +393,11 @@ run_test test_target_curl_file_payload_content_denies
 run_test test_target_curl_expanded_at_file_payload_content_denies
 run_test test_target_curl_multiple_payloads_inspect_all
 run_test test_target_curl_multipart_file_attachment_denies
+run_test test_composite_commands_inspect_later_git_and_gh_bodies
+run_test test_git_c_config_before_commit_inspects_staged_additions
+run_test test_gh_short_body_option_denies
+run_test test_target_curl_additional_data_option_forms_deny
+run_test test_target_curl_multipart_text_and_attached_forms_deny
 run_test test_placeholder_nonexistent_and_https_allow
 run_test test_old_violation_with_unrelated_new_edit_allows
 run_test test_missing_jq_fails_open
