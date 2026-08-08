@@ -52,12 +52,64 @@ EOF
 }
 
 _lpr_check_text() {
-    local text="$1" records rc=0
+    local text="$1" inspectable="${2-$1}" records rc=0
     [ -n "$text" ] || return 0
     records=$(local_path_ref_gate_core_check "$repo_root" "$text" 2>/dev/null) || rc=$?
     [ "$rc" -eq 0 ] || return 0
     [ -n "$records" ] || return 0
-    _lpr_render_deny "$records" "$text" && return 2
+    _lpr_render_deny "$records" "$inspectable" && return 2
+    return 0
+}
+
+_lpr_check_text_from_segment_cwd() {
+    local text="$1" inspectable="${2-$1}"
+    local base_cwd="${_LPR_ACTIVE_CWD-${effective_cwd-$PWD}}" canonical_repo_root line token candidate absolute rc=0
+    local -a words
+
+    base_cwd=$(cd "$base_cwd" 2>/dev/null && pwd -P) || return 0
+    canonical_repo_root=$(cd "$repo_root" 2>/dev/null && pwd -P) || return 0
+
+    _lpr_check_text "$text" "$inspectable"
+    rc=$?
+    [ "$rc" -eq 2 ] && return 2
+    [ "$base_cwd" = "$canonical_repo_root" ] && return 0
+
+    # Relative paths in outbound payloads resolve from the shell segment's
+    # effective CWD, not necessarily from the repository root. Re-check only
+    # concrete untracked candidates below that CWD; tracked repo citations were
+    # already handled by the repository-root scan above.
+    while IFS= read -r line || [ -n "$line" ]; do
+        words=()
+        read -r -a words <<< "$line" || continue
+        for token in "${words[@]}"; do
+            candidate="$token"
+            candidate="${candidate#@}"
+            candidate="${candidate#<}"
+            candidate="${candidate#\"}"
+            candidate="${candidate#'}"
+            candidate="${candidate%,}"
+            candidate="${candidate%.}"
+            candidate="${candidate%\"}"
+            candidate="${candidate%'}"
+            case "$candidate" in
+                /*|./*|../*|*//*|*:*|*'\\'*|*'\"'*|*'?'*|*'*'*|*'{'*|*'}'*) continue ;;
+                */*|*.md|*.markdown|*.yaml|*.yml|*.json|*.toml|*.txt|*.sh|*.ts|*.tsx|*.js|*.jsx) ;;
+                *) continue ;;
+            esac
+            absolute="$base_cwd/$candidate"
+            [ -f "$absolute" ] && [ -r "$absolute" ] || continue
+            case "$absolute" in
+                "$canonical_repo_root"/*)
+                    git -C "$canonical_repo_root" ls-files --error-unmatch -- "${absolute#"$canonical_repo_root"/}" >/dev/null 2>&1 && continue
+                    ;;
+            esac
+            _lpr_check_text "$absolute" "$inspectable"
+            rc=$?
+            [ "$rc" -eq 2 ] && return 2
+        done
+    done <<EOF
+$text
+EOF
     return 0
 }
 
@@ -282,6 +334,20 @@ _lpr_segment_cwd() {
     done
 }
 
+_lpr_strip_leading_env_assignments() {
+    local segment="$1" token
+    while :; do
+        _lpr_shell_next_word "$segment" || return 1
+        token="$_LPR_WORD"
+        case "$token" in
+            [[:alpha:]_][[:alnum:]_]*=*) segment="$_LPR_SHELL_REMAINDER" ;;
+            *) break ;;
+        esac
+    done
+    _LPR_COMMAND_SEGMENT="$segment"
+    return 0
+}
+
 _lpr_gh_body_value() {
     local value="$1" body_file="$2"
     [ "$value" != "-" ] || return 1
@@ -294,7 +360,7 @@ _lpr_gh_body_value() {
 }
 
 _lpr_inspect_gh() {
-    local remaining="$cmd" segment rest action word value body_file rc=0 segment_cwd="$effective_cwd"
+    local remaining="$cmd" segment rest action word value body_file rc=0 segment_cwd="$effective_cwd" segment_bad
     while [ -n "$remaining" ]; do
         _lpr_shell_next_segment "$remaining" || return 0
         segment="$_LPR_SEGMENT"
@@ -302,6 +368,8 @@ _lpr_inspect_gh() {
         _lpr_segment_cwd "$segment" "$segment_cwd"
         segment_cwd="$_LPR_SEGMENT_CWD"
         _LPR_ACTIVE_CWD="$segment_cwd"
+        _lpr_strip_leading_env_assignments "$segment" || continue
+        segment="$_LPR_COMMAND_SEGMENT"
         _lpr_shell_next_word "$segment" || continue
         [ "$_LPR_WORD" = "gh" ] || continue
         rest="$_LPR_SHELL_REMAINDER"
@@ -323,18 +391,19 @@ _lpr_inspect_gh() {
         action="$_LPR_WORD"
         case "$action" in create|edit|comment) ;; *) continue ;; esac
         rest="$_LPR_SHELL_REMAINDER"
+        segment_bad=0
         while _lpr_shell_next_word "$rest"; do
             word="$_LPR_WORD"
             rest="$_LPR_SHELL_REMAINDER"
             body_file=0
             case "$word" in
                 -b|--body)
-                    _lpr_shell_next_word "$rest" || return 0
+                    _lpr_shell_next_word "$rest" || { segment_bad=1; break; }
                     value="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
                     ;;
                 -F|--body-file)
                     body_file=1
-                    _lpr_shell_next_word "$rest" || return 0
+                    _lpr_shell_next_word "$rest" || { segment_bad=1; break; }
                     value="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
                     ;;
                 --body=*) value="${word#--body=}" ;;
@@ -344,11 +413,12 @@ _lpr_inspect_gh() {
                 *) continue ;;
             esac
             value="${value#=}"
-            _lpr_gh_body_value "$value" "$body_file" || return 0
-            _lpr_check_text "$_LPR_VALUE" || rc=$?
+            _lpr_gh_body_value "$value" "$body_file" || { segment_bad=1; break; }
+            _lpr_check_text_from_segment_cwd "$_LPR_VALUE" "$_LPR_VALUE" || rc=$?
             [ "$rc" -eq 2 ] && return 2
             rc=0
         done
+        [ "$segment_bad" -eq 0 ] || continue
     done
     return 0
 }
@@ -370,12 +440,12 @@ _lpr_curl_payload_value() {
 
 _lpr_curl_file_attachment() {
     local path="$1" expanded attachment_rc=0 base="${_LPR_ACTIVE_CWD-${effective_cwd-$PWD}}"
-    [ -n "$path" ] || return 0
+    [ -n "$path" ] || return 1
     path="${path%%;*}"
-    [ -n "$path" ] || return 0
-    _lpr_resolve_from_cwd "$path" "$base" || return 0
+    [ -n "$path" ] || return 1
+    _lpr_resolve_from_cwd "$path" "$base" || return 1
     expanded="$_LPR_RESOLVED_PATH"
-    [ -f "$expanded" ] && [ -r "$expanded" ] || return 0
+    [ -f "$expanded" ] && [ -r "$expanded" ] || return 1
     _lpr_check_attachment "$expanded" "$path" || attachment_rc=$?
     [ "$attachment_rc" -eq 2 ] && return 2
     return 0
@@ -406,17 +476,18 @@ _lpr_curl_form_payload() {
         '<'*)
             value="${value#<}"
             value="${value%%;*}"
-            _lpr_read_file_content "$value" || return 0
-            _lpr_check_text "$_LPR_VALUE"
+            _lpr_read_file_content "$value" || return 1
+            _lpr_check_text_from_segment_cwd "$_LPR_VALUE" "$_LPR_VALUE"
             return $?
             ;;
     esac
-    _lpr_check_text "$value"
+    _lpr_check_text_from_segment_cwd "$value" "$value"
     return $?
 }
 
 _lpr_curl_is_target_url() {
     local url="$1" authority host port suffix rest
+    url=$(printf '%s' "$url" | tr '[:upper:]' '[:lower:]') || return 1
     case "$url" in https://*) ;; *) return 1 ;; esac
     rest="${url#https://}"
     authority="${rest%%[/?#]*}"
@@ -443,7 +514,7 @@ _lpr_curl_is_target_url() {
 }
 
 _lpr_inspect_curl() {
-    local remaining="$cmd" segment rest arguments word value option target rc=0 form_rc curl_text segment_cwd="$effective_cwd"
+    local remaining="$cmd" segment rest arguments word value option target rc=0 form_rc curl_text segment_cwd="$effective_cwd" segment_bad
     while [ -n "$remaining" ]; do
         _lpr_shell_next_segment "$remaining" || return 0
         segment="$_LPR_SEGMENT"
@@ -451,36 +522,40 @@ _lpr_inspect_curl() {
         _lpr_segment_cwd "$segment" "$segment_cwd"
         segment_cwd="$_LPR_SEGMENT_CWD"
         _LPR_ACTIVE_CWD="$segment_cwd"
+        _lpr_strip_leading_env_assignments "$segment" || continue
+        segment="$_LPR_COMMAND_SEGMENT"
         _lpr_shell_next_word "$segment" || continue
         [ "$_LPR_WORD" = "curl" ] || continue
         arguments="$_LPR_SHELL_REMAINDER"
-        rest="$arguments"; target=0
+        rest="$arguments"; target=0; segment_bad=0
         while _lpr_shell_next_word "$rest"; do
             word="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
             case "$word" in
                 --url)
-                    _lpr_shell_next_word "$rest" || return 0
+                    _lpr_shell_next_word "$rest" || { segment_bad=1; break; }
                     _lpr_curl_is_target_url "$_LPR_WORD" && target=1
                     rest="$_LPR_SHELL_REMAINDER"
                     ;;
                 --url=*) _lpr_curl_is_target_url "${word#--url=}" && target=1 ;;
                 --data|--data-raw|--data-binary|--data-ascii|--data-urlencode|--json|-d|--form|-F|--form-string|--upload-file|-T|-X|--request|-H|--header|-u|--user)
-                    _lpr_shell_next_word "$rest" || return 0
+                    _lpr_shell_next_word "$rest" || { segment_bad=1; break; }
                     rest="$_LPR_SHELL_REMAINDER"
                     ;;
                 --data=*|--data-raw=*|--data-binary=*|--data-ascii=*|--data-urlencode=*|--json=*|--form=*|--form-string=*|--upload-file=*|--request=*|--header=*|--user=*|-d?*|-F?*|-T?*|-X?*|-H?*|-u?*) ;;
                 *) _lpr_curl_is_target_url "$word" && target=1 ;;
             esac
         done
+        [ "$segment_bad" -eq 0 ] || continue
         [ "$target" -eq 1 ] || continue
 
         rest="$arguments"
+        segment_bad=0
         while _lpr_shell_next_word "$rest"; do
             word="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"; option=""
             case "$word" in
                 --data|--data-raw|--data-binary|--data-ascii|--data-urlencode|--json|-d|--form|-F|--form-string|--upload-file|-T)
                     option="$word"
-                    _lpr_shell_next_word "$rest" || return 0
+                    _lpr_shell_next_word "$rest" || { segment_bad=1; break; }
                     value="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
                     ;;
                 --data=*) option="--data"; value="${word#--data=}" ;;
@@ -488,6 +563,7 @@ _lpr_inspect_curl() {
                 --data-binary=*) option="--data-binary"; value="${word#--data-binary=}" ;;
                 --data-ascii=*) option="--data-ascii"; value="${word#--data-ascii=}" ;;
                 --data-urlencode=*) option="--data-urlencode"; value="${word#--data-urlencode=}" ;;
+                --json=*) option="--json"; value="${word#--json=}" ;;
                 --form=*) option="--form"; value="${word#--form=}" ;;
                 --form-string=*) option="--form-string"; value="${word#--form-string=}" ;;
                 --upload-file=*) option="--upload-file"; value="${word#--upload-file=}" ;;
@@ -501,21 +577,24 @@ _lpr_inspect_curl() {
                     form_rc=0
                     _lpr_curl_form_payload "$value" || form_rc=$?
                     [ "$form_rc" -eq 2 ] && return 2
+                    [ "$form_rc" -eq 0 ] || { segment_bad=1; break; }
                     ;;
                 --upload-file|-T)
                     form_rc=0
                     _lpr_curl_file_attachment "$value" || form_rc=$?
                     [ "$form_rc" -eq 2 ] && return 2
+                    [ "$form_rc" -eq 0 ] || { segment_bad=1; break; }
                     ;;
                 *)
-                    _lpr_curl_payload_value "$value" "$option" || return 0
-                    curl_text=$(printf '%s' "$_LPR_VALUE" | tr '{}\",' '    ') || return 0
-                    _lpr_check_text "$curl_text" || rc=$?
+                    _lpr_curl_payload_value "$value" "$option" || { segment_bad=1; break; }
+                    curl_text=$(printf '%s' "$_LPR_VALUE" | tr '{}\",' '    ') || { segment_bad=1; break; }
+                    _lpr_check_text_from_segment_cwd "$curl_text" "$curl_text" || rc=$?
                     [ "$rc" -eq 2 ] && return 2
                     rc=0
                     ;;
             esac
         done
+        [ "$segment_bad" -eq 0 ] || continue
     done
     return 0
 }
