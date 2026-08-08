@@ -175,35 +175,87 @@ _lpr_gh_body() {
 }
 
 _lpr_inspect_gh() {
-    local gh_re='(^|[;&|])[[:space:]]*gh[[:space:]]+pr[[:space:]]+(create|edit)([[:space:]]|$)' segment
-    [[ "$cmd" =~ $gh_re ]] || return 0
-    segment="${cmd#*"${BASH_REMATCH[0]}"}"
-    _lpr_gh_body "$segment" || return 0
-    _lpr_check_text "$_LPR_VALUE"
-    return $?
+    local gh_re='(^|[;&|])[[:space:]]*gh[[:space:]]+pr[[:space:]]+(create|edit|comment)([[:space:]]|$)'
+    local remaining="$cmd" marker segment rc=0
+
+    # Search repeatedly: an inspected shell command may contain multiple PR
+    # operations joined by `;`, `&&`, `||`, or `|`.  Only read their body
+    # arguments; never evaluate any part of the shell input.
+    while [[ "$remaining" =~ $gh_re ]]; do
+        marker="${BASH_REMATCH[0]}"
+        segment="${remaining#*"$marker"}"
+        if _lpr_gh_body "$segment"; then
+            _lpr_check_text "$_LPR_VALUE" || rc=$?
+            [ "$rc" -eq 2 ] && return 2
+            rc=0
+            remaining="$_LPR_REST_AFTER_VALUE"
+        else
+            # Consume this gh invocation marker before looking for a later
+            # one, so a body-less operation cannot make the loop stall.
+            remaining="$segment"
+        fi
+    done
+    return 0
 }
 
 _lpr_curl_payload() {
-    local segment="$1" marker rest
-    local data_re='(^|[[:space:]])(--data([[:alnum:]_-]*)|-d)(=|[[:space:]])'
+    local segment="$1" marker rest token attached_rest
+    local data_re='(^|[[:space:]])(--data([[:alnum:]_-]*)|-d)(=|[[:space:]]|$)|(^|[[:space:]])-d[^[:space:]]'
     [[ "$segment" =~ $data_re ]] || return 1
     marker="${BASH_REMATCH[0]}"
+    token="${marker#"${marker%%[![:space:]]*}"}"
     rest="${segment#*"$marker"}"
+    case "$token" in
+        -d[![:space:]=]*)
+            attached_rest="${token#-d}${rest}"
+            _lpr_extract_value_after "$attached_rest" || return 1
+            _LPR_CURL_OPTION="-d"
+            case "$_LPR_VALUE" in
+                @*) _lpr_read_file_content "${_LPR_VALUE#@}" || return 1 ;;
+                -) return 1 ;;
+            esac
+            _LPR_CURL_REMAINDER="$_LPR_REST_AFTER_VALUE"
+            return 0
+            ;;
+    esac
     _lpr_extract_value_after "$rest" || return 1
+    case "$token" in
+        --data-urlencode*) _LPR_CURL_OPTION="--data-urlencode" ;;
+        *) _LPR_CURL_OPTION="--data" ;;
+    esac
     case "$_LPR_VALUE" in
         @*) _lpr_read_file_content "${_LPR_VALUE#@}" || return 1 ;;
         -) return 1 ;;
+        *)
+            # `--data-urlencode name@file` reads file bytes as the value.
+            # If that file cannot be read, the whole inspection is
+            # undecidable and must fail open.
+            if [ "$_LPR_CURL_OPTION" = "--data-urlencode" ]; then
+                case "$_LPR_VALUE" in
+                    ?*@*) _lpr_read_file_content "${_LPR_VALUE#*@}" || return 1 ;;
+                esac
+            fi
+            ;;
     esac
     _LPR_CURL_REMAINDER="$_LPR_REST_AFTER_VALUE"
     return 0
 }
 
 _lpr_curl_form() {
-    local segment="$1" marker rest
-    local form_re='(^|[[:space:]])(--form|-F)(=|[[:space:]])'
+    local segment="$1" marker rest token attached_rest
+    local form_re='(^|[[:space:]])(--form|-F)(=|[[:space:]]|$)|(^|[[:space:]])-F[^[:space:]]'
     [[ "$segment" =~ $form_re ]] || return 1
     marker="${BASH_REMATCH[0]}"
+    token="${marker#"${marker%%[![:space:]]*}"}"
     rest="${segment#*"$marker"}"
+    case "$token" in
+        -F[![:space:]=]*)
+            attached_rest="${token#-F}${rest}"
+            _lpr_extract_value_after "$attached_rest" || return 1
+            _LPR_CURL_REMAINDER="$_LPR_REST_AFTER_VALUE"
+            return 0
+            ;;
+    esac
     _lpr_extract_value_after "$rest" || return 1
     _LPR_CURL_REMAINDER="$_LPR_REST_AFTER_VALUE"
     return 0
@@ -271,22 +323,63 @@ _lpr_inspect_curl() {
     return 0
 }
 
+_lpr_git_commit_staged_text() {
+    local base_repo_root="$repo_root" remaining="$cmd" marker target_marker
+    local target_rest target repo_for_commit staged_text rc=0
+    local git_re='(^|[;&|])[[:space:]]*git([[:space:]]+[^;&|[:space:]]+)*[[:space:]]+commit([[:space:]]|$)'
+    local dash_c_re='(^|[[:space:]])-C([[:space:]]|$)'
+
+    # Each `git commit` can select a repository of its own with `-C`.  The
+    # default shell repository is not necessarily the repository that Git will
+    # commit, especially in compound commands.
+    while [[ "$remaining" =~ $git_re ]]; do
+        marker="${BASH_REMATCH[0]}"
+        repo_for_commit="$base_repo_root"
+        if [[ "$marker" =~ $dash_c_re ]]; then
+            target_marker="${BASH_REMATCH[0]}"
+            target_rest="${marker#*"$target_marker"}"
+            if _lpr_extract_value_after "$target_rest"; then
+                target="$_LPR_VALUE"
+                repo_for_commit=$(git -C "$target" rev-parse --show-toplevel 2>/dev/null) || {
+                    repo_root="$base_repo_root"
+                    return 0
+                }
+            else
+                repo_root="$base_repo_root"
+                return 0
+            fi
+        fi
+
+        [ -d "$repo_for_commit" ] || {
+            repo_root="$base_repo_root"
+            return 0
+        }
+        repo_root="$repo_for_commit"
+        staged_text=$(_lpr_staged_added_text) || staged_text=""
+        if [ -n "$staged_text" ]; then
+            _lpr_check_text "$staged_text" || rc=$?
+            if [ "$rc" -eq 2 ]; then
+                repo_root="$base_repo_root"
+                return 2
+            fi
+            rc=0
+        fi
+        remaining="${remaining#*"$marker"}"
+    done
+    repo_root="$base_repo_root"
+    return 0
+}
+
 _lpr_shell_route() {
-    local command_value rc=0 staged_text
+    local command_value rc=0
     command_value=$(_lpr_json_string 'if (.tool_input.command? | type) == "string" then .tool_input.command else empty end' 2>/dev/null) || \
         command_value=$(_lpr_json_string 'if (.tool_input.cmd? | type) == "string" then .tool_input.cmd else empty end' 2>/dev/null) || exit 0
     cmd="$command_value"
     _lpr_prepare_repo || exit 0
 
-    _lpr_git_re='(^|[;&|])[[:space:]]*git([[:space:]]+[^;&|[:space:]]+)*[[:space:]]+commit([[:space:]]|$)'
-    if [[ "$cmd" =~ $_lpr_git_re ]]; then
-        staged_text=$(_lpr_staged_added_text) || staged_text=""
-        if [ -n "$staged_text" ]; then
-            _lpr_check_text "$staged_text" || rc=$?
-            [ "$rc" -eq 2 ] && return 2
-            rc=0
-        fi
-    fi
+    _lpr_git_commit_staged_text || rc=$?
+    [ "$rc" -eq 2 ] && return 2
+    rc=0
 
     _lpr_inspect_gh || rc=$?
     [ "$rc" -eq 2 ] && return 2

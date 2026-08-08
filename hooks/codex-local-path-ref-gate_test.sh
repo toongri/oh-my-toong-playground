@@ -84,6 +84,28 @@ test_all_shell_spellings_deny_staged_added_omt_reference() {
     git -C "$REPO" checkout -q -- docs/notes.md
 }
 
+test_git_commit_scans_dash_c_target_and_compound_target() {
+    local target="$REPO/other-repo" payload command
+    mkdir -p "$target/docs"
+    git -C "$target" init -q
+    git -C "$target" config user.email test@example.invalid
+    git -C "$target" config user.name test
+    printf 'baseline\n' > "$target/docs/notes.md"
+    git -C "$target" add docs/notes.md
+    git -C "$target" commit -q -m baseline
+    printf 'citation: $OMT_DIR/session.md\n' >> "$target/docs/notes.md"
+    git -C "$target" add docs/notes.md
+
+    for command in \
+        "git -C '$target' commit -m target" \
+        "git status && git -C '$target' commit -m target"; do
+        payload=$(shell_payload bash "$command")
+        run_payload "$payload"
+        assert_codex_deny "$RUN_OUTPUT" || return 1
+        printf '%s' "$RUN_OUTPUT" | grep -F 'docs/notes.md:2' >/dev/null || return 1
+    done
+}
+
 test_shell_command_key_fallback_and_gh_body_routes() {
     local tool_name payload command
     for tool_name in Bash bash exec_command shell_command; do
@@ -97,6 +119,18 @@ test_shell_command_key_fallback_and_gh_body_routes() {
         payload=$(shell_payload "$tool_name" 'gh pr edit 123 --body "See docs/untracked.md"')
         run_payload "$payload"
         assert_codex_deny "$RUN_OUTPUT" || return 1
+    done
+}
+
+test_gh_compound_commands_inspect_later_create_edit_and_comment_bodies() {
+    local command payload
+    for command in \
+        'gh pr create --body "safe" && gh pr edit 12 --body "See docs/untracked.md"' \
+        'gh pr create --body "safe"; gh pr comment 12 --body "See docs/untracked.md"'; do
+        payload=$(shell_payload bash "$command")
+        run_payload "$payload"
+        assert_codex_deny "$RUN_OUTPUT" || return 1
+        printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
     done
 }
 
@@ -156,6 +190,42 @@ test_target_curl_inspects_every_data_payload_and_readable_at_file() {
             printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
         done
     done
+}
+
+test_target_curl_attached_short_options_deny() {
+    local host command payload payload_file="$REPO/attached-data.json"
+    printf '{"text":"See docs/untracked.md"}\n' > "$payload_file"
+    for host in \
+        'https://api.notion.com/v1/pages' \
+        'https://slack.com/api/chat.postMessage' \
+        'https://api.linear.app/graphql'; do
+        for command in \
+            "curl -X POST $host -d'{\"text\":\"See docs/untracked.md\"}'" \
+            "curl -X POST $host -d@$payload_file" \
+            "curl -X POST $host -Ffile=@docs/untracked.png"; do
+            payload=$(shell_payload bash "$command")
+            run_payload "$payload"
+            assert_codex_deny "$RUN_OUTPUT" || return 1
+        done
+    done
+}
+
+test_target_curl_data_urlencode_name_at_file_reads_content() {
+    local payload_file="$REPO/urlencoded.txt" command payload
+    printf 'See docs/untracked.md\n' > "$payload_file"
+    command="curl -X POST https://api.notion.com/v1/pages --data-urlencode message@$payload_file"
+    payload=$(shell_payload bash "$command")
+    run_payload "$payload"
+    assert_codex_deny "$RUN_OUTPUT" || return 1
+    printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
+}
+
+test_target_curl_data_urlencode_missing_file_fails_open() {
+    local command payload
+    command='curl -X POST https://api.notion.com/v1/pages --data-urlencode message@docs/missing.txt'
+    payload=$(shell_payload bash "$command")
+    run_payload "$payload"
+    [ "$RUN_EXIT" -eq 0 ] && [ -z "$RUN_OUTPUT" ]
 }
 
 test_target_curl_multipart_attachments_deny() {
@@ -270,10 +340,15 @@ test_yaml_registers_full_matcher() {
 main() {
     run_test test_hook_sources_core_and_strict_mode
     run_test test_all_shell_spellings_deny_staged_added_omt_reference
+    run_test test_git_commit_scans_dash_c_target_and_compound_target
     run_test test_shell_command_key_fallback_and_gh_body_routes
+    run_test test_gh_compound_commands_inspect_later_create_edit_and_comment_bodies
     run_test test_gh_body_file_routes_read_file_content
     run_test test_target_curl_payloads_deny
     run_test test_target_curl_inspects_every_data_payload_and_readable_at_file
+    run_test test_target_curl_attached_short_options_deny
+    run_test test_target_curl_data_urlencode_name_at_file_reads_content
+    run_test test_target_curl_data_urlencode_missing_file_fails_open
     run_test test_target_curl_multipart_attachments_deny
     run_test test_target_curl_multipart_missing_attachment_fails_open
     run_test test_mcp_argument_strings_deny
