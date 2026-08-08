@@ -346,7 +346,40 @@ test_target_curl_multipart_text_and_attached_forms_deny() {
     exit_code=0
     stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
     [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/notes.md' >/dev/null || return 1
+    printf '%s' "$stderr_out" | grep -F 'local-attachment' >/dev/null
+}
+
+test_target_curl_form_string_content_denies() {
+    local command payload stderr_out exit_code=0
+    command="curl -X POST https://api.notion.com/v1/pages --form-string 'text=See docs/untracked.md'"
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | jq -e '.decision == "deny"' >/dev/null || return 1
     printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null
+}
+
+test_non_target_curl_payload_host_does_not_trigger_inspection() {
+    local command payload exit_code=0
+    command="curl -X POST https://example.com/collect --data '{\"callback\":\"https://api.notion.com/v1/pages\",\"text\":\"See docs/untracked.md\"}'"
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    printf '%s' "$payload" | bash "$HOOK" >/dev/null 2>&1 || exit_code=$?
+    [[ "$exit_code" -eq 0 ]]
+}
+
+test_target_curl_tracked_multipart_attachment_denies() {
+    local command payload stderr_out exit_code=0
+    command="curl -X POST https://api.notion.com/v1/pages --form 'file=@docs/notes.md'"
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | jq -e '.decision == "deny"' >/dev/null || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/notes.md' >/dev/null || return 1
+    printf '%s' "$stderr_out" | grep -F 'local-attachment' >/dev/null
 }
 
 test_hook_declares_core_dependency() {
@@ -420,6 +453,9 @@ run_test test_git_c_config_before_commit_inspects_staged_additions
 run_test test_gh_short_body_option_denies
 run_test test_target_curl_additional_data_option_forms_deny
 run_test test_target_curl_multipart_text_and_attached_forms_deny
+run_test test_target_curl_form_string_content_denies
+run_test test_non_target_curl_payload_host_does_not_trigger_inspection
+run_test test_target_curl_tracked_multipart_attachment_denies
 run_test test_placeholder_nonexistent_and_https_allow
 run_test test_old_violation_with_unrelated_new_edit_allows
 run_test test_missing_jq_fails_open

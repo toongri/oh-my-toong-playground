@@ -337,18 +337,28 @@ _lpr_check_curl_payload_text() {
     return 0
 }
 
+_lpr_inspect_curl_attachment() {
+    local attachment="$1" inspectable="$2" records rc=0
+    [ -n "$attachment" ] || return 0
+    records=$(local_path_ref_gate_core_check_attachment "$repo_root" "$attachment" 2>/dev/null) || rc=$?
+    [ "$rc" -eq 0 ] || return 0
+    [ -n "$records" ] || return 0
+    _lpr_render_deny "$records" "$inspectable" && return 2
+    return 0
+}
+
 _lpr_inspect_curl_form() {
-    local value="$1" attachment rc=0
+    local value="$1" form_kind="$2" attachment rc=0
     _lpr_check_text "$value"
     rc=$?
     [ "$rc" -eq 2 ] && return 2
+    [ "$form_kind" = "string" ] && return 0
     case "$value" in
         *=@*)
             attachment="${value#*=@}"
             attachment="${attachment%%;*}"
             [ -n "$attachment" ] || return 0
-            # Markdown context lets the core retain spaces in attachment names.
-            _lpr_check_text "[attachment]($attachment)"
+            _lpr_inspect_curl_attachment "$attachment" "$value"
             rc=$?
             [ "$rc" -eq 2 ] && return 2
             ;;
@@ -394,14 +404,59 @@ _lpr_inspect_curl_data() {
     return 0
 }
 
+_lpr_curl_target_url() {
+    local value="$1"
+    [[ "$value" =~ ^https://(api[.]notion[.]com([/?#]|$)|slack[.]com/api([/?#]|$)|api[.]linear[.]app([/?#]|$)|linear[.]app/api([/?#]|$)) ]]
+}
+
+_lpr_curl_has_target_url() {
+    local remaining="$1" token expects_value=0 after_options=0
+    while [ -n "$remaining" ]; do
+        _lpr_extract_value_after "$remaining" || return 1
+        token="$_LPR_VALUE"
+        remaining="$_LPR_REMAINDER"
+        if [ "$expects_value" -eq 1 ]; then
+            _lpr_curl_target_url "$token" && return 0
+            expects_value=0
+            continue
+        fi
+        if [ "$after_options" -eq 1 ]; then
+            _lpr_curl_target_url "$token" && return 0
+            continue
+        fi
+        case "$token" in
+            --)
+                after_options=1
+                ;;
+            --url)
+                expects_value=1
+                ;;
+            --url=*)
+                _lpr_curl_target_url "${token#--url=}" && return 0
+                ;;
+            --data|--data-raw|--data-binary|--data-ascii|--json|--data-urlencode|--form|--form-string|-d|-F|-X|--request|-H|--header|-u|--user)
+                expects_value=1
+                ;;
+            --data=*|--data-raw=*|--data-binary=*|--data-ascii=*|--json=*|--data-urlencode=*|--form=*|--form-string=*|-d?*|-F?*|-X?*|--request=*|-H?*|--header=*|-u?*|--user=*)
+                ;;
+            -*)
+                ;;
+            *)
+                _lpr_curl_target_url "$token" && return 0
+                ;;
+        esac
+    done
+    [ "$expects_value" -eq 0 ] || return 1
+    return 1
+}
+
 _lpr_inspect_curl() {
-    local segment="$1" curl_re='^[[:space:]]*curl([[:space:]]|$)' target_re
+    local segment="$1" curl_re='^[[:space:]]*curl([[:space:]]|$)'
     local remaining token value kind rc=0
     [[ "$segment" =~ $curl_re ]] || return 0
-    # Require a URL token (rather than merely seeing a host in JSON data) so
-    # non-target curl calls remain outside this gate's scope.
-    target_re='(^|[[:space:]'\''"=])https://(api[.]notion[.]com|slack[.]com/api|api[.]linear[.]app|linear[.]app/api)'
-    [[ "$segment" =~ $target_re ]] || return 0
+    # Parse target URL tokens before inspecting payloads. A target-looking
+    # string inside a quoted payload is data, not the curl request endpoint.
+    _lpr_curl_has_target_url "$segment" || return 0
     remaining="$segment"
     while [ -n "$remaining" ]; do
         _lpr_extract_value_after "$remaining" || return 0
@@ -413,21 +468,37 @@ _lpr_inspect_curl() {
                 _lpr_extract_value_after "$remaining" || return 0
                 value="$_LPR_VALUE"
                 remaining="$_LPR_REMAINDER"
-                _lpr_inspect_curl_form "$value"
+                _lpr_inspect_curl_form "$value" form
                 rc=$?
                 [ "$rc" -eq 2 ] && return 2
                 continue
                 ;;
             -F?*)
                 value="${token#-F}"
-                _lpr_inspect_curl_form "$value"
+                _lpr_inspect_curl_form "$value" form
                 rc=$?
                 [ "$rc" -eq 2 ] && return 2
                 continue
                 ;;
             --form=*)
                 value="${token#--form=}"
-                _lpr_inspect_curl_form "$value"
+                _lpr_inspect_curl_form "$value" form
+                rc=$?
+                [ "$rc" -eq 2 ] && return 2
+                continue
+                ;;
+            --form-string)
+                _lpr_extract_value_after "$remaining" || return 0
+                value="$_LPR_VALUE"
+                remaining="$_LPR_REMAINDER"
+                _lpr_inspect_curl_form "$value" string
+                rc=$?
+                [ "$rc" -eq 2 ] && return 2
+                continue
+                ;;
+            --form-string=*)
+                value="${token#--form-string=}"
+                _lpr_inspect_curl_form "$value" string
                 rc=$?
                 [ "$rc" -eq 2 ] && return 2
                 continue
