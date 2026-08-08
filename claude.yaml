@@ -63,10 +63,6 @@ hooks:
 
 config:
   language: "한국어"
-  # 배포된 settings.json에서 outputStyle 키를 삭제하기 위한 tombstone.
-  # deepMerge는 additive라 소스에서 키를 지우는 것만으로는 이미 배포된 값이
-  # 지워지지 않는다 -- override 쪽에 null을 명시해야 delete가 실행된다.
-  outputStyle: null
   includeCoAuthoredBy: false
   env:
     CLAUDE_CODE_AUTO_COMPACT_WINDOW: "400000"
@@ -104,21 +100,7 @@ config:
 # 내린다. notion/linear/slack/sentry는 회사 계정과 개인 계정을 섞지 않기 위해
 # 전역에서 빼고 프로젝트별로 등록한다(type: http라 램은 0).
 #
-# retired MCP는 null tombstone으로 선언한다. 소스에서 키를 지우는 것만으로는 이미
-# 배포된 ~/.claude.json의 mcpServers 항목이 남으므로, 동기화가 해당 항목을 제거한다.
-# 새 대상에는 삭제할 기존 항목이 없어 영향이 없다.
 mcps:
-  playwright: null
-  # 업무용 6종은 위 주석대로 projects/acme-home(-metrics)/claude.yaml로 내려갔다.
-  # 소스에서 키를 지운 것만으로는 이미 배포된 전역 항목이 남아, 프로젝트 밖 모든
-  # 세션이 그 낡은 선언을 문다. 특히 전역 postgres에는 `--with mcp<2` 핀이 없어
-  # uvx가 mcp 2.x를 끌어오고 mcp.server.fastmcp import에서 즉사한다.
-  linear: null
-  maestro: null
-  notion: null
-  opensearch: null
-  postgres: null
-  slack: null
   # codegraph local code-graph MCP (Tree-sitter -> SQLite call graph; 100% local, no API key).
   # Requires per-machine binary (`npm i -g @colbymchenry/codegraph`) and per-repo `codegraph init` to build the index.
   codegraph:
@@ -129,9 +111,6 @@ mcps:
 
 plugins:
   items:
-    # retired plugin tombstone: existing targets are cleaned; fresh targets are unaffected.
-    - name: context7
-      state: absent
     - code-review
     - frontend-design
     - name: plannotator@plannotator
