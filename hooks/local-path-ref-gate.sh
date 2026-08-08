@@ -400,7 +400,7 @@ _lpr_inspect_curl() {
     [[ "$segment" =~ $curl_re ]] || return 0
     # Require a URL token (rather than merely seeing a host in JSON data) so
     # non-target curl calls remain outside this gate's scope.
-    target_re='(^|[[:space:]'\''"])https://(api[.]notion[.]com|slack[.]com/api|api[.]linear[.]app|linear[.]app/api)'
+    target_re='(^|[[:space:]'\''"=])https://(api[.]notion[.]com|slack[.]com/api|api[.]linear[.]app|linear[.]app/api)'
     [[ "$segment" =~ $target_re ]] || return 0
     remaining="$segment"
     while [ -n "$remaining" ]; do
@@ -524,7 +524,7 @@ _lpr_each_shell_command() {
                         segment="${segment}${char}"
                         escaped=1
                         ;;
-                    ';'|'&'|'|')
+                    ';'|'&'|'|'|$'\n')
                         segments[${#segments[@]}]="$segment"
                         segment=""
                         next="${source:$((index + 1)):1}"

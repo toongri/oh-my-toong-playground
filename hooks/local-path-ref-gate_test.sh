@@ -259,6 +259,26 @@ test_composite_commands_inspect_later_git_and_gh_bodies() {
     printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null
 }
 
+test_newline_separators_inspect_later_outbound_commands() {
+    local command payload stderr_out exit_code=0
+    command=$'git status\ngh pr comment --body "See docs/untracked.md"'
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null
+}
+
+test_target_curl_url_equals_endpoint_denies() {
+    local command payload stderr_out exit_code=0
+    command="curl --url=https://slack.com/api/chat.postMessage --data '{\"text\":\"See docs/untracked.md\"}'"
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null
+}
+
 test_git_c_config_before_commit_inspects_staged_additions() {
     local command payload stderr_out exit_code=0
     printf 'citation: docs/untracked.md\n' >> "$REPO/docs/notes.md"
@@ -394,6 +414,8 @@ run_test test_target_curl_expanded_at_file_payload_content_denies
 run_test test_target_curl_multiple_payloads_inspect_all
 run_test test_target_curl_multipart_file_attachment_denies
 run_test test_composite_commands_inspect_later_git_and_gh_bodies
+run_test test_newline_separators_inspect_later_outbound_commands
+run_test test_target_curl_url_equals_endpoint_denies
 run_test test_git_c_config_before_commit_inspects_staged_additions
 run_test test_gh_short_body_option_denies
 run_test test_target_curl_additional_data_option_forms_deny
