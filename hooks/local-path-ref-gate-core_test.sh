@@ -41,6 +41,8 @@ printf 'machine local hash\n' > "$HOME/private#notes.md"
 printf 'machine local attachment\n' > "$HOME/private attachment.md"
 printf 'machine local tabbed\n' > "$HOME/private"$'\t'"notes.md"
 printf 'machine local punctuation\n' > "$HOME/private-notes."
+printf 'machine local glob metacharacters\n' > "$HOME/private*[draft]?.md"
+printf 'machine local literal line suffix\n' > "$HOME/private-notes:2026"
 printf 'tracked attachment\n' > "$REPO/docs/tracked attachment.md"
 git -C "$REPO" add 'docs/tracked attachment.md'
 printf 'session state\n' > "$OMT_DIR/session.md"
@@ -132,6 +134,22 @@ test_existing_filename_final_period_reports_machine_local() {
     [[ "$rc" -eq 0 ]] || return 1
     printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
     printf '%s' "$out" | grep -F "path=$HOME/private-notes." >/dev/null
+}
+
+test_existing_filename_with_glob_metacharacters_reports_machine_local() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "$HOME/private*[draft]?.md") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F "path=$HOME/private*[draft]?.md" >/dev/null
+}
+
+test_existing_filename_ending_in_numbered_suffix_reports_machine_local() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "$HOME/private-notes:2026") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F "path=$HOME/private-notes:2026" >/dev/null
 }
 
 test_existing_filename_with_hash_reports_machine_local() {
@@ -284,6 +302,15 @@ test_multipart_attachment_with_tracked_relative_path_reports_machine_local() {
     printf '%s' "$out" | grep -F 'path=docs/tracked attachment.md' >/dev/null
 }
 
+test_absolute_tracked_attachment_reports_attachment_remediation() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check_attachment "$REPO" "$REPO/docs/tracked.md") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=local-attachment' >/dev/null || return 1
+    printf '%s' "$out" | grep -F "path=$REPO/docs/tracked.md" >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'do not attach local files; inline a summary or link to the repository file' >/dev/null
+}
+
 test_existing_parent_relative_file_reports_machine_local() {
     local out rc=0
     out=$(local_path_ref_gate_core_check "$REPO" 'See ../secret.md') || rc=$?
@@ -308,6 +335,8 @@ run_test test_file_url_for_tracked_file_reports_absolute_tracked
 run_test test_nonempty_file_uri_authority_allows
 run_test test_external_uri_markdown_destination_allows
 run_test test_existing_filename_final_period_reports_machine_local
+run_test test_existing_filename_with_glob_metacharacters_reports_machine_local
+run_test test_existing_filename_ending_in_numbered_suffix_reports_machine_local
 run_test test_existing_filename_with_hash_reports_machine_local
 run_test test_tab_in_local_filename_does_not_split_core_record
 run_test test_nonexistent_concrete_local_path_allows
@@ -328,6 +357,7 @@ run_test test_path_line_citation_in_regular_text_is_classified
 run_test test_single_concrete_path_with_spaces_reports_machine_local
 run_test test_markdown_destination_with_spaces_allows_tracked_target
 run_test test_multipart_attachment_with_tracked_relative_path_reports_machine_local
+run_test test_absolute_tracked_attachment_reports_attachment_remediation
 run_test test_existing_parent_relative_file_reports_machine_local
 run_test test_setup_error_fails_open
 
