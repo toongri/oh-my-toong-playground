@@ -432,6 +432,8 @@ _lpr_curl_is_target_url() {
             return 0 ;;
         slack.com:/api|slack.com:/api[/?#]*)
             return 0 ;;
+        hooks.slack.com:/services/*)
+            return 0 ;;
         api.linear.app:/*|api.linear.app:)
             return 0 ;;
         linear.app:/api|linear.app:/api[/?#]*)
