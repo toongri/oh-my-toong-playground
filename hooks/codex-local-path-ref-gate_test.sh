@@ -201,6 +201,38 @@ test_gh_body_file_routes_read_file_content() {
     done
 }
 
+test_gh_global_repo_flags_and_attached_body_equals_deny() {
+    local body_file="$REPO/gh-global-body.md" command payload
+    printf 'See docs/untracked.md\n' > "$body_file"
+    for command in \
+        'gh --repo owner/repo pr create -b="See docs/untracked.md"' \
+        'gh -R owner/repo pr create --body="See docs/untracked.md"' \
+        "gh --repo=owner/repo pr create -F='$body_file'" \
+        "gh -R owner/repo pr create -F='$body_file'"; do
+        payload=$(shell_payload bash "$command")
+        run_payload "$payload"
+        assert_codex_deny "$RUN_OUTPUT" || return 1
+        printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
+    done
+}
+
+test_gh_and_curl_paths_follow_shell_cd() {
+    local command payload
+    mkdir -p "$REPO/subdir/docs"
+    printf 'See docs/untracked.md\n' > "$REPO/subdir/docs/cd-body.md"
+    command="cd subdir && gh pr create --body-file docs/cd-body.md"
+    payload=$(shell_payload bash "$command")
+    run_payload "$payload"
+    assert_codex_deny "$RUN_OUTPUT" || return 1
+    printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
+
+    command='cd subdir && curl -X POST https://api.notion.com/v1/pages -F file=@docs/cd-body.md'
+    payload=$(shell_payload bash "$command")
+    run_payload "$payload"
+    assert_codex_deny "$RUN_OUTPUT" || return 1
+    printf '%s' "$RUN_OUTPUT" | grep -F 'docs/cd-body.md' >/dev/null || return 1
+}
+
 test_target_curl_payloads_deny() {
     local host command payload tool_name
     for host in \
@@ -269,6 +301,20 @@ test_target_curl_equals_url_routes_payload() {
     run_payload "$payload"
     assert_codex_deny "$RUN_OUTPUT" || return 1
     printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null
+}
+
+test_target_curl_explicit_ports_and_multipart_text_content_deny() {
+    local form_file="$REPO/form-body.txt" command payload
+    printf 'See docs/untracked.md\n' > "$form_file"
+    for command in \
+        'curl -X POST https://api.notion.com:443/v1/pages --data "{\"text\":\"See docs/untracked.md\"}"' \
+        'curl -X POST https://slack.com:443/api/chat.postMessage -F "text=See docs/untracked.md"' \
+        "curl -X POST https://api.linear.app:443/graphql -F 'text=<$form_file'"; do
+        payload=$(shell_payload bash "$command")
+        run_payload "$payload"
+        assert_codex_deny "$RUN_OUTPUT" || return 1
+        printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
+    done
 }
 
 test_target_curl_escaped_quotes_deny() {
@@ -418,6 +464,29 @@ test_git_commit_expands_home_in_dash_c_target() {
     assert_codex_deny "$RUN_OUTPUT"
 }
 
+test_git_repeated_dash_c_cd_and_later_valid_segment_deny() {
+    local target="$REPO/repeated-repo" payload command
+    mkdir -p "$target/docs"
+    git -C "$target" init -q
+    git -C "$target" config user.email test@example.invalid
+    git -C "$target" config user.name test
+    printf 'baseline\n' > "$target/docs/notes.md"
+    git -C "$target" add docs/notes.md
+    git -C "$target" commit -q -m baseline
+    printf 'citation: $OMT_DIR/session.md\n' >> "$target/docs/notes.md"
+    git -C "$target" add docs/notes.md
+
+    for command in \
+        'git -C repeated-repo -C . commit -m repeated' \
+        'cd repeated-repo && git commit -m cd-target' \
+        "git -C missing commit -m bad; git -C '$target' commit -m later"; do
+        payload=$(shell_payload bash "$command")
+        run_payload "$payload"
+        assert_codex_deny "$RUN_OUTPUT" || return 1
+        printf '%s' "$RUN_OUTPUT" | grep -F 'docs/notes.md:2' >/dev/null || return 1
+    done
+}
+
 test_git_commit_detects_staged_path_with_spaces() {
     local secret_dir="$HOME/local dir" payload
     mkdir -p "$secret_dir"
@@ -549,12 +618,15 @@ main() {
     run_test test_gh_compound_commands_inspect_later_create_edit_and_comment_bodies
     run_test test_newline_separators_inspect_later_gh_and_curl_commands
     run_test test_gh_body_file_routes_read_file_content
+    run_test test_gh_global_repo_flags_and_attached_body_equals_deny
+    run_test test_gh_and_curl_paths_follow_shell_cd
     run_test test_target_curl_payloads_deny
     run_test test_target_curl_api_root_endpoints_deny
     run_test test_target_curl_root_query_and_fragment_deny
     run_test test_target_curl_json_payload_deny
     run_test test_target_curl_form_string_payload_deny
     run_test test_target_curl_equals_url_routes_payload
+    run_test test_target_curl_explicit_ports_and_multipart_text_content_deny
     run_test test_target_curl_escaped_quotes_deny
     run_test test_target_curl_inspects_every_data_payload_and_readable_at_file
     run_test test_target_curl_attached_short_options_deny
@@ -566,6 +638,7 @@ main() {
     run_test test_target_curl_multipart_relative_workdir_deny
     run_test test_target_curl_multipart_missing_attachment_fails_open
     run_test test_git_commit_expands_home_in_dash_c_target
+    run_test test_git_repeated_dash_c_cd_and_later_valid_segment_deny
     run_test test_git_commit_detects_staged_path_with_spaces
     run_test test_mcp_outbound_write_argument_strings_deny
     run_test test_mcp_attachment_path_deny
