@@ -1,0 +1,67 @@
+한국어 | **[English](outbound-local-reference-gate.en.md)**
+
+# 외부 반출 로컬 참조 게이트
+
+외부 시스템에 남기는 텍스트가 현재 머신의 파일을 가리키지 않도록 하는
+상황별(outbound) 검사다. 코드를 수정하는 규칙이 아니라, 커밋·PR 본문/댓글·외부
+협업 도구에 보내기 직전에 인용 가능한 형태인지 판정한다.
+
+## 검사 표면과 범위
+
+| 연결 경계 | 표면 | 검사하는 입력 |
+|---|---|---|
+| Claude Bash | Git commit | staged diff의 **새로 추가된 줄만** (기존 줄은 다시 검사하지 않음) |
+| Claude Bash | PR | PR 생성·수정 요청 또는 PR 댓글의 body 전체 |
+| Claude Bash | 외부 API·웹훅 요청 | `curl` 요청에 담긴 payload와 첨부 경로 |
+| Codex MCP | Notion | `codex.yaml`에 등록된 쓰기 가능 route의 전체 `tool_input` payload |
+| Codex MCP | Slack | `codex.yaml`에 등록된 쓰기 가능 route의 전체 `tool_input` payload |
+| Codex MCP | Linear | `codex.yaml`에 등록된 쓰기 가능 route의 전체 `tool_input` payload |
+
+로컬 커밋은 추가 줄만 보므로 기존 위반이 무관한 새 수정으로 다시 차단되지
+않는다. PR과 온라인 MCP 쓰기는 해당 요청의 **full-payload 범위**를 검사한다. 다만
+`gh`를 대화형으로 실행해 도구 호출 명령에 본문을 직접 포함하지 않은 경우와
+`gh --body-file -`처럼 stdin에서 전달되는 경우의 PR 본문은 이 PreToolUse 셸 훅에서
+사용할 수 없다. 따라서 검사했다고 주장하지 않으며, 이 경계에서는 fail-open한다.
+
+## 판정자
+
+공유 코어(`local-path-ref-gate-core.sh`)가 텍스트를 줄 단위로 훑고 경로의
+상태를 판정한다. 다음은 허용한다.
+
+- 플레이스홀더·템플릿·글롭: `{slug}`, `$VAR`, `*`, `?`, `[set]` 등
+- 외부 URL·앵커: `https://…`, `http://…`, `mailto:…`, `#section`
+- 실제로 존재하지 않는 구체적인 경로
+
+다음은 차단한다.
+
+- 존재하는 **추적되지 않은 로컬 경로**(저장소 밖의 머신 파일 포함)
+- 저장소 안의 추적 파일을 가리키는 **절대경로**
+- 저장소 기준으로 대상이 없는 **상대 링크**(dangling relative link)
+
+추적된 파일을 가리키는 저장소 상대 링크는 정상적인 인용이다. 경로가
+존재하는지 확인할 수 없는 설정·Git 오류나 검사 입력 자체의 오류는 차단으로
+간주하지 않는다.
+
+## 차단되었을 때
+
+인용을 지우는 것으로 끝내지 않는다. 다음 중 하나로 근거를 외부 payload에
+실어 보낸다.
+
+1. 핵심 내용을 인라인 요약한다.
+2. 파일을 저장소 안에 복사해 추적된 파일로 추가하고 그 사본을 기준으로 설명한다.
+3. 저장소에 **추적된 상대 링크**를 만든다.
+
+모든 차단 기록은 문제 위치와 위 처방을 함께 표시하며, **인용만 삭제하는
+것은 금지**한다.
+
+## 플랫폼 연결과 실패 모드
+
+코어는 판정만 담당하고, 플랫폼별 shim이 각 이벤트를 같은 코어에 연결한다.
+Claude Bash shim은 `git commit`, `gh` PR, `curl` 외부 요청을 검사한다. Codex MCP
+shim은 Codex PreToolUse가 MCP 인자를 `tool_input`으로 제공한다는 경계를 기준으로,
+`codex.yaml`에 등록된 쓰기 가능 Notion·Slack·Linear route만 검사한다. 읽기 전용이나
+등록되지 않은 route는 이 MCP 훅의 검사 대상이 아니다.
+
+payload가 잘못되었거나, `jq`/Git/인덱스를 사용할 수 없거나, 알 수 없는
+명령·MCP 형태이거나, 저장소 위치를 확인할 수 없으면 **fail-open**한다.
+이 경우 외부 작업을 막지 않으며, 호출 경로에 따라 진단이 남지 않을 수도 있다.
