@@ -118,14 +118,15 @@ export interface Story {
  * dispatch renewal. Without it a dismissal keyed on `ref` alone would silently
  * suppress a genuine defect that later appears at the same location.
  *
- * `class` is narrowed to the two blocking classes: dismissing a `cleanup`
- * finding would be a no-op, and accepting one would misrepresent the lever as
- * general finding suppression rather than a completion unblock.
+ * `class` spans all four finding classes: blocking is decided by the
+ * verdict × impact diagonal (classifyReviewFindingOutcome), not by class, so any
+ * class can block. dismissReviewFinding still refuses non-BLOCK findings — the
+ * lever stays a completion unblock, never general finding suppression.
  */
 export interface DismissedReviewFinding {
 	artifact_sha256: string;
 	ref: string;
-	class: "correctness" | "requirement-gap";
+	class: ReviewFindingClass;
 	rationale: string;
 }
 
@@ -1199,21 +1200,50 @@ interface VerdictArtifact {
 // ---------------------------------------------------------------------------
 // Code-review artifact types — the SECOND independent completion lane.
 // Mirrors the verdict artifact: read/validate only, authored by a fresh
-// code-reviewer agent. The gate blocks CONFIRMED correctness and requirement-gap
-// findings; cleanup remains a reader-validated non-blocking class.
+// code-reviewer agent. Blocking is decided by the verdict × impact diagonal
+// (classifyReviewFindingOutcome); `class` is carried for reporting and
+// dismissal keying but the gate does not branch on it.
 // ---------------------------------------------------------------------------
 
+export type ReviewFindingClass = "correctness" | "regression" | "cleanup" | "requirement-gap";
+export type ReviewImpact = "HIGH" | "MEDIUM" | "LOW";
+export type ReviewFindingOutcome = "BLOCK" | "FIX" | "NOTE";
+
 interface CodeReviewFinding {
-	class: "correctness" | "cleanup" | "requirement-gap";
+	class: ReviewFindingClass;
 	verdict: "CONFIRMED" | "PLAUSIBLE";
+	impact: ReviewImpact;
 	ref?: string;
 }
 
 interface CodeReviewArtifact {
 	status: "COMPLETE" | "INCONCLUSIVE";
 	findings: CodeReviewFinding[];
+	/** Path to the findings.md card report — the full 7-field cards the summary findings were cut from. */
+	findings_report?: string;
 	reviewer: string;
 	at: string;
+}
+
+/**
+ * The diagonal outcome grid — verdict (confidence, verifier-owned) × impact
+ * (harm, orchestrator-owned). BLOCK's verb depends on verdict: CONFIRMED means
+ * "fix it, then full re-review"; PLAUSIBLE × HIGH means "adjudicate it — the
+ * next round confirms or refutes". FIX is repaired in one batch right before
+ * completion without a re-review; NOTE is report-only.
+ *
+ *   BLOCK ⟺ (CONFIRMED && impact ∈ {HIGH, MEDIUM}) || (PLAUSIBLE && impact == HIGH)
+ *   FIX   ⟺ CONFIRMED && impact == LOW
+ *   NOTE  ⟺ PLAUSIBLE && impact ∈ {MEDIUM, LOW}
+ */
+export function classifyReviewFindingOutcome(finding: {
+	verdict: "CONFIRMED" | "PLAUSIBLE";
+	impact: ReviewImpact;
+}): ReviewFindingOutcome {
+	if (finding.verdict === "CONFIRMED") {
+		return finding.impact === "LOW" ? "FIX" : "BLOCK";
+	}
+	return finding.impact === "HIGH" ? "BLOCK" : "NOTE";
 }
 
 /**
@@ -1299,13 +1329,22 @@ function isCodeReviewArtifact(value: unknown): value is CodeReviewArtifact {
 	const reviewer = value["reviewer"];
 	if (typeof reviewer !== "string" || reviewer.length === 0) return false;
 	if (typeof value["at"] !== "string") return false;
-	// Validate each finding; any enum violation → whole artifact null
-	const VALID_CLASSES = ["correctness", "cleanup", "requirement-gap"];
+	// findings_report is optional (older artifacts predate it) but must be a
+	// string when present — a non-string path is a malformed reviewer output.
+	const report = value["findings_report"];
+	if (report !== undefined && typeof report !== "string") return false;
+	// Validate each finding; any enum violation → whole artifact null.
+	// `impact` is REQUIRED — a finding without one is schema-invalid exactly like
+	// an artifact without `status`: no default-to-LOW (or any) coercion, because a
+	// silently defaulted impact would let a reviewer omission decide the gate.
+	const VALID_CLASSES = ["correctness", "regression", "cleanup", "requirement-gap"];
 	const VALID_FINDING_VERDICTS = ["CONFIRMED", "PLAUSIBLE"];
+	const VALID_IMPACTS = ["HIGH", "MEDIUM", "LOW"];
 	for (const entry of value["findings"]) {
 		if (!isRecord(entry)) return false;
 		if (!isOneOf(entry["class"], VALID_CLASSES)) return false;
 		if (!isOneOf(entry["verdict"], VALID_FINDING_VERDICTS)) return false;
+		if (!isOneOf(entry["impact"], VALID_IMPACTS)) return false;
 	}
 	return true;
 }
@@ -1356,9 +1395,7 @@ function isCompletionEligibleCodeReview(
 		reviewed.artifact.status === "COMPLETE" &&
 		!reviewed.artifact.findings.some(
 			(f) =>
-				f.verdict === "CONFIRMED" &&
-				(f.class === "correctness" || f.class === "requirement-gap") &&
-				!isDismissed(f, artifactSha, dismissed)
+				classifyReviewFindingOutcome(f) === "BLOCK" && !isDismissed(f, artifactSha, dismissed)
 		)
 	);
 }
@@ -1499,16 +1536,17 @@ function readDismissals(prior: Partial<GoalState>): DismissedReviewFinding[] {
  * wrong review, or to abandon the pursuit via set-blocked).
  *
  * Deliberately narrow, so the lever unblocks a specific wrong call rather than
- * disabling the review lane. It refuses unless a CONFIRMED finding with this exact
- * `ref` and blocking `class` is present in the CURRENT artifact — a dismissal cannot
- * be issued ahead of the finding it answers — and it records the artifact's byte hash,
- * so it lapses the moment the next review round writes different bytes.
+ * disabling the review lane. It refuses unless a BLOCK-outcome finding (per the
+ * verdict × impact diagonal) with this exact `ref` and `class` is present in the
+ * CURRENT artifact — a dismissal cannot be issued ahead of the finding it answers —
+ * and it records the artifact's byte hash, so it lapses the moment the next review
+ * round writes different bytes.
  *
  * Returns true when the dismissal is recorded (or already was), false on any refusal.
  */
 export function dismissReviewFinding(
 	sessionId: string,
-	opts: { ref: string; class: "correctness" | "requirement-gap"; rationale: string },
+	opts: { ref: string; class: ReviewFindingClass; rationale: string },
 ): boolean {
 	// A dismissal overrides an independent reviewer; an unexplained one leaves no way to
 	// tell a refuted finding from an inconvenient one. Same trim idiom the story-steering
@@ -1522,10 +1560,17 @@ export function dismissReviewFinding(
 	const rationale = opts.rationale.trim();
 	if (rationale === "") return false;
 	if (opts.ref.trim() === "") return false;
-	// Runtime enum check, not just the TypeScript type: a cleanup dismissal would be a
-	// no-op against a predicate that never blocked on cleanup, and silently accepting one
-	// would advertise this as general finding suppression.
-	if (opts.class !== "correctness" && opts.class !== "requirement-gap") return false;
+	// Runtime enum check, not just the TypeScript type: an out-of-enum class can
+	// never match a finding, and silently accepting one would record a dismissal
+	// that suppresses nothing while claiming to.
+	if (
+		opts.class !== "correctness" &&
+		opts.class !== "regression" &&
+		opts.class !== "cleanup" &&
+		opts.class !== "requirement-gap"
+	) {
+		return false;
+	}
 
 	const stateFilePath = resolveStatePath(sessionId);
 	try {
@@ -1544,13 +1589,18 @@ export function dismissReviewFinding(
 			const artifactSha = sha256(reviewed.raw);
 			// EXACTLY one match, not at-least-one. A dismissal is keyed by (artifact bytes,
 			// ref, class) and findings carry no identity of their own, so two DISTINCT
-			// confirmed findings at the same ref and class are indistinguishable to it —
+			// blocking findings at the same ref and class are indistinguishable to it —
 			// refuting one would silently clear the other and let a genuine defect complete,
 			// against the never-false-complete invariant. Refusing the ambiguous dismissal
 			// is the fail-closed direction: the user loses the escape hatch for that one
-			// finding, never the block on its twin.
+			// finding, never the block on its twin. Only BLOCK-outcome findings match:
+			// dismissing a FIX or NOTE finding would be a no-op against a gate they never
+			// block, and accepting one would advertise general finding suppression.
 			const matches = reviewed.artifact.findings.filter(
-				(f) => f.verdict === "CONFIRMED" && f.class === opts.class && f.ref === opts.ref,
+				(f) =>
+					classifyReviewFindingOutcome(f) === "BLOCK" &&
+					f.class === opts.class &&
+					f.ref === opts.ref,
 			).length;
 			if (matches !== 1) return false;
 
@@ -1738,8 +1788,9 @@ export function requestComplete(sessionId: string, codexGoalArg?: string): boole
 	// Code-review lane (D-3): the SECOND independent refusal lane, reached only after
 	// every objective-lane gate above passes — so "both lanes clean" is the completion condition.
 	// Absent/invalid artifact → block (never-false-complete: degrade toward block). The
-// gate blocks only CONFIRMED correctness or requirement-gap findings. CONFIRMED cleanup findings
-// are non-blocking quality notes; `class` is otherwise not branched on.
+	// gate blocks BLOCK-outcome findings per the verdict × impact diagonal
+	// (classifyReviewFindingOutcome); FIX and NOTE findings are non-blocking and
+	// `class` is not branched on at all.
 	const codeReview = readCodeReviewArtifactRaw(sessionId);
 	if (codeReview === null) {
 		return false;
@@ -2203,10 +2254,15 @@ function main(): void {
 			const ref = str(args["ref"]) ?? "";
 			const findingClass = str(args["class"]) ?? "";
 			const rationale = str(args["rationale"]) ?? "";
-			if (findingClass !== "correctness" && findingClass !== "requirement-gap") {
+			if (
+				findingClass !== "correctness" &&
+				findingClass !== "regression" &&
+				findingClass !== "cleanup" &&
+				findingClass !== "requirement-gap"
+			) {
 				process.stderr.write(
-					"dismiss-review-finding: --class must be correctness or requirement-gap " +
-						"(cleanup findings never block completion, so dismissing one is a no-op)\n",
+					"dismiss-review-finding: --class must be one of correctness, regression, " +
+						"cleanup, requirement-gap\n",
 				);
 				process.exit(1);
 			}
@@ -2214,8 +2270,8 @@ function main(): void {
 			if (!dismissed) {
 				process.stderr.write(
 					"dismiss-review-finding: refused — requires an active pursuing goal, a non-empty " +
-						`--ref and --rationale, and a CONFIRMED ${findingClass} finding at "${ref}" in the ` +
-						"current code-review artifact\n",
+						`--ref and --rationale, and a blocking (BLOCK-outcome) ${findingClass} finding at ` +
+						`"${ref}" in the current code-review artifact\n`,
 				);
 				process.exit(1);
 			}
