@@ -49,7 +49,7 @@ Do not solve a denial by deleting the citation alone. Put the evidence into the
 outbound payload by doing one of the following:
 
 1. include an inline summary;
-2. copy the file into the repository and cite that copy; or
+2. copy the file into the repository, ensure that copy is tracked, and cite it; or
 3. create a **tracked repository-relative link**.
 
 Every denial includes its location and one of these remedies; **deleting the
