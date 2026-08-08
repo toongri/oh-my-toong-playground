@@ -113,6 +113,12 @@ hooks:
     - component: codex-label-commit-gate.sh
       type: command
       matcher: "Bash|bash|exec_command|shell_command"
+    # Claude<->Codex hook-parity: inspect staged/local-path citations before
+    # commits and outbound PR/API/MCP writes. The matcher is a full-string
+    # regex, so the MCP prefixes intentionally carry `.*` suffixes.
+    - component: codex-local-path-ref-gate.sh
+      type: command
+      matcher: "Bash|bash|exec_command|shell_command|mcp__notion__.*|mcp__slack__.*|mcp__linear__.*"
     # Claude<->Codex hook-parity: root claude.yaml registers review-exec-guard.sh
     # globally for Bash, so its Codex analog covers every root-config shell-tool
     # spelling. Codex applies this matcher as a full-string regex.
