@@ -229,6 +229,24 @@ test_target_curl_json_payload_deny() {
     printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
 }
 
+test_target_curl_form_string_payload_deny() {
+    local command payload
+    command='curl -X POST https://api.notion.com/v1/pages --form-string "text=See docs/untracked.md"'
+    payload=$(shell_payload bash "$command")
+    run_payload "$payload"
+    assert_codex_deny "$RUN_OUTPUT" || return 1
+    printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null
+}
+
+test_target_curl_equals_url_routes_payload() {
+    local command payload
+    command='curl --url=https://api.notion.com/v1/pages --data "{\"text\":\"See docs/untracked.md\"}"'
+    payload=$(shell_payload bash "$command")
+    run_payload "$payload"
+    assert_codex_deny "$RUN_OUTPUT" || return 1
+    printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null
+}
+
 test_target_curl_escaped_quotes_deny() {
     local command payload
     command='curl -X POST https://api.notion.com/v1/pages --data "{\"text\":\"See docs/untracked.md\"}"'
@@ -341,14 +359,30 @@ test_target_curl_multipart_missing_attachment_fails_open() {
     [ "$RUN_EXIT" -eq 0 ] && [ -z "$RUN_OUTPUT" ]
 }
 
-test_mcp_argument_strings_deny() {
+test_mcp_outbound_write_argument_strings_deny() {
     local tool_name payload
-    for tool_name in mcp__notion__create mcp__slack__send mcp__linear__create; do
+    for tool_name in \
+        mcp__notion__notion_update_page \
+        mcp__slack__slack_send_message \
+        mcp__linear__save_issue; do
         payload=$(jq -nc --arg cwd "$REPO" --arg t "$tool_name" \
             '{cwd:$cwd,tool_name:$t,tool_input:{body:{text:"See docs/untracked.md"},nested:["safe",{"detail":"docs/untracked.md"}]}}')
         run_payload "$payload"
         assert_codex_deny "$RUN_OUTPUT" || return 1
         printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
+    done
+}
+
+test_mcp_read_only_routes_allow_local_path_arguments() {
+    local tool_name payload
+    for tool_name in \
+        mcp__notion__notion_fetch \
+        mcp__slack__slack_read_channel \
+        mcp__linear__get_issue; do
+        payload=$(jq -nc --arg cwd "$REPO" --arg t "$tool_name" \
+            '{cwd:$cwd,tool_name:$t,tool_input:{query:"See docs/untracked.md"}}')
+        run_payload "$payload"
+        [ "$RUN_EXIT" -eq 0 ] && [ -z "$RUN_OUTPUT" ] || return 1
     done
 }
 
@@ -416,8 +450,12 @@ test_missing_jq_core_and_failed_inspection_allow() {
 
 test_yaml_registers_full_matcher() {
     grep -F 'component: codex-local-path-ref-gate.sh' "$SCRIPT_DIR/../codex.yaml" >/dev/null || return 1
-    grep -F 'matcher: "Bash|bash|exec_command|shell_command|mcp__notion__.*|mcp__slack__.*|mcp__linear__.*"' \
-        "$SCRIPT_DIR/../codex.yaml" >/dev/null
+    grep -F 'mcp__notion__notion_update_page' "$SCRIPT_DIR/../codex.yaml" >/dev/null || return 1
+    grep -F 'mcp__slack__slack_send_message' "$SCRIPT_DIR/../codex.yaml" >/dev/null || return 1
+    grep -F 'mcp__linear__save_issue' "$SCRIPT_DIR/../codex.yaml" >/dev/null || return 1
+    ! grep -F 'mcp__notion__.*' "$SCRIPT_DIR/../codex.yaml" || return 1
+    ! grep -F 'mcp__slack__.*' "$SCRIPT_DIR/../codex.yaml" || return 1
+    ! grep -F 'mcp__linear__.*' "$SCRIPT_DIR/../codex.yaml"
 }
 
 main() {
@@ -433,6 +471,8 @@ main() {
     run_test test_target_curl_payloads_deny
     run_test test_target_curl_api_root_endpoints_deny
     run_test test_target_curl_json_payload_deny
+    run_test test_target_curl_form_string_payload_deny
+    run_test test_target_curl_equals_url_routes_payload
     run_test test_target_curl_escaped_quotes_deny
     run_test test_target_curl_inspects_every_data_payload_and_readable_at_file
     run_test test_target_curl_attached_short_options_deny
@@ -441,7 +481,8 @@ main() {
     run_test test_target_curl_multipart_attachments_deny
     run_test test_target_curl_multipart_relative_workdir_deny
     run_test test_target_curl_multipart_missing_attachment_fails_open
-    run_test test_mcp_argument_strings_deny
+    run_test test_mcp_outbound_write_argument_strings_deny
+    run_test test_mcp_read_only_routes_allow_local_path_arguments
     run_test test_allow_safe_and_fail_open_shapes
     run_test test_old_untouched_violation_allows
     run_test test_inspected_command_is_never_executed

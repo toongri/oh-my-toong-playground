@@ -326,6 +326,15 @@ _lpr_curl_form_attachment() {
     return 0
 }
 
+_lpr_curl_is_target_url() {
+    case "$1" in
+        https://api.notion.com|https://api.notion.com/*|https://slack.com/api|https://slack.com/api/*|https://api.linear.app|https://api.linear.app/*|https://linear.app/api|https://linear.app/api/*)
+            return 0
+            ;;
+        *) return 1 ;;
+    esac
+}
+
 _lpr_inspect_curl() {
     local remaining="$cmd" segment rest arguments word value option target rc=0 form_rc curl_text
     while [ -n "$remaining" ]; do
@@ -339,7 +348,13 @@ _lpr_inspect_curl() {
         while _lpr_shell_next_word "$rest"; do
             word="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
             case "$word" in
-                https://api.notion.com|https://api.notion.com/*|https://slack.com/api|https://slack.com/api/*|https://api.linear.app|https://api.linear.app/*|https://linear.app/api|https://linear.app/api/*) target=1 ;;
+                --url)
+                    _lpr_shell_next_word "$rest" || return 0
+                    _lpr_curl_is_target_url "$_LPR_WORD" && target=1
+                    rest="$_LPR_SHELL_REMAINDER"
+                    ;;
+                --url=*) _lpr_curl_is_target_url "${word#--url=}" && target=1 ;;
+                *) _lpr_curl_is_target_url "$word" && target=1 ;;
             esac
         done
         [ "$target" -eq 1 ] || continue
@@ -348,7 +363,7 @@ _lpr_inspect_curl() {
         while _lpr_shell_next_word "$rest"; do
             word="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"; option=""
             case "$word" in
-                --data|--data-raw|--data-binary|--data-ascii|--data-urlencode|--json|-d|--form|-F)
+                --data|--data-raw|--data-binary|--data-ascii|--data-urlencode|--json|-d|--form|-F|--form-string)
                     option="$word"
                     _lpr_shell_next_word "$rest" || return 0
                     value="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
@@ -359,6 +374,7 @@ _lpr_inspect_curl() {
                 --data-ascii=*) option="--data-ascii"; value="${word#--data-ascii=}" ;;
                 --data-urlencode=*) option="--data-urlencode"; value="${word#--data-urlencode=}" ;;
                 --form=*) option="--form"; value="${word#--form=}" ;;
+                --form-string=*) option="--form-string"; value="${word#--form-string=}" ;;
                 -d?*) option="-d"; value="${word#-d}" ;;
                 -F?*) option="-F"; value="${word#-F}" ;;
                 *) continue ;;
@@ -453,7 +469,7 @@ case "$tool_name" in
         [ "${rc:-0}" -eq 2 ] && exit 0
         exit 0
         ;;
-    mcp__notion__*|mcp__slack__*|mcp__linear__*)
+    mcp__notion__notion_convert_page_to_skill|mcp__notion__notion_create_attachment|mcp__notion__notion_create_comment|mcp__notion__notion_create_database|mcp__notion__notion_create_file_upload|mcp__notion__notion_create_folder|mcp__notion__notion_create_pages|mcp__notion__notion_create_view|mcp__notion__notion_duplicate_page|mcp__notion__notion_move_pages|mcp__notion__notion_update_data_source|mcp__notion__notion_update_page|mcp__notion__notion_update_view|mcp__slack__slack_add_reaction|mcp__slack__slack_create_canvas|mcp__slack__slack_create_conversation|mcp__slack__slack_schedule_message|mcp__slack__slack_send_message|mcp__slack__slack_send_message_draft|mcp__slack__slack_update_canvas|mcp__linear__create_attachment|mcp__linear__create_attachment_from_upload|mcp__linear__create_initiative_label|mcp__linear__create_issue_label|mcp__linear__delete_attachment|mcp__linear__delete_comment|mcp__linear__delete_diff_comment|mcp__linear__delete_status_update|mcp__linear__merge_diff|mcp__linear__prepare_attachment_upload|mcp__linear__resolve_diff_thread|mcp__linear__save_comment|mcp__linear__save_diff_comment|mcp__linear__save_document|mcp__linear__save_initiative|mcp__linear__save_issue|mcp__linear__save_milestone|mcp__linear__save_project|mcp__linear__save_release|mcp__linear__save_release_note|mcp__linear__save_status_update|mcp__linear__submit_diff_review)
         _lpr_prepare_repo || exit 0
         inspectable=$(printf '%s' "$input" | jq -r 'if (.tool_input? | type) == "object" or (.tool_input? | type) == "array" then .tool_input | .. | strings else empty end' 2>/dev/null) || exit 0
         [ -n "$inspectable" ] || exit 0
