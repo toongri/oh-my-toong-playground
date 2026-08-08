@@ -21,7 +21,9 @@ git -C "$REPO" config user.name test
 printf 'session state\n' > "$OMT_DIR/session.md"
 printf 'untracked fixture\n' > "$REPO/docs/untracked.md"
 printf 'safe baseline\n' > "$REPO/docs/notes.md"
+printf '{"text":"safe baseline"}\n' > "$REPO/docs/payload.json"
 git -C "$REPO" add docs/notes.md
+git -C "$REPO" add docs/payload.json
 git -C "$REPO" commit -q -m baseline
 
 TESTS_PASSED=0
@@ -73,6 +75,25 @@ test_gh_pr_create_body_untracked_path_denies() {
     printf '%s' "$stderr_out" | grep -F 'machine-local-untracked' >/dev/null
 }
 
+test_gh_pr_create_body_file_content_untracked_path_denies() {
+    printf 'See docs/untracked.md\n' > "$REPO/docs/payload.md"
+
+    local stderr_out exit_code=0
+    stderr_out=$(printf '%s' "$(jq -n --arg cwd "$REPO" '{cwd:$cwd,tool_input:{command:"gh pr create --body-file docs/payload.md"}}')" \
+        | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | jq -e '.decision == "deny"' >/dev/null || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null || return 1
+    printf '%s' "$stderr_out" | grep -F 'machine-local-untracked' >/dev/null
+}
+
+test_gh_pr_create_body_file_missing_fails_open() {
+    local exit_code=0
+    printf '%s' "$(jq -n --arg cwd "$REPO" '{cwd:$cwd,tool_input:{command:"gh pr create --body-file docs/missing-body.md"}}')" \
+        | bash "$HOOK" >/dev/null 2>&1 || exit_code=$?
+    [[ "$exit_code" -eq 0 ]]
+}
+
 test_target_curl_payloads_deny() {
     local host command payload stderr_out exit_code
     for host in \
@@ -90,6 +111,38 @@ test_target_curl_payloads_deny() {
         printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null || return 1
         unset exit_code
     done
+}
+
+test_target_curl_file_payload_content_denies() {
+    printf '{"text":"See docs/untracked.md"}\n' > "$REPO/docs/payload.json"
+
+    local host command payload stderr_out exit_code=0
+    host='https://api.notion.com/v1/pages'
+    command="curl -X POST $host --data @docs/payload.json"
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | jq -e '.decision == "deny"' >/dev/null || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null || return 1
+
+    printf '{"text":"safe baseline"}\n' > "$REPO/docs/payload.json"
+}
+
+test_target_curl_multiple_payloads_inspect_all() {
+    local host command payload stderr_out exit_code=0
+    host='https://api.notion.com/v1/pages'
+    command="curl -X POST $host --data '{\"text\":\"See docs/notes.md\"}' --data-raw '{\"text\":\"See docs/untracked.md\"}'"
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | jq -e '.decision == "deny"' >/dev/null || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null
+}
+
+test_hook_declares_core_dependency() {
+    grep -qF '# omt-hook-dep: local-path-ref-gate-core.sh' "$HOOK"
 }
 
 test_placeholder_nonexistent_and_https_allow() {
@@ -140,9 +193,14 @@ test_hook_enables_strict_mode() {
 }
 
 run_test test_hook_enables_strict_mode
+run_test test_hook_declares_core_dependency
 run_test test_staged_added_omt_reference_denies_with_context_and_remedy
 run_test test_gh_pr_create_body_untracked_path_denies
+run_test test_gh_pr_create_body_file_content_untracked_path_denies
+run_test test_gh_pr_create_body_file_missing_fails_open
 run_test test_target_curl_payloads_deny
+run_test test_target_curl_file_payload_content_denies
+run_test test_target_curl_multiple_payloads_inspect_all
 run_test test_placeholder_nonexistent_and_https_allow
 run_test test_old_violation_with_unrelated_new_edit_allows
 run_test test_missing_jq_fails_open
