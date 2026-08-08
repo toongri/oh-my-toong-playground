@@ -124,6 +124,48 @@ test_file_url_for_tracked_file_reports_absolute_tracked() {
     printf '%s' "$out" | grep -F 'path=docs/tracked.md' >/dev/null
 }
 
+test_localhost_file_url_reports_machine_local_after_percent_decoding() {
+    local out rc=0 encoded_uri="file://localhost$HOME/private%20attachment.md"
+    out=$(local_path_ref_gate_core_check "$REPO" "$encoded_uri") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F "path=$encoded_uri" >/dev/null
+}
+
+test_localhost_file_url_for_tracked_file_reports_absolute_tracked() {
+    local out rc=0 encoded_uri="file://localhost$REPO/docs/tracked%20attachment.md"
+    out=$(local_path_ref_gate_core_check "$REPO" "$encoded_uri") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=absolute-tracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'path=docs/tracked attachment.md' >/dev/null
+}
+
+test_localhost_file_url_preserves_percent_decoded_literal_colon_filename() {
+    local out rc=0 encoded_uri="file://localhost$HOME/private-notes%3A2026"
+    out=$(local_path_ref_gate_core_check "$REPO" "$encoded_uri") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F "path=$encoded_uri" >/dev/null
+}
+
+test_unresolved_escaped_path_line_syntax_fails_open() {
+    local out rc=0 escaped_uri="file://localhost$HOME/private-notes.md%3A2"
+    out=$(local_path_ref_gate_core_check "$REPO" "$escaped_uri") || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_unresolved_relative_escaped_path_line_syntax_fails_open() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" '[citation](docs/untracked.md%3A2)') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_unresolved_backslash_escaped_path_line_syntax_fails_open() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" '[citation](docs/untracked.md\:2)') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
 test_nonempty_file_uri_authority_allows() {
     local out rc=0
     out=$(local_path_ref_gate_core_check "$REPO" "See [remote file](file://files.example.invalid$HOME/private-notes.md).") || rc=$?
@@ -195,6 +237,32 @@ test_markdown_destination_with_optional_title_allows_tracked_target() {
     git -C "$REPO" add docs/notes.md
     out=$(local_path_ref_gate_core_check "$REPO" 'See [notes](docs/notes.md "read this").') || rc=$?
     [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_malformed_markdown_destination_does_not_fall_through_to_bare_scan() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See [broken](docs/not-present.md') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_escaped_markdown_link_shape_does_not_fall_through_to_bare_scan() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See \[literal\](docs/not-present.md).') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_escaped_markdown_opening_paren_does_not_fall_through_to_bare_scan() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See [literal]\(docs/not-present.md\).') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_escaped_markdown_destination_preserves_literal_filename_behavior() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See [the report](docs/untracked-parenthesized\(2026\).md).') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'path=docs/untracked-parenthesized(2026).md' >/dev/null
 }
 
 test_existing_relative_file_allows() {
@@ -357,6 +425,12 @@ run_test test_existing_absolute_tracked_file_reports_relative_remediation
 run_test test_existing_file_url_reports_machine_local
 run_test test_percent_encoded_file_url_reports_machine_local
 run_test test_file_url_for_tracked_file_reports_absolute_tracked
+run_test test_localhost_file_url_reports_machine_local_after_percent_decoding
+run_test test_localhost_file_url_for_tracked_file_reports_absolute_tracked
+run_test test_localhost_file_url_preserves_percent_decoded_literal_colon_filename
+run_test test_unresolved_escaped_path_line_syntax_fails_open
+run_test test_unresolved_relative_escaped_path_line_syntax_fails_open
+run_test test_unresolved_backslash_escaped_path_line_syntax_fails_open
 run_test test_nonempty_file_uri_authority_allows
 run_test test_external_uri_markdown_destination_allows
 run_test test_existing_filename_final_period_reports_machine_local
@@ -367,6 +441,10 @@ run_test test_tab_in_local_filename_does_not_split_core_record
 run_test test_nonexistent_concrete_local_path_allows
 run_test test_nonexistent_bare_relative_example_allows
 run_test test_markdown_destination_with_optional_title_allows_tracked_target
+run_test test_malformed_markdown_destination_does_not_fall_through_to_bare_scan
+run_test test_escaped_markdown_link_shape_does_not_fall_through_to_bare_scan
+run_test test_escaped_markdown_opening_paren_does_not_fall_through_to_bare_scan
+run_test test_escaped_markdown_destination_preserves_literal_filename_behavior
 run_test test_existing_relative_file_allows
 run_test test_existing_relative_untracked_file_reports_machine_local
 run_test test_parenthesized_bare_untracked_file_reports_machine_local

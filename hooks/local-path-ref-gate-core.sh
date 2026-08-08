@@ -58,7 +58,7 @@ _lpr_core_expand_path() {
 }
 
 _lpr_core_percent_decode() {
-    local value="$1" decoded="" index=0 length hex byte
+    local value="$1" decoded="" index=0 length hex byte unresolved=0
     length="${#value}"
     while [[ "$index" -lt "$length" ]]; do
         if [[ "${value:$index:1}" == '%' && "$((index + 2))" -lt "$length" ]]; then
@@ -69,20 +69,33 @@ _lpr_core_percent_decode() {
                 index=$((index + 3))
                 continue
             fi
+            unresolved=1
+        elif [[ "${value:$index:1}" == '%' ]]; then
+            unresolved=1
         fi
         decoded="${decoded}${value:$index:1}"
         index=$((index + 1))
     done
     _LPR_DECODED="$decoded"
+    _LPR_DECODE_UNRESOLVED="$unresolved"
 }
 
 _lpr_core_inspect_path() {
     local candidate="$1"
+    _LPR_DECODE_UNRESOLVED=0
     _lpr_core_expand_path "$candidate"
     candidate="$_LPR_EXPANDED"
     case "$candidate" in
         file:///*)
             candidate="${candidate#file://}"
+            _lpr_core_percent_decode "$candidate"
+            candidate="$_LPR_DECODED"
+            ;;
+        file://localhost/*)
+            # RFC 8089 defines localhost as the local-machine alias of the
+            # empty-authority form.  Normalize before percent decoding so the
+            # resulting path is classified exactly like file:///... .
+            candidate="${candidate#file://localhost}"
             _lpr_core_percent_decode "$candidate"
             candidate="$_LPR_DECODED"
             ;;
@@ -141,6 +154,9 @@ _lpr_core_candidate_exists() {
     local candidate="$1"
     _lpr_core_inspect_path "$candidate"
     candidate="$_LPR_INSPECT_PATH"
+    # A malformed/incomplete percent escape is not an inspectable path.  Do
+    # not reinterpret the unresolved spelling as a literal local filename.
+    [[ "${_LPR_DECODE_UNRESOLVED-0}" -eq 0 ]] || return 1
     case "$candidate" in
         /*) [[ -e "$candidate" ]] && return 0 ;;
         *) [[ -n "${_LPR_REPO_ROOT-}" && -e "$_LPR_REPO_ROOT/$candidate" ]] && return 0 ;;
@@ -152,10 +168,11 @@ _lpr_core_candidate_exists() {
 _lpr_core_placeholder_or_external() {
     local value="$1" scheme
     case "$value" in
-        # Empty-authority file URIs name a local absolute path.  Every other
-        # URI scheme (including hostname-bearing file URIs) is outside this
-        # core's local-filesystem inspection contract and must fail open.
-        file:///*) ;;
+        # Empty-authority and localhost file URIs name a local absolute path.
+        # Every other URI scheme (including hostname-bearing file URIs) is
+        # outside this core's local-filesystem inspection contract and must
+        # fail open.
+        file:///*|file://localhost/*) ;;
         *:*)
             scheme="${value%%:*}"
             case "$scheme" in
@@ -173,6 +190,16 @@ _lpr_core_placeholder_or_external() {
         # concrete local path.  Known variables are expanded before this test.
         *\$*|*'${'*'}'*) return 0 ;;
     esac
+    return 1
+}
+
+_lpr_core_unresolved_escaped_path_line() {
+    local value="$1"
+    # A line suffix whose separator is escaped (literally or as `%3A`) is not
+    # a path the core can resolve.  In particular, do not strip the suffix and
+    # then classify an otherwise-existing path portion as a citation.
+    [[ "$value" =~ \\:[1-9][0-9]*$ ]] && return 0
+    [[ "$value" =~ %[3][Aa][1-9][0-9]*$ ]] && return 0
     return 1
 }
 
@@ -249,6 +276,11 @@ _lpr_core_consider() {
     [[ -n "$candidate" ]] || return 0
     display_candidate="$candidate"
 
+    case "$candidate" in
+        file:///*|file://localhost/*) ;;
+        *) _lpr_core_unresolved_escaped_path_line "$candidate" && return 0 ;;
+    esac
+
     # `file:///...` is a local absolute reference, not an external URL.  The
     # `file://` form below deliberately accepts only the empty-authority form;
     # a hostname-bearing URI is not a local path this core can inspect.
@@ -262,6 +294,7 @@ _lpr_core_consider() {
 
     _lpr_core_inspect_path "$candidate"
     candidate="$_LPR_INSPECT_PATH"
+    [[ "${_LPR_DECODE_UNRESOLVED-0}" -eq 0 ]] || return 0
     # An unresolved $HOME/$OMT_DIR is a template; setup errors fail open.
     if ! _lpr_core_candidate_exists "$candidate"; then
         _lpr_core_placeholder_or_external "$candidate" && return 0
@@ -317,20 +350,79 @@ _lpr_core_consider() {
     esac
 }
 
+_lpr_core_markdown_prefix_has_open() {
+    local value="$1" index=0 length char escaped=0
+    _LPR_MARKDOWN_HAS_OPEN=0
+    length="${#value}"
+    while [[ "$index" -lt "$length" ]]; do
+        char="${value:$index:1}"
+        if [[ "$escaped" -eq 1 ]]; then
+            escaped=0
+        elif [[ "$char" == \\ ]]; then
+            escaped=1
+        elif [[ "$char" == '[' ]]; then
+            _LPR_MARKDOWN_HAS_OPEN=1
+        fi
+        index=$((index + 1))
+    done
+    [[ "$_LPR_MARKDOWN_HAS_OPEN" -eq 1 ]]
+}
+
+_lpr_core_escaped_markdown_prefix() {
+    local value="$1" index=0 length char next next_next
+    _LPR_ESCAPED_MARKDOWN_PREFIX=""
+    length="${#value}"
+    while [[ "$index" -lt "$length" ]]; do
+        char="${value:$index:1}"
+        next="${value:$((index + 1)):1}"
+        next_next="${value:$((index + 2)):1}"
+        # `](...)` with an escaped opening paren is a literal shape, not a
+        # Markdown destination.  Keep its path out of the bare scanner.
+        if [[ "$char" == ']' && "$next" == \\ && "$next_next" == '(' ]]; then
+            _LPR_ESCAPED_MARKDOWN_PREFIX="${value:0:$index}"
+            return 0
+        fi
+        index=$((index + 1))
+    done
+    return 1
+}
+
 _lpr_core_scan_line() {
     local line="$1" line_no="$2" scan_context="${3-bare}" rest target token candidate markdown_match
-    local markdown_tail markdown_char markdown_index markdown_depth
+    local markdown_tail markdown_char markdown_index markdown_depth markdown_prefix markdown_next
     # Markdown destinations are authoritative and also allow paths containing
     # spaces (which bare-token scanning intentionally does not attempt).
     rest="$line"
     local _lpr_title_re="^(.+)[[:space:]]+(\"[^\"]*\"|'[^']*'|\\([^)]*\\))$"
     while [[ "$rest" == *']('* ]]; do
+        markdown_prefix="${rest%%']('*}"
+        # Require an unescaped `[` before the destination marker.  Escaped or
+        # otherwise malformed Markdown must not fall through into the bare
+        # path scanner, where its final token could look like a citation.
+        if ! _lpr_core_markdown_prefix_has_open "$markdown_prefix"; then
+            line="${line%%']('*}"
+            break
+        fi
         markdown_tail="${rest#*']('}"
         target=""
         markdown_index=0
         markdown_depth=1
         while [[ "$markdown_index" -lt "${#markdown_tail}" ]]; do
             markdown_char="${markdown_tail:$markdown_index:1}"
+            markdown_next="${markdown_tail:$((markdown_index + 1)):1}"
+            # Markdown backslash escapes make punctuation literal inside a
+            # destination.  Unescape those punctuation characters for path
+            # inspection and, crucially, do not count escaped parentheses as
+            # structural delimiters.
+            if [[ "$markdown_char" == \\ ]]; then
+                case "$markdown_next" in
+                    '('|')'|'['|']'|'\\')
+                        target="${target}${markdown_next}"
+                        markdown_index=$((markdown_index + 2))
+                        continue
+                        ;;
+                esac
+            fi
             case "$markdown_char" in
                 '(') markdown_depth=$((markdown_depth + 1)) ;;
                 ')')
@@ -343,8 +435,11 @@ _lpr_core_scan_line() {
         done
         # A malformed destination is not a concrete citation.  Leave it to
         # callers with richer syntax knowledge rather than guessing here.
-        [[ "$markdown_depth" -eq 0 ]] || break
-        markdown_match="](${target})"
+        if [[ "$markdown_depth" -ne 0 ]]; then
+            line="${line%%']('*}"
+            break
+        fi
+        markdown_match="](${markdown_tail:0:$((markdown_index + 1))}"
         if [[ "$target" =~ $_lpr_title_re ]]; then
             target="${BASH_REMATCH[1]}"
         fi
@@ -360,13 +455,20 @@ _lpr_core_scan_line() {
         rest="${markdown_tail:$((markdown_index + 1))}"
     done
 
+    # The escaped `]\(` form never enters the destination loop above.  Strip
+    # it before bare scanning for the same fail-open reason as other malformed
+    # or escaped Markdown shapes.
+    if _lpr_core_escaped_markdown_prefix "$line"; then
+        line="$_LPR_ESCAPED_MARKDOWN_PREFIX"
+    fi
+
     # Callers can hand the core one concrete value, including an attachment
     # path with spaces.  Try that whole value before the intentionally
     # conservative word scan below, which would otherwise split the path.
     _lpr_core_trim_candidate "$line"
     candidate="$_LPR_CANDIDATE"
     case "$candidate" in
-        /*|~|~/*|\$HOME|\$HOME/*|\${HOME}|\${HOME}/*|\$OMT_DIR|\$OMT_DIR/*|\${OMT_DIR}|\${OMT_DIR}/*|./*|../*|file:///*|*/*)
+        /*|~|~/*|\$HOME|\$HOME/*|\${HOME}|\${HOME}/*|\$OMT_DIR|\$OMT_DIR/*|\${OMT_DIR}|\${OMT_DIR}/*|./*|../*|file:///*|file://localhost/*|*/*)
             _lpr_core_consider "$candidate" "$line_no" "$scan_context"
             ;;
     esac
@@ -385,7 +487,7 @@ _lpr_core_scan_line() {
         _lpr_core_trim_candidate "${words[$start]}"
         candidate="$_LPR_CANDIDATE"
         case "$candidate" in
-            /*|~|~/*|\$HOME|\$HOME/*|\${HOME}|\${HOME}/*|\$OMT_DIR|\$OMT_DIR/*|\${OMT_DIR}|\${OMT_DIR}/*|./*|../*|file:///*|*/*) ;;
+            /*|~|~/*|\$HOME|\$HOME/*|\${HOME}|\${HOME}/*|\$OMT_DIR|\$OMT_DIR/*|\${OMT_DIR}|\${OMT_DIR}/*|./*|../*|file:///*|file://localhost/*|*/*) ;;
             *) continue ;;
         esac
         joined=""
@@ -395,7 +497,7 @@ _lpr_core_scan_line() {
             _lpr_core_trim_candidate "$joined"
             candidate="$_LPR_CANDIDATE"
             case "$candidate" in
-                /*|~|~/*|\$HOME|\$HOME/*|\${HOME}|\${HOME}/*|\$OMT_DIR|\$OMT_DIR/*|\${OMT_DIR}|\${OMT_DIR}/*|./*|../*|file:///*|*/*)
+                /*|~|~/*|\$HOME|\$HOME/*|\${HOME}|\${HOME}/*|\$OMT_DIR|\$OMT_DIR/*|\${OMT_DIR}|\${OMT_DIR}/*|./*|../*|file:///*|file://localhost/*|*/*)
                     if _lpr_core_candidate_exists "$candidate"; then
                         _lpr_core_consider "$candidate" "$line_no" "$scan_context"
                         break
