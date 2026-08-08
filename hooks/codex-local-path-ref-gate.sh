@@ -102,7 +102,13 @@ _lpr_check_text_from_segment_cwd() {
                     /*|*'://'*) continue ;;
                     *//*|*'\\'*|*'"'*|*'?'*|*'*'*|*'{'*|*'}'*) continue ;;
                     */*|*.md|*.markdown|*.yaml|*.yml|*.json|*.toml|*.txt|*.sh|*.ts|*.tsx|*.js|*.jsx) ;;
-                    *) continue ;;
+                    *)
+                        # Extensionless filenames are valid local references
+                        # too, but only when a readable file proves the token
+                        # is concrete in the effective CWD.
+                        absolute="$base_cwd/$candidate"
+                        [ -f "$absolute" ] && [ -r "$absolute" ] || continue
+                        ;;
                 esac
                 absolute="$base_cwd/$candidate"
                 if [ ! -f "$absolute" ] || [ ! -r "$absolute" ]; then
@@ -742,7 +748,7 @@ case "$tool_name" in
         [ "${rc:-0}" -eq 2 ] && exit 0
         exit 0
         ;;
-    mcp__notion__notion_convert_page_to_skill|mcp__notion__notion_create_attachment|mcp__notion__notion_create_comment|mcp__notion__notion_create_database|mcp__notion__notion_create_file_upload|mcp__notion__notion_create_folder|mcp__notion__notion_create_pages|mcp__notion__notion_create_view|mcp__notion__notion_duplicate_page|mcp__notion__notion_move_pages|mcp__notion__notion_update_data_source|mcp__notion__notion_update_page|mcp__notion__notion_update_view|mcp__slack__slack_add_reaction|mcp__slack__slack_create_canvas|mcp__slack__slack_create_conversation|mcp__slack__slack_schedule_message|mcp__slack__slack_send_message|mcp__slack__slack_send_message_draft|mcp__slack__slack_update_canvas|mcp__linear__create_attachment|mcp__linear__create_attachment_from_upload|mcp__linear__create_initiative_label|mcp__linear__create_issue_label|mcp__linear__delete_attachment|mcp__linear__delete_comment|mcp__linear__delete_diff_comment|mcp__linear__delete_status_update|mcp__linear__merge_diff|mcp__linear__prepare_attachment_upload|mcp__linear__resolve_diff_thread|mcp__linear__save_comment|mcp__linear__save_diff_comment|mcp__linear__save_document|mcp__linear__save_initiative|mcp__linear__save_issue|mcp__linear__save_milestone|mcp__linear__save_project|mcp__linear__save_release|mcp__linear__save_release_note|mcp__linear__save_status_update|mcp__linear__submit_diff_review)
+    mcp__notion__notion_append_block_children|mcp__notion__notion_archive_page|mcp__notion__notion_convert_page_to_skill|mcp__notion__notion_create_attachment|mcp__notion__notion_create_comment|mcp__notion__notion_create_database|mcp__notion__notion_create_file_upload|mcp__notion__notion_create_folder|mcp__notion__notion_create_pages|mcp__notion__notion_create_view|mcp__notion__notion_duplicate_page|mcp__notion__notion_move_pages|mcp__notion__notion_update_block|mcp__notion__notion_update_comment|mcp__notion__notion_update_data_source|mcp__notion__notion_update_page|mcp__notion__notion_update_page_preview|mcp__notion__notion_update_view|mcp__slack__slack_add_reaction|mcp__slack__slack_create_canvas|mcp__slack__slack_create_conversation|mcp__slack__slack_schedule_message|mcp__slack__slack_send_message|mcp__slack__slack_send_message_draft|mcp__slack__slack_update_canvas|mcp__slack__slack_upload_file|mcp__linear__create_attachment|mcp__linear__create_attachment_from_upload|mcp__linear__create_comment|mcp__linear__create_initiative_label|mcp__linear__create_issue|mcp__linear__create_issue_label|mcp__linear__delete_attachment|mcp__linear__delete_comment|mcp__linear__delete_diff_comment|mcp__linear__delete_status_update|mcp__linear__merge_diff|mcp__linear__prepare_attachment_upload|mcp__linear__resolve_diff_thread|mcp__linear__save_comment|mcp__linear__save_diff_comment|mcp__linear__save_document|mcp__linear__save_initiative|mcp__linear__save_issue|mcp__linear__save_issue_comment|mcp__linear__save_milestone|mcp__linear__save_project|mcp__linear__save_release|mcp__linear__save_release_note|mcp__linear__save_status_update|mcp__linear__submit_diff_review|mcp__linear__update_issue)
         _lpr_prepare_repo || exit 0
         case "$tool_name" in
             mcp__notion__notion_create_attachment|mcp__notion__notion_create_file_upload|mcp__linear__create_attachment|mcp__linear__create_attachment_from_upload|mcp__linear__prepare_attachment_upload)
@@ -754,7 +760,7 @@ case "$tool_name" in
         inspectable=$(printf '%s' "$input" | jq -r 'if (.tool_input? | type) == "object" or (.tool_input? | type) == "array" then .tool_input | .. | strings else empty end' 2>/dev/null) || exit 0
         [ -n "$inspectable" ] || exit 0
         rc=0
-        _lpr_check_text "$inspectable" || rc=$?
+        _lpr_check_text_from_segment_cwd "$inspectable" "$inspectable" || rc=$?
         [ "$rc" -eq 2 ] && exit 0
         exit 0
         ;;

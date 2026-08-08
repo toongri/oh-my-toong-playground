@@ -264,6 +264,24 @@ test_shell_cwd_fallback_preserves_spaces_and_colons() {
     printf '%s' "$RUN_OUTPUT" | grep -F 'docs/local file:with-colon.md' >/dev/null || return 1
 }
 
+test_shell_cwd_fallback_detects_extensionless_file() {
+    local command payload
+    mkdir -p "$REPO/subdir"
+    printf 'extensionless fixture\n' > "$REPO/subdir/private"
+
+    command='cd subdir && gh pr create --body "See private"'
+    payload=$(shell_payload bash "$command")
+    run_payload "$payload"
+    assert_codex_deny "$RUN_OUTPUT" || return 1
+    printf '%s' "$RUN_OUTPUT" | grep -F 'private' >/dev/null || return 1
+
+    command='cd subdir && curl -X POST https://api.notion.com/v1/pages --data "See private"'
+    payload=$(shell_payload bash "$command")
+    run_payload "$payload"
+    assert_codex_deny "$RUN_OUTPUT" || return 1
+    printf '%s' "$RUN_OUTPUT" | grep -F 'private' >/dev/null
+}
+
 test_gh_and_curl_paths_follow_shell_cd() {
     local command payload
     mkdir -p "$REPO/subdir/docs"
@@ -604,15 +622,36 @@ test_git_commit_detects_staged_path_with_spaces() {
 test_mcp_outbound_write_argument_strings_deny() {
     local tool_name payload
     for tool_name in \
+        mcp__notion__notion_append_block_children \
+        mcp__notion__notion_archive_page \
         mcp__notion__notion_update_page \
+        mcp__notion__notion_update_block \
+        mcp__notion__notion_update_comment \
+        mcp__notion__notion_update_page_preview \
         mcp__slack__slack_send_message \
-        mcp__linear__save_issue; do
+        mcp__slack__slack_upload_file \
+        mcp__linear__create_comment \
+        mcp__linear__create_issue \
+        mcp__linear__save_issue \
+        mcp__linear__save_issue_comment \
+        mcp__linear__update_issue; do
         payload=$(jq -nc --arg cwd "$REPO" --arg t "$tool_name" \
             '{cwd:$cwd,tool_name:$t,tool_input:{body:{text:"See docs/untracked.md"},nested:["safe",{"detail":"docs/untracked.md"}]}}')
         run_payload "$payload"
         assert_codex_deny "$RUN_OUTPUT" || return 1
         printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
     done
+}
+
+test_mcp_text_payload_resolves_effective_workdir() {
+    local payload
+    mkdir -p "$REPO/subdir"
+    printf 'extensionless fixture\n' > "$REPO/subdir/private"
+    payload=$(jq -nc --arg cwd "$REPO" \
+        '{cwd:$cwd,tool_name:"mcp__notion__notion_update_page",tool_input:{workdir:"subdir",body:{text:"See private"}}}')
+    run_payload "$payload"
+    assert_codex_deny "$RUN_OUTPUT" || return 1
+    printf '%s' "$RUN_OUTPUT" | grep -F 'private' >/dev/null
 }
 
 test_mcp_attachment_path_deny() {
@@ -703,6 +742,19 @@ test_yaml_registers_full_matcher() {
     grep -F 'mcp__notion__notion_update_page' "$SCRIPT_DIR/../codex.yaml" >/dev/null || return 1
     grep -F 'mcp__slack__slack_send_message' "$SCRIPT_DIR/../codex.yaml" >/dev/null || return 1
     grep -F 'mcp__linear__save_issue' "$SCRIPT_DIR/../codex.yaml" >/dev/null || return 1
+    for route in \
+        mcp__notion__notion_append_block_children \
+        mcp__notion__notion_archive_page \
+        mcp__notion__notion_update_block \
+        mcp__notion__notion_update_comment \
+        mcp__notion__notion_update_page_preview \
+        mcp__slack__slack_upload_file \
+        mcp__linear__create_comment \
+        mcp__linear__create_issue \
+        mcp__linear__save_issue_comment \
+        mcp__linear__update_issue; do
+        grep -F "$route" "$SCRIPT_DIR/../codex.yaml" >/dev/null || return 1
+    done
     ! grep -F 'mcp__notion__.*' "$SCRIPT_DIR/../codex.yaml" || return 1
     ! grep -F 'mcp__slack__.*' "$SCRIPT_DIR/../codex.yaml" || return 1
     ! grep -F 'mcp__linear__.*' "$SCRIPT_DIR/../codex.yaml"
@@ -723,6 +775,7 @@ main() {
     run_test test_leading_env_assignments_route_gh_and_curl
     run_test test_shell_cwd_relative_payload_classification
     run_test test_shell_cwd_fallback_preserves_spaces_and_colons
+    run_test test_shell_cwd_fallback_detects_extensionless_file
     run_test test_gh_and_curl_paths_follow_shell_cd
     run_test test_target_curl_payloads_deny
     run_test test_target_curl_api_root_endpoints_deny
@@ -749,6 +802,7 @@ main() {
     run_test test_git_repeated_dash_c_cd_and_later_valid_segment_deny
     run_test test_git_commit_detects_staged_path_with_spaces
     run_test test_mcp_outbound_write_argument_strings_deny
+    run_test test_mcp_text_payload_resolves_effective_workdir
     run_test test_mcp_attachment_path_deny
     run_test test_mcp_read_only_routes_allow_local_path_arguments
     run_test test_allow_safe_and_fail_open_shapes
