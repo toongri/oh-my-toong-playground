@@ -63,6 +63,7 @@ The details of the library's skills (46) and agents (13) live under `docs/`.
 | [Orchestration Guide](docs/ORCHESTRATION.en.md) | prometheus → sisyphus workflow and usage |
 | [Model Assignment](docs/model-assignment.en.md) | Per-agent model tier principles and `model-map` substitution rules |
 | [Platform YAML Configuration Deployment](docs/platform-yaml-config-deployment.en.md) | Deployment, merge, and deletion rules for platform-specific settings, hooks, and MCPs |
+| [Outbound Local-Reference Gate](docs/outbound-local-reference-gate.en.md) | Predicate, scope, and remedies for local-path references sent to commits, PR creates/edits/comments, Notion, Slack, and Linear |
 
 ## Quick Start
 
