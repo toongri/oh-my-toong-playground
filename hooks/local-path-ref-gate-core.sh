@@ -58,19 +58,35 @@ _lpr_core_expand_path() {
 
 _lpr_core_trim_candidate() {
     local value="$1"
-    case "$value" in
-        '<*>'|"'*'"|'"*"') value="${value#?}"; value="${value%?}" ;;
-    esac
     # Link fragments identify an anchor, not a second local file.
     value="${value%%#*}"
-    # Bare prose commonly puts sentence punctuation after a path.
+    # Bare Markdown/prose commonly wraps paths in paired delimiters and puts
+    # sentence punctuation after them.  Remove only edge delimiters so
+    # meaningful characters inside a filename (for example notes(1).md) stay
+    # intact.
     while :; do
         case "$value" in
             *[.,:]) value="${value%?}" ;;
             *';') value="${value%?}" ;;
+            *\)) value="${value%?}" ;;
             *) break ;;
         esac
     done
+    while :; do
+        case "$value" in
+            '<*>'|"'*'"|'"*"'|\`*\`|\(*\)|\[*\]|\{*\})
+                value="${value#?}"
+                value="${value%?}"
+                ;;
+            *) break ;;
+        esac
+    done
+    # A Markdown/prose scanner may leave one side of a delimiter in the
+    # captured token (for example `(docs/reference)`).  Remove that edge only
+    # after sentence punctuation and paired wrappers have been handled.
+    case "$value" in
+        \(*|\[*|\{*|\`*|\'*|\"*) value="${value#?}" ;;
+    esac
     _LPR_CANDIDATE="$value"
 }
 
@@ -177,8 +193,20 @@ _lpr_core_consider() {
 }
 
 _lpr_core_scan_line() {
-    local line="$1" line_no="$2" rest target token
-    local _lpr_md_re='\]\(([^)]*)\)'
+    local line="$1" line_no="$2" rest target token candidate
+    local _lpr_location_re='^[^[:space:]:][^:]*:[1-9][0-9]*:[[:space:]]*'
+    # Staged-diff adapters prefix added content with `path:line: `.  That
+    # location metadata is not part of the citation text; inspect only the
+    # content after it so an extensionless path classifier cannot mistake
+    # `docs/file.md:2:` for a repository-relative path.
+    if [[ "$line" =~ $_lpr_location_re ]]; then
+        line="${line#"${BASH_REMATCH[0]}"}"
+    fi
+    # Permit balanced parentheses in a Markdown destination (for example a
+    # filename such as `report(2026).md`) while still stopping at the link's
+    # closing delimiter.  Bash's ERE cannot recurse, but this handles the
+    # one-level grouping used by ordinary local filenames and prose wrappers.
+    local _lpr_md_re='\]\(((\([^()]*\)|[^)])*)\)'
     # Markdown destinations are authoritative and also allow paths containing
     # spaces (which bare-token scanning intentionally does not attempt).
     rest="$line"
@@ -194,11 +222,15 @@ _lpr_core_scan_line() {
     read -r -a words <<< "$line"
     for token in "${words[@]}"; do
         case "$token" in
-            *']('*|*'('*) continue ;;
-            /*|~|~/*|\$HOME|\$HOME/*|\${HOME}|\${HOME}/*|\$OMT_DIR|\$OMT_DIR/*|\${OMT_DIR}|\${OMT_DIR}/*|./*|../*)
-                _lpr_core_consider "$token" "$line_no" ;;
+            *']('*) continue ;;
+        esac
+        _lpr_core_trim_candidate "$token"
+        candidate="$_LPR_CANDIDATE"
+        case "$candidate" in
+            /*|~|~/*|\$HOME|\$HOME/*|\${HOME}|\${HOME}/*|\$OMT_DIR|\$OMT_DIR/*|\${OMT_DIR}|\${OMT_DIR}/*|./*|../*|*/*)
+                _lpr_core_consider "$candidate" "$line_no" ;;
             *.md|*.markdown|*.yaml|*.yml|*.json|*.toml|*.txt|*.sh|*.ts|*.tsx|*.js|*.jsx)
-                _lpr_core_consider "$token" "$line_no" ;;
+                _lpr_core_consider "$candidate" "$line_no" ;;
         esac
     done
 }

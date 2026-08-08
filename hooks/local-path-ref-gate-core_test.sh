@@ -28,7 +28,11 @@ git -C "$REPO" config user.email test@example.invalid
 git -C "$REPO" config user.name test
 printf 'tracked\n' > "$REPO/docs/tracked.md"
 git -C "$REPO" add docs/tracked.md
+printf 'old tracked content\n' > "$REPO/docs/old.md"
+git -C "$REPO" add docs/old.md
 printf 'untracked in repo\n' > "$REPO/docs/untracked.md"
+printf 'untracked extensionless in repo\n' > "$REPO/docs/untracked-extensionless"
+printf 'untracked parenthesized in repo\n' > "$REPO/docs/untracked-parenthesized(2026).md"
 printf 'machine local\n' > "$HOME/private-notes.md"
 printf 'session state\n' > "$OMT_DIR/session.md"
 
@@ -103,6 +107,52 @@ test_existing_relative_untracked_file_reports_machine_local() {
     printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null
 }
 
+test_parenthesized_bare_untracked_file_reports_machine_local() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See (docs/untracked.md).') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'path=docs/untracked.md' >/dev/null
+}
+
+test_delimited_missing_extensionless_path_reports_missing() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See `docs/not-present-extensionless`.') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=repo-relative-missing' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'path=docs/not-present-extensionless' >/dev/null
+}
+
+test_existing_relative_untracked_extensionless_file_reports_machine_local() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See docs/untracked-extensionless.') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'path=docs/untracked-extensionless' >/dev/null
+}
+
+test_markdown_parenthesized_path_reports_machine_local() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See [the report](docs/untracked-parenthesized(2026).md).') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'path=docs/untracked-parenthesized(2026).md' >/dev/null
+}
+
+test_location_prefix_only_inspects_actual_content() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'docs/old.md:2: unrelated new line') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_location_prefix_preserves_content_path_classification() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'docs/old.md:2: docs/untracked-extensionless') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    ! printf '%s' "$out" | grep -F 'path=docs/old.md:2' >/dev/null
+}
+
 test_setup_error_fails_open() {
     local out rc=0
     out=$(local_path_ref_gate_core_check "$TEST_TMP_DIR/not-a-repository" 'docs/missing.md') || rc=$?
@@ -117,6 +167,12 @@ run_test test_existing_absolute_tracked_file_reports_relative_remediation
 run_test test_nonexistent_concrete_local_path_allows
 run_test test_existing_relative_file_allows
 run_test test_existing_relative_untracked_file_reports_machine_local
+run_test test_parenthesized_bare_untracked_file_reports_machine_local
+run_test test_delimited_missing_extensionless_path_reports_missing
+run_test test_existing_relative_untracked_extensionless_file_reports_machine_local
+run_test test_markdown_parenthesized_path_reports_machine_local
+run_test test_location_prefix_only_inspects_actual_content
+run_test test_location_prefix_preserves_content_path_classification
 run_test test_setup_error_fails_open
 
 echo "Passed: $TESTS_PASSED, Failed: $TESTS_FAILED"
