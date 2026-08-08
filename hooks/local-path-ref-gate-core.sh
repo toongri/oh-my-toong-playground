@@ -6,6 +6,7 @@
 # It intentionally does not emit a deny envelope.  The shim calls:
 #
 #   local_path_ref_gate_core_check <repository-root> <inspectable-text>
+#   local_path_ref_gate_core_check_attachment <repository-root> <attachment-path>
 #
 # The text is scanned line by line (the caller may include any source text and
 # file/line context it has).  The function prints one tab-separated record for
@@ -18,7 +19,7 @@
 # deliberately type-specific.  Return status is 0 when at least one record was
 # emitted and 1 for allow, including malformed/setup-error input (fail open).
 # The supported TYPE values are `repo-relative-missing`,
-# `machine-local-untracked`, and `absolute-tracked`.
+# `machine-local-untracked`, `absolute-tracked`, and `local-attachment`.
 #
 # Bash 3.2/macOS compatible.  No shell-command parsing, network/MCP
 # extraction, or platform-specific JSON belongs here.
@@ -58,6 +59,12 @@ _lpr_core_expand_path() {
 
 _lpr_core_trim_candidate() {
     local value="$1"
+    # A literal local filename can contain `#`; retain it when it resolves
+    # before treating a remaining fragment as a Markdown anchor.
+    if _lpr_core_candidate_exists "$value"; then
+        _LPR_CANDIDATE="$value"
+        return
+    fi
     # Link fragments identify an anchor, not a second local file.
     value="${value%%#*}"
     # Preserve a concrete filename whose final character is also commonly
@@ -150,6 +157,12 @@ EOF
 
 _lpr_core_emit() {
     local line_no="$1" kind="$2" display_path="$3" remediation="$4"
+    # Records are TSV for shim consumption.  Escape control characters from a
+    # filename so an inspectable local path cannot change the record shape.
+    display_path="${display_path//\\/\\\\}"
+    display_path="${display_path//$'\t'/\\t}"
+    display_path="${display_path//$'\r'/\\r}"
+    display_path="${display_path//$'\n'/\\n}"
     local key="${line_no}\t${kind}\t${display_path}"
     if _lpr_core_seen "$key"; then
         return 0
@@ -247,6 +260,11 @@ _lpr_core_consider() {
                 # form.  An existing but untracked relative target is still a
                 # machine-local file and needs the same inline/copy remedy.
                 if _lpr_core_is_tracked_absolute "$_LPR_REPO_ROOT/$candidate"; then
+                    if [[ "$context" == "attachment" ]]; then
+                        _lpr_core_emit "$line_no" "local-attachment" "$display_candidate" \
+                            "do not attach local files; inline a summary or link to the repository file"
+                        return 0
+                    fi
                     return 0
                 else
                     [[ "$?" -eq 2 ]] && return 0
@@ -264,7 +282,7 @@ _lpr_core_consider() {
 }
 
 _lpr_core_scan_line() {
-    local line="$1" line_no="$2" rest target token candidate markdown_match
+    local line="$1" line_no="$2" scan_context="${3-bare}" rest target token candidate markdown_match
     local markdown_tail markdown_char markdown_index markdown_depth
     # Markdown destinations are authoritative and also allow paths containing
     # spaces (which bare-token scanning intentionally does not attempt).
@@ -294,7 +312,11 @@ _lpr_core_scan_line() {
         if [[ "$target" =~ $_lpr_title_re ]]; then
             target="${BASH_REMATCH[1]}"
         fi
-        _lpr_core_consider "$target" "$line_no" markdown
+        if [[ "$scan_context" == "attachment" ]]; then
+            _lpr_core_consider "$target" "$line_no" attachment
+        else
+            _lpr_core_consider "$target" "$line_no" markdown
+        fi
         # Do not scan a Markdown destination again as bare prose.  In
         # particular, a destination with spaces would otherwise leave its
         # final word to be reported as a spurious missing path.
@@ -309,7 +331,7 @@ _lpr_core_scan_line() {
     candidate="$_LPR_CANDIDATE"
     case "$candidate" in
         /*|~|~/*|\$HOME|\$HOME/*|\${HOME}|\${HOME}/*|\$OMT_DIR|\$OMT_DIR/*|\${OMT_DIR}|\${OMT_DIR}/*|./*|../*|file:///*|*/*)
-            _lpr_core_consider "$candidate" "$line_no" bare
+            _lpr_core_consider "$candidate" "$line_no" "$scan_context"
             ;;
     esac
 
@@ -318,11 +340,13 @@ _lpr_core_scan_line() {
     local -a words
     read -r -a words <<< "$line"
     for token in "${words[@]}"; do
-        local context=bare
-        case "$token" in
-            *']('*) continue ;;
-            *'`'*|*'"'*|*"'"*|*'('*|*')'*) context=evidence ;;
-        esac
+        local context="$scan_context"
+        if [[ "$scan_context" != "attachment" ]]; then
+            case "$token" in
+                *']('*) continue ;;
+                *'`'*|*'"'*|*"'"*|*'('*|*')'*) context=evidence ;;
+            esac
+        fi
         _lpr_core_trim_candidate "$token"
         candidate="$_LPR_CANDIDATE"
         case "$candidate" in
@@ -343,9 +367,9 @@ _lpr_core_scan_line() {
     done
 }
 
-# local_path_ref_gate_core_check <repository-root> <inspectable-text>
+# local_path_ref_gate_core_check <repository-root> <inspectable-text> [context]
 local_path_ref_gate_core_check() {
-    local repo_root="${1-}" inspectable_text="${2-}" line line_no=0
+    local repo_root="${1-}" inspectable_text="${2-}" scan_context="${3-bare}" line line_no=0
     [[ -n "$repo_root" && -d "$repo_root" ]] || return 1
     # A repository/index lookup is part of classification.  Any setup failure
     # (not a repository, unavailable git, malformed root) is explicitly allow.
@@ -362,10 +386,17 @@ local_path_ref_gate_core_check() {
 
     while IFS= read -r line || [[ -n "$line" ]]; do
         line_no=$((line_no + 1))
-        _lpr_core_scan_line "$line" "$line_no"
+        _lpr_core_scan_line "$line" "$line_no" "$scan_context"
     done <<EOF
 $inspectable_text
 EOF
 
     [[ "$_LPR_COUNT" -gt 0 ]]
+}
+
+# local_path_ref_gate_core_check_attachment <repository-root> <attachment-path>
+# Attachments are local transfer inputs, not portable citations, even when a
+# matching repository-relative file is tracked.
+local_path_ref_gate_core_check_attachment() {
+    local_path_ref_gate_core_check "${1-}" "${2-}" attachment
 }
