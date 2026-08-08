@@ -71,6 +71,58 @@ _lpr_check_text() {
     return 0
 }
 
+_lpr_check_text_from_segment_cwd() {
+    local text="$1" inspectable="${2-$1}" target_repo="${3-$repo_root}"
+    local base_cwd="${_LPR_SEGMENT_CWD-$PWD}" canonical_repo_root line token candidate absolute rc=0
+    local -a words
+
+    base_cwd=$(cd "$base_cwd" 2>/dev/null && pwd -P) || return 0
+    canonical_repo_root=$(cd "$repo_root" 2>/dev/null && pwd -P) || return 0
+
+    _lpr_check_text "$text" "$inspectable" "$target_repo"
+    rc=$?
+    [ "$rc" -eq 2 ] && return 2
+    [ "$base_cwd" = "$canonical_repo_root" ] && return 0
+
+    # Relative paths inside a file payload are resolved by the outbound
+    # command from its effective shell CWD, not from the repository root.
+    # Re-check only concrete, untracked candidates under that CWD; tracked
+    # repository-relative citations remain portable and are handled above.
+    while IFS= read -r line || [ -n "$line" ]; do
+        words=()
+        read -r -a words <<< "$line" || continue
+        for token in "${words[@]}"; do
+            candidate="$token"
+            candidate="${candidate#@}"
+            candidate="${candidate#<}"
+            candidate="${candidate#\"}"
+            candidate="${candidate#'}"
+            candidate="${candidate%,}"
+            candidate="${candidate%.}"
+            candidate="${candidate%\"}"
+            candidate="${candidate%'}"
+            case "$candidate" in
+                /*|./*|../*|*//*|*:*|*'\'*|*'"'*|*'?'*|*'*'*|*'{'*|*'}'*) continue ;;
+                */*|*.md|*.markdown|*.yaml|*.yml|*.json|*.toml|*.txt|*.sh|*.ts|*.tsx|*.js|*.jsx) ;;
+                *) continue ;;
+            esac
+            absolute="$base_cwd/$candidate"
+            [ -f "$absolute" ] && [ -r "$absolute" ] || continue
+            case "$absolute" in
+                "$canonical_repo_root"/*)
+                    git -C "$canonical_repo_root" ls-files --error-unmatch -- "${absolute#"$canonical_repo_root"/}" >/dev/null 2>&1 && continue
+                    ;;
+            esac
+            _lpr_check_text "$absolute" "$inspectable" "$target_repo"
+            rc=$?
+            [ "$rc" -eq 2 ] && return 2
+        done
+    done <<EOF
+$text
+EOF
+    return 0
+}
+
 _lpr_check_staged_text() {
     local inspectable="$1" target_repo="${2-$repo_root}" scan_text
     scan_text=$(printf '%s\n' "$inspectable" | sed -E 's/^[^:]+:[0-9]+: //') || return 0
@@ -127,7 +179,14 @@ _lpr_extract_value_after() {
     while [ "$index" -lt "$length" ]; do
         char="${rest:$index:1}"
         if [ "$escaped" -eq 1 ]; then
-            value="${value}${char}"
+            if [ "$quote" = '"' ]; then
+                case "$char" in
+                    '$'|'`'|'"'|$'\\'|$'\n') value="${value}${char}" ;;
+                    *) value="${value}\\${char}" ;;
+                esac
+            else
+                value="${value}${char}"
+            fi
             escaped=0
             index=$((index + 1))
             continue
@@ -137,7 +196,7 @@ _lpr_extract_value_after() {
                 if [ "$char" = "'" ]; then quote=""; else value="${value}${char}"; fi
                 ;;
             '"')
-                if [ "$char" = '\\' ]; then
+                if [ "$char" = $'\\' ]; then
                     escaped=1
                 elif [ "$char" = '"' ]; then
                     quote=""
@@ -148,7 +207,7 @@ _lpr_extract_value_after() {
             '')
                 case "$char" in
                     "'"|'"') quote="$char" ;;
-                    '\\') escaped=1 ;;
+                    $'\\') escaped=1 ;;
                     [[:space:]]) break ;;
                     *) value="${value}${char}" ;;
                 esac
@@ -281,15 +340,31 @@ _lpr_inspect_gh_body() {
         _lpr_read_file "$value" || return 0
         value="$_LPR_VALUE"
     fi
-    _lpr_check_text "$value"
+    _lpr_check_text_from_segment_cwd "$value"
     rc=$?
     [ "$rc" -eq 2 ] && return 2
+    return 0
+}
+
+_lpr_strip_leading_env_assignments() {
+    local segment="$1" token
+    while :; do
+        _lpr_extract_value_after "$segment" || return 1
+        token="$_LPR_VALUE"
+        case "$token" in
+            [[:alpha:]_][[:alnum:]_]*=*) segment="$_LPR_REMAINDER" ;;
+            *) break ;;
+        esac
+    done
+    _LPR_COMMAND_SEGMENT="$segment"
     return 0
 }
 
 _lpr_inspect_gh() {
     local segment="$1" gh_re='^[[:space:]]*gh([[:space:]]|$)'
     local remaining token value rc=0
+    _lpr_strip_leading_env_assignments "$segment" || return 0
+    segment="$_LPR_COMMAND_SEGMENT"
     [[ "$segment" =~ $gh_re ]] || return 0
     remaining="${segment#*"${BASH_REMATCH[0]}"}"
     while :; do
@@ -365,7 +440,7 @@ _lpr_inspect_gh() {
 _lpr_check_curl_payload_text() {
     local text="$1" curl_text rc=0
     curl_text=$(printf '%s' "$text" | tr '{}\\",' '    ') || return 0
-    _lpr_check_text "$curl_text"
+    _lpr_check_text_from_segment_cwd "$curl_text"
     rc=$?
     [ "$rc" -eq 2 ] && return 2
     return 0
@@ -458,7 +533,7 @@ _lpr_inspect_curl_data() {
 
 _lpr_curl_target_url() {
     local value="$1"
-    [[ "$value" =~ ^https://(api[.]notion[.]com(:[0-9]+)?([/?#]|$)|slack[.]com(:[0-9]+)?/api([/?#]|$)|api[.]linear[.]app(:[0-9]+)?([/?#]|$)|linear[.]app(:[0-9]+)?/api([/?#]|$)) ]]
+    [[ "$value" =~ ^https://(api[.]notion[.]com(:[0-9]+)?([/?#]|$)|slack[.]com(:[0-9]+)?/api([/?#]|$)|hooks[.]slack[.]com(:[0-9]+)?/|api[.]linear[.]app(:[0-9]+)?([/?#]|$)|linear[.]app(:[0-9]+)?/api([/?#]|$)) ]]
 }
 
 _lpr_curl_has_target_url() {
@@ -509,6 +584,8 @@ _lpr_curl_has_target_url() {
 _lpr_inspect_curl() {
     local segment="$1" curl_re='^[[:space:]]*curl([[:space:]]|$)'
     local remaining token value kind rc=0
+    _lpr_strip_leading_env_assignments "$segment" || return 0
+    segment="$_LPR_COMMAND_SEGMENT"
     [[ "$segment" =~ $curl_re ]] || return 0
     # Parse target URL tokens before inspecting payloads. A target-looking
     # string inside a quoted payload is data, not the curl request endpoint.
@@ -670,7 +747,14 @@ _lpr_each_shell_command() {
     while [ "$index" -lt "$length" ]; do
         char="${source:$index:1}"
         if [ "$escaped" -eq 1 ]; then
-            segment="${segment}${char}"
+            if [ "$quote" = '"' ]; then
+                case "$char" in
+                    '$'|'`'|'"'|$'\\'|$'\n') segment="${segment}${char}" ;;
+                    *) segment="${segment}\\${char}" ;;
+                esac
+            else
+                segment="${segment}${char}"
+            fi
             escaped=0
             index=$((index + 1))
             continue
@@ -682,7 +766,7 @@ _lpr_each_shell_command() {
                 ;;
             '"')
                 segment="${segment}${char}"
-                if [ "$char" = '\\' ]; then
+                if [ "$char" = $'\\' ]; then
                     escaped=1
                 elif [ "$char" = '"' ]; then
                     quote=""
@@ -694,7 +778,7 @@ _lpr_each_shell_command() {
                         quote="$char"
                         segment="${segment}${char}"
                         ;;
-                    '\\')
+                    $'\\')
                         segment="${segment}${char}"
                         escaped=1
                         ;;
