@@ -51,6 +51,12 @@ shell_payload() {
         '{cwd:$cwd,tool_name:$t,tool_input:{command:$c}}'
 }
 
+shell_payload_with_workdir() {
+    local workdir="$1" command="$2"
+    jq -nc --arg cwd "$REPO" --arg workdir "$workdir" --arg command "$command" \
+        '{cwd:$cwd,tool_name:"bash",tool_input:{workdir:$workdir,command:$command}}'
+}
+
 assert_codex_deny() {
     local output="$1"
     [ "$RUN_EXIT" -eq 0 ] || return 1
@@ -98,6 +104,7 @@ test_git_commit_scans_dash_c_target_and_compound_target() {
 
     for command in \
         "git -C '$target' commit -m target" \
+        "git -C'$target' commit -m target" \
         "git status && git -C '$target' commit -m target"; do
         payload=$(shell_payload bash "$command")
         run_payload "$payload"
@@ -119,6 +126,26 @@ test_shell_command_key_fallback_and_gh_body_routes() {
         payload=$(shell_payload "$tool_name" 'gh pr edit 123 --body "See docs/untracked.md"')
         run_payload "$payload"
         assert_codex_deny "$RUN_OUTPUT" || return 1
+    done
+}
+
+test_gh_short_body_flag_and_escaped_quotes_deny() {
+    local command payload
+    command='gh pr create -b "See \"docs/untracked.md\""'
+    payload=$(shell_payload bash "$command")
+    run_payload "$payload"
+    assert_codex_deny "$RUN_OUTPUT" || return 1
+    printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
+}
+
+test_quoted_separators_do_not_create_fake_gh_or_curl_commands() {
+    local command payload
+    for command in \
+        'printf '\''safe; gh pr create --body "See docs/untracked.md"'\''' \
+        'printf '\''safe && curl https://api.notion.com/v1/pages --data "{\\"text\\":\\"See docs/untracked.md\\"}"'\'''; do
+        payload=$(shell_payload bash "$command")
+        run_payload "$payload"
+        [ "$RUN_EXIT" -eq 0 ] && [ -z "$RUN_OUTPUT" ] || return 1
     done
 }
 
@@ -164,6 +191,24 @@ test_target_curl_payloads_deny() {
             printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
         done
     done
+}
+
+test_target_curl_json_payload_deny() {
+    local command payload
+    command='curl -X POST https://api.notion.com/v1/pages --json "{\"text\":\"See docs/untracked.md\"}"'
+    payload=$(shell_payload bash "$command")
+    run_payload "$payload"
+    assert_codex_deny "$RUN_OUTPUT" || return 1
+    printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
+}
+
+test_target_curl_escaped_quotes_deny() {
+    local command payload
+    command='curl -X POST https://api.notion.com/v1/pages --data "{\"text\":\"See docs/untracked.md\"}"'
+    payload=$(shell_payload bash "$command")
+    run_payload "$payload"
+    assert_codex_deny "$RUN_OUTPUT" || return 1
+    printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
 }
 
 test_target_curl_inspects_every_data_payload_and_readable_at_file() {
@@ -247,6 +292,17 @@ test_target_curl_multipart_attachments_deny() {
             done
         done
     done
+}
+
+test_target_curl_multipart_relative_workdir_deny() {
+    local command payload
+    mkdir -p "$REPO/subdir/docs"
+    printf 'png fixture\n' > "$REPO/subdir/docs/workdir.png"
+    command='curl -X POST https://api.notion.com/v1/pages -F file=@docs/workdir.png'
+    payload=$(shell_payload_with_workdir 'subdir' "$command")
+    run_payload "$payload"
+    assert_codex_deny "$RUN_OUTPUT" || return 1
+    printf '%s' "$RUN_OUTPUT" | grep -F 'docs/workdir.png' >/dev/null || return 1
 }
 
 test_target_curl_multipart_missing_attachment_fails_open() {
@@ -342,14 +398,19 @@ main() {
     run_test test_all_shell_spellings_deny_staged_added_omt_reference
     run_test test_git_commit_scans_dash_c_target_and_compound_target
     run_test test_shell_command_key_fallback_and_gh_body_routes
+    run_test test_gh_short_body_flag_and_escaped_quotes_deny
+    run_test test_quoted_separators_do_not_create_fake_gh_or_curl_commands
     run_test test_gh_compound_commands_inspect_later_create_edit_and_comment_bodies
     run_test test_gh_body_file_routes_read_file_content
     run_test test_target_curl_payloads_deny
+    run_test test_target_curl_json_payload_deny
+    run_test test_target_curl_escaped_quotes_deny
     run_test test_target_curl_inspects_every_data_payload_and_readable_at_file
     run_test test_target_curl_attached_short_options_deny
     run_test test_target_curl_data_urlencode_name_at_file_reads_content
     run_test test_target_curl_data_urlencode_missing_file_fails_open
     run_test test_target_curl_multipart_attachments_deny
+    run_test test_target_curl_multipart_relative_workdir_deny
     run_test test_target_curl_multipart_missing_attachment_fails_open
     run_test test_mcp_argument_strings_deny
     run_test test_allow_safe_and_fail_open_shapes
