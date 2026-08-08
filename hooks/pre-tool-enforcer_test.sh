@@ -1809,7 +1809,7 @@ test_rdg_sixth_candidate_denied_without_increment() {
 test_rdg_clean_and_cleanup_reviews_deny_with_completion_actions() {
     local out
     rdg_seed_pursuing
-    printf '%s' '{"status":"COMPLETE","findings":[{"class":"cleanup","verdict":"CONFIRMED"}],"reviewer":"r","at":"now"}' > "$OMT_DIR/ultragoal-codereview-$OMT_SESSION_ID.json"
+    printf '%s' '{"status":"COMPLETE","findings":[{"class":"cleanup","verdict":"CONFIRMED","impact":"LOW"}],"reviewer":"r","at":"now"}' > "$OMT_DIR/ultragoal-codereview-$OMT_SESSION_ID.json"
     out=$(rdg_agent_payload "code-reviewer" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
     hg_is_deny "$out" || { echo "ASSERTION FAILED rdg completion eligible: $out"; return 1; }
     printf '%s' "$out" | grep -q 'request-complete' || return 1

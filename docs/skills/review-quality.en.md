@@ -31,6 +31,8 @@ oh-my-toong's review and quality skills systematically verify the completeness o
 - Correctness bugs — whether changed code behaves correctly end-to-end against the surrounding system
 - Dependencies, callers, callees, interfaces, configurations, and runtime context across file boundaries
 - Classifies each finding candidate as CONFIRMED / PLAUSIBLE / REFUTED
+- The orchestrator then assigns each verified finding a class (`correctness`/`regression`/`cleanup`/`requirement-gap`, 1:1 with the angles) and an impact (`HIGH`/`MEDIUM`/`LOW`, by case lists + angle defaults) — verdict measures confidence, impact measures harm
+- Persists the full 7-field cards to `$OMT_DIR/code-review/<sid>/findings.md` — the basis for later re-adjudication
 - At higher effort levels, may also include simplification, reuse, and efficiency findings
 
 **Non-negotiable premises**:

@@ -93,7 +93,7 @@ describe("review dispatch budget", () => {
 	function writeCleanReview(): void {
 		writeCodeReviewArtifact(S, {
 			status: "COMPLETE",
-			findings: [{ class: "cleanup", verdict: "CONFIRMED" }],
+			findings: [{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW" }],
 			reviewer: "reviewer",
 			at: "2026-07-30T00:00:00",
 		});
@@ -2876,7 +2876,7 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 		writeVerdictArtifact(S, artifact); // objective lane fully green
 		writeCodeReviewArtifact(S, {
 			status: "COMPLETE",
-			findings: [{ class: "cleanup", verdict: "CONFIRMED", ref: "foo.ts:1" }],
+			findings: [{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW", ref: "foo.ts:1" }],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
 		});
@@ -2889,7 +2889,7 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 		writeVerdictArtifact(S, artifact);
 		writeCodeReviewArtifact(S, {
 			status: "COMPLETE",
-			findings: [{ class: "correctness", verdict: "CONFIRMED", ref: "foo.ts:2" }],
+			findings: [{ class: "correctness", verdict: "CONFIRMED", impact: "HIGH", ref: "foo.ts:2" }],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
 		});
@@ -2916,7 +2916,7 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 		writeVerdictArtifact(S, artifact);
 		writeCodeReviewArtifact(S, {
 			status: "COMPLETE",
-			findings: [{ class: "cleanup", verdict: "PLAUSIBLE", ref: "foo.ts:3" }],
+			findings: [{ class: "cleanup", verdict: "PLAUSIBLE", impact: "LOW", ref: "foo.ts:3" }],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
 		});
@@ -2947,7 +2947,7 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 		writeVerdictArtifact(S, artifact);
 		writeCodeReviewArtifact(S, {
 			status: "COMPLETE",
-			findings: [{ class: "correctness", verdict: "BOGUS", ref: "foo.ts:4" }],
+			findings: [{ class: "correctness", verdict: "BOGUS", impact: "MEDIUM", ref: "foo.ts:4" }],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
 		});
@@ -3056,7 +3056,7 @@ describe("story layer: code-review INCONCLUSIVE status (TODO 2)", () => {
 		writeVerdictArtifact(S, artifact);
 		writeCodeReviewArtifact(S, {
 			status: "COMPLETE",
-			findings: [{ class: "correctness", verdict: "CONFIRMED", ref: "foo.ts:9" }],
+			findings: [{ class: "correctness", verdict: "CONFIRMED", impact: "HIGH", ref: "foo.ts:9" }],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
 		});
@@ -3079,7 +3079,7 @@ describe("requirement-gap class: validator accepts and gate keys on verdict", ()
 		writeVerdictArtifact(S, artifact);
 		writeCodeReviewArtifact(S, {
 			status: "COMPLETE",
-			findings: [{ class: "requirement-gap", verdict: "PLAUSIBLE", ref: "foo.ts:1" }],
+			findings: [{ class: "requirement-gap", verdict: "PLAUSIBLE", impact: "LOW", ref: "foo.ts:1" }],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
 		});
@@ -3095,7 +3095,7 @@ describe("requirement-gap class: validator accepts and gate keys on verdict", ()
 		writeVerdictArtifact(S, artifact);
 		writeCodeReviewArtifact(S, {
 			status: "COMPLETE",
-			findings: [{ class: "requirement-gap", verdict: "CONFIRMED", ref: "foo.ts:2" }],
+			findings: [{ class: "requirement-gap", verdict: "CONFIRMED", impact: "HIGH", ref: "foo.ts:2" }],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
 		});

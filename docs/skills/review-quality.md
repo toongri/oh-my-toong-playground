@@ -31,6 +31,8 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 - 정확성 버그 — 변경된 코드가 주변 시스템과 맞물려 올바르게 동작하는지
 - 의존성·호출자·인터페이스·설정·런타임 컨텍스트를 파일 경계를 넘어 추적
 - 리뷰 candidate를 CONFIRMED / PLAUSIBLE / REFUTED 세 등급으로 판정
+- 검증을 통과한 finding에 orchestrator가 class(`correctness`/`regression`/`cleanup`/`requirement-gap`, 앵글과 1:1)와 impact(`HIGH`/`MEDIUM`/`LOW`, 케이스 목록 + 앵글 기본값)를 배정 — verdict는 신뢰도, impact는 해악을 잼
+- 카드 전문(7필드)을 `$OMT_DIR/code-review/<sid>/findings.md`로 영속 — 사후 재판정의 근거
 - effort 수준에 따라 단순화·재사용·효율화 항목도 포함 가능
 
 **핵심 원칙** — 두 가지는 협상 불가:
