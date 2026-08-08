@@ -198,9 +198,54 @@ _lpr_curl_payload() {
     return 0
 }
 
+_lpr_curl_form() {
+    local segment="$1" marker rest
+    local form_re='(^|[[:space:]])(--form|-F)(=|[[:space:]])'
+    [[ "$segment" =~ $form_re ]] || return 1
+    marker="${BASH_REMATCH[0]}"
+    rest="${segment#*"$marker"}"
+    _lpr_extract_value_after "$rest" || return 1
+    _LPR_CURL_REMAINDER="$_LPR_REST_AFTER_VALUE"
+    return 0
+}
+
+_lpr_curl_form_attachment() {
+    local form="$1" path expanded
+    case "$form" in
+        @*) path="${form#@}" ;;
+        *=@*) path="${form#*=@}" ;;
+        *) return 0 ;;
+    esac
+    # curl permits options after an attachment path (for example
+    # `;type=image/png`).  The path itself is the only part classified here.
+    path="${path%%;*}"
+    [ -n "$path" ] || return 0
+
+    # An unreadable/missing attachment is an inspection failure, not a
+    # citation violation.  Preserve the gate's fail-open contract before
+    # handing the concrete path to the shared classifier.
+    _lpr_core_expand_path "$path" || return 0
+    expanded="$_LPR_EXPANDED"
+    case "$expanded" in
+        /*) ;;
+        *) expanded="$repo_root/$expanded" ;;
+    esac
+    [ -f "$expanded" ] && [ -r "$expanded" ] || return 0
+
+    _lpr_check_text "$path"
+    case "$?" in
+        2) return 2 ;;
+    esac
+
+    # The attachment path itself is outbound local content.  Its concrete
+    # reference is sufficient for the shared classifier; do not reinterpret
+    # arbitrary binary bytes as shell/prose text.
+    return 0
+}
+
 _lpr_inspect_curl() {
     local curl_re='(^|[;&|])[[:space:]]*curl([[:space:]]|$)' target_re
-    local segment curl_text remaining rc
+    local segment curl_text remaining rc form_rc
     [[ "$cmd" =~ $curl_re ]] || return 0
     segment="${cmd#*"${BASH_REMATCH[0]}"}"
     target_re='(^|[[:space:]'\''"])https://(api[.]notion[.]com|slack[.]com/api|api[.]linear[.]app|linear[.]app/api)'
@@ -213,7 +258,17 @@ _lpr_inspect_curl() {
         rc=0
         remaining="$_LPR_CURL_REMAINDER"
     done
-    return $?
+
+    # Multipart options are independent from --data options; inspect every
+    # --form/-F occurrence rather than stopping after the first one.
+    remaining="$segment"
+    while _lpr_curl_form "$remaining"; do
+        form_rc=0
+        _lpr_curl_form_attachment "$_LPR_VALUE" || form_rc=$?
+        [ "$form_rc" -eq 2 ] && return 2
+        remaining="$_LPR_CURL_REMAINDER"
+    done
+    return 0
 }
 
 _lpr_shell_route() {
