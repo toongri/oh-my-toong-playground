@@ -532,7 +532,18 @@ _lpr_inspect_curl_data() {
 }
 
 _lpr_curl_target_url() {
-    local value="$1"
+    local value="$1" scheme rest authority suffix
+    case "$value" in
+        *://*) ;;
+        *) return 1 ;;
+    esac
+    scheme="${value%%://*}"
+    rest="${value#*://}"
+    authority="${rest%%[/?#]*}"
+    suffix="${rest#"$authority"}"
+    scheme=$(printf '%s' "$scheme" | tr '[:upper:]' '[:lower:]') || return 1
+    authority=$(printf '%s' "$authority" | tr '[:upper:]' '[:lower:]') || return 1
+    value="${scheme}://${authority}${suffix}"
     [[ "$value" =~ ^https://(api[.]notion[.]com(:[0-9]+)?([/?#]|$)|slack[.]com(:[0-9]+)?/api([/?#]|$)|hooks[.]slack[.]com(:[0-9]+)?/|api[.]linear[.]app(:[0-9]+)?([/?#]|$)|linear[.]app(:[0-9]+)?/api([/?#]|$)) ]]
 }
 
