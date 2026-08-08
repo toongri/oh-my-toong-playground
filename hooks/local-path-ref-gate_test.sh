@@ -296,6 +296,17 @@ test_target_curl_payloads_deny() {
     done
 }
 
+test_target_curl_mixed_case_https_host_denies() {
+    local command payload stderr_out exit_code=0
+    command="curl -X POST HtTpS://API.NOTION.COM/v1/pages --data '{\"text\":\"See docs/untracked.md\"}'"
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | jq -e '.decision == "deny"' >/dev/null || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null
+}
+
 test_target_curl_slack_webhook_payload_denies() {
     local command payload stderr_out exit_code=0
     command="curl -X POST https://hooks.slack.com/services/T000/B000/XXX --data '{\"text\":\"See docs/untracked.md\"}'"
@@ -697,6 +708,7 @@ run_test test_cd_then_gh_body_file_uses_changed_directory
 run_test test_gh_pr_create_body_file_missing_fails_open
 run_test test_gh_body_file_stdin_fails_open
 run_test test_target_curl_payloads_deny
+run_test test_target_curl_mixed_case_https_host_denies
 run_test test_target_curl_slack_webhook_payload_denies
 run_test test_target_curl_file_payload_content_denies
 run_test test_target_curl_expanded_at_file_payload_content_denies
