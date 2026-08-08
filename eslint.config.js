@@ -25,7 +25,9 @@ export default defineConfig(
       "node_modules",
       "**/vendor/**",
       ".claude/**",
+      // codex는 배포 루트가 둘로 갈린다 — 스킬은 .agents/skills/, 나머지는 .codex/
       ".codex/**",
+      ".agents/**",
       ".gemini/**",
       ".opencode/**",
       ".serena/**",
