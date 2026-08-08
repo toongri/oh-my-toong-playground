@@ -181,11 +181,11 @@ _lpr_shell_next_segment() {
                     index=$((index + 1))
                     [ "$index" -lt "$length" ] || return 1
                     ;;
-                ';'|'&'|'|')
+                ';'|'&'|'|'|$'\n')
                     next_index=$((index + 1))
                     while [ "$next_index" -lt "$length" ]; do
                         case "${rest:$next_index:1}" in
-                            ';'|'&'|'|') next_index=$((next_index + 1)) ;;
+                            ';'|'&'|'|'|$'\n') next_index=$((next_index + 1)) ;;
                             *) break ;;
                         esac
                     done
@@ -339,7 +339,7 @@ _lpr_inspect_curl() {
         while _lpr_shell_next_word "$rest"; do
             word="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
             case "$word" in
-                https://api.notion.com/*|https://slack.com/api/*|https://api.linear.app/*|https://linear.app/api/*) target=1 ;;
+                https://api.notion.com|https://api.notion.com/*|https://slack.com/api|https://slack.com/api/*|https://api.linear.app|https://api.linear.app/*|https://linear.app/api|https://linear.app/api/*) target=1 ;;
             esac
         done
         [ "$target" -eq 1 ] || continue
