@@ -163,6 +163,28 @@ test_gh_body_with_leading_at_sign_inspects_remaining_content() {
     printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null
 }
 
+test_gh_body_with_shell_escaped_space_denies() {
+    local command payload stderr_out exit_code=0
+    command='gh pr create --body See\ docs/untracked.md'
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | jq -e '.decision == "deny"' >/dev/null || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null
+}
+
+test_gh_body_with_escaped_quotes_denies() {
+    local command payload stderr_out exit_code=0
+    command='gh pr create -b "See \"docs/untracked.md\""'
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | jq -e '.decision == "deny"' >/dev/null || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null
+}
+
 test_gh_global_repo_option_before_pr_inspects_body() {
     local command payload stderr_out exit_code=0
     command='gh -R owner/repo pr create --body "See docs/untracked.md"'
@@ -228,9 +250,29 @@ test_expanded_gh_body_file_paths_inspect_content() {
     done
 }
 
+test_cd_then_gh_body_file_uses_changed_directory() {
+    local command payload stderr_out exit_code=0
+    mkdir -p "$REPO/subdir/docs"
+    printf 'See docs/cd-body.md\n' > "$REPO/subdir/docs/cd-body.md"
+    command='cd subdir && gh pr create --body-file docs/cd-body.md'
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | jq -e '.decision == "deny"' >/dev/null || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/cd-body.md' >/dev/null
+}
+
 test_gh_pr_create_body_file_missing_fails_open() {
     local exit_code=0
     printf '%s' "$(jq -n --arg cwd "$REPO" '{cwd:$cwd,tool_input:{command:"gh pr create --body-file docs/missing-body.md"}}')" \
+        | bash "$HOOK" >/dev/null 2>&1 || exit_code=$?
+    [[ "$exit_code" -eq 0 ]]
+}
+
+test_gh_body_file_stdin_fails_open() {
+    local exit_code=0
+    printf '%s' "$(jq -n --arg cwd "$REPO" '{cwd:$cwd,tool_input:{command:"gh pr create --body-file -"}}')" \
         | bash "$HOOK" >/dev/null 2>&1 || exit_code=$?
     [[ "$exit_code" -eq 0 ]]
 }
@@ -252,6 +294,44 @@ test_target_curl_payloads_deny() {
         printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null || return 1
         unset exit_code
     done
+}
+
+test_target_curl_slack_webhook_payload_denies() {
+    local command payload stderr_out exit_code=0
+    command="curl -X POST https://hooks.slack.com/services/T000/B000/XXX --data '{\"text\":\"See docs/untracked.md\"}'"
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | jq -e '.decision == "deny"' >/dev/null || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null
+}
+
+test_cd_then_curl_attachment_uses_changed_directory() {
+    local command payload stderr_out exit_code=0
+    mkdir -p "$REPO/subdir/docs"
+    printf 'png fixture\n' > "$REPO/subdir/docs/cd-upload.png"
+    command='cd subdir && curl -X POST https://api.notion.com/v1/pages -F file=@docs/cd-upload.png'
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | jq -e '.decision == "deny"' >/dev/null || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/cd-upload.png' >/dev/null
+}
+
+test_cd_then_curl_data_file_uses_changed_directory() {
+    local command payload stderr_out exit_code=0
+    mkdir -p "$REPO/subdir/docs"
+    printf 'payload fixture\n' > "$REPO/subdir/docs/cd-payload.md"
+    printf '{"text":"See docs/cd-payload.md"}\n' > "$REPO/subdir/docs/payload.json"
+    command='cd subdir && curl -X POST https://api.notion.com/v1/pages --data @docs/payload.json'
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | jq -e '.decision == "deny"' >/dev/null || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs/cd-payload.md' >/dev/null
 }
 
 test_target_curl_file_payload_content_denies() {
@@ -395,6 +475,21 @@ test_target_curl_url_equals_endpoint_denies() {
     stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
     [[ "$exit_code" -eq 2 ]] || return 1
     printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null
+}
+
+test_leading_environment_assignment_does_not_bypass_gh_or_curl() {
+    local command payload stderr_out exit_code=0
+    for command in \
+        'GH_TOKEN=test gh pr create --body "See docs/untracked.md"' \
+        'CURL_SILENT=1 curl -X POST https://api.notion.com/v1/pages --data '\''{"text":"See docs/untracked.md"}'\'''; do
+        payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+            '{cwd:$cwd,tool_input:{command:$command}}')
+        exit_code=0
+        stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+        [[ "$exit_code" -eq 2 ]] || return 1
+        printf '%s' "$stderr_out" | jq -e '.decision == "deny"' >/dev/null || return 1
+        printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null || return 1
+    done
 }
 
 test_target_curl_explicit_default_port_denies() {
@@ -591,22 +686,30 @@ run_test test_git_commit_with_leading_environment_assignment_inspects_staged_tex
 run_test test_cd_then_git_commit_inspects_the_changed_directory
 run_test test_gh_pr_create_body_untracked_path_denies
 run_test test_gh_body_with_leading_at_sign_inspects_remaining_content
+run_test test_gh_body_with_shell_escaped_space_denies
+run_test test_gh_body_with_escaped_quotes_denies
 run_test test_gh_global_repo_option_before_pr_inspects_body
 run_test test_gh_short_body_file_option_inspects_content
 run_test test_gh_pr_create_body_file_content_untracked_path_denies
 run_test test_gh_pr_create_body_file_named_at_sign_inspects_content
 run_test test_expanded_gh_body_file_paths_inspect_content
+run_test test_cd_then_gh_body_file_uses_changed_directory
 run_test test_gh_pr_create_body_file_missing_fails_open
+run_test test_gh_body_file_stdin_fails_open
 run_test test_target_curl_payloads_deny
+run_test test_target_curl_slack_webhook_payload_denies
 run_test test_target_curl_file_payload_content_denies
 run_test test_target_curl_expanded_at_file_payload_content_denies
 run_test test_target_curl_multiple_payloads_inspect_all
 run_test test_target_curl_multipart_file_attachment_denies
 run_test test_target_curl_multipart_content_file_inspects_file_contents
 run_test test_target_curl_multipart_attachment_honors_relative_workdir
+run_test test_cd_then_curl_attachment_uses_changed_directory
+run_test test_cd_then_curl_data_file_uses_changed_directory
 run_test test_composite_commands_inspect_later_git_and_gh_bodies
 run_test test_newline_separators_inspect_later_outbound_commands
 run_test test_target_curl_url_equals_endpoint_denies
+run_test test_leading_environment_assignment_does_not_bypass_gh_or_curl
 run_test test_target_curl_explicit_default_port_denies
 run_test test_git_c_config_before_commit_inspects_staged_additions
 run_test test_gh_short_body_option_denies
