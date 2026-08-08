@@ -477,6 +477,20 @@ _lpr_core_escaped_markdown_prefix() {
     return 1
 }
 
+_lpr_core_is_path_shaped() {
+    local candidate="$1"
+    # A bare separator is ordinary prose, not a concrete local reference.
+    # Keep nonempty absolute and relative paths on the existing inspection
+    # path, including ./name and ../name.
+    case "$candidate" in
+        /|./|../) return 1 ;;
+        /*|~|~/*|\$HOME|\$HOME/*|\${HOME}|\${HOME}/*|\$OMT_DIR|\$OMT_DIR/*|\${OMT_DIR}|\${OMT_DIR}/*|./*|../*|file:///*|file://localhost/*|*/*)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
 _lpr_core_scan_line() {
     local line="$1" line_no="$2" scan_context="${3-bare}" rest target token candidate markdown_match
     local markdown_tail markdown_char markdown_index markdown_depth markdown_prefix markdown_next
@@ -557,11 +571,9 @@ _lpr_core_scan_line() {
     # conservative word scan below, which would otherwise split the path.
     _lpr_core_trim_candidate "$line"
     candidate="$_LPR_CANDIDATE"
-    case "$candidate" in
-        /*|~|~/*|\$HOME|\$HOME/*|\${HOME}|\${HOME}/*|\$OMT_DIR|\$OMT_DIR/*|\${OMT_DIR}|\${OMT_DIR}/*|./*|../*|file:///*|file://localhost/*|*/*)
-            _lpr_core_consider "$candidate" "$line_no" "$scan_context"
-            ;;
-    esac
+    if _lpr_core_is_path_shaped "$candidate"; then
+        _lpr_core_consider "$candidate" "$line_no" "$scan_context"
+    fi
 
     # Also inspect obvious bare local paths.  This is a reference classifier,
     # not a shell parser: quoted/escaped command syntax is left to shims.
@@ -576,24 +588,17 @@ _lpr_core_scan_line() {
     for ((start = 0; start < ${#words[@]}; start++)); do
         _lpr_core_trim_candidate "${words[$start]}"
         candidate="$_LPR_CANDIDATE"
-        case "$candidate" in
-            /*|~|~/*|\$HOME|\$HOME/*|\${HOME}|\${HOME}/*|\$OMT_DIR|\$OMT_DIR/*|\${OMT_DIR}|\${OMT_DIR}/*|./*|../*|file:///*|file://localhost/*|*/*) ;;
-            *) continue ;;
-        esac
+        _lpr_core_is_path_shaped "$candidate" || continue
         joined=""
         for ((end = start; end < ${#words[@]}; end++)); do
             [[ -n "$joined" ]] && joined="$joined "
             joined="${joined}${words[$end]}"
             _lpr_core_trim_candidate "$joined"
             candidate="$_LPR_CANDIDATE"
-            case "$candidate" in
-                /*|~|~/*|\$HOME|\$HOME/*|\${HOME}|\${HOME}/*|\$OMT_DIR|\$OMT_DIR/*|\${OMT_DIR}|\${OMT_DIR}/*|./*|../*|file:///*|file://localhost/*|*/*)
-                    if _lpr_core_candidate_exists "$candidate"; then
-                        _lpr_core_consider "$candidate" "$line_no" "$scan_context"
-                        break
-                    fi
-                    ;;
-            esac
+            if _lpr_core_is_path_shaped "$candidate" && _lpr_core_candidate_exists "$candidate"; then
+                _lpr_core_consider "$candidate" "$line_no" "$scan_context"
+                break
+            fi
         done
     done
 
@@ -607,21 +612,24 @@ _lpr_core_scan_line() {
         fi
         _lpr_core_trim_candidate "$token"
         candidate="$_LPR_CANDIDATE"
-        case "$candidate" in
-            /*|~|~/*|\$HOME|\$HOME/*|\${HOME}|\${HOME}/*|\$OMT_DIR|\$OMT_DIR/*|\${OMT_DIR}|\${OMT_DIR}/*|./*|../*|*/*)
-                _lpr_core_consider "$candidate" "$line_no" "$context" ;;
-            *.md|*.markdown|*.yaml|*.yml|*.json|*.toml|*.txt|*.sh|*.ts|*.tsx|*.js|*.jsx)
-                _lpr_core_consider "$candidate" "$line_no" "$context" ;;
-            *)
-                # Root-level extensionless candidates are only paths when a
-                # matching file actually exists in the repository.  This
-                # catches files such as `.env` and `secret` without treating
-                # arbitrary prose or illustrative words as missing paths.
-                if [[ -f "$_LPR_REPO_ROOT/$candidate" ]]; then
+        if _lpr_core_is_path_shaped "$candidate"; then
+            _lpr_core_consider "$candidate" "$line_no" "$context"
+        else
+            case "$candidate" in
+                *.md|*.markdown|*.yaml|*.yml|*.json|*.toml|*.txt|*.sh|*.ts|*.tsx|*.js|*.jsx)
                     _lpr_core_consider "$candidate" "$line_no" "$context"
-                fi
-                ;;
-        esac
+                    ;;
+                *)
+                    # Root-level extensionless candidates are only paths when a
+                    # matching file actually exists in the repository.  This
+                    # catches files such as `.env` and `secret` without treating
+                    # arbitrary prose or illustrative words as missing paths.
+                    if [[ -f "$_LPR_REPO_ROOT/$candidate" ]]; then
+                        _lpr_core_consider "$candidate" "$line_no" "$context"
+                    fi
+                    ;;
+            esac
+        fi
     done
 }
 
