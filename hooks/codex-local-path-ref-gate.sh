@@ -117,7 +117,7 @@ _lpr_prepare_repo() {
 }
 
 _lpr_extract_value_after() {
-    local rest="$1" value first_char
+    local rest="$1" value first_char remainder
     rest="${rest#"${rest%%[![:space:]]*}"}"
     [ -n "$rest" ] || return 1
     first_char="${rest%"${rest#?}"}"
@@ -126,26 +126,51 @@ _lpr_extract_value_after() {
         rest="${rest#\"}"
         [[ "$rest" == *\"* ]] || return 1
         value="${rest%%\"*}"
+        remainder="${rest#"$value"}"
+        remainder="${remainder#\"}"
     elif [ "$first_char" = "'" ]; then
         rest="${rest#\'}"
         [[ "$rest" == *\'* ]] || return 1
         value="${rest%%\'*}"
+        remainder="${rest#"$value"}"
+        remainder="${remainder#\'}"
     else
         value="${rest%%[[:space:]]*}"
+        remainder="${rest#"$value"}"
     fi
     [ -n "$value" ] || return 1
     _LPR_VALUE="$value"
+    _LPR_REST_AFTER_VALUE="$remainder"
+    return 0
+}
+
+_lpr_read_file_content() {
+    local path="$1"
+    [ -n "$path" ] || return 1
+    _lpr_core_expand_path "$path" || return 1
+    path="$_LPR_EXPANDED"
+    case "$path" in
+        /*) ;;
+        *) path="$PWD/$path" ;;
+    esac
+    [ -f "$path" ] && [ -r "$path" ] || return 1
+    _LPR_VALUE=$(cat "$path" 2>/dev/null) || return 1
     return 0
 }
 
 _lpr_gh_body() {
-    local segment="$1" marker rest
-    local body_re='(^|[[:space:]])--body(=|[[:space:]])'
+    local segment="$1" marker rest body_file=0
+    local body_re='(^|[[:space:]])--body(-file)?(=|[[:space:]])'
     [[ "$segment" =~ $body_re ]] || return 1
     marker="${BASH_REMATCH[0]}"
     rest="${segment#*"$marker"}"
     _lpr_extract_value_after "$rest" || return 1
-    case "$_LPR_VALUE" in @*|-) return 1 ;; esac
+    case "$marker" in *--body-file*) body_file=1 ;; esac
+    case "$_LPR_VALUE" in
+        @*) _lpr_read_file_content "${_LPR_VALUE#@}" || return 1 ;;
+        -) return 1 ;;
+        *) [ "$body_file" -eq 1 ] && _lpr_read_file_content "$_LPR_VALUE" || return 0 ;;
+    esac
     return 0
 }
 
@@ -166,22 +191,28 @@ _lpr_curl_payload() {
     rest="${segment#*"$marker"}"
     _lpr_extract_value_after "$rest" || return 1
     case "$_LPR_VALUE" in
-        @*) _LPR_VALUE="${_LPR_VALUE#@}" ;;
+        @*) _lpr_read_file_content "${_LPR_VALUE#@}" || return 1 ;;
         -) return 1 ;;
     esac
+    _LPR_CURL_REMAINDER="$_LPR_REST_AFTER_VALUE"
     return 0
 }
 
 _lpr_inspect_curl() {
     local curl_re='(^|[;&|])[[:space:]]*curl([[:space:]]|$)' target_re
-    local segment curl_text
+    local segment curl_text remaining rc
     [[ "$cmd" =~ $curl_re ]] || return 0
     segment="${cmd#*"${BASH_REMATCH[0]}"}"
     target_re='(^|[[:space:]'\''"])https://(api[.]notion[.]com|slack[.]com/api|api[.]linear[.]app|linear[.]app/api)'
     [[ "$segment" =~ $target_re ]] || return 0
-    _lpr_curl_payload "$segment" || return 0
-    curl_text=$(printf '%s' "$_LPR_VALUE" | tr '{}\",' '    ') || return 0
-    _lpr_check_text "$curl_text"
+    remaining="$segment"
+    while _lpr_curl_payload "$remaining"; do
+        curl_text=$(printf '%s' "$_LPR_VALUE" | tr '{}\",' '    ') || return 0
+        _lpr_check_text "$curl_text" || rc=$?
+        [ "${rc:-0}" -eq 2 ] && return 2
+        rc=0
+        remaining="$_LPR_CURL_REMAINDER"
+    done
     return $?
 }
 

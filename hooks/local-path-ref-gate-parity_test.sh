@@ -117,6 +117,17 @@ test_gh_pr_body_untracked_path_denies_in_both_adapters() {
     assert_pair_decision deny 'gh pr create --body "See docs/untracked.md"'
 }
 
+test_gh_pr_body_file_routes_deny_in_both_adapters() {
+    local body_file command
+    body_file="$REPO/docs/pr-body.md"
+    printf 'See docs/untracked.md\n' > "$body_file"
+    for command in \
+        "gh pr create --body-file '$body_file'" \
+        "gh pr edit 123 --body-file=\"$body_file\""; do
+        assert_pair_decision deny "$command" || return 1
+    done
+}
+
 test_target_curl_payloads_deny_in_both_adapters() {
     local host command
     for host in \
@@ -124,6 +135,30 @@ test_target_curl_payloads_deny_in_both_adapters() {
         'https://slack.com/api/chat.postMessage' \
         'https://api.linear.app/graphql'; do
         command="curl -X POST $host --data '{\"text\":\"See docs/untracked.md\"}'"
+        assert_pair_decision deny "$command" || return 1
+    done
+}
+
+test_target_curl_multiple_payloads_deny_in_both_adapters() {
+    local host command
+    for host in \
+        'https://api.notion.com/v1/pages' \
+        'https://slack.com/api/chat.postMessage' \
+        'https://api.linear.app/graphql'; do
+        command="curl -X POST $host --data '{\"text\":\"safe\"}' --data-raw '{\"text\":\"See docs/untracked.md\"}'"
+        assert_pair_decision deny "$command" || return 1
+    done
+}
+
+test_target_curl_file_payload_deny_in_both_adapters() {
+    local host command payload_file
+    payload_file="$REPO/docs/outgoing.json"
+    printf '{"text":"See docs/untracked.md"}\n' > "$payload_file"
+    for host in \
+        'https://api.notion.com/v1/pages' \
+        'https://slack.com/api/chat.postMessage' \
+        'https://api.linear.app/graphql'; do
+        command="curl -X POST $host --data @$payload_file"
         assert_pair_decision deny "$command" || return 1
     done
 }
@@ -149,7 +184,10 @@ test_existing_old_violation_with_safe_staged_line_allows_in_both_adapters() {
 
 run_test test_staged_new_omt_path_denies_in_both_adapters
 run_test test_gh_pr_body_untracked_path_denies_in_both_adapters
+run_test test_gh_pr_body_file_routes_deny_in_both_adapters
 run_test test_target_curl_payloads_deny_in_both_adapters
+run_test test_target_curl_multiple_payloads_deny_in_both_adapters
+run_test test_target_curl_file_payload_deny_in_both_adapters
 run_test test_placeholder_nonexistent_and_external_url_allow_in_both_adapters
 run_test test_existing_old_violation_with_safe_staged_line_allows_in_both_adapters
 
