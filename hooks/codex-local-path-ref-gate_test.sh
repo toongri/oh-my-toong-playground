@@ -161,6 +161,18 @@ test_gh_compound_commands_inspect_later_create_edit_and_comment_bodies() {
     done
 }
 
+test_newline_separators_inspect_later_gh_and_curl_commands() {
+    local command payload
+    for command in \
+        $'printf safe\ngh pr create --body "See docs/untracked.md"' \
+        $'printf safe\ncurl -X POST https://api.notion.com/v1/pages --data \'{"text":"See docs/untracked.md"}\''; do
+        payload=$(shell_payload bash "$command")
+        run_payload "$payload"
+        assert_codex_deny "$RUN_OUTPUT" || return 1
+        printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
+    done
+}
+
 test_gh_body_file_routes_read_file_content() {
     local body_file="$REPO/pr-body.md" tool_name payload command
     printf 'See docs/untracked.md\n' > "$body_file"
@@ -190,6 +202,21 @@ test_target_curl_payloads_deny() {
             assert_codex_deny "$RUN_OUTPUT" || return 1
             printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
         done
+    done
+}
+
+test_target_curl_api_root_endpoints_deny() {
+    local host command payload
+    for host in \
+        'https://api.notion.com' \
+        'https://slack.com/api' \
+        'https://api.linear.app' \
+        'https://linear.app/api'; do
+        command="curl -X POST $host --data '{\"text\":\"See docs/untracked.md\"}'"
+        payload=$(shell_payload bash "$command")
+        run_payload "$payload"
+        assert_codex_deny "$RUN_OUTPUT" || return 1
+        printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
     done
 }
 
@@ -401,8 +428,10 @@ main() {
     run_test test_gh_short_body_flag_and_escaped_quotes_deny
     run_test test_quoted_separators_do_not_create_fake_gh_or_curl_commands
     run_test test_gh_compound_commands_inspect_later_create_edit_and_comment_bodies
+    run_test test_newline_separators_inspect_later_gh_and_curl_commands
     run_test test_gh_body_file_routes_read_file_content
     run_test test_target_curl_payloads_deny
+    run_test test_target_curl_api_root_endpoints_deny
     run_test test_target_curl_json_payload_deny
     run_test test_target_curl_escaped_quotes_deny
     run_test test_target_curl_inspects_every_data_payload_and_readable_at_file
