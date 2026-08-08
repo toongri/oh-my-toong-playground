@@ -231,17 +231,55 @@ _lpr_shell_next_segment() {
 }
 
 _lpr_read_file_content() {
-    local path="$1"
+    local path="$1" base="${2-${_LPR_ACTIVE_CWD-${effective_cwd-$PWD}}}"
     [ -n "$path" ] || return 1
     _lpr_core_expand_path "$path" || return 1
     path="$_LPR_EXPANDED"
     case "$path" in
         /*) ;;
-        *) path="$PWD/$path" ;;
+        *) path="$base/$path" ;;
     esac
     [ -f "$path" ] && [ -r "$path" ] || return 1
     _LPR_VALUE=$(cat "$path" 2>/dev/null) || return 1
     return 0
+}
+
+_lpr_resolve_from_cwd() {
+    local path="$1" base="${2-${_LPR_ACTIVE_CWD-${effective_cwd-$PWD}}}"
+    [ -n "$path" ] || return 1
+    _lpr_core_expand_path "$path" || return 1
+    path="$_LPR_EXPANDED"
+    case "$path" in
+        /*) _LPR_RESOLVED_PATH="$path" ;;
+        *) _LPR_RESOLVED_PATH="$base/$path" ;;
+    esac
+    return 0
+}
+
+_lpr_segment_cwd() {
+    local segment="$1" base="$2" rest word target
+    _LPR_SEGMENT_CWD="$base"
+    _lpr_shell_next_word "$segment" || return 0
+    rest="$_LPR_SHELL_REMAINDER"
+    while :; do
+        case "$_LPR_WORD" in
+            [A-Za-z_]*=*) _lpr_shell_next_word "$rest" || return 0; rest="$_LPR_SHELL_REMAINDER" ;;
+            cd)
+                target="${HOME-}"
+                _LPR_WORD=""
+                if _lpr_shell_next_word "$rest"; then
+                    target="$_LPR_WORD"
+                    rest="$_LPR_SHELL_REMAINDER"
+                fi
+                [ -n "$target" ] || return 0
+                [ "$target" = "--" ] && { _lpr_shell_next_word "$_LPR_SHELL_REMAINDER" || return 0; target="$_LPR_WORD"; }
+                _lpr_resolve_from_cwd "$target" "$base" || return 0
+                _LPR_SEGMENT_CWD=$(cd -P "$_LPR_RESOLVED_PATH" 2>/dev/null && pwd -P) || _LPR_SEGMENT_CWD="$base"
+                return 0
+                ;;
+            *) return 0 ;;
+        esac
+    done
 }
 
 _lpr_gh_body_value() {
@@ -256,17 +294,31 @@ _lpr_gh_body_value() {
 }
 
 _lpr_inspect_gh() {
-    local remaining="$cmd" segment rest action word value body_file rc=0
+    local remaining="$cmd" segment rest action word value body_file rc=0 segment_cwd="$effective_cwd"
     while [ -n "$remaining" ]; do
         _lpr_shell_next_segment "$remaining" || return 0
         segment="$_LPR_SEGMENT"
         remaining="$_LPR_SHELL_REMAINDER"
+        _lpr_segment_cwd "$segment" "$segment_cwd"
+        segment_cwd="$_LPR_SEGMENT_CWD"
+        _LPR_ACTIVE_CWD="$segment_cwd"
         _lpr_shell_next_word "$segment" || continue
         [ "$_LPR_WORD" = "gh" ] || continue
         rest="$_LPR_SHELL_REMAINDER"
-        _lpr_shell_next_word "$rest" || continue
-        [ "$_LPR_WORD" = "pr" ] || continue
-        rest="$_LPR_SHELL_REMAINDER"
+        action=""; word=""
+        while _lpr_shell_next_word "$rest"; do
+            word="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
+            case "$word" in
+                --repo|-R)
+                    _lpr_shell_next_word "$rest" || { action=""; break; }
+                    rest="$_LPR_SHELL_REMAINDER"
+                    ;;
+                --repo=*|-R?*) ;;
+                pr) break ;;
+                *) continue ;;
+            esac
+        done
+        [ "$word" = "pr" ] || continue
         _lpr_shell_next_word "$rest" || continue
         action="$_LPR_WORD"
         case "$action" in create|edit|comment) ;; *) continue ;; esac
@@ -291,6 +343,7 @@ _lpr_inspect_gh() {
                 -b?*) value="${word#-b}" ;;
                 *) continue ;;
             esac
+            value="${value#=}"
             _lpr_gh_body_value "$value" "$body_file" || return 0
             _lpr_check_text "$_LPR_VALUE" || rc=$?
             [ "$rc" -eq 2 ] && return 2
@@ -316,16 +369,12 @@ _lpr_curl_payload_value() {
 }
 
 _lpr_curl_file_attachment() {
-    local path="$1" expanded attachment_rc=0
+    local path="$1" expanded attachment_rc=0 base="${_LPR_ACTIVE_CWD-${effective_cwd-$PWD}}"
     [ -n "$path" ] || return 0
     path="${path%%;*}"
     [ -n "$path" ] || return 0
-    _lpr_core_expand_path "$path" || return 0
-    expanded="$_LPR_EXPANDED"
-    case "$expanded" in
-        /*) ;;
-        *) expanded="$effective_cwd/$expanded" ;;
-    esac
+    _lpr_resolve_from_cwd "$path" "$base" || return 0
+    expanded="$_LPR_RESOLVED_PATH"
     [ -f "$expanded" ] && [ -r "$expanded" ] || return 0
     _lpr_check_attachment "$expanded" "$path" || attachment_rc=$?
     [ "$attachment_rc" -eq 2 ] && return 2
@@ -342,21 +391,64 @@ _lpr_curl_form_attachment() {
     _lpr_curl_file_attachment "$path"
 }
 
-_lpr_curl_is_target_url() {
-    case "$1" in
-        https://api.notion.com|https://api.notion.com[/?#]*|https://slack.com/api|https://slack.com/api[/?#]*|https://api.linear.app|https://api.linear.app[/?#]*|https://linear.app/api|https://linear.app/api[/?#]*)
-            return 0
+_lpr_curl_form_payload() {
+    local form="$1" value
+    case "$form" in
+        @*) _lpr_curl_file_attachment "${form#@}"; return $? ;;
+        *=@*) _lpr_curl_file_attachment "${form#*=@}"; return $? ;;
+    esac
+    case "$form" in
+        *=*) value="${form#*=}" ;;
+        *) value="$form" ;;
+    esac
+    [ -n "$value" ] || return 0
+    case "$value" in
+        '<'*)
+            value="${value#<}"
+            value="${value%%;*}"
+            _lpr_read_file_content "$value" || return 0
+            _lpr_check_text "$_LPR_VALUE"
+            return $?
             ;;
+    esac
+    _lpr_check_text "$value"
+    return $?
+}
+
+_lpr_curl_is_target_url() {
+    local url="$1" authority host port suffix rest
+    case "$url" in https://*) ;; *) return 1 ;; esac
+    rest="${url#https://}"
+    authority="${rest%%[/?#]*}"
+    suffix="${rest#"$authority"}"
+    host="$authority"
+    port=""
+    case "$authority" in *:*) host="${authority%%:*}"; port="${authority#*:}" ;; esac
+    if [ -n "$port" ]; then
+        case "$port" in *[!0-9]*|'') return 1 ;; esac
+    fi
+    case "$host:$suffix" in
+        api.notion.com:/*|api.notion.com:|api.notion.com:\?*|api.notion.com:\#*)
+            return 0 ;;
+        slack.com:/api|slack.com:/api[/?#]*)
+            return 0 ;;
+        api.linear.app:/*|api.linear.app:)
+            return 0 ;;
+        linear.app:/api|linear.app:/api[/?#]*)
+            return 0 ;;
         *) return 1 ;;
     esac
 }
 
 _lpr_inspect_curl() {
-    local remaining="$cmd" segment rest arguments word value option target rc=0 form_rc curl_text
+    local remaining="$cmd" segment rest arguments word value option target rc=0 form_rc curl_text segment_cwd="$effective_cwd"
     while [ -n "$remaining" ]; do
         _lpr_shell_next_segment "$remaining" || return 0
         segment="$_LPR_SEGMENT"
         remaining="$_LPR_SHELL_REMAINDER"
+        _lpr_segment_cwd "$segment" "$segment_cwd"
+        segment_cwd="$_LPR_SEGMENT_CWD"
+        _LPR_ACTIVE_CWD="$segment_cwd"
         _lpr_shell_next_word "$segment" || continue
         [ "$_LPR_WORD" = "curl" ] || continue
         arguments="$_LPR_SHELL_REMAINDER"
@@ -405,7 +497,7 @@ _lpr_inspect_curl() {
             case "$option" in
                 --form|-F)
                     form_rc=0
-                    _lpr_curl_form_attachment "$value" || form_rc=$?
+                    _lpr_curl_form_payload "$value" || form_rc=$?
                     [ "$form_rc" -eq 2 ] && return 2
                     ;;
                 --upload-file|-T)
@@ -428,10 +520,12 @@ _lpr_inspect_curl() {
 
 _lpr_git_commit_staged_text() {
     local base_repo_root="$repo_root" remaining="$cmd" segment rest word
-    local git_cwd repo_for_commit staged_text rc=0 has_commit
+    local git_cwd repo_for_commit staged_text rc=0 has_commit segment_cwd="$effective_cwd" segment_valid
     while [ -n "$remaining" ]; do
         _lpr_shell_next_segment "$remaining" || return 0
         segment="$_LPR_SEGMENT"; remaining="$_LPR_SHELL_REMAINDER"
+        _lpr_segment_cwd "$segment" "$segment_cwd"
+        segment_cwd="$_LPR_SEGMENT_CWD"
         _lpr_shell_next_word "$segment" || continue
         while [ "$_LPR_WORD" != "git" ]; do
             case "$_LPR_WORD" in
@@ -441,35 +535,33 @@ _lpr_git_commit_staged_text() {
             _lpr_shell_next_word "$_LPR_SHELL_REMAINDER" || break
         done
         [ "$_LPR_WORD" = "git" ] || continue
-        rest="$_LPR_SHELL_REMAINDER"; git_cwd="$effective_cwd"; has_commit=0
+        rest="$_LPR_SHELL_REMAINDER"; git_cwd="$segment_cwd"; has_commit=0; segment_valid=1
         while _lpr_shell_next_word "$rest"; do
             word="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
             case "$word" in
                 -C)
-                    _lpr_shell_next_word "$rest" || return 0
-                    git_cwd="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
-                    _lpr_core_expand_path "$git_cwd" || return 0
-                    git_cwd="$_LPR_EXPANDED"
-                    case "$git_cwd" in /*) ;; *) git_cwd="$effective_cwd/$git_cwd" ;; esac
+                    _lpr_shell_next_word "$rest" || { segment_valid=0; break; }
+                    word="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
+                    _lpr_resolve_from_cwd "$word" "$git_cwd" || { segment_valid=0; break; }
+                    git_cwd="$_LPR_RESOLVED_PATH"
                     ;;
                 -C?*)
-                    git_cwd="${word#-C}"
-                    _lpr_core_expand_path "$git_cwd" || return 0
-                    git_cwd="$_LPR_EXPANDED"
-                    case "$git_cwd" in /*) ;; *) git_cwd="$effective_cwd/$git_cwd" ;; esac
+                    _lpr_resolve_from_cwd "${word#-C}" "$git_cwd" || { segment_valid=0; break; }
+                    git_cwd="$_LPR_RESOLVED_PATH"
                     ;;
                 commit) has_commit=1; break ;;
             esac
         done
+        [ "$segment_valid" -eq 1 ] || { repo_root="$base_repo_root"; continue; }
         [ "$has_commit" -eq 1 ] || continue
         repo_for_commit=$(git -C "$git_cwd" rev-parse --show-toplevel 2>/dev/null) || {
             repo_root="$base_repo_root"
-            return 0
+            continue
         }
 
         [ -d "$repo_for_commit" ] || {
             repo_root="$base_repo_root"
-            return 0
+            continue
         }
         repo_root="$repo_for_commit"
         staged_text=$(_lpr_staged_added_text) || staged_text=""
