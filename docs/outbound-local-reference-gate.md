@@ -54,8 +54,8 @@
 
 코어는 판정만 담당하고, 플랫폼별 shim이 각 이벤트를 같은 코어에 연결한다.
 Claude shim과 Codex shim은 같은 코어·같은 판정·같은 처방을 사용해 결과를
-맞춘다. Codex용 shim은 동반
-동반 구현이며, Codex PreToolUse가 MCP 인자를 `tool_input`으로 제공한다는
+맞춘다. Codex용 shim은 동반 구현이며, Codex PreToolUse가 MCP 인자를
+`tool_input`으로 제공한다는
 경계를 기준으로 `mcp__notion__.*`, `mcp__slack__.*`,
 `mcp__linear__.*` tool route를 검사한다.
 
