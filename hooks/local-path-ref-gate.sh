@@ -8,6 +8,7 @@ set -euo pipefail
 # hooks/local-path-ref-gate-core.sh.  It never executes the user's command and
 # fails open on missing jq/core, malformed JSON, unknown shell shapes, or git
 # inspection errors.
+# omt-hook-dep: local-path-ref-gate-core.sh
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
@@ -61,13 +62,20 @@ EOF
 }
 
 _lpr_check_text() {
-    local text="$1" records rc=0
+    local text="$1" inspectable="${2-$1}" records rc=0
     [ -n "$text" ] || return 0
     records=$(local_path_ref_gate_core_check "$repo_root" "$text" 2>/dev/null) || rc=$?
     [ "$rc" -eq 0 ] || return 0
     [ -n "$records" ] || return 0
-    _lpr_render_deny "$records" "$text" && return 2
+    _lpr_render_deny "$records" "$inspectable" && return 2
     return 0
+}
+
+_lpr_check_staged_text() {
+    local inspectable="$1" scan_text
+    scan_text=$(printf '%s\n' "$inspectable" | sed -E 's/^[^:]+:[0-9]+: //') || return 0
+    _lpr_check_text "$scan_text" "$inspectable"
+    return $?
 }
 
 _lpr_staged_added_text() {
@@ -110,36 +118,60 @@ _lpr_staged_added_text() {
 }
 
 _lpr_extract_value_after() {
-    local rest="$1" value
+    local rest="$1" value remainder
     rest="${rest#"${rest%%[![:space:]]*}"}"
     [ -n "$rest" ] || return 1
     local first_char="${rest%"${rest#?}"}"
     if [ "$first_char" = '"' ]; then
         case "$rest" in *\\\"*) return 1 ;; esac
-        rest="${rest#\"}"
-        [[ "$rest" == *\"* ]] || return 1
-        value="${rest%%\"*}"
+        remainder="${rest#\"}"
+        [[ "$remainder" == *\"* ]] || return 1
+        value="${remainder%%\"*}"
+        remainder="${remainder#*\"}"
     elif [ "$first_char" = "'" ]; then
-        rest="${rest#\'}"
-        [[ "$rest" == *\'* ]] || return 1
-        value="${rest%%\'*}"
+        remainder="${rest#\'}"
+        [[ "$remainder" == *\'* ]] || return 1
+        value="${remainder%%\'*}"
+        remainder="${remainder#*\'}"
     else
         value="${rest%%[[:space:]]*}"
+        remainder="${rest#"$value"}"
     fi
     [ -n "$value" ] || return 1
     _LPR_VALUE="$value"
+    _LPR_REMAINDER="$remainder"
     return 0
 }
 
 _lpr_gh_body() {
-    local segment="$1" marker rest value
+    local segment="$1" marker rest
     local body_re='(^|[[:space:]])--body(=|[[:space:]])'
-    [[ "$segment" =~ $body_re ]] || return 1
-    marker="${BASH_REMATCH[0]}"
-    rest="${segment#*"$marker"}"
-    _lpr_extract_value_after "$rest" || return 1
-    _LPR_VALUE="$_LPR_VALUE"
-    case "$_LPR_VALUE" in @*|-) return 1 ;; esac
+    local body_file_re='(^|[[:space:]])--body-file(=|[[:space:]])'
+    if [[ "$segment" =~ $body_re ]]; then
+        marker="${BASH_REMATCH[0]}"
+        rest="${segment#*"$marker"}"
+        _lpr_extract_value_after "$rest" || return 1
+        case "$_LPR_VALUE" in @*|-) return 1 ;; esac
+        return 0
+    fi
+    if [[ "$segment" =~ $body_file_re ]]; then
+        marker="${BASH_REMATCH[0]}"
+        rest="${segment#*"$marker"}"
+        _lpr_extract_value_after "$rest" || return 1
+        case "$_LPR_VALUE" in -*) return 1 ;; esac
+        _lpr_read_file "$_LPR_VALUE" || return 1
+        return 0
+    fi
+    return 1
+}
+
+_lpr_read_file() {
+    local path="$1" contents
+    [ -n "$path" ] || return 1
+    case "$path" in -*) return 1 ;; esac
+    [ -f "$path" ] && [ -r "$path" ] || return 1
+    contents=$(cat "$path" 2>/dev/null) || return 1
+    _LPR_VALUE="$contents"
     return 0
 }
 
@@ -152,36 +184,44 @@ _lpr_inspect_gh() {
     return $?
 }
 
-_lpr_curl_payload() {
-    local segment="$1" marker rest
-    local data_re='(^|[[:space:]])(--data|--data-raw|--data-binary|--data-urlencode|-d)(=|[[:space:]])'
-    [[ "$segment" =~ $data_re ]] || return 1
-    marker="${BASH_REMATCH[0]}"
-    rest="${segment#*"$marker"}"
-    _lpr_extract_value_after "$rest" || return 1
-    case "$_LPR_VALUE" in
-        @*) _LPR_VALUE="${_LPR_VALUE#@}" ;;
-        -) return 1 ;;
-    esac
-    return 0
-}
-
 _lpr_inspect_curl() {
     local curl_re='(^|[;&|])[[:space:]]*curl([[:space:]]|$)' target_re
-    local segment curl_text
+    local segment curl_text payload_file payload_text rc=0
+    local marker rest remaining
+    local data_re='(^|[[:space:]])(--data|--data-raw|--data-binary|--data-urlencode|-d)(=|[[:space:]])'
     [[ "$cmd" =~ $curl_re ]] || return 0
     segment="${cmd#*"${BASH_REMATCH[0]}"}"
     # Require a URL token (rather than merely seeing a host in JSON data) so
     # non-target curl calls remain outside this gate's scope.
     target_re='(^|[[:space:]'\''"])https://(api[.]notion[.]com|slack[.]com/api|api[.]linear[.]app|linear[.]app/api)'
     [[ "$segment" =~ $target_re ]] || return 0
-    _lpr_curl_payload "$segment" || return 0
-    # JSON payload punctuation can cling to a path token (e.g.
-    # `"path":"docs/untracked.md"`); remove only structural delimiters so
-    # the shared line scanner sees the explicit value, not shell syntax.
-    curl_text=$(printf '%s' "$_LPR_VALUE" | tr '{}\",' '    ') || return 0
-    _lpr_check_text "$curl_text"
-    return $?
+    remaining="$segment"
+    while [[ "$remaining" =~ $data_re ]]; do
+        marker="${BASH_REMATCH[0]}"
+        rest="${remaining#*"$marker"}"
+        _lpr_extract_value_after "$rest" || break
+        remaining="$_LPR_REMAINDER"
+        case "$_LPR_VALUE" in
+            @*)
+                payload_file="${_LPR_VALUE#@}"
+                if _lpr_read_file "$payload_file"; then
+                    payload_text="$_LPR_VALUE"
+                    curl_text=$(printf '%s' "$payload_text" | tr '{}\\",' '    ') || continue
+                    _lpr_check_text "$curl_text"
+                    rc=$?
+                    [ "$rc" -eq 2 ] && return 2
+                fi
+                ;;
+            -) ;;
+            *)
+                curl_text=$(printf '%s' "$_LPR_VALUE" | tr '{}\\",' '    ') || continue
+                _lpr_check_text "$curl_text"
+                rc=$?
+                [ "$rc" -eq 2 ] && return 2
+                ;;
+        esac
+    done
+    return 0
 }
 
 # A bounded git-commit shape is the only route that reads staged content.
@@ -189,7 +229,7 @@ _lpr_git_re='(^|[;&|])[[:space:]]*git([[:space:]]+[^;&|[:space:]]+)*[[:space:]]+
 if [[ "$cmd" =~ $_lpr_git_re ]]; then
     staged_text=$(_lpr_staged_added_text) || staged_text=""
     if [ -n "$staged_text" ]; then
-        _lpr_check_text "$staged_text"
+        _lpr_check_staged_text "$staged_text"
         [ "$?" -eq 2 ] && exit 2
     fi
 fi
