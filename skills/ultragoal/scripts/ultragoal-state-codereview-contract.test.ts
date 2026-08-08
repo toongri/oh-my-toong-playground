@@ -106,15 +106,25 @@ function buildObjectiveLaneGreenFixture(sid: string): void {
 // {CONFIRMED, PLAUSIBLE} enum.  REFUTED findings are dropped before serialization
 // (they never appear in the artifact), so the set is a mix of both kept verdicts
 // across both classes.
-const REDESIGN_FINDINGS: Array<{ class: string; verdict: string; ref: string }> = [
+const REDESIGN_FINDINGS: Array<{ class: string; verdict: string; impact: string; ref: string }> = [
 	// inline correctness judgment, high certainty -> CONFIRMED
-	{ class: "correctness", verdict: "CONFIRMED", ref: "skills/code-review/SKILL.md:Phase2:inline" },
+	{
+		class: "correctness",
+		verdict: "CONFIRMED",
+		impact: "MEDIUM",
+		ref: "skills/code-review/SKILL.md:Phase2:inline",
+	},
 	// escalated correctness finding, uncertain -> PLAUSIBLE
-	{ class: "correctness", verdict: "PLAUSIBLE", ref: "tools/sync.ts:42" },
+	{ class: "correctness", verdict: "PLAUSIBLE", impact: "MEDIUM", ref: "tools/sync.ts:42" },
 	// inline cleanup judgment, low severity -> PLAUSIBLE
-	{ class: "cleanup", verdict: "PLAUSIBLE", ref: "skills/code-review/SKILL.md:Phase2:escalated" },
+	{
+		class: "cleanup",
+		verdict: "PLAUSIBLE",
+		impact: "LOW",
+		ref: "skills/code-review/SKILL.md:Phase2:escalated",
+	},
 	// escalated cleanup finding, architecture concern -> CONFIRMED
-	{ class: "cleanup", verdict: "CONFIRMED", ref: "tools/adapters/claude.ts:88" },
+	{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW", ref: "tools/adapters/claude.ts:88" },
 ];
 
 describe("V8: code-review 아티팩트 열거형 계약 보존 (redesign 경로)", () => {
@@ -208,27 +218,27 @@ describe("T7: requirement-gap 클래스 커버리지 계약 (regression guard)",
 	// correctness and requirement-gap classes — so this test passes today. Its
 	// job is to pin that pairing against a future regression that narrows either
 	// the class enum or the blocking classes.
-	test("REGRESSION GUARD: requirement-gap 클래스 CONFIRMED finding — 아티팩트 수락 + requestComplete refuse", () => {
+	test("REGRESSION GUARD: requirement-gap 클래스 CONFIRMED HIGH finding — 아티팩트 수락 + requestComplete refuse", () => {
 		buildObjectiveLaneGreenFixture(SID);
 		writeArtifact(SID, {
 			status: "COMPLETE",
-			findings: [{ class: "requirement-gap", verdict: "CONFIRMED", ref: "foo.ts:1" }],
+			findings: [{ class: "requirement-gap", verdict: "CONFIRMED", impact: "HIGH", ref: "foo.ts:1" }],
 			reviewer: "code-reviewer",
 			at: "2026-06-26T10:00:00",
 		});
 
 		// 수락: requirement-gap이 VALID_CLASSES에 속해 있어 isCodeReviewArtifact가 아티팩트를 거부하지 않음.
 		expect(readCodeReviewArtifact(SID)).not.toBeNull();
-		// refuse: requestComplete는 CONFIRMED requirement-gap을 차단하므로 완료가 차단됨.
+		// refuse: CONFIRMED × HIGH는 대각선 판정식에서 BLOCK이므로 완료가 차단됨.
 		expect(requestComplete(SID)).toBe(false);
 	});
 
-	// 진짜 판별 케이스: PLAUSIBLE은 non-blocking이므로 위 CONFIRMED 케이스와 대조된다.
-	test("requirement-gap 클래스 PLAUSIBLE finding — requestComplete refuse 안 함 (non-blocking 판별)", () => {
+	// 진짜 판별 케이스: PLAUSIBLE × LOW는 NOTE(non-blocking)이므로 위 BLOCK 케이스와 대조된다.
+	test("requirement-gap 클래스 PLAUSIBLE LOW finding — requestComplete refuse 안 함 (non-blocking 판별)", () => {
 		buildObjectiveLaneGreenFixture(SID);
 		writeArtifact(SID, {
 			status: "COMPLETE",
-			findings: [{ class: "requirement-gap", verdict: "PLAUSIBLE", ref: "foo.ts:2" }],
+			findings: [{ class: "requirement-gap", verdict: "PLAUSIBLE", impact: "LOW", ref: "foo.ts:2" }],
 			reviewer: "code-reviewer",
 			at: "2026-06-26T10:00:00",
 		});
@@ -250,8 +260,13 @@ describe("T7: requirement-gap 클래스 커버리지 계약 (regression guard)",
 // bytes the dismissal was issued against.
 // ---------------------------------------------------------------------------
 
-/** The blocking finding these tests dismiss — CONFIRMED correctness, the class that deadlocks. */
-const FALSE_POSITIVE = { class: "correctness", verdict: "CONFIRMED", ref: "src/auth.ts:142" };
+/** The blocking finding these tests dismiss — CONFIRMED × HIGH, a BLOCK-outcome cell that deadlocks. */
+const FALSE_POSITIVE = {
+	class: "correctness",
+	verdict: "CONFIRMED",
+	impact: "HIGH",
+	ref: "src/auth.ts:142",
+};
 
 function writeBlockingArtifact(sid: string, findings: object[], at = "2026-06-26T10:00:00"): void {
 	writeArtifact(sid, { status: "COMPLETE", findings, reviewer: "code-reviewer", at });
@@ -283,7 +298,7 @@ describe("T8: 사용자 승인 finding 무효화 (dismiss-review-finding)", () =
 		buildObjectiveLaneGreenFixture(SID);
 		writeBlockingArtifact(SID, [
 			FALSE_POSITIVE,
-			{ class: "requirement-gap", verdict: "CONFIRMED", ref: "src/pay.ts:20" },
+			{ class: "requirement-gap", verdict: "CONFIRMED", impact: "MEDIUM", ref: "src/pay.ts:20" },
 		]);
 
 		expect(
@@ -328,14 +343,16 @@ describe("T8: 사용자 승인 finding 무효화 (dismiss-review-finding)", () =
 		expect(requestComplete(SID)).toBe(false);
 	});
 
-	test("비차단 클래스(cleanup)는 무효화 대상이 아니다 — 이미 완료를 막지 않음", () => {
+	test("비차단 finding(CONFIRMED × LOW = FIX)은 무효화 대상이 아니다 — 완료를 막지 않음", () => {
 		buildObjectiveLaneGreenFixture(SID);
-		writeBlockingArtifact(SID, [{ class: "cleanup", verdict: "CONFIRMED", ref: "src/log.ts:8" }]);
+		writeBlockingArtifact(SID, [
+			{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW", ref: "src/log.ts:8" },
+		]);
 
 		expect(
 			dismissReviewFinding(SID, {
 				ref: "src/log.ts:8",
-				class: "cleanup" as "correctness",
+				class: "cleanup",
 				rationale: "무의미한 무효화",
 			}),
 		).toBe(false);

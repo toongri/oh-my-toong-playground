@@ -126,6 +126,13 @@ duplication/waste/maintenance cost is real and present; PLAUSIBLE when the cost 
 conditional; REFUTED when the "better form" does not actually apply (e.g. the helper it names does
 something different).
 
+For a **requirement-gap** candidate, apply the same ladder to its claimed absence: CONFIRMED when
+you can name the requirement (quote the acceptance criterion or stated intent) and show the diff
+contains no code satisfying it — cite where you looked; PLAUSIBLE when the requirement's own
+wording is uncertain (an inferred intent, an ambiguous criterion) or the satisfying code may live
+outside what you can trace; REFUTED when the diff does satisfy it (cite the satisfying line) or the
+claimed requirement was never actually stated or inferable.
+
 ## Output
 
 Return exactly one verdict. Evidence must quote or cite the relevant line(s). Do not hedge between
