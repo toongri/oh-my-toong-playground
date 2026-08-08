@@ -62,9 +62,9 @@ EOF
 }
 
 _lpr_check_text() {
-    local text="$1" inspectable="${2-$1}" records rc=0
+    local text="$1" inspectable="${2-$1}" target_repo="${3-$repo_root}" records rc=0
     [ -n "$text" ] || return 0
-    records=$(local_path_ref_gate_core_check "$repo_root" "$text" 2>/dev/null) || rc=$?
+    records=$(local_path_ref_gate_core_check "$target_repo" "$text" 2>/dev/null) || rc=$?
     [ "$rc" -eq 0 ] || return 0
     [ -n "$records" ] || return 0
     _lpr_render_deny "$records" "$inspectable" && return 2
@@ -72,15 +72,16 @@ _lpr_check_text() {
 }
 
 _lpr_check_staged_text() {
-    local inspectable="$1" scan_text
+    local inspectable="$1" target_repo="${2-$repo_root}" scan_text
     scan_text=$(printf '%s\n' "$inspectable" | sed -E 's/^[^:]+:[0-9]+: //') || return 0
-    _lpr_check_text "$scan_text" "$inspectable"
+    _lpr_check_text "$scan_text" "$inspectable" "$target_repo"
     return $?
 }
 
 _lpr_staged_added_text() {
-    local diff
-    diff=$(git -C "$repo_root" diff --cached --unified=0 --no-color -- 2>/dev/null) || return 1
+    local target_repo="${1:-$repo_root}" diff
+    [ -d "$target_repo" ] || return 1
+    diff=$(git -C "$target_repo" diff --cached --unified=0 --no-color -- 2>/dev/null) || return 1
     [ -n "$diff" ] || return 1
     printf '%s\n' "$diff" | awk '
         /^diff --git / { active=0; next }
@@ -169,10 +170,95 @@ _lpr_read_file() {
     local path="$1" contents
     [ -n "$path" ] || return 1
     case "$path" in -*) return 1 ;; esac
+    _lpr_expand_file_path "$path" || return 1
+    path="$_LPR_FILE_PATH"
+    case "$path" in
+        /*) ;;
+        *) path="$PWD/$path" ;;
+    esac
     [ -f "$path" ] && [ -r "$path" ] || return 1
     contents=$(cat "$path" 2>/dev/null) || return 1
     _LPR_VALUE="$contents"
     return 0
+}
+
+_lpr_expand_file_path() {
+    local path="$1"
+    _LPR_FILE_PATH="$path"
+    case "$path" in
+        '~'|'~/'*)
+            [ -n "${HOME-}" ] || return 0
+            _LPR_FILE_PATH="${HOME}${path#\~}"
+            ;;
+        '${HOME}'|'${HOME}'/*)
+            [ -n "${HOME-}" ] || return 0
+            _LPR_FILE_PATH="${HOME}${path#'${HOME}'}"
+            ;;
+        '${OMT_DIR}'|'${OMT_DIR}'/*)
+            [ -n "${OMT_DIR-}" ] || return 0
+            _LPR_FILE_PATH="${OMT_DIR}${path#'${OMT_DIR}'}"
+            ;;
+        '$HOME'|'$HOME'/*)
+            [ -n "${HOME-}" ] || return 0
+            _LPR_FILE_PATH="${HOME}${path#'$HOME'}"
+            ;;
+        '$OMT_DIR'|'$OMT_DIR'/*)
+            [ -n "${OMT_DIR-}" ] || return 0
+            _LPR_FILE_PATH="${OMT_DIR}${path#'$OMT_DIR'}"
+            ;;
+    esac
+    return 0
+}
+
+_lpr_git_commit_target() {
+    local git_re='(^|[;&|])[[:space:]]*git([[:space:]]|$)' segment token target path base_cwd has_c=0
+    [[ "$cmd" =~ $git_re ]] || return 1
+    segment="${cmd#*"${BASH_REMATCH[0]}"}"
+    target="$repo_root"
+    while :; do
+        _lpr_extract_value_after "$segment" || return 1
+        token="$_LPR_VALUE"
+        segment="$_LPR_REMAINDER"
+        case "$token" in
+            commit)
+                _LPR_GIT_REPO="$target"
+                return 0
+                ;;
+            -C)
+                _lpr_extract_value_after "$segment" || return 1
+                path="$_LPR_VALUE"
+                segment="$_LPR_REMAINDER"
+                ;;
+            -C*)
+                path="${token#-C}"
+                [ -n "$path" ] || return 1
+                ;;
+            --)
+                return 1
+                ;;
+            -*)
+                continue
+                ;;
+            *)
+                return 1
+                ;;
+        esac
+        _lpr_expand_file_path "$path" || return 1
+        path="$_LPR_FILE_PATH"
+        case "$path" in
+            /*) target="$path" ;;
+            *)
+                if [ "$has_c" -eq 1 ]; then
+                    target="$target/$path"
+                else
+                    base_cwd="$PWD"
+                    target="$base_cwd/$path"
+                fi
+                ;;
+        esac
+        has_c=1
+        target=$(cd "$target" 2>/dev/null && pwd -P) || return 1
+    done
 }
 
 _lpr_inspect_gh() {
@@ -188,6 +274,7 @@ _lpr_inspect_curl() {
     local curl_re='(^|[;&|])[[:space:]]*curl([[:space:]]|$)' target_re
     local segment curl_text payload_file payload_text rc=0
     local marker rest remaining
+    local form_re='(^|[[:space:]])(-F|--form)(=|[[:space:]])' form_marker form_value attachment
     local data_re='(^|[[:space:]])(--data|--data-raw|--data-binary|--data-urlencode|-d)(=|[[:space:]])'
     [[ "$cmd" =~ $curl_re ]] || return 0
     segment="${cmd#*"${BASH_REMATCH[0]}"}"
@@ -195,6 +282,24 @@ _lpr_inspect_curl() {
     # non-target curl calls remain outside this gate's scope.
     target_re='(^|[[:space:]'\''"])https://(api[.]notion[.]com|slack[.]com/api|api[.]linear[.]app|linear[.]app/api)'
     [[ "$segment" =~ $target_re ]] || return 0
+    remaining="$segment"
+    while [[ "$remaining" =~ $form_re ]]; do
+        form_marker="${BASH_REMATCH[0]}"
+        rest="${remaining#*"$form_marker"}"
+        _lpr_extract_value_after "$rest" || break
+        form_value="$_LPR_VALUE"
+        remaining="$_LPR_REMAINDER"
+        case "$form_value" in
+            *=@*)
+                attachment="${form_value#*=@}"
+                attachment="${attachment%%;*}"
+                [ -n "$attachment" ] || continue
+                _lpr_check_text "$attachment"
+                rc=$?
+                [ "$rc" -eq 2 ] && return 2
+                ;;
+        esac
+    done
     remaining="$segment"
     while [[ "$remaining" =~ $data_re ]]; do
         marker="${BASH_REMATCH[0]}"
@@ -225,12 +330,14 @@ _lpr_inspect_curl() {
 }
 
 # A bounded git-commit shape is the only route that reads staged content.
-_lpr_git_re='(^|[;&|])[[:space:]]*git([[:space:]]+[^;&|[:space:]]+)*[[:space:]]+commit([[:space:]]|$)'
+_lpr_git_re='(^|[;&|])[[:space:]]*git([[:space:]]|$)'
 if [[ "$cmd" =~ $_lpr_git_re ]]; then
-    staged_text=$(_lpr_staged_added_text) || staged_text=""
-    if [ -n "$staged_text" ]; then
-        _lpr_check_staged_text "$staged_text"
-        [ "$?" -eq 2 ] && exit 2
+    if _lpr_git_commit_target; then
+        staged_text=$(_lpr_staged_added_text "$_LPR_GIT_REPO") || staged_text=""
+        if [ -n "$staged_text" ]; then
+            _lpr_check_staged_text "$staged_text" "$_LPR_GIT_REPO"
+            [ "$?" -eq 2 ] && exit 2
+        fi
     fi
 fi
 
