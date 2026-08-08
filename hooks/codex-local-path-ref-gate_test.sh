@@ -99,6 +99,21 @@ test_shell_command_key_fallback_and_gh_body_routes() {
     done
 }
 
+test_gh_body_file_routes_read_file_content() {
+    local body_file="$REPO/pr-body.md" tool_name payload command
+    printf 'See docs/untracked.md\n' > "$body_file"
+    for tool_name in Bash bash exec_command shell_command; do
+        for command in \
+            "gh pr create --body-file '$body_file'" \
+            "gh pr edit 123 --body-file=\"$body_file\""; do
+            payload=$(shell_payload "$tool_name" "$command")
+            run_payload "$payload"
+            assert_codex_deny "$RUN_OUTPUT" || return 1
+            printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
+        done
+    done
+}
+
 test_target_curl_payloads_deny() {
     local host command payload tool_name
     for host in \
@@ -107,6 +122,32 @@ test_target_curl_payloads_deny() {
         'https://api.linear.app/graphql'; do
         command="curl -X POST $host --data '{\"text\":\"See docs/untracked.md\"}'"
         for tool_name in Bash bash exec_command shell_command; do
+            payload=$(jq -nc --arg cwd "$REPO" --arg t "$tool_name" --arg command "$command" \
+                '{cwd:$cwd,tool_name:$t,tool_input:{command:$command}}')
+            run_payload "$payload"
+            assert_codex_deny "$RUN_OUTPUT" || return 1
+            printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
+        done
+    done
+}
+
+test_target_curl_inspects_every_data_payload_and_readable_at_file() {
+    local host command payload tool_name payload_file
+    payload_file="$REPO/outgoing.json"
+    printf '{"text":"See docs/untracked.md"}\n' > "$payload_file"
+    for host in \
+        'https://api.notion.com/v1/pages' \
+        'https://slack.com/api/chat.postMessage' \
+        'https://api.linear.app/graphql'; do
+        command="curl -X POST $host --data '{\"text\":\"safe\"}' --data-raw '{\"text\":\"See docs/untracked.md\"}'"
+        for tool_name in Bash bash exec_command shell_command; do
+            payload=$(jq -nc --arg cwd "$REPO" --arg t "$tool_name" --arg command "$command" \
+                '{cwd:$cwd,tool_name:$t,tool_input:{command:$command}}')
+            run_payload "$payload"
+            assert_codex_deny "$RUN_OUTPUT" || return 1
+            printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
+
+            command="curl -X POST $host --data @$payload_file"
             payload=$(jq -nc --arg cwd "$REPO" --arg t "$tool_name" --arg command "$command" \
                 '{cwd:$cwd,tool_name:$t,tool_input:{command:$command}}')
             run_payload "$payload"
@@ -199,7 +240,9 @@ main() {
     run_test test_hook_sources_core_and_strict_mode
     run_test test_all_shell_spellings_deny_staged_added_omt_reference
     run_test test_shell_command_key_fallback_and_gh_body_routes
+    run_test test_gh_body_file_routes_read_file_content
     run_test test_target_curl_payloads_deny
+    run_test test_target_curl_inspects_every_data_payload_and_readable_at_file
     run_test test_mcp_argument_strings_deny
     run_test test_allow_safe_and_fail_open_shapes
     run_test test_old_untouched_violation_allows
