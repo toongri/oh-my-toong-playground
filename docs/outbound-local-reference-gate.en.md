@@ -5,14 +5,14 @@
 This situational gate checks text before it is left in an external system so it
 does not cite a file that exists only on the current machine. It does not
 change source files; it decides whether a citation is safe at the outbound
-boundary for commits, PRs, and collaboration tools.
+boundary for commits, PR bodies and comments, and collaboration tools.
 
 ## Surfaces and scope
 
 | Surface | Input inspected |
 |---|---|
 | Git commit | **Newly added lines only** from the staged diff (old lines are not rechecked) |
-| PR | The complete body of a create/edit request |
+| PR | The complete `body` of a create/edit request or a PR comment |
 | Notion | The complete page/block-write payload |
 | Slack | The complete message-write payload |
 | Linear | The complete issue/comment-write payload |
