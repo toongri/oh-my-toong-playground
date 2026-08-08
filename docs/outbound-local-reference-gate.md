@@ -8,18 +8,20 @@
 
 ## 검사 표면과 범위
 
-| 표면 | 검사하는 입력 |
-|---|---|
-| Git commit | staged diff의 **새로 추가된 줄만** (기존 줄은 다시 검사하지 않음) |
-| PR | PR 생성·수정 요청 또는 PR 댓글의 body 전체 |
-| Notion | 페이지/블록 쓰기 요청의 전체 payload |
-| Slack | 메시지 쓰기 요청의 전체 payload |
-| Linear | 이슈/댓글 쓰기 요청의 전체 payload |
+| 연결 경계 | 표면 | 검사하는 입력 |
+|---|---|---|
+| Claude Bash | Git commit | staged diff의 **새로 추가된 줄만** (기존 줄은 다시 검사하지 않음) |
+| Claude Bash | PR | PR 생성·수정 요청 또는 PR 댓글의 body 전체 |
+| Claude Bash | 외부 API·웹훅 요청 | `curl` 요청에 담긴 payload와 첨부 경로 |
+| Codex MCP | Notion | `codex.yaml`에 등록된 쓰기 가능 route의 전체 `tool_input` payload |
+| Codex MCP | Slack | `codex.yaml`에 등록된 쓰기 가능 route의 전체 `tool_input` payload |
+| Codex MCP | Linear | `codex.yaml`에 등록된 쓰기 가능 route의 전체 `tool_input` payload |
 
 로컬 커밋은 추가 줄만 보므로 기존 위반이 무관한 새 수정으로 다시 차단되지
 않는다. PR과 온라인 MCP 쓰기는 해당 요청의 **full-payload 범위**를 검사한다. 다만
-`gh --body-file -`처럼 stdin에서 전달되는 PR 본문은 이 PreToolUse 셸 훅에서 사용할 수
-없어 검사했다고 주장하지 않으며, 이 경계에서는 fail-open한다.
+`gh`를 대화형으로 실행해 도구 호출 명령에 본문을 직접 포함하지 않은 경우와
+`gh --body-file -`처럼 stdin에서 전달되는 경우의 PR 본문은 이 PreToolUse 셸 훅에서
+사용할 수 없다. 따라서 검사했다고 주장하지 않으며, 이 경계에서는 fail-open한다.
 
 ## 판정자
 
@@ -55,12 +57,11 @@
 ## 플랫폼 연결과 실패 모드
 
 코어는 판정만 담당하고, 플랫폼별 shim이 각 이벤트를 같은 코어에 연결한다.
-Claude shim과 Codex shim은 같은 코어·같은 판정·같은 처방을 사용해 결과를
-맞춘다. Codex용 shim은 동반 구현이며, Codex PreToolUse가 MCP 인자를
-`tool_input`으로 제공한다는
-경계를 기준으로 `mcp__notion__.*`, `mcp__slack__.*`,
-`mcp__linear__.*` tool route를 검사한다.
+Claude Bash shim은 `git commit`, `gh` PR, `curl` 외부 요청을 검사한다. Codex MCP
+shim은 Codex PreToolUse가 MCP 인자를 `tool_input`으로 제공한다는 경계를 기준으로,
+`codex.yaml`에 등록된 쓰기 가능 Notion·Slack·Linear route만 검사한다. 읽기 전용이나
+등록되지 않은 route는 이 MCP 훅의 검사 대상이 아니다.
 
 payload가 잘못되었거나, `jq`/Git/인덱스를 사용할 수 없거나, 알 수 없는
 명령·MCP 형태이거나, 저장소 위치를 확인할 수 없으면 **fail-open**한다.
-이 경우 외부 작업을 막지 않고 진단만 남긴다.
+이 경우 외부 작업을 막지 않으며, 호출 경로에 따라 진단이 남지 않을 수도 있다.
