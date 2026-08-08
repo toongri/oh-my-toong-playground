@@ -37,6 +37,9 @@ printf 'untracked root note\n' > "$REPO/local-note"
 printf 'untracked env\n' > "$REPO/.env"
 printf 'untracked secret\n' > "$REPO/secret"
 printf 'machine local\n' > "$HOME/private-notes.md"
+printf 'machine local attachment\n' > "$HOME/private attachment.md"
+printf 'tracked attachment\n' > "$REPO/docs/tracked attachment.md"
+git -C "$REPO" add 'docs/tracked attachment.md'
 printf 'session state\n' > "$OMT_DIR/session.md"
 printf 'machine local parent\n' > "$TEST_TMP_DIR/secret.md"
 
@@ -89,6 +92,22 @@ test_existing_absolute_tracked_file_reports_relative_remediation() {
     [[ "$rc" -eq 0 ]] || return 1
     printf '%s' "$out" | grep -F 'type=absolute-tracked' >/dev/null || return 1
     printf '%s' "$out" | grep -F 'use the repository-relative path' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'path=docs/tracked.md' >/dev/null
+}
+
+test_existing_file_url_reports_machine_local() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "file://$HOME/private-notes.md") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F "path=file://$HOME/private-notes.md" >/dev/null
+}
+
+test_file_url_for_tracked_file_reports_absolute_tracked() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "file://$REPO/docs/tracked.md") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=absolute-tracked' >/dev/null || return 1
     printf '%s' "$out" | grep -F 'path=docs/tracked.md' >/dev/null
 }
 
@@ -186,6 +205,28 @@ test_location_prefix_preserves_content_path_classification() {
     ! printf '%s' "$out" | grep -F 'path=docs/old.md:2' >/dev/null
 }
 
+test_path_line_citation_in_regular_text_is_classified() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'docs/untracked.md:2: see the cited local file') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'path=docs/untracked.md:2' >/dev/null
+}
+
+test_single_concrete_path_with_spaces_reports_machine_local() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "$HOME/private attachment.md") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F "path=$HOME/private attachment.md" >/dev/null
+}
+
+test_markdown_destination_with_spaces_allows_tracked_target() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See [attachment](docs/tracked attachment.md).') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
 test_existing_parent_relative_file_reports_machine_local() {
     local out rc=0
     out=$(local_path_ref_gate_core_check "$REPO" 'See ../secret.md') || rc=$?
@@ -205,6 +246,8 @@ run_test test_missing_relative_reports_location_type_and_remediation
 run_test test_existing_home_file_reports_untracked_remediation
 run_test test_existing_omt_file_reports_untracked_remediation
 run_test test_existing_absolute_tracked_file_reports_relative_remediation
+run_test test_existing_file_url_reports_machine_local
+run_test test_file_url_for_tracked_file_reports_absolute_tracked
 run_test test_nonexistent_concrete_local_path_allows
 run_test test_nonexistent_bare_relative_example_allows
 run_test test_markdown_destination_with_optional_title_allows_tracked_target
@@ -218,6 +261,9 @@ run_test test_nonexistent_root_level_words_are_not_paths
 run_test test_markdown_parenthesized_path_reports_machine_local
 run_test test_location_prefix_only_inspects_actual_content
 run_test test_location_prefix_preserves_content_path_classification
+run_test test_path_line_citation_in_regular_text_is_classified
+run_test test_single_concrete_path_with_spaces_reports_machine_local
+run_test test_markdown_destination_with_spaces_allows_tracked_target
 run_test test_existing_parent_relative_file_reports_machine_local
 run_test test_setup_error_fails_open
 

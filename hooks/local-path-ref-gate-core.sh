@@ -20,8 +20,8 @@
 # The supported TYPE values are `repo-relative-missing`,
 # `machine-local-untracked`, and `absolute-tracked`.
 #
-# Bash 3.2/macOS compatible.  No shell-command parsing, staged-diff handling,
-# network/MCP extraction, or platform-specific JSON belongs here.
+# Bash 3.2/macOS compatible.  No shell-command parsing, network/MCP
+# extraction, or platform-specific JSON belongs here.
 # =============================================================================
 
 _lpr_core_expand_path() {
@@ -163,10 +163,24 @@ _lpr_core_consider() {
     # `bare` references are only actionable when they resolve to an existing
     # file.  Markdown links and explicitly delimited evidence retain the
     # missing-target diagnosis because those forms assert a concrete citation.
-    local raw="$1" line_no="$2" context="${3-bare}" candidate repo_target
+    local raw="$1" line_no="$2" context="${3-bare}" candidate display_candidate repo_target
     _lpr_core_trim_candidate "$raw"
     candidate="$_LPR_CANDIDATE"
     [[ -n "$candidate" ]] || return 0
+    display_candidate="$candidate"
+
+    # `file:///...` is a local absolute reference, not an external URL.  The
+    # `file://` form below deliberately accepts only the empty-authority form;
+    # a hostname-bearing URI is not a local path this core can inspect.
+    case "$candidate" in
+        file:///*) candidate="${candidate#file://}" ;;
+    esac
+
+    # A `path:line` citation identifies the same local file as `path`.  Keep
+    # the citation in diagnostic output, but resolve and classify its path.
+    if [[ "$candidate" =~ ^(.+):[1-9][0-9]*$ ]]; then
+        candidate="${BASH_REMATCH[1]}"
+    fi
 
     _lpr_core_expand_path "$candidate"
     candidate="$_LPR_EXPANDED"
@@ -187,7 +201,7 @@ _lpr_core_consider() {
                     "use the repository-relative path"
             else
                 [[ "$?" -eq 2 ]] && return 0
-                _lpr_core_emit "$line_no" "machine-local-untracked" "$raw" \
+                _lpr_core_emit "$line_no" "machine-local-untracked" "$display_candidate" \
                     "inline a summary or copy the file into the repository"
             fi
             ;;
@@ -200,13 +214,13 @@ _lpr_core_consider() {
                     return 0
                 else
                     [[ "$?" -eq 2 ]] && return 0
-                    _lpr_core_emit "$line_no" "machine-local-untracked" "$raw" \
+                    _lpr_core_emit "$line_no" "machine-local-untracked" "$display_candidate" \
                         "inline a summary or copy the file into the repository"
                     return 0
                 fi
             fi
             if [[ "$context" == "markdown" || "$context" == "evidence" ]]; then
-                _lpr_core_emit "$line_no" "repo-relative-missing" "$raw" \
+                _lpr_core_emit "$line_no" "repo-relative-missing" "$display_candidate" \
                     "add the target or inline its content"
             fi
             ;;
@@ -215,14 +229,6 @@ _lpr_core_consider() {
 
 _lpr_core_scan_line() {
     local line="$1" line_no="$2" rest target token candidate markdown_match
-    local _lpr_location_re='^[^[:space:]:][^:]*:[1-9][0-9]*:[[:space:]]*'
-    # Staged-diff adapters prefix added content with `path:line: `.  That
-    # location metadata is not part of the citation text; inspect only the
-    # content after it so an extensionless path classifier cannot mistake
-    # `docs/file.md:2:` for a repository-relative path.
-    if [[ "$line" =~ $_lpr_location_re ]]; then
-        line="${line#"${BASH_REMATCH[0]}"}"
-    fi
     # Permit balanced parentheses in a Markdown destination (for example a
     # filename such as `report(2026).md`) while still stopping at the link's
     # closing delimiter.  Bash's ERE cannot recurse, but this handles the
@@ -239,8 +245,23 @@ _lpr_core_scan_line() {
             target="${BASH_REMATCH[1]}"
         fi
         _lpr_core_consider "$target" "$line_no" markdown
+        # Do not scan a Markdown destination again as bare prose.  In
+        # particular, a destination with spaces would otherwise leave its
+        # final word to be reported as a spurious missing path.
+        line="${line/"$markdown_match"/}"
         rest="${rest#*"$markdown_match"}"
     done
+
+    # Callers can hand the core one concrete value, including an attachment
+    # path with spaces.  Try that whole value before the intentionally
+    # conservative word scan below, which would otherwise split the path.
+    _lpr_core_trim_candidate "$line"
+    candidate="$_LPR_CANDIDATE"
+    case "$candidate" in
+        /*|~|~/*|\$HOME|\$HOME/*|\${HOME}|\${HOME}/*|\$OMT_DIR|\$OMT_DIR/*|\${OMT_DIR}|\${OMT_DIR}/*|./*|../*|file:///*|*/*)
+            _lpr_core_consider "$candidate" "$line_no" bare
+            ;;
+    esac
 
     # Also inspect obvious bare local paths.  This is a reference classifier,
     # not a shell parser: quoted/escaped command syntax is left to shims.
