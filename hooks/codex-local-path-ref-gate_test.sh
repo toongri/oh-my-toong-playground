@@ -138,6 +138,19 @@ test_gh_short_body_flag_and_escaped_quotes_deny() {
     printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
 }
 
+test_gh_body_at_mention_and_short_body_file_deny() {
+    local body_file="$REPO/gh-body.md" command payload
+    printf 'See docs/untracked.md\n' > "$body_file"
+    for command in \
+        'gh pr comment 12 --body "@team See docs/untracked.md"' \
+        "gh pr create -F '$body_file'"; do
+        payload=$(shell_payload bash "$command")
+        run_payload "$payload"
+        assert_codex_deny "$RUN_OUTPUT" || return 1
+        printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
+    done
+}
+
 test_quoted_separators_do_not_create_fake_gh_or_curl_commands() {
     local command payload
     for command in \
@@ -217,6 +230,17 @@ test_target_curl_api_root_endpoints_deny() {
         run_payload "$payload"
         assert_codex_deny "$RUN_OUTPUT" || return 1
         printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
+    done
+}
+
+test_target_curl_root_query_and_fragment_deny() {
+    local command payload
+    for command in \
+        'curl -X POST "https://api.notion.com?source=test" --data "{\"text\":\"See docs/untracked.md\"}"' \
+        'curl -X POST "https://api.notion.com#fragment" --data "{\"text\":\"See docs/untracked.md\"}"'; do
+        payload=$(shell_payload bash "$command")
+        run_payload "$payload"
+        assert_codex_deny "$RUN_OUTPUT" || return 1
     done
 }
 
@@ -300,6 +324,25 @@ test_target_curl_attached_short_options_deny() {
     done
 }
 
+test_target_curl_upload_file_deny() {
+    local command payload
+    for command in \
+        'curl -X POST https://api.notion.com/v1/pages --upload-file docs/untracked.png' \
+        'curl -X POST https://api.notion.com/v1/pages -Tdocs/untracked.png'; do
+        payload=$(shell_payload bash "$command")
+        run_payload "$payload"
+        assert_codex_deny "$RUN_OUTPUT" || return 1
+        printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.png' >/dev/null || return 1
+    done
+}
+
+test_non_target_curl_payload_url_allows() {
+    local payload
+    payload=$(shell_payload bash 'curl https://example.invalid --data "https://api.notion.com/v1/pages See docs/untracked.md"')
+    run_payload "$payload"
+    [ "$RUN_EXIT" -eq 0 ] && [ -z "$RUN_OUTPUT" ]
+}
+
 test_target_curl_data_urlencode_name_at_file_reads_content() {
     local payload_file="$REPO/urlencoded.txt" command payload
     printf 'See docs/untracked.md\n' > "$payload_file"
@@ -359,6 +402,35 @@ test_target_curl_multipart_missing_attachment_fails_open() {
     [ "$RUN_EXIT" -eq 0 ] && [ -z "$RUN_OUTPUT" ]
 }
 
+test_git_commit_expands_home_in_dash_c_target() {
+    local target="$HOME/target-repo" payload
+    mkdir -p "$target/docs"
+    git -C "$target" init -q
+    git -C "$target" config user.email test@example.invalid
+    git -C "$target" config user.name test
+    printf 'baseline\n' > "$target/docs/notes.md"
+    git -C "$target" add docs/notes.md
+    git -C "$target" commit -q -m baseline
+    printf 'citation: $OMT_DIR/session.md\n' >> "$target/docs/notes.md"
+    git -C "$target" add docs/notes.md
+    payload=$(shell_payload bash 'git -C "$HOME/target-repo" commit -m target')
+    run_payload "$payload"
+    assert_codex_deny "$RUN_OUTPUT"
+}
+
+test_git_commit_detects_staged_path_with_spaces() {
+    local secret_dir="$HOME/local dir" payload
+    mkdir -p "$secret_dir"
+    printf 'local secret\n' > "$secret_dir/secret.md"
+    printf '~/local dir/secret.md\n' >> "$REPO/docs/notes.md"
+    git -C "$REPO" add docs/notes.md
+    payload=$(shell_payload bash 'git commit -m spaces')
+    run_payload "$payload"
+    assert_codex_deny "$RUN_OUTPUT" || return 1
+    git -C "$REPO" reset -q HEAD -- docs/notes.md
+    git -C "$REPO" checkout -q -- docs/notes.md
+}
+
 test_mcp_outbound_write_argument_strings_deny() {
     local tool_name payload
     for tool_name in \
@@ -371,6 +443,14 @@ test_mcp_outbound_write_argument_strings_deny() {
         assert_codex_deny "$RUN_OUTPUT" || return 1
         printf '%s' "$RUN_OUTPUT" | grep -F 'docs/untracked.md' >/dev/null || return 1
     done
+}
+
+test_mcp_attachment_path_deny() {
+    local payload
+    payload=$(jq -nc --arg cwd "$REPO" \
+        '{cwd:$cwd,tool_name:"mcp__notion__notion_create_file_upload",tool_input:{file_path:"docs/notes.md"}}')
+    run_payload "$payload"
+    assert_codex_deny "$RUN_OUTPUT"
 }
 
 test_mcp_read_only_routes_allow_local_path_arguments() {
@@ -464,24 +544,31 @@ main() {
     run_test test_git_commit_scans_dash_c_target_and_compound_target
     run_test test_shell_command_key_fallback_and_gh_body_routes
     run_test test_gh_short_body_flag_and_escaped_quotes_deny
+    run_test test_gh_body_at_mention_and_short_body_file_deny
     run_test test_quoted_separators_do_not_create_fake_gh_or_curl_commands
     run_test test_gh_compound_commands_inspect_later_create_edit_and_comment_bodies
     run_test test_newline_separators_inspect_later_gh_and_curl_commands
     run_test test_gh_body_file_routes_read_file_content
     run_test test_target_curl_payloads_deny
     run_test test_target_curl_api_root_endpoints_deny
+    run_test test_target_curl_root_query_and_fragment_deny
     run_test test_target_curl_json_payload_deny
     run_test test_target_curl_form_string_payload_deny
     run_test test_target_curl_equals_url_routes_payload
     run_test test_target_curl_escaped_quotes_deny
     run_test test_target_curl_inspects_every_data_payload_and_readable_at_file
     run_test test_target_curl_attached_short_options_deny
+    run_test test_target_curl_upload_file_deny
+    run_test test_non_target_curl_payload_url_allows
     run_test test_target_curl_data_urlencode_name_at_file_reads_content
     run_test test_target_curl_data_urlencode_missing_file_fails_open
     run_test test_target_curl_multipart_attachments_deny
     run_test test_target_curl_multipart_relative_workdir_deny
     run_test test_target_curl_multipart_missing_attachment_fails_open
+    run_test test_git_commit_expands_home_in_dash_c_target
+    run_test test_git_commit_detects_staged_path_with_spaces
     run_test test_mcp_outbound_write_argument_strings_deny
+    run_test test_mcp_attachment_path_deny
     run_test test_mcp_read_only_routes_allow_local_path_arguments
     run_test test_allow_safe_and_fail_open_shapes
     run_test test_old_untouched_violation_allows

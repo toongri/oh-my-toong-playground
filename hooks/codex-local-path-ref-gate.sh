@@ -61,6 +61,26 @@ _lpr_check_text() {
     return 0
 }
 
+_lpr_check_attachment() {
+    local attachment="$1" inspectable="${2-$1}" records rc=0
+    [ -n "$attachment" ] || return 0
+    records=$(local_path_ref_gate_core_check_attachment "$repo_root" "$attachment" 2>/dev/null) || rc=$?
+    [ "$rc" -eq 0 ] || return 0
+    [ -n "$records" ] || return 0
+    _lpr_render_deny "$records" "$inspectable" && return 2
+    return 0
+}
+
+_lpr_check_staged_text() {
+    local inspectable="$1" scan_text records rc=0
+    scan_text=$(printf '%s\n' "$inspectable" | sed -E 's/^[^:]+:[0-9]+: //') || return 0
+    records=$(local_path_ref_gate_core_check "$repo_root" "$scan_text" 2>/dev/null) || rc=$?
+    [ "$rc" -eq 0 ] || return 0
+    [ -n "$records" ] || return 0
+    _lpr_render_deny "$records" "$inspectable" && return 2
+    return 0
+}
+
 _lpr_staged_added_text() {
     local diff
     diff=$(git -C "$repo_root" diff --cached --unified=0 --no-color -- 2>/dev/null) || return 1
@@ -135,7 +155,14 @@ _lpr_shell_next_word() {
             elif [ "$char" = '\' ]; then
                 index=$((index + 1))
                 [ "$index" -lt "$length" ] || return 1
-                value="${value}${rest:$index:1}"
+                char="${rest:$index:1}"
+                # In double quotes, a backslash only escapes `$`, backticks,
+                # double quotes, backslashes, and newlines. Preserve it for
+                # every other character so the inspected argv matches shell.
+                case "$char" in
+                    '$'|'`'|'"'|'\'|$'\n') value="${value}${char}" ;;
+                    *) value="${value}\\${char}" ;;
+                esac
             else
                 value="${value}${char}"
             fi
@@ -219,17 +246,12 @@ _lpr_read_file_content() {
 
 _lpr_gh_body_value() {
     local value="$1" body_file="$2"
-    case "$value" in
-        @*) _lpr_read_file_content "${value#@}" || return 1 ;;
-        -) return 1 ;;
-        *)
-            if [ "$body_file" -eq 1 ]; then
-                _lpr_read_file_content "$value" || return 1
-            else
-                _LPR_VALUE="$value"
-            fi
-            ;;
-    esac
+    [ "$value" != "-" ] || return 1
+    if [ "$body_file" -eq 1 ]; then
+        _lpr_read_file_content "$value" || return 1
+    else
+        _LPR_VALUE="$value"
+    fi
     return 0
 }
 
@@ -258,13 +280,14 @@ _lpr_inspect_gh() {
                     _lpr_shell_next_word "$rest" || return 0
                     value="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
                     ;;
-                --body-file)
+                -F|--body-file)
                     body_file=1
                     _lpr_shell_next_word "$rest" || return 0
                     value="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
                     ;;
                 --body=*) value="${word#--body=}" ;;
                 --body-file=*) body_file=1; value="${word#--body-file=}" ;;
+                -F?*) body_file=1; value="${word#-F}" ;;
                 -b?*) value="${word#-b}" ;;
                 *) continue ;;
             esac
@@ -292,21 +315,11 @@ _lpr_curl_payload_value() {
     return 0
 }
 
-_lpr_curl_form_attachment() {
-    local form="$1" path expanded
-    case "$form" in
-        @*) path="${form#@}" ;;
-        *=@*) path="${form#*=@}" ;;
-        *) return 0 ;;
-    esac
-    # curl permits options after an attachment path (for example
-    # `;type=image/png`).  The path itself is the only part classified here.
+_lpr_curl_file_attachment() {
+    local path="$1" expanded attachment_rc=0
+    [ -n "$path" ] || return 0
     path="${path%%;*}"
     [ -n "$path" ] || return 0
-
-    # An unreadable/missing attachment is an inspection failure, not a
-    # citation violation.  Preserve the gate's fail-open contract before
-    # handing the concrete path to the shared classifier.
     _lpr_core_expand_path "$path" || return 0
     expanded="$_LPR_EXPANDED"
     case "$expanded" in
@@ -314,21 +327,24 @@ _lpr_curl_form_attachment() {
         *) expanded="$effective_cwd/$expanded" ;;
     esac
     [ -f "$expanded" ] && [ -r "$expanded" ] || return 0
-
-    _lpr_check_text "$expanded"
-    case "$?" in
-        2) return 2 ;;
-    esac
-
-    # The attachment path itself is outbound local content.  Its concrete
-    # reference is sufficient for the shared classifier; do not reinterpret
-    # arbitrary binary bytes as shell/prose text.
+    _lpr_check_attachment "$expanded" "$path" || attachment_rc=$?
+    [ "$attachment_rc" -eq 2 ] && return 2
     return 0
+}
+
+_lpr_curl_form_attachment() {
+    local form="$1" path
+    case "$form" in
+        @*) path="${form#@}" ;;
+        *=@*) path="${form#*=@}" ;;
+        *) return 0 ;;
+    esac
+    _lpr_curl_file_attachment "$path"
 }
 
 _lpr_curl_is_target_url() {
     case "$1" in
-        https://api.notion.com|https://api.notion.com/*|https://slack.com/api|https://slack.com/api/*|https://api.linear.app|https://api.linear.app/*|https://linear.app/api|https://linear.app/api/*)
+        https://api.notion.com|https://api.notion.com[/?#]*|https://slack.com/api|https://slack.com/api[/?#]*|https://api.linear.app|https://api.linear.app[/?#]*|https://linear.app/api|https://linear.app/api[/?#]*)
             return 0
             ;;
         *) return 1 ;;
@@ -354,6 +370,11 @@ _lpr_inspect_curl() {
                     rest="$_LPR_SHELL_REMAINDER"
                     ;;
                 --url=*) _lpr_curl_is_target_url "${word#--url=}" && target=1 ;;
+                --data|--data-raw|--data-binary|--data-ascii|--data-urlencode|--json|-d|--form|-F|--form-string|--upload-file|-T|-X|--request|-H|--header|-u|--user)
+                    _lpr_shell_next_word "$rest" || return 0
+                    rest="$_LPR_SHELL_REMAINDER"
+                    ;;
+                --data=*|--data-raw=*|--data-binary=*|--data-ascii=*|--data-urlencode=*|--json=*|--form=*|--form-string=*|--upload-file=*|--request=*|--header=*|--user=*|-d?*|-F?*|-T?*|-X?*|-H?*|-u?*) ;;
                 *) _lpr_curl_is_target_url "$word" && target=1 ;;
             esac
         done
@@ -363,7 +384,7 @@ _lpr_inspect_curl() {
         while _lpr_shell_next_word "$rest"; do
             word="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"; option=""
             case "$word" in
-                --data|--data-raw|--data-binary|--data-ascii|--data-urlencode|--json|-d|--form|-F|--form-string)
+                --data|--data-raw|--data-binary|--data-ascii|--data-urlencode|--json|-d|--form|-F|--form-string|--upload-file|-T)
                     option="$word"
                     _lpr_shell_next_word "$rest" || return 0
                     value="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
@@ -375,14 +396,21 @@ _lpr_inspect_curl() {
                 --data-urlencode=*) option="--data-urlencode"; value="${word#--data-urlencode=}" ;;
                 --form=*) option="--form"; value="${word#--form=}" ;;
                 --form-string=*) option="--form-string"; value="${word#--form-string=}" ;;
+                --upload-file=*) option="--upload-file"; value="${word#--upload-file=}" ;;
                 -d?*) option="-d"; value="${word#-d}" ;;
                 -F?*) option="-F"; value="${word#-F}" ;;
+                -T?*) option="-T"; value="${word#-T}" ;;
                 *) continue ;;
             esac
             case "$option" in
                 --form|-F)
                     form_rc=0
                     _lpr_curl_form_attachment "$value" || form_rc=$?
+                    [ "$form_rc" -eq 2 ] && return 2
+                    ;;
+                --upload-file|-T)
+                    form_rc=0
+                    _lpr_curl_file_attachment "$value" || form_rc=$?
                     [ "$form_rc" -eq 2 ] && return 2
                     ;;
                 *)
@@ -405,6 +433,13 @@ _lpr_git_commit_staged_text() {
         _lpr_shell_next_segment "$remaining" || return 0
         segment="$_LPR_SEGMENT"; remaining="$_LPR_SHELL_REMAINDER"
         _lpr_shell_next_word "$segment" || continue
+        while [ "$_LPR_WORD" != "git" ]; do
+            case "$_LPR_WORD" in
+                [A-Za-z_]*=*) ;;
+                *) break ;;
+            esac
+            _lpr_shell_next_word "$_LPR_SHELL_REMAINDER" || break
+        done
         [ "$_LPR_WORD" = "git" ] || continue
         rest="$_LPR_SHELL_REMAINDER"; git_cwd="$effective_cwd"; has_commit=0
         while _lpr_shell_next_word "$rest"; do
@@ -413,11 +448,18 @@ _lpr_git_commit_staged_text() {
                 -C)
                     _lpr_shell_next_word "$rest" || return 0
                     git_cwd="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
+                    _lpr_core_expand_path "$git_cwd" || return 0
+                    git_cwd="$_LPR_EXPANDED"
+                    case "$git_cwd" in /*) ;; *) git_cwd="$effective_cwd/$git_cwd" ;; esac
                     ;;
-                -C?*) git_cwd="${word#-C}" ;;
+                -C?*)
+                    git_cwd="${word#-C}"
+                    _lpr_core_expand_path "$git_cwd" || return 0
+                    git_cwd="$_LPR_EXPANDED"
+                    case "$git_cwd" in /*) ;; *) git_cwd="$effective_cwd/$git_cwd" ;; esac
+                    ;;
                 commit) has_commit=1; break ;;
             esac
-            case "$git_cwd" in /*) ;; *) git_cwd="$effective_cwd/$git_cwd" ;; esac
         done
         [ "$has_commit" -eq 1 ] || continue
         repo_for_commit=$(git -C "$git_cwd" rev-parse --show-toplevel 2>/dev/null) || {
@@ -432,7 +474,7 @@ _lpr_git_commit_staged_text() {
         repo_root="$repo_for_commit"
         staged_text=$(_lpr_staged_added_text) || staged_text=""
         if [ -n "$staged_text" ]; then
-            _lpr_check_text "$staged_text" || rc=$?
+            _lpr_check_staged_text "$staged_text" || rc=$?
             if [ "$rc" -eq 2 ]; then
                 repo_root="$base_repo_root"
                 return 2
@@ -463,6 +505,36 @@ _lpr_shell_route() {
     return 0
 }
 
+_lpr_mcp_attachment_paths() {
+    local candidates candidate expanded rc=0
+    candidates=$(printf '%s' "$input" | jq -r '
+        if (.tool_input? | type) != "object" then empty
+        else .tool_input
+        | paths(strings) as $path
+        | ($path[-1]) as $key
+        | select($key == "file" or $key == "file_path" or $key == "filePath" or $key == "attachment_path" or $key == "attachmentPath" or $key == "path")
+        | getpath($path)
+        end
+    ' 2>/dev/null) || return 0
+    [ -n "$candidates" ] || return 0
+    while IFS= read -r candidate; do
+        [ -n "$candidate" ] || continue
+        _lpr_core_expand_path "$candidate" || return 0
+        expanded="$_LPR_EXPANDED"
+        case "$expanded" in
+            /*) ;;
+            *) expanded="$effective_cwd/$expanded" ;;
+        esac
+        [ -f "$expanded" ] && [ -r "$expanded" ] || continue
+        _lpr_check_attachment "$expanded" "$candidate" || rc=$?
+        [ "$rc" -eq 2 ] && return 2
+        rc=0
+    done <<EOF
+$candidates
+EOF
+    return 0
+}
+
 case "$tool_name" in
     Bash|bash|exec_command|shell_command)
         _lpr_shell_route || rc=$?
@@ -471,6 +543,13 @@ case "$tool_name" in
         ;;
     mcp__notion__notion_convert_page_to_skill|mcp__notion__notion_create_attachment|mcp__notion__notion_create_comment|mcp__notion__notion_create_database|mcp__notion__notion_create_file_upload|mcp__notion__notion_create_folder|mcp__notion__notion_create_pages|mcp__notion__notion_create_view|mcp__notion__notion_duplicate_page|mcp__notion__notion_move_pages|mcp__notion__notion_update_data_source|mcp__notion__notion_update_page|mcp__notion__notion_update_view|mcp__slack__slack_add_reaction|mcp__slack__slack_create_canvas|mcp__slack__slack_create_conversation|mcp__slack__slack_schedule_message|mcp__slack__slack_send_message|mcp__slack__slack_send_message_draft|mcp__slack__slack_update_canvas|mcp__linear__create_attachment|mcp__linear__create_attachment_from_upload|mcp__linear__create_initiative_label|mcp__linear__create_issue_label|mcp__linear__delete_attachment|mcp__linear__delete_comment|mcp__linear__delete_diff_comment|mcp__linear__delete_status_update|mcp__linear__merge_diff|mcp__linear__prepare_attachment_upload|mcp__linear__resolve_diff_thread|mcp__linear__save_comment|mcp__linear__save_diff_comment|mcp__linear__save_document|mcp__linear__save_initiative|mcp__linear__save_issue|mcp__linear__save_milestone|mcp__linear__save_project|mcp__linear__save_release|mcp__linear__save_release_note|mcp__linear__save_status_update|mcp__linear__submit_diff_review)
         _lpr_prepare_repo || exit 0
+        case "$tool_name" in
+            mcp__notion__notion_create_attachment|mcp__notion__notion_create_file_upload|mcp__linear__create_attachment|mcp__linear__create_attachment_from_upload|mcp__linear__prepare_attachment_upload)
+                _lpr_mcp_attachment_paths || rc=$?
+                [ "${rc:-0}" -eq 2 ] && exit 0
+                rc=0
+                ;;
+        esac
         inspectable=$(printf '%s' "$input" | jq -r 'if (.tool_input? | type) == "object" or (.tool_input? | type) == "array" then .tool_input | .. | strings else empty end' 2>/dev/null) || exit 0
         [ -n "$inspectable" ] || exit 0
         rc=0
