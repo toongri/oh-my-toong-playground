@@ -115,10 +115,11 @@ hooks:
       matcher: "Bash|bash|exec_command|shell_command"
     # Claude<->Codex hook-parity: inspect staged/local-path citations before
     # commits and outbound PR/API/MCP writes. The matcher is a full-string
-    # regex, so the MCP prefixes intentionally carry `.*` suffixes.
+    # regex and deliberately names only currently configured write tools so
+    # read-only Notion/Slack/Linear routes are never inspected or denied.
     - component: codex-local-path-ref-gate.sh
       type: command
-      matcher: "Bash|bash|exec_command|shell_command|mcp__notion__.*|mcp__slack__.*|mcp__linear__.*"
+      matcher: "Bash|bash|exec_command|shell_command|mcp__notion__notion_convert_page_to_skill|mcp__notion__notion_create_attachment|mcp__notion__notion_create_comment|mcp__notion__notion_create_database|mcp__notion__notion_create_file_upload|mcp__notion__notion_create_folder|mcp__notion__notion_create_pages|mcp__notion__notion_create_view|mcp__notion__notion_duplicate_page|mcp__notion__notion_move_pages|mcp__notion__notion_update_data_source|mcp__notion__notion_update_page|mcp__notion__notion_update_view|mcp__slack__slack_add_reaction|mcp__slack__slack_create_canvas|mcp__slack__slack_create_conversation|mcp__slack__slack_schedule_message|mcp__slack__slack_send_message|mcp__slack__slack_send_message_draft|mcp__slack__slack_update_canvas|mcp__linear__create_attachment|mcp__linear__create_attachment_from_upload|mcp__linear__create_initiative_label|mcp__linear__create_issue_label|mcp__linear__delete_attachment|mcp__linear__delete_comment|mcp__linear__delete_diff_comment|mcp__linear__delete_status_update|mcp__linear__merge_diff|mcp__linear__prepare_attachment_upload|mcp__linear__resolve_diff_thread|mcp__linear__save_comment|mcp__linear__save_diff_comment|mcp__linear__save_document|mcp__linear__save_initiative|mcp__linear__save_issue|mcp__linear__save_milestone|mcp__linear__save_project|mcp__linear__save_release|mcp__linear__save_release_note|mcp__linear__save_status_update|mcp__linear__submit_diff_review"
     # Claude<->Codex hook-parity: root claude.yaml registers review-exec-guard.sh
     # globally for Bash, so its Codex analog covers every root-config shell-tool
     # spelling. Codex applies this matcher as a full-string regex.
