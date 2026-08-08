@@ -309,6 +309,8 @@ test_target_curl_explicit_ports_and_multipart_text_content_deny() {
     for command in \
         'curl -X POST https://api.notion.com:443/v1/pages --data "{\"text\":\"See docs/untracked.md\"}"' \
         'curl -X POST https://slack.com:443/api/chat.postMessage -F "text=See docs/untracked.md"' \
+        'curl -X POST https://hooks.slack.com/services/T000/B000/XXX --data "{\"text\":\"See docs/untracked.md\"}"' \
+        'curl -X POST https://hooks.slack.com:443/services/T000/B000/XXX --data "{\"text\":\"See docs/untracked.md\"}"' \
         "curl -X POST https://api.linear.app:443/graphql -F 'text=<$form_file'"; do
         payload=$(shell_payload bash "$command")
         run_payload "$payload"
