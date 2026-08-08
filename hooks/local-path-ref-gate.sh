@@ -164,14 +164,15 @@ _lpr_extract_value_after() {
 }
 
 _lpr_read_file() {
-    local path="$1" contents
+    local path="$1" contents base_cwd
     [ -n "$path" ] || return 1
     case "$path" in -*) return 1 ;; esac
     _lpr_expand_file_path "$path" || return 1
     path="$_LPR_FILE_PATH"
+    base_cwd="${_LPR_SEGMENT_CWD-$PWD}"
     case "$path" in
         /*) ;;
-        *) path="$PWD/$path" ;;
+        *) path="$base_cwd/$path" ;;
     esac
     [ -f "$path" ] && [ -r "$path" ] || return 1
     contents=$(cat "$path" 2>/dev/null) || return 1
@@ -209,15 +210,23 @@ _lpr_expand_file_path() {
 
 _lpr_git_commit_target() {
     local segment="$1" git_re='^[[:space:]]*git([[:space:]]|$)' token target path base_cwd has_c=0
+    while :; do
+        _lpr_extract_value_after "$segment" || return 1
+        token="$_LPR_VALUE"
+        [[ "$token" =~ ^[[:alpha:]_][[:alnum:]_]*= ]] || break
+        segment="$_LPR_REMAINDER"
+    done
     [[ "$segment" =~ $git_re ]] || return 1
     segment="${segment#*"${BASH_REMATCH[0]}"}"
-    target="$repo_root"
+    base_cwd="${_LPR_SEGMENT_CWD-$PWD}"
+    target=$(git -C "$base_cwd" rev-parse --show-toplevel 2>/dev/null) || return 1
     while :; do
         _lpr_extract_value_after "$segment" || return 1
         token="$_LPR_VALUE"
         segment="$_LPR_REMAINDER"
         case "$token" in
             commit)
+                target=$(git -C "$target" rev-parse --show-toplevel 2>/dev/null) || return 1
                 _LPR_GIT_REPO="$target"
                 return 0
                 ;;
@@ -256,7 +265,6 @@ _lpr_git_commit_target() {
                 if [ "$has_c" -eq 1 ]; then
                     target="$target/$path"
                 else
-                    base_cwd="$PWD"
                     target="$base_cwd/$path"
                 fi
                 ;;
@@ -268,7 +276,7 @@ _lpr_git_commit_target() {
 
 _lpr_inspect_gh_body() {
     local value="$1" is_file="$2" rc=0
-    case "$value" in @*|-) return 0 ;; esac
+    [ "$value" = "-" ] && return 0
     if [ "$is_file" -eq 1 ]; then
         _lpr_read_file "$value" || return 0
         value="$_LPR_VALUE"
@@ -280,10 +288,28 @@ _lpr_inspect_gh_body() {
 }
 
 _lpr_inspect_gh() {
-    local segment="$1" gh_re='^[[:space:]]*gh[[:space:]]+pr[[:space:]]+(create|edit|comment)([[:space:]]|$)'
+    local segment="$1" gh_re='^[[:space:]]*gh([[:space:]]|$)'
     local remaining token value rc=0
     [[ "$segment" =~ $gh_re ]] || return 0
     remaining="${segment#*"${BASH_REMATCH[0]}"}"
+    while :; do
+        _lpr_extract_value_after "$remaining" || return 0
+        token="$_LPR_VALUE"
+        remaining="$_LPR_REMAINDER"
+        case "$token" in
+            pr) break ;;
+            -R|--repo|--hostname)
+                _lpr_extract_value_after "$remaining" || return 0
+                remaining="$_LPR_REMAINDER"
+                ;;
+            -R?*|--repo=*|--hostname=*) ;;
+            *) return 0 ;;
+        esac
+    done
+    _lpr_extract_value_after "$remaining" || return 0
+    token="$_LPR_VALUE"
+    remaining="$_LPR_REMAINDER"
+    case "$token" in create|edit|comment) ;; *) return 0 ;; esac
     while [ -n "$remaining" ]; do
         _lpr_extract_value_after "$remaining" || return 0
         token="$_LPR_VALUE"
@@ -310,7 +336,7 @@ _lpr_inspect_gh() {
                 rc=$?
                 [ "$rc" -eq 2 ] && return 2
                 ;;
-            --body-file)
+            --body-file|-F)
                 _lpr_extract_value_after "$remaining" || return 0
                 value="$_LPR_VALUE"
                 remaining="$_LPR_REMAINDER"
@@ -320,6 +346,14 @@ _lpr_inspect_gh() {
                 ;;
             --body-file=*)
                 _lpr_inspect_gh_body "${token#--body-file=}" 1
+                rc=$?
+                [ "$rc" -eq 2 ] && return 2
+                ;;
+            -F?*)
+                value="${token#-F}"
+                value="${value#=}"
+                [ -n "$value" ] || continue
+                _lpr_inspect_gh_body "$value" 1
                 rc=$?
                 [ "$rc" -eq 2 ] && return 2
                 ;;
@@ -338,8 +372,16 @@ _lpr_check_curl_payload_text() {
 }
 
 _lpr_inspect_curl_attachment() {
-    local attachment="$1" inspectable="$2" records rc=0
+    local attachment="$1" inspectable="$2" records rc=0 base_cwd
     [ -n "$attachment" ] || return 0
+    _lpr_expand_file_path "$attachment" || return 0
+    attachment="$_LPR_FILE_PATH"
+    base_cwd="${_LPR_SEGMENT_CWD-$PWD}"
+    case "$attachment" in
+        /*) ;;
+        *) attachment="$base_cwd/$attachment" ;;
+    esac
+    [ -f "$attachment" ] && [ -r "$attachment" ] || return 0
     records=$(local_path_ref_gate_core_check_attachment "$repo_root" "$attachment" 2>/dev/null) || rc=$?
     [ "$rc" -eq 0 ] || return 0
     [ -n "$records" ] || return 0
@@ -348,12 +390,22 @@ _lpr_inspect_curl_attachment() {
 }
 
 _lpr_inspect_curl_form() {
-    local value="$1" form_kind="$2" attachment rc=0
+    local value="$1" form_kind="$2" attachment contents rc=0
     _lpr_check_text "$value"
     rc=$?
     [ "$rc" -eq 2 ] && return 2
     [ "$form_kind" = "string" ] && return 0
     case "$value" in
+        *=\<*)
+            attachment="${value#*=<}"
+            attachment="${attachment%%;*}"
+            [ -n "$attachment" ] || return 0
+            _lpr_read_file "$attachment" || return 0
+            contents="$_LPR_VALUE"
+            _lpr_check_curl_payload_text "$contents"
+            rc=$?
+            [ "$rc" -eq 2 ] && return 2
+            ;;
         *=@*)
             attachment="${value#*=@}"
             attachment="${attachment%%;*}"
@@ -406,18 +458,22 @@ _lpr_inspect_curl_data() {
 
 _lpr_curl_target_url() {
     local value="$1"
-    [[ "$value" =~ ^https://(api[.]notion[.]com([/?#]|$)|slack[.]com/api([/?#]|$)|api[.]linear[.]app([/?#]|$)|linear[.]app/api([/?#]|$)) ]]
+    [[ "$value" =~ ^https://(api[.]notion[.]com(:[0-9]+)?([/?#]|$)|slack[.]com(:[0-9]+)?/api([/?#]|$)|api[.]linear[.]app(:[0-9]+)?([/?#]|$)|linear[.]app(:[0-9]+)?/api([/?#]|$)) ]]
 }
 
 _lpr_curl_has_target_url() {
-    local remaining="$1" token expects_value=0 after_options=0
+    local remaining="$1" token expects_url=0 skips_value=0 after_options=0
     while [ -n "$remaining" ]; do
         _lpr_extract_value_after "$remaining" || return 1
         token="$_LPR_VALUE"
         remaining="$_LPR_REMAINDER"
-        if [ "$expects_value" -eq 1 ]; then
+        if [ "$expects_url" -eq 1 ]; then
             _lpr_curl_target_url "$token" && return 0
-            expects_value=0
+            expects_url=0
+            continue
+        fi
+        if [ "$skips_value" -eq 1 ]; then
+            skips_value=0
             continue
         fi
         if [ "$after_options" -eq 1 ]; then
@@ -429,15 +485,15 @@ _lpr_curl_has_target_url() {
                 after_options=1
                 ;;
             --url)
-                expects_value=1
+                expects_url=1
                 ;;
             --url=*)
                 _lpr_curl_target_url "${token#--url=}" && return 0
                 ;;
-            --data|--data-raw|--data-binary|--data-ascii|--json|--data-urlencode|--form|--form-string|-d|-F|-X|--request|-H|--header|-u|--user)
-                expects_value=1
+            --data|--data-raw|--data-binary|--data-ascii|--json|--data-urlencode|--form|--form-string|--upload-file|-d|-F|-T|-X|--request|-H|--header|-u|--user)
+                skips_value=1
                 ;;
-            --data=*|--data-raw=*|--data-binary=*|--data-ascii=*|--json=*|--data-urlencode=*|--form=*|--form-string=*|-d?*|-F?*|-X?*|--request=*|-H?*|--header=*|-u?*|--user=*)
+            --data=*|--data-raw=*|--data-binary=*|--data-ascii=*|--json=*|--data-urlencode=*|--form=*|--form-string=*|--upload-file=*|-d?*|-F?*|-T?*|-X?*|--request=*|-H?*|--header=*|-u?*|--user=*)
                 ;;
             -*)
                 ;;
@@ -446,7 +502,7 @@ _lpr_curl_has_target_url() {
                 ;;
         esac
     done
-    [ "$expects_value" -eq 0 ] || return 1
+    [ "$expects_url" -eq 0 ] || return 1
     return 1
 }
 
@@ -464,6 +520,31 @@ _lpr_inspect_curl() {
         remaining="$_LPR_REMAINDER"
         kind=""
         case "$token" in
+            -T|--upload-file)
+                _lpr_extract_value_after "$remaining" || return 0
+                value="$_LPR_VALUE"
+                remaining="$_LPR_REMAINDER"
+                _lpr_inspect_curl_attachment "$value" "$value"
+                rc=$?
+                [ "$rc" -eq 2 ] && return 2
+                continue
+                ;;
+            -T?*)
+                value="${token#-T}"
+                value="${value#=}"
+                [ -n "$value" ] || continue
+                _lpr_inspect_curl_attachment "$value" "$value"
+                rc=$?
+                [ "$rc" -eq 2 ] && return 2
+                continue
+                ;;
+            --upload-file=*)
+                value="${token#--upload-file=}"
+                _lpr_inspect_curl_attachment "$value" "$value"
+                rc=$?
+                [ "$rc" -eq 2 ] && return 2
+                continue
+                ;;
             -F|--form)
                 _lpr_extract_value_after "$remaining" || return 0
                 value="$_LPR_VALUE"
@@ -557,6 +638,27 @@ _lpr_inspect_segment() {
     return 0
 }
 
+_lpr_update_segment_cwd() {
+    local segment="$1" remaining token path base_cwd
+    _lpr_extract_value_after "$segment" || return 1
+    token="$_LPR_VALUE"
+    remaining="$_LPR_REMAINDER"
+    [ "$token" = "cd" ] || return 1
+    _lpr_extract_value_after "$remaining" || return 1
+    path="$_LPR_VALUE"
+    remaining="$_LPR_REMAINDER"
+    [ -z "${remaining#"${remaining%%[![:space:]]*}"}" ] || return 1
+    _lpr_expand_file_path "$path" || return 1
+    path="$_LPR_FILE_PATH"
+    base_cwd="${_LPR_SEGMENT_CWD-$PWD}"
+    case "$path" in
+        /*) ;;
+        *) path="$base_cwd/$path" ;;
+    esac
+    _LPR_SEGMENT_CWD=$(cd "$path" 2>/dev/null && pwd -P) || return 1
+    return 0
+}
+
 # Split the limited composite shell shapes without evaluating expansion,
 # substitutions, redirects, or any command.  An unmatched quote/escape is
 # undecidable, so the entire command fails open before any inspection.
@@ -564,6 +666,7 @@ _lpr_each_shell_command() {
     local handler="$1" source="$cmd" segment="" quote="" char next
     local escaped=0 index=0 length=${#cmd} rc=0
     local -a segments
+    _LPR_SEGMENT_CWD="$PWD"
     while [ "$index" -lt "$length" ]; do
         char="${source:$index:1}"
         if [ "$escaped" -eq 1 ]; then
@@ -612,6 +715,9 @@ _lpr_each_shell_command() {
     [ -z "$quote" ] && [ "$escaped" -eq 0 ] || return 0
     segments[${#segments[@]}]="$segment"
     for segment in "${segments[@]}"; do
+        if _lpr_update_segment_cwd "$segment"; then
+            continue
+        fi
         "$handler" "$segment"
         rc=$?
         [ "$rc" -eq 2 ] && return 2
