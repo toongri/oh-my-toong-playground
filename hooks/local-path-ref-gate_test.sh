@@ -20,6 +20,7 @@ git -C "$REPO" config user.email test@example.invalid
 git -C "$REPO" config user.name test
 printf 'session state\n' > "$OMT_DIR/session.md"
 printf 'untracked fixture\n' > "$REPO/docs/untracked.md"
+printf 'png fixture\n' > "$REPO/docs/untracked.png"
 printf 'safe baseline\n' > "$REPO/docs/notes.md"
 printf '{"text":"safe baseline"}\n' > "$REPO/docs/payload.json"
 git -C "$REPO" add docs/notes.md
@@ -65,6 +66,31 @@ test_staged_added_omt_reference_denies_with_context_and_remedy() {
     git -C "$REPO" checkout -q -- docs/notes.md
 }
 
+test_git_C_commit_inspects_target_repo_staged_additions() {
+    local target_repo stderr_out exit_code=0 payload command
+    target_repo=$(mktemp -d "$REPO/git-target.XXXXXX")
+    git -C "$target_repo" init -q
+    git -C "$target_repo" config user.email test@example.invalid
+    git -C "$target_repo" config user.name test
+    printf 'safe target baseline\n' > "$target_repo/notes.md"
+    git -C "$target_repo" add notes.md
+    git -C "$target_repo" commit -q -m baseline
+    printf 'target-only fixture\n' > "$target_repo/docs-local.md"
+    printf 'citation: $OMT_DIR/session.md\n' >> "$target_repo/notes.md"
+    printf 'citation: docs-local.md\n' >> "$target_repo/notes.md"
+    git -C "$target_repo" add notes.md
+
+    command="git -C \"$target_repo\" commit -m \"target commit\""
+    payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+    [[ "$exit_code" -eq 2 ]] || return 1
+    printf '%s' "$stderr_out" | jq -e '.decision == "deny"' >/dev/null || return 1
+    printf '%s' "$stderr_out" | grep -F 'notes.md:2' >/dev/null || return 1
+    printf '%s' "$stderr_out" | grep -F 'machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$stderr_out" | grep -F 'docs-local.md' >/dev/null
+}
+
 test_gh_pr_create_body_untracked_path_denies() {
     local stderr_out exit_code=0
     stderr_out=$(printf '%s' "$(jq -n --arg cwd "$REPO" '{cwd:$cwd,tool_input:{command:"gh pr create --body \"See docs/untracked.md\""}}')" \
@@ -85,6 +111,27 @@ test_gh_pr_create_body_file_content_untracked_path_denies() {
     printf '%s' "$stderr_out" | jq -e '.decision == "deny"' >/dev/null || return 1
     printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null || return 1
     printf '%s' "$stderr_out" | grep -F 'machine-local-untracked' >/dev/null
+}
+
+test_expanded_gh_body_file_paths_inspect_content() {
+    local form command payload stderr_out exit_code path_expr
+    printf 'See docs/untracked.md\n' > "$OMT_DIR/body-omt.md"
+    printf 'See docs/untracked.md\n' > "$HOME/body-home.md"
+    for path_expr in \
+        '$OMT_DIR/body-omt.md' \
+        '${OMT_DIR}/body-omt.md' \
+        '$HOME/body-home.md' \
+        '~/body-home.md'; do
+        command="gh pr create --body-file \"$path_expr\""
+        payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+            '{cwd:$cwd,tool_input:{command:$command}}')
+        stderr_out=''
+        exit_code=0
+        stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+        [[ "$exit_code" -eq 2 ]] || return 1
+        printf '%s' "$stderr_out" | jq -e '.decision == "deny"' >/dev/null || return 1
+        printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null || return 1
+    done
 }
 
 test_gh_pr_create_body_file_missing_fails_open() {
@@ -127,6 +174,46 @@ test_target_curl_file_payload_content_denies() {
     printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null || return 1
 
     printf '{"text":"safe baseline"}\n' > "$REPO/docs/payload.json"
+}
+
+test_target_curl_expanded_at_file_payload_content_denies() {
+    local host command payload stderr_out exit_code=0 path_expr
+    printf '{"text":"See docs/untracked.md"}\n' > "$OMT_DIR/payload-omt.json"
+    printf '{"text":"See docs/untracked.md"}\n' > "$HOME/payload-home.json"
+    host='https://api.notion.com/v1/pages'
+    for path_expr in \
+        '$OMT_DIR/payload-omt.json' \
+        '${OMT_DIR}/payload-omt.json' \
+        '$HOME/payload-home.json' \
+        '~/payload-home.json'; do
+        command="curl -X POST $host --data \"@$path_expr\""
+        payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+            '{cwd:$cwd,tool_input:{command:$command}}')
+        stderr_out=''
+        exit_code=0
+        stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+        [[ "$exit_code" -eq 2 ]] || return 1
+        printf '%s' "$stderr_out" | jq -e '.decision == "deny"' >/dev/null || return 1
+        printf '%s' "$stderr_out" | grep -F 'docs/untracked.md' >/dev/null || return 1
+    done
+}
+
+test_target_curl_multipart_file_attachment_denies() {
+    local host command payload stderr_out exit_code=0
+    host='https://api.notion.com/v1/pages'
+    for command in \
+        "curl -X POST $host -F 'file=@docs/untracked.png'" \
+        "curl -X POST $host --form \"file=@docs/untracked.png\""; do
+        payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+            '{cwd:$cwd,tool_input:{command:$command}}')
+        stderr_out=''
+        exit_code=0
+        stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+        [[ "$exit_code" -eq 2 ]] || return 1
+        printf '%s' "$stderr_out" | jq -e '.decision == "deny"' >/dev/null || return 1
+        printf '%s' "$stderr_out" | grep -F 'docs/untracked.png' >/dev/null || return 1
+        printf '%s' "$stderr_out" | grep -F 'machine-local-untracked' >/dev/null || return 1
+    done
 }
 
 test_target_curl_multiple_payloads_inspect_all() {
@@ -195,12 +282,16 @@ test_hook_enables_strict_mode() {
 run_test test_hook_enables_strict_mode
 run_test test_hook_declares_core_dependency
 run_test test_staged_added_omt_reference_denies_with_context_and_remedy
+run_test test_git_C_commit_inspects_target_repo_staged_additions
 run_test test_gh_pr_create_body_untracked_path_denies
 run_test test_gh_pr_create_body_file_content_untracked_path_denies
+run_test test_expanded_gh_body_file_paths_inspect_content
 run_test test_gh_pr_create_body_file_missing_fails_open
 run_test test_target_curl_payloads_deny
 run_test test_target_curl_file_payload_content_denies
+run_test test_target_curl_expanded_at_file_payload_content_denies
 run_test test_target_curl_multiple_payloads_inspect_all
+run_test test_target_curl_multipart_file_attachment_denies
 run_test test_placeholder_nonexistent_and_https_allow
 run_test test_old_violation_with_unrelated_new_edit_allows
 run_test test_missing_jq_fails_open
