@@ -240,6 +240,10 @@ _lpr_core_placeholder_or_external() {
             esac
             ;;
         '#'*) return 0 ;;
+        # `<repo-root>/...` is a schematic placeholder, not a concrete
+        # repository-relative citation.  Keep it fail-open in Markdown links
+        # as well as in prose scans.
+        \<repo-root\>/*) return 0 ;;
         *'{'*'}'*|*'*'*|*'?'*|*'['*']'*) return 0 ;;
         # An unresolved variable is a template/reference, not an inspectable
         # concrete local path.  Known variables are expanded before this test.

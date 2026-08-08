@@ -67,6 +67,12 @@ test_placeholder_and_https_allow() {
     [[ "$rc" -eq 1 && -z "$out" ]]
 }
 
+test_markdown_repo_root_placeholder_allows() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See [source](<repo-root>/src/file.ts).') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
 test_missing_relative_reports_location_type_and_remediation() {
     local out rc=0
     out=$(local_path_ref_gate_core_check "$REPO" $'See [the design](docs/not-present.md).') || rc=$?
@@ -458,6 +464,7 @@ test_setup_error_fails_open() {
 }
 
 run_test test_placeholder_and_https_allow
+run_test test_markdown_repo_root_placeholder_allows
 run_test test_missing_relative_reports_location_type_and_remediation
 run_test test_existing_home_file_reports_untracked_remediation
 run_test test_existing_omt_file_reports_untracked_remediation
