@@ -12,7 +12,8 @@ Never put any of the following in those outbound records:
 
 - machine-local absolute paths or home-directory aliases, including paths under
   `/Users`, `/tmp`, `~`, `$HOME`, or an equivalent workspace-specific root, and
-  local file URLs such as `file://...`;
+  local file URLs with an empty or `localhost` authority (`file:///...` or
+  `file://localhost/...`, including percent-encoded path bytes);
 - `$OMT_DIR` session artifacts, their paths, or copied session-only contents;
 - files that are local and untracked, whether they are inside or outside the
   repository;
@@ -43,8 +44,9 @@ tracked relative link; otherwise do not send or commit the record.
 
 The following are distinct from local-only evidence:
 
-- placeholders such as `<repo-root>/src/file.ts` and globs such as
-  `**/*.ts` are schematic tokens, not machine paths;
+- placeholders such as `<repo-root>/src/file.ts` (including inside a Markdown
+  destination) and globs such as `**/*.ts` are schematic tokens, not machine
+  paths;
 - external URLs such as `https://example.com/...` are portable web references;
 - a nonexistent path explicitly presented as an illustrative example is an
   example, not a claim about repository evidence; and
