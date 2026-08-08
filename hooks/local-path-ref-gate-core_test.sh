@@ -38,6 +38,7 @@ printf 'untracked env\n' > "$REPO/.env"
 printf 'untracked secret\n' > "$REPO/secret"
 printf 'machine local\n' > "$HOME/private-notes.md"
 printf 'machine local attachment\n' > "$HOME/private attachment.md"
+printf 'machine local punctuation\n' > "$HOME/private-notes."
 printf 'tracked attachment\n' > "$REPO/docs/tracked attachment.md"
 git -C "$REPO" add 'docs/tracked attachment.md'
 printf 'session state\n' > "$OMT_DIR/session.md"
@@ -109,6 +110,26 @@ test_file_url_for_tracked_file_reports_absolute_tracked() {
     [[ "$rc" -eq 0 ]] || return 1
     printf '%s' "$out" | grep -F 'type=absolute-tracked' >/dev/null || return 1
     printf '%s' "$out" | grep -F 'path=docs/tracked.md' >/dev/null
+}
+
+test_nonempty_file_uri_authority_allows() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "See [remote file](file://files.example.invalid$HOME/private-notes.md).") || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_external_uri_markdown_destination_allows() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See [artifact](s3://bucket.example.invalid/build/report.md).') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_existing_filename_final_period_reports_machine_local() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "$HOME/private-notes.") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F "path=$HOME/private-notes." >/dev/null
 }
 
 test_nonexistent_concrete_local_path_allows() {
@@ -191,6 +212,15 @@ test_markdown_parenthesized_path_reports_machine_local() {
     printf '%s' "$out" | grep -F 'path=docs/untracked-parenthesized(2026).md' >/dev/null
 }
 
+test_markdown_nested_parenthesized_path_reports_machine_local() {
+    local out rc=0
+    printf 'nested parenthesized file\n' > "$REPO/docs/untracked-(draft(2026)).md"
+    out=$(local_path_ref_gate_core_check "$REPO" 'See [the report](docs/untracked-(draft(2026)).md).') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'path=docs/untracked-(draft(2026)).md' >/dev/null
+}
+
 test_location_prefix_only_inspects_actual_content() {
     local out rc=0
     out=$(local_path_ref_gate_core_check "$REPO" 'docs/old.md:2: unrelated new line') || rc=$?
@@ -248,6 +278,9 @@ run_test test_existing_omt_file_reports_untracked_remediation
 run_test test_existing_absolute_tracked_file_reports_relative_remediation
 run_test test_existing_file_url_reports_machine_local
 run_test test_file_url_for_tracked_file_reports_absolute_tracked
+run_test test_nonempty_file_uri_authority_allows
+run_test test_external_uri_markdown_destination_allows
+run_test test_existing_filename_final_period_reports_machine_local
 run_test test_nonexistent_concrete_local_path_allows
 run_test test_nonexistent_bare_relative_example_allows
 run_test test_markdown_destination_with_optional_title_allows_tracked_target
@@ -259,6 +292,7 @@ run_test test_existing_relative_untracked_extensionless_file_reports_machine_loc
 run_test test_existing_root_level_untracked_files_report_machine_local
 run_test test_nonexistent_root_level_words_are_not_paths
 run_test test_markdown_parenthesized_path_reports_machine_local
+run_test test_markdown_nested_parenthesized_path_reports_machine_local
 run_test test_location_prefix_only_inspects_actual_content
 run_test test_location_prefix_preserves_content_path_classification
 run_test test_path_line_citation_in_regular_text_is_classified

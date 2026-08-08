@@ -60,6 +60,13 @@ _lpr_core_trim_candidate() {
     local value="$1"
     # Link fragments identify an anchor, not a second local file.
     value="${value%%#*}"
+    # Preserve a concrete filename whose final character is also commonly
+    # sentence punctuation.  Only use the punctuation-stripped fallback when
+    # the literal candidate cannot be inspected as an existing local target.
+    if _lpr_core_candidate_exists "$value"; then
+        _LPR_CANDIDATE="$value"
+        return
+    fi
     # Bare Markdown/prose commonly wraps paths in paired delimiters and puts
     # sentence punctuation after them.  Remove only edge delimiters so
     # meaningful characters inside a filename (for example notes(1).md) stay
@@ -90,10 +97,39 @@ _lpr_core_trim_candidate() {
     _LPR_CANDIDATE="$value"
 }
 
+_lpr_core_candidate_exists() {
+    local candidate="$1"
+    _lpr_core_expand_path "$candidate"
+    candidate="$_LPR_EXPANDED"
+    case "$candidate" in
+        file:///*) candidate="${candidate#file://}" ;;
+    esac
+    _lpr_core_placeholder_or_external "$candidate" && return 1
+    case "$candidate" in
+        /*) [[ -e "$candidate" ]] ;;
+        *) [[ -n "${_LPR_REPO_ROOT-}" && -e "$_LPR_REPO_ROOT/$candidate" ]] ;;
+    esac
+}
+
 _lpr_core_placeholder_or_external() {
-    local value="$1"
+    local value="$1" scheme
     case "$value" in
-        https://*|http://*|mailto:*|'#'*) return 0 ;;
+        # Empty-authority file URIs name a local absolute path.  Every other
+        # URI scheme (including hostname-bearing file URIs) is outside this
+        # core's local-filesystem inspection contract and must fail open.
+        file:///*) ;;
+        *:*)
+            scheme="${value%%:*}"
+            case "$scheme" in
+                [[:alpha:]]*)
+                    case "$scheme" in
+                        *[![:alnum:]+.-]*) ;;
+                        *) return 0 ;;
+                    esac
+                    ;;
+            esac
+            ;;
+        '#'*) return 0 ;;
         *'{'*'}'*|*'*'*|*'?'*|*'['*']'*) return 0 ;;
         # An unresolved variable is a template/reference, not an inspectable
         # concrete local path.  Known variables are expanded before this test.
@@ -229,18 +265,32 @@ _lpr_core_consider() {
 
 _lpr_core_scan_line() {
     local line="$1" line_no="$2" rest target token candidate markdown_match
-    # Permit balanced parentheses in a Markdown destination (for example a
-    # filename such as `report(2026).md`) while still stopping at the link's
-    # closing delimiter.  Bash's ERE cannot recurse, but this handles the
-    # one-level grouping used by ordinary local filenames and prose wrappers.
-    local _lpr_md_re='\]\(((\([^()]*\)|[^)])*)\)'
+    local markdown_tail markdown_char markdown_index markdown_depth
     # Markdown destinations are authoritative and also allow paths containing
     # spaces (which bare-token scanning intentionally does not attempt).
     rest="$line"
     local _lpr_title_re="^(.+)[[:space:]]+(\"[^\"]*\"|'[^']*'|\\([^)]*\\))$"
-    while [[ "$rest" =~ $_lpr_md_re ]]; do
-        markdown_match="${BASH_REMATCH[0]}"
-        target="${BASH_REMATCH[1]}"
+    while [[ "$rest" == *']('* ]]; do
+        markdown_tail="${rest#*']('}"
+        target=""
+        markdown_index=0
+        markdown_depth=1
+        while [[ "$markdown_index" -lt "${#markdown_tail}" ]]; do
+            markdown_char="${markdown_tail:$markdown_index:1}"
+            case "$markdown_char" in
+                '(') markdown_depth=$((markdown_depth + 1)) ;;
+                ')')
+                    markdown_depth=$((markdown_depth - 1))
+                    [[ "$markdown_depth" -eq 0 ]] && break
+                    ;;
+            esac
+            target="${target}${markdown_char}"
+            markdown_index=$((markdown_index + 1))
+        done
+        # A malformed destination is not a concrete citation.  Leave it to
+        # callers with richer syntax knowledge rather than guessing here.
+        [[ "$markdown_depth" -eq 0 ]] || break
+        markdown_match="](${target})"
         if [[ "$target" =~ $_lpr_title_re ]]; then
             target="${BASH_REMATCH[1]}"
         fi
@@ -249,7 +299,7 @@ _lpr_core_scan_line() {
         # particular, a destination with spaces would otherwise leave its
         # final word to be reported as a spurious missing path.
         line="${line/"$markdown_match"/}"
-        rest="${rest#*"$markdown_match"}"
+        rest="${markdown_tail:$((markdown_index + 1))}"
     done
 
     # Callers can hand the core one concrete value, including an attachment
