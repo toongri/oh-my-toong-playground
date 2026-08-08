@@ -363,6 +363,21 @@ test_nonexistent_root_level_words_are_not_paths() {
     [[ "$rc" -eq 1 && -z "$out" ]]
 }
 
+test_standalone_path_markers_in_prose_are_not_paths() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'The prose uses /, ./, and ../ as separators.') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_nonempty_dot_relative_path_still_classifies() {
+    local out rc=0
+    printf 'dot relative\n' > "$REPO/dot-relative.md"
+    out=$(local_path_ref_gate_core_check "$REPO" 'See ./dot-relative.md.') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'path=./dot-relative.md' >/dev/null
+}
+
 test_markdown_parenthesized_path_reports_machine_local() {
     local out rc=0
     out=$(local_path_ref_gate_core_check "$REPO" 'See [the report](docs/untracked-parenthesized(2026).md).') || rc=$?
@@ -504,6 +519,8 @@ run_test test_delimited_missing_extensionless_path_reports_missing
 run_test test_existing_relative_untracked_extensionless_file_reports_machine_local
 run_test test_existing_root_level_untracked_files_report_machine_local
 run_test test_nonexistent_root_level_words_are_not_paths
+run_test test_standalone_path_markers_in_prose_are_not_paths
+run_test test_nonempty_dot_relative_path_still_classifies
 run_test test_markdown_parenthesized_path_reports_machine_local
 run_test test_markdown_nested_parenthesized_path_reports_machine_local
 run_test test_location_prefix_only_inspects_actual_content
