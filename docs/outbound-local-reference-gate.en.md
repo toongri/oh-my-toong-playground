@@ -19,7 +19,9 @@ boundary for commits, PR bodies and comments, and collaboration tools.
 
 Because a local commit inspects only added lines, an unrelated new edit does not
 re-block an old violation. PR and online MCP writes use **full-payload scope**
-for that request.
+for that request. However, stdin-backed PR bodies supplied via `gh --body-file -`
+are unavailable to this PreToolUse shell hook, so it does not claim to have
+inspected them; this boundary is fail-open.
 
 ## Predicate
 

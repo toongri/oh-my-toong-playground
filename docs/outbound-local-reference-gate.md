@@ -17,7 +17,9 @@
 | Linear | 이슈/댓글 쓰기 요청의 전체 payload |
 
 로컬 커밋은 추가 줄만 보므로 기존 위반이 무관한 새 수정으로 다시 차단되지
-않는다. PR과 온라인 MCP 쓰기는 해당 요청의 **full-payload 범위**를 검사한다.
+않는다. PR과 온라인 MCP 쓰기는 해당 요청의 **full-payload 범위**를 검사한다. 다만
+`gh --body-file -`처럼 stdin에서 전달되는 PR 본문은 이 PreToolUse 셸 훅에서 사용할 수
+없어 검사했다고 주장하지 않으며, 이 경계에서는 fail-open한다.
 
 ## 판정자
 
