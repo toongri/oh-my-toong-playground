@@ -146,3 +146,4 @@ rules:
     - convention-grounding
     - verification-discipline
     - e2e-driver-usage
+    - outbound-local-reference
