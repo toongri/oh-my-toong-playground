@@ -201,7 +201,7 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 	test("the 'dispatch-prompt contract above' pointer at the concrete-progress bullet sits after the contract paragraph it points back at", () => {
 		const contractParagraphLead = "carries exactly two things —";
 		const confirmedFindingBullet =
-			"- **Code-review lane: `CONFIRMED` `correctness` or `requirement-gap` finding**";
+			"- **Code-review lane: `CONFIRMED` BLOCK finding**";
 		const inconclusiveBullet =
 			'- **Code-review lane: `status: "INCONCLUSIVE"`**';
 		const pointerPhrase = "dispatch-prompt contract above";
@@ -262,7 +262,7 @@ describe("ported from goal (regression): required phrases survive somewhere in b
 			'`status === "INCONCLUSIVE"` blocks regardless of findings',
 		);
 		expect(combined).toContain(
-			"An `INCONCLUSIVE` status routes to a **reviewer-only re-run** instead — re-dispatch a fresh **code-reviewer** over the same diff, NOT sisyphus",
+			"An `INCONCLUSIVE` status also routes to a reviewer-only re-run — re-dispatch a fresh **code-reviewer** over the same diff, NOT sisyphus",
 		);
 	});
 });
@@ -416,14 +416,18 @@ describe("review dispatch budget runtime contract", () => {
 	);
 	});
 
-	test("completion-eligible findings permit AI discretion and final file-line summary", () => {
-		expect(completionGateMd).toContain("**Completion-eligible discretion.**");
-		expect(completionGateMd).toContain("**마무리** → run `request-complete`");
-		expect(completionGateMd).toContain("**계속** → ask the user; only after explicit approval, pass the selected `CONFIRMED` `cleanup` finding(s) to sisyphus for repair");
-		expect(completionGateMd).toContain("before the next code-reviewer dispatch");
-		expect(completionGateMd).toContain("`PLAUSIBLE` findings remain non-blocking report items");
+	// The 마무리/계속 discretion pair was replaced by the FIX/NOTE branch pair
+	// (verdict × impact diagonal): FIX = one pre-completion sisyphus batch with an
+	// automated-check re-run and no approval; NOTE = report-only with file:line.
+	test("completion-eligible findings route through the FIX/NOTE branch pair", () => {
+		expect(completionGateMd).not.toContain("**Completion-eligible discretion.**");
+		expect(completionGateMd).toContain("**FIX findings (CONFIRMED × LOW).**");
+		expect(completionGateMd).toContain("batch every FIX finding into ONE sisyphus dispatch");
+		expect(completionGateMd).toContain(
+			"The FIX batch triggers no re-review, consumes no review dispatch, and needs no user approval",
+		);
+		expect(completionGateMd).toContain("**NOTE findings (PLAUSIBLE × MEDIUM/LOW).**");
 		expect(completionGateMd).toContain("exact `file:line` reference and a one-line summary");
-		expect(completionGateMd).not.toContain("**Once the gate opens, a surviving non-blocking finding is not fixed on the spot.**");
 	});
 });
 
