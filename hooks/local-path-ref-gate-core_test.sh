@@ -45,6 +45,8 @@ printf 'machine local glob metacharacters\n' > "$HOME/private*[draft]?.md"
 printf 'machine local literal line suffix\n' > "$HOME/private-notes:2026"
 printf 'tracked attachment\n' > "$REPO/docs/tracked attachment.md"
 git -C "$REPO" add 'docs/tracked attachment.md'
+printf 'untracked encoded attachment\n' > "$REPO/docs/untracked attachment.md"
+printf 'untracked encoded colon filename\n' > "$REPO/docs/report:2026"
 printf 'session state\n' > "$OMT_DIR/session.md"
 printf 'machine local parent\n' > "$TEST_TMP_DIR/secret.md"
 
@@ -146,6 +148,44 @@ test_localhost_file_url_preserves_percent_decoded_literal_colon_filename() {
     [[ "$rc" -eq 0 ]] || return 1
     printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
     printf '%s' "$out" | grep -F "path=$encoded_uri" >/dev/null
+}
+
+test_localhost_file_url_authority_is_case_insensitive() {
+    local out rc=0 encoded_uri="file://LOCALHOST$HOME/private%20attachment.md"
+    out=$(local_path_ref_gate_core_check "$REPO" "$encoded_uri") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F "path=$encoded_uri" >/dev/null
+}
+
+test_markdown_destination_percent_decodes_tracked_target() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See [attachment](docs/tracked%20attachment.md).') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_markdown_destination_percent_decodes_untracked_target() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See [attachment](docs/untracked%20attachment.md).') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'path=docs/untracked%20attachment.md' >/dev/null
+}
+
+test_markdown_destination_percent_encoded_colon_filename_reports_machine_local() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See [report](docs/report%3A2026).') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'path=docs/report%3A2026' >/dev/null
+}
+
+test_percent_encoded_colon_filename_reports_decoded_absolute_target() {
+    local out rc=0 encoded_path="$HOME/private-notes%3A2026"
+    out=$(local_path_ref_gate_core_check "$REPO" "$encoded_path") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F "path=$encoded_path" >/dev/null
 }
 
 test_unresolved_escaped_path_line_syntax_fails_open() {
@@ -428,6 +468,11 @@ run_test test_file_url_for_tracked_file_reports_absolute_tracked
 run_test test_localhost_file_url_reports_machine_local_after_percent_decoding
 run_test test_localhost_file_url_for_tracked_file_reports_absolute_tracked
 run_test test_localhost_file_url_preserves_percent_decoded_literal_colon_filename
+run_test test_localhost_file_url_authority_is_case_insensitive
+run_test test_markdown_destination_percent_decodes_tracked_target
+run_test test_markdown_destination_percent_decodes_untracked_target
+run_test test_markdown_destination_percent_encoded_colon_filename_reports_machine_local
+run_test test_percent_encoded_colon_filename_reports_decoded_absolute_target
 run_test test_unresolved_escaped_path_line_syntax_fails_open
 run_test test_unresolved_relative_escaped_path_line_syntax_fails_open
 run_test test_unresolved_backslash_escaped_path_line_syntax_fails_open

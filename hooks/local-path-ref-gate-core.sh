@@ -80,14 +80,64 @@ _lpr_core_percent_decode() {
     _LPR_DECODE_UNRESOLVED="$unresolved"
 }
 
+_lpr_core_ascii_lower() {
+    local value="$1" lowered="" index=0 char
+    while [[ "$index" -lt "${#value}" ]]; do
+        char="${value:$index:1}"
+        case "$char" in
+            A) char=a ;;
+            B) char=b ;;
+            C) char=c ;;
+            D) char=d ;;
+            E) char=e ;;
+            F) char=f ;;
+            G) char=g ;;
+            H) char=h ;;
+            I) char=i ;;
+            J) char=j ;;
+            K) char=k ;;
+            L) char=l ;;
+            M) char=m ;;
+            N) char=n ;;
+            O) char=o ;;
+            P) char=p ;;
+            Q) char=q ;;
+            R) char=r ;;
+            S) char=s ;;
+            T) char=t ;;
+            U) char=u ;;
+            V) char=v ;;
+            W) char=w ;;
+            X) char=x ;;
+            Y) char=y ;;
+            Z) char=z ;;
+        esac
+        lowered="${lowered}${char}"
+        index=$((index + 1))
+    done
+    _LPR_ASCII_LOWER="$lowered"
+}
+
+_lpr_core_is_local_file_uri() {
+    local value="$1"
+    _lpr_core_ascii_lower "$value"
+    case "$_LPR_ASCII_LOWER" in
+        file:///*|file://localhost/*) return 0 ;;
+    esac
+    return 1
+}
+
 _lpr_core_inspect_path() {
-    local candidate="$1"
+    local candidate="$1" lowered_candidate
     _LPR_DECODE_UNRESOLVED=0
     _lpr_core_expand_path "$candidate"
     candidate="$_LPR_EXPANDED"
-    case "$candidate" in
+    _lpr_core_ascii_lower "$candidate"
+    lowered_candidate="$_LPR_ASCII_LOWER"
+    case "$lowered_candidate" in
         file:///*)
-            candidate="${candidate#file://}"
+            # Strip the scheme by position so URI scheme casing is ignored.
+            candidate="${candidate:7}"
             _lpr_core_percent_decode "$candidate"
             candidate="$_LPR_DECODED"
             ;;
@@ -95,7 +145,9 @@ _lpr_core_inspect_path() {
             # RFC 8089 defines localhost as the local-machine alias of the
             # empty-authority form.  Normalize before percent decoding so the
             # resulting path is classified exactly like file:///... .
-            candidate="${candidate#file://localhost}"
+            # Match the authority case-insensitively while preserving the
+            # original path bytes for percent decoding.
+            candidate="${candidate:16}"
             _lpr_core_percent_decode "$candidate"
             candidate="$_LPR_DECODED"
             ;;
@@ -167,6 +219,9 @@ _lpr_core_candidate_exists() {
 
 _lpr_core_placeholder_or_external() {
     local value="$1" scheme
+    # Keep all casing variants of local file URIs out of the external-URI
+    # branch when this helper is called before URI inspection.
+    _lpr_core_is_local_file_uri "$value" && return 1
     case "$value" in
         # Empty-authority and localhost file URIs name a local absolute path.
         # Every other URI scheme (including hostname-bearing file URIs) is
@@ -194,12 +249,23 @@ _lpr_core_placeholder_or_external() {
 }
 
 _lpr_core_unresolved_escaped_path_line() {
-    local value="$1"
+    local value="$1" decoded_value
     # A line suffix whose separator is escaped (literally or as `%3A`) is not
     # a path the core can resolve.  In particular, do not strip the suffix and
     # then classify an otherwise-existing path portion as a citation.
     [[ "$value" =~ \\:[1-9][0-9]*$ ]] && return 0
-    [[ "$value" =~ %[3][Aa][1-9][0-9]*$ ]] && return 0
+    if [[ "$value" =~ %[3][Aa][1-9][0-9]*$ ]]; then
+        # `%3A<number>` is usually an escaped `path:line` suffix, but it can
+        # also be the URI spelling of a real filename such as `report:2026`.
+        # Preserve the latter by checking the fully decoded candidate before
+        # treating the suffix as unresolved syntax.
+        _lpr_core_percent_decode "$value"
+        decoded_value="$_LPR_DECODED"
+        if [[ "${_LPR_DECODE_UNRESOLVED-0}" -eq 0 ]] && _lpr_core_candidate_exists "$decoded_value"; then
+            return 1
+        fi
+        return 0
+    fi
     return 1
 }
 
@@ -276,14 +342,34 @@ _lpr_core_consider() {
     [[ -n "$candidate" ]] || return 0
     display_candidate="$candidate"
 
-    case "$candidate" in
-        file:///*|file://localhost/*) ;;
-        *) _lpr_core_unresolved_escaped_path_line "$candidate" && return 0 ;;
-    esac
+    if _lpr_core_is_local_file_uri "$candidate"; then
+        :
+    else
+        _lpr_core_unresolved_escaped_path_line "$candidate" && return 0
+    fi
 
-    # `file:///...` is a local absolute reference, not an external URL.  The
-    # `file://` form below deliberately accepts only the empty-authority form;
-    # a hostname-bearing URI is not a local path this core can inspect.
+    # A percent-encoded colon suffix can be a real filename (for example
+    # `report%3A2026` spelling `report:2026`), not only escaped line syntax.
+    # Resolve that concrete filename before the normal path:line handling.
+    if [[ "$candidate" =~ %[3][Aa][1-9][0-9]*$ ]]; then
+        _lpr_core_percent_decode "$candidate"
+        if [[ "${_LPR_DECODE_UNRESOLVED-0}" -eq 0 ]] && _lpr_core_candidate_exists "$_LPR_DECODED"; then
+            candidate="$_LPR_DECODED"
+        fi
+    fi
+
+    # Relative Markdown destinations use URI escaping even when they point at
+    # repository files.  Decode them for filesystem classification while
+    # retaining the authored spelling in diagnostics.
+    if [[ "$context" == "markdown" ]]; then
+        _lpr_core_percent_decode "$candidate"
+        [[ "${_LPR_DECODE_UNRESOLVED-0}" -eq 0 ]] || return 0
+        candidate="$_LPR_DECODED"
+    fi
+
+    # `file:///...` and `file://localhost/...` are local absolute references,
+    # not external URLs.  Hostname-bearing file URIs remain outside this
+    # core's local-filesystem inspection contract.
     # A `path:line` citation identifies the same local file as `path`, unless
     # the complete candidate is an existing filename ending in `:<number>`.
     # Keep a real filename or a citation in diagnostic output, but resolve and
