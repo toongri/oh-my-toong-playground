@@ -108,6 +108,14 @@ test_existing_file_url_reports_machine_local() {
     printf '%s' "$out" | grep -F "path=file://$HOME/private-notes.md" >/dev/null
 }
 
+test_percent_encoded_file_url_reports_machine_local() {
+    local out rc=0 encoded_uri="file://$HOME/private%20attachment.md"
+    out=$(local_path_ref_gate_core_check "$REPO" "$encoded_uri") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F "path=$encoded_uri" >/dev/null
+}
+
 test_file_url_for_tracked_file_reports_absolute_tracked() {
     local out rc=0
     out=$(local_path_ref_gate_core_check "$REPO" "file://$REPO/docs/tracked.md") || rc=$?
@@ -288,6 +296,22 @@ test_single_concrete_path_with_spaces_reports_machine_local() {
     printf '%s' "$out" | grep -F "path=$HOME/private attachment.md" >/dev/null
 }
 
+test_existing_file_with_spaces_inside_prose_reports_machine_local() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "Please inspect $HOME/private attachment.md before continuing.") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F "path=$HOME/private attachment.md" >/dev/null
+}
+
+test_crlf_line_terminator_does_not_bypass_existing_file_check() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "Keep $HOME/private-notes.md cited."$'\r\n') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F "path=$HOME/private-notes.md" >/dev/null
+}
+
 test_markdown_destination_with_spaces_allows_tracked_target() {
     local out rc=0
     out=$(local_path_ref_gate_core_check "$REPO" 'See [attachment](docs/tracked attachment.md).') || rc=$?
@@ -331,6 +355,7 @@ run_test test_existing_home_file_reports_untracked_remediation
 run_test test_existing_omt_file_reports_untracked_remediation
 run_test test_existing_absolute_tracked_file_reports_relative_remediation
 run_test test_existing_file_url_reports_machine_local
+run_test test_percent_encoded_file_url_reports_machine_local
 run_test test_file_url_for_tracked_file_reports_absolute_tracked
 run_test test_nonempty_file_uri_authority_allows
 run_test test_external_uri_markdown_destination_allows
@@ -355,6 +380,8 @@ run_test test_location_prefix_only_inspects_actual_content
 run_test test_location_prefix_preserves_content_path_classification
 run_test test_path_line_citation_in_regular_text_is_classified
 run_test test_single_concrete_path_with_spaces_reports_machine_local
+run_test test_existing_file_with_spaces_inside_prose_reports_machine_local
+run_test test_crlf_line_terminator_does_not_bypass_existing_file_check
 run_test test_markdown_destination_with_spaces_allows_tracked_target
 run_test test_multipart_attachment_with_tracked_relative_path_reports_machine_local
 run_test test_absolute_tracked_attachment_reports_attachment_remediation

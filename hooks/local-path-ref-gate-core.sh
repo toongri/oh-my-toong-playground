@@ -57,6 +57,39 @@ _lpr_core_expand_path() {
     esac
 }
 
+_lpr_core_percent_decode() {
+    local value="$1" decoded="" index=0 length hex byte
+    length="${#value}"
+    while [[ "$index" -lt "$length" ]]; do
+        if [[ "${value:$index:1}" == '%' && "$((index + 2))" -lt "$length" ]]; then
+            hex="${value:$((index + 1)):2}"
+            if [[ "$hex" =~ ^[0-9A-Fa-f]{2}$ ]]; then
+                printf -v byte '%b' "\\x$hex"
+                decoded="${decoded}${byte}"
+                index=$((index + 3))
+                continue
+            fi
+        fi
+        decoded="${decoded}${value:$index:1}"
+        index=$((index + 1))
+    done
+    _LPR_DECODED="$decoded"
+}
+
+_lpr_core_inspect_path() {
+    local candidate="$1"
+    _lpr_core_expand_path "$candidate"
+    candidate="$_LPR_EXPANDED"
+    case "$candidate" in
+        file:///*)
+            candidate="${candidate#file://}"
+            _lpr_core_percent_decode "$candidate"
+            candidate="$_LPR_DECODED"
+            ;;
+    esac
+    _LPR_INSPECT_PATH="$candidate"
+}
+
 _lpr_core_trim_candidate() {
     local value="$1"
     # A literal local filename can contain `#`; retain it when it resolves
@@ -106,11 +139,8 @@ _lpr_core_trim_candidate() {
 
 _lpr_core_candidate_exists() {
     local candidate="$1"
-    _lpr_core_expand_path "$candidate"
-    candidate="$_LPR_EXPANDED"
-    case "$candidate" in
-        file:///*) candidate="${candidate#file://}" ;;
-    esac
+    _lpr_core_inspect_path "$candidate"
+    candidate="$_LPR_INSPECT_PATH"
     case "$candidate" in
         /*) [[ -e "$candidate" ]] && return 0 ;;
         *) [[ -n "${_LPR_REPO_ROOT-}" && -e "$_LPR_REPO_ROOT/$candidate" ]] && return 0 ;;
@@ -222,10 +252,6 @@ _lpr_core_consider() {
     # `file:///...` is a local absolute reference, not an external URL.  The
     # `file://` form below deliberately accepts only the empty-authority form;
     # a hostname-bearing URI is not a local path this core can inspect.
-    case "$candidate" in
-        file:///*) candidate="${candidate#file://}" ;;
-    esac
-
     # A `path:line` citation identifies the same local file as `path`, unless
     # the complete candidate is an existing filename ending in `:<number>`.
     # Keep a real filename or a citation in diagnostic output, but resolve and
@@ -234,8 +260,8 @@ _lpr_core_consider() {
         candidate="${BASH_REMATCH[1]}"
     fi
 
-    _lpr_core_expand_path "$candidate"
-    candidate="$_LPR_EXPANDED"
+    _lpr_core_inspect_path "$candidate"
+    candidate="$_LPR_INSPECT_PATH"
     # An unresolved $HOME/$OMT_DIR is a template; setup errors fail open.
     if ! _lpr_core_candidate_exists "$candidate"; then
         _lpr_core_placeholder_or_external "$candidate" && return 0
@@ -347,8 +373,38 @@ _lpr_core_scan_line() {
 
     # Also inspect obvious bare local paths.  This is a reference classifier,
     # not a shell parser: quoted/escaped command syntax is left to shims.
-    local -a words
+    [[ "$line" =~ [^[:space:]] ]] || return 0
+    local -a words=()
     read -r -a words <<< "$line"
+    local start end joined
+
+    # A real path can be surrounded by prose and contain spaces.  Join words
+    # beginning at path-shaped tokens and stop at the first concrete local
+    # target; ordinary prose and placeholders remain untouched.
+    for ((start = 0; start < ${#words[@]}; start++)); do
+        _lpr_core_trim_candidate "${words[$start]}"
+        candidate="$_LPR_CANDIDATE"
+        case "$candidate" in
+            /*|~|~/*|\$HOME|\$HOME/*|\${HOME}|\${HOME}/*|\$OMT_DIR|\$OMT_DIR/*|\${OMT_DIR}|\${OMT_DIR}/*|./*|../*|file:///*|*/*) ;;
+            *) continue ;;
+        esac
+        joined=""
+        for ((end = start; end < ${#words[@]}; end++)); do
+            [[ -n "$joined" ]] && joined="$joined "
+            joined="${joined}${words[$end]}"
+            _lpr_core_trim_candidate "$joined"
+            candidate="$_LPR_CANDIDATE"
+            case "$candidate" in
+                /*|~|~/*|\$HOME|\$HOME/*|\${HOME}|\${HOME}/*|\$OMT_DIR|\$OMT_DIR/*|\${OMT_DIR}|\${OMT_DIR}/*|./*|../*|file:///*|*/*)
+                    if _lpr_core_candidate_exists "$candidate"; then
+                        _lpr_core_consider "$candidate" "$line_no" "$scan_context"
+                        break
+                    fi
+                    ;;
+            esac
+        done
+    done
+
     for token in "${words[@]}"; do
         local context="$scan_context"
         if [[ "$scan_context" != "attachment" ]]; then
@@ -396,6 +452,7 @@ local_path_ref_gate_core_check() {
 
     while IFS= read -r line || [[ -n "$line" ]]; do
         line_no=$((line_no + 1))
+        line="${line%$'\r'}"
         _lpr_core_scan_line "$line" "$line_no" "$scan_context"
     done <<EOF
 $inspectable_text
