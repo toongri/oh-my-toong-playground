@@ -33,8 +33,12 @@ git -C "$REPO" add docs/old.md
 printf 'untracked in repo\n' > "$REPO/docs/untracked.md"
 printf 'untracked extensionless in repo\n' > "$REPO/docs/untracked-extensionless"
 printf 'untracked parenthesized in repo\n' > "$REPO/docs/untracked-parenthesized(2026).md"
+printf 'untracked root note\n' > "$REPO/local-note"
+printf 'untracked env\n' > "$REPO/.env"
+printf 'untracked secret\n' > "$REPO/secret"
 printf 'machine local\n' > "$HOME/private-notes.md"
 printf 'session state\n' > "$OMT_DIR/session.md"
+printf 'machine local parent\n' > "$TEST_TMP_DIR/secret.md"
 
 run_test() {
     local test_name="$1"
@@ -94,6 +98,20 @@ test_nonexistent_concrete_local_path_allows() {
     [[ "$rc" -eq 1 && -z "$out" ]]
 }
 
+test_nonexistent_bare_relative_example_allows() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'For example, docs/not-present.md may be cited.') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_markdown_destination_with_optional_title_allows_tracked_target() {
+    local out rc=0
+    printf 'tracked notes\n' > "$REPO/docs/notes.md"
+    git -C "$REPO" add docs/notes.md
+    out=$(local_path_ref_gate_core_check "$REPO" 'See [notes](docs/notes.md "read this").') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
 test_existing_relative_file_allows() {
     local out rc=0
     out=$(local_path_ref_gate_core_check "$REPO" 'See docs/tracked.md') || rc=$?
@@ -131,6 +149,21 @@ test_existing_relative_untracked_extensionless_file_reports_machine_local() {
     printf '%s' "$out" | grep -F 'path=docs/untracked-extensionless' >/dev/null
 }
 
+test_existing_root_level_untracked_files_report_machine_local() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See local-note, .env, and secret.') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'path=local-note' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'path=.env' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'path=secret' >/dev/null || return 1
+}
+
+test_nonexistent_root_level_words_are_not_paths() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'The prose mentions an illustrative-token and arbitrary-word.') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
 test_markdown_parenthesized_path_reports_machine_local() {
     local out rc=0
     out=$(local_path_ref_gate_core_check "$REPO" 'See [the report](docs/untracked-parenthesized(2026).md).') || rc=$?
@@ -153,6 +186,14 @@ test_location_prefix_preserves_content_path_classification() {
     ! printf '%s' "$out" | grep -F 'path=docs/old.md:2' >/dev/null
 }
 
+test_existing_parent_relative_file_reports_machine_local() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See ../secret.md') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'path=../secret.md' >/dev/null
+}
+
 test_setup_error_fails_open() {
     local out rc=0
     out=$(local_path_ref_gate_core_check "$TEST_TMP_DIR/not-a-repository" 'docs/missing.md') || rc=$?
@@ -165,14 +206,19 @@ run_test test_existing_home_file_reports_untracked_remediation
 run_test test_existing_omt_file_reports_untracked_remediation
 run_test test_existing_absolute_tracked_file_reports_relative_remediation
 run_test test_nonexistent_concrete_local_path_allows
+run_test test_nonexistent_bare_relative_example_allows
+run_test test_markdown_destination_with_optional_title_allows_tracked_target
 run_test test_existing_relative_file_allows
 run_test test_existing_relative_untracked_file_reports_machine_local
 run_test test_parenthesized_bare_untracked_file_reports_machine_local
 run_test test_delimited_missing_extensionless_path_reports_missing
 run_test test_existing_relative_untracked_extensionless_file_reports_machine_local
+run_test test_existing_root_level_untracked_files_report_machine_local
+run_test test_nonexistent_root_level_words_are_not_paths
 run_test test_markdown_parenthesized_path_reports_machine_local
 run_test test_location_prefix_only_inspects_actual_content
 run_test test_location_prefix_preserves_content_path_classification
+run_test test_existing_parent_relative_file_reports_machine_local
 run_test test_setup_error_fails_open
 
 echo "Passed: $TESTS_PASSED, Failed: $TESTS_FAILED"

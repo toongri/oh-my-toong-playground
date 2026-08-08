@@ -124,8 +124,24 @@ _lpr_core_emit() {
     _LPR_COUNT=$((_LPR_COUNT + 1))
 }
 
+_lpr_core_resolve_existing_path() {
+    local candidate="$1" directory basename resolved_directory
+    if [[ -d "$candidate" ]]; then
+        resolved_directory=$(cd -P "$candidate" 2>/dev/null && pwd -P) || return 1
+        _LPR_RESOLVED_PATH="$resolved_directory"
+        return 0
+    fi
+    directory="${candidate%/*}"
+    basename="${candidate##*/}"
+    [[ "$directory" == "$candidate" ]] && directory='.'
+    resolved_directory=$(cd -P "$directory" 2>/dev/null && pwd -P) || return 1
+    _LPR_RESOLVED_PATH="${resolved_directory%/}/$basename"
+}
+
 _lpr_core_is_tracked_absolute() {
     local candidate="$1" relative status
+    _lpr_core_resolve_existing_path "$candidate" || return 2
+    candidate="$_LPR_RESOLVED_PATH"
     case "$candidate" in
         "$_LPR_REPO_ROOT"/*)
             relative="${candidate#"$_LPR_REPO_ROOT/"}"
@@ -144,7 +160,10 @@ _lpr_core_is_tracked_absolute() {
 }
 
 _lpr_core_consider() {
-    local raw="$1" line_no="$2" candidate repo_target
+    # `bare` references are only actionable when they resolve to an existing
+    # file.  Markdown links and explicitly delimited evidence retain the
+    # missing-target diagnosis because those forms assert a concrete citation.
+    local raw="$1" line_no="$2" context="${3-bare}" candidate repo_target
     _lpr_core_trim_candidate "$raw"
     candidate="$_LPR_CANDIDATE"
     [[ -n "$candidate" ]] || return 0
@@ -163,7 +182,7 @@ _lpr_core_consider() {
         /*)
             [[ -e "$candidate" ]] || return 0
             if _lpr_core_is_tracked_absolute "$candidate"; then
-                repo_target="${candidate#"$_LPR_REPO_ROOT/"}"
+                repo_target="${_LPR_RESOLVED_PATH#"$_LPR_REPO_ROOT/"}"
                 _lpr_core_emit "$line_no" "absolute-tracked" "$repo_target" \
                     "use the repository-relative path"
             else
@@ -186,14 +205,16 @@ _lpr_core_consider() {
                     return 0
                 fi
             fi
-            _lpr_core_emit "$line_no" "repo-relative-missing" "$raw" \
-                "add the target or inline its content"
+            if [[ "$context" == "markdown" || "$context" == "evidence" ]]; then
+                _lpr_core_emit "$line_no" "repo-relative-missing" "$raw" \
+                    "add the target or inline its content"
+            fi
             ;;
     esac
 }
 
 _lpr_core_scan_line() {
-    local line="$1" line_no="$2" rest target token candidate
+    local line="$1" line_no="$2" rest target token candidate markdown_match
     local _lpr_location_re='^[^[:space:]:][^:]*:[1-9][0-9]*:[[:space:]]*'
     # Staged-diff adapters prefix added content with `path:line: `.  That
     # location metadata is not part of the citation text; inspect only the
@@ -210,10 +231,15 @@ _lpr_core_scan_line() {
     # Markdown destinations are authoritative and also allow paths containing
     # spaces (which bare-token scanning intentionally does not attempt).
     rest="$line"
+    local _lpr_title_re="^(.+)[[:space:]]+(\"[^\"]*\"|'[^']*'|\\([^)]*\\))$"
     while [[ "$rest" =~ $_lpr_md_re ]]; do
+        markdown_match="${BASH_REMATCH[0]}"
         target="${BASH_REMATCH[1]}"
-        _lpr_core_consider "$target" "$line_no"
-        rest="${rest#*"${BASH_REMATCH[0]}"}"
+        if [[ "$target" =~ $_lpr_title_re ]]; then
+            target="${BASH_REMATCH[1]}"
+        fi
+        _lpr_core_consider "$target" "$line_no" markdown
+        rest="${rest#*"$markdown_match"}"
     done
 
     # Also inspect obvious bare local paths.  This is a reference classifier,
@@ -221,16 +247,27 @@ _lpr_core_scan_line() {
     local -a words
     read -r -a words <<< "$line"
     for token in "${words[@]}"; do
+        local context=bare
         case "$token" in
             *']('*) continue ;;
+            *'`'*|*'"'*|*"'"*|*'('*|*')'*) context=evidence ;;
         esac
         _lpr_core_trim_candidate "$token"
         candidate="$_LPR_CANDIDATE"
         case "$candidate" in
             /*|~|~/*|\$HOME|\$HOME/*|\${HOME}|\${HOME}/*|\$OMT_DIR|\$OMT_DIR/*|\${OMT_DIR}|\${OMT_DIR}/*|./*|../*|*/*)
-                _lpr_core_consider "$candidate" "$line_no" ;;
+                _lpr_core_consider "$candidate" "$line_no" "$context" ;;
             *.md|*.markdown|*.yaml|*.yml|*.json|*.toml|*.txt|*.sh|*.ts|*.tsx|*.js|*.jsx)
-                _lpr_core_consider "$candidate" "$line_no" ;;
+                _lpr_core_consider "$candidate" "$line_no" "$context" ;;
+            *)
+                # Root-level extensionless candidates are only paths when a
+                # matching file actually exists in the repository.  This
+                # catches files such as `.env` and `secret` without treating
+                # arbitrary prose or illustrative words as missing paths.
+                if [[ -f "$_LPR_REPO_ROOT/$candidate" ]]; then
+                    _lpr_core_consider "$candidate" "$line_no" "$context"
+                fi
+                ;;
         esac
     done
 }
@@ -247,6 +284,7 @@ local_path_ref_gate_core_check() {
     while [[ "$repo_root" != "/" && "$repo_root" == */ ]]; do
         repo_root="${repo_root%/}"
     done
+    repo_root=$(cd -P "$repo_root" 2>/dev/null && pwd -P) || return 1
     _LPR_REPO_ROOT="$repo_root"
     _LPR_SEEN=""
     _LPR_COUNT=0
