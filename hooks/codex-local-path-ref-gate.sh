@@ -111,36 +111,95 @@ _lpr_prepare_repo() {
         esac
     fi
     cd "$top_cwd" 2>/dev/null || return 1
+    effective_cwd="$PWD"
     repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || return 1
     [ -d "$repo_root" ] || return 1
     return 0
 }
 
-_lpr_extract_value_after() {
-    local rest="$1" value first_char remainder
+# This is a deliberately small, non-evaluating shell lexer.  It recognizes
+# only words, quotes, escaped characters, and top-level command separators.
+# That is enough to avoid treating quoted argument text as a second command.
+_lpr_shell_next_word() {
+    local rest="$1" length index=0 char quote="" value=""
     rest="${rest#"${rest%%[![:space:]]*}"}"
     [ -n "$rest" ] || return 1
-    first_char="${rest%"${rest#?}"}"
-    if [ "$first_char" = '"' ]; then
-        case "$rest" in *\\\"*) return 1 ;; esac
-        rest="${rest#\"}"
-        [[ "$rest" == *\"* ]] || return 1
-        value="${rest%%\"*}"
-        remainder="${rest#"$value"}"
-        remainder="${remainder#\"}"
-    elif [ "$first_char" = "'" ]; then
-        rest="${rest#\'}"
-        [[ "$rest" == *\'* ]] || return 1
-        value="${rest%%\'*}"
-        remainder="${rest#"$value"}"
-        remainder="${remainder#\'}"
-    else
-        value="${rest%%[[:space:]]*}"
-        remainder="${rest#"$value"}"
-    fi
+    length=${#rest}
+    while [ "$index" -lt "$length" ]; do
+        char="${rest:$index:1}"
+        if [ -n "$quote" ]; then
+            if [ "$quote" = "'" ]; then
+                if [ "$char" = "'" ]; then quote=""; else value="${value}${char}"; fi
+            elif [ "$char" = '"' ]; then
+                quote=""
+            elif [ "$char" = '\' ]; then
+                index=$((index + 1))
+                [ "$index" -lt "$length" ] || return 1
+                value="${value}${rest:$index:1}"
+            else
+                value="${value}${char}"
+            fi
+        else
+            case "$char" in
+                [[:space:]]) break ;;
+                "'"|'"') quote="$char" ;;
+                '\')
+                    index=$((index + 1))
+                    [ "$index" -lt "$length" ] || return 1
+                    value="${value}${rest:$index:1}"
+                    ;;
+                *) value="${value}${char}" ;;
+            esac
+        fi
+        index=$((index + 1))
+    done
+    [ -z "$quote" ] || return 1
     [ -n "$value" ] || return 1
-    _LPR_VALUE="$value"
-    _LPR_REST_AFTER_VALUE="$remainder"
+    _LPR_WORD="$value"
+    _LPR_SHELL_REMAINDER="${rest:$index}"
+    return 0
+}
+
+_lpr_shell_next_segment() {
+    local rest="$1" length index=0 next_index char quote=""
+    length=${#rest}
+    while [ "$index" -lt "$length" ]; do
+        char="${rest:$index:1}"
+        if [ -n "$quote" ]; then
+            if [ "$quote" = "'" ]; then
+                [ "$char" = "'" ] && quote=""
+            elif [ "$char" = '"' ]; then
+                quote=""
+            elif [ "$char" = '\' ]; then
+                index=$((index + 1))
+                [ "$index" -lt "$length" ] || return 1
+            fi
+        else
+            case "$char" in
+                "'"|'"') quote="$char" ;;
+                '\')
+                    index=$((index + 1))
+                    [ "$index" -lt "$length" ] || return 1
+                    ;;
+                ';'|'&'|'|')
+                    next_index=$((index + 1))
+                    while [ "$next_index" -lt "$length" ]; do
+                        case "${rest:$next_index:1}" in
+                            ';'|'&'|'|') next_index=$((next_index + 1)) ;;
+                            *) break ;;
+                        esac
+                    done
+                    _LPR_SEGMENT="${rest:0:index}"
+                    _LPR_SHELL_REMAINDER="${rest:$next_index}"
+                    return 0
+                    ;;
+            esac
+        fi
+        index=$((index + 1))
+    done
+    [ -z "$quote" ] || return 1
+    _LPR_SEGMENT="$rest"
+    _LPR_SHELL_REMAINDER=""
     return 0
 }
 
@@ -158,106 +217,78 @@ _lpr_read_file_content() {
     return 0
 }
 
-_lpr_gh_body() {
-    local segment="$1" marker rest body_file=0
-    local body_re='(^|[[:space:]])--body(-file)?(=|[[:space:]])'
-    [[ "$segment" =~ $body_re ]] || return 1
-    marker="${BASH_REMATCH[0]}"
-    rest="${segment#*"$marker"}"
-    _lpr_extract_value_after "$rest" || return 1
-    case "$marker" in *--body-file*) body_file=1 ;; esac
-    case "$_LPR_VALUE" in
-        @*) _lpr_read_file_content "${_LPR_VALUE#@}" || return 1 ;;
+_lpr_gh_body_value() {
+    local value="$1" body_file="$2"
+    case "$value" in
+        @*) _lpr_read_file_content "${value#@}" || return 1 ;;
         -) return 1 ;;
-        *) [ "$body_file" -eq 1 ] && _lpr_read_file_content "$_LPR_VALUE" || return 0 ;;
+        *)
+            if [ "$body_file" -eq 1 ]; then
+                _lpr_read_file_content "$value" || return 1
+            else
+                _LPR_VALUE="$value"
+            fi
+            ;;
     esac
     return 0
 }
 
 _lpr_inspect_gh() {
-    local gh_re='(^|[;&|])[[:space:]]*gh[[:space:]]+pr[[:space:]]+(create|edit|comment)([[:space:]]|$)'
-    local remaining="$cmd" marker segment rc=0
-
-    # Search repeatedly: an inspected shell command may contain multiple PR
-    # operations joined by `;`, `&&`, `||`, or `|`.  Only read their body
-    # arguments; never evaluate any part of the shell input.
-    while [[ "$remaining" =~ $gh_re ]]; do
-        marker="${BASH_REMATCH[0]}"
-        segment="${remaining#*"$marker"}"
-        if _lpr_gh_body "$segment"; then
+    local remaining="$cmd" segment rest action word value body_file rc=0
+    while [ -n "$remaining" ]; do
+        _lpr_shell_next_segment "$remaining" || return 0
+        segment="$_LPR_SEGMENT"
+        remaining="$_LPR_SHELL_REMAINDER"
+        _lpr_shell_next_word "$segment" || continue
+        [ "$_LPR_WORD" = "gh" ] || continue
+        rest="$_LPR_SHELL_REMAINDER"
+        _lpr_shell_next_word "$rest" || continue
+        [ "$_LPR_WORD" = "pr" ] || continue
+        rest="$_LPR_SHELL_REMAINDER"
+        _lpr_shell_next_word "$rest" || continue
+        action="$_LPR_WORD"
+        case "$action" in create|edit|comment) ;; *) continue ;; esac
+        rest="$_LPR_SHELL_REMAINDER"
+        while _lpr_shell_next_word "$rest"; do
+            word="$_LPR_WORD"
+            rest="$_LPR_SHELL_REMAINDER"
+            body_file=0
+            case "$word" in
+                -b|--body)
+                    _lpr_shell_next_word "$rest" || return 0
+                    value="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
+                    ;;
+                --body-file)
+                    body_file=1
+                    _lpr_shell_next_word "$rest" || return 0
+                    value="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
+                    ;;
+                --body=*) value="${word#--body=}" ;;
+                --body-file=*) body_file=1; value="${word#--body-file=}" ;;
+                -b?*) value="${word#-b}" ;;
+                *) continue ;;
+            esac
+            _lpr_gh_body_value "$value" "$body_file" || return 0
             _lpr_check_text "$_LPR_VALUE" || rc=$?
             [ "$rc" -eq 2 ] && return 2
             rc=0
-            remaining="$_LPR_REST_AFTER_VALUE"
-        else
-            # Consume this gh invocation marker before looking for a later
-            # one, so a body-less operation cannot make the loop stall.
-            remaining="$segment"
-        fi
+        done
     done
     return 0
 }
 
-_lpr_curl_payload() {
-    local segment="$1" marker rest token attached_rest
-    local data_re='(^|[[:space:]])(--data([[:alnum:]_-]*)|-d)(=|[[:space:]]|$)|(^|[[:space:]])-d[^[:space:]]'
-    [[ "$segment" =~ $data_re ]] || return 1
-    marker="${BASH_REMATCH[0]}"
-    token="${marker#"${marker%%[![:space:]]*}"}"
-    rest="${segment#*"$marker"}"
-    case "$token" in
-        -d[![:space:]=]*)
-            attached_rest="${token#-d}${rest}"
-            _lpr_extract_value_after "$attached_rest" || return 1
-            _LPR_CURL_OPTION="-d"
-            case "$_LPR_VALUE" in
-                @*) _lpr_read_file_content "${_LPR_VALUE#@}" || return 1 ;;
-                -) return 1 ;;
-            esac
-            _LPR_CURL_REMAINDER="$_LPR_REST_AFTER_VALUE"
-            return 0
-            ;;
-    esac
-    _lpr_extract_value_after "$rest" || return 1
-    case "$token" in
-        --data-urlencode*) _LPR_CURL_OPTION="--data-urlencode" ;;
-        *) _LPR_CURL_OPTION="--data" ;;
-    esac
-    case "$_LPR_VALUE" in
-        @*) _lpr_read_file_content "${_LPR_VALUE#@}" || return 1 ;;
+_lpr_curl_payload_value() {
+    local value="$1" option="$2"
+    _LPR_VALUE="$value"
+    case "$value" in
+        @*) _lpr_read_file_content "${value#@}" || return 1 ;;
         -) return 1 ;;
         *)
-            # `--data-urlencode name@file` reads file bytes as the value.
-            # If that file cannot be read, the whole inspection is
-            # undecidable and must fail open.
-            if [ "$_LPR_CURL_OPTION" = "--data-urlencode" ]; then
-                case "$_LPR_VALUE" in
-                    ?*@*) _lpr_read_file_content "${_LPR_VALUE#*@}" || return 1 ;;
-                esac
+            if [ "$option" = "--data-urlencode" ]; then
+                case "$value" in ?*@*) _lpr_read_file_content "${value#*@}" || return 1 ;; esac
             fi
             ;;
     esac
-    _LPR_CURL_REMAINDER="$_LPR_REST_AFTER_VALUE"
-    return 0
-}
-
-_lpr_curl_form() {
-    local segment="$1" marker rest token attached_rest
-    local form_re='(^|[[:space:]])(--form|-F)(=|[[:space:]]|$)|(^|[[:space:]])-F[^[:space:]]'
-    [[ "$segment" =~ $form_re ]] || return 1
-    marker="${BASH_REMATCH[0]}"
-    token="${marker#"${marker%%[![:space:]]*}"}"
-    rest="${segment#*"$marker"}"
-    case "$token" in
-        -F[![:space:]=]*)
-            attached_rest="${token#-F}${rest}"
-            _lpr_extract_value_after "$attached_rest" || return 1
-            _LPR_CURL_REMAINDER="$_LPR_REST_AFTER_VALUE"
-            return 0
-            ;;
-    esac
-    _lpr_extract_value_after "$rest" || return 1
-    _LPR_CURL_REMAINDER="$_LPR_REST_AFTER_VALUE"
     return 0
 }
 
@@ -280,11 +311,11 @@ _lpr_curl_form_attachment() {
     expanded="$_LPR_EXPANDED"
     case "$expanded" in
         /*) ;;
-        *) expanded="$repo_root/$expanded" ;;
+        *) expanded="$effective_cwd/$expanded" ;;
     esac
     [ -f "$expanded" ] && [ -r "$expanded" ] || return 0
 
-    _lpr_check_text "$path"
+    _lpr_check_text "$expanded"
     case "$?" in
         2) return 2 ;;
     esac
@@ -296,59 +327,87 @@ _lpr_curl_form_attachment() {
 }
 
 _lpr_inspect_curl() {
-    local curl_re='(^|[;&|])[[:space:]]*curl([[:space:]]|$)' target_re
-    local segment curl_text remaining rc form_rc
-    [[ "$cmd" =~ $curl_re ]] || return 0
-    segment="${cmd#*"${BASH_REMATCH[0]}"}"
-    target_re='(^|[[:space:]'\''"])https://(api[.]notion[.]com|slack[.]com/api|api[.]linear[.]app|linear[.]app/api)'
-    [[ "$segment" =~ $target_re ]] || return 0
-    remaining="$segment"
-    while _lpr_curl_payload "$remaining"; do
-        curl_text=$(printf '%s' "$_LPR_VALUE" | tr '{}\",' '    ') || return 0
-        _lpr_check_text "$curl_text" || rc=$?
-        [ "${rc:-0}" -eq 2 ] && return 2
-        rc=0
-        remaining="$_LPR_CURL_REMAINDER"
-    done
+    local remaining="$cmd" segment rest arguments word value option target rc=0 form_rc curl_text
+    while [ -n "$remaining" ]; do
+        _lpr_shell_next_segment "$remaining" || return 0
+        segment="$_LPR_SEGMENT"
+        remaining="$_LPR_SHELL_REMAINDER"
+        _lpr_shell_next_word "$segment" || continue
+        [ "$_LPR_WORD" = "curl" ] || continue
+        arguments="$_LPR_SHELL_REMAINDER"
+        rest="$arguments"; target=0
+        while _lpr_shell_next_word "$rest"; do
+            word="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
+            case "$word" in
+                https://api.notion.com/*|https://slack.com/api/*|https://api.linear.app/*|https://linear.app/api/*) target=1 ;;
+            esac
+        done
+        [ "$target" -eq 1 ] || continue
 
-    # Multipart options are independent from --data options; inspect every
-    # --form/-F occurrence rather than stopping after the first one.
-    remaining="$segment"
-    while _lpr_curl_form "$remaining"; do
-        form_rc=0
-        _lpr_curl_form_attachment "$_LPR_VALUE" || form_rc=$?
-        [ "$form_rc" -eq 2 ] && return 2
-        remaining="$_LPR_CURL_REMAINDER"
+        rest="$arguments"
+        while _lpr_shell_next_word "$rest"; do
+            word="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"; option=""
+            case "$word" in
+                --data|--data-raw|--data-binary|--data-ascii|--data-urlencode|--json|-d|--form|-F)
+                    option="$word"
+                    _lpr_shell_next_word "$rest" || return 0
+                    value="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
+                    ;;
+                --data=*) option="--data"; value="${word#--data=}" ;;
+                --data-raw=*) option="--data-raw"; value="${word#--data-raw=}" ;;
+                --data-binary=*) option="--data-binary"; value="${word#--data-binary=}" ;;
+                --data-ascii=*) option="--data-ascii"; value="${word#--data-ascii=}" ;;
+                --data-urlencode=*) option="--data-urlencode"; value="${word#--data-urlencode=}" ;;
+                --form=*) option="--form"; value="${word#--form=}" ;;
+                -d?*) option="-d"; value="${word#-d}" ;;
+                -F?*) option="-F"; value="${word#-F}" ;;
+                *) continue ;;
+            esac
+            case "$option" in
+                --form|-F)
+                    form_rc=0
+                    _lpr_curl_form_attachment "$value" || form_rc=$?
+                    [ "$form_rc" -eq 2 ] && return 2
+                    ;;
+                *)
+                    _lpr_curl_payload_value "$value" "$option" || return 0
+                    curl_text=$(printf '%s' "$_LPR_VALUE" | tr '{}\",' '    ') || return 0
+                    _lpr_check_text "$curl_text" || rc=$?
+                    [ "$rc" -eq 2 ] && return 2
+                    rc=0
+                    ;;
+            esac
+        done
     done
     return 0
 }
 
 _lpr_git_commit_staged_text() {
-    local base_repo_root="$repo_root" remaining="$cmd" marker target_marker
-    local target_rest target repo_for_commit staged_text rc=0
-    local git_re='(^|[;&|])[[:space:]]*git([[:space:]]+[^;&|[:space:]]+)*[[:space:]]+commit([[:space:]]|$)'
-    local dash_c_re='(^|[[:space:]])-C([[:space:]]|$)'
-
-    # Each `git commit` can select a repository of its own with `-C`.  The
-    # default shell repository is not necessarily the repository that Git will
-    # commit, especially in compound commands.
-    while [[ "$remaining" =~ $git_re ]]; do
-        marker="${BASH_REMATCH[0]}"
-        repo_for_commit="$base_repo_root"
-        if [[ "$marker" =~ $dash_c_re ]]; then
-            target_marker="${BASH_REMATCH[0]}"
-            target_rest="${marker#*"$target_marker"}"
-            if _lpr_extract_value_after "$target_rest"; then
-                target="$_LPR_VALUE"
-                repo_for_commit=$(git -C "$target" rev-parse --show-toplevel 2>/dev/null) || {
-                    repo_root="$base_repo_root"
-                    return 0
-                }
-            else
-                repo_root="$base_repo_root"
-                return 0
-            fi
-        fi
+    local base_repo_root="$repo_root" remaining="$cmd" segment rest word
+    local git_cwd repo_for_commit staged_text rc=0 has_commit
+    while [ -n "$remaining" ]; do
+        _lpr_shell_next_segment "$remaining" || return 0
+        segment="$_LPR_SEGMENT"; remaining="$_LPR_SHELL_REMAINDER"
+        _lpr_shell_next_word "$segment" || continue
+        [ "$_LPR_WORD" = "git" ] || continue
+        rest="$_LPR_SHELL_REMAINDER"; git_cwd="$effective_cwd"; has_commit=0
+        while _lpr_shell_next_word "$rest"; do
+            word="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
+            case "$word" in
+                -C)
+                    _lpr_shell_next_word "$rest" || return 0
+                    git_cwd="$_LPR_WORD"; rest="$_LPR_SHELL_REMAINDER"
+                    ;;
+                -C?*) git_cwd="${word#-C}" ;;
+                commit) has_commit=1; break ;;
+            esac
+            case "$git_cwd" in /*) ;; *) git_cwd="$effective_cwd/$git_cwd" ;; esac
+        done
+        [ "$has_commit" -eq 1 ] || continue
+        repo_for_commit=$(git -C "$git_cwd" rev-parse --show-toplevel 2>/dev/null) || {
+            repo_root="$base_repo_root"
+            return 0
+        }
 
         [ -d "$repo_for_commit" ] || {
             repo_root="$base_repo_root"
@@ -364,7 +423,6 @@ _lpr_git_commit_staged_text() {
             fi
             rc=0
         fi
-        remaining="${remaining#*"$marker"}"
     done
     repo_root="$base_repo_root"
     return 0
