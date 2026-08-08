@@ -111,11 +111,12 @@ _lpr_core_candidate_exists() {
     case "$candidate" in
         file:///*) candidate="${candidate#file://}" ;;
     esac
-    _lpr_core_placeholder_or_external "$candidate" && return 1
     case "$candidate" in
-        /*) [[ -e "$candidate" ]] ;;
-        *) [[ -n "${_LPR_REPO_ROOT-}" && -e "$_LPR_REPO_ROOT/$candidate" ]] ;;
+        /*) [[ -e "$candidate" ]] && return 0 ;;
+        *) [[ -n "${_LPR_REPO_ROOT-}" && -e "$_LPR_REPO_ROOT/$candidate" ]] && return 0 ;;
     esac
+    _lpr_core_placeholder_or_external "$candidate" && return 1
+    return 1
 }
 
 _lpr_core_placeholder_or_external() {
@@ -225,16 +226,20 @@ _lpr_core_consider() {
         file:///*) candidate="${candidate#file://}" ;;
     esac
 
-    # A `path:line` citation identifies the same local file as `path`.  Keep
-    # the citation in diagnostic output, but resolve and classify its path.
-    if [[ "$candidate" =~ ^(.+):[1-9][0-9]*$ ]]; then
+    # A `path:line` citation identifies the same local file as `path`, unless
+    # the complete candidate is an existing filename ending in `:<number>`.
+    # Keep a real filename or a citation in diagnostic output, but resolve and
+    # classify only the path portion of an actual citation.
+    if ! _lpr_core_candidate_exists "$candidate" && [[ "$candidate" =~ ^(.+):[1-9][0-9]*$ ]]; then
         candidate="${BASH_REMATCH[1]}"
     fi
 
     _lpr_core_expand_path "$candidate"
     candidate="$_LPR_EXPANDED"
     # An unresolved $HOME/$OMT_DIR is a template; setup errors fail open.
-    _lpr_core_placeholder_or_external "$candidate" && return 0
+    if ! _lpr_core_candidate_exists "$candidate"; then
+        _lpr_core_placeholder_or_external "$candidate" && return 0
+    fi
     # `~` cannot be expanded safely without HOME (and ~user lookup is outside
     # this core's scope), so treat an unresolved tilde as a setup/template case.
     case "$candidate" in
@@ -245,9 +250,14 @@ _lpr_core_consider() {
         /*)
             [[ -e "$candidate" ]] || return 0
             if _lpr_core_is_tracked_absolute "$candidate"; then
-                repo_target="${_LPR_RESOLVED_PATH#"$_LPR_REPO_ROOT/"}"
-                _lpr_core_emit "$line_no" "absolute-tracked" "$repo_target" \
-                    "use the repository-relative path"
+                if [[ "$context" == "attachment" ]]; then
+                    _lpr_core_emit "$line_no" "local-attachment" "$display_candidate" \
+                        "do not attach local files; inline a summary or link to the repository file"
+                else
+                    repo_target="${_LPR_RESOLVED_PATH#"$_LPR_REPO_ROOT/"}"
+                    _lpr_core_emit "$line_no" "absolute-tracked" "$repo_target" \
+                        "use the repository-relative path"
+                fi
             else
                 [[ "$?" -eq 2 ]] && return 0
                 _lpr_core_emit "$line_no" "machine-local-untracked" "$display_candidate" \
