@@ -186,7 +186,7 @@ _lpr_core_trim_candidate() {
     done
     while :; do
         case "$value" in
-            '<*>'|"'*'"|'"*"'|\`*\`|\(*\)|\[*\]|\{*\})
+            \<*\>|\'*\'|\"*\"|\`*\`|\(*\)|\[*\]|\{*\})
                 value="${value#?}"
                 value="${value%?}"
                 ;;
@@ -240,10 +240,11 @@ _lpr_core_placeholder_or_external() {
             esac
             ;;
         '#'*) return 0 ;;
-        # `<repo-root>/...` is a schematic placeholder, not a concrete
+        # `<repo-root>/...` (and other `<...>/` schematic placeholders such as
+        # `<worktree>/...`) is a schematic placeholder, not a concrete
         # repository-relative citation.  Keep it fail-open in Markdown links
         # as well as in prose scans.
-        \<repo-root\>/*) return 0 ;;
+        \<[^\<\>]*\>/*) return 0 ;;
         *'{'*'}'*|*'*'*|*'?'*|*'['*']'*) return 0 ;;
         # An unresolved variable is a template/reference, not an inspectable
         # concrete local path.  Known variables are expanded before this test.
@@ -479,16 +480,34 @@ _lpr_core_escaped_markdown_prefix() {
 
 _lpr_core_is_path_shaped() {
     local candidate="$1"
-    # A bare separator is ordinary prose, not a concrete local reference.
-    # Keep nonempty absolute and relative paths on the existing inspection
-    # path, including ./name and ../name.
+    # A token made up entirely of separator characters (`/`, `//`, `///`,
+    # `.`, `..`, `./`, `../` ...) is prose or a comment marker, not a
+    # concrete local reference.
+    [[ "$candidate" =~ ^[/.]+$ ]] && return 1
     case "$candidate" in
-        /|./|../) return 1 ;;
         /*|~|~/*|\$HOME|\$HOME/*|\${HOME}|\${HOME}/*|\$OMT_DIR|\$OMT_DIR/*|\${OMT_DIR}|\${OMT_DIR}/*|./*|../*|file:///*|file://localhost/*|*/*)
             return 0
             ;;
     esac
     return 1
+}
+
+_lpr_core_pad_delimiters() {
+    local value="$1" padded="" index=0 length char
+    length="${#value}"
+    while [[ "$index" -lt "$length" ]]; do
+        char="${value:$index:1}"
+        case "$char" in
+            '('|')'|'"'|'`'|','|';'|'{'|'}')
+                padded="${padded} ${char} "
+                ;;
+            *)
+                padded="${padded}${char}"
+                ;;
+        esac
+        index=$((index + 1))
+    done
+    _LPR_PADDED="$padded"
 }
 
 _lpr_core_scan_line() {
@@ -579,7 +598,8 @@ _lpr_core_scan_line() {
     # not a shell parser: quoted/escaped command syntax is left to shims.
     [[ "$line" =~ [^[:space:]] ]] || return 0
     local -a words=()
-    read -r -a words <<< "$line"
+    _lpr_core_pad_delimiters "$line"
+    read -r -a words <<< "$_LPR_PADDED"
     local start end joined
 
     # A real path can be surrounded by prose and contain spaces.  Join words
@@ -602,13 +622,31 @@ _lpr_core_scan_line() {
         done
     done
 
-    for token in "${words[@]}"; do
+    local widx
+    for ((widx = 0; widx < ${#words[@]}; widx++)); do
+        token="${words[$widx]}"
         local context="$scan_context"
         if [[ "$scan_context" != "attachment" ]]; then
             case "$token" in
                 *']('*) continue ;;
+            esac
+            case "$token" in
                 *'`'*|*'"'*|*"'"*|*'('*|*')'*) context=evidence ;;
             esac
+            # Padding splits a delimiter off into its own word, which breaks
+            # the padded words' own adjacency to a delimiter that once sat
+            # right next to this token. Recover that adjacency from the
+            # original, unpadded $line instead: a delimiter immediately
+            # before or after the token's own text there still promotes it.
+            if [[ -n "$token" ]]; then
+                local delim
+                for delim in '`' '"' "'" '(' ')'; do
+                    if [[ "$line" == *"$delim$token"* || "$line" == *"$token$delim"* ]]; then
+                        context=evidence
+                        break
+                    fi
+                done
+            fi
         fi
         _lpr_core_trim_candidate "$token"
         candidate="$_LPR_CANDIDATE"
