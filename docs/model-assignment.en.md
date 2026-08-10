@@ -113,13 +113,19 @@ Handled by `model-map` in each `{platform}.yaml`.
 model-map:
   tiers:
     fable:  { model: gpt-5.6-sol }
-    opus:   { model: gpt-5.6-terra }
+    opus:   { model: gpt-5.6-terra, effort: high }
     sonnet: { model: gpt-5.6-luna }
 ```
 
-**A tier sets the model only.** Omitting `effort` leaves `model_reasoning_effort`
-out of the emitted role TOML, so each agent runs at whatever effort the session is
-configured for rather than a value frozen at sync time.
+**A tier normally sets the model only.** Omitting `effort` leaves
+`model_reasoning_effort` out of the emitted role TOML, so each agent runs at
+whatever effort the session is configured for rather than a value frozen at sync
+time.
+
+`opus` is the one exception (2026-08-11). Every agent on that tier is a judgment
+surface — review, diagnosis, plan critique — whose output nobody re-verifies.
+Judgment quality must not drop just because the session happens to be running
+low/medium, so the tier itself pins `effort: high`.
 
 ### `agents:` is only for what a tier cannot express
 
@@ -127,9 +133,9 @@ configured for rather than a value frozen at sync time.
 resolveCodexAgentModel: modelMap.agents?.[name] ?? modelMap.tiers[tier]
 ```
 
-Since a tier fixes the model alone, the one thing that qualifies for `agents:` is
-**an agent that must pin an effort instead of following the session**. As long as
-model differentiation is expressed as a tier, that is effectively its only use.
+What qualifies for `agents:` is **an agent whose model or effort no tier can
+spell** — for instance one needing an effort that is neither its tier's pin nor
+the session value.
 
 Pure model differentiation belongs in a tier, not here. A new entry must state
 **why it could not be expressed as a tier**.

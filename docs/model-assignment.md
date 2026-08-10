@@ -99,13 +99,17 @@ verdict를 자기가 만드는 것처럼 보이지만 실제로는 `skills/insan
 model-map:
   tiers:
     fable:  { model: gpt-5.6-sol }
-    opus:   { model: gpt-5.6-terra }
+    opus:   { model: gpt-5.6-terra, effort: high }
     sonnet: { model: gpt-5.6-luna }
 ```
 
-**등급은 모델만 정한다.** `effort`를 적지 않으면 배포되는 role TOML에
+**등급은 기본적으로 모델만 정한다.** `effort`를 적지 않으면 배포되는 role TOML에
 `model_reasoning_effort` 키가 실리지 않고, 각 에이전트는 세션에 설정된 effort를 따른다.
 sync 시점에 값을 얼려두지 않겠다는 뜻이다.
+
+예외는 `opus` 하나다(2026-08-11). 이 등급에 속한 에이전트는 전부 판정면이고 — 리뷰·진단·
+플랜 심사 — 그 산출물을 아무도 재검증하지 않는다. 세션이 low/medium으로 돌고 있다는 이유만으로
+판정 품질이 내려가면 안 되므로, 등급 자체에 `effort: high`를 고정한다.
 
 ### `agents:`는 등급으로 표현 불가능한 것 전용
 
@@ -113,9 +117,8 @@ sync 시점에 값을 얼려두지 않겠다는 뜻이다.
 resolveCodexAgentModel: modelMap.agents?.[name] ?? modelMap.tiers[tier]
 ```
 
-등급이 모델만 정하므로, `agents:`에 들어갈 자격이 있는 것은 **세션을 따르지 않고 effort를
-고정해야 하는 에이전트**다. 모델 차등이 등급으로 표현되는 이상 이것이 사실상 유일한 용도가
-된다.
+`agents:`에 들어갈 자격이 있는 것은 **모델이든 effort든 어느 등급으로도 표현되지 않는
+에이전트**다 — 예를 들어 자기 등급의 고정값도, 세션값도 아닌 effort가 필요한 경우.
 
 순수한 모델 차등은 `agents:`가 아니라 등급으로 표현한다. 새 엔트리를 추가할 때는 그것이
 **왜 등급으로 표현될 수 없는지**를 함께 적어야 한다.
