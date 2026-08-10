@@ -73,17 +73,6 @@ test_markdown_repo_root_placeholder_allows() {
     [[ "$rc" -eq 1 && -z "$out" ]]
 }
 
-test_missing_relative_reports_location_type_and_remediation() {
-    local out rc=0
-    out=$(local_path_ref_gate_core_check "$REPO" $'See [the design](docs/not-present.md).') || rc=$?
-    [[ "$rc" -eq 0 ]] || return 1
-    printf '%s' "$out" | grep -F 'line=1' >/dev/null || return 1
-    printf '%s' "$out" | grep -F 'type=repo-relative-missing' >/dev/null || return 1
-    printf '%s' "$out" | grep -F 'path=docs/not-present.md' >/dev/null || return 1
-    printf '%s' "$out" | grep -F 'add the target or inline its content' >/dev/null || return 1
-    printf '%s' "$out" | grep -F 'deleting the citation alone is forbidden' >/dev/null
-}
-
 test_existing_home_file_reports_untracked_remediation() {
     local out rc=0
     out=$(local_path_ref_gate_core_check "$REPO" $'Keep ~/private-notes.md cited.') || rc=$?
@@ -330,14 +319,6 @@ test_parenthesized_bare_untracked_file_reports_machine_local() {
     [[ "$rc" -eq 0 ]] || return 1
     printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
     printf '%s' "$out" | grep -F 'path=docs/untracked.md' >/dev/null
-}
-
-test_delimited_missing_extensionless_path_reports_missing() {
-    local out rc=0
-    out=$(local_path_ref_gate_core_check "$REPO" 'See `docs/not-present-extensionless`.') || rc=$?
-    [[ "$rc" -eq 0 ]] || return 1
-    printf '%s' "$out" | grep -F 'type=repo-relative-missing' >/dev/null || return 1
-    printf '%s' "$out" | grep -F 'path=docs/not-present-extensionless' >/dev/null
 }
 
 test_existing_relative_untracked_extensionless_file_reports_machine_local() {
@@ -602,13 +583,6 @@ test_comment_with_omt_dir_path_still_denies() {
     printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null
 }
 
-test_comment_with_dangling_repo_relative_link_still_denies() {
-    local out rc=0
-    out=$(local_path_ref_gate_core_check "$REPO" '// See [the design](docs/not-present.md).') || rc=$?
-    [[ "$rc" -eq 0 ]] || return 1
-    printf '%s' "$out" | grep -F 'type=repo-relative-missing' >/dev/null
-}
-
 test_function_call_real_home_path_still_denies() {
     local out rc=0
     out=$(local_path_ref_gate_core_check "$REPO" "readFile(\"\$HOME/private-notes.md\")") || rc=$?
@@ -686,41 +660,8 @@ test_quoted_neighbor_token_does_not_promote_unrelated_candidate() {
     [[ "$rc" -eq 1 && -z "$out" ]]
 }
 
-test_paren_prefixed_missing_path_reports_missing() {
-    local out rc=0
-    out=$(local_path_ref_gate_core_check "$REPO" 'See (no-such/x for details.') || rc=$?
-    [[ "$rc" -eq 0 ]] || return 1
-    printf '%s' "$out" | grep -F 'type=repo-relative-missing' >/dev/null || return 1
-    printf '%s' "$out" | grep -F 'path=no-such/x' >/dev/null
-}
-
-test_paren_suffixed_missing_path_reports_missing() {
-    local out rc=0
-    out=$(local_path_ref_gate_core_check "$REPO" 'See no-such/x) for details.') || rc=$?
-    [[ "$rc" -eq 0 ]] || return 1
-    printf '%s' "$out" | grep -F 'type=repo-relative-missing' >/dev/null || return 1
-    printf '%s' "$out" | grep -F 'path=no-such/x' >/dev/null
-}
-
-test_backtick_prefixed_missing_path_reports_missing() {
-    local out rc=0
-    out=$(local_path_ref_gate_core_check "$REPO" 'See `no-such/x for details.') || rc=$?
-    [[ "$rc" -eq 0 ]] || return 1
-    printf '%s' "$out" | grep -F 'type=repo-relative-missing' >/dev/null || return 1
-    printf '%s' "$out" | grep -F 'path=no-such/x' >/dev/null
-}
-
-test_paren_prefixed_missing_extensioned_path_reports_missing() {
-    local out rc=0
-    out=$(local_path_ref_gate_core_check "$REPO" 'See (docs/not-present.md for details.') || rc=$?
-    [[ "$rc" -eq 0 ]] || return 1
-    printf '%s' "$out" | grep -F 'type=repo-relative-missing' >/dev/null || return 1
-    printf '%s' "$out" | grep -F 'path=docs/not-present.md' >/dev/null
-}
-
 run_test test_placeholder_and_https_allow
 run_test test_markdown_repo_root_placeholder_allows
-run_test test_missing_relative_reports_location_type_and_remediation
 run_test test_existing_home_file_reports_untracked_remediation
 run_test test_existing_omt_file_reports_untracked_remediation
 run_test test_existing_absolute_tracked_file_reports_relative_remediation
@@ -755,7 +696,6 @@ run_test test_escaped_markdown_destination_preserves_literal_filename_behavior
 run_test test_existing_relative_file_allows
 run_test test_existing_relative_untracked_file_reports_machine_local
 run_test test_parenthesized_bare_untracked_file_reports_machine_local
-run_test test_delimited_missing_extensionless_path_reports_missing
 run_test test_existing_relative_untracked_extensionless_file_reports_machine_local
 run_test test_existing_root_level_untracked_files_report_machine_local
 run_test test_nonexistent_root_level_words_are_not_paths
@@ -791,7 +731,6 @@ run_test test_comment_with_tilde_path_still_denies
 run_test test_comment_with_tmp_stand_in_path_still_denies
 run_test test_comment_with_file_uri_still_denies
 run_test test_comment_with_omt_dir_path_still_denies
-run_test test_comment_with_dangling_repo_relative_link_still_denies
 run_test test_function_call_real_home_path_still_denies
 run_test test_function_call_real_omt_dir_path_still_denies
 run_test test_function_call_file_uri_still_denies
@@ -803,10 +742,6 @@ run_test test_angle_wrapped_real_path_denies
 run_test test_possessive_apostrophe_in_prose_allows
 run_test test_pipe_redirect_to_devnull_line_allows
 run_test test_quoted_neighbor_token_does_not_promote_unrelated_candidate
-run_test test_paren_prefixed_missing_path_reports_missing
-run_test test_paren_suffixed_missing_path_reports_missing
-run_test test_backtick_prefixed_missing_path_reports_missing
-run_test test_paren_prefixed_missing_extensioned_path_reports_missing
 
 echo "Passed: $TESTS_PASSED, Failed: $TESTS_FAILED"
 [[ "$TESTS_FAILED" -eq 0 ]]

@@ -18,8 +18,8 @@
 # Records are judgment data for a shim to render; paths and prescriptions are
 # deliberately type-specific.  Return status is 0 when at least one record was
 # emitted and 1 for allow, including malformed/setup-error input (fail open).
-# The supported TYPE values are `repo-relative-missing`,
-# `machine-local-untracked`, `absolute-tracked`, and `local-attachment`.
+# The supported TYPE values are `machine-local-untracked`, `absolute-tracked`,
+# and `local-attachment`.
 #
 # Bash 3.2/macOS compatible.  No shell-command parsing, network/MCP
 # extraction, or platform-specific JSON belongs here.
@@ -369,9 +369,9 @@ _lpr_core_is_tracked_absolute() {
 }
 
 _lpr_core_consider() {
-    # `bare` references are only actionable when they resolve to an existing
-    # file.  Markdown links and explicitly delimited evidence retain the
-    # missing-target diagnosis because those forms assert a concrete citation.
+    # A reference is only actionable when it resolves to an existing file
+    # (tracked or untracked, absolute or repository-relative); an unresolved
+    # candidate is left alone regardless of context.
     local raw="$1" line_no="$2" context="${3-bare}" candidate display_candidate repo_target
     _lpr_core_trim_candidate "$raw"
     candidate="$_LPR_CANDIDATE"
@@ -466,10 +466,6 @@ _lpr_core_consider() {
                         "inline a summary or copy the file into the repository; ok: inline summary, tracked repo-relative path, schematic <placeholder> for an illustrative path only, never a real one"
                     return 0
                 fi
-            fi
-            if [[ "$context" == "markdown" || "$context" == "evidence" ]]; then
-                _lpr_core_emit "$line_no" "repo-relative-missing" "$display_candidate" \
-                    "add the target or inline its content; ok: inline summary, tracked repo-relative path, schematic <placeholder> for an illustrative path only, never a real one"
             fi
             ;;
     esac
@@ -664,23 +660,6 @@ _lpr_core_scan_line() {
             case "$token" in
                 *']('*) continue ;;
             esac
-            case "$token" in
-                *'`'*|*'"'*|*"'"*|*'('*|*')'*) context=evidence ;;
-            esac
-            # Padding splits a delimiter off into its own word, which breaks
-            # the padded words' own adjacency to a delimiter that once sat
-            # right next to this token. Recover that adjacency from the
-            # original, unpadded $line instead: a delimiter immediately
-            # before or after the token's own text there still promotes it.
-            if [[ -n "$token" ]]; then
-                local delim
-                for delim in '`' '"' "'" '(' ')'; do
-                    if [[ "$line" == *"$delim$token"* || "$line" == *"$token$delim"* ]]; then
-                        context=evidence
-                        break
-                    fi
-                done
-            fi
         fi
         _lpr_core_trim_candidate "$token"
         candidate="$_LPR_CANDIDATE"
