@@ -478,6 +478,181 @@ test_setup_error_fails_open() {
     [[ "$rc" -eq 1 && -z "$out" ]]
 }
 
+test_bare_double_slash_comment_marker_allows() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" '// this is just a normal comment') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_bare_triple_slash_doc_comment_allows() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" '/// JSDoc-style comment') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_function_call_fixture_nonexistent_path_allows() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "expect(detectHostRole(\"$TEST_TMP_DIR/no-such-fixture-dir/my-skill\", {})).toBe(\"unknown\");") || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_angle_placeholder_generalized_allows() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" '// (<worktree>/skills/orchestrate-review/scripts/), which is neither a') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_comment_with_home_path_still_denies() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "// see \$HOME/private-notes.md for details") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null
+}
+
+test_comment_with_tilde_path_still_denies() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" '// see ~/private-notes.md') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null
+}
+
+test_comment_with_tmp_stand_in_path_still_denies() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "// dumped to $TEST_TMP_DIR/secret.md") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null
+}
+
+test_comment_with_file_uri_still_denies() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "// file://$HOME/private-notes.md") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null
+}
+
+test_comment_with_omt_dir_path_still_denies() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" '// state lives at $OMT_DIR/session.md') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null
+}
+
+test_comment_with_dangling_repo_relative_link_still_denies() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" '// See [the design](docs/not-present.md).') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=repo-relative-missing' >/dev/null
+}
+
+test_function_call_real_home_path_still_denies() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "readFile(\"\$HOME/private-notes.md\")") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null
+}
+
+test_function_call_real_omt_dir_path_still_denies() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'readFile("$OMT_DIR/session.md")') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null
+}
+
+test_function_call_file_uri_still_denies() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "readFile(\"file://$HOME/private-notes.md\")") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null
+}
+
+test_backtick_code_span_real_path_still_denies() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "See \`$HOME/private-notes.md\` for details.") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null
+}
+
+test_multiple_call_sites_on_one_line_both_classified_correctly() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "expect(detectHostRole(\"$TEST_TMP_DIR/no-such/x\", {})).toBe(readFile(\"\$HOME/private-notes.md\"));") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F "path=\$HOME/private-notes.md" >/dev/null || \
+        printf '%s' "$out" | grep -F "path=$HOME/private-notes.md" >/dev/null || return 1
+    ! printf '%s' "$out" | grep -F "no-such/x" >/dev/null
+}
+
+test_single_quoted_wrapped_real_path_denies() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "'$HOME/private-notes.md'") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null
+}
+
+test_double_quoted_wrapped_real_path_denies() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "\"$HOME/private-notes.md\"") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null
+}
+
+test_angle_wrapped_real_path_denies() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "<$HOME/private-notes.md>") || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null
+}
+
+test_possessive_apostrophe_in_prose_allows() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "// corrupted a job.json's chairmanRole") || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_pipe_redirect_to_devnull_line_allows() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "printf '%s' \"\$out\" | grep -F 'type=machine-local-untracked' >/dev/null") || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_quoted_neighbor_token_does_not_promote_unrelated_candidate() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" "See 'note' docs/plain-missing here.") || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_paren_prefixed_missing_path_reports_missing() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See (no-such/x for details.') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=repo-relative-missing' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'path=no-such/x' >/dev/null
+}
+
+test_paren_suffixed_missing_path_reports_missing() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See no-such/x) for details.') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=repo-relative-missing' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'path=no-such/x' >/dev/null
+}
+
+test_backtick_prefixed_missing_path_reports_missing() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See `no-such/x for details.') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=repo-relative-missing' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'path=no-such/x' >/dev/null
+}
+
+test_paren_prefixed_missing_extensioned_path_reports_missing() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" 'See (docs/not-present.md for details.') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=repo-relative-missing' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'path=docs/not-present.md' >/dev/null
+}
+
 run_test test_placeholder_and_https_allow
 run_test test_markdown_repo_root_placeholder_allows
 run_test test_missing_relative_reports_location_type_and_remediation
@@ -534,6 +709,31 @@ run_test test_multipart_attachment_with_tracked_relative_path_reports_machine_lo
 run_test test_absolute_tracked_attachment_reports_attachment_remediation
 run_test test_existing_parent_relative_file_reports_machine_local
 run_test test_setup_error_fails_open
+run_test test_bare_double_slash_comment_marker_allows
+run_test test_bare_triple_slash_doc_comment_allows
+run_test test_function_call_fixture_nonexistent_path_allows
+run_test test_angle_placeholder_generalized_allows
+run_test test_comment_with_home_path_still_denies
+run_test test_comment_with_tilde_path_still_denies
+run_test test_comment_with_tmp_stand_in_path_still_denies
+run_test test_comment_with_file_uri_still_denies
+run_test test_comment_with_omt_dir_path_still_denies
+run_test test_comment_with_dangling_repo_relative_link_still_denies
+run_test test_function_call_real_home_path_still_denies
+run_test test_function_call_real_omt_dir_path_still_denies
+run_test test_function_call_file_uri_still_denies
+run_test test_backtick_code_span_real_path_still_denies
+run_test test_multiple_call_sites_on_one_line_both_classified_correctly
+run_test test_single_quoted_wrapped_real_path_denies
+run_test test_double_quoted_wrapped_real_path_denies
+run_test test_angle_wrapped_real_path_denies
+run_test test_possessive_apostrophe_in_prose_allows
+run_test test_pipe_redirect_to_devnull_line_allows
+run_test test_quoted_neighbor_token_does_not_promote_unrelated_candidate
+run_test test_paren_prefixed_missing_path_reports_missing
+run_test test_paren_suffixed_missing_path_reports_missing
+run_test test_backtick_prefixed_missing_path_reports_missing
+run_test test_paren_prefixed_missing_extensioned_path_reports_missing
 
 echo "Passed: $TESTS_PASSED, Failed: $TESTS_FAILED"
 [[ "$TESTS_FAILED" -eq 0 ]]
