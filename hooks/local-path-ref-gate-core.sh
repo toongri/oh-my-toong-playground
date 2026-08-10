@@ -253,6 +253,37 @@ _lpr_core_placeholder_or_external() {
     return 1
 }
 
+_lpr_core_check_placeholder_advisory() {
+    # `<X>/rest` is a schematic placeholder that `_lpr_core_placeholder_or_
+    # external` always allows.  When `rest` also happens to name a real,
+    # untracked FILE under a known root (OMT_DIR, then HOME, then the repo
+    # root, in that order), the author likely meant a concrete local path,
+    # not an illustrative one.  Emit an advisory (never a blocking) record
+    # for the first root that resolves; a directory, a tracked file, or a
+    # path through the git metadata directory is left silent.
+    local candidate="$1" line_no="$2" rest root resolved status
+    case "$candidate" in
+        \<[^\<\>]*\>/*) rest="${candidate#*>/}" ;;
+        *) return 1 ;;
+    esac
+    [[ -n "$rest" ]] || return 1
+    for root in "${OMT_DIR-}" "${HOME-}" "${_LPR_REPO_ROOT-}"; do
+        [[ -n "$root" ]] || continue
+        resolved="${root%/}/$rest"
+        [[ -f "$resolved" ]] || continue
+        case "/${resolved}/" in
+            */.git/*) continue ;;
+        esac
+        _lpr_core_is_tracked_absolute "$resolved"
+        status=$?
+        [[ "$status" -eq 0 || "$status" -eq 2 ]] && continue
+        _lpr_core_emit "$line_no" "placeholder-resolves-to-untracked" "${candidate} -> ${resolved}" \
+            "never leave an untracked file path in a tracked file or a shared document; if it must be shared, upload the file itself alongside"
+        return 0
+    done
+    return 1
+}
+
 _lpr_core_unresolved_escaped_path_line() {
     local value="$1" decoded_value
     # A line suffix whose separator is escaped (literally or as `%3A`) is not
@@ -388,7 +419,10 @@ _lpr_core_consider() {
     [[ "${_LPR_DECODE_UNRESOLVED-0}" -eq 0 ]] || return 0
     # An unresolved $HOME/$OMT_DIR is a template; setup errors fail open.
     if ! _lpr_core_candidate_exists "$candidate"; then
-        _lpr_core_placeholder_or_external "$candidate" && return 0
+        if _lpr_core_placeholder_or_external "$candidate"; then
+            _lpr_core_check_placeholder_advisory "$candidate" "$line_no"
+            return 0
+        fi
     fi
     # `~` cannot be expanded safely without HOME (and ~user lookup is outside
     # this core's scope), so treat an unresolved tilde as a setup/template case.
@@ -402,16 +436,16 @@ _lpr_core_consider() {
             if _lpr_core_is_tracked_absolute "$candidate"; then
                 if [[ "$context" == "attachment" ]]; then
                     _lpr_core_emit "$line_no" "local-attachment" "$display_candidate" \
-                        "do not attach local files; inline a summary or link to the repository file"
+                        "do not attach local files; inline a summary or link to the repository file; ok: inline summary, tracked repo-relative path, schematic <placeholder> for an illustrative path only, never a real one"
                 else
                     repo_target="${_LPR_RESOLVED_PATH#"$_LPR_REPO_ROOT/"}"
                     _lpr_core_emit "$line_no" "absolute-tracked" "$repo_target" \
-                        "use the repository-relative path"
+                        "use the repository-relative path; ok: inline summary, tracked repo-relative path, schematic <placeholder> for an illustrative path only, never a real one"
                 fi
             else
                 [[ "$?" -eq 2 ]] && return 0
                 _lpr_core_emit "$line_no" "machine-local-untracked" "$display_candidate" \
-                    "inline a summary or copy the file into the repository"
+                    "inline a summary or copy the file into the repository; ok: inline summary, tracked repo-relative path, schematic <placeholder> for an illustrative path only, never a real one"
             fi
             ;;
         *)
@@ -422,20 +456,20 @@ _lpr_core_consider() {
                 if _lpr_core_is_tracked_absolute "$_LPR_REPO_ROOT/$candidate"; then
                     if [[ "$context" == "attachment" ]]; then
                         _lpr_core_emit "$line_no" "local-attachment" "$display_candidate" \
-                            "do not attach local files; inline a summary or link to the repository file"
+                            "do not attach local files; inline a summary or link to the repository file; ok: inline summary, tracked repo-relative path, schematic <placeholder> for an illustrative path only, never a real one"
                         return 0
                     fi
                     return 0
                 else
                     [[ "$?" -eq 2 ]] && return 0
                     _lpr_core_emit "$line_no" "machine-local-untracked" "$display_candidate" \
-                        "inline a summary or copy the file into the repository"
+                        "inline a summary or copy the file into the repository; ok: inline summary, tracked repo-relative path, schematic <placeholder> for an illustrative path only, never a real one"
                     return 0
                 fi
             fi
             if [[ "$context" == "markdown" || "$context" == "evidence" ]]; then
                 _lpr_core_emit "$line_no" "repo-relative-missing" "$display_candidate" \
-                    "add the target or inline its content"
+                    "add the target or inline its content; ok: inline summary, tracked repo-relative path, schematic <placeholder> for an illustrative path only, never a real one"
             fi
             ;;
     esac

@@ -654,6 +654,42 @@ test_placeholder_nonexistent_and_https_allow() {
     done
 }
 
+test_placeholder_resolving_to_untracked_file_warns_via_additional_context() {
+    printf 'private notes\n' > "$HOME/warn-notes"
+    local payload stdout_out stderr_out exit_code=0
+    payload=$(jq -n --arg cwd "$REPO" '{cwd:$cwd,tool_input:{command:"gh pr create --body \"See <home>/warn-notes\""}}')
+    stdout_out=$(printf '%s' "$payload" | bash "$HOOK" 2>/dev/null ) || exit_code=$?
+    [[ "$exit_code" -eq 0 ]] || return 1
+    printf '%s' "$stdout_out" | jq -e '.hookSpecificOutput.hookEventName == "PreToolUse"' >/dev/null || return 1
+    printf '%s' "$stdout_out" | jq -e '.hookSpecificOutput.additionalContext | contains("warn-notes")' >/dev/null || return 1
+
+    exit_code=0
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null ) || exit_code=$?
+    [[ "$exit_code" -eq 0 ]] || return 1
+    [[ -z "$stderr_out" ]]
+}
+
+test_placeholder_resolving_to_untracked_file_via_staged_commit_warns() {
+    printf 'private staged notes\n' > "$HOME/staged-warn-notes"
+    printf 'citation: <home>/staged-warn-notes\n' >> "$REPO/docs/notes.md"
+    git -C "$REPO" add docs/notes.md
+
+    local payload stdout_out stderr_out exit_code=0 exit_code_stdout=0
+    payload=$(jq -n --arg cwd "$REPO" '{cwd:$cwd,tool_input:{command:"git commit -m \"add notes\""}}')
+    stdout_out=$(printf '%s' "$payload" | bash "$HOOK" 2>/dev/null ) || exit_code_stdout=$?
+
+    stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null ) || exit_code=$?
+
+    git -C "$REPO" reset -q HEAD -- docs/notes.md
+    git -C "$REPO" checkout -q -- docs/notes.md
+
+    [[ "$exit_code_stdout" -eq 0 ]] || return 1
+    [[ "$exit_code" -eq 0 ]] || return 1
+    [[ -z "$stderr_out" ]] || return 1
+    printf '%s' "$stdout_out" | jq -e '.hookSpecificOutput.hookEventName == "PreToolUse"' >/dev/null || return 1
+    printf '%s' "$stdout_out" | jq -e '.hookSpecificOutput.additionalContext | contains("staged-warn-notes")' >/dev/null
+}
+
 test_old_violation_with_unrelated_new_edit_allows() {
     printf 'old citation: $OMT_DIR/session.md\n' > "$REPO/docs/old.md"
     git -C "$REPO" add docs/old.md
@@ -733,6 +769,8 @@ run_test test_non_target_curl_data_value_that_looks_like_target_url_allows
 run_test test_target_curl_tracked_multipart_attachment_denies
 run_test test_target_curl_upload_file_denies_local_attachment
 run_test test_placeholder_nonexistent_and_https_allow
+run_test test_placeholder_resolving_to_untracked_file_warns_via_additional_context
+run_test test_placeholder_resolving_to_untracked_file_via_staged_commit_warns
 run_test test_old_violation_with_unrelated_new_edit_allows
 run_test test_missing_jq_fails_open
 run_test test_yaml_registers_bash_pretooluse_shim
