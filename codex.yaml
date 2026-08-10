@@ -26,10 +26,11 @@ config:
       max_concurrent_threads_per_session: 20
 
 model-map:
-  # Tiers set the model only. Omitting `effort` leaves `model_reasoning_effort`
-  # out of the emitted role TOML (tools/adapters/codex.ts:55), so each agent runs
-  # at whatever effort the session is configured for instead of a value frozen at
-  # sync time.
+  # A tier normally sets the model only. Omitting `effort` leaves
+  # `model_reasoning_effort` out of the emitted role TOML
+  # (tools/adapters/codex.ts:55), so each agent runs at whatever effort the
+  # session is configured for instead of a value frozen at sync time. `opus` is
+  # the exception -- see its entry.
   tiers:
     # Every tier named here is load-bearing regardless of what it resolves to:
     # `assertMappedTier` (tools/lib/model-map.ts:22) aborts sync for any
@@ -39,11 +40,17 @@ model-map:
       model: gpt-5.6-sol
     opus:
       model: gpt-5.6-terra
+      # The one tier that pins effort instead of following the session. Every
+      # opus agent is a judgment surface (review, diagnosis, plan critique)
+      # whose output nobody re-verifies, so it must not inherit a session that
+      # happens to be running low/medium.
+      effort: high
     sonnet:
       model: gpt-5.6-luna
-  # `agents:` is for what a tier cannot express. With tiers carrying model alone,
-  # that is effort: an agent that must pin an effort rather than follow the
-  # session. It previously held code-reviewer/metis/momus/tech-claim-examiner,
+  # `agents:` is for what a tier cannot express: an agent whose model or effort
+  # differs from every tier it could otherwise be spelled as -- e.g. one that
+  # needs an effort neither its tier's pin nor the session provides.
+  # It previously held code-reviewer/metis/momus/tech-claim-examiner,
   # all four byte-identical to `tiers.opus`, so they resolved to the same TOML
   # either way and were removed. A new entry must name what tier it could not
   # be expressed as. Unlike `config:` above, an absent key is safe here:
