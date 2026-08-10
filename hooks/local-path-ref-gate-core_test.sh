@@ -502,6 +502,71 @@ test_angle_placeholder_generalized_allows() {
     [[ "$rc" -eq 1 && -z "$out" ]]
 }
 
+test_angle_placeholder_resolving_to_untracked_home_file_is_advisory_and_allows() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" '근거는 <home>/private-notes.md 참고') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=placeholder-resolves-to-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F "$HOME/private-notes.md" >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'never leave an untracked file path in a tracked file or a shared document' >/dev/null || return 1
+    ! printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null
+}
+
+test_angle_placeholder_resolving_to_untracked_repo_file_is_advisory_and_allows() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" '근거는 <repo-root>/docs/untracked.md 참고') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=placeholder-resolves-to-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F "$REPO/docs/untracked.md" >/dev/null
+}
+
+test_angle_placeholder_prefers_omt_dir_over_home_when_both_match() {
+    local out rc=0
+    printf 'omt copy\n' > "$OMT_DIR/priority-check.md"
+    printf 'home copy\n' > "$HOME/priority-check.md"
+    out=$(local_path_ref_gate_core_check "$REPO" '<x>/priority-check.md') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F "$OMT_DIR/priority-check.md" >/dev/null || return 1
+    ! printf '%s' "$out" | grep -F "$HOME/priority-check.md" >/dev/null
+}
+
+test_angle_placeholder_with_blocking_record_also_present_reports_both() {
+    # Advisory emission is purely additive: the existing "has a record"
+    # return-code contract (0 when any record was emitted, 1 when none)
+    # is unchanged here.  What matters for the shim's deny-vs-warn split is
+    # that the blocking record's own type still shows up in the output
+    # alongside the advisory one, not a distinct core-level exit status.
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" $'근거는 <home>/private-notes.md 참고\n$HOME/private-notes.md') || rc=$?
+    [[ "$rc" -eq 0 ]] || return 1
+    printf '%s' "$out" | grep -F 'type=placeholder-resolves-to-untracked' >/dev/null || return 1
+    printf '%s' "$out" | grep -F 'type=machine-local-untracked' >/dev/null
+}
+
+test_angle_placeholder_resolving_to_directory_allows() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" '근거는 <repo-root>/docs 참고') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_angle_placeholder_resolving_to_tracked_file_allows() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" '근거는 <repo-root>/docs/tracked.md 참고') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_angle_placeholder_resolving_through_dot_git_segment_allows() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" '근거는 <repo-root>/.git/config 참고') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
+test_angle_placeholder_with_no_matching_root_allows() {
+    local out rc=0
+    out=$(local_path_ref_gate_core_check "$REPO" '근거는 <repo-root>/src/nowhere.ts 참고') || rc=$?
+    [[ "$rc" -eq 1 && -z "$out" ]]
+}
+
 test_comment_with_home_path_still_denies() {
     local out rc=0
     out=$(local_path_ref_gate_core_check "$REPO" "// see \$HOME/private-notes.md for details") || rc=$?
@@ -713,6 +778,14 @@ run_test test_bare_double_slash_comment_marker_allows
 run_test test_bare_triple_slash_doc_comment_allows
 run_test test_function_call_fixture_nonexistent_path_allows
 run_test test_angle_placeholder_generalized_allows
+run_test test_angle_placeholder_resolving_to_untracked_home_file_is_advisory_and_allows
+run_test test_angle_placeholder_resolving_to_untracked_repo_file_is_advisory_and_allows
+run_test test_angle_placeholder_prefers_omt_dir_over_home_when_both_match
+run_test test_angle_placeholder_with_blocking_record_also_present_reports_both
+run_test test_angle_placeholder_resolving_to_directory_allows
+run_test test_angle_placeholder_resolving_to_tracked_file_allows
+run_test test_angle_placeholder_resolving_through_dot_git_segment_allows
+run_test test_angle_placeholder_with_no_matching_root_allows
 run_test test_comment_with_home_path_still_denies
 run_test test_comment_with_tilde_path_still_denies
 run_test test_comment_with_tmp_stand_in_path_still_denies

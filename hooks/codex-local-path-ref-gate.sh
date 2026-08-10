@@ -26,6 +26,66 @@ _lpr_json_string() {
 
 tool_name=$(_lpr_json_string 'if (.tool_name? | type) == "string" then .tool_name else empty end') || exit 0
 
+_LPR_ADVISORY_NOTES=""
+
+# Advisory records (type=placeholder-resolves-to-untracked) must never
+# reach _lpr_render_deny: split them out of the record set first, so the
+# deny path renders from exactly the same blocking-only records it always
+# did.
+_lpr_split_records() {
+    local records="$1" tab location line type path remediation instruction
+    tab=$'\t'
+    _LPR_BLOCKING_RECORDS=""
+    _LPR_ADVISORY_RECORDS=""
+    while IFS="$tab" read -r location line type path remediation instruction; do
+        [ -n "$location" ] || continue
+        case "$type" in
+            "type=placeholder-resolves-to-untracked")
+                _LPR_ADVISORY_RECORDS="${_LPR_ADVISORY_RECORDS}${location}${tab}${line}${tab}${type}${tab}${path}${tab}${remediation}${tab}${instruction}"$'\n'
+                ;;
+            *)
+                _LPR_BLOCKING_RECORDS="${_LPR_BLOCKING_RECORDS}${location}${tab}${line}${tab}${type}${tab}${path}${tab}${remediation}${tab}${instruction}"$'\n'
+                ;;
+        esac
+    done <<EOF
+$records
+EOF
+}
+
+_lpr_accumulate_advisory() {
+    local records="$1" inspectable="$2" tab location line type path remediation instruction
+    local line_no context
+    tab=$'\t'
+    while IFS="$tab" read -r location line type path remediation instruction; do
+        [ -n "$location" ] || continue
+        case "$line" in line=[0-9]*) line_no="${line#line=}" ;; *) continue ;; esac
+        context=$(printf '%s\n' "$inspectable" | sed -n "${line_no}p" 2>/dev/null ) || context=""
+        [ -n "$context" ] || context="line $line_no"
+        _LPR_ADVISORY_NOTES="${_LPR_ADVISORY_NOTES}${_LPR_ADVISORY_NOTES:+ }Advisory at ${context} (${path#path=}). ${remediation#remediation=}."
+    done <<EOF
+$records
+EOF
+}
+
+# Dispatch a record set: blocking records (if any) go to _lpr_render_deny
+# unchanged; when only advisory records are present they are accumulated
+# for a single end-of-run additionalContext note instead of a deny.
+# Returns 0 exactly when _lpr_render_deny rendered a deny (mirrors
+# _lpr_render_deny's own contract so `_lpr_dispatch_records ... && return 2`
+# reads the same as the old `_lpr_render_deny ... && return 2`).
+_lpr_dispatch_records() {
+    local records="$1" inspectable="$2"
+    _lpr_split_records "$records"
+    if [ -n "$_LPR_BLOCKING_RECORDS" ]; then
+        _lpr_render_deny "$_LPR_BLOCKING_RECORDS" "$inspectable"
+        return $?
+    fi
+    if [ -n "$_LPR_ADVISORY_RECORDS" ]; then
+        _lpr_accumulate_advisory "$_LPR_ADVISORY_RECORDS" "$inspectable"
+    fi
+    return 1
+}
+
 _lpr_render_deny() {
     local records="$1" inspectable="$2" tab location line type path remediation instruction
     local line_no context reason="" valid=1
@@ -57,7 +117,7 @@ _lpr_check_text() {
     records=$(local_path_ref_gate_core_check "$repo_root" "$text" 2>/dev/null) || rc=$?
     [ "$rc" -eq 0 ] || return 0
     [ -n "$records" ] || return 0
-    _lpr_render_deny "$records" "$inspectable" && return 2
+    _lpr_dispatch_records "$records" "$inspectable" && return 2
     return 0
 }
 
@@ -151,7 +211,7 @@ _lpr_check_attachment() {
     records=$(local_path_ref_gate_core_check_attachment "$repo_root" "$attachment" 2>/dev/null) || rc=$?
     [ "$rc" -eq 0 ] || return 0
     [ -n "$records" ] || return 0
-    _lpr_render_deny "$records" "$inspectable" && return 2
+    _lpr_dispatch_records "$records" "$inspectable" && return 2
     return 0
 }
 
@@ -161,7 +221,7 @@ _lpr_check_staged_text() {
     records=$(local_path_ref_gate_core_check "$repo_root" "$scan_text" 2>/dev/null) || rc=$?
     [ "$rc" -eq 0 ] || return 0
     [ -n "$records" ] || return 0
-    _lpr_render_deny "$records" "$inspectable" && return 2
+    _lpr_dispatch_records "$records" "$inspectable" && return 2
     return 0
 }
 
@@ -746,6 +806,9 @@ case "$tool_name" in
     Bash|bash|exec_command|shell_command)
         _lpr_shell_route || rc=$?
         [ "${rc:-0}" -eq 2 ] && exit 0
+        if [ -n "$_LPR_ADVISORY_NOTES" ]; then
+            jq -n --arg ctx "$_LPR_ADVISORY_NOTES" '{hookSpecificOutput: {hookEventName: "PreToolUse", additionalContext: $ctx}}'
+        fi
         exit 0
         ;;
     mcp__notion__notion_append_block_children|mcp__notion__notion_archive_page|mcp__notion__notion_convert_page_to_skill|mcp__notion__notion_create_attachment|mcp__notion__notion_create_comment|mcp__notion__notion_create_database|mcp__notion__notion_create_file_upload|mcp__notion__notion_create_folder|mcp__notion__notion_create_pages|mcp__notion__notion_create_view|mcp__notion__notion_duplicate_page|mcp__notion__notion_move_pages|mcp__notion__notion_update_block|mcp__notion__notion_update_comment|mcp__notion__notion_update_data_source|mcp__notion__notion_update_page|mcp__notion__notion_update_page_preview|mcp__notion__notion_update_view|mcp__slack__slack_add_reaction|mcp__slack__slack_create_canvas|mcp__slack__slack_create_conversation|mcp__slack__slack_schedule_message|mcp__slack__slack_send_message|mcp__slack__slack_send_message_draft|mcp__slack__slack_update_canvas|mcp__slack__slack_upload_file|mcp__linear__create_attachment|mcp__linear__create_attachment_from_upload|mcp__linear__create_comment|mcp__linear__create_initiative_label|mcp__linear__create_issue|mcp__linear__create_issue_label|mcp__linear__delete_attachment|mcp__linear__delete_comment|mcp__linear__delete_diff_comment|mcp__linear__delete_status_update|mcp__linear__merge_diff|mcp__linear__prepare_attachment_upload|mcp__linear__resolve_diff_thread|mcp__linear__save_comment|mcp__linear__save_diff_comment|mcp__linear__save_document|mcp__linear__save_initiative|mcp__linear__save_issue|mcp__linear__save_issue_comment|mcp__linear__save_milestone|mcp__linear__save_project|mcp__linear__save_release|mcp__linear__save_release_note|mcp__linear__save_status_update|mcp__linear__submit_diff_review|mcp__linear__update_issue)
@@ -762,6 +825,9 @@ case "$tool_name" in
         rc=0
         _lpr_check_text_from_segment_cwd "$inspectable" "$inspectable" || rc=$?
         [ "$rc" -eq 2 ] && exit 0
+        if [ -n "$_LPR_ADVISORY_NOTES" ]; then
+            jq -n --arg ctx "$_LPR_ADVISORY_NOTES" '{hookSpecificOutput: {hookEventName: "PreToolUse", additionalContext: $ctx}}'
+        fi
         exit 0
         ;;
     *) exit 0 ;;

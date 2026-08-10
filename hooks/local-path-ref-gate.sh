@@ -38,6 +38,66 @@ cd "$top_cwd" 2>/dev/null || exit 0
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 [ -d "$repo_root" ] || exit 0
 
+_LPR_ADVISORY_NOTES=""
+
+# Advisory records (type=placeholder-resolves-to-untracked) must never
+# reach _lpr_render_deny: split them out of the record set first, so the
+# deny path renders from exactly the same blocking-only records it always
+# did.
+_lpr_split_records() {
+    local records="$1" tab location line type path remediation instruction
+    tab=$'\t'
+    _LPR_BLOCKING_RECORDS=""
+    _LPR_ADVISORY_RECORDS=""
+    while IFS="$tab" read -r location line type path remediation instruction; do
+        [ -n "$location" ] || continue
+        case "$type" in
+            "type=placeholder-resolves-to-untracked")
+                _LPR_ADVISORY_RECORDS="${_LPR_ADVISORY_RECORDS}${location}${tab}${line}${tab}${type}${tab}${path}${tab}${remediation}${tab}${instruction}"$'\n'
+                ;;
+            *)
+                _LPR_BLOCKING_RECORDS="${_LPR_BLOCKING_RECORDS}${location}${tab}${line}${tab}${type}${tab}${path}${tab}${remediation}${tab}${instruction}"$'\n'
+                ;;
+        esac
+    done <<EOF
+$records
+EOF
+}
+
+_lpr_accumulate_advisory() {
+    local records="$1" inspectable="$2" tab location line type path remediation instruction
+    local line_no context
+    tab=$'\t'
+    while IFS="$tab" read -r location line type path remediation instruction; do
+        [ -n "$location" ] || continue
+        case "$line" in line=[0-9]*) line_no="${line#line=}" ;; *) continue ;; esac
+        context=$(printf '%s\n' "$inspectable" | sed -n "${line_no}p" 2>/dev/null ) || context=""
+        [ -n "$context" ] || context="line $line_no"
+        _LPR_ADVISORY_NOTES="${_LPR_ADVISORY_NOTES}${_LPR_ADVISORY_NOTES:+ }Advisory at ${context} (${path#path=}). ${remediation#remediation=}."
+    done <<EOF
+$records
+EOF
+}
+
+# Dispatch a record set: blocking records (if any) go to _lpr_render_deny
+# unchanged; when only advisory records are present they are accumulated
+# for a single end-of-run additionalContext note instead of a deny.
+# Returns 0 exactly when _lpr_render_deny rendered a deny (mirrors
+# _lpr_render_deny's own contract so `_lpr_dispatch_records ... && return 2`
+# reads the same as the old `_lpr_render_deny ... && return 2`).
+_lpr_dispatch_records() {
+    local records="$1" inspectable="$2"
+    _lpr_split_records "$records"
+    if [ -n "$_LPR_BLOCKING_RECORDS" ]; then
+        _lpr_render_deny "$_LPR_BLOCKING_RECORDS" "$inspectable"
+        return $?
+    fi
+    if [ -n "$_LPR_ADVISORY_RECORDS" ]; then
+        _lpr_accumulate_advisory "$_LPR_ADVISORY_RECORDS" "$inspectable"
+    fi
+    return 1
+}
+
 _lpr_render_deny() {
     local records="$1" inspectable="$2" tab location line type path remediation instruction
     local line_no context reason="" valid=1
@@ -67,7 +127,7 @@ _lpr_check_text() {
     records=$(local_path_ref_gate_core_check "$target_repo" "$text" 2>/dev/null) || rc=$?
     [ "$rc" -eq 0 ] || return 0
     [ -n "$records" ] || return 0
-    _lpr_render_deny "$records" "$inspectable" && return 2
+    _lpr_dispatch_records "$records" "$inspectable" && return 2
     return 0
 }
 
@@ -460,7 +520,7 @@ _lpr_inspect_curl_attachment() {
     records=$(local_path_ref_gate_core_check_attachment "$repo_root" "$attachment" 2>/dev/null) || rc=$?
     [ "$rc" -eq 0 ] || return 0
     [ -n "$records" ] || return 0
-    _lpr_render_deny "$records" "$inspectable" && return 2
+    _lpr_dispatch_records "$records" "$inspectable" && return 2
     return 0
 }
 
@@ -825,5 +885,8 @@ if _lpr_each_shell_command _lpr_inspect_segment; then
 else
     rc=$?
     [ "$rc" -eq 2 ] && exit 2
+fi
+if [ -n "$_LPR_ADVISORY_NOTES" ]; then
+    jq -n --arg ctx "$_LPR_ADVISORY_NOTES" '{hookSpecificOutput: {hookEventName: "PreToolUse", additionalContext: $ctx}}'
 fi
 exit 0

@@ -696,6 +696,37 @@ test_allow_safe_and_fail_open_shapes() {
     done
 }
 
+test_placeholder_resolving_to_untracked_file_warns_via_additional_context() {
+    printf 'private notes\n' > "$HOME/warn-notes"
+    local payload
+    payload=$(shell_payload bash 'gh pr create --body "See <home>/warn-notes"')
+    run_payload "$payload"
+    [ "$RUN_EXIT" -eq 0 ] || return 1
+    printf '%s' "$RUN_OUTPUT" | jq -e \
+        '.hookSpecificOutput.hookEventName == "PreToolUse" and .hookSpecificOutput.permissionDecision == null' \
+        >/dev/null || return 1
+    printf '%s' "$RUN_OUTPUT" | jq -e '.hookSpecificOutput.additionalContext | contains("warn-notes")' >/dev/null
+}
+
+test_placeholder_resolving_to_untracked_file_via_staged_commit_warns() {
+    printf 'private staged notes\n' > "$HOME/staged-warn-notes"
+    printf 'citation: <home>/staged-warn-notes\n' >> "$REPO/docs/notes.md"
+    git -C "$REPO" add docs/notes.md
+
+    local payload
+    payload=$(shell_payload bash 'git commit -m "add notes"')
+    run_payload "$payload"
+
+    git -C "$REPO" reset -q HEAD -- docs/notes.md
+    git -C "$REPO" checkout -q -- docs/notes.md
+
+    [ "$RUN_EXIT" -eq 0 ] || return 1
+    printf '%s' "$RUN_OUTPUT" | jq -e \
+        '.hookSpecificOutput.hookEventName == "PreToolUse" and .hookSpecificOutput.permissionDecision == null' \
+        >/dev/null || return 1
+    printf '%s' "$RUN_OUTPUT" | jq -e '.hookSpecificOutput.additionalContext | contains("staged-warn-notes")' >/dev/null
+}
+
 test_old_untouched_violation_allows() {
     printf 'old citation: $OMT_DIR/session.md\n' > "$REPO/docs/old.md"
     git -C "$REPO" add docs/old.md
@@ -806,6 +837,8 @@ main() {
     run_test test_mcp_attachment_path_deny
     run_test test_mcp_read_only_routes_allow_local_path_arguments
     run_test test_allow_safe_and_fail_open_shapes
+    run_test test_placeholder_resolving_to_untracked_file_warns_via_additional_context
+    run_test test_placeholder_resolving_to_untracked_file_via_staged_commit_warns
     run_test test_old_untouched_violation_allows
     run_test test_inspected_command_is_never_executed
     run_test test_missing_jq_core_and_failed_inspection_allow
