@@ -105,6 +105,57 @@ assert_pair_decision() {
     fi
 }
 
+normalize_advisory_output() {
+    local exit_code="$1" stdout_file="$2"
+    [ "$exit_code" -eq 0 ] || return 1
+    [ -s "$stdout_file" ] || return 1
+    jq -e '(.hookSpecificOutput.additionalContext // "") | length > 0' "$stdout_file" >/dev/null 2>&1 || return 1
+    jq -e '.hookSpecificOutput.permissionDecision != null' "$stdout_file" >/dev/null 2>&1 && return 1
+    jq -e '.decision != null' "$stdout_file" >/dev/null 2>&1 && return 1
+    printf 'advisory'
+}
+
+assert_pair_advisory() {
+    local command="$1"
+    local claude_payload codex_payload
+    local claude_out claude_err codex_out codex_err
+    local claude_exit=0 codex_exit=0 claude_state codex_state
+
+    RUN_NUMBER=$((RUN_NUMBER + 1))
+    claude_out="$RUN_DIR/claude-$RUN_NUMBER.out"
+    claude_err="$RUN_DIR/claude-$RUN_NUMBER.err"
+    codex_out="$RUN_DIR/codex-$RUN_NUMBER.out"
+    codex_err="$RUN_DIR/codex-$RUN_NUMBER.err"
+    claude_payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_input:{command:$command}}')
+    codex_payload=$(jq -nc --arg cwd "$REPO" --arg command "$command" \
+        '{cwd:$cwd,tool_name:"Bash",tool_input:{command:$command}}')
+
+    if printf '%s' "$claude_payload" | bash "$CLAUDE_HOOK" >"$claude_out" 2>"$claude_err"; then
+        claude_exit=0
+    else
+        claude_exit=$?
+    fi
+    if printf '%s' "$codex_payload" | bash "$CODEX_HOOK" >"$codex_out" 2>"$codex_err"; then
+        codex_exit=0
+    else
+        codex_exit=$?
+    fi
+
+    claude_state=$(normalize_advisory_output "$claude_exit" "$claude_out") || {
+        echo "Claude result was not an advisory (exit=$claude_exit, command=$command)" >&2
+        return 1
+    }
+    codex_state=$(normalize_advisory_output "$codex_exit" "$codex_out") || {
+        echo "Codex result was not an advisory (exit=$codex_exit, command=$command)" >&2
+        return 1
+    }
+    if [ "$claude_state" != "advisory" ] || [ "$codex_state" != "advisory" ]; then
+        echo "Advisory mismatch (Claude=$claude_state, Codex=$codex_state, command=$command)" >&2
+        return 1
+    fi
+}
+
 test_staged_new_omt_path_denies_in_both_adapters() {
     printf 'citation: $OMT_DIR/session.md\n' >> "$REPO/docs/notes.md"
     git -C "$REPO" add docs/notes.md
@@ -182,6 +233,28 @@ test_existing_old_violation_with_safe_staged_line_allows_in_both_adapters() {
     assert_pair_decision allow 'git commit -m "unrelated edit"'
 }
 
+test_placeholder_advisory_notes_in_both_adapters() {
+    printf 'untracked advisory fixture\n' > "$OMT_DIR/advisory-target.md"
+    printf 'citation: <known-root>/advisory-target.md\n' >> "$REPO/docs/notes.md"
+    git -C "$REPO" add docs/notes.md
+    assert_pair_advisory 'git commit -m "add advisory notes"' || return 1
+    git -C "$REPO" reset -q HEAD -- docs/notes.md
+    git -C "$REPO" checkout -q -- docs/notes.md
+}
+
+test_placeholder_advisory_does_not_mask_deny_in_both_adapters() {
+    printf 'untracked advisory fixture\n' > "$OMT_DIR/advisory-target.md"
+    printf 'citation: $OMT_DIR/session.md and also <known-root>/advisory-target.md\n' >> "$REPO/docs/notes.md"
+    git -C "$REPO" add docs/notes.md
+    assert_pair_decision deny 'git commit -m "add mixed advisory and deny notes"' || return 1
+    git -C "$REPO" reset -q HEAD -- docs/notes.md
+    git -C "$REPO" checkout -q -- docs/notes.md
+}
+
+test_placeholder_schematic_only_allows_in_both_adapters() {
+    assert_pair_decision allow 'gh pr create --body "See <repo-root>/src/nowhere.ts for context"'
+}
+
 run_test test_staged_new_omt_path_denies_in_both_adapters
 run_test test_gh_pr_body_untracked_path_denies_in_both_adapters
 run_test test_gh_pr_body_file_routes_deny_in_both_adapters
@@ -190,6 +263,9 @@ run_test test_target_curl_multiple_payloads_deny_in_both_adapters
 run_test test_target_curl_file_payload_deny_in_both_adapters
 run_test test_placeholder_nonexistent_and_external_url_allow_in_both_adapters
 run_test test_existing_old_violation_with_safe_staged_line_allows_in_both_adapters
+run_test test_placeholder_advisory_notes_in_both_adapters
+run_test test_placeholder_advisory_does_not_mask_deny_in_both_adapters
+run_test test_placeholder_schematic_only_allows_in_both_adapters
 
 echo "Passed: $TESTS_PASSED, Failed: $TESTS_FAILED"
 [ "$TESTS_FAILED" -eq 0 ]
