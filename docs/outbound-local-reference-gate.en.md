@@ -39,9 +39,8 @@ classifies each path. It allows:
 It denies:
 
 - an existing **untracked local path** (including a machine file outside the
-  repository);
-- an **absolute path** to a tracked file in the repository; and
-- a **dangling relative link** whose repository-relative target does not exist.
+  repository); and
+- an **absolute path** to a tracked file in the repository.
 
 A tracked repository-relative link is the normal safe citation form. If a path
 cannot be checked because setup or Git inspection failed, it is not treated as a
