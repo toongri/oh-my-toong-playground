@@ -23,7 +23,10 @@ export function exitWithError(message: string): never {
 // Host / role detection
 // ---------------------------------------------------------------------------
 
-export function detectHostRole(skillDir: string): string {
+export function detectHostRole(
+	skillDir: string,
+	env: Record<string, string | undefined> = process.env,
+): string {
 	const normalized = skillDir.replace(/\\/g, "/");
 	if (normalized.includes("/.claude/skills/")) return "claude";
 	if (normalized.includes("/.gemini/skills/")) return "gemini";
@@ -36,6 +39,23 @@ export function detectHostRole(skillDir: string): string {
 	// resolveAutoRole below silently resolves to "claude".
 	if (normalized.includes("/.codex/skills/")) return "codex";
 	if (normalized.includes("/.agents/skills/")) return "codex";
+	// Env fallback for paths with no platform skill-root segment at all — e.g.
+	// a job script run directly from the OMT source tree
+	// (<worktree>/skills/orchestrate-review/scripts/), which is neither a
+	// claude nor codex deploy target. Without this, hostRole falls through to
+	// "unknown" and resolveAutoRole below used to hardcode that to "claude"
+	// even inside an active Codex session — this actually happened on
+	// 2026-08-08 and corrupted a job.json's chairmanRole. OMT_SESSION_ID
+	// (Claude) and CODEX_THREAD_ID (Codex) are the established ambient
+	// session markers this repo already uses for the same claude/codex
+	// distinction: lib/state-core.ts documents them as "neither
+	// OMT_SESSION_ID (Claude) nor CODEX_THREAD_ID (Codex)" being present,
+	// hooks/session-start.sh sets OMT_SESSION_ID, and
+	// skills/orchestrate-review/scripts/job.ts's resolveConductorSessionId()
+	// already reads both. Path signal above always takes priority; this is
+	// checked last, before the unknown fallback.
+	if (env.CODEX_THREAD_ID) return "codex";
+	if (env.OMT_SESSION_ID) return "claude";
 	return "unknown";
 }
 
@@ -52,9 +72,7 @@ export function resolveAutoRole(role: string | undefined | null, hostRole: strin
 		.trim()
 		.toLowerCase();
 	if (roleLc && roleLc !== "auto") return roleLc;
-	if (hostRole === "codex") return "codex";
-	if (hostRole === "claude") return "claude";
-	return "claude";
+	return hostRole;
 }
 
 // ---------------------------------------------------------------------------

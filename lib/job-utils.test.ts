@@ -66,14 +66,16 @@ describe("detectHostRole", () => {
 		).toBe("codex");
 	});
 
+	// {} pins env explicitly — without it, whatever OMT_SESSION_ID/CODEX_THREAD_ID
+	// happen to be ambient in the test process leak into the result below.
 	test("returns unknown for unrecognized paths", () => {
-		expect(detectHostRole("/home/user/projects/my-skill")).toBe("unknown");
+		expect(detectHostRole("/home/user/projects/my-skill", {})).toBe("unknown");
 	});
 
 	// Negative control: `.agents/` alone is not a skill root — only the
 	// `/.agents/skills/` segment is. Guards against a loosened substring match.
 	test("returns unknown for /.agents/ without the skills segment", () => {
-		expect(detectHostRole("/home/user/.agents/lib/worker-utils.ts")).toBe("unknown");
+		expect(detectHostRole("/home/user/.agents/lib/worker-utils.ts", {})).toBe("unknown");
 	});
 
 	test("normalizes backslashes on Windows-style paths", () => {
@@ -81,7 +83,41 @@ describe("detectHostRole", () => {
 	});
 
 	test("returns unknown for empty string", () => {
-		expect(detectHostRole("")).toBe("unknown");
+		expect(detectHostRole("", {})).toBe("unknown");
+	});
+
+	// Env fallback: no recognized path segment, but CODEX_THREAD_ID is set —
+	// this is the ambient signal a Codex-run job process actually has when
+	// invoked from a bare source-tree path with no `.codex/skills/` etc segment.
+	test("returns codex when path is unrecognized but CODEX_THREAD_ID is set", () => {
+		expect(detectHostRole("/some/random/path", { CODEX_THREAD_ID: "abc123" })).toBe("codex");
+	});
+
+	// Env fallback: no recognized path segment, but OMT_SESSION_ID is set —
+	// the Claude-session counterpart of the above.
+	test("returns claude when path is unrecognized but OMT_SESSION_ID is set", () => {
+		expect(detectHostRole("/some/random/path", { OMT_SESSION_ID: "xyz" })).toBe("claude");
+	});
+
+	// Incident reproduction (2026-08-08): a codex-run job executed straight
+	// from the OMT source tree (no platform skill-root segment in the path)
+	// used to mis-resolve chairmanRole to "claude" because hostRole fell
+	// through to "unknown" and resolveAutoRole hardcoded the unknown case to
+	// "claude". With the env fallback, hostRole itself resolves to "codex".
+	test("resolves hostRole to codex for a source-tree job path with an active codex session env", () => {
+		const hostRole = detectHostRole(
+			"/Users/x/repos/oh-my-toong-playground/main/skills/orchestrate-review/scripts",
+			{ CODEX_THREAD_ID: "019fe2d6-07a8-70a1-ad24-2d6491ed6fd2", OMT_SESSION_ID: undefined },
+		);
+		expect(resolveAutoRole("auto", hostRole)).toBe("codex");
+	});
+
+	// Guard: a recognized path segment must win over env, regardless of what
+	// env vars happen to be set — path signal takes priority.
+	test("path signal takes priority over env fallback", () => {
+		expect(
+			detectHostRole("/home/user/.claude/skills/agent-council", { CODEX_THREAD_ID: "abc" }),
+		).toBe("claude");
 	});
 });
 
@@ -144,8 +180,17 @@ describe("resolveAutoRole", () => {
 		expect(resolveAutoRole("auto", "claude")).toBe("claude");
 	});
 
-	test("defaults to claude when role is auto and hostRole is unknown", () => {
-		expect(resolveAutoRole("auto", "unknown")).toBe("claude");
+	// hostRole is passed through as-is, unknown included — resolveAutoRole no
+	// longer hardcodes non-codex/non-claude hostRoles to "claude". See the
+	// gemini test below for a second instance of the same underlying fix.
+	test("passes through unknown hostRole as-is instead of defaulting to claude", () => {
+		expect(resolveAutoRole("auto", "unknown")).toBe("unknown");
+	});
+
+	// Same fix, different hostRole value — resolveAutoRole must not special-
+	// case codex/claude and hardcode everything else to claude.
+	test("passes through gemini hostRole as-is instead of defaulting to claude", () => {
+		expect(resolveAutoRole("auto", "gemini")).toBe("gemini");
 	});
 
 	test("treats null/undefined role as auto", () => {
