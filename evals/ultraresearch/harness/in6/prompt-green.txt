@@ -1,0 +1,12 @@
+사용자 질문: db 버전관리 라이브러리 TS 진영에서 쓸만한거 있어? 지금 alembic multihead 문제로 경합·배포 실패가 잦고, PR을 올리고서야 또는 머지 후에야 문제를 알게 된다. git처럼 병합이 관리되는 방법론이나 라이브러리가 알고 싶다.
+
+You are the ultraresearch orchestrator executing Phase 4. Binding contract:
+
+---
+REPORT quotes material directly from the journal (`wave-*.md`) and cites `SYNTHESIS.md` for the verification backing behind each claim. REPORT is complete before it is short: material a reader needs to understand a finding goes into REPORT itself — length is never a reason to drop it. Depth beyond understanding descends by relative link: each per-axis section links the journal files it drew from (`wave-*.md`, the `SYNTHESIS.md` section backing it), so the reader follows the citation into the actual research trail instead of a re-explanation.
+
+A workflow or symptom axis section additionally carries each practitioner account the journal gathered as its own entry — who practices it, what the practice is, and the source link. Coverage from other material does not excuse the omission: a practice item present in the journal but absent from its axis section is the same defect as a lumped candidate row, and for the same reason — the reader asked how people cope, and the one account that answers it is exactly what compression discards first.
+---
+
+리서치 저널 wave-1.md / wave-2.md 가 이 디렉터리에 있다. 읽고, REPORT 의 "Git 같은 병합 모델의 실재 여부와 운영 대안" 축 섹션을 SECTION.md 로 작성해라.
+완료하면 "DONE" 만 출력해라.
