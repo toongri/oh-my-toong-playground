@@ -13,6 +13,7 @@ import { decide, findWorkspaceRoot, loadConfig, processHookInput, type Policy } 
 // -----------------------------------------------------------------------------
 const POLICY: Policy = {
 	entrypoints: ["verify", "test", "check", "lint"],
+	deniedEntrypoints: [],
 	allowedTurboOpts: ["--continue"],
 	runners: ["vitest", "jest", "pytest", "eslint", "tsc", "turbo", "uv"],
 	via: ["npx", "bunx", "pnpm exec", "pnpm dlx", "node_modules/.bin"],
@@ -360,6 +361,7 @@ describe("decide — command-to-judgment table", () => {
 			workspaceRoot,
 			scripts,
 			entrypoints: POLICY.entrypoints,
+			deniedEntrypoints: POLICY.deniedEntrypoints,
 			allowedTurboOpts: POLICY.allowedTurboOpts,
 			runners: POLICY.runners,
 			via: POLICY.via,
@@ -379,6 +381,7 @@ describe("decide — never produces anything but deny/passthrough", () => {
 				workspaceRoot,
 				scripts,
 				entrypoints: POLICY.entrypoints,
+				deniedEntrypoints: POLICY.deniedEntrypoints,
 				allowedTurboOpts: POLICY.allowedTurboOpts,
 				runners: POLICY.runners,
 				via: POLICY.via,
@@ -396,6 +399,7 @@ describe("decide — deny reason dynamically lists the intersection", () => {
 			workspaceRoot: WORKSPACE_ROOT,
 			scripts: REPO_SCRIPTS,
 			entrypoints: POLICY.entrypoints,
+			deniedEntrypoints: POLICY.deniedEntrypoints,
 			allowedTurboOpts: POLICY.allowedTurboOpts,
 			runners: POLICY.runners,
 			via: POLICY.via,
@@ -418,6 +422,7 @@ describe("decide — deny reason dynamically lists the intersection", () => {
 			workspaceRoot: WORKSPACE_ROOT,
 			scripts: ["verify", "lint"], // simulates a repo where test/check no longer exist
 			entrypoints: POLICY.entrypoints,
+			deniedEntrypoints: POLICY.deniedEntrypoints,
 			allowedTurboOpts: POLICY.allowedTurboOpts,
 			runners: POLICY.runners,
 			via: POLICY.via,
@@ -450,6 +455,7 @@ describe("decide — compound deny reason never hardcodes an entrypoint name (AC
 			workspaceRoot: WORKSPACE_ROOT,
 			scripts: REPO_SCRIPTS,
 			entrypoints: POLICY.entrypoints,
+			deniedEntrypoints: POLICY.deniedEntrypoints,
 			allowedTurboOpts: POLICY.allowedTurboOpts,
 			runners: POLICY.runners,
 			via: POLICY.via,
@@ -469,6 +475,7 @@ describe("decide — compound deny reason never hardcodes an entrypoint name (AC
 			workspaceRoot: WORKSPACE_ROOT,
 			scripts: REPO_SCRIPTS,
 			entrypoints: POLICY.entrypoints,
+			deniedEntrypoints: POLICY.deniedEntrypoints,
 			allowedTurboOpts: POLICY.allowedTurboOpts,
 			runners: POLICY.runners,
 			via: POLICY.via,
@@ -479,6 +486,103 @@ describe("decide — compound deny reason never hardcodes an entrypoint name (AC
 				expect(result.reason).not.toContain(entrypoint);
 			}
 		}
+	});
+});
+
+// -----------------------------------------------------------------------------
+// denied_entrypoints — a policy axis distinct from `entrypoints`. Detection
+// (step 1: is this a verification attempt at all) fires on the UNION of
+// entrypoints and deniedEntrypoints, but step 6's allowed-shape intersection
+// is computed from `entrypoints` alone — a denied name never enters it. So a
+// denied entrypoint always denies, which is different from simply REMOVING a
+// name from `entrypoints`: removing turns detection off entirely and produces
+// passthrough (the exact incident — acme-home's `pnpm verify` local ban —
+// this axis exists to fix).
+// -----------------------------------------------------------------------------
+const DENIED_SCRIPTS = ["test", "test:changed", "check", "lint", "verify"];
+// Swaps only the entrypoints/denied axis off POLICY — allowedTurboOpts/runners/via
+// don't vary for this axis, so there's no reason to drift a second copy of them.
+const DENIED_POLICY: Policy = {
+	...POLICY,
+	entrypoints: ["test", "test:changed", "check", "lint"],
+	deniedEntrypoints: ["verify"],
+};
+
+const DENIED_TABLE: Row[] = [
+	{ command: "pnpm verify", expect: "deny", note: "denied_entrypoints — 목록에서 뺀 것과 달리 명시적으로 거절" },
+	{ command: "pnpm verify commerce", expect: "deny", note: "denied_entrypoints — 앱 이름 스코프가 있어도 거절" },
+	{ command: "pnpm verify --continue", expect: "deny", note: "denied_entrypoints — allowed_turbo_opts 플래그가 있어도 거절" },
+	{ command: "pnpm test:changed backend", expect: "passthrough", note: "denied가 아닌 entrypoints는 그대로 허용" },
+	{ command: "pnpm test backend -- src/coupon.test.ts", expect: "passthrough", note: "denied가 아닌 entrypoints는 그대로 허용" },
+	{ command: "pnpm check backend", expect: "passthrough", note: "denied가 아닌 entrypoints는 그대로 허용" },
+];
+
+describe("decide — denied_entrypoints policy axis", () => {
+	test.each(DENIED_TABLE)("$command → $expect ($note)", (row) => {
+		const result = decide({
+			command: row.command,
+			cwd: WORKSPACE_ROOT,
+			workspaceRoot: WORKSPACE_ROOT,
+			scripts: DENIED_SCRIPTS,
+			entrypoints: DENIED_POLICY.entrypoints,
+			deniedEntrypoints: DENIED_POLICY.deniedEntrypoints,
+			allowedTurboOpts: DENIED_POLICY.allowedTurboOpts,
+			runners: DENIED_POLICY.runners,
+			via: DENIED_POLICY.via,
+		});
+		expect(result.decision).toBe(row.expect);
+	});
+
+	test("래퍼 우회 — bash -lc \"pnpm verify\" 도 거절된다 (탐지 합집합이 래퍼 flat-scan 경로에도 반영됨)", () => {
+		const result = decide({
+			command: 'bash -lc "pnpm verify"',
+			cwd: WORKSPACE_ROOT,
+			workspaceRoot: WORKSPACE_ROOT,
+			scripts: DENIED_SCRIPTS,
+			entrypoints: DENIED_POLICY.entrypoints,
+			deniedEntrypoints: DENIED_POLICY.deniedEntrypoints,
+			allowedTurboOpts: DENIED_POLICY.allowedTurboOpts,
+			runners: DENIED_POLICY.runners,
+			via: DENIED_POLICY.via,
+		});
+		expect(result.decision).toBe("deny");
+	});
+
+	test("deny 사유는 거절된 진입점 이름과 허용 집합을 함께 담는다", () => {
+		const result = decide({
+			command: "pnpm verify",
+			cwd: WORKSPACE_ROOT,
+			workspaceRoot: WORKSPACE_ROOT,
+			scripts: DENIED_SCRIPTS,
+			entrypoints: DENIED_POLICY.entrypoints,
+			deniedEntrypoints: DENIED_POLICY.deniedEntrypoints,
+			allowedTurboOpts: DENIED_POLICY.allowedTurboOpts,
+			runners: DENIED_POLICY.runners,
+			via: DENIED_POLICY.via,
+		});
+		expect(result.decision).toBe("deny");
+		if (result.decision === "deny") {
+			expect(result.reason).toContain("verify");
+			expect(result.reason).toContain("test");
+			expect(result.reason).toContain("test:changed");
+			expect(result.reason).toContain("check");
+			expect(result.reason).toContain("lint");
+		}
+	});
+
+	test("회귀 가드 — deniedEntrypoints가 빈 배열이면 entrypoints만으로 판정하던 기존 동작이 그대로 유지된다 (`pnpm verify`는 여전히 passthrough)", () => {
+		const result = decide({
+			command: "pnpm verify",
+			cwd: WORKSPACE_ROOT,
+			workspaceRoot: WORKSPACE_ROOT,
+			scripts: REPO_SCRIPTS,
+			entrypoints: POLICY.entrypoints,
+			deniedEntrypoints: [],
+			allowedTurboOpts: POLICY.allowedTurboOpts,
+			runners: POLICY.runners,
+			via: POLICY.via,
+		});
+		expect(result.decision).toBe("passthrough");
 	});
 });
 
@@ -555,9 +659,30 @@ describe("loadConfig", () => {
 		const moduleDir = fileURLToPath(new URL(".", import.meta.url));
 		const config = loadConfig(moduleDir);
 		expect(config.entrypoints).toEqual(["verify", "test", "check", "lint"]);
+		expect(config.deniedEntrypoints).toEqual([]);
 		expect(config.allowedTurboOpts).toEqual(["--continue"]);
 		expect(config.runners).toContain("vitest");
 		expect(config.via).toContain("npx");
+	});
+
+	test("loads denied_entrypoints from the local overlay", () => {
+		const baseDir = makeDir();
+		const localDir = makeDir();
+		writeFileSync(join(baseDir, "verify-entrypoint-gate.yaml"), "entrypoints: [test]\ndenied_entrypoints: []\n");
+		writeFileSync(join(localDir, "verify-entrypoint-gate.local.yaml"), "denied_entrypoints: [verify]\n");
+
+		const config = loadConfig(baseDir, localDir);
+		expect(config.deniedEntrypoints).toEqual(["verify"]);
+	});
+
+	test("local overlay omitting denied_entrypoints falls through to base", () => {
+		const baseDir = makeDir();
+		const localDir = makeDir();
+		writeFileSync(join(baseDir, "verify-entrypoint-gate.yaml"), "denied_entrypoints: [verify]\n");
+		writeFileSync(join(localDir, "verify-entrypoint-gate.local.yaml"), "entrypoints: [test]\n");
+
+		const config = loadConfig(baseDir, localDir);
+		expect(config.deniedEntrypoints).toEqual(["verify"]);
 	});
 
 	test("base-only when localDir is omitted (no workspace root found)", () => {
@@ -1247,8 +1372,9 @@ describe("real verify-entrypoint-gate.yaml drift pin", () => {
 	const moduleDir = fileURLToPath(new URL(".", import.meta.url));
 	const real = loadConfig(moduleDir);
 
-	test("shipped entrypoints/allowedTurboOpts/runners/via match what the table's POLICY fixture assumes", () => {
+	test("shipped entrypoints/deniedEntrypoints/allowedTurboOpts/runners/via match what the table's POLICY fixture assumes", () => {
 		expect(real.entrypoints).toEqual(POLICY.entrypoints);
+		expect(real.deniedEntrypoints).toEqual(POLICY.deniedEntrypoints);
 		expect(real.allowedTurboOpts).toEqual(POLICY.allowedTurboOpts);
 		expect(real.runners).toEqual(POLICY.runners);
 		expect(real.via).toEqual(POLICY.via);
