@@ -366,6 +366,31 @@ if [ -f "$OMT_DIR/deep-interview-active-state-${SESSION_ID}.json" ]; then
   fi
 fi
 
+# Check for active explain-diff state (session-specific). A freshly seeded
+# evidence state is inert; only a state with clear progress past that seed is
+# restored. Keep the pointer literal so SessionStart context remains static.
+if [ -f "$OMT_DIR/explain-diff-state-${SESSION_ID}.json" ]; then
+  EXPLAIN_DIFF_STATE=$(cat "$OMT_DIR/explain-diff-state-${SESSION_ID}.json" 2>/dev/null)
+
+  if command -v jq 2>&1 | grep -q '^'; then
+    EXPLAIN_DIFF_ACTIVE=$(echo "$EXPLAIN_DIFF_STATE" | jq -r '.active // false' 2>/dev/null)
+    if [ "$EXPLAIN_DIFF_ACTIVE" = "true" ]; then
+      EXPLAIN_DIFF_IS_PRISTINE=$(echo "$EXPLAIN_DIFF_STATE" | jq -r '
+        ((.step // "evidence") == "evidence") and
+        (((.passed // []) | length) == 0) and
+        (((.structural_ok // []) | length) == 0) and
+        (((.concepts // []) | length) == 0) and
+        ((.awaiting_answer // false) == false) and
+        ((.no_progress.count // 0) == 0)
+      ' 2>/dev/null)
+
+      if [ "$EXPLAIN_DIFF_IS_PRISTINE" != "true" ]; then
+        MESSAGES="$MESSAGES<session-restore>\n\n[EXPLAIN-DIFF RESTORED]\n\nYou have an active explain-diff session.\n\nRun this command NOW, before any other action:\n  cat \"\$OMT_DIR/explain-diff-state-\$OMT_SESSION_ID.json\"\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)\nContinue the explain-diff session from the state you just read above.\n\n</session-restore>\n\n---\n\n"
+      fi
+    fi
+  fi
+fi
+
 # Compaction recovery (source==compact, ledger present) is now handled by the
 # ledger_core_run delegation above -- see the LEDGER_DELEGATED_ESCAPED block
 # near the top of this file.
