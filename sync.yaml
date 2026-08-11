@@ -1,7 +1,9 @@
 path: "~"
 
 # codegraph 바이너리 전역 설치 (PATH 체크라 디렉토리 무관 → 루트에서 1회).
-# 인덱스 빌드(codegraph init)는 repo별이라 각 projects/*/sync.yaml에 남겨둠.
+# 인덱스 빌드(codegraph init)는 sync가 하지 않는다 — bare 레포 fan-out 탓에
+# worktree마다 전체 인덱싱이 돌아 stale 워크트리까지 수십 GB를 만들었다.
+# 인덱스가 필요한 레포에서 직접 `codegraph init`을 1회 실행할 것.
 provision:
   - check: "command -v codegraph"
     commands:

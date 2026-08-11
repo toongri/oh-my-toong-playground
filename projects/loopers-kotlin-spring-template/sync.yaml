@@ -88,8 +88,3 @@ docs:
     - testing
     - implementation
 
-provision:
-  # 바이너리 설치는 루트 sync.yaml에서 전역 처리. 여기선 repo별 인덱스만.
-  - check: "test -f .codegraph/codegraph.db"
-    commands:
-      - "codegraph init"
