@@ -19,9 +19,26 @@ import { fileURLToPath } from "node:url";
  * renames or removes a script (the verify:quick/verify:full removal that
  * prompted this rewrite).
  *
+ * A second policy list, `deniedEntrypoints`, exists alongside `entrypoints`
+ * because that single list used to carry two jobs at once: detection ("is
+ * this a verification attempt at all", judged in step 1 below) AND allowance
+ * ("does this shape pass", judged in step 6). Conflating the two means
+ * removing a name from `entrypoints` to ban it does not deny it — the
+ * command falls out of step 1's detection entirely and passes straight
+ * through as an ordinary script, the opposite of a ban (measured directly by
+ * calling decide() with `verify` dropped from `entrypoints`: `pnpm verify`
+ * came back passthrough, not deny). `deniedEntrypoints` splits the two jobs
+ * apart: step 1 detects against the UNION of `entrypoints` and
+ * `deniedEntrypoints` (so a denied name still registers as an attempt and
+ * reaches judgment), while step 6's whitelist stays `entrypoints ∩
+ * package.json.scripts` alone — a denied name never enters that
+ * intersection, so it can never match the allowed shape and always denies.
+ *
  * Judgment order (first match wins):
  *   1. Is this command a verification attempt at all — a `pnpm`/`npm`/`yarn`
- *      entrypoint-family script invocation, a direct `runners` call, a
+ *      entrypoint-family script invocation (checked against `entrypoints ∪
+ *      deniedEntrypoints`, not `entrypoints` alone — see the paragraph
+ *      above), a direct `runners` call, a
  *      `via`-executor call reaching a `runners` name, or any of those hidden
  *      behind a transparent wrapper (`command`/`env`, peeled off) or a nested
  *      shell (`bash -c "..."`/`sh -c '...'`/`eval "..."`, whose inner command
@@ -56,7 +73,9 @@ import { fileURLToPath } from "node:url";
  *   4. `cwd` must BE that workspace root, not a subdirectory of it (running
  *      from `apps/admin` bypasses the shape check other rules assume).
  *   5. Compute `entrypoints ∩ package.json.scripts` — this run's real
- *      whitelist.
+ *      whitelist. `deniedEntrypoints` names are deliberately NOT unioned in
+ *      here (unlike step 1) — they must never be able to match the allowed
+ *      shape, only ever be detected by it.
  *   6. Does the command match the allowed shape exactly, using that
  *      whitelist? A wrapper (`command`/`env`/`bash -c`/`eval`/...) can make
  *      step 1 detect an attempt without ever making step 6's shape match —
@@ -65,10 +84,16 @@ import { fileURLToPath } from "node:url";
  *      unwrapped inner command would itself have been allowed. That's
  *      intended: the wrapper is a self-inflicted, trivially-dropped bypass
  *      attempt, not an unrecoverable false deny (drop the wrapper, run the
- *      inner command directly).
+ *      inner command directly). A `deniedEntrypoints` name also always fails
+ *      here, for the same structural reason: it was never in step 5's
+ *      whitelist to begin with.
  *   7. The deny reason for step 6 lists step 5's intersection dynamically —
  *      never a hardcoded script name (a hardcoded name going stale is
- *      exactly what caused the incident this gate redesign responds to).
+ *      exactly what caused the incident this gate redesign responds to). When
+ *      the command's `pnpm <name>` names a `deniedEntrypoints` entry
+ *      specifically, the reason names that denied entry too — read from the
+ *      command text and policy data, not hardcoded — and is judged before
+ *      the plain "no matching script" reason.
  *
  * Known unclosed gap, by design: shell variable/parameter expansion (e.g.
  * `pnpm${IFS}test --all`, `$P npm test`) is invisible to this file — the
@@ -144,6 +169,7 @@ import { fileURLToPath } from "node:url";
 // -----------------------------------------------------------------------------
 export type Policy = {
 	entrypoints: string[];
+	deniedEntrypoints: string[];
 	allowedTurboOpts: string[];
 	runners: string[];
 	via: string[];
@@ -158,6 +184,7 @@ export type DecideInput = {
 	workspaceRoot: string | null;
 	scripts: string[];
 	entrypoints: string[];
+	deniedEntrypoints: string[];
 	allowedTurboOpts: string[];
 	runners: string[];
 	via: string[];
@@ -170,9 +197,16 @@ export type DecideResult = { decision: "deny"; reason: string } | { decision: "p
 // steps 1–7 from the header comment in order, first match wins.
 // -----------------------------------------------------------------------------
 export function decide(input: DecideInput): DecideResult {
+	// Detection (step 1) runs against the UNION of entrypoints and
+	// deniedEntrypoints — a denied name must still register as a verification
+	// attempt, or it would silently fall out of the gate's sight entirely (see
+	// this file's header comment on the entrypoints/deniedEntrypoints split).
+	// Step 6's allowed-shape intersection below stays entrypoints-only; the
+	// union is used ONLY for this detection call.
+	const detectionEntrypoints = [...input.entrypoints, ...input.deniedEntrypoints];
 	const segments = splitSegments(input.command);
 	const isAttempt = segments.some((segment) =>
-		isVerificationAttemptSegment(segment, input.entrypoints, input.runners, input.via),
+		isVerificationAttemptSegment(segment, detectionEntrypoints, input.runners, input.via),
 	);
 	if (!isAttempt) {
 		return { decision: "passthrough" };
@@ -200,20 +234,56 @@ export function decide(input: DecideInput): DecideResult {
 		};
 	}
 
+	// Step 6's whitelist is entrypoints∩scripts only — a deniedEntrypoints name
+	// never enters this intersection, so it can never match the allowed shape
+	// no matter what else is true about the command.
 	const intersection = input.entrypoints.filter((entrypoint) => input.scripts.includes(entrypoint));
 	if (matchesAllowedShape(input.command, intersection, input.allowedTurboOpts)) {
 		return { decision: "passthrough" };
 	}
 
-	return { decision: "deny", reason: buildShapeMismatchReason(intersection, input.allowedTurboOpts) };
+	return {
+		decision: "deny",
+		reason: buildShapeMismatchReason(input.command, intersection, input.allowedTurboOpts, input.deniedEntrypoints),
+	};
 }
 
-function buildShapeMismatchReason(intersection: string[], allowedTurboOpts: string[]): string {
+// A deniedEntrypoints name is judged BEFORE the "no intersection" branch: an
+// empty intersection would otherwise produce the generic "no matching script"
+// reason even when the real cause is a specific, deliberately-denied name —
+// data-driven (reads the denied name from the command + policy data, never a
+// hardcoded script name), matching the same "never a hardcoded name" rule
+// this file's header comment already states for the shape-mismatch reason.
+function buildShapeMismatchReason(
+	command: string,
+	intersection: string[],
+	allowedTurboOpts: string[],
+	deniedEntrypoints: string[],
+): string {
+	const opts = allowedTurboOpts.length > 0 ? allowedTurboOpts.join("/") : "(없음)";
+	const allowedShape = `pnpm <${intersection.join("|")}> [앱이름] [${opts}] [-- 러너 인자...]`;
+
+	const deniedEntrypoint = matchedDeniedEntrypoint(command, deniedEntrypoints);
+	if (deniedEntrypoint !== null) {
+		return `\`pnpm ${deniedEntrypoint}\` 는 이 워크스페이스에서 허용되지 않는 검증 진입점입니다. 허용된 형태는 다음뿐입니다: ${allowedShape}`;
+	}
+
 	if (intersection.length === 0) {
 		return "이 워크스페이스의 package.json에는 정책의 진입점(entrypoints)과 일치하는 스크립트가 없어 어떤 검증 명령도 허용되지 않습니다.";
 	}
-	const opts = allowedTurboOpts.length > 0 ? allowedTurboOpts.join("/") : "(없음)";
-	return `허용된 검증 명령 형태는 다음뿐입니다: pnpm <${intersection.join("|")}> [앱이름] [${opts}] [-- 러너 인자...]`;
+	return `허용된 검증 명령 형태는 다음뿐입니다: ${allowedShape}`;
+}
+
+// The command's second token when its first is `pnpm` and that second token
+// is a deniedEntrypoints name — or null otherwise. Reuses the same
+// stripAfterEndOfOptions + stripLeadingEnvAssignments + tokenize combination
+// matchesAllowedShape already uses, rather than a new parser.
+function matchedDeniedEntrypoint(command: string, deniedEntrypoints: string[]): string | null {
+	if (deniedEntrypoints.length === 0) return null;
+	const tokens = tokenize(stripAfterEndOfOptions(stripLeadingEnvAssignments(command)));
+	if (tokens[0] !== "pnpm") return null;
+	const second = tokens[1];
+	return second !== undefined && deniedEntrypoints.includes(second) ? second : null;
 }
 
 // -----------------------------------------------------------------------------
@@ -779,6 +849,7 @@ export function loadConfig(
 
 	return {
 		entrypoints: pickList(local, base, "entrypoints"),
+		deniedEntrypoints: pickList(local, base, "denied_entrypoints"),
 		allowedTurboOpts: pickList(local, base, "allowed_turbo_opts"),
 		runners: pickList(local, base, "runners"),
 		via: pickList(local, base, "via"),
@@ -881,6 +952,7 @@ export function processHookInput(
 			workspaceRoot,
 			scripts,
 			entrypoints: policy.entrypoints,
+			deniedEntrypoints: policy.deniedEntrypoints,
 			allowedTurboOpts: policy.allowedTurboOpts,
 			runners: policy.runners,
 			via: policy.via,
