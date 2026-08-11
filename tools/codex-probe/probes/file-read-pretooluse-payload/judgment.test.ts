@@ -3,7 +3,11 @@ import { describe, expect, it } from "bun:test";
 import { TARGET_FILE_NAME, type PreToolUsePayload } from "./fixture.ts";
 import { inventoryPreToolUsePayloads, judgePreToolUsePayloads } from "./judgment.ts";
 
-const payload = (tool_name: string, tool_input: Record<string, unknown>, extra: Record<string, unknown> = {}): PreToolUsePayload => ({
+const payload = (
+	tool_name: string,
+	tool_input: Record<string, unknown>,
+	extra: Record<string, unknown> = {},
+): PreToolUsePayload & { tool_name: string; tool_input: Record<string, unknown> } => ({
 	hook_event_name: "PreToolUse",
 	tool_name,
 	tool_input,
