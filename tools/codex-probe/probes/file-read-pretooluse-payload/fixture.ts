@@ -8,7 +8,10 @@ export const TARGET_FILE_CONTENT = "FILE_READ_PRETOOLUSE_PAYLOAD_SENTINEL_7B3A2D
 /** Prompt used by the probe's entrypoint; deliberately does not name a tool. */
 export const FILE_READ_PROMPT = `Read ${TARGET_FILE_NAME} and include its exact contents in your final response.`;
 
-export type PreToolUsePayload = Record<string, unknown>;
+export type PreToolUsePayload = Record<string, unknown> & {
+	tool_name: string;
+	tool_input: Record<string, unknown>;
+};
 
 export type CaptureParseResult =
 	| { ok: true; payloads: PreToolUsePayload[] }
