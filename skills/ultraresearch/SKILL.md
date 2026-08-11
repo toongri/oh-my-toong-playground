@@ -91,13 +91,14 @@ Seed `intent-diff.md` here, in Phase 0, before any worker spawns — one row per
 Also here, before any worker spawns, declare the requirement items the query provisionally appears to demand. This declaration is a tentative judgment, not a final fact: it is derived from the axis decomposition, and axis decomposition can over-decompose — a facet named here can later turn out, once research runs, to be something the query never actually demanded. That correction has an explicit landing spot: the coverage gate's `not applicable` status (Phase 4) exists precisely to record it, never to silently drop the row. The timing of the initial declaration still matters for the same reason `intent-diff.md` above is seeded pre-spawn, not invented post hoc: a requirement item declared after the fact lets its own omission vanish silently instead of surfacing as a gap. The requirement items are the Phase 0 axes — the axis decomposition above, not a second classifier. One decomposition drives worker assignment (Phase 1), the requirement items declared here, and the REPORT table of contents (Artifact Contract) alike.
 
   - **Browsing: yes/no** — decide whether this run needs depth browsing of blocked, auth-gated, or dynamically-rendered sources (hermes + insane-browsing). Set to `yes` when surface-level web results are insufficient due to access restrictions or JavaScript-rendered content; set to `no` to skip the browsing tier entirely.
+  - **Symptom vs question.** The user's question names a solution shape ("is there a library that does X?"); their pain names a symptom ("we only find out at PR/merge time"). Decompose BOTH: the stated symptom is its own axis with its own worker, alongside the solution-shaped axes. An answer that settles the question while leaving the symptom unaddressed has answered the wrong thing.
 
 ## Phase 1 — Saturation wave
 
 Launch the entire first wave in one response — every Phase-0 axis at once, as foreground Agent workers. Sequential launches and "start with one and see" defeat the engine. Embed the relevant role protocol in each spawn message:
 
 - **Codebase (explore), per the tier floor.** Grep with 3+ keyword variations; structural/AST search; LSP definitions and references; file-name globs; `git log --all -S` and `--grep` for history including deleted code. Report absolute file paths, `file:line` patterns, and how findings connect — plus the quoted content at each coordinate (column definitions, enum values, signatures, endpoints): a coordinate alone does not tell the orchestrator what lives there.
-- **Web (librarian), per the tier floor.** At least 10 distinct websearch queries per worker, each with a different operator or angle; fetch the full page for every result that matters. Real-world usage via `gh search` and grep.app; official docs via sitemap discovery.
+- **Web (librarian), per the tier floor.** At least 10 distinct websearch queries per worker, each with a different operator or angle; fetch the full page for every result that matters. Real-world usage via `gh search` and grep.app; official docs via sitemap discovery. Practitioner discourse is librarian territory, not browsing-gated: engineering-blog postmortems, `site:reddit.com OR site:news.ycombinator.com` discussions, and "how teams handle <symptom>" accounts answer the workflow and symptom axes that official docs cannot — a run whose axes include a workflow or symptom axis assigns at least one librarian to this territory.
 - **Browsing (hermes, insane-browsing 로드), per the tier floor.** Full authenticated and JavaScript-rendered page access for sources blocked or insufficiently covered by surface-level web retrieval; only dispatched when Phase-0 Browsing gate is `yes`.
 
 ## Phase 2 — EXPAND until convergence (the wave loop)
@@ -109,6 +110,10 @@ This loop is what makes the engine research rather than search. Each wave:
 3. **Deduplicate** new markers against `expansion-log.md` (every lead ever seen, not just confirmed ones, or rejected leads resurface each wave).
 4. **Spawn the next wave**: one expansion worker per new unchecked lead, all dispatched in one response.
 5. **Record** the wave in `expansion-log.md`: workers spawned, markers gained, leads opened/closed, and any OPEN CHAIN carried over.
+
+### Negative-result pivot
+
+A wave verdict of the form "no tool provides X" is itself a lead, not a dead end: it converts the axis from tool-selection into practice-hunting. Before that axis may count toward convergence, spawn the next wave's workers on how practitioners cope without X — workflow conventions, CI checks, postmortems, discussion threads. A DEAD END marker that closes a tool claim leaves the underlying user need open; only the practice-hunting pass closes it.
 
 ### Convergence — the only stop rules while active
 
@@ -130,6 +135,7 @@ Verification is a **separate verification pass**, distinct from gathering. The g
 
 - **Code-shaped claims**: a verification worker writes a minimal self-contained script, runs it, captures full stdout+stderr, pins versions, and returns a verdict (CONFIRMED / REFUTED / PARTIAL) grounded in the output. "Verified" for these claims means **executed code**.
 - **Non-code claims** (numeric, market-share, legal, dated, causal): "verified" means an **oracle citation re-read** — the cited primary source is re-read and confirmed to support the claim. The `oracle` agent performs this re-read.
+- **Practice-shaped claims** (what teams do, rather than what a tool documents) satisfy the primary-source criterion with the practitioner's own first-party account — a postmortem, a talk, an issue thread written by the team itself. They enter synthesis labeled as practice ("teams report doing X"), never restated as tool capability; without this class the gate's primary-source criterion would structurally exclude the entire workflow axis, since no standard or first-party doc can exist for what practitioners do around a tool's gap.
 
 **The oracle is never dispatched as a gatherer.** The oracle's only role in this engine is the non-code verification re-read. It is never one of the Phase-1/Phase-2 gather workers.
 
@@ -156,6 +162,8 @@ After convergence and the verification pass, re-read the whole journal and write
 ### Coverage gate — per-item check against the declared requirement items
 
 This gate is scoped to the explicit research posture — the posture that emits REPORT.md. On pre-work CLEAR the engine returns grounded facts to its caller and writes no REPORT, so there is nothing for a REPORT coverage table to judge; the caller's own contract governs there instead. On the explicit research posture, after the REPORT.md draft is written — not before, since the gate judges what actually made it into REPORT.md and there is nothing to judge until that draft exists — build a **coverage table** and write it into `REPORT.md` itself, at the top of the file, above the per-axis sections — the same reason the final chat response leads with this table (an uncovered item must land on the reader's first screen, not stay buried past the axis sections) is why the persisted file leads with it too: one row per requirement item declared in Phase 0, Status restricted to exactly three values — `covered`, `not applicable: <reason Phase 0 mis-derived this axis as demanded>`, or `uncovered: <why no material was gathered>`. The gate's whole operating principle is one sentence: a blank Status is a defect, not a state to be tolerated — catching that blank is what the gate is for. When the covering material already sits in the journal but never made it into REPORT.md, resolve the blank cell by editing REPORT.md — record it in REPORT.md immediately, without relaunching a wave. The material is already in hand, so re-gathering is never the fix, and the convergence rules above stay untouched. The Phase 0 declaration is provisional (see Phase 0 — Decompose and intent-route): `not applicable` is reserved for the specific case where research completed and showed a Phase-0 axis was over-decomposition — the query never actually demanded it, even though Phase 0 provisionally captured it as a requirement item. An item the query DID demand, where the research simply failed to gather material for it, is `uncovered` — never `not applicable`. Collapsing the two would let a research gap read as a question nobody asked, which is the exact silence this gate exists to break. Run this self-check, and any resulting REPORT.md edits, before the HTML render copy is produced and before the final chat response is sent, so the render copy and the response both reflect the corrected table rather than the pre-fix draft.
+
+The coverage table also carries a `workers` column, sourced from `expansion-log.md`: for each requirement item, the workers actually assigned to it across all waves. An axis no worker was ever assigned to cannot be `covered` — material that was never gathered by anyone cannot have covered anything, so a covered-with-zero-workers row is the same defect as a blank Status. Declaring an axis staffs it: the Phase 1 wave assigns at least one worker to every declared axis, and the `workers` column is where a silently unstaffed axis surfaces.
 
 </Engine>
 
@@ -226,11 +234,18 @@ Every claim in `SYNTHESIS.md` carries a provenance label at its origin: `[from-c
 
 ## REPORT.md and REPORT.html — the deliverable
 
-`$SESSION_DIR/REPORT.md` is the SSOT deliverable. `$SESSION_DIR/REPORT.html` is a single self-contained render copy of it — no external CSS, JS, fonts, or images; everything inlined into the one file. There is no rendered-document (e.g. PDF) output and no new external tooling dependency added to produce one.
+`$SESSION_DIR/REPORT.md` is the SSOT deliverable. `$SESSION_DIR/REPORT.html` is its high-expressiveness rendering: the same claims and the same citations, presented with MORE visual structure than markdown can carry — never less. It is a single self-contained file — no external CSS, JS, fonts, or images; everything inlined into the one file — and there is no rendered-document (e.g. PDF) output and no new external tooling dependency added to produce one. The render holds two floors:
+
+- **Content parity.** Every section, every candidate profile, and every citation link in `REPORT.md` appears in `REPORT.html`. After rendering, count the citation links in both files and reconcile any difference — a lower link count in the HTML is a rendering defect to fix, not an editorial choice.
+- **Expressiveness promotion.** Every flow, pipeline, timeline, or architecture that `REPORT.md` carries as a text block or as prose is promoted to an inline SVG diagram in the HTML; comparison tables gain visual verdict state (recommended / conditional / rejected). A REPORT.html whose diagrams are byte-identical `<pre>` copies of the markdown's text blocks has not been rendered — it has been transcoded.
 
 REPORT opens with the Phase 4 coverage table (the coverage gate's per-item table; see Coverage gate) — one row per requirement item declared in Phase 0 — placed above every per-axis section, so an uncovered item is visible before the reader descends into any one axis. Below that table, REPORT's table of contents is derived from the Phase 0 axis decomposition — the orthogonal axes the query was broken into — not a fixed section list. The axes ARE the table of contents, so REPORT answers what the user actually asked rather than compressing toward SYNTHESIS's eight-section skeleton. REPORT quotes material directly from the journal (`wave-*.md`) and cites `SYNTHESIS.md` for the verification backing behind each claim.
 
 Because REPORT quotes source material verbatim — code, config, and markup among it — the render escapes `<`, `>`, and `&` in that quoted content rather than emitting it raw; an unescaped angle bracket in a quoted snippet silently swallows the rest of the document in a browser.
+
+### Candidate profiles — when the query selects among tools or approaches
+
+When the query asks "which library / tool / approach", REPORT's comparison carries one profile per candidate, each filling these REQUIRED fields: name + the exact version examined; license; maintenance signal (latest release or activity date); concurrency/locking behavior; history/merge model; feature notes — including capabilities the user de-scoped (de-scoping moves choice weight, it does not delete the field: "rollback isn't needed" changes the verdict calculus, not whether the rollback row gets filled); and a verdict with its rationale. One candidate per profile — a row that lumps several candidates ("X / Y / Z — no clear advantage") is a defect: lumping is where journal facts invert, because one shared cell cannot hold four different truths. A rejected candidate keeps its filled profile plus an explicit invalidation rationale; "no clear advantage" over empty fields is not an invalidation. Field values come from the journal; a field the journal cannot fill is written `unknown — not gathered`, which surfaces in the coverage gate instead of silently vanishing.
 
 ## Epistemic-instrumentation artifacts
 
@@ -259,6 +274,7 @@ Every artifact this section covers is generated **once, from a single post-conve
 - `SYNTHESIS.md` is written on both postures — the citation source of truth every downstream artifact cites for verification backing.
 - `REPORT.md` and `REPORT.html` are written only on the explicit research posture (see Posture selection criteria): `REPORT.md` next, quoting the journal and citing `SYNTHESIS.md`, with the Phase 4 coverage-gate table already in place at the top of the draft before the render copy is produced (see Coverage gate) — then `REPORT.html` as a render copy of `REPORT.md`.
 - The deep-interview-schema handoff is written only on the pre-work postures, in place of REPORT.
+- `intent-diff.md` is finalized from the same snapshot on both postures: every row still `unknown` at convergence is resolved to `true` or `violated` with its linked claim ids filled in, or explicitly carried into the gaps section — no row remains `unknown` with a `Pending` link after the run ends. The intent diff is the one artifact that measures whether the intent was answered; left frozen at its Phase 0 seed, it measures nothing.
 
 The per-wave `wave-*.md` journal remains the incremental trace throughout; everything above is written only at convergence, in this dependency order, from the final post-convergence snapshot.
 
@@ -285,6 +301,10 @@ This contract, like the coverage gate above, is scoped to the explicit research 
 | Asserting a high-risk claim that did not clear the graph gate | The verified set is the sole allowlist; uncleared claims go to gaps/contradictions |
 | Dispatching the oracle as a gather worker | The oracle is never a gatherer — only the non-code verification re-read |
 | Accreting SYNTHESIS.md per wave | Single post-convergence snapshot write-ordering — every convergence-time artifact generated once at convergence |
+| REPORT.html thinner than REPORT.md — dropped links, dropped sections, `<pre>` transcode | Content-parity floor (count links in both, reconcile) + expressiveness promotion (text-block flows become inline SVG) |
+| Candidate rows lumped, or journal fields (license, version, lock behavior) dropped | Candidate profiles — one per candidate, REQUIRED fields, `unknown — not gathered` for unfillable cells |
+| "No tool provides X" closes the axis | Negative-result pivot — the verdict is a lead; practice-hunting wave runs before that axis converges |
+| An axis `covered` with zero assigned workers | Coverage table `workers` column from `expansion-log.md` — unstaffed axes cannot be covered |
 
 </Failure_Modes>
 
