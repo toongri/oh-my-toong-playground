@@ -1197,6 +1197,13 @@ describe("candidate profile schema — REQUIRED slots", () => {
 		expect(context).toMatch(/history\/merge model/);
 	});
 
+	test("software-only fields are not stated as unconditional requirements for every candidate", () => {
+		const context = sectionOf();
+		expect(context).not.toContain(
+			"each filling these REQUIRED fields: name + the exact version examined; license; maintenance signal (latest release or activity date); concurrency/locking behavior; history/merge model",
+		);
+	});
+
 	test("de-scoped features stay described: de-scoping moves choice weight, it does not delete the field", () => {
 		expect(sectionOf()).toContain(
 			"de-scoping moves choice weight, it does not delete the field",
@@ -1215,6 +1222,15 @@ describe("candidate profile schema — REQUIRED slots", () => {
 
 	test("an unfillable field is written as unknown — not gathered, feeding the coverage gate", () => {
 		expect(sectionOf()).toContain("unknown — not gathered");
+	});
+
+	test("non-software candidates exempt genuinely inapplicable software-only fields without creating coverage gaps", () => {
+		const context = sectionOf();
+		expect(context).toContain("Every candidate keeps one profile with common required fields");
+		expect(context).toContain("Versioned software candidates additionally require");
+		expect(context).toContain("not applicable — <reason>");
+		expect(context).toContain("`unknown — not gathered` remains only for an applicable field");
+		expect(context).toContain("do NOT treat it as a coverage gap");
 	});
 });
 
