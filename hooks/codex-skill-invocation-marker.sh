@@ -4,6 +4,8 @@ set -euo pipefail
 
 command -v jq >/dev/null 2>&1 || exit 0
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# omt-hook-dep: lib/skill-invocation-core.sh
+source "$SCRIPT_DIR/lib/skill-invocation-core.sh"
 source "$SCRIPT_DIR/lib/omt-dir.sh"
 
 input=$(cat) || exit 0
@@ -43,4 +45,22 @@ printf '%s\n' "$names" | while IFS= read -r name; do
     # noclobber preserves any meaningful content written by an earlier event.
     ( set -C; : > "$marker" ) 2>/dev/null || true
 done
+
+# Explicitly loaded model-disabled skills are trusted from the prompt itself,
+# so the marker file is only a record and never an authorization signal.
+contexts=''
+while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    skill_path=$(skill_core_find_skill "$cwd" "$name" 2>/dev/null) || continue
+    skill_core_is_model_disabled "$skill_path" 2>/dev/null || continue
+    body=$(cat "$skill_path" 2>/dev/null) || continue
+    entry=$(printf '[CODEX EXPLICIT SKILL LOADED: %s]\n%s' "$name" "$body")
+    if [ -n "$contexts" ]; then contexts=$(printf '%s\n\n%s' "$contexts" "$entry"); else contexts="$entry"; fi
+done <<EOF
+$names
+EOF
+
+if [ -n "$contexts" ]; then
+    jq -n --arg ctx "$contexts" '{hookSpecificOutput:{hookEventName:"UserPromptSubmit",additionalContext:$ctx}}' 2>/dev/null || true
+fi
 exit 0
