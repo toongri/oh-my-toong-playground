@@ -160,3 +160,4 @@ rules:
     - verification-discipline
     - e2e-driver-usage
     - outbound-local-reference
+    - toolchain-mise
