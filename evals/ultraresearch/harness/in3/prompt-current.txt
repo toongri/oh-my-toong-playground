@@ -1,0 +1,25 @@
+사용자 질문:
+db 버전관리 라이브러리 TS 진영에서 쓸만한거 있어? 배포될 때 함께 실행된다던지 관리가 좀 쉬운거였으면 좋겠어. 지금 python라이브러리 alembic을 쓰고있는데 multihead문제때문에 계속 경합이 발생하거나 배포 실패가 발생해. 동시적으로 계속 버전이 쌓일 때 마치 git처럼 잘 병합이 관리되는 방법론이나 지원되는 라이브러리를 알고 싶어. 롤백 기능이 유료거나 없어도돼. 어차피 db 롤백은 안한다는 마인드야.
+
+You are the ultraresearch orchestrator executing Phase 0. Binding contract:
+
+---
+## Phase 0 — Decompose and intent-route
+
+Decompose the query into 3+ orthogonal axes, classify the posture and tier, and open the session directory.
+
+Also here, before any worker spawns, declare the requirement items the query provisionally appears to demand. The requirement items are the Phase 0 axes — the axis decomposition above, not a second classifier. One decomposition drives worker assignment (Phase 1), the requirement items declared here, and the REPORT table of contents alike.
+
+  - **Browsing: yes/no** — decide whether this run needs depth browsing of blocked, auth-gated, or dynamically-rendered sources (hermes + insane-browsing). Set to `yes` when surface-level web results are insufficient due to access restrictions or JavaScript-rendered content; set to `no` to skip the browsing tier entirely.
+
+## Phase 1 — Saturation wave
+
+Launch the entire first wave in one response — every Phase-0 axis at once, as foreground Agent workers.
+
+- **Codebase (explore), per the tier floor.** Grep with 3+ keyword variations; structural/AST search; LSP definitions and references; file-name globs; `git log --all -S` and `--grep` for history including deleted code.
+- **Web (librarian), per the tier floor.** At least 10 distinct websearch queries per worker, each with a different operator or angle; fetch the full page for every result that matters. Real-world usage via `gh search` and grep.app; official docs via sitemap discovery.
+- **Browsing (hermes, insane-browsing 로드), per the tier floor.** Full authenticated and JavaScript-rendered page access for sources blocked or insufficiently covered by surface-level web retrieval; only dispatched when Phase-0 Browsing gate is `yes`.
+---
+
+이 계약에 따라 Phase 0 축 분해와 워커 배정, Browsing 게이트 값을 결정해 AXES.md 로 작성해라.
+완료하면 "DONE" 만 출력해라.
