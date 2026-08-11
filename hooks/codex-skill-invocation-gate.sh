@@ -8,6 +8,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
+# omt-hook-dep: lib/skill-invocation-core.sh
+[ -r "$SCRIPT_DIR/lib/skill-invocation-core.sh" ] || exit 0
+source "$SCRIPT_DIR/lib/skill-invocation-core.sh" || exit 0
 input=$(cat 2>/dev/null) || exit 0
 [ -n "$input" ] || exit 0
 
@@ -26,13 +29,6 @@ cwd=$(printf '%s' "$input" | jq -er 'if (.cwd? | type) == "string" then .cwd els
 case "$cwd" in /*) ;; *) exit 0 ;; esac
 case "$cwd" in *$'\n'*|*$'\r'*|*$'\t'*) exit 0 ;; esac
 
-omt_dir="${OMT_DIR:-}"
-if [ -z "$omt_dir" ]; then
-  [ -r "$SCRIPT_DIR/lib/omt-dir.sh" ] || exit 0
-  omt_dir=$(source "$SCRIPT_DIR/lib/omt-dir.sh" && unset OMT_DIR && resolve_omt_dir "$cwd" 2>/dev/null) || exit 0
-fi
-[ -n "$omt_dir" ] || exit 0
-
 # Extract literal path tokens. This deliberately does not attempt shell parsing.
 targets=$(printf '%s' "$command_text" | grep -oE "[^[:space:]\"'<>;|&()]*\.agents/skills/[A-Za-z][A-Za-z0-9_-]*/SKILL\.md" | sort -u || true)
 [ -n "$targets" ] || exit 0
@@ -49,13 +45,10 @@ while IFS= read -r token; do
   skill=$(printf '%s' "$token" | sed -n 's|.*\.agents/skills/\([A-Za-z][A-Za-z0-9_-]*\)/SKILL\.md$|\1|p')
   [ -n "$skill" ] || continue
 
-  if awk 'NR==1 { if ($0 != "---") exit 2; next } !closed { if ($0 == "---") { closed=1; next } if ($0 ~ /^[[:space:]]*disable-model-invocation:[[:space:]]*true[[:space:]]*$/) found=1 } END { if (!closed) exit 2; if (found) exit 0; exit 1 }' "$target"; then
-    marker="$omt_dir/codex-skill-invocation-marker-${sid}-${skill}"
-    if [ ! -e "$marker" ]; then
-      reason="Blocked: invoke \$$skill literally before reading this model-disabled skill."
-      jq -n --arg reason "$reason" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$reason}}' 2>/dev/null || true
-      exit 0
-    fi
+  if skill_core_is_model_disabled "$target" 2>/dev/null; then
+    reason="Blocked: model-disabled skill bodies are supplied only by an explicit \$$skill UserPromptSubmit additionalContext; direct file reading is denied."
+    jq -n --arg reason "$reason" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$reason}}' 2>/dev/null || true
+    exit 0
   fi
 done <<EOF
 $targets
