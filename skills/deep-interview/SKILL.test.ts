@@ -948,26 +948,94 @@ describe("decider-gate: Phase 4 self-review gains a 5th check for non-goal decid
 		expect(skillMd).not.toContain("4 checks: placeholder / consistency / scope / ambiguity");
 	});
 
-	test('inline self-review line names 5 checks including "non-goal-decider"', () => {
-		expect(skillMd).toContain("5 checks: placeholder / consistency / scope / non-goal-decider / ambiguity");
+	test('stale 5-check phrasing (pre-invariant) is gone everywhere', () => {
+		expect(skillMd).not.toContain(
+			"5 checks: placeholder / consistency / scope / non-goal-decider / ambiguity",
+		);
 	});
 
-	test("Final_Checklist line carries the identical 5-check list (no count/name drift between the two locations)", () => {
-		expect(skillMd).toContain("(5 checks: placeholder / consistency / scope / non-goal-decider / ambiguity)");
+	test('inline self-review line names 6 checks including "non-goal-decider" and "invariant"', () => {
+		expect(skillMd).toContain(
+			"6 checks: placeholder / consistency / scope / non-goal-decider / invariant / ambiguity",
+		);
+	});
+
+	test("Final_Checklist line carries the identical 6-check list (no count/name drift between the two locations)", () => {
+		expect(skillMd).toContain(
+			"(6 checks: placeholder / consistency / scope / non-goal-decider / invariant / ambiguity)",
+		);
 	});
 
 	test("the inline self-review's non-goal-decider check requires every Non-Goals bullet to carry a decider", () => {
 		const idx = skillMd.indexOf("**Inline self-review**");
 		expect(idx).toBeGreaterThan(-1);
-		const region = skillMd.slice(idx, idx + 400);
+		const region = skillMd.slice(idx, idx + 500);
 		// Anchored on both sides of the quantifier clause: a negator (e.g. "not")
 		// inserted immediately before "every" breaks this exact substring, unlike
 		// a bare `toContain("every Non-Goals bullet carries a decider")` which the
 		// negated form would still contain verbatim.
-		expect(region).toContain(
-			"full interview coverage, every Non-Goals bullet carries a decider, no ambiguous text remains",
-		);
+		expect(region).toContain("full interview coverage, every Non-Goals bullet carries a decider,");
 		expect(region).not.toMatch(/not every Non-Goals bullet carries a decider/);
+	});
+
+	test("the inline self-review's invariant check names both required fields and the Risks cross-check", () => {
+		const idx = skillMd.indexOf("**Inline self-review**");
+		expect(idx).toBeGreaterThan(-1);
+		const region = skillMd.slice(idx, idx + 500);
+		// Same anchoring discipline as the decider check above: the quantifier and
+		// both field names are inside the matched substring, so dropping either
+		// field -- or negating the quantifier -- breaks the assertion.
+		expect(region).toContain(
+			"every Invariants bullet carries `paths:` and `check:` with no path listed there contradicted by a Risks entry",
+		);
+		expect(region).not.toMatch(/not every Invariants bullet carries/);
+	});
+});
+
+describe("invariant-slot: spec template carries an Invariants section between Constraints and Non-Goals", () => {
+	const start = template.indexOf("## Invariants");
+	const end = template.indexOf("\n## ", start + 1);
+	const section = end === -1 ? template.slice(start) : template.slice(start, end);
+
+	test('"## Invariants" heading is present', () => {
+		expect(start).toBeGreaterThan(-1);
+	});
+
+	test("it sits after Constraints and before Non-Goals", () => {
+		// Ordering is the contract, not decoration: the section only does its job
+		// if the writer meets it while the constraint-shaped material is still in
+		// hand, before Non-Goals pulls attention to exclusions.
+		const constraints = template.indexOf("## Constraints");
+		const nonGoals = template.indexOf("## Non-Goals");
+		expect(constraints).toBeGreaterThan(-1);
+		expect(nonGoals).toBeGreaterThan(-1);
+		expect(start).toBeGreaterThan(constraints);
+		expect(start).toBeLessThan(nonGoals);
+	});
+
+	test("each Invariants bullet is formatted with both a paths clause and a check clause", () => {
+		const bulletLines = section
+			.split("\n")
+			.filter((line) => line.trim().startsWith("- "))
+			.filter((line) => line.trim() !== "- ...");
+		expect(bulletLines.length).toBeGreaterThan(0);
+		for (const line of bulletLines) {
+			expect(line).toContain("| paths:");
+			expect(line).toContain("| check:");
+		}
+	});
+
+	test("the section separates an invariant from a Constraint and an Acceptance Criterion", () => {
+		// Without this contrast the slot fills with restated constraints: the
+		// no-guidance baseline produced constraint-shaped transcription 5/5 and
+		// recorded zero path-quantified propositions.
+		expect(section).toContain("Constraint");
+		expect(section).toContain("Acceptance Criterion");
+		expect(section).toContain("EVERY");
+	});
+
+	test("the section forbids demoting an unresolved property into Risks", () => {
+		expect(section).toContain("Risks & Unresolved Forks");
 	});
 });
 
