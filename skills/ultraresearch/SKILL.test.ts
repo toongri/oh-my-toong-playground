@@ -1294,12 +1294,17 @@ describe("coverage gate staffing check", () => {
 // ---------------------------------------------------------------------------
 
 describe("intent-diff finalization at convergence", () => {
-	test("single-snapshot write-ordering finalizes intent-diff.md: no row remains unknown without landing in gaps", () => {
+	test("single-snapshot write-ordering finalizes intent-diff.md with explicit settled/unresolved outcomes", () => {
 		const idx = skill.indexOf("## Single-snapshot write-ordering");
 		const endIdx = skill.indexOf("## Zero verified claims", idx);
 		const context = skill.slice(idx, endIdx);
 		expect(context).toContain("`intent-diff.md` is finalized from the same snapshot");
-		expect(context).toContain("no row remains `unknown`");
+		expect(context).toContain("evidence-settled rows become `true` or `violated`");
+		expect(context).toContain("linked claim ids");
+		expect(context).toContain("Genuinely unresolved rows may retain status `unknown`");
+		expect(context).toContain("finalized gap entry");
+		expect(context).toContain("no `Pending` placeholder");
+		expect(context).not.toContain("every row still `unknown` at convergence is resolved to `true` or `violated`");
 	});
 });
 

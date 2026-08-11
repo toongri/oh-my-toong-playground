@@ -276,7 +276,7 @@ Every artifact this section covers is generated **once, from a single post-conve
 - `SYNTHESIS.md` is written on both postures — the citation source of truth every downstream artifact cites for verification backing.
 - `REPORT.md` and `REPORT.html` are written only on the explicit research posture (see Posture selection criteria): `REPORT.md` next, quoting the journal and citing `SYNTHESIS.md`, with the Phase 4 coverage-gate table already in place at the top of the draft before the render copy is produced (see Coverage gate) — then `REPORT.html` as a render copy of `REPORT.md`.
 - The deep-interview-schema handoff is written only on the pre-work postures, in place of REPORT.
-- `intent-diff.md` is finalized from the same snapshot on both postures: every row still `unknown` at convergence is resolved to `true` or `violated` with its linked claim ids filled in, or explicitly carried into the gaps section — no row remains `unknown` with a `Pending` link after the run ends. The intent diff is the one artifact that measures whether the intent was answered; left frozen at its Phase 0 seed, it measures nothing.
+- `intent-diff.md` is finalized from the same snapshot on both postures: evidence-settled rows become `true` or `violated` with linked claim ids filled in. Genuinely unresolved rows may retain status `unknown` at convergence only when explicitly linked to their finalized gap entry; no `Pending` placeholder is permitted. The intent diff is the one artifact that measures whether the intent was answered; left frozen at its Phase 0 seed, it measures nothing.
 
 The per-wave `wave-*.md` journal remains the incremental trace throughout; everything above is written only at convergence, in this dependency order, from the final post-convergence snapshot.
 
