@@ -42,10 +42,16 @@ allowed() { ! denied "$1"; }
 base='{"session_id":"sid","cwd":"PROJECT","tool_name":"Bash","tool_input":{"command":"CMD"}}'
 mkjson() { printf '%s' "$base" | sed "s|PROJECT|$PROJECT|; s|CMD|$1|"; }
 
-# Protected unmarked target denies; exact marker allows.
+# Protected targets always deny direct reads, regardless of filesystem markers.
 if ! denied "$(mkjson "cat $PROJECT/.agents/skills/explain-diff/SKILL.md")"; then echo "protected target did not deny"; exit 1; fi
+touch "$TMP/omt/codex-skill-invocation-marker-sid-explain-diff"
+if ! denied "$(mkjson "cat $PROJECT/.agents/skills/explain-diff/SKILL.md")"; then echo "raw marker touch bypassed protected read"; exit 1; fi
 printf '%s' '{"session_id":"sid","cwd":"'$PROJECT'","prompt":"$explain-diff"}' | OMT_DIR="$TMP/omt" "$MARKER_HOOK"
-allowed "$(mkjson "cat $PROJECT/.agents/skills/explain-diff/SKILL.md")"
+if ! denied "$(mkjson "cat $PROJECT/.agents/skills/explain-diff/SKILL.md")"; then echo "trusted explicit loader marker bypassed protected read"; exit 1; fi
+
+# A marker minted by an arbitrary node process is not authorization either.
+node -e 'require("fs").writeFileSync(process.argv[1], "forged")' "$TMP/omt/codex-skill-invocation-marker-sid-explain-diff"
+if ! denied "$(mkjson "cat $PROJECT/.agents/skills/explain-diff/SKILL.md")"; then echo "node-forged marker bypassed protected read"; exit 1; fi
 rm -f "$TMP/omt/codex-skill-invocation-marker-sid-explain-diff"
 
 # A forged raw touch is denied by the write guard and must not mint a marker;
@@ -75,7 +81,7 @@ missing_jq_output=$(printf '%s' "$missing_jq_payload" | PATH="$TMP/no-jq" OMT_DI
 new_omt="$TMP/not-yet-created-omt"
 new_omt_output=$(printf '%s' "$(mkjson "cat $PROJECT/.agents/skills/explain-diff/SKILL.md")" | OMT_DIR="$new_omt" "$HOOK")
 printf '%s' "$new_omt_output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null
-if ! payload "$(mkjson "cat $PROJECT/.agents/skills/explain-diff/SKILL.md $PROJECT/.agents/skills/review-report/SKILL.md")" | jq -e '.hookSpecificOutput.permissionDecisionReason | contains("$explain-diff")' >/dev/null; then exit 1; fi
+if ! payload "$(mkjson "cat $PROJECT/.agents/skills/explain-diff/SKILL.md $PROJECT/.agents/skills/review-report/SKILL.md")" | jq -e '.hookSpecificOutput.permissionDecisionReason | contains("$explain-diff") and contains("additionalContext") and contains("direct file reading is denied")' >/dev/null; then exit 1; fi
 
 # Literal deny envelope.
 shape=$(payload "$(mkjson "cat $PROJECT/.agents/skills/review-report/SKILL.md")")
