@@ -486,3 +486,107 @@ describe("settings.deny 배관", () => {
 		expect(output).toContain("settings.deny.subagents' must be a boolean");
 	});
 });
+
+describe("settings.mcps 배관", () => {
+	let tmpDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("allow 목록을 job metadata와 실제 codex argv에 적용한다", async () => {
+		const configPath = path.join(tmpDir, "design-review.config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"review:",
+				"  members:",
+				"    - name: tester",
+				"      command: codex exec",
+				"      model: gpt-5.6-sol",
+				"      effort_level: high",
+				"      env:",
+				"        REVIEW_MARKER: preserved",
+				"  settings:",
+				"    timeout: 10",
+				"    deny:",
+				"      subagents: true",
+				"      skills: [design-review]",
+				"    mcps:",
+				"      allow:",
+				"        - codegraph",
+			].join("\n"),
+			"utf8",
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		const codexHome = path.join(tmpDir, "codex-home");
+		const binDir = path.join(tmpDir, "bin");
+		fs.mkdirSync(binDir, { recursive: true });
+		fs.mkdirSync(codexHome, { recursive: true });
+		fs.writeFileSync(
+			path.join(codexHome, "config.toml"),
+			'[mcp_servers.codegraph]\ncommand = "stub"\n\n[mcp_servers.blocked]\ncommand = "stub"\n',
+		);
+		const argvPath = path.join(tmpDir, "codex-argv.txt");
+		const stubPath = path.join(binDir, "codex");
+		fs.writeFileSync(stubPath, '#!/bin/sh\nprintf "%s\\n" "$@" > "$STUB_CODEX_ARGV"\n', "utf8");
+		fs.chmodSync(stubPath, 0o755);
+		const env = {
+			...process.env,
+			CODEX_HOME: codexHome,
+			STUB_CODEX_ARGV: argvPath,
+			PATH: `${binDir}:${process.env.PATH || ""}`,
+		};
+		const result = execFileSync(
+			process.execPath,
+			[SCRIPT, "start", "--config", configPath, "--jobs-dir", jobsDir, "--json", "mcp test"],
+			{ stdio: "pipe", env },
+		);
+		const output = JSON.parse(result.toString());
+		const member = output.members[0];
+		expect(member.mcpBlock).toEqual(["blocked"]);
+		expect(member.model).toBe("gpt-5.6-sol");
+		expect(member.effort_level).toBe("high");
+		expect(member.env).toEqual({ REVIEW_MARKER: "preserved" });
+		for (let i = 0; i < 30 && !fs.existsSync(argvPath); i++)
+			await new Promise((resolve) => setTimeout(resolve, 20));
+		expect(fs.existsSync(argvPath)).toBe(true);
+		const argv = fs.readFileSync(argvPath, "utf8").split("\n").filter(Boolean);
+		expect(argv).toContain("mcp_servers.blocked.enabled=false");
+		expect(argv).not.toContain("mcp_servers.codegraph.enabled=false");
+	});
+
+	test("malformed allow 목록은 worker와 job 생성 전에 거부한다", () => {
+		const configPath = path.join(tmpDir, "design-review.config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"review:",
+				"  members:",
+				"    - name: tester",
+				"      command: codex exec",
+				"  settings:",
+				"    mcps:",
+				"      allow: [blocked.name]",
+			].join("\n"),
+			"utf8",
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		let error: any;
+		try {
+			execFileSync(process.execPath, [SCRIPT, "start", "--config", configPath, "--jobs-dir", jobsDir, "bad mcp"], {
+				stdio: "pipe",
+			});
+		} catch (caught) {
+			error = caught;
+		}
+		expect(error?.status).toBe(1);
+		expect(`${error?.stderr?.toString() || ""}`).toContain("settings.mcps.allow");
+		expect(fs.readdirSync(jobsDir)).toEqual([]);
+	});
+});
