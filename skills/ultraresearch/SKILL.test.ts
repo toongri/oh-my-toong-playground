@@ -1235,6 +1235,15 @@ describe("symptom axis and practitioner discourse", () => {
 		expect(context).toContain("the stated symptom is its own axis");
 	});
 
+	test("Phase 0: multi-faceted runs fan out the symptom, but Scoped CLEAR folds pain into one fact axis", () => {
+		const idx = skill.indexOf("## Phase 0");
+		const endIdx = skill.indexOf("## Phase 1", idx);
+		const context = skill.slice(idx, endIdx);
+		expect(context).toMatch(/multi-faceted runs?[\s\S]*stated symptom is its own axis/i);
+		expect(context).toMatch(/Scoped pre-work CLEAR single-fact ask[\s\S]*pain statement[\s\S]*fold[\s\S]*one fact axis/i);
+		expect(context).toMatch(/one worker[\s\S]*no extra symptom worker/i);
+	});
+
 	test("Phase 1 librarian protocol names practitioner discourse as librarian territory, not browsing-gated", () => {
 		const idx = skill.indexOf("## Phase 1");
 		const endIdx = skill.indexOf("## Phase 2", idx);
