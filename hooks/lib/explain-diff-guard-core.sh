@@ -103,7 +103,7 @@ explain_diff_guard_core_verdict() {
     local state_file="$omt_dir/explain-diff-state-${session_id}.json"
 
     if [ ! -f "$state_file" ]; then
-        printf '%s' "Blocked: explain-diff 산출물 경로 쓰기가 거부됐습니다. 이 세션에 explain-diff 상태가 없습니다. 스킬을 호출해 evidence 스텝부터 시작하세요."
+        printf '%s' "Blocked: explain-diff 산출물 경로 쓰기가 거부됐습니다. 이 세션에 explain-diff 상태가 없습니다. 스킬을 호출해 evidence 스텝부터 시작하세요. explain-diff-state.ts start --range \"<git range>\" --slug \"<slug>\" 를 실행하세요."
         return 0
     fi
 
