@@ -11,6 +11,7 @@
 
 import fs from "fs";
 import path from "path";
+import os from "os";
 import { spawn, execSync } from "child_process";
 
 import {
@@ -368,6 +369,35 @@ export function computeMcpBlockList(
 	// never declared makes codex fail to boot ("Error loading config.toml:
 	// invalid transport").
 	return configuredNames.filter((name) => !allow.has(name)).sort();
+}
+
+/**
+ * Attach the MCP block list to job entities without mutating the source list.
+ * MCP enforcement is Codex-only; other CLIs receive an explicit empty list.
+ */
+export function prepareMcpEntities(
+	settings: Record<string, unknown>,
+	entities: readonly Record<string, unknown>[],
+	config: JobConfig,
+	configPath: string,
+	conductorCodexHome?: string,
+): Record<string, unknown>[] {
+	assertMcpAllowShape(settings, config, configPath);
+	const fallbackHome =
+		conductorCodexHome ?? (process.env.CODEX_HOME || path.join(os.homedir(), ".codex"));
+	const configuredByHome = new Map<string, string[]>();
+	return entities.map((entity) => {
+		const cliType = detectCliType(entity.command);
+		if (cliType !== "codex") return { ...entity, mcpBlock: [] };
+		const env = isRecord(entity.env) ? entity.env : {};
+		const codexHome = env.CODEX_HOME ? String(env.CODEX_HOME) : fallbackHome;
+		let configured = configuredByHome.get(codexHome);
+		if (configured === undefined) {
+			configured = enumerateConfiguredMcpServers(codexHome);
+			configuredByHome.set(codexHome, configured);
+		}
+		return { ...entity, mcpBlock: computeMcpBlockList(settings, configured) };
+	});
 }
 
 export function buildAugmentedCommand(
