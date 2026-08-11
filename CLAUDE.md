@@ -148,9 +148,10 @@ skills:
 - **review-exec-guard.sh** / **codex-review-exec-guard.sh**: Review-context PreToolUse guards — enforce the shared static-review execution invariant for `orchestrate-review`; block tests, builds, installs, and linters only while member or conductor review context is active
 - **qa-driver-guard.sh** / **codex-qa-driver-guard.sh**: QA PreToolUse driver guards — block `agent-device`/`agent-browser`/`curl`/`bash` while the roster is incomplete or BASELINE+ has an incomplete chain (PLAN reachability probes remain available); consume `derived.driver_gate_armed` and fail open without `jq`
 - **explain-diff-artifact-guard.sh** / **codex-explain-diff-artifact-guard.sh**: PreToolUse gates over `$OMT_DIR/explain-diff/` — the only INVERTED guards in OMT: absent, expired, inactive, or unreadable (`jq` missing) state all DENY, while every path outside that directory stays fail-open. Shared verdict + byte-identical deny JSON in `hooks/lib/explain-diff-guard-core.sh`; the directory-boundary match keeps the sibling `explain-diff-eval/` tree outside the gate
-- **codex-skill-invocation-marker.sh**: Codex UserPromptSubmit marker — records generic literal `$skill` mentions for per-session invocation authorization
-- **codex-skill-invocation-gate.sh**: Codex PreToolUse gate — when a shell command literally reads a skill's `SKILL.md`, checks `disable-model-invocation: true` and denies without the matching prompt marker; uncertain cases fail open
-- **codex-explain-diff-seed.sh**: Codex explain-diff invocation seed — arms the fail-closed artifact guard only on a `$explain-diff` prompt mention (Claude seeds the same skeleton from `pre-tool-enforcer.sh`'s Skill branch)
+- **hooks/lib/skill-invocation-core.sh**: Shared skill metadata parser and project-local-then-global protected-skill resolver used by the Codex invocation hooks
+- **codex-skill-invocation-marker.sh**: Codex UserPromptSubmit hook — resolves each explicit literal `$skill` mention to the nearest project-local, then global protected `SKILL.md`, and injects its full body as trusted `additionalContext`; also records a marker as an invocation audit/integrity record, never as authorization
+- **codex-skill-invocation-gate.sh**: Codex PreToolUse gate — literal reads of model-disabled `SKILL.md` bodies are always denied, regardless of marker presence or forgery; uncertain command shapes fail open
+- **codex-explain-diff-seed.sh**: Codex explain-diff invocation seed — arms the fail-closed artifact guard only on a `$explain-diff` prompt mention (prompt-only; opening a file does not seed it; Claude seeds the same skeleton from `pre-tool-enforcer.sh`'s Skill branch)
 - **codex-qa-seed.sh**: Codex QA invocation seed — creates the qa state skeleton and arms the same runtime gates on Codex, which has no native Skill invocation signal
 - **codex-spawn-depth-gate.sh**: Codex PreToolUse gate capping subagent spawn depth at 2 (Claude enforces the same cap natively via `claude.yaml`'s `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`)
 
@@ -172,12 +173,12 @@ skills:
 ## Critical Patterns
 
 ### Skill Invocation
-Skills are invoked via the Skill tool, not by reading files directly:
+Skills are invoked through an explicit `$skill` UserPromptSubmit, not by reading files directly. The hook resolves the nearest project-local protected skill first, then the global protected skill, and injects the full `SKILL.md` as trusted `additionalContext`:
 ```
-Skill(skill: "prometheus")  // Correct
+$prometheus  // explicit UserPromptSubmit; full protected SKILL.md arrives as additionalContext
 Read("skills/prometheus/SKILL.md")  // Wrong
 ```
-On Codex, model-disabled skills are enforced at runtime: a literal `$skill` invocation must come first before a shell read of that skill's `SKILL.md`.
+On Codex, the marker is only an invocation audit/integrity record; it is not authorization. PreToolUse always denies a literal direct read of a model-disabled skill body, whether or not a marker exists (or has been forged).
 
 ### Subagent Selection
 

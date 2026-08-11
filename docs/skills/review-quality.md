@@ -160,7 +160,7 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 
 **퀴즈 면제는 없습니다**: 시간 압박·사용자 요청·재시도 소진·"문서만 필요함" 어느 사유로도 퀴즈를 건너뛰고 완료 상태에 도달할 수 없습니다. 필수 개념이 하나도 등록되지 않은 상태도 완료로 치지 않습니다(빈 집합의 공허참 차단). 같은 항목이 문서 변경 없이 두 번 연속 틀리면 `stalled`로 표시되어 사용자만 풀 수 있는 교착으로 넘어갑니다.
 
-**호출 방식**: 사용자가 명시적으로 `$explain-diff`를 호출합니다(`disable-model-invocation: true` — 모델이 스스로 발동하지 않습니다). Claude SessionStart는 실제 진행된 non-pristine 세션만 복원 배너로 되살립니다. 초기 pristine `evidence` 시드는 복원이나 진행 중인 세션으로 보지 않습니다. Codex의 범용 `$skill` 호출 마커가 프롬프트의 명시적 멘션을 기록하고, PreToolUse gate는 마커가 없으면 `disable-model-invocation: true`인 `SKILL.md`의 리터럴 경로 읽기를 거부합니다. 현재 세션의 `codex-skill-invocation-marker-<sid>-*` 마커 namespace는 PreToolUse write guard의 best-effort 리터럴 경로 보호도 받으므로 `touch`, 리다이렉션, `apply_patch` 같은 일반적인 위조 경로는 거부됩니다. 이는 암호학적 권한이나 완전한 셸 보안이 아니라 기존 write-guard가 인식하는 리터럴 경로에 한정된 보호입니다. 전용 explain-diff seed는 프롬프트 멘션만 처리하며 파일 열람으로는 시드하지 않습니다.
+**호출 방식**: 사용자가 명시적으로 `$explain-diff`를 호출합니다(`disable-model-invocation: true` — 모델이 스스로 발동하지 않습니다). Claude SessionStart는 실제 진행된 non-pristine 세션만 복원 배너로 되살립니다. 초기 pristine `evidence` 시드는 복원이나 진행 중인 세션으로 보지 않습니다. Codex의 `UserPromptSubmit` 훅은 명시적인 `$skill` 멘션을 해석해 가장 가까운 project-local protected skill을 먼저, 없으면 global protected skill을 찾아 전체 `SKILL.md`를 trusted `additionalContext`로 주입합니다. 범용 호출 마커는 invocation audit/integrity record일 뿐 authorization이 아니며, PreToolUse gate는 마커의 존재·위조 여부와 무관하게 `disable-model-invocation: true`인 `SKILL.md`의 리터럴 경로 직접 읽기를 항상 거부합니다. 현재 세션의 `codex-skill-invocation-marker-<sid>-*` namespace는 PreToolUse write guard의 best-effort 리터럴 경로 보호도 받습니다. 전용 explain-diff seed는 프롬프트 멘션만 처리하며 파일 열람으로는 시드하지 않습니다.
 
 **언제 사용하나**: 낯선 PR을 리뷰하기 전에 먼저 이해해야 할 때, 히스토리를 따라 서브시스템에 온보딩할 때, 큰 AI 작성 diff를 사람에게 넘길 때.
 

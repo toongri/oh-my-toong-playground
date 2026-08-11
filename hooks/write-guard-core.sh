@@ -70,9 +70,8 @@ _wg_core_qa_state_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse"
 _wg_core_explain_diff_state_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the current session explain-diff state (explain-diff-state-*.json). Use the explain-diff-state.ts CLI instead."}}'
 
 # Deny JSON for the current-session skill-invocation marker namespace. Marker
-# files are authorization state consumed by codex-skill-invocation-gate.sh;
-# direct writes could forge a skill invocation (or erase one) without the
-# UserPromptSubmit marker hook.
+# files are audit/integrity records, not authorization state; direct writes
+# could forge or erase one without the UserPromptSubmit marker hook.
 _wg_core_marker_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the current session skill-invocation marker namespace (codex-skill-invocation-marker-<session>-*). Use the skill invocation marker hook instead."}}'
 
 # _wg_core_normpath <path>
