@@ -25,6 +25,44 @@ run_prompt() {
     printf '%s' "$1" | env -u OMT_DIR HOME="$SBX" PATH="/usr/bin:/bin" bash "$HOOK"
 }
 
+context_from() {
+    printf '%s' "$1" | jq -r '.hookSpecificOutput.additionalContext // empty'
+}
+
+test_protected_explicit_injects_full_body() {
+    setup
+    mkdir -p "$REPO/.agents/skills/secret"
+    printf '%s\n' '---' 'disable-model-invocation: true' '---' 'FULL_SENTINEL_BODY' > "$REPO/.agents/skills/secret/SKILL.md"
+    local out ctx
+    out=$(run_prompt "$(jq -nc --arg cwd "$REPO" '{session_id:"sid",cwd:$cwd,prompt:"use $secret"}')")
+    ctx=$(context_from "$out")
+    teardown
+    printf '%s' "$ctx" | grep -qF '[CODEX EXPLICIT SKILL LOADED: secret]' && printf '%s' "$ctx" | grep -qF 'FULL_SENTINEL_BODY'
+}
+
+test_nonprotected_does_not_inject() {
+    setup
+    mkdir -p "$REPO/.agents/skills/plain"
+    printf '%s\n' '---' 'disable-model-invocation: false' '---' 'PLAIN_SENTINEL_BODY' > "$REPO/.agents/skills/plain/SKILL.md"
+    local out
+    out=$(run_prompt "$(jq -nc --arg cwd "$REPO" '{session_id:"sid",cwd:$cwd,prompt:"use $plain"}')")
+    teardown
+    [ -z "$(context_from "$out")" ]
+}
+
+test_project_local_precedes_global_and_global_fallback() {
+    setup
+    mkdir -p "$REPO/.agents/skills/local" "$REPO/.agents/skills/global" "$SBX/.agents/skills/local" "$SBX/.agents/skills/global"
+    printf '%s\n' '---' 'disable-model-invocation: true' '---' 'LOCAL_SENTINEL' > "$REPO/.agents/skills/local/SKILL.md"
+    printf '%s\n' '---' 'disable-model-invocation: true' '---' 'GLOBAL_LOCAL_SENTINEL' > "$SBX/.agents/skills/local/SKILL.md"
+    printf '%s\n' '---' 'disable-model-invocation: true' '---' 'GLOBAL_FALLBACK_SENTINEL' > "$SBX/.agents/skills/global/SKILL.md"
+    local out ctx
+    out=$(run_prompt "$(jq -nc --arg cwd "$REPO" '{session_id:"sid",cwd:$cwd,prompt:"$global then $local"}')")
+    ctx=$(context_from "$out")
+    teardown
+    printf '%s' "$ctx" | grep -qF 'LOCAL_SENTINEL' && ! printf '%s' "$ctx" | grep -qF 'GLOBAL_LOCAL_SENTINEL' && printf '%s' "$ctx" | grep -qF 'GLOBAL_FALLBACK_SENTINEL'
+}
+
 test_one_and_multiple_sigils() {
     setup
     run_prompt "$(jq -nc --arg cwd "$REPO" '{session_id:"sid",cwd:$cwd,prompt:"$alpha and $beta"}')"
@@ -123,6 +161,9 @@ main() {
     run_test test_unsafe_session_id_fails_open
     run_test test_unsafe_cwd_fails_open
     run_test test_marker_idempotence_preserves_content
+    run_test test_protected_explicit_injects_full_body
+    run_test test_nonprotected_does_not_inject
+    run_test test_project_local_precedes_global_and_global_fallback
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
     [ "$TESTS_FAILED" -eq 0 ]
 }
