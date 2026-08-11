@@ -35,6 +35,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 - **표면별 E2E 라우팅** — 웹/Electron은 `agent-browser`, iOS·tvOS·macOS·Android·Vega OS TV는 `agent-device`로 검증
 - **QA 강제 게이트** — qa가 액터 로스터→스토리→셀→기록→판정→완료 사슬을 채우기 전 단계 전환·드라이버·Stop을 강제하고(PLAN 도달성 탐색은 허용), Claude/Codex의 `qa-driver-guard.sh`·`codex-qa-driver-guard.sh`와 Codex `codex-qa-seed.sh`가 같은 상태를 집행
 - **Ultragoal 최종 리뷰 수렴** — cleanup-only 완료를 허용하면서 active pursuing `code-reviewer` dispatch를 5회 창으로 제한하고 Claude/Codex 훅 패리티로 사용자 중재를 표면화
+- **Codex protected-skill trust boundary** — `disable-model-invocation: true` 스킬은 사용자가 명시한 `$skill` UserPromptSubmit에서만 본문이 주입되고, 직접 `SKILL.md` shell read는 차단되며, invocation marker는 authorization이 아닙니다([리뷰/품질](docs/skills/review-quality.md) 참고)
 
 ## 철학 — 왜 이 설계인가
 
