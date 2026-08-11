@@ -116,10 +116,12 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 	const defaultReview: RawReviewConfig = {
 		members: [
 			{
-				name: "hephaestus",
-				command: 'opencode run --agent "Hephaestus - Deep Agent"',
+				name: "gpt",
+				command: "codex exec",
 				emoji: "🔨",
 				color: "BLUE",
+				model: "gpt-5.6-sol",
+				effort_level: "high",
 				output_format: "json",
 			},
 		],
