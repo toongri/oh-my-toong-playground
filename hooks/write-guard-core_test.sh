@@ -616,10 +616,10 @@ test_qa_state_other_session_allows() {
     return 1
 }
 
-# Current-session skill-invocation markers are authorization state. Any
-# concrete skill suffix and suffix glob in this session's namespace must be
-# denied, while neighboring session IDs and near-prefix siblings remain
-# allowed.
+# Current-session skill-invocation markers are audit/integrity records, not
+# authorization state. Any concrete skill suffix and suffix glob in this
+# session's namespace must be denied, while neighboring session IDs and
+# near-prefix siblings remain allowed.
 test_marker_current_session_suffix_denies() {
     local out
     out=$(printf '%s\n' "$OD/codex-skill-invocation-marker-$SID-explain-diff" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
