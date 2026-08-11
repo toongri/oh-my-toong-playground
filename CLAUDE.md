@@ -133,7 +133,7 @@ skills:
 
 - **Husky v9 lifecycle**: `package.json` declares `prepare: husky`; installation activates `.husky/_/` wrappers that route to the tracked plain `.husky/pre-commit` and `.husky/pre-push` files. `pre-commit` runs `bun run lint`; `pre-push` runs `bun run lint` followed by `make test`.
 
-- **session-start.sh**: Restores persistent mode state and garbage-collects `$OMT_DIR` on session start
+- **session-start.sh**: Restores persistent mode state and garbage-collects `$OMT_DIR` on session start; emits an active, non-pristine explain-diff restoration banner while excluding the pristine initial seed
 - **orphan-reaper.sh**: SessionStart hook — reaps `orchestrate-review` worker process groups left behind when a conductor never reached teardown
 - **hooks/lib/state-liveness.sh**: Shared TTL/liveness definitions for state-file and session-artifact garbage collection
 - **scripts/omt-cleanup/**: `~/.omt` cleanup CLI, dry-run by default, `--execute` required to delete
@@ -148,7 +148,9 @@ skills:
 - **review-exec-guard.sh** / **codex-review-exec-guard.sh**: Review-context PreToolUse guards — enforce the shared static-review execution invariant for `orchestrate-review`; block tests, builds, installs, and linters only while member or conductor review context is active
 - **qa-driver-guard.sh** / **codex-qa-driver-guard.sh**: QA PreToolUse driver guards — block `agent-device`/`agent-browser`/`curl`/`bash` while the roster is incomplete or BASELINE+ has an incomplete chain (PLAN reachability probes remain available); consume `derived.driver_gate_armed` and fail open without `jq`
 - **explain-diff-artifact-guard.sh** / **codex-explain-diff-artifact-guard.sh**: PreToolUse gates over `$OMT_DIR/explain-diff/` — the only INVERTED guards in OMT: absent, expired, inactive, or unreadable (`jq` missing) state all DENY, while every path outside that directory stays fail-open. Shared verdict + byte-identical deny JSON in `hooks/lib/explain-diff-guard-core.sh`; the directory-boundary match keeps the sibling `explain-diff-eval/` tree outside the gate
-- **codex-explain-diff-seed.sh**: Codex explain-diff invocation seed — arms the fail-closed artifact guard on a `$explain-diff` mention or a shell open of the deployed SKILL.md (Claude seeds the same skeleton from `pre-tool-enforcer.sh`'s Skill branch)
+- **codex-skill-invocation-marker.sh**: Codex UserPromptSubmit marker — records generic literal `$skill` mentions for per-session invocation authorization
+- **codex-skill-invocation-gate.sh**: Codex PreToolUse gate — when a shell command literally reads a skill's `SKILL.md`, checks `disable-model-invocation: true` and denies without the matching prompt marker; uncertain cases fail open
+- **codex-explain-diff-seed.sh**: Codex explain-diff invocation seed — arms the fail-closed artifact guard only on a `$explain-diff` prompt mention (Claude seeds the same skeleton from `pre-tool-enforcer.sh`'s Skill branch)
 - **codex-qa-seed.sh**: Codex QA invocation seed — creates the qa state skeleton and arms the same runtime gates on Codex, which has no native Skill invocation signal
 - **codex-spawn-depth-gate.sh**: Codex PreToolUse gate capping subagent spawn depth at 2 (Claude enforces the same cap natively via `claude.yaml`'s `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`)
 
@@ -175,6 +177,7 @@ Skills are invoked via the Skill tool, not by reading files directly:
 Skill(skill: "prometheus")  // Correct
 Read("skills/prometheus/SKILL.md")  // Wrong
 ```
+On Codex, model-disabled skills are enforced at runtime: a literal `$skill` invocation must come first before a shell read of that skill's `SKILL.md`.
 
 ### Subagent Selection
 
