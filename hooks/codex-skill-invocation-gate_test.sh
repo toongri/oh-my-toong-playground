@@ -10,6 +10,7 @@ trap 'rm -rf "$TMP"' EXIT
 PROJECT="$TMP/project"
 mkdir -p "$PROJECT/.agents/skills/explain-diff" "$PROJECT/.agents/skills/review-report" "$PROJECT/.agents/skills/plain" "$TMP/omt"
 mkdir -p "$PROJECT/.agents/skills/malformed"
+mkdir -p "$PROJECT/.agents/skills/inline-comment" "$PROJECT/.agents/skills/quoted"
 cat > "$PROJECT/.agents/skills/explain-diff/SKILL.md" <<'EOF'
 ---
 name: explain-diff
@@ -34,6 +35,18 @@ cat > "$PROJECT/.agents/skills/malformed/SKILL.md" <<'EOF'
 ---
 disable-model-invocation: true
 body without closing fence
+EOF
+cat > "$PROJECT/.agents/skills/inline-comment/SKILL.md" <<'EOF'
+---
+disable-model-invocation: true # protected
+---
+body
+EOF
+cat > "$PROJECT/.agents/skills/quoted/SKILL.md" <<'EOF'
+---
+disable-model-invocation: "true" # protected
+---
+body
 EOF
 
 payload() { printf '%s' "$1" | OMT_DIR="$TMP/omt" "$HOOK"; }
@@ -61,8 +74,10 @@ printf '%s' "$forged" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
 [ ! -e "$TMP/omt/codex-skill-invocation-marker-sid-explain-diff" ]
 if ! denied "$(mkjson "cat $PROJECT/.agents/skills/explain-diff/SKILL.md")"; then echo "forged touch bypassed protected read"; exit 1; fi
 if ! denied "$(mkjson "cat $PROJECT/.agents/skills/review-report/SKILL.md")"; then echo "review-report did not deny"; exit 1; fi
+if ! denied "$(mkjson "cat $PROJECT/.agents/skills/inline-comment/SKILL.md")"; then echo "inline-comment protected target did not deny"; exit 1; fi
 if ! denied "$(mkjson "cat .agents/skills/explain-diff/SKILL.md")"; then echo "direct relative path did not deny"; exit 1; fi
 allowed "$(mkjson "cat $PROJECT/.agents/skills/plain/SKILL.md")"
+allowed "$(mkjson "cat $PROJECT/.agents/skills/quoted/SKILL.md")"
 touch "$TMP/omt/codex-skill-invocation-marker-sid-explain-diff-eval"
 if ! denied "$(mkjson "cat $PROJECT/.agents/skills/explain-diff/SKILL.md")"; then echo "marker isolation failed"; exit 1; fi
 
