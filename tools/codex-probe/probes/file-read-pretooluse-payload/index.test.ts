@@ -9,6 +9,8 @@ import { buildSessionConfig, runEntry } from "./index.ts";
 
 const payload = (toolName: string, toolInput: Record<string, unknown>) =>
 	JSON.stringify({ hook_event_name: "PreToolUse", tool_name: toolName, tool_input: toolInput }) + "\n";
+const payloadWithoutTrailingNewline = (toolName: string, toolInput: Record<string, unknown>) =>
+	payload(toolName, toolInput).trimEnd();
 
 async function withScratch<T>(fn: (root: string, auth: string) => Promise<T>): Promise<T> {
 	const parent = await fs.mkdtemp(path.join(os.tmpdir(), "file-read-probe-test-"));
@@ -70,6 +72,33 @@ describe("file-read payload entrypoint", () => {
 				return { ok: true, observation: { events: [], toolCalls: [], baseInstructions: "", injectedContext: "", finalMessage: null, rawStdout: "", stderr: "" } };
 			};
 			expect(await runEntry([], { scratchRoot, authSourcePath, runSessionFn })).toBe(1);
+		});
+	});
+
+	it("preserves two no-newline hook payloads as separate inventory records", async () => {
+		await withScratch(async (scratchRoot, authSourcePath) => {
+			const runSessionFn = async (config: SessionConfig): Promise<RunResult> => {
+				const hooks = JSON.parse(await fs.readFile(path.join(config.env!.CODEX_HOME, "hooks.json"), "utf8"));
+				const command = hooks.hooks.PreToolUse[0].hooks[0].command as string;
+				Bun.spawnSync(["sh", "-c", `printf '%s' '${payloadWithoutTrailingNewline("read_file", { path: TARGET_FILE_NAME })}' | ${command}`]);
+				Bun.spawnSync(["sh", "-c", `printf '%s' '${payloadWithoutTrailingNewline("list_files", { path: "other.txt" })}' | ${command}`]);
+				return { ok: true, observation: { events: [], toolCalls: [], baseInstructions: "", injectedContext: "", finalMessage: null, rawStdout: "", stderr: "" } };
+			};
+
+			let stdout = "";
+			const originalWrite = process.stdout.write;
+			process.stdout.write = ((chunk: string | Uint8Array) => {
+				stdout += typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk);
+				return true;
+			}) as typeof process.stdout.write;
+			try {
+				expect(await runEntry([], { scratchRoot, authSourcePath, runSessionFn })).toBe(0);
+			} finally {
+				process.stdout.write = originalWrite;
+			}
+
+			const result = JSON.parse(stdout.trim()) as { inventory: Array<{ toolName: string }> };
+			expect(result.inventory.map((entry) => entry.toolName)).toEqual(["read_file", "list_files"]);
 		});
 	});
 

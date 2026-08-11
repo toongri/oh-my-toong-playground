@@ -36,7 +36,7 @@ function shellQuote(value: string): string {
 
 async function createCaptureHook(scratchRoot: string, capturePath: string): Promise<string> {
 	const hookPath = path.join(scratchRoot, "file-read-pretooluse-capture.sh");
-	const body = `#!/bin/sh\ncat >> ${shellQuote(capturePath)}\n`;
+	const body = `#!/bin/sh\n{ cat; printf '\\n'; } >> ${shellQuote(capturePath)}\n`;
 	await fs.writeFile(hookPath, body, { encoding: "utf8", mode: 0o755 });
 	await fs.chmod(hookPath, 0o755);
 	return hookPath;
