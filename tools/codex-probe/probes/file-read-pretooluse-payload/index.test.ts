@@ -5,7 +5,7 @@ import path from "path";
 
 import type { RunResult, SessionConfig } from "../../types.ts";
 import { FILE_READ_PROMPT, TARGET_FILE_NAME } from "./fixture.ts";
-import { buildSessionConfig, main, runEntry } from "./index.ts";
+import { buildSessionConfig, runEntry } from "./index.ts";
 
 const payload = (toolName: string, toolInput: Record<string, unknown>) =>
 	JSON.stringify({ hook_event_name: "PreToolUse", tool_name: toolName, tool_input: toolInput }) + "\n";

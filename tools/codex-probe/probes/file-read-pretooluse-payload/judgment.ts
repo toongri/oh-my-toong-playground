@@ -17,9 +17,9 @@ export type PayloadJudgment = {
 /** Make a stable, lossless summary of each captured payload. */
 export function inventoryPreToolUsePayloads(payloads: readonly PreToolUsePayload[]): PayloadInventoryEntry[] {
 	return payloads.map((payload) => {
-		const toolInput = payload.tool_input as Record<string, unknown>;
+		const toolInput = payload.tool_input;
 		return {
-			toolName: payload.tool_name as string,
+			toolName: payload.tool_name,
 			toolInputKeys: Object.keys(toolInput).sort(),
 			toolInput,
 			payload,
