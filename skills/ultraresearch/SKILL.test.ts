@@ -1353,3 +1353,33 @@ describe("per-axis worker attribution", () => {
 		expect(context).toContain("Staffing the log cannot resolve counts as zero");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Practice-evidence slot — grounded in the 2026-08-11 live A/B run
+// (ts-db-migrations second run): the practitioner_workflow worker gathered a
+// directly on-point practice account (DoorDash's per-app migration manifest
+// forcing a Git conflict before merge) into wave-1.md, and REPORT.md dropped
+// it — the axis read `covered` off other material. Candidate facts survived
+// because REQUIRED slots carried them; practice evidence had no slot. Same
+// failure shape, same fix form.
+// ---------------------------------------------------------------------------
+
+describe("practice-evidence slot in workflow-axis sections", () => {
+	const sectionOf = () => {
+		const idx = skill.indexOf("## REPORT.md and REPORT.html");
+		const endIdx = skill.indexOf("## Epistemic-instrumentation artifacts", idx);
+		return skill.slice(idx, endIdx);
+	};
+
+	test("a workflow/symptom axis section carries each practitioner account gathered as its own entry", () => {
+		const context = sectionOf();
+		expect(context).toContain("each practitioner account the journal gathered");
+		expect(context).toMatch(/who practices it, what the practice is, and the source link/);
+	});
+
+	test("a journal practice item missing from its axis section is named a defect", () => {
+		expect(sectionOf()).toContain(
+			"a practice item present in the journal but absent from its axis section is the same defect as a lumped candidate row",
+		);
+	});
+});
