@@ -69,6 +69,11 @@ _wg_core_qa_state_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse"
 # a finished explanation document without the reader ever passing the quiz.
 _wg_core_explain_diff_state_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the current session explain-diff state (explain-diff-state-*.json). Use the explain-diff-state.ts CLI instead."}}'
 
+# Deny JSON for the current-session skill-invocation marker namespace. Marker
+# files are audit/integrity records, not authorization state; direct writes
+# could forge or erase one without the UserPromptSubmit marker hook.
+_wg_core_marker_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the current session skill-invocation marker namespace (codex-skill-invocation-marker-<session>-*). Use the skill invocation marker hook instead."}}'
+
 # _wg_core_normpath <path>
 # Pure LEXICAL path normalization (os.path.normpath semantics): collapse
 # empty (//), '.' and '..' segments WITHOUT touching the filesystem. This
@@ -299,9 +304,24 @@ write_guard_core_run() {
     qa_state_path="$(_wg_core_normpath "$omt_dir/qa-state-$session_id.json")"
     local explain_diff_state_path
     explain_diff_state_path="$(_wg_core_normpath "$omt_dir/explain-diff-state-$session_id.json")"
+    local marker_namespace_prefix marker_namespace_glob
+    marker_namespace_prefix="$(_wg_core_normpath "$omt_dir/codex-skill-invocation-marker-$session_id-")"
+    marker_namespace_glob="$(_wg_core_normpath "$omt_dir/codex-skill-invocation-marker-$session_id-*")"
     local candidate norm_candidate
     while IFS= read -r candidate; do
         norm_candidate="$(_wg_core_normpath "$candidate")"
+        # Any concrete suffix in the current session's namespace is protected,
+        # as is a suffix glob (the prefix is anchored so SID `s1` never claims
+        # the sibling namespace `s1x`). For broader globs such as `$OMT_DIR/*`,
+        # match against the namespace glob with the same component/depth
+        # semantics used by the other protected state paths.
+        case "$norm_candidate" in
+            "$marker_namespace_prefix"?*)
+                printf '%s\n' "$_wg_core_marker_deny_json"
+                _wg_core_drain_stdin
+                return 0
+                ;;
+        esac
         if [ "$norm_candidate" = "$qa_state_path" ]; then
             printf '%s\n' "$_wg_core_qa_state_deny_json"
             _wg_core_drain_stdin
@@ -347,6 +367,10 @@ write_guard_core_run() {
                     return 0
                 elif _wg_core_pathwise_glob_match "$norm_candidate" "$explain_diff_state_path"; then
                     printf '%s\n' "$_wg_core_explain_diff_state_deny_json"
+                    _wg_core_drain_stdin
+                    return 0
+                elif _wg_core_pathwise_glob_match "$norm_candidate" "$marker_namespace_glob"; then
+                    printf '%s\n' "$_wg_core_marker_deny_json"
                     _wg_core_drain_stdin
                     return 0
                 fi

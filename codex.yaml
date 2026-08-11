@@ -80,6 +80,12 @@ hooks:
     - component: codex-qa-seed.sh
       type: command
       timeout: 10
+    # Record every explicitly mentioned skill sigil and inject model-disabled
+    # skill bodies as trusted additionalContext; the marker is a record only,
+    # not authorization for a later shell read of a protected SKILL.md.
+    - component: codex-skill-invocation-marker.sh
+      type: command
+      timeout: 10
     - component: codex-explain-diff-seed.sh
       type: command
       timeout: 10
@@ -94,7 +100,10 @@ hooks:
       type: command
       matcher: "Bash|bash|exec_command|shell_command"
       timeout: 10
-    - component: codex-explain-diff-seed.sh
+    # Always deny direct shell reads of model-disabled SKILL.md files. Explicit
+    # prompt sigils receive trusted additionalContext from the UserPromptSubmit
+    # hook above; marker files are not consulted as read authorization.
+    - component: codex-skill-invocation-gate.sh
       type: command
       matcher: "Bash|bash|exec_command|shell_command"
       timeout: 10

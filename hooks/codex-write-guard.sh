@@ -2,7 +2,7 @@
 # =============================================================================
 # Codex PreToolUse Write-Guard (codex-ledger-parity plan, TODO 7): a thin
 # Codex-specific shim that parses Codex write routes (apply_patch envelope,
-# Bash-embedded apply_patch heredoc, shell redirect/tee/rm, native
+# Bash-embedded apply_patch heredoc, shell redirect/touch/tee/rm, native
 # Edit/Write/MultiEdit), resolves OMT_DIR/session_id, absolutizes candidate
 # targets against cwd, and delegates the actual full-path anchor-match + deny
 # JSON to write_guard_core_run (hooks/write-guard-core.sh) -- this file never
@@ -597,7 +597,7 @@ _cwg_extract_heredoc_body() {
 }
 
 # _cwg_extract_shell_targets <chain_segment>
-# Redirect / tee / rm / cp / mv / sed -i / dd / truncate write-target
+# Redirect / touch / tee / rm / cp / mv / sed -i / dd / truncate write-target
 # extraction, mirroring the segment-classifier shape of
 # hooks/pre-tool-enforcer.sh:42-77 (_wg_ledger_target_in_segment) but
 # EXTRACTING the candidate target rather than merely testing a substring --
@@ -627,7 +627,7 @@ _cwg_extract_shell_targets() {
         | sed -E 's/^.*>{1,2}[[:space:]]*//' || true
 
     case "$first_word" in
-        tee | rm | truncate)
+        touch | tee | rm | truncate)
             printf '%s\n' "$seg" | awk '{for (i = 2; i <= NF; i++) if ($i !~ /^-/) print $i}'
             ;;
         cp)

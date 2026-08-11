@@ -1060,6 +1060,61 @@ describe("isPristine — prometheus resume_summary 조건", () => {
 });
 
 // ---------------------------------------------------------------------------
+// isPristine — explain-diff seed/progress axes parity with SessionStart jq
+// ---------------------------------------------------------------------------
+
+describe("isPristine — explain-diff seed/progress axes", () => {
+	const canonicalSeed = {
+		active: true,
+		step: "evidence",
+		passed: [],
+		structural_ok: [],
+		concepts: [],
+		bank: [],
+		awaiting_answer: false,
+		no_progress: { key: "", count: 0, doc_digest: "" },
+		last_failure: null,
+	};
+
+	test("canonical seed is pristine", () => {
+		expect(isPristine("explain-diff", canonicalSeed)).toBe(true);
+	});
+
+	test("missing fields use the pristine defaults", () => {
+		expect(isPristine("explain-diff", {})).toBe(true);
+	});
+
+	test.each([
+		["step", { step: "background" }],
+		["passed", { passed: ["evidence"] }],
+		["structural_ok", { structural_ok: ["evidence"] }],
+		["concepts", { concepts: [{ id: "R1", required: true, passed: false }] }],
+		["awaiting_answer", { awaiting_answer: true }],
+	] as const)("any progress on %s makes the state non-pristine", (_axis, progress) => {
+		expect(isPristine("explain-diff", { ...canonicalSeed, ...progress })).toBe(false);
+	});
+
+	test("bank and last_failure do not affect pristine", () => {
+		expect(
+			isPristine("explain-diff", {
+				...canonicalSeed,
+				bank: [{ id: "seed-note" }],
+				last_failure: { step: "evidence", items: ["seed failure"] },
+			}),
+		).toBe(true);
+	});
+
+	test.each([1, 2])("no_progress.count=%i makes the state non-pristine", (count) => {
+		expect(
+			isPristine("explain-diff", {
+				...canonicalSeed,
+				no_progress: { key: "evidence", count, doc_digest: "" },
+			}),
+		).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // adopt — pristine 소스는 r8으로 거부된다
 // ---------------------------------------------------------------------------
 

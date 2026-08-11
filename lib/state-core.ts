@@ -488,6 +488,8 @@ export function writeFileNoCreate(path: string, content: string): void {
  *   goal/ultragoal: phase=="planning" && iteration==0 && outcome==""
  *   deep-interview: seeded file lacking the rich `state` object
  *   qa:             phase=="PRE-FLIGHT" && cycle==0 && target==""
+ *   explain-diff:   evidence step with empty progress arrays, no pending answer,
+ *                   and no-progress count 0
  */
 export function isPristine(type: StateType, parsed: Record<string, unknown>): boolean {
 	if (type === "prometheus") {
@@ -507,6 +509,28 @@ export function isPristine(type: StateType, parsed: Record<string, unknown>): bo
 	if (type === "deep-interview") {
 		// Pristine = seed file without the rich `state` object
 		return parsed["state"] === undefined || parsed["state"] === null;
+	}
+	if (type === "explain-diff") {
+		const emptyArrayOrDefault = (value: unknown): boolean =>
+			value === undefined || value === null || (Array.isArray(value) && value.length === 0);
+		const noProgress = parsed["no_progress"];
+		const rawCount =
+			noProgress === undefined || noProgress === null
+				? undefined
+				: isPlainObject(noProgress)
+					? noProgress["count"]
+					: NaN;
+		const count = rawCount === null ? undefined : rawCount;
+		return (
+			(parsed["step"] === undefined || parsed["step"] === null || parsed["step"] === "evidence") &&
+			emptyArrayOrDefault(parsed["passed"]) &&
+			emptyArrayOrDefault(parsed["structural_ok"]) &&
+			emptyArrayOrDefault(parsed["concepts"]) &&
+			(parsed["awaiting_answer"] === undefined ||
+				parsed["awaiting_answer"] === null ||
+				parsed["awaiting_answer"] === false) &&
+			(count === undefined || count === 0)
+		);
 	}
 	if (type === "qa") {
 		const runChecks = parsed["run_checks"];

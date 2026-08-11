@@ -133,7 +133,7 @@ skills:
 
 - **Husky v9 lifecycle**: `package.json` declares `prepare: husky`; installation activates `.husky/_/` wrappers that route to the tracked plain `.husky/pre-commit` and `.husky/pre-push` files. `pre-commit` runs `bun run lint`; `pre-push` runs `bun run lint` followed by `make test`.
 
-- **session-start.sh**: Restores persistent mode state and garbage-collects `$OMT_DIR` on session start
+- **session-start.sh**: Restores persistent mode state and garbage-collects `$OMT_DIR` on session start; emits an active, non-pristine explain-diff restoration banner while excluding the pristine initial seed
 - **orphan-reaper.sh**: SessionStart hook — reaps `orchestrate-review` worker process groups left behind when a conductor never reached teardown
 - **hooks/lib/state-liveness.sh**: Shared TTL/liveness definitions for state-file and session-artifact garbage collection
 - **scripts/omt-cleanup/**: `~/.omt` cleanup CLI, dry-run by default, `--execute` required to delete
@@ -143,12 +143,15 @@ skills:
 - **local-path-ref-gate-core.sh** / **local-path-ref-gate.sh** / **codex-local-path-ref-gate.sh (Codex twin)**: Shared-core prevention gate for local paths sent through git commits, PR creates/edits/comments, Notion, Slack, or Linear; Claude/Codex shims use the same predicate and remedies. It fails open on missing tools, malformed payloads, unknown command/MCP shapes, or Git/setup inspection errors.
 - **mermaid-render-gate.sh**: PostToolUse gate — renders every mermaid block of a just-written markdown file through `mmdc` (real mermaid inside headless Chromium, so layout-stage crashes surface too, not just parse errors) and blocks with the failing block located by file line number. Fails open when `mmdc` is absent (`npm i -g @mermaid-js/mermaid-cli` to enable); Claude-only, no Codex twin
 - **persistent-mode/** / **codex-persistent-mode/**: Prevents stopping when work remains incomplete (shared `makeDecision`); for an active ultragoal, consecutive no-progress Stops increment the iteration counter, observed diff-carrying commits or story transitions reset it, background-work waits are not counted, and the cap soft-stops as `budget_limited` for user-only `resume-pursuit` recovery. An active explain-diff session blocks Stop until the reader passes the quiz (or the state goes `stalled`, or a question is outstanding)
-- **pre-tool-enforcer.sh** / **codex-write-guard.sh**: PreToolUse gates — TaskOutput blocking, session-ledger write guard, code-review artifact identity guard, user-only ultragoal-state command guard (`approve-review-dispatch-renewal` / `dismiss-review-finding` / `resume-pursuit` — each is user-authorized; the AI's Bash path is denied and the user runs them); Codex twin additionally denies dangerous commands (`rm -rf`, `git push --force`)
+- **pre-tool-enforcer.sh** / **codex-write-guard.sh**: PreToolUse gates — TaskOutput blocking, session-ledger write guard, code-review artifact identity guard, user-only ultragoal-state command guard (`approve-review-dispatch-renewal` / `dismiss-review-finding` / `resume-pursuit` — each is user-authorized; the AI's Bash path is denied and the user runs them); Codex twin additionally denies dangerous commands (`rm -rf`, `git push --force`) and best-effort blocks ordinary direct writes/deletions in the current-session `codex-skill-invocation-marker-<sid>-*` namespace
 - **review-dispatch-gate-core.sh** / **pre-tool-enforcer.sh** / **codex-review-dispatch-gate.sh**: Shared final-review dispatch budget — Claude/Codex shims atomically claim only active `phase=pursuing` `code-reviewer` dispatches; the initial five-dispatch window denies cap exhaustion or completion-eligible re-dispatch until explicit user approval renews the cap by 5.
 - **review-exec-guard.sh** / **codex-review-exec-guard.sh**: Review-context PreToolUse guards — enforce the shared static-review execution invariant for `orchestrate-review`; block tests, builds, installs, and linters only while member or conductor review context is active
 - **qa-driver-guard.sh** / **codex-qa-driver-guard.sh**: QA PreToolUse driver guards — block `agent-device`/`agent-browser`/`curl`/`bash` while the roster is incomplete or BASELINE+ has an incomplete chain (PLAN reachability probes remain available); consume `derived.driver_gate_armed` and fail open without `jq`
 - **explain-diff-artifact-guard.sh** / **codex-explain-diff-artifact-guard.sh**: PreToolUse gates over `$OMT_DIR/explain-diff/` — the only INVERTED guards in OMT: absent, expired, inactive, or unreadable (`jq` missing) state all DENY, while every path outside that directory stays fail-open. Shared verdict + byte-identical deny JSON in `hooks/lib/explain-diff-guard-core.sh`; the directory-boundary match keeps the sibling `explain-diff-eval/` tree outside the gate
-- **codex-explain-diff-seed.sh**: Codex explain-diff invocation seed — arms the fail-closed artifact guard on a `$explain-diff` mention or a shell open of the deployed SKILL.md (Claude seeds the same skeleton from `pre-tool-enforcer.sh`'s Skill branch)
+- **hooks/lib/skill-invocation-core.sh**: Shared skill metadata parser and project-local-then-global protected-skill resolver used by the Codex invocation hooks
+- **codex-skill-invocation-marker.sh**: Codex UserPromptSubmit hook — resolves each explicit literal `$skill` mention to the nearest project-local, then global protected `SKILL.md`, and injects its full body as trusted `additionalContext`; also records a marker as an invocation audit/integrity record, never as authorization
+- **codex-skill-invocation-gate.sh**: Codex PreToolUse gate — literal reads of model-disabled `SKILL.md` bodies are always denied, regardless of marker presence or forgery; uncertain command shapes fail open
+- **codex-explain-diff-seed.sh**: Codex explain-diff invocation seed — arms the fail-closed artifact guard only on a `$explain-diff` prompt mention (prompt-only; opening a file does not seed it; Claude seeds the same skeleton from `pre-tool-enforcer.sh`'s Skill branch)
 - **codex-qa-seed.sh**: Codex QA invocation seed — creates the qa state skeleton and arms the same runtime gates on Codex, which has no native Skill invocation signal
 - **codex-spawn-depth-gate.sh**: Codex PreToolUse gate capping subagent spawn depth at 2 (Claude enforces the same cap natively via `claude.yaml`'s `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`)
 
@@ -170,11 +173,12 @@ skills:
 ## Critical Patterns
 
 ### Skill Invocation
-Skills are invoked via the Skill tool, not by reading files directly:
+Skills are invoked through an explicit `$skill` UserPromptSubmit, not by reading files directly. The hook resolves the nearest project-local protected skill first, then the global protected skill, and injects the full `SKILL.md` as trusted `additionalContext`:
 ```
-Skill(skill: "prometheus")  // Correct
+$prometheus  // explicit UserPromptSubmit; full protected SKILL.md arrives as additionalContext
 Read("skills/prometheus/SKILL.md")  // Wrong
 ```
+On Codex, the marker is only an invocation audit/integrity record; it is not authorization. PreToolUse always denies a literal direct read of a model-disabled skill body, whether or not a marker exists (or has been forged).
 
 ### Subagent Selection
 

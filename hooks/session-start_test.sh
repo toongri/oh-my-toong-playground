@@ -2416,6 +2416,94 @@ EOF
     return 0
 }
 
+# =============================================================================
+# Tests: explain-diff restore block
+# =============================================================================
+
+test_session_start_explain_diff_active_non_pristine_emits_restore() {
+    local sid="explain-diff-restore-active"
+    cat > "$TEST_OMT_DIR/explain-diff-state-${sid}.json" << 'EOF'
+{
+  "active": true,
+  "step": "background",
+  "passed": ["evidence"],
+  "concepts": [],
+  "bank": [],
+  "awaiting_answer": false,
+  "last_failure": null
+}
+EOF
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+    assert_output_contains "$ctx" "EXPLAIN-DIFF RESTORED" "active non-pristine explain-diff state must restore" || return 1
+    echo "$ctx" | grep -qF 'cat "$OMT_DIR/explain-diff-state-$OMT_SESSION_ID.json"' || return 1
+    echo "$ctx" | grep -qiE 'now, before any other action|run .*now'
+}
+
+test_session_start_explain_diff_pristine_active_not_restored() {
+    local sid="explain-diff-restore-pristine"
+    cat > "$TEST_OMT_DIR/explain-diff-state-${sid}.json" << 'EOF'
+{"active": true, "step": "evidence", "passed": [], "concepts": [], "bank": [], "awaiting_answer": false, "last_failure": null}
+EOF
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+    assert_output_not_contains "$output" "EXPLAIN-DIFF RESTORED" "pristine explain-diff state must not restore"
+}
+
+test_session_start_explain_diff_pristine_ignores_bank_and_last_failure() {
+    local sid="explain-diff-restore-pristine-fields"
+    cat > "$TEST_OMT_DIR/explain-diff-state-${sid}.json" << 'EOF'
+{
+  "active": true,
+  "step": "evidence",
+  "passed": [],
+  "structural_ok": [],
+  "concepts": [],
+  "bank": [{"id": "seed-note"}],
+  "awaiting_answer": false,
+  "last_failure": {"step": "evidence", "items": ["seed failure"]}
+}
+EOF
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+    assert_output_not_contains "$output" "EXPLAIN-DIFF RESTORED" "bank and last_failure do not make an evidence seed non-pristine"
+}
+
+test_session_start_explain_diff_no_progress_count_is_non_pristine() {
+    local sid count output
+    for count in 1 2; do
+        sid="explain-diff-restore-no-progress-${count}"
+        cat > "$TEST_OMT_DIR/explain-diff-state-${sid}.json" << EOF
+{
+  "active": true,
+  "step": "evidence",
+  "passed": [],
+  "structural_ok": [],
+  "concepts": [],
+  "bank": [],
+  "awaiting_answer": false,
+  "last_failure": null,
+  "no_progress": {"key": "evidence", "count": ${count}, "doc_digest": ""}
+}
+EOF
+        output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+        assert_output_contains "$output" "EXPLAIN-DIFF RESTORED" "no_progress.count=${count} must make explain-diff state non-pristine" || return 1
+    done
+}
+
+test_session_start_explain_diff_inactive_or_absent_not_restored() {
+    local inactive_sid="explain-diff-restore-inactive"
+    printf '%s\n' '{"active": false, "step": "background", "passed": ["evidence"]}' > "$TEST_OMT_DIR/explain-diff-state-${inactive_sid}.json"
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$inactive_sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+    assert_output_not_contains "$output" "EXPLAIN-DIFF RESTORED" "inactive explain-diff state must not restore" || return 1
+    local absent_sid="explain-diff-restore-absent"
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$absent_sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+    assert_output_not_contains "$output" "EXPLAIN-DIFF RESTORED" "absent explain-diff state must not restore"
+}
+
 # grep-0 (TODO 8): session-start.sh must contain zero handoff references — the
 # handoff reader block, the two orphan-GC arms, and the HANDOFF variable are
 # all removed; ledger recovery option D (above) supersedes them.
@@ -2478,6 +2566,13 @@ main() {
     run_test test_session_start_stale_deep_interview_with_started_at_purged
     run_test test_session_start_stale_deep_interview_no_started_at_purged_via_mtime
     run_test test_session_start_fresh_deep_interview_marker_survives
+
+    # explain-diff restore — active progressed state only
+    run_test test_session_start_explain_diff_active_non_pristine_emits_restore
+    run_test test_session_start_explain_diff_pristine_active_not_restored
+    run_test test_session_start_explain_diff_pristine_ignores_bank_and_last_failure
+    run_test test_session_start_explain_diff_no_progress_count_is_non_pristine
+    run_test test_session_start_explain_diff_inactive_or_absent_not_restored
 
     # GC liveness unification (TODO 7)
     run_test test_gc_current_session_active_7h_idle_survives
