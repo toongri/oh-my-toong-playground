@@ -1106,3 +1106,199 @@ describe("coverage table is persisted, positioned, and single-authority — not 
 		);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Expressiveness contract — REPORT.html must be MORE than a transcode of
+// REPORT.md, never less. Grounded in the 2026-08-11 ts-db-migrations run
+// (REPORT.html 0.76x of REPORT.md, 5/11 citation links surviving, the §4
+// operations flow shipped as a byte-identical <pre> text block) and in the
+// RED-1 harness (2 arms x 5 reps, terra/high): the then-current "render
+// copy" definition produced consistently THINNER output (1.32-1.36x) than
+// a no-guidance control (1.47-1.80x), and 0/10 reps across both arms
+// attempted any diagram. "Copy" semantically permits equal-or-less; the fix
+// is a positive recipe (content-parity floor + expressiveness promotion),
+// not a prohibition.
+// ---------------------------------------------------------------------------
+
+describe("REPORT.html expressiveness contract", () => {
+	const sectionOf = () => {
+		const idx = skill.indexOf("## REPORT.md and REPORT.html");
+		expect(idx).toBeGreaterThan(-1);
+		const endIdx = skill.indexOf("### Candidate profiles", idx);
+		expect(endIdx).toBeGreaterThan(idx);
+		return skill.slice(idx, endIdx);
+	};
+
+	test('the ceiling phrase "render copy of it" no longer defines the deliverable', () => {
+		expect(sectionOf()).not.toContain("render copy of it");
+	});
+
+	test("content-parity floor: every citation link in REPORT.md appears in REPORT.html, verified by counting", () => {
+		const context = sectionOf();
+		expect(context).toContain("Content parity");
+		expect(context).toMatch(/count the citation links in both files/);
+		expect(context).toContain("a lower link count in the HTML is a rendering defect");
+	});
+
+	test("expressiveness promotion: text-block flows are promoted to inline SVG diagrams", () => {
+		const context = sectionOf();
+		expect(context).toContain("Expressiveness promotion");
+		expect(context).toContain("inline SVG");
+	});
+
+	test("transcode is named as the failure: byte-identical <pre> copies are not a render", () => {
+		expect(sectionOf()).toMatch(/has not been rendered — it has been transcoded/);
+	});
+
+	test("self-containedness constraint survives the rewrite (regression guard)", () => {
+		const context = sectionOf();
+		expect(context).toContain("self-contained");
+		expect(context).toContain("no external CSS, JS, fonts, or images");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Candidate profiles — structural REQUIRED slots. Grounded in the RED-2
+// harness (2 arms x 5 reps, journal handed to a fresh writer): license
+// (MIT) and examined version (v1.6.1) present in the journal survived into
+// the comparison in 0/20 reps across all conditions — a field no contract
+// slot demands is dropped by every writer, so the fix is REQUIRED fields,
+// not prose reminders. The lumped-row ban is grounded in the production
+// REPORT.md:37 row ("Knex / TypeORM / dbmate / Umzug") whose compression
+// inverted a journal fact (wave-1.md:14 records Knex HAS a built-in DB
+// lock; the lumped row shipped "external lock needed").
+// ---------------------------------------------------------------------------
+
+describe("candidate profile schema — REQUIRED slots", () => {
+	const sectionOf = () => {
+		const idx = skill.indexOf("### Candidate profiles");
+		expect(idx).toBeGreaterThan(-1);
+		const endIdx = skill.indexOf("## Epistemic-instrumentation artifacts", idx);
+		expect(endIdx).toBeGreaterThan(idx);
+		return skill.slice(idx, endIdx);
+	};
+
+	test("the section exists inside the Artifact Contract", () => {
+		expect(skill.indexOf("### Candidate profiles")).toBeGreaterThan(
+			skill.indexOf("<Artifact_Contract>"),
+		);
+	});
+
+	test("REQUIRED fields include version examined, license, maintenance signal, concurrency/locking, and history/merge model", () => {
+		const context = sectionOf();
+		expect(context).toContain("version examined");
+		expect(context).toContain("license");
+		expect(context).toContain("maintenance signal");
+		expect(context).toMatch(/concurrency\/locking/);
+		expect(context).toMatch(/history\/merge model/);
+	});
+
+	test("de-scoped features stay described: de-scoping moves choice weight, it does not delete the field", () => {
+		expect(sectionOf()).toContain(
+			"de-scoping moves choice weight, it does not delete the field",
+		);
+	});
+
+	test("one candidate per profile — lumped multi-candidate rows are a defect", () => {
+		const context = sectionOf();
+		expect(context).toContain("One candidate per profile");
+		expect(context).toContain("defect");
+	});
+
+	test("a rejected candidate keeps its filled profile plus an explicit invalidation rationale", () => {
+		expect(sectionOf()).toContain("explicit invalidation rationale");
+	});
+
+	test("an unfillable field is written as unknown — not gathered, feeding the coverage gate", () => {
+		expect(sectionOf()).toContain("unknown — not gathered");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Symptom axis + practitioner discourse — grounded in the production run:
+// the user's pain ("we only learn at PR/merge time") never became an axis;
+// the operational-governance axis was declared (expansion-log.md:6) but
+// staffed with zero workers (:8, "4 codebase + 6 external tool lanes") and
+// still passed coverage as covered; browsing gate said no (correctly, per
+// its access-only wording) while practitioner discourse — which is
+// surface-web librarian territory, not blocked-source territory — was never
+// assigned to anyone. RED-3 (2 arms x 5 reps) reproduced browsing=no 5/5 on
+// the current wording.
+// ---------------------------------------------------------------------------
+
+describe("symptom axis and practitioner discourse", () => {
+	test("Phase 0: the user's stated symptom is its own axis, distinct from the question's solution shape", () => {
+		const idx = skill.indexOf("## Phase 0");
+		const endIdx = skill.indexOf("## Phase 1", idx);
+		const context = skill.slice(idx, endIdx);
+		expect(context).toContain("Symptom vs question");
+		expect(context).toContain("the stated symptom is its own axis");
+	});
+
+	test("Phase 1 librarian protocol names practitioner discourse as librarian territory, not browsing-gated", () => {
+		const idx = skill.indexOf("## Phase 1");
+		const endIdx = skill.indexOf("## Phase 2", idx);
+		const context = skill.slice(idx, endIdx);
+		expect(context).toContain("Practitioner discourse is librarian territory");
+		expect(context).toMatch(/postmortem/i);
+		expect(context).toMatch(/reddit\.com|news\.ycombinator\.com/);
+	});
+
+	test("Phase 2 negative-result pivot: a 'no tool provides X' verdict is a lead, converting the axis to practice-hunting", () => {
+		const idx = skill.indexOf("## Phase 2");
+		const endIdx = skill.indexOf("## Phase 3", idx);
+		const context = skill.slice(idx, endIdx);
+		expect(context).toContain("Negative-result pivot");
+		expect(context).toContain("how practitioners cope without");
+	});
+
+	test("Phase 3 gate admits practice-shaped claims with the practitioner's own first-party account as the primary source", () => {
+		const idx = skill.indexOf("## Phase 3");
+		const endIdx = skill.indexOf("## Phase 4", idx);
+		const context = skill.slice(idx, endIdx);
+		expect(context).toContain("Practice-shaped claims");
+		expect(context).toContain("labeled as practice");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Coverage staffing check — an axis nobody was assigned to cannot be
+// covered. Grounded in the production run where the coverage table showed
+// all five rows covered while the operational-governance axis had zero
+// workers across both waves.
+// ---------------------------------------------------------------------------
+
+describe("coverage gate staffing check", () => {
+	const gateSection = () => {
+		const idx = skill.indexOf("### Coverage gate");
+		const endIdx = skill.indexOf("</Engine>", idx);
+		return skill.slice(idx, endIdx);
+	};
+
+	test("the coverage table carries a workers column sourced from expansion-log.md", () => {
+		const context = gateSection();
+		expect(context).toContain("`workers` column");
+		expect(context).toContain("expansion-log.md");
+	});
+
+	test("covered-with-zero-workers is the same defect as a blank Status", () => {
+		expect(gateSection()).toContain("cannot be `covered`");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// intent-diff finalization — grounded in the production run where I1/I2
+// stayed "Unknown; research pending" / linked claims "Pending" after
+// convergence: the single-snapshot list never named intent-diff.md, so the
+// one artifact that measures "did we answer the intent" froze at Phase 0.
+// ---------------------------------------------------------------------------
+
+describe("intent-diff finalization at convergence", () => {
+	test("single-snapshot write-ordering finalizes intent-diff.md: no row remains unknown without landing in gaps", () => {
+		const idx = skill.indexOf("## Single-snapshot write-ordering");
+		const endIdx = skill.indexOf("## Zero verified claims", idx);
+		const context = skill.slice(idx, endIdx);
+		expect(context).toContain("`intent-diff.md` is finalized from the same snapshot");
+		expect(context).toContain("no row remains `unknown`");
+	});
+});
