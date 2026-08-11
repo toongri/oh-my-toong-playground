@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOK="$SCRIPT_DIR/codex-skill-invocation-gate.sh"
+MARKER_HOOK="$SCRIPT_DIR/codex-skill-invocation-marker.sh"
+WRITE_GUARD="$SCRIPT_DIR/codex-write-guard.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 PROJECT="$TMP/project"
@@ -42,9 +44,16 @@ mkjson() { printf '%s' "$base" | sed "s|PROJECT|$PROJECT|; s|CMD|$1|"; }
 
 # Protected unmarked target denies; exact marker allows.
 if ! denied "$(mkjson "cat $PROJECT/.agents/skills/explain-diff/SKILL.md")"; then echo "protected target did not deny"; exit 1; fi
-touch "$TMP/omt/codex-skill-invocation-marker-sid-explain-diff"
+printf '%s' '{"session_id":"sid","cwd":"'$PROJECT'","prompt":"$explain-diff"}' | OMT_DIR="$TMP/omt" "$MARKER_HOOK"
 allowed "$(mkjson "cat $PROJECT/.agents/skills/explain-diff/SKILL.md")"
 rm -f "$TMP/omt/codex-skill-invocation-marker-sid-explain-diff"
+
+# A forged raw touch is denied by the write guard and must not mint a marker;
+# the protected read remains denied afterwards.
+forged=$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"touch '"$TMP/omt/codex-skill-invocation-marker-sid-explain-diff"'"},"session_id":"sid","cwd":"'"$PROJECT"'"}' | OMT_DIR="$TMP/omt" CODEX_THREAD_ID=sid bash "$WRITE_GUARD")
+printf '%s' "$forged" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null
+[ ! -e "$TMP/omt/codex-skill-invocation-marker-sid-explain-diff" ]
+if ! denied "$(mkjson "cat $PROJECT/.agents/skills/explain-diff/SKILL.md")"; then echo "forged touch bypassed protected read"; exit 1; fi
 if ! denied "$(mkjson "cat $PROJECT/.agents/skills/review-report/SKILL.md")"; then echo "review-report did not deny"; exit 1; fi
 if ! denied "$(mkjson "cat .agents/skills/explain-diff/SKILL.md")"; then echo "direct relative path did not deny"; exit 1; fi
 allowed "$(mkjson "cat $PROJECT/.agents/skills/plain/SKILL.md")"

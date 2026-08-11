@@ -173,6 +173,38 @@ test_qa_redirect_to_ledger_denies() {
     return "$result"
 }
 
+# Current-session invocation markers are protected on every shell write route.
+test_current_marker_shell_writes_denied_and_sibling_allowed() {
+    new_sandbox
+    local marker="$(dirname "$LED")/codex-skill-invocation-marker-cx-explain-diff"
+    local sibling="$(dirname "$LED")/codex-skill-invocation-marker-cxy-explain-diff"
+    local near="$(dirname "$LED")/codex-skill-invocation-marker-cx"
+    local out rc=0 result=0
+
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"touch %s"},"session_id":"cx","cwd":"%s"}' "$marker" "$GITDIR" | run_hook) || rc=$?
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED current-marker-touch: expected deny, got '$out'"
+        result=1
+    fi
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo x > %s"},"session_id":"cx","cwd":"%s"}' "$marker" "$GITDIR" | run_hook) || rc=$?
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED current-marker-redirect: expected deny, got '$out'"
+        result=1
+    fi
+    out=$(printf '{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\\n*** Update File: %s\\n"},"session_id":"cx","cwd":"%s"}' "$marker" "$GITDIR" | run_hook) || rc=$?
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED current-marker-apply-patch: expected deny, got '$out'"
+        result=1
+    fi
+
+    for target in "$sibling" "$near"; do
+        out=$(printf '{"tool_name":"Bash","tool_input":{"command":"touch %s"},"session_id":"cx","cwd":"%s"}' "$target" "$GITDIR" | run_hook) || rc=$?
+        if ! assert_allow "$out" "$rc" "current-marker-sibling"; then result=1; fi
+    done
+    rm -rf "$SBX"
+    return "$result"
+}
+
 # =============================================================================
 # QA -- prose false-positive allowed (header-parser precision). A Bash
 # command merely mentioning "session-ledger" in prose (no write-target
@@ -2680,6 +2712,7 @@ main() {
     run_test test_ac2_bash_embedded_heredoc_denies
     run_test test_ac3_divergent_session_id_halts
     run_test test_qa_redirect_to_ledger_denies
+    run_test test_current_marker_shell_writes_denied_and_sibling_allowed
     run_test test_qa_prose_mention_allows
     run_test test_own_multi_file_patch_denies
     run_test test_own_move_to_ledger_denies
