@@ -258,6 +258,58 @@ describe("diagnose job lifecycle", () => {
 			});
 		} catch {}
 	});
+
+	test("start applies settings.mcps.allow to job metadata and the real codex argv", async () => {
+		const configPath = path.join(tmpDir, "diagnose.config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"review:",
+				"  members:",
+				"    - name: tester",
+				"      command: codex exec",
+				"  settings:",
+				"    timeout: 10",
+				"    mcps:",
+				"      allow:",
+				"        - codegraph",
+			].join("\n"),
+			"utf8",
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		const codexHome = path.join(tmpDir, "codex-home");
+		const binDir = path.join(tmpDir, "bin");
+		fs.mkdirSync(binDir, { recursive: true });
+		fs.mkdirSync(codexHome, { recursive: true });
+		fs.writeFileSync(
+			path.join(codexHome, "config.toml"),
+			'[mcp_servers.codegraph]\ncommand = "stub"\n\n[mcp_servers.blocked]\ncommand = "stub"\n',
+		);
+		const argvPath = path.join(tmpDir, "codex-argv.txt");
+		const stubPath = path.join(binDir, "codex");
+		fs.writeFileSync(stubPath, '#!/bin/sh\nprintf "%s\\n" "$@" > "$STUB_CODEX_ARGV"\n', "utf8");
+		fs.chmodSync(stubPath, 0o755);
+		const env = {
+			...process.env,
+			CODEX_HOME: codexHome,
+			STUB_CODEX_ARGV: argvPath,
+			PATH: `${binDir}:${process.env.PATH || ""}`,
+		};
+		const result = execFileSync(
+			process.execPath,
+			[SCRIPT, "start", "--config", configPath, "--jobs-dir", jobsDir, "--json", "mcp test"],
+			{ stdio: "pipe", env },
+		);
+		const output = JSON.parse(result.toString());
+		const member = output.members[0];
+		expect(member.mcpBlock).toEqual(["blocked"]);
+		for (let i = 0; i < 30 && !fs.existsSync(argvPath); i++)
+			await new Promise((r) => setTimeout(r, 20));
+		expect(fs.existsSync(argvPath)).toBe(true);
+		const argv = fs.readFileSync(argvPath, "utf8").split("\n").filter(Boolean);
+		expect(argv).toContain("mcp_servers.blocked.enabled=false");
+		expect(argv).not.toContain("mcp_servers.codegraph.enabled=false");
+	});
 });
 
 describe("settings fallback 병합", () => {
