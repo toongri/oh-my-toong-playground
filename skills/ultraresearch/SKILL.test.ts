@@ -1084,14 +1084,14 @@ describe("coverage table is persisted, positioned, and single-authority — not 
 		expect(context).toContain("placed above every per-axis section");
 	});
 
-	test("Single-snapshot write-ordering: the table is already in the REPORT.md draft before the REPORT.html render copy is produced", () => {
+	test("Single-snapshot write-ordering: the table is already in the REPORT.md draft before REPORT.html is rendered", () => {
 		const idx = skill.indexOf("## Single-snapshot write-ordering");
 		expect(idx).toBeGreaterThan(-1);
 		const endIdx = skill.indexOf("## Zero verified claims", idx);
 		expect(endIdx).toBeGreaterThan(idx);
 		const context = skill.slice(idx, endIdx);
 		expect(context).toContain(
-			"with the Phase 4 coverage-gate table already in place at the top of the draft before the render copy is produced",
+			"with the Phase 4 coverage-gate table already in place at the top of the draft before rendering REPORT.html",
 		);
 	});
 
@@ -1131,6 +1131,10 @@ describe("REPORT.html expressiveness contract", () => {
 
 	test('the ceiling phrase "render copy of it" no longer defines the deliverable', () => {
 		expect(sectionOf()).not.toContain("render copy of it");
+	});
+
+	test("execution guidance never calls REPORT.html a render copy", () => {
+		expect(skill).not.toMatch(/render copy/);
 	});
 
 	test("content-parity floor: every citation link in REPORT.md appears in REPORT.html, verified by counting", () => {
