@@ -213,7 +213,7 @@ flowchart TB
 
 **목적**: 아키텍처 분석, 버그 디버깅, 근본 원인 식별, 기술적 권고를 제공합니다.
 
-**핵심 제약**: **읽기 전용입니다 — 진단하되 구현하지 않습니다.** 분석 요청을 detached 워커(Hephaestus)에 위임하고 폴링으로 결과를 거둡니다. 워커는 서브에이전트 스폰과 OMT 스킬 로딩이 차단된 상태로 돕니다(`settings.deny`). 워커가 불가하면 in-session 분석으로 폴백합니다.
+**핵심 제약**: **읽기 전용입니다 — 진단하되 구현하지 않습니다.** 분석 요청을 `codex exec`로 실행하는 detached Codex 워커(`gpt-5.6-sol`, 높은 추론 강도)에 위임하고 폴링으로 결과를 거둡니다. 워커를 사용할 수 없거나 CLI 누락·타임아웃·오류·취소 등으로 실패하면 in-session 분석으로 폴백합니다. 워커는 generic-job이 `settings.deny`와 `settings.mcps.allow`를 함께 집행하며, MCP allowlist는 opt-in/fail-closed로 동작합니다. 현재 diagnose는 `codegraph`만 허용합니다.
 
 **언제 쓰나**: "원인 분석", "뭐가 문제", "아키텍처 리뷰", "조사해" 같은 요청에 씁니다. 판정(PASS/FAIL)이 아니라 분석 보고서가 필요할 때입니다. (위임 시에는 oracle 에이전트로 호출합니다.)
 

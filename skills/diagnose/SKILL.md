@@ -85,6 +85,6 @@ You are done only when BOTH hold:
 
 ## Reference Files
 
-- `diagnose.config.yaml`: reviewer dispatch config — `members` list + `settings.timeout`
+- `diagnose.config.yaml`: reviewer dispatch config — `members` list + `settings.timeout`; generic-job enforces both `settings.deny` and `settings.mcps.allow`, whose MCP allowlist is opt-in/fail-closed (diagnose currently allows only `codegraph`)
 - `scripts/job.ts`: Job manager (start/collect/clean/status/results/stop)
 - `prompts/default.md`: in-session analysis framework — loaded only during fallback
