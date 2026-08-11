@@ -40,6 +40,27 @@ test_protected_explicit_injects_full_body() {
     printf '%s' "$ctx" | grep -qF '[CODEX EXPLICIT SKILL LOADED: secret]' && printf '%s' "$ctx" | grep -qF 'FULL_SENTINEL_BODY'
 }
 
+test_inline_comment_true_explicit_injects_full_body() {
+    setup
+    mkdir -p "$REPO/.agents/skills/inline-comment"
+    printf '%s\n' '---' 'disable-model-invocation: true # protected' '---' 'INLINE_COMMENT_SENTINEL' > "$REPO/.agents/skills/inline-comment/SKILL.md"
+    local out ctx
+    out=$(run_prompt "$(jq -nc --arg cwd "$REPO" '{session_id:"sid",cwd:$cwd,prompt:"use $inline-comment"}')")
+    ctx=$(context_from "$out")
+    teardown
+    printf '%s' "$ctx" | grep -qF '[CODEX EXPLICIT SKILL LOADED: inline-comment]' && printf '%s' "$ctx" | grep -qF 'INLINE_COMMENT_SENTINEL'
+}
+
+test_quoted_true_is_not_protected() {
+    setup
+    mkdir -p "$REPO/.agents/skills/quoted"
+    printf '%s\n' '---' 'disable-model-invocation: "true" # protected' '---' 'QUOTED_SENTINEL_BODY' > "$REPO/.agents/skills/quoted/SKILL.md"
+    local out
+    out=$(run_prompt "$(jq -nc --arg cwd "$REPO" '{session_id:"sid",cwd:$cwd,prompt:"use $quoted"}')")
+    teardown
+    [ -z "$(context_from "$out")" ]
+}
+
 test_nonprotected_does_not_inject() {
     setup
     mkdir -p "$REPO/.agents/skills/plain"
@@ -162,6 +183,8 @@ main() {
     run_test test_unsafe_cwd_fails_open
     run_test test_marker_idempotence_preserves_content
     run_test test_protected_explicit_injects_full_body
+    run_test test_inline_comment_true_explicit_injects_full_body
+    run_test test_quoted_true_is_not_protected
     run_test test_nonprotected_does_not_inject
     run_test test_project_local_precedes_global_and_global_fallback
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

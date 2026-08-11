@@ -5,7 +5,7 @@
 # exact scalar `disable-model-invocation: true` (matching the PreToolUse gate).
 skill_core_is_model_disabled() {
     local target="$1"
-    awk 'NR==1 { if ($0 != "---") exit 2; next } !closed { if ($0 == "---") { closed=1; next } if ($0 ~ /^[[:space:]]*disable-model-invocation:[[:space:]]*true[[:space:]]*$/) found=1 } END { if (!closed) exit 2; if (found) exit 0; exit 1 }' "$target"
+    awk 'NR==1 { if ($0 != "---") exit 2; next } !closed { if ($0 == "---") { closed=1; next } if ($0 ~ /^[[:space:]]*disable-model-invocation:[[:space:]]*true([[:space:]]+#[^[:cntrl:]]*)?[[:space:]]*$/) found=1 } END { if (!closed) exit 2; if (found) exit 0; exit 1 }' "$target"
 }
 
 # Prints the nearest project-local skill path, then falls back to HOME.
