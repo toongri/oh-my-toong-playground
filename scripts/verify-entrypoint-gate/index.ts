@@ -11,9 +11,10 @@ import { fileURLToPath } from "node:url";
  *
  *   pnpm <entrypoint> [<app name>] [<allowed_turbo_opts>...] [-- <runner args>]
  *
- * where `<entrypoint>` is drawn from `entrypoints ∩ root package.json.scripts`
- * — the policy yaml's declared list intersected with what the target repo's
- * root package.json actually exposes right now. Neither side alone is the
+ * where `<entrypoint>` is drawn from `(entrypoints − deniedEntrypoints) ∩ root
+ * package.json.scripts` — the policy yaml's allowed list (minus any local
+ * overlay bans) intersected with what the target repo's root package.json
+ * actually exposes right now. Neither side alone is the
  * whitelist: package.json alone would auto-allow any future risky script
  * (e.g. a `test:all`), and the policy list alone drifts the moment the repo
  * renames or removes a script (the verify:quick/verify:full removal that
@@ -72,10 +73,10 @@ import { fileURLToPath } from "node:url";
  *      "allowed", or `cd /tmp && npx vitest` becomes a free bypass).
  *   4. `cwd` must BE that workspace root, not a subdirectory of it (running
  *      from `apps/admin` bypasses the shape check other rules assume).
- *   5. Compute `entrypoints ∩ package.json.scripts` — this run's real
- *      whitelist. `deniedEntrypoints` names are deliberately NOT unioned in
- *      here (unlike step 1) — they must never be able to match the allowed
- *      shape, only ever be detected by it.
+ *   5. Compute `(entrypoints − deniedEntrypoints) ∩ package.json.scripts` —
+ *      this run's real whitelist. `deniedEntrypoints` names are deliberately
+ *      NOT unioned in here (unlike step 1) — they must never be able to match
+ *      the allowed shape, only ever be detected by it.
  *   6. Does the command match the allowed shape exactly, using that
  *      whitelist? A wrapper (`command`/`env`/`bash -c`/`eval`/...) can make
  *      step 1 detect an attempt without ever making step 6's shape match —
@@ -201,7 +202,7 @@ export function decide(input: DecideInput): DecideResult {
 	// deniedEntrypoints — a denied name must still register as a verification
 	// attempt, or it would silently fall out of the gate's sight entirely (see
 	// this file's header comment on the entrypoints/deniedEntrypoints split).
-	// Step 6's allowed-shape intersection below stays entrypoints-only; the
+	// Step 6's allowed-shape intersection below subtracts denied names; the
 	// union is used ONLY for this detection call.
 	const detectionEntrypoints = [...input.entrypoints, ...input.deniedEntrypoints];
 	const segments = splitSegments(input.command);
@@ -234,10 +235,12 @@ export function decide(input: DecideInput): DecideResult {
 		};
 	}
 
-	// Step 6's whitelist is entrypoints∩scripts only — a deniedEntrypoints name
-	// never enters this intersection, so it can never match the allowed shape
-	// no matter what else is true about the command.
-	const intersection = input.entrypoints.filter((entrypoint) => input.scripts.includes(entrypoint));
+	// Step 6's whitelist is (entrypoints − deniedEntrypoints)∩scripts. Local
+	// overlays replace keys independently, so a denied name may still be present
+	// in the base entrypoints list; subtract it explicitly before shape matching.
+	const intersection = input.entrypoints.filter(
+		(entrypoint) => !input.deniedEntrypoints.includes(entrypoint) && input.scripts.includes(entrypoint),
+	);
 	if (matchesAllowedShape(input.command, intersection, input.allowedTurboOpts)) {
 		return { decision: "passthrough" };
 	}
