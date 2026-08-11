@@ -1,7 +1,6 @@
 #!/bin/bash
 # Codex explain-diff seed hook. Codex has no structured Skill invocation event,
-# so seed when the platform's $explain-diff mention scanner submits a prompt or
-# when the deployed skill is opened through a shell tool.
+# so seed when the platform's $explain-diff mention scanner submits a prompt.
 #
 # The seed is what arms the artifact guard: that guard fails CLOSED, so without
 # a state file the skill's very first document write would be denied. The
@@ -30,16 +29,6 @@ if [ "$event" = "UserPromptSubmit" ]; then
     if printf '%s' "$prompt" | grep -Eq '(^|[^[:alnum:]_])\$explain-diff([^[:alnum:]_-]|$)'; then
         trigger=true
     fi
-elif [ "$event" = "PreToolUse" ]; then
-    tool_name=$(printf '%s' "$input" | jq -r '.tool_name // .toolName // empty' 2>/dev/null) || tool_name=""
-    case "$(printf '%s' "$tool_name" | tr '[:upper:]' '[:lower:]')" in
-        bash|exec_command|shell_command)
-            command=$(printf '%s' "$input" | jq -r '.tool_input.cmd // .tool_input.command // empty' 2>/dev/null) || command=""
-            case "$command" in
-                *.agents/skills/explain-diff/SKILL.md*) trigger=true ;;
-            esac
-            ;;
-    esac
 fi
 [ "$trigger" = true ] || exit 0
 
