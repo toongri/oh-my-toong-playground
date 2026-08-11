@@ -616,6 +616,42 @@ test_qa_state_other_session_allows() {
     return 1
 }
 
+# Current-session skill-invocation markers are authorization state. Any
+# concrete skill suffix and suffix glob in this session's namespace must be
+# denied, while neighboring session IDs and near-prefix siblings remain
+# allowed.
+test_marker_current_session_suffix_denies() {
+    local out
+    out=$(printf '%s\n' "$OD/codex-skill-invocation-marker-$SID-explain-diff" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -q 'permissionDecision":"deny'; then return 0; fi
+    echo "ASSERTION FAILED marker-current-suffix: expected deny, got '$out'"
+    return 1
+}
+
+test_marker_current_session_suffix_glob_denies() {
+    local out
+    out=$(printf '%s\n' "$OD/codex-skill-invocation-marker-$SID-*" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -q 'permissionDecision":"deny'; then return 0; fi
+    echo "ASSERTION FAILED marker-current-suffix-glob: expected deny, got '$out'"
+    return 1
+}
+
+test_marker_other_session_allows() {
+    local out
+    out=$(printf '%s\n' "$OD/codex-skill-invocation-marker-other-explain-diff" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED marker-other-session: expected allow, got '$out'"
+    return 1
+}
+
+test_marker_sid_prefix_sibling_allows() {
+    local out
+    out=$(printf '%s\n' "$OD/codex-skill-invocation-marker-${SID}x-explain-diff" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED marker-sid-prefix-sibling: expected allow, got '$out'"
+    return 1
+}
+
 # =============================================================================
 # QA glob bypass (CONFIRMED P2 defect) -- an unquoted QA-state glob never
 # EXACT-string-matches the current-session state path, but `rm
@@ -1228,6 +1264,10 @@ main() {
     run_test test_user_authorized_qa_record_cell_waive_collision_denies
     run_test test_qa_state_exact_path_denies
     run_test test_qa_state_other_session_allows
+    run_test test_marker_current_session_suffix_denies
+    run_test test_marker_current_session_suffix_glob_denies
+    run_test test_marker_other_session_allows
+    run_test test_marker_sid_prefix_sibling_allows
     run_test test_qa_state_glob_current_session_denies
     run_test test_qa_state_glob_other_session_allows
     run_test test_qa_state_glob_nonmatching_allows
