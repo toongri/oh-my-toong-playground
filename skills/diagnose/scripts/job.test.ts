@@ -95,7 +95,7 @@ describe("diagnose job lifecycle", () => {
 		} catch {}
 	});
 
-	test("clean removes jobDir", () => {
+	test("clean removes jobDir", async () => {
 		const configPath = path.join(tmpDir, "diagnose.config.yaml");
 		writeConfig(configPath);
 		const jobsDir = path.join(tmpDir, "jobs");
@@ -123,6 +123,33 @@ describe("diagnose job lifecycle", () => {
 		try {
 			execFileSync(process.execPath, [SCRIPT, "stop", jobDir], { stdio: "pipe" });
 		} catch {}
+
+		// stop can observe a queued worker (or a running worker before its pid is
+		// persisted) and return before that worker writes its terminal status.
+		// Wait with a bounded, non-busy poll so clean does not race the status
+		// transition and refuse an otherwise safe deletion.
+		const pollStartedAt = Date.now();
+		const pollTimeoutMs = 5_000;
+		const pollIntervalMs = 50;
+		let overallState = "";
+		while (Date.now() - pollStartedAt < pollTimeoutMs) {
+			try {
+				const statusResult = execFileSync(process.execPath, [SCRIPT, "status", jobDir], {
+					stdio: "pipe",
+				});
+				const status = JSON.parse(statusResult.toString()) as { overallState?: unknown };
+				overallState = typeof status.overallState === "string" ? status.overallState : "";
+			} catch {}
+			if (overallState === "done") break;
+			if (Date.now() - pollStartedAt >= pollTimeoutMs) break;
+			await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+		}
+		if (overallState !== "done") {
+			throw new Error(
+				`clean lifecycle: worker status did not become terminal within ${pollTimeoutMs}ms (overallState=${overallState || "unavailable"})`,
+			);
+		}
+
 		execFileSync(process.execPath, [SCRIPT, "clean", jobDir, "--jobs-dir", jobsDir], {
 			stdio: "pipe",
 		});
