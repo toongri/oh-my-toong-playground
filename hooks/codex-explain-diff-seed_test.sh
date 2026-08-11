@@ -86,10 +86,21 @@ test_eval_sibling_mention_does_not_seed() {
     return "$ok"
 }
 
-test_yaml_registers_both_events() {
-    local count
-    count=$(awk '/component: codex-explain-diff-seed.sh/{n++} END{print n+0}' "$SCRIPT_DIR/../codex.yaml")
-    [ "$count" -eq 2 ]
+test_yaml_registers_user_prompt_submit_only() {
+    local user_prompt_count pre_tool_count
+    user_prompt_count=$(awk '
+        $0 == "  UserPromptSubmit:" { infield=1; next }
+        infield && /^  [A-Za-z]/ { infield=0 }
+        infield && $0 ~ /component: codex-explain-diff-seed\.sh/ { n++ }
+        END { print n+0 }
+    ' "$SCRIPT_DIR/../codex.yaml")
+    pre_tool_count=$(awk '
+        $0 == "  PreToolUse:" { infield=1; next }
+        infield && /^  [A-Za-z]/ { infield=0 }
+        infield && $0 ~ /component: codex-explain-diff-seed\.sh/ { n++ }
+        END { print n+0 }
+    ' "$SCRIPT_DIR/../codex.yaml")
+    [ "$user_prompt_count" -eq 1 ] && [ "$pre_tool_count" -eq 0 ]
 }
 
 main() {
@@ -98,7 +109,7 @@ main() {
     run_test test_skill_open_does_not_seed
     run_test test_unrelated_prompt_does_not_seed
     run_test test_eval_sibling_mention_does_not_seed
-    run_test test_yaml_registers_both_events
+    run_test test_yaml_registers_user_prompt_submit_only
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
     [ "$TESTS_FAILED" -eq 0 ]
 }
