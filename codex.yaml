@@ -80,6 +80,12 @@ hooks:
     - component: codex-qa-seed.sh
       type: command
       timeout: 10
+    # Record every explicitly mentioned skill sigil at prompt time so the
+    # PreToolUse frontmatter gate can distinguish a user invocation from a
+    # shell command that merely opens a protected SKILL.md.
+    - component: codex-skill-invocation-marker.sh
+      type: command
+      timeout: 10
     - component: codex-explain-diff-seed.sh
       type: command
       timeout: 10
@@ -94,7 +100,10 @@ hooks:
       type: command
       matcher: "Bash|bash|exec_command|shell_command"
       timeout: 10
-    - component: codex-explain-diff-seed.sh
+    # Enforce disable-model-invocation frontmatter for protected skills only
+    # when a shell tool attempts to read them; the prompt marker above supplies
+    # the exact per-session/per-skill authorization evidence.
+    - component: codex-skill-invocation-gate.sh
       type: command
       matcher: "Bash|bash|exec_command|shell_command"
       timeout: 10

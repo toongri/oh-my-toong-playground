@@ -189,6 +189,45 @@ test_codex_yaml_has_pretooluse_guard() {
     return 0
 }
 
+# Generic skill invocation tracking runs at prompt submission, while the
+# frontmatter gate runs before shell tools. The marker must therefore be
+# registered exactly once under UserPromptSubmit, and the gate exactly once
+# under PreToolUse with the full set of Codex shell-tool aliases. The legacy
+# explain-diff seed remains a prompt-only state seeder; registering it under
+# PreToolUse would duplicate work and seed from arbitrary tool traffic.
+test_codex_skill_invocation_hooks_registered_with_runtime_matcher() {
+    local user_block pre_block marker_count seed_count gate_count gate_matcher gate_timeout
+    user_block=$(_extract_hook_event_block "$REPO_DIR/codex.yaml" "UserPromptSubmit")
+    pre_block=$(_extract_hook_event_block "$REPO_DIR/codex.yaml" "PreToolUse")
+
+    marker_count=$(echo "$user_block" | grep -cF 'component: codex-skill-invocation-marker.sh' || true)
+    seed_count=$(echo "$user_block" | grep -cF 'component: codex-explain-diff-seed.sh' || true)
+    gate_count=$(echo "$pre_block" | grep -cF 'component: codex-skill-invocation-gate.sh' || true)
+    [ "$marker_count" -eq 1 ] || { echo "ASSERTION FAILED: marker must be registered once under UserPromptSubmit"; return 1; }
+    [ "$seed_count" -eq 1 ] || { echo "ASSERTION FAILED: explain-diff seed must remain registered once under UserPromptSubmit"; return 1; }
+    [ "$gate_count" -eq 1 ] || { echo "ASSERTION FAILED: invocation gate must be registered once under PreToolUse"; return 1; }
+
+    gate_matcher=$(echo "$pre_block" | grep -A2 'component: codex-skill-invocation-gate.sh' | grep 'matcher:' | sed -E 's/^[[:space:]]*matcher:[[:space:]]*"(.*)"[[:space:]]*$/\1/')
+    gate_timeout=$(echo "$pre_block" | grep -A3 'component: codex-skill-invocation-gate.sh' | grep 'timeout:' | sed -E 's/.*timeout:[[:space:]]*([0-9]+).*/\1/')
+    [ "$gate_matcher" = 'Bash|bash|exec_command|shell_command' ] || { echo "ASSERTION FAILED: invocation gate matcher must list all Codex shell aliases (got: ${gate_matcher:-<none>})"; return 1; }
+    [ "$gate_timeout" = 10 ] || { echo "ASSERTION FAILED: invocation gate timeout must be 10 (got: ${gate_timeout:-<none>})"; return 1; }
+
+    local tool
+    for tool in Bash bash exec_command shell_command; do
+        if ! printf '%s\n' "$tool" | grep -qE "^${gate_matcher}$"; then
+            echo "ASSERTION FAILED: invocation gate matcher \"$gate_matcher\" must full-match runtime tool \"$tool\""
+            return 1
+        fi
+    done
+}
+
+test_codex_explain_diff_seed_not_registered_under_pretooluse() {
+    local pre_block count
+    pre_block=$(_extract_hook_event_block "$REPO_DIR/codex.yaml" "PreToolUse")
+    count=$(echo "$pre_block" | grep -cF 'component: codex-explain-diff-seed.sh' || true)
+    [ "$count" -eq 0 ] || { echo "ASSERTION FAILED: explain-diff seed must not be registered under PreToolUse"; return 1; }
+}
+
 # =============================================================================
 # The six core Claude hooks live in the TRACKED root claude.yaml, under the
 # right event -- never only in gitignored claude.local.yaml (invariant (a)).
@@ -478,6 +517,8 @@ main() {
     run_test test_session_start_and_write_guard_pair_witnessed_at_least_once
     run_test test_precompact_removed_from_all_targets
     run_test test_codex_yaml_has_pretooluse_guard
+    run_test test_codex_skill_invocation_hooks_registered_with_runtime_matcher
+    run_test test_codex_explain_diff_seed_not_registered_under_pretooluse
     run_test test_core_claude_hooks_registered_in_tracked_root_yaml
     run_test test_orphan_reaper_registered_in_tracked_root_yaml
     run_test test_core_claude_hooks_not_duplicated_per_project
