@@ -7,7 +7,7 @@ description: Use when asked to analyze architecture, debug issues, identify root
 
 ## Overview
 
-Delegates architecture analysis and debugging to the Hephaestus opencode agent, which runs as a detached worker you observe by polling. This skill is finished only once you have pulled a definitive answer out of the job — nothing notifies you when the worker is done. If the agent is unavailable (CLI not installed, timeout, error, or canceled), falls back to in-session analysis using the in-session fallback framework.
+Delegates architecture analysis and debugging to a codex analyst, which runs as a detached worker you observe by polling. This skill is finished only once you have pulled a definitive answer out of the job — nothing notifies you when the worker is done. If the agent is unavailable (CLI not installed, timeout, error, or canceled), falls back to in-session analysis using the in-session fallback framework.
 
 ---
 
@@ -85,6 +85,6 @@ You are done only when BOTH hold:
 
 ## Reference Files
 
-- `diagnose.config.yaml`: reviewer dispatch config — `members` list + `settings.timeout`
+- `diagnose.config.yaml`: reviewer dispatch config — `members` list + `settings.timeout`; generic-job enforces both `settings.deny` and `settings.mcps.allow`, whose MCP allowlist is opt-in/fail-closed (diagnose currently allows only `codegraph`)
 - `scripts/job.ts`: Job manager (start/collect/clean/status/results/stop)
 - `prompts/default.md`: in-session analysis framework — loaded only during fallback

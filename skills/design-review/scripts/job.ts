@@ -17,6 +17,7 @@ import {
 	assertMembersOrExit,
 	assertDenyEnforceable,
 	assertDenyShape,
+	prepareMcpEntities,
 	extractDenySkills,
 	extractDenySubagents,
 	computeStatus as frameworkComputeStatus,
@@ -153,6 +154,10 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 	const denySkills = extractDenySkills(settings);
 	const denySubagents = extractDenySubagents(settings);
 	assertDenyEnforceable(members, denySkills, DESIGN_REVIEW_CONFIG, configPath, denySubagents);
+	// Resolve the Codex MCP allowlist before creating any job artifacts. The
+	// prepared entities carry the same per-member mcpBlock into both metadata
+	// and worker dispatch, while preserving each member's env/deny settings.
+	const preparedMembers = prepareMcpEntities(settings, members, DESIGN_REVIEW_CONFIG, configPath);
 
 	const jobId = generateJobId();
 	const jobDir = path.join(jobsDir, `themis-${jobId}`);
@@ -170,7 +175,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 			denySkills,
 			denySubagents,
 		},
-		members: members.map((m) => ({
+		members: preparedMembers.map((m) => ({
 			name: String(m.name),
 			command: String(m.command),
 			emoji: m.emoji ? String(m.emoji) : null,
@@ -178,12 +183,14 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 			model: m.model || null,
 			effort_level: m.effort_level || null,
 			output_format: m.output_format || null,
+			env: m.env ?? {},
+			mcpBlock: m.mcpBlock ?? [],
 		})),
 	};
 	atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
 
 	frameworkSpawnWorkers({
-		entities: members.map((m) => ({ ...m, deny: denySkills, denySubagents })),
+		entities: preparedMembers.map((m) => ({ ...m, deny: denySkills, denySubagents })),
 		workerPath: WORKER_PATH,
 		jobDir,
 		entitiesDir: reviewersDir,

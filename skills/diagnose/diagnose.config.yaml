@@ -1,12 +1,17 @@
 # Diagnose Configuration
-# Single-reviewer configuration for opencode Hephaestus agent.
+# External dispatch: one codex analyst (gpt-5.6-sol, high reasoning) via `codex exec`.
+# model + effort_level + output_format resolve to:
+#   codex exec -m gpt-5.6-sol -c model_reasoning_effort=high --json --skip-git-repo-check
+# codex uses bare model ids (no `openai/` prefix).
 
 review:
   members:
-    - name: hephaestus
-      command: opencode run --agent "Hephaestus - Deep Agent"
+    - name: gpt
+      command: codex exec
       emoji: "🔨"
       color: "BLUE"
+      model: "gpt-5.6-sol"
+      effort_level: "high"
       output_format: json
 
   settings:
@@ -14,7 +19,7 @@ review:
     deny:
       # Subagent axis: the analyst diagnoses alone. Spawning is a second fan-out beneath this
       # one — unbudgeted cost, and findings no analysis prompt shaped. Translated per member CLI
-      # by `buildAugmentedCommand` (opencode: `permission.task: deny`); a member on a CLI with
+      # by `buildAugmentedCommand` (codex: `-c agents.enabled=false`); a member on a CLI with
       # no such lever fails `start` rather than running unguarded.
       subagents: true
       # Three separate reasons, not one list: (1) self-recursion fan-out guard, 3 skills — this
@@ -75,3 +80,19 @@ review:
         - ultraresearch
         - visual-qa
         - writing-skills
+    mcps:
+      # This analyst's codex process inherits every MCP server declared in
+      # ~/.codex/config.toml regardless of whether it's used. Only codegraph is
+      # used — it's how the analyst grounds a root cause in the real call graph
+      # instead of a grep/read guess, which is the whole difference between a
+      # named cause and a plausible one. Unlisted here means blocked, for every
+      # server this engine can enumerate: this allowlist is opt-in (fail-closed),
+      # the opposite default from `deny.skills` above — an unspecified `mcps` or
+      # `mcps.allow` blocks every server `enumerateConfiguredMcpServers`
+      # (lib/generic-job.ts) enumerates from config.toml. Two carve-outs in that
+      # same function: a server under a quoted TOML header
+      # (`[mcp_servers."weird name"]`) is left unenumerated and stays enabled —
+      # its name can't be passed safely as a `-c mcp_servers.<name>.enabled=false`
+      # argument — and an unreadable config.toml fails OPEN.
+      allow:
+        - codegraph

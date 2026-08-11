@@ -46,6 +46,7 @@ import {
 	assertMcpAllowShape,
 	enumerateConfiguredMcpServers,
 	computeMcpBlockList,
+	prepareMcpEntities,
 	findOrphanJobs,
 	reapOrphanJobs,
 	doctorOrphanJobs,
@@ -907,6 +908,66 @@ describe("computeMcpBlockList", () => {
 		for (const name of result) {
 			expect(["codegraph", "linear"]).toContain(name);
 		}
+	});
+});
+
+describe("prepareMcpEntities", () => {
+	let tmpDir: string;
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+	});
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("malformed mcps.allow is rejected through assertMcpAllowShape", () => {
+		const settings = { mcps: { allow: ["bad.name"] } };
+		const originalExit = process.exit;
+		try {
+			(process as any).exit = (code?: number) => {
+				throw new Error(`process.exit(${code})`);
+			};
+			expect(() =>
+				prepareMcpEntities(settings, [], councilConfig, "/tmp/config.yaml", tmpDir),
+			).toThrow("process.exit(1)");
+		} finally {
+			process.exit = originalExit;
+		}
+	});
+
+	test("computes blocks per member CODEX_HOME and preserves input", () => {
+		const homeA = path.join(tmpDir, "a");
+		const homeB = path.join(tmpDir, "b");
+		fs.mkdirSync(homeA);
+		fs.mkdirSync(homeB);
+		fs.writeFileSync(path.join(homeA, "config.toml"), "[mcp_servers.alpha]\n[mcp_servers.shared]\n");
+		fs.writeFileSync(path.join(homeB, "config.toml"), "[mcp_servers.beta]\n[mcp_servers.shared]\n");
+		const settings = { mcps: { allow: ["shared"] } };
+		const entities = [
+			{ name: "a", command: "codex exec", env: { CODEX_HOME: homeA } },
+			{ name: "b", command: "codex exec", env: { CODEX_HOME: homeB } },
+			{ name: "c", command: "claude -p" },
+		];
+		const snapshot = structuredClone(entities);
+		const result = prepareMcpEntities(settings, entities, councilConfig, "/tmp/config.yaml", tmpDir);
+		expect(result).toEqual([
+			{ ...entities[0], mcpBlock: ["alpha"] },
+			{ ...entities[1], mcpBlock: ["beta"] },
+			{ ...entities[2], mcpBlock: [] },
+		]);
+		expect(entities).toEqual(snapshot);
+	});
+
+	test("uses conductor fallback for codex members without CODEX_HOME", () => {
+		fs.writeFileSync(path.join(tmpDir, "config.toml"), "[mcp_servers.alpha]\n");
+		const result = prepareMcpEntities(
+			{ mcps: { allow: [] } },
+			[{ name: "a", command: "codex exec" }],
+			councilConfig,
+			"/tmp/config.yaml",
+			tmpDir,
+		);
+		expect(result[0].mcpBlock).toEqual(["alpha"]);
 	});
 });
 
