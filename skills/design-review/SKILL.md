@@ -83,6 +83,6 @@ You are done only when BOTH hold:
 
 ## Reference Files
 
-- `design-review.config.yaml`: Job configuration — `members` list (each entry needs `name` and `command`) and `settings.timeout` (seconds)
+- `design-review.config.yaml`: Job configuration — `members` list (each entry needs `name` and `command`) and `settings.timeout` (seconds). `generic-job` enforces both `settings.deny` and `settings.mcps.allow`; the MCP allowlist is opt-in and fail-closed, and the current configuration allows only `codegraph`.
 - `scripts/job.ts`: Job manager (start/collect/clean/status/results/stop)
 - `prompts/default.md`: in-session analysis framework — loaded only during fallback

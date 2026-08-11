@@ -99,7 +99,7 @@ oh-my-toong's review and quality skills systematically verify the completeness o
 - Architectural considerations — boundaries, dependencies, scalability
 - Builds the strongest counter-argument, then provides counterpoints to it
 
-**Workflow**: By default, dispatches analysis to a Codex `gpt-5.6-sol` member with `high` reasoning via a job. The member runs with subagent spawning and OMT skill loading blocked (`settings.deny`). Falls back to in-session analysis if no member is available (`missing_cli`, timeout, empty config).
+**Workflow**: By default, dispatches analysis to a Codex `gpt-5.6-sol` member with `high` reasoning via a job. `generic-job` enforces both `settings.deny` and `settings.mcps.allow` when running the member. The MCP allowlist is opt-in and fail-closed; the current `design-review.config.yaml` allows only `codegraph`. Falls back to in-session analysis if no member is available (`missing_cli`, timeout, empty config).
 
 **When to use**: Architecture decisions, implementation plan reviews, tradeoff analysis. Trigger phrases: "design review", "plan review", "review the plan", "architectural soundness", "설계 검토", "플랜 리뷰", "아키텍처 건전성", "트레이드오프 분석".
 
