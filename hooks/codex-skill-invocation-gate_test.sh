@@ -69,7 +69,7 @@ rm -f "$TMP/omt/codex-skill-invocation-marker-sid-explain-diff"
 
 # A forged raw touch is denied by the write guard and must not mint a marker;
 # the protected read remains denied afterwards.
-forged=$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"touch '"$TMP/omt/codex-skill-invocation-marker-sid-explain-diff"'"},"session_id":"sid","cwd":"'"$PROJECT"'"}' | OMT_DIR="$TMP/omt" CODEX_THREAD_ID=sid bash "$WRITE_GUARD")
+forged=$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"touch '"$TMP/omt/codex-skill-invocation-marker-sid-explain-diff"'"},"session_id":"sid","cwd":"'"$PROJECT"'"}' | env -u OMT_SESSION_ID OMT_DIR="$TMP/omt" CODEX_THREAD_ID=sid bash "$WRITE_GUARD")
 printf '%s' "$forged" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null
 [ ! -e "$TMP/omt/codex-skill-invocation-marker-sid-explain-diff" ]
 if ! denied "$(mkjson "cat $PROJECT/.agents/skills/explain-diff/SKILL.md")"; then echo "forged touch bypassed protected read"; exit 1; fi
