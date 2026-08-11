@@ -60,7 +60,7 @@ TypeScript DB 마이그레이션 라이브러리 질의로 동일 조건 2회 �
 
 ## 특이 기록
 
-- `baselines/control/rep4/DESIGN.md`: 해당 rep이 REPORT.html 외에 자발적으로 만든
+- `baselines/control/rep5/DESIGN.md`: 해당 rep이 REPORT.html 외에 자발적으로 만든
   부산물. 출력 그대로 보존.
 - `baselines/in4-new/`·`in4-new2/`의 `REPORT.md`: 이 시나리오는 커버리지 판정이
   리포트 표까지 흘러가는지 보므로 수정된 REPORT.md도 전달물이다 (in4-old는
