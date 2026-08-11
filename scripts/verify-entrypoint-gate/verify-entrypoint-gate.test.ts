@@ -518,6 +518,27 @@ const DENIED_TABLE: Row[] = [
 ];
 
 describe("decide — denied_entrypoints policy axis", () => {
+	test("overlay-only deny still wins when the base entrypoints list also contains the denied name", () => {
+		const result = decide({
+			command: "pnpm verify",
+			cwd: WORKSPACE_ROOT,
+			workspaceRoot: WORKSPACE_ROOT,
+			scripts: REPO_SCRIPTS,
+			entrypoints: POLICY.entrypoints,
+			deniedEntrypoints: ["verify"],
+			allowedTurboOpts: POLICY.allowedTurboOpts,
+			runners: POLICY.runners,
+			via: POLICY.via,
+		});
+		expect(result.decision).toBe("deny");
+		if (result.decision === "deny") {
+			expect(result.reason).toContain("verify");
+			expect(result.reason).toContain("test");
+			expect(result.reason).toContain("check");
+			expect(result.reason).toContain("lint");
+		}
+	});
+
 	test.each(DENIED_TABLE)("$command → $expect ($note)", (row) => {
 		const result = decide({
 			command: row.command,
