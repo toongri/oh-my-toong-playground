@@ -17,6 +17,7 @@ import {
 	assertMembersOrExit,
 	assertDenyEnforceable,
 	assertDenyShape,
+	prepareMcpEntities,
 	extractDenySkills,
 	extractDenySubagents,
 	computeStatus as frameworkComputeStatus,
@@ -116,10 +117,12 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 	const defaultReview: RawReviewConfig = {
 		members: [
 			{
-				name: "hephaestus",
-				command: 'opencode run --agent "Hephaestus - Deep Agent"',
+				name: "gpt",
+				command: "codex exec",
 				emoji: "🔨",
 				color: "BLUE",
+				model: "gpt-5.6-sol",
+				effort_level: "high",
 				output_format: "json",
 			},
 		],
@@ -159,6 +162,10 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 	const denySkills = extractDenySkills(settings);
 	const denySubagents = extractDenySubagents(settings);
 	assertDenyEnforceable(members, denySkills, DIAGNOSE_CONFIG, configPath, denySubagents);
+	// Resolve the Codex MCP allowlist before creating any job artifacts. The
+	// prepared entities carry the same per-member mcpBlock into both metadata
+	// and worker dispatch, while preserving each member's env/deny settings.
+	const preparedMembers = prepareMcpEntities(settings, members, DIAGNOSE_CONFIG, configPath);
 
 	const jobId = generateJobId();
 	const jobDir = path.join(jobsDir, `diagnose-${jobId}`);
@@ -176,7 +183,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 			denySkills,
 			denySubagents,
 		},
-		members: members.map((m) => ({
+		members: preparedMembers.map((m) => ({
 			name: String(m.name),
 			command: String(m.command),
 			emoji: m.emoji ? String(m.emoji) : null,
@@ -185,12 +192,13 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 			effort_level: m.effort_level || null,
 			output_format: m.output_format || null,
 			env: m.env ?? {},
+			mcpBlock: m.mcpBlock ?? [],
 		})),
 	};
 	atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
 
 	frameworkSpawnWorkers({
-		entities: members.map((m) => ({ ...m, deny: denySkills, denySubagents })),
+		entities: preparedMembers.map((m) => ({ ...m, deny: denySkills, denySubagents })),
 		workerPath: WORKER_PATH,
 		jobDir,
 		entitiesDir: reviewersDir,

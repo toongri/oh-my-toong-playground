@@ -482,7 +482,7 @@ When the Design Interview phase has exited with all design branches resolved, or
 
 2. **Write to file**: `$OMT_DIR/deep-interview/{slug}.md`
 
-**Inline self-review** (after writing), 5 checks: placeholder / consistency / scope / non-goal-decider / ambiguity — confirm no unfilled placeholders, no section contradictions, full interview coverage, every Non-Goals bullet carries a decider, no ambiguous text remains.
+**Inline self-review** (after writing), 6 checks: placeholder / consistency / scope / non-goal-decider / invariant / ambiguity — confirm no unfilled placeholders, no section contradictions, full interview coverage, every Non-Goals bullet carries a decider, every Invariants bullet carries `paths:` and `check:` with no path listed there contradicted by a Risks entry, no ambiguous text remains.
 
 3. **Emit the handoff token** in the final assistant message before proceeding to Phase 5. The literal token `<deep-interview-done/>` must appear in the assistant turn that announces spec completion. This signals downstream hooks that the interview phase is complete and state cleanup may proceed.
 
@@ -543,8 +543,8 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 - [ ] Every round explicitly names the weakest dimension and why it is the next target
 - [ ] Challenge stances selected by the Step 2-head Dialectic Rhythm Guard at the correct rotation conditions (Contrarian round 4+, Simplifier round 6+, Ontologist on stall or round 8+ with ambiguity > 0.3)
 - [ ] Spec file written to `$OMT_DIR/deep-interview/{slug}.md`
-- [ ] Inline self-review (5 checks: placeholder / consistency / scope / non-goal-decider / ambiguity) performed
-- [ ] Spec includes: goal, constraints, acceptance criteria, Approach & Design Decisions, clarity breakdown, transcript
+- [ ] Inline self-review (6 checks: placeholder / consistency / scope / non-goal-decider / invariant / ambiguity) performed
+- [ ] Spec includes: goal, constraints, invariants, acceptance criteria, Approach & Design Decisions, clarity breakdown, transcript
 - [ ] Token `<deep-interview-done/>` emitted in the final assistant message before handoff
 - [ ] Execution bridge presented via AskUserQuestion
 - [ ] Selected execution mode invoked via Skill() (never direct implementation)

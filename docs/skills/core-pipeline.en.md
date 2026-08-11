@@ -213,7 +213,7 @@ flowchart TB
 
 **Purpose**: Provide architecture analysis, bug debugging, root-cause identification, and technical recommendations.
 
-**Core constraint**: **It is read-only — it diagnoses but never implements.** It delegates the analysis request to a detached worker (Hephaestus) and collects results by polling. The worker runs with subagent spawning and OMT skill loading blocked (`settings.deny`). If the worker is unavailable, it falls back to in-session analysis.
+**Core constraint**: **It is read-only — it diagnoses but never implements.** It delegates the analysis request to a detached Codex worker running `codex exec` (`gpt-5.6-sol`, high reasoning effort) and collects results by polling. If the worker is unavailable or fails because the CLI is missing, times out, errors, or is canceled, it falls back to in-session analysis. generic-job enforces both `settings.deny` and `settings.mcps.allow` for the worker; the MCP allowlist is opt-in/fail-closed. diagnose currently allows only `codegraph`.
 
 **When to use**: Use it for requests like "root cause", "what's wrong", "architecture review", "investigate" — when you need an analysis report, not a PASS/FAIL verdict. (When delegated, it is invoked as the oracle agent.)
 

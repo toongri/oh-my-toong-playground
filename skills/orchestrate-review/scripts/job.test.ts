@@ -4317,6 +4317,15 @@ describe("parseChunkReviewConfig settings.mcps.allow", () => {
 // mcpBlockByMember.
 // ---------------------------------------------------------------------------
 
+describe("job.ts MCP preparation architecture", () => {
+	test("delegates per-member MCP preparation to prepareMcpEntities", () => {
+		const source = fs.readFileSync(path.join(import.meta.dirname, "job.ts"), "utf8");
+		expect(source).toContain("prepareMcpEntities");
+		expect(source).not.toContain("enumerateConfiguredMcpServers");
+		expect(source).not.toContain("computeMcpBlockList");
+	});
+});
+
 describe("start: settings.mcps.allow recorded in job.json members[].mcpBlock", () => {
 	let tmpDir: string;
 	let jobsDir: string;
@@ -4362,7 +4371,7 @@ describe("start: settings.mcps.allow recorded in job.json members[].mcpBlock", (
 				"    role: none",
 				"  members:",
 				"    - name: bob",
-				"      command: echo bob",
+				"      command: codex",
 				"  settings:",
 				"    exclude_chairman_from_members: false",
 				"    timeout: 10",
@@ -4411,9 +4420,9 @@ describe("start: settings.mcps.allow recorded in job.json members[].mcpBlock", (
 				"    role: none",
 				"  members:",
 				"    - name: bob",
-				"      command: echo bob",
+				"      command: codex",
 				"    - name: carol",
-				"      command: echo carol",
+				"      command: codex",
 				"      env:",
 				`        CODEX_HOME: ${memberCodexHome}`,
 				"  settings:",
@@ -4934,9 +4943,9 @@ describe("start: mcpBlock reaches spawnWorkers entities", () => {
 				"    role: none",
 				"  members:",
 				"    - name: alice",
-				"      command: echo alice",
+				"      command: codex",
 				"    - name: bob",
-				"      command: echo bob",
+				"      command: codex",
 				"  settings:",
 				"    exclude_chairman_from_members: false",
 				"    timeout: 10",

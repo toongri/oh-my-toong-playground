@@ -33,6 +33,14 @@
 - {constraint 2}
 - ...
 
+## Invariants
+Properties that must hold in EVERY state, on EVERY path that can change what they constrain. Distinct from the three neighbouring sections: a **Constraint** is an environmental limit given to you (8 slots, app-only surface), an **Acceptance Criterion** is one scenario observed once (dispense → count drops by 1), an **Invariant** is a proposition quantified over all paths. When a property is true across paths, it belongs here — recording it only as the scenario that made you notice it loses the quantifier.
+
+`paths:` is what makes the claim checkable: enumerate every operation that can change the constrained value, not just the one the interview discussed. A path the interview never resolved goes in the list as `<path> 미확정` — the property stays recorded and the hole stays visible. Dropping the property into **Risks & Unresolved Forks** instead is the failure this section exists to prevent, and asserting it here while listing a path that violates it under Risks is a contradiction the self-review must catch.
+
+- {property, stated so a violation is observable} | paths: {every operation that can change it} | check: {how a violation would be caught — assertion, test, DB constraint}
+- ...
+
 ## Non-Goals
 - {explicitly excluded scope 1} | decider: {how to tell a finding belongs to this exclusion}
 - {explicitly excluded scope 2} | decider: {how to tell a finding belongs to this exclusion}

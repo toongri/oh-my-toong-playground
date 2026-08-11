@@ -6,6 +6,8 @@ import path from "path";
 import os from "os";
 import { execFileSync } from "child_process";
 
+import { buildAugmentedCommand } from "@lib/generic-job";
+
 const SCRIPT = path.join(import.meta.dirname, "job.ts");
 
 function makeTmpDir() {
@@ -93,7 +95,7 @@ describe("diagnose job lifecycle", () => {
 		} catch {}
 	});
 
-	test("clean removes jobDir", () => {
+	test("clean removes jobDir", async () => {
 		const configPath = path.join(tmpDir, "diagnose.config.yaml");
 		writeConfig(configPath);
 		const jobsDir = path.join(tmpDir, "jobs");
@@ -121,6 +123,33 @@ describe("diagnose job lifecycle", () => {
 		try {
 			execFileSync(process.execPath, [SCRIPT, "stop", jobDir], { stdio: "pipe" });
 		} catch {}
+
+		// stop can observe a queued worker (or a running worker before its pid is
+		// persisted) and return before that worker writes its terminal status.
+		// Wait with a bounded, non-busy poll so clean does not race the status
+		// transition and refuse an otherwise safe deletion.
+		const pollStartedAt = Date.now();
+		const pollTimeoutMs = 5_000;
+		const pollIntervalMs = 50;
+		let overallState = "";
+		while (Date.now() - pollStartedAt < pollTimeoutMs) {
+			try {
+				const statusResult = execFileSync(process.execPath, [SCRIPT, "status", jobDir], {
+					stdio: "pipe",
+				});
+				const status = JSON.parse(statusResult.toString()) as { overallState?: unknown };
+				overallState = typeof status.overallState === "string" ? status.overallState : "";
+			} catch {}
+			if (overallState === "done") break;
+			if (Date.now() - pollStartedAt >= pollTimeoutMs) break;
+			await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+		}
+		if (overallState !== "done") {
+			throw new Error(
+				`clean lifecycle: worker status did not become terminal within ${pollTimeoutMs}ms (overallState=${overallState || "unavailable"})`,
+			);
+		}
+
 		execFileSync(process.execPath, [SCRIPT, "clean", jobDir, "--jobs-dir", jobsDir], {
 			stdio: "pipe",
 		});
@@ -228,6 +257,58 @@ describe("diagnose job lifecycle", () => {
 				stdio: "pipe",
 			});
 		} catch {}
+	});
+
+	test("start applies settings.mcps.allow to job metadata and the real codex argv", async () => {
+		const configPath = path.join(tmpDir, "diagnose.config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"review:",
+				"  members:",
+				"    - name: tester",
+				"      command: codex exec",
+				"  settings:",
+				"    timeout: 10",
+				"    mcps:",
+				"      allow:",
+				"        - codegraph",
+			].join("\n"),
+			"utf8",
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		const codexHome = path.join(tmpDir, "codex-home");
+		const binDir = path.join(tmpDir, "bin");
+		fs.mkdirSync(binDir, { recursive: true });
+		fs.mkdirSync(codexHome, { recursive: true });
+		fs.writeFileSync(
+			path.join(codexHome, "config.toml"),
+			'[mcp_servers.codegraph]\ncommand = "stub"\n\n[mcp_servers.blocked]\ncommand = "stub"\n',
+		);
+		const argvPath = path.join(tmpDir, "codex-argv.txt");
+		const stubPath = path.join(binDir, "codex");
+		fs.writeFileSync(stubPath, '#!/bin/sh\nprintf "%s\\n" "$@" > "$STUB_CODEX_ARGV"\n', "utf8");
+		fs.chmodSync(stubPath, 0o755);
+		const env = {
+			...process.env,
+			CODEX_HOME: codexHome,
+			STUB_CODEX_ARGV: argvPath,
+			PATH: `${binDir}:${process.env.PATH || ""}`,
+		};
+		const result = execFileSync(
+			process.execPath,
+			[SCRIPT, "start", "--config", configPath, "--jobs-dir", jobsDir, "--json", "mcp test"],
+			{ stdio: "pipe", env },
+		);
+		const output = JSON.parse(result.toString());
+		const member = output.members[0];
+		expect(member.mcpBlock).toEqual(["blocked"]);
+		for (let i = 0; i < 30 && !fs.existsSync(argvPath); i++)
+			await new Promise((r) => setTimeout(r, 20));
+		expect(fs.existsSync(argvPath)).toBe(true);
+		const argv = fs.readFileSync(argvPath, "utf8").split("\n").filter(Boolean);
+		expect(argv).toContain("mcp_servers.blocked.enabled=false");
+		expect(argv).not.toContain("mcp_servers.codegraph.enabled=false");
 	});
 });
 
@@ -457,5 +538,60 @@ describe("settings.deny 배관", () => {
 		}
 		expect(exitCode).toBe(1);
 		expect(output).toContain("settings.deny.subagents' must be a boolean");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// 배포되는 실제 diagnose.config.yaml — 픽스처가 아니라 프로덕션 파일을 읽고,
+// buildAugmentedCommand로 실제 전송되는 커맨드라인까지 해석해 검사한다.
+// 문자열이 파일에 있는지가 아니라 그 선언이 무엇으로 resolve되는지가 계약이다.
+// ---------------------------------------------------------------------------
+
+describe("배포 config의 외부 디스패치 계약", () => {
+	const CONFIG_PATH = path.join(import.meta.dirname, "..", "diagnose.config.yaml");
+
+	function readMember(): Record<string, unknown> {
+		const parsed = Bun.YAML.parse(fs.readFileSync(CONFIG_PATH, "utf8")) as Record<string, any>;
+		const members = parsed?.review?.members;
+		if (!Array.isArray(members) || members.length !== 1) {
+			throw new Error(`${CONFIG_PATH}: 'review.members'는 단일 멤버 배열이어야 한다`);
+		}
+		return members[0] as Record<string, unknown>;
+	}
+
+	test("멤버는 codex exec를 gpt-5.6-sol/high로 실행한다", () => {
+		const member = readMember();
+		expect(member.command).toBe("codex exec");
+		expect(member.model).toBe("gpt-5.6-sol");
+		expect(member.effort_level).toBe("high");
+	});
+
+	test("opencode·Hephaestus 잔여 참조가 없다", () => {
+		const raw = fs.readFileSync(CONFIG_PATH, "utf8");
+		expect(raw).not.toContain("opencode");
+		expect(raw.toLowerCase()).not.toContain("hephaestus");
+	});
+
+	test("codegraph만 MCP 허용 목록에 있다", () => {
+		const parsed = Bun.YAML.parse(fs.readFileSync(CONFIG_PATH, "utf8")) as Record<string, any>;
+		expect(parsed?.review?.settings?.mcps?.allow).toEqual(["codegraph"]);
+	});
+
+	test("해석된 커맨드라인이 모델·추론강도·subagent 차단을 함께 싣는다", () => {
+		const member = readMember();
+		const parsed = Bun.YAML.parse(fs.readFileSync(CONFIG_PATH, "utf8")) as Record<string, any>;
+		const { command } = buildAugmentedCommand(
+			{
+				command: member.command,
+				model: member.model,
+				effort_level: member.effort_level,
+				output_format: member.output_format,
+				denySubagents: parsed?.review?.settings?.deny?.subagents,
+			},
+			"codex",
+		);
+		expect(command).toContain("-m gpt-5.6-sol");
+		expect(command).toContain("model_reasoning_effort=high");
+		expect(command).toContain("agents.enabled=false");
 	});
 });
