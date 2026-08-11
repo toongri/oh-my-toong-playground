@@ -23,6 +23,18 @@
 # intersection is a two-way gate, not a one-way passthrough of package.json.
 entrypoints: [verify, test, check, lint]
 
+# Entrypoints that are DETECTED the same as `entrypoints` above (a `pnpm
+# <name>` invocation still registers as a verification attempt) but can NEVER
+# pass step 6's allowed-shape check — the only path to one of these names is
+# denial, always. This is NOT the same axis as removing a name from
+# `entrypoints`: removing turns detection off entirely, so the command falls
+# out of this gate's sight and passes through untouched — the opposite of a
+# ban. Listing a name here instead keeps it detected and denies it
+# explicitly. Empty by default: this axis exists for a project overlay
+# (verify-entrypoint-gate.local.yaml) to declare a locally-banned entrypoint
+# without needing an engine change each time one comes up.
+denied_entrypoints: []
+
 # Flags allowed between the entrypoint name and a `--` end-of-options marker
 # (or end of command). `infra/local/scripts/verify.sh` forwards these `-*`
 # args to turbo as-is (it's the repo's own documented CLI surface), so they
