@@ -1302,3 +1302,54 @@ describe("intent-diff finalization at convergence", () => {
 		expect(context).toContain("no row remains `unknown`");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Completeness and depth links — the user-set norm from the 2026-08-11
+// review: REPORT includes everything a reader needs to UNDERSTAND a finding
+// (length is never the reason material is dropped), and detail beyond
+// understanding descends by relative link into the journal itself, so the
+// reader follows the actual research trail instead of a re-explanation.
+// ---------------------------------------------------------------------------
+
+describe("REPORT completeness and journal depth links", () => {
+	const sectionOf = () => {
+		const idx = skill.indexOf("## REPORT.md and REPORT.html");
+		const endIdx = skill.indexOf("### Candidate profiles", idx);
+		return skill.slice(idx, endIdx);
+	};
+
+	test("REPORT is complete before it is short — length never drops understanding-material", () => {
+		const context = sectionOf();
+		expect(context).toContain("complete before it is short");
+		expect(context).toContain("length is never a reason to drop it");
+	});
+
+	test("depth beyond understanding descends by relative link into the journal", () => {
+		const context = sectionOf();
+		expect(context).toContain("descends by relative link");
+		expect(context).toMatch(/links the journal files it drew from/);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Per-axis worker attribution — closes the hole the staffing-gate scenario
+// exposed: the production expansion-log recorded workers only in aggregate
+// ("4 codebase + 6 external tool lanes"), so a coverage verifier could not
+// resolve which axis each worker served, and 2/5 harness reps defensibly
+// left an unstaffed axis `covered`. Two fixes: the log attributes workers
+// per axis, and the gate treats unresolvable staffing the same as zero.
+// ---------------------------------------------------------------------------
+
+describe("per-axis worker attribution", () => {
+	test("expansion-log records each worker against the axis it owns, not an aggregate count", () => {
+		expect(skill).toContain("each worker recorded against the axis it owns");
+		expect(skill).toContain("an aggregate count cannot prove staffing");
+	});
+
+	test("coverage gate: staffing the log cannot resolve is treated the same as zero workers", () => {
+		const idx = skill.indexOf("### Coverage gate");
+		const endIdx = skill.indexOf("</Engine>", idx);
+		const context = skill.slice(idx, endIdx);
+		expect(context).toContain("Staffing the log cannot resolve counts as zero");
+	});
+});
