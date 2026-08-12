@@ -4,7 +4,7 @@
     {
       "id": "coordinate-render",
       "scenario": "좌표계·렌더링 변경",
-      "source_repo": "/Users/toong/repos/pi/main",
+      "source_repo": "pi",
       "sha": "068ab5d19b9c7a17e14bde90bcbc4fc4c78da1b1",
       "range": "068ab5d1^..068ab5d1",
       "subject": "fix(coding-agent): horizontally pan tree selector",
@@ -14,7 +14,7 @@
     {
       "id": "refactor-invariant",
       "scenario": "동작 불변 리팩터링",
-      "source_repo": "/Users/toong/repos/oh-my-toong-playground/curious-hammer",
+      "source_repo": "oh-my-toong-playground",
       "sha": "eee023802b61c91df509e749a4a9f46f193cf7ef",
       "range": "eee02380^..eee02380",
       "subject": "fix: ultragoal 상태 갱신 락 통합",
@@ -24,7 +24,7 @@
     {
       "id": "crosscutting-small",
       "scenario": "크로스커팅 소변경",
-      "source_repo": "/Users/toong/repos/oh-my-toong-playground/curious-hammer",
+      "source_repo": "oh-my-toong-playground",
       "sha": "8a9fc7ea974582b683c631c8924703dbdfac9eeb",
       "range": "8a9fc7ea^..8a9fc7ea",
       "subject": "chore: 잡 워커 프롬프트에 단독 수행 지시 추가",
@@ -34,7 +34,7 @@
     {
       "id": "giant-pr",
       "scenario": "거대 PR",
-      "source_repo": "/Users/toong/repos/oh-my-toong-playground/curious-hammer",
+      "source_repo": "oh-my-toong-playground",
       "sha": "7d277947f9da7ff8399170cdc174a36b22724d37",
       "range": "7d277947^..7d277947",
       "subject": "feat: ultragoal 무진전 실행 제어 추가 (PR #243)",
