@@ -1,8 +1,17 @@
 # Fixture provenance
 
-Every `.jsonl` file in this directory is byte-exact output copied from a real
+Every `.jsonl` file in this directory is output copied from a real
 `codex exec` invocation — not hand-written. JSONL has no comment syntax, so
 provenance is recorded here instead of inline in the fixture files.
+
+**One redaction.** The two `*-rollout.jsonl` files captured the machine's real
+injected AGENTS.md working-context document, which described a private product
+and its domain. That document was replaced with a same-shaped placeholder
+(`# Example Service — Working Context`) before this repository was published.
+It occupies two positions per file: `response_item` line 6's
+`payload.content[1].text` and `world_state` line 7's
+`payload.state.agents_md.text`. Everything else — event ordering, roles, the
+injected coding-discipline rules the tests assert on — is unmodified capture.
 
 Environment: `codex-cli 0.144.5` at `/Users/toong/.superset/bin/codex`
 (inside the root `config.yaml`'s `codex-versions` allowlist — see that file
