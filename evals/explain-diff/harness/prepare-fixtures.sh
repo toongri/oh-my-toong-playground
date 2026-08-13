@@ -12,9 +12,10 @@
 # not a machine-local path. It resolves to $OMT_FIXTURE_REPO_ROOT/<name>
 # (default $HOME/repos/<name>) — same pattern as $EVAL above.
 #
-# Idempotent: a fixture whose worktree already exists and is valid is
-# skipped, not recreated. This script only creates worktrees — it never
-# removes one, even a stale or broken one; that is a separate concern.
+# Idempotent: a fixture whose worktree already exists at the manifest SHA
+# with no local changes is skipped, not recreated. This script only creates
+# worktrees — it never removes one, even a stale or broken one; that is a
+# separate concern.
 set -euo pipefail
 
 HARNESS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -40,7 +41,7 @@ for id in $ids; do
   fields="$(bun -e '
     const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
     const f = m.fixtures.find((x) => x.id === process.argv[2]);
-    if (!f) { process.exit(1); }
+    if (!f) { process.exit(0); }
     process.stdout.write(f.source_repo + "\t" + f.sha);
   ' "$MANIFEST" "$id" 2>/dev/null)"
   if [ -z "$fields" ]; then
@@ -55,7 +56,18 @@ for id in $ids; do
   resolved="$REPO_ROOT/$source_repo"
 
   if git -C "$wt" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    echo "skip (already a valid worktree): $id"
+    actual_sha="$(git -C "$wt" rev-parse HEAD)"
+    if [ "$actual_sha" != "$sha" ]; then
+      echo "failed: $id — existing worktree HEAD does not match manifest SHA $sha (found $actual_sha)" >&2
+      fail_ids="$fail_ids $id"
+      continue
+    fi
+    if [ -n "$(git -C "$wt" status --porcelain)" ]; then
+      echo "failed: $id — existing worktree has local changes" >&2
+      fail_ids="$fail_ids $id"
+      continue
+    fi
+    echo "skip (already at manifest SHA and clean): $id"
     ok_ids="$ok_ids $id"
     continue
   fi
