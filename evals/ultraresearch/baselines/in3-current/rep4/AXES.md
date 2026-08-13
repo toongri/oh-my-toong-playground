@@ -39,5 +39,5 @@ explicit tier의 바닥값에 따라 explore 4명·librarian 6명을 한 파동�
 
 ## Phase 0 session journal
 
-- Session directory: `/Users/toong/.omt/oh-my-toong-playground/ultraresearch/ts-db-migration-management-20260811-131105/`
+- Session directory: `$OMT_DIR/oh-my-toong-playground/ultraresearch/ts-db-migration-management-20260811-131105/`
 - Next phase: 위 10개 워커를 단일 응답에서 병렬로 실행하고, 각 워커에게 exhaustive-research budget lift와 `## EXPAND`/`## CLAIMS` 반환 계약을 부여한다.

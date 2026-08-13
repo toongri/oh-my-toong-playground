@@ -2,9 +2,9 @@
 
 ## Target-repository reality
 
-- `acme-home/stage` is Node 22 / pnpm / TypeScript with `drizzle-orm` 0.44.5 and `drizzle-kit` 0.31.5, but its policy says Python/Alembic is the only migration authority and Drizzle is schema synchronization only: `/Users/toong/repos/acme-home/stage/apps/backend/docs/orm-sync-policy.md:7-30`.
-- Deploy order is already migration → backend deploy → verification; Argo serializes backend deploys per environment and retries migration dispatch once. A replacement must therefore be idempotent and use a database-level lock. Evidence: `/Users/toong/repos/acme-home/stage/.github/workflows/deploy-env-backend.reusable.yaml:48-76`; `/Users/toong/repos/acme-gitops/main/infra/argo-workflows/base/templates/deploy-env.yaml:346-363`; `/Users/toong/repos/acme-gitops/main/infra/argo-workflows/base/templates/deploy-pipeline.yaml:511-527`.
-- The immediate Alembic problem is material: the inspected tree has 296 revisions, 56 merge revisions and two heads; recent merge files explicitly record no-op merges for split heads. Evidence: `/Users/toong/repos/acme-home/stage/.github/workflows/ci.yml:476-525`; `/Users/toong/repos/acme-home/stage/apps/python-backend/migrations/versions/mrg_placeholder_0000.py:1-28`.
+- `acme-home/stage` is Node 22 / pnpm / TypeScript with `drizzle-orm` 0.44.5 and `drizzle-kit` 0.31.5, but its policy says Python/Alembic is the only migration authority and Drizzle is schema synchronization only: `<repo-root>/acme-home/stage/apps/backend/docs/orm-sync-policy.md:7-30`.
+- Deploy order is already migration → backend deploy → verification; Argo serializes backend deploys per environment and retries migration dispatch once. A replacement must therefore be idempotent and use a database-level lock. Evidence: `<repo-root>/acme-home/stage/.github/workflows/deploy-env-backend.reusable.yaml:48-76`; `<repo-root>/acme-gitops/main/infra/argo-workflows/base/templates/deploy-env.yaml:346-363`; `<repo-root>/acme-gitops/main/infra/argo-workflows/base/templates/deploy-pipeline.yaml:511-527`.
+- The immediate Alembic problem is material: the inspected tree has 296 revisions, 56 merge revisions and two heads; recent merge files explicitly record no-op merges for split heads. Evidence: `<repo-root>/acme-home/stage/.github/workflows/ci.yml:476-525`; `<repo-root>/acme-home/stage/apps/python-backend/migrations/versions/mrg_placeholder_0000.py:1-28`.
 
 ## Tool findings
 
