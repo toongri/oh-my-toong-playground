@@ -4,9 +4,9 @@
 
 | Step | Action | Key Point |
 |------|--------|-----------|
-| 0-A: Base Branch Detection | `git fetch --all --prune`, merge-base analysis for all remote branches | Build candidate table, always confirm with AskUserQuestion — no auto-skip |
-| 0-B: Target Sync | `git rev-list --left-right --count` to detect diverge | If behind > 0: merge/rebase interview + execute |
-| 0-C: Conflict Resolution | Per-file context analysis + AskUserQuestion per conflict | Stage each resolved file, finalize with commit / rebase --continue |
+| 0-A: Base Branch Detection + Setup Question | `git fetch --all --prune`, merge-base analysis for all remote branches | Build candidate table, then ONE AskUserQuestion call: 타겟 브랜치 (always) + 동기화 방식 + 충돌 처리 방침 (both when any candidate is behind) — no auto-skip on the target |
+| 0-B: Target Sync | `git rev-list --left-right --count` to confirm diverge | If behind > 0: execute the already-chosen `{sync-strategy}` — asks nothing |
+| 0-C: Conflict Resolution | Analyze the whole round's conflicts, settle per `{conflict-policy}` | 파일별로 확인 → one call carrying one question per file (max 4). Stage each file, finalize with commit / rebase --continue. Policy carries across rebase rounds |
 | Collect Git Metadata & PR Conventions | Run `git log`, `git diff --stat`, then `gh pr list --state all --limit 30` + `gh label list` | Metadata only, NO file contents. Derive title/branch/label conventions (majority pattern or "no convention") |
 | Explore Codebase | Use explore agent | Do NOT ask user about codebase |
 | User Interview | One question at a time, Clearance Checklist-based | Adaptive question count |
@@ -32,7 +32,7 @@
 | Detecting only default branch | Stacked branches show massive diff against wrong base | Compare merge-base across all remote branches and present candidate table |
 | Auto-selecting target branch | PR written against unintended target | Always confirm via AskUserQuestion — no auto-skip |
 | Ignoring diverge | PR written against stale base | Sync via merge/rebase in Step 0-B |
-| Ignoring conflicts | PR proceeds in incomplete state | Resolve all conflicts via per-file interview in Step 0-C |
+| Ignoring conflicts | PR proceeds in incomplete state | Settle every conflict per `{conflict-policy}` in Step 0-C |
 | Fixing question count | Required questions vary by context | Adaptive via Clearance Checklist |
 | Writing PR in English | Violates project convention | Write entirely in Korean |
 | Missing emoji section headers | Inconsistent with output-format.md template | Use 📌, 🔧, 💬, ✅, 📎 prefixes |

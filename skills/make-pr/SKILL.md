@@ -65,27 +65,23 @@ digraph make_pr_flow {
     "User Request" [shape=ellipse];
 
     subgraph cluster_step0 {
-        label="Step 0: Base Branch Detection & Synchronization";
+        label="Step 0: Setup -- analyze first, ask once, then execute";
         style=dashed;
-        "0-A: Fetch & Analyze\nAll Remote Branches" [shape=box];
-        "Present Candidate Table\n+ AskUserQuestion" [shape=box];
-        "Target Branch\nConfirmed" [shape=box];
-        "0-B: Check Diverge\n(behind count)" [shape=diamond];
-        "0-B: merge/rebase\nInterview + Execute" [shape=box];
+        "0-A: Fetch & Analyze\nAll Remote Branches\n(ahead/behind/scale\nper candidate)" [shape=box];
+        "Setup Question\nONE AskUserQuestion call:\n(1) 타겟 브랜치\n(2) 동기화 방식\n(3) 충돌 처리 방침" [shape=box];
+        "0-B: Execute\nmerge / rebase" [shape=box];
         "0-C: Conflict?" [shape=diamond];
-        "0-C: Per-file\nContext + Interview" [shape=box];
+        "0-C: Apply\n충돌 처리 방침\n(파일별 확인이면 이번 라운드\n충돌 파일을 한 콜에 담아 질문)" [shape=box];
         "More Conflicts?" [shape=diamond];
         "Commit / Continue\nRebase" [shape=box];
 
-        "0-A: Fetch & Analyze\nAll Remote Branches" -> "Present Candidate Table\n+ AskUserQuestion";
-        "Present Candidate Table\n+ AskUserQuestion" -> "Target Branch\nConfirmed";
-        "Target Branch\nConfirmed" -> "0-B: Check Diverge\n(behind count)";
-        "0-B: Check Diverge\n(behind count)" -> "0-B: merge/rebase\nInterview + Execute" [label="behind > 0"];
-        "0-B: merge/rebase\nInterview + Execute" -> "0-C: Conflict?";
-        "0-C: Conflict?" -> "0-C: Per-file\nContext + Interview" [label="YES"];
+        "0-A: Fetch & Analyze\nAll Remote Branches\n(ahead/behind/scale\nper candidate)" -> "Setup Question\nONE AskUserQuestion call:\n(1) 타겟 브랜치\n(2) 동기화 방식\n(3) 충돌 처리 방침";
+        "Setup Question\nONE AskUserQuestion call:\n(1) 타겟 브랜치\n(2) 동기화 방식\n(3) 충돌 처리 방침" -> "0-B: Execute\nmerge / rebase" [label="behind > 0"];
+        "0-B: Execute\nmerge / rebase" -> "0-C: Conflict?";
+        "0-C: Conflict?" -> "0-C: Apply\n충돌 처리 방침\n(파일별 확인이면 이번 라운드\n충돌 파일을 한 콜에 담아 질문)" [label="YES"];
         "0-C: Conflict?" -> "Collect Git Metadata" [label="NO"];
-        "0-C: Per-file\nContext + Interview" -> "More Conflicts?";
-        "More Conflicts?" -> "0-C: Per-file\nContext + Interview" [label="YES"];
+        "0-C: Apply\n충돌 처리 방침\n(파일별 확인이면 이번 라운드\n충돌 파일을 한 콜에 담아 질문)" -> "More Conflicts?";
+        "More Conflicts?" -> "0-C: Apply\n충돌 처리 방침\n(파일별 확인이면 이번 라운드\n충돌 파일을 한 콜에 담아 질문)" [label="YES"];
         "More Conflicts?" -> "Commit / Continue\nRebase" [label="NO"];
     }
 
@@ -107,8 +103,8 @@ digraph make_pr_flow {
     "Output Description Only" [shape=ellipse];
     "Report Absorbed\n+ Stop" [shape=ellipse];
 
-    "User Request" -> "0-A: Fetch & Analyze\nAll Remote Branches";
-    "0-B: Check Diverge\n(behind count)" -> "Collect Git Metadata" [label="behind = 0"];
+    "User Request" -> "0-A: Fetch & Analyze\nAll Remote Branches\n(ahead/behind/scale\nper candidate)";
+    "Setup Question\nONE AskUserQuestion call:\n(1) 타겟 브랜치\n(2) 동기화 방식\n(3) 충돌 처리 방침" -> "Collect Git Metadata" [label="behind = 0"];
     "Commit / Continue\nRebase" -> "Collect Git Metadata";
     "Commit / Continue\nRebase" -> "0-C: Conflict?" [label="rebase:\nmore commits"];
     "Collect Git Metadata" -> "Explore Codebase Patterns";
@@ -178,21 +174,27 @@ Collect all candidates and present a table showing commits ahead/behind and chan
 
 Show the top 2-3 candidates. If more branches exist, include an "other" option.
 
-**Phase 4 — Confirm with user via AskUserQuestion:**
+**Phase 4 — Setup Question:**
 
-Always ask even when the default branch is the only likely candidate — never auto-skip.
+Everything Step 0 needs from the user is settled in **one `AskUserQuestion` call**, assembled from the candidate table. Present the table first, then make the call with this `questions` array:
 
-Present the candidate table, then ask the user to select the target branch. Include:
-- Each top candidate as a labeled option
-- An option to type a custom branch name if none of the candidates apply
+| # | header | question | options | Included when |
+|---|--------|----------|---------|---------------|
+| 1 | 타겟 브랜치 | 이 PR의 base 브랜치는 어디인가 | Top 2-3 candidates, each option's description carrying its ahead/behind/change scale + an option to type a branch name | Always |
+| 2 | 동기화 방식 | 타겟 브랜치가 앞서 있으면 그 커밋들을 어떻게 가져올까 | **merge**: 타겟 브랜치의 변경사항을 merge commit으로 통합합니다. 기존 히스토리가 보존됩니다. / **rebase**: 현재 브랜치의 커밋을 타겟 브랜치 위로 재배치합니다. 선형적인 히스토리를 유지합니다. | Any candidate in the table has `behind > 0` |
+| 3 | 충돌 처리 | 동기화 중 충돌이 나면 어떻게 처리할까 | **파일별로 확인**: 충돌마다 양쪽 내용과 제안을 설명하고 물어봅니다. / **제안대로 자동 해결**: 각 충돌을 분석해 제안대로 바로 적용하고 결과를 보고합니다. / **현재 브랜치 우선**: 모든 충돌에서 현재 브랜치 쪽 변경을 채택합니다. / **타겟 브랜치 우선**: 모든 충돌에서 타겟 브랜치 쪽 변경을 채택합니다. | Question 2 is included |
 
-Use the confirmed value as `{base-branch}` in all subsequent git commands.
+The candidate table already carries `behind` for every candidate, so questions 2 and 3 are answerable before the target is picked — build them from the table, not from the answer to question 1.
+
+Always include question 1 even when the default branch is the only likely candidate — never auto-skip.
+
+The answers drive the rest of Step 0: `{base-branch}` (question 1) is used in all subsequent git commands, `{sync-strategy}` (question 2) is executed in Step 0-B, `{conflict-policy}` (question 3) settles every conflict in Step 0-C.
 
 ---
 
 ### Step 0-B: Target Branch Synchronization
 
-After the target branch is confirmed, check if the current branch has diverged:
+`{base-branch}` and `{sync-strategy}` are already answered. Confirm the divergence and execute — this step asks nothing:
 
 ```bash
 git rev-list --left-right --count origin/{base-branch}...HEAD
@@ -201,12 +203,7 @@ git rev-list --left-right --count origin/{base-branch}...HEAD
 
 **If behind = 0:** No synchronization needed. Proceed to Step 1.
 
-**If behind > 0:** The current branch is behind `origin/{base-branch}`. Ask the user which strategy to use via AskUserQuestion:
-
-- **merge**: 타겟 브랜치의 변경사항을 merge commit으로 통합합니다. 기존 히스토리가 보존됩니다.
-- **rebase**: 현재 브랜치의 커밋을 타겟 브랜치 위로 재배치합니다. 선형적인 히스토리를 유지합니다.
-
-Execute the chosen strategy:
+**If behind > 0:** Execute `{sync-strategy}`. If the candidate table showed every candidate at `behind = 0` and no `{sync-strategy}` was collected, ask that single question now.
 
 ```bash
 # merge
@@ -232,26 +229,31 @@ When a merge or rebase operation encounters conflicts:
 git diff --name-only --diff-filter=U
 ```
 
-**Phase 2 — Resolve each file interactively:**
+**Phase 2 — Analyze every conflicted file in this round:**
 
-For each conflicted file, repeat:
+For each file in the list: read its contents, locate the conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`), work out what each side holds, and form a proposed resolution with reasoning. Use the correct ours/theirs mapping for the operation in progress:
 
-1. Read the file contents and locate conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`).
-2. Analyze both sides:
-   - **During merge:** `HEAD` side (ours) = current branch changes, incoming side (theirs) = target branch changes
-   - **During rebase:** `HEAD` side (ours) = target branch changes (commit being rebased onto), incoming side (theirs) = current branch changes (commit being replayed)
-3. Explain the conflict in plain text to the user: what each side contains and what the conflict represents. Use the correct ours/theirs mapping for the current operation (merge vs rebase).
-4. Propose a resolution with reasoning.
-5. Ask the user to choose via AskUserQuestion:
-   - **제안대로 해결**: Apply the proposed resolution
-   - **현재 브랜치 유지**: Keep only the current branch's changes (merge: ours / rebase: theirs)
-   - **타겟 브랜치 채택**: Keep only the target branch's changes (merge: theirs / rebase: ours)
-6. Apply the chosen resolution and stage the file:
-   ```bash
-   git add {file}
-   ```
+- **During merge:** `HEAD` side (ours) = current branch changes, incoming side (theirs) = target branch changes
+- **During rebase:** `HEAD` side (ours) = target branch changes (commit being rebased onto), incoming side (theirs) = current branch changes (commit being replayed)
 
-**Phase 3 — Finalize the operation:**
+**Phase 3 — Settle them per `{conflict-policy}`:**
+
+| `{conflict-policy}` | How this round is settled |
+|---|---|
+| 파일별로 확인 | Explain this round's conflicts in plain text — one short block per file: what each side holds, what the conflict represents, the proposed resolution and its reasoning. Then ask about them in **one `AskUserQuestion` call carrying one question per file** (up to 4 files per call; a 5th file starts the next call). Each question offers **제안대로 해결** / **현재 브랜치 유지** (merge: ours / rebase: theirs) / **타겟 브랜치 채택** (merge: theirs / rebase: ours) |
+| 제안대로 자동 해결 | Apply the Phase 2 proposal to every file |
+| 현재 브랜치 우선 | Take the current branch's side in every file — merge: `git checkout --ours {file}`, rebase: `git checkout --theirs {file}` |
+| 타겟 브랜치 우선 | Take the target branch's side in every file — merge: `git checkout --theirs {file}`, rebase: `git checkout --ours {file}` |
+
+Stage each settled file:
+
+```bash
+git add {file}
+```
+
+Under the three non-interactive policies, report what was applied per file in plain text after the operation finishes, so the user can see the resolutions they did not individually approve.
+
+**Phase 4 — Finalize the operation:**
 
 After all conflicted files are resolved:
 
@@ -263,9 +265,9 @@ git commit --no-edit   # creates the merge commit with default message
 git rebase --continue
 ```
 
-**Phase 4 — Check for additional conflicts:**
+**Phase 5 — Check for additional conflicts:**
 
-If `git rebase --continue` triggers a new conflict (rebase replays commits one by one), return to Phase 1 and repeat for the new conflict set.
+If `git rebase --continue` triggers a new conflict (rebase replays commits one by one), return to Phase 1 and repeat for the new conflict set. `{conflict-policy}` is answered once and carries across every round — do not re-ask it.
 
 **When all conflicts are resolved and the operation completes:** Proceed to Step 1.
 
@@ -338,7 +340,7 @@ Use the explore agent to understand codebase patterns and structure. For archite
 
 ### Interview Rules
 
-1. **One question at a time** -- never bundle multiple questions
+1. **One question at a time** -- never bundle multiple questions. This governs the Step 3 interview, where each answer shapes the next question. It does not reach Step 0, whose decisions are all answerable from the same candidate table and are collected in a single call
 2. **Adaptive question count** -- repeat until Clearance Checklist is all YES. Could be 1-2 if user provides enough upfront, or 5-6+ for complex changes
 3. **AskUserQuestion = structured choices**, plain text = open-ended questions
 4. **Context Brokering** -- if the codebase can answer it, use explore instead of asking
