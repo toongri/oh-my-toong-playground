@@ -173,6 +173,10 @@ All splits are chained on top of the previous split. The first PR uses `{base-br
 
 ## Branch Separation Procedure
 
+Each sub-PR gets its own **git worktree** — a separate checked-out directory backed by the same repository — instead of switching branches in the one working directory.
+
+**Why**: the split is not done when the PRs open; that is when review starts. Review comments land on several sub-PRs at once, and because the split is stacked, a fix on one sub-PR has to be carried up the chain. One working directory turns every one of those moves into a checkout-and-stash round trip. One worktree per sub-PR lets each PR be edited in place, side by side, while the original branch stays checked out where it was.
+
 ### Separation Steps
 
 **Precondition**: Working tree must be clean. Run `git status --porcelain` — if output is non-empty, ask the user to commit or stash changes before proceeding.
@@ -182,13 +186,35 @@ All splits are chained on top of the previous split. The first PR uses `{base-br
 2. Pre-check for mixed commits: run `git log origin/{base-branch}..HEAD --name-status` and cross-reference each commit's changed files against the thesis mapping from step 1. If any single commit modifies files assigned to more than one thesis, **immediately stop and switch to the Graceful Degradation procedure** before creating any branch. Do not proceed to the separation loop.
 
 For each thesis (in stacking order):
-   a. Create branch — name `{branch-name}` following `{branch-convention}` from the Step 1 PR Convention Survey (fallback when no convention: descriptive kebab-case topic name):
-      - First thesis: `git checkout -b {branch-name} origin/{base-branch}`
-      - Subsequent theses: `git checkout -b {branch-name} {previous-split-branch}`
-   b. Cherry-pick ONLY the commits assigned to this thesis from the mapping in Step 1: `git cherry-pick {hash1} {hash2} ...` (MUST be in chronological order — oldest commit first)
-   c. Push branch: `git push -u origin {branch-name}` (Split Accept includes branch push. Accepting the split is considered the user's consent to creating remote branches.)
+   a. Name the branch `{branch-name}` following `{branch-convention}` from the Step 1 PR Convention Survey (fallback when no convention: descriptive kebab-case topic name). Its worktree directory is a sibling of the repository root, named after the branch with `/` replaced by `-`:
+      ```bash
+      REPO_ROOT=$(git rev-parse --show-toplevel)
+      WT_DIR="$(dirname "$REPO_ROOT")/$(basename "$REPO_ROOT")-$(echo {branch-name} | tr '/' '-')"
+      ```
+   b. Create the worktree with the new branch — this checks the branch out in `$WT_DIR`, leaving the main working directory on `{original-branch}`:
+      - First thesis: `git worktree add -b {branch-name} "$WT_DIR" origin/{base-branch}`
+      - Subsequent theses: `git worktree add -b {branch-name} "$WT_DIR" {previous-split-branch}`
+   c. Cherry-pick ONLY the commits assigned to this thesis from the mapping in Step 1, inside that worktree: `git -C "$WT_DIR" cherry-pick {hash1} {hash2} ...` (MUST be in chronological order — oldest commit first)
+   d. Push branch: `git -C "$WT_DIR" push -u origin {branch-name}` (Split Accept includes branch push. Accepting the split is considered the user's consent to creating remote branches.)
 
-3. After all sub-branches are created, write Sub-PR Descriptions
+3. After all sub-branches are created, tell the user each sub-PR's branch and worktree directory, then write Sub-PR Descriptions
+
+`gh pr create` in Step 8 targets `--head {branch-name}` and can run from the main directory or from any of the worktrees — they all address the same repository.
+
+### Worktree Lifetime
+
+The worktrees stay after the PRs are created; handling review feedback is what they are for. Remove one only when its sub-PR is merged and needs no further edits:
+
+```bash
+git worktree remove {worktree-path}
+```
+
+Because the split is stacked, a review fix committed in one sub-PR's worktree has to be carried into every worktree above it, each in its own directory:
+
+```bash
+git -C {downstream-worktree} rebase {upstream-branch}
+git -C {downstream-worktree} push --force-with-lease
+```
 
 > **Mixed commit warning**: If a single commit modifies files belonging to multiple theses (mixed commit), cherry-picking will include unintended changes. When a mixed commit is detected, **immediately stop automatic separation** and switch to the Graceful Degradation procedure. Inform the user that manual file-level separation may be possible, but the LLM must not attempt to extract files directly.
 
@@ -199,21 +225,21 @@ Merge commits are excluded from thesis analysis. They are artifacts of branch sy
 ### Failure Handling
 
 If cherry-pick fails:
-1. Abort the entire separation (`git cherry-pick --abort`)
-2. Return to the original branch: `git checkout {original-branch}` (the currently checked-out branch cannot be deleted)
-3. For each sub-branch created during this procedure:
-   a. `git branch -D {branch-name}`
-4. Ask the user for confirmation before deleting remote branches: list each remote branch to be deleted and wait for explicit approval
-5. For each remote branch confirmed by the user:
+1. Abort the cherry-pick in the worktree where it failed (`git -C "$WT_DIR" cherry-pick --abort`)
+2. For each worktree created during this procedure:
+   a. `git worktree remove --force {worktree-path}` (a branch checked out in a worktree cannot be deleted)
+   b. `git branch -D {branch-name}`
+3. Ask the user for confirmation before deleting remote branches: list each remote branch to be deleted and wait for explicit approval
+4. For each remote branch confirmed by the user:
    a. `git push origin --delete {branch-name} 2>/dev/null || true`
-6. Fall back to single PR flow (Step 6)
-7. Inform the user of the failure cause
+5. Fall back to single PR flow (Step 6) — the main working directory never left `{original-branch}`, so there is nothing to check back out
+6. Inform the user of the failure cause
 
 ### Original Branch Preservation
 
-The original branch must never be deleted. If the user changes their mind after split completion:
-- Delete sub-branches (local and remote: `git branch -D` + `git push origin --delete`)
-- Return to the original branch
+The original branch must never be deleted. It stays checked out in the main working directory for the whole procedure — the sub-branches live in their own worktrees. If the user changes their mind after split completion:
+- Remove each sub-PR worktree (`git worktree remove --force {worktree-path}`), then delete the sub-branches (local and remote: `git branch -D` + `git push origin --delete`)
+- The main working directory is already on the original branch
 - If a PR was already created with `gh pr create`, guide the user to manually close it
 
 ---

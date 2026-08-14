@@ -45,7 +45,7 @@ Never write a PR description without sufficient context. Continue the interview 
 
 ## Scope
 
-Writes PR description body. Optionally assesses PR scope for multi-thesis splitting. Detects base branch via heuristic merge-base analysis, confirms target branch with user, performs target branch synchronization with conflict resolution at request start, then collects metadata + surveys repo PR conventions (title/branch/label) → interview → assessment → description. Creates the PR via `gh pr create` after user approval, assigned to the authenticated gh user, with labels per the surveyed convention.
+Writes PR description body. Optionally assesses PR scope for multi-thesis splitting, separating each sub-PR into its own worktree. Detects base branch via heuristic merge-base analysis, settles target branch, sync strategy, and conflict policy in one question, performs target branch synchronization with conflict resolution at request start, then collects metadata + surveys repo PR conventions (title/branch/label) → interview → assessment → description. Creates the PR via `gh pr create` after user approval, assigned to the authenticated gh user, with labels per the surveyed convention.
 
 ---
 
@@ -91,7 +91,7 @@ digraph make_pr_flow {
     "Clearance Checklist" [shape=diamond];
     "Scope Assessment" [shape=diamond];
     "Split Proposal" [shape=box];
-    "Branch Separation" [shape=box];
+    "Branch Separation\n(worktree per sub-PR)" [shape=box];
     "Sub-PR Loop\n(Step 6-8 per sub-PR\nincl. user confirmation)" [shape=box];
     "Draft PR Description" [shape=box];
     "Present to User" [shape=box];
@@ -114,11 +114,11 @@ digraph make_pr_flow {
     "Clearance Checklist" -> "Scope Assessment" [label="ALL YES"];
     "Scope Assessment" -> "Draft PR Description" [label="Single thesis"];
     "Scope Assessment" -> "Split Proposal" [label="Multi-thesis"];
-    "Split Proposal" -> "Branch Separation" [label="Accept"];
+    "Split Proposal" -> "Branch Separation\n(worktree per sub-PR)" [label="Accept"];
     "Split Proposal" -> "Draft PR Description" [label="Reject"];
     "Split Proposal" -> "Split Proposal" [label="Modify"];
-    "Branch Separation" -> "Sub-PR Loop\n(Step 6-8 per sub-PR\nincl. user confirmation)";
-    "Branch Separation" -> "Draft PR Description" [label="Fallback\n(conflict/mixed)"];
+    "Branch Separation\n(worktree per sub-PR)" -> "Sub-PR Loop\n(Step 6-8 per sub-PR\nincl. user confirmation)";
+    "Branch Separation\n(worktree per sub-PR)" -> "Draft PR Description" [label="Fallback\n(conflict/mixed)"];
     "Sub-PR Loop\n(Step 6-8 per sub-PR\nincl. user confirmation)" -> "Return PR URL";
     "Draft PR Description" -> "Present to User";
     "Present to User" -> "User Feedback";
@@ -413,7 +413,7 @@ After Clearance Checklist passes, analyze whether the PR contains multiple indep
 3. Apply thesis isolation test: "Does this PR prove a single thesis?"
 4. If single thesis → proceed to Step 6
 5. If multi-thesis → propose split to user (Accept/Reject/Modify)
-6. On Accept → separate git branches, write sub-PR descriptions (Step 6-8 per sub-PR)
+6. On Accept → create one git worktree per sub-PR (so each PR stays editable side by side once review starts), write sub-PR descriptions (Step 6-8 per sub-PR)
 7. On Reject → proceed to Step 6 as single PR
 
 **Data sources:** `git diff origin/{base-branch}..HEAD --stat`, `git log`, explore results, interview answers. Never read `git diff` file contents.
