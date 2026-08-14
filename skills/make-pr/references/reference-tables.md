@@ -23,7 +23,10 @@
 | Mistake | Why It's a Problem | Fix |
 |---------|-------------------|-----|
 | Writing without Clearance Checklist | Incomplete info leads to inaccurate PR | Check checklist every turn |
-| Bundling multiple questions | Increases user burden, lowers answer quality | One question at a time |
+| Bundling multiple questions in the Step 3 interview | Each interview answer shapes the next question; bundling lowers answer quality | One question at a time — Step 3 only |
+| Asking the Step 0 setup decisions one call at a time | 타겟 브랜치·동기화 방식·충돌 처리 방침은 모두 후보 테이블만으로 답할 수 있는데 라운드트립만 3배가 된다 | Build all three from the candidate table into one AskUserQuestion call |
+| Splitting sub-PRs by switching branches in the main working tree | Once the PRs are open, review feedback on several sub-PRs forces a checkout/stash round trip per switch, and the success path strands the main directory on the last sub-branch | One `git worktree` per sub-PR; the original branch stays checked out where it was |
+| Sub-PR title or body that does not state its position in the series | Reviewer cannot tell what must merge first or where the rest of the series is | Title carries ` (K/N)`; Summary opens with the split context block, `#TBD` placeholders resolved after all PRs exist |
 | Asking user about codebase facts | Unnecessary burden on user | Discover via explore |
 | Describing design concerns in Changes | Mixes Changes and Review Points | Design concerns go in Review Points |
 | Writing without Review Points | No focal points for reviewer feedback | Proactively identify Review Points |

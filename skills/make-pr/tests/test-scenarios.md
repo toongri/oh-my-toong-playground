@@ -1892,6 +1892,178 @@ Round 12 스킬은 Step 0-A Phase 5에서 `BASELINE_TARGET_SHA`를 기록하고 
 
 ---
 
+## Scenario 29: Step 0 셋업 질문 라운드트립
+
+**Type:** Application
+**Purpose:** 타겟 브랜치·동기화 방식·충돌 처리 방침을 한 번의 AskUserQuestion으로 받는지, 그리고 같은 라운드의 충돌 파일들을 한 콜에 묶는지 검증.
+
+### Input
+
+- User message: "PR 만들어줘", 현재 브랜치 `toong/payment-retry`
+- 후보 테이블 (0-A 분석 결과):
+  ```
+  | branch            | ahead | behind | diffstat             |
+  | feat/payment-base | 2     | 3      | +120 -40 (5 files)   |
+  | develop           | 9     | 12     | +900 -300 (23 files) |
+  | main              | 31    | 40     | +4100 -2200 (88 f.)  |
+  ```
+- Scripted user responses: 타겟 `feat/payment-base` / 동기화 `rebase` / 충돌 처리 "파일별로 확인"
+- rebase 1차 replay에서 `src/config.ts`, `src/router.ts` 2개 파일 충돌 → 각각 "제안대로 해결", "현재 브랜치 유지". 이후 커밋은 충돌 없이 재적용.
+
+### Success Criteria
+
+| # | Criterion | Description |
+|---|-----------|-------------|
+| 1 | 셋업 질문 1콜 | 타겟 브랜치 + 동기화 방식 + 충돌 처리 방침이 한 AskUserQuestion 콜에 담김 |
+| 2 | 같은 라운드 충돌 파일 1콜 | 충돌 파일 2개가 파일당 1문항으로 한 콜에 담김 |
+| 3 | 방침 재질문 없음 | 충돌 처리 방침을 라운드마다 다시 묻지 않음 |
+| 4 | Step 0-B 무질문 | 동기화 단계가 아무것도 묻지 않고 확정된 전략을 실행 |
+| 5 | 총 콜 수 감소 | Step 1 진입 전 AskUserQuestion 콜이 4회 미만 |
+
+### RED Baseline Result (Round 13 스킬)
+
+| # | Criterion | Result | Notes |
+|---|-----------|--------|-------|
+| 1 | 셋업 질문 1콜 | **FAIL** | 타겟 1콜 → 동기화 1콜로 분리 |
+| 2 | 같은 라운드 충돌 파일 1콜 | **FAIL** | `config.ts` 1콜, `router.ts` 1콜 |
+| 3 | 방침 재질문 없음 | **FAIL** | 방침 개념이 없어 파일마다 매번 물음 |
+| 4 | Step 0-B 무질문 | **FAIL** | merge/rebase를 0-B에서 질문 |
+| 5 | 총 콜 수 감소 | **FAIL** | 4콜 (콜당 문항 1,1,1,1) |
+
+**Summary: 0/5 PASS, 5/5 FAIL** — 결정 4개가 각각 별도 라운드트립.
+
+**베이스라인이 든 근거 (문안 수정의 표적):** "동기화 질문은 타겟 답변 없이 성립하지 않는다 — behind가 타겟에 따라 3/12/40으로 달라지므로 한 콜에 묶을 수 없다." 실제로는 0-A 후보 테이블이 이미 후보별 behind를 담고 있어 성립하지 않는 논증이다.
+
+### GREEN Result (Round 14 스킬)
+
+**5/5 PASS** — 총 2콜 (문항 3개 + 2개).
+
+- 셋업 1콜: Phase 4의 `questions` 배열 레시피대로 타겟/동기화/충돌 처리 3문항을 후보 테이블에서 조립
+- 충돌 1콜: 파일당 1문항, 최대 4개까지 한 콜
+- 방침 재질문 없음 / 0-B 무질문: 두 단계 모두 이미 받은 답을 소비만 함
+- 베이스라인 논증 차단 확인: 실행 에이전트가 "후보 테이블이 behind를 담고 있으므로 질문 2·3은 타겟 선택 전에 답할 수 있다"는 문장을 근거로 인용
+
+**형태 선택 근거:** 이 실패는 규율 실패가 아니라 산출물 형태 실패다 — 에이전트는 규칙을 어긴 적이 없고, 순차 의존성을 성실히 추론해 4콜로 쪼갰다. 따라서 "하나씩 묻지 마라" 류의 금지문 대신 (1) 콜의 구성을 명시하는 레시피 표, (2) 순차 의존성 논증을 데이터로 반박하는 한 문장, (3) 다이어그램의 질문 노드 단일화로 형태를 고정했다. Step 3의 "One question at a time" 규칙은 인터뷰 범위로 못 박았다 — GREEN 실행 에이전트가 "이 carve-out이 없었으면 3콜로 쪼갰을 것"이라고 명시했다.
+
+---
+
+## Scenario 30: 분리 PR 워크트리 기반 분리
+
+**Type:** Application
+**Purpose:** 분리 수락 후 sub-PR마다 워크트리를 만들고, 메인 작업 디렉터리를 원래 브랜치에 그대로 두는지 검증.
+
+### Input
+
+- 메인 작업 디렉터리 `/Users/dev/work/acme-api`, 현재 브랜치 `toong/order-events`, 타겟 `develop`, 작업 트리 청결
+- 커밋 3개 (`9a2ef01`, `b73c9de` → src/order/ · `e4f1a02` → src/payment/), mixed commit 없음
+- Thesis 2개로 분리 수락, branch convention `{user}/{topic}`
+
+### Success Criteria
+
+| # | Criterion | Description |
+|---|-----------|-------------|
+| 1 | sub-PR당 워크트리 생성 | `git worktree add -b`로 레포 루트의 형제 디렉터리에 생성 |
+| 2 | 메인 디렉터리 브랜치 전환 0회 | 절차 종료 후에도 `{original-branch}` 체크아웃 유지 |
+| 3 | cherry-pick·push가 워크트리 안에서 실행 | `git -C "$WT_DIR"` 사용 |
+| 4 | 워크트리 경로 사용자 보고 | 브랜치와 디렉터리를 함께 알림 |
+| 5 | 성공 시 워크트리 유지 | 리뷰 대응용이므로 분리 종료 시 제거하지 않음 |
+| 6 | 실패 시 워크트리 제거 후 브랜치 삭제 | 워크트리에 체크아웃된 브랜치는 삭제 불가하므로 순서가 중요 |
+
+### RED Baseline Result (Round 13 스킬)
+
+| # | Criterion | Result | Notes |
+|---|-----------|--------|-------|
+| 1 | sub-PR당 워크트리 생성 | **FAIL** | `git checkout -b`로 메인 디렉터리에서 브랜치 전환. 스킬 전체에 `worktree` 언급 없음 |
+| 2 | 메인 디렉터리 브랜치 전환 0회 | **FAIL** | 2회 전환, 종료 시 마지막 sub-브랜치(`toong/payment-tx-boundary`)에 남음 — 성공 경로에 원복 명령 자체가 없음 |
+| 3 | cherry-pick·push가 워크트리 안에서 실행 | **FAIL** | 전부 메인 디렉터리에서 실행 |
+| 4 | 워크트리 경로 사용자 보고 | **FAIL** | 보고 대상 자체가 없음 |
+| 5 | 성공 시 워크트리 유지 | N/A | 워크트리가 없으므로 평가 불가 |
+| 6 | 실패 시 워크트리 제거 후 브랜치 삭제 | **FAIL** | `git checkout {original-branch}` → `git branch -D` 순서만 존재 |
+
+**Summary: 0/5 PASS (+1 N/A), 5/5 FAIL**
+
+**RED이 드러낸 실제 비용 (베이스라인 에이전트 답변):** sub-PR 1에 리뷰 코멘트가 오면 "두 브랜치가 작업 트리 하나를 공유하므로" 진행 중 작업을 stash하고 checkout해야 하며, 왕복할 때마다 이 과정을 반복해야 한다. 스킬이 남긴 상태에는 두 번째 체크아웃도 워크트리도 없다.
+
+### GREEN Result (Round 14 스킬)
+
+**6/6 PASS**
+
+- 워크트리 경로: `/Users/dev/work/acme-api-toong-order-event-publish`, `/Users/dev/work/acme-api-toong-payment-tx-boundary` (레포 루트 형제, 브랜치명의 `/`를 `-`로 치환)
+- 메인 디렉터리 전환 **0회** — `git worktree add -b`가 다른 디렉터리에 체크아웃하므로 `{original-branch}`를 떠나지 않음
+- cherry-pick·push 4개 명령 전부 `git -C "$WT_DIR"`
+- 실패 경로: `cherry-pick --abort` → `git worktree remove --force` → `git branch -D` → 원격 삭제는 사용자 승인 후
+- sub-PR 1 리뷰 대응: 해당 워크트리 디렉터리에서 바로 수정·push, stash/checkout 불필요
+
+**후속 보완:** GREEN 실행 에이전트가 "스택 위로 수정을 전파하는 명령은 스킬에 없고 내가 추론한 것"이라고 정직하게 표시 → Worktree Lifetime에 downstream 워크트리 rebase + force-with-lease 2줄 추가.
+
+---
+
+## Scenario 31: 분리 PR 제목·본문의 시리즈 위치 표기
+
+**Type:** Application
+**Purpose:** 분리 sub-PR의 제목과 본문이 "N개 중 K번째"와 관련 PR을 명시하는지, 생성 시점에 모르는 PR 번호가 유실되지 않는지 검증.
+
+### Input
+
+- 3개 sub-PR (스키마 정의 → 이벤트 발행 → 결제 트랜잭션 경계), stacked
+- title convention: conventional-commit prefix, 한국어
+- 생성 순서상 앞 PR 작성 시점에는 뒤 PR 번호를 모름. 최종 번호는 #101, #102, #103
+
+### Success Criteria
+
+| # | Criterion | Description |
+|---|-----------|-------------|
+| 1 | 제목에 위치 표기 | 3개 PR 제목 전부 `(K/N)` 접미사 |
+| 2 | 본문에 위치 표기 | Summary 첫 블록에 K/N 명시 |
+| 3 | 머지 순서 전체 체인 | 직전 PR만이 아니라 시리즈 전체 순서를 표시 |
+| 4 | 첫 PR에도 선행 관계 문장 | K=1도 "선행 없음"을 명시 (RED에서 이 문장이 통째로 없었음) |
+| 5 | 미확정 번호가 placeholder로 남음 | 생성 시점에 모르는 번호를 조용히 누락하지 않음 |
+| 6 | 갱신 후 placeholder 잔존 없음 | Post-Creation Update 이후 전 PR에 미치환 토큰 없음 |
+
+### RED Baseline Result (Round 13 스킬)
+
+| # | Criterion | Result | Notes |
+|---|-----------|--------|-------|
+| 1 | 제목에 위치 표기 | **FAIL** | 3/3 모두 없음 — 제목 규칙에 분리 시리즈 개념 자체가 없음 |
+| 2 | 본문에 위치 표기 | PASS | `이 PR은 3개 분리 PR 중 N번째입니다` |
+| 3 | 머지 순서 전체 체인 | **FAIL** | `#[K-1]`만 언급 — #101이 #102보다 앞서야 한다는 사실은 #102 본문을 열어야만 알 수 있음 |
+| 4 | 첫 PR에도 선행 관계 문장 | **FAIL** | K=1 템플릿에 머지 순서 문장 자체가 없음 (K=1/K>1 템플릿 비대칭) |
+| 5 | 미확정 번호가 placeholder로 남음 | **FAIL** | "may omit" 문구 탓에 첫 PR 본문에서 `관련 PR:` 절이 통째로 사라짐 |
+| 6 | 갱신 후 placeholder 잔존 없음 | N/A | placeholder를 쓰지 않으므로 평가 불가 |
+
+**Summary: 1/5 PASS (+1 N/A), 4/5 FAIL**
+
+### GREEN Result (Round 14 스킬)
+
+**6/6 PASS**
+
+- 제목: `feat: 주문 이벤트 스키마 정의 (1/3)` / `feat: 주문 이벤트 발행 추가 (2/3)` / `refactor: 결제 서비스 트랜잭션 경계 정리 (3/3)` — 접미사가 뒤에 붙어 서베이한 prefix 스타일이 앞을 유지
+- 본문: `**분리 PR (K/N)**` + 머지 순서 전체 체인 + 선행 PR + 관련 PR 4줄. 자기 자신은 `이 PR`로 표기해 생성 전 자기 번호 문제를 회피
+- K=1도 `선행 PR 없음 — 이 시리즈에서 가장 먼저 머지됩니다`로 같은 슬롯을 채움 (템플릿 비대칭 제거)
+- placeholder: 총 `#TBD` 4개 생성(#101에 2개, #102에 1개) → `gh pr edit` 2회로 4개 전부 치환, #103은 편집 불필요
+
+**후속 보완:** GREEN 실행 에이전트가 분리 컨텍스트 블록의 `#N` 표기와 `output-format.md`의 `[제목](URL)` 규칙이 어긋난다고 지적 → fill rules에 "`#N`은 GitHub이 같은 레포 안에서 자동 링크하며, markdown link 규칙은 📎 References 섹션 관할"이라는 행 추가.
+
+---
+
+## Gaps Found and Fixed (Round 14)
+
+| Gap | Found In | Fix Applied |
+|-----|----------|-------------|
+| Step 0 결정 4개가 각각 별도 AskUserQuestion 라운드트립 (4콜, 콜당 1문항) | Scenario 29 RED + 사용자 보고 "너무 하나씩 물어봐" | Phase 4를 `questions` 배열 레시피로 전환 — 타겟/동기화/충돌 방침 1콜, 포함 조건은 후보 테이블의 behind 값 |
+| "타겟을 정해야 behind를 안다"는 순차 의존성 논증이 배치를 막음 | Scenario 29 RED baseline 인용 | 후보 테이블이 이미 후보별 behind를 담고 있음을 명시하고 "답이 아니라 테이블에서 조립하라"로 지시 |
+| Step 3의 "One question at a time" 규칙이 Step 0까지 번져 충돌 | Scenario 29 RED + 규칙 정합성 점검 | 규칙 적용 범위를 인터뷰로 한정, `reference-tables.md` Common Mistakes 행도 함께 수정 |
+| 같은 라운드의 충돌 파일을 파일당 1콜로 질문 | Scenario 29 RED | Phase 3에 "파일당 1문항, 한 콜에 최대 4개" 명시 + 방침은 라운드 간 유지 |
+| 분리가 메인 작업 트리에서 브랜치를 전환해 진행 — 리뷰 대응 시 checkout/stash 왕복 강요 | Scenario 30 RED + 사용자 요청 | sub-PR마다 `git worktree add -b`, cherry-pick·push는 `git -C "$WT_DIR"` |
+| 성공 경로가 메인 디렉터리를 마지막 sub-브랜치에 남겨둠 (원복 명령 부재) | Scenario 30 RED baseline | 워크트리 방식이 구조적으로 해소 — 메인 디렉터리는 `{original-branch}`를 떠나지 않음 |
+| 실패 정리 순서가 워크트리를 고려하지 않음 | Scenario 30 GREEN 설계 | `worktree remove --force` → `branch -D` 순서로 교체 (체크아웃된 브랜치는 삭제 불가) |
+| 워크트리 채택 근거로 "스택 위 전파"를 들면서 전파 방법이 문서에 없음 | Scenario 30 GREEN 실행 에이전트의 정직한 표시 | Worktree Lifetime에 downstream rebase + `--force-with-lease` 2줄 추가 |
+| 분리 PR 제목에 시리즈 위치 표기 없음 | Scenario 31 RED (3/3 FAIL) | 제목에 ` (K/N)` 접미사 규칙 추가 (SKILL.md Step 6 + scope-assessment.md) |
+| K=1 본문에 머지 순서 문장이 없고, 미확정 PR 번호가 조용히 누락됨 | Scenario 31 RED | K=1/K>1 템플릿을 단일 템플릿으로 통합, 미확정 번호는 `#TBD` placeholder 고정 + 갱신 후 잔존 금지 |
+| 분리 컨텍스트 블록의 `#N` 표기와 References의 markdown link 규칙 충돌 | Scenario 31 GREEN 실행 에이전트 지적 | fill rules에 표기 관할 구분 행 추가 |
+
+---
+
 ## Gaps Found and Fixed (Round 13)
 
 | Gap | Found In | Fix Applied |

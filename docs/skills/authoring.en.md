@@ -102,11 +102,11 @@ Key constraints:
 - Entire PR written in Korean
 
 Workflow:
-1. Base branch detection + user confirmation
-2. Branch synchronization (merge/rebase; per-file interview on conflict)
+1. Base branch detection → candidate table → target branch, sync strategy, and conflict policy settled in one question
+2. Branch synchronization (merge/rebase; conflicts settled per the chosen policy)
 3. Git metadata collection + PR convention survey (title/branch/label conventions from up to 30 recent PRs) → codebase exploration
 4. One-question-at-a-time interview → Clearance Checklist passes
-5. Scope assessment (single thesis vs. split required)
+5. Scope assessment (single thesis vs. split required; one worktree per sub-PR on split)
 6. PR title + body draft (following surveyed conventions) → user review → PR creation (assigned to the authenticated gh user, existing labels only, branch-name convention check before push)
 
 **Output format**: Emoji-headed sections — `📌 Summary`, `🔧 Changes`, `💬 Review Points`, `✅ Checklist`, `📎 References`
