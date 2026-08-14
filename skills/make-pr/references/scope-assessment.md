@@ -181,7 +181,7 @@ Each sub-PR gets its own **git worktree** — a separate checked-out directory b
 
 **Precondition**: Working tree must be clean. Run `git status --porcelain` — if output is non-empty, ask the user to commit or stash changes before proceeding.
 
-1. Finalize the list of commits included in each thesis (excluding merge commits), sorted in chronological order (oldest first), and record the mapping of thesis → commit hashes
+1. Finalize the list of commits included in each thesis (excluding merge commits), sorted in chronological order (oldest first), and record the mapping of thesis → commit hashes. Before creating any worktree, record an explicit **branch → worktree** mapping for every planned sub-PR.
 
 2. Pre-check for mixed commits: run `git log origin/{base-branch}..HEAD --name-status` and cross-reference each commit's changed files against the thesis mapping from step 1. If any single commit modifies files assigned to more than one thesis, **immediately stop and switch to the Graceful Degradation procedure** before creating any branch. Do not proceed to the separation loop.
 
@@ -197,9 +197,9 @@ For each thesis (in stacking order):
    c. Cherry-pick ONLY the commits assigned to this thesis from the mapping in Step 1, inside that worktree: `git -C "$WT_DIR" cherry-pick {hash1} {hash2} ...` (MUST be in chronological order — oldest commit first)
    d. Push branch: `git -C "$WT_DIR" push -u origin {branch-name}` (Split Accept includes branch push. Accepting the split is considered the user's consent to creating remote branches.)
 
-3. After all sub-branches are created, tell the user each sub-PR's branch and worktree directory, then write Sub-PR Descriptions
+3. After all sub-branches are created, tell the user each sub-PR's branch and worktree directory, then write Sub-PR Descriptions. Preserve an explicit branch → worktree mapping (for example, `{target-sub-branch}` → `{mapped-worktree}`) for Step 8; if any sub-PR lacks a mapping, stop and ask the user rather than guessing a directory.
 
-`gh pr create` in Step 8 targets `--head {branch-name}` and can run from the main directory or from any of the worktrees — they all address the same repository.
+The `gh pr create` invocation in Step 8 targets `--head {branch-name}` and can run from the main directory or from any of the worktrees — they all address the same repository. Branch-dependent git checks, renames, and pushes must still run in the mapped worktree.
 
 ### Worktree Lifetime
 

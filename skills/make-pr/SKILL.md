@@ -188,6 +188,8 @@ The candidate table already carries `behind` for every candidate, so questions 2
 
 Always include question 1 even when the default branch is the only likely candidate — never auto-skip.
 
+On Codex, each structured setup question must offer **2–3 explicit options**; the UI adds an automatic `Other` option for free-form input, so do not add a fourth catch-all option. For conflict policy, render exactly **파일별로 확인**, **현재 브랜치 우선**, and **타겟 브랜치 우선** as the three explicit options; keep **제안대로 자동 해결** as the canonical `Other` input when the user wants the suggested resolution. Native-capable clients may show the four policies in the table below.
+
 The answers drive the rest of Step 0: `{base-branch}` (question 1) is used in all subsequent git commands, `{sync-strategy}` (question 2) is executed in Step 0-B, `{conflict-policy}` (question 3) settles every conflict in Step 0-C.
 
 ---
@@ -203,7 +205,18 @@ git rev-list --left-right --count origin/{base-branch}...HEAD
 
 **If behind = 0:** No synchronization needed. Proceed to Step 1.
 
-**If behind > 0:** Execute `{sync-strategy}`. If the candidate table showed every candidate at `behind = 0` and no `{sync-strategy}` was collected, ask that single question now.
+**If behind > 0:** If the candidate table showed every candidate at `behind = 0` and no `{sync-strategy}` was collected, make **exactly one** late-divergence `AskUserQuestion`/user-input call before executing anything. Its `questions` array MUST contain both `{sync-strategy}` and `{conflict-policy}` questions in that same call; neither value may be collected in a separate call later. Otherwise, use the already-collected `{sync-strategy}`. In either case, execute the selected strategy only after the applicable answer is available:
+
+```text
+AskUserQuestion({
+  questions: [
+    { id: "sync-strategy", header: "동기화 방식", ... },
+    { id: "conflict-policy", header: "충돌 처리", ... }
+  ]
+})
+```
+
+Only after that single call returns may the selected `{sync-strategy}` be executed; `{conflict-policy}` then governs every conflict in Step 0-C.
 
 ```bash
 # merge
@@ -240,7 +253,7 @@ For each file in the list: read its contents, locate the conflict markers (`<<<<
 
 | `{conflict-policy}` | How this round is settled |
 |---|---|
-| 파일별로 확인 | Explain this round's conflicts in plain text — one short block per file: what each side holds, what the conflict represents, the proposed resolution and its reasoning. Then ask about them in **one `AskUserQuestion` call carrying one question per file** (up to 4 files per call; a 5th file starts the next call). Each question offers **제안대로 해결** / **현재 브랜치 유지** (merge: ours / rebase: theirs) / **타겟 브랜치 채택** (merge: theirs / rebase: ours) |
+| 파일별로 확인 | Explain this round's conflicts in plain text — one short block per file: what each side holds, what the conflict represents, the proposed resolution and its reasoning. Native-capable clients may ask about up to 4 files per call; Codex batches are capped at 3 files per call. A later batch starts with the remaining files. Each question offers **제안대로 해결** / **현재 브랜치 유지** (merge: ours / rebase: theirs) / **타겟 브랜치 채택** (merge: theirs / rebase: ours) |
 | 제안대로 자동 해결 | Apply the Phase 2 proposal to every file |
 | 현재 브랜치 우선 | Take the current branch's side in every file — merge: `git checkout --ours {file}`, rebase: `git checkout --theirs {file}` |
 | 타겟 브랜치 우선 | Take the target branch's side in every file — merge: `git checkout --theirs {file}`, rebase: `git checkout --ours {file}` |
@@ -506,6 +519,8 @@ AHEAD=$(git rev-list --count origin/{base-branch}..HEAD)
 - If user confirms: check branch name convention, push the branch, and run `gh pr create` with the approved title, description, assignee, and labels
 - If user declines: output the final PR description only
 
+For a split sub-PR, resolve its branch → worktree mapping from Step 5 and bind the matching `$WT_DIR` before any ahead check, branch-name/convention check, remote lookup, rename, or push. If the mapping is missing, stop and ask the user; never infer a worktree path. Run those operations from the bound `$WT_DIR`, then create the PR with the mapped branch. This binding rule applies only to split sub-PRs; single-PR Step 8 keeps the flow below unchanged.
+
 ### Branch Name Convention Check (before push)
 
 If `{branch-convention}` exists (Step 1 survey) and the current branch name does not match it:
@@ -542,7 +557,23 @@ EOF
 - First sub-PR: `--base {base-branch}`
 - Subsequent sub-PRs: `--base {previous-split-branch}`
 
+**Split-only Step 8 command block** (run once per mapped sub-PR; do not use this block for a single PR):
+
 ```bash
+WT_DIR="{mapped-worktree}"
+TARGET_SUB_BRANCH=$(git -C "$WT_DIR" branch --show-current)
+git -C "$WT_DIR" fetch origin {appropriate-base}
+AHEAD=$(git -C "$WT_DIR" rev-list --count origin/{appropriate-base}..{target-sub-branch})
+if [ "$AHEAD" -eq 0 ]; then
+  echo "No commits to open for {target-sub-branch}" >&2
+  exit 0
+fi
+REMOTE_TARGET=$(git -C "$WT_DIR" ls-remote --heads origin "$TARGET_SUB_BRANCH")
+if [ -z "$REMOTE_TARGET" ] && [ "$TARGET_SUB_BRANCH" != "{target-sub-branch}" ]; then
+  git -C "$WT_DIR" branch -m {target-sub-branch}
+  TARGET_SUB_BRANCH="{target-sub-branch}"
+fi
+git -C "$WT_DIR" push -u origin {target-sub-branch}
 TITLE=$(cat <<'EOF'
 PR title
 EOF
