@@ -429,6 +429,7 @@ After Clearance Checklist passes, analyze whether the PR contains multiple indep
 - Title-language precedence: for the title only, the surveyed language wins over the Korean default (an English-titled repo gets an English title). The PR body and user conversation remain Korean regardless
 - Fallback (no surveyed convention): conventional commit style (`feat:`, `fix:`, `refactor:`, etc.), Korean, under 50 characters (excluding prefix)
 - Fallback example: `refactor: 주문-결제 간 이벤트 기반 아키텍처 전환`
+- **Split sub-PR**: the title carries its position in the series as a ` (K/N)` suffix after the convention-conforming title — `feat: 주문 이벤트 스키마 정의 (1/3)`. The suffix sits at the end so the surveyed prefix style still leads
 
 ### PR Labels
 
@@ -536,7 +537,8 @@ EOF
 - `--label` once per selected label from Step 6; omit the flag entirely when no label was selected
 
 **Sub-PR (Stacked split):**
-- Branch push already completed during Step 5 branch separation procedure (sub-branch names follow `{branch-convention}`)
+- Branch push already completed during Step 5 branch separation procedure (sub-branch names follow `{branch-convention}`; each sub-branch is checked out in its own worktree)
+- Title carries the ` (K/N)` position suffix, body opens with the split context block (`references/scope-assessment.md`)
 - First sub-PR: `--base {base-branch}`
 - Subsequent sub-PRs: `--base {previous-split-branch}`
 

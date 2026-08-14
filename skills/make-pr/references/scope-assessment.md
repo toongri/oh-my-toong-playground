@@ -250,19 +250,33 @@ The original branch must never be deleted. It stays checked out in the main work
 
 Each sub-PR follows the format in `references/output-format.md` (📌 Summary, 🔧 Changes, 💬 Review Points, ✅ Checklist, 📎 References).
 
+### Sub-PR Title
+
+Each sub-PR title states its position in the series as a suffix after the convention-conforming title (K = this PR's position, N = total sub-PRs):
+
+```
+feat: 주문 이벤트 스키마 정의 (1/3)
+```
+
 ### Split Context Note
 
-Add split context at the top of each sub-PR Summary. Use the appropriate template based on K (the position of this PR in the split series):
+The 📌 Summary of every sub-PR opens with the split context block. One template covers every position:
 
-When K = 1 (first PR — no predecessor):
 ```markdown
-> 이 PR은 [N]개 분리 PR 중 첫 번째입니다. 관련 PR: [sibling PR links]
+> **분리 PR (K/N)** — [분리 전 전체 작업 한 줄 설명]을 N개 PR로 나눈 것 중 K번째입니다.
+> - 머지 순서: #[1번 PR] → #[2번 PR] → 이 PR → #[K+1번 PR] → …
+> - 선행 PR: #[K-1] [해당 PR 제목] 이 먼저 머지되어야 합니다
+> - 관련 PR: [모든 형제 PR 링크]
 ```
 
-When K > 1 (has a predecessor):
-```markdown
-> 이 PR은 [N]개 분리 PR 중 [K]번째입니다. #[K-1] PR이 먼저 머지되어야 합니다. 관련 PR: [sibling PR links]
-```
+Fill rules:
+
+| Slot | How to fill |
+|---|---|
+| 머지 순서 | The full chain in stacking order, with this PR shown as `이 PR` — self-reference avoids needing your own number before creation |
+| 선행 PR | When K = 1, write `선행 PR 없음 — 이 시리즈에서 가장 먼저 머지됩니다` instead |
+| Any sub-PR number not yet created | The literal placeholder `#TBD`, replaced in the Post-Creation Update below — never drop the slot. A dropped slot leaves the reader with no route to the rest of the series |
+| Sibling PR notation | Bare `#N` — GitHub auto-links it inside the same repository. The `[Title](URL)` rule in `references/output-format.md` governs the 📎 References section, not this block |
 
 ### User Confirmation
 
@@ -270,7 +284,7 @@ Obtain user confirmation before each `gh pr create` execution.
 
 ### Post-Creation Update
 
-After ALL sub-PRs have been created, update each PR description with the actual sibling PR links using `gh pr edit`:
+After ALL sub-PRs have been created, replace every `#TBD` placeholder in the already-created descriptions with the actual PR numbers using `gh pr edit`:
 
 ```bash
 gh pr edit {pr-number} --body "$(cat <<'EOF'
@@ -279,8 +293,8 @@ EOF
 )"
 ```
 
-- When K = 1 (the first sub-PR), the initial description may omit sibling links because subsequent PR numbers are not yet known. Update it after all subsequent PRs are created.
-- Update sub-PRs 1 through N-1 (the last sub-PR already has complete sibling knowledge at creation time).
+- Update sub-PRs 1 through N-1 — each of them was created carrying at least one `#TBD` for a PR that did not exist yet. The last sub-PR already knows every predecessor at creation time and carries no placeholder.
+- After the update pass, no `#TBD` may remain in any sub-PR description.
 
 ---
 
