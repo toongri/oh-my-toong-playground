@@ -21,6 +21,10 @@ run_case() {
 setup_option_limit() {
   grep -Fq 'On Codex, each structured setup question must offer **2–3 explicit options**' "$SKILL_FILE" \
     && grep -Fq 'the UI adds an automatic `Other` option' "$SKILL_FILE" \
+    && grep -Fq 'on Codex, expose only those top 2-3 candidates and rely on the UI' "$SKILL_FILE" \
+    && grep -Fq 'Codex: top 2-3 candidates only; the UI' "$SKILL_FILE" \
+    && ! grep -Fq 'If more branches exist, include an "other" option.' "$SKILL_FILE" \
+    && ! grep -Fq 'Top 2-3 candidates, each option' "$SKILL_FILE" \
     && grep -Fq '**파일별로 확인**, **현재 브랜치 우선**, and **타겟 브랜치 우선**' "$SKILL_FILE" \
     && grep -Fq '**제안대로 자동 해결** as the canonical `Other` input' "$SKILL_FILE"
 }

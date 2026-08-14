@@ -1914,9 +1914,9 @@ Round 12 스킬은 Step 0-A Phase 5에서 `BASELINE_TARGET_SHA`를 기록하고 
 
 | # | Criterion | Description |
 |---|-----------|-------------|
-| 1 | 셋업 질문 1콜 | 타겟 브랜치 + 동기화 방식 + 충돌 처리 방침이 한 AskUserQuestion 콜에 담김 |
-| 2 | 같은 라운드 충돌 파일 1콜 | 충돌 파일 2개가 파일당 1문항으로 한 콜에 담김 |
-| 3 | 방침 재질문 없음 | 충돌 처리 방침을 라운드마다 다시 묻지 않음 |
+| 1 | 셋업 질문 1콜 | 타겟 브랜치 + 동기화 방식 + 충돌 처리 방침이 한 AskUserQuestion 콜에 담기며, Codex 타겟 문항은 top 2–3 후보만 explicit options로 내고 자동 `Other`로 자유 입력을 받음. 각 Codex 문항은 explicit options 2–3개를 유지 |
+| 2 | 같은 라운드 충돌 파일 1콜 | 충돌 파일은 파일당 1문항으로 묶고, native-capable clients는 최대 4개·Codex는 최대 3개까지 한 콜에 담음 |
+| 3 | 방침 재질문 없음 | 일반 경로는 방침을 라운드마다 다시 묻지 않으며, late divergence만 sync-strategy + conflict-policy를 합친 두 문항 한 콜로 처리 |
 | 4 | Step 0-B 무질문 | 동기화 단계가 아무것도 묻지 않고 확정된 전략을 실행 |
 | 5 | 총 콜 수 감소 | Step 1 진입 전 AskUserQuestion 콜이 4회 미만 |
 
@@ -1939,7 +1939,10 @@ Round 12 스킬은 Step 0-A Phase 5에서 `BASELINE_TARGET_SHA`를 기록하고 
 **5/5 PASS** — 총 2콜 (문항 3개 + 2개).
 
 - 셋업 1콜: Phase 4의 `questions` 배열 레시피대로 타겟/동기화/충돌 처리 3문항을 후보 테이블에서 조립
-- 충돌 1콜: 파일당 1문항, 최대 4개까지 한 콜
+- 충돌 1콜: 파일당 1문항, native-capable clients는 최대 4개·Codex는 최대 3개까지 한 콜
+- Codex 셋업: explicit options는 문항당 2–3개이며, conflict-policy는 세 안전 선택지를 제공하고 자동 `Other`를 suggested policy 입력으로 사용
+- Codex 타겟 질문: top 2–3 후보만 explicit options로 제시하고 명시적 catch-all 없이 UI 자동 `Other`로 branch name을 입력
+- late divergence: `sync-strategy`와 `conflict-policy` 두 문항을 정확히 한 user-input 콜에 포함
 - 방침 재질문 없음 / 0-B 무질문: 두 단계 모두 이미 받은 답을 소비만 함
 - 베이스라인 논증 차단 확인: 실행 에이전트가 "후보 테이블이 behind를 담고 있으므로 질문 2·3은 타겟 선택 전에 답할 수 있다"는 문장을 근거로 인용
 
@@ -1964,7 +1967,7 @@ Round 12 스킬은 Step 0-A Phase 5에서 `BASELINE_TARGET_SHA`를 기록하고 
 |---|-----------|-------------|
 | 1 | sub-PR당 워크트리 생성 | `git worktree add -b`로 레포 루트의 형제 디렉터리에 생성 |
 | 2 | 메인 디렉터리 브랜치 전환 0회 | 절차 종료 후에도 `{original-branch}` 체크아웃 유지 |
-| 3 | cherry-pick·push가 워크트리 안에서 실행 | `git -C "$WT_DIR"` 사용 |
+| 3 | branch-dependent 작업이 매핑된 워크트리에서 실행 | cherry-pick·push뿐 아니라 Step 8의 ahead 확인·remote 조회·rename·push까지 `git -C "$WT_DIR"`로 mapped branch에 실행 |
 | 4 | 워크트리 경로 사용자 보고 | 브랜치와 디렉터리를 함께 알림 |
 | 5 | 성공 시 워크트리 유지 | 리뷰 대응용이므로 분리 종료 시 제거하지 않음 |
 | 6 | 실패 시 워크트리 제거 후 브랜치 삭제 | 워크트리에 체크아웃된 브랜치는 삭제 불가하므로 순서가 중요 |
@@ -1990,7 +1993,7 @@ Round 12 스킬은 Step 0-A Phase 5에서 `BASELINE_TARGET_SHA`를 기록하고 
 
 - 워크트리 경로: `/Users/dev/work/acme-api-toong-order-event-publish`, `/Users/dev/work/acme-api-toong-payment-tx-boundary` (레포 루트 형제, 브랜치명의 `/`를 `-`로 치환)
 - 메인 디렉터리 전환 **0회** — `git worktree add -b`가 다른 디렉터리에 체크아웃하므로 `{original-branch}`를 떠나지 않음
-- cherry-pick·push 4개 명령 전부 `git -C "$WT_DIR"`
+- branch → worktree mapping을 보존하고, cherry-pick·push뿐 아니라 Step 8의 ahead 확인·remote 조회·rename·push도 매핑된 `$WT_DIR`의 branch에 `git -C "$WT_DIR"`로 실행
 - 실패 경로: `cherry-pick --abort` → `git worktree remove --force` → `git branch -D` → 원격 삭제는 사용자 승인 후
 - sub-PR 1 리뷰 대응: 해당 워크트리 디렉터리에서 바로 수정·push, stash/checkout 불필요
 
@@ -2053,7 +2056,7 @@ Round 12 스킬은 Step 0-A Phase 5에서 `BASELINE_TARGET_SHA`를 기록하고 
 | Step 0 결정 4개가 각각 별도 AskUserQuestion 라운드트립 (4콜, 콜당 1문항) | Scenario 29 RED + 사용자 보고 "너무 하나씩 물어봐" | Phase 4를 `questions` 배열 레시피로 전환 — 타겟/동기화/충돌 방침 1콜, 포함 조건은 후보 테이블의 behind 값 |
 | "타겟을 정해야 behind를 안다"는 순차 의존성 논증이 배치를 막음 | Scenario 29 RED baseline 인용 | 후보 테이블이 이미 후보별 behind를 담고 있음을 명시하고 "답이 아니라 테이블에서 조립하라"로 지시 |
 | Step 3의 "One question at a time" 규칙이 Step 0까지 번져 충돌 | Scenario 29 RED + 규칙 정합성 점검 | 규칙 적용 범위를 인터뷰로 한정, `reference-tables.md` Common Mistakes 행도 함께 수정 |
-| 같은 라운드의 충돌 파일을 파일당 1콜로 질문 | Scenario 29 RED | Phase 3에 "파일당 1문항, 한 콜에 최대 4개" 명시 + 방침은 라운드 간 유지 |
+| 같은 라운드의 충돌 파일을 파일당 1콜로 질문 | Scenario 29 RED | Phase 3에 "파일당 1문항, native-capable clients는 최대 4개·Codex는 최대 3개" 명시 + 방침은 라운드 간 유지 |
 | 분리가 메인 작업 트리에서 브랜치를 전환해 진행 — 리뷰 대응 시 checkout/stash 왕복 강요 | Scenario 30 RED + 사용자 요청 | sub-PR마다 `git worktree add -b`, cherry-pick·push는 `git -C "$WT_DIR"` |
 | 성공 경로가 메인 디렉터리를 마지막 sub-브랜치에 남겨둠 (원복 명령 부재) | Scenario 30 RED baseline | 워크트리 방식이 구조적으로 해소 — 메인 디렉터리는 `{original-branch}`를 떠나지 않음 |
 | 실패 정리 순서가 워크트리를 고려하지 않음 | Scenario 30 GREEN 설계 | `worktree remove --force` → `branch -D` 순서로 교체 (체크아웃된 브랜치는 삭제 불가) |
@@ -2072,3 +2075,12 @@ Round 12 스킬은 Step 0-A Phase 5에서 `BASELINE_TARGET_SHA`를 기록하고 
 | `BASELINE_TARGET_SHA`가 재동기화 후 갱신되지 않음 (대입 지점 1곳) | Scenario 28 RED baseline | Step 0-A Phase 5의 베이스라인 기록 자체를 삭제 — 새 술어는 기준값이 필요 없음 |
 | 워크플로 다이어그램에 재동기화·충돌 분기가 남아 재진입 경로를 암시 | Scenario 28 RED baseline | 다이어그램의 CAS 노드 3개를 ahead 검사 단일 분기로 교체 |
 | 제거된 메커니즘의 어휘가 참조 문서에 잔존 | Round 13 정리 | `references/reference-tables.md`의 PR Creation 행·Common Mistakes 행 갱신, Scenario 22/24/25에 SUPERSEDED 표기 |
+
+## Gaps Found and Fixed (PR #257 review regressions)
+
+| Gap | Found In | Fix Applied |
+|-----|----------|-------------|
+| Split Step 8이 main 디렉터리의 ambient `HEAD`/현재 브랜치에 의존 | PR #257 P1 review | branch → worktree mapping을 보존하고 mapped `$WT_DIR`에서 ahead 확인·remote 조회·rename·push를 실행 |
+| Codex setup 문항이 explicit options 4개를 노출 | PR #257 P1 review | Codex는 문항당 explicit options 2–3개로 제한하고 자동 `Other`를 사용 |
+| late divergence에서 sync-strategy만 질문하고 conflict-policy가 누락 | PR #257 P2 review | 정확히 한 user-input 콜의 `questions` 배열에 두 정책 문항을 함께 포함 |
+| Codex 충돌 배치가 4문항까지 허용 | PR #257 P2 review | native-capable clients는 최대 4개, Codex는 최대 3개로 명시 |

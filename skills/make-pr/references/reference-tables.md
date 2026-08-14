@@ -4,9 +4,9 @@
 
 | Step | Action | Key Point |
 |------|--------|-----------|
-| 0-A: Base Branch Detection + Setup Question | `git fetch --all --prune`, merge-base analysis for all remote branches | Build candidate table, then ONE AskUserQuestion call: 타겟 브랜치 (always) + 동기화 방식 + 충돌 처리 방침 (both when any candidate is behind) — no auto-skip on the target |
-| 0-B: Target Sync | `git rev-list --left-right --count` to confirm diverge | If behind > 0: execute the already-chosen `{sync-strategy}` — asks nothing |
-| 0-C: Conflict Resolution | Analyze the whole round's conflicts, settle per `{conflict-policy}` | 파일별로 확인 → one call carrying one question per file (max 4). Stage each file, finalize with commit / rebase --continue. Policy carries across rebase rounds |
+| 0-A: Base Branch Detection + Setup Question | `git fetch --all --prune`, merge-base analysis for all remote branches | Build candidate table, then ONE AskUserQuestion call: 타겟 브랜치 (always) + 동기화 방식 + 충돌 처리 방침 (both when any candidate is behind). For the target question, native-capable clients may add one explicit branch-name option; Codex exposes only the top 2–3 candidates and uses the UI's automatic `Other`. On Codex, every setup question has 2–3 explicit options |
+| 0-B: Target Sync | `git rev-list --left-right --count` to confirm diverge | If behind > 0: execute the already-chosen `{sync-strategy}` — asks nothing. If every candidate was initially behind = 0 but a late divergence appears, make exactly one call containing both `{sync-strategy}` and `{conflict-policy}` questions |
+| 0-C: Conflict Resolution | Analyze the whole round's conflicts, settle per `{conflict-policy}` | 파일별로 확인 → one call carrying one question per file (native-capable max 4; Codex max 3). Stage each file, finalize with commit / rebase --continue. Policy carries across rebase rounds |
 | Collect Git Metadata & PR Conventions | Run `git log`, `git diff --stat`, then `gh pr list --state all --limit 30` + `gh label list` | Metadata only, NO file contents. Derive title/branch/label conventions (majority pattern or "no convention") |
 | Explore Codebase | Use explore agent | Do NOT ask user about codebase |
 | User Interview | One question at a time, Clearance Checklist-based | Adaptive question count |
@@ -24,8 +24,10 @@
 |---------|-------------------|-----|
 | Writing without Clearance Checklist | Incomplete info leads to inaccurate PR | Check checklist every turn |
 | Bundling multiple questions in the Step 3 interview | Each interview answer shapes the next question; bundling lowers answer quality | One question at a time — Step 3 only |
-| Asking the Step 0 setup decisions one call at a time | 타겟 브랜치·동기화 방식·충돌 처리 방침은 모두 후보 테이블만으로 답할 수 있는데 라운드트립만 3배가 된다 | Build all three from the candidate table into one AskUserQuestion call |
+| Asking the Step 0 setup decisions one call at a time | 타겟 브랜치·동기화 방식·충돌 처리 방침은 모두 후보 테이블만으로 답할 수 있는데 라운드트립만 3배가 된다 | Build all three from the candidate table into one AskUserQuestion call; on Codex use three explicit conflict options and let automatic `Other` carry the suggested policy |
+| Adding a fourth explicit target-branch option on Codex | Top candidates plus a manually written branch-name catch-all exceed the request_user_input option limit | Show only the top 2–3 candidates on Codex and let the UI-provided automatic `Other` accept a free-form branch name; native-capable clients may add one explicit branch-name option |
 | Splitting sub-PRs by switching branches in the main working tree | Once the PRs are open, review feedback on several sub-PRs forces a checkout/stash round trip per switch, and the success path strands the main directory on the last sub-branch | One `git worktree` per sub-PR; the original branch stays checked out where it was |
+| Using the ambient current branch for split Step 8 | The main directory may still be on the original branch, so ahead checks, renames, or pushes can target the wrong sub-PR | Resolve and preserve the branch → worktree mapping, bind `$WT_DIR`, and run every branch-dependent Step 8 operation (`ahead`, remote lookup, rename, push) with `git -C "$WT_DIR"` |
 | Sub-PR title or body that does not state its position in the series | Reviewer cannot tell what must merge first or where the rest of the series is | Title carries ` (K/N)`; Summary opens with the split context block, `#TBD` placeholders resolved after all PRs exist |
 | Asking user about codebase facts | Unnecessary burden on user | Discover via explore |
 | Describing design concerns in Changes | Mixes Changes and Review Points | Design concerns go in Review Points |

@@ -172,7 +172,7 @@ Collect all candidates and present a table showing commits ahead/behind and chan
 | main                 | 17            | 0              | +1832 -1881 (17 files)|
 ```
 
-Show the top 2-3 candidates. If more branches exist, include an "other" option.
+Show the top 2-3 candidates. Native-capable clients may add one explicit branch-name option when needed; on Codex, expose only those top 2-3 candidates and rely on the UI's automatic `Other` for a free-form branch name — never add an explicit catch-all option.
 
 **Phase 4 — Setup Question:**
 
@@ -180,7 +180,7 @@ Everything Step 0 needs from the user is settled in **one `AskUserQuestion` call
 
 | # | header | question | options | Included when |
 |---|--------|----------|---------|---------------|
-| 1 | 타겟 브랜치 | 이 PR의 base 브랜치는 어디인가 | Top 2-3 candidates, each option's description carrying its ahead/behind/change scale + an option to type a branch name | Always |
+| 1 | 타겟 브랜치 | 이 PR의 base 브랜치는 어디인가 | Native-capable clients: top 2-3 candidates with ahead/behind/change scale + one explicit branch-name option when needed. Codex: top 2-3 candidates only; the UI's automatic `Other` receives a free-form branch name | Always |
 | 2 | 동기화 방식 | 타겟 브랜치가 앞서 있으면 그 커밋들을 어떻게 가져올까 | **merge**: 타겟 브랜치의 변경사항을 merge commit으로 통합합니다. 기존 히스토리가 보존됩니다. / **rebase**: 현재 브랜치의 커밋을 타겟 브랜치 위로 재배치합니다. 선형적인 히스토리를 유지합니다. | Any candidate in the table has `behind > 0` |
 | 3 | 충돌 처리 | 동기화 중 충돌이 나면 어떻게 처리할까 | **파일별로 확인**: 충돌마다 양쪽 내용과 제안을 설명하고 물어봅니다. / **제안대로 자동 해결**: 각 충돌을 분석해 제안대로 바로 적용하고 결과를 보고합니다. / **현재 브랜치 우선**: 모든 충돌에서 현재 브랜치 쪽 변경을 채택합니다. / **타겟 브랜치 우선**: 모든 충돌에서 타겟 브랜치 쪽 변경을 채택합니다. | Question 2 is included |
 
