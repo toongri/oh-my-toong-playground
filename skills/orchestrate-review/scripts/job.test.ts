@@ -5285,7 +5285,7 @@ describe("start durable review identity", () => {
 
 	test("cleans the lock after setup failure and allows a second valid start", async () => {
 		const jobsDir = path.join(tmpDir, "setup-failure");
-		const fail = true;
+		let fail = true;
 		mock.module("@lib/generic-job", () => ({
 			...GenericJob,
 			spawnWorkers: () => {
@@ -5297,7 +5297,9 @@ describe("start durable review identity", () => {
 		const options = { config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity };
 		await expect(mod.cmdStart(options, "prompt")).rejects.toThrow("setup failed");
 		expect(fs.existsSync(lockPath(jobsDir))).toBe(false);
-		await expect(mod.cmdStart(options, "prompt")).rejects.toThrow("initializing");
+		expect(fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-"))).toEqual([]);
+		fail = false;
+		await expect(mod.cmdStart(options, "prompt")).resolves.toBeUndefined();
 	});
 
 	test("two concurrent starts return the same job and execute one worker marker", async () => {
@@ -5476,7 +5478,7 @@ describe("start durable review identity", () => {
 		]);
 	});
 
-	test("preserves initializing anchor after a spawn attempt throws", async () => {
+	test("removes initializing anchor when spawn throws before creating a worker", async () => {
 		const jobsDir = path.join(tmpDir, "spawn-failure-anchor");
 		const marker = path.join(tmpDir, "spawn.marker");
 		let spawnCount = 0;
@@ -5492,13 +5494,10 @@ describe("start durable review identity", () => {
 		const options = { config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity };
 		await expect(mod.cmdStart(options, "prompt")).rejects.toThrow("spawn failed");
 		const jobs = fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-"));
-		expect(jobs).toHaveLength(1);
-		expect(JSON.parse(fs.readFileSync(path.join(jobsDir, jobs[0], "job.json"), "utf8")).state).toBe(
-			"initializing",
-		);
+		expect(jobs).toEqual([]);
 		expect(fs.readFileSync(marker, "utf8")).toBe("x");
-		await expect(mod.cmdStart(options, "prompt")).rejects.toThrow("initializing");
-		expect(spawnCount).toBe(1);
-		expect(fs.readFileSync(marker, "utf8")).toBe("x");
+		await expect(mod.cmdStart(options, "prompt")).rejects.toThrow("spawn failed");
+		expect(spawnCount).toBe(2);
+		expect(fs.readFileSync(marker, "utf8")).toBe("xx");
 	});
 });

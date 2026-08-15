@@ -934,15 +934,23 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 		atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
 
 		let spawned: SpawnedWorker[] = [];
-		spawnAttempted = true;
-		spawned = _spawnWorkers({
-			entities: preparedMembers,
-			workerPath: WORKER_PATH,
-			jobDir,
-			entitiesDir: membersDir,
-			timeoutSec,
-			config: CHUNK_REVIEW_JOB_CONFIG,
-		});
+		try {
+			spawned = _spawnWorkers({
+				entities: preparedMembers,
+				workerPath: WORKER_PATH,
+				jobDir,
+				entitiesDir: membersDir,
+				timeoutSec,
+				config: CHUNK_REVIEW_JOB_CONFIG,
+			});
+			spawnAttempted = spawned.length > 0;
+		} catch (error) {
+			// spawnWorkers validates all names before creating member directories. An
+			// empty directory therefore proves no worker launch began; once any member
+			// state exists, retain the identity anchor for conservative recovery.
+			spawnAttempted = fs.readdirSync(membersDir).length > 0;
+			throw error;
+		}
 		logInfo(`workers spawned: ${members.map((r) => String(r.name)).join(", ")}`);
 
 		const workerPgidByName = new Map(spawned.map((w) => [w.name, w.workerPgid]));
