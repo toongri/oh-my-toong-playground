@@ -87,12 +87,30 @@ split_step8_target() {
     && printf '%s\n' "$single" | grep -Fq 'gh pr create --base {base-branch} --head $(git branch --show-current) --assignee @me'
 }
 
+split_command_failure_rollback() {
+  block=$(sed -n '/### Failure Handling/,/^### Original Branch Preservation/p' "$SCOPE_FILE") \
+    && printf '%s\n' "$block" | grep -Fq '`worktree add`' \
+    && printf '%s\n' "$block" | grep -Fq '`cherry-pick`' \
+    && printf '%s\n' "$block" | grep -Fq '`push`' \
+    && printf '%s\n' "$block" | grep -Fq 'enter the same shared rollback path' \
+    && printf '%s\n' "$block" | grep -Fq 'Track only worktrees and local branches successfully created during this run' \
+    && printf '%s\n' "$block" | grep -Fq 'track only remote branches successfully pushed during this run' \
+    && printf '%s\n' "$block" | grep -Fq 'A late worktree-add failure must roll back remote branches pushed by earlier iterations of this run' \
+    && printf '%s\n' "$block" | grep -Fq 'Remove worktrees first, then delete' \
+    && printf '%s\n' "$block" | grep -Fq 'run `git -C "$WT_DIR" cherry-pick --abort` only when a cherry-pick is active' \
+    && printf '%s\n' "$block" | grep -Fq 'confirmation before deleting any tracked remote branch' \
+    && printf '%s\n' "$block" | grep -Fq 'Preserve pre-existing worktrees, local branches, and remote branches' \
+    && printf '%s\n' "$block" | grep -Fq 'fall back to the single PR flow' \
+    && printf '%s\n' "$block" | grep -Fq 'the preflight checks are not a sufficient guard'
+}
+
 run_case setup-option-limit setup_option_limit
 run_case late-divergence-policy late_divergence_policy
 run_case codex-conflict-batch codex_conflict_batch
 run_case candidate-cardinality-rules candidate_cardinality_rules
 run_case conflict-side-deletion-contract conflict_side_deletion_contract
 run_case split-step8-target split_step8_target
+run_case split-command-failure-rollback split_command_failure_rollback
 
 if [ "$failures" -gt 0 ]; then
   exit 1

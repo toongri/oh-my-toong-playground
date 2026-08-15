@@ -194,8 +194,9 @@ For each thesis (in stacking order):
    b. Create the worktree with the new branch — this checks the branch out in `$WT_DIR`, leaving the main working directory on `{original-branch}`:
       - First thesis: `git worktree add -b {branch-name} "$WT_DIR" origin/{base-branch}`
       - Subsequent theses: `git worktree add -b {branch-name} "$WT_DIR" {previous-split-branch}`
+      - After a successful command, append this worktree path and local branch to the current-run rollback registry. Do not register a failed or pre-existing resource.
    c. Cherry-pick ONLY the commits assigned to this thesis from the mapping in Step 1, inside that worktree: `git -C "$WT_DIR" cherry-pick {hash1} {hash2} ...` (MUST be in chronological order — oldest commit first)
-   d. Push branch: `git -C "$WT_DIR" push -u origin {branch-name}` (Split Accept includes branch push. Accepting the split is considered the user's consent to creating remote branches.)
+   d. Push branch: `git -C "$WT_DIR" push -u origin {branch-name}` (Split Accept includes branch push. Accepting the split is considered the user's consent to creating remote branches.) After a successful push, append that remote branch to the current-run rollback registry; do not register a branch whose push failed or a remote branch that pre-dated this run.
 
 3. After all sub-branches are created, tell the user each sub-PR's branch and worktree directory, then write Sub-PR Descriptions. Preserve an explicit branch → worktree mapping (for example, `{target-sub-branch}` → `{mapped-worktree}`) for Step 8; if any sub-PR lacks a mapping, stop and ask the user rather than guessing a directory.
 
@@ -224,16 +225,17 @@ Merge commits are excluded from thesis analysis. They are artifacts of branch sy
 
 ### Failure Handling
 
-If cherry-pick fails:
-1. Abort the cherry-pick in the worktree where it failed (`git -C "$WT_DIR" cherry-pick --abort`)
-2. For each worktree created during this procedure:
-   a. `git worktree remove --force {worktree-path}` (a branch checked out in a worktree cannot be deleted)
-   b. `git branch -D {branch-name}`
-3. Ask the user for confirmation before deleting remote branches: list each remote branch to be deleted and wait for explicit approval
+The `worktree add`, `cherry-pick`, and `push` commands are all failure points. A failure at any of those stages must enter the same shared rollback path; the preflight checks are not a sufficient guard. Track only worktrees and local branches successfully created during this run, and track only remote branches successfully pushed during this run. A late worktree-add failure must roll back remote branches pushed by earlier iterations of this run, but must not touch any pre-existing resource.
+
+1. If the failure occurred during a cherry-pick, run `git -C "$WT_DIR" cherry-pick --abort` only when a cherry-pick is active; do not invoke `--abort` for an add or push failure (or for an already-clean worktree).
+2. Remove worktrees first, then delete the corresponding local branches, using only the tracked resources from this run:
+   a. `git worktree remove --force {tracked-worktree-path}`
+   b. `git branch -D {tracked-local-branch}`
+3. Ask the user for confirmation before deleting any tracked remote branch: list each remote branch to be deleted and wait for explicit approval. Never delete a remote branch without that confirmation.
 4. For each remote branch confirmed by the user:
-   a. `git push origin --delete {branch-name} 2>/dev/null || true`
-5. Fall back to single PR flow (Step 6) — the main working directory never left `{original-branch}`, so there is nothing to check back out
-6. Inform the user of the failure cause
+   a. `git push origin --delete {tracked-remote-branch} 2>/dev/null || true`
+5. Preserve pre-existing worktrees, local branches, and remote branches, then fall back to the single PR flow (Step 6) — the main working directory never left `{original-branch}`, so there is nothing to check back out.
+6. Inform the user of the failure cause and which tracked resources were cleaned up.
 
 ### Original Branch Preservation
 
