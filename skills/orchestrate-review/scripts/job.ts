@@ -3,6 +3,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { createHash } from "crypto";
 
 import {
 	exitWithError,
@@ -471,6 +472,239 @@ function classifyReapedOrphans(
 	}));
 }
 
+interface ChunkReviewIdentity {
+	reviewId: string;
+	chunkKey: string;
+	attempt: number;
+	worktreeRealpath: string;
+	baseSha: string;
+	headSha: string;
+	diffFingerprint: string;
+}
+
+const IDENTITY_FIELDS: Array<keyof ChunkReviewIdentity> = [
+	"reviewId",
+	"chunkKey",
+	"attempt",
+	"worktreeRealpath",
+	"baseSha",
+	"headSha",
+	"diffFingerprint",
+];
+
+type ChunkReviewIdentityResult =
+	| { kind: "none" }
+	| { kind: "invalid"; missing: string[] }
+	| { kind: "complete"; identity: ChunkReviewIdentity };
+
+function readChunkReviewIdentity(options: Record<string, unknown>): ChunkReviewIdentityResult {
+	const identityContainerPresent = Object.prototype.hasOwnProperty.call(options, "identity");
+	const reviewIdentityContainerPresent = Object.prototype.hasOwnProperty.call(
+		options,
+		"reviewIdentity",
+	);
+	if (
+		(identityContainerPresent && !isRecord(options.identity)) ||
+		(reviewIdentityContainerPresent && !isRecord(options.reviewIdentity))
+	) {
+		return { kind: "invalid", missing: ["identity"] };
+	}
+	if (identityContainerPresent && reviewIdentityContainerPresent)
+		return { kind: "invalid", missing: ["identity"] };
+	let source: Record<string, unknown> = options;
+	if (identityContainerPresent && isRecord(options.identity)) source = options.identity;
+	else if (reviewIdentityContainerPresent && isRecord(options.reviewIdentity))
+		source = options.reviewIdentity;
+	const aliases: Record<keyof ChunkReviewIdentity, string[]> = {
+		reviewId: ["reviewId", "review-id", "review_id"],
+		chunkKey: ["chunkKey", "chunk-key", "chunk_key"],
+		attempt: ["attempt"],
+		worktreeRealpath: ["worktreeRealpath", "worktree-realpath", "worktree_realpath"],
+		baseSha: ["baseSha", "base-sha", "base_sha"],
+		headSha: ["headSha", "head-sha", "head_sha"],
+		diffFingerprint: ["diffFingerprint", "diff-fingerprint", "diff_fingerprint"],
+	};
+	const present = (names: string[]) =>
+		names.some((name) => Object.prototype.hasOwnProperty.call(source, name));
+	const read = (names: string[]) =>
+		names.find((name) => Object.prototype.hasOwnProperty.call(source, name));
+	const value = (names: string[]) => {
+		const key = read(names);
+		return key === undefined ? undefined : source[key];
+	};
+	const reviewId = optionalString(value(aliases.reviewId));
+	const chunkKey = optionalString(value(aliases.chunkKey));
+	const attemptValue = value(aliases.attempt);
+	const attemptNumber =
+		typeof attemptValue === "string" && attemptValue.trim() !== ""
+			? Number(attemptValue)
+			: attemptValue;
+	const attempt =
+		typeof attemptNumber === "number" && Number.isFinite(attemptNumber) ? attemptNumber : undefined;
+	const worktreeRealpath = optionalString(value(aliases.worktreeRealpath));
+	const baseSha = optionalString(value(aliases.baseSha));
+	const headSha = optionalString(value(aliases.headSha));
+	const diffFingerprint = optionalString(value(aliases.diffFingerprint));
+	const anyPresent = IDENTITY_FIELDS.some((field) => present(aliases[field]));
+	if (!anyPresent && !identityContainerPresent && !reviewIdentityContainerPresent) {
+		return { kind: "none" };
+	}
+	const values = {
+		reviewId,
+		chunkKey,
+		attempt,
+		worktreeRealpath,
+		baseSha,
+		headSha,
+		diffFingerprint,
+	};
+	const missing = IDENTITY_FIELDS.filter(
+		(field) => values[field] === undefined || !present(aliases[field]),
+	);
+	if (missing.length > 0) {
+		return { kind: "invalid", missing };
+	}
+	if (
+		reviewId === undefined ||
+		chunkKey === undefined ||
+		attempt === undefined ||
+		worktreeRealpath === undefined ||
+		baseSha === undefined ||
+		headSha === undefined ||
+		diffFingerprint === undefined
+	) {
+		return {
+			kind: "invalid",
+			missing: IDENTITY_FIELDS.filter((field) => values[field] === undefined),
+		};
+	}
+	return {
+		kind: "complete",
+		identity: { reviewId, chunkKey, attempt, worktreeRealpath, baseSha, headSha, diffFingerprint },
+	};
+}
+
+const IDENTITY_LOCK_STALE_MS = 10 * 60 * 1000;
+const configuredIdentityDeadline = Number(process.env.CHUNK_REVIEW_IDENTITY_LOCK_DEADLINE_MS);
+const IDENTITY_LOCK_DEADLINE_MS =
+	Number.isFinite(configuredIdentityDeadline) && configuredIdentityDeadline >= 100
+		? configuredIdentityDeadline
+		: 45 * 1000;
+
+function identityLockPath(jobsDir: string, identity: ChunkReviewIdentity): string {
+	const stable = IDENTITY_FIELDS.map((field) => `${field}=${JSON.stringify(identity[field])}`).join(
+		"\n",
+	);
+	const digest = createHash("sha256").update(stable).digest("hex");
+	return path.join(jobsDir, `.chunk-review-identity-${digest}.lock`);
+}
+
+async function acquireIdentityClaim(
+	jobsDir: string,
+	identity: ChunkReviewIdentity,
+): Promise<
+	| { fd: number; lockPath: string }
+	| { existing: { jobDir: string; metadata: Record<string, unknown> } }
+> {
+	const lockPath = identityLockPath(jobsDir, identity);
+	const deadline = Date.now() + IDENTITY_LOCK_DEADLINE_MS;
+	for (;;) {
+		try {
+			const fd = fs.openSync(lockPath, "wx");
+			try {
+				fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, createdAt: Date.now() }));
+				const existing = findExistingJobForIdentity(jobsDir, identity);
+				if (existing) {
+					fs.closeSync(fd);
+					fs.unlinkSync(lockPath);
+					return { existing };
+				}
+				return { fd, lockPath };
+			} catch (error) {
+				try {
+					fs.closeSync(fd);
+				} catch {
+					// Best-effort close before propagating the original acquisition error.
+				}
+				try {
+					fs.unlinkSync(lockPath);
+				} catch {
+					// Best-effort unlink prevents a failed claim from blocking future starts.
+				}
+				throw error;
+			}
+		} catch (error) {
+			if (!(error instanceof Error) || !String(error.message).includes("EEXIST")) throw error;
+			if (!fs.existsSync(lockPath)) continue;
+			try {
+				const lock = JSON.parse(fs.readFileSync(lockPath, "utf8"));
+				const createdAt = typeof lock.createdAt === "number" ? lock.createdAt : NaN;
+				const pid = typeof lock.pid === "number" ? lock.pid : NaN;
+				const stale = Number.isFinite(createdAt) && Date.now() - createdAt > IDENTITY_LOCK_STALE_MS;
+				let alive = true;
+				try {
+					if (Number.isFinite(pid)) process.kill(pid, 0);
+					else alive = true;
+				} catch {
+					alive = false;
+				}
+				if (stale && !alive) {
+					try {
+						fs.unlinkSync(lockPath);
+					} catch {
+						// Another contender may have reclaimed the lock first.
+					}
+					continue;
+				}
+			} catch {
+				/* malformed lock is fail-closed */
+			}
+			if (Date.now() >= deadline)
+				throw new Error(`identity claim timeout: ${lockPath}`, { cause: error });
+			await new Promise((resolve) => setTimeout(resolve, 25));
+		}
+	}
+}
+
+function findExistingJobForIdentity(
+	jobsDir: string,
+	identity: ChunkReviewIdentity,
+): { jobDir: string; metadata: Record<string, unknown> } | undefined {
+	let entries: string[];
+	try {
+		entries = fs.readdirSync(jobsDir);
+	} catch {
+		return undefined;
+	}
+	for (const entry of entries.sort()) {
+		if (!entry.startsWith("chunk-review-")) continue;
+		const jobDir = path.join(jobsDir, entry);
+		let metadata: Record<string, unknown>;
+		try {
+			const parsed: unknown = JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8"));
+			if (!isRecord(parsed)) continue;
+			metadata = parsed;
+		} catch {
+			// Incomplete/crashed metadata cannot be adopted.
+			continue;
+		}
+		const persistedIdentity = isRecord(metadata.identity)
+			? metadata.identity
+			: isRecord(metadata.reviewIdentity)
+				? metadata.reviewIdentity
+				: undefined;
+		if (
+			persistedIdentity &&
+			IDENTITY_FIELDS.every((field) => persistedIdentity[field] === identity[field])
+		) {
+			if (metadata.state === "initializing")
+				throw new Error(`identity job is still initializing: ${jobDir}`);
+			if (metadata.state === "ready") return { jobDir, metadata };
+		}
+	}
+	return undefined;
+}
+
 async function cmdReap(options: Record<string, unknown>): Promise<void> {
 	const jobsDir = resolveJobsDir(options);
 	const graceMs = optionalNumber(options["grace-ms"]);
@@ -510,10 +744,14 @@ function cmdDoctor(options: Record<string, unknown>): void {
 		CHUNK_REVIEW_JOB_CONFIG,
 	);
 	if (options.json) {
-		process.stdout.write(`${JSON.stringify({ orphanJobCount, orphanPgidCount, orphans }, null, 2)}\n`);
+		process.stdout.write(
+			`${JSON.stringify({ orphanJobCount, orphanPgidCount, orphans }, null, 2)}\n`,
+		);
 		return;
 	}
-	process.stdout.write(`orphan jobs: ${orphanJobCount}, orphan process groups: ${orphanPgidCount}\n`);
+	process.stdout.write(
+		`orphan jobs: ${orphanJobCount}, orphan process groups: ${orphanPgidCount}\n`,
+	);
 	for (const orphan of orphans) {
 		process.stdout.write(`  ${orphan.jobDir} (pgids: ${orphan.pgids.join(", ")})\n`);
 	}
@@ -525,173 +763,229 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	const jobsDir = resolveJobsDir(options);
 
 	ensureDir(jobsDir);
-	// Reap orphaned job process groups BEFORE gcStaleJobs, not after — the other
-	// trigger besides the SessionStart hook (next task), so an orphan gets swept
-	// up whether the user re-runs a review or opens a new session. gcStaleJobs
-	// deletes any job.json older than GC_MAX_AGE_MS with no liveness check at
-	// all (lib/generic-job.ts), and job.json is the only ownership anchor every
-	// reap layer depends on — running gc first would delete that anchor out from
-	// under a still-alive orphan (a dead conductor's job.json ages past the
-	// 1-hour mark while its codex-exec descendants are still running), making
-	// the orphan unreachable by every layer until the next reboot. graceMs: 0 —
-	// job start must never be delayed by the normal SIGTERM→SIGKILL grace wait
-	// (REAP_GRACE_MS_DEFAULT is 5s): a group findOrphanJobs already judged
-	// orphaned (alive PGID, zero live progress) has nothing left worth waiting
-	// on before SIGKILL.
-	const { reaped: reapedOrphans, survivingPids } = await reapOrphanJobs(jobsDir, CHUNK_REVIEW_JOB_CONFIG, {
-		graceMs: 0,
-	});
-	gcStaleJobs(jobsDir);
-
-	const hostRole = detectHostRole(SKILL_DIR);
-	const config = parseChunkReviewConfig(configPath);
-	const chairmanRoleRaw =
-		optionalString(options.chairman) ||
-		process.env.CHUNK_REVIEW_CHAIRMAN ||
-		optionalString(config["chunk-review"].chairman.role) ||
-		"auto";
-
-	// Pre-normalize via the same normalizeBool the framework applies internally, so passing an
-	// already-normalized boolean|null through is idempotent (identical outcome for every input shape)
-	// while satisfying resolveChairmanExclusion's `boolean | null | undefined` parameter type.
-	const rawExcludeSetting = config["chunk-review"].settings.exclude_chairman_from_members;
-	const configExcludeSetting: boolean | null | undefined =
-		typeof rawExcludeSetting === "boolean" ? rawExcludeSetting : normalizeBool(rawExcludeSetting);
-
-	const { chairmanRole, excludeChairmanFromMembers, filterMember } = resolveChairmanExclusion({
-		options,
-		configExcludeSetting,
-		hostRole,
-		chairmanRoleRaw,
-	});
-
-	const timeoutSetting = Number(config["chunk-review"].settings.timeout || 0);
-	const timeoutOverride =
-		options.timeout !== null && options.timeout !== undefined ? Number(options.timeout) : null;
-	const timeoutSec =
-		timeoutOverride !== null && Number.isFinite(timeoutOverride) && timeoutOverride > 0
-			? timeoutOverride
-			: timeoutSetting > 0
-				? timeoutSetting
-				: 0;
-
-	const requestedMembers = config["chunk-review"].members || [];
-	const members = requestedMembers.filter(isRecord).filter(filterMember);
-
-	assertMembersOrExit(members, CHUNK_REVIEW_JOB_CONFIG, configPath);
-
-	const denySkills = extractDenySkills(config["chunk-review"].settings);
-	const denySubagents = extractDenySubagents(config["chunk-review"].settings);
-	assertDenyEnforceable(members, denySkills, CHUNK_REVIEW_JOB_CONFIG, configPath, denySubagents);
-
-	const conductorCodexHome = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
-	const memberEntities = members.map((r) => ({
-		...r,
-		deny: denySkills,
-		denySubagents,
-	}));
-	const preparedMembers = prepareMcpEntities(
-		config["chunk-review"].settings,
-		memberEntities,
-		CHUNK_REVIEW_JOB_CONFIG,
-		configPath,
-		conductorCodexHome,
-	);
-
-	const jobId = generateJobId();
-	initLogger("chunk-review-job", logRootForJobsDir(jobsDir), jobId);
-	logStart();
-	logInfo(`GC: stale jobs cleaned`);
-	// Mirrors cmdReap's own reaped-vs-survived distinction (classifyReapedOrphans)
-	// — this trigger runs on every review start, so an unconditional "reaped"
-	// claim here would go stale far more often than cmdReap's own SessionStart
-	// trigger. Never claim "reaped" for a group that in fact survived the kill.
-	const reapedOrphanVerdicts = classifyReapedOrphans(reapedOrphans);
-	const anyOrphanSurvived = reapedOrphanVerdicts.some((v) => v.survived);
-	logInfo(
-		anyOrphanSurvived
-			? `reap: ${reapedOrphanVerdicts.length} orphan job(s) signalled — ${survivingPids.length} process(es) survived the group kill`
-			: `reap: ${reapedOrphans.length} orphan job(s) reaped`,
-	);
-	logInfo(`config: ${configPath}, chairman: ${chairmanRole}, members: ${members.length}`);
-
-	const jobDir = path.join(jobsDir, `chunk-review-${jobId}`);
-	const membersDir = path.join(jobDir, "members");
-	ensureDir(membersDir);
-	const conductorSessionId = resolveConductorSessionId();
-
-	fs.writeFileSync(path.join(jobDir, "prompt.txt"), String(prompt), "utf8");
-
-	// workerPgid는 스폰 전이라 아직 없다(null) — 스폰 후 members가 채워진다(하단
-	// 참고). 함수 반환 타입 애노테이션을 거치는 이유: 리터럴 null을 그냥 쓰거나
-	// `const x: number | null = null`으로 변수에 담아 써도 TS는 그 지점의 값을
-	// 여전히 리터럴 null로 좁혀 추론해, 아래 재할당(workerPgidByName.get(...)
-	// ?? null)과 타입이 맞지 않는다 — 함수 호출식의 타입은 선언된 반환 타입
-	// 그대로 쓰이므로 좁혀지지 않는다. 타입 단언(as) 없이 타입을 넓히는 방법.
-	function unsetWorkerPgid(): number | null {
-		return null;
+	const identityResult = readChunkReviewIdentity(options);
+	if (identityResult.kind === "invalid")
+		exitWithError(`start: incomplete identity (missing: ${identityResult.missing.join(", ")})`);
+	const identity = identityResult.kind === "complete" ? identityResult.identity : undefined;
+	let identityClaim: { fd: number; lockPath: string } | undefined;
+	if (identity) {
+		const claim = await acquireIdentityClaim(jobsDir, identity);
+		if ("existing" in claim) {
+			if (options.json)
+				process.stdout.write(
+					`${JSON.stringify({ jobDir: claim.existing.jobDir, ...claim.existing.metadata }, null, 2)}\n`,
+				);
+			else process.stdout.write(`${claim.existing.jobDir}\n`);
+			return;
+		}
+		identityClaim = claim;
 	}
-	// Same widening trick as unsetWorkerPgid above, for the spawn-time witness
-	// (`ps -o lstart=`) recorded alongside workerPgid — see lib/generic-job.ts's
-	// judgePgidSignal for why the reaper needs this to tell "still our worker"
-	// apart from "this PGID number is merely alive" (PID/PGID reuse).
-	function unsetWorkerPgidStartedAt(): string | null {
-		return null;
-	}
-	const jobMeta = {
-		id: `chunk-review-${jobId}`,
-		createdAt: new Date().toISOString(),
-		conductorSessionId,
-		configPath,
-		hostRole,
-		chairmanRole,
-		settings: {
-			excludeChairmanFromMembers,
-			timeoutSec: timeoutSec || null,
-			denySkills,
+	let createdJobDir: string | undefined;
+	let startCompleted = false;
+	let spawnAttempted = false;
+	try {
+		// Reap orphaned job process groups BEFORE gcStaleJobs, not after — the other
+		// trigger besides the SessionStart hook (next task), so an orphan gets swept
+		// up whether the user re-runs a review or opens a new session. gcStaleJobs
+		// deletes any job.json older than GC_MAX_AGE_MS with no liveness check at
+		// all (lib/generic-job.ts), and job.json is the only ownership anchor every
+		// reap layer depends on — running gc first would delete that anchor out from
+		// under a still-alive orphan (a dead conductor's job.json ages past the
+		// 1-hour mark while its codex-exec descendants are still running), making
+		// the orphan unreachable by every layer until the next reboot. graceMs: 0 —
+		// job start must never be delayed by the normal SIGTERM→SIGKILL grace wait
+		// (REAP_GRACE_MS_DEFAULT is 5s): a group findOrphanJobs already judged
+		// orphaned (alive PGID, zero live progress) has nothing left worth waiting
+		// on before SIGKILL.
+		const { reaped: reapedOrphans, survivingPids } = await reapOrphanJobs(
+			jobsDir,
+			CHUNK_REVIEW_JOB_CONFIG,
+			{
+				graceMs: 0,
+			},
+		);
+		gcStaleJobs(jobsDir);
+
+		const hostRole = detectHostRole(SKILL_DIR);
+		const config = parseChunkReviewConfig(configPath);
+		const chairmanRoleRaw =
+			optionalString(options.chairman) ||
+			process.env.CHUNK_REVIEW_CHAIRMAN ||
+			optionalString(config["chunk-review"].chairman.role) ||
+			"auto";
+
+		// Pre-normalize via the same normalizeBool the framework applies internally, so passing an
+		// already-normalized boolean|null through is idempotent (identical outcome for every input shape)
+		// while satisfying resolveChairmanExclusion's `boolean | null | undefined` parameter type.
+		const rawExcludeSetting = config["chunk-review"].settings.exclude_chairman_from_members;
+		const configExcludeSetting: boolean | null | undefined =
+			typeof rawExcludeSetting === "boolean" ? rawExcludeSetting : normalizeBool(rawExcludeSetting);
+
+		const { chairmanRole, excludeChairmanFromMembers, filterMember } = resolveChairmanExclusion({
+			options,
+			configExcludeSetting,
+			hostRole,
+			chairmanRoleRaw,
+		});
+
+		const timeoutSetting = Number(config["chunk-review"].settings.timeout || 0);
+		const timeoutOverride =
+			options.timeout !== null && options.timeout !== undefined ? Number(options.timeout) : null;
+		const timeoutSec =
+			timeoutOverride !== null && Number.isFinite(timeoutOverride) && timeoutOverride > 0
+				? timeoutOverride
+				: timeoutSetting > 0
+					? timeoutSetting
+					: 0;
+
+		const requestedMembers = config["chunk-review"].members || [];
+		const members = requestedMembers.filter(isRecord).filter(filterMember);
+
+		assertMembersOrExit(members, CHUNK_REVIEW_JOB_CONFIG, configPath);
+
+		const denySkills = extractDenySkills(config["chunk-review"].settings);
+		const denySubagents = extractDenySubagents(config["chunk-review"].settings);
+		assertDenyEnforceable(members, denySkills, CHUNK_REVIEW_JOB_CONFIG, configPath, denySubagents);
+
+		const conductorCodexHome = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
+		const memberEntities = members.map((r) => ({
+			...r,
+			deny: denySkills,
 			denySubagents,
-		},
-		members: members.map((r, i) => ({
-			name: String(r.name),
-			command: String(r.command),
-			emoji: r.emoji ? String(r.emoji) : null,
-			color: r.color ? String(r.color) : null,
-			model: r.model || null,
-			effort_level: r.effort_level || null,
-			output_format: r.output_format || null,
-			env: r.env ?? {},
-			mcpBlock: preparedMembers[i].mcpBlock,
-			workerPgid: unsetWorkerPgid(),
-			workerPgidStartedAt: unsetWorkerPgidStartedAt(),
-		})),
-	};
-	atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
+		}));
+		const preparedMembers = prepareMcpEntities(
+			config["chunk-review"].settings,
+			memberEntities,
+			CHUNK_REVIEW_JOB_CONFIG,
+			configPath,
+			conductorCodexHome,
+		);
 
-	const spawned: SpawnedWorker[] = _spawnWorkers({
-		entities: preparedMembers,
-		workerPath: WORKER_PATH,
-		jobDir,
-		entitiesDir: membersDir,
-		timeoutSec,
-		config: CHUNK_REVIEW_JOB_CONFIG,
-	});
-	logInfo(`workers spawned: ${members.map((r) => String(r.name)).join(", ")}`);
+		const jobId = generateJobId();
+		initLogger("chunk-review-job", logRootForJobsDir(jobsDir), jobId);
+		logStart();
+		logInfo(`GC: stale jobs cleaned`);
+		// Mirrors cmdReap's own reaped-vs-survived distinction (classifyReapedOrphans)
+		// — this trigger runs on every review start, so an unconditional "reaped"
+		// claim here would go stale far more often than cmdReap's own SessionStart
+		// trigger. Never claim "reaped" for a group that in fact survived the kill.
+		const reapedOrphanVerdicts = classifyReapedOrphans(reapedOrphans);
+		const anyOrphanSurvived = reapedOrphanVerdicts.some((v) => v.survived);
+		logInfo(
+			anyOrphanSurvived
+				? `reap: ${reapedOrphanVerdicts.length} orphan job(s) signalled — ${survivingPids.length} process(es) survived the group kill`
+				: `reap: ${reapedOrphans.length} orphan job(s) reaped`,
+		);
+		logInfo(`config: ${configPath}, chairman: ${chairmanRole}, members: ${members.length}`);
 
-	const workerPgidByName = new Map(spawned.map((w) => [w.name, w.workerPgid]));
-	const workerPgidStartedAtByName = new Map(spawned.map((w) => [w.name, w.workerPgidStartedAt]));
-	jobMeta.members = jobMeta.members.map((m) => ({
-		...m,
-		workerPgid: workerPgidByName.get(m.name) ?? null,
-		workerPgidStartedAt: workerPgidStartedAtByName.get(m.name) ?? null,
-	}));
-	atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
+		const jobDir = path.join(jobsDir, `chunk-review-${jobId}`);
+		createdJobDir = jobDir;
+		const membersDir = path.join(jobDir, "members");
+		ensureDir(membersDir);
+		const conductorSessionId = resolveConductorSessionId();
 
-	if (options.json) {
-		process.stdout.write(`${JSON.stringify({ jobDir, ...jobMeta }, null, 2)}\n`);
-	} else {
-		process.stdout.write(`${jobDir}\n`);
+		fs.writeFileSync(path.join(jobDir, "prompt.txt"), String(prompt), "utf8");
+
+		// workerPgid는 스폰 전이라 아직 없다(null) — 스폰 후 members가 채워진다(하단
+		// 참고). 함수 반환 타입 애노테이션을 거치는 이유: 리터럴 null을 그냥 쓰거나
+		// `const x: number | null = null`으로 변수에 담아 써도 TS는 그 지점의 값을
+		// 여전히 리터럴 null로 좁혀 추론해, 아래 재할당(workerPgidByName.get(...)
+		// ?? null)과 타입이 맞지 않는다 — 함수 호출식의 타입은 선언된 반환 타입
+		// 그대로 쓰이므로 좁혀지지 않는다. 타입 단언(as) 없이 타입을 넓히는 방법.
+		function unsetWorkerPgid(): number | null {
+			return null;
+		}
+		// Same widening trick as unsetWorkerPgid above, for the spawn-time witness
+		// (`ps -o lstart=`) recorded alongside workerPgid — see lib/generic-job.ts's
+		// judgePgidSignal for why the reaper needs this to tell "still our worker"
+		// apart from "this PGID number is merely alive" (PID/PGID reuse).
+		function unsetWorkerPgidStartedAt(): string | null {
+			return null;
+		}
+		const jobMeta = {
+			id: `chunk-review-${jobId}`,
+			createdAt: new Date().toISOString(),
+			conductorSessionId,
+			configPath,
+			hostRole,
+			chairmanRole,
+			settings: {
+				excludeChairmanFromMembers,
+				timeoutSec: timeoutSec || null,
+				denySkills,
+				denySubagents,
+			},
+			...(identity ? { identity } : {}),
+			state: identity ? "initializing" : undefined,
+			members: members.map((r, i) => ({
+				name: String(r.name),
+				command: String(r.command),
+				emoji: r.emoji ? String(r.emoji) : null,
+				color: r.color ? String(r.color) : null,
+				model: r.model || null,
+				effort_level: r.effort_level || null,
+				output_format: r.output_format || null,
+				env: r.env ?? {},
+				mcpBlock: preparedMembers[i].mcpBlock,
+				workerPgid: unsetWorkerPgid(),
+				workerPgidStartedAt: unsetWorkerPgidStartedAt(),
+			})),
+		};
+		atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
+
+		let spawned: SpawnedWorker[] = [];
+		spawnAttempted = true;
+		spawned = _spawnWorkers({
+			entities: preparedMembers,
+			workerPath: WORKER_PATH,
+			jobDir,
+			entitiesDir: membersDir,
+			timeoutSec,
+			config: CHUNK_REVIEW_JOB_CONFIG,
+		});
+		logInfo(`workers spawned: ${members.map((r) => String(r.name)).join(", ")}`);
+
+		const workerPgidByName = new Map(spawned.map((w) => [w.name, w.workerPgid]));
+		const workerPgidStartedAtByName = new Map(spawned.map((w) => [w.name, w.workerPgidStartedAt]));
+		jobMeta.members = jobMeta.members.map((m) => ({
+			...m,
+			workerPgid: workerPgidByName.get(m.name) ?? null,
+			workerPgidStartedAt: workerPgidStartedAtByName.get(m.name) ?? null,
+		}));
+		if (identity) {
+			jobMeta.state = "ready";
+			atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
+		} else {
+			atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
+		}
+		if (options.json) {
+			process.stdout.write(`${JSON.stringify({ jobDir, ...jobMeta }, null, 2)}\n`);
+		} else {
+			process.stdout.write(`${jobDir}\n`);
+		}
+		logEnd();
+		startCompleted = true;
+	} finally {
+		if (!startCompleted && !spawnAttempted && createdJobDir && identity) {
+			try {
+				fs.rmSync(createdJobDir, { recursive: true, force: true });
+			} catch {
+				// Cleanup is best effort; the original start failure remains authoritative.
+			}
+		}
+		if (identityClaim) {
+			try {
+				fs.closeSync(identityClaim.fd);
+			} catch {
+				// The descriptor may already be closed after an earlier failure.
+			}
+			try {
+				fs.unlinkSync(identityClaim.lockPath);
+			} catch {
+				// The lock may already have been removed by a competing cleanup.
+			}
+		}
 	}
-	logEnd();
 }
 
 // ---------------------------------------------------------------------------

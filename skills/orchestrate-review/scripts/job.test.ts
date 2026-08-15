@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { execFileSync, spawn, spawnSync } from "child_process";
+import { createHash } from "crypto";
 
 import {
 	buildUiPayload,
@@ -238,8 +239,14 @@ function fingerprint(filePath: string): FileFingerprint {
 const SUITE_LOG_FINGERPRINTS_BEFORE = new Map<string, FileFingerprint>();
 for (const basename of SUITE_JOB_DIR_BASENAMES) {
 	const file = expectedLogFileName(basename);
-	SUITE_LOG_FINGERPRINTS_BEFORE.set(path.join(REAL_TMP_LOG_DIR, file), fingerprint(path.join(REAL_TMP_LOG_DIR, file)));
-	SUITE_LOG_FINGERPRINTS_BEFORE.set(path.join(REAL_OMT_LOG_DIR, file), fingerprint(path.join(REAL_OMT_LOG_DIR, file)));
+	SUITE_LOG_FINGERPRINTS_BEFORE.set(
+		path.join(REAL_TMP_LOG_DIR, file),
+		fingerprint(path.join(REAL_TMP_LOG_DIR, file)),
+	);
+	SUITE_LOG_FINGERPRINTS_BEFORE.set(
+		path.join(REAL_OMT_LOG_DIR, file),
+		fingerprint(path.join(REAL_OMT_LOG_DIR, file)),
+	);
 }
 
 beforeAll(() => {
@@ -1473,9 +1480,13 @@ describe("job.ts doctor", () => {
 	test("kill 없이 고아 카운트를 stdout에 보고하고, 그룹은 doctor 실행 후에도 살아있다", () => {
 		const { pgid } = makeOrphanJobFixture(jobsDir, "doctor-no-kill");
 
-		const result = execFileSync(process.execPath, [SCRIPT, "doctor", "--jobs-dir", jobsDir, "--json"], {
-			stdio: "pipe",
-		});
+		const result = execFileSync(
+			process.execPath,
+			[SCRIPT, "doctor", "--jobs-dir", jobsDir, "--json"],
+			{
+				stdio: "pipe",
+			},
+		);
 		const output = JSON.parse(result.toString());
 		expect(output.orphanJobCount).toBe(1);
 		expect(output.orphanPgidCount).toBe(1);
@@ -1487,9 +1498,13 @@ describe("job.ts doctor", () => {
 	});
 
 	test("고아가 없으면 카운트 0을 보고한다", () => {
-		const result = execFileSync(process.execPath, [SCRIPT, "doctor", "--jobs-dir", jobsDir, "--json"], {
-			stdio: "pipe",
-		});
+		const result = execFileSync(
+			process.execPath,
+			[SCRIPT, "doctor", "--jobs-dir", jobsDir, "--json"],
+			{
+				stdio: "pipe",
+			},
+		);
 		const output = JSON.parse(result.toString());
 		expect(output.orphanJobCount).toBe(0);
 		expect(output.orphanPgidCount).toBe(0);
@@ -2949,50 +2964,46 @@ describe("resume-member CLI 배선 — detached spawn 계약", () => {
 		return JSON.parse(fs.readFileSync(path.join(memberDir, "status.json"), "utf8"));
 	}
 
-	test(
-		"resume-member 서브커맨드는 워커 완료를 기다리지 않고 즉시 dispatched ack로 반환한다",
-		async () => {
-			const start = Date.now();
-			const result = execFileSync(
-				process.execPath,
-				[SCRIPT, "resume-member", "--job", jobDir, "--member", "opencode", "--prompt", "continue"],
-				{ stdio: "pipe", env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` } },
-			);
-			const elapsedMs = Date.now() - start;
+	test("resume-member 서브커맨드는 워커 완료를 기다리지 않고 즉시 dispatched ack로 반환한다", async () => {
+		const start = Date.now();
+		const result = execFileSync(
+			process.execPath,
+			[SCRIPT, "resume-member", "--job", jobDir, "--member", "opencode", "--prompt", "continue"],
+			{ stdio: "pipe", env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` } },
+		);
+		const elapsedMs = Date.now() - start;
 
-			// The fake CLI sleeps 2s before it would ever finish a turn — a caller still blocking
-			// in-process on that turn would take at least that long. Returning in a small fraction
-			// of that window is the direct evidence dispatch is non-blocking.
-			expect(elapsedMs).toBeLessThan(1500);
-			expect(JSON.parse(result.toString())).toEqual({ state: "dispatched", member: "opencode" });
+		// The fake CLI sleeps 2s before it would ever finish a turn — a caller still blocking
+		// in-process on that turn would take at least that long. Returning in a small fraction
+		// of that window is the direct evidence dispatch is non-blocking.
+		expect(elapsedMs).toBeLessThan(1500);
+		expect(JSON.parse(result.toString())).toEqual({ state: "dispatched", member: "opencode" });
 
-			// Queued pre-transition: cmdCollect's "awaiting_resume already ended its own turn"
-			// early-return must not still apply to this freshly-dispatched resume.
-			const queuedStatus = readStatus();
-			expect(queuedStatus.state).toBe("queued");
-			expect(queuedStatus.sessionID).toBe("sess-existing");
-			expect(queuedStatus.command).toBe("opencode --format json");
-			expect(queuedStatus.resume_count).toBe(1);
+		// Queued pre-transition: cmdCollect's "awaiting_resume already ended its own turn"
+		// early-return must not still apply to this freshly-dispatched resume.
+		const queuedStatus = readStatus();
+		expect(queuedStatus.state).toBe("queued");
+		expect(queuedStatus.sessionID).toBe("sess-existing");
+		expect(queuedStatus.command).toBe("opencode --format json");
+		expect(queuedStatus.resume_count).toBe(1);
 
-			// Poll for the detached worker to actually finish the turn — state transitions
-			// queued → running (runOnce's own status write, before the stub's 2s sleep resolves)
-			// → done (executeOneTurn's final write once stdout is parsed).
-			const deadline = Date.now() + 10000;
-			let finalStatus = readStatus();
-			while (
-				(finalStatus.state === "queued" || finalStatus.state === "running") &&
-				Date.now() < deadline
-			) {
-				await new Promise((resolve) => setTimeout(resolve, 200));
-				finalStatus = readStatus();
-			}
+		// Poll for the detached worker to actually finish the turn — state transitions
+		// queued → running (runOnce's own status write, before the stub's 2s sleep resolves)
+		// → done (executeOneTurn's final write once stdout is parsed).
+		const deadline = Date.now() + 10000;
+		let finalStatus = readStatus();
+		while (
+			(finalStatus.state === "queued" || finalStatus.state === "running") &&
+			Date.now() < deadline
+		) {
+			await new Promise((resolve) => setTimeout(resolve, 200));
+			finalStatus = readStatus();
+		}
 
-			expect(finalStatus.state).toBe("done");
-			expect(finalStatus.sessionID).toBe("sess-123");
-			expect(finalStatus.resume_count).toBe(1);
-		},
-		15000,
-	);
+		expect(finalStatus.state).toBe("done");
+		expect(finalStatus.sessionID).toBe("sess-123");
+		expect(finalStatus.resume_count).toBe(1);
+	}, 15000);
 });
 
 // ---------------------------------------------------------------------------
@@ -4146,7 +4157,7 @@ describe("parseChunkReviewConfig settings.deny.skills", () => {
 		const configPath = path.join(tmpDir, "config.yaml");
 		fs.writeFileSync(
 			configPath,
-			["chunk-review:", "  settings:", "    deny:", "      skills:", '        - \'a"b\''].join("\n"),
+			["chunk-review:", "  settings:", "    deny:", "      skills:", "        - 'a\"b'"].join("\n"),
 		);
 		expectParseExitsWithError(configPath, `Invalid config in ${configPath}`);
 	});
@@ -4406,9 +4417,13 @@ describe("start: settings.mcps.allow recorded in job.json members[].mcpBlock", (
 		const memberCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-home-member-"));
 		fs.writeFileSync(
 			path.join(memberCodexHome, "config.toml"),
-			["[mcp_servers.codegraph]", 'command = "stub"', "", "[mcp_servers.linear]", 'command = "stub"'].join(
-				"\n",
-			),
+			[
+				"[mcp_servers.codegraph]",
+				'command = "stub"',
+				"",
+				"[mcp_servers.linear]",
+				'command = "stub"',
+			].join("\n"),
 		);
 
 		const configPath = path.join(tmpDir, "config.yaml");
@@ -4825,7 +4840,6 @@ describe("cmdStart records the trustworthy conductor session in job.json", () =>
 	);
 });
 
-
 // ---------------------------------------------------------------------------
 // start → spawnWorkers wiring: declared deny reaches each dispatched entity
 // (AC6 — verified by spying on the shared lib's spawnWorkers, per the spec's
@@ -4975,5 +4989,516 @@ describe("start: mcpBlock reaches spawnWorkers entities", () => {
 		for (const entity of capturedEntities ?? []) {
 			expect(entity.mcpBlock).toEqual(["figma", "notion"]);
 		}
+	});
+});
+
+describe("start durable review identity", () => {
+	let tmpDir: string;
+	const identity = {
+		reviewId: "review-42",
+		chunkKey: "chunk-3",
+		attempt: 1,
+		worktreeRealpath: "/tmp/worktree-real",
+		baseSha: "base-abc",
+		headSha: "head-def",
+		diffFingerprint: "diff-123",
+	};
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+	});
+	afterEach(() => {
+		mock.restore();
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	function writeConfig(): string {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: alice",
+				"      command: echo alice",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+			].join("\n"),
+		);
+		return configPath;
+	}
+
+	test("persists the complete identity in job.json", async () => {
+		let spawnCount = 0;
+		mock.module("@lib/generic-job", () => ({
+			...GenericJob,
+			spawnWorkers: () => {
+				spawnCount += 1;
+				return [];
+			},
+		}));
+		const mod = await import(`./job.ts?identity-persist=${Date.now()}-${Math.random()}`);
+		const jobsDir = path.join(tmpDir, "jobs");
+		await mod.cmdStart(
+			{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", json: true, identity },
+			"prompt",
+		);
+		const jobDir = fs.readdirSync(jobsDir).map((name) => path.join(jobsDir, name))[0];
+		const metadata = JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8"));
+		expect(metadata.identity).toEqual(identity);
+		expect(spawnCount).toBe(1);
+	});
+
+	test("reuses an existing job for the same identity without spawning again", async () => {
+		let spawnCount = 0;
+		mock.module("@lib/generic-job", () => ({
+			...GenericJob,
+			spawnWorkers: () => {
+				spawnCount += 1;
+				return [];
+			},
+		}));
+		const mod = await import(`./job.ts?identity-reuse=${Date.now()}-${Math.random()}`);
+		const jobsDir = path.join(tmpDir, "jobs");
+		const options = {
+			config: writeConfig(),
+			"jobs-dir": jobsDir,
+			chairman: "none",
+			json: true,
+			identity,
+		};
+		await mod.cmdStart(options, "prompt");
+		const first = fs.readdirSync(jobsDir).find((name) => name.startsWith("chunk-review-"));
+		if (first === undefined) throw new Error("expected first durable identity job");
+		await mod.cmdStart(options, "prompt");
+		const jobs = fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-"));
+		expect(jobs).toEqual([first]);
+		expect(spawnCount).toBe(1);
+	});
+
+	test("does not adopt a job when any identity field differs", async () => {
+		let spawnCount = 0;
+		mock.module("@lib/generic-job", () => ({
+			...GenericJob,
+			spawnWorkers: () => {
+				spawnCount += 1;
+				return [];
+			},
+		}));
+		const mod = await import(`./job.ts?identity-mismatch=${Date.now()}-${Math.random()}`);
+		const jobsDir = path.join(tmpDir, "jobs");
+		await mod.cmdStart(
+			{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", json: true, identity },
+			"prompt",
+		);
+		await mod.cmdStart(
+			{
+				config: writeConfig(),
+				"jobs-dir": jobsDir,
+				chairman: "none",
+				json: true,
+				identity: { ...identity, headSha: "other-head" },
+			},
+			"prompt",
+		);
+		expect(fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-")).length).toBe(
+			2,
+		);
+		expect(spawnCount).toBe(2);
+	});
+
+	test("retains legacy behavior when no identity is supplied", async () => {
+		let spawnCount = 0;
+		mock.module("@lib/generic-job", () => ({
+			...GenericJob,
+			spawnWorkers: () => {
+				spawnCount += 1;
+				return [];
+			},
+		}));
+		const mod = await import(`./job.ts?identity-legacy=${Date.now()}-${Math.random()}`);
+		const jobsDir = path.join(tmpDir, "jobs");
+		const options = { config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", json: true };
+		await mod.cmdStart(options, "prompt");
+		await mod.cmdStart(options, "prompt");
+		expect(fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-")).length).toBe(
+			2,
+		);
+		expect(spawnCount).toBe(2);
+	});
+
+	test("rejects partial and malformed identity before creating a job", () => {
+		const script = path.resolve(import.meta.dir, "job.ts");
+		for (const args of [
+			["--review-id", "r"],
+			["--review-id", "r", "--chunk-key", "c", "--attempt", "nope"],
+		]) {
+			const jobsDir = path.join(tmpDir, `invalid-${args.length}`);
+			const result = spawnSync(
+				process.execPath,
+				[script, "start", "--jobs-dir", jobsDir, ...args, "prompt"],
+				{
+					encoding: "utf8",
+				},
+			);
+			expect(result.status).not.toBe(0);
+			expect(`${result.stderr}${result.stdout}`).toContain("identity");
+			expect(
+				fs.existsSync(jobsDir)
+					? fs.readdirSync(jobsDir).filter((n) => n.startsWith("chunk-review-")).length
+					: 0,
+			).toBe(0);
+		}
+	});
+
+	test("concurrent starts with one identity converge on one job", async () => {
+		const configPath = writeConfig();
+		const jobsDir = path.join(tmpDir, "concurrent-jobs");
+		const args = [
+			"start",
+			"--config",
+			configPath,
+			"--jobs-dir",
+			jobsDir,
+			"--chairman",
+			"none",
+			"--review-id",
+			identity.reviewId,
+			"--chunk-key",
+			identity.chunkKey,
+			"--attempt",
+			String(identity.attempt),
+			"--worktree-realpath",
+			identity.worktreeRealpath,
+			"--base-sha",
+			identity.baseSha,
+			"--head-sha",
+			identity.headSha,
+			"--diff-fingerprint",
+			identity.diffFingerprint,
+			"prompt",
+		];
+		const children = [
+			spawn(process.execPath, [path.resolve(import.meta.dir, "job.ts"), ...args], {
+				stdio: "pipe",
+			}),
+			spawn(process.execPath, [path.resolve(import.meta.dir, "job.ts"), ...args], {
+				stdio: "pipe",
+			}),
+		];
+		await Promise.all(
+			children.map((child) => new Promise<void>((resolve) => child.on("close", () => resolve()))),
+		);
+		const jobs = fs.existsSync(jobsDir)
+			? fs.readdirSync(jobsDir).filter((n) => n.startsWith("chunk-review-"))
+			: [];
+		expect(jobs.length).toBe(1);
+	});
+
+	function lockPath(jobsDir: string): string {
+		const stable = [
+			"reviewId",
+			"chunkKey",
+			"attempt",
+			"worktreeRealpath",
+			"baseSha",
+			"headSha",
+			"diffFingerprint",
+		]
+			.map((field) => `${field}=${JSON.stringify(identity[field as keyof typeof identity])}`)
+			.join("\n");
+		return path.join(
+			jobsDir,
+			`.chunk-review-identity-${createHash("sha256").update(stable).digest("hex")}.lock`,
+		);
+	}
+
+	async function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
+		const deadline = Date.now() + timeoutMs;
+		while (!predicate()) {
+			if (Date.now() >= deadline) throw new Error("timed out waiting for test condition");
+			await new Promise((resolve) => setTimeout(resolve, 20));
+		}
+	}
+
+	test("reclaims a dead stale identity lock", async () => {
+		const jobsDir = path.join(tmpDir, "stale-lock");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		fs.writeFileSync(
+			lockPath(jobsDir),
+			JSON.stringify({ pid: 999999, createdAt: Date.now() - 11 * 60 * 1000 }),
+		);
+		const mod = await import(`./job.ts?identity-stale=${Date.now()}-${Math.random()}`);
+		await mod.cmdStart(
+			{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity },
+			"prompt",
+		);
+		expect(fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-")).length).toBe(
+			1,
+		);
+		expect(fs.existsSync(lockPath(jobsDir))).toBe(false);
+	});
+
+	test("times out on a live identity lock without hanging", () => {
+		const jobsDir = path.join(tmpDir, "live-lock");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		fs.writeFileSync(
+			lockPath(jobsDir),
+			JSON.stringify({ pid: process.pid, createdAt: Date.now() }),
+		);
+		const startedAt = Date.now();
+		const result = spawnSync(
+			process.execPath,
+			[
+				path.resolve(import.meta.dir, "job.ts"),
+				"start",
+				"--jobs-dir",
+				jobsDir,
+				"--review-id",
+				identity.reviewId,
+				"--chunk-key",
+				identity.chunkKey,
+				"--attempt",
+				String(identity.attempt),
+				"--worktree-realpath",
+				identity.worktreeRealpath,
+				"--base-sha",
+				identity.baseSha,
+				"--head-sha",
+				identity.headSha,
+				"--diff-fingerprint",
+				identity.diffFingerprint,
+				"prompt",
+			],
+			{
+				encoding: "utf8",
+				timeout: 5000,
+				env: { ...process.env, CHUNK_REVIEW_IDENTITY_LOCK_DEADLINE_MS: "500" },
+			},
+		);
+		expect(result.status).not.toBe(0);
+		expect(`${result.stderr}${result.stdout}`).toContain("identity claim timeout");
+		expect(Date.now() - startedAt).toBeLessThan(4500);
+	});
+
+	test("cleans the lock after setup failure and allows a second valid start", async () => {
+		const jobsDir = path.join(tmpDir, "setup-failure");
+		const fail = true;
+		mock.module("@lib/generic-job", () => ({
+			...GenericJob,
+			spawnWorkers: () => {
+				if (fail) throw new Error("setup failed");
+				return [];
+			},
+		}));
+		const mod = await import(`./job.ts?identity-setup-failure=${Date.now()}-${Math.random()}`);
+		const options = { config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity };
+		await expect(mod.cmdStart(options, "prompt")).rejects.toThrow("setup failed");
+		expect(fs.existsSync(lockPath(jobsDir))).toBe(false);
+		await expect(mod.cmdStart(options, "prompt")).rejects.toThrow("initializing");
+	});
+
+	test("two concurrent starts return the same job and execute one worker marker", async () => {
+		const jobsDir = path.join(tmpDir, "marker-concurrent");
+		const marker = path.join(tmpDir, "worker.marker");
+		const stubDir = path.join(tmpDir, "marker-bin");
+		fs.mkdirSync(stubDir);
+		fs.writeFileSync(
+			path.join(stubDir, "claude"),
+			'#!/bin/sh\nprintf x >> "$CHUNK_REVIEW_MARKER"\nexit 0\n',
+		);
+		fs.chmodSync(path.join(stubDir, "claude"), 0o755);
+		const config = path.join(tmpDir, "marker.yaml");
+		fs.writeFileSync(
+			config,
+			"chunk-review:\n  chairman:\n    role: none\n  members:\n    - name: alice\n      command: claude\n  settings:\n    exclude_chairman_from_members: false\n",
+		);
+		const args = [
+			"start",
+			"--config",
+			config,
+			"--jobs-dir",
+			jobsDir,
+			"--chairman",
+			"none",
+			"--json",
+			"--review-id",
+			identity.reviewId,
+			"--chunk-key",
+			identity.chunkKey,
+			"--attempt",
+			String(identity.attempt),
+			"--worktree-realpath",
+			identity.worktreeRealpath,
+			"--base-sha",
+			identity.baseSha,
+			"--head-sha",
+			identity.headSha,
+			"--diff-fingerprint",
+			identity.diffFingerprint,
+			"prompt",
+		];
+		const env = {
+			...process.env,
+			PATH: `${stubDir}:${process.env.PATH}`,
+			CHUNK_REVIEW_MARKER: marker,
+		};
+		const children = [
+			spawn(process.execPath, [path.resolve(import.meta.dir, "job.ts"), ...args], {
+				stdio: "pipe",
+				env,
+			}),
+			spawn(process.execPath, [path.resolve(import.meta.dir, "job.ts"), ...args], {
+				stdio: "pipe",
+				env,
+			}),
+		];
+		const outputs = await Promise.all(
+			children.map(
+				(child) =>
+					new Promise<string>((resolve) => {
+						let out = "";
+						child.stdout?.on("data", (d) => {
+							out += d;
+						});
+						child.on("close", () => resolve(out));
+					}),
+			),
+		);
+		expect(children.every((child) => child.exitCode === 0)).toBe(true);
+		const parsed = outputs.map((out) => JSON.parse(out.trim()) as { jobDir: string });
+		expect(parsed[0].jobDir).toBe(parsed[1].jobDir);
+		expect(fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-")).length).toBe(
+			1,
+		);
+		await waitFor(() => fs.existsSync(marker));
+		expect(fs.readFileSync(marker, "utf8")).toBe("x");
+	});
+
+	test("waits for an initializing identity job to become ready", async () => {
+		const jobsDir = path.join(tmpDir, "initializing");
+		fs.mkdirSync(path.join(jobsDir, "chunk-review-initializing"), { recursive: true });
+		const jobDir = path.join(jobsDir, "chunk-review-initializing");
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({ id: "chunk-review-initializing", identity, state: "initializing" }),
+		);
+		fs.writeFileSync(
+			lockPath(jobsDir),
+			JSON.stringify({ pid: process.pid, createdAt: Date.now() }),
+		);
+		const releaseScript = path.join(tmpDir, "release-lock.mjs");
+		fs.writeFileSync(
+			releaseScript,
+			`import fs from "fs"; import path from "path"; await new Promise(r => setTimeout(r, 250)); const p = ${JSON.stringify(path.join(jobDir, "job.json"))}; const m = JSON.parse(fs.readFileSync(p, "utf8")); m.state = "ready"; fs.writeFileSync(p, JSON.stringify(m)); fs.unlinkSync(${JSON.stringify(lockPath(jobsDir))});\n`,
+		);
+		const releaser = spawn(process.execPath, [releaseScript], { stdio: "ignore" });
+		const startedAt = Date.now();
+		const result = spawnSync(
+			process.execPath,
+			[
+				path.resolve(import.meta.dir, "job.ts"),
+				"start",
+				"--config",
+				writeConfig(),
+				"--jobs-dir",
+				jobsDir,
+				"--chairman",
+				"none",
+				"--review-id",
+				identity.reviewId,
+				"--chunk-key",
+				identity.chunkKey,
+				"--attempt",
+				String(identity.attempt),
+				"--worktree-realpath",
+				identity.worktreeRealpath,
+				"--base-sha",
+				identity.baseSha,
+				"--head-sha",
+				identity.headSha,
+				"--diff-fingerprint",
+				identity.diffFingerprint,
+				"prompt",
+			],
+			{ encoding: "utf8", timeout: 5000 },
+		);
+		releaser.kill();
+		expect(result.status).toBe(0);
+		expect(Date.now() - startedAt).toBeGreaterThanOrEqual(200);
+		expect(result.stdout.trim()).toBe(jobDir);
+		expect(JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8")).state).toBe("ready");
+	});
+
+	test("rejects malformed structured identities without creating jobs or spawning", () => {
+		const script = path.join(tmpDir, "malformed.mjs");
+		const jobModule = path.resolve(import.meta.dir, "job.ts");
+		for (const [label, expression] of [
+			["null", "null"],
+			["nan", "{ ...identity, attempt: NaN }"],
+			["wrong-attempt", "{ ...identity, attempt: {} }"],
+			["array", "[]"],
+		] as const) {
+			const jobsDir = path.join(tmpDir, `malformed-${label}`);
+			fs.writeFileSync(
+				script,
+				`import { cmdStart } from ${JSON.stringify(jobModule)};\nconst identity = ${JSON.stringify(identity)};\nawait cmdStart({ config: ${JSON.stringify(writeConfig())}, "jobs-dir": ${JSON.stringify(jobsDir)}, identity: ${expression} }, "prompt");\n`,
+			);
+			const result = spawnSync(process.execPath, [script], { encoding: "utf8" });
+			expect(result.status).not.toBe(0);
+			expect(
+				fs.existsSync(jobsDir)
+					? fs.readdirSync(jobsDir).filter((n) => n.startsWith("chunk-review-")).length
+					: 0,
+			).toBe(0);
+		}
+	});
+
+	test("fails closed on matching initializing job without a lock", async () => {
+		const jobsDir = path.join(tmpDir, "initializing-no-lock");
+		const jobDir = path.join(jobsDir, "chunk-review-initializing");
+		fs.mkdirSync(jobDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({ id: "chunk-review-initializing", identity, state: "initializing" }),
+		);
+		const mod = await import(`./job.ts?initializing-no-lock=${Date.now()}-${Math.random()}`);
+		await expect(
+			mod.cmdStart(
+				{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity },
+				"prompt",
+			),
+		).rejects.toThrow("initializing");
+		expect(fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-"))).toEqual([
+			"chunk-review-initializing",
+		]);
+	});
+
+	test("preserves initializing anchor after a spawn attempt throws", async () => {
+		const jobsDir = path.join(tmpDir, "spawn-failure-anchor");
+		const marker = path.join(tmpDir, "spawn.marker");
+		let spawnCount = 0;
+		mock.module("@lib/generic-job", () => ({
+			...GenericJob,
+			spawnWorkers: () => {
+				spawnCount += 1;
+				fs.appendFileSync(marker, "x");
+				throw new Error("spawn failed");
+			},
+		}));
+		const mod = await import(`./job.ts?spawn-anchor=${Date.now()}-${Math.random()}`);
+		const options = { config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity };
+		await expect(mod.cmdStart(options, "prompt")).rejects.toThrow("spawn failed");
+		const jobs = fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-"));
+		expect(jobs).toHaveLength(1);
+		expect(JSON.parse(fs.readFileSync(path.join(jobsDir, jobs[0], "job.json"), "utf8")).state).toBe(
+			"initializing",
+		);
+		expect(fs.readFileSync(marker, "utf8")).toBe("x");
+		await expect(mod.cmdStart(options, "prompt")).rejects.toThrow("initializing");
+		expect(spawnCount).toBe(1);
+		expect(fs.readFileSync(marker, "utf8")).toBe("x");
 	});
 });
