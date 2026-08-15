@@ -59,7 +59,8 @@ describe("code-review direct finder-job contract", () => {
 		expect(step4).toContain("review-session-id");
 		expect(step4).toContain('realpath "$(git rev-parse --show-toplevel)"');
 		expect(step4).toContain("git rev-parse --verify");
-		expect(step4).toContain("git merge-base --verify <baseSha> <headSha>");
+		expect(step4).toContain("git merge-base <baseSha> <headSha>");
+		expect(step4).not.toContain("git merge-base --verify");
 		expect(step4).toContain("joined by NL, followed by NL");
 		expect(step4).toContain("git diff --no-ext-diff --binary <mergeBase> <headSha>");
 		expect(step4).toContain("mergeBase");
