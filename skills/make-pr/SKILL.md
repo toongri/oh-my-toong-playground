@@ -174,19 +174,25 @@ Collect all candidates and present a table showing commits ahead/behind and chan
 
 Show the top 2-3 candidates. Native-capable clients may add one explicit branch-name option when needed; on Codex, expose only those top 2-3 candidates and rely on the UI's automatic `Other` for a free-form branch name — never add an explicit catch-all option.
 
+**Codex candidate-cardinality guard:**
+
+- With 2 or more candidates, use the structured target-branch question with the top 2-3 candidates. The UI's automatic `Other` remains the free-form path.
+- With exactly 1 candidate, do not issue a one-option structured target-branch question. Instead, obtain plain-text confirmation or a free-form target branch. Do not fabricate or duplicate candidates, and do not count the automatic `Other` option as an explicit candidate.
+- With 0 candidates, request the target branch as plain text; do not synthesize a placeholder option. Keep any applicable sync-strategy and conflict-policy questions in the same structured setup call, preserving the one-call rule for those setup decisions.
+
 **Phase 4 — Setup Question:**
 
-Everything Step 0 needs from the user is settled in **one `AskUserQuestion` call**, assembled from the candidate table. Present the table first, then make the call with this `questions` array:
+Everything Step 0 needs from the user is settled in one setup turn: use **one `AskUserQuestion` call** for the structured decisions, and use the plain-text target prompt from the cardinality guard when there are fewer than 2 candidates. Present the table first, then make the structured call with this `questions` array when applicable:
 
 | # | header | question | options | Included when |
 |---|--------|----------|---------|---------------|
-| 1 | 타겟 브랜치 | 이 PR의 base 브랜치는 어디인가 | Native-capable clients: top 2-3 candidates with ahead/behind/change scale + one explicit branch-name option when needed. Codex: top 2-3 candidates only; the UI's automatic `Other` receives a free-form branch name | Always |
+| 1 | 타겟 브랜치 | 이 PR의 base 브랜치는 어디인가 | Native-capable clients: top 2-3 candidates with ahead/behind/change scale + one explicit branch-name option when needed. Codex: top 2-3 candidates only; the UI's automatic `Other` receives a free-form branch name | 2+ candidates |
 | 2 | 동기화 방식 | 타겟 브랜치가 앞서 있으면 그 커밋들을 어떻게 가져올까 | **merge**: 타겟 브랜치의 변경사항을 merge commit으로 통합합니다. 기존 히스토리가 보존됩니다. / **rebase**: 현재 브랜치의 커밋을 타겟 브랜치 위로 재배치합니다. 선형적인 히스토리를 유지합니다. | Any candidate in the table has `behind > 0` |
 | 3 | 충돌 처리 | 동기화 중 충돌이 나면 어떻게 처리할까 | **파일별로 확인**: 충돌마다 양쪽 내용과 제안을 설명하고 물어봅니다. / **제안대로 자동 해결**: 각 충돌을 분석해 제안대로 바로 적용하고 결과를 보고합니다. / **현재 브랜치 우선**: 모든 충돌에서 현재 브랜치 쪽 변경을 채택합니다. / **타겟 브랜치 우선**: 모든 충돌에서 타겟 브랜치 쪽 변경을 채택합니다. | Question 2 is included |
 
 The candidate table already carries `behind` for every candidate, so questions 2 and 3 are answerable before the target is picked — build them from the table, not from the answer to question 1.
 
-Always include question 1 even when the default branch is the only likely candidate — never auto-skip.
+When there is exactly 1 or 0 candidate, the plain-text target prompt above replaces structured question 1; never auto-select or fabricate a target. When there are at least 2 candidates, always include structured question 1 even when one candidate is much more likely.
 
 On Codex, each structured setup question must offer **2–3 explicit options**; the UI adds an automatic `Other` option for free-form input, so do not add a fourth catch-all option. For conflict policy, render exactly **파일별로 확인**, **현재 브랜치 우선**, and **타겟 브랜치 우선** as the three explicit options; keep **제안대로 자동 해결** as the canonical `Other` input when the user wants the suggested resolution. Native-capable clients may show the four policies in the table below.
 

@@ -43,6 +43,16 @@ codex_conflict_batch() {
   grep -Fq 'Native-capable clients may ask about up to 4 files per call; Codex batches are capped at 3 files per call.' "$SKILL_FILE"
 }
 
+candidate_cardinality_rules() {
+  grep -Fq 'With 2 or more candidates, use the structured target-branch question with the top 2-3 candidates' "$SKILL_FILE" \
+    && grep -Fq 'With exactly 1 candidate, do not issue a one-option structured target-branch question' "$SKILL_FILE" \
+    && grep -Fq 'obtain plain-text confirmation or a free-form target branch' "$SKILL_FILE" \
+    && grep -Fq 'With 0 candidates, request the target branch as plain text' "$SKILL_FILE" \
+    && grep -Fq 'Do not fabricate or duplicate candidates, and do not count the automatic `Other` option' "$SKILL_FILE" \
+    && grep -Fq 'Keep any applicable sync-strategy and conflict-policy questions in the same structured setup call' "$SKILL_FILE" \
+    && ! grep -Fq 'ask a structured question with one candidate plus `Other`' "$SKILL_FILE"
+}
+
 split_step8_target() {
   block=$(sed -n '/Split-only Step 8 command block/,/^```$/p' "$SKILL_FILE") \
     && grep -Fq 'Preserve an explicit branch → worktree mapping' "$SCOPE_FILE" \
@@ -66,6 +76,7 @@ split_step8_target() {
 run_case setup-option-limit setup_option_limit
 run_case late-divergence-policy late_divergence_policy
 run_case codex-conflict-batch codex_conflict_batch
+run_case candidate-cardinality-rules candidate_cardinality_rules
 run_case split-step8-target split_step8_target
 
 if [ "$failures" -gt 0 ]; then
