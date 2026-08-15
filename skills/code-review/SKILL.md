@@ -5,17 +5,17 @@ description: Use when reviewing code changes for quality, correctness, and produ
 
 # Code Review
 
-Orchestrates chunk-reviewer agents against diffs. Handles input parsing, context gathering, chunking, and result synthesis.
+Directly conducts orchestrate-review jobs against diffs. Handles input parsing, context gathering, chunking, finder-job lifecycle, and result synthesis.
 
-## Premises (apply to orchestrator AND chunk-reviewer)
+## Premises (apply to orchestrator AND finder jobs)
 
-These two premises are non-negotiable. They are forwarded to every chunk-reviewer dispatch and they govern every decision in this skill.
+These two premises are non-negotiable. They are forwarded through every finder-job prompt and govern every decision in this skill.
 
 1. **Post-change state** — The working directory reflects the post-change state of the target ref. PR mode achieves this by checking out the PR head into a dedicated linked worktree (see Step 0). Non-PR modes (branch comparison, auto-detect) achieve this by verifying HEAD-match + clean-tree on the current working directory (also Step 0). Either way: read code freely from the working directory — the diff is the delta, the working directory is the result. Do not pretend the file system is read-only or stuck at base.
 
 2. **No diff-only review** — A diff is a delta. The unit of review is the *system the diff produces*. Always trace dependencies, callers, callees, interfaces, configurations, and runtime context across files. If you cannot explain how the changed code behaves end-to-end against the surrounding system, you have not reviewed it.
 
-These premises must be reflected in the chunk-reviewer dispatch prompt — see Step 4.
+These premises must be reflected in the finder-job prompt — see Step 4. Review is static-only: do not run tests, builds, linters, formatters, migrations, or other project execution. The job lifecycle commands (`start`, `collect`, `status`, `results`, `clean`, and usage-summary) are allowed.
 
 ## Input Modes
 
@@ -41,13 +41,13 @@ These premises must be reflected in the chunk-reviewer dispatch prompt — see S
 | Findings synthesis (rank/class verified findings) | Yes | - |
 | Individual candidate judgment inline (Phase 2) | Yes | - |
 | Escalation verification (candidates below confidence threshold) | - | verifier subagent (one per escalated candidate) |
-| Individual chunk review | NEVER | chunk-reviewer |
+| Individual chunk review | NEVER | configured finder CLIs through direct jobs |
 | Code modification | NEVER | (forbidden entirely) |
 
 ### Role Separation
 
 **Your role as orchestrator:**
-- Dispatch chunk-reviewer agents with diff command strings (each fans out the angle finders)
+- Start direct orchestrate-review jobs with diff command strings (each job fans out the configured angle finders)
 - Judge each deduped candidate inline in Phase 2 (reasoning → confidence → verdict + enrichment); enrich kept findings directly
 - Escalate only candidates below the confidence threshold to verifier subagents; collect their final verdicts; supersede inline tentative verdicts with verifier verdicts in Phase 3
 - Synthesize the kept findings into a ranked findings report (text only)
@@ -55,7 +55,7 @@ These premises must be reflected in the chunk-reviewer dispatch prompt — see S
 
 **NOT your role:**
 - Modifying any source files
-- Running the raw `git diff` command (chunk-reviewers execute the diff)
+- Running the raw `git diff` command (finder CLIs execute the diff)
 
 ### Context Budget
 
@@ -69,6 +69,8 @@ These premises must be reflected in the chunk-reviewer dispatch prompt — see S
 - Phase 2 inline judgment output (reasoning, verdicts, enriched findings for non-escalated candidates)
 - Escalated verifier subagent verdicts + enriched findings (Phase 2, candidates below confidence threshold)
 - Code reading via Read/Grep for Phase 2 inline candidate judgment
+
+The orchestrator never inspects, loads, or displays diff text. The sole exception is the prescribed binary `git diff --no-ext-diff --binary ...` stdout byte stream, which flows directly to SHA-256 outside model context for `diffFingerprint`; stderr is excluded and a nonzero exit aborts. Finder jobs execute the review diff from the prompt.
 
 ## Step 0: Input Parsing
 
@@ -299,11 +301,11 @@ For each chunk, construct the diff command string using git's native path filter
 git diff {range} -- <file1> <file2> ... <fileN>
 ```
 
-The orchestrator constructs this command string but does NOT execute it. The command is passed to the chunk-reviewer via {DIFF_COMMAND}, and each reviewer CLI executes it independently.
+The orchestrator constructs this command string for the configured finder CLIs; each finder executes it independently inside the direct job.
 
-## Step 4: Agent Dispatch
+## Step 4: Direct Finder-Job Dispatch
 
-1. Read dispatch template from `${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/chunk-reviewer-prompt.md`
+1. Read the job prompt template from `${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/chunk-reviewer-prompt.md`.
 2. Interpolate placeholders with context from Steps 0-3:
    - {WHAT_WAS_IMPLEMENTED} ← Step 1 description (interactive) / JSON field `what_was_implemented` (structured-output completion-gate dispatch)
    - {DESCRIPTION} ← Step 1 or commit messages (interactive) / JSON field `description` (completion-gate dispatch)
@@ -311,30 +313,100 @@ The orchestrator constructs this command string but does NOT execute it. The com
    - {PROJECT_CONTEXT} ← Step 1 project context (interactive) / JSON field `project_context` (completion-gate dispatch); if it resolves to the literal `"(none provided)"` backfill marker, backfill from codebase signals gathered in Step 1 acquisition steps 1-3 (CLAUDE.md/README/ADR)
    - {NON_GOAL} ← Step 1 declared non-goals (interactive) / JSON field `non_goals` (completion-gate dispatch); backfilled to the literal `"(none provided)"` marker when blank
    - {FILE_LIST} ← Step 2 file list
-   - {DIFF_COMMAND} ← diff command string: `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk). Orchestrator constructs this string but does NOT execute it.
+   - {DIFF_COMMAND} ← diff command string: `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk). The orchestrator constructs this string for configured finder CLIs but does NOT execute it.
    - {COMMIT_HISTORY} ← Step 2 commit history
 
-   The five intent placeholders above ({WHAT_WAS_IMPLEMENTED}/{DESCRIPTION}/{REQUIREMENTS}/{PROJECT_CONTEXT}/{NON_GOAL}) source differently depending on mode, discriminated by the completion-gate dispatch signal from Step 1's Intent Block Gate. In structured-output mode (completion-gate dispatch), the Step 1 payload is a JSON object with named fields `what_was_implemented`/`description`/`requirements`/`project_context`/`non_goals` — `JSON.parse` it and read each named field 1:1 into its placeholder above. This is a named-field read, not a blob split — never dump the whole payload into one placeholder. If the payload fails to parse as JSON, do not guess field values from malformed input — stop before dispatching chunk-reviewer agents. When the completion-gate dispatch signal is present, first write that `{gate}-codereview-{sid}.json` artifact directly as `{"status": "INCONCLUSIVE", "reviewer": "<reviewer id>", "at": "<ISO timestamp>", "findings": []}` (the code-review artifact schema `skills/{gate}/references/completion-gate.md` defines); if the artifact write itself fails, leave the artifact absent — `request-complete` already refuses on an absent artifact. Then report the parse failure and exit.
-3. Dispatch `chunk-reviewer` agent(s) via Task tool (`subagent_type: "chunk-reviewer"`) with interpolated prompt
+   The five intent placeholders above ({WHAT_WAS_IMPLEMENTED}/{DESCRIPTION}/{REQUIREMENTS}/{PROJECT_CONTEXT}/{NON_GOAL}) source differently depending on mode, discriminated by the completion-gate dispatch signal from Step 1's Intent Block Gate. In structured-output mode (completion-gate dispatch), the Step 1 payload is a JSON object with named fields `what_was_implemented`/`description`/`requirements`/`project_context`/`non_goals` — `JSON.parse` it and read each named field 1:1 into its placeholder above. This is a named-field read, not a blob split — never dump the whole payload into one placeholder. If the payload fails to parse as JSON, do not guess field values from malformed input — stop before starting finder jobs. When the completion-gate dispatch signal is present, first write that `{gate}-codereview-{sid}.json` artifact directly as `{"status": "INCONCLUSIVE", "reviewer": "<reviewer id>", "at": "<ISO timestamp>", "findings": []}` (the code-review artifact schema `skills/{gate}/references/completion-gate.md` defines); if the artifact write itself fails, leave the artifact absent — `request-complete` already refuses on an absent artifact. Then report the parse failure and exit.
+3. Before starting any job, derive a deterministic review identity from the real worktree path, base SHA, head SHA, and a stable review-session-id hash of those values. For each chunk, sort its file list and derive a stable chunk key; compute a SHA-256 fingerprint of exactly that chunk's diff. Recompute the same values on recovery. Start with the exact seven committed identity flags and `--attempt 1`:
+
+   Canonical bytes are UTF-8 with no normalization. Resolve `worktreeRealpath` as the physical repository root (`realpath "$(git rev-parse --show-toplevel)"`), `baseSha` as `git rev-parse --verify '<base>^{commit}'`, and `headSha` as `git rev-parse --verify '<head>^{commit}'`. Derive the fixed `mergeBase` reproducibly as `git merge-base --verify <baseSha> <headSha>`. Paths are repository-relative and bytewise sorted. Let `NL` be one LF byte and `H(x)` be lowercase SHA-256 hex of UTF-8 bytes. Compute exactly:
+
+   ```text
+   chunkKey = H(sortedPaths joined by NL, followed by NL)
+   diffFingerprint = H(raw stdout bytes of
+     git diff --no-ext-diff --binary <mergeBase> <headSha> -- <sorted paths>)
+   reviewId = H(worktreeRealpath + NL + baseSha + NL + headSha + NL)
+   ```
+
+   Exclude stderr from `diffFingerprint`; a nonzero diff exit aborts identity derivation. Use Bun/Node's builtin `crypto.createHash("sha256")` over the exact bytes (never a locale or ambiguous “stable hash”). These formulas and commands are rerun verbatim after interruption. The same path-filtered command is used for a single chunk and for every multi-chunk file list; only `<sorted paths>` differs.
+
+   ```bash
+   bun "${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/job.ts" start \
+     --review-id "<reviewId>" --chunk-key "<chunkKey>" --attempt 1 \
+     --worktree-realpath "<real worktree path>" --base-sha "<base SHA>" \
+     --head-sha "<head SHA>" --diff-fingerprint "<SHA-256>" --timeout 2700 \
+     --prompt-file "<interpolated chunk-reviewer-prompt.md>" --json
+   ```
+
+   Start every chunk before polling any chunk. `start` returns quickly after detached finder CLIs launch; its `jobDir` is the durable handle. On runtime recovery, rerun the same idempotent start identity only to attach to an existing job. If it reports `identity job is still initializing: <jobDir>`, validate that job's `job.json` identity and continue status/collect on that same directory; never start, delete, or respawn it. A true pre-start with no identity anchor starts once. Never create a new identity/job because the code-reviewer turn was interrupted.
+
+4. Poll every returned `jobDir` with short foreground calls, each no longer than 20 seconds:
+
+   ```bash
+   bun "${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/job.ts" collect --timeout-ms 20000 "<jobDir>"
+   bun "${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/job.ts" status --json "<jobDir>"
+   ```
+
+   Continue polling until terminal. Finder runtime is allowed up to 2700 seconds (45 minutes); `poll_again` is expected progress, not failure, and must not trigger an early return or retry. Codex keeps polling in-turn rather than ending the turn to wait.
+
+5. When terminal, read `outputFilePath` values from the results manifest:
+
+   ```bash
+   bun "${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/job.ts" results --manifest "<jobDir>"
+   ```
+
+   Merge and deduplicate all finder candidate outputs and Angle Coverage blocks using the existing aggregation contract. Persist the merged candidates atomically to `$OMT_DIR/code-review/<reviewId>/candidates.json` **before** invoking `usage-summary` or `clean`; this file is the recovery point if the code-reviewer is interrupted after collection. Only after persistence run `bun "${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/usage-summary.ts" "<jobDir>"`, then clean:
+
+   ```bash
+   bun "${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/job.ts" clean "<jobDir>"
+   ```
+
+6. Retry only a terminal infrastructure failure, unavailable angle, or diff-command failure. Attempt 2 is a different full tuple: preserve reviewId, chunkKey, worktreeRealpath, baseSha, headSha, and diffFingerprint, changing only `attempt 1` to `attempt 2`; pass all seven flags again. Retry at most once and merge original plus retry outputs. `poll_again`, caller-turn interruption, and an existing `running`/`ready` job are not retry signals. If the retry fails, accept partial coverage under the existing policy.
+
+   ```bash
+   bun "${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/job.ts" start \
+     --review-id "<same reviewId>" --chunk-key "<same chunkKey>" --attempt 2 \
+     --worktree-realpath "<same real worktree path>" --base-sha "<same base SHA>" \
+     --head-sha "<same head SHA>" --diff-fingerprint "<same SHA-256>" --timeout 2700 \
+     --prompt-file "<same interpolated chunk-reviewer-prompt.md>" --json
+   ```
+
+7. Recovery artifact and aggregation are self-contained. Before cleanup, atomically write `$OMT_DIR/code-review/<reviewId>/candidates.json` using a same-directory temporary file, flush/fsync, then rename. Its schema is:
+
+   ```json
+   {
+     "schemaVersion": 1,
+     "reviewId": "…", "worktreeRealpath": "…", "baseSha": "…", "headSha": "…",
+     "expectedChunks": [{"chunkKey": "…", "files": ["…"]}],
+     "chunks": [{"chunkKey": "…", "diffFingerprint": "…", "attempts": [{"attempt": 1,
+       "jobDir": "…", "terminalState": "done", "candidates": [{"file": "…", "line": 1,
+         "summary": "…", "failure_scenario": "…"}],
+       "angleCoverage": [{"angle": "correctness", "state": "complete"}]}]}]
+   }
+   ```
+
+   Validate schemaVersion, exact top identity/chunk set/fingerprints, arrays, terminal state, and that each jobDir is under the orchestrate-review jobs root with matching `job.json` identity (including attempt) when present. Each chunk's attempts are unique and contiguous, exactly `[1]` or `[1,2]`, never more than two. A valid artifact skips all starts; a missing artifact reuses only validated jobs/results; an invalid artifact is reported/quarantined and never authorizes unvalidated reuse. Attempt 2 may be created only after terminal infrastructure failure and only when no validated attempt 2 exists; persisted `[1,2]` never respawns and both outputs merge. Cleanup interruption never respawns; an already-cleaned job relies on the validated artifact. Persist, then run usage-summary, then clean.
+
+   Read each manifest `outputFilePath`. Required raw finder fields are `file`, `line`, `summary`, and `failure_scenario`; preserve any additional evidence fields. Normalize paths/locations and deduplicate only when normalized file/location and defect reason match (not title); union unique `found by` angles/evidence and retain the most concrete failure scenario. Emit exactly one coverage record per configured angle, explicitly marking unavailable angles, and require every configured angle to be represented before Phase 2. Do not read the protected orchestrate-review/SKILL.md to perform this aggregation.
 
 **Dispatch rules:**
 
 | Scale | Action |
 |-------|--------|
-| Single chunk | 1 agent call |
-| Multiple chunks | Parallel dispatch -- all chunks in ONE response. Each chunk gets its own interpolated template with chunk-specific {DIFF_COMMAND} and {FILE_LIST} |
+| Single chunk | 1 direct `start` job |
+| Multiple chunks | Start all jobs before polling; each gets its own interpolated template with chunk-specific {DIFF_COMMAND} and {FILE_LIST} |
 
 ### Result Scope Validation
 
-Each chunk-reviewer scans its whole assigned diff through every angle and reports coverage per *angle* (the Angle Coverage block), not per file. A file that produced no candidates is clean, not omitted — never treat an unmentioned file as a coverage gap.
+Each configured finder CLI scans its whole assigned diff through its angle and reports coverage in the Angle Coverage block. A file that produced no candidates is clean, not omitted — never treat an unmentioned file as a coverage gap.
 
-Re-dispatch a chunk-reviewer for its chunk only when its response signals an infrastructure failure: a "Partial review"/"Limited review" degradation notice, an Angle Coverage entry marked `Unavailable`, or a reported diff-command failure.
-Cap: maximum 1 re-dispatch per original chunk; if the re-dispatch also fails, accept partial coverage.
-After all re-dispatches complete, merge all chunk results (original + re-dispatched) before proceeding to Step 5.
+Retry a chunk job only when its terminal result signals an infrastructure failure: a "Partial review"/"Limited review" degradation notice, an Angle Coverage entry marked `Unavailable`, or a reported diff-command failure. Use attempt 2 once at most, preserving the same review identity.
+Cap: maximum 1 retry per original chunk; if the retry also fails, accept partial coverage.
+After all retries complete, merge all chunk results (original + retry) before proceeding to Step 5.
 
 ## Step 5: Verification + Synthesis
 
-After all chunk-reviewers return, produce the final findings in two phases: per-candidate inline judgment with selective escalation (Phase 2), and findings synthesis (Phase 3). The terminal deliverable is the **Phase 3 findings text** — no walkthrough, no diagrams, no HTML.
+After all finder jobs reach terminal state, produce the final findings in two phases: per-candidate inline judgment with selective escalation (Phase 2), and findings synthesis (Phase 3). The terminal deliverable is the **Phase 3 findings text** — no walkthrough, no diagrams, no HTML.
 
 ### Phase 2: Candidate Verification (MANDATORY)
 
