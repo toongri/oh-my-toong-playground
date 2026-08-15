@@ -53,6 +53,20 @@ candidate_cardinality_rules() {
     && ! grep -Fq 'ask a structured question with one candidate plus `Other`' "$SKILL_FILE"
 }
 
+conflict_side_deletion_contract() {
+  grep -Fq 'git ls-files -u -- {file}' "$SKILL_FILE" \
+    && grep -Fq 'Stage 2 is **ours** and stage 3 is **theirs**' "$SKILL_FILE" \
+    && grep -Fq 'If the selected stage is absent, resolve the deletion with `git rm -- {file}`' "$SKILL_FILE" \
+    && grep -Fq 'git checkout --$selected_side -- {file}' "$SKILL_FILE" \
+    && grep -Fq 'git add -- {file}' "$SKILL_FILE" \
+    && grep -Fq "'\$3 == stage { found=1 }" "$SKILL_FILE" \
+    && ! grep -Fq "'\$1 == stage { found=1 }" "$SKILL_FILE" \
+    && grep -Fq 'merge selects ours (stage 2), rebase selects theirs (stage 3)' "$SKILL_FILE" \
+    && grep -Fq 'merge selects theirs (stage 3), rebase selects ours (stage 2)' "$SKILL_FILE" \
+    && grep -Fq 'This stage inspection and missing-stage `git rm` rule also applies to file-by-file choices' "$SKILL_FILE" \
+    && grep -Fq 'including a Phase 2 auto proposal' "$SKILL_FILE"
+}
+
 split_step8_target() {
   block=$(sed -n '/Split-only Step 8 command block/,/^```$/p' "$SKILL_FILE") \
     && grep -Fq 'Preserve an explicit branch → worktree mapping' "$SCOPE_FILE" \
@@ -77,6 +91,7 @@ run_case setup-option-limit setup_option_limit
 run_case late-divergence-policy late_divergence_policy
 run_case codex-conflict-batch codex_conflict_batch
 run_case candidate-cardinality-rules candidate_cardinality_rules
+run_case conflict-side-deletion-contract conflict_side_deletion_contract
 run_case split-step8-target split_step8_target
 
 if [ "$failures" -gt 0 ]; then

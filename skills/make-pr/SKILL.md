@@ -250,7 +250,13 @@ git diff --name-only --diff-filter=U
 
 **Phase 2 — Analyze every conflicted file in this round:**
 
-For each file in the list: read its contents, locate the conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`), work out what each side holds, and form a proposed resolution with reasoning. Use the correct ours/theirs mapping for the operation in progress:
+For each file in the list, first inspect its index stages before attempting any checkout or staging:
+
+```bash
+git ls-files -u -- {file}
+```
+
+Stage 2 is **ours** and stage 3 is **theirs**. A missing stage is a deletion on that side, so do not assume that the worktree contains conflict markers (modify/delete and rename/delete conflicts may not). Read the present stage blobs (`git show :2:{file}` / `git show :3:{file}`) when analyzing the two sides, then form a proposed resolution with reasoning. Use the correct ours/theirs mapping for the operation in progress:
 
 - **During merge:** `HEAD` side (ours) = current branch changes, incoming side (theirs) = target branch changes
 - **During rebase:** `HEAD` side (ours) = target branch changes (commit being rebased onto), incoming side (theirs) = current branch changes (commit being replayed)
@@ -261,14 +267,23 @@ For each file in the list: read its contents, locate the conflict markers (`<<<<
 |---|---|
 | 파일별로 확인 | Explain this round's conflicts in plain text — one short block per file: what each side holds, what the conflict represents, the proposed resolution and its reasoning. Native-capable clients may ask about up to 4 files per call; Codex batches are capped at 3 files per call. A later batch starts with the remaining files. Each question offers **제안대로 해결** / **현재 브랜치 유지** (merge: ours / rebase: theirs) / **타겟 브랜치 채택** (merge: theirs / rebase: ours) |
 | 제안대로 자동 해결 | Apply the Phase 2 proposal to every file |
-| 현재 브랜치 우선 | Take the current branch's side in every file — merge: `git checkout --ours {file}`, rebase: `git checkout --theirs {file}` |
-| 타겟 브랜치 우선 | Take the target branch's side in every file — merge: `git checkout --theirs {file}`, rebase: `git checkout --ours {file}` |
+| 현재 브랜치 우선 | Take the current branch's side in every file — merge selects ours (stage 2), rebase selects theirs (stage 3) |
+| 타겟 브랜치 우선 | Take the target branch's side in every file — merge selects theirs (stage 3), rebase selects ours (stage 2) |
 
-Stage each settled file:
+For every file and every policy that selects a side (including a Phase 2 auto proposal), resolve the selected stage explicitly. If the selected stage is absent, resolve the deletion with `git rm -- {file}`; otherwise check out the selected side and stage it:
 
 ```bash
-git add {file}
+stages=$(git ls-files -u -- {file})
+# selected_stage is 2 (ours) or 3 (theirs), according to the mapping above
+if ! printf '%s\n' "$stages" | awk -v stage="$selected_stage" '$3 == stage { found=1 } END { exit !found }'; then
+  git rm -- {file}
+else
+  git checkout --$selected_side -- {file}
+  git add -- {file}
+fi
 ```
+
+This stage inspection and missing-stage `git rm` rule also applies to file-by-file choices; never blindly run `git checkout` when the chosen side is a deletion.
 
 Under the three non-interactive policies, report what was applied per file in plain text after the operation finishes, so the user can see the resolutions they did not individually approve.
 
