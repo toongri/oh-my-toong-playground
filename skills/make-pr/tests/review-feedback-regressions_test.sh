@@ -104,6 +104,16 @@ split_command_failure_rollback() {
     && printf '%s\n' "$block" | grep -Fq 'the preflight checks are not a sufficient guard'
 }
 
+remote_split_branch_preflight() {
+  block=$(sed -n '/### Separation Steps/,/^### Worktree Lifetime/p' "$SCOPE_FILE") \
+    && printf '%s\n' "$block" | grep -Fq 'Before creating any worktree, preflight every planned split branch' \
+    && printf '%s\n' "$block" | grep -Fq 'git ls-remote --exit-code --heads origin "refs/heads/{branch-name}"' \
+    && printf '%s\n' "$block" | grep -Fq 'require a different branch name' \
+    && preflight_line=$(printf '%s\n' "$block" | grep -n -m1 -F 'Before creating any worktree, preflight every planned split branch' | cut -d: -f1) \
+    && add_line=$(printf '%s\n' "$block" | grep -n -m1 -F 'git worktree add -b {branch-name}' | cut -d: -f1) \
+    && [ "$preflight_line" -lt "$add_line" ]
+}
+
 run_case setup-option-limit setup_option_limit
 run_case late-divergence-policy late_divergence_policy
 run_case codex-conflict-batch codex_conflict_batch
@@ -111,6 +121,7 @@ run_case candidate-cardinality-rules candidate_cardinality_rules
 run_case conflict-side-deletion-contract conflict_side_deletion_contract
 run_case split-step8-target split_step8_target
 run_case split-command-failure-rollback split_command_failure_rollback
+run_case remote-split-branch-preflight remote_split_branch_preflight
 
 if [ "$failures" -gt 0 ]; then
   exit 1

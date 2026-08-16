@@ -185,6 +185,8 @@ Each sub-PR gets its own **git worktree** — a separate checked-out directory b
 
 2. Pre-check for mixed commits: run `git log origin/{base-branch}..HEAD --name-status` and cross-reference each commit's changed files against the thesis mapping from step 1. If any single commit modifies files assigned to more than one thesis, **immediately stop and switch to the Graceful Degradation procedure** before creating any branch. Do not proceed to the separation loop.
 
+Before creating any worktree, preflight every planned split branch and worktree path. Abort the split setup before creating resources if a local branch or worktree path already exists. Also run `git ls-remote --exit-code --heads origin "refs/heads/{branch-name}"` for every planned name: exit 0 means the remote branch already exists, exit 2 means it is absent, and any other result is a remote-check failure. If any remote branch exists, require a different branch name and repeat the complete preflight; never push to or register a pre-existing remote split branch.
+
 For each thesis (in stacking order):
    a. Name the branch `{branch-name}` following `{branch-convention}` from the Step 1 PR Convention Survey (fallback when no convention: descriptive kebab-case topic name). Its worktree directory is a sibling of the repository root, named after the branch with `/` replaced by `-`:
       ```bash
