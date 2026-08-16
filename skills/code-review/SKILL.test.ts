@@ -89,6 +89,13 @@ describe("code-review direct finder-job contract", () => {
 		expect(step4).toContain("recovery point");
 	});
 
+	test("completed reviews retire the recovery artifact before returning", () => {
+		expect(step4).toContain('"lifecycle": "recoverable"');
+		expect(step4).toContain('update `lifecycle` to `"retired"`');
+		expect(step4).toContain("A retired artifact never skips finder starts");
+		expect(step4).toContain("after `findings.md` is durably written");
+	});
+
 	test("retry policy excludes polling/interruption and caps attempt two", () => {
 		expect(step4).toContain("--attempt 2");
 		expect(step4).toContain("at most once");

@@ -376,6 +376,7 @@ The orchestrator constructs this command string for the configured finder CLIs; 
    ```json
    {
      "schemaVersion": 1,
+     "lifecycle": "recoverable",
      "reviewId": "…", "worktreeRealpath": "…", "baseSha": "…", "headSha": "…",
      "expectedChunks": [{"chunkKey": "…", "files": ["…"]}],
      "chunks": [{"chunkKey": "…", "diffFingerprint": "…", "attempts": [{"attempt": 1,
@@ -385,7 +386,9 @@ The orchestrator constructs this command string for the configured finder CLIs; 
    }
    ```
 
-   Validate schemaVersion, exact top identity/chunk set/fingerprints, arrays, terminal state, and that each jobDir is under the orchestrate-review jobs root with matching `job.json` identity (including attempt) when present. Each chunk's attempts are unique and contiguous, exactly `[1]` or `[1,2]`, never more than two. A valid artifact skips all starts; a missing artifact reuses only validated jobs/results; an invalid artifact is reported/quarantined and never authorizes unvalidated reuse. Attempt 2 may be created only after terminal infrastructure failure and only when no validated attempt 2 exists; persisted `[1,2]` never respawns and both outputs merge. Cleanup interruption never respawns; an already-cleaned job relies on the validated artifact. Persist, then run usage-summary, then clean.
+   Validate schemaVersion, `lifecycle === "recoverable"`, exact top identity/chunk set/fingerprints, arrays, terminal state, and that each jobDir is under the orchestrate-review jobs root with matching `job.json` identity (including attempt) when present. Each chunk's attempts are unique and contiguous, exactly `[1]` or `[1,2]`, never more than two. A valid artifact skips all starts only when its lifecycle is recoverable; a missing artifact reuses only validated jobs/results; an invalid artifact is reported/quarantined and never authorizes unvalidated reuse. A retired artifact never skips finder starts: treat it as a completed prior invocation, quarantine it, and create a fresh recoverable artifact for the new review. Attempt 2 may be created only after terminal infrastructure failure and only when no validated attempt 2 exists; persisted `[1,2]` never respawns and both outputs merge. Cleanup interruption never respawns; an already-cleaned job relies on the validated artifact. Persist, then run usage-summary, then clean.
+
+   The artifact is invocation-scoped recovery state, not a cache across independent reviews. Retire it after `findings.md` is durably written and the final findings report is fully synthesized: atomically update `lifecycle` to `"retired"` before returning the report. If the turn is interrupted earlier, leave it `recoverable` so the same invocation can resume. Retiring before the final response may cause an interruption in the narrow retire-to-response window to rerun finders, which is safe; reusing candidates produced from obsolete intent is not.
 
    Read each manifest `outputFilePath`. Required raw finder fields are `file`, `line`, `summary`, and `failure_scenario`; preserve any additional evidence fields. Normalize paths/locations and deduplicate only when normalized file/location and defect reason match (not title); union unique `found by` angles/evidence and retain the most concrete failure scenario. Emit exactly one coverage record per configured angle, explicitly marking unavailable angles, and require every configured angle to be represented before Phase 2. Do not read the protected orchestrate-review/SKILL.md to perform this aggregation.
 
