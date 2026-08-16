@@ -300,6 +300,10 @@ EOF
 - Update sub-PRs 1 through N-1 — each of them was created carrying at least one `#TBD` for a PR that did not exist yet. The last sub-PR already knows every predecessor at creation time and carries no placeholder.
 - After the update pass, no `#TBD` may remain in any sub-PR description.
 
+### Early Stop / Partial Creation Finalization
+
+If the user declines a later `gh pr create` or that command fails, stop before creating any later sub-PRs. Let **M** be the number of sub-PRs successfully created in this run. When **M > 0**, finalize every created PR with `gh pr edit`: change each visible title and split-context/body series count from `K/N` to the actual M created PRs (`K/M`), remove every `#TBD`, and remove or rewrite every reference to an uncreated sibling so the remaining merge order and related-PR links describe only the created series. Report which planned theses were not published. When M = 0, do not edit any remote PR. The normal all-created update path remains unchanged.
+
 ---
 
 ## Graceful Degradation

@@ -114,6 +114,19 @@ remote_split_branch_preflight() {
     && [ "$preflight_line" -lt "$add_line" ]
 }
 
+split_partial_creation_finalization() {
+  block=$(sed -n '/### Post-Creation Update/,/^## Graceful Degradation/p' "$SCOPE_FILE") \
+    && printf '%s\n' "$block" | grep -Fq 'If the user declines a later `gh pr create` or that command fails' \
+    && printf '%s\n' "$block" | grep -Fq 'stop before creating any later sub-PRs' \
+    && printf '%s\n' "$block" | grep -Fq 'M > 0' \
+    && printf '%s\n' "$block" | grep -Fq 'actual M created PRs' \
+    && printf '%s\n' "$block" | grep -Fq 'remove every `#TBD`' \
+    && printf '%s\n' "$block" | grep -Fq 'uncreated sibling' \
+    && printf '%s\n' "$block" | grep -Fq 'Report which planned theses were not published' \
+    && printf '%s\n' "$block" | grep -Fq 'When M = 0, do not edit any remote PR' \
+    && printf '%s\n' "$block" | grep -Fq 'normal all-created update path remains unchanged'
+}
+
 run_case setup-option-limit setup_option_limit
 run_case late-divergence-policy late_divergence_policy
 run_case codex-conflict-batch codex_conflict_batch
@@ -122,6 +135,7 @@ run_case conflict-side-deletion-contract conflict_side_deletion_contract
 run_case split-step8-target split_step8_target
 run_case split-command-failure-rollback split_command_failure_rollback
 run_case remote-split-branch-preflight remote_split_branch_preflight
+run_case split-partial-creation-finalization split_partial_creation_finalization
 
 if [ "$failures" -gt 0 ]; then
   exit 1
