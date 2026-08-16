@@ -5241,6 +5241,24 @@ describe("start durable review identity", () => {
 		expect(fs.existsSync(lockPath(jobsDir))).toBe(false);
 	});
 
+	test("reclaims a stale malformed identity lock by mtime", async () => {
+		const jobsDir = path.join(tmpDir, "stale-malformed-lock");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		const malformedLockPath = lockPath(jobsDir);
+		fs.writeFileSync(malformedLockPath, '{"pid":');
+		const staleAt = new Date(Date.now() - 11 * 60 * 1000);
+		fs.utimesSync(malformedLockPath, staleAt, staleAt);
+		const mod = await import(`./job.ts?identity-malformed-stale=${Date.now()}-${Math.random()}`);
+		await mod.cmdStart(
+			{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity },
+			"prompt",
+		);
+		expect(fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-")).length).toBe(
+			1,
+		);
+		expect(fs.existsSync(malformedLockPath)).toBe(false);
+	});
+
 	test("times out on a live identity lock without hanging", () => {
 		const jobsDir = path.join(tmpDir, "live-lock");
 		fs.mkdirSync(jobsDir, { recursive: true });

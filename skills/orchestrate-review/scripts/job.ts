@@ -657,7 +657,22 @@ async function acquireIdentityClaim(
 					continue;
 				}
 			} catch {
-				/* malformed lock is fail-closed */
+				// A process can die after creating the lock but before its JSON write completes.
+				// Such a lock has no usable owner PID, so reclaim only after the same stale
+				// window, using filesystem mtime as the durable creation-time fallback.
+				try {
+					const stale = Date.now() - fs.statSync(lockPath).mtimeMs > IDENTITY_LOCK_STALE_MS;
+					if (stale) {
+						try {
+							fs.unlinkSync(lockPath);
+						} catch {
+							// Another contender may have reclaimed the malformed lock first.
+						}
+						continue;
+					}
+				} catch {
+					// The lock disappeared or cannot be inspected; retry until the bounded deadline.
+				}
 			}
 			if (Date.now() >= deadline)
 				throw new Error(`identity claim timeout: ${lockPath}`, { cause: error });
