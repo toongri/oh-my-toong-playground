@@ -97,6 +97,7 @@ split_command_failure_rollback() {
     && printf '%s\n' "$block" | grep -Fq 'track only remote branches successfully pushed during this run' \
     && printf '%s\n' "$block" | grep -Fq 'A late worktree-add failure must roll back remote branches pushed by earlier iterations of this run' \
     && printf '%s\n' "$block" | grep -Fq 'Remove worktrees first, then delete' \
+    && printf '%s\n' "$block" | grep -Fq 'git worktree remove --force "{tracked-worktree-path}"' \
     && printf '%s\n' "$block" | grep -Fq 'run `git -C "$WT_DIR" cherry-pick --abort` only when a cherry-pick is active' \
     && printf '%s\n' "$block" | grep -Fq 'confirmation before deleting any tracked remote branch' \
     && printf '%s\n' "$block" | grep -Fq 'Preserve pre-existing worktrees, local branches, and remote branches' \

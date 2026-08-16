@@ -231,7 +231,7 @@ The `worktree add`, `cherry-pick`, and `push` commands are all failure points. A
 
 1. If the failure occurred during a cherry-pick, run `git -C "$WT_DIR" cherry-pick --abort` only when a cherry-pick is active; do not invoke `--abort` for an add or push failure (or for an already-clean worktree).
 2. Remove worktrees first, then delete the corresponding local branches, using only the tracked resources from this run:
-   a. `git worktree remove --force {tracked-worktree-path}`
+   a. `git worktree remove --force "{tracked-worktree-path}"`
    b. `git branch -D {tracked-local-branch}`
 3. Ask the user for confirmation before deleting any tracked remote branch: list each remote branch to be deleted and wait for explicit approval. Never delete a remote branch without that confirmation.
 4. For each remote branch confirmed by the user:
