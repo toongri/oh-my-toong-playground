@@ -32,6 +32,24 @@ describe("code-review Terminal Output prose 계약", () => {
 describe("code-review direct finder-job contract", () => {
 	const step4 = extractSection(skillMd, "## Step 4: Direct Finder-Job Dispatch", "## Step 5:");
 
+	test("review identity includes the canonical five-slot intent fingerprint", () => {
+		expect(step4).toContain("canonical intent fingerprint");
+		for (const slot of [
+			"WHAT_WAS_IMPLEMENTED",
+			"DESCRIPTION",
+			"REQUIREMENTS",
+			"PROJECT_CONTEXT",
+			"NON_GOAL",
+		]) {
+			expect(step4).toContain(slot);
+		}
+		expect(step4).toContain(
+			"reviewId = H(worktreeRealpath + NL + baseSha + NL + headSha + NL + intentFingerprint + NL)",
+		);
+		expect(step4).toContain("same invocation");
+		expect(step4).toContain("one reviewId shared across all chunks");
+	});
+
 	test("Step 4 uses direct job lifecycle and keeps finder dispatch delegated to CLIs", () => {
 		expect(step4).not.toContain('subagent_type: "chunk-reviewer"');
 		expect(step4).not.toMatch(/Task tool|Task wrapper/);

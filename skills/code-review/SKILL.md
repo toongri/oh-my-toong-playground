@@ -317,15 +317,18 @@ The orchestrator constructs this command string for the configured finder CLIs; 
    - {COMMIT_HISTORY} ← Step 2 commit history
 
    The five intent placeholders above ({WHAT_WAS_IMPLEMENTED}/{DESCRIPTION}/{REQUIREMENTS}/{PROJECT_CONTEXT}/{NON_GOAL}) source differently depending on mode, discriminated by the completion-gate dispatch signal from Step 1's Intent Block Gate. In structured-output mode (completion-gate dispatch), the Step 1 payload is a JSON object with named fields `what_was_implemented`/`description`/`requirements`/`project_context`/`non_goals` — `JSON.parse` it and read each named field 1:1 into its placeholder above. This is a named-field read, not a blob split — never dump the whole payload into one placeholder. If the payload fails to parse as JSON, do not guess field values from malformed input — stop before starting finder jobs. When the completion-gate dispatch signal is present, first write that `{gate}-codereview-{sid}.json` artifact directly as `{"status": "INCONCLUSIVE", "reviewer": "<reviewer id>", "at": "<ISO timestamp>", "findings": []}` (the code-review artifact schema `skills/{gate}/references/completion-gate.md` defines); if the artifact write itself fails, leave the artifact absent — `request-complete` already refuses on an absent artifact. Then report the parse failure and exit.
-3. Before starting any job, derive a deterministic review identity from the real worktree path, base SHA, head SHA, and a stable review-session-id hash of those values. For each chunk, sort its file list and derive a stable chunk key; compute a SHA-256 fingerprint of exactly that chunk's diff. Recompute the same values on recovery. Start with the exact seven committed identity flags and `--attempt 1`:
+3. Before starting any job, derive a deterministic review identity from the real worktree path, base SHA, head SHA, and a canonical intent fingerprint of the five intent slots (`WHAT_WAS_IMPLEMENTED`, `DESCRIPTION`, `REQUIREMENTS`, `PROJECT_CONTEXT`, `NON_GOAL`). The stable review-session-id hash is intent-aware. For each chunk, sort its file list and derive a stable chunk key; compute a SHA-256 fingerprint of exactly that chunk's diff. Recompute the same values on recovery from the same five-slot intent, so the same invocation recomputes the same value after interruption while different intent produces a different review identity. All chunks use one reviewId shared across all chunks. Start with the exact seven committed identity flags and `--attempt 1`:
 
    Canonical bytes are UTF-8 with no normalization. Resolve `worktreeRealpath` as the physical repository root (`realpath "$(git rev-parse --show-toplevel)"`), `baseSha` as `git rev-parse --verify '<base>^{commit}'`, and `headSha` as `git rev-parse --verify '<head>^{commit}'`. Derive the fixed `mergeBase` reproducibly as `git merge-base <baseSha> <headSha>`. Paths are repository-relative and bytewise sorted. Let `NL` be one LF byte and `H(x)` be lowercase SHA-256 hex of UTF-8 bytes. Compute exactly:
 
    ```text
+   canonicalIntentBytes = each of the five named slots in the fixed order above,
+     serialized as `<slotName>:<UTF-8 byte length>:<value>` followed by NL
+   intentFingerprint = H(canonicalIntentBytes)
    chunkKey = H(sortedPaths joined by NL, followed by NL)
    diffFingerprint = H(raw stdout bytes of
      git diff --no-ext-diff --binary <mergeBase> <headSha> -- <sorted paths>)
-   reviewId = H(worktreeRealpath + NL + baseSha + NL + headSha + NL)
+   reviewId = H(worktreeRealpath + NL + baseSha + NL + headSha + NL + intentFingerprint + NL)
    ```
 
    Exclude stderr from `diffFingerprint`; a nonzero diff exit aborts identity derivation. Use Bun/Node's builtin `crypto.createHash("sha256")` over the exact bytes (never a locale or ambiguous “stable hash”). These formulas and commands are rerun verbatim after interruption. The same path-filtered command is used for a single chunk and for every multi-chunk file list; only `<sorted paths>` differs.
@@ -377,7 +380,7 @@ The orchestrator constructs this command string for the configured finder CLIs; 
    {
      "schemaVersion": 1,
      "lifecycle": "recoverable",
-     "reviewId": "…", "worktreeRealpath": "…", "baseSha": "…", "headSha": "…",
+     "reviewId": "…", "intentFingerprint": "…", "worktreeRealpath": "…", "baseSha": "…", "headSha": "…",
      "expectedChunks": [{"chunkKey": "…", "files": ["…"]}],
      "chunks": [{"chunkKey": "…", "diffFingerprint": "…", "attempts": [{"attempt": 1,
        "jobDir": "…", "terminalState": "done", "candidates": [{"file": "…", "line": 1,
@@ -386,7 +389,7 @@ The orchestrator constructs this command string for the configured finder CLIs; 
    }
    ```
 
-   Validate schemaVersion, `lifecycle === "recoverable"`, exact top identity/chunk set/fingerprints, arrays, terminal state, and that each jobDir is under the orchestrate-review jobs root with matching `job.json` identity (including attempt) when present. Each chunk's attempts are unique and contiguous, exactly `[1]` or `[1,2]`, never more than two. A valid artifact skips all starts only when its lifecycle is recoverable; a missing artifact reuses only validated jobs/results; an invalid artifact is reported/quarantined and never authorizes unvalidated reuse. A retired artifact never skips finder starts: treat it as a completed prior invocation, quarantine it, and create a fresh recoverable artifact for the new review. Attempt 2 may be created only after terminal infrastructure failure and only when no validated attempt 2 exists; persisted `[1,2]` never respawns and both outputs merge. Cleanup interruption never respawns; an already-cleaned job relies on the validated artifact. Persist, then run usage-summary, then clean.
+   Validate schemaVersion, `lifecycle === "recoverable"`, exact top identity (including `intentFingerprint`) / chunk set / fingerprints, arrays, terminal state, and that each jobDir is under the orchestrate-review jobs root with matching `job.json` identity (including attempt) when present. Each chunk's attempts are unique and contiguous, exactly `[1]` or `[1,2]`, never more than two. A valid artifact skips all starts only when its lifecycle is recoverable; a missing artifact reuses only validated jobs/results; an invalid artifact is reported/quarantined and never authorizes unvalidated reuse. A retired artifact never skips finder starts: treat it as a completed prior invocation, quarantine it, and create a fresh recoverable artifact for the new review. Attempt 2 may be created only after terminal infrastructure failure and only when no validated attempt 2 exists; persisted `[1,2]` never respawns and both outputs merge. Cleanup interruption never respawns; an already-cleaned job relies on the validated artifact. Persist, then run usage-summary, then clean.
 
    The artifact is invocation-scoped recovery state, not a cache across independent reviews. Retire it after `findings.md` is durably written and the final findings report is fully synthesized: atomically update `lifecycle` to `"retired"` before returning the report. If the turn is interrupted earlier, leave it `recoverable` so the same invocation can resume. Retiring before the final response may cause an interruption in the narrow retire-to-response window to rerun finders, which is safe; reusing candidates produced from obsolete intent is not.
 
