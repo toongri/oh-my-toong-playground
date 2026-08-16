@@ -640,7 +640,6 @@ async function acquireIdentityClaim(
 				const lock = JSON.parse(fs.readFileSync(lockPath, "utf8"));
 				const createdAt = typeof lock.createdAt === "number" ? lock.createdAt : NaN;
 				const pid = typeof lock.pid === "number" ? lock.pid : NaN;
-				const stale = Number.isFinite(createdAt) && Date.now() - createdAt > IDENTITY_LOCK_STALE_MS;
 				let alive = true;
 				try {
 					if (Number.isFinite(pid)) process.kill(pid, 0);
@@ -648,7 +647,7 @@ async function acquireIdentityClaim(
 				} catch {
 					alive = false;
 				}
-				if (stale && !alive) {
+				if (Number.isFinite(createdAt) && Number.isFinite(pid) && !alive) {
 					try {
 						fs.unlinkSync(lockPath);
 					} catch {

@@ -5241,6 +5241,50 @@ describe("start durable review identity", () => {
 		expect(fs.existsSync(lockPath(jobsDir))).toBe(false);
 	});
 
+	test("reclaims a fresh identity lock whose owner PID is dead", async () => {
+		const jobsDir = path.join(tmpDir, "fresh-dead-lock");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		const owner = spawn(process.execPath, ["-e", ""], { stdio: "ignore" });
+		const deadPid = owner.pid;
+		if (deadPid === undefined) throw new Error("expected owner process PID");
+		await new Promise<void>((resolve) => owner.once("close", () => resolve()));
+		fs.writeFileSync(lockPath(jobsDir), JSON.stringify({ pid: deadPid, createdAt: Date.now() }));
+		const result = spawnSync(
+			process.execPath,
+			[
+				path.resolve(import.meta.dir, "job.ts"),
+				"start",
+				"--jobs-dir",
+				jobsDir,
+				"--review-id",
+				identity.reviewId,
+				"--chunk-key",
+				identity.chunkKey,
+				"--attempt",
+				String(identity.attempt),
+				"--worktree-realpath",
+				identity.worktreeRealpath,
+				"--base-sha",
+				identity.baseSha,
+				"--head-sha",
+				identity.headSha,
+				"--diff-fingerprint",
+				identity.diffFingerprint,
+				"prompt",
+			],
+			{
+				encoding: "utf8",
+				timeout: 5000,
+				env: { ...process.env, CHUNK_REVIEW_IDENTITY_LOCK_DEADLINE_MS: "500" },
+			},
+		);
+		expect(result.status).toBe(0);
+		expect(fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-")).length).toBe(
+			1,
+		);
+		expect(fs.existsSync(lockPath(jobsDir))).toBe(false);
+	});
+
 	test("reclaims a stale malformed identity lock by mtime", async () => {
 		const jobsDir = path.join(tmpDir, "stale-malformed-lock");
 		fs.mkdirSync(jobsDir, { recursive: true });
