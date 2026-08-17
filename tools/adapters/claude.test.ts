@@ -15,6 +15,7 @@ import { deriveClaudeProjectKey } from "../lib/git-key.ts";
 import baseline from "./__fixtures__/claude-project-baseline.json";
 import type { PlatformYaml } from "../lib/types.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
+import { composePreToolTraceCommand } from "../lib/pretool-trace-command.ts";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -40,6 +41,16 @@ async function exists(p: string): Promise<boolean> {
 	} catch {
 		return false;
 	}
+}
+
+function decodeTraceCommand(command: string): string[] {
+	const args: string[] = [];
+	const pattern = /'((?:'"'"'|[^'])*)'/g;
+	let match: RegExpExecArray | null;
+	while ((match = pattern.exec(command)) !== null) {
+		args.push(match[1].replaceAll(`'"'"'`, "'"));
+	}
+	return args;
 }
 
 // ---------------------------------------------------------------------------
@@ -1475,13 +1486,15 @@ describe("syncPlatformYaml - processedSections", () => {
 	});
 
 	it("includes 'hooks' in processedSections after processing hooks section via `syncPlatformYaml`", async () => {
+		const hookFile = path.join(tmpDir, "processed-hook.sh");
+		await writeFile(hookFile, "#!/bin/sh\n");
 		const result = await adapter.syncPlatformYaml(
 			targetPath,
 			{
 				hooks: {
 					PreToolUse: [
 						{
-							command: "$CLAUDE_PROJECT_DIR/.claude/hooks/test.sh",
+							component: hookFile,
 							timeout: 10,
 							matcher: "*",
 						},
@@ -1889,8 +1902,123 @@ describe("isGlobalSync 분기 — 글로벌 sync (path = homedir)", () => {
 		>;
 		const hookEntries = eventHooks.flatMap((h) => h["hooks"] as Array<Record<string, unknown>>);
 		const commands = hookEntries.map((e) => e["command"] as string);
-		expect(commands.some((c) => c.startsWith("$HOME/.claude/hooks/"))).toBe(true);
+		expect(commands[0]).toBe(
+			composePreToolTraceCommand({
+				wrapperPath: path.join(globalTarget, ".claude", "scripts", "pretool-trace", "index.ts"),
+				platform: "claude",
+				hookId: "session-start.sh",
+				originalCommand: "$HOME/.claude/hooks/session-start.sh",
+			}),
+		);
 		expect(commands.some((c) => c.includes("$CLAUDE_PROJECT_DIR"))).toBe(false);
+	});
+});
+
+describe("PreToolUse trace wrapper", () => {
+	it("PreToolUse trace wrapper coverage", async () => {
+		const rootA = path.join(tmpDir, "root-a");
+		const rootB = path.join(tmpDir, "root-b");
+		const direct = path.join(rootA, "direct-hook.sh");
+		const indexTs = path.join(rootA, "index-ts");
+		const indexSh = path.join(rootA, "index-sh");
+		const sameName = path.join(rootB, "index-ts");
+		await writeFile(direct, "#!/bin/sh\n");
+		await writeFile(path.join(indexTs, "index.ts"), "export {};\n");
+		await writeFile(path.join(indexSh, "index.sh"), "#!/bin/sh\n");
+		await writeFile(path.join(sameName, "index.ts"), "export {};\n");
+		const yaml = { hooks: { PreToolUse: [
+			{ component: direct, matcher: "Bash", timeout: 3 },
+			{ component: indexTs, matcher: "*", timeout: 4 },
+			{ component: indexSh, matcher: "*", timeout: 5 },
+			{ component: sameName, matcher: "Read", timeout: 6 },
+		] } } as PlatformYaml;
+		const previews = await adapter.previewPreToolUseCommands(targetPath, yaml);
+		expect(previews).toHaveLength(4);
+		expect(new Set(previews.map((p) => p.hookId))).toEqual(new Set(["direct-hook.sh", "index-ts", "index-sh"]));
+		const expectedOriginals = [
+			"$CLAUDE_PROJECT_DIR/.claude/hooks/direct-hook.sh",
+			"bun run $CLAUDE_PROJECT_DIR/.claude/hooks/index-ts/index.ts",
+			"bash $CLAUDE_PROJECT_DIR/.claude/hooks/index-sh/index.sh",
+			"bun run $CLAUDE_PROJECT_DIR/.claude/hooks/index-ts/index.ts",
+		];
+		const expectedWrapper = path.join(targetPath, ".claude", "scripts", "pretool-trace", "index.ts");
+		previews.forEach((preview, index) => {
+			expect(preview.scope).toBe("project");
+			expect(preview.wrapperDeploymentPath).toBe(expectedWrapper);
+			expect(preview.originalCommand).toBe(expectedOriginals[index]);
+			expect(preview.wrappedCommand).toBe(composePreToolTraceCommand({
+				wrapperPath: expectedWrapper,
+				platform: "claude",
+				hookId: preview.hookId,
+				originalCommand: expectedOriginals[index],
+			}));
+			const argv = decodeTraceCommand(preview.wrappedCommand);
+			expect(argv).toEqual([expectedWrapper, "claude", preview.hookId, expectedOriginals[index]]);
+			expect(argv.filter((value) => value === expectedOriginals[index])).toHaveLength(1);
+			expect(preview.hookId).not.toContain(path.sep);
+		});
+		await adapter.syncPlatformYaml(targetPath, yaml, false);
+		const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.local.json"));
+		const emitted = ((settings.hooks as Record<string, unknown>).PreToolUse as Array<Record<string, unknown>>)
+			.flatMap((group) => group.hooks as Array<Record<string, unknown>>).map((hook) => hook.command);
+		expect(emitted).toEqual(previews.map((p) => p.wrappedCommand));
+	});
+
+	it("PreToolUse trace preserves hook metadata", async () => {
+		const command = path.join(tmpDir, "metadata.sh");
+		const post = path.join(tmpDir, "post.sh");
+		const session = path.join(tmpDir, "session.sh");
+		await writeFile(command, "#!/bin/sh\n");
+		await writeFile(post, "#!/bin/sh\n");
+		await writeFile(session, "#!/bin/sh\n");
+		const yaml = { hooks: {
+			PreToolUse: [{ component: command, matcher: "Bash", timeout: 7 }],
+			PostToolUse: [{ component: post, matcher: "Read", timeout: 8 }],
+			SessionStart: [{ component: session, matcher: "startup", timeout: 11 }],
+			Stop: [{ type: "prompt", prompt: "keep", matcher: "*", timeout: 9, component: "" }],
+		} } as PlatformYaml;
+		await adapter.syncPlatformYaml(targetPath, yaml, false);
+		const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.local.json"));
+		const hooks = settings.hooks as Record<string, Array<Record<string, unknown>>>;
+		expect(hooks.PreToolUse[0]?.matcher).toBe("Bash");
+		expect(hooks.PreToolUse[0]?.hooks).toMatchObject([{ timeout: 7, type: "command" }]);
+		expect(hooks.PostToolUse[0]?.matcher).toBe("Read");
+		expect(hooks.PostToolUse[0]?.hooks).toEqual([{ type: "command", command: "$CLAUDE_PROJECT_DIR/.claude/hooks/post.sh", timeout: 8 }]);
+		expect(hooks.SessionStart[0]?.matcher).toBe("startup");
+		expect(hooks.SessionStart[0]?.hooks).toEqual([{ type: "command", command: "$CLAUDE_PROJECT_DIR/.claude/hooks/session.sh", timeout: 11 }]);
+		expect(hooks.Stop[0]?.hooks).toEqual([{ type: "prompt", prompt: "keep", timeout: 9 }]);
+		expect(Object.keys(hooks)).toEqual(["PreToolUse", "PostToolUse", "SessionStart", "Stop"]);
+	});
+
+	it("PreToolUse trace pure preview", async () => {
+		const source = path.join(tmpDir, "pure.sh");
+		await writeFile(source, "#!/bin/sh\n");
+		const yaml = { hooks: { PreToolUse: [{ component: source, matcher: "*", timeout: 10 }] } } as PlatformYaml;
+		const before = await fs.readdir(targetPath, { recursive: true });
+		const preview = await adapter.previewPreToolUseCommands(targetPath, yaml);
+		expect(preview).toHaveLength(1);
+		expect(await fs.readdir(targetPath, { recursive: true })).toEqual(before);
+		expect(await exists(path.join(targetPath, ".claude", "settings.local.json"))).toBe(false);
+		const globalPreview = await adapter.previewPreToolUseCommands(os.homedir(), yaml);
+		expect(globalPreview[0]?.scope).toBe("global");
+		expect(globalPreview[0]?.wrapperDeploymentPath).toBe(
+			path.join(os.homedir(), ".claude", "scripts", "pretool-trace", "index.ts"),
+		);
+		expect(globalPreview[0]?.originalCommand).toBe("$HOME/.claude/hooks/pure.sh");
+		await adapter.syncPlatformYaml(targetPath, yaml, false);
+		const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.local.json"));
+		const command = ((settings.hooks as Record<string, Array<Record<string, unknown>>>).PreToolUse[0]?.hooks as Array<Record<string, unknown>>)[0]?.command;
+		expect(command).toBe(preview[0]?.wrappedCommand);
+	});
+
+	it("non-PreToolUse directory without index is warned and skipped", async () => {
+		const emptyDir = path.join(tmpDir, "empty-hook");
+		await fs.mkdir(emptyDir, { recursive: true });
+		await adapter.syncPlatformYaml(targetPath, {
+			hooks: { PostToolUse: [{ component: emptyDir, matcher: "*", timeout: 10 }] },
+		} as PlatformYaml, false);
+		const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.local.json"));
+		expect(settings.hooks).toEqual({});
 	});
 });
 
@@ -1959,10 +2087,12 @@ describe("AC-7: 프로젝트 분기 hook command가 pre-fix baseline과 byte-equ
 		const hookEntries = eventHooks.flatMap((h) => h["hooks"] as Array<Record<string, unknown>>);
 		const command = hookEntries[0]?.["command"] as string;
 
-		const expected = (baseline.syncPlatformYaml_L442_direct as string).replace(
-			"${displayName}",
-			hookDisplayName,
-		);
+		const expected = composePreToolTraceCommand({
+			wrapperPath: path.join(targetPath, ".claude", "scripts", "pretool-trace", "index.ts"),
+			platform: "claude",
+			hookId: hookDisplayName,
+			originalCommand: "$CLAUDE_PROJECT_DIR/.claude/hooks/test-hook.sh",
+		});
 		expect(command).toBe(expected);
 	});
 

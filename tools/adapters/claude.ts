@@ -6,6 +6,7 @@ import type {
 	Platform,
 	PlatformConfigResult,
 	PlatformYaml,
+	PlatformYamlHookItem,
 	PluginScope,
 } from "../lib/types.ts";
 import type { PlatformAdapter } from "./types.ts";
@@ -17,6 +18,7 @@ import { deepMerge } from "../lib/deep-merge.ts";
 import { readJsonFile, writeJsonFile } from "../lib/json.ts";
 import { isGlobalSync } from "../lib/path-utils.ts";
 import { deriveClaudeProjectKey } from "../lib/git-key.ts";
+import { composePreToolTraceCommand } from "../lib/pretool-trace-command.ts";
 
 // =============================================================================
 // Local narrowing helpers (avoid `as` casts on loosely-typed YAML/JSON data)
@@ -46,6 +48,29 @@ export type PluginInstaller = (
 ) => Promise<void>;
 
 export type CommandRunner = (command: string, cwd: string) => Promise<{ exitCode: number }>;
+
+export type ClaudePreToolUsePreview = {
+	hookEvent: "PreToolUse";
+	itemIndex: number;
+	hookId: string;
+	originalCommand: string;
+	wrappedCommand: string;
+	wrapperDeploymentPath: string;
+	matcher: string;
+	timeout: number;
+	scope: "global" | "project";
+	component: string;
+};
+
+export class ClaudePreToolUsePreviewError extends Error {
+	readonly itemIndex: number;
+
+	constructor(itemIndex: number, message: string) {
+		super(`Claude PreToolUse trace preview failed for item ${itemIndex}: ${message}`);
+		this.name = "ClaudePreToolUsePreviewError";
+		this.itemIndex = itemIndex;
+	}
+}
 
 async function defaultPluginInstaller(
 	name: string,
@@ -378,6 +403,111 @@ export class ClaudeAdapter implements PlatformAdapter {
 	// syncPlatformYaml
 	// ---------------------------------------------------------------------------
 
+	/**
+	 * Resolve command-type PreToolUse hooks and compose their trace wrappers.
+	 * This method is intentionally pure with respect to deployment: it only
+	 * stats source components and never creates, copies, or updates settings.
+	 */
+	async previewPreToolUseCommands(
+		targetPath: string,
+		yaml: PlatformYaml,
+	): Promise<ClaudePreToolUsePreview[]> {
+		const items = yaml.hooks?.PreToolUse;
+		if (!Array.isArray(items)) return [];
+		const wrapperDeploymentPath = path.join(
+			targetPath,
+			".claude",
+			"scripts",
+			"pretool-trace",
+			"index.ts",
+		);
+		const scope = isGlobalSync(targetPath) ? "global" : "project";
+		const previews: ClaudePreToolUsePreview[] = [];
+
+		for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
+			const item = items[itemIndex];
+			if (!item || pickString(item["type"]) === "prompt") continue;
+			const component = item.component ?? "";
+			if (!component) {
+				throw new ClaudePreToolUsePreviewError(
+					itemIndex,
+					"command-type PreToolUse items require a component-derived hook id",
+				);
+			}
+			const hookId = path.basename(component);
+			if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(hookId)) {
+				throw new ClaudePreToolUsePreviewError(itemIndex, `unsafe component basename ${hookId}`);
+			}
+			const matcher = item.matcher ?? "*";
+			const timeout = item.timeout ?? 10;
+			const originalCommand = await this._resolveHookCommand(targetPath, item, true);
+			const wrappedCommand = composePreToolTraceCommand({
+				wrapperPath: wrapperDeploymentPath,
+				platform: "claude",
+				hookId,
+				originalCommand,
+			});
+			previews.push({
+				hookEvent: "PreToolUse",
+				itemIndex,
+				hookId,
+				originalCommand,
+				wrappedCommand,
+				wrapperDeploymentPath,
+				matcher,
+				timeout,
+				scope,
+				component,
+			});
+		}
+		return previews;
+	}
+
+	private async _resolveHookCommand(
+		targetPath: string,
+		item: PlatformYamlHookItem,
+		strictMissingIndex = false,
+	): Promise<string> {
+		const component = item.component ?? "";
+		const customCommand = pickString(item["command"]) ?? "";
+		if (customCommand) return customCommand;
+		if (!component) return "";
+		const displayName = path.basename(component);
+		let stat: Awaited<ReturnType<typeof fs.stat>> | undefined;
+		try {
+			stat = await fs.stat(component);
+		} catch {
+			stat = undefined;
+		}
+		if (stat?.isDirectory()) {
+			const indexTs = path.join(component, "index.ts");
+			const indexSh = path.join(component, "index.sh");
+			let hasIndexTs = false;
+			let hasIndexSh = false;
+			try {
+				await fs.stat(indexTs);
+				hasIndexTs = true;
+			} catch {
+				/* empty */
+			}
+			try {
+				await fs.stat(indexSh);
+				hasIndexSh = true;
+			} catch {
+				/* empty */
+			}
+			const hookPrefix = isGlobalSync(targetPath) ? "$HOME" : "$CLAUDE_PROJECT_DIR";
+			if (hasIndexTs) return `bun run ${hookPrefix}/.claude/hooks/${displayName}/index.ts`;
+			if (hasIndexSh) return `bash ${hookPrefix}/.claude/hooks/${displayName}/index.sh`;
+			if (strictMissingIndex) {
+				throw new ClaudePreToolUsePreviewError(-1, `hook directory has no index.ts/index.sh: ${component}`);
+			}
+			return "";
+		}
+		const hookPrefix = isGlobalSync(targetPath) ? "$HOME" : "$CLAUDE_PROJECT_DIR";
+		return `${hookPrefix}/.claude/hooks/${displayName}`;
+	}
+
 	async syncPlatformYaml(
 		targetPath: string,
 		yaml: PlatformYaml,
@@ -394,6 +524,8 @@ export class ClaudeAdapter implements PlatformAdapter {
 
 		// --- hooks ---
 		if (yaml.hooks !== null && yaml.hooks !== undefined) {
+			const preToolUsePreview = await this.previewPreToolUseCommands(targetPath, yaml);
+			const previewByItemIndex = new Map(preToolUsePreview.map((preview) => [preview.itemIndex, preview]));
 			const hooksMap = yaml.hooks;
 			// "preserve" is a reserved key smuggled into the hooks map with a shape
 			// (`{ "command-contains"?: string[] }`) that PlatformYaml.hooks doesn't
@@ -417,27 +549,25 @@ export class ClaudeAdapter implements PlatformAdapter {
 				if (hookEvent === "preserve") continue;
 				if (!Array.isArray(items)) continue;
 
-				for (const item of items) {
+				for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
+					const item = items[itemIndex];
 					// component/timeout/matcher are declared fields on PlatformYamlHookItem;
 					// type/command/prompt fall through its index signature as `unknown`.
 					const component = item.component ?? "";
 					const timeout = item.timeout ?? 10;
 					const matcher = item.matcher ?? "*";
 					const hookType = pickString(item["type"]) ?? "command";
-					const customCommand = pickString(item["command"]) ?? "";
 					const promptText = pickString(item["prompt"]) ?? "";
 
 					let displayName = "";
-					let resolvedSourcePath = "";
 
 					// If a component is specified, resolve and copy the hook file
 					if (component) {
 						// component is a pre-resolved absolute path (orchestrator resolves before calling adapter)
 						displayName = path.basename(component);
-						resolvedSourcePath = component;
 
 						// Copy the hook file/dir
-						await this.syncHooksDirect(targetPath, displayName, resolvedSourcePath, dryRun);
+						await this.syncHooksDirect(targetPath, displayName, component, dryRun);
 					}
 
 					// Build hook entry (buildHookEntry always returns Record<string, unknown[]>)
@@ -457,54 +587,12 @@ export class ClaudeAdapter implements PlatformAdapter {
 							displayName,
 						);
 					} else {
-						let cmdPath: string;
-						if (customCommand) {
-							cmdPath = customCommand;
-						} else if (component) {
-							// Determine command path based on whether it's a directory
-							let isDir = false;
-							try {
-								const stat = await fs.stat(resolvedSourcePath);
-								isDir = stat.isDirectory();
-							} catch {
-								// treat as file
-							}
-
-							if (isDir) {
-								const indexTs = path.join(resolvedSourcePath, "index.ts");
-								const indexSh = path.join(resolvedSourcePath, "index.sh");
-								let hasIndexTs = false;
-								let hasIndexSh = false;
-								try {
-									await fs.stat(indexTs);
-									hasIndexTs = true;
-								} catch {
-									/* empty */
-								}
-								try {
-									await fs.stat(indexSh);
-									hasIndexSh = true;
-								} catch {
-									/* empty */
-								}
-
-								const hookPrefix = isGlobalSync(targetPath) ? "$HOME" : "$CLAUDE_PROJECT_DIR";
-								if (hasIndexTs) {
-									cmdPath = `bun run ${hookPrefix}/.claude/hooks/${displayName}/index.ts`;
-								} else if (hasIndexSh) {
-									cmdPath = `bash ${hookPrefix}/.claude/hooks/${displayName}/index.sh`;
-								} else {
-									logWarn(`Hook 디렉토리에 index.ts/index.sh 없음: ${resolvedSourcePath} (스킵)`);
-									continue;
-								}
-							} else {
-								cmdPath = `${isGlobalSync(targetPath) ? "$HOME" : "$CLAUDE_PROJECT_DIR"}/.claude/hooks/${displayName}`;
-							}
-						} else {
+						const preview = hookEvent === "PreToolUse" ? previewByItemIndex.get(itemIndex) : undefined;
+						const cmdPath = preview ? preview.wrappedCommand : await this._resolveHookCommand(targetPath, item);
+						if (!cmdPath) {
 							logWarn(`Hook command 미정의: event=${hookEvent} (스킵)`);
 							continue;
 						}
-
 						hookEntry = this.buildHookEntry(
 							hookEvent,
 							matcher,
