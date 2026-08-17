@@ -629,7 +629,7 @@ export type SpawnedWorker = {
  *  `ps -A` calls elsewhere in this file (reapOrphanJobs, cmdClean): failure
  *  has no basis to assert anything, so it degrades to `null` (no witness)
  *  rather than guessing. */
-function getProcessStartedAt(pid: number): string | null {
+export function getProcessStartedAt(pid: number): string | null {
 	try {
 		// LC_ALL=C: see getPgidSnapshot's own comment below for why this witness
 		// must render in a fixed locale — this call and that one are the two

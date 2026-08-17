@@ -5345,6 +5345,85 @@ describe("start durable review identity", () => {
 		expect(Date.now() - startedAt).toBeLessThan(4500);
 	});
 
+	test("includes a pid-start witness in a newly acquired lock", async () => {
+		const jobsDir = path.join(tmpDir, "new-lock-witness");
+		const writes: string[] = [];
+		const originalWrite = fs.writeFileSync;
+		fs.writeFileSync = ((file: fs.PathLike | number, data: string | NodeJS.ArrayBufferView, ...rest: any[]) => {
+			if (typeof data === "string") writes.push(data);
+			return originalWrite.call(fs, file, data, ...rest);
+		}) as typeof fs.writeFileSync;
+		try {
+			const mod = await import(`./job.ts?identity-new-witness=${Date.now()}-${Math.random()}`);
+			await mod.cmdStart(
+				{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity },
+				"prompt",
+			);
+		} finally {
+			fs.writeFileSync = originalWrite;
+		}
+		const lockRecord = writes.map((data) => {
+			try {
+				return JSON.parse(data) as Record<string, unknown>;
+			} catch {
+				return null;
+			}
+		}).find((record) => record !== null && "pidStartedAt" in record);
+		expect(lockRecord?.pid).toBe(process.pid);
+		expect(lockRecord?.pidStartedAt).toEqual(expect.any(String));
+	});
+
+	test("records a process-start witness and reclaims a stale lock when the live PID was reused", async () => {
+		const jobsDir = path.join(tmpDir, "reused-live-lock");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		const witness = GenericJob.getProcessStartedAt(process.pid);
+		expect(witness).toEqual(expect.any(String));
+		fs.writeFileSync(
+			lockPath(jobsDir),
+			JSON.stringify({ pid: process.pid, pidStartedAt: "Mon Jan  1 00:00:00 1970", createdAt: Date.now() - 11 * 60 * 1000 }),
+		);
+		const mod = await import(`./job.ts?identity-reused-live=${Date.now()}-${Math.random()}`);
+		await mod.cmdStart(
+			{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity },
+			"prompt",
+		);
+		expect(fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-")).length).toBe(1);
+		expect(fs.existsSync(lockPath(jobsDir))).toBe(false);
+	});
+
+	test("keeps a stale lock when the live PID witness matches", () => {
+		const jobsDir = path.join(tmpDir, "matching-live-lock");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		const witness = GenericJob.getProcessStartedAt(process.pid);
+		if (witness === null) throw new Error("expected process-start witness");
+		fs.writeFileSync(
+			lockPath(jobsDir),
+			JSON.stringify({ pid: process.pid, pidStartedAt: witness, createdAt: Date.now() - 11 * 60 * 1000 }),
+		);
+		const result = spawnSync(
+			process.execPath,
+			[path.resolve(import.meta.dirname, "job.ts"), "start", "--jobs-dir", jobsDir, "--review-id", identity.reviewId, "--chunk-key", identity.chunkKey, "--attempt", String(identity.attempt), "--worktree-realpath", identity.worktreeRealpath, "--base-sha", identity.baseSha, "--head-sha", identity.headSha, "--diff-fingerprint", identity.diffFingerprint, "prompt"],
+			{ encoding: "utf8", timeout: 5000, env: { ...process.env, CHUNK_REVIEW_IDENTITY_LOCK_DEADLINE_MS: "500" } },
+		);
+		expect(result.status).not.toBe(0);
+		expect(`${result.stderr}${result.stdout}`).toContain("identity claim timeout");
+		expect(fs.existsSync(lockPath(jobsDir))).toBe(true);
+	});
+
+	test("keeps a stale old-format lock when the live PID has no witness", () => {
+		const jobsDir = path.join(tmpDir, "old-format-live-lock");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		fs.writeFileSync(lockPath(jobsDir), JSON.stringify({ pid: process.pid, createdAt: Date.now() - 11 * 60 * 1000 }));
+		const result = spawnSync(
+			process.execPath,
+			[path.resolve(import.meta.dirname, "job.ts"), "start", "--jobs-dir", jobsDir, "--review-id", identity.reviewId, "--chunk-key", identity.chunkKey, "--attempt", String(identity.attempt), "--worktree-realpath", identity.worktreeRealpath, "--base-sha", identity.baseSha, "--head-sha", identity.headSha, "--diff-fingerprint", identity.diffFingerprint, "prompt"],
+			{ encoding: "utf8", timeout: 5000, env: { ...process.env, CHUNK_REVIEW_IDENTITY_LOCK_DEADLINE_MS: "500" } },
+		);
+		expect(result.status).not.toBe(0);
+		expect(`${result.stderr}${result.stdout}`).toContain("identity claim timeout");
+		expect(fs.existsSync(lockPath(jobsDir))).toBe(true);
+	});
+
 	test("cleans the lock after setup failure and allows a second valid start", async () => {
 		const jobsDir = path.join(tmpDir, "setup-failure");
 		let fail = true;

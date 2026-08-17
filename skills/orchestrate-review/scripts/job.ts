@@ -48,6 +48,7 @@ import {
 	cmdResumeMember as _cmdResumeMember,
 	reapOrphanJobs,
 	doctorOrphanJobs,
+	getProcessStartedAt,
 } from "@lib/generic-job";
 
 export { cmdResumeMember } from "@lib/generic-job";
@@ -612,7 +613,14 @@ async function acquireIdentityClaim(
 		try {
 			const fd = fs.openSync(lockPath, "wx");
 			try {
-				fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, createdAt: Date.now() }));
+				fs.writeFileSync(
+					fd,
+					JSON.stringify({
+						pid: process.pid,
+						pidStartedAt: getProcessStartedAt(process.pid),
+						createdAt: Date.now(),
+					}),
+				);
 				const existing = findExistingJobForIdentity(jobsDir, identity);
 				if (existing) {
 					fs.closeSync(fd);
@@ -640,14 +648,22 @@ async function acquireIdentityClaim(
 				const lock = JSON.parse(fs.readFileSync(lockPath, "utf8"));
 				const createdAt = typeof lock.createdAt === "number" ? lock.createdAt : NaN;
 				const pid = typeof lock.pid === "number" ? lock.pid : NaN;
-				let alive = true;
+				const storedStartedAt = typeof lock.pidStartedAt === "string" ? lock.pidStartedAt : null;
+				let dead = false;
+				let probeSucceeded = false;
 				try {
-					if (Number.isFinite(pid)) process.kill(pid, 0);
-					else alive = true;
-				} catch {
-					alive = false;
+					if (Number.isFinite(pid)) {
+						process.kill(pid, 0);
+						probeSucceeded = true;
+					}
+				} catch (probeError) {
+					if (probeError instanceof Error && "code" in probeError && probeError.code === "ESRCH") {
+						dead = true;
+					}
 				}
-				if (Number.isFinite(createdAt) && Number.isFinite(pid) && !alive) {
+				const currentStartedAt = Number.isFinite(pid) ? getProcessStartedAt(pid) : null;
+				const reused = probeSucceeded && storedStartedAt !== null && currentStartedAt !== null && storedStartedAt !== currentStartedAt;
+				if (Number.isFinite(createdAt) && Number.isFinite(pid) && (dead || reused)) {
 					try {
 						fs.unlinkSync(lockPath);
 					} catch {
