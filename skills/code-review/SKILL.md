@@ -358,11 +358,7 @@ The orchestrator constructs this command string for the configured finder CLIs; 
    bun "${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/job.ts" results --manifest "<jobDir>"
    ```
 
-   Merge and deduplicate all finder candidate outputs and Angle Coverage blocks using the existing aggregation contract. Persist the merged candidates atomically to `$OMT_DIR/code-review/<reviewId>/candidates.json` **before** invoking `usage-summary` or `clean`; this file is the recovery point if the code-reviewer is interrupted after collection. Only after persistence run `bun "${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/usage-summary.ts" "<jobDir>"`, then clean:
-
-   ```bash
-   bun "${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/job.ts" clean "<jobDir>"
-   ```
+   Merge and deduplicate all finder candidate outputs and Angle Coverage blocks using the existing aggregation contract. Persist the merged candidates atomically to `$OMT_DIR/code-review/<reviewId>/candidates.json` **before** invoking `usage-summary`; this file is the recovery point if the code-reviewer is interrupted after collection. Only after persistence run `bun "${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/usage-summary.ts" "<jobDir>"`. identity-backed job directories are shared by concurrent consumers, so leave them in place for existing stale-job GC/orphan-reaper cleanup; an individual review invocation must not delete them.
 
 6. Retry only a terminal infrastructure failure, unavailable angle, or diff-command failure. Attempt 2 is a different full tuple: preserve reviewId, chunkKey, worktreeRealpath, baseSha, headSha, and diffFingerprint, changing only `attempt 1` to `attempt 2`; pass all seven flags again. Retry at most once and merge original plus retry outputs. `poll_again`, caller-turn interruption, and an existing `running`/`ready` job are not retry signals. If the retry fails, accept partial coverage under the existing policy.
 
@@ -374,7 +370,7 @@ The orchestrator constructs this command string for the configured finder CLIs; 
      --prompt-file "<same interpolated chunk-reviewer-prompt.md>" --json
    ```
 
-7. Recovery artifact and aggregation are self-contained. Before cleanup, atomically write `$OMT_DIR/code-review/<reviewId>/candidates.json` using a same-directory temporary file, flush/fsync, then rename. Its schema is:
+7. Recovery artifact and aggregation are self-contained. Before handing off the recovered state, atomically write `$OMT_DIR/code-review/<reviewId>/candidates.json` using a same-directory temporary file, flush/fsync, then rename. Its schema is:
 
    ```json
    {
@@ -389,7 +385,7 @@ The orchestrator constructs this command string for the configured finder CLIs; 
    }
    ```
 
-   Validate schemaVersion, `lifecycle === "recoverable"`, exact top identity (including `intentFingerprint`) / chunk set / fingerprints, arrays, terminal state, and that each jobDir is under the orchestrate-review jobs root with matching `job.json` identity (including attempt) when present. Each chunk's attempts are unique and contiguous, exactly `[1]` or `[1,2]`, never more than two. A valid artifact skips all starts only when its lifecycle is recoverable; a missing artifact reuses only validated jobs/results; an invalid artifact is reported/quarantined and never authorizes unvalidated reuse. A retired artifact never skips finder starts: treat it as a completed prior invocation, quarantine it, and create a fresh recoverable artifact for the new review. Attempt 2 may be created only after terminal infrastructure failure and only when no validated attempt 2 exists; persisted `[1,2]` never respawns and both outputs merge. Cleanup interruption never respawns; an already-cleaned job relies on the validated artifact. Persist, then run usage-summary, then clean.
+   Validate schemaVersion, `lifecycle === "recoverable"`, exact top identity (including `intentFingerprint`) / chunk set / fingerprints, arrays, terminal state, and that each jobDir is under the orchestrate-review jobs root with matching `job.json` identity (including attempt) when present. Each chunk's attempts are unique and contiguous, exactly `[1]` or `[1,2]`, never more than two. A valid artifact skips all starts only when its lifecycle is recoverable; a missing artifact reuses only validated jobs/results; an invalid artifact is reported/quarantined and never authorizes unvalidated reuse. A retired artifact never skips finder starts: treat it as a completed prior invocation, quarantine it, and create a fresh recoverable artifact for the new review. Attempt 2 may be created only after terminal infrastructure failure and only when no validated attempt 2 exists; persisted `[1,2]` never respawns and both outputs merge. If the invocation is interrupted, do not respawn a validated job; rely on the artifact for recovery and leave shared identity-backed job directories to stale-job GC/orphan-reaper cleanup. Persist, then run usage-summary.
 
    The artifact is invocation-scoped recovery state, not a cache across independent reviews. Retire it after `findings.md` is durably written and the final findings report is fully synthesized: atomically update `lifecycle` to `"retired"` before returning the report. If the turn is interrupted earlier, leave it `recoverable` so the same invocation can resume. Retiring before the final response may cause an interruption in the narrow retire-to-response window to rerun finders, which is safe; reusing candidates produced from obsolete intent is not.
 

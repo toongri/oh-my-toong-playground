@@ -56,7 +56,7 @@ describe("code-review direct finder-job contract", () => {
 		expect(step4).toContain('job.ts" start');
 		expect(step4).toContain('job.ts" collect');
 		expect(step4).toContain('job.ts" results');
-		expect(step4).toContain('job.ts" clean');
+		expect(step4).not.toContain('job.ts" clean');
 		expect(step4).toContain("configured finder CLIs");
 	});
 
@@ -96,13 +96,14 @@ describe("code-review direct finder-job contract", () => {
 		expect(step4).toContain("Codex keeps polling in-turn");
 	});
 
-	test("candidate persistence precedes usage summary and cleanup", () => {
+	test("candidate persistence precedes usage and defers shared-job cleanup to GC", () => {
 		const persist = step4.indexOf("candidates.json");
 		const usage = step4.indexOf("usage-summary");
-		const clean = step4.indexOf('job.ts" clean');
 		expect(persist).toBeGreaterThanOrEqual(0);
 		expect(usage).toBeGreaterThan(persist);
-		expect(clean).toBeGreaterThan(usage);
+		expect(step4).not.toContain('job.ts" clean');
+		expect(step4).toContain("identity-backed job directories are shared");
+		expect(step4).toContain("stale-job GC/orphan-reaper cleanup");
 		expect(step4).toContain("atomically");
 		expect(step4).toContain("recovery point");
 	});
