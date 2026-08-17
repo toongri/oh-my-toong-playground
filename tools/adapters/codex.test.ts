@@ -1184,6 +1184,147 @@ describe("CodexAdapter", () => {
 	// ---------------------------------------------------------------------------
 
 	describe("syncPlatformYaml hooks", () => {
+		it("PreToolUse trace wrapper coverage", async () => {
+			const componentDir = path.join(tmpDir, "source-hooks", "component-hook");
+			await fs.mkdir(componentDir, { recursive: true });
+			await fs.writeFile(path.join(componentDir, "index.ts"), "// hook\n");
+			const rawCommand = ": .codex/raw-marker; printf '%s|%s|%s\\n' 'quote' \"$HOME\" `printf tick`; printf '%s\\n' marker; printf '%s\\n' marker >> \"$OMT_DIR/sentinel\"\\n";
+			const yaml = {
+				hooks: {
+					PreToolUse: [
+						{ component: componentDir, matcher: "Bash", timeout: 17 },
+						{ command: rawCommand, "trace-id": "raw-hook", matcher: "Read", timeout: 23 },
+					],
+					SessionStart: [{ command: "echo session", matcher: "*", timeout: 4 }],
+				},
+			};
+
+			const preview = await adapter.previewPreToolUseCommands(tmpDir, yaml as never);
+			await adapter.syncPlatformYaml(tmpDir, yaml as never, false);
+			const parsed = JSON.parse(await fs.readFile(path.join(tmpDir, ".codex", "hooks.json"), "utf-8"));
+			const pre = parsed.hooks.PreToolUse;
+			expect(pre).toHaveLength(2);
+			const fakeBin = path.join(tmpDir, "fake-bin");
+			await fs.mkdir(fakeBin, { recursive: true });
+			const fakeBun = path.join(fakeBin, "bun");
+			await fs.writeFile(fakeBun, "#!/bin/sh\nprintf '%s\\0' \"$@\"\n");
+			await fs.chmod(fakeBun, 0o755);
+			const captureArgv = (command: string) => {
+				const result = Bun.spawnSync(["sh", "-c", command], {
+					env: { ...process.env, PATH: `${fakeBin}:/bin:/usr/bin` },
+				});
+				return new TextDecoder().decode(result.stdout).split("\0").slice(0, -1);
+			};
+			const componentArgv = captureArgv(pre[0].hooks[0].command);
+			const rawArgv = captureArgv(pre[1].hooks[0].command);
+			const absoluteRawCommand = rawCommand.replaceAll(".codex/", `${path.join(tmpDir, ".codex")}/`);
+			expect(pre.map((entry: any) => entry.hooks[0].command)).toEqual(preview.map((item) => item.wrappedCommand));
+			expect(pre[0].hooks[0].command.match(/pretool-trace/g)?.length).toBe(1);
+			expect(pre[1].hooks[0].command.match(/pretool-trace/g)?.length).toBe(1);
+			expect(componentArgv).toEqual([
+				path.join(tmpDir, ".codex/scripts/pretool-trace/index.ts"),
+				"codex",
+				"component-hook",
+				`bun run ${path.join(tmpDir, ".codex/hooks/component-hook/index.ts")}`,
+			]);
+			expect(rawArgv).toEqual([path.join(tmpDir, ".codex/scripts/pretool-trace/index.ts"), "codex", "raw-hook", absoluteRawCommand]);
+			const baselineDir = path.join(tmpDir, "baseline");
+			const wrappedDir = path.join(tmpDir, "wrapped");
+			await fs.mkdir(path.join(baselineDir, ".codex"), { recursive: true });
+			await fs.mkdir(path.join(wrappedDir, ".codex"), { recursive: true });
+			await fs.mkdir(path.join(baselineDir, "omt"), { recursive: true });
+			await fs.mkdir(path.join(wrappedDir, "omt"), { recursive: true });
+			const executableBun = "#!/bin/sh\nexec /bin/sh -c \"$4\"\n";
+			await fs.writeFile(fakeBun, executableBun);
+			const run = (cwd: string, command: string) =>
+				Bun.spawnSync(["sh", "-c", command], {
+					cwd,
+				env: { ...process.env, PATH: `${fakeBin}:/bin:/usr/bin`, HOME: path.join(tmpDir, "controlled-home"), OMT_DIR: path.join(cwd, "omt") },
+				});
+			const baseline = run(baselineDir, rawCommand);
+			const wrapped = run(wrappedDir, pre[1].hooks[0].command);
+			expect(wrapped.exitCode).toBe(baseline.exitCode);
+			expect(new TextDecoder().decode(wrapped.stdout)).toBe(new TextDecoder().decode(baseline.stdout));
+			expect(new TextDecoder().decode(wrapped.stderr)).toBe(new TextDecoder().decode(baseline.stderr));
+			expect(new TextDecoder().decode(wrapped.stdout).match(/marker/g)?.length).toBe(1);
+			expect(pre[0].hooks[0].timeout).toBe(17);
+			expect(pre[0].matcher).toBe("Bash");
+			expect(pre[1].hooks[0].timeout).toBe(23);
+			expect(pre[1].matcher).toBe("Read");
+			expect(parsed.hooks.SessionStart[0].hooks[0].command).toBe("echo session");
+		});
+
+		it("raw PreToolUse trace id", async () => {
+			const target = path.join(tmpDir, "raw-invalid");
+			await fs.mkdir(path.join(target, ".codex"), { recursive: true });
+			await fs.writeFile(path.join(target, ".codex", "hooks.json"), "hooks-sentinel");
+			await fs.writeFile(path.join(target, ".codex", "config.toml"), "config-sentinel");
+			const snapshot = async () => {
+				const files = await fs.readdir(target, { recursive: true });
+				const regularFiles = [];
+				for (const file of files) {
+					if ((await fs.stat(path.join(target, file))).isFile()) regularFiles.push(file);
+				}
+				return Promise.all(regularFiles.map(async (file) => [file, await fs.readFile(path.join(target, file))] as const));
+			};
+			for (const item of [{ command: "echo raw" }, { command: "echo raw", "trace-id": "unsafe id" }]) {
+				const before = await snapshot();
+				await expect(adapter.syncPlatformYaml(target, { hooks: { PreToolUse: [item] } } as never, false)).rejects.toThrow(/trace-id/);
+				expect(await snapshot()).toEqual(before);
+			}
+		});
+
+		it("PreToolUse trace pure preview", async () => {
+			const componentDir = path.join(tmpDir, "source-hooks", "preview-hook");
+			await fs.mkdir(componentDir, { recursive: true });
+			await fs.writeFile(path.join(componentDir, "index.sh"), "#!/bin/sh\n");
+			const yaml = {
+				hooks: {
+					PreToolUse: [
+						{ component: componentDir, matcher: "Bash", timeout: 31 },
+						{ command: "printf '%s' \"$HOME\"", "trace-id": "raw-preview", matcher: "*", timeout: 32 },
+					],
+				},
+			};
+			const before = await fs.readdir(tmpDir);
+			const preview = await adapter.previewPreToolUseCommands(tmpDir, yaml as never);
+			expect(await fs.readdir(tmpDir)).toEqual(before);
+			expect(preview).toHaveLength(2);
+			expect(preview[0]).toMatchObject({
+				hookId: "preview-hook",
+				originalCommand: `bash ${path.join(tmpDir, ".codex/hooks/preview-hook/index.sh")}`,
+				wrapperDeploymentPath: path.join(tmpDir, ".codex/scripts/pretool-trace/index.ts"),
+				matcher: "Bash",
+				timeout: 31,
+				scope: "project",
+			});
+			expect(preview[1]).toMatchObject({ hookId: "raw-preview", originalCommand: "printf '%s' \"$HOME\"", timeout: 32 });
+			await adapter.syncPlatformYaml(tmpDir, yaml as never, false);
+			const parsed = JSON.parse(await fs.readFile(path.join(tmpDir, ".codex", "hooks.json"), "utf-8"));
+			expect(parsed.hooks.PreToolUse.map((entry: any) => entry.hooks[0].command)).toEqual(
+				preview.map((item) => item.wrappedCommand),
+			);
+			const globalPreview = await adapter.previewPreToolUseCommands(os.homedir(), {
+				hooks: { PreToolUse: [{ command: "echo global", "trace-id": "global-hook", matcher: "*", timeout: 41 }] },
+			} as never);
+			expect(globalPreview[0]).toMatchObject({
+				scope: "global",
+				wrapperDeploymentPath: path.join(os.homedir(), ".codex/scripts/pretool-trace/index.ts"),
+				matcher: "*",
+				timeout: 41,
+			});
+			const relativeTarget = path.relative(process.cwd(), tmpDir);
+			const relativePreview = await adapter.previewPreToolUseCommands(relativeTarget, {
+				hooks: { PreToolUse: [{ command: "echo relative", "trace-id": "relative-hook" }] },
+			} as never);
+			await adapter.syncPlatformYaml(relativeTarget, { hooks: { PreToolUse: [{ command: "echo relative", "trace-id": "relative-hook" }] } } as never, false);
+			const relativeParsed = JSON.parse(await fs.readFile(path.join(tmpDir, ".codex/hooks.json"), "utf-8"));
+			expect(relativeParsed.hooks.PreToolUse[0].hooks[0].command).toBe(relativePreview[0].wrappedCommand);
+			const missingComponent = path.join(tmpDir, "missing-component");
+			await fs.mkdir(missingComponent);
+			await expect(adapter.previewPreToolUseCommands(tmpDir, { hooks: { PreToolUse: [{ component: missingComponent }] } } as never)).rejects.toThrow(/item 0/);
+		});
+
 		it("deploys rules-injector bundle + relative command", async () => {
 			// Stage a synthetic rules-injector hook dir with index.ts and a test file
 			const hookSrcDir = path.join(tmpDir, "source-hooks", "rules-injector");

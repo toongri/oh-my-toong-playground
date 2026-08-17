@@ -24,6 +24,8 @@ import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
 import { assertMappedTier } from "../lib/model-map.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
 import { PLATFORM_REWRITE_RULES, applyRewriteRules } from "../lib/rewrite-rules.ts";
+import { composePreToolTraceCommand } from "../lib/pretool-trace-command.ts";
+import { isGlobalSync } from "../lib/path-utils.ts";
 import type {
 	ModelMap,
 	PlatformConfigResult,
@@ -139,6 +141,33 @@ export function buildMcpTomlContent(servers: Record<string, Record<string, unkno
 /** Type-predicate wrapper around isPlainObject, used to narrow `unknown` without a cast. */
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return isPlainObject(value);
+}
+
+function pickString(value: unknown): string | undefined {
+	return typeof value === "string" ? value : undefined;
+}
+
+export type CodexPreToolUsePreview = {
+	hookEvent: "PreToolUse";
+	itemIndex: number;
+	hookId: string;
+	originalCommand: string;
+	wrappedCommand: string;
+	wrapperDeploymentPath: string;
+	matcher: string;
+	timeout: number;
+	scope: "global" | "project";
+	component: string;
+};
+
+export class CodexPreToolUsePreviewError extends Error {
+	readonly itemIndex: number;
+
+	constructor(itemIndex: number, message: string) {
+		super(`Codex PreToolUse trace preview failed for item ${itemIndex}: ${message}`);
+		this.name = "CodexPreToolUsePreviewError";
+		this.itemIndex = itemIndex;
+	}
 }
 
 // =============================================================================
@@ -699,6 +728,94 @@ export class CodexAdapter implements PlatformAdapter {
 	// syncPlatformYaml — config, mcps, model-map
 	// ---------------------------------------------------------------------------
 
+	async previewPreToolUseCommands(
+		targetPath: string,
+		yaml: PlatformYaml,
+	): Promise<CodexPreToolUsePreview[]> {
+		const items = yaml.hooks?.PreToolUse;
+		if (!Array.isArray(items)) return [];
+		const deployRoot = path.resolve(targetPath);
+		const wrapperDeploymentPath = path.join(
+			deployRoot,
+			".codex",
+			"scripts",
+			"pretool-trace",
+			"index.ts",
+		);
+		const scope = isGlobalSync(deployRoot) ? "global" : "project";
+		const previews: CodexPreToolUsePreview[] = [];
+
+		for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
+			const item = items[itemIndex];
+			if (!item || pickString(item["type"]) === "prompt") continue;
+			const component = item.component ?? "";
+			const rawTraceId = pickString(item["trace-id"]);
+			const hookId = component ? path.basename(component) : rawTraceId ?? "";
+			if (!hookId || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(hookId)) {
+				throw new CodexPreToolUsePreviewError(
+					itemIndex,
+					component
+						? `unsafe component basename ${hookId}`
+						: "raw command requires a safe explicit trace-id",
+				);
+			}
+			const matcher = item.matcher ?? "*";
+			const timeout = item.timeout ?? 10;
+			const originalCommand = await this.resolveHookCommand(deployRoot, item, true, itemIndex);
+			if (!originalCommand) {
+				throw new CodexPreToolUsePreviewError(itemIndex, "command is missing");
+			}
+			const wrappedCommand = composePreToolTraceCommand({
+				wrapperPath: wrapperDeploymentPath,
+				platform: "codex",
+				hookId,
+				originalCommand,
+			});
+			previews.push({
+				hookEvent: "PreToolUse",
+				itemIndex,
+				hookId,
+				originalCommand,
+				wrappedCommand,
+				wrapperDeploymentPath,
+				matcher,
+				timeout,
+				scope,
+				component,
+			});
+		}
+		return previews;
+	}
+
+	private async resolveHookCommand(
+		targetPath: string,
+		item: PlatformYamlHookItem,
+		strictMissingIndex = false,
+		itemIndex = -1,
+	): Promise<string> {
+		const component = item.component ?? "";
+		const customCommand = pickString(item["command"]) ?? "";
+		let command = customCommand;
+		if (!command && component) {
+			const displayName = path.basename(component);
+			const stat = await fs.stat(component).catch(() => undefined);
+			if (stat?.isDirectory()) {
+				const indexTs = path.join(component, "index.ts");
+				const indexSh = path.join(component, "index.sh");
+				const hasIndexTs = Boolean(await fs.stat(indexTs).catch(() => undefined));
+				const hasIndexSh = Boolean(await fs.stat(indexSh).catch(() => undefined));
+				if (hasIndexTs) command = `bun run .codex/hooks/${displayName}/index.ts`;
+				else if (hasIndexSh) command = `bash .codex/hooks/${displayName}/index.sh`;
+				else if (strictMissingIndex) {
+					throw new CodexPreToolUsePreviewError(itemIndex, `hook directory has no index.ts/index.sh: ${component}`);
+				}
+			} else {
+				command = `.codex/hooks/${displayName}`;
+			}
+		}
+		return command.replaceAll(".codex/", `${path.join(targetPath, ".codex")}/`);
+	}
+
 	async syncPlatformYaml(
 		targetPath: string,
 		yaml: PlatformYaml,
@@ -707,6 +824,8 @@ export class CodexAdapter implements PlatformAdapter {
 	): Promise<PlatformConfigResult> {
 		const processedSections: string[] = [];
 		let modelMap: ModelMap | undefined;
+		const preToolUsePreview = await this.previewPreToolUseCommands(targetPath, yaml);
+		const previewByItemIndex = new Map(preToolUsePreview.map((preview) => [preview.itemIndex, preview]));
 
 		// Reset MCP accumulator for this run
 		this.resetMcpAccumulator();
@@ -757,7 +876,8 @@ export class CodexAdapter implements PlatformAdapter {
 				if (hookEvent === "preserve") continue;
 				if (!Array.isArray(items)) continue;
 
-				for (const item of items) {
+				for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
+					const item = items[itemIndex];
 					const component = item.component ?? "";
 					const timeout = item.timeout ?? 10;
 					const matcher = item.matcher ?? "*";
@@ -830,6 +950,8 @@ export class CodexAdapter implements PlatformAdapter {
 					// This is correct for both global (~/.codex) and project-local deploys
 					// because targetPath IS the deploy root in both cases.
 					cmdPath = cmdPath.replaceAll(".codex/", `${path.join(targetPath, ".codex")}/`);
+					const preview = hookEvent === "PreToolUse" ? previewByItemIndex.get(itemIndex) : undefined;
+					if (preview) cmdPath = preview.wrappedCommand;
 
 					const hookEntry = this.buildHookEntry(hookEvent, matcher, timeout, cmdPath);
 
