@@ -907,6 +907,17 @@ describe("CodexAdapter", () => {
 			expect(helperContent).toContain("echo helper");
 		});
 
+		it("rewrites @lib imports relative to the deployed Codex platform root", async () => {
+			const sourceDir = path.join(tmpDir, "source-scripts", "trace");
+			await fs.mkdir(sourceDir, { recursive: true });
+			await fs.writeFile(path.join(sourceDir, "index.ts"), 'import { deriveProjectName } from "@lib/omt-dir";\nconsole.log(typeof deriveProjectName);\n');
+			const targetBase = path.join(tmpDir, "target");
+			await adapter.syncScriptsDirect(targetBase, "trace", sourceDir, false);
+			const deployed = await fs.readFile(path.join(targetBase, ".codex", "scripts", "trace", "index.ts"), "utf8");
+			expect(deployed).not.toContain('"@lib/omt-dir"');
+			expect(deployed).toContain("../../lib/omt-dir");
+		});
+
 		it("skips copy in dry-run mode via `syncScriptsDirect`", async () => {
 			const sourceFile = path.join(tmpDir, "hud.sh");
 			await fs.writeFile(sourceFile, "#!/bin/bash\necho hud\n");

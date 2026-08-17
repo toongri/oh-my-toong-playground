@@ -588,7 +588,9 @@ export class CodexAdapter implements PlatformAdapter {
 				logDry(`Copy (directory): ${sourcePath} -> ${path.join(targetDir, displayName)}/`);
 				return;
 			}
-			await syncDirectory(sourcePath, path.join(targetDir, displayName));
+			await syncDirectory(sourcePath, path.join(targetDir, displayName), {
+				platformRoot: path.join(targetPath, this.configDir),
+			});
 			logInfo(`Copied: ${displayName}/`);
 		} else {
 			const targetFile = path.join(targetDir, displayName);

@@ -24,7 +24,18 @@ import type {
 } from "./lib/types.ts";
 import type { PlatformAdapter } from "./adapters/types.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
+import { CodexAdapter } from "./adapters/codex.ts";
 import { _resetConfigCache } from "./lib/config.ts";
+
+const GENERATED_PAYLOAD = '{"session_id":"generated-session","tool_name":"Bash","tool_use_id":"generated-call","tool_input":{"safe":true}}';
+
+async function runGeneratedCommand(command: string, cwd: string, env: Record<string, string>): Promise<{ stdout: string; stderr: string; status: number }> {
+	const proc = Bun.spawn(["bash", "-c", command], { cwd, env: { ...process.env, ...env }, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+	proc.stdin.write(GENERATED_PAYLOAD);
+	proc.stdin.end();
+	const [status, stdout, stderr] = await Promise.all([proc.exited, new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
+	return { status: status ?? 1, stdout, stderr };
+}
 
 // ---------------------------------------------------------------------------
 // Spy adapter that captures the merged PlatformYaml passed to syncPlatformYaml
@@ -296,6 +307,85 @@ describe("4-platform overlay E2E", () => {
 		expect(opencodeProviders).toContain("openai");
 		expect(opencodeProviders.filter((v) => v === "anthropic")).toHaveLength(1);
 	});
+});
+
+describe("generated PreToolUse trace runtime", () => {
+	it("생성된 Claude/Codex 루트 설정의 모든 command hook을 실제 wrapper로 실행함", async () => {
+		type HookRecord = Record<string, unknown>;
+		const savedOmtDir = process.env.OMT_DIR;
+		const root = await fs.mkdtemp(path.join(os.tmpdir(), "omt-generated-trace-"));
+		try {
+		const target = path.join(root, "target");
+		const omt = path.join(root, "omt");
+		await fs.cp(path.join(process.cwd(), "scripts", "pretool-trace"), path.join(root, "scripts", "pretool-trace"), { recursive: true });
+		await fs.mkdir(path.join(root, "lib"), { recursive: true });
+		await fs.cp(path.join(process.cwd(), "lib", "omt-dir.ts"), path.join(root, "lib", "omt-dir.ts"));
+		const rootYaml = { claude: Bun.YAML.parse(await fs.readFile(path.join(process.cwd(), "claude.yaml"), "utf8")) as HookRecord, codex: Bun.YAML.parse(await fs.readFile(path.join(process.cwd(), "codex.yaml"), "utf8")) as HookRecord };
+		const inventories = new Map<string, HookRecord[]>();
+		for (const platform of ["claude", "codex"] as const) inventories.set(platform, ((rootYaml[platform].hooks as HookRecord | undefined)?.PreToolUse as HookRecord[] ?? []).filter((item) => item.type !== "prompt"));
+		const hooksDir = path.join(root, "hooks");
+		for (const platform of ["claude", "codex"] as const) {
+			for (const item of inventories.get(platform)!) {
+				if (!item.component) continue;
+				const id = path.basename(item.component as string);
+				const file = path.join(hooksDir, platform, id);
+				await fs.mkdir(path.dirname(file), { recursive: true });
+				await writeFile(file, `#!/usr/bin/env bash\ncat\nexit 0\n`);
+				await fs.chmod(file, 0o755);
+			}
+		}
+		const syncYaml = `path: ${target}\nplatforms: [claude, codex]\nscripts:\n  items: [pretool-trace]\n`;
+		await writeFile(path.join(root, "sync.yaml"), syncYaml);
+		for (const platform of ["claude", "codex"] as const) {
+			const items = inventories.get(platform)!.map((item) => typeof item.component === "string" ? { ...item, component: `${platform}/${path.basename(item.component)}` } : { ...item, command: "cat; exit 0" });
+			await writeFile(path.join(root, `${platform}.yaml`), `hooks:\n  PreToolUse:\n${items.map((item) => `    - ${JSON.stringify(item)}`).join("\n")}\n`);
+		}
+		const adapters: AdapterMap = new Map();
+		adapters.set("claude", new ClaudeAdapter());
+		adapters.set("codex", new CodexAdapter());
+		process.env.OMT_DIR = omt;
+		await processYaml(createContext(false), path.join(root, "sync.yaml"), adapters, root);
+		for (const platform of [".claude", ".codex"]) {
+			for (const file of ["scripts/pretool-trace/index.ts", "scripts/pretool-trace/storage.ts", "lib/omt-dir.ts"]) expect(await fs.stat(path.join(target, platform, file)).then(() => true).catch(() => false)).toBe(true);
+			expect(await fs.readFile(path.join(target, platform, "scripts/pretool-trace/storage.ts"), "utf8")).not.toContain("@lib");
+		}
+		const claudeSettings = JSON.parse(await fs.readFile(path.join(target, ".claude", "settings.local.json"), "utf8"));
+		const claudeCommands = claudeSettings.hooks.PreToolUse.flatMap((entry: HookRecord) => (entry.hooks as HookRecord[])).map((hook: HookRecord) => hook.command as string);
+		expect(claudeCommands).toHaveLength(inventories.get("claude")!.length);
+		for (const command of claudeCommands) {
+			const result = await runGeneratedCommand(command, target, { OMT_DIR: omt, CLAUDE_PROJECT_DIR: target });
+			expect({ status: result.status, stdout: result.stdout, stderr: result.stderr }).toEqual({ status: 0, stdout: GENERATED_PAYLOAD, stderr: "" });
+		}
+
+		const codexSettings = JSON.parse(await fs.readFile(path.join(target, ".codex", "hooks.json"), "utf8"));
+		const codexCommands = codexSettings.hooks.PreToolUse.flatMap((entry: HookRecord) => (entry.hooks as HookRecord[])).map((hook: HookRecord) => hook.command as string);
+		expect(codexCommands).toHaveLength(inventories.get("codex")!.length);
+		for (const command of codexCommands) {
+			const result = await runGeneratedCommand(command, target, { OMT_DIR: omt });
+			expect({ status: result.status, stdout: result.stdout, stderr: result.stderr }).toEqual({ status: 0, stdout: GENERATED_PAYLOAD, stderr: "" });
+		}
+
+		const lines = (await fs.readFile(path.join(omt, "pretool-trace", "events.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+		expect(lines).toHaveLength(2 * (claudeCommands.length + codexCommands.length));
+		expect(new Set(lines.map((line) => line.platform))).toEqual(new Set(["claude", "codex"]));
+		for (const platform of ["claude", "codex"] as const) {
+			const expectedIds = inventories.get(platform)!.map((item) => typeof item.component === "string" ? path.basename(item.component) : item["trace-id"]);
+			expect(new Set(expectedIds).size).toBe(expectedIds.length);
+			expect(lines.filter((line) => line.platform === platform && line.phase === "start").map((line) => line.hook_id).sort()).toEqual([...expectedIds].sort());
+		}
+		const byInvocation = new Map<string, HookRecord[]>();
+		for (const line of lines as HookRecord[]) { const id = String(line.invocation_id); byInvocation.set(id, [...(byInvocation.get(id) ?? []), line]); }
+		expect(byInvocation.size).toBe(claudeCommands.length + codexCommands.length);
+		for (const records of byInvocation.values()) { expect(records.map((r) => r.phase).sort()).toEqual(["end", "start"]); expect(records[0].call_correlation).toBe(records[1].call_correlation); expect(records.every((r) => r.correlation_quality === "exact")).toBe(true); }
+		expect(new Set(lines.map((line) => line.call_correlation)).size).toBe(1);
+		const forbidden = ["generated-session", "generated-call", '{"safe":true}', root, target, ...claudeCommands, ...codexCommands];
+		const serialized = lines.map((line) => JSON.stringify(line)).join("\n");
+		for (const value of forbidden) expect(serialized).not.toContain(value);
+		} finally {
+			if (savedOmtDir === undefined) delete process.env.OMT_DIR; else process.env.OMT_DIR = savedOmtDir;
+			await fs.rm(root, { recursive: true, force: true });
+		}
+	}, 30000);
 });
 
 // ---------------------------------------------------------------------------
