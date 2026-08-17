@@ -120,8 +120,6 @@ split_step8_target() {
     && printf '%s\n' "$block" | grep -Fq 'git -C "$WT_DIR" fetch origin "$BASE_BRANCH"' \
     && printf '%s\n' "$block" | grep -Fq 'AHEAD=$(git -C "$WT_DIR" rev-list --count "origin/$BASE_BRANCH..$TARGET_SUB_BRANCH")' \
     && printf '%s\n' "$block" | grep -Fq 'TARGET_SUB_BRANCH=$(git -C "$WT_DIR" branch --show-current)' \
-    && printf '%s\n' "$block" | grep -Fq 'git -C "$WT_DIR" ls-remote --heads origin "$TARGET_SUB_BRANCH"' \
-    && printf '%s\n' "$block" | grep -Fq 'git -C "$WT_DIR" branch -m "$EXPECTED_SUB_BRANCH"' \
     && printf '%s\n' "$block" | grep -Fq 'git -C "$WT_DIR" push -u origin "$TARGET_SUB_BRANCH"' \
     && printf '%s\n' "$block" | grep -Fq 'gh pr create --base "$BASE_BRANCH" --head "$TARGET_SUB_BRANCH"' \
     && [ "$(printf '%s\n' "$block" | grep -Fc 'gh pr create --base "$BASE_BRANCH" --head "$TARGET_SUB_BRANCH"')" -eq 1 ] \
@@ -131,6 +129,35 @@ split_step8_target() {
     && grep -Fq 'If the mapping is missing, stop and ask the user; never infer a worktree path.' "$SKILL_FILE" \
     && single=$(sed -n '/\*\*For single PR\*\*/,/^\*\*Sub-PR (Stacked split):\*\*/p' "$SKILL_FILE") \
     && printf '%s\n' "$single" | grep -Fq 'gh pr create --base {base-branch} --head $(git branch --show-current) --assignee @me'
+}
+
+split_step8_branch_mismatch_fails_closed() {
+  block=$(sed -n '/Split-only Step 8 command block/,/^```$/p' "$SKILL_FILE") \
+    && printf '%s\n' "$block" | grep -Fq 'EXPECTED_SUB_BRANCH=<shell-word:target-sub-branch>' \
+    && printf '%s\n' "$block" | grep -Fq 'git check-ref-format --branch "$EXPECTED_SUB_BRANCH"' \
+    && printf '%s\n' "$block" | grep -Fq 'TARGET_SUB_BRANCH=$(git -C "$WT_DIR" branch --show-current)' \
+    && printf '%s\n' "$block" | grep -Fq 'git check-ref-format --branch "$TARGET_SUB_BRANCH"' \
+    && printf '%s\n' "$block" | grep -Fq 'if [ "$TARGET_SUB_BRANCH" != "$EXPECTED_SUB_BRANCH" ]; then' \
+    && printf '%s\n' "$block" | grep -Fq 'echo "Mapped worktree branch mismatch:' \
+    && printf '%s\n' "$block" | grep -Fq 'exit 1' \
+    && ! printf '%s\n' "$block" | grep -Fq 'REMOTE_TARGET=' \
+    && ! printf '%s\n' "$block" | grep -Fq 'ls-remote' \
+    && ! printf '%s\n' "$block" | grep -Fq 'git -C "$WT_DIR" branch -m "$EXPECTED_SUB_BRANCH"' \
+    && expected_line=$(printf '%s\n' "$block" | grep -n -m1 -F 'git check-ref-format --branch "$EXPECTED_SUB_BRANCH"' | cut -d: -f1) \
+    && actual_line=$(printf '%s\n' "$block" | grep -n -m1 -F 'TARGET_SUB_BRANCH=$(git -C "$WT_DIR" branch --show-current)' | cut -d: -f1) \
+    && actual_check_line=$(printf '%s\n' "$block" | grep -n -m1 -F 'git check-ref-format --branch "$TARGET_SUB_BRANCH"' | cut -d: -f1) \
+    && mismatch_line=$(printf '%s\n' "$block" | grep -n -m1 -F 'if [ "$TARGET_SUB_BRANCH" != "$EXPECTED_SUB_BRANCH" ]; then' | cut -d: -f1) \
+    && fetch_line=$(printf '%s\n' "$block" | grep -n -m1 -F 'git -C "$WT_DIR" fetch origin "$BASE_BRANCH"' | cut -d: -f1) \
+    && ahead_line=$(printf '%s\n' "$block" | grep -n -m1 -F 'AHEAD=$(git -C "$WT_DIR" rev-list --count "origin/$BASE_BRANCH..$TARGET_SUB_BRANCH")' | cut -d: -f1) \
+    && push_line=$(printf '%s\n' "$block" | grep -n -m1 -F 'git -C "$WT_DIR" push -u origin "$TARGET_SUB_BRANCH"' | cut -d: -f1) \
+    && create_line=$(printf '%s\n' "$block" | grep -n -m1 -F 'gh pr create --base "$BASE_BRANCH" --head "$TARGET_SUB_BRANCH"' | cut -d: -f1) \
+    && [ "$expected_line" -lt "$actual_line" ] \
+    && [ "$actual_line" -lt "$actual_check_line" ] \
+    && [ "$actual_check_line" -lt "$mismatch_line" ] \
+    && [ "$mismatch_line" -lt "$fetch_line" ] \
+    && [ "$mismatch_line" -lt "$ahead_line" ] \
+    && [ "$mismatch_line" -lt "$push_line" ] \
+    && [ "$mismatch_line" -lt "$create_line" ]
 }
 
 split_command_failure_rollback() {
@@ -200,7 +227,6 @@ split_branch_shell_safety_contract() {
     && printf '%s\n' "$scope_block" | grep -Fq 'git push origin --delete "$REMOTE_BRANCH"' \
     && printf '%s\n' "$skill_block" | grep -Fq 'git -C "$WT_DIR" fetch origin "$BASE_BRANCH"' \
     && printf '%s\n' "$skill_block" | grep -Fq 'git -C "$WT_DIR" rev-list --count "origin/$BASE_BRANCH..$TARGET_SUB_BRANCH"' \
-    && printf '%s\n' "$skill_block" | grep -Fq 'git -C "$WT_DIR" branch -m "$EXPECTED_SUB_BRANCH"' \
     && printf '%s\n' "$skill_block" | grep -Fq 'git -C "$WT_DIR" push -u origin "$TARGET_SUB_BRANCH"' \
     && printf '%s\n' "$skill_block" | grep -Fq 'gh pr create --base "$BASE_BRANCH" --head "$TARGET_SUB_BRANCH"' \
     && ! printf '%s\n' "$scope_block" | grep -Eq '^\s*[-a-z.]*(git|gh) .*\{(base-branch|branch-name|target-sub-branch|previous-split-branch|upstream-branch|tracked-local-branch|tracked-remote-branch)\}' \
@@ -237,6 +263,7 @@ run_case conflict-side-deletion-contract conflict_side_deletion_contract
 run_case conflict-proposal-preservation conflict_proposal_preservation
 run_case conflict-path-shell-word-safety conflict_path_shell_word_safety
 run_case split-step8-target split_step8_target
+run_case split-step8-branch-mismatch-fails-closed split_step8_branch_mismatch_fails_closed
 run_case split-command-failure-rollback split_command_failure_rollback
 run_case remote-split-branch-preflight remote_split_branch_preflight
 run_case split-partial-creation-finalization split_partial_creation_finalization

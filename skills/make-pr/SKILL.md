@@ -586,19 +586,18 @@ WT_DIR=<shell-word:mapped-worktree>
 BASE_BRANCH=<shell-word:appropriate-base>
 EXPECTED_SUB_BRANCH=<shell-word:target-sub-branch>
 git check-ref-format --branch "$BASE_BRANCH"
+git check-ref-format --branch "$EXPECTED_SUB_BRANCH"
 TARGET_SUB_BRANCH=$(git -C "$WT_DIR" branch --show-current)
 git check-ref-format --branch "$TARGET_SUB_BRANCH"
+if [ "$TARGET_SUB_BRANCH" != "$EXPECTED_SUB_BRANCH" ]; then
+  echo "Mapped worktree branch mismatch: expected $EXPECTED_SUB_BRANCH, found $TARGET_SUB_BRANCH" >&2
+  exit 1
+fi
 git -C "$WT_DIR" fetch origin "$BASE_BRANCH"
 AHEAD=$(git -C "$WT_DIR" rev-list --count "origin/$BASE_BRANCH..$TARGET_SUB_BRANCH")
 if [ "$AHEAD" -eq 0 ]; then
   echo "No commits to open for $TARGET_SUB_BRANCH" >&2
   exit 0
-fi
-REMOTE_TARGET=$(git -C "$WT_DIR" ls-remote --heads origin "$TARGET_SUB_BRANCH")
-if [ -z "$REMOTE_TARGET" ] && [ "$TARGET_SUB_BRANCH" != "$EXPECTED_SUB_BRANCH" ]; then
-  git check-ref-format --branch "$EXPECTED_SUB_BRANCH"
-  git -C "$WT_DIR" branch -m "$EXPECTED_SUB_BRANCH"
-  TARGET_SUB_BRANCH="$EXPECTED_SUB_BRANCH"
 fi
 git -C "$WT_DIR" push -u origin "$TARGET_SUB_BRANCH"
 TITLE=$(cat <<'EOF'
