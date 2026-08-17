@@ -58,11 +58,12 @@ candidate_cardinality_rules() {
 }
 
 conflict_side_deletion_contract() {
-  grep -Fq 'git ls-files -u -- {file}' "$SKILL_FILE" \
+  grep -Fq 'git ls-files -u -- "{file}"' "$SKILL_FILE" \
     && grep -Fq 'Stage 2 is **ours** and stage 3 is **theirs**' "$SKILL_FILE" \
-    && grep -Fq 'If the selected stage is absent, resolve the deletion with `git rm -- {file}`' "$SKILL_FILE" \
-    && grep -Fq 'git checkout --$selected_side -- {file}' "$SKILL_FILE" \
-    && grep -Fq 'git add -- {file}' "$SKILL_FILE" \
+    && grep -Fq 'Read the present stage blobs (`git show ":2:{file}"` / `git show ":3:{file}"`)' "$SKILL_FILE" \
+    && grep -Fq 'If the selected stage is absent, resolve the deletion with `git rm -- "{file}"`' "$SKILL_FILE" \
+    && grep -Fq 'git checkout --$selected_side -- "{file}"' "$SKILL_FILE" \
+    && grep -Fq 'git add -- "{file}"' "$SKILL_FILE" \
     && grep -Fq "'\$3 == stage { found=1 }" "$SKILL_FILE" \
     && ! grep -Fq "'\$1 == stage { found=1 }" "$SKILL_FILE" \
     && grep -Fq 'merge selects ours (stage 2), rebase selects theirs (stage 3)' "$SKILL_FILE" \

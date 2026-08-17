@@ -253,10 +253,10 @@ git diff --name-only --diff-filter=U
 For each file in the list, first inspect its index stages before attempting any checkout or staging:
 
 ```bash
-git ls-files -u -- {file}
+git ls-files -u -- "{file}"
 ```
 
-Stage 2 is **ours** and stage 3 is **theirs**. A missing stage is a deletion on that side, so do not assume that the worktree contains conflict markers (modify/delete and rename/delete conflicts may not). Read the present stage blobs (`git show :2:{file}` / `git show :3:{file}`) when analyzing the two sides, then form a proposed resolution with reasoning. Use the correct ours/theirs mapping for the operation in progress:
+Stage 2 is **ours** and stage 3 is **theirs**. A missing stage is a deletion on that side, so do not assume that the worktree contains conflict markers (modify/delete and rename/delete conflicts may not). Read the present stage blobs (`git show ":2:{file}"` / `git show ":3:{file}"`) when analyzing the two sides, then form a proposed resolution with reasoning. Use the correct ours/theirs mapping for the operation in progress:
 
 - **During merge:** `HEAD` side (ours) = current branch changes, incoming side (theirs) = target branch changes
 - **During rebase:** `HEAD` side (ours) = target branch changes (commit being rebased onto), incoming side (theirs) = current branch changes (commit being replayed)
@@ -270,16 +270,16 @@ Stage 2 is **ours** and stage 3 is **theirs**. A missing stage is a deletion on 
 | 현재 브랜치 우선 | Take the current branch's side in every file — merge selects ours (stage 2), rebase selects theirs (stage 3) |
 | 타겟 브랜치 우선 | Take the target branch's side in every file — merge selects theirs (stage 3), rebase selects ours (stage 2) |
 
-For every file and every policy that selects a side (including a Phase 2 auto proposal), resolve the selected stage explicitly. If the selected stage is absent, resolve the deletion with `git rm -- {file}`; otherwise check out the selected side and stage it:
+For every file and every policy that selects a side (including a Phase 2 auto proposal), resolve the selected stage explicitly. If the selected stage is absent, resolve the deletion with `git rm -- "{file}"`; otherwise check out the selected side and stage it:
 
 ```bash
-stages=$(git ls-files -u -- {file})
+stages=$(git ls-files -u -- "{file}")
 # selected_stage is 2 (ours) or 3 (theirs), according to the mapping above
 if ! printf '%s\n' "$stages" | awk -v stage="$selected_stage" '$3 == stage { found=1 } END { exit !found }'; then
-  git rm -- {file}
+  git rm -- "{file}"
 else
-  git checkout --$selected_side -- {file}
-  git add -- {file}
+  git checkout --$selected_side -- "{file}"
+  git add -- "{file}"
 fi
 ```
 
