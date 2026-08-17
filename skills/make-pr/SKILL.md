@@ -266,11 +266,11 @@ Stage 2 is **ours** and stage 3 is **theirs**. A missing stage is a deletion on 
 | `{conflict-policy}` | How this round is settled |
 |---|---|
 | 파일별로 확인 | Explain this round's conflicts in plain text — one short block per file: what each side holds, what the conflict represents, the proposed resolution and its reasoning. Native-capable clients may ask about up to 4 files per call; Codex batches are capped at 3 files per call. A later batch starts with the remaining files. Each question offers **제안대로 해결** / **현재 브랜치 유지** (merge: ours / rebase: theirs) / **타겟 브랜치 채택** (merge: theirs / rebase: ours) |
-| 제안대로 자동 해결 | Apply the Phase 2 proposal to every file |
+| 제안대로 자동 해결 | Apply the Phase 2 proposal to every file, preserving whether it is a side selection, deletion, or synthesized/custom result |
 | 현재 브랜치 우선 | Take the current branch's side in every file — merge selects ours (stage 2), rebase selects theirs (stage 3) |
 | 타겟 브랜치 우선 | Take the target branch's side in every file — merge selects theirs (stage 3), rebase selects ours (stage 2) |
 
-For every file and every policy that selects a side (including a Phase 2 auto proposal), resolve the selected stage explicitly. If the selected stage is absent, resolve the deletion with `git rm -- "{file}"`; otherwise check out the selected side and stage it:
+Phase 2 proposals may be an explicit side selection, a deletion, or a synthesized/custom result. For a deletion proposal, resolve it with `git rm -- "{file}"`. For a synthesized/custom proposal, preserve the exact proposed content in the worktree, then stage it with `git add -- "{file}"`. The stage checkout procedure below applies only to explicit current-branch/target-branch side choices. For those side choices, resolve the selected stage explicitly. If the selected stage is absent, resolve the deletion with `git rm -- "{file}"`; otherwise check out the selected side and stage it:
 
 ```bash
 stages=$(git ls-files -u -- "{file}")

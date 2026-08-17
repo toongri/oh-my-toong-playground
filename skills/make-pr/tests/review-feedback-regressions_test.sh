@@ -69,7 +69,16 @@ conflict_side_deletion_contract() {
     && grep -Fq 'merge selects ours (stage 2), rebase selects theirs (stage 3)' "$SKILL_FILE" \
     && grep -Fq 'merge selects theirs (stage 3), rebase selects ours (stage 2)' "$SKILL_FILE" \
     && grep -Fq 'This stage inspection and missing-stage `git rm` rule also applies to file-by-file choices' "$SKILL_FILE" \
-    && grep -Fq 'including a Phase 2 auto proposal' "$SKILL_FILE"
+    && ! grep -Fq 'including a Phase 2 auto proposal' "$SKILL_FILE"
+}
+
+conflict_proposal_preservation() {
+  grep -Fq 'Phase 2 proposals may be an explicit side selection, a deletion, or a synthesized/custom result' "$SKILL_FILE" \
+    && grep -Fq 'Apply the Phase 2 proposal to every file' "$SKILL_FILE" \
+    && grep -Fq 'For a synthesized/custom proposal, preserve the exact proposed content in the worktree' "$SKILL_FILE" \
+    && grep -Fq 'git add -- "{file}"' "$SKILL_FILE" \
+    && grep -Fq 'For a deletion proposal, resolve it with `git rm -- "{file}"`' "$SKILL_FILE" \
+    && grep -Fq 'The stage checkout procedure below applies only to explicit current-branch/target-branch side choices' "$SKILL_FILE"
 }
 
 split_step8_target() {
@@ -147,6 +156,7 @@ run_case late-divergence-policy late_divergence_policy
 run_case codex-conflict-batch codex_conflict_batch
 run_case candidate-cardinality-rules candidate_cardinality_rules
 run_case conflict-side-deletion-contract conflict_side_deletion_contract
+run_case conflict-proposal-preservation conflict_proposal_preservation
 run_case split-step8-target split_step8_target
 run_case split-command-failure-rollback split_command_failure_rollback
 run_case remote-split-branch-preflight remote_split_branch_preflight
