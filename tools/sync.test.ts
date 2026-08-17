@@ -67,6 +67,26 @@ async function exists(p: string): Promise<boolean> {
 	}
 }
 
+async function snapshotTree(root: string): Promise<Map<string, string>> {
+	const out = new Map<string, string>();
+	async function walk(dir: string): Promise<void> {
+		for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+			const abs = path.join(dir, entry.name);
+			const rel = path.relative(root, abs);
+			if (entry.isSymbolicLink()) out.set(`link:${rel}`, `->${await fs.readlink(abs)}`);
+			else if (entry.isDirectory()) {
+				out.set(`dir:${rel}`, "");
+				await walk(abs);
+			} else {
+				const stat = await fs.stat(abs);
+				out.set(`file:${rel}`, `${stat.mode}:${await fs.readFile(abs, "base64")}`);
+			}
+		}
+	}
+	await walk(root);
+	return out;
+}
+
 /** Sets a directory's mtime far enough in the past to clear any retention window used in these tests. */
 async function ageDir(dirPath: string): Promise<void> {
 	const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -135,6 +155,134 @@ afterEach(async () => {
 		const dir = makeContextTmpDirs.pop()!;
 		await fs.rm(dir, { recursive: true, force: true });
 	}
+});
+
+describe("PreToolUse wrapper deployment validation", () => {
+	let tmpDir: string;
+	let rootDir: string;
+	let targetPath: string;
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "pretool-wrapper-validation-"));
+		rootDir = path.join(tmpDir, "root");
+		targetPath = path.join(tmpDir, "target");
+		await fs.mkdir(targetPath, { recursive: true });
+		await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude, codex]\n");
+		await writeFile(path.join(rootDir, "hooks", "audit", "index.sh"), "#!/bin/sh\n");
+		await writeFile(path.join(rootDir, "scripts", "pretool-trace", "index.ts"), "export {};\n");
+		_resetConfigCache();
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+		_resetConfigCache();
+	});
+
+	it("rejects a missing shared script declaration before creating the target", async () => {
+		await writeFile(path.join(targetPath, ".claude", "nested", "sentinel.txt"), "keep\n");
+		const before = await snapshotTree(targetPath);
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\n`);
+		await writeFile(path.join(rootDir, "claude.yaml"), "hooks:\n  PreToolUse:\n    - component: audit\n");
+		const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+		await expect(processYaml(makeContext(), syncYamlPath, adapters, rootDir)).rejects.toThrow(/pretool-trace/);
+		expect(await snapshotTree(targetPath)).toEqual(before);
+	});
+
+	it("PreToolUse preflight before writes", async () => {
+		await writeFile(path.join(targetPath, ".claude", "config.json"), "keep\n");
+		const context = makeContext();
+		const before = await snapshotTree(targetPath);
+		const backupBefore = await snapshotTree(context.backupBase);
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\n`);
+		await writeFile(path.join(rootDir, "claude.yaml"), "hooks:\n  PreToolUse:\n    - component: audit\n");
+		const adapter = makeMockAdapter("claude");
+		adapter.previewPreToolUseCommands = async () => [{ wrapperDeploymentPath: path.join(targetPath, ".claude", "scripts", "pretool-trace", "index.ts") }];
+		const adapters = new Map<Platform, PlatformAdapter>([["claude", adapter]]) as AdapterMap;
+		await expect(processYaml(context, syncYamlPath, adapters, rootDir)).rejects.toThrow(/pretool-trace/);
+		expect(await snapshotTree(targetPath)).toEqual(before);
+		expect(await snapshotTree(context.backupBase)).toEqual(backupBefore);
+		expect(adapter.calls).toHaveLength(0);
+	});
+
+	it("rejects a missing source entrypoint before creating the target", async () => {
+		await writeFile(path.join(targetPath, ".codex", "nested", "sentinel.txt"), "keep\n");
+		const before = await snapshotTree(targetPath);
+		await fs.rm(path.join(rootDir, "scripts", "pretool-trace", "index.ts"));
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\nscripts:\n  platforms: [claude]\n  items:\n    - pretool-trace\n`);
+		await writeFile(path.join(rootDir, "claude.yaml"), "hooks:\n  PreToolUse:\n    - component: audit\n");
+		const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+		await expect(processYaml(makeContext(), syncYamlPath, adapters, rootDir)).rejects.toThrow(/entrypoint/);
+		expect(await snapshotTree(targetPath)).toEqual(before);
+	});
+
+	it("validates Claude and Codex wrapper destinations before permitting deployment", async () => {
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\nscripts:\n  platforms: [claude, codex]\n  items:\n    - pretool-trace\n`);
+		await writeFile(path.join(rootDir, "claude.yaml"), "hooks:\n  PreToolUse:\n    - component: audit\n");
+		await writeFile(path.join(rootDir, "codex.yaml"), "hooks:\n  PreToolUse:\n    - component: audit\n");
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["claude", new ClaudeAdapter()],
+			["codex", new CodexAdapter()],
+		]) as AdapterMap;
+		await processYaml(makeContext(), syncYamlPath, adapters, rootDir);
+		expect(await exists(path.join(targetPath, ".claude", "scripts", "pretool-trace", "index.ts"))).toBe(true);
+		expect(await exists(path.join(targetPath, ".codex", "scripts", "pretool-trace", "index.ts"))).toBe(true);
+	});
+
+	it("rejects an adapter preview whose wrapper destination differs before mutation", async () => {
+		await writeFile(path.join(targetPath, ".claude", "nested", "sentinel.txt"), "keep\n");
+		const before = await snapshotTree(targetPath);
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\nscripts:\n  platforms: [claude]\n  items:\n    - pretool-trace\n`);
+		await writeFile(path.join(rootDir, "claude.yaml"), "hooks:\n  PreToolUse:\n    - component: audit\n");
+		const adapter = makeMockAdapter("claude");
+		adapter.previewPreToolUseCommands = async () => [{ wrapperDeploymentPath: path.join(targetPath, "wrong", "index.ts") }];
+		const adapters = new Map<Platform, PlatformAdapter>([["claude", adapter]]) as AdapterMap;
+		await expect(processYaml(makeContext(), syncYamlPath, adapters, rootDir)).rejects.toThrow(/destination mismatch/);
+		expect(await snapshotTree(targetPath)).toEqual(before);
+	});
+
+	it("allows prompt-only PreToolUse without a shared script declaration", async () => {
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\n`);
+		await writeFile(path.join(rootDir, "claude.yaml"), "hooks:\n  PreToolUse:\n    - type: prompt\n      prompt: check\n");
+		const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+		await expect(processYaml(makeContext(), syncYamlPath, adapters, rootDir)).resolves.toBeUndefined();
+	});
+
+	it("allows an empty PreToolUse array without a shared script declaration", async () => {
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\n`);
+		await writeFile(path.join(rootDir, "claude.yaml"), "hooks:\n  PreToolUse: []\n");
+		const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+		await expect(processYaml(makeContext(), syncYamlPath, adapters, rootDir)).resolves.toBeUndefined();
+	});
+
+	it("rejects a directory named index.ts as the wrapper entrypoint", async () => {
+		await fs.rm(path.join(rootDir, "scripts", "pretool-trace", "index.ts"));
+		await fs.mkdir(path.join(rootDir, "scripts", "pretool-trace", "index.ts"), { recursive: true });
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\nscripts:\n  platforms: [claude]\n  items:\n    - pretool-trace\n`);
+		await writeFile(path.join(rootDir, "claude.yaml"), "hooks:\n  PreToolUse:\n    - component: audit\n");
+		const before = await snapshotTree(targetPath);
+		const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+		await expect(processYaml(makeContext(), syncYamlPath, adapters, rootDir)).rejects.toThrow(/entrypoint/);
+		expect(await snapshotTree(targetPath)).toEqual(before);
+	});
+
+	it("uses an independent scripts deploy location for destination validation", async () => {
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\nscripts:\n  platforms: [claude]\n  items:\n    - pretool-trace\n`);
+		await writeFile(path.join(rootDir, "claude.yaml"), "hooks:\n  PreToolUse:\n    - component: audit\n");
+		const adapter = makeMockAdapter("claude");
+		Object.defineProperty(adapter, "configDir", { value: ".wrong" });
+		adapter.previewPreToolUseCommands = async () => [{ wrapperDeploymentPath: path.join(targetPath, ".wrong", "scripts", "pretool-trace", "index.ts") }];
+		const adapters = new Map<Platform, PlatformAdapter>([["claude", adapter]]) as AdapterMap;
+		await expect(processYaml(makeContext(), syncYamlPath, adapters, rootDir)).rejects.toThrow(/destination mismatch/);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -3805,9 +3953,13 @@ describe("processYaml — rewritePlatformPaths hooks-provenance regression (team
 			path.join(rootDir, "hooks", "my-omt-hook", "README.md"),
 			"Configured under .claude/hooks/my-omt-hook — see .claude/rules/ too.\n",
 		);
+		await writeFile(path.join(rootDir, "scripts", "pretool-trace", "index.ts"), "export {};\n");
 
 		const syncYamlPath = path.join(rootDir, "sync.yaml");
-		await writeFile(syncYamlPath, `path: ${targetPath}\n`);
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nscripts:\n  platforms: [codex]\n  items:\n    - component: pretool-trace\n`,
+		);
 		await writeFile(
 			path.join(rootDir, "codex.yaml"),
 			"hooks:\n  PreToolUse:\n    - component: my-omt-hook\n",

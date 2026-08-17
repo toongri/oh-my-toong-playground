@@ -78,6 +78,65 @@ import {
 /** Map from platform name to its adapter instance. */
 export type AdapterMap = Map<Platform, PlatformAdapter>;
 
+async function validatePreToolUseWrapperDeployments(
+	syncYaml: SyncYaml,
+	yamlDir: string,
+	adapters: AdapterMap,
+	rootDir: string,
+	projectDir: string | undefined,
+	deployRoots: string[],
+): Promise<void> {
+	const declared = new Map<Platform, string>();
+	const scripts = syncYaml.scripts;
+	if (scripts && Array.isArray(scripts.items)) {
+		for (const item of scripts.items) {
+			const component = typeof item === "string" ? item : item.component ?? "";
+			if (path.basename(component) !== "pretool-trace") continue;
+			const platforms = await resolvePlatforms(item, scripts.platforms, syncYaml.platforms, "scripts");
+			const resolved = resolveComponentPath(component, "scripts", rootDir, projectDir);
+			if ("error" in resolved) continue;
+			for (const platform of platforms) declared.set(platform, resolved.path);
+		}
+	}
+
+	const previewPlatforms: Platform[] = ["claude", "codex"];
+	for (const platform of previewPlatforms) {
+		const adapter = adapters.get(platform);
+		if (!adapter?.previewPreToolUseCommands) continue;
+		const merged = await parseAndMergePlatformYaml(yamlDir, platform);
+		if (!merged?.hooks?.PreToolUse) continue;
+		const hookItems = merged.hooks.PreToolUse;
+		const previewHooks = { ...merged.hooks, PreToolUse: hookItems.map((item) => {
+			if (!item?.component) return item;
+			const resolved = resolveComponentPath(item.component, "hooks", rootDir, projectDir);
+			if ("error" in resolved) throw new Error(`${platform} hook component missing: ${item.component}`);
+			return { ...item, component: resolved.path };
+		}) };
+		const previewYaml: PlatformYaml = { ...merged, hooks: previewHooks };
+		for (const deployRoot of deployRoots) {
+			const previews = await adapter.previewPreToolUseCommands(deployRoot, previewYaml);
+			if (previews.length === 0) continue;
+			const source = declared.get(platform);
+			if (!source) throw new Error(`${platform} PreToolUse requires declared scripts/pretool-trace component`);
+			const entrypoint = path.join(source, "index.ts");
+			const entryStat = await fs.stat(entrypoint).catch(() => undefined);
+			if (!entryStat?.isFile()) throw new Error(`${platform} pretool-trace entrypoint missing: ${entrypoint}`);
+			const expected = path.join(
+				deployRoot,
+				`.${deployLocationForManifest(platform, "scripts")}`,
+				"scripts",
+				"pretool-trace",
+				"index.ts",
+			);
+			for (const preview of previews) {
+				if (path.resolve(preview.wrapperDeploymentPath) !== path.resolve(expected)) {
+					throw new Error(`${platform} PreToolUse wrapper destination mismatch: ${preview.wrapperDeploymentPath}`);
+				}
+			}
+		}
+	}
+}
+
 /**
  * Per-deploy-LOCATION accumulator of resolved component SOURCE paths,
  * populated as categories and per-platform hooks are processed. syncLib scans
@@ -1972,6 +2031,16 @@ export async function processYaml(
 	// resolveDeployTargets throws DeployTargetsError on git-enumeration failure or
 	// an empty worktree set — let it escape so it surfaces as a non-zero exit.
 	const deployRoots = resolveDeployTargets(targetPath);
+	// Validate pure PreToolUse wrapper previews before any target mkdir, backup,
+	// config, or component mutation occurs.
+	await validatePreToolUseWrapperDeployments(
+		syncYaml,
+		yamlDir,
+		adapters,
+		rootDir,
+		context.projectDir || undefined,
+		deployRoots,
+	);
 
 	for (const deployRoot of deployRoots) {
 		try {

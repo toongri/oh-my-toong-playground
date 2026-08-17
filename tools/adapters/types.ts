@@ -6,6 +6,10 @@ import type {
 	PluginScope,
 } from "../lib/types.ts";
 
+export type PreToolUsePreview = {
+	wrapperDeploymentPath: string;
+};
+
 /**
  * Common interface for all platform adapters.
  * Each adapter handles component deployment and platform-specific config for one target platform.
@@ -90,6 +94,12 @@ export interface PlatformAdapter {
 		dryRun: boolean,
 		scope?: PluginScope,
 	): Promise<PlatformConfigResult>;
+
+	/** Pure preview of command-type PreToolUse wrappers, when supported. */
+	previewPreToolUseCommands?(
+		targetPath: string,
+		yaml: PlatformYaml,
+	): Promise<PreToolUsePreview[]>;
 
 	/**
 	 * Optional: prepare a category target directory before sync (e.g., backup).
