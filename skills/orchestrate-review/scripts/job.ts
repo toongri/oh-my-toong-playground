@@ -728,15 +728,42 @@ function findExistingJobForIdentity(
 			IDENTITY_FIELDS.every((field) => persistedIdentity[field] === identity[field])
 		) {
 			if (metadata.state === "initializing") {
-				// An initializer can be left behind by SIGKILL/OOM before the first
-				// member launch. Reclaim only when there is no per-member evidence;
-				// once a member directory/status or worker anchor exists, retain the
-				// job and fail closed so a live concurrent initializer is never cloned.
+				// Initializer ownership is durable so a SIGKILL/OOM can be distinguished
+				// from a live concurrent starter. A matching live/indeterminate owner
+				// always fails closed once any launch evidence exists.
+				const initializerPid = optionalNumber(metadata.initializerPid);
+				const initializerWitness = optionalString(metadata.initializerPidStartedAt);
+				let initializerDead = false;
+				let initializerLive = false;
+				if (initializerPid !== undefined) {
+					try {
+						process.kill(initializerPid, 0);
+						initializerLive = true;
+					} catch (error) {
+						const code = isRecord(error) ? error.code : undefined;
+						initializerDead = code === "ESRCH";
+						initializerLive = !initializerDead;
+					}
+					if (initializerLive && initializerWitness !== undefined) {
+						const currentWitness = getProcessStartedAt(initializerPid);
+						if (currentWitness !== null && currentWitness !== initializerWitness) {
+							initializerDead = true;
+							initializerLive = false;
+						}
+					}
+				}
 				const members = isRecord(metadata) && Array.isArray(metadata.members) ? metadata.members : [];
-				const hasWorkerAnchor = members.some(
-					(member) => isRecord(member) && member.workerPgid !== null && member.workerPgid !== undefined,
-				);
-				let hasMemberLaunchEvidence = hasWorkerAnchor;
+				let hasMemberLaunchEvidence = false;
+				const missingMembers: string[] = [];
+				for (const member of members) {
+					if (!isRecord(member) || typeof member.name !== "string") continue;
+					const memberDir = path.join(jobDir, "members", member.name);
+					const hasAnchor = member.workerPgid !== null && member.workerPgid !== undefined;
+					const hasDir = fs.existsSync(memberDir);
+					const hasStatus = fs.existsSync(path.join(memberDir, "status.json"));
+					if (hasAnchor || hasDir || hasStatus) hasMemberLaunchEvidence = true;
+					if (!hasAnchor && !hasStatus) missingMembers.push(member.name);
+				}
 				try {
 					const membersDir = path.join(jobDir, "members");
 					hasMemberLaunchEvidence = hasMemberLaunchEvidence || fs.readdirSync(membersDir).length > 0;
@@ -746,7 +773,28 @@ function findExistingJobForIdentity(
 					const code = isRecord(error) ? error.code : undefined;
 					if (code !== "ENOENT") throw error;
 				}
-				if (hasMemberLaunchEvidence) throw new Error(`identity job is still initializing: ${jobDir}`);
+				if (hasMemberLaunchEvidence) {
+					if (initializerDead) {
+						for (const name of missingMembers) {
+							const memberDir = path.join(jobDir, "members", name);
+							ensureDir(memberDir);
+							atomicWriteJson(path.join(memberDir, "status.json"), {
+								member: name,
+								state: "error",
+								error: "initializer terminated before member launch",
+								finishedAt: new Date().toISOString(),
+							});
+						}
+						metadata.state = "ready";
+						atomicWriteJson(path.join(jobDir, "job.json"), metadata);
+						return { jobDir, metadata };
+					}
+					throw new Error(`identity job is still initializing: ${jobDir}`);
+				}
+				if (initializerLive || initializerPid === undefined) {
+					// No evidence is safe to reclaim for legacy metadata or a live owner.
+					if (initializerLive) throw new Error(`identity job is still initializing: ${jobDir}`);
+				}
 				fs.rmSync(jobDir, { recursive: true, force: true });
 				continue;
 			}
@@ -968,6 +1016,12 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 			},
 			...(identity ? { identity } : {}),
 			state: identity ? "initializing" : undefined,
+			...(identity
+				? {
+					initializerPid: process.pid,
+					initializerPidStartedAt: getProcessStartedAt(process.pid),
+				}
+				: {}),
 			members: members.map((r, i) => ({
 				name: String(r.name),
 				command: String(r.command),

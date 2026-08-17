@@ -5770,6 +5770,98 @@ describe("start durable review identity", () => {
 		expect(fs.existsSync(jobDir)).toBe(true);
 	});
 
+	test("recovers a dead initializer's strict partial launch without duplicating workers", async () => {
+		const jobsDir = path.join(tmpDir, "initializing-dead-partial");
+		const jobDir = path.join(jobsDir, "chunk-review-initializing");
+		fs.mkdirSync(path.join(jobDir, "members", "alice"), { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({
+				id: "chunk-review-initializing",
+				identity,
+				state: "initializing",
+				initializerPid: 999999,
+				initializerPidStartedAt: "dead-owner-witness",
+				members: [
+					{ name: "alice", workerPgid: 4242, workerPgidStartedAt: "worker-witness" },
+					{ name: "bob", workerPgid: null, workerPgidStartedAt: null },
+				],
+			}),
+		);
+		fs.writeFileSync(
+			path.join(jobDir, "members", "alice", "status.json"),
+			JSON.stringify({ member: "alice", state: "queued" }),
+		);
+		const mod = await import(`./job.ts?initializing-dead-partial=${Date.now()}-${Math.random()}`);
+		const options = { config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity };
+		await expect(mod.cmdStart(options, "prompt")).resolves.toBeUndefined();
+		expect(fs.existsSync(jobDir)).toBe(true);
+		const metadata = JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8"));
+		expect(metadata.state).toBe("ready");
+		expect(metadata.members[0].workerPgid).toBe(4242);
+		expect(JSON.parse(fs.readFileSync(path.join(jobDir, "members", "alice", "status.json"), "utf8")).state).toBe(
+			"queued",
+		);
+		expect(JSON.parse(fs.readFileSync(path.join(jobDir, "members", "bob", "status.json"), "utf8"))).toMatchObject({
+			member: "bob",
+			state: "error",
+		});
+	});
+
+	test("terminalizes directory-only and absent members so ready totals include both", async () => {
+		const jobsDir = path.join(tmpDir, "initializing-dead-directory-only");
+		const jobDir = path.join(jobsDir, "chunk-review-initializing");
+		fs.mkdirSync(path.join(jobDir, "members", "alice"), { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({
+				id: "chunk-review-initializing",
+				identity,
+				state: "initializing",
+				initializerPid: 999999,
+				initializerPidStartedAt: "dead-owner-witness",
+				members: [{ name: "alice" }, { name: "bob" }],
+			}),
+		);
+		const mod = await import(`./job.ts?initializing-dead-directory-only=${Date.now()}-${Math.random()}`);
+		await expect(
+			mod.cmdStart({ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity }, "prompt"),
+		).resolves.toBeUndefined();
+		for (const name of ["alice", "bob"]) {
+			expect(JSON.parse(fs.readFileSync(path.join(jobDir, "members", name, "status.json"), "utf8"))).toMatchObject({
+				member: name,
+				state: "error",
+			});
+		}
+		const status = await mod.computeStatus(jobDir);
+		expect(status.counts.total).toBe(2);
+	});
+
+	test("fails closed when a live initializer owns a strict partial launch", async () => {
+		const jobsDir = path.join(tmpDir, "initializing-live-partial");
+		const jobDir = path.join(jobsDir, "chunk-review-initializing");
+		fs.mkdirSync(path.join(jobDir, "members", "alice"), { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({
+				id: "chunk-review-initializing",
+				identity,
+				state: "initializing",
+				initializerPid: process.pid,
+				members: [{ name: "alice", workerPgid: 4242, workerPgidStartedAt: "worker-witness" }, { name: "bob" }],
+			}),
+		);
+		fs.writeFileSync(
+			path.join(jobDir, "members", "alice", "status.json"),
+			JSON.stringify({ member: "alice", state: "queued" }),
+		);
+		const mod = await import(`./job.ts?initializing-live-partial=${Date.now()}-${Math.random()}`);
+		await expect(
+			mod.cmdStart({ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity }, "prompt"),
+		).rejects.toThrow("initializing");
+		expect(fs.existsSync(path.join(jobDir, "members", "bob"))).toBe(false);
+	});
+
 	test("fails closed when the members path is not a directory", async () => {
 		const jobsDir = path.join(tmpDir, "initializing-enotdir");
 		const jobDir = path.join(jobsDir, "chunk-review-initializing");
