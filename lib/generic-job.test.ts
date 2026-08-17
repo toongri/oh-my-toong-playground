@@ -1161,6 +1161,64 @@ describe("computeStatus", () => {
 		expect(result.counts.running).toBe(0);
 	});
 
+	test("keeps an initializing zero-member job non-terminal", async () => {
+		const jobDir = makeTmpDir();
+		fs.mkdirSync(path.join(jobDir, "members"), { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({ id: "initializing", state: "initializing", members: [] }),
+		);
+		const result = await computeStatus(jobDir, chunkReviewConfig);
+		expect(result.overallState).toBe("initializing");
+		expect(result.counts.total).toBe(0);
+	});
+
+	test("recovers initializing jobs only after every declared member has a recognized status", async () => {
+		const jobDir = path.join(tmpDir, "job-initializing-recovery");
+		setupJob(
+			jobDir,
+			{ id: "recover-1", state: "initializing", members: [{ name: "alice" }, { name: "bob" }] },
+			{
+				alice: { member: "alice", state: "done" },
+				bob: { member: "bob", state: "running" },
+			},
+			chunkReviewConfig,
+		);
+		const result = await computeStatus(jobDir, chunkReviewConfig);
+		expect(result.overallState).toBe("running");
+	});
+
+	test("keeps initializing when declared and observed member sets are incomplete or invalid", async () => {
+		const cases = [
+			{
+				name: "missing member",
+				meta: { members: [{ name: "alice" }, { name: "bob" }] },
+				entities: { alice: { member: "alice", state: "done" } },
+			},
+			{
+				name: "unknown state",
+				meta: { members: [{ name: "alice" }] },
+				entities: { alice: { member: "alice", state: "mystery" } },
+			},
+			{
+				name: "malformed status",
+				meta: { members: [{ name: "alice" }] },
+				entities: { alice: "not-json-record" },
+			},
+			{
+				name: "duplicate expected names",
+				meta: { members: [{ name: "alice" }, { name: "alice" }] },
+				entities: { alice: { member: "alice", state: "done" } },
+			},
+		];
+		for (const testCase of cases) {
+			const jobDir = path.join(tmpDir, `job-init-${testCase.name.replace(/ /g, "-")}`);
+			setupJob(jobDir, { id: testCase.name, state: "initializing", ...testCase.meta }, testCase.entities, chunkReviewConfig);
+			const result = await computeStatus(jobDir, chunkReviewConfig);
+			expect(result.overallState).toBe("initializing");
+		}
+	});
+
 	test("returns running overallState when some entities are running", async () => {
 		const jobDir = path.join(tmpDir, "job2");
 		setupJob(
@@ -2237,6 +2295,81 @@ describe("`spawnWorkers`", () => {
 		expect(typeof result[0].workerPgidStartedAt).toBe("string");
 		expect((result[0].workerPgidStartedAt as string).length).toBeGreaterThan(0);
 	});
+
+	test("onSpawned 콜백은 다음 엔티티 실행 전에 호출된다", () => {
+		const fakeWorkerPath = path.join(tmpDir, "sleep-worker.js");
+		fs.writeFileSync(fakeWorkerPath, "setTimeout(() => {}, 30_000);\n");
+		const entitiesDir = path.join(tmpDir, "members");
+		fs.mkdirSync(entitiesDir, { recursive: true });
+		const callbackEvents: Array<{ name: string; nextEntityExists: boolean }> = [];
+
+		const result = spawnWorkers({
+			entities: [
+				{ name: "alice", command: "echo hi" },
+				{ name: "bob", command: "echo hi" },
+			],
+			workerPath: fakeWorkerPath,
+			jobDir: tmpDir,
+			entitiesDir,
+			timeoutSec: 30,
+			config: councilConfig,
+			onSpawned: (worker) => {
+				callbackEvents.push({
+					name: worker.name,
+					nextEntityExists: fs.existsSync(path.join(entitiesDir, "bob")),
+				});
+			},
+		});
+
+		expect(callbackEvents).toEqual([
+			{ name: "alice", nextEntityExists: false },
+			{ name: "bob", nextEntityExists: true },
+		]);
+		expect(result.map((worker) => worker.name)).toEqual(["alice", "bob"]);
+		for (const worker of result) {
+			if (worker.workerPgid !== null) spawnedPgids.push(worker.workerPgid);
+		}
+	});
+
+	test("onSpawned 콜백 예외는 방금 생성된 워커를 종료하고 다음 실행을 막는다", () => {
+		const fakeWorkerPath = path.join(tmpDir, "sleep-worker.js");
+		fs.writeFileSync(fakeWorkerPath, "setTimeout(() => {}, 30_000);\n");
+		const entitiesDir = path.join(tmpDir, "members");
+		fs.mkdirSync(entitiesDir, { recursive: true });
+		let createdWorkerPgid: number | null = null;
+
+		expect(() =>
+			spawnWorkers({
+				entities: [
+					{ name: "alice", command: "echo hi" },
+					{ name: "bob", command: "echo hi" },
+				],
+				workerPath: fakeWorkerPath,
+				jobDir: tmpDir,
+				entitiesDir,
+				timeoutSec: 30,
+				config: councilConfig,
+				onSpawned: (worker) => {
+					createdWorkerPgid = worker.workerPgid;
+					throw new Error("durable persistence failed");
+				},
+			}),
+		).toThrow("durable persistence failed");
+
+		expect(createdWorkerPgid).toBeGreaterThan(0);
+		expect(fs.existsSync(path.join(entitiesDir, "bob"))).toBe(false);
+		if (createdWorkerPgid !== null) {
+			let processState = "";
+			try {
+				processState = execSync(`ps -o stat= -p ${createdWorkerPgid}`, {
+					encoding: "utf8",
+				}).trim();
+			} catch {
+				// ps exits non-zero when the process has already disappeared.
+			}
+			expect(processState === "" || processState.startsWith("Z")).toBe(true);
+		}
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -2301,6 +2434,35 @@ describe("cmdCollect", () => {
 		const result = JSON.parse(output[0]);
 		expect(result.overallState).toBe("done");
 	}, 15000);
+
+	test("initializing job with a complete terminal set returns done", async () => {
+		const jobDir = path.join(tmpDir, "job-collect-initializing-done");
+		fs.mkdirSync(jobDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({ id: "collect-init-done", state: "initializing", members: [{ name: "alice" }, { name: "bob" }] }),
+		);
+		const entitiesDir = path.join(jobDir, chunkReviewConfig.entityDirName);
+		fs.mkdirSync(entitiesDir, { recursive: true });
+		for (const [name, status] of Object.entries({ alice: { state: "done" }, bob: { state: "error" } })) {
+			const dir = path.join(entitiesDir, name);
+			fs.mkdirSync(dir, { recursive: true });
+			fs.writeFileSync(path.join(dir, "status.json"), JSON.stringify({ member: name, ...status }));
+		}
+		const output: string[] = [];
+		const origWrite = process.stdout.write.bind(process.stdout);
+		process.stdout.write = (chunk: string | Uint8Array, ..._args: unknown[]) => {
+			if (typeof chunk === "string") output.push(chunk);
+			return true;
+		};
+		try {
+			await cmdCollect({ "timeout-ms": 100 }, jobDir, chunkReviewConfig);
+		} finally {
+			process.stdout.write = origWrite;
+		}
+		expect(JSON.parse(output[0]).overallState).toBe("done");
+	});
+
 });
 
 // ---------------------------------------------------------------------------

@@ -5,17 +5,17 @@ description: Use when reviewing code changes for quality, correctness, and produ
 
 # Code Review
 
-Orchestrates chunk-reviewer agents against diffs. Handles input parsing, context gathering, chunking, and result synthesis.
+Directly conducts orchestrate-review jobs against diffs. Handles input parsing, context gathering, chunking, finder-job lifecycle, and result synthesis.
 
-## Premises (apply to orchestrator AND chunk-reviewer)
+## Premises (apply to orchestrator AND finder jobs)
 
-These two premises are non-negotiable. They are forwarded to every chunk-reviewer dispatch and they govern every decision in this skill.
+These two premises are non-negotiable. They are forwarded through every finder-job prompt and govern every decision in this skill.
 
 1. **Post-change state** — The working directory reflects the post-change state of the target ref. PR mode achieves this by checking out the PR head into a dedicated linked worktree (see Step 0). Non-PR modes (branch comparison, auto-detect) achieve this by verifying HEAD-match + clean-tree on the current working directory (also Step 0). Either way: read code freely from the working directory — the diff is the delta, the working directory is the result. Do not pretend the file system is read-only or stuck at base.
 
 2. **No diff-only review** — A diff is a delta. The unit of review is the *system the diff produces*. Always trace dependencies, callers, callees, interfaces, configurations, and runtime context across files. If you cannot explain how the changed code behaves end-to-end against the surrounding system, you have not reviewed it.
 
-These premises must be reflected in the chunk-reviewer dispatch prompt — see Step 4.
+These premises must be reflected in the finder-job prompt — see Step 4. Review is static-only: do not run tests, builds, linters, formatters, migrations, or other project execution. The job lifecycle commands (`start`, `collect`, `status`, `results`, `clean`, and usage-summary) are allowed.
 
 ## Input Modes
 
@@ -41,13 +41,13 @@ These premises must be reflected in the chunk-reviewer dispatch prompt — see S
 | Findings synthesis (rank/class verified findings) | Yes | - |
 | Individual candidate judgment inline (Phase 2) | Yes | - |
 | Escalation verification (candidates below confidence threshold) | - | verifier subagent (one per escalated candidate) |
-| Individual chunk review | NEVER | chunk-reviewer |
+| Individual chunk review | NEVER | configured finder CLIs through direct jobs |
 | Code modification | NEVER | (forbidden entirely) |
 
 ### Role Separation
 
 **Your role as orchestrator:**
-- Dispatch chunk-reviewer agents with diff command strings (each fans out the angle finders)
+- Start direct orchestrate-review jobs with diff command strings (each job fans out the configured angle finders)
 - Judge each deduped candidate inline in Phase 2 (reasoning → confidence → verdict + enrichment); enrich kept findings directly
 - Escalate only candidates below the confidence threshold to verifier subagents; collect their final verdicts; supersede inline tentative verdicts with verifier verdicts in Phase 3
 - Synthesize the kept findings into a ranked findings report (text only)
@@ -55,7 +55,7 @@ These premises must be reflected in the chunk-reviewer dispatch prompt — see S
 
 **NOT your role:**
 - Modifying any source files
-- Running the raw `git diff` command (chunk-reviewers execute the diff)
+- Running the raw `git diff` command (finder CLIs execute the diff)
 
 ### Context Budget
 
@@ -69,6 +69,8 @@ These premises must be reflected in the chunk-reviewer dispatch prompt — see S
 - Phase 2 inline judgment output (reasoning, verdicts, enriched findings for non-escalated candidates)
 - Escalated verifier subagent verdicts + enriched findings (Phase 2, candidates below confidence threshold)
 - Code reading via Read/Grep for Phase 2 inline candidate judgment
+
+The orchestrator never inspects, loads, or displays diff text. The sole exception is the prescribed binary `git diff --no-ext-diff --binary ...` stdout byte stream, which flows directly to SHA-256 outside model context for `diffFingerprint`; stderr is excluded and a nonzero exit aborts. Finder jobs execute the review diff from the prompt.
 
 ## Step 0: Input Parsing
 
@@ -299,42 +301,27 @@ For each chunk, construct the diff command string using git's native path filter
 git diff {range} -- <file1> <file2> ... <fileN>
 ```
 
-The orchestrator constructs this command string but does NOT execute it. The command is passed to the chunk-reviewer via {DIFF_COMMAND}, and each reviewer CLI executes it independently.
+The orchestrator constructs this command string for the configured finder CLIs; each finder executes it independently inside the direct job.
 
-## Step 4: Agent Dispatch
+## Step 4: Direct Finder-Job Dispatch
 
-1. Read dispatch template from `${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/chunk-reviewer-prompt.md`
-2. Interpolate placeholders with context from Steps 0-3:
-   - {WHAT_WAS_IMPLEMENTED} ← Step 1 description (interactive) / JSON field `what_was_implemented` (structured-output completion-gate dispatch)
-   - {DESCRIPTION} ← Step 1 or commit messages (interactive) / JSON field `description` (completion-gate dispatch)
-   - {REQUIREMENTS} ← Step 1 requirements or "N/A - code quality review only" (interactive) / JSON field `requirements` (completion-gate dispatch)
-   - {PROJECT_CONTEXT} ← Step 1 project context (interactive) / JSON field `project_context` (completion-gate dispatch); if it resolves to the literal `"(none provided)"` backfill marker, backfill from codebase signals gathered in Step 1 acquisition steps 1-3 (CLAUDE.md/README/ADR)
-   - {NON_GOAL} ← Step 1 declared non-goals (interactive) / JSON field `non_goals` (completion-gate dispatch); backfilled to the literal `"(none provided)"` marker when blank
-   - {FILE_LIST} ← Step 2 file list
-   - {DIFF_COMMAND} ← diff command string: `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk). Orchestrator constructs this string but does NOT execute it.
-   - {COMMIT_HISTORY} ← Step 2 commit history
-
-   The five intent placeholders above ({WHAT_WAS_IMPLEMENTED}/{DESCRIPTION}/{REQUIREMENTS}/{PROJECT_CONTEXT}/{NON_GOAL}) source differently depending on mode, discriminated by the completion-gate dispatch signal from Step 1's Intent Block Gate. In structured-output mode (completion-gate dispatch), the Step 1 payload is a JSON object with named fields `what_was_implemented`/`description`/`requirements`/`project_context`/`non_goals` — `JSON.parse` it and read each named field 1:1 into its placeholder above. This is a named-field read, not a blob split — never dump the whole payload into one placeholder. If the payload fails to parse as JSON, do not guess field values from malformed input — stop before dispatching chunk-reviewer agents. When the completion-gate dispatch signal is present, first write that `{gate}-codereview-{sid}.json` artifact directly as `{"status": "INCONCLUSIVE", "reviewer": "<reviewer id>", "at": "<ISO timestamp>", "findings": []}` (the code-review artifact schema `skills/{gate}/references/completion-gate.md` defines); if the artifact write itself fails, leave the artifact absent — `request-complete` already refuses on an absent artifact. Then report the parse failure and exit.
-3. Dispatch `chunk-reviewer` agent(s) via Task tool (`subagent_type: "chunk-reviewer"`) with interpolated prompt
+1. Read the chunk-reviewer prompt template and interpolate the existing inputs: {WHAT_WAS_IMPLEMENTED}, {DESCRIPTION}, {REQUIREMENTS}, {PROJECT_CONTEXT}, {NON_GOAL}, {FILE_LIST}, {DIFF_COMMAND}, and {COMMIT_HISTORY}. Preserve the named-field completion-gate parsing and result aggregation/angle coverage semantics used by later phases.
+2. Each independent review receives one fresh cryptographically random, path-safe `invocationId`; never derive it from content or reuse it. Before any finder starts, durably persist a frozen invocation manifest containing the target, resolved launch context, chunk plan, and required job metadata. Recovery uses that ID and frozen values; conflicting state is rejected, not reused.
+3. The logical job key is `(invocationId, chunkId, attempt)`. Same keys idempotently attach; different invocation IDs never share jobs or artifacts. Validate ownership and path containment on recovery, attaching rather than respawning. If `invocationId` is lost, safely start a new independent review rather than rediscovering by content. Pass commands, paths, and external values safely; exact serialization/quoting is left to implementation judgment.
+4. Start every chunk before polling. Poll each direct `job.ts` job (`start`, `collect`, `status`, `results`) to terminal. Poll progress, interruption, or a running/ready job is never a retry. Attempt 2 is allowed once only for terminal infrastructure failure, unavailable angle, or diff-command failure; preserve the same invocation/chunk identity, merge original and retry outputs, and accept partial coverage if both fail.
+5. Read every terminal output, merge and deduplicate candidates by normalized location and defect reason, union `found by` angles/evidence, and emit one coverage record per configured angle (including unavailable angles). Atomically persist `candidates.json` before `usage-summary`. Leave job cleanup to GC/orphan reaper; do not run `clean`.
+6. Use the existing direct finder CLIs and prompt interpolation; do not dispatch chunk-reviewer subagents. Keep the review static-only and preserve all raw finder fields required by the aggregation contract.
 
 **Dispatch rules:**
 
 | Scale | Action |
 |-------|--------|
-| Single chunk | 1 agent call |
-| Multiple chunks | Parallel dispatch -- all chunks in ONE response. Each chunk gets its own interpolated template with chunk-specific {DIFF_COMMAND} and {FILE_LIST} |
-
-### Result Scope Validation
-
-Each chunk-reviewer scans its whole assigned diff through every angle and reports coverage per *angle* (the Angle Coverage block), not per file. A file that produced no candidates is clean, not omitted — never treat an unmentioned file as a coverage gap.
-
-Re-dispatch a chunk-reviewer for its chunk only when its response signals an infrastructure failure: a "Partial review"/"Limited review" degradation notice, an Angle Coverage entry marked `Unavailable`, or a reported diff-command failure.
-Cap: maximum 1 re-dispatch per original chunk; if the re-dispatch also fails, accept partial coverage.
-After all re-dispatches complete, merge all chunk results (original + re-dispatched) before proceeding to Step 5.
+| Single chunk | one direct `start` job |
+| Multiple chunks | start all jobs, then poll and merge all terminal results |
 
 ## Step 5: Verification + Synthesis
 
-After all chunk-reviewers return, produce the final findings in two phases: per-candidate inline judgment with selective escalation (Phase 2), and findings synthesis (Phase 3). The terminal deliverable is the **Phase 3 findings text** — no walkthrough, no diagrams, no HTML.
+After all finder jobs reach terminal state, produce the final findings in two phases: per-candidate inline judgment with selective escalation (Phase 2), and findings synthesis (Phase 3). The terminal deliverable is the **Phase 3 findings text** — no walkthrough, no diagrams, no HTML.
 
 ### Phase 2: Candidate Verification (MANDATORY)
 
@@ -402,7 +389,7 @@ This is a **report**. You surface verified findings, ranked by what matters most
 4. **Rank** most-significant first: **HIGH, then MEDIUM, then LOW impact**; within a grade, **CONFIRMED before PLAUSIBLE**.
 5. **Cap**: keep the most significant findings. If a review produced an unwieldy number, keep the top ~15 and state how many were dropped — never silently truncate.
 6. **Pre-existing**: a candidate on an unchanged context line is tagged `[Pre-existing]` and listed under Out of Scope — unless the change aggravates it (increases blast radius or frequency), in which case it stays in the main list.
-7. **Persist the cards**: write every kept finding's full enrichment (the 7-field card from `references/verifier-prompt.md`'s output contract, plus its class and impact) to `$OMT_DIR/code-review/<review-session-id>/findings.md` — the same session directory `candidates.json` lives in. The summary tuples elsewhere are cut from these cards; this file is what makes a finding re-adjudicable after the review ends.
+7. **Persist the cards**: write every kept finding's full enrichment (the 7-field card from `references/verifier-prompt.md`'s output contract, plus its class and impact) to `$OMT_DIR/code-review/<invocationId>/findings.md` — the same invocation directory `candidates.json` lives in. The summary tuples elsewhere are cut from these cards; this file is what makes a finding re-adjudicable after the review ends.
 
 #### Edge Cases
 

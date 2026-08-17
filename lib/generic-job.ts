@@ -629,7 +629,7 @@ export type SpawnedWorker = {
  *  `ps -A` calls elsewhere in this file (reapOrphanJobs, cmdClean): failure
  *  has no basis to assert anything, so it degrades to `null` (no witness)
  *  rather than guessing. */
-function getProcessStartedAt(pid: number): string | null {
+export function getProcessStartedAt(pid: number): string | null {
 	try {
 		// LC_ALL=C: see getPgidSnapshot's own comment below for why this witness
 		// must render in a fixed locale — this call and that one are the two
@@ -648,6 +648,7 @@ export function spawnWorkers({
 	entitiesDir,
 	timeoutSec,
 	config,
+	onSpawned,
 }: {
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- public exported signature; entity shape is consumer-defined YAML-derived data
 	entities: any[];
@@ -656,6 +657,8 @@ export function spawnWorkers({
 	entitiesDir: string;
 	timeoutSec: number;
 	config: JobConfig;
+	/** Called synchronously after each worker's ownership anchors are captured. */
+	onSpawned?: (worker: SpawnedWorker) => void;
 }): SpawnedWorker[] {
 	// Validate names and detect case-insensitive collisions before spawning
 	const seenLower = new Map<string, string>();
@@ -713,19 +716,38 @@ export function spawnWorkers({
 			stdio: "ignore",
 			env: process.env,
 		});
-		child.unref();
 
 		// A detached child is the leader of its own process group, so its PGID
 		// equals its PID — no `ps` lookup needed (see spawnWorkers tests for the
 		// measured proof of this platform contract). The start-time witness
 		// still needs its own `ps` lookup, done immediately so it reflects this
 		// exact process rather than whatever later reuses the same number.
-		const workerPgid = child.pid ?? null;
-		spawned.push({
+		const worker: SpawnedWorker = {
 			name,
-			workerPgid,
-			workerPgidStartedAt: workerPgid !== null ? getProcessStartedAt(workerPgid) : null,
-		});
+			workerPgid: child.pid ?? null,
+			workerPgidStartedAt: child.pid !== undefined ? getProcessStartedAt(child.pid) : null,
+		};
+		if (onSpawned) {
+			try {
+				onSpawned(worker);
+			} catch (error) {
+				// Do not leave an unowned detached worker behind when durable persistence fails.
+				if (worker.workerPgid !== null) {
+					try {
+						process.kill(-worker.workerPgid, "SIGKILL");
+					} catch {
+						try {
+							child.kill("SIGKILL");
+						} catch {
+							// Best effort only — preserve the callback's original error.
+						}
+					}
+				}
+				throw error;
+			}
+		}
+		spawned.push(worker);
+		child.unref();
 	}
 
 	return spawned;
@@ -870,10 +892,16 @@ export async function computeStatus(
 	const stalenessThresholdMs = Math.max(2 * timeoutSec, 120) * 1000;
 
 	const members: Record<string, unknown>[] = [];
+	let observedStatusInvalid = false;
 	for (const entry of fs.readdirSync(entitiesRoot)) {
 		const statusPath = path.join(entitiesRoot, entry, "status.json");
 		const statusRaw = readJsonIfExists(statusPath);
-		if (!isRecord(statusRaw)) continue;
+		if (!isRecord(statusRaw)) {
+			// During identity recovery, an unreadable/malformed status is evidence
+			// that the launch set is incomplete; keep the job initializing.
+			observedStatusInvalid = true;
+			continue;
+		}
 		let status: Record<string, unknown> = statusRaw;
 
 		// Staleness check for queued entities
@@ -986,7 +1014,39 @@ export async function computeStatus(
 		totals.queued === 0 &&
 		totals.retrying === 0 &&
 		totals.awaiting_resume === 0;
-	const overallState = allDone
+	const expectedMembers = Array.isArray(jobMeta.members) ? jobMeta.members : [];
+	const expectedNames = new Set<string>();
+	const expectedNamesLower = new Set<string>();
+	let expectedNamesValid = expectedMembers.length > 0;
+	for (const member of expectedMembers) {
+		const name = isRecord(member) ? member.name : undefined;
+		if (typeof name !== "string" || !/^[a-zA-Z0-9_-]+$/.test(name)) {
+			expectedNamesValid = false;
+			continue;
+		}
+		const lower = name.toLowerCase();
+		if (expectedNamesLower.has(lower)) {
+			expectedNamesValid = false;
+		}
+		expectedNames.add(name);
+		expectedNamesLower.add(lower);
+	}
+	const observedNames = new Set(members.map((member) => String(member.safeName)));
+	const recognizedStates = new Set(Object.keys(totals));
+	const observedStatesRecognized = members.every(
+		(member) => typeof member.state === "string" && recognizedStates.has(member.state),
+	);
+	const initializingCanRecover =
+		jobMeta.state === "initializing" &&
+		expectedNamesValid &&
+		expectedNames.size > 0 &&
+		!observedStatusInvalid &&
+		observedNames.size === expectedNames.size &&
+		[...expectedNames].every((name) => observedNames.has(name)) &&
+		observedStatesRecognized;
+	const overallState = jobMeta.state === "initializing" && !initializingCanRecover
+		? "initializing"
+		: allDone
 		? "done"
 		: totals.running > 0 || totals.retrying > 0
 			? "running"

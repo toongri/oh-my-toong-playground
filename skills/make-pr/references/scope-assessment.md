@@ -173,22 +173,73 @@ All splits are chained on top of the previous split. The first PR uses `{base-br
 
 ## Branch Separation Procedure
 
+### Shell-safe branch/ref bindings
+
+Never interpolate a raw branch/ref placeholder into shell source. Every external branch, ref, path, or hash uses a `<shell-word:name>` token: before the shell parses the block, replace the whole token with one single-quoted shell literal, encoding each internal apostrophe as `'\''`. Then validate branch refs when created or renamed and use only quoted variable expansions. A branch such as `feat;id`, `$()` or backticks remains data. The binding contract is:
+
+```bash
+BRANCH_NAME=<shell-word:branch-name>
+BASE_BRANCH=<shell-word:base-branch>
+PREVIOUS_SPLIT_BRANCH=<shell-word:previous-split-branch>
+git check-ref-format --branch "$BRANCH_NAME"
+git check-ref-format --branch "$BASE_BRANCH"
+```
+
+Use the same contract for worktree paths, cherry-pick operands, downstream rebase, push, and rollback. Commit hashes are likewise bound as one value before use (for example, `COMMIT_HASH=<shell-word:hash1>` and `git -C "$WT_DIR" cherry-pick "$COMMIT_HASH"`).
+
+Each sub-PR gets its own **git worktree** — a separate checked-out directory backed by the same repository — instead of switching branches in the one working directory.
+
+**Why**: the split is not done when the PRs open; that is when review starts. Review comments land on several sub-PRs at once, and because the split is stacked, a fix on one sub-PR has to be carried up the chain. One working directory turns every one of those moves into a checkout-and-stash round trip. One worktree per sub-PR lets each PR be edited in place, side by side, while the original branch stays checked out where it was.
+
 ### Separation Steps
 
 **Precondition**: Working tree must be clean. Run `git status --porcelain` — if output is non-empty, ask the user to commit or stash changes before proceeding.
 
-1. Finalize the list of commits included in each thesis (excluding merge commits), sorted in chronological order (oldest first), and record the mapping of thesis → commit hashes
+1. Finalize the list of commits included in each thesis (excluding merge commits), sorted in chronological order (oldest first), and record the mapping of thesis → commit hashes. Before creating any worktree, record an explicit **branch → worktree** mapping for every planned sub-PR.
 
 2. Pre-check for mixed commits: run `git log origin/{base-branch}..HEAD --name-status` and cross-reference each commit's changed files against the thesis mapping from step 1. If any single commit modifies files assigned to more than one thesis, **immediately stop and switch to the Graceful Degradation procedure** before creating any branch. Do not proceed to the separation loop.
 
-For each thesis (in stacking order):
-   a. Create branch — name `{branch-name}` following `{branch-convention}` from the Step 1 PR Convention Survey (fallback when no convention: descriptive kebab-case topic name):
-      - First thesis: `git checkout -b {branch-name} origin/{base-branch}`
-      - Subsequent theses: `git checkout -b {branch-name} {previous-split-branch}`
-   b. Cherry-pick ONLY the commits assigned to this thesis from the mapping in Step 1: `git cherry-pick {hash1} {hash2} ...` (MUST be in chronological order — oldest commit first)
-   c. Push branch: `git push -u origin {branch-name}` (Split Accept includes branch push. Accepting the split is considered the user's consent to creating remote branches.)
+Before creating any worktree, preflight every planned split branch and worktree path. Abort the split setup before creating resources if a local branch or worktree path already exists. For each planned name, bind `PLANNED_BRANCH=<shell-word:branch-name>`, validate it with `git check-ref-format --branch "$PLANNED_BRANCH"`, then run `git ls-remote --exit-code --heads origin "refs/heads/$PLANNED_BRANCH"`: exit 0 means the remote branch already exists, exit 2 means it is absent, and any other result is a remote-check failure. If any remote branch exists, require a different branch name and repeat the complete preflight; never push to or register a pre-existing remote split branch.
 
-3. After all sub-branches are created, write Sub-PR Descriptions
+For each thesis (in stacking order):
+   a. Name the branch `{branch-name}` following `{branch-convention}` from the Step 1 PR Convention Survey (fallback when no convention: descriptive kebab-case topic name). Its worktree directory is a sibling of the repository root, named after the branch with `/` replaced by `-`:
+      ```bash
+      REPO_ROOT=$(git rev-parse --show-toplevel)
+      BRANCH_NAME=<shell-word:branch-name>
+      BASE_BRANCH=<shell-word:base-branch>
+      PREVIOUS_SPLIT_BRANCH=<shell-word:previous-split-branch>
+      git check-ref-format --branch "$BRANCH_NAME"
+      WT_DIR="$(dirname "$REPO_ROOT")/$(basename "$REPO_ROOT")-$(printf '%s' "$BRANCH_NAME" | tr '/' '-')"
+      ```
+   b. Create the worktree with the new branch — this checks the branch out in `$WT_DIR`, leaving the main working directory on `{original-branch}`:
+      - First thesis: `git worktree add -b "$BRANCH_NAME" "$WT_DIR" "origin/$BASE_BRANCH"`
+      - Subsequent theses: `git worktree add -b "$BRANCH_NAME" "$WT_DIR" "$PREVIOUS_SPLIT_BRANCH"`
+      - After a successful command, append this worktree path and local branch to the current-run rollback registry. Do not register a failed or pre-existing resource.
+   c. Cherry-pick ONLY the commits assigned to this thesis from the mapping in Step 1, inside that worktree: bind each hash (`COMMIT_HASH=<shell-word:hash1>`) and run `git -C "$WT_DIR" cherry-pick "$COMMIT_HASH"` (MUST be in chronological order — oldest commit first)
+   d. Push branch with a create-only compare-and-swap: `git -C "$WT_DIR" push --force-with-lease="refs/heads/$BRANCH_NAME:" -u origin "$BRANCH_NAME"`. The empty expected value means the remote ref must still be absent; if a competitor created it after preflight (even at an ancestor tip), the push fails and cannot overwrite that ref. Split Accept includes branch push. Accepting the split is considered the user's consent to creating remote branches. After a successful push, append that remote branch to the current-run rollback registry; do not register a branch whose push failed or a remote branch that pre-dated this run.
+
+3. After all sub-branches are created, tell the user each sub-PR's branch and worktree directory, then write Sub-PR Descriptions. Preserve an explicit branch → worktree mapping (for example, `{target-sub-branch}` → `{mapped-worktree}`) for Step 8; if any sub-PR lacks a mapping, stop and ask the user rather than guessing a directory.
+
+The `gh pr create` invocation in Step 8 targets `--head {branch-name}` and can run from the main directory or from any of the worktrees — they all address the same repository. Branch-dependent git checks, renames, and pushes must still run in the mapped worktree.
+
+### Worktree Lifetime
+
+The worktrees stay after the PRs are created; handling review feedback is what they are for. Remove one only when its sub-PR is merged and needs no further edits:
+
+```bash
+WORKTREE_PATH=<shell-word:worktree-path> # from the recorded branch → worktree mapping
+git worktree remove "$WORKTREE_PATH"
+```
+
+Because the split is stacked, a review fix committed in one sub-PR's worktree has to be carried into every worktree above it, each in its own directory:
+
+```bash
+DOWNSTREAM_WT=<shell-word:downstream-worktree>
+UPSTREAM_BRANCH=<shell-word:upstream-branch>
+git check-ref-format --branch "$UPSTREAM_BRANCH"
+git -C "$DOWNSTREAM_WT" rebase "$UPSTREAM_BRANCH"
+git -C "$DOWNSTREAM_WT" push --force-with-lease
+```
 
 > **Mixed commit warning**: If a single commit modifies files belonging to multiple theses (mixed commit), cherry-picking will include unintended changes. When a mixed commit is detected, **immediately stop automatic separation** and switch to the Graceful Degradation procedure. Inform the user that manual file-level separation may be possible, but the LLM must not attempt to extract files directly.
 
@@ -198,22 +249,24 @@ Merge commits are excluded from thesis analysis. They are artifacts of branch sy
 
 ### Failure Handling
 
-If cherry-pick fails:
-1. Abort the entire separation (`git cherry-pick --abort`)
-2. Return to the original branch: `git checkout {original-branch}` (the currently checked-out branch cannot be deleted)
-3. For each sub-branch created during this procedure:
-   a. `git branch -D {branch-name}`
-4. Ask the user for confirmation before deleting remote branches: list each remote branch to be deleted and wait for explicit approval
-5. For each remote branch confirmed by the user:
-   a. `git push origin --delete {branch-name} 2>/dev/null || true`
-6. Fall back to single PR flow (Step 6)
-7. Inform the user of the failure cause
+The `worktree add`, `cherry-pick`, and `push` commands are all failure points. A failure at any of those stages must enter the same shared rollback path; the preflight checks are not a sufficient guard. Track only worktrees and local branches successfully created during this run, and track only remote branches successfully pushed during this run. A late worktree-add failure must roll back remote branches pushed by earlier iterations of this run, but must not touch any pre-existing resource.
+
+1. If the failure occurred during a cherry-pick, run `git -C "$WT_DIR" cherry-pick --abort` only when a cherry-pick is active; do not invoke `--abort` for an add or push failure (or for an already-clean worktree).
+2. Remove worktrees first, then delete the corresponding local branches, using only the tracked resources from this run:
+   Iterate the current-run rollback registry's paired worktree/local-branch entries; for each entry bind `TRACKED_WORKTREE_PATH=<shell-word:tracked-worktree-path>` and `TRACKED_LOCAL_BRANCH=<shell-word:tracked-local-branch>` from that registry, then:
+   a. `git worktree remove --force "$TRACKED_WORKTREE_PATH"`
+   b. `git branch -D "$TRACKED_LOCAL_BRANCH"`
+3. Ask the user for confirmation before deleting any tracked remote branch: list each remote branch to be deleted and wait for explicit approval. Never delete a remote branch without that confirmation.
+4. For each remote branch confirmed by the user:
+   bind `REMOTE_BRANCH=<shell-word:confirmed-remote-branch>` from the user's confirmation list, then `git push origin --delete "$REMOTE_BRANCH" 2>/dev/null || true`
+5. Preserve pre-existing worktrees, local branches, and remote branches, then fall back to the single PR flow (Step 6) — the main working directory never left `{original-branch}`, so there is nothing to check back out.
+6. Inform the user of the failure cause and which tracked resources were cleaned up.
 
 ### Original Branch Preservation
 
-The original branch must never be deleted. If the user changes their mind after split completion:
-- Delete sub-branches (local and remote: `git branch -D` + `git push origin --delete`)
-- Return to the original branch
+The original branch must never be deleted. It stays checked out in the main working directory for the whole procedure — the sub-branches live in their own worktrees. If the user changes their mind after split completion:
+- Iterate the recorded branch → worktree mapping; for each entry bind `WORKTREE_PATH=<shell-word:worktree-path>`, `LOCAL_BRANCH=<shell-word:local-branch>`, and (after confirmation) `REMOTE_BRANCH=<shell-word:confirmed-remote-branch>`, then remove the worktree and delete local/remote branches (`git worktree remove --force "$WORKTREE_PATH"`, `git branch -D "$LOCAL_BRANCH"`, and `git push origin --delete "$REMOTE_BRANCH"`).
+- The main working directory is already on the original branch
 - If a PR was already created with `gh pr create`, guide the user to manually close it
 
 ---
@@ -224,19 +277,33 @@ The original branch must never be deleted. If the user changes their mind after 
 
 Each sub-PR follows the format in `references/output-format.md` (📌 Summary, 🔧 Changes, 💬 Review Points, ✅ Checklist, 📎 References).
 
+### Sub-PR Title
+
+Each sub-PR title states its position in the series as a suffix after the convention-conforming title (K = this PR's position, N = total sub-PRs):
+
+```
+feat: 주문 이벤트 스키마 정의 (1/3)
+```
+
 ### Split Context Note
 
-Add split context at the top of each sub-PR Summary. Use the appropriate template based on K (the position of this PR in the split series):
+The 📌 Summary of every sub-PR opens with the split context block. One template covers every position:
 
-When K = 1 (first PR — no predecessor):
 ```markdown
-> 이 PR은 [N]개 분리 PR 중 첫 번째입니다. 관련 PR: [sibling PR links]
+> **분리 PR (K/N)** — [분리 전 전체 작업 한 줄 설명]을 N개 PR로 나눈 것 중 K번째입니다.
+> - 머지 순서: #[1번 PR] → #[2번 PR] → 이 PR → #[K+1번 PR] → …
+> - 선행 PR: #[K-1] [해당 PR 제목] 이 먼저 머지되어야 합니다
+> - 관련 PR: [모든 형제 PR 링크]
 ```
 
-When K > 1 (has a predecessor):
-```markdown
-> 이 PR은 [N]개 분리 PR 중 [K]번째입니다. #[K-1] PR이 먼저 머지되어야 합니다. 관련 PR: [sibling PR links]
-```
+Fill rules:
+
+| Slot | How to fill |
+|---|---|
+| 머지 순서 | The full chain in stacking order, with this PR shown as `이 PR` — self-reference avoids needing your own number before creation |
+| 선행 PR | When K = 1, write `선행 PR 없음 — 이 시리즈에서 가장 먼저 머지됩니다` instead |
+| Any sub-PR number not yet created | The literal placeholder `#TBD`, replaced in the Post-Creation Update below — never drop the slot. A dropped slot leaves the reader with no route to the rest of the series |
+| Sibling PR notation | Bare `#N` — GitHub auto-links it inside the same repository. The `[Title](URL)` rule in `references/output-format.md` governs the 📎 References section, not this block |
 
 ### User Confirmation
 
@@ -244,7 +311,7 @@ Obtain user confirmation before each `gh pr create` execution.
 
 ### Post-Creation Update
 
-After ALL sub-PRs have been created, update each PR description with the actual sibling PR links using `gh pr edit`:
+After ALL sub-PRs have been created, replace every `#TBD` placeholder in the already-created descriptions with the actual PR numbers using `gh pr edit`:
 
 ```bash
 gh pr edit {pr-number} --body "$(cat <<'EOF'
@@ -253,8 +320,12 @@ EOF
 )"
 ```
 
-- When K = 1 (the first sub-PR), the initial description may omit sibling links because subsequent PR numbers are not yet known. Update it after all subsequent PRs are created.
-- Update sub-PRs 1 through N-1 (the last sub-PR already has complete sibling knowledge at creation time).
+- Update sub-PRs 1 through N-1 — each of them was created carrying at least one `#TBD` for a PR that did not exist yet. The last sub-PR already knows every predecessor at creation time and carries no placeholder.
+- After the update pass, no `#TBD` may remain in any sub-PR description.
+
+### Early Stop / Partial Creation Finalization
+
+If the user declines a later `gh pr create` or that command fails, stop before creating any later sub-PRs. Let **M** be the number of sub-PRs successfully created in this run. When **M > 0**, finalize every created PR with `gh pr edit`: change each visible title and split-context/body series count from `K/N` to the actual M created PRs (`K/M`), remove every `#TBD`, and remove or rewrite every reference to an uncreated sibling so the remaining merge order and related-PR links describe only the created series. Report which planned theses were not published. When M = 0, do not edit any remote PR. The normal all-created update path remains unchanged.
 
 ---
 

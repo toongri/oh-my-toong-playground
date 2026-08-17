@@ -111,18 +111,9 @@ describe("code-review SKILL.md: 신호-게이팅 불변식 (regression guard: ma
 		});
 	});
 
-	describe("Agent Dispatch 페이로드 파싱 실패: INCONCLUSIVE 브리지는 완료-게이트 신호에 조건부다", () => {
-		it("파싱 실패 시 신호-present에서만 INCONCLUSIVE 아티팩트를 기록하고, 리뷰를 실행하는 정적 검토 경로에 build/test/lint 실행 요구가 없다", () => {
-			const parseFailureSentence = skillContent
-				.split("\n")
-				.find((line) => line.includes("If the payload fails to parse as JSON"));
-
-			expect(parseFailureSentence).toBeDefined();
-			expect(parseFailureSentence).toContain("INCONCLUSIVE");
-			// Conditional on the completion-gate dispatch signal, not unconditional.
-			expect(parseFailureSentence).toContain(
-				"When the completion-gate dispatch signal is present",
-			);
+	describe("Agent Dispatch 페이로드 파싱과 정적 검토 계약", () => {
+		it("concise Step 4 preserves named-field completion-gate parsing", () => {
+			expect(skillContent).toContain("named-field completion-gate parsing");
 		});
 
 		it("리뷰 시작 전 build/test/lint 실행을 요구하는 Evidence Verification 게이트가 존재하지 않는다 (정적-전용 리뷰 불변식)", () => {

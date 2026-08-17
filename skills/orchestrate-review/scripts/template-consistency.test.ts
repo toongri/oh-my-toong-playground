@@ -13,46 +13,23 @@ const TEMPLATE_MD = join(
 	"scripts",
 	"chunk-reviewer-prompt.md",
 );
+const COMPLETION_GATE_MD = join(REPO_ROOT, "skills", "ultragoal", "references", "completion-gate.md");
 
-/**
- * Extract placeholder names from SKILL.md Step 4 (Agent Dispatch)'s "Interpolate placeholders" bullet list.
- *
- * The block starts at the line containing "Interpolate placeholders with context from"
- * and ends at the next line beginning with "##" or "###" (or the next numbered list item
- * that is not a placeholder bullet).
- *
- * Bullet format: `   - {NAME} ←`
- */
+/** Extract placeholder names from Step 4's concise interpolation sentence. */
 function extractSkillPlaceholders(content: string): Set<string> {
-	const lines = content.split("\n");
-
-	// Find the line index that starts the placeholder block
-	const startIndex = lines.findIndex((line) =>
-		line.includes("Interpolate placeholders with context from"),
-	);
-	if (startIndex === -1) {
+	const interpolationLine = content
+		.split("\n")
+		.find((line) => line.includes("interpolate the existing inputs:"));
+	if (!interpolationLine) {
 		throw new Error(
-			"SKILL.md: Could not locate 'Interpolate placeholders with context from' marker in Step 4 (Agent Dispatch). " +
+			"SKILL.md: Could not locate the concise interpolation sentence in Step 4. " +
 				"The section may have been renamed — update the parser in template-consistency.test.ts.",
 		);
 	}
 
 	const placeholders = new Set<string>();
-
-	// Scan forward from the start marker until we hit the next heading or numbered step
-	for (let i = startIndex + 1; i < lines.length; i++) {
-		const line = lines[i];
-
-		// Stop at the next heading (## or ###) or at the next top-level numbered step
-		if (/^#{1,6}\s/.test(line)) break;
-		// Stop when we hit the closing step line (e.g. "3. Dispatch ...")
-		if (/^\d+\.\s/.test(line)) break;
-
-		// Match bullet lines: optional spaces + "- {NAME} ←"
-		const match = line.match(/^\s+-\s+(\{[A-Z_]+\})\s+←/);
-		if (match) {
-			placeholders.add(match[1]);
-		}
+	for (const match of interpolationLine.matchAll(/\{[A-Z_]+\}/g)) {
+		placeholders.add(match[0]);
 	}
 
 	return placeholders;
@@ -179,73 +156,16 @@ describe("dispatch template placeholder consistency", () => {
 	});
 });
 
-/**
- * Extract the JSON field names named by "JSON field `x`" bullets in SKILL.md Step 4 (Agent Dispatch).
- *
- * Of the eight placeholder bullets under "Interpolate placeholders", only the five intent
- * placeholders ({WHAT_WAS_IMPLEMENTED}/{DESCRIPTION}/{REQUIREMENTS}/{PROJECT_CONTEXT}/{NON_GOAL})
- * carry a "JSON field `x`" tag — the codebase-derived bullets
- * ({FILE_LIST}/{DIFF_COMMAND}/{COMMIT_HISTORY}) do not. The regex itself is the selector: only
- * matching lines contribute a name.
- *
- * Scoped to the "## Step 4" section (stops at the next level-2 heading) so a same-named
- * JSON field mentioned elsewhere in the file is never picked up by accident.
- */
-function extractSkillJsonFieldBullets(content: string): Set<string> {
-	const lines = content.split("\n");
-
-	const startIndex = lines.findIndex((line) => /^##\s+Step 4:/.test(line));
-	if (startIndex === -1) {
-		throw new Error(
-			"SKILL.md: Could not locate '## Step 4:' heading. " +
-				"The section may have been renamed — update the parser in template-consistency.test.ts.",
-		);
-	}
-
-	const fields = new Set<string>();
-	for (let i = startIndex + 1; i < lines.length; i++) {
-		const line = lines[i];
-		if (/^##\s/.test(line)) break; // next level-2 heading ends Step 4
-
-		const match = line.match(/JSON field `([a-zA-Z_]+)`/);
-		if (match) {
-			fields.add(match[1]);
-		}
-	}
-
-	return fields;
+/** Extract the canonical five-slot payload fields from the completion-gate reference. */
+function extractCompletionGatePayloadFields(content: string): Set<string> {
+	const payload = content.match(/5-slot payload `?\{([^}]+)\}/)?.[1];
+	if (!payload) throw new Error("completion-gate reference payload marker missing");
+	return new Set(payload.match(/[a-z_]+/g) ?? []);
 }
 
-/**
- * Extract the field names from Step 4's summary sentence: "named fields
- * `a`/`b`/`c`/..." — the second, independent place the same five field names are spelled
- * out in prose. A drift where only the bullets or only this sentence gets updated is the
- * exact failure mode this parser exists to catch.
- */
-function extractSkillNamedFieldsSummary(content: string): Set<string> {
-	const match = content.match(/named fields ((?:`[a-zA-Z_]+`\/?)+)/);
-	if (!match) {
-		throw new Error(
-			"SKILL.md: Could not locate the 'named fields `...`/`...`' summary sentence in Step 4. " +
-				"The wording may have changed — update the parser in template-consistency.test.ts.",
-		);
-	}
-
-	const fields = new Set<string>();
-	const tokenRegex = /`([a-zA-Z_]+)`/g;
-	let tokenMatch: RegExpExecArray | null;
-	while ((tokenMatch = tokenRegex.exec(match[1])) !== null) {
-		fields.add(tokenMatch[1]);
-	}
-
-	return fields;
-}
-
-describe("dispatch JSON-field binding (SKILL.md Step 4 <-> serializeReviewContext)", () => {
-	// This binding today lives only in prose: Step 4's bullets and summary sentence name the
-	// JSON field keys a completion-gate dispatch payload must carry, but nothing checks that
-	// those names still match the keys serializeReviewContext() actually emits. Renaming a
-	// field on either side silently breaks completion-gate dispatch without failing any test.
+describe("dispatch JSON-field binding (completion-gate reference <-> serializeReviewContext)", () => {
+	// The completion-gate reference is the payload source of truth; this detects drift against
+	// the keys serializeReviewContext() actually emits.
 	let tmpDir: string;
 	const originalOmtDir = process.env.OMT_DIR;
 	const originalSessionId = process.env.OMT_SESSION_ID;
@@ -271,40 +191,25 @@ describe("dispatch JSON-field binding (SKILL.md Step 4 <-> serializeReviewContex
 		}
 	});
 
-	it("bullet JSON field names, the summary sentence's field list, and serializeReviewContext's actual output keys are exactly the same set", () => {
-		// Arrange: parse SKILL.md's two prose listings
-		const skillContent = readFileSync(SKILL_MD, "utf-8");
-		const bulletFields = extractSkillJsonFieldBullets(skillContent);
-		const summaryFields = extractSkillNamedFieldsSummary(skillContent);
+	it("completion-gate payload keys and serializeReviewContext's actual output keys are exactly the same set", () => {
+		// Arrange: parse the completion-gate reference's canonical five-slot payload
+		const completionGate = readFileSync(COMPLETION_GATE_MD, "utf-8");
+		const payloadFields = extractCompletionGatePayloadFields(completionGate);
 
 		// Guard: parsers must not silently return empty sets (format regression detection)
-		expect(bulletFields.size).toBeGreaterThan(0);
-		expect(summaryFields.size).toBeGreaterThan(0);
+		expect(payloadFields.size).toBe(5);
 
 		// Act: get the real contract keys by calling the function and reading Object.keys() —
 		// never a hardcoded array, so a rename on the code side breaks this test too.
 		setGoalState(SESSION_ID, { phase: "planning" });
 		const actualKeys = new Set(Object.keys(serializeReviewContext(SESSION_ID)));
 
-		const sortedBullets = [...bulletFields].sort();
-		const sortedSummary = [...summaryFields].sort();
+		const sortedPayload = [...payloadFields].sort();
 		const sortedActual = [...actualKeys].sort();
-
-		// Assert (1): the bullets and the summary sentence must agree with each other —
-		// one prose spot getting updated without the other is a real drift mode.
 		expect(
-			sortedSummary,
-			`Step 4 summary sentence field list drifted from the per-field bullet list. ` +
-				`bullets=[${sortedBullets.join(", ")}] summary=[${sortedSummary.join(", ")}]`,
-		).toEqual(sortedBullets);
-
-		// Assert (2): the prose field names must exactly match serializeReviewContext's
-		// actual output keys — bidirectional, not toContain/subset, per the asymmetric gap
-		// this test closes.
-		expect(
-			sortedBullets,
-			`SKILL.md Step 4 JSON field names do not match serializeReviewContext's actual output keys. ` +
-				`skill=[${sortedBullets.join(", ")}] actual=[${sortedActual.join(", ")}]`,
+			sortedPayload,
+			`completion-gate payload keys do not match serializeReviewContext's actual output keys. ` +
+				`payload=[${sortedPayload.join(", ")}] actual=[${sortedActual.join(", ")}]`,
 		).toEqual(sortedActual);
 	});
 });

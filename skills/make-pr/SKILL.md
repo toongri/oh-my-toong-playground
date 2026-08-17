@@ -45,7 +45,7 @@ Never write a PR description without sufficient context. Continue the interview 
 
 ## Scope
 
-Writes PR description body. Optionally assesses PR scope for multi-thesis splitting. Detects base branch via heuristic merge-base analysis, confirms target branch with user, performs target branch synchronization with conflict resolution at request start, then collects metadata + surveys repo PR conventions (title/branch/label) → interview → assessment → description. Creates the PR via `gh pr create` after user approval, assigned to the authenticated gh user, with labels per the surveyed convention.
+Writes PR description body. Optionally assesses PR scope for multi-thesis splitting, separating each sub-PR into its own worktree. Detects base branch via heuristic merge-base analysis, settles target branch, sync strategy, and conflict policy in one question, performs target branch synchronization with conflict resolution at request start, then collects metadata + surveys repo PR conventions (title/branch/label) → interview → assessment → description. Creates the PR via `gh pr create` after user approval, assigned to the authenticated gh user, with labels per the surveyed convention.
 
 ---
 
@@ -65,27 +65,23 @@ digraph make_pr_flow {
     "User Request" [shape=ellipse];
 
     subgraph cluster_step0 {
-        label="Step 0: Base Branch Detection & Synchronization";
+        label="Step 0: Setup -- analyze first, settle setup, then execute";
         style=dashed;
-        "0-A: Fetch & Analyze\nAll Remote Branches" [shape=box];
-        "Present Candidate Table\n+ AskUserQuestion" [shape=box];
-        "Target Branch\nConfirmed" [shape=box];
-        "0-B: Check Diverge\n(behind count)" [shape=diamond];
-        "0-B: merge/rebase\nInterview + Execute" [shape=box];
+        "0-A: Fetch & Analyze\nAll Remote Branches\n(ahead/behind/scale\nper candidate)" [shape=box];
+        "Setup Question\n2+ candidates: ONE AskUserQuestion call:\n(1) 타겟 브랜치\n(2) 동기화 방식\n(3) 충돌 처리 방침\n0/1 candidates: plain-text target turn,\nthen conditional sync/conflict call" [shape=box];
+        "0-B: Execute\nmerge / rebase" [shape=box];
         "0-C: Conflict?" [shape=diamond];
-        "0-C: Per-file\nContext + Interview" [shape=box];
+        "0-C: Apply\n충돌 처리 방침\n(파일별 확인이면 이번 라운드\n충돌 파일을 한 콜에 담아 질문)" [shape=box];
         "More Conflicts?" [shape=diamond];
         "Commit / Continue\nRebase" [shape=box];
 
-        "0-A: Fetch & Analyze\nAll Remote Branches" -> "Present Candidate Table\n+ AskUserQuestion";
-        "Present Candidate Table\n+ AskUserQuestion" -> "Target Branch\nConfirmed";
-        "Target Branch\nConfirmed" -> "0-B: Check Diverge\n(behind count)";
-        "0-B: Check Diverge\n(behind count)" -> "0-B: merge/rebase\nInterview + Execute" [label="behind > 0"];
-        "0-B: merge/rebase\nInterview + Execute" -> "0-C: Conflict?";
-        "0-C: Conflict?" -> "0-C: Per-file\nContext + Interview" [label="YES"];
+        "0-A: Fetch & Analyze\nAll Remote Branches\n(ahead/behind/scale\nper candidate)" -> "Setup Question\nONE AskUserQuestion call:\n(1) 타겟 브랜치\n(2) 동기화 방식\n(3) 충돌 처리 방침";
+        "Setup Question\nONE AskUserQuestion call:\n(1) 타겟 브랜치\n(2) 동기화 방식\n(3) 충돌 처리 방침" -> "0-B: Execute\nmerge / rebase" [label="behind > 0"];
+        "0-B: Execute\nmerge / rebase" -> "0-C: Conflict?";
+        "0-C: Conflict?" -> "0-C: Apply\n충돌 처리 방침\n(파일별 확인이면 이번 라운드\n충돌 파일을 한 콜에 담아 질문)" [label="YES"];
         "0-C: Conflict?" -> "Collect Git Metadata" [label="NO"];
-        "0-C: Per-file\nContext + Interview" -> "More Conflicts?";
-        "More Conflicts?" -> "0-C: Per-file\nContext + Interview" [label="YES"];
+        "0-C: Apply\n충돌 처리 방침\n(파일별 확인이면 이번 라운드\n충돌 파일을 한 콜에 담아 질문)" -> "More Conflicts?";
+        "More Conflicts?" -> "0-C: Apply\n충돌 처리 방침\n(파일별 확인이면 이번 라운드\n충돌 파일을 한 콜에 담아 질문)" [label="YES"];
         "More Conflicts?" -> "Commit / Continue\nRebase" [label="NO"];
     }
 
@@ -95,7 +91,7 @@ digraph make_pr_flow {
     "Clearance Checklist" [shape=diamond];
     "Scope Assessment" [shape=diamond];
     "Split Proposal" [shape=box];
-    "Branch Separation" [shape=box];
+    "Branch Separation\n(worktree per sub-PR)" [shape=box];
     "Sub-PR Loop\n(Step 6-8 per sub-PR\nincl. user confirmation)" [shape=box];
     "Draft PR Description" [shape=box];
     "Present to User" [shape=box];
@@ -107,8 +103,8 @@ digraph make_pr_flow {
     "Output Description Only" [shape=ellipse];
     "Report Absorbed\n+ Stop" [shape=ellipse];
 
-    "User Request" -> "0-A: Fetch & Analyze\nAll Remote Branches";
-    "0-B: Check Diverge\n(behind count)" -> "Collect Git Metadata" [label="behind = 0"];
+    "User Request" -> "0-A: Fetch & Analyze\nAll Remote Branches\n(ahead/behind/scale\nper candidate)";
+    "Setup Question\nONE AskUserQuestion call:\n(1) 타겟 브랜치\n(2) 동기화 방식\n(3) 충돌 처리 방침" -> "Collect Git Metadata" [label="behind = 0"];
     "Commit / Continue\nRebase" -> "Collect Git Metadata";
     "Commit / Continue\nRebase" -> "0-C: Conflict?" [label="rebase:\nmore commits"];
     "Collect Git Metadata" -> "Explore Codebase Patterns";
@@ -118,11 +114,11 @@ digraph make_pr_flow {
     "Clearance Checklist" -> "Scope Assessment" [label="ALL YES"];
     "Scope Assessment" -> "Draft PR Description" [label="Single thesis"];
     "Scope Assessment" -> "Split Proposal" [label="Multi-thesis"];
-    "Split Proposal" -> "Branch Separation" [label="Accept"];
+    "Split Proposal" -> "Branch Separation\n(worktree per sub-PR)" [label="Accept"];
     "Split Proposal" -> "Draft PR Description" [label="Reject"];
     "Split Proposal" -> "Split Proposal" [label="Modify"];
-    "Branch Separation" -> "Sub-PR Loop\n(Step 6-8 per sub-PR\nincl. user confirmation)";
-    "Branch Separation" -> "Draft PR Description" [label="Fallback\n(conflict/mixed)"];
+    "Branch Separation\n(worktree per sub-PR)" -> "Sub-PR Loop\n(Step 6-8 per sub-PR\nincl. user confirmation)";
+    "Branch Separation\n(worktree per sub-PR)" -> "Draft PR Description" [label="Fallback\n(conflict/mixed)"];
     "Sub-PR Loop\n(Step 6-8 per sub-PR\nincl. user confirmation)" -> "Return PR URL";
     "Draft PR Description" -> "Present to User";
     "Present to User" -> "User Feedback";
@@ -176,23 +172,37 @@ Collect all candidates and present a table showing commits ahead/behind and chan
 | main                 | 17            | 0              | +1832 -1881 (17 files)|
 ```
 
-Show the top 2-3 candidates. If more branches exist, include an "other" option.
+Show the top 2-3 candidates. Native-capable clients may add one explicit branch-name option when needed; on Codex, expose only those top 2-3 candidates and rely on the UI's automatic `Other` for a free-form branch name — never add an explicit catch-all option.
 
-**Phase 4 — Confirm with user via AskUserQuestion:**
+**Codex candidate-cardinality guard:**
 
-Always ask even when the default branch is the only likely candidate — never auto-skip.
+- With 2 or more candidates, use the structured target-branch question with the top 2-3 candidates. The UI's automatic `Other` remains the free-form path.
+- With exactly 1 candidate, do not issue a one-option structured target-branch question. Instead, obtain plain-text confirmation or a free-form target branch. Do not fabricate or duplicate candidates, and do not count the automatic `Other` option as an explicit candidate.
+- With 0 candidates, request the target branch as plain text; do not synthesize a placeholder option. For 0 or 1 candidates, obtain the target branch in a separate plain-text user turn before issuing any structured setup call. After the target is known, recompute and confirm its actual divergence. When the selected target is behind, issue exactly one structured setup call containing only sync-strategy and conflict-policy; when it is not behind, do not issue a setup call for those decisions. Do not claim that the plain-text target and structured answers are collected in one user turn.
 
-Present the candidate table, then ask the user to select the target branch. Include:
-- Each top candidate as a labeled option
-- An option to type a custom branch name if none of the candidates apply
+**Phase 4 — Setup Question:**
 
-Use the confirmed value as `{base-branch}` in all subsequent git commands.
+For 2 or more candidates, settle Step 0 in one setup turn: use **one `AskUserQuestion` call** for the target, sync-strategy, and conflict-policy decisions. Present the table first, then make the structured call with this `questions` array. For 0 or 1 candidates, first use a separate plain-text user turn to obtain the target branch; only after that answer is available, recompute and confirm the selected target's actual divergence, then issue at most one structured call containing sync-strategy and conflict-policy if and only if that target is behind:
+
+| # | header | question | options | Included when |
+|---|--------|----------|---------|---------------|
+| 1 | 타겟 브랜치 | 이 PR의 base 브랜치는 어디인가 | Native-capable clients: top 2-3 candidates with ahead/behind/change scale + one explicit branch-name option when needed. Codex: top 2-3 candidates only; the UI's automatic `Other` receives a free-form branch name | 2+ candidates |
+| 2 | 동기화 방식 | 타겟 브랜치가 앞서 있으면 그 커밋들을 어떻게 가져올까 | **merge**: 타겟 브랜치의 변경사항을 merge commit으로 통합합니다. 기존 히스토리가 보존됩니다. / **rebase**: 현재 브랜치의 커밋을 타겟 브랜치 위로 재배치합니다. 선형적인 히스토리를 유지합니다. | Any candidate in the table has `behind > 0` |
+| 3 | 충돌 처리 | 동기화 중 충돌이 나면 어떻게 처리할까 | **파일별로 확인**: 충돌마다 양쪽 내용과 제안을 설명하고 물어봅니다. / **제안대로 자동 해결**: 각 충돌을 분석해 제안대로 바로 적용하고 결과를 보고합니다. / **현재 브랜치 우선**: 모든 충돌에서 현재 브랜치 쪽 변경을 채택합니다. / **타겟 브랜치 우선**: 모든 충돌에서 타겟 브랜치 쪽 변경을 채택합니다. | Question 2 is included |
+
+For 2 or more candidates, the candidate table already carries `behind` for every candidate, so questions 2 and 3 are answerable before the target is picked — build them from the table, not from the answer to question 1. For 0 or 1 candidates, build those questions only from the selected target's confirmed divergence after the separate plain-text target turn.
+
+When there is exactly 1 or 0 candidate, the plain-text target prompt above replaces structured question 1; never auto-select or fabricate a target. When there are at least 2 candidates, always include structured question 1 even when one candidate is much more likely. The plain-text target turn and any later structured sync/conflict call are separate user turns; do not combine them or describe them as one setup turn.
+
+On Codex, each structured setup question must offer **2–3 explicit options**; the UI adds an automatic `Other` option for free-form input, so do not add a fourth catch-all option. For conflict policy, render exactly **파일별로 확인**, **현재 브랜치 우선**, and **타겟 브랜치 우선** as the three explicit options; keep **제안대로 자동 해결** as the canonical `Other` input when the user wants the suggested resolution. Native-capable clients may show the four policies in the table below.
+
+The answers drive the rest of Step 0: `{base-branch}` (question 1) is used in all subsequent git commands, `{sync-strategy}` (question 2) is executed in Step 0-B, `{conflict-policy}` (question 3) settles every conflict in Step 0-C.
 
 ---
 
 ### Step 0-B: Target Branch Synchronization
 
-After the target branch is confirmed, check if the current branch has diverged:
+For 2 or more candidates, `{base-branch}` and `{sync-strategy}` are already answered. For 0 or 1 candidates, `{base-branch}` is answered by the separate plain-text turn and `{sync-strategy}` is answered only by the structured call when the selected target is behind. Confirm the selected target's actual divergence before executing — this step asks nothing after any applicable setup call:
 
 ```bash
 git rev-list --left-right --count origin/{base-branch}...HEAD
@@ -201,12 +211,18 @@ git rev-list --left-right --count origin/{base-branch}...HEAD
 
 **If behind = 0:** No synchronization needed. Proceed to Step 1.
 
-**If behind > 0:** The current branch is behind `origin/{base-branch}`. Ask the user which strategy to use via AskUserQuestion:
+**If behind > 0:** If the candidate table showed every candidate at `behind = 0` and no `{sync-strategy}` was collected, make **exactly one** late-divergence `AskUserQuestion`/user-input call before executing anything. Its `questions` array MUST contain both `{sync-strategy}` and `{conflict-policy}` questions in that same call; neither value may be collected in a separate call later. Otherwise, use the already-collected `{sync-strategy}`. In either case, execute the selected strategy only after the applicable answer is available:
 
-- **merge**: 타겟 브랜치의 변경사항을 merge commit으로 통합합니다. 기존 히스토리가 보존됩니다.
-- **rebase**: 현재 브랜치의 커밋을 타겟 브랜치 위로 재배치합니다. 선형적인 히스토리를 유지합니다.
+```text
+AskUserQuestion({
+  questions: [
+    { id: "sync-strategy", header: "동기화 방식", ... },
+    { id: "conflict-policy", header: "충돌 처리", ... }
+  ]
+})
+```
 
-Execute the chosen strategy:
+Only after that single call returns may the selected `{sync-strategy}` be executed; `{conflict-policy}` then governs every conflict in Step 0-C.
 
 ```bash
 # merge
@@ -232,26 +248,47 @@ When a merge or rebase operation encounters conflicts:
 git diff --name-only --diff-filter=U
 ```
 
-**Phase 2 — Resolve each file interactively:**
+**Phase 2 — Analyze every conflicted file in this round:**
 
-For each conflicted file, repeat:
+For each file in the list, first render the path as one shell-safe literal and bind it before any shell command. Use `CONFLICT_FILE=<shell-word:file>` (single-quote escaping as needed); after that binding, use only quoted variable expansions for the path:
 
-1. Read the file contents and locate conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`).
-2. Analyze both sides:
-   - **During merge:** `HEAD` side (ours) = current branch changes, incoming side (theirs) = target branch changes
-   - **During rebase:** `HEAD` side (ours) = target branch changes (commit being rebased onto), incoming side (theirs) = current branch changes (commit being replayed)
-3. Explain the conflict in plain text to the user: what each side contains and what the conflict represents. Use the correct ours/theirs mapping for the current operation (merge vs rebase).
-4. Propose a resolution with reasoning.
-5. Ask the user to choose via AskUserQuestion:
-   - **제안대로 해결**: Apply the proposed resolution
-   - **현재 브랜치 유지**: Keep only the current branch's changes (merge: ours / rebase: theirs)
-   - **타겟 브랜치 채택**: Keep only the target branch's changes (merge: theirs / rebase: ours)
-6. Apply the chosen resolution and stage the file:
-   ```bash
-   git add {file}
-   ```
+```bash
+CONFLICT_FILE=<shell-word:file>
+git ls-files -u -- "$CONFLICT_FILE"
+```
 
-**Phase 3 — Finalize the operation:**
+Stage 2 is **ours** and stage 3 is **theirs**. A missing stage is a deletion on that side, so do not assume that the worktree contains conflict markers (modify/delete and rename/delete conflicts may not). Read the present stage blobs (`git show ":2:$CONFLICT_FILE"` / `git show ":3:$CONFLICT_FILE"`) when analyzing the two sides, then form a proposed resolution with reasoning. Use the correct ours/theirs mapping for the operation in progress:
+
+- **During merge:** `HEAD` side (ours) = current branch changes, incoming side (theirs) = target branch changes
+- **During rebase:** `HEAD` side (ours) = target branch changes (commit being rebased onto), incoming side (theirs) = current branch changes (commit being replayed)
+
+**Phase 3 — Settle them per `{conflict-policy}`:**
+
+| `{conflict-policy}` | How this round is settled |
+|---|---|
+| 파일별로 확인 | Explain this round's conflicts in plain text — one short block per file: what each side holds, what the conflict represents, the proposed resolution and its reasoning. Native-capable clients may ask about up to 4 files per call; Codex batches are capped at 3 files per call. A later batch starts with the remaining files. Each question offers **제안대로 해결** / **현재 브랜치 유지** (merge: ours / rebase: theirs) / **타겟 브랜치 채택** (merge: theirs / rebase: ours) |
+| 제안대로 자동 해결 | Apply the Phase 2 proposal to every file, preserving whether it is a side selection, deletion, or synthesized/custom result |
+| 현재 브랜치 우선 | Take the current branch's side in every file — merge selects ours (stage 2), rebase selects theirs (stage 3) |
+| 타겟 브랜치 우선 | Take the target branch's side in every file — merge selects theirs (stage 3), rebase selects ours (stage 2) |
+
+Phase 2 proposals may be an explicit side selection, a deletion, or a synthesized/custom result. For a deletion proposal, resolve it with `git rm -- "$CONFLICT_FILE"`. For a synthesized/custom proposal, preserve the exact proposed content in the worktree, then stage it with `git add -- "$CONFLICT_FILE"`. The stage checkout procedure below applies only to explicit current-branch/target-branch side choices. For those side choices, resolve the selected stage explicitly. If the selected stage is absent, resolve the deletion with `git rm -- "$CONFLICT_FILE"`; otherwise check out the selected side and stage it:
+
+```bash
+stages=$(git ls-files -u -- "$CONFLICT_FILE")
+# selected_stage is 2 (ours) or 3 (theirs), according to the mapping above
+if ! printf '%s\n' "$stages" | awk -v stage="$selected_stage" '$3 == stage { found=1 } END { exit !found }'; then
+  git rm -- "$CONFLICT_FILE"
+else
+  git checkout --$selected_side -- "$CONFLICT_FILE"
+  git add -- "$CONFLICT_FILE"
+fi
+```
+
+This stage inspection and missing-stage `git rm` rule also applies to file-by-file choices; never blindly run `git checkout` when the chosen side is a deletion.
+
+Under the three non-interactive policies, report what was applied per file in plain text after the operation finishes, so the user can see the resolutions they did not individually approve.
+
+**Phase 4 — Finalize the operation:**
 
 After all conflicted files are resolved:
 
@@ -263,9 +300,9 @@ git commit --no-edit   # creates the merge commit with default message
 git rebase --continue
 ```
 
-**Phase 4 — Check for additional conflicts:**
+**Phase 5 — Check for additional conflicts:**
 
-If `git rebase --continue` triggers a new conflict (rebase replays commits one by one), return to Phase 1 and repeat for the new conflict set.
+If `git rebase --continue` triggers a new conflict (rebase replays commits one by one), return to Phase 1 and repeat for the new conflict set. `{conflict-policy}` is answered once and carries across every round — do not re-ask it.
 
 **When all conflicts are resolved and the operation completes:** Proceed to Step 1.
 
@@ -338,7 +375,7 @@ Use the explore agent to understand codebase patterns and structure. For archite
 
 ### Interview Rules
 
-1. **One question at a time** -- never bundle multiple questions
+1. **One question at a time** -- never bundle multiple questions. This governs the Step 3 interview, where each answer shapes the next question. It does not reach Step 0, whose decisions are all answerable from the same candidate table and are collected in a single call
 2. **Adaptive question count** -- repeat until Clearance Checklist is all YES. Could be 1-2 if user provides enough upfront, or 5-6+ for complex changes
 3. **AskUserQuestion = structured choices**, plain text = open-ended questions
 4. **Context Brokering** -- if the codebase can answer it, use explore instead of asking
@@ -411,7 +448,7 @@ After Clearance Checklist passes, analyze whether the PR contains multiple indep
 3. Apply thesis isolation test: "Does this PR prove a single thesis?"
 4. If single thesis → proceed to Step 6
 5. If multi-thesis → propose split to user (Accept/Reject/Modify)
-6. On Accept → separate git branches, write sub-PR descriptions (Step 6-8 per sub-PR)
+6. On Accept → create one git worktree per sub-PR (so each PR stays editable side by side once review starts), write sub-PR descriptions (Step 6-8 per sub-PR)
 7. On Reject → proceed to Step 6 as single PR
 
 **Data sources:** `git diff origin/{base-branch}..HEAD --stat`, `git log`, explore results, interview answers. Never read `git diff` file contents.
@@ -427,6 +464,7 @@ After Clearance Checklist passes, analyze whether the PR contains multiple indep
 - Title-language precedence: for the title only, the surveyed language wins over the Korean default (an English-titled repo gets an English title). The PR body and user conversation remain Korean regardless
 - Fallback (no surveyed convention): conventional commit style (`feat:`, `fix:`, `refactor:`, etc.), Korean, under 50 characters (excluding prefix)
 - Fallback example: `refactor: 주문-결제 간 이벤트 기반 아키텍처 전환`
+- **Split sub-PR**: the title carries its position in the series as a ` (K/N)` suffix after the convention-conforming title — `feat: 주문 이벤트 스키마 정의 (1/3)`. The suffix sits at the end so the surveyed prefix style still leads
 
 ### PR Labels
 
@@ -503,6 +541,8 @@ AHEAD=$(git rev-list --count origin/{base-branch}..HEAD)
 - If user confirms: check branch name convention, push the branch, and run `gh pr create` with the approved title, description, assignee, and labels
 - If user declines: output the final PR description only
 
+For a split sub-PR, resolve its branch → worktree mapping from Step 5 and bind the matching `$WT_DIR` before any ahead check, branch-name/convention check, remote lookup, rename, or push. If the mapping is missing, stop and ask the user; never infer a worktree path. Never interpolate a raw branch/ref placeholder into shell source: render each external value as one shell-safe literal into a variable, validate branch refs with `git check-ref-format --branch` when created or renamed, and use only quoted variable expansions. A branch such as `feat;id`, `$()` or backticks remains data. Run those operations from the bound `$WT_DIR`, then create the PR with the mapped branch. This binding rule applies only to split sub-PRs; single-PR Step 8 keeps the flow below unchanged.
+
 ### Branch Name Convention Check (before push)
 
 If `{branch-convention}` exists (Step 1 survey) and the current branch name does not match it:
@@ -534,16 +574,37 @@ EOF
 - `--label` once per selected label from Step 6; omit the flag entirely when no label was selected
 
 **Sub-PR (Stacked split):**
-- Branch push already completed during Step 5 branch separation procedure (sub-branch names follow `{branch-convention}`)
+- Branch push already completed during Step 5 branch separation procedure (sub-branch names follow `{branch-convention}`; each sub-branch is checked out in its own worktree)
+- Title carries the ` (K/N)` position suffix, body opens with the split context block (`references/scope-assessment.md`)
 - First sub-PR: `--base {base-branch}`
 - Subsequent sub-PRs: `--base {previous-split-branch}`
 
+**Split-only Step 8 command block** (run once per mapped sub-PR; do not use this block for a single PR):
+
 ```bash
+WT_DIR=<shell-word:mapped-worktree>
+BASE_BRANCH=<shell-word:appropriate-base>
+EXPECTED_SUB_BRANCH=<shell-word:target-sub-branch>
+git check-ref-format --branch "$BASE_BRANCH"
+git check-ref-format --branch "$EXPECTED_SUB_BRANCH"
+TARGET_SUB_BRANCH=$(git -C "$WT_DIR" branch --show-current)
+git check-ref-format --branch "$TARGET_SUB_BRANCH"
+if [ "$TARGET_SUB_BRANCH" != "$EXPECTED_SUB_BRANCH" ]; then
+  echo "Mapped worktree branch mismatch: expected $EXPECTED_SUB_BRANCH, found $TARGET_SUB_BRANCH" >&2
+  exit 1
+fi
+git -C "$WT_DIR" fetch origin "$BASE_BRANCH"
+AHEAD=$(git -C "$WT_DIR" rev-list --count "origin/$BASE_BRANCH..$TARGET_SUB_BRANCH")
+if [ "$AHEAD" -eq 0 ]; then
+  echo "No commits to open for $TARGET_SUB_BRANCH" >&2
+  exit 0
+fi
+git -C "$WT_DIR" push -u origin "$TARGET_SUB_BRANCH"
 TITLE=$(cat <<'EOF'
 PR title
 EOF
 )
-gh pr create --base {appropriate-base} --head {target-sub-branch} --assignee @me --title "$TITLE" --body "$(cat <<'EOF'
+gh pr create --base "$BASE_BRANCH" --head "$TARGET_SUB_BRANCH" --assignee @me --title "$TITLE" --body "$(cat <<'EOF'
 PR description body
 EOF
 )" --label "{label-1}"
