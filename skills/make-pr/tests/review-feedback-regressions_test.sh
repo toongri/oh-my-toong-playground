@@ -189,6 +189,54 @@ remote_split_branch_preflight() {
     && [ "$preflight_line" -lt "$add_line" ]
 }
 
+split_branch_creation_is_create_only() {
+  block=$(sed -n '/### Separation Steps/,/^### Worktree Lifetime/p' "$SCOPE_FILE") \
+    && printf '%s\n' "$block" | grep -Fq 'git -C "$WT_DIR" push --force-with-lease="refs/heads/$BRANCH_NAME:"' \
+    && ! printf '%s\n' "$block" | grep -Fq 'git -C "$WT_DIR" push -u origin "$BRANCH_NAME"'
+}
+
+split_branch_creation_race_preserves_competitor_tip() {
+  temp_dir=$(mktemp -d)
+  remote="$temp_dir/remote.git"
+  producer="$temp_dir/producer"
+  competitor="$temp_dir/competitor"
+  cleanup() {
+    rm -rf "$temp_dir"
+  }
+
+  git init --bare "$remote" >/dev/null 2>&1 \
+    && git init "$producer" >/dev/null 2>&1 \
+    && git -C "$producer" config user.email test@example.com \
+    && git -C "$producer" config user.name test \
+    && printf 'base\n' >"$producer/file" \
+    && git -C "$producer" add file \
+    && git -C "$producer" commit -m base >/dev/null 2>&1 \
+    && git -C "$producer" branch -M main \
+    && git -C "$producer" remote add origin "$remote" \
+    && git -C "$producer" push -u origin main >/dev/null 2>&1 \
+    && printf 'split\n' >>"$producer/file" \
+    && git -C "$producer" commit -am split >/dev/null 2>&1 \
+    && git clone "$remote" "$competitor" >/dev/null 2>&1 \
+    && git -C "$competitor" config user.email test@example.com \
+    && git -C "$competitor" config user.name test \
+    && git -C "$competitor" branch -c main split-race \
+    && git -C "$competitor" push origin split-race >/dev/null 2>&1
+
+  if [ "$?" -ne 0 ]; then
+    cleanup
+    return 1
+  fi
+
+  set +e
+  git -C "$producer" push --force-with-lease="refs/heads/split-race:" origin HEAD:refs/heads/split-race >/dev/null 2>&1
+  push_status=$?
+  set -e
+  remote_tip=$(git --git-dir "$remote" rev-parse refs/heads/split-race 2>/dev/null)
+  competitor_tip=$(git -C "$competitor" rev-parse refs/heads/split-race 2>/dev/null)
+  cleanup
+  [ "$push_status" -ne 0 ] && [ "$remote_tip" = "$competitor_tip" ]
+}
+
 split_partial_creation_finalization() {
   block=$(sed -n '/### Post-Creation Update/,/^## Graceful Degradation/p' "$SCOPE_FILE") \
     && printf '%s\n' "$block" | grep -Fq 'If the user declines a later `gh pr create` or that command fails' \
@@ -222,7 +270,7 @@ split_branch_shell_safety_contract() {
     && printf '%s\n' "$scope_block" | grep -Fq 'git check-ref-format --branch "$BRANCH_NAME"' \
     && printf '%s\n' "$scope_block" | grep -Fq 'git worktree add -b "$BRANCH_NAME" "$WT_DIR" "origin/$BASE_BRANCH"' \
     && printf '%s\n' "$scope_block" | grep -Fq 'git -C "$WT_DIR" cherry-pick "$COMMIT_HASH"' \
-    && printf '%s\n' "$scope_block" | grep -Fq 'git -C "$WT_DIR" push -u origin "$BRANCH_NAME"' \
+    && printf '%s\n' "$scope_block" | grep -Fq 'git -C "$WT_DIR" push --force-with-lease="refs/heads/$BRANCH_NAME:" -u origin "$BRANCH_NAME"' \
     && printf '%s\n' "$scope_block" | grep -Fq 'git -C "$DOWNSTREAM_WT" rebase "$UPSTREAM_BRANCH"' \
     && printf '%s\n' "$scope_block" | grep -Fq 'git push origin --delete "$REMOTE_BRANCH"' \
     && printf '%s\n' "$skill_block" | grep -Fq 'git -C "$WT_DIR" fetch origin "$BASE_BRANCH"' \
@@ -266,6 +314,8 @@ run_case split-step8-target split_step8_target
 run_case split-step8-branch-mismatch-fails-closed split_step8_branch_mismatch_fails_closed
 run_case split-command-failure-rollback split_command_failure_rollback
 run_case remote-split-branch-preflight remote_split_branch_preflight
+run_case split-branch-creation-is-create-only split_branch_creation_is_create_only
+run_case split-branch-creation-race-preserves-competitor-tip split_branch_creation_race_preserves_competitor_tip
 run_case split-partial-creation-finalization split_partial_creation_finalization
 run_case retained-worktree-path-quoting retained_worktree_path_quoting
 run_case split-branch-shell-safety-contract split_branch_shell_safety_contract
