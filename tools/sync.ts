@@ -2430,6 +2430,15 @@ export async function runProjectsLoop(
 				if (isFatalSyncError(err)) {
 					throw err;
 				}
+				// Errors raised before processYaml reaches its per-worktree catch (for
+				// example, PreToolUse preflight validation) still need to identify every
+				// deploy root that failed. Resolve here after targetPath is known; a
+				// topology failure during this resolution remains fatal.
+				for (const deployRoot of resolveDeployTargets(targetPath)) {
+					if (!context.failedTargets.includes(deployRoot)) {
+						context.failedTargets.push(deployRoot);
+					}
+				}
 				logError(`프로젝트 처리 실패 (계속 진행): ${projectSyncYaml}: ${err}`);
 			}
 			if (verbose) {

@@ -4732,6 +4732,39 @@ describe("enabled-projects 화이트리스트 — projects 루프 통합", () =>
 		await expect(
 			runProjectsLoop(rootDir, adapters, context, effectiveFilter, false),
 		).resolves.toBeUndefined();
+		expect(context.failedTargets).toContain(targetA);
+	});
+
+	it("records a preflight failure and continues to the next project", async () => {
+		const targetA = path.join(tmpDir, "target-a");
+		const targetB = path.join(tmpDir, "target-b");
+		await fs.mkdir(targetA, { recursive: true });
+		await fs.mkdir(targetB, { recursive: true });
+
+		await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+		await writeFile(path.join(rootDir, "hooks", "audit.md"), "audit\n");
+		await writeFile(path.join(rootDir, "projects", "proj-a", "sync.yaml"), `path: ${targetA}\n`);
+		await writeFile(
+			path.join(rootDir, "projects", "proj-a", "claude.yaml"),
+			"hooks:\n  PreToolUse:\n    - component: audit\n",
+		);
+		await writeFile(path.join(rootDir, "projects", "proj-b", "sync.yaml"), `path: ${targetB}\n`);
+
+		const context = makeContext();
+		const effectiveFilter = resolveProjectFilter(new Set(), undefined);
+		await expect(
+			runProjectsLoop(
+				rootDir,
+				new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap,
+				context,
+				effectiveFilter,
+				false,
+			),
+		).resolves.toBeUndefined();
+
+		expect(context.failedTargets).toEqual([targetA]);
+		expect(context.processedPaths.has(targetB)).toBe(true);
+		expect(context.processedPaths.has(targetA)).toBe(false);
 	});
 });
 
