@@ -121,7 +121,7 @@ describe("termination semantics", () => {
 		const dir = mkdtempSync(join(tmpdir(), "pretool-signal-")); dirs.push(dir);
 		const ready = join(dir, "ready.json");
 		const proc = Bun.spawn(["bun", wrapper, "claude", "fixture", `bun ${child}`], { cwd: root, env: { ...process.env, OMT_DIR: join(dir, ".omt"), OMT_SESSION_ID: "signal-session", CHILD_READY: ready }, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
-		proc.stdin.end(Buffer.from("{}"));
+		proc.stdin.write(Buffer.from("{}")); proc.stdin.end();
 		await waitFor(ready); process.kill(proc.pid, "SIGTERM");
 		try { expect(await proc.exited).toBe(143); const pids = JSON.parse(readFileSync(ready, "utf8")); await waitForGone(pids.child); await waitForGone(pids.descendant); const end = expectPaired(traceEvents(dir)); expect(end?.termination).toBe("signal"); expect(end?.process_status).toBe(143); expect(end?.signal).toBe(15); expect(end?.signal_name).toBe("SIGTERM"); } finally { const pids = JSON.parse(readFileSync(ready, "utf8")); for (const pid of [pids.child, pids.descendant]) { try { process.kill(pid, "SIGKILL"); } catch {} } }
 	});
@@ -130,7 +130,7 @@ describe("termination semantics", () => {
 		const dir = mkdtempSync(join(tmpdir(), "pretool-sigint-")); dirs.push(dir);
 		const ready = join(dir, "ready.json");
 		const proc = Bun.spawn(["bun", wrapper, "claude", "fixture", `bun ${child}`], { cwd: root, env: { ...process.env, OMT_DIR: join(dir, ".omt"), OMT_SESSION_ID: "sigint-session", CHILD_READY: ready }, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
-		proc.stdin.end(Buffer.from("{}"));
+		proc.stdin.write(Buffer.from("{}")); proc.stdin.end();
 		await waitFor(ready); process.kill(proc.pid, "SIGINT");
 		try { expect(await proc.exited).toBe(130); const pids = JSON.parse(readFileSync(ready, "utf8")); await waitForGone(pids.child); await waitForGone(pids.descendant); const end = expectPaired(traceEvents(dir)); expect(end?.termination).toBe("signal"); expect(end?.process_status).toBe(130); expect(end?.signal).toBe(2); expect(end?.signal_name).toBe("SIGINT"); } finally { const pids = JSON.parse(readFileSync(ready, "utf8")); for (const pid of [pids.child, pids.descendant]) { try { process.kill(pid, "SIGKILL"); } catch {} } }
 	});
@@ -139,7 +139,7 @@ describe("termination semantics", () => {
 		const dir = mkdtempSync(join(tmpdir(), "pretool-sigkill-")); dirs.push(dir);
 		const ready = join(dir, "ready.json");
 		const proc = Bun.spawn(["bun", wrapper, "claude", "fixture", `bun ${child}`], { cwd: root, env: { ...process.env, OMT_DIR: join(dir, ".omt"), OMT_SESSION_ID: "sigkill-session", CHILD_READY: ready }, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
-		proc.stdin.end(Buffer.from("{}"));
+		proc.stdin.write(Buffer.from("{}")); proc.stdin.end();
 		const eventsPath = join(dir, ".omt", "pretool-trace", "events.jsonl");
 		try {
 			await waitFor(ready); await waitFor(eventsPath);

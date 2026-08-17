@@ -168,6 +168,7 @@ hooks:
     # $HOME/.codex/scripts/... 로 착지한다 — 스크립트 전역 단일본의 실제 위치이며,
     # 프로젝트 스코프 시절 필요했던 따옴표 분할 회피 트릭도 이제 필요 없다.
     - command: "bun run .codex/scripts/verify-entrypoint-gate/index.ts"
+      trace-id: "codex.verify-entrypoint-gate"
       matcher: "Bash|bash|exec_command|shell_command"
       timeout: 10
     # NOT a Claude<->Codex hook-parity mirror -- Claude enforces the same

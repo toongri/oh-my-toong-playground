@@ -21,6 +21,10 @@ const CORRELATION = /^hmac-sha256:[0-9a-f]{64}$/;
 const START_KEYS = ["schema_version", "event", "phase", "timestamp", "platform", "hook_id", "pid", "invocation_id", "call_correlation", "correlation_quality", "tool_name"];
 const END_KEYS = [...START_KEYS, "termination", "process_status", "duration_ms", "signal", "signal_name"];
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function keysExactly(value: Record<string, unknown>, allowed: string[], required: string[]): boolean {
 	const keys = Object.keys(value).sort();
 	return keys.every((key) => allowed.includes(key)) && required.every((key) => Object.prototype.hasOwnProperty.call(value, key));
@@ -49,12 +53,12 @@ function validCommon(value: Record<string, unknown>, phase: "start" | "end"): bo
 }
 
 export function isValidStartEvent(value: unknown): value is StartEvent {
-	return !!value && typeof value === "object" && validCommon(value as Record<string, unknown>, "start");
+	return isRecord(value) && validCommon(value, "start");
 }
 
 export function isValidEndEvent(value: unknown): value is EndEvent {
-	if (!value || typeof value !== "object") return false;
-	const event = value as Record<string, unknown>;
+	if (!isRecord(value)) return false;
+	const event = value;
 	if (!validCommon(event, "end")) return false;
 	if (event.termination !== "exit" && event.termination !== "signal" && event.termination !== "ambiguous") return false;
 	if (typeof event.process_status !== "number" || !Number.isInteger(event.process_status) || event.process_status < 0 || event.process_status > 255) return false;
@@ -81,8 +85,8 @@ function canonical(value: unknown): string {
 		return JSON.stringify(value);
 	}
 	if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-	if (value && typeof value === "object") {
-		return `{${Object.keys(value as Record<string, unknown>).sort().map((key) => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(",")}}`;
+	if (isRecord(value)) {
+		return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`;
 	}
 	throw new TypeError("unsupported canonical value");
 }

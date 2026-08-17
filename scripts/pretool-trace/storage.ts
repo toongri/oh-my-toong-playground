@@ -1,11 +1,15 @@
 import { randomBytes } from "node:crypto";
 import { chmodSync, closeSync, existsSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, rmdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { resolveOmtDir } from "../../lib/omt-dir";
+import { resolveOmtDir } from "@lib/omt-dir";
 import { join } from "node:path";
 
 const LIMIT = 1024 * 1024;
 const PRIVATE_DIR = 0o700;
 const PRIVATE_FILE = 0o600;
+
+function isErrnoException(value: unknown): value is NodeJS.ErrnoException {
+	return typeof value === "object" && value !== null && "code" in value;
+}
 
 export type StoragePaths = { dir: string; events: string; lock: string; keys: string };
 
@@ -43,14 +47,14 @@ export function getSessionKey(locator: string): Uint8Array {
 				try {
 					linkSync(temporary, file);
 					return new Uint8Array(key);
-				} catch (linkError) {
-					if ((linkError as NodeJS.ErrnoException).code !== "EEXIST") throw linkError;
+					} catch (linkError) {
+						if (!isErrnoException(linkError) || linkError.code !== "EEXIST") throw linkError;
 					const existing = readFileSync(file);
 					return existing.byteLength === 32 ? new Uint8Array(existing) : new Uint8Array(0);
 				}
 			} finally { closeSync(fd); }
 		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+			if (!isErrnoException(error) || error.code !== "EEXIST") throw error;
 			const existing = readFileSync(file);
 			return existing.byteLength === 32 ? new Uint8Array(existing) : new Uint8Array(0);
 		} finally {
@@ -85,7 +89,7 @@ export function appendEvent(value: unknown): boolean {
 			chmodSync(paths.lock, PRIVATE_DIR);
 			let size = 0;
 			try { size = statSync(paths.events).size; } catch (error) {
-				if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+				if (!isErrnoException(error) || error.code !== "ENOENT") throw error;
 			}
 			if (size + Buffer.byteLength(line) > LIMIT) rotate(paths);
 			const fd = openSync(paths.events, "a", PRIVATE_FILE);
