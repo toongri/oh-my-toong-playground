@@ -870,10 +870,16 @@ export async function computeStatus(
 	const stalenessThresholdMs = Math.max(2 * timeoutSec, 120) * 1000;
 
 	const members: Record<string, unknown>[] = [];
+	let observedStatusInvalid = false;
 	for (const entry of fs.readdirSync(entitiesRoot)) {
 		const statusPath = path.join(entitiesRoot, entry, "status.json");
 		const statusRaw = readJsonIfExists(statusPath);
-		if (!isRecord(statusRaw)) continue;
+		if (!isRecord(statusRaw)) {
+			// During identity recovery, an unreadable/malformed status is evidence
+			// that the launch set is incomplete; keep the job initializing.
+			observedStatusInvalid = true;
+			continue;
+		}
 		let status: Record<string, unknown> = statusRaw;
 
 		// Staleness check for queued entities
@@ -986,7 +992,37 @@ export async function computeStatus(
 		totals.queued === 0 &&
 		totals.retrying === 0 &&
 		totals.awaiting_resume === 0;
-	const overallState = jobMeta.state === "initializing"
+	const expectedMembers = Array.isArray(jobMeta.members) ? jobMeta.members : [];
+	const expectedNames = new Set<string>();
+	const expectedNamesLower = new Set<string>();
+	let expectedNamesValid = expectedMembers.length > 0;
+	for (const member of expectedMembers) {
+		const name = isRecord(member) ? member.name : undefined;
+		if (typeof name !== "string" || !/^[a-zA-Z0-9_-]+$/.test(name)) {
+			expectedNamesValid = false;
+			continue;
+		}
+		const lower = name.toLowerCase();
+		if (expectedNamesLower.has(lower)) {
+			expectedNamesValid = false;
+		}
+		expectedNames.add(name);
+		expectedNamesLower.add(lower);
+	}
+	const observedNames = new Set(members.map((member) => String(member.safeName)));
+	const recognizedStates = new Set(Object.keys(totals));
+	const observedStatesRecognized = members.every(
+		(member) => typeof member.state === "string" && recognizedStates.has(member.state),
+	);
+	const initializingCanRecover =
+		jobMeta.state === "initializing" &&
+		expectedNamesValid &&
+		expectedNames.size > 0 &&
+		!observedStatusInvalid &&
+		observedNames.size === expectedNames.size &&
+		[...expectedNames].every((name) => observedNames.has(name)) &&
+		observedStatesRecognized;
+	const overallState = jobMeta.state === "initializing" && !initializingCanRecover
 		? "initializing"
 		: allDone
 		? "done"

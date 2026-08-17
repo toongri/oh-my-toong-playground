@@ -1173,6 +1173,52 @@ describe("computeStatus", () => {
 		expect(result.counts.total).toBe(0);
 	});
 
+	test("recovers initializing jobs only after every declared member has a recognized status", async () => {
+		const jobDir = path.join(tmpDir, "job-initializing-recovery");
+		setupJob(
+			jobDir,
+			{ id: "recover-1", state: "initializing", members: [{ name: "alice" }, { name: "bob" }] },
+			{
+				alice: { member: "alice", state: "done" },
+				bob: { member: "bob", state: "running" },
+			},
+			chunkReviewConfig,
+		);
+		const result = await computeStatus(jobDir, chunkReviewConfig);
+		expect(result.overallState).toBe("running");
+	});
+
+	test("keeps initializing when declared and observed member sets are incomplete or invalid", async () => {
+		const cases = [
+			{
+				name: "missing member",
+				meta: { members: [{ name: "alice" }, { name: "bob" }] },
+				entities: { alice: { member: "alice", state: "done" } },
+			},
+			{
+				name: "unknown state",
+				meta: { members: [{ name: "alice" }] },
+				entities: { alice: { member: "alice", state: "mystery" } },
+			},
+			{
+				name: "malformed status",
+				meta: { members: [{ name: "alice" }] },
+				entities: { alice: "not-json-record" },
+			},
+			{
+				name: "duplicate expected names",
+				meta: { members: [{ name: "alice" }, { name: "alice" }] },
+				entities: { alice: { member: "alice", state: "done" } },
+			},
+		];
+		for (const testCase of cases) {
+			const jobDir = path.join(tmpDir, `job-init-${testCase.name.replace(/ /g, "-")}`);
+			setupJob(jobDir, { id: testCase.name, state: "initializing", ...testCase.meta }, testCase.entities, chunkReviewConfig);
+			const result = await computeStatus(jobDir, chunkReviewConfig);
+			expect(result.overallState).toBe("initializing");
+		}
+	});
+
 	test("returns running overallState when some entities are running", async () => {
 		const jobDir = path.join(tmpDir, "job2");
 		setupJob(
@@ -2313,6 +2359,35 @@ describe("cmdCollect", () => {
 		const result = JSON.parse(output[0]);
 		expect(result.overallState).toBe("done");
 	}, 15000);
+
+	test("initializing job with a complete terminal set returns done", async () => {
+		const jobDir = path.join(tmpDir, "job-collect-initializing-done");
+		fs.mkdirSync(jobDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({ id: "collect-init-done", state: "initializing", members: [{ name: "alice" }, { name: "bob" }] }),
+		);
+		const entitiesDir = path.join(jobDir, chunkReviewConfig.entityDirName);
+		fs.mkdirSync(entitiesDir, { recursive: true });
+		for (const [name, status] of Object.entries({ alice: { state: "done" }, bob: { state: "error" } })) {
+			const dir = path.join(entitiesDir, name);
+			fs.mkdirSync(dir, { recursive: true });
+			fs.writeFileSync(path.join(dir, "status.json"), JSON.stringify({ member: name, ...status }));
+		}
+		const output: string[] = [];
+		const origWrite = process.stdout.write.bind(process.stdout);
+		process.stdout.write = (chunk: string | Uint8Array, ..._args: unknown[]) => {
+			if (typeof chunk === "string") output.push(chunk);
+			return true;
+		};
+		try {
+			await cmdCollect({ "timeout-ms": 100 }, jobDir, chunkReviewConfig);
+		} finally {
+			process.stdout.write = origWrite;
+		}
+		expect(JSON.parse(output[0]).overallState).toBe("done");
+	});
+
 });
 
 // ---------------------------------------------------------------------------
