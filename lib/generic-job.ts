@@ -648,6 +648,7 @@ export function spawnWorkers({
 	entitiesDir,
 	timeoutSec,
 	config,
+	onSpawned,
 }: {
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- public exported signature; entity shape is consumer-defined YAML-derived data
 	entities: any[];
@@ -656,6 +657,8 @@ export function spawnWorkers({
 	entitiesDir: string;
 	timeoutSec: number;
 	config: JobConfig;
+	/** Called synchronously after each worker's ownership anchors are captured. */
+	onSpawned?: (worker: SpawnedWorker) => void;
 }): SpawnedWorker[] {
 	// Validate names and detect case-insensitive collisions before spawning
 	const seenLower = new Map<string, string>();
@@ -713,19 +716,38 @@ export function spawnWorkers({
 			stdio: "ignore",
 			env: process.env,
 		});
-		child.unref();
 
 		// A detached child is the leader of its own process group, so its PGID
 		// equals its PID — no `ps` lookup needed (see spawnWorkers tests for the
 		// measured proof of this platform contract). The start-time witness
 		// still needs its own `ps` lookup, done immediately so it reflects this
 		// exact process rather than whatever later reuses the same number.
-		const workerPgid = child.pid ?? null;
-		spawned.push({
+		const worker: SpawnedWorker = {
 			name,
-			workerPgid,
-			workerPgidStartedAt: workerPgid !== null ? getProcessStartedAt(workerPgid) : null,
-		});
+			workerPgid: child.pid ?? null,
+			workerPgidStartedAt: child.pid !== undefined ? getProcessStartedAt(child.pid) : null,
+		};
+		if (onSpawned) {
+			try {
+				onSpawned(worker);
+			} catch (error) {
+				// Do not leave an unowned detached worker behind when durable persistence fails.
+				if (worker.workerPgid !== null) {
+					try {
+						process.kill(-worker.workerPgid, "SIGKILL");
+					} catch {
+						try {
+							child.kill("SIGKILL");
+						} catch {
+							// Best effort only — preserve the callback's original error.
+						}
+					}
+				}
+				throw error;
+			}
+		}
+		spawned.push(worker);
+		child.unref();
 	}
 
 	return spawned;

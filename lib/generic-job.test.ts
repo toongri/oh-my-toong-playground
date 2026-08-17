@@ -2295,6 +2295,81 @@ describe("`spawnWorkers`", () => {
 		expect(typeof result[0].workerPgidStartedAt).toBe("string");
 		expect((result[0].workerPgidStartedAt as string).length).toBeGreaterThan(0);
 	});
+
+	test("onSpawned 콜백은 다음 엔티티 실행 전에 호출된다", () => {
+		const fakeWorkerPath = path.join(tmpDir, "sleep-worker.js");
+		fs.writeFileSync(fakeWorkerPath, "setTimeout(() => {}, 30_000);\n");
+		const entitiesDir = path.join(tmpDir, "members");
+		fs.mkdirSync(entitiesDir, { recursive: true });
+		const callbackEvents: Array<{ name: string; nextEntityExists: boolean }> = [];
+
+		const result = spawnWorkers({
+			entities: [
+				{ name: "alice", command: "echo hi" },
+				{ name: "bob", command: "echo hi" },
+			],
+			workerPath: fakeWorkerPath,
+			jobDir: tmpDir,
+			entitiesDir,
+			timeoutSec: 30,
+			config: councilConfig,
+			onSpawned: (worker) => {
+				callbackEvents.push({
+					name: worker.name,
+					nextEntityExists: fs.existsSync(path.join(entitiesDir, "bob")),
+				});
+			},
+		});
+
+		expect(callbackEvents).toEqual([
+			{ name: "alice", nextEntityExists: false },
+			{ name: "bob", nextEntityExists: true },
+		]);
+		expect(result.map((worker) => worker.name)).toEqual(["alice", "bob"]);
+		for (const worker of result) {
+			if (worker.workerPgid !== null) spawnedPgids.push(worker.workerPgid);
+		}
+	});
+
+	test("onSpawned 콜백 예외는 방금 생성된 워커를 종료하고 다음 실행을 막는다", () => {
+		const fakeWorkerPath = path.join(tmpDir, "sleep-worker.js");
+		fs.writeFileSync(fakeWorkerPath, "setTimeout(() => {}, 30_000);\n");
+		const entitiesDir = path.join(tmpDir, "members");
+		fs.mkdirSync(entitiesDir, { recursive: true });
+		let createdWorkerPgid: number | null = null;
+
+		expect(() =>
+			spawnWorkers({
+				entities: [
+					{ name: "alice", command: "echo hi" },
+					{ name: "bob", command: "echo hi" },
+				],
+				workerPath: fakeWorkerPath,
+				jobDir: tmpDir,
+				entitiesDir,
+				timeoutSec: 30,
+				config: councilConfig,
+				onSpawned: (worker) => {
+					createdWorkerPgid = worker.workerPgid;
+					throw new Error("durable persistence failed");
+				},
+			}),
+		).toThrow("durable persistence failed");
+
+		expect(createdWorkerPgid).toBeGreaterThan(0);
+		expect(fs.existsSync(path.join(entitiesDir, "bob"))).toBe(false);
+		if (createdWorkerPgid !== null) {
+			let processState = "";
+			try {
+				processState = execSync(`ps -o stat= -p ${createdWorkerPgid}`, {
+					encoding: "utf8",
+				}).trim();
+			} catch {
+				// ps exits non-zero when the process has already disappeared.
+			}
+			expect(processState === "" || processState.startsWith("Z")).toBe(true);
+		}
+	});
 });
 
 // ---------------------------------------------------------------------------
