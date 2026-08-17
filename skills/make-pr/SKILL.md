@@ -250,13 +250,14 @@ git diff --name-only --diff-filter=U
 
 **Phase 2 — Analyze every conflicted file in this round:**
 
-For each file in the list, first inspect its index stages before attempting any checkout or staging:
+For each file in the list, first render the path as one shell-safe literal and bind it before any shell command. Use `CONFLICT_FILE=<shell-word:file>` (single-quote escaping as needed); after that binding, use only quoted variable expansions for the path:
 
 ```bash
-git ls-files -u -- "{file}"
+CONFLICT_FILE=<shell-word:file>
+git ls-files -u -- "$CONFLICT_FILE"
 ```
 
-Stage 2 is **ours** and stage 3 is **theirs**. A missing stage is a deletion on that side, so do not assume that the worktree contains conflict markers (modify/delete and rename/delete conflicts may not). Read the present stage blobs (`git show ":2:{file}"` / `git show ":3:{file}"`) when analyzing the two sides, then form a proposed resolution with reasoning. Use the correct ours/theirs mapping for the operation in progress:
+Stage 2 is **ours** and stage 3 is **theirs**. A missing stage is a deletion on that side, so do not assume that the worktree contains conflict markers (modify/delete and rename/delete conflicts may not). Read the present stage blobs (`git show ":2:$CONFLICT_FILE"` / `git show ":3:$CONFLICT_FILE"`) when analyzing the two sides, then form a proposed resolution with reasoning. Use the correct ours/theirs mapping for the operation in progress:
 
 - **During merge:** `HEAD` side (ours) = current branch changes, incoming side (theirs) = target branch changes
 - **During rebase:** `HEAD` side (ours) = target branch changes (commit being rebased onto), incoming side (theirs) = current branch changes (commit being replayed)
@@ -270,16 +271,16 @@ Stage 2 is **ours** and stage 3 is **theirs**. A missing stage is a deletion on 
 | 현재 브랜치 우선 | Take the current branch's side in every file — merge selects ours (stage 2), rebase selects theirs (stage 3) |
 | 타겟 브랜치 우선 | Take the target branch's side in every file — merge selects theirs (stage 3), rebase selects ours (stage 2) |
 
-Phase 2 proposals may be an explicit side selection, a deletion, or a synthesized/custom result. For a deletion proposal, resolve it with `git rm -- "{file}"`. For a synthesized/custom proposal, preserve the exact proposed content in the worktree, then stage it with `git add -- "{file}"`. The stage checkout procedure below applies only to explicit current-branch/target-branch side choices. For those side choices, resolve the selected stage explicitly. If the selected stage is absent, resolve the deletion with `git rm -- "{file}"`; otherwise check out the selected side and stage it:
+Phase 2 proposals may be an explicit side selection, a deletion, or a synthesized/custom result. For a deletion proposal, resolve it with `git rm -- "$CONFLICT_FILE"`. For a synthesized/custom proposal, preserve the exact proposed content in the worktree, then stage it with `git add -- "$CONFLICT_FILE"`. The stage checkout procedure below applies only to explicit current-branch/target-branch side choices. For those side choices, resolve the selected stage explicitly. If the selected stage is absent, resolve the deletion with `git rm -- "$CONFLICT_FILE"`; otherwise check out the selected side and stage it:
 
 ```bash
-stages=$(git ls-files -u -- "{file}")
+stages=$(git ls-files -u -- "$CONFLICT_FILE")
 # selected_stage is 2 (ours) or 3 (theirs), according to the mapping above
 if ! printf '%s\n' "$stages" | awk -v stage="$selected_stage" '$3 == stage { found=1 } END { exit !found }'; then
-  git rm -- "{file}"
+  git rm -- "$CONFLICT_FILE"
 else
-  git checkout --$selected_side -- "{file}"
-  git add -- "{file}"
+  git checkout --$selected_side -- "$CONFLICT_FILE"
+  git add -- "$CONFLICT_FILE"
 fi
 ```
 

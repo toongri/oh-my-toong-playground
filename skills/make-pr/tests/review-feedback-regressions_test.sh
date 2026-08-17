@@ -58,12 +58,13 @@ candidate_cardinality_rules() {
 }
 
 conflict_side_deletion_contract() {
-  grep -Fq 'git ls-files -u -- "{file}"' "$SKILL_FILE" \
+  grep -Fq 'CONFLICT_FILE=<shell-word:file>' "$SKILL_FILE" \
+    && grep -Fq 'git ls-files -u -- "$CONFLICT_FILE"' "$SKILL_FILE" \
     && grep -Fq 'Stage 2 is **ours** and stage 3 is **theirs**' "$SKILL_FILE" \
-    && grep -Fq 'Read the present stage blobs (`git show ":2:{file}"` / `git show ":3:{file}"`)' "$SKILL_FILE" \
-    && grep -Fq 'If the selected stage is absent, resolve the deletion with `git rm -- "{file}"`' "$SKILL_FILE" \
-    && grep -Fq 'git checkout --$selected_side -- "{file}"' "$SKILL_FILE" \
-    && grep -Fq 'git add -- "{file}"' "$SKILL_FILE" \
+    && grep -Fq 'Read the present stage blobs (`git show ":2:$CONFLICT_FILE"` / `git show ":3:$CONFLICT_FILE"`)' "$SKILL_FILE" \
+    && grep -Fq 'If the selected stage is absent, resolve the deletion with `git rm -- "$CONFLICT_FILE"`' "$SKILL_FILE" \
+    && grep -Fq 'git checkout --$selected_side -- "$CONFLICT_FILE"' "$SKILL_FILE" \
+    && grep -Fq 'git add -- "$CONFLICT_FILE"' "$SKILL_FILE" \
     && grep -Fq "'\$3 == stage { found=1 }" "$SKILL_FILE" \
     && ! grep -Fq "'\$1 == stage { found=1 }" "$SKILL_FILE" \
     && grep -Fq 'merge selects ours (stage 2), rebase selects theirs (stage 3)' "$SKILL_FILE" \
@@ -76,9 +77,40 @@ conflict_proposal_preservation() {
   grep -Fq 'Phase 2 proposals may be an explicit side selection, a deletion, or a synthesized/custom result' "$SKILL_FILE" \
     && grep -Fq 'Apply the Phase 2 proposal to every file' "$SKILL_FILE" \
     && grep -Fq 'For a synthesized/custom proposal, preserve the exact proposed content in the worktree' "$SKILL_FILE" \
-    && grep -Fq 'git add -- "{file}"' "$SKILL_FILE" \
-    && grep -Fq 'For a deletion proposal, resolve it with `git rm -- "{file}"`' "$SKILL_FILE" \
+    && grep -Fq 'git add -- "$CONFLICT_FILE"' "$SKILL_FILE" \
+    && grep -Fq 'For a deletion proposal, resolve it with `git rm -- "$CONFLICT_FILE"`' "$SKILL_FILE" \
     && grep -Fq 'The stage checkout procedure below applies only to explicit current-branch/target-branch side choices' "$SKILL_FILE"
+}
+
+conflict_path_shell_word_safety() {
+  grep -Fq 'CONFLICT_FILE=<shell-word:file>' "$SKILL_FILE" \
+    && grep -Fq 'git ls-files -u -- "$CONFLICT_FILE"' "$SKILL_FILE" \
+    && grep -Fq 'git show ":2:$CONFLICT_FILE"' "$SKILL_FILE" \
+    && grep -Fq 'git show ":3:$CONFLICT_FILE"' "$SKILL_FILE" \
+    && grep -Fq 'git rm -- "$CONFLICT_FILE"' "$SKILL_FILE" \
+    && grep -Fq 'git checkout --$selected_side -- "$CONFLICT_FILE"' "$SKILL_FILE" \
+    && grep -Fq 'git add -- "$CONFLICT_FILE"' "$SKILL_FILE" \
+    && ! grep -Fq 'git ls-files -u -- "{file}"' "$SKILL_FILE" \
+    && ! grep -Fq 'git rm -- "{file}"' "$SKILL_FILE" \
+    && ! grep -Fq 'git checkout --$selected_side -- "{file}"' "$SKILL_FILE" \
+    && ! grep -Fq 'git add -- "{file}"' "$SKILL_FILE" \
+    && ! grep -Fq 'git show ":2:{file}"' "$SKILL_FILE" \
+    && ! grep -Fq 'git show ":3:{file}"' "$SKILL_FILE" \
+    && payloads=$(printf '%s\n' 'conflict $(touch${IFS}make-pr-conflict-sentinel) path' 'conflict `touch${IFS}make-pr-conflict-sentinel` path' "conflict'a path" 'conflict path with spaces') \
+    && while IFS= read -r payload; do
+      escaped=$(printf '%s' "$payload" | sed "s/'/'\\\\''/g")
+      rendered="CONFLICT_FILE='$escaped'"
+      temp_dir=$(mktemp -d)
+      result=$(cd "$temp_dir" && eval "$rendered; printf '%s' \"\$CONFLICT_FILE\"")
+      if [ "$result" != "$payload" ] || [ -e "$temp_dir/make-pr-conflict-sentinel" ]; then
+        rm -f "$temp_dir/make-pr-conflict-sentinel"
+        rmdir "$temp_dir"
+        exit 1
+      fi
+      rmdir "$temp_dir"
+    done <<EOF
+$payloads
+EOF
 }
 
 split_step8_target() {
@@ -203,6 +235,7 @@ run_case codex-conflict-batch codex_conflict_batch
 run_case candidate-cardinality-rules candidate_cardinality_rules
 run_case conflict-side-deletion-contract conflict_side_deletion_contract
 run_case conflict-proposal-preservation conflict_proposal_preservation
+run_case conflict-path-shell-word-safety conflict_path_shell_word_safety
 run_case split-step8-target split_step8_target
 run_case split-command-failure-rollback split_command_failure_rollback
 run_case remote-split-branch-preflight remote_split_branch_preflight
