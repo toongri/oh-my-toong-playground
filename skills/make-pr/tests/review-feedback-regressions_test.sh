@@ -18,43 +18,43 @@ run_case() {
   fi
 }
 
-setup_option_limit() {
-  grep -Fq 'On Codex, each structured setup question must offer **2–3 explicit options**' "$SKILL_FILE" \
-    && grep -Fq 'the UI adds an automatic `Other` option' "$SKILL_FILE" \
-    && grep -Fq 'on Codex, expose only those top 2-3 candidates and rely on the UI' "$SKILL_FILE" \
-    && grep -Fq 'Codex: top 2-3 candidates only; the UI' "$SKILL_FILE" \
-    && ! grep -Fq 'If more branches exist, include an "other" option.' "$SKILL_FILE" \
-    && ! grep -Fq 'Top 2-3 candidates, each option' "$SKILL_FILE" \
-    && grep -Fq '**파일별로 확인**, **현재 브랜치 우선**, and **타겟 브랜치 우선**' "$SKILL_FILE" \
-    && grep -Fq '**제안대로 자동 해결** as the canonical `Other` input' "$SKILL_FILE"
+concise_interview_contract() {
+  for file in "$SKILL_FILE" "$ROOT_DIR/skills/make-pr/references/reference-tables.md"; do
+    grep -Fq 'Ask one user decision at a time' "$file" \
+      && grep -Fq 'Present detected target-branch evidence, then ask the user to confirm the target; never auto-select.' "$file" \
+      && grep -Fq 'Only after target confirmation, re-check divergence.' "$file" \
+      && grep -Fq 'If behind > 0, ask sync strategy before merge/rebase.' "$file" \
+      && grep -Fq 'If behind = 0, do not ask a sync question.' "$file" \
+      && grep -Fq 'Only if synchronization actually conflicts, obtain the conflict policy/decision before resolving.' "$file" \
+      && grep -Fq 'File-by-file mode asks one file decision at a time.' "$file" \
+      && grep -Fq 'Do not execute dependent actions before their required answer.' "$file" \
+      && ! grep -Fq 'With 2 or more candidates' "$file" \
+      && ! grep -Fq 'With exactly 1 candidate' "$file" \
+      && ! grep -Fq 'Codex candidate-cardinality guard' "$file" \
+      && ! grep -Fq 'late-divergence' "$file" \
+      && ! grep -Fq 'ONE AskUserQuestion call' "$file" \
+      && ! grep -Fq '2–3 explicit options' "$file" \
+      && ! grep -Fq 'top 2-3 candidates' "$file" \
+      && ! grep -Fq 'Codex batches are capped at 3 files per call' "$file" \
+      && ! grep -Fq 'A later batch starts with the remaining files' "$file" \
+      && ! grep -Fq 'settles target branch, sync strategy, and conflict policy in one question' "$file" \
+      && ! grep -Fq 'collected in a single call' "$file" \
+      && ! grep -Fq 'does not reach Step 0' "$file" \
+      || return 1
+  done
 }
 
-late_divergence_policy() {
-  block=$(sed -n '/late-divergence/,/^Only after that single call returns/p' "$SKILL_FILE") \
-    && printf '%s\n' "$block" | grep -Fq 'AskUserQuestion({' \
-    && printf '%s\n' "$block" | grep -Fq 'questions: [' \
-    && printf '%s\n' "$block" | grep -Fq '{ id: "sync-strategy"' \
-    && printf '%s\n' "$block" | grep -Fq '{ id: "conflict-policy"' \
-    && printf '%s\n' "$block" | grep -Fq 'Only after that single call returns may the selected `{sync-strategy}` be executed' \
-    && [ "$(printf '%s\n' "$block" | grep -Fc 'AskUserQuestion({')" -eq 1 ]
-}
-
-codex_conflict_batch() {
-  grep -Fq 'Native-capable clients may ask about up to 4 files per call; Codex batches are capped at 3 files per call.' "$SKILL_FILE"
-}
-
-candidate_cardinality_rules() {
-  grep -Fq 'With 2 or more candidates, use the structured target-branch question with the top 2-3 candidates' "$SKILL_FILE" \
-    && grep -Fq 'With exactly 1 candidate, do not issue a one-option structured target-branch question' "$SKILL_FILE" \
-    && grep -Fq 'obtain plain-text confirmation or a free-form target branch' "$SKILL_FILE" \
-    && grep -Fq 'With 0 candidates, request the target branch as plain text' "$SKILL_FILE" \
-    && grep -Fq 'Do not fabricate or duplicate candidates, and do not count the automatic `Other` option' "$SKILL_FILE" \
-    && grep -Fq 'For 0 or 1 candidates, obtain the target branch in a separate plain-text user turn before issuing any structured setup call' "$SKILL_FILE" \
-    && grep -Fq 'After the target is known, recompute and confirm its actual divergence' "$SKILL_FILE" \
-    && grep -Fq 'When the selected target is behind, issue exactly one structured setup call containing only sync-strategy and conflict-policy' "$SKILL_FILE" \
-    && ! grep -Fq 'Keep any applicable sync-strategy and conflict-policy questions in the same structured setup call' "$SKILL_FILE" \
-    && ! grep -Fq 'Everything Step 0 needs from the user is settled in one setup turn' "$SKILL_FILE" \
-    && ! grep -Fq 'ask a structured question with one candidate plus `Other`' "$SKILL_FILE"
+concise_interview_contract_rejects_first_file_violation() {
+  temp_skill=$(mktemp)
+  cleanup() {
+    rm -f "$temp_skill"
+  }
+  trap cleanup RETURN
+  cp "$SKILL_FILE" "$temp_skill" \
+    && printf '%s\n' 'stale policy: 2–3 explicit options' >>"$temp_skill" \
+    && if SKILL_FILE="$temp_skill" concise_interview_contract; then
+      return 1
+    fi
 }
 
 conflict_side_deletion_contract() {
@@ -303,10 +303,8 @@ $payloads
 EOF
 }
 
-run_case setup-option-limit setup_option_limit
-run_case late-divergence-policy late_divergence_policy
-run_case codex-conflict-batch codex_conflict_batch
-run_case candidate-cardinality-rules candidate_cardinality_rules
+run_case concise-interview-contract concise_interview_contract
+run_case concise-interview-contract-rejects-first-file-violation concise_interview_contract_rejects_first_file_violation
 run_case conflict-side-deletion-contract conflict_side_deletion_contract
 run_case conflict-proposal-preservation conflict_proposal_preservation
 run_case conflict-path-shell-word-safety conflict_path_shell_word_safety

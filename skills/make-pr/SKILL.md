@@ -45,7 +45,7 @@ Never write a PR description without sufficient context. Continue the interview 
 
 ## Scope
 
-Writes PR description body. Optionally assesses PR scope for multi-thesis splitting, separating each sub-PR into its own worktree. Detects base branch via heuristic merge-base analysis, settles target branch, sync strategy, and conflict policy in one question, performs target branch synchronization with conflict resolution at request start, then collects metadata + surveys repo PR conventions (title/branch/label) → interview → assessment → description. Creates the PR via `gh pr create` after user approval, assigned to the authenticated gh user, with labels per the surveyed convention.
+Writes PR description body. Optionally assesses PR scope for multi-thesis splitting, separating each sub-PR into its own worktree. Detects base branch via heuristic merge-base analysis, confirms the target, and requests later sync or conflict decisions only when their prerequisite state exists before collecting metadata + surveying repo PR conventions (title/branch/label) → interview → assessment → description. Creates the PR via `gh pr create` after user approval, assigned to the authenticated gh user, with labels per the surveyed convention.
 
 ---
 
@@ -58,79 +58,9 @@ Writes PR description body. Optionally assesses PR scope for multi-thesis splitt
 
 ## Workflow
 
-```dot
-digraph make_pr_flow {
-    rankdir=TB;
+Discover facts before asking anything. Ask one user decision at a time, and ask only preferences or decisions; do not ask the user for facts you can determine. Run the target-branch setup, metadata discovery, interview, scope assessment, drafting, review, and explicit PR-creation approval in that order.
 
-    "User Request" [shape=ellipse];
-
-    subgraph cluster_step0 {
-        label="Step 0: Setup -- analyze first, settle setup, then execute";
-        style=dashed;
-        "0-A: Fetch & Analyze\nAll Remote Branches\n(ahead/behind/scale\nper candidate)" [shape=box];
-        "Setup Question\n2+ candidates: ONE AskUserQuestion call:\n(1) 타겟 브랜치\n(2) 동기화 방식\n(3) 충돌 처리 방침\n0/1 candidates: plain-text target turn,\nthen conditional sync/conflict call" [shape=box];
-        "0-B: Execute\nmerge / rebase" [shape=box];
-        "0-C: Conflict?" [shape=diamond];
-        "0-C: Apply\n충돌 처리 방침\n(파일별 확인이면 이번 라운드\n충돌 파일을 한 콜에 담아 질문)" [shape=box];
-        "More Conflicts?" [shape=diamond];
-        "Commit / Continue\nRebase" [shape=box];
-
-        "0-A: Fetch & Analyze\nAll Remote Branches\n(ahead/behind/scale\nper candidate)" -> "Setup Question\nONE AskUserQuestion call:\n(1) 타겟 브랜치\n(2) 동기화 방식\n(3) 충돌 처리 방침";
-        "Setup Question\nONE AskUserQuestion call:\n(1) 타겟 브랜치\n(2) 동기화 방식\n(3) 충돌 처리 방침" -> "0-B: Execute\nmerge / rebase" [label="behind > 0"];
-        "0-B: Execute\nmerge / rebase" -> "0-C: Conflict?";
-        "0-C: Conflict?" -> "0-C: Apply\n충돌 처리 방침\n(파일별 확인이면 이번 라운드\n충돌 파일을 한 콜에 담아 질문)" [label="YES"];
-        "0-C: Conflict?" -> "Collect Git Metadata" [label="NO"];
-        "0-C: Apply\n충돌 처리 방침\n(파일별 확인이면 이번 라운드\n충돌 파일을 한 콜에 담아 질문)" -> "More Conflicts?";
-        "More Conflicts?" -> "0-C: Apply\n충돌 처리 방침\n(파일별 확인이면 이번 라운드\n충돌 파일을 한 콜에 담아 질문)" [label="YES"];
-        "More Conflicts?" -> "Commit / Continue\nRebase" [label="NO"];
-    }
-
-    "Collect Git Metadata" [shape=box];
-    "Explore Codebase Patterns" [shape=box];
-    "Interview Mode" [shape=box];
-    "Clearance Checklist" [shape=diamond];
-    "Scope Assessment" [shape=diamond];
-    "Split Proposal" [shape=box];
-    "Branch Separation\n(worktree per sub-PR)" [shape=box];
-    "Sub-PR Loop\n(Step 6-8 per sub-PR\nincl. user confirmation)" [shape=box];
-    "Draft PR Description" [shape=box];
-    "Present to User" [shape=box];
-    "User Feedback" [shape=diamond];
-    "Confirm PR Creation" [shape=diamond];
-    "Ahead Check\n(commits not in base)" [shape=diamond];
-    "gh pr create" [shape=box];
-    "Return PR URL" [shape=ellipse];
-    "Output Description Only" [shape=ellipse];
-    "Report Absorbed\n+ Stop" [shape=ellipse];
-
-    "User Request" -> "0-A: Fetch & Analyze\nAll Remote Branches\n(ahead/behind/scale\nper candidate)";
-    "Setup Question\nONE AskUserQuestion call:\n(1) 타겟 브랜치\n(2) 동기화 방식\n(3) 충돌 처리 방침" -> "Collect Git Metadata" [label="behind = 0"];
-    "Commit / Continue\nRebase" -> "Collect Git Metadata";
-    "Commit / Continue\nRebase" -> "0-C: Conflict?" [label="rebase:\nmore commits"];
-    "Collect Git Metadata" -> "Explore Codebase Patterns";
-    "Explore Codebase Patterns" -> "Interview Mode";
-    "Interview Mode" -> "Clearance Checklist";
-    "Clearance Checklist" -> "Interview Mode" [label="ANY NO"];
-    "Clearance Checklist" -> "Scope Assessment" [label="ALL YES"];
-    "Scope Assessment" -> "Draft PR Description" [label="Single thesis"];
-    "Scope Assessment" -> "Split Proposal" [label="Multi-thesis"];
-    "Split Proposal" -> "Branch Separation\n(worktree per sub-PR)" [label="Accept"];
-    "Split Proposal" -> "Draft PR Description" [label="Reject"];
-    "Split Proposal" -> "Split Proposal" [label="Modify"];
-    "Branch Separation\n(worktree per sub-PR)" -> "Sub-PR Loop\n(Step 6-8 per sub-PR\nincl. user confirmation)";
-    "Branch Separation\n(worktree per sub-PR)" -> "Draft PR Description" [label="Fallback\n(conflict/mixed)"];
-    "Sub-PR Loop\n(Step 6-8 per sub-PR\nincl. user confirmation)" -> "Return PR URL";
-    "Draft PR Description" -> "Present to User";
-    "Present to User" -> "User Feedback";
-    "User Feedback" -> "Draft PR Description" [label="Revision requested"];
-    "User Feedback" -> "Confirm PR Creation" [label="Approved"];
-    "Confirm PR Creation" -> "Output Description Only" [label="Declined"];
-    "Confirm PR Creation" -> "Ahead Check\n(commits not in base)" [label="Confirmed"];
-    "Ahead Check\n(commits not in base)" -> "gh pr create" [label="ahead > 0"];
-    "Ahead Check\n(commits not in base)" -> "Report Absorbed\n+ Stop" [label="ahead = 0"];
-    "gh pr create" -> "Return PR URL";
-}
-```
+Interview contract: Ask one user decision at a time. Present detected target-branch evidence, then ask the user to confirm the target; never auto-select. Only after target confirmation, re-check divergence. If behind > 0, ask sync strategy before merge/rebase. If behind = 0, do not ask a sync question. Only if synchronization actually conflicts, obtain the conflict policy/decision before resolving. File-by-file mode asks one file decision at a time. Do not execute dependent actions before their required answer.
 
 ---
 
@@ -172,37 +102,25 @@ Collect all candidates and present a table showing commits ahead/behind and chan
 | main                 | 17            | 0              | +1832 -1881 (17 files)|
 ```
 
-Show the top 2-3 candidates. Native-capable clients may add one explicit branch-name option when needed; on Codex, expose only those top 2-3 candidates and rely on the UI's automatic `Other` for a free-form branch name — never add an explicit catch-all option.
+Present the detected target-branch evidence, then ask the user to confirm the target; never auto-select. Do not add candidate-count or UI-option rules.
 
-**Codex candidate-cardinality guard:**
+**Phase 4 — Target confirmation:**
 
-- With 2 or more candidates, use the structured target-branch question with the top 2-3 candidates. The UI's automatic `Other` remains the free-form path.
-- With exactly 1 candidate, do not issue a one-option structured target-branch question. Instead, obtain plain-text confirmation or a free-form target branch. Do not fabricate or duplicate candidates, and do not count the automatic `Other` option as an explicit candidate.
-- With 0 candidates, request the target branch as plain text; do not synthesize a placeholder option. For 0 or 1 candidates, obtain the target branch in a separate plain-text user turn before issuing any structured setup call. After the target is known, recompute and confirm its actual divergence. When the selected target is behind, issue exactly one structured setup call containing only sync-strategy and conflict-policy; when it is not behind, do not issue a setup call for those decisions. Do not claim that the plain-text target and structured answers are collected in one user turn.
-
-**Phase 4 — Setup Question:**
-
-For 2 or more candidates, settle Step 0 in one setup turn: use **one `AskUserQuestion` call** for the target, sync-strategy, and conflict-policy decisions. Present the table first, then make the structured call with this `questions` array. For 0 or 1 candidates, first use a separate plain-text user turn to obtain the target branch; only after that answer is available, recompute and confirm the selected target's actual divergence, then issue at most one structured call containing sync-strategy and conflict-policy if and only if that target is behind:
+After presenting the evidence table, ask only for the target branch confirmation. Only after the user confirms the target, re-check divergence. Ask sync strategy only when the confirmed target is behind; if behind = 0, do not ask a sync question. Ask conflict policy only if synchronization actually conflicts, before resolving it. Do not execute dependent actions before their required answer.
 
 | # | header | question | options | Included when |
 |---|--------|----------|---------|---------------|
-| 1 | 타겟 브랜치 | 이 PR의 base 브랜치는 어디인가 | Native-capable clients: top 2-3 candidates with ahead/behind/change scale + one explicit branch-name option when needed. Codex: top 2-3 candidates only; the UI's automatic `Other` receives a free-form branch name | 2+ candidates |
-| 2 | 동기화 방식 | 타겟 브랜치가 앞서 있으면 그 커밋들을 어떻게 가져올까 | **merge**: 타겟 브랜치의 변경사항을 merge commit으로 통합합니다. 기존 히스토리가 보존됩니다. / **rebase**: 현재 브랜치의 커밋을 타겟 브랜치 위로 재배치합니다. 선형적인 히스토리를 유지합니다. | Any candidate in the table has `behind > 0` |
-| 3 | 충돌 처리 | 동기화 중 충돌이 나면 어떻게 처리할까 | **파일별로 확인**: 충돌마다 양쪽 내용과 제안을 설명하고 물어봅니다. / **제안대로 자동 해결**: 각 충돌을 분석해 제안대로 바로 적용하고 결과를 보고합니다. / **현재 브랜치 우선**: 모든 충돌에서 현재 브랜치 쪽 변경을 채택합니다. / **타겟 브랜치 우선**: 모든 충돌에서 타겟 브랜치 쪽 변경을 채택합니다. | Question 2 is included |
+| 1 | 타겟 브랜치 | 이 PR의 base 브랜치는 어디인가 | 탐지한 후보와 ahead/behind/change scale 근거를 보여주고 사용자가 확인 | Always |
+| 2 | 동기화 방식 | 타겟 브랜치가 앞서 있으면 그 커밋들을 어떻게 가져올까 | **merge** 또는 **rebase**의 의미와 결과를 설명 | Confirmed target is behind |
+| 3 | 충돌 처리 | 동기화 중 충돌이 나면 어떻게 처리할까 | **파일별로 확인**, **제안대로 자동 해결**, **현재 브랜치 우선**, **타겟 브랜치 우선** | Synchronization conflicts |
 
-For 2 or more candidates, the candidate table already carries `behind` for every candidate, so questions 2 and 3 are answerable before the target is picked — build them from the table, not from the answer to question 1. For 0 or 1 candidates, build those questions only from the selected target's confirmed divergence after the separate plain-text target turn.
-
-When there is exactly 1 or 0 candidate, the plain-text target prompt above replaces structured question 1; never auto-select or fabricate a target. When there are at least 2 candidates, always include structured question 1 even when one candidate is much more likely. The plain-text target turn and any later structured sync/conflict call are separate user turns; do not combine them or describe them as one setup turn.
-
-On Codex, each structured setup question must offer **2–3 explicit options**; the UI adds an automatic `Other` option for free-form input, so do not add a fourth catch-all option. For conflict policy, render exactly **파일별로 확인**, **현재 브랜치 우선**, and **타겟 브랜치 우선** as the three explicit options; keep **제안대로 자동 해결** as the canonical `Other` input when the user wants the suggested resolution. Native-capable clients may show the four policies in the table below.
-
-The answers drive the rest of Step 0: `{base-branch}` (question 1) is used in all subsequent git commands, `{sync-strategy}` (question 2) is executed in Step 0-B, `{conflict-policy}` (question 3) settles every conflict in Step 0-C.
+The confirmed `{base-branch}` is used in subsequent git commands. Collect each later decision only when its prerequisite state exists.
 
 ---
 
 ### Step 0-B: Target Branch Synchronization
 
-For 2 or more candidates, `{base-branch}` and `{sync-strategy}` are already answered. For 0 or 1 candidates, `{base-branch}` is answered by the separate plain-text turn and `{sync-strategy}` is answered only by the structured call when the selected target is behind. Confirm the selected target's actual divergence before executing — this step asks nothing after any applicable setup call:
+After target confirmation, re-check the confirmed target's actual divergence before executing:
 
 ```bash
 git rev-list --left-right --count origin/{base-branch}...HEAD
@@ -211,18 +129,7 @@ git rev-list --left-right --count origin/{base-branch}...HEAD
 
 **If behind = 0:** No synchronization needed. Proceed to Step 1.
 
-**If behind > 0:** If the candidate table showed every candidate at `behind = 0` and no `{sync-strategy}` was collected, make **exactly one** late-divergence `AskUserQuestion`/user-input call before executing anything. Its `questions` array MUST contain both `{sync-strategy}` and `{conflict-policy}` questions in that same call; neither value may be collected in a separate call later. Otherwise, use the already-collected `{sync-strategy}`. In either case, execute the selected strategy only after the applicable answer is available:
-
-```text
-AskUserQuestion({
-  questions: [
-    { id: "sync-strategy", header: "동기화 방식", ... },
-    { id: "conflict-policy", header: "충돌 처리", ... }
-  ]
-})
-```
-
-Only after that single call returns may the selected `{sync-strategy}` be executed; `{conflict-policy}` then governs every conflict in Step 0-C.
+**If behind > 0:** Ask the user for `{sync-strategy}` and wait for the answer before running merge or rebase. Do not ask a sync question when behind = 0. If synchronization actually conflicts, ask for `{conflict-policy}` and wait for that answer before resolving conflicts.
 
 ```bash
 # merge
@@ -266,7 +173,7 @@ Stage 2 is **ours** and stage 3 is **theirs**. A missing stage is a deletion on 
 
 | `{conflict-policy}` | How this round is settled |
 |---|---|
-| 파일별로 확인 | Explain this round's conflicts in plain text — one short block per file: what each side holds, what the conflict represents, the proposed resolution and its reasoning. Native-capable clients may ask about up to 4 files per call; Codex batches are capped at 3 files per call. A later batch starts with the remaining files. Each question offers **제안대로 해결** / **현재 브랜치 유지** (merge: ours / rebase: theirs) / **타겟 브랜치 채택** (merge: theirs / rebase: ours) |
+| 파일별로 확인 | Explain one conflicted file at a time in plain text: what each side holds, what the conflict represents, the proposed resolution and its reasoning. Ask one file decision at a time, then resolve only that file. Each question offers **제안대로 해결** / **현재 브랜치 유지** (merge: ours / rebase: theirs) / **타겟 브랜치 채택** (merge: theirs / rebase: ours) |
 | 제안대로 자동 해결 | Apply the Phase 2 proposal to every file, preserving whether it is a side selection, deletion, or synthesized/custom result |
 | 현재 브랜치 우선 | Take the current branch's side in every file — merge selects ours (stage 2), rebase selects theirs (stage 3) |
 | 타겟 브랜치 우선 | Take the target branch's side in every file — merge selects theirs (stage 3), rebase selects ours (stage 2) |
@@ -375,7 +282,7 @@ Use the explore agent to understand codebase patterns and structure. For archite
 
 ### Interview Rules
 
-1. **One question at a time** -- never bundle multiple questions. This governs the Step 3 interview, where each answer shapes the next question. It does not reach Step 0, whose decisions are all answerable from the same candidate table and are collected in a single call
+1. **One question at a time** -- never bundle multiple questions. This rule applies globally; request each later decision only when its prerequisite state exists, and wait for the answer before dependent actions.
 2. **Adaptive question count** -- repeat until Clearance Checklist is all YES. Could be 1-2 if user provides enough upfront, or 5-6+ for complex changes
 3. **AskUserQuestion = structured choices**, plain text = open-ended questions
 4. **Context Brokering** -- if the codebase can answer it, use explore instead of asking
