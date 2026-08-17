@@ -44,10 +44,29 @@ describe("code-review direct finder-job contract", () => {
 			expect(step4).toContain(slot);
 		}
 		expect(step4).toContain(
-			"reviewId = H(worktreeRealpath + NL + baseSha + NL + headSha + NL + intentFingerprint + NL + generation + NL)",
+			"reviewId = H(worktreeRealpath + NL + baseSha + NL + headSha + NL + intentFingerprint + NL + finderFingerprint + NL + generation + NL)",
 		);
 		expect(step4).toContain("invocation-fresh");
 		expect(step4).toContain("one reviewId shared across all chunks");
+	});
+
+	test("review identity isolates effective finder configuration", () => {
+		expect(step4).toContain("canonical effective-finder fingerprint");
+		expect(step4).toContain("canonical effective launch manifest");
+		expect(step4).toContain("resolved timeout/filtering/deny");
+		expect(step4).toContain("final command and final worker environment");
+		expect(step4).toContain("effective `OPENCODE_CONFIG_CONTENT`");
+		expect(step4).toContain("mcpBlock");
+		expect(step4).toContain("selected common+per-angle/fallback prompt bytes");
+		expect(step4).toContain("absent/null/empty distinction");
+		expect(step4).toContain("finderFingerprint");
+		expect(step4).toContain(
+			"scopeKey = H(worktreeRealpath + NL + baseSha + NL + headSha + NL + intentFingerprint + NL + finderFingerprint + NL)",
+		);
+		expect(step4).toContain(
+			"reviewId = H(worktreeRealpath + NL + baseSha + NL + headSha + NL + intentFingerprint + NL + finderFingerprint + NL + generation + NL)",
+		);
+		expect(step4).toContain('"finderFingerprint": "…"');
 	});
 
 	test("Step 4 uses direct job lifecycle and keeps finder dispatch delegated to CLIs", () => {
@@ -130,7 +149,7 @@ describe("code-review direct finder-job contract", () => {
 	});
 
 	test("recovery locator is stable before generation and paths are unified", () => {
-		expect(step4).toContain("scopeKey = H(worktreeRealpath + NL + baseSha + NL + headSha + NL + intentFingerprint + NL)");
+		expect(step4).toContain("scopeKey = H(worktreeRealpath + NL + baseSha + NL + headSha + NL + intentFingerprint + NL + finderFingerprint + NL)");
 		expect(step4).toContain("$OMT_DIR/code-review/<scopeKey>/");
 		expect(step4).toContain("candidates.json");
 		expect(step4).toContain("findings.md");
