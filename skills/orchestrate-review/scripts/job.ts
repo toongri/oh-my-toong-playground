@@ -833,7 +833,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	}
 	let createdJobDir: string | undefined;
 	let startCompleted = false;
-	let spawnAttempted = false;
+	let durablyAnchored = 0;
 	try {
 		// Reap orphaned job process groups BEFORE gcStaleJobs, not after — the other
 		// trigger besides the SessionStart hook (next task), so an orphan gets swept
@@ -985,6 +985,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 		atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
 
 		let spawned: SpawnedWorker[] = [];
+		const anchoredNames = new Set<string>();
 		try {
 			spawned = _spawnWorkers({
 				entities: preparedMembers,
@@ -993,14 +994,43 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 				entitiesDir: membersDir,
 				timeoutSec,
 				config: CHUNK_REVIEW_JOB_CONFIG,
+				onSpawned: (worker) => {
+					const member = jobMeta.members.find((candidate) => candidate.name === worker.name);
+					if (!member) throw new Error(`spawned unknown member: ${worker.name}`);
+					member.workerPgid = worker.workerPgid;
+					member.workerPgidStartedAt = worker.workerPgidStartedAt;
+					atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
+					durablyAnchored += 1;
+					anchoredNames.add(worker.name);
+				},
 			});
-			spawnAttempted = spawned.length > 0;
 		} catch (error) {
-			// spawnWorkers validates all names before creating member directories. An
-			// empty directory therefore proves no worker launch began; once any member
-			// state exists, retain the identity anchor for conservative recovery.
-			spawnAttempted = fs.readdirSync(membersDir).length > 0;
-			throw error;
+			if (durablyAnchored === 0) throw error;
+			const failureMessage = error instanceof Error ? error.message : String(error);
+			for (const member of jobMeta.members) {
+				// Only callback writes that completed successfully are ownership anchors.
+				if (anchoredNames.has(member.name)) continue;
+				member.workerPgid = null;
+				member.workerPgidStartedAt = null;
+				const memberDir = path.join(membersDir, member.name);
+				ensureDir(memberDir);
+				atomicWriteJson(path.join(memberDir, "status.json"), {
+					member: member.name,
+					state: "error",
+					error: failureMessage,
+					finishedAt: new Date().toISOString(),
+				});
+			}
+			jobMeta.state = "ready";
+			atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
+			if (options.json) {
+				process.stdout.write(`${JSON.stringify({ jobDir, ...jobMeta }, null, 2)}\n`);
+			} else {
+				process.stdout.write(`${jobDir}\n`);
+			}
+			logEnd();
+			startCompleted = true;
+			return;
 		}
 		logInfo(`workers spawned: ${members.map((r) => String(r.name)).join(", ")}`);
 
@@ -1025,7 +1055,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 		logEnd();
 		startCompleted = true;
 	} finally {
-		if (!startCompleted && !spawnAttempted && createdJobDir && identity) {
+		if (!startCompleted && durablyAnchored === 0 && createdJobDir && identity) {
 			try {
 				fs.rmSync(createdJobDir, { recursive: true, force: true });
 			} catch {

@@ -5129,6 +5129,114 @@ describe("start durable review identity", () => {
 		expect(spawnCount).toBe(2);
 	});
 
+	test("부분 스폰 실패는 이미 고정된 멤버를 보존하고 나머지를 terminal error로 만든다", async () => {
+		let spawnCount = 0;
+		mock.module("@lib/generic-job", () => ({
+			...GenericJob,
+			spawnWorkers: ({
+				entitiesDir,
+				onSpawned,
+			}: {
+				entitiesDir: string;
+				onSpawned?: (worker: {
+					name: string;
+					workerPgid: number;
+					workerPgidStartedAt: string;
+				}) => void;
+			}) => {
+				spawnCount += 1;
+				if (spawnCount > 1) return [];
+				const aliceDir = path.join(entitiesDir, "alice");
+				fs.mkdirSync(aliceDir, { recursive: true });
+				fs.writeFileSync(
+					path.join(aliceDir, "status.json"),
+					JSON.stringify({ member: "alice", state: "done", exitCode: 0, finishedAt: new Date().toISOString() }),
+				);
+				onSpawned?.({ name: "alice", workerPgid: 4242, workerPgidStartedAt: "witness" });
+				const bobDir = path.join(entitiesDir, "bob");
+				fs.mkdirSync(bobDir, { recursive: true });
+				fs.writeFileSync(
+					path.join(bobDir, "status.json"),
+					JSON.stringify({ member: "bob", state: "queued", queuedAt: new Date().toISOString() }),
+				);
+				throw new Error("second launch failed");
+			},
+		}));
+		const mod = await import(`./job.ts?identity-partial-spawn=${Date.now()}-${Math.random()}`);
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: alice",
+				"      command: echo alice",
+				"    - name: bob",
+				"      command: echo bob",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+			].join("\n"),
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		const options = { config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true, identity };
+		await expect(mod.cmdStart(options, "prompt")).resolves.toBeUndefined();
+		const jobDirName = fs.readdirSync(jobsDir).find((name) => name.startsWith("chunk-review-"));
+		if (!jobDirName) throw new Error("expected durable job");
+		const jobDir = path.join(jobsDir, jobDirName);
+		const metadata = JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8"));
+		expect(metadata.state).toBe("ready");
+		expect(metadata.members.find((m: { name: string }) => m.name === "alice")).toMatchObject({ workerPgid: 4242 });
+		const bobStatus = JSON.parse(fs.readFileSync(path.join(jobDir, "members", "bob", "status.json"), "utf8"));
+		expect(bobStatus).toMatchObject({ member: "bob", state: "error" });
+		expect(String(bobStatus.error)).toContain("second launch failed");
+		const status = await mod.computeStatus(jobDir);
+		expect(status.overallState).toBe("done");
+		expect(status.counts.queued).toBe(0);
+		expect(status.counts.running).toBe(0);
+		expect(status.counts.total).toBe(2);
+		const manifest = mod.buildManifest(jobDir);
+		expect(manifest.members).toHaveLength(2);
+		expect(manifest.members.find((member: { member: string }) => member.member === "bob").errorMessage).toBe("error");
+		const adoptedOutput: string[] = [];
+		const originalWrite = process.stdout.write;
+		process.stdout.write = ((chunk: string | Uint8Array) => {
+			adoptedOutput.push(String(chunk));
+			return true;
+		}) as typeof process.stdout.write;
+		try {
+			await mod.cmdStart(options, "prompt");
+		} finally {
+			process.stdout.write = originalWrite;
+		}
+		expect(JSON.parse(adoptedOutput.join("")).jobDir).toBe(jobDir);
+		expect(spawnCount).toBe(1);
+	});
+
+	test("콜백 이전 실패는 stray queued 디렉터리가 있어도 job을 정리하고 재시도한다", async () => {
+		let spawnCount = 0;
+		mock.module("@lib/generic-job", () => ({
+			...GenericJob,
+			spawnWorkers: ({ entitiesDir }: { entitiesDir: string }) => {
+				spawnCount += 1;
+				if (spawnCount === 1) {
+					const bobDir = path.join(entitiesDir, "bob");
+					fs.mkdirSync(bobDir, { recursive: true });
+					fs.writeFileSync(path.join(bobDir, "status.json"), JSON.stringify({ member: "bob", state: "queued" }));
+					throw new Error("before callback");
+				}
+				return [];
+			},
+		}));
+		const mod = await import(`./job.ts?identity-pre-callback=${Date.now()}-${Math.random()}`);
+		const options = { config: writeConfig(), "jobs-dir": path.join(tmpDir, "jobs"), chairman: "none", json: true, identity };
+		await expect(mod.cmdStart(options, "prompt")).rejects.toThrow("before callback");
+		expect(fs.readdirSync(options["jobs-dir"]).filter((name) => name.startsWith("chunk-review-")).length).toBe(0);
+		await expect(mod.cmdStart(options, "prompt")).resolves.toBeUndefined();
+		expect(spawnCount).toBe(2);
+	});
+
 	test("rejects partial and malformed identity before creating a job", () => {
 		const script = path.resolve(import.meta.dir, "job.ts");
 		for (const args of [
