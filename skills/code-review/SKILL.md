@@ -317,18 +317,21 @@ The orchestrator constructs this command string for the configured finder CLIs; 
    - {COMMIT_HISTORY} ← Step 2 commit history
 
    The five intent placeholders above ({WHAT_WAS_IMPLEMENTED}/{DESCRIPTION}/{REQUIREMENTS}/{PROJECT_CONTEXT}/{NON_GOAL}) source differently depending on mode, discriminated by the completion-gate dispatch signal from Step 1's Intent Block Gate. In structured-output mode (completion-gate dispatch), the Step 1 payload is a JSON object with named fields `what_was_implemented`/`description`/`requirements`/`project_context`/`non_goals` — `JSON.parse` it and read each named field 1:1 into its placeholder above. This is a named-field read, not a blob split — never dump the whole payload into one placeholder. If the payload fails to parse as JSON, do not guess field values from malformed input — stop before starting finder jobs. When the completion-gate dispatch signal is present, first write that `{gate}-codereview-{sid}.json` artifact directly as `{"status": "INCONCLUSIVE", "reviewer": "<reviewer id>", "at": "<ISO timestamp>", "findings": []}` (the code-review artifact schema `skills/{gate}/references/completion-gate.md` defines); if the artifact write itself fails, leave the artifact absent — `request-complete` already refuses on an absent artifact. Then report the parse failure and exit.
-3. Before starting any job, derive a deterministic review identity from the real worktree path, base SHA, head SHA, and a canonical intent fingerprint of the five intent slots (`WHAT_WAS_IMPLEMENTED`, `DESCRIPTION`, `REQUIREMENTS`, `PROJECT_CONTEXT`, `NON_GOAL`). The stable review-session-id hash is intent-aware. For each chunk, sort its file list and derive a stable chunk key; compute a SHA-256 fingerprint of exactly that chunk's diff. Recompute the same values on recovery from the same five-slot intent, so the same invocation recomputes the same value after interruption while different intent produces a different review identity. All chunks use one reviewId shared across all chunks. Start with the exact seven committed identity flags and `--attempt 1`:
+3. Before starting any finder, establish an invocation generation. A new independent invocation creates a fresh cryptographic generation/nonce and durably records it atomically in the scope-located recovery artifact **before any finder start**; never derive it from prompt/config hashes alone. A valid prepared or recoverable artifact may reuse its generation and reviewId after exact identity validation. A retired artifact never reuses its generation or retained ready jobs: quarantine it, create a fresh finder generation, and include that generation in the reviewId or start identity. Then derive the review identity from the real worktree path, base SHA, head SHA, canonical intent fingerprint, and generation. The stable review-session-id hash is intent-aware and invocation-fresh. For each chunk, sort its file list and derive a stable chunk key; compute a SHA-256 fingerprint of exactly that chunk's diff. Recompute the same values on recovery from the valid prepared/recoverable artifact, so independent invocations get different review identities. All chunks use one reviewId shared across all chunks. Start with the exact seven committed identity flags and `--attempt 1`:
 
    Canonical bytes are UTF-8 with no normalization. Resolve `worktreeRealpath` as the physical repository root (`realpath "$(git rev-parse --show-toplevel)"`), `baseSha` as `git rev-parse --verify '<base>^{commit}'`, and `headSha` as `git rev-parse --verify '<head>^{commit}'`. Derive the fixed `mergeBase` reproducibly as `git merge-base <baseSha> <headSha>`. Paths are repository-relative and bytewise sorted. Let `NL` be one LF byte and `H(x)` be lowercase SHA-256 hex of UTF-8 bytes. Compute exactly:
+
+   Recovery locator/lifecycle: `scopeKey = H(worktreeRealpath + NL + baseSha + NL + headSha + NL + intentFingerprint + NL)`, with all recovery state under `$OMT_DIR/code-review/<scopeKey>/` (never `<reviewId>`). A scopeKey-scoped atomic lock/CAS creates a fresh generation and schemaVersion 2 `prepared` artifact with `attempts: []`, fsync+rename, before any finder start; concurrent invocations cannot overwrite it. Prepared/recoverable recovery validates exact identity and attaches idempotently with the same generation and reviewId; prepared or recoverable state reuses generation. Retired artifacts are quarantined and never reuse generation or jobs.
 
    ```text
    canonicalIntentBytes = each of the five named slots in the fixed order above,
      serialized as `<slotName>:<UTF-8 byte length>:<value>` followed by NL
    intentFingerprint = H(canonicalIntentBytes)
+   scopeKey = H(worktreeRealpath + NL + baseSha + NL + headSha + NL + intentFingerprint + NL)
    chunkKey = H(sortedPaths joined by NL, followed by NL)
    diffFingerprint = H(raw stdout bytes of
      git diff --no-ext-diff --binary <mergeBase> <headSha> -- <sorted paths>)
-   reviewId = H(worktreeRealpath + NL + baseSha + NL + headSha + NL + intentFingerprint + NL)
+   reviewId = H(worktreeRealpath + NL + baseSha + NL + headSha + NL + intentFingerprint + NL + generation + NL)
    ```
 
    Exclude stderr from `diffFingerprint`; a nonzero diff exit aborts identity derivation. Use Bun/Node's builtin `crypto.createHash("sha256")` over the exact bytes (never a locale or ambiguous “stable hash”). These formulas and commands are rerun verbatim after interruption. The same path-filtered command is used for a single chunk and for every multi-chunk file list; only `<sorted paths>` differs.
@@ -358,7 +361,7 @@ The orchestrator constructs this command string for the configured finder CLIs; 
    bun "${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/job.ts" results --manifest "<jobDir>"
    ```
 
-   Merge and deduplicate all finder candidate outputs and Angle Coverage blocks using the existing aggregation contract. Persist the merged candidates atomically to `$OMT_DIR/code-review/<reviewId>/candidates.json` **before** invoking `usage-summary`; this file is the recovery point if the code-reviewer is interrupted after collection. Only after persistence run `bun "${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/usage-summary.ts" "<jobDir>"`. identity-backed job directories are shared by concurrent consumers, so leave them in place for existing stale-job GC/orphan-reaper cleanup; an individual review invocation must not delete them.
+   Merge and deduplicate all finder candidate outputs and Angle Coverage blocks using the existing aggregation contract. Persist the merged candidates atomically to `$OMT_DIR/code-review/<scopeKey>/candidates.json` **before** invoking `usage-summary`; persist the final report as `$OMT_DIR/code-review/<scopeKey>/findings.md`. Only after persistence run `bun "${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/usage-summary.ts" "<jobDir>"`. identity-backed job directories are shared by concurrent consumers, so leave them in place for existing stale-job GC/orphan-reaper cleanup; an individual review invocation must not delete them.
 
 6. Retry only a terminal infrastructure failure, unavailable angle, or diff-command failure. Attempt 2 is a different full tuple: preserve reviewId, chunkKey, worktreeRealpath, baseSha, headSha, and diffFingerprint, changing only `attempt 1` to `attempt 2`; pass all seven flags again. Retry at most once and merge original plus retry outputs. `poll_again`, caller-turn interruption, and an existing `running`/`ready` job are not retry signals. If the retry fails, accept partial coverage under the existing policy.
 
@@ -370,26 +373,30 @@ The orchestrator constructs this command string for the configured finder CLIs; 
      --prompt-file "<same interpolated chunk-reviewer-prompt.md>" --json
    ```
 
-7. Recovery artifact and aggregation are self-contained. Before handing off the recovered state, atomically write `$OMT_DIR/code-review/<reviewId>/candidates.json` using a same-directory temporary file, flush/fsync, then rename. Its schema is:
+7. Recovery artifact and aggregation are self-contained. Before handing off the recovered state, atomically write `$OMT_DIR/code-review/<scopeKey>/candidates.json` using a same-directory temporary file, flush/fsync, then rename. Its schema is:
 
    ```json
    {
-     "schemaVersion": 1,
-     "lifecycle": "recoverable",
-     "reviewId": "…", "intentFingerprint": "…", "worktreeRealpath": "…", "baseSha": "…", "headSha": "…",
+     "schemaVersion": 2,
+     "lifecycle": "prepared",
+     "scopeKey": "…",
+     "reviewId": "…", "generation": "…", "intentFingerprint": "…", "worktreeRealpath": "…", "baseSha": "…", "headSha": "…",
      "expectedChunks": [{"chunkKey": "…", "files": ["…"]}],
-     "chunks": [{"chunkKey": "…", "diffFingerprint": "…", "attempts": [{"attempt": 1,
-       "jobDir": "…", "terminalState": "done", "candidates": [{"file": "…", "line": 1,
-         "summary": "…", "failure_scenario": "…"}],
-       "angleCoverage": [{"angle": "correctness", "state": "complete"}]}]}]
+     "chunks": [{"chunkKey": "…", "diffFingerprint": "…", "attempts": []}]
    }
    ```
 
-   Validate schemaVersion, `lifecycle === "recoverable"`, exact top identity (including `intentFingerprint`) / chunk set / fingerprints, arrays, terminal state, and that each jobDir is under the orchestrate-review jobs root with matching `job.json` identity (including attempt) when present. Each chunk's attempts are unique and contiguous, exactly `[1]` or `[1,2]`, never more than two. A valid artifact skips all starts only when its lifecycle is recoverable; a missing artifact reuses only validated jobs/results; an invalid artifact is reported/quarantined and never authorizes unvalidated reuse. A retired artifact never skips finder starts: treat it as a completed prior invocation, quarantine it, and create a fresh recoverable artifact for the new review. Attempt 2 may be created only after terminal infrastructure failure and only when no validated attempt 2 exists; persisted `[1,2]` never respawns and both outputs merge. If the invocation is interrupted, do not respawn a validated job; rely on the artifact for recovery and leave shared identity-backed job directories to stale-job GC/orphan-reaper cleanup. Persist, then run usage-summary.
+   Validate schemaVersion 2 with state-dependent lifecycle rules, exact top identity (including `generation` and `intentFingerprint`) / chunk set / fingerprints, arrays, terminal state, and that each jobDir is under the orchestrate-review jobs root with matching `job.json` identity (including attempt) when present. recoverable attempt numbers are unique and contiguous, exactly `[1]` or `[1,2]`, never more than two. Valid prepared or recoverable artifact authorizes exact attach or skip; a missing artifact authorizes no reuse; an invalid artifact is reported/quarantined and never authorizes unvalidated reuse. A retired artifact never skips finder starts or reuses its generation: treat it as a completed prior invocation, quarantine it, and create a fresh prepared artifact with a fresh generation and reviewId for the new review. Attempt 2 may be created only after terminal infrastructure failure and only when no validated attempt 2 exists; persisted `[1,2]` never respawns and both outputs merge. If the invocation is interrupted, do not respawn a validated job; reuse the same generation from the valid prepared/recoverable artifact, rely on the artifact for recovery, and leave shared identity-backed job directories to stale-job GC/orphan-reaper cleanup. Persist, then run usage-summary.
 
-   The artifact is invocation-scoped recovery state, not a cache across independent reviews. Retire it after `findings.md` is durably written and the final findings report is fully synthesized: atomically update `lifecycle` to `"retired"` before returning the report. If the turn is interrupted earlier, leave it `recoverable` so the same invocation can resume. Retiring before the final response may cause an interruption in the narrow retire-to-response window to rerun finders, which is safe; reusing candidates produced from obsolete intent is not.
+   The artifact is invocation-scoped recovery state, not a cache across independent reviews. Retire it after `findings.md` is durably written and the final findings report is fully synthesized: atomically update `lifecycle` to `"retired"` before returning the report. Before any finder attempt, leave lifecycle `prepared`; after an attempt is recorded, lifecycle is `recoverable`. Retiring before the final response may cause an interruption in the narrow retire-to-response window to rerun finders, which is safe; reusing candidates produced from obsolete intent is not.
 
    Read each manifest `outputFilePath`. Required raw finder fields are `file`, `line`, `summary`, and `failure_scenario`; preserve any additional evidence fields. Normalize paths/locations and deduplicate only when normalized file/location and defect reason match (not title); union unique `found by` angles/evidence and retain the most concrete failure scenario. Emit exactly one coverage record per configured angle, explicitly marking unavailable angles, and require every configured angle to be represented before Phase 2. Do not read the protected orchestrate-review/SKILL.md to perform this aggregation.
+
+Schema v2 lifecycle rules: `prepared` permits `attempts: []` before the first finder, and every prepared chunk `attempts` MUST be empty. After the first successful or idempotent finder start, atomically record the attempt/job identity and transition lifecycle to `recoverable`; recoverable permits starting/running/ready/done/failed attempts, with `terminalState` required only for terminal states. Attempt numbers are unique and contiguous, exactly `[1]` or `[1,2]`. State-dependent validation accepts generation reuse from a valid prepared or recoverable artifact; retired artifacts never authorize reuse.
+
+All candidate and findings artifact paths use `$OMT_DIR/code-review/<scopeKey>/`; `<reviewId>` is never a recovery directory.
+
+Recovery reads the valid prepared/recoverable artifact. A valid `prepared` artifact also skips generation creation and attaches with its recorded generation/reviewId; it is promoted to `recoverable` only when a finder attempt is atomically recorded.
 
 **Dispatch rules:**
 

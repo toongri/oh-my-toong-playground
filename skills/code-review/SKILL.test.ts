@@ -44,9 +44,9 @@ describe("code-review direct finder-job contract", () => {
 			expect(step4).toContain(slot);
 		}
 		expect(step4).toContain(
-			"reviewId = H(worktreeRealpath + NL + baseSha + NL + headSha + NL + intentFingerprint + NL)",
+			"reviewId = H(worktreeRealpath + NL + baseSha + NL + headSha + NL + intentFingerprint + NL + generation + NL)",
 		);
-		expect(step4).toContain("same invocation");
+		expect(step4).toContain("invocation-fresh");
 		expect(step4).toContain("one reviewId shared across all chunks");
 	});
 
@@ -105,14 +105,85 @@ describe("code-review direct finder-job contract", () => {
 		expect(step4).toContain("identity-backed job directories are shared");
 		expect(step4).toContain("stale-job GC/orphan-reaper cleanup");
 		expect(step4).toContain("atomically");
-		expect(step4).toContain("recovery point");
+		expect(step4).toContain("recovery artifact");
 	});
 
 	test("completed reviews retire the recovery artifact before returning", () => {
-		expect(step4).toContain('"lifecycle": "recoverable"');
 		expect(step4).toContain('update `lifecycle` to `"retired"`');
 		expect(step4).toContain("A retired artifact never skips finder starts");
 		expect(step4).toContain("after `findings.md` is durably written");
+	});
+
+	test("independent invocations get a fresh finder generation", () => {
+		expect(step4).toContain("fresh finder generation");
+		expect(step4).toContain("generation/nonce");
+		expect(step4).toContain("independent invocation");
+		expect(step4).toContain("retired artifact never reuses");
+		expect(step4).toContain("reviewId or start identity");
+	});
+
+	test("recovery generation is durable before finder start and prepared/recoverable state reuses it", () => {
+		expect(step4).toContain("durably record");
+		expect(step4).toContain("before any finder start");
+		expect(step4).toContain("prepared or recoverable");
+		expect(step4).toContain("same generation");
+	});
+
+	test("recovery locator is stable before generation and paths are unified", () => {
+		expect(step4).toContain("scopeKey = H(worktreeRealpath + NL + baseSha + NL + headSha + NL + intentFingerprint + NL)");
+		expect(step4).toContain("$OMT_DIR/code-review/<scopeKey>/");
+		expect(step4).toContain("candidates.json");
+		expect(step4).toContain("findings.md");
+		expect(step4).toContain("never `<reviewId>`");
+	});
+
+	test("prepared schema supports interruption before the first finder", () => {
+		expect(step4).toContain('"schemaVersion": 2');
+		expect(step4).toContain('"lifecycle": "prepared"');
+		expect(step4).toContain('"attempts": []');
+		expect(step4).toContain("terminalState` required only for terminal states");
+	});
+
+	test("scope initialization is serialized and recovery attaches idempotently", () => {
+		expect(step4).toContain("scopeKey-scoped atomic lock/CAS");
+		expect(step4).toContain("concurrent invocations cannot overwrite");
+		expect(step4).toContain("Prepared/recoverable recovery");
+		expect(step4).toContain("exact identity");
+		expect(step4).toContain("same generation and reviewId");
+	});
+
+	test("prepared and recoverable artifacts both authorize generation reuse", () => {
+		expect(step4).not.toContain("only an interrupted recoverable invocation may reuse it");
+		expect(step4).toContain("prepared or recoverable");
+		expect(step4).toContain("valid prepared/recoverable artifact");
+	});
+
+	test("prepared schema keeps attempts empty per chunk until transition", () => {
+		expect(step4).toContain("every prepared chunk `attempts` MUST be empty");
+		expect(step4).toContain("After the first successful or idempotent finder start");
+		expect(step4).toContain("transition lifecycle to `recoverable`");
+		expect(step4).toContain('"chunks": [{"chunkKey": "…", "diffFingerprint": "…", "attempts": []}]');
+		expect(step4).not.toContain('"lifecycle": "prepared",\n     "attempts": [],');
+	});
+
+	test("obsolete lifecycle and reviewId-path rules are absent", () => {
+		for (const obsolete of [
+			"only interrupted recoverable state reuses generation",
+			"Validate schemaVersion, `lifecycle === \"recoverable\"`",
+			"A valid artifact skips all starts only when its lifecycle is recoverable",
+			"a missing artifact reuses only validated jobs/results",
+			"create a fresh recoverable artifact with a fresh generation",
+			"reuse the same generation from the recoverable artifact",
+			"$OMT_DIR/code-review/<reviewId>/candidates.json",
+			"If the turn is interrupted earlier, leave it recoverable",
+		]) expect(step4).not.toContain(obsolete);
+		expect(step4).toContain('"scopeKey": "…"');
+	});
+
+	test("attempt cardinality is lifecycle-qualified", () => {
+		expect(step4).not.toContain("Each chunk's attempts are unique and contiguous, exactly `[1]` or `[1,2]`");
+		expect(step4).toContain("every prepared chunk `attempts` MUST be empty");
+		expect(step4).toContain("recoverable attempt numbers are unique and contiguous, exactly `[1]` or `[1,2]`");
 	});
 
 	test("retry policy excludes polling/interruption and caps attempt two", () => {
@@ -130,16 +201,17 @@ describe("code-review direct finder-job contract", () => {
 		expect(step4).toContain("identity job is still initializing");
 		expect(step4).toContain("validate that job's `job.json` identity");
 		expect(step4).toContain("never start, delete, or respawn it");
-		expect(step4).toContain('"schemaVersion": 1');
+		expect(step4).toContain('"schemaVersion": 2');
+		expect(step4).toContain('"lifecycle": "prepared"');
+		expect(step4).toContain('"attempts": []');
 		expect(step4).toContain('"expectedChunks"');
-		expect(step4).toContain('"angleCoverage"');
 		expect(step4).toContain('"attempts"');
 		expect(step4).toContain("unique and contiguous");
 		expect(step4).toContain("exactly `[1]` or `[1,2]`");
 		expect(step4).toContain("persisted `[1,2]` never respawns");
 		expect(step4).toContain("same-directory temporary file");
 		expect(step4).toContain("flush/fsync");
-		expect(step4).toContain("valid artifact skips all starts");
+		expect(step4).toContain("Valid prepared or recoverable artifact authorizes exact attach or skip");
 		expect(step4).toContain("invalid artifact is reported/quarantined");
 	});
 
