@@ -209,14 +209,14 @@ The `gh pr create` invocation in Step 8 targets `--head {branch-name}` and can r
 The worktrees stay after the PRs are created; handling review feedback is what they are for. Remove one only when its sub-PR is merged and needs no further edits:
 
 ```bash
-git worktree remove {worktree-path}
+git worktree remove "{worktree-path}"
 ```
 
 Because the split is stacked, a review fix committed in one sub-PR's worktree has to be carried into every worktree above it, each in its own directory:
 
 ```bash
-git -C {downstream-worktree} rebase {upstream-branch}
-git -C {downstream-worktree} push --force-with-lease
+git -C "{downstream-worktree}" rebase {upstream-branch}
+git -C "{downstream-worktree}" push --force-with-lease
 ```
 
 > **Mixed commit warning**: If a single commit modifies files belonging to multiple theses (mixed commit), cherry-picking will include unintended changes. When a mixed commit is detected, **immediately stop automatic separation** and switch to the Graceful Degradation procedure. Inform the user that manual file-level separation may be possible, but the LLM must not attempt to extract files directly.
@@ -242,7 +242,7 @@ The `worktree add`, `cherry-pick`, and `push` commands are all failure points. A
 ### Original Branch Preservation
 
 The original branch must never be deleted. It stays checked out in the main working directory for the whole procedure — the sub-branches live in their own worktrees. If the user changes their mind after split completion:
-- Remove each sub-PR worktree (`git worktree remove --force {worktree-path}`), then delete the sub-branches (local and remote: `git branch -D` + `git push origin --delete`)
+- Remove each sub-PR worktree (`git worktree remove --force "{worktree-path}"`), then delete the sub-branches (local and remote: `git branch -D` + `git push origin --delete`)
 - The main working directory is already on the original branch
 - If a PR was already created with `gh pr create`, guide the user to manually close it
 

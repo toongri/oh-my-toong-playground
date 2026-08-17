@@ -133,6 +133,15 @@ split_partial_creation_finalization() {
     && printf '%s\n' "$block" | grep -Fq 'normal all-created update path remains unchanged'
 }
 
+retained_worktree_path_quoting() {
+  block=$(sed -n '/### Worktree Lifetime/,/^### Merge Commit Handling/p' "$SCOPE_FILE") \
+    && printf '%s\n' "$block" | grep -Fq 'git worktree remove "{worktree-path}"' \
+    && printf '%s\n' "$block" | grep -Fq 'git -C "{downstream-worktree}" rebase {upstream-branch}' \
+    && printf '%s\n' "$block" | grep -Fq 'git -C "{downstream-worktree}" push --force-with-lease' \
+    && original=$(sed -n '/### Original Branch Preservation/,/^---$/p' "$SCOPE_FILE") \
+    && printf '%s\n' "$original" | grep -Fq 'git worktree remove --force "{worktree-path}"'
+}
+
 run_case setup-option-limit setup_option_limit
 run_case late-divergence-policy late_divergence_policy
 run_case codex-conflict-batch codex_conflict_batch
@@ -142,6 +151,7 @@ run_case split-step8-target split_step8_target
 run_case split-command-failure-rollback split_command_failure_rollback
 run_case remote-split-branch-preflight remote_split_branch_preflight
 run_case split-partial-creation-finalization split_partial_creation_finalization
+run_case retained-worktree-path-quoting retained_worktree_path_quoting
 
 if [ "$failures" -gt 0 ]; then
   exit 1
