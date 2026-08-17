@@ -986,7 +986,9 @@ export async function computeStatus(
 		totals.queued === 0 &&
 		totals.retrying === 0 &&
 		totals.awaiting_resume === 0;
-	const overallState = allDone
+	const overallState = jobMeta.state === "initializing"
+		? "initializing"
+		: allDone
 		? "done"
 		: totals.running > 0 || totals.retrying > 0
 			? "running"

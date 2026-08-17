@@ -5520,7 +5520,7 @@ describe("start durable review identity", () => {
 		}
 	});
 
-	test("fails closed on matching initializing job without a lock", async () => {
+	test("reclaims matching initializing job without a lock when no member launched", async () => {
 		const jobsDir = path.join(tmpDir, "initializing-no-lock");
 		const jobDir = path.join(jobsDir, "chunk-review-initializing");
 		fs.mkdirSync(jobDir, { recursive: true });
@@ -5534,10 +5534,72 @@ describe("start durable review identity", () => {
 				{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity },
 				"prompt",
 			),
-		).rejects.toThrow("initializing");
-		expect(fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-"))).toEqual([
+		).resolves.toBeUndefined();
+		expect(fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-"))).toHaveLength(1);
+		expect(fs.readdirSync(jobsDir).find((name) => name.startsWith("chunk-review-"))).not.toBe(
 			"chunk-review-initializing",
-		]);
+		);
+	});
+
+	test("reclaims a matching initializing anchor with no member launch evidence", async () => {
+		const jobsDir = path.join(tmpDir, "initializing-dead-anchor");
+		const jobDir = path.join(jobsDir, "chunk-review-initializing");
+		fs.mkdirSync(jobDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({ id: "chunk-review-initializing", identity, state: "initializing", members: [] }),
+		);
+		const mod = await import(`./job.ts?initializing-dead-anchor=${Date.now()}-${Math.random()}`);
+		await expect(
+			mod.cmdStart(
+				{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity },
+				"prompt",
+			),
+		).resolves.toBeUndefined();
+		const jobs = fs.readdirSync(jobsDir).filter((name) => name.startsWith("chunk-review-"));
+		expect(jobs).toHaveLength(1);
+		expect(jobs[0]).not.toBe("chunk-review-initializing");
+	});
+
+	test("retains a matching initializing anchor once a member launch is evidenced", async () => {
+		const jobsDir = path.join(tmpDir, "initializing-live-anchor");
+		const jobDir = path.join(jobsDir, "chunk-review-initializing");
+		fs.mkdirSync(path.join(jobDir, "members", "alice"), { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({ id: "chunk-review-initializing", identity, state: "initializing", members: [] }),
+		);
+		fs.writeFileSync(
+			path.join(jobDir, "members", "alice", "status.json"),
+			JSON.stringify({ member: "alice", state: "queued" }),
+		);
+		const mod = await import(`./job.ts?initializing-live-anchor=${Date.now()}-${Math.random()}`);
+		await expect(
+			mod.cmdStart(
+				{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity },
+				"prompt",
+			),
+		).rejects.toThrow("initializing");
+		expect(fs.existsSync(jobDir)).toBe(true);
+	});
+
+	test("fails closed when the members path is not a directory", async () => {
+		const jobsDir = path.join(tmpDir, "initializing-enotdir");
+		const jobDir = path.join(jobsDir, "chunk-review-initializing");
+		fs.mkdirSync(jobDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({ id: "chunk-review-initializing", identity, state: "initializing", members: [] }),
+		);
+		fs.writeFileSync(path.join(jobDir, "members"), "not-a-directory");
+		const mod = await import(`./job.ts?initializing-enotdir=${Date.now()}-${Math.random()}`);
+		await expect(
+			mod.cmdStart(
+				{ config: writeConfig(), "jobs-dir": jobsDir, chairman: "none", identity },
+				"prompt",
+			),
+		).rejects.toThrow("initializing");
+		expect(fs.existsSync(jobDir)).toBe(true);
 	});
 
 	test("removes initializing anchor when spawn throws before creating a worker", async () => {

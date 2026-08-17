@@ -711,8 +711,29 @@ function findExistingJobForIdentity(
 			persistedIdentity &&
 			IDENTITY_FIELDS.every((field) => persistedIdentity[field] === identity[field])
 		) {
-			if (metadata.state === "initializing")
-				throw new Error(`identity job is still initializing: ${jobDir}`);
+			if (metadata.state === "initializing") {
+				// An initializer can be left behind by SIGKILL/OOM before the first
+				// member launch. Reclaim only when there is no per-member evidence;
+				// once a member directory/status or worker anchor exists, retain the
+				// job and fail closed so a live concurrent initializer is never cloned.
+				const members = isRecord(metadata) && Array.isArray(metadata.members) ? metadata.members : [];
+				const hasWorkerAnchor = members.some(
+					(member) => isRecord(member) && member.workerPgid !== null && member.workerPgid !== undefined,
+				);
+				let hasMemberLaunchEvidence = hasWorkerAnchor;
+				try {
+					const membersDir = path.join(jobDir, "members");
+					hasMemberLaunchEvidence = hasMemberLaunchEvidence || fs.readdirSync(membersDir).length > 0;
+				} catch (error) {
+					// Only a missing members directory proves no launch began. Any
+					// other read failure is indeterminate and must fail closed.
+					const code = isRecord(error) ? error.code : undefined;
+					if (code !== "ENOENT") throw error;
+				}
+				if (hasMemberLaunchEvidence) throw new Error(`identity job is still initializing: ${jobDir}`);
+				fs.rmSync(jobDir, { recursive: true, force: true });
+				continue;
+			}
 			if (metadata.state === "ready") return { jobDir, metadata };
 		}
 	}

@@ -1161,6 +1161,18 @@ describe("computeStatus", () => {
 		expect(result.counts.running).toBe(0);
 	});
 
+	test("keeps an initializing zero-member job non-terminal", async () => {
+		const jobDir = makeTmpDir();
+		fs.mkdirSync(path.join(jobDir, "members"), { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({ id: "initializing", state: "initializing", members: [] }),
+		);
+		const result = await computeStatus(jobDir, chunkReviewConfig);
+		expect(result.overallState).toBe("initializing");
+		expect(result.counts.total).toBe(0);
+	});
+
 	test("returns running overallState when some entities are running", async () => {
 		const jobDir = path.join(tmpDir, "job2");
 		setupJob(
