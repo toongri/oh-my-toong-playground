@@ -84,17 +84,17 @@ conflict_proposal_preservation() {
 split_step8_target() {
   block=$(sed -n '/Split-only Step 8 command block/,/^```$/p' "$SKILL_FILE") \
     && grep -Fq 'Preserve an explicit branch → worktree mapping' "$SCOPE_FILE" \
-    && printf '%s\n' "$block" | grep -Fq 'WT_DIR="{mapped-worktree}"' \
-    && printf '%s\n' "$block" | grep -Fq 'git -C "$WT_DIR" fetch origin {appropriate-base}' \
-    && printf '%s\n' "$block" | grep -Fq 'AHEAD=$(git -C "$WT_DIR" rev-list --count origin/{appropriate-base}..{target-sub-branch})' \
+    && printf '%s\n' "$block" | grep -Fq 'WT_DIR=<shell-word:mapped-worktree>' \
+    && printf '%s\n' "$block" | grep -Fq 'git -C "$WT_DIR" fetch origin "$BASE_BRANCH"' \
+    && printf '%s\n' "$block" | grep -Fq 'AHEAD=$(git -C "$WT_DIR" rev-list --count "origin/$BASE_BRANCH..$TARGET_SUB_BRANCH")' \
     && printf '%s\n' "$block" | grep -Fq 'TARGET_SUB_BRANCH=$(git -C "$WT_DIR" branch --show-current)' \
     && printf '%s\n' "$block" | grep -Fq 'git -C "$WT_DIR" ls-remote --heads origin "$TARGET_SUB_BRANCH"' \
-    && printf '%s\n' "$block" | grep -Fq 'git -C "$WT_DIR" branch -m {target-sub-branch}' \
-    && printf '%s\n' "$block" | grep -Fq 'git -C "$WT_DIR" push -u origin {target-sub-branch}' \
-    && printf '%s\n' "$block" | grep -Fq 'gh pr create --base {appropriate-base} --head {target-sub-branch}' \
-    && [ "$(printf '%s\n' "$block" | grep -Fc 'gh pr create --base {appropriate-base} --head {target-sub-branch}')" -eq 1 ] \
+    && printf '%s\n' "$block" | grep -Fq 'git -C "$WT_DIR" branch -m "$EXPECTED_SUB_BRANCH"' \
+    && printf '%s\n' "$block" | grep -Fq 'git -C "$WT_DIR" push -u origin "$TARGET_SUB_BRANCH"' \
+    && printf '%s\n' "$block" | grep -Fq 'gh pr create --base "$BASE_BRANCH" --head "$TARGET_SUB_BRANCH"' \
+    && [ "$(printf '%s\n' "$block" | grep -Fc 'gh pr create --base "$BASE_BRANCH" --head "$TARGET_SUB_BRANCH"')" -eq 1 ] \
     && title_line=$(printf '%s\n' "$block" | grep -n -m1 -F 'TITLE=' | cut -d: -f1) \
-    && create_line=$(printf '%s\n' "$block" | grep -n -m1 -F 'gh pr create --base {appropriate-base} --head {target-sub-branch}' | cut -d: -f1) \
+    && create_line=$(printf '%s\n' "$block" | grep -n -m1 -F 'gh pr create --base "$BASE_BRANCH" --head "$TARGET_SUB_BRANCH"' | cut -d: -f1) \
     && [ "$title_line" -lt "$create_line" ] \
     && grep -Fq 'If the mapping is missing, stop and ask the user; never infer a worktree path.' "$SKILL_FILE" \
     && single=$(sed -n '/\*\*For single PR\*\*/,/^\*\*Sub-PR (Stacked split):\*\*/p' "$SKILL_FILE") \
@@ -111,7 +111,8 @@ split_command_failure_rollback() {
     && printf '%s\n' "$block" | grep -Fq 'track only remote branches successfully pushed during this run' \
     && printf '%s\n' "$block" | grep -Fq 'A late worktree-add failure must roll back remote branches pushed by earlier iterations of this run' \
     && printf '%s\n' "$block" | grep -Fq 'Remove worktrees first, then delete' \
-    && printf '%s\n' "$block" | grep -Fq 'git worktree remove --force "{tracked-worktree-path}"' \
+    && printf '%s\n' "$block" | grep -Fq 'git worktree remove --force "$TRACKED_WORKTREE_PATH"' \
+    && printf '%s\n' "$block" | grep -Fq 'current-run rollback registry' \
     && printf '%s\n' "$block" | grep -Fq 'run `git -C "$WT_DIR" cherry-pick --abort` only when a cherry-pick is active' \
     && printf '%s\n' "$block" | grep -Fq 'confirmation before deleting any tracked remote branch' \
     && printf '%s\n' "$block" | grep -Fq 'Preserve pre-existing worktrees, local branches, and remote branches' \
@@ -122,10 +123,10 @@ split_command_failure_rollback() {
 remote_split_branch_preflight() {
   block=$(sed -n '/### Separation Steps/,/^### Worktree Lifetime/p' "$SCOPE_FILE") \
     && printf '%s\n' "$block" | grep -Fq 'Before creating any worktree, preflight every planned split branch' \
-    && printf '%s\n' "$block" | grep -Fq 'git ls-remote --exit-code --heads origin "refs/heads/{branch-name}"' \
+    && printf '%s\n' "$block" | grep -Fq 'git ls-remote --exit-code --heads origin "refs/heads/$PLANNED_BRANCH"' \
     && printf '%s\n' "$block" | grep -Fq 'require a different branch name' \
     && preflight_line=$(printf '%s\n' "$block" | grep -n -m1 -F 'Before creating any worktree, preflight every planned split branch' | cut -d: -f1) \
-    && add_line=$(printf '%s\n' "$block" | grep -n -m1 -F 'git worktree add -b {branch-name}' | cut -d: -f1) \
+    && add_line=$(printf '%s\n' "$block" | grep -n -m1 -F 'git worktree add -b "$BRANCH_NAME"' | cut -d: -f1) \
     && [ "$preflight_line" -lt "$add_line" ]
 }
 
@@ -144,11 +145,56 @@ split_partial_creation_finalization() {
 
 retained_worktree_path_quoting() {
   block=$(sed -n '/### Worktree Lifetime/,/^### Merge Commit Handling/p' "$SCOPE_FILE") \
-    && printf '%s\n' "$block" | grep -Fq 'git worktree remove "{worktree-path}"' \
-    && printf '%s\n' "$block" | grep -Fq 'git -C "{downstream-worktree}" rebase {upstream-branch}' \
-    && printf '%s\n' "$block" | grep -Fq 'git -C "{downstream-worktree}" push --force-with-lease' \
+    && printf '%s\n' "$block" | grep -Fq 'git worktree remove "$WORKTREE_PATH"' \
+    && printf '%s\n' "$block" | grep -Fq 'git -C "$DOWNSTREAM_WT" rebase "$UPSTREAM_BRANCH"' \
+    && printf '%s\n' "$block" | grep -Fq 'git -C "$DOWNSTREAM_WT" push --force-with-lease' \
     && original=$(sed -n '/### Original Branch Preservation/,/^---$/p' "$SCOPE_FILE") \
-    && printf '%s\n' "$original" | grep -Fq 'git worktree remove --force "{worktree-path}"'
+    && printf '%s\n' "$original" | grep -Fq 'git worktree remove --force "$WORKTREE_PATH"' \
+    && printf '%s\n' "$block" | grep -Fq 'WORKTREE_PATH=<shell-word:worktree-path>' \
+    && printf '%s\n' "$original" | grep -Fq 'Iterate the recorded branch → worktree mapping' \
+    && printf '%s\n' "$original" | grep -Fq 'LOCAL_BRANCH=<shell-word:local-branch>'
+}
+
+split_branch_shell_safety_contract() {
+  skill_block=$(sed -n '/## Step 8: PR Creation/,$p' "$SKILL_FILE") \
+    && scope_block=$(sed -n '/## Branch Separation Procedure/,$p' "$SCOPE_FILE") \
+    && printf '%s\n' "$skill_block" | grep -Fq 'Never interpolate a raw branch/ref placeholder into shell source' \
+    && printf '%s\n' "$scope_block" | grep -Fq 'Never interpolate a raw branch/ref placeholder into shell source' \
+    && printf '%s\n' "$scope_block" | grep -Fq 'git check-ref-format --branch "$BRANCH_NAME"' \
+    && printf '%s\n' "$scope_block" | grep -Fq 'git worktree add -b "$BRANCH_NAME" "$WT_DIR" "origin/$BASE_BRANCH"' \
+    && printf '%s\n' "$scope_block" | grep -Fq 'git -C "$WT_DIR" cherry-pick "$COMMIT_HASH"' \
+    && printf '%s\n' "$scope_block" | grep -Fq 'git -C "$WT_DIR" push -u origin "$BRANCH_NAME"' \
+    && printf '%s\n' "$scope_block" | grep -Fq 'git -C "$DOWNSTREAM_WT" rebase "$UPSTREAM_BRANCH"' \
+    && printf '%s\n' "$scope_block" | grep -Fq 'git push origin --delete "$REMOTE_BRANCH"' \
+    && printf '%s\n' "$skill_block" | grep -Fq 'git -C "$WT_DIR" fetch origin "$BASE_BRANCH"' \
+    && printf '%s\n' "$skill_block" | grep -Fq 'git -C "$WT_DIR" rev-list --count "origin/$BASE_BRANCH..$TARGET_SUB_BRANCH"' \
+    && printf '%s\n' "$skill_block" | grep -Fq 'git -C "$WT_DIR" branch -m "$EXPECTED_SUB_BRANCH"' \
+    && printf '%s\n' "$skill_block" | grep -Fq 'git -C "$WT_DIR" push -u origin "$TARGET_SUB_BRANCH"' \
+    && printf '%s\n' "$skill_block" | grep -Fq 'gh pr create --base "$BASE_BRANCH" --head "$TARGET_SUB_BRANCH"' \
+    && ! printf '%s\n' "$scope_block" | grep -Eq '^\s*[-a-z.]*(git|gh) .*\{(base-branch|branch-name|target-sub-branch|previous-split-branch|upstream-branch|tracked-local-branch|tracked-remote-branch)\}' \
+    && ! printf '%s\n' "$scope_block" | grep -Eq '^[A-Z_]+="\{[^}]+\}"$' \
+    && ! printf '%s\n' "$skill_block" | grep -Eq '^[A-Z_]+="\{[^}]+\}"$' \
+    && ! printf '%s\n' "$skill_block" | grep -Eq 'git (fetch|rev-list|worktree|push|branch -m) [^\n]*\{(base-branch|target-sub-branch|branch-name)\}'
+}
+
+dynamic_shell_word_safety() {
+  grep -Fq '<shell-word:branch-name>' "$SCOPE_FILE" || return 1
+  payloads=$(printf '%s\n' 'feat;id' "feat'a;id" 'feat$(touch${IFS}make-pr-shell-word-sentinel)' 'feat${IFS}id' 'feat`touch${IFS}make-pr-shell-word-sentinel`')
+  while IFS= read -r payload; do
+    git check-ref-format --branch "$payload" >/dev/null || return 1
+    escaped=$(printf '%s' "$payload" | sed "s/'/'\\\\''/g")
+    rendered="BRANCH_NAME='$escaped'"
+    temp_dir=$(mktemp -d)
+    result=$(cd "$temp_dir" && eval "$rendered; printf '%s' \"\$BRANCH_NAME\"")
+    if [ "$result" != "$payload" ] || [ -e "$temp_dir/make-pr-shell-word-sentinel" ]; then
+      rm -f "$temp_dir/make-pr-shell-word-sentinel"
+      rmdir "$temp_dir"
+      return 1
+    fi
+    rmdir "$temp_dir"
+  done <<EOF
+$payloads
+EOF
 }
 
 run_case setup-option-limit setup_option_limit
@@ -162,6 +208,8 @@ run_case split-command-failure-rollback split_command_failure_rollback
 run_case remote-split-branch-preflight remote_split_branch_preflight
 run_case split-partial-creation-finalization split_partial_creation_finalization
 run_case retained-worktree-path-quoting retained_worktree_path_quoting
+run_case split-branch-shell-safety-contract split_branch_shell_safety_contract
+run_case dynamic-shell-word-safety dynamic_shell_word_safety
 
 if [ "$failures" -gt 0 ]; then
   exit 1

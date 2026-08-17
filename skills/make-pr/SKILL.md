@@ -540,7 +540,7 @@ AHEAD=$(git rev-list --count origin/{base-branch}..HEAD)
 - If user confirms: check branch name convention, push the branch, and run `gh pr create` with the approved title, description, assignee, and labels
 - If user declines: output the final PR description only
 
-For a split sub-PR, resolve its branch → worktree mapping from Step 5 and bind the matching `$WT_DIR` before any ahead check, branch-name/convention check, remote lookup, rename, or push. If the mapping is missing, stop and ask the user; never infer a worktree path. Run those operations from the bound `$WT_DIR`, then create the PR with the mapped branch. This binding rule applies only to split sub-PRs; single-PR Step 8 keeps the flow below unchanged.
+For a split sub-PR, resolve its branch → worktree mapping from Step 5 and bind the matching `$WT_DIR` before any ahead check, branch-name/convention check, remote lookup, rename, or push. If the mapping is missing, stop and ask the user; never infer a worktree path. Never interpolate a raw branch/ref placeholder into shell source: render each external value as one shell-safe literal into a variable, validate branch refs with `git check-ref-format --branch` when created or renamed, and use only quoted variable expansions. A branch such as `feat;id`, `$()` or backticks remains data. Run those operations from the bound `$WT_DIR`, then create the PR with the mapped branch. This binding rule applies only to split sub-PRs; single-PR Step 8 keeps the flow below unchanged.
 
 ### Branch Name Convention Check (before push)
 
@@ -581,25 +581,30 @@ EOF
 **Split-only Step 8 command block** (run once per mapped sub-PR; do not use this block for a single PR):
 
 ```bash
-WT_DIR="{mapped-worktree}"
+WT_DIR=<shell-word:mapped-worktree>
+BASE_BRANCH=<shell-word:appropriate-base>
+EXPECTED_SUB_BRANCH=<shell-word:target-sub-branch>
+git check-ref-format --branch "$BASE_BRANCH"
 TARGET_SUB_BRANCH=$(git -C "$WT_DIR" branch --show-current)
-git -C "$WT_DIR" fetch origin {appropriate-base}
-AHEAD=$(git -C "$WT_DIR" rev-list --count origin/{appropriate-base}..{target-sub-branch})
+git check-ref-format --branch "$TARGET_SUB_BRANCH"
+git -C "$WT_DIR" fetch origin "$BASE_BRANCH"
+AHEAD=$(git -C "$WT_DIR" rev-list --count "origin/$BASE_BRANCH..$TARGET_SUB_BRANCH")
 if [ "$AHEAD" -eq 0 ]; then
-  echo "No commits to open for {target-sub-branch}" >&2
+  echo "No commits to open for $TARGET_SUB_BRANCH" >&2
   exit 0
 fi
 REMOTE_TARGET=$(git -C "$WT_DIR" ls-remote --heads origin "$TARGET_SUB_BRANCH")
-if [ -z "$REMOTE_TARGET" ] && [ "$TARGET_SUB_BRANCH" != "{target-sub-branch}" ]; then
-  git -C "$WT_DIR" branch -m {target-sub-branch}
-  TARGET_SUB_BRANCH="{target-sub-branch}"
+if [ -z "$REMOTE_TARGET" ] && [ "$TARGET_SUB_BRANCH" != "$EXPECTED_SUB_BRANCH" ]; then
+  git check-ref-format --branch "$EXPECTED_SUB_BRANCH"
+  git -C "$WT_DIR" branch -m "$EXPECTED_SUB_BRANCH"
+  TARGET_SUB_BRANCH="$EXPECTED_SUB_BRANCH"
 fi
-git -C "$WT_DIR" push -u origin {target-sub-branch}
+git -C "$WT_DIR" push -u origin "$TARGET_SUB_BRANCH"
 TITLE=$(cat <<'EOF'
 PR title
 EOF
 )
-gh pr create --base {appropriate-base} --head {target-sub-branch} --assignee @me --title "$TITLE" --body "$(cat <<'EOF'
+gh pr create --base "$BASE_BRANCH" --head "$TARGET_SUB_BRANCH" --assignee @me --title "$TITLE" --body "$(cat <<'EOF'
 PR description body
 EOF
 )" --label "{label-1}"
