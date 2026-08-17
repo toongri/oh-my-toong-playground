@@ -49,7 +49,11 @@ candidate_cardinality_rules() {
     && grep -Fq 'obtain plain-text confirmation or a free-form target branch' "$SKILL_FILE" \
     && grep -Fq 'With 0 candidates, request the target branch as plain text' "$SKILL_FILE" \
     && grep -Fq 'Do not fabricate or duplicate candidates, and do not count the automatic `Other` option' "$SKILL_FILE" \
-    && grep -Fq 'Keep any applicable sync-strategy and conflict-policy questions in the same structured setup call' "$SKILL_FILE" \
+    && grep -Fq 'For 0 or 1 candidates, obtain the target branch in a separate plain-text user turn before issuing any structured setup call' "$SKILL_FILE" \
+    && grep -Fq 'After the target is known, recompute and confirm its actual divergence' "$SKILL_FILE" \
+    && grep -Fq 'When the selected target is behind, issue exactly one structured setup call containing only sync-strategy and conflict-policy' "$SKILL_FILE" \
+    && ! grep -Fq 'Keep any applicable sync-strategy and conflict-policy questions in the same structured setup call' "$SKILL_FILE" \
+    && ! grep -Fq 'Everything Step 0 needs from the user is settled in one setup turn' "$SKILL_FILE" \
     && ! grep -Fq 'ask a structured question with one candidate plus `Other`' "$SKILL_FILE"
 }
 

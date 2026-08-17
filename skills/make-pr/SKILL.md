@@ -65,10 +65,10 @@ digraph make_pr_flow {
     "User Request" [shape=ellipse];
 
     subgraph cluster_step0 {
-        label="Step 0: Setup -- analyze first, ask once, then execute";
+        label="Step 0: Setup -- analyze first, settle setup, then execute";
         style=dashed;
         "0-A: Fetch & Analyze\nAll Remote Branches\n(ahead/behind/scale\nper candidate)" [shape=box];
-        "Setup Question\nONE AskUserQuestion call:\n(1) 타겟 브랜치\n(2) 동기화 방식\n(3) 충돌 처리 방침" [shape=box];
+        "Setup Question\n2+ candidates: ONE AskUserQuestion call:\n(1) 타겟 브랜치\n(2) 동기화 방식\n(3) 충돌 처리 방침\n0/1 candidates: plain-text target turn,\nthen conditional sync/conflict call" [shape=box];
         "0-B: Execute\nmerge / rebase" [shape=box];
         "0-C: Conflict?" [shape=diamond];
         "0-C: Apply\n충돌 처리 방침\n(파일별 확인이면 이번 라운드\n충돌 파일을 한 콜에 담아 질문)" [shape=box];
@@ -178,11 +178,11 @@ Show the top 2-3 candidates. Native-capable clients may add one explicit branch-
 
 - With 2 or more candidates, use the structured target-branch question with the top 2-3 candidates. The UI's automatic `Other` remains the free-form path.
 - With exactly 1 candidate, do not issue a one-option structured target-branch question. Instead, obtain plain-text confirmation or a free-form target branch. Do not fabricate or duplicate candidates, and do not count the automatic `Other` option as an explicit candidate.
-- With 0 candidates, request the target branch as plain text; do not synthesize a placeholder option. Keep any applicable sync-strategy and conflict-policy questions in the same structured setup call, preserving the one-call rule for those setup decisions.
+- With 0 candidates, request the target branch as plain text; do not synthesize a placeholder option. For 0 or 1 candidates, obtain the target branch in a separate plain-text user turn before issuing any structured setup call. After the target is known, recompute and confirm its actual divergence. When the selected target is behind, issue exactly one structured setup call containing only sync-strategy and conflict-policy; when it is not behind, do not issue a setup call for those decisions. Do not claim that the plain-text target and structured answers are collected in one user turn.
 
 **Phase 4 — Setup Question:**
 
-Everything Step 0 needs from the user is settled in one setup turn: use **one `AskUserQuestion` call** for the structured decisions, and use the plain-text target prompt from the cardinality guard when there are fewer than 2 candidates. Present the table first, then make the structured call with this `questions` array when applicable:
+For 2 or more candidates, settle Step 0 in one setup turn: use **one `AskUserQuestion` call** for the target, sync-strategy, and conflict-policy decisions. Present the table first, then make the structured call with this `questions` array. For 0 or 1 candidates, first use a separate plain-text user turn to obtain the target branch; only after that answer is available, recompute and confirm the selected target's actual divergence, then issue at most one structured call containing sync-strategy and conflict-policy if and only if that target is behind:
 
 | # | header | question | options | Included when |
 |---|--------|----------|---------|---------------|
@@ -190,9 +190,9 @@ Everything Step 0 needs from the user is settled in one setup turn: use **one `A
 | 2 | 동기화 방식 | 타겟 브랜치가 앞서 있으면 그 커밋들을 어떻게 가져올까 | **merge**: 타겟 브랜치의 변경사항을 merge commit으로 통합합니다. 기존 히스토리가 보존됩니다. / **rebase**: 현재 브랜치의 커밋을 타겟 브랜치 위로 재배치합니다. 선형적인 히스토리를 유지합니다. | Any candidate in the table has `behind > 0` |
 | 3 | 충돌 처리 | 동기화 중 충돌이 나면 어떻게 처리할까 | **파일별로 확인**: 충돌마다 양쪽 내용과 제안을 설명하고 물어봅니다. / **제안대로 자동 해결**: 각 충돌을 분석해 제안대로 바로 적용하고 결과를 보고합니다. / **현재 브랜치 우선**: 모든 충돌에서 현재 브랜치 쪽 변경을 채택합니다. / **타겟 브랜치 우선**: 모든 충돌에서 타겟 브랜치 쪽 변경을 채택합니다. | Question 2 is included |
 
-The candidate table already carries `behind` for every candidate, so questions 2 and 3 are answerable before the target is picked — build them from the table, not from the answer to question 1.
+For 2 or more candidates, the candidate table already carries `behind` for every candidate, so questions 2 and 3 are answerable before the target is picked — build them from the table, not from the answer to question 1. For 0 or 1 candidates, build those questions only from the selected target's confirmed divergence after the separate plain-text target turn.
 
-When there is exactly 1 or 0 candidate, the plain-text target prompt above replaces structured question 1; never auto-select or fabricate a target. When there are at least 2 candidates, always include structured question 1 even when one candidate is much more likely.
+When there is exactly 1 or 0 candidate, the plain-text target prompt above replaces structured question 1; never auto-select or fabricate a target. When there are at least 2 candidates, always include structured question 1 even when one candidate is much more likely. The plain-text target turn and any later structured sync/conflict call are separate user turns; do not combine them or describe them as one setup turn.
 
 On Codex, each structured setup question must offer **2–3 explicit options**; the UI adds an automatic `Other` option for free-form input, so do not add a fourth catch-all option. For conflict policy, render exactly **파일별로 확인**, **현재 브랜치 우선**, and **타겟 브랜치 우선** as the three explicit options; keep **제안대로 자동 해결** as the canonical `Other` input when the user wants the suggested resolution. Native-capable clients may show the four policies in the table below.
 
@@ -202,7 +202,7 @@ The answers drive the rest of Step 0: `{base-branch}` (question 1) is used in al
 
 ### Step 0-B: Target Branch Synchronization
 
-`{base-branch}` and `{sync-strategy}` are already answered. Confirm the divergence and execute — this step asks nothing:
+For 2 or more candidates, `{base-branch}` and `{sync-strategy}` are already answered. For 0 or 1 candidates, `{base-branch}` is answered by the separate plain-text turn and `{sync-strategy}` is answered only by the structured call when the selected target is behind. Confirm the selected target's actual divergence before executing — this step asks nothing after any applicable setup call:
 
 ```bash
 git rev-list --left-right --count origin/{base-branch}...HEAD
