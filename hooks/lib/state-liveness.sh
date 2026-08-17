@@ -9,6 +9,7 @@
 # lib/state-core.ts. Tests assert pairwise equality between both files.
 ACTIVE_IDLE_TTL=21600   # 6 hours — active session idle window
 TERMINAL_TTL=1800       # 30 minutes — terminal (active:false) grace period
+PRETOOL_TRACE_RETENTION_TTL=604800 # 7 days — strict mtime retention boundary
 
 # STATE_PREFIXES — the 6 managed state-file prefixes. This is the single
 # definition site for bash; the out-of-scope *seeding* point is
@@ -28,6 +29,203 @@ STATE_PREFIXES="goal-state- ultragoal-state- prometheus-state- deep-interview-ac
 # delete path. reap_session_artifacts is deliberately NOT `.json`-anchored:
 # state/block-count-* files carry no extension at all.
 SESSION_ARTIFACT_PREFIXES="codex-todo- state/block-count- goal-verdict- goal-codereview- ultragoal-verdict- ultragoal-codereview-"
+
+# _pretool_trace_stale <file> <now_epoch>
+#
+# Returns success only when a regular, non-symlink file has a readable mtime
+# strictly older than seven days.  A missing/unreadable mtime is preserved.
+_pretool_trace_stale() {
+  local file="$1"
+  local now_epoch="$2"
+  [ -f "$file" ] || [ -d "$file" ] || return 1
+  [ -L "$file" ] && return 1
+  local touched
+  touched=$(_state_liveness_stat_mtime "$file" 2>/dev/null || true)
+  case "$touched" in ''|*[!0-9]*) return 1 ;; esac
+  local age=$((now_epoch - touched))
+  [ "$age" -gt "$PRETOOL_TRACE_RETENTION_TTL" ]
+}
+
+_pretool_trace_safe_name() {
+  local name="$1"
+  printf '%s\n' "$name" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*\.txt$'
+}
+
+_pretool_trace_hex_key() {
+  local name="$1"
+  printf '%s\n' "$name" | grep -Eq '^[0-9a-f]{64}\.key$'
+}
+
+# reap_pretool_trace_artifacts <root> <now_epoch> <dry_run>
+#
+# Scans only the explicit trace/key/evidence allowlist.  It emits stale paths
+# (including the exact lock directory) and never follows a symlink or enters
+# an unknown directory.  The empty real lock is removed with rmdir only.
+reap_pretool_trace_artifacts() {
+  local root="$1" now_epoch="$2" dry_run="$3"
+  local path name work child nonempty had_failure=0
+  local trace="$root/pretool-trace"
+  local keys="$trace/keys"
+  local evidence="$root/evidence"
+  local evidence_trace="$evidence/pretool-trace"
+
+  # Trace generations and keys.
+  if [ -d "$trace" ] && [ ! -L "$trace" ]; then
+    for name in events.jsonl events.jsonl.1 events.jsonl.2 events.jsonl.3; do
+      path="$trace/$name"
+      if _pretool_trace_stale "$path" "$now_epoch"; then
+        if [ "$dry_run" = "1" ]; then printf '%s\n' "$path"
+        elif rm -f "$path" 2>/dev/null; then printf '%s\n' "$path"
+        else echo "reap: failed to delete $path" >&2; had_failure=1; fi
+      fi
+    done
+    if [ -d "$keys" ] && [ ! -L "$keys" ]; then
+      for path in "$keys"/*; do
+        [ -f "$path" ] || continue
+        [ -L "$path" ] && continue
+        name="${path##*/}"
+        _pretool_trace_hex_key "$name" || continue
+        if _pretool_trace_stale "$path" "$now_epoch"; then
+          if [ "$dry_run" = "1" ]; then printf '%s\n' "$path"
+          elif rm -f "$path" 2>/dev/null; then printf '%s\n' "$path"
+          else echo "reap: failed to delete $path" >&2; had_failure=1; fi
+        fi
+      done
+    fi
+    # Only the exact empty real lock is eligible for rmdir.
+    path="$trace/.append.lock"
+    if [ -d "$path" ] && [ ! -L "$path" ] && _pretool_trace_stale "$path" "$now_epoch"; then
+      nonempty=0
+      for child in "$path"/* "$path"/.[!.]* "$path"/..?*; do
+        [ -e "$child" ] || [ -L "$child" ] || continue
+        nonempty=1
+        break
+      done
+      if [ "$nonempty" -eq 0 ]; then
+        if [ "$dry_run" = "1" ]; then printf '%s\n' "$path"
+        elif rmdir "$path" 2>/dev/null; then printf '%s\n' "$path"
+        else echo "reap: failed to remove $path" >&2; had_failure=1; fi
+      fi
+    fi
+  fi
+
+  # Evidence work-item directories are an explicit finite allowlist.
+  if [ -d "$evidence" ] && [ ! -L "$evidence" ] && [ -d "$evidence_trace" ] && [ ! -L "$evidence_trace" ]; then
+    for work in wi-1 wi-2 wi-3 wi-4 wi-5 wi-6 wi-7 wi-8 wi-9 wi-10 final; do
+      path="$evidence_trace/$work"
+      [ -d "$path" ] && [ ! -L "$path" ] || continue
+      for child in "$path"/*; do
+        [ -f "$child" ] || continue
+        [ -L "$child" ] && continue
+        name="${child##*/}"
+        _pretool_trace_safe_name "$name" || continue
+        if _pretool_trace_stale "$child" "$now_epoch"; then
+          if [ "$dry_run" = "1" ]; then printf '%s\n' "$child"
+          elif rm -f "$child" 2>/dev/null; then printf '%s\n' "$child"
+          else echo "reap: failed to delete $child" >&2; had_failure=1; fi
+        fi
+      done
+    done
+  fi
+  [ "$had_failure" -eq 0 ]
+}
+
+# list_pretool_trace_symlinks <root>
+# Report symlinked allowed ancestors/leaves without traversing them.
+list_pretool_trace_symlinks() {
+  local root="$1" path work name
+  local trace="$root/pretool-trace" evidence="$root/evidence" evidence_trace="$root/evidence/pretool-trace"
+  for path in "$trace" "$trace/keys" "$trace/.append.lock" "$evidence" "$evidence_trace"; do
+    [ -L "$path" ] && printf '%s\n' "$path"
+  done
+  if [ -d "$evidence_trace" ] && [ ! -L "$evidence_trace" ]; then
+    for work in wi-1 wi-2 wi-3 wi-4 wi-5 wi-6 wi-7 wi-8 wi-9 wi-10 final; do
+      path="$evidence_trace/$work"
+      [ -L "$path" ] && printf '%s\n' "$path"
+      if [ -d "$path" ] && [ ! -L "$path" ]; then
+        for name in "$path"/* "$path"/.[!.]* "$path"/..?*; do
+          [ -L "$name" ] && printf '%s\n' "$name"
+        done
+      fi
+    done
+  fi
+  if [ -d "$trace" ] && [ ! -L "$trace" ]; then
+    for name in events.jsonl events.jsonl.1 events.jsonl.2 events.jsonl.3; do
+      path="$trace/$name"
+      [ -L "$path" ] && printf '%s\n' "$path"
+    done
+    if [ -d "$trace/keys" ] && [ ! -L "$trace/keys" ]; then
+      for path in "$trace/keys"/*; do [ -L "$path" ] && printf '%s\n' "$path"; done
+    fi
+  fi
+  return 0
+}
+
+# pretool_trace_find_ancestor_symlink <path>
+# Walk the lexical path from the managed root toward `/` without resolving it.
+# This catches an intermediate alias (for example holder/alias/root) before
+# any glob can follow it, while leaving ordinary ancestors such as /tmp alone.
+pretool_trace_find_ancestor_symlink() {
+  local current="$1" parent
+  case "$current" in /*) ;; *) return 1 ;; esac
+  while :; do
+    # macOS commonly exposes /var (and temporary roots beneath it) as a
+    # system alias. These OS-owned ancestors are outside the managed OMT
+    # boundary; do not reject them while still checking every project-local
+    # component below the boundary.
+    case "$current" in /tmp|/var|/private/var|/Users|/private/Users) return 1 ;; esac
+    if [ -L "$current" ]; then
+      printf '%s\n' "$current"
+      return 0
+    fi
+    [ "$current" = "/" ] && break
+    parent="${current%/*}"
+    [ -n "$parent" ] || parent="/"
+    [ "$parent" = "$current" ] && break
+    current="$parent"
+  done
+  return 1
+}
+
+# list_pretool_trace_unclassified <root>
+# Report immediate entries beneath managed trace/evidence directories that are
+# outside the allowlist. Unknown directories are reported but never entered.
+list_pretool_trace_unclassified() {
+  local root="$1" path name work child
+  local trace="$root/pretool-trace" keys="$root/pretool-trace/keys"
+  local evidence_trace="$root/evidence/pretool-trace"
+  if [ -d "$trace" ] && [ ! -L "$trace" ]; then
+    for child in "$trace"/* "$trace"/.[!.]* "$trace"/..?*; do
+      [ -e "$child" ] || [ -L "$child" ] || continue
+      name="${child##*/}"
+      case "$name" in events.jsonl|events.jsonl.1|events.jsonl.2|events.jsonl.3|.append.lock|keys) ;; *) printf '%s\n' "$child" ;; esac
+    done
+    if [ -d "$keys" ] && [ ! -L "$keys" ]; then
+      for child in "$keys"/* "$keys"/.[!.]* "$keys"/..?*; do
+        [ -e "$child" ] || [ -L "$child" ] || continue
+        name="${child##*/}"
+        _pretool_trace_hex_key "$name" || printf '%s\n' "$child"
+      done
+    fi
+  fi
+  if [ -d "$evidence_trace" ] && [ ! -L "$evidence_trace" ]; then
+    for child in "$evidence_trace"/* "$evidence_trace"/.[!.]* "$evidence_trace"/..?*; do
+      [ -e "$child" ] || [ -L "$child" ] || continue
+      name="${child##*/}"
+      case "$name" in wi-1|wi-2|wi-3|wi-4|wi-5|wi-6|wi-7|wi-8|wi-9|wi-10|final) ;; *) printf '%s\n' "$child" ;; esac
+    done
+    for work in wi-1 wi-2 wi-3 wi-4 wi-5 wi-6 wi-7 wi-8 wi-9 wi-10 final; do
+      path="$evidence_trace/$work"
+      [ -d "$path" ] && [ ! -L "$path" ] || continue
+      for child in "$path"/* "$path"/.[!.]* "$path"/..?*; do
+        [ -e "$child" ] || [ -L "$child" ] || continue
+        name="${child##*/}"
+        _pretool_trace_safe_name "$name" || printf '%s\n' "$child"
+      done
+    done
+  fi
+  return 0
+}
 
 # is_state_live <file> <now_epoch>
 #

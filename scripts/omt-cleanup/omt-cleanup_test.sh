@@ -1356,6 +1356,155 @@ test_symlinked_project_reported_in_symlinks_section() {
     return 0
 }
 
+# WI-8 — trace/key/evidence retention and exact stale-lock cleanup.
+test_pretool_trace_retention_and_custom_root() {
+    local custom="$FIXTURE_HOME/custom-omt" default="$FIXTURE_HOME/.omt/default"
+    mkdir -p "$custom/pretool-trace/keys" "$custom/evidence/pretool-trace/wi-8" \
+        "$custom/pretool-trace/.append.lock" "$default/pretool-trace"
+    local key
+    key=$(printf 'a%.0s' {1..64})
+    printf stale > "$custom/pretool-trace/events.jsonl"
+    printf stale > "$custom/pretool-trace/keys/$key.key"
+    printf stale > "$custom/evidence/pretool-trace/wi-8/result.txt"
+    touch -t 200001010000 "$custom/pretool-trace/events.jsonl" "$custom/pretool-trace/keys/$key.key" \
+        "$custom/evidence/pretool-trace/wi-8/result.txt" "$custom/pretool-trace/.append.lock"
+    printf sentinel > "$default/pretool-trace/events.jsonl"
+    export OMT_DIR="$custom"
+    local dry
+    dry=$(bash "$CLEANUP_SCRIPT" --dry-run)
+    echo "$dry" | grep -q "$custom/pretool-trace/events.jsonl" || return 1
+    echo "$dry" | grep -q "$custom/pretool-trace/keys/$key.key" || return 1
+    echo "$dry" | grep -q "$custom/evidence/pretool-trace/wi-8/result.txt" || return 1
+    echo "$dry" | grep -q "$custom/pretool-trace/.append.lock" || return 1
+    echo "$dry" | grep -q "$default/pretool-trace/events.jsonl" && return 1
+    [[ -f "$custom/pretool-trace/events.jsonl" ]] || return 1
+    bash "$CLEANUP_SCRIPT" --execute > /dev/null
+    [[ ! -e "$custom/pretool-trace/events.jsonl" ]] || return 1
+    [[ ! -e "$custom/pretool-trace/keys/$key.key" ]] || return 1
+    [[ ! -e "$custom/evidence/pretool-trace/wi-8/result.txt" ]] || return 1
+    [[ ! -e "$custom/pretool-trace/.append.lock" ]] || return 1
+    [[ -f "$default/pretool-trace/events.jsonl" ]] || return 1
+    unset OMT_DIR
+}
+
+test_pretool_trace_fixed_now_boundaries_all_families() (
+    local root="$FIXTURE_HOME/boundary" now=1000000000
+    mkdir -p "$root/pretool-trace/keys" "$root/evidence/pretool-trace/wi-8"
+    local key; key=$(printf 'b%.0s' {1..64})
+    local f
+    for f in events.jsonl events.jsonl.1 events.jsonl.2 events.jsonl.3; do printf x > "$root/pretool-trace/$f"; done
+    printf x > "$root/pretool-trace/keys/$key.key"
+    printf x > "$root/evidence/pretool-trace/wi-8/result.txt"
+    mkdir -p "$root/pretool-trace/.append.lock"
+    # The helper's stat dependency is replaced with a deterministic clock.
+    source "$SCRIPT_DIR/../../hooks/lib/state-liveness.sh"
+    local failed=0
+    TEST_MTIME=$((now - 6 * 86400)); _state_liveness_stat_mtime() { printf '%s\n' "$TEST_MTIME"; }
+    local paths="$root/pretool-trace/events.jsonl
+$root/pretool-trace/events.jsonl.1
+$root/pretool-trace/events.jsonl.2
+$root/pretool-trace/events.jsonl.3
+$root/pretool-trace/keys/$key.key
+$root/evidence/pretool-trace/wi-8/result.txt"
+    for age in 6 7; do
+        TEST_MTIME=$((now - age * 86400))
+        while IFS= read -r f; do _pretool_trace_stale "$f" "$now" && failed=1; done <<PATHS
+$paths
+PATHS
+        _pretool_trace_stale "$root/pretool-trace/.append.lock" "$now" && failed=1
+    done
+    TEST_MTIME=$((now - 7 * 86400 - 1))
+    while IFS= read -r f; do _pretool_trace_stale "$f" "$now" || failed=1; done <<PATHS
+$paths
+PATHS
+    _pretool_trace_stale "$root/pretool-trace/.append.lock" "$now" || failed=1
+    _state_liveness_stat_mtime() { return 1; }
+    _pretool_trace_stale "$root/pretool-trace/events.jsonl" "$now" && failed=1
+    [[ "${failed:-0}" -eq 0 ]]
+)
+
+test_pretool_trace_intermediate_ancestor_symlink_reported() {
+    local holder="$FIXTURE_HOME/holder" real="$FIXTURE_HOME/real" root
+    mkdir -p "$holder" "$real/root/pretool-trace"
+    printf sentinel > "$real/root/pretool-trace/events.jsonl"
+    ln -s "$real" "$holder/alias"
+    root="$holder/alias/root"
+    local out
+    out=$(OMT_DIR="$root" bash "$CLEANUP_SCRIPT" --execute 2>&1)
+    echo "$out" | grep -q "SYMLINKS" || return 1
+    echo "$out" | grep -q "$holder/alias" || return 1
+    [[ -f "$real/root/pretool-trace/events.jsonl" ]]
+}
+
+test_pretool_trace_lock_reap_matrix_actual_helper() (
+    local base="$FIXTURE_HOME/lock-matrix" now=1000000000 root out
+    mkdir -p "$base"
+    source "$SCRIPT_DIR/../../hooks/lib/state-liveness.sh"
+    _state_liveness_stat_mtime() { printf '%s\n' "$TEST_MTIME"; }
+
+    # Stale empty real lock: dry-run reports it; execute removes only the lock.
+    root="$base/stale"; mkdir -p "$root/pretool-trace/.append.lock"
+    TEST_MTIME=$((now - 7 * 86400 - 1))
+    out=$(reap_pretool_trace_artifacts "$root" "$now" 1)
+    echo "$out" | grep -q "$root/pretool-trace/.append.lock" || return 1
+    reap_pretool_trace_artifacts "$root" "$now" 0 >/dev/null
+    [[ ! -e "$root/pretool-trace/.append.lock" ]] || return 1
+
+    # Fresh and exactly-seven-day locks are not candidates.
+    for kind in fresh exact; do
+        root="$base/$kind"; mkdir -p "$root/pretool-trace/.append.lock"
+        if [[ "$kind" = fresh ]]; then TEST_MTIME="$now"; else TEST_MTIME=$((now - 7 * 86400)); fi
+        out=$(reap_pretool_trace_artifacts "$root" "$now" 1)
+        [[ -z "$out" ]] || return 1
+        [[ -d "$root/pretool-trace/.append.lock" ]] || return 1
+    done
+
+    # Stale nonempty lock is preserved, including its child.
+    root="$base/nonempty"; mkdir -p "$root/pretool-trace/.append.lock"
+    printf sentinel > "$root/pretool-trace/.append.lock/owner"
+    TEST_MTIME=$((now - 7 * 86400 - 1)); out=$(reap_pretool_trace_artifacts "$root" "$now" 1)
+    [[ -z "$out" ]] || return 1
+    [[ -f "$root/pretool-trace/.append.lock/owner" ]] || return 1
+
+    # Unreadable/stat failure is fail-safe and does not produce a candidate.
+    root="$base/unreadable"; mkdir -p "$root/pretool-trace/.append.lock"
+    _state_liveness_stat_mtime() { return 1; }
+    out=$(reap_pretool_trace_artifacts "$root" "$now" 1)
+    [[ -z "$out" ]] && [[ -d "$root/pretool-trace/.append.lock" ]]
+)
+
+test_pretool_trace_symlink_and_unknown_preserved() {
+    local custom="$FIXTURE_HOME/custom-omt" outside="$FIXTURE_HOME/outside"
+    mkdir -p "$custom/pretool-trace/keys" "$custom/evidence/pretool-trace/wi-8" "$outside"
+    mkdir -p "$outside/work"
+    printf sentinel > "$outside/events.jsonl"
+    ln -s "$outside" "$custom/pretool-trace/keys/link"
+    printf unknown > "$custom/evidence/pretool-trace/wi-8/unknown.bin"
+    ln -s "$outside/events.jsonl" "$custom/evidence/pretool-trace/wi-8/leaf.txt"
+    ln -s "$outside/work" "$custom/evidence/pretool-trace/wi-9"
+    ln -s "$outside/work" "$custom/pretool-trace/.append.lock"
+    export OMT_DIR="$custom"
+    local out
+    out=$(bash "$CLEANUP_SCRIPT" --execute 2>&1)
+    [[ -f "$outside/events.jsonl" ]] && [[ -L "$custom/pretool-trace/keys/link" ]] && [[ -f "$custom/evidence/pretool-trace/wi-8/unknown.bin" ]]
+    [[ -L "$custom/pretool-trace/.append.lock" ]] || return 1
+    echo "$out" | grep -q "$custom/pretool-trace/keys/link" || return 1
+    echo "$out" | grep -q "$custom/evidence/pretool-trace/wi-8/unknown.bin" || return 1
+    echo "$out" | grep -q "$custom/evidence/pretool-trace/wi-8/leaf.txt" || return 1
+    echo "$out" | grep -q "$custom/evidence/pretool-trace/wi-9" || return 1
+    echo "$out" | grep -q "$custom/pretool-trace/.append.lock" || return 1
+    unset OMT_DIR
+}
+
+test_pretool_trace_empty_override_uses_default_root() {
+    local project="$FIXTURE_HOME/.omt/empty-project/pretool-trace"
+    mkdir -p "$project"
+    printf stale > "$project/events.jsonl"
+    touch -t 200001010000 "$project/events.jsonl"
+    OMT_DIR="" bash "$CLEANUP_SCRIPT" --execute > /dev/null
+    [[ ! -e "$project/events.jsonl" ]]
+}
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -1441,6 +1590,12 @@ main() {
     # Symlink fan-out guard
     run_test test_symlinked_project_target_artifact_survives_execute
     run_test test_symlinked_project_reported_in_symlinks_section
+    run_test test_pretool_trace_retention_and_custom_root
+    run_test test_pretool_trace_symlink_and_unknown_preserved
+    run_test test_pretool_trace_fixed_now_boundaries_all_families
+    run_test test_pretool_trace_intermediate_ancestor_symlink_reported
+    run_test test_pretool_trace_lock_reap_matrix_actual_helper
+    run_test test_pretool_trace_empty_override_uses_default_root
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

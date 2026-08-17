@@ -5,7 +5,7 @@
 # Usage:
 #   omt-cleanup.sh              # dry-run (default): report reap candidates; delete nothing
 #   omt-cleanup.sh --dry-run    # same as default
-#   omt-cleanup.sh --execute    # reap dead state files and dead session artifacts (file-level only — directories are never removed)
+#   omt-cleanup.sh --execute    # reap stale allowlisted files plus one exact stale empty .append.lock directory
 #
 # --dry-run and --execute are mutually exclusive: passing both, or any
 # unrecognized argument, is rejected on stderr with a non-zero exit before
@@ -24,8 +24,14 @@ SCRIPT_DIR_CLEANUP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=hooks/lib/state-liveness.sh
 source "$SCRIPT_DIR_CLEANUP/../../hooks/lib/state-liveness.sh"
 
-OMT_DIR="${HOME}/.omt"
 CLEANUP_NOW=$(date +%s)
+OMT_DIR_OVERRIDE=0
+if [[ -n "${OMT_DIR:-}" ]]; then
+    OMT_DIR_OVERRIDE=1
+    OMT_DIR="${OMT_DIR}"
+else
+    OMT_DIR="${HOME}/.omt"
+fi
 
 # ---------------------------------------------------------------------------
 # Main
@@ -36,7 +42,7 @@ print_usage() {
 Usage:
   omt-cleanup.sh              # dry-run (default): report reap candidates; delete nothing
   omt-cleanup.sh --dry-run    # same as default
-  omt-cleanup.sh --execute    # reap dead state files and dead session artifacts (file-level only — directories are never removed)
+  omt-cleanup.sh --execute    # reap stale allowlisted files plus one exact stale empty .append.lock directory
 EOF
 }
 
@@ -69,7 +75,7 @@ if [[ $SAW_EXECUTE -eq 1 ]]; then
     DRY_RUN=0
 fi
 
-if [[ ! -d "$OMT_DIR" ]]; then
+if [[ ! -d "$OMT_DIR" && ! -L "$OMT_DIR" ]]; then
     echo "Nothing to do: $OMT_DIR does not exist."
     exit 0
 fi
@@ -81,6 +87,7 @@ DEAD_STATE_OUT=""
 DEAD_ARTIFACTS_OUT=""
 UNCLASSIFIED_OUT=""
 SYMLINK_OUT=""
+TRACE_OUT=""
 HAD_REAP_FAILURE=0
 
 # Fan out to every top-level directory. Every classification and liveness
@@ -103,8 +110,34 @@ HAD_REAP_FAILURE=0
 # entries are still surfaced in the SYMLINKS report section below — never
 # silently dropped — following this script's existing UNCLASSIFIED
 # reported-not-acted-on convention.
-for entry_path in "$OMT_DIR"/*/; do
-    entry_path="${entry_path%/}"
+SCAN_TARGETS=""
+if [[ "$OMT_DIR_OVERRIDE" -eq 1 ]]; then
+    if [[ ! -L "$OMT_DIR" ]]; then
+        SCAN_TARGETS="$OMT_DIR"
+    else
+        SYMLINK_OUT="$OMT_DIR"
+    fi
+else
+    for candidate in "$OMT_DIR"/*/; do
+        candidate="${candidate%/}"
+        [ -d "$candidate" ] || [ -L "$candidate" ] || continue
+        if [[ -n "$SCAN_TARGETS" ]]; then SCAN_TARGETS="${SCAN_TARGETS}
+${candidate}"; else SCAN_TARGETS="$candidate"; fi
+    done
+fi
+
+while IFS= read -r entry_path; do
+    [[ -n "$entry_path" ]] || continue
+
+    ancestor_symlink=""
+    if command -v pretool_trace_find_ancestor_symlink >/dev/null 2>&1; then
+        ancestor_symlink="$(pretool_trace_find_ancestor_symlink "$entry_path" || true)"
+    fi
+    if [[ -n "$ancestor_symlink" ]]; then
+        if [[ -n "$SYMLINK_OUT" ]]; then SYMLINK_OUT="${SYMLINK_OUT}
+${ancestor_symlink}"; else SYMLINK_OUT="$ancestor_symlink"; fi
+        continue
+    fi
 
     # The -L check MUST run after the trailing slash is stripped above, not
     # against the raw glob match: `[ -L "path/" ]` follows the symlink (the
@@ -150,6 +183,25 @@ ${dead_artifacts}"
         fi
     fi
 
+    trace_candidates=""
+    if command -v reap_pretool_trace_artifacts >/dev/null 2>&1; then
+        if ! trace_candidates="$(reap_pretool_trace_artifacts "$entry_path" "$CLEANUP_NOW" "$DRY_RUN")"; then
+            HAD_REAP_FAILURE=1
+        fi
+    fi
+    if [[ -n "$trace_candidates" ]]; then
+        if [[ -n "$TRACE_OUT" ]]; then TRACE_OUT="${TRACE_OUT}
+${trace_candidates}"; else TRACE_OUT="$trace_candidates"; fi
+    fi
+    trace_symlinks=""
+    if command -v list_pretool_trace_symlinks >/dev/null 2>&1; then
+        trace_symlinks="$(list_pretool_trace_symlinks "$entry_path")"
+    fi
+    if [[ -n "$trace_symlinks" ]]; then
+        if [[ -n "$SYMLINK_OUT" ]]; then SYMLINK_OUT="${SYMLINK_OUT}
+${trace_symlinks}"; else SYMLINK_OUT="$trace_symlinks"; fi
+    fi
+
     unclassified="$(list_unclassified_session_files "$entry_path")"
     if [[ -n "$unclassified" ]]; then
         if [[ -n "$UNCLASSIFIED_OUT" ]]; then
@@ -159,7 +211,17 @@ ${unclassified}"
             UNCLASSIFIED_OUT="$unclassified"
         fi
     fi
-done
+    trace_unknown=""
+    if command -v list_pretool_trace_unclassified >/dev/null 2>&1; then
+        trace_unknown="$(list_pretool_trace_unclassified "$entry_path")"
+    fi
+    if [[ -n "$trace_unknown" ]]; then
+        if [[ -n "$UNCLASSIFIED_OUT" ]]; then UNCLASSIFIED_OUT="${UNCLASSIFIED_OUT}
+${trace_unknown}"; else UNCLASSIFIED_OUT="$trace_unknown"; fi
+    fi
+done <<SCAN_TARGETS
+$SCAN_TARGETS
+SCAN_TARGETS
 
 # Reap-lane label carries mode in its own text: dry-run has deleted nothing
 # yet (DELETE), execute already deleted by the time this prints (DELETED).
@@ -189,6 +251,17 @@ else
     while IFS= read -r f; do
         echo "${REAP_LABEL}${f}"
     done <<< "$DEAD_ARTIFACTS_OUT"
+fi
+
+echo ""
+
+echo "--- PRETOOL-TRACE (to reap) ---"
+if [[ -z "$TRACE_OUT" ]]; then
+    echo "  (none)"
+else
+    while IFS= read -r f; do
+        echo "${REAP_LABEL}${f}"
+    done <<< "$TRACE_OUT"
 fi
 
 echo ""
