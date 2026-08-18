@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
@@ -106,6 +106,92 @@ describe("pre-tool trace storage", () => {
 		expect(appendEvent({ dropped: true })).toBe(false);
 		expect(performance.now() - started).toBeLessThan(100);
 		expect(statSync(storagePaths().events).size).toBe(before);
+	});
+
+	test("owner lock — live owner drops immediately", () => {
+		root();
+		mkdirSync(storagePaths().dir, { recursive: true });
+		mkdirSync(storagePaths().lock);
+		writeFileSync(join(storagePaths().lock, `owner-${process.pid}-live`), JSON.stringify({ pid: process.pid, nonce: "live" }));
+		const started = performance.now();
+		expect(appendEvent({ dropped: true })).toBe(false);
+		expect(performance.now() - started).toBeLessThan(100);
+	});
+
+	test("owner lock — dead owner is recovered and append succeeds", () => {
+		root();
+		mkdirSync(storagePaths().dir, { recursive: true });
+		mkdirSync(storagePaths().lock);
+		writeFileSync(join(storagePaths().lock, "owner-2147483647-dead"), JSON.stringify({ pid: 2147483647, nonce: "dead" }));
+		expect(appendEvent({ recovered: true })).toBe(true);
+		expect(JSON.parse(readFileSync(storagePaths().events, "utf8"))).toEqual({ recovered: true });
+	});
+
+	test("owner lock — fresh empty initialization drops immediately", () => {
+		root();
+		mkdirSync(storagePaths().dir, { recursive: true });
+		mkdirSync(storagePaths().lock);
+		const started = performance.now();
+		expect(appendEvent({ dropped: true })).toBe(false);
+		expect(performance.now() - started).toBeLessThan(100);
+	});
+
+	test("owner lock — stale empty initialization is recovered", () => {
+		root();
+		mkdirSync(storagePaths().dir, { recursive: true });
+		mkdirSync(storagePaths().lock);
+		const stale = new Date(Date.now() - 10_000);
+		utimesSync(storagePaths().lock, stale, stale);
+		expect(appendEvent({ recovered: true })).toBe(true);
+	});
+
+	test("owner lock — malformed owner and symlink lock fail open", () => {
+		root();
+		mkdirSync(storagePaths().dir, { recursive: true });
+		mkdirSync(storagePaths().lock);
+		writeFileSync(join(storagePaths().lock, "owner-malformed"), "not-json");
+		expect(appendEvent({ dropped: true })).toBe(false);
+		rmSync(storagePaths().lock, { recursive: true, force: true });
+		const target = join(storagePaths().dir, "target-lock");
+		mkdirSync(target);
+		symlinkSync(target, storagePaths().lock);
+		expect(appendEvent({ dropped: true })).toBe(false);
+	});
+
+	test("owner lock — concurrent stale recovery preserves JSONL records", async () => {
+		root();
+		mkdirSync(storagePaths().dir, { recursive: true });
+		mkdirSync(storagePaths().lock);
+		writeFileSync(join(storagePaths().lock, "owner-2147483647-dead"), JSON.stringify({ pid: 2147483647, nonce: "dead" }));
+		const modulePath = join(import.meta.dir, "storage.ts");
+		const results = await concurrentChildren(`import {appendEvent} from ${JSON.stringify(modulePath)}; const writer_id=${JSON.stringify("stale-")}+process.pid; const ok=appendEvent({writer_id}); process.stdout.write(JSON.stringify({writer_id,ok}));`, 20, { OMT_DIR: process.env.OMT_DIR! });
+		const statuses = results.map((result) => JSON.parse(result) as { writer_id: string; ok: boolean });
+		const successful = new Set(statuses.filter((status) => status.ok).map((status) => status.writer_id));
+		const stored = new Set<string>();
+		for (const line of readFileSync(storagePaths().events, "utf8").split("\n").filter(Boolean)) stored.add((JSON.parse(line) as { writer_id: string }).writer_id);
+		expect(stored).toEqual(successful);
+	});
+
+	test("owner lock — append failure leaves no owned lock behind", () => {
+		root();
+		mkdirSync(storagePaths().dir, { recursive: true });
+		mkdirSync(storagePaths().events);
+		expect(appendEvent({ failed: true })).toBe(false);
+		expect(existsSync(storagePaths().lock)).toBe(false);
+	});
+
+	test("owner lock — initialization metadata failure cleans up for retry", async () => {
+		root();
+		const modulePath = join(import.meta.dir, "storage.ts");
+		const script = `import {mock} from "bun:test"; const actual=await import("node:fs"); let fail=true; mock.module("node:fs",()=>({...actual.default,...actual,writeFileSync(...args){if(fail && String(args[0]).includes(".append.lock/owner-")){fail=false; throw new Error("injected owner write failure");} return actual.writeFileSync(...args);}})); const {appendEvent,storagePaths}=await import(${JSON.stringify(modulePath)}); const first=appendEvent({first:true}); const lockAfterFirst=actual.existsSync(storagePaths().lock); process.stdout.write(JSON.stringify({first,lockAfterFirst}));`;
+		const child = Bun.spawn([process.execPath, "-e", script], { env: { ...process.env, OMT_DIR: process.env.OMT_DIR! }, stdout: "pipe", stderr: "pipe" });
+		const output = await new Response(child.stdout).text();
+		const stderr = await new Response(child.stderr).text();
+		await child.exited;
+		expect(child.exitCode, stderr).toBe(0);
+		expect(JSON.parse(output)).toEqual({ first: false, lockAfterFirst: false });
+		expect(appendEvent({ second: true })).toBe(true);
+		expect(readFileSync(storagePaths().events, "utf8")).toBe("{\"second\":true}\n");
 	});
 
 	test("canonical OMT directory — explicit override wins", () => {
