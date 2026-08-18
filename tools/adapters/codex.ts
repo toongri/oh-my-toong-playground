@@ -61,6 +61,27 @@ export function resolveCodexAgentModel(
 // TOML Managed Block Helpers
 // =============================================================================
 
+/** Escapes a literal string for embedding in a RegExp source. */
+function escapeRegExp(literal: string): string {
+	return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Finds every line-anchored occurrence of `marker`: the marker must start
+ * the line and may be followed only by trailing horizontal whitespace
+ * before the line ends. Anchoring to whole lines (rather than a raw
+ * substring match) keeps a marker literal sitting inside a TOML string
+ * value or a plain comment from being mistaken for a structural marker.
+ * Trailing-whitespace tolerance exists because Codex re-serializing
+ * config.toml can append trailing spaces to the marker line — treating
+ * that as "marker absent" would fall through to append and duplicate the
+ * block.
+ */
+function matchMarkerLines(content: string, marker: string): RegExpMatchArray[] {
+	const pattern = new RegExp(`^${escapeRegExp(marker)}[ \t]*$`, "gm");
+	return [...content.matchAll(pattern)];
+}
+
 /**
  * Inserts or replaces a managed block in TOML content.
  *
@@ -87,20 +108,22 @@ export function insertManagedBlock(
 	// existence check, and the replace path below would then splice out
 	// everything between the FIRST start marker and the ONLY end marker —
 	// silently deleting any user-owned content sitting between the duplicates.
-	// Split-based counting is safe here because neither marker string is a
-	// substring of the other.
-	const startCount = content.split(startMarker).length - 1;
-	const endCount = content.split(endMarker).length - 1;
+	// Count and position come from the same line-anchored match (matchMarkerLines)
+	// so they can never disagree about which occurrence is "the" marker.
+	const startMatches = matchMarkerLines(content, startMarker);
+	const endMatches = matchMarkerLines(content, endMarker);
+	const startCount = startMatches.length;
+	const endCount = endMatches.length;
 
-	const startIdx = content.indexOf(startMarker);
-	const endIdx = content.indexOf(endMarker);
+	const startIdx = startMatches[0]?.index ?? -1;
+	const endIdx = endMatches[0]?.index ?? -1;
 
 	let result: string;
 
 	if (startCount === 1 && endCount === 1 && endIdx > startIdx) {
 		// Replace existing block (inclusive of markers)
 		const before = content.slice(0, startIdx);
-		const after = content.slice(endIdx + endMarker.length);
+		const after = content.slice(endIdx + endMatches[0][0].length);
 		// Trim trailing newlines from before, trim leading newlines from after
 		const beforeTrimmed = before.replace(/\n+$/, "");
 		const afterTrimmed = after.replace(/^\n+/, "");

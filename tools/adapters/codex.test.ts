@@ -55,7 +55,7 @@ describe("insertManagedBlock", () => {
 		expect(result).toContain(`server = "test"`);
 	});
 
-	it("appends a fresh block when neither marker is present via `insertManagedBlock`", () => {
+	it("마커가 전혀 없으면 `insertManagedBlock`이 새 블록을 append한다", () => {
 		const existing = `# user config\nsome_setting = true\n`;
 		const result = insertManagedBlock(existing, "mcp", `server = "test"\n`);
 		expect(result).toContain("some_setting = true");
@@ -63,7 +63,7 @@ describe("insertManagedBlock", () => {
 		expect(result).toContain(`server = "test"`);
 	});
 
-	it("throws when the start marker survives but the end marker is orphaned away via `insertManagedBlock`", () => {
+	it("시작 마커는 남아 있고 끝 마커만 사라지면 `insertManagedBlock`이 예외를 던진다", () => {
 		// Reproduces the real incident: Codex CLI rewrote config.toml and left
 		// only the start marker behind, with the stale block body still in place.
 		const existing = `# --- omt:mcp ---\n[mcp_servers.figma]\ncommand = "npx"\nargs = ["-y", "figma-mcp"]\n`;
@@ -72,14 +72,14 @@ describe("insertManagedBlock", () => {
 		);
 	});
 
-	it("throws when the end marker survives but the start marker is orphaned away via `insertManagedBlock`", () => {
+	it("끝 마커는 남아 있고 시작 마커만 사라지면 `insertManagedBlock`이 예외를 던진다", () => {
 		const existing = `[mcp_servers.figma]\ncommand = "npx"\n# --- end omt:mcp ---\n`;
 		expect(() => insertManagedBlock(existing, "mcp", `server = "test"\n`)).toThrow(
 			/orphaned marker.*omt:mcp/,
 		);
 	});
 
-	it("throws (not replaces) when the start marker is duplicated via `insertManagedBlock`, preserving the user table sitting between the duplicates", () => {
+	it("시작 마커가 중복되면 `insertManagedBlock`이 교체 대신 예외를 던지고, 중복 마커 사이의 사용자 테이블을 보존한다", () => {
 		// Reproduces the real incident from PR #262: a stale sync re-appended a
 		// full block onto a file whose end marker had already been clobbered,
 		// leaving TWO start markers and only ONE end marker. A naive
@@ -110,7 +110,7 @@ describe("insertManagedBlock", () => {
 		);
 	});
 
-	it("throws when the end marker is duplicated via `insertManagedBlock`", () => {
+	it("끝 마커가 중복되면 `insertManagedBlock`이 예외를 던진다", () => {
 		const existing = [
 			`# --- omt:mcp ---`,
 			`[mcp_servers.figma]`,
@@ -126,7 +126,25 @@ describe("insertManagedBlock", () => {
 		);
 	});
 
-	it("throws when the resulting TOML would duplicate a key via `insertManagedBlock`", () => {
+	it("관리 블록 밖 TOML 문자열 값 안에 마커 리터럴이 들어 있어도 `insertManagedBlock`이 정상적으로 블록을 교체한다", () => {
+		// The start marker text appears mid-line inside a string value, not at
+		// the start of a line — a substring-based count (content.split(marker))
+		// would count this as a second start marker and misfire the "duplicate"
+		// throw path even though only one real structural marker pair exists.
+		const existing = [
+			`note = "see # --- omt:mcp --- for details"`,
+			`# --- omt:mcp ---`,
+			`old = "data"`,
+			`# --- end omt:mcp ---`,
+			``,
+		].join("\n");
+		const result = insertManagedBlock(existing, "mcp", `new = "data"\n`);
+		expect(result).toContain(`note = "see # --- omt:mcp --- for details"`);
+		expect(result).toContain(`new = "data"`);
+		expect(result).not.toContain(`old = "data"`);
+	});
+
+	it("결과 TOML에 키가 중복되면 `insertManagedBlock`이 예외를 던진다", () => {
 		// No markers present (append path), but the block being appended
 		// declares a table the surrounding content already declares — the
 		// exact duplicate-key shape that crashed Codex CLI on startup.
