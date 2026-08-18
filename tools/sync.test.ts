@@ -10,6 +10,7 @@ import {
 	syncPlatformConfigs,
 	syncDocs,
 	processYaml,
+	collectComponentSourceRoots,
 	syncLib,
 	rewritePlatformPaths,
 	rewriteLibAliases,
@@ -155,6 +156,120 @@ afterEach(async () => {
 		const dir = makeContextTmpDirs.pop()!;
 		await fs.rm(dir, { recursive: true, force: true });
 	}
+});
+
+describe("processYaml — complete lib precollection before writes", () => {
+	let tmpDir: string;
+	let rootDir: string;
+	let targetPath: string;
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "lib-precollect-"));
+		rootDir = path.join(tmpDir, "root");
+		targetPath = path.join(tmpDir, "target");
+		await fs.mkdir(targetPath, { recursive: true });
+		await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+		await writeFile(path.join(rootDir, "lib", "wrapper.ts"), "export const wrapper = 1;\n");
+		await writeFile(path.join(rootDir, "lib", "skill.ts"), "export const skill = 2;\n");
+		await writeFile(
+			path.join(rootDir, "scripts", "wrapper", "index.ts"),
+			'import "@lib/wrapper";\n',
+		);
+		await writeFile(
+			path.join(rootDir, "skills", "skill", "SKILL.md"),
+			"# skill\n",
+		);
+		await writeFile(
+			path.join(rootDir, "skills", "skill", "index.ts"),
+			'import "@lib/skill";\n',
+		);
+		_resetConfigCache();
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+		_resetConfigCache();
+	});
+
+	function syncYamlPath(): string {
+		return path.join(rootDir, "sync.yaml");
+	}
+
+	async function writeSyncYaml(): Promise<void> {
+		await writeFile(
+			syncYamlPath(),
+			`path: ${targetPath}\nscripts:\n  items:\n    - wrapper\nskills:\n  items:\n    - skill\n`,
+		);
+	}
+
+	it("config failure after early staging preserves every currently declared skill and lib module", async () => {
+		await writeSyncYaml();
+		await writeFile(path.join(rootDir, "claude.yaml"), "config:\n  theme: dark\n");
+		const adapter = new ClaudeAdapter();
+		const adapters = new Map<Platform, PlatformAdapter>([["claude", adapter]]) as AdapterMap;
+		const first = makeContext({ dryRun: false });
+		first.backupBase = path.join(tmpDir, "backups");
+		await processYaml(first, syncYamlPath(), adapters, rootDir);
+		const before = await snapshotTree(targetPath);
+
+		adapter.syncPlatformYaml = async () => {
+			throw new Error("injected config failure");
+		};
+		const second = makeContext({ dryRun: false });
+		second.backupBase = path.join(tmpDir, "backups-2");
+		await processYaml(second, syncYamlPath(), adapters, rootDir);
+
+		expect(second.failedTargets).toContain(targetPath);
+		expect(await snapshotTree(targetPath)).toEqual(before);
+	});
+
+	it("remaining-category failure after early staging preserves the complete declared lib set", async () => {
+		await writeSyncYaml();
+		class FailingAdapter extends ClaudeAdapter {
+			override async syncSkillsDirect(): Promise<void> {
+				throw new Error("injected skill failure");
+			}
+		}
+		const adapters = new Map<Platform, PlatformAdapter>([["claude", new FailingAdapter()]]) as AdapterMap;
+		const context = makeContext({ dryRun: false });
+		context.backupBase = path.join(tmpDir, "backups");
+		await processYaml(context, syncYamlPath(), adapters, rootDir);
+
+		expect(context.failedTargets).toContain(targetPath);
+		expect(await exists(path.join(targetPath, ".claude", "lib", "wrapper.ts"))).toBe(true);
+		expect(await exists(path.join(targetPath, ".claude", "lib", "skill.ts"))).toBe(true);
+	});
+
+	it("precollects Codex skill bucket and agents add-hooks source roots", async () => {
+		await writeFile(path.join(rootDir, "skills", "codex-skill", "index.ts"), 'import "@lib/skill";\n');
+		await writeFile(path.join(rootDir, "hooks", "agent-hook", "index.ts"), 'import "@lib/wrapper";\n');
+		const syncYaml = {
+			path: targetPath,
+			skills: { items: [{ component: "codex-skill", platforms: ["codex"] }] },
+			agents: {
+				items: [
+					{
+						component: "agent",
+						platforms: ["codex"],
+						"add-hooks": [{ component: "agent-hook" }],
+					},
+				],
+			},
+		} as unknown as SyncYaml;
+		await writeFile(path.join(rootDir, "agents", "agent.md"), "# agent\n");
+		const roots: LibSourceRoots = new Map();
+		await collectComponentSourceRoots(
+			syncYaml,
+			new Map<Platform, PlatformAdapter>([["codex", new CodexAdapter()]]) as AdapterMap,
+			rootDir,
+			undefined,
+			roots,
+		);
+		expect(roots.get("agents")).toEqual(new Set([path.join(rootDir, "skills", "codex-skill")]));
+		expect(roots.get("codex")).toEqual(
+			new Set([path.join(rootDir, "agents", "agent.md"), path.join(rootDir, "hooks", "agent-hook")]),
+		);
+	});
 });
 
 describe("PreToolUse wrapper deployment validation", () => {

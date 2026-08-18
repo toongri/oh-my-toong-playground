@@ -167,6 +167,57 @@ async function collectPlatformHookSourceRoots(
 }
 
 /**
+ * Collect every currently deployable component source before the first target
+ * write. This mirrors syncCategory's resolution/adapter/capability gates so
+ * the early syncLib staging sees the complete lib dependency graph even when a
+ * later config or category write fails.
+ */
+export async function collectComponentSourceRoots(
+	syncYaml: SyncYaml,
+	adapters: AdapterMap,
+	rootDir: string,
+	projectDir: string | undefined,
+	libSourceRoots: LibSourceRoots,
+): Promise<void> {
+	for (const category of CATEGORIES) {
+		const section = syncYaml[category];
+		if (!section || !Array.isArray(section.items) || section.items.length === 0) continue;
+		for (const item of section.items) {
+			const componentRef = typeof item === "string" ? item : (item.component ?? "");
+			if (!componentRef) continue;
+			const resolved = resolveComponentPath(componentRef, category, rootDir, projectDir);
+			if ("error" in resolved) continue;
+			const platforms = await resolvePlatforms(item, section.platforms, syncYaml.platforms, category);
+
+			const resolvedHooks: Array<Record<string, unknown>> = [];
+			if (category === "agents" && typeof item === "object" && Array.isArray(item["add-hooks"])) {
+				for (const hook of item["add-hooks"]) {
+					const hookComponent = hook?.component ?? "";
+					if (!hookComponent) continue;
+					const hookResolved = resolveComponentPath(hookComponent, "hooks", rootDir, projectDir);
+					if (!("error" in hookResolved)) {
+						resolvedHooks.push({ source_path: hookResolved.path });
+					}
+				}
+			}
+
+			for (const platform of platforms) {
+				if (!adapters.get(platform) || !SUPPORTED_CATEGORIES[platform]?.has(category)) continue;
+				const location = deployLocationForManifest(platform, category);
+				addLibSourceRoot(libSourceRoots, location, resolved.path);
+				if (category === "agents") {
+					for (const hook of resolvedHooks) {
+						if (typeof hook.source_path === "string") {
+							addLibSourceRoot(libSourceRoots, location, hook.source_path);
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+/**
  * Per-deploy-LOCATION accumulator of resolved component SOURCE paths,
  * populated as categories and per-platform hooks are processed. syncLib scans
  * these SOURCE roots (not the deployed tree, which no longer carries raw
@@ -2110,6 +2161,13 @@ export async function processYaml(
 			// first so a failure leaves settings/hooks untouched.
 			await collectPlatformHookSourceRoots(
 				yamlDir,
+				adapters,
+				rootDir,
+				context.projectDir || undefined,
+				libSourceRoots,
+			);
+			await collectComponentSourceRoots(
+				syncYaml,
 				adapters,
 				rootDir,
 				context.projectDir || undefined,
