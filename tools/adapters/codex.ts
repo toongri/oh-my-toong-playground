@@ -67,6 +67,27 @@ function escapeRegExp(literal: string): string {
 }
 
 /**
+ * Returns true when every leaf key/value `expected` declares is reachable
+ * at the same path in `actual`. Plain objects recurse (actual may carry
+ * extra sibling keys — e.g. a user-owned `[features]` table alongside the
+ * managed one); everything else (string, number, boolean, array) is
+ * compared by value, with arrays requiring an exact match rather than a
+ * partial overlap.
+ */
+function isDeepSubset(expected: unknown, actual: unknown): boolean {
+	if (isPlainObject(expected)) {
+		return (
+			isPlainObject(actual) &&
+			Object.entries(expected).every(([key, val]) => isDeepSubset(val, actual[key]))
+		);
+	}
+	if (Array.isArray(expected)) {
+		return Array.isArray(actual) && JSON.stringify(expected) === JSON.stringify(actual);
+	}
+	return expected === actual;
+}
+
+/**
  * Finds every line-anchored occurrence of `marker`: the marker must start
  * the line and may be followed only by trailing horizontal whitespace
  * before the line ends. Anchoring to whole lines (rather than a raw
@@ -173,13 +194,35 @@ export function insertManagedBlock(
 	// return value straight to disk (syncConfig, flushMcpBlock) — a managed
 	// block that duplicates a key already in the surrounding content (e.g. a
 	// stale block appended alongside a fresh one) must never reach the file.
+	let parsedResult: Record<string, unknown>;
 	try {
-		parse(result);
+		parsedResult = parse(result);
 	} catch (err) {
 		const causeMessage = err instanceof Error ? err.message : String(err);
 		throw new Error(
 			`insertManagedBlock: writing managed block 'omt:${blockName}' would produce invalid TOML (not written) — ${causeMessage}`,
 			{ cause: err },
+		);
+	}
+
+	// Landing-site backstop: valid TOML syntax alone isn't enough — the
+	// line-anchored marker match above only knows a marker sits at the
+	// start of its own line, not whether that line is real structure or
+	// the body of a pre-existing multiline TOML string (e.g. a user-authored
+	// `doc = """ ... """` whose text happens to contain a line matching the
+	// marker literal). In that case the replace still produces syntactically
+	// valid TOML — the block just ends up trapped inside the string instead
+	// of declared at the top level. Confirm every leaf key/value
+	// `tomlContent` declares is actually readable back from the parsed
+	// result at its intended path before this is allowed to reach disk.
+	const declaredStructure: Record<string, unknown> = parse(tomlContent);
+	if (!isDeepSubset(declaredStructure, parsedResult)) {
+		throw new Error(
+			`insertManagedBlock: managed block 'omt:${blockName}' did not land at its intended location (not written) — ` +
+				`the configuration this block declares does not read back from the result at its intended path. ` +
+				`This happens when the target file has a structure such as a multiline TOML string whose body ` +
+				`contains a line matching the marker literal, trapping the managed block inside that string instead ` +
+				`of as real top-level structure. Nothing was written.`,
 		);
 	}
 

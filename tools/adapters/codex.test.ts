@@ -153,6 +153,48 @@ describe("insertManagedBlock", () => {
 			insertManagedBlock(existing, "mcp", `[features.multi_agent_v2]\nenabled = false\n`),
 		).toThrow(/invalid TOML/);
 	});
+
+	it("마커 리터럴이 대상 파일의 멀티라인 TOML 문자열 안에 단독 줄로 들어 있으면 `insertManagedBlock`이 예외를 던진다 — 반환값이 없다는 사실 자체가 사용자 문단이 훼손되지 않았다는 증거다", () => {
+		// Reproduces the PR #262 P1 finding: the line-anchored marker regex
+		// only knows a marker sits at the start of its own line — it cannot
+		// tell that line is the BODY of a pre-existing `doc = """ ... """`
+		// multiline string rather than real structure. The replace still
+		// produces syntactically valid TOML (the existing `parse(result)`
+		// backstop alone would let this through), but the generated block
+		// ends up trapped inside the string instead of declared as real
+		// top-level structure — so the config it declares is never actually
+		// deployed even though sync reports success.
+		//
+		// The target file also carries a user-owned `[features]` table with
+		// an unrelated leaf key, to prove a shallow "does the top-level key
+		// exist" check is not enough: `parse(result).features` is truthy
+		// either way, so only descending to the actual leaf key/value
+		// (`features.multi_agent_v2.max_concurrent_threads_per_session`)
+		// can tell the declared config never landed.
+		const existing = [
+			`[features]`,
+			`existing_flag = true`,
+			``,
+			`[owner]`,
+			`doc = """`,
+			`# --- omt:mcp ---`,
+			`사용자가 직접 쓴 설명 문단`,
+			`# --- end omt:mcp ---`,
+			`"""`,
+			``,
+		].join("\n");
+		expect(() =>
+			insertManagedBlock(
+				existing,
+				"mcp",
+				`[features.multi_agent_v2]\nmax_concurrent_threads_per_session = 4\n`,
+			),
+		).toThrow(/did not land at its intended location/);
+		// The throw IS the assertion that "사용자가 직접 쓴 설명 문단" was never
+		// spliced out: insertManagedBlock never produces a result for a
+		// caller to write to disk, so the original multiline string is left
+		// wherever the caller read `existing` from.
+	});
 });
 
 // =============================================================================
