@@ -54,6 +54,40 @@ describe("insertManagedBlock", () => {
 		expect(result).toContain("# --- end omt:mcp ---");
 		expect(result).toContain(`server = "test"`);
 	});
+
+	it("appends a fresh block when neither marker is present via `insertManagedBlock`", () => {
+		const existing = `# user config\nsome_setting = true\n`;
+		const result = insertManagedBlock(existing, "mcp", `server = "test"\n`);
+		expect(result).toContain("some_setting = true");
+		expect(result).toContain("# --- omt:mcp ---");
+		expect(result).toContain(`server = "test"`);
+	});
+
+	it("throws when the start marker survives but the end marker is orphaned away via `insertManagedBlock`", () => {
+		// Reproduces the real incident: Codex CLI rewrote config.toml and left
+		// only the start marker behind, with the stale block body still in place.
+		const existing = `# --- omt:mcp ---\n[mcp_servers.figma]\ncommand = "npx"\nargs = ["-y", "figma-mcp"]\n`;
+		expect(() => insertManagedBlock(existing, "mcp", `server = "test"\n`)).toThrow(
+			/orphaned marker.*omt:mcp/,
+		);
+	});
+
+	it("throws when the end marker survives but the start marker is orphaned away via `insertManagedBlock`", () => {
+		const existing = `[mcp_servers.figma]\ncommand = "npx"\n# --- end omt:mcp ---\n`;
+		expect(() => insertManagedBlock(existing, "mcp", `server = "test"\n`)).toThrow(
+			/orphaned marker.*omt:mcp/,
+		);
+	});
+
+	it("throws when the resulting TOML would duplicate a key via `insertManagedBlock`", () => {
+		// No markers present (append path), but the block being appended
+		// declares a table the surrounding content already declares — the
+		// exact duplicate-key shape that crashed Codex CLI on startup.
+		const existing = `[features.multi_agent_v2]\nenabled = true\n`;
+		expect(() =>
+			insertManagedBlock(existing, "mcp", `[features.multi_agent_v2]\nenabled = false\n`),
+		).toThrow(/invalid TOML/);
+	});
 });
 
 // =============================================================================
