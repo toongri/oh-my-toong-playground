@@ -72,6 +72,8 @@ export class ClaudePreToolUsePreviewError extends Error {
 	}
 }
 
+const CLAUDE_TRACE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
 async function defaultPluginInstaller(
 	name: string,
 	targetPath: string,
@@ -428,14 +430,41 @@ export class ClaudeAdapter implements PlatformAdapter {
 			const item = items[itemIndex];
 			if (!item || pickString(item["type"]) === "prompt") continue;
 			const component = item.component ?? "";
+			const customCommand = pickString(item["command"]) ?? "";
 			if (!component) {
-				throw new ClaudePreToolUsePreviewError(
-					itemIndex,
-					"command-type PreToolUse items require a component-derived hook id",
-				);
+				if (Object.prototype.hasOwnProperty.call(item, "trace-id")) {
+					const traceId = item["trace-id"];
+					if (typeof traceId !== "string" || !CLAUDE_TRACE_ID_PATTERN.test(traceId)) {
+						throw new ClaudePreToolUsePreviewError(itemIndex, "unsafe raw command trace-id");
+					}
+					if (!customCommand) {
+						throw new ClaudePreToolUsePreviewError(itemIndex, "raw command is missing or not a string");
+					}
+					const matcher = item.matcher ?? "*";
+					const timeout = item.timeout ?? 10;
+					const wrappedCommand = composePreToolTraceCommand({
+						wrapperPath: wrapperDeploymentPath,
+						platform: "claude",
+						hookId: traceId,
+						originalCommand: customCommand,
+					});
+					previews.push({
+						hookEvent: "PreToolUse",
+						itemIndex,
+						hookId: traceId,
+						originalCommand: customCommand,
+						wrappedCommand,
+						wrapperDeploymentPath,
+						matcher,
+						timeout,
+						scope,
+						component,
+					});
+				}
+				continue;
 			}
 			const hookId = path.basename(component);
-			if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(hookId)) {
+			if (!CLAUDE_TRACE_ID_PATTERN.test(hookId)) {
 				throw new ClaudePreToolUsePreviewError(itemIndex, `unsafe component basename ${hookId}`);
 			}
 			const matcher = item.matcher ?? "*";
@@ -515,6 +544,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 		scope?: PluginScope,
 	): Promise<PlatformConfigResult> {
 		const processedSections: string[] = [];
+		const preToolUsePreview = await this.previewPreToolUseCommands(targetPath, yaml);
 
 		// --- config ---
 		if (yaml.config !== null && yaml.config !== undefined) {
@@ -524,7 +554,6 @@ export class ClaudeAdapter implements PlatformAdapter {
 
 		// --- hooks ---
 		if (yaml.hooks !== null && yaml.hooks !== undefined) {
-			const preToolUsePreview = await this.previewPreToolUseCommands(targetPath, yaml);
 			const previewByItemIndex = new Map(preToolUsePreview.map((preview) => [preview.itemIndex, preview]));
 			const hooksMap = yaml.hooks;
 			// "preserve" is a reserved key smuggled into the hooks map with a shape

@@ -10,7 +10,7 @@ import path from "path";
 import os from "os";
 import { execFileSync } from "node:child_process";
 
-import { ClaudeAdapter } from "./claude.ts";
+import { ClaudeAdapter, ClaudePreToolUsePreviewError } from "./claude.ts";
 import { deriveClaudeProjectKey } from "../lib/git-key.ts";
 import baseline from "./__fixtures__/claude-project-baseline.json";
 import type { PlatformYaml } from "../lib/types.ts";
@@ -1915,6 +1915,89 @@ describe("isGlobalSync 분기 — 글로벌 sync (path = homedir)", () => {
 });
 
 describe("PreToolUse trace wrapper", () => {
+	it("preserves a raw PreToolUse command without trace-id byte-for-byte and without a preview", async () => {
+		const originalCommand = `bun run '$CLAUDE_PROJECT_DIR/scripts/raw hook.ts' --label "a'b"`;
+		const yaml = { hooks: { PreToolUse: [{ command: originalCommand, matcher: "Bash", timeout: 12 }] } } as unknown as PlatformYaml;
+
+		const previews = await adapter.previewPreToolUseCommands(targetPath, yaml);
+		expect(previews).toHaveLength(0);
+		await adapter.syncPlatformYaml(targetPath, yaml, false);
+
+		const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.local.json"));
+		const command = (((settings.hooks as Record<string, unknown>).PreToolUse as Array<Record<string, unknown>>)[0]
+			?.hooks as Array<Record<string, unknown>>)[0]?.command;
+		expect(command).toBe(originalCommand);
+	});
+
+	it("wraps a raw PreToolUse command when an explicit safe trace-id is provided", async () => {
+		const originalCommand = "bun run scripts/raw.ts --flag=one";
+		const traceId = "raw-command.v1";
+		const yaml = { hooks: { PreToolUse: [{ command: originalCommand, "trace-id": traceId }] } } as unknown as PlatformYaml;
+
+		const previews = await adapter.previewPreToolUseCommands(targetPath, yaml);
+		expect(previews).toHaveLength(1);
+		expect(previews[0]?.hookId).toBe(traceId);
+		expect(previews[0]?.originalCommand).toBe(originalCommand);
+		expect(decodeTraceCommand(previews[0]?.wrappedCommand ?? "")).toEqual([
+			path.join(targetPath, ".claude", "scripts", "pretool-trace", "index.ts"),
+			"claude",
+			traceId,
+			originalCommand,
+		]);
+		await adapter.syncPlatformYaml(targetPath, yaml, false);
+		const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.local.json"));
+		const command = (((settings.hooks as Record<string, unknown>).PreToolUse as Array<Record<string, unknown>>)[0]
+			?.hooks as Array<Record<string, unknown>>)[0]?.command;
+		expect(command).toBe(previews[0]?.wrappedCommand);
+	});
+
+	it("rejects invalid raw trace-id values before writing settings", async () => {
+		const invalidTraceIds: unknown[] = ["", "bad/id", "x".repeat(129), 42];
+		for (const traceId of invalidTraceIds) {
+			const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+			const sentinel = JSON.stringify({ sentinel: "unchanged", hooks: { Stop: [{ matcher: "*", hooks: [] }] } });
+			await writeFile(settingsFile, sentinel);
+			const yaml = { hooks: { PreToolUse: [{ command: "echo raw", "trace-id": traceId }] } } as unknown as PlatformYaml;
+			await expect(adapter.syncPlatformYaml(targetPath, { ...yaml, config: { shouldNotWrite: true } }, false)).rejects.toBeInstanceOf(
+				ClaudePreToolUsePreviewError,
+			);
+			expect(await fs.readFile(settingsFile, "utf8")).toBe(sentinel);
+		}
+	});
+
+	it("warns and skips raw PreToolUse entries with empty or non-string commands", async () => {
+		const yaml = {
+			hooks: { PreToolUse: [{ command: "" }, { command: 42 }] },
+		} as unknown as PlatformYaml;
+		await expect(adapter.syncPlatformYaml(targetPath, yaml, false)).resolves.toBeDefined();
+		const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.local.json"));
+		expect(settings.hooks).toEqual({});
+	});
+
+	it("rejects explicit trace-id entries with empty or non-string commands before writing", async () => {
+		for (const command of ["", 42]) {
+			const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+			const sentinel = JSON.stringify({ sentinel: "unchanged", hooks: { Stop: [{ matcher: "*", hooks: [] }] } });
+			await writeFile(settingsFile, sentinel);
+			const yaml = {
+				config: { shouldNotWrite: true },
+				hooks: { PreToolUse: [{ command, "trace-id": "explicit-safe-id" }] },
+			} as unknown as PlatformYaml;
+			await expect(adapter.syncPlatformYaml(targetPath, yaml, false)).rejects.toBeInstanceOf(
+				ClaudePreToolUsePreviewError,
+			);
+			expect(await fs.readFile(settingsFile, "utf8")).toBe(sentinel);
+		}
+	});
+
+	it("does not require a wrapper declaration for a raw command without trace-id", async () => {
+		const yaml = { hooks: { PreToolUse: [{ command: "echo raw" }] } } as unknown as PlatformYaml;
+		expect(await adapter.previewPreToolUseCommands(targetPath, yaml)).toEqual([]);
+		await adapter.syncPlatformYaml(targetPath, yaml, false);
+		const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.local.json"));
+		expect(settings.hooks).toEqual({ PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command: "echo raw", timeout: 10 }] }] });
+	});
+
 	it("PreToolUse trace wrapper coverage", async () => {
 		const rootA = path.join(tmpDir, "root-a");
 		const rootB = path.join(tmpDir, "root-b");
@@ -1927,7 +2010,7 @@ describe("PreToolUse trace wrapper", () => {
 		await writeFile(path.join(indexSh, "index.sh"), "#!/bin/sh\n");
 		await writeFile(path.join(sameName, "index.ts"), "export {};\n");
 		const yaml = { hooks: { PreToolUse: [
-			{ component: direct, matcher: "Bash", timeout: 3 },
+			{ component: direct, matcher: "Bash", timeout: 3, "trace-id": "ignored-component-id" },
 			{ component: indexTs, matcher: "*", timeout: 4 },
 			{ component: indexSh, matcher: "*", timeout: 5 },
 			{ component: sameName, matcher: "Read", timeout: 6 },
@@ -1935,6 +2018,7 @@ describe("PreToolUse trace wrapper", () => {
 		const previews = await adapter.previewPreToolUseCommands(targetPath, yaml);
 		expect(previews).toHaveLength(4);
 		expect(new Set(previews.map((p) => p.hookId))).toEqual(new Set(["direct-hook.sh", "index-ts", "index-sh"]));
+		expect(previews[0]?.hookId).toBe("direct-hook.sh");
 		const expectedOriginals = [
 			"$CLAUDE_PROJECT_DIR/.claude/hooks/direct-hook.sh",
 			"bun run $CLAUDE_PROJECT_DIR/.claude/hooks/index-ts/index.ts",
