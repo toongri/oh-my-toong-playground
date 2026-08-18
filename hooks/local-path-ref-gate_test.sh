@@ -704,10 +704,10 @@ test_old_violation_with_unrelated_new_edit_allows() {
 }
 
 test_missing_jq_fails_open() {
-    local no_jq="$REPO/no-jq-bin" exit_code=0
+    local no_jq="$REPO/no-jq-bin" exit_code=0 payload
     mkdir -p "$no_jq"
-    printf '%s' "$(jq -n --arg cwd "$REPO" '{cwd:$cwd,tool_input:{command:"gh pr create --body \"See docs/untracked.md\""}}')" \
-        | PATH="$no_jq" /bin/bash "$HOOK" >/dev/null 2>&1 || exit_code=$?
+    payload=$(jq -n --arg cwd "$REPO" '{cwd:$cwd,tool_input:{command:"gh pr create --body \"See docs/untracked.md\""}}')
+    PATH="$no_jq" "$BASH" "$HOOK" >/dev/null 2>&1 <<< "$payload" || exit_code=$?
     [[ "$exit_code" -eq 0 ]]
 }
 
