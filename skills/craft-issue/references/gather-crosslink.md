@@ -49,11 +49,14 @@ Retrieve from each source type that is wired in the current runtime. Map each ab
 |---|---|
 | collaboration-docs | spec pages, PRDs, design docs, meeting notes related to the issue's domain |
 | PM | linked issues, parent epics, related issues, sibling items in the same epic |
+| target-issue history | the target issue's own comment thread — every comment, in order. Mandatory whenever the intake is an existing issue; the per-source cap and recency window of Section 1 do NOT apply to it (a superseding comment may be older than 90 days and still be the live one). |
 | messenger | Slack threads, comment trails that discuss the requirement or the affected area |
 | code-VCS | recent commits, open PRs touching the affected area, blame for the relevant code path |
 | logs | error log entries, monitoring alerts, incident records for the affected component (strict bound applies — see Section 1) |
 
 Apply the gather bound from Section 1 to every source type independently.
+
+**Reconstructing an existing issue's effective state**: the body is immutable (see the Append-Only History Contract in `SKILL.md`), so it records what was true at filing, not what is true now. Replay the comment thread over it in order — each comment's **대체 대상 (Supersedes)** retires the body or comment lines it names, and its **정정 후 상태 (Effective State)** is what now stands in their place. Everything neither superseded nor restated still holds. Judge duplicates, refuse-to-file conditions, and the INVEST gate against that reconstructed state, never against the raw body.
 
 ---
 

@@ -156,7 +156,7 @@ describe("A9: payload precondition", () => {
 
 	test("incomplete payload forbids PASS", () => {
 		expect(reviewerMd).toContain(
-			"An incomplete payload (any of the three blocks missing) is a payload contract violation and PASS is forbidden.",
+			"An incomplete payload (the request block missing, or the set carrying neither a child block nor a comment block, or a block sent label-only with no text) is a payload contract violation and PASS is forbidden.",
 		);
 	});
 });
@@ -356,7 +356,9 @@ describe("B4: post-hoc contract correction", () => {
 	});
 
 	test("pipeline diagram write-tail node names the gate", () => {
-		expect(skillMd).toContain("→ write tail    (checklist gate → autonomous write; human review post-hoc)");
+		expect(skillMd).toContain(
+			"→ write tail    (checklist gate → autonomous write — body when the issue is new,\n                           append comment when it already exists; human review post-hoc)",
+		);
 	});
 });
 
@@ -451,7 +453,7 @@ describe("D3: terminal findings recorded under Notes only (not Decisions Needed)
 describe("D4: terminal exit — write anyway, exact bytes, caller notification", () => {
 	test("terminal exit condition and write-anyway action", () => {
 		expect(skillMd).toContain(
-			"Terminal exit (max_cycles=5 exhausted, or Same-Rule-3x): write the issue anyway, and append the unresolved findings verbatim under Notes.",
+			"Terminal exit (max_cycles=5 exhausted, or Same-Rule-3x): write the issue anyway — body on the create path, append comment on the existing-issue path — and append the unresolved findings verbatim under Notes (메모) at the end of whichever text is written.",
 		);
 	});
 
@@ -527,5 +529,160 @@ describe("G4: no forced Decisions Needed section when the trigger fails", () => 
 describe("G5: dedup — one dispatch per open decision", () => {
 	test("one dispatch per decision", () => {
 		expect(skillMd).toContain("one dispatch per decision");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Append-Only History Contract — an existing issue's body is immutable; new
+// material lands as a comment shaped by the Append Comment Shape.
+// ---------------------------------------------------------------------------
+
+const gatherCrosslinkMd = readFileSync(join(import.meta.dir, "references/gather-crosslink.md"), "utf8");
+
+describe("H1: Append-Only History Contract in SKILL.md", () => {
+	test("body is written exactly once, at creation", () => {
+		expect(skillMd).toContain(
+			"**An issue body is written exactly once — when the issue is created. After that it is immutable.**",
+		);
+	});
+
+	test("structural relations are the named exception", () => {
+		expect(skillMd).toContain(
+			"| Structural relations — related, parent, blocked-by, label | Written **directly**, on either path. These are graph edges, not body text, and have no comment form. |",
+		);
+	});
+
+	test("immutability binds bytes, not the comment's authority", () => {
+		expect(skillMd).toContain("**The body's immutability binds its bytes, not the comment's authority.**");
+	});
+
+	test("a superseded line stays visible and needs an explicit declaration", () => {
+		expect(skillMd).toContain("**A superseded line stays visible.**");
+		expect(skillMd).toContain("it is a named,\nrequired field of the append shape.");
+	});
+
+	test("Stage 1 assigned-issue mode appends instead of enriching in place", () => {
+		expect(skillMd).toContain(
+			"enrich and cross-link it by **appending a comment** — its body is immutable per the Append-Only History Contract above.",
+		);
+	});
+});
+
+describe("H2: Append Comment Shape in issue-craft.md", () => {
+	test("section exists", () => {
+		expect(issueCraftMd).toContain("### Append Comment Shape");
+	});
+
+	for (const row of ["**Update Summary**", "**Basis**", "**Supersedes**", "**Effective State**"]) {
+		test("shape table carries the " + row + " row", () => {
+			expect(issueCraftMd).toContain("| " + row + " |");
+		});
+	}
+
+	test("Effective State is a rewrite, not a review", () => {
+		expect(issueCraftMd).toContain("**Effective State is a rewrite, not a review.**");
+	});
+
+	test("untouched sections are not restated", () => {
+		expect(issueCraftMd).toContain("**Untouched sections are not restated.**");
+	});
+
+	test("scope note forbids withholding the decision", () => {
+		expect(issueCraftMd).toContain("the comment IS where the decision is now recorded");
+	});
+
+	for (const [en, ko] of [
+		["Update Summary", "변경 요약"],
+		["Basis", "근거"],
+		["Supersedes", "대체 대상"],
+		["Effective State", "정정 후 상태"],
+	]) {
+		test("localization table maps " + en + " to " + ko, () => {
+			expect(issueCraftMd).toContain("| " + en + " | " + ko + " |");
+		});
+	}
+
+	test("Append Comment Shape is inside the every-emittable-header scope sentence", () => {
+		expect(issueCraftMd).toContain("Append Comment Shape, Parent-Issue Body Shape,");
+	});
+});
+
+describe("H3: gather reconstructs effective state from the comment thread", () => {
+	test("SKILL.md lists target-issue history as a source type", () => {
+		expect(skillMd).toContain(
+			"| target-issue history | the target issue's own comment thread, read in full and in order — mandatory whenever the intake is an existing issue |",
+		);
+	});
+
+	test("SKILL.md states the body alone is not the current state", () => {
+		expect(skillMd).toContain("**Effective state of an existing issue**");
+	});
+
+	test("gather reference exempts the thread from the recency window and per-source cap", () => {
+		expect(gatherCrosslinkMd).toContain(
+			"the per-source cap and recency window of Section 1 do NOT apply to it",
+		);
+	});
+
+	test("gather reference defines the replay procedure", () => {
+		expect(gatherCrosslinkMd).toContain("**Reconstructing an existing issue's effective state**");
+		expect(gatherCrosslinkMd).toContain(
+			"Judge duplicates, refuse-to-file conditions, and the INVEST gate against that reconstructed state, never against the raw body.",
+		);
+	});
+});
+
+describe("H4: Stage 5 and Stage 6 route by create-vs-exists", () => {
+	test("Stage 5 parent restructure branches on whether the parent already exists", () => {
+		expect(skillMd).toContain(
+			"as its body when this run is creating the parent, or as an **append comment** on it when the parent already exists",
+		);
+	});
+
+	test("write step 4 routes body vs append comment", () => {
+		expect(skillMd).toContain(
+			"For an issue that already has a body, **append a comment** following the **Append Comment Shape** in the same file — do not write the body.",
+		);
+	});
+
+	test("Linear binding names create_comment and forbids description-over-existing", () => {
+		expect(skillMd).toContain("`create_comment` to append to one that already exists");
+		expect(skillMd).toContain(
+			"`save_issue` with a `description` on an issue that already has one is the write the Append-Only History Contract forbids.",
+		);
+	});
+
+	test("Plain-Language Gate covers the append comment's own headers", () => {
+		expect(skillMd).toContain(
+			"for an append comment this covers its four 변경 요약 / 근거 / 대체 대상 / 정정 후 상태 headers",
+		);
+	});
+});
+
+describe("H5: reviewer payload accepts comment blocks", () => {
+	test("payload contract names four block kinds", () => {
+		expect(reviewerMd).toContain("The dispatch payload contains exactly four kinds of labeled blocks");
+	});
+
+	test("one comment:<issue-key> block per append comment", () => {
+		expect(reviewerMd).toContain(
+			"One labeled block per append comment: repeat the comment:<issue-key> label M times for M comments.",
+		);
+	});
+
+	test("an append-only run is complete without a child block", () => {
+		expect(reviewerMd).toContain(
+			"A run that only appends to an existing issue sends the request block plus comment blocks and no child block — that is complete, not defective.",
+		);
+	});
+
+	test("a comment block is judged against the Append Comment Shape", () => {
+		expect(reviewerMd).toContain(
+			"Judge a comment:<issue-key> block against the Append Comment Shape in `references/issue-craft.md`, not against the Standard Body Shape.",
+		);
+	});
+
+	test("Where field accepts a comment target", () => {
+		expect(reviewerMd).toContain("**Where:** <target — request / parent / child:<title-slug> / comment:<issue-key>>");
 	});
 });
