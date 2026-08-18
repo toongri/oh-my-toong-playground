@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { constants as osSignals } from "node:os";
 import { appendEvent, getSessionKey } from "./storage";
@@ -87,8 +87,9 @@ async function main(): Promise<void> {
 	if (enabled) {
 		try {
 			const identity = sessionIdentity(payload);
-			const key = identity ? getSessionKey(locator(identity)) : randomBytes(32);
-			if (key.byteLength === 32) {
+			if (identity) {
+				const key = getSessionKey(locator(identity));
+				if (key.byteLength !== 32) throw new Error("invalid session key");
 				const selected = selectCorrelationInput(payload, identity, input);
 				const toolUseId = selected.tool_use_id;
 				quality = toolUseId && identity ? "exact" : "fingerprint";

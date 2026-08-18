@@ -94,10 +94,26 @@ describe("transparent child contract", () => {
 		expect(metadata.env).toBe("visible");
 	});
 
-	test("uses fingerprint quality when tool id has no stable session", async () => {
+	test("skips tracing when tool id has no stable session", async () => {
 		const selected = selectCorrelationInput({ tool_use_id: "raw-id", tool_name: "Read", tool_input: { x: 1 } }, undefined, Buffer.from("{}"));
 		expect(selected.tool_use_id).toBeUndefined();
-		const result = await run(`bun ${child}`, Buffer.from('{"tool_use_id":"raw-id","tool_name":"Read","tool_input":{"x":1}}'), { OMT_SESSION_ID: "", CODEX_THREAD_ID: "" });
+		const input = Buffer.from('{"tool_use_id":"raw-id","tool_name":"Read","tool_input":{"x":1}}');
+		const baseline = await runDirect(`bun ${child}`, input);
+		const result = await run(`bun ${child}`, input, { OMT_SESSION_ID: "", CODEX_THREAD_ID: "" });
+		expect(result.status).toBe(baseline.status);
+		expect(Buffer.from(result.stdout)).toEqual(Buffer.from(baseline.stdout));
+		expect(Buffer.from(result.stderr)).toEqual(Buffer.from(baseline.stderr));
+		expect(allTraceRecords(result.dir)).toHaveLength(0);
+	});
+
+	test("uses exact quality when identity and tool id are present", async () => {
+		const result = await run(`bun ${child}`, Buffer.from('{"session_id":"payload-session","tool_use_id":"toolu_123","tool_name":"Read"}'), { OMT_SESSION_ID: "", CODEX_THREAD_ID: "" });
+		const start = traceEvents(result.dir).find((event) => event.phase === "start");
+		expect(start?.correlation_quality).toBe("exact");
+	});
+
+	test("uses fingerprint quality when identity has no tool id", async () => {
+		const result = await run(`bun ${child}`, Buffer.from('{"tool_name":"Read","tool_input":{"x":1}}'), { OMT_SESSION_ID: "identity-session", CODEX_THREAD_ID: "" });
 		const start = traceEvents(result.dir).find((event) => event.phase === "start");
 		expect(start?.correlation_quality).toBe("fingerprint");
 		expect(start?.call_correlation).toMatch(/^hmac-sha256:[0-9a-f]{64}$/);
