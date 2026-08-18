@@ -686,3 +686,69 @@ describe("H5: reviewer payload accepts comment blocks", () => {
 		expect(reviewerMd).toContain("**Where:** <target — request / parent / child:<title-slug> / comment:<issue-key>>");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// H6: code-review fixes — target-issue history is the sole fail-open carve-out,
+// mixed child+comment payloads survive review, pre-contract issues baseline on
+// their current body.
+// ---------------------------------------------------------------------------
+
+describe("H6: unreadable target-issue history blocks the append", () => {
+	test("gather §3 carves target-issue history out of fail-open", () => {
+		expect(gatherCrosslinkMd).toContain("**Exception — `target-issue history`**: this one source type is NOT fail-open.");
+		expect(gatherCrosslinkMd).toContain("This is the sole carve-out from the three rules above.");
+	});
+
+	test("the carve-out sits after the Do-not-block rule it excepts", () => {
+		const doNotBlock = gatherCrosslinkMd.indexOf("- **Do not block**:");
+		const carveOut = gatherCrosslinkMd.indexOf("**Exception — `target-issue history`**");
+		expect(doNotBlock).toBeGreaterThan(-1);
+		expect(carveOut).toBeGreaterThan(doNotBlock);
+	});
+
+	test("SKILL.md refuse-to-file list carries the condition", () => {
+		expect(skillMd).toContain("- **Unreadable target-issue history**:");
+		expect(skillMd).toContain(
+			"This is the one gather failure that blocks — every other unreachable source stays fail-open",
+		);
+	});
+});
+
+describe("H6: mixed child + comment dispatch payload", () => {
+	test("each issue contributes the artifact this run writes to it", () => {
+		expect(skillMd).toContain(
+			"an issue being created contributes its body as a `child:<title-slug>` block, and an issue that already has a body contributes its append comment as a `comment:<issue-key>` block",
+		);
+	});
+
+	test("a sliced existing parent emits both kinds and keeps every child body", () => {
+		expect(skillMd).toContain(
+			"a Stage 5 slice of an **existing** parent emits one `comment:<issue-key>` block for that parent plus one `child:<title-slug>` block per newly created child, and every one of those child bodies stays in the same dispatch",
+		);
+	});
+});
+
+describe("H6: issues that predate the contract", () => {
+	test("filing-time framing is scoped to contract-era issues", () => {
+		expect(gatherCrosslinkMd).toContain(
+			"for an issue filed under the Append-Only History Contract (see `SKILL.md`) the body is immutable",
+		);
+	});
+
+	test("a pre-contract issue baselines on its current body", () => {
+		expect(gatherCrosslinkMd).toContain("**Issues that predate the contract**");
+		expect(gatherCrosslinkMd).toContain("**current body is the baseline**");
+	});
+
+	test("only append-shaped comments replay as state transitions", () => {
+		expect(gatherCrosslinkMd).toContain(
+			"Only comments carrying the append shape (a **대체 대상** or **정정 후 상태** section) are replayed as state transitions",
+		);
+	});
+
+	test("an unfulfilled pre-contract request is an open question, not a supersede", () => {
+		expect(gatherCrosslinkMd).toContain(
+			"is an open question to carry forward, not a superseding declaration to apply",
+		);
+	});
+});

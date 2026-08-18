@@ -195,6 +195,7 @@ Refuse to file (or refuse to enrich an existing issue) if ANY of the following h
 - **No consistent reproduction**: a bug or behavior report with no reproducible scenario, no log evidence, and no witness account.
 - **Runtime-evidence-free root-cause claim**: a root cause assertion that cannot be grounded in code, logs, or a reproducible trace — pure speculation is not a root cause.
 - **Un-observable AC**: every acceptance criterion must be verifiable by a defined method (test, query, manual step). An AC that cannot be verified is not an AC.
+- **Unreadable target-issue history**: the intake is an existing issue and its comment thread cannot be retrieved in full. Under the Append-Only History Contract the thread carries that issue's current state, so an append written without it can re-assert body lines a comment already retired. This is the one gather failure that blocks — every other unreachable source stays fail-open (`references/gather-crosslink.md` §3).
 
 When refusing, state clearly which condition triggered and what evidence is needed to unblock.
 
@@ -245,7 +246,7 @@ Dispatch payload (inline text, not file paths):
 <one comment:<issue-key> block per append comment in the set, each carrying that comment's full text — omit when the set contains no append>
 ```
 
-On the existing-issue path the set is the append comments, not bodies: emit them as `comment:<issue-key>` blocks. A run that writes only an append sends the request block plus exactly one `comment:<issue-key>` block.
+Each issue in the set is emitted as the artifact this run actually writes to it: an issue being created contributes its body as a `child:<title-slug>` block, and an issue that already has a body contributes its append comment as a `comment:<issue-key>` block. The two kinds coexist — a Stage 5 slice of an **existing** parent emits one `comment:<issue-key>` block for that parent plus one `child:<title-slug>` block per newly created child, and every one of those child bodies stays in the same dispatch. A run that only appends sends the request block plus exactly one `comment:<issue-key>` block.
 
 Rule files are passed as the two absolute paths printed by the RULES_RESOLVED step.
 

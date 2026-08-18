@@ -37,6 +37,7 @@ When a source type is not wired in the current runtime, or when a retrieval call
 - **Skip gracefully**: proceed without that source type.
 - **Annotate the gap**: add a one-line note in the References section (or inline if the section is empty) stating which source type was unreachable and why (e.g., "messenger: Slack MCP not connected in this session").
 - **Do not block**: gather incompleteness does NOT trigger the refuse-to-file gate. An issue may proceed to record with only a partial reference set.
+- **Exception — `target-issue history`**: this one source type is NOT fail-open. When the intake is an existing issue and its comment thread cannot be retrieved in full (the listing errors, is truncated, or the tool is unavailable), stop: do not append. The thread is not supporting context, it is where that issue's current state lives — appending without it means writing an Effective State derived from body lines a comment may already have retired. Report to the caller which retrieval failed and what is needed to unblock. This is the sole carve-out from the three rules above.
 - **Zero artifacts found**: if all source types are searched and no related artifacts are discovered, the References section may be omitted entirely or left empty. An empty References section is a valid outcome — it means the issue stands on its own with no prior context discovered.
 
 ---
@@ -56,7 +57,9 @@ Retrieve from each source type that is wired in the current runtime. Map each ab
 
 Apply the gather bound from Section 1 to every source type independently.
 
-**Reconstructing an existing issue's effective state**: the body is immutable (see the Append-Only History Contract in `SKILL.md`), so it records what was true at filing, not what is true now. Replay the comment thread over it in order — each comment's **대체 대상 (Supersedes)** retires the body or comment lines it names, and its **정정 후 상태 (Effective State)** is what now stands in their place. Everything neither superseded nor restated still holds. Judge duplicates, refuse-to-file conditions, and the INVEST gate against that reconstructed state, never against the raw body.
+**Reconstructing an existing issue's effective state**: for an issue filed under the Append-Only History Contract (see `SKILL.md`) the body is immutable, so it records what was true at filing, not what is true now. Replay the comment thread over it in order — each comment's **대체 대상 (Supersedes)** retires the body or comment lines it names, and its **정정 후 상태 (Effective State)** is what now stands in their place. Everything neither superseded nor restated still holds. Judge duplicates, refuse-to-file conditions, and the INVEST gate against that reconstructed state, never against the raw body.
+
+**Issues that predate the contract**: an issue filed under the earlier in-place-enrichment workflow has a body that was already edited after filing, so its **current body is the baseline** — read it as current, not as a filing-time snapshot. Only comments carrying the append shape (a **대체 대상** or **정정 후 상태** section) are replayed as state transitions; earlier comments are discussion context and retire nothing, however emphatically they argue for a change. A pre-contract comment asking for a change you cannot find in the body is an open question to carry forward, not a superseding declaration to apply.
 
 ---
 
