@@ -303,6 +303,12 @@ $payloads
 EOF
 }
 
+english_branch_names_contract() {
+  grep -Fq 'Every branch name this skill creates, renames, or proposes must use English words only.' "$SKILL_FILE" \
+    && grep -Fq 'A surveyed branch convention may determine structure, but never overrides the English-only rule.' "$SKILL_FILE" \
+    && grep -Fq 'Every split branch name must use English words only.' "$SCOPE_FILE"
+}
+
 run_case concise-interview-contract concise_interview_contract
 run_case concise-interview-contract-rejects-first-file-violation concise_interview_contract_rejects_first_file_violation
 run_case conflict-side-deletion-contract conflict_side_deletion_contract
@@ -318,6 +324,7 @@ run_case split-partial-creation-finalization split_partial_creation_finalization
 run_case retained-worktree-path-quoting retained_worktree_path_quoting
 run_case split-branch-shell-safety-contract split_branch_shell_safety_contract
 run_case dynamic-shell-word-safety dynamic_shell_word_safety
+run_case english-branch-names-contract english_branch_names_contract
 
 if [ "$failures" -gt 0 ]; then
   exit 1

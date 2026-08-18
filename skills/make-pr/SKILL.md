@@ -254,6 +254,8 @@ From the survey, derive and record three values for later steps:
 
 **Convention exists only when a majority pattern does.** An axis counts as having a convention only when BOTH hold: (1) at least 5 PRs were surveyed, and (2) strictly more than half of them share the pattern — an exact tie (e.g., 3-3 between two styles) means no convention. With fewer than 5 surveyed PRs, mark every axis "no convention" — a handful of PRs is not a convention. For any axis without a convention, use the fallback defaults (title: conventional commit style Korean, branch: keep current name, labels: none).
 
+Every branch name this skill creates, renames, or proposes must use English words only. A surveyed branch convention may determine structure, but never overrides the English-only rule.
+
 **Never invent labels.** Only labels present in `gh label list` output may ever be applied. If no existing label fits, apply none.
 
 ---
