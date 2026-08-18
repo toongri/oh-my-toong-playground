@@ -121,6 +121,17 @@ describe("transparent child contract", () => {
 });
 
 describe("termination semantics", () => {
+	test("preserves child status when child closes stdin before a large payload finishes", async () => {
+		const input = new Uint8Array(1024 * 1024).fill(0x61);
+		for (const code of [0, 7]) {
+			const result = await run(`exec 0<&-; exit ${code}`, input);
+			expect(result.status).toBe(code);
+			expect(Buffer.from(result.stderr).toString()).not.toContain("EPIPE");
+			const end = expectPaired(traceEvents(result.dir));
+			expect(end?.process_status).toBe(code);
+		}
+	});
+
 	test("keeps ordinary exit statuses including 143", async () => {
 		for (const code of [0, 1, 2, 143]) {
 			const result = await run(`CHILD_EXIT=${code} bun ${child}`, Buffer.from("x"));

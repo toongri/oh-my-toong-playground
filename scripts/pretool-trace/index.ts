@@ -116,6 +116,7 @@ async function main(): Promise<void> {
 	const spawned = spawn("bash", ["-c", command], { detached: true, stdio: ["pipe", "inherit", "inherit"] });
 	childRef.value = spawned;
 	if (witnessed) forwardSignal(witnessed);
+	spawned.stdin?.once("error", () => { /* child may close stdin before the payload is written */ });
 	spawned.stdin?.end(input);
 	let result: { code: number; signal: string | null };
 	try { result = await childResult(spawned); } catch { result = { code: 1, signal: null }; }
