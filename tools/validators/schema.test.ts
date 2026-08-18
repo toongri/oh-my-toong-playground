@@ -1032,6 +1032,89 @@ hooks:
 			const result = validatePlatformYaml(path, "claude");
 			expect(result.errors).toHaveLength(0);
 		});
+
+		it("accepts missing trace-id and safe boundary values for Claude and Codex", () => {
+			for (const platform of ["claude", "codex"]) {
+				const path = writeYaml(
+					dir,
+					`${platform}.yaml`,
+					`hooks:\n  PreToolUse:\n    - command: echo legacy\n    - command: echo minimum\n      trace-id: A\n    - command: echo maximum\n      trace-id: ${"a".repeat(128)}\n`,
+				);
+				const result = validatePlatformYaml(path, platform);
+				expect(result.errors).toHaveLength(0);
+			}
+		});
+
+		it("rejects empty, unsafe, and overlong trace-id values for Claude and Codex", () => {
+			for (const platform of ["claude", "codex"]) {
+				const path = writeYaml(
+					dir,
+					`${platform}.yaml`,
+					`hooks:\n  PreToolUse:\n    - command: echo empty\n      trace-id: ''\n    - command: echo underscore\n      trace-id: '_leading'\n    - command: echo dash\n      trace-id: '-leading'\n    - command: echo dot\n      trace-id: '.leading'\n    - command: echo unsafe\n      trace-id: 'unsafe id'\n    - command: echo slash\n      trace-id: 'unsafe/id'\n    - command: echo unicode\n      trace-id: '한글'\n    - command: echo control\n      trace-id: "bad\\nvalue"\n    - command: echo long\n      trace-id: ${"a".repeat(129)}\n`,
+				);
+				const result = validatePlatformYaml(path, platform);
+				for (let index = 0; index < 9; index++) {
+					expect(result.errors.some((error) => error.includes(`hooks.PreToolUse[${index}].trace-id`))).toBe(
+						true,
+					);
+				}
+			}
+		});
+
+		it("rejects non-string trace-id values for Claude and Codex", () => {
+			for (const platform of ["claude", "codex"]) {
+				const path = writeYaml(
+					dir,
+					`${platform}.yaml`,
+					`hooks:\n  PreToolUse:\n    - command: echo number\n      trace-id: 42\n    - command: echo null\n      trace-id: null\n    - command: echo object\n      trace-id:\n        nested: true\n    - command: echo array\n      trace-id: [id]\n`,
+				);
+				const result = validatePlatformYaml(path, platform);
+				for (let index = 0; index < 4; index++) {
+					expect(result.errors.some((error) => error.includes(`hooks.PreToolUse[${index}].trace-id`))).toBe(
+						true,
+					);
+				}
+			}
+		});
+
+		it("validates component PreToolUse trace-id while preserving safe values", () => {
+			for (const platform of ["claude", "codex"]) {
+				const safePath = writeYaml(
+					dir,
+					`${platform}-component-safe.yaml`,
+					`hooks:\n  PreToolUse:\n    - component: trace-hook.sh\n      trace-id: component.safe\n`,
+				);
+				expect(validatePlatformYaml(safePath, platform).errors).toHaveLength(0);
+
+				const unsafePath = writeYaml(
+					dir,
+					`${platform}-component-unsafe.yaml`,
+					`hooks:\n  PreToolUse:\n    - component: trace-hook.sh\n      trace-id: '-component'\n`,
+				);
+				const unsafeErrors = validatePlatformYaml(unsafePath, platform).errors;
+				expect(unsafeErrors.some((error) => error.includes("hooks.PreToolUse[0].trace-id"))).toBe(true);
+			}
+		});
+
+		it("does not apply trace-id validation to Gemini or non-PreToolUse events", () => {
+			const geminiPath = writeYaml(
+				dir,
+				"gemini.yaml",
+				`hooks:\n  PreToolUse:\n    - command: echo gemini\n      trace-id: 'unsafe id'\n`,
+			);
+			const geminiErrors = validatePlatformYaml(geminiPath, "gemini").errors;
+			expect(geminiErrors.some((error) => error.includes("trace-id"))).toBe(false);
+
+			for (const platform of ["claude", "codex"]) {
+				const path = writeYaml(
+					dir,
+					`${platform}-stop.yaml`,
+					`hooks:\n  Stop:\n    - command: echo stop\n      trace-id: 'unsafe id'\n`,
+				);
+				const errors = validatePlatformYaml(path, platform).errors;
+				expect(errors.some((error) => error.includes("trace-id"))).toBe(false);
+			}
+		});
 	});
 
 	// --- A-2: codex-specific event/type 제약 검증 ---

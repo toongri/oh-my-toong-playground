@@ -105,6 +105,7 @@ const VALID_EVENTS = new Set([
 
 const VALID_HOOK_TYPES = new Set(["command", "prompt"]);
 const VALID_PLUGIN_STATES = new Set(["present", "absent"]);
+const TRACE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 const PLATFORM_ALLOWED_SECTIONS: Record<string, Set<string>> = {
 	claude: new Set(["config", "hooks", "mcps", "plugins", "statusLine"]),
@@ -135,6 +136,19 @@ function validateComponentRef(value: string, context: string, result: Validation
 	const parts = value.split(":");
 	if (parts.length !== 2 || !parts[0] || !parts[1]) {
 		result.errors.push(`${context}: 잘못된 형식 '${value}' (올바른 형식: {project}:{name})`);
+	}
+}
+
+function validateTraceId(value: unknown, context: string, result: ValidationResult): void {
+	if (value === undefined) return;
+	if (typeof value !== "string") {
+		result.errors.push(`${context}: string이어야 합니다 (got ${value === null ? "null" : typeof value})`);
+		return;
+	}
+	if (!TRACE_ID_PATTERN.test(value)) {
+		result.errors.push(
+			`${context}: 안전한 형식이어야 합니다 (영숫자로 시작하고 영숫자, ., _, -만 허용하며 최대 128자)`,
+		);
 	}
 }
 
@@ -648,6 +662,9 @@ function validatePlatformYamlData(
 					result.errors.push(
 						`${label}: hooks.${event}[${i}].timeout은 number여야 합니다 (got ${typeof hookObj.timeout})`,
 					);
+				}
+				if ((platform === "claude" || platform === "codex") && event === "PreToolUse") {
+					validateTraceId(hookObj["trace-id"], `${label}: hooks.${event}[${i}].trace-id`, result);
 				}
 
 				// A-2: codex does not support type: prompt
