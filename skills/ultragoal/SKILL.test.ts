@@ -229,8 +229,8 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 	});
 });
 
-describe("long-running code-reviewer wait contract", () => {
-	test("elapsed time alone never interrupts an in-flight reviewer", () => {
+describe("장시간 `code-reviewer` 대기 계약", () => {
+	test("경과 시간만으로 진행 중인 `code-reviewer`를 중단하지 않는다", () => {
 		expect(completionGateMd).toContain(
 			"may legitimately remain in flight for 2–3 hours",
 		);
