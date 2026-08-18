@@ -12,7 +12,13 @@ TESTS_PASSED=0
 TESTS_FAILED=0
 
 ORIGINAL_HOME="$HOME"
+ORIGINAL_OMT_DIR="${OMT_DIR-}"
+ORIGINAL_OMT_DIR_SET=0
+if [[ -n "${OMT_DIR+x}" ]]; then
+    ORIGINAL_OMT_DIR_SET=1
+fi
 FIXTURE_HOME=""
+AMBIENT_ROOT=""
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -69,16 +75,51 @@ setup_fixture() {
 
 teardown_fixture() {
     export HOME="$ORIGINAL_HOME"
+    if [[ "$ORIGINAL_OMT_DIR_SET" -eq 1 ]]; then
+        export OMT_DIR="$ORIGINAL_OMT_DIR"
+    else
+        unset OMT_DIR
+    fi
     if [[ -n "$FIXTURE_HOME" && -d "$FIXTURE_HOME" ]]; then
         rm -rf "$FIXTURE_HOME"
     fi
     FIXTURE_HOME=""
 }
 
+run_test_with_ambient_omt_dir() {
+    local name="$1"
+    local ambient_root
+    local status=0
+    ambient_root=$(mktemp -d)
+    AMBIENT_ROOT="$ambient_root"
+    mkdir -p "$ambient_root/ambient-project"
+    printf '{"active":true,"phase":"pursuing","last_touched_at":"2000-01-01T00:00:00"}' \
+        > "$ambient_root/ambient-project/goal-state-ambient-sess.json"
+    export OMT_DIR="$ambient_root/ambient-project"
+
+    run_test "$name" || status=$?
+    if [[ -f "$ambient_root/ambient-project/goal-state-ambient-sess.json" ]]; then
+        echo "[PASS] ambient OMT_DIR sentinel preserved"
+    else
+        echo "[FAIL] ambient OMT_DIR sentinel was modified"
+        status=1
+    fi
+    rm -rf "$ambient_root"
+    if [[ -e "$ambient_root" ]]; then
+        echo "[FAIL] ambient OMT_DIR temp root leaked"
+        status=1
+    else
+        echo "[PASS] ambient OMT_DIR temp root removed"
+    fi
+    AMBIENT_ROOT=""
+    return "$status"
+}
+
 run_test() {
     local name="$1"
     setup_fixture
     export HOME="$FIXTURE_HOME"
+    unset OMT_DIR
 
     if "$name"; then
         echo "[PASS] $name"
@@ -388,6 +429,13 @@ test_real_omt_untouched_when_home_is_fixture() {
     fi
     echo "FAIL: script did not scan fixture .omt"
     return 1
+}
+
+test_harness_scans_fixture_not_ambient_omt_dir() {
+    local output
+    output=$(bash "$CLEANUP_SCRIPT" --execute 2>&1)
+    [[ "$output" == *"$FIXTURE_HOME/.omt"* ]] || return 1
+    [[ "$output" != *"$AMBIENT_ROOT"* ]] || return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -1545,6 +1593,7 @@ main() {
     # AC 6.3 — default no-execute hermetic
     run_test test_default_no_execute_leaves_fixture_identical
     run_test test_real_omt_untouched_when_home_is_fixture
+    run_test_with_ambient_omt_dir test_harness_scans_fixture_not_ambient_omt_dir
 
     # Execute mode
     run_test test_execute_deletes_capricious_watcher
