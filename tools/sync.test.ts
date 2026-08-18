@@ -272,6 +272,79 @@ describe("processYaml — complete lib precollection before writes", () => {
 	});
 });
 
+describe("processYaml — scripts reconciliation after platform config", () => {
+	let tmpDir: string;
+	let rootDir: string;
+	let targetPath: string;
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "scripts-reconcile-order-"));
+		rootDir = path.join(tmpDir, "root");
+		targetPath = path.join(tmpDir, "target");
+		await fs.mkdir(targetPath, { recursive: true });
+		await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+		await writeFile(path.join(rootDir, "scripts", "old-script", "index.sh"), "#!/bin/sh\necho old\n");
+		await writeFile(path.join(rootDir, "scripts", "pretool-trace", "index.ts"), "export {};\n");
+		await writeFile(path.join(rootDir, "claude.yaml"), "config:\n  theme: dark\n");
+		_resetConfigCache();
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+		_resetConfigCache();
+	});
+
+	function syncYamlPath(): string {
+		return path.join(rootDir, "sync.yaml");
+	}
+
+	async function writeSyncYaml(items: string[]): Promise<void> {
+		await writeFile(
+			syncYamlPath(),
+			`path: ${targetPath}\nscripts:\n  platforms: [claude]\n  items:\n${items.map((item) => `    - ${item}`).join("\n")}\n`,
+		);
+	}
+
+	async function runSync(adapter: ClaudeAdapter): Promise<SyncContext> {
+		const context = makeContext({ dryRun: false });
+		context.backupBase = path.join(tmpDir, "backups");
+		await processYaml(context, syncYamlPath(), new Map<Platform, PlatformAdapter>([["claude", adapter]]) as AdapterMap, rootDir);
+		return context;
+	}
+
+	it("keeps stale scripts when platform config fails after wrapper preparation", async () => {
+		await writeSyncYaml(["old-script", "pretool-trace"]);
+		await runSync(new ClaudeAdapter());
+		const oldScript = path.join(targetPath, ".claude", "scripts", "old-script", "index.sh");
+		expect(await exists(oldScript)).toBe(true);
+		await writeFile(path.join(targetPath, ".claude", "settings.local.json"), '{"hooks":{"old":"old-script"}}\n');
+
+		await writeSyncYaml(["pretool-trace"]);
+		const failingAdapter = new ClaudeAdapter();
+		failingAdapter.syncPlatformYaml = async () => {
+			throw new Error("injected config failure");
+		};
+		const failed = await runSync(failingAdapter);
+
+		expect(failed.failedTargets).toContain(targetPath);
+		expect(await exists(oldScript)).toBe(true);
+		expect(await readFile(path.join(targetPath, ".claude", "settings.local.json"))).toContain("old-script");
+	});
+
+	it("removes stale scripts after platform config succeeds", async () => {
+		await writeSyncYaml(["old-script", "pretool-trace"]);
+		await runSync(new ClaudeAdapter());
+		const oldScript = path.join(targetPath, ".claude", "scripts", "old-script", "index.sh");
+		expect(await exists(oldScript)).toBe(true);
+
+		await writeSyncYaml(["pretool-trace"]);
+		const completed = await runSync(new ClaudeAdapter());
+
+		expect(completed.failedTargets).toHaveLength(0);
+		expect(await exists(oldScript)).toBe(false);
+	});
+});
+
 describe("PreToolUse wrapper deployment validation", () => {
 	let tmpDir: string;
 	let rootDir: string;

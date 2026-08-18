@@ -24,6 +24,7 @@ import type {
 	PluginScope,
 	DocsItem,
 	ModelMap,
+	SyncItem,
 } from "./lib/types.ts";
 import {
 	getRootDir,
@@ -280,6 +281,11 @@ function addOwnedName(names: OwnedHookNames | OwnedRuleNames, platform: Platform
 /** All categories handled by syncCategory. */
 export const CATEGORIES: Category[] = ["agents", "commands", "skills", "scripts", "rules"];
 
+type SyncCategoryOptions = {
+	reconcile?: boolean;
+	itemFilter?: (item: SyncItem) => boolean;
+};
+
 /**
  * Platforms whose adapters actually write hooks. Hooks are not a sync.yaml
  * category — they arrive through `{platform}.yaml` — so SUPPORTED_CATEGORIES
@@ -360,6 +366,7 @@ export async function syncCategory(
 	rootDir: string,
 	deployRoot: string,
 	libSourceRoots?: LibSourceRoots,
+	options?: SyncCategoryOptions,
 ): Promise<void> {
 	const section = syncYaml[category];
 	if (!section || !Array.isArray(section.items) || section.items.length === 0) {
@@ -368,7 +375,7 @@ export async function syncCategory(
 
 	const sectionPlatforms = section.platforms;
 	const syncYamlPlatforms = syncYaml.platforms;
-	const items = section.items;
+	const items = options?.itemFilter ? section.items.filter(options.itemFilter) : section.items;
 
 	logInfo(`${category} 동기화 시작 (${items.length} 개)`);
 
@@ -587,7 +594,7 @@ export async function syncCategory(
 	// anything under "rules" (deployedNames stays empty for rules, so this loop
 	// is a no-op there). deployedNames is already keyed by deploy LOCATION
 	// (deployLocationForManifest), so no further mapping is needed here.
-	if (!context.dryRun) {
+	if (options?.reconcile !== false && !context.dryRun) {
 		for (const [deployLocation, names] of deployedNames) {
 			await reconcilePairManifest(deployRoot, deployLocation, category, [...names]);
 		}
@@ -603,7 +610,7 @@ export async function syncCategory(
 	// Cleanup runs even under dryRun (it reports via logDry); the manifest key is only
 	// pruned after a successful (non-dry) cleanup, so a thrown cleanup leaves the
 	// ownership record intact for the next run to retry against.
-	if (category === "skills" && deployedNames.has("agents")) {
+	if (options?.reconcile !== false && category === "skills" && deployedNames.has("agents")) {
 		await cleanupCodexSkillsFossil(
 			deployRoot,
 			context.backupDest,
@@ -2181,6 +2188,13 @@ export async function processYaml(
 				rootDir,
 				deployRoot,
 				libSourceRoots,
+				{
+					reconcile: false,
+					itemFilter: (item) => {
+						const component = typeof item === "string" ? item : item.component ?? "";
+						return path.basename(component) === "pretool-trace";
+					},
+				},
 			);
 			if (shouldMkdirClaude || libSourceRoots.size > 0) {
 				await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
@@ -2202,7 +2216,18 @@ export async function processYaml(
 				ownedHookNames,
 			);
 
-			// Sync remaining categories (scripts were prepared above).
+			// Reconcile the complete scripts category only after platform config succeeds.
+			await syncCategory(
+				context,
+				"scripts",
+				syncYaml,
+				adapters,
+				rootDir,
+				deployRoot,
+				libSourceRoots,
+			);
+
+			// Sync remaining categories.
 			for (const category of CATEGORIES) {
 				if (category === "scripts") continue;
 				await syncCategory(
