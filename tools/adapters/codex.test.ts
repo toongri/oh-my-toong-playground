@@ -158,19 +158,16 @@ describe("insertManagedBlock", () => {
 		// Reproduces the PR #262 P1 finding: the line-anchored marker regex
 		// only knows a marker sits at the start of its own line — it cannot
 		// tell that line is the BODY of a pre-existing `doc = """ ... """`
-		// multiline string rather than real structure. The replace still
-		// produces syntactically valid TOML (the existing `parse(result)`
-		// backstop alone would let this through), but the generated block
-		// ends up trapped inside the string instead of declared as real
-		// top-level structure — so the config it declares is never actually
-		// deployed even though sync reports success.
+		// multiline string rather than real structure. The replace would
+		// otherwise produce syntactically valid TOML (the existing
+		// `parse(result)` backstop alone would let this through), with the
+		// generated block trapped inside the string instead of declared as
+		// real top-level structure — so the config it declares would never
+		// actually be deployed even though sync reports success.
 		//
-		// The target file also carries a user-owned `[features]` table with
-		// an unrelated leaf key, to prove a shallow "does the top-level key
-		// exist" check is not enough: `parse(result).features` is truthy
-		// either way, so only descending to the actual leaf key/value
-		// (`features.multi_agent_v2.max_concurrent_threads_per_session`)
-		// can tell the declared config never landed.
+		// The pre-replace backstop now catches this first, on the EXISTING
+		// side: "사용자가 직접 쓴 설명 문단" is not valid TOML, so the matched
+		// markers cannot be wrapping a real managed block.
 		const existing = [
 			`[features]`,
 			`existing_flag = true`,
@@ -189,11 +186,52 @@ describe("insertManagedBlock", () => {
 				"mcp",
 				`[features.multi_agent_v2]\nmax_concurrent_threads_per_session = 4\n`,
 			),
-		).toThrow(/did not land at its intended location/);
+		).toThrow(/does not parse as TOML/);
 		// The throw IS the assertion that "사용자가 직접 쓴 설명 문단" was never
 		// spliced out: insertManagedBlock never produces a result for a
 		// caller to write to disk, so the original multiline string is left
 		// wherever the caller read `existing` from.
+	});
+
+	it("마커 리터럴이 멀티라인 TOML 문자열 안에 있고 새 본문이 주석뿐이어도 `insertManagedBlock`이 예외를 던진다 — 반환값이 없다는 사실 자체가 사용자 문단 보존의 증거다", () => {
+		// Reproduces the PR #262 P1 gap left by the previous fix: the new-body
+		// landing-site backstop (isDeepSubset(declaredStructure, parsedResult))
+		// only inspects what the NEW body declares. `flushMcpBlock` passes
+		// "# No MCP servers configured\n" when there are 0 MCP servers — that
+		// parses to `{}`, which is a subset of every object, so the backstop
+		// passes vacuously no matter where the block actually landed. This test
+		// validates the EXISTING side instead: the content trapped between the
+		// markers is not valid TOML (it's a plain user sentence), so replacing
+		// it must be refused before anything reaches disk.
+		const existing = [
+			`[features]`,
+			`existing_flag = true`,
+			``,
+			`[owner]`,
+			`doc = """`,
+			`# --- omt:mcp ---`,
+			`사용자가 직접 쓴 설명 문단`,
+			`# --- end omt:mcp ---`,
+			`"""`,
+			``,
+		].join("\n");
+		expect(() => insertManagedBlock(existing, "mcp", `# No MCP servers configured\n`)).toThrow(
+			/does not parse as TOML/,
+		);
+		// The throw IS the assertion that "사용자가 직접 쓴 설명 문단" was never
+		// spliced out: insertManagedBlock never produces a result for a caller
+		// to write to disk.
+	});
+
+	it("정상적인 기존 관리 블록을 주석뿐인 본문으로 교체하는 것은 여전히 성공한다 — 서버 0개 정리 경로의 회귀 방지", () => {
+		// Regression guard for the pre-replace backstop added above: a real
+		// managed block (valid TOML, reachable at the top level) must still be
+		// replaceable by the comment-only body `flushMcpBlock` writes when the
+		// MCP accumulator is empty.
+		const existing = `# --- omt:mcp ---\n[mcp_servers.figma]\ncommand = "npx"\n# --- end omt:mcp ---\n`;
+		const result = insertManagedBlock(existing, "mcp", `# No MCP servers configured\n`);
+		expect(result).toContain("# No MCP servers configured");
+		expect(result).not.toContain("mcp_servers.figma");
 	});
 });
 

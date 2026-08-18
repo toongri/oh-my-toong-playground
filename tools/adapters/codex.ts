@@ -142,6 +142,52 @@ export function insertManagedBlock(
 	let result: string;
 
 	if (startCount === 1 && endCount === 1 && endIdx > startIdx) {
+		// Pre-replace backstop: confirm the matched marker pair actually wraps a
+		// real managed block before splicing it out. The line-anchored marker
+		// match only knows a marker sits at the start of its own line — it
+		// cannot tell that line is real structure rather than the BODY of a
+		// pre-existing multiline TOML string (e.g. `doc = """ ... """`) whose
+		// text happens to contain lines matching both marker literals. Mirrors
+		// the new-body landing-site backstop below, but on the existing side.
+		const existingBody = content.slice(startIdx + startMatches[0][0].length, endIdx);
+		let existingDeclared: Record<string, unknown>;
+		try {
+			existingDeclared = parse(existingBody);
+		} catch (err) {
+			const causeMessage = err instanceof Error ? err.message : String(err);
+			throw new Error(
+				`insertManagedBlock: existing content between the 'omt:${blockName}' markers does not parse as TOML ` +
+					`(not written) — ${causeMessage}. This happens when the matched markers are not a real managed ` +
+					`block, such as a multiline TOML string in the target file whose body happens to contain lines ` +
+					`matching the marker literals. Nothing was written.`,
+				{ cause: err },
+			);
+		}
+		// The original content may be malformed for unrelated reasons; if so the
+		// existing parse(result) backstop further down already catches it, so this
+		// reachability check is skipped rather than raising a second, redundant error.
+		let parsedOriginalContent: Record<string, unknown> | undefined;
+		try {
+			parsedOriginalContent = parse(content);
+		} catch {
+			parsedOriginalContent = undefined;
+		}
+		if (parsedOriginalContent && !isDeepSubset(existingDeclared, parsedOriginalContent)) {
+			throw new Error(
+				`insertManagedBlock: existing content between the 'omt:${blockName}' markers does not read back ` +
+					`at the top level of the target file (not written) — the matched markers are not wrapping a ` +
+					`real managed block. This happens when the target file has a structure such as a multiline ` +
+					`TOML string whose body contains lines matching the marker literals, trapping what looks like ` +
+					`a block body inside that string instead of as real top-level structure. Nothing was written.`,
+			);
+		}
+		// lazy: when the trapped body AND the new tomlContent are both comment-only,
+		// both this check and the landing-site backstop below pass vacuously (an
+		// empty declared structure is a subset of anything) — loss is negligible
+		// since comment-only text replaces comment-only text either way. Upgrade
+		// path: a TOML string-boundary scanner that excludes marker lines living
+		// inside string literals.
+
 		// Replace existing block (inclusive of markers)
 		const before = content.slice(0, startIdx);
 		const after = content.slice(endIdx + endMatches[0][0].length);
