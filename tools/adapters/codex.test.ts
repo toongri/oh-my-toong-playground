@@ -79,6 +79,53 @@ describe("insertManagedBlock", () => {
 		);
 	});
 
+	it("throws (not replaces) when the start marker is duplicated via `insertManagedBlock`, preserving the user table sitting between the duplicates", () => {
+		// Reproduces the real incident from PR #262: a stale sync re-appended a
+		// full block onto a file whose end marker had already been clobbered,
+		// leaving TWO start markers and only ONE end marker. A naive
+		// existence-only check (`indexOf(...) !== -1`) treats the FIRST start
+		// marker and the ONLY end marker as a valid pair and replaces
+		// everything between them — silently deleting the Codex-runtime-owned
+		// `[hooks.state.*]` and `[tui.model_availability_nux]` tables that sit
+		// between the duplicate start markers. Asserting the throw (and thus
+		// the absence of any return value to write to disk) IS the assertion
+		// that those tables are never deleted — a thrown error means
+		// `insertManagedBlock` never produces a result for a caller to persist.
+		const existing = [
+			`# --- omt:mcp ---`,
+			`[mcp_servers.figma]`,
+			`command = "npx"`,
+			``,
+			`# --- omt:mcp ---`,
+			`[hooks.state.some_hook]`,
+			`enabled = true`,
+			``,
+			`[tui.model_availability_nux]`,
+			`seen = true`,
+			`# --- end omt:mcp ---`,
+			``,
+		].join("\n");
+		expect(() => insertManagedBlock(existing, "mcp", `server = "test"\n`)).toThrow(
+			/2 occurrence\(s\) of start marker.*1 occurrence\(s\) of end marker/,
+		);
+	});
+
+	it("throws when the end marker is duplicated via `insertManagedBlock`", () => {
+		const existing = [
+			`# --- omt:mcp ---`,
+			`[mcp_servers.figma]`,
+			`command = "npx"`,
+			`# --- end omt:mcp ---`,
+			``,
+			`some_other = true`,
+			`# --- end omt:mcp ---`,
+			``,
+		].join("\n");
+		expect(() => insertManagedBlock(existing, "mcp", `server = "test"\n`)).toThrow(
+			/1 occurrence\(s\) of start marker.*2 occurrence\(s\) of end marker/,
+		);
+	});
+
 	it("throws when the resulting TOML would duplicate a key via `insertManagedBlock`", () => {
 		// No markers present (append path), but the block being appended
 		// declares a table the surrounding content already declares — the

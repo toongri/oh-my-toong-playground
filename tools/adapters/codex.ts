@@ -80,12 +80,24 @@ export function insertManagedBlock(
 
 	const block = `${startMarker}\n${tomlContent}${endMarker}`;
 
+	// Count, not just detect, each marker's occurrences: a corrupted pairing
+	// (e.g. two start markers and one end marker, observed after a stale sync
+	// appended a fresh block onto a file whose end marker had already been
+	// clobbered) still satisfies a naive "both present, end after start"
+	// existence check, and the replace path below would then splice out
+	// everything between the FIRST start marker and the ONLY end marker —
+	// silently deleting any user-owned content sitting between the duplicates.
+	// Split-based counting is safe here because neither marker string is a
+	// substring of the other.
+	const startCount = content.split(startMarker).length - 1;
+	const endCount = content.split(endMarker).length - 1;
+
 	const startIdx = content.indexOf(startMarker);
 	const endIdx = content.indexOf(endMarker);
 
 	let result: string;
 
-	if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+	if (startCount === 1 && endCount === 1 && endIdx > startIdx) {
 		// Replace existing block (inclusive of markers)
 		const before = content.slice(0, startIdx);
 		const after = content.slice(endIdx + endMarker.length);
@@ -101,30 +113,36 @@ export function insertManagedBlock(
 		} else {
 			result = `${block}\n`;
 		}
-	} else if (startIdx === -1 && endIdx === -1) {
+	} else if (startCount === 0 && endCount === 0) {
 		// Append at end
 		const trimmed = content.replace(/\n+$/, "");
 		result = trimmed ? `${trimmed}\n\n${block}\n` : `${block}\n`;
 	} else {
-		// Orphaned marker: exactly one of the pair is present, or the end marker
-		// precedes the start marker. This happens when something else rewrites
-		// the file and breaks the marker pairing (observed: Codex CLI rewriting
+		// Orphaned or duplicated marker: anything other than exactly one start +
+		// one end (in start-before-end order) leaves the stale block's true
+		// extent unknown — guessing where it ends risks deleting config the
+		// user owns. This happens when something else rewrites the file and
+		// breaks the marker pairing (observed: Codex CLI rewriting
 		// .codex/config.toml to persist its own runtime state clobbered one
-		// side of an `omt:mcp` marker pair). With only one marker left, the
-		// stale block's true extent is unknown — guessing where it ends risks
-		// deleting config the user owns. Silently falling through to append
-		// would leave the stale block's keys in place and duplicate-declare
-		// them alongside the freshly appended block, which crashes the Codex
-		// CLI on a `duplicate key` parse error. Fail loud instead.
-		const reason =
-			startIdx !== -1 && endIdx === -1
-				? `start marker '${startMarker}' is present but end marker '${endMarker}' is missing`
-				: startIdx === -1 && endIdx !== -1
-					? `end marker '${endMarker}' is present but start marker '${startMarker}' is missing`
-					: `end marker '${endMarker}' appears before start marker '${startMarker}'`;
+		// side of an `omt:mcp` marker pair — and, separately, a stale sync
+		// re-appending a full block onto that already-clobbered file produced a
+		// duplicated start marker). Silently falling through to append or
+		// replace would either duplicate-declare keys (crashing the Codex CLI on
+		// a `duplicate key` parse error) or delete content between duplicate
+		// markers. Fail loud instead.
+		let reason: string;
+		if (startCount >= 1 && endCount === 0) {
+			reason = `start marker '${startMarker}' is present but end marker '${endMarker}' is missing`;
+		} else if (startCount === 0 && endCount >= 1) {
+			reason = `end marker '${endMarker}' is present but start marker '${startMarker}' is missing`;
+		} else if (startCount === 1 && endCount === 1) {
+			reason = `end marker '${endMarker}' appears before start marker '${startMarker}'`;
+		} else {
+			reason = `found ${startCount} occurrence(s) of start marker '${startMarker}' and ${endCount} occurrence(s) of end marker '${endMarker}' — expected exactly one of each`;
+		}
 		throw new Error(
 			`insertManagedBlock: orphaned marker for managed block 'omt:${blockName}' — ${reason}. ` +
-				`Remove the orphaned marker and its stale block body by hand, then re-run sync.`,
+				`Remove the extra/orphaned marker(s) and any stale block body by hand, then re-run sync.`,
 		);
 	}
 
