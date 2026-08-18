@@ -138,6 +138,35 @@ async function validatePreToolUseWrapperDeployments(
 }
 
 /**
+ * Resolve platform-YAML hook sources before any platform settings are written.
+ * Hook components can import `@lib/*`; recording their SOURCE roots here lets
+ * the scripts/lib preparation phase deploy those runtime dependencies first.
+ */
+async function collectPlatformHookSourceRoots(
+	yamlDir: string,
+	adapters: AdapterMap,
+	rootDir: string,
+	projectDir: string | undefined,
+	libSourceRoots: LibSourceRoots,
+): Promise<void> {
+	for (const platform of KNOWN_PLATFORMS) {
+		if (!adapters.get(platform) || !HOOK_DEPLOYING_PLATFORMS.includes(platform)) continue;
+		const merged = await parseAndMergePlatformYaml(yamlDir, platform);
+		if (!merged?.hooks) continue;
+		for (const items of Object.values(merged.hooks)) {
+			if (!Array.isArray(items)) continue;
+			for (const item of items) {
+				const component = item?.component ?? "";
+				if (!component) continue;
+				const resolved = resolveComponentPath(component, "hooks", rootDir, projectDir);
+				if ("error" in resolved) continue;
+				addLibSourceRoot(libSourceRoots, platform, resolved.path);
+			}
+		}
+	}
+}
+
+/**
  * Per-deploy-LOCATION accumulator of resolved component SOURCE paths,
  * populated as categories and per-platform hooks are processed. syncLib scans
  * these SOURCE roots (not the deployed tree, which no longer carries raw
@@ -597,7 +626,7 @@ export async function syncPlatformConfigs(
 					} else {
 						resolvedItems.push({ ...item, component: resolved.path });
 						// Record the hook SOURCE so syncLib deploys any @lib/ deps it imports.
-						if (libSourceRoots) {
+						if (libSourceRoots && HOOK_DEPLOYING_PLATFORMS.includes(platform)) {
 							addLibSourceRoot(libSourceRoots, platform, resolved.path);
 						}
 						// Record the hook's deployed NAME so rewritePlatformPaths can scope
@@ -2076,9 +2105,31 @@ export async function processYaml(
 				logDry(`Deploy target: ${deployRoot}`);
 			}
 
-			// Ensure <deployRoot>/.claude exists only when something deploys into it
-			// (non-dry). The container is never the mkdir target (AC2.2): an MCP-only
-			// project writes to ~/.claude.json, not <deployRoot>/.claude/.
+			// Prepare command wrappers' runtime before platform YAML can activate them.
+			// Hook sources are collected without writes; scripts then lib are deployed
+			// first so a failure leaves settings/hooks untouched.
+			await collectPlatformHookSourceRoots(
+				yamlDir,
+				adapters,
+				rootDir,
+				context.projectDir || undefined,
+				libSourceRoots,
+			);
+			await syncCategory(
+				context,
+				"scripts",
+				syncYaml,
+				adapters,
+				rootDir,
+				deployRoot,
+				libSourceRoots,
+			);
+			if (shouldMkdirClaude || libSourceRoots.size > 0) {
+				await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
+			}
+
+			// Ensure <deployRoot>/.claude exists only once wrapper/runtime preparation
+			// has succeeded. The container is never the mkdir target (AC2.2).
 			if (!context.dryRun && shouldMkdirClaude) {
 				await fs.mkdir(path.join(deployRoot, ".claude"), { recursive: true });
 			}
@@ -2093,8 +2144,9 @@ export async function processYaml(
 				ownedHookNames,
 			);
 
-			// Sync 5 categories
+			// Sync remaining categories (scripts were prepared above).
 			for (const category of CATEGORIES) {
+				if (category === "scripts") continue;
 				await syncCategory(
 					context,
 					category,

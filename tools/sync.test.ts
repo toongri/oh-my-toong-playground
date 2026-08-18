@@ -230,6 +230,8 @@ describe("PreToolUse wrapper deployment validation", () => {
 		await processYaml(makeContext(), syncYamlPath, adapters, rootDir);
 		expect(await exists(path.join(targetPath, ".claude", "scripts", "pretool-trace", "index.ts"))).toBe(true);
 		expect(await exists(path.join(targetPath, ".codex", "scripts", "pretool-trace", "index.ts"))).toBe(true);
+		const settings = await fs.readFile(path.join(targetPath, ".claude", "settings.local.json"), "utf8");
+		expect(settings).toContain(".claude/scripts/pretool-trace/index.ts");
 	});
 
 	it("rejects an adapter preview whose wrapper destination differs before mutation", async () => {
@@ -1726,6 +1728,95 @@ describe("processYaml", () => {
 
 		// syncPlatformConfigs should have been called (claude.yaml exists)
 		expect(platformYamlCalls.length).toBeGreaterThan(0);
+	});
+
+	it("does not write platform settings when pretool-trace script deployment fails", async () => {
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nscripts:\n  platforms: [claude]\n  items:\n    - pretool-trace\n`,
+		);
+		await writeFile(path.join(rootDir, "claude.yaml"), "hooks:\n  PreToolUse:\n    - component: audit\n");
+		await writeFile(path.join(rootDir, "hooks", "audit", "index.sh"), "#!/bin/sh\n");
+		await writeFile(path.join(rootDir, "scripts", "pretool-trace", "index.ts"), "export {};\n");
+		await writeFile(path.join(targetPath, ".claude", "settings.local.json"), "{\"keep\":true}\n");
+		const before = await fs.readFile(path.join(targetPath, ".claude", "settings.local.json"), "utf8");
+		const adapter = new ClaudeAdapter();
+		adapter.syncScriptsDirect = async () => {
+			throw new Error("injected pretool-trace deployment failure");
+		};
+		const adapters = new Map<Platform, PlatformAdapter>([["claude", adapter]]) as AdapterMap;
+
+		const context = makeContext();
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(context.failedTargets).toContain(targetPath);
+		expect(await fs.readFile(path.join(targetPath, ".claude", "settings.local.json"), "utf8")).toBe(before);
+		expect(await exists(path.join(targetPath, ".claude", "scripts", "pretool-trace", "index.ts"))).toBe(false);
+	});
+
+	it("keeps a clean target topology unchanged when pretool-trace deployment fails", async () => {
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\nscripts:\n  platforms: [claude]\n  items: [pretool-trace]\n`);
+		await writeFile(path.join(rootDir, "claude.yaml"), "hooks:\n  PreToolUse:\n    - component: audit\n");
+		await writeFile(path.join(rootDir, "hooks", "audit", "index.sh"), "#!/bin/sh\n");
+		await writeFile(path.join(rootDir, "scripts", "pretool-trace", "index.ts"), "export {};\n");
+		const before = await snapshotTree(targetPath);
+		const adapter = new ClaudeAdapter();
+		adapter.syncScriptsDirect = async () => {
+			throw new Error("injected pretool-trace deployment failure");
+		};
+		const adapters = new Map<Platform, PlatformAdapter>([["claude", adapter]]) as AdapterMap;
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(context.failedTargets).toContain(targetPath);
+		expect(await snapshotTree(targetPath)).toEqual(before);
+	});
+
+	it("keeps settings and hooks unchanged when pretool-trace lib vendoring fails", async () => {
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\nscripts:\n  platforms: [claude]\n  items: [pretool-trace]\n`);
+		await writeFile(path.join(rootDir, "claude.yaml"), "hooks:\n  PreToolUse:\n    - component: audit\n");
+		await writeFile(path.join(rootDir, "hooks", "audit", "index.sh"), "#!/bin/sh\n");
+		await writeFile(
+			path.join(rootDir, "scripts", "pretool-trace", "index.ts"),
+			'import { runtime } from "@lib/runtime";\nvoid runtime;\n',
+		);
+		await writeFile(path.join(rootDir, "lib", "runtime.ts"), 'import "definitely-not-installed";\nexport const runtime = true;\n');
+		await writeFile(path.join(rootDir, "package.json"), '{"dependencies":{"definitely-not-installed":"1.0.0"}}\n');
+		await writeFile(path.join(targetPath, ".claude", "settings.local.json"), "{\"keep\":true}\n");
+		await writeFile(path.join(targetPath, ".claude", "hooks.json"), "{\"keep\":true}\n");
+		const settingsPath = path.join(targetPath, ".claude", "settings.local.json");
+		const hooksPath = path.join(targetPath, ".claude", "hooks.json");
+		const settingsBefore = await fs.readFile(settingsPath, "utf8");
+		const hooksBefore = await fs.readFile(hooksPath, "utf8");
+		const context = makeContext();
+		const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(context.failedTargets).toContain(targetPath);
+		expect(await fs.readFile(settingsPath, "utf8")).toBe(settingsBefore);
+		expect(await fs.readFile(hooksPath, "utf8")).toBe(hooksBefore);
+	});
+
+	it("does not prepare opencode hook-only lib or hook/config paths", async () => {
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\n`);
+		await writeFile(path.join(rootDir, "opencode.yaml"), "hooks:\n  PreToolUse:\n    - component: audit\n");
+		await writeFile(path.join(rootDir, "hooks", "audit", "index.ts"), 'import "@lib/runtime";\n');
+		await writeFile(path.join(rootDir, "lib", "runtime.ts"), "export {};\n");
+		const before = await snapshotTree(targetPath);
+		const context = makeContext();
+		const adapters = new Map<Platform, PlatformAdapter>([["opencode", opencodeAdapter]]) as AdapterMap;
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(await snapshotTree(targetPath)).toEqual(before);
+		expect(await exists(path.join(targetPath, ".opencode", "lib"))).toBe(false);
+		expect(await exists(path.join(targetPath, ".opencode", "hooks"))).toBe(false);
 	});
 
 	it("does not process config/hooks/mcps/plugins sections in sync.yaml (P2-3)", async () => {
