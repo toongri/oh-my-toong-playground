@@ -5,7 +5,7 @@ import type { ModelMap, PlatformConfigResult, PlatformYaml, PluginScope } from "
 import { parseFrontmatter, serializeFrontmatter } from "../lib/frontmatter.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
-import type { PlatformAdapter } from "./types.ts";
+import type { PlatformAdapter, PlatformWriteObserver } from "./types.ts";
 import { deepMerge } from "../lib/deep-merge.ts";
 import { readJsonFile, writeJsonFile } from "../lib/json.ts";
 import { assertMappedTier, ModelMapError } from "../lib/model-map.ts";
@@ -304,6 +304,7 @@ export const opencodeAdapter: PlatformAdapter = {
 		yaml: PlatformYaml,
 		dryRun: boolean,
 		_scope?: PluginScope,
+		writeObserver?: PlatformWriteObserver,
 	): Promise<PlatformConfigResult> {
 		const processedSections: string[] = [];
 		let modelMap: ModelMap | undefined;
@@ -317,7 +318,7 @@ export const opencodeAdapter: PlatformAdapter = {
 		// 2. config — merged as-is. config.model/small_model are OpenCode's own
 		// default model ids, not agent tiers, so model-map does not apply here.
 		if (yaml.config !== undefined && yaml.config !== null) {
-			await syncConfig(targetPath, yaml.config, dryRun);
+			await syncConfig(targetPath, yaml.config, dryRun, writeObserver);
 			processedSections.push("config");
 		}
 
@@ -330,7 +331,7 @@ export const opencodeAdapter: PlatformAdapter = {
 		// 4. mcps — iterate items and merge each server
 		if (yaml.mcps !== undefined && yaml.mcps !== null) {
 			for (const [name, serverDef] of Object.entries(yaml.mcps)) {
-				await syncMcpsMerge(targetPath, name, serverDef, dryRun);
+				await syncMcpsMerge(targetPath, name, serverDef, dryRun, writeObserver);
 			}
 			processedSections.push("mcps");
 		}
@@ -355,6 +356,7 @@ export async function syncConfig(
 	targetPath: string,
 	configObj: Record<string, unknown>,
 	dryRun: boolean,
+	writeObserver?: PlatformWriteObserver,
 ): Promise<void> {
 	const configFile = path.join(targetPath, ".opencode", "opencode.json");
 
@@ -366,6 +368,9 @@ export async function syncConfig(
 	const current = await readJsonFile(configFile);
 	const merged = deepMerge(current, configObj);
 	await writeJsonFile(configFile, merged);
+	if (writeObserver) {
+		await writeObserver(configFile);
+	}
 	logInfo(`Config merged: ${configFile}`);
 }
 
@@ -419,6 +424,7 @@ export async function syncMcpsMerge(
 	serverName: string,
 	serverDef: Record<string, unknown> | null,
 	dryRun: boolean,
+	writeObserver?: PlatformWriteObserver,
 ): Promise<void> {
 	const configFile = path.join(targetPath, ".opencode", "opencode.json");
 
@@ -441,6 +447,9 @@ export async function syncMcpsMerge(
 		delete mcp[serverName];
 		current["mcp"] = mcp;
 		await writeJsonFile(configFile, current);
+		if (writeObserver) {
+			await writeObserver(configFile);
+		}
 		logInfo(`MCP removed: ${serverName} -> ${configFile}`);
 		return;
 	}
@@ -455,5 +464,8 @@ export async function syncMcpsMerge(
 	}
 
 	await writeJsonFile(configFile, current);
+	if (writeObserver) {
+		await writeObserver(configFile);
+	}
 	logInfo(`MCP merged: ${serverName} -> ${configFile}`);
 }

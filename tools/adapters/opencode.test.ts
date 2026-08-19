@@ -730,6 +730,70 @@ describe("opencodeAdapter.syncPlatformYaml", () => {
 		expect(mcp["serena"]).toEqual({ type: "stdio", command: "npx serena" });
 	});
 
+	it("notifies after each successful tracked config write and observes written bytes via `syncPlatformYaml`", async () => {
+		const configFile = path.join(tmpDir, ".opencode", "opencode.json");
+		const notifications: Array<{ path: string; bytes: string }> = [];
+		const observer = async (writtenPath: string) => {
+			notifications.push({ path: writtenPath, bytes: await fs.readFile(writtenPath, "utf-8") });
+		};
+
+		await opencodeAdapter.syncPlatformYaml(
+			tmpDir,
+			{
+				"model-map": { tiers: { opus: { model: "openai/o3" } } },
+				config: { model: "openai/o3" },
+				mcps: {
+					context7: { type: "http", url: "http://localhost:3000" },
+					serena: { type: "stdio", command: "npx serena" },
+				},
+			},
+			false,
+			undefined,
+			observer,
+		);
+
+		expect(notifications.map(({ path: writtenPath }) => writtenPath)).toEqual([
+			configFile,
+			configFile,
+			configFile,
+		]);
+		expect(notifications.map(({ bytes }) => JSON.parse(bytes))).toEqual([
+			{ model: "openai/o3" },
+			{ model: "openai/o3", mcp: { context7: { type: "http", url: "http://localhost:3000" } } },
+			{
+				model: "openai/o3",
+				mcp: {
+					context7: { type: "http", url: "http://localhost:3000" },
+					serena: { type: "stdio", command: "npx serena" },
+				},
+			},
+		]);
+	});
+
+	it("does not notify for dry-run, skipped sections, or failed writes via `syncPlatformYaml`", async () => {
+		const notifications: string[] = [];
+		const observer = (writtenPath: string) => {
+			notifications.push(writtenPath);
+		};
+
+		await opencodeAdapter.syncPlatformYaml(
+			tmpDir,
+			{ config: { model: "openai/o3" }, hooks: { UserPromptSubmit: [] } },
+			true,
+			undefined,
+			observer,
+		);
+		expect(notifications).toEqual([]);
+
+		const configFile = path.join(tmpDir, ".opencode", "opencode.json");
+		await fs.mkdir(path.dirname(configFile), { recursive: true });
+		await fs.writeFile(configFile, "{ invalid json }", "utf-8");
+		await expect(
+			opencodeAdapter.syncPlatformYaml(tmpDir, { config: { model: "openai/o3" } }, false, undefined, observer),
+		).rejects.toThrow(SyntaxError);
+		expect(notifications).toEqual([]);
+	});
+
 	it("removes null MCP declarations while preserving remaining servers via `syncPlatformYaml`", async () => {
 		const configFile = path.join(tmpDir, ".opencode", "opencode.json");
 		await writeJson(configFile, {
