@@ -348,4 +348,51 @@ describe("DeployTransaction", () => {
 			await rm(parent, { recursive: true, force: true });
 		}
 	});
+
+	it("replaces a leaf symlink before a callback can follow its external target", async () => {
+		const root = await tempRoot("leaf-symlink-write");
+		const outside = await tempRoot("leaf-symlink-write-outside");
+		try {
+			const target = join(root, "settings.json");
+			const external = join(outside, "settings.json");
+			await writeFile(external, "sentinel");
+			await fs.symlink(external, target);
+			const transaction = await DeployTransaction.begin(root, false, [target]);
+			await transaction!.mutate(target, async () => writeFile(target, "omt"));
+			expect(await readFile(external, "utf8")).toBe("sentinel");
+			expect(await readFile(target, "utf8")).toBe("omt");
+			expect((await lstat(target)).isSymbolicLink()).toBe(false);
+			await transaction!.rollback();
+			expect((await lstat(target)).isSymbolicLink()).toBe(true);
+			expect(await fs.readlink(target)).toBe(external);
+			expect(await readFile(external, "utf8")).toBe("sentinel");
+		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(outside, { recursive: true, force: true });
+		}
+	});
+
+	it("journals a leaf symlink removal that reports a late error", async () => {
+		const root = await tempRoot("leaf-symlink-rm-throw");
+		const outside = await tempRoot("leaf-symlink-rm-throw-outside");
+		try {
+			const target = join(root, "settings.json");
+			const external = join(outside, "settings.json");
+			await writeFile(external, "sentinel");
+			await fs.symlink(external, target);
+			const transaction = await DeployTransaction.begin(root, false, [target]);
+			const originalRm = fs.rm.bind(fs);
+			const rmSpy = spyOn(fs, "rm").mockImplementationOnce(async (candidate, options) => {
+				await originalRm(candidate, options);
+				throw new Error("delete reported late");
+			});
+			let calls = 0;
+			await expect(transaction!.mutate(target, async () => { calls++; })).rejects.toThrow("delete reported late");
+			expect(calls).toBe(0);
+			rmSpy.mockRestore();
+			await transaction!.rollback();
+			expect(await fs.readlink(target)).toBe(external);
+			expect(await readFile(external, "utf8")).toBe("sentinel");
+		} finally { await rm(root, { recursive: true, force: true }); await rm(outside, { recursive: true, force: true }); }
+	});
 });

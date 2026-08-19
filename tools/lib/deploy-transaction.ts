@@ -195,6 +195,11 @@ export class DeployTransaction implements DeployMutationHooks {
 			throw new Error(`Deploy transaction conflict: ${targetPath}`);
 		}
 		try {
+			const resident = await fs.lstat(entry.live).catch((error) => {
+				if (errorCode(error) === "ENOENT") return undefined;
+				throw error;
+			});
+			if (resident?.isSymbolicLink()) await fs.rm(entry.live, { force: true });
 			await operation();
 		} catch (error) {
 			try { entry.expected = await fingerprint(entry.live); } catch { /* preserve operation error */ }
