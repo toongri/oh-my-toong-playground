@@ -96,11 +96,17 @@ git diff --name-status <git range>
 | 도메인 | 엔티티·개념·불변식이 무엇이고 무엇이 바뀌는가 |
 
 다이어그램은 ` ```mermaid ` 펜스로 쓴다 — render 스텝에서 인라인 SVG로 구워지므로 최종
-HTML은 여전히 자기완결이다. 노드 라벨에는 diff에 실재하는 식별자를 쓰고, 변경이 닿는
-노드는 `:::changed`로 표시한다. 유형 선택과 문법 규칙은 `markdown-template.md`를 따른다.
+HTML은 여전히 자기완결이다. 다이어그램이 하나라도 있으면 노드·간선 라벨에 diff에
+실재하는 식별자를 쓰고, 최소 한 레벨에 변경 표시(`:::changed` 또는 Before/After 대비)를
+넣어야 R12를 통과한다. 이 두 근거는 심사자의 필수 인용에 함께 드러나야 한다. 유형 선택과
+문법 규칙은 `markdown-template.md`를 따른다.
 
 그릴 것이 정말 없는 레벨은 `구조 변화 없음: <사유 한 문장>`으로 대신한다 — 사유 없는
-마커는 구조 검사가 거부한다.
+마커는 구조 검사가 거부한다. 다이어그램이 하나도 없고 세 레벨 모두에 이 사유 있는
+waiver가 있으면 R12를 충족할 수 있다. 이 경우 심사자 인용에는 시스템·컴포넌트·도메인
+레벨의 세 waiver 문장을 모두 문서에서 그대로 따온 문자열로 넣어야 하며, 하나라도 빠지거나
+사유가 없으면 통과하지 못한다. 다이어그램이 하나라도 있으면 이 waiver 예외는 적용되지
+않는다.
 
 ## Step 4 — intuition
 
@@ -202,7 +208,13 @@ $CLI pass-step --step <step> --doc "<문서 경로>" --judge-json '<판정 JSON>
 
 판정 JSON은 심사 서브에이전트가 내놓는다. 심사자에게는 `references/judge-prompt.md`의 **고정 템플릿**을 그대로 준다. 직접 지어내지 않는다.
 
-심사자가 판정하는 항목은 전체 루브릭 중 세 개뿐이다 — `R12`(아키텍처 다이어그램의 라벨이 diff의 실재 식별자와 대응하는가), `R6`(Intuition의 구체 예시가 실제로 있고 본문에서 다시 쓰이는가), `R7`(그룹 N의 예고문이 그룹 N-1을 전제하는가). 나머지는 구조 검사가 이미 판정했다.
+심사자가 판정하는 항목은 전체 루브릭 중 세 개뿐이다 — `R12`(아키텍처 다이어그램이
+있다면 라벨·변경 표시가 diff의 근거와 대응하는가, 다이어그램이 없다면 세 레벨의 사유
+있는 waiver가 모두 있는가), `R6`(Intuition의 구체 예시가 실제로 있고 본문에서 다시
+쓰이는가), `R7`(그룹 N의 예고문이 그룹 N-1을 전제하는가). 나머지는 구조 검사가 이미
+판정했다. R12를 통과하려면 심사자 인용이 필수다. 다이어그램이 있는 경우 인용에는
+식별자와 변경 표시 근거를, 다이어그램이 없는 경우에는 세 waiver 문장을 모두 그대로
+담아야 한다.
 
 이 세 항목이 **필수인 스텝은 각각 하나뿐이다** — `architecture`는 `R12`, `intuition`은 `R6`, `code`는 `R7`. 그 외 다섯 스텝(evidence·background·commits·render·quiz)은 필수 심사 ID가 없으므로 `--judge-json '[]'`로 통과시킨다. 필수 ID가 페이로드에 없으면 그 자체로 거부되고, 관련 없는 ID에 실재하는 인용을 붙여도 필수 ID 누락을 대신 채우지 못한다.
 
@@ -235,7 +247,7 @@ render.ts가 ` ```mermaid ` 펜스를 mmdc로 인라인 SVG로 굽는다. HTML�
    `REVIEW: APPLIED`를 적는다. 문서를 고쳤으면 render.ts를 다시 돌린다.
 
 ```bash
-# 관문 1 — 산출물 검사: HTML 존재·mermaid→SVG 패리티·검증 리포트 2종의 판정 줄
+# 관문 1 — 산출물 검사: 현재 Markdown에서 다시 렌더된 HTML·mermaid→SVG 패리티·검증 리포트 2종
 $CLI submit-step --step render --doc "<문서.md>" --signal-files "a.ts,b.ts" \
   --html "<문서.html>" \
   --visual-report "<slug>-visual-report.md" --writing-report "<slug>-writing-report.md"
@@ -243,6 +255,10 @@ $CLI submit-step --step render --doc "<문서.md>" --signal-files "a.ts,b.ts" \
 # 관문 2 — 심사 (render 스텝에는 심사 항목이 없으므로 빈 배열로 통과시킨다)
 $CLI pass-step --step render --doc "<문서.md>" --judge-json '[]'
 ```
+
+render 제출은 HTML이 제출 시점의 현재 Markdown으로 다시 생성된 산출물인지도 확인한다.
+Markdown을 고친 뒤 예전 HTML을 제출하면 stale artifact로 거부되므로, 문서를 고칠 때마다
+render.ts를 다시 실행한 뒤 제출한다.
 
 렌더가 끝나면 사용자에게 두 경로를 알리고 문서를 읽어달라고 요청한다.
 
