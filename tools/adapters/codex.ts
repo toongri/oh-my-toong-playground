@@ -403,6 +403,7 @@ export class CodexAdapter implements PlatformAdapter {
 		_addHooks?: unknown[],
 		dryRun = false,
 		modelMap?: ModelMap,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const targetFile = codexDestinationPath(targetPath, "agents", displayName);
 
@@ -471,8 +472,12 @@ export class CodexAdapter implements PlatformAdapter {
 			...modelFields,
 		};
 
-		await fs.mkdir(path.dirname(targetFile), { recursive: true });
-		await fs.writeFile(targetFile, stringify(tomlObj), "utf-8");
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(path.dirname(targetFile), { recursive: true });
+			await fs.writeFile(targetFile, stringify(tomlObj), "utf-8");
+		};
+		if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+		else await operation();
 		logInfo(`Codex agent 생성: ${displayName}.toml`);
 	}
 
@@ -523,16 +528,13 @@ export class CodexAdapter implements PlatformAdapter {
 				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookRoot, dryRun);
 				return;
 			}
-			const operation = async (): Promise<void> => {
-				await syncDirectory(sourcePath, targetHookRoot, {
-					exclude: ["*.test.ts", "config.local.yaml"],
-					platformRoot: path.join(targetPath, this.configDir),
-				});
-			};
-			if (mutationHooks) await mutationHooks.mutate(targetHookRoot, operation);
-			else await operation();
+			await syncDirectory(sourcePath, targetHookRoot, {
+				exclude: ["*.test.ts", "config.local.yaml"],
+				platformRoot: path.join(targetPath, this.configDir),
+				mutationHooks,
+			});
 			logInfo(`Copied: ${displayName}/`);
-			if (writeObserver) await writeObserver(targetHookRoot);
+			if (writeObserver && !mutationHooks) await writeObserver(targetHookRoot);
 			await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookRoot, dryRun, writeObserver, mutationHooks);
 		} else {
 			const targetFile = targetHookRoot;
@@ -564,6 +566,7 @@ export class CodexAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const targetSkillDir = codexDestinationPath(targetPath, "skills", displayName);
 
@@ -585,7 +588,7 @@ export class CodexAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await syncDirectory(sourcePath, targetSkillDir);
+		await syncDirectory(sourcePath, targetSkillDir, { mutationHooks });
 		logInfo(`Copied: ${displayName}/`);
 	}
 
@@ -598,6 +601,7 @@ export class CodexAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const targetScriptRoot = codexDestinationPath(targetPath, "scripts", displayName);
 
@@ -616,6 +620,7 @@ export class CodexAdapter implements PlatformAdapter {
 			}
 			await syncDirectory(sourcePath, targetScriptRoot, {
 				platformRoot: path.join(targetPath, this.configDir),
+				mutationHooks,
 			});
 			logInfo(`Copied: ${displayName}/`);
 		} else {
@@ -624,7 +629,9 @@ export class CodexAdapter implements PlatformAdapter {
 				logDry(`Copy: ${sourcePath} -> ${targetFile}`);
 				return;
 			}
-			await copyFile(sourcePath, targetFile);
+			const operation = async (): Promise<void> => copyFile(sourcePath, targetFile);
+			if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+			else await operation();
 			logInfo(`Copied: ${displayName}`);
 		}
 	}
@@ -647,6 +654,8 @@ export class CodexAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const targetFile = codexDestinationPath(targetPath, "rules", displayName);
 		const targetDir = path.dirname(targetFile);
@@ -663,9 +672,14 @@ export class CodexAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(targetDir, { recursive: true });
-		await fs.copyFile(sourcePath, targetFile);
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(targetDir, { recursive: true });
+			await copyFile(sourcePath, targetFile);
+		};
+		if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+		else await operation();
 		logInfo(`Copied: ${displayName}.md`);
+		if (writeObserver) await writeObserver(targetFile);
 	}
 
 	// ---------------------------------------------------------------------------

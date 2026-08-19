@@ -114,6 +114,29 @@ describe("CodexAdapter", () => {
 	// ---------------------------------------------------------------------------
 
 	describe("syncAgentsDirect", () => {
+		it("generated TOML is guarded by mutation hooks before writing", async () => {
+			const sourceFile = path.join(tmpDir, "guarded-agent.md");
+			await fs.writeFile(sourceFile, "---\nname: guarded-agent\ndescription: guarded\n---\n\nInstructions\n");
+			const targetBase = path.join(tmpDir, "guarded-agent-target");
+			const targetFile = path.join(targetBase, ".codex", "agents", "guarded-agent.toml");
+			await fs.mkdir(path.dirname(targetFile), { recursive: true });
+			await fs.writeFile(targetFile, "external-agent\n");
+			const calls: string[] = [];
+			const state = { operationCalled: false };
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (targetPath, operation) => {
+					calls.push(targetPath);
+					void operation;
+					throw new Error("Deploy transaction conflict");
+				},
+			};
+			await expect(
+				adapter.syncAgentsDirect(targetBase, "guarded-agent", sourceFile, [], [], false, undefined, mutationHooks),
+			).rejects.toThrow("Deploy transaction conflict");
+			expect(calls).toEqual([targetFile]);
+			expect(state.operationCalled).toBe(false);
+			expect(await fs.readFile(targetFile, "utf-8")).toBe("external-agent\n");
+		});
 		it("skips with warning and creates no files via `syncAgentsDirect`", async () => {
 			// Should not throw, should not create any files
 			await adapter.syncAgentsDirect(tmpDir, "oracle", "/nonexistent/oracle.md");
@@ -516,6 +539,30 @@ describe("CodexAdapter", () => {
 	// ---------------------------------------------------------------------------
 
 	describe("syncRulesDirect", () => {
+		it("rule copy is guarded by mutation hooks before writing", async () => {
+			const sourceFile = path.join(tmpDir, "guarded-rule.md");
+			await fs.writeFile(sourceFile, "# guarded\n");
+			const targetBase = path.join(tmpDir, "guarded-rule-target");
+			const targetFile = path.join(targetBase, ".codex", "rules", "guarded-rule.md");
+			await fs.mkdir(path.dirname(targetFile), { recursive: true });
+			await fs.writeFile(targetFile, "external-rule\n");
+			const state = { operationCalled: false };
+			let observerCalled = false;
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (_targetPath, operation) => {
+					void operation;
+					throw new Error("Deploy transaction conflict");
+				},
+			};
+			await expect(
+				adapter.syncRulesDirect(targetBase, "guarded-rule", sourceFile, false, () => {
+					observerCalled = true;
+				}, mutationHooks),
+			).rejects.toThrow("Deploy transaction conflict");
+			expect(state.operationCalled).toBe(false);
+			expect(observerCalled).toBe(false);
+			expect(await fs.readFile(targetFile, "utf-8")).toBe("external-rule\n");
+		});
 		it("copies a rule file to .codex/rules/<name>.md via `syncRulesDirect`", async () => {
 			const sourceFile = path.join(tmpDir, "communication-style.md");
 			await fs.writeFile(sourceFile, "# Communication Style\n\nSee .claude/rules/ for more.\n");
@@ -837,6 +884,56 @@ describe("CodexAdapter", () => {
 	// ---------------------------------------------------------------------------
 
 	describe("syncSkillsDirect", () => {
+		it("forwards mutation hooks to each skill directory leaf", async () => {
+			const sourceSkill = path.join(tmpDir, "guarded-skill");
+			await fs.mkdir(sourceSkill, { recursive: true });
+			await fs.writeFile(path.join(sourceSkill, "SKILL.md"), "# skill\n");
+			const targetBase = path.join(tmpDir, "guarded-skill-target");
+			const targetFile = path.join(targetBase, ".agents", "skills", "guarded-skill", "SKILL.md");
+			const calls: string[] = [];
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (targetPath, operation) => {
+					calls.push(targetPath);
+					await operation();
+				},
+			};
+			await adapter.syncSkillsDirect(targetBase, "guarded-skill", sourceSkill, false, mutationHooks);
+			expect(calls).toContain(targetFile);
+		});
+
+		it("dry-run does not invoke skill mutation hooks", async () => {
+			const sourceSkill = path.join(tmpDir, "dry-skill");
+			await fs.mkdir(sourceSkill, { recursive: true });
+			await fs.writeFile(path.join(sourceSkill, "SKILL.md"), "# skill\n");
+			let mutateCount = 0;
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (_targetPath, operation) => {
+					mutateCount += 1;
+					await operation();
+				},
+			};
+			await adapter.syncSkillsDirect(tmpDir, "dry-skill", sourceSkill, true, mutationHooks);
+			expect(mutateCount).toBe(0);
+		});
+
+		it("skill pre-CAS conflict preserves the resident file", async () => {
+			const sourceSkill = path.join(tmpDir, "resident-skill");
+			await fs.mkdir(sourceSkill, { recursive: true });
+			await fs.writeFile(path.join(sourceSkill, "SKILL.md"), "new\n");
+			const targetBase = path.join(tmpDir, "resident-skill-target");
+			const targetFile = path.join(targetBase, ".agents", "skills", "resident-skill", "SKILL.md");
+			await fs.mkdir(path.dirname(targetFile), { recursive: true });
+			await fs.writeFile(targetFile, "external\n");
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async () => {
+					throw new Error("Deploy transaction conflict");
+				},
+			};
+			await expect(adapter.syncSkillsDirect(targetBase, "resident-skill", sourceSkill, false, mutationHooks)).rejects.toThrow(
+				"Deploy transaction conflict",
+			);
+			expect(await fs.readFile(targetFile, "utf-8")).toBe("external\n");
+		});
 		it("copies skill directory to <target>/.agents/skills via `syncSkillsDirect`", async () => {
 			// Create a source skill directory
 			const sourceSkill = path.join(tmpDir, "source-skills", "prometheus");
@@ -890,6 +987,26 @@ describe("CodexAdapter", () => {
 	// ---------------------------------------------------------------------------
 
 	describe("syncScriptsDirect", () => {
+		it("guards a single script copy with mutation hooks", async () => {
+			const sourceFile = path.join(tmpDir, "guarded-script.sh");
+			await fs.writeFile(sourceFile, "echo guarded\n");
+			const targetBase = path.join(tmpDir, "guarded-script-target");
+			const targetFile = plannedCodexPath(targetBase, "scripts", "guarded-script.sh");
+			await fs.mkdir(path.dirname(targetFile), { recursive: true });
+			await fs.writeFile(targetFile, "external-script\n");
+			const state = { operationCalled: false };
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (_targetPath, operation) => {
+					void operation;
+					throw new Error("Deploy transaction conflict");
+				},
+			};
+			await expect(adapter.syncScriptsDirect(targetBase, "guarded-script.sh", sourceFile, false, mutationHooks)).rejects.toThrow(
+				"Deploy transaction conflict",
+			);
+			expect(state.operationCalled).toBe(false);
+			expect(await fs.readFile(targetFile, "utf-8")).toBe("external-script\n");
+		});
 		it("copies a single script file to target via `syncScriptsDirect`", async () => {
 			const sourceFile = path.join(tmpDir, "hud.sh");
 			await fs.writeFile(sourceFile, "#!/bin/bash\necho hud\n");
@@ -1143,14 +1260,25 @@ describe("CodexAdapter", () => {
 			const root = plannedCodexPath(targetBase, "hooks", "bundle");
 			const dependency = path.join(root, "lib", "shared.sh");
 			const mutations: string[] = [];
+			const observations: string[] = [];
 			const mutationHooks: DeployMutationHooks = {
 				mutate: async (targetPath, operation) => {
 					mutations.push(targetPath);
 					await operation();
 				},
 			};
-			await adapter.syncHooksDirect(targetBase, "bundle", dirHookDir, false, undefined, mutationHooks);
-			expect(mutations).toEqual([root, dependency]);
+			await adapter.syncHooksDirect(
+				targetBase,
+				"bundle",
+				dirHookDir,
+				false,
+				async (writtenPath) => {
+					observations.push(writtenPath);
+				},
+				mutationHooks,
+			);
+			expect(mutations).toEqual([path.join(root, "entry.sh"), dependency]);
+			expect(observations).toEqual([dependency]);
 		});
 
 		it("dry-run에서는 mutation hook과 observer를 호출하지 않는다", async () => {
