@@ -175,8 +175,29 @@ describe("termination semantics", () => {
 			const events = traceEvents(dir);
 			expect(events.filter((event) => event.phase === "start")).toHaveLength(1);
 			expect(events.filter((event) => event.phase === "end")).toHaveLength(0);
+			const pids = JSON.parse(readFileSync(ready, "utf8"));
+			await Promise.all([waitForGone(pids.child), waitForGone(pids.descendant)]);
 		} finally {
-			if (existsSync(ready)) { const pids = JSON.parse(readFileSync(ready, "utf8")); for (const pid of [pids.child, pids.descendant]) { try { process.kill(pid, "SIGKILL"); } catch {} } await Promise.all([waitForGone(pids.child), waitForGone(pids.descendant)]); }
+			if (existsSync(ready)) { const pids = JSON.parse(readFileSync(ready, "utf8")); for (const pid of [pids.child, pids.descendant]) { try { process.kill(pid, "SIGKILL"); } catch {} } }
+		}
+	});
+
+	test("kills a TERM-ignoring child group after wrapper SIGKILL", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "pretool-term-ignore-")); dirs.push(dir);
+		const pidFile = join(dir, "child.pid");
+		const proc = Bun.spawn(["bun", wrapper, "claude", "fixture", `trap '' TERM; printf '%s\\n' "$$" > "$PID_FILE"; sleep 30`], { cwd: root, env: { ...process.env, OMT_DIR: join(dir, ".omt"), OMT_SESSION_ID: "term-ignore-session", PID_FILE: pidFile }, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+		proc.stdin.write(Buffer.from("{}")); proc.stdin.end();
+		const eventsPath = join(dir, ".omt", "pretool-trace", "events.jsonl");
+		try {
+			await waitFor(pidFile); await waitFor(eventsPath);
+			process.kill(proc.pid, "SIGKILL");
+			expect(await proc.exited).toBe(137);
+			const events = traceEvents(dir);
+			expect(events.filter((event) => event.phase === "start")).toHaveLength(1);
+			expect(events.filter((event) => event.phase === "end")).toHaveLength(0);
+			await waitForGone(Number(readFileSync(pidFile, "utf8").trim()));
+		} finally {
+			if (existsSync(pidFile)) { try { process.kill(Number(readFileSync(pidFile, "utf8").trim()), "SIGKILL"); } catch {} }
 		}
 	});
 

@@ -8,6 +8,26 @@ const SIGNALS: Record<string, { number: number; status: number }> = {
 	SIGTERM: { number: osSignals.signals.SIGTERM ?? 15, status: 128 + (osSignals.signals.SIGTERM ?? 15) },
 	SIGINT: { number: osSignals.signals.SIGINT ?? 2, status: 128 + (osSignals.signals.SIGINT ?? 2) },
 };
+const CHILD_WRAPPER_SCRIPT = `
+set +m
+parent=$PPID
+group=$$
+(
+  trap '' TERM INT
+  while kill -0 "$parent" 2>/dev/null; do sleep 0.05; done
+  kill -TERM -"$group" 2>/dev/null
+  sleep 0.1
+  kill -KILL -"$group" 2>/dev/null
+) &
+watchdog=$!
+trap 'kill -KILL "$watchdog" 2>/dev/null; wait "$watchdog" 2>/dev/null' EXIT
+eval "set --; $1"
+status=$?
+kill -KILL "$watchdog" 2>/dev/null
+wait "$watchdog" 2>/dev/null
+trap - EXIT
+exit "$status"
+`;
 function observedSignalNumber(signal: string | null): number {
 	if (!signal) return 0;
 	const value = Object.entries(osSignals.signals).find(([name]) => name === signal)?.[1];
@@ -113,7 +133,7 @@ async function main(): Promise<void> {
 	process.on("SIGTERM", () => onSignal("SIGTERM"));
 	process.on("SIGINT", () => onSignal("SIGINT"));
 
-	const spawned = spawn("bash", ["-c", command], { detached: true, stdio: ["pipe", "inherit", "inherit"] });
+	const spawned = spawn("bash", ["-c", CHILD_WRAPPER_SCRIPT, "bash", command], { detached: true, stdio: ["pipe", "inherit", "inherit"] });
 	childRef.value = spawned;
 	if (witnessed) forwardSignal(witnessed);
 	spawned.stdin?.once("error", () => { /* child may close stdin before the payload is written */ });
