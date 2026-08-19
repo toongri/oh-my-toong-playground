@@ -7,7 +7,7 @@ import { GeminiAdapter } from "./gemini.ts";
 import type { ExtensionInstaller, CommandRunner } from "./gemini.ts";
 import type { PlatformYaml } from "../lib/types.ts";
 import type { PlatformWriteObserver } from "./types.ts";
-import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
+import { DeployTransaction, type DeployMutationHooks } from "../lib/deploy-transaction.ts";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -721,6 +721,21 @@ describe("buildHookEntry", () => {
 // ---------------------------------------------------------------------------
 
 describe("updateSettings", () => {
+	it("runs the complete read/merge/write inside the mutation boundary", async () => {
+		const settingsFile = path.join(targetPath, ".gemini", "settings.json");
+		await writeFile(settingsFile, JSON.stringify({ resident: "before" }));
+		const calls: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (target, operation) => {
+				calls.push(target);
+				await operation();
+			},
+		};
+		await adapter.updateSettings(targetPath, { PreToolUse: [] }, false, undefined, mutationHooks);
+		expect(calls).toEqual([settingsFile]);
+		expect(await readJsonFile(settingsFile)).toEqual({ resident: "before", PreToolUse: [] });
+	});
+
 	it("writes hooks to settings.json via `updateSettings`", async () => {
 		const hooksEntries = {
 			PreToolUse: [
@@ -811,6 +826,19 @@ describe("updateSettings", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncConfig", () => {
+	it("rejects a pre-CAS external edit and preserves the resident settings", async () => {
+		const settingsFile = path.join(targetPath, ".gemini", "settings.json");
+		await writeFile(settingsFile, JSON.stringify({ resident: "before" }));
+		const transaction = await DeployTransaction.begin(targetPath, false, [".gemini/settings.json"]);
+		await writeFile(settingsFile, JSON.stringify({ resident: "external" }));
+
+		await expect(
+			adapter.syncConfig(targetPath, { model: "should-not-write" }, false, undefined, transaction!),
+		).rejects.toThrow(/Deploy transaction conflict/);
+		expect(await readJsonFile(settingsFile)).toEqual({ resident: "external" });
+		await transaction!.finish();
+	});
+
 	it("deep merges config into settings.json via `syncConfig`", async () => {
 		await adapter.syncConfig(targetPath, { model: "gemini-2.0-flash" });
 
@@ -842,6 +870,30 @@ describe("syncConfig", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncMcpsMerge", () => {
+	it("keeps the observer after a successful mutation", async () => {
+		const settingsFile = path.join(targetPath, ".gemini", "settings.json");
+		const observed: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (target, operation) => {
+				await operation();
+				observed.push(`mutation:${target}:${(await readJsonFile(target)).mcpServers ? "written" : "missing"}`);
+			},
+		};
+		await adapter.syncMcpsMerge(
+			targetPath,
+			{ context7: { command: "npx" } },
+			false,
+			async (target) => {
+				observed.push(`observer:${target}`);
+			},
+			mutationHooks,
+		);
+		expect(observed).toEqual([
+			`mutation:${settingsFile}:written`,
+			`observer:${settingsFile}`,
+		]);
+	});
+
 	it("writes MCP server to mcpServers in settings.json via `syncMcpsMerge`", async () => {
 		const serverJson = { command: "npx", args: ["-y", "@upstash/context7-mcp"] };
 
@@ -901,6 +953,28 @@ describe("readJsonFile 오류 처리", () => {
 
 		await expect(adapter.updateSettings(targetPath, { PreToolUse: [] })).rejects.toThrow();
 	});
+
+	it("does not notify when settings read fails inside mutation", async () => {
+		const settingsFile = path.join(targetPath, ".gemini", "settings.json");
+		await writeFile(settingsFile, "{ invalid json !!!");
+		const observed: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (_target, operation) => await operation(),
+		};
+		await expect(
+			adapter.syncConfig(
+				targetPath,
+				{ model: "unwritten" },
+				false,
+				(target) => {
+					observed.push(target);
+				},
+				mutationHooks,
+			),
+		).rejects.toThrow();
+		expect(observed).toEqual([]);
+		expect(await fs.readFile(settingsFile, "utf8")).toBe("{ invalid json !!!");
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -908,6 +982,75 @@ describe("readJsonFile 오류 처리", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncPlatformYaml", () => {
+	it("rolls back an earlier settings mutation when a later section fails", async () => {
+		const settingsFile = path.join(targetPath, ".gemini", "settings.json");
+		const original = JSON.stringify({ resident: "before" });
+		await writeFile(settingsFile, original);
+		const transaction = await DeployTransaction.begin(targetPath, false, [".gemini/settings.json"]);
+		let mutationCount = 0;
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (target, operation) => {
+				mutationCount += 1;
+				if (mutationCount === 2) throw new Error("later section failed");
+				await transaction!.mutate(target, operation);
+			},
+		};
+
+		await expect(
+			adapter.syncPlatformYaml(
+				targetPath,
+				{
+					config: { model: "new" },
+					hooks: { PreToolUse: [{ command: ".gemini/hooks/test.sh" }] },
+				} as unknown as PlatformYaml,
+				false,
+				undefined,
+				undefined,
+				mutationHooks,
+			),
+		).rejects.toThrow("later section failed");
+		await transaction!.rollback();
+		await transaction!.finish();
+		expect(await fs.readFile(settingsFile, "utf8")).toBe(`${original}`);
+	});
+
+	it("journals each settings section separately and observes only after success", async () => {
+		const settingsFile = path.join(targetPath, ".gemini", "settings.json");
+		const events: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (target, operation) => {
+				events.push(`before:${target}`);
+				await operation();
+				events.push(`after:${target}`);
+			},
+		};
+		await adapter.syncPlatformYaml(
+			targetPath,
+			{
+				config: { model: "new" },
+				hooks: { PreToolUse: [{ command: ".gemini/hooks/test.sh" }] },
+				mcps: { context7: { command: "npx" } },
+			} as unknown as PlatformYaml,
+			false,
+			undefined,
+			(target) => {
+				events.push(`observer:${target}`);
+			},
+			mutationHooks,
+		);
+		expect(events).toEqual([
+			`before:${settingsFile}`,
+			`after:${settingsFile}`,
+			`observer:${settingsFile}`,
+			`before:${settingsFile}`,
+			`after:${settingsFile}`,
+			`observer:${settingsFile}`,
+			`before:${settingsFile}`,
+			`after:${settingsFile}`,
+			`observer:${settingsFile}`,
+		]);
+	});
+
 	it("notifies after each successful settings and hook bundle write with normalized paths and written bytes", async () => {
 		const hookDir = path.join(tmpDir, "hooks", "bundle");
 		await writeFile(path.join(hookDir, "index.sh"), "#!/bin/bash\necho bundle\n");

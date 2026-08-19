@@ -424,6 +424,7 @@ export class GeminiAdapter implements PlatformAdapter {
 		hooksEntries: Record<string, unknown>,
 		dryRun = false,
 		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const settingsFile = path.join(targetPath, ".gemini", "settings.json");
 
@@ -433,20 +434,24 @@ export class GeminiAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(path.join(targetPath, ".gemini"), { recursive: true });
-		const current = await readJsonFile(settingsFile);
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(path.join(targetPath, ".gemini"), { recursive: true });
+			const current = await readJsonFile(settingsFile);
 
-		// Preserve non-hook config keys (objects/strings), remove stale hook event keys (arrays)
-		const result: Record<string, unknown> = {};
-		for (const [key, value] of Object.entries(current)) {
-			if (!Array.isArray(value)) {
-				result[key] = value;
+			// Preserve non-hook config keys (objects/strings), remove stale hook event keys (arrays)
+			const result: Record<string, unknown> = {};
+			for (const [key, value] of Object.entries(current)) {
+				if (!Array.isArray(value)) {
+					result[key] = value;
+				}
 			}
-		}
-		// Apply new hooks atomically
-		Object.assign(result, hooksEntries);
+			// Apply new hooks atomically
+			Object.assign(result, hooksEntries);
 
-		await writeJsonFile(settingsFile, result);
+			await writeJsonFile(settingsFile, result);
+		};
+		if (mutationHooks) await mutationHooks.mutate(settingsFile, operation);
+		else await operation();
 		await writeObserver?.(settingsFile);
 		logInfo(`Updated settings.json: ${settingsFile}`);
 	}
@@ -461,6 +466,7 @@ export class GeminiAdapter implements PlatformAdapter {
 		configJson: Record<string, unknown>,
 		dryRun = false,
 		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const settingsFile = path.join(targetPath, ".gemini", "settings.json");
 
@@ -469,10 +475,14 @@ export class GeminiAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(path.join(targetPath, ".gemini"), { recursive: true });
-		const current = await readJsonFile(settingsFile);
-		const merged = deepMerge(current, configJson);
-		await writeJsonFile(settingsFile, merged);
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(path.join(targetPath, ".gemini"), { recursive: true });
+			const current = await readJsonFile(settingsFile);
+			const merged = deepMerge(current, configJson);
+			await writeJsonFile(settingsFile, merged);
+		};
+		if (mutationHooks) await mutationHooks.mutate(settingsFile, operation);
+		else await operation();
 		await writeObserver?.(settingsFile);
 		logInfo(`Config merged: ${settingsFile}`);
 	}
@@ -487,6 +497,7 @@ export class GeminiAdapter implements PlatformAdapter {
 		servers: Record<string, Record<string, unknown>>,
 		dryRun = false,
 		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const settingsFile = path.join(targetPath, ".gemini", "settings.json");
 
@@ -495,16 +506,20 @@ export class GeminiAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(path.join(targetPath, ".gemini"), { recursive: true });
-		const current = await readJsonFile(settingsFile);
-		// Build complete mcpServers from yaml
-		const newMcpServers: Record<string, unknown> = {};
-		for (const [name, serverDef] of Object.entries(servers)) {
-			newMcpServers[name] = serverDef;
-		}
-		// Replace entirely (not merge)
-		current.mcpServers = newMcpServers;
-		await writeJsonFile(settingsFile, current);
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(path.join(targetPath, ".gemini"), { recursive: true });
+			const current = await readJsonFile(settingsFile);
+			// Build complete mcpServers from yaml
+			const newMcpServers: Record<string, unknown> = {};
+			for (const [name, serverDef] of Object.entries(servers)) {
+				newMcpServers[name] = serverDef;
+			}
+			// Replace entirely (not merge)
+			current.mcpServers = newMcpServers;
+			await writeJsonFile(settingsFile, current);
+		};
+		if (mutationHooks) await mutationHooks.mutate(settingsFile, operation);
+		else await operation();
 		await writeObserver?.(settingsFile);
 		logInfo(`MCP replaced: ${settingsFile}`);
 	}
@@ -533,7 +548,7 @@ export class GeminiAdapter implements PlatformAdapter {
 
 		// --- config ---
 		if (yaml.config !== undefined && yaml.config !== null) {
-			await this.syncConfig(targetPath, yaml.config, dryRun, writeObserver);
+			await this.syncConfig(targetPath, yaml.config, dryRun, writeObserver, mutationHooks);
 			processedSections.push("config");
 		}
 
@@ -658,14 +673,14 @@ export class GeminiAdapter implements PlatformAdapter {
 				}
 			}
 
-			await this.updateSettings(targetPath, accumulatedHooks, dryRun, writeObserver);
+			await this.updateSettings(targetPath, accumulatedHooks, dryRun, writeObserver, mutationHooks);
 			processedSections.push("hooks");
 		}
 
 		// --- mcps ---
 		if (yaml.mcps !== undefined && yaml.mcps !== null) {
 			assertGeminiMcpServers(yaml.mcps);
-			await this.syncMcpsMerge(targetPath, yaml.mcps, dryRun, writeObserver);
+			await this.syncMcpsMerge(targetPath, yaml.mcps, dryRun, writeObserver, mutationHooks);
 			processedSections.push("mcps");
 		}
 
