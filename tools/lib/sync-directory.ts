@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { randomUUID } from "node:crypto";
 import { detectBareImports } from "../adapters/ts-lib-deps.ts";
+import type { DeployMutationHooks } from "./deploy-transaction.ts";
 
 /** Python cache patterns that are always excluded, regardless of any caller-supplied list. */
 export const PY_CACHE_EXCLUDE = ["__pycache__", ".pytest_cache", "*.pyc"];
@@ -229,6 +230,82 @@ export async function copyFile(source: string, target: string): Promise<void> {
 	}
 }
 
+type SyncDirectoryOptions = {
+	exclude?: string[];
+	platformRoot?: string;
+	mutationHooks?: DeployMutationHooks;
+};
+
+type SyncDirectoryPlan = {
+	includedSourceFiles: string[];
+	orphanTargetFiles: string[];
+};
+
+function effectiveExclude(options?: SyncDirectoryOptions): string[] {
+	return [...ALWAYS_PRUNE, ...(options?.exclude ?? ["*.test.ts"])];
+}
+
+async function collectTargetFiles(target: string): Promise<string[]> {
+	try {
+		return await collectFiles(target, "", []);
+	} catch (error: unknown) {
+		if (isErrnoException(error) && error.code === "ENOENT") return [];
+		throw error;
+	}
+}
+
+async function buildSyncDirectoryPlan(
+	source: string,
+	target: string,
+	options?: SyncDirectoryOptions,
+): Promise<SyncDirectoryPlan> {
+	const exclude = effectiveExclude(options);
+	const sourceFiles = await collectFiles(source, "", exclude);
+	const includedSourceFiles = sourceFiles
+		.filter((relPath) => !isExcluded(path.basename(relPath), exclude))
+		.sort();
+	const includedSourceSet = new Set(includedSourceFiles);
+	const orphanTargetFiles = (await collectTargetFiles(target))
+		.filter((relPath) => !includedSourceSet.has(relPath) && !isExcluded(path.basename(relPath), exclude))
+		.sort();
+	return { includedSourceFiles, orphanTargetFiles };
+}
+
+/**
+ * Plans the exact file leaves that syncDirectory may mutate.
+ * The result is deterministic absolute target paths, and excludes
+ * target-only files protected by the same exclude rules as the executor.
+ */
+export async function planSyncDirectoryMutations(
+	source: string,
+	target: string,
+	options?: Pick<SyncDirectoryOptions, "exclude">,
+): Promise<string[]> {
+	const plan = await buildSyncDirectoryPlan(source, target, options);
+	return [...new Set(
+		[...plan.includedSourceFiles, ...plan.orphanTargetFiles].map((relPath) => path.normalize(path.join(target, relPath))),
+	)];
+}
+
+async function rewriteFileAtomically(source: string, target: string, platformRoot: string): Promise<void> {
+	await fs.mkdir(path.dirname(target), { recursive: true });
+	const [srcContent, sourceStat] = await Promise.all([
+		fs.readFile(source, "utf8"),
+		fs.stat(source),
+	]);
+	const rewritten = rewriteLibImports(srcContent, target, platformRoot, new Set<string>());
+	const tempTarget = path.join(path.dirname(target), `.${path.basename(target)}.${randomUUID()}.tmp`);
+	let renamed = false;
+	try {
+		await fs.writeFile(tempTarget, rewritten, "utf8");
+		await fs.chmod(tempTarget, sourceStat.mode & 0o7777);
+		await fs.rename(tempTarget, target);
+		renamed = true;
+	} finally {
+		if (!renamed) await fs.rm(tempTarget, { force: true }).catch(() => undefined);
+	}
+}
+
 /**
  * Synchronizes a source directory to a target directory.
  * Mirrors rsync -a --delete --exclude behavior:
@@ -245,66 +322,41 @@ export async function copyFile(source: string, target: string): Promise<void> {
  * @param options.platformRoot When provided, rewrites @lib/ aliases in .ts files at
  *                             write time so the deployed bytes are already resolved.
  *                             Must be the platform root dir (e.g. /path/.claude/).
+ * @param options.mutationHooks When provided, wraps each file-leaf copy/rewrite/unlink
+ *                              in the caller's exact mutation journal.
  */
 export async function syncDirectory(
 	source: string,
 	target: string,
-	options?: { exclude?: string[]; platformRoot?: string },
+	options?: SyncDirectoryOptions,
 ): Promise<void> {
 	// ALWAYS_PRUNE is always prepended so callers that supply a custom list
 	// (e.g. { exclude: ["*.test.ts"] }) do not accidentally lose Python cache pruning
 	// or __fixtures__ pruning.
-	const exclude = [...ALWAYS_PRUNE, ...(options?.exclude ?? ["*.test.ts"])];
 	const platformRoot = options?.platformRoot;
 
 	// 1. Ensure target directory exists
 	await fs.mkdir(target, { recursive: true });
 
 	// 2. Collect source files (excluded dir names are pruned during the walk)
-	const sourceFiles = await collectFiles(source, "", exclude);
+	const plan = await buildSyncDirectoryPlan(source, target, options);
+	const { includedSourceFiles } = plan;
 
-	// 3. Determine files to copy (respecting exclude patterns)
-	const includedSourceFiles = sourceFiles.filter((relPath) => {
-		const filename = path.basename(relPath);
-		return !isExcluded(filename, exclude);
-	});
+	const orphanSet = new Set(plan.orphanTargetFiles);
+	const mutationOrder = [...new Set([...includedSourceFiles, ...plan.orphanTargetFiles])];
 
-	// 4. Copy included files to target, preserving permissions.
+	// 4. Copy included files and delete orphans in the planner's deterministic order.
 	//    If platformRoot is set, rewrite @lib/ aliases in .ts files at write time
 	//    so that no deployed file ever exists on disk with raw @lib/ specifiers.
-	for (const relPath of includedSourceFiles) {
-		const srcFile = path.join(source, relPath);
-		const tgtFile = path.join(target, relPath);
-
-		if (platformRoot && tgtFile.endsWith(".ts") && !tgtFile.endsWith(".test.ts")) {
-			await fs.mkdir(path.dirname(tgtFile), { recursive: true });
-			const srcContent = await fs.readFile(srcFile, "utf8");
-			// syncDirectory only resolves @lib/ aliases at copy time; the bundled-package
-			// set is unknown here (the post-pass rewriteLibAliases in sync.ts carries it),
-			// so pass an empty set — the bare-specifier rewrite is a no-op at this stage.
-			const rewritten = rewriteLibImports(srcContent, tgtFile, platformRoot, new Set<string>());
-			await fs.writeFile(tgtFile, rewritten, "utf8");
-			// Preserve execute permissions
-			const stat = await fs.stat(srcFile);
-			if (stat.mode & 0o111) {
-				const tgtStat = await fs.stat(tgtFile);
-				await fs.chmod(tgtFile, tgtStat.mode | 0o111);
-			}
-		} else {
-			await copyFile(srcFile, tgtFile);
-		}
-	}
-
-	// 5. Collect target files and delete orphans. Walk the full target tree
-	//    (no prune) so orphan detection sees every deployed file; the per-file
-	//    isExcluded guard below preserves excluded target-only files.
-	const targetFiles = await collectFiles(target, "", []);
-	const includedSourceSet = new Set(includedSourceFiles);
-
-	for (const relPath of targetFiles) {
-		if (!includedSourceSet.has(relPath) && !isExcluded(path.basename(relPath), exclude)) {
-			await fs.unlink(path.join(target, relPath));
-		}
+	for (const relPath of mutationOrder) {
+		const targetPath = path.join(target, relPath);
+		const operation = orphanSet.has(relPath)
+			? async () => { await fs.unlink(targetPath); }
+			: platformRoot && targetPath.endsWith(".ts") && !targetPath.endsWith(".test.ts")
+				? () => rewriteFileAtomically(path.join(source, relPath), targetPath, platformRoot)
+				: () => copyFile(path.join(source, relPath), targetPath);
+		if (options?.mutationHooks) await options.mutationHooks.mutate(targetPath, operation);
+		else await operation();
 	}
 
 	// 6. Remove empty directories in target (deepest first)
@@ -316,8 +368,9 @@ export async function syncDirectory(
 			if (contents.length === 0) {
 				await fs.rmdir(absDir);
 			}
-		} catch {
-			// Directory may have already been removed
+		} catch (error: unknown) {
+			if (isErrnoException(error) && (error.code === "ENOENT" || error.code === "ENOTEMPTY")) continue;
+			throw error;
 		}
 	}
 }
