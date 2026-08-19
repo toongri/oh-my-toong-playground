@@ -1,8 +1,23 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach, setDefaultTimeout } from "bun:test";
 import { mkdtempSync, rmSync, readFileSync, existsSync } from "fs";
 import { execSync } from "child_process";
 import { tmpdir } from "os";
 import { join } from "path";
+
+// The "CLI wiring" suite below drives qa-state.ts as a real CLI: its `run()`
+// helper spawns a fresh `bun` process per command, and its heaviest test issues
+// 27 of them. bun's 5000ms default per-test timeout assumes in-process work and
+// was never calibrated for that shape -- measured on this machine, one spawn
+// costs ~27ms idle (10-run average), so the heaviest test costs ~730ms idle but
+// was observed at 5045ms during a full-suite run, where parallel test workers
+// contend for the same cores. It failed on the timeout, not on an assertion.
+//
+// This ceiling is derived from that measurement rather than picked: 60s is
+// roughly 80x the heaviest test's idle cost, and ~9x the whole file's idle
+// runtime (6.87s for all 36 tests), so contention has to get an order of
+// magnitude worse than observed before it bites again. It relaxes no
+// assertion -- a genuinely hung CLI still fails, just later.
+setDefaultTimeout(60_000);
 import {
 	readQaState,
 	setQaState,
