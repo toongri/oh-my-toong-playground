@@ -381,6 +381,24 @@ describe("commits 스텝 — R10", () => {
 		expect(r.failedItems.join(" ")).toContain("99dead0");
 	});
 
+	test("Commit Journey 밖 헤딩의 해시는 누락 커밋 블록을 대체하지 않는다", () => {
+		const doc = `## Commit Journey
+
+### 1. \`ab12cd3\` — feat: 첫 커밋
+무엇을 만들었나 — 내용.
+
+## Background
+### unrelated heading \`ef45ab6\`
+`;
+		const r = checkStructure(doc, {
+			signalFiles: ["a.ts"],
+			step: "commits",
+			commitHashes: ["ab12cd3f00", "ef45ab6c11"],
+		});
+		expect(r.pass).toBe(false);
+		expect(r.failedItems.join(" ")).toContain("ef45ab6");
+	});
+
 	test("단일 커밋 범위는 생략 마커로 통과한다", () => {
 		const doc = withBackground("단일 커밋 범위 — Commit Journey 생략.\n");
 		const r = checkStructure(doc, {
@@ -429,6 +447,18 @@ describe("모든 저작 스텝 — R11 스타일 발명 금지", () => {
 		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "evidence" });
 		expect(r.pass).toBe(false);
 		expect(r.failedItems.join(" ")).toContain("invented");
+	});
+
+	test("fenced HTML 예시는 R11 스타일 위반이 아니다", () => {
+		const doc = ["# 설명", "", "```html", '<div style="color:red" class="invented">x</div>', "```"].join("\n");
+		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "intuition" });
+		expect(r.pass).toBe(true);
+	});
+
+	test("인라인 HTML 예시는 R11 스타일 위반이 아니다", () => {
+		const doc = "# 설명\n\n`<div style=\"color:red\" class=\"invented\">x</div>`";
+		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "intuition" });
+		expect(r.pass).toBe(true);
 	});
 
 	test("승인 목록 밖의 class를 쓰면 실패하고 그 클래스명을 사유에 담는다", () => {

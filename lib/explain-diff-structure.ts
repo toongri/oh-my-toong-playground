@@ -283,14 +283,34 @@ function checkR9(text: string): CheckItem {
 	};
 }
 
+/** Removes fenced Markdown code, which can contain headings unrelated to the document structure. */
+function withoutFencedCode(text: string): string {
+	return text.replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^(?:`{3,}|~{3,})[^\n]*$/gm, "");
+}
+
+/** Removes fenced and inline Markdown code, which can describe styles without applying them. */
+function withoutMarkdownCode(text: string): string {
+	return withoutFencedCode(text).replace(/`+[^`\n]*`+/g, "");
+}
+
+/** The slice from a level-two heading to the next level-one or level-two heading. */
+function sectionSlice(text: string, heading: string): string | null {
+	const m = new RegExp(`^##\\s+${heading}.*$`, "m").exec(text);
+	if (!m) return null;
+	const start = m.index + m[0].length;
+	const next = text.slice(start).search(/^#{1,2}\s/m);
+	return next >= 0 ? text.slice(start, start + next) : text.slice(start);
+}
+
 // R10 — the commit journey. With two or more commits every commit's hash must
 // head its own block; a single-commit range may waive the section with the
 // explicit marker instead, because a one-entry journey restates the document.
 function checkR10(text: string, commitHashes: string[] | undefined): CheckItem {
 	const hashes = commitHashes ?? [];
-	const hasJourney = /^##\s+Commit Journey/m.test(text);
+	const journey = sectionSlice(text, "Commit Journey");
+	const hasJourney = journey !== null;
 	const hasSingleWaiver = /단일 커밋 범위/.test(text);
-	const headings = collect(/^###\s+.*$/gm, text);
+	const headings = collect(/^###\s+.*$/gm, withoutFencedCode(journey ?? ""));
 
 	let problems: string[] = [];
 	if (hashes.length >= 2) {
@@ -342,11 +362,12 @@ const SANCTIONED_CLASSES = new Set([
 // cumulatively at every authoring step so a violation is named at the step
 // that introduced it, not discovered at render.
 function checkR11(text: string): CheckItem {
+	const prose = withoutMarkdownCode(text);
 	const problems: string[] = [];
-	if (/<style/i.test(text)) problems.push("<style> 블록은 금지입니다 — 스타일은 render.ts가 소유합니다");
-	if (/style\s*=\s*["']/i.test(text)) problems.push('인라인 style="…" 속성은 금지입니다 — 승인된 컴포넌트 클래스를 쓰세요');
+	if (/<style/i.test(prose)) problems.push("<style> 블록은 금지입니다 — 스타일은 render.ts가 소유합니다");
+	if (/style\s*=\s*["']/i.test(prose)) problems.push('인라인 style="…" 속성은 금지입니다 — 승인된 컴포넌트 클래스를 쓰세요');
 	const unknown = new Set<string>();
-	for (const m of text.matchAll(/class\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {
+	for (const m of prose.matchAll(/class\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {
 		for (const cls of (m[1] ?? m[2] ?? "").split(/\s+/).filter(Boolean)) {
 			if (!SANCTIONED_CLASSES.has(cls)) unknown.add(cls);
 		}
