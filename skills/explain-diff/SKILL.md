@@ -236,15 +236,16 @@ render.ts가 ` ```mermaid ` 펜스를 mmdc로 인라인 SVG로 굽는다. HTML�
 파일이며 런타임 JS도 외부 참조도 없다. mmdc가 없거나 블록이 실패하면 렌더가 실패 블록
 번호와 함께 죽는다 — 그 블록을 고치고 다시 렌더한다.
 
-렌더 후, quiz로 넘어가기 전에 **두 검증을 반드시 돌린다.**
+렌더 후, quiz로 넘어가기 전에 **두 검증을 반드시 돌린다.** technical-writing이 Markdown을
+바꿀 수 있으므로, visual-qa는 항상 최종 렌더 HTML을 검사한다.
 
-1. **visual-qa** — visual-qa 스킬(없는 플랫폼에서는 agent-browser로 직접)로 렌더된 HTML을
+1. **technical-writing** — technical-writing 스킬로 마크다운 산문을 리뷰시키고, 받아들인
+   지적을 문서에 반영한다. 반영 내역을 `<slug>-writing-report.md`에 남기고 마지막 줄에
+   `REVIEW: APPLIED`를 적는다. 문서를 고쳤으면 render.ts를 다시 돌린다.
+2. **visual-qa** — visual-qa 스킬(없는 플랫폼에서는 agent-browser로 직접)로 최종 렌더된 HTML을
    데스크톱·모바일 폭에서 스크린샷 검증한다: 겹침·잘림·가로 스크롤·다이어그램 가독성.
    결과를 `<문서.md>` 옆 `<slug>-visual-report.md`에 남기고, 발견을 고친 뒤 마지막 줄에
    `VERDICT: PASS`를 적는다. 고치지 않은 발견이 남았으면 PASS를 적을 수 없다.
-2. **technical-writing** — technical-writing 스킬로 마크다운 산문을 리뷰시키고, 받아들인
-   지적을 문서에 반영한다. 반영 내역을 `<slug>-writing-report.md`에 남기고 마지막 줄에
-   `REVIEW: APPLIED`를 적는다. 문서를 고쳤으면 render.ts를 다시 돌린다.
 
 ```bash
 # 관문 1 — 산출물 검사: 현재 Markdown에서 다시 렌더된 HTML·mermaid→SVG 패리티·검증 리포트 2종
