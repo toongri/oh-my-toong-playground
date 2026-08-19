@@ -809,6 +809,42 @@ describe("syncCommandsDirect", () => {
 
 		expect(await exists(path.join(targetPath, ".claude", "commands", "my-command.md"))).toBe(true);
 	});
+
+	it("wraps the command file mutation and preserves the resident on pre-CAS conflict", async () => {
+		const src = path.join(tmpDir, "my-command.md");
+		const target = path.join(targetPath, ".claude", "commands", "my-command.md");
+		await writeFile(src, "new\n");
+		await writeFile(target, "resident\n");
+		let mutationCalls = 0;
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async () => {
+				mutationCalls++;
+				throw new Error("pre-CAS conflict");
+			},
+		};
+
+		await expect(adapter.syncCommandsDirect(targetPath, "my-command", src, false, mutationHooks)).rejects.toThrow(
+			"pre-CAS conflict",
+		);
+		expect(mutationCalls).toBe(1);
+		expect(await fs.readFile(target, "utf8")).toBe("resident\n");
+	});
+
+	it("does not invoke mutation hooks in dry-run", async () => {
+		const src = path.join(tmpDir, "my-command.md");
+		await writeFile(src, "new\n");
+		let mutations = 0;
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (_target, operation) => {
+				mutations++;
+				await operation();
+			},
+		};
+
+		await adapter.syncCommandsDirect(targetPath, "my-command", src, true, mutationHooks);
+		expect(mutations).toBe(0);
+		expect(await exists(path.join(targetPath, ".claude", "commands", "my-command.md"))).toBe(false);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -935,6 +971,39 @@ describe("syncHooksDirect", () => {
 		expect(await exists(targetLib)).toBe(true);
 	});
 
+	it("uses exact directory leaf mutations without a coarse root observer", async () => {
+		const hooksDir = path.join(tmpDir, "hooks");
+		const dirHookDir = path.join(hooksDir, "leaf-hook");
+		await writeFile(
+			path.join(dirHookDir, "entry.sh"),
+			'#!/bin/bash\nsource "$HOOKS_DIR/lib/shared.sh"\necho entry\n',
+			0o644,
+		);
+		await writeFile(path.join(hooksDir, "lib", "shared.sh"), "#!/bin/bash\necho shared\n", 0o644);
+		const targetRoot = path.join(targetPath, ".claude", "hooks", "leaf-hook");
+		const mutationPaths: string[] = [];
+		const observedPaths: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath, operation) => {
+				mutationPaths.push(writtenPath);
+				await operation();
+			},
+		};
+		const observer: PlatformWriteObserver = async (writtenPath) => {
+			observedPaths.push(writtenPath);
+		};
+
+		await adapter.syncHooksDirect(targetPath, "leaf-hook", dirHookDir, false, observer, mutationHooks);
+
+		expect(mutationPaths).toEqual([
+			path.join(targetRoot, "entry.sh"),
+			path.join(targetRoot, "lib", "shared.sh"),
+		]);
+		expect(mutationPaths).not.toContain(targetRoot);
+		expect(observedPaths).toEqual([path.join(targetRoot, "lib", "shared.sh")]);
+		expect(observedPaths).not.toContain(targetRoot);
+	});
+
 	it("`# omt-hook-dep:` 디렉티브로 참조된 companion 파일을 함께 복사한다", async () => {
 		// session-start.sh references omt-ledger.sh only inside an injected string
 		// (not a `source` statement), so the plain scanner would miss it without
@@ -977,6 +1046,30 @@ describe("syncSkillsDirect", () => {
 			true,
 		);
 	});
+
+	it("forwards directory leaf mutations and stops on a later leaf failure", async () => {
+		const srcDir = path.join(tmpDir, "prometheus");
+		await writeFile(path.join(srcDir, "a.md"), "a\n");
+		await writeFile(path.join(srcDir, "b.md"), "b\n");
+		const seen: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath, operation) => {
+				seen.push(path.relative(targetPath, writtenPath));
+				if (writtenPath.endsWith(`${path.sep}b.md`)) throw new Error("later leaf failure");
+				await operation();
+			},
+		};
+
+		await expect(adapter.syncSkillsDirect(targetPath, "prometheus", srcDir, false, mutationHooks)).rejects.toThrow(
+			"later leaf failure",
+		);
+		expect(seen).toEqual([
+			path.join(".claude", "skills", "prometheus", "a.md"),
+			path.join(".claude", "skills", "prometheus", "b.md"),
+		]);
+		expect(await exists(path.join(targetPath, ".claude", "skills", "prometheus", "a.md"))).toBe(true);
+		expect(await exists(path.join(targetPath, ".claude", "skills", "prometheus", "b.md"))).toBe(false);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -1005,6 +1098,21 @@ describe("syncScriptsDirect", () => {
 			false,
 		);
 	});
+
+	it("wraps direct script file writes with mutation hooks", async () => {
+		const src = path.join(tmpDir, "script.sh");
+		await writeFile(src, "new\n");
+		const seen: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath, operation) => {
+				seen.push(path.relative(targetPath, writtenPath));
+				await operation();
+			},
+		};
+
+		await adapter.syncScriptsDirect(targetPath, "script.sh", src, false, mutationHooks);
+		expect(seen).toEqual([path.join(".claude", "scripts", "script.sh")]);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -1021,6 +1129,24 @@ describe("syncRulesDirect", () => {
 		expect(await exists(path.join(targetPath, ".claude", "rules", "coding-discipline.md"))).toBe(
 			true,
 		);
+	});
+
+	it("runs the legacy rule observer only after the mutation succeeds", async () => {
+		const src = path.join(tmpDir, "coding-discipline.md");
+		await writeFile(src, "rule\n");
+		const events: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (_writtenPath, operation) => {
+				events.push("mutate");
+				await operation();
+			},
+		};
+		const observer: PlatformWriteObserver = async () => {
+			events.push("observe");
+		};
+
+		await adapter.syncRulesDirect(targetPath, "coding-discipline", src, false, observer, mutationHooks);
+		expect(events).toEqual(["mutate", "observe"]);
 	});
 });
 

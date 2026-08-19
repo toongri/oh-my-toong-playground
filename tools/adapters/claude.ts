@@ -247,6 +247,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const targetFile = claudeDestination(targetPath, "commands", displayName);
 		const targetDir = path.dirname(targetFile);
@@ -263,8 +264,12 @@ export class ClaudeAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(targetDir, { recursive: true });
-		await fs.copyFile(sourcePath, targetFile);
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(targetDir, { recursive: true });
+			await copyFile(sourcePath, targetFile);
+		};
+		if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+		else await operation();
 		logInfo(`Copied: ${displayName}.md`);
 	}
 
@@ -301,15 +306,13 @@ export class ClaudeAdapter implements PlatformAdapter {
 				// Scan .sh files in directory for dependencies (dry-run logging)
 				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
 			} else {
-				const operation = () =>
-					syncDirectory(sourcePath, targetHookDir, {
-						exclude: ["*.test.ts", "*.local.yaml"],
-						platformRoot: path.join(targetPath, ".claude"),
-					});
-				if (mutationHooks) await mutationHooks.mutate(targetHookDir, operation);
-				else await operation();
+				await syncDirectory(sourcePath, targetHookDir, {
+					exclude: ["*.test.ts", "*.local.yaml"],
+					platformRoot: path.join(targetPath, ".claude"),
+					mutationHooks,
+				});
 				logInfo(`Copied: ${displayName}/`);
-				await writeObserver?.(targetHookDir);
+				if (!mutationHooks) await writeObserver?.(targetHookDir);
 				// Copy shell dependencies discovered in directory hooks
 				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun, writeObserver, mutationHooks);
 			}
@@ -345,9 +348,9 @@ export class ClaudeAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const targetSkillDir = claudeDestination(targetPath, "skills", displayName);
-		const targetDir = path.dirname(targetSkillDir);
 
 		try {
 			const stat = await fs.stat(sourcePath);
@@ -362,9 +365,9 @@ export class ClaudeAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(targetDir, { recursive: true });
 		await syncDirectory(sourcePath, targetSkillDir, {
 			platformRoot: path.join(targetPath, ".claude"),
+			mutationHooks,
 		});
 		logInfo(`Copied: ${displayName}/`);
 	}
@@ -378,6 +381,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const targetFile = claudeDestination(targetPath, "scripts", displayName);
 		const targetDir = path.dirname(targetFile);
@@ -398,6 +402,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 				await syncDirectory(sourcePath, targetScriptDir, {
 					exclude: ["*.test.ts"],
 					platformRoot: path.join(targetPath, ".claude"),
+					mutationHooks,
 				});
 				logInfo(`Copied: ${displayName}/`);
 			}
@@ -407,8 +412,12 @@ export class ClaudeAdapter implements PlatformAdapter {
 		if (dryRun) {
 			logDry(`Copy: ${sourcePath} -> ${targetFile}`);
 		} else {
-			await fs.mkdir(targetDir, { recursive: true });
-			await fs.copyFile(sourcePath, targetFile);
+			const operation = async (): Promise<void> => {
+				await fs.mkdir(targetDir, { recursive: true });
+				await copyFile(sourcePath, targetFile);
+			};
+			if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+			else await operation();
 			logInfo(`Copied: ${displayName}`);
 		}
 	}
@@ -422,6 +431,8 @@ export class ClaudeAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const targetFile = claudeDestination(targetPath, "rules", displayName);
 		const targetDir = path.dirname(targetFile);
@@ -438,8 +449,13 @@ export class ClaudeAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(targetDir, { recursive: true });
-		await fs.copyFile(sourcePath, targetFile);
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(targetDir, { recursive: true });
+			await copyFile(sourcePath, targetFile);
+		};
+		if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+		else await operation();
+		await writeObserver?.(targetFile);
 		logInfo(`Copied: ${displayName}.md`);
 	}
 
