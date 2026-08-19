@@ -27,6 +27,7 @@ import type {
 	PluginScope,
 } from "../lib/types.ts";
 import type { PlatformAdapter, PlatformWriteObserver } from "./types.ts";
+import { planCategoryDestinationPaths, type DestinationCategory } from "./destinations.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
 import { syncDirectory } from "../lib/sync-directory.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
@@ -99,6 +100,23 @@ export class GeminiAdapter implements PlatformAdapter {
 		this._runCommand = runCommand ?? defaultCommandRunner;
 	}
 
+	/** Returns a deploy-root-relative destination planned for a Gemini component. */
+	private destinationPath(category: DestinationCategory, displayName: string): string {
+		const [destination] = planCategoryDestinationPaths("gemini", category, displayName);
+		if (!destination) {
+			throw new Error(`Gemini destination is unsupported: ${category}`);
+		}
+		return destination;
+	}
+
+	private absoluteDestinationPath(
+		targetPath: string,
+		category: DestinationCategory,
+		displayName: string,
+	): string {
+		return path.join(targetPath, this.destinationPath(category, displayName));
+	}
+
 	// ---------------------------------------------------------------------------
 	// syncAgentsDirect
 	// ---------------------------------------------------------------------------
@@ -136,8 +154,8 @@ export class GeminiAdapter implements PlatformAdapter {
 		sourcePath: string,
 		dryRun = false,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".gemini", "commands");
-		const targetFile = path.join(targetDir, `${displayName}.toml`);
+		const targetFile = this.absoluteDestinationPath(targetPath, "commands", displayName);
+		const targetDir = path.dirname(targetFile);
 
 		try {
 			await fs.stat(sourcePath);
@@ -185,7 +203,8 @@ export class GeminiAdapter implements PlatformAdapter {
 		dryRun = false,
 		writeObserver?: PlatformWriteObserver,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".gemini", "hooks");
+		const targetHookRoot = this.absoluteDestinationPath(targetPath, "hooks", displayName);
+		const targetDir = path.dirname(targetHookRoot);
 		const hooksSourceDir = path.dirname(sourcePath);
 
 		let stat: Awaited<ReturnType<typeof fs.stat>>;
@@ -197,7 +216,7 @@ export class GeminiAdapter implements PlatformAdapter {
 		}
 
 		if (stat.isDirectory()) {
-			const targetHookDir = path.join(targetDir, displayName);
+			const targetHookDir = targetHookRoot;
 			if (dryRun) {
 				logDry(`Copy (directory): ${sourcePath} -> ${targetHookDir}/`);
 				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
@@ -210,7 +229,7 @@ export class GeminiAdapter implements PlatformAdapter {
 				await writeObserver?.(targetHookDir);
 			}
 		} else {
-			const targetFile = path.join(targetDir, displayName);
+			const targetFile = targetHookRoot;
 			if (dryRun) {
 				logDry(`Copy: ${sourcePath} -> ${targetFile}`);
 				await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun);
@@ -238,7 +257,7 @@ export class GeminiAdapter implements PlatformAdapter {
 		sourcePath: string,
 		dryRun = false,
 	): Promise<void> {
-		const targetSkillDir = path.join(targetPath, ".gemini", "skills", displayName);
+		const targetSkillDir = this.absoluteDestinationPath(targetPath, "skills", displayName);
 
 		try {
 			const stat = await fs.stat(sourcePath);
@@ -268,7 +287,8 @@ export class GeminiAdapter implements PlatformAdapter {
 		sourcePath: string,
 		dryRun = false,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".gemini", "scripts");
+		const targetScriptRoot = this.absoluteDestinationPath(targetPath, "scripts", displayName);
+		const targetDir = path.dirname(targetScriptRoot);
 
 		let stat: Awaited<ReturnType<typeof fs.stat>>;
 		try {
@@ -279,7 +299,7 @@ export class GeminiAdapter implements PlatformAdapter {
 		}
 
 		if (stat.isDirectory()) {
-			const targetScriptDir = path.join(targetDir, displayName);
+			const targetScriptDir = targetScriptRoot;
 			if (dryRun) {
 				logDry(`Copy (directory): ${sourcePath} -> ${targetScriptDir}/`);
 			} else {
@@ -291,7 +311,7 @@ export class GeminiAdapter implements PlatformAdapter {
 			return;
 		}
 
-		const targetFile = path.join(targetDir, displayName);
+		const targetFile = targetScriptRoot;
 		if (dryRun) {
 			logDry(`Copy: ${sourcePath} -> ${targetFile}`);
 		} else {
@@ -567,9 +587,9 @@ export class GeminiAdapter implements PlatformAdapter {
 								}
 
 								if (hasIndexTs) {
-									cmdPath = `bun run .gemini/hooks/${displayName}/index.ts`;
+									cmdPath = `bun run ${this.destinationPath("hooks", `${displayName}/index.ts`)}`;
 								} else if (hasIndexSh) {
-									cmdPath = `bash .gemini/hooks/${displayName}/index.sh`;
+									cmdPath = `bash ${this.destinationPath("hooks", `${displayName}/index.sh`)}`;
 								} else {
 									logWarn(
 										`Hook 디렉토리에 index.ts 또는 index.sh가 없음: ${resolvedSourcePath} (스킵)`,
@@ -577,7 +597,7 @@ export class GeminiAdapter implements PlatformAdapter {
 									continue;
 								}
 							} else {
-								cmdPath = `.gemini/hooks/${displayName}`;
+								cmdPath = this.destinationPath("hooks", displayName);
 							}
 						} else {
 							logWarn(`Hook command가 정의되지 않음: event=${hookEvent} (스킵)`);
