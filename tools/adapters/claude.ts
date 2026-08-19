@@ -11,7 +11,7 @@ import type {
 } from "../lib/types.ts";
 import type { PlatformAdapter, PlatformWriteObserver } from "./types.ts";
 import { parseFrontmatter, serializeFrontmatter } from "../lib/frontmatter.ts";
-import { syncDirectory } from "../lib/sync-directory.ts";
+import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
 import { deepMerge } from "../lib/deep-merge.ts";
@@ -20,6 +20,7 @@ import { isGlobalSync } from "../lib/path-utils.ts";
 import { deriveClaudeProjectKey } from "../lib/git-key.ts";
 import { composePreToolTraceCommand } from "../lib/pretool-trace-command.ts";
 import { planCategoryDestinationPaths, type DestinationCategory } from "./destinations.ts";
+import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
 
 // =============================================================================
 // Local narrowing helpers (avoid `as` casts on loosely-typed YAML/JSON data)
@@ -143,6 +144,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 		addHooks?: unknown[],
 		dryRun = false,
 		_modelMap?: ModelMap,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const targetFile = claudeDestination(targetPath, "agents", displayName);
 		const targetDir = path.dirname(targetFile);
@@ -159,13 +161,19 @@ export class ClaudeAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(targetDir, { recursive: true });
-		await fs.copyFile(sourcePath, targetFile);
+		const copyOperation = async (): Promise<void> => {
+			await fs.mkdir(targetDir, { recursive: true });
+			await copyFile(sourcePath, targetFile);
+		};
+		if (mutationHooks) await mutationHooks.mutate(targetFile, copyOperation);
+		else await copyOperation();
 		logInfo(`Copied: ${displayName}.md`);
 
 		// Inject add-skills into frontmatter
 		if (addSkills && addSkills.length > 0) {
-			await this._addSkillsToFrontmatter(targetFile, addSkills);
+			const operation = () => this._addSkillsToFrontmatter(targetFile, addSkills);
+			if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+			else await operation();
 		}
 
 		// Inject add-hooks into frontmatter (and deploy hook files)
@@ -196,10 +204,18 @@ export class ClaudeAdapter implements PlatformAdapter {
 				if (hook.source_path && hook.display_name) {
 					try {
 						await fs.stat(hook.source_path);
-						await this.syncHooksDirect(targetPath, hook.display_name, hook.source_path, false);
 					} catch {
 						// Hook file not found; skip silently
+						continue;
 					}
+					await this.syncHooksDirect(
+						targetPath,
+						hook.display_name,
+						hook.source_path,
+						false,
+						undefined,
+						mutationHooks,
+					);
 				}
 			}
 
@@ -216,7 +232,9 @@ export class ClaudeAdapter implements PlatformAdapter {
 				timeout: h.timeout ?? 10,
 			}));
 
-			await this._addHooksToFrontmatter(targetFile, frontmatterHooks);
+			const operation = () => this._addHooksToFrontmatter(targetFile, frontmatterHooks);
+			if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+			else await operation();
 		}
 	}
 
@@ -260,6 +278,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 		sourcePath: string,
 		dryRun = false,
 		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const targetFile = claudeDestination(targetPath, "hooks", displayName);
 		const targetDir = path.dirname(targetFile);
@@ -282,14 +301,17 @@ export class ClaudeAdapter implements PlatformAdapter {
 				// Scan .sh files in directory for dependencies (dry-run logging)
 				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
 			} else {
-				await syncDirectory(sourcePath, targetHookDir, {
-					exclude: ["*.test.ts", "*.local.yaml"],
-					platformRoot: path.join(targetPath, ".claude"),
-				});
+				const operation = () =>
+					syncDirectory(sourcePath, targetHookDir, {
+						exclude: ["*.test.ts", "*.local.yaml"],
+						platformRoot: path.join(targetPath, ".claude"),
+					});
+				if (mutationHooks) await mutationHooks.mutate(targetHookDir, operation);
+				else await operation();
 				logInfo(`Copied: ${displayName}/`);
-				// Copy shell dependencies discovered in directory hooks
-				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
 				await writeObserver?.(targetHookDir);
+				// Copy shell dependencies discovered in directory hooks
+				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun, writeObserver, mutationHooks);
 			}
 		} else {
 			if (dryRun) {
@@ -297,15 +319,19 @@ export class ClaudeAdapter implements PlatformAdapter {
 				// Log dependency copies for dry-run
 				await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun);
 			} else {
-				await fs.mkdir(targetDir, { recursive: true });
-				await fs.copyFile(sourcePath, targetFile);
-				// chmod +x
-				const tgtStat = await fs.stat(targetFile);
-				await fs.chmod(targetFile, tgtStat.mode | 0o111);
+				const operation = async (): Promise<void> => {
+					await fs.mkdir(targetDir, { recursive: true });
+					await copyFile(sourcePath, targetFile);
+					// chmod +x
+					const tgtStat = await fs.stat(targetFile);
+					await fs.chmod(targetFile, tgtStat.mode | 0o111);
+				};
+				if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+				else await operation();
 				logInfo(`Copied: ${displayName}`);
-				// Copy shell dependencies
-				await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun);
 				await writeObserver?.(targetFile);
+				// Copy shell dependencies
+				await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun, writeObserver, mutationHooks);
 			}
 		}
 	}
@@ -557,6 +583,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 		dryRun: boolean,
 		scope?: PluginScope,
 		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<PlatformConfigResult> {
 		const processedSections: string[] = [];
 		const preToolUsePreview = await this.previewPreToolUseCommands(targetPath, yaml);
@@ -611,7 +638,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 						displayName = path.basename(component);
 
 						// Copy the hook file/dir
-						await this.syncHooksDirect(targetPath, displayName, component, dryRun, writeObserver);
+						await this.syncHooksDirect(targetPath, displayName, component, dryRun, writeObserver, mutationHooks);
 					}
 
 					// Build hook entry (buildHookEntry always returns Record<string, unknown[]>)

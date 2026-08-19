@@ -15,6 +15,7 @@ import { deriveClaudeProjectKey } from "../lib/git-key.ts";
 import baseline from "./__fixtures__/claude-project-baseline.json";
 import type { PlatformYaml } from "../lib/types.ts";
 import type { PlatformWriteObserver } from "./types.ts";
+import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
 import { composePreToolTraceCommand } from "../lib/pretool-trace-command.ts";
 import { planCategoryDestinationPaths } from "./destinations.ts";
@@ -541,6 +542,22 @@ describe("syncAgentsDirect - 파일 복사", () => {
 
 		expect(await exists(path.join(targetPath, ".claude", "agents", "agent.md"))).toBe(false);
 	});
+
+	it("records the initial copy and frontmatter rewrites as separate mutations via `syncAgentsDirect`", async () => {
+		const sourceFile = path.join(tmpDir, "agent.md");
+		await writeFile(sourceFile, "---\nname: agent\n---\n\nbody\n");
+		const calls: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath, operation) => {
+				calls.push(path.relative(targetPath, writtenPath));
+				await operation();
+			},
+		};
+
+		await adapter.syncAgentsDirect(targetPath, "agent", sourceFile, ["testing"], [], false, undefined, mutationHooks);
+
+		expect(calls).toEqual([".claude/agents/agent.md", ".claude/agents/agent.md"]);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -626,6 +643,31 @@ describe("syncAgentsDirect - add-skills 프론트매터 주입", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncAgentsDirect - add-hooks 프론트매터 주입", () => {
+	it("does not swallow nested hook mutation conflicts via `syncAgentsDirect`", async () => {
+		const sourceFile = path.join(tmpDir, "agent.md");
+		const hookSource = path.join(tmpDir, "nested-hook.sh");
+		await writeFile(sourceFile, "---\nname: agent\n---\n\nbody\n");
+		await writeFile(hookSource, "#!/bin/sh\necho hook\n", 0o755);
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath) => {
+				throw new Error(`nested conflict: ${writtenPath}`);
+			},
+		};
+
+		await expect(
+			adapter.syncAgentsDirect(
+				targetPath,
+				"agent",
+				sourceFile,
+				[],
+				[{ event: "Stop", display_name: "nested-hook.sh", source_path: hookSource }],
+				false,
+				undefined,
+				mutationHooks,
+			),
+		).rejects.toThrow("nested conflict:");
+	});
+
 	it("injects add-hooks into agent frontmatter via `syncAgentsDirect`", async () => {
 		const sourceFile = path.join(tmpDir, "agent.md");
 		await writeFile(sourceFile, "---\nname: agent\n---\n\n# Agent\n");
@@ -774,6 +816,40 @@ describe("syncCommandsDirect", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncHooksDirect", () => {
+	it("observes the main hook before dependency mutations and propagates dependency conflicts", async () => {
+		const hooksDir = path.join(tmpDir, "hooks");
+		await writeFile(
+			path.join(hooksDir, "main.sh"),
+			'#!/bin/bash\nsource "$HOOKS_DIR/lib/one.sh"\nsource "$HOOKS_DIR/lib/two.sh"\n',
+			0o644,
+		);
+		await writeFile(path.join(hooksDir, "lib", "one.sh"), "one\n", 0o644);
+		await writeFile(path.join(hooksDir, "lib", "two.sh"), "two\n", 0o644);
+		const order: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath, operation) => {
+				order.push(`mutate:${path.basename(writtenPath)}`);
+				if (path.basename(writtenPath) === "two.sh") throw new Error("dependency conflict");
+				await operation();
+			},
+		};
+		const observer: PlatformWriteObserver = async (writtenPath) => {
+			order.push(`observe:${path.basename(writtenPath)}`);
+		};
+
+		await expect(
+			adapter.syncHooksDirect(targetPath, "main.sh", path.join(hooksDir, "main.sh"), false, observer, mutationHooks),
+		).rejects.toThrow("dependency conflict");
+		expect(order).toEqual([
+			"mutate:main.sh",
+			"observe:main.sh",
+			"mutate:one.sh",
+			"observe:one.sh",
+			"mutate:two.sh",
+		]);
+		expect(await exists(path.join(targetPath, ".claude", "hooks", "lib", "one.sh"))).toBe(true);
+		expect(await exists(path.join(targetPath, ".claude", "hooks", "lib", "two.sh"))).toBe(false);
+	});
 	it("copies hook file to .claude/hooks/ and sets +x permission via `syncHooksDirect`", async () => {
 		const src = path.join(tmpDir, "my-hook.sh");
 		await writeFile(src, "#!/bin/bash\necho hi", 0o644);
@@ -1513,6 +1589,28 @@ describe("syncMcpsMerge", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncPlatformYaml - PlatformWriteObserver", () => {
+	it("propagates platform hook mutation conflicts before updating settings", async () => {
+		const hookSource = path.join(tmpDir, "conflicting-hook.sh");
+		await writeFile(hookSource, "#!/bin/sh\necho hook\n", 0o755);
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath) => {
+				throw new Error(`conflict: ${writtenPath}`);
+			},
+		};
+
+		await expect(
+			adapter.syncPlatformYaml(
+				targetPath,
+				{ hooks: { PostToolUse: [{ component: hookSource, matcher: "*", type: "command" }] } },
+				false,
+				undefined,
+				undefined,
+				mutationHooks,
+			),
+		).rejects.toThrow("conflict:");
+		expect(await exists(path.join(targetPath, ".claude", "settings.local.json"))).toBe(false);
+	});
+
 	it("observes target-owned writes in completion order after bytes exist", async () => {
 		const hookSource = path.join(tmpDir, "source-hook");
 		await writeFile(path.join(hookSource, "index.sh"), "#!/bin/sh\necho hook\n", 0o755);
