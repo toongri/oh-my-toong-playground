@@ -745,6 +745,7 @@ export class CodexAdapter implements PlatformAdapter {
 		configJson: Record<string, unknown>,
 		dryRun = false,
 		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const configFile = path.join(targetPath, this.configDir, "config.toml");
 
@@ -753,15 +754,15 @@ export class CodexAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(path.join(targetPath, this.configDir), { recursive: true });
-
-		const existing = await readTextFile(configFile);
-
-		// Use smol-toml to generate TOML content from the config object
-		const tomlContent = stringify(configJson);
-		const updated = insertManagedBlock(existing, "config", tomlContent);
-
-		await fs.writeFile(configFile, updated, "utf-8");
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(path.join(targetPath, this.configDir), { recursive: true });
+			const existing = await readTextFile(configFile);
+			const tomlContent = stringify(configJson);
+			const updated = insertManagedBlock(existing, "config", tomlContent);
+			await fs.writeFile(configFile, updated, "utf-8");
+		};
+		if (mutationHooks) await mutationHooks.mutate(configFile, operation);
+		else await operation();
 		if (writeObserver) await writeObserver(configFile);
 		logInfo(`Config managed block: ${configFile}`);
 	}
@@ -785,6 +786,7 @@ export class CodexAdapter implements PlatformAdapter {
 		targetPath: string,
 		dryRun: boolean,
 		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const configFile = path.join(targetPath, this.configDir, "config.toml");
 		const serverCount = Object.keys(this.mcpAccumulator).length;
@@ -804,8 +806,13 @@ export class CodexAdapter implements PlatformAdapter {
 				logDry(`MCP managed block (empty — removing servers): ${configFile}`);
 				return;
 			}
-			const updated = insertManagedBlock(existing, "mcp", "# No MCP servers configured\n");
-			await fs.writeFile(configFile, updated, "utf-8");
+			const operation = async (): Promise<void> => {
+				const current = await readTextFile(configFile);
+				const updated = insertManagedBlock(current, "mcp", "# No MCP servers configured\n");
+				await fs.writeFile(configFile, updated, "utf-8");
+			};
+			if (mutationHooks) await mutationHooks.mutate(configFile, operation);
+			else await operation();
 			if (writeObserver) await writeObserver(configFile);
 			logInfo(`MCP managed block cleared: ${configFile}`);
 			return;
@@ -816,14 +823,15 @@ export class CodexAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(path.join(targetPath, this.configDir), { recursive: true });
-
-		const existing = await readTextFile(configFile);
-
-		const tomlContent = buildMcpTomlContent(this.mcpAccumulator);
-		const updated = insertManagedBlock(existing, "mcp", tomlContent);
-
-		await fs.writeFile(configFile, updated, "utf-8");
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(path.join(targetPath, this.configDir), { recursive: true });
+			const existing = await readTextFile(configFile);
+			const tomlContent = buildMcpTomlContent(this.mcpAccumulator);
+			const updated = insertManagedBlock(existing, "mcp", tomlContent);
+			await fs.writeFile(configFile, updated, "utf-8");
+		};
+		if (mutationHooks) await mutationHooks.mutate(configFile, operation);
+		else await operation();
 		if (writeObserver) await writeObserver(configFile);
 		logInfo(`MCP managed block: ${configFile}`);
 	}
@@ -938,7 +946,7 @@ export class CodexAdapter implements PlatformAdapter {
 
 		// --- config ---
 		if (yaml.config !== undefined && yaml.config !== null) {
-			await this.syncConfig(targetPath, yaml.config, dryRun, writeObserver);
+			await this.syncConfig(targetPath, yaml.config, dryRun, writeObserver, mutationHooks);
 			processedSections.push("config");
 		}
 
@@ -955,7 +963,7 @@ export class CodexAdapter implements PlatformAdapter {
 					logInfo(`MCP accumulated: ${name}`);
 				}
 			}
-			await this.flushMcpBlock(targetPath, dryRun, writeObserver);
+			await this.flushMcpBlock(targetPath, dryRun, writeObserver, mutationHooks);
 			processedSections.push("mcps");
 		}
 
@@ -1088,7 +1096,7 @@ export class CodexAdapter implements PlatformAdapter {
 				}
 			}
 
-			await this.updateSettings(targetPath, accumulatedHooks, dryRun, preserveConfig, writeObserver);
+			await this.updateSettings(targetPath, accumulatedHooks, dryRun, preserveConfig, writeObserver, mutationHooks);
 			processedSections.push("hooks");
 		}
 
@@ -1138,6 +1146,7 @@ export class CodexAdapter implements PlatformAdapter {
 		dryRun = false,
 		preserve?: { "command-contains"?: string[] },
 		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const hooksFile = path.join(targetPath, ".codex", "hooks.json");
 
@@ -1146,34 +1155,31 @@ export class CodexAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(path.join(targetPath, ".codex"), { recursive: true });
-		const current = await readJsonFile(hooksFile);
-
-		// Start from the synced (OMT-authored) entries, then carry over foreign
-		// entries matching a preserve marker so the replace below keeps them.
-		const mergedHooks: Record<string, unknown[]> = {};
-		for (const [event, blocks] of Object.entries(hooksEntries)) {
-			mergedHooks[event] = Array.isArray(blocks)
-				? [...blocks]
-				: // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- hooksEntries is declared Record<string, unknown>; a non-array value here is carried through as-is (defensive passthrough for an already-untyped boundary), matching prior behavior
-					(blocks as unknown[]);
-		}
-		const markers = preserve?.["command-contains"] ?? [];
-		const currentHooks = current.hooks;
-		if (markers.length > 0 && isRecord(currentHooks)) {
-			for (const [event, blocks] of Object.entries(currentHooks)) {
-				if (!Array.isArray(blocks)) continue;
-				for (const block of blocks) {
-					if (this.hookCommandMatches(block, markers)) {
-						(mergedHooks[event] ??= []).push(block);
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(path.join(targetPath, ".codex"), { recursive: true });
+			const current = await readJsonFile(hooksFile);
+			const mergedHooks: Record<string, unknown[]> = {};
+			for (const [event, blocks] of Object.entries(hooksEntries)) {
+				mergedHooks[event] = Array.isArray(blocks)
+					? [...blocks]
+					: // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- hooksEntries is declared Record<string, unknown>; a non-array value here is carried through as-is (defensive passthrough for an already-untyped boundary), matching prior behavior
+						(blocks as unknown[]);
+			}
+			const markers = preserve?.["command-contains"] ?? [];
+			const currentHooks = current.hooks;
+			if (markers.length > 0 && isRecord(currentHooks)) {
+				for (const [event, blocks] of Object.entries(currentHooks)) {
+					if (!Array.isArray(blocks)) continue;
+					for (const block of blocks) {
+						if (this.hookCommandMatches(block, markers)) (mergedHooks[event] ??= []).push(block);
 					}
 				}
 			}
-		}
-
-		const { hooks: _removed, ...rest } = current;
-		const updated = { ...rest, hooks: mergedHooks };
-		await writeJsonFile(hooksFile, updated);
+			const { hooks: _removed, ...rest } = current;
+			await writeJsonFile(hooksFile, { ...rest, hooks: mergedHooks });
+		};
+		if (mutationHooks) await mutationHooks.mutate(hooksFile, operation);
+		else await operation();
 		if (writeObserver) await writeObserver(hooksFile);
 		logInfo(`Updated hooks.json: ${hooksFile}`);
 	}

@@ -14,7 +14,7 @@ import {
 } from "./codex.ts";
 import { planCategoryDestinationPaths } from "./destinations.ts";
 import type { ModelMap } from "../lib/types.ts";
-import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
+import { DeployTransaction, type DeployMutationHooks } from "../lib/deploy-transaction.ts";
 
 function plannedCodexPath(targetPath: string, category: "hooks" | "scripts", displayName: string): string {
 	return path.join(targetPath, planCategoryDestinationPaths("codex", category, displayName)[0]);
@@ -648,6 +648,24 @@ describe("CodexAdapter", () => {
 			const content = await fs.readFile(configFile, "utf-8");
 			expect(content).toContain("[features.multi_agent_v2]");
 			expect(content).toContain("max_concurrent_threads_per_session = 20");
+		});
+
+		it("rejects an external config edit before the guarded read and preserves resident bytes", async () => {
+			const configFile = path.join(tmpDir, ".codex", "config.toml");
+			await fs.mkdir(path.dirname(configFile), { recursive: true });
+			await fs.writeFile(configFile, "resident\n", "utf-8");
+			const transaction = await DeployTransaction.begin(tmpDir, false, [".codex/config.toml"]);
+			expect(transaction).not.toBeNull();
+			await fs.writeFile(configFile, "external edit\n", "utf-8");
+			const observed: string[] = [];
+			await expect(
+				adapter.syncConfig(tmpDir, { model: "o4-mini" }, false, (writtenPath) => {
+					observed.push(writtenPath);
+				}, transaction!),
+			).rejects.toThrow(/Deploy transaction conflict/);
+			expect(await fs.readFile(configFile, "utf-8")).toBe("external edit\n");
+			expect(observed).toEqual([]);
+			await transaction!.finish();
 		});
 	});
 
@@ -1450,6 +1468,29 @@ describe("CodexAdapter", () => {
 			// Untagged old OMT entry is gone
 			expect(commands).not.toContain("omt-old-command");
 		});
+
+		it("rejects an external hooks.json edit before the guarded read and preserves resident bytes", async () => {
+			const hooksFile = path.join(tmpDir, ".codex", "hooks.json");
+			await fs.mkdir(path.dirname(hooksFile), { recursive: true });
+			await fs.writeFile(hooksFile, JSON.stringify({ hooks: { Resident: [] } }) + "\n", "utf-8");
+			const transaction = await DeployTransaction.begin(tmpDir, false, [".codex/hooks.json"]);
+			expect(transaction).not.toBeNull();
+			await fs.writeFile(hooksFile, "external hooks edit\n", "utf-8");
+			const observed: string[] = [];
+			await expect(
+				adapter.updateSettings(
+					tmpDir,
+					{ PostToolUse: [{ hooks: [{ command: "echo post" }] }] },
+					false,
+					undefined,
+					(writtenPath) => { observed.push(writtenPath); },
+					transaction!,
+				),
+			).rejects.toThrow(/Deploy transaction conflict/);
+			expect(await fs.readFile(hooksFile, "utf-8")).toBe("external hooks edit\n");
+			expect(observed).toEqual([]);
+			await transaction!.finish();
+		});
 	});
 
 	// ---------------------------------------------------------------------------
@@ -1533,6 +1574,28 @@ describe("CodexAdapter", () => {
 			const hookDir = path.join(tmpDir, ".codex", "hooks", path.basename(sourceHookDir));
 			const hooksFile = path.join(tmpDir, ".codex", "hooks.json");
 			expect(writes).toEqual([configFile, configFile, hookDir, hooksFile]);
+		});
+
+		it("forwards mutation hooks to repeated config and MCP writes on the exact shared path", async () => {
+			const calls: string[] = [];
+			const observed: string[] = [];
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (targetPath, operation) => {
+					calls.push(targetPath);
+					await operation();
+				},
+			};
+			await adapter.syncPlatformYaml(
+				tmpDir,
+				{ config: { model: "o4-mini" }, mcps: { server: { command: "npx" } } } as never,
+				false,
+				undefined,
+				(writtenPath) => { observed.push(writtenPath); },
+				mutationHooks,
+			);
+			const configFile = path.join(tmpDir, ".codex", "config.toml");
+			expect(calls).toEqual([configFile, configFile]);
+			expect(observed).toEqual([configFile, configFile]);
 		});
 
 		it("does not notify for dry-run or sections that perform no writes via `syncPlatformYaml`", async () => {
