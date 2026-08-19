@@ -9,6 +9,7 @@ import type { PlatformAdapter, PlatformWriteObserver } from "./types.ts";
 import { deepMerge } from "../lib/deep-merge.ts";
 import { readJsonFile, writeJsonFile } from "../lib/json.ts";
 import { assertMappedTier, ModelMapError } from "../lib/model-map.ts";
+import { planCategoryDestinationPaths, type DestinationCategory } from "./destinations.ts";
 
 // =============================================================================
 // Model Map Helper
@@ -74,6 +75,14 @@ export function translateAgentFrontmatter(
 // OpenCode Adapter
 // =============================================================================
 
+/** Return OpenCode's planner-owned destination paths for a component. */
+function opencodeDestinationPaths(
+	category: Exclude<DestinationCategory, "hooks">,
+	displayName: string,
+): string[] {
+	return planCategoryDestinationPaths("opencode", category, displayName);
+}
+
 export const opencodeAdapter: PlatformAdapter = {
 	platform: "opencode",
 	configDir: ".opencode",
@@ -88,8 +97,9 @@ export const opencodeAdapter: PlatformAdapter = {
 		dryRun?: boolean,
 		modelMap?: ModelMap,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".opencode", "agents");
-		const targetFile = path.join(targetDir, `${displayName}.md`);
+		const [targetRelative] = opencodeDestinationPaths("agents", displayName);
+		const targetFile = path.join(targetPath, targetRelative);
+		const targetDir = path.dirname(targetFile);
 
 		let stat;
 		try {
@@ -141,8 +151,9 @@ export const opencodeAdapter: PlatformAdapter = {
 		sourcePath: string,
 		dryRun?: boolean,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".opencode", "commands");
-		const targetFile = path.join(targetDir, `${displayName}.md`);
+		const [targetRelative] = opencodeDestinationPaths("commands", displayName);
+		const targetFile = path.join(targetPath, targetRelative);
+		const targetDir = path.dirname(targetFile);
 
 		let stat;
 		try {
@@ -172,8 +183,9 @@ export const opencodeAdapter: PlatformAdapter = {
 		sourcePath: string,
 		dryRun?: boolean,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".opencode", "skills");
-		const targetSkillDir = path.join(targetDir, displayName);
+		const [targetRelative] = opencodeDestinationPaths("skills", displayName);
+		const targetSkillDir = path.join(targetPath, targetRelative);
+		const targetDir = path.dirname(targetSkillDir);
 
 		try {
 			const stat = await fs.stat(sourcePath);
@@ -202,7 +214,9 @@ export const opencodeAdapter: PlatformAdapter = {
 		sourcePath: string,
 		dryRun?: boolean,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".opencode", "scripts");
+		const [targetRelative] = opencodeDestinationPaths("scripts", displayName);
+		const targetBase = path.join(targetPath, targetRelative);
+		const targetDir = path.dirname(targetBase);
 
 		let isDir = false;
 		let exists = true;
@@ -219,7 +233,7 @@ export const opencodeAdapter: PlatformAdapter = {
 		}
 
 		if (isDir) {
-			const targetScriptDir = path.join(targetDir, displayName);
+			const targetScriptDir = targetBase;
 			if (dryRun) {
 				logDry(`Copy (directory): ${sourcePath} -> ${targetScriptDir}/`);
 			} else {
@@ -228,7 +242,7 @@ export const opencodeAdapter: PlatformAdapter = {
 				logInfo(`Copied: ${displayName}/`);
 			}
 		} else {
-			const targetFile = path.join(targetDir, displayName);
+			const targetFile = targetBase;
 			if (dryRun) {
 				logDry(`Copy: ${sourcePath} -> ${targetFile}`);
 			} else {
@@ -245,10 +259,11 @@ export const opencodeAdapter: PlatformAdapter = {
 		sourcePath: string,
 		dryRun?: boolean,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".opencode", "rules");
-		const targetFile = path.join(targetDir, `${displayName}.md`);
-		const configFile = path.join(targetPath, ".opencode", "opencode.json");
-		const globEntry = ".opencode/rules/*.md";
+		const [targetRelative, configRelative] = opencodeDestinationPaths("rules", displayName);
+		const targetFile = path.join(targetPath, targetRelative);
+		const targetDir = path.dirname(targetFile);
+		const configFile = path.join(targetPath, configRelative);
+		const globEntry = `${path.posix.dirname(targetRelative)}/*.md`;
 
 		let stat;
 		try {

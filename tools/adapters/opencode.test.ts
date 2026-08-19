@@ -11,6 +11,7 @@ import {
 	syncMcpsMerge,
 	opencodeAdapter,
 } from "./opencode.ts";
+import { planCategoryDestinationPaths } from "./destinations.ts";
 import { assertMappedTier } from "../lib/model-map.ts";
 import type { ModelMap } from "../lib/types.ts";
 
@@ -522,13 +523,18 @@ describe("opencodeAdapter.syncRulesDirect", () => {
 		try {
 			await opencodeAdapter.syncRulesDirect(targetDir, "coding-discipline", ruleFile, false);
 
-			const ruleTarget = path.join(targetDir, ".opencode", "rules", "coding-discipline.md");
+			const [ruleRelative, configRelative] = planCategoryDestinationPaths(
+				"opencode",
+				"rules",
+				"coding-discipline",
+			);
+			const ruleTarget = path.join(targetDir, ruleRelative);
 			const ruleContent = await fs.readFile(ruleTarget, "utf-8");
 			expect(ruleContent).toContain("Coding Discipline");
 
-			const config = await readJson(path.join(targetDir, ".opencode", "opencode.json"));
+			const config = await readJson(path.join(targetDir, configRelative));
 			const instructions = config["instructions"] as string[];
-			expect(instructions).toContain(".opencode/rules/*.md");
+			expect(instructions).toEqual([".opencode/rules/*.md"]);
 		} finally {
 			await fs.rm(targetDir, { recursive: true, force: true });
 		}
@@ -882,7 +888,8 @@ Body content.`,
 		try {
 			await opencodeAdapter.syncAgentsDirect(targetDir, "oracle", agentFile, [], [], false);
 
-			const target = path.join(targetDir, ".opencode", "agents", "oracle.md");
+			const [targetRelative] = planCategoryDestinationPaths("opencode", "agents", "oracle");
+			const target = path.join(targetDir, targetRelative);
 			const content = await fs.readFile(target, "utf-8");
 
 			expect(content).not.toContain("subagent_type");
@@ -1011,7 +1018,8 @@ describe("opencodeAdapter.syncCommandsDirect", () => {
 		try {
 			await opencodeAdapter.syncCommandsDirect(targetDir, "commit", commandFile, false);
 
-			const target = path.join(targetDir, ".opencode", "commands", "commit.md");
+			const [targetRelative] = planCategoryDestinationPaths("opencode", "commands", "commit");
+			const target = path.join(targetDir, targetRelative);
 			const content = await fs.readFile(target, "utf-8");
 			expect(content).toContain("Commit command");
 		} finally {
@@ -1083,7 +1091,8 @@ describe("opencodeAdapter.syncSkillsDirect", () => {
 		try {
 			await opencodeAdapter.syncSkillsDirect(targetDir, "oracle", skillDir, false);
 
-			const target = path.join(targetDir, ".opencode", "skills", "oracle", "SKILL.md");
+			const [targetRelative] = planCategoryDestinationPaths("opencode", "skills", "oracle");
+			const target = path.join(targetDir, targetRelative, "SKILL.md");
 			const content = await fs.readFile(target, "utf-8");
 			expect(content).toContain("Oracle skill");
 		} finally {
@@ -1154,7 +1163,8 @@ describe("opencodeAdapter.syncScriptsDirect", () => {
 		try {
 			await opencodeAdapter.syncScriptsDirect(targetDir, "hud.sh", scriptFile, false);
 
-			const target = path.join(targetDir, ".opencode", "scripts", "hud.sh");
+			const [targetRelative] = planCategoryDestinationPaths("opencode", "scripts", "hud.sh");
+			const target = path.join(targetDir, targetRelative);
 			const content = await fs.readFile(target, "utf-8");
 			expect(content).toContain("echo hud");
 		} finally {
@@ -1210,7 +1220,8 @@ describe("opencodeAdapter.syncScriptsDirect", () => {
 		try {
 			await opencodeAdapter.syncScriptsDirect(targetDir, "hud", scriptDir, false);
 
-			const target = path.join(targetDir, ".opencode", "scripts", "hud", "hud.sh");
+			const [targetRelative] = planCategoryDestinationPaths("opencode", "scripts", "hud");
+			const target = path.join(targetDir, targetRelative, "hud.sh");
 			const content = await fs.readFile(target, "utf-8");
 			expect(content).toContain("echo hud");
 		} finally {
