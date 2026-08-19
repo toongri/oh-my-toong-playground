@@ -1,7 +1,4 @@
 [test]
-# Raises bun's 5000ms default per-test timeout repo-wide — see tools/test-preload.ts
-# for the measurement the 60s ceiling is derived from.
-preload = ["./tools/test-preload.ts"]
 # Exclude deployed and backup directories — source tests live in lib/, scripts/, tools/
 # Skills tests have @lib/ dependencies that only resolve in deployed context
 exclude = [".claude/**", ".gemini/**", ".codex/**", ".opencode/**", ".sync-backup/**", ".omt/**", "skills/**"]

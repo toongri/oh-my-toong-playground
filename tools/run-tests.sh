@@ -153,7 +153,18 @@ run_bun_tests() {
     fi
 
     local output
-    if output=$(cd "$ROOT_DIR" && run_without_git_local_env bun test ./tools/ ./lib/ ./scripts/ ./hooks/ ./skills/ ./projects/ 2>&1); then
+    # 5000ms 기본 per-test 타임아웃 상향. 여기 테스트 다수는 CLI를 실제로 구동해
+    # 명령마다 bun/node 프로세스를 새로 띄운다 — skills/qa/scripts/qa-state.test.ts의
+    # 최대 테스트는 27 spawn(이 머신 idle 기준 spawn당 ~27ms, 10회 평균 ≈ 730ms)이다.
+    # 전체 스위트에선 워커가 코어를 다투면서 같은 테스트가 5045ms/5796ms로 관측돼
+    # 단언이 아니라 타임아웃으로 죽었다(단독 실행은 항상 통과 — 부하 의존 flake).
+    # 60s는 관측된 최악값의 약 12배이자 해당 테스트 idle 비용의 약 80배로, 단언을
+    # 전혀 완화하지 않는다(진짜 멈춘 테스트는 그대로 실패, 시점만 늦다).
+    # bunfig.toml의 `[test] timeout`은 대안이 아니다 — bun 1.3.13에서 조용히 무시되고
+    # (6s 테스트가 여전히 5000ms에 사망), preload의 setDefaultTimeout도 다중 파일
+    # 실행에선 파일마다 리셋돼 무효였다. 실제로 먹는 레버는 이 CLI 플래그뿐이다.
+    local timeout_ms=60000
+    if output=$(cd "$ROOT_DIR" && run_without_git_local_env bun test --timeout "$timeout_ms" ./tools/ ./lib/ ./scripts/ ./hooks/ ./skills/ ./projects/ 2>&1); then
         TS_PASS=1
         TS_TOTAL=1
         printf '%s\n' "$output" | log_block "PASS bun test"
