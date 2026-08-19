@@ -6,6 +6,7 @@ import { parseFrontmatter, serializeFrontmatter } from "../lib/frontmatter.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
 import type { PlatformAdapter, PlatformWriteObserver } from "./types.ts";
+import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
 import { deepMerge } from "../lib/deep-merge.ts";
 import { readJsonFile, writeJsonFile } from "../lib/json.ts";
 import { assertMappedTier, ModelMapError } from "../lib/model-map.ts";
@@ -96,6 +97,7 @@ export const opencodeAdapter: PlatformAdapter = {
 		_addHooks?: unknown[],
 		dryRun?: boolean,
 		modelMap?: ModelMap,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const [targetRelative] = opencodeDestinationPaths("agents", displayName);
 		const targetFile = path.join(targetPath, targetRelative);
@@ -119,25 +121,24 @@ export const opencodeAdapter: PlatformAdapter = {
 		}
 
 		await fs.mkdir(targetDir, { recursive: true });
-		await fs.copyFile(sourcePath, targetFile);
-		logInfo(`Copied: ${displayName}.md`);
-
-		// Translate frontmatter for OpenCode compatibility (P2-5: pass modelMap)
-		try {
-			const content = await fs.readFile(targetFile, "utf-8");
-			const translated = translateAgentFrontmatter(content, modelMap, sourcePath, displayName);
-			await fs.writeFile(targetFile, translated, "utf-8");
-		} catch (err) {
-			if (err instanceof ModelMapError) {
-				// The initial copy (line 112) already wrote the raw, untranslated
-				// frontmatter — remove it so no file is left containing the
-				// unmapped tier string before propagating the hard-fail.
-				await fs.rm(targetFile, { force: true });
-				throw err;
+		const write = async () => {
+			await copyFile(sourcePath, targetFile);
+			logInfo(`Copied: ${displayName}.md`);
+			try {
+				const content = await fs.readFile(targetFile, "utf-8");
+				const translated = translateAgentFrontmatter(content, modelMap, sourcePath, displayName);
+				await fs.writeFile(targetFile, translated, "utf-8");
+			} catch (err) {
+				if (err instanceof ModelMapError) {
+					await fs.rm(targetFile, { force: true });
+					throw err;
+				}
+				logWarn(`Failed to translate frontmatter for: ${sourcePath}. Copying as-is.`);
+				await copyFile(sourcePath, targetFile);
 			}
-			logWarn(`Failed to translate frontmatter for: ${sourcePath}. Copying as-is.`);
-			await fs.copyFile(sourcePath, targetFile);
-		}
+		};
+		if (mutationHooks) await mutationHooks.mutate(targetFile, write);
+		else await write();
 
 		// add-skills not supported — log if provided
 		if (addSkills && addSkills.length > 0) {
@@ -150,6 +151,7 @@ export const opencodeAdapter: PlatformAdapter = {
 		displayName: string,
 		sourcePath: string,
 		dryRun?: boolean,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const [targetRelative] = opencodeDestinationPaths("commands", displayName);
 		const targetFile = path.join(targetPath, targetRelative);
@@ -173,7 +175,9 @@ export const opencodeAdapter: PlatformAdapter = {
 		}
 
 		await fs.mkdir(targetDir, { recursive: true });
-		await fs.copyFile(sourcePath, targetFile);
+		const write = () => copyFile(sourcePath, targetFile);
+		if (mutationHooks) await mutationHooks.mutate(targetFile, write);
+		else await write();
 		logInfo(`Copied: ${displayName}.md`);
 	},
 
@@ -182,6 +186,7 @@ export const opencodeAdapter: PlatformAdapter = {
 		displayName: string,
 		sourcePath: string,
 		dryRun?: boolean,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const [targetRelative] = opencodeDestinationPaths("skills", displayName);
 		const targetSkillDir = path.join(targetPath, targetRelative);
@@ -204,7 +209,7 @@ export const opencodeAdapter: PlatformAdapter = {
 		}
 
 		await fs.mkdir(targetDir, { recursive: true });
-		await syncDirectory(sourcePath, targetSkillDir);
+		await syncDirectory(sourcePath, targetSkillDir, { mutationHooks });
 		logInfo(`Copied: ${displayName}/`);
 	},
 
@@ -213,6 +218,7 @@ export const opencodeAdapter: PlatformAdapter = {
 		displayName: string,
 		sourcePath: string,
 		dryRun?: boolean,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const [targetRelative] = opencodeDestinationPaths("scripts", displayName);
 		const targetBase = path.join(targetPath, targetRelative);
@@ -238,7 +244,7 @@ export const opencodeAdapter: PlatformAdapter = {
 				logDry(`Copy (directory): ${sourcePath} -> ${targetScriptDir}/`);
 			} else {
 				await fs.mkdir(targetScriptDir, { recursive: true });
-				await syncDirectory(sourcePath, targetScriptDir);
+				await syncDirectory(sourcePath, targetScriptDir, { mutationHooks });
 				logInfo(`Copied: ${displayName}/`);
 			}
 		} else {
@@ -247,7 +253,9 @@ export const opencodeAdapter: PlatformAdapter = {
 				logDry(`Copy: ${sourcePath} -> ${targetFile}`);
 			} else {
 				await fs.mkdir(targetDir, { recursive: true });
-				await copyFile(sourcePath, targetFile);
+				const write = () => copyFile(sourcePath, targetFile);
+				if (mutationHooks) await mutationHooks.mutate(targetFile, write);
+				else await write();
 				logInfo(`Copied: ${displayName}`);
 			}
 		}
@@ -259,6 +267,7 @@ export const opencodeAdapter: PlatformAdapter = {
 		sourcePath: string,
 		dryRun?: boolean,
 		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const [targetRelative, configRelative] = opencodeDestinationPaths("rules", displayName);
 		const targetFile = path.join(targetPath, targetRelative);
@@ -286,7 +295,9 @@ export const opencodeAdapter: PlatformAdapter = {
 
 		// Copy rule file
 		await fs.mkdir(targetDir, { recursive: true });
-		await fs.copyFile(sourcePath, targetFile);
+		const copy = () => copyFile(sourcePath, targetFile);
+		if (mutationHooks) await mutationHooks.mutate(targetFile, copy);
+		else await copy();
 		if (writeObserver) {
 			await writeObserver(targetFile);
 		}
@@ -299,7 +310,9 @@ export const opencodeAdapter: PlatformAdapter = {
 
 		if (!instructions.includes(globEntry)) {
 			config["instructions"] = [...instructions, globEntry];
-			await writeJsonFile(configFile, config);
+			const write = () => writeJsonFile(configFile, config);
+			if (mutationHooks) await mutationHooks.mutate(configFile, write);
+			else await write();
 			if (writeObserver) {
 				await writeObserver(configFile);
 			}
@@ -327,6 +340,7 @@ export const opencodeAdapter: PlatformAdapter = {
 		dryRun: boolean,
 		_scope?: PluginScope,
 		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<PlatformConfigResult> {
 		const processedSections: string[] = [];
 		let modelMap: ModelMap | undefined;
@@ -340,7 +354,7 @@ export const opencodeAdapter: PlatformAdapter = {
 		// 2. config — merged as-is. config.model/small_model are OpenCode's own
 		// default model ids, not agent tiers, so model-map does not apply here.
 		if (yaml.config !== undefined && yaml.config !== null) {
-			await syncConfig(targetPath, yaml.config, dryRun, writeObserver);
+			await syncConfig(targetPath, yaml.config, dryRun, writeObserver, mutationHooks);
 			processedSections.push("config");
 		}
 
@@ -353,7 +367,7 @@ export const opencodeAdapter: PlatformAdapter = {
 		// 4. mcps — iterate items and merge each server
 		if (yaml.mcps !== undefined && yaml.mcps !== null) {
 			for (const [name, serverDef] of Object.entries(yaml.mcps)) {
-				await syncMcpsMerge(targetPath, name, serverDef, dryRun, writeObserver);
+				await syncMcpsMerge(targetPath, name, serverDef, dryRun, writeObserver, mutationHooks);
 			}
 			processedSections.push("mcps");
 		}
@@ -379,6 +393,7 @@ export async function syncConfig(
 	configObj: Record<string, unknown>,
 	dryRun: boolean,
 	writeObserver?: PlatformWriteObserver,
+	mutationHooks?: DeployMutationHooks,
 ): Promise<void> {
 	const configFile = path.join(targetPath, ".opencode", "opencode.json");
 
@@ -389,7 +404,9 @@ export async function syncConfig(
 
 	const current = await readJsonFile(configFile);
 	const merged = deepMerge(current, configObj);
-	await writeJsonFile(configFile, merged);
+	const write = () => writeJsonFile(configFile, merged);
+	if (mutationHooks) await mutationHooks.mutate(configFile, write);
+	else await write();
 	if (writeObserver) {
 		await writeObserver(configFile);
 	}
@@ -447,6 +464,7 @@ export async function syncMcpsMerge(
 	serverDef: Record<string, unknown> | null,
 	dryRun: boolean,
 	writeObserver?: PlatformWriteObserver,
+	mutationHooks?: DeployMutationHooks,
 ): Promise<void> {
 	const configFile = path.join(targetPath, ".opencode", "opencode.json");
 
@@ -468,7 +486,9 @@ export async function syncMcpsMerge(
 		}
 		delete mcp[serverName];
 		current["mcp"] = mcp;
-		await writeJsonFile(configFile, current);
+		const write = () => writeJsonFile(configFile, current);
+		if (mutationHooks) await mutationHooks.mutate(configFile, write);
+		else await write();
 		if (writeObserver) {
 			await writeObserver(configFile);
 		}
@@ -485,7 +505,9 @@ export async function syncMcpsMerge(
 		delete current["env"];
 	}
 
-	await writeJsonFile(configFile, current);
+	const write = () => writeJsonFile(configFile, current);
+	if (mutationHooks) await mutationHooks.mutate(configFile, write);
+	else await write();
 	if (writeObserver) {
 		await writeObserver(configFile);
 	}
