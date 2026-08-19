@@ -65,6 +65,23 @@ describe("deploy-manifest 모듈", () => {
 			expect(await readManifest(deployRoot)).toBeNull();
 		});
 
+		it("returns null for unsafe pair keys and entry names", async () => {
+			const cases = [
+				{ "claude/skills/extra": ["ok"] },
+				{ "../skills": ["ok"] },
+				{ "/absolute/skills": ["ok"] },
+				{ "claude/skills": ["nested/name"] },
+				{ "claude/skills": ["..\\escape"] },
+				{ "claude/skills": ["/absolute"] },
+			];
+			for (const [index, value] of cases.entries()) {
+				const deployRoot = join(tmpDir, `read-unsafe-${index}`);
+				await mkdir(deployRoot, { recursive: true });
+				await seedRawManifest(deployRoot, JSON.stringify(value));
+				expect(await readManifest(deployRoot)).toBeNull();
+			}
+		});
+
 		it("returns the parsed map when the manifest is valid", async () => {
 			const deployRoot = join(tmpDir, "read-valid");
 			await mkdir(deployRoot, { recursive: true });
@@ -125,6 +142,27 @@ describe("deploy-manifest 모듈", () => {
 	});
 
 	describe("removeOrphans", () => {
+		it("wraps each exact deletion and propagates operation errors", async () => {
+			const deployRoot = join(tmpDir, "remove-hooks");
+			const target = join(deployRoot, ".claude", "skills", "old.md");
+			await mkdir(join(deployRoot, ".claude", "skills"), { recursive: true });
+			await writeFile(target, "old");
+			const calls: string[] = [];
+			await removeOrphans(deployRoot, "claude", "skills", ["old"], {
+				mutate: async (path, operation) => {
+					calls.push(path);
+					await operation();
+				},
+			});
+			expect(calls).toEqual([target]);
+			expect(stat(target)).rejects.toThrow();
+
+			const error = new Error("operation failed");
+			await writeFile(target, "old");
+			await expect(removeOrphans(deployRoot, "claude", "skills", ["old"], {
+				mutate: async (_path, _operation) => { throw error; },
+			})).rejects.toBe(error);
+		});
 		it("removes an orphaned directory-form entry by exact name", async () => {
 			const deployRoot = join(tmpDir, "remove-dir");
 			const categoryDir = join(deployRoot, ".claude", "skills");
@@ -191,6 +229,15 @@ describe("deploy-manifest 모듈", () => {
 	});
 
 	describe("reconcilePairManifest - safety contract", () => {
+		it("wraps the exact manifest write target", async () => {
+			const deployRoot = join(tmpDir, "reconcile-hooks");
+			await mkdir(deployRoot, { recursive: true });
+			const calls: string[] = [];
+			await reconcilePairManifest(deployRoot, "claude", "skills", ["a"], {
+				mutate: async (target, operation) => { calls.push(target); await operation(); },
+			});
+			expect(calls).toEqual([manifestFile(deployRoot)]);
+		});
 		it("bootstrap (no manifest file): preserves a foreign resident, removes nothing, and seeds the manifest from the declared set", async () => {
 			const deployRoot = join(tmpDir, "reconcile-bootstrap");
 			const categoryDir = join(deployRoot, ".claude", "skills");
@@ -276,6 +323,16 @@ describe("deploy-manifest 모듈", () => {
 	});
 
 	describe("removeManifestPair", () => {
+		it("wraps the exact manifest write target", async () => {
+			const deployRoot = join(tmpDir, "remove-pair-hooks");
+			await mkdir(deployRoot, { recursive: true });
+			await seedRawManifest(deployRoot, JSON.stringify({ "codex/skills": ["a"] }));
+			const calls: string[] = [];
+			await removeManifestPair(deployRoot, "codex", "skills", {
+				mutate: async (target, operation) => { calls.push(target); await operation(); },
+			});
+			expect(calls).toEqual([manifestFile(deployRoot)]);
+		});
 		it("removes only the named pair key, leaving sibling pairs intact", async () => {
 			const deployRoot = join(tmpDir, "remove-pair-basic");
 			await mkdir(deployRoot, { recursive: true });
