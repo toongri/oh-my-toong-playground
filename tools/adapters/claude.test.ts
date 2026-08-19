@@ -16,6 +16,7 @@ import baseline from "./__fixtures__/claude-project-baseline.json";
 import type { PlatformYaml } from "../lib/types.ts";
 import type { PlatformWriteObserver } from "./types.ts";
 import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
+import { DeployTransaction } from "../lib/deploy-transaction.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
 import { composePreToolTraceCommand } from "../lib/pretool-trace-command.ts";
 import { planCategoryDestinationPaths } from "./destinations.ts";
@@ -1715,6 +1716,117 @@ describe("syncMcpsMerge", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncPlatformYaml - PlatformWriteObserver", () => {
+	it("guards every in-deploy-root settings write with the mutation hook and observes after success", async () => {
+		const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+		const calls: string[] = [];
+		const observed: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath, operation) => {
+				calls.push(writtenPath);
+				await operation();
+			},
+		};
+
+		await adapter.syncPlatformYaml(
+			targetPath,
+			{ config: { fromConfig: true }, hooks: {}, statusLine: "echo status" },
+			false,
+			undefined,
+			(pathname) => {
+				observed.push(pathname);
+			},
+			mutationHooks,
+		);
+
+		expect(calls).toEqual([settingsFile, settingsFile, settingsFile]);
+		expect(observed).toEqual([settingsFile, settingsFile, settingsFile]);
+		expect(JSON.parse(await fs.readFile(settingsFile, "utf8"))).toMatchObject({
+			fromConfig: true,
+			statusLine: { type: "command", command: "echo status" },
+		});
+	});
+
+	it("rejects an external settings edit before the first config read and preserves resident bytes", async () => {
+		const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+		await writeFile(settingsFile, JSON.stringify({ resident: "before" }));
+		const transaction = await DeployTransaction.begin(targetPath, false, [".claude/settings.local.json"]);
+		expect(transaction).not.toBeNull();
+		await writeFile(settingsFile, JSON.stringify({ external: "edit" }));
+
+		await expect(
+			adapter.syncPlatformYaml(targetPath, { config: { fromConfig: true } }, false, undefined, undefined, transaction!),
+		).rejects.toThrow("Deploy transaction conflict");
+		expect(await fs.readFile(settingsFile, "utf8")).toBe(JSON.stringify({ external: "edit" }));
+		await transaction!.finish();
+	});
+
+	it("leaves the successful config postimage rollbackable when a later hook mutation conflicts", async () => {
+		const hookSource = path.join(tmpDir, "later-hook.sh");
+		await writeFile(hookSource, "#!/bin/sh\necho managed\n", 0o755);
+		const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+		const hookTarget = path.join(targetPath, ".claude", "hooks", "later-hook.sh");
+		const transaction = await DeployTransaction.begin(targetPath, false, [
+			".claude/settings.local.json",
+			".claude/hooks/later-hook.sh",
+		]);
+		expect(transaction).not.toBeNull();
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath, operation) => {
+				if (writtenPath === hookTarget) await writeFile(hookTarget, "external\n");
+				await transaction!.mutate(writtenPath, operation);
+			},
+		};
+
+		await expect(
+			adapter.syncPlatformYaml(
+				targetPath,
+				{
+					config: { fromConfig: true },
+					hooks: { PostToolUse: [{ component: hookSource, matcher: "*", type: "command" }] },
+				},
+				false,
+				undefined,
+				undefined,
+				mutationHooks,
+			),
+		).rejects.toThrow("Deploy transaction conflict");
+		await transaction!.rollback();
+		expect(await exists(settingsFile)).toBe(false);
+		expect(await fs.readFile(hookTarget, "utf8")).toBe("external\n");
+		await transaction!.finish();
+	});
+
+	it("does not route user-scope MCP writes through mutation hooks", async () => {
+		const claudeUserConfig = path.join(tmpDir, "claude.json");
+		await writeFile(claudeUserConfig, JSON.stringify({}));
+		const previousUserConfig = process.env["CLAUDE_USER_CONFIG"];
+		process.env["CLAUDE_USER_CONFIG"] = claudeUserConfig;
+		try {
+			let calls = 0;
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (_writtenPath, operation) => {
+					calls += 1;
+					await operation();
+				},
+			};
+			await adapter.syncPlatformYaml(
+				targetPath,
+				{ mcps: { external: { command: "server" } } },
+				false,
+				undefined,
+				undefined,
+				mutationHooks,
+			);
+			expect(calls).toBe(0);
+			expect(await readJsonFile(claudeUserConfig)).toEqual({
+				mcpServers: { external: { command: "server" } },
+			});
+		} finally {
+			if (previousUserConfig === undefined) delete process.env["CLAUDE_USER_CONFIG"];
+			else process.env["CLAUDE_USER_CONFIG"] = previousUserConfig;
+		}
+	});
+
 	it("propagates platform hook mutation conflicts before updating settings", async () => {
 		const hookSource = path.join(tmpDir, "conflicting-hook.sh");
 		await writeFile(hookSource, "#!/bin/sh\necho hook\n", 0o755);
@@ -2195,6 +2307,29 @@ describe("isGlobalSync 분기 — 글로벌 sync (path = homedir)", () => {
 		const commands = hookEntries.map((e) => e["command"] as string);
 		expect(commands.some((c) => c.startsWith("bun run $HOME/.claude/hooks/"))).toBe(true);
 		expect(commands.some((c) => c.includes("$CLAUDE_PROJECT_DIR"))).toBe(false);
+	});
+
+	it("global settings.json writes use the mutation hook before reading", async () => {
+		const calls: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath, operation) => {
+				calls.push(writtenPath);
+				await operation();
+			},
+		};
+		await adapter.syncPlatformYaml(
+			globalTarget,
+			{ config: { globalConfig: true }, statusLine: "echo global" },
+			false,
+			undefined,
+			undefined,
+			mutationHooks,
+		);
+		expect(calls).toEqual([settingsFile, settingsFile]);
+		expect(await readJsonFile(settingsFile)).toMatchObject({
+			globalConfig: true,
+			statusLine: { type: "command", command: "echo global" },
+		});
 	});
 
 	// AC-5: syncPlatformYaml — directory hook with index.sh uses $HOME prefix

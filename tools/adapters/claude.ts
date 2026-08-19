@@ -606,7 +606,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 
 		// --- config ---
 		if (yaml.config !== null && yaml.config !== undefined) {
-			await this.syncConfig(targetPath, yaml.config, dryRun, writeObserver);
+			await this.syncConfig(targetPath, yaml.config, dryRun, writeObserver, mutationHooks);
 			processedSections.push("config");
 		}
 
@@ -697,7 +697,14 @@ export class ClaudeAdapter implements PlatformAdapter {
 				}
 			}
 
-			await this.updateSettings(targetPath, accumulatedHooks, dryRun, preserveConfig, writeObserver);
+			await this.updateSettings(
+				targetPath,
+				accumulatedHooks,
+				dryRun,
+				preserveConfig,
+				writeObserver,
+				mutationHooks,
+			);
 			processedSections.push("hooks");
 		}
 
@@ -746,7 +753,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 
 		// --- statusLine ---
 		if (yaml.statusLine !== null && yaml.statusLine !== undefined) {
-			await this.setStatusline(targetPath, yaml.statusLine, dryRun, writeObserver);
+			await this.setStatusline(targetPath, yaml.statusLine, dryRun, writeObserver, mutationHooks);
 			processedSections.push("statusLine");
 		}
 
@@ -814,6 +821,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 		dryRun = false,
 		preserve?: { "command-contains"?: string[] },
 		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const settingsFilename = isGlobalSync(targetPath) ? "settings.json" : "settings.local.json";
 		const settingsFile = path.join(targetPath, ".claude", settingsFilename);
@@ -823,36 +831,40 @@ export class ClaudeAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
-		const current = await readJsonFile(settingsFile);
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
+			const current = await readJsonFile(settingsFile);
 
-		// Start from the synced (OMT-authored) entries, then carry over foreign
-		// entries matching a preserve marker so the replace below keeps them.
-		const mergedHooks: Record<string, unknown[]> = {};
-		for (const [event, blocks] of Object.entries(hooksEntries)) {
-			// hooksEntries is typed Record<string, unknown> (looser than the
-			// Record<string, unknown[]> every real caller passes), so the
-			// non-array branch has no runtime-derivable array type; preserved
-			// verbatim to match the caller's loose contract.
-			// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- non-array branch value has no statically-derivable array type; preserved as-is per hooksEntries' declared `unknown` value type
-			mergedHooks[event] = Array.isArray(blocks) ? [...blocks] : (blocks as unknown[]);
-		}
-		const markers = preserve?.["command-contains"] ?? [];
-		const currentHooks = current["hooks"];
-		if (markers.length > 0 && isRecord(currentHooks)) {
-			for (const [event, blocks] of Object.entries(currentHooks)) {
-				if (!Array.isArray(blocks)) continue;
-				for (const block of blocks) {
-					if (this.hookCommandMatches(block, markers)) {
-						(mergedHooks[event] ??= []).push(block);
+			// Start from the synced (OMT-authored) entries, then carry over foreign
+			// entries matching a preserve marker so the replace below keeps them.
+			const mergedHooks: Record<string, unknown[]> = {};
+			for (const [event, blocks] of Object.entries(hooksEntries)) {
+				// hooksEntries is typed Record<string, unknown> (looser than the
+				// Record<string, unknown[]> every real caller passes), so the
+				// non-array branch has no runtime-derivable array type; preserved
+				// verbatim to match the caller's loose contract.
+				// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- non-array branch value has no statically-derivable array type; preserved as-is per hooksEntries' declared `unknown` value type
+				mergedHooks[event] = Array.isArray(blocks) ? [...blocks] : (blocks as unknown[]);
+			}
+			const markers = preserve?.["command-contains"] ?? [];
+			const currentHooks = current["hooks"];
+			if (markers.length > 0 && isRecord(currentHooks)) {
+				for (const [event, blocks] of Object.entries(currentHooks)) {
+					if (!Array.isArray(blocks)) continue;
+					for (const block of blocks) {
+						if (this.hookCommandMatches(block, markers)) {
+							(mergedHooks[event] ??= []).push(block);
+						}
 					}
 				}
 			}
-		}
 
-		const { hooks: _removed, ...rest } = current;
-		const updated = { ...rest, hooks: mergedHooks };
-		await writeJsonFile(settingsFile, updated);
+			const { hooks: _removed, ...rest } = current;
+			const updated = { ...rest, hooks: mergedHooks };
+			await writeJsonFile(settingsFile, updated);
+		};
+		if (mutationHooks) await mutationHooks.mutate(settingsFile, operation);
+		else await operation();
 		await writeObserver?.(settingsFile);
 		logInfo(`Updated ${settingsFilename}: ${settingsFile}`);
 	}
@@ -867,6 +879,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 		statusLine: string,
 		dryRun = false,
 		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const settingsFilename = isGlobalSync(targetPath) ? "settings.json" : "settings.local.json";
 		const settingsFile = path.join(targetPath, ".claude", settingsFilename);
@@ -876,24 +889,31 @@ export class ClaudeAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
+		let wrote = false;
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
 
-		let current: Record<string, unknown>;
-		try {
-			current = await readJsonFile(settingsFile);
-		} catch (err: unknown) {
-			if (err instanceof SyntaxError) {
-				logWarn(`statusLine 설정 실패: ${settingsFile} JSON 파싱 오류`);
-			} else {
-				logWarn(`statusLine 설정 실패: ${settingsFile} 읽기 오류`);
+			let current: Record<string, unknown>;
+			try {
+				current = await readJsonFile(settingsFile);
+			} catch (err: unknown) {
+				if (err instanceof SyntaxError) {
+					logWarn(`statusLine 설정 실패: ${settingsFile} JSON 파싱 오류`);
+				} else {
+					logWarn(`statusLine 설정 실패: ${settingsFile} 읽기 오류`);
+				}
+				return;
 			}
-			return;
-		}
 
-		const merged = deepMerge(current, {
-			statusLine: { type: "command", command: statusLine },
-		});
-		await writeJsonFile(settingsFile, merged);
+			const merged = deepMerge(current, {
+				statusLine: { type: "command", command: statusLine },
+			});
+			await writeJsonFile(settingsFile, merged);
+			wrote = true;
+		};
+		if (mutationHooks) await mutationHooks.mutate(settingsFile, operation);
+		else await operation();
+		if (!wrote) return;
 		await writeObserver?.(settingsFile);
 		logInfo(`statusLine 설정 완료: ${settingsFile}`);
 	}
@@ -908,6 +928,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 		configJson: Record<string, unknown>,
 		dryRun = false,
 		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const settingsFilename = isGlobalSync(targetPath) ? "settings.json" : "settings.local.json";
 		const settingsFile = path.join(targetPath, ".claude", settingsFilename);
@@ -919,10 +940,14 @@ export class ClaudeAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
-		const current = await readJsonFile(settingsFile);
-		const merged = deepMerge(current, configJson);
-		await writeJsonFile(settingsFile, merged);
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
+			const current = await readJsonFile(settingsFile);
+			const merged = deepMerge(current, configJson);
+			await writeJsonFile(settingsFile, merged);
+		};
+		if (mutationHooks) await mutationHooks.mutate(settingsFile, operation);
+		else await operation();
 		await writeObserver?.(settingsFile);
 		logInfo(`Config merged: ${settingsFile}`);
 	}
