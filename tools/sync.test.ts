@@ -2432,13 +2432,15 @@ describe("processYaml platform transaction atomicity", () => {
 			);
 
 			const adapter = makeMockAdapter("gemini");
-			adapter.syncPlatformYaml = async (target, _yaml, _dryRun, _scope, observer) => {
+			adapter.syncPlatformYaml = async (target, _yaml, _dryRun, _scope, observer, mutationHooks) => {
 				const writtenPath = kind === "settings"
 					? path.join(target, ".gemini", "settings.json")
 					: path.join(target, ".gemini", "hooks", "audit");
 				const contentPath = kind === "settings" ? writtenPath : path.join(writtenPath, "index.sh");
-				await writeFile(contentPath, kind === "settings" ? '{"theme":"dark"}\n' : "#!/bin/sh\nomt\n");
-				await observer?.(path.join(target, ".", path.relative(target, writtenPath)));
+				const operation = () => writeFile(contentPath, kind === "settings" ? '{"theme":"dark"}\n' : "#!/bin/sh\nomt\n");
+				if (mutationHooks) await mutationHooks.mutate(contentPath, operation);
+				else await operation();
+				await observer?.(contentPath);
 				if (preserveExternal) {
 					await writeFile(contentPath, kind === "settings" ? '{"theme":"external"}\n' : "#!/bin/sh\nexternal\n");
 				}
@@ -2532,17 +2534,39 @@ describe("processYaml direct hook dependency transaction inventory", () => {
 		} finally { await fs.rm(fixture.tmpDir, { recursive: true, force: true }); }
 	});
 
+	it("rejects an external hook edit made after transaction start but before the main mutate", async () => {
+		const fixture = await setupDirectHookFixture();
+		try {
+			await writeFile(path.join(fixture.targetPath, ".claude", "hooks", "audit.sh"), "resident\n");
+			class PreWriteConflictAdapter extends ClaudeAdapter {
+				override async syncPlatformYaml(...args: Parameters<ClaudeAdapter["syncPlatformYaml"]>): ReturnType<ClaudeAdapter["syncPlatformYaml"]> {
+					await writeFile(path.join(args[0], ".claude", "hooks", "audit.sh"), "external before\n");
+					return super.syncPlatformYaml(...args);
+				}
+			}
+			const context = makeContext();
+			await processYaml(context, fixture.syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", new PreWriteConflictAdapter()]]) as AdapterMap, fixture.rootDir);
+			expect(context.failedTargets).toContain(fixture.targetPath);
+			expect(await readFile(path.join(fixture.targetPath, ".claude", "hooks", "audit.sh"))).toBe("external before\n");
+		} finally { await fs.rm(fixture.tmpDir, { recursive: true, force: true }); }
+	});
+
 	it("keeps directory-hook rollback atomic without a separate sibling inventory", async () => {
 		const fixture = await setupDirectHookFixture();
 		try {
 			await fs.rm(path.join(fixture.rootDir, "hooks", "audit.sh"));
 			await writeFile(path.join(fixture.rootDir, "hooks", "audit", "index.sh"), '#!/bin/sh\nsource "$SCRIPT_DIR/lib/shared.sh"\n');
 			await writeFile(path.join(fixture.rootDir, "hooks", "audit", "lib", "shared.sh"), "directory shared\n");
+			await writeFile(path.join(fixture.targetPath, ".claude", "hooks", "audit", "orphan.sh"), "orphan resident\n");
+			await writeFile(path.join(fixture.targetPath, ".claude", "hooks", "audit", "keep.local.yaml"), "local resident\n");
 			await writeFile(path.join(fixture.rootDir, "claude.yaml"), "hooks:\n  UserPromptSubmit:\n    - component: audit\n");
 			const adapter = new ClaudeAdapter();
 			adapter.syncSkillsDirect = async () => { throw new Error("later category failure"); };
 			await processYaml(makeContext(), fixture.syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", adapter]]) as AdapterMap, fixture.rootDir);
-			expect(await exists(path.join(fixture.targetPath, ".claude", "hooks", "audit"))).toBe(false);
+			expect(await exists(path.join(fixture.targetPath, ".claude", "hooks", "audit", "index.sh"))).toBe(false);
+			expect(await exists(path.join(fixture.targetPath, ".claude", "hooks", "audit", "lib", "shared.sh"))).toBe(false);
+			expect(await readFile(path.join(fixture.targetPath, ".claude", "hooks", "audit", "orphan.sh"))).toBe("orphan resident\n");
+			expect(await readFile(path.join(fixture.targetPath, ".claude", "hooks", "audit", "keep.local.yaml"))).toBe("local resident\n");
 		} finally { await fs.rm(fixture.tmpDir, { recursive: true, force: true }); }
 	});
 
@@ -2559,6 +2583,54 @@ describe("processYaml direct hook dependency transaction inventory", () => {
 				expect(await exists(path.join(targetRoot, `.${platform}`, "hooks", "lib", "shared.sh"))).toBe(true);
 			}
 		} finally { await fs.rm(tmpDir, { recursive: true, force: true }); }
+	});
+
+	it("deletes a Gemini directory-hook local overlay because only test files are protected", async () => {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-gemini-hook-overlay-txn-"));
+		try {
+			const rootDir = path.join(tmpDir, "root");
+			const targetPath = path.join(tmpDir, "target");
+			await fs.mkdir(targetPath, { recursive: true });
+			await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [gemini]\n");
+			await writeFile(path.join(rootDir, "hooks", "audit", "index.sh"), "#!/bin/sh\necho audit\n");
+			await writeFile(path.join(rootDir, "gemini.yaml"), "hooks:\n  PreToolUse:\n    - component: audit\n");
+			await writeFile(path.join(rootDir, "sync.yaml"), `path: ${targetPath}\n`);
+			await writeFile(path.join(targetPath, ".gemini", "hooks", "audit", "keep.local.yaml"), "overlay\n");
+			const context = makeContext();
+			await processYaml(context, path.join(rootDir, "sync.yaml"), new Map<Platform, PlatformAdapter>([["gemini", new GeminiAdapter()]]) as AdapterMap, rootDir);
+			expect(context.failedTargets).toEqual([]);
+			expect(await exists(path.join(targetPath, ".gemini", "hooks", "audit", "keep.local.yaml"))).toBe(false);
+		} finally {
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("rolls back a Claude agent and its add-hooks bundle after a later category failure", async () => {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-agent-add-hook-txn-"));
+		try {
+			const rootDir = path.join(tmpDir, "root");
+			const targetPath = path.join(tmpDir, "target");
+			await fs.mkdir(targetPath, { recursive: true });
+			await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+			await writeFile(path.join(rootDir, "agents", "worker.md"), "---\nname: worker\n---\n# worker\n");
+			await writeFile(path.join(rootDir, "hooks", "audit.sh"), '#!/bin/sh\nsource "$SCRIPT_DIR/lib/shared.sh"\necho audit\n');
+			await writeFile(path.join(rootDir, "hooks", "lib", "shared.sh"), "#!/bin/sh\nshared\n");
+			await writeFile(path.join(rootDir, "skills", "later", "SKILL.md"), "# later\n");
+			await writeFile(
+				path.join(rootDir, "sync.yaml"),
+				`path: ${targetPath}\nagents:\n  platforms: [claude]\n  items:\n    - component: worker\n      add-hooks:\n        - component: audit.sh\n          event: UserPromptSubmit\nskills:\n  platforms: [claude]\n  items: [later]\n`,
+			);
+			const adapter = new ClaudeAdapter();
+			adapter.syncSkillsDirect = async () => { throw new Error("later category failure"); };
+			const context = makeContext();
+			await processYaml(context, path.join(rootDir, "sync.yaml"), new Map<Platform, PlatformAdapter>([["claude", adapter]]) as AdapterMap, rootDir);
+			expect(context.failedTargets).toContain(targetPath);
+			expect(await exists(path.join(targetPath, ".claude", "agents", "worker.md"))).toBe(false);
+			expect(await exists(path.join(targetPath, ".claude", "hooks", "audit.sh"))).toBe(false);
+			expect(await exists(path.join(targetPath, ".claude", "hooks", "lib", "shared.sh"))).toBe(false);
+		} finally {
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
 	});
 });
 

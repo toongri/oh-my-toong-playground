@@ -106,6 +106,7 @@ export interface PlatformAdapter {
 		dryRun: boolean,
 		scope?: PluginScope,
 		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<PlatformConfigResult>;
 
 	/** Pure preview of command-type PreToolUse wrappers, when supported. */

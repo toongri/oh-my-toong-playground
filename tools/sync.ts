@@ -57,7 +57,7 @@ import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts"
 import { ProjectKeyError } from "./lib/git-key.ts";
 import { resolveDeployTargets, DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
 import { assertCleanWorktree, assertDefaultBranch, PreflightGitError } from "./lib/preflight-git.ts";
-import { rewriteLibImports } from "./lib/sync-directory.ts";
+import { planSyncDirectoryMutations, rewriteLibImports } from "./lib/sync-directory.ts";
 import {
 	collectRequiredLibModulesFromSources,
 	collectLibDataFiles,
@@ -174,15 +174,58 @@ async function collectPlatformHookSourceRoots(
 	}
 }
 
-/** Inventory direct-file hook dependencies before platform writes begin. */
+/** Inventory every hook bundle leaf before platform writes begin. */
 async function collectPlatformHookTransactionPaths(
 	yamlDir: string,
 	adapters: AdapterMap,
 	rootDir: string,
 	projectDir: string | undefined,
 	deployRoot: string,
+	additionalBundles: Array<{ platform: Platform; sourcePath: string; displayName: string }> = [],
 ): Promise<Array<string | { path: string; owner: string }>> {
 	const paths: Array<string | { path: string; owner: string }> = [];
+	const seen = new Set<string>();
+	const add = (entry: string | { path: string; owner: string }) => {
+		const target = typeof entry === "string" ? entry : entry.path;
+		if (seen.has(target)) return;
+		seen.add(target);
+		paths.push(entry);
+	};
+	const addHookBundle = async (platform: Platform, sourcePath: string, displayName: string) => {
+		const [relativeTarget] = planCategoryDestinationPaths(platform, "hooks", displayName);
+		if (!relativeTarget) return;
+		const hookTarget = path.join(deployRoot, relativeTarget);
+		let stat: Awaited<ReturnType<typeof fs.stat>>;
+		try { stat = await fs.stat(sourcePath); } catch { return; }
+		if (!stat.isDirectory()) add(hookTarget);
+		const hooksSourceDir = path.dirname(sourcePath);
+		let dependencySources: string[];
+		if (stat.isDirectory()) {
+			const exclude = platform === "claude"
+				? ["*.test.ts", "*.local.yaml"]
+				: platform === "codex"
+					? ["*.test.ts", "config.local.yaml"]
+					: ["*.test.ts"];
+			for (const targetLeaf of await planSyncDirectoryMutations(sourcePath, hookTarget, { exclude })) {
+				add({ path: targetLeaf, owner: hookTarget });
+			}
+			const entries = await fs.readdir(sourcePath, { withFileTypes: true });
+			const shellFiles = entries
+				.filter((entry) => entry.isFile() && entry.name.endsWith(".sh") && !entry.name.endsWith("_test.sh"))
+				.map((entry) => path.join(sourcePath, entry.name));
+			dependencySources = [];
+			for (const shellFile of shellFiles) {
+				dependencySources.push(...await resolveShellDependencies(shellFile, hooksSourceDir));
+			}
+		} else {
+			dependencySources = await resolveShellDependencies(sourcePath, hooksSourceDir);
+		}
+		const targetHooksDir = stat.isDirectory() ? hookTarget : path.dirname(hookTarget);
+		for (const dependency of dependencySources) {
+			const relative = path.relative(hooksSourceDir, dependency);
+			add({ path: path.join(targetHooksDir, relative), owner: hookTarget });
+		}
+	};
 	for (const platform of HOOK_DEPLOYING_PLATFORMS) {
 		if (!adapters.get(platform)) continue;
 		const merged = await parseAndMergePlatformYaml(yamlDir, platform);
@@ -194,21 +237,13 @@ async function collectPlatformHookTransactionPaths(
 				if (typeof component !== "string" || !component) continue;
 				const resolved = resolveComponentPath(component, "hooks", rootDir, projectDir);
 				if ("error" in resolved) continue;
-				const directPath = path.join(deployRoot, `.${platform}`, "hooks", resolved.displayName);
-				paths.push(directPath);
-				let stat: Awaited<ReturnType<typeof fs.stat>>;
-				try { stat = await fs.stat(resolved.path); } catch { continue; }
-				if (stat.isDirectory()) continue;
-				const sourceDir = path.dirname(resolved.path);
-				const dependencies = await resolveShellDependencies(resolved.path, sourceDir);
-				for (const dependency of dependencies) {
-					const relative = path.relative(sourceDir, dependency);
-					paths.push({
-						path: path.join(deployRoot, `.${platform}`, "hooks", relative),
-						owner: directPath,
-					});
-				}
+				await addHookBundle(platform, resolved.path, resolved.displayName);
 			}
+		}
+	}
+	for (const bundle of additionalBundles) {
+		if (adapters.get(bundle.platform)) {
+			await addHookBundle(bundle.platform, bundle.sourcePath, bundle.displayName);
 		}
 	}
 	return paths;
@@ -623,6 +658,7 @@ export async function syncCategory(
 					addHooks,
 					false,
 					context.modelMaps.get(platform) ?? context.rootModelMaps.get(platform),
+					transaction ?? undefined,
 				);
 			} else if (category === "commands") {
 				await adapter.syncCommandsDirect(deployRoot, displayName, sourcePath, false);
@@ -791,6 +827,7 @@ export async function syncPlatformConfigs(
 			context.dryRun,
 			pluginScope,
 			writeObserver,
+			transaction ?? undefined,
 		);
 
 		if (result.processedSections.length > 0) {
@@ -2288,12 +2325,37 @@ export async function processYaml(
 			// Runtime preparation is intentionally before platform YAML activation. If
 			// anything in the remainder fails, restore the complete prior tree rather
 			// than exposing a new lib beside old consumers/settings (or vice versa).
+			const agentHookBundles: Array<{ platform: Platform; sourcePath: string; displayName: string }> = [];
+			const agentSection = syncYaml.agents;
+			for (const item of agentSection?.items ?? []) {
+				if (typeof item !== "object" || !Array.isArray(item["add-hooks"])) continue;
+				const platforms = await resolvePlatforms(item, agentSection?.platforms, syncYaml.platforms, "agents");
+				if (!platforms.includes("claude") || !adapters.get("claude")) continue;
+				for (const hook of item["add-hooks"]) {
+					const component = hook?.component ?? "";
+					if (!component) continue;
+					const resolvedHook = resolveComponentPath(
+						component,
+						"hooks",
+						rootDir,
+						context.projectDir || undefined,
+					);
+					if (!("error" in resolvedHook)) {
+						agentHookBundles.push({
+							platform: "claude",
+							sourcePath: resolvedHook.path,
+							displayName: resolvedHook.displayName,
+						});
+					}
+				}
+			}
 			const platformHookTransactionPaths = await collectPlatformHookTransactionPaths(
 				yamlDir,
 				adapters,
 				rootDir,
 				context.projectDir || undefined,
 				deployRoot,
+				agentHookBundles,
 			);
 			const hasPlatformYaml = (await Promise.all(
 				KNOWN_PLATFORMS.map(async (platform) => (await parseAndMergePlatformYaml(yamlDir, platform)) !== null),
