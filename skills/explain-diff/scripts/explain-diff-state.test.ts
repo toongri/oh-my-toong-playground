@@ -118,6 +118,35 @@ describe("start", () => {
 		expect(state().commit_hashes[0]).toMatch(/^[0-9a-f]{7,40}$/);
 	});
 
+	test("머지 커밋은 박제 목록에서 제외된다 — 머지의 서사는 문서 자신과 중복", async () => {
+		// 실측(algocare-home PR 3407): 실커밋 1 + 머지 1 범위에서 머지 헤딩을
+		// 강요하면 waiver 가 영영 못 열린다. 머지 커밋의 첫 부모 대비 diff 는
+		// PR 전체 = 이 문서가 설명하는 것 그 자체다.
+		const repo = join(sandbox, "repo-merge");
+		const git = (...a: string[]) =>
+			execFileSync(
+				"git",
+				["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", ...a],
+				{ stdio: ["ignore", "pipe", "ignore"] },
+			);
+		mkdirSync(repo);
+		git("init", "-q", "-b", "main");
+		git("commit", "-q", "--allow-empty", "-m", "base");
+		git("checkout", "-q", "-b", "feat");
+		git("commit", "-q", "--allow-empty", "-m", "real work");
+		git("checkout", "-q", "main");
+		git("merge", "-q", "--no-ff", "--no-edit", "feat");
+		const prev = process.cwd();
+		try {
+			process.chdir(repo);
+			const { start } = await cli();
+			start(SID, "HEAD^1..HEAD", "sample");
+		} finally {
+			process.chdir(prev);
+		}
+		expect(state().commit_hashes.length).toBe(1);
+	});
+
 	test("열거할 수 없는 range 는 빈 배열로 남는다 — 실패가 start 를 막지 않는다", async () => {
 		const { start } = await cli();
 		start(SID, "존재하지-않는-ref..도-없는-ref", "sample");

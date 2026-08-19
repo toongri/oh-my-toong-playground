@@ -116,7 +116,9 @@ function mustRead(sessionId: string): Persisted {
  */
 function enumerateCommits(range: string): string[] {
 	try {
-		const out = execFileSync("git", ["rev-list", "--reverse", range.replace("...", "..")], {
+		// 머지 커밋 제외: 머지의 첫 부모 대비 diff는 범위 전체와 같아 서사가 없다 —
+		// 머지 헤딩을 강요하면 실커밋 1개짜리 PR에서 waiver가 영영 열리지 않는다.
+		const out = execFileSync("git", ["rev-list", "--reverse", "--no-merges", range.replace("...", "..")], {
 			encoding: "utf8",
 			stdio: ["ignore", "pipe", "ignore"],
 		});
