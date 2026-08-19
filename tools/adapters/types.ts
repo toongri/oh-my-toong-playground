@@ -6,6 +6,9 @@ import type {
 	PluginScope,
 } from "../lib/types.ts";
 
+/** Called immediately after an adapter writes an OMT-owned tracked path. */
+export type PlatformWriteObserver = (writtenPath: string) => void | Promise<void>;
+
 export type PreToolUsePreview = {
 	wrapperDeploymentPath: string;
 };
@@ -93,6 +96,7 @@ export interface PlatformAdapter {
 		platformYaml: PlatformYaml,
 		dryRun: boolean,
 		scope?: PluginScope,
+		writeObserver?: PlatformWriteObserver,
 	): Promise<PlatformConfigResult>;
 
 	/** Pure preview of command-type PreToolUse wrappers, when supported. */

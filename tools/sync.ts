@@ -64,7 +64,7 @@ import { ClaudeAdapter } from "./adapters/claude.ts";
 import { GeminiAdapter } from "./adapters/gemini.ts";
 import { CodexAdapter, cleanupCodexSkillsFossil, codexSkillsDir } from "./adapters/codex.ts";
 import { opencodeAdapter } from "./adapters/opencode.ts";
-import type { PlatformAdapter } from "./adapters/types.ts";
+import type { PlatformAdapter, PlatformWriteObserver } from "./adapters/types.ts";
 import {
 	PLATFORM_REWRITE_RULES,
 	applyRewriteRules,
@@ -644,6 +644,7 @@ export async function syncPlatformConfigs(
 	rootDir: string,
 	libSourceRoots?: LibSourceRoots,
 	ownedHookNames?: OwnedHookNames,
+	transaction?: DeployTransaction | null,
 ): Promise<void> {
 	for (const platform of KNOWN_PLATFORMS) {
 		const merged = await parseAndMergePlatformYaml(yamlDir, platform);
@@ -709,11 +710,21 @@ export async function syncPlatformConfigs(
 		// was a pre-fan-out relic. (ProjectKeyError also propagates for the same
 		// reason — a local MCP not written to ~/.claude.json.)
 		const pluginScope: PluginScope = context.isRootYaml ? "user" : "project";
+			const writeObserver: PlatformWriteObserver | undefined = transaction
+			? async (writtenPath) => {
+				const normalizedWrittenPath = path.normalize(path.resolve(writtenPath));
+				const entry = transaction.entries.find(
+					(candidate) => path.normalize(path.resolve(candidate.live)) === normalizedWrittenPath,
+				);
+				if (entry) entry.expected = await fingerprint(entry.live);
+			}
+			: undefined;
 		const result = await adapter.syncPlatformYaml(
 			targetPath,
 			parsedYaml,
 			context.dryRun,
 			pluginScope,
+			writeObserver,
 		);
 
 		if (result.processedSections.length > 0) {
@@ -2266,7 +2277,25 @@ export async function processYaml(
 						}
 					}
 				}
-				deployTransaction = await beginDeployTransaction(deployRoot, context.dryRun, ownedPaths);
+				for (const platform of HOOK_DEPLOYING_PLATFORMS) {
+					const platformYaml = await parseAndMergePlatformYaml(yamlDir, platform);
+					if (!platformYaml?.hooks) continue;
+					for (const items of Object.values(platformYaml.hooks)) {
+						if (!Array.isArray(items)) continue;
+						for (const item of items) {
+							const component = item?.component;
+							if (typeof component !== "string" || !component) continue;
+							const resolved = resolveComponentPath(component, "hooks", rootDir, context.projectDir || undefined);
+							if (!resolved || "error" in resolved) continue;
+							ownedPaths.push(path.join(`.${platform}`, "hooks", resolved.displayName));
+						}
+					}
+				}
+				deployTransaction = await beginDeployTransaction(
+					deployRoot,
+					context.dryRun,
+					[...new Set(ownedPaths.map((ownedPath) => path.normalize(ownedPath)))],
+				);
 			}
 			await syncCategory(
 				context,
@@ -2303,6 +2332,7 @@ export async function processYaml(
 				rootDir,
 				libSourceRoots,
 				ownedHookNames,
+				deployTransaction,
 			);
 			await markDeployTransactionExpected(deployTransaction);
 

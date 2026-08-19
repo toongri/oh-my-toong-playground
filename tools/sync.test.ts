@@ -118,7 +118,7 @@ function makeMockAdapter(platform: Platform): PlatformAdapter & {
 		syncScriptsDirect: record("syncScriptsDirect") as PlatformAdapter["syncScriptsDirect"],
 		syncRulesDirect: record("syncRulesDirect") as PlatformAdapter["syncRulesDirect"],
 		syncHooksDirect: record("syncHooksDirect") as PlatformAdapter["syncHooksDirect"],
-		syncPlatformYaml: async (_targetPath, _yaml, _dryRun) => {
+		syncPlatformYaml: async (_targetPath, _yaml, _dryRun, _scope, _observer) => {
 			calls.push({ method: "syncPlatformYaml", args: [_targetPath, _yaml, _dryRun] });
 			return { processedSections: [], modelMap: undefined };
 		},
@@ -1915,6 +1915,61 @@ describe("syncPlatformConfigs", () => {
 		expect(
 			(projectReceived[0] as Record<string, Record<string, unknown>>)["config"]["rootLocal"],
 		).toBeUndefined();
+	});
+});
+
+describe("processYaml platform transaction atomicity", () => {
+	async function runPlatformFailure(kind: "settings" | "hooks", preserveExternal: boolean): Promise<string> {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-platform-txn-settings-"));
+		try {
+			const rootDir = path.join(tmpDir, "root");
+			const targetPath = path.join(tmpDir, "target");
+			await fs.mkdir(targetPath, { recursive: true });
+			await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [gemini]\n");
+			await writeFile(path.join(rootDir, "scripts", "runtime", "index.sh"), "#!/bin/sh\n");
+			if (kind === "hooks") await writeFile(path.join(rootDir, "hooks", "audit", "index.sh"), "#!/bin/sh\nsource\n");
+			await writeFile(path.join(tmpDir, "sync.yaml"), "path: " + targetPath + "\nscripts:\n  items: [runtime]\n  platforms: [gemini]\n");
+			await writeFile(
+				path.join(tmpDir, "gemini.yaml"),
+				kind === "settings" ? "config:\n  theme: dark\n" : "hooks:\n  PreToolUse:\n    - component: audit\n",
+			);
+
+			const adapter = makeMockAdapter("gemini");
+			adapter.syncPlatformYaml = async (target, _yaml, _dryRun, _scope, observer) => {
+				const writtenPath = kind === "settings"
+					? path.join(target, ".gemini", "settings.json")
+					: path.join(target, ".gemini", "hooks", "audit");
+				const contentPath = kind === "settings" ? writtenPath : path.join(writtenPath, "index.sh");
+				await writeFile(contentPath, kind === "settings" ? '{"theme":"dark"}\n' : "#!/bin/sh\nomt\n");
+				await observer?.(path.join(target, ".", path.relative(target, writtenPath)));
+				if (preserveExternal) {
+					await writeFile(contentPath, kind === "settings" ? '{"theme":"external"}\n' : "#!/bin/sh\nexternal\n");
+				}
+				throw new Error("post-write platform failure");
+			};
+			const adapters = new Map<Platform, PlatformAdapter>([["gemini", adapter]]) as AdapterMap;
+			const context = makeContext();
+
+			await processYaml(context, path.join(tmpDir, "sync.yaml"), adapters, rootDir);
+
+			expect(context.failedTargets).toEqual([targetPath]);
+			return await readFile(kind === "settings" ? path.join(targetPath, ".gemini", "settings.json") : path.join(targetPath, ".gemini", "hooks", "audit", "index.sh"));
+		} finally {
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
+	}
+
+	it("rolls back settings after observer-notified write then throw", async () => {
+		await expect(runPlatformFailure("settings", false)).rejects.toThrow();
+	});
+	it("preserves external settings after observer-notified write", async () => {
+		expect(await runPlatformFailure("settings", true)).toContain("external");
+	});
+	it("rolls back hook directory after observer-notified write then throw", async () => {
+		await expect(runPlatformFailure("hooks", false)).rejects.toThrow();
+	});
+	it("preserves external hook bytes after observer-notified write", async () => {
+		expect(await runPlatformFailure("hooks", true)).toContain("external");
 	});
 });
 
