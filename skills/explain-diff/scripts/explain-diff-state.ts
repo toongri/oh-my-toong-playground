@@ -10,7 +10,10 @@
  * every existence claim with a quote this CLI found in the document.
  */
 import { execFileSync } from "child_process";
-import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import { fileURLToPath } from "url";
 import { getOmtDir } from "@lib/omt-dir";
 import { nowStamp, resolveSessionIdOrThrow, STATE_PREFIX } from "@lib/state-core";
 import {
@@ -33,6 +36,9 @@ interface Persisted extends ExplainDiffState {
 	last_touched_at: string;
 	derived: ReturnType<typeof computeDerived>;
 }
+
+const renderedDocumentCache = new Map<string, string>();
+type FreshRenderer = (docPath: string) => string;
 
 function statePath(sessionId: string): string {
 	return `${getOmtDir()}/${STATE_PREFIX["explain-diff"]}${sessionId}.json`;
@@ -182,6 +188,48 @@ function checkReport(
 }
 
 /**
+ * Re-renders the submitted Markdown through the project renderer and returns
+ * the exact bytes it produced.  The renderer output is the proof boundary:
+ * comparing only Mermaid/SVG counts cannot detect stale prose or component
+ * markup, while comparing this deterministic derivation proves the HTML was
+ * built from this exact source (including Mermaid source, not just its SVG).
+ */
+function renderCurrentDocument(docPath: string): string {
+	const markdown = readFileSync(docPath, "utf8");
+	const cached = renderedDocumentCache.get(markdown);
+	if (cached !== undefined) return cached;
+	const dir = mkdtempSync(join(tmpdir(), "explain-diff-render-check-"));
+	const sourcePath = join(dir, "source.md");
+	const outPath = join(dir, "render.html");
+	try {
+		writeFileSync(sourcePath, markdown, "utf8");
+		execFileSync(
+			process.execPath,
+			[
+				fileURLToPath(new URL("./render.ts", import.meta.url)),
+				"--in",
+				sourcePath,
+				"--out",
+				outPath,
+			],
+			{ encoding: "utf8", stdio: ["ignore", "ignore", "pipe"] },
+		);
+		const rendered = readFileSync(outPath, "utf8");
+		renderedDocumentCache.set(markdown, rendered);
+		return rendered;
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+}
+
+let renderFreshDocument: FreshRenderer = renderCurrentDocument;
+
+/** Test seam: production keeps the sibling renderer; tests inject its pure renderer. */
+export function setRenderForTesting(renderer?: FreshRenderer): void {
+	renderFreshDocument = renderer ?? renderCurrentDocument;
+}
+
+/**
  * render is a derivation, not authoring — the markdown structure slots were
  * already earned at `code`, so this checks the artifacts of the derivation:
  * the HTML exists and is not empty, every authored mermaid block actually
@@ -207,6 +255,18 @@ function checkRenderOutput(
 	}
 	if (size === 0) {
 		return { pass: false, failedItems: [`render 산출물이 비어 있습니다: ${htmlPath}`] };
+	}
+
+	try {
+		const actualHtml = readFileSync(htmlPath, "utf8");
+		const expectedHtml = renderFreshDocument(docPath);
+		if (actualHtml !== expectedHtml) {
+			failedItems.push(
+				`HTML이 현재 Markdown에서 만들어진 renderer 산출물과 일치하지 않습니다 — 현재 Markdown으로 다시 렌더한 뒤 제출하세요: ${htmlPath}`,
+			);
+		}
+	} catch {
+		failedItems.push(`현재 Markdown으로 renderer 산출물을 만들 수 없습니다: ${docPath}`);
 	}
 
 	// Diagram parity: N authored mermaid fences must yield at least N inline

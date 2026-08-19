@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs"
 import { tmpdir } from "os";
 import { join } from "path";
 import { STEP_ORDER, type Step } from "@lib/explain-diff-core";
+import { preRenderMermaid, renderToHtml } from "./render";
 
 const SID = "explain-diff-cli-test";
 let sandbox: string;
@@ -29,7 +30,9 @@ afterEach(() => {
 });
 
 async function cli() {
-	return await import("./explain-diff-state");
+	const stateCli = await import("./explain-diff-state");
+	stateCli.setRenderForTesting((docPath) => projectRenderedHtml(readFileSync(docPath, "utf8")));
+	return stateCli;
 }
 
 const GOOD_DOC = `# 설명
@@ -499,6 +502,21 @@ function reportFiles(): { visual: string; writing: string } {
 	return { visual, writing };
 }
 
+const projectRenderedHtmlCache = new Map<string, string>();
+
+function projectRenderedHtml(markdown: string): string {
+	const cached = projectRenderedHtmlCache.get(markdown);
+	if (cached !== undefined) return cached;
+	const renderedMarkdown = preRenderMermaid(
+		markdown,
+		(_source, index) => `<svg data-i="${index}"></svg>`,
+	);
+	const title = (renderedMarkdown.match(/^#\s+(.+)$/m)?.[1] ?? "explain-diff").trim();
+	const rendered = renderToHtml(renderedMarkdown, title);
+	projectRenderedHtmlCache.set(markdown, rendered);
+	return rendered;
+}
+
 describe("render 산출물 검사", () => {
 	test("--html 없이 제출하면 실패한다", async () => {
 		const { submitStep, doc } = await driveToRender();
@@ -527,17 +545,33 @@ describe("render 산출물 검사", () => {
 	test("정상 HTML + 두 리포트면 통과하고 render 를 구조 통과 목록에 남긴다", async () => {
 		const { submitStep, doc } = await driveToRender();
 		const htmlPath = join(sandbox, "doc.html");
-		writeFileSync(htmlPath, "<svg>다이어그램</svg>", "utf8");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
 		const rep = reportFiles();
 		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing);
 		expect(rc).toBe(0);
 		expect(state().structural_ok).toContain("render");
 	});
 
+	test("Markdown 산문이 바뀐 뒤 예전 renderer HTML은 Mermaid 패리티가 같아도 거부하고 현재 산출물은 통과한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const oldMarkdown = readFileSync(doc, "utf8");
+		const currentMarkdown = oldMarkdown.replace("내용", "현재 문서의 새 산문");
+		writeFileSync(doc, currentMarkdown, "utf8");
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(oldMarkdown), "utf8");
+		const rep = reportFiles();
+
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing)).toBe(1);
+		expect(state().last_failure.items.join(" ")).toContain("현재 Markdown");
+
+		writeFileSync(htmlPath, projectRenderedHtml(currentMarkdown), "utf8");
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing)).toBe(0);
+	});
+
 	test("visual-qa 리포트가 없으면 실패한다", async () => {
 		const { submitStep, doc } = await driveToRender();
 		const htmlPath = join(sandbox, "doc.html");
-		writeFileSync(htmlPath, "<svg>다이어그램</svg>", "utf8");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
 		const rep = reportFiles();
 		const rc = submitStep(SID, "render", doc, [], [], htmlPath, undefined, rep.writing);
 		expect(rc).toBe(1);
@@ -547,7 +581,7 @@ describe("render 산출물 검사", () => {
 	test("visual-qa 리포트에 VERDICT: PASS 가 없으면 실패한다", async () => {
 		const { submitStep, doc } = await driveToRender();
 		const htmlPath = join(sandbox, "doc.html");
-		writeFileSync(htmlPath, "<svg>다이어그램</svg>", "utf8");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
 		const rep = reportFiles();
 		writeFileSync(rep.visual, "겹침 발견.\nVERDICT: FAIL\n", "utf8");
 		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing);
@@ -558,7 +592,7 @@ describe("render 산출물 검사", () => {
 	test("technical-writing 리포트가 없거나 REVIEW: APPLIED 가 없으면 실패한다", async () => {
 		const { submitStep, doc } = await driveToRender();
 		const htmlPath = join(sandbox, "doc.html");
-		writeFileSync(htmlPath, "<svg>다이어그램</svg>", "utf8");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
 		const rep = reportFiles();
 		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, undefined)).toBe(1);
 		writeFileSync(rep.writing, "리뷰만 하고 반영 안 함\n", "utf8");
@@ -580,7 +614,7 @@ describe("render 산출물 검사", () => {
 	test("render 통과 후 pass-step 은 심사 항목 없이 quiz 로 넘긴다", async () => {
 		const { submitStep, passStep, doc } = await driveToRender();
 		const htmlPath = join(sandbox, "doc.html");
-		writeFileSync(htmlPath, "<svg>다이어그램</svg>", "utf8");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
 		const rep = reportFiles();
 		submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing);
 		const rc = passStep(SID, "render", doc, []);
@@ -609,7 +643,7 @@ describe("render 산출물 검사", () => {
 			]);
 		}
 		const htmlPath = join(sandbox, "doc.html");
-		writeFileSync(htmlPath, "<svg>본문</svg>", "utf8");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
 		const rep = reportFiles();
 		submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing);
 		passStep(SID, "render", doc, []);
