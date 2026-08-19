@@ -14,6 +14,7 @@ import { ClaudeAdapter, ClaudePreToolUsePreviewError } from "./claude.ts";
 import { deriveClaudeProjectKey } from "../lib/git-key.ts";
 import baseline from "./__fixtures__/claude-project-baseline.json";
 import type { PlatformYaml } from "../lib/types.ts";
+import type { PlatformWriteObserver } from "./types.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
 import { composePreToolTraceCommand } from "../lib/pretool-trace-command.ts";
 
@@ -1471,6 +1472,98 @@ describe("syncMcpsMerge", () => {
 // ---------------------------------------------------------------------------
 // syncPlatformYaml — processed sections
 // ---------------------------------------------------------------------------
+
+describe("syncPlatformYaml - PlatformWriteObserver", () => {
+	it("observes target-owned writes in completion order after bytes exist", async () => {
+		const hookSource = path.join(tmpDir, "source-hook");
+		await writeFile(path.join(hookSource, "index.sh"), "#!/bin/sh\necho hook\n", 0o755);
+		const observed: Array<{ path: string; bytes: string }> = [];
+		const observer: PlatformWriteObserver = async (writtenPath) => {
+			const stat = await fs.stat(writtenPath);
+			const bytes = stat.isDirectory() ? (await fs.readdir(writtenPath)).join(",") : await fs.readFile(writtenPath, "utf8");
+			observed.push({ path: writtenPath, bytes });
+		};
+
+		await adapter.syncPlatformYaml(
+			targetPath,
+			{
+				config: { fromConfig: true },
+				hooks: {
+					PostToolUse: [{ component: hookSource, matcher: "*", type: "command" }],
+				},
+				statusLine: "echo status",
+			},
+			false,
+			undefined,
+			observer,
+		);
+
+		const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+		const hookTarget = path.join(targetPath, ".claude", "hooks", "source-hook");
+		expect(observed.map((entry) => entry.path)).toEqual([
+			settingsFile,
+			hookTarget,
+			settingsFile,
+			settingsFile,
+		]);
+		expect(observed[0]?.bytes).toContain("fromConfig");
+		expect(observed[1]?.bytes).toContain("index.sh");
+		expect(observed[2]?.bytes).toContain("PostToolUse");
+		expect(observed[3]?.bytes).toContain("statusLine");
+	});
+
+	it("does not observe dry-run or external MCP writes", async () => {
+		const claudeUserConfig = path.join(tmpDir, "claude.json");
+		await writeFile(claudeUserConfig, JSON.stringify({}));
+		const previousUserConfig = process.env["CLAUDE_USER_CONFIG"];
+		process.env["CLAUDE_USER_CONFIG"] = claudeUserConfig;
+		try {
+			const observed: string[] = [];
+			const observer: PlatformWriteObserver = (writtenPath) => {
+				observed.push(writtenPath);
+			};
+			await adapter.syncPlatformYaml(
+				targetPath,
+				{ config: { dry: true }, hooks: {}, statusLine: "echo dry" },
+				true,
+				undefined,
+				observer,
+			);
+			await adapter.syncPlatformYaml(
+				targetPath,
+				{ mcps: { external: { command: "server" } } },
+				false,
+				undefined,
+				observer,
+			);
+			expect(observed).toEqual([]);
+			expect(await readJsonFile(claudeUserConfig)).toEqual({
+			mcpServers: { external: { command: "server" } },
+		});
+		} finally {
+			if (previousUserConfig === undefined) delete process.env["CLAUDE_USER_CONFIG"];
+			else process.env["CLAUDE_USER_CONFIG"] = previousUserConfig;
+		}
+	});
+
+	it("does not observe a write that fails", async () => {
+		const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+		await writeFile(settingsFile, "{invalid");
+		const observed: string[] = [];
+		await expect(
+			adapter.syncPlatformYaml(
+				targetPath,
+				{ config: { shouldNotWrite: true } },
+				false,
+				undefined,
+				(pathname) => {
+					observed.push(pathname);
+				},
+			),
+		).rejects.toThrow();
+		expect(observed).toEqual([]);
+	});
+});
 
 describe("syncPlatformYaml - processedSections", () => {
 	it("includes 'config' in processedSections after processing config section via `syncPlatformYaml`", async () => {

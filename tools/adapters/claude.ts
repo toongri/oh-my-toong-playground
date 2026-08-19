@@ -9,7 +9,7 @@ import type {
 	PlatformYamlHookItem,
 	PluginScope,
 } from "../lib/types.ts";
-import type { PlatformAdapter } from "./types.ts";
+import type { PlatformAdapter, PlatformWriteObserver } from "./types.ts";
 import { parseFrontmatter, serializeFrontmatter } from "../lib/frontmatter.ts";
 import { syncDirectory } from "../lib/sync-directory.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
@@ -246,6 +246,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		writeObserver?: PlatformWriteObserver,
 	): Promise<void> {
 		const targetDir = path.join(targetPath, ".claude", "hooks");
 		// hooksSourceDir: parent of sourcePath — hooks/ root for top-level files,
@@ -274,6 +275,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 				logInfo(`Copied: ${displayName}/`);
 				// Copy shell dependencies discovered in directory hooks
 				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
+				await writeObserver?.(targetHookDir);
 			}
 		} else {
 			const targetFile = path.join(targetDir, displayName);
@@ -290,6 +292,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 				logInfo(`Copied: ${displayName}`);
 				// Copy shell dependencies
 				await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun);
+				await writeObserver?.(targetFile);
 			}
 		}
 	}
@@ -542,13 +545,14 @@ export class ClaudeAdapter implements PlatformAdapter {
 		yaml: PlatformYaml,
 		dryRun: boolean,
 		scope?: PluginScope,
+		writeObserver?: PlatformWriteObserver,
 	): Promise<PlatformConfigResult> {
 		const processedSections: string[] = [];
 		const preToolUsePreview = await this.previewPreToolUseCommands(targetPath, yaml);
 
 		// --- config ---
 		if (yaml.config !== null && yaml.config !== undefined) {
-			await this.syncConfig(targetPath, yaml.config, dryRun);
+			await this.syncConfig(targetPath, yaml.config, dryRun, writeObserver);
 			processedSections.push("config");
 		}
 
@@ -596,7 +600,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 						displayName = path.basename(component);
 
 						// Copy the hook file/dir
-						await this.syncHooksDirect(targetPath, displayName, component, dryRun);
+						await this.syncHooksDirect(targetPath, displayName, component, dryRun, writeObserver);
 					}
 
 					// Build hook entry (buildHookEntry always returns Record<string, unknown[]>)
@@ -639,7 +643,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 				}
 			}
 
-			await this.updateSettings(targetPath, accumulatedHooks, dryRun, preserveConfig);
+			await this.updateSettings(targetPath, accumulatedHooks, dryRun, preserveConfig, writeObserver);
 			processedSections.push("hooks");
 		}
 
@@ -688,7 +692,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 
 		// --- statusLine ---
 		if (yaml.statusLine !== null && yaml.statusLine !== undefined) {
-			await this.setStatusline(targetPath, yaml.statusLine, dryRun);
+			await this.setStatusline(targetPath, yaml.statusLine, dryRun, writeObserver);
 			processedSections.push("statusLine");
 		}
 
@@ -755,6 +759,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 		hooksEntries: Record<string, unknown>,
 		dryRun = false,
 		preserve?: { "command-contains"?: string[] },
+		writeObserver?: PlatformWriteObserver,
 	): Promise<void> {
 		const settingsFilename = isGlobalSync(targetPath) ? "settings.json" : "settings.local.json";
 		const settingsFile = path.join(targetPath, ".claude", settingsFilename);
@@ -794,6 +799,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 		const { hooks: _removed, ...rest } = current;
 		const updated = { ...rest, hooks: mergedHooks };
 		await writeJsonFile(settingsFile, updated);
+		await writeObserver?.(settingsFile);
 		logInfo(`Updated ${settingsFilename}: ${settingsFile}`);
 	}
 
@@ -802,7 +808,12 @@ export class ClaudeAdapter implements PlatformAdapter {
 	// ---------------------------------------------------------------------------
 
 	/** Set the statusLine field in .claude/settings.json (global) or .claude/settings.local.json (project). */
-	async setStatusline(targetPath: string, statusLine: string, dryRun = false): Promise<void> {
+	async setStatusline(
+		targetPath: string,
+		statusLine: string,
+		dryRun = false,
+		writeObserver?: PlatformWriteObserver,
+	): Promise<void> {
 		const settingsFilename = isGlobalSync(targetPath) ? "settings.json" : "settings.local.json";
 		const settingsFile = path.join(targetPath, ".claude", settingsFilename);
 
@@ -829,6 +840,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 			statusLine: { type: "command", command: statusLine },
 		});
 		await writeJsonFile(settingsFile, merged);
+		await writeObserver?.(settingsFile);
 		logInfo(`statusLine 설정 완료: ${settingsFile}`);
 	}
 
@@ -841,6 +853,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 		targetPath: string,
 		configJson: Record<string, unknown>,
 		dryRun = false,
+		writeObserver?: PlatformWriteObserver,
 	): Promise<void> {
 		const settingsFilename = isGlobalSync(targetPath) ? "settings.json" : "settings.local.json";
 		const settingsFile = path.join(targetPath, ".claude", settingsFilename);
@@ -856,6 +869,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 		const current = await readJsonFile(settingsFile);
 		const merged = deepMerge(current, configJson);
 		await writeJsonFile(settingsFile, merged);
+		await writeObserver?.(settingsFile);
 		logInfo(`Config merged: ${settingsFile}`);
 	}
 
