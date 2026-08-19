@@ -215,6 +215,66 @@ describe("resolveShellDependencies", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncShellDependencies", () => {
+	it("각 dependency를 원자 교체하고 rename 직후 callback에서 최종 바이트를 확인함", async () => {
+		const first = path.join(hooksDir, "lib", "first.sh");
+		const second = path.join(hooksDir, "lib", "second.sh");
+		await writeFile(first, "first-new");
+		await writeFile(second, "second-new");
+		const entryFile = path.join(hooksDir, "entry.sh");
+		await writeFile(
+			entryFile,
+			'source "$HOOKS_DIR/lib/first.sh"\nsource "$HOOKS_DIR/lib/second.sh"\n',
+		);
+		const observed: string[] = [];
+		await syncShellDependencies(entryFile, hooksDir, targetDir, false, async (targetPath) => {
+			observed.push(path.basename(targetPath));
+			expect(await fs.readFile(targetPath, "utf8")).toBe(`${path.basename(targetPath, ".sh")}-new`);
+		});
+		expect(observed).toEqual(["first.sh", "second.sh"]);
+	});
+
+	it("rename 실패 시 이전 resident와 temp residue를 보존하고 실패 dependency callback은 호출하지 않음", async () => {
+		const first = path.join(hooksDir, "lib", "first.sh");
+		const second = path.join(hooksDir, "lib", "second.sh");
+		await writeFile(first, "first-new");
+		await writeFile(second, "second-new");
+		const entryFile = path.join(hooksDir, "entry.sh");
+		await writeFile(
+			entryFile,
+			'source "$HOOKS_DIR/lib/first.sh"\nsource "$HOOKS_DIR/lib/second.sh"\n',
+		);
+		const secondTarget = path.join(targetDir, "lib", "second.sh");
+		await fs.mkdir(secondTarget, { recursive: true });
+		await writeFile(path.join(secondTarget, "resident.txt"), "resident");
+		const observed: string[] = [];
+		await expect(
+			syncShellDependencies(entryFile, hooksDir, targetDir, false, (targetPath) => {
+				observed.push(path.basename(targetPath));
+			}),
+		).rejects.toThrow();
+		expect(observed).toEqual(["first.sh"]);
+		expect(await fs.readFile(path.join(targetDir, "lib", "first.sh"), "utf8")).toBe("first-new");
+		expect(await fs.readFile(path.join(secondTarget, "resident.txt"), "utf8")).toBe("resident");
+		expect((await fs.readdir(path.join(targetDir, "lib"))).filter((name) => name.includes(".tmp-")).length).toBe(0);
+	});
+
+	it("callback 오류는 mutation 이후 전파되고 temp residue가 없음", async () => {
+		const libFile = path.join(hooksDir, "lib", "callback.sh");
+		await writeFile(libFile, "final");
+		const entryFile = path.join(hooksDir, "entry.sh");
+		await writeFile(entryFile, 'source "$HOOKS_DIR/lib/callback.sh"\n');
+		const target = path.join(targetDir, "lib", "callback.sh");
+		await expect(
+			syncShellDependencies(entryFile, hooksDir, targetDir, false, async (targetPath) => {
+				expect(targetPath).toBe(target);
+				expect(await fs.readFile(targetPath, "utf8")).toBe("final");
+				throw new Error("checkpoint failed");
+			}),
+		).rejects.toThrow("checkpoint failed");
+		expect(await exists(target)).toBe(true);
+		expect((await fs.readdir(path.dirname(target))).filter((name) => name.includes(".tmp-")).length).toBe(0);
+	});
+
 	it("의존성 파일이 targetHooksDir 하위에 올바른 상대경로로 복사됨", async () => {
 		const libFile = path.join(hooksDir, "lib", "foo.sh");
 		await writeFile(libFile, "# foo");
@@ -241,6 +301,18 @@ describe("syncShellDependencies", () => {
 
 		const expected = path.join(targetDir, "lib", "dry.sh");
 		expect(await exists(expected)).toBe(false);
+	});
+
+	it("dryRun=true 시 callback 호출 안 됨", async () => {
+		const libFile = path.join(hooksDir, "lib", "dry-callback.sh");
+		await writeFile(libFile, "# dry");
+		const entryFile = path.join(hooksDir, "entry.sh");
+		await writeFile(entryFile, 'source "$HOOKS_DIR/lib/dry-callback.sh"\n');
+		let callbackCount = 0;
+		await syncShellDependencies(entryFile, hooksDir, targetDir, true, () => {
+			callbackCount += 1;
+		});
+		expect(callbackCount).toBe(0);
 	});
 
 	it("중첩 디렉토리 의존성(lib/sub/foo.sh) 복사 시 mkdir -p 동작 확인", async () => {
@@ -336,5 +408,17 @@ describe("syncShellDepsForDir", () => {
 		expect(await exists(expected)).toBe(true);
 		const content = await fs.readFile(expected, "utf8");
 		expect(content).toBe("# shared from lib");
+	});
+
+	it("syncShellDepsForDir가 callback을 각 dependency로 전달함", async () => {
+		const libFile = path.join(hooksDir, "lib", "forwarded.sh");
+		await writeFile(libFile, "forwarded");
+		const hookFile = path.join(hooksDir, "hook.sh");
+		await writeFile(hookFile, 'source "$HOOKS_DIR/lib/forwarded.sh"\n');
+		const observed: string[] = [];
+		await syncShellDepsForDir(hooksDir, hooksDir, targetDir, false, (targetPath) => {
+			observed.push(targetPath);
+		});
+		expect(observed).toEqual([path.join(targetDir, "lib", "forwarded.sh")]);
 	});
 });
