@@ -486,7 +486,24 @@ export async function syncCategory(
 	transaction?: DeployTransaction | null,
 ): Promise<void> {
 	const section = syncYaml[category];
-	if (!section || !Array.isArray(section.items) || section.items.length === 0) {
+	// An absent section (or a section without an `items` property) is a strict
+	// no-op. Explicit `items: []` is different: it means clear the prior OMT
+	// ownership for this category, while leaving foreign residents untouched.
+	if (!section || typeof section !== "object" || !("items" in section) || !Array.isArray(section.items)) {
+		return;
+	}
+	const previousManifest = category !== "rules" && options?.reconcile !== false && !context.dryRun
+		? await readManifest(deployRoot)
+		: null;
+	if (section.items.length === 0) {
+		if (category !== "rules" && previousManifest !== null && options?.reconcile !== false && !context.dryRun) {
+			for (const pair of Object.keys(previousManifest)) {
+				const [location, pairCategory] = pair.split("/");
+				if (pairCategory === category) {
+					await reconcilePairManifest(deployRoot, location, category, [], transaction ?? undefined);
+				}
+			}
+		}
 		return;
 	}
 
@@ -722,8 +739,27 @@ export async function syncCategory(
 	// (deployLocationForManifest), so no further mapping is needed here.
 	if (options?.reconcile !== false && !context.dryRun) {
 		const manifestMutationHooks: ManifestMutationHooks | undefined = transaction ?? undefined;
-		for (const [deployLocation, names] of deployedNames) {
-			await reconcilePairManifest(deployRoot, deployLocation, category, [...names], manifestMutationHooks);
+		const locations = new Set<string>(deployedNames.keys());
+		if (category !== "rules" && previousManifest !== null) {
+			for (const pair of Object.keys(previousManifest)) {
+				const [location, pairCategory] = pair.split("/");
+				// The legacy `.codex/skills` pair is handled by the dedicated fossil
+				// cleanup below; let that routine validate counterparts, back up, and
+				// remove the directory atomically instead of treating it as a normal
+				// manifest pair.
+				if (pairCategory === category && !(category === "skills" && location === "codex" && deployedNames.has("agents"))) {
+					locations.add(location);
+				}
+			}
+		}
+		for (const deployLocation of locations) {
+			await reconcilePairManifest(
+				deployRoot,
+				deployLocation,
+				category,
+				[...(deployedNames.get(deployLocation) ?? new Set<string>())],
+				manifestMutationHooks,
+			);
 		}
 	}
 

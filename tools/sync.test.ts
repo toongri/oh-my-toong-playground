@@ -732,6 +732,94 @@ describe("syncCategory", () => {
 			expect(receivedHooks).toBe(transaction);
 		} finally { await fs.rm(tmpDir, { recursive: true, force: true }); }
 	});
+
+	it("explicit empty items reconcile prior OMT entries while preserving foreign residents", async () => {
+		const categoryDir = path.join(targetPath, ".claude", "agents");
+		await writeFile(path.join(categoryDir, "old.md"), "old\n");
+		await writeFile(path.join(categoryDir, "foreign.md"), "foreign\n");
+		await writeFile(path.join(targetPath, ".omt", "sync-manifest.json"), '{"claude/agents":["old"]}\n');
+
+		await syncCategory(
+			makeContext(),
+			"agents",
+			{ path: targetPath, agents: { platforms: ["claude"], items: [] } } as SyncYaml,
+			makeAdapterMap(["claude"]), rootDir, targetPath,
+		);
+
+		expect(await exists(path.join(categoryDir, "old.md"))).toBe(false);
+		expect(await exists(path.join(categoryDir, "foreign.md"))).toBe(true);
+		expect(JSON.parse(await readFile(path.join(targetPath, ".omt", "sync-manifest.json")))).toEqual({ "claude/agents": [] });
+	});
+
+	it("absent section or absent items preserves the manifest and files byte-for-byte", async () => {
+		const manifestPath = path.join(targetPath, ".omt", "sync-manifest.json");
+		await writeFile(path.join(targetPath, ".claude", "agents", "old.md"), "old\n");
+		const manifestBytes = '{"claude/agents":["old"]}\n';
+		await writeFile(manifestPath, manifestBytes);
+		await syncCategory(makeContext(), "agents", { path: targetPath } as SyncYaml, makeAdapterMap(["claude"]), rootDir, targetPath);
+		await syncCategory(makeContext(), "agents", { path: targetPath, agents: {} } as SyncYaml, makeAdapterMap(["claude"]), rootDir, targetPath);
+		expect(await readFile(path.join(targetPath, ".claude", "agents", "old.md"))).toBe("old\n");
+		expect(await readFile(manifestPath)).toBe(manifestBytes);
+	});
+
+	it("non-empty runs reconcile prior pairs that are no longer deployed", async () => {
+		await writeFile(path.join(rootDir, "agents", "keep.md"), "keep\n");
+		await writeFile(path.join(targetPath, ".claude", "agents", "keep.md"), "keep\n");
+		await writeFile(path.join(targetPath, ".opencode", "agents", "stale.md"), "stale\n");
+		await writeFile(path.join(targetPath, ".omt", "sync-manifest.json"), '{"claude/agents":["keep"],"opencode/agents":["stale"]}\n');
+
+		await syncCategory(
+			makeContext(), "agents",
+			{ path: targetPath, agents: { platforms: ["claude"], items: ["keep"] } } as SyncYaml,
+			makeAdapterMap(["claude"]), rootDir, targetPath,
+		);
+		expect(await exists(path.join(targetPath, ".opencode", "agents", "stale.md"))).toBe(false);
+		expect(JSON.parse(await readFile(path.join(targetPath, ".omt", "sync-manifest.json")))).toEqual({ "claude/agents": ["keep"], "opencode/agents": [] });
+	});
+
+	it("explicit empty dry-run does not delete or rewrite", async () => {
+		const oldPath = path.join(targetPath, ".claude", "agents", "old.md");
+		const manifestPath = path.join(targetPath, ".omt", "sync-manifest.json");
+		await writeFile(oldPath, "old\n");
+		await writeFile(manifestPath, '{"claude/agents":["old"]}\n');
+		const before = await readFile(manifestPath);
+		await syncCategory(makeContext({ dryRun: true }), "agents", { path: targetPath, agents: { platforms: ["claude"], items: [] } } as SyncYaml, makeAdapterMap(["claude"]), rootDir, targetPath);
+		expect(await readFile(oldPath)).toBe("old\n");
+		expect(await readFile(manifestPath)).toBe(before);
+	});
+
+	it("explicit empty with reconcile:false preserves prior state", async () => {
+		const oldPath = path.join(targetPath, ".claude", "agents", "old.md");
+		const manifestPath = path.join(targetPath, ".omt", "sync-manifest.json");
+		await writeFile(oldPath, "old\n");
+		await writeFile(manifestPath, '{"claude/agents":["old"]}\n');
+		await syncCategory(makeContext(), "agents", { path: targetPath, agents: { platforms: ["claude"], items: [] } } as SyncYaml, makeAdapterMap(["claude"]), rootDir, targetPath, undefined, { reconcile: false });
+		expect(await readFile(oldPath)).toBe("old\n");
+		expect(await readFile(manifestPath)).toBe('{"claude/agents":["old"]}\n');
+	});
+
+	it("explicit empty rejects a pre-CAS external edit and preserves external bytes", async () => {
+		const oldPath = path.join(targetPath, ".claude", "agents", "old.md");
+		const manifestPath = path.join(targetPath, ".omt", "sync-manifest.json");
+		await writeFile(oldPath, "old\n");
+		await writeFile(manifestPath, '{"claude/agents":["old"]}\n');
+		const tx = await DeployTransaction.begin(targetPath, false, [oldPath, manifestPath]);
+		await writeFile(oldPath, "external\n");
+		await expect(syncCategory(makeContext(), "agents", { path: targetPath, agents: { platforms: ["claude"], items: [] } } as SyncYaml, makeAdapterMap(["claude"]), rootDir, targetPath, undefined, undefined, tx)).rejects.toThrow();
+		expect(await readFile(oldPath)).toBe("external\n");
+		expect(await readFile(manifestPath)).toBe('{"claude/agents":["old"]}\n');
+	});
+
+	it.each(["missing", "corrupt"])("explicit empty %s manifest preserves foreign files and does not replace the manifest", async (kind) => {
+		const foreignPath = path.join(targetPath, ".claude", "agents", "foreign.md");
+		const manifestPath = path.join(targetPath, ".omt", "sync-manifest.json");
+		await writeFile(foreignPath, "foreign\n");
+		if (kind === "corrupt") await writeFile(manifestPath, "{broken\n");
+		await syncCategory(makeContext(), "agents", { path: targetPath, agents: { platforms: ["claude"], items: [] } } as SyncYaml, makeAdapterMap(["claude"]), rootDir, targetPath);
+		expect(await readFile(foreignPath)).toBe("foreign\n");
+		if (kind === "corrupt") expect(await readFile(manifestPath)).toBe("{broken\n");
+		else expect(await exists(manifestPath)).toBe(false);
+	});
 	let tmpDir: string;
 	let rootDir: string;
 	let targetPath: string;
@@ -2050,6 +2138,31 @@ describe("syncPlatformConfigs", () => {
 });
 
 describe("processYaml platform transaction atomicity", () => {
+	it("rolls back explicit empty reconciliation after a later format failure", async () => {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-empty-format-txn-"));
+		try {
+			const rootDir = path.join(tmpDir, "root");
+			const targetPath = path.join(tmpDir, "target");
+			await fs.mkdir(targetPath, { recursive: true });
+			await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+			const oldPath = path.join(targetPath, ".claude", "agents", "old.md");
+			const manifestPath = path.join(targetPath, ".omt", "sync-manifest.json");
+			await writeFile(oldPath, "old bytes\n");
+			const manifestBefore = '{"claude/agents":["old"]}\n';
+			await writeFile(manifestPath, manifestBefore);
+			const formatter = path.join(tmpDir, "fail-format.sh");
+			await writeFile(formatter, "#!/bin/sh\nexit 1\n");
+			await fs.chmod(formatter, 0o755);
+			const syncYamlPath = path.join(tmpDir, "sync.yaml");
+			await writeFile(syncYamlPath, `path: ${targetPath}\nformat: ${formatter}\nagents:\n  platforms: [claude]\n  items: []\n`);
+			const context = makeContext();
+			await processYaml(context, syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap, rootDir);
+			expect(context.failedTargets).toContain(targetPath);
+			expect(await readFile(oldPath)).toBe("old bytes\n");
+			expect(await readFile(manifestPath)).toBe(manifestBefore);
+		} finally { await fs.rm(tmpDir, { recursive: true, force: true }); }
+	});
+
 	it("rolls back directory leaves and orphan deletion after a later category failure", async () => {
 		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-directory-leaf-txn-"));
 		try {
