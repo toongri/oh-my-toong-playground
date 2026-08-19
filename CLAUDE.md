@@ -14,7 +14,7 @@ make validate-schema    # YAML schema validation only
 make validate-components # Referenced file/directory existence check
 make validate-skill-refs # Skill path-reference validation
 make typecheck          # TypeScript strict type-check (tsc --noEmit)
-make test               # Run all tests (Shell + TypeScript)
+make test               # Run all tests (Shell + TypeScript); writes an untruncated log (path printed; override with OMT_TEST_LOG)
 make sync-dry           # Preview sync changes (no writes)
 make sync               # Deploy to target projects (requires default branch + clean tree; runs validate + tests first)
 ```
