@@ -14,7 +14,6 @@ import fs from "fs/promises";
 import path from "path";
 import { existsSync, realpathSync } from "fs";
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
 
 import type {
 	Platform,
@@ -52,6 +51,7 @@ import {
 	readManifest,
 	type ManifestMutationHooks,
 } from "./lib/deploy-manifest.ts";
+import { DeployTransaction } from "./lib/deploy-transaction.ts";
 import { resolveDocsTarget, detectDocsTargetCollisions } from "./lib/path-utils.ts";
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
 import { ProjectKeyError } from "./lib/git-key.ts";
@@ -633,7 +633,7 @@ export async function syncCategory(
 			} else if (category === "rules") {
 				const writeObserver: PlatformWriteObserver | undefined = transaction
 					? async (writtenPath) => {
-						await checkpointDeployTransactionPaths(transaction, [writtenPath]);
+						await transaction.checkpoint([writtenPath]);
 					}
 					: undefined;
 				await adapter.syncRulesDirect(deployRoot, displayName, sourcePath, false, writeObserver);
@@ -646,8 +646,7 @@ export async function syncCategory(
 			// inventoried at transaction start (Codex skills use `.agents`).
 			if (transaction) {
 				const plannedPaths = planCategoryDestinationPaths(platform, category, displayName);
-				await checkpointDeployTransactionPaths(
-					transaction,
+				await transaction.checkpoint(
 					plannedPaths.map((relativePath) => path.join(deployRoot, relativePath)),
 				);
 			}
@@ -661,9 +660,7 @@ export async function syncCategory(
 	// is a no-op there). deployedNames is already keyed by deploy LOCATION
 	// (deployLocationForManifest), so no further mapping is needed here.
 	if (options?.reconcile !== false && !context.dryRun) {
-		const manifestMutationHooks = transaction
-			? createManifestMutationHooks(transaction)
-			: undefined;
+		const manifestMutationHooks: ManifestMutationHooks | undefined = transaction ?? undefined;
 		for (const [deployLocation, names] of deployedNames) {
 			await reconcilePairManifest(deployRoot, deployLocation, category, [...names], manifestMutationHooks);
 		}
@@ -691,7 +688,7 @@ export async function syncCategory(
 				deployRoot,
 				"codex",
 				"skills",
-				transaction ? createManifestMutationHooks(transaction) : undefined,
+				transaction ?? undefined,
 			);
 		}
 	}
@@ -785,7 +782,7 @@ export async function syncPlatformConfigs(
 		const pluginScope: PluginScope = context.isRootYaml ? "user" : "project";
 		const writeObserver: PlatformWriteObserver | undefined = transaction
 			? async (writtenPath) => {
-				await checkpointDeployTransactionPaths(transaction, [writtenPath]);
+				await transaction.checkpoint([writtenPath]);
 			}
 			: undefined;
 		const result = await adapter.syncPlatformYaml(
@@ -2041,9 +2038,6 @@ export function isFatalSyncError(err: unknown): boolean {
 	return err instanceof ProjectKeyError || err instanceof DeployTargetsError;
 }
 
-type DeployTransactionEntry = { live: string; before: string; expected: string; owners?: string[] };
-type DeployTransaction = { entries: DeployTransactionEntry[] };
-
 const MANIFEST_MUTATION_SUFFIXES = ["", ".md", ".toml"] as const;
 
 /** Inventory the manifest file and every concrete leaf form that a valid prior manifest can own. */
@@ -2068,117 +2062,6 @@ async function collectManifestTransactionPaths(deployRoot: string): Promise<stri
 		}
 	}
 	return [...new Set(paths)];
-}
-
-async function fingerprint(target: string): Promise<string> {
-	const hash = createHash("sha256");
-	const walk = async (current: string, rel = ""): Promise<void> => {
-		let entries: import("fs").Dirent[];
-		try { entries = await fs.readdir(current, { withFileTypes: true }); } catch { return; }
-		for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-			const abs = path.join(current, entry.name);
-			const child = path.join(rel, entry.name);
-			if (entry.isDirectory()) { hash.update(`d:${child}\n`); await walk(abs, child); }
-			else if (entry.isSymbolicLink()) hash.update(`l:${child}:${await fs.readlink(abs)}\n`);
-			else hash.update(`f:${child}:${await fs.readFile(abs, "base64")}\n`);
-		}
-	};
-	try { if ((await fs.lstat(target)).isDirectory()) await walk(target); else hash.update(await fs.readFile(target, "base64")); } catch { hash.update("<absent>"); }
-	return hash.digest("hex");
-}
-
-/** Snapshot only OMT-owned early runtime paths; never the whole deploy root. */
-async function beginDeployTransaction(
-	deployRoot: string,
-	dryRun: boolean,
-	ownedPaths: Array<string | { path: string; owner?: string }> = [],
-): Promise<DeployTransaction | null> {
-	if (dryRun) return null;
-	const names = [
-		".claude/lib", ".codex/lib", ".agents/lib",
-		".claude/scripts/pretool-trace", ".codex/scripts/pretool-trace",
-		".claude/settings.local.json", ".claude/settings.json", ".gemini/settings.json",
-		".codex/hooks.json", ".codex/config.toml", ".opencode/opencode.json",
-	];
-	const entryOwners = new Map<string, string[]>();
-	for (const owned of ownedPaths) {
-		const rawName = typeof owned === "string" ? owned : owned.path;
-		const name = path.isAbsolute(rawName) ? path.relative(deployRoot, rawName) : rawName;
-		const normalized = path.normalize(name);
-		if (!names.includes(normalized)) names.push(normalized);
-		if (typeof owned !== "string" && owned.owner) {
-			const owners = entryOwners.get(normalized) ?? [];
-			if (!owners.includes(owned.owner)) owners.push(owned.owner);
-			entryOwners.set(normalized, owners);
-		}
-	}
-	const entries: DeployTransactionEntry[] = [];
-	for (const name of [...new Set(names.map((entry) => path.normalize(entry)))]) {
-		const live = path.join(deployRoot, name);
-		const before = `${live}.txn-before-${Math.random().toString(36).slice(2)}`;
-		if (existsSync(live)) await fs.cp(live, before, { recursive: true, force: true, dereference: false });
-		entries.push({ live, before, expected: await fingerprint(live), owners: entryOwners.get(name) });
-	}
-	return { entries };
-}
-
-async function checkpointDeployTransactionPaths(
-	transaction: DeployTransaction,
-	livePaths: readonly string[],
-): Promise<void> {
-	for (const livePath of livePaths) {
-		const normalizedLivePath = path.normalize(path.resolve(livePath));
-		const entry = transaction.entries.find(
-			(candidate) => path.normalize(path.resolve(candidate.live)) === normalizedLivePath,
-		);
-		if (!entry) continue;
-		entry.expected = await fingerprint(entry.live);
-		for (const dependency of transaction.entries.filter((candidate) => candidate.owners?.includes(entry.live))) {
-			dependency.expected = await fingerprint(dependency.live);
-		}
-	}
-}
-
-function createManifestMutationHooks(transaction: DeployTransaction): ManifestMutationHooks {
-	return {
-		mutate: async (targetPath, operation) => {
-			const normalizedTarget = path.normalize(path.resolve(targetPath));
-			const entry = transaction.entries.find(
-				(candidate) => path.normalize(path.resolve(candidate.live)) === normalizedTarget,
-			);
-			if (!entry) throw new Error(`Manifest mutation target was not inventoried: ${targetPath}`);
-			if ((await fingerprint(entry.live)) !== entry.expected) {
-				throw new Error(`Manifest mutation conflict: ${targetPath}`);
-			}
-			try {
-				await operation();
-			} catch (error) {
-				entry.expected = await fingerprint(entry.live);
-				throw error;
-			}
-			entry.expected = await fingerprint(entry.live);
-		},
-	};
-}
-
-async function finishDeployTransaction(transaction: DeployTransaction | null): Promise<void> {
-	for (const entry of transaction?.entries ?? []) await fs.rm(entry.before, { recursive: true, force: true }).catch(() => undefined);
-}
-
-async function rollbackDeployTransaction(transaction: DeployTransaction | null): Promise<void> {
-	if (!transaction) return;
-	for (const entry of transaction.entries) {
-		const unchanged = (await fingerprint(entry.live)) === entry.expected;
-		if (!unchanged) continue;
-		if (existsSync(entry.before)) {
-			await fs.rm(entry.live, { recursive: true, force: true }).catch(() => undefined);
-			await fs.rename(entry.before, entry.live).catch(() => undefined);
-		} else {
-			// A path absent at the transaction boundary is OMT-created during this
-			// run; remove it only when it still carries the expected staged state.
-			await fs.rm(entry.live, { recursive: true, force: true }).catch(() => undefined);
-		}
-	}
 }
 
 // ---------------------------------------------------------------------------
@@ -2435,7 +2318,7 @@ export async function processYaml(
 					}
 				}
 				ownedPaths.push(...platformHookTransactionPaths);
-				deployTransaction = await beginDeployTransaction(
+				deployTransaction = await DeployTransaction.begin(
 					deployRoot,
 					context.dryRun,
 					ownedPaths,
@@ -2463,7 +2346,7 @@ export async function processYaml(
 			if (shouldMkdirClaude || libSourceRoots.size > 0) {
 				await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
 				if (deployTransaction) {
-					await checkpointDeployTransactionPaths(deployTransaction, [
+					await deployTransaction.checkpoint([
 						".claude/lib", ".codex/lib", ".agents/lib",
 					].map((relativePath) => path.join(deployRoot, relativePath)));
 				}
@@ -2527,7 +2410,7 @@ export async function processYaml(
 			if (shouldMkdirClaude || libSourceRoots.size > 0) {
 				await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
 				if (deployTransaction) {
-					await checkpointDeployTransactionPaths(deployTransaction, [
+					await deployTransaction.checkpoint([
 						".claude/lib", ".codex/lib", ".agents/lib",
 					].map((relativePath) => path.join(deployRoot, relativePath)));
 				}
@@ -2587,14 +2470,14 @@ export async function processYaml(
 			if (syncYaml.format && !context.dryRun) {
 				await formatDeployedRoots(deployRoot, syncYaml.format, docsDests, codexSkillNames);
 			}
-			await finishDeployTransaction(deployTransaction);
+			await deployTransaction?.finish();
 		} catch (err) {
 			try {
-				await rollbackDeployTransaction(deployTransaction);
+				await deployTransaction?.rollback();
 			} catch (rollbackErr) {
 				logError(`worktree 롤백 실패 (수동 복구 필요): ${deployRoot}: ${rollbackErr}`);
 			}
-			await finishDeployTransaction(deployTransaction);
+			await deployTransaction?.finish();
 			// Fatal errors (MCP key-derivation or topology failure) must never be
 			// downgraded: rethrow so they surface as a non-zero exit.
 			if (isFatalSyncError(err)) {
