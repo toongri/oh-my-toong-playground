@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
@@ -643,6 +643,12 @@ describe("detectBareImports (content-based bare import detection)", () => {
 describe("copyFile", () => {
 	let tmpDir: string;
 
+	async function tempResidues(target: string): Promise<string[]> {
+		const dir = path.dirname(target);
+		const prefix = `.${path.basename(target)}.`;
+		return (await fs.readdir(dir)).filter((entry) => entry.startsWith(prefix));
+	}
+
 	beforeEach(async () => {
 		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "copy-file-test-"));
 	});
@@ -671,6 +677,93 @@ describe("copyFile", () => {
 			await copyFile(src, tgt);
 
 			expect(await exists(tgt)).toBe(true);
+		});
+
+		it("atomically replaces an existing file and leaves no temporary residue", async () => {
+			const src = path.join(tmpDir, "src.txt");
+			const tgt = path.join(tmpDir, "out/tgt.txt");
+			await fs.writeFile(src, "new bytes");
+			await fs.chmod(src, 0o755);
+			await fs.mkdir(path.dirname(tgt), { recursive: true });
+			await fs.writeFile(tgt, "old bytes");
+			await fs.chmod(tgt, 0o644);
+
+			await copyFile(src, tgt);
+
+			expect(await fs.readFile(tgt, "utf8")).toBe("new bytes");
+			expect((await fs.stat(tgt)).mode & 0o111).toBeTruthy();
+			expect(await tempResidues(tgt)).toEqual([]);
+		});
+
+		it("preserves the resident target when rename fails and cleans the temporary file", async () => {
+			const src = path.join(tmpDir, "src.txt");
+			const tgt = path.join(tmpDir, "out/tgt.txt");
+			await fs.writeFile(src, "new bytes");
+			await fs.mkdir(tgt, { recursive: true });
+			await fs.writeFile(path.join(tgt, "resident.txt"), "resident");
+			const renameSpy = spyOn(fs, "rename").mockRejectedValueOnce(new Error("rename failed"));
+
+			try {
+				await expect(copyFile(src, tgt)).rejects.toThrow("rename failed");
+			} finally {
+				renameSpy.mockRestore();
+			}
+
+			expect(await fs.readFile(path.join(tgt, "resident.txt"), "utf8")).toBe("resident");
+			expect(await tempResidues(tgt)).toEqual([]);
+		});
+
+		it("preserves the resident target when copying fails", async () => {
+			const src = path.join(tmpDir, "src.txt");
+			const tgt = path.join(tmpDir, "out/tgt.txt");
+			await fs.writeFile(src, "new bytes");
+			await fs.mkdir(path.dirname(tgt), { recursive: true });
+			await fs.writeFile(tgt, "old bytes");
+			const copySpy = spyOn(fs, "copyFile").mockRejectedValueOnce(new Error("copy failed"));
+
+			try {
+				await expect(copyFile(src, tgt)).rejects.toThrow("copy failed");
+			} finally {
+				copySpy.mockRestore();
+			}
+
+			expect(await fs.readFile(tgt, "utf8")).toBe("old bytes");
+			expect(await tempResidues(tgt)).toEqual([]);
+		});
+
+		it("preserves the resident target when chmod fails", async () => {
+			const src = path.join(tmpDir, "src.sh");
+			const tgt = path.join(tmpDir, "out/tgt.sh");
+			await fs.writeFile(src, "#!/bin/sh\n");
+			await fs.chmod(src, 0o755);
+			await fs.mkdir(path.dirname(tgt), { recursive: true });
+			await fs.writeFile(tgt, "old bytes");
+			const chmodSpy = spyOn(fs, "chmod").mockRejectedValueOnce(new Error("chmod failed"));
+
+			try {
+				await expect(copyFile(src, tgt)).rejects.toThrow("chmod failed");
+			} finally {
+				chmodSpy.mockRestore();
+			}
+
+			expect(await fs.readFile(tgt, "utf8")).toBe("old bytes");
+			expect(await tempResidues(tgt)).toEqual([]);
+		});
+
+		it("replaces a symlink itself without changing its external target", async () => {
+			const src = path.join(tmpDir, "src.txt");
+			const external = path.join(tmpDir, "external.txt");
+			const tgt = path.join(tmpDir, "out/tgt.txt");
+			await fs.writeFile(src, "new bytes");
+			await fs.writeFile(external, "external bytes");
+			await fs.mkdir(path.dirname(tgt), { recursive: true });
+			await fs.symlink(external, tgt);
+
+			await copyFile(src, tgt);
+
+			expect(await fs.readFile(external, "utf8")).toBe("external bytes");
+			expect((await fs.lstat(tgt)).isSymbolicLink()).toBe(false);
+			expect(await fs.readFile(tgt, "utf8")).toBe("new bytes");
 		});
 	});
 

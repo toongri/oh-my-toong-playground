@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
+import { randomUUID } from "node:crypto";
 import { detectBareImports } from "../adapters/ts-lib-deps.ts";
 
 /** Python cache patterns that are always excluded, regardless of any caller-supplied list. */
@@ -203,11 +204,28 @@ export function rewriteLibImports(
  */
 export async function copyFile(source: string, target: string): Promise<void> {
 	await fs.mkdir(path.dirname(target), { recursive: true });
-	await fs.copyFile(source, target, fs.constants.COPYFILE_FICLONE);
 	const stat = await fs.stat(source);
-	if (stat.mode & 0o111) {
-		const targetStat = await fs.stat(target);
-		await fs.chmod(target, targetStat.mode | 0o111);
+	const tempTarget = path.join(
+		path.dirname(target),
+		`.${path.basename(target)}.${randomUUID()}.tmp`,
+	);
+	let renamed = false;
+	try {
+		await fs.copyFile(source, tempTarget, fs.constants.COPYFILE_FICLONE);
+		if (stat.mode & 0o111) {
+			const tempStat = await fs.stat(tempTarget);
+			await fs.chmod(tempTarget, tempStat.mode | 0o111);
+		}
+		await fs.rename(tempTarget, target);
+		renamed = true;
+	} finally {
+		if (!renamed) {
+			try {
+				await fs.rm(tempTarget, { force: true });
+			} catch {
+				// Preserve the original copy/chmod/rename error if cleanup also fails.
+			}
+		}
 	}
 }
 
