@@ -12,11 +12,15 @@ disable-model-invocation: true
 
 ## Overview
 
-여섯 스텝을 순서대로 통과해야 한다. 1~5번은 혼자 수행하고, 사용자는 문서를 읽는 것과 퀴즈에 답하는 것 두 가지만 한다.
+여덟 스텝을 순서대로 통과해야 한다. 1~7번은 혼자 수행하고, 사용자는 문서를 읽는 것과 퀴즈에 답하는 것 두 가지만 한다.
 
 ```
-evidence → background → intuition → code → render → quiz
+evidence → background → architecture → intuition → commits → code → render → quiz
 ```
+
+문서의 골격과 쓸 수 있는 시각 컴포넌트는 `references/markdown-template.md`가 소유한다.
+**문서 안에 `<style>` 블록·인라인 `style=` 속성·승인 목록 밖의 class를 쓰면 구조 검사가
+그 스텝에서 거부한다** — 스타일은 render.ts가 소유하고, 저자는 내용과 컴포넌트만 쓴다.
 
 각 스텝은 **구조 검사(스크립트) → 심사(서브에이전트, 인용 필수)** 두 관문을 통과해야 다음으로 넘어간다. 통과 판정은 상태 CLI가 내리고, 산출물 경로 쓰기는 훅이 그 판정을 읽어 허용하거나 거부한다. 스텝을 건너뛸 수는 없다.
 
@@ -75,18 +79,45 @@ git diff --name-status <git range>
 
 건너뛰기 문구는 구조 검사가 문자열로 확인한다.
 
-## Step 3 — intuition
+## Step 3 — architecture
+
+변경이 닿는 구조를 **세 레벨**로 그린다. 각 레벨은 `### 시스템 레벨`·`### 컴포넌트 레벨`·
+`### 도메인 레벨` 헤딩 아래 mermaid 다이어그램 하나와 그것을 읽어주는 산문으로 구성한다.
+
+| 레벨 | 답하는 질문 |
+|---|---|
+| 시스템 | 어떤 런타임·서비스·저장소가 관여하고, diff는 어느 경계에 닿는가 |
+| 컴포넌트 | 모듈·도메인 사이 의존이 변경 전후로 어떻게 달라지는가 |
+| 도메인 | 엔티티·개념·불변식이 무엇이고 무엇이 바뀌는가 |
+
+다이어그램은 ` ```mermaid ` 펜스로 쓴다 — render 스텝에서 인라인 SVG로 구워지므로 최종
+HTML은 여전히 자기완결이다. 노드 라벨에는 diff에 실재하는 식별자를 쓰고, 변경이 닿는
+노드는 `:::changed`로 표시한다. 유형 선택과 문법 규칙은 `markdown-template.md`를 따른다.
+
+그릴 것이 정말 없는 레벨은 `구조 변화 없음: <사유 한 문장>`으로 대신한다 — 사유 없는
+마커는 구조 검사가 거부한다.
+
+## Step 4 — intuition
 
 변경의 **본질**만 쓴다. 세부는 다음 스텝의 몫이다. 구체적인 toy 값을 실제로 등장시키고, 그 값을 설명 문장에서 다시 쓴다.
 
-그림은 마크다운 안에 **인라인 HTML 조각**으로 그린다. ASCII 다이어그램은 쓰지 않는다. 네 가지 계열을 재사용한다.
+그림은 승인된 컴포넌트로 그린다. ASCII 다이어그램은 쓰지 않고, 스타일을 발명하지 않는다.
 
-1. Before/After 나란히
-2. 데이터 흐름 + 예시 값
-3. 파일/모듈 지도
-4. 상태 전이
+- 한 줄로 흐르는 것(호출 순서·데이터 흐름 + 예시 값) → `flow` 컴포넌트
+- 전후 대비 → `compare` 컴포넌트
+- 경계·분기가 필요한 2차원 구조 → ` ```mermaid ` (architecture 스텝과 같은 문법)
 
-## Step 4 — code
+## Step 5 — commits
+
+커밋을 오래된 순으로 읽으며 **변경이 쌓인 서사**를 쓴다. `## Commit Journey` 아래
+커밋마다 헤딩 하나를 만든다 — 형식은 `### N. <short-hash> — <커밋 제목>`, 해시는 백틱으로
+감싼다. 각 블록에 세 가지를 담는다: 무엇을 만들었/고쳤나, 이 시점의 한계(다음 커밋이 왜
+더 필요했나), 왜 별도 커밋인가.
+
+커밋 해시는 `start`가 상태에 박제한 목록과 대조된다 — 하나라도 헤딩에 없으면 구조 검사가
+실패한다. 단일 커밋 범위면 섹션 대신 `단일 커밋 범위 — Commit Journey 생략.` 한 줄을 쓴다.
+
+## Step 6 — code
 
 1급 단위는 파일이 아니라 **Change Group**이다. signal 파일은 정확히 한 그룹에 한 번 들어간다.
 
@@ -120,7 +151,7 @@ git diff --name-status <git range>
 | 근거는 없지만 코드에서 추론된다 | `[추론: <추론의 근거>]` |
 | 도달 가능한 근거가 없다 | `Unknown / not supplied` |
 
-세 번째 경우는 **문서 안에 열린 질문으로 남긴다.** 사용자에게 대화로 묻지 않는다 — 1~5번 스텝은 사람 없이 돈다.
+세 번째 경우는 **문서 안에 열린 질문으로 남긴다.** 사용자에게 대화로 묻지 않는다 — 1~7번 스텝은 사람 없이 돈다.
 
 ## 스텝 통과시키기
 
@@ -138,9 +169,13 @@ $CLI submit-step --step <step> --doc "<문서 경로>" \
 |---|---|
 | evidence | signal 파일 전부가 문서 어딘가에 등장하는가 |
 | background | 깊은/좁은 배경 2단 + 건너뛰기 마커 |
-| intuition | 없음 — 구조 검사는 통과만 시키면 되고, 실질 판정은 심사(R6)가 맡는다 |
+| architecture | 세 레벨 헤딩이 모두 있고, 각 레벨에 mermaid 또는 사유 있는 생략 마커가 있는가 |
+| intuition | 고유 항목 없음 — 실질 판정은 심사(R6)가 맡는다 |
+| commits | 커밋 2개 이상이면 Commit Journey에 모든 해시가 헤딩으로 등장하는가; 단일 커밋이면 생략 마커 허용 |
 | code | Change Group 제목·예고·순서 근거 3슬롯, 모든 "왜 필요한가"의 출처 표시, base/head 추적성, signal 파일이 Change Group에 정확히 한 번씩 들어갔는가 |
-| render | Step 5를 보라 — 마크다운 구조가 아니라 `--html`로 넘긴 산출물의 존재·비어있지 않음을 본다 |
+| render | Step 7을 보라 — 산출물 HTML·mermaid 렌더 패리티·검증 리포트 2종을 본다 |
+
+**모든 저작 스텝 공통**: 누적 문서 전체에서 `<style>`·인라인 `style=`·미승인 class를 검사한다(R11).
 
 실패하면 실패 항목이 그대로 출력된다. 문서를 고치고 다시 제출한다.
 
@@ -151,9 +186,9 @@ $CLI pass-step --step <step> --doc "<문서 경로>" --judge-json '<판정 JSON>
 
 판정 JSON은 심사 서브에이전트가 내놓는다. 심사자에게는 `references/judge-prompt.md`의 **고정 템플릿**을 그대로 준다. 직접 지어내지 않는다.
 
-심사자가 판정하는 항목은 전체 루브릭 중 두 개뿐이다 — `R6`(Intuition의 구체 예시가 실제로 있고 본문에서 다시 쓰이는가)과 `R7`(그룹 N의 예고문이 그룹 N-1을 전제하는가). 나머지는 구조 검사가 이미 판정했다.
+심사자가 판정하는 항목은 전체 루브릭 중 세 개뿐이다 — `R12`(아키텍처 다이어그램의 라벨이 diff의 실재 식별자와 대응하는가), `R6`(Intuition의 구체 예시가 실제로 있고 본문에서 다시 쓰이는가), `R7`(그룹 N의 예고문이 그룹 N-1을 전제하는가). 나머지는 구조 검사가 이미 판정했다.
 
-이 두 항목이 **필수인 스텝은 각각 하나뿐이다** — `intuition`은 `R6`, `code`는 `R7`. 그 외 네 스텝(evidence·background·render·quiz)은 필수 심사 ID가 없으므로 `--judge-json '[]'`로 통과시킨다. 필수 ID가 페이로드에 없으면 그 자체로 거부되고, 관련 없는 ID에 실재하는 인용을 붙여도 필수 ID 누락을 대신 채우지 못한다.
+이 세 항목이 **필수인 스텝은 각각 하나뿐이다** — `architecture`는 `R12`, `intuition`은 `R6`, `code`는 `R7`. 그 외 다섯 스텝(evidence·background·commits·render·quiz)은 필수 심사 ID가 없으므로 `--judge-json '[]'`로 통과시킨다. 필수 ID가 페이로드에 없으면 그 자체로 거부되고, 관련 없는 ID에 실재하는 인용을 붙여도 필수 ID 누락을 대신 채우지 못한다.
 
 ```json
 [{"id":"R6","pass":true,"quote":"문서에서 그대로 따온 문장"}]
@@ -161,7 +196,7 @@ $CLI pass-step --step <step> --doc "<문서 경로>" --judge-json '<판정 JSON>
 
 인용 없이 `pass`를 주거나, 인용이 문서에 문자열로 없으면 CLI가 자동으로 실패시킨다.
 
-## Step 5 — render
+## Step 7 — render
 
 마크다운이 원본이고 HTML은 파생이다.
 
@@ -169,13 +204,25 @@ $CLI pass-step --step <step> --doc "<문서 경로>" --judge-json '<판정 JSON>
 bun ${CLAUDE_SKILL_DIR}/scripts/render.ts --in "<문서.md>" --out "<문서.html>"
 ```
 
-HTML은 단일 self-contained 파일이며 런타임 JS도 외부 참조도 없다.
+render.ts가 ` ```mermaid ` 펜스를 mmdc로 인라인 SVG로 굽는다. HTML은 단일 self-contained
+파일이며 런타임 JS도 외부 참조도 없다. mmdc가 없거나 블록이 실패하면 렌더가 실패 블록
+번호와 함께 죽는다 — 그 블록을 고치고 다시 렌더한다.
 
-render도 다른 스텝과 같은 두 관문을 통과해야 quiz로 넘어간다 — 이 전이를 건너뛰면 완료가 영원히 불가능해진다.
+렌더 후, quiz로 넘어가기 전에 **두 검증을 반드시 돌린다.**
+
+1. **visual-qa** — visual-qa 스킬(없는 플랫폼에서는 agent-browser로 직접)로 렌더된 HTML을
+   데스크톱·모바일 폭에서 스크린샷 검증한다: 겹침·잘림·가로 스크롤·다이어그램 가독성.
+   결과를 `<문서.md>` 옆 `<slug>-visual-report.md`에 남기고, 발견을 고친 뒤 마지막 줄에
+   `VERDICT: PASS`를 적는다. 고치지 않은 발견이 남았으면 PASS를 적을 수 없다.
+2. **technical-writing** — technical-writing 스킬로 마크다운 산문을 리뷰시키고, 받아들인
+   지적을 문서에 반영한다. 반영 내역을 `<slug>-writing-report.md`에 남기고 마지막 줄에
+   `REVIEW: APPLIED`를 적는다. 문서를 고쳤으면 render.ts를 다시 돌린다.
 
 ```bash
-# 관문 1 — 산출물 검사 (마크다운 구조가 아니라 HTML 파일의 존재와 비어있지 않음을 확인한다)
-$CLI submit-step --step render --doc "<문서.md>" --signal-files "a.ts,b.ts" --html "<문서.html>"
+# 관문 1 — 산출물 검사: HTML 존재·mermaid→SVG 패리티·검증 리포트 2종의 판정 줄
+$CLI submit-step --step render --doc "<문서.md>" --signal-files "a.ts,b.ts" \
+  --html "<문서.html>" \
+  --visual-report "<slug>-visual-report.md" --writing-report "<slug>-writing-report.md"
 
 # 관문 2 — 심사 (render 스텝에는 심사 항목이 없으므로 빈 배열로 통과시킨다)
 $CLI pass-step --step render --doc "<문서.md>" --judge-json '[]'
@@ -183,7 +230,7 @@ $CLI pass-step --step render --doc "<문서.md>" --judge-json '[]'
 
 렌더가 끝나면 사용자에게 두 경로를 알리고 문서를 읽어달라고 요청한다.
 
-## Step 6 — quiz
+## Step 8 — quiz
 
 ### 문항 뱅크
 
@@ -238,6 +285,7 @@ $CLI complete
 
 | 파일 | 언제 연다 |
 |---|---|
+| `references/markdown-template.md` | 문서를 쓰기 시작할 때 — 골격·아키텍처 레벨별 다이어그램 유형·승인된 컴포넌트 전체 목록 |
 | `references/rubric.md` | 어떤 항목을 누가 판정하는지, 각 항목이 무엇을 요구하는지 |
 | `references/judge-prompt.md` | 심사 서브에이전트를 부를 때 (고정 템플릿) |
 | `references/discipline.md` | 구조로 옮기지 못하고 남은 규율 |
