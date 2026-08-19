@@ -230,6 +230,31 @@ export async function copyFile(source: string, target: string): Promise<void> {
 	}
 }
 
+/**
+ * Atomically replaces a resident text file while preserving its mode.
+ * The sibling temporary file is removed whenever write, chmod, or rename fails.
+ */
+export async function writeResidentFileAtomically(
+	target: string,
+	content: string,
+	mode?: number,
+): Promise<void> {
+	const residentMode = mode ?? ((await fs.stat(target)).mode & 0o7777);
+	const tempTarget = path.join(
+		path.dirname(target),
+		`.${path.basename(target)}.${randomUUID()}.tmp`,
+	);
+	let renamed = false;
+	try {
+		await fs.writeFile(tempTarget, content, "utf8");
+		await fs.chmod(tempTarget, residentMode);
+		await fs.rename(tempTarget, target);
+		renamed = true;
+	} finally {
+		if (!renamed) await fs.rm(tempTarget, { force: true }).catch(() => undefined);
+	}
+}
+
 type SyncDirectoryOptions = {
 	exclude?: string[];
 	platformRoot?: string;
@@ -294,16 +319,7 @@ async function rewriteFileAtomically(source: string, target: string, platformRoo
 		fs.stat(source),
 	]);
 	const rewritten = rewriteLibImports(srcContent, target, platformRoot, new Set<string>());
-	const tempTarget = path.join(path.dirname(target), `.${path.basename(target)}.${randomUUID()}.tmp`);
-	let renamed = false;
-	try {
-		await fs.writeFile(tempTarget, rewritten, "utf8");
-		await fs.chmod(tempTarget, sourceStat.mode & 0o7777);
-		await fs.rename(tempTarget, target);
-		renamed = true;
-	} finally {
-		if (!renamed) await fs.rm(tempTarget, { force: true }).catch(() => undefined);
-	}
+	await writeResidentFileAtomically(target, rewritten, sourceStat.mode & 0o7777);
 }
 
 /**

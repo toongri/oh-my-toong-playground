@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import { syncDirectory, copyFile, rewriteLibImports, planSyncDirectoryMutations } from "./sync-directory.ts";
+import { syncDirectory, copyFile, writeResidentFileAtomically, rewriteLibImports, planSyncDirectoryMutations } from "./sync-directory.ts";
 import { detectBareImports } from "../adapters/ts-lib-deps.ts";
 
 async function writeFile(filePath: string, content: string, mode?: number): Promise<void> {
@@ -931,5 +931,65 @@ describe("copyFile", () => {
 			const stat = await fs.stat(tgt);
 			expect(stat.mode & 0o111).toBe(0);
 		});
+	});
+});
+
+describe("writeResidentFileAtomically", () => {
+	let tmpDir: string;
+
+	async function tempResidues(target: string): Promise<string[]> {
+		const dir = path.dirname(target);
+		const prefix = `.${path.basename(target)}.`;
+		return (await fs.readdir(dir)).filter((entry) => entry.startsWith(prefix));
+	}
+
+	beforeEach(async () => { tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "resident-writer-test-")); });
+	afterEach(async () => { await fs.rm(tmpDir, { recursive: true, force: true }); });
+
+	it("writes UTF-8 content and preserves the resident mode", async () => {
+		const target = path.join(tmpDir, "resident.txt");
+		await writeFile(target, "old", 0o751);
+		await writeResidentFileAtomically(target, "새 내용");
+		expect(await fs.readFile(target, "utf8")).toBe("새 내용");
+		expect((await fs.stat(target)).mode & 0o777).toBe(0o751);
+		expect(await tempResidues(target)).toEqual([]);
+	});
+
+	it("propagates resident stat failure before creating a parent or temp", async () => {
+		const target = path.join(tmpDir, "nested", "resident.txt");
+		const statSpy = spyOn(fs, "stat").mockRejectedValueOnce(Object.assign(new Error("stat failed"), { code: "EIO" }));
+		const writeSpy = spyOn(fs, "writeFile");
+		const chmodSpy = spyOn(fs, "chmod");
+		const renameSpy = spyOn(fs, "rename");
+		try {
+			await expect(writeResidentFileAtomically(target, "replacement")).rejects.toThrow("stat failed");
+		} finally {
+			statSpy.mockRestore();
+			writeSpy.mockRestore();
+			chmodSpy.mockRestore();
+			renameSpy.mockRestore();
+		}
+		expect(await exists(path.dirname(target))).toBe(false);
+		expect(writeSpy).not.toHaveBeenCalled();
+		expect(chmodSpy).not.toHaveBeenCalled();
+		expect(renameSpy).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		["write", "write failed", "writeFile"],
+		["chmod", "chmod failed", "chmod"],
+		["rename", "rename failed", "rename"],
+	])("preserves the resident and cleans temp when %s fails", async (_stage, message, method) => {
+		const target = path.join(tmpDir, "resident.txt");
+		await writeFile(target, "resident", 0o640);
+		const stub = spyOn(fs, method as "writeFile" | "chmod" | "rename").mockRejectedValueOnce(new Error(message));
+		try {
+			await expect(writeResidentFileAtomically(target, "replacement")).rejects.toThrow(message);
+		} finally {
+			stub.mockRestore();
+		}
+		expect(await fs.readFile(target, "utf8")).toBe("resident");
+		expect((await fs.stat(target)).mode & 0o777).toBe(0o640);
+		expect(await tempResidues(target)).toEqual([]);
 	});
 });
