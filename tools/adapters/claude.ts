@@ -19,6 +19,7 @@ import { readJsonFile, writeJsonFile } from "../lib/json.ts";
 import { isGlobalSync } from "../lib/path-utils.ts";
 import { deriveClaudeProjectKey } from "../lib/git-key.ts";
 import { composePreToolTraceCommand } from "../lib/pretool-trace-command.ts";
+import { planCategoryDestinationPaths, type DestinationCategory } from "./destinations.ts";
 
 // =============================================================================
 // Local narrowing helpers (avoid `as` casts on loosely-typed YAML/JSON data)
@@ -35,6 +36,18 @@ function pickString(value: unknown): string | undefined {
 
 function isStringArray(value: unknown): value is string[] {
 	return Array.isArray(value) && value.every((v): v is string => typeof v === "string");
+}
+
+function claudeDestination(targetPath: string, category: DestinationCategory, displayName: string): string {
+	const [relativePath] = planCategoryDestinationPaths("claude", category, displayName);
+	if (!relativePath) throw new Error(`No Claude destination for ${category}`);
+	return path.join(targetPath, relativePath);
+}
+
+function claudeDestinationRelative(category: DestinationCategory, displayName: string): string {
+	const [relativePath] = planCategoryDestinationPaths("claude", category, displayName);
+	if (!relativePath) throw new Error(`No Claude destination for ${category}`);
+	return relativePath;
 }
 
 // =============================================================================
@@ -131,8 +144,8 @@ export class ClaudeAdapter implements PlatformAdapter {
 		dryRun = false,
 		_modelMap?: ModelMap,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".claude", "agents");
-		const targetFile = path.join(targetDir, `${displayName}.md`);
+		const targetFile = claudeDestination(targetPath, "agents", displayName);
+		const targetDir = path.dirname(targetFile);
 
 		try {
 			await fs.stat(sourcePath);
@@ -198,7 +211,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 				command:
 					h.command && h.command !== ""
 						? h.command
-						: `${isGlobalSync(targetPath) ? "$HOME" : "$CLAUDE_PROJECT_DIR"}/.claude/hooks/${h.display_name ?? ""}`,
+						: `${isGlobalSync(targetPath) ? "$HOME" : "$CLAUDE_PROJECT_DIR"}/${claudeDestinationRelative("hooks", h.display_name ?? "")}`,
 				prompt: h.prompt,
 				timeout: h.timeout ?? 10,
 			}));
@@ -217,8 +230,8 @@ export class ClaudeAdapter implements PlatformAdapter {
 		sourcePath: string,
 		dryRun = false,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".claude", "commands");
-		const targetFile = path.join(targetDir, `${displayName}.md`);
+		const targetFile = claudeDestination(targetPath, "commands", displayName);
+		const targetDir = path.dirname(targetFile);
 
 		try {
 			await fs.stat(sourcePath);
@@ -248,7 +261,8 @@ export class ClaudeAdapter implements PlatformAdapter {
 		dryRun = false,
 		writeObserver?: PlatformWriteObserver,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".claude", "hooks");
+		const targetFile = claudeDestination(targetPath, "hooks", displayName);
+		const targetDir = path.dirname(targetFile);
 		// hooksSourceDir: parent of sourcePath — hooks/ root for top-level files,
 		// or the directory hook itself (its .sh files resolve deps relative to it).
 		const hooksSourceDir = path.dirname(sourcePath);
@@ -262,7 +276,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 		}
 
 		if (stat.isDirectory()) {
-			const targetHookDir = path.join(targetDir, displayName);
+			const targetHookDir = targetFile;
 			if (dryRun) {
 				logDry(`Copy (directory): ${sourcePath} -> ${targetHookDir}/`);
 				// Scan .sh files in directory for dependencies (dry-run logging)
@@ -278,7 +292,6 @@ export class ClaudeAdapter implements PlatformAdapter {
 				await writeObserver?.(targetHookDir);
 			}
 		} else {
-			const targetFile = path.join(targetDir, displayName);
 			if (dryRun) {
 				logDry(`Copy: ${sourcePath} -> ${targetFile}`);
 				// Log dependency copies for dry-run
@@ -307,8 +320,8 @@ export class ClaudeAdapter implements PlatformAdapter {
 		sourcePath: string,
 		dryRun = false,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".claude", "skills");
-		const targetSkillDir = path.join(targetDir, displayName);
+		const targetSkillDir = claudeDestination(targetPath, "skills", displayName);
+		const targetDir = path.dirname(targetSkillDir);
 
 		try {
 			const stat = await fs.stat(sourcePath);
@@ -340,7 +353,8 @@ export class ClaudeAdapter implements PlatformAdapter {
 		sourcePath: string,
 		dryRun = false,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".claude", "scripts");
+		const targetFile = claudeDestination(targetPath, "scripts", displayName);
+		const targetDir = path.dirname(targetFile);
 
 		let stat: Awaited<ReturnType<typeof fs.stat>>;
 		try {
@@ -351,7 +365,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 		}
 
 		if (stat.isDirectory()) {
-			const targetScriptDir = path.join(targetDir, displayName);
+			const targetScriptDir = targetFile;
 			if (dryRun) {
 				logDry(`Copy (directory): ${sourcePath} -> ${targetScriptDir}/`);
 			} else {
@@ -364,7 +378,6 @@ export class ClaudeAdapter implements PlatformAdapter {
 			return;
 		}
 
-		const targetFile = path.join(targetDir, displayName);
 		if (dryRun) {
 			logDry(`Copy: ${sourcePath} -> ${targetFile}`);
 		} else {
@@ -384,8 +397,8 @@ export class ClaudeAdapter implements PlatformAdapter {
 		sourcePath: string,
 		dryRun = false,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".claude", "rules");
-		const targetFile = path.join(targetDir, `${displayName}.md`);
+		const targetFile = claudeDestination(targetPath, "rules", displayName);
+		const targetDir = path.dirname(targetFile);
 
 		try {
 			await fs.stat(sourcePath);
@@ -420,10 +433,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 		const items = yaml.hooks?.PreToolUse;
 		if (!Array.isArray(items)) return [];
 		const wrapperDeploymentPath = path.join(
-			targetPath,
-			".claude",
-			"scripts",
-			"pretool-trace",
+			claudeDestination(targetPath, "scripts", "pretool-trace"),
 			"index.ts",
 		);
 		const scope = isGlobalSync(targetPath) ? "global" : "project";
@@ -529,15 +539,16 @@ export class ClaudeAdapter implements PlatformAdapter {
 				/* empty */
 			}
 			const hookPrefix = isGlobalSync(targetPath) ? "$HOME" : "$CLAUDE_PROJECT_DIR";
-			if (hasIndexTs) return `bun run ${hookPrefix}/.claude/hooks/${displayName}/index.ts`;
-			if (hasIndexSh) return `bash ${hookPrefix}/.claude/hooks/${displayName}/index.sh`;
+			const hookRelativePath = claudeDestinationRelative("hooks", displayName);
+			if (hasIndexTs) return `bun run ${hookPrefix}/${hookRelativePath}/index.ts`;
+			if (hasIndexSh) return `bash ${hookPrefix}/${hookRelativePath}/index.sh`;
 			if (strictMissingIndex) {
 				throw new ClaudePreToolUsePreviewError(-1, `hook directory has no index.ts/index.sh: ${component}`);
 			}
 			return "";
 		}
 		const hookPrefix = isGlobalSync(targetPath) ? "$HOME" : "$CLAUDE_PROJECT_DIR";
-		return `${hookPrefix}/.claude/hooks/${displayName}`;
+		return `${hookPrefix}/${claudeDestinationRelative("hooks", displayName)}`;
 	}
 
 	async syncPlatformYaml(

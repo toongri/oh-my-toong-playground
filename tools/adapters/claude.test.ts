@@ -17,6 +17,7 @@ import type { PlatformYaml } from "../lib/types.ts";
 import type { PlatformWriteObserver } from "./types.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
 import { composePreToolTraceCommand } from "../lib/pretool-trace-command.ts";
+import { planCategoryDestinationPaths } from "./destinations.ts";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -88,6 +89,44 @@ describe("PlatformAdapter 기본 필드", () => {
 
 	it("returns 'CLAUDE.md' for contextFile field", () => {
 		expect(adapter.contextFile).toBe("CLAUDE.md");
+	});
+});
+
+describe("planner destinations", () => {
+	it("writes every Claude component category at the planner destination", async () => {
+		const sources: Record<string, string> = {
+			agent: path.join(tmpDir, "agent.md"),
+			command: path.join(tmpDir, "command.md"),
+			hook: path.join(tmpDir, "hook.sh"),
+			skill: path.join(tmpDir, "skill"),
+			script: path.join(tmpDir, "script.sh"),
+			rule: path.join(tmpDir, "rule.md"),
+		};
+		await writeFile(sources.agent, "agent");
+		await writeFile(sources.command, "command");
+		await writeFile(sources.hook, "#!/bin/sh\n");
+		await writeFile(sources.skill + "/SKILL.md", "skill");
+		await writeFile(sources.script, "script");
+		await writeFile(sources.rule, "rule");
+
+		await adapter.syncAgentsDirect(targetPath, "a", sources.agent);
+		await adapter.syncCommandsDirect(targetPath, "c", sources.command);
+		await adapter.syncHooksDirect(targetPath, "h", sources.hook);
+		await adapter.syncSkillsDirect(targetPath, "s", sources.skill);
+		await adapter.syncScriptsDirect(targetPath, "x", sources.script);
+		await adapter.syncRulesDirect(targetPath, "r", sources.rule);
+
+		for (const [category, name] of [
+			["agents", "a"],
+			["commands", "c"],
+			["hooks", "h"],
+			["skills", "s"],
+			["scripts", "x"],
+			["rules", "r"],
+		] as const) {
+			const [relative] = planCategoryDestinationPaths("claude", category, name);
+			expect(await exists(path.join(targetPath, relative))).toBe(true);
+		}
 	});
 });
 
