@@ -704,10 +704,16 @@ test_old_violation_with_unrelated_new_edit_allows() {
 }
 
 test_missing_jq_fails_open() {
-    local no_jq="$REPO/no-jq-bin" exit_code=0
+    local no_jq="$REPO/no-jq-bin" payload exit_code=0
     mkdir -p "$no_jq"
-    printf '%s' "$(jq -n --arg cwd "$REPO" '{cwd:$cwd,tool_input:{command:"gh pr create --body \"See docs/untracked.md\""}}')" \
-        | PATH="$no_jq" /bin/bash "$HOOK" >/dev/null 2>&1 || exit_code=$?
+    payload=$(jq -n --arg cwd "$REPO" '{cwd:$cwd,tool_input:{command:"gh pr create --body \"See docs/untracked.md\""}}')
+    # Here-string, not a pipe: the hook checks jq BEFORE it reads stdin, so with
+    # jq absent it exits without draining. A pipe writer then loses the race
+    # whenever the hook exits first, and `printf: write error: Broken pipe` under
+    # `pipefail` makes the pipeline -- not the hook -- decide exit_code. Bash
+    # backs a here-string with a temp file, so nothing can receive EPIPE and the
+    # assertion measures only what it claims to.
+    PATH="$no_jq" /bin/bash "$HOOK" >/dev/null 2>&1 <<<"$payload" || exit_code=$?
     [[ "$exit_code" -eq 0 ]]
 }
 

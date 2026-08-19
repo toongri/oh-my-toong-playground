@@ -752,13 +752,16 @@ test_missing_jq_core_and_failed_inspection_allow() {
     mkdir -p "$no_jq"
     payload=$(shell_payload bash 'gh pr create --body "See docs/untracked.md"')
     RUN_EXIT=0
-    RUN_OUTPUT=$(printf '%s' "$payload" | PATH="$no_jq" /bin/bash "$HOOK" 2>/dev/null) || RUN_EXIT=$?
+    # Here-string, not a pipe: with jq (or the core) absent the hook exits
+    # before draining stdin, so a pipe writer can take EPIPE and `pipefail`
+    # would attribute the writer's failure to the hook. See the Claude twin.
+    RUN_OUTPUT=$(PATH="$no_jq" /bin/bash "$HOOK" 2>/dev/null <<<"$payload") || RUN_EXIT=$?
     [ "${RUN_EXIT:-0}" -eq 0 ] && [ -z "$RUN_OUTPUT" ] || return 1
 
     mkdir -p "$tmp_hook"
     cp "$HOOK" "$tmp_hook/"
     RUN_EXIT=0
-    RUN_OUTPUT=$(printf '%s' "$payload" | /bin/bash "$tmp_hook/codex-local-path-ref-gate.sh") || RUN_EXIT=$?
+    RUN_OUTPUT=$(/bin/bash "$tmp_hook/codex-local-path-ref-gate.sh" <<<"$payload") || RUN_EXIT=$?
     [ "$RUN_EXIT" -eq 0 ] && [ -z "$RUN_OUTPUT" ] || return 1
 
     RUN_EXIT=0

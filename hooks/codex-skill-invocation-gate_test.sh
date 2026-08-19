@@ -91,7 +91,9 @@ allowed "$(mkjson "cat $PROJECT/.agents/skills/malformed/SKILL.md")"
 missing_jq_payload=$(mkjson "cat $PROJECT/.agents/skills/explain-diff/SKILL.md")
 mkdir -p "$TMP/no-jq"
 for utility in cat dirname; do ln -s "$(command -v "$utility")" "$TMP/no-jq/$utility"; done
-missing_jq_output=$(printf '%s' "$missing_jq_payload" | PATH="$TMP/no-jq" OMT_DIR="$TMP/omt" "$HOOK")
+# Here-string, not a pipe: the hook checks jq before reading stdin, so with jq
+# absent it exits without draining and a pipe writer can die on EPIPE instead.
+missing_jq_output=$(PATH="$TMP/no-jq" OMT_DIR="$TMP/omt" "$HOOK" <<<"$missing_jq_payload")
 [ -z "$missing_jq_output" ]
 new_omt="$TMP/not-yet-created-omt"
 new_omt_output=$(printf '%s' "$(mkjson "cat $PROJECT/.agents/skills/explain-diff/SKILL.md")" | OMT_DIR="$new_omt" "$HOOK")
