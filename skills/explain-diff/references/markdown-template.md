@@ -71,7 +71,15 @@
   산출 HTML은 여전히 런타임 JS 없이 자기완결이다.
 - 노드 라벨에는 diff에 실재하는 식별자(서비스명·모듈 경로·커맨드명)를 쓴다.
   심사(R12)가 라벨과 diff의 대응을 인용으로 검증한다.
-- 변경 표시는 classDef 하나로 통일한다:
+- 변경 표시는 `classDef changed stroke:#b0563a,stroke-width:3px` 하나로 통일하되,
+  적용 문법은 다이어그램 타입마다 다르다 — 아래 표 밖의 조합은 파스 에러가 난다:
+
+  | 타입 | 적용 문법 |
+  |---|---|
+  | `flowchart` | `class order,coupon changed` |
+  | `classDiagram` | `cssClass "Foo,Bar" changed` 또는 선언에 `class Foo:::changed` |
+  | `stateDiagram-v2` | `class Active changed` |
+  | `erDiagram` | classDef 미지원 — 변경 엔티티는 캡션이나 본문에서 지목 |
 
   ```mermaid
   flowchart LR
