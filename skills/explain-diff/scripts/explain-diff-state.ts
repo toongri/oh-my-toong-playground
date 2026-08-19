@@ -182,7 +182,8 @@ function checkReport(
 		failedItems.push(`${label} 리포트를 찾을 수 없습니다: ${reportPath}`);
 		return;
 	}
-	if (!marker.test(text)) {
+	const closingLine = text.trimEnd().split(/\r?\n/).at(-1) ?? "";
+	if (!marker.test(closingLine)) {
 		failedItems.push(`${label} 리포트에 \`${markerName}\` 줄이 없습니다: ${reportPath}`);
 	}
 }
@@ -288,12 +289,12 @@ function checkRenderOutput(
 		failedItems.push(`문서를 읽을 수 없습니다: ${docPath}`);
 	}
 
-	checkReport("visual-qa", "--visual-report", visualReport, /^VERDICT:\s*PASS/m, "VERDICT: PASS", failedItems);
+	checkReport("visual-qa", "--visual-report", visualReport, /^VERDICT:\s*PASS\s*$/, "VERDICT: PASS", failedItems);
 	checkReport(
 		"technical-writing",
 		"--writing-report",
 		writingReport,
-		/^REVIEW:\s*APPLIED/m,
+		/^REVIEW:\s*APPLIED\s*$/,
 		"REVIEW: APPLIED",
 		failedItems,
 	);

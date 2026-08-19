@@ -600,6 +600,18 @@ describe("render 산출물 검사", () => {
 		expect(state().last_failure.items.join(" ")).toContain("REVIEW: APPLIED");
 	});
 
+	test("리포트의 종결 표식 뒤 미해결 항목이 있으면 실패한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		writeFileSync(rep.visual, "VERDICT: PASS\n미해결 겹침\n", "utf8");
+		writeFileSync(rep.writing, "REVIEW: APPLIED\n미반영 지적\n", "utf8");
+
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing)).toBe(1);
+		expect(state().last_failure.items.join(" ")).toContain("VERDICT: PASS");
+	});
+
 	test("문서에 mermaid 블록이 있는데 HTML에 SVG가 그만큼 없으면 실패한다", async () => {
 		const { submitStep, doc } = await driveToRender();
 		const htmlPath = join(sandbox, "doc.html");
