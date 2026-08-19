@@ -84,6 +84,21 @@ plugins:
 scope, 프로젝트 YAML에서는 project scope로 실행한다. 다른 플러그인은 보존되고,
 이미 제거된 플러그인을 다시 지정해도 안전하게 처리된다.
 
+### Claude 플러그인의 트랜잭션 범위와 외부 명령
+
+플러그인 항목의 `check`와 `pre-commands`는 대상 워크트리에서 `bash -c`로
+실행된다. 따라서 Claude CLI 호출을 포함한 임의의 셸 명령이 사용자 범위,
+프로젝트 범위 또는 `deployRoot` 밖의 외부 상태를 변경할 수 있다. 플러그인
+설치·제거와 이 명령들의 변경은 파일 배포용 `DeployTransaction`에 포함되지
+않으며, 트랜잭션으로 롤백할 수도 없다. 뒤이어 다른 대상의 배포가 실패해도
+이미 실행된 외부 변경은 남을 수 있다.
+
+복구가 필요하면 먼저 같은 설정으로 sync를 재시도한다. 플러그인 상태가
+엇갈렸다면 해당 scope에 맞는 Claude CLI `plugin uninstall` 또는 `plugin install`을
+수동으로 실행하고, `check`·`pre-commands`가 만든 파일·설정·기타 외부 변경은
+그 명령의 의미에 맞게 직접 되돌린다. 이 복구 절차는 선언형 파일 배포의
+트랜잭션 보장에 포함되지 않는다.
+
 ## 두 개의 gitignore 계층 (핵심)
 
 `claude.yaml`과 `claude.local.yaml`을 가르는 건 "팀에 유출되느냐"가 **아니다**.
