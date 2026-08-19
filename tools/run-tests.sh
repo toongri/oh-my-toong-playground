@@ -30,6 +30,30 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Complete, untruncated transcript of this run. Everything stdout shows is
+# abridged -- per-test output is echoed as `tail -20` so one noisy test cannot
+# bury the rest -- and stdout itself is routinely kept only as a tail (a
+# truncated CI log, a backgrounded run captured with `tail`, terminal
+# scrollback). Both together lose the very thing a failure needs: which test,
+# and its output. This file is the unabridged copy that survives both, and its
+# path is printed in the summary on every run, pass or fail. Override with
+# OMT_TEST_LOG to place it somewhere a CI job can archive.
+# TMPDIR usually carries a trailing slash on macOS; strip it so the printed
+# path is copy-pasteable rather than containing a doubled separator.
+RUN_LOG="${OMT_TEST_LOG:-${TMPDIR:-/tmp}}"
+RUN_LOG="${RUN_LOG%/}"
+[[ -n "${OMT_TEST_LOG:-}" ]] || RUN_LOG="$RUN_LOG/omt-run-tests.log"
+: > "$RUN_LOG"
+
+# Appends a titled block to the run log. Never writes to stdout.
+log_block() {
+    {
+        echo "===== $1"
+        cat
+        echo ""
+    } >> "$RUN_LOG"
+}
+
 SHELL_PASS=0
 SHELL_FAIL=0
 SHELL_TOTAL=0
@@ -95,11 +119,13 @@ run_shell_tests() {
         local output
         if output=$(run_without_git_local_env bash "$test_file" 2>&1); then
             ((SHELL_PASS++)) || true
+            printf '%s\n' "$output" | log_block "PASS $rel_path"
             log_success "  통과: $rel_path"
         else
             ((SHELL_FAIL++)) || true
             SHELL_FAILED_NAMES="${SHELL_FAILED_NAMES}${rel_path}
 "
+            printf '%s\n' "$output" | log_block "FAIL $rel_path"
             log_fail "  실패: $rel_path"
             # 실패 시 출력 마지막 20줄 표시
             echo "$output" | tail -20 | while IFS= read -r line; do
@@ -130,6 +156,7 @@ run_bun_tests() {
     if output=$(cd "$ROOT_DIR" && run_without_git_local_env bun test ./tools/ ./lib/ ./scripts/ ./hooks/ ./skills/ ./projects/ 2>&1); then
         TS_PASS=1
         TS_TOTAL=1
+        printf '%s\n' "$output" | log_block "PASS bun test"
         log_success "  Bun 테스트 통과"
         # Show summary line from bun test output
         echo "$output" | tail -5 | while IFS= read -r line; do
@@ -139,6 +166,7 @@ run_bun_tests() {
         TS_FAIL=1
         TS_TOTAL=1
         log_fail "  Bun 테스트 실패"
+        printf '%s\n' "$output" | log_block "FAIL bun test"
         # Harvest every failure name before the tail window throws them away.
         TS_FAILED_NAMES=$(echo "$output" | grep '^(fail)' || true)
         echo "$output" | tail -20 | while IFS= read -r line; do
@@ -178,6 +206,7 @@ main() {
             echo -e "    ${RED}실패${NC}: ${failed_name#(fail) }"
         done
     fi
+    echo -e "  전체 로그(미축약): $RUN_LOG"
     echo "=========================================="
 
     if [[ $SHELL_FAIL -gt 0 || $TS_FAIL -gt 0 ]]; then
