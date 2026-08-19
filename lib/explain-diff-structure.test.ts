@@ -424,6 +424,13 @@ describe("모든 저작 스텝 — R11 스타일 발명 금지", () => {
 		expect(r.pass).toBe(false);
 	});
 
+	test("단일 인용부호의 style과 승인 목록 밖 class도 실패한다", () => {
+		const doc = `${evidenceOnlyDoc("a.ts")}\n<div style='color:red' class='invented'>x</div>\n`;
+		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "evidence" });
+		expect(r.pass).toBe(false);
+		expect(r.failedItems.join(" ")).toContain("invented");
+	});
+
 	test("승인 목록 밖의 class를 쓰면 실패하고 그 클래스명을 사유에 담는다", () => {
 		const doc = `${evidenceOnlyDoc("a.ts")}\n<div class="my-fancy-box">x</div>\n`;
 		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "evidence" });

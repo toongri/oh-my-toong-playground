@@ -344,10 +344,10 @@ const SANCTIONED_CLASSES = new Set([
 function checkR11(text: string): CheckItem {
 	const problems: string[] = [];
 	if (/<style/i.test(text)) problems.push("<style> 블록은 금지입니다 — 스타일은 render.ts가 소유합니다");
-	if (/style\s*=\s*"/i.test(text)) problems.push('인라인 style="…" 속성은 금지입니다 — 승인된 컴포넌트 클래스를 쓰세요');
+	if (/style\s*=\s*["']/i.test(text)) problems.push('인라인 style="…" 속성은 금지입니다 — 승인된 컴포넌트 클래스를 쓰세요');
 	const unknown = new Set<string>();
-	for (const m of text.matchAll(/class\s*=\s*"([^"]*)"/gi)) {
-		for (const cls of (m[1] ?? "").split(/\s+/).filter(Boolean)) {
+	for (const m of text.matchAll(/class\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {
+		for (const cls of (m[1] ?? m[2] ?? "").split(/\s+/).filter(Boolean)) {
 			if (!SANCTIONED_CLASSES.has(cls)) unknown.add(cls);
 		}
 	}
