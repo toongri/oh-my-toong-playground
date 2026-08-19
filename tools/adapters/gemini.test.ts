@@ -104,6 +104,55 @@ describe("syncAgentsDirect", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncCommandsDirect", () => {
+	it("wraps generated TOML content in the mutation journal", async () => {
+		const sourceFile = path.join(tmpDir, "commands", "journaled.md");
+		await writeFile(sourceFile, `---\ndescription: Journal me\n---\n`);
+		const calls: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (target, operation) => {
+				calls.push(target);
+				await operation();
+			},
+		};
+
+		await adapter.syncCommandsDirect(targetPath, "journaled", sourceFile, false, mutationHooks);
+
+		expect(calls).toEqual([path.join(targetPath, ".gemini", "commands", "journaled.toml")]);
+	});
+
+	it("does not invoke mutation hooks during dry-run", async () => {
+		const sourceFile = path.join(tmpDir, "commands", "preview.md");
+		await writeFile(sourceFile, `---\ndescription: Preview\n---\n`);
+		let calls = 0;
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (_target, operation) => {
+				calls += 1;
+				await operation();
+			},
+		};
+
+		await adapter.syncCommandsDirect(targetPath, "preview", sourceFile, true, mutationHooks);
+
+		expect(calls).toBe(0);
+	});
+
+	it("does not overwrite a resident TOML when mutation pre-CAS rejects", async () => {
+		const sourceFile = path.join(tmpDir, "commands", "conflict.md");
+		await writeFile(sourceFile, `---\ndescription: New\n---\n`);
+		const targetFile = path.join(targetPath, ".gemini", "commands", "conflict.toml");
+		await writeFile(targetFile, "resident = true\n");
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async () => {
+				throw new Error("concurrent mutation");
+			},
+		};
+
+		await expect(
+			adapter.syncCommandsDirect(targetPath, "conflict", sourceFile, false, mutationHooks),
+		).rejects.toThrow("concurrent mutation");
+		expect(await fs.readFile(targetFile, "utf8")).toBe("resident = true\n");
+	});
+
 	it("generates .toml with frontmatter description via `syncCommandsDirect`", async () => {
 		const sourceFile = path.join(tmpDir, "commands", "prometheus.md");
 		await writeFile(
@@ -314,17 +363,28 @@ describe("syncHooksDirect", () => {
 		);
 		await writeFile(path.join(hooksDir, "lib", "shared.sh"), "shared\n");
 		const paths: string[] = [];
+		const observed: string[] = [];
 		const mutationHooks: DeployMutationHooks = {
 			mutate: async (target, operation) => {
 				paths.push(path.relative(targetPath, target));
 				await operation();
 			},
 		};
-		await adapter.syncHooksDirect(targetPath, "dir-hook", sourceDir, false, undefined, mutationHooks);
+		await adapter.syncHooksDirect(
+			targetPath,
+			"dir-hook",
+			sourceDir,
+			false,
+			(target) => {
+				observed.push(path.relative(targetPath, target));
+			},
+			mutationHooks,
+		);
 		expect(paths).toEqual([
-			path.join(".gemini", "hooks", "dir-hook"),
+			path.join(".gemini", "hooks", "dir-hook", "entry.sh"),
 			path.join(".gemini", "hooks", "dir-hook", "lib", "shared.sh"),
 		]);
+		expect(observed).toEqual([path.join(".gemini", "hooks", "dir-hook", "lib", "shared.sh")]);
 	});
 
 	it("does not invoke mutation or observer hooks during dry-run", async () => {
@@ -455,6 +515,26 @@ describe("syncHooksDirect", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncSkillsDirect", () => {
+	it("forwards mutation hooks to each directory leaf", async () => {
+		const sourceDir = path.join(tmpDir, "skills", "journaled");
+		await writeFile(path.join(sourceDir, "SKILL.md"), "# Skill\n");
+		await writeFile(path.join(sourceDir, "nested", "README.md"), "# Readme\n");
+		const calls: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (target, operation) => {
+				calls.push(target);
+				await operation();
+			},
+		};
+
+		await adapter.syncSkillsDirect(targetPath, "journaled", sourceDir, false, mutationHooks);
+
+		expect(calls.sort()).toEqual([
+			path.join(targetPath, ".gemini", "skills", "journaled", "SKILL.md"),
+			path.join(targetPath, ".gemini", "skills", "journaled", "nested", "README.md"),
+		].sort());
+	});
+
 	it("copies skill directory to .gemini/skills/{name}/ via `syncSkillsDirect`", async () => {
 		const sourceDir = path.join(tmpDir, "skills", "prometheus");
 		await writeFile(path.join(sourceDir, "SKILL.md"), "# Prometheus\n");
@@ -492,6 +572,42 @@ describe("syncSkillsDirect", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncScriptsDirect", () => {
+	it("wraps a plain script copy in the mutation journal", async () => {
+		const sourceFile = path.join(tmpDir, "scripts", "journaled.sh");
+		await writeFile(sourceFile, "#!/bin/bash\necho journaled\n");
+		const calls: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (target, operation) => {
+				calls.push(target);
+				await operation();
+			},
+		};
+
+		await adapter.syncScriptsDirect(targetPath, "journaled.sh", sourceFile, false, mutationHooks);
+
+		expect(calls).toEqual([path.join(targetPath, ".gemini", "scripts", "journaled.sh")]);
+	});
+
+	it("forwards mutation hooks to each script directory leaf", async () => {
+		const sourceDir = path.join(tmpDir, "scripts", "journaled");
+		await writeFile(path.join(sourceDir, "index.ts"), "export {};\n");
+		await writeFile(path.join(sourceDir, "lib", "helper.ts"), "export {};\n");
+		const calls: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (target, operation) => {
+				calls.push(target);
+				await operation();
+			},
+		};
+
+		await adapter.syncScriptsDirect(targetPath, "journaled", sourceDir, false, mutationHooks);
+
+		expect(calls.sort()).toEqual([
+			path.join(targetPath, ".gemini", "scripts", "journaled", "index.ts"),
+			path.join(targetPath, ".gemini", "scripts", "journaled", "lib", "helper.ts"),
+		].sort());
+	});
+
 	it("copies script directory to .gemini/scripts/{name}/ via `syncScriptsDirect`", async () => {
 		const sourceDir = path.join(tmpDir, "scripts", "hud");
 		await writeFile(path.join(sourceDir, "index.ts"), "export {};\n");

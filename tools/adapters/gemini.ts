@@ -134,6 +134,7 @@ export class GeminiAdapter implements PlatformAdapter {
 		_addHooks?: unknown[],
 		_dryRun = false,
 		_modelMap?: ModelMap,
+		_mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		logWarn(`Gemini: agents는 지원되지 않습니다. Skip: ${displayName}`);
 	}
@@ -154,6 +155,7 @@ export class GeminiAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const targetFile = this.absoluteDestinationPath(targetPath, "commands", displayName);
 		const targetDir = path.dirname(targetFile);
@@ -184,9 +186,13 @@ export class GeminiAdapter implements PlatformAdapter {
 		const description =
 			typeof frontmatter["description"] === "string" ? frontmatter["description"] : "";
 
-		await fs.mkdir(targetDir, { recursive: true });
 		const toml = tomlStringify({ extension: { name: displayName, description } });
-		await fs.writeFile(targetFile, toml, "utf8");
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(targetDir, { recursive: true });
+			await fs.writeFile(targetFile, toml, "utf8");
+		};
+		if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+		else await operation();
 		logInfo(`Created: ${displayName}.toml`);
 	}
 
@@ -223,15 +229,12 @@ export class GeminiAdapter implements PlatformAdapter {
 				logDry(`Copy (directory): ${sourcePath} -> ${targetHookDir}/`);
 				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
 			} else {
-				const operation = async (): Promise<void> => {
-					await syncDirectory(sourcePath, targetHookDir, {
-						exclude: ["*.test.ts"],
-					});
-				};
-				if (mutationHooks) await mutationHooks.mutate(targetHookDir, operation);
-				else await operation();
+				await syncDirectory(sourcePath, targetHookDir, {
+					exclude: ["*.test.ts"],
+					mutationHooks,
+				});
 				logInfo(`Copied: ${displayName}/`);
-				await writeObserver?.(targetHookDir);
+				if (!mutationHooks) await writeObserver?.(targetHookDir);
 				await syncShellDepsForDir(
 					sourcePath,
 					hooksSourceDir,
@@ -279,6 +282,7 @@ export class GeminiAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const targetSkillDir = this.absoluteDestinationPath(targetPath, "skills", displayName);
 
@@ -295,7 +299,7 @@ export class GeminiAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await syncDirectory(sourcePath, targetSkillDir);
+		await syncDirectory(sourcePath, targetSkillDir, { mutationHooks });
 		logInfo(`Copied: ${displayName}/`);
 	}
 
@@ -309,6 +313,7 @@ export class GeminiAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const targetScriptRoot = this.absoluteDestinationPath(targetPath, "scripts", displayName);
 		const targetDir = path.dirname(targetScriptRoot);
@@ -328,6 +333,7 @@ export class GeminiAdapter implements PlatformAdapter {
 			} else {
 				await syncDirectory(sourcePath, targetScriptDir, {
 					exclude: ["*.test.ts"],
+					mutationHooks,
 				});
 				logInfo(`Copied: ${displayName}/`);
 			}
@@ -338,8 +344,12 @@ export class GeminiAdapter implements PlatformAdapter {
 		if (dryRun) {
 			logDry(`Copy: ${sourcePath} -> ${targetFile}`);
 		} else {
-			await fs.mkdir(targetDir, { recursive: true });
-			await fs.copyFile(sourcePath, targetFile);
+			const operation = async (): Promise<void> => {
+				await fs.mkdir(targetDir, { recursive: true });
+				await copyFile(sourcePath, targetFile);
+			};
+			if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+			else await operation();
 			logInfo(`Copied: ${displayName}`);
 		}
 	}
@@ -357,6 +367,8 @@ export class GeminiAdapter implements PlatformAdapter {
 		displayName: string,
 		_sourcePath: string,
 		_dryRun = false,
+		_writeObserver?: PlatformWriteObserver,
+		_mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		logWarn(`Gemini: rules는 지원되지 않습니다. Skip: ${displayName}`);
 	}
