@@ -1983,6 +1983,218 @@ describe("syncPlatformConfigs", () => {
 });
 
 describe("processYaml platform transaction atomicity", () => {
+	it("restores orphan leaves and the raw manifest after a later category failure", async () => {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-manifest-txn-"));
+		try {
+			const rootDir = path.join(tmpDir, "root");
+			const targetPath = path.join(tmpDir, "target");
+			await fs.mkdir(targetPath, { recursive: true });
+			await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+			await fs.mkdir(path.join(rootDir, "agents"), { recursive: true });
+			await fs.mkdir(path.join(rootDir, "skills"), { recursive: true });
+			await writeFile(path.join(rootDir, "agents", "old.md"), "old source\n");
+			await writeFile(path.join(rootDir, "agents", "keep.md"), "keep source\n");
+			await writeFile(path.join(rootDir, "skills", "later.md"), "later source\n");
+			const syncYamlPath = path.join(tmpDir, "sync.yaml");
+			const writeYaml = async (agents: string, skills = "") => writeFile(
+				syncYamlPath,
+				`path: ${targetPath}\nagents:\n  platforms: [claude]\n  items: [${agents}]\n${skills ? `skills:\n  platforms: [claude]\n  items: [${skills}]\n` : ""}`,
+			);
+			const adapter = new ClaudeAdapter();
+			adapter.syncAgentsDirect = async (target, displayName) => {
+				await writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName} deployed\n`);
+			};
+			await writeYaml("old, keep");
+			await processYaml(makeContext(), syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", adapter]]) as AdapterMap, rootDir);
+			const manifestPath = path.join(targetPath, ".omt", "sync-manifest.json");
+			const manifestBefore = await readFile(manifestPath);
+			const oldPath = path.join(targetPath, ".claude", "agents", "old.md");
+			const oldBefore = await readFile(oldPath);
+
+			class FailingAdapter extends ClaudeAdapter {
+				override async syncAgentsDirect(target: string, displayName: string): Promise<void> {
+					await writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName} updated\n`);
+				}
+				override async syncSkillsDirect(): Promise<void> { throw new Error("later category failure"); }
+			}
+			await writeYaml("keep", "later");
+			const failed = makeContext();
+			await processYaml(failed, syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", new FailingAdapter()]]) as AdapterMap, rootDir);
+			expect(failed.failedTargets).toContain(targetPath);
+			expect(await readFile(oldPath)).toBe(oldBefore);
+			expect(await readFile(manifestPath)).toBe(manifestBefore);
+		} finally {
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("preserves an external orphan edit and the prior manifest on CAS conflict", async () => {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-manifest-conflict-"));
+		try {
+			const rootDir = path.join(tmpDir, "root");
+			const targetPath = path.join(tmpDir, "target");
+			await fs.mkdir(targetPath, { recursive: true });
+			await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+			await fs.mkdir(path.join(rootDir, "agents"), { recursive: true });
+			await writeFile(path.join(rootDir, "agents", "old.md"), "old source\n");
+			await writeFile(path.join(rootDir, "agents", "keep.md"), "keep source\n");
+			const syncYamlPath = path.join(tmpDir, "sync.yaml");
+			const writeYaml = async (agents: string) => writeFile(syncYamlPath, `path: ${targetPath}\nagents:\n  platforms: [claude]\n  items: [${agents}]\n`);
+			const initial = new ClaudeAdapter();
+			initial.syncAgentsDirect = async (target, displayName) => {
+				await writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName}\n`);
+			};
+			await writeYaml("old, keep");
+			await processYaml(makeContext(), syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", initial]]) as AdapterMap, rootDir);
+			const manifestPath = path.join(targetPath, ".omt", "sync-manifest.json");
+			const manifestBefore = await readFile(manifestPath);
+			const oldPath = path.join(targetPath, ".claude", "agents", "old.md");
+			const conflicting = new ClaudeAdapter();
+			conflicting.syncAgentsDirect = async (target, displayName) => {
+				await writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName} updated\n`);
+				if (displayName === "keep") await writeFile(oldPath, "external edit\n");
+			};
+			await writeYaml("keep");
+			const failed = makeContext();
+			await processYaml(failed, syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", conflicting]]) as AdapterMap, rootDir);
+			expect(failed.failedTargets).toContain(targetPath);
+			expect(await readFile(oldPath)).toBe("external edit\n");
+			expect(await readFile(manifestPath)).toBe(manifestBefore);
+		} finally {
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("restores orphan leaves from multiple reconciled pairs before a later failure", async () => {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-manifest-pairs-"));
+		try {
+			const rootDir = path.join(tmpDir, "root");
+			const targetPath = path.join(tmpDir, "target");
+			await fs.mkdir(targetPath, { recursive: true });
+			await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+			for (const category of ["agents", "commands", "skills"]) await fs.mkdir(path.join(rootDir, category), { recursive: true });
+			for (const category of ["agents", "commands"]) {
+				await writeFile(path.join(rootDir, category, "old.md"), `${category} old\n`);
+				await writeFile(path.join(rootDir, category, "keep.md"), `${category} keep\n`);
+			}
+			await writeFile(path.join(rootDir, "skills", "later.md"), "later\n");
+			const syncYamlPath = path.join(tmpDir, "sync.yaml");
+			const writeYaml = async (declared: string, skills = "") => writeFile(
+				syncYamlPath,
+				`path: ${targetPath}\nagents:\n  platforms: [claude]\n  items: [${declared}]\ncommands:\n  platforms: [claude]\n  items: [${declared}]\n${skills ? `skills:\n  platforms: [claude]\n  items: [${skills}]\n` : ""}`,
+			);
+			const initial = new ClaudeAdapter();
+			initial.syncAgentsDirect = async (target, displayName) => writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName}\n`);
+			initial.syncCommandsDirect = async (target, displayName) => writeFile(path.join(target, ".claude", "commands", `${displayName}.md`), `${displayName}\n`);
+			await writeYaml("old, keep");
+			await processYaml(makeContext(), syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", initial]]) as AdapterMap, rootDir);
+			const manifestPath = path.join(targetPath, ".omt", "sync-manifest.json");
+			const manifestBefore = await readFile(manifestPath);
+			const agentOld = path.join(targetPath, ".claude", "agents", "old.md");
+			const commandOld = path.join(targetPath, ".claude", "commands", "old.md");
+			class FailingAdapter extends ClaudeAdapter {
+				override async syncAgentsDirect(target: string, displayName: string): Promise<void> { await writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName} updated\n`); }
+				override async syncCommandsDirect(target: string, displayName: string): Promise<void> { await writeFile(path.join(target, ".claude", "commands", `${displayName}.md`), `${displayName} updated\n`); }
+				override async syncSkillsDirect(): Promise<void> { throw new Error("later pair failure"); }
+			}
+			await writeYaml("keep", "later");
+			const failed = makeContext();
+			await processYaml(failed, syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", new FailingAdapter()]]) as AdapterMap, rootDir);
+			expect(failed.failedTargets).toContain(targetPath);
+			expect(await readFile(agentOld)).toBe("old\n");
+			expect(await readFile(commandOld)).toBe("old\n");
+			expect(await readFile(manifestPath)).toBe(manifestBefore);
+		} finally { await fs.rm(tmpDir, { recursive: true, force: true }); }
+	});
+
+	it("restores missing or corrupt bootstrap manifests after a later failure", async () => {
+		for (const initialManifest of [null, "{broken\n"]) {
+			const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-manifest-bootstrap-"));
+			try {
+				const rootDir = path.join(tmpDir, "root");
+				const targetPath = path.join(tmpDir, "target");
+				await fs.mkdir(path.join(targetPath, ".claude", "agents"), { recursive: true });
+				await writeFile(path.join(targetPath, ".claude", "agents", "foreign.md"), "foreign\n");
+				if (initialManifest !== null) await writeFile(path.join(targetPath, ".omt", "sync-manifest.json"), initialManifest);
+				await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+				await fs.mkdir(path.join(rootDir, "agents"), { recursive: true });
+				await fs.mkdir(path.join(rootDir, "skills"), { recursive: true });
+				await writeFile(path.join(rootDir, "agents", "keep.md"), "keep\n");
+				await writeFile(path.join(rootDir, "skills", "later.md"), "later\n");
+				const syncYamlPath = path.join(tmpDir, "sync.yaml");
+				await writeFile(syncYamlPath, `path: ${targetPath}\nagents:\n  platforms: [claude]\n  items: [keep]\nskills:\n  platforms: [claude]\n  items: [later]\n`);
+				class FailingAdapter extends ClaudeAdapter {
+					override async syncAgentsDirect(target: string, displayName: string): Promise<void> { await writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), "new\n"); }
+					override async syncSkillsDirect(): Promise<void> { throw new Error("bootstrap later failure"); }
+				}
+				const failed = makeContext();
+				await processYaml(failed, syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", new FailingAdapter()]]) as AdapterMap, rootDir);
+				expect(failed.failedTargets).toContain(targetPath);
+				expect(await readFile(path.join(targetPath, ".claude", "agents", "foreign.md"))).toBe("foreign\n");
+				expect(await exists(path.join(targetPath, ".claude", "agents", "keep.md"))).toBe(false);
+				if (initialManifest === null) expect(await exists(path.join(targetPath, ".omt", "sync-manifest.json"))).toBe(false);
+				else expect(await readFile(path.join(targetPath, ".omt", "sync-manifest.json"))).toBe(initialManifest);
+			} finally { await fs.rm(tmpDir, { recursive: true, force: true }); }
+		}
+	});
+
+	it("checkpoints a partial orphan mutation before rethrowing its operation error", async () => {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-manifest-partial-"));
+		const originalRm = fs.rm.bind(fs);
+		const rmSpy = spyOn(fs, "rm");
+		try {
+			const rootDir = path.join(tmpDir, "root");
+			const targetPath = path.join(tmpDir, "target");
+			await fs.mkdir(targetPath, { recursive: true });
+			await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+			await fs.mkdir(path.join(rootDir, "agents"), { recursive: true });
+			for (const name of ["old1", "old2", "keep"]) await writeFile(path.join(rootDir, "agents", `${name}.md`), `${name}\n`);
+			const syncYamlPath = path.join(tmpDir, "sync.yaml");
+			const writeYaml = async (items: string) => writeFile(syncYamlPath, `path: ${targetPath}\nagents:\n  platforms: [claude]\n  items: [${items}]\n`);
+			const initial = new ClaudeAdapter();
+			initial.syncAgentsDirect = async (target, displayName) => writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName}\n`);
+			await writeYaml("old1, old2, keep");
+			await processYaml(makeContext(), syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", initial]]) as AdapterMap, rootDir);
+			const manifestPath = path.join(targetPath, ".omt", "sync-manifest.json");
+			const manifestBefore = await readFile(manifestPath);
+			rmSpy.mockImplementation(async (target, options) => {
+				await originalRm(target, options);
+				if (String(target).endsWith("old2.md")) throw new Error("partial orphan failure");
+			});
+			await writeYaml("keep");
+			const failed = makeContext();
+			await processYaml(failed, syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", initial]]) as AdapterMap, rootDir);
+			expect(failed.failedTargets).toContain(targetPath);
+			expect(await readFile(path.join(targetPath, ".claude", "agents", "old1.md"))).toBe("old1\n");
+			expect(await readFile(path.join(targetPath, ".claude", "agents", "old2.md"))).toBe("old2\n");
+			expect(await readFile(manifestPath)).toBe(manifestBefore);
+		} finally {
+			rmSpy.mockRestore();
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("arms a transaction for a docs-only run when a valid prior manifest exists", async () => {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-manifest-only-txn-"));
+		const cpSpy = spyOn(fs, "cp");
+		try {
+			const rootDir = path.join(tmpDir, "root");
+			const targetPath = path.join(tmpDir, "target");
+			await fs.mkdir(path.join(targetPath, ".claude", "agents"), { recursive: true });
+			await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+			await writeFile(path.join(tmpDir, "sync.yaml"), `path: ${targetPath}\n`);
+			await writeFile(path.join(targetPath, ".claude", "agents", "old.md"), "old\n");
+			await writeFile(path.join(targetPath, ".omt", "sync-manifest.json"), '{"claude/agents":["old"]}\n');
+			await processYaml(makeContext(), path.join(tmpDir, "sync.yaml"), new Map<Platform, PlatformAdapter>(), rootDir);
+			const copiedSources = cpSpy.mock.calls.map((args) => String(args[0]));
+			expect(copiedSources).toContain(path.join(targetPath, ".omt", "sync-manifest.json"));
+			expect(copiedSources).toContain(path.join(targetPath, ".claude", "agents", "old.md"));
+		} finally {
+			cpSpy.mockRestore();
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
+	});
+
 	it("rolls back file-backed category destinations using planner suffixes", async () => {
 		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-file-dest-txn-"));
 		try {

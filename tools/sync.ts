@@ -46,7 +46,12 @@ import {
 	isSafeBackupRoot,
 } from "./lib/backup.ts";
 import { resolveOmtDir, getOmtDir, deriveProjectName } from "../lib/omt-dir.ts";
-import { reconcilePairManifest, removeManifestPair } from "./lib/deploy-manifest.ts";
+import {
+	reconcilePairManifest,
+	removeManifestPair,
+	readManifest,
+	type ManifestMutationHooks,
+} from "./lib/deploy-manifest.ts";
 import { resolveDocsTarget, detectDocsTargetCollisions } from "./lib/path-utils.ts";
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
 import { ProjectKeyError } from "./lib/git-key.ts";
@@ -656,8 +661,11 @@ export async function syncCategory(
 	// is a no-op there). deployedNames is already keyed by deploy LOCATION
 	// (deployLocationForManifest), so no further mapping is needed here.
 	if (options?.reconcile !== false && !context.dryRun) {
+		const manifestMutationHooks = transaction
+			? createManifestMutationHooks(transaction)
+			: undefined;
 		for (const [deployLocation, names] of deployedNames) {
-			await reconcilePairManifest(deployRoot, deployLocation, category, [...names]);
+			await reconcilePairManifest(deployRoot, deployLocation, category, [...names], manifestMutationHooks);
 		}
 	}
 
@@ -679,7 +687,12 @@ export async function syncCategory(
 			deployedNames.get("agents") ?? new Set(),
 		);
 		if (!context.dryRun) {
-			await removeManifestPair(deployRoot, "codex", "skills");
+			await removeManifestPair(
+				deployRoot,
+				"codex",
+				"skills",
+				transaction ? createManifestMutationHooks(transaction) : undefined,
+			);
 		}
 	}
 }
@@ -2031,6 +2044,32 @@ export function isFatalSyncError(err: unknown): boolean {
 type DeployTransactionEntry = { live: string; before: string; expected: string; owners?: string[] };
 type DeployTransaction = { entries: DeployTransactionEntry[] };
 
+const MANIFEST_MUTATION_SUFFIXES = ["", ".md", ".toml"] as const;
+
+/** Inventory the manifest file and every concrete leaf form that a valid prior manifest can own. */
+async function collectManifestTransactionPaths(deployRoot: string): Promise<string[]> {
+	const root = path.resolve(deployRoot);
+	const manifestPath = path.join(root, ".omt", "sync-manifest.json");
+	const paths = [manifestPath];
+	const manifest = await readManifest(root);
+	if (manifest === null) return paths;
+	for (const [pair, names] of Object.entries(manifest)) {
+		const segments = pair.split("/");
+		if (segments.length !== 2) throw new Error(`Invalid manifest pair: ${pair}`);
+		const [location, category] = segments;
+		for (const name of names) {
+			for (const suffix of MANIFEST_MUTATION_SUFFIXES) {
+				const candidate = path.resolve(root, `.${location}`, category, `${name}${suffix}`);
+				if (candidate !== root && !candidate.startsWith(`${root}${path.sep}`)) {
+					throw new Error(`Manifest path escapes deploy root: ${pair}/${name}`);
+				}
+				paths.push(candidate);
+			}
+		}
+	}
+	return [...new Set(paths)];
+}
+
 async function fingerprint(target: string): Promise<string> {
 	const hash = createHash("sha256");
 	const walk = async (current: string, rel = ""): Promise<void> => {
@@ -2098,6 +2137,28 @@ async function checkpointDeployTransactionPaths(
 			dependency.expected = await fingerprint(dependency.live);
 		}
 	}
+}
+
+function createManifestMutationHooks(transaction: DeployTransaction): ManifestMutationHooks {
+	return {
+		mutate: async (targetPath, operation) => {
+			const normalizedTarget = path.normalize(path.resolve(targetPath));
+			const entry = transaction.entries.find(
+				(candidate) => path.normalize(path.resolve(candidate.live)) === normalizedTarget,
+			);
+			if (!entry) throw new Error(`Manifest mutation target was not inventoried: ${targetPath}`);
+			if ((await fingerprint(entry.live)) !== entry.expected) {
+				throw new Error(`Manifest mutation conflict: ${targetPath}`);
+			}
+			try {
+				await operation();
+			} catch (error) {
+				entry.expected = await fingerprint(entry.live);
+				throw error;
+			}
+			entry.expected = await fingerprint(entry.live);
+		},
+	};
 }
 
 async function finishDeployTransaction(transaction: DeployTransaction | null): Promise<void> {
@@ -2354,8 +2415,10 @@ export async function processYaml(
 			const hasPlatformYaml = (await Promise.all(
 				KNOWN_PLATFORMS.map(async (platform) => (await parseAndMergePlatformYaml(yamlDir, platform)) !== null),
 			)).some(Boolean);
-			if (shouldMkdirClaude || libSourceRoots.size > 0 || platformHookTransactionPaths.length > 0 || hasPlatformYaml) {
+			const hasValidPreviousManifest = (await readManifest(deployRoot)) !== null;
+			if (shouldMkdirClaude || libSourceRoots.size > 0 || platformHookTransactionPaths.length > 0 || hasPlatformYaml || hasValidPreviousManifest) {
 				const ownedPaths: Array<string | { path: string; owner: string }> = [];
+				ownedPaths.push(...await collectManifestTransactionPaths(deployRoot));
 				for (const category of CATEGORIES) {
 					const section = syncYaml[category];
 					for (const item of section?.items ?? []) {
