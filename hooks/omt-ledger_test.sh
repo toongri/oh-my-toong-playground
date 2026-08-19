@@ -400,48 +400,63 @@ test_empty_session_id_refuses_and_creates_no_file() {
 }
 
 # =============================================================================
-# Test (PR #162 finding A, P2): two concurrent append/now invocations must be
+# Test (PR #162 finding A, P2): concurrent append invocations must be
 # serialized via a lock so one cannot clobber the other's write (last-writer-
-# wins durability race). Deterministic reproduction: pre-seize the lock
-# directory ourselves, launch a background append, and assert it stays
-# blocked (content absent, process still alive) until we release the lock.
+# wins durability race).
+#
+# This asserts the DURABILITY OUTCOME, not the blocking mechanism: launch
+# WRITER_COUNT appends at once and require every one of their payloads to
+# survive in the final file. The critical section is a read-modify-write
+# ending in `mv`, so an unserialized run has overlapping writers read the
+# same base and the later `mv` drops the earlier payload -- a missing token
+# is exactly the clobber this lock exists to prevent.
+#
+# Why not the earlier shape (hold the lock ourselves, sleep, assert the
+# background append is still blocked): that sleep was not incidental pacing,
+# it WAS the observation window -- it had to outlast an unserialized writer's
+# whole run for the clobber to be visible, while omt-ledger.sh gives up on
+# the lock after ~5s, so the window was squeezed between two wall-clock
+# bounds it did not control. Measured against a lock-removed mutant, the
+# blocking form only detected it while that sleep stayed long enough.
+# Asserting the outcome needs no window at all: `wait` supplies the
+# synchronization, and the verdict is a set of tokens in a file.
 # =============================================================================
 
 test_concurrent_append_serializes_via_lock() {
+    local writer_count=8
+    local ledger i pid
+    local pids=""
+
     printf 'seed' | "$LEDGER_SCRIPT" append Decisions >/dev/null
-
-    local ledger lockdir pid
     ledger="$(ledger_path)"
-    lockdir="${ledger}.lock"
 
-    mkdir "$lockdir"
+    i=1
+    while [[ "$i" -le "$writer_count" ]]; do
+        printf 'CONCURRENT_PAYLOAD_%s' "$i" | "$LEDGER_SCRIPT" append Decisions >/dev/null 2>&1 &
+        pids="$pids $!"
+        i=$((i + 1))
+    done
 
-    printf 'LOCKED_APPEND' | "$LEDGER_SCRIPT" append Decisions &
-    pid=$!
+    for pid in $pids; do
+        if ! wait "$pid"; then
+            echo "ASSERTION FAILED: a concurrent append exited non-zero -- it gave up on the lock instead of acquiring it"
+            return 1
+        fi
+    done
 
-    sleep 0.3
+    i=1
+    while [[ "$i" -le "$writer_count" ]]; do
+        if ! grep -qF "CONCURRENT_PAYLOAD_$i" "$ledger"; then
+            echo "ASSERTION FAILED: CONCURRENT_PAYLOAD_$i is missing -- a concurrent writer clobbered it (writes were not serialized)"
+            return 1
+        fi
+        i=$((i + 1))
+    done
 
-    if grep -qF 'LOCKED_APPEND' "$ledger"; then
-        echo "ASSERTION FAILED: append should be blocked while lock is held, but content already appeared"
-        kill "$pid" 2>/dev/null || true
-        wait "$pid" 2>/dev/null || true
-        rmdir "$lockdir" 2>/dev/null || true
-        return 1
-    fi
-
-    if ! kill -0 "$pid" 2>/dev/null; then
-        echo "ASSERTION FAILED: background append process should still be waiting for the lock, but it already exited"
-        rmdir "$lockdir" 2>/dev/null || true
-        return 1
-    fi
-
-    rmdir "$lockdir"
-    wait "$pid"
-
-    assert_file_contains "$ledger" 'LOCKED_APPEND' \
-        "background append should complete once the lock is released" || return 1
+    assert_file_contains "$ledger" 'seed' \
+        "the pre-existing entry must survive every concurrent append" || return 1
     assert_file_contains "$ledger" '## Decisions' \
-        "skeleton headers should survive the serialized append" || return 1
+        "skeleton headers should survive the serialized appends" || return 1
 }
 
 # =============================================================================
