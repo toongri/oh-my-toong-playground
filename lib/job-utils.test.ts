@@ -426,33 +426,40 @@ describe("readJsonIfExists", () => {
 // ---------------------------------------------------------------------------
 
 describe("sleepMs", () => {
+	// "Returns immediately" is an ORDERING claim, so it is checked by ordering.
+	// These used to assert `elapsed < 50` against the wall clock, which measures
+	// the machine rather than sleepMs: a loaded event loop can take longer than
+	// 50ms to resume even a resolved promise, so the bound failed for reasons
+	// the function under test does not control. Racing against a deliberately
+	// long sleep is immune to that -- both sides are slowed by exactly the same
+	// contention, so the winner never changes.
+	const racesAheadOf = async (subject: Promise<unknown>, slowMs: number): Promise<string> =>
+		Promise.race([subject.then(() => "subject"), sleepMs(slowMs).then(() => "slow")]);
+
 	test("waits for approximately the specified duration", async () => {
 		const start = Date.now();
 		await sleepMs(50);
 		const elapsed = Date.now() - start;
+		// Lower bound only. Load can only ever push elapsed UP, so this side is
+		// load-safe; the upper side is covered by the ordering test below rather
+		// than by an absolute ceiling.
 		expect(elapsed >= 40).toBe(true);
-		expect(elapsed < 200).toBe(true);
+	});
+
+	test("a 50ms sleep resolves before a 2000ms one", async () => {
+		expect(await racesAheadOf(sleepMs(50), 2000)).toBe("subject");
 	});
 
 	test("returns immediately for 0", async () => {
-		const start = Date.now();
-		await sleepMs(0);
-		const elapsed = Date.now() - start;
-		expect(elapsed < 50).toBe(true);
+		expect(await racesAheadOf(sleepMs(0), 2000)).toBe("subject");
 	});
 
 	test("returns immediately for negative values", async () => {
-		const start = Date.now();
-		await sleepMs(-100);
-		const elapsed = Date.now() - start;
-		expect(elapsed < 50).toBe(true);
+		expect(await racesAheadOf(sleepMs(-100), 2000)).toBe("subject");
 	});
 
 	test("returns immediately for NaN", async () => {
-		const start = Date.now();
-		await sleepMs(NaN);
-		const elapsed = Date.now() - start;
-		expect(elapsed < 50).toBe(true);
+		expect(await racesAheadOf(sleepMs(NaN), 2000)).toBe("subject");
 	});
 
 	test("returns a Promise", () => {

@@ -1349,19 +1349,28 @@ describe("job.ts reap", () => {
 
 	test("--grace-ms 옵션이 reapOrphanJobs로 전달된다 (유예 시간 실측)", () => {
 		const { pgid } = makeOrphanJobFixture(jobsDir, "grace-passthrough");
+		const requestedGraceMs = 300;
 
 		const start = Date.now();
-		execFileSync(process.execPath, [SCRIPT, "reap", "--jobs-dir", jobsDir, "--grace-ms", "300"], {
-			stdio: "pipe",
-		});
+		execFileSync(
+			process.execPath,
+			[SCRIPT, "reap", "--jobs-dir", jobsDir, "--grace-ms", String(requestedGraceMs)],
+			{ stdio: "pipe" },
+		);
 		const elapsed = Date.now() - start;
 
-		// Default grace is REAP_GRACE_MS_DEFAULT (5000ms) — an elapsed time well
-		// under that but still >= most of the requested 300ms proves --grace-ms
-		// reached reapOrphanJobs rather than being ignored (which would either
-		// return near-instantly or take the full 5s default).
-		expect(elapsed).toBeGreaterThanOrEqual(250);
-		expect(elapsed).toBeLessThan(4000);
+		// This separates three outcomes: --grace-ms ignored and no grace waited
+		// (near-instant), --grace-ms ignored and the default used (near
+		// REAP_GRACE_MS_DEFAULT), or --grace-ms honoured (near the requested
+		// value). Both bounds come from those two real constants rather than
+		// from picked numbers — the floor is most of what was requested, and
+		// the ceiling is the midpoint between the two candidate grace values,
+		// so anything the option could have resolved to lands unambiguously on
+		// one side. The lower bound is load-safe by construction (contention
+		// only pushes elapsed up) and the upper bound keeps most of a 5s window
+		// as headroom for the `node` spawn this measurement has to include.
+		expect(elapsed).toBeGreaterThanOrEqual(requestedGraceMs * 0.83);
+		expect(elapsed).toBeLessThan((requestedGraceMs + GenericJob.REAP_GRACE_MS_DEFAULT) / 2);
 
 		killPgidIfAlive(pgid);
 	});
@@ -2914,6 +2923,22 @@ describe("resume-member CLI 배선 — detached spawn 계약", () => {
 	 * it would observably block, then emits a minimal opencode NDJSON stream the real
 	 * opencodeDriver can parse (step_finish/stop + one text event) before exiting 0.
 	 */
+	// Two stub lengths, because the two claims below need opposite things from
+	// the fake worker and one shared value cannot serve both.
+	//
+	// BLOCKING_STUB_SECONDS is the SIGNAL the "does not wait" assertion measures
+	// against, so it must sit far above the cost of the `node` spawn that
+	// assertion pays. It used to be 2s with a 1500ms ceiling -- a 500ms margin,
+	// less than one process launch on a contended machine, so a loaded run could
+	// cross the ceiling while dispatch behaved perfectly.
+	//
+	// FINISHING_STUB_SECONDS is the opposite: the "reaches done" assertion has to
+	// poll until the detached worker actually finishes, so that stub must expire
+	// well inside the poll deadline. Its deadline is derived from it (5x) rather
+	// than fixed, so load stretches the allowance too.
+	const BLOCKING_STUB_SECONDS = 20;
+	const FINISHING_STUB_SECONDS = 2;
+
 	function makeSlowOpencodeStub(sleepSec: number): string {
 		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "resume-spawn-stub-"));
 		const stubPath = path.join(dir, "opencode");
@@ -2952,31 +2977,38 @@ describe("resume-member CLI 배선 — detached spawn 계약", () => {
 			),
 			"utf8",
 		);
-		stubDir = makeSlowOpencodeStub(2);
 	});
 
 	afterEach(() => {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
-		fs.rmSync(stubDir, { recursive: true, force: true });
+		if (stubDir) fs.rmSync(stubDir, { recursive: true, force: true });
 	});
 
 	function readStatus(): Record<string, unknown> {
 		return JSON.parse(fs.readFileSync(path.join(memberDir, "status.json"), "utf8"));
 	}
 
-	test("resume-member 서브커맨드는 워커 완료를 기다리지 않고 즉시 dispatched ack로 반환한다", async () => {
-		const start = Date.now();
-		const result = execFileSync(
+	function dispatchResume(): Buffer {
+		return execFileSync(
 			process.execPath,
 			[SCRIPT, "resume-member", "--job", jobDir, "--member", "opencode", "--prompt", "continue"],
 			{ stdio: "pipe", env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` } },
 		);
+	}
+
+	test("resume-member 서브커맨드는 워커 완료를 기다리지 않고 즉시 dispatched ack로 반환한다", () => {
+		stubDir = makeSlowOpencodeStub(BLOCKING_STUB_SECONDS);
+
+		const start = Date.now();
+		const result = dispatchResume();
 		const elapsedMs = Date.now() - start;
 
-		// The fake CLI sleeps 2s before it would ever finish a turn — a caller still blocking
-		// in-process on that turn would take at least that long. Returning in a small fraction
-		// of that window is the direct evidence dispatch is non-blocking.
-		expect(elapsedMs).toBeLessThan(1500);
+		// The fake CLI blocks BLOCKING_STUB_SECONDS before it would ever finish a turn —
+		// a caller still blocking in-process on that turn could not return before then.
+		// Returning inside half that window is the evidence dispatch is non-blocking, and
+		// half of an INJECTED delay is a bound that stretches with load, unlike an
+		// absolute ceiling that load can cross on its own.
+		expect(elapsedMs).toBeLessThan((BLOCKING_STUB_SECONDS * 1000) / 2);
 		expect(JSON.parse(result.toString())).toEqual({ state: "dispatched", member: "opencode" });
 
 		// Queued pre-transition: cmdCollect's "awaiting_resume already ended its own turn"
@@ -2986,11 +3018,21 @@ describe("resume-member CLI 배선 — detached spawn 계약", () => {
 		expect(queuedStatus.sessionID).toBe("sess-existing");
 		expect(queuedStatus.command).toBe("opencode --format json");
 		expect(queuedStatus.resume_count).toBe(1);
+	});
+
+	test("dispatch된 워커는 스스로 done까지 진행한다", async () => {
+		// Separate stub, deliberately short: this claim needs the worker to FINISH,
+		// which the blocking stub above is built never to do inside a test. One
+		// shared duration cannot serve both claims, which is why they are two tests.
+		stubDir = makeSlowOpencodeStub(FINISHING_STUB_SECONDS);
+		dispatchResume();
 
 		// Poll for the detached worker to actually finish the turn — state transitions
-		// queued → running (runOnce's own status write, before the stub's 2s sleep resolves)
-		// → done (executeOneTurn's final write once stdout is parsed).
-		const deadline = Date.now() + 10000;
+		// queued → running (runOnce's own status write, before the stub's sleep resolves)
+		// → done (executeOneTurn's final write once stdout is parsed). The deadline is
+		// 5x the stub's own sleep rather than a fixed number, so a machine that slows
+		// the worker slows the allowance with it.
+		const deadline = Date.now() + FINISHING_STUB_SECONDS * 1000 * 5;
 		let finalStatus = readStatus();
 		while (
 			(finalStatus.state === "queued" || finalStatus.state === "running") &&
@@ -3003,7 +3045,7 @@ describe("resume-member CLI 배선 — detached spawn 계약", () => {
 		expect(finalStatus.state).toBe("done");
 		expect(finalStatus.sessionID).toBe("sess-123");
 		expect(finalStatus.resume_count).toBe(1);
-	}, 15000);
+	});
 });
 
 // ---------------------------------------------------------------------------
