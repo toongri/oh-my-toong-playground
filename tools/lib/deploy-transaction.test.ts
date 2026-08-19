@@ -18,6 +18,7 @@ describe("DeployTransaction", () => {
 			await writeFile(target, "before");
 			const transaction = await DeployTransaction.begin(root, false, ["settings.json"]);
 			expect(transaction).not.toBeNull();
+			expect("checkpoint" in transaction!).toBe(false);
 			await transaction!.mutate(target, async () => writeFile(target, "after"));
 			await transaction!.rollback();
 			expect(await readFile(target, "utf8")).toBe("before");
@@ -54,7 +55,7 @@ describe("DeployTransaction", () => {
 		} finally { await rm(root, { recursive: true, force: true }); }
 	});
 
-	it("preserves an overwrite made after a successful checkpoint", async () => {
+	it("preserves an external overwrite after a successful mutation", async () => {
 		const root = await tempRoot("external");
 		try {
 			const target = join(root, "settings.json");
@@ -78,38 +79,14 @@ describe("DeployTransaction", () => {
 		} finally { await rm(root, { recursive: true, force: true }); }
 	});
 
-	it("checkpoints owner-linked dependencies with their owner", async () => {
-		const root = await tempRoot("owner");
-		try {
-			const owner = join(root, "hook");
-			const dependency = join(root, "lib", "dep.sh");
-			await mkdir(join(root, "lib"), { recursive: true });
-			await writeFile(owner, "old-hook");
-			await writeFile(dependency, "old-dep");
-			const transaction = await DeployTransaction.begin(root, false, [
-				{ path: owner, owner: undefined },
-				{ path: dependency, owner },
-			]);
-			await transaction!.mutate(owner, async () => writeFile(owner, "new-hook"));
-			await transaction!.mutate(dependency, async () => writeFile(dependency, "omt-dep"));
-			await transaction!.checkpoint([owner]);
-			await transaction!.rollback();
-			expect(await readFile(owner, "utf8")).toBe("old-hook");
-			expect(await readFile(dependency, "utf8")).toBe("old-dep");
-		} finally { await rm(root, { recursive: true, force: true }); }
-	});
-
-	it("rejects an owner dependency conflict before running its operation", async () => {
+	it("rejects an inventoried dependency conflict before running its operation", async () => {
 		const root = await tempRoot("owner-conflict");
 		try {
 			const owner = join(root, "hook");
 			const dependency = join(root, "dep.sh");
 			await writeFile(owner, "old-hook");
 			await writeFile(dependency, "old-dep");
-			const transaction = await DeployTransaction.begin(root, false, [
-				owner,
-				{ path: dependency, owner },
-			]);
+			const transaction = await DeployTransaction.begin(root, false, [owner, dependency]);
 			await writeFile(dependency, "external");
 			let calls = 0;
 			await expect(transaction!.mutate(dependency, async () => { calls++; })).rejects.toThrow("conflict");

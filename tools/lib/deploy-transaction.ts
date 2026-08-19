@@ -10,10 +10,7 @@ type DeployTransactionEntry = {
 	live: string;
 	before: string;
 	expected: string;
-	owners?: string[];
 };
-
-export type DeployOwnedPath = string | { path: string; owner?: string };
 
 const DEFAULT_PATHS = [
 	".claude/settings.local.json", ".claude/settings.json", ".gemini/settings.json",
@@ -81,7 +78,7 @@ export class DeployTransaction implements DeployMutationHooks {
 	static async begin(
 		deployRoot: string,
 		dryRun: boolean,
-		ownedPaths: DeployOwnedPath[] = [],
+		ownedPaths: string[] = [],
 	): Promise<DeployTransaction | null> {
 		if (dryRun) return null;
 		const root = path.resolve(deployRoot);
@@ -95,21 +92,12 @@ export class DeployTransaction implements DeployMutationHooks {
 			if (errorCode(error) === "ENOENT") return false;
 			throw error;
 		});
-		const entryOwners = new Map<string, string[]>();
 		const names = [...DEFAULT_PATHS];
-		for (const owned of ownedPaths) {
-			const rawPath = typeof owned === "string" ? owned : owned.path;
+		for (const rawPath of ownedPaths) {
 			const live = path.resolve(root, rawPath);
 			if (!isWithin(root, live) || live === root) throw new Error(`Deploy transaction path escapes deploy root: ${rawPath}`);
 			const normalized = path.relative(root, live);
 			names.push(normalized);
-			if (typeof owned !== "string" && owned.owner) {
-				const owner = path.resolve(root, owned.owner);
-				if (!isWithin(root, owner) || owner === root) throw new Error(`Deploy transaction owner escapes deploy root: ${owned.owner}`);
-				const owners = entryOwners.get(normalized) ?? [];
-				if (!owners.includes(owner)) owners.push(owner);
-				entryOwners.set(normalized, owners);
-			}
 		}
 		const entries: DeployTransactionEntry[] = [];
 		let snapshotRoot: string | undefined;
@@ -125,7 +113,7 @@ export class DeployTransaction implements DeployMutationHooks {
 				} catch (error) {
 					if (errorCode(error) !== "ENOENT") throw error;
 				}
-				entries.push({ live, before, expected: await fingerprint(live), owners: entryOwners.get(name) });
+				entries.push({ live, before, expected: await fingerprint(live) });
 			}
 		} catch (error) {
 			if (snapshotRoot) await fs.rm(snapshotRoot, { recursive: true, force: true }).catch(() => undefined);
@@ -156,17 +144,6 @@ export class DeployTransaction implements DeployMutationHooks {
 			throw error;
 		}
 		entry.expected = await fingerprint(entry.live);
-	}
-
-	async checkpoint(livePaths: readonly string[]): Promise<void> {
-		for (const livePath of livePaths) {
-			const entry = this.entries.find((candidate) => path.normalize(candidate.live) === path.normalize(path.resolve(this.deployRoot, livePath)));
-			if (!entry) continue;
-			entry.expected = await fingerprint(entry.live);
-			for (const dependency of this.entries.filter((candidate) => candidate.owners?.includes(entry.live))) {
-				dependency.expected = await fingerprint(dependency.live);
-			}
-		}
 	}
 
 	async finish(): Promise<void> {

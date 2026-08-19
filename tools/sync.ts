@@ -188,14 +188,13 @@ async function collectPlatformHookTransactionPaths(
 	deployRoot: string,
 	additionalBundles: Array<{ platform: Platform; sourcePath: string; displayName: string }> = [],
 	ownedHookNames?: OwnedHookNames,
-): Promise<Array<string | { path: string; owner: string }>> {
-	const paths: Array<string | { path: string; owner: string }> = [];
+): Promise<string[]> {
+	const paths: string[] = [];
 	const seen = new Set<string>();
-	const add = (entry: string | { path: string; owner: string }) => {
-		const target = typeof entry === "string" ? entry : entry.path;
+	const add = (target: string) => {
 		if (seen.has(target)) return;
 		seen.add(target);
-		paths.push(entry);
+		paths.push(target);
 	};
 	const addHookBundle = async (platform: Platform, sourcePath: string, displayName: string) => {
 		const [relativeTarget] = planCategoryDestinationPaths(platform, "hooks", displayName);
@@ -212,9 +211,7 @@ async function collectPlatformHookTransactionPaths(
 				: platform === "codex"
 					? ["*.test.ts", "config.local.yaml"]
 					: ["*.test.ts"];
-			for (const targetLeaf of await planSyncDirectoryMutations(sourcePath, hookTarget, { exclude })) {
-				add({ path: targetLeaf, owner: hookTarget });
-			}
+			for (const targetLeaf of await planSyncDirectoryMutations(sourcePath, hookTarget, { exclude })) add(targetLeaf);
 			const entries = await fs.readdir(sourcePath, { withFileTypes: true });
 			const shellFiles = entries
 				.filter((entry) => entry.isFile() && entry.name.endsWith(".sh") && !entry.name.endsWith("_test.sh"))
@@ -229,7 +226,7 @@ async function collectPlatformHookTransactionPaths(
 		const targetHooksDir = stat.isDirectory() ? hookTarget : path.dirname(hookTarget);
 		for (const dependency of dependencySources) {
 			const relative = path.relative(hooksSourceDir, dependency);
-			add({ path: path.join(targetHooksDir, relative), owner: hookTarget });
+			add(path.join(targetHooksDir, relative));
 		}
 	};
 	for (const platform of HOOK_DEPLOYING_PLATFORMS) {
@@ -2640,7 +2637,7 @@ export async function processYaml(
 				));
 			}
 			if (shouldMkdirClaude || libSourceRoots.size > 0 || platformHookTransactionPaths.length > 0 || hasPlatformYaml || hasValidPreviousManifest || docsTransactionPaths.length > 0) {
-				const ownedPaths: Array<string | { path: string; owner: string }> = [];
+				const ownedPaths: string[] = [];
 				ownedPaths.push(...await collectManifestTransactionPaths(deployRoot));
 				for (const category of CATEGORIES) {
 					const section = syncYaml[category];
