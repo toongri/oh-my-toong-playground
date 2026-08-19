@@ -24,34 +24,56 @@ function state(partial: Partial<ExplainDiffState> = {}): ExplainDiffState {
 }
 
 describe("스텝 순서", () => {
-	test("`STEP_ORDER`는 6단계를 스펙이 정한 순서로 담는다", () => {
-		expect(STEP_ORDER).toEqual(["evidence", "background", "intuition", "code", "render", "quiz"]);
+	test("`STEP_ORDER`는 8단계를 스펙이 정한 순서로 담는다", () => {
+		expect(STEP_ORDER).toEqual([
+			"evidence",
+			"background",
+			"architecture",
+			"intuition",
+			"commits",
+			"code",
+			"render",
+			"quiz",
+		]);
 	});
 
-	test("`AUTHORING_STEPS`는 사람이 개입하지 않는 앞 4단계다", () => {
-		expect(AUTHORING_STEPS).toEqual(["evidence", "background", "intuition", "code"]);
+	test("`AUTHORING_STEPS`는 사람이 개입하지 않는 앞 6단계다", () => {
+		expect(AUTHORING_STEPS).toEqual([
+			"evidence",
+			"background",
+			"architecture",
+			"intuition",
+			"commits",
+			"code",
+		]);
 	});
 
 	test("`nextStep`은 순서대로 진행하고 마지막 다음은 null이다", () => {
 		expect(nextStep("evidence")).toBe("background");
+		expect(nextStep("background")).toBe("architecture");
+		expect(nextStep("architecture")).toBe("intuition");
+		expect(nextStep("intuition")).toBe("commits");
+		expect(nextStep("commits")).toBe("code");
 		expect(nextStep("code")).toBe("render");
 		expect(nextStep("quiz")).toBeNull();
 	});
 });
 
 describe("필수 심사 ID 배정", () => {
-	test("intuition은 R6, code는 R7을 요구하고 나머지 네 스텝은 아무 것도 요구하지 않는다", () => {
+	test("architecture는 R12, intuition은 R6, code는 R7을 요구하고 나머지 다섯 스텝은 아무 것도 요구하지 않는다", () => {
 		expect(REQUIRED_JUDGE_IDS).toEqual({
 			evidence: [],
 			background: [],
+			architecture: ["R12"],
 			intuition: ["R6"],
+			commits: [],
 			code: ["R7"],
 			render: [],
 			quiz: [],
 		});
 	});
 
-	test("여섯 스텝 전부에 배정이 있다 — 빠진 스텝이 무자격 통과를 만들지 않는다", () => {
+	test("여덟 스텝 전부에 배정이 있다 — 빠진 스텝이 무자격 통과를 만들지 않는다", () => {
 		for (const s of STEP_ORDER) expect(REQUIRED_JUDGE_IDS[s]).toBeDefined();
 	});
 });
@@ -202,6 +224,15 @@ describe("normalizeExplainDiffState", () => {
 		const s = normalizeExplainDiffState({ step: "wat", passed: ["evidence", "wat", "code"] });
 		expect(s?.step).toBe("evidence");
 		expect(s?.passed).toEqual(["evidence", "code"]);
+	});
+
+	test("commit_hashes는 문자열 배열만 통과하고 그 외 입력은 빈 배열로 떨어진다", () => {
+		expect(normalizeExplainDiffState({ commit_hashes: ["ab12cd3", "ef45ab6"] })?.commit_hashes).toEqual([
+			"ab12cd3",
+			"ef45ab6",
+		]);
+		expect(normalizeExplainDiffState({ commit_hashes: "ab12cd3" })?.commit_hashes).toEqual([]);
+		expect(normalizeExplainDiffState({})?.commit_hashes).toEqual([]);
 	});
 
 	test("개념 배열은 id 가 문자열인 항목만 남는다", () => {

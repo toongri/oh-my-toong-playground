@@ -60,12 +60,12 @@ describe("evidence 스텝 — R1 등재형", () => {
 		expect(r.items.find((i) => i.id === "R1")?.pass).toBe(false);
 	});
 
-	test("evidence 스텝에는 R1 외의 항목이 평가되지 않는다", () => {
+	test("evidence 스텝에는 R1과 공통 R11 외의 항목이 평가되지 않는다", () => {
 		const r = checkStructure(evidenceOnlyDoc("lib/state-lock.ts"), {
 			signalFiles: ["lib/state-lock.ts"],
 			step: "evidence",
 		});
-		expect(r.items.map((i) => i.id)).toEqual(["R1"]);
+		expect(r.items.map((i) => i.id)).toEqual(["R1", "R11"]);
 	});
 });
 
@@ -76,7 +76,7 @@ describe("background 스텝 — R4만 평가", () => {
 			step: "background",
 		});
 		expect(r.pass).toBe(false);
-		expect(r.items.map((i) => i.id)).toEqual(["R4"]);
+		expect(r.items.map((i) => i.id)).toEqual(["R4", "R11"]);
 		expect(r.items.find((i) => i.id === "R4")?.pass).toBe(false);
 	});
 
@@ -96,14 +96,14 @@ describe("background 스텝 — R4만 평가", () => {
 	});
 });
 
-describe("intuition 스텝 — 구조 항목 없음", () => {
-	test("최소 문서로도 무조건 통과한다", () => {
+describe("intuition 스텝 — 고유 구조 항목 없음 (공통 R11만)", () => {
+	test("스타일 위반이 없는 최소 문서는 통과한다", () => {
 		const r = checkStructure("# 설명\n\n본질만 적힌 한 줄.", {
 			signalFiles: ["lib/state-lock.ts"],
 			step: "intuition",
 		});
 		expect(r.pass).toBe(true);
-		expect(r.items).toEqual([]);
+		expect(r.items.map((i) => i.id)).toEqual(["R11"]);
 		expect(r.failedItems).toEqual([]);
 	});
 });
@@ -149,7 +149,7 @@ describe("code 스텝 — R2·R3·R5·R1(커버리지형)", () => {
 			step: "code",
 		});
 		expect(r.pass).toBe(false);
-		expect(r.items.map((i) => i.id)).toEqual(["R2", "R3", "R5", "R1"]);
+		expect(r.items.map((i) => i.id)).toEqual(["R2", "R3", "R5", "R1", "R11"]);
 	});
 
 	test("완전한 문서는 code 스텝에서 통과한다", () => {
@@ -276,5 +276,161 @@ describe("code 스텝 — R2·R3·R5·R1(커버리지형)", () => {
 			const r = checkStructure(withBackground(GOOD_GROUP), { signalFiles: [], step: "code" });
 			expect(r.items.find((i) => i.id === "R1")?.pass).toBe(false);
 		});
+	});
+});
+
+// ---------------------------------------------------------------------------
+// v3 확장 — R9(아키텍처 3레벨), R10(커밋 저니), R11(스타일 발명 금지)
+
+const ARCH_OK = `## Architecture
+
+### 시스템 레벨
+\`\`\`mermaid
+flowchart LR
+  A[Node backend] --> B[(PostgreSQL)]
+\`\`\`
+설명.
+
+### 컴포넌트 레벨
+\`\`\`mermaid
+flowchart LR
+  order --> couponHandler
+\`\`\`
+설명.
+
+### 도메인 레벨
+구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.
+`;
+
+describe("architecture 스텝 — R9", () => {
+	test("세 레벨이 각각 mermaid 블록 또는 생략 마커를 가지면 통과한다", () => {
+		const r = checkStructure(withBackground(ARCH_OK), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "architecture",
+		});
+		expect(r.items.map((i) => i.id)).toContain("R9");
+		expect(r.pass).toBe(true);
+	});
+
+	test("레벨 헤딩이 하나라도 빠지면 실패하고 그 레벨 이름을 사유에 담는다", () => {
+		const doc = withBackground(ARCH_OK.replace(/### 도메인 레벨[\s\S]*$/, ""));
+		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" });
+		expect(r.pass).toBe(false);
+		expect(r.failedItems.join(" ")).toContain("도메인 레벨");
+	});
+
+	test("레벨에 mermaid도 생략 마커도 없으면 실패한다", () => {
+		const doc = withBackground(ARCH_OK.replace(/구조 변화 없음.*$/m, "산문만 있다."));
+		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" });
+		expect(r.pass).toBe(false);
+		expect(r.failedItems.join(" ")).toContain("도메인 레벨");
+	});
+
+	test("생략 마커에 사유가 없으면 실패한다", () => {
+		const doc = withBackground(ARCH_OK.replace(/구조 변화 없음.*$/m, "구조 변화 없음:"));
+		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" });
+		expect(r.pass).toBe(false);
+	});
+});
+
+const JOURNEY = `## Commit Journey
+
+### 1. \`ab12cd3\` — feat: 첫 커밋
+무엇을 만들었나 — 내용.
+
+### 2. \`ef45ab6\` — fix: 둘째 커밋
+무엇을 고쳤나 — 내용.
+`;
+
+describe("commits 스텝 — R10", () => {
+	test("커밋 2개 이상이면 각 해시가 헤딩에 등장해야 통과한다", () => {
+		const r = checkStructure(withBackground(JOURNEY), {
+			signalFiles: ["a.ts"],
+			step: "commits",
+			commitHashes: ["ab12cd3f00", "ef45ab6c11"],
+		});
+		expect(r.items.map((i) => i.id)).toContain("R10");
+		expect(r.pass).toBe(true);
+	});
+
+	test("빠진 커밋이 있으면 실패하고 그 해시를 사유에 담는다", () => {
+		const r = checkStructure(withBackground(JOURNEY), {
+			signalFiles: ["a.ts"],
+			step: "commits",
+			commitHashes: ["ab12cd3f00", "ef45ab6c11", "99dead000"],
+		});
+		expect(r.pass).toBe(false);
+		expect(r.failedItems.join(" ")).toContain("99dead0");
+	});
+
+	test("단일 커밋 범위는 생략 마커로 통과한다", () => {
+		const doc = withBackground("단일 커밋 범위 — Commit Journey 생략.\n");
+		const r = checkStructure(doc, {
+			signalFiles: ["a.ts"],
+			step: "commits",
+			commitHashes: ["ab12cd3f00"],
+		});
+		expect(r.pass).toBe(true);
+	});
+
+	test("단일 커밋인데 저니도 마커도 없으면 실패한다", () => {
+		const r = checkStructure(withBackground("본문.\n"), {
+			signalFiles: ["a.ts"],
+			step: "commits",
+			commitHashes: ["ab12cd3f00"],
+		});
+		expect(r.pass).toBe(false);
+	});
+
+	test("해시 목록이 비어 있으면(열거 실패) 섹션 존재 또는 마커만 요구한다", () => {
+		const r = checkStructure(withBackground(JOURNEY), {
+			signalFiles: ["a.ts"],
+			step: "commits",
+			commitHashes: [],
+		});
+		expect(r.pass).toBe(true);
+	});
+});
+
+describe("모든 저작 스텝 — R11 스타일 발명 금지", () => {
+	test("<style> 블록이 있으면 evidence 스텝부터 실패한다", () => {
+		const doc = `${evidenceOnlyDoc("a.ts")}\n<style>h1 { color: red; }</style>\n`;
+		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "evidence" });
+		expect(r.pass).toBe(false);
+		expect(r.failedItems.join(" ")).toContain("<style>");
+	});
+
+	test("인라인 style= 속성이 있으면 실패한다", () => {
+		const doc = `${evidenceOnlyDoc("a.ts")}\n<div style="color:red">x</div>\n`;
+		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "evidence" });
+		expect(r.pass).toBe(false);
+	});
+
+	test("승인 목록 밖의 class를 쓰면 실패하고 그 클래스명을 사유에 담는다", () => {
+		const doc = `${evidenceOnlyDoc("a.ts")}\n<div class="my-fancy-box">x</div>\n`;
+		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "evidence" });
+		expect(r.pass).toBe(false);
+		expect(r.failedItems.join(" ")).toContain("my-fancy-box");
+	});
+
+	test("승인된 컴포넌트 클래스만 쓰면 통과한다", () => {
+		const doc = `${evidenceOnlyDoc("a.ts")}
+<div class="flow">
+  <div class="flow-step">A</div><span class="flow-arrow">→</span>
+  <div class="flow-step">B</div>
+</div>
+<div class="compare">
+  <div class="compare-before">전</div>
+  <div class="compare-after">후</div>
+</div>
+`;
+		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "evidence" });
+		expect(r.pass).toBe(true);
+	});
+
+	test("intuition 스텝에서도 R11은 평가된다", () => {
+		const doc = `# 설명\n\n## Intuition\n<div style="display:grid">x</div>\n`;
+		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "intuition" });
+		expect(r.pass).toBe(false);
 	});
 });

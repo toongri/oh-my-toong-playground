@@ -9,6 +9,7 @@
  * structural checks in lib/explain-diff-structure.ts passed and a judge backed
  * every existence claim with a quote this CLI found in the document.
  */
+import { execFileSync } from "child_process";
 import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { getOmtDir } from "@lib/omt-dir";
 import { nowStamp, resolveSessionIdOrThrow, STATE_PREFIX } from "@lib/state-core";
@@ -106,6 +107,25 @@ function mustRead(sessionId: string): Persisted {
 	return s;
 }
 
+/**
+ * Enumerates the commits of `range`, oldest first, at the only moment the CLI
+ * is guaranteed to run inside the repo. `A...B` is normalized to `A..B`: the
+ * diff convention (merge-base diff) and the commit-list convention (commits on
+ * the branch side) name the same intent with different dot counts. Failure is
+ * an empty list, not an error — R10 then degrades to section presence.
+ */
+function enumerateCommits(range: string): string[] {
+	try {
+		const out = execFileSync("git", ["rev-list", "--reverse", range.replace("...", "..")], {
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "ignore"],
+		});
+		return out.split("\n").filter(Boolean);
+	} catch {
+		return [];
+	}
+}
+
 function start(sessionId: string, range: string, slug: string): void {
 	const ts = nowStamp();
 	const seed: Persisted = {
@@ -115,6 +135,7 @@ function start(sessionId: string, range: string, slug: string): void {
 		structural_ok: [],
 		concepts: [],
 		bank: [],
+		commit_hashes: enumerateCommits(range),
 		awaiting_answer: false,
 		no_progress: { key: "", count: 0, doc_digest: "" },
 		last_failure: null,
@@ -133,12 +154,46 @@ function start(sessionId: string, range: string, slug: string): void {
 	withLock(statePath(sessionId), () => write(sessionId, seed));
 }
 
+/** Reads a verification report and demands its machine-checkable closing line. */
+function checkReport(
+	label: string,
+	flag: string,
+	reportPath: string | undefined,
+	marker: RegExp,
+	markerName: string,
+	failedItems: string[],
+): void {
+	if (!reportPath) {
+		failedItems.push(`${label} 리포트 경로(${flag})가 없습니다.`);
+		return;
+	}
+	let text: string;
+	try {
+		text = readFileSync(reportPath, "utf8");
+	} catch {
+		failedItems.push(`${label} 리포트를 찾을 수 없습니다: ${reportPath}`);
+		return;
+	}
+	if (!marker.test(text)) {
+		failedItems.push(`${label} 리포트에 \`${markerName}\` 줄이 없습니다: ${reportPath}`);
+	}
+}
+
 /**
- * render is a derivation, not authoring — the markdown structure slots (R1..R5)
- * were already earned at `code`, so this checks the artifact itself exists and
- * is not empty rather than re-running a check aimed at prose.
+ * render is a derivation, not authoring — the markdown structure slots were
+ * already earned at `code`, so this checks the artifacts of the derivation:
+ * the HTML exists and is not empty, every authored mermaid block actually
+ * became an inline SVG, and the two render-gate reviews (visual-qa on the
+ * rendered page, technical-writing on the prose) ran and closed with their
+ * machine-checkable verdict lines.
  */
-function checkRenderOutput(htmlPath: string | undefined): { pass: boolean; failedItems: string[] } {
+function checkRenderOutput(
+	htmlPath: string | undefined,
+	docPath: string,
+	visualReport: string | undefined,
+	writingReport: string | undefined,
+): { pass: boolean; failedItems: string[] } {
+	const failedItems: string[] = [];
 	if (!htmlPath) {
 		return { pass: false, failedItems: ["render 산출물 경로(--html)가 없습니다."] };
 	}
@@ -151,7 +206,36 @@ function checkRenderOutput(htmlPath: string | undefined): { pass: boolean; faile
 	if (size === 0) {
 		return { pass: false, failedItems: [`render 산출물이 비어 있습니다: ${htmlPath}`] };
 	}
-	return { pass: true, failedItems: [] };
+
+	// Diagram parity: N authored mermaid fences must yield at least N inline
+	// SVGs, and no fence may survive as literal text — a page with the source
+	// where the picture should be is a failed render that still "exists".
+	try {
+		const md = readFileSync(docPath, "utf8");
+		const fences = (md.match(/```mermaid/g) || []).length;
+		if (fences > 0) {
+			const html = readFileSync(htmlPath, "utf8");
+			const svgs = (html.match(/<svg/g) || []).length;
+			if (svgs < fences || html.includes("```mermaid") || html.includes("language-mermaid")) {
+				failedItems.push(
+					`mermaid 블록 ${fences}개 중 인라인 SVG로 렌더된 것이 ${svgs}개입니다 — render.ts가 mmdc 사전 렌더에 실패했는지 확인하세요.`,
+				);
+			}
+		}
+	} catch {
+		failedItems.push(`문서를 읽을 수 없습니다: ${docPath}`);
+	}
+
+	checkReport("visual-qa", "--visual-report", visualReport, /^VERDICT:\s*PASS/m, "VERDICT: PASS", failedItems);
+	checkReport(
+		"technical-writing",
+		"--writing-report",
+		writingReport,
+		/^REVIEW:\s*APPLIED/m,
+		"REVIEW: APPLIED",
+		failedItems,
+	);
+	return { pass: failedItems.length === 0, failedItems };
 }
 
 /**
@@ -167,6 +251,8 @@ function submitStep(
 	signalFiles: string[],
 	addedFiles: string[],
 	htmlPath?: string,
+	visualReport?: string,
+	writingReport?: string,
 ): number {
 	return withLock(statePath(sessionId), () => {
 		const s = mustRead(sessionId);
@@ -175,8 +261,13 @@ function submitStep(
 		}
 		const result =
 			step === "render"
-				? checkRenderOutput(htmlPath)
-				: checkStructure(readFileSync(docPath, "utf8"), { signalFiles, addedFiles, step });
+				? checkRenderOutput(htmlPath, docPath, visualReport, writingReport)
+				: checkStructure(readFileSync(docPath, "utf8"), {
+						signalFiles,
+						addedFiles,
+						commitHashes: s.commit_hashes,
+						step,
+					});
 		if (!result.pass) {
 			s.last_failure = { step, items: result.failedItems };
 			s.structural_ok = s.structural_ok.filter((x) => x !== step);
@@ -411,6 +502,8 @@ function main(): void {
 						csv(req(args, "signal-files")),
 						csv(typeof args["added-files"] === "string" ? args["added-files"] : ""),
 						typeof args["html"] === "string" ? args["html"] : undefined,
+						typeof args["visual-report"] === "string" ? args["visual-report"] : undefined,
+						typeof args["writing-report"] === "string" ? args["writing-report"] : undefined,
 					),
 				);
 				break;

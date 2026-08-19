@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { execFileSync } from "child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { STEP_ORDER, type Step } from "@lib/explain-diff-core";
@@ -53,6 +54,30 @@ const GOOD_DOC = `# 설명
 **추적성** — \`lib/state-lock.ts:14\`
 `;
 
+const ARCH_SECTION = `## Architecture
+
+### 시스템 레벨
+\`\`\`mermaid
+flowchart LR
+  CLI --> STATE[(state file)]
+\`\`\`
+
+### 컴포넌트 레벨
+구조 변화 없음: 모듈 경계는 그대로다.
+
+### 도메인 레벨
+구조 변화 없음: 엔티티가 없다.
+`;
+
+const JOURNEY_SECTION = `## Commit Journey
+
+### 1. \`ab12cd3\` — fix: 락 통합
+락을 옮겼다.
+`;
+
+/** 8스텝 전부의 구조 슬롯을 갖춘 문서. */
+const FULL_DOC = `${GOOD_DOC}\n${ARCH_SECTION}\n${JOURNEY_SECTION}`;
+
 function docFile(text: string): string {
 	const p = join(sandbox, "doc.md");
 	writeFileSync(p, text, "utf8");
@@ -69,6 +94,34 @@ describe("start", () => {
 		start(SID, "HEAD~1..HEAD", "sample");
 		expect(state().step).toBe("evidence");
 		expect(state().derived.artifact_write_allowed).toBe(true);
+	});
+
+	test("start 는 range 의 커밋 해시를 상태에 박제한다 — R10 이 나중에 git 없이 읽는다", async () => {
+		// Hermetic repo: the count assertion must not depend on this repo's HEAD shape
+		// (a merge commit makes HEAD~1..HEAD span the whole merged branch).
+		const repo = join(sandbox, "repo");
+		const git = (...a: string[]) =>
+			execFileSync("git", ["-C", repo, ...a], { stdio: ["ignore", "pipe", "ignore"] });
+		mkdirSync(repo);
+		git("init", "-q", "-b", "main");
+		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "one");
+		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "two");
+		const prev = process.cwd();
+		try {
+			process.chdir(repo);
+			const { start } = await cli();
+			start(SID, "HEAD~1..HEAD", "sample");
+		} finally {
+			process.chdir(prev);
+		}
+		expect(state().commit_hashes.length).toBe(1);
+		expect(state().commit_hashes[0]).toMatch(/^[0-9a-f]{7,40}$/);
+	});
+
+	test("열거할 수 없는 range 는 빈 배열로 남는다 — 실패가 start 를 막지 않는다", async () => {
+		const { start } = await cli();
+		start(SID, "존재하지-않는-ref..도-없는-ref", "sample");
+		expect(state().commit_hashes).toEqual([]);
 	});
 });
 
@@ -127,6 +180,9 @@ const WITH_BACKGROUND_DOC = `${EVIDENCE_ONLY_DOC}
 내용
 `;
 
+/** advanceTo가 신규 스텝(architecture·commits)을 건널 수 있는 문서. */
+const WITH_ARCH_DOC = () => `${WITH_BACKGROUND_DOC}\n${ARCH_SECTION}\n${JOURNEY_SECTION}`;
+
 /**
  * evidence 부터 `step` 직전까지 `docAtStep`이 준 문서로 통과시켜 그 스텝에 진입시킨다.
  * 도달한 스텝의 `submitStep`/`passStep` 은 호출자가 직접 실행해 검증한다.
@@ -144,7 +200,13 @@ async function advanceTo(
 		if (s === step) break;
 		const doc = docFile(docAtStep(s));
 		submitStep(SID, s, doc, ["lib/state-lock.ts"], []);
-		passStep(SID, s, doc, [{ id: "R6", pass: true, quote: "state-lock" }]);
+		// R6·R7·R12를 매 스텝에 함께 싣는다 — 각 스텝이 요구하는 필수 ID를 놓치지
+		// 않기 위해서이고, 요구되지 않는 스텝에서는 여분의 검증된 통과 항목일 뿐이다.
+		passStep(SID, s, doc, [
+			{ id: "R6", pass: true, quote: "state-lock" },
+			{ id: "R7", pass: true, quote: "state-lock" },
+			{ id: "R12", pass: true, quote: "state-lock" },
+		]);
 	}
 	return { submitStep, passStep };
 }
@@ -167,7 +229,7 @@ describe("스텝 스코핑 — 스텝마다 다른 슬롯만 본다", () => {
 	test("Background 까지 채운 문서는 background 스텝을 통과하고, code 스텝은 실패한다", async () => {
 		// WITH_BACKGROUND_DOC 은 evidence 의 R1(등재형)과 background 의 R4 를 모두
 		// 만족시키므로 그대로 evidence·background·intuition 을 통과해 code 에 진입한다.
-		const { submitStep } = await advanceTo("code", () => WITH_BACKGROUND_DOC);
+		const { submitStep } = await advanceTo("code", WITH_ARCH_DOC);
 		// Change Group이 없는 같은 문서를 code 스텝에 그대로 제출한다 — R2가 슬롯 부재로
 		// 실패하고, R1(커버리지형)도 signal 파일이 어느 그룹에도 없어 실패한다.
 		const rc = submitStep(SID, "code", docFile(WITH_BACKGROUND_DOC), ["lib/state-lock.ts"], []);
@@ -178,7 +240,7 @@ describe("스텝 스코핑 — 스텝마다 다른 슬롯만 본다", () => {
 	});
 
 	test("signal 파일이 Evidence 표에만 있고 Change Group 파일 블록이 없으면 code 스텝이 실패하고 사유에 경로가 나온다", async () => {
-		const { submitStep } = await advanceTo("code", () => WITH_BACKGROUND_DOC);
+		const { submitStep } = await advanceTo("code", WITH_ARCH_DOC);
 		const noGroupDoc = `${WITH_BACKGROUND_DOC}
 ## Change Group 1: 관련 없는 변경
 > 예고: 다른 파일을 다룬다.
@@ -194,7 +256,7 @@ describe("스텝 스코핑 — 스텝마다 다른 슬롯만 본다", () => {
 	});
 
 	test("같은 signal 파일의 파일 블록이 두 Change Group에 각각 있으면 code 스텝이 실패하고 사유가 중복임을 밝힌다", async () => {
-		const { submitStep } = await advanceTo("code", () => WITH_BACKGROUND_DOC);
+		const { submitStep } = await advanceTo("code", WITH_ARCH_DOC);
 		const duplicatedDoc = `${WITH_BACKGROUND_DOC}
 ## Change Group 1: 락을 공용 모듈로 뽑아낸다
 > 예고: 먼저 락 자체를 옮겨 놓아야 호출부 정리가 의미를 갖는다.
@@ -220,7 +282,7 @@ describe("스텝 스코핑 — 스텝마다 다른 슬롯만 본다", () => {
 	});
 
 	test("intuition 스텝은 최소 문서로도 구조 검사를 통과한다", async () => {
-		const { submitStep } = await advanceTo("intuition", () => WITH_BACKGROUND_DOC);
+		const { submitStep } = await advanceTo("intuition", WITH_ARCH_DOC);
 		const rc = submitStep(SID, "intuition", docFile("본질만 적힌 한 줄."), ["lib/state-lock.ts"], []);
 		expect(rc).toBe(0);
 	});
@@ -274,7 +336,7 @@ describe("심사 인용 검증", () => {
 
 describe("필수 심사 ID 강제 — 빈 페이로드로 심사 관문을 건너뛸 수 없다", () => {
 	test("intuition 스텝은 --judge-json '[]' 로는 통과하지 못한다 — R6 미제출", async () => {
-		const { submitStep, passStep } = await advanceTo("intuition", () => WITH_BACKGROUND_DOC);
+		const { submitStep, passStep } = await advanceTo("intuition", WITH_ARCH_DOC);
 		const doc = docFile("본질만 적힌 한 줄.");
 		submitStep(SID, "intuition", doc, ["lib/state-lock.ts"], []);
 		const rc = passStep(SID, "intuition", doc, []);
@@ -284,7 +346,7 @@ describe("필수 심사 ID 강제 — 빈 페이로드로 심사 관문을 건�
 	});
 
 	test("intuition 스텝은 R6가 아닌 무관한 ID만으로는 통과하지 못한다 — 인용이 문서에 실재해도", async () => {
-		const { submitStep, passStep } = await advanceTo("intuition", () => WITH_BACKGROUND_DOC);
+		const { submitStep, passStep } = await advanceTo("intuition", WITH_ARCH_DOC);
 		const doc = docFile("본질만 적힌 한 줄.");
 		submitStep(SID, "intuition", doc, ["lib/state-lock.ts"], []);
 		const rc = passStep(SID, "intuition", doc, [{ id: "R9", pass: true, quote: "본질만" }]);
@@ -292,18 +354,18 @@ describe("필수 심사 ID 강제 — 빈 페이로드로 심사 관문을 건�
 		expect(state().last_failure.items.join(" ")).toContain("R6");
 	});
 
-	test("intuition 스텝은 R6를 pass:true + 실재 인용으로 제출해야 통과하고 code로 넘어간다", async () => {
-		const { submitStep, passStep } = await advanceTo("intuition", () => WITH_BACKGROUND_DOC);
+	test("intuition 스텝은 R6를 pass:true + 실재 인용으로 제출해야 통과하고 commits로 넘어간다", async () => {
+		const { submitStep, passStep } = await advanceTo("intuition", WITH_ARCH_DOC);
 		const doc = docFile("본질만 적힌 한 줄.");
 		submitStep(SID, "intuition", doc, ["lib/state-lock.ts"], []);
 		const rc = passStep(SID, "intuition", doc, [{ id: "R6", pass: true, quote: "본질만" }]);
 		expect(rc).toBe(0);
-		expect(state().step).toBe("code");
+		expect(state().step).toBe("commits");
 		expect(state().passed).toContain("intuition");
 	});
 
 	test("R6가 있어도 인용이 문서에 없으면 통과하지 못한다 — 기존 인용 검증은 살아 있다", async () => {
-		const { submitStep, passStep } = await advanceTo("intuition", () => WITH_BACKGROUND_DOC);
+		const { submitStep, passStep } = await advanceTo("intuition", WITH_ARCH_DOC);
 		const doc = docFile("본질만 적힌 한 줄.");
 		submitStep(SID, "intuition", doc, ["lib/state-lock.ts"], []);
 		const rc = passStep(SID, "intuition", doc, [{ id: "R6", pass: true, quote: "문서에 없는 문장" }]);
@@ -312,7 +374,7 @@ describe("필수 심사 ID 강제 — 빈 페이로드로 심사 관문을 건�
 	});
 
 	test("code 스텝은 --judge-json '[]' 로는 통과하지 못한다 — R7 미제출", async () => {
-		const { submitStep, passStep } = await advanceTo("code", () => GOOD_DOC);
+		const { submitStep, passStep } = await advanceTo("code", () => FULL_DOC);
 		const doc = docFile(GOOD_DOC);
 		submitStep(SID, "code", doc, ["lib/state-lock.ts"], []);
 		const rc = passStep(SID, "code", doc, []);
@@ -322,7 +384,7 @@ describe("필수 심사 ID 강제 — 빈 페이로드로 심사 관문을 건�
 	});
 
 	test("code 스텝은 R7이 아닌 무관한 ID만으로는 통과하지 못한다 — 인용이 문서에 실재해도", async () => {
-		const { submitStep, passStep } = await advanceTo("code", () => GOOD_DOC);
+		const { submitStep, passStep } = await advanceTo("code", () => FULL_DOC);
 		const doc = docFile(GOOD_DOC);
 		submitStep(SID, "code", doc, ["lib/state-lock.ts"], []);
 		const rc = passStep(SID, "code", doc, [
@@ -333,7 +395,7 @@ describe("필수 심사 ID 강제 — 빈 페이로드로 심사 관문을 건�
 	});
 
 	test("code 스텝은 R7을 pass:true + 실재 인용으로 제출해야 통과하고 render로 넘어간다", async () => {
-		const { submitStep, passStep } = await advanceTo("code", () => GOOD_DOC);
+		const { submitStep, passStep } = await advanceTo("code", () => FULL_DOC);
 		const doc = docFile(GOOD_DOC);
 		submitStep(SID, "code", doc, ["lib/state-lock.ts"], []);
 		const rc = passStep(SID, "code", doc, [
@@ -360,7 +422,7 @@ describe("필수 심사 ID 강제 — 빈 페이로드로 심사 관문을 건�
 		submitStep(SID, "background", doc, ["lib/state-lock.ts"], []);
 		const rc = passStep(SID, "background", doc, []);
 		expect(rc).toBe(0);
-		expect(state().step).toBe("intuition");
+		expect(state().step).toBe("architecture");
 	});
 
 	// render는 필수 ID가 없어 빈 배열로 통과한다 — "render 산출물 검사" 아래
@@ -379,16 +441,33 @@ async function driveToRender(): Promise<{
 }> {
 	const { start, submitStep, passStep } = await cli();
 	start(SID, "r", "s");
-	const doc = docFile(GOOD_DOC);
+	const doc = docFile(FULL_DOC);
 	const quote = "락을 공용 모듈로 뽑아낸다";
-	for (const step of ["evidence", "background", "intuition", "code"] as const) {
+	for (const step of [
+		"evidence",
+		"background",
+		"architecture",
+		"intuition",
+		"commits",
+		"code",
+	] as const) {
 		submitStep(SID, step, doc, ["lib/state-lock.ts"], []);
 		passStep(SID, step, doc, [
 			{ id: "R6", pass: true, quote },
 			{ id: "R7", pass: true, quote },
+			{ id: "R12", pass: true, quote },
 		]);
 	}
 	return { passStep, submitStep, doc };
+}
+
+/** render 게이트가 요구하는 두 검증 리포트를 통과 형태로 만든다. */
+function reportFiles(): { visual: string; writing: string } {
+	const visual = join(sandbox, "visual-report.md");
+	const writing = join(sandbox, "writing-report.md");
+	writeFileSync(visual, "스크린샷 3장 검토.\nVERDICT: PASS\n", "utf8");
+	writeFileSync(writing, "지적 2건 반영.\nREVIEW: APPLIED\n", "utf8");
+	return { visual, writing };
 }
 
 describe("render 산출물 검사", () => {
@@ -416,20 +495,65 @@ describe("render 산출물 검사", () => {
 		expect(state().last_failure.items.join(" ")).toContain("비어 있습니다");
 	});
 
-	test("정상 HTML 은 통과하고 render 를 구조 통과 목록에 남긴다", async () => {
+	test("정상 HTML + 두 리포트면 통과하고 render 를 구조 통과 목록에 남긴다", async () => {
 		const { submitStep, doc } = await driveToRender();
 		const htmlPath = join(sandbox, "doc.html");
-		writeFileSync(htmlPath, "<html></html>", "utf8");
-		const rc = submitStep(SID, "render", doc, [], [], htmlPath);
+		writeFileSync(htmlPath, "<svg>다이어그램</svg>", "utf8");
+		const rep = reportFiles();
+		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing);
 		expect(rc).toBe(0);
 		expect(state().structural_ok).toContain("render");
+	});
+
+	test("visual-qa 리포트가 없으면 실패한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, "<svg>다이어그램</svg>", "utf8");
+		const rep = reportFiles();
+		const rc = submitStep(SID, "render", doc, [], [], htmlPath, undefined, rep.writing);
+		expect(rc).toBe(1);
+		expect(state().last_failure.items.join(" ")).toContain("visual");
+	});
+
+	test("visual-qa 리포트에 VERDICT: PASS 가 없으면 실패한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, "<svg>다이어그램</svg>", "utf8");
+		const rep = reportFiles();
+		writeFileSync(rep.visual, "겹침 발견.\nVERDICT: FAIL\n", "utf8");
+		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing);
+		expect(rc).toBe(1);
+		expect(state().last_failure.items.join(" ")).toContain("VERDICT: PASS");
+	});
+
+	test("technical-writing 리포트가 없거나 REVIEW: APPLIED 가 없으면 실패한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, "<svg>다이어그램</svg>", "utf8");
+		const rep = reportFiles();
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, undefined)).toBe(1);
+		writeFileSync(rep.writing, "리뷰만 하고 반영 안 함\n", "utf8");
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing)).toBe(1);
+		expect(state().last_failure.items.join(" ")).toContain("REVIEW: APPLIED");
+	});
+
+	test("문서에 mermaid 블록이 있는데 HTML에 SVG가 그만큼 없으면 실패한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		// FULL_DOC 은 mermaid 블록 1개를 갖는다 — svg 0개인 HTML은 렌더 누락이다.
+		writeFileSync(htmlPath, "<html>svg 없음</html>", "utf8");
+		const rep = reportFiles();
+		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing);
+		expect(rc).toBe(1);
+		expect(state().last_failure.items.join(" ")).toContain("mermaid");
 	});
 
 	test("render 통과 후 pass-step 은 심사 항목 없이 quiz 로 넘긴다", async () => {
 		const { submitStep, passStep, doc } = await driveToRender();
 		const htmlPath = join(sandbox, "doc.html");
-		writeFileSync(htmlPath, "<html></html>", "utf8");
-		submitStep(SID, "render", doc, [], [], htmlPath);
+		writeFileSync(htmlPath, "<svg>다이어그램</svg>", "utf8");
+		const rep = reportFiles();
+		submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing);
 		const rc = passStep(SID, "render", doc, []);
 		expect(rc).toBe(0);
 		expect(state().step).toBe("quiz");
@@ -438,18 +562,27 @@ describe("render 산출물 검사", () => {
 	test("evidence 부터 render 까지 전 스텝을 통과시키고 필수 개념을 채우면 complete 가 성공한다", async () => {
 		const { start, submitStep, passStep, addConcept, ask, grade, complete } = await cli();
 		start(SID, "r", "s");
-		const doc = docFile(GOOD_DOC);
+		const doc = docFile(FULL_DOC);
 		const quote = "락을 공용 모듈로 뽑아낸다";
-		for (const step of ["evidence", "background", "intuition", "code"] as const) {
+		for (const step of [
+			"evidence",
+			"background",
+			"architecture",
+			"intuition",
+			"commits",
+			"code",
+		] as const) {
 			submitStep(SID, step, doc, ["lib/state-lock.ts"], []);
 			passStep(SID, step, doc, [
 				{ id: "R6", pass: true, quote },
 				{ id: "R7", pass: true, quote },
+				{ id: "R12", pass: true, quote },
 			]);
 		}
 		const htmlPath = join(sandbox, "doc.html");
-		writeFileSync(htmlPath, "<html></html>", "utf8");
-		submitStep(SID, "render", doc, [], [], htmlPath);
+		writeFileSync(htmlPath, "<svg>본문</svg>", "utf8");
+		const rep = reportFiles();
+		submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing);
 		passStep(SID, "render", doc, []);
 		expect(state().step).toBe("quiz");
 		addConcept(SID, "c1", true);
