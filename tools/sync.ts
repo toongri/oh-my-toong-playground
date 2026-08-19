@@ -14,6 +14,7 @@ import fs from "fs/promises";
 import path from "path";
 import { existsSync, realpathSync } from "fs";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 
 import type {
 	Platform,
@@ -1960,6 +1961,71 @@ export function isFatalSyncError(err: unknown): boolean {
 	return err instanceof ProjectKeyError || err instanceof DeployTargetsError;
 }
 
+type DeployTransactionEntry = { live: string; before: string; expected: string };
+type DeployTransaction = { entries: DeployTransactionEntry[] };
+
+async function fingerprint(target: string): Promise<string> {
+	const hash = createHash("sha256");
+	const walk = async (current: string, rel = ""): Promise<void> => {
+		let entries: import("fs").Dirent[];
+		try { entries = await fs.readdir(current, { withFileTypes: true }); } catch { return; }
+		for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+			const abs = path.join(current, entry.name);
+			const child = path.join(rel, entry.name);
+			if (entry.isDirectory()) { hash.update(`d:${child}\n`); await walk(abs, child); }
+			else if (entry.isSymbolicLink()) hash.update(`l:${child}:${await fs.readlink(abs)}\n`);
+			else hash.update(`f:${child}:${await fs.readFile(abs, "base64")}\n`);
+		}
+	};
+	try { if ((await fs.lstat(target)).isDirectory()) await walk(target); else hash.update(await fs.readFile(target, "base64")); } catch { hash.update("<absent>"); }
+	return hash.digest("hex");
+}
+
+/** Snapshot only OMT-owned early runtime paths; never the whole deploy root. */
+async function beginDeployTransaction(deployRoot: string, dryRun: boolean, ownedPaths: string[] = []): Promise<DeployTransaction | null> {
+	if (dryRun) return null;
+	const names = [
+		".claude/lib", ".codex/lib", ".agents/lib",
+		".claude/scripts/pretool-trace", ".codex/scripts/pretool-trace",
+		".claude/settings.local.json", ".claude/settings.json", ".gemini/settings.json",
+		".codex/hooks.json", ".codex/config.toml", ".opencode/opencode.json",
+		...ownedPaths,
+	];
+	const entries: DeployTransactionEntry[] = [];
+	for (const name of names) {
+		const live = path.join(deployRoot, name);
+		const before = `${live}.txn-before-${Math.random().toString(36).slice(2)}`;
+		if (existsSync(live)) await fs.cp(live, before, { recursive: true, force: true, dereference: false });
+		entries.push({ live, before, expected: "" });
+	}
+	return { entries };
+}
+
+async function markDeployTransactionExpected(transaction: DeployTransaction | null): Promise<void> {
+	if (!transaction) return;
+	for (const entry of transaction.entries) entry.expected = await fingerprint(entry.live);
+}
+
+async function finishDeployTransaction(transaction: DeployTransaction | null): Promise<void> {
+	for (const entry of transaction?.entries ?? []) await fs.rm(entry.before, { recursive: true, force: true }).catch(() => undefined);
+}
+
+async function rollbackDeployTransaction(transaction: DeployTransaction | null): Promise<void> {
+	if (!transaction) return;
+	for (const entry of transaction.entries) {
+		const unchanged = (await fingerprint(entry.live)) === entry.expected;
+		if (!unchanged) continue;
+		if (existsSync(entry.before)) {
+			await fs.rm(entry.live, { recursive: true, force: true }).catch(() => undefined);
+			await fs.rename(entry.before, entry.live).catch(() => undefined);
+		} else {
+			// A path absent at the transaction boundary is OMT-created during this
+			// run; remove it only when it still carries the expected staged state.
+			await fs.rm(entry.live, { recursive: true, force: true }).catch(() => undefined);
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // processYaml
 // ---------------------------------------------------------------------------
@@ -2130,6 +2196,7 @@ export async function processYaml(
 	);
 
 	for (const deployRoot of deployRoots) {
+		let deployTransaction: DeployTransaction | null = null;
 		try {
 			// Per-deploy backup destination (D-5): computed once per (target,
 			// worktree), before any deploy step. This is the only site that holds
@@ -2180,6 +2247,27 @@ export async function processYaml(
 				context.projectDir || undefined,
 				libSourceRoots,
 			);
+			// Runtime preparation is intentionally before platform YAML activation. If
+			// anything in the remainder fails, restore the complete prior tree rather
+			// than exposing a new lib beside old consumers/settings (or vice versa).
+			if (shouldMkdirClaude || libSourceRoots.size > 0) {
+				const ownedPaths: string[] = [];
+				for (const category of CATEGORIES) {
+					const section = syncYaml[category];
+					for (const item of section?.items ?? []) {
+						const ref = typeof item === "string" ? item : item.component ?? "";
+						const resolved = ref && resolveComponentPath(ref, category, rootDir, context.projectDir || undefined);
+						if (!resolved || "error" in resolved) continue;
+						const platforms = await resolvePlatforms(item, section?.platforms, syncYaml.platforms, category);
+						for (const platform of platforms) {
+							if (!SUPPORTED_CATEGORIES[platform]?.has(category)) continue;
+							const location = deployLocationForManifest(platform, category);
+							ownedPaths.push(path.join(`.${location}`, category, resolved.displayName));
+						}
+					}
+				}
+				deployTransaction = await beginDeployTransaction(deployRoot, context.dryRun, ownedPaths);
+			}
 			await syncCategory(
 				context,
 				"scripts",
@@ -2199,6 +2287,7 @@ export async function processYaml(
 			if (shouldMkdirClaude || libSourceRoots.size > 0) {
 				await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
 			}
+			await markDeployTransactionExpected(deployTransaction);
 
 			// Ensure <deployRoot>/.claude exists only once wrapper/runtime preparation
 			// has succeeded. The container is never the mkdir target (AC2.2).
@@ -2215,6 +2304,7 @@ export async function processYaml(
 				libSourceRoots,
 				ownedHookNames,
 			);
+			await markDeployTransactionExpected(deployTransaction);
 
 			// Reconcile the complete scripts category only after platform config succeeds.
 			await syncCategory(
@@ -2226,6 +2316,7 @@ export async function processYaml(
 				deployRoot,
 				libSourceRoots,
 			);
+			await markDeployTransactionExpected(deployTransaction);
 
 			// Sync remaining categories.
 			for (const category of CATEGORIES) {
@@ -2239,6 +2330,7 @@ export async function processYaml(
 					deployRoot,
 					libSourceRoots,
 				);
+				await markDeployTransactionExpected(deployTransaction);
 			}
 
 			// Sync lib — whenever this deploy target received deployable source. The
@@ -2253,6 +2345,7 @@ export async function processYaml(
 			if (shouldMkdirClaude || libSourceRoots.size > 0) {
 				await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
 			}
+			await markDeployTransactionExpected(deployTransaction);
 
 			// Sync docs — unconditional (not gated on shouldMkdirClaude): docs is
 			// platform-agnostic and lands directly under deployRoot, so a docs-only
@@ -2308,7 +2401,14 @@ export async function processYaml(
 			if (syncYaml.format && !context.dryRun) {
 				await formatDeployedRoots(deployRoot, syncYaml.format, docsDests, codexSkillNames);
 			}
+			await finishDeployTransaction(deployTransaction);
 		} catch (err) {
+			try {
+				await rollbackDeployTransaction(deployTransaction);
+			} catch (rollbackErr) {
+				logError(`worktree 롤백 실패 (수동 복구 필요): ${deployRoot}: ${rollbackErr}`);
+			}
+			await finishDeployTransaction(deployTransaction);
 			// Fatal errors (MCP key-derivation or topology failure) must never be
 			// downgraded: rethrow so they surface as a non-zero exit.
 			if (isFatalSyncError(err)) {

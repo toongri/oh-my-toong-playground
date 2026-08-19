@@ -211,6 +211,8 @@ describe("processYaml — complete lib precollection before writes", () => {
 		first.backupBase = path.join(tmpDir, "backups");
 		await processYaml(first, syncYamlPath(), adapters, rootDir);
 		const before = await snapshotTree(targetPath);
+		await writeFile(path.join(rootDir, "lib", "wrapper.ts"), "export const wrapper = 99;\n");
+		await writeFile(path.join(rootDir, "lib", "skill.ts"), "export const skill = 98;\n");
 
 		adapter.syncPlatformYaml = async () => {
 			throw new Error("injected config failure");
@@ -220,6 +222,25 @@ describe("processYaml — complete lib precollection before writes", () => {
 		await processYaml(second, syncYamlPath(), adapters, rootDir);
 
 		expect(second.failedTargets).toContain(targetPath);
+		expect(await snapshotTree(targetPath)).toEqual(before);
+	});
+
+	it("restores old lib, consumer, local settings, and manifest after later failure", async () => {
+		await writeSyncYaml();
+		await writeFile(path.join(rootDir, "claude.yaml"), "config:\n  theme: dark\n");
+		const first = makeContext({ dryRun: false });
+		first.backupBase = path.join(tmpDir, "backups-generation-1");
+		await processYaml(first, syncYamlPath(), new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap, rootDir);
+		const before = await snapshotTree(targetPath);
+		await writeFile(path.join(rootDir, "lib", "wrapper.ts"), "export const wrapper = 77;\n");
+		await writeFile(path.join(rootDir, "lib", "skill.ts"), "export const skill = 66;\n");
+		await writeFile(path.join(rootDir, "claude.yaml"), "config:\n  theme: light\n");
+		class FailingAdapter extends ClaudeAdapter {
+			override async syncSkillsDirect(): Promise<void> { throw new Error("injected later failure"); }
+		}
+		const second = makeContext({ dryRun: false });
+		second.backupBase = path.join(tmpDir, "backups-generation-2");
+		await processYaml(second, syncYamlPath(), new Map<Platform, PlatformAdapter>([["claude", new FailingAdapter()]]) as AdapterMap, rootDir);
 		expect(await snapshotTree(targetPath)).toEqual(before);
 	});
 
@@ -236,8 +257,39 @@ describe("processYaml — complete lib precollection before writes", () => {
 		await processYaml(context, syncYamlPath(), adapters, rootDir);
 
 		expect(context.failedTargets).toContain(targetPath);
-		expect(await exists(path.join(targetPath, ".claude", "lib", "wrapper.ts"))).toBe(true);
-		expect(await exists(path.join(targetPath, ".claude", "lib", "skill.ts"))).toBe(true);
+		expect(await exists(path.join(targetPath, ".claude", "lib"))).toBe(false);
+		expect(await exists(path.join(targetPath, ".claude", "scripts", "wrapper"))).toBe(false);
+	});
+
+	it("preserves an existing lib path changed concurrently before rollback", async () => {
+		await writeSyncYaml();
+		const first = makeContext({ dryRun: false });
+		first.backupBase = path.join(tmpDir, "backups-existing");
+		await processYaml(first, syncYamlPath(), new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap, rootDir);
+		class ConcurrentAdapter extends ClaudeAdapter {
+			override async syncSkillsDirect(): Promise<void> {
+				await writeFile(path.join(targetPath, ".claude", "lib", "wrapper.ts"), "concurrent-existing\n");
+				throw new Error("injected skill failure");
+			}
+		}
+		const context = makeContext({ dryRun: false });
+		context.backupBase = path.join(tmpDir, "backups-existing-2");
+		await processYaml(context, syncYamlPath(), new Map<Platform, PlatformAdapter>([["claude", new ConcurrentAdapter()]]) as AdapterMap, rootDir);
+		expect(await readFile(path.join(targetPath, ".claude", "lib", "wrapper.ts"))).toBe("concurrent-existing\n");
+	});
+
+	it("preserves an absent-before owned path changed concurrently before rollback", async () => {
+		await writeSyncYaml();
+		class ConcurrentAdapter extends ClaudeAdapter {
+			override async syncScriptsDirect(): Promise<void> {
+				await writeFile(path.join(targetPath, ".claude", "scripts", "wrapper", "index.ts"), "concurrent-absent\n");
+				throw new Error("injected wrapper failure");
+			}
+		}
+		const context = makeContext({ dryRun: false });
+		context.backupBase = path.join(tmpDir, "backups-absent");
+		await processYaml(context, syncYamlPath(), new Map<Platform, PlatformAdapter>([["claude", new ConcurrentAdapter()]]) as AdapterMap, rootDir);
+		expect(await readFile(path.join(targetPath, ".claude", "scripts", "wrapper", "index.ts"))).toBe("concurrent-absent\n");
 	});
 
 	it("precollects Codex skill bucket and agents add-hooks source roots", async () => {
