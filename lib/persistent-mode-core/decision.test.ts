@@ -2966,6 +2966,7 @@ describe("explain-diff Stop-gate decision table", () => {
 
 	const midSession = {
 		active: true,
+		commit_hashes: [],
 		step: "code",
 		passed: ["evidence", "background", "intuition"],
 		concepts: [],
