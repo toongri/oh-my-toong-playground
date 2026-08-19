@@ -34,6 +34,7 @@ import type {
 	PluginScope,
 } from "../lib/types.ts";
 import type { PlatformAdapter, PlatformWriteObserver } from "./types.ts";
+import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
 import { planCategoryDestinationPaths, type DestinationCategory } from "./destinations.ts";
 
 /** Resolve a Codex component destination by combining the shared plan with its deploy root. */
@@ -500,6 +501,7 @@ export class CodexAdapter implements PlatformAdapter {
 		sourcePath: string,
 		dryRun = false,
 		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		// event filtering is handled by the caller (sync.sh / orchestrator)
 		// This method is called only for supported events — just copy the file
@@ -521,13 +523,17 @@ export class CodexAdapter implements PlatformAdapter {
 				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookRoot, dryRun);
 				return;
 			}
-			await syncDirectory(sourcePath, targetHookRoot, {
-				exclude: ["*.test.ts", "config.local.yaml"],
-				platformRoot: path.join(targetPath, this.configDir),
-			});
+			const operation = async (): Promise<void> => {
+				await syncDirectory(sourcePath, targetHookRoot, {
+					exclude: ["*.test.ts", "config.local.yaml"],
+					platformRoot: path.join(targetPath, this.configDir),
+				});
+			};
+			if (mutationHooks) await mutationHooks.mutate(targetHookRoot, operation);
+			else await operation();
 			logInfo(`Copied: ${displayName}/`);
-			await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookRoot, dryRun);
 			if (writeObserver) await writeObserver(targetHookRoot);
+			await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookRoot, dryRun, writeObserver, mutationHooks);
 		} else {
 			const targetFile = targetHookRoot;
 			if (dryRun) {
@@ -535,13 +541,17 @@ export class CodexAdapter implements PlatformAdapter {
 				await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun);
 				return;
 			}
-			await copyFile(sourcePath, targetFile);
-			// Ensure executable
-			const fileStat = await fs.stat(targetFile);
-			await fs.chmod(targetFile, fileStat.mode | 0o111);
+			const operation = async (): Promise<void> => {
+				await copyFile(sourcePath, targetFile);
+				// Ensure executable
+				const fileStat = await fs.stat(targetFile);
+				await fs.chmod(targetFile, fileStat.mode | 0o111);
+			};
+			if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+			else await operation();
 			logInfo(`Copied: ${displayName}`);
-			await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun);
 			if (writeObserver) await writeObserver(targetFile);
+			await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun, writeObserver, mutationHooks);
 		}
 	}
 
@@ -848,6 +858,7 @@ export class CodexAdapter implements PlatformAdapter {
 		dryRun: boolean,
 		_scope?: PluginScope,
 		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<PlatformConfigResult> {
 		const processedSections: string[] = [];
 		let modelMap: ModelMap | undefined;
@@ -926,6 +937,7 @@ export class CodexAdapter implements PlatformAdapter {
 							resolvedSourcePath,
 							dryRun,
 							writeObserver,
+							mutationHooks,
 						);
 					}
 

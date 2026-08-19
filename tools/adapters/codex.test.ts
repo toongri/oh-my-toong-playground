@@ -13,6 +13,7 @@ import {
 } from "./codex.ts";
 import { planCategoryDestinationPaths } from "./destinations.ts";
 import type { ModelMap } from "../lib/types.ts";
+import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
 
 function plannedCodexPath(targetPath: string, category: "hooks" | "scripts", displayName: string): string {
 	return path.join(targetPath, planCategoryDestinationPaths("codex", category, displayName)[0]);
@@ -1023,6 +1024,60 @@ describe("CodexAdapter", () => {
 			expect(libExists).toBe(true);
 		});
 
+		it("파일 훅은 main mutate·observer 뒤 dependency mutate·observer 순서를 보장한다", async () => {
+			const hooksDir = path.join(tmpDir, "ordered-hooks");
+			await fs.mkdir(path.join(hooksDir, "lib"), { recursive: true });
+			const sourceFile = path.join(hooksDir, "main.sh");
+			await fs.writeFile(sourceFile, 'source "$HOOKS_DIR/lib/shared.sh"\necho main\n');
+			await fs.writeFile(path.join(hooksDir, "lib", "shared.sh"), "echo shared\n");
+			const targetBase = path.join(tmpDir, "ordered-target");
+			const targetMain = plannedCodexPath(targetBase, "hooks", "main.sh");
+			const targetDependency = path.join(targetBase, ".codex", "hooks", "lib", "shared.sh");
+			const events: string[] = [];
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (targetPath, operation) => {
+					events.push(`mutate:${targetPath}`);
+					await operation();
+				},
+			};
+			await adapter.syncHooksDirect(
+				targetBase,
+				"main.sh",
+				sourceFile,
+				false,
+				async (writtenPath) => {
+					events.push(`observe:${writtenPath}`);
+				},
+				mutationHooks,
+			);
+			expect(events).toEqual([
+				`mutate:${targetMain}`,
+				`observe:${targetMain}`,
+				`mutate:${targetDependency}`,
+				`observe:${targetDependency}`,
+			]);
+		});
+
+		it("파일 훅 main mutation conflict는 실제 복사·dependency·observer를 모두 차단한다", async () => {
+			const sourceFile = path.join(tmpDir, "conflict.sh");
+			await fs.writeFile(sourceFile, "echo conflict\n");
+			const targetBase = path.join(tmpDir, "conflict-target");
+			const calls: string[] = [];
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (targetPath) => {
+					calls.push(targetPath);
+					throw new Error("Deploy transaction conflict");
+				},
+			};
+			await expect(
+				adapter.syncHooksDirect(targetBase, "conflict.sh", sourceFile, false, () => undefined, mutationHooks),
+			).rejects.toThrow("Deploy transaction conflict");
+			expect(calls).toEqual([plannedCodexPath(targetBase, "hooks", "conflict.sh")]);
+			expect(
+				await fs.stat(plannedCodexPath(targetBase, "hooks", "conflict.sh")).then(() => true).catch(() => false),
+			).toBe(false);
+		});
+
 		it("디렉토리 훅의 외부 의존성을 base dir 기반으로 resolve한다", async () => {
 			// hooks/ 구조: my-dir-hook/entry.sh (hooks/ 루트 기준 source) + lib/shared.sh
 			// hooksSourceDir = path.dirname(dirHookDir) = hooks/
@@ -1051,7 +1106,7 @@ describe("CodexAdapter", () => {
 			expect(libExists).toBe(true);
 		});
 
-		it("디렉터리 훅 observer가 shell 의존성 복사 완료 후 호출된다", async () => {
+		it("디렉터리 훅 observer가 root 배포 직후 호출되고 dependency가 뒤따른다", async () => {
 			const hooksDir = path.join(tmpDir, "hooks");
 			const dirHookDir = path.join(hooksDir, "my-dir-hook");
 			const libDir = path.join(hooksDir, "lib");
@@ -1070,13 +1125,60 @@ describe("CodexAdapter", () => {
 			const observed: string[] = [];
 			await adapter.syncHooksDirect(targetBase, "my-dir-hook", dirHookDir, false, async (writtenPath) => {
 				observed.push(writtenPath);
-				expect(await fs.readFile(targetLib, "utf-8")).toContain("shared");
+				expect(await fs.stat(writtenPath)).toBeTruthy();
 			});
 
-			expect(observed).toEqual([targetHookRoot]);
+			expect(observed).toEqual([targetHookRoot, targetLib]);
+			expect(await fs.readFile(targetLib, "utf-8")).toContain("shared");
 		});
 
-		it("의존성 복사 실패 시 디렉터리 훅 observer를 호출하지 않는다", async () => {
+		it("디렉터리 훅은 root mutation·observer와 dependency mutation을 전달한다", async () => {
+			const hooksDir = path.join(tmpDir, "forward-hooks");
+			const dirHookDir = path.join(hooksDir, "bundle");
+			await fs.mkdir(dirHookDir, { recursive: true });
+			await fs.mkdir(path.join(hooksDir, "lib"), { recursive: true });
+			await fs.writeFile(path.join(dirHookDir, "entry.sh"), 'source "$HOOKS_DIR/lib/shared.sh"\n');
+			await fs.writeFile(path.join(hooksDir, "lib", "shared.sh"), "echo shared\n");
+			const targetBase = path.join(tmpDir, "forward-target");
+			const root = plannedCodexPath(targetBase, "hooks", "bundle");
+			const dependency = path.join(root, "lib", "shared.sh");
+			const mutations: string[] = [];
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (targetPath, operation) => {
+					mutations.push(targetPath);
+					await operation();
+				},
+			};
+			await adapter.syncHooksDirect(targetBase, "bundle", dirHookDir, false, undefined, mutationHooks);
+			expect(mutations).toEqual([root, dependency]);
+		});
+
+		it("dry-run에서는 mutation hook과 observer를 호출하지 않는다", async () => {
+			const sourceFile = path.join(tmpDir, "dry.sh");
+			await fs.writeFile(sourceFile, "echo dry\n");
+			let mutateCount = 0;
+			let observeCount = 0;
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (_targetPath, operation) => {
+					mutateCount += 1;
+					await operation();
+				},
+			};
+			await adapter.syncHooksDirect(
+				path.join(tmpDir, "dry-target"),
+				"dry.sh",
+				sourceFile,
+				true,
+				() => {
+					observeCount += 1;
+				},
+				mutationHooks,
+			);
+			expect(mutateCount).toBe(0);
+			expect(observeCount).toBe(0);
+		});
+
+		it("의존성 복사 실패 뒤에도 이미 완료된 디렉터리 훅 observer만 유지한다", async () => {
 			const hooksDir = path.join(tmpDir, "hooks");
 			const dirHookDir = path.join(hooksDir, "my-dir-hook");
 			const libDir = path.join(hooksDir, "lib");
@@ -1100,7 +1202,7 @@ describe("CodexAdapter", () => {
 					},
 				),
 			).rejects.toThrow();
-			expect(observed).toEqual([]);
+			expect(observed).toEqual([plannedCodexPath(path.join(tmpDir, "target"), "hooks", "my-dir-hook")]);
 		});
 
 		it("디렉토리 훅의 @lib/ import를 배포 시 상대 경로로 재작성한다", async () => {
@@ -1257,6 +1359,29 @@ describe("CodexAdapter", () => {
 	// ---------------------------------------------------------------------------
 
 	describe("syncPlatformYaml hooks", () => {
+		it("hook bundle mutation conflict prevents the later hooks.json write", async () => {
+			const sourceHook = path.join(tmpDir, "conflicting-platform-hook.sh");
+			await fs.writeFile(sourceHook, "echo hook\n");
+			const targetBase = path.join(tmpDir, "platform-conflict");
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async () => {
+					throw new Error("Deploy transaction conflict");
+				},
+			};
+			await expect(
+				adapter.syncPlatformYaml(
+					targetBase,
+					{ hooks: { Notification: [{ component: sourceHook }] } } as never,
+					false,
+					undefined,
+					undefined,
+					mutationHooks,
+				),
+			).rejects.toThrow("Deploy transaction conflict");
+			expect(
+				await fs.stat(path.join(targetBase, ".codex", "hooks.json")).then(() => true).catch(() => false),
+			).toBe(false);
+		});
 		it("notifies after each successful OMT-owned config, MCP, hook bundle, and hooks.json write via `syncPlatformYaml`", async () => {
 			const sourceHookDir = path.join(tmpDir, "external-hook");
 			await fs.mkdir(sourceHookDir, { recursive: true });
