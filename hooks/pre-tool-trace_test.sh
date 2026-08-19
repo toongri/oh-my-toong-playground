@@ -16,6 +16,9 @@ mkdir -p "$CUSTOM_ROOT" "$TMP/work" "$TMP/bin"
 RESOLVED=$(cd "$ROOT" && OMT_DIR="$CUSTOM_ROOT" bun -e 'import { resolveOmtDir } from "./lib/omt-dir.ts"; process.stdout.write(resolveOmtDir(process.cwd()))')
 [ "$RESOLVED" = "$CUSTOM_ROOT" ] || fail "unexpected OMT_DIR resolver output: $RESOLVED"
 export OMT_DIR="$RESOLVED"
+# Keep wrapper identity deterministic and independent of the caller's environment.
+TEST_SESSION_ID='pretool-trace-test-session'
+export OMT_SESSION_ID="$TEST_SESSION_ID"
 EVIDENCE_DIR="$OMT_DIR/evidence/pretool-trace/wi-10"
 mkdir -p "$EVIDENCE_DIR"
 printf 'resolver=custom;mode=metadata-only\n' > "$EVIDENCE_DIR/resolver.txt"
@@ -106,7 +109,7 @@ sanitize_runtime_evidence() {
 
 test_privacy_boundary() {
   local key
-  for key in "$GENERATED_PAYLOAD" '"arg":"safe"' generated-session generated-call preserved child-stderr-sentinel "$ROOT" "$TMP" "$OMT_DIR" "$TMP/bin/child.sh"; do
+  for key in "$GENERATED_PAYLOAD" '"arg":"safe"' generated-session generated-call "$TEST_SESSION_ID" preserved child-stderr-sentinel "$ROOT" "$TMP" "$OMT_DIR" "$TMP/bin/child.sh"; do
     grep -R -F -q -- "$key" "$OMT_DIR/pretool-trace" "$CUSTOM_ROOT/concurrent/pretool-trace" "$EVIDENCE_DIR" && fail "privacy boundary" || true
   done
   for key in "$OMT_DIR/pretool-trace/keys"/*.key "$CUSTOM_ROOT/concurrent/pretool-trace/keys"/*.key; do
