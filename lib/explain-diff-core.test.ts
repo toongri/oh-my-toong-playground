@@ -247,6 +247,7 @@ describe("normalizeExplainDiffState", () => {
 			active: true,
 			step: "quiz",
 			passed: ["evidence", "background", "intuition", "code", "render"],
+			commit_hashes: [],
 			concepts: [{ id: "c1", required: true, passed: false }],
 			bank: [1, 2],
 			awaiting_answer: true,
@@ -258,5 +259,25 @@ describe("normalizeExplainDiffState", () => {
 		expect(s?.awaiting_answer).toBe(true);
 		expect(s?.stalled).toBe(true);
 		expect(s?.last_failure).toEqual({ step: "code", items: ["R5 추적성"] });
+	});
+
+	test("새 워크플로 메타데이터가 없는 활성 레거시 code 상태는 architecture에서 복구한다", () => {
+		const s = normalizeExplainDiffState({
+			active: true,
+			step: "code",
+			passed: ["evidence", "background", "intuition"],
+		});
+		expect(s?.step).toBe("architecture");
+		expect(s?.passed).toEqual(["evidence", "background"]);
+	});
+
+	test("새 워크플로 메타데이터가 없는 활성 레거시 quiz 상태도 architecture에서 복구한다", () => {
+		const s = normalizeExplainDiffState({
+			active: true,
+			step: "quiz",
+			passed: ["evidence", "background", "intuition", "code", "render"],
+		});
+		expect(s?.step).toBe("architecture");
+		expect(s?.passed).toEqual(["evidence", "background"]);
 	});
 });

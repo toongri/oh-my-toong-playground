@@ -103,6 +103,18 @@ function toStep(v: unknown): Step | null {
 	return STEP_ORDER.find((s) => s === v) ?? null;
 }
 
+function recoverLegacyStep(step: Step): Step {
+	switch (step) {
+		case "intuition":
+		case "code":
+		case "render":
+		case "quiz":
+			return "architecture";
+		default:
+			return step;
+	}
+}
+
 /**
  * Rebuilds a state object out of untrusted JSON, field by field.
  *
@@ -137,10 +149,16 @@ export function normalizeExplainDiffState(parsed: unknown): ExplainDiffState | n
 
 	const passedRaw = r["passed"];
 	const conceptsRaw = r["concepts"];
+	const parsedStep = toStep(r["step"]) ?? "evidence";
+	const legacy = r["active"] === true && !Object.prototype.hasOwnProperty.call(r, "commit_hashes");
+	const step = legacy ? recoverLegacyStep(parsedStep) : parsedStep;
+	const passed = Array.isArray(passedRaw) ? passedRaw.flatMap((x) => toStep(x) ?? []) : [];
 	return {
 		active: r["active"] === true,
-		step: toStep(r["step"]) ?? "evidence",
-		passed: Array.isArray(passedRaw) ? passedRaw.flatMap((x) => toStep(x) ?? []) : [],
+		step,
+		passed: legacy
+			? passed.filter((s) => STEP_ORDER.indexOf(s) < STEP_ORDER.indexOf(step))
+			: passed,
 		concepts: Array.isArray(conceptsRaw)
 			? conceptsRaw.flatMap((x) => {
 					if (x === null || typeof x !== "object") return [];
