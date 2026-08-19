@@ -57,7 +57,7 @@ import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts"
 import { ProjectKeyError } from "./lib/git-key.ts";
 import { resolveDeployTargets, DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
 import { assertCleanWorktree, assertDefaultBranch, PreflightGitError } from "./lib/preflight-git.ts";
-import { planSyncDirectoryMutations, rewriteLibImports, copyFile } from "./lib/sync-directory.ts";
+import { planSyncDirectoryMutations, rewriteLibImports, copyFile, writeResidentFileAtomically } from "./lib/sync-directory.ts";
 import {
 	collectRequiredLibModulesFromSources,
 	collectLibDataFiles,
@@ -187,6 +187,7 @@ async function collectPlatformHookTransactionPaths(
 	projectDir: string | undefined,
 	deployRoot: string,
 	additionalBundles: Array<{ platform: Platform; sourcePath: string; displayName: string }> = [],
+	ownedHookNames?: OwnedHookNames,
 ): Promise<Array<string | { path: string; owner: string }>> {
 	const paths: Array<string | { path: string; owner: string }> = [];
 	const seen = new Set<string>();
@@ -242,6 +243,7 @@ async function collectPlatformHookTransactionPaths(
 				if (typeof component !== "string" || !component) continue;
 				const resolved = resolveComponentPath(component, "hooks", rootDir, projectDir);
 				if ("error" in resolved) continue;
+				if (ownedHookNames) addOwnedName(ownedHookNames, platform, resolved.displayName);
 				await addHookBundle(platform, resolved.path, resolved.displayName);
 			}
 		}
@@ -1482,14 +1484,10 @@ export async function syncDocs(
 export async function rewriteLibAliases(
 	platformRoot: string,
 	bundledPackages: Set<string>,
+	mutationHooks?: DeployMutationHooks,
 ): Promise<void> {
-	const tsFiles = await collectTsFiles(platformRoot);
-	for (const filePath of tsFiles) {
-		// Skip test files and lib/ itself
-		if (filePath.endsWith(".test.ts")) continue;
-		const rel = path.relative(platformRoot, filePath);
-		if (rel.startsWith("lib/") || rel.startsWith("lib\\")) continue;
-
+	const candidates = await planLibAliasRewritePaths(platformRoot, bundledPackages);
+	for (const filePath of candidates) {
 		let content: string;
 		try {
 			content = await fs.readFile(filePath, "utf8");
@@ -1500,9 +1498,31 @@ export async function rewriteLibAliases(
 		const updated = rewriteLibImports(content, filePath, platformRoot, bundledPackages);
 
 		if (updated !== content) {
-			await fs.writeFile(filePath, updated, "utf8");
+			const operation = () => writeResidentFileAtomically(filePath, updated);
+			if (mutationHooks) await mutationHooks.mutate(filePath, operation);
+			else await operation();
 		}
 	}
+}
+
+/** Plan existing non-lib TypeScript leaves whose current content may change. */
+export async function planLibAliasRewritePaths(
+	platformRoot: string,
+	bundledPackages: Set<string>,
+): Promise<string[]> {
+	const tsFiles = (await collectTsFiles(platformRoot)).sort();
+	const candidates: string[] = [];
+	for (const filePath of tsFiles) {
+		if (filePath.endsWith(".test.ts")) continue;
+		const rel = path.relative(platformRoot, filePath);
+		if (rel.startsWith(`lib${path.sep}`) || rel.startsWith("lib/")) continue;
+		let content: string;
+		try { content = await fs.readFile(filePath, "utf8"); } catch { continue; }
+		if (content.includes("@lib/") || (await findBareNpmImports(filePath)).some((pkg) => bundledPackages.has(pkg))) {
+			candidates.push(filePath);
+		}
+	}
+	return candidates;
 }
 
 /**
@@ -1812,7 +1832,7 @@ export async function syncLib(
 			else await swapLib();
 
 			logInfo(`Deployed shared lib to .${platform}/lib/`);
-			await rewriteLibAliases(platformDir, bundledPackages);
+			await rewriteLibAliases(platformDir, bundledPackages, mutationHooks);
 		}
 	}
 }
@@ -1874,6 +1894,7 @@ export async function rewritePlatformPaths(
 	codexSkillNames: ReadonlySet<string> = new Set(),
 	ownedHookNames: ReadonlySet<string> = new Set(),
 	ownedRuleNames: ReadonlySet<string> = new Set(),
+	mutationHooks?: DeployMutationHooks,
 ): Promise<void> {
 	const rules = PLATFORM_REWRITE_RULES[platform];
 	// Claude's rule table is empty by design (tools/lib/rewrite-rules.ts) — this
@@ -1891,6 +1912,8 @@ export async function rewritePlatformPaths(
 			undefined,
 			ownedHookNames,
 			ownedRuleNames,
+			mutationHooks,
+			true,
 		);
 		return;
 	}
@@ -1908,6 +1931,8 @@ export async function rewritePlatformPaths(
 		undefined,
 		ownedHookNames,
 		ownedRuleNames,
+		mutationHooks,
+		true,
 	);
 
 	// Root 2: .agents/skills/<name>, manifest-owned only. For each owned skill,
@@ -1923,6 +1948,10 @@ export async function rewritePlatformPaths(
 		const skillDir = path.join(codexSkillsDir(targetPath), name);
 		await rewriteFilesUnder(skillDir, rules, [], (content) =>
 			bakeOmtDirToken(bakeSkillDirToken(content, skillDir), omtDirCli),
+			ownedHookNames,
+			ownedRuleNames,
+			mutationHooks,
+			false,
 		);
 	}
 }
@@ -2118,28 +2147,84 @@ async function rewriteFilesUnder(
 	extraTransform?: (content: string) => string,
 	ownedHookNames: ReadonlySet<string> = new Set(),
 	ownedRuleNames: ReadonlySet<string> = new Set(),
+	mutationHooks?: DeployMutationHooks,
+	groupSharedLib = false,
 ): Promise<void> {
-	const files = await collectMdFiles(dir, excludeDirs);
-	for (const filePath of files) {
+	const candidates = await planRewriteFilePaths(dir, rules, excludeDirs, extraTransform, ownedHookNames, ownedRuleNames);
+	const grouped = new Map<string, string[]>();
+	for (const filePath of candidates) {
 		const relPath = path.relative(dir, filePath);
-		if (isUnderHooksDir(relPath) && !isOwnedHookPath(relPath, ownedHookNames)) {
-			continue;
-		}
-		if (isUnderRulesDir(relPath) && !isOwnedRulePath(relPath, ownedRuleNames)) {
-			continue;
-		}
+		const mutationTarget = groupSharedLib && (relPath.startsWith(`lib${path.sep}`) || relPath.startsWith("lib/"))
+			? path.join(dir, "lib")
+			: filePath;
+		const files = grouped.get(mutationTarget) ?? [];
+		files.push(filePath);
+		grouped.set(mutationTarget, files);
+	}
+	for (const [mutationTarget, files] of grouped) {
+		const operation = async (): Promise<void> => {
+			for (const filePath of files) {
+				let content: string;
+				try { content = await fs.readFile(filePath, "utf8"); } catch { continue; }
+				let updated = applyRewriteRules(content, rules);
+				if (extraTransform) updated = extraTransform(updated);
+				if (updated !== content) await writeResidentFileAtomically(filePath, updated);
+			}
+		};
+		if (mutationHooks) await mutationHooks.mutate(mutationTarget, operation);
+		else await operation();
+	}
+}
+
+/** Plan only existing markdown leaves whose rewrite would change their bytes. */
+async function planRewriteFilePaths(
+	dir: string,
+	rules: readonly RewriteRule[],
+	excludeDirs: string[],
+	extraTransform: ((content: string) => string) | undefined,
+	ownedHookNames: ReadonlySet<string>,
+	ownedRuleNames: ReadonlySet<string>,
+): Promise<string[]> {
+	const candidates: string[] = [];
+	for (const filePath of (await collectMdFiles(dir, excludeDirs)).sort()) {
+		const relPath = path.relative(dir, filePath);
+		if (isUnderHooksDir(relPath) && !isOwnedHookPath(relPath, ownedHookNames)) continue;
+		if (isUnderRulesDir(relPath) && !isOwnedRulePath(relPath, ownedRuleNames)) continue;
 		let content: string;
-		try {
-			content = await fs.readFile(filePath, "utf8");
-		} catch {
-			continue;
-		}
+		try { content = await fs.readFile(filePath, "utf8"); } catch { continue; }
 		let updated = applyRewriteRules(content, rules);
 		if (extraTransform) updated = extraTransform(updated);
-		if (updated !== content) {
-			await fs.writeFile(filePath, updated, "utf8");
-		}
+		if (updated !== content) candidates.push(filePath);
 	}
+	return candidates;
+}
+
+/** Plan existing platform markdown leaves using the same ownership and transform rules as execution. */
+export async function planPlatformRewritePaths(
+	targetPath: string,
+	platform: Platform,
+	codexSkillNames: ReadonlySet<string> = new Set(),
+	ownedHookNames: ReadonlySet<string> = new Set(),
+	ownedRuleNames: ReadonlySet<string> = new Set(),
+): Promise<string[]> {
+	const rules = PLATFORM_REWRITE_RULES[platform];
+	if (rules.length === 0) return [];
+	const paths: string[] = [];
+	if (platform !== "codex") {
+		const root = path.join(targetPath, `.${platform}`);
+		const leaves = await planRewriteFilePaths(root, rules, [], undefined, ownedHookNames, ownedRuleNames);
+		const targets = new Set(leaves.map((filePath) => path.relative(root, filePath).startsWith(`lib${path.sep}`) ? path.join(root, "lib") : filePath));
+		return [...targets];
+	}
+	const codexDir = path.join(targetPath, ".codex");
+	const rootLeaves = await planRewriteFilePaths(codexDir, rules, [path.join(codexDir, "skills")], undefined, ownedHookNames, ownedRuleNames);
+	paths.push(...new Set(rootLeaves.map((filePath) => path.relative(codexDir, filePath).startsWith(`lib${path.sep}`) ? path.join(codexDir, "lib") : filePath)));
+	const omtDirCli = path.join(codexSkillsDir(targetPath), "..", "lib", "omt-dir.ts");
+	for (const name of codexSkillNames) {
+		const skillDir = path.join(codexSkillsDir(targetPath), name);
+		paths.push(...await planRewriteFilePaths(skillDir, rules, [], (content) => bakeOmtDirToken(bakeSkillDirToken(content, skillDir), omtDirCli), ownedHookNames, ownedRuleNames));
+	}
+	return paths;
 }
 
 /**
@@ -2225,6 +2310,19 @@ export function allTargetsProcessed(targetPath: string, processedPaths: Set<stri
  */
 export function isFatalSyncError(err: unknown): boolean {
 	return err instanceof ProjectKeyError || err instanceof DeployTargetsError;
+}
+
+function shouldRewritePlatform(
+	deployRoot: string,
+	platform: Platform,
+	codexSkillNames: ReadonlySet<string>,
+	rewriteEligiblePlatforms: ReadonlySet<Platform>,
+	libSourceRoots: LibSourceRoots,
+): boolean {
+	const platformDir = path.join(deployRoot, `.${platform}`);
+	const codexSkillsPresent = platform === "codex" && codexSkillNames.size > 0;
+	return (existsSync(platformDir) || codexSkillsPresent) &&
+		(rewriteEligiblePlatforms.has(platform) || libSourceRoots.has(platform));
 }
 
 const MANIFEST_MUTATION_SUFFIXES = ["", ".md", ".toml"] as const;
@@ -2508,6 +2606,7 @@ export async function processYaml(
 				context.projectDir || undefined,
 				deployRoot,
 				agentHookBundles,
+				ownedHookNames,
 			);
 			const hasPlatformYaml = (await Promise.all(
 				KNOWN_PLATFORMS.map(async (platform) => (await parseAndMergePlatformYaml(yamlDir, platform)) !== null),
@@ -2517,6 +2616,21 @@ export async function processYaml(
 			const libTransactionPaths = shouldMkdirClaude || libSourceRoots.size > 0
 				? libDestinationPaths(deployRoot, libPlatforms, libSourceRoots)
 				: [];
+			const declaredPackages = await readPackageJsonDeps(rootDir).catch(() => new Set<string>());
+			const aliasRewritePaths = (shouldMkdirClaude || libSourceRoots.size > 0)
+				? (await Promise.all(effectiveLibLocations(libPlatforms, libSourceRoots).map((location) => planLibAliasRewritePaths(path.join(deployRoot, `.${location}`), declaredPackages)))).flat()
+				: [];
+			const platformRewritePaths: string[] = [];
+			for (const platform of ["gemini", "codex", "opencode"] as const) {
+				if (!shouldRewritePlatform(deployRoot, platform, codexSkillNames, rewriteEligiblePlatforms, libSourceRoots)) continue;
+				platformRewritePaths.push(...await planPlatformRewritePaths(
+					deployRoot,
+					platform,
+					codexSkillNames,
+					ownedHookNames.get(platform) ?? new Set<string>(),
+					ownedRuleNames.get(platform) ?? new Set<string>(),
+				));
+			}
 			if (shouldMkdirClaude || libSourceRoots.size > 0 || platformHookTransactionPaths.length > 0 || hasPlatformYaml || hasValidPreviousManifest || docsTransactionPaths.length > 0) {
 				const ownedPaths: Array<string | { path: string; owner: string }> = [];
 				ownedPaths.push(...await collectManifestTransactionPaths(deployRoot));
@@ -2544,6 +2658,8 @@ export async function processYaml(
 				ownedPaths.push(...platformHookTransactionPaths);
 				ownedPaths.push(...docsTransactionPaths);
 				ownedPaths.push(...libTransactionPaths);
+				ownedPaths.push(...aliasRewritePaths);
+				ownedPaths.push(...platformRewritePaths);
 				if (codexSkillNames.size > 0 && adapters.get("codex")) {
 					ownedPaths.push(...await planCodexSkillsFossilCleanup(deployRoot, codexSkillNames));
 				}
@@ -2653,11 +2769,7 @@ export async function processYaml(
 				// A codex-skills-only project never creates .codex/ at all (skills land
 				// under .agents/skills, not .codex/skills) — codexSkillNames.size > 0 is
 				// the second, independent trigger that covers exactly that case (D4).
-				const codexSkillsPresent = platform === "codex" && codexSkillNames.size > 0;
-				if (
-					(existsSync(platformDir) || codexSkillsPresent) &&
-					(rewriteEligiblePlatforms.has(platform) || libSourceRoots.has(platform))
-				) {
+				if (shouldRewritePlatform(deployRoot, platform, codexSkillNames, rewriteEligiblePlatforms, libSourceRoots)) {
 					if (context.dryRun) {
 						logDry(`Rewrite .claude/ paths -> .${platform}/ in ${platformDir}/`);
 					} else {
@@ -2681,6 +2793,7 @@ export async function processYaml(
 							codexSkillNames,
 							ownedHookNames.get(platform) ?? new Set<string>(),
 							ownedRuleNames.get(platform) ?? new Set<string>(),
+							deployTransaction ?? undefined,
 						);
 					}
 				}

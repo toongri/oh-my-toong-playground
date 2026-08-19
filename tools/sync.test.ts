@@ -26,6 +26,8 @@ import {
 	syncLib,
 	rewritePlatformPaths,
 	rewriteLibAliases,
+	planLibAliasRewritePaths,
+	planPlatformRewritePaths,
 	createContext,
 	resolveBackupBase,
 	UnsafeBackupRootError,
@@ -4556,6 +4558,36 @@ describe("rewriteLibAliases", () => {
 		const content = await readFile(path.join(tmpDir, "lib", "internal.ts"));
 		expect(content).toBe(original);
 	});
+
+	it("plans and journals an existing alias rewrite leaf", async () => {
+		const target = path.join(tmpDir, "agents", "oracle.ts");
+		await writeFile(target, "import { X } from '@lib/types.ts';\n");
+		const planned = await planLibAliasRewritePaths(tmpDir, new Set());
+		expect(planned).toEqual([target]);
+		const transaction = await DeployTransaction.begin(tmpDir, false, [target]);
+		await rewriteLibAliases(tmpDir, new Set(), transaction!);
+		expect(await readFile(target)).toContain("../lib/types.ts");
+		await transaction!.rollback();
+		expect(await readFile(target)).toContain("@lib/types.ts");
+	});
+
+	it("rejects a pre-CAS alias edit and leaves the external bytes", async () => {
+		const target = path.join(tmpDir, "oracle.ts");
+		await writeFile(target, "import { X } from '@lib/types.ts';\n");
+		const transaction = await DeployTransaction.begin(tmpDir, false, [target]);
+		await writeFile(target, "// external\nimport { X } from '@lib/types.ts';\n");
+		expect(await planLibAliasRewritePaths(tmpDir, new Set())).toEqual([target]);
+		await expect(rewriteLibAliases(tmpDir, new Set(), transaction!)).rejects.toThrow("conflict");
+		expect(await readFile(target)).toBe("// external\nimport { X } from '@lib/types.ts';\n");
+	});
+
+	it("does not invoke mutation for an unchanged alias candidate", async () => {
+		const target = path.join(tmpDir, "oracle.ts");
+		await writeFile(target, "import { X } from './types.ts';\n");
+		let calls = 0;
+		await rewriteLibAliases(tmpDir, new Set(), { mutate: async (_path, operation) => { calls++; await operation(); } });
+		expect(calls).toBe(0);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -4586,6 +4618,98 @@ describe("rewritePlatformPaths", () => {
 		const content = await readFile(path.join(geminiDir, "oracle.md"));
 		expect(content).toContain(".gemini/skills/");
 		expect(content).not.toContain(".claude/");
+	});
+
+	it("plans only changed platform leaves", async () => {
+		const geminiDir = path.join(targetPath, ".gemini", "agents");
+		await fs.mkdir(geminiDir, { recursive: true });
+		const changed = path.join(geminiDir, "changed.md");
+		const same = path.join(geminiDir, "same.md");
+		await writeFile(changed, "Look in .claude/skills/ for more\n");
+		await writeFile(same, "No platform path\n");
+		expect(await planPlatformRewritePaths(targetPath, "gemini")).toEqual([changed]);
+	});
+
+	it("returns one shared lib root for top-level lib markdown and a leaf for codex skill lib", async () => {
+		const geminiLib = path.join(targetPath, ".gemini", "lib");
+		await writeFile(path.join(geminiLib, "a.md"), ".claude/one\n");
+		await writeFile(path.join(geminiLib, "b.md"), ".claude/two\n");
+		expect(await planPlatformRewritePaths(targetPath, "gemini")).toEqual([geminiLib]);
+		const skillLeaf = path.join(targetPath, ".agents", "skills", "mine", "lib", "a.md");
+		await writeFile(skillLeaf, ".claude/skill\n");
+		expect(await planPlatformRewritePaths(targetPath, "codex", new Set(["mine"]))).toContain(skillLeaf);
+	});
+
+	it("journals a platform rewrite leaf and restores it on rollback", async () => {
+		const target = path.join(targetPath, ".gemini", "agents", "oracle.md");
+		await writeFile(target, "Look in .claude/skills/ for more\n");
+		const planned = await planPlatformRewritePaths(targetPath, "gemini");
+		const transaction = await DeployTransaction.begin(targetPath, false, planned);
+		await rewritePlatformPaths(targetPath, "gemini", new Set(), new Set(), new Set(), transaction!);
+		expect(await readFile(target)).toContain(".gemini/");
+		await transaction!.rollback();
+		expect(await readFile(target)).toContain(".claude/");
+	});
+
+	it("rejects a pre-CAS platform edit while preserving external bytes", async () => {
+		const target = path.join(targetPath, ".gemini", "agents", "oracle.md");
+		await writeFile(target, "Look in .claude/skills/ for more\n");
+		const planned = await planPlatformRewritePaths(targetPath, "gemini");
+		const transaction = await DeployTransaction.begin(targetPath, false, planned);
+		await writeFile(target, "External note\nLook in .claude/skills/ for more\n");
+		await expect(rewritePlatformPaths(targetPath, "gemini", new Set(), new Set(), new Set(), transaction!)).rejects.toThrow("conflict");
+		expect(await readFile(target)).toContain("External note");
+	});
+
+	it("mutates a shared top-level lib root once and rolls both markdown leaves back", async () => {
+		const libRoot = path.join(targetPath, ".gemini", "lib");
+		const first = path.join(libRoot, "a.md");
+		const second = path.join(libRoot, "b.md");
+		await writeFile(first, ".claude/one\n");
+		await writeFile(second, ".claude/two\n");
+		const planned = await planPlatformRewritePaths(targetPath, "gemini");
+		expect(planned).toEqual([libRoot]);
+		const transaction = await DeployTransaction.begin(targetPath, false, planned);
+		let calls = 0;
+		await rewritePlatformPaths(targetPath, "gemini", new Set(), new Set(), new Set(), {
+			mutate: async (target, operation) => { calls++; expect(target).toBe(libRoot); await transaction!.mutate(target, operation); },
+		});
+		expect(calls).toBe(1);
+		expect(await readFile(first)).toContain(".gemini/");
+		expect(await readFile(second)).toContain(".gemini/");
+		await transaction!.rollback();
+		expect(await readFile(first)).toContain(".claude/");
+		expect(await readFile(second)).toContain(".claude/");
+	});
+
+	it("journals codex skill extra transforms as one exact skill leaf", async () => {
+		const skillFile = path.join(targetPath, ".agents", "skills", "mine", "README.md");
+		await writeFile(skillFile, "${CLAUDE_SKILL_DIR}\n$OMT_DIR\n");
+		const planned = await planPlatformRewritePaths(targetPath, "codex", new Set(["mine"]));
+		expect(planned).toEqual([skillFile]);
+		const transaction = await DeployTransaction.begin(targetPath, false, planned);
+		await rewritePlatformPaths(targetPath, "codex", new Set(["mine"]), new Set(), new Set(), transaction!);
+		expect(await readFile(skillFile)).not.toContain("${CLAUDE_SKILL_DIR}");
+		await transaction!.rollback();
+		expect(await readFile(skillFile)).toContain("${CLAUDE_SKILL_DIR}");
+	});
+
+	it("excludes foreign hooks, rules, and codex skills from planning and mutation", async () => {
+		const foreignHook = path.join(targetPath, ".gemini", "hooks", "foreign", "README.md");
+		const foreignRule = path.join(targetPath, ".codex", "rules", "foreign.md");
+		const foreignSkill = path.join(targetPath, ".agents", "skills", "foreign", "README.md");
+		await writeFile(foreignHook, ".claude/hook\n");
+		await writeFile(foreignRule, ".claude/rule\n");
+		await writeFile(foreignSkill, ".claude/skill\n");
+		expect(await planPlatformRewritePaths(targetPath, "gemini")).toEqual([]);
+		expect(await planPlatformRewritePaths(targetPath, "codex")).toEqual([]);
+		let calls = 0;
+		await rewritePlatformPaths(targetPath, "gemini", new Set(), new Set(), new Set(), { mutate: async () => { calls++; } });
+		await rewritePlatformPaths(targetPath, "codex", new Set(), new Set(), new Set(), { mutate: async () => { calls++; } });
+		expect(calls).toBe(0);
+		expect(await readFile(foreignHook)).toContain(".claude/");
+		expect(await readFile(foreignRule)).toContain(".claude/");
+		expect(await readFile(foreignSkill)).toContain(".claude/");
 	});
 
 	it("rewrites .claude/ to .codex/ for codex platform via `rewritePlatformPaths`", async () => {
