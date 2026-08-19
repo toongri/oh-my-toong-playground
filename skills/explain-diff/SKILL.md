@@ -55,8 +55,13 @@ git diff --name-status <git range>
 
 그다음 변경 파일을 **signal**과 **noise**로 나눈다.
 
-- noise 기본 규칙표: `*.lock`, `dist/`, `__snapshots__/`, `*.generated.*`, 포맷팅만 바뀐 hunk
+- noise 기본 규칙표: `*.lock`, `dist/`, `__snapshots__/`, `*.generated.*`, 바이너리 에셋
+  (이미지·폰트·미디어), 포맷팅만 바뀐 hunk
 - 규칙표 **밖**의 파일을 noise로 분류하려면 그 파일마다 사유를 한 줄 적는다
+- **같은 성격의 대량 파일 집합**(에셋 교체, 일괄 rename)은 개별 나열하지 않는다 —
+  noise에 글롭 한 줄 + 개수 + 사유로 묶고, 그 변경의 의미는 그것을 참조하는 코드
+  파일의 Change Group에서 한 번 설명한다. signal은 파일마다 설명할 것이 있는
+  파일이다 — 개수가 곧 의미인 집합은 signal이 아니다
 - 분류 결과를 문서 맨 앞 `## Evidence` 블록에 표로 남긴다
 
 이후 모든 스텝의 문서는 하나의 마크다운 파일에 누적한다:
