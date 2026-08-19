@@ -42,7 +42,9 @@
 ## Commit Journey
 ### 1. `<short-hash>` — <커밋 제목>
 <…>
-(단일 커밋 범위면 섹션 대신: "단일 커밋 범위 — Commit Journey 생략.")
+(`git rev-list --no-merges <base>..<head>`가 정확히 한 줄일 때만 섹션 대신:
+"단일 커밋 범위 — Commit Journey 생략." — 머지 범위는 브랜치 실커밋이 전부 나오므로
+"PR 하나"라도 여러 줄이면 단일 커밋이 아니다.)
 
 ## Change Group 1: <제목>
 <…파일 블록들…>
