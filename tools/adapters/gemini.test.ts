@@ -6,6 +6,7 @@ import os from "os";
 import { GeminiAdapter } from "./gemini.ts";
 import type { ExtensionInstaller, CommandRunner } from "./gemini.ts";
 import type { PlatformYaml } from "../lib/types.ts";
+import type { PlatformWriteObserver } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -617,6 +618,67 @@ describe("readJsonFile 오류 처리", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncPlatformYaml", () => {
+	it("notifies after each successful settings and hook bundle write with normalized paths and written bytes", async () => {
+		const hookDir = path.join(tmpDir, "hooks", "bundle");
+		await writeFile(path.join(hookDir, "index.sh"), "#!/bin/bash\necho bundle\n");
+		const observed: Array<{ path: string; bytes: string }> = [];
+		const observer: PlatformWriteObserver = async (writtenPath) => {
+			observed.push({
+				path: writtenPath,
+				bytes: await fs.stat(writtenPath).then((stat) =>
+					stat.isDirectory() ? "directory" : fs.readFile(writtenPath, "utf8"),
+				),
+			});
+		};
+
+		await adapter.syncPlatformYaml(
+			targetPath,
+			{
+				config: { model: "gemini-2.0-flash" },
+				mcps: { context7: { command: "npx" } },
+				hooks: {
+					PreToolUse: [{ component: hookDir, timeout: 10, matcher: "*" }],
+				},
+			} as unknown as PlatformYaml,
+			false,
+			undefined,
+			observer,
+		);
+
+		expect(observed.map(({ path: observedPath }) => observedPath)).toEqual([
+			path.join(targetPath, ".gemini", "settings.json"),
+			path.join(targetPath, ".gemini", "hooks", "bundle"),
+			path.join(targetPath, ".gemini", "settings.json"),
+			path.join(targetPath, ".gemini", "settings.json"),
+		]);
+		expect(observed[0]?.bytes).toContain('"model": "gemini-2.0-flash"');
+		expect(observed[1]?.bytes).toBe("directory");
+		expect(observed[2]?.bytes).toContain('"PreToolUse"');
+		expect(observed[3]?.bytes).toContain('"context7"');
+	});
+
+	it("does not notify for dry-run or unsupported/skipped sections", async () => {
+		const observed: string[] = [];
+		const observer: PlatformWriteObserver = (writtenPath) => {
+			observed.push(writtenPath);
+		};
+
+		await adapter.syncPlatformYaml(
+			targetPath,
+			{
+				agents: { items: ["unsupported"] },
+				rules: { items: ["unsupported"] },
+				config: { model: "dry-run" },
+				mcps: { context7: { command: "npx" } },
+			} as unknown as PlatformYaml,
+			true,
+			undefined,
+			observer,
+		);
+
+		expect(observed).toEqual([]);
+	});
+
 	it("processes config section and includes it in processedSections via `syncPlatformYaml`", async () => {
 		const yaml = { config: { model: "gemini-2.0-flash" } };
 

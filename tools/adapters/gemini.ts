@@ -26,7 +26,7 @@ import type {
 	PluginObjectItem,
 	PluginScope,
 } from "../lib/types.ts";
-import type { PlatformAdapter } from "./types.ts";
+import type { PlatformAdapter, PlatformWriteObserver } from "./types.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
 import { syncDirectory } from "../lib/sync-directory.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
@@ -183,6 +183,7 @@ export class GeminiAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		writeObserver?: PlatformWriteObserver,
 	): Promise<void> {
 		const targetDir = path.join(targetPath, ".gemini", "hooks");
 		const hooksSourceDir = path.dirname(sourcePath);
@@ -206,6 +207,7 @@ export class GeminiAdapter implements PlatformAdapter {
 				});
 				logInfo(`Copied: ${displayName}/`);
 				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
+				await writeObserver?.(targetHookDir);
 			}
 		} else {
 			const targetFile = path.join(targetDir, displayName);
@@ -220,6 +222,7 @@ export class GeminiAdapter implements PlatformAdapter {
 				await fs.chmod(targetFile, tgtStat.mode | 0o111);
 				logInfo(`Copied: ${displayName}`);
 				await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun);
+				await writeObserver?.(targetFile);
 			}
 		}
 	}
@@ -365,6 +368,7 @@ export class GeminiAdapter implements PlatformAdapter {
 		targetPath: string,
 		hooksEntries: Record<string, unknown>,
 		dryRun = false,
+		writeObserver?: PlatformWriteObserver,
 	): Promise<void> {
 		const settingsFile = path.join(targetPath, ".gemini", "settings.json");
 
@@ -388,6 +392,7 @@ export class GeminiAdapter implements PlatformAdapter {
 		Object.assign(result, hooksEntries);
 
 		await writeJsonFile(settingsFile, result);
+		await writeObserver?.(settingsFile);
 		logInfo(`Updated settings.json: ${settingsFile}`);
 	}
 
@@ -400,6 +405,7 @@ export class GeminiAdapter implements PlatformAdapter {
 		targetPath: string,
 		configJson: Record<string, unknown>,
 		dryRun = false,
+		writeObserver?: PlatformWriteObserver,
 	): Promise<void> {
 		const settingsFile = path.join(targetPath, ".gemini", "settings.json");
 
@@ -412,6 +418,7 @@ export class GeminiAdapter implements PlatformAdapter {
 		const current = await readJsonFile(settingsFile);
 		const merged = deepMerge(current, configJson);
 		await writeJsonFile(settingsFile, merged);
+		await writeObserver?.(settingsFile);
 		logInfo(`Config merged: ${settingsFile}`);
 	}
 
@@ -424,6 +431,7 @@ export class GeminiAdapter implements PlatformAdapter {
 		targetPath: string,
 		servers: Record<string, Record<string, unknown>>,
 		dryRun = false,
+		writeObserver?: PlatformWriteObserver,
 	): Promise<void> {
 		const settingsFile = path.join(targetPath, ".gemini", "settings.json");
 
@@ -442,6 +450,7 @@ export class GeminiAdapter implements PlatformAdapter {
 		// Replace entirely (not merge)
 		current.mcpServers = newMcpServers;
 		await writeJsonFile(settingsFile, current);
+		await writeObserver?.(settingsFile);
 		logInfo(`MCP replaced: ${settingsFile}`);
 	}
 
@@ -462,12 +471,13 @@ export class GeminiAdapter implements PlatformAdapter {
 		yaml: PlatformYaml,
 		dryRun: boolean,
 		_scope?: PluginScope,
+		writeObserver?: PlatformWriteObserver,
 	): Promise<PlatformConfigResult> {
 		const processedSections: string[] = [];
 
 		// --- config ---
 		if (yaml.config !== undefined && yaml.config !== null) {
-			await this.syncConfig(targetPath, yaml.config, dryRun);
+			await this.syncConfig(targetPath, yaml.config, dryRun, writeObserver);
 			processedSections.push("config");
 		}
 
@@ -499,7 +509,13 @@ export class GeminiAdapter implements PlatformAdapter {
 						displayName = path.basename(component);
 						resolvedSourcePath = component;
 
-						await this.syncHooksDirect(targetPath, displayName, resolvedSourcePath, dryRun);
+						await this.syncHooksDirect(
+							targetPath,
+							displayName,
+							resolvedSourcePath,
+							dryRun,
+							writeObserver,
+						);
 					}
 
 					// Build hook entry
@@ -585,14 +601,14 @@ export class GeminiAdapter implements PlatformAdapter {
 				}
 			}
 
-			await this.updateSettings(targetPath, accumulatedHooks, dryRun);
+			await this.updateSettings(targetPath, accumulatedHooks, dryRun, writeObserver);
 			processedSections.push("hooks");
 		}
 
 		// --- mcps ---
 		if (yaml.mcps !== undefined && yaml.mcps !== null) {
 			assertGeminiMcpServers(yaml.mcps);
-			await this.syncMcpsMerge(targetPath, yaml.mcps, dryRun);
+			await this.syncMcpsMerge(targetPath, yaml.mcps, dryRun, writeObserver);
 			processedSections.push("mcps");
 		}
 
