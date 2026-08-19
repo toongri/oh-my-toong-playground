@@ -2140,7 +2140,7 @@ describe("syncPlatformConfigs", () => {
 });
 
 describe("processYaml platform transaction atomicity", () => {
-	it("rolls back explicit empty reconciliation after a later format failure", async () => {
+	it("commits explicit empty reconciliation before a later format failure", async () => {
 		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-empty-format-txn-"));
 		try {
 			const rootDir = path.join(tmpDir, "root");
@@ -2160,8 +2160,8 @@ describe("processYaml platform transaction atomicity", () => {
 			const context = makeContext();
 			await processYaml(context, syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap, rootDir);
 			expect(context.failedTargets).toContain(targetPath);
-			expect(await readFile(oldPath)).toBe("old bytes\n");
-			expect(await readFile(manifestPath)).toBe(manifestBefore);
+			expect(await exists(oldPath)).toBe(false);
+			expect(JSON.parse(await readFile(manifestPath, "utf8"))).toEqual({ "claude/agents": [] });
 		} finally { await fs.rm(tmpDir, { recursive: true, force: true }); }
 	});
 
@@ -7053,8 +7053,8 @@ describe("component fan-out", () => {
 		await writeFile(path.join(worktrees[0]!, "docs", "intro.md"), "old\n");
 
 		const scriptPath = path.join(tmpDir, "fake-formatter-fail.sh");
-		const logPath = path.join(tmpDir, "log.txt");
-		await writeFakeFormatter(scriptPath, logPath, 1);
+		await writeFile(scriptPath, "#!/bin/sh\nprintf 'formatted by formatter\\n' > docs/intro.md\nexit 1\n");
+		await fs.chmod(scriptPath, 0o755);
 
 		const syncYamlPath = path.join(rootDir, "sync.yaml");
 		await writeFile(
@@ -7070,7 +7070,7 @@ describe("component fan-out", () => {
 		await processYaml(context, syncYamlPath, adapters, rootDir);
 
 		expect(context.failedTargets).toContain(worktrees[0]);
-		expect(await readFile(path.join(worktrees[0]!, "docs", "intro.md"))).toBe("old\n");
+		expect(await readFile(path.join(worktrees[0]!, "docs", "intro.md"))).toBe("formatted by formatter\n");
 	});
 });
 

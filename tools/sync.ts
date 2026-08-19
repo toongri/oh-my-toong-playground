@@ -2799,17 +2799,25 @@ export async function processYaml(
 				}
 			}
 
+			// The transaction ends before arbitrary user formatter code runs. A
+			// formatter is an external, post-commit step whose writes are not journaled.
+			if (deployTransaction) {
+				const committedTransaction = deployTransaction;
+				deployTransaction = null;
+				await committedTransaction.finish();
+			}
 			if (syncYaml.format && !context.dryRun) {
 				await formatDeployedRoots(deployRoot, syncYaml.format, docsDests, codexSkillNames);
 			}
-			await deployTransaction?.finish();
 		} catch (err) {
 			try {
 				await deployTransaction?.rollback();
 			} catch (rollbackErr) {
 				logError(`worktree 롤백 실패 (수동 복구 필요): ${deployRoot}: ${rollbackErr}`);
 			}
-			await deployTransaction?.finish();
+			if (deployTransaction) {
+				await deployTransaction.finish();
+			}
 			// Fatal errors (MCP key-derivation or topology failure) must never be
 			// downgraded: rethrow so they surface as a non-zero exit.
 			if (isFatalSyncError(err)) {
