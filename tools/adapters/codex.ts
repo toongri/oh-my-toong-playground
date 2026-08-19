@@ -503,7 +503,8 @@ export class CodexAdapter implements PlatformAdapter {
 	): Promise<void> {
 		// event filtering is handled by the caller (sync.sh / orchestrator)
 		// This method is called only for supported events — just copy the file
-		const targetDir = path.dirname(codexDestinationPath(targetPath, "hooks", displayName));
+		const targetHookRoot = codexDestinationPath(targetPath, "hooks", displayName);
+		const targetDir = path.dirname(targetHookRoot);
 		const hooksSourceDir = path.dirname(sourcePath);
 
 		let stat: Awaited<ReturnType<typeof fs.stat>>;
@@ -515,21 +516,20 @@ export class CodexAdapter implements PlatformAdapter {
 		}
 
 		if (stat.isDirectory()) {
-			const targetHookDir = codexDestinationPath(targetPath, "hooks", displayName);
 			if (dryRun) {
-				logDry(`Copy (directory): ${sourcePath} -> ${targetHookDir}/`);
-				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
+				logDry(`Copy (directory): ${sourcePath} -> ${targetHookRoot}/`);
+				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookRoot, dryRun);
 				return;
 			}
-			await syncDirectory(sourcePath, targetHookDir, {
+			await syncDirectory(sourcePath, targetHookRoot, {
 				exclude: ["*.test.ts", "config.local.yaml"],
 				platformRoot: path.join(targetPath, this.configDir),
 			});
 			logInfo(`Copied: ${displayName}/`);
-			await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
-			if (writeObserver) await writeObserver(targetHookDir);
+			await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookRoot, dryRun);
+			if (writeObserver) await writeObserver(targetHookRoot);
 		} else {
-			const targetFile = path.join(targetDir, displayName);
+			const targetFile = targetHookRoot;
 			if (dryRun) {
 				logDry(`Copy: ${sourcePath} -> ${targetFile}`);
 				await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun);
@@ -589,7 +589,7 @@ export class CodexAdapter implements PlatformAdapter {
 		sourcePath: string,
 		dryRun = false,
 	): Promise<void> {
-		const targetDir = path.dirname(codexDestinationPath(targetPath, "scripts", displayName));
+		const targetScriptRoot = codexDestinationPath(targetPath, "scripts", displayName);
 
 		let stat: Awaited<ReturnType<typeof fs.stat>>;
 		try {
@@ -601,15 +601,15 @@ export class CodexAdapter implements PlatformAdapter {
 
 		if (stat.isDirectory()) {
 			if (dryRun) {
-				logDry(`Copy (directory): ${sourcePath} -> ${path.join(targetDir, displayName)}/`);
+				logDry(`Copy (directory): ${sourcePath} -> ${targetScriptRoot}/`);
 				return;
 			}
-			await syncDirectory(sourcePath, path.join(targetDir, displayName), {
+			await syncDirectory(sourcePath, targetScriptRoot, {
 				platformRoot: path.join(targetPath, this.configDir),
 			});
 			logInfo(`Copied: ${displayName}/`);
 		} else {
-			const targetFile = path.join(targetDir, displayName);
+			const targetFile = targetScriptRoot;
 			if (dryRun) {
 				logDry(`Copy: ${sourcePath} -> ${targetFile}`);
 				return;

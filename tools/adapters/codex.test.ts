@@ -11,7 +11,12 @@ import {
 	cleanupCodexSkillsFossil,
 	codexSkillsDir,
 } from "./codex.ts";
+import { planCategoryDestinationPaths } from "./destinations.ts";
 import type { ModelMap } from "../lib/types.ts";
+
+function plannedCodexPath(targetPath: string, category: "hooks" | "scripts", displayName: string): string {
+	return path.join(targetPath, planCategoryDestinationPaths("codex", category, displayName)[0]);
+}
 
 // =============================================================================
 // insertManagedBlock
@@ -891,7 +896,7 @@ describe("CodexAdapter", () => {
 			const targetBase = path.join(tmpDir, "target");
 			await adapter.syncScriptsDirect(targetBase, "hud.sh", sourceFile, false);
 
-			const targetFile = path.join(targetBase, ".codex", "scripts", "hud.sh");
+			const targetFile = plannedCodexPath(targetBase, "scripts", "hud.sh");
 			const content = await fs.readFile(targetFile, "utf-8");
 			expect(content).toBe("#!/bin/bash\necho hud\n");
 		});
@@ -905,7 +910,7 @@ describe("CodexAdapter", () => {
 			const targetBase = path.join(tmpDir, "target");
 			await adapter.syncScriptsDirect(targetBase, "hud", sourceDir, false);
 
-			const targetDir = path.join(targetBase, ".codex", "scripts", "hud");
+			const targetDir = plannedCodexPath(targetBase, "scripts", "hud");
 			const indexContent = await fs.readFile(path.join(targetDir, "index.sh"), "utf-8");
 			const helperContent = await fs.readFile(path.join(targetDir, "helper.sh"), "utf-8");
 			expect(indexContent).toContain("echo index");
@@ -918,7 +923,7 @@ describe("CodexAdapter", () => {
 			await fs.writeFile(path.join(sourceDir, "index.ts"), 'import { deriveProjectName } from "@lib/omt-dir";\nconsole.log(typeof deriveProjectName);\n');
 			const targetBase = path.join(tmpDir, "target");
 			await adapter.syncScriptsDirect(targetBase, "trace", sourceDir, false);
-			const deployed = await fs.readFile(path.join(targetBase, ".codex", "scripts", "trace", "index.ts"), "utf8");
+			const deployed = await fs.readFile(path.join(plannedCodexPath(targetBase, "scripts", "trace"), "index.ts"), "utf8");
 			expect(deployed).not.toContain('"@lib/omt-dir"');
 			expect(deployed).toContain("../../lib/omt-dir");
 		});
@@ -966,7 +971,7 @@ describe("CodexAdapter", () => {
 			const targetBase = path.join(tmpDir, "target");
 			await adapter.syncHooksDirect(targetBase, "notify.sh", hookFile, false);
 
-			const targetFile = path.join(targetBase, ".codex", "hooks", "notify.sh");
+			const targetFile = plannedCodexPath(targetBase, "hooks", "notify.sh");
 			const content = await fs.readFile(targetFile, "utf-8");
 			expect(content).toContain("notify");
 
@@ -1038,7 +1043,7 @@ describe("CodexAdapter", () => {
 			await adapter.syncHooksDirect(targetBase, "my-dir-hook", dirHookDir, false);
 
 			// deps are copied into the targetHookDir, not the parent hooks/ dir
-			const targetLib = path.join(targetBase, ".codex", "hooks", "my-dir-hook", "lib", "shared.sh");
+			const targetLib = path.join(plannedCodexPath(targetBase, "hooks", "my-dir-hook"), "lib", "shared.sh");
 			const libExists = await fs
 				.stat(targetLib)
 				.then(() => true)
@@ -1060,14 +1065,15 @@ describe("CodexAdapter", () => {
 			await fs.writeFile(path.join(libDir, "shared.sh"), "#!/bin/bash\necho shared\n", "utf-8");
 
 			const targetBase = path.join(tmpDir, "target");
-			const targetLib = path.join(targetBase, ".codex", "hooks", "my-dir-hook", "lib", "shared.sh");
+			const targetHookRoot = plannedCodexPath(targetBase, "hooks", "my-dir-hook");
+			const targetLib = path.join(targetHookRoot, "lib", "shared.sh");
 			const observed: string[] = [];
 			await adapter.syncHooksDirect(targetBase, "my-dir-hook", dirHookDir, false, async (writtenPath) => {
 				observed.push(writtenPath);
 				expect(await fs.readFile(targetLib, "utf-8")).toContain("shared");
 			});
 
-			expect(observed).toEqual([path.join(targetBase, ".codex", "hooks", "my-dir-hook")]);
+			expect(observed).toEqual([targetHookRoot]);
 		});
 
 		it("의존성 복사 실패 시 디렉터리 훅 observer를 호출하지 않는다", async () => {
@@ -1111,7 +1117,7 @@ describe("CodexAdapter", () => {
 
 			// Deployed file must have @lib/ rewritten to a relative path (../../lib/)
 			// .codex/hooks/rules-injector/cli.ts is 2 dirs deep under platformRoot (.codex)
-			const deployedFile = path.join(targetBase, ".codex", "hooks", "rules-injector", "cli.ts");
+			const deployedFile = path.join(plannedCodexPath(targetBase, "hooks", "rules-injector"), "cli.ts");
 			const content = await fs.readFile(deployedFile, "utf-8");
 			expect(content).not.toContain("@lib/");
 			expect(content).toContain("../../lib/");
