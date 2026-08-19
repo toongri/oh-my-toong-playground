@@ -57,7 +57,7 @@ function observation(finalMessage: string | null, toolCommands: string[] = []) {
 }
 
 describe("main", () => {
-	it("takes no negative-control parameter — this probe answers only the load-trace-exists question (spec AC line 70); the causal sigil-vs-prose question moved to probes/skill-chain-cue-form", () => {
+	it("takes no negative-control parameter — this probe answers only the load-trace-exists question (spec AC line 70), never the causal sigil-vs-prose question", () => {
 		expect(main.length).toBe(0);
 	});
 });

@@ -38,12 +38,10 @@
  * predicate needs a matching new case — it is deliberately narrow rather
  * than speculatively broad.
  *
- * This predicate is shared by 4 call sites — this file's own
- * skillChainJudgment, skill-chain-cue-form/judgment.ts's cueFormPredicate
- * (the positive AND arm), its invertedCueFormPredicate (the negative-control
- * `opened` axis), and its decoysOpened — so a fix here closes the same
- * false-positive class everywhere it's used, not just at this file's own
- * call site.
+ * Exported rather than kept private to this file's own skillChainJudgment:
+ * it is the falsifiable "a tool call opened <skill>/SKILL.md" predicate any
+ * future probe asking that question should reuse, so a fix here closes the
+ * same false-positive class at every call site rather than one.
  */
 
 import type { Judgment, Observation } from "../../types.ts";

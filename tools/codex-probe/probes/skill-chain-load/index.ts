@@ -7,17 +7,23 @@
  * codex session, given `$ultragoal` at the user-input position, produce a tool
  * call that opens skills/sisyphus/SKILL.md at all. It does NOT, and cannot,
  * answer the CAUSAL question "does the `$sisyphus` sigil (vs. prose
- * `Skill(skill: "sisyphus")`) cause that open" — that question lives in
- * probes/skill-chain-cue-form, which isolates cue form with a synthetic
- * fixture free of the confounds real skill prose carries (ultragoal's own body
- * and its references/*.md mention "sisyphus" in plain prose in several
- * places independent of rule 6a's rewrite, so a rewrite-applied/skipped
- * comparison on the REAL ultragoal skill cannot isolate sigil-vs-prose as the
- * cause — both arms give the model the same non-sigil textual cues to
- * follow). This probe used to also expose a `--negative` control built on
- * exactly that confounded comparison; it rendered exit 0 on both arms
- * (no discriminating power) and has been removed rather than left to imply
- * a judgment this probe was never able to make.
+ * `Skill(skill: "sisyphus")`) cause that open": ultragoal's own body and its
+ * references/*.md mention "sisyphus" in plain prose in several places
+ * independent of rule 6a's rewrite, so a rewrite-applied/skipped comparison
+ * on the REAL ultragoal skill cannot isolate sigil-vs-prose as the cause —
+ * both arms give the model the same non-sigil textual cues to follow. This
+ * probe used to expose a `--negative` control built on exactly that
+ * confounded comparison; it rendered exit 0 on both arms (no discriminating
+ * power) and has been removed rather than left to imply a judgment this
+ * probe was never able to make.
+ *
+ * A sibling probe (skill-chain-cue-form) once tried to answer the causal
+ * question on a synthetic alpha/beta fixture. It was deleted: measured on
+ * codex-cli 0.148.0, every cue form it compared — `$beta`, an unrewritten
+ * `Skill(skill: "beta")`, and rule 6a's legacy `the beta skill` prose — made
+ * the model open beta, and only removing the skill's name entirely stopped
+ * it. Cue form was not the cause, so the comparison had nothing left to
+ * measure.
  *
  * Builds on the existing harness (tools/codex-probe/{runner,evaluate,probe,
  * types}.ts) unmodified — this file only composes materializeCodexSkills +
