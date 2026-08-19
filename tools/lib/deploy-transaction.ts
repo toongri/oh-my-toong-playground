@@ -40,6 +40,52 @@ async function pathExists(target: string): Promise<boolean> {
 	}
 }
 
+async function nearestExistingRealpath(target: string): Promise<string> {
+	let current = target;
+	while (true) {
+		try { return await fs.realpath(current); }
+		catch (error) {
+			if (errorCode(error) !== "ENOENT") throw error;
+			const parent = path.dirname(current);
+			if (parent === current) throw error;
+			current = parent;
+		}
+	}
+}
+
+async function canonicalRoot(target: string): Promise<{ lexical: string; canonical: string }> {
+	const lexical = path.resolve(target);
+	let current = lexical;
+	const suffix: string[] = [];
+	while (true) {
+		try {
+			const canonicalAncestor = await fs.realpath(current);
+			return { lexical, canonical: path.join(canonicalAncestor, ...suffix) };
+		} catch (error) {
+			if (errorCode(error) !== "ENOENT") throw error;
+			const parent = path.dirname(current);
+			if (parent === current) throw error;
+			suffix.unshift(path.basename(current));
+			current = parent;
+		}
+	}
+}
+
+async function assertTrustedPath(canonicalRoot: string, lexicalRoot: string, target: string, rawPath: string, allowLeafSymlink = true, bootstrap = false): Promise<void> {
+	if (!isWithin(lexicalRoot, target) || target === lexicalRoot) {
+		throw new Error(`Deploy transaction path escapes deploy root: ${rawPath}`);
+	}
+	const targetStat = await fs.lstat(target).catch((error) => {
+		if (errorCode(error) === "ENOENT") return undefined;
+		throw error;
+	});
+	const probe = targetStat?.isSymbolicLink() && allowLeafSymlink ? path.dirname(target) : target;
+	const existing = await nearestExistingRealpath(probe);
+	if (!isWithin(canonicalRoot, existing) && !(bootstrap && isWithin(existing, canonicalRoot))) {
+		throw new Error(`Deploy transaction path escapes deploy root through symlink: ${rawPath}`);
+	}
+}
+
 async function fingerprint(target: string): Promise<string> {
 	const hash = createHash("sha256");
 	const walk = async (current: string, rel = ""): Promise<void> => {
@@ -59,7 +105,9 @@ async function fingerprint(target: string): Promise<string> {
 		}
 	};
 	try {
-		if ((await fs.lstat(target)).isDirectory()) await walk(target);
+		const targetStat = await fs.lstat(target);
+		if (targetStat.isSymbolicLink()) hash.update(`l:${await fs.readlink(target)}\n`);
+		else if (targetStat.isDirectory()) await walk(target);
 		else hash.update(await fs.readFile(target, "base64"));
 	} catch (error) {
 		if (errorCode(error) !== "ENOENT") throw error;
@@ -71,6 +119,7 @@ async function fingerprint(target: string): Promise<string> {
 export class DeployTransaction implements DeployMutationHooks {
 	private constructor(
 		private readonly entries: DeployTransactionEntry[],
+		private readonly lexicalRoot: string,
 		private readonly deployRoot: string,
 		private readonly snapshotRoot: string,
 	) {}
@@ -81,9 +130,13 @@ export class DeployTransaction implements DeployMutationHooks {
 		ownedPaths: string[] = [],
 	): Promise<DeployTransaction | null> {
 		if (dryRun) return null;
-		const root = path.resolve(deployRoot);
-		const omtDir = path.join(root, ".omt");
+		const rootInfo = await canonicalRoot(deployRoot);
+		const lexicalRoot = rootInfo.lexical;
+		const canonical = rootInfo.canonical;
+		const omtDir = path.join(lexicalRoot, ".omt");
 		const transactionsDir = path.join(omtDir, "transactions");
+		await assertTrustedPath(canonical, lexicalRoot, omtDir, ".omt", false, true);
+		await assertTrustedPath(canonical, lexicalRoot, transactionsDir, ".omt/transactions", false, true);
 		const omtExisted = await fs.lstat(omtDir).then(() => true).catch((error) => {
 			if (errorCode(error) === "ENOENT") return false;
 			throw error;
@@ -94,9 +147,11 @@ export class DeployTransaction implements DeployMutationHooks {
 		});
 		const names = [...DEFAULT_PATHS];
 		for (const rawPath of ownedPaths) {
-			const live = path.resolve(root, rawPath);
-			if (!isWithin(root, live) || live === root) throw new Error(`Deploy transaction path escapes deploy root: ${rawPath}`);
-			const normalized = path.relative(root, live);
+			const lexicalLive = path.resolve(lexicalRoot, rawPath);
+			if (!isWithin(lexicalRoot, lexicalLive) || lexicalLive === lexicalRoot) {
+				throw new Error(`Deploy transaction path escapes deploy root: ${rawPath}`);
+			}
+			const normalized = path.relative(lexicalRoot, lexicalLive);
 			names.push(normalized);
 		}
 		const entries: DeployTransactionEntry[] = [];
@@ -106,7 +161,8 @@ export class DeployTransaction implements DeployMutationHooks {
 			snapshotRoot = await fs.mkdtemp(path.join(transactionsDir, "txn-"));
 			let index = 0;
 			for (const name of [...new Set(names.map((value) => path.normalize(value)))]) {
-				const live = path.join(root, name);
+				const live = path.join(lexicalRoot, name);
+				await assertTrustedPath(canonical, lexicalRoot, live, name);
 				const before = path.join(snapshotRoot, String(index++));
 				try {
 					await fs.cp(live, before, { recursive: true, force: true, dereference: false });
@@ -122,11 +178,11 @@ export class DeployTransaction implements DeployMutationHooks {
 			throw error;
 		}
 		if (!snapshotRoot) throw new Error("Deploy transaction snapshot was not created");
-		return new DeployTransaction(entries, root, snapshotRoot);
+		return new DeployTransaction(entries, lexicalRoot, canonical, snapshotRoot);
 	}
 
 	private entryFor(targetPath: string): DeployTransactionEntry {
-		const normalized = path.normalize(path.resolve(this.deployRoot, targetPath));
+		const normalized = path.normalize(path.resolve(this.lexicalRoot, targetPath));
 		const entry = this.entries.find((candidate) => path.normalize(candidate.live) === normalized);
 		if (!entry) throw new Error(`Deploy transaction target was not inventoried: ${targetPath}`);
 		return entry;
@@ -134,6 +190,7 @@ export class DeployTransaction implements DeployMutationHooks {
 
 	async mutate(targetPath: string, operation: () => Promise<void>): Promise<void> {
 		const entry = this.entryFor(targetPath);
+		await assertTrustedPath(this.deployRoot, this.lexicalRoot, entry.live, targetPath);
 		if (await fingerprint(entry.live) !== entry.expected) {
 			throw new Error(`Deploy transaction conflict: ${targetPath}`);
 		}
@@ -154,6 +211,7 @@ export class DeployTransaction implements DeployMutationHooks {
 
 	async rollback(): Promise<void> {
 		for (const entry of this.entries) {
+			await assertTrustedPath(this.deployRoot, this.lexicalRoot, entry.live, entry.live);
 			if (await fingerprint(entry.live) !== entry.expected) continue;
 			const hasBaseline = await pathExists(entry.before);
 			if (!hasBaseline) {

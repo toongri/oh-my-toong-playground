@@ -242,4 +242,110 @@ describe("DeployTransaction", () => {
 			expect((await fs.readdir(root)).length).toBe(0);
 		} finally { await rm(root, { recursive: true, force: true }); }
 	});
+
+	it("rejects an existing symlink ancestor that resolves outside the deploy root", async () => {
+		const root = await tempRoot("symlink-ancestor");
+		const outside = await tempRoot("symlink-outside");
+		try {
+			await writeFile(join(outside, "sentinel.txt"), "do-not-touch");
+			await fs.symlink(outside, join(root, "linked"));
+			await expect(DeployTransaction.begin(root, false, ["linked/file.txt"]))
+				.rejects.toThrow(/deploy root|escapes|outside/i);
+			expect(await readFile(join(outside, "sentinel.txt"), "utf8")).toBe("do-not-touch");
+			expect(await lstat(join(root, ".omt")).catch(() => null)).toBeNull();
+		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(outside, { recursive: true, force: true });
+		}
+	});
+
+	it("rejects an external .omt transaction directory", async () => {
+		const root = await tempRoot("symlink-omt");
+		const outside = await tempRoot("symlink-omt-outside");
+		try {
+			await writeFile(join(outside, "sentinel.txt"), "do-not-touch");
+			await fs.symlink(outside, join(root, ".omt"));
+			await expect(DeployTransaction.begin(root, false, ["owned.txt"])).rejects.toThrow(/deploy root|escapes|symlink/i);
+			expect(await readFile(join(outside, "sentinel.txt"), "utf8")).toBe("do-not-touch");
+		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(outside, { recursive: true, force: true });
+		}
+	});
+
+	it("revalidates the trust boundary after an ancestor symlink swap", async () => {
+		const root = await tempRoot("symlink-swap");
+		const outside = await tempRoot("symlink-swap-outside");
+		try {
+			const parent = join(root, "owned");
+			const target = join(parent, "file.txt");
+			await mkdir(parent);
+			await writeFile(target, "before");
+			await writeFile(join(outside, "file.txt"), "external");
+			const transaction = await DeployTransaction.begin(root, false, [target]);
+			await rm(parent, { recursive: true, force: true });
+			await fs.symlink(outside, parent);
+			let calls = 0;
+			await expect(transaction!.mutate(target, async () => { calls++; })).rejects.toThrow();
+			expect(calls).toBe(0);
+			expect(await readFile(join(outside, "file.txt"), "utf8")).toBe("external");
+		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(outside, { recursive: true, force: true });
+		}
+	});
+
+	it("allows an absent leaf below a real in-root parent", async () => {
+		const root = await tempRoot("symlink-absent-leaf");
+		try {
+			const parent = join(root, "owned");
+			const target = join(parent, "new.txt");
+			await mkdir(parent);
+			const transaction = await DeployTransaction.begin(root, false, [target]);
+			await transaction!.mutate(target, async () => writeFile(target, "created"));
+			await transaction!.rollback();
+			expect(await lstat(target).catch(() => null)).toBeNull();
+		} finally { await rm(root, { recursive: true, force: true }); }
+	});
+
+	it("canonicalizes a symlinked deploy root while preserving its boundary", async () => {
+		const root = await tempRoot("canonical-root");
+		const parent = await tempRoot("canonical-parent");
+		const alias = join(parent, "alias");
+		try {
+			await fs.symlink(root, alias);
+			const target = join(alias, "owned.txt");
+			const transaction = await DeployTransaction.begin(alias, false, [target]);
+			await transaction!.mutate(target, async () => writeFile(target, "created"));
+			await transaction!.rollback();
+			expect(await lstat(join(root, "owned.txt")).catch(() => null)).toBeNull();
+		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(parent, { recursive: true, force: true });
+		}
+	});
+
+	it("rejects an ancestor swap from a newly created root to a sibling", async () => {
+		const parent = await tempRoot("missing-root-parent");
+		const root = join(parent, "project");
+		const sibling = join(parent, "sibling");
+		try {
+			await mkdir(sibling);
+			await writeFile(join(sibling, "sentinel.txt"), "do-not-touch");
+			const target = join(root, "owned", "file.txt");
+			const transaction = await DeployTransaction.begin(root, false, [target]);
+			await rm(join(root, "owned"), { recursive: true, force: true });
+			await fs.symlink(sibling, join(root, "owned"));
+			let calls = 0;
+			await expect(transaction!.mutate(target, async () => {
+				calls++;
+				await writeFile(target, "external");
+			})).rejects.toThrow();
+			expect(calls).toBe(0);
+			expect(await readFile(join(sibling, "sentinel.txt"), "utf8")).toBe("do-not-touch");
+			expect(await lstat(join(sibling, "file.txt")).catch(() => null)).toBeNull();
+		} finally {
+			await rm(parent, { recursive: true, force: true });
+		}
+	});
 });
