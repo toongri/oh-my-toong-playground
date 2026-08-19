@@ -1973,6 +1973,98 @@ describe("processYaml platform transaction atomicity", () => {
 	});
 });
 
+describe("processYaml direct hook dependency transaction inventory", () => {
+	async function setupDirectHookFixture() {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-hook-dep-txn-"));
+		const rootDir = path.join(tmpDir, "root");
+		const targetPath = path.join(tmpDir, "target");
+		await fs.mkdir(targetPath, { recursive: true });
+		await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+		await writeFile(path.join(rootDir, "hooks", "audit.sh"), '#!/bin/sh\nsource "$SCRIPT_DIR/lib/shared.sh"\n');
+		await writeFile(path.join(rootDir, "hooks", "lib", "shared.sh"), "#!/bin/sh\nshared\n");
+		await writeFile(path.join(rootDir, "skills", "later", "SKILL.md"), "# later\n");
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(path.join(rootDir, "claude.yaml"), "hooks:\n  UserPromptSubmit:\n    - component: audit.sh\n");
+		await writeFile(path.join(rootDir, "sync.yaml"), `path: ${targetPath}\nskills:\n  platforms: [claude]\n  items: [later]\n`);
+		return { tmpDir, rootDir, targetPath, syncYamlPath };
+	}
+
+	it("restores/removes a direct hook and its discovered sibling after later category failure", async () => {
+		const fixture = await setupDirectHookFixture();
+		try {
+			const adapter = new ClaudeAdapter();
+			adapter.syncSkillsDirect = async () => { throw new Error("later category failure"); };
+			const context = makeContext();
+			await processYaml(context, fixture.syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", adapter]]) as AdapterMap, fixture.rootDir);
+			expect(context.failedTargets).toContain(fixture.targetPath);
+			expect(await exists(path.join(fixture.targetPath, ".claude", "hooks", "audit.sh"))).toBe(false);
+			expect(await exists(path.join(fixture.targetPath, ".claude", "hooks", "lib", "shared.sh"))).toBe(false);
+		} finally { await fs.rm(fixture.tmpDir, { recursive: true, force: true }); }
+	});
+
+	it("rolls back the dependency when the adapter throws after syncPlatformYaml returns", async () => {
+		const fixture = await setupDirectHookFixture();
+		try {
+			class ThrowAfterPlatformYamlAdapter extends ClaudeAdapter {
+				async syncPlatformYaml(...args: Parameters<ClaudeAdapter["syncPlatformYaml"]>): ReturnType<ClaudeAdapter["syncPlatformYaml"]> {
+					await super.syncPlatformYaml(...args);
+					throw new Error("after platform yaml");
+				}
+			}
+			const context = makeContext();
+			await processYaml(context, fixture.syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", new ThrowAfterPlatformYamlAdapter()]]) as AdapterMap, fixture.rootDir);
+			expect(await exists(path.join(fixture.targetPath, ".claude", "hooks", "lib", "shared.sh"))).toBe(false);
+		} finally { await fs.rm(fixture.tmpDir, { recursive: true, force: true }); }
+	});
+
+	it("preserves an external dependency overwrite after the platform observer", async () => {
+		const fixture = await setupDirectHookFixture();
+		try {
+			class ConcurrentHookAdapter extends ClaudeAdapter {
+				async syncPlatformYaml(...args: Parameters<ClaudeAdapter["syncPlatformYaml"]>): ReturnType<ClaudeAdapter["syncPlatformYaml"]> {
+					await super.syncPlatformYaml(...args);
+					await writeFile(path.join(args[0], ".claude", "hooks", "lib", "shared.sh"), "external\n");
+					throw new Error("concurrent platform failure");
+				}
+			}
+			const adapter = new ConcurrentHookAdapter();
+			adapter.syncSkillsDirect = async () => { throw new Error("later category failure"); };
+			const context = makeContext();
+			await processYaml(context, fixture.syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", adapter]]) as AdapterMap, fixture.rootDir);
+			expect(await fs.readFile(path.join(fixture.targetPath, ".claude", "hooks", "lib", "shared.sh"), "utf8")).toBe("external\n");
+		} finally { await fs.rm(fixture.tmpDir, { recursive: true, force: true }); }
+	});
+
+	it("keeps directory-hook rollback atomic without a separate sibling inventory", async () => {
+		const fixture = await setupDirectHookFixture();
+		try {
+			await fs.rm(path.join(fixture.rootDir, "hooks", "audit.sh"));
+			await writeFile(path.join(fixture.rootDir, "hooks", "audit", "index.sh"), '#!/bin/sh\nsource "$SCRIPT_DIR/lib/shared.sh"\n');
+			await writeFile(path.join(fixture.rootDir, "hooks", "audit", "lib", "shared.sh"), "directory shared\n");
+			await writeFile(path.join(fixture.rootDir, "claude.yaml"), "hooks:\n  UserPromptSubmit:\n    - component: audit\n");
+			const adapter = new ClaudeAdapter();
+			adapter.syncSkillsDirect = async () => { throw new Error("later category failure"); };
+			await processYaml(makeContext(), fixture.syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", adapter]]) as AdapterMap, fixture.rootDir);
+			expect(await exists(path.join(fixture.targetPath, ".claude", "hooks", "audit"))).toBe(false);
+		} finally { await fs.rm(fixture.tmpDir, { recursive: true, force: true }); }
+	});
+
+	it("maps direct-hook dependency destinations under Gemini and Codex hook roots", async () => {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-hook-dep-platform-roots-"));
+		try {
+			const sourceRoot = path.join(tmpDir, "hooks");
+			const targetRoot = path.join(tmpDir, "target");
+			await writeFile(path.join(sourceRoot, "audit.sh"), '#!/bin/sh\nsource "$SCRIPT_DIR/lib/shared.sh"\n');
+			await writeFile(path.join(sourceRoot, "lib", "shared.sh"), "shared\n");
+			for (const [platform, adapter] of [["gemini", new GeminiAdapter()], ["codex", new CodexAdapter()]] as const) {
+				await adapter.syncHooksDirect(targetRoot, "audit.sh", path.join(sourceRoot, "audit.sh"));
+				expect(await exists(path.join(targetRoot, `.${platform}`, "hooks", "audit.sh"))).toBe(true);
+				expect(await exists(path.join(targetRoot, `.${platform}`, "hooks", "lib", "shared.sh"))).toBe(true);
+			}
+		} finally { await fs.rm(tmpDir, { recursive: true, force: true }); }
+	});
+});
+
 // ---------------------------------------------------------------------------
 // Suite: processYaml
 // ---------------------------------------------------------------------------

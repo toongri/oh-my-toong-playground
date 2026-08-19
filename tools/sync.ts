@@ -64,6 +64,7 @@ import { ClaudeAdapter } from "./adapters/claude.ts";
 import { GeminiAdapter } from "./adapters/gemini.ts";
 import { CodexAdapter, cleanupCodexSkillsFossil, codexSkillsDir } from "./adapters/codex.ts";
 import { opencodeAdapter } from "./adapters/opencode.ts";
+import { resolveShellDependencies } from "./adapters/hook-deps.ts";
 import type { PlatformAdapter, PlatformWriteObserver } from "./adapters/types.ts";
 import {
 	PLATFORM_REWRITE_RULES,
@@ -166,6 +167,46 @@ async function collectPlatformHookSourceRoots(
 			}
 		}
 	}
+}
+
+/** Inventory direct-file hook dependencies before platform writes begin. */
+async function collectPlatformHookTransactionPaths(
+	yamlDir: string,
+	adapters: AdapterMap,
+	rootDir: string,
+	projectDir: string | undefined,
+	deployRoot: string,
+): Promise<Array<string | { path: string; owner: string }>> {
+	const paths: Array<string | { path: string; owner: string }> = [];
+	for (const platform of HOOK_DEPLOYING_PLATFORMS) {
+		if (!adapters.get(platform)) continue;
+		const merged = await parseAndMergePlatformYaml(yamlDir, platform);
+		if (!merged?.hooks) continue;
+		for (const items of Object.values(merged.hooks)) {
+			if (!Array.isArray(items)) continue;
+			for (const item of items) {
+				const component = item?.component;
+				if (typeof component !== "string" || !component) continue;
+				const resolved = resolveComponentPath(component, "hooks", rootDir, projectDir);
+				if ("error" in resolved) continue;
+				const directPath = path.join(deployRoot, `.${platform}`, "hooks", resolved.displayName);
+				paths.push(directPath);
+				let stat: Awaited<ReturnType<typeof fs.stat>>;
+				try { stat = await fs.stat(resolved.path); } catch { continue; }
+				if (stat.isDirectory()) continue;
+				const sourceDir = path.dirname(resolved.path);
+				const dependencies = await resolveShellDependencies(resolved.path, sourceDir);
+				for (const dependency of dependencies) {
+					const relative = path.relative(sourceDir, dependency);
+					paths.push({
+						path: path.join(deployRoot, `.${platform}`, "hooks", relative),
+						owner: directPath,
+					});
+				}
+			}
+		}
+	}
+	return paths;
 }
 
 /**
@@ -710,13 +751,18 @@ export async function syncPlatformConfigs(
 		// was a pre-fan-out relic. (ProjectKeyError also propagates for the same
 		// reason — a local MCP not written to ~/.claude.json.)
 		const pluginScope: PluginScope = context.isRootYaml ? "user" : "project";
-			const writeObserver: PlatformWriteObserver | undefined = transaction
+		const writeObserver: PlatformWriteObserver | undefined = transaction
 			? async (writtenPath) => {
 				const normalizedWrittenPath = path.normalize(path.resolve(writtenPath));
 				const entry = transaction.entries.find(
 					(candidate) => path.normalize(path.resolve(candidate.live)) === normalizedWrittenPath,
 				);
-				if (entry) entry.expected = await fingerprint(entry.live);
+				if (entry) {
+					entry.expected = await fingerprint(entry.live);
+					for (const dependency of transaction.entries.filter((candidate) => candidate.owners?.includes(entry.live))) {
+						dependency.expected = await fingerprint(dependency.live);
+					}
+				}
 			}
 			: undefined;
 		const result = await adapter.syncPlatformYaml(
@@ -1972,7 +2018,7 @@ export function isFatalSyncError(err: unknown): boolean {
 	return err instanceof ProjectKeyError || err instanceof DeployTargetsError;
 }
 
-type DeployTransactionEntry = { live: string; before: string; expected: string };
+type DeployTransactionEntry = { live: string; before: string; expected: string; owners?: string[] };
 type DeployTransaction = { entries: DeployTransactionEntry[] };
 
 async function fingerprint(target: string): Promise<string> {
@@ -1993,21 +2039,36 @@ async function fingerprint(target: string): Promise<string> {
 }
 
 /** Snapshot only OMT-owned early runtime paths; never the whole deploy root. */
-async function beginDeployTransaction(deployRoot: string, dryRun: boolean, ownedPaths: string[] = []): Promise<DeployTransaction | null> {
+async function beginDeployTransaction(
+	deployRoot: string,
+	dryRun: boolean,
+	ownedPaths: Array<string | { path: string; owner?: string }> = [],
+): Promise<DeployTransaction | null> {
 	if (dryRun) return null;
 	const names = [
 		".claude/lib", ".codex/lib", ".agents/lib",
 		".claude/scripts/pretool-trace", ".codex/scripts/pretool-trace",
 		".claude/settings.local.json", ".claude/settings.json", ".gemini/settings.json",
 		".codex/hooks.json", ".codex/config.toml", ".opencode/opencode.json",
-		...ownedPaths,
 	];
+	const entryOwners = new Map<string, string[]>();
+	for (const owned of ownedPaths) {
+		const rawName = typeof owned === "string" ? owned : owned.path;
+		const name = path.isAbsolute(rawName) ? path.relative(deployRoot, rawName) : rawName;
+		const normalized = path.normalize(name);
+		if (!names.includes(normalized)) names.push(normalized);
+		if (typeof owned !== "string" && owned.owner) {
+			const owners = entryOwners.get(normalized) ?? [];
+			if (!owners.includes(owned.owner)) owners.push(owned.owner);
+			entryOwners.set(normalized, owners);
+		}
+	}
 	const entries: DeployTransactionEntry[] = [];
-	for (const name of names) {
+	for (const name of [...new Set(names.map((entry) => path.normalize(entry)))]) {
 		const live = path.join(deployRoot, name);
 		const before = `${live}.txn-before-${Math.random().toString(36).slice(2)}`;
 		if (existsSync(live)) await fs.cp(live, before, { recursive: true, force: true, dereference: false });
-		entries.push({ live, before, expected: "" });
+		entries.push({ live, before, expected: "", owners: entryOwners.get(name) });
 	}
 	return { entries };
 }
@@ -2261,8 +2322,15 @@ export async function processYaml(
 			// Runtime preparation is intentionally before platform YAML activation. If
 			// anything in the remainder fails, restore the complete prior tree rather
 			// than exposing a new lib beside old consumers/settings (or vice versa).
-			if (shouldMkdirClaude || libSourceRoots.size > 0) {
-				const ownedPaths: string[] = [];
+			const platformHookTransactionPaths = await collectPlatformHookTransactionPaths(
+				yamlDir,
+				adapters,
+				rootDir,
+				context.projectDir || undefined,
+				deployRoot,
+			);
+			if (shouldMkdirClaude || libSourceRoots.size > 0 || platformHookTransactionPaths.length > 0) {
+				const ownedPaths: Array<string | { path: string; owner: string }> = [];
 				for (const category of CATEGORIES) {
 					const section = syncYaml[category];
 					for (const item of section?.items ?? []) {
@@ -2277,24 +2345,11 @@ export async function processYaml(
 						}
 					}
 				}
-				for (const platform of HOOK_DEPLOYING_PLATFORMS) {
-					const platformYaml = await parseAndMergePlatformYaml(yamlDir, platform);
-					if (!platformYaml?.hooks) continue;
-					for (const items of Object.values(platformYaml.hooks)) {
-						if (!Array.isArray(items)) continue;
-						for (const item of items) {
-							const component = item?.component;
-							if (typeof component !== "string" || !component) continue;
-							const resolved = resolveComponentPath(component, "hooks", rootDir, context.projectDir || undefined);
-							if (!resolved || "error" in resolved) continue;
-							ownedPaths.push(path.join(`.${platform}`, "hooks", resolved.displayName));
-						}
-					}
-				}
+				ownedPaths.push(...platformHookTransactionPaths);
 				deployTransaction = await beginDeployTransaction(
 					deployRoot,
 					context.dryRun,
-					[...new Set(ownedPaths.map((ownedPath) => path.normalize(ownedPath)))],
+					ownedPaths,
 				);
 			}
 			await syncCategory(
