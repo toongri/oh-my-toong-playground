@@ -2121,6 +2121,45 @@ run_test test_session_artifact_prefixes_exactly_six_managed
 run_test test_ttl_parity_with_state_core_ts
 run_test test_ttl_allowlist_no_stray_literals
 
+test_pretool_valid_lease_lock_is_not_unclassified() {
+  local root="$TEST_TMP_DIR/root" key lock out
+  key=$(printf 'a%.0s' $(seq 1 64)); mkdir -p "$root/pretool-trace/keys"
+  lock="$root/pretool-trace/keys/$key.key.lease-lock"; mkdir "$lock"; : > "$lock/owner-$$-dead"
+  out=$(list_pretool_trace_unclassified "$root")
+  [ -z "$out" ]
+}
+
+test_pretool_lease_lock_extra_symlink_reported_and_preserved() {
+  local root="$TEST_TMP_DIR/root" key lock out
+  key=$(printf 'b%.0s' $(seq 1 64)); mkdir -p "$root/pretool-trace/keys"
+  lock="$root/pretool-trace/keys/$key.key.lease-lock"; mkdir "$lock"; : > "$lock/owner-$$-dead"; mkdir "$root/target"; ln -s "$root/target" "$lock/extra"
+  out=$(list_pretool_trace_unclassified "$root"); printf '%s\n' "$out" | grep -Fq "$lock"
+  reap_pretool_trace_artifacts "$root" "$(date +%s)" 0 >/dev/null || true
+  [ -L "$lock/extra" ] && [ -f "$lock/owner-$$-dead" ]
+}
+
+test_pretool_lease_lock_extra_directory_reported_and_preserved() {
+  local root="$TEST_TMP_DIR/root" key lock out
+  key=$(printf 'c%.0s' $(seq 1 64)); mkdir -p "$root/pretool-trace/keys"
+  lock="$root/pretool-trace/keys/$key.key.lease-lock"; mkdir "$lock" "$lock/extra"; : > "$lock/owner-$$-dead"
+  out=$(list_pretool_trace_unclassified "$root"); printf '%s\n' "$out" | grep -Fq "$lock"
+  reap_pretool_trace_artifacts "$root" "$(date +%s)" 0 >/dev/null || true
+  [ -d "$lock/extra" ] && [ -f "$lock/owner-$$-dead" ]
+}
+
+test_pretool_lease_lock_symlink_reported_and_preserved() {
+  local root="$TEST_TMP_DIR/root" key lock out
+  key=$(printf 'd%.0s' $(seq 1 64)); mkdir -p "$root/pretool-trace/keys" "$root/target"
+  lock="$root/pretool-trace/keys/$key.key.lease-lock"; ln -s "$root/target" "$lock"
+  out=$(list_pretool_trace_unclassified "$root"); printf '%s\n' "$out" | grep -Fq "$lock"
+  [ -L "$lock" ]
+}
+
+run_test test_pretool_valid_lease_lock_is_not_unclassified
+run_test test_pretool_lease_lock_extra_symlink_reported_and_preserved
+run_test test_pretool_lease_lock_extra_directory_reported_and_preserved
+run_test test_pretool_lease_lock_symlink_reported_and_preserved
+
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------

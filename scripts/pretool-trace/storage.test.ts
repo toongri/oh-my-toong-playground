@@ -112,7 +112,7 @@ describe("pre-tool trace storage", () => {
 		root();
 		mkdirSync(storagePaths().dir, { recursive: true });
 		mkdirSync(storagePaths().lock);
-		writeFileSync(join(storagePaths().lock, `owner-${process.pid}-live`), JSON.stringify({ pid: process.pid, nonce: "live" }));
+		writeFileSync(join(storagePaths().lock, `owner-${process.pid}-live`), "");
 		const started = performance.now();
 		expect(appendEvent({ dropped: true })).toBe(false);
 		expect(performance.now() - started).toBeLessThan(100);
@@ -238,6 +238,107 @@ describe("pre-tool trace storage", () => {
 		mkdirSync(storagePaths().keys, { recursive: true });
 		writeFileSync(join(storagePaths().keys, `${locator}.key`), Buffer.from("short"));
 		expect(getSessionKey(locator)).toHaveLength(0);
+	});
+
+	test("valid key reuse preserves bytes and renews the seven-day lease", async () => {
+		const base = root();
+		const locator = "c".repeat(64);
+		const first = getSessionKey(locator);
+		const file = join(storagePaths().keys, `${locator}.key`);
+		const old = new Date(Date.now() - 8 * 86400_000);
+		utimesSync(file, old, old);
+		const reused = getSessionKey(locator);
+		expect(Buffer.from(reused)).toEqual(Buffer.from(first));
+		expect(statSync(file).mtimeMs).toBeGreaterThan(old.getTime());
+		const helper = join(import.meta.dir, "../../hooks/lib/state-liveness.sh");
+		const cleanup = Bun.spawn(["bash", "-c", `source "$1"; reap_pretool_trace_artifacts "$2" "$(date +%s)" 0`, "cleanup", helper, base], { stdout: "pipe", stderr: "pipe" });
+		await cleanup.exited;
+		expect(cleanup.exitCode).toBe(0);
+		expect(existsSync(file)).toBe(true);
+	});
+
+	test("inactive key older than seven days is deleted by real cleanup", async () => {
+		const base = root();
+		const locator = "d".repeat(64);
+		getSessionKey(locator);
+		const file = join(storagePaths().keys, `${locator}.key`);
+		const old = new Date(Date.now() - 8 * 86400_000);
+		utimesSync(file, old, old);
+		const helper = join(import.meta.dir, "../../hooks/lib/state-liveness.sh");
+		const cleanup = Bun.spawn(["bash", "-c", `source "$1"; reap_pretool_trace_artifacts "$2" "$(date +%s)" 0`, "cleanup", helper, base], { stdout: "pipe", stderr: "pipe" });
+		await cleanup.exited;
+		expect(cleanup.exitCode).toBe(0);
+		expect(existsSync(file)).toBe(false);
+	});
+
+	test("cleanup preserves a key while its lease lock is held", async () => {
+		const base = root();
+		const locator = "e".repeat(64);
+		getSessionKey(locator);
+		const file = join(storagePaths().keys, `${locator}.key`);
+		const old = new Date(Date.now() - 8 * 86400_000);
+		utimesSync(file, old, old);
+		const leaseLock = `${file}.lease-lock`;
+		mkdirSync(leaseLock, { mode: 0o700 });
+		const helper = join(import.meta.dir, "../../hooks/lib/state-liveness.sh");
+		const cleanup = Bun.spawn(["bash", "-c", `source "$1"; reap_pretool_trace_artifacts "$2" "$(date +%s)" 0`, "cleanup", helper, base], { stdout: "pipe", stderr: "pipe" });
+		await cleanup.exited;
+		expect(cleanup.exitCode).toBe(0);
+		expect(existsSync(file)).toBe(true);
+	});
+
+	test("dead lease owner is recovered for valid key reuse", () => {
+		root();
+		const locator = "f".repeat(64);
+		const first = getSessionKey(locator);
+		const file = join(storagePaths().keys, `${locator}.key`);
+		const leaseLock = `${file}.lease-lock`;
+		mkdirSync(leaseLock);
+		writeFileSync(join(leaseLock, "owner-2147483647-dead"), "");
+		const reused = getSessionKey(locator);
+		expect(Buffer.from(reused)).toEqual(Buffer.from(first));
+		expect(existsSync(leaseLock)).toBe(false);
+	});
+
+	test("live lease owner fails open without changing key", () => {
+		root();
+		const locator = "0".repeat(64);
+		const first = getSessionKey(locator);
+		const file = join(storagePaths().keys, `${locator}.key`);
+		const leaseLock = `${file}.lease-lock`;
+		mkdirSync(leaseLock);
+		writeFileSync(join(leaseLock, `owner-${process.pid}-live`), "");
+		expect(getSessionKey(locator)).toHaveLength(0);
+		expect(readFileSync(file)).toEqual(Buffer.from(first));
+	});
+
+	test("stale empty lease lock is recovered", () => {
+		root();
+		const locator = "1".repeat(64);
+		const first = getSessionKey(locator);
+		const file = join(storagePaths().keys, `${locator}.key`);
+		const lock = `${file}.lease-lock`;
+		mkdirSync(lock);
+		const old = new Date(Date.now() - 10_000);
+		utimesSync(lock, old, old);
+		expect(Buffer.from(getSessionKey(locator))).toEqual(Buffer.from(first));
+		expect(existsSync(lock)).toBe(false);
+	});
+
+	test("cleanup dry-run does not create lease locks", async () => {
+		const base = root();
+		const locator = "2".repeat(64);
+		getSessionKey(locator);
+		const file = join(storagePaths().keys, `${locator}.key`);
+		const old = new Date(Date.now() - 8 * 86400_000);
+		utimesSync(file, old, old);
+		const before = readFileSync(file);
+		const helper = join(import.meta.dir, "../../hooks/lib/state-liveness.sh");
+		const cleanup = Bun.spawn(["bash", "-c", `source "$1"; reap_pretool_trace_artifacts "$2" "$(date +%s)" 1`, "cleanup", helper, base], { stdout: "pipe", stderr: "pipe" });
+		await cleanup.exited;
+		expect(cleanup.exitCode).toBe(0);
+		expect(readFileSync(file)).toEqual(before);
+		expect(existsSync(`${file}.lease-lock`)).toBe(false);
 	});
 
 	test("canonical OMT directory — custom cwd uses resolver", () => {

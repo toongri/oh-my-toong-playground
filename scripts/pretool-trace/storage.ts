@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { chmodSync, closeSync, existsSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmdirSync, statSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { resolveOmtDir } from "@lib/omt-dir";
 import { join } from "node:path";
 
@@ -7,6 +7,7 @@ const LIMIT = 1024 * 1024;
 const PRIVATE_DIR = 0o700;
 const PRIVATE_FILE = 0o600;
 const LOCK_INIT_GRACE_MS = 1000;
+const KEY_LEASE_LOCK_SUFFIX = ".lease-lock";
 
 function isErrnoException(value: unknown): value is NodeJS.ErrnoException {
 	return typeof value === "object" && value !== null && "code" in value;
@@ -34,8 +35,79 @@ function ensureLayout(paths: StoragePaths): void {
 	ensureDir(paths.keys);
 }
 
+function recoverLeaseLock(lock: string): boolean {
+	try {
+		const lockStat = lstatSync(lock);
+		if (!lockStat.isDirectory() || lockStat.isSymbolicLink()) return false;
+		const entries = readdirSync(lock);
+		const owners = entries.filter((entry) => /^owner-[0-9]+-[0-9a-f]+$/.test(entry));
+		if (owners.length === 1 && entries.length === 1) {
+			const owner = owners[0];
+			const ownerStat = lstatSync(join(lock, owner));
+			if (!ownerStat.isFile() || ownerStat.isSymbolicLink()) return false;
+			const match = /^owner-([0-9]+)-([0-9a-f]+)$/.exec(owner);
+			if (!match) return false;
+			if (readFileSync(join(lock, owner)).byteLength !== 0) return false;
+			try { process.kill(Number(match[1]), 0); return false; }
+			catch (error) {
+				if (!isErrnoException(error) || error.code !== "ESRCH") return false;
+				try { unlinkSync(join(lock, owner)); rmdirSync(lock); return true; } catch { return false; }
+			}
+		}
+		if (entries.length === 0 && Date.now() - lockStat.mtimeMs > LOCK_INIT_GRACE_MS) {
+			try { rmdirSync(lock); return true; } catch { return false; }
+		}
+		return false;
+	} catch { return false; }
+}
+
+function acquireLeaseLock(lock: string): string | null {
+	for (let attempt = 0; attempt < 20; attempt++) {
+		let created = false;
+		let owner: string | null = null;
+		try {
+			mkdirSync(lock, { mode: PRIVATE_DIR });
+			created = true;
+			const nonce = randomBytes(8).toString("hex");
+			owner = join(lock, `owner-${process.pid}-${nonce}`);
+			const fd = openSync(owner, "wx", PRIVATE_FILE);
+			try { chmodSync(owner, PRIVATE_FILE); }
+			finally { closeSync(fd); }
+			chmodSync(lock, PRIVATE_DIR);
+			return owner;
+		} catch (error) {
+			if (created) { if (owner !== null) try { unlinkSync(owner); } catch { /* cleanup */ } try { rmdirSync(lock); } catch { /* cleanup */ } }
+			if (!isErrnoException(error) || error.code !== "EEXIST") return null;
+			if (recoverLeaseLock(lock)) continue;
+			if (attempt === 19) return null;
+			Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1);
+		}
+	}
+	return null;
+}
+
+function readExistingKey(file: string): Uint8Array {
+	const leaseLock = `${file}${KEY_LEASE_LOCK_SUFFIX}`;
+	const owner = acquireLeaseLock(leaseLock);
+	if (owner === null) return new Uint8Array(0);
+		try {
+			const fileStat = lstatSync(file);
+			if (!fileStat.isFile() || fileStat.isSymbolicLink()) return new Uint8Array(0);
+			const existing = readFileSync(file);
+			if (existing.byteLength !== 32) return new Uint8Array(0);
+			const now = new Date();
+			utimesSync(file, now, now);
+			return new Uint8Array(existing);
+		} catch {
+			return new Uint8Array(0);
+		} finally {
+			try { unlinkSync(owner); } catch { /* fail-open cleanup */ }
+			try { rmdirSync(leaseLock); } catch { /* fail-open cleanup */ }
+		}
+}
+
 /** Return the per-locator 32-byte key, creating it atomically on first use. */
-export function getSessionKey(locator: string): Uint8Array {
+function getSessionKeyOnce(locator: string): Uint8Array {
 	try {
 		if (typeof locator !== "string" || !/^[0-9a-f]{64}$/.test(locator)) return new Uint8Array(0);
 		const paths = storagePaths();
@@ -54,20 +126,27 @@ export function getSessionKey(locator: string): Uint8Array {
 					return new Uint8Array(key);
 					} catch (linkError) {
 						if (!isErrnoException(linkError) || linkError.code !== "EEXIST") throw linkError;
-					const existing = readFileSync(file);
-					return existing.byteLength === 32 ? new Uint8Array(existing) : new Uint8Array(0);
-				}
+					return readExistingKey(file);
+					}
 			} finally { closeSync(fd); }
 		} catch (error) {
 			if (!isErrnoException(error) || error.code !== "EEXIST") throw error;
-			const existing = readFileSync(file);
-			return existing.byteLength === 32 ? new Uint8Array(existing) : new Uint8Array(0);
+			return readExistingKey(file);
 		} finally {
 			try { unlinkSync(temporary); } catch { /* already linked or failed */ }
 		}
 	} catch {
 		return new Uint8Array(0);
 	}
+}
+
+export function getSessionKey(locator: string): Uint8Array {
+	for (let attempt = 0; attempt < 3; attempt++) {
+		const key = getSessionKeyOnce(locator);
+		if (key.byteLength === 32) return key;
+		Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1);
+	}
+	return new Uint8Array(0);
 }
 
 function rotate(paths: StoragePaths): void {

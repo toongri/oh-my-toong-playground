@@ -56,6 +56,45 @@ _pretool_trace_hex_key() {
   printf '%s\n' "$name" | grep -Eq '^[0-9a-f]{64}\.key$'
 }
 
+_pretool_trace_lease_lock_recover() {
+  local lock="$1" now_epoch="$2" entries owner pid probe entry count
+  [ -d "$lock" ] && [ ! -L "$lock" ] || return 1
+  count=0; owner=""
+  for entry in "$lock"/* "$lock"/.[!.]* "$lock"/..?*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    count=$((count + 1)); owner="$entry"
+  done
+  [ "$count" -eq 1 ] || {
+    [ "$count" -eq 0 ] && _pretool_trace_stale "$lock" "$now_epoch" && rmdir "$lock" 2>/dev/null
+    return $?
+  }
+  owner="${owner##*/}"
+  printf '%s\n' "$owner" | grep -Eq '^owner-[0-9]+-[0-9a-f]+$' || return 1
+  [ -f "$lock/$owner" ] && [ ! -L "$lock/$owner" ] || return 1
+  pid="${owner#owner-}"; pid="${pid%%-*}"
+  [ ! -s "$lock/$owner" ] || return 1
+  probe=$(kill -0 "$pid" 2>&1) && return 1
+  printf '%s\n' "$probe" | grep -qi 'operation not permitted' && return 1
+  rm -f "$lock/$owner" 2>/dev/null && rmdir "$lock" 2>/dev/null
+}
+
+_pretool_trace_valid_lease_lock() {
+  local lock="$1" owner pid entry count
+  [ -d "$lock" ] && [ ! -L "$lock" ] || return 1
+  count=0; owner=""
+  for entry in "$lock"/* "$lock"/.[!.]* "$lock"/..?*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    count=$((count + 1)); owner="$entry"
+  done
+  [ "$count" -eq 1 ] || return 1
+  [ -f "$owner" ] && [ ! -L "$owner" ] || return 1
+  [ ! -s "$owner" ] || return 1
+  owner="${owner##*/}"; printf '%s\n' "$owner" | grep -Eq '^owner-[0-9]+-[0-9a-f]+$' || return 1
+  pid="${owner#owner-}"; pid="${pid%%-*}"
+  [ ! -s "$lock/$owner" ] || return 1
+  return 0
+}
+
 # reap_pretool_trace_artifacts <root> <now_epoch> <dry_run>
 #
 # Scans only the explicit trace/key/evidence allowlist.  It emits stale paths
@@ -85,10 +124,27 @@ reap_pretool_trace_artifacts() {
         [ -L "$path" ] && continue
         name="${path##*/}"
         _pretool_trace_hex_key "$name" || continue
-        if _pretool_trace_stale "$path" "$now_epoch"; then
-          if [ "$dry_run" = "1" ]; then printf '%s\n' "$path"
-          elif rm -f "$path" 2>/dev/null; then printf '%s\n' "$path"
-          else echo "reap: failed to delete $path" >&2; had_failure=1; fi
+        # Coordinate with getSessionKey's lease renewal.  mkdir is the
+        # atomic lock acquisition; stale is re-checked while held so a
+        # reader cannot be deleted between stat and unlink.
+        local lease_lock="${path}.lease-lock"
+        if [ "$dry_run" = "1" ]; then
+          _pretool_trace_stale "$path" "$now_epoch" && printf '%s\n' "$path"
+        elif mkdir "$lease_lock" 2>/dev/null; then
+          local lease_owner="owner-$$-$(printf '%x' $$)"
+          if ! (umask 077; : > "$lease_lock/$lease_owner"); then
+            rmdir "$lease_lock" 2>/dev/null || true
+            continue
+          fi
+          if _pretool_trace_stale "$path" "$now_epoch"; then
+            if [ "$dry_run" = "1" ]; then printf '%s\n' "$path"
+            elif rm -f "$path" 2>/dev/null; then printf '%s\n' "$path"
+            else echo "reap: failed to delete $path" >&2; had_failure=1; fi
+          fi
+          rm -f "$lease_lock/$lease_owner" 2>/dev/null || true
+          rmdir "$lease_lock" 2>/dev/null || true
+        else
+          _pretool_trace_lease_lock_recover "$lease_lock" "$now_epoch" >/dev/null 2>&1 || true
         fi
       done
     fi
@@ -191,7 +247,7 @@ pretool_trace_find_ancestor_symlink() {
 # Report immediate entries beneath managed trace/evidence directories that are
 # outside the allowlist. Unknown directories are reported but never entered.
 list_pretool_trace_unclassified() {
-  local root="$1" path name work child
+  local root="$1" path name work child base
   local trace="$root/pretool-trace" keys="$root/pretool-trace/keys"
   local evidence_trace="$root/evidence/pretool-trace"
   if [ -d "$trace" ] && [ ! -L "$trace" ]; then
@@ -204,7 +260,16 @@ list_pretool_trace_unclassified() {
       for child in "$keys"/* "$keys"/.[!.]* "$keys"/..?*; do
         [ -e "$child" ] || [ -L "$child" ] || continue
         name="${child##*/}"
-        _pretool_trace_hex_key "$name" || printf '%s\n' "$child"
+        if _pretool_trace_hex_key "$name"; then
+          continue
+        fi
+        case "$name" in
+          *.key.lease-lock)
+            base="${name%.lease-lock}"
+            _pretool_trace_hex_key "$base" && _pretool_trace_valid_lease_lock "$child" && continue
+            ;;
+        esac
+        printf '%s\n' "$child"
       done
     fi
   fi
