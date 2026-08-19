@@ -56,7 +56,8 @@ export interface StructureResult {
 }
 
 const GROUP_HEADING = /^##\s+Change Group\s+\d+\s*:\s*\S.*$/gm;
-const FILE_BLOCK = /^###\s+`([^`]+)`\s*$/gm;
+// 백틱 뒤 괄호 주석(`(삭제)`, `(→ 새 경로)` 등)은 정당한 표기 — 경로 캡처에서 제외하고 허용.
+const FILE_BLOCK = /^###\s+`([^`]+)`(?:\s+\([^)]*\))?\s*$/gm;
 
 /** The three provenance markers a "왜" block may carry. Anything else is a flat assertion. */
 const WHY_MARKERS = /(\[근거:|\[추론:|Unknown\s*\/\s*not supplied)/;

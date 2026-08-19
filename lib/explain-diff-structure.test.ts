@@ -276,6 +276,24 @@ describe("code 스텝 — R2·R3·R5·R1(커버리지형)", () => {
 			const r = checkStructure(withBackground(GOOD_GROUP), { signalFiles: [], step: "code" });
 			expect(r.items.find((i) => i.id === "R1")?.pass).toBe(false);
 		});
+
+		test("헤딩 백틱 뒤 괄호 주석(삭제·이동 표기)이 붙어도 파일 블록으로 센다", () => {
+			// 실측: PR 3402 문서가 삭제 파일을 "### `path` (삭제)" 로 표기했고,
+			// 줄 끝 앵커 때문에 블록이 0으로 세어져 R1 이 오탐했다.
+			const annotated = `## Change Group 1: 테스트 계약 교체
+> 예고: 옛 계약 테스트를 지운다.
+> 순서: 복원 코드가 먼저 있어야 한다.
+
+### \`tests/api/removed_routes.py\` (삭제)
+**왜 필요한가** — [근거: "v1 복원으로 404 계약이 사라졌다"]
+**추적성** — \`base:tests/api/removed_routes.py:12\` \`head:없음\`
+`;
+			const r = checkStructure(withBackground(annotated), {
+				signalFiles: ["tests/api/removed_routes.py"],
+				step: "code",
+			});
+			expect(r.items.find((i) => i.id === "R1")?.pass).toBe(true);
+		});
 	});
 });
 
