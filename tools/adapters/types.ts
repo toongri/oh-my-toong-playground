@@ -83,6 +83,7 @@ export interface PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun?: boolean,
+		writeObserver?: PlatformWriteObserver,
 	): Promise<void>;
 
 	/**

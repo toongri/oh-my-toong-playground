@@ -588,6 +588,83 @@ describe("opencodeAdapter.syncRulesDirect", () => {
 			await fs.rm(targetDir, { recursive: true, force: true });
 		}
 	});
+
+	it("notifies rule then sidecar after each successful write with readable bytes via `syncRulesDirect`", async () => {
+		const targetDir = await mkTempDir();
+		try {
+			const notifications: Array<{ path: string; bytes: string }> = [];
+			const observer = async (writtenPath: string) => {
+				notifications.push({ path: writtenPath, bytes: await fs.readFile(writtenPath, "utf-8") });
+			};
+			const [ruleRelative, configRelative] = planCategoryDestinationPaths(
+				"opencode",
+				"rules",
+				"coding-discipline",
+			);
+			const ruleTarget = path.join(targetDir, ruleRelative);
+			const configFile = path.join(targetDir, configRelative);
+
+			await opencodeAdapter.syncRulesDirect(targetDir, "coding-discipline", ruleFile, false, observer);
+
+			expect(notifications.map(({ path: writtenPath }) => writtenPath)).toEqual([ruleTarget, configFile]);
+			expect(notifications[0]?.bytes).toContain("Coding Discipline");
+			expect((JSON.parse(notifications[1]?.bytes ?? "{}") as Record<string, unknown>)["instructions"]).toEqual([
+				".opencode/rules/*.md",
+			]);
+		} finally {
+			await fs.rm(targetDir, { recursive: true, force: true });
+		}
+	});
+
+	it("notifies only the rule when opencode.json is corrupt and read fails via `syncRulesDirect`", async () => {
+		const targetDir = await mkTempDir();
+		try {
+			const configFile = path.join(targetDir, ".opencode", "opencode.json");
+			await fs.mkdir(path.dirname(configFile), { recursive: true });
+			await fs.writeFile(configFile, "{ invalid json }", "utf-8");
+			const notifications: string[] = [];
+
+			await expect(
+				opencodeAdapter.syncRulesDirect(targetDir, "coding-discipline", ruleFile, false, (writtenPath) => {
+					notifications.push(writtenPath);
+				}),
+			).rejects.toThrow(SyntaxError);
+
+			const [ruleRelative] = planCategoryDestinationPaths("opencode", "rules", "coding-discipline");
+			expect(notifications).toEqual([path.join(targetDir, ruleRelative)]);
+		} finally {
+			await fs.rm(targetDir, { recursive: true, force: true });
+		}
+	});
+
+	it("notifies only the rule when the instructions glob already exists via `syncRulesDirect`", async () => {
+		const targetDir = await mkTempDir();
+		try {
+			await opencodeAdapter.syncRulesDirect(targetDir, "coding-discipline", ruleFile, false);
+			const notifications: string[] = [];
+			await opencodeAdapter.syncRulesDirect(targetDir, "coding-discipline", ruleFile, false, (writtenPath) => {
+				notifications.push(writtenPath);
+			});
+
+			const [ruleRelative] = planCategoryDestinationPaths("opencode", "rules", "coding-discipline");
+			expect(notifications).toEqual([path.join(targetDir, ruleRelative)]);
+		} finally {
+			await fs.rm(targetDir, { recursive: true, force: true });
+		}
+	});
+
+	it("does not notify in dry-run mode via `syncRulesDirect`", async () => {
+		const targetDir = await mkTempDir();
+		try {
+			const notifications: string[] = [];
+			await opencodeAdapter.syncRulesDirect(targetDir, "coding-discipline", ruleFile, true, (writtenPath) => {
+				notifications.push(writtenPath);
+			});
+			expect(notifications).toEqual([]);
+		} finally {
+			await fs.rm(targetDir, { recursive: true, force: true });
+		}
+	});
 });
 
 // =============================================================================

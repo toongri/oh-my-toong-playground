@@ -258,6 +258,7 @@ export const opencodeAdapter: PlatformAdapter = {
 		displayName: string,
 		sourcePath: string,
 		dryRun?: boolean,
+		writeObserver?: PlatformWriteObserver,
 	): Promise<void> {
 		const [targetRelative, configRelative] = opencodeDestinationPaths("rules", displayName);
 		const targetFile = path.join(targetPath, targetRelative);
@@ -286,6 +287,9 @@ export const opencodeAdapter: PlatformAdapter = {
 		// Copy rule file
 		await fs.mkdir(targetDir, { recursive: true });
 		await fs.copyFile(sourcePath, targetFile);
+		if (writeObserver) {
+			await writeObserver(targetFile);
+		}
 		logInfo(`Copied: ${displayName}.md`);
 
 		// Ensure opencode.json has instructions glob (idempotent)
@@ -296,6 +300,9 @@ export const opencodeAdapter: PlatformAdapter = {
 		if (!instructions.includes(globEntry)) {
 			config["instructions"] = [...instructions, globEntry];
 			await writeJsonFile(configFile, config);
+			if (writeObserver) {
+				await writeObserver(configFile);
+			}
 			if (instructions.length === 0) {
 				logInfo("Created: opencode.json with instructions glob");
 			} else {
