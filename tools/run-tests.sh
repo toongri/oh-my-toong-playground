@@ -33,9 +33,21 @@ NC='\033[0m'
 SHELL_PASS=0
 SHELL_FAIL=0
 SHELL_TOTAL=0
+# Newline-delimited list of failing shell tests, replayed in the final
+# summary. The per-test `실패:` line is emitted mid-run and is lost whenever
+# a caller keeps only the tail of this script's output (a truncated CI log,
+# a backgrounded run captured with `tail`); the summary block is what always
+# survives, so the names have to appear there too. Bash 3.2: a plain
+# newline-delimited string, no arrays.
+SHELL_FAILED_NAMES=""
 TS_PASS=0
 TS_FAIL=0
 TS_TOTAL=0
+# Same reason as SHELL_FAILED_NAMES: bun prints one `(fail) <suite> > <test>`
+# line per failure somewhere in its output, and this script only echoes the
+# last 20 lines of that output -- a failure whose name scrolled past that
+# window is invisible, leaving a caller with a count and nothing to run.
+TS_FAILED_NAMES=""
 
 log_info() {
     echo -e "${BLUE}[TEST]${NC} $1"
@@ -86,6 +98,8 @@ run_shell_tests() {
             log_success "  통과: $rel_path"
         else
             ((SHELL_FAIL++)) || true
+            SHELL_FAILED_NAMES="${SHELL_FAILED_NAMES}${rel_path}
+"
             log_fail "  실패: $rel_path"
             # 실패 시 출력 마지막 20줄 표시
             echo "$output" | tail -20 | while IFS= read -r line; do
@@ -125,6 +139,8 @@ run_bun_tests() {
         TS_FAIL=1
         TS_TOTAL=1
         log_fail "  Bun 테스트 실패"
+        # Harvest every failure name before the tail window throws them away.
+        TS_FAILED_NAMES=$(echo "$output" | grep '^(fail)' || true)
         echo "$output" | tail -20 | while IFS= read -r line; do
             echo -e "    ${RED}|${NC} $line"
         done
@@ -149,7 +165,19 @@ main() {
     log_info "테스트 결과 요약"
     echo "=========================================="
     echo -e "  Shell: ${SHELL_PASS}/${SHELL_TOTAL} 통과, ${SHELL_FAIL} 실패"
+    if [[ -n "$SHELL_FAILED_NAMES" ]]; then
+        printf '%s' "$SHELL_FAILED_NAMES" | while IFS= read -r failed_name; do
+            [[ -z "$failed_name" ]] && continue
+            echo -e "    ${RED}실패${NC}: $failed_name"
+        done
+    fi
     echo -e "  TypeScript: ${TS_PASS}/${TS_TOTAL} 통과, ${TS_FAIL} 실패"
+    if [[ -n "$TS_FAILED_NAMES" ]]; then
+        printf '%s\n' "$TS_FAILED_NAMES" | while IFS= read -r failed_name; do
+            [[ -z "$failed_name" ]] && continue
+            echo -e "    ${RED}실패${NC}: ${failed_name#(fail) }"
+        done
+    fi
     echo "=========================================="
 
     if [[ $SHELL_FAIL -gt 0 || $TS_FAIL -gt 0 ]]; then
