@@ -51,6 +51,12 @@ mcps:
 | OpenCode | 대상의 `.opencode/opencode.json`에서 `mcp.<name>`만 삭제한다. |
 | Gemini | **지원하지 않는다.** `mcps.<name>: null`은 검증에서 거부된다. Gemini는 `mcps` 섹션이 제공되면 `.gemini/settings.json`의 `mcpServers` 전체를 교체하므로, 이 삭제 tombstone 계약의 대상이 아니다. |
 
+Claude의 루트·프로젝트 MCP는 `deployRoot` 밖의 사용자 설정 파일에 기록되므로 해당
+워크트리의 `DeployTransaction` 범위에 포함되지 않는다. 이후 대상 배포가 실패해도
+MCP 변경은 남을 수 있다. 필요하면 sync를 재시도하거나 tombstone을 선언하고, 또는
+Claude CLI로 수동 제거한다. Codex·OpenCode의 대상 설정은 `deployRoot` 안에서
+처리되지만, 개별 외부 명령의 추가 변경까지 보장하는 계약은 아니다.
+
 수동 CLI로는 루트 전역 MCP에 `claude mcp remove <name> --scope user`, 프로젝트
 local MCP에 `claude mcp remove <name> --scope local`을 쓴다. scope를 생략하면
 Claude CLI가 MCP의 존재 위치를 찾는다. 이 수동 방법은 계속 쓸 수 있지만 선언형

@@ -2140,6 +2140,43 @@ describe("syncPlatformConfigs", () => {
 });
 
 describe("processYaml platform transaction atomicity", () => {
+	it("keeps user-scope MCP committed outside the deploy transaction after later skill failure", async () => {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-user-mcp-scope-"));
+		const previousUserConfig = process.env["CLAUDE_USER_CONFIG"];
+		try {
+			const rootDir = path.join(tmpDir, "root");
+			const targetPath = path.join(tmpDir, "target");
+			const userConfig = path.join(tmpDir, "claude.json");
+			await fs.mkdir(targetPath, { recursive: true });
+			await writeFile(userConfig, "{}\n");
+			process.env["CLAUDE_USER_CONFIG"] = userConfig;
+			await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+			await fs.mkdir(path.join(rootDir, "scripts", "first"), { recursive: true });
+			await fs.writeFile(path.join(rootDir, "scripts", "first", "run.sh"), "#!/bin/sh\necho first\n", { encoding: "utf8", mode: 0o755 });
+			await writeFile(path.join(rootDir, "skills", "first", "SKILL.md"), "first\n");
+			await writeFile(path.join(rootDir, "sync.yaml"), `path: ${targetPath}\nscripts:\n  platforms: [claude]\n  items: [first]\nskills:\n  platforms: [claude]\n  items: [first]\n`);
+			await writeFile(path.join(rootDir, "claude.yaml"), "mcps:\n  external:\n    command: server\n");
+			class FailingAdapter extends ClaudeAdapter {
+				override async syncSkillsDirect(): Promise<void> { throw new Error("later skill failure"); }
+			}
+			const context = makeContext();
+			await processYaml(
+				context,
+				path.join(rootDir, "sync.yaml"),
+				new Map<Platform, PlatformAdapter>([["claude", new FailingAdapter()]]) as AdapterMap,
+				rootDir,
+			);
+			expect(context.failedTargets).toContain(targetPath);
+			expect(await exists(path.join(targetPath, ".claude", "scripts", "first", "run.sh"))).toBe(false);
+			expect(await exists(path.join(targetPath, ".claude", "skills", "first", "SKILL.md"))).toBe(false);
+			expect(JSON.parse(await readFile(userConfig))).toEqual({ mcpServers: { external: { command: "server" } } });
+		} finally {
+			if (previousUserConfig === undefined) delete process.env["CLAUDE_USER_CONFIG"];
+			else process.env["CLAUDE_USER_CONFIG"] = previousUserConfig;
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
+	});
+
 	it("commits explicit empty reconciliation before a later format failure", async () => {
 		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-empty-format-txn-"));
 		try {
@@ -2161,7 +2198,7 @@ describe("processYaml platform transaction atomicity", () => {
 			await processYaml(context, syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap, rootDir);
 			expect(context.failedTargets).toContain(targetPath);
 			expect(await exists(oldPath)).toBe(false);
-			expect(JSON.parse(await readFile(manifestPath, "utf8"))).toEqual({ "claude/agents": [] });
+			expect(JSON.parse(await fs.readFile(manifestPath, "utf8"))).toEqual({ "claude/agents": [] });
 		} finally { await fs.rm(tmpDir, { recursive: true, force: true }); }
 	});
 
