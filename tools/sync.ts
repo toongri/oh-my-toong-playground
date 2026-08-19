@@ -65,6 +65,7 @@ import { GeminiAdapter } from "./adapters/gemini.ts";
 import { CodexAdapter, cleanupCodexSkillsFossil, codexSkillsDir } from "./adapters/codex.ts";
 import { opencodeAdapter } from "./adapters/opencode.ts";
 import { resolveShellDependencies } from "./adapters/hook-deps.ts";
+import { planCategoryDestinationPaths } from "./adapters/destinations.ts";
 import type { PlatformAdapter, PlatformWriteObserver } from "./adapters/types.ts";
 import {
 	PLATFORM_REWRITE_RULES,
@@ -625,7 +626,12 @@ export async function syncCategory(
 			} else if (category === "scripts") {
 				await adapter.syncScriptsDirect(deployRoot, displayName, sourcePath, false);
 			} else if (category === "rules") {
-				await adapter.syncRulesDirect(deployRoot, displayName, sourcePath, false);
+				const writeObserver: PlatformWriteObserver | undefined = transaction
+					? async (writtenPath) => {
+						await checkpointDeployTransactionPaths(transaction, [writtenPath]);
+					}
+					: undefined;
+				await adapter.syncRulesDirect(deployRoot, displayName, sourcePath, false, writeObserver);
 			}
 
 			// Establish the rollback checkpoint immediately after this adapter's
@@ -634,9 +640,10 @@ export async function syncCategory(
 			// edit made after it.  The path is the exact platform×category entry
 			// inventoried at transaction start (Codex skills use `.agents`).
 			if (transaction) {
-				await markDeployTransactionEntryExpected(
+				const plannedPaths = planCategoryDestinationPaths(platform, category, displayName);
+				await checkpointDeployTransactionPaths(
 					transaction,
-					path.join(deployRoot, `.${deployLocationForManifest(platform, category)}`, category, displayName),
+					plannedPaths.map((relativePath) => path.join(deployRoot, relativePath)),
 				);
 			}
 		}
@@ -765,7 +772,7 @@ export async function syncPlatformConfigs(
 		const pluginScope: PluginScope = context.isRootYaml ? "user" : "project";
 		const writeObserver: PlatformWriteObserver | undefined = transaction
 			? async (writtenPath) => {
-				await markDeployTransactionEntryExpected(transaction, writtenPath);
+				await checkpointDeployTransactionPaths(transaction, [writtenPath]);
 			}
 			: undefined;
 		const result = await adapter.syncPlatformYaml(
@@ -2071,28 +2078,25 @@ async function beginDeployTransaction(
 		const live = path.join(deployRoot, name);
 		const before = `${live}.txn-before-${Math.random().toString(36).slice(2)}`;
 		if (existsSync(live)) await fs.cp(live, before, { recursive: true, force: true, dereference: false });
-		entries.push({ live, before, expected: "", owners: entryOwners.get(name) });
+		entries.push({ live, before, expected: await fingerprint(live), owners: entryOwners.get(name) });
 	}
 	return { entries };
 }
 
-async function markDeployTransactionExpected(transaction: DeployTransaction | null): Promise<void> {
-	if (!transaction) return;
-	for (const entry of transaction.entries) entry.expected = await fingerprint(entry.live);
-}
-
-async function markDeployTransactionEntryExpected(
+async function checkpointDeployTransactionPaths(
 	transaction: DeployTransaction,
-	livePath: string,
+	livePaths: readonly string[],
 ): Promise<void> {
-	const normalizedLivePath = path.normalize(path.resolve(livePath));
-	const entry = transaction.entries.find(
-		(candidate) => path.normalize(path.resolve(candidate.live)) === normalizedLivePath,
-	);
-	if (!entry) return;
-	entry.expected = await fingerprint(entry.live);
-	for (const dependency of transaction.entries.filter((candidate) => candidate.owners?.includes(entry.live))) {
-		dependency.expected = await fingerprint(dependency.live);
+	for (const livePath of livePaths) {
+		const normalizedLivePath = path.normalize(path.resolve(livePath));
+		const entry = transaction.entries.find(
+			(candidate) => path.normalize(path.resolve(candidate.live)) === normalizedLivePath,
+		);
+		if (!entry) continue;
+		entry.expected = await fingerprint(entry.live);
+		for (const dependency of transaction.entries.filter((candidate) => candidate.owners?.includes(entry.live))) {
+			dependency.expected = await fingerprint(dependency.live);
+		}
 	}
 }
 
@@ -2347,7 +2351,10 @@ export async function processYaml(
 				context.projectDir || undefined,
 				deployRoot,
 			);
-			if (shouldMkdirClaude || libSourceRoots.size > 0 || platformHookTransactionPaths.length > 0) {
+			const hasPlatformYaml = (await Promise.all(
+				KNOWN_PLATFORMS.map(async (platform) => (await parseAndMergePlatformYaml(yamlDir, platform)) !== null),
+			)).some(Boolean);
+			if (shouldMkdirClaude || libSourceRoots.size > 0 || platformHookTransactionPaths.length > 0 || hasPlatformYaml) {
 				const ownedPaths: Array<string | { path: string; owner: string }> = [];
 				for (const category of CATEGORIES) {
 					const section = syncYaml[category];
@@ -2358,8 +2365,9 @@ export async function processYaml(
 						const platforms = await resolvePlatforms(item, section?.platforms, syncYaml.platforms, category);
 						for (const platform of platforms) {
 							if (!SUPPORTED_CATEGORIES[platform]?.has(category)) continue;
-							const location = deployLocationForManifest(platform, category);
-							ownedPaths.push(path.join(`.${location}`, category, resolved.displayName));
+							for (const relativePath of planCategoryDestinationPaths(platform, category, resolved.displayName)) {
+								ownedPaths.push(path.join(relativePath));
+							}
 						}
 					}
 				}
@@ -2391,8 +2399,12 @@ export async function processYaml(
 			);
 			if (shouldMkdirClaude || libSourceRoots.size > 0) {
 				await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
+				if (deployTransaction) {
+					await checkpointDeployTransactionPaths(deployTransaction, [
+						".claude/lib", ".codex/lib", ".agents/lib",
+					].map((relativePath) => path.join(deployRoot, relativePath)));
+				}
 			}
-			await markDeployTransactionExpected(deployTransaction);
 
 			// Ensure <deployRoot>/.claude exists only once wrapper/runtime preparation
 			// has succeeded. The container is never the mkdir target (AC2.2).
@@ -2410,7 +2422,6 @@ export async function processYaml(
 				ownedHookNames,
 				deployTransaction,
 			);
-			await markDeployTransactionExpected(deployTransaction);
 
 			// Reconcile the complete scripts category only after platform config succeeds.
 			await syncCategory(
@@ -2424,7 +2435,6 @@ export async function processYaml(
 				undefined,
 				deployTransaction,
 			);
-			await markDeployTransactionExpected(deployTransaction);
 
 			// Sync remaining categories.
 			for (const category of CATEGORIES) {
@@ -2440,7 +2450,6 @@ export async function processYaml(
 					undefined,
 					deployTransaction,
 				);
-				await markDeployTransactionExpected(deployTransaction);
 			}
 
 			// Sync lib — whenever this deploy target received deployable source. The
@@ -2454,8 +2463,12 @@ export async function processYaml(
 			// delete a directory this sync never owns.
 			if (shouldMkdirClaude || libSourceRoots.size > 0) {
 				await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
+				if (deployTransaction) {
+					await checkpointDeployTransactionPaths(deployTransaction, [
+						".claude/lib", ".codex/lib", ".agents/lib",
+					].map((relativePath) => path.join(deployRoot, relativePath)));
+				}
 			}
-			await markDeployTransactionExpected(deployTransaction);
 
 			// Sync docs — unconditional (not gated on shouldMkdirClaude): docs is
 			// platform-agnostic and lands directly under deployRoot, so a docs-only

@@ -46,6 +46,7 @@ import { deriveProjectName } from "../lib/omt-dir.ts";
 import { execFileSync } from "child_process";
 import { PreflightGitError } from "./lib/preflight-git.ts";
 import { composePreToolTraceCommand } from "./lib/pretool-trace-command.ts";
+import { planCategoryDestinationPaths } from "./adapters/destinations.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1982,6 +1983,142 @@ describe("syncPlatformConfigs", () => {
 });
 
 describe("processYaml platform transaction atomicity", () => {
+	it("rolls back file-backed category destinations using planner suffixes", async () => {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-file-dest-txn-"));
+		try {
+			const rootDir = path.join(tmpDir, "root");
+			const targetPath = path.join(tmpDir, "target");
+			await fs.mkdir(targetPath, { recursive: true });
+			await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [codex]\n");
+			await writeFile(path.join(rootDir, "agents", "first.md"), "# first\n");
+			await writeFile(path.join(rootDir, "agents", "second.md"), "# second\n");
+			const syncYamlPath = path.join(tmpDir, "sync.yaml");
+			await writeFile(syncYamlPath, `path: ${targetPath}\nagents:\n  platforms: [codex]\n  items: [first, second]\n`);
+			const adapter = new CodexAdapter();
+			adapter.syncAgentsDirect = async (target, displayName) => {
+				await writeFile(path.join(target, ".codex", "agents", `${displayName}.toml`), `${displayName}\n`);
+				if (displayName === "second") throw new Error("later failure");
+			};
+			const context = makeContext();
+			await processYaml(context, syncYamlPath, new Map<Platform, PlatformAdapter>([["codex", adapter]]) as AdapterMap, rootDir);
+			expect(context.failedTargets).toContain(targetPath);
+			expect(await exists(path.join(targetPath, ".codex", "agents", "first.toml"))).toBe(false);
+		} finally {
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("rolls back every file-backed planner suffix in the category matrix", async () => {
+		const cases = [
+			{ platform: "gemini" as const, category: "commands" as const, ext: ".toml" },
+			{ platform: "codex" as const, category: "agents" as const, ext: ".toml" },
+			{ platform: "claude" as const, category: "agents" as const, ext: ".md" },
+			{ platform: "opencode" as const, category: "agents" as const, ext: ".md" },
+		];
+		for (const fixtureCase of cases) {
+			const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-suffix-matrix-txn-"));
+			try {
+				const rootDir = path.join(tmpDir, "root");
+				const targetPath = path.join(tmpDir, "target");
+				await fs.mkdir(targetPath, { recursive: true });
+				await writeFile(path.join(rootDir, "config.yaml"), `use-platforms: [${fixtureCase.platform}]\n`);
+				await writeFile(path.join(rootDir, fixtureCase.category, "first.md"), "first\n");
+				await writeFile(path.join(rootDir, fixtureCase.category, "second.md"), "second\n");
+				await writeFile(path.join(tmpDir, "sync.yaml"), `path: ${targetPath}\n${fixtureCase.category}:\n  platforms: [${fixtureCase.platform}]\n  items: [first, second]\n`);
+				const adapter = makeMockAdapter(fixtureCase.platform);
+				const method = `sync${fixtureCase.category[0].toUpperCase()}${fixtureCase.category.slice(1)}Direct` as keyof PlatformAdapter;
+				(adapter as unknown as Record<string, unknown>)[method] = async (target: string, displayName: string) => {
+					const [relative] = planCategoryDestinationPaths(fixtureCase.platform, fixtureCase.category, displayName);
+					await writeFile(path.join(target, relative), `${displayName}\n`);
+					if (displayName === "second") throw new Error("later failure");
+				};
+				const context = makeContext();
+				await processYaml(context, path.join(tmpDir, "sync.yaml"), new Map<Platform, PlatformAdapter>([[fixtureCase.platform, adapter]]) as AdapterMap, rootDir);
+				expect(await exists(path.join(targetPath, planCategoryDestinationPaths(fixtureCase.platform, fixtureCase.category, "first")[0]))).toBe(false);
+				expect(fixtureCase.ext).toBe(path.extname(planCategoryDestinationPaths(fixtureCase.platform, fixtureCase.category, "first")[0]));
+			} finally {
+				await fs.rm(tmpDir, { recursive: true, force: true });
+			}
+		}
+	});
+
+	it("rolls back an OpenCode rule after rule checkpoint when a corrupt sidecar fails", async () => {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-opencode-rule-sidecar-txn-"));
+		try {
+			const rootDir = path.join(tmpDir, "root");
+			const targetPath = path.join(tmpDir, "target");
+			await fs.mkdir(targetPath, { recursive: true });
+			await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [opencode]\n");
+			await writeFile(path.join(rootDir, "rules", "policy.md"), "# policy\n");
+			await writeFile(path.join(targetPath, ".opencode", "opencode.json"), "{broken\n");
+			const syncYamlPath = path.join(tmpDir, "sync.yaml");
+			await writeFile(syncYamlPath, `path: ${targetPath}\nrules:\n  platforms: [opencode]\n  items: [policy]\n`);
+			const context = makeContext();
+			await processYaml(context, syncYamlPath, new Map<Platform, PlatformAdapter>([["opencode", opencodeAdapter]]) as AdapterMap, rootDir);
+			expect(context.failedTargets).toContain(targetPath);
+			expect(await exists(path.join(targetPath, ".opencode", "rules", "policy.md"))).toBe(false);
+			expect(await readFile(path.join(targetPath, ".opencode", "opencode.json"))).toBe("{broken\n");
+		} finally {
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("starts transactions for config-only Gemini, Codex, and OpenCode YAML", async () => {
+		const cases = [
+			{ platform: "gemini" as const, file: ".gemini/settings.json", yaml: "config:\n  theme: dark\n", old: "{\"keep\":true}\n" },
+			{ platform: "codex" as const, file: ".codex/config.toml", yaml: "config:\n  model: old\n", old: "model = \"keep\"\n" },
+			{ platform: "opencode" as const, file: ".opencode/opencode.json", yaml: "config:\n  model: new\n", old: "{\"keep\":true}\n" },
+		];
+		for (const fixtureCase of cases) {
+			const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), `sync-${fixtureCase.platform}-config-only-txn-`));
+			try {
+				const rootDir = path.join(tmpDir, "root");
+				const targetPath = path.join(tmpDir, "target");
+				await fs.mkdir(targetPath, { recursive: true });
+				await writeFile(path.join(rootDir, "config.yaml"), `use-platforms: [${fixtureCase.platform}]\n`);
+				await writeFile(path.join(tmpDir, "sync.yaml"), `path: ${targetPath}\n`);
+				await writeFile(path.join(tmpDir, `${fixtureCase.platform}.yaml`), fixtureCase.yaml);
+				await writeFile(path.join(targetPath, fixtureCase.file), fixtureCase.old);
+				const base = fixtureCase.platform === "gemini" ? new GeminiAdapter() : fixtureCase.platform === "codex" ? new CodexAdapter() : opencodeAdapter;
+				const adapter = Object.create(base) as PlatformAdapter;
+				adapter.syncPlatformYaml = async (...args: Parameters<PlatformAdapter["syncPlatformYaml"]>) => {
+					await base.syncPlatformYaml(...args);
+					throw new Error("post-config failure");
+				};
+				const context = makeContext();
+				await processYaml(context, path.join(tmpDir, "sync.yaml"), new Map<Platform, PlatformAdapter>([[fixtureCase.platform, adapter]]) as AdapterMap, rootDir);
+				expect(context.failedTargets).toContain(targetPath);
+				expect(await readFile(path.join(targetPath, fixtureCase.file))).toBe(fixtureCase.old);
+			} finally {
+				await fs.rm(tmpDir, { recursive: true, force: true });
+			}
+		}
+	});
+
+	it("preserves an unrelated external config edit after an item checkpoint", async () => {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-unrelated-cas-txn-"));
+		try {
+			const rootDir = path.join(tmpDir, "root");
+			const targetPath = path.join(tmpDir, "target");
+			await fs.mkdir(targetPath, { recursive: true });
+			await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+			await writeFile(path.join(rootDir, "skills", "first", "SKILL.md"), "first\n");
+			await writeFile(path.join(rootDir, "skills", "second", "SKILL.md"), "second\n");
+			await writeFile(path.join(targetPath, ".claude", "settings.local.json"), "old-config\n");
+			await writeFile(path.join(tmpDir, "sync.yaml"), `path: ${targetPath}\nskills:\n  platforms: [claude]\n  items: [first, second]\n`);
+			const adapter = makeMockAdapter("claude");
+			adapter.syncSkillsDirect = async (target, displayName) => {
+				await writeFile(path.join(target, ".claude", "skills", displayName, "SKILL.md"), `${displayName}\n`);
+				if (displayName === "first") await writeFile(path.join(target, ".claude", "settings.local.json"), "external-config\n");
+				if (displayName === "second") throw new Error("later failure");
+			};
+			await processYaml(makeContext(), path.join(tmpDir, "sync.yaml"), new Map<Platform, PlatformAdapter>([["claude", adapter]]) as AdapterMap, rootDir);
+			expect(await exists(path.join(targetPath, ".claude", "skills", "first"))).toBe(false);
+			expect(await readFile(path.join(targetPath, ".claude", "settings.local.json"))).toBe("external-config\n");
+		} finally {
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
+	});
 	async function runCategoryFailure(
 		items: Array<string | { component: string; platforms?: Platform[] }>,
 		platforms: Platform[],
