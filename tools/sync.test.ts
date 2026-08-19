@@ -1919,6 +1919,91 @@ describe("syncPlatformConfigs", () => {
 });
 
 describe("processYaml platform transaction atomicity", () => {
+	async function runCategoryFailure(
+		items: Array<string | { component: string; platforms?: Platform[] }>,
+		platforms: Platform[],
+		seedItem1: string | null,
+		externalAfterCheckpoint: boolean,
+		failPlatform?: Platform,
+	): Promise<{ targetPath: string; item1Path: string; cleanup: () => Promise<void> }> {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-category-txn-"));
+		const rootDir = path.join(tmpDir, "root");
+		const targetPath = path.join(tmpDir, "target");
+		await fs.mkdir(targetPath, { recursive: true });
+		await writeFile(path.join(rootDir, "config.yaml"), `use-platforms: [${platforms.join(", ")} ]\n`);
+		for (const item of items) {
+			const name = typeof item === "string" ? item : item.component;
+			await writeFile(path.join(rootDir, "skills", name, "SKILL.md"), `# ${name}\n`);
+		}
+		const item1 = typeof items[0] === "string" ? items[0] : items[0]!.component;
+		const item2 = typeof items[1] === "string" ? items[1] : items[1]!.component;
+		const item1Path = path.join(targetPath, ".claude", "skills", item1!);
+		if (seedItem1 !== null) await writeFile(path.join(item1Path, "SKILL.md"), seedItem1);
+		await writeFile(
+			path.join(tmpDir, "sync.yaml"),
+			`path: ${targetPath}\nskills:\n  platforms: [${platforms.join(", ")} ]\n  items: ${JSON.stringify(items)}\n`,
+		);
+
+		const makeWritingAdapter = (platform: Platform): PlatformAdapter => {
+			const adapter = makeMockAdapter(platform);
+			adapter.syncSkillsDirect = async (target, displayName) => {
+				const livePath = path.join(target, `.${platform}`, "skills", displayName, "SKILL.md");
+				await writeFile(livePath, `deployed-${displayName}\n`);
+				if (displayName === item2 || (failPlatform === platform && displayName === item1)) {
+					if (externalAfterCheckpoint) await writeFile(path.join(item1Path, "SKILL.md"), "external\n");
+					throw new Error("item2 failure");
+				}
+			};
+			return adapter;
+		};
+		const adapters = new Map<Platform, PlatformAdapter>(platforms.map((p) => [p, makeWritingAdapter(p)])) as AdapterMap;
+		const context = makeContext();
+		await processYaml(context, path.join(tmpDir, "sync.yaml"), adapters, rootDir);
+		return { targetPath, item1Path, cleanup: () => fs.rm(tmpDir, { recursive: true, force: true }) };
+	}
+
+	it("rolls back an absent first category item when the next item fails", async () => {
+		const fixture = await runCategoryFailure(["first", "second"], ["claude"], null, false);
+		try {
+			expect(await exists(fixture.item1Path)).toBe(false);
+		} finally {
+			await fixture.cleanup();
+		}
+	});
+
+	it("restores an existing first category item when the next item fails", async () => {
+		const fixture = await runCategoryFailure(["first", "second"], ["claude"], "old\n", false);
+		try {
+			expect(await readFile(path.join(fixture.item1Path, "SKILL.md"))).toBe("old\n");
+		} finally {
+			await fixture.cleanup();
+		}
+	});
+
+	it("preserves an external overwrite after the first category checkpoint", async () => {
+		const fixture = await runCategoryFailure(["first", "second"], ["claude"], null, true);
+		try {
+			expect(await readFile(path.join(fixture.item1Path, "SKILL.md"))).toBe("external\n");
+		} finally {
+			await fixture.cleanup();
+		}
+	});
+
+	it("rolls back the first platform when the second platform of one item fails", async () => {
+		const fixture = await runCategoryFailure(
+			[{ component: "first", platforms: ["claude", "gemini"] }, "second"],
+			["claude", "gemini"],
+			null,
+			false,
+			"gemini",
+		);
+		try {
+			expect(await exists(path.join(fixture.targetPath, ".claude", "skills", "first"))).toBe(false);
+		} finally {
+			await fixture.cleanup();
+		}
+	});
+
 	async function runPlatformFailure(kind: "settings" | "hooks", preserveExternal: boolean): Promise<string> {
 		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-platform-txn-settings-"));
 		try {

@@ -409,6 +409,7 @@ export async function syncCategory(
 	deployRoot: string,
 	libSourceRoots?: LibSourceRoots,
 	options?: SyncCategoryOptions,
+	transaction?: DeployTransaction | null,
 ): Promise<void> {
 	const section = syncYaml[category];
 	if (!section || !Array.isArray(section.items) || section.items.length === 0) {
@@ -627,6 +628,18 @@ export async function syncCategory(
 			} else if (category === "rules") {
 				await adapter.syncRulesDirect(deployRoot, displayName, sourcePath, false);
 			}
+
+			// Establish the rollback checkpoint immediately after this adapter's
+			// successful owned-path mutation.  A later item/platform may fail, and
+			// the transaction must then distinguish this OMT write from an external
+			// edit made after it.  The path is the exact platform×category entry
+			// inventoried at transaction start (Codex skills use `.agents`).
+			if (transaction) {
+				await markDeployTransactionEntryExpected(
+					transaction,
+					path.join(deployRoot, `.${deployLocationForManifest(platform, category)}`, category, displayName),
+				);
+			}
 		}
 	}
 
@@ -753,16 +766,7 @@ export async function syncPlatformConfigs(
 		const pluginScope: PluginScope = context.isRootYaml ? "user" : "project";
 		const writeObserver: PlatformWriteObserver | undefined = transaction
 			? async (writtenPath) => {
-				const normalizedWrittenPath = path.normalize(path.resolve(writtenPath));
-				const entry = transaction.entries.find(
-					(candidate) => path.normalize(path.resolve(candidate.live)) === normalizedWrittenPath,
-				);
-				if (entry) {
-					entry.expected = await fingerprint(entry.live);
-					for (const dependency of transaction.entries.filter((candidate) => candidate.owners?.includes(entry.live))) {
-						dependency.expected = await fingerprint(dependency.live);
-					}
-				}
+				await markDeployTransactionEntryExpected(transaction, writtenPath);
 			}
 			: undefined;
 		const result = await adapter.syncPlatformYaml(
@@ -2078,6 +2082,21 @@ async function markDeployTransactionExpected(transaction: DeployTransaction | nu
 	for (const entry of transaction.entries) entry.expected = await fingerprint(entry.live);
 }
 
+async function markDeployTransactionEntryExpected(
+	transaction: DeployTransaction,
+	livePath: string,
+): Promise<void> {
+	const normalizedLivePath = path.normalize(path.resolve(livePath));
+	const entry = transaction.entries.find(
+		(candidate) => path.normalize(path.resolve(candidate.live)) === normalizedLivePath,
+	);
+	if (!entry) return;
+	entry.expected = await fingerprint(entry.live);
+	for (const dependency of transaction.entries.filter((candidate) => candidate.owners?.includes(entry.live))) {
+		dependency.expected = await fingerprint(dependency.live);
+	}
+}
+
 async function finishDeployTransaction(transaction: DeployTransaction | null): Promise<void> {
 	for (const entry of transaction?.entries ?? []) await fs.rm(entry.before, { recursive: true, force: true }).catch(() => undefined);
 }
@@ -2367,6 +2386,7 @@ export async function processYaml(
 						return path.basename(component) === "pretool-trace";
 					},
 				},
+				deployTransaction,
 			);
 			if (shouldMkdirClaude || libSourceRoots.size > 0) {
 				await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
@@ -2400,6 +2420,8 @@ export async function processYaml(
 				rootDir,
 				deployRoot,
 				libSourceRoots,
+				undefined,
+				deployTransaction,
 			);
 			await markDeployTransactionExpected(deployTransaction);
 
@@ -2414,6 +2436,8 @@ export async function processYaml(
 					rootDir,
 					deployRoot,
 					libSourceRoots,
+					undefined,
+					deployTransaction,
 				);
 				await markDeployTransactionExpected(deployTransaction);
 			}
