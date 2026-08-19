@@ -67,11 +67,16 @@ import {
 import { runProvision } from "./lib/provision.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
 import { GeminiAdapter } from "./adapters/gemini.ts";
-import { CodexAdapter, cleanupCodexSkillsFossil, codexSkillsDir } from "./adapters/codex.ts";
+import {
+	CodexAdapter,
+	cleanupCodexSkillsFossil,
+	codexSkillsDir,
+	planCodexSkillsFossilCleanup,
+} from "./adapters/codex.ts";
 import { opencodeAdapter } from "./adapters/opencode.ts";
 import { resolveShellDependencies } from "./adapters/hook-deps.ts";
 import { planCategoryDestinationPaths } from "./adapters/destinations.ts";
-import type { PlatformAdapter, PlatformWriteObserver } from "./adapters/types.ts";
+import type { PlatformAdapter } from "./adapters/types.ts";
 import {
 	PLATFORM_REWRITE_RULES,
 	applyRewriteRules,
@@ -369,6 +374,35 @@ type SyncCategoryOptions = {
 };
 
 /**
+ * Inventory the concrete leaves a category adapter can mutate for one item.
+ * Directory-backed categories use the same leaf/orphan planner as the
+ * executor; a directory root is never used as a rollback entry.
+ */
+async function planCategoryMutationPaths(
+	deployRoot: string,
+	platform: Platform,
+	category: Category,
+	displayName: string,
+	sourcePath: string,
+): Promise<string[]> {
+	const destinations = planCategoryDestinationPaths(platform, category, displayName);
+	const stat = await fs.stat(sourcePath).catch((error: unknown) => {
+		if (typeof error === "object" && error !== null && Reflect.get(error, "code") === "ENOENT") return undefined;
+		throw error;
+	});
+	if (!stat?.isDirectory() || (category !== "skills" && category !== "scripts")) {
+		return destinations.map((relativePath) => path.join(deployRoot, relativePath));
+	}
+	const paths: string[] = [];
+	for (const relativePath of destinations) {
+		const target = path.join(deployRoot, relativePath);
+		const planned = await planSyncDirectoryMutations(sourcePath, target);
+		paths.push(...planned);
+	}
+	return paths;
+}
+
+/**
  * Platforms whose adapters actually write hooks. Hooks are not a sync.yaml
  * category — they arrive through `{platform}.yaml` — so SUPPORTED_CATEGORIES
  * has no entry to consult for them, and this is the equivalent table for that
@@ -661,29 +695,20 @@ export async function syncCategory(
 					transaction ?? undefined,
 				);
 			} else if (category === "commands") {
-				await adapter.syncCommandsDirect(deployRoot, displayName, sourcePath, false);
+				await adapter.syncCommandsDirect(deployRoot, displayName, sourcePath, false, transaction ?? undefined);
 			} else if (category === "skills") {
-				await adapter.syncSkillsDirect(deployRoot, displayName, sourcePath, false);
+				await adapter.syncSkillsDirect(deployRoot, displayName, sourcePath, false, transaction ?? undefined);
 			} else if (category === "scripts") {
-				await adapter.syncScriptsDirect(deployRoot, displayName, sourcePath, false);
+				await adapter.syncScriptsDirect(deployRoot, displayName, sourcePath, false, transaction ?? undefined);
 			} else if (category === "rules") {
-				const writeObserver: PlatformWriteObserver | undefined = transaction
-					? async (writtenPath) => {
-						await transaction.checkpoint([writtenPath]);
-					}
-					: undefined;
-				await adapter.syncRulesDirect(deployRoot, displayName, sourcePath, false, writeObserver);
-			}
-
-			// Establish the rollback checkpoint immediately after this adapter's
-			// successful owned-path mutation.  A later item/platform may fail, and
-			// the transaction must then distinguish this OMT write from an external
-			// edit made after it.  The path is the exact platform×category entry
-			// inventoried at transaction start (Codex skills use `.agents`).
-			if (transaction) {
-				const plannedPaths = planCategoryDestinationPaths(platform, category, displayName);
-				await transaction.checkpoint(
-					plannedPaths.map((relativePath) => path.join(deployRoot, relativePath)),
+				const writeObserver = undefined;
+				await adapter.syncRulesDirect(
+					deployRoot,
+					displayName,
+					sourcePath,
+					false,
+					writeObserver,
+					transaction ?? undefined,
 				);
 			}
 		}
@@ -718,6 +743,7 @@ export async function syncCategory(
 			context.backupDest,
 			context.dryRun,
 			deployedNames.get("agents") ?? new Set(),
+			transaction ?? undefined,
 		);
 		if (!context.dryRun) {
 			await removeManifestPair(
@@ -816,11 +842,7 @@ export async function syncPlatformConfigs(
 		// was a pre-fan-out relic. (ProjectKeyError also propagates for the same
 		// reason — a local MCP not written to ~/.claude.json.)
 		const pluginScope: PluginScope = context.isRootYaml ? "user" : "project";
-		const writeObserver: PlatformWriteObserver | undefined = transaction
-			? async (writtenPath) => {
-				await transaction.checkpoint([writtenPath]);
-			}
-			: undefined;
+		const writeObserver = undefined;
 		const result = await adapter.syncPlatformYaml(
 			targetPath,
 			parsedYaml,
@@ -2373,13 +2395,22 @@ export async function processYaml(
 						const platforms = await resolvePlatforms(item, section?.platforms, syncYaml.platforms, category);
 						for (const platform of platforms) {
 							if (!SUPPORTED_CATEGORIES[platform]?.has(category)) continue;
-							for (const relativePath of planCategoryDestinationPaths(platform, category, resolved.displayName)) {
-								ownedPaths.push(path.join(relativePath));
-							}
+							ownedPaths.push(
+								...(await planCategoryMutationPaths(
+									deployRoot,
+									platform,
+									category,
+									resolved.displayName,
+									resolved.path,
+								)),
+							);
 						}
 					}
 				}
 				ownedPaths.push(...platformHookTransactionPaths);
+				if (codexSkillNames.size > 0 && adapters.get("codex")) {
+					ownedPaths.push(...await planCodexSkillsFossilCleanup(deployRoot, codexSkillNames));
+				}
 				deployTransaction = await DeployTransaction.begin(
 					deployRoot,
 					context.dryRun,

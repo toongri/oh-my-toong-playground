@@ -3,7 +3,17 @@ import fs from "fs/promises";
 import fs2 from "fs";
 import path from "path";
 import os from "os";
+import type { DeployMutationHooks } from "./lib/deploy-transaction.ts";
 const parseYaml = Bun.YAML.parse;
+
+async function writeWithMutation(
+	hooks: DeployMutationHooks | undefined,
+	target: string,
+	operation: () => Promise<void>,
+): Promise<void> {
+	if (hooks) await hooks.mutate(target, operation);
+	else await operation();
+}
 
 import {
 	syncCategory,
@@ -260,7 +270,7 @@ describe("processYaml — complete lib precollection before writes", () => {
 
 		expect(context.failedTargets).toContain(targetPath);
 		expect(await exists(path.join(targetPath, ".claude", "lib"))).toBe(false);
-		expect(await exists(path.join(targetPath, ".claude", "scripts", "wrapper"))).toBe(false);
+		expect(await exists(path.join(targetPath, ".claude", "scripts", "wrapper", "index.ts"))).toBe(false);
 	});
 
 	it("preserves an existing lib path changed concurrently before rollback", async () => {
@@ -690,6 +700,36 @@ describe("deploysToClaudeDotDir", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncCategory", () => {
+	it("does not pass the legacy rules observer when a transaction is active", async () => {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-category-observer-"));
+		try {
+			const rootDir = path.join(tmpDir, "root");
+			const targetPath = path.join(tmpDir, "target");
+			await writeFile(path.join(rootDir, "rules", "policy.md"), "policy\n");
+			const adapter = makeMockAdapter("claude");
+			let legacyObserver: unknown = "unset";
+			let receivedHooks: unknown;
+			adapter.syncRulesDirect = async (...args) => {
+				legacyObserver = args[4];
+				receivedHooks = args[5];
+			};
+			const transaction = { mutate: async () => undefined };
+			const context = makeContext();
+			await syncCategory(
+				context,
+				"rules",
+				{ path: targetPath, rules: { items: ["policy"], platforms: ["claude"] } } as SyncYaml,
+				new Map<Platform, PlatformAdapter>([["claude", adapter]]) as AdapterMap,
+				rootDir,
+				targetPath,
+				undefined,
+				{ reconcile: false },
+				transaction as never,
+			);
+			expect(legacyObserver).toBeUndefined();
+			expect(receivedHooks).toBe(transaction);
+		} finally { await fs.rm(tmpDir, { recursive: true, force: true }); }
+	});
 	let tmpDir: string;
 	let rootDir: string;
 	let targetPath: string;
@@ -1602,6 +1642,31 @@ describe("syncPlatformConfigs", () => {
 		).toHaveLength(0);
 	});
 
+	it("does not pass a legacy observer to platform YAML when a transaction is active", async () => {
+		await writeFile(path.join(yamlDir, "gemini.yaml"), "config:\n  theme: dark\n");
+		const adapter = makeMockAdapter("gemini");
+		let legacyObserver: unknown = "unset";
+		let receivedHooks: unknown;
+		adapter.syncPlatformYaml = async (...args) => {
+			legacyObserver = args[4];
+			receivedHooks = args[5];
+			return { processedSections: ["config"], modelMap: undefined };
+		};
+		const transaction = { mutate: async () => undefined };
+		await syncPlatformConfigs(
+			makeContext(),
+			targetPath,
+			yamlDir,
+			new Map<Platform, PlatformAdapter>([["gemini", adapter]]) as AdapterMap,
+			rootDir,
+			undefined,
+			undefined,
+			transaction as never,
+		);
+		expect(legacyObserver).toBeUndefined();
+		expect(receivedHooks).toBe(transaction);
+	});
+
 	it("rethrows ProjectKeyError instead of swallowing it (local MCP key-derivation must fail loudly)", async () => {
 		await writeFile(
 			path.join(yamlDir, "claude.yaml"),
@@ -1983,6 +2048,50 @@ describe("syncPlatformConfigs", () => {
 });
 
 describe("processYaml platform transaction atomicity", () => {
+	it("rolls back directory leaves and orphan deletion after a later category failure", async () => {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-directory-leaf-txn-"));
+		try {
+			const rootDir = path.join(tmpDir, "root");
+			const targetPath = path.join(tmpDir, "target");
+			await fs.mkdir(targetPath, { recursive: true });
+			await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+			await writeFile(path.join(rootDir, "skills", "first", "SKILL.md"), "new\n");
+			await writeFile(path.join(targetPath, ".claude", "skills", "first", "orphan.txt"), "old orphan\n");
+			await writeFile(path.join(tmpDir, "sync.yaml"), `path: ${targetPath}\nskills:\n  platforms: [claude]\n  items: [first]\nrules:\n  platforms: [claude]\n  items: [first]\n`);
+			await writeFile(path.join(rootDir, "rules", "first.md"), "rule\n");
+			class FailingAdapter extends ClaudeAdapter {
+				override async syncRulesDirect(): Promise<void> { throw new Error("later category failure"); }
+			}
+			const context = makeContext();
+			await processYaml(context, path.join(tmpDir, "sync.yaml"), new Map<Platform, PlatformAdapter>([["claude", new FailingAdapter()]]) as AdapterMap, rootDir);
+			expect(context.failedTargets).toContain(targetPath);
+			expect(await readFile(path.join(targetPath, ".claude", "skills", "first", "orphan.txt"))).toBe("old orphan\n");
+			expect(await exists(path.join(targetPath, ".claude", "skills", "first", "SKILL.md"))).toBe(false);
+		} finally { await fs.rm(tmpDir, { recursive: true, force: true }); }
+	});
+
+	it("journals Codex fossil entry cleanup so a later failure restores it", async () => {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-codex-fossil-txn-"));
+		try {
+			const rootDir = path.join(tmpDir, "root");
+			const targetPath = path.join(tmpDir, "target");
+			await fs.mkdir(targetPath, { recursive: true });
+			await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [codex]\n");
+			await writeFile(path.join(rootDir, "skills", "first", "SKILL.md"), "new\n");
+			await writeFile(path.join(targetPath, ".codex", "skills", "first", "old.txt"), "fossil\n");
+			await writeFile(path.join(targetPath, ".agents", "skills", "first", "SKILL.md"), "counterpart\n");
+			await writeFile(path.join(rootDir, "rules", "first.md"), "rule\n");
+			await writeFile(path.join(tmpDir, "sync.yaml"), `path: ${targetPath}\nskills:\n  platforms: [codex]\n  items: [first]\nrules:\n  platforms: [codex]\n  items: [first]\n`);
+			class FailingAdapter extends CodexAdapter {
+				override async syncRulesDirect(): Promise<void> { throw new Error("later category failure"); }
+			}
+			const context = makeContext();
+			await processYaml(context, path.join(tmpDir, "sync.yaml"), new Map<Platform, PlatformAdapter>([["codex", new FailingAdapter()]]) as AdapterMap, rootDir);
+			expect(context.failedTargets).toContain(targetPath);
+			expect(await readFile(path.join(targetPath, ".codex", "skills", "first", "old.txt"))).toBe("fossil\n");
+		} finally { await fs.rm(tmpDir, { recursive: true, force: true }); }
+	});
+
 	it("restores orphan leaves and the raw manifest after a later category failure", async () => {
 		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-manifest-txn-"));
 		try {
@@ -2001,8 +2110,8 @@ describe("processYaml platform transaction atomicity", () => {
 				`path: ${targetPath}\nagents:\n  platforms: [claude]\n  items: [${agents}]\n${skills ? `skills:\n  platforms: [claude]\n  items: [${skills}]\n` : ""}`,
 			);
 			const adapter = new ClaudeAdapter();
-			adapter.syncAgentsDirect = async (target, displayName) => {
-				await writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName} deployed\n`);
+			adapter.syncAgentsDirect = async (target, displayName, _source, _skills, _hooks, _dryRun, _modelMap, mutationHooks) => {
+				await writeWithMutation(mutationHooks, path.join(target, ".claude", "agents", `${displayName}.md`), () => writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName} deployed\n`));
 			};
 			await writeYaml("old, keep");
 			await processYaml(makeContext(), syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", adapter]]) as AdapterMap, rootDir);
@@ -2012,8 +2121,8 @@ describe("processYaml platform transaction atomicity", () => {
 			const oldBefore = await readFile(oldPath);
 
 			class FailingAdapter extends ClaudeAdapter {
-				override async syncAgentsDirect(target: string, displayName: string): Promise<void> {
-					await writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName} updated\n`);
+				override async syncAgentsDirect(target: string, displayName: string, _source: string, _skills?: string[], _hooks?: unknown[], _dryRun?: boolean, _modelMap?: ModelMap, mutationHooks?: DeployMutationHooks): Promise<void> {
+					await writeWithMutation(mutationHooks, path.join(target, ".claude", "agents", `${displayName}.md`), () => writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName} updated\n`));
 				}
 				override async syncSkillsDirect(): Promise<void> { throw new Error("later category failure"); }
 			}
@@ -2041,8 +2150,8 @@ describe("processYaml platform transaction atomicity", () => {
 			const syncYamlPath = path.join(tmpDir, "sync.yaml");
 			const writeYaml = async (agents: string) => writeFile(syncYamlPath, `path: ${targetPath}\nagents:\n  platforms: [claude]\n  items: [${agents}]\n`);
 			const initial = new ClaudeAdapter();
-			initial.syncAgentsDirect = async (target, displayName) => {
-				await writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName}\n`);
+			initial.syncAgentsDirect = async (target, displayName, _source, _skills, _hooks, _dryRun, _modelMap, mutationHooks) => {
+				await writeWithMutation(mutationHooks, path.join(target, ".claude", "agents", `${displayName}.md`), () => writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName}\n`));
 			};
 			await writeYaml("old, keep");
 			await processYaml(makeContext(), syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", initial]]) as AdapterMap, rootDir);
@@ -2050,8 +2159,8 @@ describe("processYaml platform transaction atomicity", () => {
 			const manifestBefore = await readFile(manifestPath);
 			const oldPath = path.join(targetPath, ".claude", "agents", "old.md");
 			const conflicting = new ClaudeAdapter();
-			conflicting.syncAgentsDirect = async (target, displayName) => {
-				await writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName} updated\n`);
+			conflicting.syncAgentsDirect = async (target, displayName, _source, _skills, _hooks, _dryRun, _modelMap, mutationHooks) => {
+				await writeWithMutation(mutationHooks, path.join(target, ".claude", "agents", `${displayName}.md`), () => writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName} updated\n`));
 				if (displayName === "keep") await writeFile(oldPath, "external edit\n");
 			};
 			await writeYaml("keep");
@@ -2084,8 +2193,8 @@ describe("processYaml platform transaction atomicity", () => {
 				`path: ${targetPath}\nagents:\n  platforms: [claude]\n  items: [${declared}]\ncommands:\n  platforms: [claude]\n  items: [${declared}]\n${skills ? `skills:\n  platforms: [claude]\n  items: [${skills}]\n` : ""}`,
 			);
 			const initial = new ClaudeAdapter();
-			initial.syncAgentsDirect = async (target, displayName) => writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName}\n`);
-			initial.syncCommandsDirect = async (target, displayName) => writeFile(path.join(target, ".claude", "commands", `${displayName}.md`), `${displayName}\n`);
+			initial.syncAgentsDirect = async (target, displayName, _source, _skills, _hooks, _dryRun, _modelMap, mutationHooks) => writeWithMutation(mutationHooks, path.join(target, ".claude", "agents", `${displayName}.md`), () => writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName}\n`));
+			initial.syncCommandsDirect = async (target, displayName, _source, _dryRun, mutationHooks) => writeWithMutation(mutationHooks, path.join(target, ".claude", "commands", `${displayName}.md`), () => writeFile(path.join(target, ".claude", "commands", `${displayName}.md`), `${displayName}\n`));
 			await writeYaml("old, keep");
 			await processYaml(makeContext(), syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", initial]]) as AdapterMap, rootDir);
 			const manifestPath = path.join(targetPath, ".omt", "sync-manifest.json");
@@ -2093,8 +2202,8 @@ describe("processYaml platform transaction atomicity", () => {
 			const agentOld = path.join(targetPath, ".claude", "agents", "old.md");
 			const commandOld = path.join(targetPath, ".claude", "commands", "old.md");
 			class FailingAdapter extends ClaudeAdapter {
-				override async syncAgentsDirect(target: string, displayName: string): Promise<void> { await writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName} updated\n`); }
-				override async syncCommandsDirect(target: string, displayName: string): Promise<void> { await writeFile(path.join(target, ".claude", "commands", `${displayName}.md`), `${displayName} updated\n`); }
+				override async syncAgentsDirect(target: string, displayName: string, _source: string, _skills?: string[], _hooks?: unknown[], _dryRun?: boolean, _modelMap?: ModelMap, mutationHooks?: DeployMutationHooks): Promise<void> { await writeWithMutation(mutationHooks, path.join(target, ".claude", "agents", `${displayName}.md`), () => writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName} updated\n`)); }
+				override async syncCommandsDirect(target: string, displayName: string, _source: string, _dryRun?: boolean, mutationHooks?: DeployMutationHooks): Promise<void> { await writeWithMutation(mutationHooks, path.join(target, ".claude", "commands", `${displayName}.md`), () => writeFile(path.join(target, ".claude", "commands", `${displayName}.md`), `${displayName} updated\n`)); }
 				override async syncSkillsDirect(): Promise<void> { throw new Error("later pair failure"); }
 			}
 			await writeYaml("keep", "later");
@@ -2124,7 +2233,7 @@ describe("processYaml platform transaction atomicity", () => {
 				const syncYamlPath = path.join(tmpDir, "sync.yaml");
 				await writeFile(syncYamlPath, `path: ${targetPath}\nagents:\n  platforms: [claude]\n  items: [keep]\nskills:\n  platforms: [claude]\n  items: [later]\n`);
 				class FailingAdapter extends ClaudeAdapter {
-					override async syncAgentsDirect(target: string, displayName: string): Promise<void> { await writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), "new\n"); }
+					override async syncAgentsDirect(target: string, displayName: string, _source: string, _skills?: string[], _hooks?: unknown[], _dryRun?: boolean, _modelMap?: ModelMap, mutationHooks?: DeployMutationHooks): Promise<void> { await writeWithMutation(mutationHooks, path.join(target, ".claude", "agents", `${displayName}.md`), () => writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), "new\n")); }
 					override async syncSkillsDirect(): Promise<void> { throw new Error("bootstrap later failure"); }
 				}
 				const failed = makeContext();
@@ -2152,7 +2261,7 @@ describe("processYaml platform transaction atomicity", () => {
 			const syncYamlPath = path.join(tmpDir, "sync.yaml");
 			const writeYaml = async (items: string) => writeFile(syncYamlPath, `path: ${targetPath}\nagents:\n  platforms: [claude]\n  items: [${items}]\n`);
 			const initial = new ClaudeAdapter();
-			initial.syncAgentsDirect = async (target, displayName) => writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName}\n`);
+			initial.syncAgentsDirect = async (target, displayName, _source, _skills, _hooks, _dryRun, _modelMap, mutationHooks) => writeWithMutation(mutationHooks, path.join(target, ".claude", "agents", `${displayName}.md`), () => writeFile(path.join(target, ".claude", "agents", `${displayName}.md`), `${displayName}\n`));
 			await writeYaml("old1, old2, keep");
 			await processYaml(makeContext(), syncYamlPath, new Map<Platform, PlatformAdapter>([["claude", initial]]) as AdapterMap, rootDir);
 			const manifestPath = path.join(targetPath, ".omt", "sync-manifest.json");
@@ -2207,8 +2316,8 @@ describe("processYaml platform transaction atomicity", () => {
 			const syncYamlPath = path.join(tmpDir, "sync.yaml");
 			await writeFile(syncYamlPath, `path: ${targetPath}\nagents:\n  platforms: [codex]\n  items: [first, second]\n`);
 			const adapter = new CodexAdapter();
-			adapter.syncAgentsDirect = async (target, displayName) => {
-				await writeFile(path.join(target, ".codex", "agents", `${displayName}.toml`), `${displayName}\n`);
+			adapter.syncAgentsDirect = async (target, displayName, _source, _skills, _hooks, _dryRun, _modelMap, mutationHooks) => {
+				await writeWithMutation(mutationHooks, path.join(target, ".codex", "agents", `${displayName}.toml`), () => writeFile(path.join(target, ".codex", "agents", `${displayName}.toml`), `${displayName}\n`));
 				if (displayName === "second") throw new Error("later failure");
 			};
 			const context = makeContext();
@@ -2239,9 +2348,10 @@ describe("processYaml platform transaction atomicity", () => {
 				await writeFile(path.join(tmpDir, "sync.yaml"), `path: ${targetPath}\n${fixtureCase.category}:\n  platforms: [${fixtureCase.platform}]\n  items: [first, second]\n`);
 				const adapter = makeMockAdapter(fixtureCase.platform);
 				const method = `sync${fixtureCase.category[0].toUpperCase()}${fixtureCase.category.slice(1)}Direct` as keyof PlatformAdapter;
-				(adapter as unknown as Record<string, unknown>)[method] = async (target: string, displayName: string) => {
+				(adapter as unknown as Record<string, unknown>)[method] = async (target: string, displayName: string, ...args: unknown[]) => {
+					const mutationHooks = args.at(-1) as DeployMutationHooks | undefined;
 					const [relative] = planCategoryDestinationPaths(fixtureCase.platform, fixtureCase.category, displayName);
-					await writeFile(path.join(target, relative), `${displayName}\n`);
+					await writeWithMutation(mutationHooks, path.join(target, relative), () => writeFile(path.join(target, relative), `${displayName}\n`));
 					if (displayName === "second") throw new Error("later failure");
 				};
 				const context = makeContext();
@@ -2319,13 +2429,13 @@ describe("processYaml platform transaction atomicity", () => {
 			await writeFile(path.join(targetPath, ".claude", "settings.local.json"), "old-config\n");
 			await writeFile(path.join(tmpDir, "sync.yaml"), `path: ${targetPath}\nskills:\n  platforms: [claude]\n  items: [first, second]\n`);
 			const adapter = makeMockAdapter("claude");
-			adapter.syncSkillsDirect = async (target, displayName) => {
-				await writeFile(path.join(target, ".claude", "skills", displayName, "SKILL.md"), `${displayName}\n`);
+			adapter.syncSkillsDirect = async (target, displayName, _source, _dryRun, mutationHooks) => {
+				await writeWithMutation(mutationHooks, path.join(target, ".claude", "skills", displayName, "SKILL.md"), () => writeFile(path.join(target, ".claude", "skills", displayName, "SKILL.md"), `${displayName}\n`));
 				if (displayName === "first") await writeFile(path.join(target, ".claude", "settings.local.json"), "external-config\n");
 				if (displayName === "second") throw new Error("later failure");
 			};
 			await processYaml(makeContext(), path.join(tmpDir, "sync.yaml"), new Map<Platform, PlatformAdapter>([["claude", adapter]]) as AdapterMap, rootDir);
-			expect(await exists(path.join(targetPath, ".claude", "skills", "first"))).toBe(false);
+			expect(await exists(path.join(targetPath, ".claude", "skills", "first", "SKILL.md"))).toBe(false);
 			expect(await readFile(path.join(targetPath, ".claude", "settings.local.json"))).toBe("external-config\n");
 		} finally {
 			await fs.rm(tmpDir, { recursive: true, force: true });
@@ -2358,9 +2468,9 @@ describe("processYaml platform transaction atomicity", () => {
 
 		const makeWritingAdapter = (platform: Platform): PlatformAdapter => {
 			const adapter = makeMockAdapter(platform);
-			adapter.syncSkillsDirect = async (target, displayName) => {
+			adapter.syncSkillsDirect = async (target, displayName, _source, _dryRun, mutationHooks) => {
 				const livePath = path.join(target, `.${platform}`, "skills", displayName, "SKILL.md");
-				await writeFile(livePath, `deployed-${displayName}\n`);
+				await writeWithMutation(mutationHooks, livePath, () => writeFile(livePath, `deployed-${displayName}\n`));
 				if (displayName === item2 || (failPlatform === platform && displayName === item1)) {
 					if (externalAfterCheckpoint) await writeFile(path.join(item1Path, "SKILL.md"), "external\n");
 					throw new Error("item2 failure");
@@ -2377,7 +2487,7 @@ describe("processYaml platform transaction atomicity", () => {
 	it("rolls back an absent first category item when the next item fails", async () => {
 		const fixture = await runCategoryFailure(["first", "second"], ["claude"], null, false);
 		try {
-			expect(await exists(fixture.item1Path)).toBe(false);
+			expect(await exists(path.join(fixture.item1Path, "SKILL.md"))).toBe(false);
 		} finally {
 			await fixture.cleanup();
 		}
@@ -2410,7 +2520,7 @@ describe("processYaml platform transaction atomicity", () => {
 			"gemini",
 		);
 		try {
-			expect(await exists(path.join(fixture.targetPath, ".claude", "skills", "first"))).toBe(false);
+			expect(await exists(path.join(fixture.targetPath, ".claude", "skills", "first", "SKILL.md"))).toBe(false);
 		} finally {
 			await fixture.cleanup();
 		}
