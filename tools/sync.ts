@@ -243,8 +243,14 @@ async function collectPlatformHookTransactionPaths(
 				if (typeof component !== "string" || !component) continue;
 				const resolved = resolveComponentPath(component, "hooks", rootDir, projectDir);
 				if ("error" in resolved) continue;
-				if (ownedHookNames) addOwnedName(ownedHookNames, platform, resolved.displayName);
-				await addHookBundle(platform, resolved.path, resolved.displayName);
+				// Platform YAML hook adapters receive the resolved absolute source path
+				// and derive the deployed name with path.basename(sourcePath). Keep the
+				// transaction inventory and ownership provenance on that same name (a
+				// nested relative ref such as `claude/pre-tool-enforcer.sh` must not
+				// become part of the deployed filename).
+				const deployedName = path.basename(resolved.path);
+				if (ownedHookNames) addOwnedName(ownedHookNames, platform, deployedName);
+				await addHookBundle(platform, resolved.path, deployedName);
 			}
 		}
 	}
@@ -873,7 +879,9 @@ export async function syncPlatformConfigs(
 						// Resolving a component is not deploying one: a platform whose
 						// adapter skips hooks outright owns nothing under its `hooks/`.
 						if (ownedHookNames && HOOK_DEPLOYING_PLATFORMS.includes(platform)) {
-							addOwnedName(ownedHookNames, platform, resolved.displayName);
+							// syncPlatformYaml adapters derive hook destinations from the
+							// resolved absolute path (path.basename), not resolver displayName.
+							addOwnedName(ownedHookNames, platform, path.basename(resolved.path));
 						}
 					}
 				}

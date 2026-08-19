@@ -345,6 +345,17 @@ describe("generated PreToolUse trace runtime", () => {
 		adapters.set("codex", new CodexAdapter());
 		process.env.OMT_DIR = omt;
 		await processYaml(createContext(false), path.join(root, "sync.yaml"), adapters, root);
+		// Platform YAML adapters derive hook destinations from the resolved source
+		// basename. This guards the transaction inventory against the nested ref
+		// (`claude/<hook>`) used by the fixture and keeps ownership on that same leaf.
+		for (const platform of ["claude", "codex"] as const) {
+			for (const item of inventories.get(platform)!) {
+				if (typeof item.component !== "string") continue;
+				const hookName = path.basename(item.component);
+				expect(await fs.stat(path.join(target, `.${platform}`, "hooks", hookName)).then(() => true).catch(() => false)).toBe(true);
+				expect(await fs.stat(path.join(target, `.${platform}`, "hooks", platform, hookName)).then(() => true).catch(() => false)).toBe(false);
+			}
+		}
 		for (const platform of [".claude", ".codex"]) {
 			for (const file of ["scripts/pretool-trace/index.ts", "scripts/pretool-trace/storage.ts", "lib/omt-dir.ts"]) expect(await fs.stat(path.join(target, platform, file)).then(() => true).catch(() => false)).toBe(true);
 			expect(await fs.readFile(path.join(target, platform, "scripts/pretool-trace/storage.ts"), "utf8")).not.toContain("@lib");
