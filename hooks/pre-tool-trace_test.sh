@@ -135,7 +135,7 @@ test_cleanup_handoff_and_evidence_boundary() {
   [ ! -e "$custom/pretool-trace/events.jsonl.1" ] || fail "custom cleanup did not reap stale trace"
   [ ! -e "$stale_key" ] || fail "custom cleanup did not reap stale key"
   [ -e "$fresh_key" ] || fail "fresh key removed"
-  [ "$(stat -f '%Lp' "$fresh_key")" = 600 ] || fail "fresh key mode"
+  [ "$(stat -c '%a' "$fresh_key" 2>/dev/null || stat -f '%Lp' "$fresh_key")" = 600 ] || fail "fresh key mode"
   [ -e "$custom/pretool-trace/events.jsonl" ] && [ -e "$custom/evidence/pretool-trace/wi-10/resolver.txt" ] || fail "fresh artifacts removed"
   [ ! -e "$custom/evidence/pretool-trace/wi-10/stale.txt" ] || fail "custom cleanup did not reap stale evidence"
   [ -e "$default_root/pretool-trace/events.jsonl" ] || fail "default root sentinel changed"
