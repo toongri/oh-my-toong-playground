@@ -488,7 +488,10 @@ describe("worker.ts 종료 경로 — reapOwnProcessGroup 연결", () => {
 					// 자손이 실제로 살아 있었음을 먼저 확인 — 마커가 나타날 때까지 폴링한다.
 					// 이게 없으면 "애초에 아무것도 안 떴는데 0개라서 통과"하는 공허한
 					// 초록이 된다. 이 단계는 필수다.
-					const spawnDeadline = Date.now() + 5000;
+					// 상한은 '언제 실패를 선언할지'만 정한다 — 마커가 끝내 안 나타나면
+					// 그대로 실패한다. 전체 스위트 부하에서 bun 기동이 5.8초까지 늘어난
+					// 것이 실측돼, 5초 상한은 결함이 아니라 부하 때문에 터졌다.
+					const spawnDeadline = Date.now() + 30_000;
 					while (!fs.existsSync(markerPath) && Date.now() < spawnDeadline) {
 						await new Promise((resolve) => setTimeout(resolve, 50));
 					}
@@ -500,7 +503,7 @@ describe("worker.ts 종료 경로 — reapOwnProcessGroup 연결", () => {
 
 					// 워커 종료(스크립트의 3초 대기 + close 이벤트) + 자가회수 유예(5초) +
 					// 여유분을 기다린 뒤, 그룹이 완전히 회수됐는지 확인한다.
-					const reapDeadline = Date.now() + 20000;
+					const reapDeadline = Date.now() + 45_000;
 					let remaining = processesInGroup(workerPgid);
 					while (remaining.length > 0 && Date.now() < reapDeadline) {
 						await new Promise((resolve) => setTimeout(resolve, 300));
@@ -520,6 +523,6 @@ describe("worker.ts 종료 경로 — reapOwnProcessGroup 연결", () => {
 				fs.rmSync(tmpDir, { recursive: true, force: true });
 			}
 		},
-		60000,
+		120_000,
 	);
 });

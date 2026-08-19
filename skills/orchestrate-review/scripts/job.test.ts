@@ -1702,7 +1702,8 @@ describe("classifyReapedOrphans", () => {
 		process.kill(-pgid, "SIGKILL");
 		// SIGKILL is asynchronous — poll until the group is actually gone before
 		// asserting, or this test would flake on a slow host.
-		for (let i = 0; i < 50 && isPgidAlive(pgid); i++) {
+		const killDeadline = Date.now() + 45_000;
+		while (isPgidAlive(pgid) && Date.now() < killDeadline) {
 			await new Promise((resolve) => setTimeout(resolve, 20));
 		}
 		expect(isPgidAlive(pgid)).toBe(false);
@@ -3855,7 +3856,9 @@ describe("start + collect integration", () => {
 			// safely overwrite status.json without a race.
 			const membersDir = path.join(jobDir, "members");
 			const ACTIVE_STATES = new Set(["queued", "running", "retrying"]);
-			const deadline = Date.now() + 15000;
+			// 상한 초과 시 아래 덮어쓰기가 워커와 경합하므로, 부하에 밀려 만료되지
+			// 않도록 넉넉히 잡는다. 워커가 끝내 종료 상태에 못 가면 결과는 동일하다.
+			const deadline = Date.now() + 45_000;
 			while (Date.now() < deadline) {
 				const allTerminal = fs.readdirSync(membersDir).every((entry) => {
 					try {
@@ -5365,7 +5368,9 @@ describe("start durable review identity", () => {
 		);
 	}
 
-	async function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
+	// 기본 상한은 실패 선언 시점만 정한다 — 조건이 끝내 성립하지 않으면 그대로
+	// throw한다. 이 대기는 스폰된 프로세스를 기다리므로 부하에 밀릴 수 있다.
+	async function waitFor(predicate: () => boolean, timeoutMs = 45_000): Promise<void> {
 		const deadline = Date.now() + timeoutMs;
 		while (!predicate()) {
 			if (Date.now() >= deadline) throw new Error("timed out waiting for test condition");

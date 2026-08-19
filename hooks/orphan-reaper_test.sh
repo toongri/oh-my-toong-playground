@@ -248,8 +248,21 @@ EOF
     fi
 
     local log_file="$omt_dir/logs/orphan-reaper.log"
+    # Ceiling derived from a measured control, not invented: the reap runs
+    # detached, and its dominant cost is one bun startup. Timing a bun startup
+    # right here prices that on THIS machine under THIS load, so a loaded
+    # machine that slows the detached reap slows the control the same way and
+    # the window stretches with it. Ten of those, with a 20s floor so a
+    # sub-second control still leaves the window this test has always had.
+    local ctl_start ctl_end ctl_seconds
+    printf 'process.exit(0);\n' > "$TEST_TMP_DIR/reaplog-control.ts"
+    ctl_start=$(date +%s)
+    bun "$TEST_TMP_DIR/reaplog-control.ts" > /dev/null 2>&1 || true
+    ctl_end=$(date +%s)
+    ctl_seconds=$((ctl_end - ctl_start))
+    local max_wait=$(( (ctl_seconds + 1) * 10 ))
+    [[ "$max_wait" -lt 20 ]] && max_wait=20
     local waited=0
-    local max_wait=20
     while [[ ! -s "$log_file" && "$waited" -lt "$max_wait" ]]; do
         sleep 1
         waited=$((waited + 1))
