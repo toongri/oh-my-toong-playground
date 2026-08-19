@@ -9,6 +9,7 @@ import {
 	buildMcpTomlContent,
 	resolveCodexAgentModel,
 	cleanupCodexSkillsFossil,
+	codexSkillsDir,
 } from "./codex.ts";
 import type { ModelMap } from "../lib/types.ts";
 
@@ -96,6 +97,10 @@ describe("CodexAdapter", () => {
 
 	afterEach(async () => {
 		await fs.rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("preserves relative target semantics for the planner-backed skills root", () => {
+		expect(codexSkillsDir("relative-target")).toBe(path.join("relative-target", ".agents", "skills"));
 	});
 
 	// ---------------------------------------------------------------------------

@@ -34,6 +34,20 @@ import type {
 	PluginScope,
 } from "../lib/types.ts";
 import type { PlatformAdapter, PlatformWriteObserver } from "./types.ts";
+import { planCategoryDestinationPaths, type DestinationCategory } from "./destinations.ts";
+
+/** Resolve a Codex component destination by combining the shared plan with its deploy root. */
+function codexDestinationPath(
+	targetPath: string,
+	category: DestinationCategory,
+	displayName: string,
+): string {
+	const [relativePath] = planCategoryDestinationPaths("codex", category, displayName);
+	if (!relativePath) {
+		throw new Error(`Codex has no destination for category '${category}'`);
+	}
+	return path.join(targetPath, relativePath);
+}
 
 // =============================================================================
 // Model Map Applier
@@ -185,7 +199,7 @@ export class CodexPreToolUsePreviewError extends Error {
  * rather than re-declaring the `.agents/skills` string — one owner for it.
  */
 export function codexSkillsDir(targetPath: string): string {
-	return path.join(targetPath, ".agents", "skills");
+	return path.dirname(codexDestinationPath(targetPath, "skills", "__skill__"));
 }
 
 /**
@@ -389,7 +403,7 @@ export class CodexAdapter implements PlatformAdapter {
 		dryRun = false,
 		modelMap?: ModelMap,
 	): Promise<void> {
-		const targetFile = path.join(targetPath, this.configDir, "agents", `${displayName}.toml`);
+		const targetFile = codexDestinationPath(targetPath, "agents", displayName);
 
 		const stat = await fs.stat(sourcePath).catch(() => undefined);
 		if (!stat?.isFile()) {
@@ -489,7 +503,7 @@ export class CodexAdapter implements PlatformAdapter {
 	): Promise<void> {
 		// event filtering is handled by the caller (sync.sh / orchestrator)
 		// This method is called only for supported events — just copy the file
-		const targetDir = path.join(targetPath, this.configDir, "hooks");
+		const targetDir = path.dirname(codexDestinationPath(targetPath, "hooks", displayName));
 		const hooksSourceDir = path.dirname(sourcePath);
 
 		let stat: Awaited<ReturnType<typeof fs.stat>>;
@@ -501,7 +515,7 @@ export class CodexAdapter implements PlatformAdapter {
 		}
 
 		if (stat.isDirectory()) {
-			const targetHookDir = path.join(targetDir, displayName);
+			const targetHookDir = codexDestinationPath(targetPath, "hooks", displayName);
 			if (dryRun) {
 				logDry(`Copy (directory): ${sourcePath} -> ${targetHookDir}/`);
 				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
@@ -541,8 +555,7 @@ export class CodexAdapter implements PlatformAdapter {
 		sourcePath: string,
 		dryRun = false,
 	): Promise<void> {
-		const targetDir = codexSkillsDir(targetPath);
-		const targetSkillDir = path.join(targetDir, displayName);
+		const targetSkillDir = codexDestinationPath(targetPath, "skills", displayName);
 
 		let stat: Awaited<ReturnType<typeof fs.stat>>;
 		try {
@@ -576,7 +589,7 @@ export class CodexAdapter implements PlatformAdapter {
 		sourcePath: string,
 		dryRun = false,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, this.configDir, "scripts");
+		const targetDir = path.dirname(codexDestinationPath(targetPath, "scripts", displayName));
 
 		let stat: Awaited<ReturnType<typeof fs.stat>>;
 		try {
@@ -625,8 +638,8 @@ export class CodexAdapter implements PlatformAdapter {
 		sourcePath: string,
 		dryRun = false,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, this.configDir, "rules");
-		const targetFile = path.join(targetDir, `${displayName}.md`);
+		const targetFile = codexDestinationPath(targetPath, "rules", displayName);
+		const targetDir = path.dirname(targetFile);
 
 		try {
 			await fs.stat(sourcePath);
