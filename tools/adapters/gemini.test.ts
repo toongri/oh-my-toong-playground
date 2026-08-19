@@ -7,6 +7,7 @@ import { GeminiAdapter } from "./gemini.ts";
 import type { ExtensionInstaller, CommandRunner } from "./gemini.ts";
 import type { PlatformYaml } from "../lib/types.ts";
 import type { PlatformWriteObserver } from "./types.ts";
+import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -198,6 +199,179 @@ describe("syncCommandsDirect", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncHooksDirect", () => {
+	it("runs main mutation, observer, dependency mutation, observer in order", async () => {
+		const hooksDir = path.join(tmpDir, "hooks");
+		const sourceFile = path.join(hooksDir, "main.sh");
+		await writeFile(
+			sourceFile,
+			'#!/bin/bash\nsource "$HOOKS_DIR/lib/first.sh"\nsource "$HOOKS_DIR/lib/second.sh"\n',
+		);
+		await writeFile(path.join(hooksDir, "lib", "first.sh"), "first\n");
+		await writeFile(path.join(hooksDir, "lib", "second.sh"), "second\n");
+
+		const events: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (target, operation) => {
+				events.push(`mutate:${path.basename(target)}`);
+				await operation();
+				events.push(`done:${path.basename(target)}`);
+			},
+		};
+		await adapter.syncHooksDirect(
+			targetPath,
+			"main.sh",
+			sourceFile,
+			false,
+			(target) => { events.push(`observe:${path.basename(target)}`); },
+			mutationHooks,
+		);
+
+		expect(events).toEqual([
+			"mutate:main.sh",
+			"done:main.sh",
+			"observe:main.sh",
+			"mutate:first.sh",
+			"done:first.sh",
+			"observe:first.sh",
+			"mutate:second.sh",
+			"done:second.sh",
+			"observe:second.sh",
+		]);
+	});
+
+	it("preserves a resident direct hook when main mutation conflicts before operation", async () => {
+		const hooksDir = path.join(tmpDir, "hooks");
+		const sourceFile = path.join(hooksDir, "main.sh");
+		await writeFile(
+			sourceFile,
+			'#!/bin/bash\nsource "$HOOKS_DIR/lib/shared.sh"\n',
+		);
+		await writeFile(path.join(hooksDir, "lib", "shared.sh"), "new dependency\n");
+		const targetHook = path.join(targetPath, ".gemini", "hooks", "main.sh");
+		await writeFile(targetHook, "resident bytes\n");
+		const parentEntriesBefore = await fs.readdir(path.dirname(targetHook));
+		let operationCalls = 0;
+		let dependencyOperations = 0;
+		let observations = 0;
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (target, operation) => {
+				if (path.basename(target) === "main.sh") throw new Error("main conflict");
+				dependencyOperations += 1;
+				operationCalls += 1;
+				await operation();
+			},
+		};
+		await expect(
+			adapter.syncHooksDirect(
+				targetPath,
+				"main.sh",
+				sourceFile,
+				false,
+				() => { observations += 1; },
+				mutationHooks,
+			),
+		).rejects.toThrow("main conflict");
+		expect(operationCalls).toBe(0);
+		expect(dependencyOperations).toBe(0);
+		expect(observations).toBe(0);
+		expect(await fs.readFile(targetHook, "utf8")).toBe("resident bytes\n");
+		expect(await fs.readdir(path.dirname(targetHook))).toEqual(parentEntriesBefore);
+	});
+
+	it("does not execute a later dependency after a mutation conflict", async () => {
+		const hooksDir = path.join(tmpDir, "hooks");
+		const sourceFile = path.join(hooksDir, "main.sh");
+		await writeFile(
+			sourceFile,
+			'#!/bin/bash\nsource "$HOOKS_DIR/lib/first.sh"\nsource "$HOOKS_DIR/lib/second.sh"\n',
+		);
+		await writeFile(path.join(hooksDir, "lib", "first.sh"), "first\n");
+		await writeFile(path.join(hooksDir, "lib", "second.sh"), "second\n");
+
+		const completed: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (target, operation) => {
+				if (path.basename(target) === "second.sh") throw new Error("conflict");
+				await operation();
+				completed.push(path.basename(target));
+			},
+		};
+		await expect(
+			adapter.syncHooksDirect(targetPath, "main.sh", sourceFile, false, undefined, mutationHooks),
+		).rejects.toThrow("conflict");
+		expect(completed).toEqual(["main.sh", "first.sh"]);
+		expect(await exists(path.join(targetPath, ".gemini", "hooks", "main.sh"))).toBe(true);
+		expect(await exists(path.join(targetPath, ".gemini", "hooks", "lib", "first.sh"))).toBe(true);
+		expect(await exists(path.join(targetPath, ".gemini", "hooks", "lib", "second.sh"))).toBe(false);
+	});
+
+	it("forwards mutation hooks for directory roots and dependencies", async () => {
+		const hooksDir = path.join(tmpDir, "hooks");
+		const sourceDir = path.join(hooksDir, "dir-hook");
+		await writeFile(
+			path.join(sourceDir, "entry.sh"),
+			'#!/bin/bash\nsource "$HOOKS_DIR/lib/shared.sh"\n',
+		);
+		await writeFile(path.join(hooksDir, "lib", "shared.sh"), "shared\n");
+		const paths: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (target, operation) => {
+				paths.push(path.relative(targetPath, target));
+				await operation();
+			},
+		};
+		await adapter.syncHooksDirect(targetPath, "dir-hook", sourceDir, false, undefined, mutationHooks);
+		expect(paths).toEqual([
+			path.join(".gemini", "hooks", "dir-hook"),
+			path.join(".gemini", "hooks", "dir-hook", "lib", "shared.sh"),
+		]);
+	});
+
+	it("does not invoke mutation or observer hooks during dry-run", async () => {
+		const sourceFile = path.join(tmpDir, "hooks", "dry.sh");
+		await writeFile(sourceFile, "#!/bin/bash\n");
+		let mutations = 0;
+		let observations = 0;
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (_target, operation) => {
+				mutations += 1;
+				await operation();
+			},
+		};
+		await adapter.syncHooksDirect(
+			targetPath,
+			"dry.sh",
+			sourceFile,
+			true,
+			() => { observations += 1; },
+			mutationHooks,
+		);
+		expect(mutations).toBe(0);
+		expect(observations).toBe(0);
+	});
+
+	it("stops before updating settings when a platform hook mutation conflicts", async () => {
+		const sourceFile = path.join(tmpDir, "hooks", "conflict.sh");
+		await writeFile(sourceFile, "#!/bin/bash\n");
+		const settingsFile = path.join(targetPath, ".gemini", "settings.json");
+		const settingsBefore = '{"model":"resident"}\n';
+		await writeFile(settingsFile, settingsBefore);
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async () => { throw new Error("hook conflict"); },
+		};
+		await expect(
+			adapter.syncPlatformYaml(
+				targetPath,
+				{ hooks: { BeforeAgent: [{ component: sourceFile }] } },
+				false,
+				undefined,
+				undefined,
+				mutationHooks,
+			),
+		).rejects.toThrow("hook conflict");
+		expect(await fs.readFile(settingsFile, "utf8")).toBe(settingsBefore);
+	});
+
 	it("copies hook file to .gemini/hooks/ and grants execute permission via `syncHooksDirect`", async () => {
 		const sourceFile = path.join(tmpDir, "hooks", "test-hook.sh");
 		await writeFile(sourceFile, "#!/bin/bash\necho test\n", 0o644);

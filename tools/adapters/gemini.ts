@@ -29,9 +29,10 @@ import type {
 import type { PlatformAdapter, PlatformWriteObserver } from "./types.ts";
 import { planCategoryDestinationPaths, type DestinationCategory } from "./destinations.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
-import { syncDirectory } from "../lib/sync-directory.ts";
+import { copyFile, syncDirectory } from "../lib/sync-directory.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
+import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
 import { deepMerge } from "../lib/deep-merge.ts";
 import { readJsonFile, writeJsonFile } from "../lib/json.ts";
 
@@ -202,6 +203,7 @@ export class GeminiAdapter implements PlatformAdapter {
 		sourcePath: string,
 		dryRun = false,
 		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const targetHookRoot = this.absoluteDestinationPath(targetPath, "hooks", displayName);
 		const targetDir = path.dirname(targetHookRoot);
@@ -221,12 +223,23 @@ export class GeminiAdapter implements PlatformAdapter {
 				logDry(`Copy (directory): ${sourcePath} -> ${targetHookDir}/`);
 				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
 			} else {
-				await syncDirectory(sourcePath, targetHookDir, {
-					exclude: ["*.test.ts"],
-				});
+				const operation = async (): Promise<void> => {
+					await syncDirectory(sourcePath, targetHookDir, {
+						exclude: ["*.test.ts"],
+					});
+				};
+				if (mutationHooks) await mutationHooks.mutate(targetHookDir, operation);
+				else await operation();
 				logInfo(`Copied: ${displayName}/`);
-				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
 				await writeObserver?.(targetHookDir);
+				await syncShellDepsForDir(
+					sourcePath,
+					hooksSourceDir,
+					targetHookDir,
+					dryRun,
+					writeObserver,
+					mutationHooks,
+				);
 			}
 		} else {
 			const targetFile = targetHookRoot;
@@ -234,14 +247,24 @@ export class GeminiAdapter implements PlatformAdapter {
 				logDry(`Copy: ${sourcePath} -> ${targetFile}`);
 				await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun);
 			} else {
-				await fs.mkdir(targetDir, { recursive: true });
-				await fs.copyFile(sourcePath, targetFile);
-				// chmod +x
-				const tgtStat = await fs.stat(targetFile);
-				await fs.chmod(targetFile, tgtStat.mode | 0o111);
+				const operation = async (): Promise<void> => {
+					await fs.mkdir(targetDir, { recursive: true });
+					await copyFile(sourcePath, targetFile);
+					const tgtStat = await fs.stat(targetFile);
+					await fs.chmod(targetFile, tgtStat.mode | 0o111);
+				};
+				if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+				else await operation();
 				logInfo(`Copied: ${displayName}`);
-				await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun);
 				await writeObserver?.(targetFile);
+				await syncShellDependencies(
+					sourcePath,
+					hooksSourceDir,
+					targetDir,
+					dryRun,
+					writeObserver,
+					mutationHooks,
+				);
 			}
 		}
 	}
@@ -492,6 +515,7 @@ export class GeminiAdapter implements PlatformAdapter {
 		dryRun: boolean,
 		_scope?: PluginScope,
 		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<PlatformConfigResult> {
 		const processedSections: string[] = [];
 
@@ -535,6 +559,7 @@ export class GeminiAdapter implements PlatformAdapter {
 							resolvedSourcePath,
 							dryRun,
 							writeObserver,
+							mutationHooks,
 						);
 					}
 
