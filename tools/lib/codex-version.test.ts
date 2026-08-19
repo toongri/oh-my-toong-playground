@@ -60,7 +60,7 @@ describe("assertCodexVersionIfTargeted (sync.ts entry-point wiring)", () => {
 		expect(fetchCalled).toBe(false);
 	});
 
-	it("positive control: real installed codex (probe-verified 0.146.1) is in the real allowlist -> resolves", async () => {
+	it("positive control: real installed codex (probe-verified 0.148.0) is in the real allowlist -> resolves", async () => {
 		// No fetchVersion override: exercises the real installed `codex` binary on
 		// PATH and the real config.yaml codex-versions allowlist.
 		await expect(
