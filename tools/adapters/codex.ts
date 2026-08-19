@@ -203,6 +203,40 @@ export function codexSkillsDir(targetPath: string): string {
 	return path.dirname(codexDestinationPath(targetPath, "skills", "__skill__"));
 }
 
+function plannedCodexSkillsFossilEntries(
+	fossilDir: string,
+	fossilEntries: readonly string[],
+	ownedSkillNames: ReadonlySet<string>,
+): string[] {
+	return fossilEntries
+		.filter((name) => ownedSkillNames.has(name))
+		.sort((left, right) => left.localeCompare(right))
+		.map((name) => path.join(fossilDir, name));
+}
+
+function isErrno(error: unknown, code: string): boolean {
+	return typeof error === "object" && error !== null && Reflect.get(error, "code") === code;
+}
+
+/**
+ * Returns the exact fossil entry paths that this run is allowed to remove.
+ * The planner is read-only; ownership remains name-provenance based and the
+ * executor repeats the counterpart checks before mutating any entry.
+ */
+export async function planCodexSkillsFossilCleanup(
+	deployRoot: string,
+	ownedSkillNames: ReadonlySet<string>,
+): Promise<string[]> {
+	const fossilDir = path.join(deployRoot, ".codex", "skills");
+	const fossilStat = await fs.stat(fossilDir).catch((error: unknown) => {
+		if (isErrno(error, "ENOENT")) return undefined;
+		throw error;
+	});
+	if (!fossilStat?.isDirectory()) return [];
+	const fossilEntries = await fs.readdir(fossilDir);
+	return plannedCodexSkillsFossilEntries(fossilDir, fossilEntries, ownedSkillNames);
+}
+
 /**
  * Removes the pre-b9908fbc `.codex/skills` fossil now that Codex skills deploy
  * to `.agents/skills` (codexSkillsDir). Codex 0.144.1 reads BOTH roots, so a
@@ -238,16 +272,23 @@ export async function cleanupCodexSkillsFossil(
 	backupDest: string,
 	dryRun: boolean,
 	ownedSkillNames: ReadonlySet<string>,
+	mutationHooks?: DeployMutationHooks,
 ): Promise<void> {
 	const fossilDir = path.join(deployRoot, ".codex", "skills");
 	const newDir = codexSkillsDir(deployRoot);
 
-	const fossilStat = await fs.stat(fossilDir).catch(() => undefined);
+	const fossilStat = await fs.stat(fossilDir).catch((error: unknown) => {
+		if (isErrno(error, "ENOENT")) return undefined;
+		throw error;
+	});
 	if (!fossilStat?.isDirectory()) {
 		return; // nothing to do — idempotent
 	}
 
-	const newStat = await fs.stat(newDir).catch(() => undefined);
+	const newStat = await fs.stat(newDir).catch((error: unknown) => {
+		if (isErrno(error, "ENOENT")) return undefined;
+		throw error;
+	});
 	if (!newStat?.isDirectory()) {
 		if (dryRun) {
 			logDry(
@@ -283,7 +324,10 @@ export async function cleanupCodexSkillsFossil(
 	// a real-run-only guard: in dry-run nothing has been written yet, so a
 	// missing counterpart is expected, not an anomaly.
 	for (const name of omtOwned) {
-		const counterpartStat = await fs.stat(path.join(newDir, name)).catch(() => undefined);
+		const counterpartStat = await fs.stat(path.join(newDir, name)).catch((error: unknown) => {
+			if (isErrno(error, "ENOENT")) return undefined;
+			throw error;
+		});
 		if (!counterpartStat) {
 			throw new Error(
 				`cleanupCodexSkillsFossil: entry '${name}' is owned this run but has no counterpart at '${path.join(newDir, name)}' — refusing to delete`,
@@ -297,13 +341,23 @@ export async function cleanupCodexSkillsFossil(
 
 	await backupCategory(deployRoot, "codex", "skills", backupDest);
 
-	for (const name of omtOwned) {
-		await fs.rm(path.join(fossilDir, name), { recursive: true, force: true });
+	const plannedEntries = plannedCodexSkillsFossilEntries(fossilDir, fossilEntries, ownedSkillNames);
+	for (const entryPath of plannedEntries) {
+		const operation = async (): Promise<void> => {
+			await fs.rm(entryPath, { recursive: true, force: true });
+		};
+		if (mutationHooks) await mutationHooks.mutate(entryPath, operation);
+		else await operation();
 	}
 
 	const remaining = await fs.readdir(fossilDir);
 	if (remaining.length === 0) {
-		await fs.rm(fossilDir, { recursive: true, force: true });
+		// The root is deliberately outside the per-entry journal: it overlaps
+		// every inventoried entry. Remove it only when empty, and propagate all
+		// errors except the expected absent/already-nonempty races.
+		await fs.rmdir(fossilDir).catch((error: unknown) => {
+			if (!isErrno(error, "ENOENT") && !isErrno(error, "ENOTEMPTY")) throw error;
+		});
 		logInfo(`Codex skills fossil removed: ${fossilDir}`);
 	}
 }

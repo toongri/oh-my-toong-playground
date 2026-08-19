@@ -9,6 +9,7 @@ import {
 	buildMcpTomlContent,
 	resolveCodexAgentModel,
 	cleanupCodexSkillsFossil,
+	planCodexSkillsFossilCleanup,
 	codexSkillsDir,
 } from "./codex.ts";
 import { planCategoryDestinationPaths } from "./destinations.ts";
@@ -1879,6 +1880,80 @@ describe("cleanupCodexSkillsFossil", () => {
 			.then(() => true)
 			.catch(() => false);
 	}
+
+	it("plans owned fossil entry paths deterministically without mutating the filesystem", async () => {
+		await fs.mkdir(fossilPath("skill-z"), { recursive: true });
+		await fs.mkdir(fossilPath("skill-a"), { recursive: true });
+		await fs.mkdir(fossilPath("foreign"), { recursive: true });
+
+		const planned = await planCodexSkillsFossilCleanup(
+			tmpDir,
+			new Set(["skill-z", "skill-a", "missing"]),
+		);
+
+		expect(planned).toEqual([fossilPath("skill-a"), fossilPath("skill-z")]);
+		expect(await pathExists(fossilPath("skill-a"))).toBe(true);
+		expect(await pathExists(fossilPath("skill-z"))).toBe(true);
+		expect(await pathExists(fossilPath("foreign"))).toBe(true);
+	});
+
+	it("uses mutation hooks for each planned owned entry and does not journal the fossil root", async () => {
+		await fs.mkdir(fossilPath("skill-b"), { recursive: true });
+		await fs.writeFile(fossilPath("skill-b", "SKILL.md"), "b\n");
+		await fs.mkdir(fossilPath("skill-a"), { recursive: true });
+		await fs.writeFile(fossilPath("skill-a", "SKILL.md"), "a\n");
+		await fs.mkdir(newPath("skill-a"), { recursive: true });
+		await fs.mkdir(newPath("skill-b"), { recursive: true });
+
+		const calls: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			async mutate(target, operation) {
+				calls.push(target);
+				await operation();
+			},
+		};
+
+		await cleanupCodexSkillsFossil(
+			tmpDir,
+			backupDest("hooks"),
+			false,
+			new Set(["skill-a", "skill-b"]),
+			mutationHooks,
+		);
+
+		expect(calls).toEqual([fossilPath("skill-a"), fossilPath("skill-b")]);
+		expect(await pathExists(path.join(tmpDir, ".codex", "skills"))).toBe(false);
+	});
+
+	it("propagates mutation errors and leaves later fossil entries for the caller transaction rollback", async () => {
+		await fs.mkdir(fossilPath("skill-a"), { recursive: true });
+		await fs.writeFile(fossilPath("skill-a", "SKILL.md"), "a\n");
+		await fs.mkdir(fossilPath("skill-b"), { recursive: true });
+		await fs.writeFile(fossilPath("skill-b", "SKILL.md"), "b\n");
+		await fs.mkdir(newPath("skill-a"), { recursive: true });
+		await fs.mkdir(newPath("skill-b"), { recursive: true });
+
+		let count = 0;
+		const mutationHooks: DeployMutationHooks = {
+			async mutate(_target, operation) {
+				count += 1;
+				if (count === 2) throw new Error("mutation failure");
+				await operation();
+			},
+		};
+
+		await expect(
+			cleanupCodexSkillsFossil(
+				tmpDir,
+				backupDest("mutation-failure"),
+				false,
+				new Set(["skill-a", "skill-b"]),
+				mutationHooks,
+			),
+		).rejects.toThrow("mutation failure");
+		expect(await pathExists(fossilPath("skill-a"))).toBe(false);
+		expect(await pathExists(fossilPath("skill-b"))).toBe(true);
+	});
 
 	it("backs up then removes an owned fossil entry, removes the now-empty fossilDir, and leaves .codex/config.toml untouched", async () => {
 		await fs.mkdir(fossilPath("skill-a"), { recursive: true });
