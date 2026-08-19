@@ -94,10 +94,9 @@ async function validatePreToolUseWrapperDeployments(
 	if (scripts && Array.isArray(scripts.items)) {
 		for (const item of scripts.items) {
 			const component = typeof item === "string" ? item : item.component ?? "";
-			if (path.basename(component) !== "pretool-trace") continue;
 			const platforms = await resolvePlatforms(item, scripts.platforms, syncYaml.platforms, "scripts");
 			const resolved = resolveComponentPath(component, "scripts", rootDir, projectDir);
-			if ("error" in resolved) continue;
+			if ("error" in resolved || resolved.displayName !== "pretool-trace") continue;
 			for (const platform of platforms) declared.set(platform, resolved.path);
 		}
 	}
@@ -2383,7 +2382,9 @@ export async function processYaml(
 					reconcile: false,
 					itemFilter: (item) => {
 						const component = typeof item === "string" ? item : item.component ?? "";
-						return path.basename(component) === "pretool-trace";
+						if (!component) return false;
+						const resolved = resolveComponentPath(component, "scripts", rootDir, context.projectDir || undefined);
+						return !("error" in resolved) && resolved.displayName === "pretool-trace";
 					},
 				},
 				deployTransaction,

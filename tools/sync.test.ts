@@ -45,6 +45,7 @@ import { cleanupOldBackups, isSafeBackupRoot } from "./lib/backup.ts";
 import { deriveProjectName } from "../lib/omt-dir.ts";
 import { execFileSync } from "child_process";
 import { PreflightGitError } from "./lib/preflight-git.ts";
+import { composePreToolTraceCommand } from "./lib/pretool-trace-command.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -472,6 +473,68 @@ describe("PreToolUse wrapper deployment validation", () => {
 		expect(await exists(path.join(targetPath, ".codex", "scripts", "pretool-trace", "index.ts"))).toBe(true);
 		const settings = await fs.readFile(path.join(targetPath, ".claude", "settings.local.json"), "utf8");
 		expect(settings).toContain(".claude/scripts/pretool-trace/index.ts");
+	});
+
+	it("deploys scoped project pretool-trace wrappers for Claude and Codex", async () => {
+		const projectDir = path.join(rootDir, "projects", "myproj");
+		await fs.mkdir(path.join(projectDir, "scripts", "pretool-trace"), { recursive: true });
+		await writeFile(path.join(projectDir, "scripts", "pretool-trace", "index.ts"), "export {};");
+		const syncYamlPath = path.join(projectDir, "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nscripts:\n  platforms: [claude, codex]\n  items:\n    - component: myproj:pretool-trace\n`,
+		);
+		await writeFile(path.join(projectDir, "claude.yaml"), "hooks:\n  PreToolUse:\n    - command: echo claude\n      trace-id: claude-hook\n");
+		await writeFile(path.join(projectDir, "codex.yaml"), "hooks:\n  PreToolUse:\n    - command: echo codex\n      trace-id: codex-hook\n");
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["claude", new ClaudeAdapter()],
+			["codex", new CodexAdapter()],
+		]) as AdapterMap;
+		const wrapperPresentAtConfigEntry: Record<"claude" | "codex", boolean> = {
+			claude: false,
+			codex: false,
+		};
+		for (const platform of ["claude", "codex"] as const) {
+			const adapter = adapters.get(platform)!;
+			const originalSyncPlatformYaml = adapter.syncPlatformYaml.bind(adapter);
+			adapter.syncPlatformYaml = async (...args: Parameters<PlatformAdapter["syncPlatformYaml"]>) => {
+				wrapperPresentAtConfigEntry[platform] = await exists(
+					path.join(targetPath, `.${platform}`, "scripts", "pretool-trace", "index.ts"),
+				);
+				return originalSyncPlatformYaml(...args);
+			};
+		}
+
+		await processYaml(makeContext(), syncYamlPath, adapters, rootDir);
+
+		expect(wrapperPresentAtConfigEntry.claude).toBe(true);
+		expect(wrapperPresentAtConfigEntry.codex).toBe(true);
+		expect(await exists(path.join(targetPath, ".claude", "scripts", "pretool-trace", "index.ts"))).toBe(true);
+		expect(await exists(path.join(targetPath, ".codex", "scripts", "pretool-trace", "index.ts"))).toBe(true);
+		const claudeSettings = JSON.parse(await fs.readFile(path.join(targetPath, ".claude", "settings.local.json"), "utf8")) as {
+			hooks: { PreToolUse: Array<{ hooks: Array<{ command: string }> }> };
+		};
+		const codexHooks = JSON.parse(await fs.readFile(path.join(targetPath, ".codex", "hooks.json"), "utf8")) as {
+			hooks: { PreToolUse: Array<{ hooks: Array<{ command: string }> }> };
+		};
+		const claudeCommand = claudeSettings.hooks.PreToolUse[0]?.hooks[0]?.command ?? "";
+		const codexCommand = codexHooks.hooks.PreToolUse[0]?.hooks[0]?.command ?? "";
+		expect(claudeCommand).toBe(
+			composePreToolTraceCommand({
+				wrapperPath: path.join(targetPath, ".claude", "scripts", "pretool-trace", "index.ts"),
+				platform: "claude",
+				hookId: "claude-hook",
+				originalCommand: "echo claude",
+			}),
+		);
+		expect(codexCommand).toBe(
+			composePreToolTraceCommand({
+				wrapperPath: path.join(targetPath, ".codex", "scripts", "pretool-trace", "index.ts"),
+				platform: "codex",
+				hookId: "codex-hook",
+				originalCommand: "echo codex",
+			}),
+		);
 	});
 
 	it("rejects an adapter preview whose wrapper destination differs before mutation", async () => {
