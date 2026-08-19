@@ -33,7 +33,7 @@ import type {
 	PlatformYamlHookItem,
 	PluginScope,
 } from "../lib/types.ts";
-import type { PlatformAdapter } from "./types.ts";
+import type { PlatformAdapter, PlatformWriteObserver } from "./types.ts";
 
 // =============================================================================
 // Model Map Applier
@@ -485,6 +485,7 @@ export class CodexAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		writeObserver?: PlatformWriteObserver,
 	): Promise<void> {
 		// event filtering is handled by the caller (sync.sh / orchestrator)
 		// This method is called only for supported events — just copy the file
@@ -512,6 +513,7 @@ export class CodexAdapter implements PlatformAdapter {
 			});
 			logInfo(`Copied: ${displayName}/`);
 			await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
+			if (writeObserver) await writeObserver(targetHookDir);
 		} else {
 			const targetFile = path.join(targetDir, displayName);
 			if (dryRun) {
@@ -525,6 +527,7 @@ export class CodexAdapter implements PlatformAdapter {
 			await fs.chmod(targetFile, fileStat.mode | 0o111);
 			logInfo(`Copied: ${displayName}`);
 			await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun);
+			if (writeObserver) await writeObserver(targetFile);
 		}
 	}
 
@@ -650,6 +653,7 @@ export class CodexAdapter implements PlatformAdapter {
 		targetPath: string,
 		configJson: Record<string, unknown>,
 		dryRun = false,
+		writeObserver?: PlatformWriteObserver,
 	): Promise<void> {
 		const configFile = path.join(targetPath, this.configDir, "config.toml");
 
@@ -667,6 +671,7 @@ export class CodexAdapter implements PlatformAdapter {
 		const updated = insertManagedBlock(existing, "config", tomlContent);
 
 		await fs.writeFile(configFile, updated, "utf-8");
+		if (writeObserver) await writeObserver(configFile);
 		logInfo(`Config managed block: ${configFile}`);
 	}
 
@@ -685,7 +690,11 @@ export class CodexAdapter implements PlatformAdapter {
 	}
 
 	/** Flush all accumulated MCP servers to a managed block in config.toml */
-	async flushMcpBlock(targetPath: string, dryRun: boolean): Promise<void> {
+	async flushMcpBlock(
+		targetPath: string,
+		dryRun: boolean,
+		writeObserver?: PlatformWriteObserver,
+	): Promise<void> {
 		const configFile = path.join(targetPath, this.configDir, "config.toml");
 		const serverCount = Object.keys(this.mcpAccumulator).length;
 
@@ -706,6 +715,7 @@ export class CodexAdapter implements PlatformAdapter {
 			}
 			const updated = insertManagedBlock(existing, "mcp", "# No MCP servers configured\n");
 			await fs.writeFile(configFile, updated, "utf-8");
+			if (writeObserver) await writeObserver(configFile);
 			logInfo(`MCP managed block cleared: ${configFile}`);
 			return;
 		}
@@ -723,6 +733,7 @@ export class CodexAdapter implements PlatformAdapter {
 		const updated = insertManagedBlock(existing, "mcp", tomlContent);
 
 		await fs.writeFile(configFile, updated, "utf-8");
+		if (writeObserver) await writeObserver(configFile);
 		logInfo(`MCP managed block: ${configFile}`);
 	}
 
@@ -823,6 +834,7 @@ export class CodexAdapter implements PlatformAdapter {
 		yaml: PlatformYaml,
 		dryRun: boolean,
 		_scope?: PluginScope,
+		writeObserver?: PlatformWriteObserver,
 	): Promise<PlatformConfigResult> {
 		const processedSections: string[] = [];
 		let modelMap: ModelMap | undefined;
@@ -834,7 +846,7 @@ export class CodexAdapter implements PlatformAdapter {
 
 		// --- config ---
 		if (yaml.config !== undefined && yaml.config !== null) {
-			await this.syncConfig(targetPath, yaml.config, dryRun);
+			await this.syncConfig(targetPath, yaml.config, dryRun, writeObserver);
 			processedSections.push("config");
 		}
 
@@ -851,7 +863,7 @@ export class CodexAdapter implements PlatformAdapter {
 					logInfo(`MCP accumulated: ${name}`);
 				}
 			}
-			await this.flushMcpBlock(targetPath, dryRun);
+			await this.flushMcpBlock(targetPath, dryRun, writeObserver);
 			processedSections.push("mcps");
 		}
 
@@ -895,7 +907,13 @@ export class CodexAdapter implements PlatformAdapter {
 						displayName = path.basename(component);
 						resolvedSourcePath = component;
 
-						await this.syncHooksDirect(targetPath, displayName, resolvedSourcePath, dryRun);
+						await this.syncHooksDirect(
+							targetPath,
+							displayName,
+							resolvedSourcePath,
+							dryRun,
+							writeObserver,
+						);
 					}
 
 					// Build command string
@@ -977,7 +995,7 @@ export class CodexAdapter implements PlatformAdapter {
 				}
 			}
 
-			await this.updateSettings(targetPath, accumulatedHooks, dryRun, preserveConfig);
+			await this.updateSettings(targetPath, accumulatedHooks, dryRun, preserveConfig, writeObserver);
 			processedSections.push("hooks");
 		}
 
@@ -1026,6 +1044,7 @@ export class CodexAdapter implements PlatformAdapter {
 		hooksEntries: Record<string, unknown>,
 		dryRun = false,
 		preserve?: { "command-contains"?: string[] },
+		writeObserver?: PlatformWriteObserver,
 	): Promise<void> {
 		const hooksFile = path.join(targetPath, ".codex", "hooks.json");
 
@@ -1062,6 +1081,7 @@ export class CodexAdapter implements PlatformAdapter {
 		const { hooks: _removed, ...rest } = current;
 		const updated = { ...rest, hooks: mergedHooks };
 		await writeJsonFile(hooksFile, updated);
+		if (writeObserver) await writeObserver(hooksFile);
 		logInfo(`Updated hooks.json: ${hooksFile}`);
 	}
 

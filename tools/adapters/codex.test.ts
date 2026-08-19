@@ -1041,6 +1041,57 @@ describe("CodexAdapter", () => {
 			expect(libExists).toBe(true);
 		});
 
+		it("디렉터리 훅 observer가 shell 의존성 복사 완료 후 호출된다", async () => {
+			const hooksDir = path.join(tmpDir, "hooks");
+			const dirHookDir = path.join(hooksDir, "my-dir-hook");
+			const libDir = path.join(hooksDir, "lib");
+			await fs.mkdir(dirHookDir, { recursive: true });
+			await fs.mkdir(libDir, { recursive: true });
+			await fs.writeFile(
+				path.join(dirHookDir, "entry.sh"),
+				'#!/bin/bash\nsource "$HOOKS_DIR/lib/shared.sh"\necho entry\n',
+				"utf-8",
+			);
+			await fs.writeFile(path.join(libDir, "shared.sh"), "#!/bin/bash\necho shared\n", "utf-8");
+
+			const targetBase = path.join(tmpDir, "target");
+			const targetLib = path.join(targetBase, ".codex", "hooks", "my-dir-hook", "lib", "shared.sh");
+			const observed: string[] = [];
+			await adapter.syncHooksDirect(targetBase, "my-dir-hook", dirHookDir, false, async (writtenPath) => {
+				observed.push(writtenPath);
+				expect(await fs.readFile(targetLib, "utf-8")).toContain("shared");
+			});
+
+			expect(observed).toEqual([path.join(targetBase, ".codex", "hooks", "my-dir-hook")]);
+		});
+
+		it("의존성 복사 실패 시 디렉터리 훅 observer를 호출하지 않는다", async () => {
+			const hooksDir = path.join(tmpDir, "hooks");
+			const dirHookDir = path.join(hooksDir, "my-dir-hook");
+			const libDir = path.join(hooksDir, "lib");
+			await fs.mkdir(dirHookDir, { recursive: true });
+			await fs.mkdir(path.join(libDir, "shared.sh"), { recursive: true });
+			await fs.writeFile(
+				path.join(dirHookDir, "entry.sh"),
+				'#!/bin/bash\nsource "$HOOKS_DIR/lib/shared.sh"\necho entry\n',
+				"utf-8",
+			);
+
+			const observed: string[] = [];
+			await expect(
+				adapter.syncHooksDirect(
+					path.join(tmpDir, "target"),
+					"my-dir-hook",
+					dirHookDir,
+					false,
+					(writtenPath) => {
+						observed.push(writtenPath);
+					},
+				),
+			).rejects.toThrow();
+			expect(observed).toEqual([]);
+		});
+
 		it("디렉토리 훅의 @lib/ import를 배포 시 상대 경로로 재작성한다", async () => {
 			// Source dir: hooks/rules-injector/cli.ts with @lib/ import
 			const hookSrcDir = path.join(tmpDir, "hooks", "rules-injector");
@@ -1195,6 +1246,52 @@ describe("CodexAdapter", () => {
 	// ---------------------------------------------------------------------------
 
 	describe("syncPlatformYaml hooks", () => {
+		it("notifies after each successful OMT-owned config, MCP, hook bundle, and hooks.json write via `syncPlatformYaml`", async () => {
+			const sourceHookDir = path.join(tmpDir, "external-hook");
+			await fs.mkdir(sourceHookDir, { recursive: true });
+			await fs.writeFile(path.join(sourceHookDir, "index.ts"), "console.log('hook');\n");
+			const yaml = {
+				config: { model: "o4-mini" },
+				mcps: { "server-a": { command: "npx" } },
+				"model-map": { tiers: { sonnet: { model: "gpt-5.6-sol" } } },
+				hooks: { Notification: [{ component: sourceHookDir }] },
+			};
+			const writes: string[] = [];
+			const observer = async (writtenPath: string) => {
+				writes.push(writtenPath);
+				await fs.stat(writtenPath);
+			};
+
+			await adapter.syncPlatformYaml(tmpDir, yaml as never, false, undefined, observer);
+
+			const configFile = path.join(tmpDir, ".codex", "config.toml");
+			const hookDir = path.join(tmpDir, ".codex", "hooks", path.basename(sourceHookDir));
+			const hooksFile = path.join(tmpDir, ".codex", "hooks.json");
+			expect(writes).toEqual([configFile, configFile, hookDir, hooksFile]);
+		});
+
+		it("does not notify for dry-run or sections that perform no writes via `syncPlatformYaml`", async () => {
+			const writes: string[] = [];
+			const observer = (writtenPath: string) => {
+				writes.push(writtenPath);
+			};
+			await adapter.syncPlatformYaml(
+				tmpDir,
+				{
+					config: { model: "o4-mini" },
+					mcps: { "server-a": { command: "npx" } },
+					"model-map": { tiers: { sonnet: { model: "gpt-5.6-sol" } } },
+					plugins: { absent: { state: "absent" } },
+				} as never,
+				true,
+				undefined,
+				observer,
+			);
+			await adapter.syncPlatformYaml(tmpDir, { "model-map": { tiers: {} } } as never, false, undefined, observer);
+			await adapter.syncPlatformYaml(tmpDir, { plugins: { absent: { state: "absent" } } } as never, false, undefined, observer);
+			expect(writes).toEqual([]);
+		});
+
 		it("PreToolUse trace wrapper coverage", async () => {
 			const componentDir = path.join(tmpDir, "source-hooks", "component-hook");
 			await fs.mkdir(componentDir, { recursive: true });
