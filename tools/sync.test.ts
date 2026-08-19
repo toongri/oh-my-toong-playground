@@ -4,6 +4,7 @@ import fs2 from "fs";
 import path from "path";
 import os from "os";
 import type { DeployMutationHooks } from "./lib/deploy-transaction.ts";
+import { DeployTransaction } from "./lib/deploy-transaction.ts";
 const parseYaml = Bun.YAML.parse;
 
 async function writeWithMutation(
@@ -19,6 +20,7 @@ import {
 	syncCategory,
 	syncPlatformConfigs,
 	syncDocs,
+	planDocsTransactionPaths,
 	processYaml,
 	collectComponentSourceRoots,
 	syncLib,
@@ -6737,6 +6739,7 @@ describe("component fan-out", () => {
 	it("format wired: a non-zero-exit format command does not abort processYaml, routes the deployRoot to failedTargets", async () => {
 		const { container, worktrees } = makeBareTopology("repo", ["wt1"]);
 		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+		await writeFile(path.join(worktrees[0]!, "docs", "intro.md"), "old\n");
 
 		const scriptPath = path.join(tmpDir, "fake-formatter-fail.sh");
 		const logPath = path.join(tmpDir, "log.txt");
@@ -6756,6 +6759,7 @@ describe("component fan-out", () => {
 		await processYaml(context, syncYamlPath, adapters, rootDir);
 
 		expect(context.failedTargets).toContain(worktrees[0]);
+		expect(await readFile(path.join(worktrees[0]!, "docs", "intro.md"))).toBe("old\n");
 	});
 });
 
@@ -6778,6 +6782,105 @@ describe("syncDocs", () => {
 
 	afterEach(async () => {
 		await fs.rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("journals exact docs leaves and rolls back overwrite plus stale form after later failure", async () => {
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "new\n");
+		await writeFile(path.join(rootDir, "docs", "guide", "a.md"), "guide-new\n");
+		await writeFile(path.join(deployRoot, "docs", "intro.md"), "old\n");
+		await writeFile(path.join(deployRoot, "docs", "guide"), "stale\n");
+		const yaml: SyncYaml = { path: deployRoot, docs: { items: ["intro", "guide"] } };
+		const planned = await planDocsTransactionPaths(makeContext(), yaml, rootDir, deployRoot);
+		expect(planned).toContain(path.join(deployRoot, "docs", "guide"));
+		expect(planned).not.toContain(path.join(deployRoot, "docs", "guide", "a.md"));
+		const tx = await DeployTransaction.begin(deployRoot, false, planned);
+		await syncDocs(makeContext(), yaml, rootDir, deployRoot, tx ?? undefined);
+		expect((await fs.lstat(path.join(deployRoot, "docs", "guide"))).isDirectory()).toBe(true);
+		expect(await readFile(path.join(deployRoot, "docs", "guide", "a.md"))).toBe("guide-new\n");
+		await expect(tx?.mutate(path.join(deployRoot, "docs", "later"), async () => undefined)).rejects.toThrow();
+		await tx?.rollback();
+		expect(await readFile(path.join(deployRoot, "docs", "intro.md"))).toBe("old\n");
+		expect(await readFile(path.join(deployRoot, "docs", "guide"))).toBe("stale\n");
+	});
+
+	it("planner inventories only declared leaves and directory tombstone files", async () => {
+		await writeFile(path.join(rootDir, "docs", "guide", "a.md"), "a\n");
+		await writeFile(path.join(deployRoot, "docs", "guide", "a.md"), "old\n");
+		await writeFile(path.join(deployRoot, "docs", "guide", "human.md"), "human\n");
+		await writeFile(path.join(deployRoot, "docs", "outside.md"), "outside\n");
+		const paths = await planDocsTransactionPaths(makeContext(), { path: deployRoot, docs: { items: [{ component: "guide", delete: true }] } }, rootDir, deployRoot);
+		expect(paths).toEqual([path.join(deployRoot, "docs", "guide", "a.md"), path.join(deployRoot, "docs", "guide", "human.md")]);
+		expect(paths).not.toContain(path.join(deployRoot, "docs", "outside.md"));
+	});
+
+	it("delete file mutation rolls back after a later failure", async () => {
+		const target = path.join(deployRoot, "docs", "gone.md");
+		await writeFile(target, "keep\n");
+		const yaml: SyncYaml = { path: deployRoot, docs: { items: [{ component: "gone", delete: true }] } };
+		const tx = await DeployTransaction.begin(deployRoot, false, await planDocsTransactionPaths(makeContext(), yaml, rootDir, deployRoot));
+		await syncDocs(makeContext(), yaml, rootDir, deployRoot, tx ?? undefined);
+		expect(await exists(target)).toBe(false);
+		await tx?.rollback();
+		expect(await readFile(target)).toBe("keep\n");
+	});
+
+	it("delete directory journals regular and symlink leaves without following external target", async () => {
+		const dir = path.join(deployRoot, "docs", "bundle");
+		const regular = path.join(dir, "a.txt");
+		const external = path.join(tmpDir, "external.txt");
+		const link = path.join(dir, "link.txt");
+		await writeFile(regular, "regular\n");
+		await writeFile(external, "external\n");
+		await fs.symlink(external, link);
+		const yaml: SyncYaml = { path: deployRoot, docs: { items: [{ component: "bundle", delete: true }] } };
+		const planned = await planDocsTransactionPaths(makeContext(), yaml, rootDir, deployRoot);
+		expect(planned.sort()).toEqual([link, regular].sort());
+		const tx = await DeployTransaction.begin(deployRoot, false, planned);
+		await syncDocs(makeContext(), yaml, rootDir, deployRoot, tx ?? undefined);
+		expect(await exists(dir)).toBe(false);
+		expect(await readFile(external)).toBe("external\n");
+		await tx?.rollback();
+		expect(await readFile(regular)).toBe("regular\n");
+		expect(await fs.readlink(link)).toBe(external);
+	});
+
+	it("rejects a pre-CAS external edit without backup or overwrite", async () => {
+		const target = path.join(deployRoot, "docs", "note.md");
+		await writeFile(target, "old\n");
+		await writeFile(path.join(rootDir, "docs", "note.md"), "new\n");
+		const yaml: SyncYaml = { path: deployRoot, docs: { items: ["note"] } };
+		const context = makeContext({ backupDest: path.join(tmpDir, "backup") });
+		const tx = await DeployTransaction.begin(deployRoot, false, await planDocsTransactionPaths(context, yaml, rootDir, deployRoot));
+		await writeFile(target, "external\n");
+		await expect(syncDocs(context, yaml, rootDir, deployRoot, tx ?? undefined)).rejects.toThrow(/conflict/);
+		expect(await readFile(target)).toBe("external\n");
+		expect(await exists(path.join(tmpDir, "backup"))).toBe(false);
+	});
+
+	it("normal directory merge journals only declared leaves and preserves human files", async () => {
+		await writeFile(path.join(rootDir, "docs", "guide", "a.md"), "new\n");
+		await writeFile(path.join(deployRoot, "docs", "guide", "human.md"), "human\n");
+		const yaml: SyncYaml = { path: deployRoot, docs: { items: ["guide"] } };
+		const planned = await planDocsTransactionPaths(makeContext(), yaml, rootDir, deployRoot);
+		expect(planned).toEqual([path.join(deployRoot, "docs", "guide", "a.md")]);
+		const tx = await DeployTransaction.begin(deployRoot, false, planned);
+		await syncDocs(makeContext(), yaml, rootDir, deployRoot, tx ?? undefined);
+		expect(await readFile(path.join(deployRoot, "docs", "guide", "a.md"))).toBe("new\n");
+		await tx?.rollback();
+		expect(await exists(path.join(deployRoot, "docs", "guide", "a.md"))).toBe(false);
+		expect(await readFile(path.join(deployRoot, "docs", "guide", "human.md"))).toBe("human\n");
+	});
+
+	it("dry-run with a transaction inventory performs no mutation", async () => {
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "new\n");
+		const target = path.join(deployRoot, "docs", "intro.md");
+		await writeFile(target, "old\n");
+		const before = await readFile(target);
+		let calls = 0;
+		const hooks: DeployMutationHooks = { mutate: async () => { calls++; throw new Error("must not mutate in dry-run"); } };
+		await syncDocs(makeContext({ dryRun: true }), { path: deployRoot, docs: { items: ["intro"] } }, rootDir, deployRoot, hooks);
+		expect(calls).toBe(0);
+		expect(await readFile(target)).toBe(before);
 	});
 
 	it("is a no-op when the docs section is absent", async () => {

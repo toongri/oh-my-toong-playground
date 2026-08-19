@@ -51,13 +51,13 @@ import {
 	readManifest,
 	type ManifestMutationHooks,
 } from "./lib/deploy-manifest.ts";
-import { DeployTransaction } from "./lib/deploy-transaction.ts";
+import { DeployTransaction, type DeployMutationHooks } from "./lib/deploy-transaction.ts";
 import { resolveDocsTarget, detectDocsTargetCollisions } from "./lib/path-utils.ts";
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
 import { ProjectKeyError } from "./lib/git-key.ts";
 import { resolveDeployTargets, DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
 import { assertCleanWorktree, assertDefaultBranch, PreflightGitError } from "./lib/preflight-git.ts";
-import { planSyncDirectoryMutations, rewriteLibImports } from "./lib/sync-directory.ts";
+import { planSyncDirectoryMutations, rewriteLibImports, copyFile } from "./lib/sync-directory.ts";
 import {
 	collectRequiredLibModulesFromSources,
 	collectLibDataFiles,
@@ -891,14 +891,15 @@ async function listFilesRecursive(dir: string): Promise<string[]> {
 	let entries: import("fs").Dirent[];
 	try {
 		entries = await fs.readdir(dir, { withFileTypes: true });
-	} catch {
+	} catch (error) {
+		if (docsErrorCode(error) !== "ENOENT") throw error;
 		return results;
 	}
 	for (const entry of entries) {
 		const fullPath = path.join(dir, entry.name);
 		if (entry.isDirectory()) {
 			results.push(...(await listFilesRecursive(fullPath)));
-		} else if (entry.isFile()) {
+		} else if (entry.isFile() || entry.isSymbolicLink()) {
 			results.push(fullPath);
 		}
 	}
@@ -915,7 +916,8 @@ async function findSymlinkInTree(dir: string): Promise<string | null> {
 	let entries: import("fs").Dirent[];
 	try {
 		entries = await fs.readdir(dir, { withFileTypes: true });
-	} catch {
+	} catch (error) {
+		if (docsErrorCode(error) !== "ENOENT") throw error;
 		return null;
 	}
 	for (const entry of entries) {
@@ -929,16 +931,12 @@ async function findSymlinkInTree(dir: string): Promise<string | null> {
 	return null;
 }
 
-/**
- * Back up every file currently under `targetDir` (recursively), preserving
- * substructure. `backupDocs` only ever copies a single file, so a whole-tree
- * backup is this per-file loop over it. No-op if targetDir is absent/empty.
- */
-async function backupDocsTree(targetDir: string, deployRoot: string, sessionId: string): Promise<void> {
-	for (const file of await listFilesRecursive(targetDir)) {
-		await backupDocs(file, deployRoot, sessionId);
-	}
+function docsErrorCode(error: unknown): string | undefined {
+	if (typeof error !== "object" || error === null) return undefined;
+	const code = Reflect.get(error, "code");
+	return typeof code === "string" ? code : undefined;
 }
+
 
 /**
  * Reject a docs deploy/delete target whose path — walked segment by segment
@@ -989,52 +987,77 @@ function docsFileFinalTarget(absTarget: string, sourceFile: string): string {
 }
 
 /**
- * Remove a single stale FILE squatting at a dir-form docs item's own
- * (pre-extension) target path, backing it up first — otherwise the
- * mkdir/copyFile in deployDocsDir would ENOTDIR trying to write files under a
- * path that's currently a file. Only ever inspects `absTarget` itself; a
- * sibling item's target is never touched.
- *
- * File-form has NO equivalent call: its real write leaf carries an appended
- * extension (docsFileFinalTarget), so a directory sitting at the bare,
- * pre-extension stem never collides with it on disk — anti-wipe wins, that
- * directory is simply left alone (AC3.4 vs anti-wipe reconciliation).
- *
- * NEVER removes a directory — that would be an undeclared-human-dir wipe. If
- * a directory sits at the exact leaf being deployed (e.g. a directory
- * literally named `foo.md` squatting a file-form leaf), this function is not
- * called for that path at all; copyFile is left to fail loudly instead.
- */
-async function cleanStaleDocsForm(absTarget: string, deployRoot: string, sessionId: string): Promise<void> {
-	let existing: import("fs").Stats;
-	try {
-		existing = await fs.stat(absTarget);
-	} catch {
-		return; // Nothing there — no stale form to clean.
-	}
-	if (existing.isDirectory()) return; // Already the right form — additive merge handles it.
-
-	await backupDocs(absTarget, deployRoot, sessionId);
-	await fs.rm(absTarget, { force: true }); // Non-recursive: a single file, never a directory.
-}
-
-/**
  * Write one docs FILE target at its real, already-resolved leaf
  * (`finalTarget` — post-extension, computed once by the caller via
  * docsFileFinalTarget): back up whatever currently sits there, then copy the
  * source over it unconditionally (declared items always overwrite). No
- * opposite-form cleaning here — see cleanStaleDocsForm's doc comment for why
- * file-form never needs it.
+ * opposite-form cleaning is needed for file-form targets.
  */
 async function deployDocsFile(
 	sourceFile: string,
 	finalTarget: string,
 	deployRoot: string,
 	sessionId: string,
+	mutationHooks?: DeployMutationHooks,
 ): Promise<void> {
-	await backupDocs(finalTarget, deployRoot, sessionId);
-	await fs.mkdir(path.dirname(finalTarget), { recursive: true });
-	await fs.copyFile(sourceFile, finalTarget);
+	const operation = async () => {
+		await backupDocs(finalTarget, deployRoot, sessionId);
+		await copyFile(sourceFile, finalTarget);
+	};
+	if (mutationHooks) await mutationHooks.mutate(finalTarget, operation);
+	else await operation();
+}
+
+type DocsTransactionPlan = {
+	kind: "file" | "dir" | "delete";
+	absTarget: string;
+	leaves: string[];
+};
+
+/** Read-only docs mutation inventory, shared by processYaml transaction setup. */
+export async function planDocsTransactionPaths(
+	context: SyncContext,
+	syncYaml: SyncYaml,
+	rootDir: string,
+	deployRoot: string,
+): Promise<string[]> {
+	const section = syncYaml.docs;
+	if (!section?.items?.length) return [];
+	const docsBase = path.posix.normalize(section.path ?? "docs");
+	const plans: DocsTransactionPlan[] = [];
+	for (const item of section.items) {
+		const { componentName, itemPath, as, isDelete } = docsItemFields(item);
+		const relStem = resolveDocsTarget(componentName, section.path, itemPath, as);
+		if (relStem.replace(/\/+$/, "") === docsBase.replace(/\/+$/, "")) {
+			throw new Error(`docs: target resolves to the docs base directory itself — refusing: ${relStem}`);
+		}
+		const absTarget = path.join(deployRoot, relStem);
+		if (isDelete) {
+			const candidates = await findDocsDeleteCandidates(absTarget);
+			if (candidates.length > 1) throw new Error(`docs: ambiguous tombstone — multiple candidates match ${relStem}: [${candidates.join(", ")}]`);
+			const candidate = candidates[0];
+			if (!candidate) continue;
+			const st = await fs.lstat(candidate);
+			plans.push({ kind: "delete", absTarget, leaves: st.isDirectory() ? await listFilesRecursive(candidate) : [candidate] });
+			continue;
+		}
+		const resolved = resolveComponentPath(componentName, "docs", rootDir, context.projectDir || undefined);
+		if ("error" in resolved) continue;
+		const sourceStat = await fs.stat(resolved.path);
+		if (sourceStat.isDirectory()) {
+			const files = await listFilesRecursive(resolved.path);
+			const leaves = files.map((source) => path.join(absTarget, path.relative(resolved.path, source)));
+			let staleFile = false;
+			try { staleFile = (await fs.lstat(absTarget)).isFile(); } catch (error) {
+				if (docsErrorCode(error) !== "ENOENT") throw error;
+			}
+			if (staleFile) leaves.splice(0, leaves.length, absTarget);
+			plans.push({ kind: "dir", absTarget, leaves });
+		} else {
+			plans.push({ kind: "file", absTarget, leaves: [docsFileFinalTarget(absTarget, resolved.path)] });
+		}
+	}
+	return [...new Set(plans.flatMap((plan) => plan.leaves))].sort();
 }
 
 /**
@@ -1058,19 +1081,39 @@ async function deployDocsDir(
 	files: { source: string; dest: string }[],
 	deployRoot: string,
 	sessionId: string,
+	mutationHooks?: DeployMutationHooks,
 ): Promise<void> {
-	await cleanStaleDocsForm(absTarget, deployRoot, sessionId);
+	let existing: import("fs").Stats | undefined;
+	try { existing = await fs.stat(absTarget); } catch (error) {
+		if (docsErrorCode(error) !== "ENOENT") throw error;
+	}
+	if (existing && !existing.isDirectory()) {
+		const operation = async () => {
+			await backupDocs(absTarget, deployRoot, sessionId);
+			await fs.rm(absTarget, { force: true });
+			for (const { source, dest } of files) {
+				await assertNoSymlinkInTargetPath(dest, deployRoot);
+				await copyFile(source, dest);
+			}
+		};
+		if (mutationHooks) await mutationHooks.mutate(absTarget, operation);
+		else await operation();
+		return;
+	}
 
 	for (const { source, dest } of files) {
 		await assertNoSymlinkInTargetPath(dest, deployRoot);
-		await backupDocs(dest, deployRoot, sessionId);
-		await fs.mkdir(path.dirname(dest), { recursive: true });
-		await fs.copyFile(source, dest);
+		const operation = async () => {
+			await backupDocs(dest, deployRoot, sessionId);
+			await copyFile(source, dest);
+		};
+		if (mutationHooks) await mutationHooks.mutate(dest, operation);
+		else await operation();
 	}
 }
 
 /** Delete one docs target (file or directory), backing it up first. Idempotent: no-op if already absent. */
-async function deleteDocsTarget(absTarget: string, deployRoot: string, sessionId: string): Promise<void> {
+async function deleteDocsTarget(absTarget: string, deployRoot: string, sessionId: string, mutationHooks?: DeployMutationHooks): Promise<void> {
 	let st: import("fs").Stats;
 	try {
 		st = await fs.stat(absTarget);
@@ -1078,11 +1121,44 @@ async function deleteDocsTarget(absTarget: string, deployRoot: string, sessionId
 		return;
 	}
 	if (st.isDirectory()) {
-		await backupDocsTree(absTarget, deployRoot, sessionId);
+		for (const file of await listFilesRecursive(absTarget)) {
+			const operation = async () => {
+				await backupDocs(file, deployRoot, sessionId);
+				await fs.rm(file, { force: true });
+			};
+			if (mutationHooks) await mutationHooks.mutate(file, operation);
+			else await operation();
+		}
+		const directories = [...(await listDirectoriesRecursive(absTarget)), absTarget]
+			.sort((a, b) => b.length - a.length);
+		for (const dir of directories) {
+			await fs.rmdir(dir).catch((error) => {
+				if (docsErrorCode(error) !== "ENOENT" && docsErrorCode(error) !== "ENOTEMPTY") throw error;
+			});
+		}
 	} else {
-		await backupDocs(absTarget, deployRoot, sessionId);
+		const operation = async () => {
+			await backupDocs(absTarget, deployRoot, sessionId);
+			await fs.rm(absTarget, { force: true });
+		};
+		if (mutationHooks) await mutationHooks.mutate(absTarget, operation);
+		else await operation();
 	}
-	await fs.rm(absTarget, { recursive: true, force: true });
+}
+
+async function listDirectoriesRecursive(dir: string): Promise<string[]> {
+	const results: string[] = [];
+	let entries: import("fs").Dirent[];
+	try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch (error) {
+		if (docsErrorCode(error) !== "ENOENT") throw error;
+		return results;
+	}
+	for (const entry of entries) {
+		if (!entry.isDirectory()) continue;
+		const child = path.join(dir, entry.name);
+		results.push(child, ...(await listDirectoriesRecursive(child)));
+	}
+	return results;
 }
 
 /**
@@ -1156,6 +1232,7 @@ export async function syncDocs(
 	syncYaml: SyncYaml,
 	rootDir: string,
 	deployRoot: string,
+	mutationHooks?: DeployMutationHooks,
 ): Promise<string[]> {
 	const section = syncYaml.docs;
 	if (!section || !Array.isArray(section.items) || section.items.length === 0) {
@@ -1287,7 +1364,7 @@ export async function syncDocs(
 				managedTargets.add(candidate);
 				logDry(`docs: would remove ${candidate}`);
 			} else {
-				await deleteDocsTarget(candidate, deployRoot, context.backupDest);
+				await deleteDocsTarget(candidate, deployRoot, context.backupDest, mutationHooks);
 			}
 			continue;
 		}
@@ -1299,7 +1376,7 @@ export async function syncDocs(
 				managedTargets.add(plan.finalTarget);
 				logDry(`docs: would write ${plan.finalTarget}`);
 			} else {
-				await deployDocsFile(plan.sourceFile, plan.finalTarget, deployRoot, context.backupDest);
+				await deployDocsFile(plan.sourceFile, plan.finalTarget, deployRoot, context.backupDest, mutationHooks);
 				writtenLeaves.push(plan.finalTarget);
 			}
 			continue;
@@ -1314,7 +1391,7 @@ export async function syncDocs(
 				logDry(`docs: would write ${dest}`);
 			}
 		} else {
-			await deployDocsDir(plan.absTarget, plan.files, deployRoot, context.backupDest);
+			await deployDocsDir(plan.absTarget, plan.files, deployRoot, context.backupDest, mutationHooks);
 			writtenLeaves.push(...plan.files.map((f) => f.dest));
 		}
 	}
@@ -2383,7 +2460,8 @@ export async function processYaml(
 				KNOWN_PLATFORMS.map(async (platform) => (await parseAndMergePlatformYaml(yamlDir, platform)) !== null),
 			)).some(Boolean);
 			const hasValidPreviousManifest = (await readManifest(deployRoot)) !== null;
-			if (shouldMkdirClaude || libSourceRoots.size > 0 || platformHookTransactionPaths.length > 0 || hasPlatformYaml || hasValidPreviousManifest) {
+			const docsTransactionPaths = await planDocsTransactionPaths(context, syncYaml, rootDir, deployRoot);
+			if (shouldMkdirClaude || libSourceRoots.size > 0 || platformHookTransactionPaths.length > 0 || hasPlatformYaml || hasValidPreviousManifest || docsTransactionPaths.length > 0) {
 				const ownedPaths: Array<string | { path: string; owner: string }> = [];
 				ownedPaths.push(...await collectManifestTransactionPaths(deployRoot));
 				for (const category of CATEGORIES) {
@@ -2408,6 +2486,7 @@ export async function processYaml(
 					}
 				}
 				ownedPaths.push(...platformHookTransactionPaths);
+				ownedPaths.push(...docsTransactionPaths);
 				if (codexSkillNames.size > 0 && adapters.get("codex")) {
 					ownedPaths.push(...await planCodexSkillsFossilCleanup(deployRoot, codexSkillNames));
 				}
@@ -2512,7 +2591,7 @@ export async function processYaml(
 			// Sync docs — unconditional (not gated on shouldMkdirClaude): docs is
 			// platform-agnostic and lands directly under deployRoot, so a docs-only
 			// project (no CATEGORIES items, no .claude) must still deploy its docs.
-			const docsDests = await syncDocs(context, syncYaml, rootDir, deployRoot);
+			const docsDests = await syncDocs(context, syncYaml, rootDir, deployRoot, deployTransaction ?? undefined);
 
 			// Rewrite platform paths for non-claude platforms
 			const nonClaudePlatforms: Platform[] = ["gemini", "codex", "opencode"];
