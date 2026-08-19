@@ -5,6 +5,7 @@ import type {
 	PlatformYaml,
 	PluginScope,
 } from "../lib/types.ts";
+import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
 
 /** Called immediately after an adapter writes an OMT-owned tracked path. */
 export type PlatformWriteObserver = (writtenPath: string) => void | Promise<void>;
@@ -40,6 +41,7 @@ export interface PlatformAdapter {
 		addHooks?: unknown[],
 		dryRun?: boolean,
 		modelMap?: ModelMap,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void>;
 
 	/** Sync a command file to the target project. */
@@ -48,6 +50,7 @@ export interface PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun?: boolean,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void>;
 
 	/**
@@ -59,6 +62,8 @@ export interface PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun?: boolean,
+		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void>;
 
 	/** Sync a skill directory to the target project. */
@@ -67,6 +72,7 @@ export interface PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun?: boolean,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void>;
 
 	/** Sync a script file or directory to the target project. */
@@ -75,6 +81,7 @@ export interface PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun?: boolean,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void>;
 
 	/** Sync a rule file to the target project's rules directory. */
@@ -84,6 +91,7 @@ export interface PlatformAdapter {
 		sourcePath: string,
 		dryRun?: boolean,
 		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void>;
 
 	/**
