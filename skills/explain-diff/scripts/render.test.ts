@@ -88,3 +88,64 @@ describe("테마", () => {
 		expect(renderToHtml(DOC, "제목")).toContain("prefers-color-scheme: dark");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// v3 — mermaid 사전 렌더 + 렌더러 소유 컴포넌트 CSS
+
+import { preRenderMermaid } from "./render";
+
+const MERMAID_DOC = `# 제목
+
+## Architecture
+
+### 시스템 레벨
+
+\`\`\`mermaid
+flowchart LR
+  A --> B
+\`\`\`
+
+산문.
+
+\`\`\`mermaid
+flowchart TB
+  C --> D
+\`\`\`
+`;
+
+describe("mermaid 사전 렌더", () => {
+	test("mermaid 펜스는 렌더 함수를 거쳐 figure.diagram 으로 감싼 인라인 SVG 가 된다", () => {
+		const out = preRenderMermaid(MERMAID_DOC, (src, i) => `<svg data-i="${i}">${src.includes("A --> B") ? "AB" : "CD"}</svg>`);
+		expect(out).not.toContain("```mermaid");
+		expect(out).toContain('<figure class="diagram"><svg data-i="0">AB</svg></figure>');
+		expect(out).toContain('<figure class="diagram"><svg data-i="1">CD</svg></figure>');
+	});
+
+	test("mermaid 가 아닌 코드 펜스는 건드리지 않는다", () => {
+		const doc = "```ts\nconst x = 1;\n```\n";
+		expect(preRenderMermaid(doc, () => "<svg/>")).toBe(doc);
+	});
+
+	test("렌더 함수가 던지면 실패한 블록 번호가 오류에 실린다", () => {
+		expect(() =>
+			preRenderMermaid(MERMAID_DOC, (_src, i) => {
+				if (i === 1) throw new Error("mmdc exploded");
+				return "<svg/>";
+			}),
+		).toThrow(/2번째 mermaid 블록/);
+	});
+});
+
+describe("컴포넌트 CSS — 렌더러가 시각 언어를 소유한다", () => {
+	const html = renderToHtml(DOC, "제목");
+
+	test("승인된 컴포넌트 클래스의 CSS 가 내장돼 있다", () => {
+		for (const cls of [".flow", ".flow-step", ".flow-arrow", ".compare", ".callout", ".doc-meta"]) {
+			expect(html).toContain(cls);
+		}
+	});
+
+	test("figure.diagram 스타일이 내장돼 있다 — 다크 모드에서도 다이어그램이 읽힌다", () => {
+		expect(html).toContain("figure.diagram");
+	});
+});
