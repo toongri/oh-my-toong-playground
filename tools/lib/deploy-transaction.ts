@@ -16,8 +16,6 @@ type DeployTransactionEntry = {
 export type DeployOwnedPath = string | { path: string; owner?: string };
 
 const DEFAULT_PATHS = [
-	".claude/lib", ".codex/lib", ".agents/lib",
-	".claude/scripts/pretool-trace", ".codex/scripts/pretool-trace",
 	".claude/settings.local.json", ".claude/settings.json", ".gemini/settings.json",
 	".codex/hooks.json", ".codex/config.toml", ".opencode/opencode.json",
 ];

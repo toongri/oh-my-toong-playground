@@ -4084,6 +4084,80 @@ describe("syncLib", () => {
 		// tbox.yaml also deploys (data file for the hook's lib module)
 		expect(await exists(path.join(libDest, "pins", "tbox.yaml"))).toBe(true);
 	});
+
+	it("journals the exact .agents/lib root and rolls it back after a later failure", async () => {
+		const libSrc = path.join(rootDir, "lib");
+		await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
+		const sourceTs = path.join(rootDir, "skills", "oracle", "run.ts");
+		await writeFile(sourceTs, "import { x } from '@lib/helper';\n");
+		const libDest = path.join(targetPath, ".agents", "lib");
+		const transaction = await DeployTransaction.begin(targetPath, false, [libDest, path.join(targetPath, ".claude", "lib")]);
+		const agentsRoots: LibSourceRoots = new Map([["agents", new Set([sourceTs])]]);
+		await syncLib(makeContext(), targetPath, rootDir, ["claude"], agentsRoots, transaction!);
+		expect(await exists(path.join(libDest, "helper.ts"))).toBe(true);
+		await fs.rm(path.join(libSrc, "helper.ts"));
+		await fs.mkdir(path.join(libSrc, "helper.ts"));
+		await expect(syncLib(makeContext(), targetPath, rootDir, ["claude"], agentsRoots, transaction!)).rejects.toThrow();
+		await transaction!.rollback();
+		expect(await exists(libDest)).toBe(false);
+	});
+
+	it("rejects an unplanned lib location instead of mutating it", async () => {
+		const libSrc = path.join(rootDir, "lib");
+		await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
+		const sourceTs = path.join(rootDir, "skills", "oracle", "run.ts");
+		await writeFile(sourceTs, "export const hello = 'world';\n");
+		const unplanned = path.join(targetPath, ".gemini", "lib");
+		await fs.mkdir(unplanned, { recursive: true });
+		await writeFile(path.join(unplanned, "sentinel.ts"), "sentinel\n");
+		const transaction = await DeployTransaction.begin(targetPath, false, [path.join(targetPath, ".claude", "lib")]);
+		await expect(syncLib(makeContext(), targetPath, rootDir, ["gemini"], libRoots("gemini", sourceTs), transaction!)).rejects.toThrow("not inventoried");
+		expect(await readFile(path.join(unplanned, "sentinel.ts"))).toBe("sentinel\n");
+	});
+
+	it("restores a stale lib after transaction rollback", async () => {
+		const libSrc = path.join(rootDir, "lib");
+		await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
+		const sourceTs = path.join(rootDir, "skills", "plain", "run.ts");
+		await writeFile(sourceTs, "export const hello = 'world';\n");
+		const libDest = path.join(targetPath, ".claude", "lib");
+		await fs.mkdir(libDest, { recursive: true });
+		await writeFile(path.join(libDest, "sentinel.ts"), "before\n");
+		const transaction = await DeployTransaction.begin(targetPath, false, [libDest]);
+		await syncLib(makeContext(), targetPath, rootDir, ["claude"], libRoots("claude", sourceTs), transaction!);
+		expect(await exists(libDest)).toBe(false);
+		await transaction!.rollback();
+		expect(await readFile(path.join(libDest, "sentinel.ts"))).toBe("before\n");
+	});
+
+	it("rejects a pre-CAS external lib edit and preserves its bytes", async () => {
+		const libSrc = path.join(rootDir, "lib");
+		await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
+		const sourceTs = path.join(rootDir, "skills", "oracle", "run.ts");
+		await writeFile(sourceTs, "import { x } from '@lib/helper';\n");
+		const libDest = path.join(targetPath, ".claude", "lib");
+		await fs.mkdir(libDest, { recursive: true });
+		await writeFile(path.join(libDest, "sentinel.ts"), "before\n");
+		const transaction = await DeployTransaction.begin(targetPath, false, [libDest]);
+		await writeFile(path.join(libDest, "sentinel.ts"), "external\n");
+		await expect(syncLib(makeContext(), targetPath, rootDir, ["claude"], libRoots("claude", sourceTs), transaction!)).rejects.toThrow("conflict");
+		expect(await readFile(path.join(libDest, "sentinel.ts"))).toBe("external\n");
+	});
+
+	it("does not invoke mutation hooks or mutate lib during dry-run", async () => {
+		const libSrc = path.join(rootDir, "lib");
+		await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
+		const sourceTs = path.join(rootDir, "skills", "oracle", "run.ts");
+		await writeFile(sourceTs, "import { x } from '@lib/helper';\n");
+		const libDest = path.join(targetPath, ".claude", "lib");
+		await fs.mkdir(libDest, { recursive: true });
+		await writeFile(path.join(libDest, "sentinel.ts"), "before\n");
+		let calls = 0;
+		const hooks: DeployMutationHooks = { mutate: async () => { calls++; throw new Error("must not mutate"); } };
+		await syncLib(makeContext({ dryRun: true }), targetPath, rootDir, ["claude"], libRoots("claude", sourceTs), hooks);
+		expect(calls).toBe(0);
+		expect(await readFile(path.join(libDest, "sentinel.ts"))).toBe("before\n");
+	});
 });
 
 // ---------------------------------------------------------------------------

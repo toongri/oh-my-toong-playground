@@ -324,6 +324,15 @@ export async function collectComponentSourceRoots(
  */
 export type LibSourceRoots = Map<string, Set<string>>;
 
+/** Resolve the exact live lib roots touched by both syncLib calls in one run. */
+function effectiveLibLocations(platforms: readonly Platform[], libSourceRoots?: LibSourceRoots): string[] {
+	return [...new Set<string>([...platforms, ...(libSourceRoots?.keys() ?? [])])];
+}
+
+function libDestinationPaths(targetPath: string, platforms: readonly Platform[], libSourceRoots?: LibSourceRoots): string[] {
+	return effectiveLibLocations(platforms, libSourceRoots).map((location) => path.join(targetPath, `.${location}`, "lib"));
+}
+
 /** Record a resolved source path under a deploy location in the lib-source accumulator. */
 function addLibSourceRoot(roots: LibSourceRoots, location: string, sourcePath: string): void {
 	let set = roots.get(location);
@@ -1553,7 +1562,10 @@ async function sourceRootsCarryOmtDirToken(sourceRoots: Iterable<string>): Promi
  * Deploy lib/ directory to each platform target, then rewrite @lib/* aliases.
  * Mirrors sync_lib in sync.sh:1422-1457.
  *
- * Called AFTER category syncs, BEFORE rewritePlatformPaths.
+ * Called AFTER category syncs, BEFORE rewritePlatformPaths. When supplied,
+ * mutationHooks journals each live `.{location}/lib` root as one atomic
+ * build-and-swap mutation; transient `lib.tmp-*` and `lib.old-*` siblings are
+ * intentionally excluded from the transaction inventory.
  */
 export async function syncLib(
 	context: SyncContext,
@@ -1561,6 +1573,7 @@ export async function syncLib(
 	rootDir: string,
 	platforms: Platform[],
 	libSourceRoots?: LibSourceRoots,
+	mutationHooks?: DeployMutationHooks,
 ): Promise<void> {
 	const libSrc = path.join(rootDir, "lib");
 	if (!existsSync(libSrc)) {
@@ -1598,7 +1611,7 @@ export async function syncLib(
 	// not a Platform value — so this loop variable must admit that key too. The
 	// resulting `.agents` bucket is exactly `.${"agents"}`, which lands lib
 	// beside `.agents/skills` where a codex skill script can actually resolve it.
-	const effectivePlatforms = new Set<string>([...platforms, ...(libSourceRoots?.keys() ?? [])]);
+	const effectivePlatforms = effectiveLibLocations(platforms, libSourceRoots);
 
 	for (const platform of effectivePlatforms) {
 		const platformDir = path.join(targetPath, `.${platform}`);
@@ -1680,11 +1693,11 @@ export async function syncLib(
 					logDry(`Remove stale lib directory: ${libDest}`);
 				}
 			} else {
-				try {
-					await fs.rm(libDest, { recursive: true, force: true });
-				} catch {
-					// ignore
-				}
+				const removeStale = async (): Promise<void> => {
+					try { await fs.rm(libDest, { recursive: true, force: true }); } catch { /* ignore */ }
+				};
+				if (mutationHooks) await mutationHooks.mutate(libDest, removeStale);
+				else await removeStale();
 			}
 			logInfo(`No @lib/ imports found in .${platform}/, skipping lib deployment`);
 			continue;
@@ -1706,22 +1719,23 @@ export async function syncLib(
 			}
 			logDry(`Rewrite @lib/* aliases in ${platformDir}/`);
 		} else {
-			// Build the new lib tree in a temp sibling directory (same filesystem as
-			// libDest) so we can atomically swap it in via fs.rename.  The reader
-			// always sees either the complete old lib or the complete new lib.
-			const suffix = Math.random().toString(36).slice(2);
-			const libTmp = path.join(platformDir, `lib.tmp-${suffix}`);
-			const libOld = path.join(platformDir, `lib.old-${suffix}`);
+			const swapLib = async (): Promise<void> => {
+				// Build the new lib tree in a temp sibling directory (same filesystem as
+				// libDest) so we can atomically swap it in via fs.rename. The reader
+				// always sees either the complete old lib or the complete new lib.
+				const suffix = Math.random().toString(36).slice(2);
+				const libTmp = path.join(platformDir, `lib.tmp-${suffix}`);
+				const libOld = path.join(platformDir, `lib.old-${suffix}`);
 
 			// Remove any leftover temp dirs from prior crashed runs.
 			const platformEntries = await fs.readdir(platformDir).catch(() => []);
-			for (const entry of platformEntries) {
-				if (entry.startsWith("lib.tmp-") || entry.startsWith("lib.old-")) {
-					await fs
-						.rm(path.join(platformDir, entry), { recursive: true, force: true })
-						.catch(() => undefined);
+				for (const entry of platformEntries) {
+					if (entry.startsWith("lib.tmp-") || entry.startsWith("lib.old-")) {
+						await fs
+							.rm(path.join(platformDir, entry), { recursive: true, force: true })
+							.catch(() => undefined);
+					}
 				}
-			}
 
 			// True once the live lib has been renamed to libOld but before the new
 			// tree has taken its place — the window in which a failure would leave the
@@ -1793,6 +1807,9 @@ export async function syncLib(
 				}
 				throw err;
 			}
+			};
+			if (mutationHooks) await mutationHooks.mutate(libDest, swapLib);
+			else await swapLib();
 
 			logInfo(`Deployed shared lib to .${platform}/lib/`);
 			await rewriteLibAliases(platformDir, bundledPackages);
@@ -2497,6 +2514,9 @@ export async function processYaml(
 			)).some(Boolean);
 			const hasValidPreviousManifest = (await readManifest(deployRoot)) !== null;
 			const docsTransactionPaths = await planDocsTransactionPaths(context, syncYaml, rootDir, deployRoot);
+			const libTransactionPaths = shouldMkdirClaude || libSourceRoots.size > 0
+				? libDestinationPaths(deployRoot, libPlatforms, libSourceRoots)
+				: [];
 			if (shouldMkdirClaude || libSourceRoots.size > 0 || platformHookTransactionPaths.length > 0 || hasPlatformYaml || hasValidPreviousManifest || docsTransactionPaths.length > 0) {
 				const ownedPaths: Array<string | { path: string; owner: string }> = [];
 				ownedPaths.push(...await collectManifestTransactionPaths(deployRoot));
@@ -2523,6 +2543,7 @@ export async function processYaml(
 				}
 				ownedPaths.push(...platformHookTransactionPaths);
 				ownedPaths.push(...docsTransactionPaths);
+				ownedPaths.push(...libTransactionPaths);
 				if (codexSkillNames.size > 0 && adapters.get("codex")) {
 					ownedPaths.push(...await planCodexSkillsFossilCleanup(deployRoot, codexSkillNames));
 				}
@@ -2552,12 +2573,7 @@ export async function processYaml(
 				deployTransaction,
 			);
 			if (shouldMkdirClaude || libSourceRoots.size > 0) {
-				await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
-				if (deployTransaction) {
-					await deployTransaction.checkpoint([
-						".claude/lib", ".codex/lib", ".agents/lib",
-					].map((relativePath) => path.join(deployRoot, relativePath)));
-				}
+				await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots, deployTransaction ?? undefined);
 			}
 
 			// Ensure <deployRoot>/.claude exists only once wrapper/runtime preparation
@@ -2616,12 +2632,7 @@ export async function processYaml(
 			// false, so syncLib never reaches into the worktree's .{platform}/lib to
 			// delete a directory this sync never owns.
 			if (shouldMkdirClaude || libSourceRoots.size > 0) {
-				await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
-				if (deployTransaction) {
-					await deployTransaction.checkpoint([
-						".claude/lib", ".codex/lib", ".agents/lib",
-					].map((relativePath) => path.join(deployRoot, relativePath)));
-				}
+				await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots, deployTransaction ?? undefined);
 			}
 
 			// Sync docs — unconditional (not gated on shouldMkdirClaude): docs is
