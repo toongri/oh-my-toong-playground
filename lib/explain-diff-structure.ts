@@ -61,9 +61,22 @@ const GROUP_HEADING = /^##\s+Change Group\s+\d+\s*:\s*\S.*$/gm;
 const FILE_BLOCK = /^####\s+`([^`]+)`(?:\s+\([^)]*\))?\s*$/gm;
 // 커밋 서브섹션: h3 헤딩의 백틱 안 16진 해시.
 const COMMIT_SUBSECTION = /^###\s+`([0-9a-fA-F]{6,40})`/gm;
+// 단일 헤딩 문자열이 커밋 서브섹션 형태인지 판정(전역/멀티라인 플래그 없이 .test용).
+const COMMIT_HEADING_LINE = /^###\s+`[0-9a-fA-F]{6,40}`/;
+// 그룹 본문 안 모든 h3 헤딩(커밋이든 아니든) — 파일 블록의 최근접 부모 판정용.
+const ANY_H3 = /^###\s[^\n]*$/gm;
 
 /** The 왜 field, as an HTML paragraph (the cf component authors it). */
 const WHY_PARAGRAPH = /<p>\s*<strong>\s*왜[\s\S]*?<\/p>/;
+/** The cf-loc slot paragraph — where the traceability anchors must live. */
+const CF_LOC_PARAGRAPH = /<p[^>]*class=["']cf-loc["'][^>]*>[\s\S]*?<\/p>/;
+/** A cf-loc anchor in `base:<path>:<line>` / `head:<path>:<line>` form. The line
+ *  number is what makes it an anchor rather than a bare filename in prose. */
+const BASE_ANCHOR = /base:\S+:\d+/;
+const HEAD_ANCHOR = /head:\S+:\d+/;
+/** The non-왜 cf fields R13 requires present in every file block (왜 is R3's). */
+const CF_FIELDS = ["역할/변경 전", "바뀐 것", "효과"] as const;
+const CF_CONTAINER = /class=["']cf["']/;
 /** A provenance tag a 왜 field may carry. The cf-src badge must be a valid label
  *  WITH its required companion — `근거` followed by a quote, `추론` followed by a
  *  ground (a non-tag char, so `추론</span></p>` fails), or a standalone
@@ -271,15 +284,19 @@ function checkR4(text: string): CheckItem {
 }
 
 // R5 — both endpoints of the move (base:/head: anchors in the cf-loc slot). An
-// ADDED file is asked for the head anchor alone. Read on the code-stripped body.
+// ADDED file is asked for the head anchor alone. Scoped to the cf-loc paragraph
+// so anchors in ordinary prose can not stand in for the required slot, and the
+// anchor must carry a line number (`path:line`), not just a bare `base:` token.
 function checkR5(blocks: Array<{ path: string; body: string }>, addedFiles: string[] | undefined): CheckItem {
 	const addedSet = new Set(addedFiles ?? []);
 	const noAnchor = blocks
 		.filter((b) => {
-			const body = withoutFencedCode(b.body);
-			const head = /head:\S/.test(body);
+			const locMatch = withoutFencedCode(b.body).match(CF_LOC_PARAGRAPH);
+			if (locMatch === null) return true; // no cf-loc slot at all
+			const loc = locMatch[0];
+			const head = HEAD_ANCHOR.test(loc);
 			if (addedSet.has(b.path)) return !head;
-			return !(head && /base:\S/.test(body));
+			return !(head && BASE_ANCHOR.test(loc));
 		})
 		.map((b) => b.path);
 	return {
@@ -290,7 +307,7 @@ function checkR5(blocks: Array<{ path: string; body: string }>, addedFiles: stri
 			blocks.length === 0
 				? "파일 블록이 하나도 없습니다."
 				: noAnchor.length > 0
-					? `base/head 위치가 모두 있지 않은 파일: ${noAnchor.join(", ")}`
+					? `cf-loc 슬롯에 base/head 위치 앵커(path:line)가 갖춰지지 않은 파일: ${noAnchor.join(", ")}`
 					: "",
 	};
 }
@@ -365,7 +382,10 @@ function axisHasValue(slice: string, axis: string): boolean {
 // drew one box-and-arrow diagram and stopped, never naming which API surface,
 // schema, or client-consumed contract this diff actually moves.
 function checkR14(text: string): CheckItem {
-	const slice = levelSlice(text, "시스템 레벨");
+	// Mask fenced code first: a contract table that lives only inside a fenced
+	// example (the template itself ships one) is illustration, not the rendered
+	// table R14 requires. Every other structural check strips fences the same way.
+	const slice = levelSlice(maskFenced(text), "시스템 레벨");
 	if (slice === null) {
 		return {
 			id: "R14",
@@ -455,15 +475,21 @@ function checkR13(
 			problems.push(`${g.title}: 커밋 서브섹션(### \`hash\` — 제목)이 없습니다`);
 			continue;
 		}
-		// Every file block must sit UNDER a commit subsection, not just share the
-		// group with one. A file block before the first commit heading is the flat
-		// structure the spine rejects — the file is mapped to no commit.
-		const firstCommit = masked.search(new RegExp(COMMIT_SUBSECTION.source, "m"));
-		const orphanBeforeCommit = [...masked.matchAll(new RegExp(FILE_BLOCK.source, "gm"))].some(
-			(m) => m.index !== undefined && m.index < firstCommit,
-		);
-		if (orphanBeforeCommit) {
-			problems.push(`${g.title}: 커밋 서브섹션보다 먼저 온 파일 블록이 있습니다(커밋에 매이지 않음)`);
+		// Every file block must sit UNDER a commit subsection — its NEAREST
+		// preceding h3 must be one. Comparing only against the first commit's
+		// position let a later non-commit h3 (`### Notes`) re-parent a file away
+		// from any commit while still passing. Check each block's actual parent.
+		const h3s = [...masked.matchAll(new RegExp(ANY_H3.source, "gm"))]
+			.map((m) => ({ at: m.index, text: m[0] }))
+			.filter((h): h is { at: number; text: string } => h.at !== undefined);
+		const misparented = [...masked.matchAll(new RegExp(FILE_BLOCK.source, "gm"))].some((fm) => {
+			const at = fm.index;
+			if (at === undefined) return false;
+			const parent = h3s.filter((h) => h.at < at).sort((a, b) => b.at - a.at)[0];
+			return parent === undefined || !COMMIT_HEADING_LINE.test(parent.text);
+		});
+		if (misparented) {
+			problems.push(`${g.title}: 파일 블록의 최근접 상위 h3가 커밋 서브섹션이 아닙니다(커밋에 매이지 않음)`);
 		}
 		// Only validate hashes when enumeration succeeded — an empty known set is
 		// "git failed", not "every hash is fake".
@@ -491,6 +517,17 @@ function checkR13(
 		return at !== undefined && !groupSpans.some((s) => at >= s.start && at < s.end);
 	});
 	if (outsideGroup) problems.push("Change Group 밖에 파일 블록이 있습니다(그룹·커밋에 매이지 않음)");
+	// Each file block must carry a complete cf component — the container plus the
+	// non-왜 fields (왜 is R3's, cf-loc is R5's). A block with only a 왜 line and a
+	// code fence is an incomplete explanation the template does not permit.
+	const incompleteCf = blocks
+		.filter((b) => {
+			const body = withoutFencedCode(b.body);
+			return !CF_CONTAINER.test(body) || CF_FIELDS.some((f) => !body.includes(f));
+		})
+		.map((b) => b.path);
+	if (incompleteCf.length > 0)
+		problems.push(`cf 컴포넌트 필수 요소(${CF_FIELDS.join("·")}·cf 컨테이너)가 없는 파일: ${incompleteCf.join(", ")}`);
 	const noCode = blocks.filter((b) => !hasCoreCodeFence(b.body)).map((b) => b.path);
 	if (noCode.length > 0) problems.push(`핵심 로직 코드 펜스(mermaid·빈 펜스 제외)가 없는 파일: ${noCode.join(", ")}`);
 	return {

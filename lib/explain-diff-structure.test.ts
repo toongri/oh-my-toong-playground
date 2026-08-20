@@ -246,7 +246,10 @@ describe("code 스텝 — R2·R3·R5·R1(커버리지형)·R13", () => {
 
 #### \`lib/state-lock.ts\`
 <div class="cf">
+<p><strong>역할/변경 전</strong> — 이 파일은 새로 생겼다</p>
+<p><strong>바뀐 것</strong> — 락 획득/해제를 새로 넣었다</p>
 <p><strong>왜</strong> — <span class="cf-src">근거</span> "동시 작성자 두 명"</p>
+<p><strong>효과</strong> — 두 CLI가 같은 락을 쓴다</p>
 <p class="cf-loc"><code>base:신규 파일</code> → <code>head:lib/state-lock.ts:15</code></p>
 </div>
 
@@ -775,5 +778,92 @@ export const other = 1;
 			step: "code",
 		});
 		expect(r.items.find((i) => i.id === "R3")?.pass).toBe(false);
+	});
+});
+
+describe("게이트 이완 보강 3라운드 — 재리뷰 지적 4종", () => {
+	// finding 1 — cf 컴포넌트의 필수 필드 전수 검증
+	test("R13 — cf 블록에 효과 필드가 없으면 실패한다", () => {
+		const body = GOOD_GROUP.replace(/<p><strong>효과<\/strong>[^\n]*\n/, "");
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+		});
+		expect(r.items.find((i) => i.id === "R13")?.pass).toBe(false);
+	});
+
+	test("R13 — cf 블록에 역할/변경 전·바뀐 것이 없으면 실패한다", () => {
+		const body = GOOD_GROUP.replace(/<p><strong>역할\/변경 전<\/strong>[^\n]*\n/, "").replace(
+			/<p><strong>바뀐 것<\/strong>[^\n]*\n/,
+			"",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+		});
+		expect(r.items.find((i) => i.id === "R13")?.pass).toBe(false);
+	});
+
+	// finding 2 — 파일 블록의 최근접 h3 부모가 커밋 서브섹션이어야 한다
+	test("R13 — 커밋과 파일 블록 사이에 비-커밋 h3가 끼면 실패한다", () => {
+		const body = GOOD_GROUP.replace(
+			"#### `lib/state-lock.ts`",
+			"### Notes\n주석용 h3 섹션.\n\n#### `lib/state-lock.ts`",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+		});
+		expect(r.items.find((i) => i.id === "R13")?.pass).toBe(false);
+	});
+
+	// finding 3 — 펜스 안 예시 표는 R14를 만족시키지 못한다
+	test("R14 — 계약 3축이 펜스 예시 안에만 있으면 실패한다", () => {
+		const fenced = `## Architecture
+
+### 시스템 레벨
+\`\`\`mermaid
+flowchart LR
+  A[Node] --> B[(PG)]
+\`\`\`
+
+표는 이렇게 씁니다:
+
+\`\`\`markdown
+| 축 | 이번에 바뀌는 계약 |
+|---|---|
+| 서버 API | 좁아진다 |
+| DB 스키마 | 변경 없음: 조인만 |
+| 클라이언트 의존 | 좁아진다 |
+\`\`\`
+
+### 컴포넌트 레벨
+구조 변화 없음: 이 diff는 모듈 의존을 건드리지 않는다.
+
+### 도메인 레벨
+구조 변화 없음: 엔티티 관계는 바뀌지 않는다.
+`;
+		const r = checkStructure(withBackground(fenced), {
+			signalFiles: ["a.ts"],
+			step: "architecture",
+		});
+		expect(r.items.find((i) => i.id === "R14")?.pass).toBe(false);
+	});
+
+	// finding 4 — 앵커는 cf-loc 슬롯 안에 형식을 갖춰 있어야 한다
+	test("R5 — 앵커가 cf-loc 슬롯이 아니라 산문에 있으면 실패한다", () => {
+		const body = GOOD_GROUP.replace(
+			/<p class="cf-loc">[\s\S]*?<\/p>/,
+			"<p>위치는 base:lib/state-lock.ts:0 에서 head:lib/state-lock.ts:14 로 옮겼다.</p>",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+		});
+		expect(r.items.find((i) => i.id === "R5")?.pass).toBe(false);
 	});
 });

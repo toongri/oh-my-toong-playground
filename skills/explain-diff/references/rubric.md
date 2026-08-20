@@ -86,7 +86,7 @@ Both a deep background and a narrow background are present, and the deep backgro
 
 ### R5. Traceability
 
-Each file block points at the before-location and after-location in the `cf-loc` slot in the form `base:file:line` → `head:file:line` — the location anchors are pulled out of the prose.
+Each file block points at the before-location and after-location in the `cf-loc` slot in the form `base:file:line` → `head:file:line`. The anchors are read **only inside the `cf-loc` paragraph**, and each must carry a line number (`path:line`) — `base:`/`head:` tokens sitting in ordinary prose, or a bare filename with no line, do not satisfy traceability.
 But a file the diff **newly added** has no prior location to point at, so only the `head:` anchor is required. New-ness comes from `A` in `git diff --name-status`, not from the document's narrative — deciding by sentence would let an author be exempted from the base anchor merely by writing "new file".
 
 > **RED 10/16.** 6 have not a single `file:line`. In particular 3 codex no-guidance and 2 claude gist are at
@@ -124,7 +124,7 @@ Nowhere in the document is there a `<style>` block or an inline `style=` attribu
 
 ### R13. Commit spine + core-logic code
 
-The code section is organized with the commit as its spine. Each Change Group has at least one commit subsection (`### \`hash\``) carrying a valid range hash, and every file block sits inside a Change Group and under (after) a commit subsection — a file block outside any group, or one that precedes the first commit heading in its group, is the flat structure the spine rejects and fails. Each file block has one core-logic code fence, and a mermaid-only or empty fence does not count (the template reserves mermaid for diagrams and requires real code/pseudocode per file). Hash validity is compared against the list `start` pinned — if enumeration failed and the list is empty, the validity check is skipped ("git failed" is not "every hash is fake").
+The code section is organized with the commit as its spine. Each Change Group has at least one commit subsection (`### \`hash\``) carrying a valid range hash, and every file block sits inside a Change Group and its **nearest enclosing h3 is a commit subsection** — a file block outside any group, or one whose nearest preceding h3 is a non-commit heading (e.g. `### Notes`), is the flat structure the spine rejects and fails. Each file block carries the **complete cf component** — the `cf` container plus the `역할/변경 전`, `바뀐 것`, `효과` fields (the `왜` field is R3's, the `cf-loc` slot is R5's) — and one core-logic code fence; a block with only a `왜` line, or a mermaid-only or empty fence, does not count (the template reserves mermaid for diagrams and requires real code/pseudocode per file). Hash validity is compared against the list `start` pinned — if enumeration failed and the list is empty, the validity check is skipped ("git failed" is not "every hash is fake").
 
 > **RED — v3 artifact.** In the `b2c-6106` document, `## Commit Journey` (21 commits) and `## Change Group`
 > (per file) were fully separated, so commits were listed unrelated to the code explanation. File blocks
@@ -133,7 +133,7 @@ The code section is organized with the commit as its spine. Each Change Group ha
 
 ### R14. Three system-level change-contract axes
 
-`### 시스템 레벨`, beyond the diagram (or waiver marker), enumerates the contracts this diff changes across three axes — `서버 API`, `DB 스키마`, `클라이언트 의존`. All three axis labels must be present. Each axis states the changing contract or is filled with `변경 없음: <사유>`.
+`### 시스템 레벨`, beyond the diagram (or waiver marker), enumerates the contracts this diff changes across three axes — `서버 API`, `DB 스키마`, `클라이언트 의존`. All three axis labels must be present, each in a table row whose value cell is non-empty. Each axis states the changing contract or is filled with `변경 없음: <사유>` — a bare `변경 없음` with no rationale is an empty cell. The table must be **real rendered content**: fenced code is masked before the axes are scanned, so a contract table that appears only inside a fenced example (the template ships one) does not satisfy R14.
 
 > **RED — v3 artifact.** The `b2c-6106` system level ended with one box-and-arrow flowchart. How the API
 > surface of the three server contracts (cost, program doses, intake history) changes, how the join changes,
