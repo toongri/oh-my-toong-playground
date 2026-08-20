@@ -47,28 +47,28 @@ chunk-review:
     # `cleanup` (is this more than necessary), `requirement` (was what was
     # asked for actually done, and is it actually verified).
     - name: correctness
-      command: codex exec
+      command: codex exec -c service_tier=fast
       model: gpt-5.6-luna
       emoji: "\U0001F517"
       color: "CYAN"
       effort_level: xhigh
       output_format: json
     - name: regression
-      command: codex exec
+      command: codex exec -c service_tier=fast
       model: gpt-5.6-luna
       emoji: "\U0001F5D1"
       color: "MAGENTA"
       effort_level: xhigh
       output_format: json
     - name: cleanup
-      command: codex exec
+      command: codex exec -c service_tier=fast
       model: gpt-5.6-luna
       emoji: "\U0001F9F9"
       color: "YELLOW"
       effort_level: xhigh
       output_format: json
     - name: requirement
-      command: codex exec
+      command: codex exec -c service_tier=fast
       model: gpt-5.6-luna
       emoji: "\U0001F4CB"
       color: "GREEN"
