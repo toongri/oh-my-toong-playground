@@ -1,185 +1,175 @@
-# explain-diff 통합 루브릭
+# explain-diff unified rubric
 
-이 12항목은 세 곳에서 **같은 한 벌로** 쓰인다 — 스텝별 섹션 심사, 퀴즈 문항 생성의 근거,
-그리고 RED/GREEN 산출물 비교. 세 곳이 서로 다른 기준을 들면 "게이트를 통과했다"와
-"좋은 문서다"가 갈라지고, 그때부터 게이트는 통과 의식이 된다.
+These 14 items are used as **one and the same set** in three places — per-step section judgment, the basis for generating quiz questions, and the RED/GREEN artifact comparison. If the three places hold different standards, "passed the gate" and "is a good document" split apart, and from then on the gate is a pass-through ritual.
 
-항목은 **판정 주체로 3분할**돼 있다. 부재는 스크립트가 세고, 존재는 심사자가 인용으로
-증명하며, 순수 판단은 최소로 남긴다. 심사자가 재량을 쓸 수 있는 표면 자체를 줄이는 것이
-분할의 목적이다.
+The items are **split three ways by who decides**. Absence is counted by the script, existence is proven by the judge with a quote, and pure judgment is kept minimal. Reducing the very surface on which the judge can exercise discretion is the purpose of the split.
 
-## 근거
+## Grounds
 
-R1~R8의 `RED` 값은 무가이드·gist원문 두 대조군 × 픽스처 4종 × Claude/Codex,
-총 16건 실측이다(`$OMT_DIR/explain-diff-eval/probe.ts`). R9~R12의 `RED` 값은 v3 이전
-스킬이 실제로 만든 문서 13건(픽스처 10 + 실전 2 + codex terra 1) 실측이다. 추측으로 쓴
-항목은 없다. v3 GREEN: 개정 스킬 × codex(gpt-5.6-terra, high) × 픽스처 4종에서
-전 스텝 구조 검사 + mermaid 렌더 패리티 4/4 통과 — 23커밋 머지 PR의 해시 전수 대조 포함.
+The `RED` values for R1–R8 are 16 measured runs: no-guidance and gist-source, two controls × 4 fixtures × Claude/Codex (`$OMT_DIR/explain-diff-eval/probe.ts`). The `RED` values for R9–R12 are measured on 13 documents actually produced by the pre-v3 skill (10 fixtures + 2 real + 1 codex terra). No item is written from a guess. v3 GREEN: the revised skill × codex (gpt-5.6-terra, high) × 4 fixtures passed the full-step structure check + mermaid render parity 4/4 — including a full hash comparison of a 23-commit merge PR.
 
-## 언제 평가되는가
+The `RED` for R13 and R14 is measured on a v3 artifact (the document for the real 21-commit PR `b2c-6106`): the code section was separated from the commit narrative so files sat stranded, the file fields clumped into a single paragraph, and the system level ended with one box-and-arrow diagram, never enumerating which API, schema, or client contracts change.
 
-문서는 스텝 하나씩 누적해서 쓰인다. 그래서 항목도 그 슬롯을 채우는 스텝에서만 평가된다
-— 아직 쓰지도 않은 스텝의 슬롯을 앞선 스텝에서 요구하지 않는다.
+## When each is evaluated
 
-| 항목 | 판정 주체 | 평가되는 스텝 |
+The document is written one step at a time, accumulating. So an item is evaluated only in the step that fills its slot — an earlier step does not demand the slot of a step not yet written.
+
+| Item | Decider | Step evaluated |
 |---|---|---|
-| R1 (등재형) | 스크립트 | evidence |
-| R1 (커버리지형) | 스크립트 | code |
-| R2 | 스크립트 | code |
-| R3 | 스크립트 | code |
-| R4 | 스크립트 | background |
-| R5 | 스크립트 | code |
-| R6 | 심사자 | intuition |
-| R7 | 심사자 | code |
-| R8 | 순수 판단 | quiz (문항 뱅크를 구성할 때) |
-| R9 | 스크립트 | architecture |
-| R10 | 스크립트 | commits |
-| R11 | 스크립트 | 모든 저작 스텝 (누적 문서 전체) |
-| R12 | 심사자 | architecture |
+| R1 (listing form) | script | evidence |
+| R1 (coverage form) | script | code |
+| R2 | script | code |
+| R3 | script | code |
+| R4 | script | background |
+| R5 | script | code |
+| R6 | judge | intuition |
+| R7 | judge | code |
+| R8 | pure judgment | quiz (when composing the question bank) |
+| R9 | script | architecture |
+| R10 | script | commits |
+| R11 | script | every authoring step (whole accumulated document) |
+| R12 | judge | architecture |
+| R13 | script | code |
+| R14 | script | architecture |
 
-`intuition` 스텝은 고유 슬롯이 없다 — R6(심사자)와 공통 R11만 그 스텝을 판정한다.
-`render`와 `quiz`는 이 표의 어떤 항목도 채점하지 않는다: `render`는 산출물 검사
-(HTML의 존재·비어있지 않음·mermaid→SVG 패리티·visual-qa `VERDICT: PASS`·
-technical-writing `REVIEW: APPLIED`)를 보고, `quiz`는 별도의 채점 경로(`grade`)를 탄다.
+The `intuition` step has no slot of its own — only R6 (judge) and the common R11 decide it. `render` and `quiz` score none of this table's items: `render` looks at the artifact check (HTML present and non-empty, mermaid→SVG parity, visual-qa `VERDICT: PASS`, technical-writing `REVIEW: APPLIED`), and `quiz` runs a separate grading path (`grade`).
 
 ---
 
-## A. 스크립트가 판정 — 부재 검사
+## A. Script decides — absence check
 
-부재는 기계가 셀 수 있고, 셀 수 있는 것을 사람이나 모델에게 맡기면 흔들린다.
+Absence is machine-countable, and handing a countable thing to a person or a model makes it wobble.
 
-### R1. signal 파일 전수 등장
+### R1. Every signal file appears
 
-signal로 분류된 변경 파일이 하나도 빠지지 않는다. 문서가 누적되는 두 시점에서 요구하는
-형태가 다르다.
+Not one file classified as signal is dropped. The required form differs at the two points where the document accumulates.
 
-- **등재형 (evidence 스텝)** — Change Group은 아직 쓰이지 않았으므로, 파일 경로가 문서
-  어딘가에 등장하기만 하면 된다.
-- **커버리지형 (code 스텝)** — signal 파일마다 Change Group 파일 블록(`### \`path\``)이
-  **정확히 하나**여야 한다. 0개는 그 그룹에 아예 들지 못한 것이고, 2개 이상은 같은 파일이
-  여러 그룹에 중복 등장한 것이다 — 둘 다 실패다.
+- **Listing form (evidence step)** — Change Groups are not written yet, so the file path merely needs to
+  appear somewhere in the document.
+- **Coverage form (code step)** — each signal file must have **exactly one** file block (`#### \`path\``).
+  Zero means it never entered a group; two or more means the same file appears in multiple groups —
+  both fail. (A file block is h4 — an h3 `### \`hash\`` is a commit subsection.)
 
-`git diff --name-only` 목록과 문서를 대조해 판정한다.
+Decided by comparing the `git diff --name-only` list against the document.
 
-> **RED 10/16.** 작은 픽스처에서는 대체로 지켜지지만 거대 PR에서 **4런 전부 실패**했다
-> (29개 중 18 / 19 / 11 / 7). 파일이 조용히 사라지는 지점이 정확히 여기다.
+> **RED 10/16.** Mostly upheld in small fixtures, but **all 4 runs failed** on a giant PR
+> (18 / 19 / 11 / 7 of 29). This is exactly where files silently vanish.
 
-### R2. Change Group 구조
+### R2. Change Group structure
 
-각 Change Group이 ① 제목 ② 사전 예고 한 문장 ③ 순서 근거 한 줄 세 슬롯을 모두 채운다.
-슬롯의 존재만 본다 — 내용의 질은 R7에서 심사한다.
+Each Change Group fills all three slots — ① title ② one sentence of advance herald ③ one line of order rationale. Only slot presence is checked — content quality is judged in R7.
 
-> **RED 0/16.** 어느 대조군도 명명된 변경 그룹을 만들지 않았다. gist가 "Group/order the
-> changes in an understandable way"라고 요구했는데도 8/8 실패다. 산문으로 요청한 배치가
-> 구조로 착지하지 않는다는 뜻이고, 그래서 이 항목은 슬롯으로 강제한다.
+> **RED 0/16.** No control produced a named change group. Even though the gist demanded "Group/order the
+> changes in an understandable way", it failed 8/8. It means an arrangement requested in prose does not
+> land as structure, which is why this item is forced by slots.
 
-### R3. "왜"의 출처 표시
+### R3. Provenance on the "왜"
 
-각 "왜 필요한가" 블록이 셋 중 하나를 갖는다 — 원문 근거 인용, `[추론: 근거]` 라벨,
-`Unknown / not supplied`. 셋 다 없으면 날조로 판정해 실패시킨다.
+Each file block's 왜 field (`<p><strong>왜</strong>…`) carries a `cf-src` provenance tag — the badge text is one of three: `근거` (followed by a verbatim quote), `추론` (followed by the inference's ground), or `Unknown / not supplied`. Because the 왜 field is read only after stripping the code fence, a `[근거:]` inside a code comment cannot stand in for it. If none of the three is present, it is judged fabricated and failed.
 
-> **RED 1/16 (`Unknown` 계열), 0/16 (`[추론:]` 라벨).** 수치보다 실물이 중요하다.
-> `claude/naive/coordinate-render`는 **"세로 스크롤은 있었지만 가로 스크롤이 없었던 것이
-> 이슈 #5830이다"** 를 굵은 글씨 단정으로 썼다. 워크트리에 #5830 본문은 없다(커밋 두 개가
-> 번호만 참조). 추론 자체는 합리적이지만 근거 표시도 unknown 표시도 없이 사실로 제시됐다.
+> **RED 1/16 (`Unknown` class), 0/16 (`[추론:]` label).** The reality matters more than the number.
+> `claude/naive/coordinate-render` wrote, in bold assertion, **"the issue where there was vertical scroll
+> but no horizontal scroll is #5830".** The worktree has no body for #5830 (two commits reference only the
+> number). The inference itself is reasonable, but it was presented as fact with neither a ground marker
+> nor an unknown marker.
 >
-> 반대 방향도 실측했다. `codex/naive/giant-pr`의 "왜" 주장은 diff 주석
-> (`Detached workers can still be in their queued startup window after stop`)에 실제 근거가
-> 있었다. 그러므로 이 항목은 "왜를 쓰지 마라"가 아니라 **"출처를 표시하라"** 다.
+> The opposite direction was also measured. The "왜" claim of `codex/naive/giant-pr` had a real ground in a
+> diff comment (`Detached workers can still be in their queued startup window after stop`). So this item is
+> not "don't explain why" but **"mark the provenance".**
 
-### R4. Background 2단 + 건너뛰기 마커
+### R4. Two-tier Background + skip marker
 
-깊은 배경과 좁은 배경이 모두 있고, 깊은 배경에 건너뛰기 마커가 붙어 있다.
+Both a deep background and a narrow background are present, and the deep background carries a skip marker.
 
-> **RED 8/16 — gist 8/8, 무가이드 0/8.** gist의 이 지침은 **완전히 작동한다**. 이 항목은
-> 새로 만드는 게 아니라 이미 되는 것을 구조 슬롯으로 고정해 회귀를 막는 쪽이다.
+> **RED 8/16 — gist 8/8, no-guidance 0/8.** The gist's guidance here **works completely**. This item is not
+> newly created; it fixes something that already works as a structure slot to prevent regression.
 
-### R5. 추적성
+### R5. Traceability
 
-각 파일 블록이 변경 전 위치와 변경 후 위치를 `file:line` 형태로 짚는다.
-단, diff가 **신규 추가**한 파일은 가리킬 변경 전 위치가 없으므로 `head:` 앵커만 요구한다.
-신규 여부는 문서의 서술이 아니라 `git diff --name-status`의 `A`에서 온다 — 문장으로
-판정하면 저자가 "신규 파일"이라고 적는 것만으로 base 앵커를 면제받을 수 있다.
+Each file block points at the before-location and after-location in the `cf-loc` slot in the form `base:file:line` → `head:file:line` — the location anchors are pulled out of the prose. The gate asks only that both `base:` and `head:` anchors be present (an added file needs only `head:`); the exact `path:line` precision and the deletion/new-file wording are the author's to fill.
+But a file the diff **newly added** has no prior location to point at, so only the `head:` anchor is required. New-ness comes from `A` in `git diff --name-status`, not from the document's narrative — deciding by sentence would let an author be exempted from the base anchor merely by writing "new file".
 
-> **RED 10/16.** 6건은 `file:line`이 하나도 없다. 특히 codex 무가이드 3건과
-> claude gist 2건이 0이다 — 문서 길이와 무관하다(50KB 문서에도 0건이 있다).
+> **RED 10/16.** 6 have not a single `file:line`. In particular 3 codex no-guidance and 2 claude gist are at
+> zero — independent of document length (even a 50KB document has zeros).
 >
-> **GREEN 8건 관측으로 정정.** 초판은 모든 파일에 base+head 양쪽을 요구했다.
-> 구조 검사에 걸린 GREEN 2건이 전부 이 항목이었고, 실패 파일 중 신규 추가분은
-> 어떤 정직한 저자도 만족시킬 수 없는 요구였다. 같은 2건의 나머지 실패
-> (수정된 파일에서 base 앵커 누락)는 정정 후에도 그대로 걸린다 — 게이트가
-> 잡아야 할 진짜 누락이다.
+> **Corrected by the 8-GREEN observation.** The first edition required both base+head on every file. The two
+> GREEN runs caught by the structure check were both this item, and among the failing files the newly added
+> ones were a demand no honest author could satisfy. The remaining failures of those same two runs (a missing
+> base anchor on a modified file) still catch after the correction — a real omission the gate should catch.
 
-### R9. 아키텍처 3레벨
+### R9. Three architecture levels
 
-`## Architecture` 아래 `### 시스템 레벨`·`### 컴포넌트 레벨`·`### 도메인 레벨`이 모두 있고,
-각 레벨에 mermaid 다이어그램 또는 사유를 단 생략 마커(`구조 변화 없음: <사유>`)가 있다.
-각 레벨이 답할 질문과 권장 다이어그램 유형은 `markdown-template.md`가 정의한다.
+Under `## Architecture`, `### 시스템 레벨`, `### 컴포넌트 레벨`, and `### 도메인 레벨` are all present, and each level has a mermaid diagram or a reasoned waiver marker (`구조 변화 없음: <사유>`). The question each level answers and the recommended diagram type are defined by `markdown-template.md`.
 
-> **RED 0/12.** v3 이전 스킬이 만든 12개 문서(픽스처 10 + 실전 2) 어디에도 아키텍처
-> 레벨 뷰가 없다. 구조 사실("Node/Python이 같은 PostgreSQL을 읽는다")이 전부 Background
-> 산문 속 문장으로만 존재했다 — 산문 요청은 구조로 착지하지 않는다는 R2와 같은 패턴이다.
+> **RED 0/12.** None of the 12 documents produced by the pre-v3 skill (10 fixtures + 2 real) has an
+> architecture-level view anywhere. Structural facts ("Node/Python read the same PostgreSQL") existed only as
+> sentences in Background prose — the same pattern as R2, that a prose request does not land as structure.
 
-### R10. Commit Journey
+### R10. Commit Journey overview
 
-range의 커밋이 2개 이상이면 `## Commit Journey` 아래 커밋마다 그 해시(7자 이상)가 들어간
-`###` 블록이 있다. 단일 커밋 범위는 `단일 커밋 범위 — Commit Journey 생략` 마커로
-대신할 수 있다. 해시 목록은 `start`가 상태에 박제한 것을 쓴다 — 문서의 주장이 아니라
-`git rev-list`가 출처다.
+If the range has two or more commits, the `## Commit Journey` overview body has each commit's hash (7 chars). This clause is a one-line map showing which group each commit is sent to, and the deep per-commit code is written inside the Change Group (R13). A single-commit range may be replaced by the `단일 커밋 범위 — Commit Journey 생략` marker. The hash list uses what `start` pinned into the state — the source is `git rev-list`, not the document's claim.
 
-> **RED 0/12 (보장 기준).** 실전 v1 문서 하나가 Commit Journey를 **즉흥으로** 만들었고
-> 독자 평가도 좋았지만, 스킬이 요구하지 않으므로 v2에서 서브섹션으로 강등됐고 픽스처
-> 10건에는 아예 없다. 좋았던 것이 우연이었다 — 슬롯로 고정해야 재현된다.
+> **RED 0/12 (as a guarantee).** One real v1 document made a Commit Journey **on its own** and readers rated
+> it well, but the skill did not require it, so it was demoted to a subsection in v2 and is absent entirely
+> from the 10 fixtures. What was good was accidental — it reproduces only when fixed as a slot.
 
-### R11. 스타일 발명 금지
+### R11. No style invention
 
-문서 어디에도 `<style>` 블록·인라인 `style=` 속성이 없고, `class=`는 승인 목록
-(`markdown-template.md`의 컴포넌트)만 쓴다. 모든 저작 스텝에서 누적 문서 전체를 검사한다
-— 위반은 그것을 만든 스텝에서 즉시 거부된다.
+Nowhere in the document is there a `<style>` block or an inline `style=` attribute, and `class=` uses only the sanctioned list (the components in `markdown-template.md`). The whole accumulated document is checked at every authoring step — a violation is rejected immediately in the step that created it.
 
-> **RED 11/12.** 문서마다 인라인 style 속성을 3~78개씩 제각각 발명했고, 실전 문서 2건은
-> 서로 다른 `<style>` 블록(27줄/30줄)을 손으로 짜 넣었다. 같은 스킬의 산출물 두 개가
-> 다른 도구로 만든 것처럼 보이는 원인이 정확히 여기다. 시각 언어는 render.ts 한 곳이
-> 소유하고, 저자에게는 컴포넌트만 남긴다.
+> **RED 11/12.** Each document invented 3–78 inline style attributes of its own, and the 2 real documents
+> hand-wrote different `<style>` blocks (27 lines / 30 lines). This is exactly why two artifacts of the same
+> skill look like they were made with different tools. The visual language is owned by render.ts alone, and
+> the author is left only components.
 
----
+### R13. Commit spine + core-logic code
 
-## B. 심사자가 판정 — 존재 검사 + 인용 필수
+The code section is organized with the commit as its spine. Each Change Group has at least one commit subsection (`### \`hash\``) carrying a valid range hash, and each file block has one core-logic code fence — a mermaid-only or empty fence does not count (the template reserves mermaid for diagrams and requires real code/pseudocode per file). The gate forces this coarse spine — a commit subsection per group and a code fence per file; how the file blocks nest under commits and which cf fields each carries is the author's to fill from the template, not machine-forced. Hash validity is compared against the list `start` pinned — if enumeration failed and the list is empty, the validity check is skipped ("git failed" is not "every hash is fake").
 
-여기서 심사자는 "좋은가"를 묻지 않는다. **"그것이 문서 안에 있는가"** 를 묻고, 있다면
-문서에서 그대로 따온 발췌를 함께 내야 한다. 인용 없는 pass는 자동 실패이고, 인용이 문서에
-문자열로 존재하지 않아도 자동 실패다. 심사자가 지어낼 수 있는 여지를 그 두 검사가 닫는다.
+> **RED — v3 artifact.** In the `b2c-6106` document, `## Commit Journey` (21 commits) and `## Change Group`
+> (per file) were fully separated, so commits were listed unrelated to the code explanation. File blocks
+> pointed only at location anchors and showed not one line of the actual logic. Making the commit the group's
+> spine and requiring code per file joins the two.
 
-### R6. Intuition의 구체 예시
+### R14. Three system-level change-contract axes
 
-toy 데이터 값이 실제로 등장하고, 그 값이 본문 설명에서 다시 쓰인다.
-심사자는 등장한 리터럴 값과 그것을 사용하는 문장을 함께 인용한다.
+`### 시스템 레벨`, beyond the diagram (or waiver marker), enumerates the contracts this diff changes across three axes — `서버 API`, `DB 스키마`, `클라이언트 의존`. All three axis labels must be present. The table must be **real rendered content**: fenced code is masked before the axes are scanned, so a contract table that appears only inside a fenced example (the template ships one) does not satisfy R14. What each axis says about its contract is the author's to fill.
 
-### R7. 그룹 순서의 정합
-
-그룹 N의 사전 예고문이 그룹 N-1을 전제한다. 심사자는 그 전제가 드러나는 대목을 인용한다.
-인용할 수 없으면 순서에 근거가 없는 것이고, 근거 없는 순서는 나열이다.
-
-### R12. 아키텍처 다이어그램의 diff 대응
-
-Architecture의 다이어그램 노드·간선 라벨이 diff에 실재하는 식별자(서비스·모듈·커맨드·
-엔티티 이름)를 쓰고, 최소 한 레벨에 변경 표시(`:::changed` 또는 Before/After 대비)가
-있다. 심사자는 다이어그램의 라벨과 그 식별자가 등장하는 본문/Evidence의 문장을 함께
-인용한다. R9가 "그림이 있는가"를 세고, R12가 "그 그림이 이 diff의 그림인가"를 본다 —
-구조 검사는 mermaid 펜스의 존재만 셀 수 있으므로 대응 여부는 인용 심사로 남긴다.
+> **RED — v3 artifact.** The `b2c-6106` system level ended with one box-and-arrow flowchart. How the API
+> surface of the three server contracts (cost, program doses, intake history) changes, how the join changes,
+> and what the chat client must match were not enumerated in a table, so the "system-unit" explanation was
+> thin.
 
 ---
 
-## C. 순수 판단 — 최소
+## B. Judge decides — existence check + quote required
 
-기계로도 인용으로도 좁혀지지 않는 것만 남긴다. 항목이 늘어나면 조작 가능한 형태로 바꾼다.
+Here the judge does not ask "is it good". It asks **"is it in the document"**, and if it is, must produce an excerpt copied verbatim from the document. A pass without a quote is auto-failed, and a quote that does not exist as a string in the document is auto-failed too. Those two checks close the room for the judge to fabricate.
 
-### R8. 퀴즈 문항의 변별력
+### R6. Intuition's concrete example
 
-각 문항이 루브릭 항목 2개 이상을 요구하고, 그중 최소 하나는 문서를 읽지 않으면 알 수 없는
-구체 값(식별자·좌표·조건·순서)이다. 같은 concept 안에서 문항끼리 요구 루브릭이 겹치지 않는다.
+A toy data value actually appears, and that value is reused in the explaining prose.
+The judge quotes both the literal value that appeared and the sentence that uses it.
 
-> **참고 — 대조군의 퀴즈 형식.** gist 대조군은 선택지를 보여주는 객관식을 만든다
-> (`<div class="q" data-answer="1">` 형태). 선택지가 보이는 순간 측정 대상이 회상에서
-> 재인으로 내려간다. 이 스킬이 서술형을 쓰는 이유가 그것이고, R8은 그 서술형이 실제로
-> 변별하는지를 본다.
+### R7. Coherence of group order
+
+Group N's advance herald presupposes group N-1. The judge quotes the passage where that premise shows. If it cannot be quoted, the order has no ground, and an order with no ground is a list.
+
+### R12. The architecture diagram's correspondence to the diff
+
+The Architecture diagram's node/edge labels use identifiers that actually exist in the diff (service, module, command, entity names), and at least one level has a change marker (`:::changed` or Before/After contrast). The judge quotes both the diagram's labels and the body/Evidence sentence where those identifiers appear. R9 counts "is there a picture", and R12 looks at "is that picture this diff's picture" — the structure check can only count the presence of a mermaid fence, so correspondence is left to the quote-based judgment.
+
+---
+
+## C. Pure judgment — minimal
+
+Only what cannot be narrowed by machine or by quote is left. When the items grow, convert them into a manipulable form.
+
+### R8. Quiz question discrimination
+
+Each question requires two or more rubric items, at least one of which is a concrete value unknowable without reading the document (identifier, coordinate, condition, order). Within the same concept, questions do not overlap in required rubric.
+
+> **Note — the controls' quiz form.** The gist control makes multiple-choice questions that show the options
+> (`<div class="q" data-answer="1">` form). The moment options are visible, what is measured drops from recall
+> to recognition. That is why this skill uses open-ended answers, and R8 looks at whether that open-ended form
+> actually discriminates.

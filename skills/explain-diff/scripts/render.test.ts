@@ -140,9 +140,14 @@ describe("컴포넌트 CSS — 렌더러가 시각 언어를 소유한다", () =
 	const html = renderToHtml(DOC, "제목");
 
 	test("승인된 컴포넌트 클래스의 CSS 가 내장돼 있다", () => {
-		for (const cls of [".flow", ".flow-step", ".flow-arrow", ".compare", ".callout", ".doc-meta"]) {
+		for (const cls of [".flow", ".flow-step", ".flow-arrow", ".compare", ".callout", ".doc-meta", ".cf", ".cf-src", ".cf-loc"]) {
 			expect(html).toContain(cls);
 		}
+	});
+
+	test("cf 필드는 각 <p> 가 세로로 분리되는 규칙을 갖는다 — 한 문단 붕괴 방지", () => {
+		// 파일 블록의 6개 필드가 한 <p> 로 뭉치던 붕괴를 CSS 로 막는다.
+		expect(html).toMatch(/\.cf\s+p\s*\{[^}]*margin/);
 	});
 
 	test("figure.diagram 스타일이 내장돼 있다 — 다크 모드에서도 다이어그램이 읽힌다", () => {
