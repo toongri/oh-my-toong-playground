@@ -2483,6 +2483,60 @@ describe("processYaml platform transaction atomicity", () => {
 		}
 	});
 
+	it("@lib import 없는 Gemini 커맨드 단독 배포도 트랜잭션을 시작한다", async () => {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-gemini-command-only-txn-"));
+		try {
+			const rootDir = path.join(tmpDir, "root");
+			const targetPath = path.join(tmpDir, "target");
+			await fs.mkdir(targetPath, { recursive: true });
+			await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [gemini]\n");
+			await writeFile(path.join(rootDir, "commands", "first.md"), "# first\nplain command body\n");
+			await writeFile(path.join(rootDir, "commands", "second.md"), "# second\nplain command body\n");
+			const syncYamlPath = path.join(tmpDir, "sync.yaml");
+			await writeFile(syncYamlPath, `path: ${targetPath}\ncommands:\n  platforms: [gemini]\n  items: [first, second]\n`);
+			class FailingAdapter extends GeminiAdapter {
+				override async syncCommandsDirect(target: string, displayName: string, _source: string, _dryRun?: boolean, mutationHooks?: DeployMutationHooks): Promise<void> {
+					const [relative] = planCategoryDestinationPaths("gemini", "commands", displayName);
+					await writeWithMutation(mutationHooks, path.join(target, relative), () => writeFile(path.join(target, relative), `${displayName}\n`));
+					if (displayName === "second") throw new Error("later failure");
+				}
+			}
+			const context = makeContext();
+			await processYaml(context, syncYamlPath, new Map<Platform, PlatformAdapter>([["gemini", new FailingAdapter()]]) as AdapterMap, rootDir);
+			expect(context.failedTargets).toContain(targetPath);
+			expect(await exists(path.join(targetPath, planCategoryDestinationPaths("gemini", "commands", "first")[0]))).toBe(false);
+		} finally {
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("@lib import 없는 Codex 룰 단독 배포도 트랜잭션을 시작한다", async () => {
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-codex-rule-only-txn-"));
+		try {
+			const rootDir = path.join(tmpDir, "root");
+			const targetPath = path.join(tmpDir, "target");
+			await fs.mkdir(targetPath, { recursive: true });
+			await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [codex]\n");
+			await writeFile(path.join(rootDir, "rules", "first.md"), "# first\nplain rule body\n");
+			await writeFile(path.join(rootDir, "rules", "second.md"), "# second\nplain rule body\n");
+			const syncYamlPath = path.join(tmpDir, "sync.yaml");
+			await writeFile(syncYamlPath, `path: ${targetPath}\nrules:\n  platforms: [codex]\n  items: [first, second]\n`);
+			class FailingAdapter extends CodexAdapter {
+				override async syncRulesDirect(target: string, displayName: string, _source: string, _dryRun?: boolean, _writeObserver?: unknown, mutationHooks?: DeployMutationHooks): Promise<void> {
+					const [relative] = planCategoryDestinationPaths("codex", "rules", displayName);
+					await writeWithMutation(mutationHooks, path.join(target, relative), () => writeFile(path.join(target, relative), `${displayName}\n`));
+					if (displayName === "second") throw new Error("later failure");
+				}
+			}
+			const context = makeContext();
+			await processYaml(context, syncYamlPath, new Map<Platform, PlatformAdapter>([["codex", new FailingAdapter()]]) as AdapterMap, rootDir);
+			expect(context.failedTargets).toContain(targetPath);
+			expect(await exists(path.join(targetPath, planCategoryDestinationPaths("codex", "rules", "first")[0]))).toBe(false);
+		} finally {
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
+	});
+
 	it("rolls back every file-backed planner suffix in the category matrix", async () => {
 		const cases = [
 			{ platform: "gemini" as const, category: "commands" as const, ext: ".toml" },
