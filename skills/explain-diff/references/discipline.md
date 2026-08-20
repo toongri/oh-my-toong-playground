@@ -35,7 +35,7 @@ The `추론` provenance tag (`<span class="cf-src">추론</span>`) exists for us
 
 At every spot the tag is attached, ask yourself: **where did I actually look to confirm this.** If you cannot answer, you have not looked yet.
 
-8 GREEN measured (in the era of the old bracket notation): the `추론` marking appeared in 7, and one document had it in 12 places (the same document's `근거` marking was fewer). Because the structure check looks only at **whether a provenance tag is present**, attaching an inference tag without finding the ground passes mechanically — which is why this item is left for a person.
+8 GREEN measured (in the era of the old bracket notation): the `추론` marking appeared in 7, and one document had it in 12 places (the same document's `근거` marking was fewer). The structure check validates the badge's **form** — a valid label with its companion present (`근거` + a quote, `추론` + a ground) — but it cannot judge whether that ground is **real**. Attaching an inference tag with a plausible-looking but unverified ground passes mechanically, which is why this item is left for a person.
 
 ## Remainder 4 — reverting a Change Group into a file list
 

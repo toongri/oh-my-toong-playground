@@ -715,3 +715,65 @@ export function withLock() {}
 		expect(item?.detail).toContain("서버 API");
 	});
 });
+
+// 코드리뷰 2라운드(codex 봇, a14e74e1 재리뷰) — 1라운드 수정의 인접 엣지케이스 3종.
+describe("게이트 이완 보강 2라운드 — 재리뷰 지적 3종", () => {
+	test("R13 — Change Group 밖의 파일 블록은 실패한다(그룹·커밋 미매핑)", () => {
+		const outside = `${GOOD_GROUP}
+## 부록: 기타 메모
+#### \`lib/other.ts\`
+<div class="cf">
+<p><strong>역할/변경 전</strong> — 기타 파일</p>
+<p><strong>바뀐 것</strong> — 뭔가 바뀜</p>
+<p><strong>왜</strong> — 이유 <span class="cf-src">근거</span> "커밋 메시지"</p>
+<p><strong>효과</strong> — 효과</p>
+<p class="cf-loc"><code>base:lib/other.ts:1</code> → <code>head:lib/other.ts:2</code></p>
+</div>
+
+\`\`\`ts
+export const other = 1;
+\`\`\`
+`;
+		const r = checkStructure(withBackground(outside), {
+			signalFiles: ["lib/state-lock.ts", "lib/other.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+		});
+		const item = r.items.find((i) => i.id === "R13");
+		expect(item?.pass).toBe(false);
+	});
+
+	test("R14 — 값이 사유 없는 `변경 없음:`뿐이면 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(/\| DB 스키마 \|[^\n]*\n/, "| DB 스키마 | 변경 없음: |\n"),
+		);
+		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" });
+		const item = r.items.find((i) => i.id === "R14");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("DB 스키마");
+	});
+
+	test("R3 — `근거` 배지 뒤에 인용이 없으면 실패한다", () => {
+		const body = GOOD_GROUP.replace(
+			/<span class="cf-src">근거<\/span> "[^"]*"/,
+			'<span class="cf-src">근거</span>',
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+		});
+		expect(r.items.find((i) => i.id === "R3")?.pass).toBe(false);
+	});
+
+	test("R3 — `추론` 배지 뒤에 근거 텍스트가 없으면 실패한다", () => {
+		const body = GOOD_GROUP.replace(
+			/<span class="cf-src">근거<\/span> "[^"]*"/,
+			'<span class="cf-src">추론</span>',
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+		});
+		expect(r.items.find((i) => i.id === "R3")?.pass).toBe(false);
+	});
+});

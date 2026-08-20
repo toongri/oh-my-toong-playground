@@ -64,13 +64,15 @@ const COMMIT_SUBSECTION = /^###\s+`([0-9a-fA-F]{6,40})`/gm;
 
 /** The 왜 field, as an HTML paragraph (the cf component authors it). */
 const WHY_PARAGRAPH = /<p>\s*<strong>\s*왜[\s\S]*?<\/p>/;
-/** A provenance tag a 왜 field may carry. The cf-src badge text must be one of
- *  the three sanctioned labels — the class alone is not enough, so an empty or
- *  garbage badge is a flat assertion. Whether an 추론 is justified stays a human
- *  call (discipline.md); this only fixes that the label itself is valid. Legacy
+/** A provenance tag a 왜 field may carry. The cf-src badge must be a valid label
+ *  WITH its required companion — `근거` followed by a quote, `추론` followed by a
+ *  ground (a non-tag char, so `추론</span></p>` fails), or a standalone
+ *  `Unknown / not supplied`. The class alone, an empty/garbage label, or a bare
+ *  badge with nothing after is a flat assertion. Whether an 추론's ground is real
+ *  stays a human call (discipline.md); this only checks the badge's form. Legacy
  *  bracket forms remain accepted. */
 const PROVENANCE =
-	/<span[^>]*class=["']cf-src["'][^>]*>\s*(?:근거|추론|Unknown\s*\/\s*not supplied)\s*<\/span>|\[근거:|\[추론:/;
+	/<span[^>]*class=["']cf-src["'][^>]*>\s*근거\s*<\/span>\s*"[^"]+"|<span[^>]*class=["']cf-src["'][^>]*>\s*추론\s*<\/span>\s*[^<\s]|<span[^>]*class=["']cf-src["'][^>]*>\s*Unknown\s*\/\s*not supplied\s*<\/span>|\[근거:|\[추론:/;
 
 /** Fenced code, matched so it can be stripped or length-preserving masked. */
 const FENCE_RE = /^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^(?:`{3,}|~{3,})[^\n]*$/gm;
@@ -347,7 +349,13 @@ function axisHasValue(slice: string, axis: string): boolean {
 		if (!line.includes("|") || !line.includes(axis)) continue;
 		const cells = line.split("|").map((c) => c.trim());
 		const idx = cells.findIndex((c) => c.includes(axis));
-		if (idx >= 0 && idx + 1 < cells.length && (cells[idx + 1] ?? "") !== "") return true;
+		if (idx < 0 || idx + 1 >= cells.length) continue;
+		const value = cells[idx + 1] ?? "";
+		if (value === "") continue;
+		// A bare no-change marker with no rationale is not a filled contract —
+		// mirror R9's ARCH_WAIVER, which requires text after 구조 변화 없음:.
+		if (/^변경\s*없음\s*[:：]?\s*$/.test(value)) continue;
+		return true;
 	}
 	return false;
 }
@@ -464,6 +472,25 @@ function checkR13(
 			if (bogus.length > 0) problems.push(`${g.title}: 범위에 없는 커밋 해시 ${bogus.join(", ")}`);
 		}
 	}
+	// Every file block must live INSIDE a Change Group span. A `#### path` under
+	// some other level-two section is seen by the global R1/R3/R5 checks but the
+	// per-group loop above never reaches it — so it would attach to neither a
+	// group nor a commit. Check group membership on the whole document here.
+	const maskedFull = maskFenced(text);
+	const groupSpans: Array<{ start: number; end: number }> = [];
+	for (const m of maskedFull.matchAll(/^##\s+Change Group\s+\d+\s*:.*$/gm)) {
+		if (m.index === undefined) continue;
+		const rest = maskedFull.slice(m.index + m[0].length).search(/^##\s/m);
+		groupSpans.push({
+			start: m.index,
+			end: rest >= 0 ? m.index + m[0].length + rest : maskedFull.length,
+		});
+	}
+	const outsideGroup = [...maskedFull.matchAll(new RegExp(FILE_BLOCK.source, "gm"))].some((m) => {
+		const at = m.index;
+		return at !== undefined && !groupSpans.some((s) => at >= s.start && at < s.end);
+	});
+	if (outsideGroup) problems.push("Change Group 밖에 파일 블록이 있습니다(그룹·커밋에 매이지 않음)");
 	const noCode = blocks.filter((b) => !hasCoreCodeFence(b.body)).map((b) => b.path);
 	if (noCode.length > 0) problems.push(`핵심 로직 코드 펜스(mermaid·빈 펜스 제외)가 없는 파일: ${noCode.join(", ")}`);
 	return {
