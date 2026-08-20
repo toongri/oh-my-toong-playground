@@ -111,7 +111,7 @@ async function parseCouncilConfig(configPath: string): Promise<CouncilConfig> {
 				{ name: "codex", command: "codex exec", emoji: "🤖", color: "BLUE" },
 				{ name: "gemini", command: "gemini", emoji: "💎", color: "GREEN" },
 			],
-			settings: { exclude_chairman_from_members: true, timeout: 120 },
+			settings: { exclude_chairman_from_members: true, timeout: 2400 },
 		},
 	};
 

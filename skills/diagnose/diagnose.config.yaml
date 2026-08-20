@@ -15,7 +15,7 @@ review:
       output_format: json
 
   settings:
-    timeout: 600
+    timeout: 1200
     deny:
       # Subagent axis: the analyst diagnoses alone. Spawning is a second fan-out beneath this
       # one — unbudgeted cost, and findings no analysis prompt shaped. Translated per member CLI

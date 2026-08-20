@@ -580,7 +580,7 @@ describe("parseCouncilConfig", () => {
 		expect(result.council.members[1].name).toBe("codex");
 		expect(result.council.members[2].name).toBe("gemini");
 		expect(result.council.settings.exclude_chairman_from_members).toBe(true);
-		expect(result.council.settings.timeout).toBe(120);
+		expect(result.council.settings.timeout).toBe(2400);
 	});
 
 	test("parses valid YAML config via simple parser fallback", async () => {

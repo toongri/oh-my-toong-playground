@@ -51,7 +51,7 @@ council:
     # No-op with the members above (no `claude` member to exclude); the chairman is
     # the calling Claude session, which synthesizes rather than arguing a seat.
     exclude_chairman_from_members: false
-    timeout: 1200                         # Timeout seconds per agent (0 to disable)
+    timeout: 2400                         # Timeout seconds per agent (0 to disable)
     deny:
       # Subagent axis: a council member argues its own assigned perspective alone. Spawning is a
       # second fan-out beneath this one — unbudgeted cost, and opinions no perspective prompt

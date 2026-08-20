@@ -322,7 +322,7 @@ function parseChunkReviewConfig(configPath: string): ChunkReviewConfig {
 				{ name: "claude", command: "claude -p", emoji: "\u{1F9E0}", color: "CYAN" },
 				{ name: "codex", command: "codex exec", emoji: "\u{1F916}", color: "BLUE" },
 			],
-			settings: { exclude_chairman_from_members: true, timeout: 300 },
+			settings: { exclude_chairman_from_members: true, timeout: 5400 },
 		},
 	};
 

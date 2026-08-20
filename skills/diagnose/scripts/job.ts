@@ -126,7 +126,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 				output_format: "json",
 			},
 		],
-		settings: { timeout: 600 },
+		settings: { timeout: 1200 },
 	};
 
 	const fileText = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf8") : null;

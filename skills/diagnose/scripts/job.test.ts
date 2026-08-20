@@ -331,7 +331,7 @@ describe("settings fallback 병합", () => {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
 
-	test("`settings`를 생략한 config에서 default timeout(600)이 job.json에 유지된다", () => {
+	test("`settings`를 생략한 config에서 default timeout(1200)이 job.json에 유지된다", () => {
 		const configPath = path.join(tmpDir, "diagnose.config.yaml");
 		// settings 블록 없이 members만 정의
 		fs.writeFileSync(
@@ -361,7 +361,7 @@ describe("settings fallback 병합", () => {
 		const { jobDir } = JSON.parse(result.toString());
 		const jobJson = JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8"));
 
-		expect(jobJson.settings.timeoutSec).toBe(600);
+		expect(jobJson.settings.timeoutSec).toBe(1200);
 
 		try {
 			execFileSync(process.execPath, [SCRIPT, "stop", jobDir], { stdio: "pipe" });

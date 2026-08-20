@@ -15,7 +15,7 @@ review:
       output_format: json
 
   settings:
-    timeout: 1200
+    timeout: 2400
     deny:
       # Subagent axis: the reviewer answers the design question alone. Spawning is a second
       # fan-out beneath this one — unbudgeted cost, and counsel no review prompt shaped.

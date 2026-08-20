@@ -291,7 +291,7 @@ describe("parseChunkReviewConfig", () => {
 	test("fallback contains default settings", async () => {
 		const result = await parseChunkReviewConfig(path.join(tmpDir, "nope.yaml"));
 		expect(result["chunk-review"].settings.exclude_chairman_from_members).toBe(true);
-		expect(result["chunk-review"].settings.timeout).toBe(300);
+		expect(result["chunk-review"].settings.timeout).toBe(5400);
 	});
 
 	test("parses valid config via simple parser (yaml module unavailable)", async () => {

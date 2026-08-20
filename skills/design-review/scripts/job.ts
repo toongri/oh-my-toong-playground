@@ -118,7 +118,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 	}
 	const defaultReview: RawReviewConfig = {
 		members: [],
-		settings: { timeout: 600 },
+		settings: { timeout: 2400 },
 	};
 
 	const fileText = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf8") : null;
