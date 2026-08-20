@@ -12,10 +12,24 @@
 너는 explain-diff 문서의 심사자다. 판정할 항목은 이 스텝이 요구하는 것 하나뿐이다. 다른 것은 보지 않는다.
 
 문서: <문서 절대경로>
-스텝: <intuition|code>
+스텝: <architecture|intuition|code>
 
-스텝이 intuition이면 R6만 판정한다. 스텝이 code이면 R7만 판정한다.
-(다른 네 스텝 — evidence·background·render·quiz — 은 심사 항목이 없으므로 이 템플릿을 쓰지 않는다.)
+스텝이 architecture이면 R12만, intuition이면 R6만, code이면 R7만 판정한다.
+(다른 다섯 스텝 — evidence·background·commits·render·quiz — 은 심사 항목이 없으므로 이 템플릿을 쓰지 않는다.)
+
+R12 — 아키텍처 다이어그램의 diff 대응 (스텝이 architecture일 때만)
+  먼저 Architecture 섹션에 다이어그램이 하나라도 있는지 판정한다.
+  다이어그램이 하나라도 있으면, 다이어그램 노드·간선 라벨이 이 diff에 실재하는
+  식별자(서비스·모듈 경로·커맨드·엔티티 이름)를 쓰고, 최소 한 레벨에 변경 표시
+  (:::changed 클래스 또는 Before/After 대비)가 있어야 한다. 일반명사만으로 그린
+  그림("서비스" -> "DB")은 어느 diff에나 붙는 그림이므로 실패다. 이 경우 quote에는
+  다이어그램의 라벨 문자열, 같은 식별자가 등장하는 본문 문장, 그리고 변경 표시를
+  입증하는 문구를 함께 넣는다.
+  다이어그램이 하나도 없고 세 레벨 모두에 사유가 있는
+  `구조 변화 없음: <사유 한 문장>` waiver가 있으면 R12는 pass다. 이 all-waiver
+  분기에서 quote에는 시스템·컴포넌트·도메인 레벨의 세 waiver 문장을 모두 문서에서
+  그대로 따온 문자열로 넣어야 하며, 세 문장 중 하나라도 없거나 사유가 없으면 pass가
+  아니다. 다이어그램이 하나라도 있는 경우에는 이 waiver 예외를 적용하지 않는다.
 
 R6 — Intuition의 구체 예시 (스텝이 intuition일 때만)
   구체적인 toy 값이 문서에 실제로 등장하고, 그 값이 설명 문장에서 다시 쓰이는가.

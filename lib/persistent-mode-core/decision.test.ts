@@ -7,6 +7,42 @@ import { tmpdir } from "os";
 import { execFileSync } from "child_process";
 import { approveOk } from "@lib/qa-chain-core";
 
+// ---------------------------------------------------------------------------
+// Freshness assertions
+// ---------------------------------------------------------------------------
+
+/**
+ * Lower bound of the window in which the current test could possibly have
+ * written anything. A file-level beforeEach runs before every describe's own
+ * setup, so this is stamped before the code under test can touch a file.
+ */
+let stampWindowStart = 0;
+beforeEach(() => {
+	stampWindowStart = Date.now();
+});
+
+/**
+ * Asserts a `nowStamp()`-formatted timestamp was written DURING the current
+ * test -- i.e. it is neither a leftover from the fixture nor from the future.
+ *
+ * Replaces `expectStampedDuringThisTest(stamp)`. That form
+ * compared against an invented 5s tolerance, and 5s is a gap a loaded
+ * full-suite run genuinely produces: a sibling test in this repo was measured
+ * at 5045ms inside bun's 5000ms default timeout. This form has no tolerance to
+ * invent -- both bounds are real events in this test's own execution, so
+ * contention moves them together and can never flip the verdict.
+ *
+ * The lower bound is floored to its second because `nowStamp()` (state-core.ts)
+ * emits whole-second resolution: a stamp written at `stampWindowStart` parses
+ * up to 999ms earlier than it. That is a property of the format, not slack.
+ */
+function expectStampedDuringThisTest(stamp: string | number): void {
+	const ms = typeof stamp === "number" ? stamp : Date.parse(stamp);
+	expect(ms).toBeGreaterThanOrEqual(Math.floor(stampWindowStart / 1000) * 1000);
+	expect(ms).toBeLessThanOrEqual(Date.now());
+}
+
+
 describe("makeDecision", () => {
 	const testDir = join(tmpdir(), "persistent-mode-decision-test-" + Date.now());
 	const projectRoot = join(testDir, "project");
@@ -1663,7 +1699,7 @@ describe("makeDecision", () => {
 			expect(result).toEqual({ continue: true });
 			const parsed = JSON.parse(await readFile(statePath, "utf8"));
 			const touchedMs = Date.parse(parsed.last_touched_at);
-			expect(Math.abs(Date.now() - touchedMs)).toBeLessThan(5000);
+			expectStampedDuringThisTest(touchedMs);
 		});
 
 		it("touches state without the guard ever reaching stateDir/ensureDir below it", async () => {
@@ -1708,7 +1744,7 @@ describe("makeDecision", () => {
 				expect(fs.existsSync(join(freshOmtDir, "state"))).toBe(false);
 				const parsed = JSON.parse(await readFile(statePath, "utf8"));
 				const touchedMs = Date.parse(parsed.last_touched_at);
-				expect(Math.abs(Date.now() - touchedMs)).toBeLessThan(5000);
+				expectStampedDuringThisTest(touchedMs);
 			} finally {
 				if (prevOmtDir === undefined) delete process.env.OMT_DIR;
 				else process.env.OMT_DIR = prevOmtDir;
@@ -1855,8 +1891,8 @@ describe("makeDecision", () => {
 
 			const prometheusAfter = JSON.parse(await readFile(prometheusPath, "utf8"));
 			const qaAfter = JSON.parse(await readFile(qaPath, "utf8"));
-			expect(Math.abs(Date.now() - Date.parse(prometheusAfter.last_touched_at))).toBeLessThan(5000);
-			expect(Math.abs(Date.now() - Date.parse(qaAfter.last_touched_at))).toBeLessThan(5000);
+			expectStampedDuringThisTest(prometheusAfter.last_touched_at);
+			expectStampedDuringThisTest(qaAfter.last_touched_at);
 		});
 	});
 
@@ -1915,7 +1951,7 @@ describe("makeDecision", () => {
 			expect(heartbeatResult).toEqual({ continue: true });
 
 			const revived = JSON.parse(await readFile(statePath, "utf8"));
-			expect(Math.abs(Date.now() - Date.parse(revived.last_touched_at))).toBeLessThan(5000);
+			expectStampedDuringThisTest(revived.last_touched_at);
 			expect(revived.progress_touched_at).toBe(staleIso);
 
 			// Now Stop with no subagents active — must NOT wedge on the revived corpse.
@@ -1948,7 +1984,7 @@ describe("makeDecision", () => {
 			expect(heartbeatResult).toEqual({ continue: true });
 
 			const revived = JSON.parse(await readFile(statePath, "utf8"));
-			expect(Math.abs(Date.now() - Date.parse(revived.last_touched_at))).toBeLessThan(5000);
+			expectStampedDuringThisTest(revived.last_touched_at);
 			expect(revived.progress_touched_at).toBe(staleIso);
 
 			// First Stop call after revival — must not block, well before MAX_BLOCK_COUNT (5).
@@ -2060,7 +2096,7 @@ describe("makeDecision", () => {
 			expect(heartbeatResult).toEqual({ continue: true });
 
 			const revived = JSON.parse(await readFile(statePath, "utf8"));
-			expect(Math.abs(Date.now() - Date.parse(revived.last_touched_at))).toBeLessThan(5000);
+			expectStampedDuringThisTest(revived.last_touched_at);
 			expect(revived.started_at).toBe(staleIso);
 			expect(revived.progress_touched_at).toBe(staleIso);
 
@@ -2094,7 +2130,7 @@ describe("makeDecision", () => {
 			expect(heartbeatResult).toEqual({ continue: true });
 
 			const revived = JSON.parse(await readFile(statePath, "utf8"));
-			expect(Math.abs(Date.now() - Date.parse(revived.last_touched_at))).toBeLessThan(5000);
+			expectStampedDuringThisTest(revived.last_touched_at);
 			expect(revived.started_at).toBe(staleIso);
 			expect(revived.progress_touched_at).toBe(staleIso);
 
@@ -2579,7 +2615,7 @@ describe("makeDecision", () => {
 			updateUltragoalState(sid, {});
 
 			const after = JSON.parse(await readFile(statePath, "utf8"));
-			expect(Math.abs(Date.now() - Date.parse(after.last_touched_at))).toBeLessThan(5000);
+			expectStampedDuringThisTest(after.last_touched_at);
 			expect(after.progress_touched_at).toBe(staleTouch);
 		});
 
@@ -2604,7 +2640,7 @@ describe("makeDecision", () => {
 			makeDecision(createContext({ sessionId: sid }));
 
 			const after = JSON.parse(await readFile(statePath, "utf8"));
-			expect(Math.abs(Date.now() - Date.parse(after.last_touched_at))).toBeLessThan(5000);
+			expectStampedDuringThisTest(after.last_touched_at);
 			expect(after.progress_touched_at).toBe(staleTouch);
 		});
 
@@ -2654,7 +2690,7 @@ describe("makeDecision", () => {
 
 			const after = JSON.parse(await readFile(statePath, "utf8"));
 			expect(after.iteration).toBe(4);
-			expect(Math.abs(Date.now() - Date.parse(after.progress_touched_at))).toBeLessThan(5000);
+			expectStampedDuringThisTest(after.progress_touched_at);
 		});
 	});
 });
@@ -2930,6 +2966,7 @@ describe("explain-diff Stop-gate decision table", () => {
 
 	const midSession = {
 		active: true,
+		commit_hashes: [],
 		step: "code",
 		passed: ["evidence", "background", "intuition"],
 		concepts: [],

@@ -3,8 +3,8 @@
  * by EVERY probe that spawns a real `codex exec`, since none of them can let
  * this developer machine's own ambient state confound what they observe. The
  * two hook probes (ultrawork-keyword-injection, rules-runtime-leak-absence)
- * additionally register a self-authored `hooks.json`; the two skill-chain
- * probes (skill-chain-load, skill-chain-cue-form) pass an EMPTY `hooks` and
+ * additionally register a self-authored `hooks.json`; the skill-chain probes
+ * (skill-chain-load, currently the only one) pass an EMPTY `hooks` and
  * isolate for home-scope SKILL discovery alone (`~/.agents/skills`), which is
  * the ambient source that could otherwise satisfy their predicates without
  * the freshly materialized bytes ever being loaded.

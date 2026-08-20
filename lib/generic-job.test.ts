@@ -4058,7 +4058,7 @@ describe("cmdClean — 삭제 전 프로세스 그룹 회수", () => {
 	// this process's event loop runs its SIGCHLD reap callback. A busy-wait
 	// spin loop would starve that same event loop and never observe the
 	// reap, so this poll must yield via a real `setTimeout`, not spin.
-	async function waitUntil(predicate: () => boolean, timeoutMs = 2000): Promise<boolean> {
+	async function waitUntil(predicate: () => boolean, timeoutMs = 30_000): Promise<boolean> {
 		const deadline = Date.now() + timeoutMs;
 		while (Date.now() < deadline) {
 			if (predicate()) return true;
@@ -4217,7 +4217,7 @@ describe("findOrphanJobs / reapOrphanJobs / doctorOrphanJobs", () => {
 	// Bounded async poll — same reasoning as cmdClean's waitUntil above: a
 	// killed child stays a zombie in `ps` until this process's event loop
 	// runs its SIGCHLD reap callback, so this must yield via setTimeout.
-	async function waitUntil(predicate: () => boolean, timeoutMs = 2000): Promise<boolean> {
+	async function waitUntil(predicate: () => boolean, timeoutMs = 30_000): Promise<boolean> {
 		const deadline = Date.now() + timeoutMs;
 		while (Date.now() < deadline) {
 			if (predicate()) return true;

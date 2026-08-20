@@ -8,7 +8,8 @@
 #   1. stdout is byte-empty on every path (cache-safe context injection).
 #   2. fail-open when job.ts is absent (undeployed orchestrate-review target).
 #   3. fail-open when jq is absent (existing hook convention).
-#   4. returns well inside the 10s SessionStart budget (reap fully detaches).
+#   4. the reap is detached -- the hook never waits for its `bun` child,
+#      which is what keeps it inside the 10s SessionStart budget.
 #   5. reap diagnostics (stderr) survive to $OMT_DIR/logs/orphan-reaper.log
 #      instead of being discarded, while stdout stays byte-empty.
 #   6. a bunfig.toml preload in the hook's cwd (an arbitrary, possibly
@@ -121,19 +122,53 @@ test_missing_jq_fails_open() {
 }
 
 # =============================================================================
-# Test 4: returns well inside the 10s SessionStart budget. No `timeout`
-# binary on this host -- measure wall-clock via `date +%s` around the call
-# instead of shelling out to a nonexistent `timeout` command.
+# Test 4: the reap is DETACHED -- the hook must not wait for the `bun` reap
+# process it launches, which is what keeps it inside the 10s SessionStart
+# budget.
+#
+# This test used to measure wall-clock around a run with nothing to reap and
+# assert `elapsed < 3s`. That bound was invented rather than derived: on the
+# empty-$OMT_DIR path it measured little more than bash+jq startup, and a
+# loaded machine could cross 3s with nothing regressed -- an absolute
+# threshold compared against a signal that does not scale with it.
+#
+# Here the delay is INJECTED, so the bound comes from the signal. A stub
+# `bun` on the front of PATH sleeps SENTINEL_SECONDS; the hook backgrounds it
+# (`( ... & )` in orphan-reaper.sh), so a detached hook returns immediately
+# while a hook that waited could not return before SENTINEL_SECONDS. The
+# comparison is against half the injected delay, so both sides stretch
+# together under load and the verdict does not move.
 # =============================================================================
-test_returns_within_budget() {
+test_reap_is_detached_from_hook() {
+    local sentinel_seconds=20
+    local stub_bin="$TEST_TMP_DIR/detach-bin"
+    local pid_file="$TEST_TMP_DIR/stub-bun.pid"
+    mkdir -p "$stub_bin"
+    # Records its own pid so teardown can kill exactly this sleep, never a
+    # `pkill -f sleep` sweep that could hit an unrelated process on the host.
+    printf '#!/bin/sh\nprintf %%s "$$" > %s\nsleep %s\n' "$pid_file" "$sentinel_seconds" > "$stub_bin/bun"
+    chmod +x "$stub_bin/bun"
+
     local start end elapsed
     start=$(date +%s)
-    run_hook_isolated > /dev/null
+    ( export PATH="$stub_bin:$PATH"; run_hook_isolated > /dev/null )
     end=$(date +%s)
     elapsed=$((end - start))
 
-    if [[ "$elapsed" -ge 3 ]]; then
-        echo "ASSERTION FAILED: orphan-reaper.sh took ${elapsed}s to return (budget: 10s, expected near-instant since reap fully detaches)"
+    # The stub is detached, so its pid file may land just after the hook
+    # returns. Bounded poll, then kill whatever it recorded; a miss here must
+    # not fail the test, only leave the sleep to expire on its own.
+    local waited=0
+    while [[ ! -s "$pid_file" && "$waited" -lt 50 ]]; do
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    if [[ -s "$pid_file" ]]; then
+        kill "$(cat "$pid_file")" 2>/dev/null || true
+    fi
+
+    if [[ "$elapsed" -ge $((sentinel_seconds / 2)) ]]; then
+        echo "ASSERTION FAILED: orphan-reaper.sh took ${elapsed}s while its reap child slept ${sentinel_seconds}s -- the hook waited for the child instead of detaching it"
         return 1
     fi
     return 0
@@ -213,8 +248,21 @@ EOF
     fi
 
     local log_file="$omt_dir/logs/orphan-reaper.log"
+    # Ceiling derived from a measured control, not invented: the reap runs
+    # detached, and its dominant cost is one bun startup. Timing a bun startup
+    # right here prices that on THIS machine under THIS load, so a loaded
+    # machine that slows the detached reap slows the control the same way and
+    # the window stretches with it. Ten of those, with a 20s floor so a
+    # sub-second control still leaves the window this test has always had.
+    local ctl_start ctl_end ctl_seconds
+    printf 'process.exit(0);\n' > "$TEST_TMP_DIR/reaplog-control.ts"
+    ctl_start=$(date +%s)
+    bun "$TEST_TMP_DIR/reaplog-control.ts" > /dev/null 2>&1 || true
+    ctl_end=$(date +%s)
+    ctl_seconds=$((ctl_end - ctl_start))
+    local max_wait=$(( (ctl_seconds + 1) * 10 ))
+    [[ "$max_wait" -lt 20 ]] && max_wait=20
     local waited=0
-    local max_wait=20
     while [[ ! -s "$log_file" && "$waited" -lt "$max_wait" ]]; do
         sleep 1
         waited=$((waited + 1))
@@ -274,6 +322,37 @@ import { writeFileSync } from "fs";
 writeFileSync("$marker", "pwned");
 EOF
 
+    # POSITIVE CONTROL, run first and in the FOREGROUND: prove this fixture can
+    # actually fire on this machine before trusting an absence result from it.
+    # Without this the test passes for two indistinguishable reasons -- the cwd
+    # pinning worked, or the fixture was inert (a bun that ignores bunfig, a
+    # preload path that never resolves) and nothing would have appeared either
+    # way. `bun <script>` from that cwd is the same trigger the unpinned hook
+    # would have hit; `bun --version` is NOT (measured: it does not read
+    # bunfig's preload), so the control has to run a real script.
+    local control_marker="$TEST_TMP_DIR/CONTROL-PRELOAD-RAN"
+    cat > "$TEST_TMP_DIR/control-pwn.ts" <<EOF
+import { writeFileSync } from "fs";
+writeFileSync("$control_marker", "control");
+EOF
+    cat > "$TEST_TMP_DIR/control-noop.ts" <<'EOF'
+process.exit(0);
+EOF
+    cat > "$TEST_TMP_DIR/bunfig.toml" <<EOF
+preload = ["$TEST_TMP_DIR/control-pwn.ts"]
+EOF
+    local control_start control_end control_seconds
+    control_start=$(date +%s)
+    (cd "$TEST_TMP_DIR" && bun "$TEST_TMP_DIR/control-noop.ts") > /dev/null 2>&1 || true
+    control_end=$(date +%s)
+    control_seconds=$((control_end - control_start))
+
+    if [[ ! -f "$control_marker" ]]; then
+        echo "ASSERTION FAILED: positive control never fired -- a bunfig.toml preload in bun's own cwd did not run, so this fixture cannot prove anything about the hook and an absence result below would be vacuous"
+        return 1
+    fi
+
+    # Now the real subject, with the preload pointed back at the hook's marker.
     cat > "$TEST_TMP_DIR/bunfig.toml" <<EOF
 preload = ["$TEST_TMP_DIR/pwn.ts"]
 EOF
@@ -284,12 +363,20 @@ EOF
 
     # preload runs at bun startup, before any entrypoint code runs -- if it
     # were going to run at all, it already has by the time bun finishes
-    # loading. Poll briefly rather than asserting immediately, since the hook
-    # detaches the whole reap call to the background (see
-    # test_returns_within_budget above) -- no `timeout` binary on this host,
-    # so bound the wait with a polling loop instead.
+    # loading. The hook detaches the whole reap call to the background (see
+    # test_reap_is_detached_from_hook above), so the marker cannot be asserted
+    # absent immediately; there is no `timeout` binary on this host, so bound
+    # the wait with a polling loop.
+    #
+    # The ceiling is derived from the control above rather than invented: the
+    # control just measured what one bun startup costs on this machine under
+    # this load, and the ceiling is ten of those (floor 5s so a sub-second
+    # control still yields a usable window). A loaded machine that slows the
+    # detached bun slows the control the same way, so the window stretches
+    # with it instead of expiring early and passing vacuously.
+    local max_wait=$(( (control_seconds + 1) * 10 ))
+    [[ "$max_wait" -lt 5 ]] && max_wait=5
     local waited=0
-    local max_wait=5
     while [[ ! -f "$marker" && "$waited" -lt "$max_wait" ]]; do
         sleep 1
         waited=$((waited + 1))
@@ -310,7 +397,7 @@ main() {
     run_test test_stdout_is_completely_empty
     run_test test_missing_job_ts_fails_open
     run_test test_missing_jq_fails_open
-    run_test test_returns_within_budget
+    run_test test_reap_is_detached_from_hook
     run_test test_reap_diagnostics_preserved_in_log
     run_test test_bunfig_preload_in_cwd_does_not_execute
 

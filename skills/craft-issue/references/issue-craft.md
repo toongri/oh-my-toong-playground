@@ -45,6 +45,10 @@ Korean-working teams, use this canonical mapping:
 | Core Concept | 핵심 개념 |
 | User Value | 사용자 가치 |
 | Scope of Application | 적용 범위 |
+| Update Summary | 변경 요약 |
+| Basis | 근거 |
+| Supersedes | 대체 대상 |
+| Effective State | 정정 후 상태 |
 | Notes | 메모 |
 | per-path status | 경로별 상태 |
 | References | References (그대로 둔다) |
@@ -52,7 +56,7 @@ Korean-working teams, use this canonical mapping:
 The observable-AC two-line shape (§2) is unchanged — only its labels localize: `**[결과]**` + `**검증**`.
 
 Every emittable header across this rubric's tables — Standard Body Shape, Bug-Genre Additions,
-Parent-Issue Body Shape, Transition-Genre Additions, the Two-Bucket bucket labels, and the RCA
+Append Comment Shape, Parent-Issue Body Shape, Transition-Genre Additions, the Two-Bucket bucket labels, and the RCA
 Bug-Report shape (§3 below; wired from `references/diagnose-rootcause.md`) — must have an entry in
 the mapping table above. A header with no entry above is a rubric bug, not a license to emit its raw
 canonical English name.
@@ -167,6 +171,37 @@ The three sub-items are:
 - **Blockers & Risks** — upstream dependencies, potential blocking points, and open questions; observations only, never solution proposals.
 
 Every sub-item must carry either an evidence citation (investigation result, document, code location, commit) or the marker `TBD — needs validation via {method}`. An unbacked assertion is a rule violation.
+
+### Append Comment Shape
+
+Per the **Append-Only History Contract** in `SKILL.md`, an issue that already carries a body is never
+rewritten — the new material is appended as a comment. That comment is a body-grade document, not a
+changelog line: same register, same localized headers, same observable-AC rubric (§2), same
+symbol-gloss contract, same anti-fluff rules as a body.
+
+| Section | Required / Conditional | Content |
+|---|---|---|
+| **Update Summary** | Required | What is being corrected or added, and why — the context that produced the change, as prose a PM reader can follow. Name what triggered it: who established what, when. One to three paragraphs. |
+| **Basis** | Required | The evidence this append rests on — the confirmation, log line, commit, code location, or measurement. Direct quote or paste, not paraphrase. When it rests on a single unreplicated report, say so; that judgment decides whether the restated content below lands as established or carries `TBD — needs validation via {method}`. |
+| **Supersedes** | Required when this append retires anything | One bullet per retired item, each naming its exact location in the existing record and what is now wrong with it — e.g. `본문 §전제 조건 2번 "펌웨어가 ack를 200으로 돌려준다" — 반증됨`. Retiring an item only inside an Update Summary paragraph does not count as declared. Omit the section only when the append retires nothing at all. |
+| **Effective State** | Required | Every section this append touches, restated in final decided form. Emit **only** the touched sections, each under its own localized header from the Working-Language Localization table. |
+
+**Effective State is a rewrite, not a review.** Write each touched section as it now stands, in the
+form a body would carry it — an AC keeps its two-line `**[결과]**` + `**검증**` shape (§2). Do not
+write *about* whether the old text still holds ("1번은 결과가 그대로 유효하고 근거만 바뀝니다",
+"2번은 다시 봐야 합니다"): commentary of that kind leaves the reader to merge body and comment in
+their head, which is the exact cost the append model exists to remove. When a touched item genuinely
+has no decided form yet, its restated form is that item carrying `TBD — needs validation via
+{method}` — written out, not deferred to a later comment.
+
+**Untouched sections are not restated.** A section this append does not change stays where it is.
+Re-rendering the whole body into every comment duplicates the record, buries what actually changed,
+and lets unchanged wording drift each time it is re-authored — which smuggles back in the body edit
+the contract forbids.
+
+**Scope note.** Immutability governs the issue body. It does not license withholding a decision: if
+this append settles what an AC or a premise should now say, Effective State says it. "본문을 고칠 수
+없으니 판단만 남긴다" is a misreading — the comment IS where the decision is now recorded.
 
 ### Parent-Issue Body Shape
 

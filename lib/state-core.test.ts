@@ -33,6 +33,42 @@ import {
 } from "./state-core.ts";
 
 // ---------------------------------------------------------------------------
+// Freshness assertions
+// ---------------------------------------------------------------------------
+
+/**
+ * Lower bound of the window in which the current test could possibly have
+ * written anything. A file-level beforeEach runs before every describe's own
+ * setup, so this is stamped before the code under test can touch a file.
+ */
+let stampWindowStart = 0;
+beforeEach(() => {
+	stampWindowStart = Date.now();
+});
+
+/**
+ * Asserts a `nowStamp()`-formatted timestamp was written DURING the current
+ * test -- i.e. it is neither a leftover from the fixture nor from the future.
+ *
+ * Replaces `expectStampedDuringThisTest(stamp)`. That form
+ * compared against an invented 5s tolerance, and 5s is a gap a loaded
+ * full-suite run genuinely produces: a sibling test in this repo was measured
+ * at 5045ms inside bun's 5000ms default timeout. This form has no tolerance to
+ * invent -- both bounds are real events in this test's own execution, so
+ * contention moves them together and can never flip the verdict.
+ *
+ * The lower bound is floored to its second because `nowStamp()` (state-core.ts)
+ * emits whole-second resolution: a stamp written at `stampWindowStart` parses
+ * up to 999ms earlier than it. That is a property of the format, not slack.
+ */
+function expectStampedDuringThisTest(stamp: string | number): void {
+	const ms = typeof stamp === "number" ? stamp : Date.parse(stamp);
+	expect(ms).toBeGreaterThanOrEqual(Math.floor(stampWindowStart / 1000) * 1000);
+	expect(ms).toBeLessThanOrEqual(Date.now());
+}
+
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -839,9 +875,7 @@ describe("listOthers/adopt — progress axis, not GC axis (heartbeat revival gua
 			omtDir,
 			`deep-interview-active-state-${sid}.json`,
 		) as Record<string, unknown>;
-		expect(Math.abs(Date.now() - Date.parse(revived["last_touched_at"] as string))).toBeLessThan(
-			5000,
-		);
+		expectStampedDuringThisTest(revived["last_touched_at"] as string);
 
 		// Progress axis is still stale (backfilled from the pre-heartbeat value) —
 		// must NOT be offered as a candidate despite the now-fresh GC timestamp.
@@ -1656,7 +1690,7 @@ describe("touchSessionStates", () => {
 
 		const parsed = readState(omtDir, `ultragoal-state-${sid}.json`) as Record<string, unknown>;
 		const touchedMs = Date.parse(parsed["last_touched_at"] as string);
-		expect(Math.abs(Date.now() - touchedMs)).toBeLessThan(5000);
+		expectStampedDuringThisTest(touchedMs);
 	});
 
 	// QA 1 — no-create updater count must stay at 2 (pre-existing updateGoalState +
@@ -1706,7 +1740,7 @@ describe("touchSessionStates", () => {
 
 		const mine = readState(omtDir, `goal-state-${sid}.json`) as Record<string, unknown>;
 		const theirs = readState(omtDir, `goal-state-${other}.json`) as Record<string, unknown>;
-		expect(Math.abs(Date.now() - Date.parse(mine["last_touched_at"] as string))).toBeLessThan(5000);
+		expectStampedDuringThisTest(mine["last_touched_at"] as string);
 		expect(theirs["last_touched_at"]).toBe(old);
 	});
 
@@ -1732,7 +1766,7 @@ describe("touchSessionStates", () => {
 			unknown
 		>;
 		const touchedMs = Date.parse(parsed["last_touched_at"] as string);
-		expect(Math.abs(Date.now() - touchedMs)).toBeLessThan(5000);
+		expectStampedDuringThisTest(touchedMs);
 		expect(parsed["progress_touched_at"]).toBe(old);
 	});
 
@@ -1764,7 +1798,7 @@ describe("touchSessionStates", () => {
 			unknown
 		>;
 		// last_touched_at (GC axis) is bumped to now.
-		expect(Math.abs(Date.now() - Date.parse(parsed["last_touched_at"] as string))).toBeLessThan(5000);
+		expectStampedDuringThisTest(parsed["last_touched_at"] as string);
 		// progress_touched_at is backfilled from the ORIGINAL last_touched_at value —
 		// not from `now`, and not left absent.
 		expect(parsed["progress_touched_at"]).toBe(old);

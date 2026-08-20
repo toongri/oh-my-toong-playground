@@ -36,7 +36,9 @@ const ACTIVE_STATES = new Set(["queued", "running", "retrying", "awaiting_resume
  * its active-member guard without racing the worker's final status write.
  */
 async function waitForStableTerminal(jobDir: string, stableMs = 500): Promise<void> {
-	const deadline = Date.now() + 15_000;
+	// 상한은 실패 선언 시점만 정한다 — 안정 종료에 끝내 도달 못 하면 아래에서
+	// 그대로 throw한다. 부하 걸린 머신의 워커 기동 지연에 밀리지 않도록 넉넉히.
+	const deadline = Date.now() + 45_000;
 	let terminalSince: number | null = null;
 	while (Date.now() < deadline) {
 		const membersDir = path.join(jobDir, "reviewers");
@@ -552,7 +554,12 @@ describe("settings.mcps 배관", () => {
 		expect(member.model).toBe("gpt-5.6-sol");
 		expect(member.effort_level).toBe("high");
 		expect(member.env).toEqual({ REVIEW_MARKER: "preserved" });
-		for (let i = 0; i < 30 && !fs.existsSync(argvPath); i++)
+		// 상한은 실패 선언 시점만 정한다 — 파일이 끝내 안 생기면 그대로 실패한다.
+		// 여기서 기다리는 대상은 별도로 스폰된 워커 프로세스이고, 전체 스위트
+		// 부하에서 프로세스 기동만 5.8초까지 늘어난 것이 실측됐다. 30회 x 20ms
+		// (0.6초) 상한은 결함 없이도 만료된다.
+		const argvDeadline = Date.now() + 45_000;
+		while (!fs.existsSync(argvPath) && Date.now() < argvDeadline)
 			await new Promise((resolve) => setTimeout(resolve, 20));
 		expect(fs.existsSync(argvPath)).toBe(true);
 		const argv = fs.readFileSync(argvPath, "utf8").split("\n").filter(Boolean);

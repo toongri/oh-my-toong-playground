@@ -37,6 +37,16 @@ function sleepMsAsync(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// 실제 프로세스를 띄우는 테스트들의 시간 상한. 이 값들은 "얼마나 기다렸다가
+// 실패를 선언하는가"만 정하며 단언을 전혀 완화하지 않는다 — 마커가 끝내 안
+// 나타나거나 프로세스가 끝내 안 죽으면 그대로 실패한다. 상한을 넉넉히 두는
+// 이유는 여기서 기다리는 대상이 bun 프로세스 기동이고, 전체 스위트를 돌릴 때
+// 워커들이 코어를 다투면서 단일 테스트가 5.8초까지 늘어난 것이 실측됐기 때문
+// 이다. 3~4초짜리 상한은 그 부하 아래에서 결함이 아니라 부하 때문에 터진다.
+const SPAWN_MARKER_DEADLINE_MS = 30_000;
+const REAP_OBSERVE_DEADLINE_MS = 30_000;
+const PROCESS_GROUP_TEST_TIMEOUT_MS = 120_000;
+
 describe("splitCommand", () => {
 	test("splits a simple command", () => {
 		expect(splitCommand("echo hello world")).toEqual(["echo", "hello", "world"]);
@@ -1687,7 +1697,7 @@ describe("reapOwnProcessGroup", () => {
 			// 죽으면(예: reapOwnProcessGroup 미구현) 이 마커가 끝까지 나타나지
 			// 않아 아래 단언에서 실패한다. 이게 없으면 "회수 전 대상이 하나도
 			// 없어서 우연히 0개"인 거짓 통과를 걸러내지 못한다.
-			const spawnDeadline = Date.now() + 3000;
+			const spawnDeadline = Date.now() + SPAWN_MARKER_DEADLINE_MS;
 			while (!existsSync(spawnedMarkerPath) && Date.now() < spawnDeadline) {
 				await sleepMsAsync(50);
 			}
@@ -1699,19 +1709,23 @@ describe("reapOwnProcessGroup", () => {
 				harness.on("exit", () => resolve());
 			});
 
-			// 그룹 전체 SIGKILL 이후 OS가 좀비를 회수할 여유 시간
-			await sleepMsAsync(500);
+			// 그룹 전체 SIGKILL 이후 OS가 좀비를 회수하기를 기다린다. 고정 500ms
+			// 관찰창은 부하 걸린 머신에서 회수가 늦어지면 그대로 거짓 실패가 된다
+			// — 폴링은 빨리 끝나면 즉시 통과하고, 끝내 비지 않으면 여전히 실패한다.
+			const livePgidLines = (): string[] =>
+				execSync("ps -o pgid=,pid= -A", { encoding: "utf8" })
+					.split("\n")
+					.map((line) => line.trim())
+					.filter((line) => line.length > 0)
+					.filter((line) => Number(line.split(/\s+/)[0]) === pgid);
+			const reapDeadline = Date.now() + REAP_OBSERVE_DEADLINE_MS;
+			while (livePgidLines().length > 0 && Date.now() < reapDeadline) {
+				await sleepMsAsync(50);
+			}
 
-			const psOutput = execSync("ps -o pgid=,pid= -A", { encoding: "utf8" });
-			const remaining = psOutput
-				.split("\n")
-				.map((line) => line.trim())
-				.filter((line) => line.length > 0)
-				.filter((line) => Number(line.split(/\s+/)[0]) === pgid);
-
-			expect(remaining).toHaveLength(0);
+			expect(livePgidLines()).toHaveLength(0);
 		},
-		20000,
+		PROCESS_GROUP_TEST_TIMEOUT_MS,
 	);
 
 	// AC1 이행 증거: 그룹 전체 SIGTERM을 보내기 "전에" 무시 핸들러를 설치해야
@@ -1749,7 +1763,7 @@ describe("reapOwnProcessGroup", () => {
 			spawnedPgids.push(pgid);
 
 			// 고정 sleep 대신 폴링 — 스케줄링 지연에 덜 취약함
-			const deadline = Date.now() + 4000;
+			const deadline = Date.now() + SPAWN_MARKER_DEADLINE_MS;
 			while (!existsSync(markerPath) && Date.now() < deadline) {
 				await sleepMsAsync(100);
 			}
@@ -1757,7 +1771,7 @@ describe("reapOwnProcessGroup", () => {
 			expect(existsSync(markerPath)).toBe(true);
 			expect(readFileSync(markerPath, "utf8")).toBe("alive-after-own-sigterm");
 		},
-		20000,
+		PROCESS_GROUP_TEST_TIMEOUT_MS,
 	);
 
 	// 오살 방지 증명: reapOwnProcessGroup은 process.kill(-pgid, ...)로 그룹
@@ -1803,7 +1817,7 @@ describe("reapOwnProcessGroup", () => {
 			if (pgid === undefined) throw new Error("spawn failed to produce a pid");
 			spawnedPgids.push(pgid);
 
-			const spawnDeadline = Date.now() + 3000;
+			const spawnDeadline = Date.now() + SPAWN_MARKER_DEADLINE_MS;
 			while (!existsSync(markerPath) && Date.now() < spawnDeadline) {
 				await sleepMsAsync(50);
 			}
@@ -1819,7 +1833,7 @@ describe("reapOwnProcessGroup", () => {
 			// 오살 방지 음성 대조군: 이 하니스와 무관한 프로세스 그룹은 살아남아야 한다.
 			expect(isPgidAlive(bystanderPgid)).toBe(true);
 		},
-		20000,
+		PROCESS_GROUP_TEST_TIMEOUT_MS,
 	);
 
 	// SIGKILL 에스컬레이션 증거: 계층 1 픽스처의 자손이 전부 평범한 sleep이면
@@ -1891,7 +1905,7 @@ describe("reapOwnProcessGroup", () => {
 			if (pgid === undefined) throw new Error("spawn failed to produce a pid");
 			spawnedPgids.push(pgid);
 
-			const spawnDeadline = Date.now() + 3000;
+			const spawnDeadline = Date.now() + SPAWN_MARKER_DEADLINE_MS;
 			while (!existsSync(trapPidPath) && Date.now() < spawnDeadline) {
 				await sleepMsAsync(50);
 			}
@@ -1903,7 +1917,7 @@ describe("reapOwnProcessGroup", () => {
 			// 아직 5초 SIGKILL 전) SIGTERM을 무시하는 이 자손이 여전히 살아있음을
 			// 확인한다 — 없으면 뒤의 "결국 죽음" 단언이 SIGKILL 에스컬레이션의
 			// 효과인지, 애초에 살아있지 않았던 건지 구분할 수 없다.
-			const midDeadline = Date.now() + 5000;
+			const midDeadline = Date.now() + SPAWN_MARKER_DEADLINE_MS;
 			while (!existsSync(midGraceMarkerPath) && Date.now() < midDeadline) {
 				await sleepMsAsync(50);
 			}
@@ -1914,11 +1928,16 @@ describe("reapOwnProcessGroup", () => {
 				harness.on("exit", () => resolve());
 			});
 
-			// 5초 유예 종료 + SIGKILL 전파 및 OS 좀비 회수 여유 시간
-			await sleepMsAsync(500);
+			// 5초 유예 종료 + SIGKILL 전파/좀비 회수를 기다린다. 고정 500ms 관찰창은
+			// 전파가 그보다 늦어지는 순간 거짓 실패가 된다 — 폴링은 죽는 즉시
+			// 통과하고, 끝내 살아 있으면 여전히 실패한다.
+			const deathDeadline = Date.now() + REAP_OBSERVE_DEADLINE_MS;
+			while (isPidAlive(trapPid) && Date.now() < deathDeadline) {
+				await sleepMsAsync(50);
+			}
 
 			expect(isPidAlive(trapPid)).toBe(false);
 		},
-		20000,
+		PROCESS_GROUP_TEST_TIMEOUT_MS,
 	);
 });

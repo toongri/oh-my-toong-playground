@@ -14,7 +14,7 @@ make validate-schema    # YAML schema validation only
 make validate-components # Referenced file/directory existence check
 make validate-skill-refs # Skill path-reference validation
 make typecheck          # TypeScript strict type-check (tsc --noEmit)
-make test               # Run all tests (Shell + TypeScript)
+make test               # Run all tests (Shell + TypeScript); writes an untruncated log (path printed; override with OMT_TEST_LOG)
 make sync-dry           # Preview sync changes (no writes)
 make sync               # Deploy to target projects (requires default branch + clean tree; runs validate + tests first)
 ```
@@ -124,7 +124,7 @@ skills:
 | git-master | Git conventions (commits + branch naming) | Korean messages, 50-char limit, atomic commits |
 | agent-council | Multi-AI advisory body | For trade-offs and subjective decisions |
 | qa | Quality Assurance verification | Enforced actor-roster → story → cell → record → verdict → complete chain; runtime gates block unrecorded drivers and Stop |
-| explain-diff | Diff explanation ending in a comprehension quiz | Completion is the reader passing, not the document; evidence → background → intuition → code → render → quiz, no quiz exemption |
+| explain-diff | Diff explanation ending in a comprehension quiz | Completion is the reader passing, not the document; evidence → background → architecture → intuition → commits → code → render → quiz, template-owned visuals (style invention rejected), no quiz exemption |
 | agent-browser | Web and Electron E2E | Load this skill before using its driver CLI |
 | agent-device | iOS, tvOS, macOS, Android, Vega OS TV E2E | Load this skill before using its driver CLI; delegates runtime help |
 | dogfood | Mobile exploratory QA | Load this skill before using its driver CLI |

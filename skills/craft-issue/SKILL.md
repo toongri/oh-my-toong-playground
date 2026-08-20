@@ -20,10 +20,37 @@ intake
                            cause is unknown, run the diagnosis sub-pipeline — READ references/diagnose-rootcause.md)
       → record            (best-practice body — READ references/issue-craft.md at this stage)
         → slice           (Model A INVEST — READ references/issue-craft.md at this stage)
-          → write tail    (checklist gate → autonomous write; human review post-hoc)
+          → write tail    (checklist gate → autonomous write — body when the issue is new,
+                           append comment when it already exists; human review post-hoc)
 ```
 
 Each stage is described below. Refuse-to-file conditions, duplicate policy, and the INVEST slice gate are inline gates within this spine — do not skip them.
+
+---
+
+## Append-Only History Contract
+
+**An issue body is written exactly once — when the issue is created. After that it is immutable.**
+Every later finding, correction, decision, and diagnosis lands as a **new comment appended to that
+issue**. Nothing already written is edited away; the record accumulates, so a reader can reconstruct
+how the issue reached its current state and why.
+
+| What you are writing | Where it goes |
+|---|---|
+| An issue that does not exist yet | The **body**, in full, per Stages 4-5 |
+| An issue that already has a body — enrichment, correction, new diagnosis, re-scoping | An **append comment**. The body is not rewritten. |
+| Structural relations — related, parent, blocked-by, label | Written **directly**, on either path. These are graph edges, not body text, and have no comment form. |
+
+**The body's immutability binds its bytes, not the comment's authority.** An append comment states
+the corrected content in final, decided form — "완료 조건 1번은 이제 이렇다" — and the reader treats it
+as current. It is not a set of remarks *about* the body that leaves the merge to the reader. A
+comment that names which body lines are now doubtful without stating what replaces them has not done
+its job. The required shape is the **Append Comment Shape** in `references/issue-craft.md`.
+
+**A superseded line stays visible.** Because nothing is deleted, a wrong premise or a stale AC keeps
+sitting in the body looking alive. The only thing that retires it is an explicit supersede
+declaration in the append comment. Retiring it inside a paragraph does not count — it is a named,
+required field of the append shape.
 
 ---
 
@@ -31,7 +58,7 @@ Each stage is described below. Refuse-to-file conditions, duplicate policy, and 
 
 Identify what was handed to you. Three input modes:
 
-- **Assigned PM issue**: an issue already exists; enrich and cross-link it in place.
+- **Assigned PM issue**: an issue already exists; enrich and cross-link it by **appending a comment** — its body is immutable per the Append-Only History Contract above.
 - **Abstract free-text requirement**: no issue yet; synthesize one from scratch.
 - **Symptom report (cause unknown)**: a bug, regression, incident, or support report describing wrong behavior whose root cause is not yet established. This mode routes Stage 3 to the diagnosis sub-pipeline (not the light investigation): the issue's Root Cause cannot be written until the cause is established by evidence or explicitly marked hypothesis-grade.
 
@@ -51,9 +78,12 @@ Read `references/gather-crosslink.md` now (using the Read tool with path `refere
 |---|---|
 | collaboration-docs | spec pages, PRD, design docs, meeting notes |
 | PM | linked issues, parent epics, related issues |
+| target-issue history | the target issue's own comment thread, read in full and in order — mandatory whenever the intake is an existing issue |
 | messenger | slack threads, comment trails |
 | code-VCS | recent commits, blame, open PRs touching the area |
 | logs | error logs, monitoring alerts, incident records |
+
+**Effective state of an existing issue** — because the body is immutable (see the Append-Only History Contract), the body alone is NOT the current state. The current state is the body **as amended by its comment thread, in order**: a body line that a later comment declares superseded is dead, and the comment's Effective State replaces it. Read the whole thread before judging what the issue currently says. Enriching or diagnosing against the body alone reasons from retired facts.
 
 **Runtime tool-mapping note** (stated once): at gather time, map each abstract source TYPE to whatever MCP/CLI is available in the current runtime (e.g., a docs MCP for collaboration-docs, a PM MCP for PM, a Slack MCP for messenger, git/GitHub MCP for code-VCS, a log tool for logs). An unwired source type is skipped gracefully — gather incompleteness does not trigger refuse-to-file.
 
@@ -117,7 +147,7 @@ Read `references/issue-craft.md` (already loaded in Stage 4 — re-read only if 
 **Slice gate decision:**
 
 - If the issue passes INVEST as a single unit: proceed to Stage 6 (write as-is).
-- If the issue is too large (fails Independent or Estimable or Small): slice into child issues, each passing the per-child stage-check ("requirement-understanding vs implementation-planning"). Then restructure the parent body per the **Parent-Issue Body Shape** in `references/issue-craft.md` — follow its required/conditional column in full (the parent keeps its own Pre-Context; shared context placement follows the **Tiered Shared-Context Placement** rule there — Tier A parent-inline for small/stable context regardless of reuse count, Tier C canonical-document link for substantial/evolving context, Tier B full duplication only for a cross-team/external handoff). Each child carries its own Problem, Pre-Context, AC, and Non-Goals and references the canonical location (parent or Tier-C document) for shared definitions rather than duplicating them (except a Tier-B handoff child, which restates them in full).
+- If the issue is too large (fails Independent or Estimable or Small): slice into child issues, each passing the per-child stage-check ("requirement-understanding vs implementation-planning"). Then apply the **Parent-Issue Body Shape** in `references/issue-craft.md` to the parent — as its body when this run is creating the parent, or as an **append comment** on it when the parent already exists (Append-Only History Contract; the restructure is written as Effective State over the sections it changes, never as a body rewrite) — follow its required/conditional column in full (the parent keeps its own Pre-Context; shared context placement follows the **Tiered Shared-Context Placement** rule there — Tier A parent-inline for small/stable context regardless of reuse count, Tier C canonical-document link for substantial/evolving context, Tier B full duplication only for a cross-team/external handoff). Each child carries its own Problem, Pre-Context, AC, and Non-Goals and references the canonical location (parent or Tier-C document) for shared definitions rather than duplicating them (except a Tier-B handoff child, which restates them in full).
 - Settled child issues hand off to `prometheus` (for planning) or `sisyphus` (for execution) as appropriate.
 
 INVEST is the slice gate. File-count or LOC atomicity is NOT the gate.
@@ -165,6 +195,7 @@ Refuse to file (or refuse to enrich an existing issue) if ANY of the following h
 - **No consistent reproduction**: a bug or behavior report with no reproducible scenario, no log evidence, and no witness account.
 - **Runtime-evidence-free root-cause claim**: a root cause assertion that cannot be grounded in code, logs, or a reproducible trace — pure speculation is not a root cause.
 - **Un-observable AC**: every acceptance criterion must be verifiable by a defined method (test, query, manual step). An AC that cannot be verified is not an AC.
+- **Unreadable target-issue history**: the intake is an existing issue and its comment thread cannot be retrieved in full. Under the Append-Only History Contract the thread carries that issue's current state, so an append written without it can re-assert body lines a comment already retired. This is the one gather failure that blocks — every other unreachable source stays fail-open (`references/gather-crosslink.md` §3).
 
 When refusing, state clearly which condition triggered and what evidence is needed to unblock.
 
@@ -184,9 +215,9 @@ Write to the PM tool autonomously once all refuse-to-file conditions pass. No pr
 
 ### Plain-Language Gate (before any write)
 
-Before executing the write steps below, check the **body about to be emitted to the issue** — not gather-stage summaries or authoring notes — against these four checks. Failing any check blocks the write: fix the issue, then re-check.
+Before executing the write steps below, check the **text about to be emitted to the issue — a body on the create path, an append comment on the existing-issue path** — not gather-stage summaries or authoring notes, against these four checks. Failing any check blocks the write: fix the issue, then re-check.
 
-1. **Header contract**: every emitted section header/subheading is the localized Render-Label from `references/issue-craft.md`'s Render Contract — no authoring-instruction leakage (Required/Conditional markers, trigger conditions, hedge language, the `— expected` separator) survives into a header or bracketed subtitle.
+1. **Header contract**: every emitted section header/subheading is the localized Render-Label from `references/issue-craft.md`'s Render Contract — for an append comment this covers its four 변경 요약 / 근거 / 대체 대상 / 정정 후 상태 headers and every localized header restated under 정정 후 상태 — no authoring-instruction leakage (Required/Conditional markers, trigger conditions, hedge language, the `— expected` separator) survives into a header or bracketed subtitle.
 2. **Symbol gloss**: every code symbol (function, module, file, service, constant) named in the body carries a first-occurrence what/where/does gloss, per `references/issue-craft.md`'s symbol-gloss contract.
 3. **Shorthand/abbreviation**: no undefined engineer shorthand or internal abbreviation (domain-internal shorthand in the style of `known-moved`, `recon`, `tx-body`, `markFailed-first`, `pre-capture`) appears without being spelled out at first use. Found one? Expand it at first use.
 4. **Reader-facing humanizer pass**: when the body's language is Korean (the team's working language), invoke `Skill(humanizer)` on the reader-facing prose immediately before the write — this is the point where engineer-shorthand register becomes PM-reader register.
@@ -212,7 +243,10 @@ Dispatch payload (inline text, not file paths):
 <original raw request, verbatim>
 <parent body, if any — omit this block when there is no parent>
 <one child:<title-slug> block per issue body in the set — an unsliced single issue (Stage 5 "write as-is") is still emitted as exactly one child:<title-slug> block, never sent body-less>
+<one comment:<issue-key> block per append comment in the set, each carrying that comment's full text — omit when the set contains no append>
 ```
+
+Each issue in the set is emitted as the artifact this run actually writes to it: an issue being created contributes its body as a `child:<title-slug>` block, and an issue that already has a body contributes its append comment as a `comment:<issue-key>` block. The two kinds coexist — a Stage 5 slice of an **existing** parent emits one `comment:<issue-key>` block for that parent plus one `child:<title-slug>` block per newly created child, and every one of those child bodies stays in the same dispatch. A run that only appends sends the request block plus exactly one `comment:<issue-key>` block.
 
 Rule files are passed as the two absolute paths printed by the RULES_RESOLVED step.
 
@@ -220,17 +254,17 @@ Rule files are passed as the two absolute paths printed by the RULES_RESOLVED st
 
 **Loop contract:** cycle starts at 0 and increments at reviewer dispatch; max_cycles=5 permits exactly 5 dispatches. A REQUEST_CHANGES on the 5th dispatch is terminal — no further revision is produced. Dispatch a fresh agent instance each cycle. Do not pass the prior verdict or its findings into the new prompt. The writer's self-assessment cannot substitute for a reviewer verdict. Same-Rule key = target + the **Rule:** string verbatim. Pin each target identifier at cycle 1 and never recompute it. Two verdicts are "the same" iff the Same-Rule key matches; the count resets to 1 when a different key appears. Three consecutive same-key verdicts trigger `Same-Rule-3x` termination — the same early-exit as exhausting `max_cycles=5`.
 
-**On loop exhaustion:** Terminal exit (max_cycles=5 exhausted, or Same-Rule-3x): write the issue anyway, and append the unresolved findings verbatim under Notes. The terminal write must record every unresolved finding verbatim under Notes — no other section receives them. The bytes written are exactly the body as last dispatched to the reviewer. The findings from that final verdict are recorded, not acted on — no post-terminal revision is produced. This terminal Notes block is appended after the Plain-Language Gate and is exempt from it — it is a verbatim machine record of the final reviewer verdict, not reader-facing prose, and is the only exception to the reviewed-bytes-equal-written-bytes invariant that governs every other write in this pipeline. Report the terminal write to the caller: the issue was written with N unresolved findings on <rule>; see Notes.
+**On loop exhaustion:** Terminal exit (max_cycles=5 exhausted, or Same-Rule-3x): write the issue anyway — body on the create path, append comment on the existing-issue path — and append the unresolved findings verbatim under Notes (메모) at the end of whichever text is written. The terminal write must record every unresolved finding verbatim under Notes — no other section receives them. The bytes written are exactly the body as last dispatched to the reviewer. The findings from that final verdict are recorded, not acted on — no post-terminal revision is produced. This terminal Notes block is appended after the Plain-Language Gate and is exempt from it — it is a verbatim machine record of the final reviewer verdict, not reader-facing prose, and is the only exception to the reviewed-bytes-equal-written-bytes invariant that governs every other write in this pipeline. Report the terminal write to the caller: the issue was written with N unresolved findings on <rule>; see Notes.
 
 Abstract write steps (in order):
 
 1. **Link related items**: attach previously gathered related issues/issues as related items in the PM tool.
 2. **Set parent**: if this is a child issue from the slice stage, set the parent relationship to the parent issue.
 3. **Set dependency links**: for child issues that carry a blocked-by ordering from the slice stage, attach the blocked-by relation to the predecessor issue. Independent children carry no dependency link.
-4. **Write body**: write the full issue body following the body shape from `references/issue-craft.md`.
+4. **Write the issue text**: for an issue being created, write the full body following the body shape from `references/issue-craft.md`. For an issue that already has a body, **append a comment** following the **Append Comment Shape** in the same file — do not write the body. Steps 1, 2, 3, and 5 run identically on both paths: structural relations and labels are written directly (Append-Only History Contract).
 5. **Label**: apply any labels derived from the issue genre (bug, feature, improvement, etc.) and the source domain.
 
-**Runtime tool binding** (this is the only place concrete tool identifiers may appear): when the PM tool is Linear, the write steps map to the Linear MCP: `save_issue` to create or update, `relatedTo` for related links, `parentId` for parent assignment, `blockedBy` for dependency links. When the PM tool differs, substitute the equivalent fields. The binding is resolved at runtime based on what MCP is wired — this skill carries no hardcoded assumption beyond Linear as the documented example.
+**Runtime tool binding** (this is the only place concrete tool identifiers may appear): when the PM tool is Linear, the write steps map to the Linear MCP: `save_issue` to create an issue, `create_comment` to append to one that already exists, `relatedTo` for related links, `parentId` for parent assignment, `blockedBy` for dependency links. `save_issue` with a `description` on an issue that already has one is the write the Append-Only History Contract forbids. When the PM tool differs, substitute the equivalent fields. The binding is resolved at runtime based on what MCP is wired — this skill carries no hardcoded assumption beyond Linear as the documented example.
 
 **Linear auto-relation fact**: Linear auto-creates a native `relatedTo` relation from any unescaped issue reference placed in a description body, including a bare issue key (for example, `B2C-4992` as normal text), an issue markdown link, or an issue URL. Therefore, when the PM tool is Linear: `relatedTo` is written only for the curated related set (step 1 above), `parentId` only for parent assignment (step 2 above), and PM issues that must be referenced in the body without becoming related — parent epics, context-only mentions, or duplicate-policy distinct siblings — are rendered as inline-code issue identifiers (for example, `` `B2C-4992` ``), which preserves literal text and does not create a Linear issue mention/relation. Do not render must-not-relate Linear issue references as bare keys, markdown issue links, or issue URLs in the body.
 
@@ -240,6 +274,6 @@ Human review is post-hoc: the issue is written first; the caller can review and 
 
 ## Reference Files
 
-- `references/gather-crosslink.md`: complete gather bound, curation rules, cross-link procedure, source-unreachable handling, impact & premises investigation delegation (§7), and cross-link annotation format. Read at Stage 2.
+- `references/gather-crosslink.md`: complete gather bound, curation rules, effective-state reconstruction from an existing issue's comment thread, cross-link procedure, source-unreachable handling, impact & premises investigation delegation (§7), and cross-link annotation format. Read at Stage 2.
 - `references/diagnose-rootcause.md`: the symptom-report diagnosis sub-pipeline — independent-diagnosis mandate (prior issues are hypotheses), delegation orchestration (explore/oracle/librarian + your own runtime-evidence track), competing-hypothesis disproof ledger, runtime-evidence gate, multi-path coverage, and the confidence gate. Read at Stage 3 when the cause is unknown.
-- `references/issue-craft.md`: best-practice body shape, observable-AC rubric (weasel-word prohibition, Action/Expected/Verification), RCA Bug-Report shape, anti-fluff rules, Model A INVEST slice rubric with per-child stage-check and settled-child handoff, Render Contract, and symbol-gloss contract. Read at Stages 4 and 5, and consulted again at Stage 6's Plain-Language Gate.
+- `references/issue-craft.md`: best-practice body shape, **Append Comment Shape** (변경 요약 / 근거 / 대체 대상 / 정정 후 상태), observable-AC rubric (weasel-word prohibition, Action/Expected/Verification), RCA Bug-Report shape, anti-fluff rules, Model A INVEST slice rubric with per-child stage-check and settled-child handoff, Render Contract, and symbol-gloss contract. Read at Stages 4 and 5, and consulted again at Stage 6's Plain-Language Gate.

@@ -129,7 +129,10 @@ describe("diagnose job lifecycle", () => {
 		// Wait with a bounded, non-busy poll so clean does not race the status
 		// transition and refuse an otherwise safe deletion.
 		const pollStartedAt = Date.now();
-		const pollTimeoutMs = 5_000;
+		// 워커는 별도 프로세스로 뜬다 — 전체 스위트 부하에서 기동만 5.8초까지
+		// 늘어난 것이 실측됐으므로 5초 상한은 결함 없이도 만료됐다. 상한은 실패
+		// 선언 시점만 정하고, 끝내 종료 상태에 못 가면 그대로 throw한다.
+		const pollTimeoutMs = 45_000;
 		const pollIntervalMs = 50;
 		let overallState = "";
 		while (Date.now() - pollStartedAt < pollTimeoutMs) {
@@ -303,8 +306,13 @@ describe("diagnose job lifecycle", () => {
 		const output = JSON.parse(result.toString());
 		const member = output.members[0];
 		expect(member.mcpBlock).toEqual(["blocked"]);
-		for (let i = 0; i < 30 && !fs.existsSync(argvPath); i++)
-			await new Promise((r) => setTimeout(r, 20));
+		// 상한은 실패 선언 시점만 정한다 — 파일이 끝내 안 생기면 그대로 실패한다.
+		// 여기서 기다리는 대상은 별도로 스폰된 워커 프로세스이고, 전체 스위트
+		// 부하에서 프로세스 기동만 5.8초까지 늘어난 것이 실측됐다. 30회 x 20ms
+		// (0.6초) 상한은 결함 없이도 만료된다.
+		const argvDeadline = Date.now() + 45_000;
+		while (!fs.existsSync(argvPath) && Date.now() < argvDeadline)
+			await new Promise((resolve) => setTimeout(resolve, 20));
 		expect(fs.existsSync(argvPath)).toBe(true);
 		const argv = fs.readFileSync(argvPath, "utf8").split("\n").filter(Boolean);
 		expect(argv).toContain("mcp_servers.blocked.enabled=false");

@@ -229,6 +229,20 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 	});
 });
 
+describe("장시간 `code-reviewer` 대기 계약", () => {
+	test("경과 시간만으로 진행 중인 `code-reviewer`를 중단하지 않는다", () => {
+		expect(completionGateMd).toContain(
+			"may legitimately remain in flight for 2–3 hours",
+		);
+		expect(completionGateMd).toContain(
+			"Elapsed time alone is not evidence to interrupt, cancel, or re-dispatch it",
+		);
+		expect(completionGateMd).toContain(
+			"concrete terminal evidence",
+		);
+	});
+});
+
 describe("ported from goal (regression): required phrases survive somewhere in body+references", () => {
 	test("all seven slot names are named somewhere in the union", () => {
 		expect(combined).toContain("**outcome** (`--outcome`)");

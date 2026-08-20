@@ -6,9 +6,8 @@
  * `subagent_type`) into ONE rule file, and carries its own unique sentinel
  * for the positive control — so this probe's result never depends on which
  * literals a real rule happens to contain today, or drifts if that rule's
- * prose changes later (matching skill-chain-cue-form's synthetic-fixture
- * rationale for the same reason: a real source's content is out of this
- * probe's control).
+ * prose changes later — a real source's content is out of this probe's
+ * control.
  */
 
 import fs from "fs/promises";

@@ -8,10 +8,16 @@
  * and every one of those breaks the moment the page needs a CDN to render
  * itself. A page with no script tag and no external reference cannot rot.
  *
- * Diagrams are authored as inline HTML inside the markdown, so they arrive here
- * already rendered and need no client-side library.
+ * Diagrams arrive two ways and leave one way: 1D flow strips and before/after
+ * cards are authored as sanctioned component markup (classes this file's CSS
+ * owns), and 2D structure diagrams are authored as ```mermaid fences that
+ * preRenderMermaid bakes into inline SVG at build time. Either way the page
+ * ships with zero client-side rendering left to do.
  */
-import { readFileSync, writeFileSync } from "fs";
+import { execFileSync } from "child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { marked } from "marked";
 
 /** Heading rows the table of contents is built from. */
@@ -32,6 +38,72 @@ export function slugify(text: string): string {
 			.replace(/[^\p{L}\p{N}]+/gu, "-")
 			.replace(/^-+|-+$/g, "") || "section"
 	);
+}
+
+const MERMAID_FENCE = /```mermaid\n([\s\S]*?)```/g;
+
+/**
+ * Replaces every ```mermaid fence with an inline SVG before markdown parsing.
+ *
+ * This is the build-time half of the "no runtime JS" invariant: the page keeps
+ * rendering offline and in mail clients precisely because the diagram was
+ * rendered HERE, once, rather than by a script the viewer must be able to run.
+ * `renderSvg` is injected so tests exercise the wrapping without Chromium; the
+ * production caller passes {@link mmdcRenderSvg}.
+ */
+export function preRenderMermaid(
+	markdown: string,
+	renderSvg: (source: string, index: number) => string,
+): string {
+	let index = 0;
+	return markdown.replace(MERMAID_FENCE, (_m, source: string) => {
+		const i = index;
+		index += 1;
+		let svg: string;
+		try {
+			svg = renderSvg(source, i);
+		} catch (e) {
+			throw new Error(`${i + 1}번째 mermaid 블록 렌더 실패: ${String(e)}\n--- 블록 원문 ---\n${source}`, {
+				cause: e,
+			});
+		}
+		return `<figure class="diagram">${svg}</figure>`;
+	});
+}
+
+/**
+ * Renders one mermaid source to SVG through mmdc (real mermaid inside headless
+ * Chromium — the same engine the mermaid-render-gate hook uses, so a diagram
+ * that passes here is the diagram the reader sees). The id is de-duplicated per
+ * block: mmdc names every SVG `my-svg` and its internal stylesheet targets that
+ * id, so two untouched diagrams on one page would style each other.
+ */
+function mmdcRenderSvg(source: string, index: number): string {
+	const dir = mkdtempSync(join(tmpdir(), "explain-diff-mmd-"));
+	try {
+		const src = join(dir, "block.mmd");
+		const out = join(dir, "block.svg");
+		writeFileSync(src, source, "utf8");
+		try {
+			execFileSync("mmdc", ["-i", src, "-o", out, "-b", "transparent", "-q"], {
+				stdio: ["ignore", "pipe", "pipe"],
+			});
+		} catch (e) {
+			const rec: Record<string, unknown> = {};
+			if (e !== null && typeof e === "object") Object.assign(rec, e);
+			if (rec["code"] === "ENOENT") {
+				throw new Error(
+					"mmdc 가 없습니다 — `npm i -g @mermaid-js/mermaid-cli` 후 `npx puppeteer browsers install chrome-headless-shell` 로 설치하세요.",
+					{ cause: e },
+				);
+			}
+			const stderr = rec["stderr"];
+			throw new Error(stderr instanceof Buffer ? stderr.toString() : String(e), { cause: e });
+		}
+		return readFileSync(out, "utf8").replaceAll("my-svg", `mmd-${index}`);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
 }
 
 export function renderToHtml(markdown: string, title: string): string {
@@ -90,11 +162,13 @@ const STYLE = `
 :root {
   --bg: #ffffff; --fg: #1a1a1a; --muted: #666; --rule: #e3e3e3;
   --code-bg: #f6f6f4; --accent: #2b5fa8;
+  --before: #b0563a; --after: #2e7d4f;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #16181c; --fg: #e6e6e6; --muted: #9aa0a6; --rule: #2e3238;
     --code-bg: #1e2126; --accent: #7aa7e6;
+    --before: #e0937a; --after: #7ec99a;
   }
 }
 * { box-sizing: border-box; }
@@ -135,6 +209,59 @@ img, svg { max-width: 100%; height: auto; }
 .toc ul { list-style: none; margin: 0; padding: 0; }
 .toc .lv2 { margin-left: 0; }
 .toc .lv3 { margin-left: 1.1rem; color: var(--muted); }
+h1, h2, h3, h4, p, li, blockquote, th, td { word-break: keep-all; }
+
+/* --- 승인된 컴포넌트: 저자는 클래스만 쓰고, 시각 언어는 여기 한 곳이 소유한다 --- */
+.doc-meta {
+  display: flex; flex-wrap: wrap; gap: 0.4rem 1.5rem; list-style: none;
+  margin: 0 0 2rem; padding: 0.8rem 1.1rem; background: var(--code-bg);
+  border-radius: 8px; font-size: 0.9rem; color: var(--muted);
+}
+.doc-meta strong { color: var(--fg); font-weight: 600; }
+
+.flow { display: flex; align-items: stretch; flex-wrap: wrap; gap: 0.4rem; margin: 1.25rem 0; }
+.flow-step {
+  flex: 1 1 8.5rem; min-width: 0; display: flex; flex-direction: column; justify-content: center;
+  padding: 0.6rem 0.55rem; border: 1px solid var(--rule); border-top: 3px solid var(--accent);
+  border-radius: 8px; background: var(--code-bg); text-align: center;
+  font-size: 0.85rem; line-height: 1.5;
+}
+.flow-step code { overflow-wrap: anywhere; word-break: break-all; }
+.flow-arrow { display: flex; align-items: center; color: var(--muted); }
+
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.25rem 0; }
+.compare-before, .compare-after {
+  border: 1px solid var(--rule); border-radius: 10px; padding: 0.9rem 1rem 1rem; font-size: 0.92rem;
+}
+.compare-before { border-top: 3px solid var(--before); }
+.compare-after { border-top: 3px solid var(--after); }
+.compare-before::before, .compare-after::before {
+  display: block; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em;
+  margin-bottom: 0.35rem;
+}
+.compare-before::before { content: "BEFORE"; color: var(--before); }
+.compare-after::before { content: "AFTER"; color: var(--after); }
+
+.callout {
+  margin: 1.25rem 0; padding: 0.8rem 1.1rem; border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent); border-radius: 8px;
+  background: var(--code-bg); font-size: 0.95rem;
+}
+
+/* mermaid SVG는 밝은 테마 색으로 구워지므로, 다크 모드에서도 흰 카드 위에 놓는다. */
+figure.diagram {
+  margin: 1.25rem 0; padding: 1rem; background: #ffffff;
+  border: 1px solid var(--rule); border-radius: 10px; overflow-x: auto;
+}
+figure.diagram svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+figure.diagram figcaption { color: var(--muted); font-size: 0.85rem; margin-top: 0.6rem; text-align: center; }
+
+@media (max-width: 640px) {
+  .flow { flex-direction: column; }
+  .flow-arrow { justify-content: center; transform: rotate(90deg); }
+  .compare { grid-template-columns: 1fr; }
+}
+
 @media print {
   body { background: #fff; color: #000; }
   .toc { break-after: page; }
@@ -153,7 +280,7 @@ function main(): void {
 		process.stderr.write("Usage: render.ts --in <doc.md> --out <doc.html>\n");
 		process.exit(1);
 	}
-	const markdown = readFileSync(input, "utf8");
+	const markdown = preRenderMermaid(readFileSync(input, "utf8"), mmdcRenderSvg);
 	const title = (markdown.match(/^#\s+(.+)$/m)?.[1] ?? "explain-diff").trim();
 	writeFileSync(output, renderToHtml(markdown, title), "utf8");
 	process.stdout.write(`${output}\n`);

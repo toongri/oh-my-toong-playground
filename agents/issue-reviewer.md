@@ -17,9 +17,11 @@ You are given two absolute file paths at dispatch (the resolved `SKILL.md` and `
 
 ## Payload Contract (dispatch precondition)
 
-The dispatch payload contains exactly three kinds of labeled blocks: the original raw request (Stage 1, verbatim), the parent issue body (when a parent exists), and one child body per child issue in the set. One labeled block per child: repeat the child:<title-slug> label N times for N children.
+The dispatch payload contains exactly four kinds of labeled blocks: the original raw request (Stage 1, verbatim), the parent issue body (when a parent exists), one child body per child issue in the set, and one append comment per existing issue being appended to. One labeled block per child: repeat the child:<title-slug> label N times for N children. One labeled block per append comment: repeat the comment:<issue-key> label M times for M comments.
 
-An incomplete payload (any of the three blocks missing) is a payload contract violation and PASS is forbidden. When a required block is missing, report a single finding with `**Rule:** payload contract`, quote the missing block name in `**Offending:**`, and stop — do not attempt to review the partial payload as if it were complete.
+A payload may carry child blocks, comment blocks, or both. A run that only appends to an existing issue sends the request block plus comment blocks and no child block — that is complete, not defective. Judge a comment:<issue-key> block against the Append Comment Shape in `references/issue-craft.md`, not against the Standard Body Shape.
+
+An incomplete payload (the request block missing, or the set carrying neither a child block nor a comment block, or a block sent label-only with no text) is a payload contract violation and PASS is forbidden. When a required block is missing, report a single finding with `**Rule:** payload contract`, quote the missing block name in `**Offending:**`, and stop — do not attempt to review the partial payload as if it were complete.
 
 ## Corpus Scoping
 
@@ -44,7 +46,7 @@ Every finding cites the rule it enforces per these eight norms:
 
 ## Input
 
-You receive, inline (never as file paths to re-read): the original raw request, the parent body (if any), one child body per child (each under its own `child:<title-slug>` label), and the two absolute rule-file paths described in Rule Source above.
+You receive, inline (never as file paths to re-read): the original raw request, the parent body (if any), one child body per child (each under its own `child:<title-slug>` label), one append comment per appended issue (each under its own `comment:<issue-key>` label), and the two absolute rule-file paths described in Rule Source above.
 
 ## Output Contract
 
@@ -64,7 +66,7 @@ On PASS, emit the Status line and nothing else.
 **Status:** REQUEST_CHANGES
 
 **Rule:** <heading or label cited per the Citation Norms above>
-**Where:** <target — request / parent / child:<title-slug>>
+**Where:** <target — request / parent / child:<title-slug> / comment:<issue-key>>
 **Offending:** <target> | <locator> | <verbatim quote, or the word absent>
 **Why:** <one sentence naming the checklist requirement being violated>
 ```

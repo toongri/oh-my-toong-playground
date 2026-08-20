@@ -14,7 +14,7 @@
 
 import fs from "fs/promises";
 import path from "path";
-import { stringify } from "smol-toml";
+import { stringify, parse } from "smol-toml";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { readTextFile, readJsonFile, writeJsonFile } from "../lib/json.ts";
 import { isPlainObject } from "../lib/deep-merge.ts";
@@ -78,6 +78,48 @@ export function resolveCodexAgentModel(
 // TOML Managed Block Helpers
 // =============================================================================
 
+/** Escapes a literal string for embedding in a RegExp source. */
+function escapeRegExp(literal: string): string {
+	return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Returns true when every leaf key/value `expected` declares is reachable
+ * at the same path in `actual`. Plain objects recurse (actual may carry
+ * extra sibling keys — e.g. a user-owned `[features]` table alongside the
+ * managed one); everything else (string, number, boolean, array) is
+ * compared by value, with arrays requiring an exact match rather than a
+ * partial overlap.
+ */
+function isDeepSubset(expected: unknown, actual: unknown): boolean {
+	if (isPlainObject(expected)) {
+		return (
+			isPlainObject(actual) &&
+			Object.entries(expected).every(([key, val]) => isDeepSubset(val, actual[key]))
+		);
+	}
+	if (Array.isArray(expected)) {
+		return Array.isArray(actual) && JSON.stringify(expected) === JSON.stringify(actual);
+	}
+	return expected === actual;
+}
+
+/**
+ * Finds every line-anchored occurrence of `marker`: the marker must start
+ * the line and may be followed only by trailing horizontal whitespace
+ * before the line ends. Anchoring to whole lines (rather than a raw
+ * substring match) keeps a marker literal sitting inside a TOML string
+ * value or a plain comment from being mistaken for a structural marker.
+ * Trailing-whitespace tolerance exists because Codex re-serializing
+ * config.toml can append trailing spaces to the marker line — treating
+ * that as "marker absent" would fall through to append and duplicate the
+ * block.
+ */
+function matchMarkerLines(content: string, marker: string): RegExpMatchArray[] {
+	const pattern = new RegExp(`^${escapeRegExp(marker)}[ \t]*$`, "gm");
+	return [...content.matchAll(pattern)];
+}
+
 /**
  * Inserts or replaces a managed block in TOML content.
  *
@@ -97,33 +139,157 @@ export function insertManagedBlock(
 
 	const block = `${startMarker}\n${tomlContent}${endMarker}`;
 
-	const startIdx = content.indexOf(startMarker);
-	const endIdx = content.indexOf(endMarker);
+	// Count, not just detect, each marker's occurrences: a corrupted pairing
+	// (e.g. two start markers and one end marker, observed after a stale sync
+	// appended a fresh block onto a file whose end marker had already been
+	// clobbered) still satisfies a naive "both present, end after start"
+	// existence check, and the replace path below would then splice out
+	// everything between the FIRST start marker and the ONLY end marker —
+	// silently deleting any user-owned content sitting between the duplicates.
+	// Count and position come from the same line-anchored match (matchMarkerLines)
+	// so they can never disagree about which occurrence is "the" marker.
+	const startMatches = matchMarkerLines(content, startMarker);
+	const endMatches = matchMarkerLines(content, endMarker);
+	const startCount = startMatches.length;
+	const endCount = endMatches.length;
 
-	if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+	const startIdx = startMatches[0]?.index ?? -1;
+	const endIdx = endMatches[0]?.index ?? -1;
+
+	let result: string;
+
+	if (startCount === 1 && endCount === 1 && endIdx > startIdx) {
+		// Pre-replace backstop: confirm the matched marker pair actually wraps a
+		// real managed block before splicing it out. The line-anchored marker
+		// match only knows a marker sits at the start of its own line — it
+		// cannot tell that line is real structure rather than the BODY of a
+		// pre-existing multiline TOML string (e.g. `doc = """ ... """`) whose
+		// text happens to contain lines matching both marker literals. Mirrors
+		// the new-body landing-site backstop below, but on the existing side.
+		const existingBody = content.slice(startIdx + startMatches[0][0].length, endIdx);
+		let existingDeclared: Record<string, unknown>;
+		try {
+			existingDeclared = parse(existingBody);
+		} catch (err) {
+			const causeMessage = err instanceof Error ? err.message : String(err);
+			throw new Error(
+				`insertManagedBlock: existing content between the 'omt:${blockName}' markers does not parse as TOML ` +
+					`(not written) — ${causeMessage}. This happens when the matched markers are not a real managed ` +
+					`block, such as a multiline TOML string in the target file whose body happens to contain lines ` +
+					`matching the marker literals. Nothing was written.`,
+				{ cause: err },
+			);
+		}
+		// The original content may be malformed for unrelated reasons; if so the
+		// existing parse(result) backstop further down already catches it, so this
+		// reachability check is skipped rather than raising a second, redundant error.
+		let parsedOriginalContent: Record<string, unknown> | undefined;
+		try {
+			parsedOriginalContent = parse(content);
+		} catch {
+			parsedOriginalContent = undefined;
+		}
+		if (parsedOriginalContent && !isDeepSubset(existingDeclared, parsedOriginalContent)) {
+			throw new Error(
+				`insertManagedBlock: existing content between the 'omt:${blockName}' markers does not read back ` +
+					`at the top level of the target file (not written) — the matched markers are not wrapping a ` +
+					`real managed block. This happens when the target file has a structure such as a multiline ` +
+					`TOML string whose body contains lines matching the marker literals, trapping what looks like ` +
+					`a block body inside that string instead of as real top-level structure. Nothing was written.`,
+			);
+		}
+		// lazy: when the trapped body AND the new tomlContent are both comment-only,
+		// both this check and the landing-site backstop below pass vacuously (an
+		// empty declared structure is a subset of anything) — loss is negligible
+		// since comment-only text replaces comment-only text either way. Upgrade
+		// path: a TOML string-boundary scanner that excludes marker lines living
+		// inside string literals.
+
 		// Replace existing block (inclusive of markers)
 		const before = content.slice(0, startIdx);
-		const after = content.slice(endIdx + endMarker.length);
+		const after = content.slice(endIdx + endMatches[0][0].length);
 		// Trim trailing newlines from before, trim leading newlines from after
 		const beforeTrimmed = before.replace(/\n+$/, "");
 		const afterTrimmed = after.replace(/^\n+/, "");
 		if (beforeTrimmed && afterTrimmed) {
-			return `${beforeTrimmed}\n\n${block}\n\n${afterTrimmed}`;
+			result = `${beforeTrimmed}\n\n${block}\n\n${afterTrimmed}`;
 		} else if (beforeTrimmed) {
-			return `${beforeTrimmed}\n\n${block}\n`;
+			result = `${beforeTrimmed}\n\n${block}\n`;
 		} else if (afterTrimmed) {
-			return `${block}\n\n${afterTrimmed}`;
+			result = `${block}\n\n${afterTrimmed}`;
 		} else {
-			return `${block}\n`;
+			result = `${block}\n`;
 		}
+	} else if (startCount === 0 && endCount === 0) {
+		// Append at end
+		const trimmed = content.replace(/\n+$/, "");
+		result = trimmed ? `${trimmed}\n\n${block}\n` : `${block}\n`;
+	} else {
+		// Orphaned or duplicated marker: anything other than exactly one start +
+		// one end (in start-before-end order) leaves the stale block's true
+		// extent unknown — guessing where it ends risks deleting config the
+		// user owns. This happens when something else rewrites the file and
+		// breaks the marker pairing (observed: Codex CLI rewriting
+		// .codex/config.toml to persist its own runtime state clobbered one
+		// side of an `omt:mcp` marker pair — and, separately, a stale sync
+		// re-appending a full block onto that already-clobbered file produced a
+		// duplicated start marker). Silently falling through to append or
+		// replace would either duplicate-declare keys (crashing the Codex CLI on
+		// a `duplicate key` parse error) or delete content between duplicate
+		// markers. Fail loud instead.
+		let reason: string;
+		if (startCount >= 1 && endCount === 0) {
+			reason = `start marker '${startMarker}' is present but end marker '${endMarker}' is missing`;
+		} else if (startCount === 0 && endCount >= 1) {
+			reason = `end marker '${endMarker}' is present but start marker '${startMarker}' is missing`;
+		} else if (startCount === 1 && endCount === 1) {
+			reason = `end marker '${endMarker}' appears before start marker '${startMarker}'`;
+		} else {
+			reason = `found ${startCount} occurrence(s) of start marker '${startMarker}' and ${endCount} occurrence(s) of end marker '${endMarker}' — expected exactly one of each`;
+		}
+		throw new Error(
+			`insertManagedBlock: orphaned marker for managed block 'omt:${blockName}' — ${reason}. ` +
+				`Remove the extra/orphaned marker(s) and any stale block body by hand, then re-run sync.`,
+		);
 	}
 
-	// Append at end
-	const trimmed = content.replace(/\n+$/, "");
-	if (trimmed) {
-		return `${trimmed}\n\n${block}\n`;
+	// Backstop: parse the result before returning it. Callers write the
+	// return value straight to disk (syncConfig, flushMcpBlock) — a managed
+	// block that duplicates a key already in the surrounding content (e.g. a
+	// stale block appended alongside a fresh one) must never reach the file.
+	let parsedResult: Record<string, unknown>;
+	try {
+		parsedResult = parse(result);
+	} catch (err) {
+		const causeMessage = err instanceof Error ? err.message : String(err);
+		throw new Error(
+			`insertManagedBlock: writing managed block 'omt:${blockName}' would produce invalid TOML (not written) — ${causeMessage}`,
+			{ cause: err },
+		);
 	}
-	return `${block}\n`;
+
+	// Landing-site backstop: valid TOML syntax alone isn't enough — the
+	// line-anchored marker match above only knows a marker sits at the
+	// start of its own line, not whether that line is real structure or
+	// the body of a pre-existing multiline TOML string (e.g. a user-authored
+	// `doc = """ ... """` whose text happens to contain a line matching the
+	// marker literal). In that case the replace still produces syntactically
+	// valid TOML — the block just ends up trapped inside the string instead
+	// of declared at the top level. Confirm every leaf key/value
+	// `tomlContent` declares is actually readable back from the parsed
+	// result at its intended path before this is allowed to reach disk.
+	const declaredStructure: Record<string, unknown> = parse(tomlContent);
+	if (!isDeepSubset(declaredStructure, parsedResult)) {
+		throw new Error(
+			`insertManagedBlock: managed block 'omt:${blockName}' did not land at its intended location (not written) — ` +
+				`the configuration this block declares does not read back from the result at its intended path. ` +
+				`This happens when the target file has a structure such as a multiline TOML string whose body ` +
+				`contains a line matching the marker literal, trapping the managed block inside that string instead ` +
+				`of as real top-level structure. Nothing was written.`,
+		);
+	}
+
+	return result;
 }
 
 // =============================================================================

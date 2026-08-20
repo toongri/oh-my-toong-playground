@@ -8,8 +8,17 @@
  * one place where "may this write land" and "may this session stop" are decided.
  */
 
-/** The six steps, in the order a document is built. */
-export const STEP_ORDER = ["evidence", "background", "intuition", "code", "render", "quiz"] as const;
+/** The eight steps, in the order a document is built. */
+export const STEP_ORDER = [
+	"evidence",
+	"background",
+	"architecture",
+	"intuition",
+	"commits",
+	"code",
+	"render",
+	"quiz",
+] as const;
 
 export type Step = (typeof STEP_ORDER)[number];
 
@@ -17,21 +26,30 @@ export type Step = (typeof STEP_ORDER)[number];
  * The steps the skill performs alone. `render` is a derivation, not authoring,
  * and `quiz` is the only step that needs the reader — so authoring ends at `code`.
  */
-export const AUTHORING_STEPS = ["evidence", "background", "intuition", "code"] as const;
+export const AUTHORING_STEPS = [
+	"evidence",
+	"background",
+	"architecture",
+	"intuition",
+	"commits",
+	"code",
+] as const;
 
 /**
  * Judge rubric items each step's judge review must certify before `pass-step`
  * may advance it. SKILL.md and references/judge-prompt.md assign the judge
- * exactly two items — R6 at `intuition`, R7 at `code` — everything else in the
- * rubric (R1..R5) is scripted in explain-diff-structure.ts. An empty required
- * set is deliberate at the other four steps, not an oversight: their coverage
- * is already earned before the judge ever runs, so a judge payload with
- * nothing in it is correctly a no-op there, not a bypass.
+ * exactly three items — R12 at `architecture`, R6 at `intuition`, R7 at `code`
+ * — everything else in the rubric is scripted in explain-diff-structure.ts. An
+ * empty required set is deliberate at the other five steps, not an oversight:
+ * their coverage is already earned before the judge ever runs, so a judge
+ * payload with nothing in it is correctly a no-op there, not a bypass.
  */
 export const REQUIRED_JUDGE_IDS: Record<Step, readonly string[]> = {
 	evidence: [],
 	background: [],
+	architecture: ["R12"],
 	intuition: ["R6"],
+	commits: [],
 	code: ["R7"],
 	render: [],
 	quiz: [],
@@ -56,6 +74,15 @@ export interface ExplainDiffState {
 	passed: Step[];
 	concepts: Concept[];
 	bank: unknown[];
+	/**
+	 * Short hashes of the commits in the explained range, oldest first, captured
+	 * once at `start` (where the CLI still runs inside the repo). The commits
+	 * step's structural check reads them from here instead of re-running git,
+	 * because later CLI calls may run from a directory that is not the repo.
+	 * Empty when the range could not be enumerated — the check then degrades to
+	 * section-presence only.
+	 */
+	commit_hashes: string[];
 	/** Set while a quiz question is outstanding and the reader has not answered. */
 	awaiting_answer: boolean;
 	/** Soft stop raised by the no-progress detector; cleared only by the user. */
@@ -74,6 +101,18 @@ export interface ExplainDiffDerived {
 
 function toStep(v: unknown): Step | null {
 	return STEP_ORDER.find((s) => s === v) ?? null;
+}
+
+function recoverLegacyStep(step: Step): Step {
+	switch (step) {
+		case "intuition":
+		case "code":
+		case "render":
+		case "quiz":
+			return "architecture";
+		default:
+			return step;
+	}
 }
 
 /**
@@ -110,10 +149,16 @@ export function normalizeExplainDiffState(parsed: unknown): ExplainDiffState | n
 
 	const passedRaw = r["passed"];
 	const conceptsRaw = r["concepts"];
+	const parsedStep = toStep(r["step"]) ?? "evidence";
+	const legacy = r["active"] === true && !Object.prototype.hasOwnProperty.call(r, "commit_hashes");
+	const step = legacy ? recoverLegacyStep(parsedStep) : parsedStep;
+	const passed = Array.isArray(passedRaw) ? passedRaw.flatMap((x) => toStep(x) ?? []) : [];
 	return {
 		active: r["active"] === true,
-		step: toStep(r["step"]) ?? "evidence",
-		passed: Array.isArray(passedRaw) ? passedRaw.flatMap((x) => toStep(x) ?? []) : [],
+		step,
+		passed: legacy
+			? passed.filter((s) => STEP_ORDER.indexOf(s) < STEP_ORDER.indexOf(step))
+			: passed,
 		concepts: Array.isArray(conceptsRaw)
 			? conceptsRaw.flatMap((x) => {
 					if (x === null || typeof x !== "object") return [];
@@ -125,6 +170,9 @@ export function normalizeExplainDiffState(parsed: unknown): ExplainDiffState | n
 				})
 			: [],
 		bank: Array.isArray(r["bank"]) ? r["bank"] : [],
+		commit_hashes: Array.isArray(r["commit_hashes"])
+			? r["commit_hashes"].filter((x): x is string => typeof x === "string")
+			: [],
 		awaiting_answer: r["awaiting_answer"] === true,
 		...(r["stalled"] === true ? { stalled: true } : {}),
 		no_progress: {
