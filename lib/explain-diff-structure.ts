@@ -64,11 +64,38 @@ const COMMIT_SUBSECTION = /^###\s+`([0-9a-fA-F]{6,40})`/gm;
 
 /** The 왜 field, as an HTML paragraph (the cf component authors it). */
 const WHY_PARAGRAPH = /<p>\s*<strong>\s*왜[\s\S]*?<\/p>/;
-/** A provenance tag a 왜 field may carry. Anything else is a flat assertion. */
-const PROVENANCE = /class=["']cf-src["']|\[근거:|\[추론:|Unknown\s*\/\s*not supplied/;
+/** A provenance tag a 왜 field may carry. The cf-src badge text must be one of
+ *  the three sanctioned labels — the class alone is not enough, so an empty or
+ *  garbage badge is a flat assertion. Whether an 추론 is justified stays a human
+ *  call (discipline.md); this only fixes that the label itself is valid. Legacy
+ *  bracket forms remain accepted. */
+const PROVENANCE =
+	/<span[^>]*class=["']cf-src["'][^>]*>\s*(?:근거|추론|Unknown\s*\/\s*not supplied)\s*<\/span>|\[근거:|\[추론:/;
 
 /** Fenced code, matched so it can be stripped or length-preserving masked. */
 const FENCE_RE = /^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^(?:`{3,}|~{3,})[^\n]*$/gm;
+
+/** Fenced code with its info string and body captured, so a mermaid-only or
+ *  empty fence can be told apart from an actual core-logic fence. */
+const CODE_FENCE = /^(`{3,}|~{3,})([^\n]*)\n([\s\S]*?)^(?:`{3,}|~{3,})[^\n]*$/gm;
+
+/**
+ * A file block satisfies R13's core-logic requirement only with a fence that is
+ * NOT a mermaid diagram and is NOT empty. The template reserves mermaid for
+ * diagrams and requires real code/pseudocode per file, so a mermaid-only or
+ * blank fence is not the logic R13 guarantees.
+ */
+function hasCoreCodeFence(body: string): boolean {
+	CODE_FENCE.lastIndex = 0;
+	let m: RegExpExecArray | null = CODE_FENCE.exec(body);
+	while (m !== null) {
+		const info = (m[2] ?? "").trim().toLowerCase();
+		const content = (m[3] ?? "").trim();
+		if (info !== "mermaid" && content !== "") return true;
+		m = CODE_FENCE.exec(body);
+	}
+	return false;
+}
 
 function collect(re: RegExp, text: string): string[] {
 	const out: string[] = [];
@@ -309,6 +336,22 @@ function checkR9(text: string): CheckItem {
 	};
 }
 
+/**
+ * An axis passes only when it labels a table row whose value cell is non-empty.
+ * Reads the row `| <axis> | <value> |`: finds the axis cell and checks the next
+ * cell has content. A `변경 없음: <사유>` value counts (it is non-empty). An axis
+ * mentioned only in prose, or with a blank value cell, does not.
+ */
+function axisHasValue(slice: string, axis: string): boolean {
+	for (const line of slice.split("\n")) {
+		if (!line.includes("|") || !line.includes(axis)) continue;
+		const cells = line.split("|").map((c) => c.trim());
+		const idx = cells.findIndex((c) => c.includes(axis));
+		if (idx >= 0 && idx + 1 < cells.length && (cells[idx + 1] ?? "") !== "") return true;
+	}
+	return false;
+}
+
 // R14 — the system level must enumerate the changed contracts across all three
 // axes (server API / DB schema / client dependency). Measured gap: 시스템 레벨
 // drew one box-and-arrow diagram and stopped, never naming which API surface,
@@ -323,14 +366,17 @@ function checkR14(text: string): CheckItem {
 			detail: "시스템 레벨 헤딩(### 시스템 레벨)이 없습니다",
 		};
 	}
-	const missing = SYSTEM_CONTRACT_AXES.filter((axis) => !slice.includes(axis));
+	// An axis label present but with an empty value cell is not a filled contract —
+	// R14 exists to force the actual API/schema/client change, and nothing
+	// downstream judges these cells, so the value must be checked here.
+	const missing = SYSTEM_CONTRACT_AXES.filter((axis) => !axisHasValue(slice, axis));
 	return {
 		id: "R14",
 		title: "R14 시스템 레벨 변경 계약 3축",
 		pass: missing.length === 0,
 		detail:
 			missing.length > 0
-				? `시스템 레벨 변경 계약 표에서 빠진 축: ${missing.join(", ")} (각 축은 바뀌는 계약을 적거나 "변경 없음: <사유>"로 채운다)`
+				? `시스템 레벨 변경 계약 표에서 라벨/값이 채워지지 않은 축: ${missing.join(", ")} (각 축은 바뀌는 계약을 적거나 "변경 없음: <사유>"로 채운다)`
 				: "",
 	};
 }
@@ -395,10 +441,21 @@ function checkR13(
 		problems.push("커밋 뼈대를 검사할 Change Group이 없습니다");
 	}
 	for (const g of groups) {
-		const heads = collect(new RegExp(COMMIT_SUBSECTION.source, "gm"), maskFenced(g.body));
+		const masked = maskFenced(g.body);
+		const heads = collect(new RegExp(COMMIT_SUBSECTION.source, "gm"), masked);
 		if (heads.length === 0) {
 			problems.push(`${g.title}: 커밋 서브섹션(### \`hash\` — 제목)이 없습니다`);
 			continue;
+		}
+		// Every file block must sit UNDER a commit subsection, not just share the
+		// group with one. A file block before the first commit heading is the flat
+		// structure the spine rejects — the file is mapped to no commit.
+		const firstCommit = masked.search(new RegExp(COMMIT_SUBSECTION.source, "m"));
+		const orphanBeforeCommit = [...masked.matchAll(new RegExp(FILE_BLOCK.source, "gm"))].some(
+			(m) => m.index !== undefined && m.index < firstCommit,
+		);
+		if (orphanBeforeCommit) {
+			problems.push(`${g.title}: 커밋 서브섹션보다 먼저 온 파일 블록이 있습니다(커밋에 매이지 않음)`);
 		}
 		// Only validate hashes when enumeration succeeded — an empty known set is
 		// "git failed", not "every hash is fake".
@@ -407,8 +464,8 @@ function checkR13(
 			if (bogus.length > 0) problems.push(`${g.title}: 범위에 없는 커밋 해시 ${bogus.join(", ")}`);
 		}
 	}
-	const noCode = blocks.filter((b) => !/```|~~~/.test(b.body)).map((b) => b.path);
-	if (noCode.length > 0) problems.push(`핵심 로직 코드 펜스가 없는 파일: ${noCode.join(", ")}`);
+	const noCode = blocks.filter((b) => !hasCoreCodeFence(b.body)).map((b) => b.path);
+	if (noCode.length > 0) problems.push(`핵심 로직 코드 펜스(mermaid·빈 펜스 제외)가 없는 파일: ${noCode.join(", ")}`);
 	return {
 		id: "R13",
 		title: "R13 커밋 뼈대 + 핵심 로직 코드",

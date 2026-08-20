@@ -621,3 +621,97 @@ describe("모든 저작 스텝 — R11 스타일 발명 금지", () => {
 		expect(r.pass).toBe(false);
 	});
 });
+
+// 코드리뷰(codex 봇, PR #264)가 지적한 게이트 이완 4종 — 스크립트 검사가
+// 루브릭 계약보다 느슨한 지점을 닫는다.
+describe("게이트 이완 보강 — 리뷰 지적 4종", () => {
+	test("R3 — cf-src 배지 텍스트가 세 라벨(근거/추론/Unknown)이 아니면 실패한다", () => {
+		const body = GOOD_GROUP.replace(
+			/<span class="cf-src">근거<\/span> "[^"]*"/,
+			'<span class="cf-src">garbage</span>',
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+		});
+		const item = r.items.find((i) => i.id === "R3");
+		expect(item?.pass).toBe(false);
+	});
+
+	test("R3 — 빈 cf-src 배지도 실패한다", () => {
+		const body = GOOD_GROUP.replace(
+			/<span class="cf-src">근거<\/span> "[^"]*"/,
+			'<span class="cf-src"></span>',
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+		});
+		expect(r.items.find((i) => i.id === "R3")?.pass).toBe(false);
+	});
+
+	test("R13 — 파일 블록의 유일한 펜스가 mermaid면 핵심 로직 코드로 인정되지 않는다", () => {
+		const body = GOOD_GROUP.replace(
+			/```ts[\s\S]*?```/,
+			"```mermaid\nflowchart LR\n  A --> B\n```",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+		});
+		const item = r.items.find((i) => i.id === "R13");
+		expect(item?.pass).toBe(false);
+	});
+
+	test("R13 — 빈 코드 펜스는 핵심 로직 코드로 인정되지 않는다", () => {
+		const body = GOOD_GROUP.replace(/```ts[\s\S]*?```/, "```ts\n```");
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+		});
+		expect(r.items.find((i) => i.id === "R13")?.pass).toBe(false);
+	});
+
+	test("R13 — 파일 블록이 커밋 서브섹션보다 먼저 오면(중첩 위반) 실패한다", () => {
+		const flat = `## Change Group 1: 락을 공용 모듈로 뽑아낸다
+> 예고: 먼저 락 자체를 옮겨 놓아야 호출부 정리가 의미를 갖는다.
+> 순서: 추출이 먼저다.
+
+#### \`lib/state-lock.ts\`
+<div class="cf">
+<p><strong>역할/변경 전</strong> — 이 파일은 새로 생겼다</p>
+<p><strong>바뀐 것</strong> — 락 획득/해제가 여기로 모였다</p>
+<p><strong>왜</strong> — 통합 <span class="cf-src">근거</span> "fix: 상태 갱신 락 통합"</p>
+<p><strong>효과</strong> — 두 CLI가 같은 락을 쓴다</p>
+<p class="cf-loc"><code>base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14</code></p>
+</div>
+
+\`\`\`ts
+export function withLock() {}
+\`\`\`
+
+### \`ab12cd3\` — feat: 락을 공용 모듈로 추출
+이 커밋이 락을 모은다.
+`;
+		const r = checkStructure(withBackground(flat), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+		});
+		const item = r.items.find((i) => i.id === "R13");
+		expect(item?.pass).toBe(false);
+	});
+
+	test("R14 — 3축 라벨이 있어도 값 셀이 비면 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				/\| 서버 API \|[^\n]*\n/,
+				"| 서버 API |  |\n",
+			),
+		);
+		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" });
+		const item = r.items.find((i) => i.id === "R14");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("서버 API");
+	});
+});
