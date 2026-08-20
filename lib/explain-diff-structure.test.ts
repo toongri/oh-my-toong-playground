@@ -625,9 +625,10 @@ describe("모든 저작 스텝 — R11 스타일 발명 금지", () => {
 	});
 });
 
-// 코드리뷰(codex 봇, PR #264)가 지적한 게이트 이완 4종 — 스크립트 검사가
-// 루브릭 계약보다 느슨한 지점을 닫는다.
-describe("게이트 이완 보강 — 리뷰 지적 4종", () => {
+// 코드리뷰(codex 봇, PR #264)가 지적한 게이트 이완 중 측정 기반 유지분 —
+// R3 출처 배지 형식, R13 코드 펜스 실체. 세밀 강제(cf 필드·배치·값 셀·cf-loc
+// 형식)는 추상 지시로 되돌려 게이트에서 뺐다.
+describe("게이트 이완 보강 — R3 배지 형식·R13 코드 펜스", () => {
 	test("R3 — cf-src 배지 텍스트가 세 라벨(근거/추론/Unknown)이 아니면 실패한다", () => {
 		const body = GOOD_GROUP.replace(
 			/<span class="cf-src">근거<\/span> "[^"]*"/,
@@ -675,87 +676,10 @@ describe("게이트 이완 보강 — 리뷰 지적 4종", () => {
 		expect(r.items.find((i) => i.id === "R13")?.pass).toBe(false);
 	});
 
-	test("R13 — 파일 블록이 커밋 서브섹션보다 먼저 오면(중첩 위반) 실패한다", () => {
-		const flat = `## Change Group 1: 락을 공용 모듈로 뽑아낸다
-> 예고: 먼저 락 자체를 옮겨 놓아야 호출부 정리가 의미를 갖는다.
-> 순서: 추출이 먼저다.
-
-#### \`lib/state-lock.ts\`
-<div class="cf">
-<p><strong>역할/변경 전</strong> — 이 파일은 새로 생겼다</p>
-<p><strong>바뀐 것</strong> — 락 획득/해제가 여기로 모였다</p>
-<p><strong>왜</strong> — 통합 <span class="cf-src">근거</span> "fix: 상태 갱신 락 통합"</p>
-<p><strong>효과</strong> — 두 CLI가 같은 락을 쓴다</p>
-<p class="cf-loc"><code>base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14</code></p>
-</div>
-
-\`\`\`ts
-export function withLock() {}
-\`\`\`
-
-### \`ab12cd3\` — feat: 락을 공용 모듈로 추출
-이 커밋이 락을 모은다.
-`;
-		const r = checkStructure(withBackground(flat), {
-			signalFiles: ["lib/state-lock.ts"],
-			step: "code",
-			commitHashes: ["ab12cd3f00"],
-		});
-		const item = r.items.find((i) => i.id === "R13");
-		expect(item?.pass).toBe(false);
-	});
-
-	test("R14 — 3축 라벨이 있어도 값 셀이 비면 실패한다", () => {
-		const doc = withBackground(
-			ARCH_OK.replace(
-				/\| 서버 API \|[^\n]*\n/,
-				"| 서버 API |  |\n",
-			),
-		);
-		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" });
-		const item = r.items.find((i) => i.id === "R14");
-		expect(item?.pass).toBe(false);
-		expect(item?.detail).toContain("서버 API");
-	});
 });
 
-// 코드리뷰 2라운드(codex 봇, a14e74e1 재리뷰) — 1라운드 수정의 인접 엣지케이스 3종.
-describe("게이트 이완 보강 2라운드 — 재리뷰 지적 3종", () => {
-	test("R13 — Change Group 밖의 파일 블록은 실패한다(그룹·커밋 미매핑)", () => {
-		const outside = `${GOOD_GROUP}
-## 부록: 기타 메모
-#### \`lib/other.ts\`
-<div class="cf">
-<p><strong>역할/변경 전</strong> — 기타 파일</p>
-<p><strong>바뀐 것</strong> — 뭔가 바뀜</p>
-<p><strong>왜</strong> — 이유 <span class="cf-src">근거</span> "커밋 메시지"</p>
-<p><strong>효과</strong> — 효과</p>
-<p class="cf-loc"><code>base:lib/other.ts:1</code> → <code>head:lib/other.ts:2</code></p>
-</div>
-
-\`\`\`ts
-export const other = 1;
-\`\`\`
-`;
-		const r = checkStructure(withBackground(outside), {
-			signalFiles: ["lib/state-lock.ts", "lib/other.ts"],
-			step: "code",
-			commitHashes: ["ab12cd3f00"],
-		});
-		const item = r.items.find((i) => i.id === "R13");
-		expect(item?.pass).toBe(false);
-	});
-
-	test("R14 — 값이 사유 없는 `변경 없음:`뿐이면 실패한다", () => {
-		const doc = withBackground(
-			ARCH_OK.replace(/\| DB 스키마 \|[^\n]*\n/, "| DB 스키마 | 변경 없음: |\n"),
-		);
-		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" });
-		const item = r.items.find((i) => i.id === "R14");
-		expect(item?.pass).toBe(false);
-		expect(item?.detail).toContain("DB 스키마");
-	});
-
+// R3 출처 배지의 말미 내용 요구(근거+인용·추론+ground) — 측정 기반 유지분.
+describe("게이트 이완 보강 — R3 배지 말미 내용", () => {
 	test("R3 — `근거` 배지 뒤에 인용이 없으면 실패한다", () => {
 		const body = GOOD_GROUP.replace(
 			/<span class="cf-src">근거<\/span> "[^"]*"/,
@@ -781,46 +705,8 @@ export const other = 1;
 	});
 });
 
-describe("게이트 이완 보강 3라운드 — 재리뷰 지적 4종", () => {
-	// finding 1 — cf 컴포넌트의 필수 필드 전수 검증
-	test("R13 — cf 블록에 효과 필드가 없으면 실패한다", () => {
-		const body = GOOD_GROUP.replace(/<p><strong>효과<\/strong>[^\n]*\n/, "");
-		const r = checkStructure(withBackground(body), {
-			signalFiles: ["lib/state-lock.ts"],
-			step: "code",
-			commitHashes: ["ab12cd3f00"],
-		});
-		expect(r.items.find((i) => i.id === "R13")?.pass).toBe(false);
-	});
-
-	test("R13 — cf 블록에 역할/변경 전·바뀐 것이 없으면 실패한다", () => {
-		const body = GOOD_GROUP.replace(/<p><strong>역할\/변경 전<\/strong>[^\n]*\n/, "").replace(
-			/<p><strong>바뀐 것<\/strong>[^\n]*\n/,
-			"",
-		);
-		const r = checkStructure(withBackground(body), {
-			signalFiles: ["lib/state-lock.ts"],
-			step: "code",
-			commitHashes: ["ab12cd3f00"],
-		});
-		expect(r.items.find((i) => i.id === "R13")?.pass).toBe(false);
-	});
-
-	// finding 2 — 파일 블록의 최근접 h3 부모가 커밋 서브섹션이어야 한다
-	test("R13 — 커밋과 파일 블록 사이에 비-커밋 h3가 끼면 실패한다", () => {
-		const body = GOOD_GROUP.replace(
-			"#### `lib/state-lock.ts`",
-			"### Notes\n주석용 h3 섹션.\n\n#### `lib/state-lock.ts`",
-		);
-		const r = checkStructure(withBackground(body), {
-			signalFiles: ["lib/state-lock.ts"],
-			step: "code",
-			commitHashes: ["ab12cd3f00"],
-		});
-		expect(r.items.find((i) => i.id === "R13")?.pass).toBe(false);
-	});
-
-	// finding 3 — 펜스 안 예시 표는 R14를 만족시키지 못한다
+describe("게이트 이완 보강 — R14 펜스 마스킹", () => {
+	// 펜스 안 예시 표는 R14를 만족시키지 못한다(fence 마스킹 — 진짜 일관성 수정, 유지분)
 	test("R14 — 계약 3축이 펜스 예시 안에만 있으면 실패한다", () => {
 		const fenced = `## Architecture
 
@@ -851,19 +737,5 @@ flowchart LR
 			step: "architecture",
 		});
 		expect(r.items.find((i) => i.id === "R14")?.pass).toBe(false);
-	});
-
-	// finding 4 — 앵커는 cf-loc 슬롯 안에 형식을 갖춰 있어야 한다
-	test("R5 — 앵커가 cf-loc 슬롯이 아니라 산문에 있으면 실패한다", () => {
-		const body = GOOD_GROUP.replace(
-			/<p class="cf-loc">[\s\S]*?<\/p>/,
-			"<p>위치는 base:lib/state-lock.ts:0 에서 head:lib/state-lock.ts:14 로 옮겼다.</p>",
-		);
-		const r = checkStructure(withBackground(body), {
-			signalFiles: ["lib/state-lock.ts"],
-			step: "code",
-			commitHashes: ["ab12cd3f00"],
-		});
-		expect(r.items.find((i) => i.id === "R5")?.pass).toBe(false);
 	});
 });

@@ -61,22 +61,9 @@ const GROUP_HEADING = /^##\s+Change Group\s+\d+\s*:\s*\S.*$/gm;
 const FILE_BLOCK = /^####\s+`([^`]+)`(?:\s+\([^)]*\))?\s*$/gm;
 // 커밋 서브섹션: h3 헤딩의 백틱 안 16진 해시.
 const COMMIT_SUBSECTION = /^###\s+`([0-9a-fA-F]{6,40})`/gm;
-// 단일 헤딩 문자열이 커밋 서브섹션 형태인지 판정(전역/멀티라인 플래그 없이 .test용).
-const COMMIT_HEADING_LINE = /^###\s+`[0-9a-fA-F]{6,40}`/;
-// 그룹 본문 안 모든 h3 헤딩(커밋이든 아니든) — 파일 블록의 최근접 부모 판정용.
-const ANY_H3 = /^###\s[^\n]*$/gm;
 
 /** The 왜 field, as an HTML paragraph (the cf component authors it). */
 const WHY_PARAGRAPH = /<p>\s*<strong>\s*왜[\s\S]*?<\/p>/;
-/** The cf-loc slot paragraph — where the traceability anchors must live. */
-const CF_LOC_PARAGRAPH = /<p[^>]*class=["']cf-loc["'][^>]*>[\s\S]*?<\/p>/;
-/** A cf-loc anchor in `base:<path>:<line>` / `head:<path>:<line>` form. The line
- *  number is what makes it an anchor rather than a bare filename in prose. */
-const BASE_ANCHOR = /base:\S+:\d+/;
-const HEAD_ANCHOR = /head:\S+:\d+/;
-/** The non-왜 cf fields R13 requires present in every file block (왜 is R3's). */
-const CF_FIELDS = ["역할/변경 전", "바뀐 것", "효과"] as const;
-const CF_CONTAINER = /class=["']cf["']/;
 /** A provenance tag a 왜 field may carry. The cf-src badge must be a valid label
  *  WITH its required companion — `근거` followed by a quote, `추론` followed by a
  *  ground (a non-tag char, so `추론</span></p>` fails), or a standalone
@@ -283,20 +270,18 @@ function checkR4(text: string): CheckItem {
 	};
 }
 
-// R5 — both endpoints of the move (base:/head: anchors in the cf-loc slot). An
-// ADDED file is asked for the head anchor alone. Scoped to the cf-loc paragraph
-// so anchors in ordinary prose can not stand in for the required slot, and the
-// anchor must carry a line number (`path:line`), not just a bare `base:` token.
+// R5 — both endpoints of the move (base:/head: anchors). An ADDED file is asked
+// for the head anchor alone. Read on the code-stripped body; the template places
+// these in the cf-loc slot, but the check only asks that the anchors be present —
+// the author fills where and how precisely they point.
 function checkR5(blocks: Array<{ path: string; body: string }>, addedFiles: string[] | undefined): CheckItem {
 	const addedSet = new Set(addedFiles ?? []);
 	const noAnchor = blocks
 		.filter((b) => {
-			const locMatch = withoutFencedCode(b.body).match(CF_LOC_PARAGRAPH);
-			if (locMatch === null) return true; // no cf-loc slot at all
-			const loc = locMatch[0];
-			const head = HEAD_ANCHOR.test(loc);
+			const body = withoutFencedCode(b.body);
+			const head = /head:\S/.test(body);
 			if (addedSet.has(b.path)) return !head;
-			return !(head && BASE_ANCHOR.test(loc));
+			return !(head && /base:\S/.test(body));
 		})
 		.map((b) => b.path);
 	return {
@@ -307,7 +292,7 @@ function checkR5(blocks: Array<{ path: string; body: string }>, addedFiles: stri
 			blocks.length === 0
 				? "파일 블록이 하나도 없습니다."
 				: noAnchor.length > 0
-					? `cf-loc 슬롯에 base/head 위치 앵커(path:line)가 갖춰지지 않은 파일: ${noAnchor.join(", ")}`
+					? `base/head 위치가 모두 있지 않은 파일: ${noAnchor.join(", ")}`
 					: "",
 	};
 }
@@ -355,28 +340,6 @@ function checkR9(text: string): CheckItem {
 	};
 }
 
-/**
- * An axis passes only when it labels a table row whose value cell is non-empty.
- * Reads the row `| <axis> | <value> |`: finds the axis cell and checks the next
- * cell has content. A `변경 없음: <사유>` value counts (it is non-empty). An axis
- * mentioned only in prose, or with a blank value cell, does not.
- */
-function axisHasValue(slice: string, axis: string): boolean {
-	for (const line of slice.split("\n")) {
-		if (!line.includes("|") || !line.includes(axis)) continue;
-		const cells = line.split("|").map((c) => c.trim());
-		const idx = cells.findIndex((c) => c.includes(axis));
-		if (idx < 0 || idx + 1 >= cells.length) continue;
-		const value = cells[idx + 1] ?? "";
-		if (value === "") continue;
-		// A bare no-change marker with no rationale is not a filled contract —
-		// mirror R9's ARCH_WAIVER, which requires text after 구조 변화 없음:.
-		if (/^변경\s*없음\s*[:：]?\s*$/.test(value)) continue;
-		return true;
-	}
-	return false;
-}
-
 // R14 — the system level must enumerate the changed contracts across all three
 // axes (server API / DB schema / client dependency). Measured gap: 시스템 레벨
 // drew one box-and-arrow diagram and stopped, never naming which API surface,
@@ -394,17 +357,17 @@ function checkR14(text: string): CheckItem {
 			detail: "시스템 레벨 헤딩(### 시스템 레벨)이 없습니다",
 		};
 	}
-	// An axis label present but with an empty value cell is not a filled contract —
-	// R14 exists to force the actual API/schema/client change, and nothing
-	// downstream judges these cells, so the value must be checked here.
-	const missing = SYSTEM_CONTRACT_AXES.filter((axis) => !axisHasValue(slice, axis));
+	// All three axis labels must be present in the system-level slice. What each
+	// axis says about its contract is the author's to fill — the gate only forces
+	// that the three change-contract axes are named, not their content.
+	const missing = SYSTEM_CONTRACT_AXES.filter((axis) => !slice.includes(axis));
 	return {
 		id: "R14",
 		title: "R14 시스템 레벨 변경 계약 3축",
 		pass: missing.length === 0,
 		detail:
 			missing.length > 0
-				? `시스템 레벨 변경 계약 표에서 라벨/값이 채워지지 않은 축: ${missing.join(", ")} (각 축은 바뀌는 계약을 적거나 "변경 없음: <사유>"로 채운다)`
+				? `시스템 레벨 변경 계약 표에 없는 축: ${missing.join(", ")} (세 축 라벨을 모두 표에 둔다)`
 				: "",
 	};
 }
@@ -475,22 +438,6 @@ function checkR13(
 			problems.push(`${g.title}: 커밋 서브섹션(### \`hash\` — 제목)이 없습니다`);
 			continue;
 		}
-		// Every file block must sit UNDER a commit subsection — its NEAREST
-		// preceding h3 must be one. Comparing only against the first commit's
-		// position let a later non-commit h3 (`### Notes`) re-parent a file away
-		// from any commit while still passing. Check each block's actual parent.
-		const h3s = [...masked.matchAll(new RegExp(ANY_H3.source, "gm"))]
-			.map((m) => ({ at: m.index, text: m[0] }))
-			.filter((h): h is { at: number; text: string } => h.at !== undefined);
-		const misparented = [...masked.matchAll(new RegExp(FILE_BLOCK.source, "gm"))].some((fm) => {
-			const at = fm.index;
-			if (at === undefined) return false;
-			const parent = h3s.filter((h) => h.at < at).sort((a, b) => b.at - a.at)[0];
-			return parent === undefined || !COMMIT_HEADING_LINE.test(parent.text);
-		});
-		if (misparented) {
-			problems.push(`${g.title}: 파일 블록의 최근접 상위 h3가 커밋 서브섹션이 아닙니다(커밋에 매이지 않음)`);
-		}
 		// Only validate hashes when enumeration succeeded — an empty known set is
 		// "git failed", not "every hash is fake".
 		if (known.length > 0) {
@@ -498,36 +445,6 @@ function checkR13(
 			if (bogus.length > 0) problems.push(`${g.title}: 범위에 없는 커밋 해시 ${bogus.join(", ")}`);
 		}
 	}
-	// Every file block must live INSIDE a Change Group span. A `#### path` under
-	// some other level-two section is seen by the global R1/R3/R5 checks but the
-	// per-group loop above never reaches it — so it would attach to neither a
-	// group nor a commit. Check group membership on the whole document here.
-	const maskedFull = maskFenced(text);
-	const groupSpans: Array<{ start: number; end: number }> = [];
-	for (const m of maskedFull.matchAll(/^##\s+Change Group\s+\d+\s*:.*$/gm)) {
-		if (m.index === undefined) continue;
-		const rest = maskedFull.slice(m.index + m[0].length).search(/^##\s/m);
-		groupSpans.push({
-			start: m.index,
-			end: rest >= 0 ? m.index + m[0].length + rest : maskedFull.length,
-		});
-	}
-	const outsideGroup = [...maskedFull.matchAll(new RegExp(FILE_BLOCK.source, "gm"))].some((m) => {
-		const at = m.index;
-		return at !== undefined && !groupSpans.some((s) => at >= s.start && at < s.end);
-	});
-	if (outsideGroup) problems.push("Change Group 밖에 파일 블록이 있습니다(그룹·커밋에 매이지 않음)");
-	// Each file block must carry a complete cf component — the container plus the
-	// non-왜 fields (왜 is R3's, cf-loc is R5's). A block with only a 왜 line and a
-	// code fence is an incomplete explanation the template does not permit.
-	const incompleteCf = blocks
-		.filter((b) => {
-			const body = withoutFencedCode(b.body);
-			return !CF_CONTAINER.test(body) || CF_FIELDS.some((f) => !body.includes(f));
-		})
-		.map((b) => b.path);
-	if (incompleteCf.length > 0)
-		problems.push(`cf 컴포넌트 필수 요소(${CF_FIELDS.join("·")}·cf 컨테이너)가 없는 파일: ${incompleteCf.join(", ")}`);
 	const noCode = blocks.filter((b) => !hasCoreCodeFence(b.body)).map((b) => b.path);
 	if (noCode.length > 0) problems.push(`핵심 로직 코드 펜스(mermaid·빈 펜스 제외)가 없는 파일: ${noCode.join(", ")}`);
 	return {
