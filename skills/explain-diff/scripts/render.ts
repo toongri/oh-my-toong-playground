@@ -248,6 +248,23 @@ h1, h2, h3, h4, p, li, blockquote, th, td { word-break: keep-all; }
   background: var(--code-bg); font-size: 0.95rem;
 }
 
+/* cf — 바뀐 파일 하나의 필드 블록. 필드가 각자 한 줄로 서고(붕괴 방지),
+   출처는 배지로, 위치 앵커는 산문 밖 회색 슬롯으로 뺀다. */
+.cf {
+  margin: 0.6rem 0 1rem; padding: 0.1rem 0 0.1rem 0.9rem;
+  border-left: 2px solid var(--rule);
+}
+.cf p { margin: 0.3rem 0; font-size: 0.95rem; }
+.cf strong { color: var(--fg); font-weight: 650; }
+.cf-src {
+  display: inline-block; font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.02em; color: var(--muted); background: var(--code-bg);
+  border: 1px solid var(--rule); border-radius: 999px;
+  padding: 0 0.5rem; margin: 0 0.15rem; vertical-align: 0.06em;
+}
+.cf-loc { font-size: 0.78rem; color: var(--muted); margin-top: 0.45rem; }
+.cf-loc code { background: none; padding: 0; font-size: inherit; color: inherit; }
+
 /* mermaid SVG는 밝은 테마 색으로 구워지므로, 다크 모드에서도 흰 카드 위에 놓는다. */
 figure.diagram {
   margin: 1.25rem 0; padding: 1rem; background: #ffffff;

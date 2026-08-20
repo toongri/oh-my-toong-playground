@@ -49,12 +49,23 @@ const GOOD_DOC = `# 설명
 > 예고: 먼저 락을 옮겨야 호출부 정리가 의미를 갖는다.
 > 순서: 추출이 먼저다.
 
-### \`lib/state-lock.ts\`
-**역할/변경 전 맥락** — 없던 파일 (\`base:lib/state-lock.ts:0\`)
-**무엇이 바뀌었나** — 락이 모였다 (\`head:lib/state-lock.ts:14\`)
-**왜 필요한가** — [근거: "fix: ultragoal 상태 갱신 락 통합"]
-**시스템 효과** — 두 CLI가 같은 락을 쓴다
-**추적성** — \`lib/state-lock.ts:14\`
+### \`ab12cd3\` — fix: 상태 갱신 락 통합
+락 획득/해제를 한 파일로 모은다.
+
+#### \`lib/state-lock.ts\`
+<div class="cf">
+<p><strong>역할/변경 전</strong> — 없던 파일</p>
+<p><strong>바뀐 것</strong> — 락이 여기로 모였다</p>
+<p><strong>왜</strong> — 커밋 제목이 통합이라 적는다 <span class="cf-src">근거</span> "fix: ultragoal 상태 갱신 락 통합"</p>
+<p><strong>효과</strong> — 두 CLI가 같은 락을 쓴다</p>
+<p class="cf-loc"><code>base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14</code></p>
+</div>
+
+\`\`\`ts
+export function withLock(path, fn) {
+  // 획득 → fn() → 해제
+}
+\`\`\`
 `;
 
 const ARCH_SECTION = `## Architecture
@@ -65,6 +76,12 @@ flowchart LR
   CLI --> STATE[(state file)]
 \`\`\`
 
+| 축 | 이번에 바뀌는 계약 |
+|---|---|
+| 서버 API | 변경 없음: CLI 전용이라 서버 API 표면이 없다 |
+| DB 스키마 | 변경 없음: 상태는 JSON 파일이다 |
+| 클라이언트 의존 | 두 CLI가 공용 락 모듈에 의존하게 된다 |
+
 ### 컴포넌트 레벨
 구조 변화 없음: 모듈 경계는 그대로다.
 
@@ -74,8 +91,7 @@ flowchart LR
 
 const JOURNEY_SECTION = `## Commit Journey
 
-### 1. \`ab12cd3\` — fix: 락 통합
-락을 옮겼다.
+1. \`ab12cd3\` fix — 상태 갱신 락 통합 → 그룹 1
 `;
 
 /** 8스텝 전부의 구조 슬롯을 갖춘 문서. */
@@ -278,9 +294,18 @@ describe("스텝 스코핑 — 스텝마다 다른 슬롯만 본다", () => {
 > 예고: 다른 파일을 다룬다.
 > 순서: 순서상 이유가 있다.
 
-### \`lib/other.ts\`
-**왜 필요한가** — [근거: "다른 이유"]
-**추적성** — \`base:lib/other.ts:1\` \`head:lib/other.ts:2\`
+### \`ab12cd3\` — fix: 다른 변경
+다른 파일을 고친다.
+
+#### \`lib/other.ts\`
+<div class="cf">
+<p><strong>왜</strong> — <span class="cf-src">근거</span> "다른 이유"</p>
+<p class="cf-loc"><code>base:lib/other.ts:1</code> → <code>head:lib/other.ts:2</code></p>
+</div>
+
+\`\`\`ts
+const x = 1;
+\`\`\`
 `;
 		const rc = submitStep(SID, "code", docFile(noGroupDoc), ["lib/state-lock.ts"], []);
 		expect(rc).toBe(1);
@@ -294,17 +319,35 @@ describe("스텝 스코핑 — 스텝마다 다른 슬롯만 본다", () => {
 > 예고: 먼저 락 자체를 옮겨 놓아야 호출부 정리가 의미를 갖는다.
 > 순서: 추출이 먼저다.
 
-### \`lib/state-lock.ts\`
-**왜 필요한가** — [근거: "첫 번째 이유"]
-**추적성** — \`base:lib/state-lock.ts:1\` \`head:lib/state-lock.ts:14\`
+### \`ab12cd3\` — fix: 첫 손질
+락을 옮긴다.
+
+#### \`lib/state-lock.ts\`
+<div class="cf">
+<p><strong>왜</strong> — <span class="cf-src">근거</span> "첫 번째 이유"</p>
+<p class="cf-loc"><code>base:lib/state-lock.ts:1</code> → <code>head:lib/state-lock.ts:14</code></p>
+</div>
+
+\`\`\`ts
+const a = 1;
+\`\`\`
 
 ## Change Group 2: 같은 파일을 또 다룬다
 > 예고: 같은 파일이 다시 등장한다.
 > 순서: 두 번째 손질이 필요하다.
 
-### \`lib/state-lock.ts\`
-**왜 필요한가** — [근거: "두 번째 이유"]
-**추적성** — \`base:lib/state-lock.ts:14\` \`head:lib/state-lock.ts:20\`
+### \`ef45ab6\` — fix: 둘째 손질
+같은 파일을 다시 만진다.
+
+#### \`lib/state-lock.ts\`
+<div class="cf">
+<p><strong>왜</strong> — <span class="cf-src">근거</span> "두 번째 이유"</p>
+<p class="cf-loc"><code>base:lib/state-lock.ts:14</code> → <code>head:lib/state-lock.ts:20</code></p>
+</div>
+
+\`\`\`ts
+const b = 2;
+\`\`\`
 `;
 		const rc = submitStep(SID, "code", docFile(duplicatedDoc), ["lib/state-lock.ts"], []);
 		expect(rc).toBe(1);
