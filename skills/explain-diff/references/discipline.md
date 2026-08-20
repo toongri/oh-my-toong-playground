@@ -1,47 +1,44 @@
-# 구조로 옮기지 못하고 남은 규율
+# Discipline that could not be moved into structure
 
-이 스킬은 규율을 금지문으로 세우지 않는다. 훅과 구조 검사가 막을 수 있는 것은 전부 그쪽으로 넘겼고, 여기 남은 것은 기계가 볼 수 없는 자리다.
+This skill does not raise discipline as prohibitions. Everything a hook or the structure check can stop has been handed to those; what remains here is where a machine cannot see.
 
-옮긴 것과 남은 것은 이렇게 갈렸다.
+Here is how what moved and what stayed were split.
 
-| 무엇 | 어디로 갔나 |
+| What | Where it went |
 |---|---|
-| 스텝 건너뛰기 | 상태 CLI가 순서를 강제 — 이전 스텝 미통과 시 제출 자체가 거부 |
-| 완성 문서 조기 생성 | 산출물 경로 PreToolUse 가드 |
-| 상태 조작 | write-guard가 상태 파일 직접 편집을 거부 |
-| 퀴즈 미통과 종료 | Stop 게이트 + `complete` 거부 |
-| 문항 난이도 하향 | 루브릭 항목 수·미지값 요구를 문항 구조로 고정 |
-| noise 오분류 | 규칙표 밖 분류에 사유 한 줄을 요구 |
-| 심사자 프롬프트 즉흥 작성 | 고정 템플릿 (`judge-prompt.md`) |
-| 심사자의 근거 없는 통과 | 인용 필수 + CLI의 문자열 대조 |
+| Skipping a step | The state CLI forces the order — with a prior step unpassed, submission itself is rejected |
+| Generating the finished document early | A PreToolUse guard on the artifact path |
+| Manipulating state | The write-guard rejects direct edits of the state file |
+| Ending without passing the quiz | The Stop gate + rejection of `complete` |
+| Lowering question difficulty | The rubric item count and unknown-value requirement are fixed into the question structure |
+| Misclassifying noise | A one-line rationale is required for any classification outside the ruleset |
+| Improvising the judge prompt | A fixed template (`judge-prompt.md`) |
+| A judge's groundless pass | Quote required + the CLI's string comparison |
 
 ---
 
-## 남은 것 1 — 채점의 관대함
+## Remainder 1 — leniency in grading
 
-루브릭 항목을 "대충 맞았다"로 넘기는 것은 기계가 볼 수 없다. 항목은 **짚었거나 안 짚었거나** 둘 중 하나다. 답변이 그 항목의 내용을 말하지 않았으면 `--missing`에 넣는다.
+Waving a rubric item through as "roughly right" is something a machine cannot see. An item is **hit or not hit**, one of the two. If the answer did not state that item's content, put it in `--missing`.
 
-판단이 갈리면 항목 쪽이 아니라 **문항 쪽**을 의심한다. 채점이 애매하다는 것은 대개 루브릭 항목이 애매하게 적혔다는 뜻이고, 그건 문항을 만들 때 고칠 일이지 채점할 때 봐줄 일이 아니다.
+When the call is close, suspect the **question**, not the item. An ambiguous grade usually means the rubric item was written ambiguously, and that is something to fix when making the question, not to excuse when grading.
 
-## 남은 것 2 — 유도 질문이 답을 흘리는 것
+## Remainder 2 — a leading question leaking the answer
 
-1층 유도 질문이 루브릭 항목의 핵심 명사·동사를 그대로 쓰면 안 된다는 것은 문자열 검사로 잡히지만, 그 검사를 우회하면서 답을 흘리는 표현은 잡히지 않는다. 동의어로 바꿔 말하거나, 선택지를 은근히 좁혀 주거나, "혹시 …아닐까요"로 답을 제시하는 형태가 그렇다.
+That a tier-1 leading question must not use the rubric item's core noun/verb verbatim is caught by a string check, but a phrasing that leaks the answer while evading that check is not. Rephrasing with a synonym, quietly narrowing the options, or presenting the answer as "could it perhaps be …" are such forms.
 
-기준은 하나다. **유도 질문은 독자를 문서로 돌려보내야 하고, 답으로 데려가면 안 된다.** 질문을 읽고 문서를 다시 안 봐도 답할 수 있다면 그건 유도가 아니라 누설이다.
+The standard is one. **A leading question must send the reader back to the document, not carry them to the answer.** If you can answer after reading the question without looking at the document again, that is not leading but leaking.
 
-## 남은 것 3 — "왜"의 추론 라벨을 남용하는 것
+## Remainder 3 — abusing the "왜" inference label
 
-`추론` 출처 태그(`<span class="cf-src">추론</span>`)는 근거가 없을 때 쓰라고 있는 것이지, 근거를 찾기 귀찮을 때 쓰라고 있는 것이 아니다. diff·커밋 메시지·주석·인접 코드를 실제로 뒤져 본 뒤에도 없을 때만 붙인다.
+The `추론` provenance tag (`<span class="cf-src">추론</span>`) exists for use when there is no ground, not for when finding the ground is a chore. Attach it only when it is still absent after actually digging through the diff, commit message, comments, and adjacent code.
 
-태그가 붙은 곳마다 스스로에게 묻는다. **이걸 확인하려고 실제로 어디를 봤는가.** 대답할 수 없으면 아직 안 본 것이다.
+At every spot the tag is attached, ask yourself: **where did I actually look to confirm this.** If you cannot answer, you have not looked yet.
 
-GREEN 8건 실측(구 대괄호 표기 시절): `추론` 표기가 7건에 나타났고 한 문서는 12곳이었다
-(같은 문서의 `근거` 표기는 그보다 적다). 구조 검사는 **출처 태그가 있는지**만 보므로,
-근거를 찾지 않고 추론 태그를 붙이는 것은 기계적으로는 통과한다 — 이 항목이 사람 몫으로
-남은 이유다.
+8 GREEN measured (in the era of the old bracket notation): the `추론` marking appeared in 7, and one document had it in 12 places (the same document's `근거` marking was fewer). Because the structure check looks only at **whether a provenance tag is present**, attaching an inference tag without finding the ground passes mechanically — which is why this item is left for a person.
 
-## 남은 것 4 — Change Group을 파일 목록으로 되돌리는 것
+## Remainder 4 — reverting a Change Group into a file list
 
-그룹 제목이 "파일 3개 변경"이거나, 예고문이 "아래 파일들을 살펴본다"이면 형식만 채운 것이다. 구조 검사는 슬롯이 찼는지만 보고 그 안의 문장은 보지 않는다.
+If the group title is "3 files changed", or the herald is "we look at the files below", it is form filled in name only. The structure check looks only at whether the slot is filled, not at the sentences inside it.
 
-그룹은 **변경의 논리 단위**다. 제목은 그 그룹이 무엇을 하는지 말해야 하고, 예고문은 다음에 무엇이 올지 말해야 하며, 순서 근거는 왜 앞 그룹이 먼저여야 했는지 말해야 한다. 셋 다 파일 이름 없이 쓸 수 있어야 한다.
+A group is a **logical unit of change**. Its title must say what that group does, its herald must say what comes next, and its order rationale must say why the preceding group had to come first. All three must be writable without a file name.

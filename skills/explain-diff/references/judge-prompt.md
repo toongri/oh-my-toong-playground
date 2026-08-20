@@ -1,52 +1,53 @@
-# 심사 서브에이전트 고정 템플릿
+# Judging subagent — fixed template
 
-이 파일의 프롬프트를 **그대로** 쓴다. 스텝 이름·문서 경로·루브릭 항목만 치환하고 문장은 손대지 않는다.
+Use this file's prompt **verbatim**. Substitute only the step name, document path, and rubric item; do not touch the sentences.
 
-템플릿을 고정하는 이유는 재량을 없애기 위해서다. 매번 프롬프트를 새로 쓰면 심사 기준도 매번 새로 쓰이고, 그러면 "심사를 통과했다"가 무엇을 뜻하는지 회차마다 달라진다.
+The template is fixed to remove discretion. Rewriting the prompt each time rewrites the judging standard each time, and then what "passed judgment" means differs from round to round.
 
 ---
 
-## 프롬프트
+## Prompt
 
 ```
-너는 explain-diff 문서의 심사자다. 판정할 항목은 이 스텝이 요구하는 것 하나뿐이다. 다른 것은 보지 않는다.
+You are the judge of an explain-diff document. There is exactly one item this step requires you to judge. You look at nothing else.
 
-문서: <문서 절대경로>
-스텝: <architecture|intuition|code>
+Document: <absolute document path>
+Step: <architecture|intuition|code>
 
-스텝이 architecture이면 R12만, intuition이면 R6만, code이면 R7만 판정한다.
-(다른 다섯 스텝 — evidence·background·commits·render·quiz — 은 심사 항목이 없으므로 이 템플릿을 쓰지 않는다.)
+If the step is architecture judge only R12, if intuition only R6, if code only R7.
+(The other five steps — evidence, background, commits, render, quiz — have no judge item and do not use this template.)
 
-R12 — 아키텍처 다이어그램의 diff 대응 (스텝이 architecture일 때만)
-  먼저 Architecture 섹션에 다이어그램이 하나라도 있는지 판정한다.
-  다이어그램이 하나라도 있으면, 다이어그램 노드·간선 라벨이 이 diff에 실재하는
-  식별자(서비스·모듈 경로·커맨드·엔티티 이름)를 쓰고, 최소 한 레벨에 변경 표시
-  (:::changed 클래스 또는 Before/After 대비)가 있어야 한다. 일반명사만으로 그린
-  그림("서비스" -> "DB")은 어느 diff에나 붙는 그림이므로 실패다. 이 경우 quote에는
-  다이어그램의 라벨 문자열, 같은 식별자가 등장하는 본문 문장, 그리고 변경 표시를
-  입증하는 문구를 함께 넣는다.
-  다이어그램이 하나도 없고 세 레벨 모두에 사유가 있는
-  `구조 변화 없음: <사유 한 문장>` waiver가 있으면 R12는 pass다. 이 all-waiver
-  분기에서 quote에는 시스템·컴포넌트·도메인 레벨의 세 waiver 문장을 모두 문서에서
-  그대로 따온 문자열로 넣어야 하며, 세 문장 중 하나라도 없거나 사유가 없으면 pass가
-  아니다. 다이어그램이 하나라도 있는 경우에는 이 waiver 예외를 적용하지 않는다.
+R12 — the architecture diagram's correspondence to the diff (only when the step is architecture)
+  First judge whether the Architecture section has any diagram at all.
+  If any diagram is present, its node/edge labels must use identifiers that actually exist
+  in this diff (service, module path, command, entity names), and at least one level must
+  have a change marker (a :::changed class or Before/After contrast). A picture drawn with
+  generic nouns only ("service" -> "DB") is a picture that fits any diff, so it fails. In this
+  case put into quote the diagram's label string, the body sentence where the same identifier
+  appears, and the phrase that evidences the change marker, together.
+  If there is no diagram at all and all three levels have a reasoned
+  `구조 변화 없음: <사유 한 문장>` waiver, R12 is a pass. In this all-waiver branch, quote must
+  contain all three waiver sentences — 시스템 레벨, 컴포넌트 레벨, 도메인 레벨 — as strings copied
+  verbatim from the document, and if any one of the three is missing or lacks a rationale it is
+  not a pass. When any diagram is present this waiver exception does not apply.
 
-R6 — Intuition의 구체 예시 (스텝이 intuition일 때만)
-  구체적인 toy 값이 문서에 실제로 등장하고, 그 값이 설명 문장에서 다시 쓰이는가.
-  값만 있고 쓰이지 않으면 실패다.
+R6 — Intuition's concrete example (only when the step is intuition)
+  Does a concrete toy value actually appear in the document, and is that value reused in an
+  explaining sentence. If the value is only present but not used, it fails.
 
-R7 — 그룹 순서의 정합 (스텝이 code일 때만)
-  Change Group N의 예고문이 그룹 N-1을 전제하는가.
-  전제가 드러나는 대목을 짚을 수 없으면 순서에 근거가 없는 것이고, 근거 없는 순서는 나열이다.
-  그룹이 하나뿐이면 이 항목은 pass 이고 quote 는 그 그룹의 예고문으로 한다.
+R7 — coherence of group order (only when the step is code)
+  Does Change Group N's herald presuppose group N-1.
+  If you cannot point to the passage where the premise shows, the order has no ground, and an
+  order with no ground is a list.
+  If there is only one group this item is a pass and the quote is that group's herald.
 
-판정 규칙:
-  - pass 를 주려면 문서에서 **그대로 따온 발췌**를 quote 에 넣어야 한다.
-  - quote 는 문서에 문자열로 존재해야 한다. 요약하거나 다듬으면 안 된다. 한 글자도 바꾸지 마라.
-  - 인용을 붙일 수 없으면 pass 가 아니다.
-  - fail 일 때는 quote 를 비우고, 무엇이 없는지 한 문장으로 적는다.
+Judging rules:
+  - To give pass, you must put an **excerpt copied verbatim** from the document into quote.
+  - quote must exist as a string in the document. Do not summarize or polish it. Do not change one character.
+  - If you cannot attach a quote, it is not a pass.
+  - On fail, leave quote empty and write one sentence on what is missing.
 
-출력은 이 JSON 배열 하나뿐이다. 다른 텍스트를 쓰지 마라. 배열에는 이 스텝의 항목 하나만 담는다 — 요구되지 않은 항목을 함께 내면, 그 항목이 fail 로 나올 경우 요구되지 않았어도 스텝이 그대로 막힌다.
+The output is this one JSON array only. Write no other text. The array holds only this step's item — if you include an item that was not required, and that item comes out fail, the step is blocked all the same even though it was not required.
 
 [
   {"id": "R6", "pass": true, "quote": "…"}
@@ -55,8 +56,8 @@ R7 — 그룹 순서의 정합 (스텝이 code일 때만)
 
 ---
 
-## 왜 인용을 강제하는가
+## Why the quote is forced
 
-인용은 심사자의 정직성을 믿지 않기 위한 장치다. 상태 CLI가 받은 quote를 문서에서 문자열로 찾아보고, 없으면 pass를 실패로 뒤집는다. 심사자가 통과를 지어낼 수 있는 표면이 그 한 번의 대조로 닫힌다.
+The quote is a device for not trusting the judge's honesty. The state CLI looks for the received quote as a string in the document, and if it is absent, flips the pass to fail. The surface on which the judge could fabricate a pass is closed by that one comparison.
 
-그래서 심사자에게 맡기는 항목 수를 최소로 유지한다. 항목이 늘면 대조로 닫히지 않는 재량이 함께 는다. 새 항목을 넣고 싶으면 먼저 구조 검사로 옮길 수 있는지부터 본다.
+That is why the number of items entrusted to the judge is kept minimal. As items grow, so does the discretion not closed by comparison. When you want to add a new item, first look at whether it can be moved into the structure check.
