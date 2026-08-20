@@ -20,6 +20,10 @@ run_without_git_local_env() {
         [[ -z "$var" ]] && continue
         unset "$var"
     done <<< "$GIT_LOCAL_ENV_VARS"
+    # Prevent shell startup files from writing into test protocol output.
+    # BASH_ENV/ENV are inherited by nested shell processes and can prepend
+    # arbitrary stdout before hook JSON, making otherwise valid assertions fail.
+    unset BASH_ENV ENV
     "$@"
 }
 

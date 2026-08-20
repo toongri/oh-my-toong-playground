@@ -2121,6 +2121,225 @@ run_test test_session_artifact_prefixes_exactly_six_managed
 run_test test_ttl_parity_with_state_core_ts
 run_test test_ttl_allowlist_no_stray_literals
 
+test_pretool_valid_lease_lock_is_not_unclassified() {
+  local root="$TEST_TMP_DIR/root" key lock out
+  key=$(printf 'a%.0s' $(seq 1 64)); mkdir -p "$root/pretool-trace/keys"
+  lock="$root/pretool-trace/keys/$key.key.lease-lock"; mkdir "$lock"; : > "$lock/owner-$$-dead"
+  out=$(list_pretool_trace_unclassified "$root")
+  [ -z "$out" ]
+}
+
+test_pretool_lease_lock_extra_symlink_reported_and_preserved() {
+  local root="$TEST_TMP_DIR/root" key lock out
+  key=$(printf 'b%.0s' $(seq 1 64)); mkdir -p "$root/pretool-trace/keys"
+  lock="$root/pretool-trace/keys/$key.key.lease-lock"; mkdir "$lock"; : > "$lock/owner-$$-dead"; mkdir "$root/target"; ln -s "$root/target" "$lock/extra"
+  out=$(list_pretool_trace_unclassified "$root"); printf '%s\n' "$out" | grep -Fq "$lock"
+  reap_pretool_trace_artifacts "$root" "$(date +%s)" 0 >/dev/null || true
+  [ -L "$lock/extra" ] && [ -f "$lock/owner-$$-dead" ]
+}
+
+test_pretool_lease_lock_extra_directory_reported_and_preserved() {
+  local root="$TEST_TMP_DIR/root" key lock out
+  key=$(printf 'c%.0s' $(seq 1 64)); mkdir -p "$root/pretool-trace/keys"
+  lock="$root/pretool-trace/keys/$key.key.lease-lock"; mkdir "$lock" "$lock/extra"; : > "$lock/owner-$$-dead"
+  out=$(list_pretool_trace_unclassified "$root"); printf '%s\n' "$out" | grep -Fq "$lock"
+  reap_pretool_trace_artifacts "$root" "$(date +%s)" 0 >/dev/null || true
+  [ -d "$lock/extra" ] && [ -f "$lock/owner-$$-dead" ]
+}
+
+test_pretool_lease_lock_symlink_reported_and_preserved() {
+  local root="$TEST_TMP_DIR/root" key lock out
+  key=$(printf 'd%.0s' $(seq 1 64)); mkdir -p "$root/pretool-trace/keys" "$root/target"
+  lock="$root/pretool-trace/keys/$key.key.lease-lock"; ln -s "$root/target" "$lock"
+  out=$(list_pretool_trace_unclassified "$root"); printf '%s\n' "$out" | grep -Fq "$lock"
+  [ -L "$lock" ]
+}
+
+run_test test_pretool_valid_lease_lock_is_not_unclassified
+run_test test_pretool_lease_lock_extra_symlink_reported_and_preserved
+run_test test_pretool_lease_lock_extra_directory_reported_and_preserved
+run_test test_pretool_lease_lock_symlink_reported_and_preserved
+
+# ---------------------------------------------------------------------------
+# reap_pretool_trace_artifacts vs the append-lock protocol
+#
+# The append lock (scripts/pretool-trace/storage.ts: acquireAppendLock /
+# inspectAndRecoverLock) is a DIRECTORY at pretool-trace/.append.lock. A HELD
+# lock is exactly one regular, non-symlink owner file named
+# "owner-<pid>-<nonce>" whose content is JSON {"pid":<pid>,"nonce":"<nonce>"}
+# matching the name, with <pid> alive. Any deviation (dead pid, malformed
+# JSON, name/JSON mismatch, >1 entry, unreadable owner, or a symlinked lock
+# dir) is AMBIGUOUS. reap_pretool_trace_artifacts's trace-generation loop
+# (state-liveness.sh:111-120) currently deletes stale events.jsonl[.1-3]
+# without ever consulting this lock — these tests encode the contract that
+# it must not.
+# ---------------------------------------------------------------------------
+
+# seed_pretool_trace_generations <root>
+# Creates the four generation files, each aged past PRETOOL_TRACE_RETENTION_TTL
+# (7 days) so every case below starts from an unconditionally-stale set.
+seed_pretool_trace_generations() {
+  local root="$1" trace name
+  trace="$root/pretool-trace"
+  mkdir -p "$trace"
+  for name in events.jsonl events.jsonl.1 events.jsonl.2 events.jsonl.3; do
+    printf 'x\n' > "$trace/$name"
+    touch_ago "$trace/$name" 700000   # ~8.1 days — past the 7-day retention boundary
+  done
+}
+
+test_pretool_append_lock_live_valid_owner_preserves_generations_and_lock() {
+  local root="$TEST_TMP_DIR/root" trace lock nonce owner name
+  seed_pretool_trace_generations "$root"
+  trace="$root/pretool-trace"
+  lock="$trace/.append.lock"; mkdir "$lock"
+  nonce="abc123"
+  owner="$lock/owner-$$-$nonce"
+  printf '{"pid":%s,"nonce":"%s"}' "$$" "$nonce" > "$owner"
+  reap_pretool_trace_artifacts "$root" "$NOW" 0 >/dev/null
+  for name in events.jsonl events.jsonl.1 events.jsonl.2 events.jsonl.3; do
+    [ -f "$trace/$name" ] || { echo "  MISSING: $trace/$name (deleted despite a live valid append-lock owner)"; return 1; }
+  done
+  [ -d "$lock" ] || { echo "  MISSING: $lock (live append lock evicted by cleanup)"; return 1; }
+  [ -f "$owner" ] || { echo "  MISSING: $owner (live append-lock owner evicted by cleanup)"; return 1; }
+}
+
+test_pretool_append_lock_malformed_json_owner_preserves_generations() {
+  local root="$TEST_TMP_DIR/root" trace lock nonce owner name
+  seed_pretool_trace_generations "$root"
+  trace="$root/pretool-trace"
+  lock="$trace/.append.lock"; mkdir "$lock"
+  nonce="abc123"
+  owner="$lock/owner-$$-$nonce"
+  printf 'not-json' > "$owner"
+  reap_pretool_trace_artifacts "$root" "$NOW" 0 >/dev/null
+  for name in events.jsonl events.jsonl.1 events.jsonl.2 events.jsonl.3; do
+    [ -f "$trace/$name" ] || { echo "  MISSING: $trace/$name (deleted despite a malformed-JSON append-lock owner)"; return 1; }
+  done
+}
+
+test_pretool_append_lock_name_json_mismatch_preserves_generations() {
+  local root="$TEST_TMP_DIR/root" trace lock owner name
+  seed_pretool_trace_generations "$root"
+  trace="$root/pretool-trace"
+  lock="$trace/.append.lock"; mkdir "$lock"
+  owner="$lock/owner-$$-aaa"
+  printf '{"pid":%s,"nonce":"bbb"}' "$$" > "$owner"
+  reap_pretool_trace_artifacts "$root" "$NOW" 0 >/dev/null
+  for name in events.jsonl events.jsonl.1 events.jsonl.2 events.jsonl.3; do
+    [ -f "$trace/$name" ] || { echo "  MISSING: $trace/$name (deleted despite an owner name/JSON nonce mismatch)"; return 1; }
+  done
+}
+
+test_pretool_append_lock_multiple_owners_preserves_generations() {
+  local root="$TEST_TMP_DIR/root" trace lock name
+  seed_pretool_trace_generations "$root"
+  trace="$root/pretool-trace"
+  lock="$trace/.append.lock"; mkdir "$lock"
+  printf '{"pid":%s,"nonce":"aaa"}' "$$" > "$lock/owner-$$-aaa"
+  printf '{"pid":%s,"nonce":"bbb"}' "$$" > "$lock/owner-$$-bbb"
+  reap_pretool_trace_artifacts "$root" "$NOW" 0 >/dev/null
+  for name in events.jsonl events.jsonl.1 events.jsonl.2 events.jsonl.3; do
+    [ -f "$trace/$name" ] || { echo "  MISSING: $trace/$name (deleted despite a multi-owner append lock)"; return 1; }
+  done
+}
+
+test_pretool_append_lock_unreadable_owner_preserves_generations() {
+  local root="$TEST_TMP_DIR/root" trace lock nonce owner name status
+  seed_pretool_trace_generations "$root"
+  trace="$root/pretool-trace"
+  lock="$trace/.append.lock"; mkdir "$lock"
+  nonce="abc123"
+  owner="$lock/owner-$$-$nonce"
+  printf '{"pid":%s,"nonce":"%s"}' "$$" "$nonce" > "$owner"
+  chmod 000 "$owner"
+  reap_pretool_trace_artifacts "$root" "$NOW" 0 >/dev/null
+  status=0
+  for name in events.jsonl events.jsonl.1 events.jsonl.2 events.jsonl.3; do
+    [ -f "$trace/$name" ] || { echo "  MISSING: $trace/$name (deleted despite an unreadable append-lock owner)"; status=1; }
+  done
+  chmod 600 "$owner" 2>/dev/null || true
+  return "$status"
+}
+
+test_pretool_append_lock_symlink_lock_preserves_generations() {
+  local root="$TEST_TMP_DIR/root" trace lock target name
+  seed_pretool_trace_generations "$root"
+  trace="$root/pretool-trace"
+  target="$root/lock-target"; mkdir -p "$target"
+  lock="$trace/.append.lock"; ln -s "$target" "$lock"
+  reap_pretool_trace_artifacts "$root" "$NOW" 0 >/dev/null
+  for name in events.jsonl events.jsonl.1 events.jsonl.2 events.jsonl.3; do
+    [ -f "$trace/$name" ] || { echo "  MISSING: $trace/$name (deleted despite a symlinked .append.lock)"; return 1; }
+  done
+}
+
+test_pretool_trace_generation_symlink_preserved_not_deleted() {
+  local root="$TEST_TMP_DIR/root" trace target
+  seed_pretool_trace_generations "$root"
+  trace="$root/pretool-trace"
+  target="$root/target-events"
+  printf 'x\n' > "$target"
+  touch_ago "$target" 700000
+  rm -f "$trace/events.jsonl.1"
+  ln -s "$target" "$trace/events.jsonl.1"
+  reap_pretool_trace_artifacts "$root" "$NOW" 0 >/dev/null
+  [ -L "$trace/events.jsonl.1" ] || { echo "  MISSING: $trace/events.jsonl.1 symlink (a symlinked generation must never be followed or deleted)"; return 1; }
+}
+
+test_pretool_append_lock_dead_owner_recovered_and_generations_deleted() {
+  local root="$TEST_TMP_DIR/root" trace lock deadpid nonce owner name status
+  seed_pretool_trace_generations "$root"
+  trace="$root/pretool-trace"
+  lock="$trace/.append.lock"; mkdir "$lock"
+  ( sleep 0.01 ) &
+  deadpid=$!
+  wait "$deadpid" 2>/dev/null || true
+  nonce="deadbeef"
+  owner="$lock/owner-$deadpid-$nonce"
+  printf '{"pid":%s,"nonce":"%s"}' "$deadpid" "$nonce" > "$owner"
+  reap_pretool_trace_artifacts "$root" "$NOW" 0 >/dev/null
+  status=0
+  for name in events.jsonl events.jsonl.1 events.jsonl.2 events.jsonl.3; do
+    [ ! -e "$trace/$name" ] || { echo "  SURVIVOR: $trace/$name (a recoverable dead-owner lock must not block cleanup)"; status=1; }
+  done
+  [ ! -e "$lock" ] || { echo "  SURVIVOR: $lock (a recovered append lock must be released, not left behind)"; status=1; }
+  return "$status"
+}
+
+test_pretool_trace_dry_run_no_lock_creates_no_append_lock() {
+  local root="$TEST_TMP_DIR/root" trace lock out name
+  seed_pretool_trace_generations "$root"
+  trace="$root/pretool-trace"
+  lock="$trace/.append.lock"
+  out=$(reap_pretool_trace_artifacts "$root" "$NOW" 1)
+  for name in events.jsonl events.jsonl.1 events.jsonl.2 events.jsonl.3; do
+    printf '%s\n' "$out" | grep -Fq "$trace/$name" || { echo "  MISSING FROM REPORT: $trace/$name"; return 1; }
+  done
+  [ ! -e "$lock" ] || { echo "  UNEXPECTED: $lock created by a dry run (dry-run must be read-only)"; return 1; }
+}
+
+test_pretool_trace_baseline_stale_generations_deleted_without_lock() {
+  local root="$TEST_TMP_DIR/root" trace name
+  seed_pretool_trace_generations "$root"
+  trace="$root/pretool-trace"
+  reap_pretool_trace_artifacts "$root" "$NOW" 0 >/dev/null
+  for name in events.jsonl events.jsonl.1 events.jsonl.2 events.jsonl.3; do
+    [ ! -e "$trace/$name" ] || { echo "  SURVIVOR: $trace/$name (expected baseline deletion when no append lock is present)"; return 1; }
+  done
+}
+
+run_test test_pretool_append_lock_live_valid_owner_preserves_generations_and_lock
+run_test test_pretool_append_lock_malformed_json_owner_preserves_generations
+run_test test_pretool_append_lock_name_json_mismatch_preserves_generations
+run_test test_pretool_append_lock_multiple_owners_preserves_generations
+run_test test_pretool_append_lock_unreadable_owner_preserves_generations
+run_test test_pretool_append_lock_symlink_lock_preserves_generations
+run_test test_pretool_trace_generation_symlink_preserved_not_deleted
+run_test test_pretool_append_lock_dead_owner_recovered_and_generations_deleted
+run_test test_pretool_trace_dry_run_no_lock_creates_no_append_lock
+run_test test_pretool_trace_baseline_stale_generations_deleted_without_lock
+
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------

@@ -6,17 +6,21 @@ import type {
 	Platform,
 	PlatformConfigResult,
 	PlatformYaml,
+	PlatformYamlHookItem,
 	PluginScope,
 } from "../lib/types.ts";
-import type { PlatformAdapter } from "./types.ts";
+import type { PlatformAdapter, PlatformWriteObserver } from "./types.ts";
 import { parseFrontmatter, serializeFrontmatter } from "../lib/frontmatter.ts";
-import { syncDirectory } from "../lib/sync-directory.ts";
+import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
 import { deepMerge } from "../lib/deep-merge.ts";
 import { readJsonFile, writeJsonFile } from "../lib/json.ts";
 import { isGlobalSync } from "../lib/path-utils.ts";
 import { deriveClaudeProjectKey } from "../lib/git-key.ts";
+import { composePreToolTraceCommand } from "../lib/pretool-trace-command.ts";
+import { planCategoryDestinationPaths, type DestinationCategory } from "./destinations.ts";
+import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
 
 // =============================================================================
 // Local narrowing helpers (avoid `as` casts on loosely-typed YAML/JSON data)
@@ -35,6 +39,18 @@ function isStringArray(value: unknown): value is string[] {
 	return Array.isArray(value) && value.every((v): v is string => typeof v === "string");
 }
 
+function claudeDestination(targetPath: string, category: DestinationCategory, displayName: string): string {
+	const [relativePath] = planCategoryDestinationPaths("claude", category, displayName);
+	if (!relativePath) throw new Error(`No Claude destination for ${category}`);
+	return path.join(targetPath, relativePath);
+}
+
+function claudeDestinationRelative(category: DestinationCategory, displayName: string): string {
+	const [relativePath] = planCategoryDestinationPaths("claude", category, displayName);
+	if (!relativePath) throw new Error(`No Claude destination for ${category}`);
+	return relativePath;
+}
+
 // =============================================================================
 // Plugin installer type (for DI in tests)
 // =============================================================================
@@ -46,6 +62,31 @@ export type PluginInstaller = (
 ) => Promise<void>;
 
 export type CommandRunner = (command: string, cwd: string) => Promise<{ exitCode: number }>;
+
+export type ClaudePreToolUsePreview = {
+	hookEvent: "PreToolUse";
+	itemIndex: number;
+	hookId: string;
+	originalCommand: string;
+	wrappedCommand: string;
+	wrapperDeploymentPath: string;
+	matcher: string;
+	timeout: number;
+	scope: "global" | "project";
+	component: string;
+};
+
+export class ClaudePreToolUsePreviewError extends Error {
+	readonly itemIndex: number;
+
+	constructor(itemIndex: number, message: string) {
+		super(`Claude PreToolUse trace preview failed for item ${itemIndex}: ${message}`);
+		this.name = "ClaudePreToolUsePreviewError";
+		this.itemIndex = itemIndex;
+	}
+}
+
+const CLAUDE_TRACE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 async function defaultPluginInstaller(
 	name: string,
@@ -103,9 +144,10 @@ export class ClaudeAdapter implements PlatformAdapter {
 		addHooks?: unknown[],
 		dryRun = false,
 		_modelMap?: ModelMap,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".claude", "agents");
-		const targetFile = path.join(targetDir, `${displayName}.md`);
+		const targetFile = claudeDestination(targetPath, "agents", displayName);
+		const targetDir = path.dirname(targetFile);
 
 		try {
 			await fs.stat(sourcePath);
@@ -119,13 +161,19 @@ export class ClaudeAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(targetDir, { recursive: true });
-		await fs.copyFile(sourcePath, targetFile);
+		const copyOperation = async (): Promise<void> => {
+			await fs.mkdir(targetDir, { recursive: true });
+			await copyFile(sourcePath, targetFile);
+		};
+		if (mutationHooks) await mutationHooks.mutate(targetFile, copyOperation);
+		else await copyOperation();
 		logInfo(`Copied: ${displayName}.md`);
 
 		// Inject add-skills into frontmatter
 		if (addSkills && addSkills.length > 0) {
-			await this._addSkillsToFrontmatter(targetFile, addSkills);
+			const operation = () => this._addSkillsToFrontmatter(targetFile, addSkills);
+			if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+			else await operation();
 		}
 
 		// Inject add-hooks into frontmatter (and deploy hook files)
@@ -156,10 +204,18 @@ export class ClaudeAdapter implements PlatformAdapter {
 				if (hook.source_path && hook.display_name) {
 					try {
 						await fs.stat(hook.source_path);
-						await this.syncHooksDirect(targetPath, hook.display_name, hook.source_path, false);
 					} catch {
 						// Hook file not found; skip silently
+						continue;
 					}
+					await this.syncHooksDirect(
+						targetPath,
+						hook.display_name,
+						hook.source_path,
+						false,
+						undefined,
+						mutationHooks,
+					);
 				}
 			}
 
@@ -171,12 +227,14 @@ export class ClaudeAdapter implements PlatformAdapter {
 				command:
 					h.command && h.command !== ""
 						? h.command
-						: `${isGlobalSync(targetPath) ? "$HOME" : "$CLAUDE_PROJECT_DIR"}/.claude/hooks/${h.display_name ?? ""}`,
+						: `${isGlobalSync(targetPath) ? "$HOME" : "$CLAUDE_PROJECT_DIR"}/${claudeDestinationRelative("hooks", h.display_name ?? "")}`,
 				prompt: h.prompt,
 				timeout: h.timeout ?? 10,
 			}));
 
-			await this._addHooksToFrontmatter(targetFile, frontmatterHooks);
+			const operation = () => this._addHooksToFrontmatter(targetFile, frontmatterHooks);
+			if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+			else await operation();
 		}
 	}
 
@@ -189,9 +247,10 @@ export class ClaudeAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".claude", "commands");
-		const targetFile = path.join(targetDir, `${displayName}.md`);
+		const targetFile = claudeDestination(targetPath, "commands", displayName);
+		const targetDir = path.dirname(targetFile);
 
 		try {
 			await fs.stat(sourcePath);
@@ -205,8 +264,12 @@ export class ClaudeAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(targetDir, { recursive: true });
-		await fs.copyFile(sourcePath, targetFile);
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(targetDir, { recursive: true });
+			await copyFile(sourcePath, targetFile);
+		};
+		if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+		else await operation();
 		logInfo(`Copied: ${displayName}.md`);
 	}
 
@@ -219,8 +282,11 @@ export class ClaudeAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".claude", "hooks");
+		const targetFile = claudeDestination(targetPath, "hooks", displayName);
+		const targetDir = path.dirname(targetFile);
 		// hooksSourceDir: parent of sourcePath — hooks/ root for top-level files,
 		// or the directory hook itself (its .sh files resolve deps relative to it).
 		const hooksSourceDir = path.dirname(sourcePath);
@@ -234,7 +300,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 		}
 
 		if (stat.isDirectory()) {
-			const targetHookDir = path.join(targetDir, displayName);
+			const targetHookDir = targetFile;
 			if (dryRun) {
 				logDry(`Copy (directory): ${sourcePath} -> ${targetHookDir}/`);
 				// Scan .sh files in directory for dependencies (dry-run logging)
@@ -243,26 +309,32 @@ export class ClaudeAdapter implements PlatformAdapter {
 				await syncDirectory(sourcePath, targetHookDir, {
 					exclude: ["*.test.ts", "*.local.yaml"],
 					platformRoot: path.join(targetPath, ".claude"),
+					mutationHooks,
 				});
 				logInfo(`Copied: ${displayName}/`);
+				if (!mutationHooks) await writeObserver?.(targetHookDir);
 				// Copy shell dependencies discovered in directory hooks
-				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
+				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun, writeObserver, mutationHooks);
 			}
 		} else {
-			const targetFile = path.join(targetDir, displayName);
 			if (dryRun) {
 				logDry(`Copy: ${sourcePath} -> ${targetFile}`);
 				// Log dependency copies for dry-run
 				await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun);
 			} else {
-				await fs.mkdir(targetDir, { recursive: true });
-				await fs.copyFile(sourcePath, targetFile);
-				// chmod +x
-				const tgtStat = await fs.stat(targetFile);
-				await fs.chmod(targetFile, tgtStat.mode | 0o111);
+				const operation = async (): Promise<void> => {
+					await fs.mkdir(targetDir, { recursive: true });
+					await copyFile(sourcePath, targetFile);
+					// chmod +x
+					const tgtStat = await fs.stat(targetFile);
+					await fs.chmod(targetFile, tgtStat.mode | 0o111);
+				};
+				if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+				else await operation();
 				logInfo(`Copied: ${displayName}`);
+				await writeObserver?.(targetFile);
 				// Copy shell dependencies
-				await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun);
+				await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun, writeObserver, mutationHooks);
 			}
 		}
 	}
@@ -276,9 +348,9 @@ export class ClaudeAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".claude", "skills");
-		const targetSkillDir = path.join(targetDir, displayName);
+		const targetSkillDir = claudeDestination(targetPath, "skills", displayName);
 
 		try {
 			const stat = await fs.stat(sourcePath);
@@ -293,9 +365,9 @@ export class ClaudeAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(targetDir, { recursive: true });
 		await syncDirectory(sourcePath, targetSkillDir, {
 			platformRoot: path.join(targetPath, ".claude"),
+			mutationHooks,
 		});
 		logInfo(`Copied: ${displayName}/`);
 	}
@@ -309,8 +381,10 @@ export class ClaudeAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".claude", "scripts");
+		const targetFile = claudeDestination(targetPath, "scripts", displayName);
+		const targetDir = path.dirname(targetFile);
 
 		let stat: Awaited<ReturnType<typeof fs.stat>>;
 		try {
@@ -321,25 +395,29 @@ export class ClaudeAdapter implements PlatformAdapter {
 		}
 
 		if (stat.isDirectory()) {
-			const targetScriptDir = path.join(targetDir, displayName);
+			const targetScriptDir = targetFile;
 			if (dryRun) {
 				logDry(`Copy (directory): ${sourcePath} -> ${targetScriptDir}/`);
 			} else {
 				await syncDirectory(sourcePath, targetScriptDir, {
 					exclude: ["*.test.ts"],
 					platformRoot: path.join(targetPath, ".claude"),
+					mutationHooks,
 				});
 				logInfo(`Copied: ${displayName}/`);
 			}
 			return;
 		}
 
-		const targetFile = path.join(targetDir, displayName);
 		if (dryRun) {
 			logDry(`Copy: ${sourcePath} -> ${targetFile}`);
 		} else {
-			await fs.mkdir(targetDir, { recursive: true });
-			await fs.copyFile(sourcePath, targetFile);
+			const operation = async (): Promise<void> => {
+				await fs.mkdir(targetDir, { recursive: true });
+				await copyFile(sourcePath, targetFile);
+			};
+			if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+			else await operation();
 			logInfo(`Copied: ${displayName}`);
 		}
 	}
@@ -353,9 +431,11 @@ export class ClaudeAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, ".claude", "rules");
-		const targetFile = path.join(targetDir, `${displayName}.md`);
+		const targetFile = claudeDestination(targetPath, "rules", displayName);
+		const targetDir = path.dirname(targetFile);
 
 		try {
 			await fs.stat(sourcePath);
@@ -369,8 +449,13 @@ export class ClaudeAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(targetDir, { recursive: true });
-		await fs.copyFile(sourcePath, targetFile);
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(targetDir, { recursive: true });
+			await copyFile(sourcePath, targetFile);
+		};
+		if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+		else await operation();
+		await writeObserver?.(targetFile);
 		logInfo(`Copied: ${displayName}.md`);
 	}
 
@@ -378,22 +463,156 @@ export class ClaudeAdapter implements PlatformAdapter {
 	// syncPlatformYaml
 	// ---------------------------------------------------------------------------
 
+	/**
+	 * Resolve command-type PreToolUse hooks and compose their trace wrappers.
+	 * This method is intentionally pure with respect to deployment: it only
+	 * stats source components and never creates, copies, or updates settings.
+	 */
+	async previewPreToolUseCommands(
+		targetPath: string,
+		yaml: PlatformYaml,
+	): Promise<ClaudePreToolUsePreview[]> {
+		const items = yaml.hooks?.PreToolUse;
+		if (!Array.isArray(items)) return [];
+		const wrapperDeploymentPath = path.join(
+			claudeDestination(targetPath, "scripts", "pretool-trace"),
+			"index.ts",
+		);
+		const scope = isGlobalSync(targetPath) ? "global" : "project";
+		const previews: ClaudePreToolUsePreview[] = [];
+
+		for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
+			const item = items[itemIndex];
+			if (!item || pickString(item["type"]) === "prompt") continue;
+			const component = item.component ?? "";
+			const customCommand = pickString(item["command"]) ?? "";
+			if (!component) {
+				if (Object.prototype.hasOwnProperty.call(item, "trace-id")) {
+					const traceId = item["trace-id"];
+					if (typeof traceId !== "string" || !CLAUDE_TRACE_ID_PATTERN.test(traceId)) {
+						throw new ClaudePreToolUsePreviewError(itemIndex, "unsafe raw command trace-id");
+					}
+					if (!customCommand) {
+						throw new ClaudePreToolUsePreviewError(itemIndex, "raw command is missing or not a string");
+					}
+					const matcher = item.matcher ?? "*";
+					const timeout = item.timeout ?? 10;
+					const wrappedCommand = composePreToolTraceCommand({
+						wrapperPath: wrapperDeploymentPath,
+						platform: "claude",
+						hookId: traceId,
+						originalCommand: customCommand,
+					});
+					previews.push({
+						hookEvent: "PreToolUse",
+						itemIndex,
+						hookId: traceId,
+						originalCommand: customCommand,
+						wrappedCommand,
+						wrapperDeploymentPath,
+						matcher,
+						timeout,
+						scope,
+						component,
+					});
+				}
+				continue;
+			}
+			const hookId = path.basename(component);
+			if (!CLAUDE_TRACE_ID_PATTERN.test(hookId)) {
+				throw new ClaudePreToolUsePreviewError(itemIndex, `unsafe component basename ${hookId}`);
+			}
+			const matcher = item.matcher ?? "*";
+			const timeout = item.timeout ?? 10;
+			const originalCommand = await this._resolveHookCommand(targetPath, item, true);
+			const wrappedCommand = composePreToolTraceCommand({
+				wrapperPath: wrapperDeploymentPath,
+				platform: "claude",
+				hookId,
+				originalCommand,
+			});
+			previews.push({
+				hookEvent: "PreToolUse",
+				itemIndex,
+				hookId,
+				originalCommand,
+				wrappedCommand,
+				wrapperDeploymentPath,
+				matcher,
+				timeout,
+				scope,
+				component,
+			});
+		}
+		return previews;
+	}
+
+	private async _resolveHookCommand(
+		targetPath: string,
+		item: PlatformYamlHookItem,
+		strictMissingIndex = false,
+	): Promise<string> {
+		const component = item.component ?? "";
+		const customCommand = pickString(item["command"]) ?? "";
+		if (customCommand) return customCommand;
+		if (!component) return "";
+		const displayName = path.basename(component);
+		let stat: Awaited<ReturnType<typeof fs.stat>> | undefined;
+		try {
+			stat = await fs.stat(component);
+		} catch {
+			stat = undefined;
+		}
+		if (stat?.isDirectory()) {
+			const indexTs = path.join(component, "index.ts");
+			const indexSh = path.join(component, "index.sh");
+			let hasIndexTs = false;
+			let hasIndexSh = false;
+			try {
+				await fs.stat(indexTs);
+				hasIndexTs = true;
+			} catch {
+				/* empty */
+			}
+			try {
+				await fs.stat(indexSh);
+				hasIndexSh = true;
+			} catch {
+				/* empty */
+			}
+			const hookPrefix = isGlobalSync(targetPath) ? "$HOME" : "$CLAUDE_PROJECT_DIR";
+			const hookRelativePath = claudeDestinationRelative("hooks", displayName);
+			if (hasIndexTs) return `bun run ${hookPrefix}/${hookRelativePath}/index.ts`;
+			if (hasIndexSh) return `bash ${hookPrefix}/${hookRelativePath}/index.sh`;
+			if (strictMissingIndex) {
+				throw new ClaudePreToolUsePreviewError(-1, `hook directory has no index.ts/index.sh: ${component}`);
+			}
+			return "";
+		}
+		const hookPrefix = isGlobalSync(targetPath) ? "$HOME" : "$CLAUDE_PROJECT_DIR";
+		return `${hookPrefix}/${claudeDestinationRelative("hooks", displayName)}`;
+	}
+
 	async syncPlatformYaml(
 		targetPath: string,
 		yaml: PlatformYaml,
 		dryRun: boolean,
 		scope?: PluginScope,
+		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<PlatformConfigResult> {
 		const processedSections: string[] = [];
+		const preToolUsePreview = await this.previewPreToolUseCommands(targetPath, yaml);
 
 		// --- config ---
 		if (yaml.config !== null && yaml.config !== undefined) {
-			await this.syncConfig(targetPath, yaml.config, dryRun);
+			await this.syncConfig(targetPath, yaml.config, dryRun, writeObserver, mutationHooks);
 			processedSections.push("config");
 		}
 
 		// --- hooks ---
 		if (yaml.hooks !== null && yaml.hooks !== undefined) {
+			const previewByItemIndex = new Map(preToolUsePreview.map((preview) => [preview.itemIndex, preview]));
 			const hooksMap = yaml.hooks;
 			// "preserve" is a reserved key smuggled into the hooks map with a shape
 			// (`{ "command-contains"?: string[] }`) that PlatformYaml.hooks doesn't
@@ -417,27 +636,25 @@ export class ClaudeAdapter implements PlatformAdapter {
 				if (hookEvent === "preserve") continue;
 				if (!Array.isArray(items)) continue;
 
-				for (const item of items) {
+				for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
+					const item = items[itemIndex];
 					// component/timeout/matcher are declared fields on PlatformYamlHookItem;
 					// type/command/prompt fall through its index signature as `unknown`.
 					const component = item.component ?? "";
 					const timeout = item.timeout ?? 10;
 					const matcher = item.matcher ?? "*";
 					const hookType = pickString(item["type"]) ?? "command";
-					const customCommand = pickString(item["command"]) ?? "";
 					const promptText = pickString(item["prompt"]) ?? "";
 
 					let displayName = "";
-					let resolvedSourcePath = "";
 
 					// If a component is specified, resolve and copy the hook file
 					if (component) {
 						// component is a pre-resolved absolute path (orchestrator resolves before calling adapter)
 						displayName = path.basename(component);
-						resolvedSourcePath = component;
 
 						// Copy the hook file/dir
-						await this.syncHooksDirect(targetPath, displayName, resolvedSourcePath, dryRun);
+						await this.syncHooksDirect(targetPath, displayName, component, dryRun, writeObserver, mutationHooks);
 					}
 
 					// Build hook entry (buildHookEntry always returns Record<string, unknown[]>)
@@ -457,54 +674,12 @@ export class ClaudeAdapter implements PlatformAdapter {
 							displayName,
 						);
 					} else {
-						let cmdPath: string;
-						if (customCommand) {
-							cmdPath = customCommand;
-						} else if (component) {
-							// Determine command path based on whether it's a directory
-							let isDir = false;
-							try {
-								const stat = await fs.stat(resolvedSourcePath);
-								isDir = stat.isDirectory();
-							} catch {
-								// treat as file
-							}
-
-							if (isDir) {
-								const indexTs = path.join(resolvedSourcePath, "index.ts");
-								const indexSh = path.join(resolvedSourcePath, "index.sh");
-								let hasIndexTs = false;
-								let hasIndexSh = false;
-								try {
-									await fs.stat(indexTs);
-									hasIndexTs = true;
-								} catch {
-									/* empty */
-								}
-								try {
-									await fs.stat(indexSh);
-									hasIndexSh = true;
-								} catch {
-									/* empty */
-								}
-
-								const hookPrefix = isGlobalSync(targetPath) ? "$HOME" : "$CLAUDE_PROJECT_DIR";
-								if (hasIndexTs) {
-									cmdPath = `bun run ${hookPrefix}/.claude/hooks/${displayName}/index.ts`;
-								} else if (hasIndexSh) {
-									cmdPath = `bash ${hookPrefix}/.claude/hooks/${displayName}/index.sh`;
-								} else {
-									logWarn(`Hook 디렉토리에 index.ts/index.sh 없음: ${resolvedSourcePath} (스킵)`);
-									continue;
-								}
-							} else {
-								cmdPath = `${isGlobalSync(targetPath) ? "$HOME" : "$CLAUDE_PROJECT_DIR"}/.claude/hooks/${displayName}`;
-							}
-						} else {
+						const preview = hookEvent === "PreToolUse" ? previewByItemIndex.get(itemIndex) : undefined;
+						const cmdPath = preview ? preview.wrappedCommand : await this._resolveHookCommand(targetPath, item);
+						if (!cmdPath) {
 							logWarn(`Hook command 미정의: event=${hookEvent} (스킵)`);
 							continue;
 						}
-
 						hookEntry = this.buildHookEntry(
 							hookEvent,
 							matcher,
@@ -522,7 +697,14 @@ export class ClaudeAdapter implements PlatformAdapter {
 				}
 			}
 
-			await this.updateSettings(targetPath, accumulatedHooks, dryRun, preserveConfig);
+			await this.updateSettings(
+				targetPath,
+				accumulatedHooks,
+				dryRun,
+				preserveConfig,
+				writeObserver,
+				mutationHooks,
+			);
 			processedSections.push("hooks");
 		}
 
@@ -571,7 +753,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 
 		// --- statusLine ---
 		if (yaml.statusLine !== null && yaml.statusLine !== undefined) {
-			await this.setStatusline(targetPath, yaml.statusLine, dryRun);
+			await this.setStatusline(targetPath, yaml.statusLine, dryRun, writeObserver, mutationHooks);
 			processedSections.push("statusLine");
 		}
 
@@ -638,6 +820,8 @@ export class ClaudeAdapter implements PlatformAdapter {
 		hooksEntries: Record<string, unknown>,
 		dryRun = false,
 		preserve?: { "command-contains"?: string[] },
+		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const settingsFilename = isGlobalSync(targetPath) ? "settings.json" : "settings.local.json";
 		const settingsFile = path.join(targetPath, ".claude", settingsFilename);
@@ -647,36 +831,41 @@ export class ClaudeAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
-		const current = await readJsonFile(settingsFile);
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
+			const current = await readJsonFile(settingsFile);
 
-		// Start from the synced (OMT-authored) entries, then carry over foreign
-		// entries matching a preserve marker so the replace below keeps them.
-		const mergedHooks: Record<string, unknown[]> = {};
-		for (const [event, blocks] of Object.entries(hooksEntries)) {
-			// hooksEntries is typed Record<string, unknown> (looser than the
-			// Record<string, unknown[]> every real caller passes), so the
-			// non-array branch has no runtime-derivable array type; preserved
-			// verbatim to match the caller's loose contract.
-			// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- non-array branch value has no statically-derivable array type; preserved as-is per hooksEntries' declared `unknown` value type
-			mergedHooks[event] = Array.isArray(blocks) ? [...blocks] : (blocks as unknown[]);
-		}
-		const markers = preserve?.["command-contains"] ?? [];
-		const currentHooks = current["hooks"];
-		if (markers.length > 0 && isRecord(currentHooks)) {
-			for (const [event, blocks] of Object.entries(currentHooks)) {
-				if (!Array.isArray(blocks)) continue;
-				for (const block of blocks) {
-					if (this.hookCommandMatches(block, markers)) {
-						(mergedHooks[event] ??= []).push(block);
+			// Start from the synced (OMT-authored) entries, then carry over foreign
+			// entries matching a preserve marker so the replace below keeps them.
+			const mergedHooks: Record<string, unknown[]> = {};
+			for (const [event, blocks] of Object.entries(hooksEntries)) {
+				// hooksEntries is typed Record<string, unknown> (looser than the
+				// Record<string, unknown[]> every real caller passes), so the
+				// non-array branch has no runtime-derivable array type; preserved
+				// verbatim to match the caller's loose contract.
+				// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- non-array branch value has no statically-derivable array type; preserved as-is per hooksEntries' declared `unknown` value type
+				mergedHooks[event] = Array.isArray(blocks) ? [...blocks] : (blocks as unknown[]);
+			}
+			const markers = preserve?.["command-contains"] ?? [];
+			const currentHooks = current["hooks"];
+			if (markers.length > 0 && isRecord(currentHooks)) {
+				for (const [event, blocks] of Object.entries(currentHooks)) {
+					if (!Array.isArray(blocks)) continue;
+					for (const block of blocks) {
+						if (this.hookCommandMatches(block, markers)) {
+							(mergedHooks[event] ??= []).push(block);
+						}
 					}
 				}
 			}
-		}
 
-		const { hooks: _removed, ...rest } = current;
-		const updated = { ...rest, hooks: mergedHooks };
-		await writeJsonFile(settingsFile, updated);
+			const { hooks: _removed, ...rest } = current;
+			const updated = { ...rest, hooks: mergedHooks };
+			await writeJsonFile(settingsFile, updated);
+		};
+		if (mutationHooks) await mutationHooks.mutate(settingsFile, operation);
+		else await operation();
+		await writeObserver?.(settingsFile);
 		logInfo(`Updated ${settingsFilename}: ${settingsFile}`);
 	}
 
@@ -685,7 +874,13 @@ export class ClaudeAdapter implements PlatformAdapter {
 	// ---------------------------------------------------------------------------
 
 	/** Set the statusLine field in .claude/settings.json (global) or .claude/settings.local.json (project). */
-	async setStatusline(targetPath: string, statusLine: string, dryRun = false): Promise<void> {
+	async setStatusline(
+		targetPath: string,
+		statusLine: string,
+		dryRun = false,
+		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
+	): Promise<void> {
 		const settingsFilename = isGlobalSync(targetPath) ? "settings.json" : "settings.local.json";
 		const settingsFile = path.join(targetPath, ".claude", settingsFilename);
 
@@ -694,24 +889,32 @@ export class ClaudeAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
+		let wrote = false;
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
 
-		let current: Record<string, unknown>;
-		try {
-			current = await readJsonFile(settingsFile);
-		} catch (err: unknown) {
-			if (err instanceof SyntaxError) {
-				logWarn(`statusLine 설정 실패: ${settingsFile} JSON 파싱 오류`);
-			} else {
-				logWarn(`statusLine 설정 실패: ${settingsFile} 읽기 오류`);
+			let current: Record<string, unknown>;
+			try {
+				current = await readJsonFile(settingsFile);
+			} catch (err: unknown) {
+				if (err instanceof SyntaxError) {
+					logWarn(`statusLine 설정 실패: ${settingsFile} JSON 파싱 오류`);
+				} else {
+					logWarn(`statusLine 설정 실패: ${settingsFile} 읽기 오류`);
+				}
+				return;
 			}
-			return;
-		}
 
-		const merged = deepMerge(current, {
-			statusLine: { type: "command", command: statusLine },
-		});
-		await writeJsonFile(settingsFile, merged);
+			const merged = deepMerge(current, {
+				statusLine: { type: "command", command: statusLine },
+			});
+			await writeJsonFile(settingsFile, merged);
+			wrote = true;
+		};
+		if (mutationHooks) await mutationHooks.mutate(settingsFile, operation);
+		else await operation();
+		if (!wrote) return;
+		await writeObserver?.(settingsFile);
 		logInfo(`statusLine 설정 완료: ${settingsFile}`);
 	}
 
@@ -724,6 +927,8 @@ export class ClaudeAdapter implements PlatformAdapter {
 		targetPath: string,
 		configJson: Record<string, unknown>,
 		dryRun = false,
+		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const settingsFilename = isGlobalSync(targetPath) ? "settings.json" : "settings.local.json";
 		const settingsFile = path.join(targetPath, ".claude", settingsFilename);
@@ -735,10 +940,15 @@ export class ClaudeAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
-		const current = await readJsonFile(settingsFile);
-		const merged = deepMerge(current, configJson);
-		await writeJsonFile(settingsFile, merged);
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
+			const current = await readJsonFile(settingsFile);
+			const merged = deepMerge(current, configJson);
+			await writeJsonFile(settingsFile, merged);
+		};
+		if (mutationHooks) await mutationHooks.mutate(settingsFile, operation);
+		else await operation();
+		await writeObserver?.(settingsFile);
 		logInfo(`Config merged: ${settingsFile}`);
 	}
 

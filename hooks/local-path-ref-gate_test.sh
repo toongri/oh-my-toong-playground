@@ -713,7 +713,7 @@ test_missing_jq_fails_open() {
     # `pipefail` makes the pipeline -- not the hook -- decide exit_code. Bash
     # backs a here-string with a temp file, so nothing can receive EPIPE and the
     # assertion measures only what it claims to.
-    PATH="$no_jq" /bin/bash "$HOOK" >/dev/null 2>&1 <<<"$payload" || exit_code=$?
+    PATH="$no_jq" "$BASH" "$HOOK" >/dev/null 2>&1 <<<"$payload" || exit_code=$?
     [[ "$exit_code" -eq 0 ]]
 }
 

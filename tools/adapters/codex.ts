@@ -24,6 +24,8 @@ import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
 import { assertMappedTier } from "../lib/model-map.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
 import { PLATFORM_REWRITE_RULES, applyRewriteRules } from "../lib/rewrite-rules.ts";
+import { composePreToolTraceCommand } from "../lib/pretool-trace-command.ts";
+import { isGlobalSync } from "../lib/path-utils.ts";
 import type {
 	ModelMap,
 	PlatformConfigResult,
@@ -31,7 +33,22 @@ import type {
 	PlatformYamlHookItem,
 	PluginScope,
 } from "../lib/types.ts";
-import type { PlatformAdapter } from "./types.ts";
+import type { PlatformAdapter, PlatformWriteObserver } from "./types.ts";
+import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
+import { planCategoryDestinationPaths, type DestinationCategory } from "./destinations.ts";
+
+/** Resolve a Codex component destination by combining the shared plan with its deploy root. */
+function codexDestinationPath(
+	targetPath: string,
+	category: DestinationCategory,
+	displayName: string,
+): string {
+	const [relativePath] = planCategoryDestinationPaths("codex", category, displayName);
+	if (!relativePath) {
+		throw new Error(`Codex has no destination for category '${category}'`);
+	}
+	return path.join(targetPath, relativePath);
+}
 
 // =============================================================================
 // Model Map Applier
@@ -307,6 +324,33 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return isPlainObject(value);
 }
 
+function pickString(value: unknown): string | undefined {
+	return typeof value === "string" ? value : undefined;
+}
+
+export type CodexPreToolUsePreview = {
+	hookEvent: "PreToolUse";
+	itemIndex: number;
+	hookId: string;
+	originalCommand: string;
+	wrappedCommand: string;
+	wrapperDeploymentPath: string;
+	matcher: string;
+	timeout: number;
+	scope: "global" | "project";
+	component: string;
+};
+
+export class CodexPreToolUsePreviewError extends Error {
+	readonly itemIndex: number;
+
+	constructor(itemIndex: number, message: string) {
+		super(`Codex PreToolUse trace preview failed for item ${itemIndex}: ${message}`);
+		this.name = "CodexPreToolUsePreviewError";
+		this.itemIndex = itemIndex;
+	}
+}
+
 // =============================================================================
 // Skills directory resolution
 // =============================================================================
@@ -322,7 +366,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * rather than re-declaring the `.agents/skills` string — one owner for it.
  */
 export function codexSkillsDir(targetPath: string): string {
-	return path.join(targetPath, ".agents", "skills");
+	return path.dirname(codexDestinationPath(targetPath, "skills", "__skill__"));
+}
+
+function plannedCodexSkillsFossilEntries(
+	fossilDir: string,
+	fossilEntries: readonly string[],
+	ownedSkillNames: ReadonlySet<string>,
+): string[] {
+	return fossilEntries
+		.filter((name) => ownedSkillNames.has(name))
+		.sort((left, right) => left.localeCompare(right))
+		.map((name) => path.join(fossilDir, name));
+}
+
+function isErrno(error: unknown, code: string): boolean {
+	return typeof error === "object" && error !== null && Reflect.get(error, "code") === code;
+}
+
+/**
+ * Returns the exact fossil entry paths that this run is allowed to remove.
+ * The planner is read-only; ownership remains name-provenance based and the
+ * executor repeats the counterpart checks before mutating any entry.
+ */
+export async function planCodexSkillsFossilCleanup(
+	deployRoot: string,
+	ownedSkillNames: ReadonlySet<string>,
+): Promise<string[]> {
+	const fossilDir = path.join(deployRoot, ".codex", "skills");
+	const fossilStat = await fs.stat(fossilDir).catch((error: unknown) => {
+		if (isErrno(error, "ENOENT")) return undefined;
+		throw error;
+	});
+	if (!fossilStat?.isDirectory()) return [];
+	const fossilEntries = await fs.readdir(fossilDir);
+	return plannedCodexSkillsFossilEntries(fossilDir, fossilEntries, ownedSkillNames);
 }
 
 /**
@@ -360,16 +438,23 @@ export async function cleanupCodexSkillsFossil(
 	backupDest: string,
 	dryRun: boolean,
 	ownedSkillNames: ReadonlySet<string>,
+	mutationHooks?: DeployMutationHooks,
 ): Promise<void> {
 	const fossilDir = path.join(deployRoot, ".codex", "skills");
 	const newDir = codexSkillsDir(deployRoot);
 
-	const fossilStat = await fs.stat(fossilDir).catch(() => undefined);
+	const fossilStat = await fs.stat(fossilDir).catch((error: unknown) => {
+		if (isErrno(error, "ENOENT")) return undefined;
+		throw error;
+	});
 	if (!fossilStat?.isDirectory()) {
 		return; // nothing to do — idempotent
 	}
 
-	const newStat = await fs.stat(newDir).catch(() => undefined);
+	const newStat = await fs.stat(newDir).catch((error: unknown) => {
+		if (isErrno(error, "ENOENT")) return undefined;
+		throw error;
+	});
 	if (!newStat?.isDirectory()) {
 		if (dryRun) {
 			logDry(
@@ -405,7 +490,10 @@ export async function cleanupCodexSkillsFossil(
 	// a real-run-only guard: in dry-run nothing has been written yet, so a
 	// missing counterpart is expected, not an anomaly.
 	for (const name of omtOwned) {
-		const counterpartStat = await fs.stat(path.join(newDir, name)).catch(() => undefined);
+		const counterpartStat = await fs.stat(path.join(newDir, name)).catch((error: unknown) => {
+			if (isErrno(error, "ENOENT")) return undefined;
+			throw error;
+		});
 		if (!counterpartStat) {
 			throw new Error(
 				`cleanupCodexSkillsFossil: entry '${name}' is owned this run but has no counterpart at '${path.join(newDir, name)}' — refusing to delete`,
@@ -419,13 +507,23 @@ export async function cleanupCodexSkillsFossil(
 
 	await backupCategory(deployRoot, "codex", "skills", backupDest);
 
-	for (const name of omtOwned) {
-		await fs.rm(path.join(fossilDir, name), { recursive: true, force: true });
+	const plannedEntries = plannedCodexSkillsFossilEntries(fossilDir, fossilEntries, ownedSkillNames);
+	for (const entryPath of plannedEntries) {
+		const operation = async (): Promise<void> => {
+			await fs.rm(entryPath, { recursive: true, force: true });
+		};
+		if (mutationHooks) await mutationHooks.mutate(entryPath, operation);
+		else await operation();
 	}
 
 	const remaining = await fs.readdir(fossilDir);
 	if (remaining.length === 0) {
-		await fs.rm(fossilDir, { recursive: true, force: true });
+		// The root is deliberately outside the per-entry journal: it overlaps
+		// every inventoried entry. Remove it only when empty, and propagate all
+		// errors except the expected absent/already-nonempty races.
+		await fs.rmdir(fossilDir).catch((error: unknown) => {
+			if (!isErrno(error, "ENOENT") && !isErrno(error, "ENOTEMPTY")) throw error;
+		});
 		logInfo(`Codex skills fossil removed: ${fossilDir}`);
 	}
 }
@@ -525,8 +623,9 @@ export class CodexAdapter implements PlatformAdapter {
 		_addHooks?: unknown[],
 		dryRun = false,
 		modelMap?: ModelMap,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
-		const targetFile = path.join(targetPath, this.configDir, "agents", `${displayName}.toml`);
+		const targetFile = codexDestinationPath(targetPath, "agents", displayName);
 
 		const stat = await fs.stat(sourcePath).catch(() => undefined);
 		if (!stat?.isFile()) {
@@ -593,8 +692,12 @@ export class CodexAdapter implements PlatformAdapter {
 			...modelFields,
 		};
 
-		await fs.mkdir(path.dirname(targetFile), { recursive: true });
-		await fs.writeFile(targetFile, stringify(tomlObj), "utf-8");
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(path.dirname(targetFile), { recursive: true });
+			await fs.writeFile(targetFile, stringify(tomlObj), "utf-8");
+		};
+		if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+		else await operation();
 		logInfo(`Codex agent 생성: ${displayName}.toml`);
 	}
 
@@ -622,10 +725,13 @@ export class CodexAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		// event filtering is handled by the caller (sync.sh / orchestrator)
 		// This method is called only for supported events — just copy the file
-		const targetDir = path.join(targetPath, this.configDir, "hooks");
+		const targetHookRoot = codexDestinationPath(targetPath, "hooks", displayName);
+		const targetDir = path.dirname(targetHookRoot);
 		const hooksSourceDir = path.dirname(sourcePath);
 
 		let stat: Awaited<ReturnType<typeof fs.stat>>;
@@ -637,31 +743,37 @@ export class CodexAdapter implements PlatformAdapter {
 		}
 
 		if (stat.isDirectory()) {
-			const targetHookDir = path.join(targetDir, displayName);
 			if (dryRun) {
-				logDry(`Copy (directory): ${sourcePath} -> ${targetHookDir}/`);
-				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
+				logDry(`Copy (directory): ${sourcePath} -> ${targetHookRoot}/`);
+				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookRoot, dryRun);
 				return;
 			}
-			await syncDirectory(sourcePath, targetHookDir, {
+			await syncDirectory(sourcePath, targetHookRoot, {
 				exclude: ["*.test.ts", "config.local.yaml"],
 				platformRoot: path.join(targetPath, this.configDir),
+				mutationHooks,
 			});
 			logInfo(`Copied: ${displayName}/`);
-			await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
+			if (writeObserver && !mutationHooks) await writeObserver(targetHookRoot);
+			await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookRoot, dryRun, writeObserver, mutationHooks);
 		} else {
-			const targetFile = path.join(targetDir, displayName);
+			const targetFile = targetHookRoot;
 			if (dryRun) {
 				logDry(`Copy: ${sourcePath} -> ${targetFile}`);
 				await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun);
 				return;
 			}
-			await copyFile(sourcePath, targetFile);
-			// Ensure executable
-			const fileStat = await fs.stat(targetFile);
-			await fs.chmod(targetFile, fileStat.mode | 0o111);
+			const operation = async (): Promise<void> => {
+				await copyFile(sourcePath, targetFile);
+				// Ensure executable
+				const fileStat = await fs.stat(targetFile);
+				await fs.chmod(targetFile, fileStat.mode | 0o111);
+			};
+			if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+			else await operation();
 			logInfo(`Copied: ${displayName}`);
-			await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun);
+			if (writeObserver) await writeObserver(targetFile);
+			await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun, writeObserver, mutationHooks);
 		}
 	}
 
@@ -674,9 +786,9 @@ export class CodexAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
-		const targetDir = codexSkillsDir(targetPath);
-		const targetSkillDir = path.join(targetDir, displayName);
+		const targetSkillDir = codexDestinationPath(targetPath, "skills", displayName);
 
 		let stat: Awaited<ReturnType<typeof fs.stat>>;
 		try {
@@ -696,7 +808,7 @@ export class CodexAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await syncDirectory(sourcePath, targetSkillDir);
+		await syncDirectory(sourcePath, targetSkillDir, { mutationHooks });
 		logInfo(`Copied: ${displayName}/`);
 	}
 
@@ -709,8 +821,9 @@ export class CodexAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, this.configDir, "scripts");
+		const targetScriptRoot = codexDestinationPath(targetPath, "scripts", displayName);
 
 		let stat: Awaited<ReturnType<typeof fs.stat>>;
 		try {
@@ -722,18 +835,23 @@ export class CodexAdapter implements PlatformAdapter {
 
 		if (stat.isDirectory()) {
 			if (dryRun) {
-				logDry(`Copy (directory): ${sourcePath} -> ${path.join(targetDir, displayName)}/`);
+				logDry(`Copy (directory): ${sourcePath} -> ${targetScriptRoot}/`);
 				return;
 			}
-			await syncDirectory(sourcePath, path.join(targetDir, displayName));
+			await syncDirectory(sourcePath, targetScriptRoot, {
+				platformRoot: path.join(targetPath, this.configDir),
+				mutationHooks,
+			});
 			logInfo(`Copied: ${displayName}/`);
 		} else {
-			const targetFile = path.join(targetDir, displayName);
+			const targetFile = targetScriptRoot;
 			if (dryRun) {
 				logDry(`Copy: ${sourcePath} -> ${targetFile}`);
 				return;
 			}
-			await copyFile(sourcePath, targetFile);
+			const operation = async (): Promise<void> => copyFile(sourcePath, targetFile);
+			if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+			else await operation();
 			logInfo(`Copied: ${displayName}`);
 		}
 	}
@@ -756,9 +874,11 @@ export class CodexAdapter implements PlatformAdapter {
 		displayName: string,
 		sourcePath: string,
 		dryRun = false,
+		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, this.configDir, "rules");
-		const targetFile = path.join(targetDir, `${displayName}.md`);
+		const targetFile = codexDestinationPath(targetPath, "rules", displayName);
+		const targetDir = path.dirname(targetFile);
 
 		try {
 			await fs.stat(sourcePath);
@@ -772,9 +892,14 @@ export class CodexAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(targetDir, { recursive: true });
-		await fs.copyFile(sourcePath, targetFile);
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(targetDir, { recursive: true });
+			await copyFile(sourcePath, targetFile);
+		};
+		if (mutationHooks) await mutationHooks.mutate(targetFile, operation);
+		else await operation();
 		logInfo(`Copied: ${displayName}.md`);
+		if (writeObserver) await writeObserver(targetFile);
 	}
 
 	// ---------------------------------------------------------------------------
@@ -785,6 +910,8 @@ export class CodexAdapter implements PlatformAdapter {
 		targetPath: string,
 		configJson: Record<string, unknown>,
 		dryRun = false,
+		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const configFile = path.join(targetPath, this.configDir, "config.toml");
 
@@ -793,15 +920,16 @@ export class CodexAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(path.join(targetPath, this.configDir), { recursive: true });
-
-		const existing = await readTextFile(configFile);
-
-		// Use smol-toml to generate TOML content from the config object
-		const tomlContent = stringify(configJson);
-		const updated = insertManagedBlock(existing, "config", tomlContent);
-
-		await fs.writeFile(configFile, updated, "utf-8");
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(path.join(targetPath, this.configDir), { recursive: true });
+			const existing = await readTextFile(configFile);
+			const tomlContent = stringify(configJson);
+			const updated = insertManagedBlock(existing, "config", tomlContent);
+			await fs.writeFile(configFile, updated, "utf-8");
+		};
+		if (mutationHooks) await mutationHooks.mutate(configFile, operation);
+		else await operation();
+		if (writeObserver) await writeObserver(configFile);
 		logInfo(`Config managed block: ${configFile}`);
 	}
 
@@ -820,7 +948,12 @@ export class CodexAdapter implements PlatformAdapter {
 	}
 
 	/** Flush all accumulated MCP servers to a managed block in config.toml */
-	async flushMcpBlock(targetPath: string, dryRun: boolean): Promise<void> {
+	async flushMcpBlock(
+		targetPath: string,
+		dryRun: boolean,
+		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
+	): Promise<void> {
 		const configFile = path.join(targetPath, this.configDir, "config.toml");
 		const serverCount = Object.keys(this.mcpAccumulator).length;
 
@@ -839,8 +972,14 @@ export class CodexAdapter implements PlatformAdapter {
 				logDry(`MCP managed block (empty — removing servers): ${configFile}`);
 				return;
 			}
-			const updated = insertManagedBlock(existing, "mcp", "# No MCP servers configured\n");
-			await fs.writeFile(configFile, updated, "utf-8");
+			const operation = async (): Promise<void> => {
+				const current = await readTextFile(configFile);
+				const updated = insertManagedBlock(current, "mcp", "# No MCP servers configured\n");
+				await fs.writeFile(configFile, updated, "utf-8");
+			};
+			if (mutationHooks) await mutationHooks.mutate(configFile, operation);
+			else await operation();
+			if (writeObserver) await writeObserver(configFile);
 			logInfo(`MCP managed block cleared: ${configFile}`);
 			return;
 		}
@@ -850,14 +989,16 @@ export class CodexAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(path.join(targetPath, this.configDir), { recursive: true });
-
-		const existing = await readTextFile(configFile);
-
-		const tomlContent = buildMcpTomlContent(this.mcpAccumulator);
-		const updated = insertManagedBlock(existing, "mcp", tomlContent);
-
-		await fs.writeFile(configFile, updated, "utf-8");
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(path.join(targetPath, this.configDir), { recursive: true });
+			const existing = await readTextFile(configFile);
+			const tomlContent = buildMcpTomlContent(this.mcpAccumulator);
+			const updated = insertManagedBlock(existing, "mcp", tomlContent);
+			await fs.writeFile(configFile, updated, "utf-8");
+		};
+		if (mutationHooks) await mutationHooks.mutate(configFile, operation);
+		else await operation();
+		if (writeObserver) await writeObserver(configFile);
 		logInfo(`MCP managed block: ${configFile}`);
 	}
 
@@ -865,21 +1006,113 @@ export class CodexAdapter implements PlatformAdapter {
 	// syncPlatformYaml — config, mcps, model-map
 	// ---------------------------------------------------------------------------
 
+	async previewPreToolUseCommands(
+		targetPath: string,
+		yaml: PlatformYaml,
+	): Promise<CodexPreToolUsePreview[]> {
+		const items = yaml.hooks?.PreToolUse;
+		if (!Array.isArray(items)) return [];
+		const deployRoot = path.resolve(targetPath);
+		const wrapperDeploymentPath = path.join(
+			deployRoot,
+			".codex",
+			"scripts",
+			"pretool-trace",
+			"index.ts",
+		);
+		const scope = isGlobalSync(deployRoot) ? "global" : "project";
+		const previews: CodexPreToolUsePreview[] = [];
+
+		for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
+			const item = items[itemIndex];
+			if (!item || pickString(item["type"]) === "prompt") continue;
+			const component = item.component ?? "";
+			const rawTraceId = pickString(item["trace-id"]);
+			const hookId = component ? path.basename(component) : rawTraceId ?? "";
+			if (!hookId || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(hookId)) {
+				throw new CodexPreToolUsePreviewError(
+					itemIndex,
+					component
+						? `unsafe component basename ${hookId}`
+						: "raw command requires a safe explicit trace-id",
+				);
+			}
+			const matcher = item.matcher ?? "*";
+			const timeout = item.timeout ?? 10;
+			const originalCommand = await this.resolveHookCommand(deployRoot, item, true, itemIndex);
+			if (!originalCommand) {
+				throw new CodexPreToolUsePreviewError(itemIndex, "command is missing");
+			}
+			const wrappedCommand = composePreToolTraceCommand({
+				wrapperPath: wrapperDeploymentPath,
+				platform: "codex",
+				hookId,
+				originalCommand,
+			});
+			previews.push({
+				hookEvent: "PreToolUse",
+				itemIndex,
+				hookId,
+				originalCommand,
+				wrappedCommand,
+				wrapperDeploymentPath,
+				matcher,
+				timeout,
+				scope,
+				component,
+			});
+		}
+		return previews;
+	}
+
+	private async resolveHookCommand(
+		targetPath: string,
+		item: PlatformYamlHookItem,
+		strictMissingIndex = false,
+		itemIndex = -1,
+	): Promise<string> {
+		const component = item.component ?? "";
+		const customCommand = pickString(item["command"]) ?? "";
+		let command = customCommand;
+		if (!command && component) {
+			const displayName = path.basename(component);
+			const stat = await fs.stat(component).catch(() => undefined);
+			if (stat?.isDirectory()) {
+				const indexTs = path.join(component, "index.ts");
+				const indexSh = path.join(component, "index.sh");
+				const hasIndexTs = Boolean(await fs.stat(indexTs).catch(() => undefined));
+				const hasIndexSh = Boolean(await fs.stat(indexSh).catch(() => undefined));
+				if (hasIndexTs) command = `bun run .codex/hooks/${displayName}/index.ts`;
+				else if (hasIndexSh) command = `bash .codex/hooks/${displayName}/index.sh`;
+				else if (strictMissingIndex) {
+					throw new CodexPreToolUsePreviewError(itemIndex, `hook directory has no index.ts/index.sh: ${component}`);
+				}
+			} else {
+				command = `.codex/hooks/${displayName}`;
+			}
+		}
+		return command.replaceAll(".codex/", `${path.join(targetPath, ".codex")}/`);
+	}
+
 	async syncPlatformYaml(
 		targetPath: string,
 		yaml: PlatformYaml,
 		dryRun: boolean,
 		_scope?: PluginScope,
+		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<PlatformConfigResult> {
 		const processedSections: string[] = [];
 		let modelMap: ModelMap | undefined;
+		const preToolUsePreview = await this.previewPreToolUseCommands(targetPath, yaml);
+		const previewByItemIndex = new Map(preToolUsePreview.map((preview) => [preview.itemIndex, preview]));
 
 		// Reset MCP accumulator for this run
 		this.resetMcpAccumulator();
 
 		// --- config ---
 		if (yaml.config !== undefined && yaml.config !== null) {
-			await this.syncConfig(targetPath, yaml.config, dryRun);
+			await this.syncConfig(targetPath, yaml.config, dryRun, writeObserver, mutationHooks);
 			processedSections.push("config");
 		}
 
@@ -896,7 +1129,7 @@ export class CodexAdapter implements PlatformAdapter {
 					logInfo(`MCP accumulated: ${name}`);
 				}
 			}
-			await this.flushMcpBlock(targetPath, dryRun);
+			await this.flushMcpBlock(targetPath, dryRun, writeObserver, mutationHooks);
 			processedSections.push("mcps");
 		}
 
@@ -923,7 +1156,8 @@ export class CodexAdapter implements PlatformAdapter {
 				if (hookEvent === "preserve") continue;
 				if (!Array.isArray(items)) continue;
 
-				for (const item of items) {
+				for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
+					const item = items[itemIndex];
 					const component = item.component ?? "";
 					const timeout = item.timeout ?? 10;
 					const matcher = item.matcher ?? "*";
@@ -939,7 +1173,14 @@ export class CodexAdapter implements PlatformAdapter {
 						displayName = path.basename(component);
 						resolvedSourcePath = component;
 
-						await this.syncHooksDirect(targetPath, displayName, resolvedSourcePath, dryRun);
+						await this.syncHooksDirect(
+							targetPath,
+							displayName,
+							resolvedSourcePath,
+							dryRun,
+							writeObserver,
+							mutationHooks,
+						);
 					}
 
 					// Build command string
@@ -996,6 +1237,8 @@ export class CodexAdapter implements PlatformAdapter {
 					// This is correct for both global (~/.codex) and project-local deploys
 					// because targetPath IS the deploy root in both cases.
 					cmdPath = cmdPath.replaceAll(".codex/", `${path.join(targetPath, ".codex")}/`);
+					const preview = hookEvent === "PreToolUse" ? previewByItemIndex.get(itemIndex) : undefined;
+					if (preview) cmdPath = preview.wrappedCommand;
 
 					const hookEntry = this.buildHookEntry(hookEvent, matcher, timeout, cmdPath);
 
@@ -1019,7 +1262,7 @@ export class CodexAdapter implements PlatformAdapter {
 				}
 			}
 
-			await this.updateSettings(targetPath, accumulatedHooks, dryRun, preserveConfig);
+			await this.updateSettings(targetPath, accumulatedHooks, dryRun, preserveConfig, writeObserver, mutationHooks);
 			processedSections.push("hooks");
 		}
 
@@ -1068,6 +1311,8 @@ export class CodexAdapter implements PlatformAdapter {
 		hooksEntries: Record<string, unknown>,
 		dryRun = false,
 		preserve?: { "command-contains"?: string[] },
+		writeObserver?: PlatformWriteObserver,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const hooksFile = path.join(targetPath, ".codex", "hooks.json");
 
@@ -1076,34 +1321,32 @@ export class CodexAdapter implements PlatformAdapter {
 			return;
 		}
 
-		await fs.mkdir(path.join(targetPath, ".codex"), { recursive: true });
-		const current = await readJsonFile(hooksFile);
-
-		// Start from the synced (OMT-authored) entries, then carry over foreign
-		// entries matching a preserve marker so the replace below keeps them.
-		const mergedHooks: Record<string, unknown[]> = {};
-		for (const [event, blocks] of Object.entries(hooksEntries)) {
-			mergedHooks[event] = Array.isArray(blocks)
-				? [...blocks]
-				: // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- hooksEntries is declared Record<string, unknown>; a non-array value here is carried through as-is (defensive passthrough for an already-untyped boundary), matching prior behavior
-					(blocks as unknown[]);
-		}
-		const markers = preserve?.["command-contains"] ?? [];
-		const currentHooks = current.hooks;
-		if (markers.length > 0 && isRecord(currentHooks)) {
-			for (const [event, blocks] of Object.entries(currentHooks)) {
-				if (!Array.isArray(blocks)) continue;
-				for (const block of blocks) {
-					if (this.hookCommandMatches(block, markers)) {
-						(mergedHooks[event] ??= []).push(block);
+		const operation = async (): Promise<void> => {
+			await fs.mkdir(path.join(targetPath, ".codex"), { recursive: true });
+			const current = await readJsonFile(hooksFile);
+			const mergedHooks: Record<string, unknown[]> = {};
+			for (const [event, blocks] of Object.entries(hooksEntries)) {
+				mergedHooks[event] = Array.isArray(blocks)
+					? [...blocks]
+					: // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- hooksEntries is declared Record<string, unknown>; a non-array value here is carried through as-is (defensive passthrough for an already-untyped boundary), matching prior behavior
+						(blocks as unknown[]);
+			}
+			const markers = preserve?.["command-contains"] ?? [];
+			const currentHooks = current.hooks;
+			if (markers.length > 0 && isRecord(currentHooks)) {
+				for (const [event, blocks] of Object.entries(currentHooks)) {
+					if (!Array.isArray(blocks)) continue;
+					for (const block of blocks) {
+						if (this.hookCommandMatches(block, markers)) (mergedHooks[event] ??= []).push(block);
 					}
 				}
 			}
-		}
-
-		const { hooks: _removed, ...rest } = current;
-		const updated = { ...rest, hooks: mergedHooks };
-		await writeJsonFile(hooksFile, updated);
+			const { hooks: _removed, ...rest } = current;
+			await writeJsonFile(hooksFile, { ...rest, hooks: mergedHooks });
+		};
+		if (mutationHooks) await mutationHooks.mutate(hooksFile, operation);
+		else await operation();
+		if (writeObserver) await writeObserver(hooksFile);
 		logInfo(`Updated hooks.json: ${hooksFile}`);
 	}
 

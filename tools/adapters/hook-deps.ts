@@ -1,6 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
+import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
 
 /**
  * Recursively resolve shell `source` dependencies for a .sh file.
@@ -112,6 +113,8 @@ export async function syncShellDependencies(
 	hooksSourceDir: string,
 	targetHooksDir: string,
 	dryRun: boolean,
+	onPostWrite?: (targetPath: string) => Promise<void> | void,
+	mutationHooks?: DeployMutationHooks,
 ): Promise<void> {
 	const deps = await resolveShellDependencies(sourcePath, hooksSourceDir);
 	for (const dep of deps) {
@@ -120,8 +123,23 @@ export async function syncShellDependencies(
 		if (dryRun) {
 			logDry(`Copy (dep): ${dep} -> ${targetDep}`);
 		} else {
-			await fs.mkdir(path.dirname(targetDep), { recursive: true });
-			await fs.copyFile(dep, targetDep);
+			const operation = async (): Promise<void> => {
+				await fs.mkdir(path.dirname(targetDep), { recursive: true });
+				const tempTarget = path.join(
+					path.dirname(targetDep),
+					`.${path.basename(targetDep)}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`,
+				);
+				try {
+					await fs.copyFile(dep, tempTarget);
+					await fs.rename(tempTarget, targetDep);
+				} catch (error) {
+					await fs.rm(tempTarget, { force: true }).catch(() => undefined);
+					throw error;
+				}
+			};
+			if (mutationHooks) await mutationHooks.mutate(targetDep, operation);
+			else await operation();
+			if (onPostWrite) await onPostWrite(targetDep);
 			logInfo(`Copied (dep): ${relDep}`);
 		}
 	}
@@ -139,6 +157,8 @@ export async function syncShellDepsForDir(
 	hooksBaseDir: string,
 	targetHooksDir: string,
 	dryRun: boolean,
+	onPostWrite?: (targetPath: string) => Promise<void> | void,
+	mutationHooks?: DeployMutationHooks,
 ): Promise<void> {
 	let entries: import("fs").Dirent[];
 	try {
@@ -152,6 +172,13 @@ export async function syncShellDepsForDir(
 		if (entry.name.endsWith("_test.sh")) continue;
 
 		const shFile = path.join(hookDir, entry.name);
-		await syncShellDependencies(shFile, hooksBaseDir, targetHooksDir, dryRun);
+		await syncShellDependencies(
+			shFile,
+			hooksBaseDir,
+			targetHooksDir,
+			dryRun,
+			onPostWrite,
+			mutationHooks,
+		);
 	}
 }

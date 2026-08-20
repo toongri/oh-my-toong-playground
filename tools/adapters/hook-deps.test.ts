@@ -8,6 +8,7 @@ import {
 	syncShellDependencies,
 	syncShellDepsForDir,
 } from "./hook-deps.ts";
+import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -215,6 +216,141 @@ describe("resolveShellDependencies", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncShellDependencies", () => {
+	it("mutation hook이 exact target에서 operation을 감싸고 성공 뒤 legacy callback을 호출함", async () => {
+		const libFile = path.join(hooksDir, "lib", "hooked.sh");
+		await writeFile(libFile, "hooked");
+		const entryFile = path.join(hooksDir, "entry.sh");
+		await writeFile(entryFile, 'source "$HOOKS_DIR/lib/hooked.sh"\n');
+		const target = path.join(targetDir, "lib", "hooked.sh");
+		const operations: string[] = [];
+		let callbackCount = 0;
+		const mutationHooks: DeployMutationHooks = {
+			async mutate(targetPath, operation) {
+				operations.push(targetPath);
+				await operation();
+			},
+		};
+		await syncShellDependencies(entryFile, hooksDir, targetDir, false, async (writtenPath) => {
+			callbackCount += 1;
+			expect(writtenPath).toBe(target);
+			expect(await fs.readFile(writtenPath, "utf8")).toBe("hooked");
+		}, mutationHooks);
+		expect(operations).toEqual([target]);
+		expect(callbackCount).toBe(1);
+	});
+
+	it("mutation hook pre-operation conflict 시 operation·callback 없이 resident와 temp를 보존함", async () => {
+		const libFile = path.join(hooksDir, "lib", "conflict.sh");
+		await writeFile(libFile, "new");
+		const entryFile = path.join(hooksDir, "entry.sh");
+		await writeFile(entryFile, 'source "$HOOKS_DIR/lib/conflict.sh"\n');
+		const target = path.join(targetDir, "lib", "conflict.sh");
+		await writeFile(target, "resident");
+		let operationCount = 0;
+		let callbackCount = 0;
+		const mutationHooks: DeployMutationHooks = {
+			async mutate(_targetPath, operation) {
+				if ((await fs.readFile(target, "utf8")) === "resident") {
+					throw new Error("conflict");
+				}
+				operationCount += 1;
+				await operation();
+			},
+		};
+		await expect(
+			syncShellDependencies(entryFile, hooksDir, targetDir, false, () => {
+				callbackCount += 1;
+			}, mutationHooks),
+		).rejects.toThrow("conflict");
+		expect(operationCount).toBe(0);
+		expect(callbackCount).toBe(0);
+		expect(await fs.readFile(target, "utf8")).toBe("resident");
+		expect((await fs.readdir(path.dirname(target))).filter((name) => name.includes(".tmp-")).length).toBe(0);
+	});
+
+	it("mutation wrapper 내부 rename 실패를 전파하고 callback을 호출하지 않음", async () => {
+		const libFile = path.join(hooksDir, "lib", "rename-failure.sh");
+		await writeFile(libFile, "new");
+		const entryFile = path.join(hooksDir, "entry.sh");
+		await writeFile(entryFile, 'source "$HOOKS_DIR/lib/rename-failure.sh"\n');
+		const target = path.join(targetDir, "lib", "rename-failure.sh");
+		await fs.mkdir(target, { recursive: true });
+		await writeFile(path.join(target, "resident.txt"), "resident");
+		let callbackCount = 0;
+		const mutationHooks: DeployMutationHooks = {
+			async mutate(_targetPath, operation) {
+				await operation();
+			},
+		};
+		await expect(
+			syncShellDependencies(entryFile, hooksDir, targetDir, false, () => {
+				callbackCount += 1;
+			}, mutationHooks),
+		).rejects.toThrow();
+		expect(callbackCount).toBe(0);
+		expect(await fs.readFile(path.join(target, "resident.txt"), "utf8")).toBe("resident");
+		expect((await fs.readdir(path.dirname(target))).filter((name) => name.includes(".tmp-")).length).toBe(0);
+	});
+	it("각 dependency를 원자 교체하고 rename 직후 callback에서 최종 바이트를 확인함", async () => {
+		const first = path.join(hooksDir, "lib", "first.sh");
+		const second = path.join(hooksDir, "lib", "second.sh");
+		await writeFile(first, "first-new");
+		await writeFile(second, "second-new");
+		const entryFile = path.join(hooksDir, "entry.sh");
+		await writeFile(
+			entryFile,
+			'source "$HOOKS_DIR/lib/first.sh"\nsource "$HOOKS_DIR/lib/second.sh"\n',
+		);
+		const observed: string[] = [];
+		await syncShellDependencies(entryFile, hooksDir, targetDir, false, async (targetPath) => {
+			observed.push(path.basename(targetPath));
+			expect(await fs.readFile(targetPath, "utf8")).toBe(`${path.basename(targetPath, ".sh")}-new`);
+		});
+		expect(observed).toEqual(["first.sh", "second.sh"]);
+	});
+
+	it("rename 실패 시 이전 resident와 temp residue를 보존하고 실패 dependency callback은 호출하지 않음", async () => {
+		const first = path.join(hooksDir, "lib", "first.sh");
+		const second = path.join(hooksDir, "lib", "second.sh");
+		await writeFile(first, "first-new");
+		await writeFile(second, "second-new");
+		const entryFile = path.join(hooksDir, "entry.sh");
+		await writeFile(
+			entryFile,
+			'source "$HOOKS_DIR/lib/first.sh"\nsource "$HOOKS_DIR/lib/second.sh"\n',
+		);
+		const secondTarget = path.join(targetDir, "lib", "second.sh");
+		await fs.mkdir(secondTarget, { recursive: true });
+		await writeFile(path.join(secondTarget, "resident.txt"), "resident");
+		const observed: string[] = [];
+		await expect(
+			syncShellDependencies(entryFile, hooksDir, targetDir, false, (targetPath) => {
+				observed.push(path.basename(targetPath));
+			}),
+		).rejects.toThrow();
+		expect(observed).toEqual(["first.sh"]);
+		expect(await fs.readFile(path.join(targetDir, "lib", "first.sh"), "utf8")).toBe("first-new");
+		expect(await fs.readFile(path.join(secondTarget, "resident.txt"), "utf8")).toBe("resident");
+		expect((await fs.readdir(path.join(targetDir, "lib"))).filter((name) => name.includes(".tmp-")).length).toBe(0);
+	});
+
+	it("callback 오류는 mutation 이후 전파되고 temp residue가 없음", async () => {
+		const libFile = path.join(hooksDir, "lib", "callback.sh");
+		await writeFile(libFile, "final");
+		const entryFile = path.join(hooksDir, "entry.sh");
+		await writeFile(entryFile, 'source "$HOOKS_DIR/lib/callback.sh"\n');
+		const target = path.join(targetDir, "lib", "callback.sh");
+		await expect(
+			syncShellDependencies(entryFile, hooksDir, targetDir, false, async (targetPath) => {
+				expect(targetPath).toBe(target);
+				expect(await fs.readFile(targetPath, "utf8")).toBe("final");
+				throw new Error("checkpoint failed");
+			}),
+		).rejects.toThrow("checkpoint failed");
+		expect(await exists(target)).toBe(true);
+		expect((await fs.readdir(path.dirname(target))).filter((name) => name.includes(".tmp-")).length).toBe(0);
+	});
+
 	it("의존성 파일이 targetHooksDir 하위에 올바른 상대경로로 복사됨", async () => {
 		const libFile = path.join(hooksDir, "lib", "foo.sh");
 		await writeFile(libFile, "# foo");
@@ -241,6 +377,34 @@ describe("syncShellDependencies", () => {
 
 		const expected = path.join(targetDir, "lib", "dry.sh");
 		expect(await exists(expected)).toBe(false);
+	});
+
+	it("dryRun=true 시 callback 호출 안 됨", async () => {
+		const libFile = path.join(hooksDir, "lib", "dry-callback.sh");
+		await writeFile(libFile, "# dry");
+		const entryFile = path.join(hooksDir, "entry.sh");
+		await writeFile(entryFile, 'source "$HOOKS_DIR/lib/dry-callback.sh"\n');
+		let callbackCount = 0;
+		await syncShellDependencies(entryFile, hooksDir, targetDir, true, () => {
+			callbackCount += 1;
+		});
+		expect(callbackCount).toBe(0);
+	});
+
+	it("dryRun=true 시 mutation hook도 호출 안 됨", async () => {
+		const libFile = path.join(hooksDir, "lib", "dry-hook.sh");
+		await writeFile(libFile, "# dry");
+		const entryFile = path.join(hooksDir, "entry.sh");
+		await writeFile(entryFile, 'source "$HOOKS_DIR/lib/dry-hook.sh"\n');
+		let mutationCount = 0;
+		const mutationHooks: DeployMutationHooks = {
+			async mutate(_targetPath, operation) {
+				mutationCount += 1;
+				await operation();
+			},
+		};
+		await syncShellDependencies(entryFile, hooksDir, targetDir, true, undefined, mutationHooks);
+		expect(mutationCount).toBe(0);
 	});
 
 	it("중첩 디렉토리 의존성(lib/sub/foo.sh) 복사 시 mkdir -p 동작 확인", async () => {
@@ -336,5 +500,37 @@ describe("syncShellDepsForDir", () => {
 		expect(await exists(expected)).toBe(true);
 		const content = await fs.readFile(expected, "utf8");
 		expect(content).toBe("# shared from lib");
+	});
+
+	it("syncShellDepsForDir가 callback을 각 dependency로 전달함", async () => {
+		const libFile = path.join(hooksDir, "lib", "forwarded.sh");
+		await writeFile(libFile, "forwarded");
+		const hookFile = path.join(hooksDir, "hook.sh");
+		await writeFile(hookFile, 'source "$HOOKS_DIR/lib/forwarded.sh"\n');
+		const observed: string[] = [];
+		await syncShellDepsForDir(hooksDir, hooksDir, targetDir, false, (targetPath) => {
+			observed.push(targetPath);
+		});
+		expect(observed).toEqual([path.join(targetDir, "lib", "forwarded.sh")]);
+	});
+
+	it("syncShellDepsForDir가 mutation hook과 callback을 각 dependency로 전달함", async () => {
+		const libFile = path.join(hooksDir, "lib", "forwarded-hook.sh");
+		await writeFile(libFile, "forwarded");
+		const hookFile = path.join(hooksDir, "hook.sh");
+		await writeFile(hookFile, 'source "$HOOKS_DIR/lib/forwarded-hook.sh"\n');
+		const observed: string[] = [];
+		const mutated: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			async mutate(targetPath, operation) {
+				mutated.push(targetPath);
+				await operation();
+			},
+		};
+		await syncShellDepsForDir(hooksDir, hooksDir, targetDir, false, (targetPath) => {
+			observed.push(targetPath);
+		}, mutationHooks);
+		expect(observed).toEqual([path.join(targetDir, "lib", "forwarded-hook.sh")]);
+		expect(mutated).toEqual(observed);
 	});
 });

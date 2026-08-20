@@ -14,6 +14,11 @@ agents:
     - code-reviewer
     - sisyphus-junior
 
+scripts:
+  platforms: [claude]
+  items:
+    - pretool-trace
+
 skills:
   items:
     - component: deep-interview
@@ -87,4 +92,3 @@ docs:
   items:
     - testing
     - implementation
-

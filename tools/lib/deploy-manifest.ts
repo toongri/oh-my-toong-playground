@@ -8,6 +8,10 @@ const MANIFEST_RELPATH = path.join(".omt", "sync-manifest.json");
 /** Manifest shape: `"<platform>/<category>"` -> the entry names OMT deployed there. */
 export type ManifestData = Record<string, string[]>;
 
+export type ManifestMutationHooks = {
+	mutate(targetPath: string, operation: () => Promise<void>): Promise<void>;
+};
+
 function manifestPath(deployRoot: string): string {
 	return path.join(deployRoot, MANIFEST_RELPATH);
 }
@@ -16,12 +20,32 @@ function pairKey(platform: string, category: string): string {
 	return `${platform}/${category}`;
 }
 
+function isSafeSegment(value: string): boolean {
+	return value.length > 0 && value !== "." && value !== ".." && !path.isAbsolute(value) && !/[\\/]/.test(value);
+}
+
+function isSafePairKey(value: string): boolean {
+	const segments = value.split("/");
+	return segments.length === 2 && segments.every(isSafeSegment);
+}
+
 /** True when `value` is a pair-key -> string[] map (the only shape readManifest accepts). */
 function isValidManifestShape(value: unknown): value is ManifestData {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-	return Object.values(value).every(
-		(names) => Array.isArray(names) && names.every((name) => typeof name === "string"),
+	return Object.entries(value).every(
+		([key, names]) => isSafePairKey(key) && Array.isArray(names) && names.every(
+			(name) => typeof name === "string" && isSafeSegment(name),
+		),
 	);
+}
+
+async function runMutation(
+	hooks: ManifestMutationHooks | undefined,
+	targetPath: string,
+	operation: () => Promise<void>,
+): Promise<void> {
+	if (hooks) await hooks.mutate(targetPath, operation);
+	else await operation();
 }
 
 /**
@@ -93,6 +117,7 @@ export async function removeOrphans(
 	platform: string,
 	category: string,
 	orphanNames: string[],
+	hooks?: ManifestMutationHooks,
 ): Promise<void> {
 	if (orphanNames.length === 0) return;
 
@@ -109,7 +134,8 @@ export async function removeOrphans(
 			(name) => entry === name || entry === `${name}.md` || entry === `${name}.toml`,
 		);
 		if (isOrphan) {
-			await fs.rm(path.join(categoryDir, entry), { recursive: true, force: true });
+			const target = path.join(categoryDir, entry);
+			await runMutation(hooks, target, () => fs.rm(target, { recursive: true, force: true }));
 		}
 	}
 }
@@ -130,6 +156,7 @@ export async function reconcilePairManifest(
 	platform: string,
 	category: string,
 	declaredNames: string[],
+	hooks?: ManifestMutationHooks,
 ): Promise<void> {
 	const key = pairKey(platform, category);
 	const previous = await readManifest(deployRoot);
@@ -137,13 +164,14 @@ export async function reconcilePairManifest(
 	if (previous !== null) {
 		const orphans = computeOrphans(previous[key] ?? [], declaredNames);
 		if (orphans.length > 0) {
-			await removeOrphans(deployRoot, platform, category, orphans);
+			await removeOrphans(deployRoot, platform, category, orphans, hooks);
 		}
 	}
 
 	const next: ManifestData = previous !== null ? { ...previous } : {};
 	next[key] = declaredNames;
-	await writeManifest(deployRoot, next);
+	const target = manifestPath(deployRoot);
+	await runMutation(hooks, target, () => writeManifest(deployRoot, next));
 }
 
 /**
@@ -159,11 +187,13 @@ export async function removeManifestPair(
 	deployRoot: string,
 	platformOrLocation: string,
 	category: string,
+	hooks?: ManifestMutationHooks,
 ): Promise<void> {
 	const current = await readManifest(deployRoot);
 	if (current === null) return;
 
 	const key = pairKey(platformOrLocation, category);
 	const { [key]: _removed, ...rest } = current;
-	await writeManifest(deployRoot, rest);
+	const target = manifestPath(deployRoot);
+	await runMutation(hooks, target, () => writeManifest(deployRoot, rest));
 }

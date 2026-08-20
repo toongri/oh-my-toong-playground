@@ -9,8 +9,16 @@ import {
 	buildMcpTomlContent,
 	resolveCodexAgentModel,
 	cleanupCodexSkillsFossil,
+	planCodexSkillsFossilCleanup,
+	codexSkillsDir,
 } from "./codex.ts";
+import { planCategoryDestinationPaths } from "./destinations.ts";
 import type { ModelMap } from "../lib/types.ts";
+import { DeployTransaction, type DeployMutationHooks } from "../lib/deploy-transaction.ts";
+
+function plannedCodexPath(targetPath: string, category: "hooks" | "scripts", displayName: string): string {
+	return path.join(targetPath, planCategoryDestinationPaths("codex", category, displayName)[0]);
+}
 
 // =============================================================================
 // insertManagedBlock
@@ -277,11 +285,38 @@ describe("CodexAdapter", () => {
 		await fs.rm(tmpDir, { recursive: true, force: true });
 	});
 
+	it("preserves relative target semantics for the planner-backed skills root", () => {
+		expect(codexSkillsDir("relative-target")).toBe(path.join("relative-target", ".agents", "skills"));
+	});
+
 	// ---------------------------------------------------------------------------
 	// syncAgentsDirect — md → toml translator
 	// ---------------------------------------------------------------------------
 
 	describe("syncAgentsDirect", () => {
+		it("generated TOML is guarded by mutation hooks before writing", async () => {
+			const sourceFile = path.join(tmpDir, "guarded-agent.md");
+			await fs.writeFile(sourceFile, "---\nname: guarded-agent\ndescription: guarded\n---\n\nInstructions\n");
+			const targetBase = path.join(tmpDir, "guarded-agent-target");
+			const targetFile = path.join(targetBase, ".codex", "agents", "guarded-agent.toml");
+			await fs.mkdir(path.dirname(targetFile), { recursive: true });
+			await fs.writeFile(targetFile, "external-agent\n");
+			const calls: string[] = [];
+			const state = { operationCalled: false };
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (targetPath, operation) => {
+					calls.push(targetPath);
+					void operation;
+					throw new Error("Deploy transaction conflict");
+				},
+			};
+			await expect(
+				adapter.syncAgentsDirect(targetBase, "guarded-agent", sourceFile, [], [], false, undefined, mutationHooks),
+			).rejects.toThrow("Deploy transaction conflict");
+			expect(calls).toEqual([targetFile]);
+			expect(state.operationCalled).toBe(false);
+			expect(await fs.readFile(targetFile, "utf-8")).toBe("external-agent\n");
+		});
 		it("skips with warning and creates no files via `syncAgentsDirect`", async () => {
 			// Should not throw, should not create any files
 			await adapter.syncAgentsDirect(tmpDir, "oracle", "/nonexistent/oracle.md");
@@ -684,6 +719,30 @@ describe("CodexAdapter", () => {
 	// ---------------------------------------------------------------------------
 
 	describe("syncRulesDirect", () => {
+		it("rule copy is guarded by mutation hooks before writing", async () => {
+			const sourceFile = path.join(tmpDir, "guarded-rule.md");
+			await fs.writeFile(sourceFile, "# guarded\n");
+			const targetBase = path.join(tmpDir, "guarded-rule-target");
+			const targetFile = path.join(targetBase, ".codex", "rules", "guarded-rule.md");
+			await fs.mkdir(path.dirname(targetFile), { recursive: true });
+			await fs.writeFile(targetFile, "external-rule\n");
+			const state = { operationCalled: false };
+			let observerCalled = false;
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (_targetPath, operation) => {
+					void operation;
+					throw new Error("Deploy transaction conflict");
+				},
+			};
+			await expect(
+				adapter.syncRulesDirect(targetBase, "guarded-rule", sourceFile, false, () => {
+					observerCalled = true;
+				}, mutationHooks),
+			).rejects.toThrow("Deploy transaction conflict");
+			expect(state.operationCalled).toBe(false);
+			expect(observerCalled).toBe(false);
+			expect(await fs.readFile(targetFile, "utf-8")).toBe("external-rule\n");
+		});
 		it("copies a rule file to .codex/rules/<name>.md via `syncRulesDirect`", async () => {
 			const sourceFile = path.join(tmpDir, "communication-style.md");
 			await fs.writeFile(sourceFile, "# Communication Style\n\nSee .claude/rules/ for more.\n");
@@ -768,6 +827,24 @@ describe("CodexAdapter", () => {
 			const content = await fs.readFile(configFile, "utf-8");
 			expect(content).toContain("[features.multi_agent_v2]");
 			expect(content).toContain("max_concurrent_threads_per_session = 20");
+		});
+
+		it("rejects an external config edit before the guarded read and preserves resident bytes", async () => {
+			const configFile = path.join(tmpDir, ".codex", "config.toml");
+			await fs.mkdir(path.dirname(configFile), { recursive: true });
+			await fs.writeFile(configFile, "resident\n", "utf-8");
+			const transaction = await DeployTransaction.begin(tmpDir, false, [".codex/config.toml"]);
+			expect(transaction).not.toBeNull();
+			await fs.writeFile(configFile, "external edit\n", "utf-8");
+			const observed: string[] = [];
+			await expect(
+				adapter.syncConfig(tmpDir, { model: "o4-mini" }, false, (writtenPath) => {
+					observed.push(writtenPath);
+				}, transaction!),
+			).rejects.toThrow(/Deploy transaction conflict/);
+			expect(await fs.readFile(configFile, "utf-8")).toBe("external edit\n");
+			expect(observed).toEqual([]);
+			await transaction!.finish();
 		});
 	});
 
@@ -1005,6 +1082,56 @@ describe("CodexAdapter", () => {
 	// ---------------------------------------------------------------------------
 
 	describe("syncSkillsDirect", () => {
+		it("forwards mutation hooks to each skill directory leaf", async () => {
+			const sourceSkill = path.join(tmpDir, "guarded-skill");
+			await fs.mkdir(sourceSkill, { recursive: true });
+			await fs.writeFile(path.join(sourceSkill, "SKILL.md"), "# skill\n");
+			const targetBase = path.join(tmpDir, "guarded-skill-target");
+			const targetFile = path.join(targetBase, ".agents", "skills", "guarded-skill", "SKILL.md");
+			const calls: string[] = [];
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (targetPath, operation) => {
+					calls.push(targetPath);
+					await operation();
+				},
+			};
+			await adapter.syncSkillsDirect(targetBase, "guarded-skill", sourceSkill, false, mutationHooks);
+			expect(calls).toContain(targetFile);
+		});
+
+		it("dry-run does not invoke skill mutation hooks", async () => {
+			const sourceSkill = path.join(tmpDir, "dry-skill");
+			await fs.mkdir(sourceSkill, { recursive: true });
+			await fs.writeFile(path.join(sourceSkill, "SKILL.md"), "# skill\n");
+			let mutateCount = 0;
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (_targetPath, operation) => {
+					mutateCount += 1;
+					await operation();
+				},
+			};
+			await adapter.syncSkillsDirect(tmpDir, "dry-skill", sourceSkill, true, mutationHooks);
+			expect(mutateCount).toBe(0);
+		});
+
+		it("skill pre-CAS conflict preserves the resident file", async () => {
+			const sourceSkill = path.join(tmpDir, "resident-skill");
+			await fs.mkdir(sourceSkill, { recursive: true });
+			await fs.writeFile(path.join(sourceSkill, "SKILL.md"), "new\n");
+			const targetBase = path.join(tmpDir, "resident-skill-target");
+			const targetFile = path.join(targetBase, ".agents", "skills", "resident-skill", "SKILL.md");
+			await fs.mkdir(path.dirname(targetFile), { recursive: true });
+			await fs.writeFile(targetFile, "external\n");
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async () => {
+					throw new Error("Deploy transaction conflict");
+				},
+			};
+			await expect(adapter.syncSkillsDirect(targetBase, "resident-skill", sourceSkill, false, mutationHooks)).rejects.toThrow(
+				"Deploy transaction conflict",
+			);
+			expect(await fs.readFile(targetFile, "utf-8")).toBe("external\n");
+		});
 		it("copies skill directory to <target>/.agents/skills via `syncSkillsDirect`", async () => {
 			// Create a source skill directory
 			const sourceSkill = path.join(tmpDir, "source-skills", "prometheus");
@@ -1058,6 +1185,26 @@ describe("CodexAdapter", () => {
 	// ---------------------------------------------------------------------------
 
 	describe("syncScriptsDirect", () => {
+		it("guards a single script copy with mutation hooks", async () => {
+			const sourceFile = path.join(tmpDir, "guarded-script.sh");
+			await fs.writeFile(sourceFile, "echo guarded\n");
+			const targetBase = path.join(tmpDir, "guarded-script-target");
+			const targetFile = plannedCodexPath(targetBase, "scripts", "guarded-script.sh");
+			await fs.mkdir(path.dirname(targetFile), { recursive: true });
+			await fs.writeFile(targetFile, "external-script\n");
+			const state = { operationCalled: false };
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (_targetPath, operation) => {
+					void operation;
+					throw new Error("Deploy transaction conflict");
+				},
+			};
+			await expect(adapter.syncScriptsDirect(targetBase, "guarded-script.sh", sourceFile, false, mutationHooks)).rejects.toThrow(
+				"Deploy transaction conflict",
+			);
+			expect(state.operationCalled).toBe(false);
+			expect(await fs.readFile(targetFile, "utf-8")).toBe("external-script\n");
+		});
 		it("copies a single script file to target via `syncScriptsDirect`", async () => {
 			const sourceFile = path.join(tmpDir, "hud.sh");
 			await fs.writeFile(sourceFile, "#!/bin/bash\necho hud\n");
@@ -1065,7 +1212,7 @@ describe("CodexAdapter", () => {
 			const targetBase = path.join(tmpDir, "target");
 			await adapter.syncScriptsDirect(targetBase, "hud.sh", sourceFile, false);
 
-			const targetFile = path.join(targetBase, ".codex", "scripts", "hud.sh");
+			const targetFile = plannedCodexPath(targetBase, "scripts", "hud.sh");
 			const content = await fs.readFile(targetFile, "utf-8");
 			expect(content).toBe("#!/bin/bash\necho hud\n");
 		});
@@ -1079,11 +1226,22 @@ describe("CodexAdapter", () => {
 			const targetBase = path.join(tmpDir, "target");
 			await adapter.syncScriptsDirect(targetBase, "hud", sourceDir, false);
 
-			const targetDir = path.join(targetBase, ".codex", "scripts", "hud");
+			const targetDir = plannedCodexPath(targetBase, "scripts", "hud");
 			const indexContent = await fs.readFile(path.join(targetDir, "index.sh"), "utf-8");
 			const helperContent = await fs.readFile(path.join(targetDir, "helper.sh"), "utf-8");
 			expect(indexContent).toContain("echo index");
 			expect(helperContent).toContain("echo helper");
+		});
+
+		it("rewrites @lib imports relative to the deployed Codex platform root", async () => {
+			const sourceDir = path.join(tmpDir, "source-scripts", "trace");
+			await fs.mkdir(sourceDir, { recursive: true });
+			await fs.writeFile(path.join(sourceDir, "index.ts"), 'import { deriveProjectName } from "@lib/omt-dir";\nconsole.log(typeof deriveProjectName);\n');
+			const targetBase = path.join(tmpDir, "target");
+			await adapter.syncScriptsDirect(targetBase, "trace", sourceDir, false);
+			const deployed = await fs.readFile(path.join(plannedCodexPath(targetBase, "scripts", "trace"), "index.ts"), "utf8");
+			expect(deployed).not.toContain('"@lib/omt-dir"');
+			expect(deployed).toContain("../../lib/omt-dir");
 		});
 
 		it("skips copy in dry-run mode via `syncScriptsDirect`", async () => {
@@ -1129,7 +1287,7 @@ describe("CodexAdapter", () => {
 			const targetBase = path.join(tmpDir, "target");
 			await adapter.syncHooksDirect(targetBase, "notify.sh", hookFile, false);
 
-			const targetFile = path.join(targetBase, ".codex", "hooks", "notify.sh");
+			const targetFile = plannedCodexPath(targetBase, "hooks", "notify.sh");
 			const content = await fs.readFile(targetFile, "utf-8");
 			expect(content).toContain("notify");
 
@@ -1181,6 +1339,60 @@ describe("CodexAdapter", () => {
 			expect(libExists).toBe(true);
 		});
 
+		it("파일 훅은 main mutate·observer 뒤 dependency mutate·observer 순서를 보장한다", async () => {
+			const hooksDir = path.join(tmpDir, "ordered-hooks");
+			await fs.mkdir(path.join(hooksDir, "lib"), { recursive: true });
+			const sourceFile = path.join(hooksDir, "main.sh");
+			await fs.writeFile(sourceFile, 'source "$HOOKS_DIR/lib/shared.sh"\necho main\n');
+			await fs.writeFile(path.join(hooksDir, "lib", "shared.sh"), "echo shared\n");
+			const targetBase = path.join(tmpDir, "ordered-target");
+			const targetMain = plannedCodexPath(targetBase, "hooks", "main.sh");
+			const targetDependency = path.join(targetBase, ".codex", "hooks", "lib", "shared.sh");
+			const events: string[] = [];
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (targetPath, operation) => {
+					events.push(`mutate:${targetPath}`);
+					await operation();
+				},
+			};
+			await adapter.syncHooksDirect(
+				targetBase,
+				"main.sh",
+				sourceFile,
+				false,
+				async (writtenPath) => {
+					events.push(`observe:${writtenPath}`);
+				},
+				mutationHooks,
+			);
+			expect(events).toEqual([
+				`mutate:${targetMain}`,
+				`observe:${targetMain}`,
+				`mutate:${targetDependency}`,
+				`observe:${targetDependency}`,
+			]);
+		});
+
+		it("파일 훅 main mutation conflict는 실제 복사·dependency·observer를 모두 차단한다", async () => {
+			const sourceFile = path.join(tmpDir, "conflict.sh");
+			await fs.writeFile(sourceFile, "echo conflict\n");
+			const targetBase = path.join(tmpDir, "conflict-target");
+			const calls: string[] = [];
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (targetPath) => {
+					calls.push(targetPath);
+					throw new Error("Deploy transaction conflict");
+				},
+			};
+			await expect(
+				adapter.syncHooksDirect(targetBase, "conflict.sh", sourceFile, false, () => undefined, mutationHooks),
+			).rejects.toThrow("Deploy transaction conflict");
+			expect(calls).toEqual([plannedCodexPath(targetBase, "hooks", "conflict.sh")]);
+			expect(
+				await fs.stat(plannedCodexPath(targetBase, "hooks", "conflict.sh")).then(() => true).catch(() => false),
+			).toBe(false);
+		});
+
 		it("디렉토리 훅의 외부 의존성을 base dir 기반으로 resolve한다", async () => {
 			// hooks/ 구조: my-dir-hook/entry.sh (hooks/ 루트 기준 source) + lib/shared.sh
 			// hooksSourceDir = path.dirname(dirHookDir) = hooks/
@@ -1201,12 +1413,122 @@ describe("CodexAdapter", () => {
 			await adapter.syncHooksDirect(targetBase, "my-dir-hook", dirHookDir, false);
 
 			// deps are copied into the targetHookDir, not the parent hooks/ dir
-			const targetLib = path.join(targetBase, ".codex", "hooks", "my-dir-hook", "lib", "shared.sh");
+			const targetLib = path.join(plannedCodexPath(targetBase, "hooks", "my-dir-hook"), "lib", "shared.sh");
 			const libExists = await fs
 				.stat(targetLib)
 				.then(() => true)
 				.catch(() => false);
 			expect(libExists).toBe(true);
+		});
+
+		it("디렉터리 훅 observer가 root 배포 직후 호출되고 dependency가 뒤따른다", async () => {
+			const hooksDir = path.join(tmpDir, "hooks");
+			const dirHookDir = path.join(hooksDir, "my-dir-hook");
+			const libDir = path.join(hooksDir, "lib");
+			await fs.mkdir(dirHookDir, { recursive: true });
+			await fs.mkdir(libDir, { recursive: true });
+			await fs.writeFile(
+				path.join(dirHookDir, "entry.sh"),
+				'#!/bin/bash\nsource "$HOOKS_DIR/lib/shared.sh"\necho entry\n',
+				"utf-8",
+			);
+			await fs.writeFile(path.join(libDir, "shared.sh"), "#!/bin/bash\necho shared\n", "utf-8");
+
+			const targetBase = path.join(tmpDir, "target");
+			const targetHookRoot = plannedCodexPath(targetBase, "hooks", "my-dir-hook");
+			const targetLib = path.join(targetHookRoot, "lib", "shared.sh");
+			const observed: string[] = [];
+			await adapter.syncHooksDirect(targetBase, "my-dir-hook", dirHookDir, false, async (writtenPath) => {
+				observed.push(writtenPath);
+				expect(await fs.stat(writtenPath)).toBeTruthy();
+			});
+
+			expect(observed).toEqual([targetHookRoot, targetLib]);
+			expect(await fs.readFile(targetLib, "utf-8")).toContain("shared");
+		});
+
+		it("디렉터리 훅은 root mutation·observer와 dependency mutation을 전달한다", async () => {
+			const hooksDir = path.join(tmpDir, "forward-hooks");
+			const dirHookDir = path.join(hooksDir, "bundle");
+			await fs.mkdir(dirHookDir, { recursive: true });
+			await fs.mkdir(path.join(hooksDir, "lib"), { recursive: true });
+			await fs.writeFile(path.join(dirHookDir, "entry.sh"), 'source "$HOOKS_DIR/lib/shared.sh"\n');
+			await fs.writeFile(path.join(hooksDir, "lib", "shared.sh"), "echo shared\n");
+			const targetBase = path.join(tmpDir, "forward-target");
+			const root = plannedCodexPath(targetBase, "hooks", "bundle");
+			const dependency = path.join(root, "lib", "shared.sh");
+			const mutations: string[] = [];
+			const observations: string[] = [];
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (targetPath, operation) => {
+					mutations.push(targetPath);
+					await operation();
+				},
+			};
+			await adapter.syncHooksDirect(
+				targetBase,
+				"bundle",
+				dirHookDir,
+				false,
+				async (writtenPath) => {
+					observations.push(writtenPath);
+				},
+				mutationHooks,
+			);
+			expect(mutations).toEqual([path.join(root, "entry.sh"), dependency]);
+			expect(observations).toEqual([dependency]);
+		});
+
+		it("dry-run에서는 mutation hook과 observer를 호출하지 않는다", async () => {
+			const sourceFile = path.join(tmpDir, "dry.sh");
+			await fs.writeFile(sourceFile, "echo dry\n");
+			let mutateCount = 0;
+			let observeCount = 0;
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (_targetPath, operation) => {
+					mutateCount += 1;
+					await operation();
+				},
+			};
+			await adapter.syncHooksDirect(
+				path.join(tmpDir, "dry-target"),
+				"dry.sh",
+				sourceFile,
+				true,
+				() => {
+					observeCount += 1;
+				},
+				mutationHooks,
+			);
+			expect(mutateCount).toBe(0);
+			expect(observeCount).toBe(0);
+		});
+
+		it("의존성 복사 실패 뒤에도 이미 완료된 디렉터리 훅 observer만 유지한다", async () => {
+			const hooksDir = path.join(tmpDir, "hooks");
+			const dirHookDir = path.join(hooksDir, "my-dir-hook");
+			const libDir = path.join(hooksDir, "lib");
+			await fs.mkdir(dirHookDir, { recursive: true });
+			await fs.mkdir(path.join(libDir, "shared.sh"), { recursive: true });
+			await fs.writeFile(
+				path.join(dirHookDir, "entry.sh"),
+				'#!/bin/bash\nsource "$HOOKS_DIR/lib/shared.sh"\necho entry\n',
+				"utf-8",
+			);
+
+			const observed: string[] = [];
+			await expect(
+				adapter.syncHooksDirect(
+					path.join(tmpDir, "target"),
+					"my-dir-hook",
+					dirHookDir,
+					false,
+					(writtenPath) => {
+						observed.push(writtenPath);
+					},
+				),
+			).rejects.toThrow();
+			expect(observed).toEqual([plannedCodexPath(path.join(tmpDir, "target"), "hooks", "my-dir-hook")]);
 		});
 
 		it("디렉토리 훅의 @lib/ import를 배포 시 상대 경로로 재작성한다", async () => {
@@ -1223,7 +1545,7 @@ describe("CodexAdapter", () => {
 
 			// Deployed file must have @lib/ rewritten to a relative path (../../lib/)
 			// .codex/hooks/rules-injector/cli.ts is 2 dirs deep under platformRoot (.codex)
-			const deployedFile = path.join(targetBase, ".codex", "hooks", "rules-injector", "cli.ts");
+			const deployedFile = path.join(plannedCodexPath(targetBase, "hooks", "rules-injector"), "cli.ts");
 			const content = await fs.readFile(deployedFile, "utf-8");
 			expect(content).not.toContain("@lib/");
 			expect(content).toContain("../../lib/");
@@ -1325,6 +1647,29 @@ describe("CodexAdapter", () => {
 			// Untagged old OMT entry is gone
 			expect(commands).not.toContain("omt-old-command");
 		});
+
+		it("rejects an external hooks.json edit before the guarded read and preserves resident bytes", async () => {
+			const hooksFile = path.join(tmpDir, ".codex", "hooks.json");
+			await fs.mkdir(path.dirname(hooksFile), { recursive: true });
+			await fs.writeFile(hooksFile, JSON.stringify({ hooks: { Resident: [] } }) + "\n", "utf-8");
+			const transaction = await DeployTransaction.begin(tmpDir, false, [".codex/hooks.json"]);
+			expect(transaction).not.toBeNull();
+			await fs.writeFile(hooksFile, "external hooks edit\n", "utf-8");
+			const observed: string[] = [];
+			await expect(
+				adapter.updateSettings(
+					tmpDir,
+					{ PostToolUse: [{ hooks: [{ command: "echo post" }] }] },
+					false,
+					undefined,
+					(writtenPath) => { observed.push(writtenPath); },
+					transaction!,
+				),
+			).rejects.toThrow(/Deploy transaction conflict/);
+			expect(await fs.readFile(hooksFile, "utf-8")).toBe("external hooks edit\n");
+			expect(observed).toEqual([]);
+			await transaction!.finish();
+		});
 	});
 
 	// ---------------------------------------------------------------------------
@@ -1363,6 +1708,238 @@ describe("CodexAdapter", () => {
 	// ---------------------------------------------------------------------------
 
 	describe("syncPlatformYaml hooks", () => {
+		it("hook bundle mutation conflict prevents the later hooks.json write", async () => {
+			const sourceHook = path.join(tmpDir, "conflicting-platform-hook.sh");
+			await fs.writeFile(sourceHook, "echo hook\n");
+			const targetBase = path.join(tmpDir, "platform-conflict");
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async () => {
+					throw new Error("Deploy transaction conflict");
+				},
+			};
+			await expect(
+				adapter.syncPlatformYaml(
+					targetBase,
+					{ hooks: { Notification: [{ component: sourceHook }] } } as never,
+					false,
+					undefined,
+					undefined,
+					mutationHooks,
+				),
+			).rejects.toThrow("Deploy transaction conflict");
+			expect(
+				await fs.stat(path.join(targetBase, ".codex", "hooks.json")).then(() => true).catch(() => false),
+			).toBe(false);
+		});
+		it("notifies after each successful OMT-owned config, MCP, hook bundle, and hooks.json write via `syncPlatformYaml`", async () => {
+			const sourceHookDir = path.join(tmpDir, "external-hook");
+			await fs.mkdir(sourceHookDir, { recursive: true });
+			await fs.writeFile(path.join(sourceHookDir, "index.ts"), "console.log('hook');\n");
+			const yaml = {
+				config: { model: "o4-mini" },
+				mcps: { "server-a": { command: "npx" } },
+				"model-map": { tiers: { sonnet: { model: "gpt-5.6-sol" } } },
+				hooks: { Notification: [{ component: sourceHookDir }] },
+			};
+			const writes: string[] = [];
+			const observer = async (writtenPath: string) => {
+				writes.push(writtenPath);
+				await fs.stat(writtenPath);
+			};
+
+			await adapter.syncPlatformYaml(tmpDir, yaml as never, false, undefined, observer);
+
+			const configFile = path.join(tmpDir, ".codex", "config.toml");
+			const hookDir = path.join(tmpDir, ".codex", "hooks", path.basename(sourceHookDir));
+			const hooksFile = path.join(tmpDir, ".codex", "hooks.json");
+			expect(writes).toEqual([configFile, configFile, hookDir, hooksFile]);
+		});
+
+		it("forwards mutation hooks to repeated config and MCP writes on the exact shared path", async () => {
+			const calls: string[] = [];
+			const observed: string[] = [];
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (targetPath, operation) => {
+					calls.push(targetPath);
+					await operation();
+				},
+			};
+			await adapter.syncPlatformYaml(
+				tmpDir,
+				{ config: { model: "o4-mini" }, mcps: { server: { command: "npx" } } } as never,
+				false,
+				undefined,
+				(writtenPath) => { observed.push(writtenPath); },
+				mutationHooks,
+			);
+			const configFile = path.join(tmpDir, ".codex", "config.toml");
+			expect(calls).toEqual([configFile, configFile]);
+			expect(observed).toEqual([configFile, configFile]);
+		});
+
+		it("does not notify for dry-run or sections that perform no writes via `syncPlatformYaml`", async () => {
+			const writes: string[] = [];
+			const observer = (writtenPath: string) => {
+				writes.push(writtenPath);
+			};
+			await adapter.syncPlatformYaml(
+				tmpDir,
+				{
+					config: { model: "o4-mini" },
+					mcps: { "server-a": { command: "npx" } },
+					"model-map": { tiers: { sonnet: { model: "gpt-5.6-sol" } } },
+					plugins: { absent: { state: "absent" } },
+				} as never,
+				true,
+				undefined,
+				observer,
+			);
+			await adapter.syncPlatformYaml(tmpDir, { "model-map": { tiers: {} } } as never, false, undefined, observer);
+			await adapter.syncPlatformYaml(tmpDir, { plugins: { absent: { state: "absent" } } } as never, false, undefined, observer);
+			expect(writes).toEqual([]);
+		});
+
+		it("PreToolUse trace wrapper coverage", async () => {
+			const componentDir = path.join(tmpDir, "source-hooks", "component-hook");
+			await fs.mkdir(componentDir, { recursive: true });
+			await fs.writeFile(path.join(componentDir, "index.ts"), "// hook\n");
+			const rawCommand = ": .codex/raw-marker; printf '%s|%s|%s\\n' 'quote' \"$HOME\" `printf tick`; printf '%s\\n' marker; printf '%s\\n' marker >> \"$OMT_DIR/sentinel\"\\n";
+			const yaml = {
+				hooks: {
+					PreToolUse: [
+						{ component: componentDir, matcher: "Bash", timeout: 17 },
+						{ command: rawCommand, "trace-id": "raw-hook", matcher: "Read", timeout: 23 },
+					],
+					SessionStart: [{ command: "echo session", matcher: "*", timeout: 4 }],
+				},
+			};
+
+			const preview = await adapter.previewPreToolUseCommands(tmpDir, yaml as never);
+			await adapter.syncPlatformYaml(tmpDir, yaml as never, false);
+			const parsed = JSON.parse(await fs.readFile(path.join(tmpDir, ".codex", "hooks.json"), "utf-8"));
+			const pre = parsed.hooks.PreToolUse;
+			expect(pre).toHaveLength(2);
+			const fakeBin = path.join(tmpDir, "fake-bin");
+			await fs.mkdir(fakeBin, { recursive: true });
+			const fakeBun = path.join(fakeBin, "bun");
+			await fs.writeFile(fakeBun, "#!/bin/sh\nprintf '%s\\0' \"$@\"\n");
+			await fs.chmod(fakeBun, 0o755);
+			const captureArgv = (command: string) => {
+				const result = Bun.spawnSync(["sh", "-c", command], {
+					env: { ...process.env, PATH: `${fakeBin}:/bin:/usr/bin` },
+				});
+				return new TextDecoder().decode(result.stdout).split("\0").slice(0, -1);
+			};
+			const componentArgv = captureArgv(pre[0].hooks[0].command);
+			const rawArgv = captureArgv(pre[1].hooks[0].command);
+			const absoluteRawCommand = rawCommand.replaceAll(".codex/", `${path.join(tmpDir, ".codex")}/`);
+			expect(pre.map((entry: any) => entry.hooks[0].command)).toEqual(preview.map((item) => item.wrappedCommand));
+			expect(pre[0].hooks[0].command.match(/pretool-trace/g)?.length).toBe(1);
+			expect(pre[1].hooks[0].command.match(/pretool-trace/g)?.length).toBe(1);
+			expect(componentArgv).toEqual([
+				path.join(tmpDir, ".codex/scripts/pretool-trace/index.ts"),
+				"codex",
+				"component-hook",
+				`bun run ${path.join(tmpDir, ".codex/hooks/component-hook/index.ts")}`,
+			]);
+			expect(rawArgv).toEqual([path.join(tmpDir, ".codex/scripts/pretool-trace/index.ts"), "codex", "raw-hook", absoluteRawCommand]);
+			const baselineDir = path.join(tmpDir, "baseline");
+			const wrappedDir = path.join(tmpDir, "wrapped");
+			await fs.mkdir(path.join(baselineDir, ".codex"), { recursive: true });
+			await fs.mkdir(path.join(wrappedDir, ".codex"), { recursive: true });
+			await fs.mkdir(path.join(baselineDir, "omt"), { recursive: true });
+			await fs.mkdir(path.join(wrappedDir, "omt"), { recursive: true });
+			const executableBun = "#!/bin/sh\nexec /bin/sh -c \"$4\"\n";
+			await fs.writeFile(fakeBun, executableBun);
+			const run = (cwd: string, command: string) =>
+				Bun.spawnSync(["sh", "-c", command], {
+					cwd,
+				env: { ...process.env, PATH: `${fakeBin}:/bin:/usr/bin`, HOME: path.join(tmpDir, "controlled-home"), OMT_DIR: path.join(cwd, "omt") },
+				});
+			const baseline = run(baselineDir, rawCommand);
+			const wrapped = run(wrappedDir, pre[1].hooks[0].command);
+			expect(wrapped.exitCode).toBe(baseline.exitCode);
+			expect(new TextDecoder().decode(wrapped.stdout)).toBe(new TextDecoder().decode(baseline.stdout));
+			expect(new TextDecoder().decode(wrapped.stderr)).toBe(new TextDecoder().decode(baseline.stderr));
+			expect(new TextDecoder().decode(wrapped.stdout).match(/marker/g)?.length).toBe(1);
+			expect(pre[0].hooks[0].timeout).toBe(17);
+			expect(pre[0].matcher).toBe("Bash");
+			expect(pre[1].hooks[0].timeout).toBe(23);
+			expect(pre[1].matcher).toBe("Read");
+			expect(parsed.hooks.SessionStart[0].hooks[0].command).toBe("echo session");
+		});
+
+		it("raw PreToolUse trace id", async () => {
+			const target = path.join(tmpDir, "raw-invalid");
+			await fs.mkdir(path.join(target, ".codex"), { recursive: true });
+			await fs.writeFile(path.join(target, ".codex", "hooks.json"), "hooks-sentinel");
+			await fs.writeFile(path.join(target, ".codex", "config.toml"), "config-sentinel");
+			const snapshot = async () => {
+				const files = await fs.readdir(target, { recursive: true });
+				const regularFiles = [];
+				for (const file of files) {
+					if ((await fs.stat(path.join(target, file))).isFile()) regularFiles.push(file);
+				}
+				return Promise.all(regularFiles.map(async (file) => [file, await fs.readFile(path.join(target, file))] as const));
+			};
+			for (const item of [{ command: "echo raw" }, { command: "echo raw", "trace-id": "unsafe id" }]) {
+				const before = await snapshot();
+				await expect(adapter.syncPlatformYaml(target, { hooks: { PreToolUse: [item] } } as never, false)).rejects.toThrow(/trace-id/);
+				expect(await snapshot()).toEqual(before);
+			}
+		});
+
+		it("PreToolUse trace pure preview", async () => {
+			const componentDir = path.join(tmpDir, "source-hooks", "preview-hook");
+			await fs.mkdir(componentDir, { recursive: true });
+			await fs.writeFile(path.join(componentDir, "index.sh"), "#!/bin/sh\n");
+			const yaml = {
+				hooks: {
+					PreToolUse: [
+						{ component: componentDir, matcher: "Bash", timeout: 31 },
+						{ command: "printf '%s' \"$HOME\"", "trace-id": "raw-preview", matcher: "*", timeout: 32 },
+					],
+				},
+			};
+			const before = await fs.readdir(tmpDir);
+			const preview = await adapter.previewPreToolUseCommands(tmpDir, yaml as never);
+			expect(await fs.readdir(tmpDir)).toEqual(before);
+			expect(preview).toHaveLength(2);
+			expect(preview[0]).toMatchObject({
+				hookId: "preview-hook",
+				originalCommand: `bash ${path.join(tmpDir, ".codex/hooks/preview-hook/index.sh")}`,
+				wrapperDeploymentPath: path.join(tmpDir, ".codex/scripts/pretool-trace/index.ts"),
+				matcher: "Bash",
+				timeout: 31,
+				scope: "project",
+			});
+			expect(preview[1]).toMatchObject({ hookId: "raw-preview", originalCommand: "printf '%s' \"$HOME\"", timeout: 32 });
+			await adapter.syncPlatformYaml(tmpDir, yaml as never, false);
+			const parsed = JSON.parse(await fs.readFile(path.join(tmpDir, ".codex", "hooks.json"), "utf-8"));
+			expect(parsed.hooks.PreToolUse.map((entry: any) => entry.hooks[0].command)).toEqual(
+				preview.map((item) => item.wrappedCommand),
+			);
+			const globalPreview = await adapter.previewPreToolUseCommands(os.homedir(), {
+				hooks: { PreToolUse: [{ command: "echo global", "trace-id": "global-hook", matcher: "*", timeout: 41 }] },
+			} as never);
+			expect(globalPreview[0]).toMatchObject({
+				scope: "global",
+				wrapperDeploymentPath: path.join(os.homedir(), ".codex/scripts/pretool-trace/index.ts"),
+				matcher: "*",
+				timeout: 41,
+			});
+			const relativeTarget = path.relative(process.cwd(), tmpDir);
+			const relativePreview = await adapter.previewPreToolUseCommands(relativeTarget, {
+				hooks: { PreToolUse: [{ command: "echo relative", "trace-id": "relative-hook" }] },
+			} as never);
+			await adapter.syncPlatformYaml(relativeTarget, { hooks: { PreToolUse: [{ command: "echo relative", "trace-id": "relative-hook" }] } } as never, false);
+			const relativeParsed = JSON.parse(await fs.readFile(path.join(tmpDir, ".codex/hooks.json"), "utf-8"));
+			expect(relativeParsed.hooks.PreToolUse[0].hooks[0].command).toBe(relativePreview[0].wrappedCommand);
+			const missingComponent = path.join(tmpDir, "missing-component");
+			await fs.mkdir(missingComponent);
+			await expect(adapter.previewPreToolUseCommands(tmpDir, { hooks: { PreToolUse: [{ component: missingComponent }] } } as never)).rejects.toThrow(/item 0/);
+		});
+
 		it("deploys rules-injector bundle + relative command", async () => {
 			// Stage a synthetic rules-injector hook dir with index.ts and a test file
 			const hookSrcDir = path.join(tmpDir, "source-hooks", "rules-injector");
@@ -1545,6 +2122,80 @@ describe("cleanupCodexSkillsFossil", () => {
 			.then(() => true)
 			.catch(() => false);
 	}
+
+	it("plans owned fossil entry paths deterministically without mutating the filesystem", async () => {
+		await fs.mkdir(fossilPath("skill-z"), { recursive: true });
+		await fs.mkdir(fossilPath("skill-a"), { recursive: true });
+		await fs.mkdir(fossilPath("foreign"), { recursive: true });
+
+		const planned = await planCodexSkillsFossilCleanup(
+			tmpDir,
+			new Set(["skill-z", "skill-a", "missing"]),
+		);
+
+		expect(planned).toEqual([fossilPath("skill-a"), fossilPath("skill-z")]);
+		expect(await pathExists(fossilPath("skill-a"))).toBe(true);
+		expect(await pathExists(fossilPath("skill-z"))).toBe(true);
+		expect(await pathExists(fossilPath("foreign"))).toBe(true);
+	});
+
+	it("uses mutation hooks for each planned owned entry and does not journal the fossil root", async () => {
+		await fs.mkdir(fossilPath("skill-b"), { recursive: true });
+		await fs.writeFile(fossilPath("skill-b", "SKILL.md"), "b\n");
+		await fs.mkdir(fossilPath("skill-a"), { recursive: true });
+		await fs.writeFile(fossilPath("skill-a", "SKILL.md"), "a\n");
+		await fs.mkdir(newPath("skill-a"), { recursive: true });
+		await fs.mkdir(newPath("skill-b"), { recursive: true });
+
+		const calls: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			async mutate(target, operation) {
+				calls.push(target);
+				await operation();
+			},
+		};
+
+		await cleanupCodexSkillsFossil(
+			tmpDir,
+			backupDest("hooks"),
+			false,
+			new Set(["skill-a", "skill-b"]),
+			mutationHooks,
+		);
+
+		expect(calls).toEqual([fossilPath("skill-a"), fossilPath("skill-b")]);
+		expect(await pathExists(path.join(tmpDir, ".codex", "skills"))).toBe(false);
+	});
+
+	it("propagates mutation errors and leaves later fossil entries for the caller transaction rollback", async () => {
+		await fs.mkdir(fossilPath("skill-a"), { recursive: true });
+		await fs.writeFile(fossilPath("skill-a", "SKILL.md"), "a\n");
+		await fs.mkdir(fossilPath("skill-b"), { recursive: true });
+		await fs.writeFile(fossilPath("skill-b", "SKILL.md"), "b\n");
+		await fs.mkdir(newPath("skill-a"), { recursive: true });
+		await fs.mkdir(newPath("skill-b"), { recursive: true });
+
+		let count = 0;
+		const mutationHooks: DeployMutationHooks = {
+			async mutate(_target, operation) {
+				count += 1;
+				if (count === 2) throw new Error("mutation failure");
+				await operation();
+			},
+		};
+
+		await expect(
+			cleanupCodexSkillsFossil(
+				tmpDir,
+				backupDest("mutation-failure"),
+				false,
+				new Set(["skill-a", "skill-b"]),
+				mutationHooks,
+			),
+		).rejects.toThrow("mutation failure");
+		expect(await pathExists(fossilPath("skill-a"))).toBe(false);
+		expect(await pathExists(fossilPath("skill-b"))).toBe(true);
+	});
 
 	it("backs up then removes an owned fossil entry, removes the now-empty fossilDir, and leaves .codex/config.toml untouched", async () => {
 		await fs.mkdir(fossilPath("skill-a"), { recursive: true });

@@ -12,7 +12,13 @@ TESTS_PASSED=0
 TESTS_FAILED=0
 
 ORIGINAL_HOME="$HOME"
+ORIGINAL_OMT_DIR="${OMT_DIR-}"
+ORIGINAL_OMT_DIR_SET=0
+if [[ -n "${OMT_DIR+x}" ]]; then
+    ORIGINAL_OMT_DIR_SET=1
+fi
 FIXTURE_HOME=""
+AMBIENT_ROOT=""
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -69,16 +75,51 @@ setup_fixture() {
 
 teardown_fixture() {
     export HOME="$ORIGINAL_HOME"
+    if [[ "$ORIGINAL_OMT_DIR_SET" -eq 1 ]]; then
+        export OMT_DIR="$ORIGINAL_OMT_DIR"
+    else
+        unset OMT_DIR
+    fi
     if [[ -n "$FIXTURE_HOME" && -d "$FIXTURE_HOME" ]]; then
         rm -rf "$FIXTURE_HOME"
     fi
     FIXTURE_HOME=""
 }
 
+run_test_with_ambient_omt_dir() {
+    local name="$1"
+    local ambient_root
+    local status=0
+    ambient_root=$(mktemp -d)
+    AMBIENT_ROOT="$ambient_root"
+    mkdir -p "$ambient_root/ambient-project"
+    printf '{"active":true,"phase":"pursuing","last_touched_at":"2000-01-01T00:00:00"}' \
+        > "$ambient_root/ambient-project/goal-state-ambient-sess.json"
+    export OMT_DIR="$ambient_root/ambient-project"
+
+    run_test "$name" || status=$?
+    if [[ -f "$ambient_root/ambient-project/goal-state-ambient-sess.json" ]]; then
+        echo "[PASS] ambient OMT_DIR sentinel preserved"
+    else
+        echo "[FAIL] ambient OMT_DIR sentinel was modified"
+        status=1
+    fi
+    rm -rf "$ambient_root"
+    if [[ -e "$ambient_root" ]]; then
+        echo "[FAIL] ambient OMT_DIR temp root leaked"
+        status=1
+    else
+        echo "[PASS] ambient OMT_DIR temp root removed"
+    fi
+    AMBIENT_ROOT=""
+    return "$status"
+}
+
 run_test() {
     local name="$1"
     setup_fixture
     export HOME="$FIXTURE_HOME"
+    unset OMT_DIR
 
     if "$name"; then
         echo "[PASS] $name"
@@ -342,15 +383,15 @@ test_dryrun_preserved_names_cache() {
 test_dryrun_preserved_not_in_delete_list() {
     local output
     output=$(bash "$CLEANUP_SCRIPT" --dry-run 2>&1)
-    if echo "$output" | grep "DELETE " | grep -q "oh-my-toong-playground"; then
+    if grep -q -- "DELETE .*oh-my-toong-playground" <<<"$output"; then
         echo "oh-my-toong-playground appeared in DELETE section"
         return 1
     fi
-    if echo "$output" | grep "DELETE " | grep -q "acme-backend"; then
+    if grep -q -- "DELETE .*acme-backend" <<<"$output"; then
         echo "acme-backend appeared in DELETE section"
         return 1
     fi
-    if echo "$output" | grep "DELETE " | grep -q "cache"; then
+    if grep -q -- "DELETE .*cache" <<<"$output"; then
         echo "cache appeared in DELETE section"
         return 1
     fi
@@ -379,15 +420,22 @@ test_real_omt_untouched_when_home_is_fixture() {
     output=$(bash "$CLEANUP_SCRIPT" 2>&1)
     # The script prints: "=== omt-cleanup: scanning <path>/.omt ==="
     # It must contain the fixture path and NOT the real home path.
-    if echo "$output" | grep -q "$ORIGINAL_HOME/.omt"; then
+    if grep -q -- "$ORIGINAL_HOME/.omt" <<<"$output"; then
         echo "FAIL: script scanned real ~/.omt (non-hermetic)"
         return 1
     fi
-    if echo "$output" | grep -q "$FIXTURE_HOME/.omt"; then
+    if grep -q -- "$FIXTURE_HOME/.omt" <<<"$output"; then
         return 0
     fi
     echo "FAIL: script did not scan fixture .omt"
     return 1
+}
+
+test_harness_scans_fixture_not_ambient_omt_dir() {
+    local output
+    output=$(bash "$CLEANUP_SCRIPT" --execute 2>&1)
+    [[ "$output" == *"$FIXTURE_HOME/.omt"* ]] || return 1
+    [[ "$output" != *"$AMBIENT_ROOT"* ]] || return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -576,7 +624,7 @@ EOF
     local out
     out=$(bash "$CLEANUP_SCRIPT" --dry-run 2>&1)
     # Must list the state file path
-    if ! echo "$out" | grep "DELETE " | grep -q "goal-state-dry-sess.json"; then
+    if ! grep -q -- "DELETE .*goal-state-dry-sess.json" <<<"$out"; then
         echo "ASSERTION FAILED: dry-run must list state file path, not just dir name"
         echo "  Output: ${out}"
         return 1
@@ -627,7 +675,7 @@ EOF
     # match (-F) against the constructed path so a shell-glob/regex metachar in the
     # temp path (e.g. mktemp's own brackets on some platforms) cannot make this match
     # accidentally succeed or fail.
-    if ! echo "$out" | grep "DELETE " | grep -qF -- "$state_file"; then
+    if ! grep -qF -- "$state_file" <<<"$out"; then
         echo "ASSERTION FAILED: dry-run must list full state file path verbatim (spaces in HOME)"
         echo "  Expected path: ${state_file}"
         echo "  Output: ${out}"
@@ -978,17 +1026,17 @@ test_execute_fails_when_dead_state_reap_reports_failure() {
         echo "  Output: ${FAKE_RUN_OUTPUT}"
         return 1
     fi
-    if ! echo "$FAKE_RUN_OUTPUT" | grep -q "dummy-project-a/fake-dead-state.json"; then
+    if ! grep -q -- "dummy-project-a/fake-dead-state.json" <<<"$FAKE_RUN_OUTPUT"; then
         echo "ASSERTION FAILED: dummy-project-a's candidate must still be reported"
         echo "  Output: ${FAKE_RUN_OUTPUT}"
         return 1
     fi
-    if ! echo "$FAKE_RUN_OUTPUT" | grep -q "dummy-project-b/fake-dead-state.json"; then
+    if ! grep -q -- "dummy-project-b/fake-dead-state.json" <<<"$FAKE_RUN_OUTPUT"; then
         echo "ASSERTION FAILED: a failure on the first directory must not abort the fan-out — dummy-project-b must still be scanned"
         echo "  Output: ${FAKE_RUN_OUTPUT}"
         return 1
     fi
-    if ! echo "$FAKE_RUN_OUTPUT" | grep -q "=== done ==="; then
+    if ! grep -q -- "=== done ===" <<<"$FAKE_RUN_OUTPUT"; then
         echo "ASSERTION FAILED: the report must still print its completion trailer before exiting non-zero"
         echo "  Output: ${FAKE_RUN_OUTPUT}"
         return 1
@@ -1003,17 +1051,17 @@ test_execute_fails_when_session_artifact_reap_reports_failure() {
         echo "  Output: ${FAKE_RUN_OUTPUT}"
         return 1
     fi
-    if ! echo "$FAKE_RUN_OUTPUT" | grep -q "dummy-project-a/fake-dead-artifact.json"; then
+    if ! grep -q -- "dummy-project-a/fake-dead-artifact.json" <<<"$FAKE_RUN_OUTPUT"; then
         echo "ASSERTION FAILED: dummy-project-a's candidate must still be reported"
         echo "  Output: ${FAKE_RUN_OUTPUT}"
         return 1
     fi
-    if ! echo "$FAKE_RUN_OUTPUT" | grep -q "dummy-project-b/fake-dead-artifact.json"; then
+    if ! grep -q -- "dummy-project-b/fake-dead-artifact.json" <<<"$FAKE_RUN_OUTPUT"; then
         echo "ASSERTION FAILED: a failure on the first directory must not abort the fan-out — dummy-project-b must still be scanned"
         echo "  Output: ${FAKE_RUN_OUTPUT}"
         return 1
     fi
-    if ! echo "$FAKE_RUN_OUTPUT" | grep -q "=== done ==="; then
+    if ! grep -q -- "=== done ===" <<<"$FAKE_RUN_OUTPUT"; then
         echo "ASSERTION FAILED: the report must still print its completion trailer before exiting non-zero"
         echo "  Output: ${FAKE_RUN_OUTPUT}"
         return 1
@@ -1028,7 +1076,7 @@ test_execute_succeeds_when_reap_helpers_report_no_failure() {
         echo "  Output: ${FAKE_RUN_OUTPUT}"
         return 1
     fi
-    if ! echo "$FAKE_RUN_OUTPUT" | grep -q "=== done ==="; then
+    if ! grep -q -- "=== done ===" <<<"$FAKE_RUN_OUTPUT"; then
         echo "ASSERTION FAILED: a clean run must still print its completion trailer"
         echo "  Output: ${FAKE_RUN_OUTPUT}"
         return 1
@@ -1084,7 +1132,7 @@ EOF
         echo "  Output: ${out}"
         return 1
     fi
-    if ! echo "$out" | grep -q "Usage"; then
+    if ! grep -q -- "Usage" <<<"$out"; then
         echo "ASSERTION FAILED: rejection must show usage"
         echo "  Output: ${out}"
         return 1
@@ -1136,7 +1184,7 @@ EOF
         echo "  Output: ${out}"
         return 1
     fi
-    if ! echo "$out" | grep -q "Usage"; then
+    if ! grep -q -- "Usage" <<<"$out"; then
         echo "ASSERTION FAILED: rejection must show usage"
         echo "  Output: ${out}"
         return 1
@@ -1188,7 +1236,7 @@ EOF
         echo "  Output: ${out}"
         return 1
     fi
-    if ! echo "$out" | grep -q "Usage"; then
+    if ! grep -q -- "Usage" <<<"$out"; then
         echo "ASSERTION FAILED: rejection must show usage"
         echo "  Output: ${out}"
         return 1
@@ -1348,12 +1396,163 @@ test_symlinked_project_reported_in_symlinks_section() {
     local out
     out=$(bash "$CLEANUP_SCRIPT" --dry-run 2>&1)
 
-    if ! echo "$out" | grep -A5 "SYMLINKS" | grep -q "linkproj"; then
+    local symlink_section
+    symlink_section=$(grep -A5 "SYMLINKS" <<<"$out")
+    if ! grep -q -- "linkproj" <<<"$symlink_section"; then
         echo "ASSERTION FAILED: symlinked entry must be reported in the SYMLINKS section"
         echo "  Output: ${out}"
         return 1
     fi
     return 0
+}
+
+# WI-8 — trace/key/evidence retention and exact stale-lock cleanup.
+test_pretool_trace_retention_and_custom_root() {
+    local custom="$FIXTURE_HOME/custom-omt" default="$FIXTURE_HOME/.omt/default"
+    mkdir -p "$custom/pretool-trace/keys" "$custom/evidence/pretool-trace/wi-8" \
+        "$custom/pretool-trace/.append.lock" "$default/pretool-trace"
+    local key
+    key=$(printf 'a%.0s' {1..64})
+    printf stale > "$custom/pretool-trace/events.jsonl"
+    printf stale > "$custom/pretool-trace/keys/$key.key"
+    printf stale > "$custom/evidence/pretool-trace/wi-8/result.txt"
+    touch -t 200001010000 "$custom/pretool-trace/events.jsonl" "$custom/pretool-trace/keys/$key.key" \
+        "$custom/evidence/pretool-trace/wi-8/result.txt" "$custom/pretool-trace/.append.lock"
+    printf sentinel > "$default/pretool-trace/events.jsonl"
+    export OMT_DIR="$custom"
+    local dry
+    dry=$(bash "$CLEANUP_SCRIPT" --dry-run)
+    grep -q -- "$custom/pretool-trace/events.jsonl" <<<"$dry" || return 1
+    grep -q -- "$custom/pretool-trace/keys/$key.key" <<<"$dry" || return 1
+    grep -q -- "$custom/evidence/pretool-trace/wi-8/result.txt" <<<"$dry" || return 1
+    grep -q -- "$custom/pretool-trace/.append.lock" <<<"$dry" || return 1
+    grep -q -- "$default/pretool-trace/events.jsonl" <<<"$dry" && return 1
+    [[ -f "$custom/pretool-trace/events.jsonl" ]] || return 1
+    bash "$CLEANUP_SCRIPT" --execute > /dev/null
+    [[ ! -e "$custom/pretool-trace/events.jsonl" ]] || return 1
+    [[ ! -e "$custom/pretool-trace/keys/$key.key" ]] || return 1
+    [[ ! -e "$custom/evidence/pretool-trace/wi-8/result.txt" ]] || return 1
+    [[ ! -e "$custom/pretool-trace/.append.lock" ]] || return 1
+    [[ -f "$default/pretool-trace/events.jsonl" ]] || return 1
+    unset OMT_DIR
+}
+
+test_pretool_trace_fixed_now_boundaries_all_families() (
+    local root="$FIXTURE_HOME/boundary" now=1000000000
+    mkdir -p "$root/pretool-trace/keys" "$root/evidence/pretool-trace/wi-8"
+    local key; key=$(printf 'b%.0s' {1..64})
+    local f
+    for f in events.jsonl events.jsonl.1 events.jsonl.2 events.jsonl.3; do printf x > "$root/pretool-trace/$f"; done
+    printf x > "$root/pretool-trace/keys/$key.key"
+    printf x > "$root/evidence/pretool-trace/wi-8/result.txt"
+    mkdir -p "$root/pretool-trace/.append.lock"
+    # The helper's stat dependency is replaced with a deterministic clock.
+    source "$SCRIPT_DIR/../../hooks/lib/state-liveness.sh"
+    local failed=0
+    TEST_MTIME=$((now - 6 * 86400)); _state_liveness_stat_mtime() { printf '%s\n' "$TEST_MTIME"; }
+    local paths="$root/pretool-trace/events.jsonl
+$root/pretool-trace/events.jsonl.1
+$root/pretool-trace/events.jsonl.2
+$root/pretool-trace/events.jsonl.3
+$root/pretool-trace/keys/$key.key
+$root/evidence/pretool-trace/wi-8/result.txt"
+    for age in 6 7; do
+        TEST_MTIME=$((now - age * 86400))
+        while IFS= read -r f; do _pretool_trace_stale "$f" "$now" && failed=1; done <<PATHS
+$paths
+PATHS
+        _pretool_trace_stale "$root/pretool-trace/.append.lock" "$now" && failed=1
+    done
+    TEST_MTIME=$((now - 7 * 86400 - 1))
+    while IFS= read -r f; do _pretool_trace_stale "$f" "$now" || failed=1; done <<PATHS
+$paths
+PATHS
+    _pretool_trace_stale "$root/pretool-trace/.append.lock" "$now" || failed=1
+    _state_liveness_stat_mtime() { return 1; }
+    _pretool_trace_stale "$root/pretool-trace/events.jsonl" "$now" && failed=1
+    [[ "${failed:-0}" -eq 0 ]]
+)
+
+test_pretool_trace_intermediate_ancestor_symlink_reported() {
+    local holder="$FIXTURE_HOME/holder" real="$FIXTURE_HOME/real" root
+    mkdir -p "$holder" "$real/root/pretool-trace"
+    printf sentinel > "$real/root/pretool-trace/events.jsonl"
+    ln -s "$real" "$holder/alias"
+    root="$holder/alias/root"
+    local out
+    out=$(OMT_DIR="$root" bash "$CLEANUP_SCRIPT" --execute 2>&1)
+    grep -q -- "SYMLINKS" <<<"$out" || return 1
+    grep -q -- "$holder/alias" <<<"$out" || return 1
+    [[ -f "$real/root/pretool-trace/events.jsonl" ]]
+}
+
+test_pretool_trace_lock_reap_matrix_actual_helper() (
+    local base="$FIXTURE_HOME/lock-matrix" now=1000000000 root out
+    mkdir -p "$base"
+    source "$SCRIPT_DIR/../../hooks/lib/state-liveness.sh"
+    _state_liveness_stat_mtime() { printf '%s\n' "$TEST_MTIME"; }
+
+    # Stale empty real lock: dry-run reports it; execute removes only the lock.
+    root="$base/stale"; mkdir -p "$root/pretool-trace/.append.lock"
+    TEST_MTIME=$((now - 7 * 86400 - 1))
+    out=$(reap_pretool_trace_artifacts "$root" "$now" 1)
+    grep -q -- "$root/pretool-trace/.append.lock" <<<"$out" || return 1
+    reap_pretool_trace_artifacts "$root" "$now" 0 >/dev/null
+    [[ ! -e "$root/pretool-trace/.append.lock" ]] || return 1
+
+    # Fresh and exactly-seven-day locks are not candidates.
+    for kind in fresh exact; do
+        root="$base/$kind"; mkdir -p "$root/pretool-trace/.append.lock"
+        if [[ "$kind" = fresh ]]; then TEST_MTIME="$now"; else TEST_MTIME=$((now - 7 * 86400)); fi
+        out=$(reap_pretool_trace_artifacts "$root" "$now" 1)
+        [[ -z "$out" ]] || return 1
+        [[ -d "$root/pretool-trace/.append.lock" ]] || return 1
+    done
+
+    # Stale nonempty lock is preserved, including its child.
+    root="$base/nonempty"; mkdir -p "$root/pretool-trace/.append.lock"
+    printf sentinel > "$root/pretool-trace/.append.lock/owner"
+    TEST_MTIME=$((now - 7 * 86400 - 1)); out=$(reap_pretool_trace_artifacts "$root" "$now" 1)
+    [[ -z "$out" ]] || return 1
+    [[ -f "$root/pretool-trace/.append.lock/owner" ]] || return 1
+
+    # Unreadable/stat failure is fail-safe and does not produce a candidate.
+    root="$base/unreadable"; mkdir -p "$root/pretool-trace/.append.lock"
+    _state_liveness_stat_mtime() { return 1; }
+    out=$(reap_pretool_trace_artifacts "$root" "$now" 1)
+    [[ -z "$out" ]] && [[ -d "$root/pretool-trace/.append.lock" ]]
+)
+
+test_pretool_trace_symlink_and_unknown_preserved() {
+    local custom="$FIXTURE_HOME/custom-omt" outside="$FIXTURE_HOME/outside"
+    mkdir -p "$custom/pretool-trace/keys" "$custom/evidence/pretool-trace/wi-8" "$outside"
+    mkdir -p "$outside/work"
+    printf sentinel > "$outside/events.jsonl"
+    ln -s "$outside" "$custom/pretool-trace/keys/link"
+    printf unknown > "$custom/evidence/pretool-trace/wi-8/unknown.bin"
+    ln -s "$outside/events.jsonl" "$custom/evidence/pretool-trace/wi-8/leaf.txt"
+    ln -s "$outside/work" "$custom/evidence/pretool-trace/wi-9"
+    ln -s "$outside/work" "$custom/pretool-trace/.append.lock"
+    export OMT_DIR="$custom"
+    local out
+    out=$(bash "$CLEANUP_SCRIPT" --execute 2>&1)
+    [[ -f "$outside/events.jsonl" ]] && [[ -L "$custom/pretool-trace/keys/link" ]] && [[ -f "$custom/evidence/pretool-trace/wi-8/unknown.bin" ]]
+    [[ -L "$custom/pretool-trace/.append.lock" ]] || return 1
+    grep -q -- "$custom/pretool-trace/keys/link" <<<"$out" || return 1
+    grep -q -- "$custom/evidence/pretool-trace/wi-8/unknown.bin" <<<"$out" || return 1
+    grep -q -- "$custom/evidence/pretool-trace/wi-8/leaf.txt" <<<"$out" || return 1
+    grep -q -- "$custom/evidence/pretool-trace/wi-9" <<<"$out" || return 1
+    grep -q -- "$custom/pretool-trace/.append.lock" <<<"$out" || return 1
+    unset OMT_DIR
+}
+
+test_pretool_trace_empty_override_uses_default_root() {
+    local project="$FIXTURE_HOME/.omt/empty-project/pretool-trace"
+    mkdir -p "$project"
+    printf stale > "$project/events.jsonl"
+    touch -t 200001010000 "$project/events.jsonl"
+    OMT_DIR="" bash "$CLEANUP_SCRIPT" --execute > /dev/null
+    [[ ! -e "$project/events.jsonl" ]]
 }
 
 # ---------------------------------------------------------------------------
@@ -1394,6 +1593,7 @@ main() {
     # AC 6.3 — default no-execute hermetic
     run_test test_default_no_execute_leaves_fixture_identical
     run_test test_real_omt_untouched_when_home_is_fixture
+    run_test_with_ambient_omt_dir test_harness_scans_fixture_not_ambient_omt_dir
 
     # Execute mode
     run_test test_execute_deletes_capricious_watcher
@@ -1441,6 +1641,12 @@ main() {
     # Symlink fan-out guard
     run_test test_symlinked_project_target_artifact_survives_execute
     run_test test_symlinked_project_reported_in_symlinks_section
+    run_test test_pretool_trace_retention_and_custom_root
+    run_test test_pretool_trace_symlink_and_unknown_preserved
+    run_test test_pretool_trace_fixed_now_boundaries_all_families
+    run_test test_pretool_trace_intermediate_ancestor_symlink_reported
+    run_test test_pretool_trace_lock_reap_matrix_actual_helper
+    run_test test_pretool_trace_empty_override_uses_default_root
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

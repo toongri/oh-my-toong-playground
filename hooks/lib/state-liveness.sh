@@ -9,6 +9,7 @@
 # lib/state-core.ts. Tests assert pairwise equality between both files.
 ACTIVE_IDLE_TTL=21600   # 6 hours — active session idle window
 TERMINAL_TTL=1800       # 30 minutes — terminal (active:false) grace period
+PRETOOL_TRACE_RETENTION_TTL=604800 # 7 days — strict mtime retention boundary
 
 # STATE_PREFIXES — the 6 managed state-file prefixes. This is the single
 # definition site for bash; the out-of-scope *seeding* point is
@@ -28,6 +29,395 @@ STATE_PREFIXES="goal-state- ultragoal-state- prometheus-state- deep-interview-ac
 # delete path. reap_session_artifacts is deliberately NOT `.json`-anchored:
 # state/block-count-* files carry no extension at all.
 SESSION_ARTIFACT_PREFIXES="codex-todo- state/block-count- goal-verdict- goal-codereview- ultragoal-verdict- ultragoal-codereview-"
+
+# _pretool_trace_stale <file> <now_epoch>
+#
+# Returns success only when a regular, non-symlink file has a readable mtime
+# strictly older than seven days.  A missing/unreadable mtime is preserved.
+_pretool_trace_stale() {
+  local file="$1"
+  local now_epoch="$2"
+  [ -f "$file" ] || [ -d "$file" ] || return 1
+  [ -L "$file" ] && return 1
+  local touched
+  touched=$(_state_liveness_stat_mtime "$file" 2>/dev/null || true)
+  case "$touched" in ''|*[!0-9]*) return 1 ;; esac
+  local age=$((now_epoch - touched))
+  [ "$age" -gt "$PRETOOL_TRACE_RETENTION_TTL" ]
+}
+
+_pretool_trace_safe_name() {
+  local name="$1"
+  printf '%s\n' "$name" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*\.txt$'
+}
+
+_pretool_trace_hex_key() {
+  local name="$1"
+  printf '%s\n' "$name" | grep -Eq '^[0-9a-f]{64}\.key$'
+}
+
+_pretool_trace_lease_lock_recover() {
+  local lock="$1" now_epoch="$2" entries owner pid probe entry count
+  [ -d "$lock" ] && [ ! -L "$lock" ] || return 1
+  count=0; owner=""
+  for entry in "$lock"/* "$lock"/.[!.]* "$lock"/..?*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    count=$((count + 1)); owner="$entry"
+  done
+  [ "$count" -eq 1 ] || {
+    [ "$count" -eq 0 ] && _pretool_trace_stale "$lock" "$now_epoch" && rmdir "$lock" 2>/dev/null
+    return $?
+  }
+  owner="${owner##*/}"
+  printf '%s\n' "$owner" | grep -Eq '^owner-[0-9]+-[0-9a-f]+$' || return 1
+  [ -f "$lock/$owner" ] && [ ! -L "$lock/$owner" ] || return 1
+  pid="${owner#owner-}"; pid="${pid%%-*}"
+  [ ! -s "$lock/$owner" ] || return 1
+  probe=$(kill -0 "$pid" 2>&1) && return 1
+  printf '%s\n' "$probe" | grep -qi 'operation not permitted' && return 1
+  rm -f "$lock/$owner" 2>/dev/null && rmdir "$lock" 2>/dev/null
+}
+
+_pretool_trace_valid_lease_lock() {
+  local lock="$1" owner pid entry count
+  [ -d "$lock" ] && [ ! -L "$lock" ] || return 1
+  count=0; owner=""
+  for entry in "$lock"/* "$lock"/.[!.]* "$lock"/..?*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    count=$((count + 1)); owner="$entry"
+  done
+  [ "$count" -eq 1 ] || return 1
+  [ -f "$owner" ] && [ ! -L "$owner" ] || return 1
+  [ ! -s "$owner" ] || return 1
+  owner="${owner##*/}"; printf '%s\n' "$owner" | grep -Eq '^owner-[0-9]+-[0-9a-f]+$' || return 1
+  pid="${owner#owner-}"; pid="${pid%%-*}"
+  [ ! -s "$lock/$owner" ] || return 1
+  return 0
+}
+
+# --- Append-lock coordination (pretool-trace/.append.lock) -----------------
+#
+# This is a SEPARATE protocol from the key lease-lock helpers above: the
+# append lock is acquired/held by scripts/pretool-trace/storage.ts's
+# acquireAppendLock/inspectAndRecoverLock (a live writer's non-blocking
+# appendEvent()), and its owner marker carries NON-EMPTY JSON metadata
+# (`{"pid":<pid>,"nonce":"<nonce>"}`), unlike the lease-lock's empty-file
+# marker. reap_pretool_trace_artifacts's generation-cleanup loop must
+# interoperate with exactly this protocol before deleting events.jsonl[.1-3],
+# so a live writer's in-flight append is never raced.
+#
+# _PRETOOL_APPEND_LOCK_GRACE — mirrors storage.ts's LOCK_INIT_GRACE_MS
+# (1000ms): an empty lock dir is only recoverable once older than this many
+# seconds, giving a writer that just mkdir'd the lock time to create its
+# owner file before cleanup treats the brief empty window as abandoned.
+_PRETOOL_APPEND_LOCK_GRACE=1
+
+# _pretool_append_lock_recover <lock> <now_epoch>
+#
+# Mirrors inspectAndRecoverLock exactly: recovers (unlinks the owner, rmdirs
+# the lock) ONLY when the lock is a real non-symlink directory containing
+# EXACTLY ONE entry that is a regular non-symlink file named
+# "owner-<pid>-<nonce>" whose content is byte-exactly
+# {"pid":<pid>,"nonce":"<nonce>"} (matching name) AND that pid is dead (not
+# EPERM). An empty lock dir recovers only once older than the init grace.
+# Every other shape (live owner, malformed/mismatched JSON, >1 entry,
+# unreadable owner, symlinked lock) is left untouched — return 1, unsafe.
+_pretool_append_lock_recover() {
+  local lock="$1" now_epoch="$2"
+  local entry count owner name content pid nonce name_pid name_nonce probe mtime age
+  [ -d "$lock" ] && [ ! -L "$lock" ] || return 1
+  count=0; owner=""
+  for entry in "$lock"/* "$lock"/.[!.]* "$lock"/..?*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    count=$((count + 1)); owner="$entry"
+  done
+  if [ "$count" -eq 0 ]; then
+    mtime=$(_state_liveness_stat_mtime "$lock" 2>/dev/null || true)
+    case "$mtime" in ''|*[!0-9]*) return 1 ;; esac
+    age=$((now_epoch - mtime))
+    [ "$age" -gt "$_PRETOOL_APPEND_LOCK_GRACE" ] || return 1
+    rmdir "$lock" 2>/dev/null
+    return $?
+  fi
+  [ "$count" -eq 1 ] || return 1
+  name="${owner##*/}"
+  printf '%s\n' "$name" | grep -Eq '^owner-[0-9]+-[0-9a-f]+$' || return 1
+  [ -f "$owner" ] && [ ! -L "$owner" ] || return 1
+  content=$(cat "$owner" 2>/dev/null) || return 1
+  case "$content" in
+    '{"pid":'[0-9][0-9]*',"nonce":"'[0-9a-f][0-9a-f]*'"}') ;;
+    *) return 1 ;;
+  esac
+  pid="${content#*:}"; pid="${pid%%,*}"
+  nonce="${content#*,}"; nonce="${nonce#*:}"; nonce="${nonce#\"}"; nonce="${nonce%\"\}}"
+  name_pid="${name#owner-}"; name_pid="${name_pid%%-*}"
+  name_nonce="${name#owner-*-}"
+  [ "$pid" = "$name_pid" ] && [ "$nonce" = "$name_nonce" ] || return 1
+  probe=$(kill -0 "$pid" 2>&1) && return 1
+  printf '%s\n' "$probe" | grep -qi 'operation not permitted' && return 1
+  rm -f "$owner" 2>/dev/null && rmdir "$lock" 2>/dev/null
+}
+
+# _pretool_append_lock_acquire <lock> <now_epoch>
+#
+# Mirrors acquireAppendLock: `mkdir` is the atomic acquisition primitive. On
+# EEXIST, attempts recovery exactly once and retries; any other outcome is
+# acquisition failure. On success echoes the created owner path (caller
+# captures it via command substitution) and returns 0; on failure prints
+# nothing and returns 1.
+_pretool_append_lock_acquire() {
+  local lock="$1" now_epoch="$2" attempt nonce owner
+  for attempt in 0 1; do
+    if mkdir "$lock" 2>/dev/null; then
+      chmod 700 "$lock" 2>/dev/null || true
+      nonce=$(od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')
+      case "$nonce" in [0-9a-f][0-9a-f]*) ;; *) rmdir "$lock" 2>/dev/null; return 1 ;; esac
+      owner="$lock/owner-$$-$nonce"
+      if (umask 077; printf '{"pid":%s,"nonce":"%s"}' "$$" "$nonce" > "$owner") 2>/dev/null; then
+        chmod 600 "$owner" 2>/dev/null || true
+        printf '%s\n' "$owner"
+        return 0
+      fi
+      rm -f "$owner" 2>/dev/null
+      rmdir "$lock" 2>/dev/null
+      return 1
+    fi
+    if [ "$attempt" -eq 0 ] && _pretool_append_lock_recover "$lock" "$now_epoch"; then
+      continue
+    fi
+    return 1
+  done
+  return 1
+}
+
+# _pretool_append_lock_release <owner> <lock>
+#
+# Releases only the caller's own owner + lock — never evicts a lock this
+# call did not itself create in _pretool_append_lock_acquire.
+_pretool_append_lock_release() {
+  local owner="$1" lock="$2"
+  rm -f "$owner" 2>/dev/null
+  rmdir "$lock" 2>/dev/null
+  return 0
+}
+
+# reap_pretool_trace_artifacts <root> <now_epoch> <dry_run>
+#
+# Scans only the explicit trace/key/evidence allowlist.  It emits stale paths
+# (including the exact lock directory) and never follows a symlink or enters
+# an unknown directory.  The empty real lock is removed with rmdir only.
+reap_pretool_trace_artifacts() {
+  local root="$1" now_epoch="$2" dry_run="$3"
+  local path name work child nonempty had_failure=0
+  local append_lock append_lock_owner append_lock_acquired
+  local trace="$root/pretool-trace"
+  local keys="$trace/keys"
+  local evidence="$root/evidence"
+  local evidence_trace="$evidence/pretool-trace"
+
+  # Trace generations and keys.
+  if [ -d "$trace" ] && [ ! -L "$trace" ]; then
+    # Coordinate with a live writer's append lock (see the
+    # _pretool_append_lock_* helpers above) before deleting any generation.
+    # dry_run stays fully read-only: never create/acquire/mutate the lock.
+    # In execute mode, acquisition failure (busy or any ambiguous/unsafe
+    # lock state) skips deletion of ALL FOUR generations this pass, per the
+    # fail-toward-preservation invariant — the rest of cleanup below is
+    # unaffected.
+    append_lock="$trace/.append.lock"
+    append_lock_owner=""
+    append_lock_acquired=0
+    if [ "$dry_run" != "1" ]; then
+      if append_lock_owner=$(_pretool_append_lock_acquire "$append_lock" "$now_epoch"); then
+        append_lock_acquired=1
+      fi
+    fi
+    if [ "$dry_run" = "1" ] || [ "$append_lock_acquired" -eq 1 ]; then
+      for name in events.jsonl events.jsonl.1 events.jsonl.2 events.jsonl.3; do
+        path="$trace/$name"
+        if _pretool_trace_stale "$path" "$now_epoch"; then
+          if [ "$dry_run" = "1" ]; then printf '%s\n' "$path"
+          elif rm -f "$path" 2>/dev/null; then printf '%s\n' "$path"
+          else echo "reap: failed to delete $path" >&2; had_failure=1; fi
+        fi
+      done
+    fi
+    if [ "$append_lock_acquired" -eq 1 ]; then
+      _pretool_append_lock_release "$append_lock_owner" "$append_lock"
+    fi
+    if [ -d "$keys" ] && [ ! -L "$keys" ]; then
+      for path in "$keys"/*; do
+        [ -f "$path" ] || continue
+        [ -L "$path" ] && continue
+        name="${path##*/}"
+        _pretool_trace_hex_key "$name" || continue
+        # Coordinate with getSessionKey's lease renewal.  mkdir is the
+        # atomic lock acquisition; stale is re-checked while held so a
+        # reader cannot be deleted between stat and unlink.
+        local lease_lock="${path}.lease-lock"
+        if [ "$dry_run" = "1" ]; then
+          _pretool_trace_stale "$path" "$now_epoch" && printf '%s\n' "$path"
+        elif mkdir "$lease_lock" 2>/dev/null; then
+          local lease_owner="owner-$$-$(printf '%x' $$)"
+          if ! (umask 077; : > "$lease_lock/$lease_owner"); then
+            rmdir "$lease_lock" 2>/dev/null || true
+            continue
+          fi
+          if _pretool_trace_stale "$path" "$now_epoch"; then
+            if [ "$dry_run" = "1" ]; then printf '%s\n' "$path"
+            elif rm -f "$path" 2>/dev/null; then printf '%s\n' "$path"
+            else echo "reap: failed to delete $path" >&2; had_failure=1; fi
+          fi
+          rm -f "$lease_lock/$lease_owner" 2>/dev/null || true
+          rmdir "$lease_lock" 2>/dev/null || true
+        else
+          _pretool_trace_lease_lock_recover "$lease_lock" "$now_epoch" >/dev/null 2>&1 || true
+        fi
+      done
+    fi
+    # Only the exact empty real lock is eligible for rmdir.
+    path="$trace/.append.lock"
+    if [ -d "$path" ] && [ ! -L "$path" ] && _pretool_trace_stale "$path" "$now_epoch"; then
+      nonempty=0
+      for child in "$path"/* "$path"/.[!.]* "$path"/..?*; do
+        [ -e "$child" ] || [ -L "$child" ] || continue
+        nonempty=1
+        break
+      done
+      if [ "$nonempty" -eq 0 ]; then
+        if [ "$dry_run" = "1" ]; then printf '%s\n' "$path"
+        elif rmdir "$path" 2>/dev/null; then printf '%s\n' "$path"
+        else echo "reap: failed to remove $path" >&2; had_failure=1; fi
+      fi
+    fi
+  fi
+
+  # Evidence work-item directories are an explicit finite allowlist.
+  if [ -d "$evidence" ] && [ ! -L "$evidence" ] && [ -d "$evidence_trace" ] && [ ! -L "$evidence_trace" ]; then
+    for work in wi-1 wi-2 wi-3 wi-4 wi-5 wi-6 wi-7 wi-8 wi-9 wi-10 final; do
+      path="$evidence_trace/$work"
+      [ -d "$path" ] && [ ! -L "$path" ] || continue
+      for child in "$path"/*; do
+        [ -f "$child" ] || continue
+        [ -L "$child" ] && continue
+        name="${child##*/}"
+        _pretool_trace_safe_name "$name" || continue
+        if _pretool_trace_stale "$child" "$now_epoch"; then
+          if [ "$dry_run" = "1" ]; then printf '%s\n' "$child"
+          elif rm -f "$child" 2>/dev/null; then printf '%s\n' "$child"
+          else echo "reap: failed to delete $child" >&2; had_failure=1; fi
+        fi
+      done
+    done
+  fi
+  [ "$had_failure" -eq 0 ]
+}
+
+# list_pretool_trace_symlinks <root>
+# Report symlinked allowed ancestors/leaves without traversing them.
+list_pretool_trace_symlinks() {
+  local root="$1" path work name
+  local trace="$root/pretool-trace" evidence="$root/evidence" evidence_trace="$root/evidence/pretool-trace"
+  for path in "$trace" "$trace/keys" "$trace/.append.lock" "$evidence" "$evidence_trace"; do
+    [ -L "$path" ] && printf '%s\n' "$path"
+  done
+  if [ -d "$evidence_trace" ] && [ ! -L "$evidence_trace" ]; then
+    for work in wi-1 wi-2 wi-3 wi-4 wi-5 wi-6 wi-7 wi-8 wi-9 wi-10 final; do
+      path="$evidence_trace/$work"
+      [ -L "$path" ] && printf '%s\n' "$path"
+      if [ -d "$path" ] && [ ! -L "$path" ]; then
+        for name in "$path"/* "$path"/.[!.]* "$path"/..?*; do
+          [ -L "$name" ] && printf '%s\n' "$name"
+        done
+      fi
+    done
+  fi
+  if [ -d "$trace" ] && [ ! -L "$trace" ]; then
+    for name in events.jsonl events.jsonl.1 events.jsonl.2 events.jsonl.3; do
+      path="$trace/$name"
+      [ -L "$path" ] && printf '%s\n' "$path"
+    done
+    if [ -d "$trace/keys" ] && [ ! -L "$trace/keys" ]; then
+      for path in "$trace/keys"/*; do [ -L "$path" ] && printf '%s\n' "$path"; done
+    fi
+  fi
+  return 0
+}
+
+# pretool_trace_find_ancestor_symlink <path>
+# Walk the lexical path from the managed root toward `/` without resolving it.
+# This catches an intermediate alias (for example holder/alias/root) before
+# any glob can follow it, while leaving ordinary ancestors such as /tmp alone.
+pretool_trace_find_ancestor_symlink() {
+  local current="$1" parent
+  case "$current" in /*) ;; *) return 1 ;; esac
+  while :; do
+    # macOS commonly exposes /var (and temporary roots beneath it) as a
+    # system alias. These OS-owned ancestors are outside the managed OMT
+    # boundary; do not reject them while still checking every project-local
+    # component below the boundary.
+    case "$current" in /tmp|/var|/private/var|/Users|/private/Users) return 1 ;; esac
+    if [ -L "$current" ]; then
+      printf '%s\n' "$current"
+      return 0
+    fi
+    [ "$current" = "/" ] && break
+    parent="${current%/*}"
+    [ -n "$parent" ] || parent="/"
+    [ "$parent" = "$current" ] && break
+    current="$parent"
+  done
+  return 1
+}
+
+# list_pretool_trace_unclassified <root>
+# Report immediate entries beneath managed trace/evidence directories that are
+# outside the allowlist. Unknown directories are reported but never entered.
+list_pretool_trace_unclassified() {
+  local root="$1" path name work child base
+  local trace="$root/pretool-trace" keys="$root/pretool-trace/keys"
+  local evidence_trace="$root/evidence/pretool-trace"
+  if [ -d "$trace" ] && [ ! -L "$trace" ]; then
+    for child in "$trace"/* "$trace"/.[!.]* "$trace"/..?*; do
+      [ -e "$child" ] || [ -L "$child" ] || continue
+      name="${child##*/}"
+      case "$name" in events.jsonl|events.jsonl.1|events.jsonl.2|events.jsonl.3|.append.lock|keys) ;; *) printf '%s\n' "$child" ;; esac
+    done
+    if [ -d "$keys" ] && [ ! -L "$keys" ]; then
+      for child in "$keys"/* "$keys"/.[!.]* "$keys"/..?*; do
+        [ -e "$child" ] || [ -L "$child" ] || continue
+        name="${child##*/}"
+        if _pretool_trace_hex_key "$name"; then
+          continue
+        fi
+        case "$name" in
+          *.key.lease-lock)
+            base="${name%.lease-lock}"
+            _pretool_trace_hex_key "$base" && _pretool_trace_valid_lease_lock "$child" && continue
+            ;;
+        esac
+        printf '%s\n' "$child"
+      done
+    fi
+  fi
+  if [ -d "$evidence_trace" ] && [ ! -L "$evidence_trace" ]; then
+    for child in "$evidence_trace"/* "$evidence_trace"/.[!.]* "$evidence_trace"/..?*; do
+      [ -e "$child" ] || [ -L "$child" ] || continue
+      name="${child##*/}"
+      case "$name" in wi-1|wi-2|wi-3|wi-4|wi-5|wi-6|wi-7|wi-8|wi-9|wi-10|final) ;; *) printf '%s\n' "$child" ;; esac
+    done
+    for work in wi-1 wi-2 wi-3 wi-4 wi-5 wi-6 wi-7 wi-8 wi-9 wi-10 final; do
+      path="$evidence_trace/$work"
+      [ -d "$path" ] && [ ! -L "$path" ] || continue
+      for child in "$path"/* "$path"/.[!.]* "$path"/..?*; do
+        [ -e "$child" ] || [ -L "$child" ] || continue
+        name="${child##*/}"
+        _pretool_trace_safe_name "$name" || printf '%s\n' "$child"
+      done
+    done
+  fi
+  return 0
+}
 
 # is_state_live <file> <now_epoch>
 #

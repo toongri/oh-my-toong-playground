@@ -508,6 +508,194 @@ test_codex_yaml_keeps_config_section_declared_so_stale_keys_can_be_cleared() {
     fi
 }
 
+# =============================================================================
+# Every root PreToolUse registration must map one-to-one to a stable trace ID.
+# Component entries derive the basename; raw command entries must carry an
+# explicit safe `trace-id`. This keeps the execution trace identity stable
+# without embedding machine-specific source paths in the registration.
+# =============================================================================
+_assert_pretooluse_trace_ids() {
+    local file="$1"
+    local platform="$2"
+    local expected_ids="$3"
+    local block records kind value trace id actual_ids expected count
+    block=$(_extract_hook_event_block "$file" "PreToolUse")
+        records=$(printf '%s\n' "$block" | awk '
+            /^[[:space:]]*-[[:space:]]+(component|command):/ {
+                if (seen) print kind "\t" value "\t" trace
+                kind = index($0, "component:") ? "component" : "command"
+                value = $0
+                sub(/^[^:]+:[[:space:]]*/, "", value)
+                sub(/[[:space:]]*$/, "", value)
+                trace = ""
+                seen = 1
+                next
+            }
+            seen && /^[[:space:]]+trace-id:/ {
+                trace = $0
+                sub(/^[^:]+:[[:space:]]*/, "", trace)
+                sub(/[[:space:]]*$/, "", trace)
+            }
+            END { if (seen) print kind "\t" value "\t" trace }
+        ')
+        actual_ids=""
+        while IFS=$'\t' read -r kind value trace; do
+            [ -n "$kind" ] || continue
+            if [ "$kind" = component ]; then
+                id=${value##*/}
+                if [ -n "$trace" ]; then
+                    echo "ASSERTION FAILED: $platform component entry '$value' must not declare trace-id '$trace'"
+                    return 1
+                fi
+            else
+                id=$trace
+                id=${id#\"}
+                id=${id%\"}
+                if [ -z "$id" ]; then
+                    echo "ASSERTION FAILED: $platform PreToolUse entry raw command '$value' requires an explicit trace-id (trace ID '<missing>')"
+                    return 1
+                fi
+            fi
+            if ! printf '%s\n' "$id" | grep -qE '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'; then
+                echo "ASSERTION FAILED: $platform PreToolUse entry '$value' has unsafe trace ID '$id'"
+                return 1
+            fi
+            if printf '%s\n' "$actual_ids" | grep -qFx "$id"; then
+                echo "ASSERTION FAILED: $platform PreToolUse entry '$value' has duplicated trace ID '$id'"
+                return 1
+            fi
+            actual_ids="${actual_ids}${id}"$'\n'
+        done <<EOF
+$records
+EOF
+
+        while IFS= read -r id; do
+            [ -n "$id" ] || continue
+            if ! printf '%s\n' "$expected_ids" | grep -qFx "$id"; then
+                echo "ASSERTION FAILED: $platform PreToolUse entry has unexpected trace ID '$id' (entry ID '$id')"
+                return 1
+            fi
+        done <<EOF
+$actual_ids
+EOF
+
+        while IFS= read -r expected; do
+            [ -n "$expected" ] || continue
+            count=$(printf '%s\n' "$actual_ids" | grep -cFx "$expected" || true)
+            if [ "$count" -ne 1 ]; then
+                echo "ASSERTION FAILED: $platform PreToolUse entry mapping expected trace ID '$expected' exactly once, observed $count"
+                return 1
+            fi
+        done <<EOF
+$expected_ids
+EOF
+}
+
+_claude_pretooluse_expected_ids="pre-tool-enforcer.sh
+qa-driver-guard.sh
+review-exec-guard.sh
+label-commit-gate.sh
+local-path-ref-gate.sh
+explain-diff-artifact-guard.sh"
+
+_codex_pretooluse_expected_ids="codex-qa-seed.sh
+codex-skill-invocation-gate.sh
+codex-explain-diff-artifact-guard.sh
+codex-write-guard.sh
+codex-qa-driver-guard.sh
+codex-label-commit-gate.sh
+codex-local-path-ref-gate.sh
+codex-review-exec-guard.sh
+codex.verify-entrypoint-gate
+codex-spawn-depth-gate.sh
+codex-review-dispatch-gate.sh"
+
+test_root_pretooluse_trace_ids_are_one_to_one() {
+    _assert_pretooluse_trace_ids "$REPO_DIR/claude.yaml" claude "$_claude_pretooluse_expected_ids" \
+        || return 1
+    _assert_pretooluse_trace_ids "$REPO_DIR/codex.yaml" codex "$_codex_pretooluse_expected_ids" \
+        || return 1
+}
+
+test_root_pretooluse_trace_id_negative_fixtures() {
+    local platform case_name output rc fixture_file expected_ids component_token
+    fixture_root=$(mktemp -d "${TMPDIR:-/tmp}/hook-registration-fixtures.XXXXXX")
+    trap 'rm -rf "$fixture_root"' RETURN
+
+    for platform in claude codex; do
+        fixture_file="$fixture_root/$platform.yaml"
+        expected_ids="_${platform}_pretooluse_expected_ids"
+        expected_ids=$(eval "printf '%s' \"\${$expected_ids}\"")
+        component_token=$([ "$platform" = claude ] && printf '%s' 'qa-driver-guard.sh' || printf '%s' 'codex-write-guard.sh')
+        for case_name in missing duplicate extra component; do
+            cp "$REPO_DIR/$platform.yaml" "$fixture_file"
+            case "$case_name" in
+                missing)
+                    if [ "$platform" = codex ]; then
+                        sed '/trace-id: "codex\.verify-entrypoint-gate"/d' "$fixture_file" > "$fixture_root/next.yaml"
+                    else
+                        sed '/component: pre-tool-enforcer\.sh/d' "$fixture_file" > "$fixture_root/next.yaml"
+                    fi
+                    ;;
+                duplicate)
+                    if [ "$platform" = codex ]; then
+                        sed 's/codex\.verify-entrypoint-gate/codex-write-guard.sh/' "$fixture_file" > "$fixture_root/next.yaml"
+                    else
+                        sed 's/component: qa-driver-guard\.sh/component: pre-tool-enforcer.sh/' "$fixture_file" > "$fixture_root/next.yaml"
+                    fi
+                    ;;
+                extra)
+                    if [ "$platform" = codex ]; then
+                        sed 's/codex\.verify-entrypoint-gate/unexpected.trace-id/' "$fixture_file" > "$fixture_root/next.yaml"
+                    else
+                        sed 's/component: qa-driver-guard\.sh/component: unexpected-component.sh/' "$fixture_file" > "$fixture_root/next.yaml"
+                    fi
+                    ;;
+                component)
+                    awk -v token="$component_token" '
+                        { print }
+                        !done && $0 ~ ("component: " token "$") {
+                            print "      trace-id: \"component-id\""
+                            done=1
+                        }
+                    ' "$fixture_file" > "$fixture_root/next.yaml"
+                    ;;
+            esac
+            mv "$fixture_root/next.yaml" "$fixture_file"
+            set +e
+            output=$(_assert_pretooluse_trace_ids "$fixture_file" "$platform" "$expected_ids" 2>&1)
+            rc=$?
+            set -e
+            if [ "$rc" -eq 0 ]; then
+                echo "ASSERTION FAILED: $platform negative fixture '$case_name' unexpectedly passed"
+                return 1
+            fi
+            case "$case_name" in
+                missing) printf '%s\n' "$output" | grep -qF "$platform PreToolUse entry" && printf '%s\n' "$output" | grep -qF "trace ID" ;;
+                duplicate) printf '%s\n' "$output" | grep -qF "$platform PreToolUse entry" && printf '%s\n' "$output" | grep -qF "trace ID" ;;
+                extra) printf '%s\n' "$output" | grep -qF "$platform PreToolUse entry" && printf '%s\n' "$output" | grep -qF "unexpected" ;;
+                component) printf '%s\n' "$output" | grep -qF "$platform component entry" && printf '%s\n' "$output" | grep -qF "component-id" ;;
+            esac || {
+                echo "ASSERTION FAILED: $platform negative fixture '$case_name' did not name platform, entry, and ID: $output"
+                return 1
+            }
+        done
+        if [ "$platform" = codex ]; then
+            cp "$REPO_DIR/codex.yaml" "$fixture_file"
+            sed 's/codex\.verify-entrypoint-gate/unsafe trace-id/' "$fixture_file" > "$fixture_root/next.yaml"
+            mv "$fixture_root/next.yaml" "$fixture_file"
+            set +e
+            output=$(_assert_pretooluse_trace_ids "$fixture_file" codex "$expected_ids" 2>&1)
+            rc=$?
+            set -e
+            [ "$rc" -ne 0 ] && printf '%s\n' "$output" | grep -qF "unsafe trace ID 'unsafe trace-id'" || {
+                echo "ASSERTION FAILED: codex negative fixture 'unsafe' did not name platform, entry, and ID: $output"
+                return 1
+            }
+        fi
+    done
+}
+
 main() {
     echo "=========================================="
     echo "Hook Registration Consistency Tests"
@@ -530,6 +718,8 @@ main() {
     run_test test_codex_spawn_depth_gate_matcher_reaches_runtime_tool_name
     run_test test_codex_review_dispatch_gate_registered_and_reaches_namespaced_tool
     run_test test_codex_yaml_keeps_config_section_declared_so_stale_keys_can_be_cleared
+    run_test test_root_pretooluse_trace_ids_are_one_to_one
+    run_test test_root_pretooluse_trace_id_negative_fixtures
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

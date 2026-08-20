@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import { syncDirectory, copyFile, rewriteLibImports } from "./sync-directory.ts";
+import { syncDirectory, copyFile, writeResidentFileAtomically, rewriteLibImports, planSyncDirectoryMutations } from "./sync-directory.ts";
 import { detectBareImports } from "../adapters/ts-lib-deps.ts";
 
 async function writeFile(filePath: string, content: string, mode?: number): Promise<void> {
@@ -81,6 +81,119 @@ describe("syncDirectory", () => {
 			await syncDirectory(src, tgt);
 
 			expect(await exists(path.join(tgt, "sub/orphan.ts"))).toBe(false);
+		});
+	});
+
+	describe("정확한 파일 변이 계획과 journal 경계", () => {
+		it("plans included leaves and deletable orphans in deterministic order", async () => {
+			await writeFile(path.join(src, "z.ts"), "z");
+			await writeFile(path.join(src, "a.ts"), "a");
+			await writeFile(path.join(src, "ignored.test.ts"), "keep source out");
+			await writeFile(path.join(tgt, "orphan.ts"), "orphan");
+			await writeFile(path.join(tgt, "ignored.test.ts"), "resident");
+
+			const planned = await planSyncDirectoryMutations(src, tgt);
+
+			expect(planned).toEqual([
+				path.join(tgt, "a.ts"),
+				path.join(tgt, "z.ts"),
+				path.join(tgt, "orphan.ts"),
+			]);
+		});
+
+		it("routes every file write and orphan unlink through mutation hooks", async () => {
+			await writeFile(path.join(src, "a.ts"), "new");
+			await writeFile(path.join(src, "b.ts"), "new-b");
+			await writeFile(path.join(tgt, "a.ts"), "old");
+			await writeFile(path.join(tgt, "orphan.ts"), "orphan");
+			const calls: string[] = [];
+
+			await syncDirectory(src, tgt, {
+				mutationHooks: {
+					async mutate(targetPath, operation) {
+						calls.push(targetPath);
+						await operation();
+					},
+				},
+			});
+
+			expect(calls).toEqual([
+				path.join(tgt, "a.ts"),
+				path.join(tgt, "b.ts"),
+				path.join(tgt, "orphan.ts"),
+			]);
+			expect(await fs.readFile(path.join(tgt, "a.ts"), "utf8")).toBe("new");
+			expect(await exists(path.join(tgt, "orphan.ts"))).toBe(false);
+		});
+
+		it("keeps planner and executor write sets byte-for-byte aligned", async () => {
+			await writeFile(path.join(src, "rewrite.ts"), "import x from '@lib/x.ts';\n");
+			await writeFile(path.join(src, "plain.ts"), "plain");
+			await writeFile(path.join(src, "ignored.test.ts"), "ignored");
+			await writeFile(path.join(tgt, "orphan.ts"), "orphan");
+			await writeFile(path.join(tgt, "ignored.test.ts"), "resident");
+			const planned = await planSyncDirectoryMutations(src, tgt);
+			const calls: string[] = [];
+
+			await syncDirectory(src, tgt, {
+				platformRoot: tgt,
+				mutationHooks: {
+					async mutate(targetPath, operation) {
+						calls.push(targetPath);
+						await operation();
+					},
+				},
+			});
+
+			expect(calls).toEqual(planned);
+		});
+
+		it("does not execute a conflicting leaf operation and preserves its resident", async () => {
+			await writeFile(path.join(src, "a.ts"), "new");
+			await writeFile(path.join(tgt, "a.ts"), "external");
+			let operationCalled = false;
+
+			await expect(syncDirectory(src, tgt, {
+				mutationHooks: {
+					async mutate(targetPath, operation) {
+						if (targetPath === path.join(tgt, "a.ts")) throw new Error("conflict");
+						await operation();
+						operationCalled = true;
+					},
+				},
+			})).rejects.toThrow("conflict");
+			expect(operationCalled).toBe(false);
+			expect(await fs.readFile(path.join(tgt, "a.ts"), "utf8")).toBe("external");
+		});
+
+		it("keeps an earlier leaf journaled when a later mutation fails", async () => {
+			await writeFile(path.join(src, "a.ts"), "a");
+			await writeFile(path.join(src, "b.ts"), "b");
+			const calls: string[] = [];
+
+			await expect(syncDirectory(src, tgt, {
+				mutationHooks: {
+					async mutate(targetPath, operation) {
+						calls.push(targetPath);
+						await operation();
+						if (targetPath === path.join(tgt, "b.ts")) throw new Error("second leaf failed");
+					},
+				},
+			})).rejects.toThrow("second leaf failed");
+			expect(calls).toEqual([path.join(tgt, "a.ts"), path.join(tgt, "b.ts")]);
+			expect(await fs.readFile(path.join(tgt, "a.ts"), "utf8")).toBe("a");
+		});
+
+		it("leaves a newly-created empty parent when the first leaf copy fails", async () => {
+			await writeFile(path.join(src, "nested", "a.ts"), "a");
+			const copySpy = spyOn(fs, "copyFile").mockRejectedValueOnce(new Error("copy failed"));
+			try {
+				await expect(syncDirectory(src, tgt)).rejects.toThrow("copy failed");
+			} finally {
+				copySpy.mockRestore();
+			}
+			expect(await exists(path.join(tgt, "nested"))).toBe(true);
+			expect(await fs.readdir(path.join(tgt, "nested"))).toEqual([]);
 		});
 	});
 
@@ -331,6 +444,33 @@ describe("@lib/ alias rewrite at copy time (platformRoot option)", () => {
 			.replace(/"@lib\//g, `"${prefix}lib/`);
 
 		expect(rewritten).toBe(contentBefore);
+	});
+
+	it("rewrites atomically and preserves source mode when the resident exists", async () => {
+		const sourceFile = path.join(src, "run.ts");
+		const targetFile = path.join(tgt, "run.ts");
+		await writeFile(sourceFile, "import { foo } from '@lib/foo.ts';\n", 0o755);
+		await writeFile(targetFile, "resident\n", 0o600);
+
+		await syncDirectory(src, tgt, { platformRoot });
+
+		expect(await fs.readFile(targetFile, "utf8")).toContain("../../lib/foo.ts");
+		expect((await fs.stat(targetFile)).mode & 0o777).toBe((await fs.stat(sourceFile)).mode & 0o777);
+	});
+
+	it("preserves resident and cleans the temporary rewrite when rename fails", async () => {
+		const sourceFile = path.join(src, "run.ts");
+		const targetFile = path.join(tgt, "run.ts");
+		await writeFile(sourceFile, "import { foo } from '@lib/foo.ts';\n");
+		await writeFile(targetFile, "resident\n");
+		const renameSpy = spyOn(fs, "rename").mockRejectedValueOnce(new Error("rename failed"));
+		try {
+			await expect(syncDirectory(src, tgt, { platformRoot })).rejects.toThrow("rename failed");
+		} finally {
+			renameSpy.mockRestore();
+		}
+		expect(await fs.readFile(targetFile, "utf8")).toBe("resident\n");
+		expect((await fs.readdir(tgt)).filter((name) => name.includes(".run.ts.") && name.endsWith(".tmp"))).toEqual([]);
 	});
 });
 
@@ -643,6 +783,12 @@ describe("detectBareImports (content-based bare import detection)", () => {
 describe("copyFile", () => {
 	let tmpDir: string;
 
+	async function tempResidues(target: string): Promise<string[]> {
+		const dir = path.dirname(target);
+		const prefix = `.${path.basename(target)}.`;
+		return (await fs.readdir(dir)).filter((entry) => entry.startsWith(prefix));
+	}
+
 	beforeEach(async () => {
 		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "copy-file-test-"));
 	});
@@ -672,6 +818,93 @@ describe("copyFile", () => {
 
 			expect(await exists(tgt)).toBe(true);
 		});
+
+		it("atomically replaces an existing file and leaves no temporary residue", async () => {
+			const src = path.join(tmpDir, "src.txt");
+			const tgt = path.join(tmpDir, "out/tgt.txt");
+			await fs.writeFile(src, "new bytes");
+			await fs.chmod(src, 0o755);
+			await fs.mkdir(path.dirname(tgt), { recursive: true });
+			await fs.writeFile(tgt, "old bytes");
+			await fs.chmod(tgt, 0o644);
+
+			await copyFile(src, tgt);
+
+			expect(await fs.readFile(tgt, "utf8")).toBe("new bytes");
+			expect((await fs.stat(tgt)).mode & 0o111).toBeTruthy();
+			expect(await tempResidues(tgt)).toEqual([]);
+		});
+
+		it("preserves the resident target when rename fails and cleans the temporary file", async () => {
+			const src = path.join(tmpDir, "src.txt");
+			const tgt = path.join(tmpDir, "out/tgt.txt");
+			await fs.writeFile(src, "new bytes");
+			await fs.mkdir(tgt, { recursive: true });
+			await fs.writeFile(path.join(tgt, "resident.txt"), "resident");
+			const renameSpy = spyOn(fs, "rename").mockRejectedValueOnce(new Error("rename failed"));
+
+			try {
+				await expect(copyFile(src, tgt)).rejects.toThrow("rename failed");
+			} finally {
+				renameSpy.mockRestore();
+			}
+
+			expect(await fs.readFile(path.join(tgt, "resident.txt"), "utf8")).toBe("resident");
+			expect(await tempResidues(tgt)).toEqual([]);
+		});
+
+		it("preserves the resident target when copying fails", async () => {
+			const src = path.join(tmpDir, "src.txt");
+			const tgt = path.join(tmpDir, "out/tgt.txt");
+			await fs.writeFile(src, "new bytes");
+			await fs.mkdir(path.dirname(tgt), { recursive: true });
+			await fs.writeFile(tgt, "old bytes");
+			const copySpy = spyOn(fs, "copyFile").mockRejectedValueOnce(new Error("copy failed"));
+
+			try {
+				await expect(copyFile(src, tgt)).rejects.toThrow("copy failed");
+			} finally {
+				copySpy.mockRestore();
+			}
+
+			expect(await fs.readFile(tgt, "utf8")).toBe("old bytes");
+			expect(await tempResidues(tgt)).toEqual([]);
+		});
+
+		it("preserves the resident target when chmod fails", async () => {
+			const src = path.join(tmpDir, "src.sh");
+			const tgt = path.join(tmpDir, "out/tgt.sh");
+			await fs.writeFile(src, "#!/bin/sh\n");
+			await fs.chmod(src, 0o755);
+			await fs.mkdir(path.dirname(tgt), { recursive: true });
+			await fs.writeFile(tgt, "old bytes");
+			const chmodSpy = spyOn(fs, "chmod").mockRejectedValueOnce(new Error("chmod failed"));
+
+			try {
+				await expect(copyFile(src, tgt)).rejects.toThrow("chmod failed");
+			} finally {
+				chmodSpy.mockRestore();
+			}
+
+			expect(await fs.readFile(tgt, "utf8")).toBe("old bytes");
+			expect(await tempResidues(tgt)).toEqual([]);
+		});
+
+		it("replaces a symlink itself without changing its external target", async () => {
+			const src = path.join(tmpDir, "src.txt");
+			const external = path.join(tmpDir, "external.txt");
+			const tgt = path.join(tmpDir, "out/tgt.txt");
+			await fs.writeFile(src, "new bytes");
+			await fs.writeFile(external, "external bytes");
+			await fs.mkdir(path.dirname(tgt), { recursive: true });
+			await fs.symlink(external, tgt);
+
+			await copyFile(src, tgt);
+
+			expect(await fs.readFile(external, "utf8")).toBe("external bytes");
+			expect((await fs.lstat(tgt)).isSymbolicLink()).toBe(false);
+			expect(await fs.readFile(tgt, "utf8")).toBe("new bytes");
+		});
 	});
 
 	describe("실행 권한 보존", () => {
@@ -698,5 +931,65 @@ describe("copyFile", () => {
 			const stat = await fs.stat(tgt);
 			expect(stat.mode & 0o111).toBe(0);
 		});
+	});
+});
+
+describe("writeResidentFileAtomically", () => {
+	let tmpDir: string;
+
+	async function tempResidues(target: string): Promise<string[]> {
+		const dir = path.dirname(target);
+		const prefix = `.${path.basename(target)}.`;
+		return (await fs.readdir(dir)).filter((entry) => entry.startsWith(prefix));
+	}
+
+	beforeEach(async () => { tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "resident-writer-test-")); });
+	afterEach(async () => { await fs.rm(tmpDir, { recursive: true, force: true }); });
+
+	it("writes UTF-8 content and preserves the resident mode", async () => {
+		const target = path.join(tmpDir, "resident.txt");
+		await writeFile(target, "old", 0o751);
+		await writeResidentFileAtomically(target, "새 내용");
+		expect(await fs.readFile(target, "utf8")).toBe("새 내용");
+		expect((await fs.stat(target)).mode & 0o777).toBe(0o751);
+		expect(await tempResidues(target)).toEqual([]);
+	});
+
+	it("propagates resident stat failure before creating a parent or temp", async () => {
+		const target = path.join(tmpDir, "nested", "resident.txt");
+		const statSpy = spyOn(fs, "stat").mockRejectedValueOnce(Object.assign(new Error("stat failed"), { code: "EIO" }));
+		const writeSpy = spyOn(fs, "writeFile");
+		const chmodSpy = spyOn(fs, "chmod");
+		const renameSpy = spyOn(fs, "rename");
+		try {
+			await expect(writeResidentFileAtomically(target, "replacement")).rejects.toThrow("stat failed");
+		} finally {
+			statSpy.mockRestore();
+			writeSpy.mockRestore();
+			chmodSpy.mockRestore();
+			renameSpy.mockRestore();
+		}
+		expect(await exists(path.dirname(target))).toBe(false);
+		expect(writeSpy).not.toHaveBeenCalled();
+		expect(chmodSpy).not.toHaveBeenCalled();
+		expect(renameSpy).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		["write", "write failed", "writeFile"],
+		["chmod", "chmod failed", "chmod"],
+		["rename", "rename failed", "rename"],
+	])("preserves the resident and cleans temp when %s fails", async (_stage, message, method) => {
+		const target = path.join(tmpDir, "resident.txt");
+		await writeFile(target, "resident", 0o640);
+		const stub = spyOn(fs, method as "writeFile" | "chmod" | "rename").mockRejectedValueOnce(new Error(message));
+		try {
+			await expect(writeResidentFileAtomically(target, "replacement")).rejects.toThrow(message);
+		} finally {
+			stub.mockRestore();
+		}
+		expect(await fs.readFile(target, "utf8")).toBe("resident");
+		expect((await fs.stat(target)).mode & 0o777).toBe(0o640);
+		expect(await tempResidues(target)).toEqual([]);
 	});
 });

@@ -11,8 +11,11 @@ import {
 	syncMcpsMerge,
 	opencodeAdapter,
 } from "./opencode.ts";
+import { planCategoryDestinationPaths } from "./destinations.ts";
 import { assertMappedTier } from "../lib/model-map.ts";
 import type { ModelMap } from "../lib/types.ts";
+import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
+import { DeployTransaction } from "../lib/deploy-transaction.ts";
 
 // =============================================================================
 // Test helpers
@@ -30,6 +33,20 @@ async function readJson(file: string): Promise<Record<string, unknown>> {
 async function writeJson(file: string, obj: Record<string, unknown>): Promise<void> {
 	await fs.mkdir(path.dirname(file), { recursive: true });
 	await fs.writeFile(file, JSON.stringify(obj, null, 2) + "\n", "utf-8");
+}
+
+function recordingMutationHooks(options?: {
+	throwAt?: number;
+}): { hooks: DeployMutationHooks; calls: string[] } {
+	const calls: string[] = [];
+	const hooks: DeployMutationHooks = {
+		async mutate(targetPath, operation) {
+			calls.push(targetPath);
+			if (options?.throwAt === calls.length) throw new Error("mutation failed");
+			await operation();
+		},
+	};
+	return { hooks, calls };
 }
 
 // =============================================================================
@@ -522,13 +539,18 @@ describe("opencodeAdapter.syncRulesDirect", () => {
 		try {
 			await opencodeAdapter.syncRulesDirect(targetDir, "coding-discipline", ruleFile, false);
 
-			const ruleTarget = path.join(targetDir, ".opencode", "rules", "coding-discipline.md");
+			const [ruleRelative, configRelative] = planCategoryDestinationPaths(
+				"opencode",
+				"rules",
+				"coding-discipline",
+			);
+			const ruleTarget = path.join(targetDir, ruleRelative);
 			const ruleContent = await fs.readFile(ruleTarget, "utf-8");
 			expect(ruleContent).toContain("Coding Discipline");
 
-			const config = await readJson(path.join(targetDir, ".opencode", "opencode.json"));
+			const config = await readJson(path.join(targetDir, configRelative));
 			const instructions = config["instructions"] as string[];
-			expect(instructions).toContain(".opencode/rules/*.md");
+			expect(instructions).toEqual([".opencode/rules/*.md"]);
 		} finally {
 			await fs.rm(targetDir, { recursive: true, force: true });
 		}
@@ -578,6 +600,123 @@ describe("opencodeAdapter.syncRulesDirect", () => {
 				.then(() => true)
 				.catch(() => false);
 			expect(exists).toBe(false);
+		} finally {
+			await fs.rm(targetDir, { recursive: true, force: true });
+		}
+	});
+
+	it("notifies rule then sidecar after each successful write with readable bytes via `syncRulesDirect`", async () => {
+		const targetDir = await mkTempDir();
+		try {
+			const notifications: Array<{ path: string; bytes: string }> = [];
+			const observer = async (writtenPath: string) => {
+				notifications.push({ path: writtenPath, bytes: await fs.readFile(writtenPath, "utf-8") });
+			};
+			const [ruleRelative, configRelative] = planCategoryDestinationPaths(
+				"opencode",
+				"rules",
+				"coding-discipline",
+			);
+			const ruleTarget = path.join(targetDir, ruleRelative);
+			const configFile = path.join(targetDir, configRelative);
+
+			await opencodeAdapter.syncRulesDirect(targetDir, "coding-discipline", ruleFile, false, observer);
+
+			expect(notifications.map(({ path: writtenPath }) => writtenPath)).toEqual([ruleTarget, configFile]);
+			expect(notifications[0]?.bytes).toContain("Coding Discipline");
+			expect((JSON.parse(notifications[1]?.bytes ?? "{}") as Record<string, unknown>)["instructions"]).toEqual([
+				".opencode/rules/*.md",
+			]);
+		} finally {
+			await fs.rm(targetDir, { recursive: true, force: true });
+		}
+	});
+
+	it("notifies only the rule when opencode.json is corrupt and read fails via `syncRulesDirect`", async () => {
+		const targetDir = await mkTempDir();
+		try {
+			const configFile = path.join(targetDir, ".opencode", "opencode.json");
+			await fs.mkdir(path.dirname(configFile), { recursive: true });
+			await fs.writeFile(configFile, "{ invalid json }", "utf-8");
+			const notifications: string[] = [];
+
+			await expect(
+				opencodeAdapter.syncRulesDirect(targetDir, "coding-discipline", ruleFile, false, (writtenPath) => {
+					notifications.push(writtenPath);
+				}),
+			).rejects.toThrow(SyntaxError);
+
+			const [ruleRelative] = planCategoryDestinationPaths("opencode", "rules", "coding-discipline");
+			expect(notifications).toEqual([path.join(targetDir, ruleRelative)]);
+		} finally {
+			await fs.rm(targetDir, { recursive: true, force: true });
+		}
+	});
+
+	it("notifies only the rule when the instructions glob already exists via `syncRulesDirect`", async () => {
+		const targetDir = await mkTempDir();
+		try {
+			await opencodeAdapter.syncRulesDirect(targetDir, "coding-discipline", ruleFile, false);
+			const notifications: string[] = [];
+			await opencodeAdapter.syncRulesDirect(targetDir, "coding-discipline", ruleFile, false, (writtenPath) => {
+				notifications.push(writtenPath);
+			});
+
+			const [ruleRelative] = planCategoryDestinationPaths("opencode", "rules", "coding-discipline");
+			expect(notifications).toEqual([path.join(targetDir, ruleRelative)]);
+		} finally {
+			await fs.rm(targetDir, { recursive: true, force: true });
+		}
+	});
+
+	it("journals the rule and opencode.json writes through mutation hooks in order via `syncRulesDirect`", async () => {
+		const targetDir = await mkTempDir();
+		try {
+			const { hooks, calls } = recordingMutationHooks();
+			const [ruleRelative, configRelative] = planCategoryDestinationPaths("opencode", "rules", "coding-discipline");
+			await opencodeAdapter.syncRulesDirect(targetDir, "coding-discipline", ruleFile, false, undefined, hooks);
+			expect(calls).toEqual([path.join(targetDir, ruleRelative), path.join(targetDir, configRelative)]);
+		} finally {
+			await fs.rm(targetDir, { recursive: true, force: true });
+		}
+	});
+
+	it("preserves a resident rule when mutation pre-CAS rejects it via `syncRulesDirect`", async () => {
+		const targetDir = await mkTempDir();
+		try {
+			const [ruleRelative] = planCategoryDestinationPaths("opencode", "rules", "coding-discipline");
+			const ruleTarget = path.join(targetDir, ruleRelative);
+			await fs.mkdir(path.dirname(ruleTarget), { recursive: true });
+			await fs.writeFile(ruleTarget, "resident", "utf-8");
+			const { hooks } = recordingMutationHooks({ throwAt: 1 });
+			await expect(
+				opencodeAdapter.syncRulesDirect(targetDir, "coding-discipline", ruleFile, false, undefined, hooks),
+			).rejects.toThrow("mutation failed");
+			expect(await fs.readFile(ruleTarget, "utf-8")).toBe("resident");
+		} finally {
+			await fs.rm(targetDir, { recursive: true, force: true });
+		}
+	});
+
+	it("does not notify in dry-run mode via `syncRulesDirect`", async () => {
+		const targetDir = await mkTempDir();
+		try {
+			const notifications: string[] = [];
+			await opencodeAdapter.syncRulesDirect(targetDir, "coding-discipline", ruleFile, true, (writtenPath) => {
+				notifications.push(writtenPath);
+			});
+			expect(notifications).toEqual([]);
+		} finally {
+			await fs.rm(targetDir, { recursive: true, force: true });
+		}
+	});
+
+	it("does not invoke mutation hooks during dry-run via `syncRulesDirect`", async () => {
+		const targetDir = await mkTempDir();
+		try {
+			const { hooks, calls } = recordingMutationHooks();
+			await opencodeAdapter.syncRulesDirect(targetDir, "coding-discipline", ruleFile, true, undefined, hooks);
+			expect(calls).toEqual([]);
 		} finally {
 			await fs.rm(targetDir, { recursive: true, force: true });
 		}
@@ -730,6 +869,112 @@ describe("opencodeAdapter.syncPlatformYaml", () => {
 		expect(mcp["serena"]).toEqual({ type: "stdio", command: "npx serena" });
 	});
 
+	it("notifies after each successful tracked config write and observes written bytes via `syncPlatformYaml`", async () => {
+		const configFile = path.join(tmpDir, ".opencode", "opencode.json");
+		const notifications: Array<{ path: string; bytes: string }> = [];
+		const observer = async (writtenPath: string) => {
+			notifications.push({ path: writtenPath, bytes: await fs.readFile(writtenPath, "utf-8") });
+		};
+
+		await opencodeAdapter.syncPlatformYaml(
+			tmpDir,
+			{
+				"model-map": { tiers: { opus: { model: "openai/o3" } } },
+				config: { model: "openai/o3" },
+				mcps: {
+					context7: { type: "http", url: "http://localhost:3000" },
+					serena: { type: "stdio", command: "npx serena" },
+				},
+			},
+			false,
+			undefined,
+			observer,
+		);
+
+		expect(notifications.map(({ path: writtenPath }) => writtenPath)).toEqual([
+			configFile,
+			configFile,
+			configFile,
+		]);
+		expect(notifications.map(({ bytes }) => JSON.parse(bytes))).toEqual([
+			{ model: "openai/o3" },
+			{ model: "openai/o3", mcp: { context7: { type: "http", url: "http://localhost:3000" } } },
+			{
+				model: "openai/o3",
+				mcp: {
+					context7: { type: "http", url: "http://localhost:3000" },
+					serena: { type: "stdio", command: "npx serena" },
+				},
+			},
+		]);
+	});
+
+	it("does not notify for dry-run, skipped sections, or failed writes via `syncPlatformYaml`", async () => {
+		const notifications: string[] = [];
+		const observer = (writtenPath: string) => {
+			notifications.push(writtenPath);
+		};
+
+		await opencodeAdapter.syncPlatformYaml(
+			tmpDir,
+			{ config: { model: "openai/o3" }, hooks: { UserPromptSubmit: [] } },
+			true,
+			undefined,
+			observer,
+		);
+		expect(notifications).toEqual([]);
+
+		const configFile = path.join(tmpDir, ".opencode", "opencode.json");
+		await fs.mkdir(path.dirname(configFile), { recursive: true });
+		await fs.writeFile(configFile, "{ invalid json }", "utf-8");
+		await expect(
+			opencodeAdapter.syncPlatformYaml(tmpDir, { config: { model: "openai/o3" } }, false, undefined, observer),
+		).rejects.toThrow(SyntaxError);
+		expect(notifications).toEqual([]);
+	});
+
+	it("journals each opencode.json section mutation in declaration order via `syncPlatformYaml`", async () => {
+		const { hooks, calls } = recordingMutationHooks();
+		const configFile = path.join(tmpDir, ".opencode", "opencode.json");
+		await opencodeAdapter.syncPlatformYaml(
+			tmpDir,
+			{ config: { model: "openai/o3" }, mcps: { context7: { type: "http", url: "https://context7.example" } } },
+			false,
+			undefined,
+			undefined,
+			hooks,
+		);
+		expect(calls).toEqual([configFile, configFile]);
+	});
+
+	it("keeps the first section write when a later opencode.json mutation is rejected via `syncPlatformYaml`", async () => {
+		const { hooks } = recordingMutationHooks({ throwAt: 2 });
+		await expect(
+			opencodeAdapter.syncPlatformYaml(
+				tmpDir,
+				{ config: { model: "openai/o3" }, mcps: { context7: { type: "http", url: "https://context7.example" } } },
+				false,
+				undefined,
+				undefined,
+				hooks,
+			),
+		).rejects.toThrow("mutation failed");
+		expect(await readJson(path.join(tmpDir, ".opencode", "opencode.json"))).toEqual({ model: "openai/o3" });
+	});
+
+	it("does not invoke mutation hooks for platform YAML dry-run", async () => {
+		const { hooks, calls } = recordingMutationHooks();
+		await opencodeAdapter.syncPlatformYaml(
+			tmpDir,
+			{ config: { model: "openai/o3" }, mcps: { context7: { type: "http" } } },
+			true,
+			undefined,
+			undefined,
+			hooks,
+		);
+		expect(calls).toEqual([]);
+	});
+
 	it("removes null MCP declarations while preserving remaining servers via `syncPlatformYaml`", async () => {
 		const configFile = path.join(tmpDir, ".opencode", "opencode.json");
 		await writeJson(configFile, {
@@ -818,7 +1063,8 @@ Body content.`,
 		try {
 			await opencodeAdapter.syncAgentsDirect(targetDir, "oracle", agentFile, [], [], false);
 
-			const target = path.join(targetDir, ".opencode", "agents", "oracle.md");
+			const [targetRelative] = planCategoryDestinationPaths("opencode", "agents", "oracle");
+			const target = path.join(targetDir, targetRelative);
 			const content = await fs.readFile(target, "utf-8");
 
 			expect(content).not.toContain("subagent_type");
@@ -922,6 +1168,18 @@ Body content.`,
 			await fs.rm(targetDir, { recursive: true, force: true });
 		}
 	});
+
+	it("journals the translated agent as one exact destination mutation via `syncAgentsDirect`", async () => {
+		const targetDir = await mkTempDir();
+		try {
+			const { hooks, calls } = recordingMutationHooks();
+			const [relative] = planCategoryDestinationPaths("opencode", "agents", "oracle");
+			await opencodeAdapter.syncAgentsDirect(targetDir, "oracle", agentFile, [], [], false, undefined, hooks);
+			expect(calls).toEqual([path.join(targetDir, relative)]);
+		} finally {
+			await fs.rm(targetDir, { recursive: true, force: true });
+		}
+	});
 });
 
 // =============================================================================
@@ -947,7 +1205,8 @@ describe("opencodeAdapter.syncCommandsDirect", () => {
 		try {
 			await opencodeAdapter.syncCommandsDirect(targetDir, "commit", commandFile, false);
 
-			const target = path.join(targetDir, ".opencode", "commands", "commit.md");
+			const [targetRelative] = planCategoryDestinationPaths("opencode", "commands", "commit");
+			const target = path.join(targetDir, targetRelative);
 			const content = await fs.readFile(target, "utf-8");
 			expect(content).toContain("Commit command");
 		} finally {
@@ -993,6 +1252,47 @@ describe("opencodeAdapter.syncCommandsDirect", () => {
 			await fs.rm(targetDir, { recursive: true, force: true });
 		}
 	});
+
+	it("journals command copy and preserves resident on pre-CAS rejection via `syncCommandsDirect`", async () => {
+		const targetDir = await mkTempDir();
+		try {
+			const [relative] = planCategoryDestinationPaths("opencode", "commands", "commit");
+			const target = path.join(targetDir, relative);
+			await fs.mkdir(path.dirname(target), { recursive: true });
+			await fs.writeFile(target, "resident", "utf-8");
+			const { hooks, calls } = recordingMutationHooks({ throwAt: 1 });
+			await expect(opencodeAdapter.syncCommandsDirect(targetDir, "commit", commandFile, false, hooks)).rejects.toThrow(
+				"mutation failed",
+			);
+			expect(calls).toEqual([target]);
+			expect(await fs.readFile(target, "utf-8")).toBe("resident");
+		} finally {
+			await fs.rm(targetDir, { recursive: true, force: true });
+		}
+	});
+
+	it("preserves an external command edit detected by the transaction pre-CAS check via `syncCommandsDirect`", async () => {
+		const targetDir = await mkTempDir();
+		let transaction: DeployTransaction | null = null;
+		try {
+			const [relative] = planCategoryDestinationPaths("opencode", "commands", "commit");
+			const target = path.join(targetDir, relative);
+			await fs.mkdir(path.dirname(target), { recursive: true });
+			await fs.writeFile(target, "resident", "utf-8");
+			transaction = await DeployTransaction.begin(targetDir, false, [relative]);
+			await fs.writeFile(target, "external edit", "utf-8");
+			await expect(opencodeAdapter.syncCommandsDirect(targetDir, "commit", commandFile, false, transaction!)).rejects.toThrow(
+				/Deploy transaction conflict/,
+			);
+			expect(await fs.readFile(target, "utf-8")).toBe("external edit");
+		} finally {
+			if (transaction) {
+				await transaction.rollback();
+				await transaction.finish();
+			}
+			await fs.rm(targetDir, { recursive: true, force: true });
+		}
+	});
 });
 
 // =============================================================================
@@ -1019,7 +1319,8 @@ describe("opencodeAdapter.syncSkillsDirect", () => {
 		try {
 			await opencodeAdapter.syncSkillsDirect(targetDir, "oracle", skillDir, false);
 
-			const target = path.join(targetDir, ".opencode", "skills", "oracle", "SKILL.md");
+			const [targetRelative] = planCategoryDestinationPaths("opencode", "skills", "oracle");
+			const target = path.join(targetDir, targetRelative, "SKILL.md");
 			const content = await fs.readFile(target, "utf-8");
 			expect(content).toContain("Oracle skill");
 		} finally {
@@ -1065,6 +1366,18 @@ describe("opencodeAdapter.syncSkillsDirect", () => {
 			await fs.rm(targetDir, { recursive: true, force: true });
 		}
 	});
+
+	it("forwards mutation hooks to each skill leaf via `syncSkillsDirect`", async () => {
+		const targetDir = await mkTempDir();
+		try {
+			const { hooks, calls } = recordingMutationHooks();
+			const [relative] = planCategoryDestinationPaths("opencode", "skills", "oracle");
+			await opencodeAdapter.syncSkillsDirect(targetDir, "oracle", skillDir, false, hooks);
+			expect(calls).toEqual([path.join(targetDir, relative, "SKILL.md")]);
+		} finally {
+			await fs.rm(targetDir, { recursive: true, force: true });
+		}
+	});
 });
 
 // =============================================================================
@@ -1090,7 +1403,8 @@ describe("opencodeAdapter.syncScriptsDirect", () => {
 		try {
 			await opencodeAdapter.syncScriptsDirect(targetDir, "hud.sh", scriptFile, false);
 
-			const target = path.join(targetDir, ".opencode", "scripts", "hud.sh");
+			const [targetRelative] = planCategoryDestinationPaths("opencode", "scripts", "hud.sh");
+			const target = path.join(targetDir, targetRelative);
 			const content = await fs.readFile(target, "utf-8");
 			expect(content).toContain("echo hud");
 		} finally {
@@ -1146,7 +1460,8 @@ describe("opencodeAdapter.syncScriptsDirect", () => {
 		try {
 			await opencodeAdapter.syncScriptsDirect(targetDir, "hud", scriptDir, false);
 
-			const target = path.join(targetDir, ".opencode", "scripts", "hud", "hud.sh");
+			const [targetRelative] = planCategoryDestinationPaths("opencode", "scripts", "hud");
+			const target = path.join(targetDir, targetRelative, "hud.sh");
 			const content = await fs.readFile(target, "utf-8");
 			expect(content).toContain("echo hud");
 		} finally {
@@ -1169,6 +1484,21 @@ describe("opencodeAdapter.syncScriptsDirect", () => {
 				.then(() => true)
 				.catch(() => false);
 			expect(exists).toBe(false);
+		} finally {
+			await fs.rm(targetDir, { recursive: true, force: true });
+		}
+	});
+
+	it("forwards mutation hooks to directory script leaves and journals file scripts via `syncScriptsDirect`", async () => {
+		const scriptDir = path.join(tmpDir, "hud");
+		await fs.mkdir(scriptDir, { recursive: true });
+		await fs.writeFile(path.join(scriptDir, "hud.sh"), "#!/bin/bash\necho hud", "utf-8");
+		const targetDir = await mkTempDir();
+		try {
+			const { hooks, calls } = recordingMutationHooks();
+			const [relative] = planCategoryDestinationPaths("opencode", "scripts", "hud");
+			await opencodeAdapter.syncScriptsDirect(targetDir, "hud", scriptDir, false, hooks);
+			expect(calls).toEqual([path.join(targetDir, relative, "hud.sh")]);
 		} finally {
 			await fs.rm(targetDir, { recursive: true, force: true });
 		}

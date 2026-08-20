@@ -24,6 +24,7 @@ import type {
 	PluginScope,
 	DocsItem,
 	ModelMap,
+	SyncItem,
 } from "./lib/types.ts";
 import {
 	getRootDir,
@@ -44,13 +45,19 @@ import {
 	isSafeBackupRoot,
 } from "./lib/backup.ts";
 import { resolveOmtDir, getOmtDir, deriveProjectName } from "../lib/omt-dir.ts";
-import { reconcilePairManifest, removeManifestPair } from "./lib/deploy-manifest.ts";
+import {
+	reconcilePairManifest,
+	removeManifestPair,
+	readManifest,
+	type ManifestMutationHooks,
+} from "./lib/deploy-manifest.ts";
+import { DeployTransaction, type DeployMutationHooks } from "./lib/deploy-transaction.ts";
 import { resolveDocsTarget, detectDocsTargetCollisions } from "./lib/path-utils.ts";
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
 import { ProjectKeyError } from "./lib/git-key.ts";
 import { resolveDeployTargets, DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
 import { assertCleanWorktree, assertDefaultBranch, PreflightGitError } from "./lib/preflight-git.ts";
-import { rewriteLibImports } from "./lib/sync-directory.ts";
+import { planSyncDirectoryMutations, rewriteLibImports, copyFile, writeResidentFileAtomically } from "./lib/sync-directory.ts";
 import {
 	collectRequiredLibModulesFromSources,
 	collectLibDataFiles,
@@ -60,8 +67,15 @@ import {
 import { runProvision } from "./lib/provision.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
 import { GeminiAdapter } from "./adapters/gemini.ts";
-import { CodexAdapter, cleanupCodexSkillsFossil, codexSkillsDir } from "./adapters/codex.ts";
+import {
+	CodexAdapter,
+	cleanupCodexSkillsFossil,
+	codexSkillsDir,
+	planCodexSkillsFossilCleanup,
+} from "./adapters/codex.ts";
 import { opencodeAdapter } from "./adapters/opencode.ts";
+import { resolveShellDependencies } from "./adapters/hook-deps.ts";
+import { planCategoryDestinationPaths } from "./adapters/destinations.ts";
 import type { PlatformAdapter } from "./adapters/types.ts";
 import {
 	PLATFORM_REWRITE_RULES,
@@ -77,6 +91,224 @@ import {
 
 /** Map from platform name to its adapter instance. */
 export type AdapterMap = Map<Platform, PlatformAdapter>;
+
+async function validatePreToolUseWrapperDeployments(
+	syncYaml: SyncYaml,
+	yamlDir: string,
+	adapters: AdapterMap,
+	rootDir: string,
+	projectDir: string | undefined,
+	deployRoots: string[],
+): Promise<void> {
+	const declared = new Map<Platform, string>();
+	const scripts = syncYaml.scripts;
+	if (scripts && Array.isArray(scripts.items)) {
+		for (const item of scripts.items) {
+			const component = typeof item === "string" ? item : item.component ?? "";
+			const platforms = await resolvePlatforms(item, scripts.platforms, syncYaml.platforms, "scripts");
+			const resolved = resolveComponentPath(component, "scripts", rootDir, projectDir);
+			if ("error" in resolved || resolved.displayName !== "pretool-trace") continue;
+			for (const platform of platforms) declared.set(platform, resolved.path);
+		}
+	}
+
+	const previewPlatforms: Platform[] = ["claude", "codex"];
+	for (const platform of previewPlatforms) {
+		const adapter = adapters.get(platform);
+		if (!adapter?.previewPreToolUseCommands) continue;
+		const merged = await parseAndMergePlatformYaml(yamlDir, platform);
+		if (!merged?.hooks?.PreToolUse) continue;
+		const hookItems = merged.hooks.PreToolUse;
+		const previewHooks = { ...merged.hooks, PreToolUse: hookItems.map((item) => {
+			if (!item?.component) return item;
+			const resolved = resolveComponentPath(item.component, "hooks", rootDir, projectDir);
+			if ("error" in resolved) throw new Error(`${platform} hook component missing: ${item.component}`);
+			return { ...item, component: resolved.path };
+		}) };
+		const previewYaml: PlatformYaml = { ...merged, hooks: previewHooks };
+		for (const deployRoot of deployRoots) {
+			const previews = await adapter.previewPreToolUseCommands(deployRoot, previewYaml);
+			if (previews.length === 0) continue;
+			const source = declared.get(platform);
+			if (!source) throw new Error(`${platform} PreToolUse requires declared scripts/pretool-trace component`);
+			const entrypoint = path.join(source, "index.ts");
+			const entryStat = await fs.stat(entrypoint).catch(() => undefined);
+			if (!entryStat?.isFile()) throw new Error(`${platform} pretool-trace entrypoint missing: ${entrypoint}`);
+			const expected = path.join(
+				deployRoot,
+				`.${deployLocationForManifest(platform, "scripts")}`,
+				"scripts",
+				"pretool-trace",
+				"index.ts",
+			);
+			for (const preview of previews) {
+				if (path.resolve(preview.wrapperDeploymentPath) !== path.resolve(expected)) {
+					throw new Error(`${platform} PreToolUse wrapper destination mismatch: ${preview.wrapperDeploymentPath}`);
+				}
+			}
+		}
+	}
+}
+
+/**
+ * Resolve platform-YAML hook sources before any platform settings are written.
+ * Hook components can import `@lib/*`; recording their SOURCE roots here lets
+ * the scripts/lib preparation phase deploy those runtime dependencies first.
+ */
+async function collectPlatformHookSourceRoots(
+	yamlDir: string,
+	adapters: AdapterMap,
+	rootDir: string,
+	projectDir: string | undefined,
+	libSourceRoots: LibSourceRoots,
+): Promise<void> {
+	for (const platform of KNOWN_PLATFORMS) {
+		if (!adapters.get(platform) || !HOOK_DEPLOYING_PLATFORMS.includes(platform)) continue;
+		const merged = await parseAndMergePlatformYaml(yamlDir, platform);
+		if (!merged?.hooks) continue;
+		for (const items of Object.values(merged.hooks)) {
+			if (!Array.isArray(items)) continue;
+			for (const item of items) {
+				const component = item?.component ?? "";
+				if (!component) continue;
+				const resolved = resolveComponentPath(component, "hooks", rootDir, projectDir);
+				if ("error" in resolved) continue;
+				addLibSourceRoot(libSourceRoots, platform, resolved.path);
+			}
+		}
+	}
+}
+
+/** Inventory every hook bundle leaf before platform writes begin. */
+async function collectPlatformHookTransactionPaths(
+	yamlDir: string,
+	adapters: AdapterMap,
+	rootDir: string,
+	projectDir: string | undefined,
+	deployRoot: string,
+	additionalBundles: Array<{ platform: Platform; sourcePath: string; displayName: string }> = [],
+	ownedHookNames?: OwnedHookNames,
+): Promise<string[]> {
+	const paths: string[] = [];
+	const seen = new Set<string>();
+	const add = (target: string) => {
+		if (seen.has(target)) return;
+		seen.add(target);
+		paths.push(target);
+	};
+	const addHookBundle = async (platform: Platform, sourcePath: string, displayName: string) => {
+		const [relativeTarget] = planCategoryDestinationPaths(platform, "hooks", displayName);
+		if (!relativeTarget) return;
+		const hookTarget = path.join(deployRoot, relativeTarget);
+		let stat: Awaited<ReturnType<typeof fs.stat>>;
+		try { stat = await fs.stat(sourcePath); } catch { return; }
+		if (!stat.isDirectory()) add(hookTarget);
+		const hooksSourceDir = path.dirname(sourcePath);
+		let dependencySources: string[];
+		if (stat.isDirectory()) {
+			const exclude = platform === "claude"
+				? ["*.test.ts", "*.local.yaml"]
+				: platform === "codex"
+					? ["*.test.ts", "config.local.yaml"]
+					: ["*.test.ts"];
+			for (const targetLeaf of await planSyncDirectoryMutations(sourcePath, hookTarget, { exclude })) add(targetLeaf);
+			const entries = await fs.readdir(sourcePath, { withFileTypes: true });
+			const shellFiles = entries
+				.filter((entry) => entry.isFile() && entry.name.endsWith(".sh") && !entry.name.endsWith("_test.sh"))
+				.map((entry) => path.join(sourcePath, entry.name));
+			dependencySources = [];
+			for (const shellFile of shellFiles) {
+				dependencySources.push(...await resolveShellDependencies(shellFile, hooksSourceDir));
+			}
+		} else {
+			dependencySources = await resolveShellDependencies(sourcePath, hooksSourceDir);
+		}
+		const targetHooksDir = stat.isDirectory() ? hookTarget : path.dirname(hookTarget);
+		for (const dependency of dependencySources) {
+			const relative = path.relative(hooksSourceDir, dependency);
+			add(path.join(targetHooksDir, relative));
+		}
+	};
+	for (const platform of HOOK_DEPLOYING_PLATFORMS) {
+		if (!adapters.get(platform)) continue;
+		const merged = await parseAndMergePlatformYaml(yamlDir, platform);
+		if (!merged?.hooks) continue;
+		for (const items of Object.values(merged.hooks)) {
+			if (!Array.isArray(items)) continue;
+			for (const item of items) {
+				const component = item?.component;
+				if (typeof component !== "string" || !component) continue;
+				const resolved = resolveComponentPath(component, "hooks", rootDir, projectDir);
+				if ("error" in resolved) continue;
+				// Platform YAML hook adapters receive the resolved absolute source path
+				// and derive the deployed name with path.basename(sourcePath). Keep the
+				// transaction inventory and ownership provenance on that same name (a
+				// nested relative ref such as `claude/pre-tool-enforcer.sh` must not
+				// become part of the deployed filename).
+				const deployedName = path.basename(resolved.path);
+				if (ownedHookNames) addOwnedName(ownedHookNames, platform, deployedName);
+				await addHookBundle(platform, resolved.path, deployedName);
+			}
+		}
+	}
+	for (const bundle of additionalBundles) {
+		if (adapters.get(bundle.platform)) {
+			await addHookBundle(bundle.platform, bundle.sourcePath, bundle.displayName);
+		}
+	}
+	return paths;
+}
+
+/**
+ * Collect every currently deployable component source before the first target
+ * write. This mirrors syncCategory's resolution/adapter/capability gates so
+ * the early syncLib staging sees the complete lib dependency graph even when a
+ * later config or category write fails.
+ */
+export async function collectComponentSourceRoots(
+	syncYaml: SyncYaml,
+	adapters: AdapterMap,
+	rootDir: string,
+	projectDir: string | undefined,
+	libSourceRoots: LibSourceRoots,
+): Promise<void> {
+	for (const category of CATEGORIES) {
+		const section = syncYaml[category];
+		if (!section || !Array.isArray(section.items) || section.items.length === 0) continue;
+		for (const item of section.items) {
+			const componentRef = typeof item === "string" ? item : (item.component ?? "");
+			if (!componentRef) continue;
+			const resolved = resolveComponentPath(componentRef, category, rootDir, projectDir);
+			if ("error" in resolved) continue;
+			const platforms = await resolvePlatforms(item, section.platforms, syncYaml.platforms, category);
+
+			const resolvedHooks: Array<Record<string, unknown>> = [];
+			if (category === "agents" && typeof item === "object" && Array.isArray(item["add-hooks"])) {
+				for (const hook of item["add-hooks"]) {
+					const hookComponent = hook?.component ?? "";
+					if (!hookComponent) continue;
+					const hookResolved = resolveComponentPath(hookComponent, "hooks", rootDir, projectDir);
+					if (!("error" in hookResolved)) {
+						resolvedHooks.push({ source_path: hookResolved.path });
+					}
+				}
+			}
+
+			for (const platform of platforms) {
+				if (!adapters.get(platform) || !SUPPORTED_CATEGORIES[platform]?.has(category)) continue;
+				const location = deployLocationForManifest(platform, category);
+				addLibSourceRoot(libSourceRoots, location, resolved.path);
+				if (category === "agents") {
+					for (const hook of resolvedHooks) {
+						if (typeof hook.source_path === "string") {
+							addLibSourceRoot(libSourceRoots, location, hook.source_path);
+						}
+					}
+				}
+			}
+		}
+	}
+}
 
 /**
  * Per-deploy-LOCATION accumulator of resolved component SOURCE paths,
@@ -96,6 +328,15 @@ export type AdapterMap = Map<Platform, PlatformAdapter>;
  * at runtime, since `rewriteLibAliases` only walks the location's own root).
  */
 export type LibSourceRoots = Map<string, Set<string>>;
+
+/** Resolve the exact live lib roots touched by both syncLib calls in one run. */
+function effectiveLibLocations(platforms: readonly Platform[], libSourceRoots?: LibSourceRoots): string[] {
+	return [...new Set<string>([...platforms, ...(libSourceRoots?.keys() ?? [])])];
+}
+
+function libDestinationPaths(targetPath: string, platforms: readonly Platform[], libSourceRoots?: LibSourceRoots): string[] {
+	return effectiveLibLocations(platforms, libSourceRoots).map((location) => path.join(targetPath, `.${location}`, "lib"));
+}
 
 /** Record a resolved source path under a deploy location in the lib-source accumulator. */
 function addLibSourceRoot(roots: LibSourceRoots, location: string, sourcePath: string): void {
@@ -140,6 +381,40 @@ function addOwnedName(names: OwnedHookNames | OwnedRuleNames, platform: Platform
 
 /** All categories handled by syncCategory. */
 export const CATEGORIES: Category[] = ["agents", "commands", "skills", "scripts", "rules"];
+
+type SyncCategoryOptions = {
+	reconcile?: boolean;
+	itemFilter?: (item: SyncItem) => boolean;
+};
+
+/**
+ * Inventory the concrete leaves a category adapter can mutate for one item.
+ * Directory-backed categories use the same leaf/orphan planner as the
+ * executor; a directory root is never used as a rollback entry.
+ */
+async function planCategoryMutationPaths(
+	deployRoot: string,
+	platform: Platform,
+	category: Category,
+	displayName: string,
+	sourcePath: string,
+): Promise<string[]> {
+	const destinations = planCategoryDestinationPaths(platform, category, displayName);
+	const stat = await fs.stat(sourcePath).catch((error: unknown) => {
+		if (typeof error === "object" && error !== null && Reflect.get(error, "code") === "ENOENT") return undefined;
+		throw error;
+	});
+	if (!stat?.isDirectory() || (category !== "skills" && category !== "scripts")) {
+		return destinations.map((relativePath) => path.join(deployRoot, relativePath));
+	}
+	const paths: string[] = [];
+	for (const relativePath of destinations) {
+		const target = path.join(deployRoot, relativePath);
+		const planned = await planSyncDirectoryMutations(sourcePath, target);
+		paths.push(...planned);
+	}
+	return paths;
+}
 
 /**
  * Platforms whose adapters actually write hooks. Hooks are not a sync.yaml
@@ -221,15 +496,34 @@ export async function syncCategory(
 	rootDir: string,
 	deployRoot: string,
 	libSourceRoots?: LibSourceRoots,
+	options?: SyncCategoryOptions,
+	transaction?: DeployTransaction | null,
 ): Promise<void> {
 	const section = syncYaml[category];
-	if (!section || !Array.isArray(section.items) || section.items.length === 0) {
+	// An absent section (or a section without an `items` property) is a strict
+	// no-op. Explicit `items: []` is different: it means clear the prior OMT
+	// ownership for this category, while leaving foreign residents untouched.
+	if (!section || typeof section !== "object" || !("items" in section) || !Array.isArray(section.items)) {
+		return;
+	}
+	const previousManifest = category !== "rules" && options?.reconcile !== false && !context.dryRun
+		? await readManifest(deployRoot)
+		: null;
+	if (section.items.length === 0) {
+		if (category !== "rules" && previousManifest !== null && options?.reconcile !== false && !context.dryRun) {
+			for (const pair of Object.keys(previousManifest)) {
+				const [location, pairCategory] = pair.split("/");
+				if (pairCategory === category) {
+					await reconcilePairManifest(deployRoot, location, category, [], transaction ?? undefined);
+				}
+			}
+		}
 		return;
 	}
 
 	const sectionPlatforms = section.platforms;
 	const syncYamlPlatforms = syncYaml.platforms;
-	const items = section.items;
+	const items = options?.itemFilter ? section.items.filter(options.itemFilter) : section.items;
 
 	logInfo(`${category} 동기화 시작 (${items.length} 개)`);
 
@@ -429,15 +723,24 @@ export async function syncCategory(
 					addHooks,
 					false,
 					context.modelMaps.get(platform) ?? context.rootModelMaps.get(platform),
+					transaction ?? undefined,
 				);
 			} else if (category === "commands") {
-				await adapter.syncCommandsDirect(deployRoot, displayName, sourcePath, false);
+				await adapter.syncCommandsDirect(deployRoot, displayName, sourcePath, false, transaction ?? undefined);
 			} else if (category === "skills") {
-				await adapter.syncSkillsDirect(deployRoot, displayName, sourcePath, false);
+				await adapter.syncSkillsDirect(deployRoot, displayName, sourcePath, false, transaction ?? undefined);
 			} else if (category === "scripts") {
-				await adapter.syncScriptsDirect(deployRoot, displayName, sourcePath, false);
+				await adapter.syncScriptsDirect(deployRoot, displayName, sourcePath, false, transaction ?? undefined);
 			} else if (category === "rules") {
-				await adapter.syncRulesDirect(deployRoot, displayName, sourcePath, false);
+				const writeObserver = undefined;
+				await adapter.syncRulesDirect(
+					deployRoot,
+					displayName,
+					sourcePath,
+					false,
+					writeObserver,
+					transaction ?? undefined,
+				);
 			}
 		}
 	}
@@ -448,9 +751,29 @@ export async function syncCategory(
 	// anything under "rules" (deployedNames stays empty for rules, so this loop
 	// is a no-op there). deployedNames is already keyed by deploy LOCATION
 	// (deployLocationForManifest), so no further mapping is needed here.
-	if (!context.dryRun) {
-		for (const [deployLocation, names] of deployedNames) {
-			await reconcilePairManifest(deployRoot, deployLocation, category, [...names]);
+	if (options?.reconcile !== false && !context.dryRun) {
+		const manifestMutationHooks: ManifestMutationHooks | undefined = transaction ?? undefined;
+		const locations = new Set<string>(deployedNames.keys());
+		if (category !== "rules" && previousManifest !== null) {
+			for (const pair of Object.keys(previousManifest)) {
+				const [location, pairCategory] = pair.split("/");
+				// The legacy `.codex/skills` pair is handled by the dedicated fossil
+				// cleanup below; let that routine validate counterparts, back up, and
+				// remove the directory atomically instead of treating it as a normal
+				// manifest pair.
+				if (pairCategory === category && !(category === "skills" && location === "codex" && deployedNames.has("agents"))) {
+					locations.add(location);
+				}
+			}
+		}
+		for (const deployLocation of locations) {
+			await reconcilePairManifest(
+				deployRoot,
+				deployLocation,
+				category,
+				[...(deployedNames.get(deployLocation) ?? new Set<string>())],
+				manifestMutationHooks,
+			);
 		}
 	}
 
@@ -464,15 +787,21 @@ export async function syncCategory(
 	// Cleanup runs even under dryRun (it reports via logDry); the manifest key is only
 	// pruned after a successful (non-dry) cleanup, so a thrown cleanup leaves the
 	// ownership record intact for the next run to retry against.
-	if (category === "skills" && deployedNames.has("agents")) {
+	if (options?.reconcile !== false && category === "skills" && deployedNames.has("agents")) {
 		await cleanupCodexSkillsFossil(
 			deployRoot,
 			context.backupDest,
 			context.dryRun,
 			deployedNames.get("agents") ?? new Set(),
+			transaction ?? undefined,
 		);
 		if (!context.dryRun) {
-			await removeManifestPair(deployRoot, "codex", "skills");
+			await removeManifestPair(
+				deployRoot,
+				"codex",
+				"skills",
+				transaction ?? undefined,
+			);
 		}
 	}
 }
@@ -497,6 +826,7 @@ export async function syncPlatformConfigs(
 	rootDir: string,
 	libSourceRoots?: LibSourceRoots,
 	ownedHookNames?: OwnedHookNames,
+	transaction?: DeployTransaction | null,
 ): Promise<void> {
 	for (const platform of KNOWN_PLATFORMS) {
 		const merged = await parseAndMergePlatformYaml(yamlDir, platform);
@@ -538,7 +868,7 @@ export async function syncPlatformConfigs(
 					} else {
 						resolvedItems.push({ ...item, component: resolved.path });
 						// Record the hook SOURCE so syncLib deploys any @lib/ deps it imports.
-						if (libSourceRoots) {
+						if (libSourceRoots && HOOK_DEPLOYING_PLATFORMS.includes(platform)) {
 							addLibSourceRoot(libSourceRoots, platform, resolved.path);
 						}
 						// Record the hook's deployed NAME so rewritePlatformPaths can scope
@@ -546,7 +876,9 @@ export async function syncPlatformConfigs(
 						// Resolving a component is not deploying one: a platform whose
 						// adapter skips hooks outright owns nothing under its `hooks/`.
 						if (ownedHookNames && HOOK_DEPLOYING_PLATFORMS.includes(platform)) {
-							addOwnedName(ownedHookNames, platform, resolved.displayName);
+							// syncPlatformYaml adapters derive hook destinations from the
+							// resolved absolute path (path.basename), not resolver displayName.
+							addOwnedName(ownedHookNames, platform, path.basename(resolved.path));
 						}
 					}
 				}
@@ -562,11 +894,14 @@ export async function syncPlatformConfigs(
 		// was a pre-fan-out relic. (ProjectKeyError also propagates for the same
 		// reason — a local MCP not written to ~/.claude.json.)
 		const pluginScope: PluginScope = context.isRootYaml ? "user" : "project";
+		const writeObserver = undefined;
 		const result = await adapter.syncPlatformYaml(
 			targetPath,
 			parsedYaml,
 			context.dryRun,
 			pluginScope,
+			writeObserver,
+			transaction ?? undefined,
 		);
 
 		if (result.processedSections.length > 0) {
@@ -608,14 +943,15 @@ async function listFilesRecursive(dir: string): Promise<string[]> {
 	let entries: import("fs").Dirent[];
 	try {
 		entries = await fs.readdir(dir, { withFileTypes: true });
-	} catch {
+	} catch (error) {
+		if (docsErrorCode(error) !== "ENOENT") throw error;
 		return results;
 	}
 	for (const entry of entries) {
 		const fullPath = path.join(dir, entry.name);
 		if (entry.isDirectory()) {
 			results.push(...(await listFilesRecursive(fullPath)));
-		} else if (entry.isFile()) {
+		} else if (entry.isFile() || entry.isSymbolicLink()) {
 			results.push(fullPath);
 		}
 	}
@@ -632,7 +968,8 @@ async function findSymlinkInTree(dir: string): Promise<string | null> {
 	let entries: import("fs").Dirent[];
 	try {
 		entries = await fs.readdir(dir, { withFileTypes: true });
-	} catch {
+	} catch (error) {
+		if (docsErrorCode(error) !== "ENOENT") throw error;
 		return null;
 	}
 	for (const entry of entries) {
@@ -646,16 +983,12 @@ async function findSymlinkInTree(dir: string): Promise<string | null> {
 	return null;
 }
 
-/**
- * Back up every file currently under `targetDir` (recursively), preserving
- * substructure. `backupDocs` only ever copies a single file, so a whole-tree
- * backup is this per-file loop over it. No-op if targetDir is absent/empty.
- */
-async function backupDocsTree(targetDir: string, deployRoot: string, sessionId: string): Promise<void> {
-	for (const file of await listFilesRecursive(targetDir)) {
-		await backupDocs(file, deployRoot, sessionId);
-	}
+function docsErrorCode(error: unknown): string | undefined {
+	if (typeof error !== "object" || error === null) return undefined;
+	const code = Reflect.get(error, "code");
+	return typeof code === "string" ? code : undefined;
 }
+
 
 /**
  * Reject a docs deploy/delete target whose path — walked segment by segment
@@ -706,52 +1039,77 @@ function docsFileFinalTarget(absTarget: string, sourceFile: string): string {
 }
 
 /**
- * Remove a single stale FILE squatting at a dir-form docs item's own
- * (pre-extension) target path, backing it up first — otherwise the
- * mkdir/copyFile in deployDocsDir would ENOTDIR trying to write files under a
- * path that's currently a file. Only ever inspects `absTarget` itself; a
- * sibling item's target is never touched.
- *
- * File-form has NO equivalent call: its real write leaf carries an appended
- * extension (docsFileFinalTarget), so a directory sitting at the bare,
- * pre-extension stem never collides with it on disk — anti-wipe wins, that
- * directory is simply left alone (AC3.4 vs anti-wipe reconciliation).
- *
- * NEVER removes a directory — that would be an undeclared-human-dir wipe. If
- * a directory sits at the exact leaf being deployed (e.g. a directory
- * literally named `foo.md` squatting a file-form leaf), this function is not
- * called for that path at all; copyFile is left to fail loudly instead.
- */
-async function cleanStaleDocsForm(absTarget: string, deployRoot: string, sessionId: string): Promise<void> {
-	let existing: import("fs").Stats;
-	try {
-		existing = await fs.stat(absTarget);
-	} catch {
-		return; // Nothing there — no stale form to clean.
-	}
-	if (existing.isDirectory()) return; // Already the right form — additive merge handles it.
-
-	await backupDocs(absTarget, deployRoot, sessionId);
-	await fs.rm(absTarget, { force: true }); // Non-recursive: a single file, never a directory.
-}
-
-/**
  * Write one docs FILE target at its real, already-resolved leaf
  * (`finalTarget` — post-extension, computed once by the caller via
  * docsFileFinalTarget): back up whatever currently sits there, then copy the
  * source over it unconditionally (declared items always overwrite). No
- * opposite-form cleaning here — see cleanStaleDocsForm's doc comment for why
- * file-form never needs it.
+ * opposite-form cleaning is needed for file-form targets.
  */
 async function deployDocsFile(
 	sourceFile: string,
 	finalTarget: string,
 	deployRoot: string,
 	sessionId: string,
+	mutationHooks?: DeployMutationHooks,
 ): Promise<void> {
-	await backupDocs(finalTarget, deployRoot, sessionId);
-	await fs.mkdir(path.dirname(finalTarget), { recursive: true });
-	await fs.copyFile(sourceFile, finalTarget);
+	const operation = async () => {
+		await backupDocs(finalTarget, deployRoot, sessionId);
+		await copyFile(sourceFile, finalTarget);
+	};
+	if (mutationHooks) await mutationHooks.mutate(finalTarget, operation);
+	else await operation();
+}
+
+type DocsTransactionPlan = {
+	kind: "file" | "dir" | "delete";
+	absTarget: string;
+	leaves: string[];
+};
+
+/** Read-only docs mutation inventory, shared by processYaml transaction setup. */
+export async function planDocsTransactionPaths(
+	context: SyncContext,
+	syncYaml: SyncYaml,
+	rootDir: string,
+	deployRoot: string,
+): Promise<string[]> {
+	const section = syncYaml.docs;
+	if (!section?.items?.length) return [];
+	const docsBase = path.posix.normalize(section.path ?? "docs");
+	const plans: DocsTransactionPlan[] = [];
+	for (const item of section.items) {
+		const { componentName, itemPath, as, isDelete } = docsItemFields(item);
+		const relStem = resolveDocsTarget(componentName, section.path, itemPath, as);
+		if (relStem.replace(/\/+$/, "") === docsBase.replace(/\/+$/, "")) {
+			throw new Error(`docs: target resolves to the docs base directory itself — refusing: ${relStem}`);
+		}
+		const absTarget = path.join(deployRoot, relStem);
+		if (isDelete) {
+			const candidates = await findDocsDeleteCandidates(absTarget);
+			if (candidates.length > 1) throw new Error(`docs: ambiguous tombstone — multiple candidates match ${relStem}: [${candidates.join(", ")}]`);
+			const candidate = candidates[0];
+			if (!candidate) continue;
+			const st = await fs.lstat(candidate);
+			plans.push({ kind: "delete", absTarget, leaves: st.isDirectory() ? await listFilesRecursive(candidate) : [candidate] });
+			continue;
+		}
+		const resolved = resolveComponentPath(componentName, "docs", rootDir, context.projectDir || undefined);
+		if ("error" in resolved) continue;
+		const sourceStat = await fs.stat(resolved.path);
+		if (sourceStat.isDirectory()) {
+			const files = await listFilesRecursive(resolved.path);
+			const leaves = files.map((source) => path.join(absTarget, path.relative(resolved.path, source)));
+			let staleFile = false;
+			try { staleFile = (await fs.lstat(absTarget)).isFile(); } catch (error) {
+				if (docsErrorCode(error) !== "ENOENT") throw error;
+			}
+			if (staleFile) leaves.splice(0, leaves.length, absTarget);
+			plans.push({ kind: "dir", absTarget, leaves });
+		} else {
+			plans.push({ kind: "file", absTarget, leaves: [docsFileFinalTarget(absTarget, resolved.path)] });
+		}
+	}
+	return [...new Set(plans.flatMap((plan) => plan.leaves))].sort();
 }
 
 /**
@@ -775,19 +1133,39 @@ async function deployDocsDir(
 	files: { source: string; dest: string }[],
 	deployRoot: string,
 	sessionId: string,
+	mutationHooks?: DeployMutationHooks,
 ): Promise<void> {
-	await cleanStaleDocsForm(absTarget, deployRoot, sessionId);
+	let existing: import("fs").Stats | undefined;
+	try { existing = await fs.stat(absTarget); } catch (error) {
+		if (docsErrorCode(error) !== "ENOENT") throw error;
+	}
+	if (existing && !existing.isDirectory()) {
+		const operation = async () => {
+			await backupDocs(absTarget, deployRoot, sessionId);
+			await fs.rm(absTarget, { force: true });
+			for (const { source, dest } of files) {
+				await assertNoSymlinkInTargetPath(dest, deployRoot);
+				await copyFile(source, dest);
+			}
+		};
+		if (mutationHooks) await mutationHooks.mutate(absTarget, operation);
+		else await operation();
+		return;
+	}
 
 	for (const { source, dest } of files) {
 		await assertNoSymlinkInTargetPath(dest, deployRoot);
-		await backupDocs(dest, deployRoot, sessionId);
-		await fs.mkdir(path.dirname(dest), { recursive: true });
-		await fs.copyFile(source, dest);
+		const operation = async () => {
+			await backupDocs(dest, deployRoot, sessionId);
+			await copyFile(source, dest);
+		};
+		if (mutationHooks) await mutationHooks.mutate(dest, operation);
+		else await operation();
 	}
 }
 
 /** Delete one docs target (file or directory), backing it up first. Idempotent: no-op if already absent. */
-async function deleteDocsTarget(absTarget: string, deployRoot: string, sessionId: string): Promise<void> {
+async function deleteDocsTarget(absTarget: string, deployRoot: string, sessionId: string, mutationHooks?: DeployMutationHooks): Promise<void> {
 	let st: import("fs").Stats;
 	try {
 		st = await fs.stat(absTarget);
@@ -795,11 +1173,44 @@ async function deleteDocsTarget(absTarget: string, deployRoot: string, sessionId
 		return;
 	}
 	if (st.isDirectory()) {
-		await backupDocsTree(absTarget, deployRoot, sessionId);
+		for (const file of await listFilesRecursive(absTarget)) {
+			const operation = async () => {
+				await backupDocs(file, deployRoot, sessionId);
+				await fs.rm(file, { force: true });
+			};
+			if (mutationHooks) await mutationHooks.mutate(file, operation);
+			else await operation();
+		}
+		const directories = [...(await listDirectoriesRecursive(absTarget)), absTarget]
+			.sort((a, b) => b.length - a.length);
+		for (const dir of directories) {
+			await fs.rmdir(dir).catch((error) => {
+				if (docsErrorCode(error) !== "ENOENT" && docsErrorCode(error) !== "ENOTEMPTY") throw error;
+			});
+		}
 	} else {
-		await backupDocs(absTarget, deployRoot, sessionId);
+		const operation = async () => {
+			await backupDocs(absTarget, deployRoot, sessionId);
+			await fs.rm(absTarget, { force: true });
+		};
+		if (mutationHooks) await mutationHooks.mutate(absTarget, operation);
+		else await operation();
 	}
-	await fs.rm(absTarget, { recursive: true, force: true });
+}
+
+async function listDirectoriesRecursive(dir: string): Promise<string[]> {
+	const results: string[] = [];
+	let entries: import("fs").Dirent[];
+	try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch (error) {
+		if (docsErrorCode(error) !== "ENOENT") throw error;
+		return results;
+	}
+	for (const entry of entries) {
+		if (!entry.isDirectory()) continue;
+		const child = path.join(dir, entry.name);
+		results.push(child, ...(await listDirectoriesRecursive(child)));
+	}
+	return results;
 }
 
 /**
@@ -873,6 +1284,7 @@ export async function syncDocs(
 	syncYaml: SyncYaml,
 	rootDir: string,
 	deployRoot: string,
+	mutationHooks?: DeployMutationHooks,
 ): Promise<string[]> {
 	const section = syncYaml.docs;
 	if (!section || !Array.isArray(section.items) || section.items.length === 0) {
@@ -1004,7 +1416,7 @@ export async function syncDocs(
 				managedTargets.add(candidate);
 				logDry(`docs: would remove ${candidate}`);
 			} else {
-				await deleteDocsTarget(candidate, deployRoot, context.backupDest);
+				await deleteDocsTarget(candidate, deployRoot, context.backupDest, mutationHooks);
 			}
 			continue;
 		}
@@ -1016,7 +1428,7 @@ export async function syncDocs(
 				managedTargets.add(plan.finalTarget);
 				logDry(`docs: would write ${plan.finalTarget}`);
 			} else {
-				await deployDocsFile(plan.sourceFile, plan.finalTarget, deployRoot, context.backupDest);
+				await deployDocsFile(plan.sourceFile, plan.finalTarget, deployRoot, context.backupDest, mutationHooks);
 				writtenLeaves.push(plan.finalTarget);
 			}
 			continue;
@@ -1031,7 +1443,7 @@ export async function syncDocs(
 				logDry(`docs: would write ${dest}`);
 			}
 		} else {
-			await deployDocsDir(plan.absTarget, plan.files, deployRoot, context.backupDest);
+			await deployDocsDir(plan.absTarget, plan.files, deployRoot, context.backupDest, mutationHooks);
 			writtenLeaves.push(...plan.files.map((f) => f.dest));
 		}
 	}
@@ -1077,14 +1489,10 @@ export async function syncDocs(
 export async function rewriteLibAliases(
 	platformRoot: string,
 	bundledPackages: Set<string>,
+	mutationHooks?: DeployMutationHooks,
 ): Promise<void> {
-	const tsFiles = await collectTsFiles(platformRoot);
-	for (const filePath of tsFiles) {
-		// Skip test files and lib/ itself
-		if (filePath.endsWith(".test.ts")) continue;
-		const rel = path.relative(platformRoot, filePath);
-		if (rel.startsWith("lib/") || rel.startsWith("lib\\")) continue;
-
+	const candidates = await planLibAliasRewritePaths(platformRoot, bundledPackages);
+	for (const filePath of candidates) {
 		let content: string;
 		try {
 			content = await fs.readFile(filePath, "utf8");
@@ -1095,9 +1503,31 @@ export async function rewriteLibAliases(
 		const updated = rewriteLibImports(content, filePath, platformRoot, bundledPackages);
 
 		if (updated !== content) {
-			await fs.writeFile(filePath, updated, "utf8");
+			const operation = () => writeResidentFileAtomically(filePath, updated);
+			if (mutationHooks) await mutationHooks.mutate(filePath, operation);
+			else await operation();
 		}
 	}
+}
+
+/** Plan existing non-lib TypeScript leaves whose current content may change. */
+export async function planLibAliasRewritePaths(
+	platformRoot: string,
+	bundledPackages: Set<string>,
+): Promise<string[]> {
+	const tsFiles = (await collectTsFiles(platformRoot)).sort();
+	const candidates: string[] = [];
+	for (const filePath of tsFiles) {
+		if (filePath.endsWith(".test.ts")) continue;
+		const rel = path.relative(platformRoot, filePath);
+		if (rel.startsWith(`lib${path.sep}`) || rel.startsWith("lib/")) continue;
+		let content: string;
+		try { content = await fs.readFile(filePath, "utf8"); } catch { continue; }
+		if (content.includes("@lib/") || (await findBareNpmImports(filePath)).some((pkg) => bundledPackages.has(pkg))) {
+			candidates.push(filePath);
+		}
+	}
+	return candidates;
 }
 
 /**
@@ -1157,7 +1587,10 @@ async function sourceRootsCarryOmtDirToken(sourceRoots: Iterable<string>): Promi
  * Deploy lib/ directory to each platform target, then rewrite @lib/* aliases.
  * Mirrors sync_lib in sync.sh:1422-1457.
  *
- * Called AFTER category syncs, BEFORE rewritePlatformPaths.
+ * Called AFTER category syncs, BEFORE rewritePlatformPaths. When supplied,
+ * mutationHooks journals each live `.{location}/lib` root as one atomic
+ * build-and-swap mutation; transient `lib.tmp-*` and `lib.old-*` siblings are
+ * intentionally excluded from the transaction inventory.
  */
 export async function syncLib(
 	context: SyncContext,
@@ -1165,6 +1598,7 @@ export async function syncLib(
 	rootDir: string,
 	platforms: Platform[],
 	libSourceRoots?: LibSourceRoots,
+	mutationHooks?: DeployMutationHooks,
 ): Promise<void> {
 	const libSrc = path.join(rootDir, "lib");
 	if (!existsSync(libSrc)) {
@@ -1202,7 +1636,7 @@ export async function syncLib(
 	// not a Platform value — so this loop variable must admit that key too. The
 	// resulting `.agents` bucket is exactly `.${"agents"}`, which lands lib
 	// beside `.agents/skills` where a codex skill script can actually resolve it.
-	const effectivePlatforms = new Set<string>([...platforms, ...(libSourceRoots?.keys() ?? [])]);
+	const effectivePlatforms = effectiveLibLocations(platforms, libSourceRoots);
 
 	for (const platform of effectivePlatforms) {
 		const platformDir = path.join(targetPath, `.${platform}`);
@@ -1284,11 +1718,11 @@ export async function syncLib(
 					logDry(`Remove stale lib directory: ${libDest}`);
 				}
 			} else {
-				try {
-					await fs.rm(libDest, { recursive: true, force: true });
-				} catch {
-					// ignore
-				}
+				const removeStale = async (): Promise<void> => {
+					try { await fs.rm(libDest, { recursive: true, force: true }); } catch { /* ignore */ }
+				};
+				if (mutationHooks) await mutationHooks.mutate(libDest, removeStale);
+				else await removeStale();
 			}
 			logInfo(`No @lib/ imports found in .${platform}/, skipping lib deployment`);
 			continue;
@@ -1310,22 +1744,23 @@ export async function syncLib(
 			}
 			logDry(`Rewrite @lib/* aliases in ${platformDir}/`);
 		} else {
-			// Build the new lib tree in a temp sibling directory (same filesystem as
-			// libDest) so we can atomically swap it in via fs.rename.  The reader
-			// always sees either the complete old lib or the complete new lib.
-			const suffix = Math.random().toString(36).slice(2);
-			const libTmp = path.join(platformDir, `lib.tmp-${suffix}`);
-			const libOld = path.join(platformDir, `lib.old-${suffix}`);
+			const swapLib = async (): Promise<void> => {
+				// Build the new lib tree in a temp sibling directory (same filesystem as
+				// libDest) so we can atomically swap it in via fs.rename. The reader
+				// always sees either the complete old lib or the complete new lib.
+				const suffix = Math.random().toString(36).slice(2);
+				const libTmp = path.join(platformDir, `lib.tmp-${suffix}`);
+				const libOld = path.join(platformDir, `lib.old-${suffix}`);
 
 			// Remove any leftover temp dirs from prior crashed runs.
 			const platformEntries = await fs.readdir(platformDir).catch(() => []);
-			for (const entry of platformEntries) {
-				if (entry.startsWith("lib.tmp-") || entry.startsWith("lib.old-")) {
-					await fs
-						.rm(path.join(platformDir, entry), { recursive: true, force: true })
-						.catch(() => undefined);
+				for (const entry of platformEntries) {
+					if (entry.startsWith("lib.tmp-") || entry.startsWith("lib.old-")) {
+						await fs
+							.rm(path.join(platformDir, entry), { recursive: true, force: true })
+							.catch(() => undefined);
+					}
 				}
-			}
 
 			// True once the live lib has been renamed to libOld but before the new
 			// tree has taken its place — the window in which a failure would leave the
@@ -1397,9 +1832,12 @@ export async function syncLib(
 				}
 				throw err;
 			}
+			};
+			if (mutationHooks) await mutationHooks.mutate(libDest, swapLib);
+			else await swapLib();
 
 			logInfo(`Deployed shared lib to .${platform}/lib/`);
-			await rewriteLibAliases(platformDir, bundledPackages);
+			await rewriteLibAliases(platformDir, bundledPackages, mutationHooks);
 		}
 	}
 }
@@ -1461,6 +1899,7 @@ export async function rewritePlatformPaths(
 	codexSkillNames: ReadonlySet<string> = new Set(),
 	ownedHookNames: ReadonlySet<string> = new Set(),
 	ownedRuleNames: ReadonlySet<string> = new Set(),
+	mutationHooks?: DeployMutationHooks,
 ): Promise<void> {
 	const rules = PLATFORM_REWRITE_RULES[platform];
 	// Claude's rule table is empty by design (tools/lib/rewrite-rules.ts) — this
@@ -1478,6 +1917,8 @@ export async function rewritePlatformPaths(
 			undefined,
 			ownedHookNames,
 			ownedRuleNames,
+			mutationHooks,
+			true,
 		);
 		return;
 	}
@@ -1495,6 +1936,8 @@ export async function rewritePlatformPaths(
 		undefined,
 		ownedHookNames,
 		ownedRuleNames,
+		mutationHooks,
+		true,
 	);
 
 	// Root 2: .agents/skills/<name>, manifest-owned only. For each owned skill,
@@ -1510,6 +1953,10 @@ export async function rewritePlatformPaths(
 		const skillDir = path.join(codexSkillsDir(targetPath), name);
 		await rewriteFilesUnder(skillDir, rules, [], (content) =>
 			bakeOmtDirToken(bakeSkillDirToken(content, skillDir), omtDirCli),
+			ownedHookNames,
+			ownedRuleNames,
+			mutationHooks,
+			false,
 		);
 	}
 }
@@ -1705,28 +2152,84 @@ async function rewriteFilesUnder(
 	extraTransform?: (content: string) => string,
 	ownedHookNames: ReadonlySet<string> = new Set(),
 	ownedRuleNames: ReadonlySet<string> = new Set(),
+	mutationHooks?: DeployMutationHooks,
+	groupSharedLib = false,
 ): Promise<void> {
-	const files = await collectMdFiles(dir, excludeDirs);
-	for (const filePath of files) {
+	const candidates = await planRewriteFilePaths(dir, rules, excludeDirs, extraTransform, ownedHookNames, ownedRuleNames);
+	const grouped = new Map<string, string[]>();
+	for (const filePath of candidates) {
 		const relPath = path.relative(dir, filePath);
-		if (isUnderHooksDir(relPath) && !isOwnedHookPath(relPath, ownedHookNames)) {
-			continue;
-		}
-		if (isUnderRulesDir(relPath) && !isOwnedRulePath(relPath, ownedRuleNames)) {
-			continue;
-		}
+		const mutationTarget = groupSharedLib && (relPath.startsWith(`lib${path.sep}`) || relPath.startsWith("lib/"))
+			? path.join(dir, "lib")
+			: filePath;
+		const files = grouped.get(mutationTarget) ?? [];
+		files.push(filePath);
+		grouped.set(mutationTarget, files);
+	}
+	for (const [mutationTarget, files] of grouped) {
+		const operation = async (): Promise<void> => {
+			for (const filePath of files) {
+				let content: string;
+				try { content = await fs.readFile(filePath, "utf8"); } catch { continue; }
+				let updated = applyRewriteRules(content, rules);
+				if (extraTransform) updated = extraTransform(updated);
+				if (updated !== content) await writeResidentFileAtomically(filePath, updated);
+			}
+		};
+		if (mutationHooks) await mutationHooks.mutate(mutationTarget, operation);
+		else await operation();
+	}
+}
+
+/** Plan only existing markdown leaves whose rewrite would change their bytes. */
+async function planRewriteFilePaths(
+	dir: string,
+	rules: readonly RewriteRule[],
+	excludeDirs: string[],
+	extraTransform: ((content: string) => string) | undefined,
+	ownedHookNames: ReadonlySet<string>,
+	ownedRuleNames: ReadonlySet<string>,
+): Promise<string[]> {
+	const candidates: string[] = [];
+	for (const filePath of (await collectMdFiles(dir, excludeDirs)).sort()) {
+		const relPath = path.relative(dir, filePath);
+		if (isUnderHooksDir(relPath) && !isOwnedHookPath(relPath, ownedHookNames)) continue;
+		if (isUnderRulesDir(relPath) && !isOwnedRulePath(relPath, ownedRuleNames)) continue;
 		let content: string;
-		try {
-			content = await fs.readFile(filePath, "utf8");
-		} catch {
-			continue;
-		}
+		try { content = await fs.readFile(filePath, "utf8"); } catch { continue; }
 		let updated = applyRewriteRules(content, rules);
 		if (extraTransform) updated = extraTransform(updated);
-		if (updated !== content) {
-			await fs.writeFile(filePath, updated, "utf8");
-		}
+		if (updated !== content) candidates.push(filePath);
 	}
+	return candidates;
+}
+
+/** Plan existing platform markdown leaves using the same ownership and transform rules as execution. */
+export async function planPlatformRewritePaths(
+	targetPath: string,
+	platform: Platform,
+	codexSkillNames: ReadonlySet<string> = new Set(),
+	ownedHookNames: ReadonlySet<string> = new Set(),
+	ownedRuleNames: ReadonlySet<string> = new Set(),
+): Promise<string[]> {
+	const rules = PLATFORM_REWRITE_RULES[platform];
+	if (rules.length === 0) return [];
+	const paths: string[] = [];
+	if (platform !== "codex") {
+		const root = path.join(targetPath, `.${platform}`);
+		const leaves = await planRewriteFilePaths(root, rules, [], undefined, ownedHookNames, ownedRuleNames);
+		const targets = new Set(leaves.map((filePath) => path.relative(root, filePath).startsWith(`lib${path.sep}`) ? path.join(root, "lib") : filePath));
+		return [...targets];
+	}
+	const codexDir = path.join(targetPath, ".codex");
+	const rootLeaves = await planRewriteFilePaths(codexDir, rules, [path.join(codexDir, "skills")], undefined, ownedHookNames, ownedRuleNames);
+	paths.push(...new Set(rootLeaves.map((filePath) => path.relative(codexDir, filePath).startsWith(`lib${path.sep}`) ? path.join(codexDir, "lib") : filePath)));
+	const omtDirCli = path.join(codexSkillsDir(targetPath), "..", "lib", "omt-dir.ts");
+	for (const name of codexSkillNames) {
+		const skillDir = path.join(codexSkillsDir(targetPath), name);
+		paths.push(...await planRewriteFilePaths(skillDir, rules, [], (content) => bakeOmtDirToken(bakeSkillDirToken(content, skillDir), omtDirCli), ownedHookNames, ownedRuleNames));
+	}
+	return paths;
 }
 
 /**
@@ -1812,6 +2315,45 @@ export function allTargetsProcessed(targetPath: string, processedPaths: Set<stri
  */
 export function isFatalSyncError(err: unknown): boolean {
 	return err instanceof ProjectKeyError || err instanceof DeployTargetsError;
+}
+
+function shouldRewritePlatform(
+	deployRoot: string,
+	platform: Platform,
+	codexSkillNames: ReadonlySet<string>,
+	rewriteEligiblePlatforms: ReadonlySet<Platform>,
+	libSourceRoots: LibSourceRoots,
+): boolean {
+	const platformDir = path.join(deployRoot, `.${platform}`);
+	const codexSkillsPresent = platform === "codex" && codexSkillNames.size > 0;
+	return (existsSync(platformDir) || codexSkillsPresent) &&
+		(rewriteEligiblePlatforms.has(platform) || libSourceRoots.has(platform));
+}
+
+const MANIFEST_MUTATION_SUFFIXES = ["", ".md", ".toml"] as const;
+
+/** Inventory the manifest file and every concrete leaf form that a valid prior manifest can own. */
+async function collectManifestTransactionPaths(deployRoot: string): Promise<string[]> {
+	const root = path.resolve(deployRoot);
+	const manifestPath = path.join(root, ".omt", "sync-manifest.json");
+	const paths = [manifestPath];
+	const manifest = await readManifest(root);
+	if (manifest === null) return paths;
+	for (const [pair, names] of Object.entries(manifest)) {
+		const segments = pair.split("/");
+		if (segments.length !== 2) throw new Error(`Invalid manifest pair: ${pair}`);
+		const [location, category] = segments;
+		for (const name of names) {
+			for (const suffix of MANIFEST_MUTATION_SUFFIXES) {
+				const candidate = path.resolve(root, `.${location}`, category, `${name}${suffix}`);
+				if (candidate !== root && !candidate.startsWith(`${root}${path.sep}`)) {
+					throw new Error(`Manifest path escapes deploy root: ${pair}/${name}`);
+				}
+				paths.push(candidate);
+			}
+		}
+	}
+	return [...new Set(paths)];
 }
 
 // ---------------------------------------------------------------------------
@@ -1972,8 +2514,19 @@ export async function processYaml(
 	// resolveDeployTargets throws DeployTargetsError on git-enumeration failure or
 	// an empty worktree set — let it escape so it surfaces as a non-zero exit.
 	const deployRoots = resolveDeployTargets(targetPath);
+	// Validate pure PreToolUse wrapper previews before any target mkdir, backup,
+	// config, or component mutation occurs.
+	await validatePreToolUseWrapperDeployments(
+		syncYaml,
+		yamlDir,
+		adapters,
+		rootDir,
+		context.projectDir || undefined,
+		deployRoots,
+	);
 
 	for (const deployRoot of deployRoots) {
+		let deployTransaction: DeployTransaction | null = null;
 		try {
 			// Per-deploy backup destination (D-5): computed once per (target,
 			// worktree), before any deploy step. This is the only site that holds
@@ -2007,9 +2560,145 @@ export async function processYaml(
 				logDry(`Deploy target: ${deployRoot}`);
 			}
 
-			// Ensure <deployRoot>/.claude exists only when something deploys into it
-			// (non-dry). The container is never the mkdir target (AC2.2): an MCP-only
-			// project writes to ~/.claude.json, not <deployRoot>/.claude/.
+			// Prepare command wrappers' runtime before platform YAML can activate them.
+			// Hook sources are collected without writes; scripts then lib are deployed
+			// first so a failure leaves settings/hooks untouched.
+			await collectPlatformHookSourceRoots(
+				yamlDir,
+				adapters,
+				rootDir,
+				context.projectDir || undefined,
+				libSourceRoots,
+			);
+			await collectComponentSourceRoots(
+				syncYaml,
+				adapters,
+				rootDir,
+				context.projectDir || undefined,
+				libSourceRoots,
+			);
+			// Runtime preparation is intentionally before platform YAML activation. If
+			// anything in the remainder fails, restore the complete prior tree rather
+			// than exposing a new lib beside old consumers/settings (or vice versa).
+			const agentHookBundles: Array<{ platform: Platform; sourcePath: string; displayName: string }> = [];
+			const agentSection = syncYaml.agents;
+			for (const item of agentSection?.items ?? []) {
+				if (typeof item !== "object" || !Array.isArray(item["add-hooks"])) continue;
+				const platforms = await resolvePlatforms(item, agentSection?.platforms, syncYaml.platforms, "agents");
+				if (!platforms.includes("claude") || !adapters.get("claude")) continue;
+				for (const hook of item["add-hooks"]) {
+					const component = hook?.component ?? "";
+					if (!component) continue;
+					const resolvedHook = resolveComponentPath(
+						component,
+						"hooks",
+						rootDir,
+						context.projectDir || undefined,
+					);
+					if (!("error" in resolvedHook)) {
+						agentHookBundles.push({
+							platform: "claude",
+							sourcePath: resolvedHook.path,
+							displayName: resolvedHook.displayName,
+						});
+					}
+				}
+			}
+			const platformHookTransactionPaths = await collectPlatformHookTransactionPaths(
+				yamlDir,
+				adapters,
+				rootDir,
+				context.projectDir || undefined,
+				deployRoot,
+				agentHookBundles,
+				ownedHookNames,
+			);
+			const hasPlatformYaml = (await Promise.all(
+				KNOWN_PLATFORMS.map(async (platform) => (await parseAndMergePlatformYaml(yamlDir, platform)) !== null),
+			)).some(Boolean);
+			const hasValidPreviousManifest = (await readManifest(deployRoot)) !== null;
+			const docsTransactionPaths = await planDocsTransactionPaths(context, syncYaml, rootDir, deployRoot);
+			const libTransactionPaths = shouldMkdirClaude || libSourceRoots.size > 0
+				? libDestinationPaths(deployRoot, libPlatforms, libSourceRoots)
+				: [];
+			const declaredPackages = await readPackageJsonDeps(rootDir).catch(() => new Set<string>());
+			const aliasRewritePaths = (shouldMkdirClaude || libSourceRoots.size > 0)
+				? (await Promise.all(effectiveLibLocations(libPlatforms, libSourceRoots).map((location) => planLibAliasRewritePaths(path.join(deployRoot, `.${location}`), declaredPackages)))).flat()
+				: [];
+			const platformRewritePaths: string[] = [];
+			for (const platform of ["gemini", "codex", "opencode"] as const) {
+				if (!shouldRewritePlatform(deployRoot, platform, codexSkillNames, rewriteEligiblePlatforms, libSourceRoots)) continue;
+				platformRewritePaths.push(...await planPlatformRewritePaths(
+					deployRoot,
+					platform,
+					codexSkillNames,
+					ownedHookNames.get(platform) ?? new Set<string>(),
+					ownedRuleNames.get(platform) ?? new Set<string>(),
+				));
+			}
+			if (shouldMkdirClaude || libSourceRoots.size > 0 || platformHookTransactionPaths.length > 0 || hasPlatformYaml || hasValidPreviousManifest || docsTransactionPaths.length > 0) {
+				const ownedPaths: string[] = [];
+				ownedPaths.push(...await collectManifestTransactionPaths(deployRoot));
+				for (const category of CATEGORIES) {
+					const section = syncYaml[category];
+					for (const item of section?.items ?? []) {
+						const ref = typeof item === "string" ? item : item.component ?? "";
+						const resolved = ref && resolveComponentPath(ref, category, rootDir, context.projectDir || undefined);
+						if (!resolved || "error" in resolved) continue;
+						const platforms = await resolvePlatforms(item, section?.platforms, syncYaml.platforms, category);
+						for (const platform of platforms) {
+							if (!SUPPORTED_CATEGORIES[platform]?.has(category)) continue;
+							ownedPaths.push(
+								...(await planCategoryMutationPaths(
+									deployRoot,
+									platform,
+									category,
+									resolved.displayName,
+									resolved.path,
+								)),
+							);
+						}
+					}
+				}
+				ownedPaths.push(...platformHookTransactionPaths);
+				ownedPaths.push(...docsTransactionPaths);
+				ownedPaths.push(...libTransactionPaths);
+				ownedPaths.push(...aliasRewritePaths);
+				ownedPaths.push(...platformRewritePaths);
+				if (codexSkillNames.size > 0 && adapters.get("codex")) {
+					ownedPaths.push(...await planCodexSkillsFossilCleanup(deployRoot, codexSkillNames));
+				}
+				deployTransaction = await DeployTransaction.begin(
+					deployRoot,
+					context.dryRun,
+					ownedPaths,
+				);
+			}
+			await syncCategory(
+				context,
+				"scripts",
+				syncYaml,
+				adapters,
+				rootDir,
+				deployRoot,
+				libSourceRoots,
+				{
+					reconcile: false,
+					itemFilter: (item) => {
+						const component = typeof item === "string" ? item : item.component ?? "";
+						if (!component) return false;
+						const resolved = resolveComponentPath(component, "scripts", rootDir, context.projectDir || undefined);
+						return !("error" in resolved) && resolved.displayName === "pretool-trace";
+					},
+				},
+				deployTransaction,
+			);
+			if (shouldMkdirClaude || libSourceRoots.size > 0) {
+				await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots, deployTransaction ?? undefined);
+			}
+
+			// Ensure <deployRoot>/.claude exists only once wrapper/runtime preparation
+			// has succeeded. The container is never the mkdir target (AC2.2).
 			if (!context.dryRun && shouldMkdirClaude) {
 				await fs.mkdir(path.join(deployRoot, ".claude"), { recursive: true });
 			}
@@ -2022,10 +2711,25 @@ export async function processYaml(
 				rootDir,
 				libSourceRoots,
 				ownedHookNames,
+				deployTransaction,
 			);
 
-			// Sync 5 categories
+			// Reconcile the complete scripts category only after platform config succeeds.
+			await syncCategory(
+				context,
+				"scripts",
+				syncYaml,
+				adapters,
+				rootDir,
+				deployRoot,
+				libSourceRoots,
+				undefined,
+				deployTransaction,
+			);
+
+			// Sync remaining categories.
 			for (const category of CATEGORIES) {
+				if (category === "scripts") continue;
 				await syncCategory(
 					context,
 					category,
@@ -2034,6 +2738,8 @@ export async function processYaml(
 					rootDir,
 					deployRoot,
 					libSourceRoots,
+					undefined,
+					deployTransaction,
 				);
 			}
 
@@ -2047,13 +2753,13 @@ export async function processYaml(
 			// false, so syncLib never reaches into the worktree's .{platform}/lib to
 			// delete a directory this sync never owns.
 			if (shouldMkdirClaude || libSourceRoots.size > 0) {
-				await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
+				await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots, deployTransaction ?? undefined);
 			}
 
 			// Sync docs — unconditional (not gated on shouldMkdirClaude): docs is
 			// platform-agnostic and lands directly under deployRoot, so a docs-only
 			// project (no CATEGORIES items, no .claude) must still deploy its docs.
-			const docsDests = await syncDocs(context, syncYaml, rootDir, deployRoot);
+			const docsDests = await syncDocs(context, syncYaml, rootDir, deployRoot, deployTransaction ?? undefined);
 
 			// Rewrite platform paths for non-claude platforms
 			const nonClaudePlatforms: Platform[] = ["gemini", "codex", "opencode"];
@@ -2068,11 +2774,7 @@ export async function processYaml(
 				// A codex-skills-only project never creates .codex/ at all (skills land
 				// under .agents/skills, not .codex/skills) — codexSkillNames.size > 0 is
 				// the second, independent trigger that covers exactly that case (D4).
-				const codexSkillsPresent = platform === "codex" && codexSkillNames.size > 0;
-				if (
-					(existsSync(platformDir) || codexSkillsPresent) &&
-					(rewriteEligiblePlatforms.has(platform) || libSourceRoots.has(platform))
-				) {
+				if (shouldRewritePlatform(deployRoot, platform, codexSkillNames, rewriteEligiblePlatforms, libSourceRoots)) {
 					if (context.dryRun) {
 						logDry(`Rewrite .claude/ paths -> .${platform}/ in ${platformDir}/`);
 					} else {
@@ -2096,15 +2798,31 @@ export async function processYaml(
 							codexSkillNames,
 							ownedHookNames.get(platform) ?? new Set<string>(),
 							ownedRuleNames.get(platform) ?? new Set<string>(),
+							deployTransaction ?? undefined,
 						);
 					}
 				}
 			}
 
+			// The transaction ends before arbitrary user formatter code runs. A
+			// formatter is an external, post-commit step whose writes are not journaled.
+			if (deployTransaction) {
+				const committedTransaction = deployTransaction;
+				deployTransaction = null;
+				await committedTransaction.finish();
+			}
 			if (syncYaml.format && !context.dryRun) {
 				await formatDeployedRoots(deployRoot, syncYaml.format, docsDests, codexSkillNames);
 			}
 		} catch (err) {
+			try {
+				await deployTransaction?.rollback();
+			} catch (rollbackErr) {
+				logError(`worktree 롤백 실패 (수동 복구 필요): ${deployRoot}: ${rollbackErr}`);
+			}
+			if (deployTransaction) {
+				await deployTransaction.finish();
+			}
 			// Fatal errors (MCP key-derivation or topology failure) must never be
 			// downgraded: rethrow so they surface as a non-zero exit.
 			if (isFatalSyncError(err)) {
@@ -2360,6 +3078,15 @@ export async function runProjectsLoop(
 				// the top-level handler so the run exits non-zero.
 				if (isFatalSyncError(err)) {
 					throw err;
+				}
+				// Errors raised before processYaml reaches its per-worktree catch (for
+				// example, PreToolUse preflight validation) still need to identify every
+				// deploy root that failed. Resolve here after targetPath is known; a
+				// topology failure during this resolution remains fatal.
+				for (const deployRoot of resolveDeployTargets(targetPath)) {
+					if (!context.failedTargets.includes(deployRoot)) {
+						context.failedTargets.push(deployRoot);
+					}
 				}
 				logError(`프로젝트 처리 실패 (계속 진행): ${projectSyncYaml}: ${err}`);
 			}

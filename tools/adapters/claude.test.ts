@@ -10,11 +10,16 @@ import path from "path";
 import os from "os";
 import { execFileSync } from "node:child_process";
 
-import { ClaudeAdapter } from "./claude.ts";
+import { ClaudeAdapter, ClaudePreToolUsePreviewError } from "./claude.ts";
 import { deriveClaudeProjectKey } from "../lib/git-key.ts";
 import baseline from "./__fixtures__/claude-project-baseline.json";
 import type { PlatformYaml } from "../lib/types.ts";
+import type { PlatformWriteObserver } from "./types.ts";
+import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
+import { DeployTransaction } from "../lib/deploy-transaction.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
+import { composePreToolTraceCommand } from "../lib/pretool-trace-command.ts";
+import { planCategoryDestinationPaths } from "./destinations.ts";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -40,6 +45,16 @@ async function exists(p: string): Promise<boolean> {
 	} catch {
 		return false;
 	}
+}
+
+function decodeTraceCommand(command: string): string[] {
+	const args: string[] = [];
+	const pattern = /'((?:'"'"'|[^'])*)'/g;
+	let match: RegExpExecArray | null;
+	while ((match = pattern.exec(command)) !== null) {
+		args.push(match[1].replaceAll(`'"'"'`, "'"));
+	}
+	return args;
 }
 
 // ---------------------------------------------------------------------------
@@ -76,6 +91,44 @@ describe("PlatformAdapter 기본 필드", () => {
 
 	it("returns 'CLAUDE.md' for contextFile field", () => {
 		expect(adapter.contextFile).toBe("CLAUDE.md");
+	});
+});
+
+describe("planner destinations", () => {
+	it("writes every Claude component category at the planner destination", async () => {
+		const sources: Record<string, string> = {
+			agent: path.join(tmpDir, "agent.md"),
+			command: path.join(tmpDir, "command.md"),
+			hook: path.join(tmpDir, "hook.sh"),
+			skill: path.join(tmpDir, "skill"),
+			script: path.join(tmpDir, "script.sh"),
+			rule: path.join(tmpDir, "rule.md"),
+		};
+		await writeFile(sources.agent, "agent");
+		await writeFile(sources.command, "command");
+		await writeFile(sources.hook, "#!/bin/sh\n");
+		await writeFile(sources.skill + "/SKILL.md", "skill");
+		await writeFile(sources.script, "script");
+		await writeFile(sources.rule, "rule");
+
+		await adapter.syncAgentsDirect(targetPath, "a", sources.agent);
+		await adapter.syncCommandsDirect(targetPath, "c", sources.command);
+		await adapter.syncHooksDirect(targetPath, "h", sources.hook);
+		await adapter.syncSkillsDirect(targetPath, "s", sources.skill);
+		await adapter.syncScriptsDirect(targetPath, "x", sources.script);
+		await adapter.syncRulesDirect(targetPath, "r", sources.rule);
+
+		for (const [category, name] of [
+			["agents", "a"],
+			["commands", "c"],
+			["hooks", "h"],
+			["skills", "s"],
+			["scripts", "x"],
+			["rules", "r"],
+		] as const) {
+			const [relative] = planCategoryDestinationPaths("claude", category, name);
+			expect(await exists(path.join(targetPath, relative))).toBe(true);
+		}
 	});
 });
 
@@ -490,6 +543,22 @@ describe("syncAgentsDirect - 파일 복사", () => {
 
 		expect(await exists(path.join(targetPath, ".claude", "agents", "agent.md"))).toBe(false);
 	});
+
+	it("records the initial copy and frontmatter rewrites as separate mutations via `syncAgentsDirect`", async () => {
+		const sourceFile = path.join(tmpDir, "agent.md");
+		await writeFile(sourceFile, "---\nname: agent\n---\n\nbody\n");
+		const calls: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath, operation) => {
+				calls.push(path.relative(targetPath, writtenPath));
+				await operation();
+			},
+		};
+
+		await adapter.syncAgentsDirect(targetPath, "agent", sourceFile, ["testing"], [], false, undefined, mutationHooks);
+
+		expect(calls).toEqual([".claude/agents/agent.md", ".claude/agents/agent.md"]);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -575,6 +644,31 @@ describe("syncAgentsDirect - add-skills 프론트매터 주입", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncAgentsDirect - add-hooks 프론트매터 주입", () => {
+	it("does not swallow nested hook mutation conflicts via `syncAgentsDirect`", async () => {
+		const sourceFile = path.join(tmpDir, "agent.md");
+		const hookSource = path.join(tmpDir, "nested-hook.sh");
+		await writeFile(sourceFile, "---\nname: agent\n---\n\nbody\n");
+		await writeFile(hookSource, "#!/bin/sh\necho hook\n", 0o755);
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath) => {
+				throw new Error(`nested conflict: ${writtenPath}`);
+			},
+		};
+
+		await expect(
+			adapter.syncAgentsDirect(
+				targetPath,
+				"agent",
+				sourceFile,
+				[],
+				[{ event: "Stop", display_name: "nested-hook.sh", source_path: hookSource }],
+				false,
+				undefined,
+				mutationHooks,
+			),
+		).rejects.toThrow("nested conflict:");
+	});
+
 	it("injects add-hooks into agent frontmatter via `syncAgentsDirect`", async () => {
 		const sourceFile = path.join(tmpDir, "agent.md");
 		await writeFile(sourceFile, "---\nname: agent\n---\n\n# Agent\n");
@@ -716,6 +810,42 @@ describe("syncCommandsDirect", () => {
 
 		expect(await exists(path.join(targetPath, ".claude", "commands", "my-command.md"))).toBe(true);
 	});
+
+	it("wraps the command file mutation and preserves the resident on pre-CAS conflict", async () => {
+		const src = path.join(tmpDir, "my-command.md");
+		const target = path.join(targetPath, ".claude", "commands", "my-command.md");
+		await writeFile(src, "new\n");
+		await writeFile(target, "resident\n");
+		let mutationCalls = 0;
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async () => {
+				mutationCalls++;
+				throw new Error("pre-CAS conflict");
+			},
+		};
+
+		await expect(adapter.syncCommandsDirect(targetPath, "my-command", src, false, mutationHooks)).rejects.toThrow(
+			"pre-CAS conflict",
+		);
+		expect(mutationCalls).toBe(1);
+		expect(await fs.readFile(target, "utf8")).toBe("resident\n");
+	});
+
+	it("does not invoke mutation hooks in dry-run", async () => {
+		const src = path.join(tmpDir, "my-command.md");
+		await writeFile(src, "new\n");
+		let mutations = 0;
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (_target, operation) => {
+				mutations++;
+				await operation();
+			},
+		};
+
+		await adapter.syncCommandsDirect(targetPath, "my-command", src, true, mutationHooks);
+		expect(mutations).toBe(0);
+		expect(await exists(path.join(targetPath, ".claude", "commands", "my-command.md"))).toBe(false);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -723,6 +853,40 @@ describe("syncCommandsDirect", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncHooksDirect", () => {
+	it("observes the main hook before dependency mutations and propagates dependency conflicts", async () => {
+		const hooksDir = path.join(tmpDir, "hooks");
+		await writeFile(
+			path.join(hooksDir, "main.sh"),
+			'#!/bin/bash\nsource "$HOOKS_DIR/lib/one.sh"\nsource "$HOOKS_DIR/lib/two.sh"\n',
+			0o644,
+		);
+		await writeFile(path.join(hooksDir, "lib", "one.sh"), "one\n", 0o644);
+		await writeFile(path.join(hooksDir, "lib", "two.sh"), "two\n", 0o644);
+		const order: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath, operation) => {
+				order.push(`mutate:${path.basename(writtenPath)}`);
+				if (path.basename(writtenPath) === "two.sh") throw new Error("dependency conflict");
+				await operation();
+			},
+		};
+		const observer: PlatformWriteObserver = async (writtenPath) => {
+			order.push(`observe:${path.basename(writtenPath)}`);
+		};
+
+		await expect(
+			adapter.syncHooksDirect(targetPath, "main.sh", path.join(hooksDir, "main.sh"), false, observer, mutationHooks),
+		).rejects.toThrow("dependency conflict");
+		expect(order).toEqual([
+			"mutate:main.sh",
+			"observe:main.sh",
+			"mutate:one.sh",
+			"observe:one.sh",
+			"mutate:two.sh",
+		]);
+		expect(await exists(path.join(targetPath, ".claude", "hooks", "lib", "one.sh"))).toBe(true);
+		expect(await exists(path.join(targetPath, ".claude", "hooks", "lib", "two.sh"))).toBe(false);
+	});
 	it("copies hook file to .claude/hooks/ and sets +x permission via `syncHooksDirect`", async () => {
 		const src = path.join(tmpDir, "my-hook.sh");
 		await writeFile(src, "#!/bin/bash\necho hi", 0o644);
@@ -808,6 +972,39 @@ describe("syncHooksDirect", () => {
 		expect(await exists(targetLib)).toBe(true);
 	});
 
+	it("uses exact directory leaf mutations without a coarse root observer", async () => {
+		const hooksDir = path.join(tmpDir, "hooks");
+		const dirHookDir = path.join(hooksDir, "leaf-hook");
+		await writeFile(
+			path.join(dirHookDir, "entry.sh"),
+			'#!/bin/bash\nsource "$HOOKS_DIR/lib/shared.sh"\necho entry\n',
+			0o644,
+		);
+		await writeFile(path.join(hooksDir, "lib", "shared.sh"), "#!/bin/bash\necho shared\n", 0o644);
+		const targetRoot = path.join(targetPath, ".claude", "hooks", "leaf-hook");
+		const mutationPaths: string[] = [];
+		const observedPaths: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath, operation) => {
+				mutationPaths.push(writtenPath);
+				await operation();
+			},
+		};
+		const observer: PlatformWriteObserver = async (writtenPath) => {
+			observedPaths.push(writtenPath);
+		};
+
+		await adapter.syncHooksDirect(targetPath, "leaf-hook", dirHookDir, false, observer, mutationHooks);
+
+		expect(mutationPaths).toEqual([
+			path.join(targetRoot, "entry.sh"),
+			path.join(targetRoot, "lib", "shared.sh"),
+		]);
+		expect(mutationPaths).not.toContain(targetRoot);
+		expect(observedPaths).toEqual([path.join(targetRoot, "lib", "shared.sh")]);
+		expect(observedPaths).not.toContain(targetRoot);
+	});
+
 	it("`# omt-hook-dep:` 디렉티브로 참조된 companion 파일을 함께 복사한다", async () => {
 		// session-start.sh references omt-ledger.sh only inside an injected string
 		// (not a `source` statement), so the plain scanner would miss it without
@@ -850,6 +1047,30 @@ describe("syncSkillsDirect", () => {
 			true,
 		);
 	});
+
+	it("forwards directory leaf mutations and stops on a later leaf failure", async () => {
+		const srcDir = path.join(tmpDir, "prometheus");
+		await writeFile(path.join(srcDir, "a.md"), "a\n");
+		await writeFile(path.join(srcDir, "b.md"), "b\n");
+		const seen: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath, operation) => {
+				seen.push(path.relative(targetPath, writtenPath));
+				if (writtenPath.endsWith(`${path.sep}b.md`)) throw new Error("later leaf failure");
+				await operation();
+			},
+		};
+
+		await expect(adapter.syncSkillsDirect(targetPath, "prometheus", srcDir, false, mutationHooks)).rejects.toThrow(
+			"later leaf failure",
+		);
+		expect(seen).toEqual([
+			path.join(".claude", "skills", "prometheus", "a.md"),
+			path.join(".claude", "skills", "prometheus", "b.md"),
+		]);
+		expect(await exists(path.join(targetPath, ".claude", "skills", "prometheus", "a.md"))).toBe(true);
+		expect(await exists(path.join(targetPath, ".claude", "skills", "prometheus", "b.md"))).toBe(false);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -878,6 +1099,21 @@ describe("syncScriptsDirect", () => {
 			false,
 		);
 	});
+
+	it("wraps direct script file writes with mutation hooks", async () => {
+		const src = path.join(tmpDir, "script.sh");
+		await writeFile(src, "new\n");
+		const seen: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath, operation) => {
+				seen.push(path.relative(targetPath, writtenPath));
+				await operation();
+			},
+		};
+
+		await adapter.syncScriptsDirect(targetPath, "script.sh", src, false, mutationHooks);
+		expect(seen).toEqual([path.join(".claude", "scripts", "script.sh")]);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -894,6 +1130,24 @@ describe("syncRulesDirect", () => {
 		expect(await exists(path.join(targetPath, ".claude", "rules", "coding-discipline.md"))).toBe(
 			true,
 		);
+	});
+
+	it("runs the legacy rule observer only after the mutation succeeds", async () => {
+		const src = path.join(tmpDir, "coding-discipline.md");
+		await writeFile(src, "rule\n");
+		const events: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (_writtenPath, operation) => {
+				events.push("mutate");
+				await operation();
+			},
+		};
+		const observer: PlatformWriteObserver = async () => {
+			events.push("observe");
+		};
+
+		await adapter.syncRulesDirect(targetPath, "coding-discipline", src, false, observer, mutationHooks);
+		expect(events).toEqual(["mutate", "observe"]);
 	});
 });
 
@@ -1461,6 +1715,231 @@ describe("syncMcpsMerge", () => {
 // syncPlatformYaml — processed sections
 // ---------------------------------------------------------------------------
 
+describe("syncPlatformYaml - PlatformWriteObserver", () => {
+	it("guards every in-deploy-root settings write with the mutation hook and observes after success", async () => {
+		const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+		const calls: string[] = [];
+		const observed: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath, operation) => {
+				calls.push(writtenPath);
+				await operation();
+			},
+		};
+
+		await adapter.syncPlatformYaml(
+			targetPath,
+			{ config: { fromConfig: true }, hooks: {}, statusLine: "echo status" },
+			false,
+			undefined,
+			(pathname) => {
+				observed.push(pathname);
+			},
+			mutationHooks,
+		);
+
+		expect(calls).toEqual([settingsFile, settingsFile, settingsFile]);
+		expect(observed).toEqual([settingsFile, settingsFile, settingsFile]);
+		expect(JSON.parse(await fs.readFile(settingsFile, "utf8"))).toMatchObject({
+			fromConfig: true,
+			statusLine: { type: "command", command: "echo status" },
+		});
+	});
+
+	it("rejects an external settings edit before the first config read and preserves resident bytes", async () => {
+		const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+		await writeFile(settingsFile, JSON.stringify({ resident: "before" }));
+		const transaction = await DeployTransaction.begin(targetPath, false, [".claude/settings.local.json"]);
+		expect(transaction).not.toBeNull();
+		await writeFile(settingsFile, JSON.stringify({ external: "edit" }));
+
+		await expect(
+			adapter.syncPlatformYaml(targetPath, { config: { fromConfig: true } }, false, undefined, undefined, transaction!),
+		).rejects.toThrow("Deploy transaction conflict");
+		expect(await fs.readFile(settingsFile, "utf8")).toBe(JSON.stringify({ external: "edit" }));
+		await transaction!.finish();
+	});
+
+	it("leaves the successful config postimage rollbackable when a later hook mutation conflicts", async () => {
+		const hookSource = path.join(tmpDir, "later-hook.sh");
+		await writeFile(hookSource, "#!/bin/sh\necho managed\n", 0o755);
+		const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+		const hookTarget = path.join(targetPath, ".claude", "hooks", "later-hook.sh");
+		const transaction = await DeployTransaction.begin(targetPath, false, [
+			".claude/settings.local.json",
+			".claude/hooks/later-hook.sh",
+		]);
+		expect(transaction).not.toBeNull();
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath, operation) => {
+				if (writtenPath === hookTarget) await writeFile(hookTarget, "external\n");
+				await transaction!.mutate(writtenPath, operation);
+			},
+		};
+
+		await expect(
+			adapter.syncPlatformYaml(
+				targetPath,
+				{
+					config: { fromConfig: true },
+					hooks: { PostToolUse: [{ component: hookSource, matcher: "*", type: "command" }] },
+				},
+				false,
+				undefined,
+				undefined,
+				mutationHooks,
+			),
+		).rejects.toThrow("Deploy transaction conflict");
+		await transaction!.rollback();
+		expect(await exists(settingsFile)).toBe(false);
+		expect(await fs.readFile(hookTarget, "utf8")).toBe("external\n");
+		await transaction!.finish();
+	});
+
+	it("does not route user-scope MCP writes through mutation hooks", async () => {
+		const claudeUserConfig = path.join(tmpDir, "claude.json");
+		await writeFile(claudeUserConfig, JSON.stringify({}));
+		const previousUserConfig = process.env["CLAUDE_USER_CONFIG"];
+		process.env["CLAUDE_USER_CONFIG"] = claudeUserConfig;
+		try {
+			let calls = 0;
+			const mutationHooks: DeployMutationHooks = {
+				mutate: async (_writtenPath, operation) => {
+					calls += 1;
+					await operation();
+				},
+			};
+			await adapter.syncPlatformYaml(
+				targetPath,
+				{ mcps: { external: { command: "server" } } },
+				false,
+				undefined,
+				undefined,
+				mutationHooks,
+			);
+			expect(calls).toBe(0);
+			expect(await readJsonFile(claudeUserConfig)).toEqual({
+				mcpServers: { external: { command: "server" } },
+			});
+		} finally {
+			if (previousUserConfig === undefined) delete process.env["CLAUDE_USER_CONFIG"];
+			else process.env["CLAUDE_USER_CONFIG"] = previousUserConfig;
+		}
+	});
+
+	it("propagates platform hook mutation conflicts before updating settings", async () => {
+		const hookSource = path.join(tmpDir, "conflicting-hook.sh");
+		await writeFile(hookSource, "#!/bin/sh\necho hook\n", 0o755);
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath) => {
+				throw new Error(`conflict: ${writtenPath}`);
+			},
+		};
+
+		await expect(
+			adapter.syncPlatformYaml(
+				targetPath,
+				{ hooks: { PostToolUse: [{ component: hookSource, matcher: "*", type: "command" }] } },
+				false,
+				undefined,
+				undefined,
+				mutationHooks,
+			),
+		).rejects.toThrow("conflict:");
+		expect(await exists(path.join(targetPath, ".claude", "settings.local.json"))).toBe(false);
+	});
+
+	it("observes target-owned writes in completion order after bytes exist", async () => {
+		const hookSource = path.join(tmpDir, "source-hook");
+		await writeFile(path.join(hookSource, "index.sh"), "#!/bin/sh\necho hook\n", 0o755);
+		const observed: Array<{ path: string; bytes: string }> = [];
+		const observer: PlatformWriteObserver = async (writtenPath) => {
+			const stat = await fs.stat(writtenPath);
+			const bytes = stat.isDirectory() ? (await fs.readdir(writtenPath)).join(",") : await fs.readFile(writtenPath, "utf8");
+			observed.push({ path: writtenPath, bytes });
+		};
+
+		await adapter.syncPlatformYaml(
+			targetPath,
+			{
+				config: { fromConfig: true },
+				hooks: {
+					PostToolUse: [{ component: hookSource, matcher: "*", type: "command" }],
+				},
+				statusLine: "echo status",
+			},
+			false,
+			undefined,
+			observer,
+		);
+
+		const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+		const hookTarget = path.join(targetPath, ".claude", "hooks", "source-hook");
+		expect(observed.map((entry) => entry.path)).toEqual([
+			settingsFile,
+			hookTarget,
+			settingsFile,
+			settingsFile,
+		]);
+		expect(observed[0]?.bytes).toContain("fromConfig");
+		expect(observed[1]?.bytes).toContain("index.sh");
+		expect(observed[2]?.bytes).toContain("PostToolUse");
+		expect(observed[3]?.bytes).toContain("statusLine");
+	});
+
+	it("does not observe dry-run or external MCP writes", async () => {
+		const claudeUserConfig = path.join(tmpDir, "claude.json");
+		await writeFile(claudeUserConfig, JSON.stringify({}));
+		const previousUserConfig = process.env["CLAUDE_USER_CONFIG"];
+		process.env["CLAUDE_USER_CONFIG"] = claudeUserConfig;
+		try {
+			const observed: string[] = [];
+			const observer: PlatformWriteObserver = (writtenPath) => {
+				observed.push(writtenPath);
+			};
+			await adapter.syncPlatformYaml(
+				targetPath,
+				{ config: { dry: true }, hooks: {}, statusLine: "echo dry" },
+				true,
+				undefined,
+				observer,
+			);
+			await adapter.syncPlatformYaml(
+				targetPath,
+				{ mcps: { external: { command: "server" } } },
+				false,
+				undefined,
+				observer,
+			);
+			expect(observed).toEqual([]);
+			expect(await readJsonFile(claudeUserConfig)).toEqual({
+			mcpServers: { external: { command: "server" } },
+		});
+		} finally {
+			if (previousUserConfig === undefined) delete process.env["CLAUDE_USER_CONFIG"];
+			else process.env["CLAUDE_USER_CONFIG"] = previousUserConfig;
+		}
+	});
+
+	it("does not observe a write that fails", async () => {
+		const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+		await writeFile(settingsFile, "{invalid");
+		const observed: string[] = [];
+		await expect(
+			adapter.syncPlatformYaml(
+				targetPath,
+				{ config: { shouldNotWrite: true } },
+				false,
+				undefined,
+				(pathname) => {
+					observed.push(pathname);
+				},
+			),
+		).rejects.toThrow();
+		expect(observed).toEqual([]);
+	});
+});
+
 describe("syncPlatformYaml - processedSections", () => {
 	it("includes 'config' in processedSections after processing config section via `syncPlatformYaml`", async () => {
 		const result = await adapter.syncPlatformYaml(
@@ -1475,13 +1954,15 @@ describe("syncPlatformYaml - processedSections", () => {
 	});
 
 	it("includes 'hooks' in processedSections after processing hooks section via `syncPlatformYaml`", async () => {
+		const hookFile = path.join(tmpDir, "processed-hook.sh");
+		await writeFile(hookFile, "#!/bin/sh\n");
 		const result = await adapter.syncPlatformYaml(
 			targetPath,
 			{
 				hooks: {
 					PreToolUse: [
 						{
-							command: "$CLAUDE_PROJECT_DIR/.claude/hooks/test.sh",
+							component: hookFile,
 							timeout: 10,
 							matcher: "*",
 						},
@@ -1828,6 +2309,29 @@ describe("isGlobalSync 분기 — 글로벌 sync (path = homedir)", () => {
 		expect(commands.some((c) => c.includes("$CLAUDE_PROJECT_DIR"))).toBe(false);
 	});
 
+	it("global settings.json writes use the mutation hook before reading", async () => {
+		const calls: string[] = [];
+		const mutationHooks: DeployMutationHooks = {
+			mutate: async (writtenPath, operation) => {
+				calls.push(writtenPath);
+				await operation();
+			},
+		};
+		await adapter.syncPlatformYaml(
+			globalTarget,
+			{ config: { globalConfig: true }, statusLine: "echo global" },
+			false,
+			undefined,
+			undefined,
+			mutationHooks,
+		);
+		expect(calls).toEqual([settingsFile, settingsFile]);
+		expect(await readJsonFile(settingsFile)).toMatchObject({
+			globalConfig: true,
+			statusLine: { type: "command", command: "echo global" },
+		});
+	});
+
 	// AC-5: syncPlatformYaml — directory hook with index.sh uses $HOME prefix
 	it("AC-5: `syncPlatformYaml`이 글로벌 path에서 index.sh hook command를 bash $HOME 경로로 emit", async () => {
 		// Create hook directory with index.sh only (triggers AC-5 branch)
@@ -1889,8 +2393,207 @@ describe("isGlobalSync 분기 — 글로벌 sync (path = homedir)", () => {
 		>;
 		const hookEntries = eventHooks.flatMap((h) => h["hooks"] as Array<Record<string, unknown>>);
 		const commands = hookEntries.map((e) => e["command"] as string);
-		expect(commands.some((c) => c.startsWith("$HOME/.claude/hooks/"))).toBe(true);
+		expect(commands[0]).toBe(
+			composePreToolTraceCommand({
+				wrapperPath: path.join(globalTarget, ".claude", "scripts", "pretool-trace", "index.ts"),
+				platform: "claude",
+				hookId: "session-start.sh",
+				originalCommand: "$HOME/.claude/hooks/session-start.sh",
+			}),
+		);
 		expect(commands.some((c) => c.includes("$CLAUDE_PROJECT_DIR"))).toBe(false);
+	});
+});
+
+describe("PreToolUse trace wrapper", () => {
+	it("preserves a raw PreToolUse command without trace-id byte-for-byte and without a preview", async () => {
+		const originalCommand = `bun run '$CLAUDE_PROJECT_DIR/scripts/raw hook.ts' --label "a'b"`;
+		const yaml = { hooks: { PreToolUse: [{ command: originalCommand, matcher: "Bash", timeout: 12 }] } } as unknown as PlatformYaml;
+
+		const previews = await adapter.previewPreToolUseCommands(targetPath, yaml);
+		expect(previews).toHaveLength(0);
+		await adapter.syncPlatformYaml(targetPath, yaml, false);
+
+		const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.local.json"));
+		const command = (((settings.hooks as Record<string, unknown>).PreToolUse as Array<Record<string, unknown>>)[0]
+			?.hooks as Array<Record<string, unknown>>)[0]?.command;
+		expect(command).toBe(originalCommand);
+	});
+
+	it("wraps a raw PreToolUse command when an explicit safe trace-id is provided", async () => {
+		const originalCommand = "bun run scripts/raw.ts --flag=one";
+		const traceId = "raw-command.v1";
+		const yaml = { hooks: { PreToolUse: [{ command: originalCommand, "trace-id": traceId }] } } as unknown as PlatformYaml;
+
+		const previews = await adapter.previewPreToolUseCommands(targetPath, yaml);
+		expect(previews).toHaveLength(1);
+		expect(previews[0]?.hookId).toBe(traceId);
+		expect(previews[0]?.originalCommand).toBe(originalCommand);
+		expect(decodeTraceCommand(previews[0]?.wrappedCommand ?? "")).toEqual([
+			path.join(targetPath, ".claude", "scripts", "pretool-trace", "index.ts"),
+			"claude",
+			traceId,
+			originalCommand,
+		]);
+		await adapter.syncPlatformYaml(targetPath, yaml, false);
+		const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.local.json"));
+		const command = (((settings.hooks as Record<string, unknown>).PreToolUse as Array<Record<string, unknown>>)[0]
+			?.hooks as Array<Record<string, unknown>>)[0]?.command;
+		expect(command).toBe(previews[0]?.wrappedCommand);
+	});
+
+	it("rejects invalid raw trace-id values before writing settings", async () => {
+		const invalidTraceIds: unknown[] = ["", "bad/id", "x".repeat(129), 42];
+		for (const traceId of invalidTraceIds) {
+			const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+			const sentinel = JSON.stringify({ sentinel: "unchanged", hooks: { Stop: [{ matcher: "*", hooks: [] }] } });
+			await writeFile(settingsFile, sentinel);
+			const yaml = { hooks: { PreToolUse: [{ command: "echo raw", "trace-id": traceId }] } } as unknown as PlatformYaml;
+			await expect(adapter.syncPlatformYaml(targetPath, { ...yaml, config: { shouldNotWrite: true } }, false)).rejects.toBeInstanceOf(
+				ClaudePreToolUsePreviewError,
+			);
+			expect(await fs.readFile(settingsFile, "utf8")).toBe(sentinel);
+		}
+	});
+
+	it("warns and skips raw PreToolUse entries with empty or non-string commands", async () => {
+		const yaml = {
+			hooks: { PreToolUse: [{ command: "" }, { command: 42 }] },
+		} as unknown as PlatformYaml;
+		await expect(adapter.syncPlatformYaml(targetPath, yaml, false)).resolves.toBeDefined();
+		const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.local.json"));
+		expect(settings.hooks).toEqual({});
+	});
+
+	it("rejects explicit trace-id entries with empty or non-string commands before writing", async () => {
+		for (const command of ["", 42]) {
+			const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+			const sentinel = JSON.stringify({ sentinel: "unchanged", hooks: { Stop: [{ matcher: "*", hooks: [] }] } });
+			await writeFile(settingsFile, sentinel);
+			const yaml = {
+				config: { shouldNotWrite: true },
+				hooks: { PreToolUse: [{ command, "trace-id": "explicit-safe-id" }] },
+			} as unknown as PlatformYaml;
+			await expect(adapter.syncPlatformYaml(targetPath, yaml, false)).rejects.toBeInstanceOf(
+				ClaudePreToolUsePreviewError,
+			);
+			expect(await fs.readFile(settingsFile, "utf8")).toBe(sentinel);
+		}
+	});
+
+	it("does not require a wrapper declaration for a raw command without trace-id", async () => {
+		const yaml = { hooks: { PreToolUse: [{ command: "echo raw" }] } } as unknown as PlatformYaml;
+		expect(await adapter.previewPreToolUseCommands(targetPath, yaml)).toEqual([]);
+		await adapter.syncPlatformYaml(targetPath, yaml, false);
+		const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.local.json"));
+		expect(settings.hooks).toEqual({ PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command: "echo raw", timeout: 10 }] }] });
+	});
+
+	it("PreToolUse trace wrapper coverage", async () => {
+		const rootA = path.join(tmpDir, "root-a");
+		const rootB = path.join(tmpDir, "root-b");
+		const direct = path.join(rootA, "direct-hook.sh");
+		const indexTs = path.join(rootA, "index-ts");
+		const indexSh = path.join(rootA, "index-sh");
+		const sameName = path.join(rootB, "index-ts");
+		await writeFile(direct, "#!/bin/sh\n");
+		await writeFile(path.join(indexTs, "index.ts"), "export {};\n");
+		await writeFile(path.join(indexSh, "index.sh"), "#!/bin/sh\n");
+		await writeFile(path.join(sameName, "index.ts"), "export {};\n");
+		const yaml = { hooks: { PreToolUse: [
+			{ component: direct, matcher: "Bash", timeout: 3, "trace-id": "ignored-component-id" },
+			{ component: indexTs, matcher: "*", timeout: 4 },
+			{ component: indexSh, matcher: "*", timeout: 5 },
+			{ component: sameName, matcher: "Read", timeout: 6 },
+		] } } as PlatformYaml;
+		const previews = await adapter.previewPreToolUseCommands(targetPath, yaml);
+		expect(previews).toHaveLength(4);
+		expect(new Set(previews.map((p) => p.hookId))).toEqual(new Set(["direct-hook.sh", "index-ts", "index-sh"]));
+		expect(previews[0]?.hookId).toBe("direct-hook.sh");
+		const expectedOriginals = [
+			"$CLAUDE_PROJECT_DIR/.claude/hooks/direct-hook.sh",
+			"bun run $CLAUDE_PROJECT_DIR/.claude/hooks/index-ts/index.ts",
+			"bash $CLAUDE_PROJECT_DIR/.claude/hooks/index-sh/index.sh",
+			"bun run $CLAUDE_PROJECT_DIR/.claude/hooks/index-ts/index.ts",
+		];
+		const expectedWrapper = path.join(targetPath, ".claude", "scripts", "pretool-trace", "index.ts");
+		previews.forEach((preview, index) => {
+			expect(preview.scope).toBe("project");
+			expect(preview.wrapperDeploymentPath).toBe(expectedWrapper);
+			expect(preview.originalCommand).toBe(expectedOriginals[index]);
+			expect(preview.wrappedCommand).toBe(composePreToolTraceCommand({
+				wrapperPath: expectedWrapper,
+				platform: "claude",
+				hookId: preview.hookId,
+				originalCommand: expectedOriginals[index],
+			}));
+			const argv = decodeTraceCommand(preview.wrappedCommand);
+			expect(argv).toEqual([expectedWrapper, "claude", preview.hookId, expectedOriginals[index]]);
+			expect(argv.filter((value) => value === expectedOriginals[index])).toHaveLength(1);
+			expect(preview.hookId).not.toContain(path.sep);
+		});
+		await adapter.syncPlatformYaml(targetPath, yaml, false);
+		const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.local.json"));
+		const emitted = ((settings.hooks as Record<string, unknown>).PreToolUse as Array<Record<string, unknown>>)
+			.flatMap((group) => group.hooks as Array<Record<string, unknown>>).map((hook) => hook.command);
+		expect(emitted).toEqual(previews.map((p) => p.wrappedCommand));
+	});
+
+	it("PreToolUse trace preserves hook metadata", async () => {
+		const command = path.join(tmpDir, "metadata.sh");
+		const post = path.join(tmpDir, "post.sh");
+		const session = path.join(tmpDir, "session.sh");
+		await writeFile(command, "#!/bin/sh\n");
+		await writeFile(post, "#!/bin/sh\n");
+		await writeFile(session, "#!/bin/sh\n");
+		const yaml = { hooks: {
+			PreToolUse: [{ component: command, matcher: "Bash", timeout: 7 }],
+			PostToolUse: [{ component: post, matcher: "Read", timeout: 8 }],
+			SessionStart: [{ component: session, matcher: "startup", timeout: 11 }],
+			Stop: [{ type: "prompt", prompt: "keep", matcher: "*", timeout: 9, component: "" }],
+		} } as PlatformYaml;
+		await adapter.syncPlatformYaml(targetPath, yaml, false);
+		const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.local.json"));
+		const hooks = settings.hooks as Record<string, Array<Record<string, unknown>>>;
+		expect(hooks.PreToolUse[0]?.matcher).toBe("Bash");
+		expect(hooks.PreToolUse[0]?.hooks).toMatchObject([{ timeout: 7, type: "command" }]);
+		expect(hooks.PostToolUse[0]?.matcher).toBe("Read");
+		expect(hooks.PostToolUse[0]?.hooks).toEqual([{ type: "command", command: "$CLAUDE_PROJECT_DIR/.claude/hooks/post.sh", timeout: 8 }]);
+		expect(hooks.SessionStart[0]?.matcher).toBe("startup");
+		expect(hooks.SessionStart[0]?.hooks).toEqual([{ type: "command", command: "$CLAUDE_PROJECT_DIR/.claude/hooks/session.sh", timeout: 11 }]);
+		expect(hooks.Stop[0]?.hooks).toEqual([{ type: "prompt", prompt: "keep", timeout: 9 }]);
+		expect(Object.keys(hooks)).toEqual(["PreToolUse", "PostToolUse", "SessionStart", "Stop"]);
+	});
+
+	it("PreToolUse trace pure preview", async () => {
+		const source = path.join(tmpDir, "pure.sh");
+		await writeFile(source, "#!/bin/sh\n");
+		const yaml = { hooks: { PreToolUse: [{ component: source, matcher: "*", timeout: 10 }] } } as PlatformYaml;
+		const before = await fs.readdir(targetPath, { recursive: true });
+		const preview = await adapter.previewPreToolUseCommands(targetPath, yaml);
+		expect(preview).toHaveLength(1);
+		expect(await fs.readdir(targetPath, { recursive: true })).toEqual(before);
+		expect(await exists(path.join(targetPath, ".claude", "settings.local.json"))).toBe(false);
+		const globalPreview = await adapter.previewPreToolUseCommands(os.homedir(), yaml);
+		expect(globalPreview[0]?.scope).toBe("global");
+		expect(globalPreview[0]?.wrapperDeploymentPath).toBe(
+			path.join(os.homedir(), ".claude", "scripts", "pretool-trace", "index.ts"),
+		);
+		expect(globalPreview[0]?.originalCommand).toBe("$HOME/.claude/hooks/pure.sh");
+		await adapter.syncPlatformYaml(targetPath, yaml, false);
+		const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.local.json"));
+		const command = ((settings.hooks as Record<string, Array<Record<string, unknown>>>).PreToolUse[0]?.hooks as Array<Record<string, unknown>>)[0]?.command;
+		expect(command).toBe(preview[0]?.wrappedCommand);
+	});
+
+	it("non-PreToolUse directory without index is warned and skipped", async () => {
+		const emptyDir = path.join(tmpDir, "empty-hook");
+		await fs.mkdir(emptyDir, { recursive: true });
+		await adapter.syncPlatformYaml(targetPath, {
+			hooks: { PostToolUse: [{ component: emptyDir, matcher: "*", timeout: 10 }] },
+		} as PlatformYaml, false);
+		const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.local.json"));
+		expect(settings.hooks).toEqual({});
 	});
 });
 
@@ -1959,10 +2662,12 @@ describe("AC-7: 프로젝트 분기 hook command가 pre-fix baseline과 byte-equ
 		const hookEntries = eventHooks.flatMap((h) => h["hooks"] as Array<Record<string, unknown>>);
 		const command = hookEntries[0]?.["command"] as string;
 
-		const expected = (baseline.syncPlatformYaml_L442_direct as string).replace(
-			"${displayName}",
-			hookDisplayName,
-		);
+		const expected = composePreToolTraceCommand({
+			wrapperPath: path.join(targetPath, ".claude", "scripts", "pretool-trace", "index.ts"),
+			platform: "claude",
+			hookId: hookDisplayName,
+			originalCommand: "$CLAUDE_PROJECT_DIR/.claude/hooks/test-hook.sh",
+		});
 		expect(command).toBe(expected);
 	});
 

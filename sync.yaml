@@ -152,6 +152,8 @@ scripts:
     # 오버라이드"마저 전역 단일본이었다(어느 프로젝트에서 실행해도 같은 파일을 봤다).
     - component: verify-entrypoint-gate
       platforms: [claude, codex]
+    - component: pretool-trace
+      platforms: [claude, codex]
 
 rules:
   items:

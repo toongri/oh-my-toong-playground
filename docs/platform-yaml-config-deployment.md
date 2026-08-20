@@ -51,6 +51,12 @@ mcps:
 | OpenCode | 대상의 `.opencode/opencode.json`에서 `mcp.<name>`만 삭제한다. |
 | Gemini | **지원하지 않는다.** `mcps.<name>: null`은 검증에서 거부된다. Gemini는 `mcps` 섹션이 제공되면 `.gemini/settings.json`의 `mcpServers` 전체를 교체하므로, 이 삭제 tombstone 계약의 대상이 아니다. |
 
+Claude의 루트·프로젝트 MCP는 `deployRoot` 밖의 사용자 설정 파일에 기록되므로 해당
+워크트리의 `DeployTransaction` 범위에 포함되지 않는다. 이후 대상 배포가 실패해도
+MCP 변경은 남을 수 있다. 필요하면 sync를 재시도하거나 tombstone을 선언하고, 또는
+Claude CLI로 수동 제거한다. Codex·OpenCode의 대상 설정은 `deployRoot` 안에서
+처리되지만, 개별 외부 명령의 추가 변경까지 보장하는 계약은 아니다.
+
 수동 CLI로는 루트 전역 MCP에 `claude mcp remove <name> --scope user`, 프로젝트
 local MCP에 `claude mcp remove <name> --scope local`을 쓴다. scope를 생략하면
 Claude CLI가 MCP의 존재 위치를 찾는다. 이 수동 방법은 계속 쓸 수 있지만 선언형
@@ -77,6 +83,21 @@ plugins:
 `state: absent`는 해당 이름만 `claude plugin uninstall`하며, 루트 YAML에서는 user
 scope, 프로젝트 YAML에서는 project scope로 실행한다. 다른 플러그인은 보존되고,
 이미 제거된 플러그인을 다시 지정해도 안전하게 처리된다.
+
+### Claude 플러그인의 트랜잭션 범위와 외부 명령
+
+플러그인 항목의 `check`와 `pre-commands`는 대상 워크트리에서 `bash -c`로
+실행된다. 따라서 Claude CLI 호출을 포함한 임의의 셸 명령이 사용자 범위,
+프로젝트 범위 또는 `deployRoot` 밖의 외부 상태를 변경할 수 있다. 플러그인
+설치·제거와 이 명령들의 변경은 파일 배포용 `DeployTransaction`에 포함되지
+않으며, 트랜잭션으로 롤백할 수도 없다. 뒤이어 다른 대상의 배포가 실패해도
+이미 실행된 외부 변경은 남을 수 있다.
+
+복구가 필요하면 먼저 같은 설정으로 sync를 재시도한다. 플러그인 상태가
+엇갈렸다면 해당 scope에 맞는 Claude CLI `plugin uninstall` 또는 `plugin install`을
+수동으로 실행하고, `check`·`pre-commands`가 만든 파일·설정·기타 외부 변경은
+그 명령의 의미에 맞게 직접 되돌린다. 이 복구 절차는 선언형 파일 배포의
+트랜잭션 보장에 포함되지 않는다.
 
 ## 두 개의 gitignore 계층 (핵심)
 

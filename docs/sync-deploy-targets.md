@@ -108,8 +108,8 @@
 ## 배포후 포맷(format-on-deploy)
 
 `sync.yaml`이 top-level `format`(예: `format: "pnpm exec prettier --write"`)을
-선언하면, 각 워크트리 배포가 끝난 뒤(플랫폼 경로 rewrite 다음, 워크트리 catch
-직전) 그 명령을 **타겟 cwd(deployRoot)**에서 한 번 실행한다. `format`은 **문자열**
+선언하면, 각 워크트리 배포 transaction을 커밋한 뒤(플랫폼 경로 rewrite 다음,
+워크트리 catch 직전) 그 명령을 **타겟 cwd(deployRoot)**에서 한 번 실행한다. `format`은 **문자열**
 (공백 토큰화 — 단순 케이스, 셸 인용 미지원) 또는 **문자열 배열**(argv로 그대로 사용
 — 공백 든 인자, 예: config 경로가 필요할 때)을 받는다. 목적은 배포 `.md`
 —특히 CJK 표—가 타겟 **자기 포매터의 정규형 바이트**로 착지하게 하는 것이다.
@@ -126,7 +126,9 @@
   deploy root 밖을 재귀 재작성하지 못하게 한다.
 - **실패 처리**: format 실패(non-zero exit 또는 명령 미설치 ENOENT)는 그 워크트리를
   위 "배포 독립성과 실패 처리"의 `failedTargets`로 흘려 **best-effort**로 처리한다 —
-  다른 워크트리는 계속되고, 하나라도 실패하면 전체 sync가 non-zero exit이다.
+  다른 워크트리는 계속되고, 하나라도 실패하면 전체 sync가 non-zero exit이다. 포맷터는
+  transaction 밖의 임의 명령이므로 배포 바이트와 포맷터가 쓴 바이트 모두 rollback되지
+  않는다. 실패 뒤에는 재시도하거나 수동으로 정리한다.
 - **dry-run skip**: `make sync-dry`는 이 포맷 패스를 실행하지 않는다.
 - 미선언(`format` 없음) 타겟은 이 단계 없이 기존대로 raw 배포된다(하위호환).
 
