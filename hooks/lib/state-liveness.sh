@@ -95,6 +95,112 @@ _pretool_trace_valid_lease_lock() {
   return 0
 }
 
+# --- Append-lock coordination (pretool-trace/.append.lock) -----------------
+#
+# This is a SEPARATE protocol from the key lease-lock helpers above: the
+# append lock is acquired/held by scripts/pretool-trace/storage.ts's
+# acquireAppendLock/inspectAndRecoverLock (a live writer's non-blocking
+# appendEvent()), and its owner marker carries NON-EMPTY JSON metadata
+# (`{"pid":<pid>,"nonce":"<nonce>"}`), unlike the lease-lock's empty-file
+# marker. reap_pretool_trace_artifacts's generation-cleanup loop must
+# interoperate with exactly this protocol before deleting events.jsonl[.1-3],
+# so a live writer's in-flight append is never raced.
+#
+# _PRETOOL_APPEND_LOCK_GRACE — mirrors storage.ts's LOCK_INIT_GRACE_MS
+# (1000ms): an empty lock dir is only recoverable once older than this many
+# seconds, giving a writer that just mkdir'd the lock time to create its
+# owner file before cleanup treats the brief empty window as abandoned.
+_PRETOOL_APPEND_LOCK_GRACE=1
+
+# _pretool_append_lock_recover <lock> <now_epoch>
+#
+# Mirrors inspectAndRecoverLock exactly: recovers (unlinks the owner, rmdirs
+# the lock) ONLY when the lock is a real non-symlink directory containing
+# EXACTLY ONE entry that is a regular non-symlink file named
+# "owner-<pid>-<nonce>" whose content is byte-exactly
+# {"pid":<pid>,"nonce":"<nonce>"} (matching name) AND that pid is dead (not
+# EPERM). An empty lock dir recovers only once older than the init grace.
+# Every other shape (live owner, malformed/mismatched JSON, >1 entry,
+# unreadable owner, symlinked lock) is left untouched — return 1, unsafe.
+_pretool_append_lock_recover() {
+  local lock="$1" now_epoch="$2"
+  local entry count owner name content pid nonce name_pid name_nonce probe mtime age
+  [ -d "$lock" ] && [ ! -L "$lock" ] || return 1
+  count=0; owner=""
+  for entry in "$lock"/* "$lock"/.[!.]* "$lock"/..?*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    count=$((count + 1)); owner="$entry"
+  done
+  if [ "$count" -eq 0 ]; then
+    mtime=$(_state_liveness_stat_mtime "$lock" 2>/dev/null || true)
+    case "$mtime" in ''|*[!0-9]*) return 1 ;; esac
+    age=$((now_epoch - mtime))
+    [ "$age" -gt "$_PRETOOL_APPEND_LOCK_GRACE" ] || return 1
+    rmdir "$lock" 2>/dev/null
+    return $?
+  fi
+  [ "$count" -eq 1 ] || return 1
+  name="${owner##*/}"
+  printf '%s\n' "$name" | grep -Eq '^owner-[0-9]+-[0-9a-f]+$' || return 1
+  [ -f "$owner" ] && [ ! -L "$owner" ] || return 1
+  content=$(cat "$owner" 2>/dev/null) || return 1
+  case "$content" in
+    '{"pid":'[0-9][0-9]*',"nonce":"'[0-9a-f][0-9a-f]*'"}') ;;
+    *) return 1 ;;
+  esac
+  pid="${content#*:}"; pid="${pid%%,*}"
+  nonce="${content#*,}"; nonce="${nonce#*:}"; nonce="${nonce#\"}"; nonce="${nonce%\"\}}"
+  name_pid="${name#owner-}"; name_pid="${name_pid%%-*}"
+  name_nonce="${name#owner-*-}"
+  [ "$pid" = "$name_pid" ] && [ "$nonce" = "$name_nonce" ] || return 1
+  probe=$(kill -0 "$pid" 2>&1) && return 1
+  printf '%s\n' "$probe" | grep -qi 'operation not permitted' && return 1
+  rm -f "$owner" 2>/dev/null && rmdir "$lock" 2>/dev/null
+}
+
+# _pretool_append_lock_acquire <lock> <now_epoch>
+#
+# Mirrors acquireAppendLock: `mkdir` is the atomic acquisition primitive. On
+# EEXIST, attempts recovery exactly once and retries; any other outcome is
+# acquisition failure. On success echoes the created owner path (caller
+# captures it via command substitution) and returns 0; on failure prints
+# nothing and returns 1.
+_pretool_append_lock_acquire() {
+  local lock="$1" now_epoch="$2" attempt nonce owner
+  for attempt in 0 1; do
+    if mkdir "$lock" 2>/dev/null; then
+      chmod 700 "$lock" 2>/dev/null || true
+      nonce=$(od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')
+      case "$nonce" in [0-9a-f][0-9a-f]*) ;; *) rmdir "$lock" 2>/dev/null; return 1 ;; esac
+      owner="$lock/owner-$$-$nonce"
+      if (umask 077; printf '{"pid":%s,"nonce":"%s"}' "$$" "$nonce" > "$owner") 2>/dev/null; then
+        chmod 600 "$owner" 2>/dev/null || true
+        printf '%s\n' "$owner"
+        return 0
+      fi
+      rm -f "$owner" 2>/dev/null
+      rmdir "$lock" 2>/dev/null
+      return 1
+    fi
+    if [ "$attempt" -eq 0 ] && _pretool_append_lock_recover "$lock" "$now_epoch"; then
+      continue
+    fi
+    return 1
+  done
+  return 1
+}
+
+# _pretool_append_lock_release <owner> <lock>
+#
+# Releases only the caller's own owner + lock — never evicts a lock this
+# call did not itself create in _pretool_append_lock_acquire.
+_pretool_append_lock_release() {
+  local owner="$1" lock="$2"
+  rm -f "$owner" 2>/dev/null
+  rmdir "$lock" 2>/dev/null
+  return 0
+}
+
 # reap_pretool_trace_artifacts <root> <now_epoch> <dry_run>
 #
 # Scans only the explicit trace/key/evidence allowlist.  It emits stale paths
@@ -103,6 +209,7 @@ _pretool_trace_valid_lease_lock() {
 reap_pretool_trace_artifacts() {
   local root="$1" now_epoch="$2" dry_run="$3"
   local path name work child nonempty had_failure=0
+  local append_lock append_lock_owner append_lock_acquired
   local trace="$root/pretool-trace"
   local keys="$trace/keys"
   local evidence="$root/evidence"
@@ -110,14 +217,34 @@ reap_pretool_trace_artifacts() {
 
   # Trace generations and keys.
   if [ -d "$trace" ] && [ ! -L "$trace" ]; then
-    for name in events.jsonl events.jsonl.1 events.jsonl.2 events.jsonl.3; do
-      path="$trace/$name"
-      if _pretool_trace_stale "$path" "$now_epoch"; then
-        if [ "$dry_run" = "1" ]; then printf '%s\n' "$path"
-        elif rm -f "$path" 2>/dev/null; then printf '%s\n' "$path"
-        else echo "reap: failed to delete $path" >&2; had_failure=1; fi
+    # Coordinate with a live writer's append lock (see the
+    # _pretool_append_lock_* helpers above) before deleting any generation.
+    # dry_run stays fully read-only: never create/acquire/mutate the lock.
+    # In execute mode, acquisition failure (busy or any ambiguous/unsafe
+    # lock state) skips deletion of ALL FOUR generations this pass, per the
+    # fail-toward-preservation invariant — the rest of cleanup below is
+    # unaffected.
+    append_lock="$trace/.append.lock"
+    append_lock_owner=""
+    append_lock_acquired=0
+    if [ "$dry_run" != "1" ]; then
+      if append_lock_owner=$(_pretool_append_lock_acquire "$append_lock" "$now_epoch"); then
+        append_lock_acquired=1
       fi
-    done
+    fi
+    if [ "$dry_run" = "1" ] || [ "$append_lock_acquired" -eq 1 ]; then
+      for name in events.jsonl events.jsonl.1 events.jsonl.2 events.jsonl.3; do
+        path="$trace/$name"
+        if _pretool_trace_stale "$path" "$now_epoch"; then
+          if [ "$dry_run" = "1" ]; then printf '%s\n' "$path"
+          elif rm -f "$path" 2>/dev/null; then printf '%s\n' "$path"
+          else echo "reap: failed to delete $path" >&2; had_failure=1; fi
+        fi
+      done
+    fi
+    if [ "$append_lock_acquired" -eq 1 ]; then
+      _pretool_append_lock_release "$append_lock_owner" "$append_lock"
+    fi
     if [ -d "$keys" ] && [ ! -L "$keys" ]; then
       for path in "$keys"/*; do
         [ -f "$path" ] || continue
