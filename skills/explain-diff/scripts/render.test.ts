@@ -1,5 +1,15 @@
+import { execFileSync } from "child_process";
 import { describe, expect, test } from "bun:test";
-import { renderToHtml, slugify } from "./render";
+import { mmdcRenderSvg, renderToHtml, slugify } from "./render";
+
+function mmdcAvailable(): boolean {
+	try {
+		execFileSync("mmdc", ["--version"], { stdio: "ignore" });
+		return true;
+	} catch {
+		return false;
+	}
+}
 
 const DOC = `# 트리 선택기 수평 패닝
 
@@ -134,6 +144,20 @@ describe("mermaid 사전 렌더", () => {
 			}),
 		).toThrow(/2번째 mermaid 블록/);
 	});
+});
+
+describe("mmdc 결정성 — 렌더 게이트의 재현 비교 전제", () => {
+	// 렌더 게이트는 제출된 HTML을 현재 Markdown으로 다시 렌더해 바이트 비교로
+	// "이 소스에서 만든 HTML"임을 증명한다. 그 전제는 렌더러가 결정적이라는 것 —
+	// mermaid는 기본적으로 랜덤 id와 rough.js 손그림 획으로 매 실행 다른 SVG를
+	// 낸다. mmdc가 있는 환경에서만 돈다(없으면 skip).
+	test.skipIf(!mmdcAvailable())(
+		"classDiagram 을 같은 소스로 두 번 렌더하면 바이트가 동일하다",
+		() => {
+			const src = "classDiagram\n  class Tool { execute() }\n  class Helper { run() }\n  Tool --> Helper\n";
+			expect(mmdcRenderSvg(src, 0)).toBe(mmdcRenderSvg(src, 0));
+		},
+	);
 });
 
 describe("컴포넌트 CSS — 렌더러가 시각 언어를 소유한다", () => {

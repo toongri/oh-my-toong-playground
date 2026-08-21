@@ -78,14 +78,33 @@ export function preRenderMermaid(
  * block: mmdc names every SVG `my-svg` and its internal stylesheet targets that
  * id, so two untouched diagrams on one page would style each other.
  */
-function mmdcRenderSvg(source: string, index: number): string {
+export function mmdcRenderSvg(source: string, index: number): string {
 	const dir = mkdtempSync(join(tmpdir(), "explain-diff-mmd-"));
 	try {
 		const src = join(dir, "block.mmd");
 		const out = join(dir, "block.svg");
+		const cfg = join(dir, "config.json");
 		writeFileSync(src, source, "utf8");
+		// mermaid is non-deterministic by default: it mints random element ids and
+		// draws shapes with rough.js hand-drawn strokes seeded from a random value,
+		// so the SAME source yields different SVG bytes every run. That breaks the
+		// render gate, which proves an HTML was built from the current Markdown by
+		// re-rendering and byte-comparing — a proof that only holds if this renderer
+		// is a deterministic derivation. Pin every randomness source: a fixed id
+		// seed, the classic (non-sketch) look, and a fixed rough seed for the shapes
+		// (class boxes, dividers) mermaid still draws with rough.js regardless of look.
+		writeFileSync(
+			cfg,
+			JSON.stringify({
+				deterministicIds: true,
+				deterministicIDSeed: "explain-diff",
+				look: "classic",
+				handDrawnSeed: 42,
+			}),
+			"utf8",
+		);
 		try {
-			execFileSync("mmdc", ["-i", src, "-o", out, "-b", "transparent", "-q"], {
+			execFileSync("mmdc", ["-i", src, "-o", out, "-b", "transparent", "-q", "-c", cfg], {
 				stdio: ["ignore", "pipe", "pipe"],
 			});
 		} catch (e) {
