@@ -266,6 +266,191 @@ test_canonical_worktree_emits_no_warning() {
 }
 
 # =============================================================================
+# AC (f): cache hit avoids invoking git — behavioral core of the cwd-independent
+# file cache. Seeds the cache with a real git repo, then re-resolves the same
+# path with a decoy `git` on PATH that marks a file if invoked. No cache means
+# the second call hits the decoy and leaves a marker — that is the RED signal.
+# =============================================================================
+test_cache_hit_avoids_invoking_git() {
+  local repo
+  repo=$(mktemp -d)
+  (cd "$repo" && git init -q)
+
+  # Seed the cache with a real resolution (real git on PATH).
+  local first
+  first=$(call_resolve "$repo")
+
+  # Decoy `git`: if invoked, touches a marker and returns garbage.
+  local fakebin marker
+  fakebin=$(mktemp -d)
+  marker="$fakebin/marker-hit"
+  {
+    echo '#!/bin/bash'
+    echo "touch \"$marker\""
+    echo 'echo FAKE-GIT-OUTPUT'
+    echo 'exit 0'
+  } > "$fakebin/git"
+  chmod +x "$fakebin/git"
+
+  local second
+  second=$(
+    unset OMT_DIR || true
+    export PATH="$fakebin:$PATH"
+    source "$SCRIPT_DIR/omt-dir.sh"
+    resolve_omt_dir "$repo"
+  )
+
+  local marker_hit=0
+  [ -f "$marker" ] && marker_hit=1
+
+  rm -rf "$repo" "$fakebin"
+
+  if [ "$first" != "$second" ]; then
+    echo "  ASSERTION FAILED: cached value mismatch: seed='$first' second='$second'"
+    return 1
+  fi
+
+  if [ "$marker_hit" -eq 1 ]; then
+    echo "  ASSERTION FAILED: decoy git was invoked on the second call (cache miss)"
+    return 1
+  fi
+
+  return 0
+}
+
+# =============================================================================
+# AC (g): OMT_DIR env short-circuits before the cache is ever consulted or
+# written — preserves the existing Claude env-var fast path unchanged.
+# =============================================================================
+test_omt_dir_env_short_circuits_before_cache() {
+  local repo preset result
+  repo=$(mktemp -d)
+  preset="/some/preset/dir"
+
+  result=$(
+    export OMT_DIR="$preset"
+    source "$SCRIPT_DIR/omt-dir.sh"
+    compute_omt_dir "$repo"
+    printf '%s' "$OMT_DIR"
+  )
+
+  local key cache_file
+  key="${repo//\//_}"
+  key="${key// /-}"
+  cache_file="$HOME/.omt/.dir-cache/$key"
+
+  rm -rf "$repo"
+
+  if [ "$result" != "$preset" ]; then
+    echo "  ASSERTION FAILED: expected OMT_DIR '$preset' to survive, got '$result'"
+    return 1
+  fi
+
+  if [ -f "$cache_file" ]; then
+    echo "  ASSERTION FAILED: cache file created despite OMT_DIR env short-circuit: $cache_file"
+    return 1
+  fi
+
+  return 0
+}
+
+# =============================================================================
+# AC (h): cached value equals the freshly computed value (cache miss vs hit
+# return identical OMT_DIR for the same root path).
+# =============================================================================
+test_cached_value_equals_freshly_computed_value() {
+  local repo miss_result hit_result
+  repo=$(mktemp -d)
+  (cd "$repo" && git init -q)
+
+  miss_result=$(call_resolve "$repo")
+  hit_result=$(call_resolve "$repo")
+
+  rm -rf "$repo"
+
+  if [ "$miss_result" != "$hit_result" ]; then
+    echo "  ASSERTION FAILED: cache-miss result '$miss_result' != cache-hit result '$hit_result'"
+    return 1
+  fi
+
+  return 0
+}
+
+# =============================================================================
+# AC (i): empty argument skips cache logic entirely — no cache file is
+# created and existing fallback behavior for an empty root is untouched.
+# =============================================================================
+test_empty_argument_skips_cache_logic() {
+  local cache_dir="$HOME/.omt/.dir-cache"
+  local before_count after_count
+
+  before_count=0
+  if [ -d "$cache_dir" ]; then
+    before_count=$(find "$cache_dir" -type f 2>/dev/null | wc -l | tr -d ' ')
+  fi
+
+  (
+    unset OMT_DIR || true
+    source "$SCRIPT_DIR/omt-dir.sh"
+    compute_omt_dir ""
+  ) >/dev/null 2>&1 || true
+
+  after_count=0
+  if [ -d "$cache_dir" ]; then
+    after_count=$(find "$cache_dir" -type f 2>/dev/null | wc -l | tr -d ' ')
+  fi
+
+  if [ "$after_count" -ne "$before_count" ]; then
+    echo "  ASSERTION FAILED: cache file count changed from $before_count to $after_count on empty arg"
+    return 1
+  fi
+
+  return 0
+}
+
+# =============================================================================
+# AC (j): cache hit does not abort a `set -euo pipefail` consumer. Seeds the
+# cache with a first resolve, then re-resolves the same root in a genuinely
+# separate `bash -c 'set -euo pipefail; ...'` process — its own exit code must
+# be 0. Regression: the cache-read `read -r OMT_DIR < file` on a newline-less
+# cache file returns 1 at EOF even though OMT_DIR was assigned, which aborts
+# every `set -e` hook consumer (resume-forge-start.sh, session-start.sh,
+# codex-*.sh) at the moment of a cache hit.
+#
+# Must spawn a real subprocess rather than a nested subshell: bash ignores -e
+# for any compound command executing inside a context where -e is already
+# being ignored (here, this test function's own body, called via
+# `if "$test_name"` in run_test) — a `set -e` re-declared inside a nested
+# subshell in that context does not re-arm it, so the bug would go unnoticed.
+# Also unsets OMT_DIR inside the spawned process before `set -e`: OMT_DIR is
+# exported in the ambient dev/CI shell, and an inherited value would short-
+# circuit compute_omt_dir at its very first line, never reaching the cache
+# read this test targets.
+# =============================================================================
+test_cache_hit_does_not_abort_under_set_e() {
+  local repo
+  repo=$(mktemp -d)
+  (cd "$repo" && git init -q)
+
+  # Seed the cache with a first resolution.
+  call_resolve "$repo" >/dev/null
+
+  local rc=0
+  OMT_DIR_TEST_LIB="$SCRIPT_DIR/omt-dir.sh" OMT_DIR_TEST_REPO="$repo" \
+    bash -c 'unset OMT_DIR; set -euo pipefail; source "$OMT_DIR_TEST_LIB"; resolve_omt_dir "$OMT_DIR_TEST_REPO" >/dev/null' \
+    || rc=$?
+
+  rm -rf "$repo"
+
+  if [ "$rc" -ne 0 ]; then
+    echo "  ASSERTION FAILED: cache-hit resolve aborted under set -e (rc=$rc)"
+    return 1
+  fi
+
+  return 0
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 main() {
@@ -278,6 +463,11 @@ main() {
   run_test test_all_worktree_paths_resolve_to_canonical_name
   run_test test_nongit_path_emits_warning_and_resolves
   run_test test_canonical_worktree_emits_no_warning
+  run_test test_cache_hit_avoids_invoking_git
+  run_test test_omt_dir_env_short_circuits_before_cache
+  run_test test_cached_value_equals_freshly_computed_value
+  run_test test_empty_argument_skips_cache_logic
+  run_test test_cache_hit_does_not_abort_under_set_e
 
   echo "=========================================="
   echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
