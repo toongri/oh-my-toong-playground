@@ -478,13 +478,30 @@ is_state_live() {
   fi
 
   if [ -n "$ts" ]; then
-    # Parse ISO 8601 (strip timezone). BSD date (macOS) is the deploy target;
-    # GNU date -d is the Linux/CI fallback. Mirrors session-start.sh:84-85.
-    local time_part
+    # Parse ISO 8601. An explicit Z/offset suffix, when present, must be
+    # honored — not stripped and reparsed as local wall-clock, which would
+    # misread a genuinely UTC-stamped timestamp by this host's own UTC
+    # offset. BSD date (macOS) is the deploy target; GNU date -d is the
+    # Linux/CI fallback. No-suffix case mirrors session-start.sh:84-85
+    # unchanged.
+    local time_part suffix offset_hhmm
+    suffix=$(printf '%s' "$ts" | sed -nE 's/.*(Z|[+-][0-9]{2}:[0-9]{2})$/\1/p')
     time_part=$(printf '%s' "$ts" | sed -E 's/(Z|[+-][0-9]{2}:[0-9]{2})$//')
-    touched_epoch=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$time_part" "+%s" 2>/dev/null \
-      || date -d "$time_part" "+%s" 2>/dev/null \
-      || true)
+    if [ -n "$suffix" ]; then
+      if [ "$suffix" = "Z" ]; then
+        offset_hhmm="+0000"
+      else
+        offset_hhmm=$(printf '%s' "$suffix" | tr -d ':')
+      fi
+      touched_epoch=$(date -j -f "%Y-%m-%dT%H:%M:%S%z" "${time_part}${offset_hhmm}" "+%s" 2>/dev/null \
+        || date -d "$ts" "+%s" 2>/dev/null \
+        || date -d "$time_part" "+%s" 2>/dev/null \
+        || true)
+    else
+      touched_epoch=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$time_part" "+%s" 2>/dev/null \
+        || date -d "$time_part" "+%s" 2>/dev/null \
+        || true)
+    fi
   fi
 
   if [ -z "$touched_epoch" ]; then
