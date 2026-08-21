@@ -166,3 +166,5 @@ rules:
     - e2e-driver-usage
     - outbound-local-reference
     - toolchain-mise
+    - component: codex-subagent-spawn
+      platforms: [codex]
