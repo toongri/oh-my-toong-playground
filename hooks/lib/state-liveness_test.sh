@@ -346,7 +346,7 @@ iso_ago_utc_offset00() {
 iso_ago_local_offset09() {
   local secs="$1"
   local t=$((NOW - secs))
-  date -r "$t" "+%Y-%m-%dT%H:%M:%S+09:00" 2>/dev/null || date -d "@$t" "+%Y-%m-%dT%H:%M:%S+09:00" 2>/dev/null
+  TZ=Asia/Seoul date -r "$t" "+%Y-%m-%dT%H:%M:%S+09:00" 2>/dev/null || TZ=Asia/Seoul date -d "@$t" "+%Y-%m-%dT%H:%M:%S+09:00" 2>/dev/null
 }
 
 test_is_state_live_honors_utc_z_suffix_not_local_wall_clock() {
