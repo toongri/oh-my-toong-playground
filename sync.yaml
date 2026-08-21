@@ -158,6 +158,7 @@ scripts:
 rules:
   items:
     - answer-grounding
+    - architecture-boundaries
     - communication-style
     - continuation-contract
     - convention-grounding
