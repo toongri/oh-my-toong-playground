@@ -19,7 +19,8 @@
  *                                    progress_touched_at via writeFileNoCreate — adoption is a
  *                                    genuine progress event (explicit user resume), not a
  *                                    GC-only write
- *   writeFileNoCreate(path, s)    — single-syscall no-create write (ENOENT if absent)
+ *   writeFileNoCreate(path, s)    — crash-atomic no-create write (ENOENT if absent);
+ *                                    temp-write + renameSync, never truncate-in-place
  *   isPristine(type, parsed)      — true iff state is freshly seeded, safe for adoption overwrite
  *   touchSessionStates(sid)       — family-agnostic heartbeat: refreshes last_touched_at on
  *                                    every existing, non-pristine state file for sid
@@ -36,11 +37,12 @@
 import {
 	readdirSync,
 	readFileSync,
+	writeFileSync,
 	renameSync,
+	unlinkSync,
 	appendFileSync,
 	existsSync,
 	openSync,
-	ftruncateSync,
 	writeSync,
 	closeSync,
 } from "fs";
@@ -456,22 +458,46 @@ function purposeFor(type: StateType, parsed: Record<string, unknown>): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Writes `content` to an existing file at `path` using a single open-truncate-write
- * sequence. Throws ENOENT if the file does not exist — callers decide whether to
- * create it. This eliminates the existsSync-then-writeFileSync TOCTOU window where
- * an adopt-rename between the two calls could resurrect an orphan file.
+ * Writes `content` to an existing file at `path`, crash-atomically. Throws ENOENT
+ * if the file does not exist — callers decide whether to create it; this function
+ * never creates `path` itself. This eliminates the existsSync-then-writeFileSync
+ * TOCTOU window where an adopt-rename between the two calls could resurrect an
+ * orphan file.
+ *
+ * Sequence:
+ *   1. Existence gate: openSync(path, "r+") proves `path` exists (ENOENT if not)
+ *      without writing through this fd — it is closed immediately.
+ *   2. Write `content` to a temp file in the SAME directory as `path`
+ *      (`path + ".tmp." + process.pid`), so it shares `path`'s filesystem —
+ *      required for renameSync to be atomic.
+ *   3. renameSync(tmp, path) — atomically replaces `path`'s content in one step.
+ *
+ * A prior version did open("r+") + ftruncateSync(0) + writeSync in place: a
+ * process kill between truncate and write left `path` at 0 bytes or a partial
+ * write, which a reader parses as invalid JSON — indistinguishable from the
+ * state having been deleted. The temp+rename sequence above never has that
+ * window: until step 3's rename completes, `path` still holds its old, complete
+ * content; after it completes, `path` holds the new, complete content. A crash
+ * at any point leaves `path` at one or the other, never in between.
+ *
+ * On failure in step 2 or 3, the temp file is best-effort unlinked and the
+ * original error is rethrown; `path` itself is untouched (step 3 either fully
+ * ran or didn't start), so it is never left in a partial state.
  */
 export function writeFileNoCreate(path: string, content: string): void {
-	const buf = Buffer.from(content, "utf8");
-	let fd: number | undefined;
+	closeSync(openSync(path, "r+"));
+
+	const tmp = `${path}.tmp.${process.pid}`;
 	try {
-		fd = openSync(path, "r+");
-		ftruncateSync(fd, 0);
-		if (buf.length > 0) {
-			writeSync(fd, buf, 0, buf.length, 0);
+		writeFileSync(tmp, content, "utf8");
+		renameSync(tmp, path);
+	} catch (err) {
+		try {
+			unlinkSync(tmp);
+		} catch {
+			// best-effort cleanup — the error rethrown below is what matters
 		}
-	} finally {
-		if (fd !== undefined) closeSync(fd);
+		throw err;
 	}
 }
 

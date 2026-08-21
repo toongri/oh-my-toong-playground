@@ -6,7 +6,8 @@
  * a mktemp fixture; real ~/.omt is never touched.
  */
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach, spyOn } from "bun:test";
+import * as fs from "fs";
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -430,7 +431,8 @@ describe("writeFileNoCreate", () => {
 		expect(readFileSync(p, "utf8")).toBe("short");
 	});
 
-	test("throws ENOENT when file does not exist", () => {
+	// no-create 계약 회귀 방지: 부재 파일 호출은 throw하고, 파일도 생성하지 않는다.
+	test("기존 파일에만 쓰고 부재 파일엔 ENOENT를 던진다", () => {
 		const p = join(omtDir, "nonexistent.json");
 		let code: string | undefined;
 		try {
@@ -439,6 +441,47 @@ describe("writeFileNoCreate", () => {
 			code = (e as NodeJS.ErrnoException).code;
 		}
 		expect(code).toBe("ENOENT");
+		expect(existsSync(p)).toBe(false);
+	});
+
+	test("빈 문자열도 원자적으로 쓴다", () => {
+		const p = join(omtDir, "empty.json");
+		writeFileSync(p, "old content");
+		writeFileNoCreate(p, "");
+		expect(readFileSync(p, "utf8")).toBe("");
+	});
+
+	// Crash-atomicity: rename 직전(또는 도중) 실패해도 원본이 옛 완전본으로 남아야 한다.
+	// 이 테스트는 temp+rename 구현을 전제로 renameSync를 실패점으로 모킹한다 — 이전 구현
+	// (open("r+") + ftruncateSync(0) + writeSync)은 renameSync를 아예 호출하지 않으므로
+	// 모킹이 걸리지 않고, throw 없이 path를 새 content로 완전히 덮어써 버린다(원본 보존
+	// 실패). 그래서 이 테스트는 이전 구현에서 RED(toThrow 불만족), temp+rename 구현에서
+	// GREEN이다 — RED의 근거는 "0바이트로 남는다"가 아니라 "커밋 지점이 없어 실패 주입
+	// 자체가 원본 보존을 강제하지 못한다"이다.
+	test("rename 직전 실패 시 원본이 옛 완전본으로 보존된다", () => {
+		const p = join(omtDir, "crash-atomic.json");
+		const originalContent = JSON.stringify({ active: true, outcome: "original-complete-state" });
+		writeFileSync(p, originalContent);
+
+		const renameSpy = spyOn(fs, "renameSync").mockImplementation(() => {
+			throw new Error("injected rename failure (simulated crash point)");
+		});
+		try {
+			expect(() => writeFileNoCreate(p, "new-content-that-must-not-land")).toThrow(
+				/injected rename failure/,
+			);
+		} finally {
+			renameSpy.mockRestore();
+		}
+
+		// path must still hold the OLD, COMPLETE content — never 0 bytes, never
+		// the new content, never truncated.
+		expect(readFileSync(p, "utf8")).toBe(originalContent);
+		expect(readFileSync(p, "utf8").length).toBeGreaterThan(0);
+
+		// the failed temp file must not be left behind.
+		const leftoverTmp = readdirSync(omtDir).filter((f) => f.startsWith("crash-atomic.json.tmp."));
+		expect(leftoverTmp).toEqual([]);
 	});
 });
 
