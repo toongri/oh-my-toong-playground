@@ -1,6 +1,6 @@
 # explain-diff unified rubric
 
-These 14 items are used as **one and the same set** in three places — per-step section judgment, the basis for generating quiz questions, and the RED/GREEN artifact comparison. If the three places hold different standards, "passed the gate" and "is a good document" split apart, and from then on the gate is a pass-through ritual.
+These 15 items are used as **one and the same set** in three places — per-step section judgment, the basis for generating quiz questions, and the RED/GREEN artifact comparison. If the three places hold different standards, "passed the gate" and "is a good document" split apart, and from then on the gate is a pass-through ritual.
 
 The items are **split three ways by who decides**. Absence is counted by the script, existence is proven by the judge with a quote, and pure judgment is kept minimal. Reducing the very surface on which the judge can exercise discretion is the purpose of the split.
 
@@ -31,6 +31,7 @@ The document is written one step at a time, accumulating. So an item is evaluate
 | R12 | judge | architecture |
 | R13 | script | code |
 | R14 | script | architecture |
+| R15 | script | architecture |
 
 The `intuition` step has no slot of its own — only R6 (judge) and the common R11 decide it. `render` and `quiz` score none of this table's items: `render` looks at the artifact check (HTML present and non-empty, mermaid→SVG parity, visual-qa `VERDICT: PASS`, technical-writing `REVIEW: APPLIED`), and `quiz` runs a separate grading path (`grade`).
 
@@ -139,6 +140,18 @@ The code section is organized with the commit as its spine. Each Change Group ha
 > surface of the three server contracts (cost, program doses, intake history) changes, how the join changes,
 > and what the chat client must match were not enumerated in a table, so the "system-unit" explanation was
 > thin.
+
+### R15. Boundary / dependency / use-case block
+
+The Architecture section carries a `### 경계·의존·유스케이스` block that defines the domains and use cases this change touches (a table naming each part) and judges the dependency direction. Three labels must be present, read on the Architecture section with fences masked: `협력자` (the definition table's collaborator column, which forces each part to be named with its boundary and its collaborators), `영향/수정` (the affected-vs-modified marker), and `의존 방향` (the unidirectional-dependency verdict). What each says is the author's to fill; the gate forces the slots present. The vocabulary follows the `architecture-boundaries` rule — the two axes (vertical domain / horizontal use-case), not any one methodology.
+
+> **RED 0/4 (as the three named slots).** Four baseline runs of the pre-R15 skill on a two-domain refactor
+> (a subscription/billing split moved behind a use case): all four drew the boundary and the before/after
+> dependency picture at the component and domain levels — the three-level + R14 scaffold makes that reliable —
+> but none defined the domains/use-cases as named parts with their collaborators, none marked affected vs
+> modified as structure, and all four stated the direction change only as prose ("방향이 바뀜", "침투")
+> rather than a unidirectional-invariant verdict. Same pattern as R2/R9/R10: the picture lands, the named
+> slots do not — so they are forced.
 
 ---
 

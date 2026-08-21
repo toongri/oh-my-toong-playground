@@ -1,5 +1,5 @@
 /**
- * explain-diff structural checks — rubric items R1..R5, R9..R11, R13..R14.
+ * explain-diff structural checks — rubric items R1..R5, R9..R11, R13..R15.
  *
  * These are the half of the rubric a script can decide, and the split is
  * deliberate (see skills/explain-diff/references/rubric.md): absence is
@@ -42,7 +42,7 @@ export interface StructureInput {
 }
 
 export interface CheckItem {
-	id: "R1" | "R2" | "R3" | "R4" | "R5" | "R9" | "R10" | "R11" | "R13" | "R14";
+	id: "R1" | "R2" | "R3" | "R4" | "R5" | "R9" | "R10" | "R11" | "R13" | "R14" | "R15";
 	title: string;
 	pass: boolean;
 	detail: string;
@@ -372,6 +372,44 @@ function checkR14(text: string): CheckItem {
 	};
 }
 
+/**
+ * The boundary / dependency / use-case block the Architecture section must carry
+ * (R15). Three distinctive markers, mirroring R14's three-axis approach: the
+ * collaborator column of the definition table (naming the parts by their
+ * boundary), the affected/modified marker, and the dependency-direction verdict.
+ * Vocabulary is delegated to the architecture-boundaries rule; the gate only
+ * forces the slots present, not their content — the measured baseline drew the
+ * dependency picture reliably but never defined the domains/use-cases as named
+ * parts, never marked affected vs modified, and stated the direction change only
+ * as prose, never as a unidirectional-invariant verdict.
+ */
+const BOUNDARY_MARKERS = ["협력자", "영향/수정", "의존 방향"] as const;
+
+// R15 — the boundary / dependency / use-case block, read on the Architecture
+// section with fences masked (the template ships an example block inside a fence,
+// which must not satisfy the gate — same masking discipline as R14).
+function checkR15(text: string): CheckItem {
+	const slice = sectionSlice(maskFenced(text), "Architecture");
+	if (slice === null) {
+		return {
+			id: "R15",
+			title: "R15 경계·의존·유스케이스 블록",
+			pass: false,
+			detail: "## Architecture 섹션이 없습니다",
+		};
+	}
+	const missing = BOUNDARY_MARKERS.filter((label) => !slice.includes(label));
+	return {
+		id: "R15",
+		title: "R15 경계·의존·유스케이스 블록",
+		pass: missing.length === 0,
+		detail:
+			missing.length > 0
+				? `경계·의존·유스케이스 블록에 없는 슬롯: ${missing.join(", ")} — 도메인/유스케이스를 협력자와 함께 정의하고, 영향/수정을 표시하고, 의존 방향을 판정한다 (architecture-boundaries rule 참조)`
+				: "",
+	};
+}
+
 /** The slice from a level-two heading to the next level-one or level-two heading. */
 function sectionSlice(text: string, heading: string): string | null {
 	const m = new RegExp(`^##\\s+${heading}.*$`, "m").exec(text);
@@ -512,6 +550,7 @@ export function checkStructure(text: string, input: StructureInput): StructureRe
 		case "architecture":
 			items.push(checkR9(text));
 			items.push(checkR14(text));
+			items.push(checkR15(text));
 			break;
 		case "intuition":
 			// No slot of its own — R6 (the judge) is its rubric coverage; the

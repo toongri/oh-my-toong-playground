@@ -448,17 +448,65 @@ flowchart LR
 
 ### 도메인 레벨
 구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.
+
+### 경계·의존·유스케이스
+
+| 파트 | 레이어 | 책임 | 협력자 | 영향/수정 |
+|---|---|---|---|---|
+| cost | 수직 도메인 | 비용 계산 | chat | 수정 |
+
+**의존 방향** — chat → cost 단방향 유지.
 `;
 
-describe("architecture 스텝 — R9·R14", () => {
-	test("세 레벨이 각각 mermaid/생략 마커를 갖고 시스템 레벨에 계약 3축이 있으면 통과한다", () => {
+describe("architecture 스텝 — R9·R14·R15", () => {
+	test("세 레벨이 각각 mermaid/생략 마커를 갖고 시스템 레벨에 계약 3축·경계 블록 3슬롯이 있으면 통과한다", () => {
 		const r = checkStructure(withBackground(ARCH_OK), {
 			signalFiles: ["lib/state-lock.ts"],
 			step: "architecture",
 		});
 		expect(r.items.map((i) => i.id)).toContain("R9");
 		expect(r.items.map((i) => i.id)).toContain("R14");
+		expect(r.items.map((i) => i.id)).toContain("R15");
 		expect(r.pass).toBe(true);
+	});
+
+	test("경계·의존·유스케이스 슬롯이 하나라도 빠지면 R15가 실패하고 빠진 라벨을 담는다", () => {
+		const doc = withBackground(ARCH_OK.replace(/\*\*의존 방향\*\*[^\n]*\n/, ""));
+		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" });
+		const item = r.items.find((i) => i.id === "R15");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("의존 방향");
+	});
+
+	test("경계 블록이 펜스 예시 안에만 있으면 R15가 실패한다(마스킹)", () => {
+		const doc = withBackground(`## Architecture
+
+### 시스템 레벨
+\`\`\`mermaid
+flowchart LR
+  A --> B
+\`\`\`
+
+| 축 | 계약 |
+|---|---|
+| 서버 API | x |
+| DB 스키마 | 변경 없음: - |
+| 클라이언트 의존 | y |
+
+### 컴포넌트 레벨
+구조 변화 없음: 이유.
+
+### 도메인 레벨
+구조 변화 없음: 이유.
+
+\`\`\`markdown
+| 파트 | 레이어 | 책임 | 협력자 | 영향/수정 |
+| a | 수직 도메인 | b | c | 수정 |
+**의존 방향** — 단방향.
+\`\`\`
+`);
+		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" });
+		expect(r.items.find((i) => i.id === "R15")?.pass).toBe(false);
 	});
 
 	test("레벨 헤딩이 하나라도 빠지면 R9가 실패하고 그 레벨 이름을 사유에 담는다", () => {
