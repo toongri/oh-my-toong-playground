@@ -24,7 +24,11 @@ compute_omt_dir() {
 
   # cwd-independent file cache: keyed on the root path, keyed via pure bash
   # parameter expansion only (no fork). Avoids re-forking `git` on every call
-  # (Codex has no env persistence across hook subprocesses).
+  # (Codex has no env persistence across hook subprocesses). No invalidation:
+  # the root path is assumed to keep a stable git identity, since fingerprinting
+  # it would re-fork `git` and defeat the fork-avoidance this cache exists for. A
+  # root whose git identity later changes serves a stale OMT_DIR (and line 36
+  # re-mkdirs it) until the entry is removed by hand.
   local _omt_cache_dir _omt_cache_key _omt_cache_file
   if [ -n "$1" ]; then
     _omt_cache_dir="$HOME/.omt/.dir-cache"

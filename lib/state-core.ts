@@ -459,10 +459,15 @@ function purposeFor(type: StateType, parsed: Record<string, unknown>): string {
 
 /**
  * Writes `content` to an existing file at `path`, crash-atomically. Throws ENOENT
- * if the file does not exist — callers decide whether to create it; this function
- * never creates `path` itself. This eliminates the existsSync-then-writeFileSync
- * TOCTOU window where an adopt-rename between the two calls could resurrect an
- * orphan file.
+ * if the file does not exist at the existence gate (step 1) — callers decide
+ * whether to create it; this function never creates `path` on the absent-at-gate
+ * path. No-create is enforced at the gate, not at the commit: renameSync (step 3)
+ * creates its destination when absent, so an adopt-rename that removes `path` in
+ * the gate→rename window would let step 3 resurrect it. That window is narrow and
+ * requires a concurrent cross-process adopt; crash-atomicity (below) is the
+ * property this sequence guarantees, and that residual resurrection race is the
+ * accepted tradeoff for it — an in-place fd write would close the race but reopen
+ * the torn-write window this rewrite exists to remove.
  *
  * Sequence:
  *   1. Existence gate: openSync(path, "r+") proves `path` exists (ENOENT if not)
@@ -1008,7 +1013,8 @@ function typeFromStateFilename(filename: string): StateType | null {
  * that file's last genuine-activity timestamp.
  *
  * Read-modify-write, no lock: each iteration does read → parse → stamp →
- * writeFileNoCreate (truncate+write, no lock — see its own doc comment). This is
+ * writeFileNoCreate (temp-write + renameSync, crash-atomic, no lock — see its own
+ * doc comment). This is
  * only safe because the main thread is the sole writer of any given session state
  * file — the code review on PR #209 flagged this as a lost-update risk, and the
  * invariant that closes it is measured, not assumed: no agent definition under
