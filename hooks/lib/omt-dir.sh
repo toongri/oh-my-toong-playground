@@ -22,6 +22,26 @@ compute_omt_dir() {
     return 0
   fi
 
+  # cwd-independent file cache: keyed on the root path, keyed via pure bash
+  # parameter expansion only (no fork). Avoids re-forking `git` on every call
+  # (Codex has no env persistence across hook subprocesses). No invalidation:
+  # the root path is assumed to keep a stable git identity, since fingerprinting
+  # it would re-fork `git` and defeat the fork-avoidance this cache exists for. A
+  # root whose git identity later changes serves a stale OMT_DIR (and line 36
+  # re-mkdirs it) until the entry is removed by hand.
+  local _omt_cache_dir _omt_cache_key _omt_cache_file
+  if [ -n "$1" ]; then
+    _omt_cache_dir="$HOME/.omt/.dir-cache"
+    _omt_cache_key="${1//\//_}"
+    _omt_cache_key="${_omt_cache_key// /-}"
+    _omt_cache_file="$_omt_cache_dir/$_omt_cache_key"
+    if [ -s "$_omt_cache_file" ]; then
+      IFS= read -r OMT_DIR < "$_omt_cache_file" || [ -n "${OMT_DIR:-}" ]
+      [ -d "$OMT_DIR" ] || mkdir -p "$OMT_DIR"
+      return 0
+    fi
+  fi
+
   local _omt_root="$1"
   local _omt_git_common
   _omt_git_common=$(git -C "$_omt_root" rev-parse --git-common-dir 2>/dev/null) || _omt_git_common=""
@@ -57,6 +77,12 @@ compute_omt_dir() {
   # Sanitize: replace spaces with hyphens
   OMT_DIR="$HOME/.omt/${_omt_name// /-}"
   mkdir -p "$OMT_DIR"
+
+  # Cache write: best-effort, atomic (tmp + mv). A write failure is not fatal
+  # — OMT_DIR is already valid, the cache is only a fork-avoidance optimization.
+  if [ -n "$1" ]; then
+    { mkdir -p "$_omt_cache_dir" && printf '%s\n' "$OMT_DIR" > "$_omt_cache_dir/.tmp.$$" && mv -f "$_omt_cache_dir/.tmp.$$" "$_omt_cache_file"; } || true
+  fi
 }
 
 # resolve_omt_dir <cwd>

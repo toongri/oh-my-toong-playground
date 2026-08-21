@@ -143,10 +143,11 @@ export function updateGoalState(sessionId: string, partial: Partial<GoalState>):
 	// is backfilled once, it would never move again even while the loop keeps
 	// genuinely iterating, and an actively-pursued goal would eventually read as
 	// progress-dead to lib/state-core.ts's listOthers/adopt.
-	// writeFileNoCreate (single open-truncate-write syscall) throws ENOENT if the file
-	// was renamed away between our read and this write — i.e. the adopt TOCTOU window.
-	// Catching ENOENT preserves the existing "file absent → do nothing" semantics while
-	// closing the race: the write syscall itself refuses creation (ADR-7 / F10).
+	// writeFileNoCreate (temp-write + renameSync, crash-atomic) throws ENOENT if the
+	// file was renamed away before its existence gate — the adopt TOCTOU window.
+	// Catching ENOENT preserves the existing "file absent → do nothing" semantics; the
+	// gate refuses creation (ADR-7 / F10). See its doc comment for the residual
+	// gate→rename resurrection race that plain renameSync leaves open.
 	const ts = nowStamp();
 	const progressPatch =
 		Object.keys(partial).length === 0 ? backfillProgressTouchedAt(raw) : { progress_touched_at: ts };
