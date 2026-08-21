@@ -304,6 +304,69 @@ export function validatePlanGraph(content: string): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// Boundary Map — consolidated two-axis boundary picture (structural plans only)
+// ---------------------------------------------------------------------------
+
+/**
+ * Validate the Boundary Map block.
+ *
+ * A plan that carries structural enumeration must also render the consolidated
+ * two-axis boundary picture the per-component D-items leave scattered: each
+ * part named with its layer + collaborators, classified affected vs modified,
+ * and a dependency-direction verdict. This mirrors the ADR structural
+ * enumeration's own gating — structural enumeration is Complex/Architecture
+ * only, detected here by the `Must NOT own` ownership marker every structural
+ * D-item declares (an explicit `Must NOT own: none` counts). When that marker
+ * is absent the plan carries no structural enumeration and the block is not
+ * required.
+ *
+ * The three content markers parallel the explain-diff R15 gate: presence only
+ * (Collaborators / affected + modified / Dependency direction) — the block's
+ * prose is the planner's to fill, the gate only forces the slots present. See
+ * the `architecture-boundaries` rule.
+ *
+ * @returns Array of human-readable violation messages (empty = OK or N/A).
+ */
+export function validateBoundaryMap(content: string): string[] {
+	const stripped = stripFences(content);
+
+	// No structural enumeration → block not required.
+	if (!/Must NOT own/.test(stripped)) return [];
+
+	// The block anchors on a heading whose text contains "Boundary Map".
+	const headingMatch = /^#{2,4}[ \t]+.*Boundary Map.*$/im.exec(stripped);
+	if (headingMatch === null) {
+		return [
+			"Boundary Map: block is missing — a plan with structural enumeration MUST render the consolidated two-axis boundary map (vertical domain / horizontal use-case, collaborators, affected vs modified, dependency direction). See the architecture-boundaries rule.",
+		];
+	}
+
+	// Slice the block body: from the heading to the next same-or-higher heading.
+	const bodyStart = headingMatch.index + headingMatch[0].length;
+	const hashes = headingMatch[0].match(/^#+/);
+	const level = hashes !== null ? hashes[0].length : 2;
+	const nextHeading = new RegExp(`^#{1,${level}}[ \\t]+`, "m").exec(stripped.slice(bodyStart));
+	const block = stripped.slice(
+		bodyStart,
+		nextHeading !== null ? bodyStart + nextHeading.index : stripped.length,
+	);
+
+	const violations: string[] = [];
+	const markers: Array<[RegExp, string]> = [
+		[/Collaborators/i, "Collaborators (names each part with its boundary + collaborators)"],
+		[/affected/i, "affected (affected-vs-modified classification)"],
+		[/modified/i, "modified (affected-vs-modified classification)"],
+		[/Dependency direction/i, "Dependency direction (unidirectional-per-axis verdict)"],
+	];
+	for (const [re, label] of markers) {
+		if (!re.test(block)) {
+			violations.push(`Boundary Map: missing "${label}" slot (see architecture-boundaries rule)`);
+		}
+	}
+	return violations;
+}
+
+// ---------------------------------------------------------------------------
 // CLI entry point
 // ---------------------------------------------------------------------------
 
@@ -316,7 +379,11 @@ if (import.meta.main) {
 
 	const { readFileSync } = await import("fs");
 	const content = readFileSync(planPath, "utf8");
-	const problems = [...validatePlan(content), ...validatePlanGraph(content)];
+	const problems = [
+		...validatePlan(content),
+		...validatePlanGraph(content),
+		...validateBoundaryMap(content),
+	];
 
 	if (problems.length > 0) {
 		for (const p of problems) {

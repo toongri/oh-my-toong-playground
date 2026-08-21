@@ -93,6 +93,22 @@ describe("presence assertions — new ADR-log tokens", () => {
 	it("N12: every component the change creates or modifies", () => {
 		expect(skillContent).toContain("every component the change creates or modifies");
 	});
+
+	it("N13: Boundary Map block is required alongside structural enumeration", () => {
+		expect(skillContent).toContain("Boundary Map (REQUIRED alongside structural enumeration)");
+	});
+
+	it("N14: Boundary Map carries the Dependency direction verdict", () => {
+		expect(skillContent).toContain("**Dependency direction** verdict");
+	});
+
+	it("N15: Boundary Map names the two axes (vertical domain · horizontal use-case)", () => {
+		expect(skillContent).toContain("vertical domain · horizontal use-case");
+	});
+
+	it("N16: Boundary Map follows the architecture-boundaries rule as vocabulary only", () => {
+		expect(skillContent).toContain("`architecture-boundaries` rule");
+	});
 });
 
 // ---------------------------------------------------------------------------

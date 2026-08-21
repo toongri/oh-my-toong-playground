@@ -1,7 +1,12 @@
 import { describe, test, expect } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { REQUIRED_HEADINGS, validatePlan, validatePlanGraph } from "./validate-plan.ts";
+import {
+	REQUIRED_HEADINGS,
+	validatePlan,
+	validatePlanGraph,
+	validateBoundaryMap,
+} from "./validate-plan.ts";
 
 // ---------------------------------------------------------------------------
 // Self-test: canonical heading list
@@ -321,4 +326,79 @@ test("validator headings match SKILL contract", () => {
 		.map((line) => line.slice("## ".length).trim());
 
 	expect(extracted).toEqual(REQUIRED_HEADINGS);
+});
+
+// ---------------------------------------------------------------------------
+// Boundary Map — consolidated two-axis boundary picture (structural plans only)
+// ---------------------------------------------------------------------------
+
+// A complete Boundary Map block: definition table (layer + Collaborators +
+// affected/modified) + Dependency direction verdict. Structural enumeration is
+// signalled by the "Must NOT own" ownership marker.
+const BOUNDARY_MAP_OK = `## ADR
+
+### D-2 — RenewSubscriptionUseCase (new, structural)
+
+Owns the renewal sequence.
+Must NOT own the charge mechanics.
+Edges: (RenewalScheduler → RenewSubscriptionUseCase, trigger)
+
+### Boundary Map
+
+| Part | Layer (vertical domain / horizontal use-case) | Responsibility | Collaborators | affected / modified |
+|------|------------------------------------------------|----------------|---------------|---------------------|
+| RenewSubscriptionUseCase | horizontal use-case | orchestrates renewal | Subscription, Billing, Notification | modified (new) |
+| Subscription | vertical domain | period + lifecycle | (called by use-case) | modified |
+| Billing | vertical domain | charge | (called by use-case) | affected, unchanged |
+
+**Dependency direction:** use-case → domains, one way. No domain→domain back-reference; unidirectional on both axes.
+`;
+
+describe("Boundary Map — structural plans", () => {
+	test("not required when no structural enumeration (no Must NOT own)", () => {
+		const plan = buildPlan();
+		expect(validateBoundaryMap(plan)).toEqual([]);
+	});
+
+	test("complete Boundary Map block passes", () => {
+		expect(validateBoundaryMap(BOUNDARY_MAP_OK)).toEqual([]);
+	});
+
+	test("structural enumeration with NO Boundary Map block fails", () => {
+		const plan = `## ADR\n\n### D-2 — X (structural)\n\nOwns the thing.\nMust NOT own the other.\nEdges: none\n`;
+		const out = validateBoundaryMap(plan);
+		expect(out.length).toBe(1);
+		expect(out[0]).toContain("block is missing");
+	});
+
+	test("Boundary Map block missing the Collaborators slot fails", () => {
+		const plan = BOUNDARY_MAP_OK.replace(/Collaborators/g, "Uses");
+		const out = validateBoundaryMap(plan);
+		expect(out.some((v) => v.includes("Collaborators"))).toBe(true);
+	});
+
+	test("Boundary Map block missing the Dependency direction verdict fails", () => {
+		const plan = BOUNDARY_MAP_OK.replace("Dependency direction", "Wiring");
+		const out = validateBoundaryMap(plan);
+		expect(out.some((v) => v.includes("Dependency direction"))).toBe(true);
+	});
+
+	test("markers only inside a fenced example do not count (fence-masking)", () => {
+		const plan = `## ADR
+
+### D-2 — X (structural)
+
+Owns the thing.
+Must NOT own the other.
+
+### Boundary Map
+
+\`\`\`
+| Part | Layer | Collaborators | affected / modified |
+Dependency direction: use-case → domains
+\`\`\`
+`;
+		const out = validateBoundaryMap(plan);
+		expect(out.length).toBeGreaterThan(0);
+	});
 });

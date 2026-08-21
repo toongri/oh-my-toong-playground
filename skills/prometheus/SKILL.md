@@ -835,6 +835,13 @@ This full-item gate covers both tiers: contested and solo items alike populate t
 
 **Momus framing.** The solo items' structural claims are reviewed downstream as **document quality** (do the items agree with each other and with the prose?) and **feasibility** (do the cited references exist and match the codebase?) — **NOT architecture ideality**, which stays with the human and the in-phase Daedalus advisory.
 
+**Boundary Map (REQUIRED alongside structural enumeration).** The per-component D-items above carry ownership and edges scattered one-per-item; the reader cannot see the whole boundary picture from them. Consolidate that picture into one `### Boundary Map` block so the design's two axes are rendered explicitly, not left to be reconstructed:
+
+- A **definition table** naming every part this change touches — columns **Part / Layer (vertical domain · horizontal use-case) / Responsibility / Collaborators / affected·modified**. Every part is identifiable by name + responsibility + which layer/boundary it lives in + its collaborators, and marked **modified** (its behavior changes) vs **affected** (consumed or depended on but unchanged). A part you cannot name and place is a design smell.
+- A **Dependency direction** verdict: which way dependency flows on each axis, and whether the change keeps, violates, or restores unidirectional dependency. Flag any domain→domain back-reference, cycle, or inner/lower→outer/upper import as a coupling defect — do not add it.
+
+The two axes and the vocabulary follow the `architecture-boundaries` rule — borrow method names (DDD · FSD · Clean-arch) only as vocabulary, never make the work about a methodology. Server-side plans name the axes domain / use-case / service; client-side plans may borrow FSD slice / feature / widget — the same two axes. The labels `Collaborators`, `affected`/`modified`, and `Dependency direction` must be present; `validate-plan.ts` checks their presence in a plan that carries structural enumeration.
+
 > Worked example → [plan-template.md](plan-template.md). Lookup-only.
 
 ### Deliberate Mode Triggers
@@ -1123,7 +1130,7 @@ Time pressure, user override ("just proceed"), self-assessment of fix correctnes
 | 2 | File references exist | All file paths and line references resolve |
 | 3 | Guardrails from Metis incorporated | Every Metis-flagged constraint reflected |
 | 4 | Zero human-intervention criteria | No TODO requires manual mid-execution action |
-| 5 | Plan validator passes | Run `bun "${CLAUDE_SKILL_DIR}/scripts/validate-plan.ts" <plan_path>` (invoked ONLY here, pre-S4, full plan). It checks section presence AND TODO graph semantics (id uniqueness, Blocked By resolution, self-dependency/cycle ban, `Wave = max(blocker waves) + 1`). If it reports violations, fix the plan and re-run before submitting to Momus. |
+| 5 | Plan validator passes | Run `bun "${CLAUDE_SKILL_DIR}/scripts/validate-plan.ts" <plan_path>` (invoked ONLY here, pre-S4, full plan). It checks section presence, TODO graph semantics (id uniqueness, Blocked By resolution, self-dependency/cycle ban, `Wave = max(blocker waves) + 1`), AND — when the plan carries structural enumeration — the Boundary Map block's required slots (`Collaborators`, `affected`/`modified`, `Dependency direction`). If it reports violations, fix the plan and re-run before submitting to Momus. |
 | 6 | design forks resolved | Every CRITICAL design fork is resolved with a recorded decision carried through the S2 Co-Design human gate; an unresolved fork reopens the co-design interview (`### Next-Gate Readiness Rule`) rather than reaching the plan. No fork is silently absorbed. |
 | 7 | structural enumeration present (Complex/Arch) | For a Complex or Architecture plan, the artifact carries the decision log with structural enumeration OR the anti-ceremony escape with a named, specific consequence recorded. Presence only; fork resolution stays with item 6. |
 

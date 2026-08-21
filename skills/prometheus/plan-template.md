@@ -152,6 +152,18 @@ Must NOT own: HTTP parsing, session context, or request validation — those rem
 Edges: (controller→UserService.getUser, passes enrich flag; UserService.getUser→UserRepository.findById,
   side effect: none beyond the read; failure path: repository throws NotFoundError → service re-throws as
   domain error, controller maps to 404)
+
+---
+
+### Boundary Map
+
+| Part | Layer (vertical domain · horizontal use-case) | Responsibility | Collaborators | affected · modified |
+|------|-----------------------------------------------|----------------|---------------|---------------------|
+| get-user use-case (controller path) | horizontal use-case | translate HTTP → domain call, pass `enrich` flag | UserService | modified |
+| UserService | vertical domain (User) | user lifecycle + enrich-flag handling | UserRepository | modified |
+| UserRepository | vertical domain (User) | persistence | — | affected, unchanged |
+
+**Dependency direction:** controller/use-case → UserService → UserRepository — one way on both axes. No domain→domain back-reference and no cycle; the use-case orchestrates, the domain never reaches back up. Unidirectional dependency preserved.
 ```
 
 ---
