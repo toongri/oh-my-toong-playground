@@ -478,6 +478,8 @@ When the Design Interview phase has exited with all design branches resolved, or
 
 1. **Generate the specification** with the prompt-safe transcript, using the design decisions recorded during the Design Interview phase for the Approach section; on a user-forced escape hatch, include any unresolved requirements gap or design branch as a risk-note instead. **Spec template: you MUST read `deep-interview-spec-template.md` now, before composing the spec.** Do not write the spec from memory.
 
+**Boundary Map (required section).** The spec's `## Boundary Map` places the Topology components on the two boundary axes — a definition table naming each part by layer (vertical domain · horizontal use-case), responsibility, collaborators, and **affected vs modified**, followed by a **Dependency direction** verdict (unidirectional per axis; flag any back-reference, cycle, or inner→outer import as a coupling defect). This renders the boundary picture the Topology scores and Ontology entities leave implicit. Vocabulary follows the `architecture-boundaries` rule — method names (DDD · FSD · Clean-arch) as vocabulary only, never a methodology mandate.
+
 **Diagram-authoring guidance**: **you MUST read `diagram-guide.md` in full before authoring the spec's `## Diagrams` section.** Author the 6-row coverage table using the canonical literals verbatim — header `| Lens | Trigger FACT | Status |`, and per-row status of either `drawn` or `trigger FALSE: <reason>` (these are control-plane tokens; never translate or paraphrase them). Draw every lens whose trigger FACT holds. Each diagram follows the Why → Diagram → Interpretation format. All mermaid fences live inside the `## Diagrams` section (fence-locality) — no mermaid block appears outside it.
 
 2. **Write to file**: `$OMT_DIR/deep-interview/{slug}.md`
@@ -553,6 +555,7 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 - [ ] Scope-fuzzy tasks can trigger ontology-style questioning to stabilize the core entity before feature elaboration
 - [ ] Per-round ambiguity report includes Ontology row with entity count and stability ratio
 - [ ] Spec includes Ontology (Key Entities) table and Ontology Convergence section
+- [ ] Spec includes a Boundary Map: each part placed on the two axes (vertical domain / horizontal use-case) with its collaborators and affected/modified mark, plus a Dependency direction verdict
 </Final_Checklist>
 
 **Advanced topics (resume, configuration, ambiguityThreshold, cross-session continuation, weights / challenge-modes / score-interpretation tables): read `deep-interview-advanced.md` now** — do not guess at resume logic or configuration values from memory.

@@ -1159,3 +1159,53 @@ describe("Phase 5 execution bridge offers reciprocal planning-skill overrides", 
 		expect(section).toContain('Skill(skill: "ultragoal")');
 	});
 });
+
+// ---------------------------------------------------------------------------
+// architecture-boundaries injection: the Phase-4 spec-template gained a
+// "## Boundary Map" section placing the Topology components on the two boundary
+// axes (vertical domain / horizontal use-case) with collaborators, an
+// affected/modified mark, and a dependency-direction verdict. The scaffold
+// reliably renders components (Topology) and entities (Ontology) but omitted
+// the consolidated two-axis boundary picture (RED n=3). Vocabulary follows the
+// architecture-boundaries rule, methodology names as vocabulary only.
+// ---------------------------------------------------------------------------
+
+describe("template: Boundary Map renders the two boundary axes", () => {
+	const start = template.indexOf("## Boundary Map");
+	const end = template.indexOf("\n## ", start + 1);
+	const section = end === -1 ? template.slice(start) : template.slice(start, end);
+
+	test('"## Boundary Map" heading is present', () => {
+		expect(start).toBeGreaterThan(-1);
+	});
+
+	test("names both boundary axes (vertical domain / horizontal use-case)", () => {
+		expect(section).toContain("vertical domain");
+		expect(section).toContain("horizontal use-case");
+	});
+
+	test("definition table forces name + responsibility + collaborators + affected/modified", () => {
+		expect(section).toContain("Responsibility");
+		expect(section).toContain("Collaborators");
+		expect(section).toContain("affected");
+		expect(section).toContain("modified");
+	});
+
+	test("carries the Dependency direction verdict slot", () => {
+		expect(section).toContain("Dependency direction");
+	});
+
+	test("defers vocabulary to the architecture-boundaries rule, not a methodology", () => {
+		expect(section).toContain("`architecture-boundaries` rule");
+	});
+});
+
+describe("SKILL: Phase 4 requires the Boundary Map section", () => {
+	test("Phase-4 crystallize names the Boundary Map as a required section", () => {
+		expect(skillMd).toContain("**Boundary Map (required section).**");
+	});
+
+	test("Final Checklist gates on the Boundary Map", () => {
+		expect(skillMd).toContain("Spec includes a Boundary Map");
+	});
+});

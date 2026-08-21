@@ -75,6 +75,18 @@ Round 0 (Topology Enumeration Gate) enumerated and confirmed the component list 
 
 An unscored ({null}) dimension on any active component holds the interview's overall convergence back (Closure Guard) even when every other component and dimension is fully scored.
 
+## Boundary Map
+The Topology table above lists the components and their scores; this section places them on the two boundary axes so the design's structure is explicit, not left to be reconstructed from prose. It renders the boundary picture for the scope in hand — every part named and placed, the dependency direction judged. Vocabulary follows the `architecture-boundaries` rule (vertical domain / horizontal use-case); borrow DDD / FSD / Clean-architecture names only as vocabulary, never make the spec about a methodology. Server-side scopes name the axes domain / use-case / service; client-side scopes may borrow FSD slice / feature / widget — the same two axes.
+
+Each part is identifiable by **name + responsibility + which layer/boundary it lives in + its collaborators**, and marked **modified** (its behavior changes) vs **affected** (consumed or depended on but unchanged). A part you cannot name and place is a design smell to resolve in the interview, not a detail to skip.
+
+| Part | Layer (vertical domain · horizontal use-case) | Responsibility | Collaborators | affected · modified |
+|------|-----------------------------------------------|----------------|---------------|---------------------|
+| {part.name} | {vertical domain \| horizontal use-case / feature} | {one-line responsibility} | {parts it collaborates with, through their contracts} | {modified \| affected} |
+| ... | ... | ... | ... | ... |
+
+**Dependency direction:** {which way dependency flows on each axis — e.g. use-case → domains, outer → inner — and whether the change keeps, violates, or restores unidirectional dependency}. Flag any domain→domain back-reference, cycle, or inner/lower→outer/upper import as a coupling defect (`{defect}` or `none`); a violation surfaced here is an interview finding, not a detail to bury under Risks.
+
 ## Diagrams
 The coverage table below comes first and lists all six deep-interview lenses; a subsection follows for each lens that was actually drawn, in Why → Diagram → Interpretation form.
 

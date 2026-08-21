@@ -11,7 +11,7 @@ excludes `classDiagram`.
 
 | Lens | Trigger FACT | Mermaid type |
 |---|---|---|
-| System topology | components >= 2 | `flowchart` |
+| System topology | components >= 2 | `flowchart` (group vertical domains vs the horizontal use-case layer; draw dependency arrows in their decided direction so unidirectionality is checkable — see `## Boundary Map`) |
 | Module / API | the approach decides module interaction | `sequenceDiagram` |
 | Actor scenario | a user-facing scenario exists | `sequenceDiagram` (actor) |
 | Entity lifecycle | non-trivial state transitions exist | `stateDiagram-v2` |
