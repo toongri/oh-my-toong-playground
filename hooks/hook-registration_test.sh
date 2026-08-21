@@ -432,12 +432,16 @@ test_codex_yaml_spawn_depth_gate_matcher_never_bare() {
 }
 
 # =============================================================================
-# Dispatch-gate reachability against the MEASURED runtime tool name. The
+# Dispatch-gate reachability against the MEASURED runtime tool names. The
 # audit above (test_codex_yaml_spawn_depth_gate_registered_with_full_match_
 # matcher) pins the matcher's literal VALUE; this one pins its SEMANTICS --
-# that whatever value is there full-matches "collaborationspawn_agent"
-# (codex 0.145.0) under Codex's anchored-regex rule, so the gate is not
-# silently unreachable at runtime.
+# that whatever value is there full-matches both runtime tool names Codex
+# has been observed to emit: "collaborationspawn_agent" (codex 0.145.0,
+# under the reserved "collaboration" namespace) and "agentsspawn_agent"
+# (codex 0.148.0, once codex.yaml deploys `tool_namespace: "agents"` to
+# escape that reserved namespace for `expose_spawn_agent_model_overrides`).
+# Both must full-match under Codex's anchored-regex rule, so the gate is not
+# silently unreachable at runtime on either form.
 #
 # The complementary half -- that the matcher also reaches the fixture
 # codex-spawn-depth-gate_test.sh's row10 sends -- is asserted in row10
@@ -471,6 +475,17 @@ test_codex_spawn_depth_gate_matcher_reaches_runtime_tool_name() {
         echo "ASSERTION FAILED: codex.yaml matcher \"$matcher\" does NOT full-match the measured runtime tool name \"collaborationspawn_agent\" (codex 0.145.0) -- the spawn-depth gate would never fire at all"
         return 1
     fi
+
+    # codex.yaml now deploys `tool_namespace: "agents"` (see codex.yaml's
+    # multi_agent_v2 block) to escape the reserved "collaboration" namespace
+    # for `expose_spawn_agent_model_overrides`, which renames the emitted
+    # tool from "collaborationspawn_agent" to "agentsspawn_agent". The
+    # matcher must keep reaching this new runtime name too, or the gate goes
+    # silently unreachable the moment that config key lands.
+    if ! printf '%s\n' "agentsspawn_agent" | grep -qE "^${matcher}\$"; then
+        echo "ASSERTION FAILED: codex.yaml matcher \"$matcher\" does NOT full-match the renamed runtime tool name \"agentsspawn_agent\" (codex 0.148.0, tool_namespace=\"agents\") -- the spawn-depth gate would never fire at all"
+        return 1
+    fi
 }
 
 test_codex_review_dispatch_gate_registered_and_reaches_namespaced_tool() {
@@ -488,6 +503,15 @@ test_codex_review_dispatch_gate_registered_and_reaches_namespaced_tool() {
     matcher=$(echo "$matcher_line" | sed -E 's/^[[:space:]]*matcher:[[:space:]]*"(.*)"[[:space:]]*$/\1/')
     if ! printf '%s\n' "collaborationspawn_agent" | grep -qE "^${matcher}\$"; then
         echo "ASSERTION FAILED: review-dispatch matcher \"$matcher\" does not full-match collaborationspawn_agent"
+        return 1
+    fi
+
+    # Same rename as the spawn-depth gate above: codex.yaml's
+    # `tool_namespace: "agents"` moves the runtime tool name from
+    # "collaborationspawn_agent" to "agentsspawn_agent". Lock that this
+    # matcher still reaches it.
+    if ! printf '%s\n' "agentsspawn_agent" | grep -qE "^${matcher}\$"; then
+        echo "ASSERTION FAILED: review-dispatch matcher \"$matcher\" does not full-match agentsspawn_agent"
         return 1
     fi
 }

@@ -24,6 +24,24 @@ config:
       # Do NOT add `enabled = true` here: it would force V1-model sessions
       # into V2 too, which is out of scope for this change.
       max_concurrent_threads_per_session: 20
+      # V2 hides `model`/`reasoning_effort` from the `spawn_agent` tool
+      # schema by default, so a child thread always inherits the parent
+      # session's model with no way to override it. This restores those
+      # fields to the schema. Arming the capability alone does not change
+      # any child's model -- only an orchestrator that explicitly passes
+      # `model` on spawn does, and nothing in OMT does that yet, so
+      # children still inherit the session model today.
+      expose_spawn_agent_model_overrides: true
+      # `expose_spawn_agent_model_overrides` alone 400s at spawn time:
+      # `collaboration` is a reserved tool namespace and the backend
+      # rejects a modified schema under it. Renaming the namespace to
+      # "agents" moves the emitted tool name from
+      # `collaborationspawn_agent` to `agentsspawn_agent`, out of the
+      # reserved namespace, so the modified schema is accepted. This
+      # combination (expose=true + tool_namespace="agents") was live-
+      # verified on this machine's codex 0.148.0: a child ran under an
+      # explicitly-passed model with no 400.
+      tool_namespace: "agents"
 
 model-map:
   # A tier normally sets the model only. Omitting `effort` leaves
@@ -180,11 +198,16 @@ hooks:
     #
     # matcher MUST be ".*[sS]pawn_[aA]gent", never "spawn_agent" or
     # "^spawn_agent$": Codex's PreToolUse matcher is a full-string regex
-    # match, and the actual tool name observed at runtime is
-    # "collaborationspawn_agent" (not "spawn_agent"). A bare "spawn_agent" or
-    # anchored "^spawn_agent$" never matches that string, so the hook would
-    # silently never fire -- passing both deploy and this repo's own tests
-    # while doing nothing at runtime.
+    # match. The tool name observed at runtime was "collaborationspawn_agent"
+    # (not "spawn_agent") before this file started deploying
+    # `tool_namespace: "agents"` above; with that key deployed, the runtime
+    # name is "agentsspawn_agent" instead. A bare "spawn_agent" or anchored
+    # "^spawn_agent$" never matches either string, so the hook would silently
+    # never fire -- passing both deploy and this repo's own tests while doing
+    # nothing at runtime. This is exactly why the ".*" prefix + suffix-match
+    # shape matters even more now: the same matcher must keep covering both
+    # the pre-rename "collaboration*" form (any install that hasn't picked up
+    # this sync yet) and the post-rename "agents*" form.
     #
     # The [sS]/[aA] case classes exist so the hook body's own defense
     # against a mixed-case variant (codex-spawn-depth-gate.sh:84's
