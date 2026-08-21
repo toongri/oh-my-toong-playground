@@ -1253,6 +1253,61 @@ test_reap_dead_state_files_old_closed_bak_survives_json_anchor() {
   return 0
 }
 
+# Debugging aid for the intermittent ultragoal-state wipe: at the exact
+# moment a reap decision is made against a foreign (different sid) dead
+# state file, reap_dead_state_files must emit a `reap-diag:` breadcrumb line
+# to STDERR carrying the raw inputs (file, now_epoch, active, ...) that
+# produced the decision — WITHOUT recomputing/duplicating is_state_live's own
+# parse. This must hold in BOTH dry_run modes (breadcrumb sits before the
+# dry_run branch), and must never leak onto STDOUT — session-start.sh depends
+# on reap_dead_state_files's stdout staying byte-static (one reaped path per
+# line, nothing else).
+test_reap_dead_state_files_emits_diag_breadcrumb_to_stderr() {
+  local sid="diag-sid-42"
+  local d="$TEST_TMP_DIR"
+  local f="$d/ultragoal-state-other-$sid.json"
+  local touched_ago
+  touched_ago=$(iso_ago 25200)   # 7 hours — past ACTIVE_IDLE_TTL, a genuine dead candidate
+  write_state "$f" "{\"active\":true,\"last_touched_at\":\"$touched_ago\"}"
+
+  local err_file="$TEST_TMP_DIR/stderr.out"
+  local out
+  out=$(reap_dead_state_files "$d" "current-$sid" "$NOW" 0 2>"$err_file")
+
+  local err
+  err=$(cat "$err_file")
+
+  if ! printf '%s\n' "$err" | grep -q "reap-diag:"; then
+    echo "  ASSERTION FAILED: stderr must contain a reap-diag: breadcrumb line"
+    echo "  stderr: $err"
+    return 1
+  fi
+  if ! printf '%s\n' "$err" | grep -q "file=$f"; then
+    echo "  ASSERTION FAILED: breadcrumb must carry file=$f"
+    echo "  stderr: $err"
+    return 1
+  fi
+  if ! printf '%s\n' "$err" | grep -q "active=true"; then
+    echo "  ASSERTION FAILED: breadcrumb must carry active=true (raw .active value)"
+    echo "  stderr: $err"
+    return 1
+  fi
+  if ! printf '%s\n' "$err" | grep -q "now=$NOW"; then
+    echo "  ASSERTION FAILED: breadcrumb must carry now=$NOW"
+    echo "  stderr: $err"
+    return 1
+  fi
+
+  # Regression guard: the breadcrumb must not leak onto stdout — stdout stays
+  # exactly the reaped path, nothing else.
+  if [ "$out" != "$f" ]; then
+    echo "  ASSERTION FAILED: stdout must remain exactly the reaped path (breadcrumb must not leak to stdout)"
+    echo "  stdout: $out"
+    return 1
+  fi
+  return 0
+}
+
 # =============================================================================
 # reap_session_artifacts
 # =============================================================================
@@ -2167,6 +2222,7 @@ run_test test_reap_dead_state_files_execute_mode_echoes_real_path_not_constant
 run_test test_reap_dead_state_files_dry_run_emits_candidate_but_does_not_delete
 run_test test_reap_dead_state_files_dry_run_preserves_candidate_bytes
 run_test test_reap_dead_state_files_old_closed_bak_survives_json_anchor
+run_test test_reap_dead_state_files_emits_diag_breadcrumb_to_stderr
 run_test test_is_current_session_suffix_match_diverges_from_base_exact_match_over_preserves
 run_test test_reap_session_artifacts_current_session_self_artifact_survives
 run_test test_reap_session_artifacts_other_live_session_survives_without_sid

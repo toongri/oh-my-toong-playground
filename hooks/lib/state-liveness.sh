@@ -965,6 +965,26 @@ reap_dead_state_files() {
         continue
       fi
       if ! is_state_live "$f" "$now_epoch"; then
+        # reap-diag breadcrumb: raw inputs behind this reap decision, for
+        # debugging the intermittent ultragoal-state wipe. Reads the SAME
+        # raw fields is_state_live itself parses (one jq call, no re-parse
+        # of timestamps/age/TTL — that would risk drifting from
+        # is_state_live's own logic). STDERR only, both dry_run modes (this
+        # sits before the dry_run branch below), and must never itself fail
+        # the reap or alter control flow — jq absence or an unreadable file
+        # still emits the line with "absent" for the unresolved fields.
+        local _diag_fields _diag_active _diag_phase _diag_last_touched _diag_started _diag_mtime
+        _diag_fields=$(jq -r '[(.active // "absent"), (.phase // "absent"), (.last_touched_at // "absent"), (.started_at // "absent")] | @tsv' "$f" 2>/dev/null) || _diag_fields=""
+        if [ -n "$_diag_fields" ]; then
+          IFS=$'\t' read -r _diag_active _diag_phase _diag_last_touched _diag_started <<EOF
+$_diag_fields
+EOF
+        else
+          _diag_active="absent"; _diag_phase="absent"; _diag_last_touched="absent"; _diag_started="absent"
+        fi
+        _diag_mtime=$(_state_liveness_stat_mtime "$f" 2>/dev/null) || _diag_mtime=""
+        [ -n "$_diag_mtime" ] || _diag_mtime="absent"
+        echo "reap-diag: sid=$current_sid file=$f now=$now_epoch active=$_diag_active phase=$_diag_phase last_touched_at=$_diag_last_touched started_at=$_diag_started mtime=$_diag_mtime" >&2
         if [ "$dry_run" = "1" ]; then
           echo "$f"
         elif rm -f "$f" 2>/dev/null; then
