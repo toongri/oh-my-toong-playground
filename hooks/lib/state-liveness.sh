@@ -478,13 +478,30 @@ is_state_live() {
   fi
 
   if [ -n "$ts" ]; then
-    # Parse ISO 8601 (strip timezone). BSD date (macOS) is the deploy target;
-    # GNU date -d is the Linux/CI fallback. Mirrors session-start.sh:84-85.
-    local time_part
+    # Parse ISO 8601. An explicit Z/offset suffix, when present, must be
+    # honored — not stripped and reparsed as local wall-clock, which would
+    # misread a genuinely UTC-stamped timestamp by this host's own UTC
+    # offset. BSD date (macOS) is the deploy target; GNU date -d is the
+    # Linux/CI fallback. No-suffix case mirrors session-start.sh:84-85
+    # unchanged.
+    local time_part suffix offset_hhmm
+    suffix=$(printf '%s' "$ts" | sed -nE 's/.*(Z|[+-][0-9]{2}:[0-9]{2})$/\1/p')
     time_part=$(printf '%s' "$ts" | sed -E 's/(Z|[+-][0-9]{2}:[0-9]{2})$//')
-    touched_epoch=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$time_part" "+%s" 2>/dev/null \
-      || date -d "$time_part" "+%s" 2>/dev/null \
-      || true)
+    if [ -n "$suffix" ]; then
+      if [ "$suffix" = "Z" ]; then
+        offset_hhmm="+0000"
+      else
+        offset_hhmm=$(printf '%s' "$suffix" | tr -d ':')
+      fi
+      touched_epoch=$(date -j -f "%Y-%m-%dT%H:%M:%S%z" "${time_part}${offset_hhmm}" "+%s" 2>/dev/null \
+        || date -d "$ts" "+%s" 2>/dev/null \
+        || date -d "$time_part" "+%s" 2>/dev/null \
+        || true)
+    else
+      touched_epoch=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$time_part" "+%s" 2>/dev/null \
+        || date -d "$time_part" "+%s" 2>/dev/null \
+        || true)
+    fi
   fi
 
   if [ -z "$touched_epoch" ]; then
@@ -948,6 +965,26 @@ reap_dead_state_files() {
         continue
       fi
       if ! is_state_live "$f" "$now_epoch"; then
+        # reap-diag breadcrumb: raw inputs behind this reap decision, for
+        # debugging the intermittent ultragoal-state wipe. Reads the SAME
+        # raw fields is_state_live itself parses (one jq call, no re-parse
+        # of timestamps/age/TTL — that would risk drifting from
+        # is_state_live's own logic). STDERR only, both dry_run modes (this
+        # sits before the dry_run branch below), and must never itself fail
+        # the reap or alter control flow — jq absence or an unreadable file
+        # still emits the line with "absent" for the unresolved fields.
+        local _diag_fields _diag_active _diag_phase _diag_last_touched _diag_started _diag_mtime
+        _diag_fields=$(jq -r '[(.active // "absent"), (.phase // "absent"), (.last_touched_at // "absent"), (.started_at // "absent")] | @tsv' "$f" 2>/dev/null) || _diag_fields=""
+        if [ -n "$_diag_fields" ]; then
+          IFS=$'\t' read -r _diag_active _diag_phase _diag_last_touched _diag_started <<EOF
+$_diag_fields
+EOF
+        else
+          _diag_active="absent"; _diag_phase="absent"; _diag_last_touched="absent"; _diag_started="absent"
+        fi
+        _diag_mtime=$(_state_liveness_stat_mtime "$f" 2>/dev/null) || _diag_mtime=""
+        [ -n "$_diag_mtime" ] || _diag_mtime="absent"
+        echo "reap-diag: sid=$current_sid file=$f now=$now_epoch active=$_diag_active phase=$_diag_phase last_touched_at=$_diag_last_touched started_at=$_diag_started mtime=$_diag_mtime" >&2
         if [ "$dry_run" = "1" ]; then
           echo "$f"
         elif rm -f "$f" 2>/dev/null; then

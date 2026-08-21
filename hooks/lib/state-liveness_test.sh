@@ -316,6 +316,82 @@ test_is_state_live_active_ttl_boundary_is_dead() {
 }
 
 # =============================================================================
+# Defect coverage: an explicit Z/offset suffix must be honored, not stripped
+# and reparsed as local wall-clock. On this KST(+09:00) host, a timestamp
+# genuinely stamped in UTC-Z form 60s ago is misread by the stripped-local
+# parse as ~9h old — enough to blow past ACTIVE_IDLE_TTL and be judged dead.
+# =============================================================================
+
+# iso_ago_z <seconds> — UTC-Z ISO 8601 timestamp N seconds before NOW
+iso_ago_z() {
+  local secs="$1"
+  local t=$((NOW - secs))
+  date -u -r "$t" "+%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -d "@$t" "+%Y-%m-%dT%H:%M:%SZ" 2>/dev/null
+}
+
+# iso_ago_offset <seconds> <offset> — ISO 8601 timestamp N seconds before NOW,
+# rendered in UTC clock terms but suffixed with the given explicit offset.
+# Only used with offset="+00:00" (UTC) — the UTC clock rendering is correct
+# for that offset specifically.
+iso_ago_utc_offset00() {
+  local secs="$1"
+  local t=$((NOW - secs))
+  date -u -r "$t" "+%Y-%m-%dT%H:%M:%S+00:00" 2>/dev/null || date -u -d "@$t" "+%Y-%m-%dT%H:%M:%S+00:00" 2>/dev/null
+}
+
+# iso_ago_local_offset09 <seconds> — ISO 8601 timestamp N seconds before NOW,
+# rendered in this host's own local (KST, +09:00) clock terms and suffixed
+# with +09:00 — a regression guard that explicit-offset handling doesn't
+# break the common local-offset case.
+iso_ago_local_offset09() {
+  local secs="$1"
+  local t=$((NOW - secs))
+  TZ=Asia/Seoul date -r "$t" "+%Y-%m-%dT%H:%M:%S+09:00" 2>/dev/null || TZ=Asia/Seoul date -d "@$t" "+%Y-%m-%dT%H:%M:%S+09:00" 2>/dev/null
+}
+
+test_is_state_live_honors_utc_z_suffix_not_local_wall_clock() {
+  local file="$TEST_TMP_DIR/state.json"
+  local touched_ts
+  touched_ts=$(iso_ago_z 60)   # 60s ago, stamped in UTC-Z form
+  write_state "$file" "{\"active\":true,\"last_touched_at\":\"$touched_ts\"}"
+
+  if is_state_live "$file" "$NOW"; then
+    return 0
+  else
+    echo "  ASSERTION FAILED: a Z-suffixed timestamp 60s ago must be parsed as UTC, not local wall-clock — true age is 60s (live), stripping Z and reparsing as KST local misreads it as ~9h old (dead)"
+    return 1
+  fi
+}
+
+test_is_state_live_honors_explicit_utc_offset_suffix() {
+  local file="$TEST_TMP_DIR/state.json"
+  local touched_ts
+  touched_ts=$(iso_ago_utc_offset00 60)   # 60s ago, stamped +00:00
+  write_state "$file" "{\"active\":true,\"last_touched_at\":\"$touched_ts\"}"
+
+  if is_state_live "$file" "$NOW"; then
+    return 0
+  else
+    echo "  ASSERTION FAILED: a +00:00-suffixed timestamp 60s ago must be parsed against its explicit offset, not local wall-clock — true age is 60s (live)"
+    return 1
+  fi
+}
+
+test_is_state_live_honors_local_kst_offset_suffix_regression_guard() {
+  local file="$TEST_TMP_DIR/state.json"
+  local touched_ts
+  touched_ts=$(iso_ago_local_offset09 60)   # 60s ago, stamped +09:00 (this host's own offset)
+  write_state "$file" "{\"active\":true,\"last_touched_at\":\"$touched_ts\"}"
+
+  if is_state_live "$file" "$NOW"; then
+    return 0
+  else
+    echo "  ASSERTION FAILED: a +09:00-suffixed timestamp 60s ago (this host's own local offset) must still be live — offset handling must not break the common case"
+    return 1
+  fi
+}
+
+# =============================================================================
 # is_current_session — generalized sid-suffix matching
 # =============================================================================
 
@@ -1172,6 +1248,61 @@ test_reap_dead_state_files_old_closed_bak_survives_json_anchor() {
   remaining=$(find "$d" -type f | wc -l | tr -d ' ')
   if [ "$remaining" != "1" ]; then
     echo "  ASSERTION FAILED: a 7h-old .closed.bak backup must survive state reap (json-anchored glob)"
+    return 1
+  fi
+  return 0
+}
+
+# Debugging aid for the intermittent ultragoal-state wipe: at the exact
+# moment a reap decision is made against a foreign (different sid) dead
+# state file, reap_dead_state_files must emit a `reap-diag:` breadcrumb line
+# to STDERR carrying the raw inputs (file, now_epoch, active, ...) that
+# produced the decision — WITHOUT recomputing/duplicating is_state_live's own
+# parse. This must hold in BOTH dry_run modes (breadcrumb sits before the
+# dry_run branch), and must never leak onto STDOUT — session-start.sh depends
+# on reap_dead_state_files's stdout staying byte-static (one reaped path per
+# line, nothing else).
+test_reap_dead_state_files_emits_diag_breadcrumb_to_stderr() {
+  local sid="diag-sid-42"
+  local d="$TEST_TMP_DIR"
+  local f="$d/ultragoal-state-other-$sid.json"
+  local touched_ago
+  touched_ago=$(iso_ago 25200)   # 7 hours — past ACTIVE_IDLE_TTL, a genuine dead candidate
+  write_state "$f" "{\"active\":true,\"last_touched_at\":\"$touched_ago\"}"
+
+  local err_file="$TEST_TMP_DIR/stderr.out"
+  local out
+  out=$(reap_dead_state_files "$d" "current-$sid" "$NOW" 0 2>"$err_file")
+
+  local err
+  err=$(cat "$err_file")
+
+  if ! printf '%s\n' "$err" | grep -q "reap-diag:"; then
+    echo "  ASSERTION FAILED: stderr must contain a reap-diag: breadcrumb line"
+    echo "  stderr: $err"
+    return 1
+  fi
+  if ! printf '%s\n' "$err" | grep -q "file=$f"; then
+    echo "  ASSERTION FAILED: breadcrumb must carry file=$f"
+    echo "  stderr: $err"
+    return 1
+  fi
+  if ! printf '%s\n' "$err" | grep -q "active=true"; then
+    echo "  ASSERTION FAILED: breadcrumb must carry active=true (raw .active value)"
+    echo "  stderr: $err"
+    return 1
+  fi
+  if ! printf '%s\n' "$err" | grep -q "now=$NOW"; then
+    echo "  ASSERTION FAILED: breadcrumb must carry now=$NOW"
+    echo "  stderr: $err"
+    return 1
+  fi
+
+  # Regression guard: the breadcrumb must not leak onto stdout — stdout stays
+  # exactly the reaped path, nothing else.
+  if [ "$out" != "$f" ]; then
+    echo "  ASSERTION FAILED: stdout must remain exactly the reaped path (breadcrumb must not leak to stdout)"
+    echo "  stdout: $out"
     return 1
   fi
   return 0
@@ -2060,6 +2191,9 @@ run_test test_fallback_to_started_at_when_no_heartbeat_stale
 run_test test_fallback_to_mtime_when_no_timestamps_fresh
 run_test test_fallback_to_mtime_when_no_timestamps_stale
 run_test test_is_state_live_active_ttl_boundary_is_dead
+run_test test_is_state_live_honors_utc_z_suffix_not_local_wall_clock
+run_test test_is_state_live_honors_explicit_utc_offset_suffix
+run_test test_is_state_live_honors_local_kst_offset_suffix_regression_guard
 run_test test_is_current_session_matches_filename_sid
 run_test test_is_current_session_no_match_different_sid
 run_test test_is_current_session_matches_ultragoal_filename_sid
@@ -2088,6 +2222,7 @@ run_test test_reap_dead_state_files_execute_mode_echoes_real_path_not_constant
 run_test test_reap_dead_state_files_dry_run_emits_candidate_but_does_not_delete
 run_test test_reap_dead_state_files_dry_run_preserves_candidate_bytes
 run_test test_reap_dead_state_files_old_closed_bak_survives_json_anchor
+run_test test_reap_dead_state_files_emits_diag_breadcrumb_to_stderr
 run_test test_is_current_session_suffix_match_diverges_from_base_exact_match_over_preserves
 run_test test_reap_session_artifacts_current_session_self_artifact_survives
 run_test test_reap_session_artifacts_other_live_session_survives_without_sid
