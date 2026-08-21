@@ -8,10 +8,11 @@
  * one place where "may this write land" and "may this session stop" are decided.
  */
 
-/** The eight steps, in the order a document is built. */
+/** The nine steps, in the order a document is built. */
 export const STEP_ORDER = [
 	"evidence",
 	"background",
+	"goal",
 	"architecture",
 	"intuition",
 	"commits",
@@ -29,6 +30,7 @@ export type Step = (typeof STEP_ORDER)[number];
 export const AUTHORING_STEPS = [
 	"evidence",
 	"background",
+	"goal",
 	"architecture",
 	"intuition",
 	"commits",
@@ -40,13 +42,14 @@ export const AUTHORING_STEPS = [
  * may advance it. SKILL.md and references/judge-prompt.md assign the judge
  * exactly three items — R12 at `architecture`, R6 at `intuition`, R7 at `code`
  * — everything else in the rubric is scripted in explain-diff-structure.ts. An
- * empty required set is deliberate at the other five steps, not an oversight:
+ * empty required set is deliberate at the other six steps, not an oversight:
  * their coverage is already earned before the judge ever runs, so a judge
  * payload with nothing in it is correctly a no-op there, not a bypass.
  */
 export const REQUIRED_JUDGE_IDS: Record<Step, readonly string[]> = {
 	evidence: [],
 	background: [],
+	goal: [],
 	architecture: ["R12"],
 	intuition: ["R6"],
 	commits: [],

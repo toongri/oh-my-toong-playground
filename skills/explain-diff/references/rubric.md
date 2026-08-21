@@ -1,6 +1,6 @@
 # explain-diff unified rubric
 
-These 15 items are used as **one and the same set** in three places — per-step section judgment, the basis for generating quiz questions, and the RED/GREEN artifact comparison. If the three places hold different standards, "passed the gate" and "is a good document" split apart, and from then on the gate is a pass-through ritual.
+These 16 items are used as **one and the same set** in three places — per-step section judgment, the basis for generating quiz questions, and the RED/GREEN artifact comparison. If the three places hold different standards, "passed the gate" and "is a good document" split apart, and from then on the gate is a pass-through ritual.
 
 The items are **split three ways by who decides**. Absence is counted by the script, existence is proven by the judge with a quote, and pure judgment is kept minimal. Reducing the very surface on which the judge can exercise discretion is the purpose of the split.
 
@@ -32,6 +32,7 @@ The document is written one step at a time, accumulating. So an item is evaluate
 | R13 | script | code |
 | R14 | script | architecture |
 | R15 | script | architecture |
+| R16 | script | goal |
 
 The `intuition` step has no slot of its own — only R6 (judge) and the common R11 decide it. `render` and `quiz` score none of this table's items: `render` looks at the artifact check (HTML present and non-empty, mermaid→SVG parity, visual-qa `VERDICT: PASS`, technical-writing `REVIEW: APPLIED`), and `quiz` runs a separate grading path (`grade`).
 
@@ -153,6 +154,18 @@ The Architecture section carries a `### 경계·의존·유스케이스` block t
 > rather than a unidirectional-invariant verdict. Same pattern as R2/R9/R10: the picture lands, the named
 > slots do not — so they are forced.
 
+### R16. Goal / core-message beat
+
+Between Background and Architecture the document carries a `## 목표` section with both sub-slots — `### 무엇을·왜` (what the change achieves + why it was needed) and `### 핵심` (the one-line core the reader should hold before any code). Read on the fence-masked text so a `###` inside a code example does not stand in for the real slot. What each slot says is the author's to fill; the gate forces the two slots present.
+
+> **RED — real artifact (`boostpack-tool-helper-restore`).** The document ran Evidence → Background →
+> Architecture with no statement anywhere of what the change was for or its one-line takeaway. The "왜"
+> existed only as per-file fields at the bottom of the code section, after all the mechanism, so a reader hit
+> the architecture (and a mislabeled one — see R12) before ever learning the point. The original explain-diff
+> talk lists "커밋 목표 및 핵심 전달" — state the goal before the code, like a math teacher — as a first-class
+> document component; the pre-R16 skill had dropped it. Same pattern as R2/R9/R14: a beat requested in prose
+> does not land, so it is forced as a slot.
+
 ---
 
 ## B. Judge decides — existence check + quote required
@@ -170,7 +183,13 @@ Group N's advance herald presupposes group N-1. The judge quotes the passage whe
 
 ### R12. The architecture diagram's correspondence to the diff
 
-The Architecture diagram's node/edge labels use identifiers that actually exist in the diff (service, module, command, entity names), and at least one level has a change marker (`:::changed` or Before/After contrast). The judge quotes both the diagram's labels and the body/Evidence sentence where those identifiers appear. R9 counts "is there a picture", and R12 looks at "is that picture this diff's picture" — the structure check can only count the presence of a mermaid fence, so correspondence is left to the quote-based judgment.
+The Architecture diagram's node/edge labels are real identifiers of the actual system (service, module, command, entity names) — not invented generic nouns, though context nodes the diff does not change are allowed — and at least one level has a change marker (`:::changed` or Before/After contrast) pointing at what this diff changed. For the 시스템 레벨 specifically, its nodes must be **distinct processes/services/deployables/stores**: an in-process call chain (functions or modules within one runtime) drawn as the system level is mislabeled and fails, because it presents component/domain structure as a system boundary. The judge quotes both the diagram's labels and the body/Evidence sentence where those identifiers appear, plus the change marker. R9 counts "is there a picture", and R12 looks at "is that picture this diff's picture, at the right level" — the structure check can only count the presence of a mermaid fence, so correspondence and leveling are left to the quote-based judgment.
+
+> **RED — real artifact (`boostpack-tool-helper-restore`).** A 14-line test-only diff whose R14 contract table
+> declared all three axes "변경 없음" still drew a 시스템 레벨 diagram of `test → helper → tool → api → server` —
+> an in-process call chain (only the mocked, unchanged `server` is a real other process) presented as the
+> system level. The picture had a change marker, so pre-R12-tightening it passed; the leveling error — an
+> in-process chain labeled 시스템 — is what the sharpened R12 catches.
 
 ---
 

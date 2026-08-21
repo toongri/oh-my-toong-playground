@@ -1,5 +1,5 @@
 /**
- * explain-diff structural checks — rubric items R1..R5, R9..R11, R13..R15.
+ * explain-diff structural checks — rubric items R1..R5, R9..R11, R13..R16.
  *
  * These are the half of the rubric a script can decide, and the split is
  * deliberate (see skills/explain-diff/references/rubric.md): absence is
@@ -42,7 +42,7 @@ export interface StructureInput {
 }
 
 export interface CheckItem {
-	id: "R1" | "R2" | "R3" | "R4" | "R5" | "R9" | "R10" | "R11" | "R13" | "R14" | "R15";
+	id: "R1" | "R2" | "R3" | "R4" | "R5" | "R9" | "R10" | "R11" | "R13" | "R14" | "R15" | "R16";
 	title: string;
 	pass: boolean;
 	detail: string;
@@ -267,6 +267,41 @@ function checkR4(text: string): CheckItem {
 		title: "R4 Background 2단 + 건너뛰기 마커",
 		pass: r4Missing.length === 0,
 		detail: r4Missing.length > 0 ? `없는 요소: ${r4Missing.join(", ")}` : "",
+	};
+}
+
+/** The two slots the 목표 section must fill (R16): goal+why, and a one-line core before code. */
+const GOAL_SLOTS = [
+	{ label: "무엇을·왜", re: /^###\s*무엇을/m },
+	{ label: "핵심", re: /^###\s*핵심/m },
+] as const;
+
+// R16 — the goal / core-message beat, authored before any architecture or code.
+// Measured gap: the document jumped from Background straight to Architecture with
+// no statement of what the change is for or its one-line takeaway, so a reader met
+// the mechanism before ever learning the point. Forced as slots because a prose
+// request to "state the goal first" does not land as structure (same pattern as
+// R2/R9/R14). Read on the fence-masked text so a `###` inside a code example does
+// not stand in for the real slot.
+function checkR16(text: string): CheckItem {
+	const slice = sectionSlice(maskFenced(text), "목표");
+	if (slice === null) {
+		return {
+			id: "R16",
+			title: "R16 목표·핵심 전달",
+			pass: false,
+			detail: "## 목표 섹션이 없습니다 — 코드 전에 이 변경의 목표와 핵심 한 줄을 먼저 전달하세요.",
+		};
+	}
+	const missing = GOAL_SLOTS.filter((s) => !s.re.test(slice)).map((s) => s.label);
+	return {
+		id: "R16",
+		title: "R16 목표·핵심 전달",
+		pass: missing.length === 0,
+		detail:
+			missing.length > 0
+				? `목표 섹션에 없는 슬롯: ${missing.join(", ")} (### 무엇을·왜 / ### 핵심)`
+				: "",
 	};
 }
 
@@ -546,6 +581,9 @@ export function checkStructure(text: string, input: StructureInput): StructureRe
 			break;
 		case "background":
 			items.push(checkR4(text));
+			break;
+		case "goal":
+			items.push(checkR16(text));
 			break;
 		case "architecture":
 			items.push(checkR9(text));

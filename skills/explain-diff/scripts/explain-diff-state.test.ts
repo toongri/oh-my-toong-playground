@@ -102,8 +102,18 @@ const JOURNEY_SECTION = `## Commit Journey
 1. \`ab12cd3\` fix — 상태 갱신 락 통합 → 그룹 1
 `;
 
-/** 8스텝 전부의 구조 슬롯을 갖춘 문서. */
-const FULL_DOC = `${GOOD_DOC}\n${ARCH_SECTION}\n${JOURNEY_SECTION}`;
+/** goal 스텝의 R16 두 슬롯(무엇을·왜 / 핵심). 코드 전에 목표를 먼저 전달한다. */
+const GOAL_SECTION = `## 목표
+
+### 무엇을·왜
+두 CLI가 상태 파일 락을 공유하도록 공용 락 모듈로 뽑아, 갱신 경합을 없앤다.
+
+### 핵심
+코드를 보기 전에: 락 획득/해제를 한 곳으로 모으는 작은 추출이다.
+`;
+
+/** 9스텝 전부의 구조 슬롯을 갖춘 문서. */
+const FULL_DOC = `${GOOD_DOC}\n${GOAL_SECTION}\n${ARCH_SECTION}\n${JOURNEY_SECTION}`;
 
 function docFile(text: string): string {
 	const p = join(sandbox, "doc.md");
@@ -236,8 +246,8 @@ const WITH_BACKGROUND_DOC = `${EVIDENCE_ONLY_DOC}
 내용
 `;
 
-/** advanceTo가 신규 스텝(architecture·commits)을 건널 수 있는 문서. */
-const WITH_ARCH_DOC = () => `${WITH_BACKGROUND_DOC}\n${ARCH_SECTION}\n${JOURNEY_SECTION}`;
+/** advanceTo가 신규 스텝(goal·architecture·commits)을 건널 수 있는 문서. */
+const WITH_ARCH_DOC = () => `${WITH_BACKGROUND_DOC}\n${GOAL_SECTION}\n${ARCH_SECTION}\n${JOURNEY_SECTION}`;
 
 /**
  * evidence 부터 `step` 직전까지 `docAtStep`이 준 문서로 통과시켜 그 스텝에 진입시킨다.
@@ -505,7 +515,7 @@ describe("필수 심사 ID 강제 — 빈 페이로드로 심사 관문을 건�
 		submitStep(SID, "background", doc, ["lib/state-lock.ts"], []);
 		const rc = passStep(SID, "background", doc, []);
 		expect(rc).toBe(0);
-		expect(state().step).toBe("architecture");
+		expect(state().step).toBe("goal");
 	});
 
 	// render는 필수 ID가 없어 빈 배열로 통과한다 — "render 산출물 검사" 아래
@@ -529,6 +539,7 @@ async function driveToRender(): Promise<{
 	for (const step of [
 		"evidence",
 		"background",
+		"goal",
 		"architecture",
 		"intuition",
 		"commits",
@@ -693,6 +704,7 @@ describe("render 산출물 검사", () => {
 		for (const step of [
 			"evidence",
 			"background",
+			"goal",
 			"architecture",
 			"intuition",
 			"commits",

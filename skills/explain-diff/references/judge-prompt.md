@@ -15,14 +15,19 @@ Document: <absolute document path>
 Step: <architecture|intuition|code>
 
 If the step is architecture judge only R12, if intuition only R6, if code only R7.
-(The other five steps — evidence, background, commits, render, quiz — have no judge item and do not use this template.)
+(The other six steps — evidence, background, goal, commits, render, quiz — have no judge item and do not use this template.)
 
 R12 — the architecture diagram's correspondence to the diff (only when the step is architecture)
   First judge whether the Architecture section has any diagram at all.
-  If any diagram is present, its node/edge labels must use identifiers that actually exist
-  in this diff (service, module path, command, entity names), and at least one level must
-  have a change marker (a :::changed class or Before/After contrast). A picture drawn with
-  generic nouns only ("service" -> "DB") is a picture that fits any diff, so it fails. In this
+  If any diagram is present, its node/edge labels must use real identifiers of the actual
+  system (service, module path, command, entity names) — they need not all be things the diff
+  changed; context nodes the diff leaves untouched are allowed. At least one level must have a
+  change marker (a :::changed class or Before/After contrast) pointing at what this diff
+  changed. A picture drawn with generic nouns only ("service" -> "DB") is a picture that fits
+  any diff, so it fails. For the 시스템 레벨 specifically: its nodes must be DISTINCT
+  processes, services, deployables, or stores. An in-process call chain — functions or modules
+  inside a single runtime (e.g. test -> helper -> tool) — drawn as the system level is
+  mislabeled and fails; that structure belongs to the component/domain level. In the pass
   case put into quote the diagram's label string, the body sentence where the same identifier
   appears, and the phrase that evidences the change marker, together.
   If there is no diagram at all and all three levels have a reasoned

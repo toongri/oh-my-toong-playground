@@ -111,6 +111,50 @@ describe("background 스텝 — R4만 평가", () => {
 	});
 });
 
+const GOAL = `## 목표
+
+### 무엇을·왜
+반복 오류 테스트가 실행 준비를 매번 다시 쓰지 않도록 공통 helper를 복원한다.
+
+### 핵심
+코드를 보기 전에: 이 변경은 "도구 실행 준비"를 한 함수로 모은 작은 어댑터다.
+`;
+
+describe("goal 스텝 — R16만 평가", () => {
+	test("목표 섹션이 아예 없으면 R16이 실패하고 없는 슬롯을 담는다", () => {
+		const r = checkStructure(evidenceOnlyDoc("lib/state-lock.ts"), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "goal",
+		});
+		expect(r.pass).toBe(false);
+		expect(r.items.map((i) => i.id)).toEqual(["R16", "R11"]);
+		expect(r.items.find((i) => i.id === "R16")?.pass).toBe(false);
+		expect(r.items.find((i) => i.id === "R16")?.detail).toContain("목표");
+	});
+
+	test("무엇을·왜 + 핵심 두 슬롯이 다 있으면 통과한다", () => {
+		const r = checkStructure(`# 설명\n\n${GOAL}`, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "goal",
+		});
+		expect(r.items.find((i) => i.id === "R16")?.pass).toBe(true);
+	});
+
+	test("핵심 슬롯이 빠지면 R16이 실패하고 그 슬롯을 사유에 담는다", () => {
+		const doc = `# 설명\n\n${GOAL.replace(/### 핵심[\s\S]*$/, "")}`;
+		const r = checkStructure(doc, { signalFiles: ["lib/state-lock.ts"], step: "goal" });
+		const item = r.items.find((i) => i.id === "R16");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("핵심");
+	});
+
+	test("무엇을·왜 슬롯이 빠지면 R16이 실패한다", () => {
+		const doc = `# 설명\n\n${GOAL.replace(/### 무엇을·왜[\s\S]*?(?=### 핵심)/, "")}`;
+		const r = checkStructure(doc, { signalFiles: ["lib/state-lock.ts"], step: "goal" });
+		expect(r.items.find((i) => i.id === "R16")?.pass).toBe(false);
+	});
+});
+
 describe("intuition 스텝 — 고유 구조 항목 없음 (공통 R11만)", () => {
 	test("스타일 위반이 없는 최소 문서는 통과한다", () => {
 		const r = checkStructure("# 설명\n\n본질만 적힌 한 줄.", {

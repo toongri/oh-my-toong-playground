@@ -12,10 +12,10 @@ disable-model-invocation: true
 
 ## Overview
 
-Eight steps, passed in order. Steps 1–7 you do alone; the user does only two things — read the document and answer the quiz.
+Nine steps, passed in order. Steps 1–8 you do alone; the user does only two things — read the document and answer the quiz.
 
 ```
-evidence → background → architecture → intuition → commits → code → render → quiz
+evidence → background → goal → architecture → intuition → commits → code → render → quiz
 ```
 
 The document skeleton and the usable visual components are owned by `references/markdown-template.md`.
@@ -82,25 +82,43 @@ Write **both** tiers.
 
 The skip line is verified by the structure check as a string.
 
-## Step 3 — architecture
+## Step 3 — goal
 
-Draw the structure the change touches at **three levels**. Each level is a mermaid diagram plus reading prose under the `### 시스템 레벨`, `### 컴포넌트 레벨`, `### 도메인 레벨` headings.
+State the **goal and the one-line core before any structure or code** — the way a good teacher gives the point of a lesson before the exercises. Background taught the system; this step says what this change is *for*. Do not describe mechanism here (that is architecture/code's job) — say what it achieves, why it was needed, and the single thing the reader should carry into the rest of the document.
 
-| Level | Question it answers |
-|---|---|
-| 시스템 (system) | Which runtimes, services, and stores are involved, and which boundary does the diff touch |
-| 컴포넌트 (component) | How dependencies between modules and domains differ before vs after the change |
-| 도메인 (domain) | What the entities, concepts, and invariants are, and what changes |
+```markdown
+## 목표
+
+### 무엇을·왜
+<이 변경이 이루려는 것 + 왜 필요했는가(해결하는 문제)>
+
+### 핵심
+<코드를 보기 전에 독자가 먼저 쥐어야 할 핵심 한 줄>
+```
+
+Both sub-headings are verified by the structure check (R16). What each says is yours to fill.
+
+## Step 4 — architecture
+
+Draw the structure needed to **understand this diff** at **three levels**. Each level is a mermaid diagram plus reading prose under the `### 시스템 레벨`, `### 컴포넌트 레벨`, `### 도메인 레벨` headings.
+
+**These diagrams are not a diff-only world.** Draw whatever scope a reader needs to understand the change — including surrounding systems, services, and components the diff does *not* touch, as context. The one requirement: **mark which elements this diff actually changed** (`:::changed` / Before-After), so context and change are never confused. Every node must be a real element of the actual system — never an invented placeholder.
+
+| Level | Question it answers | Belongs here |
+|---|---|---|
+| 시스템 (system) | Which **distinct processes, services, deployables, and stores** are involved, and which boundary does the diff touch | Only cross-process/service/store boundaries. An in-process call chain (functions/modules inside one runtime) is **NOT** the system level — that belongs to 컴포넌트/도메인. If the diff crosses no process boundary, the system level is a `구조 변화 없음: <사유>` waiver, not an in-process chain dressed up as a system picture. |
+| 컴포넌트 (component) | How dependencies between modules and domains differ before vs after the change | Module/domain structure within a process |
+| 도메인 (domain) | What the entities, concepts, and invariants are, and what changes | Entities, concepts, invariants |
 
 **The system level does not end with a diagram alone.** Under the diagram (or the waiver marker), place a table enumerating the contracts this diff changes across three axes — `서버 API` (endpoints, tRPC procedures, request/response schemas), `DB 스키마` (tables, columns, constraints), `클라이언트 의존` (contracts the client must change to match). Each axis states the changing contract concretely or is filled with `변경 없음: <사유>`. All three axis labels must be present to pass R14. The table format follows `markdown-template.md`.
 
 **The Architecture section also carries a boundary/dependency/use-case block (R15).** After the three levels, add a `### 경계·의존·유스케이스` block that (a) defines each domain and use case this change touches, as a table — **파트 / 레이어(수직 도메인·수평 유스케이스) / 책임 / 협력자 / 영향/수정** — and (b) judges the **의존 방향**: which way dependency flows on each axis, and whether the change keeps, violates, or restores unidirectional dependency (flag any reach-in, back-reference, or cycle as a coupling defect). The two axes and the vocabulary follow the `architecture-boundaries` rule — borrow method names (DDD·FSD·Clean-arch) only as vocabulary, never make the work about a methodology. The labels `협력자`, `영향/수정`, and `의존 방향` must be present to pass R15. Format follows `markdown-template.md`.
 
-Write diagrams in a ` ```mermaid ` fence — they are baked to inline SVG at the render step, so the final HTML stays self-contained. If any diagram is present, use identifiers that actually exist in the diff for node/edge labels, and put a change marker (`:::changed` or Before/After contrast) on at least one level to pass R12. Both of these grounds must appear together in the judge's required quote. Type selection and syntax rules follow `markdown-template.md`.
+Write diagrams in a ` ```mermaid ` fence — they are baked to inline SVG at the render step, so the final HTML stays self-contained. If any diagram is present, its node/edge labels must be **real identifiers of the actual system** — service, module path, command, entity names — not invented generic nouns (a "service → DB" picture fits any diff and fails R12). Context nodes the diff does not change are welcome, but at least one level must carry a change marker (`:::changed` or Before/After contrast) pointing at what this diff changed, and for the 시스템 레벨 the marked-and-drawn boundary must be an actual cross-process/service boundary, not an in-process call. The identifier grounds and the change marker must appear together in the judge's required quote (R12). Type selection and syntax rules follow `markdown-template.md`.
 
 A level with genuinely nothing to draw is replaced by `구조 변화 없음: <사유 한 문장>` — a marker with no rationale is rejected by the structure check. If there is no diagram at all and every one of the three levels carries this reasoned waiver, R12 can still be satisfied. In that case the judge's quote must include all three waiver sentences — system, component, domain — as strings copied verbatim from the document; if any is missing or lacks a rationale, it does not pass. This waiver exception does not apply once any diagram is present.
 
-## Step 4 — intuition
+## Step 5 — intuition
 
 Write only the **essence** of the change. Detail is the next step's job. Make a concrete toy value actually appear, and reuse that value in the explaining sentence.
 
@@ -110,7 +128,7 @@ Draw with sanctioned components. Do not use ASCII diagrams, and do not invent st
 - Before/after contrast → `compare` component
 - A two-dimensional structure needing boundaries or branches → ` ```mermaid ` (same syntax as the architecture step)
 
-## Step 5 — commits
+## Step 6 — commits
 
 First pull the commit list for the range — this list is this step's subject:
 
@@ -130,7 +148,7 @@ What this step writes is a **one-line overview**. The deep narrative is the next
 
 Commit hashes are compared against the list that `start` pinned into the state — if any is missing from the overview, the structure check fails. Only when the command above is exactly one line, write the single line `단일 커밋 범위 — Commit Journey 생략.` instead of the section.
 
-## Step 6 — code
+## Step 7 — code
 
 The first-class unit is the **Change Group** (a concern), but **the spine is the commit.** Inside a group you descend commit by commit, and under a commit come the file blocks that commit touched. A signal file enters exactly once, as exactly one file block.
 
@@ -171,7 +189,7 @@ The three slots fill R13, R3, and R5. The component, field labels, and code-fenc
 | No ground, but it is inferred from the code | `<span class="cf-src">추론</span> <추론의 근거>` |
 | No reachable ground | `<span class="cf-src">Unknown / not supplied</span>` |
 
-Leave the third case **as an open question inside the document.** Do not ask the user in conversation — steps 1–7 run without a person.
+Leave the third case **as an open question inside the document.** Do not ask the user in conversation — steps 1–8 run without a person.
 
 ## Passing a step
 
@@ -189,11 +207,12 @@ What this gate actually looks at differs per step — it inspects only the slots
 |---|---|
 | evidence | Does every signal file appear somewhere in the document |
 | background | Deep/narrow two-tier background + skip marker |
+| goal | Does the `## 목표` section carry both sub-slots — `### 무엇을·왜` and `### 핵심` (R16) |
 | architecture | Are all three level headings present, each with a mermaid diagram or a reasoned waiver marker (R9); does the system level have the three change-contract axes (R14); does the boundary/dependency/use-case block carry the `협력자`/`영향/수정`/`의존 방향` slots (R15) |
 | intuition | No item of its own — the substantive verdict is the judgment's (R6) |
 | commits | With two or more commits, does every hash appear in the Commit Journey overview (R10); a single commit may use the waiver marker |
 | code | Change Group title/herald/order-rationale three slots (R2), a provenance tag on every 왜 (R3), cf-loc base/head traceability (R5), each signal file in exactly one file block (R1), a commit subsection with a valid hash per group + core-logic code per file (R13) |
-| render | See Step 7 — it inspects the artifact HTML, mermaid render parity, and the two verification reports |
+| render | See Step 8 — it inspects the artifact HTML, mermaid render parity, and the two verification reports |
 
 **Common to all authoring steps**: the whole accumulated document is checked for `<style>`, inline `style=`, and unsanctioned classes (R11).
 
@@ -208,7 +227,7 @@ The judgment JSON is produced by the judging subagent. Give the judge the **fixe
 
 The judge decides only three of the whole rubric — `R12` (if the architecture has a diagram, do its labels and change markers correspond to grounds in the diff; if it has no diagram, are all three levels' reasoned waivers present), `R6` (does Intuition's concrete example actually exist and get reused in the prose), `R7` (does group N's herald presuppose group N-1). The rest are already decided by the structure check. Passing R12 requires the judge's quote. When a diagram exists the quote must carry the identifier and change-marker grounds; when none exists it must carry all three waiver sentences verbatim.
 
-Each of these three items is **required in exactly one step** — `architecture` for `R12`, `intuition` for `R6`, `code` for `R7`. The other five steps (evidence, background, commits, render, quiz) have no required judge ID, so pass them with `--judge-json '[]'`. If the required ID is absent from the payload it is rejected on that alone, and attaching a real quote to an unrelated ID does not substitute for the missing required ID.
+Each of these three items is **required in exactly one step** — `architecture` for `R12`, `intuition` for `R6`, `code` for `R7`. The other six steps (evidence, background, goal, commits, render, quiz) have no required judge ID, so pass them with `--judge-json '[]'`. If the required ID is absent from the payload it is rejected on that alone, and attaching a real quote to an unrelated ID does not substitute for the missing required ID.
 
 ```json
 [{"id":"R6","pass":true,"quote":"문서에서 그대로 따온 문장"}]
@@ -216,7 +235,7 @@ Each of these three items is **required in exactly one step** — `architecture`
 
 Giving `pass` without a quote, or a quote that is not present in the document as a string, is auto-failed by the CLI.
 
-## Step 7 — render
+## Step 8 — render
 
 The markdown is the source; the HTML is derived.
 
@@ -251,7 +270,7 @@ The render submission also confirms the HTML is an artifact re-generated from th
 
 When the render is done, tell the user the two paths and ask them to read the document.
 
-## Step 8 — quiz
+## Step 9 — quiz
 
 The quiz is **a conversational stage, not a document section.** Do not write a `## Quiz` heading in the document — it would leave an empty clause in the rendered HTML. Manage the questions with the CLI below and pose them in plain prose.
 

@@ -24,10 +24,11 @@ function state(partial: Partial<ExplainDiffState> = {}): ExplainDiffState {
 }
 
 describe("스텝 순서", () => {
-	test("`STEP_ORDER`는 8단계를 스펙이 정한 순서로 담는다", () => {
+	test("`STEP_ORDER`는 9단계를 스펙이 정한 순서로 담는다 — goal이 background와 architecture 사이", () => {
 		expect(STEP_ORDER).toEqual([
 			"evidence",
 			"background",
+			"goal",
 			"architecture",
 			"intuition",
 			"commits",
@@ -37,10 +38,11 @@ describe("스텝 순서", () => {
 		]);
 	});
 
-	test("`AUTHORING_STEPS`는 사람이 개입하지 않는 앞 6단계다", () => {
+	test("`AUTHORING_STEPS`는 사람이 개입하지 않는 앞 7단계다", () => {
 		expect(AUTHORING_STEPS).toEqual([
 			"evidence",
 			"background",
+			"goal",
 			"architecture",
 			"intuition",
 			"commits",
@@ -50,7 +52,8 @@ describe("스텝 순서", () => {
 
 	test("`nextStep`은 순서대로 진행하고 마지막 다음은 null이다", () => {
 		expect(nextStep("evidence")).toBe("background");
-		expect(nextStep("background")).toBe("architecture");
+		expect(nextStep("background")).toBe("goal");
+		expect(nextStep("goal")).toBe("architecture");
 		expect(nextStep("architecture")).toBe("intuition");
 		expect(nextStep("intuition")).toBe("commits");
 		expect(nextStep("commits")).toBe("code");
@@ -60,10 +63,11 @@ describe("스텝 순서", () => {
 });
 
 describe("필수 심사 ID 배정", () => {
-	test("architecture는 R12, intuition은 R6, code는 R7을 요구하고 나머지 다섯 스텝은 아무 것도 요구하지 않는다", () => {
+	test("architecture는 R12, intuition은 R6, code는 R7을 요구하고 나머지 여섯 스텝은 아무 것도 요구하지 않는다", () => {
 		expect(REQUIRED_JUDGE_IDS).toEqual({
 			evidence: [],
 			background: [],
+			goal: [],
 			architecture: ["R12"],
 			intuition: ["R6"],
 			commits: [],
@@ -73,7 +77,7 @@ describe("필수 심사 ID 배정", () => {
 		});
 	});
 
-	test("여덟 스텝 전부에 배정이 있다 — 빠진 스텝이 무자격 통과를 만들지 않는다", () => {
+	test("아홉 스텝 전부에 배정이 있다 — 빠진 스텝이 무자격 통과를 만들지 않는다", () => {
 		for (const s of STEP_ORDER) expect(REQUIRED_JUDGE_IDS[s]).toBeDefined();
 	});
 });
@@ -92,6 +96,12 @@ describe("산출물 쓰기 허용", () => {
 
 	test("첫 스텝은 선행이 없으므로 허용된다", () => {
 		expect(computeDerived(state({ step: "evidence", passed: [] })).artifact_write_allowed).toBe(true);
+	});
+
+	test("goal 스텝이 통과되지 않으면 architecture 저작을 막고 goal로 복귀시킨다", () => {
+		const d = computeDerived(state({ step: "architecture", passed: ["evidence", "background"] }));
+		expect(d.artifact_write_allowed).toBe(false);
+		expect(d.block_reason).toContain("goal");
 	});
 
 	test("비활성 상태는 허용하지 않는다", () => {
