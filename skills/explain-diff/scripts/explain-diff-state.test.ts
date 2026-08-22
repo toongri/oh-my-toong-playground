@@ -76,6 +76,10 @@ flowchart LR
   CLI --> STATE[(state file)]
 \`\`\`
 
+| 경계 | 인터페이스 | 오가는 것 |
+|---|---|---|
+| CLI → state file | withLock(경로) | 락 획득/해제 |
+
 | 축 | 이번에 바뀌는 계약 |
 |---|---|
 | 서버 API | 변경 없음: CLI 전용이라 서버 API 표면이 없다 |
@@ -83,16 +87,29 @@ flowchart LR
 | 클라이언트 의존 | 두 CLI가 공용 락 모듈에 의존하게 된다 |
 
 ### 컴포넌트 레벨
-구조 변화 없음: 모듈 경계는 그대로다.
+\`\`\`mermaid
+flowchart LR
+  cliA --> lock
+  cliB --> lock
+\`\`\`
+
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>state-lock</code></p>
+<p><strong>레이어</strong> lib/상태-인프라</p>
+<p><strong>책임</strong> 상태 파일 락 소유</p>
+<p><strong>인터페이스</strong> withLock</p>
+</div>
 
 ### 도메인 레벨
 구조 변화 없음: 엔티티가 없다.
 
 ### 경계·의존·유스케이스
 
-| 파트 | 레이어 | 책임 | 협력자 | 영향/수정 |
-|---|---|---|---|---|
-| state-lock | 수직 도메인 | 상태 파일 락 소유 | 두 CLI | 신설 |
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> 상태 갱신 락 통합</p>
+<p><strong>한 일</strong> 두 CLI의 상태 쓰기를 공용 락으로 직렬화</p>
+<p><strong>영향 인터페이스</strong> withLock(경로, fn)</p>
+</div>
 
 **의존 방향** — 두 CLI → 공용 락 모듈 단방향. 역참조 없음.
 `;

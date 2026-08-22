@@ -467,90 +467,145 @@ v1 복원으로 사라진 404 계약 테스트를 지운다.
 // ---------------------------------------------------------------------------
 // v3/v4 확장 — R9·R14(아키텍처), R10(커밋 오버뷰), R11(스타일 발명 금지)
 
+// v5 계약: 시스템 레벨은 상시 인터페이스 표(R17), 컴포넌트 레벨은 노드별 arch-entity
+// 카드(R18), 경계 블록은 동작단위 변경종류·영향 인터페이스·의존 방향(R15 재작성)을 갖고,
+// Architecture 산문에는 방법론 명칭이 없다(R19).
 const ARCH_OK = `## Architecture
 
 ### 시스템 레벨
 \`\`\`mermaid
 flowchart LR
-  A[Node backend] --> B[(PostgreSQL)]
+  A[commerce browser] -->|HTTP| B[Hono backend]
+  B -->|SQL| C[(PostgreSQL)]
 \`\`\`
+
+| 경계 | 인터페이스 | 오가는 것 |
+|---|---|---|
+| browser → backend | GET /v1/supplement-catalog | 표시 카탈로그 |
+| backend → db | supplement_categories 조회 | 카탈로그 행 |
 
 | 축 | 이번에 바뀌는 계약 |
 |---|---|
-| 서버 API | \`calculateSupplementCost\` 입력 스키마가 좁아진다 |
+| 서버 API | \`GET /v1/supplement-catalog\` 가 query를 받는다 |
 | DB 스키마 | 변경 없음: 조인 방식만 바뀐다 |
-| 클라이언트 의존 | 챗이 의존하는 공유 계약이 category 단일로 좁아진다 |
+| 클라이언트 의존 | 챗이 display catalog를 함께 읽는다 |
 
 설명.
 
 ### 컴포넌트 레벨
 \`\`\`mermaid
 flowchart LR
-  order --> couponHandler
+  card --> resolver
 \`\`\`
-설명.
+
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>
+<p><strong>레이어</strong> entities/supplement/api</p>
+<p><strong>책임</strong> fail-closed 해소기 공급</p>
+<p><strong>인터페이스</strong> resolveAlias, resolveDisplay</p>
+</div>
 
 ### 도메인 레벨
 구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.
 
 ### 경계·의존·유스케이스
 
-| 파트 | 레이어 | 책임 | 협력자 | 영향/수정 |
-|---|---|---|---|---|
-| cost | 수직 도메인 | 비용 계산 | chat | 수정 |
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> display catalog 조회</p>
+<p><strong>한 일</strong> 삭제 포함 표시 카탈로그 경로 신설</p>
+<p><strong>영향 인터페이스</strong> GET /v1/supplement-catalog?includeDeletedCategories=true</p>
+</div>
 
-**의존 방향** — chat → cost 단방향 유지.
+**의존 방향** — commerce feature → resolver → backend REST 단방향 유지.
 `;
 
-describe("architecture 스텝 — R9·R14·R15", () => {
-	test("세 레벨이 각각 mermaid/생략 마커를 갖고 시스템 레벨에 계약 3축·경계 블록 3슬롯이 있으면 통과한다", () => {
+describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
+	test("세 레벨·계약3축·상시 인터페이스 표·컴포넌트 카드·경계 동작단위가 모두 있으면 통과한다", () => {
 		const r = checkStructure(withBackground(ARCH_OK), {
 			signalFiles: ["lib/state-lock.ts"],
 			step: "architecture",
 		});
-		expect(r.items.map((i) => i.id)).toContain("R9");
-		expect(r.items.map((i) => i.id)).toContain("R14");
-		expect(r.items.map((i) => i.id)).toContain("R15");
+		const ids = r.items.map((i) => i.id as string);
+		for (const id of ["R9", "R14", "R15", "R17", "R18", "R19"]) {
+			expect(ids).toContain(id);
+		}
 		expect(r.pass).toBe(true);
 	});
 
-	test("경계·의존·유스케이스 슬롯이 하나라도 빠지면 R15가 실패하고 빠진 라벨을 담는다", () => {
+	// R15 재작성 — 경계 블록은 동작단위 변경종류·영향 인터페이스·의존 방향을 요구한다.
+	test("경계 블록에 의존 방향이 빠지면 R15가 실패한다", () => {
 		const doc = withBackground(ARCH_OK.replace(/\*\*의존 방향\*\*[^\n]*\n/, ""));
-		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" });
-		const item = r.items.find((i) => i.id === "R15");
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R15",
+		);
 		expect(item?.pass).toBe(false);
 		expect(item?.detail).toContain("의존 방향");
 	});
 
-	test("경계 블록이 펜스 예시 안에만 있으면 R15가 실패한다(마스킹)", () => {
-		const doc = withBackground(`## Architecture
+	test("경계 블록에 영향 인터페이스 라벨이 빠지면 R15가 실패한다", () => {
+		const doc = withBackground(ARCH_OK.replace("영향 인터페이스", "무엇"));
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R15",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("영향 인터페이스");
+	});
 
-### 시스템 레벨
-\`\`\`mermaid
-flowchart LR
-  A --> B
-\`\`\`
+	test("경계 블록 동작단위에 변경종류(data-change)가 없으면 R15가 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				'<div class="arch-entity" data-change="new">\n<p><strong>이름</strong> display catalog 조회</p>',
+				'<div class="arch-entity">\n<p><strong>이름</strong> display catalog 조회</p>',
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R15",
+		);
+		expect(item?.pass).toBe(false);
+	});
 
-| 축 | 계약 |
-|---|---|
-| 서버 API | x |
-| DB 스키마 | 변경 없음: - |
-| 클라이언트 의존 | y |
+	// R17 — 시스템 레벨 상시 인터페이스 표.
+	test("시스템 레벨에 상시 인터페이스 표가 없으면 R17이 실패하고 빠진 라벨을 담는다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(/\| 경계 \| 인터페이스 \| 오가는 것 \|[\s\S]*?카탈로그 행 \|\n/, ""),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R17",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("오가는 것");
+	});
 
-### 컴포넌트 레벨
-구조 변화 없음: 이유.
+	// R18 — 컴포넌트 레벨 노드별 arch-entity 카드.
+	test("컴포넌트 레벨에 arch-entity 카드 라벨이 없으면 R18이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				/<div class="arch-entity" data-change="new">\n<p><strong>이름<\/strong> <code>useSupplementCodeResolver[\s\S]*?<\/div>\n/,
+				"",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(false);
+	});
 
-### 도메인 레벨
-구조 변화 없음: 이유.
+	// R19 — Architecture 산문의 방법론 명칭 금지.
+	test("Architecture 산문에 방법론 명칭(FSD 등)이 있으면 R19가 실패한다", () => {
+		const doc = withBackground(ARCH_OK.replace("fail-closed 해소기 공급", "이건 FSD의 feature다"));
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R19",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("FSD");
+	});
 
-\`\`\`markdown
-| 파트 | 레이어 | 책임 | 협력자 | 영향/수정 |
-| a | 수직 도메인 | b | c | 수정 |
-**의존 방향** — 단방향.
-\`\`\`
-`);
-		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" });
-		expect(r.items.find((i) => i.id === "R15")?.pass).toBe(false);
+	test("방법론 명칭이 없으면 R19가 통과한다", () => {
+		const item = checkStructure(withBackground(ARCH_OK), {
+			signalFiles: ["a.ts"],
+			step: "architecture",
+		}).items.find((i) => i.id === "R19");
+		expect(item?.pass).toBe(true);
 	});
 
 	test("레벨 헤딩이 하나라도 빠지면 R9가 실패하고 그 레벨 이름을 사유에 담는다", () => {

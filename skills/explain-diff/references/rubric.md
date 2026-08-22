@@ -1,6 +1,6 @@
 # explain-diff unified rubric
 
-These 16 items are used as **one and the same set** in three places — per-step section judgment, the basis for generating quiz questions, and the RED/GREEN artifact comparison. If the three places hold different standards, "passed the gate" and "is a good document" split apart, and from then on the gate is a pass-through ritual.
+These 19 items are used as **one and the same set** in three places — per-step section judgment, the basis for generating quiz questions, and the RED/GREEN artifact comparison. If the three places hold different standards, "passed the gate" and "is a good document" split apart, and from then on the gate is a pass-through ritual.
 
 The items are **split three ways by who decides**. Absence is counted by the script, existence is proven by the judge with a quote, and pure judgment is kept minimal. Reducing the very surface on which the judge can exercise discretion is the purpose of the split.
 
@@ -33,6 +33,9 @@ The document is written one step at a time, accumulating. So an item is evaluate
 | R14 | script | architecture |
 | R15 | script | architecture |
 | R16 | script | goal |
+| R17 | script | architecture |
+| R18 | script | architecture |
+| R19 | script | architecture |
 
 The `intuition` step has no slot of its own — only R6 (judge) and the common R11 decide it. `render` and `quiz` score none of this table's items: `render` looks at the artifact check (HTML present and non-empty, mermaid→SVG parity, visual-qa `VERDICT: PASS`, technical-writing `REVIEW: APPLIED`), and `quiz` runs a separate grading path (`grade`).
 
@@ -142,17 +145,44 @@ The code section is organized with the commit as its spine. Each Change Group ha
 > and what the chat client must match were not enumerated in a table, so the "system-unit" explanation was
 > thin.
 
-### R15. Boundary / dependency / use-case block
+### R15. Boundary / dependency / use-case change map
 
-The Architecture section carries a `### 경계·의존·유스케이스` block that defines the domains and use cases this change touches (a table naming each part) and judges the dependency direction. Three labels must be present, read on the Architecture section with fences masked: `협력자` (the definition table's collaborator column, which forces each part to be named with its boundary and its collaborators), `영향/수정` (the affected-vs-modified marker), and `의존 방향` (the unidirectional-dependency verdict). What each says is the author's to fill; the gate forces the slots present. The vocabulary follows the `architecture-boundaries` rule — the two axes (vertical domain / horizontal use-case), not any one methodology.
+The Architecture section closes with a `### 경계·의존·유스케이스` block that is a **change map**, not a static layer-classification table. Read on the `### 경계·의존·유스케이스` sub-slice with fences masked, three markers must be present: `영향 인터페이스` (each behaviour unit names the interface it affected), `의존 방향` (the unidirectional-dependency verdict), and a unit-level `data-change` (the change kind on the `arch-entity` units). What each says is the author's to fill; the gate forces the slots present. The vocabulary follows the `architecture-boundaries` rule but the output speaks the codebase's own terms (enforced by R19).
 
-> **RED 0/4 (as the three named slots).** Four baseline runs of the pre-R15 skill on a two-domain refactor
-> (a subscription/billing split moved behind a use case): all four drew the boundary and the before/after
-> dependency picture at the component and domain levels — the three-level + R14 scaffold makes that reliable —
-> but none defined the domains/use-cases as named parts with their collaborators, none marked affected vs
-> modified as structure, and all four stated the direction change only as prose ("방향이 바뀜", "침투")
-> rather than a unidirectional-invariant verdict. Same pattern as R2/R9/R10: the picture lands, the named
-> slots do not — so they are forced.
+> **RED — the v4 static table.** The earlier R15 forced a `파트/레이어/협력자/영향·수정` classification table
+> with a binary `수직 도메인 / 수평 유스케이스` layer choice. On an FSD codebase this miscategorised parts that
+> are neither a clean vertical domain nor a horizontal use-case: a `resolver` (an `entities/lib` module) and a
+> `census` (a standalone backend CLI) were both forced into "수평 유스케이스", and the table answered "what
+> exists" rather than "what this diff did to the boundary". The rewrite drops the static classification: each
+> behaviour unit is an `arch-entity` carrying its change kind and affected interface, closed by the direction
+> verdict — the same "change contract, not inventory" shape that made R14 work.
+
+### R17. System-level standing-interface table
+
+The 시스템 레벨, beyond the R14 change-contract table, carries a standing-interface table naming which boundary communicates over which endpoint/query/screen-URL and what flows. Read on the 시스템 레벨 slice with fences masked, three column labels must be present: `경계`, `인터페이스`, `오가는 것`. This is distinct from R14 in layer — R14 enumerates what this diff *changes*, R17 the *standing* interface the diagram's short-protocol edges leave implicit. What each row says is the author's to fill.
+
+> **RED — real artifact (`b2c-6105`).** The system diagram was `browser --> backend --> db` with every edge
+> unlabelled, and it *omitted* the Python health-profile API and the census→DB boundary that the prose itself
+> named — so "which entrance do they talk through" was answerable only by hunting the prose. Putting the
+> interface on the edge as a label was rejected in the interview (long endpoint/query strings blow the 12-node
+> layout); the table carries it instead, and the diagram keeps short-protocol edges.
+
+### R18. Component-level node cards
+
+The 컴포넌트 레벨, beyond the dependency graph, decodes each changed behaviour node with an `arch-entity` card. Read on the 컴포넌트 레벨 slice with fences masked, the labels `레이어`, `책임`, `인터페이스` plus `arch-entity` and `data-change` must be present. Pure data/contract-type nodes stay diagram-only; only behaviour-bearing nodes get a card.
+
+> **RED — real artifact (`b2c-6105`).** The component level was a bare chain of class/function names —
+> `CurrentBoostPackInfoCard`, `useBoostPackSupplementCatalogResolvers` — with no responsibility, interface, or
+> layer anywhere, so a reader could not tell what any node *does*. The system level had gained a companion
+> table (R14); the component level had no counterpart, an asymmetry R18 closes.
+
+### R19. No methodology name in Architecture prose
+
+The Architecture section's prose speaks the codebase's own domain terms — no methodology proper name leaks in. Read on the fence-masked `## Architecture` section, none of these tokens may appear (case-insensitive): `FSD`, `Feature-Sliced`, `Clean Architecture`, `Clean-arch`, `DDD`, `Domain-Driven`, `bounded context`. The plain words `유스케이스`/`도메인` are legitimate (the block heading uses them); only framework names are banned. The boundary vocabulary still follows the `architecture-boundaries` rule — this forbids naming the *methodology*, not thinking in its axes.
+
+> **RED — interview requirement.** The user asked that the boundary block think in the two axes but never surface
+> the framework names in the output ("이게 프롬프트에 굳이 드러나진 않았으면 좋겠어"). A literal token scan is
+> the precise, cheap enforcement — the names are proper nouns, so a grep catches them without judge discretion.
 
 ### R16. Goal / core-message beat
 
@@ -183,7 +213,7 @@ Group N's advance herald presupposes group N-1. The judge quotes the passage whe
 
 ### R12. The architecture diagram's correspondence to the diff
 
-The Architecture diagram's node/edge labels are real identifiers of the actual system (service, module, command, entity names) — not invented generic nouns, though context nodes the diff does not change are allowed — and at least one level has a change marker (`:::changed` or Before/After contrast) pointing at what this diff changed. For the 시스템 레벨 specifically, its nodes must be **distinct processes/services/deployables/stores**: an in-process call chain (functions or modules within one runtime) drawn as the system level is mislabeled and fails, because it presents component/domain structure as a system boundary. The judge quotes both the diagram's labels and the body/Evidence sentence where those identifiers appear, plus the change marker. R9 counts "is there a picture", and R12 looks at "is that picture this diff's picture, at the right level" — the structure check can only count the presence of a mermaid fence, so correspondence and leveling are left to the quote-based judgment.
+The Architecture diagram's node/edge labels are real identifiers of the actual system (service, module, command, entity names) — not invented generic nouns, though context nodes the diff does not change are allowed — and at least one level has a change marker (`:::changed` or Before/After contrast) pointing at what this diff changed. For the 시스템 레벨 specifically, its nodes must be **distinct processes/services/deployables/stores**: an in-process call chain (functions or modules within one runtime) drawn as the system level is mislabeled and fails, because it presents component/domain structure as a system boundary. The 시스템 레벨 must also be **complete** — every distinct process/service/store the Evidence or Background prose names as involved must appear as a node; a process the prose names but the diagram omits (a separate API, a CLI) is a fail. The judge quotes both the diagram's labels and the body/Evidence sentence where those identifiers appear, plus the change marker. R9 counts "is there a picture", and R12 looks at "is that picture this diff's picture, at the right level" — the structure check can only count the presence of a mermaid fence, so correspondence and leveling are left to the quote-based judgment.
 
 > **RED — real artifact (`boostpack-tool-helper-restore`).** A 14-line test-only diff whose R14 contract table
 > declared all three axes "변경 없음" still drew a 시스템 레벨 diagram of `test → helper → tool → api → server` —
