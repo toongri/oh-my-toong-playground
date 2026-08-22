@@ -37,15 +37,17 @@
 
 ## Architecture
 ### 시스템 레벨
-<mermaid 또는 "구조 변화 없음: <사유>">
-<변경 계약 표 — 서버 API / DB 스키마 / 클라이언트 의존 3축, 아래 참조>
+<mermaid(간선=짧은 프로토콜: HTTP/SQL/REST) 또는 "구조 변화 없음: <사유>">
+<상시 인터페이스 표 — 경계 / 인터페이스 / 오가는 것, 아래 참조 (R17)>
+<변경 계약 표 — 서버 API / DB 스키마 / 클라이언트 의존 3축, 아래 참조 (R14)>
 ### 컴포넌트 레벨
-<mermaid 또는 "구조 변화 없음: <사유>">
+<mermaid 의존 그래프 또는 "구조 변화 없음: <사유>">
+<변경 행위 노드마다 arch-entity 카드 — 레이어 / 책임 / 인터페이스 + 변경종류, 아래 참조 (R18)>
 ### 도메인 레벨
 <mermaid 또는 "구조 변화 없음: <사유>">
 
 ### 경계·의존·유스케이스
-<정의 표(파트 / 레이어 / 책임 / 협력자 / 영향/수정) + 의존 방향 판정 한 줄 — 아래 참조>
+<동작 단위마다 arch-entity — 변경종류 + 한 일 + 영향 인터페이스, + 의존 방향 판정 한 줄 — 아래 참조 (R15)>
 
 ## Intuition
 <본질 한 문단 + toy 값 예시 + flow/compare 컴포넌트>
@@ -121,38 +123,85 @@
 세 축 라벨(`서버 API`·`DB 스키마`·`클라이언트 의존`)이 시스템 레벨 안에 모두 있어야
 R14를 통과한다.
 
+### 시스템 레벨 — 상시 인터페이스 표 (R17 필수)
+
+다이어그램의 간선은 **짧은 프로토콜**(HTTP·SQL·REST)만 얹는다 — 긴 엔드포인트·쿼리를
+간선 라벨로 박으면 레이아웃이 무너진다. "어떤 입구로 소통하는가"는 다이어그램 아래
+**상시 인터페이스 표**가 답한다. 각 경계(간선)가 지금 어떤 엔드포인트·쿼리·화면 URL로
+통신하고 무엇이 오가는지 적는다. 이 표는 R14와 층이 다르다 — **R14 = 이번에 바뀌는 계약,
+R17 = 지금 소통하는 상시 인터페이스**. 순서는 다이어그램 → 상시 인터페이스 표 → 변경 계약 표
+(맥락 먼저, 델타 나중).
+
+```markdown
+| 경계 | 인터페이스 | 오가는 것 |
+|---|---|---|
+| browser → Hono backend | `GET /v1/supplement-catalog?includeDeletedCategories=true` | 표시 카탈로그 |
+| Next.js BFF → Python health API | health-profile REST | 부스트팩 원본 |
+| backend → PostgreSQL | `supplement_categories` 조회(활성/전체) | 카탈로그 행 |
+```
+
+세 열 라벨(`경계`·`인터페이스`·`오가는 것`)이 시스템 레벨 안에 모두 있어야 R17을 통과한다.
+무엇을 적는지는 저자의 몫 — 게이트는 세 열 라벨의 존재만 본다.
+
+### 컴포넌트 레벨 — 노드 카드 (R18 필수)
+
+의존 그래프(mermaid)는 "무엇이 무엇에 연결되나"를 그리지만, 노드 이름만으로는
+`CurrentBoostPackInfoCard` 가 무엇을 하는지 읽히지 않는다. 그래서 **변경된 행위 노드마다**
+`arch-entity` 카드로 그 노드의 **레이어·책임·인터페이스(함수)**를 해독하고, 변경종류를 배지로
+단다. 순수 데이터/계약 타입 노드는 다이어그램에만 남기고 카드는 생략한다(행위·책임을 지는
+노드만 카드를 받는다).
+
+```markdown
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>
+<p><strong>레이어</strong> commerce/entities/supplement/api</p>
+<p><strong>책임</strong> 두 카탈로그 query를 묶어 fail-closed 해소기를 카드에 공급</p>
+<p><strong>인터페이스</strong> <code>{ resolveAlias, resolveDisplay, areCatalogsSettled }</code></p>
+</div>
+```
+
+`레이어`·`책임`·`인터페이스` 라벨과 `arch-entity`·`data-change` 가 컴포넌트 레벨 안에 있어야
+R18을 통과한다. 변경종류는 `data-change="new|mod|del"` 로 나르고 배지 색은 render.ts가 붙인다.
+
 ## 경계·의존·유스케이스 블록 (R15 필수)
 
-다이어그램은 "무엇이 어떻게 연결되는가"를 그리지만, **어떤 도메인·유스케이스가 관여하고,
-무엇이 영향받고 수정되며, 의존이 어느 방향으로 흐르는가**를 명시적으로 정의하지는 못한다.
-Architecture 섹션은 아래 블록으로 이 세 가지를 못박는다 — 어휘·원리는
-`architecture-boundaries` rule의 **2축(수직 도메인 / 수평 유스케이스)**을 따르고, 방법론
-이름(DDD·FSD·Clean-arch)은 필요할 때 어휘로만 빌린다. 일을 방법론에 대한 것으로 만들지 않는다.
+이 블록은 각 파트를 어느 레이어에 분류하는 **정적 표**가 아니라, **이 diff가 닿은 경계의 변경
+지도**다. "누가 어느 레이어냐"가 아니라, 이번 변경에서 **동작을 끝까지 나르는 단위**가 무엇이
+추가/삭제/변경됐고, 그로 인해 **어떤 인터페이스에 영향**이 갔으며, **의존 방향**이 유지됐나
+뒤집혔나를 적는다. 무게중심은 동작 단위와 영향 인터페이스이고, 닿은 레이어·도메인은 그 위 한 줄
+배경으로만 훑는다.
 
-- **정의 표** — 이 변경이 건드리는 도메인·유스케이스를 파트별로 정의한다. 각 파트는
-  이름 + 레이어(수직 도메인 / 수평 유스케이스) + 책임 + 협력자 + 영향/수정으로 식별된다.
-  `협력자`·`영향/수정` 라벨이 표에 있어야 한다.
-- **의존 방향 판정** — 두 축의 의존이 어느 방향으로 흐르는지, 이 변경이 단방향을 유지·위반·
-  복원하는지 한 줄로 판정한다. reach-in·역참조·순환은 결합 결함으로 플래그한다. `의존 방향`
-  라벨이 있어야 한다.
+- **동작 단위** — 이 변경이 추가/삭제/변경한 행위 단위마다 `arch-entity` 하나. 변경종류는
+  `data-change`, 각 단위는 **한 일 + 영향 인터페이스**를 적는다. 어휘·원리는
+  `architecture-boundaries` rule의 2축을 따르되 **방법론 이름(DDD·FSD·Clean-arch·bounded context)은
+  산출물에 쓰지 않는다** — 코드베이스 실제 도메인 어휘로 쓴다(R19가 이를 검사한다).
+- **의존 방향 판정** — 의존이 어느 방향으로 흐르는지, 이 변경이 단방향을 유지·위반·복원하는지
+  한 줄로 판정한다. reach-in·역참조·순환은 결합 결함으로 플래그한다. `의존 방향` 라벨이 있어야 한다.
 
 ```markdown
 ### 경계·의존·유스케이스
-> `architecture-boundaries` 2축 — 수직(도메인) / 수평(유스케이스).
 
-| 파트 | 레이어 | 책임 | 협력자 | 영향/수정 |
-|---|---|---|---|---|
-| subscription | 수직 도메인 | 구독 수명주기·취소 | evaluate-refund-on-cancel | 영향 (환불 직접 판정 제거) |
-| billing | 수직 도메인 | 결제·환불 규칙 소유 | BillingContract(공개) | 수정 (계약에 조회 메서드 신설) |
-| evaluate-refund-on-cancel | 수평 유스케이스 | 취소 시 환불 판정 오케스트레이션 | subscription → billing | 신설 |
+> 닿은 곳 — 수평: commerce `entities`·`features/ui`, backend `catalog`. 수직: 부스트팩 상담챗 · catalog.
 
-**의존 방향** — 이전: subscription이 billing 내부 테이블을 직접 조립(경계 침투·역방향 결합).
-이후: subscription → 유스케이스 → BillingContract 단방향으로 복원, billing 내부는 계약 뒤로 캡슐화.
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> display catalog 조회</p>
+<p><strong>한 일</strong> 삭제 카테고리까지 포함한 표시용 카탈로그 경로 신설</p>
+<p><strong>영향 인터페이스</strong> <code>GET /v1/supplement-catalog?includeDeletedCategories=true</code></p>
+</div>
+
+<div class="arch-entity" data-change="mod">
+<p><strong>이름</strong> 카드 category 축 전환</p>
+<p><strong>한 일</strong> row key·표시·편집 대상을 product에서 category로</p>
+<p><strong>영향 인터페이스</strong> 카드 snapshot 계약, pill override 키</p>
+</div>
+
+**의존 방향** — commerce feature → entities resolver → shared schema → backend REST 단방향 유지.
+commerce가 catalog 내부 테이블을 직접 조회하지 않고 계약 뒤에 머문다 — 새 순환·경계 침투 없음.
 ```
 
-R15는 `협력자`·`영향/수정`·`의존 방향` 세 라벨의 **존재**만 기계로 검사한다(R14와 같은 철학) —
-각 칸이 말하는 내용은 저자가 채운다. 펜스 안 예시는 마스킹되므로 위 예시를 그대로 두는 것으로는
-통과하지 못한다 — 실제 변경 내용으로 블록을 문서에 써야 한다.
+R15는 `영향 인터페이스`·`의존 방향` 라벨과 동작 단위의 `data-change` 의 **존재**만 기계로 검사한다
+(R14와 같은 철학) — 각 칸이 말하는 내용은 저자가 채운다. 펜스 안 예시는 마스킹되므로 위 예시를
+그대로 두는 것으로는 통과하지 못한다 — 실제 변경 내용으로 블록을 문서에 써야 한다.
 
 ## mermaid 작성 규칙
 
@@ -235,6 +284,25 @@ export const SupplementCostItem = z.strictObject({
 `cf-src` 배지 텍스트는 셋 중 하나다 — `근거`(diff·커밋·주석에 원문이 있을 때, 뒤에 인용),
 `추론`(코드에서 추론될 때, 뒤에 추론 근거), `Unknown / not supplied`(도달 근거 없음, 열린
 질문으로 남긴다). 이 출처 태그가 왜 필드에 없으면 R3가 거부한다.
+
+### `arch-entity` — 아키텍처 노드·동작단위 하나의 구조 카드
+
+컴포넌트 레벨의 노드(R18)와 경계 블록의 동작 단위(R15)가 함께 쓰는 단일 컴포넌트다. `cf`와 같은
+`<p><strong>라벨</strong> 값>` 필드 규칙에, 변경종류를 `data-change` 속성으로 실어 배지를 붙인다 —
+배지 텍스트·색은 render.ts가 소유하므로 저자는 종류(`new`·`mod`·`del`)만 준다. 어느 라벨이 필수인지는
+섹션마다 다르다(컴포넌트: `레이어`·`책임`·`인터페이스` / 경계: `한 일`·`영향 인터페이스`).
+
+```html
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>
+<p><strong>레이어</strong> commerce/entities/supplement/api</p>
+<p><strong>책임</strong> fail-closed 해소기를 카드에 공급</p>
+<p><strong>인터페이스</strong> <code>{ resolveAlias, resolveDisplay, areCatalogsSettled }</code></p>
+</div>
+```
+
+`data-change` 는 `new`(신설)·`mod`(변경)·`del`(삭제) 셋 중 하나. 산출물에 색·style을 직접 쓰지
+않는다(R11) — 종류만 주면 render.ts가 색을 붙인다.
 
 ### `flow` / `flow-step` / `flow-arrow` — 1차원 단계 스트립
 

@@ -164,8 +164,16 @@ describe("컴포넌트 CSS — 렌더러가 시각 언어를 소유한다", () =
 	const html = renderToHtml(DOC, "제목");
 
 	test("승인된 컴포넌트 클래스의 CSS 가 내장돼 있다", () => {
-		for (const cls of [".flow", ".flow-step", ".flow-arrow", ".compare", ".callout", ".doc-meta", ".cf", ".cf-src", ".cf-loc"]) {
+		for (const cls of [".flow", ".flow-step", ".flow-arrow", ".compare", ".callout", ".doc-meta", ".cf", ".cf-src", ".cf-loc", ".arch-entity"]) {
 			expect(html).toContain(cls);
+		}
+	});
+
+	test("arch-entity 변경종류 배지가 세 종류(신설/변경/삭제)의 색을 CSS 로 갖는다", () => {
+		// 컴포넌트/경계 블록의 arch-entity 는 data-change 로 변경종류를 나르고,
+		// 렌더러가 배지 텍스트와 색을 붙인다 — 저자는 문서에 색을 발명하지 않는다.
+		for (const kind of ["new", "mod", "del"]) {
+			expect(html).toContain(`.arch-entity[data-change="${kind}"]`);
 		}
 	});
 

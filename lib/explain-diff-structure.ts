@@ -1,5 +1,5 @@
 /**
- * explain-diff structural checks — rubric items R1..R5, R9..R11, R13..R16.
+ * explain-diff structural checks — rubric items R1..R5, R9..R11, R13..R19.
  *
  * These are the half of the rubric a script can decide, and the split is
  * deliberate (see skills/explain-diff/references/rubric.md): absence is
@@ -42,7 +42,22 @@ export interface StructureInput {
 }
 
 export interface CheckItem {
-	id: "R1" | "R2" | "R3" | "R4" | "R5" | "R9" | "R10" | "R11" | "R13" | "R14" | "R15" | "R16";
+	id:
+		| "R1"
+		| "R2"
+		| "R3"
+		| "R4"
+		| "R5"
+		| "R9"
+		| "R10"
+		| "R11"
+		| "R13"
+		| "R14"
+		| "R15"
+		| "R16"
+		| "R17"
+		| "R18"
+		| "R19";
 	title: string;
 	pass: boolean;
 	detail: string;
@@ -409,38 +424,144 @@ function checkR14(text: string): CheckItem {
 
 /**
  * The boundary / dependency / use-case block the Architecture section must carry
- * (R15). Three distinctive markers, mirroring R14's three-axis approach: the
- * collaborator column of the definition table (naming the parts by their
- * boundary), the affected/modified marker, and the dependency-direction verdict.
- * Vocabulary is delegated to the architecture-boundaries rule; the gate only
- * forces the slots present, not their content — the measured baseline drew the
- * dependency picture reliably but never defined the domains/use-cases as named
- * parts, never marked affected vs modified, and stated the direction change only
- * as prose, never as a unidirectional-invariant verdict.
+ * (R15, v5 rewrite). The baseline that forced the rewrite: the earlier static
+ * classification table (파트/레이어/협력자/영향·수정) miscategorised parts that are
+ * neither a clean vertical domain nor a horizontal use-case, and answered "what
+ * exists" instead of "what this diff did to the boundary". The block is now a
+ * change map: each behaviour unit is an `arch-entity` carrying its change kind
+ * (`data-change`) and the interface it affects (`영향 인터페이스`), closed by a
+ * one-line dependency-direction verdict (`의존 방향`). The gate forces the slots
+ * present; what each says is the author's to fill.
  */
-const BOUNDARY_MARKERS = ["협력자", "영향/수정", "의존 방향"] as const;
+const BOUNDARY_MARKERS = ["영향 인터페이스", "의존 방향"] as const;
 
-// R15 — the boundary / dependency / use-case block, read on the Architecture
-// section with fences masked (the template ships an example block inside a fence,
-// which must not satisfy the gate — same masking discipline as R14).
+// R15 — the boundary / dependency / use-case change map, read on the
+// `### 경계·의존·유스케이스` sub-slice with fences masked (an example block inside a
+// fence must not satisfy the gate — same masking discipline as R14).
 function checkR15(text: string): CheckItem {
-	const slice = sectionSlice(maskFenced(text), "Architecture");
+	const slice = levelSlice(maskFenced(text), "경계·의존·유스케이스");
 	if (slice === null) {
 		return {
 			id: "R15",
 			title: "R15 경계·의존·유스케이스 블록",
 			pass: false,
-			detail: "## Architecture 섹션이 없습니다",
+			detail: "경계·의존·유스케이스 헤딩(### 경계·의존·유스케이스)이 없습니다",
 		};
 	}
-	const missing = BOUNDARY_MARKERS.filter((label) => !slice.includes(label));
+	const missing: string[] = BOUNDARY_MARKERS.filter((label) => !slice.includes(label));
+	// The change kind of each behaviour unit rides on the arch-entity's
+	// data-change attribute — a boundary block with no unit carrying it is a
+	// static list again, not the change map R15 requires.
+	if (!slice.includes("data-change")) missing.push("변경종류(data-change)");
 	return {
 		id: "R15",
 		title: "R15 경계·의존·유스케이스 블록",
 		pass: missing.length === 0,
 		detail:
 			missing.length > 0
-				? `경계·의존·유스케이스 블록에 없는 슬롯: ${missing.join(", ")} — 도메인/유스케이스를 협력자와 함께 정의하고, 영향/수정을 표시하고, 의존 방향을 판정한다 (architecture-boundaries rule 참조)`
+				? `경계·의존·유스케이스 블록에 없는 슬롯: ${missing.join(", ")} — 동작 단위마다 변경종류(arch-entity data-change)와 영향 인터페이스를 적고, 의존 방향을 판정한다 (architecture-boundaries rule 참조)`
+				: "",
+	};
+}
+
+/** The column labels the 시스템 레벨 standing-interface table must carry (R17). */
+const STANDING_INTERFACE_MARKERS = ["경계", "인터페이스", "오가는 것"] as const;
+
+// R17 — the system level, beyond the change-contract table (R14), carries a
+// standing-interface table so the diagram's short-protocol edges become legible:
+// which boundary talks over which endpoint/query/screen-URL, and what flows.
+// Read on the 시스템 레벨 slice with fences masked, same discipline as R14.
+function checkR17(text: string): CheckItem {
+	const slice = levelSlice(maskFenced(text), "시스템 레벨");
+	if (slice === null) {
+		return {
+			id: "R17",
+			title: "R17 시스템 레벨 상시 인터페이스 표",
+			pass: false,
+			detail: "시스템 레벨 헤딩(### 시스템 레벨)이 없습니다",
+		};
+	}
+	const missing = STANDING_INTERFACE_MARKERS.filter((label) => !slice.includes(label));
+	return {
+		id: "R17",
+		title: "R17 시스템 레벨 상시 인터페이스 표",
+		pass: missing.length === 0,
+		detail:
+			missing.length > 0
+				? `상시 인터페이스 표에 없는 열: ${missing.join(", ")} (경계 | 인터페이스 | 오가는 것 — 엔드포인트·쿼리·화면 URL을 담는다)`
+				: "",
+	};
+}
+
+/** The labels each 컴포넌트 레벨 arch-entity card must carry (R18). */
+const COMPONENT_CARD_MARKERS = ["레이어", "책임", "인터페이스"] as const;
+
+// R18 — the component level, beyond the dependency graph (R9/R12), decodes each
+// changed behaviour node with an arch-entity card: its layer, responsibility,
+// and interface (functions), plus a change kind. Measured gap: the component
+// diagram was bare class names — `CurrentBoostPackInfoCard` alone read as opaque.
+function checkR18(text: string): CheckItem {
+	const slice = levelSlice(maskFenced(text), "컴포넌트 레벨");
+	if (slice === null) {
+		return {
+			id: "R18",
+			title: "R18 컴포넌트 레벨 노드 카드",
+			pass: false,
+			detail: "컴포넌트 레벨 헤딩(### 컴포넌트 레벨)이 없습니다",
+		};
+	}
+	const missing: string[] = COMPONENT_CARD_MARKERS.filter((label) => !slice.includes(label));
+	if (!slice.includes("arch-entity")) missing.push("arch-entity 카드");
+	if (!slice.includes("data-change")) missing.push("변경종류(data-change)");
+	return {
+		id: "R18",
+		title: "R18 컴포넌트 레벨 노드 카드",
+		pass: missing.length === 0,
+		detail:
+			missing.length > 0
+				? `컴포넌트 노드 카드에 없는 슬롯: ${missing.join(", ")} — 변경 노드마다 arch-entity로 레이어·책임·인터페이스·변경종류를 적는다`
+				: "",
+	};
+}
+
+/**
+ * Methodology proper names R19 forbids in the rendered Architecture prose. The
+ * boundary vocabulary follows the architecture-boundaries rule, but the OUTPUT
+ * must speak the codebase's own domain terms — a reader learns the change, not a
+ * framework. The plain word `유스케이스`/`도메인` is legitimate (the block heading
+ * uses it); only the framework names below leak methodology and are banned.
+ */
+const METHODOLOGY_TOKENS = [
+	"FSD",
+	"Feature-Sliced",
+	"Clean Architecture",
+	"Clean-arch",
+	"DDD",
+	"Domain-Driven",
+	"bounded context",
+] as const;
+
+// R19 — no methodology name leaks into the Architecture prose. Read on the
+// fence-masked Architecture section (a token inside a code example is not prose).
+function checkR19(text: string): CheckItem {
+	const slice = sectionSlice(maskFenced(text), "Architecture");
+	if (slice === null) {
+		return {
+			id: "R19",
+			title: "R19 방법론 명칭 비노출",
+			pass: false,
+			detail: "## Architecture 섹션이 없습니다",
+		};
+	}
+	const lower = slice.toLowerCase();
+	const found = METHODOLOGY_TOKENS.filter((t) => lower.includes(t.toLowerCase()));
+	return {
+		id: "R19",
+		title: "R19 방법론 명칭 비노출",
+		pass: found.length === 0,
+		detail:
+			found.length > 0
+				? `Architecture 산문에 방법론 명칭이 노출됨: ${found.join(", ")} — 코드베이스 실제 도메인 어휘로 바꾼다`
 				: "",
 	};
 }
@@ -545,6 +666,7 @@ const SANCTIONED_CLASSES = new Set([
 	"cf",
 	"cf-src",
 	"cf-loc",
+	"arch-entity",
 ]);
 
 // R11 — the document authors content, the renderer owns presentation.
@@ -589,6 +711,9 @@ export function checkStructure(text: string, input: StructureInput): StructureRe
 			items.push(checkR9(text));
 			items.push(checkR14(text));
 			items.push(checkR15(text));
+			items.push(checkR17(text));
+			items.push(checkR18(text));
+			items.push(checkR19(text));
 			break;
 		case "intuition":
 			// No slot of its own — R6 (the judge) is its rubric coverage; the

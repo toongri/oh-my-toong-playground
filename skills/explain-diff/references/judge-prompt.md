@@ -27,9 +27,13 @@ R12 — the architecture diagram's correspondence to the diff (only when the ste
   any diff, so it fails. For the 시스템 레벨 specifically: its nodes must be DISTINCT
   processes, services, deployables, or stores. An in-process call chain — functions or modules
   inside a single runtime (e.g. test -> helper -> tool) — drawn as the system level is
-  mislabeled and fails; that structure belongs to the component/domain level. In the pass
-  case put into quote the diagram's label string, the body sentence where the same identifier
-  appears, and the phrase that evidences the change marker, together.
+  mislabeled and fails; that structure belongs to the component/domain level. The system
+  diagram must also be COMPLETE: every distinct process, service, or store the Evidence or
+  Background prose names as involved in this change must appear as a node. If the prose names a
+  process the diagram omits (e.g. a separate Python API or a CLI the prose references but the
+  diagram leaves out), that is a fail — quote the prose sentence naming the omitted process. In
+  the pass case put into quote the diagram's label string, the body sentence where the same
+  identifier appears, and the phrase that evidences the change marker, together.
   If there is no diagram at all and all three levels have a reasoned
   `구조 변화 없음: <사유 한 문장>` waiver, R12 is a pass. In this all-waiver branch, quote must
   contain all three waiver sentences — 시스템 레벨, 컴포넌트 레벨, 도메인 레벨 — as strings copied
