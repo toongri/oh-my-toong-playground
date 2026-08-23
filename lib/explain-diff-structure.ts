@@ -22,6 +22,19 @@
 
 import type { Step } from "@lib/explain-diff-core";
 
+/** A Git hunk's line range: `start` is the first line and `count` its length. */
+export interface DiffLineRange {
+	start: number;
+	count: number;
+}
+
+/** One unified-diff hunk; a null side means that side has no file lines. */
+export interface DiffHunk {
+	path: string;
+	base: DiffLineRange | null;
+	head: DiffLineRange | null;
+}
+
 export interface StructureInput {
 	/** Changed files classified as signal — every one must appear exactly once. */
 	signalFiles: string[];
@@ -31,6 +44,8 @@ export interface StructureInput {
 	 * rather than from a phrase in the document.
 	 */
 	addedFiles?: string[];
+	/** Unified diff hunks used to verify numeric R5 anchors when available. */
+	diffHunks?: DiffHunk[];
 	/**
 	 * Short (or full) hashes of the commits in the explained range, oldest
 	 * first, as captured at `start`. Empty means enumeration failed — R10 then
@@ -322,43 +337,109 @@ function checkR16(text: string): CheckItem {
 
 // R5 — both endpoints of the move (base:/head: anchors). An ADDED file is asked
 // for the head anchor alone. Read on the code-stripped body; the template places
-// these in the cf-loc slot, but the check only asks that the anchors be present —
-// the author fills where and how precisely they point.
-function checkR5(blocks: Array<{ path: string; body: string }>, addedFiles: string[] | undefined): CheckItem {
+// these in the cf-loc slot. Without hunk metadata the check only asks that the
+// anchors be present; with metadata it also checks numeric anchors against ranges.
+function checkR5(
+	blocks: Array<{ path: string; body: string }>,
+	addedFiles: string[] | undefined,
+	diffHunks: DiffHunk[] | undefined,
+): CheckItem {
 	const addedSet = new Set(addedFiles ?? []);
-	const noAnchor = blocks
-		.filter((b) => {
-			const body = withoutFencedCode(b.body);
-			const head = /head:\S/.test(body);
-			if (addedSet.has(b.path)) return !head;
-			return !(head && /base:\S/.test(body));
-		})
-		.map((b) => b.path);
-	// A modified file whose base AND head anchors both point at line 1 is a
-	// placeholder, not a real hunk location — measured (luna max) as the way a
-	// model skips computing the anchor while still passing the presence check
-	// above. New files carry `base:새 파일` (no numeric base) and never trip this.
-	const placeholder = blocks
-		.filter((b) => {
-			if (addedSet.has(b.path)) return false;
-			const body = withoutFencedCode(b.body);
-			const base = body.match(/base:[^\s<]*:(\d+)/);
-			const head = body.match(/head:[^\s<]*:(\d+)/);
-			return base !== null && head !== null && base[1] === "1" && head[1] === "1";
-		})
-		.map((b) => b.path);
+	const hasDiffHunks = (diffHunks?.length ?? 0) > 0;
+	if (!hasDiffHunks) {
+		const noAnchor = blocks
+			.filter((b) => {
+				const body = withoutFencedCode(b.body);
+				const head = /head:\S/.test(body);
+				if (addedSet.has(b.path)) return !head;
+				return !(head && /base:\S/.test(body));
+			})
+			.map((b) => b.path);
+		// A modified file whose base AND head anchors both point at line 1 is a
+		// placeholder, not a real hunk location — measured (luna max) as the way a
+		// model skips computing the anchor while still passing the presence check
+		// above. New files carry `base:새 파일` (no numeric base) and never trip this.
+		const placeholder = blocks
+			.filter((b) => {
+				if (addedSet.has(b.path)) return false;
+				const body = withoutFencedCode(b.body);
+				const base = body.match(/base:[^\s<]*:(\d+)/);
+				const head = body.match(/head:[^\s<]*:(\d+)/);
+				return base !== null && head !== null && base[1] === "1" && head[1] === "1";
+			})
+			.map((b) => b.path);
+		return {
+			id: "R5",
+			title: "R5 추적성",
+			pass: blocks.length > 0 && noAnchor.length === 0 && placeholder.length === 0,
+			detail:
+				blocks.length === 0
+					? "파일 블록이 하나도 없습니다."
+					: noAnchor.length > 0
+						? `base/head 위치가 모두 있지 않은 파일: ${noAnchor.join(", ")}`
+						: placeholder.length > 0
+							? `cf-loc가 실제 변경 위치가 아니라 :1 → :1 플레이스홀더인 파일: ${placeholder.join(", ")} — git으로 변경 hunk의 base/head 라인을 확인해 적는다`
+							: "",
+		};
+	}
+
+	const hunksByPath = new Map<string, DiffHunk[]>();
+	for (const hunk of diffHunks ?? []) {
+		const hunks = hunksByPath.get(hunk.path) ?? [];
+		hunks.push(hunk);
+		hunksByPath.set(hunk.path, hunks);
+	}
+	const missingHunk = blocks.filter((b) => !hunksByPath.has(b.path)).map((b) => b.path);
+	const missingAnchor: string[] = [];
+	const outsideHunk: string[] = [];
+	for (const block of blocks) {
+		const hunks = hunksByPath.get(block.path);
+		if (hunks === undefined) continue;
+		const body = withoutFencedCode(block.body);
+		const base = body.match(/base:[^\s<]*:(\d+)/);
+		const head = body.match(/head:[^\s<]*:(\d+)/);
+		const needsBase = !addedSet.has(block.path) && hunks.some((hunk) => hunk.base !== null);
+		const needsHead = hunks.some((hunk) => hunk.head !== null);
+
+		if (needsBase && base === null) missingAnchor.push(`${block.path} (base)`);
+		if (needsHead && head === null) missingAnchor.push(`${block.path} (head)`);
+		if (
+			needsBase &&
+			base !== null &&
+			!hunks.some(
+				(hunk) =>
+					hunk.base !== null &&
+					Number(base[1]) >= hunk.base.start &&
+					Number(base[1]) < hunk.base.start + hunk.base.count,
+			)
+		)
+			outsideHunk.push(`${block.path} (base:${base?.[1]})`);
+		if (
+			needsHead &&
+			head !== null &&
+			!hunks.some(
+				(hunk) =>
+					hunk.head !== null &&
+					Number(head[1]) >= hunk.head.start &&
+					Number(head[1]) < hunk.head.start + hunk.head.count,
+			)
+		)
+			outsideHunk.push(`${block.path} (head:${head?.[1]})`);
+	}
 	return {
 		id: "R5",
 		title: "R5 추적성",
-		pass: blocks.length > 0 && noAnchor.length === 0 && placeholder.length === 0,
+		pass: blocks.length > 0 && missingHunk.length === 0 && missingAnchor.length === 0 && outsideHunk.length === 0,
 		detail:
 			blocks.length === 0
 				? "파일 블록이 하나도 없습니다."
-				: noAnchor.length > 0
-					? `base/head 위치가 모두 있지 않은 파일: ${noAnchor.join(", ")}`
-					: placeholder.length > 0
-						? `cf-loc가 실제 변경 위치가 아니라 :1 → :1 플레이스홀더인 파일: ${placeholder.join(", ")} — git으로 변경 hunk의 base/head 라인을 확인해 적는다`
-						: "",
+				: missingHunk.length > 0
+					? `diff hunk 메타데이터가 없는 파일: ${missingHunk.join(", ")}`
+					: missingAnchor.length > 0
+						? `실제 diff hunk의 숫자 위치가 없는 파일: ${missingAnchor.join(", ")}`
+						: outsideHunk.length > 0
+							? `실제 diff hunk 범위 밖의 앵커: ${outsideHunk.join(", ")}`
+							: "",
 	};
 }
 
@@ -795,7 +876,7 @@ export function checkStructure(text: string, input: StructureInput): StructureRe
 		case "code":
 			items.push(checkR2(text));
 			items.push(checkR3(blocks));
-			items.push(checkR5(blocks, input.addedFiles));
+			items.push(checkR5(blocks, input.addedFiles, input.diffHunks));
 			items.push(checkR1Coverage(blocks, input.signalFiles));
 			items.push(checkR13(text, blocks, input.commitHashes));
 			break;

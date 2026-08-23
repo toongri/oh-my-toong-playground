@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { checkStructure } from "./explain-diff-structure";
+import { checkStructure, type DiffHunk } from "./explain-diff-structure";
 
 // v4 계약: 코드 섹션의 뼈대는 커밋이다. Change Group(관심사) 안에서 커밋 단위로
 // 내려가고(### `hash` — 제목), 커밋 아래 파일 블록(#### `file`)이 cf 컴포넌트로
@@ -326,6 +326,129 @@ export function withLock() {}
 		const item = r.items.find((i) => i.id === "R5");
 		expect(item?.pass).toBe(false);
 		expect(item?.detail).toContain("lib/state-lock.ts");
+	});
+
+	test("실제 hunk가 양쪽 모두 1행에서 시작하면 :1 → :1을 R5가 허용한다", () => {
+		const body = GOOD_GROUP.replace(
+			"base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14",
+			"base:lib/state-lock.ts:1</code> → <code>head:lib/state-lock.ts:1",
+		);
+		const diffHunks: DiffHunk[] = [
+			{
+				path: "lib/state-lock.ts",
+				base: { start: 1, count: 4 },
+				head: { start: 1, count: 5 },
+			},
+		];
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			diffHunks,
+		});
+		const item = r.items.find((i) => i.id === "R5");
+		expect(item?.pass).toBe(true);
+	});
+
+	test("메타데이터의 hunk가 다른 위치면 :1 → :1을 여전히 거부한다", () => {
+		const body = GOOD_GROUP.replace(
+			"base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14",
+			"base:lib/state-lock.ts:1</code> → <code>head:lib/state-lock.ts:1",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			diffHunks: [
+				{
+					path: "lib/state-lock.ts",
+					base: { start: 20, count: 4 },
+					head: { start: 20, count: 5 },
+				},
+			],
+		});
+		const item = r.items.find((i) => i.id === "R5");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("lib/state-lock.ts");
+	});
+
+	test("숫자 앵커가 보고된 hunk 범위를 벗어나면 R5가 실패한다", () => {
+		const body = GOOD_GROUP.replace(
+			"base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14",
+			"base:lib/state-lock.ts:25</code> → <code>head:lib/state-lock.ts:35",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			diffHunks: [
+				{
+					path: "lib/state-lock.ts",
+					base: { start: 20, count: 4 },
+					head: { start: 30, count: 5 },
+				},
+			],
+		});
+		const item = r.items.find((i) => i.id === "R5");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("hunk");
+	});
+
+	test("메타데이터에서 base가 없는 신규 파일은 head hunk만 검증한다", () => {
+		const added = `## Change Group 1: 락을 도입한다
+> 예고: 락이 무엇을 막는지 본다.
+> 순서: 락이 없으면 나머지가 성립하지 않는다.
+
+### \`ab12cd3\` — feat: 락 도입
+동시 작성자 두 명을 막는 락을 새로 넣는다.
+
+#### \`lib/state-lock.ts\`
+<div class="cf">
+<p><strong>역할/변경 전</strong> — 이 파일은 새로 생겼다</p>
+<p><strong>바뀐 것</strong> — 락 획득/해제를 새로 넣었다</p>
+<p><strong>왜</strong> — <span class="cf-src">근거</span> "동시 작성자 두 명"</p>
+<p><strong>효과</strong> — 두 CLI가 같은 락을 쓴다</p>
+<p class="cf-loc"><code>base:신규 파일</code> → <code>head:lib/state-lock.ts:15</code></p>
+</div>
+
+\`\`\`ts
+export function withLock() {}
+\`\`\`
+`;
+		const r = checkStructure(withBackground(added), {
+			signalFiles: ["lib/state-lock.ts"],
+			addedFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			diffHunks: [
+				{
+					path: "lib/state-lock.ts",
+					base: null,
+					head: { start: 15, count: 1 },
+				},
+			],
+		});
+		expect(r.items.find((i) => i.id === "R5")?.pass).toBe(true);
+	});
+
+	test("삭제 파일은 null head side에 대해 base hunk만 검증한다", () => {
+		const body = GOOD_GROUP.replace(
+			"base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14",
+			"base:lib/state-lock.ts:1</code> → <code>head:삭제됨",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			diffHunks: [
+				{
+					path: "lib/state-lock.ts",
+					base: { start: 1, count: 4 },
+					head: null,
+				},
+			],
+		});
+		expect(r.items.find((i) => i.id === "R5")?.pass).toBe(true);
 	});
 
 	test("실제 라인 번호를 가리키는 cf-loc는 R5를 통과한다", () => {
