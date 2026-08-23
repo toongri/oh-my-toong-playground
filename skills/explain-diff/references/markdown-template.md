@@ -132,24 +132,25 @@ R14를 통과한다.
 R17 = 지금 소통하는 상시 인터페이스**. 순서는 다이어그램 → 상시 인터페이스 표 → 변경 계약 표
 (맥락 먼저, 델타 나중).
 
-```markdown
 | 경계 | 인터페이스 | 오가는 것 |
 |---|---|---|
 | browser → Hono backend | `GET /v1/supplement-catalog?includeDeletedCategories=true` | 표시 카탈로그 |
 | Next.js BFF → Python health API | health-profile REST | 부스트팩 원본 |
 | backend → PostgreSQL | `supplement_categories` 조회(활성/전체) | 카탈로그 행 |
-```
 
-세 열 라벨(`경계`·`인터페이스`·`오가는 것`)이 시스템 레벨 안에 모두 있어야 R17을 통과한다.
-무엇을 적는지는 저자의 몫 — 게이트는 세 열 라벨의 존재만 본다.
+이 표는 **실제로 렌더되는 Markdown 표**여야 한다. 헤더와 separator row는 정확히 세 열
+`경계`·`인터페이스`·`오가는 것`이어야 하며, 산문으로 열 이름만 쓰거나 펜스 안 예시로
+대체하면 R17을 통과하지 못한다. 무엇을 적는지는 저자의 몫이다.
 
 ### 컴포넌트 레벨 — 노드 카드 (R18 필수)
 
 의존 그래프(mermaid)는 "무엇이 무엇에 연결되나"를 그리지만, 노드 이름만으로는
-`CurrentBoostPackInfoCard` 가 무엇을 하는지 읽히지 않는다. 그래서 **변경된 행위 노드마다**
-`arch-entity` 카드로 그 노드의 **레이어·책임·인터페이스(함수)**를 해독하고, 변경종류를 배지로
-단다. 순수 데이터/계약 타입 노드는 다이어그램에만 남기고 카드는 생략한다(행위·책임을 지는
-노드만 카드를 받는다).
+`CurrentBoostPackInfoCard` 가 무엇을 하는지 읽히지 않는다. 컴포넌트 구조가 정말 바뀌지
+않는다면 그 이유를 담은 `구조 변화 없음: <사유>` waiver로 R18을 충족할 수 있다. 그 외에는
+변경 행위 노드를 renderer-recognized `arch-entity` 카드로 해독하고, 카드에 **레이어·책임·인터페이스(함수)**
+필드와 `data-change="new|mod|del"` 를 둔다. 순수 데이터/계약 타입만 바뀌었다는 이유로 카드를
+그냥 생략할 수는 없으며, 카드가 필요 없는 구조라면 reasoned waiver를 명시해야 한다. 산문만으로
+카드를 설명하거나 허용되지 않은 `data-change` 값을 쓰면 R18에 포함되지 않는다.
 
 ```markdown
 <div class="arch-entity" data-change="new">
@@ -160,8 +161,9 @@ R17 = 지금 소통하는 상시 인터페이스**. 순서는 다이어그램 �
 </div>
 ```
 
-`레이어`·`책임`·`인터페이스` 라벨과 `arch-entity`·`data-change` 가 컴포넌트 레벨 안에 있어야
-R18을 통과한다. 변경종류는 `data-change="new|mod|del"` 로 나르고 배지 색은 render.ts가 붙인다.
+`레이어`·`책임`·`인터페이스` 라벨과 renderer-recognized `arch-entity`·`data-change` 카드가
+컴포넌트 레벨 안에 있어야 R18을 통과한다(단, reasoned waiver는 카드 대신 허용된다).
+변경종류는 `data-change="new|mod|del"` 로 나르고 배지 색은 render.ts가 붙인다.
 
 ## 경계·의존·유스케이스 블록 (R15 필수)
 
@@ -178,6 +180,10 @@ R18을 통과한다. 변경종류는 `data-change="new|mod|del"` 로 나르고 �
   이름으로 적는다(부품을 수평/수직 격자에 분류하는 게 아니라). R19가 명칭과 축 라벨을 모두 검사한다.
 - **의존 방향 판정** — 의존이 어느 방향으로 흐르는지, 이 변경이 단방향을 유지·위반·복원하는지
   한 줄로 판정한다. reach-in·역참조·순환은 결합 결함으로 플래그한다. `의존 방향` 라벨이 있어야 한다.
+
+R19는 렌더되는 `## Architecture` 산문만 검사한다. fenced block과 inline-code 예시는 무시하고,
+방법론·축 토큰이 식별자 안에 묻힌 경우가 아닌 **standalone token**일 때만 거부한다(영문 방법론
+토큰은 대소문자를 구분하지 않는다).
 
 ```markdown
 ### 경계·의존·유스케이스
@@ -200,9 +206,11 @@ R18을 통과한다. 변경종류는 `data-change="new|mod|del"` 로 나르고 �
 commerce가 catalog 내부 테이블을 직접 조회하지 않고 계약 뒤에 머문다 — 새 순환·경계 침투 없음.
 ```
 
-R15는 `영향 인터페이스`·`의존 방향` 라벨과 동작 단위의 `data-change` 의 **존재**만 기계로 검사한다
-(R14와 같은 철학) — 각 칸이 말하는 내용은 저자가 채운다. 펜스 안 예시는 마스킹되므로 위 예시를
-그대로 두는 것으로는 통과하지 못한다 — 실제 변경 내용으로 블록을 문서에 써야 한다.
+R15는 펜스를 마스킹한 실제 블록에서 `영향 인터페이스`·`의존 방향` 슬롯과 허용된
+`data-change="new|mod|del"` 를 가진 renderer-recognized `arch-entity`의 **존재**를 검사한다
+(R14와 같은 철학) — 각 칸이 말하는 내용은 저자가 채운다. 산문 속 `data-change` 언급이나
+허용되지 않은 값은 카드로 세지 않는다. 펜스 안 예시는 마스킹되므로 위 예시를 그대로 두는
+것으로는 통과하지 못한다 — 실제 변경 내용으로 블록을 문서에 써야 한다.
 
 ## mermaid 작성 규칙
 
@@ -272,9 +280,12 @@ export const SupplementCostItem = z.strictObject({
 산문 밖에 둔다. 필드 라벨은 `<strong>` 으로 쓴다 — 마크다운 `**…**` 는 div 안에서
 살지 않는다.
 
-`cf-loc`의 `base:`·`head:` 라인 번호는 **git으로 실제 변경 hunk의 위치를 확인해 적는다**
-(`git diff base..head -- <file>` 의 hunk 헤더). `base:…:1 → head:…:1` 같은 플레이스홀더는
-추적성이 없어 R5가 거부한다. 신규 파일만 `base:새 파일`로 두고 `head:` 라인만 적는다.
+`start`가 unified diff hunk 메타데이터를 저장하고, `code` 제출 때 `cf-loc`의 숫자
+`base:`·`head:` 라인 번호를 그 hunk의 base/head 범위와 대조한다. 따라서 실제 첫 줄 hunk라면
+`base:…:1 → head:…:1`도 유효하다. hunk 메타데이터가 없을 때는 legacy fallback이 수정 파일의
+`:1 → :1` 플레이스홀더를 계속 거부한다. 메타데이터가 있는 경우 신규 파일은 `head:`만, 삭제
+파일은 `base:`만 필요하고, zero-count side에는 파일 줄이 없으므로 그쪽 앵커도 없다. 위치는
+`git diff base..head -- <file>`의 hunk 헤더에서 확인한다.
 
 ```html
 <div class="cf">
@@ -306,8 +317,9 @@ export const SupplementCostItem = z.strictObject({
 </div>
 ```
 
-`data-change` 는 `new`(신설)·`mod`(변경)·`del`(삭제) 셋 중 하나. 산출물에 색·style을 직접 쓰지
-않는다(R11) — 종류만 주면 render.ts가 색을 붙인다.
+`data-change` 는 `new`(신설)·`mod`(변경)·`del`(삭제) 셋 중 하나다. renderer-recognized
+`arch-entity` opening tag가 이 허용값을 가져야 R15/R18의 카드로 인정된다. 산출물에 색·style을
+직접 쓰지 않는다(R11) — 종류만 주면 render.ts가 색을 붙인다.
 
 ### `flow` / `flow-step` / `flow-arrow` — 1차원 단계 스트립
 

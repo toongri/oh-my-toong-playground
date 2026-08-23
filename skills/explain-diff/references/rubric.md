@@ -91,8 +91,14 @@ Both a deep background and a narrow background are present, and the deep backgro
 
 ### R5. Traceability
 
-Each file block points at the before-location and after-location in the `cf-loc` slot in the form `base:file:line` → `head:file:line` — the location anchors are pulled out of the prose. The gate asks that both `base:` and `head:` anchors be present (an added file needs only `head:`) AND that a modified file's anchors are not the placeholder `base:…:1 → head:…:1` — both lines being `1` points nowhere, so read the real hunk lines from `git diff base..head -- <file>`. The deletion/new-file wording beyond that is the author's to fill.
-But a file the diff **newly added** has no prior location to point at, so only the `head:` anchor is required. New-ness comes from `A` in `git diff --name-status`, not from the document's narrative — deciding by sentence would let an author be exempted from the base anchor merely by writing "new file".
+At `start`, the CLI captures unified-diff hunk metadata. At the `code` submission, numeric
+`base:`/`head:` anchors in each `cf-loc` slot are checked against the captured base/head hunk
+ranges. A legitimate first-line hunk may therefore use `base:…:1 → head:…:1`. If hunk metadata
+is unavailable, the legacy fallback still rejects a modified file whose numeric anchors are the
+`:1 → :1` placeholder. With metadata, an added file needs only `head:`, a deleted file needs only
+`base:`, and a zero-count side has no file lines and needs no anchor. New-ness comes from `A` in
+`git diff --name-status`, not from the document's narrative; a zero-count side comes from the hunk
+header, not from a prose claim.
 
 > **RED 10/16.** 6 have not a single `file:line`. In particular 3 codex no-guidance and 2 claude gist are at
 > zero — independent of document length (even a 50KB document has zeros).
@@ -147,7 +153,7 @@ The code section is organized with the commit as its spine. Each Change Group ha
 
 ### R15. Boundary / dependency / use-case change map
 
-The Architecture section closes with a `### 경계·의존·유스케이스` block that is a **change map**, not a static layer-classification table. Read on the `### 경계·의존·유스케이스` sub-slice with fences masked, three markers must be present: `영향 인터페이스` (each behaviour unit names the interface it affected), `의존 방향` (the unidirectional-dependency verdict), and a unit-level `data-change` (the change kind on the `arch-entity` units). What each says is the author's to fill; the gate forces the slots present. The vocabulary follows the `architecture-boundaries` rule but the output speaks the codebase's own terms (enforced by R19).
+The Architecture section closes with a `### 경계·의존·유스케이스` block that is a **change map**, not a static layer-classification table. Read on the `### 경계·의존·유스케이스` sub-slice with fences masked. The rendered block must contain a renderer-recognized `arch-entity` opening tag whose `data-change` is one of `new`, `mod`, or `del`, plus the `영향 인터페이스` and `의존 방향` slots. Prose-only mentions of `data-change`, or unsupported values, do not count. What each slot says is the author's to fill. The vocabulary follows the `architecture-boundaries` rule but the output speaks the codebase's own terms (enforced by R19).
 
 > **RED — the v4 static table.** The earlier R15 forced a `파트/레이어/협력자/영향·수정` classification table
 > with a binary `수직 도메인 / 수평 유스케이스` layer choice. On an FSD codebase this miscategorised parts that
@@ -159,7 +165,18 @@ The Architecture section closes with a `### 경계·의존·유스케이스` blo
 
 ### R17. System-level standing-interface table
 
-The 시스템 레벨, beyond the R14 change-contract table, carries a standing-interface table naming which boundary communicates over which endpoint/query/screen-URL and what flows. Read on the 시스템 레벨 slice with fences masked, three column labels must be present: `경계`, `인터페이스`, `오가는 것`. This is distinct from R14 in layer — R14 enumerates what this diff *changes*, R17 the *standing* interface the diagram's short-protocol edges leave implicit. What each row says is the author's to fill.
+The 시스템 레벨, beyond the R14 change-contract table, carries a **real rendered Markdown table**
+naming which boundary communicates over which endpoint/query/screen-URL and what flows. Its header
+and separator row must have exactly these three columns:
+
+| 경계 | 인터페이스 | 오가는 것 |
+|---|---|---|
+
+Prose-only labels and a fenced example are not the table R17 requires. Read on the 시스템 레벨
+slice with fences masked; the executable checker requires this exact three-column header/separator
+shape. This is distinct from R14 in layer — R14 enumerates what this diff *changes*, R17 the
+*standing* interface the diagram's short-protocol edges leave implicit. What each row says is the
+author's to fill.
 
 > **RED — real artifact (`b2c-6105`).** The system diagram was `browser --> backend --> db` with every edge
 > unlabelled, and it *omitted* the Python health-profile API and the census→DB boundary that the prose itself
@@ -169,7 +186,12 @@ The 시스템 레벨, beyond the R14 change-contract table, carries a standing-i
 
 ### R18. Component-level node cards
 
-The 컴포넌트 레벨, beyond the dependency graph, decodes each changed behaviour node with an `arch-entity` card. Read on the 컴포넌트 레벨 slice with fences masked, the labels `레이어`, `책임`, `인터페이스` plus `arch-entity` and `data-change` must be present. Pure data/contract-type nodes stay diagram-only; only behaviour-bearing nodes get a card.
+The 컴포넌트 레벨 may use a reasoned `구조 변화 없음: <사유>` waiver when there is no component
+structure change. Otherwise, the slice must contain renderer-recognized `arch-entity` cards with
+the `레이어`, `책임`, and `인터페이스` fields and an allowed `data-change` value: `new`, `mod`, or
+`del`. Prose-only card descriptions and invalid `data-change` values do not count. Pure
+data/contract-only content cannot simply omit cards; it needs the reasoned waiver if no valid card
+is present.
 
 > **RED — real artifact (`b2c-6105`).** The component level was a bare chain of class/function names —
 > `CurrentBoostPackInfoCard`, `useBoostPackSupplementCatalogResolvers` — with no responsibility, interface, or
@@ -178,7 +200,16 @@ The 컴포넌트 레벨, beyond the dependency graph, decodes each changed behav
 
 ### R19. No methodology name or axis label in Architecture prose
 
-The Architecture section's prose speaks the codebase's own domain terms — no methodology proper name and no bare layer-axis label leaks in. Read on the fence-masked `## Architecture` section, none of these tokens may appear: methodology names (case-insensitive) `FSD`, `Feature-Sliced`, `Clean Architecture`, `Clean-arch`, `DDD`, `Domain-Driven`, `bounded context`; and axis labels `수평`, `수직`. The plain words `유스케이스`/`도메인` are legitimate (the block heading uses them); only framework names and the horizontal/vertical axis labels are banned. The boundary block names what this diff touched in the codebase's own terms, not by sorting parts into a `수평`/`수직` grid — the boundary vocabulary still follows the `architecture-boundaries` rule internally, but the *output* forbids naming the methodology or its axes.
+The Architecture section's **rendered prose** speaks the codebase's own domain terms — no methodology
+proper name and no bare layer-axis label leaks in. The checker masks fenced blocks and removes
+inline-code examples before scanning, then requires standalone token matches (methodology matching
+is case-insensitive). None of these standalone tokens may appear: methodology names `FSD`,
+`Feature-Sliced`, `Clean Architecture`, `Clean-arch`, `DDD`, `Domain-Driven`, `bounded context`; or
+axis labels `수평`, `수직`. The plain words `유스케이스`/`도메인` are legitimate (the block heading
+uses them); only framework names and the horizontal/vertical axis labels are banned. The boundary
+block names what this diff touched in the codebase's own terms, not by sorting parts into a
+`수평`/`수직` grid — the boundary vocabulary still follows the `architecture-boundaries` rule
+internally, but the *output* forbids naming the methodology or its axes.
 
 > **RED — interview requirement.** The user asked that the boundary block think in the two axes but never surface
 > the framework names in the output ("이게 프롬프트에 굳이 드러나진 않았으면 좋겠어"). A literal token scan is
