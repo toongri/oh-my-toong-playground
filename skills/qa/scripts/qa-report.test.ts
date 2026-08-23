@@ -142,6 +142,14 @@ describe("qa-report renderer", () => {
 		expect(html).toContain("curl status 200");
 	});
 
+	test("renders required evidence.path when supplementary slots are absent", () => {
+		const view = baseView();
+		view.cells![0].evidence = { path: "/evidence/required.log", surface: "agent-device" };
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const scenarioEvidence = html.slice(html.indexOf("Scenario Evidence"), html.indexOf("Failures &amp; Mismatches"));
+		expect(scenarioEvidence).toContain("contents of /evidence/required.log");
+	});
+
 	test("skips embedding and links by path when a file exceeds the embed size cap", () => {
 		const bigReader: EvidenceReader = (path) => ({ kind: "too-large", path, size: 5 * 1024 * 1024 });
 		const html = renderQaReport(baseView(), {}, bigReader)!;

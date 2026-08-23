@@ -194,11 +194,10 @@ function renderScenarioEvidence(view: QaView, narrative: QaReportNarrative, read
 			const key = cellKey(cell);
 			const scenarioNarrative = narrative.scenarios?.[key];
 			const evidence: QaEvidence | undefined = cell.evidence;
-			const slots = evidence
-				? [evidenceSlot("before", evidence.before, readEvidence), evidenceSlot("action", evidence.action, readEvidence), evidenceSlot("after", evidence.after, readEvidence)]
-						.filter(Boolean)
-						.join("")
-				: "";
+			const supplementarySlots = evidence
+				? [evidenceSlot("before", evidence.before, readEvidence), evidenceSlot("action", evidence.action, readEvidence), evidenceSlot("after", evidence.after, readEvidence)].filter(Boolean)
+				: [];
+			const slots = supplementarySlots.length ? supplementarySlots.join("") : evidence ? evidenceSlot("recorded", evidence.path, readEvidence) : "";
 			return (
 				`<div class="scenario"><h3>${escapeHtml(cell.story)} / ${escapeHtml(cellLabel(cell))} ` +
 				`<span class="badge">${escapeHtml(cell.priority ?? "")}</span> ` +
