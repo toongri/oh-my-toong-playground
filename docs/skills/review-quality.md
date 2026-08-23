@@ -140,7 +140,7 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 
 **증거**: 실행된 시나리오마다 액터 관점의 `before` / `action` / `after` 증거를 남깁니다 — 액터가 실제로 관찰하는 상태여야 하며, 앱 기동·스플래시·랜딩 화면 캡처는 시나리오 증거가 아닙니다. 서버 로그·DB 행 같은 내부 신호는 보조 증거일 뿐 대체물이 아닙니다.
 
-**HTML 리포트 사실성**: STATE 리포트는 `qa-state` 기록을 그대로 렌더합니다. `Failures & Mismatches`에는 FAIL 셀뿐 아니라 실패한 baseline과 stale-state·dirty-worktree·flaky-rerun 실행 단위 점검도 기록된 note와 함께 표시하며, waiver 대상은 `story/cls/sub`까지 식별합니다. 브라우저 도구 설치는 checked worktree 밖 ephemeral 디렉터리를 우선 사용하고, 대상 manifest·lockfile·`node_modules`를 CHECK 전에 복구·재검증합니다.
+**HTML 리포트 사실성**: STATE 리포트는 `qa-state` 기록을 그대로 렌더합니다. 보조 `before`·`action`·`after` 슬롯이 없는 하위 호환 레코드는 필수 `evidence.path`를 Scenario Evidence의 기록 증거 슬롯으로 표시하며, 새 `start`는 `acceptance_criteria`를 비워 이전 사이클 기준을 상속하지 않습니다. `Failures & Mismatches`에는 FAIL 셀뿐 아니라 실패한 baseline과 stale-state·dirty-worktree·flaky-rerun 실행 단위 점검도 기록된 note와 함께 표시하며, waiver 대상은 `story/cls/sub`까지 식별합니다. 브라우저 도구 설치는 checked worktree 밖 ephemeral 디렉터리를 우선 사용하고, 대상 manifest·lockfile·`node_modules`를 CHECK 전에 복구·재검증합니다.
 
 **핵심 구분**: 자동화 테스트와 hands-on QA는 대체 관계가 아닙니다. 자동화는 "코드가 의도대로 동작하는가"를, hands-on은 "액터의 경로가 프로덕션처럼 동작하는가"를 각각 검증합니다. 서로 다른 깊이에서 모은 증거는 합쳐도 더 깊은 주장이 되지 않습니다.
 

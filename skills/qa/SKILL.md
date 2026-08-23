@@ -319,6 +319,8 @@ Omit this section when no commands were executed (a PRE-FLIGHT fail-fast, judgme
 
 At STATE, immediately after `set-verdict` and before `complete`, qa renders a self-contained HTML report via `bun ${CLAUDE_SKILL_DIR}/scripts/qa-report.ts --session <id> --out <path> [--narrative <json-file>]`. The renderer reads the recorded chain through the `qa-state get` / `readQaView` path and renders **from qa-state records, not re-narrated** — every AC, actor, story, scenario, evidence path, and PASS/FAIL/verdict fact in the report is exactly what qa-state recorded, so the report cannot drift from what actually ran. Only subjective narrative — issue descriptions, expected-vs-actual prose, oracle diagnosis — is supplied at render time through `--narrative`, never persisted to qa-state.
 
+Scenario Evidence renders the optional `before` / `action` / `after` slots when present; for backward-compatible records that only have the required `evidence.path`, it renders that path as the recorded evidence slot. A fresh `start` clears `acceptance_criteria`, so a new report cannot inherit the previous cycle's criteria.
+
 The report is produced on **every cycle that reached a roster** (PLAN.1 ran) — this includes the inert-refactor zero-row case. The sole exception is the **PRE-FLIGHT fail-fast**, which never reaches PLAN and therefore renders no report.
 
 The report file is self-contained: inline `<style>`, zero runtime `<script>`, no external CSS/JS/font/image reference — it opens offline. Screenshots embed as base64 `data:` URIs (capped per file; an oversized file is linked by path instead of embedded, so the report itself never balloons). Save it under the evidence directory, e.g. `$OMT_DIR/evidence/{work-slug}/{task-slug}/report.html`.

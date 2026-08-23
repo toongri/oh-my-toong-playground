@@ -1112,6 +1112,16 @@ describe("new-prose: HTML report is the canonical deliverable", () => {
 		expect(skillMd).toContain("never persisted to qa-state");
 	});
 
+	test("the report preserves required evidence.path when optional actor slots are absent", () => {
+		expect(skillMd).toContain("only have the required `evidence.path`");
+		expect(skillMd).toContain("recorded evidence slot");
+	});
+
+	test("a fresh start clears prior acceptance criteria before the next report", () => {
+		expect(skillMd).toContain("A fresh `start` clears `acceptance_criteria`");
+		expect(skillMd).toContain("cannot inherit the previous cycle's criteria");
+	});
+
 	test("the report is produced on every cycle that reached a roster, PRE-FLIGHT fail-fast excepted", () => {
 		expect(skillMd).toContain("every cycle that reached a roster");
 		expect(skillMd).toContain("PRE-FLIGHT fail-fast");
