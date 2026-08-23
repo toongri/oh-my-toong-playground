@@ -201,7 +201,7 @@ function decodeGitPath(raw: string): string | null {
 			case '"':
 				decoded += '"';
 				break;
-			default:
+			default: {
 				if (!/[0-7]/.test(escaped)) return null;
 				let octal = escaped;
 				while (octal.length < 3 && /[0-7]/.test(body[i + 1] ?? "")) {
@@ -209,6 +209,7 @@ function decodeGitPath(raw: string): string | null {
 					octal += body[i] ?? "";
 				}
 				decoded += String.fromCharCode(Number.parseInt(octal, 8));
+			}
 		}
 	}
 	return decoded;

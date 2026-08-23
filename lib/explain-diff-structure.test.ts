@@ -796,7 +796,7 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 	test("컴포넌트 레벨의 사유 있는 구조 변화 없음 면제는 R18을 통과시킨다", () => {
 		const doc = withBackground(
 			ARCH_OK.replace(
-				/```mermaid\nflowchart LR\n  card --> resolver\n```[\s\S]*?(?=### 도메인 레벨)/,
+				/```mermaid\nflowchart LR\n {2}card --> resolver\n```[\s\S]*?(?=### 도메인 레벨)/,
 				"구조 변화 없음: 이 diff는 컴포넌트 경계를 바꾸지 않는다.\n\n",
 			),
 		);
