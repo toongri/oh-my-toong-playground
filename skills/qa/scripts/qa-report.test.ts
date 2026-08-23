@@ -162,6 +162,43 @@ describe("qa-report renderer", () => {
 		expect(html).toContain("app.ts:12");
 	});
 
+	test("renders recorded baseline and per-run failures even when all scenario cells pass", () => {
+		const passingCells = baseView().cells!.map((cell) => ({ ...cell, status: "pass" as const }));
+		const view = baseView({
+			cells: passingCells,
+			stories: [{ id: "story-1", actor: "actor-1", baseline: { result: "fail", note: "server did not start", cycle: 0 } }],
+			run_checks: {
+				stale_state: { result: "pass", cycle: 0 },
+				dirty_worktree: { result: "fail", note: "verifier install changed package.json", cycle: 0 },
+				flaky_rerun: { result: "pass", cycle: 0 },
+			},
+			verdict: "REQUEST_CHANGES",
+		});
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const failures = html.slice(html.indexOf("Failures &amp; Mismatches"), html.indexOf("<h2>Verdict"));
+		expect(failures).toContain("story-1 / baseline");
+		expect(failures).toContain("server did not start");
+		expect(failures).toContain("dirty-worktree");
+		expect(failures).toContain("verifier install changed package.json");
+		expect(failures).not.toContain("no failures or mismatches recorded this cycle");
+	});
+
+	test("renders the waived sub-scenario in the verdict identifier", () => {
+		const html = renderQaReport(
+			baseView({
+				verdict_report: {
+					verdict: "COMMENT",
+					cycle: 0,
+					waives: [{ story: "story-1", cls: 1, sub: "hang-timeout", reason: "known harness limit" }],
+				},
+			}),
+			{},
+			fakeReader,
+		)!;
+		const verdict = html.slice(html.indexOf("<h2>Verdict"));
+		expect(verdict).toContain("story-1/1/hang-timeout");
+	});
+
 	test("renders the verdict from state", () => {
 		const html = renderQaReport(baseView(), {}, fakeReader)!;
 		expect(html).toContain("COMMENT");

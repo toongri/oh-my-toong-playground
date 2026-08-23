@@ -17,7 +17,7 @@
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "fs";
 import { dirname, extname, resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
-import type { QaCell, QaEvidence, QaStory } from "@lib/qa-chain-core";
+import type { QaBaseline, QaCell, QaEvidence, QaResult, QaRunCheck, QaStory } from "@lib/qa-chain-core";
 import { readQaView, type QaView } from "./qa-state.ts";
 
 // lazy: flat 2MB per-file embed cap keeps a report with a handful of
@@ -96,6 +96,17 @@ function cellKey(cell: Pick<QaCell, "story" | "cls" | "sub">): string {
 
 function cellLabel(cell: Pick<QaCell, "cls" | "sub">): string {
 	return `cls ${cell.cls}${cell.sub ? `/${cell.sub}` : ""}`;
+}
+
+type RecordedCheck = QaBaseline | QaRunCheck | QaResult | null | undefined;
+
+function recordedResult(value: RecordedCheck): QaResult | null {
+	if (typeof value === "string") return value;
+	return value?.result ?? value?.status ?? null;
+}
+
+function recordedNote(value: RecordedCheck): string | undefined {
+	return typeof value === "string" || value === null || value === undefined ? undefined : value.note;
 }
 
 function actorFor(view: QaView, story: QaStory): { id: string; name?: string; boundary?: string; driver?: string } | undefined {
@@ -213,6 +224,25 @@ function renderFailures(view: QaView, narrative: QaReportNarrative): string {
 				`<li><code>${escapeHtml(cell.story)} / ${escapeHtml(cellLabel(cell))}</code> — ${escapeHtml(cell.attack_point ?? "")}</li>`,
 		)
 		.join("");
+	const baselineRows = (view.stories ?? [])
+		.map((story) => {
+			const baseline = story.baseline;
+			if (recordedResult(baseline) !== "fail") return "";
+			const note = recordedNote(baseline);
+			return `<li><code>${escapeHtml(story.id)} / baseline</code> — fail${note ? ` — ${escapeHtml(note)}` : ""}</li>`;
+		})
+		.join("");
+	const runCheckRows = ([
+		["stale-state", view.run_checks?.stale_state],
+		["dirty-worktree", view.run_checks?.dirty_worktree],
+		["flaky-rerun", view.run_checks?.flaky_rerun],
+	] as const)
+		.map(([name, check]) => {
+			if (recordedResult(check) !== "fail") return "";
+			const note = recordedNote(check);
+			return `<li><code>run-check / ${escapeHtml(name)}</code> — fail${note ? ` — ${escapeHtml(note)}` : ""}</li>`;
+		})
+		.join("");
 	const issueRows = (narrative.issues ?? [])
 		.map(
 			(issue) =>
@@ -223,8 +253,8 @@ function renderFailures(view: QaView, narrative: QaReportNarrative): string {
 		)
 		.join("");
 	const body =
-		cellRows || issueRows
-			? `<ul>${cellRows}${issueRows}</ul>`
+		cellRows || baselineRows || runCheckRows || issueRows
+			? `<ul>${cellRows}${baselineRows}${runCheckRows}${issueRows}</ul>`
 			: `<p class="evidence-note">no failures or mismatches recorded this cycle</p>`;
 	return `<h2>Failures &amp; Mismatches</h2>${body}`;
 }
@@ -232,7 +262,10 @@ function renderFailures(view: QaView, narrative: QaReportNarrative): string {
 function renderVerdict(view: QaView): string {
 	const report = view.verdict_report;
 	const waives = (report?.waives ?? [])
-		.map((waive) => `<li><code>${escapeHtml(waive.story)}/${escapeHtml(String(waive.cls))}</code> — ${escapeHtml(waive.reason ?? "")}</li>`)
+		.map(
+			(waive) =>
+				`<li><code>${escapeHtml(waive.story)}/${escapeHtml(String(waive.cls))}${waive.sub ? `/${escapeHtml(waive.sub)}` : ""}</code> — ${escapeHtml(waive.reason ?? "")}</li>`,
+		)
 		.join("");
 	const inert = report?.inert?.declared ? `<p class="evidence-note">declared inert: ${escapeHtml(report.inert.reason ?? "")}</p>` : "";
 	return (
