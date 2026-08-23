@@ -311,6 +311,7 @@ describe("qa-state CLI wiring", () => {
 	});
 
 	test("start resets a completed cycle and refuses to launder active work", () => {
+		run("set-acceptance --json '[\"first cycle AC\"]'");
 		run("set-verdict REQUEST_CHANGES");
 		run("complete");
 		run('start --target "second cycle"');
@@ -325,6 +326,7 @@ describe("qa-state CLI wiring", () => {
 		expect(reset.same_failure_count).toBe(0);
 		expect(reset.fix_head_before).toBe("");
 		expect(reset.user_dirty_set).toEqual([]);
+		expect(reset.acceptance_criteria).toEqual([]);
 		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
 		const before = readFileSync(resolveStatePath(S), "utf8");
 		expect(() => run('start --target "launder"')).toThrow();

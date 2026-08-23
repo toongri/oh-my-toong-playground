@@ -757,6 +757,7 @@ export function startQa(sessionId: string, target: string): void {
 			cells: [],
 			run_checks: null,
 			waives: [],
+			acceptance_criteria: [],
 			verdict: null,
 		};
 		delete reset.inert;
