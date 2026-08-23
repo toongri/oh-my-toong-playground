@@ -385,6 +385,17 @@ describe("new-prose: stage3-handson.md risk-surface + hardening rows", () => {
 	test("new hardening rows are called out as distinct from the pre-existing row 4", () => {
 		expect(stage3Md).toContain("distinct from row");
 	});
+
+	test("browser-tool installs use an ephemeral directory outside the checked worktree", () => {
+		const frontendStart = stage3Md.indexOf("## Step 3.4: Frontend Verification");
+		const frontendEnd = stage3Md.indexOf("## Step 3.5: Native App Verification", frontendStart + 1);
+		const frontendSection = stage3Md.slice(frontendStart, frontendEnd);
+		expect(frontendSection).toContain("ephemeral");
+		expect(frontendSection).toContain("outside the checked worktree");
+		expect(frontendSection).toContain("manifest, lockfile");
+		expect(frontendSection).toContain("node_modules");
+		expect(frontendSection).toContain("before CHECK");
+	});
 });
 
 describe("new-prose: SKILL.md points at scenario-authoring.md", () => {
