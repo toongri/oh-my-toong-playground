@@ -118,7 +118,7 @@ Apply the corresponding row's primitives based on the change type detected in St
 
 **Primary path — agent-browser (attempt-then-fallback rule):**
 
-1. Check the CLI is available: `command -v agent-browser`. If it is missing, treat that as an agent-browser attempt failure — record the reason in evidence and use the Playwright fallback path below. Do NOT install agent-browser here: the CLI is assumed pre-installed, and a QA flow must not mutate the global machine (a global install can hang or fail in offline/locked-down environments).
+1. Check the CLI is available: `command -v agent-browser`. If it is missing, install it rather than skip the scenario — project-local first (a devDependency or a project-scoped local bin, no machine mutation), falling back to a global install only if a project-local install is not possible for this tool; if even the global install fails (offline, locked-down), record that failure as the substituted hop and use the Playwright fallback path below instead of declaring the scenario unreachable. Local-first exists because a global install can hang or fail in offline/locked-down environments — it is a safety order, not a ban.
 2. Open the affected page:
    ```bash
    agent-browser open <url>
@@ -149,7 +149,7 @@ Apply the corresponding row's primitives based on the change type detected in St
 
 **Fallback path — playwright, only if available (optional):**
 
-If an agent-browser step returns a non-zero exit code or the required assertion cannot be expressed via the agent-browser CLI, and a playwright is available in this environment (however it's supplied), use it to verify that check instead — document the failure reason in evidence. If no playwright is available, do not install or set one up: report that check as verification-unavailable rather than working around the gap.
+If an agent-browser step returns a non-zero exit code or the required assertion cannot be expressed via the agent-browser CLI, and a playwright is available in this environment (however it's supplied), use it to verify that check instead — document the failure reason in evidence. If no playwright is available, install it — project-local first, global only if project-local is not possible — before falling back to reporting that check as verification-unavailable; only an install failure (offline, locked-down) earns that fallback, recorded as a substitution, not an unattempted skip.
 
 ### Verification Criteria
 

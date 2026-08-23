@@ -134,6 +134,68 @@ function probeEvidence(path: string, surface: string, driver: QaDriver): string 
 	return absolute;
 }
 
+/** Like probeEvidence, but for a supplementary 3-slot capture path — no driver/surface match required. */
+function probePlainFile(path: string): string {
+	const absolute = resolve(path);
+	const size = (() => {
+		try {
+			return statSync(absolute).size;
+		} catch {
+			throw new Error(`evidence-path does not exist: ${absolute}`);
+		}
+	})();
+	if (size <= 0) throw new Error(`evidence-path is empty: ${absolute}`);
+	return absolute;
+}
+
+const SCENARIO_SOURCES = ["self-authored", "caller-provided"] as const;
+
+/** Shared optional structured-scenario fields accepted by both author-cell and record-cell. */
+interface ScenarioFieldOpts {
+	drivenAt?: string;
+	whyNeeded?: string;
+	source?: string;
+}
+
+function scenarioFieldPatch(opts: ScenarioFieldOpts): Partial<QaCell> {
+	const patch: Partial<QaCell> = {};
+	if (opts.drivenAt !== undefined) patch.driven_at = opts.drivenAt;
+	if (opts.whyNeeded !== undefined) patch.why_needed = opts.whyNeeded;
+	if (opts.source !== undefined) {
+		if (!isOneOf(opts.source, SCENARIO_SOURCES)) throw new Error(`source must be one of ${SCENARIO_SOURCES.join("|")}`);
+		patch.source = opts.source;
+	}
+	return patch;
+}
+
+/** Carries forward an authored cell's scenario fields as defaults for record-cell to override. */
+function pickScenarioFields(cell: QaCell | undefined): Partial<QaCell> {
+	if (!cell) return {};
+	const out: Partial<QaCell> = {};
+	if (cell.driven_at !== undefined) out.driven_at = cell.driven_at;
+	if (cell.why_needed !== undefined) out.why_needed = cell.why_needed;
+	if (cell.source !== undefined) out.source = cell.source;
+	return out;
+}
+
+interface EvidenceSlotOpts {
+	evidenceBefore?: string;
+	evidenceAction?: string;
+	evidenceAfter?: string;
+}
+
+/** Validates and resolves whichever of the 3 supplementary evidence slots were supplied. */
+function buildEvidenceSlots(
+	opts: EvidenceSlotOpts,
+): { path: string; before?: string; action?: string; after?: string } | undefined {
+	const slot: { before?: string; action?: string; after?: string } = {};
+	if (opts.evidenceBefore) slot.before = probePlainFile(opts.evidenceBefore);
+	if (opts.evidenceAction) slot.action = probePlainFile(opts.evidenceAction);
+	if (opts.evidenceAfter) slot.after = probePlainFile(opts.evidenceAfter);
+	if (Object.keys(slot).length === 0) return undefined;
+	return { path: slot.action ?? slot.after ?? slot.before ?? "", ...slot };
+}
+
 function stateProbe(path: string): { exists: boolean; size: number } {
 	try {
 		return { exists: true, size: statSync(path).size };
@@ -479,7 +541,7 @@ function sameCell(left: Pick<QaCell, "story" | "cls" | "sub">, right: Pick<QaCel
 	return left.story === right.story && left.cls === right.cls && left.sub === right.sub;
 }
 
-export interface AuthorCellOpts {
+export interface AuthorCellOpts extends ScenarioFieldOpts {
 	story: string;
 	cls: number;
 	sub?: string;
@@ -495,7 +557,8 @@ export function authorCell(sessionId: string, opts: AuthorCellOpts): void {
 	if (!(prior.stories ?? []).some((story) => story.id === selector.story)) throw new Error(`author-cell: unknown story "${selector.story}"`);
 	const cycle = currentCycle(prior);
 	const cells = [...(prior.cells ?? [])];
-	const next: QaCell = { ...selector, attack_point: attackPoint, priority: opts.priority, cycle };
+	const scenarioPatch = scenarioFieldPatch(opts);
+	const next: QaCell = { ...selector, attack_point: attackPoint, priority: opts.priority, cycle, ...scenarioPatch };
 	const index = cells.findIndex((cell) => cell.cycle === cycle && sameCell(cell, selector));
 	if (index >= 0) cells[index] = next;
 	else cells.push(next);
@@ -542,7 +605,7 @@ export function recordBaseline(sessionId: string, opts: RecordBaselineOpts): voi
 	mergeWrite(sessionId, { stories });
 }
 
-export interface RecordCellOpts {
+export interface RecordCellOpts extends ScenarioFieldOpts, EvidenceSlotOpts {
 	story: string;
 	cls: number;
 	sub?: string;
@@ -560,10 +623,21 @@ export function recordCell(sessionId: string, opts: RecordCellOpts): void {
 	const authored = (prior.cells ?? []).find((cell) => cell.cycle === cycle && sameCell(cell, selector));
 	if (!authored || !authored.attack_point || !authored.priority) throw new Error("record-cell requires an authored current-cycle cell");
 	if (opts.status === "na" && !opts.naReason?.trim()) throw new Error("na status requires na-reason");
-	let evidence: { path: string; surface: string } | undefined;
+	const scenarioPatch = scenarioFieldPatch(opts);
+	let evidence: QaCell["evidence"];
 	if (opts.status === "pass") {
 		if (!opts.evidencePath || !opts.evidenceSurface) throw new Error("pass cell requires evidence-path and evidence-surface");
 		evidence = { path: probeEvidence(opts.evidencePath, opts.evidenceSurface, actorDriver(prior, selector.story)), surface: opts.evidenceSurface };
+	}
+	const slots = buildEvidenceSlots(opts);
+	if (slots) {
+		evidence = {
+			path: evidence?.path ?? slots.path,
+			surface: evidence?.surface ?? opts.evidenceSurface ?? actorDriver(prior, selector.story),
+			...(slots.before !== undefined ? { before: slots.before } : {}),
+			...(slots.action !== undefined ? { action: slots.action } : {}),
+			...(slots.after !== undefined ? { after: slots.after } : {}),
+		};
 	}
 	const next: QaCell = {
 		...selector,
@@ -572,6 +646,8 @@ export function recordCell(sessionId: string, opts: RecordCellOpts): void {
 		status: opts.status,
 		cycle,
 		...(opts.naReason !== undefined ? { na_reason: opts.naReason } : {}),
+		...pickScenarioFields(authored),
+		...scenarioPatch,
 		...(evidence ? { evidence } : {}),
 	};
 	const cells = [...(prior.cells ?? [])];
@@ -647,6 +723,13 @@ export function declareInert(sessionId: string, reason: string): void {
 	mergeWrite(sessionId, { inert: { declared: true, reason: nonEmpty(reason, "reason"), cycle: currentCycle(readPrior(sessionId)) } });
 }
 
+/** Persists the acceptance criteria (full-replace) so the report renders them from records. */
+export function setAcceptance(sessionId: string, criteria: string[]): void {
+	if (!Array.isArray(criteria)) throw new Error("set-acceptance: expected a JSON array of strings");
+	const cleaned = criteria.map((item) => nonEmpty(String(item), "acceptance item"));
+	mergeWrite(sessionId, { acceptance_criteria: cleaned });
+}
+
 /** Re-enters a session with a fresh, empty QA cycle. */
 export function startQa(sessionId: string, target: string): void {
 	const stateFilePath = resolveStatePath(sessionId);
@@ -713,13 +796,13 @@ export function completeQa(sessionId: string): void {
 	});
 }
 
-type QaView = QaState & {
+export type QaView = QaState & {
 	prior_cycle_cells: QaCell[];
 	prior_cycle_waives: QaWaive[];
 	verdict_report: { verdict: QaState["verdict"]; cycle: number; waives: QaWaive[]; inert?: QaInert };
 };
 
-function readQaView(sessionId: string): QaView | null {
+export function readQaView(sessionId: string): QaView | null {
 	const state = readQaState(sessionId);
 	if (!state) return null;
 	const cycle = currentCycle(state);
@@ -845,6 +928,9 @@ function main(): void {
 					sub: str(args["sub"]),
 					attackPoint: requiredArg(args, "attack-point"),
 					priority: requiredArg(args, "priority"),
+					drivenAt: str(args["driven-at"]),
+					whyNeeded: str(args["why-needed"]),
+					source: str(args["source"]),
 				});
 			} else if (subcommand === "record-baseline") {
 				recordBaseline(sessionId, {
@@ -863,6 +949,12 @@ function main(): void {
 					naReason: str(args["na-reason"]),
 					evidencePath: str(args["evidence-path"]),
 					evidenceSurface: str(args["evidence-surface"]),
+					drivenAt: str(args["driven-at"]),
+					whyNeeded: str(args["why-needed"]),
+					source: str(args["source"]),
+					evidenceBefore: str(args["evidence-before"]),
+					evidenceAction: str(args["evidence-action"]),
+					evidenceAfter: str(args["evidence-after"]),
 				});
 			} else if (subcommand === "record-run-check") {
 				recordRunCheck(sessionId, {
@@ -879,6 +971,9 @@ function main(): void {
 				setVerdict(sessionId, verdict);
 			} else if (subcommand === "start") {
 				startQa(sessionId, requiredArg(args, "target"));
+			} else if (subcommand === "set-acceptance") {
+				const parsed = JSON.parse(requiredArg(args, "json"));
+				setAcceptance(sessionId, parsed);
 			} else if (subcommand === "waive") {
 				waiveCell(sessionId, {
 					story: requiredArg(args, "story"),

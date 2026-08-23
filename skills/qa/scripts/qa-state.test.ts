@@ -514,6 +514,85 @@ describe("qa-state CLI wiring", () => {
 		const defaultPath = `${tmpDir}/qa-state-default.json`;
 		expect(existsSync(defaultPath)).toBe(false);
 	});
+
+	// -------------------------------------------------------------------------
+	// Report-rendering schema extension: author-cell/record-cell round-trip the
+	// new optional structured scenario fields and 3-slot evidence.
+	// -------------------------------------------------------------------------
+
+	test("author-cell records the optional structured scenario fields", () => {
+		run("set --phase PLAN");
+		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
+		run('add-story --id story-1 --actor actor-1');
+		run(
+			'author-cell --story story-1 --cls 1 --attack-point "attack" --priority H ' +
+				'--why-needed "covers gap" --source self-authored',
+		);
+		const cell = rawState().cells.find((c: any) => c.story === "story-1" && c.cls === 1 && !c.sub);
+		expect(cell.why_needed).toBe("covers gap");
+		expect(cell.source).toBe("self-authored");
+	});
+
+	test("set-acceptance records the acceptance criteria (full-replace)", () => {
+		run("set --phase PLAN");
+		run(`set-acceptance --json '["V2 read returns category-only DTO","Unauthenticated request yields 401"]'`);
+		expect(rawState().acceptance_criteria).toEqual([
+			"V2 read returns category-only DTO",
+			"Unauthenticated request yields 401",
+		]);
+		run(`set-acceptance --json '["only this one now"]'`);
+		expect(rawState().acceptance_criteria).toEqual(["only this one now"]);
+	});
+
+	test("record-cell round-trips driven-at, scenario fields, and 3-slot evidence", () => {
+		run("set --phase PLAN");
+		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
+		run('add-story --id story-1 --actor actor-1');
+		run('author-cell --story story-1 --cls 1 --attack-point "attack" --priority H');
+		run(
+			"record-cell --story story-1 --cls 1 --status pass " +
+				"--evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash " +
+				'--driven-at "app screen" ' +
+				'--why-needed "covers gap" --source self-authored ' +
+				"--evidence-before skills/qa/scripts/qa-state.test.ts " +
+				"--evidence-action skills/qa/scripts/qa-state.test.ts " +
+				"--evidence-after skills/qa/scripts/qa-state.test.ts",
+		);
+		const cell = rawState().cells.find((c: any) => c.story === "story-1" && c.cls === 1 && !c.sub);
+		expect(cell.driven_at).toBe("app screen");
+		expect(cell.why_needed).toBe("covers gap");
+		expect(cell.source).toBe("self-authored");
+		expect(cell.evidence.before).toContain("qa-state.test.ts");
+		expect(cell.evidence.action).toContain("qa-state.test.ts");
+		expect(cell.evidence.after).toContain("qa-state.test.ts");
+		// existing pass-evidence contract (path/surface) stays intact alongside the 3-slot addition
+		expect(cell.evidence.path).toContain("qa-state.test.ts");
+		expect(cell.evidence.surface).toBe("bash");
+	});
+
+	test("record-cell records the 3-slot evidence on a FAIL cell too (no pass-evidence required)", () => {
+		run("set --phase PLAN");
+		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
+		run('add-story --id story-1 --actor actor-1');
+		run('author-cell --story story-1 --cls 1 --attack-point "attack" --priority H');
+		run(
+			"record-cell --story story-1 --cls 1 --status fail --na-reason ignored " +
+				"--evidence-before skills/qa/scripts/qa-state.test.ts " +
+				"--evidence-after skills/qa/scripts/qa-state.test.ts",
+		);
+		const cell = rawState().cells.find((c: any) => c.story === "story-1" && c.cls === 1 && !c.sub);
+		expect(cell.status).toBe("fail");
+		expect(cell.evidence.before).toContain("qa-state.test.ts");
+		expect(cell.evidence.after).toContain("qa-state.test.ts");
+	});
+
+	test("record-cell rejects an invalid --source value", () => {
+		run("set --phase PLAN");
+		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
+		run('add-story --id story-1 --actor actor-1');
+		run('author-cell --story story-1 --cls 1 --attack-point "attack" --priority H');
+		expect(() => run("record-cell --story story-1 --cls 1 --status fail --na-reason x --source bogus")).toThrow();
+	});
 });
 
 // Type-only compile-time smoke: ensures QaState shape is exported and usable.

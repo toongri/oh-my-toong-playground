@@ -10,7 +10,9 @@ import {
 	recordComplete,
 	requiredCells,
 	rosterComplete,
+	type QaCell,
 	type QaChainState,
+	type QaEvidence,
 	type QaStory,
 } from "./qa-chain-core";
 
@@ -227,5 +229,69 @@ describe("qa chain core", () => {
 			"PRE-FLIGHT", "PLAN", "BASELINE", "ADVERSARIAL E2E", "CHECK", "DIAGNOSIS",
 			"FIX", "RE-VERIFY", "EXIT", "CLEANUP", "ROLLBACK", "STATE",
 		]);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Additive schema extension: 3-slot evidence (before/action/after) on
+// QaEvidence, and structured scenario fields on QaCell. Both are optional and
+// must not be newly required by any predicate — a required field would break
+// every existing qa run that never sets them.
+// ---------------------------------------------------------------------------
+
+describe("qa chain core: additive schema extension (3-slot evidence + structured scenario fields)", () => {
+	test("QaEvidence accepts optional before/action/after alongside required path/surface", () => {
+		const evidence: QaEvidence = {
+			path: "/a",
+			surface: "bash",
+			before: "/evidence/before.png",
+			action: "/evidence/action.png",
+			after: "/evidence/after.png",
+		};
+		expect(evidence.before).toBe("/evidence/before.png");
+		expect(evidence.action).toBe("/evidence/action.png");
+		expect(evidence.after).toBe("/evidence/after.png");
+	});
+
+	test("QaCell accepts optional structured scenario fields", () => {
+		const cell: QaCell = {
+			story: "s1",
+			cls: 1,
+			attack_point: "x",
+			priority: "H",
+			status: "pass",
+			cycle: 0,
+			driven_at: "app screen",
+			why_needed: "covers boundary Z",
+			source: "self-authored",
+		};
+		expect(cell.driven_at).toBe("app screen");
+		expect(cell.why_needed).toBe("covers boundary Z");
+		expect(cell.source).toBe("self-authored");
+	});
+
+	test("chainComplete/recordComplete/approveOk/commentOk are unaffected by the new optional fields, present or absent", () => {
+		const state = authoredState();
+		expect(chainComplete(state)).toBe(true);
+		expect(recordComplete(state, probe)).toBe(true);
+		expect(approveOk(state, probe)).toBe(true);
+		expect(commentOk(state, probe)).toBe(true);
+
+		const withFields: CompleteFixture = {
+			...state,
+			cells: state.cells.map((cell) => ({
+				...cell,
+				driven_at: "boundary X",
+				why_needed: "why",
+				source: "self-authored" as const,
+				evidence: cell.evidence
+					? { ...cell.evidence, before: "/before", action: "/action", after: "/after" }
+					: cell.evidence,
+			})),
+		};
+		expect(chainComplete(withFields)).toBe(true);
+		expect(recordComplete(withFields, probe)).toBe(true);
+		expect(approveOk(withFields, probe)).toBe(true);
+		expect(commentOk(withFields, probe)).toBe(true);
 	});
 });

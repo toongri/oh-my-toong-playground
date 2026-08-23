@@ -85,7 +85,7 @@ Enumerate every actor the changed surface serves and pin each one's boundary, as
 
 A change with no UI still has actors. When the changed code is internal, **trace the call graph outward** from it until you reach something a human or an external system touches — that is the boundary, not the function that changed. Emit the result as the `## Actor Roster` output section.
 
-Record the roster in state before authoring scenarios. Add each actor with `qa-state.ts add-actor --id … --name … --boundary … --driver agent-device|agent-browser|curl|bash --reachable unknown`, then update `--reachable` after the PLAN.1 probe. Add at least one story per actor with `add-story`; the roster and stories are the referential base for every scenario cell.
+Record the roster in state before authoring scenarios. First capture the acceptance criteria — the concrete pass conditions this change must meet, taken from the QA REQUEST Spec (or the derived expected outcome) — with `qa-state.ts set-acceptance --json '["…","…"]'`; the report renders its Acceptance Criteria section from this record. Then add each actor with `qa-state.ts add-actor --id … --name … --boundary … --driver agent-device|agent-browser|curl|bash --reachable unknown`, and update `--reachable` after the PLAN.1 probe. Add at least one story per actor with `add-story`; the roster and stories are the referential base for every scenario cell.
 
 **The roster spans the actor's journey, not the diff (CRITICAL).** Never QA only the platform where the change landed. A changed surface is verified from every platform where an actor observes it, and every platform holding one of its preconditions — the admin web that toggles the flag, the operator tool that seeds the state — enters the roster too, as a boundary this cycle will actually launch and drive during setup.
 
@@ -138,11 +138,12 @@ A **caller-provided** scenario is exempt from relocation and stays verbatim (par
 
 **Precondition bootstrap (CRITICAL) — exhausted before any hop is called unreachable.** A missing precondition is work to do, not an obstacle to record. Bootstrap it, rung by rung:
 
-1. **Environment not deployed / not accessible** (branch not on stage, endpoint 404, no deploy permission) → first read what the QA REQUEST verifies. For a **source change not yet deployed**, the deployed environment was never the boundary: stand the stack up locally — backend, database, bundler — and re-point or re-build the app against that local backend; non-deployment is an environment choice, not a boundary obstacle. When the QA REQUEST **verifies the deployment itself** — a release, deploy config, routing, migration, packaged artifact — the deployed environment IS the boundary: its 404 is the scenario's observed FAIL (or `NOT-RUN` when truly unreachable), never a precondition to bootstrap around, and a local stack proves nothing about the deployed artifact ([stage3-handson.md] stale-state row).
-2. **No data** → read the schema and create seed data.
+1. **Environment not deployed / not accessible** (branch not on stage, endpoint 404, no deploy permission) → first read what the QA REQUEST verifies. For a **source change not yet deployed**, the deployed environment was never the boundary: stand the stack up locally — backend, database, bundler. When HOW to stand it up is not already known, mine the project's own docs and scripts for it — `README.md`/`CONTRIBUTING.md`, `Makefile`, `docker-compose.yml`/`docker-compose.*.yml`, `scripts/` — before asking the user or declaring the precondition unreachable (see [stage1-commands.md] Discovery Order). Then re-point or re-build the app against that local backend; non-deployment is an environment choice, not a boundary obstacle. When the QA REQUEST **verifies the deployment itself** — a release, deploy config, routing, migration, packaged artifact — the deployed environment IS the boundary: its 404 is the scenario's observed FAIL (or `NOT-RUN` when truly unreachable), never a precondition to bootstrap around, and a local stack proves nothing about the deployed artifact ([stage3-handson.md] stale-state row).
+2. **No data** → read the schema and create seed data; when the seeding procedure itself is not already known, mine README/`Makefile`/`docker-compose.yml`/`scripts/` for a seed script or documented seed procedure first.
 3. **No account / credential** → run the signup flow as its own scenario step, or mint a test token and inject it (cookie/header/session).
 4. **Precondition satisfiable only on another platform** (a flag toggled in an admin web, a state set from an operator tool) → launch that platform too, satisfy the precondition there for real, then verify the feature on the platform under test. Launching the precondition platform is setup cost, and setup cost never skips a scenario.
 5. **Genuinely external dependency outside your control** (third-party API off-network, physical hardware absent) → only this rung enters *Boundary substitution* below: fake that hop alone while every other layer runs real.
+6. **Required tool missing locally** (a CLI, browser driver, emulator/simulator toolchain, or other dependency the verification needs is not installed) → install it, don't skip the scenario. Try **project-local** first — a devDependency, a local bin, a project-scoped install — no machine mutation. Only when a tool genuinely cannot be project-local (e.g. a system emulator/simulator toolchain) try a **global** install. If the global install fails (offline, locked-down) — substitute *only that hop* and record what was substituted and why, the same discipline as rung 5's Boundary substitution; never treat the failed install as a reason to skip the scenario outright. Never use `rm -rf` or a force flag to clear the way for an install.
 
 Declaring an obstacle without recording which rungs were attempted and why each failed is boundary evasion, not a coverage delta.
 
@@ -247,7 +248,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts <sub>
 
 A `continue` invocation reads this state and resumes at the last recorded phase/cycle rather than restarting the cycle from PRE-FLIGHT. (The CLI itself is authored elsewhere — this section only pins the invocation contract qa's cycle relies on.)
 
-The chain-recording surface is: `add-actor`, `add-story`, `author-cell`, `record-baseline`, `record-cell`, and `record-run-check`. Use `set-verdict APPROVE|COMMENT|REQUEST_CHANGES` to persist the verdict; `waive --story … --cls … --reason "…"` is a **user-only** exception and is denied on the AI Bash path. For a no-risk-surface cycle, use `declare-inert --reason "…"`. Runtime gates consume the persisted chain/record predicates: the phase funnel blocks BASELINE until the roster→story→cell chain is complete, the driver guards block `agent-device`/`agent-browser`/`curl`/`bash` while the roster is incomplete or once BASELINE has been reached with an incomplete chain (PLAN reachability probes remain available), and the Stop gate validates the raw state on both Claude and Codex. Direct writes to `qa-state-*.json` are denied; use the CLI.
+The chain-recording surface is: `set-acceptance`, `add-actor`, `add-story`, `author-cell`, `record-baseline`, `record-cell`, and `record-run-check`. Use `set-verdict APPROVE|COMMENT|REQUEST_CHANGES` to persist the verdict; `waive --story … --cls … --reason "…"` is a **user-only** exception and is denied on the AI Bash path. For a no-risk-surface cycle, use `declare-inert --reason "…"`. Runtime gates consume the persisted chain/record predicates: the phase funnel blocks BASELINE until the roster→story→cell chain is complete, the driver guards block `agent-device`/`agent-browser`/`curl`/`bash` while the roster is incomplete or once BASELINE has been reached with an incomplete chain (PLAN reachability probes remain available), and the Stop gate validates the raw state on both Claude and Codex. Direct writes to `qa-state-*.json` are denied; use the CLI.
 
 Once the cycle concludes (any EXIT outcome — Goal Met, max_cycles, Same-Failure-3x, or Safety), first run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts set-verdict <APPROVE|COMMENT|REQUEST_CHANGES>`, then run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts complete`, and only then report the verdict prose. `complete` is gated by the same predicates as Stop and refuses an unrecorded or falsely approved cycle; it marks an earned terminal state inactive so the finished cycle is not resurrected as "in progress" in a later session.
 
@@ -314,6 +315,16 @@ Omit this section when no commands were executed (a PRE-FLIGHT fail-fast, judgme
 
 ---
 
+### HTML Report
+
+At STATE, immediately after `set-verdict` and before `complete`, qa renders a self-contained HTML report via `bun ${CLAUDE_SKILL_DIR}/scripts/qa-report.ts --session <id> --out <path> [--narrative <json-file>]`. The renderer reads the recorded chain through the `qa-state get` / `readQaView` path and renders **from qa-state records, not re-narrated** — every AC, actor, story, scenario, evidence path, and PASS/FAIL/verdict fact in the report is exactly what qa-state recorded, so the report cannot drift from what actually ran. Only subjective narrative — issue descriptions, expected-vs-actual prose, oracle diagnosis — is supplied at render time through `--narrative`, never persisted to qa-state.
+
+The report is produced on **every cycle that reached a roster** (PLAN.1 ran) — this includes the inert-refactor zero-row case. The sole exception is the **PRE-FLIGHT fail-fast**, which never reaches PLAN and therefore renders no report.
+
+The report file is self-contained: inline `<style>`, zero runtime `<script>`, no external CSS/JS/font/image reference — it opens offline. Screenshots embed as base64 `data:` URIs (capped per file; an oversized file is linked by path instead of embedded, so the report itself never balloons). Save it under the evidence directory, e.g. `$OMT_DIR/evidence/{work-slug}/{task-slug}/report.html`.
+
+---
+
 <Output_Format>
 
 ## Output Format
@@ -345,6 +356,8 @@ Every row's `source` is either `self-authored` or `caller-provided`. A `self-aut
 Close the table with exactly one coverage-delta line naming the impact-map domains from [scenario-authoring.md] and the three Layer D use-case axes (arrival paths · adjacent state transitions · lifecycle stances), stating which of those the rows above cover and which are left uncovered.
 
 ## Verdict: [APPROVE / REQUEST_CHANGES / COMMENT]
+
+**Report:** [absolute path to the self-contained HTML report file — or "not generated (PRE-FLIGHT fail-fast)" when the cycle never reached a roster]
 
 ## Issues (if any)
 [For each issue:]
