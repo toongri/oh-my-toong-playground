@@ -595,6 +595,47 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 		expect(item?.pass).toBe(false);
 	});
 
+	test("경계 동작단위의 data-change가 arch-entity 태그 밖 산문에만 있으면 R15가 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				'<div class="arch-entity" data-change="new">\n<p><strong>이름</strong> display catalog 조회</p>',
+				'<div class="arch-entity">\n<p><strong>이름</strong> display catalog 조회</p>\n<p>data-change="new"</p>',
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R15",
+		);
+		expect(item?.pass).toBe(false);
+	});
+
+	test("경계 동작단위의 허용되지 않은 data-change 값은 R15가 거부한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				'<div class="arch-entity" data-change="new">\n<p><strong>이름</strong> display catalog 조회</p>',
+				'<div class="arch-entity" data-change="changed">\n<p><strong>이름</strong> display catalog 조회</p>',
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R15",
+		);
+		expect(item?.pass).toBe(false);
+	});
+
+	test("경계 동작단위는 data-change mod와 del도 R15에서 허용한다", () => {
+		for (const change of ["mod", "del"]) {
+			const doc = withBackground(
+				ARCH_OK.replace(
+					'<div class="arch-entity" data-change="new">\n<p><strong>이름</strong> display catalog 조회</p>',
+					`<div class="arch-entity" data-change="${change}">\n<p><strong>이름</strong> display catalog 조회</p>`,
+				),
+			);
+			const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+				(i) => i.id === "R15",
+			);
+			expect(item?.pass).toBe(true);
+		}
+	});
+
 	// R17 — 시스템 레벨 상시 인터페이스 표.
 	test("시스템 레벨에 상시 인터페이스 표가 없으면 R17이 실패하고 빠진 라벨을 담는다", () => {
 		const doc = withBackground(
@@ -607,7 +648,64 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 		expect(item?.detail).toContain("오가는 것");
 	});
 
+	test("시스템 레벨 산문에 열 이름만 있으면 R17이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				/\| 경계 \| 인터페이스 \| 오가는 것 \|[\s\S]*?카탈로그 행 \|\n/,
+				"경계, 인터페이스, 오가는 것을 설명한다.\n",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R17",
+		);
+		expect(item?.pass).toBe(false);
+	});
+
+	test("시스템 레벨 표 헤더에 구분 행이 없으면 R17이 실패한다", () => {
+		const doc = withBackground(ARCH_OK.replace("|---|---|---|\n", ""));
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R17",
+		);
+		expect(item?.pass).toBe(false);
+	});
+
 	// R18 — 컴포넌트 레벨 노드별 arch-entity 카드.
+	test("컴포넌트 레벨의 사유 있는 구조 변화 없음 면제는 R18을 통과시킨다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				/```mermaid\nflowchart LR\n  card --> resolver\n```[\s\S]*?(?=### 도메인 레벨)/,
+				"구조 변화 없음: 이 diff는 컴포넌트 경계를 바꾸지 않는다.\n\n",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(true);
+	});
+
+	test("컴포넌트 카드의 data-change 값이 허용값이 아니면 R18이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace('class="arch-entity" data-change="new"', 'class="arch-entity" data-change="changed"'),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(false);
+	});
+
+	test("컴포넌트 카드 밖 산문의 data-change는 R18을 통과시키지 않는다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				'<div class="arch-entity" data-change="new">\n<p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>',
+				'<div class="arch-entity">\n<p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>\n<p>data-change="new"</p>',
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(false);
+	});
+
 	test("컴포넌트 레벨에 arch-entity 카드 라벨이 없으면 R18이 실패한다", () => {
 		const doc = withBackground(
 			ARCH_OK.replace(
@@ -637,6 +735,29 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 			step: "architecture",
 		}).items.find((i) => i.id === "R19");
 		expect(item?.pass).toBe(true);
+	});
+
+	test("펜스와 인라인 코드의 방법론 토큰 및 AddDomainEvent 식별자는 R19에서 무시한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"fail-closed 해소기 공급",
+				"식별자 AddDomainEvent와 `FSD`, `DDD`, `Clean Architecture`, `수평`, `수직`은 코드 예시다.\n\n```ts\nconst labels = 'FSD DDD Clean Architecture 수평 수직';\n```",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R19",
+		);
+		expect(item?.pass).toBe(true);
+	});
+
+	test("독립된 방법론 토큰과 축 라벨은 R19에서 거부한다", () => {
+		for (const token of ["FSD", "DDD", "Clean Architecture", "수평", "수직"]) {
+			const doc = withBackground(ARCH_OK.replace("fail-closed 해소기 공급", `${token} 분류를 쓴다.`));
+			const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+				(i) => i.id === "R19",
+			);
+			expect(item?.pass).toBe(false);
+		}
 	});
 
 	// R19 — 레이어 축 라벨(수평/수직)도 방법론 프레이밍이라 산문 노출 금지. 실측(luna max):

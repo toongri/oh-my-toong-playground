@@ -464,10 +464,10 @@ function checkR15(text: string): CheckItem {
 		};
 	}
 	const missing: string[] = BOUNDARY_MARKERS.filter((label) => !slice.includes(label));
-	// The change kind of each behaviour unit rides on the arch-entity's
-	// data-change attribute — a boundary block with no unit carrying it is a
-	// static list again, not the change map R15 requires.
-	if (!slice.includes("data-change")) missing.push("변경종류(data-change)");
+	// The change kind of each behaviour unit rides on a renderer-recognized
+	// arch-entity opening tag — prose mentions or unsupported values are not a
+	// change map.
+	if (!hasValidArchEntity(slice)) missing.push("변경종류(data-change: new|mod|del)");
 	return {
 		id: "R15",
 		title: "R15 경계·의존·유스케이스 블록",
@@ -481,6 +481,9 @@ function checkR15(text: string): CheckItem {
 
 /** The column labels the 시스템 레벨 standing-interface table must carry (R17). */
 const STANDING_INTERFACE_MARKERS = ["경계", "인터페이스", "오가는 것"] as const;
+
+const STANDING_INTERFACE_TABLE =
+	/^[ \t]*\|[ \t]*경계[ \t]*\|[ \t]*인터페이스[ \t]*\|[ \t]*오가는 것[ \t]*\|[ \t]*\r?\n[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*$/m;
 
 // R17 — the system level, beyond the change-contract table (R14), carries a
 // standing-interface table so the diagram's short-protocol edges become legible:
@@ -496,7 +499,7 @@ function checkR17(text: string): CheckItem {
 			detail: "시스템 레벨 헤딩(### 시스템 레벨)이 없습니다",
 		};
 	}
-	const missing = STANDING_INTERFACE_MARKERS.filter((label) => !slice.includes(label));
+	const missing = STANDING_INTERFACE_TABLE.test(slice) ? [] : [...STANDING_INTERFACE_MARKERS];
 	return {
 		id: "R17",
 		title: "R17 시스템 레벨 상시 인터페이스 표",
@@ -510,6 +513,31 @@ function checkR17(text: string): CheckItem {
 
 /** The labels each 컴포넌트 레벨 arch-entity card must carry (R18). */
 const COMPONENT_CARD_MARKERS = ["레이어", "책임", "인터페이스"] as const;
+
+/** A renderer-recognized arch-entity opening tag with an allowed change kind. */
+const VALID_ARCH_ENTITY_OPENING_TAG =
+	/<([A-Za-z][\w-]*)\b(?=[^>]*\bclass=(["'])(?:[^"'\s]+\s+)*arch-entity(?:\s+[^"'\s]+)*\2)(?=[^>]*\bdata-change=(["'])(?:new|mod|del)\3)[^>]*>/gi;
+
+function archEntityBodies(slice: string): string[] {
+	const bodies: string[] = [];
+	VALID_ARCH_ENTITY_OPENING_TAG.lastIndex = 0;
+	let match: RegExpExecArray | null = VALID_ARCH_ENTITY_OPENING_TAG.exec(slice);
+	while (match !== null) {
+		const tag = match[1];
+		if (tag !== undefined) {
+			const bodyStart = match.index + match[0].length;
+			const close = new RegExp(`</${tag}\\s*>`, "i").exec(slice.slice(bodyStart));
+			if (close !== null) bodies.push(slice.slice(bodyStart, bodyStart + close.index));
+		}
+		match = VALID_ARCH_ENTITY_OPENING_TAG.exec(slice);
+	}
+	return bodies;
+}
+
+function hasValidArchEntity(slice: string): boolean {
+	VALID_ARCH_ENTITY_OPENING_TAG.lastIndex = 0;
+	return VALID_ARCH_ENTITY_OPENING_TAG.test(slice);
+}
 
 // R18 — the component level, beyond the dependency graph (R9/R12), decodes each
 // changed behaviour node with an arch-entity card: its layer, responsibility,
@@ -525,9 +553,16 @@ function checkR18(text: string): CheckItem {
 			detail: "컴포넌트 레벨 헤딩(### 컴포넌트 레벨)이 없습니다",
 		};
 	}
-	const missing: string[] = COMPONENT_CARD_MARKERS.filter((label) => !slice.includes(label));
-	if (!slice.includes("arch-entity")) missing.push("arch-entity 카드");
-	if (!slice.includes("data-change")) missing.push("변경종류(data-change)");
+	if (ARCH_WAIVER.test(slice)) {
+		return { id: "R18", title: "R18 컴포넌트 레벨 노드 카드", pass: true, detail: "" };
+	}
+	const cards = archEntityBodies(slice);
+	const missing: string[] = COMPONENT_CARD_MARKERS.filter(
+		(label) => !cards.some((body) => body.includes(label)),
+	);
+	if (cards.length === 0) {
+		missing.push("arch-entity 카드", "변경종류(data-change: new|mod|del)");
+	}
 	return {
 		id: "R18",
 		title: "R18 컴포넌트 레벨 노드 카드",
@@ -566,9 +601,15 @@ const METHODOLOGY_TOKENS = [
  */
 const AXIS_LABEL_TOKENS = ["수평", "수직"] as const;
 
+function hasStandaloneToken(text: string, token: string): boolean {
+	const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const identifierChars = /^[A-Za-z]/.test(token) ? "A-Za-z0-9_" : "\\p{L}\\p{N}_";
+	return new RegExp(`(?<![${identifierChars}])${escaped}(?![${identifierChars}])`, "iu").test(text);
+}
+
 // R19 — no methodology name OR layer-axis label leaks into the Architecture
-// prose. Read on the fence-masked Architecture section (a token inside a code
-// example is not prose).
+// prose. Read on the fence- and inline-code-stripped Architecture section so
+// examples and identifiers do not count as rendered prose.
 function checkR19(text: string): CheckItem {
 	const slice = sectionSlice(maskFenced(text), "Architecture");
 	if (slice === null) {
@@ -579,10 +620,10 @@ function checkR19(text: string): CheckItem {
 			detail: "## Architecture 섹션이 없습니다",
 		};
 	}
-	const lower = slice.toLowerCase();
+	const prose = withoutMarkdownCode(slice);
 	const found = [
-		...METHODOLOGY_TOKENS.filter((t) => lower.includes(t.toLowerCase())),
-		...AXIS_LABEL_TOKENS.filter((t) => slice.includes(t)),
+		...METHODOLOGY_TOKENS.filter((t) => hasStandaloneToken(prose, t)),
+		...AXIS_LABEL_TOKENS.filter((t) => hasStandaloneToken(prose, t)),
 	];
 	return {
 		id: "R19",
