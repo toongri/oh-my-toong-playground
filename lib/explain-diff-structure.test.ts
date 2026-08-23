@@ -310,6 +310,37 @@ export function withLock() {}
 		expect(r.items.find((i) => i.id === "R5")?.pass).toBe(true);
 	});
 
+	// 실측(luna max): 수정 파일인데 cf-loc를 base:…:1 → head:…:1 플레이스홀더로 채워
+	// (29건) 실제 변경 hunk를 가리키지 않았다. 두 앵커가 다 있어 존재검사(R5)는 통과했다.
+	// base·head 라인이 둘 다 1이면 추적성이 없는 플레이스홀더로 판정해 거부한다.
+	test("수정 파일 cf-loc가 :1 → :1 플레이스홀더면 R5가 실패한다", () => {
+		const body = GOOD_GROUP.replace(
+			"base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14",
+			"base:lib/state-lock.ts:1</code> → <code>head:lib/state-lock.ts:1",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+		});
+		const item = r.items.find((i) => i.id === "R5");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("lib/state-lock.ts");
+	});
+
+	test("실제 라인 번호를 가리키는 cf-loc는 R5를 통과한다", () => {
+		const body = GOOD_GROUP.replace(
+			"base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14",
+			"base:lib/state-lock.ts:325</code> → <code>head:lib/state-lock.ts:590",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+		});
+		expect(r.items.find((i) => i.id === "R5")?.pass).toBe(true);
+	});
+
 	describe("R13 — 커밋이 그룹의 뼈대이고 파일마다 핵심 로직 코드가 있다", () => {
 		test("그룹에 커밋 서브섹션이 하나도 없으면 실패한다", () => {
 			// 파일 블록을 그룹 바로 아래 두고 커밋 서브섹션을 생략한 옛 평면 구조.
@@ -606,6 +637,20 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 			step: "architecture",
 		}).items.find((i) => i.id === "R19");
 		expect(item?.pass).toBe(true);
+	});
+
+	// R19 — 레이어 축 라벨(수평/수직)도 방법론 프레이밍이라 산문 노출 금지. 실측(luna max):
+	// 경계 블록 "닿은 곳" 줄에 "수평: … 수직: …"를 재도입해, 사용자가 빼라던 정적 축
+	// 분류가 되살아났다. 방법론 명칭 스캔과 같은 기계검사로 막는다.
+	test("Architecture 산문에 축 라벨(수평/수직)이 있으면 R19가 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace("단방향 유지.", "단방향 유지. 수직 도메인은 catalog, 수평 레이어는 feature다."),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R19",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("수직");
 	});
 
 	test("레벨 헤딩이 하나라도 빠지면 R9가 실패하고 그 레벨 이름을 사유에 담는다", () => {

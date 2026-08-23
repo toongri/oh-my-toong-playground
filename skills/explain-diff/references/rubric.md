@@ -91,7 +91,7 @@ Both a deep background and a narrow background are present, and the deep backgro
 
 ### R5. Traceability
 
-Each file block points at the before-location and after-location in the `cf-loc` slot in the form `base:file:line` → `head:file:line` — the location anchors are pulled out of the prose. The gate asks only that both `base:` and `head:` anchors be present (an added file needs only `head:`); the exact `path:line` precision and the deletion/new-file wording are the author's to fill.
+Each file block points at the before-location and after-location in the `cf-loc` slot in the form `base:file:line` → `head:file:line` — the location anchors are pulled out of the prose. The gate asks that both `base:` and `head:` anchors be present (an added file needs only `head:`) AND that a modified file's anchors are not the placeholder `base:…:1 → head:…:1` — both lines being `1` points nowhere, so read the real hunk lines from `git diff base..head -- <file>`. The deletion/new-file wording beyond that is the author's to fill.
 But a file the diff **newly added** has no prior location to point at, so only the `head:` anchor is required. New-ness comes from `A` in `git diff --name-status`, not from the document's narrative — deciding by sentence would let an author be exempted from the base anchor merely by writing "new file".
 
 > **RED 10/16.** 6 have not a single `file:line`. In particular 3 codex no-guidance and 2 claude gist are at
@@ -176,9 +176,9 @@ The 컴포넌트 레벨, beyond the dependency graph, decodes each changed behav
 > layer anywhere, so a reader could not tell what any node *does*. The system level had gained a companion
 > table (R14); the component level had no counterpart, an asymmetry R18 closes.
 
-### R19. No methodology name in Architecture prose
+### R19. No methodology name or axis label in Architecture prose
 
-The Architecture section's prose speaks the codebase's own domain terms — no methodology proper name leaks in. Read on the fence-masked `## Architecture` section, none of these tokens may appear (case-insensitive): `FSD`, `Feature-Sliced`, `Clean Architecture`, `Clean-arch`, `DDD`, `Domain-Driven`, `bounded context`. The plain words `유스케이스`/`도메인` are legitimate (the block heading uses them); only framework names are banned. The boundary vocabulary still follows the `architecture-boundaries` rule — this forbids naming the *methodology*, not thinking in its axes.
+The Architecture section's prose speaks the codebase's own domain terms — no methodology proper name and no bare layer-axis label leaks in. Read on the fence-masked `## Architecture` section, none of these tokens may appear: methodology names (case-insensitive) `FSD`, `Feature-Sliced`, `Clean Architecture`, `Clean-arch`, `DDD`, `Domain-Driven`, `bounded context`; and axis labels `수평`, `수직`. The plain words `유스케이스`/`도메인` are legitimate (the block heading uses them); only framework names and the horizontal/vertical axis labels are banned. The boundary block names what this diff touched in the codebase's own terms, not by sorting parts into a `수평`/`수직` grid — the boundary vocabulary still follows the `architecture-boundaries` rule internally, but the *output* forbids naming the methodology or its axes.
 
 > **RED — interview requirement.** The user asked that the boundary block think in the two axes but never surface
 > the framework names in the output ("이게 프롬프트에 굳이 드러나진 않았으면 좋겠어"). A literal token scan is

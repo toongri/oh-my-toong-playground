@@ -173,15 +173,16 @@ R18을 통과한다. 변경종류는 `data-change="new|mod|del"` 로 나르고 �
 
 - **동작 단위** — 이 변경이 추가/삭제/변경한 행위 단위마다 `arch-entity` 하나. 변경종류는
   `data-change`, 각 단위는 **한 일 + 영향 인터페이스**를 적는다. 어휘·원리는
-  `architecture-boundaries` rule의 2축을 따르되 **방법론 이름(DDD·FSD·Clean-arch·bounded context)은
-  산출물에 쓰지 않는다** — 코드베이스 실제 도메인 어휘로 쓴다(R19가 이를 검사한다).
+  `architecture-boundaries` rule의 2축을 따르되 **방법론 이름(DDD·FSD·Clean-arch·bounded context)도,
+  `수평`/`수직` 같은 축 라벨도 산출물에 쓰지 않는다** — 이 diff가 닿은 곳을 코드베이스 실제 도메인
+  이름으로 적는다(부품을 수평/수직 격자에 분류하는 게 아니라). R19가 명칭과 축 라벨을 모두 검사한다.
 - **의존 방향 판정** — 의존이 어느 방향으로 흐르는지, 이 변경이 단방향을 유지·위반·복원하는지
   한 줄로 판정한다. reach-in·역참조·순환은 결합 결함으로 플래그한다. `의존 방향` 라벨이 있어야 한다.
 
 ```markdown
 ### 경계·의존·유스케이스
 
-> 닿은 곳 — 수평: commerce `entities`·`features/ui`, backend `catalog`. 수직: 부스트팩 상담챗 · catalog.
+> 닿은 곳 — 부스트팩 상담챗의 카드·도구(commerce `entities`·`features/ui`), 표시 카탈로그(backend `catalog`).
 
 <div class="arch-entity" data-change="new">
 <p><strong>이름</strong> display catalog 조회</p>
@@ -270,6 +271,10 @@ export const SupplementCostItem = z.strictObject({
 한 문단으로 뭉치지 않게 한다. 출처는 `cf-src` 배지로, 위치 앵커는 `cf-loc` 슬롯으로
 산문 밖에 둔다. 필드 라벨은 `<strong>` 으로 쓴다 — 마크다운 `**…**` 는 div 안에서
 살지 않는다.
+
+`cf-loc`의 `base:`·`head:` 라인 번호는 **git으로 실제 변경 hunk의 위치를 확인해 적는다**
+(`git diff base..head -- <file>` 의 hunk 헤더). `base:…:1 → head:…:1` 같은 플레이스홀더는
+추적성이 없어 R5가 거부한다. 신규 파일만 `base:새 파일`로 두고 `head:` 라인만 적는다.
 
 ```html
 <div class="cf">

@@ -334,16 +334,31 @@ function checkR5(blocks: Array<{ path: string; body: string }>, addedFiles: stri
 			return !(head && /base:\S/.test(body));
 		})
 		.map((b) => b.path);
+	// A modified file whose base AND head anchors both point at line 1 is a
+	// placeholder, not a real hunk location — measured (luna max) as the way a
+	// model skips computing the anchor while still passing the presence check
+	// above. New files carry `base:새 파일` (no numeric base) and never trip this.
+	const placeholder = blocks
+		.filter((b) => {
+			if (addedSet.has(b.path)) return false;
+			const body = withoutFencedCode(b.body);
+			const base = body.match(/base:[^\s<]*:(\d+)/);
+			const head = body.match(/head:[^\s<]*:(\d+)/);
+			return base !== null && head !== null && base[1] === "1" && head[1] === "1";
+		})
+		.map((b) => b.path);
 	return {
 		id: "R5",
 		title: "R5 추적성",
-		pass: blocks.length > 0 && noAnchor.length === 0,
+		pass: blocks.length > 0 && noAnchor.length === 0 && placeholder.length === 0,
 		detail:
 			blocks.length === 0
 				? "파일 블록이 하나도 없습니다."
 				: noAnchor.length > 0
 					? `base/head 위치가 모두 있지 않은 파일: ${noAnchor.join(", ")}`
-					: "",
+					: placeholder.length > 0
+						? `cf-loc가 실제 변경 위치가 아니라 :1 → :1 플레이스홀더인 파일: ${placeholder.join(", ")} — git으로 변경 hunk의 base/head 라인을 확인해 적는다`
+						: "",
 	};
 }
 
@@ -541,27 +556,41 @@ const METHODOLOGY_TOKENS = [
 	"bounded context",
 ] as const;
 
-// R19 — no methodology name leaks into the Architecture prose. Read on the
-// fence-masked Architecture section (a token inside a code example is not prose).
+/**
+ * Layer-axis labels R19 also forbids. Measured (luna max): the boundary block's
+ * "닿은 곳" line reintroduced `수평: … 수직: …`, the exact static-classification
+ * framing the boundary rewrite (R15) removed. The block must map what this diff
+ * touched in the codebase's own domain terms, not sort parts into a horizontal /
+ * vertical grid — so the bare axis words leak the same methodology framing the
+ * proper names do, and are banned in the Architecture prose too.
+ */
+const AXIS_LABEL_TOKENS = ["수평", "수직"] as const;
+
+// R19 — no methodology name OR layer-axis label leaks into the Architecture
+// prose. Read on the fence-masked Architecture section (a token inside a code
+// example is not prose).
 function checkR19(text: string): CheckItem {
 	const slice = sectionSlice(maskFenced(text), "Architecture");
 	if (slice === null) {
 		return {
 			id: "R19",
-			title: "R19 방법론 명칭 비노출",
+			title: "R19 방법론 명칭·축 라벨 비노출",
 			pass: false,
 			detail: "## Architecture 섹션이 없습니다",
 		};
 	}
 	const lower = slice.toLowerCase();
-	const found = METHODOLOGY_TOKENS.filter((t) => lower.includes(t.toLowerCase()));
+	const found = [
+		...METHODOLOGY_TOKENS.filter((t) => lower.includes(t.toLowerCase())),
+		...AXIS_LABEL_TOKENS.filter((t) => slice.includes(t)),
+	];
 	return {
 		id: "R19",
-		title: "R19 방법론 명칭 비노출",
+		title: "R19 방법론 명칭·축 라벨 비노출",
 		pass: found.length === 0,
 		detail:
 			found.length > 0
-				? `Architecture 산문에 방법론 명칭이 노출됨: ${found.join(", ")} — 코드베이스 실제 도메인 어휘로 바꾼다`
+				? `Architecture 산문에 방법론 명칭·축 라벨이 노출됨: ${found.join(", ")} — 코드베이스 실제 도메인 어휘로 바꾼다(수평/수직 축 분류 대신 닿은 곳을 도메인 이름으로)`
 				: "",
 	};
 }
