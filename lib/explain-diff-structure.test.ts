@@ -310,6 +310,77 @@ export function withLock() {}
 		expect(r.items.find((i) => i.id === "R5")?.pass).toBe(true);
 	});
 
+	test("텍스트 hunk가 없는 파일은 파일 단위 legacy R5 규칙으로 검사한다", () => {
+		const strict = GOOD_GROUP.replace(
+			"base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14",
+			"base:lib/state-lock.ts:2</code> → <code>head:lib/state-lock.ts:14",
+		);
+		const fallbackPath = "assets/mode-only.png";
+		const fallback = `## Change Group 2: 바이너리 메타데이터
+> 예고: 텍스트 변경과 함께 비텍스트 파일도 기록한다.
+> 순서: 텍스트 hunk 검증 뒤 파일 존재를 확인한다.
+
+### \`ef45ab6\` — chore: 이미지 메타데이터 갱신
+비텍스트 파일은 텍스트 hunk가 없다.
+
+#### \`${fallbackPath}\`
+<div class="cf">
+<p class="cf-loc"><code>base:${fallbackPath}:12</code> → <code>head:${fallbackPath}:20</code></p>
+</div>
+
+\`\`\`text
+binary placeholder
+\`\`\`
+`;
+		const r = checkStructure(withBackground(`${strict}\n${fallback}`), {
+			signalFiles: ["lib/state-lock.ts", fallbackPath],
+			step: "code",
+			commitHashes: ["ab12cd3f00", "ef45ab6c11"],
+			diffHunks: [
+				{
+					path: "lib/state-lock.ts",
+					base: { start: 2, count: 4 },
+					head: { start: 14, count: 5 },
+				},
+			],
+		});
+		expect(r.items.find((i) => i.id === "R5")?.pass).toBe(true);
+	});
+
+	test("공백이 있는 경로의 strict·fallback 앵커는 파일 블록 경로와 일치하면 통과한다", () => {
+		const strictPath = "src/strict file.ts";
+		const fallbackPath = "assets/mode only file.bin";
+		const strict = GOOD_GROUP.replace(/lib\/state-lock\.ts/g, strictPath).replace(
+			`base:${strictPath}:0</code> → <code>head:${strictPath}:14`,
+			`base:${strictPath}:12</code> → <code>head:${strictPath}:18`,
+		);
+		const fallback = `## Change Group 2: 비텍스트 경로
+> 예고: 공백 경로도 기록한다.
+> 순서: 텍스트 파일의 hunk 뒤 fallback 파일을 확인한다.
+
+### \`ef45ab6\` — chore: 공백 경로 기록
+공백이 있는 비텍스트 경로다.
+
+#### \`${fallbackPath}\`
+<div class="cf">
+<p class="cf-loc"><code>base:${fallbackPath}:12</code> → <code>head:${fallbackPath}:20</code></p>
+</div>
+`;
+		const r = checkStructure(withBackground(`${strict}\n${fallback}`), {
+			signalFiles: [strictPath, fallbackPath],
+			step: "code",
+			commitHashes: ["ab12cd3f00", "ef45ab6c11"],
+			diffHunks: [
+				{
+					path: strictPath,
+					base: { start: 12, count: 4 },
+					head: { start: 18, count: 5 },
+				},
+			],
+		});
+		expect(r.items.find((i) => i.id === "R5")?.pass).toBe(true);
+	});
+
 	// 실측(luna max): 수정 파일인데 cf-loc를 base:…:1 → head:…:1 플레이스홀더로 채워
 	// (29건) 실제 변경 hunk를 가리키지 않았다. 두 앵커가 다 있어 존재검사(R5)는 통과했다.
 	// base·head 라인이 둘 다 1이면 추적성이 없는 플레이스홀더로 판정해 거부한다.
@@ -792,6 +863,19 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 		expect(item?.pass).toBe(false);
 	});
 
+	test("시스템 레벨 상시 인터페이스 표가 헤더와 구분 행만 있으면 R17이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"| browser → backend | GET /v1/supplement-catalog | 표시 카탈로그 |\n| backend → db | supplement_categories 조회 | 카탈로그 행 |\n",
+				"",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R17",
+		);
+		expect(item?.pass).toBe(false);
+	});
+
 	// R18 — 컴포넌트 레벨 노드별 arch-entity 카드.
 	test("컴포넌트 레벨의 사유 있는 구조 변화 없음 면제는 R18을 통과시킨다", () => {
 		const doc = withBackground(
@@ -827,6 +911,39 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 			(i) => i.id === "R18",
 		);
 		expect(item?.pass).toBe(false);
+	});
+
+	test("완전한 카드가 다른 카드의 누락된 인터페이스를 가리지 못한다", () => {
+		const incompleteCard = `<div class="arch-entity" data-change="mod">
+<p><strong>이름</strong> secondaryNode</p>
+<p><strong>레이어</strong> features/catalog</p>
+<p><strong>책임</strong> 보조 경로 연결</p>
+</div>`;
+		const doc = withBackground(
+			ARCH_OK.replace("</div>\n\n### 도메인 레벨", `</div>\n\n${incompleteCard}\n\n### 도메인 레벨`),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("인터페이스");
+	});
+
+	test("유효한 카드가 다른 카드의 잘못된 data-change를 가리지 못한다", () => {
+		const invalidCard = `<div class="arch-entity" data-change="changed">
+<p><strong>이름</strong> invalidNode</p>
+<p><strong>레이어</strong> features/catalog</p>
+<p><strong>책임</strong> 잘못된 변경 종류를 가진 경로</p>
+<p><strong>인터페이스</strong> resolveInvalid</p>
+</div>`;
+		const doc = withBackground(
+			ARCH_OK.replace("</div>\n\n### 도메인 레벨", `</div>\n\n${invalidCard}\n\n### 도메인 레벨`),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("data-change");
 	});
 
 	test("컴포넌트 레벨에 arch-entity 카드 라벨이 없으면 R18이 실패한다", () => {

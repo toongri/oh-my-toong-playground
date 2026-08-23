@@ -208,6 +208,44 @@ describe("start", () => {
 		expect(state().diff_hunks).toEqual([]);
 	});
 
+	test("start 는 A...B diff hunk에 merge-base 이후 feature 변경만 박제한다", async () => {
+		const repo = join(sandbox, "repo-diverged-range");
+		const git = (...a: string[]) =>
+			execFileSync("git", ["-C", repo, ...a], {
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+			});
+		mkdirSync(repo);
+		git("init", "-q", "-b", "main");
+		writeFileSync(join(repo, "shared.txt"), "merge base\n", "utf8");
+		git("add", "shared.txt");
+		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "merge base");
+		writeFileSync(join(repo, "base-only.txt"), "base branch\n", "utf8");
+		git("add", "base-only.txt");
+		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "base branch change");
+		git("checkout", "-q", "-b", "feature", "HEAD~1");
+		writeFileSync(join(repo, "feature-only.txt"), "feature branch\n", "utf8");
+		git("add", "feature-only.txt");
+		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "feature change");
+
+		const prev = process.cwd();
+		try {
+			process.chdir(repo);
+			const { start } = await cli();
+			start(SID, "main...feature", "sample");
+		} finally {
+			process.chdir(prev);
+		}
+
+		expect(state().diff_hunks).toEqual([
+			{
+				path: "feature-only.txt",
+				base: null,
+				head: { start: 1, count: 1 },
+			},
+		]);
+	});
+
 	test("start 는 첫 줄 수정 hunk의 base/head 범위를 박제한다", async () => {
 		const repo = join(sandbox, "repo-first-line");
 		const git = (...a: string[]) =>

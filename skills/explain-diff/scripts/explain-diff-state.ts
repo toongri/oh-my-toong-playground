@@ -302,7 +302,7 @@ function captureDiffHunks(range: string): DiffHunk[] {
 				"--no-renames",
 				"--no-color",
 				"--unified=0",
-				range.replace("...", ".."),
+				range,
 			],
 			{ encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
 		);

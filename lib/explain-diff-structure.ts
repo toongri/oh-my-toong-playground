@@ -335,6 +335,61 @@ function checkR16(text: string): CheckItem {
 	};
 }
 
+type AnchorSide = "base" | "head";
+
+function anchorValues(body: string, side: AnchorSide): string[] {
+	const values: string[] = [];
+	const re = new RegExp(`${side}:([^<\\r\\n]+)`, "g");
+	let match: RegExpExecArray | null = re.exec(body);
+	while (match !== null) {
+		if (match[1] !== undefined) values.push(match[1].trim());
+		match = re.exec(body);
+	}
+	return values;
+}
+
+/** Parse the final `:<number>` and accept it only for this file block's path. */
+function numericAnchor(body: string, side: AnchorSide, path: string): number | null {
+	for (const value of anchorValues(body, side)) {
+		const match = value.match(/^(.*):(\d+)$/);
+		if (match !== null && match[1] === path) return Number(match[2]);
+	}
+	return null;
+}
+
+/** The pre-hunk R5 contract: presence, with numeric anchors path-checked. */
+function hasLegacyAnchor(body: string, side: AnchorSide, path: string): boolean {
+	return anchorValues(body, side).some((value) => {
+		if (value === "") return false;
+		const match = value.match(/^(.*):(\d+)$/);
+		return match === null || match[1] === path;
+	});
+}
+
+function legacyR5Failures(
+	blocks: Array<{ path: string; body: string }>,
+	addedSet: Set<string>,
+): { noAnchor: string[]; placeholder: string[] } {
+	const noAnchor = blocks
+		.filter((block) => {
+			const body = withoutFencedCode(block.body);
+			const hasHead = hasLegacyAnchor(body, "head", block.path);
+			if (addedSet.has(block.path)) return !hasHead;
+			return !(hasHead && hasLegacyAnchor(body, "base", block.path));
+		})
+		.map((block) => block.path);
+	const placeholder = blocks
+		.filter((block) => {
+			if (addedSet.has(block.path)) return false;
+			const body = withoutFencedCode(block.body);
+			const base = numericAnchor(body, "base", block.path);
+			const head = numericAnchor(body, "head", block.path);
+			return base === 1 && head === 1;
+		})
+		.map((block) => block.path);
+	return { noAnchor, placeholder };
+}
+
 // R5 — both endpoints of the move (base:/head: anchors). An ADDED file is asked
 // for the head anchor alone. Read on the code-stripped body; the template places
 // these in the cf-loc slot. Without hunk metadata the check only asks that the
@@ -347,27 +402,7 @@ function checkR5(
 	const addedSet = new Set(addedFiles ?? []);
 	const hasDiffHunks = (diffHunks?.length ?? 0) > 0;
 	if (!hasDiffHunks) {
-		const noAnchor = blocks
-			.filter((b) => {
-				const body = withoutFencedCode(b.body);
-				const head = /head:\S/.test(body);
-				if (addedSet.has(b.path)) return !head;
-				return !(head && /base:\S/.test(body));
-			})
-			.map((b) => b.path);
-		// A modified file whose base AND head anchors both point at line 1 is a
-		// placeholder, not a real hunk location — measured (luna max) as the way a
-		// model skips computing the anchor while still passing the presence check
-		// above. New files carry `base:새 파일` (no numeric base) and never trip this.
-		const placeholder = blocks
-			.filter((b) => {
-				if (addedSet.has(b.path)) return false;
-				const body = withoutFencedCode(b.body);
-				const base = body.match(/base:[^\s<]*:(\d+)/);
-				const head = body.match(/head:[^\s<]*:(\d+)/);
-				return base !== null && head !== null && base[1] === "1" && head[1] === "1";
-			})
-			.map((b) => b.path);
+		const { noAnchor, placeholder } = legacyR5Failures(blocks, addedSet);
 		return {
 			id: "R5",
 			title: "R5 추적성",
@@ -389,15 +424,16 @@ function checkR5(
 		hunks.push(hunk);
 		hunksByPath.set(hunk.path, hunks);
 	}
-	const missingHunk = blocks.filter((b) => !hunksByPath.has(b.path)).map((b) => b.path);
+	const fallbackBlocks = blocks.filter((block) => !hunksByPath.has(block.path));
+	const fallback = legacyR5Failures(fallbackBlocks, addedSet);
 	const missingAnchor: string[] = [];
 	const outsideHunk: string[] = [];
 	for (const block of blocks) {
 		const hunks = hunksByPath.get(block.path);
 		if (hunks === undefined) continue;
 		const body = withoutFencedCode(block.body);
-		const base = body.match(/base:[^\s<]*:(\d+)/);
-		const head = body.match(/head:[^\s<]*:(\d+)/);
+		const base = numericAnchor(body, "base", block.path);
+		const head = numericAnchor(body, "head", block.path);
 		const needsBase = !addedSet.has(block.path) && hunks.some((hunk) => hunk.base !== null);
 		const needsHead = hunks.some((hunk) => hunk.head !== null);
 
@@ -409,37 +445,44 @@ function checkR5(
 			!hunks.some(
 				(hunk) =>
 					hunk.base !== null &&
-					Number(base[1]) >= hunk.base.start &&
-					Number(base[1]) < hunk.base.start + hunk.base.count,
+					base >= hunk.base.start &&
+					base < hunk.base.start + hunk.base.count,
 			)
 		)
-			outsideHunk.push(`${block.path} (base:${base?.[1]})`);
+			outsideHunk.push(`${block.path} (base:${base})`);
 		if (
 			needsHead &&
 			head !== null &&
 			!hunks.some(
 				(hunk) =>
 					hunk.head !== null &&
-					Number(head[1]) >= hunk.head.start &&
-					Number(head[1]) < hunk.head.start + hunk.head.count,
+					head >= hunk.head.start &&
+					head < hunk.head.start + hunk.head.count,
 			)
 		)
-			outsideHunk.push(`${block.path} (head:${head?.[1]})`);
+			outsideHunk.push(`${block.path} (head:${head})`);
 	}
 	return {
 		id: "R5",
 		title: "R5 추적성",
-		pass: blocks.length > 0 && missingHunk.length === 0 && missingAnchor.length === 0 && outsideHunk.length === 0,
+		pass:
+			blocks.length > 0 &&
+			fallback.noAnchor.length === 0 &&
+			fallback.placeholder.length === 0 &&
+			missingAnchor.length === 0 &&
+			outsideHunk.length === 0,
 		detail:
 			blocks.length === 0
 				? "파일 블록이 하나도 없습니다."
-				: missingHunk.length > 0
-					? `diff hunk 메타데이터가 없는 파일: ${missingHunk.join(", ")}`
-					: missingAnchor.length > 0
-						? `실제 diff hunk의 숫자 위치가 없는 파일: ${missingAnchor.join(", ")}`
-						: outsideHunk.length > 0
-							? `실제 diff hunk 범위 밖의 앵커: ${outsideHunk.join(", ")}`
-							: "",
+				: fallback.noAnchor.length > 0
+					? `base/head 위치가 모두 있지 않은 파일(hunk 없는 파일은 legacy 규칙): ${fallback.noAnchor.join(", ")}`
+					: fallback.placeholder.length > 0
+						? `cf-loc가 실제 변경 위치가 아니라 :1 → :1 플레이스홀더인 파일: ${fallback.placeholder.join(", ")} — git으로 변경 hunk의 base/head 라인을 확인해 적는다`
+						: missingAnchor.length > 0
+							? `실제 diff hunk의 숫자 위치가 없는 파일: ${missingAnchor.join(", ")}`
+							: outsideHunk.length > 0
+								? `실제 diff hunk 범위 밖의 앵커: ${outsideHunk.join(", ")}`
+								: "",
 	};
 }
 
@@ -564,7 +607,7 @@ function checkR15(text: string): CheckItem {
 const STANDING_INTERFACE_MARKERS = ["경계", "인터페이스", "오가는 것"] as const;
 
 const STANDING_INTERFACE_TABLE =
-	/^[ \t]*\|[ \t]*경계[ \t]*\|[ \t]*인터페이스[ \t]*\|[ \t]*오가는 것[ \t]*\|[ \t]*\r?\n[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*$/m;
+	/^[ \t]*\|[ \t]*경계[ \t]*\|[ \t]*인터페이스[ \t]*\|[ \t]*오가는 것[ \t]*\|[ \t]*\r?\n[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*\r?\n(?![ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*(?:\r?\n|$))[ \t]*\|[^|\r\n]*\|[^|\r\n]*\|[^|\r\n]*\|[ \t]*(?:\r?\n|$)/m;
 
 // R17 — the system level, beyond the change-contract table (R14), carries a
 // standing-interface table so the diagram's short-protocol edges become legible:
@@ -595,24 +638,36 @@ function checkR17(text: string): CheckItem {
 /** The labels each 컴포넌트 레벨 arch-entity card must carry (R18). */
 const COMPONENT_CARD_MARKERS = ["레이어", "책임", "인터페이스"] as const;
 
+/** Every authored arch-entity card, including cards with an invalid change kind. */
+const ARCH_ENTITY_OPENING_TAG =
+	/<([A-Za-z][\w-]*)\b(?=[^>]*\bclass=(["'])(?:[^"'\s]+\s+)*arch-entity(?:\s+[^"'\s]+)*\2)[^>]*>/gi;
+
 /** A renderer-recognized arch-entity opening tag with an allowed change kind. */
 const VALID_ARCH_ENTITY_OPENING_TAG =
 	/<([A-Za-z][\w-]*)\b(?=[^>]*\bclass=(["'])(?:[^"'\s]+\s+)*arch-entity(?:\s+[^"'\s]+)*\2)(?=[^>]*\bdata-change=(["'])(?:new|mod|del)\3)[^>]*>/gi;
 
-function archEntityBodies(slice: string): string[] {
-	const bodies: string[] = [];
-	VALID_ARCH_ENTITY_OPENING_TAG.lastIndex = 0;
-	let match: RegExpExecArray | null = VALID_ARCH_ENTITY_OPENING_TAG.exec(slice);
+interface ArchEntityCard {
+	body: string;
+	validDataChange: boolean;
+}
+
+function archEntityCards(slice: string): ArchEntityCard[] {
+	const cards: ArchEntityCard[] = [];
+	ARCH_ENTITY_OPENING_TAG.lastIndex = 0;
+	let match: RegExpExecArray | null = ARCH_ENTITY_OPENING_TAG.exec(slice);
 	while (match !== null) {
 		const tag = match[1];
 		if (tag !== undefined) {
 			const bodyStart = match.index + match[0].length;
 			const close = new RegExp(`</${tag}\\s*>`, "i").exec(slice.slice(bodyStart));
-			if (close !== null) bodies.push(slice.slice(bodyStart, bodyStart + close.index));
+			cards.push({
+				body: slice.slice(bodyStart, close === null ? slice.length : bodyStart + close.index),
+				validDataChange: /\bdata-change=(["'])(?:new|mod|del)\1/i.test(match[0]),
+			});
 		}
-		match = VALID_ARCH_ENTITY_OPENING_TAG.exec(slice);
+		match = ARCH_ENTITY_OPENING_TAG.exec(slice);
 	}
-	return bodies;
+	return cards;
 }
 
 function hasValidArchEntity(slice: string): boolean {
@@ -637,12 +692,16 @@ function checkR18(text: string): CheckItem {
 	if (ARCH_WAIVER.test(slice)) {
 		return { id: "R18", title: "R18 컴포넌트 레벨 노드 카드", pass: true, detail: "" };
 	}
-	const cards = archEntityBodies(slice);
-	const missing: string[] = COMPONENT_CARD_MARKERS.filter(
-		(label) => !cards.some((body) => body.includes(label)),
-	);
+	const cards = archEntityCards(slice);
+	const missing: string[] = [];
 	if (cards.length === 0) {
 		missing.push("arch-entity 카드", "변경종류(data-change: new|mod|del)");
+	} else {
+		cards.forEach((card, index) => {
+			const cardMissing: string[] = COMPONENT_CARD_MARKERS.filter((label) => !card.body.includes(label));
+			if (!card.validDataChange) cardMissing.push("변경종류(data-change: new|mod|del)");
+			if (cardMissing.length > 0) missing.push(`카드 ${index + 1}: ${cardMissing.join(", ")}`);
+		});
 	}
 	return {
 		id: "R18",
