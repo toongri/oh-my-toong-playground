@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { checkStructure } from "./explain-diff-structure";
+import { checkStructure, type DiffHunk } from "./explain-diff-structure";
 
 // v4 계약: 코드 섹션의 뼈대는 커밋이다. Change Group(관심사) 안에서 커밋 단위로
 // 내려가고(### `hash` — 제목), 커밋 아래 파일 블록(#### `file`)이 cf 컴포넌트로
@@ -310,6 +310,231 @@ export function withLock() {}
 		expect(r.items.find((i) => i.id === "R5")?.pass).toBe(true);
 	});
 
+	test("텍스트 hunk가 없는 파일은 파일 단위 legacy R5 규칙으로 검사한다", () => {
+		const strict = GOOD_GROUP.replace(
+			"base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14",
+			"base:lib/state-lock.ts:2</code> → <code>head:lib/state-lock.ts:14",
+		);
+		const fallbackPath = "assets/mode-only.png";
+		const fallback = `## Change Group 2: 바이너리 메타데이터
+> 예고: 텍스트 변경과 함께 비텍스트 파일도 기록한다.
+> 순서: 텍스트 hunk 검증 뒤 파일 존재를 확인한다.
+
+### \`ef45ab6\` — chore: 이미지 메타데이터 갱신
+비텍스트 파일은 텍스트 hunk가 없다.
+
+#### \`${fallbackPath}\`
+<div class="cf">
+<p class="cf-loc"><code>base:${fallbackPath}:12</code> → <code>head:${fallbackPath}:20</code></p>
+</div>
+
+\`\`\`text
+binary placeholder
+\`\`\`
+`;
+		const r = checkStructure(withBackground(`${strict}\n${fallback}`), {
+			signalFiles: ["lib/state-lock.ts", fallbackPath],
+			step: "code",
+			commitHashes: ["ab12cd3f00", "ef45ab6c11"],
+			diffHunks: [
+				{
+					path: "lib/state-lock.ts",
+					base: { start: 2, count: 4 },
+					head: { start: 14, count: 5 },
+				},
+			],
+		});
+		expect(r.items.find((i) => i.id === "R5")?.pass).toBe(true);
+	});
+
+	test("공백이 있는 경로의 strict·fallback 앵커는 파일 블록 경로와 일치하면 통과한다", () => {
+		const strictPath = "src/strict file.ts";
+		const fallbackPath = "assets/mode only file.bin";
+		const strict = GOOD_GROUP.replace(/lib\/state-lock\.ts/g, strictPath).replace(
+			`base:${strictPath}:0</code> → <code>head:${strictPath}:14`,
+			`base:${strictPath}:12</code> → <code>head:${strictPath}:18`,
+		);
+		const fallback = `## Change Group 2: 비텍스트 경로
+> 예고: 공백 경로도 기록한다.
+> 순서: 텍스트 파일의 hunk 뒤 fallback 파일을 확인한다.
+
+### \`ef45ab6\` — chore: 공백 경로 기록
+공백이 있는 비텍스트 경로다.
+
+#### \`${fallbackPath}\`
+<div class="cf">
+<p class="cf-loc"><code>base:${fallbackPath}:12</code> → <code>head:${fallbackPath}:20</code></p>
+</div>
+`;
+		const r = checkStructure(withBackground(`${strict}\n${fallback}`), {
+			signalFiles: [strictPath, fallbackPath],
+			step: "code",
+			commitHashes: ["ab12cd3f00", "ef45ab6c11"],
+			diffHunks: [
+				{
+					path: strictPath,
+					base: { start: 12, count: 4 },
+					head: { start: 18, count: 5 },
+				},
+			],
+		});
+		expect(r.items.find((i) => i.id === "R5")?.pass).toBe(true);
+	});
+
+	// 실측(luna max): 수정 파일인데 cf-loc를 base:…:1 → head:…:1 플레이스홀더로 채워
+	// (29건) 실제 변경 hunk를 가리키지 않았다. 두 앵커가 다 있어 존재검사(R5)는 통과했다.
+	// base·head 라인이 둘 다 1이면 추적성이 없는 플레이스홀더로 판정해 거부한다.
+	test("수정 파일 cf-loc가 :1 → :1 플레이스홀더면 R5가 실패한다", () => {
+		const body = GOOD_GROUP.replace(
+			"base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14",
+			"base:lib/state-lock.ts:1</code> → <code>head:lib/state-lock.ts:1",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+		});
+		const item = r.items.find((i) => i.id === "R5");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("lib/state-lock.ts");
+	});
+
+	test("실제 hunk가 양쪽 모두 1행에서 시작하면 :1 → :1을 R5가 허용한다", () => {
+		const body = GOOD_GROUP.replace(
+			"base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14",
+			"base:lib/state-lock.ts:1</code> → <code>head:lib/state-lock.ts:1",
+		);
+		const diffHunks: DiffHunk[] = [
+			{
+				path: "lib/state-lock.ts",
+				base: { start: 1, count: 4 },
+				head: { start: 1, count: 5 },
+			},
+		];
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			diffHunks,
+		});
+		const item = r.items.find((i) => i.id === "R5");
+		expect(item?.pass).toBe(true);
+	});
+
+	test("메타데이터의 hunk가 다른 위치면 :1 → :1을 여전히 거부한다", () => {
+		const body = GOOD_GROUP.replace(
+			"base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14",
+			"base:lib/state-lock.ts:1</code> → <code>head:lib/state-lock.ts:1",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			diffHunks: [
+				{
+					path: "lib/state-lock.ts",
+					base: { start: 20, count: 4 },
+					head: { start: 20, count: 5 },
+				},
+			],
+		});
+		const item = r.items.find((i) => i.id === "R5");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("lib/state-lock.ts");
+	});
+
+	test("숫자 앵커가 보고된 hunk 범위를 벗어나면 R5가 실패한다", () => {
+		const body = GOOD_GROUP.replace(
+			"base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14",
+			"base:lib/state-lock.ts:25</code> → <code>head:lib/state-lock.ts:35",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			diffHunks: [
+				{
+					path: "lib/state-lock.ts",
+					base: { start: 20, count: 4 },
+					head: { start: 30, count: 5 },
+				},
+			],
+		});
+		const item = r.items.find((i) => i.id === "R5");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("hunk");
+	});
+
+	test("메타데이터에서 base가 없는 신규 파일은 head hunk만 검증한다", () => {
+		const added = `## Change Group 1: 락을 도입한다
+> 예고: 락이 무엇을 막는지 본다.
+> 순서: 락이 없으면 나머지가 성립하지 않는다.
+
+### \`ab12cd3\` — feat: 락 도입
+동시 작성자 두 명을 막는 락을 새로 넣는다.
+
+#### \`lib/state-lock.ts\`
+<div class="cf">
+<p><strong>역할/변경 전</strong> — 이 파일은 새로 생겼다</p>
+<p><strong>바뀐 것</strong> — 락 획득/해제를 새로 넣었다</p>
+<p><strong>왜</strong> — <span class="cf-src">근거</span> "동시 작성자 두 명"</p>
+<p><strong>효과</strong> — 두 CLI가 같은 락을 쓴다</p>
+<p class="cf-loc"><code>base:신규 파일</code> → <code>head:lib/state-lock.ts:15</code></p>
+</div>
+
+\`\`\`ts
+export function withLock() {}
+\`\`\`
+`;
+		const r = checkStructure(withBackground(added), {
+			signalFiles: ["lib/state-lock.ts"],
+			addedFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			diffHunks: [
+				{
+					path: "lib/state-lock.ts",
+					base: null,
+					head: { start: 15, count: 1 },
+				},
+			],
+		});
+		expect(r.items.find((i) => i.id === "R5")?.pass).toBe(true);
+	});
+
+	test("삭제 파일은 null head side에 대해 base hunk만 검증한다", () => {
+		const body = GOOD_GROUP.replace(
+			"base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14",
+			"base:lib/state-lock.ts:1</code> → <code>head:삭제됨",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			diffHunks: [
+				{
+					path: "lib/state-lock.ts",
+					base: { start: 1, count: 4 },
+					head: null,
+				},
+			],
+		});
+		expect(r.items.find((i) => i.id === "R5")?.pass).toBe(true);
+	});
+
+	test("실제 라인 번호를 가리키는 cf-loc는 R5를 통과한다", () => {
+		const body = GOOD_GROUP.replace(
+			"base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14",
+			"base:lib/state-lock.ts:325</code> → <code>head:lib/state-lock.ts:590",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+		});
+		expect(r.items.find((i) => i.id === "R5")?.pass).toBe(true);
+	});
+
 	describe("R13 — 커밋이 그룹의 뼈대이고 파일마다 핵심 로직 코드가 있다", () => {
 		test("그룹에 커밋 서브섹션이 하나도 없으면 실패한다", () => {
 			// 파일 블록을 그룹 바로 아래 두고 커밋 서브섹션을 생략한 옛 평면 구조.
@@ -467,90 +692,326 @@ v1 복원으로 사라진 404 계약 테스트를 지운다.
 // ---------------------------------------------------------------------------
 // v3/v4 확장 — R9·R14(아키텍처), R10(커밋 오버뷰), R11(스타일 발명 금지)
 
+// v5 계약: 시스템 레벨은 상시 인터페이스 표(R17), 컴포넌트 레벨은 노드별 arch-entity
+// 카드(R18), 경계 블록은 동작단위 변경종류·영향 인터페이스·의존 방향(R15 재작성)을 갖고,
+// Architecture 산문에는 방법론 명칭이 없다(R19).
 const ARCH_OK = `## Architecture
 
 ### 시스템 레벨
 \`\`\`mermaid
 flowchart LR
-  A[Node backend] --> B[(PostgreSQL)]
+  A[commerce browser] -->|HTTP| B[Hono backend]
+  B -->|SQL| C[(PostgreSQL)]
 \`\`\`
+
+| 경계 | 인터페이스 | 오가는 것 |
+|---|---|---|
+| browser → backend | GET /v1/supplement-catalog | 표시 카탈로그 |
+| backend → db | supplement_categories 조회 | 카탈로그 행 |
 
 | 축 | 이번에 바뀌는 계약 |
 |---|---|
-| 서버 API | \`calculateSupplementCost\` 입력 스키마가 좁아진다 |
+| 서버 API | \`GET /v1/supplement-catalog\` 가 query를 받는다 |
 | DB 스키마 | 변경 없음: 조인 방식만 바뀐다 |
-| 클라이언트 의존 | 챗이 의존하는 공유 계약이 category 단일로 좁아진다 |
+| 클라이언트 의존 | 챗이 display catalog를 함께 읽는다 |
 
 설명.
 
 ### 컴포넌트 레벨
 \`\`\`mermaid
 flowchart LR
-  order --> couponHandler
+  card --> resolver
 \`\`\`
-설명.
+
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>
+<p><strong>레이어</strong> entities/supplement/api</p>
+<p><strong>책임</strong> fail-closed 해소기 공급</p>
+<p><strong>인터페이스</strong> resolveAlias, resolveDisplay</p>
+</div>
 
 ### 도메인 레벨
 구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.
 
 ### 경계·의존·유스케이스
 
-| 파트 | 레이어 | 책임 | 협력자 | 영향/수정 |
-|---|---|---|---|---|
-| cost | 수직 도메인 | 비용 계산 | chat | 수정 |
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> display catalog 조회</p>
+<p><strong>한 일</strong> 삭제 포함 표시 카탈로그 경로 신설</p>
+<p><strong>영향 인터페이스</strong> GET /v1/supplement-catalog?includeDeletedCategories=true</p>
+</div>
 
-**의존 방향** — chat → cost 단방향 유지.
+**의존 방향** — commerce feature → resolver → backend REST 단방향 유지.
 `;
 
-describe("architecture 스텝 — R9·R14·R15", () => {
-	test("세 레벨이 각각 mermaid/생략 마커를 갖고 시스템 레벨에 계약 3축·경계 블록 3슬롯이 있으면 통과한다", () => {
+describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
+	test("세 레벨·계약3축·상시 인터페이스 표·컴포넌트 카드·경계 동작단위가 모두 있으면 통과한다", () => {
 		const r = checkStructure(withBackground(ARCH_OK), {
 			signalFiles: ["lib/state-lock.ts"],
 			step: "architecture",
 		});
-		expect(r.items.map((i) => i.id)).toContain("R9");
-		expect(r.items.map((i) => i.id)).toContain("R14");
-		expect(r.items.map((i) => i.id)).toContain("R15");
+		const ids = r.items.map((i) => i.id as string);
+		for (const id of ["R9", "R14", "R15", "R17", "R18", "R19"]) {
+			expect(ids).toContain(id);
+		}
 		expect(r.pass).toBe(true);
 	});
 
-	test("경계·의존·유스케이스 슬롯이 하나라도 빠지면 R15가 실패하고 빠진 라벨을 담는다", () => {
+	// R15 재작성 — 경계 블록은 동작단위 변경종류·영향 인터페이스·의존 방향을 요구한다.
+	test("경계 블록에 의존 방향이 빠지면 R15가 실패한다", () => {
 		const doc = withBackground(ARCH_OK.replace(/\*\*의존 방향\*\*[^\n]*\n/, ""));
-		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" });
-		const item = r.items.find((i) => i.id === "R15");
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R15",
+		);
 		expect(item?.pass).toBe(false);
 		expect(item?.detail).toContain("의존 방향");
 	});
 
-	test("경계 블록이 펜스 예시 안에만 있으면 R15가 실패한다(마스킹)", () => {
-		const doc = withBackground(`## Architecture
+	test("경계 블록에 영향 인터페이스 라벨이 빠지면 R15가 실패한다", () => {
+		const doc = withBackground(ARCH_OK.replace("영향 인터페이스", "무엇"));
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R15",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("영향 인터페이스");
+	});
 
-### 시스템 레벨
-\`\`\`mermaid
-flowchart LR
-  A --> B
-\`\`\`
+	test("경계 블록 동작단위에 변경종류(data-change)가 없으면 R15가 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				'<div class="arch-entity" data-change="new">\n<p><strong>이름</strong> display catalog 조회</p>',
+				'<div class="arch-entity">\n<p><strong>이름</strong> display catalog 조회</p>',
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R15",
+		);
+		expect(item?.pass).toBe(false);
+	});
 
-| 축 | 계약 |
-|---|---|
-| 서버 API | x |
-| DB 스키마 | 변경 없음: - |
-| 클라이언트 의존 | y |
+	test("경계 동작단위의 data-change가 arch-entity 태그 밖 산문에만 있으면 R15가 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				'<div class="arch-entity" data-change="new">\n<p><strong>이름</strong> display catalog 조회</p>',
+				'<div class="arch-entity">\n<p><strong>이름</strong> display catalog 조회</p>\n<p>data-change="new"</p>',
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R15",
+		);
+		expect(item?.pass).toBe(false);
+	});
 
-### 컴포넌트 레벨
-구조 변화 없음: 이유.
+	test("경계 동작단위의 허용되지 않은 data-change 값은 R15가 거부한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				'<div class="arch-entity" data-change="new">\n<p><strong>이름</strong> display catalog 조회</p>',
+				'<div class="arch-entity" data-change="changed">\n<p><strong>이름</strong> display catalog 조회</p>',
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R15",
+		);
+		expect(item?.pass).toBe(false);
+	});
 
-### 도메인 레벨
-구조 변화 없음: 이유.
+	test("경계 동작단위는 data-change mod와 del도 R15에서 허용한다", () => {
+		for (const change of ["mod", "del"]) {
+			const doc = withBackground(
+				ARCH_OK.replace(
+					'<div class="arch-entity" data-change="new">\n<p><strong>이름</strong> display catalog 조회</p>',
+					`<div class="arch-entity" data-change="${change}">\n<p><strong>이름</strong> display catalog 조회</p>`,
+				),
+			);
+			const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+				(i) => i.id === "R15",
+			);
+			expect(item?.pass).toBe(true);
+		}
+	});
 
-\`\`\`markdown
-| 파트 | 레이어 | 책임 | 협력자 | 영향/수정 |
-| a | 수직 도메인 | b | c | 수정 |
-**의존 방향** — 단방향.
-\`\`\`
-`);
-		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" });
-		expect(r.items.find((i) => i.id === "R15")?.pass).toBe(false);
+	// R17 — 시스템 레벨 상시 인터페이스 표.
+	test("시스템 레벨에 상시 인터페이스 표가 없으면 R17이 실패하고 빠진 라벨을 담는다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(/\| 경계 \| 인터페이스 \| 오가는 것 \|[\s\S]*?카탈로그 행 \|\n/, ""),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R17",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("오가는 것");
+	});
+
+	test("시스템 레벨 산문에 열 이름만 있으면 R17이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				/\| 경계 \| 인터페이스 \| 오가는 것 \|[\s\S]*?카탈로그 행 \|\n/,
+				"경계, 인터페이스, 오가는 것을 설명한다.\n",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R17",
+		);
+		expect(item?.pass).toBe(false);
+	});
+
+	test("시스템 레벨 표 헤더에 구분 행이 없으면 R17이 실패한다", () => {
+		const doc = withBackground(ARCH_OK.replace("|---|---|---|\n", ""));
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R17",
+		);
+		expect(item?.pass).toBe(false);
+	});
+
+	test("시스템 레벨 상시 인터페이스 표가 헤더와 구분 행만 있으면 R17이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"| browser → backend | GET /v1/supplement-catalog | 표시 카탈로그 |\n| backend → db | supplement_categories 조회 | 카탈로그 행 |\n",
+				"",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R17",
+		);
+		expect(item?.pass).toBe(false);
+	});
+
+	// R18 — 컴포넌트 레벨 노드별 arch-entity 카드.
+	test("컴포넌트 레벨의 사유 있는 구조 변화 없음 면제는 R18을 통과시킨다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				/```mermaid\nflowchart LR\n {2}card --> resolver\n```[\s\S]*?(?=### 도메인 레벨)/,
+				"구조 변화 없음: 이 diff는 컴포넌트 경계를 바꾸지 않는다.\n\n",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(true);
+	});
+
+	test("컴포넌트 카드의 data-change 값이 허용값이 아니면 R18이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace('class="arch-entity" data-change="new"', 'class="arch-entity" data-change="changed"'),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(false);
+	});
+
+	test("컴포넌트 카드 밖 산문의 data-change는 R18을 통과시키지 않는다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				'<div class="arch-entity" data-change="new">\n<p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>',
+				'<div class="arch-entity">\n<p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>\n<p>data-change="new"</p>',
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(false);
+	});
+
+	test("완전한 카드가 다른 카드의 누락된 인터페이스를 가리지 못한다", () => {
+		const incompleteCard = `<div class="arch-entity" data-change="mod">
+<p><strong>이름</strong> secondaryNode</p>
+<p><strong>레이어</strong> features/catalog</p>
+<p><strong>책임</strong> 보조 경로 연결</p>
+</div>`;
+		const doc = withBackground(
+			ARCH_OK.replace("</div>\n\n### 도메인 레벨", `</div>\n\n${incompleteCard}\n\n### 도메인 레벨`),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("인터페이스");
+	});
+
+	test("유효한 카드가 다른 카드의 잘못된 data-change를 가리지 못한다", () => {
+		const invalidCard = `<div class="arch-entity" data-change="changed">
+<p><strong>이름</strong> invalidNode</p>
+<p><strong>레이어</strong> features/catalog</p>
+<p><strong>책임</strong> 잘못된 변경 종류를 가진 경로</p>
+<p><strong>인터페이스</strong> resolveInvalid</p>
+</div>`;
+		const doc = withBackground(
+			ARCH_OK.replace("</div>\n\n### 도메인 레벨", `</div>\n\n${invalidCard}\n\n### 도메인 레벨`),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("data-change");
+	});
+
+	test("컴포넌트 레벨에 arch-entity 카드 라벨이 없으면 R18이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				/<div class="arch-entity" data-change="new">\n<p><strong>이름<\/strong> <code>useSupplementCodeResolver[\s\S]*?<\/div>\n/,
+				"",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(false);
+	});
+
+	// R19 — Architecture 산문의 방법론 명칭 금지.
+	test("Architecture 산문에 방법론 명칭(FSD 등)이 있으면 R19가 실패한다", () => {
+		const doc = withBackground(ARCH_OK.replace("fail-closed 해소기 공급", "이건 FSD의 feature다"));
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R19",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("FSD");
+	});
+
+	test("방법론 명칭이 없으면 R19가 통과한다", () => {
+		const item = checkStructure(withBackground(ARCH_OK), {
+			signalFiles: ["a.ts"],
+			step: "architecture",
+		}).items.find((i) => i.id === "R19");
+		expect(item?.pass).toBe(true);
+	});
+
+	test("펜스와 인라인 코드의 방법론 토큰 및 AddDomainEvent 식별자는 R19에서 무시한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"fail-closed 해소기 공급",
+				"식별자 AddDomainEvent와 `FSD`, `DDD`, `Clean Architecture`, `수평`, `수직`은 코드 예시다.\n\n```ts\nconst labels = 'FSD DDD Clean Architecture 수평 수직';\n```",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R19",
+		);
+		expect(item?.pass).toBe(true);
+	});
+
+	test("독립된 방법론 토큰과 축 라벨은 R19에서 거부한다", () => {
+		for (const token of ["FSD", "DDD", "Clean Architecture", "수평", "수직"]) {
+			const doc = withBackground(ARCH_OK.replace("fail-closed 해소기 공급", `${token} 분류를 쓴다.`));
+			const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+				(i) => i.id === "R19",
+			);
+			expect(item?.pass).toBe(false);
+		}
+	});
+
+	// R19 — 레이어 축 라벨(수평/수직)도 방법론 프레이밍이라 산문 노출 금지. 실측(luna max):
+	// 경계 블록 "닿은 곳" 줄에 "수평: … 수직: …"를 재도입해, 사용자가 빼라던 정적 축
+	// 분류가 되살아났다. 방법론 명칭 스캔과 같은 기계검사로 막는다.
+	test("Architecture 산문에 축 라벨(수평/수직)이 있으면 R19가 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace("단방향 유지.", "단방향 유지. 수직 도메인은 catalog, 수평 레이어는 feature다."),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R19",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("수직");
 	});
 
 	test("레벨 헤딩이 하나라도 빠지면 R9가 실패하고 그 레벨 이름을 사유에 담는다", () => {

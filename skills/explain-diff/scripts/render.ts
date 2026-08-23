@@ -182,12 +182,14 @@ const STYLE = `
   --bg: #ffffff; --fg: #1a1a1a; --muted: #666; --rule: #e3e3e3;
   --code-bg: #f6f6f4; --accent: #2b5fa8;
   --before: #b0563a; --after: #2e7d4f;
+  --ae-new: #2e7d4f; --ae-mod: #b8860b; --ae-del: #c0392b;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #16181c; --fg: #e6e6e6; --muted: #9aa0a6; --rule: #2e3238;
     --code-bg: #1e2126; --accent: #7aa7e6;
     --before: #e0937a; --after: #7ec99a;
+    --ae-new: #4a9d6f; --ae-mod: #c99a3a; --ae-del: #d05a48;
   }
 }
 * { box-sizing: border-box; }
@@ -283,6 +285,27 @@ h1, h2, h3, h4, p, li, blockquote, th, td { word-break: keep-all; }
 }
 .cf-loc { font-size: 0.78rem; color: var(--muted); margin-top: 0.45rem; }
 .cf-loc code { background: none; padding: 0; font-size: inherit; color: inherit; }
+
+/* arch-entity — 아키텍처 노드/동작단위 하나의 구조 카드. cf 와 같은 필드 규칙에
+   변경종류 배지(data-change)를 더한다. 색은 render.ts 가 소유한다 — 저자는 종류만 준다.
+   컴포넌트 레벨(레이어·책임·인터페이스)과 경계 블록(한 일·영향 인터페이스)이 함께 쓴다. */
+.arch-entity {
+  margin: 0.6rem 0 1rem; padding: 0.55rem 0.9rem;
+  border: 1px solid var(--rule); border-left: 3px solid var(--rule);
+  border-radius: 8px; background: var(--code-bg);
+}
+.arch-entity p { margin: 0.25rem 0; font-size: 0.93rem; }
+.arch-entity strong { color: var(--fg); font-weight: 650; }
+.arch-entity[data-change]::before {
+  display: inline-block; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em;
+  border-radius: 999px; padding: 0 0.5rem; margin: 0 0 0.35rem; color: #fff;
+}
+.arch-entity[data-change="new"] { border-left-color: var(--ae-new); }
+.arch-entity[data-change="new"]::before { content: "신설"; background: var(--ae-new); }
+.arch-entity[data-change="mod"] { border-left-color: var(--ae-mod); }
+.arch-entity[data-change="mod"]::before { content: "변경"; background: var(--ae-mod); }
+.arch-entity[data-change="del"] { border-left-color: var(--ae-del); }
+.arch-entity[data-change="del"]::before { content: "삭제"; background: var(--ae-del); }
 
 /* mermaid SVG는 밝은 테마 색으로 구워지므로, 다크 모드에서도 흰 카드 위에 놓는다. */
 figure.diagram {

@@ -1,6 +1,6 @@
 # explain-diff unified rubric
 
-These 16 items are used as **one and the same set** in three places — per-step section judgment, the basis for generating quiz questions, and the RED/GREEN artifact comparison. If the three places hold different standards, "passed the gate" and "is a good document" split apart, and from then on the gate is a pass-through ritual.
+These 19 items are used as **one and the same set** in three places — per-step section judgment, the basis for generating quiz questions, and the RED/GREEN artifact comparison. If the three places hold different standards, "passed the gate" and "is a good document" split apart, and from then on the gate is a pass-through ritual.
 
 The items are **split three ways by who decides**. Absence is counted by the script, existence is proven by the judge with a quote, and pure judgment is kept minimal. Reducing the very surface on which the judge can exercise discretion is the purpose of the split.
 
@@ -33,6 +33,9 @@ The document is written one step at a time, accumulating. So an item is evaluate
 | R14 | script | architecture |
 | R15 | script | architecture |
 | R16 | script | goal |
+| R17 | script | architecture |
+| R18 | script | architecture |
+| R19 | script | architecture |
 
 The `intuition` step has no slot of its own — only R6 (judge) and the common R11 decide it. `render` and `quiz` score none of this table's items: `render` looks at the artifact check (HTML present and non-empty, mermaid→SVG parity, visual-qa `VERDICT: PASS`, technical-writing `REVIEW: APPLIED`), and `quiz` runs a separate grading path (`grade`).
 
@@ -88,8 +91,19 @@ Both a deep background and a narrow background are present, and the deep backgro
 
 ### R5. Traceability
 
-Each file block points at the before-location and after-location in the `cf-loc` slot in the form `base:file:line` → `head:file:line` — the location anchors are pulled out of the prose. The gate asks only that both `base:` and `head:` anchors be present (an added file needs only `head:`); the exact `path:line` precision and the deletion/new-file wording are the author's to fill.
-But a file the diff **newly added** has no prior location to point at, so only the `head:` anchor is required. New-ness comes from `A` in `git diff --name-status`, not from the document's narrative — deciding by sentence would let an author be exempted from the base anchor merely by writing "new file".
+At `start`, the CLI passes the original range unchanged to `git diff` when it captures unified-diff
+hunk metadata, preserving `A...B` merge-base semantics. Only `git rev-list` commit enumeration
+normalizes `A...B` to `A..B`. At the `code` submission, textual hunk ranges and numeric
+`base:`/`head:` anchors are checked per file. If a changed file has no textual hunk while another
+file does, that file uses the legacy per-file anchor-presence/placeholder fallback rather than being
+rejected as globally missing. Numeric anchors parse the final `:<number>` suffix and are accepted
+only when the preceding path matches the enclosing file-block path, including paths with spaces. A
+legitimate first-line hunk may therefore use `base:…:1 → head:…:1`. If hunk metadata is unavailable,
+or unavailable for that file, the legacy fallback still rejects a modified file whose numeric anchors
+are the `:1 → :1` placeholder. With metadata, an added file needs only `head:`, a deleted file only
+`base:`, and a zero-count side has no file lines and needs no anchor. New-ness comes from `A` in
+`git diff --name-status`, not from the document's narrative; a zero-count side comes from the hunk
+header, not from a prose claim.
 
 > **RED 10/16.** 6 have not a single `file:line`. In particular 3 codex no-guidance and 2 claude gist are at
 > zero — independent of document length (even a 50KB document has zeros).
@@ -142,17 +156,69 @@ The code section is organized with the commit as its spine. Each Change Group ha
 > and what the chat client must match were not enumerated in a table, so the "system-unit" explanation was
 > thin.
 
-### R15. Boundary / dependency / use-case block
+### R15. Boundary / dependency / use-case change map
 
-The Architecture section carries a `### 경계·의존·유스케이스` block that defines the domains and use cases this change touches (a table naming each part) and judges the dependency direction. Three labels must be present, read on the Architecture section with fences masked: `협력자` (the definition table's collaborator column, which forces each part to be named with its boundary and its collaborators), `영향/수정` (the affected-vs-modified marker), and `의존 방향` (the unidirectional-dependency verdict). What each says is the author's to fill; the gate forces the slots present. The vocabulary follows the `architecture-boundaries` rule — the two axes (vertical domain / horizontal use-case), not any one methodology.
+The Architecture section closes with a `### 경계·의존·유스케이스` block that is a **change map**, not a static layer-classification table. Read on the `### 경계·의존·유스케이스` sub-slice with fences masked. The rendered block must contain a renderer-recognized `arch-entity` opening tag whose `data-change` is one of `new`, `mod`, or `del`, plus the `영향 인터페이스` and `의존 방향` slots. Prose-only mentions of `data-change`, or unsupported values, do not count. What each slot says is the author's to fill. The vocabulary follows the `architecture-boundaries` rule but the output speaks the codebase's own terms (enforced by R19).
 
-> **RED 0/4 (as the three named slots).** Four baseline runs of the pre-R15 skill on a two-domain refactor
-> (a subscription/billing split moved behind a use case): all four drew the boundary and the before/after
-> dependency picture at the component and domain levels — the three-level + R14 scaffold makes that reliable —
-> but none defined the domains/use-cases as named parts with their collaborators, none marked affected vs
-> modified as structure, and all four stated the direction change only as prose ("방향이 바뀜", "침투")
-> rather than a unidirectional-invariant verdict. Same pattern as R2/R9/R10: the picture lands, the named
-> slots do not — so they are forced.
+> **RED — the v4 static table.** The earlier R15 forced a `파트/레이어/협력자/영향·수정` classification table
+> with a binary `수직 도메인 / 수평 유스케이스` layer choice. On an FSD codebase this miscategorised parts that
+> are neither a clean vertical domain nor a horizontal use-case: a `resolver` (an `entities/lib` module) and a
+> `census` (a standalone backend CLI) were both forced into "수평 유스케이스", and the table answered "what
+> exists" rather than "what this diff did to the boundary". The rewrite drops the static classification: each
+> behaviour unit is an `arch-entity` carrying its change kind and affected interface, closed by the direction
+> verdict — the same "change contract, not inventory" shape that made R14 work.
+
+### R17. System-level standing-interface table
+
+The 시스템 레벨, beyond the R14 change-contract table, carries a **real rendered Markdown table**
+naming which boundary communicates over which endpoint/query/screen-URL and what flows. Its header
+and separator row must have exactly these three columns, followed by at least one data row:
+
+| 경계 | 인터페이스 | 오가는 것 |
+|---|---|---|
+
+Prose-only labels, a fenced example, and a header/separator-only table are not the table R17
+requires. Read on the 시스템 레벨 slice with fences masked; the executable checker requires this
+exact three-column header/separator shape plus a non-separator data row. This is distinct from R14 in
+layer — R14 enumerates what this diff *changes*, R17 the *standing* interface the diagram's
+short-protocol edges leave implicit. What each row says is the author's to fill.
+
+> **RED — real artifact (`b2c-6105`).** The system diagram was `browser --> backend --> db` with every edge
+> unlabelled, and it *omitted* the Python health-profile API and the census→DB boundary that the prose itself
+> named — so "which entrance do they talk through" was answerable only by hunting the prose. Putting the
+> interface on the edge as a label was rejected in the interview (long endpoint/query strings blow the 12-node
+> layout); the table carries it instead, and the diagram keeps short-protocol edges.
+
+### R18. Component-level node cards
+
+The 컴포넌트 레벨 may use a reasoned `구조 변화 없음: <사유>` waiver when there is no component
+structure change. Otherwise, every authored `arch-entity` card in the slice is checked independently
+for the `레이어`, `책임`, and `인터페이스` fields and an allowed `data-change` value: `new`, `mod`, or
+`del`. One complete card cannot mask an incomplete or invalid card. Prose-only card descriptions and
+invalid `data-change` values do not count. Pure data/contract-only content cannot simply omit cards;
+it needs the reasoned waiver if no valid card is present.
+
+> **RED — real artifact (`b2c-6105`).** The component level was a bare chain of class/function names —
+> `CurrentBoostPackInfoCard`, `useBoostPackSupplementCatalogResolvers` — with no responsibility, interface, or
+> layer anywhere, so a reader could not tell what any node *does*. The system level had gained a companion
+> table (R14); the component level had no counterpart, an asymmetry R18 closes.
+
+### R19. No methodology name or axis label in Architecture prose
+
+The Architecture section's **rendered prose** speaks the codebase's own domain terms — no methodology
+proper name and no bare layer-axis label leaks in. The checker masks fenced blocks and removes
+inline-code examples before scanning, then requires standalone token matches (methodology matching
+is case-insensitive). None of these standalone tokens may appear: methodology names `FSD`,
+`Feature-Sliced`, `Clean Architecture`, `Clean-arch`, `DDD`, `Domain-Driven`, `bounded context`; or
+axis labels `수평`, `수직`. The plain words `유스케이스`/`도메인` are legitimate (the block heading
+uses them); only framework names and the horizontal/vertical axis labels are banned. The boundary
+block names what this diff touched in the codebase's own terms, not by sorting parts into a
+`수평`/`수직` grid — the boundary vocabulary still follows the `architecture-boundaries` rule
+internally, but the *output* forbids naming the methodology or its axes.
+
+> **RED — interview requirement.** The user asked that the boundary block think in the two axes but never surface
+> the framework names in the output ("이게 프롬프트에 굳이 드러나진 않았으면 좋겠어"). A literal token scan is
+> the precise, cheap enforcement — the names are proper nouns, so a grep catches them without judge discretion.
 
 ### R16. Goal / core-message beat
 
@@ -183,7 +249,7 @@ Group N's advance herald presupposes group N-1. The judge quotes the passage whe
 
 ### R12. The architecture diagram's correspondence to the diff
 
-The Architecture diagram's node/edge labels are real identifiers of the actual system (service, module, command, entity names) — not invented generic nouns, though context nodes the diff does not change are allowed — and at least one level has a change marker (`:::changed` or Before/After contrast) pointing at what this diff changed. For the 시스템 레벨 specifically, its nodes must be **distinct processes/services/deployables/stores**: an in-process call chain (functions or modules within one runtime) drawn as the system level is mislabeled and fails, because it presents component/domain structure as a system boundary. The judge quotes both the diagram's labels and the body/Evidence sentence where those identifiers appear, plus the change marker. R9 counts "is there a picture", and R12 looks at "is that picture this diff's picture, at the right level" — the structure check can only count the presence of a mermaid fence, so correspondence and leveling are left to the quote-based judgment.
+The Architecture diagram's node/edge labels are real identifiers of the actual system (service, module, command, entity names) — not invented generic nouns, though context nodes the diff does not change are allowed — and at least one level has a change marker (`:::changed` or Before/After contrast) pointing at what this diff changed. For the 시스템 레벨 specifically, its nodes must be **distinct processes/services/deployables/stores**: an in-process call chain (functions or modules within one runtime) drawn as the system level is mislabeled and fails, because it presents component/domain structure as a system boundary. The 시스템 레벨 must also be **complete** — every distinct process/service/store the Evidence or Background prose names as involved must appear as a node; a process the prose names but the diagram omits (a separate API, a CLI) is a fail. The judge quotes both the diagram's labels and the body/Evidence sentence where those identifiers appear, plus the change marker. R9 counts "is there a picture", and R12 looks at "is that picture this diff's picture, at the right level" — the structure check can only count the presence of a mermaid fence, so correspondence and leveling are left to the quote-based judgment.
 
 > **RED — real artifact (`boostpack-tool-helper-restore`).** A 14-line test-only diff whose R14 contract table
 > declared all three axes "변경 없음" still drew a 시스템 레벨 diagram of `test → helper → tool → api → server` —

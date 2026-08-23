@@ -1,5 +1,5 @@
 /**
- * explain-diff structural checks — rubric items R1..R5, R9..R11, R13..R16.
+ * explain-diff structural checks — rubric items R1..R5, R9..R11, R13..R19.
  *
  * These are the half of the rubric a script can decide, and the split is
  * deliberate (see skills/explain-diff/references/rubric.md): absence is
@@ -22,6 +22,19 @@
 
 import type { Step } from "@lib/explain-diff-core";
 
+/** A Git hunk's line range: `start` is the first line and `count` its length. */
+export interface DiffLineRange {
+	start: number;
+	count: number;
+}
+
+/** One unified-diff hunk; a null side means that side has no file lines. */
+export interface DiffHunk {
+	path: string;
+	base: DiffLineRange | null;
+	head: DiffLineRange | null;
+}
+
 export interface StructureInput {
 	/** Changed files classified as signal — every one must appear exactly once. */
 	signalFiles: string[];
@@ -31,6 +44,8 @@ export interface StructureInput {
 	 * rather than from a phrase in the document.
 	 */
 	addedFiles?: string[];
+	/** Unified diff hunks used to verify numeric R5 anchors when available. */
+	diffHunks?: DiffHunk[];
 	/**
 	 * Short (or full) hashes of the commits in the explained range, oldest
 	 * first, as captured at `start`. Empty means enumeration failed — R10 then
@@ -42,7 +57,22 @@ export interface StructureInput {
 }
 
 export interface CheckItem {
-	id: "R1" | "R2" | "R3" | "R4" | "R5" | "R9" | "R10" | "R11" | "R13" | "R14" | "R15" | "R16";
+	id:
+		| "R1"
+		| "R2"
+		| "R3"
+		| "R4"
+		| "R5"
+		| "R9"
+		| "R10"
+		| "R11"
+		| "R13"
+		| "R14"
+		| "R15"
+		| "R16"
+		| "R17"
+		| "R18"
+		| "R19";
 	title: string;
 	pass: boolean;
 	detail: string;
@@ -305,30 +335,154 @@ function checkR16(text: string): CheckItem {
 	};
 }
 
+type AnchorSide = "base" | "head";
+
+function anchorValues(body: string, side: AnchorSide): string[] {
+	const values: string[] = [];
+	const re = new RegExp(`${side}:([^<\\r\\n]+)`, "g");
+	let match: RegExpExecArray | null = re.exec(body);
+	while (match !== null) {
+		if (match[1] !== undefined) values.push(match[1].trim());
+		match = re.exec(body);
+	}
+	return values;
+}
+
+/** Parse the final `:<number>` and accept it only for this file block's path. */
+function numericAnchor(body: string, side: AnchorSide, path: string): number | null {
+	for (const value of anchorValues(body, side)) {
+		const match = value.match(/^(.*):(\d+)$/);
+		if (match !== null && match[1] === path) return Number(match[2]);
+	}
+	return null;
+}
+
+/** The pre-hunk R5 contract: presence, with numeric anchors path-checked. */
+function hasLegacyAnchor(body: string, side: AnchorSide, path: string): boolean {
+	return anchorValues(body, side).some((value) => {
+		if (value === "") return false;
+		const match = value.match(/^(.*):(\d+)$/);
+		return match === null || match[1] === path;
+	});
+}
+
+function legacyR5Failures(
+	blocks: Array<{ path: string; body: string }>,
+	addedSet: Set<string>,
+): { noAnchor: string[]; placeholder: string[] } {
+	const noAnchor = blocks
+		.filter((block) => {
+			const body = withoutFencedCode(block.body);
+			const hasHead = hasLegacyAnchor(body, "head", block.path);
+			if (addedSet.has(block.path)) return !hasHead;
+			return !(hasHead && hasLegacyAnchor(body, "base", block.path));
+		})
+		.map((block) => block.path);
+	const placeholder = blocks
+		.filter((block) => {
+			if (addedSet.has(block.path)) return false;
+			const body = withoutFencedCode(block.body);
+			const base = numericAnchor(body, "base", block.path);
+			const head = numericAnchor(body, "head", block.path);
+			return base === 1 && head === 1;
+		})
+		.map((block) => block.path);
+	return { noAnchor, placeholder };
+}
+
 // R5 — both endpoints of the move (base:/head: anchors). An ADDED file is asked
 // for the head anchor alone. Read on the code-stripped body; the template places
-// these in the cf-loc slot, but the check only asks that the anchors be present —
-// the author fills where and how precisely they point.
-function checkR5(blocks: Array<{ path: string; body: string }>, addedFiles: string[] | undefined): CheckItem {
+// these in the cf-loc slot. Without hunk metadata the check only asks that the
+// anchors be present; with metadata it also checks numeric anchors against ranges.
+function checkR5(
+	blocks: Array<{ path: string; body: string }>,
+	addedFiles: string[] | undefined,
+	diffHunks: DiffHunk[] | undefined,
+): CheckItem {
 	const addedSet = new Set(addedFiles ?? []);
-	const noAnchor = blocks
-		.filter((b) => {
-			const body = withoutFencedCode(b.body);
-			const head = /head:\S/.test(body);
-			if (addedSet.has(b.path)) return !head;
-			return !(head && /base:\S/.test(body));
-		})
-		.map((b) => b.path);
+	const hasDiffHunks = (diffHunks?.length ?? 0) > 0;
+	if (!hasDiffHunks) {
+		const { noAnchor, placeholder } = legacyR5Failures(blocks, addedSet);
+		return {
+			id: "R5",
+			title: "R5 추적성",
+			pass: blocks.length > 0 && noAnchor.length === 0 && placeholder.length === 0,
+			detail:
+				blocks.length === 0
+					? "파일 블록이 하나도 없습니다."
+					: noAnchor.length > 0
+						? `base/head 위치가 모두 있지 않은 파일: ${noAnchor.join(", ")}`
+						: placeholder.length > 0
+							? `cf-loc가 실제 변경 위치가 아니라 :1 → :1 플레이스홀더인 파일: ${placeholder.join(", ")} — git으로 변경 hunk의 base/head 라인을 확인해 적는다`
+							: "",
+		};
+	}
+
+	const hunksByPath = new Map<string, DiffHunk[]>();
+	for (const hunk of diffHunks ?? []) {
+		const hunks = hunksByPath.get(hunk.path) ?? [];
+		hunks.push(hunk);
+		hunksByPath.set(hunk.path, hunks);
+	}
+	const fallbackBlocks = blocks.filter((block) => !hunksByPath.has(block.path));
+	const fallback = legacyR5Failures(fallbackBlocks, addedSet);
+	const missingAnchor: string[] = [];
+	const outsideHunk: string[] = [];
+	for (const block of blocks) {
+		const hunks = hunksByPath.get(block.path);
+		if (hunks === undefined) continue;
+		const body = withoutFencedCode(block.body);
+		const base = numericAnchor(body, "base", block.path);
+		const head = numericAnchor(body, "head", block.path);
+		const needsBase = !addedSet.has(block.path) && hunks.some((hunk) => hunk.base !== null);
+		const needsHead = hunks.some((hunk) => hunk.head !== null);
+
+		if (needsBase && base === null) missingAnchor.push(`${block.path} (base)`);
+		if (needsHead && head === null) missingAnchor.push(`${block.path} (head)`);
+		if (
+			needsBase &&
+			base !== null &&
+			!hunks.some(
+				(hunk) =>
+					hunk.base !== null &&
+					base >= hunk.base.start &&
+					base < hunk.base.start + hunk.base.count,
+			)
+		)
+			outsideHunk.push(`${block.path} (base:${base})`);
+		if (
+			needsHead &&
+			head !== null &&
+			!hunks.some(
+				(hunk) =>
+					hunk.head !== null &&
+					head >= hunk.head.start &&
+					head < hunk.head.start + hunk.head.count,
+			)
+		)
+			outsideHunk.push(`${block.path} (head:${head})`);
+	}
 	return {
 		id: "R5",
 		title: "R5 추적성",
-		pass: blocks.length > 0 && noAnchor.length === 0,
+		pass:
+			blocks.length > 0 &&
+			fallback.noAnchor.length === 0 &&
+			fallback.placeholder.length === 0 &&
+			missingAnchor.length === 0 &&
+			outsideHunk.length === 0,
 		detail:
 			blocks.length === 0
 				? "파일 블록이 하나도 없습니다."
-				: noAnchor.length > 0
-					? `base/head 위치가 모두 있지 않은 파일: ${noAnchor.join(", ")}`
-					: "",
+				: fallback.noAnchor.length > 0
+					? `base/head 위치가 모두 있지 않은 파일(hunk 없는 파일은 legacy 규칙): ${fallback.noAnchor.join(", ")}`
+					: fallback.placeholder.length > 0
+						? `cf-loc가 실제 변경 위치가 아니라 :1 → :1 플레이스홀더인 파일: ${fallback.placeholder.join(", ")} — git으로 변경 hunk의 base/head 라인을 확인해 적는다`
+						: missingAnchor.length > 0
+							? `실제 diff hunk의 숫자 위치가 없는 파일: ${missingAnchor.join(", ")}`
+							: outsideHunk.length > 0
+								? `실제 diff hunk 범위 밖의 앵커: ${outsideHunk.join(", ")}`
+								: "",
 	};
 }
 
@@ -409,38 +563,215 @@ function checkR14(text: string): CheckItem {
 
 /**
  * The boundary / dependency / use-case block the Architecture section must carry
- * (R15). Three distinctive markers, mirroring R14's three-axis approach: the
- * collaborator column of the definition table (naming the parts by their
- * boundary), the affected/modified marker, and the dependency-direction verdict.
- * Vocabulary is delegated to the architecture-boundaries rule; the gate only
- * forces the slots present, not their content — the measured baseline drew the
- * dependency picture reliably but never defined the domains/use-cases as named
- * parts, never marked affected vs modified, and stated the direction change only
- * as prose, never as a unidirectional-invariant verdict.
+ * (R15, v5 rewrite). The baseline that forced the rewrite: the earlier static
+ * classification table (파트/레이어/협력자/영향·수정) miscategorised parts that are
+ * neither a clean vertical domain nor a horizontal use-case, and answered "what
+ * exists" instead of "what this diff did to the boundary". The block is now a
+ * change map: each behaviour unit is an `arch-entity` carrying its change kind
+ * (`data-change`) and the interface it affects (`영향 인터페이스`), closed by a
+ * one-line dependency-direction verdict (`의존 방향`). The gate forces the slots
+ * present; what each says is the author's to fill.
  */
-const BOUNDARY_MARKERS = ["협력자", "영향/수정", "의존 방향"] as const;
+const BOUNDARY_MARKERS = ["영향 인터페이스", "의존 방향"] as const;
 
-// R15 — the boundary / dependency / use-case block, read on the Architecture
-// section with fences masked (the template ships an example block inside a fence,
-// which must not satisfy the gate — same masking discipline as R14).
+// R15 — the boundary / dependency / use-case change map, read on the
+// `### 경계·의존·유스케이스` sub-slice with fences masked (an example block inside a
+// fence must not satisfy the gate — same masking discipline as R14).
 function checkR15(text: string): CheckItem {
-	const slice = sectionSlice(maskFenced(text), "Architecture");
+	const slice = levelSlice(maskFenced(text), "경계·의존·유스케이스");
 	if (slice === null) {
 		return {
 			id: "R15",
 			title: "R15 경계·의존·유스케이스 블록",
 			pass: false,
-			detail: "## Architecture 섹션이 없습니다",
+			detail: "경계·의존·유스케이스 헤딩(### 경계·의존·유스케이스)이 없습니다",
 		};
 	}
-	const missing = BOUNDARY_MARKERS.filter((label) => !slice.includes(label));
+	const missing: string[] = BOUNDARY_MARKERS.filter((label) => !slice.includes(label));
+	// The change kind of each behaviour unit rides on a renderer-recognized
+	// arch-entity opening tag — prose mentions or unsupported values are not a
+	// change map.
+	if (!hasValidArchEntity(slice)) missing.push("변경종류(data-change: new|mod|del)");
 	return {
 		id: "R15",
 		title: "R15 경계·의존·유스케이스 블록",
 		pass: missing.length === 0,
 		detail:
 			missing.length > 0
-				? `경계·의존·유스케이스 블록에 없는 슬롯: ${missing.join(", ")} — 도메인/유스케이스를 협력자와 함께 정의하고, 영향/수정을 표시하고, 의존 방향을 판정한다 (architecture-boundaries rule 참조)`
+				? `경계·의존·유스케이스 블록에 없는 슬롯: ${missing.join(", ")} — 동작 단위마다 변경종류(arch-entity data-change)와 영향 인터페이스를 적고, 의존 방향을 판정한다 (architecture-boundaries rule 참조)`
+				: "",
+	};
+}
+
+/** The column labels the 시스템 레벨 standing-interface table must carry (R17). */
+const STANDING_INTERFACE_MARKERS = ["경계", "인터페이스", "오가는 것"] as const;
+
+const STANDING_INTERFACE_TABLE =
+	/^[ \t]*\|[ \t]*경계[ \t]*\|[ \t]*인터페이스[ \t]*\|[ \t]*오가는 것[ \t]*\|[ \t]*\r?\n[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*\r?\n(?![ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*(?:\r?\n|$))[ \t]*\|[^|\r\n]*\|[^|\r\n]*\|[^|\r\n]*\|[ \t]*(?:\r?\n|$)/m;
+
+// R17 — the system level, beyond the change-contract table (R14), carries a
+// standing-interface table so the diagram's short-protocol edges become legible:
+// which boundary talks over which endpoint/query/screen-URL, and what flows.
+// Read on the 시스템 레벨 slice with fences masked, same discipline as R14.
+function checkR17(text: string): CheckItem {
+	const slice = levelSlice(maskFenced(text), "시스템 레벨");
+	if (slice === null) {
+		return {
+			id: "R17",
+			title: "R17 시스템 레벨 상시 인터페이스 표",
+			pass: false,
+			detail: "시스템 레벨 헤딩(### 시스템 레벨)이 없습니다",
+		};
+	}
+	const missing = STANDING_INTERFACE_TABLE.test(slice) ? [] : [...STANDING_INTERFACE_MARKERS];
+	return {
+		id: "R17",
+		title: "R17 시스템 레벨 상시 인터페이스 표",
+		pass: missing.length === 0,
+		detail:
+			missing.length > 0
+				? `상시 인터페이스 표에 없는 열: ${missing.join(", ")} (경계 | 인터페이스 | 오가는 것 — 엔드포인트·쿼리·화면 URL을 담는다)`
+				: "",
+	};
+}
+
+/** The labels each 컴포넌트 레벨 arch-entity card must carry (R18). */
+const COMPONENT_CARD_MARKERS = ["레이어", "책임", "인터페이스"] as const;
+
+/** Every authored arch-entity card, including cards with an invalid change kind. */
+const ARCH_ENTITY_OPENING_TAG =
+	/<([A-Za-z][\w-]*)\b(?=[^>]*\bclass=(["'])(?:[^"'\s]+\s+)*arch-entity(?:\s+[^"'\s]+)*\2)[^>]*>/gi;
+
+/** A renderer-recognized arch-entity opening tag with an allowed change kind. */
+const VALID_ARCH_ENTITY_OPENING_TAG =
+	/<([A-Za-z][\w-]*)\b(?=[^>]*\bclass=(["'])(?:[^"'\s]+\s+)*arch-entity(?:\s+[^"'\s]+)*\2)(?=[^>]*\bdata-change=(["'])(?:new|mod|del)\3)[^>]*>/gi;
+
+interface ArchEntityCard {
+	body: string;
+	validDataChange: boolean;
+}
+
+function archEntityCards(slice: string): ArchEntityCard[] {
+	const cards: ArchEntityCard[] = [];
+	ARCH_ENTITY_OPENING_TAG.lastIndex = 0;
+	let match: RegExpExecArray | null = ARCH_ENTITY_OPENING_TAG.exec(slice);
+	while (match !== null) {
+		const tag = match[1];
+		if (tag !== undefined) {
+			const bodyStart = match.index + match[0].length;
+			const close = new RegExp(`</${tag}\\s*>`, "i").exec(slice.slice(bodyStart));
+			cards.push({
+				body: slice.slice(bodyStart, close === null ? slice.length : bodyStart + close.index),
+				validDataChange: /\bdata-change=(["'])(?:new|mod|del)\1/i.test(match[0]),
+			});
+		}
+		match = ARCH_ENTITY_OPENING_TAG.exec(slice);
+	}
+	return cards;
+}
+
+function hasValidArchEntity(slice: string): boolean {
+	VALID_ARCH_ENTITY_OPENING_TAG.lastIndex = 0;
+	return VALID_ARCH_ENTITY_OPENING_TAG.test(slice);
+}
+
+// R18 — the component level, beyond the dependency graph (R9/R12), decodes each
+// changed behaviour node with an arch-entity card: its layer, responsibility,
+// and interface (functions), plus a change kind. Measured gap: the component
+// diagram was bare class names — `CurrentBoostPackInfoCard` alone read as opaque.
+function checkR18(text: string): CheckItem {
+	const slice = levelSlice(maskFenced(text), "컴포넌트 레벨");
+	if (slice === null) {
+		return {
+			id: "R18",
+			title: "R18 컴포넌트 레벨 노드 카드",
+			pass: false,
+			detail: "컴포넌트 레벨 헤딩(### 컴포넌트 레벨)이 없습니다",
+		};
+	}
+	if (ARCH_WAIVER.test(slice)) {
+		return { id: "R18", title: "R18 컴포넌트 레벨 노드 카드", pass: true, detail: "" };
+	}
+	const cards = archEntityCards(slice);
+	const missing: string[] = [];
+	if (cards.length === 0) {
+		missing.push("arch-entity 카드", "변경종류(data-change: new|mod|del)");
+	} else {
+		cards.forEach((card, index) => {
+			const cardMissing: string[] = COMPONENT_CARD_MARKERS.filter((label) => !card.body.includes(label));
+			if (!card.validDataChange) cardMissing.push("변경종류(data-change: new|mod|del)");
+			if (cardMissing.length > 0) missing.push(`카드 ${index + 1}: ${cardMissing.join(", ")}`);
+		});
+	}
+	return {
+		id: "R18",
+		title: "R18 컴포넌트 레벨 노드 카드",
+		pass: missing.length === 0,
+		detail:
+			missing.length > 0
+				? `컴포넌트 노드 카드에 없는 슬롯: ${missing.join(", ")} — 변경 노드마다 arch-entity로 레이어·책임·인터페이스·변경종류를 적는다`
+				: "",
+	};
+}
+
+/**
+ * Methodology proper names R19 forbids in the rendered Architecture prose. The
+ * boundary vocabulary follows the architecture-boundaries rule, but the OUTPUT
+ * must speak the codebase's own domain terms — a reader learns the change, not a
+ * framework. The plain word `유스케이스`/`도메인` is legitimate (the block heading
+ * uses it); only the framework names below leak methodology and are banned.
+ */
+const METHODOLOGY_TOKENS = [
+	"FSD",
+	"Feature-Sliced",
+	"Clean Architecture",
+	"Clean-arch",
+	"DDD",
+	"Domain-Driven",
+	"bounded context",
+] as const;
+
+/**
+ * Layer-axis labels R19 also forbids. Measured (luna max): the boundary block's
+ * "닿은 곳" line reintroduced `수평: … 수직: …`, the exact static-classification
+ * framing the boundary rewrite (R15) removed. The block must map what this diff
+ * touched in the codebase's own domain terms, not sort parts into a horizontal /
+ * vertical grid — so the bare axis words leak the same methodology framing the
+ * proper names do, and are banned in the Architecture prose too.
+ */
+const AXIS_LABEL_TOKENS = ["수평", "수직"] as const;
+
+function hasStandaloneToken(text: string, token: string): boolean {
+	const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const identifierChars = /^[A-Za-z]/.test(token) ? "A-Za-z0-9_" : "\\p{L}\\p{N}_";
+	return new RegExp(`(?<![${identifierChars}])${escaped}(?![${identifierChars}])`, "iu").test(text);
+}
+
+// R19 — no methodology name OR layer-axis label leaks into the Architecture
+// prose. Read on the fence- and inline-code-stripped Architecture section so
+// examples and identifiers do not count as rendered prose.
+function checkR19(text: string): CheckItem {
+	const slice = sectionSlice(maskFenced(text), "Architecture");
+	if (slice === null) {
+		return {
+			id: "R19",
+			title: "R19 방법론 명칭·축 라벨 비노출",
+			pass: false,
+			detail: "## Architecture 섹션이 없습니다",
+		};
+	}
+	const prose = withoutMarkdownCode(slice);
+	const found = [
+		...METHODOLOGY_TOKENS.filter((t) => hasStandaloneToken(prose, t)),
+		...AXIS_LABEL_TOKENS.filter((t) => hasStandaloneToken(prose, t)),
+	];
+	return {
+		id: "R19",
+		title: "R19 방법론 명칭·축 라벨 비노출",
+		pass: found.length === 0,
+		detail:
+			found.length > 0
+				? `Architecture 산문에 방법론 명칭·축 라벨이 노출됨: ${found.join(", ")} — 코드베이스 실제 도메인 어휘로 바꾼다(수평/수직 축 분류 대신 닿은 곳을 도메인 이름으로)`
 				: "",
 	};
 }
@@ -545,6 +876,7 @@ const SANCTIONED_CLASSES = new Set([
 	"cf",
 	"cf-src",
 	"cf-loc",
+	"arch-entity",
 ]);
 
 // R11 — the document authors content, the renderer owns presentation.
@@ -589,6 +921,9 @@ export function checkStructure(text: string, input: StructureInput): StructureRe
 			items.push(checkR9(text));
 			items.push(checkR14(text));
 			items.push(checkR15(text));
+			items.push(checkR17(text));
+			items.push(checkR18(text));
+			items.push(checkR19(text));
 			break;
 		case "intuition":
 			// No slot of its own — R6 (the judge) is its rubric coverage; the
@@ -600,7 +935,7 @@ export function checkStructure(text: string, input: StructureInput): StructureRe
 		case "code":
 			items.push(checkR2(text));
 			items.push(checkR3(blocks));
-			items.push(checkR5(blocks, input.addedFiles));
+			items.push(checkR5(blocks, input.addedFiles, input.diffHunks));
 			items.push(checkR1Coverage(blocks, input.signalFiles));
 			items.push(checkR13(text, blocks, input.commitHashes));
 			break;

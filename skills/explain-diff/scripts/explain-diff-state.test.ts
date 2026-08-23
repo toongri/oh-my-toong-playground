@@ -76,6 +76,10 @@ flowchart LR
   CLI --> STATE[(state file)]
 \`\`\`
 
+| 경계 | 인터페이스 | 오가는 것 |
+|---|---|---|
+| CLI → state file | withLock(경로) | 락 획득/해제 |
+
 | 축 | 이번에 바뀌는 계약 |
 |---|---|
 | 서버 API | 변경 없음: CLI 전용이라 서버 API 표면이 없다 |
@@ -83,16 +87,29 @@ flowchart LR
 | 클라이언트 의존 | 두 CLI가 공용 락 모듈에 의존하게 된다 |
 
 ### 컴포넌트 레벨
-구조 변화 없음: 모듈 경계는 그대로다.
+\`\`\`mermaid
+flowchart LR
+  cliA --> lock
+  cliB --> lock
+\`\`\`
+
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>state-lock</code></p>
+<p><strong>레이어</strong> lib/상태-인프라</p>
+<p><strong>책임</strong> 상태 파일 락 소유</p>
+<p><strong>인터페이스</strong> withLock</p>
+</div>
 
 ### 도메인 레벨
 구조 변화 없음: 엔티티가 없다.
 
 ### 경계·의존·유스케이스
 
-| 파트 | 레이어 | 책임 | 협력자 | 영향/수정 |
-|---|---|---|---|---|
-| state-lock | 수직 도메인 | 상태 파일 락 소유 | 두 CLI | 신설 |
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> 상태 갱신 락 통합</p>
+<p><strong>한 일</strong> 두 CLI의 상태 쓰기를 공용 락으로 직렬화</p>
+<p><strong>영향 인터페이스</strong> withLock(경로, fn)</p>
+</div>
 
 **의존 방향** — 두 CLI → 공용 락 모듈 단방향. 역참조 없음.
 `;
@@ -188,6 +205,152 @@ describe("start", () => {
 		const { start } = await cli();
 		start(SID, "존재하지-않는-ref..도-없는-ref", "sample");
 		expect(state().commit_hashes).toEqual([]);
+		expect(state().diff_hunks).toEqual([]);
+	});
+
+	test("start 는 A...B diff hunk에 merge-base 이후 feature 변경만 박제한다", async () => {
+		const repo = join(sandbox, "repo-diverged-range");
+		const git = (...a: string[]) =>
+			execFileSync("git", ["-C", repo, ...a], {
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+			});
+		mkdirSync(repo);
+		git("init", "-q", "-b", "main");
+		writeFileSync(join(repo, "shared.txt"), "merge base\n", "utf8");
+		git("add", "shared.txt");
+		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "merge base");
+		writeFileSync(join(repo, "base-only.txt"), "base branch\n", "utf8");
+		git("add", "base-only.txt");
+		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "base branch change");
+		git("checkout", "-q", "-b", "feature", "HEAD~1");
+		writeFileSync(join(repo, "feature-only.txt"), "feature branch\n", "utf8");
+		git("add", "feature-only.txt");
+		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "feature change");
+
+		const prev = process.cwd();
+		try {
+			process.chdir(repo);
+			const { start } = await cli();
+			start(SID, "main...feature", "sample");
+		} finally {
+			process.chdir(prev);
+		}
+
+		expect(state().diff_hunks).toEqual([
+			{
+				path: "feature-only.txt",
+				base: null,
+				head: { start: 1, count: 1 },
+			},
+		]);
+	});
+
+	test("start 는 첫 줄 수정 hunk의 base/head 범위를 박제한다", async () => {
+		const repo = join(sandbox, "repo-first-line");
+		const git = (...a: string[]) =>
+			execFileSync("git", ["-C", repo, ...a], {
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+			});
+		mkdirSync(repo);
+		git("init", "-q", "-b", "main");
+		mkdirSync(join(repo, "src"));
+		const file = join(repo, "src", "target.ts");
+		writeFileSync(file, "const value = \"old\";\nconst stable = true;\n", "utf8");
+		git("add", "src/target.ts");
+		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "base");
+		writeFileSync(file, "const value = \"new\";\nconst stable = true;\n", "utf8");
+		git("add", "src/target.ts");
+		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "change");
+
+		const prev = process.cwd();
+		try {
+			process.chdir(repo);
+			const { start } = await cli();
+			start(SID, "HEAD~1..HEAD", "sample");
+		} finally {
+			process.chdir(prev);
+		}
+
+		const hunks = state().diff_hunks;
+		expect(hunks).toHaveLength(1);
+		expect(hunks[0].path).toBe("src/target.ts");
+		expect(hunks[0].base.start).toBe(1);
+		expect(hunks[0].base.count).toBeGreaterThan(0);
+		expect(hunks[0].head.start).toBe(1);
+		expect(hunks[0].head.count).toBeGreaterThan(0);
+	});
+
+	test("start 는 hunk 안의 두 대시로 시작하는 삭제 줄을 파일 헤더로 오인하지 않는다", async () => {
+		const repo = join(sandbox, "repo-dash-body-line");
+		const git = (...a: string[]) =>
+			execFileSync("git", ["-C", repo, ...a], {
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+			});
+		mkdirSync(repo);
+		git("init", "-q", "-b", "main");
+		const file = join(repo, "target.txt");
+		writeFileSync(file, "-- old option\nstable\n", "utf8");
+		git("add", "target.txt");
+		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "base");
+		writeFileSync(file, "-- new option\nstable\n", "utf8");
+		git("add", "target.txt");
+		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "change");
+
+		const prev = process.cwd();
+		try {
+			process.chdir(repo);
+			const { start } = await cli();
+			start(SID, "HEAD~1..HEAD", "sample");
+		} finally {
+			process.chdir(prev);
+		}
+
+		const hunks = state().diff_hunks;
+		expect(hunks).toHaveLength(1);
+		expect(hunks[0].path).toBe("target.txt");
+		expect(hunks[0].base).toMatchObject({ start: 1, count: 1 });
+		expect(hunks[0].head).toMatchObject({ start: 1, count: 1 });
+	});
+
+	test("start 는 추가·삭제 파일 hunk의 없는 쪽을 null로 박제한다", async () => {
+		const repo = join(sandbox, "repo-added-deleted");
+		const git = (...a: string[]) =>
+			execFileSync("git", ["-C", repo, ...a], {
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+			});
+		mkdirSync(repo);
+		git("init", "-q", "-b", "main");
+		writeFileSync(join(repo, "removed.txt"), "remove one\nremove two\n", "utf8");
+		git("add", "removed.txt");
+		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "base");
+		rmSync(join(repo, "removed.txt"));
+		writeFileSync(join(repo, "added.txt"), "add one\nadd two\n", "utf8");
+		git("add", "-A");
+		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "change");
+
+		const prev = process.cwd();
+		try {
+			process.chdir(repo);
+			const { start } = await cli();
+			start(SID, "HEAD~1..HEAD", "sample");
+		} finally {
+			process.chdir(prev);
+		}
+
+		const hunks = state().diff_hunks as Array<Record<string, any>>;
+		const byPath = new Map(hunks.map((hunk) => [hunk.path, hunk]));
+		expect(byPath.get("added.txt")).toMatchObject({
+			base: null,
+			head: { start: 1, count: 2 },
+		});
+		expect(byPath.get("removed.txt")).toMatchObject({
+			base: { start: 1, count: 2 },
+			head: null,
+		});
 	});
 });
 
@@ -256,12 +419,13 @@ const WITH_ARCH_DOC = () => `${WITH_BACKGROUND_DOC}\n${GOAL_SECTION}\n${ARCH_SEC
 async function advanceTo(
 	step: Step,
 	docAtStep: (s: Step) => string,
+	range = "r",
 ): Promise<{
 	submitStep: Awaited<ReturnType<typeof cli>>["submitStep"];
 	passStep: Awaited<ReturnType<typeof cli>>["passStep"];
 }> {
 	const { start, submitStep, passStep } = await cli();
-	start(SID, "r", "s");
+	start(SID, range, "s");
 	for (const s of STEP_ORDER) {
 		if (s === step) break;
 		const doc = docFile(docAtStep(s));
@@ -276,6 +440,45 @@ async function advanceTo(
 	}
 	return { submitStep, passStep };
 }
+
+describe("diff hunk 메타데이터 전달", () => {
+	test("code 제출은 start에서 저장한 첫 줄 hunk로 :1 → :1 앵커를 검증한다", async () => {
+		const repo = join(sandbox, "repo-submit-hunk");
+		const git = (...a: string[]) =>
+			execFileSync("git", ["-C", repo, ...a], {
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+			});
+		mkdirSync(repo);
+		git("init", "-q", "-b", "main");
+		mkdirSync(join(repo, "lib"));
+		const file = join(repo, "lib", "state-lock.ts");
+		writeFileSync(file, "export const mode = \"old\";\nexport const stable = true;\n", "utf8");
+		git("add", "lib/state-lock.ts");
+		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "base");
+		writeFileSync(file, "export const mode = \"new\";\nexport const stable = true;\n", "utf8");
+		git("add", "lib/state-lock.ts");
+		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "change");
+		const shortHash = git("rev-parse", "--short", "HEAD").trim();
+
+		const prev = process.cwd();
+		try {
+			process.chdir(repo);
+			const { submitStep } = await advanceTo("code", WITH_ARCH_DOC, "HEAD~1..HEAD");
+			const doc = docFile(
+				GOOD_DOC.replaceAll("ab12cd3", shortHash).replace(
+					"base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14",
+					"base:lib/state-lock.ts:1</code> → <code>head:lib/state-lock.ts:1",
+				),
+			);
+			// start 이후에는 저장된 메타데이터만 사용해야 하므로 저장소 밖에서 제출한다.
+			process.chdir(prev);
+			expect(submitStep(SID, "code", doc, ["lib/state-lock.ts"], [])).toBe(0);
+		} finally {
+			process.chdir(prev);
+		}
+	});
+});
 
 describe("스텝 스코핑 — 스텝마다 다른 슬롯만 본다", () => {
 	test("Evidence 절만 있는 문서는 evidence 스텝을 통과한다 — 문서화된 흐름의 첫 호출", async () => {

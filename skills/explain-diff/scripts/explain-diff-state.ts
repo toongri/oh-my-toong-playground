@@ -25,13 +25,14 @@ import {
 	type ExplainDiffState,
 	type Step,
 } from "@lib/explain-diff-core";
-import { checkStructure } from "@lib/explain-diff-structure";
+import { checkStructure, type DiffHunk, type DiffLineRange } from "@lib/explain-diff-structure";
 
 interface Persisted extends ExplainDiffState {
 	range: string;
 	slug: string;
 	/** Steps whose structural checks passed but whose judge review has not run. */
 	structural_ok: Step[];
+	diff_hunks: DiffHunk[];
 	started_at: string;
 	last_touched_at: string;
 	derived: ReturnType<typeof computeDerived>;
@@ -85,6 +86,7 @@ function read(sessionId: string): Persisted | null {
 			structural_ok: Array.isArray(structuralRaw)
 				? structuralRaw.flatMap((x) => STEP_ORDER.find((s) => s === x) ?? [])
 				: [],
+			diff_hunks: normalizeStoredDiffHunks(r["diff_hunks"]),
 			range: typeof r["range"] === "string" ? r["range"] : "",
 			slug: typeof r["slug"] === "string" ? r["slug"] : "",
 			started_at: typeof r["started_at"] === "string" ? r["started_at"] : nowStamp(),
@@ -111,6 +113,203 @@ function mustRead(sessionId: string): Persisted {
 	const s = read(sessionId);
 	if (!s) throw new Error("explain-diff 상태가 없습니다. 먼저 `start` 를 실행하세요.");
 	return s;
+}
+
+/** Normalizes one persisted hunk side and rejects malformed line metadata. */
+function normalizeStoredLineRange(raw: unknown): DiffLineRange | null | undefined {
+	if (raw === null) return null;
+	if (raw === undefined || typeof raw !== "object") return undefined;
+	const record: Record<string, unknown> = {};
+	Object.assign(record, raw);
+	const start = record["start"];
+	const count = record["count"];
+	if (
+		typeof start !== "number" ||
+		typeof count !== "number" ||
+		!Number.isSafeInteger(start) ||
+		!Number.isSafeInteger(count) ||
+		start < 0 ||
+		count < 0
+	)
+		return undefined;
+	if (count === 0) return null;
+	if (start < 1) return undefined;
+	return { start, count };
+}
+
+/** Rebuilds the optional CLI-owned hunk field; legacy states become `[]`. */
+function normalizeStoredDiffHunks(raw: unknown): DiffHunk[] {
+	if (!Array.isArray(raw)) return [];
+	const out: DiffHunk[] = [];
+	for (const item of raw) {
+		if (item === null || typeof item !== "object") continue;
+		const record: Record<string, unknown> = {};
+		Object.assign(record, item);
+		const path = record["path"];
+		if (typeof path !== "string" || path.length === 0 || path === "/dev/null") continue;
+		const base = normalizeStoredLineRange(record["base"]);
+		const head = normalizeStoredLineRange(record["head"]);
+		if (base === undefined || head === undefined || (base === null && head === null)) continue;
+		out.push({ path, base, head });
+	}
+	return out;
+}
+
+/** Decodes Git's C-style quoted pathname form when a path needs it. */
+function decodeGitPath(raw: string): string | null {
+	if (!raw.startsWith('"')) return raw;
+	if (raw.length < 2 || !raw.endsWith('"')) return null;
+	const body = raw.slice(1, -1);
+	let decoded = "";
+	for (let i = 0; i < body.length; i += 1) {
+		const char = body[i];
+		if (char !== "\\") {
+			decoded += char ?? "";
+			continue;
+		}
+		const escaped = body[i + 1];
+		if (escaped === undefined) return null;
+		i += 1;
+		switch (escaped) {
+			case "a":
+				decoded += "\x07";
+				break;
+			case "b":
+				decoded += "\b";
+				break;
+			case "t":
+				decoded += "\t";
+				break;
+			case "n":
+				decoded += "\n";
+				break;
+			case "v":
+				decoded += "\v";
+				break;
+			case "f":
+				decoded += "\f";
+				break;
+			case "r":
+				decoded += "\r";
+				break;
+			case "e":
+				decoded += "\x1b";
+				break;
+			case "\\":
+				decoded += "\\";
+				break;
+			case '"':
+				decoded += '"';
+				break;
+			default: {
+				if (!/[0-7]/.test(escaped)) return null;
+				let octal = escaped;
+				while (octal.length < 3 && /[0-7]/.test(body[i + 1] ?? "")) {
+					i += 1;
+					octal += body[i] ?? "";
+				}
+				decoded += String.fromCharCode(Number.parseInt(octal, 8));
+			}
+		}
+	}
+	return decoded;
+}
+
+type ParsedDiffPath = string | null | undefined;
+
+/** Parses a `---` or `+++` file header without splitting paths on whitespace. */
+function parseDiffHeaderPath(line: string, marker: "---" | "+++"): ParsedDiffPath {
+	const prefix = `${marker} `;
+	if (!line.startsWith(prefix)) return undefined;
+	const decoded = decodeGitPath(line.slice(prefix.length));
+	if (decoded === null) return undefined;
+	if (decoded === "/dev/null") return null;
+	const sidePrefix = marker === "---" ? "a/" : "b/";
+	if (!decoded.startsWith(sidePrefix) || decoded.length === sidePrefix.length) return undefined;
+	return decoded.slice(sidePrefix.length);
+}
+
+/** Parses a hunk header side; a zero-count side carries no file lines. */
+function parseDiffLineRange(
+	startText: string,
+	countText: string | undefined,
+): DiffLineRange | null | undefined {
+	const start = Number(startText);
+	const count = countText === undefined ? 1 : Number(countText);
+	if (
+		!Number.isSafeInteger(start) ||
+		!Number.isSafeInteger(count) ||
+		start < 0 ||
+		count < 0
+	)
+		return undefined;
+	if (count === 0) return null;
+	if (start < 1) return undefined;
+	return { start, count };
+}
+
+/** Parses all textual hunk headers from one unified diff. */
+function parseDiffHunks(output: string): DiffHunk[] {
+	const out: DiffHunk[] = [];
+	let basePath: ParsedDiffPath;
+	let headPath: ParsedDiffPath;
+	let inHunk = false;
+	let fileHeaderContext = false;
+	for (const line of output.split(/\r?\n/)) {
+		if (line.startsWith("diff --git ")) {
+			basePath = undefined;
+			headPath = undefined;
+			inHunk = false;
+			fileHeaderContext = true;
+			continue;
+		}
+		if (!inHunk && fileHeaderContext && line.startsWith("--- ")) {
+			const parsed = parseDiffHeaderPath(line, "---");
+			if (parsed === undefined) return [];
+			basePath = parsed;
+			headPath = undefined;
+			continue;
+		}
+		if (!inHunk && fileHeaderContext && line.startsWith("+++ ")) {
+			const parsed = parseDiffHeaderPath(line, "+++");
+			if (parsed === undefined || basePath === undefined) return [];
+			headPath = parsed;
+			continue;
+		}
+		if (!line.startsWith("@@ ")) continue;
+
+		const match = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: .*)?$/.exec(line);
+		if (match === null || basePath === undefined || headPath === undefined) return [];
+		inHunk = true;
+		const path = headPath ?? basePath;
+		if (path === null) return [];
+		const base = parseDiffLineRange(match[1] ?? "", match[2]);
+		const head = parseDiffLineRange(match[3] ?? "", match[4]);
+		if (base === undefined || head === undefined || (base === null && head === null)) return [];
+		out.push({ path, base, head });
+	}
+	return out;
+}
+
+/** Captures the range's textual Git hunks once, at `start`; failure is fail-open. */
+function captureDiffHunks(range: string): DiffHunk[] {
+	try {
+		const out = execFileSync(
+			"git",
+			[
+				"diff",
+				"--no-ext-diff",
+				"--no-renames",
+				"--no-color",
+				"--unified=0",
+				range,
+			],
+			{ encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+		);
+		return parseDiffHunks(out);
+	} catch {
+		return [];
+	}
 }
 
 /**
@@ -144,6 +343,7 @@ function start(sessionId: string, range: string, slug: string): void {
 		concepts: [],
 		bank: [],
 		commit_hashes: enumerateCommits(range),
+		diff_hunks: captureDiffHunks(range),
 		awaiting_answer: false,
 		no_progress: { key: "", count: 0, doc_digest: "" },
 		last_failure: null,
@@ -329,6 +529,7 @@ function submitStep(
 						signalFiles,
 						addedFiles,
 						commitHashes: s.commit_hashes,
+						diffHunks: s.diff_hunks,
 						step,
 					});
 		if (!result.pass) {
