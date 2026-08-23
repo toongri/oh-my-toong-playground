@@ -91,11 +91,16 @@ Both a deep background and a narrow background are present, and the deep backgro
 
 ### R5. Traceability
 
-At `start`, the CLI captures unified-diff hunk metadata. At the `code` submission, numeric
-`base:`/`head:` anchors in each `cf-loc` slot are checked against the captured base/head hunk
-ranges. A legitimate first-line hunk may therefore use `base:…:1 → head:…:1`. If hunk metadata
-is unavailable, the legacy fallback still rejects a modified file whose numeric anchors are the
-`:1 → :1` placeholder. With metadata, an added file needs only `head:`, a deleted file needs only
+At `start`, the CLI passes the original range unchanged to `git diff` when it captures unified-diff
+hunk metadata, preserving `A...B` merge-base semantics. Only `git rev-list` commit enumeration
+normalizes `A...B` to `A..B`. At the `code` submission, textual hunk ranges and numeric
+`base:`/`head:` anchors are checked per file. If a changed file has no textual hunk while another
+file does, that file uses the legacy per-file anchor-presence/placeholder fallback rather than being
+rejected as globally missing. Numeric anchors parse the final `:<number>` suffix and are accepted
+only when the preceding path matches the enclosing file-block path, including paths with spaces. A
+legitimate first-line hunk may therefore use `base:…:1 → head:…:1`. If hunk metadata is unavailable,
+or unavailable for that file, the legacy fallback still rejects a modified file whose numeric anchors
+are the `:1 → :1` placeholder. With metadata, an added file needs only `head:`, a deleted file only
 `base:`, and a zero-count side has no file lines and needs no anchor. New-ness comes from `A` in
 `git diff --name-status`, not from the document's narrative; a zero-count side comes from the hunk
 header, not from a prose claim.
@@ -167,16 +172,16 @@ The Architecture section closes with a `### 경계·의존·유스케이스` blo
 
 The 시스템 레벨, beyond the R14 change-contract table, carries a **real rendered Markdown table**
 naming which boundary communicates over which endpoint/query/screen-URL and what flows. Its header
-and separator row must have exactly these three columns:
+and separator row must have exactly these three columns, followed by at least one data row:
 
 | 경계 | 인터페이스 | 오가는 것 |
 |---|---|---|
 
-Prose-only labels and a fenced example are not the table R17 requires. Read on the 시스템 레벨
-slice with fences masked; the executable checker requires this exact three-column header/separator
-shape. This is distinct from R14 in layer — R14 enumerates what this diff *changes*, R17 the
-*standing* interface the diagram's short-protocol edges leave implicit. What each row says is the
-author's to fill.
+Prose-only labels, a fenced example, and a header/separator-only table are not the table R17
+requires. Read on the 시스템 레벨 slice with fences masked; the executable checker requires this
+exact three-column header/separator shape plus a non-separator data row. This is distinct from R14 in
+layer — R14 enumerates what this diff *changes*, R17 the *standing* interface the diagram's
+short-protocol edges leave implicit. What each row says is the author's to fill.
 
 > **RED — real artifact (`b2c-6105`).** The system diagram was `browser --> backend --> db` with every edge
 > unlabelled, and it *omitted* the Python health-profile API and the census→DB boundary that the prose itself
@@ -187,11 +192,11 @@ author's to fill.
 ### R18. Component-level node cards
 
 The 컴포넌트 레벨 may use a reasoned `구조 변화 없음: <사유>` waiver when there is no component
-structure change. Otherwise, the slice must contain renderer-recognized `arch-entity` cards with
-the `레이어`, `책임`, and `인터페이스` fields and an allowed `data-change` value: `new`, `mod`, or
-`del`. Prose-only card descriptions and invalid `data-change` values do not count. Pure
-data/contract-only content cannot simply omit cards; it needs the reasoned waiver if no valid card
-is present.
+structure change. Otherwise, every authored `arch-entity` card in the slice is checked independently
+for the `레이어`, `책임`, and `인터페이스` fields and an allowed `data-change` value: `new`, `mod`, or
+`del`. One complete card cannot mask an incomplete or invalid card. Prose-only card descriptions and
+invalid `data-change` values do not count. Pure data/contract-only content cannot simply omit cards;
+it needs the reasoned waiver if no valid card is present.
 
 > **RED — real artifact (`b2c-6105`).** The component level was a bare chain of class/function names —
 > `CurrentBoostPackInfoCard`, `useBoostPackSupplementCatalogResolvers` — with no responsibility, interface, or

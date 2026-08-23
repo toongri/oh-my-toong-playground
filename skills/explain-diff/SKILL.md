@@ -41,6 +41,11 @@ CLI="bun ${CLAUDE_SKILL_DIR}/scripts/explain-diff-state.ts"
 $CLI start --range "<git range>" --slug "<slug>"
 ```
 
+The range string passed to `start` is passed unchanged to `git diff` when the
+CLI captures textual hunk metadata, so `A...B` retains Git's merge-base diff
+semantics. Only commit enumeration normalizes `A...B` to `A..B` for
+`git rev-list`.
+
 With no arguments, use `HEAD~1..HEAD`; if even that is ambiguous, use the current branch against the default branch.
 
 Then read the changed files together with the state. An added file has no prior location to point at, so the structure check asks only for a `head:` anchor on it — which files are new is fixed here.
@@ -110,7 +115,7 @@ Draw the structure needed to **understand this diff** at **three levels**. Each 
 | 컴포넌트 (component) | How dependencies between modules and domains differ before vs after the change | Module/domain structure within a process |
 | 도메인 (domain) | What the entities, concepts, and invariants are, and what changes | Entities, concepts, invariants |
 
-**The system level does not end with a diagram alone.** Keep diagram edges to a **short protocol** (HTTP·SQL·REST) — long endpoints/queries on an edge break layout. Under the diagram (or waiver), place **two** tables. First, a **standing-interface table** (R17) naming which boundary talks over which endpoint, query, or screen URL, and what flows. It must be a real rendered Markdown table with exactly these three columns — prose-only labels or a fenced example do not count:
+**The system level does not end with a diagram alone.** Keep diagram edges to a **short protocol** (HTTP·SQL·REST) — long endpoints/queries on an edge break layout. Under the diagram (or waiver), place **two** tables. First, a **standing-interface table** (R17) naming which boundary talks over which endpoint, query, or screen URL, and what flows. It must be a real rendered Markdown table with exactly these three columns and at least one data row — prose-only labels, a fenced example, or a header/separator-only table do not count:
 
 | 경계 | 인터페이스 | 오가는 것 |
 |---|---|---|
@@ -118,7 +123,7 @@ Draw the structure needed to **understand this diff** at **three levels**. Each 
 
 Then, a **change-contract table** (R14) across three axes — `서버 API` (endpoints, tRPC procedures, request/response schemas), `DB 스키마` (tables, columns, constraints), `클라이언트 의존` (contracts the client must change to match); each axis states the changing contract or `변경 없음: <사유>`. Order: diagram → standing-interface (context) → change-contract (delta). The three axis labels pass R14; the three rendered column labels (`경계`·`인터페이스`·`오가는 것`) pass R17. Format follows `markdown-template.md`.
 
-**The component level decodes each changed node (R18).** The mermaid graph shows how modules connect; bare class names do not say what a node *is*. A reasoned component-level `구조 변화 없음: <사유>` waiver is accepted. Otherwise, changed behaviour nodes need renderer-recognized `arch-entity` cards carrying `레이어` / `책임` / `인터페이스` (functions) and `data-change="new|mod|del"`. Prose-only card descriptions and unsupported `data-change` values do not count; a pure data/contract-only level must use the reasoned waiver instead of simply omitting cards. The labels and valid cards are what R18 checks.
+**The component level decodes each changed node (R18).** The mermaid graph shows how modules connect; bare class names do not say what a node *is*. A reasoned component-level `구조 변화 없음: <사유>` waiver is accepted. Otherwise, every authored `arch-entity` card is checked independently for `레이어` / `책임` / `인터페이스` (functions) and `data-change="new|mod|del"`; one complete card cannot mask an incomplete or invalid card. Prose-only card descriptions and unsupported `data-change` values do not count; a pure data/contract-only level must use the reasoned waiver instead of simply omitting cards. The labels and valid cards are what R18 checks.
 
 **The Architecture section closes with a boundary/dependency/use-case change map (R15).** After the three levels, add a `### 경계·의존·유스케이스` block that is **not** a static layer-classification table but a map of what this diff did to the boundary. The rendered block must contain a real renderer-recognized `arch-entity` with an allowed `data-change="new|mod|del"`, plus the `영향 인터페이스` and `의존 방향` slots; prose-only mentions or unsupported change values do not count. Describe each behaviour unit's affected interface, the touched layers/domains as a one-line backdrop, and close with a dependency-direction verdict (keeps/violates/restores unidirectional dependency; flag any reach-in, back-reference, or cycle). **Do not write methodology names (FSD·Feature-Sliced·Clean Architecture·DDD·bounded context) OR bare axis labels (`수평`/`수직`) in the Architecture prose (R19)** — name the touched areas in the codebase's own domain terms, not by sorting parts into a horizontal/vertical grid. The vocabulary follows the `architecture-boundaries` rule but the output speaks the codebase's own domain terms. Format follows `markdown-template.md`.
 
@@ -189,12 +194,17 @@ The three slots fill R13, R3, and R5. The component, field labels, and code-fenc
 - **Commit subsection** (`### \`hash\``): at least one per group. The hash must be a range commit that `start` pinned (R13).
 - **Core-logic code**: one code fence per file block. Location anchors alone do not read as "what was done" (R13).
 - **`cf-loc` location anchors**: put `base:` (before) and `head:` (after) in a slot outside the prose (R5).
-  `start` captures unified-diff hunk metadata; at the `code` submission, numeric anchors are validated
-  against the captured base/head hunk ranges. A legitimate first-line hunk may therefore use
-  `base:…:1 → head:…:1`. If hunk metadata is unavailable, the legacy fallback still rejects a modified
-  file whose numeric anchors are the `:1 → :1` placeholder. With metadata, added files need only a
-  `head:` anchor, deleted files need only a `base:` anchor, and a zero-count side has no file lines and
-  needs no anchor. Read the real ranges from the captured hunk headers rather than inventing positions.
+  `start` passes the original range unchanged to `git diff` for textual hunk capture, preserving
+  `A...B` merge-base semantics; only `git rev-list` commit enumeration changes it to `A..B`. At the
+  `code` submission, hunk ranges are checked per file. If a changed file has no textual hunk while
+  another file does, that file uses the legacy per-file anchor-presence/placeholder fallback instead
+  of being rejected as globally missing. Numeric anchors parse the final `:<number>` suffix and are
+  accepted only when the path before it matches the enclosing file-block path, including paths with
+  spaces. A legitimate first-line hunk may therefore use `base:…:1 → head:…:1`; without hunk metadata
+  (or for a file with no textual hunk), the legacy fallback still rejects a modified file whose
+  numeric anchors are the `:1 → :1` placeholder. With metadata, added files need only a `head:` anchor,
+  deleted files only a `base:` anchor, and a zero-count side has no file lines and needs no anchor.
+  Read the real ranges from the captured hunk headers rather than inventing positions.
 - **`cf-src` provenance tag**: one of three on every 왜 field (R3).
 
 | Situation | Tag |
@@ -225,7 +235,7 @@ What this gate actually looks at differs per step — it inspects only the slots
 | architecture | Three level headings, each with a mermaid diagram or a reasoned waiver (R9); system level has the three change-contract axes (R14) and a real rendered three-column standing-interface table `경계`/`인터페이스`/`오가는 것` (R17); component level accepts a reasoned structure-no-change waiver or requires renderer-recognized `arch-entity` cards with `레이어`/`책임`/`인터페이스` and `data-change="new|mod|del"` (R18); boundary block requires a real `arch-entity` with allowed `data-change` plus `영향 인터페이스`/`의존 방향` slots (R15); rendered Architecture prose uses standalone-token filtering (R19) |
 | intuition | No item of its own — the substantive verdict is the judgment's (R6) |
 | commits | With two or more commits, does every hash appear in the Commit Journey overview (R10); a single commit may use the waiver marker |
-| code | Change Group title/herald/order-rationale three slots (R2), a provenance tag on every 왜 (R3), cf-loc traceability (R5), each signal file in exactly one file block (R1), a commit subsection with a valid hash per group + core-logic code per file (R13). At `start`, unified diff hunk metadata is captured; at `code` submission, numeric anchors are checked against the captured hunk ranges. A legitimate first-line hunk may use `base:…:1 → head:…:1`; without metadata, the legacy `:1 → :1` placeholder rejection remains. Added files need `head:` only, deleted files need `base:` only, and a zero-count side has no file lines. |
+| code | Change Group title/herald/order-rationale three slots (R2), a provenance tag on every 왜 (R3), cf-loc traceability (R5), each signal file in exactly one file block (R1), a commit subsection with a valid hash per group + core-logic code per file (R13). `start` passes the original range unchanged to `git diff` (preserving `A...B` merge-base semantics); only `git rev-list` enumeration normalizes it to `A..B`. At `code` submission, textual hunk ranges are checked per file, and a file with no textual hunk uses the legacy per-file presence/placeholder fallback even when other files have hunks. The final `:<number>` suffix is matched against the enclosing file-block path, including paths with spaces. A legitimate first-line hunk may use `base:…:1 → head:…:1`; added files need `head:` only, deleted files `base:` only, and a zero-count side has no file lines. |
 | render | See Step 8 — it inspects the artifact HTML, mermaid render parity, and the two verification reports |
 
 **Common to all authoring steps**: the whole accumulated document is checked for `<style>`, inline `style=`, and unsanctioned classes (R11).
