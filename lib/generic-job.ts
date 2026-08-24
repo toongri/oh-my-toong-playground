@@ -862,6 +862,7 @@ export function findActiveMembers(entitiesDir: string): string[] | null {
 export async function computeStatus(
 	jobDir: string,
 	config: JobConfig,
+	opts: { casSleepFn?: typeof sleepMs } = {},
 ): Promise<{
 	jobDir: string;
 	id: string | null;
@@ -871,6 +872,7 @@ export async function computeStatus(
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- public exported return type; members shape is intentionally loose for downstream JSON serialization
 	members: any[];
 }> {
+	const casSleep = opts.casSleepFn ?? sleepMs;
 	const resolvedJobDir = path.resolve(jobDir);
 	if (!fs.existsSync(resolvedJobDir)) exitWithError(`jobDir not found: ${resolvedJobDir}`);
 
@@ -920,7 +922,7 @@ export async function computeStatus(
 			const elapsed = Date.now() - queuedTs;
 			if (elapsed > stalenessThresholdMs) {
 				// CAS pattern: sleep then re-read to avoid race with worker startup
-				await sleepMs(250);
+				await casSleep(250);
 				const recheck = readJsonIfExists(statusPath);
 				if (isRecord(recheck) && recheck.state === "queued") {
 					const errorPayload = {
@@ -954,7 +956,7 @@ export async function computeStatus(
 
 			if (isStale) {
 				// CAS pattern: sleep then re-read to avoid race with legitimate completion
-				await sleepMs(250);
+				await casSleep(250);
 				const recheck = readJsonIfExists(statusPath);
 				if (isRecord(recheck) && recheck.state === "running") {
 					// Recompute elapsed using recheck fields (post-CAS)

@@ -1450,8 +1450,11 @@ describe("computeStatus", () => {
 			startedAt: staleStart,
 			exitCode: 0,
 		});
-		Bun.spawn(["bash", "-c", `sleep 0.1 && printf '%s' '${donePayload}' > "${statusPath}"`]);
-		const result = await computeStatus(jobDir, chunkReviewConfig);
+		const result = await computeStatus(jobDir, chunkReviewConfig, {
+			casSleepFn: async () => {
+				fs.writeFileSync(statusPath, donePayload);
+			},
+		});
 		const alice = result.members.find((r) => r.member === "alice");
 		// CAS re-read sees 'done' → preserves 'done', does NOT overwrite with error
 		expect(alice.state).toBe("done");
