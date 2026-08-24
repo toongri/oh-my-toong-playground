@@ -349,6 +349,7 @@ figure.diagram figcaption { color: var(--muted); font-size: 0.85rem; margin-top:
 @media print {
   body { background: #fff; color: #000; }
   .toc { break-after: page; }
+  figure.diagram svg { max-width: 100%; }
 }
 `;
 

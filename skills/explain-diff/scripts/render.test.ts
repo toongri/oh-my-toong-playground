@@ -226,11 +226,18 @@ describe("figure.diagram svg CSS — 넓은 다이어그램은 축소가 아니�
 	const html = renderToHtml(DOC, "제목");
 
 	test("SVG 폭을 100% 로 캡하지 않는다 — max-width:100% 는 다운스케일 버그였다", () => {
-		expect(html).not.toMatch(/figure\.diagram svg\s*\{[^}]*max-width:\s*100%/);
-		expect(html).toMatch(/figure\.diagram svg\s*\{[^}]*max-width:\s*none/);
+		const screenCss = html.split("@media print", 1)[0];
+		expect(screenCss).not.toMatch(/figure\.diagram svg\s*\{[^}]*max-width:\s*100%/);
+		expect(screenCss).toMatch(/figure\.diagram svg\s*\{[^}]*max-width:\s*none/);
 	});
 
 	test("figure.diagram 은 가로 스크롤 컨테이너다 — 넓은 다이어그램이 넘치면 스크롤된다", () => {
 		expect(html).toMatch(/figure\.diagram\s*\{[^}]*overflow-x:\s*auto/);
+	});
+
+	test("인쇄에서는 figure.diagram SVG를 인쇄 가능 폭에 맞춘다", () => {
+		const printCss = html.match(/@media print\s*\{([\s\S]*?)\n\}/)?.[1];
+		expect(printCss).toBeDefined();
+		expect(printCss).toMatch(/figure\.diagram svg\s*\{[^}]*max-width:\s*100%/);
 	});
 });
