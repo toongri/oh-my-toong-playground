@@ -998,6 +998,30 @@ describe("CodexAdapter", () => {
 			expect(addCalls).toEqual([]);
 			expect(removeCalls).toEqual([]);
 		});
+
+		it("routes the manifest write through `mutationHooks.mutate` (not a direct write) via `flushMcpBlock`", async () => {
+			const { adapter: fakeAdapter, addCalls } = makeFakeMcpAdapter();
+			fakeAdapter.resetMcpAccumulator();
+			fakeAdapter.accumulateMcp("server-a", { command: "npx", args: ["-y", "a"] });
+
+			const recorded: string[] = [];
+			const fakeMutationHooks: DeployMutationHooks = {
+				mutate: async (targetPath, operation) => {
+					recorded.push(targetPath);
+					await operation();
+				},
+			};
+
+			await fakeAdapter.flushMcpBlock(tmpDir, false, undefined, fakeMutationHooks);
+
+			expect(addCalls.map((c) => c.name)).toEqual(["server-a"]);
+			const manifestFile = path.join(tmpDir, ".omt", "sync-manifest.json");
+			// (a) the manifest write went through `mutate`, not a direct `writeManifest`
+			expect(recorded).toEqual([manifestFile]);
+			// (b) the routed operation actually ran — the manifest reflects the new declared set
+			const manifest = JSON.parse(await fs.readFile(manifestFile, "utf-8"));
+			expect(manifest["codex/mcps"]).toEqual(["server-a"]);
+		});
 	});
 
 	// ---------------------------------------------------------------------------
@@ -1809,7 +1833,7 @@ describe("CodexAdapter", () => {
 			expect(addCalls.map((c) => c.name)).toEqual(["server-a"]);
 		});
 
-		it("forwards mutation hooks to the config write only — MCP flush is not guarded by mutationHooks", async () => {
+		it("forwards mutation hooks to both the config write and the MCP manifest write via `syncPlatformYaml`", async () => {
 			const { adapter: fakeAdapter, addCalls } = makeFakeMcpAdapter();
 			const calls: string[] = [];
 			const observed: string[] = [];
@@ -1828,7 +1852,13 @@ describe("CodexAdapter", () => {
 				mutationHooks,
 			);
 			const configFile = path.join(tmpDir, ".codex", "config.toml");
-			expect(calls).toEqual([configFile]);
+			const manifestFile = path.join(tmpDir, ".omt", "sync-manifest.json");
+			// Both the config write and the MCP manifest write route through
+			// mutationHooks — a direct manifest write would drift the
+			// DeployTransaction's tracked fingerprint (see flushMcpBlock).
+			expect(calls).toEqual([configFile, manifestFile]);
+			// writeObserver is not wired to the manifest write (mirrors
+			// reconcilePairManifest, which only routes through `mutate`).
 			expect(observed).toEqual([configFile]);
 			expect(addCalls.map((c) => c.name)).toEqual(["server"]);
 		});

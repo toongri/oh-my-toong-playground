@@ -1083,9 +1083,9 @@ export class CodexAdapter implements PlatformAdapter {
 
 	/**
 	 * Flush all accumulated MCP servers via the native `codex mcp add`/`codex
-	 * mcp remove` CLI (no OMT-side config.toml write, so `writeObserver` and
-	 * `mutationHooks` are unused here — kept in the signature only because
-	 * `syncPlatformYaml` passes them positionally to every section flush).
+	 * mcp remove` CLI (no OMT-side config.toml write, so `writeObserver` is
+	 * unused here — kept in the signature only because `syncPlatformYaml`
+	 * passes it positionally to every section flush).
 	 *
 	 * Orphan tracking (a server declared in a previous run but not this one)
 	 * has no on-disk fingerprint of its own the way a deployed file does — the
@@ -1093,13 +1093,17 @@ export class CodexAdapter implements PlatformAdapter {
 	 * `.omt/sync-manifest.json` (`readManifest`/`computeOrphans` from
 	 * deploy-manifest.ts) under the `"codex/mcps"` pair key, exactly like every
 	 * other category's orphan bookkeeping, except removal here is `codex mcp
-	 * remove` rather than a file delete.
+	 * remove` rather than a file delete. The manifest write at the end IS
+	 * routed through `mutationHooks` when present — a `DeployTransaction`
+	 * snapshots this file at transaction start, and a direct `writeManifest`
+	 * would drift its tracked fingerprint, tripping `Deploy transaction
+	 * conflict` when another category later reconciles its own manifest pair.
 	 */
 	async flushMcpBlock(
 		targetPath: string,
 		dryRun: boolean,
 		_writeObserver?: PlatformWriteObserver,
-		_mutationHooks?: DeployMutationHooks,
+		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
 		const desired = this.mcpAccumulator;
 		const declaredNames = Object.keys(desired).sort();
@@ -1152,7 +1156,15 @@ export class CodexAdapter implements PlatformAdapter {
 
 		const nextManifest: ManifestData = manifest !== null ? { ...manifest } : {};
 		nextManifest[manifestKey] = declaredNames;
-		await writeManifest(deployRoot, nextManifest);
+		// Route the manifest write through the DeployTransaction (when present) so it
+		// updates the tracked fingerprint — a direct writeManifest bypasses the
+		// transaction snapshot and trips `Deploy transaction conflict` when the
+		// pipeline later reconciles other pairs. Path must match manifestPath() in
+		// deploy-manifest.ts (and sync.ts's inline path.join(root,".omt","sync-manifest.json")).
+		const manifestFile = path.join(deployRoot, ".omt", "sync-manifest.json");
+		const writeManifestOp = async (): Promise<void> => { await writeManifest(deployRoot, nextManifest); };
+		if (mutationHooks) await mutationHooks.mutate(manifestFile, writeManifestOp);
+		else await writeManifestOp();
 		logInfo(`MCP manifest updated: ${declaredNames.length} server(s) declared`);
 	}
 
