@@ -434,14 +434,16 @@ export function setRenderForTesting(renderer?: FreshRenderer): void {
  * render is a derivation, not authoring — the markdown structure slots were
  * already earned at `code`, so this checks the artifacts of the derivation:
  * the HTML exists and is not empty, every authored mermaid block actually
- * became an inline SVG, and the two render-gate reviews (visual-qa on the
- * rendered page, technical-writing on the prose) ran and closed with their
- * machine-checkable verdict lines.
+ * became an inline SVG, and the technical-writing prose review ran and closed
+ * with its machine-checkable verdict line. Visual layout is not reviewed per
+ * document — it is a deterministic property render.ts owns (wide-diagram
+ * legibility is sealed by normalizeSvgWidth + the figure scroll container,
+ * regression-guarded by render.test.ts), so there is no per-document visual-qa
+ * gate here.
  */
 function checkRenderOutput(
 	htmlPath: string | undefined,
 	docPath: string,
-	visualReport: string | undefined,
 	writingReport: string | undefined,
 ): { pass: boolean; failedItems: string[] } {
 	const failedItems: string[] = [];
@@ -489,7 +491,6 @@ function checkRenderOutput(
 		failedItems.push(`문서를 읽을 수 없습니다: ${docPath}`);
 	}
 
-	checkReport("visual-qa", "--visual-report", visualReport, /^VERDICT:\s*PASS\s*$/, "VERDICT: PASS", failedItems);
 	checkReport(
 		"technical-writing",
 		"--writing-report",
@@ -514,7 +515,6 @@ function submitStep(
 	signalFiles: string[],
 	addedFiles: string[],
 	htmlPath?: string,
-	visualReport?: string,
 	writingReport?: string,
 ): number {
 	return withLock(statePath(sessionId), () => {
@@ -524,7 +524,7 @@ function submitStep(
 		}
 		const result =
 			step === "render"
-				? checkRenderOutput(htmlPath, docPath, visualReport, writingReport)
+				? checkRenderOutput(htmlPath, docPath, writingReport)
 				: checkStructure(readFileSync(docPath, "utf8"), {
 						signalFiles,
 						addedFiles,
@@ -766,7 +766,6 @@ function main(): void {
 						csv(req(args, "signal-files")),
 						csv(typeof args["added-files"] === "string" ? args["added-files"] : ""),
 						typeof args["html"] === "string" ? args["html"] : undefined,
-						typeof args["visual-report"] === "string" ? args["visual-report"] : undefined,
 						typeof args["writing-report"] === "string" ? args["writing-report"] : undefined,
 					),
 				);

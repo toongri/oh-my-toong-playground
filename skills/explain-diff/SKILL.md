@@ -236,7 +236,7 @@ What this gate actually looks at differs per step — it inspects only the slots
 | intuition | No item of its own — the substantive verdict is the judgment's (R6) |
 | commits | With two or more commits, does every hash appear in the Commit Journey overview (R10); a single commit may use the waiver marker |
 | code | Change Group title/herald/order-rationale three slots (R2), a provenance tag on every 왜 (R3), cf-loc traceability (R5), each signal file in exactly one file block (R1), a commit subsection with a valid hash per group + core-logic code per file (R13). `start` passes the original range unchanged to `git diff` (preserving `A...B` merge-base semantics); only `git rev-list` enumeration normalizes it to `A..B`. At `code` submission, textual hunk ranges are checked per file, and a file with no textual hunk uses the legacy per-file presence/placeholder fallback even when other files have hunks. The final `:<number>` suffix is matched against the enclosing file-block path, including paths with spaces. A legitimate first-line hunk may use `base:…:1 → head:…:1`; added files need `head:` only, deleted files `base:` only, and a zero-count side has no file lines. |
-| render | See Step 8 — it inspects the artifact HTML, mermaid render parity, and the two verification reports |
+| render | See Step 8 — it inspects the artifact HTML, mermaid render parity, and the technical-writing report |
 
 **Common to all authoring steps**: the whole accumulated document is checked for `<style>`, inline `style=`, and unsanctioned classes (R11).
 
@@ -269,22 +269,17 @@ bun ${CLAUDE_SKILL_DIR}/scripts/render.ts --in "<문서.md>" --out "<문서.html
 
 render.ts bakes ` ```mermaid ` fences to inline SVG via mmdc. The HTML is a single self-contained file with no runtime JS and no external references. If mmdc is absent or a block fails, the render dies with the failing block number — fix that block and re-render.
 
-After rendering, before moving to the quiz, **you must run two verifications.** Because technical-writing may change the Markdown, visual-qa always inspects the final rendered HTML.
+After rendering, before moving to the quiz, **run the one verification the machine cannot do — technical-writing.** Do NOT screenshot-review the visual layout per document: style is owned by render.ts and is deterministic, so a layout defect is systematic (fix it once in render.ts + its test, never re-review). The one visual risk that used to justify a per-document pass — a wide mermaid diagram whose labels collapse below legibility — is now sealed at the renderer: `normalizeSvgWidth` keeps every diagram at its natural viewBox width and `figure.diagram` scrolls, guarded by `render.test.ts`. There is no `visual-qa` step here.
 
 1. **technical-writing** — have the technical-writing skill review the markdown prose, and apply the
    accepted points to the document. Record what you applied in `<slug>-writing-report.md` with a last
    line of `REVIEW: APPLIED`. If you changed the document, re-run render.ts.
-2. **visual-qa** — with the visual-qa skill (or, on a platform without it, agent-browser directly),
-   screenshot-verify the final rendered HTML at desktop and mobile widths: overlap, clipping,
-   horizontal scroll, diagram legibility. Record the result next to `<문서.md>` in
-   `<slug>-visual-report.md`, and after fixing the findings write a last line of `VERDICT: PASS`.
-   If any unaddressed finding remains you cannot write PASS.
 
 ```bash
-# Gate 1 — artifact check: HTML re-rendered from the current Markdown, mermaid→SVG parity, two verification reports
+# Gate 1 — artifact check: HTML re-rendered from the current Markdown, mermaid→SVG parity, technical-writing report
 $CLI submit-step --step render --doc "<문서.md>" --signal-files "a.ts,b.ts" \
   --html "<문서.html>" \
-  --visual-report "<slug>-visual-report.md" --writing-report "<slug>-writing-report.md"
+  --writing-report "<slug>-writing-report.md"
 
 # Gate 2 — judgment (the render step has no judge item, so pass it with an empty array)
 $CLI pass-step --step render --doc "<문서.md>" --judge-json '[]'
