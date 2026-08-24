@@ -144,6 +144,37 @@ describe("qa-report renderer", () => {
 		expect(html).toContain("curl status 200");
 	});
 
+	test("reads and renders duplicate evidence paths once while keeping distinct supplementary slots", () => {
+		const view = baseView({
+			cells: [
+				{
+					...baseView().cells![0],
+					evidence: {
+						path: "/evidence/action.log",
+						surface: "agent-device",
+						before: "/evidence/before.log",
+						action: "/evidence/action.log",
+						after: "/evidence/after.log",
+					},
+				},
+			],
+		});
+		const readPaths: string[] = [];
+		const html = renderQaReport(view, {}, (path) => {
+			readPaths.push(path);
+			return { kind: "text", content: "proof" };
+		})!;
+		const scenarioEvidence = html.slice(html.indexOf("Scenario Evidence"), html.indexOf("Failures &amp; Mismatches"));
+		const occurrences = (value: string): number => scenarioEvidence.split(value).length - 1;
+
+		expect(readPaths).toEqual(["/evidence/action.log", "/evidence/before.log", "/evidence/after.log"]);
+		expect(occurrences("/evidence/action.log")).toBe(1);
+		expect(occurrences("/evidence/before.log")).toBe(1);
+		expect(occurrences("/evidence/after.log")).toBe(1);
+		expect(scenarioEvidence).toContain('class="evidence-slot-label">recorded</div>');
+		expect(scenarioEvidence).not.toContain('class="evidence-slot-label">action</div>');
+	});
+
 	test("renders required evidence.path when supplementary slots are absent", () => {
 		const view = baseView();
 		view.cells![0].evidence = { path: "/evidence/required.log", surface: "agent-device" };

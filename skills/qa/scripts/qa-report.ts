@@ -131,6 +131,7 @@ function statusBadge(status: QaCell["status"]): string {
 
 interface EvidenceRenderContext {
 	embeddedBytes: number;
+	renderedPaths: Set<string>;
 }
 
 function embeddedByteLength(embed: EvidenceEmbed): number {
@@ -140,7 +141,8 @@ function embeddedByteLength(embed: EvidenceEmbed): number {
 }
 
 function evidenceSlot(label: string, path: string | undefined, readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
-	if (!path) return "";
+	if (!path || context.renderedPaths.has(path)) return "";
+	context.renderedPaths.add(path);
 	const embed = readEvidence(path);
 	let body: string;
 	const embedBytes = embeddedByteLength(embed);
@@ -350,7 +352,7 @@ function renderEvidenceFiles(view: QaView): string {
 export function renderQaReport(view: QaView, narrative: QaReportNarrative = {}, readEvidence: EvidenceReader = defaultEvidenceReader): string | null {
 	if ((view.actors ?? []).length === 0) return null;
 	const title = `QA Report — ${view.target || view.phase}`;
-	const evidenceContext: EvidenceRenderContext = { embeddedBytes: 0 };
+	const evidenceContext: EvidenceRenderContext = { embeddedBytes: 0, renderedPaths: new Set() };
 	const body = [
 		`<h1>${escapeHtml(title)}</h1>`,
 		`<ul class="doc-meta"><li><strong>Target</strong> ${escapeHtml(view.target)}</li>` +
