@@ -1092,6 +1092,27 @@ describe("regression-guard: frontmatter", () => {
 // ---------------------------------------------------------------------------
 
 describe("new-prose: HTML report is the canonical deliverable", () => {
+	test("STATE terminal sequence renders the report before completing the state", () => {
+		const setVerdict = skillMd.indexOf(
+			"bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts set-verdict <APPROVE|COMMENT|REQUEST_CHANGES>",
+		);
+		const report = skillMd.indexOf(
+			"bun ${CLAUDE_SKILL_DIR}/scripts/qa-report.ts --session <id> --out <path> [--narrative <json-file>]",
+		);
+		const complete = skillMd.indexOf(
+			"bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts complete",
+		);
+		const verdictProse = skillMd.indexOf("and only then report the verdict prose");
+
+		expect(setVerdict).not.toBe(-1);
+		expect(report).not.toBe(-1);
+		expect(complete).not.toBe(-1);
+		expect(verdictProse).not.toBe(-1);
+		expect(report).toBeGreaterThan(setVerdict);
+		expect(complete).toBeGreaterThan(report);
+		expect(verdictProse).toBeGreaterThan(complete);
+	});
+
 	test("qa-report.ts is invoked at STATE, before complete", () => {
 		expect(skillMd).toContain("bun ${CLAUDE_SKILL_DIR}/scripts/qa-report.ts");
 		expect(skillMd).toContain("immediately after `set-verdict` and before `complete`");
