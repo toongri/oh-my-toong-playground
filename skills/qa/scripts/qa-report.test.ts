@@ -102,9 +102,11 @@ describe("qa-report renderer", () => {
 		expect(html).not.toContain("narrative: should be overridden");
 	});
 
-	test("falls back to narrative acceptance criteria when none are recorded", () => {
+	test("기록되지 않은 narrative acceptance criteria를 렌더하지 않음", () => {
 		const html = renderQaReport(baseView(), { acceptanceCriteria: ["narrative-only AC"] }, fakeReader)!;
-		expect(html).toContain("narrative-only AC");
+		const acceptanceSection = html.slice(html.indexOf("Acceptance Criteria"), html.indexOf("Actor Roster"));
+		expect(acceptanceSection).not.toContain("narrative-only AC");
+		expect(acceptanceSection).toContain("no acceptance-criteria recorded");
 	});
 
 	test("renders each scenario's attack_point in the Scenario Evidence section", () => {
@@ -150,11 +152,48 @@ describe("qa-report renderer", () => {
 		expect(scenarioEvidence).toContain("contents of /evidence/required.log");
 	});
 
+	test("부분 supplementary 슬롯이 있어도 필수 evidence.path를 함께 렌더함", () => {
+		const view = baseView();
+		view.cells![0].evidence = {
+			path: "/evidence/required.log",
+			surface: "agent-device",
+			before: "/evidence/before.png",
+		};
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const scenarioEvidence = html.slice(html.indexOf("Scenario Evidence"), html.indexOf("Failures &amp; Mismatches"));
+		expect(scenarioEvidence).toContain("contents of /evidence/required.log");
+		expect(scenarioEvidence).toContain("data:image/png;base64,AAAA");
+	});
+
 	test("skips embedding and links by path when a file exceeds the embed size cap", () => {
 		const bigReader: EvidenceReader = (path) => ({ kind: "too-large", path, size: 5 * 1024 * 1024 });
 		const html = renderQaReport(baseView(), {}, bigReader)!;
 		expect(html).not.toContain("base64");
 		expect(html).toContain("/evidence/action.png");
+	});
+
+	test("누적 evidence 임베드 예산을 초과하면 이후 파일을 경로로 남김", () => {
+		const nearBudget = "A".repeat(16 * 1024 * 1024 - 40);
+		const budgetReader: EvidenceReader = (path) =>
+			path.endsWith("first.png")
+				? { kind: "image", dataUri: `data:image/png;base64,${nearBudget}` }
+				: { kind: "image", dataUri: "data:image/png;base64,BBBB" };
+		const view = baseView({
+			cells: [
+				{
+					...baseView().cells![0],
+					evidence: {
+						path: "/evidence/first.png",
+						surface: "agent-device",
+						action: "/evidence/second.png",
+					},
+				},
+			],
+		});
+		const html = renderQaReport(view, {}, budgetReader)!;
+		expect(html).toContain("data:image/png;base64,AAAA");
+		expect(html).toContain("embedding budget exhausted");
+		expect(html).toContain("/evidence/second.png");
 	});
 
 	test("renders expected-vs-actual narrative supplied at render time, keyed per scenario", () => {

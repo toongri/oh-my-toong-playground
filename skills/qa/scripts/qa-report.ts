@@ -20,10 +20,11 @@ import { getOmtDir } from "@lib/omt-dir";
 import type { QaBaseline, QaCell, QaEvidence, QaResult, QaRunCheck, QaStory } from "@lib/qa-chain-core";
 import { readQaView, type QaView } from "./qa-state.ts";
 
-// lazy: flat 2MB per-file embed cap keeps a report with a handful of
-// screenshots well under the 16MB ceiling; add per-image downscaling if a
-// real cycle's evidence set routinely exceeds this.
+// Keep individual evidence files small enough to inspect, and cap the total
+// embedded payload so a full scenario matrix cannot produce an impractical
+// self-contained document.
 export const MAX_EMBED_BYTES = 2 * 1024 * 1024;
+export const MAX_TOTAL_EMBED_BYTES = 16 * 1024 * 1024;
 
 export type EvidenceEmbed =
 	| { kind: "image"; dataUri: string }
@@ -77,6 +78,10 @@ export interface QaReportScenarioNarrative {
  * `${story}:${cls}:${sub ?? ""}` (matching qa-chain-core's cell key shape).
  */
 export interface QaReportNarrative {
+	/**
+	 * Legacy input kept for JSON compatibility. Acceptance criteria are only
+	 * authoritative when recorded in QaView and this value is ignored.
+	 */
 	acceptanceCriteria?: string[];
 	issues?: QaReportNarrativeIssue[];
 	scenarios?: Record<string, QaReportScenarioNarrative>;
@@ -125,12 +130,31 @@ function statusBadge(status: QaCell["status"]): string {
 	return `<span class="badge badge-${escapeHtml(String(label))}">${escapeHtml(String(label))}</span>`;
 }
 
-function evidenceSlot(label: string, path: string | undefined, readEvidence: EvidenceReader): string {
+interface EvidenceRenderContext {
+	embeddedBytes: number;
+}
+
+function embeddedByteLength(embed: EvidenceEmbed): number {
+	if (embed.kind === "image") return Buffer.byteLength(embed.dataUri, "utf8");
+	if (embed.kind === "text") return Buffer.byteLength(embed.content, "utf8");
+	return 0;
+}
+
+function evidenceSlot(label: string, path: string | undefined, readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
 	if (!path) return "";
 	const embed = readEvidence(path);
 	let body: string;
-	if (embed.kind === "image") body = `<img src="${escapeHtml(embed.dataUri)}" alt="${escapeHtml(label)} evidence">`;
-	else if (embed.kind === "text") body = `<pre>${escapeHtml(embed.content)}</pre>`;
+	const embedBytes = embeddedByteLength(embed);
+	const budgetExceeded = embedBytes > 0 && context.embeddedBytes + embedBytes > MAX_TOTAL_EMBED_BYTES;
+	if (budgetExceeded) {
+		body = `<p class="evidence-note">evidence embedding budget exhausted — see path below</p>`;
+	} else if (embed.kind === "image") {
+		context.embeddedBytes += embedBytes;
+		body = `<img src="${escapeHtml(embed.dataUri)}" alt="${escapeHtml(label)} evidence">`;
+	} else if (embed.kind === "text") {
+		context.embeddedBytes += embedBytes;
+		body = `<pre>${escapeHtml(embed.content)}</pre>`;
+	}
 	else if (embed.kind === "too-large") body = `<p class="evidence-note">too large to embed (${embed.size} bytes) — see path below</p>`;
 	else body = `<p class="evidence-note">evidence file missing</p>`;
 	return (
@@ -144,12 +168,13 @@ function fieldRow(label: string, value: string | undefined): string {
 	return `<p class="scenario-field"><strong>${escapeHtml(label)}</strong> ${escapeHtml(value)}</p>`;
 }
 
-function renderAcceptanceCriteria(view: QaView, narrative: QaReportNarrative): string {
-	// Recorded criteria (captured at PLAN) win; narrative is the render-time fallback.
-	const items = (view.acceptance_criteria?.length ? view.acceptance_criteria : narrative.acceptanceCriteria) ?? [];
+function renderAcceptanceCriteria(view: QaView): string {
+	// Acceptance criteria are facts captured at PLAN; never promote render-time
+	// narrative values into the report's authoritative criteria section.
+	const items = view.acceptance_criteria ?? [];
 	const body = items.length
 		? `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
-		: `<p class="evidence-note">no acceptance-criteria recorded or supplied at render time</p>`;
+		: `<p class="evidence-note">no acceptance-criteria recorded in qa-state</p>`;
 	return `<h2>Acceptance Criteria</h2>${body}`;
 }
 
@@ -187,17 +212,23 @@ function renderStoryTree(view: QaView): string {
 	return `<h2>Story &rarr; Scenario Tree</h2><ul class="story-tree">${stories}</ul>`;
 }
 
-function renderScenarioEvidence(view: QaView, narrative: QaReportNarrative, readEvidence: EvidenceReader): string {
+function renderScenarioEvidence(view: QaView, narrative: QaReportNarrative, readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
 	const blocks = (view.stories ?? [])
 		.flatMap((story) => cellsForStory(view, story.id))
 		.map((cell) => {
 			const key = cellKey(cell);
 			const scenarioNarrative = narrative.scenarios?.[key];
 			const evidence: QaEvidence | undefined = cell.evidence;
-			const supplementarySlots = evidence
-				? [evidenceSlot("before", evidence.before, readEvidence), evidenceSlot("action", evidence.action, readEvidence), evidenceSlot("after", evidence.after, readEvidence)].filter(Boolean)
-				: [];
-			const slots = supplementarySlots.length ? supplementarySlots.join("") : evidence ? evidenceSlot("recorded", evidence.path, readEvidence) : "";
+			const slots = evidence
+				? [
+					evidenceSlot("recorded", evidence.path, readEvidence, context),
+					evidenceSlot("before", evidence.before, readEvidence, context),
+					evidenceSlot("action", evidence.action, readEvidence, context),
+					evidenceSlot("after", evidence.after, readEvidence, context),
+				]
+					.filter(Boolean)
+					.join("")
+				: "";
 			return (
 				`<div class="scenario"><h3>${escapeHtml(cell.story)} / ${escapeHtml(cellLabel(cell))} ` +
 				`<span class="badge">${escapeHtml(cell.priority ?? "")}</span> ` +
@@ -303,15 +334,16 @@ function renderEvidenceFiles(view: QaView): string {
 export function renderQaReport(view: QaView, narrative: QaReportNarrative = {}, readEvidence: EvidenceReader = defaultEvidenceReader): string | null {
 	if ((view.actors ?? []).length === 0) return null;
 	const title = `QA Report — ${view.target || view.phase}`;
+	const evidenceContext: EvidenceRenderContext = { embeddedBytes: 0 };
 	const body = [
 		`<h1>${escapeHtml(title)}</h1>`,
 		`<ul class="doc-meta"><li><strong>Target</strong> ${escapeHtml(view.target)}</li>` +
 			`<li><strong>Cycle</strong> ${escapeHtml(String(view.cycle))}</li>` +
 			`<li><strong>Generated</strong> ${escapeHtml(view.last_touched_at)}</li></ul>`,
-		renderAcceptanceCriteria(view, narrative),
+		renderAcceptanceCriteria(view),
 		renderActorRoster(view),
 		renderStoryTree(view),
-		renderScenarioEvidence(view, narrative, readEvidence),
+		renderScenarioEvidence(view, narrative, readEvidence, evidenceContext),
 		renderFailures(view, narrative),
 		renderVerdict(view),
 		renderEvidenceFiles(view),
