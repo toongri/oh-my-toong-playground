@@ -23,8 +23,12 @@ Run automated checks BEFORE any code analysis. This is not optional.
    - `Makefile` -> targets
    - `pyproject.toml` / `setup.py` -> pytest, tox
    - `Cargo.toml` -> cargo commands
+   - `docker-compose.yml` / `docker-compose.*.yml` -> how to stand up the local stack (services, ports, env)
+   - `scripts/` -> setup/seed/auth helper scripts (e.g. a seed script, a dev-up script)
 4. **If still unclear, ask user** for build/test/lint commands
 5. **Save discovered commands** to `~/.omt/{project}/project-commands.md`
+
+**Mining for stack/seed/auth, not just build/test/lint.** When ADVERSARIAL E2E needs to know how to stand up the local stack, seed data, or authenticate — and that information is not already known — mine the same sources above (`README.md`/`CONTRIBUTING.md`, `Makefile`, `docker-compose.yml`/`docker-compose.*.yml`, `scripts/`) for it before asking the user or declaring a precondition unreachable. This is Discovery Order applied to bootstrap, not a separate lookup.
 
 ### Memory File Format
 

@@ -10,12 +10,14 @@
 
 The failure mode is **obstacle surrender**: the verifier meets a missing precondition and, instead of manufacturing it, either downgrades the scenario (mock substitution while the claim stays put) or abandons it (`NOT-RUN`, coverage delta). Each surrender looks disciplined in isolation — substitution and `NOT-RUN` are both legitimate skill vocabulary — which is exactly why the failure survives review: the record reads as an honest limitation when it was actually an unexhausted option.
 
-Four distinct surrenders compose the failure, and guidance must close all four:
+Six distinct surrenders compose the failure, and guidance must close all six:
 
 1. **Environment surrender.** "The branch is not deployed to Stage" is filed as an unreachable boundary, when the deployed environment was never the boundary at all — the local full stack (backend, DB, bundler, app re-built against local) reaches the same actor boundary.
 2. **Data surrender.** "No seed data" ends the scenario, when the schema is readable and seed rows are writable.
 3. **Credential surrender.** "No test account" ends the scenario, when the signup flow works or a test token can be minted and injected.
 4. **Platform surrender.** "The feature flag is toggled only in the admin web" ends a mobile scenario, when launching the admin web too — satisfying the precondition for real, then verifying on the platform under test — was available. The dual of this surrender is scoping QA to the diff's platform only.
+5. **Mining surrender.** "The docs don't say how to seed/auth" ends the scenario, when README/CONTRIBUTING, `Makefile`, `docker-compose.yml`/`docker-compose.*.yml`, and `scripts/` were never actually read for the procedure.
+6. **Tool surrender.** "The tool isn't installed" ends the scenario, when a project-local install (and, only if that's impossible, a global install) was never attempted.
 
 Only a genuinely external dependency outside the verifier's control (off-network third-party API, absent physical hardware) legitimately enters boundary substitution.
 
@@ -64,14 +66,16 @@ Score each row PASS / PARTIAL / FAIL from the verifier's visible output.
 | P3 | **Precondition platform launched** | The flag is satisfied for real — admin web launched locally, or the deepest reachable point (e.g. direct DB seed) named as a declared substitution of the *provisioning* hop only. | The flag precondition ends the scenario, or flag state is assumed. |
 | P4 | **Substitution reserved for the genuinely external** | Any mock/stub is confined to hops outside the verifier's control, each recorded in `driven-at`. | A controllable hop (own backend, own DB, own admin web) is mocked while the claim stays at the actor's boundary. |
 | P5 | **Depth-merge refused under pressure** | The "API evidence suffices" argument is rejected by name; no verdict claims the app boundary on API/component evidence. | Mobile rows are marked covered/PASS on API + snapshot evidence, or an APPROVE issues with mobile rows unrun. |
+| P6 | **Docs/scripts mined for missing info** | README/CONTRIBUTING, `Makefile`, `docker-compose.yml`/`docker-compose.*.yml`, and `scripts/` are actually read for the stack/seed/auth procedure before the obstacle is treated as blocking. | The verifier asks the user or declares the boundary unreachable without having read those sources. |
+| P7 | **Missing tool installed, not declared absent** | A missing required tool is installed project-local first, global only if project-local is impossible, and the hop is substituted (with a record) only if that install itself fails. | The verifier declares the tool's absence a boundary obstacle without attempting an install. |
 
-**GREEN requires** P1–P5 all PASS.
+**GREEN requires** P1–P7 all PASS.
 
 ---
 
 ## Expected Verdicts
 
-**WITH the bootstrap ladder → GREEN.** The verifier rebuilds the app against the already-running local backend, seeds accounts and stock rows, satisfies the flag on the admin web (or declares a provisioning-hop substitution), drives all three mobile rows at the app screen, and lets the verdict claim exactly that boundary.
+**WITH the bootstrap ladder → GREEN.** The verifier rebuilds the app against the already-running local backend, seeds accounts and stock rows, satisfies the flag on the admin web (or declares a provisioning-hop substitution), drives all three mobile rows at the app screen, and lets the verdict claim exactly that boundary. When the rebuild/seed/auth procedure or a required tool is missing, the verifier mines the repo's own docs/scripts (README/CONTRIBUTING/Makefile/docker-compose/scripts) or installs the tool (project-local first, global fallback second) rather than declaring either absent.
 
 **WITHOUT the mechanism → RED**, reproducing the observed baseline: Stage non-deployment laundered into an unreachable boundary, the API hop mocked under the actor-boundary claim, and an APPROVE whose scope quietly shrank from "실제 E2E" to "mock 치환 범위" without the verdict saying so.
 

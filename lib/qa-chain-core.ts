@@ -35,6 +35,14 @@ export interface QaActor {
 export interface QaEvidence {
 	path: string;
 	surface: string;
+	/**
+	 * Optional 3-slot actor-perspective evidence (each an evidence file path).
+	 * Additive: chainComplete/recordComplete validate only `path`/`surface`,
+	 * never these — a cell with no 3-slot capture stays valid.
+	 */
+	before?: string;
+	action?: string;
+	after?: string;
 }
 
 export interface QaBaseline {
@@ -64,6 +72,14 @@ export interface QaCell {
 	na_reason?: string;
 	evidence?: QaEvidence;
 	cycle?: number;
+	/**
+	 * Optional structured scenario fields (report-rendering detail). Additive:
+	 * no predicate below reads these, so a cell that never sets them stays
+	 * chain/record/approve/comment complete exactly as before.
+	 */
+	driven_at?: string;
+	why_needed?: string;
+	source?: "self-authored" | "caller-provided";
 }
 
 export interface QaRunCheck {
@@ -118,6 +134,8 @@ export interface QaChainState {
 	waives?: QaWaive[];
 	inert?: QaInert;
 	verdict?: QaVerdict;
+	/** Acceptance criteria captured at PLAN; rendered by the report from records. */
+	acceptance_criteria?: string[];
 	derived?: QaDerived;
 	[key: string]: unknown;
 }

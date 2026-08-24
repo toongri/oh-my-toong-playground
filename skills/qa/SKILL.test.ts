@@ -385,6 +385,17 @@ describe("new-prose: stage3-handson.md risk-surface + hardening rows", () => {
 	test("new hardening rows are called out as distinct from the pre-existing row 4", () => {
 		expect(stage3Md).toContain("distinct from row");
 	});
+
+	test("browser-tool installs use an ephemeral directory outside the checked worktree", () => {
+		const frontendStart = stage3Md.indexOf("## Step 3.4: Frontend Verification");
+		const frontendEnd = stage3Md.indexOf("## Step 3.5: Native App Verification", frontendStart + 1);
+		const frontendSection = stage3Md.slice(frontendStart, frontendEnd);
+		expect(frontendSection).toContain("ephemeral");
+		expect(frontendSection).toContain("outside the checked worktree");
+		expect(frontendSection).toContain("manifest, lockfile");
+		expect(frontendSection).toContain("node_modules");
+		expect(frontendSection).toContain("before CHECK");
+	});
 });
 
 describe("new-prose: SKILL.md points at scenario-authoring.md", () => {
@@ -1073,5 +1084,170 @@ describe("new-prose: product use-case breadth is a required derivation axis", ()
 describe("regression-guard: frontmatter", () => {
 	test("name: qa is present", () => {
 		expect(skillMd).toContain("name: qa");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// NEW-PROSE: self-contained HTML report is the canonical deliverable (RED)
+// ---------------------------------------------------------------------------
+
+describe("new-prose: HTML report is the canonical deliverable", () => {
+	test("STATE terminal sequence renders the report before completing the state", () => {
+		const setVerdict = skillMd.indexOf(
+			"bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts set-verdict <APPROVE|COMMENT|REQUEST_CHANGES>",
+		);
+		const report = skillMd.indexOf(
+			"bun ${CLAUDE_SKILL_DIR}/scripts/qa-report.ts --session <id> --out <path> [--narrative <json-file>]",
+		);
+		const complete = skillMd.indexOf(
+			"bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts complete",
+		);
+		const verdictProse = skillMd.indexOf("and only then report the verdict prose");
+
+		expect(setVerdict).not.toBe(-1);
+		expect(report).not.toBe(-1);
+		expect(complete).not.toBe(-1);
+		expect(verdictProse).not.toBe(-1);
+		expect(report).toBeGreaterThan(setVerdict);
+		expect(complete).toBeGreaterThan(report);
+		expect(verdictProse).toBeGreaterThan(complete);
+	});
+
+	test("qa-report.ts is invoked at STATE, before complete", () => {
+		expect(skillMd).toContain("bun ${CLAUDE_SKILL_DIR}/scripts/qa-report.ts");
+		expect(skillMd).toContain("immediately after `set-verdict` and before `complete`");
+	});
+
+	test("the report renders from qa-state records, not re-narrated", () => {
+		expect(skillMd).toContain("from qa-state records, not re-narrated");
+	});
+
+	test("acceptance criteria are captured at PLAN via set-acceptance so the report renders them from records", () => {
+		expect(skillMd).toContain("set-acceptance");
+		expect(skillMd).toContain("the report renders its Acceptance Criteria section from this record");
+	});
+
+	test("only subjective narrative is supplied at render time, never persisted to qa-state", () => {
+		expect(skillMd).toContain("Only subjective narrative");
+		expect(skillMd).toContain("supplied at render time");
+		expect(skillMd).toContain("never persisted to qa-state");
+	});
+
+	test("the report preserves required evidence.path with partial actor slots", () => {
+		expect(skillMd).toContain("always renders the current-cycle baseline evidence and the required cell `evidence.path`");
+		expect(skillMd).toContain("partial slot sets alike");
+		expect(skillMd).toContain("recorded evidence slot");
+	});
+
+	test("the report caps evidence embedding per file and cumulatively", () => {
+		expect(skillMd).toContain("2 MiB per file and 16 MiB cumulatively");
+		expect(skillMd).toContain("after the cumulative budget is exhausted");
+	});
+
+	test("a fresh start clears prior acceptance criteria before the next report", () => {
+		expect(skillMd).toContain("A fresh `start` clears `acceptance_criteria`");
+		expect(skillMd).toContain("cannot inherit the previous cycle's criteria");
+	});
+
+	test("the report is produced on every cycle that reached a roster, PRE-FLIGHT fail-fast excepted", () => {
+		expect(skillMd).toContain("every cycle that reached a roster");
+		expect(skillMd).toContain("PRE-FLIGHT fail-fast");
+	});
+
+	test("the report is self-contained: no external CSS/JS/font/image references", () => {
+		expect(skillMd).toContain("no external CSS/JS/font/image reference");
+	});
+
+	test("the chat Output Format carries the report's absolute path", () => {
+		const outputStart = skillMd.indexOf("<Output_Format>");
+		expect(outputStart).not.toBe(-1);
+		const outputEnd = skillMd.indexOf("</Output_Format>", outputStart);
+		expect(outputEnd).not.toBe(-1);
+		const outputSection = skillMd.slice(outputStart, outputEnd);
+		expect(outputSection).toContain("absolute path to the self-contained HTML report file");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// NEW-PROSE: stack/seed/auth info is mined from repo docs and scripts, not
+// asked or declared unreachable (RED)
+// ---------------------------------------------------------------------------
+
+describe("new-prose: stack/seed/auth info is mined from repo docs and scripts", () => {
+	test("bootstrap rung 1 mines docs/scripts for how to stand up the stack", () => {
+		expect(skillMd).toContain("mine the project's own docs and scripts for it");
+		expect(skillMd).toContain("before asking the user or declaring the precondition unreachable");
+	});
+
+	test("bootstrap rung 2 mines docs/scripts for the seed procedure", () => {
+		expect(skillMd).toContain("when the seeding procedure itself is not already known, mine README");
+	});
+
+	test("stage1-commands.md Discovery Order mines docker-compose and scripts/", () => {
+		expect(stage1Md).toContain("docker-compose.yml");
+		expect(stage1Md).toContain("docker-compose.*.yml");
+		expect(stage1Md).toContain("`scripts/`");
+	});
+
+	test("stage1-commands.md states mining applies to stack/seed/auth, not only build/test/lint", () => {
+		expect(stage1Md).toContain("Mining for stack/seed/auth");
+		expect(stage1Md).toContain("before asking the user or declaring a precondition unreachable");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// NEW-PROSE / STRIP: bootstrap ladder installs a missing tool local-first,
+// global-fallback, substituting only on install failure — superseding the old
+// blanket "Do NOT install" global-machine ban (RED)
+// ---------------------------------------------------------------------------
+
+describe("new-prose: bootstrap ladder installs a missing tool local-first, global-fallback", () => {
+	test("a new bootstrap rung installs a missing required tool rather than skipping the scenario", () => {
+		expect(skillMd).toContain("Required tool missing locally");
+		expect(skillMd).toContain("project-local");
+		expect(skillMd).toContain("no machine mutation");
+	});
+
+	test("the rung falls back to a global install only when project-local is impossible, then substitutes on failure", () => {
+		expect(skillMd).toContain("try a **global** install");
+		expect(skillMd).toContain("substitute *only that hop*");
+	});
+
+	test("the install rung never uses rm -rf or a force flag", () => {
+		const rungStart = skillMd.indexOf("**Required tool missing locally**");
+		expect(rungStart).not.toBe(-1);
+		const rungEnd = skillMd.indexOf("\n\n", rungStart);
+		expect(rungEnd).toBeGreaterThan(rungStart);
+		const rungSection = skillMd.slice(rungStart, rungEnd);
+		expect(rungSection).toContain("Never use `rm -rf` or a force flag");
+	});
+});
+
+describe("strip: the old blanket 'Do NOT install' global-machine ban is gone", () => {
+	test("the agent-browser blanket install ban is removed", () => {
+		expect(stage3Md).not.toContain("Do NOT install agent-browser here");
+		expect(stage3Md).not.toContain("the CLI is assumed pre-installed, and a QA flow must not mutate the global machine");
+	});
+
+	test("the playwright blanket install ban is removed", () => {
+		expect(stage3Md).not.toContain("do not install or set one up: report that check as verification-unavailable");
+	});
+});
+
+describe("new-prose: stage3-handson.md carries the local-first/global-fallback/substitution install policy", () => {
+	test("agent-browser absence installs project-local first, global fallback second", () => {
+		expect(stage3Md).toContain("install it rather than skip the scenario");
+		expect(stage3Md).toContain("project-local first");
+		expect(stage3Md).toContain("falling back to a global install only if a project-local install is not possible");
+	});
+
+	test("the offline-safety reason justifies local-first ordering, not a ban", () => {
+		expect(stage3Md).toContain("a global install can hang or fail in offline/locked-down environments");
+		expect(stage3Md).toContain("it is a safety order, not a ban");
+	});
+
+	test("playwright absence follows the same install-before-fallback policy", () => {
+		expect(stage3Md).toContain("install it — project-local first, global only if project-local is not possible");
+		expect(stage3Md).toContain("recorded as a substitution, not an unattempted skip");
 	});
 });
