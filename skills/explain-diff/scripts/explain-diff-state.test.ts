@@ -758,13 +758,11 @@ async function driveToRender(): Promise<{
 	return { passStep, submitStep, doc };
 }
 
-/** render 게이트가 요구하는 두 검증 리포트를 통과 형태로 만든다. */
-function reportFiles(): { visual: string; writing: string } {
-	const visual = join(sandbox, "visual-report.md");
+/** render 게이트가 요구하는 검증 리포트(technical-writing)를 통과 형태로 만든다. */
+function reportFiles(): { writing: string } {
 	const writing = join(sandbox, "writing-report.md");
-	writeFileSync(visual, "스크린샷 3장 검토.\nVERDICT: PASS\n", "utf8");
 	writeFileSync(writing, "지적 2건 반영.\nREVIEW: APPLIED\n", "utf8");
-	return { visual, writing };
+	return { writing };
 }
 
 const projectRenderedHtmlCache = new Map<string, string>();
@@ -812,7 +810,7 @@ describe("render 산출물 검사", () => {
 		const htmlPath = join(sandbox, "doc.html");
 		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
 		const rep = reportFiles();
-		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing);
+		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.writing);
 		expect(rc).toBe(0);
 		expect(state().structural_ok).toContain("render");
 	});
@@ -826,32 +824,24 @@ describe("render 산출물 검사", () => {
 		writeFileSync(htmlPath, projectRenderedHtml(oldMarkdown), "utf8");
 		const rep = reportFiles();
 
-		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing)).toBe(1);
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing)).toBe(1);
 		expect(state().last_failure.items.join(" ")).toContain("현재 Markdown");
 
 		writeFileSync(htmlPath, projectRenderedHtml(currentMarkdown), "utf8");
-		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing)).toBe(0);
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing)).toBe(0);
 	});
 
-	test("visual-qa 리포트가 없으면 실패한다", async () => {
+	test("visual-qa 리포트 없이도 통과한다 — 넓은 다이어그램 가독성은 render.ts 가 결정적으로 봉인한다", async () => {
+		// 시각 검증은 문서마다 반복할 대상이 아니라 렌더러가 소유하는 결정적 속성이다
+		// (넓은 mermaid 다운스케일은 normalizeSvgWidth + figure.diagram 스크롤로 봉인).
+		// 그래서 render 게이트는 더는 visual-qa 리포트를 요구하지 않는다.
 		const { submitStep, doc } = await driveToRender();
 		const htmlPath = join(sandbox, "doc.html");
 		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
 		const rep = reportFiles();
-		const rc = submitStep(SID, "render", doc, [], [], htmlPath, undefined, rep.writing);
-		expect(rc).toBe(1);
-		expect(state().last_failure.items.join(" ")).toContain("visual");
-	});
-
-	test("visual-qa 리포트에 VERDICT: PASS 가 없으면 실패한다", async () => {
-		const { submitStep, doc } = await driveToRender();
-		const htmlPath = join(sandbox, "doc.html");
-		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
-		const rep = reportFiles();
-		writeFileSync(rep.visual, "겹침 발견.\nVERDICT: FAIL\n", "utf8");
-		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing);
-		expect(rc).toBe(1);
-		expect(state().last_failure.items.join(" ")).toContain("VERDICT: PASS");
+		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.writing);
+		expect(rc).toBe(0);
+		expect(state().structural_ok).toContain("render");
 	});
 
 	test("technical-writing 리포트가 없거나 REVIEW: APPLIED 가 없으면 실패한다", async () => {
@@ -859,9 +849,9 @@ describe("render 산출물 검사", () => {
 		const htmlPath = join(sandbox, "doc.html");
 		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
 		const rep = reportFiles();
-		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, undefined)).toBe(1);
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, undefined)).toBe(1);
 		writeFileSync(rep.writing, "리뷰만 하고 반영 안 함\n", "utf8");
-		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing)).toBe(1);
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing)).toBe(1);
 		expect(state().last_failure.items.join(" ")).toContain("REVIEW: APPLIED");
 	});
 
@@ -870,11 +860,10 @@ describe("render 산출물 검사", () => {
 		const htmlPath = join(sandbox, "doc.html");
 		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
 		const rep = reportFiles();
-		writeFileSync(rep.visual, "VERDICT: PASS\n미해결 겹침\n", "utf8");
 		writeFileSync(rep.writing, "REVIEW: APPLIED\n미반영 지적\n", "utf8");
 
-		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing)).toBe(1);
-		expect(state().last_failure.items.join(" ")).toContain("VERDICT: PASS");
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing)).toBe(1);
+		expect(state().last_failure.items.join(" ")).toContain("REVIEW: APPLIED");
 	});
 
 	test("문서에 mermaid 블록이 있는데 HTML에 SVG가 그만큼 없으면 실패한다", async () => {
@@ -883,7 +872,7 @@ describe("render 산출물 검사", () => {
 		// FULL_DOC 은 mermaid 블록 1개를 갖는다 — svg 0개인 HTML은 렌더 누락이다.
 		writeFileSync(htmlPath, "<html>svg 없음</html>", "utf8");
 		const rep = reportFiles();
-		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing);
+		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.writing);
 		expect(rc).toBe(1);
 		expect(state().last_failure.items.join(" ")).toContain("mermaid");
 	});
@@ -893,7 +882,7 @@ describe("render 산출물 검사", () => {
 		const htmlPath = join(sandbox, "doc.html");
 		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
 		const rep = reportFiles();
-		submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing);
+		submitStep(SID, "render", doc, [], [], htmlPath, rep.writing);
 		const rc = passStep(SID, "render", doc, []);
 		expect(rc).toBe(0);
 		expect(state().step).toBe("quiz");
@@ -923,7 +912,7 @@ describe("render 산출물 검사", () => {
 		const htmlPath = join(sandbox, "doc.html");
 		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
 		const rep = reportFiles();
-		submitStep(SID, "render", doc, [], [], htmlPath, rep.visual, rep.writing);
+		submitStep(SID, "render", doc, [], [], htmlPath, rep.writing);
 		passStep(SID, "render", doc, []);
 		expect(state().step).toBe("quiz");
 		addConcept(SID, "c1", true);
