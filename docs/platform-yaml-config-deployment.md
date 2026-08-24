@@ -47,7 +47,7 @@ mcps:
 | 플랫폼 | `mcps.<name>: null`의 범위·착지점 |
 |---|---|
 | Claude | 루트 `claude.yaml`은 사용자 범위 `~/.claude.json`의 최상위 `mcpServers.<name>`을 삭제한다. 프로젝트 `claude.yaml`은 같은 사용자 설정 파일 안에서 해당 프로젝트의 local MCP 위치(`projects.<derived-project-key>.mcpServers.<name>`)만 삭제한다. `CLAUDE_USER_CONFIG`로 파일 위치를 바꿀 수 있다. |
-| Codex | 관리되는 MCP 블록에서 해당 이름만 제외한다. |
+| Codex | `codex mcp remove <name>`로 해당 서버만 제거한다. OMT가 관리하는 MCP 이름은 대상의 `.omt/sync-manifest.json` `codex/mcps` 페어로 추적하므로, 형제·사용자 추가 서버는 건드리지 않는다. |
 | OpenCode | 대상의 `.opencode/opencode.json`에서 `mcp.<name>`만 삭제한다. |
 | Gemini | **지원하지 않는다.** `mcps.<name>: null`은 검증에서 거부된다. Gemini는 `mcps` 섹션이 제공되면 `.gemini/settings.json`의 `mcpServers` 전체를 교체하므로, 이 삭제 tombstone 계약의 대상이 아니다. |
 

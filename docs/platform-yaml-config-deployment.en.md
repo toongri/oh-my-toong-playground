@@ -49,7 +49,7 @@ is also idempotent when the named MCP is already absent.
 | Platform | Scope and destination of `mcps.<name>: null` |
 |---|---|
 | Claude | Root `claude.yaml` removes top-level `mcpServers.<name>` at user scope in `~/.claude.json`. Project `claude.yaml` removes only the local MCP at `projects.<derived-project-key>.mcpServers.<name>` in that same user config file. `CLAUDE_USER_CONFIG` can override the file location. |
-| Codex | Omits only the named entry from the managed MCP block. |
+| Codex | Removes only that server via `codex mcp remove <name>`. OMT-managed MCP names are tracked in the target's `.omt/sync-manifest.json` under the `codex/mcps` pair, so sibling and user-added servers are left untouched. |
 | OpenCode | Removes only `mcp.<name>` from the target's `.opencode/opencode.json`. |
 | Gemini | **Not supported.** Validation rejects `mcps.<name>: null`. When Gemini receives an `mcps` section, it replaces all `mcpServers` in `.gemini/settings.json`, so it is outside this removal-tombstone contract. |
 
