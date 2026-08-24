@@ -1112,9 +1112,15 @@ describe("new-prose: HTML report is the canonical deliverable", () => {
 		expect(skillMd).toContain("never persisted to qa-state");
 	});
 
-	test("the report preserves required evidence.path when optional actor slots are absent", () => {
-		expect(skillMd).toContain("only have the required `evidence.path`");
+	test("the report preserves required evidence.path with partial actor slots", () => {
+		expect(skillMd).toContain("always renders the required `evidence.path`");
+		expect(skillMd).toContain("partial slot sets alike");
 		expect(skillMd).toContain("recorded evidence slot");
+	});
+
+	test("the report caps evidence embedding per file and cumulatively", () => {
+		expect(skillMd).toContain("2 MiB per file and 16 MiB cumulatively");
+		expect(skillMd).toContain("after the cumulative budget is exhausted");
 	});
 
 	test("a fresh start clears prior acceptance criteria before the next report", () => {
