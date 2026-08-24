@@ -6,18 +6,48 @@ import { parse } from "smol-toml";
 import {
 	CodexAdapter,
 	insertManagedBlock,
-	buildMcpTomlContent,
 	resolveCodexAgentModel,
 	cleanupCodexSkillsFossil,
 	planCodexSkillsFossilCleanup,
 	codexSkillsDir,
+	mcpServerToAddArgs,
+	mcpServerEquivalent,
+	type McpListEntry,
+	type McpLister,
+	type McpAdder,
+	type McpRemover,
 } from "./codex.ts";
 import { planCategoryDestinationPaths } from "./destinations.ts";
 import type { ModelMap } from "../lib/types.ts";
 import { DeployTransaction, type DeployMutationHooks } from "../lib/deploy-transaction.ts";
+import { writeManifest } from "../lib/deploy-manifest.ts";
 
 function plannedCodexPath(targetPath: string, category: "hooks" | "scripts", displayName: string): string {
 	return path.join(targetPath, planCategoryDestinationPaths("codex", category, displayName)[0]);
+}
+
+/**
+ * Builds a CodexAdapter with fake `codex mcp` CLI wrappers that record every
+ * call instead of shelling out, plus a fake `codex mcp list --json` result.
+ * Used by every MCP-touching test below so none of them ever spawn a real
+ * `codex` process.
+ */
+function makeFakeMcpAdapter(listEntries: McpListEntry[] = []) {
+	const listCalls: string[] = [];
+	const addCalls: Array<{ codexHome: string; name: string; args: string[] }> = [];
+	const removeCalls: Array<{ codexHome: string; name: string }> = [];
+	const lister: McpLister = async (codexHome) => {
+		listCalls.push(codexHome);
+		return listEntries;
+	};
+	const adder: McpAdder = async (codexHome, name, args) => {
+		addCalls.push({ codexHome, name, args });
+	};
+	const remover: McpRemover = async (codexHome, name) => {
+		removeCalls.push({ codexHome, name });
+	};
+	const adapter = new CodexAdapter(lister, adder, remover);
+	return { adapter, listCalls, addCalls, removeCalls };
 }
 
 // =============================================================================
@@ -244,27 +274,47 @@ describe("insertManagedBlock", () => {
 });
 
 // =============================================================================
-// buildMcpTomlContent
+// mcpServerToAddArgs / mcpServerEquivalent
 // =============================================================================
 
-describe("buildMcpTomlContent", () => {
-	it("builds a single TOML block from 3 servers via `buildMcpTomlContent`", () => {
-		const servers = {
-			"server-a": { command: "npx", args: ["-y", "a"] },
-			"server-b": { command: "node", args: ["b.js"] },
-			"server-c": { command: "python", args: ["c.py"] },
-		};
-		const toml = buildMcpTomlContent(servers);
-		expect(toml).toContain("server-a");
-		expect(toml).toContain("server-b");
-		expect(toml).toContain("server-c");
-		expect(toml).toContain("mcp_servers");
+describe("mcpServerToAddArgs", () => {
+	it("builds --url (+ --bearer-token-env-var) args for an http server via `mcpServerToAddArgs`", () => {
+		expect(mcpServerToAddArgs({ url: "https://example.com/mcp" })).toEqual([
+			"--url",
+			"https://example.com/mcp",
+		]);
+		expect(
+			mcpServerToAddArgs({ url: "https://example.com/mcp", bearer_token_env_var: "NOTION_TOKEN" }),
+		).toEqual(["--url", "https://example.com/mcp", "--bearer-token-env-var", "NOTION_TOKEN"]);
 	});
 
-	it("returns empty TOML for empty server list via `buildMcpTomlContent`", () => {
-		const toml = buildMcpTomlContent({});
-		// smol-toml stringify on { mcp_servers: {} } should produce minimal output
-		expect(typeof toml).toBe("string");
+	it("builds --env + -- <command> <args> for a stdio server via `mcpServerToAddArgs`", () => {
+		expect(
+			mcpServerToAddArgs({ command: "npx", args: ["-y", "figma-mcp"], env: { API_KEY: "secret" } }),
+		).toEqual(["--env", "API_KEY=secret", "--", "npx", "-y", "figma-mcp"]);
+		expect(mcpServerToAddArgs({ command: "my-mcp" })).toEqual(["--", "my-mcp"]);
+	});
+});
+
+describe("mcpServerEquivalent", () => {
+	it("treats a matching http server as equivalent via `mcpServerEquivalent`", () => {
+		const current: McpListEntry = {
+			name: "notion",
+			transport: { type: "streamable_http", url: "https://example.com/mcp", bearer_token_env_var: "T" },
+		};
+		expect(
+			mcpServerEquivalent({ url: "https://example.com/mcp", bearer_token_env_var: "T" }, current),
+		).toBe(true);
+		expect(mcpServerEquivalent({ url: "https://other.example.com/mcp" }, current)).toBe(false);
+	});
+
+	it("treats a matching stdio server as equivalent via `mcpServerEquivalent`", () => {
+		const current: McpListEntry = {
+			name: "figma",
+			transport: { type: "stdio", command: "npx", args: ["-y", "figma-mcp"] },
+		};
+		expect(mcpServerEquivalent({ command: "npx", args: ["-y", "figma-mcp"] }, current)).toBe(true);
+		expect(mcpServerEquivalent({ command: "npx", args: ["-y", "other-mcp"] }, current)).toBe(false);
 	});
 });
 
@@ -853,81 +903,100 @@ describe("CodexAdapter", () => {
 	// ---------------------------------------------------------------------------
 
 	describe("MCP accumulator", () => {
-		it("accumulates 3 servers into a single omt:mcp managed block via `flushMcpBlock`", async () => {
-			adapter.resetMcpAccumulator();
-			adapter.accumulateMcp("server-a", { command: "npx", args: ["-y", "a"] });
-			adapter.accumulateMcp("server-b", { command: "node", args: ["b.js"] });
-			adapter.accumulateMcp("server-c", { command: "python", args: ["c.py"] });
-			await adapter.flushMcpBlock(tmpDir, false);
+		it("accumulates 3 servers into 3 `codex mcp add` calls via `flushMcpBlock`", async () => {
+			const { adapter: fakeAdapter, addCalls, removeCalls } = makeFakeMcpAdapter();
+			fakeAdapter.resetMcpAccumulator();
+			fakeAdapter.accumulateMcp("server-a", { command: "npx", args: ["-y", "a"] });
+			fakeAdapter.accumulateMcp("server-b", { command: "node", args: ["b.js"] });
+			fakeAdapter.accumulateMcp("server-c", { command: "python", args: ["c.py"] });
+			await fakeAdapter.flushMcpBlock(tmpDir, false);
 
-			const configFile = path.join(tmpDir, ".codex", "config.toml");
-			const content = await fs.readFile(configFile, "utf-8");
-
-			expect(content).toContain("# --- omt:mcp ---");
-			expect(content).toContain("# --- end omt:mcp ---");
-			// All 3 servers appear in single block
-			const startIdx = content.indexOf("# --- omt:mcp ---");
-			const endIdx = content.indexOf("# --- end omt:mcp ---");
-			expect(startIdx).toBeGreaterThanOrEqual(0);
-			expect(endIdx).toBeGreaterThan(startIdx);
-			const blockContent = content.slice(startIdx, endIdx);
-			expect(blockContent).toContain("server-a");
-			expect(blockContent).toContain("server-b");
-			expect(blockContent).toContain("server-c");
+			expect(addCalls.map((c) => c.name).sort()).toEqual(["server-a", "server-b", "server-c"]);
+			const codexHome = path.join(tmpDir, ".codex");
+			expect(addCalls.every((c) => c.codexHome === codexHome)).toBe(true);
+			expect(addCalls.find((c) => c.name === "server-a")?.args).toEqual(["--", "npx", "-y", "a"]);
+			expect(removeCalls).toEqual([]);
 		});
 
-		it("replaces existing omt:mcp block and preserves content outside it via `flushMcpBlock`", async () => {
-			const configFile = path.join(tmpDir, ".codex", "config.toml");
-			await fs.mkdir(path.join(tmpDir, ".codex"), { recursive: true });
-			await fs.writeFile(
-				configFile,
-				`model = "o4-mini"\n\n# --- omt:mcp ---\nold_server = {}\n# --- end omt:mcp ---\n`,
-				"utf-8",
-			);
+		it("skips a server already present and equivalent in `codex mcp list` via `flushMcpBlock` (OAuth-skip)", async () => {
+			const { adapter: fakeAdapter, addCalls } = makeFakeMcpAdapter([
+				{ name: "notion", transport: { type: "streamable_http", url: "https://example.com/mcp" } },
+			]);
+			fakeAdapter.resetMcpAccumulator();
+			fakeAdapter.accumulateMcp("notion", { url: "https://example.com/mcp" });
+			fakeAdapter.accumulateMcp("figma", { command: "npx", args: ["-y", "figma-mcp"] });
+			await fakeAdapter.flushMcpBlock(tmpDir, false);
 
-			adapter.resetMcpAccumulator();
-			adapter.accumulateMcp("new-server", { command: "npx" });
-			await adapter.flushMcpBlock(tmpDir, false);
-
-			const content = await fs.readFile(configFile, "utf-8");
-			expect(content).toContain(`model = "o4-mini"`);
-			expect(content).not.toContain("old_server");
-			expect(content).toContain("new-server");
+			// notion is unchanged -> no re-add (avoids re-triggering its OAuth flow);
+			// figma is new -> added.
+			expect(addCalls.map((c) => c.name)).toEqual(["figma"]);
 		});
 
-		it("does not create config.toml when accumulator is empty via `flushMcpBlock`", async () => {
-			adapter.resetMcpAccumulator();
-			// flushMcpBlock with 0 servers should not create file
-			await adapter.flushMcpBlock(tmpDir, false);
-			const exists = await fs
-				.stat(path.join(tmpDir, ".codex", "config.toml"))
+		it("removes a manifest-tracked server no longer declared via `flushMcpBlock`", async () => {
+			await writeManifest(tmpDir, { "codex/mcps": ["stale-server", "kept-server"] });
+			const { adapter: fakeAdapter, addCalls, removeCalls } = makeFakeMcpAdapter([
+				{ name: "stale-server", transport: { type: "stdio", command: "npx" } },
+				{ name: "kept-server", transport: { type: "stdio", command: "npx" } },
+			]);
+			fakeAdapter.resetMcpAccumulator();
+			fakeAdapter.accumulateMcp("kept-server", { command: "npx" });
+			await fakeAdapter.flushMcpBlock(tmpDir, false);
+
+			expect(removeCalls.map((c) => c.name)).toEqual(["stale-server"]);
+			expect(addCalls).toEqual([]); // kept-server already equivalent, no re-add
+		});
+
+		it("BOOTSTRAP (no manifest) removes nothing via `flushMcpBlock`", async () => {
+			const { adapter: fakeAdapter, removeCalls } = makeFakeMcpAdapter([
+				{ name: "foreign-server", transport: { type: "stdio", command: "npx" } },
+			]);
+			fakeAdapter.resetMcpAccumulator();
+			// declared set is empty — a naive bootstrap-as-empty-history read would
+			// compute foreign-server as an orphan and remove it
+			await fakeAdapter.flushMcpBlock(tmpDir, false);
+
+			expect(removeCalls).toEqual([]);
+		});
+
+		it("dry-run makes zero adder/remover/lister calls and writes no manifest via `flushMcpBlock`", async () => {
+			const { adapter: fakeAdapter, addCalls, removeCalls, listCalls } = makeFakeMcpAdapter();
+			fakeAdapter.resetMcpAccumulator();
+			fakeAdapter.accumulateMcp("server-a", { command: "npx" });
+			await fakeAdapter.flushMcpBlock(tmpDir, true);
+
+			expect(addCalls).toEqual([]);
+			expect(removeCalls).toEqual([]);
+			expect(listCalls).toEqual([]);
+			const manifestExists = await fs
+				.stat(path.join(tmpDir, ".omt", "sync-manifest.json"))
 				.then(() => true)
 				.catch(() => false);
-			expect(exists).toBe(false);
+			expect(manifestExists).toBe(false);
 		});
 
-		it("replaces existing omt:mcp block with empty block when accumulator is empty via `flushMcpBlock`", async () => {
-			const configFile = path.join(tmpDir, ".codex", "config.toml");
-			await fs.mkdir(path.join(tmpDir, ".codex"), { recursive: true });
-			await fs.writeFile(
-				configFile,
-				`model = "o4-mini"\n\n# --- omt:mcp ---\n[mcp_servers.old-server]\ncommand = "npx"\n# --- end omt:mcp ---\n`,
-				"utf-8",
+		it("`mcps: {}` removes every prior server and sets the manifest to [] via `flushMcpBlock`", async () => {
+			await writeManifest(tmpDir, { "codex/mcps": ["old-a", "old-b"] });
+			const { adapter: fakeAdapter, removeCalls } = makeFakeMcpAdapter([
+				{ name: "old-a", transport: { type: "stdio", command: "npx" } },
+				{ name: "old-b", transport: { type: "stdio", command: "npx" } },
+			]);
+			fakeAdapter.resetMcpAccumulator();
+			await fakeAdapter.flushMcpBlock(tmpDir, false);
+
+			expect(removeCalls.map((c) => c.name).sort()).toEqual(["old-a", "old-b"]);
+			const manifest = JSON.parse(
+				await fs.readFile(path.join(tmpDir, ".omt", "sync-manifest.json"), "utf-8"),
 			);
+			expect(manifest["codex/mcps"]).toEqual([]);
+		});
 
-			adapter.resetMcpAccumulator();
-			await adapter.flushMcpBlock(tmpDir, false);
+		it("a first-ever run with 0 servers and no manifest is a clean no-op via `flushMcpBlock`", async () => {
+			const { adapter: fakeAdapter, addCalls, removeCalls } = makeFakeMcpAdapter([]);
+			fakeAdapter.resetMcpAccumulator();
+			await fakeAdapter.flushMcpBlock(tmpDir, false);
 
-			const content = await fs.readFile(configFile, "utf-8");
-			// Markers must still be present
-			expect(content).toContain("# --- omt:mcp ---");
-			expect(content).toContain("# --- end omt:mcp ---");
-			// Old server must be removed
-			expect(content).not.toContain("old-server");
-			// Empty comment inside block
-			expect(content).toContain("# No MCP servers configured");
-			// User content outside block preserved
-			expect(content).toContain(`model = "o4-mini"`);
+			expect(addCalls).toEqual([]);
+			expect(removeCalls).toEqual([]);
 		});
 	});
 
@@ -961,54 +1030,49 @@ describe("CodexAdapter", () => {
 			expect(result.processedSections).toContain("config");
 		});
 
-		it("includes 'mcps' in processedSections and creates managed block via `syncPlatformYaml`", async () => {
+		it("includes 'mcps' in processedSections and issues `codex mcp add` per server via `syncPlatformYaml`", async () => {
+			const { adapter: fakeAdapter, addCalls } = makeFakeMcpAdapter();
 			const yaml = {
 				mcps: {
 					"my-server": { command: "npx", args: ["-y", "my-server"] },
 					"other-server": { command: "node", args: ["server.js"] },
 				},
 			};
-			const result = await adapter.syncPlatformYaml(tmpDir, yaml, false);
+			const result = await fakeAdapter.syncPlatformYaml(tmpDir, yaml, false);
 			expect(result.processedSections).toContain("mcps");
-
-			const configFile = path.join(tmpDir, ".codex", "config.toml");
-			const content = await fs.readFile(configFile, "utf-8");
-			expect(content).toContain("# --- omt:mcp ---");
-			expect(content).toContain("my-server");
-			expect(content).toContain("other-server");
+			expect(addCalls.map((c) => c.name).sort()).toEqual(["my-server", "other-server"]);
 		});
 
 		it("skips a server whose overlay value is null via `syncPlatformYaml`", async () => {
+			const { adapter: fakeAdapter, addCalls } = makeFakeMcpAdapter();
 			const yaml = {
 				mcps: {
 					"keep-server": { command: "npx", args: ["-y", "keep"] },
 					"drop-server": null,
 				},
 			};
-			const result = await adapter.syncPlatformYaml(
+			const result = await fakeAdapter.syncPlatformYaml(
 				tmpDir,
-				yaml as unknown as Parameters<typeof adapter.syncPlatformYaml>[1],
+				yaml as unknown as Parameters<typeof fakeAdapter.syncPlatformYaml>[1],
 				false,
 			);
 			expect(result.processedSections).toContain("mcps");
-
-			const configFile = path.join(tmpDir, ".codex", "config.toml");
-			const content = await fs.readFile(configFile, "utf-8");
-			expect(content).toContain("keep-server");
-			expect(content).not.toContain("drop-server");
+			expect(addCalls.map((c) => c.name)).toEqual(["keep-server"]);
 		});
 
 		it("processes config, mcps, and model-map sections together via `syncPlatformYaml`", async () => {
+			const { adapter: fakeAdapter, addCalls } = makeFakeMcpAdapter();
 			const yaml = {
 				config: { model: "o4-mini" },
 				mcps: { srv: { command: "npx" } },
 				"model-map": { tiers: { sonnet: { model: "o4-mini" } } },
 			};
-			const result = await adapter.syncPlatformYaml(tmpDir, yaml, false);
+			const result = await fakeAdapter.syncPlatformYaml(tmpDir, yaml, false);
 			expect(result.processedSections).toContain("config");
 			expect(result.processedSections).toContain("mcps");
 			expect(result.processedSections).toContain("model-map");
 			expect(result.modelMap).toBeDefined();
+			expect(addCalls.map((c) => c.name)).toEqual(["srv"]);
 		});
 
 		it("skips config.toml creation in dry-run mode via `syncPlatformYaml`", async () => {
@@ -1024,13 +1088,8 @@ describe("CodexAdapter", () => {
 			expect(exists).toBe(false);
 		});
 
-		it("accumulates MCP servers in dry-run mode so preview is correct via `syncPlatformYaml`", async () => {
-			// Create existing config.toml so flushMcpBlock can log a meaningful dry-run preview
-			const configDir = path.join(tmpDir, ".codex");
-			await fs.mkdir(configDir, { recursive: true });
-			const configFile = path.join(configDir, "config.toml");
-			await fs.writeFile(configFile, `model = "o4-mini"\n`, "utf-8");
-
+		it("accumulates MCP servers in dry-run mode so a later real flush is correct via `syncPlatformYaml`", async () => {
+			const { adapter: fakeAdapter, addCalls } = makeFakeMcpAdapter();
 			const yaml = {
 				mcps: {
 					"server-alpha": { command: "npx", args: ["-y", "alpha"] },
@@ -1038,15 +1097,15 @@ describe("CodexAdapter", () => {
 				},
 			};
 
-			await adapter.syncPlatformYaml(tmpDir, yaml, true);
+			await fakeAdapter.syncPlatformYaml(tmpDir, yaml, true);
+			// dry-run must make zero adder calls
+			expect(addCalls).toEqual([]);
 
-			// Accumulator must be populated — flushMcpBlock dry-run path uses it to build preview
-			// Verify by calling flushMcpBlock in non-dry-run mode and confirming servers are written
-			await adapter.flushMcpBlock(tmpDir, false);
-			const content = await fs.readFile(configFile, "utf-8");
-			expect(content).toContain("server-alpha");
-			expect(content).toContain("server-beta");
-			expect(content).toContain("# --- omt:mcp ---");
+			// Accumulator must still be populated — flushMcpBlock dry-run path
+			// reads it to build the preview without clearing it. Verify by
+			// flushing for real afterwards and confirming both servers were added.
+			await fakeAdapter.flushMcpBlock(tmpDir, false);
+			expect(addCalls.map((c) => c.name).sort()).toEqual(["server-alpha", "server-beta"]);
 		});
 
 		it("returns undefined for modelMap when model-map is absent via `syncPlatformYaml`", async () => {
@@ -1055,25 +1114,16 @@ describe("CodexAdapter", () => {
 			expect(result.modelMap).toBeUndefined();
 		});
 
-		it("removes existing managed block and includes 'mcps' in processedSections when mcps: {} via `syncPlatformYaml`", async () => {
-			// Setup: write a config.toml with an existing omt:mcp managed block
-			const configDir = path.join(tmpDir, ".codex");
-			await fs.mkdir(configDir, { recursive: true });
-			const configFile = path.join(configDir, "config.toml");
-			const existingContent =
-				[
-					`# --- omt:mcp ---`,
-					`[mcp.servers.old-server]`,
-					`command = "old-cmd"`,
-					`# --- end omt:mcp ---`,
-				].join("\n") + "\n";
-			await fs.writeFile(configFile, existingContent, "utf-8");
+		it("removes every manifest-tracked server and includes 'mcps' in processedSections when mcps: {} via `syncPlatformYaml`", async () => {
+			await writeManifest(tmpDir, { "codex/mcps": ["old-server"] });
+			const { adapter: fakeAdapter, removeCalls } = makeFakeMcpAdapter([
+				{ name: "old-server", transport: { type: "stdio", command: "old-cmd" } },
+			]);
 
-			const result = await adapter.syncPlatformYaml(tmpDir, { mcps: {} }, false);
+			const result = await fakeAdapter.syncPlatformYaml(tmpDir, { mcps: {} }, false);
 
 			expect(result.processedSections).toContain("mcps");
-			const content = await fs.readFile(configFile, "utf-8");
-			expect(content).not.toContain("old-server");
+			expect(removeCalls.map((c) => c.name)).toEqual(["old-server"]);
 		});
 	});
 
@@ -1731,7 +1781,8 @@ describe("CodexAdapter", () => {
 				await fs.stat(path.join(targetBase, ".codex", "hooks.json")).then(() => true).catch(() => false),
 			).toBe(false);
 		});
-		it("notifies after each successful OMT-owned config, MCP, hook bundle, and hooks.json write via `syncPlatformYaml`", async () => {
+		it("notifies after each successful OMT-owned config, hook bundle, and hooks.json write via `syncPlatformYaml` — MCP no longer writes config.toml", async () => {
+			const { adapter: fakeAdapter, addCalls } = makeFakeMcpAdapter();
 			const sourceHookDir = path.join(tmpDir, "external-hook");
 			await fs.mkdir(sourceHookDir, { recursive: true });
 			await fs.writeFile(path.join(sourceHookDir, "index.ts"), "console.log('hook');\n");
@@ -1747,15 +1798,19 @@ describe("CodexAdapter", () => {
 				await fs.stat(writtenPath);
 			};
 
-			await adapter.syncPlatformYaml(tmpDir, yaml as never, false, undefined, observer);
+			await fakeAdapter.syncPlatformYaml(tmpDir, yaml as never, false, undefined, observer);
 
 			const configFile = path.join(tmpDir, ".codex", "config.toml");
 			const hookDir = path.join(tmpDir, ".codex", "hooks", path.basename(sourceHookDir));
 			const hooksFile = path.join(tmpDir, ".codex", "hooks.json");
-			expect(writes).toEqual([configFile, configFile, hookDir, hooksFile]);
+			// config.toml is written ONCE, for the `config` section — MCP flush no
+			// longer touches config.toml at all, so it does not appear a second time.
+			expect(writes).toEqual([configFile, hookDir, hooksFile]);
+			expect(addCalls.map((c) => c.name)).toEqual(["server-a"]);
 		});
 
-		it("forwards mutation hooks to repeated config and MCP writes on the exact shared path", async () => {
+		it("forwards mutation hooks to the config write only — MCP flush is not guarded by mutationHooks", async () => {
+			const { adapter: fakeAdapter, addCalls } = makeFakeMcpAdapter();
 			const calls: string[] = [];
 			const observed: string[] = [];
 			const mutationHooks: DeployMutationHooks = {
@@ -1764,7 +1819,7 @@ describe("CodexAdapter", () => {
 					await operation();
 				},
 			};
-			await adapter.syncPlatformYaml(
+			await fakeAdapter.syncPlatformYaml(
 				tmpDir,
 				{ config: { model: "o4-mini" }, mcps: { server: { command: "npx" } } } as never,
 				false,
@@ -1773,8 +1828,9 @@ describe("CodexAdapter", () => {
 				mutationHooks,
 			);
 			const configFile = path.join(tmpDir, ".codex", "config.toml");
-			expect(calls).toEqual([configFile, configFile]);
-			expect(observed).toEqual([configFile, configFile]);
+			expect(calls).toEqual([configFile]);
+			expect(observed).toEqual([configFile]);
+			expect(addCalls.map((c) => c.name)).toEqual(["server"]);
 		});
 
 		it("does not notify for dry-run or sections that perform no writes via `syncPlatformYaml`", async () => {

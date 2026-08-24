@@ -9,7 +9,9 @@
  * - skills, scripts: syncDirectory
  * - rules: supported, copied verbatim to `.codex/rules/<name>.md` (syncRulesDirect)
  * - config: TOML managed block in .codex/config.toml
- * - mcps: accumulate all servers, flush as single managed block
+ * - mcps: accumulate all servers, flush via native `codex mcp add/remove` CLI
+ *   (idempotent add-if-changed + orphan removal tracked in
+ *   .omt/sync-manifest.json — see flushMcpBlock)
  */
 
 import fs from "fs/promises";
@@ -26,6 +28,7 @@ import { parseFrontmatter } from "../lib/frontmatter.ts";
 import { PLATFORM_REWRITE_RULES, applyRewriteRules } from "../lib/rewrite-rules.ts";
 import { composePreToolTraceCommand } from "../lib/pretool-trace-command.ts";
 import { isGlobalSync } from "../lib/path-utils.ts";
+import { readManifest, computeOrphans, writeManifest, type ManifestData } from "../lib/deploy-manifest.ts";
 import type {
 	ModelMap,
 	PlatformConfigResult,
@@ -293,26 +296,146 @@ export function insertManagedBlock(
 }
 
 // =============================================================================
-// MCP Accumulator
+// MCP CLI Helpers
 // =============================================================================
 
-/**
- * Builds the TOML content for a managed MCP block from accumulated servers.
- *
- * Each server becomes a `[mcp_servers.<name>]` section.
- * Object sub-keys become `[mcp_servers.<name>.<key>]` sub-tables.
- */
-export function buildMcpTomlContent(servers: Record<string, Record<string, unknown>>): string {
-	// We use smol-toml stringify via a constructed object
-	// Build: { mcp_servers: { <name>: { ... } } }
-	const mcpServersObj: Record<string, Record<string, unknown>> = {};
-	for (const [name, server] of Object.entries(servers)) {
-		mcpServersObj[name] = server;
+/** One entry from `codex mcp list --json` — loosely typed, since Codex owns the shape. */
+export type McpListEntry = {
+	name: string;
+	transport?: Record<string, unknown>;
+	[key: string]: unknown;
+};
+
+export type McpLister = (codexHome: string) => Promise<McpListEntry[]>;
+export type McpAdder = (codexHome: string, name: string, args: string[]) => Promise<void>;
+export type McpRemover = (codexHome: string, name: string) => Promise<void>;
+
+async function defaultMcpLister(codexHome: string): Promise<McpListEntry[]> {
+	const proc = Bun.spawn(["codex", "mcp", "list", "--json"], {
+		env: { ...process.env, CODEX_HOME: codexHome },
+		stdout: "pipe",
+		stderr: "inherit",
+	});
+	const stdout = await new Response(proc.stdout).text();
+	await proc.exited;
+	if (proc.exitCode !== 0) {
+		throw new Error(
+			`codex mcp list --json (CODEX_HOME=${codexHome}) exited with code ${proc.exitCode}`,
+		);
 	}
-	// smol-toml stringify on { mcp_servers: { ... } }
-	const tomlObj = { mcp_servers: mcpServersObj };
-	const tomlStr = stringify(tomlObj);
-	return tomlStr;
+	const parsed: unknown = JSON.parse(stdout || "[]");
+	if (!Array.isArray(parsed)) return [];
+	return parsed.filter(
+		(entry): entry is McpListEntry => isRecord(entry) && typeof entry.name === "string",
+	);
+}
+
+async function defaultMcpAdder(codexHome: string, name: string, args: string[]): Promise<void> {
+	const proc = Bun.spawn(["codex", "mcp", "add", name, ...args], {
+		cwd: codexHome,
+		env: { ...process.env, CODEX_HOME: codexHome },
+		stdout: "inherit",
+		stderr: "inherit",
+	});
+	await proc.exited;
+	if (proc.exitCode !== 0) {
+		throw new Error(
+			`codex mcp add ${name} ${args.join(" ")} (CODEX_HOME=${codexHome}) exited with code ${proc.exitCode}`,
+		);
+	}
+}
+
+async function defaultMcpRemover(codexHome: string, name: string): Promise<void> {
+	const proc = Bun.spawn(["codex", "mcp", "remove", name], {
+		cwd: codexHome,
+		env: { ...process.env, CODEX_HOME: codexHome },
+		stdout: "inherit",
+		stderr: "inherit",
+	});
+	await proc.exited;
+	if (proc.exitCode !== 0) {
+		throw new Error(`codex mcp remove ${name} (CODEX_HOME=${codexHome}) exited with code ${proc.exitCode}`);
+	}
+}
+
+/**
+ * Translates one accumulated MCP server definition (authored in yaml as
+ * Codex's own `[mcp_servers.<name>]` schema) into the args `codex mcp add
+ * <name>` expects AFTER the name.
+ *
+ * lazy: an http (`--url`) server that carries OAuth re-triggers a login
+ * attempt on every `codex mcp add` call for it — acceptable since it exits 0
+ * headless and `flushMcpBlock` only calls add when the server is new or its
+ * definition changed (see mcpServerEquivalent), not on every sync. Upgrade
+ * path: skip re-add entirely for a known-OAuth server once Codex exposes a
+ * way to distinguish "needs re-auth" from "unchanged".
+ */
+export function mcpServerToAddArgs(server: Record<string, unknown>): string[] {
+	if (typeof server.url === "string") {
+		const args = ["--url", server.url];
+		if (typeof server.bearer_token_env_var === "string") {
+			args.push("--bearer-token-env-var", server.bearer_token_env_var);
+		}
+		return args;
+	}
+	const command = typeof server.command === "string" ? server.command : "";
+	const envArgs: string[] = [];
+	if (isRecord(server.env)) {
+		for (const [key, value] of Object.entries(server.env)) {
+			envArgs.push("--env", `${key}=${String(value)}`);
+		}
+	}
+	const extraArgs = Array.isArray(server.args) ? server.args.map(String) : [];
+	return [...envArgs, "--", command, ...extraArgs];
+}
+
+/** Normalizes a `codex mcp list --json` entry's `transport` back to the desired-shape server object, or undefined if unrecognized. */
+function normalizeMcpListEntry(entry: McpListEntry): Record<string, unknown> | undefined {
+	const transport = entry.transport;
+	if (!isRecord(transport)) return undefined;
+	if (transport.type === "streamable_http") {
+		const normalized: Record<string, unknown> = { url: transport.url };
+		if (typeof transport.bearer_token_env_var === "string") {
+			normalized.bearer_token_env_var = transport.bearer_token_env_var;
+		}
+		return normalized;
+	}
+	if (transport.type === "stdio") {
+		const normalized: Record<string, unknown> = { command: transport.command };
+		if (Array.isArray(transport.args) && transport.args.length > 0) normalized.args = transport.args;
+		if (isRecord(transport.env) && Object.keys(transport.env).length > 0) normalized.env = transport.env;
+		return normalized;
+	}
+	return undefined;
+}
+
+/**
+ * True when `desired` (the yaml-authored server object) already matches
+ * `currentEntry` (one entry from `codex mcp list --json`), so `flushMcpBlock`
+ * can skip re-adding it. Getting http (`url`) equivalence right matters most —
+ * it gates the OAuth re-trigger described on mcpServerToAddArgs; for a stdio
+ * server a false "differs" only causes a harmless idempotent re-add.
+ */
+export function mcpServerEquivalent(
+	desired: Record<string, unknown>,
+	currentEntry: McpListEntry,
+): boolean {
+	const normalizedCurrent = normalizeMcpListEntry(currentEntry);
+	if (!normalizedCurrent) return false;
+	const normalizedDesired: Record<string, unknown> =
+		typeof desired.url === "string"
+			? {
+					url: desired.url,
+					...(typeof desired.bearer_token_env_var === "string"
+						? { bearer_token_env_var: desired.bearer_token_env_var }
+						: {}),
+				}
+			: {
+					command: desired.command,
+					...(Array.isArray(desired.args) && desired.args.length > 0 ? { args: desired.args } : {}),
+					...(isRecord(desired.env) && Object.keys(desired.env).length > 0 ? { env: desired.env } : {}),
+				};
+	return JSON.stringify(normalizedDesired) === JSON.stringify(normalizedCurrent);
 }
 
 // =============================================================================
@@ -600,6 +723,17 @@ export class CodexAdapter implements PlatformAdapter {
 
 	/** Accumulated MCP servers (reset at the start of each syncPlatformYaml call) */
 	private mcpAccumulator: Record<string, Record<string, unknown>> = {};
+
+	/** Injected `codex mcp` CLI wrappers — swap out in tests. */
+	private readonly mcpLister: McpLister;
+	private readonly mcpAdder: McpAdder;
+	private readonly mcpRemover: McpRemover;
+
+	constructor(mcpLister?: McpLister, mcpAdder?: McpAdder, mcpRemover?: McpRemover) {
+		this.mcpLister = mcpLister ?? defaultMcpLister;
+		this.mcpAdder = mcpAdder ?? defaultMcpAdder;
+		this.mcpRemover = mcpRemover ?? defaultMcpRemover;
+	}
 
 	// ---------------------------------------------------------------------------
 	// syncAgentsDirect — md -> toml translator
@@ -947,59 +1081,79 @@ export class CodexAdapter implements PlatformAdapter {
 		this.mcpAccumulator[name] = server;
 	}
 
-	/** Flush all accumulated MCP servers to a managed block in config.toml */
+	/**
+	 * Flush all accumulated MCP servers via the native `codex mcp add`/`codex
+	 * mcp remove` CLI (no OMT-side config.toml write, so `writeObserver` and
+	 * `mutationHooks` are unused here — kept in the signature only because
+	 * `syncPlatformYaml` passes them positionally to every section flush).
+	 *
+	 * Orphan tracking (a server declared in a previous run but not this one)
+	 * has no on-disk fingerprint of its own the way a deployed file does — the
+	 * CLI's own state doesn't record OMT ownership — so it goes through
+	 * `.omt/sync-manifest.json` (`readManifest`/`computeOrphans` from
+	 * deploy-manifest.ts) under the `"codex/mcps"` pair key, exactly like every
+	 * other category's orphan bookkeeping, except removal here is `codex mcp
+	 * remove` rather than a file delete.
+	 */
 	async flushMcpBlock(
 		targetPath: string,
 		dryRun: boolean,
-		writeObserver?: PlatformWriteObserver,
-		mutationHooks?: DeployMutationHooks,
+		_writeObserver?: PlatformWriteObserver,
+		_mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
-		const configFile = path.join(targetPath, this.configDir, "config.toml");
-		const serverCount = Object.keys(this.mcpAccumulator).length;
+		const desired = this.mcpAccumulator;
+		const declaredNames = Object.keys(desired).sort();
+		const codexHome = path.join(targetPath, this.configDir);
+		const deployRoot = targetPath;
+		const manifestKey = "codex/mcps";
 
-		if (serverCount === 0) {
-			// If a managed MCP block exists in the file, replace it with an empty block
-			const existing = await readTextFile(configFile);
-			if (!existing) {
-				// File does not exist — nothing to clean up
-				return;
-			}
-			const startMarker = `# --- omt:mcp ---`;
-			if (!existing.includes(startMarker)) {
-				return;
-			}
-			if (dryRun) {
-				logDry(`MCP managed block (empty — removing servers): ${configFile}`);
-				return;
-			}
-			const operation = async (): Promise<void> => {
-				const current = await readTextFile(configFile);
-				const updated = insertManagedBlock(current, "mcp", "# No MCP servers configured\n");
-				await fs.writeFile(configFile, updated, "utf-8");
-			};
-			if (mutationHooks) await mutationHooks.mutate(configFile, operation);
-			else await operation();
-			if (writeObserver) await writeObserver(configFile);
-			logInfo(`MCP managed block cleared: ${configFile}`);
-			return;
-		}
+		// BOOTSTRAP (readManifest -> null: absent/corrupt manifest) means no
+		// prior declared set is known — orphan removal is skipped entirely,
+		// same hard branch every other category's manifest reconciliation uses.
+		const manifest = await readManifest(deployRoot);
+		const prev = manifest === null ? null : (manifest[manifestKey] ?? []);
+		const orphans = prev === null ? [] : computeOrphans(prev, declaredNames);
 
 		if (dryRun) {
-			logDry(`MCP managed block: ${JSON.stringify(this.mcpAccumulator)} -> ${configFile}`);
+			for (const name of declaredNames) {
+				logDry(`codex mcp add ${name} (CODEX_HOME=${codexHome})`);
+			}
+			for (const name of orphans) {
+				logDry(`codex mcp remove ${name} (CODEX_HOME=${codexHome})`);
+			}
+			logDry(`MCP manifest pair '${manifestKey}': ${JSON.stringify(declaredNames)}`);
 			return;
 		}
 
-		const operation = async (): Promise<void> => {
-			await fs.mkdir(path.join(targetPath, this.configDir), { recursive: true });
-			const existing = await readTextFile(configFile);
-			const tomlContent = buildMcpTomlContent(this.mcpAccumulator);
-			const updated = insertManagedBlock(existing, "mcp", tomlContent);
-			await fs.writeFile(configFile, updated, "utf-8");
-		};
-		if (mutationHooks) await mutationHooks.mutate(configFile, operation);
-		else await operation();
-		if (writeObserver) await writeObserver(configFile);
-		logInfo(`MCP managed block: ${configFile}`);
+		const current = await this.mcpLister(codexHome);
+		const byName = new Map(current.map((entry) => [entry.name, entry] as const));
+
+		for (const name of declaredNames) {
+			const server = desired[name];
+			const existing = byName.get(name);
+			// Add only when absent or changed — re-adding an unchanged http
+			// (`--url`) server re-triggers its OAuth flow (see the lazy: note on
+			// mcpServerToAddArgs), so an unnecessary add is not merely wasteful.
+			if (!existing || !mcpServerEquivalent(server, existing)) {
+				await this.mcpAdder(codexHome, name, mcpServerToAddArgs(server));
+				logInfo(`MCP server added: ${name}`);
+			}
+		}
+
+		for (const name of orphans) {
+			// Only remove what the CLI still reports — an orphan already absent
+			// from `codex mcp list` needs no `codex mcp remove` call (idempotent
+			// either way, but this avoids a pointless subprocess + config parse).
+			if (byName.has(name)) {
+				await this.mcpRemover(codexHome, name);
+				logInfo(`MCP server removed: ${name}`);
+			}
+		}
+
+		const nextManifest: ManifestData = manifest !== null ? { ...manifest } : {};
+		nextManifest[manifestKey] = declaredNames;
+		await writeManifest(deployRoot, nextManifest);
+		logInfo(`MCP manifest updated: ${declaredNames.length} server(s) declared`);
 	}
 
 	// ---------------------------------------------------------------------------
