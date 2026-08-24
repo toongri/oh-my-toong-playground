@@ -418,6 +418,21 @@ describe("qa-state CLI wiring", () => {
 		expect(view.prior_cycle_cells.some((cell: any) => cell.cls === 1 && cell.cycle === 0)).toBe(true);
 	});
 
+	test("get excludes prior-cycle baseline and run-check records from the current view", () => {
+		authorCompleteChain();
+		run("record-baseline --story story-1 --result fail --note first-cycle");
+		run("record-run-check --check stale-state --result fail --note first-cycle");
+		run("record-run-check --check dirty-worktree --result pass");
+		run("record-run-check --check flaky-rerun --result pass");
+		run("inc-cycle");
+
+		const view = JSON.parse(run("get"));
+		expect(view.stories[0].baseline).toBeNull();
+		expect(view.run_checks.stale_state).toBeNull();
+		expect(view.run_checks.dirty_worktree).toBeNull();
+		expect(view.run_checks.flaky_rerun).toBeNull();
+	});
+
 	test("inc-cycle invalidates chain completion until current-cycle cells are authored", () => {
 		authorCompleteChain();
 		expect(rawState().derived.chain_complete).toBe(true);
@@ -544,6 +559,11 @@ describe("qa-state CLI wiring", () => {
 		]);
 		run(`set-acceptance --json '["only this one now"]'`);
 		expect(rawState().acceptance_criteria).toEqual(["only this one now"]);
+	});
+
+	test("set-acceptance rejects non-string criteria instead of stringifying them", () => {
+		run("set --phase PLAN");
+		expect(() => run(`set-acceptance --json '[42]'`)).toThrow();
 	});
 
 	test("record-cell round-trips driven-at, scenario fields, and 3-slot evidence", () => {

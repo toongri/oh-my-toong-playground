@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { execSync } from "child_process";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "fs";
+import { mkdtempSync, mkdirSync, rmSync, existsSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -230,6 +230,30 @@ describe("qa-report renderer", () => {
 		expect(failures).not.toContain("no failures or mismatches recorded this cycle");
 	});
 
+	test("embeds readable baseline evidence in the Scenario Evidence section", () => {
+		const view = baseView({
+			stories: [
+				{
+					id: "story-1",
+					actor: "actor-1",
+					baseline: {
+						result: "pass",
+						cycle: 0,
+						evidence: { path: "/evidence/baseline.log", surface: "agent-device" },
+					},
+				},
+			],
+		});
+		const readPaths: string[] = [];
+		const html = renderQaReport(view, {}, (path) => {
+			readPaths.push(path);
+			return { kind: "text", content: "baseline proof" };
+		})!;
+		const scenarioEvidence = html.slice(html.indexOf("Scenario Evidence"), html.indexOf("Failures &amp; Mismatches"));
+		expect(readPaths).toContain("/evidence/baseline.log");
+		expect(scenarioEvidence).toContain("baseline proof");
+	});
+
 	test("renders the waived sub-scenario in the verdict identifier", () => {
 		const html = renderQaReport(
 			baseView({
@@ -281,6 +305,17 @@ describe("qa-report renderer", () => {
 describe("defaultEvidenceReader", () => {
 	test("returns missing for a nonexistent path", () => {
 		expect(defaultEvidenceReader("/definitely/not/here.png").kind).toBe("missing");
+	});
+
+	test("returns missing when an evidence path is readable by stat but not by read", () => {
+		const root = mkdtempSync(join(tmpdir(), "qa-report-unreadable-"));
+		const directoryPath = join(root, "evidence");
+		mkdirSync(directoryPath);
+		try {
+			expect(defaultEvidenceReader(directoryPath)).toEqual({ kind: "missing", path: directoryPath });
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 });
 

@@ -1113,7 +1113,7 @@ describe("new-prose: HTML report is the canonical deliverable", () => {
 	});
 
 	test("the report preserves required evidence.path with partial actor slots", () => {
-		expect(skillMd).toContain("always renders the required `evidence.path`");
+		expect(skillMd).toContain("always renders the current-cycle baseline evidence and the required cell `evidence.path`");
 		expect(skillMd).toContain("partial slot sets alike");
 		expect(skillMd).toContain("recorded evidence slot");
 	});

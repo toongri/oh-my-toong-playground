@@ -46,19 +46,18 @@ const IMAGE_MIME: Record<string, string> = {
 /** Reads evidence off disk: images embed as base64 data URIs (capped), everything else renders as text. */
 export function defaultEvidenceReader(path: string): EvidenceEmbed {
 	const absolute = resolve(path);
-	let size: number;
 	try {
-		size = statSync(absolute).size;
+		const size = statSync(absolute).size;
+		if (size > MAX_EMBED_BYTES) return { kind: "too-large", path, size };
+		const mime = IMAGE_MIME[extname(absolute).toLowerCase()];
+		if (mime) {
+			const data = readFileSync(absolute);
+			return { kind: "image", dataUri: `data:${mime};base64,${data.toString("base64")}` };
+		}
+		return { kind: "text", content: readFileSync(absolute, "utf8") };
 	} catch {
 		return { kind: "missing", path };
 	}
-	if (size > MAX_EMBED_BYTES) return { kind: "too-large", path, size };
-	const mime = IMAGE_MIME[extname(absolute).toLowerCase()];
-	if (mime) {
-		const data = readFileSync(absolute);
-		return { kind: "image", dataUri: `data:${mime};base64,${data.toString("base64")}` };
-	}
-	return { kind: "text", content: readFileSync(absolute, "utf8") };
 }
 
 export interface QaReportNarrativeIssue {
@@ -212,8 +211,25 @@ function renderStoryTree(view: QaView): string {
 	return `<h2>Story &rarr; Scenario Tree</h2><ul class="story-tree">${stories}</ul>`;
 }
 
+function renderBaselineEvidence(view: QaView, readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
+	return (view.stories ?? [])
+		.map((story) => {
+			const baseline = story.baseline;
+			if (!baseline || baseline.cycle !== view.cycle || !baseline.evidence?.path) return "";
+			const status = recordedResult(baseline);
+			const note = recordedNote(baseline);
+			return (
+				`<div class="scenario"><h3>${escapeHtml(story.id)} / baseline ${statusBadge(status)}</h3>` +
+				(note ? `<p class="scenario-field">${escapeHtml(note)}</p>` : "") +
+				`<div class="evidence-slots">${evidenceSlot("baseline", baseline.evidence.path, readEvidence, context)}</div></div>`
+			);
+		})
+		.join("");
+}
+
 function renderScenarioEvidence(view: QaView, narrative: QaReportNarrative, readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
-	const blocks = (view.stories ?? [])
+	const baselineBlocks = renderBaselineEvidence(view, readEvidence, context);
+	const cellBlocks = (view.stories ?? [])
 		.flatMap((story) => cellsForStory(view, story.id))
 		.map((cell) => {
 			const key = cellKey(cell);
@@ -243,7 +259,7 @@ function renderScenarioEvidence(view: QaView, narrative: QaReportNarrative, read
 			);
 		})
 		.join("");
-	return `<h2>Scenario Evidence</h2>${blocks}`;
+	return `<h2>Scenario Evidence</h2>${baselineBlocks}${cellBlocks}`;
 }
 
 function renderFailures(view: QaView, narrative: QaReportNarrative): string {

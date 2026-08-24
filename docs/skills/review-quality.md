@@ -128,7 +128,7 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 
 **사이클**: PRE-FLIGHT(계약 게이트) → PLAN(액터 로스터 + 시나리오 도출) → BASELINE(빌드·테스트·린트) → ADVERSARIAL E2E(실제 구동 + 6개 커버리지 축) → CHECK → 실패 시 DIAGNOSIS→FIX→RE-VERIFY 루프(최대 5회) → EXIT → CLEANUP → ROLLBACK → STATE. 한 번의 호출이 탐지부터 수정·재검증까지 전부 소유하며, 수정자(`sisyphus-junior`)는 자기 수정을 인증하지 못합니다. 7–9번은 stale-state·dirty-worktree·flaky-rerun **실행 단위 점검**으로 별도 기록합니다.
 
-**강제되는 기록 사슬**: PLAN에서 액터 로스터를 고정한 뒤 액터마다 스토리를 만들고, 각 스토리에서 6개 커버리지 축과 `hang-timeout`(1번 축), `flaky-green`(5번 축) 하위 셀을 파생합니다. 셀의 공격 지점·우선순위와 baseline·셀·실행 단위 결과를 상태 CLI에 기록해야 다음 단계로 진행할 수 있습니다. 이 사슬의 완결성·참조 무결성·현재 사이클 증거는 phase funnel과 Claude/Codex Stop 게이트가 검사하며, 로스터가 없거나 BASELINE 이후 기록이 비어 있으면 드라이버도 차단합니다(PLAN 도달성 탐색은 허용).
+**강제되는 기록 사슬**: PLAN에서 액터 로스터를 고정한 뒤 액터마다 스토리를 만들고, 각 스토리에서 6개 커버리지 축과 `hang-timeout`(1번 축), `flaky-green`(5번 축) 하위 셀을 파생합니다. 셀의 공격 지점·우선순위와 baseline·셀·실행 단위 결과를 상태 CLI에 기록해야 다음 단계로 진행할 수 있습니다. `set-acceptance`는 비어 있지 않은 문자열만 담은 JSON 배열을 받습니다. 이 사슬의 완결성·참조 무결성·현재 사이클 증거는 phase funnel과 Claude/Codex Stop 게이트가 검사하며, 로스터가 없거나 BASELINE 이후 기록이 비어 있으면 드라이버도 차단합니다(PLAN 도달성 탐색은 허용).
 
 **종료와 예외**: `APPROVE`/`COMMENT`는 모든 필수 기록과 증거가 predicate를 통과해야 하며, `REQUEST_CHANGES`는 정직한 실패 기록 또는 실제 실행 전 fail-fast에 열려 있습니다. 셀 waive는 사유가 필요한 사용자 전용 명령이고 AI 경로에서 거부됩니다. `qa-state-*.json` 직접 쓰기도 차단되며, `set-verdict` → HTML report → `complete` 순서로 상태를 닫은 뒤에만 결과를 보고합니다. Codex는 자체 시드 훅으로 같은 상태 파일과 런타임 게이트를 확보합니다.
 
@@ -140,7 +140,7 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 
 **증거**: 실행된 시나리오마다 액터 관점의 `before` / `action` / `after` 증거를 남깁니다 — 액터가 실제로 관찰하는 상태여야 하며, 앱 기동·스플래시·랜딩 화면 캡처는 시나리오 증거가 아닙니다. 서버 로그·DB 행 같은 내부 신호는 보조 증거일 뿐 대체물이 아닙니다.
 
-**HTML 리포트 사실성**: STATE 리포트는 `qa-state` 기록을 그대로 렌더합니다. 필수 `evidence.path`는 항상 Scenario Evidence의 기록 증거 슬롯으로 표시하고, 존재하는 `before`·`action`·`after` 보조 슬롯도 함께 표시해 부분 슬롯 레코드에서 주 증거가 사라지지 않게 합니다. 새 `start`는 `acceptance_criteria`를 비워 이전 사이클 기준을 상속하지 않습니다. `Failures & Mismatches`에는 FAIL 셀뿐 아니라 실패한 baseline과 stale-state·dirty-worktree·flaky-rerun 실행 단위 점검도 기록된 note와 함께 표시하며, waiver 대상은 `story/cls/sub`까지 식별합니다. Evidence 임베드는 파일당 2MiB, 리포트 전체 누적 16MiB로 제한하고, 초과 파일은 경로만 남깁니다. 브라우저 도구 설치는 checked worktree 밖 ephemeral 디렉터리를 우선 사용하고, 대상 manifest·lockfile·`node_modules`를 CHECK 전에 복구·재검증합니다.
+**HTML 리포트 사실성**: STATE 리포트는 `qa-state` 기록을 그대로 렌더합니다. 현재 사이클의 baseline 증거와 필수 `evidence.path`는 항상 Scenario Evidence의 기록 증거 슬롯으로 표시하고, 존재하는 `before`·`action`·`after` 보조 슬롯도 함께 표시해 baseline 증명과 부분 슬롯 레코드의 주 증거가 사라지지 않게 합니다. 읽을 수 없거나 임베드 예산을 넘긴 증거는 리포트 생성을 중단하지 않고 기록된 경로로 남습니다. 새 `start`는 `acceptance_criteria`를 비워 이전 사이클 기준을 상속하지 않으며, 현재 view에서도 이전 사이클의 baseline·run-check 기록을 제외합니다(원본 state/history에는 보존). `Failures & Mismatches`에는 FAIL 셀뿐 아니라 실패한 baseline과 stale-state·dirty-worktree·flaky-rerun 실행 단위 점검도 기록된 note와 함께 표시하며, waiver 대상은 `story/cls/sub`까지 식별합니다. Evidence 임베드는 파일당 2MiB, 리포트 전체 누적 16MiB로 제한하고, 초과 파일은 경로만 남깁니다. 브라우저 도구 설치는 checked worktree 밖 ephemeral 디렉터리를 우선 사용하고, 대상 manifest·lockfile·`node_modules`를 CHECK 전에 복구·재검증합니다.
 
 **핵심 구분**: 자동화 테스트와 hands-on QA는 대체 관계가 아닙니다. 자동화는 "코드가 의도대로 동작하는가"를, hands-on은 "액터의 경로가 프로덕션처럼 동작하는가"를 각각 검증합니다. 서로 다른 깊이에서 모은 증거는 합쳐도 더 깊은 주장이 되지 않습니다.
 

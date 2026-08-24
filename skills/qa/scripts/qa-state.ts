@@ -726,7 +726,10 @@ export function declareInert(sessionId: string, reason: string): void {
 /** Persists the acceptance criteria (full-replace) so the report renders them from records. */
 export function setAcceptance(sessionId: string, criteria: string[]): void {
 	if (!Array.isArray(criteria)) throw new Error("set-acceptance: expected a JSON array of strings");
-	const cleaned = criteria.map((item) => nonEmpty(String(item), "acceptance item"));
+	if (!criteria.every((item) => typeof item === "string")) {
+		throw new Error("set-acceptance: every acceptance item must be a string");
+	}
+	const cleaned = criteria.map((item) => nonEmpty(item, "acceptance item"));
 	mergeWrite(sessionId, { acceptance_criteria: cleaned });
 }
 
@@ -803,6 +806,16 @@ export type QaView = QaState & {
 	verdict_report: { verdict: QaState["verdict"]; cycle: number; waives: QaWaive[]; inert?: QaInert };
 };
 
+function isPriorCycleRecord(value: unknown, cycle: number): boolean {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		"cycle" in value &&
+		typeof value.cycle === "number" &&
+		value.cycle !== cycle
+	);
+}
+
 export function readQaView(sessionId: string): QaView | null {
 	const state = readQaState(sessionId);
 	if (!state) return null;
@@ -811,8 +824,23 @@ export function readQaView(sessionId: string): QaView | null {
 	const waives = state.waives ?? [];
 	const currentWaives = waives.filter((waive) => waive.cycle === cycle);
 	const currentInert = state.inert?.cycle === undefined || state.inert.cycle === cycle ? state.inert : undefined;
+	const stories = (state.stories ?? []).map((story) => ({
+		...story,
+		baseline: isPriorCycleRecord(story.baseline, cycle) ? null : story.baseline,
+	}));
+	const runChecks = state.run_checks
+		? {
+				stale_state: isPriorCycleRecord(state.run_checks.stale_state, cycle) ? null : state.run_checks.stale_state,
+				dirty_worktree: isPriorCycleRecord(state.run_checks.dirty_worktree, cycle)
+					? null
+					: state.run_checks.dirty_worktree,
+				flaky_rerun: isPriorCycleRecord(state.run_checks.flaky_rerun, cycle) ? null : state.run_checks.flaky_rerun,
+			}
+		: state.run_checks;
 	return {
 		...state,
+		stories,
+		run_checks: runChecks,
 		cells: cells.filter((cell) => cell.cycle === cycle),
 		waives: currentWaives,
 		prior_cycle_cells: cells.filter((cell) => cell.cycle !== cycle),
