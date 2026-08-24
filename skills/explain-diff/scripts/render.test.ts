@@ -1,6 +1,6 @@
 import { execFileSync } from "child_process";
 import { describe, expect, test } from "bun:test";
-import { mmdcRenderSvg, renderToHtml, slugify } from "./render";
+import { mmdcRenderSvg, normalizeSvgWidth, renderToHtml, slugify } from "./render";
 
 function mmdcAvailable(): boolean {
 	try {
@@ -184,5 +184,53 @@ describe("컴포넌트 CSS — 렌더러가 시각 언어를 소유한다", () =
 
 	test("figure.diagram 스타일이 내장돼 있다 — 다크 모드에서도 다이어그램이 읽힌다", () => {
 		expect(html).toContain("figure.diagram");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// 넓은 mermaid 라벨 가독성 — 다운스케일이 아니라 자연폭+스크롤
+//
+// mmdc 는 SVG 루트에 width="100%" 를 박는다. 그대로 두면 컬럼보다 넓은 다이어그램이
+// 컬럼으로 축소돼 16px 라벨이 몇 px 로 붕괴하고(브라우저 실측: 2261px vb → 데스크톱
+// 4.7px·모바일 2.1px) figure 의 overflow-x 도 발화하지 않는다. 봉인은 두 겹이다 —
+// normalizeSvgWidth 가 width 를 viewBox px 로 재작성하고, CSS 가 그 폭을 캡하지 않는다.
+
+describe("넓은 mermaid 폭 정규화 (normalizeSvgWidth)", () => {
+	const wide = `<svg id="mmd-0" width="100%" class="flowchart" style="max-width: 2261.48px;" viewBox="0 0 2261.484375 94">x</svg>`;
+
+	test('width="100%" 를 viewBox 자연폭(px)으로 재작성한다 — 넓은 다이어그램이 축소되지 않는다', () => {
+		const out = normalizeSvgWidth(wide);
+		expect(out).toContain('width="2262"');
+		expect(out).not.toContain('width="100%"');
+	});
+
+	test("viewBox 가 없으면 손대지 않는다", () => {
+		const noVb = `<svg id="mmd-0" width="100%" class="flowchart">x</svg>`;
+		expect(normalizeSvgWidth(noVb)).toBe(noVb);
+	});
+
+	test("이미 px 폭이면(= width=100% 아님) 그대로 둔다", () => {
+		const fixed = `<svg id="mmd-1" width="123" viewBox="0 0 123 40">y</svg>`;
+		expect(normalizeSvgWidth(fixed)).toBe(fixed);
+	});
+
+	test("preRenderMermaid 가 감싸는 SVG 에 폭 재작성이 적용된다", () => {
+		const doc = "```mermaid\nflowchart LR\n  A --> B\n```\n";
+		const out = preRenderMermaid(doc, () => wide);
+		expect(out).toContain('<figure class="diagram"><svg id="mmd-0" width="2262"');
+		expect(out).not.toContain('width="100%"');
+	});
+});
+
+describe("figure.diagram svg CSS — 넓은 다이어그램은 축소가 아니라 스크롤", () => {
+	const html = renderToHtml(DOC, "제목");
+
+	test("SVG 폭을 100% 로 캡하지 않는다 — max-width:100% 는 다운스케일 버그였다", () => {
+		expect(html).not.toMatch(/figure\.diagram svg\s*\{[^}]*max-width:\s*100%/);
+		expect(html).toMatch(/figure\.diagram svg\s*\{[^}]*max-width:\s*none/);
+	});
+
+	test("figure.diagram 은 가로 스크롤 컨테이너다 — 넓은 다이어그램이 넘치면 스크롤된다", () => {
+		expect(html).toMatch(/figure\.diagram\s*\{[^}]*overflow-x:\s*auto/);
 	});
 });

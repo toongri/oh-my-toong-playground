@@ -43,6 +43,24 @@ export function slugify(text: string): string {
 const MERMAID_FENCE = /```mermaid\n([\s\S]*?)```/g;
 
 /**
+ * Rewrites a mermaid SVG's `width="100%"` root attribute to its viewBox pixel
+ * width so a wide diagram renders at natural size and its figure scrolls, rather
+ * than the SVG shrinking to the column and collapsing its labels to a few
+ * illegible pixels. `width="100%"` is a presentation attribute that CSS
+ * `width:auto`/`max-content` cannot reliably override on a percentage-sized SVG,
+ * so the width is fixed here at build time from the ground truth already in the
+ * markup — the viewBox. Left unchanged when there is no `width="100%"` or no
+ * parseable viewBox width (a diagram mmdc already sized in px keeps that size).
+ */
+export function normalizeSvgWidth(svg: string): string {
+	const viewBox = svg.match(/viewBox="0 0 ([\d.]+) [\d.]+"/);
+	if (!viewBox) return svg;
+	const width = Math.ceil(Number(viewBox[1]));
+	if (!Number.isFinite(width) || width <= 0) return svg;
+	return svg.replace(/(<svg\b[^>]*?)\swidth="100%"/, `$1 width="${width}"`);
+}
+
+/**
  * Replaces every ```mermaid fence with an inline SVG before markdown parsing.
  *
  * This is the build-time half of the "no runtime JS" invariant: the page keeps
@@ -67,7 +85,7 @@ export function preRenderMermaid(
 				cause: e,
 			});
 		}
-		return `<figure class="diagram">${svg}</figure>`;
+		return `<figure class="diagram">${normalizeSvgWidth(svg)}</figure>`;
 	});
 }
 
@@ -312,7 +330,14 @@ figure.diagram {
   margin: 1.25rem 0; padding: 1rem; background: #ffffff;
   border: 1px solid var(--rule); border-radius: 10px; overflow-x: auto;
 }
-figure.diagram svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+/* A wide diagram (viewBox wider than the column) must scroll at natural size, not
+   shrink to fit. mmdc emits width="100%", which downscales the whole SVG and
+   collapses 16px labels to a few illegible pixels while figure's overflow-x never
+   fires. normalizeSvgWidth (below) rewrites that attribute to the viewBox's pixel
+   width, so max-width:none here lets the SVG keep its natural width and the figure
+   scrolls instead. A diagram narrower than the column stays its own size, centered
+   by margin:auto. */
+figure.diagram svg { max-width: none; height: auto; display: block; margin: 0 auto; }
 figure.diagram figcaption { color: var(--muted); font-size: 0.85rem; margin-top: 0.6rem; text-align: center; }
 
 @media (max-width: 640px) {
