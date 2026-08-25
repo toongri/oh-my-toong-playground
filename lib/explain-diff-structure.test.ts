@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { checkStructure, type DiffHunk } from "./explain-diff-structure";
 
-// v4 계약: 코드 섹션의 뼈대는 커밋이다. Change Group(관심사) 안에서 커밋 단위로
-// 내려가고(### `hash` — 제목), 커밋 아래 파일 블록(#### `file`)이 cf 컴포넌트로
-// 필드를 분리하며, 파일마다 핵심 로직 코드 펜스를 하나 둔다. 독립 Commit Journey는
-// 커밋을 그룹에 매핑하는 한 줄짜리 오버뷰로만 남는다.
+// v5 계약: 코드 섹션의 뼈대는 커밋이고, 단위는 파일이 아니라 변경(change)이다.
+// Change Group(관심사) 안에서 커밋 단위로 내려가고(### `hash` — 제목), 커밋 아래
+// 변경 블록(#### 변경 N: <한 일>)이 cf 컴포넌트로 필드를 분리한다. 한 변경은 여러
+// 책임(함께 바뀐 class·function) 항목으로 이뤄지고, 파일은 heading이 아니라 `바뀐 위치`
+// (cf-loc)의 위치 인용으로만 등장한다. R1 커버리지는 모든 signal 파일이 어느 변경 블록에든
+// 인용되는지를, R5는 그 인용이 실제 hunk에 드는지를, R13은 커밋 뼈대 + 변경당 코드 하나를 본다.
 const GOOD_GROUP = `## Change Group 1: 락을 공용 모듈로 뽑아낸다
 > 예고: 먼저 락 자체를 옮겨 놓아야 호출부 정리가 의미를 갖는다.
 > 순서: 추출이 먼저다 — 호출부를 먼저 고치면 가리킬 대상이 없다.
@@ -12,13 +14,13 @@ const GOOD_GROUP = `## Change Group 1: 락을 공용 모듈로 뽑아낸다
 ### \`ab12cd3\` — feat: 락을 공용 모듈로 추출
 이 커밋이 락 획득/해제를 한 파일로 모은다.
 
-#### \`lib/state-lock.ts\`
-<div class="cf">
-<p><strong>역할/변경 전</strong> — 이 파일은 새로 생겼다</p>
-<p><strong>바뀐 것</strong> — 락 획득/해제가 여기로 모였다</p>
-<p><strong>왜</strong> — 커밋 메시지가 통합이라고 적는다 <span class="cf-src">근거</span> "fix: 상태 갱신 락 통합"</p>
-<p><strong>효과</strong> — 두 CLI가 같은 락을 쓴다</p>
-<p class="cf-loc"><code>base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14</code></p>
+#### 변경 1: 락 획득·해제를 공용 모듈로 추출
+<div class="cf" data-change="new">
+<p><strong>책임 1 — 공용 락 유틸</strong> — <code>withLock()</code> (state 도메인의 락 유틸). 획득→실행→해제를 한 함수로 모은다.</p>
+<p><strong>왜</strong> — 두 CLI가 같은 락을 공유해야 하기 때문 <span class="cf-src">근거</span> "fix: 상태 갱신 락 통합"</p>
+<p><strong>효과·사이드이펙트</strong> — 두 CLI가 같은 락을 쓰므로 상태 파일 경쟁이 직렬화된다.</p>
+<p><strong>검증</strong> — state-lock.test.ts 가 동시 획득 직렬화를 고정한다.</p>
+<p class="cf-loc"><strong>바뀐 위치</strong> — <code>base:lib/state-lock.ts:0</code> → <code>head:lib/state-lock.ts:14</code></p>
 </div>
 
 \`\`\`ts
@@ -118,6 +120,9 @@ const GOAL = `## 목표
 
 ### 핵심
 코드를 보기 전에: 이 변경은 "도구 실행 준비"를 한 함수로 모은 작은 어댑터다.
+
+### 출처
+커밋 본문 "helper 복원"과 코드 추론.
 `;
 
 describe("goal 스텝 — R16만 평가", () => {
@@ -152,6 +157,14 @@ describe("goal 스텝 — R16만 평가", () => {
 		const doc = `# 설명\n\n${GOAL.replace(/### 무엇을·왜[\s\S]*?(?=### 핵심)/, "")}`;
 		const r = checkStructure(doc, { signalFiles: ["lib/state-lock.ts"], step: "goal" });
 		expect(r.items.find((i) => i.id === "R16")?.pass).toBe(false);
+	});
+
+	test("출처 슬롯이 빠지면 R16이 실패하고 그 슬롯을 사유에 담는다", () => {
+		const doc = `# 설명\n\n${GOAL.replace(/### 출처[\s\S]*$/, "")}`;
+		const r = checkStructure(doc, { signalFiles: ["lib/state-lock.ts"], step: "goal" });
+		const item = r.items.find((i) => i.id === "R16");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("출처");
 	});
 });
 
@@ -239,7 +252,7 @@ describe("code 스텝 — R2·R3·R5·R1(커버리지형)·R13", () => {
 		});
 		const item = r.items.find((i) => i.id === "R3");
 		expect(item?.pass).toBe(false);
-		expect(item?.detail).toContain("lib/state-lock.ts");
+		expect(item?.detail).toContain("변경 1");
 	});
 
 	test("추론 출처 태그도 R3를 통과시킨다", () => {
@@ -574,7 +587,7 @@ export function withLock() {}
 			expect(item?.detail).toContain("deadbee");
 		});
 
-		test("파일 블록에 핵심 로직 코드 펜스가 없으면 실패하고 그 파일을 담는다", () => {
+		test("변경 블록에 핵심 로직 코드 펜스가 없으면 실패하고 그 변경을 담는다", () => {
 			const body = GOOD_GROUP.replace(/```ts[\s\S]*?```/, "");
 			const r = checkStructure(withBackground(body), {
 				signalFiles: ["lib/state-lock.ts"],
@@ -583,11 +596,11 @@ export function withLock() {}
 			});
 			const item = r.items.find((i) => i.id === "R13");
 			expect(item?.pass).toBe(false);
-			expect(item?.detail).toContain("lib/state-lock.ts");
+			expect(item?.detail).toContain("변경 1");
 		});
 	});
 
-	describe("R1 커버리지형 — signal 파일이 파일 블록으로 정확히 한 번", () => {
+	describe("R1 커버리지형 — signal 파일이 어느 변경 블록엔가 인용된다", () => {
 		test("signal 파일이 Evidence 표에만 있고 파일 블록이 없으면 실패하고 경로를 담는다", () => {
 			const body = `## Evidence
 
@@ -622,19 +635,22 @@ const x = 1;
 			expect(item?.detail).toContain("lib/state-lock.ts");
 		});
 
-		test("같은 signal 파일 블록이 두 그룹에 각각 있으면 실패하고 중복임을 밝힌다", () => {
+		test("같은 signal 파일이 두 변경 블록에 인용돼도 통과한다 — 한 파일은 여러 변경에 참여할 수 있다", () => {
 			const duplicated = `${GOOD_GROUP}
 ## Change Group 2: 같은 파일을 또 다룬다
-> 예고: 같은 파일이 다시 등장한다.
+> 예고: 같은 파일이 다른 변경에서 다시 등장한다.
 > 순서: 두 번째 손질이 필요하다.
 
 ### \`ef45ab6\` — fix: 두 번째 손질
-같은 파일을 다시 만진다.
+같은 파일을 다른 이유로 다시 만진다.
 
-#### \`lib/state-lock.ts\`
-<div class="cf">
-<p><strong>왜</strong> — <span class="cf-src">근거</span> "두 번째 이유"</p>
-<p class="cf-loc"><code>base:lib/state-lock.ts:14</code> → <code>head:lib/state-lock.ts:20</code></p>
+#### 변경 2: 락 해제 타임아웃을 추가
+<div class="cf" data-change="mod">
+<p><strong>책임 1 — 락 해제</strong> — <code>withLock()</code> (state 도메인의 락 유틸). 해제에 타임아웃을 건다.</p>
+<p><strong>왜</strong> — 데드락 방지 <span class="cf-src">근거</span> "fix: 락 해제 타임아웃"</p>
+<p><strong>효과·사이드이펙트</strong> — 무한 대기 대신 타임아웃으로 실패한다.</p>
+<p><strong>검증</strong> — state-lock.test.ts 가 타임아웃 경로를 고정한다.</p>
+<p class="cf-loc"><strong>바뀐 위치</strong> — <code>base:lib/state-lock.ts:14</code> → <code>head:lib/state-lock.ts:20</code></p>
 </div>
 
 \`\`\`ts
@@ -646,10 +662,7 @@ const y = 2;
 				step: "code",
 				commitHashes: ["ab12cd3f00", "ef45ab6c11"],
 			});
-			const item = r.items.find((i) => i.id === "R1");
-			expect(item?.pass).toBe(false);
-			expect(item?.detail).toContain("lib/state-lock.ts");
-			expect(item?.detail).toContain("중복");
+			expect(r.items.find((i) => i.id === "R1")?.pass).toBe(true);
 		});
 
 		test("signal 파일이 하나도 없으면 통과가 아니다 — 빈 집합 공허참 차단", () => {
@@ -659,6 +672,52 @@ const y = 2;
 				commitHashes: ["ab12cd3f00"],
 			});
 			expect(r.items.find((i) => i.id === "R1")?.pass).toBe(false);
+		});
+
+		test("한 변경 블록이 여러 파일을 인용하면 그 파일들이 모두 커버된다 — 책임 묶음", () => {
+			// 하나의 변경이 함께 바뀐 두 책임(서로 다른 파일)으로 이뤄진다. 두 파일 모두
+			// 한 변경 블록의 cf-loc에 인용되므로 R1 커버리지를 통과해야 한다(파일당 1블록 강제 없음).
+			const grouped = `## Change Group 1: category 읽기로 전환
+> 예고: 읽기 경계를 category로 옮긴다.
+> 순서: 어댑터가 먼저다.
+
+### \`ab12cd3\` — refactor: category 읽기
+
+#### 변경 1: v2 제안 읽기를 category 정본으로만 조립
+<div class="cf" data-change="mod">
+<p><strong>책임 1 — 읽기 입구</strong> — <code>Adapter.read_v2()</code> (인프라 어댑터). product를 읽지 않는다.</p>
+<p><strong>책임 2 — 조립·실패</strong> — <code>compose()</code> (도메인 유틸). 없으면 NotFoundError.</p>
+<p><strong>왜</strong> — 정체성 기준을 category로 <span class="cf-src">근거</span> "refactor: category 읽기"</p>
+<p><strong>효과·사이드이펙트</strong> — 누락이 조용한 성공 대신 명시적 실패로 드러난다.</p>
+<p><strong>검증</strong> — read_v2.test 가 누락 시 실패를 고정한다.</p>
+<p class="cf-loc"><strong>바뀐 위치</strong> — <code>base:app/adapter.py:170</code> → <code>head:app/adapter.py:183</code>, <code>base:app/compose.py:40</code> → <code>head:app/compose.py:31</code></p>
+</div>
+
+\`\`\`py
+if not mirror:
+    raise NotFoundError()
+\`\`\`
+`;
+			const r = checkStructure(withBackground(grouped), {
+				signalFiles: ["app/adapter.py", "app/compose.py"],
+				step: "code",
+				commitHashes: ["ab12cd3f00"],
+			});
+			expect(r.items.find((i) => i.id === "R1")?.pass).toBe(true);
+			expect(r.items.find((i) => i.id === "R5")?.pass).toBe(true);
+			expect(r.items.find((i) => i.id === "R13")?.pass).toBe(true);
+		});
+
+		test("변경 블록이 인용하지 않은 signal 파일은 R1이 잡아낸다", () => {
+			// 두 파일이 signal인데 변경 블록이 한 파일만 인용하면, 빠진 파일을 사유에 담아 실패한다.
+			const r = checkStructure(withBackground(GOOD_GROUP), {
+				signalFiles: ["lib/state-lock.ts", "lib/forgotten.ts"],
+				step: "code",
+				commitHashes: ["ab12cd3f00"],
+			});
+			const item = r.items.find((i) => i.id === "R1");
+			expect(item?.pass).toBe(false);
+			expect(item?.detail).toContain("lib/forgotten.ts");
 		});
 
 		test("헤딩 백틱 뒤 괄호 주석(삭제·이동 표기)이 붙어도 파일 블록으로 센다", () => {
@@ -735,6 +794,18 @@ flowchart LR
 
 ### 경계·의존·유스케이스
 
+유스케이스: 표시 카탈로그 조회 흐름. 아래 시퀀스의 backend 조회 단계가 이 diff로 바뀐다.
+
+\`\`\`mermaid
+sequenceDiagram
+  participant Card as card
+  participant Resolver as resolver
+  participant Backend as Hono backend
+  Card->>Resolver: resolveDisplay(code)
+  Resolver->>Backend: GET /v1/supplement-catalog
+  Backend-->>Resolver: 표시 카탈로그
+\`\`\`
+
 <div class="arch-entity" data-change="new">
 <p><strong>이름</strong> display catalog 조회</p>
 <p><strong>한 일</strong> 삭제 포함 표시 카탈로그 경로 신설</p>
@@ -751,7 +822,7 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 			step: "architecture",
 		});
 		const ids = r.items.map((i) => i.id as string);
-		for (const id of ["R9", "R14", "R15", "R17", "R18", "R19"]) {
+		for (const id of ["R9", "R14", "R15", "R17", "R18", "R19", "R21"]) {
 			expect(ids).toContain(id);
 		}
 		expect(r.pass).toBe(true);
@@ -1040,6 +1111,120 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 		const item = r.items.find((i) => i.id === "R14");
 		expect(item?.pass).toBe(false);
 		expect(item?.detail).toContain("DB 스키마");
+	});
+
+	// R15 — 유스케이스 블록은 오케스트레이션을 다이어그램으로 보여야 한다(정적 카드가 아니라 흐름).
+	test("경계·유스케이스 블록에 오케스트레이션 다이어그램이 없으면 R15가 실패한다", () => {
+		const doc = withBackground(ARCH_OK.replace(/```mermaid\nsequenceDiagram[\s\S]*?```\n\n/, ""));
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R15",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("오케스트레이션");
+	});
+
+	test("유스케이스 흐름이 정말 안 바뀌면 사유 있는 waiver로 R15 오케스트레이션을 대신할 수 있다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				/유스케이스: 표시 카탈로그 조회 흐름[\s\S]*?```\n/,
+				"구조 변화 없음: 이 diff는 유스케이스 흐름을 바꾸지 않는다.\n",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R15",
+		);
+		expect(item?.pass).toBe(true);
+	});
+
+	// R21 — 도메인 레벨은 다이어그램만이 아니라 엔티티 카드(책임·변경종류)를 요구한다.
+	test("도메인 레벨이 waiver면 R21을 통과한다", () => {
+		const item = checkStructure(withBackground(ARCH_OK), {
+			signalFiles: ["a.ts"],
+			step: "architecture",
+		}).items.find((i) => i.id === "R21");
+		expect(item?.pass).toBe(true);
+	});
+
+	test("도메인 레벨에 다이어그램만 있고 엔티티 카드도 waiver도 없으면 R21이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				"### 도메인 레벨\n```mermaid\nclassDiagram\n  class SupplementCategory\n```",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("책임");
+	});
+
+	test("도메인 엔티티 카드가 책임·변경종류를 갖추면 R21을 통과한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+\`\`\`mermaid
+classDiagram
+  class SupplementCategory {
+    +code: string
+    +displayName: string
+    +isActive() bool
+  }
+\`\`\`
+
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>SupplementCategory</code></p>
+<p><strong>책임</strong> 영양제의 canonical 정체성을 보유하고, 상품 교체와 무관하게 유지된다</p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(true);
+	});
+
+	// R18/R21 — 다이어그램 노드는 컴포넌트/도메인 이름이지 파일 경로가 아니다.
+	// 실측(luna max): 컴포넌트 다이어그램 노드가 전체 파일 경로라 화면에서 중간이
+	// 잘렸다(`health-`, `proposal-`). 위치는 카드의 레이어 슬롯이 말한다.
+	test("컴포넌트 다이어그램 노드가 파일 경로면 R18이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"flowchart LR\n  card --> resolver",
+				'flowchart LR\n  a["apps/backend/src/domains/health-profiles/routers/health-v2.router.ts"] --> b["packages/schemas/src/program/proposal-request-v2.ts"]',
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("파일 경로");
+	});
+
+	test("도메인 객체 다이어그램의 클래스 박스가 비어 있으면 R21이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+\`\`\`mermaid
+classDiagram
+  class SupplementCategory
+  class Supplement
+  SupplementCategory --> Supplement
+\`\`\`
+
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>SupplementCategory</code></p>
+<p><strong>책임</strong> canonical 정체성 보유</p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("멤버");
 	});
 });
 

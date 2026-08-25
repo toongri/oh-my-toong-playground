@@ -36,6 +36,7 @@ The document is written one step at a time, accumulating. So an item is evaluate
 | R17 | script | architecture |
 | R18 | script | architecture |
 | R19 | script | architecture |
+| R21 | script | architecture |
 
 The `intuition` step has no slot of its own — only R6 (judge) and the common R11 decide it. `render` and `quiz` score none of this table's items: `render` looks at the artifact check (HTML present and non-empty, mermaid→SVG parity, technical-writing `REVIEW: APPLIED`), and `quiz` runs a separate grading path (`grade`). Visual layout is not scored per document — it is a deterministic property render.ts owns (wide-diagram legibility is sealed by `normalizeSvgWidth` + the figure scroll container, regression-guarded by `render.test.ts`), so there is no visual-qa gate.
 
@@ -51,11 +52,12 @@ Not one file classified as signal is dropped. The required form differs at the t
 
 - **Listing form (evidence step)** — Change Groups are not written yet, so the file path merely needs to
   appear somewhere in the document.
-- **Coverage form (code step)** — each signal file must have **exactly one** file block (`#### \`path\``).
-  Zero means it never entered a group; two or more means the same file appears in multiple groups —
-  both fail. (A file block is h4 — an h3 `### \`hash\`` is a commit subsection.)
+- **Coverage form (code step)** — the unit is the change, not the file, so each signal file must be
+  **cited by at least one change block's `바뀐 위치` (cf-loc) anchors**. Zero citations means the
+  walkthrough silently dropped that file — fail. A file cited by several changes is fine (one file
+  often participates in several responsibilities), so there is no exactly-once rule.
 
-Decided by comparing the `git diff --name-only` list against the document.
+Decided by comparing the `git diff --name-only` list against the anchor paths cited in the document.
 
 > **RED 10/16.** Mostly upheld in small fixtures, but **all 4 runs failed** on a giant PR
 > (18 / 19 / 11 / 7 of 29). This is exactly where files silently vanish.
@@ -93,12 +95,13 @@ Both a deep background and a narrow background are present, and the deep backgro
 
 At `start`, the CLI passes the original range unchanged to `git diff` when it captures unified-diff
 hunk metadata, preserving `A...B` merge-base semantics. Only `git rev-list` commit enumeration
-normalizes `A...B` to `A..B`. At the `code` submission, textual hunk ranges and numeric
-`base:`/`head:` anchors are checked per file. If a changed file has no textual hunk while another
-file does, that file uses the legacy per-file anchor-presence/placeholder fallback rather than being
-rejected as globally missing. Numeric anchors parse the final `:<number>` suffix and are accepted
-only when the preceding path matches the enclosing file-block path, including paths with spaces. A
-legitimate first-line hunk may therefore use `base:…:1 → head:…:1`. If hunk metadata is unavailable,
+normalizes `A...B` to `A..B`. At the `code` submission, R5 gathers every `base:path:line` /
+`head:path:line` anchor across all change blocks, keys them by their own cited path, and checks **per
+signal file** that its before and after are cited and land in real hunks. If a signal file has no
+textual hunk while another does, it uses the legacy presence/placeholder fallback rather than being
+rejected as globally missing. Numeric anchors parse the final `:<number>` suffix against their own
+cited path, including paths with spaces. A legitimate first-line hunk may therefore use
+`base:…:1 → head:…:1`. If hunk metadata is unavailable,
 or unavailable for that file, the legacy fallback still rejects a modified file whose numeric anchors
 are the `:1 → :1` placeholder. With metadata, an added file needs only `head:`, a deleted file only
 `base:`, and a zero-count side has no file lines and needs no anchor. New-ness comes from `A` in
@@ -140,7 +143,7 @@ Nowhere in the document is there a `<style>` block or an inline `style=` attribu
 
 ### R13. Commit spine + core-logic code
 
-The code section is organized with the commit as its spine. Each Change Group has at least one commit subsection (`### \`hash\``) carrying a valid range hash, and each file block has one core-logic code fence — a mermaid-only or empty fence does not count (the template reserves mermaid for diagrams and requires real code/pseudocode per file). The gate forces this coarse spine — a commit subsection per group and a code fence per file; how the file blocks nest under commits and which cf fields each carries is the author's to fill from the template, not machine-forced. Hash validity is compared against the list `start` pinned — if enumeration failed and the list is empty, the validity check is skipped ("git failed" is not "every hash is fake").
+The code section is organized with the commit as its spine, and its unit is the change (`#### 변경 N: <한 일>`), not the file. Each Change Group has at least one commit subsection (`### \`hash\``) carrying a valid range hash, and each change block has one core-logic code fence — a mermaid-only or empty fence does not count (the template reserves mermaid for diagrams and requires real code/pseudocode per change). The gate forces this coarse spine — a commit subsection per group and a code fence per change block; how the responsibilities nest inside a change and which cf fields each carries is the author's to fill from the template, not machine-forced. Hash validity is compared against the list `start` pinned — if enumeration failed and the list is empty, the validity check is skipped ("git failed" is not "every hash is fake").
 
 > **RED — v3 artifact.** In the `b2c-6106` document, `## Commit Journey` (21 commits) and `## Change Group`
 > (per file) were fully separated, so commits were listed unrelated to the code explanation. File blocks
@@ -158,7 +161,7 @@ The code section is organized with the commit as its spine. Each Change Group ha
 
 ### R15. Boundary / dependency / use-case change map
 
-The Architecture section closes with a `### 경계·의존·유스케이스` block that is a **change map**, not a static layer-classification table. Read on the `### 경계·의존·유스케이스` sub-slice with fences masked. The rendered block must contain a renderer-recognized `arch-entity` opening tag whose `data-change` is one of `new`, `mod`, or `del`, plus the `영향 인터페이스` and `의존 방향` slots. Prose-only mentions of `data-change`, or unsupported values, do not count. What each slot says is the author's to fill. The vocabulary follows the `architecture-boundaries` rule but the output speaks the codebase's own terms (enforced by R19).
+The Architecture section closes with a `### 경계·의존·유스케이스` block that is a **use-case change map**, not a static layer-classification table. Because a feature/use case mostly carries an orchestration responsibility, the block must **show the flow as a mermaid diagram** (a `sequenceDiagram` is the recommended type) — who calls whom in what order, with the changed step marked — or a reasoned `구조 변화 없음: <사유>` waiver when the diff changes no use-case flow. Beyond the diagram, the block must contain a renderer-recognized `arch-entity` opening tag whose `data-change` is one of `new`, `mod`, or `del`, plus the `영향 인터페이스` and `의존 방향` slots. Prose-only mentions of `data-change`, or unsupported values, do not count. The orchestration-diagram check reads the raw sub-slice (a mermaid fence is masked away, so it is looked for before masking); the slot checks read the fence-masked sub-slice. What each slot says is the author's to fill. The vocabulary follows the `architecture-boundaries` rule but the output speaks the codebase's own terms (enforced by R19).
 
 > **RED — the v4 static table.** The earlier R15 forced a `파트/레이어/협력자/영향·수정` classification table
 > with a binary `수직 도메인 / 수평 유스케이스` layer choice. On an FSD codebase this miscategorised parts that
@@ -181,7 +184,15 @@ Prose-only labels, a fenced example, and a header/separator-only table are not t
 requires. Read on the 시스템 레벨 slice with fences masked; the executable checker requires this
 exact three-column header/separator shape plus a non-separator data row. This is distinct from R14 in
 layer — R14 enumerates what this diff *changes*, R17 the *standing* interface the diagram's
-short-protocol edges leave implicit. What each row says is the author's to fill.
+short-protocol edges leave implicit. What each row says is the author's to fill — but the
+`인터페이스`/`오가는 것` cells must carry the actual signature and request/response payload (fields
+with types), not a naming-convention note; the checker enforces the table shape, and the signature
+content is a documented authoring requirement the judge and RED/GREEN comparison hold to.
+
+> **RED — real artifact (`pr-3412`, luna max).** The standing-interface `오가는 것` cell said
+> "camelCase `generationRequest`, `proposalType`" — a naming convention, not a message. A reader could
+> not tell what value crossed the boundary. The requirement is the signature and payload shape
+> (`{ generationRequest: { userRequest: string, intakeTimeCodes: string[] }, proposalType: enum } → { asyncTaskId }`).
 
 > **RED — real artifact (`b2c-6105`).** The system diagram was `browser --> backend --> db` with every edge
 > unlabelled, and it *omitted* the Python health-profile API and the census→DB boundary that the prose itself
@@ -192,16 +203,51 @@ short-protocol edges leave implicit. What each row says is the author's to fill.
 ### R18. Component-level node cards
 
 The 컴포넌트 레벨 may use a reasoned `구조 변화 없음: <사유>` waiver when there is no component
-structure change. Otherwise, every authored `arch-entity` card in the slice is checked independently
-for the `레이어`, `책임`, and `인터페이스` fields and an allowed `data-change` value: `new`, `mod`, or
-`del`. One complete card cannot mask an incomplete or invalid card. Prose-only card descriptions and
-invalid `data-change` values do not count. Pure data/contract-only content cannot simply omit cards;
-it needs the reasoned waiver if no valid card is present.
+structure change. The diagram's **nodes must be module/concept names** (a feature, use case, hook,
+service, schema module), **never source file paths** — the checker rejects a component diagram whose
+nodes are file paths (a path with a code extension), and this ban holds even under the waiver. Where a
+component lives is stated in the card's `레이어` slot at package/layer granularity, not as a node
+label. Otherwise, every authored `arch-entity` card in the slice is checked independently for the
+`레이어`, `책임`, and `인터페이스` fields and an allowed `data-change` value: `new`, `mod`, or `del`.
+One complete card cannot mask an incomplete or invalid card. Prose-only card descriptions and invalid
+`data-change` values do not count. Pure data/contract-only content cannot simply omit cards; it needs
+the reasoned waiver if no valid card is present.
 
 > **RED — real artifact (`b2c-6105`).** The component level was a bare chain of class/function names —
 > `CurrentBoostPackInfoCard`, `useBoostPackSupplementCatalogResolvers` — with no responsibility, interface, or
 > layer anywhere, so a reader could not tell what any node *does*. The system level had gained a companion
 > table (R14); the component level had no counterpart, an asymmetry R18 closes.
+>
+> **RED — real artifact (`pr-3412`, luna max).** The component diagram's nodes were full source file paths
+> (`apps/backend/src/domains/health-profiles/routers/health-v2.router.ts`) that truncated mid-path in the
+> render (`health-`, `proposal-`), telling the reader a location instead of a module. A component is a module
+> unit; its location belongs in the card's `레이어`, not in the node label.
+
+### R21. Domain-level entity cards
+
+The `### 도메인 레벨` may use a reasoned `구조 변화 없음: <사유>` waiver when the diff changes no
+domain object. Otherwise, above the entity/relation diagram, every touched domain object gets an
+`arch-entity` card checked independently for the `책임` field (the duty/invariant it holds) and an
+allowed `data-change` value (`new`, `mod`, `del`). One complete card cannot mask an incomplete or
+invalid card. Nodes and cards must name **real business concepts** — the things the domain models
+(a Program, an intake-time slot, an onboarding vs regular request kind) — in the codebase's own terms;
+a bare schema-encoding name with no business meaning is not a domain object (reality judged by R12).
+Two structural bans hold even under the waiver: diagram nodes must not be file paths, and a
+`classDiagram`, if drawn, must fill each box with **members and methods** — an empty class box (name
+only) fails. This is the domain-level counterpart to R18.
+
+> **RED — real artifact (`pr-3412`, luna max).** The domain `classDiagram` drew boxes with class names
+> only and no members — `GenerationIntakeTimeCodesSchema`, `ProgramGenerationRequestV2Schema` — so a
+> reader could not tell what each object holds or does, nor whether these encoding names were real
+> business concepts. An object diagram must show member variables and methods; the domain level names
+> business concepts, not schema encodings without their meaning.
+
+> **RED — real artifacts (`pr-3557`, `pr-3556`).** The domain level was the thinnest of the three:
+> `pr-3557` drew a `classDiagram` whose nodes included narrative concepts (`ModelAlias`,
+> `LegacyProductKey`) with no responsibility or change kind, and `pr-3556` closed the level with a bare
+> `erDiagram` and one prose paragraph. A reader could not tell which domain object this diff added or
+> modified, or what invariant it now holds — the component level had cards (R18) but the domain level
+> had no counterpart, the same asymmetry R21 closes.
 
 ### R19. No methodology name or axis label in Architecture prose
 
@@ -222,7 +268,9 @@ internally, but the *output* forbids naming the methodology or its axes.
 
 ### R16. Goal / core-message beat
 
-Between Background and Architecture the document carries a `## 목표` section with both sub-slots — `### 무엇을·왜` (what the change achieves + why it was needed) and `### 핵심` (the one-line core the reader should hold before any code). Read on the fence-masked text so a `###` inside a code example does not stand in for the real slot. What each slot says is the author's to fill; the gate forces the two slots present.
+Between Background and Architecture the document carries a `## 목표` section with three sub-slots — `### 무엇을·왜` (what the change achieves + why it was needed), `### 핵심` (the one-line core the reader should hold before any code), and `### 출처` (where the purpose/context understanding came from — a Linear issue, Notion doc, Slack thread, PR description, commit body, wiki path, or `코드 추론`). Read on the fence-masked text so a `###` inside a code example does not stand in for the real slot. What each slot says is the author's to fill; the gate forces the three slots present. The `출처` slot applies R3's provenance discipline to the document's whole purpose — the reader can trace and trust the WHY.
+
+> **RED — real artifact (`pr-3412`, luna max).** The 목표 section was rated clear and understandable, but nothing said where the understanding came from — a reader could not tell whether the stated purpose was grounded in a Linear/Notion/PR source or invented. The `출처` slot closes that: name the source, or say `코드 추론`, never blank.
 
 > **RED — real artifact (`boostpack-tool-helper-restore`).** The document ran Evidence → Background →
 > Architecture with no statement anywhere of what the change was for or its one-line takeaway. The "왜"
@@ -265,9 +313,11 @@ Only what cannot be narrowed by machine or by quote is left. When the items grow
 
 ### R8. Quiz question discrimination
 
-Each question requires two or more rubric items, at least one of which is a concrete value unknowable without reading the document (identifier, coordinate, condition, order). Within the same concept, questions do not overlap in required rubric.
+Each question requires two or more rubric items, at least one of which is a concrete value unknowable without reading the document (identifier, coordinate, condition, order). Within the same concept, questions do not overlap in required rubric. **Questions test comprehension of the change — its purpose, mechanism, or consequence — not document metadata.** The git range, the signal/noise file counts, the commit count, and other bookkeeping prove nothing about whether the reader understood the change; such questions are banned. At least one required concept must be a why/purpose question whose answer must state the reason, not just the mechanic.
 
 > **Note — the controls' quiz form.** The gist control makes multiple-choice questions that show the options
 > (`<div class="q" data-answer="1">` form). The moment options are visible, what is measured drops from recall
 > to recognition. That is why this skill uses open-ended answers, and R8 looks at whether that open-ended form
 > actually discriminates.
+
+> **RED — real artifact (`pr-3412`, luna max).** The quiz led with "이 문서가 설명하는 git range와 signal 파일 수·noise 파일 수는 무엇인가?" — pure metadata a reader could answer by skimming the header, testing bookkeeping instead of whether they grasped the change's purpose and why it was needed.

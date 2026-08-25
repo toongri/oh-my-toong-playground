@@ -23,6 +23,8 @@ The document skeleton and the usable visual components are owned by `references/
 
 Each step must pass two gates — **structure check (script) → judgment (subagent, quote required)** — before it advances. The state CLI renders the pass verdict, and writes to the artifact path are permitted or rejected by a hook that reads that verdict. Steps cannot be skipped.
 
+**State purpose, not just mechanism — for the document and for each section.** The document opens (under the title, in the meta block from `markdown-template.md`) with **one line on what this document is for**: which change it teaches and why a reader should understand it. And each major section earns its place — begin Background, 목표, Architecture, Intuition, Code with a short framing of *why this section exists and what the reader takes from it*, not just its content. A reader who lands mid-document should always know why they are reading this part. The skill's own steps carry the how; the sections must also carry the why.
+
 </Role>
 
 ## State CLI
@@ -99,9 +101,12 @@ State the **goal and the one-line core before any structure or code** — the wa
 
 ### 핵심
 <코드를 보기 전에 독자가 먼저 쥐어야 할 핵심 한 줄>
+
+### 출처
+<이 목적·컨텍스트를 파악하는 데 실제로 쓴 근거 — Linear 이슈, Notion 문서, Slack 스레드, PR 설명, 커밋 본문, 위키 문서 경로, 또는 코드 추론. 접근할 수 있으면 식별자/경로를, 없으면 어디서 왔는지 한 줄>
 ```
 
-Both sub-headings are verified by the structure check (R16). What each says is yours to fill.
+All three sub-headings are verified by the structure check (R16). What each says is yours to fill. The `### 출처` names where the WHY came from so the reader can trace and trust it — the same provenance discipline R3 applies to each change's 왜, here applied to the whole document's purpose. In a sandbox with no external tools, cite the in-repo grounds (commit body, PR description, wiki) or say `코드 추론`; never leave it blank.
 
 ## Step 4 — architecture
 
@@ -121,11 +126,15 @@ Draw the structure needed to **understand this diff** at **three levels**. Each 
 |---|---|---|
 | <프로세스·서비스 경계> | <엔드포인트·쿼리·화면 URL> | <오가는 데이터> |
 
+**The `인터페이스` and `오가는 것` cells must show the actual message, not a naming-convention note.** A reader cannot tell what an interface does from "camelCase generationRequest" — write the signature and the request/response shape: the endpoint/procedure plus the fields it takes and returns, with types (`initiateGeneration(input: { generationRequest: { userRequest: string; intakeTimeCodes: string[] }, proposalType: enum }) → { asyncTaskId: string }`). Name the payload and response body concretely so the reader knows what value crosses the boundary; a bare field name or a convention label is not an interface.
+
 Then, a **change-contract table** (R14) across three axes — `서버 API` (endpoints, tRPC procedures, request/response schemas), `DB 스키마` (tables, columns, constraints), `클라이언트 의존` (contracts the client must change to match); each axis states the changing contract or `변경 없음: <사유>`. Order: diagram → standing-interface (context) → change-contract (delta). The three axis labels pass R14; the three rendered column labels (`경계`·`인터페이스`·`오가는 것`) pass R17. Format follows `markdown-template.md`.
 
-**The component level decodes each changed node (R18).** The mermaid graph shows how modules connect; bare class names do not say what a node *is*. A reasoned component-level `구조 변화 없음: <사유>` waiver is accepted. Otherwise, every authored `arch-entity` card is checked independently for `레이어` / `책임` / `인터페이스` (functions) and `data-change="new|mod|del"`; one complete card cannot mask an incomplete or invalid card. Prose-only card descriptions and unsupported `data-change` values do not count; a pure data/contract-only level must use the reasoned waiver instead of simply omitting cards. The labels and valid cards are what R18 checks.
+**The component level decodes each changed node (R18).** A component is a **module as a unit** — a feature, a use case, a hook, a service, a schema module — not a file. So the diagram's **nodes are module/concept names**, never source file paths: a file path as a node label tells the reader a location, not a component, and long paths truncate mid-word in the render (`health-`, `proposal-`). **Where** a component lives is said in the card's `레이어` slot at package/layer granularity (`packages/schemas/src/program`, `entities/supplement/api`) — the diagram names the component, the card says where it sits. R18 rejects a component diagram whose nodes are file paths. A reasoned component-level `구조 변화 없음: <사유>` waiver is accepted (but a file-path node fails even under the waiver). Otherwise, every authored `arch-entity` card is checked independently for `레이어` / `책임` / `인터페이스` (functions) and `data-change="new|mod|del"`; one complete card cannot mask an incomplete or invalid card. Prose-only card descriptions and unsupported `data-change` values do not count; a pure data/contract-only level must use the reasoned waiver instead of simply omitting cards. The labels and valid cards are what R18 checks.
 
-**The Architecture section closes with a boundary/dependency/use-case change map (R15).** After the three levels, add a `### 경계·의존·유스케이스` block that is **not** a static layer-classification table but a map of what this diff did to the boundary. The rendered block must contain a real renderer-recognized `arch-entity` with an allowed `data-change="new|mod|del"`, plus the `영향 인터페이스` and `의존 방향` slots; prose-only mentions or unsupported change values do not count. Describe each behaviour unit's affected interface, the touched layers/domains as a one-line backdrop, and close with a dependency-direction verdict (keeps/violates/restores unidirectional dependency; flag any reach-in, back-reference, or cycle). **Do not write methodology names (FSD·Feature-Sliced·Clean Architecture·DDD·bounded context) OR bare axis labels (`수평`/`수직`) in the Architecture prose (R19)** — name the touched areas in the codebase's own domain terms, not by sorting parts into a horizontal/vertical grid. The vocabulary follows the `architecture-boundaries` rule but the output speaks the codebase's own domain terms. Format follows `markdown-template.md`.
+**The domain level decodes each touched domain object (R21).** The `### 도메인 레벨` is the thinnest level if left as a bare diagram — a reader cannot tell which domain object this diff added or changed, or what invariant it now guarantees. The nodes and cards must be **real business concepts** — the things the domain actually models (a Program, an intake-time slot, a request kind like 온보딩 vs 일반 생성) — decoded in the codebase's own domain terms. A schema class name is acceptable **only when you explain the business concept it encodes**; a bare encoding name (`GenerationIntakeTimeCodesSchema`) with no business meaning is not a domain object. Above the entity/relation diagram (`erDiagram`/`classDiagram`), every touched domain object gets an `arch-entity` card carrying its `책임` (the duty/invariant it holds) and a `data-change` change kind. **If you draw an object/class diagram, fill each class box** — its member variables (what it holds) and its methods/messages (what it does); an empty box with only a class name teaches nothing, and R21 rejects a `classDiagram` whose boxes have no members. Diagram nodes are domain-concept names, never file paths. A reasoned `구조 변화 없음: <사유>` waiver stands in when the diff changes no domain object; otherwise every card is checked for `책임` + a valid `data-change`, the same way R18 checks component cards.
+
+**The Architecture section closes with a boundary/dependency/use-case change map (R15).** After the three levels, add a `### 경계·의존·유스케이스` block. A feature/use case mostly carries an **orchestration** responsibility, so this block's centre of gravity is the **flow**: show it as a mermaid `sequenceDiagram` — who calls whom in what order — and mark the step this diff changed (a `Note` or `:::changed`). A reasoned `구조 변화 없음: <사유>` waiver stands in when the diff changes no use-case flow (R15 checks the block for a mermaid diagram or that waiver). Above/around the diagram, add a renderer-recognized `arch-entity` per behaviour unit with an allowed `data-change="new|mod|del"`, plus the `영향 인터페이스` and `의존 방향` slots; prose-only mentions or unsupported change values do not count. The `영향 인터페이스` slot names the actual signature/payload the use case exposes or calls — endpoint/procedure plus the request and response shape — not a bare name. Close with a dependency-direction verdict (keeps/violates/restores unidirectional dependency; flag any reach-in, back-reference, or cycle). **Do not write methodology names (FSD·Feature-Sliced·Clean Architecture·DDD·bounded context) OR bare axis labels (`수평`/`수직`) in the Architecture prose (R19)** — name the touched areas in the codebase's own domain terms, not by sorting parts into a horizontal/vertical grid. The vocabulary follows the `architecture-boundaries` rule but the output speaks the codebase's own domain terms. Format follows `markdown-template.md`.
 
 R19 scans the rendered `## Architecture` prose after ignoring fenced blocks and inline-code examples, and rejects only standalone methodology or axis tokens (methodology matching is case-insensitive). A token embedded in a code identifier or example is not prose.
 
@@ -165,46 +174,47 @@ Commit hashes are compared against the list that `start` pinned into the state �
 
 ## Step 7 — code
 
-The first-class unit is the **Change Group** (a concern), but **the spine is the commit.** Inside a group you descend commit by commit, and under a commit come the file blocks that commit touched. A signal file enters exactly once, as exactly one file block.
+The unit is the **change (변경)**, not the file, and **the spine is the commit.** A Change Group (a concern) descends commit by commit; under a commit come **change blocks** (`#### 변경 N: <한 일>`). **A change is not a file** — one change is realized by several **책임(responsibilities)**, the class/function duties that were edited together for one reason. So a change block lists those responsibilities, each naming the class/function it touched and **where that symbol lives** (which layer/domain — pointing back to the architecture cards). The file appears only as a location citation in the `cf-loc` slot, never as the heading. A signal file may be cited by more than one change; what must not happen is a signal file no change cites (R1).
 
 ```markdown
-## Change Group 1: <제목>
+## Change Group 1: <관심사>
 > 예고: <what this group will do — 그룹 N presupposes 그룹 N-1>
 > 순서: <one line on why this order>
 
 ### `<short-hash>` — <커밋 제목>
 <one or two sentences on what this commit did in this group. If it spans multiple groups, one spillover line.>
 
-#### `path/to/file.ts`
-<div class="cf">
-<p><strong>역할/변경 전</strong> — <설명></p>
-<p><strong>바뀐 것</strong> — <설명></p>
-<p><strong>왜</strong> — <설명> <span class="cf-src">근거</span> "<원문 인용>"</p>
-<p><strong>효과</strong> — <설명></p>
-<p class="cf-loc"><code>base:path/to/file.ts:12</code> → <code>head:path/to/file.ts:15</code></p>
+#### 변경 1: <이 변경이 이룬 것 — 파일명이 아니라 한 일로>
+<div class="cf" data-change="mod">
+<p><strong>책임 1 — <역할></strong> — <code>Class.method()</code> (<어느 레이어·도메인의 무엇인지 배치>). <이 책임이 이제 하는 일 — 완결 문장>.</p>
+<p><strong>책임 2 — <역할></strong> — <code>otherFn()</code> (<배치>). <한 일>.</p>
+<p><strong>왜</strong> — <이 변경이 필요한 이유> <span class="cf-src">근거</span> "<원문 인용>"</p>
+<p><strong>효과·사이드이펙트</strong> — <이 변경이 부른 결과·부작용 — 완결 문장></p>
+<p><strong>검증</strong> — <이 변경을 고정하는 테스트와 무엇을 잠그는지></p>
+<p class="cf-loc"><strong>바뀐 위치</strong> — <code>base:path/a.ts:12</code>→<code>head:path/a.ts:15</code>, <code>base:path/b.ts:40</code>→<code>head:path/b.ts:31</code></p>
 </div>
 
 ​```ts
-// 핵심 로직 — real code or pseudocode (one required per file)
+// 핵심 로직 — real code or pseudocode (one required per change block)
 ​```
 ```
 
-The three slots fill R13, R3, and R5. The component, field labels, and code-fence rules follow `markdown-template.md`.
+The slots fill R13, R3, and R5. The `왜`·`효과·사이드이펙트`·`검증`·code are at the change level; the `책임` entries and `바뀐 위치` carry the symbols and their files. The component, field labels, and code-fence rules follow `markdown-template.md`.
 
 - **Commit subsection** (`### \`hash\``): at least one per group. The hash must be a range commit that `start` pinned (R13).
-- **Core-logic code**: one code fence per file block. Location anchors alone do not read as "what was done" (R13).
-- **`cf-loc` location anchors**: put `base:` (before) and `head:` (after) in a slot outside the prose (R5).
+- **Core-logic code**: one code fence per change block — the few lines that reveal the change's core (the central responsibility). Location anchors alone do not read as "what was done" (R13).
+- **`cf-loc` location anchors**: put `base:` (before) and `head:` (after) for **every file this change touched** in the `바뀐 위치` slot outside the prose (R5). This is a location citation, not a flow — flow is the use-case sequence diagram's job.
   `start` passes the original range unchanged to `git diff` for textual hunk capture, preserving
   `A...B` merge-base semantics; only `git rev-list` commit enumeration changes it to `A..B`. At the
-  `code` submission, hunk ranges are checked per file. If a changed file has no textual hunk while
-  another file does, that file uses the legacy per-file anchor-presence/placeholder fallback instead
-  of being rejected as globally missing. Numeric anchors parse the final `:<number>` suffix and are
-  accepted only when the path before it matches the enclosing file-block path, including paths with
-  spaces. A legitimate first-line hunk may therefore use `base:…:1 → head:…:1`; without hunk metadata
-  (or for a file with no textual hunk), the legacy fallback still rejects a modified file whose
-  numeric anchors are the `:1 → :1` placeholder. With metadata, added files need only a `head:` anchor,
-  deleted files only a `base:` anchor, and a zero-count side has no file lines and needs no anchor.
-  Read the real ranges from the captured hunk headers rather than inventing positions.
+  `code` submission, R5 gathers every `base:path:line` / `head:path:line` anchor across all change
+  blocks, keys them by their own cited path, and checks **per signal file** that its before and after
+  are cited and land in real hunks. If a signal file has no textual hunk while others do, it uses the
+  legacy presence/placeholder fallback instead of being rejected. A legitimate first-line hunk may use
+  `base:…:1 → head:…:1`; without hunk metadata for that file, the fallback still rejects a modified
+  file whose only anchors are the `:1 → :1` placeholder. With metadata, an added file needs only a
+  `head:` anchor, a deleted file only a `base:`, and a zero-count side needs none. New-ness comes from
+  `A` in `git diff --name-status`; deleted-ness (no head side) from the hunk header. Read the real
+  ranges from the captured hunk headers rather than inventing positions.
 - **`cf-src` provenance tag**: one of three on every 왜 field (R3).
 
 | Situation | Tag |
@@ -231,11 +241,11 @@ What this gate actually looks at differs per step — it inspects only the slots
 |---|---|
 | evidence | Does every signal file appear somewhere in the document |
 | background | Deep/narrow two-tier background + skip marker |
-| goal | Does the `## 목표` section carry both sub-slots — `### 무엇을·왜` and `### 핵심` (R16) |
-| architecture | Three level headings, each with a mermaid diagram or a reasoned waiver (R9); system level has the three change-contract axes (R14) and a real rendered three-column standing-interface table `경계`/`인터페이스`/`오가는 것` (R17); component level accepts a reasoned structure-no-change waiver or requires renderer-recognized `arch-entity` cards with `레이어`/`책임`/`인터페이스` and `data-change="new|mod|del"` (R18); boundary block requires a real `arch-entity` with allowed `data-change` plus `영향 인터페이스`/`의존 방향` slots (R15); rendered Architecture prose uses standalone-token filtering (R19) |
+| goal | Does the `## 목표` section carry all three sub-slots — `### 무엇을·왜`, `### 핵심`, and `### 출처` (R16) |
+| architecture | Three level headings, each with a mermaid diagram or a reasoned waiver (R9); system level has the three change-contract axes (R14) and a real rendered three-column standing-interface table `경계`/`인터페이스`/`오가는 것` (R17); component level accepts a reasoned waiver or requires `arch-entity` cards with `레이어`/`책임`/`인터페이스` and `data-change`, and rejects a diagram whose nodes are file paths (R18); domain level accepts a reasoned waiver or requires `arch-entity` cards with `책임` and `data-change`, rejects file-path nodes, and requires a `classDiagram`'s boxes to carry members/methods (R21); boundary/use-case block requires an orchestration mermaid diagram (or waiver) plus a real `arch-entity` with allowed `data-change` and `영향 인터페이스`/`의존 방향` slots (R15); rendered Architecture prose uses standalone-token filtering (R19) |
 | intuition | No item of its own — the substantive verdict is the judgment's (R6) |
 | commits | With two or more commits, does every hash appear in the Commit Journey overview (R10); a single commit may use the waiver marker |
-| code | Change Group title/herald/order-rationale three slots (R2), a provenance tag on every 왜 (R3), cf-loc traceability (R5), each signal file in exactly one file block (R1), a commit subsection with a valid hash per group + core-logic code per file (R13). `start` passes the original range unchanged to `git diff` (preserving `A...B` merge-base semantics); only `git rev-list` enumeration normalizes it to `A..B`. At `code` submission, textual hunk ranges are checked per file, and a file with no textual hunk uses the legacy per-file presence/placeholder fallback even when other files have hunks. The final `:<number>` suffix is matched against the enclosing file-block path, including paths with spaces. A legitimate first-line hunk may use `base:…:1 → head:…:1`; added files need `head:` only, deleted files `base:` only, and a zero-count side has no file lines. |
+| code | Change Group title/herald/order-rationale three slots (R2), a provenance tag on every 왜 (R3), cf-loc traceability (R5), every signal file cited by at least one change block's `바뀐 위치` anchors (R1 — a file may be cited by several changes), a commit subsection with a valid hash per group + core-logic code per change block (R13). `start` passes the original range unchanged to `git diff` (preserving `A...B` merge-base semantics); only `git rev-list` enumeration normalizes it to `A..B`. At `code` submission, R5 keys every `base:`/`head:` anchor by its own cited path and checks per signal file that its before/after are cited and land in real hunks; a file with no textual hunk uses the legacy presence/placeholder fallback. A legitimate first-line hunk may use `base:…:1 → head:…:1`; added files need `head:` only, deleted files `base:` only, and a zero-count side has no file lines. |
 | render | See Step 8 — it inspects the artifact HTML, mermaid render parity, and the technical-writing report |
 
 **Common to all authoring steps**: the whole accumulated document is checked for `<style>`, inline `style=`, and unsanctioned classes (R11).
@@ -296,6 +306,8 @@ The quiz is **a conversational stage, not a document section.** Do not write a `
 ### Question bank
 
 Fix at least one **required concept** per section, and one per subsystem the diff touched for the Code section. If the total exceeds 20, cut by importance and **note in the document that you cut.**
+
+**Test understanding, not metadata.** The quiz measures whether the reader grasped **what this change is for and why it was needed** — its purpose, the problem it solves, the tradeoff it makes, the reason one path was chosen over another. Do **not** ask about document metadata or bookkeeping — the git range, the signal/noise file counts, the number of commits — none of that proves comprehension of the change. Every question ties to the substance: the purpose (why this change exists), the mechanism (how it works), or the consequence (what it enables or prevents). If a question could be answered by skimming the header without understanding the change, cut it. At least one required concept must be a **why/purpose** question, phrased so the answer must state the reason, not just the mechanic.
 
 ```bash
 $CLI add-concept --id <concept> --required

@@ -287,14 +287,25 @@ h1, h2, h3, h4, p, li, blockquote, th, td { word-break: keep-all; }
   background: var(--code-bg); font-size: 0.95rem;
 }
 
-/* cf — 바뀐 파일 하나의 필드 블록. 필드가 각자 한 줄로 서고(붕괴 방지),
-   출처는 배지로, 위치 앵커는 산문 밖 회색 슬롯으로 뺀다. */
+/* cf — 변경 하나의 필드 블록. 책임 항목이 각자 한 줄로 서고(붕괴 방지),
+   출처는 배지로, 위치 앵커는 산문 밖 회색 슬롯으로 뺀다. 변경종류(data-change)
+   배지는 arch-entity 와 같은 색·라벨을 render.ts 가 붙인다 — 저자는 종류만 준다. */
 .cf {
   margin: 0.6rem 0 1rem; padding: 0.1rem 0 0.1rem 0.9rem;
   border-left: 2px solid var(--rule);
 }
 .cf p { margin: 0.3rem 0; font-size: 0.95rem; }
 .cf strong { color: var(--fg); font-weight: 650; }
+.cf[data-change]::before {
+  display: inline-block; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em;
+  border-radius: 999px; padding: 0 0.5rem; margin: 0 0 0.35rem; color: #fff;
+}
+.cf[data-change="new"] { border-left-color: var(--ae-new); }
+.cf[data-change="new"]::before { content: "신설"; background: var(--ae-new); }
+.cf[data-change="mod"] { border-left-color: var(--ae-mod); }
+.cf[data-change="mod"]::before { content: "변경"; background: var(--ae-mod); }
+.cf[data-change="del"] { border-left-color: var(--ae-del); }
+.cf[data-change="del"]::before { content: "삭제"; background: var(--ae-del); }
 .cf-src {
   display: inline-block; font-size: 0.72rem; font-weight: 700;
   letter-spacing: 0.02em; color: var(--muted); background: var(--code-bg);
