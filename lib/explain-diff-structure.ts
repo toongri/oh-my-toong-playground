@@ -552,8 +552,58 @@ function mermaidFences(rawSlice: string): string[] {
 	return out;
 }
 
-/** A node/label token that is a source file path (a slashed path ending in a code extension). */
-const FILE_PATH_TOKEN = /[\w.@-]+\/[\w./@-]*\.(?:ts|tsx|js|jsx|mjs|cjs|py|md|json|sql|yaml|yml|css|scss)\b/i;
+/** A node/label token that is a source file path (including root-level files). */
+const FILE_PATH_TOKEN = /(?:^|[\s"'([{])(?:[\w.@-]+\/)*[\w.@-]+\.(?:ts|tsx|js|jsx|mjs|cjs|py|md|json|sql|yaml|yml|css|scss)\b/i;
+
+const DIAGRAM_TOKEN = "[A-Za-z0-9_./@-]+";
+const DIAGRAM_NON_NODE_LINE = /^(?:flowchart|graph|classDiagram|erDiagram|sequenceDiagram|stateDiagram(?:-v2)?|subgraph|end|direction|title|accTitle|accDescr|note|classDef|style|linkStyle|click)\b/i;
+const DIAGRAM_NODE_DECLARATION = new RegExp(
+	`(?:^|[\\s,])(${DIAGRAM_TOKEN})\\s*(?:\\[\\[([^\\]\\r\\n]*)\\]\\]|\\[([^\\]\\r\\n]*)\\]|\\(\\(([^)\\r\\n]*)\\)\\)|\\(([^)\\r\\n]*)\\)\\)|\\{\\{([^}\\r\\n]*)\\}\\}|\\{([^}\\r\\n]*)\\})`,
+	"g",
+);
+const DIAGRAM_RELATION = new RegExp(
+	`(?:^|[\\s,])(${DIAGRAM_TOKEN}?)\\s*(?:["'][^"\\r\\n]*["']\\s*)?[<|>*o.{}-]{2,}\\s*(?:["'][^"\\r\\n]*["']\\s*)?(${DIAGRAM_TOKEN})`,
+	"g",
+);
+
+function diagramNodeLabels(fence: string): string[] {
+	const labels: string[] = [];
+	for (const rawLine of fence.split(/\r?\n/)) {
+		const line = rawLine.replace(/%%.*$/, "").trim();
+		if (line === "" || DIAGRAM_NON_NODE_LINE.test(line)) continue;
+
+		const classDeclaration = new RegExp(`^class\\s+(${DIAGRAM_TOKEN})\\b`, "i").exec(line);
+		if (classDeclaration?.[1] !== undefined) {
+			labels.push(classDeclaration[1]);
+			continue;
+		}
+
+		const withoutEdgeLabels = line.replace(/\|[^|\r\n]*\|/g, "");
+		DIAGRAM_NODE_DECLARATION.lastIndex = 0;
+		let declaration: RegExpExecArray | null = DIAGRAM_NODE_DECLARATION.exec(withoutEdgeLabels);
+		while (declaration !== null) {
+			for (const value of declaration.slice(1)) {
+				if (value !== undefined) labels.push(value);
+			}
+			declaration = DIAGRAM_NODE_DECLARATION.exec(withoutEdgeLabels);
+		}
+
+		const block = new RegExp(`^(${DIAGRAM_TOKEN})\\s*\\{$`).exec(withoutEdgeLabels);
+		if (block?.[1] !== undefined) labels.push(block[1]);
+
+		DIAGRAM_RELATION.lastIndex = 0;
+		let relationship: RegExpExecArray | null = DIAGRAM_RELATION.exec(withoutEdgeLabels);
+		while (relationship !== null) {
+			if (relationship[1] !== undefined) labels.push(relationship[1]);
+			if (relationship[2] !== undefined) labels.push(relationship[2]);
+			relationship = DIAGRAM_RELATION.exec(withoutEdgeLabels);
+		}
+
+		const standalone = new RegExp(`^(${DIAGRAM_TOKEN})$`).exec(withoutEdgeLabels);
+		if (standalone?.[1] !== undefined) labels.push(standalone[1]);
+	}
+	return labels;
+}
 
 // Component/domain diagram nodes must name a MODULE/concept (a feature, use case,
 // hook, service, entity), not a source file path — a file path is WHERE a symbol
@@ -561,7 +611,9 @@ const FILE_PATH_TOKEN = /[\w.@-]+\/[\w./@-]*\.(?:ts|tsx|js|jsx|mjs|cjs|py|md|jso
 // component diagram nodes were full file paths that truncated mid-path
 // (`health-`, `proposal-`) and told the reader a location, not a module.
 function diagramFilePathNodes(rawSlice: string): boolean {
-	return mermaidFences(rawSlice).some((fence) => FILE_PATH_TOKEN.test(fence));
+	return mermaidFences(rawSlice).some((fence) =>
+		diagramNodeLabels(fence).some((label) => FILE_PATH_TOKEN.test(label)),
+	);
 }
 
 // A domain object diagram (`classDiagram`) drawn with empty class bodies is an
@@ -585,7 +637,7 @@ function classDiagramMissingMembers(rawSlice: string): boolean {
 			if (member?.[1] !== undefined) declareClass(member[1], true);
 
 			const relationship = line.match(
-				/^\s*([A-Za-z_][\w-]*)\s+(?:["'][^"']*["']\s+)?[<|>*o.-]{2,}(?:\s+["'][^"']*["'])?\s+([A-Za-z_][\w-]*)\b/,
+				/^\s*([A-Za-z_][\w-]*)\s*(?:["'][^"']*["']\s+)?[<|>*o.-]{2,}(?:\s+["'][^"']*["'])?\s*([A-Za-z_][\w-]*)\b/,
 			);
 			if (relationship?.[1] !== undefined && relationship[2] !== undefined) {
 				declareClass(relationship[1]);

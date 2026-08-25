@@ -1237,6 +1237,33 @@ classDiagram
 		expect(item?.detail).toContain("파일 경로");
 	});
 
+	test("컴포넌트 다이어그램 edge label·note·comment의 파일 경로는 R18 노드 경로가 아니다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"flowchart LR\n  card --> resolver",
+				"flowchart LR\n%% reads src/comment.ts\n  card -->|reads src/config.ts| resolver\n  Note right of card: src/note.ts",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(true);
+	});
+
+	test("루트 파일명이 컴포넌트 다이어그램 노드면 R18이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"flowchart LR\n  card --> resolver",
+				"flowchart LR\n  package.json --> resolver",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("파일 경로");
+	});
+
 	test("도메인 객체 다이어그램의 클래스 박스가 비어 있으면 R21이 실패한다", () => {
 		const doc = withBackground(
 			ARCH_OK.replace(
@@ -1304,6 +1331,22 @@ classDiagram
 <p><strong>이름</strong> <code>SupplementCategory</code></p>
 <p><strong>책임</strong> canonical 정체성 보유</p>
 </div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("멤버");
+	});
+
+	test("공백 없는 class 관계의 암시된 빈 class도 R21에서 검사한다", () => {
+		const domainSection =
+			"### 도메인 레벨\n```mermaid\nclassDiagram\n  Populated : +id: string\n  Populated-->Empty\n```\n\n<div class=\"arch-entity\" data-change=\"new\">\n<p><strong>이름</strong> <code>Populated</code></p>\n<p><strong>책임</strong> canonical 정체성 보유</p>\n</div>";
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				domainSection,
 			),
 		);
 		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
