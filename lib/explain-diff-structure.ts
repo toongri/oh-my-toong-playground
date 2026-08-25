@@ -346,6 +346,16 @@ const GOAL_SLOTS = [
 	{ label: "출처", re: /^###\s*출처/m },
 ] as const;
 
+function goalSlotHasContent(slice: string, slot: (typeof GOAL_SLOTS)[number]): boolean {
+	const heading = slot.re.exec(slice);
+	if (heading === null) return false;
+	const lineEnd = slice.indexOf("\n", heading.index);
+	const bodyStart = lineEnd >= 0 ? lineEnd + 1 : slice.length;
+	const nextHeading = slice.slice(bodyStart).search(/^#{1,3}\s/m);
+	const bodyEnd = nextHeading >= 0 ? bodyStart + nextHeading : slice.length;
+	return /\S/.test(slice.slice(bodyStart, bodyEnd));
+}
+
 // R16 — the goal / core-message beat, authored before any architecture or code.
 // Measured gap: the document jumped from Background straight to Architecture with
 // no statement of what the change is for or its one-line takeaway, so a reader met
@@ -363,7 +373,7 @@ function checkR16(text: string): CheckItem {
 			detail: "## 목표 섹션이 없습니다 — 코드 전에 이 변경의 목표와 핵심 한 줄을 먼저 전달하세요.",
 		};
 	}
-	const missing = GOAL_SLOTS.filter((s) => !s.re.test(slice)).map((s) => s.label);
+	const missing = GOAL_SLOTS.filter((s) => !goalSlotHasContent(slice, s)).map((s) => s.label);
 	return {
 		id: "R16",
 		title: "R16 목표·핵심 전달",
@@ -557,20 +567,32 @@ function diagramFilePathNodes(rawSlice: string): boolean {
 // A domain object diagram (`classDiagram`) drawn with empty class bodies is an
 // opaque box. Measured gap: the domain classDiagram showed only class names with
 // no members or methods, so a reader could not tell what each object holds or
-// does. Every declared class must carry at least one member/method — either in
-// its `{ ... }` body or in a `Class : +field` declaration.
+// does. Every rendered class must carry at least one member/method — explicit
+// declarations, relationship endpoints, and `Class : +field` declarations all
+// create class boxes in Mermaid.
 function classDiagramMissingMembers(rawSlice: string): boolean {
 	const fences = mermaidFences(rawSlice).filter((f) => /\bclassDiagram\b/.test(f));
 	if (fences.length === 0) return false;
 	return fences.some((fence) => {
 		const lines = fence.split(/\r?\n/);
-		const colonMembers = new Set<string>();
+		const classes = new Map<string, boolean>();
+		const declareClass = (name: string, hasMember = false): void => {
+			classes.set(name, (classes.get(name) ?? false) || hasMember);
+		};
+
 		for (const line of lines) {
 			const member = line.match(/^\s*([A-Za-z_][\w-]*)\s*:\s*[+\-#~]?\s*\S/);
-			if (member?.[1] !== undefined) colonMembers.add(member[1]);
+			if (member?.[1] !== undefined) declareClass(member[1], true);
+
+			const relationship = line.match(
+				/^\s*([A-Za-z_][\w-]*)\s+(?:["'][^"']*["']\s+)?[<|>*o.-]{2,}(?:\s+["'][^"']*["'])?\s+([A-Za-z_][\w-]*)\b/,
+			);
+			if (relationship?.[1] !== undefined && relationship[2] !== undefined) {
+				declareClass(relationship[1]);
+				declareClass(relationship[2]);
+			}
 		}
 
-		const classes: boolean[] = [];
 		for (let index = 0; index < lines.length; index += 1) {
 			const declaration = lines[index]?.match(/^\s*class\s+([A-Za-z_][\w-]*)\b(.*)$/);
 			if (declaration?.[1] === undefined) continue;
@@ -579,14 +601,14 @@ function classDiagramMissingMembers(rawSlice: string): boolean {
 			const tail = declaration[2] ?? "";
 			const openBrace = tail.indexOf("{");
 			if (openBrace < 0) {
-				classes.push(colonMembers.has(name));
+				declareClass(name);
 				continue;
 			}
 
 			const sameLineBody = tail.slice(openBrace + 1);
 			const closeBrace = sameLineBody.indexOf("}");
 			if (closeBrace >= 0) {
-				classes.push(sameLineBody.slice(0, closeBrace).trim().length > 0);
+				declareClass(name, sameLineBody.slice(0, closeBrace).trim().length > 0);
 				continue;
 			}
 
@@ -601,10 +623,10 @@ function classDiagramMissingMembers(rawSlice: string): boolean {
 					hasMember = true;
 				}
 			}
-			classes.push(hasMember);
+			declareClass(name, hasMember);
 		}
 
-		return classes.length > 0 && classes.some((hasMember) => !hasMember);
+		return classes.size > 0 && [...classes.values()].some((hasMember) => !hasMember);
 	});
 }
 
@@ -706,7 +728,9 @@ function checkR15(text: string): CheckItem {
 	// The orchestration must be a real diagram, not prose — the flow (call order,
 	// changed step) is shown, not narrated. A reasoned waiver stands in when the
 	// diff genuinely changes no use-case flow.
-	const hasOrchestration = /```mermaid/.test(rawSlice) || ARCH_WAIVER.test(rawSlice);
+	const hasOrchestration =
+		mermaidFences(rawSlice).some((fence) => /^\s*sequenceDiagram\b/m.test(fence)) ||
+		ARCH_WAIVER.test(rawSlice);
 	if (!hasOrchestration) missing.push("오케스트레이션 다이어그램(mermaid sequenceDiagram)");
 	return {
 		id: "R15",

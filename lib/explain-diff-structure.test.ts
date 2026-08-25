@@ -166,6 +166,25 @@ describe("goal 스텝 — R16만 평가", () => {
 		expect(item?.pass).toBe(false);
 		expect(item?.detail).toContain("출처");
 	});
+
+	test("출처 헤딩만 있고 내용이 비어 있으면 R16이 실패한다", () => {
+		const doc = `# 설명
+
+## 목표
+
+### 무엇을·왜
+상태 갱신 경합을 없앤다.
+
+### 핵심
+락 획득과 해제를 공용 함수로 모은다.
+
+### 출처
+`;
+		const r = checkStructure(doc, { signalFiles: ["lib/state-lock.ts"], step: "goal" });
+		const item = r.items.find((i) => i.id === "R16");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("출처");
+	});
 });
 
 describe("intuition 스텝 — 고유 구조 항목 없음 (공통 R11만)", () => {
@@ -1125,6 +1144,20 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 		expect(item?.detail).toContain("오케스트레이션");
 	});
 
+	test("경계 블록의 비오케스트레이션 Mermaid는 R15를 통과시키지 않는다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				/```mermaid\nsequenceDiagram[\s\S]*?```\n\n/,
+				"```mermaid\nclassDiagram\n  class Boundary\n```\n\n",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R15",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("오케스트레이션");
+	});
+
 	test("유스케이스 흐름이 정말 안 바뀌면 사유 있는 waiver로 R15 오케스트레이션을 대신할 수 있다", () => {
 		const doc = withBackground(
 			ARCH_OK.replace(
@@ -1240,6 +1273,30 @@ classDiagram
     +code: string
   }
   class Supplement
+  SupplementCategory --> Supplement
+\`\`\`
+
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>SupplementCategory</code></p>
+<p><strong>책임</strong> canonical 정체성 보유</p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("멤버");
+	});
+
+	test("관계로 암시된 빈 class도 R21에서 검사한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+\`\`\`mermaid
+classDiagram
+  SupplementCategory : +code: string
   SupplementCategory --> Supplement
 \`\`\`
 
