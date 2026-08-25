@@ -42,7 +42,7 @@ export interface DiffHunk {
 }
 
 export interface StructureInput {
-	/** Changed files classified as signal — every one must appear exactly once. */
+	/** Changed files classified as signal — every one must be cited by a change block. */
 	signalFiles: string[];
 	/**
 	 * Signal files the diff ADDED. These have no base location to point at, so
@@ -94,8 +94,9 @@ export interface StructureResult {
 
 const GROUP_HEADING = /^##\s+Change Group\s+\d+\s*:\s*\S.*$/gm;
 // 변경 블록은 h4 `#### 변경 N: <한 일>` — 파일이 아니라 변경이 단위다.
-// (h3 `### `hash` — 제목`은 커밋 서브섹션이라 변경 블록이 아니다.) 헤딩 텍스트를 캡처한다.
-const CHANGE_BLOCK = /^####\s+(\S.*?)\s*$/gm;
+// (h3 `### `hash` — 제목`은 커밋 서브섹션이고, v4의 `#### `path``도 변경 블록이
+// 아니다.) 수평 공백만 소비해 빈 행을 행동 텍스트로 오인하지 않도록 한다.
+const CHANGE_BLOCK = /^####[ \t]+(변경[ \t]+\d+[ \t]*:[ \t]*\S[^\r\n]*?)[ \t]*\r?$/gm;
 // 커밋 서브섹션: h3 헤딩의 백틱 안 16진 해시.
 const COMMIT_SUBSECTION = /^###\s+`([0-9a-fA-F]{6,40})`/gm;
 
@@ -119,9 +120,9 @@ const FENCE_RE = /^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^(?:`{3,}|~{3,})[^\n]*$/gm;
 const CODE_FENCE = /^(`{3,}|~{3,})([^\n]*)\n([\s\S]*?)^(?:`{3,}|~{3,})[^\n]*$/gm;
 
 /**
- * A file block satisfies R13's core-logic requirement only with a fence that is
+ * A change block satisfies R13's core-logic requirement only with a fence that is
  * NOT a mermaid diagram and is NOT empty. The template reserves mermaid for
- * diagrams and requires real code/pseudocode per file, so a mermaid-only or
+ * diagrams and requires real code/pseudocode per change, so a mermaid-only or
  * blank fence is not the logic R13 guarantees.
  */
 function hasCoreCodeFence(body: string): boolean {
@@ -155,7 +156,7 @@ function withoutFencedCode(text: string): string {
 /**
  * Blanks fenced code to same-length spaces (newlines kept), so heading and
  * boundary offsets computed on the masked copy still index the raw text. This
- * is what lets file blocks carry code fences without a `##` comment line inside
+ * is what lets change blocks carry code fences without a `##` comment line inside
  * the fence truncating the block early.
  */
 function maskFenced(text: string): string {
@@ -195,11 +196,13 @@ interface LocAnchor {
 	line: number | null;
 }
 
+const ANCHOR_SIDES: AnchorSide[] = ["base", "head"];
+
 /** Every `base:path:line` / `head:path:line` location anchor in one change block. */
 function blockAnchors(body: string): LocAnchor[] {
 	const clean = withoutFencedCode(body);
 	const out: LocAnchor[] = [];
-	for (const side of ["base", "head"] as AnchorSide[]) {
+	for (const side of ANCHOR_SIDES) {
 		for (const value of anchorValues(clean, side)) {
 			if (value === "") continue;
 			const match = value.match(/^(.*):(\d+)$/);
@@ -292,7 +295,7 @@ function checkR2(text: string): CheckItem {
 
 // R3 — provenance on every 왜. Not "don't explain why": say WHERE the why came
 // from. Read on the code-stripped body so a `[근거:]` inside a code comment can
-// not stand in for the file block's actual 왜 field.
+// not stand in for the change block's actual 왜 field.
 function checkR3(blocks: Array<{ heading: string; body: string }>): CheckItem {
 	const bodies = blocks.map((b) => ({ heading: b.heading, body: withoutFencedCode(b.body) }));
 	const unmarked = bodies
@@ -554,15 +557,54 @@ function diagramFilePathNodes(rawSlice: string): boolean {
 // A domain object diagram (`classDiagram`) drawn with empty class bodies is an
 // opaque box. Measured gap: the domain classDiagram showed only class names with
 // no members or methods, so a reader could not tell what each object holds or
-// does. When a classDiagram is present, at least one member/method must appear —
-// either a `Class : +field` line or a non-empty `{ ... }` body.
+// does. Every declared class must carry at least one member/method — either in
+// its `{ ... }` body or in a `Class : +field` declaration.
 function classDiagramMissingMembers(rawSlice: string): boolean {
 	const fences = mermaidFences(rawSlice).filter((f) => /\bclassDiagram\b/.test(f));
 	if (fences.length === 0) return false;
 	return fences.some((fence) => {
-		const hasColonMember = /^\s*[A-Za-z_][\w]*\s*:\s*[+\-#~]?\S/m.test(fence);
-		const hasBracedMember = /\{[^}]*[+\-#~(][^}]*\}/.test(fence);
-		return !hasColonMember && !hasBracedMember;
+		const lines = fence.split(/\r?\n/);
+		const colonMembers = new Set<string>();
+		for (const line of lines) {
+			const member = line.match(/^\s*([A-Za-z_][\w-]*)\s*:\s*[+\-#~]?\s*\S/);
+			if (member?.[1] !== undefined) colonMembers.add(member[1]);
+		}
+
+		const classes: boolean[] = [];
+		for (let index = 0; index < lines.length; index += 1) {
+			const declaration = lines[index]?.match(/^\s*class\s+([A-Za-z_][\w-]*)\b(.*)$/);
+			if (declaration?.[1] === undefined) continue;
+
+			const name = declaration[1];
+			const tail = declaration[2] ?? "";
+			const openBrace = tail.indexOf("{");
+			if (openBrace < 0) {
+				classes.push(colonMembers.has(name));
+				continue;
+			}
+
+			const sameLineBody = tail.slice(openBrace + 1);
+			const closeBrace = sameLineBody.indexOf("}");
+			if (closeBrace >= 0) {
+				classes.push(sameLineBody.slice(0, closeBrace).trim().length > 0);
+				continue;
+			}
+
+			let hasMember = false;
+			for (let bodyIndex = index + 1; bodyIndex < lines.length; bodyIndex += 1) {
+				const bodyLine = lines[bodyIndex]?.trim() ?? "";
+				if (bodyLine === "}") {
+					index = bodyIndex;
+					break;
+				}
+				if (bodyLine !== "" && !bodyLine.startsWith("%%") && !/^<<.*>>$/.test(bodyLine)) {
+					hasMember = true;
+				}
+			}
+			classes.push(hasMember);
+		}
+
+		return classes.length > 0 && classes.some((hasMember) => !hasMember);
 	});
 }
 
@@ -960,9 +1002,9 @@ function checkR10(text: string, commitHashes: string[] | undefined): CheckItem {
 }
 
 // R13 — the commit-spined walkthrough. Each Change Group holds at least one
-// commit subsection whose hash is a real range commit, and each file block
+// commit subsection whose hash is a real range commit, and each change block
 // carries one core-logic code fence. Measured baseline: the code section sat
-// disconnected from the commit history, and file blocks pointed at line
+// disconnected from the commit history, and change blocks pointed at line
 // numbers without ever showing the logic.
 function checkR13(
 	text: string,

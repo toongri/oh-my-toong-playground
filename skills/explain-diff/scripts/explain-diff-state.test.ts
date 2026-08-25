@@ -52,7 +52,7 @@ const GOOD_DOC = `# 설명
 ### \`ab12cd3\` — fix: 상태 갱신 락 통합
 락 획득/해제를 한 파일로 모은다.
 
-#### \`lib/state-lock.ts\`
+#### 변경 1: 락 획득·해제를 공용 모듈로 추출
 <div class="cf">
 <p><strong>역할/변경 전</strong> — 없던 파일</p>
 <p><strong>바뀐 것</strong> — 락이 여기로 모였다</p>
@@ -520,7 +520,7 @@ describe("스텝 스코핑 — 스텝마다 다른 슬롯만 본다", () => {
 		expect(items).toContain("lib/state-lock.ts");
 	});
 
-	test("signal 파일이 Evidence 표에만 있고 Change Group 파일 블록이 없으면 code 스텝이 실패하고 사유에 경로가 나온다", async () => {
+	test("signal 파일이 Evidence 표에만 있고 Change Group 변경 블록이 없으면 code 스텝이 실패하고 사유에 경로가 나온다", async () => {
 		const { submitStep } = await advanceTo("code", WITH_ARCH_DOC);
 		const noGroupDoc = `${WITH_BACKGROUND_DOC}
 ## Change Group 1: 관련 없는 변경

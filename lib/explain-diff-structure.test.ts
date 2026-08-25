@@ -269,7 +269,7 @@ describe("code 스텝 — R2·R3·R5·R1(커버리지형)·R13", () => {
 	});
 
 	test("코드 펜스 주석 안의 왜 단어는 R3의 출처 판정에 새지 않는다", () => {
-		// 핵심 로직 코드 펜스에 `// 왜냐하면` 같은 주석이 있어도, 파일 블록의 진짜
+		// 핵심 로직 코드 펜스에 `// 왜냐하면` 같은 주석이 있어도, 변경 블록의 진짜
 		// 왜 필드에 출처 태그가 없으면 실패해야 한다 — 펜스를 벗겨내고 판정한다.
 		const body = GOOD_GROUP.replace(
 			/<p><strong>왜<\/strong>.*<\/p>/,
@@ -301,7 +301,7 @@ describe("code 스텝 — R2·R3·R5·R1(커버리지형)·R13", () => {
 ### \`ab12cd3\` — feat: 락 도입
 동시 작성자 두 명을 막는 락을 새로 넣는다.
 
-#### \`lib/state-lock.ts\`
+#### 변경 1: 락을 도입한다
 <div class="cf">
 <p><strong>역할/변경 전</strong> — 이 파일은 새로 생겼다</p>
 <p><strong>바뀐 것</strong> — 락 획득/해제를 새로 넣었다</p>
@@ -336,7 +336,7 @@ export function withLock() {}
 ### \`ef45ab6\` — chore: 이미지 메타데이터 갱신
 비텍스트 파일은 텍스트 hunk가 없다.
 
-#### \`${fallbackPath}\`
+#### 변경 2: 비텍스트 파일 위치를 기록한다
 <div class="cf">
 <p class="cf-loc"><code>base:${fallbackPath}:12</code> → <code>head:${fallbackPath}:20</code></p>
 </div>
@@ -360,7 +360,7 @@ binary placeholder
 		expect(r.items.find((i) => i.id === "R5")?.pass).toBe(true);
 	});
 
-	test("공백이 있는 경로의 strict·fallback 앵커는 파일 블록 경로와 일치하면 통과한다", () => {
+	test("공백이 있는 경로의 strict·fallback 앵커는 변경 블록 위치와 일치하면 통과한다", () => {
 		const strictPath = "src/strict file.ts";
 		const fallbackPath = "assets/mode only file.bin";
 		const strict = GOOD_GROUP.replace(/lib\/state-lock\.ts/g, strictPath).replace(
@@ -374,7 +374,7 @@ binary placeholder
 ### \`ef45ab6\` — chore: 공백 경로 기록
 공백이 있는 비텍스트 경로다.
 
-#### \`${fallbackPath}\`
+#### 변경 2: 공백 경로의 위치를 기록한다
 <div class="cf">
 <p class="cf-loc"><code>base:${fallbackPath}:12</code> → <code>head:${fallbackPath}:20</code></p>
 </div>
@@ -486,7 +486,7 @@ binary placeholder
 ### \`ab12cd3\` — feat: 락 도입
 동시 작성자 두 명을 막는 락을 새로 넣는다.
 
-#### \`lib/state-lock.ts\`
+#### 변경 1: 락을 도입한다
 <div class="cf">
 <p><strong>역할/변경 전</strong> — 이 파일은 새로 생겼다</p>
 <p><strong>바뀐 것</strong> — 락 획득/해제를 새로 넣었다</p>
@@ -548,9 +548,9 @@ export function withLock() {}
 		expect(r.items.find((i) => i.id === "R5")?.pass).toBe(true);
 	});
 
-	describe("R13 — 커밋이 그룹의 뼈대이고 파일마다 핵심 로직 코드가 있다", () => {
+	describe("R13 — 커밋이 그룹의 뼈대이고 변경마다 핵심 로직 코드가 있다", () => {
 		test("그룹에 커밋 서브섹션이 하나도 없으면 실패한다", () => {
-			// 파일 블록을 그룹 바로 아래 두고 커밋 서브섹션을 생략한 옛 평면 구조.
+			// 변경 블록을 그룹 바로 아래 두고 커밋 서브섹션을 생략한 옛 평면 구조.
 			const flat = `## Change Group 1: 락 추출
 > 예고: 락을 옮긴다.
 > 순서: 추출이 먼저다.
@@ -720,7 +720,7 @@ if not mirror:
 			expect(item?.detail).toContain("lib/forgotten.ts");
 		});
 
-		test("헤딩 백틱 뒤 괄호 주석(삭제·이동 표기)이 붙어도 파일 블록으로 센다", () => {
+		test("v4 파일 블록은 변경 블록으로 인식하지 않아 code 스텝이 실패한다", () => {
 			const annotated = `## Change Group 1: 테스트 계약 교체
 > 예고: 옛 계약 테스트를 지운다.
 > 순서: 복원 코드가 먼저 있어야 한다.
@@ -743,7 +743,9 @@ v1 복원으로 사라진 404 계약 테스트를 지운다.
 				step: "code",
 				commitHashes: ["ab12cd3f00"],
 			});
-			expect(r.items.find((i) => i.id === "R1")?.pass).toBe(true);
+			expect(r.pass).toBe(false);
+			expect(r.items.find((i) => i.id === "R1")?.pass).toBe(false);
+			expect(r.items.find((i) => i.id === "R1")?.detail).toContain("tests/api/removed_routes.py");
 		});
 	});
 });
@@ -1226,6 +1228,33 @@ classDiagram
 		expect(item?.pass).toBe(false);
 		expect(item?.detail).toContain("멤버");
 	});
+
+	test("classDiagram의 한 클래스가 채워져도 다른 빈 클래스 박스를 가리지 못한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+\`\`\`mermaid
+classDiagram
+  class SupplementCategory {
+    +code: string
+  }
+  class Supplement
+  SupplementCategory --> Supplement
+\`\`\`
+
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>SupplementCategory</code></p>
+<p><strong>책임</strong> canonical 정체성 보유</p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("멤버");
+	});
 });
 
 const OVERVIEW = `## Commit Journey
@@ -1392,7 +1421,7 @@ describe("게이트 이완 보강 — R3 배지 형식·R13 코드 펜스", () =
 		expect(r.items.find((i) => i.id === "R3")?.pass).toBe(false);
 	});
 
-	test("R13 — 파일 블록의 유일한 펜스가 mermaid면 핵심 로직 코드로 인정되지 않는다", () => {
+	test("R13 — 변경 블록의 유일한 펜스가 mermaid면 핵심 로직 코드로 인정되지 않는다", () => {
 		const body = GOOD_GROUP.replace(
 			/```ts[\s\S]*?```/,
 			"```mermaid\nflowchart LR\n  A --> B\n```",
