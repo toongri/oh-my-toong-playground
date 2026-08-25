@@ -1,5 +1,5 @@
 /**
- * explain-diff structural checks — rubric items R1..R5, R9..R11, R13..R19.
+ * explain-diff structural checks — rubric items R1..R5, R9..R11, R13..R19, R21.
  *
  * These are the half of the rubric a script can decide, and the split is
  * deliberate (see skills/explain-diff/references/rubric.md): absence is
@@ -10,10 +10,16 @@
  * Each check looks for a named slot; a section that fills the slots passes, and
  * one that does not names the missing slot back to the author.
  *
- * v4 spine: the code section is organized by COMMIT. A Change Group (concern)
- * holds commit subsections (`### \`hash\` — title`), each commit holds file
- * blocks (`#### \`file\``), and each file block separates its fields with the
- * `cf` component and carries one core-logic code fence. R13 enforces that spine.
+ * v5 spine: the code section is organized by COMMIT, and its unit is the CHANGE,
+ * not the file. A Change Group (concern) holds commit subsections
+ * (`### \`hash\` — title`), each commit holds change blocks (`#### 변경 N: <한 일>`),
+ * and each change block separates its fields with the `cf` component — one or
+ * more `책임`(responsibility) entries naming the class/function touched, plus
+ * 왜/효과/검증 at the change level — and carries one core-logic code fence. The
+ * file appears only as a location citation inside the `cf-loc` slot, never as the
+ * block heading. R1 coverage therefore checks that every signal file is CITED by
+ * some change block's location anchors, R5 that those anchors land in real hunks,
+ * and R13 the commit spine + one code fence per change block.
  *
  * The document is written incrementally, one step at a time, so a rubric item
  * only ever has its slot filled once the step that owns it has been reached.
@@ -36,7 +42,7 @@ export interface DiffHunk {
 }
 
 export interface StructureInput {
-	/** Changed files classified as signal — every one must appear exactly once. */
+	/** Changed files classified as signal — every one must be cited by a change block. */
 	signalFiles: string[];
 	/**
 	 * Signal files the diff ADDED. These have no base location to point at, so
@@ -72,7 +78,8 @@ export interface CheckItem {
 		| "R16"
 		| "R17"
 		| "R18"
-		| "R19";
+		| "R19"
+		| "R21";
 	title: string;
 	pass: boolean;
 	detail: string;
@@ -86,9 +93,10 @@ export interface StructureResult {
 }
 
 const GROUP_HEADING = /^##\s+Change Group\s+\d+\s*:\s*\S.*$/gm;
-// 파일 블록은 h4다 — h3(### `hash` — 제목)은 커밋 서브섹션이라 파일이 아니다.
-// 백틱 뒤 괄호 주석(`(삭제)`, `(→ 새 경로)` 등)은 정당한 표기 — 경로 캡처에서 제외하고 허용.
-const FILE_BLOCK = /^####\s+`([^`]+)`(?:\s+\([^)]*\))?\s*$/gm;
+// 변경 블록은 h4 `#### 변경 N: <한 일>` — 파일이 아니라 변경이 단위다.
+// (h3 `### `hash` — 제목`은 커밋 서브섹션이고, v4의 `#### `path``도 변경 블록이
+// 아니다.) 수평 공백만 소비해 빈 행을 행동 텍스트로 오인하지 않도록 한다.
+const CHANGE_BLOCK = /^####[ \t]+(변경[ \t]+\d+[ \t]*:[ \t]*\S[^\r\n]*?)[ \t]*\r?$/gm;
 // 커밋 서브섹션: h3 헤딩의 백틱 안 16진 해시.
 const COMMIT_SUBSECTION = /^###\s+`([0-9a-fA-F]{6,40})`/gm;
 
@@ -112,9 +120,9 @@ const FENCE_RE = /^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^(?:`{3,}|~{3,})[^\n]*$/gm;
 const CODE_FENCE = /^(`{3,}|~{3,})([^\n]*)\n([\s\S]*?)^(?:`{3,}|~{3,})[^\n]*$/gm;
 
 /**
- * A file block satisfies R13's core-logic requirement only with a fence that is
+ * A change block satisfies R13's core-logic requirement only with a fence that is
  * NOT a mermaid diagram and is NOT empty. The template reserves mermaid for
- * diagrams and requires real code/pseudocode per file, so a mermaid-only or
+ * diagrams and requires real code/pseudocode per change, so a mermaid-only or
  * blank fence is not the logic R13 guarantees.
  */
 function hasCoreCodeFence(body: string): boolean {
@@ -148,7 +156,7 @@ function withoutFencedCode(text: string): string {
 /**
  * Blanks fenced code to same-length spaces (newlines kept), so heading and
  * boundary offsets computed on the masked copy still index the raw text. This
- * is what lets file blocks carry code fences without a `##` comment line inside
+ * is what lets change blocks carry code fences without a `##` comment line inside
  * the fence truncating the block early.
  */
 function maskFenced(text: string): string {
@@ -160,22 +168,48 @@ function withoutMarkdownCode(text: string): string {
 	return withoutFencedCode(text).replace(/`+[^`\n]*`+/g, "");
 }
 
-/** The slice of `text` belonging to one file block: from its heading to the next heading. */
-function fileBlocks(text: string): Array<{ path: string; body: string }> {
+/** The slice of `text` belonging to one change block: from its `#### ` heading to the next heading. */
+function changeBlocks(text: string): Array<{ heading: string; body: string }> {
 	const masked = maskFenced(text);
-	const out: Array<{ path: string; body: string }> = [];
-	const re = new RegExp(FILE_BLOCK.source, "gm");
-	const marks: Array<{ path: string; start: number }> = [];
+	const out: Array<{ heading: string; body: string }> = [];
+	const re = new RegExp(CHANGE_BLOCK.source, "gm");
+	const marks: Array<{ heading: string; start: number }> = [];
 	let m: RegExpExecArray | null = re.exec(masked);
 	while (m !== null) {
 		const captured = m[1];
-		if (captured !== undefined) marks.push({ path: captured, start: m.index + m[0].length });
+		if (captured !== undefined) marks.push({ heading: captured, start: m.index + m[0].length });
 		m = re.exec(masked);
 	}
 	for (const mark of marks) {
 		const next = masked.slice(mark.start).search(/^#{2,4}\s/m);
 		const end = next >= 0 ? mark.start + next : text.length;
-		out.push({ path: mark.path, body: text.slice(mark.start, end) });
+		out.push({ heading: mark.heading, body: text.slice(mark.start, end) });
+	}
+	return out;
+}
+
+/** One `cf-loc` location citation parsed from a change block's `base:`/`head:` anchors. */
+interface LocAnchor {
+	side: AnchorSide;
+	path: string;
+	/** The parsed `:<number>` line, or null when the anchor carries no numeric suffix. */
+	line: number | null;
+}
+
+const ANCHOR_SIDES: AnchorSide[] = ["base", "head"];
+
+/** Every `base:path:line` / `head:path:line` location anchor in one change block. */
+function blockAnchors(body: string): LocAnchor[] {
+	const clean = withoutFencedCode(body);
+	const out: LocAnchor[] = [];
+	for (const side of ANCHOR_SIDES) {
+		for (const value of anchorValues(clean, side)) {
+			if (value === "") continue;
+			const match = value.match(/^(.*):(\d+)$/);
+			if (match !== null && match[1] !== undefined)
+				out.push({ side, path: match[1], line: Number(match[2]) });
+			else out.push({ side, path: value, line: null });
+		}
 	}
 	return out;
 }
@@ -216,23 +250,28 @@ function checkR1Listing(text: string, signalFiles: string[]): CheckItem {
 	};
 }
 
-// R1, coverage form (code step) — every signal file has exactly one file block.
-function checkR1Coverage(blocks: Array<{ path: string }>, signalFiles: string[]): CheckItem {
-	const counts = new Map<string, number>();
-	for (const b of blocks) counts.set(b.path, (counts.get(b.path) ?? 0) + 1);
-	const zero = signalFiles.filter((p) => (counts.get(p) ?? 0) === 0);
-	const dup = signalFiles.filter((p) => (counts.get(p) ?? 0) >= 2);
-	const details: string[] = [];
-	if (zero.length > 0) details.push(`파일 블록에 등장하지 않는 파일: ${zero.join(", ")}`);
-	if (dup.length > 0) details.push(`여러 그룹에 중복 등장한 파일: ${dup.join(", ")}`);
+// R1, coverage form (code step) — every signal file is CITED by at least one
+// change block's location anchors. The unit is the change, not the file, so a
+// file may be cited by several changes (no exactly-once rule); what must not
+// happen is a signal file that never appears in any `바뀐 위치` slot — that is a
+// file the walkthrough silently dropped.
+function checkR1Coverage(
+	blocks: Array<{ heading: string; body: string }>,
+	signalFiles: string[],
+): CheckItem {
+	const cited = new Set<string>();
+	for (const b of blocks) for (const a of blockAnchors(b.body)) cited.add(a.path);
+	const missing = signalFiles.filter((p) => !cited.has(p));
 	return {
 		id: "R1",
-		title: "R1 signal 파일 파일 블록 커버리지 (커버리지형)",
-		pass: signalFiles.length > 0 && details.length === 0,
+		title: "R1 signal 파일 변경 블록 인용 커버리지 (커버리지형)",
+		pass: signalFiles.length > 0 && missing.length === 0,
 		detail:
 			signalFiles.length === 0
 				? "signal 파일이 하나도 분류되지 않았습니다 — evidence 스텝의 분류표를 확인하세요."
-				: details.join(" / "),
+				: missing.length > 0
+					? `어느 변경 블록의 '바뀐 위치'(cf-loc)에도 인용되지 않은 signal 파일: ${missing.join(", ")}`
+					: "",
 	};
 }
 
@@ -256,28 +295,28 @@ function checkR2(text: string): CheckItem {
 
 // R3 — provenance on every 왜. Not "don't explain why": say WHERE the why came
 // from. Read on the code-stripped body so a `[근거:]` inside a code comment can
-// not stand in for the file block's actual 왜 field.
-function checkR3(blocks: Array<{ path: string; body: string }>): CheckItem {
-	const bodies = blocks.map((b) => ({ path: b.path, body: withoutFencedCode(b.body) }));
+// not stand in for the change block's actual 왜 field.
+function checkR3(blocks: Array<{ heading: string; body: string }>): CheckItem {
+	const bodies = blocks.map((b) => ({ heading: b.heading, body: withoutFencedCode(b.body) }));
 	const unmarked = bodies
 		.filter((b) => WHY_PARAGRAPH.test(b.body))
 		.filter((b) => {
 			const m = b.body.match(WHY_PARAGRAPH);
 			return m === null || !PROVENANCE.test(m[0]);
 		})
-		.map((b) => b.path);
-	const noWhy = bodies.filter((b) => !WHY_PARAGRAPH.test(b.body)).map((b) => b.path);
+		.map((b) => b.heading);
+	const noWhy = bodies.filter((b) => !WHY_PARAGRAPH.test(b.body)).map((b) => b.heading);
 	return {
 		id: "R3",
 		title: "R3 왜의 출처 표시",
 		pass: blocks.length > 0 && unmarked.length === 0 && noWhy.length === 0,
 		detail:
 			blocks.length === 0
-				? "파일 블록이 하나도 없습니다."
+				? "변경 블록이 하나도 없습니다."
 				: noWhy.length > 0
-					? `"왜" 필드가 없는 파일: ${noWhy.join(", ")}`
+					? `"왜" 필드가 없는 변경: ${noWhy.join(", ")}`
 					: unmarked.length > 0
-						? `출처 태그(cf-src / [근거:] / [추론:] / Unknown) 없이 단정한 파일: ${unmarked.join(", ")}`
+						? `출처 태그(cf-src / [근거:] / [추론:] / Unknown) 없이 단정한 변경: ${unmarked.join(", ")}`
 						: "",
 	};
 }
@@ -300,11 +339,22 @@ function checkR4(text: string): CheckItem {
 	};
 }
 
-/** The two slots the 목표 section must fill (R16): goal+why, and a one-line core before code. */
+/** The slots the 목표 section must fill (R16): goal+why, a one-line core, and where the understanding came from. */
 const GOAL_SLOTS = [
 	{ label: "무엇을·왜", re: /^###\s*무엇을/m },
 	{ label: "핵심", re: /^###\s*핵심/m },
+	{ label: "출처", re: /^###\s*출처/m },
 ] as const;
+
+function goalSlotHasContent(slice: string, slot: (typeof GOAL_SLOTS)[number]): boolean {
+	const heading = slot.re.exec(slice);
+	if (heading === null) return false;
+	const lineEnd = slice.indexOf("\n", heading.index);
+	const bodyStart = lineEnd >= 0 ? lineEnd + 1 : slice.length;
+	const nextHeading = slice.slice(bodyStart).search(/^#{1,3}\s/m);
+	const bodyEnd = nextHeading >= 0 ? bodyStart + nextHeading : slice.length;
+	return /\S/.test(slice.slice(bodyStart, bodyEnd));
+}
 
 // R16 — the goal / core-message beat, authored before any architecture or code.
 // Measured gap: the document jumped from Background straight to Architecture with
@@ -323,14 +373,14 @@ function checkR16(text: string): CheckItem {
 			detail: "## 목표 섹션이 없습니다 — 코드 전에 이 변경의 목표와 핵심 한 줄을 먼저 전달하세요.",
 		};
 	}
-	const missing = GOAL_SLOTS.filter((s) => !s.re.test(slice)).map((s) => s.label);
+	const missing = GOAL_SLOTS.filter((s) => !goalSlotHasContent(slice, s)).map((s) => s.label);
 	return {
 		id: "R16",
 		title: "R16 목표·핵심 전달",
 		pass: missing.length === 0,
 		detail:
 			missing.length > 0
-				? `목표 섹션에 없는 슬롯: ${missing.join(", ")} (### 무엇을·왜 / ### 핵심)`
+				? `목표 섹션에 없는 슬롯: ${missing.join(", ")} (### 무엇을·왜 / ### 핵심 / ### 출처 — 이 이해에 쓴 근거: Linear·Notion·Slack·커밋·PR·위키·코드 추론)`
 				: "",
 	};
 }
@@ -348,141 +398,126 @@ function anchorValues(body: string, side: AnchorSide): string[] {
 	return values;
 }
 
-/** Parse the final `:<number>` and accept it only for this file block's path. */
-function numericAnchor(body: string, side: AnchorSide, path: string): number | null {
-	for (const value of anchorValues(body, side)) {
-		const match = value.match(/^(.*):(\d+)$/);
-		if (match !== null && match[1] === path) return Number(match[2]);
+/** Location anchors collected per file path across all change blocks. */
+interface FileAnchors {
+	baseLines: number[];
+	headLines: number[];
+	baseNonNumeric: boolean;
+	headNonNumeric: boolean;
+}
+
+/** Gathers every change block's `base:`/`head:` anchors keyed by file path. */
+function collectFileAnchors(blocks: Array<{ body: string }>): Map<string, FileAnchors> {
+	const byPath = new Map<string, FileAnchors>();
+	for (const b of blocks) {
+		for (const a of blockAnchors(b.body)) {
+			const e = byPath.get(a.path) ?? {
+				baseLines: [],
+				headLines: [],
+				baseNonNumeric: false,
+				headNonNumeric: false,
+			};
+			if (a.line === null) {
+				if (a.side === "base") e.baseNonNumeric = true;
+				else e.headNonNumeric = true;
+			} else {
+				(a.side === "base" ? e.baseLines : e.headLines).push(a.line);
+			}
+			byPath.set(a.path, e);
+		}
 	}
-	return null;
+	return byPath;
 }
 
-/** The pre-hunk R5 contract: presence, with numeric anchors path-checked. */
-function hasLegacyAnchor(body: string, side: AnchorSide, path: string): boolean {
-	return anchorValues(body, side).some((value) => {
-		if (value === "") return false;
-		const match = value.match(/^(.*):(\d+)$/);
-		return match === null || match[1] === path;
-	});
-}
-
-function legacyR5Failures(
-	blocks: Array<{ path: string; body: string }>,
-	addedSet: Set<string>,
-): { noAnchor: string[]; placeholder: string[] } {
-	const noAnchor = blocks
-		.filter((block) => {
-			const body = withoutFencedCode(block.body);
-			const hasHead = hasLegacyAnchor(body, "head", block.path);
-			if (addedSet.has(block.path)) return !hasHead;
-			return !(hasHead && hasLegacyAnchor(body, "base", block.path));
-		})
-		.map((block) => block.path);
-	const placeholder = blocks
-		.filter((block) => {
-			if (addedSet.has(block.path)) return false;
-			const body = withoutFencedCode(block.body);
-			const base = numericAnchor(body, "base", block.path);
-			const head = numericAnchor(body, "head", block.path);
-			return base === 1 && head === 1;
-		})
-		.map((block) => block.path);
-	return { noAnchor, placeholder };
-}
-
-// R5 — both endpoints of the move (base:/head: anchors). An ADDED file is asked
-// for the head anchor alone. Read on the code-stripped body; the template places
-// these in the cf-loc slot. Without hunk metadata the check only asks that the
-// anchors be present; with metadata it also checks numeric anchors against ranges.
+// R5 — traceability, file-centric. Every signal file must have its before AND
+// after location cited somewhere in the change blocks' `바뀐 위치` (cf-loc)
+// slots — an ADDED file needs the head anchor alone, a DELETED file the base
+// alone — and every cited numeric anchor must land in a real diff hunk. Because
+// the unit is the change, one file's anchors may be spread across several change
+// blocks, so they are gathered per path first. New-ness comes from `A` in
+// `git diff --name-status`; deleted-ness (no head side) comes from the hunk
+// header. Without hunk metadata for a file, the check falls back to
+// presence-only and rejects the `:1 → :1` placeholder on a modified file.
 function checkR5(
-	blocks: Array<{ path: string; body: string }>,
+	blocks: Array<{ heading: string; body: string }>,
+	signalFiles: string[],
 	addedFiles: string[] | undefined,
 	diffHunks: DiffHunk[] | undefined,
 ): CheckItem {
 	const addedSet = new Set(addedFiles ?? []);
-	const hasDiffHunks = (diffHunks?.length ?? 0) > 0;
-	if (!hasDiffHunks) {
-		const { noAnchor, placeholder } = legacyR5Failures(blocks, addedSet);
-		return {
-			id: "R5",
-			title: "R5 추적성",
-			pass: blocks.length > 0 && noAnchor.length === 0 && placeholder.length === 0,
-			detail:
-				blocks.length === 0
-					? "파일 블록이 하나도 없습니다."
-					: noAnchor.length > 0
-						? `base/head 위치가 모두 있지 않은 파일: ${noAnchor.join(", ")}`
-						: placeholder.length > 0
-							? `cf-loc가 실제 변경 위치가 아니라 :1 → :1 플레이스홀더인 파일: ${placeholder.join(", ")} — git으로 변경 hunk의 base/head 라인을 확인해 적는다`
-							: "",
-		};
-	}
-
+	const byPath = collectFileAnchors(blocks);
 	const hunksByPath = new Map<string, DiffHunk[]>();
 	for (const hunk of diffHunks ?? []) {
 		const hunks = hunksByPath.get(hunk.path) ?? [];
 		hunks.push(hunk);
 		hunksByPath.set(hunk.path, hunks);
 	}
-	const fallbackBlocks = blocks.filter((block) => !hunksByPath.has(block.path));
-	const fallback = legacyR5Failures(fallbackBlocks, addedSet);
-	const missingAnchor: string[] = [];
-	const outsideHunk: string[] = [];
-	for (const block of blocks) {
-		const hunks = hunksByPath.get(block.path);
-		if (hunks === undefined) continue;
-		const body = withoutFencedCode(block.body);
-		const base = numericAnchor(body, "base", block.path);
-		const head = numericAnchor(body, "head", block.path);
-		const needsBase = !addedSet.has(block.path) && hunks.some((hunk) => hunk.base !== null);
-		const needsHead = hunks.some((hunk) => hunk.head !== null);
 
-		if (needsBase && base === null) missingAnchor.push(`${block.path} (base)`);
-		if (needsHead && head === null) missingAnchor.push(`${block.path} (head)`);
-		if (
-			needsBase &&
-			base !== null &&
-			!hunks.some(
-				(hunk) =>
-					hunk.base !== null &&
-					base >= hunk.base.start &&
-					base < hunk.base.start + hunk.base.count,
+	const missing: string[] = [];
+	const outside: string[] = [];
+	const placeholder: string[] = [];
+
+	for (const file of signalFiles) {
+		const e = byPath.get(file);
+		const hasBase = (e?.baseLines.length ?? 0) > 0 || (e?.baseNonNumeric ?? false);
+		const hasHead = (e?.headLines.length ?? 0) > 0 || (e?.headNonNumeric ?? false);
+		const hunks = hunksByPath.get(file);
+
+		if (hunks !== undefined && hunks.length > 0) {
+			const needsBase = !addedSet.has(file) && hunks.some((h) => h.base !== null);
+			const needsHead = hunks.some((h) => h.head !== null);
+			if (needsBase && (e?.baseLines.length ?? 0) === 0) missing.push(`${file} (base)`);
+			if (needsHead && (e?.headLines.length ?? 0) === 0) missing.push(`${file} (head)`);
+			for (const bl of e?.baseLines ?? [])
+				if (
+					!hunks.some(
+						(h) => h.base !== null && bl >= h.base.start && bl < h.base.start + h.base.count,
+					)
+				)
+					outside.push(`${file} (base:${bl})`);
+			for (const hl of e?.headLines ?? [])
+				if (
+					!hunks.some(
+						(h) => h.head !== null && hl >= h.head.start && hl < h.head.start + h.head.count,
+					)
+				)
+					outside.push(`${file} (head:${hl})`);
+		} else {
+			if (addedSet.has(file)) {
+				if (!hasHead) missing.push(`${file} (head)`);
+			} else if (!(hasBase && hasHead)) {
+				missing.push(`${file} (base/head)`);
+			}
+			if (
+				!addedSet.has(file) &&
+				e !== undefined &&
+				e.baseLines.length === 1 &&
+				e.baseLines[0] === 1 &&
+				e.headLines.length === 1 &&
+				e.headLines[0] === 1
 			)
-		)
-			outsideHunk.push(`${block.path} (base:${base})`);
-		if (
-			needsHead &&
-			head !== null &&
-			!hunks.some(
-				(hunk) =>
-					hunk.head !== null &&
-					head >= hunk.head.start &&
-					head < hunk.head.start + hunk.head.count,
-			)
-		)
-			outsideHunk.push(`${block.path} (head:${head})`);
+				placeholder.push(file);
+		}
 	}
+
 	return {
 		id: "R5",
 		title: "R5 추적성",
 		pass:
-			blocks.length > 0 &&
-			fallback.noAnchor.length === 0 &&
-			fallback.placeholder.length === 0 &&
-			missingAnchor.length === 0 &&
-			outsideHunk.length === 0,
+			signalFiles.length > 0 &&
+			missing.length === 0 &&
+			outside.length === 0 &&
+			placeholder.length === 0,
 		detail:
-			blocks.length === 0
-				? "파일 블록이 하나도 없습니다."
-				: fallback.noAnchor.length > 0
-					? `base/head 위치가 모두 있지 않은 파일(hunk 없는 파일은 legacy 규칙): ${fallback.noAnchor.join(", ")}`
-					: fallback.placeholder.length > 0
-						? `cf-loc가 실제 변경 위치가 아니라 :1 → :1 플레이스홀더인 파일: ${fallback.placeholder.join(", ")} — git으로 변경 hunk의 base/head 라인을 확인해 적는다`
-						: missingAnchor.length > 0
-							? `실제 diff hunk의 숫자 위치가 없는 파일: ${missingAnchor.join(", ")}`
-							: outsideHunk.length > 0
-								? `실제 diff hunk 범위 밖의 앵커: ${outsideHunk.join(", ")}`
-								: "",
+			signalFiles.length === 0
+				? "signal 파일이 하나도 없습니다."
+				: missing.length > 0
+					? `변경 블록의 '바뀐 위치'(cf-loc)에 base/head 위치가 인용되지 않은 signal 파일: ${missing.join(", ")}`
+					: outside.length > 0
+						? `실제 diff hunk 범위 밖의 위치 앵커: ${outside.join(", ")}`
+						: placeholder.length > 0
+							? `cf-loc가 실제 변경 위치가 아니라 :1 → :1 플레이스홀더인 파일: ${placeholder.join(", ")} — git으로 변경 hunk의 base/head 라인을 확인해 적는다`
+							: "",
 	};
 }
 
@@ -503,6 +538,148 @@ function levelSlice(text: string, level: string): string | null {
 	const start = m.index + m[0].length;
 	const next = text.slice(start).search(/^#{2,3}\s/m);
 	return next >= 0 ? text.slice(start, start + next) : text.slice(start);
+}
+
+/** The bodies of every ` ```mermaid ` fence in a raw (unmasked) slice. */
+function mermaidFences(rawSlice: string): string[] {
+	const out: string[] = [];
+	const re = /```mermaid\r?\n([\s\S]*?)```/g;
+	let m: RegExpExecArray | null = re.exec(rawSlice);
+	while (m !== null) {
+		if (m[1] !== undefined) out.push(m[1]);
+		m = re.exec(rawSlice);
+	}
+	return out;
+}
+
+/** A node/label token that is a source file path (including root-level files). */
+const FILE_PATH_TOKEN = /(?:^|[\s"'([{])(?:[\w.@-]+\/)*[\w.@-]+\.(?:ts|tsx|js|jsx|mjs|cjs|py|md|json|sql|yaml|yml|css|scss)\b/i;
+
+const DIAGRAM_TOKEN = "[A-Za-z0-9_./@-]+";
+const DIAGRAM_NON_NODE_LINE = /^(?:flowchart|graph|classDiagram|erDiagram|sequenceDiagram|stateDiagram(?:-v2)?|subgraph|end|direction|title|accTitle|accDescr|note|classDef|style|linkStyle|click)\b/i;
+const DIAGRAM_NODE_DECLARATION = new RegExp(
+	`(?:^|[\\s,])(${DIAGRAM_TOKEN})\\s*(?:\\[\\[([^\\]\\r\\n]*)\\]\\]|\\[([^\\]\\r\\n]*)\\]|\\(\\(([^)\\r\\n]*)\\)\\)|\\(([^)\\r\\n]*)\\)\\)|\\{\\{([^}\\r\\n]*)\\}\\}|\\{([^}\\r\\n]*)\\})`,
+	"g",
+);
+const DIAGRAM_RELATION = new RegExp(
+	`(?:^|[\\s,])(${DIAGRAM_TOKEN}?)\\s*(?:["'][^"\\r\\n]*["']\\s*)?[<|>*o.{}-]{2,}\\s*(?:["'][^"\\r\\n]*["']\\s*)?(${DIAGRAM_TOKEN})`,
+	"g",
+);
+
+function diagramNodeLabels(fence: string): string[] {
+	const labels: string[] = [];
+	for (const rawLine of fence.split(/\r?\n/)) {
+		const line = rawLine.replace(/%%.*$/, "").trim();
+		if (line === "" || DIAGRAM_NON_NODE_LINE.test(line)) continue;
+
+		const classDeclaration = new RegExp(`^class\\s+(${DIAGRAM_TOKEN})\\b`, "i").exec(line);
+		if (classDeclaration?.[1] !== undefined) {
+			labels.push(classDeclaration[1]);
+			continue;
+		}
+
+		const withoutEdgeLabels = line.replace(/\|[^|\r\n]*\|/g, "");
+		DIAGRAM_NODE_DECLARATION.lastIndex = 0;
+		let declaration: RegExpExecArray | null = DIAGRAM_NODE_DECLARATION.exec(withoutEdgeLabels);
+		while (declaration !== null) {
+			for (const value of declaration.slice(1)) {
+				if (value !== undefined) labels.push(value);
+			}
+			declaration = DIAGRAM_NODE_DECLARATION.exec(withoutEdgeLabels);
+		}
+
+		const block = new RegExp(`^(${DIAGRAM_TOKEN})\\s*\\{$`).exec(withoutEdgeLabels);
+		if (block?.[1] !== undefined) labels.push(block[1]);
+
+		DIAGRAM_RELATION.lastIndex = 0;
+		let relationship: RegExpExecArray | null = DIAGRAM_RELATION.exec(withoutEdgeLabels);
+		while (relationship !== null) {
+			if (relationship[1] !== undefined) labels.push(relationship[1]);
+			if (relationship[2] !== undefined) labels.push(relationship[2]);
+			relationship = DIAGRAM_RELATION.exec(withoutEdgeLabels);
+		}
+
+		const standalone = new RegExp(`^(${DIAGRAM_TOKEN})$`).exec(withoutEdgeLabels);
+		if (standalone?.[1] !== undefined) labels.push(standalone[1]);
+	}
+	return labels;
+}
+
+// Component/domain diagram nodes must name a MODULE/concept (a feature, use case,
+// hook, service, entity), not a source file path — a file path is WHERE a symbol
+// lives (the card's `레이어` slot), not WHAT the component is. Measured gap: the
+// component diagram nodes were full file paths that truncated mid-path
+// (`health-`, `proposal-`) and told the reader a location, not a module.
+function diagramFilePathNodes(rawSlice: string): boolean {
+	return mermaidFences(rawSlice).some((fence) =>
+		diagramNodeLabels(fence).some((label) => FILE_PATH_TOKEN.test(label)),
+	);
+}
+
+// A domain object diagram (`classDiagram`) drawn with empty class bodies is an
+// opaque box. Measured gap: the domain classDiagram showed only class names with
+// no members or methods, so a reader could not tell what each object holds or
+// does. Every rendered class must carry at least one member/method — explicit
+// declarations, relationship endpoints, and `Class : +field` declarations all
+// create class boxes in Mermaid.
+function classDiagramMissingMembers(rawSlice: string): boolean {
+	const fences = mermaidFences(rawSlice).filter((f) => /\bclassDiagram\b/.test(f));
+	if (fences.length === 0) return false;
+	return fences.some((fence) => {
+		const lines = fence.split(/\r?\n/);
+		const classes = new Map<string, boolean>();
+		const declareClass = (name: string, hasMember = false): void => {
+			classes.set(name, (classes.get(name) ?? false) || hasMember);
+		};
+
+		for (const line of lines) {
+			const member = line.match(/^\s*([A-Za-z_][\w-]*)\s*:\s*[+\-#~]?\s*\S/);
+			if (member?.[1] !== undefined) declareClass(member[1], true);
+
+			const relationship = line.match(
+				/^\s*([A-Za-z_][\w-]*)\s*(?:["'][^"']*["']\s+)?[<|>*o.-]{2,}(?:\s+["'][^"']*["'])?\s*([A-Za-z_][\w-]*)\b/,
+			);
+			if (relationship?.[1] !== undefined && relationship[2] !== undefined) {
+				declareClass(relationship[1]);
+				declareClass(relationship[2]);
+			}
+		}
+
+		for (let index = 0; index < lines.length; index += 1) {
+			const declaration = lines[index]?.match(/^\s*class\s+([A-Za-z_][\w-]*)\b(.*)$/);
+			if (declaration?.[1] === undefined) continue;
+
+			const name = declaration[1];
+			const tail = declaration[2] ?? "";
+			const openBrace = tail.indexOf("{");
+			if (openBrace < 0) {
+				declareClass(name);
+				continue;
+			}
+
+			const sameLineBody = tail.slice(openBrace + 1);
+			const closeBrace = sameLineBody.indexOf("}");
+			if (closeBrace >= 0) {
+				declareClass(name, sameLineBody.slice(0, closeBrace).trim().length > 0);
+				continue;
+			}
+
+			let hasMember = false;
+			for (let bodyIndex = index + 1; bodyIndex < lines.length; bodyIndex += 1) {
+				const bodyLine = lines[bodyIndex]?.trim() ?? "";
+				if (bodyLine === "}") {
+					index = bodyIndex;
+					break;
+				}
+				if (bodyLine !== "" && !bodyLine.startsWith("%%") && !/^<<.*>>$/.test(bodyLine)) {
+					hasMember = true;
+				}
+			}
+			declareClass(name, hasMember);
+		}
+
+		return classes.size > 0 && [...classes.values()].some((hasMember) => !hasMember);
+	});
 }
 
 // R9 — the three architecture levels, each with a mermaid diagram or a reasoned waiver.
@@ -575,11 +752,19 @@ function checkR14(text: string): CheckItem {
 const BOUNDARY_MARKERS = ["영향 인터페이스", "의존 방향"] as const;
 
 // R15 — the boundary / dependency / use-case change map, read on the
-// `### 경계·의존·유스케이스` sub-slice with fences masked (an example block inside a
-// fence must not satisfy the gate — same masking discipline as R14).
+// `### 경계·의존·유스케이스` sub-slice with fences masked for the slot check, but
+// the RAW slice for the orchestration-diagram check (a mermaid fence is masked
+// away, so it must be looked for before masking). Measured gap: the use-case
+// level was a list of static arch-entity cards with cryptic names
+// ("V2 proposal detail / active read") and no flow — a reader could not see the
+// call order or which step moved. The rewrite requires the block to SHOW the
+// orchestration as a mermaid diagram (a sequenceDiagram is the recommended type)
+// with the changed step marked (leveling/marker judged by R12), alongside the
+// existing behaviour-unit cards and the dependency-direction verdict.
 function checkR15(text: string): CheckItem {
+	const rawSlice = levelSlice(text, "경계·의존·유스케이스");
 	const slice = levelSlice(maskFenced(text), "경계·의존·유스케이스");
-	if (slice === null) {
+	if (slice === null || rawSlice === null) {
 		return {
 			id: "R15",
 			title: "R15 경계·의존·유스케이스 블록",
@@ -592,13 +777,20 @@ function checkR15(text: string): CheckItem {
 	// arch-entity opening tag — prose mentions or unsupported values are not a
 	// change map.
 	if (!hasValidArchEntity(slice)) missing.push("변경종류(data-change: new|mod|del)");
+	// The orchestration must be a real diagram, not prose — the flow (call order,
+	// changed step) is shown, not narrated. A reasoned waiver stands in when the
+	// diff genuinely changes no use-case flow.
+	const hasOrchestration =
+		mermaidFences(rawSlice).some((fence) => /^\s*sequenceDiagram\b/m.test(fence)) ||
+		ARCH_WAIVER.test(rawSlice);
+	if (!hasOrchestration) missing.push("오케스트레이션 다이어그램(mermaid sequenceDiagram)");
 	return {
 		id: "R15",
 		title: "R15 경계·의존·유스케이스 블록",
 		pass: missing.length === 0,
 		detail:
 			missing.length > 0
-				? `경계·의존·유스케이스 블록에 없는 슬롯: ${missing.join(", ")} — 동작 단위마다 변경종류(arch-entity data-change)와 영향 인터페이스를 적고, 의존 방향을 판정한다 (architecture-boundaries rule 참조)`
+				? `경계·의존·유스케이스 블록에 없는 슬롯: ${missing.join(", ")} — 유스케이스마다 오케스트레이션(mermaid sequenceDiagram)으로 흐름과 바뀐 단계를 보이고, 동작 단위마다 변경종류(arch-entity data-change)·영향 인터페이스를 적고, 의존 방향을 판정한다 (architecture-boundaries rule 참조)`
 				: "",
 	};
 }
@@ -680,8 +872,9 @@ function hasValidArchEntity(slice: string): boolean {
 // and interface (functions), plus a change kind. Measured gap: the component
 // diagram was bare class names — `CurrentBoostPackInfoCard` alone read as opaque.
 function checkR18(text: string): CheckItem {
+	const rawSlice = levelSlice(text, "컴포넌트 레벨");
 	const slice = levelSlice(maskFenced(text), "컴포넌트 레벨");
-	if (slice === null) {
+	if (slice === null || rawSlice === null) {
 		return {
 			id: "R18",
 			title: "R18 컴포넌트 레벨 노드 카드",
@@ -689,19 +882,28 @@ function checkR18(text: string): CheckItem {
 			detail: "컴포넌트 레벨 헤딩(### 컴포넌트 레벨)이 없습니다",
 		};
 	}
-	if (ARCH_WAIVER.test(slice)) {
+	// The diagram-node ban applies whether or not the level is waived — a waiver
+	// says "no structural change", not "file paths are fine as nodes".
+	const pathNode = diagramFilePathNodes(rawSlice);
+	if (ARCH_WAIVER.test(slice) && !pathNode) {
 		return { id: "R18", title: "R18 컴포넌트 레벨 노드 카드", pass: true, detail: "" };
 	}
-	const cards = archEntityCards(slice);
 	const missing: string[] = [];
-	if (cards.length === 0) {
-		missing.push("arch-entity 카드", "변경종류(data-change: new|mod|del)");
-	} else {
-		cards.forEach((card, index) => {
-			const cardMissing: string[] = COMPONENT_CARD_MARKERS.filter((label) => !card.body.includes(label));
-			if (!card.validDataChange) cardMissing.push("변경종류(data-change: new|mod|del)");
-			if (cardMissing.length > 0) missing.push(`카드 ${index + 1}: ${cardMissing.join(", ")}`);
-		});
+	if (pathNode)
+		missing.push(
+			"다이어그램 노드가 파일 경로 — 컴포넌트 노드는 모듈/개념 이름(피처·유스케이스·훅·서비스)으로 적고, 위치는 카드의 레이어 슬롯에 패키지/레이어 단위로 적는다",
+		);
+	if (!ARCH_WAIVER.test(slice)) {
+		const cards = archEntityCards(slice);
+		if (cards.length === 0) {
+			missing.push("arch-entity 카드", "변경종류(data-change: new|mod|del)");
+		} else {
+			cards.forEach((card, index) => {
+				const cardMissing: string[] = COMPONENT_CARD_MARKERS.filter((label) => !card.body.includes(label));
+				if (!card.validDataChange) cardMissing.push("변경종류(data-change: new|mod|del)");
+				if (cardMissing.length > 0) missing.push(`카드 ${index + 1}: ${cardMissing.join(", ")}`);
+			});
+		}
 	}
 	return {
 		id: "R18",
@@ -710,6 +912,62 @@ function checkR18(text: string): CheckItem {
 		detail:
 			missing.length > 0
 				? `컴포넌트 노드 카드에 없는 슬롯: ${missing.join(", ")} — 변경 노드마다 arch-entity로 레이어·책임·인터페이스·변경종류를 적는다`
+				: "",
+	};
+}
+
+/** The label each 도메인 레벨 arch-entity card must carry (R21). */
+const DOMAIN_CARD_MARKERS = ["책임"] as const;
+
+// R21 — the domain level, beyond the entity/relation diagram (R9/R12), decodes
+// each touched domain object with an arch-entity card: what it is responsible for
+// (its 책임 / invariant) and how it changed (data-change). Measured gap: the
+// domain level was the thinnest of the three — a bare diagram whose nodes were
+// sometimes narrative concepts (`ModelAlias`, `LegacyProductKey`) with no
+// responsibility or change kind, so a reader could not tell which domain object
+// this diff added or modified, or what it now guarantees. A reasoned
+// `구조 변화 없음: <사유>` waiver stands in when the diff changes no domain object.
+function checkR21(text: string): CheckItem {
+	const rawSlice = levelSlice(text, "도메인 레벨");
+	const slice = levelSlice(maskFenced(text), "도메인 레벨");
+	if (slice === null || rawSlice === null) {
+		return {
+			id: "R21",
+			title: "R21 도메인 레벨 엔티티 카드",
+			pass: false,
+			detail: "도메인 레벨 헤딩(### 도메인 레벨)이 없습니다",
+		};
+	}
+	const missing: string[] = [];
+	// The diagram bans hold even under a waiver: an object diagram, if drawn, must
+	// name domain concepts (not file paths) and must show each object's members.
+	if (diagramFilePathNodes(rawSlice))
+		missing.push(
+			"다이어그램 노드가 파일 경로 — 도메인 노드는 실재 비즈니스 개념/엔티티 이름으로 적는다",
+		);
+	if (classDiagramMissingMembers(rawSlice))
+		missing.push(
+			"객체 다이어그램의 클래스 박스가 비어 있음 — 각 객체의 멤버 변수와 메소드(메시지)를 채운다",
+		);
+	if (!ARCH_WAIVER.test(slice)) {
+		const cards = archEntityCards(slice);
+		if (cards.length === 0) {
+			missing.push("arch-entity 카드", "변경종류(data-change: new|mod|del)");
+		} else {
+			cards.forEach((card, index) => {
+				const cardMissing: string[] = DOMAIN_CARD_MARKERS.filter((label) => !card.body.includes(label));
+				if (!card.validDataChange) cardMissing.push("변경종류(data-change: new|mod|del)");
+				if (cardMissing.length > 0) missing.push(`카드 ${index + 1}: ${cardMissing.join(", ")}`);
+			});
+		}
+	}
+	return {
+		id: "R21",
+		title: "R21 도메인 레벨 엔티티 카드",
+		pass: missing.length === 0,
+		detail:
+			missing.length > 0
+				? `도메인 엔티티 카드에 없는 슬롯: ${missing.join(", ")} — 이 diff가 건드린 도메인 객체마다 arch-entity로 책임(불변식)·변경종류를 적는다(서사용 가짜 개념이 아니라 실재 도메인 객체)`
 				: "",
 	};
 }
@@ -820,13 +1078,13 @@ function checkR10(text: string, commitHashes: string[] | undefined): CheckItem {
 }
 
 // R13 — the commit-spined walkthrough. Each Change Group holds at least one
-// commit subsection whose hash is a real range commit, and each file block
+// commit subsection whose hash is a real range commit, and each change block
 // carries one core-logic code fence. Measured baseline: the code section sat
-// disconnected from the commit history, and file blocks pointed at line
+// disconnected from the commit history, and change blocks pointed at line
 // numbers without ever showing the logic.
 function checkR13(
 	text: string,
-	blocks: Array<{ path: string; body: string }>,
+	blocks: Array<{ heading: string; body: string }>,
 	commitHashes: string[] | undefined,
 ): CheckItem {
 	const groups = groupSlices(text);
@@ -849,8 +1107,10 @@ function checkR13(
 			if (bogus.length > 0) problems.push(`${g.title}: 범위에 없는 커밋 해시 ${bogus.join(", ")}`);
 		}
 	}
-	const noCode = blocks.filter((b) => !hasCoreCodeFence(b.body)).map((b) => b.path);
-	if (noCode.length > 0) problems.push(`핵심 로직 코드 펜스(mermaid·빈 펜스 제외)가 없는 파일: ${noCode.join(", ")}`);
+	if (blocks.length === 0) problems.push("변경 블록(#### 변경 N: …)이 하나도 없습니다");
+	const noCode = blocks.filter((b) => !hasCoreCodeFence(b.body)).map((b) => b.heading);
+	if (noCode.length > 0)
+		problems.push(`핵심 로직 코드 펜스(mermaid·빈 펜스 제외)가 없는 변경: ${noCode.join(", ")}`);
 	return {
 		id: "R13",
 		title: "R13 커밋 뼈대 + 핵심 로직 코드",
@@ -905,7 +1165,7 @@ function checkR11(text: string): CheckItem {
 
 export function checkStructure(text: string, input: StructureInput): StructureResult {
 	const items: CheckItem[] = [];
-	const blocks = fileBlocks(text);
+	const blocks = changeBlocks(text);
 
 	switch (input.step) {
 		case "evidence":
@@ -924,6 +1184,7 @@ export function checkStructure(text: string, input: StructureInput): StructureRe
 			items.push(checkR17(text));
 			items.push(checkR18(text));
 			items.push(checkR19(text));
+			items.push(checkR21(text));
 			break;
 		case "intuition":
 			// No slot of its own — R6 (the judge) is its rubric coverage; the
@@ -935,7 +1196,7 @@ export function checkStructure(text: string, input: StructureInput): StructureRe
 		case "code":
 			items.push(checkR2(text));
 			items.push(checkR3(blocks));
-			items.push(checkR5(blocks, input.addedFiles, input.diffHunks));
+			items.push(checkR5(blocks, input.signalFiles, input.addedFiles, input.diffHunks));
 			items.push(checkR1Coverage(blocks, input.signalFiles));
 			items.push(checkR13(text, blocks, input.commitHashes));
 			break;

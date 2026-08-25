@@ -31,8 +31,14 @@ R12 — the architecture diagram's correspondence to the diff (only when the ste
   diagram must also be COMPLETE: every distinct process, service, or store the Evidence or
   Background prose names as involved in this change must appear as a node. If the prose names a
   process the diagram omits (e.g. a separate Python API or a CLI the prose references but the
-  diagram leaves out), that is a fail — quote the prose sentence naming the omitted process. In
-  the pass case put into quote the diagram's label string, the body sentence where the same
+  diagram leaves out), that is a fail — quote the prose sentence naming the omitted process.
+  For the 컴포넌트 레벨 and 도메인 레벨 specifically: nodes name a MODULE/component or a
+  business CONCEPT, never a source file path (a path is a location, told in the card's 레이어
+  slot — a file-path node fails). A 도메인 레벨 node must be a real business concept in the
+  codebase's own terms; a bare schema-encoding name with no business meaning attached
+  (`GenerationIntakeTimeCodesSchema` standing alone) is not a domain object and fails. If a
+  domain classDiagram is drawn, its class boxes must carry members/methods — empty boxes fail.
+  In the pass case put into quote the diagram's label string, the body sentence where the same
   identifier appears, and the phrase that evidences the change marker, together.
   If there is no diagram at all and all three levels have a reasoned
   `구조 변화 없음: <사유 한 문장>` waiver, R12 is a pass. In this all-waiver branch, quote must

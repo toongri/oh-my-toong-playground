@@ -52,7 +52,7 @@ const GOOD_DOC = `# 설명
 ### \`ab12cd3\` — fix: 상태 갱신 락 통합
 락 획득/해제를 한 파일로 모은다.
 
-#### \`lib/state-lock.ts\`
+#### 변경 1: 락 획득·해제를 공용 모듈로 추출
 <div class="cf">
 <p><strong>역할/변경 전</strong> — 없던 파일</p>
 <p><strong>바뀐 것</strong> — 락이 여기로 모였다</p>
@@ -105,6 +105,15 @@ flowchart LR
 
 ### 경계·의존·유스케이스
 
+\`\`\`mermaid
+sequenceDiagram
+  participant CLI_A as ultragoal CLI
+  participant Lock as withLock (신설)
+  participant State as state file
+  CLI_A->>Lock: 상태 쓰기 요청
+  Lock->>State: 락 획득 → 쓰기 → 해제
+\`\`\`
+
 <div class="arch-entity" data-change="new">
 <p><strong>이름</strong> 상태 갱신 락 통합</p>
 <p><strong>한 일</strong> 두 CLI의 상태 쓰기를 공용 락으로 직렬화</p>
@@ -127,6 +136,9 @@ const GOAL_SECTION = `## 목표
 
 ### 핵심
 코드를 보기 전에: 락 획득/해제를 한 곳으로 모으는 작은 추출이다.
+
+### 출처
+커밋 본문 "상태 갱신 락 통합"과 코드 추론.
 `;
 
 /** 9스텝 전부의 구조 슬롯을 갖춘 문서. */
@@ -508,7 +520,7 @@ describe("스텝 스코핑 — 스텝마다 다른 슬롯만 본다", () => {
 		expect(items).toContain("lib/state-lock.ts");
 	});
 
-	test("signal 파일이 Evidence 표에만 있고 Change Group 파일 블록이 없으면 code 스텝이 실패하고 사유에 경로가 나온다", async () => {
+	test("signal 파일이 Evidence 표에만 있고 Change Group 변경 블록이 없으면 code 스텝이 실패하고 사유에 경로가 나온다", async () => {
 		const { submitStep } = await advanceTo("code", WITH_ARCH_DOC);
 		const noGroupDoc = `${WITH_BACKGROUND_DOC}
 ## Change Group 1: 관련 없는 변경
@@ -533,7 +545,7 @@ const x = 1;
 		expect(state().last_failure.items.join(" ")).toContain("lib/state-lock.ts");
 	});
 
-	test("같은 signal 파일의 파일 블록이 두 Change Group에 각각 있으면 code 스텝이 실패하고 사유가 중복임을 밝힌다", async () => {
+	test("같은 signal 파일을 두 변경 블록이 각각 인용해도 code 스텝은 통과한다 — 단위는 파일이 아니라 변경이다", async () => {
 		const { submitStep } = await advanceTo("code", WITH_ARCH_DOC);
 		const duplicatedDoc = `${WITH_BACKGROUND_DOC}
 ## Change Group 1: 락을 공용 모듈로 뽑아낸다
@@ -543,7 +555,7 @@ const x = 1;
 ### \`ab12cd3\` — fix: 첫 손질
 락을 옮긴다.
 
-#### \`lib/state-lock.ts\`
+#### 변경 1: 락 획득/해제를 공용 함수로 추출
 <div class="cf">
 <p><strong>왜</strong> — <span class="cf-src">근거</span> "첫 번째 이유"</p>
 <p class="cf-loc"><code>base:lib/state-lock.ts:1</code> → <code>head:lib/state-lock.ts:14</code></p>
@@ -560,7 +572,7 @@ const a = 1;
 ### \`ef45ab6\` — fix: 둘째 손질
 같은 파일을 다시 만진다.
 
-#### \`lib/state-lock.ts\`
+#### 변경 2: 같은 파일에 타임아웃 가드를 덧댄다
 <div class="cf">
 <p><strong>왜</strong> — <span class="cf-src">근거</span> "두 번째 이유"</p>
 <p class="cf-loc"><code>base:lib/state-lock.ts:14</code> → <code>head:lib/state-lock.ts:20</code></p>
@@ -571,10 +583,7 @@ const b = 2;
 \`\`\`
 `;
 		const rc = submitStep(SID, "code", docFile(duplicatedDoc), ["lib/state-lock.ts"], []);
-		expect(rc).toBe(1);
-		const items = state().last_failure.items.join(" ");
-		expect(items).toContain("lib/state-lock.ts");
-		expect(items).toContain("중복");
+		expect(rc).toBe(0);
 	});
 
 	test("intuition 스텝은 최소 문서로도 구조 검사를 통과한다", async () => {
