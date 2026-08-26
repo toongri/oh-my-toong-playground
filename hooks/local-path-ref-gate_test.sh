@@ -717,13 +717,13 @@ test_missing_jq_fails_open() {
     [[ "$exit_code" -eq 0 ]]
 }
 
-test_yaml_registers_bash_pretooluse_shim() {
-    awk '
-        /component: local-path-ref-gate\.sh/ { found=1; next }
-        found && /matcher: "Bash"/ { matched=1; exit }
-        found && /component:/ { exit }
-        END { exit !(found && matched) }
-    ' "$SCRIPT_DIR/../claude.yaml"
+# The hook was deliberately deregistered from claude.yaml for CPU cost
+# (commit 380a323a); the script and this test file are preserved, and
+# re-registration is tracked by GitHub issue #276. This guards the
+# deregistered state so an accidental re-registration is caught before it
+# ships without the re-benchmark that issue #276 requires.
+test_yaml_does_not_register_bash_pretooluse_shim() {
+    ! grep -F 'component: local-path-ref-gate.sh' "$SCRIPT_DIR/../claude.yaml" >/dev/null
 }
 
 test_hook_enables_strict_mode() {
@@ -779,7 +779,7 @@ run_test test_placeholder_resolving_to_untracked_file_warns_via_additional_conte
 run_test test_placeholder_resolving_to_untracked_file_via_staged_commit_warns
 run_test test_old_violation_with_unrelated_new_edit_allows
 run_test test_missing_jq_fails_open
-run_test test_yaml_registers_bash_pretooluse_shim
+run_test test_yaml_does_not_register_bash_pretooluse_shim
 
 echo "Passed: $TESTS_PASSED, Failed: $TESTS_FAILED"
 [[ "$TESTS_FAILED" -eq 0 ]]

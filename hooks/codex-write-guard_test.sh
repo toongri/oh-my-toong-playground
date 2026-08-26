@@ -2700,6 +2700,210 @@ test_qa_waive_denied_nojq() {
 }
 
 # =============================================================================
+# O(1)-fork heredoc-strip+mask rewrite (single-awk-process performance fix):
+# _cwg_strip_heredoc_bodies used to fork a NEW _cwg_mask_quoted (its own
+# `printf | awk`) plus `grep -oE | head -1` per line NOT inside a heredoc
+# body, an O(number of lines) subprocess count. The tests below cover the
+# specific edge cases the merged single-awk-process rewrite must still
+# handle exactly as before, plus a wall-clock regression guard proving the
+# fork count no longer scales with line count.
+# =============================================================================
+
+# `<<-` tab-stripping: previously exercised only with a terminator line that
+# needed no stripping ("EOF", no leading tab), which never actually proved
+# the leading-tab-strip comparison works. Here the TERMINATOR line itself is
+# tab-indented, matching real `<<-` heredoc usage (`\tEOF`) -- if the tab
+# strip were broken, the heredoc would never be recognized as closed, and
+# the REAL dangerous command that follows it would be silently swallowed as
+# still-in-body instead of denied.
+test_heredoc_dash_variant_indented_terminator_denies() {
+    new_sandbox
+    local cmd out result=0
+
+    cmd=$(printf 'cat <<-EOF\n\tbody line looks like rm -rf /tmp/fake\n\tEOF\nrm -rf /tmp/real')
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED heredoc-dash-variant-indented-terminator: expected deny for the real command after a tab-indented '<<-' terminator, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# Negative control for the case above -- without the trailing real command,
+# the tab-indented terminator must still correctly close the heredoc and the
+# whole thing must ALLOW (proving the tab-strip closes the body rather than
+# leaving inhd stuck open, which would also happen to allow but for the
+# wrong reason -- the positive control above is what actually distinguishes
+# the two).
+test_heredoc_dash_variant_indented_terminator_no_trailing_command_allows() {
+    new_sandbox
+    local cmd out rc=0 result=0
+
+    cmd=$(printf 'cat <<-EOF\n\tbody line looks like rm -rf /tmp/fake\n\tEOF\necho done')
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "heredoc-dash-variant-indented-terminator-allows"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# Multiple sequential heredoc markers in one command (own corpus, not
+# previously covered end-to-end through the full hook): two separate
+# heredocs, each with a dangerous-looking body, must both be stripped
+# correctly -- the inhd/striptabs/delim state machine has to close the
+# first heredoc and independently open+close the second, not get confused
+# between them.
+test_heredoc_multiple_sequential_bodies_ignored_allows() {
+    new_sandbox
+    local cmd out rc=0 result=0
+
+    cmd=$(printf "cat <<A\nrm -rf /fake1\nA\ncat <<B\nrm -rf /fake2\nB\necho done")
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "heredoc-multiple-sequential-bodies-ignored"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# No-bypass proof for the case above: a REAL dangerous command chained after
+# BOTH heredocs close must still be caught, proving the state machine
+# returns to "not in any heredoc" after the second one closes.
+test_heredoc_multiple_sequential_real_command_after_denies() {
+    new_sandbox
+    local cmd out result=0
+
+    cmd=$(printf "cat <<A\nrm -rf /fake1\nA\ncat <<B\nrm -rf /fake2\nB\nrm -rf /tmp/real")
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED heredoc-multiple-sequential-real-command-after: expected deny for the real command after two sequential heredocs close, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# Performance regression guard: 1000 lines of harmless text NONE of which
+# sit inside a heredoc body (the fork-per-line hot path the old
+# implementation took on every such line), followed by one real dangerous
+# command. Measured on the pre-fix implementation this took ~14s per
+# invocation on this machine -- close enough to this hook's 10s PreToolUse
+# timeout to be a real incident risk under CPU pressure; the single-awk-
+# process rewrite completes in ~2s for the same input. The bound below
+# (well under the 10s timeout, comfortably above the measured ~2s to avoid
+# flaking on a loaded/slower machine) exists to catch a reintroduced
+# per-line fork, not to pin an exact duration.
+test_perf_1000_non_heredoc_lines_denies_within_timeout() {
+    new_sandbox
+    local cmd out start end elapsed result=0 i
+
+    cmd=""
+    for i in $(seq 1 1000); do
+        cmd="${cmd}echo padding line $i with some text here"$'\n'
+    done
+    cmd="${cmd}rm -rf /tmp/real"
+
+    start=$(date +%s)
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    end=$(date +%s)
+    elapsed=$((end - start))
+
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED perf-1000-non-heredoc-lines: expected deny for the trailing real command, got '$out'"
+        result=1
+    fi
+    if [ "$elapsed" -ge 8 ]; then
+        echo "ASSERTION FAILED perf-1000-non-heredoc-lines: expected completion well under the 10s hook timeout, took ${elapsed}s (O(lines) fork regression?)"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# Same performance guard, correctness-only companion: 1000 lines all inside
+# ONE heredoc body (dangerous-looking text that must never be read as live),
+# nothing dangerous outside it -- must ALLOW, and must also complete quickly
+# under the merged single-awk-process implementation.
+test_perf_1000_line_heredoc_body_allows_within_timeout() {
+    new_sandbox
+    local cmd out start end elapsed rc=0 result=0 i
+
+    cmd="cat <<'EOF'"$'\n'
+    for i in $(seq 1 1000); do
+        cmd="${cmd}body line $i rm -rf /tmp/fake${i}"$'\n'
+    done
+    cmd="${cmd}EOF"
+
+    start=$(date +%s)
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    end=$(date +%s)
+    elapsed=$((end - start))
+
+    if ! assert_allow "$out" "$rc" "perf-1000-line-heredoc-body"; then
+        result=1
+    fi
+    if [ "$elapsed" -ge 8 ]; then
+        echo "ASSERTION FAILED perf-1000-line-heredoc-body: expected completion well under the 10s hook timeout, took ${elapsed}s"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# Second O(N)-fork bottleneck regression guard (codex-write-guard second-
+# optimization story): 1000 lines of harmless, non-heredoc, non-dangerous
+# text with NO trailing real command at all -- the pure ALLOW path a
+# multi-line `echo` sequence takes. This is a DIFFERENT scenario from
+# test_perf_1000_non_heredoc_lines_denies_within_timeout above: that test's
+# trailing `rm -rf` still exercises the same segment loops (the deny fires
+# only after they run over every earlier padding line), but this test proves
+# the ALLOW path itself -- with no deny to short-circuit early exit -- is
+# fast, which is what actually caught the second bottleneck (the dangerous-
+# command segment loop and the redirect/rm target-extraction segment loop
+# both used to fork a NEW subprocess pipeline per line even when nothing
+# ever matched). Measured on the pre-fix implementation: ~6.3s for this exact
+# shape at 1000 lines (10 lines/150ms /.../ 1000 lines/6256ms, roughly linear
+# per line); the O(1)-fork rewrite (_cwg_dc_scan_dangerous +
+# _cwg_extract_shell_targets_bulk) completes in well under 1s for the same
+# input. The bound below is tighter than the sibling perf tests' `-ge 8`
+# (which only guards the 10s hook timeout) specifically to catch a
+# reintroduced per-line fork before it grows back toward that ceiling.
+test_perf_1000_non_heredoc_lines_allows_within_timeout() {
+    new_sandbox
+    local cmd out start end elapsed rc=0 result=0 i
+
+    cmd=""
+    for i in $(seq 1 1000); do
+        cmd="${cmd}echo line $i with some text here"$'\n'
+    done
+    cmd="${cmd%$'\n'}"
+
+    start=$(date +%s)
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    end=$(date +%s)
+    elapsed=$((end - start))
+
+    if ! assert_allow "$out" "$rc" "perf-1000-non-heredoc-lines-allows"; then
+        result=1
+    fi
+    if [ "$elapsed" -ge 3 ]; then
+        echo "ASSERTION FAILED perf-1000-non-heredoc-lines-allows: expected sub-second-class completion on the pure allow path, took ${elapsed}s (O(lines) fork regression in the dangerous-command scan or the redirect/rm target extraction?)"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -2846,6 +3050,13 @@ main() {
     run_test test_regression_genuine_heredoc_body_still_stripped_allows
     run_test test_regression_quoted_paren_in_substitution_does_not_hide_rm_rf_denies
     run_test test_regression_quoted_paren_without_danger_still_allows
+    run_test test_heredoc_dash_variant_indented_terminator_denies
+    run_test test_heredoc_dash_variant_indented_terminator_no_trailing_command_allows
+    run_test test_heredoc_multiple_sequential_bodies_ignored_allows
+    run_test test_heredoc_multiple_sequential_real_command_after_denies
+    run_test test_perf_1000_non_heredoc_lines_denies_within_timeout
+    run_test test_perf_1000_line_heredoc_body_allows_within_timeout
+    run_test test_perf_1000_non_heredoc_lines_allows_within_timeout
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

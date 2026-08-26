@@ -29,9 +29,6 @@ hooks:
     - component: label-commit-gate.sh
       matcher: "Bash"
       timeout: 5
-    - component: local-path-ref-gate.sh
-      matcher: "Bash"
-      timeout: 5
     # explain-diff 산출물 게이트. 다른 가드와 달리 자기 디렉터리에서만
     # fail-closed라 상태를 못 읽으면 거부한다.
     #

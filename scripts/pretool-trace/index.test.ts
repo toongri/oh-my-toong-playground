@@ -177,6 +177,8 @@ describe("termination semantics", () => {
 			expect(events.filter((event) => event.phase === "end")).toHaveLength(0);
 			const pids = JSON.parse(readFileSync(ready, "utf8"));
 			await Promise.all([waitForGone(pids.child), waitForGone(pids.descendant)]);
+			const stderr = Buffer.from(await new Response(proc.stderr).arrayBuffer()).toString();
+			expect(stderr).toContain("pretool-trace: watchdog fired after parent exit");
 		} finally {
 			if (existsSync(ready)) { const pids = JSON.parse(readFileSync(ready, "utf8")); for (const pid of [pids.child, pids.descendant]) { try { process.kill(pid, "SIGKILL"); } catch {} } }
 		}
@@ -196,6 +198,8 @@ describe("termination semantics", () => {
 			expect(events.filter((event) => event.phase === "start")).toHaveLength(1);
 			expect(events.filter((event) => event.phase === "end")).toHaveLength(0);
 			await waitForGone(Number(readFileSync(pidFile, "utf8").trim()));
+			const stderr = Buffer.from(await new Response(proc.stderr).arrayBuffer()).toString();
+			expect(stderr).toContain("pretool-trace: watchdog fired after parent exit");
 		} finally {
 			if (existsSync(pidFile)) { try { process.kill(Number(readFileSync(pidFile, "utf8").trim()), "SIGKILL"); } catch {} }
 		}

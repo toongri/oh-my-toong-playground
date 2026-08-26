@@ -771,27 +771,13 @@ test_missing_jq_core_and_failed_inspection_allow() {
     [ "$RUN_EXIT" -eq 0 ] && [ -z "$RUN_OUTPUT" ]
 }
 
-test_yaml_registers_full_matcher() {
-    grep -F 'component: codex-local-path-ref-gate.sh' "$SCRIPT_DIR/../codex.yaml" >/dev/null || return 1
-    grep -F 'mcp__notion__notion_update_page' "$SCRIPT_DIR/../codex.yaml" >/dev/null || return 1
-    grep -F 'mcp__slack__slack_send_message' "$SCRIPT_DIR/../codex.yaml" >/dev/null || return 1
-    grep -F 'mcp__linear__save_issue' "$SCRIPT_DIR/../codex.yaml" >/dev/null || return 1
-    for route in \
-        mcp__notion__notion_append_block_children \
-        mcp__notion__notion_archive_page \
-        mcp__notion__notion_update_block \
-        mcp__notion__notion_update_comment \
-        mcp__notion__notion_update_page_preview \
-        mcp__slack__slack_upload_file \
-        mcp__linear__create_comment \
-        mcp__linear__create_issue \
-        mcp__linear__save_issue_comment \
-        mcp__linear__update_issue; do
-        grep -F "$route" "$SCRIPT_DIR/../codex.yaml" >/dev/null || return 1
-    done
-    ! grep -F 'mcp__notion__.*' "$SCRIPT_DIR/../codex.yaml" || return 1
-    ! grep -F 'mcp__slack__.*' "$SCRIPT_DIR/../codex.yaml" || return 1
-    ! grep -F 'mcp__linear__.*' "$SCRIPT_DIR/../codex.yaml"
+# The hook was deliberately deregistered from codex.yaml for CPU cost (commit
+# 380a323a); the script and this test file are preserved, and re-registration
+# is tracked by GitHub issue #276. This guards the deregistered state so an
+# accidental re-registration is caught before it ships without the
+# re-benchmark that issue #276 requires.
+test_yaml_does_not_register_hook() {
+    ! grep -F 'component: codex-local-path-ref-gate.sh' "$SCRIPT_DIR/../codex.yaml" >/dev/null
 }
 
 main() {
@@ -845,7 +831,7 @@ main() {
     run_test test_old_untouched_violation_allows
     run_test test_inspected_command_is_never_executed
     run_test test_missing_jq_core_and_failed_inspection_allow
-    run_test test_yaml_registers_full_matcher
+    run_test test_yaml_does_not_register_hook
     echo "Passed: $TESTS_PASSED, Failed: $TESTS_FAILED"
     [ "$TESTS_FAILED" -eq 0 ]
 }

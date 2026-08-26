@@ -297,7 +297,10 @@ describe("main() 배선: prompt.txt가 필터링되어 reviewContent로 전달�
 			execFileSync(
 				process.execPath,
 				[WORKER_PATH, "--job-dir", jobDir, "--member", "correctness", "--command", "true"],
-				{ stdio: "pipe" },
+				// HOME isolates the machine-wide worker slot pool under
+				// $HOME/.omt/worker-slots/v2, while OMT_DIR isolates worker state; both
+				// are pinned to this test's own tmp root.
+				{ stdio: "pipe", env: { ...process.env, HOME: tmpRoot, OMT_DIR: tmpRoot } },
 			);
 
 			const assembled = fs.readFileSync(
@@ -379,7 +382,17 @@ describe("main() 배선: --session/--prompt는 resumeOneTurn 경로(assembled-pr
 					"--prompt",
 					"continue please",
 				],
-				{ stdio: "pipe", env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` } },
+				// HOME isolates the machine-wide worker slot pool and OMT_DIR isolates
+				// worker state; both are pinned to this test's own tmp root.
+				{
+					stdio: "pipe",
+					env: {
+						...process.env,
+						PATH: `${stubDir}:${process.env.PATH}`,
+						HOME: tmpRoot,
+						OMT_DIR: tmpRoot,
+					},
+				},
 			);
 
 			const memberDir = path.join(jobDir, "members", "opencode");
@@ -477,7 +490,13 @@ describe("worker.ts 종료 경로 — reapOwnProcessGroup 연결", () => {
 						"--timeout",
 						"60",
 					],
-					{ detached: true, stdio: "ignore", env: process.env },
+					// HOME isolates the machine-wide worker slot pool and OMT_DIR isolates
+					// worker state; both are pinned to this test's own tmp root.
+					{
+						detached: true,
+						stdio: "ignore",
+						env: { ...process.env, HOME: tmpDir, OMT_DIR: tmpDir },
+					},
 				);
 				const workerPgid = worker.pid;
 				worker.unref();

@@ -300,6 +300,40 @@ _cwg_mask_quoted() {
 # line (`cmd <<'EOF' && next`) -- only the BODY lines, up to and including
 # the terminator line, are dropped.
 #
+# PERFORMANCE (both-platform measurement, ultragoal test-hardening story):
+# this function's contract now ALSO returns the caller's subsequent
+# _cwg_mask_quoted pass applied to every surviving line -- both callers used
+# to do `stripped=$(_cwg_strip_heredoc_bodies "$cmd"); masked=$(_cwg_mask_quoted
+# "$stripped")`; that second call is gone from both call sites, folded in
+# here instead. The old version processed the input with a bash line-at-a-
+# time `while read` loop that forked a NEW _cwg_mask_quoted (its own `printf |
+# awk` subshell) plus `grep -oE | head -1` on EVERY non-heredoc-body line --
+# an O(number of lines) subprocess fork count. A multi-line Bash tool call
+# with hundreds or thousands of lines outside any active heredoc body (the
+# common case: most of a large command is NOT heredoc body) accumulated
+# forks linearly and could approach this hook's 10-second PreToolUse timeout
+# under CPU pressure -- measured directly: 1000 such lines took ~7s in the
+# fork-per-line form versus ~0.05s here. The rewrite below is ONE awk
+# process for the entire input regardless of line count: the heredoc
+# line-state machine (inhd/striptabs/delim, persisting across awk records)
+# and the full character-by-character quote/comment masking machinery
+# (previously _cwg_mask_quoted's own awk body, now the local _cwg_mask
+# function) both run inside the same awk program, so per-line work is
+# in-process awk looping, not a new fork per line. _cwg_mask_quoted itself
+# is UNCHANGED and still used standalone by _cwg_process_shell_text further
+# below (a different, non-heredoc route) -- only this heredoc pipeline's two
+# separate calls were merged.
+#
+# Masking a SURVIVING line here is byte-identical to what the old two-step
+# pipeline produced: _cwg_mask_quoted resets all of its state at the start
+# of processing each line it is given (whether invoked once per line, as the
+# old code did, or once over a multi-line blob, as the old code's second
+# pass over the stripped text did) -- so masking is inherently a per-line,
+# state-does-not-carry-across-lines operation already, and computing it once
+# per kept line here (reused for BOTH heredoc-marker detection on this line
+# and as this line's contribution to the final output) reproduces the old
+# two-pass result exactly, without masking anything twice.
+#
 # Scope note: this is called ONLY from the dangerous-command guard's own
 # command text, NOT from the ledger/code-review-artifact candidate
 # extraction route (_cwg_process_shell_text further below) -- that route's
@@ -318,40 +352,196 @@ _cwg_mask_quoted() {
 # heredoc at real execution time -- the token is literal text inside a string
 # -- but a raw-text scan read it as an opener and then dropped every
 # following line through `EOF`, swallowing a live `rm -rf` on the next line
-# and bypassing the dangerous-command guard entirely. _cwg_mask_quoted is
-# exactly the right masker here because it neutralizes `<` INSIDE quoted
-# spans while PRESERVING a genuinely quoted delimiter as a bare word
-# (`cat <<'EOF'` -> `cat <<EOF`), so real quoted heredocs keep stripping.
+# and bypassing the dangerous-command guard entirely. The masking here is
+# exactly the right filter because it neutralizes `<` INSIDE quoted spans
+# while PRESERVING a genuinely quoted delimiter as a bare word (`cat
+# <<'EOF'` -> `cat <<EOF`), so real quoted heredocs keep stripping.
 #
 # Residual, unclosed by design (same class as this file's other static-scan
 # limits): masking is per-line, so a quote opened on one line and closed on a
 # later one is not tracked across the boundary, and a `<<DELIM` inside a live
-# `$( )`/backtick span is passed through unmasked by _cwg_mask_quoted itself.
+# `$( )`/backtick span is passed through unmasked by the masking here.
+#
+# qc/hdpat/qc_start/qc_end are built at runtime from sq/dq (sprintf'd
+# character constants, same trick _cwg_mask_quoted uses) rather than written
+# as literal `['"]` regex text, purely so this whole awk program can stay
+# inside a single-quoted shell string -- a literal `'` character cannot
+# appear inside one. hdpat mirrors the old `grep -oE
+# "<<-?[[:space:]]*['\"]?[A-Za-z_][A-Za-z0-9_]*['\"]?"`; awk's match() finds
+# the same leftmost POSIX-ERE match grep -oE | head -1 did, so no separate
+# "first match" step is needed. The three delim-extraction sub() calls mirror
+# the old `sed -E "s/^<<-?[[:space:]]*//; s/^['\"]//; s/['\"]\$//"` one
+# substitution at a time, same as sed's default (no `g` flag).
 _cwg_strip_heredoc_bodies() {
-    local text="$1"
-    local out="" line delim="" striptabs=0 inhd=0 cmp marker masked
-    while IFS= read -r line || [ -n "$line" ]; do
-        if [ "$inhd" -eq 1 ]; then
-            cmp="$line"
-            if [ "$striptabs" -eq 1 ]; then
-                cmp="${cmp#"${cmp%%[!$'\t']*}"}"
-            fi
-            if [ "$cmp" = "$delim" ]; then
-                inhd=0
-            fi
-            continue
-        fi
-        masked=$(_cwg_mask_quoted "$line")
-        marker=$(printf '%s\n' "$masked" | grep -oE "<<-?[[:space:]]*['\"]?[A-Za-z_][A-Za-z0-9_]*['\"]?" | head -1) || marker=""
-        if [ -n "$marker" ]; then
-            striptabs=0
-            case "$marker" in "<<-"*) striptabs=1 ;; esac
-            delim=$(printf '%s' "$marker" | sed -E "s/^<<-?[[:space:]]*//; s/^['\"]//; s/['\"]\$//")
-            inhd=1
-        fi
-        out="${out}${line}"$'\n'
-    done <<< "$text"
-    printf '%s' "$out"
+    printf '%s' "$1" | awk '
+        function _cwg_mask(s,    n,i,c,nc,insq,indq,dpdepth,subsq,subdq,btactive,out) {
+            n = length(s)
+            insq = 0
+            indq = 0
+            dpdepth = 0
+            subsq = 0
+            subdq = 0
+            btactive = 0
+            out = ""
+            for (i = 1; i <= n; i++) {
+                c = substr(s, i, 1)
+
+                if (c == bs && !insq && i < n) {
+                    nc = substr(s, i + 1, 1)
+                    if (nc == ">" || nc == "<" || nc == "|" || nc == ";" || nc == "&") {
+                        out = out "  "
+                    } else {
+                        out = out c nc
+                    }
+                    i++
+                    continue
+                }
+
+                if (dpdepth > 0) {
+                    if (subsq) {
+                        if (c == sq) { subsq = 0 }
+                    } else if (subdq) {
+                        if (c == bs && i < n) { out = out c; i++; c = substr(s, i, 1) }
+                        else if (c == dq) { subdq = 0 }
+                    } else if (c == bs && i < n) {
+                        out = out c; i++; c = substr(s, i, 1)
+                    } else if (c == sq) {
+                        subsq = 1
+                    } else if (c == dq) {
+                        subdq = 1
+                    } else if (c == lp) {
+                        dpdepth++
+                    } else if (c == rp) {
+                        dpdepth--
+                        if (dpdepth == 0) { out = out " "; continue }
+                    }
+                    out = out c
+                    continue
+                }
+                if (btactive) {
+                    if (c == bt) { btactive = 0 }
+                    out = out c
+                    continue
+                }
+
+                if (indq && c == dl && i < n && substr(s, i + 1, 1) == lp) {
+                    dpdepth = 1
+                    subsq = 0
+                    subdq = 0
+                    out = out c lp
+                    i++
+                    continue
+                }
+                if (indq && c == bt) {
+                    btactive = 1
+                    out = out c
+                    continue
+                }
+
+                if (!indq && c == sq) {
+                    insq = 1 - insq
+                    continue
+                }
+                if (!insq && c == dq) {
+                    indq = 1 - indq
+                    continue
+                }
+                if ((insq || indq) && (c == ">" || c == "<" || c == "|" || c == ";" || c == "&")) {
+                    out = out " "
+                    continue
+                }
+                if (!insq && !indq && dpdepth == 0 && !btactive && c == hs && (out == "" || substr(out, length(out), 1) ~ /[ \t]/)) {
+                    break
+                }
+                out = out c
+            }
+            return out
+        }
+        BEGIN {
+            sq = sprintf("%c", 39); dq = sprintf("%c", 34); bs = sprintf("%c", 92); dl = sprintf("%c", 36); lp = sprintf("%c", 40); rp = sprintf("%c", 41); bt = sprintf("%c", 96); hs = sprintf("%c", 35)
+            qc = "[" sq dq "]"
+            hdpat = "<<-?[[:space:]]*" qc "?[A-Za-z_][A-Za-z0-9_]*" qc "?"
+            qc_start = "^" qc
+            qc_end = qc "$"
+            inhd = 0
+            striptabs = 0
+            delim = ""
+        }
+        {
+            if (inhd) {
+                cmp = $0
+                if (striptabs) { gsub(/^\t+/, "", cmp) }
+                if (cmp == delim) { inhd = 0 }
+                next
+            }
+            masked = _cwg_mask($0)
+            if (match(masked, hdpat) > 0) {
+                marker = substr(masked, RSTART, RLENGTH)
+                striptabs = (marker ~ /^<<-/) ? 1 : 0
+                delim = marker
+                sub(/^<<-?[[:space:]]*/, "", delim)
+                sub(qc_start, "", delim)
+                sub(qc_end, "", delim)
+                inhd = 1
+            }
+            print masked
+        }'
+}
+
+# _cwg_dc_scan_dangerous <shell_command_text>
+# Existence-only scan: does ANY &&/||/;/|/&-split chain segment of the input
+# match one of write_guard_core_check_dangerous_command's (hooks/write-guard-
+# core.sh) 9 rm-rf/git-push-force glob patterns, after the SAME leading-
+# whitespace-trim + whitespace-run-collapse normalization that function
+# applies. Prints "1" and stops at the first match; prints nothing otherwise.
+#
+# PERFORMANCE (both-platform measurement, SECOND O(N)-fork bottleneck found
+# after the _cwg_strip_heredoc_bodies single-awk-process fix above): both
+# callers of this function used to `while read` over the same chain-split
+# segments and invoke write_guard_core_check_dangerous_command once PER
+# segment -- and that shared function itself forks a `printf | tr -s`
+# pipeline on every single call (to collapse whitespace runs before
+# matching), so a 1000-line non-heredoc Bash command (the ordinary case: each
+# line is its own chain segment, none of them dangerous) forked roughly 2000
+# processes for this check alone, on top of the equally-sized cost in
+# _cwg_extract_shell_targets_bulk's caller below -- together the two
+# accounted for the full O(N) wall-clock blowup (measured ~6.3s at 1000
+# lines; ~2.2s of that was this loop). write-guard-core.sh cannot be edited
+# from this shim (shared with the Claude twin, kept independently re-derived
+# per this file's header) -- so the fix is not to change what that function
+# does, only to stop calling it once per segment: this function re-derives
+# the same 9 patterns and the same normalization (leading-trim, then
+# collapsing [[:space:]] runs to one space -- exactly what `tr -s
+# '[:space:]' ' '` does) as a single awk pass over every already-chain-split
+# segment at once, one process regardless of segment count. Differential-
+# tested against the original per-segment bash `case` match across 30+
+# inputs (plain rm/git-push forms, tab/multi-space runs, near-miss
+# non-matches, and the "extra trailing text" glob-suffix cases) with no
+# divergence. If write-guard-core.sh's pattern list is ever changed, this
+# copy must be updated in lockstep -- there is no way to share the pattern
+# list without also sharing its per-call fork cost.
+#
+# Callers still run write_guard_core_check_user_authorized_command once on
+# the WHOLE (unsplit) command exactly as before -- that call was already
+# O(1) per invocation (see the "Whole-command, not per-segment" comments at
+# each call site) and is untouched here.
+_cwg_dc_scan_dangerous() {
+    printf '%s\n' "$1" \
+        | sed -E 's/(&&|\|\||;|\||&)/\n/g' \
+        | awk '
+            {
+                s = $0
+                sub(/^[[:space:]]+/, "", s)
+                gsub(/[[:space:]]+/, " ", s)
+                if (s ~ /^rm -rf / || s ~ /^rm -fr / || s ~ /^rm -Rf / \
+                    || s ~ /^rm -r -f / || s ~ /^rm -f -r / \
+                    || s ~ /^git push --force/ || s ~ /^git push .* --force/ \
+                    || s ~ /^git push -f/ || s ~ /^git push .* -f/) {
+                    print "1"
+                    exit
+                }
+            }
+        '
 }
 
 # jq is required for full JSON-shaped extraction (tool_name routing,
@@ -384,8 +574,7 @@ if ! command -v jq > /dev/null 2>&1; then
         _cwg_nojq_cmd=$(_cwg_nojq_extract_str_field cmd) || _cwg_nojq_cmd=""
     fi
     if [ -n "$_cwg_nojq_cmd" ]; then
-        _cwg_nojq_stripped=$(_cwg_strip_heredoc_bodies "$_cwg_nojq_cmd")
-        _cwg_nojq_masked=$(_cwg_mask_quoted "$_cwg_nojq_stripped")
+        _cwg_nojq_masked=$(_cwg_strip_heredoc_bodies "$_cwg_nojq_cmd")
         # Whole-command, not per-segment: a `sub=<subcommand>;` assignment splits
         # the two tokens across chain segments (see write-guard-core.sh).
         _cwg_nojq_out=$(write_guard_core_check_user_authorized_command "$_cwg_nojq_masked")
@@ -393,14 +582,13 @@ if ! command -v jq > /dev/null 2>&1; then
             printf '%s\n' "$_cwg_nojq_out"
             exit 0
         fi
-        while IFS= read -r _cwg_nojq_seg; do
-            [ -n "$_cwg_nojq_seg" ] || continue
-            _cwg_nojq_out=$(write_guard_core_check_dangerous_command "$_cwg_nojq_seg")
-            if [ -n "$_cwg_nojq_out" ]; then
-                printf '%s\n' "$_cwg_nojq_out"
-                exit 0
-            fi
-        done < <(printf '%s\n' "$_cwg_nojq_masked" | sed -E 's/(&&|\|\||;|\||&)/\n/g')
+        # O(1)-fork scan (see _cwg_dc_scan_dangerous's own docstring) --
+        # replaces the former while-read loop that forked
+        # write_guard_core_check_dangerous_command once per chain segment.
+        if [ -n "$(_cwg_dc_scan_dangerous "$_cwg_nojq_masked")" ]; then
+            printf '%s\n' "$_wg_core_dangerous_deny_json"
+            exit 0
+        fi
     fi
     exit 0
 fi
@@ -427,15 +615,17 @@ esac
 # resolved session id -- but this dangerous-command guard has no such
 # dependency, and must not silently inherit that unrelated fail-open.
 #
-# Heredoc-body stripping (_cwg_strip_heredoc_bodies) runs BEFORE quote-aware
-# masking (CONFIRMED false-deny fix, both-platform measurement): a
-# destructive-looking string sitting inside a heredoc BODY (e.g.
-# `cat <<'EOF'` / `rm -rf /tmp/x` / `EOF`) is literal stdin data, never
-# parsed as shell code, so it must never reach the chain-splitter below.
+# Heredoc-body stripping runs BEFORE quote-aware masking (CONFIRMED
+# false-deny fix, both-platform measurement): a destructive-looking string
+# sitting inside a heredoc BODY (e.g. `cat <<'EOF'` / `rm -rf /tmp/x` /
+# `EOF`) is literal stdin data, never parsed as shell code, so it must never
+# reach the chain-splitter below. _cwg_strip_heredoc_bodies now performs
+# both steps (strip, then mask) in one call -- see its own docstring.
 #
-# Quote-aware masking (_cwg_mask_quoted, same function the shell-target route
-# below uses) is applied BEFORE chain-splitting, mirroring that sibling route
-# exactly (code-review CONFIRMED fix, both single- and double-quoted spans):
+# Quote-aware masking (the same masking logic the shell-target route below
+# uses via _cwg_mask_quoted) is applied BEFORE chain-splitting, mirroring
+# that sibling route exactly (code-review CONFIRMED fix, both single- and
+# double-quoted spans):
 # without it, a `;`/`|` inside a quoted string (e.g. `echo 'note; rm -rf
 # /tmp/x'` OR `echo "note; rm -rf /tmp/x"`) was read the same as a live
 # chain separator, splitting the segment so its second half
@@ -462,22 +652,22 @@ case "$tool_name" in
         for _cwg_dc_key in command cmd; do
             _cwg_dc_cmd=$(printf '%s' "$input" | jq -r --arg k "$_cwg_dc_key" '.tool_input[$k] // empty' 2>/dev/null) || _cwg_dc_cmd=""
             [ -n "$_cwg_dc_cmd" ] || continue
-            _cwg_dc_stripped=$(_cwg_strip_heredoc_bodies "$_cwg_dc_cmd")
-            _cwg_dc_masked=$(_cwg_mask_quoted "$_cwg_dc_stripped")
+            _cwg_dc_masked=$(_cwg_strip_heredoc_bodies "$_cwg_dc_cmd")
             # Whole-command, not per-segment — same reason as the no-jq path above.
             _cwg_dc_out=$(write_guard_core_check_user_authorized_command "$_cwg_dc_masked")
             if [ -n "$_cwg_dc_out" ]; then
                 printf '%s\n' "$_cwg_dc_out"
                 exit 0
             fi
-            while IFS= read -r _cwg_dc_seg; do
-                [ -n "$_cwg_dc_seg" ] || continue
-                _cwg_dc_out=$(write_guard_core_check_dangerous_command "$_cwg_dc_seg")
-                if [ -n "$_cwg_dc_out" ]; then
-                    printf '%s\n' "$_cwg_dc_out"
-                    exit 0
-                fi
-            done < <(printf '%s\n' "$_cwg_dc_masked" | sed -E 's/(&&|\|\||;|\||&)/\n/g')
+            # O(1)-fork scan (see _cwg_dc_scan_dangerous's own docstring) --
+            # replaces the former while-read loop that forked
+            # write_guard_core_check_dangerous_command once per chain segment
+            # (the second O(N)-fork bottleneck this file measured, alongside
+            # _cwg_extract_shell_targets_bulk's caller below).
+            if [ -n "$(_cwg_dc_scan_dangerous "$_cwg_dc_masked")" ]; then
+                printf '%s\n' "$_wg_core_dangerous_deny_json"
+                exit 0
+            fi
         done
         ;;
 esac
@@ -596,68 +786,93 @@ _cwg_extract_heredoc_body() {
     '
 }
 
-# _cwg_extract_shell_targets <chain_segment>
+# _cwg_extract_shell_targets_bulk <chain_segments_text>
 # Redirect / touch / tee / rm / cp / mv / sed -i / dd / truncate write-target
 # extraction, mirroring the segment-classifier shape of
 # hooks/pre-tool-enforcer.sh:42-77 (_wg_ledger_target_in_segment) but
 # EXTRACTING the candidate target rather than merely testing a substring --
 # the core does full-path EXACT match, so the actual candidate path is
-# required.
-_cwg_extract_shell_targets() {
-    local seg="$1"
-    local first_word
-    first_word=$(printf '%s' "$seg" | awk '{print $1}')
+# required. Takes the WHOLE already &&/||/;/|-split segment text (one
+# segment per line, same shape _cwg_strip_heredoc_bodies's caller produces)
+# and prints every candidate for every segment, in ONE awk process.
+#
+# PERFORMANCE (both-platform measurement, THIRD site sharing the same O(N)-
+# fork class as _cwg_dc_scan_dangerous above): this used to be
+# `_cwg_extract_shell_targets <chain_segment>`, called once per segment from
+# a bash `while read` loop -- each call forking its own `printf | awk`
+# for the first-word lookup, plus (depending on the verb) another
+# `printf | grep | sed` or `printf | awk` for the redirect/target scan. A
+# 1000-line non-heredoc Bash command (each line its own segment, the
+# ordinary case) forked on the order of 2000 processes here alone --
+# measured ~4s of the ~6.3s total at 1000 lines, the larger of the two
+# bottlenecks this story found. The awk body below is functionally
+# unchanged per segment (same first-word classification, same redirect/
+# of= scan-all-occurrences behavior, same non-option-argument filtering) --
+# only the DRIVER changed, from one fork per segment to one awk process
+# reading every segment as its own record. Differential-tested against the
+# original per-segment version across 25+ inputs (every verb branch, fd-dup
+# redirects, multiple redirects/of= in one segment, an empty/whitespace-only
+# segment, a bare `cp` with no operands) with no divergence.
+_cwg_extract_shell_targets_bulk() {
+    printf '%s\n' "$1" | awk '
+        {
+            line = $0
+            first = $1
 
-    # Redirect target: the token after the last `>` / `>>`. Over-extract,
-    # like the Claude twin (hooks/pre-tool-enforcer.sh:115): no leading-char
-    # exclusion for fd-dups (`2>&1`, `>&2`) here -- an earlier version
-    # excluded a digit/`&` immediately before `>` to skip fd-dups, but that
-    # same exclusion also skipped the FILE-target forms `2>`/`&>` (a digit
-    # or `&` sits right before `>` there too), silently ALLOWING a real
-    # ledger redirect through either form. write_guard_core_run does the
-    # actual EXACT match, so an over-extracted fd-dup operand (e.g. `&1`
-    # from `2>&1`) simply never matches the ledger path -- harmless.
-    # `|| true`: grep -oE returns 1 when a segment has no redirect at all --
-    # under this script's `set -euo pipefail`, an unguarded nonzero pipeline
-    # here would abort the function (via the process-substitution subshell
-    # that invokes it) before the case block below -- tee/rm/truncate/cp/mv/
-    # sed -i/dd -- ever runs, silently ALLOWING those write routes.
-    printf '%s\n' "$seg" \
-        | grep -oE '>{1,2}[[:space:]]*[^[:space:]]+' \
-        | sed -E 's/^.*>{1,2}[[:space:]]*//' || true
+            # Redirect target(s): the token after EVERY `>` / `>>` in the
+            # segment (not just the last -- grep -oE found every
+            # non-overlapping match, and this loop mirrors that same
+            # leftmost-first scan). Over-extract, like the Claude twin
+            # (hooks/pre-tool-enforcer.sh:115): no leading-char exclusion for
+            # fd-dups (`2>&1`, `>&2`) here -- an earlier version excluded a
+            # digit/`&` immediately before `>` to skip fd-dups, but that same
+            # exclusion also skipped the FILE-target forms `2>`/`&>` (a digit
+            # or `&` sits right before `>` there too), silently ALLOWING a
+            # real ledger redirect through either form. write_guard_core_run
+            # does the actual EXACT match, so an over-extracted fd-dup
+            # operand (e.g. `&1` from `2>&1`) simply never matches the ledger
+            # path -- harmless.
+            rem = line
+            while (match(rem, />{1,2}[[:space:]]*[^[:space:]]+/)) {
+                tgt = substr(rem, RSTART, RLENGTH)
+                sub(/^>{1,2}[[:space:]]*/, "", tgt)
+                print tgt
+                rem = substr(rem, RSTART + RLENGTH)
+            }
 
-    case "$first_word" in
-        touch | tee | rm | truncate)
-            printf '%s\n' "$seg" | awk '{for (i = 2; i <= NF; i++) if ($i !~ /^-/) print $i}'
-            ;;
-        cp)
-            # Destination only. `cp <guarded> /tmp/x` READS the guarded path
-            # and leaves it intact, so extracting the source operand here
-            # would false-deny a harmless copy.
-            printf '%s\n' "$seg" | awk '{print $NF}'
-            ;;
-        mv)
-            # Every non-option operand, not just the last -- `mv` DELETES its
-            # source, so `mv <guarded> /tmp/x` removes the guarded path exactly
-            # like `rm <guarded>`, which the tee/rm/truncate arm above already
-            # catches. $NF alone saw only the destination, leaving the delete
-            # leg of the write/delete contract open through this one verb.
-            # Split from `cp` above because only `mv` is destructive; mirrors
-            # the Claude twin's own cp/mv split in hooks/pre-tool-enforcer.sh.
-            printf '%s\n' "$seg" | awk '{for (i = 2; i <= NF; i++) if ($i !~ /^-/) print $i}'
-            ;;
-        sed)
-            if printf '%s\n' "$seg" | grep -q -- '-i'; then
-                printf '%s\n' "$seg" | awk '{for (i = 2; i <= NF; i++) if ($i !~ /^-/) print $i}'
-            fi
-            ;;
-        dd)
-            # Same set -e/pipefail hazard as the redirect grep above:
-            # `of=` is absent for a plain `dd if=x` read, so this grep can
-            # legitimately return 1.
-            printf '%s\n' "$seg" | grep -oE 'of=[^[:space:]]+' | sed 's/^of=//' || true
-            ;;
-    esac
+            if (first == "touch" || first == "tee" || first == "rm" || first == "truncate") {
+                for (i = 2; i <= NF; i++) if ($i !~ /^-/) print $i
+            } else if (first == "cp") {
+                # Destination only. `cp <guarded> /tmp/x` READS the guarded
+                # path and leaves it intact, so extracting the source operand
+                # here would false-deny a harmless copy.
+                print $NF
+            } else if (first == "mv") {
+                # Every non-option operand, not just the last -- `mv`
+                # DELETES its source, so `mv <guarded> /tmp/x` removes the
+                # guarded path exactly like `rm <guarded>`, which the
+                # tee/rm/truncate arm above already catches. $NF alone saw
+                # only the destination, leaving the delete leg of the
+                # write/delete contract open through this one verb. Split
+                # from `cp` above because only `mv` is destructive; mirrors
+                # the same cp/mv split used by the Claude twin in
+                # hooks/pre-tool-enforcer.sh.
+                for (i = 2; i <= NF; i++) if ($i !~ /^-/) print $i
+            } else if (first == "sed") {
+                if (index(line, "-i") > 0) {
+                    for (i = 2; i <= NF; i++) if ($i !~ /^-/) print $i
+                }
+            } else if (first == "dd") {
+                rem2 = line
+                while (match(rem2, /of=[^[:space:]]+/)) {
+                    tgt2 = substr(rem2, RSTART, RLENGTH)
+                    sub(/^of=/, "", tgt2)
+                    print tgt2
+                    rem2 = substr(rem2, RSTART + RLENGTH)
+                }
+            }
+        }
+    '
 }
 
 # _cwg_mask_quoted is defined earlier in this file (before the
@@ -791,13 +1006,15 @@ _cwg_process_shell_text() {
     masked=$(_cwg_mask_quoted "$shell_cmd")
 
     # Redirect / tee / rm classifier, per chain segment (split on
-    # && || ; |, matching pre-tool-enforcer.sh's segmentation).
-    while IFS= read -r seg; do
-        [ -n "$seg" ] || continue
-        while IFS= read -r tgt; do
-            _cwg_add_candidate "$tgt"
-        done < <(_cwg_extract_shell_targets "$seg")
-    done < <(printf '%s\n' "$masked" | sed -E 's/(&&|\|\||;|\|)/\n/g')
+    # && || ; |, matching pre-tool-enforcer.sh's segmentation) -- single-awk-
+    # process rewrite (O(1) forks regardless of segment count): the sed
+    # split still runs once over the whole masked text, but the former
+    # while-read loop that forked _cwg_extract_shell_targets once per
+    # resulting segment is gone, folded into _cwg_extract_shell_targets_bulk
+    # (see its own docstring for the fork-count rationale).
+    while IFS= read -r tgt; do
+        _cwg_add_candidate "$tgt"
+    done < <(_cwg_extract_shell_targets_bulk "$(printf '%s\n' "$masked" | sed -E 's/(&&|\|\||;|\|)/\n/g')")
 }
 
 # -----------------------------------------------------------------------------

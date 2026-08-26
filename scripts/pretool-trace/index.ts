@@ -15,6 +15,17 @@ group=$$
 (
   trap '' TERM INT
   while kill -0 "$parent" 2>/dev/null; do sleep 0.05; done
+  cores=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null)
+  load=$(sysctl -n vm.loadavg 2>/dev/null | tr -d '{}' | awk '{print $1}')
+  if [ -z "$load" ] && [ -r /proc/loadavg ]; then load=$(awk '{print $1}' /proc/loadavg); fi
+  if [ -n "$load" ] && [ -n "$cores" ]; then
+    note=$(awk -v l="$load" -v c="$cores" 'BEGIN { if (l+0 >= (c+0)*2) printf "likely CPU starvation (load %s on %s cores), not a hook defect", l, c; else printf "load %s", l }')
+  elif [ -n "$load" ]; then
+    note="load $load"
+  else
+    note="load average unavailable"
+  fi
+  echo "pretool-trace: watchdog fired after parent exit -- $note" >&2
   kill -TERM -"$group" 2>/dev/null
   sleep 0.1
   kill -KILL -"$group" 2>/dev/null
