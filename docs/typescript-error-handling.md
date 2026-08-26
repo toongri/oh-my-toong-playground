@@ -1,80 +1,115 @@
-# TypeScript 오류 처리 가이드
+# TypeScript Error Handling Guide
 
-결론부터 말하면 TypeScript 커뮤니티에는 단일 오류 처리 표준이 없다. 주류 Node/TypeScript는 typed `Error`/커스텀 오류를 throw하고 Express·Nest·tRPC 같은 경계 핸들러에서 응답으로 매핑한다. FP 지향 TypeScript는 `Result`/`Either`/`Effect`를 실패 채널로 사용한다. 권장안은 의미에 따른 하이브리드다. 호출자가 예상하고 복구할 수 있는 업무 결과는 `Result<T, E>`로 반환하고, 중단·전파해야 하는 인프라 실패나 불변식 위반은 안정적인 code를 가진 typed error로 throw한다.
+The concrete conclusion is that TypeScript has no single error-handling standard accepted across the whole community. Mainstream Node/TypeScript code commonly throws typed `Error`/custom errors and maps them to responses at the HTTP/RPC boundary. Functional-programming-oriented TypeScript code uses `Result`/`Either`/`Effect` typed failure channels. A practical recommendation is a hybrid: represent expected, recoverable business outcomes with `Result<T, E>`, throw stable-code typed errors for infrastructure failures or invariant violations that must abort and propagate, and map them once at the transport boundary.
 
-## 1. Kotlin sealed class와 TypeScript
+## 1. The TypeScript model closest to Kotlin sealed classes
 
-Kotlin `sealed class`에 가장 가까운 기본 TypeScript 모델은 `enum` discriminant + discriminated union + `never` exhaustive switch다.
+The closest native TypeScript model to Kotlin's sealed class—where the compiler knows the variants and catches missing `when` branches—combines the following:
+
+- Use an enum as the discriminant.
+- Put variant-specific fields on each member of a discriminated union.
+- Put a `never`-returning `assertNever` in the default branch of a `switch`.
 
 ```ts
-enum FailureCode { REQUIRED_FIELD = "REQUIRED_FIELD", INVALID_EMAIL = "INVALID_EMAIL" }
-type Failure =
-  | { code: FailureCode.REQUIRED_FIELD; field: string }
-  | { code: FailureCode.INVALID_EMAIL; normalizedValue: string };
-
-function assertNever(value: never): never {
-  throw new Error(`Unhandled failure: ${String(value)}`);
+enum ValidationFailureCode {
+  REQUIRED_FIELD = "REQUIRED_FIELD",
+  INVALID_EMAIL = "INVALID_EMAIL",
 }
-function describe(failure: Failure): string {
-  switch (failure.code) {
-    case FailureCode.REQUIRED_FIELD: return `${failure.field} is required`;
-    case FailureCode.INVALID_EMAIL: return `Invalid email: ${failure.normalizedValue}`;
-    default: return assertNever(failure);
+interface RequiredFieldFailure {
+  kind: ValidationFailureCode.REQUIRED_FIELD;
+  field: string;
+}
+interface InvalidEmailFailure {
+  kind: ValidationFailureCode.INVALID_EMAIL;
+  normalizedValue: string;
+}
+type ValidationFailure = RequiredFieldFailure | InvalidEmailFailure;
+function assertNever(value: never): never {
+  throw new Error(`Unhandled validation failure: ${String(value)}`);
+}
+function describeFailure(failure: ValidationFailure): string {
+  switch (failure.kind) {
+    case ValidationFailureCode.REQUIRED_FIELD:
+      return `${failure.field} is required`;
+    case ValidationFailureCode.INVALID_EMAIL:
+      return `Invalid email: ${failure.normalizedValue}`;
+    default:
+      return assertNever(failure);
   }
 }
 ```
 
-새 변형을 추가하고 `switch`를 갱신하지 않으면 `assertNever`에서 컴파일 오류가 난다. 단, TypeScript 타입은 런타임에 지워진다. 외부 JSON·메시지·HTTP 입력을 타입으로 선언하는 것만으로는 안전하지 않으므로 경계에서 Zod 같은 런타임 validator로 검증한다. `z.discriminatedUnion("code", [...])` 같은 스키마를 파싱한 뒤에만 내부 타입으로 넘긴다.
-
-참고: [TypeScript narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing), [TypeScript from scratch](https://www.typescriptlang.org/docs/handbook/typescript-from-scratch), [Kotlin sealed classes](https://kotlinlang.org/docs/sealed-classes.html)
-
-## 2. 먼저 실패의 의미를 분류한다
-
-| 분류 | 예 | 기본 선택 |
-| --- | --- | --- |
-| 예상 가능한 업무/도메인 거절 | 잔액 부족, 중복 주문, 입력 규칙 위반 | `Result` 또는 함수 계약에 따른 typed throw |
-| 애플리케이션/워크플로 실패 | 정책, 취소, deadline 때문에 조율 작업을 완료하지 못함 | 호출자 계약에 따른 `Result` 또는 typed throw |
-| 인프라/외부 실패 | DB, HTTP API, 결제사, 파일 시스템, 큐 장애 | `cause`를 보존한 typed throw |
-| 불변식/프로그래머 오류 | 도달하면 안 되는 상태, 버그, 잘못된 내부 사용 | 즉시 throw하고 관찰 |
-
-업무 실패는 자동으로 예외도, 자동으로 `Result`도 아니다. 같은 `INSUFFICIENT_BALANCE`라도 다음 행동을 선택해야 하는 함수라면 데이터로 반환하고, 현재 작업을 중단하는 계약이라면 throw할 수 있다. 함수 계약과 복구 가능성으로 결정한다.
-
-TypeScript에는 checked exception이 없고 `Promise<T>` 같은 반환 타입도 throw 가능성을 표현하지 않는다. 따라서 throw 계약은 Error 클래스, 팀 규칙, 문서, 테스트로 관리해야 한다. 반면 `Result`는 실패 채널을 함수 시그니처에 드러낸다.
-
-선택 기준은 간단하다.
-
-| 질문 | 선택 |
-| --- | --- |
-| 호출자가 예상 가능한 실패를 분기·복구·재시도해야 하는가? | `Result` |
-| 현재 작업을 중단하고 상위 핸들러로 전파해야 하는가? | typed throw |
-| 불변식 위반이나 프로그래머 버그인가? | 별도 invariant Error throw |
-
-## 3. 예상 가능한 분기는 `Result<T, E>`로 표현한다
+If a new variant is added to `ValidationFailure` but not handled in the `switch`, `assertNever` produces a compile-time error. TypeScript types are erased at runtime, however, so declaring external JSON, message, or HTTP input as `ValidationFailure` does not validate it. Use a runtime validator such as Zod at the boundary.
 
 ```ts
+import { z } from "zod";
+const validationFailureSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal(ValidationFailureCode.REQUIRED_FIELD), field: z.string() }),
+  z.object({ kind: z.literal(ValidationFailureCode.INVALID_EMAIL), normalizedValue: z.string() }),
+]);
+function parseFailure(input: unknown): ValidationFailure {
+  return validationFailureSchema.parse(input);
+}
+```
+
+## 2. Classifying errors into four categories
+
+Classify the failure before choosing its representation. The representations below are defaults, not mandatory rules.
+
+| Category | Meaning | Common representation |
+| --- | --- | --- |
+| Expected domain/business rejection | A normal branch such as insufficient balance, duplicate order, or an input rule violation | `Result` or typed throw |
+| Application/workflow failure | A coordinated operation cannot complete because of policy, cancellation, or a deadline | `Result` or typed throw according to the caller contract |
+| Infrastructure/external failure | A DB, HTTP API, payment provider, filesystem, or queue fails or is temporarily unavailable | Typed throw with `cause` wrapped |
+| Invariant/programmer error | An impossible state, bug, or invalid internal use | Throw immediately and observe it |
+
+A business failure is neither automatically an exception nor automatically a `Result`. The same `INSUFFICIENT_BALANCE` outcome can be returned as data when a CLI needs to choose its next action, or thrown as a typed error when the current HTTP request must abort. Decide from the caller contract and recoverability.
+
+TypeScript has no checked exceptions, and a return type such as `Promise<T>` does not express whether a function may throw. Manage throw contracts with Error classes, team rules, documentation, and tests. A `Result`, in contrast, exposes the failure channel in the function signature.
+
+Use this simple decision table:
+
+| Question | Choice |
+| --- | --- |
+| Must the caller branch on, recover from, or retry an expected failure? | `Result` |
+| Must the current operation abort and propagate to an upper handler? | typed throw |
+| Is it an invariant violation or programmer bug? | throw a separate invariant Error |
+
+## 3. Representing expected branches with `Result<T, E>`
+
+`Result` represents success and expected failure together as return values. Keep failure codes in stable enums and put structured details on the relevant variants.
+
+```ts
+enum RegistrationField { EMAIL = "EMAIL", AGE = "AGE" }
 enum RegistrationFailureCode {
   REQUIRED_FIELD = "REQUIRED_FIELD",
   EMAIL_ALREADY_REGISTERED = "EMAIL_ALREADY_REGISTERED",
   AGE_RESTRICTION = "AGE_RESTRICTION",
 }
-enum RegistrationField { EMAIL = "EMAIL", AGE = "AGE" }
-type RegistrationFailure =
-  | { code: RegistrationFailureCode.REQUIRED_FIELD; field: RegistrationField }
-  | { code: RegistrationFailureCode.EMAIL_ALREADY_REGISTERED; safeEmail: string }
-  | { code: RegistrationFailureCode.AGE_RESTRICTION; minimumAge: number };
-type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+type RegistrationInput = { email: string; age: number };
 type User = { id: string; email: string };
-declare function emailAlreadyRegistered(email: string): boolean;
-declare function createUser(email: string, age: number): User;
-
-function register(email: string, age: number): Promise<Result<User, RegistrationFailure>> {
-  if (email.length === 0) return Promise.resolve({ ok: false, error: { code: RegistrationFailureCode.REQUIRED_FIELD, field: RegistrationField.EMAIL } });
-  if (age < 14) return Promise.resolve({ ok: false, error: { code: RegistrationFailureCode.AGE_RESTRICTION, minimumAge: 14 } });
-  if (emailAlreadyRegistered(email)) return Promise.resolve({ ok: false, error: { code: RegistrationFailureCode.EMAIL_ALREADY_REGISTERED, safeEmail: "redacted" } });
-  return Promise.resolve({ ok: true, value: createUser(email, age) });
+interface RequiredFieldFailure {
+  code: RegistrationFailureCode.REQUIRED_FIELD;
+  field: RegistrationField;
 }
-
-function explain(failure: RegistrationFailure): string {
+interface ExistingEmailFailure {
+  code: RegistrationFailureCode.EMAIL_ALREADY_REGISTERED;
+}
+interface AgeRestrictionFailure {
+  code: RegistrationFailureCode.AGE_RESTRICTION;
+  minimumAge: number;
+}
+type RegistrationFailure = RequiredFieldFailure | ExistingEmailFailure | AgeRestrictionFailure;
+type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+declare function emailAlreadyRegistered(email: string): boolean;
+declare function createUser(input: RegistrationInput): User;
+function register(input: RegistrationInput): Result<User, RegistrationFailure> {
+  if (input.email.length === 0) return { ok: false, error: { code: RegistrationFailureCode.REQUIRED_FIELD, field: RegistrationField.EMAIL } };
+  if (input.age < 14) return { ok: false, error: { code: RegistrationFailureCode.AGE_RESTRICTION, minimumAge: 14 } };
+  if (emailAlreadyRegistered(input.email)) return { ok: false, error: { code: RegistrationFailureCode.EMAIL_ALREADY_REGISTERED } };
+  return { ok: true, value: createUser(input) };
+}
+function explainRegistrationFailure(failure: RegistrationFailure): string {
   switch (failure.code) {
     case RegistrationFailureCode.REQUIRED_FIELD: return `${failure.field} is required`;
     case RegistrationFailureCode.EMAIL_ALREADY_REGISTERED: return "Email is already registered";
@@ -84,27 +119,28 @@ function explain(failure: RegistrationFailure): string {
 }
 ```
 
-`Result`는 워크플로를 반드시 계속하라는 뜻이 아니다. 호출자는 렌더링·재시도를 선택하고, 경계는 실패를 transport 오류로 매핑해 즉시 반환하거나 framework 오류로 throw할 수 있다. 한 함수 계약 안에서 문서화되지 않은 임의 throw를 섞지 않는다.
+Returning a `Result` does not mean the whole workflow must continue. The caller may render the failure or retry, while a boundary may map `Err` to an HTTP/RPC error and return immediately, or throw a framework error. Make this choice visible in the function contract; do not mix business `Result` failures with undocumented arbitrary throws in the same contract.
 
-`Result`가 특히 적합한 경우는 다음과 같다.
+`Result` is appropriate when:
 
-- 실패가 예상된 분기이고 호출자가 복구·재시도하거나 다른 UI를 선택할 수 있을 때
-- 여러 validation 이유를 구분해 호출자에게 전달해야 할 때
-- 함수 시그니처에 성공 채널과 실패 채널을 명시해야 할 때
+- The failure is an expected branch and the caller may recover, retry, or choose different UI.
+- Multiple validation reasons must be distinguished.
+- The function signature should declare its success and failure channels.
 
-## 4. typed throw가 맞는 경우
+## 4. Representing abort-and-propagate failures with typed throws
 
-현재 작업을 중단해 상위 호출자나 중앙 핸들러로 전파해야 할 때 typed throw가 적합하다. 특히 인프라/외부 실패, 중앙화된 핸들러, 불변식/프로그래머 오류에 사용한다.
+Typed throws are natural when the current operation must abort and propagate to an upper caller or centralized handler. Typical cases are infrastructure/external failures, a centralized framework handler, and invariant/programmer errors.
 
 ```ts
-enum InfrastructureCode {
+enum InfrastructureFailureCode {
   DATABASE_UNAVAILABLE = "DATABASE_UNAVAILABLE",
   PAYMENT_PROVIDER_TIMEOUT = "PAYMENT_PROVIDER_TIMEOUT",
 }
+interface InfrastructureDetails { operation: string; retryable: boolean }
 class InfrastructureError extends Error {
-  readonly code: InfrastructureCode;
-  readonly details: Readonly<{ operation: string; retryable: boolean }>;
-  constructor(code: InfrastructureCode, details: { operation: string; retryable: boolean }, options: ErrorOptions = {}) {
+  readonly code: InfrastructureFailureCode;
+  readonly details: Readonly<InfrastructureDetails>;
+  constructor(code: InfrastructureFailureCode, details: InfrastructureDetails, options: { cause?: unknown } = {}) {
     super("Infrastructure operation failed", options);
     this.name = "InfrastructureError";
     this.code = code;
@@ -114,97 +150,124 @@ class InfrastructureError extends Error {
 class InvariantViolation extends Error {
   constructor(message: string, options?: ErrorOptions) { super(message, options); this.name = "InvariantViolation"; }
 }
+interface Account { id: string }
+declare const accountRepository: { load(accountId: string): Account };
+function loadAccount(accountId: string): Account {
+  try { return accountRepository.load(accountId); }
+  catch (cause) {
+    throw new InfrastructureError(InfrastructureFailureCode.DATABASE_UNAVAILABLE, { operation: "loadAccount", retryable: true }, { cause });
+  }
+}
 ```
 
-오류에는 안정적인 `code`, 로그·재시도 판단에 필요한 안전한 `details`, 원인을 보존하는 native `cause`를 둔다. `Error`의 `cause`는 [MDN 문서](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error/cause)처럼 `{ cause }`로 감싼다. 입력 전문, 토큰, 결제 정보, PII, secret은 message·details에 넣지 않는다. `InvariantViolation`은 공개 업무 오류와 분리한다. 버그를 사용자 입력 오류로 포장하면 결함이 정상 분기로 숨겨진다.
+An error class should carry a stable `code`, safe `details` needed for logging or retry decisions, and the native `cause` that preserves the underlying failure. Do not put full input, tokens, payment data, PII, or secrets into `message`, `details`, or `cause`; use `cause` only for internal logs and tracing.
 
-## 5. transport 경계에서 한 번만 매핑한다
+Distinguish a public business error such as `BusinessRuleError` from an internal error such as `InvariantViolation`. The former may be converted to a stable business code. The latter is a bug signal: relabeling it as a user-input error hides a defect as a normal business branch.
 
-도메인·애플리케이션 코드에 HTTP status나 tRPC/Nest/Express 타입을 import하지 않는다. 내부의 `Result`/도메인 오류를 transport adapter가 외부 계약으로 한 번 매핑한다. Express의 error middleware, Nest의 exception filter, tRPC의 error formatting/handling은 이 경계 패턴의 예다. [Express error handling](https://expressjs.com/en/5x/guide/error-handling.html), [Nest exception filters](https://docs.nestjs.com/exception-filters), [tRPC error handling](https://trpc.io/docs/server/error-handling)
+## 5. Mapping once at the transport boundary
+
+The domain and application layers must not import HTTP status values or tRPC/Nest/Express types. They know `Result` and domain errors; the transport adapter maps them once into the public contract.
 
 ```ts
-type Response =
+type HttpResponse =
   | { status: 201; body: { userId: string } }
   | { status: 400 | 409 | 422; body: { code: RegistrationFailureCode; message: string } };
-function mapFailure(failure: RegistrationFailure): Response {
+function mapRegistrationFailure(failure: RegistrationFailure): HttpResponse {
   switch (failure.code) {
-    case RegistrationFailureCode.REQUIRED_FIELD: return { status: 400, body: { code: failure.code, message: "A required field is missing" } };
-    case RegistrationFailureCode.EMAIL_ALREADY_REGISTERED: return { status: 409, body: { code: failure.code, message: "Email is already registered" } };
-    case RegistrationFailureCode.AGE_RESTRICTION: return { status: 422, body: { code: failure.code, message: "Age requirement is not met" } };
+    case RegistrationFailureCode.REQUIRED_FIELD:
+      return { status: 400, body: { code: failure.code, message: "A required field is missing" } };
+    case RegistrationFailureCode.EMAIL_ALREADY_REGISTERED:
+      return { status: 409, body: { code: failure.code, message: "Email is already registered" } };
+    case RegistrationFailureCode.AGE_RESTRICTION:
+      return { status: 422, body: { code: failure.code, message: "Age requirement is not met" } };
     default: return assertNever(failure);
   }
 }
+function handleRegistration(input: RegistrationInput): HttpResponse {
+  const result = register(input);
+  if (result.ok) return { status: 201, body: { userId: result.value.id } };
+  return mapRegistrationFailure(result.error);
+}
 ```
 
-## 6. worker/queue 오류 계약
+Express error middleware, Nest exception filters, and tRPC error formatting/mapping are mainstream examples of this boundary, not a universal TypeScript standard. If another transport is added, each adapter should map the same domain error once.
 
-프로세스 경계를 넘을 때 `Error` class identity에 의존하지 않는다. plain data, stable code, `retryable`, idempotency key, 안전한 message를 직렬화한다. consumer는 retryability와 handler의 idempotency를 함께 보고 재시도한다. 원문 message·stack·`cause`는 전송하지 말고 correlation ID로 내부 로그에 남긴다.
+## 6. Error contracts for async workers and queues
+
+Across process, language, or deployment-version boundaries, do not serialize an `Error` instance or rely on class identity. Prototypes, stacks, and `cause` chains are not stable message contracts; send plain data with a stable code instead.
 
 ```ts
-type QueueFailure = {
-  code: QueueFailureCode;
-  retryable: boolean;
-  idempotencyKey: string;
-  safeMessage: string;
-};
-enum QueueFailureCode {
+enum JobFailureCode {
   INFRASTRUCTURE_FAILURE = "INFRASTRUCTURE_FAILURE",
   UNKNOWN_FAILURE = "UNKNOWN_FAILURE",
 }
-function serializeFailure(error: unknown, idempotencyKey: string): QueueFailure {
-  if (error instanceof InfrastructureError) {
-    return { code: QueueFailureCode.INFRASTRUCTURE_FAILURE, retryable: error.details.retryable, idempotencyKey, safeMessage: "Temporary processing failure" };
-  }
-  return { code: QueueFailureCode.UNKNOWN_FAILURE, retryable: false, idempotencyKey, safeMessage: "Processing failed" };
+interface SerializedJobFailure {
+  code: JobFailureCode;
+  retryable: boolean;
+  idempotencyKey: string;
+  publicMessage: string;
+  details: Readonly<Record<string, string | number | boolean>>;
+}
+function toJobFailure(error: unknown, idempotencyKey: string): SerializedJobFailure {
+  if (error instanceof InfrastructureError) return {
+    code: JobFailureCode.INFRASTRUCTURE_FAILURE,
+    retryable: error.details.retryable,
+    idempotencyKey,
+    publicMessage: "Temporary processing failure",
+    details: { operation: error.details.operation },
+  };
+  return { code: JobFailureCode.UNKNOWN_FAILURE, retryable: false, idempotencyKey, publicMessage: "Processing failed", details: {} };
 }
 ```
 
-unknown은 보수적인 fallback으로 alert/dead-letter에 보낸다. 재시도 가능한 작업은 중복 실행되어도 안전하도록 멱등성을 보장한다.
+The message should carry a stable failure code, retryability, idempotency, a safe public message, and limited structured payload. A consumer should consider retryability and handler idempotency together. Treat an unknown error as a conservative fallback: do not expose its raw message, route it to an alert/dead-letter flow, and keep its stack and `cause` in server logs under a correlation ID.
 
-## 7. 선택지 비교
+## 7. Comparing the options
 
-| 선택지 | 장점 | 주의점 |
+| Option | Strength | Caution |
 | --- | --- | --- |
-| Native union | 의존성 없이 명시적 계약·exhaustiveness | 조합/async helper를 직접 작성 |
-| [neverthrow](https://github.com/supermacro/neverthrow) | `ResultAsync`와 fluent 조합 | 라이브러리 API를 팀 전체가 채택해야 함 |
-| [fp-ts Either/TaskEither](https://gcanti.github.io/fp-ts/modules/Either.ts.html) / [TaskEither](https://gcanti.github.io/fp-ts/modules/TaskEither.ts.html) | 함수형 조합과 풍부한 추상화 | 학습 비용과 함수형 스타일 일관성 필요 |
-| [Effect](https://www.effect.website/) | 오류·재시도·리소스·동시성까지 아우르는 런타임/아키텍처 | 작은 코드베이스에는 과한 선택일 수 있음 |
-| [ts-pattern](https://github.com/gvergnaud/ts-pattern) | 패턴 매칭과 exhaustive 검사 | 추가 문법·의존성 |
+| Native discriminated union | Explicit contracts and exhaustive checking without a dependency | Write composition and async helpers yourself |
+| `neverthrow` | Adds `Result` composition, `ResultAsync`, and a fluent API | Adopt its API and team style broadly |
+| `fp-ts` `Either`/`TaskEither` | Functional combinators and typed async flows | Abstraction and learning cost |
+| `Effect` | Handles typed errors, resources, concurrency, and runtime together | An architecture/runtime choice, not a small utility |
+| `ts-pattern` | Helps with union matching and exhaustive checks | A matching tool, not an error channel |
 
-작은 코드베이스에는 native union만으로 충분하다. `Effect`는 단순 오류 타입의 대안이라기보다 넓은 아키텍처 선택이다.
+For a small codebase, native unions and `assertNever` are enough. Consider `neverthrow`/`fp-ts` when `Result` composition is repeated. Consider `Effect` when its execution model, resource handling, and concurrency model are adopted together; it changes function signatures and runtime boundaries, so it is an architectural decision.
 
-## 8. 권장 정책과 체크리스트
+## 8. Recommended policy and test checklist
 
-정책은 다음과 같다: 예상 가능한 업무 결과는 `Result`; 중단·전파할 인프라 실패는 stable-code typed throw; 불변식 위반은 별도 `InvariantViolation`; transport 매핑은 경계 한 곳; 외부 입력은 런타임 검증; 큐에는 plain data와 unknown fallback을 사용한다.
+Keep the policy short:
 
-피할 anti-pattern: 모든 것을 `any`/문자열로 표현하기, 모든 업무 거절을 throw하기, 모든 예외를 `Result`로 삼키기, domain에 HTTP 타입을 넣기, Error class를 큐 payload로 보내기, PII·secret을 message에 넣기, 불변식 오류를 공개 business error로 바꾸기.
+1. Classify failures as business rejection, application flow, infrastructure/external failure, or invariant error.
+2. Use `Result<T, E>` for expected/recoverable branches; use stable-code typed `Error` for infrastructure/invariant failures that must abort and propagate.
+3. Keep codes in enums, details safe and structured, and native `cause` for internal tracing.
+4. Keep transport types out of domain code and map public errors once in the adapter.
+5. Send validated plain data across queues, including retryability and idempotency.
 
-테스트 체크리스트:
+Test these points:
 
-- [ ] 모든 union `switch`가 `assertNever`로 exhaustive한가?
-- [ ] 각 업무 code의 transport 매핑과 unknown fallback을 검증했는가?
-- [ ] `cause`와 안전한 로그/correlation ID가 보존되는가?
-- [ ] public message에 PII·secret이 새지 않는가?
-- [ ] worker의 직렬화·재시도·dead-letter·unknown 경로가 있는가?
-- [ ] 재시도 대상 작업이 멱등적인가?
+- Exhaustive union checks and boundary mapping for every public code
+- No PII, secrets, or raw `cause` leakage; searchable cause chain and correlation-ID logging
+- Unknown-error fallback, retry/backoff behavior, and idempotency
+- Both `Result` branches and typed-throw type, code, and boundary response
 
-## 9. 반패턴
+## 9. Anti-patterns
 
-- 업무 결과를 `new Error(...)`로만 반환해 호출자가 가능한 변형을 알 수 없게 하기
-- 안정적인 `code` 대신 `message` 문자열을 분기 기준으로 사용하기
-- domain 코드가 HTTP status나 transport 타입에 의존하기
-- `Result`와 분류되지 않은 임의 throw를 한 함수 계약에 혼용하기
-- `catch`한 오류를 기록·전파·변환하지 않고 무시하기
-- 불변식 위반을 공개 업무 오류로 포장해 프로그래머 버그를 숨기기
+- Throwing raw `new Error("...")` throughout the codebase for business outcomes.
+- Treating the `message` string as a stable code.
+- Having domain code directly reference HTTP status or Express/Nest/tRPC types.
+- Mixing `Result` business failures with uncategorized throws in one contract.
+- Catching an error, logging it, and then ignoring it without returning or rethrowing.
+- Forcing invariant failures into user-input errors or normal business exceptions.
 
-## 참고 자료
+## References
 
 - [TypeScript Handbook: Narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing)
-- [TypeScript: 새로운 프로그래머를 위한 안내](https://www.typescriptlang.org/docs/handbook/typescript-from-scratch)
+- [TypeScript for the New Programmer](https://www.typescriptlang.org/docs/handbook/typescript-from-scratch)
 - [Kotlin: Sealed classes and interfaces](https://kotlinlang.org/docs/sealed-classes.html)
-- [Express 5: 오류 처리](https://expressjs.com/en/5x/guide/error-handling.html)
+- [Express 5: Error handling](https://expressjs.com/en/5x/guide/error-handling.html)
 - [NestJS: Exception filters](https://docs.nestjs.com/exception-filters)
-- [tRPC: 오류 처리](https://trpc.io/docs/server/error-handling)
+- [tRPC: Error handling](https://trpc.io/docs/server/error-handling)
 - [neverthrow](https://github.com/supermacro/neverthrow)
 - [fp-ts: Either](https://gcanti.github.io/fp-ts/modules/Either.ts.html)
 - [fp-ts: TaskEither](https://gcanti.github.io/fp-ts/modules/TaskEither.ts.html)
