@@ -2858,6 +2858,51 @@ test_perf_1000_line_heredoc_body_allows_within_timeout() {
     return "$result"
 }
 
+# Second O(N)-fork bottleneck regression guard (codex-write-guard second-
+# optimization story): 1000 lines of harmless, non-heredoc, non-dangerous
+# text with NO trailing real command at all -- the pure ALLOW path a
+# multi-line `echo` sequence takes. This is a DIFFERENT scenario from
+# test_perf_1000_non_heredoc_lines_denies_within_timeout above: that test's
+# trailing `rm -rf` still exercises the same segment loops (the deny fires
+# only after they run over every earlier padding line), but this test proves
+# the ALLOW path itself -- with no deny to short-circuit early exit -- is
+# fast, which is what actually caught the second bottleneck (the dangerous-
+# command segment loop and the redirect/rm target-extraction segment loop
+# both used to fork a NEW subprocess pipeline per line even when nothing
+# ever matched). Measured on the pre-fix implementation: ~6.3s for this exact
+# shape at 1000 lines (10 lines/150ms /.../ 1000 lines/6256ms, roughly linear
+# per line); the O(1)-fork rewrite (_cwg_dc_scan_dangerous +
+# _cwg_extract_shell_targets_bulk) completes in well under 1s for the same
+# input. The bound below is tighter than the sibling perf tests' `-ge 8`
+# (which only guards the 10s hook timeout) specifically to catch a
+# reintroduced per-line fork before it grows back toward that ceiling.
+test_perf_1000_non_heredoc_lines_allows_within_timeout() {
+    new_sandbox
+    local cmd out start end elapsed rc=0 result=0 i
+
+    cmd=""
+    for i in $(seq 1 1000); do
+        cmd="${cmd}echo line $i with some text here"$'\n'
+    done
+    cmd="${cmd%$'\n'}"
+
+    start=$(date +%s)
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    end=$(date +%s)
+    elapsed=$((end - start))
+
+    if ! assert_allow "$out" "$rc" "perf-1000-non-heredoc-lines-allows"; then
+        result=1
+    fi
+    if [ "$elapsed" -ge 3 ]; then
+        echo "ASSERTION FAILED perf-1000-non-heredoc-lines-allows: expected sub-second-class completion on the pure allow path, took ${elapsed}s (O(lines) fork regression in the dangerous-command scan or the redirect/rm target extraction?)"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -3011,6 +3056,7 @@ main() {
     run_test test_heredoc_multiple_sequential_real_command_after_denies
     run_test test_perf_1000_non_heredoc_lines_denies_within_timeout
     run_test test_perf_1000_line_heredoc_body_allows_within_timeout
+    run_test test_perf_1000_non_heredoc_lines_allows_within_timeout
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
