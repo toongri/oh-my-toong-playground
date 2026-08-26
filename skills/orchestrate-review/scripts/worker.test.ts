@@ -297,10 +297,10 @@ describe("main() 배선: prompt.txt가 필터링되어 reviewContent로 전달�
 			execFileSync(
 				process.execPath,
 				[WORKER_PATH, "--job-dir", jobDir, "--member", "correctness", "--command", "true"],
-				// OMT_DIR pinned to this test's own tmp root: worker.ts now acquires a
-				// machine-wide worker slot under $OMT_DIR/worker-slots before spawning
-				// its command, and this test must not touch the real project OMT_DIR.
-				{ stdio: "pipe", env: { ...process.env, OMT_DIR: tmpRoot } },
+				// HOME isolates the machine-wide worker slot pool under
+				// $HOME/.omt/worker-slots/v2, while OMT_DIR isolates worker state; both
+				// are pinned to this test's own tmp root.
+				{ stdio: "pipe", env: { ...process.env, HOME: tmpRoot, OMT_DIR: tmpRoot } },
 			);
 
 			const assembled = fs.readFileSync(
@@ -382,10 +382,16 @@ describe("main() 배선: --session/--prompt는 resumeOneTurn 경로(assembled-pr
 					"--prompt",
 					"continue please",
 				],
-				// OMT_DIR pinned to this test's own tmp root — see the wiring test above.
+				// HOME isolates the machine-wide worker slot pool and OMT_DIR isolates
+				// worker state; both are pinned to this test's own tmp root.
 				{
 					stdio: "pipe",
-					env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}`, OMT_DIR: tmpRoot },
+					env: {
+						...process.env,
+						PATH: `${stubDir}:${process.env.PATH}`,
+						HOME: tmpRoot,
+						OMT_DIR: tmpRoot,
+					},
 				},
 			);
 
@@ -484,8 +490,13 @@ describe("worker.ts 종료 경로 — reapOwnProcessGroup 연결", () => {
 						"--timeout",
 						"60",
 					],
-					// OMT_DIR pinned to this test's own tmp root — see the wiring test above.
-					{ detached: true, stdio: "ignore", env: { ...process.env, OMT_DIR: tmpDir } },
+					// HOME isolates the machine-wide worker slot pool and OMT_DIR isolates
+					// worker state; both are pinned to this test's own tmp root.
+					{
+						detached: true,
+						stdio: "ignore",
+						env: { ...process.env, HOME: tmpDir, OMT_DIR: tmpDir },
+					},
 				);
 				const workerPgid = worker.pid;
 				worker.unref();

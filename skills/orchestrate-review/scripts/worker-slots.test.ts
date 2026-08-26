@@ -4,7 +4,7 @@ import os from "os";
 import path from "path";
 import { spawnSync } from "child_process";
 
-import { resolveSlotCount, acquireWorkerSlot, releaseWorkerSlot } from "./worker-slots.ts";
+import { resolveSlotCount, slotsDir, acquireWorkerSlot, releaseWorkerSlot } from "./worker-slots.ts";
 
 function makeTmpDir(): string {
 	return fs.mkdtempSync(path.join(os.tmpdir(), "worker-slots-test-"));
@@ -32,6 +32,36 @@ describe("resolveSlotCount", () => {
 		for (const bad of ["0", "-1", "abc", "", "1.5"]) {
 			process.env.OMT_WORKER_SLOTS = bad;
 			expect(resolveSlotCount()).toBe(12);
+		}
+	});
+});
+
+describe("slotsDir", () => {
+	const originalOmtDir = process.env.OMT_DIR;
+
+	afterEach(() => {
+		if (originalOmtDir === undefined) delete process.env.OMT_DIR;
+		else process.env.OMT_DIR = originalOmtDir;
+	});
+
+	it("서로 다른 OMT_DIR에서도 HOME 기준 machine-wide v2 경로를 반환한다", () => {
+		const firstOmtDir = makeTmpDir();
+		const secondOmtDir = makeTmpDir();
+		const expected = path.join(os.homedir(), ".omt", "worker-slots", "v2");
+
+		try {
+			process.env.OMT_DIR = firstOmtDir;
+			const firstSlotsDir = slotsDir();
+			process.env.OMT_DIR = secondOmtDir;
+			const secondSlotsDir = slotsDir();
+
+			expect(firstSlotsDir).toBe(expected);
+			expect(secondSlotsDir).toBe(expected);
+			expect(path.relative(firstOmtDir, firstSlotsDir).split(path.sep)[0]).toBe("..");
+			expect(path.relative(secondOmtDir, secondSlotsDir).split(path.sep)[0]).toBe("..");
+		} finally {
+			fs.rmSync(firstOmtDir, { recursive: true, force: true });
+			fs.rmSync(secondOmtDir, { recursive: true, force: true });
 		}
 	});
 });

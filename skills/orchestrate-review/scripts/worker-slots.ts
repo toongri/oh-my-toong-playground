@@ -8,8 +8,8 @@
  * module enforces is deliberately NOT per-job: 8 jobs x 4 members with no
  * shared limit is exactly what drove load average to 40 on a 10-core box
  * (measured: 15 concurrent `codex exec` processes). A slot pool rooted at
- * $OMT_DIR is the one thing every worker.ts process on this machine shares,
- * regardless of which job or which conductor spawned it.
+ * $HOME/.omt/worker-slots/v2 is the one thing every worker.ts process on this
+ * machine shares, regardless of which job or which conductor spawned it.
  *
  * Slot claim uses a directory lock with a UUID owner record. The directory's
  * mkdir is the atomic no-replace acquisition step, and a dead- or reused-pid
@@ -23,10 +23,10 @@
 
 import { randomUUID } from "node:crypto";
 import fs from "fs";
+import os from "os";
 import path from "path";
 
 import { ensureDir, sleepMs } from "@lib/job-utils";
-import { getOmtDir } from "@lib/omt-dir";
 import { getProcessStartedAt } from "@lib/generic-job";
 
 export interface WorkerSlot {
@@ -35,7 +35,7 @@ export interface WorkerSlot {
 }
 
 export interface AcquireWorkerSlotOptions {
-	/** Slot pool directory. Defaults to $OMT_DIR/worker-slots (machine-wide). */
+	/** Slot pool directory. Defaults to $HOME/.omt/worker-slots/v2 (machine-wide). */
 	dir?: string;
 	/** Pool size. Defaults to resolveSlotCount(). */
 	slotCount?: number;
@@ -89,7 +89,7 @@ export function resolveSlotCount(): number {
 }
 
 export function slotsDir(): string {
-	return path.join(getOmtDir(), "worker-slots");
+	return path.join(os.homedir(), ".omt", "worker-slots", "v2");
 }
 
 function ownerRecord(): string {
