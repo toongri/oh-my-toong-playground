@@ -21,6 +21,17 @@ Uniformity of location is not a goal; matching cost to frequency is.
 The test: if you'd be annoyed to re-fetch this doc every single time the
 topic comes up, it wasn't situational — inline it.
 
+## 1.1 Project Docs and Component Grounding Docs
+
+Keep project-explanation docs separate from component grounding docs. Project
+docs explain oh-my-toong's architecture, workflows, and operations; they belong
+in the README catalog and follow the project documentation policy. Component
+grounding docs explain the criteria, examples, and rationale for one reusable
+component; global ones live under `docs/components/`, are discovered through
+their companion index rule, and are deployed through `docs.items`. They do not
+need a README catalog row or a bilingual pair unless their own audience requires
+one.
+
 ## 2. Three Rule Categories in `rules/`
 
 Every file under `rules/` is one of three kinds. Know which one you're

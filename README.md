@@ -65,7 +65,6 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 | [모델 배정](docs/model-assignment.md) | 에이전트별 모델 등급 배정 원칙과 `model-map` 치환 규칙 |
 | [플랫폼 YAML 설정 배포](docs/platform-yaml-config-deployment.md) | 플랫폼별 설정·훅·MCP의 배포·병합·삭제 규칙 |
 | [외부 반출 로컬 참조 게이트](docs/outbound-local-reference-gate.md) | 커밋·PR 생성/수정/댓글·Notion·Slack·Linear로 내보내는 로컬 경로 참조의 판정·범위·처방 |
-| [TypeScript 오류 처리](docs/typescript-error-handling.md) | `Result`, typed throw, 오류 분류와 transport/queue 경계 매핑 |
 
 ## Quick Start
 

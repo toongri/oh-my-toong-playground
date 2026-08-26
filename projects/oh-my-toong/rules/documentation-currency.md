@@ -1,9 +1,8 @@
-# Documentation Currency
+# Project Documentation Currency
 
-When you change what a component does or how the system works, the docs that
-describe it go stale silently. Updating documentation is part of the change, not
-an optional follow-up. Do not consider a functional change done until the docs
-that describe it are current.
+When you change how oh-my-toong works or what components it provides, keep its
+project-facing documentation current. Component grounding documents are governed
+by the separate component-docs rule.
 
 ## When This Rule Applies
 
@@ -20,22 +19,23 @@ do not trigger it.
 
 ## What to Check and Update
 
-Before considering the task done, read each surface and update what the change
-made stale:
+Before considering the task done, read each project-facing surface and update
+what the change made stale:
 
-1. **README** (`README.md`) — features list, philosophy, the docs-catalog table,
-   and any component counts the README states ("스킬 N종" 등).
-2. **`docs/`** — the category file documenting the affected component. The README
-   docs-catalog table maps each category to its file; use it to find the right one.
-3. **`CLAUDE.md`** — the architectural surfaces that drift the same way: Core
+1. **README** (`README.md`) and **README.en.md** — project identity, feature
+   list, philosophy, project-doc catalog, and component counts.
+2. **Project docs** — update a root `docs/` document when it explains
+   oh-my-toong's architecture, workflow, or operation. Component grounding docs
+   under `docs/components/` are handled by the component-docs rule.
+3. **CLAUDE.md** — the architectural surfaces that drift the same way: Core
    Skills table, Development Commands list, adapter table, directory layout.
 
 ## Non-Negotiables
 
-- **Bilingual pairs stay in lockstep.** README and every `docs/` file ship as a
-  Korean `.md` + English `.en.md` pair. Update both, or neither is current.
-- **Catalog before content.** When a doc file is added or removed, update the
-  README docs-catalog table that links to it — a dangling or missing catalog row
-  is a broken doc surface.
+- **README pairs stay in lockstep.** README and README.en.md describe the same
+  project-facing surface. Update both, or neither is current.
+- **Catalog project docs only.** The README docs-catalog table lists
+  project-facing docs. Component grounding docs are discovered through their
+  companion index rule and `docs.items` declaration.
 - **Counts are claims.** If a doc states a component count and you add or remove a
   component, that count is now a claim the repo no longer satisfies — correct it.

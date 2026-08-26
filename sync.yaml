@@ -169,3 +169,7 @@ rules:
     - toolchain-mise
     - component: codex-subagent-spawn
       platforms: [codex]
+
+docs:
+  items:
+    - components/typescript-error-handling
