@@ -7,6 +7,10 @@ does not cite a file that exists only on the current machine. It does not
 change source files; it decides whether a citation is safe at the outbound
 boundary for commits, PR bodies and comments, and collaboration tools.
 
+> Currently unregistered in `claude.yaml`/`codex.yaml`'s hook wiring (quadratic-
+> scaling tokenizer cost; pending re-optimization, tracked as a separate
+> issue). The scripts and the design below remain intact.
+
 ## Surfaces and scope
 
 | Wiring boundary | Surface | Input inspected |
