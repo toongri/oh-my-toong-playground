@@ -300,6 +300,40 @@ _cwg_mask_quoted() {
 # line (`cmd <<'EOF' && next`) -- only the BODY lines, up to and including
 # the terminator line, are dropped.
 #
+# PERFORMANCE (both-platform measurement, ultragoal test-hardening story):
+# this function's contract now ALSO returns the caller's subsequent
+# _cwg_mask_quoted pass applied to every surviving line -- both callers used
+# to do `stripped=$(_cwg_strip_heredoc_bodies "$cmd"); masked=$(_cwg_mask_quoted
+# "$stripped")`; that second call is gone from both call sites, folded in
+# here instead. The old version processed the input with a bash line-at-a-
+# time `while read` loop that forked a NEW _cwg_mask_quoted (its own `printf |
+# awk` subshell) plus `grep -oE | head -1` on EVERY non-heredoc-body line --
+# an O(number of lines) subprocess fork count. A multi-line Bash tool call
+# with hundreds or thousands of lines outside any active heredoc body (the
+# common case: most of a large command is NOT heredoc body) accumulated
+# forks linearly and could approach this hook's 10-second PreToolUse timeout
+# under CPU pressure -- measured directly: 1000 such lines took ~7s in the
+# fork-per-line form versus ~0.05s here. The rewrite below is ONE awk
+# process for the entire input regardless of line count: the heredoc
+# line-state machine (inhd/striptabs/delim, persisting across awk records)
+# and the full character-by-character quote/comment masking machinery
+# (previously _cwg_mask_quoted's own awk body, now the local _cwg_mask
+# function) both run inside the same awk program, so per-line work is
+# in-process awk looping, not a new fork per line. _cwg_mask_quoted itself
+# is UNCHANGED and still used standalone by _cwg_process_shell_text further
+# below (a different, non-heredoc route) -- only this heredoc pipeline's two
+# separate calls were merged.
+#
+# Masking a SURVIVING line here is byte-identical to what the old two-step
+# pipeline produced: _cwg_mask_quoted resets all of its state at the start
+# of processing each line it is given (whether invoked once per line, as the
+# old code did, or once over a multi-line blob, as the old code's second
+# pass over the stripped text did) -- so masking is inherently a per-line,
+# state-does-not-carry-across-lines operation already, and computing it once
+# per kept line here (reused for BOTH heredoc-marker detection on this line
+# and as this line's contribution to the final output) reproduces the old
+# two-pass result exactly, without masking anything twice.
+#
 # Scope note: this is called ONLY from the dangerous-command guard's own
 # command text, NOT from the ledger/code-review-artifact candidate
 # extraction route (_cwg_process_shell_text further below) -- that route's
@@ -318,40 +352,140 @@ _cwg_mask_quoted() {
 # heredoc at real execution time -- the token is literal text inside a string
 # -- but a raw-text scan read it as an opener and then dropped every
 # following line through `EOF`, swallowing a live `rm -rf` on the next line
-# and bypassing the dangerous-command guard entirely. _cwg_mask_quoted is
-# exactly the right masker here because it neutralizes `<` INSIDE quoted
-# spans while PRESERVING a genuinely quoted delimiter as a bare word
-# (`cat <<'EOF'` -> `cat <<EOF`), so real quoted heredocs keep stripping.
+# and bypassing the dangerous-command guard entirely. The masking here is
+# exactly the right filter because it neutralizes `<` INSIDE quoted spans
+# while PRESERVING a genuinely quoted delimiter as a bare word (`cat
+# <<'EOF'` -> `cat <<EOF`), so real quoted heredocs keep stripping.
 #
 # Residual, unclosed by design (same class as this file's other static-scan
 # limits): masking is per-line, so a quote opened on one line and closed on a
 # later one is not tracked across the boundary, and a `<<DELIM` inside a live
-# `$( )`/backtick span is passed through unmasked by _cwg_mask_quoted itself.
+# `$( )`/backtick span is passed through unmasked by the masking here.
+#
+# qc/hdpat/qc_start/qc_end are built at runtime from sq/dq (sprintf'd
+# character constants, same trick _cwg_mask_quoted uses) rather than written
+# as literal `['"]` regex text, purely so this whole awk program can stay
+# inside a single-quoted shell string -- a literal `'` character cannot
+# appear inside one. hdpat mirrors the old `grep -oE
+# "<<-?[[:space:]]*['\"]?[A-Za-z_][A-Za-z0-9_]*['\"]?"`; awk's match() finds
+# the same leftmost POSIX-ERE match grep -oE | head -1 did, so no separate
+# "first match" step is needed. The three delim-extraction sub() calls mirror
+# the old `sed -E "s/^<<-?[[:space:]]*//; s/^['\"]//; s/['\"]\$//"` one
+# substitution at a time, same as sed's default (no `g` flag).
 _cwg_strip_heredoc_bodies() {
-    local text="$1"
-    local out="" line delim="" striptabs=0 inhd=0 cmp marker masked
-    while IFS= read -r line || [ -n "$line" ]; do
-        if [ "$inhd" -eq 1 ]; then
-            cmp="$line"
-            if [ "$striptabs" -eq 1 ]; then
-                cmp="${cmp#"${cmp%%[!$'\t']*}"}"
-            fi
-            if [ "$cmp" = "$delim" ]; then
-                inhd=0
-            fi
-            continue
-        fi
-        masked=$(_cwg_mask_quoted "$line")
-        marker=$(printf '%s\n' "$masked" | grep -oE "<<-?[[:space:]]*['\"]?[A-Za-z_][A-Za-z0-9_]*['\"]?" | head -1) || marker=""
-        if [ -n "$marker" ]; then
-            striptabs=0
-            case "$marker" in "<<-"*) striptabs=1 ;; esac
-            delim=$(printf '%s' "$marker" | sed -E "s/^<<-?[[:space:]]*//; s/^['\"]//; s/['\"]\$//")
-            inhd=1
-        fi
-        out="${out}${line}"$'\n'
-    done <<< "$text"
-    printf '%s' "$out"
+    printf '%s' "$1" | awk '
+        function _cwg_mask(s,    n,i,c,nc,insq,indq,dpdepth,subsq,subdq,btactive,out) {
+            n = length(s)
+            insq = 0
+            indq = 0
+            dpdepth = 0
+            subsq = 0
+            subdq = 0
+            btactive = 0
+            out = ""
+            for (i = 1; i <= n; i++) {
+                c = substr(s, i, 1)
+
+                if (c == bs && !insq && i < n) {
+                    nc = substr(s, i + 1, 1)
+                    if (nc == ">" || nc == "<" || nc == "|" || nc == ";" || nc == "&") {
+                        out = out "  "
+                    } else {
+                        out = out c nc
+                    }
+                    i++
+                    continue
+                }
+
+                if (dpdepth > 0) {
+                    if (subsq) {
+                        if (c == sq) { subsq = 0 }
+                    } else if (subdq) {
+                        if (c == bs && i < n) { out = out c; i++; c = substr(s, i, 1) }
+                        else if (c == dq) { subdq = 0 }
+                    } else if (c == bs && i < n) {
+                        out = out c; i++; c = substr(s, i, 1)
+                    } else if (c == sq) {
+                        subsq = 1
+                    } else if (c == dq) {
+                        subdq = 1
+                    } else if (c == lp) {
+                        dpdepth++
+                    } else if (c == rp) {
+                        dpdepth--
+                        if (dpdepth == 0) { out = out " "; continue }
+                    }
+                    out = out c
+                    continue
+                }
+                if (btactive) {
+                    if (c == bt) { btactive = 0 }
+                    out = out c
+                    continue
+                }
+
+                if (indq && c == dl && i < n && substr(s, i + 1, 1) == lp) {
+                    dpdepth = 1
+                    subsq = 0
+                    subdq = 0
+                    out = out c lp
+                    i++
+                    continue
+                }
+                if (indq && c == bt) {
+                    btactive = 1
+                    out = out c
+                    continue
+                }
+
+                if (!indq && c == sq) {
+                    insq = 1 - insq
+                    continue
+                }
+                if (!insq && c == dq) {
+                    indq = 1 - indq
+                    continue
+                }
+                if ((insq || indq) && (c == ">" || c == "<" || c == "|" || c == ";" || c == "&")) {
+                    out = out " "
+                    continue
+                }
+                if (!insq && !indq && dpdepth == 0 && !btactive && c == hs && (out == "" || substr(out, length(out), 1) ~ /[ \t]/)) {
+                    break
+                }
+                out = out c
+            }
+            return out
+        }
+        BEGIN {
+            sq = sprintf("%c", 39); dq = sprintf("%c", 34); bs = sprintf("%c", 92); dl = sprintf("%c", 36); lp = sprintf("%c", 40); rp = sprintf("%c", 41); bt = sprintf("%c", 96); hs = sprintf("%c", 35)
+            qc = "[" sq dq "]"
+            hdpat = "<<-?[[:space:]]*" qc "?[A-Za-z_][A-Za-z0-9_]*" qc "?"
+            qc_start = "^" qc
+            qc_end = qc "$"
+            inhd = 0
+            striptabs = 0
+            delim = ""
+        }
+        {
+            if (inhd) {
+                cmp = $0
+                if (striptabs) { gsub(/^\t+/, "", cmp) }
+                if (cmp == delim) { inhd = 0 }
+                next
+            }
+            masked = _cwg_mask($0)
+            if (match(masked, hdpat) > 0) {
+                marker = substr(masked, RSTART, RLENGTH)
+                striptabs = (marker ~ /^<<-/) ? 1 : 0
+                delim = marker
+                sub(/^<<-?[[:space:]]*/, "", delim)
+                sub(qc_start, "", delim)
+                sub(qc_end, "", delim)
+                inhd = 1
+            }
+            print masked
+        }'
 }
 
 # jq is required for full JSON-shaped extraction (tool_name routing,
@@ -384,8 +518,7 @@ if ! command -v jq > /dev/null 2>&1; then
         _cwg_nojq_cmd=$(_cwg_nojq_extract_str_field cmd) || _cwg_nojq_cmd=""
     fi
     if [ -n "$_cwg_nojq_cmd" ]; then
-        _cwg_nojq_stripped=$(_cwg_strip_heredoc_bodies "$_cwg_nojq_cmd")
-        _cwg_nojq_masked=$(_cwg_mask_quoted "$_cwg_nojq_stripped")
+        _cwg_nojq_masked=$(_cwg_strip_heredoc_bodies "$_cwg_nojq_cmd")
         # Whole-command, not per-segment: a `sub=<subcommand>;` assignment splits
         # the two tokens across chain segments (see write-guard-core.sh).
         _cwg_nojq_out=$(write_guard_core_check_user_authorized_command "$_cwg_nojq_masked")
@@ -427,15 +560,17 @@ esac
 # resolved session id -- but this dangerous-command guard has no such
 # dependency, and must not silently inherit that unrelated fail-open.
 #
-# Heredoc-body stripping (_cwg_strip_heredoc_bodies) runs BEFORE quote-aware
-# masking (CONFIRMED false-deny fix, both-platform measurement): a
-# destructive-looking string sitting inside a heredoc BODY (e.g.
-# `cat <<'EOF'` / `rm -rf /tmp/x` / `EOF`) is literal stdin data, never
-# parsed as shell code, so it must never reach the chain-splitter below.
+# Heredoc-body stripping runs BEFORE quote-aware masking (CONFIRMED
+# false-deny fix, both-platform measurement): a destructive-looking string
+# sitting inside a heredoc BODY (e.g. `cat <<'EOF'` / `rm -rf /tmp/x` /
+# `EOF`) is literal stdin data, never parsed as shell code, so it must never
+# reach the chain-splitter below. _cwg_strip_heredoc_bodies now performs
+# both steps (strip, then mask) in one call -- see its own docstring.
 #
-# Quote-aware masking (_cwg_mask_quoted, same function the shell-target route
-# below uses) is applied BEFORE chain-splitting, mirroring that sibling route
-# exactly (code-review CONFIRMED fix, both single- and double-quoted spans):
+# Quote-aware masking (the same masking logic the shell-target route below
+# uses via _cwg_mask_quoted) is applied BEFORE chain-splitting, mirroring
+# that sibling route exactly (code-review CONFIRMED fix, both single- and
+# double-quoted spans):
 # without it, a `;`/`|` inside a quoted string (e.g. `echo 'note; rm -rf
 # /tmp/x'` OR `echo "note; rm -rf /tmp/x"`) was read the same as a live
 # chain separator, splitting the segment so its second half
@@ -462,8 +597,7 @@ case "$tool_name" in
         for _cwg_dc_key in command cmd; do
             _cwg_dc_cmd=$(printf '%s' "$input" | jq -r --arg k "$_cwg_dc_key" '.tool_input[$k] // empty' 2>/dev/null) || _cwg_dc_cmd=""
             [ -n "$_cwg_dc_cmd" ] || continue
-            _cwg_dc_stripped=$(_cwg_strip_heredoc_bodies "$_cwg_dc_cmd")
-            _cwg_dc_masked=$(_cwg_mask_quoted "$_cwg_dc_stripped")
+            _cwg_dc_masked=$(_cwg_strip_heredoc_bodies "$_cwg_dc_cmd")
             # Whole-command, not per-segment — same reason as the no-jq path above.
             _cwg_dc_out=$(write_guard_core_check_user_authorized_command "$_cwg_dc_masked")
             if [ -n "$_cwg_dc_out" ]; then
