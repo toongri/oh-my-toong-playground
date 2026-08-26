@@ -64,6 +64,8 @@ bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --prompt-file "$PROMPT_FILE"
 ```
 Output: JOB_DIR path (one line on stdout). Each configured angle is dispatched as one finder; the angle's role prompt (`scripts/prompts/<angle>.md`) is injected automatically by member name.
 
+**Machine-wide worker concurrency cap:** `start` returns immediately once every member's worker process is spawned — this is unaffected. Each spawned worker then self-throttles before it launches its actual CLI child (`codex exec` etc.): it acquires one slot from a machine-wide pool (shared across every chunk-review job on the host, not per-job) rooted at `$OMT_DIR/worker-slots`, waiting (polling every 1–2s) if the pool is full, and releases the slot the moment its CLI turn finishes. Pool size defaults to `max(1, logical cores - 2)`, overridable via `OMT_WORKER_SLOTS`. This only changes when a dispatched member's CLI actually starts running under load from many concurrent jobs — it never delays `start`'s own dispatch ack or `collect`'s polling contract.
+
 ### Step 2 — Collect (Bash)
 
 One `collect` call is one poll: it waits up to 20 seconds, then answers with the job's current state. Finders run far longer than a single poll, so repeating is the normal path, not a symptom that something is wrong. No external sleep needed, and **no call budget of your own to keep** — the response itself tells you when to stop.
