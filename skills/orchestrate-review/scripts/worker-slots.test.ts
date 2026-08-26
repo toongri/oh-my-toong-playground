@@ -91,6 +91,139 @@ describe("acquireWorkerSlot / releaseWorkerSlot", () => {
 		releaseWorkerSlot(second);
 	});
 
+	it("정상 live owner를 여러 contender가 polling해도 ps를 반복 호출하지 않는다", async () => {
+		dir = makeTmpDir();
+		const wrapperDir = makeTmpDir();
+		const psCallsPath = path.join(wrapperDir, "ps-calls");
+		const realPs = spawnSync("sh", ["-c", "command -v ps"], { encoding: "utf8" }).stdout.trim();
+		expect(realPs).not.toBe("");
+
+		const fakePsPath = path.join(wrapperDir, "ps");
+		fs.writeFileSync(
+			fakePsPath,
+			[
+				"#!/bin/sh",
+				`printf '%s\\n' call >> ${JSON.stringify(psCallsPath)}`,
+				`exec ${JSON.stringify(realPs)} "$@"`,
+			].join("\n"),
+			"utf8",
+		);
+		fs.chmodSync(fakePsPath, 0o755);
+
+		try {
+			// Start a separate Bun process after installing the wrapper. Bun snapshots
+			// the child environment at process start, so changing PATH in this test
+			// process after importing worker-slots.ts would not intercept execSync.
+			const script = `
+import fs from "fs";
+import { acquireWorkerSlot, releaseWorkerSlot } from ${JSON.stringify(path.resolve(import.meta.dirname, "worker-slots.ts"))};
+
+const dir = process.env.WORKER_SLOTS_TEST_DIR;
+const psCallsPath = process.env.WORKER_SLOTS_TEST_PS_CALLS;
+if (typeof dir !== "string" || typeof psCallsPath !== "string") process.exit(2);
+
+function countCalls() {
+\tif (!fs.existsSync(psCallsPath)) return 0;
+\tconst content = fs.readFileSync(psCallsPath, "utf8").trim();
+\treturn content === "" ? 0 : content.split("\\n").length;
+}
+
+const first = await acquireWorkerSlot({ dir, slotCount: 1, pollMs: 20 });
+const callsAfterAcquire = countCalls();
+let contenderAcquired = 0;
+const contenders = [1, 2, 3].map(() =>
+\tacquireWorkerSlot({ dir, slotCount: 1, pollMs: 20 }).then((slot) => {
+\t\tcontenderAcquired++;
+\t\treturn slot;
+\t}),
+);
+await new Promise((resolve) => setTimeout(resolve, 120));
+const callsWhileOccupied = countCalls();
+const marker = { callsAfterAcquire, callsWhileOccupied, contenderAcquired };
+
+releaseWorkerSlot(first);
+await Promise.all(
+\tcontenders.map(async (promise) => {
+\t\tconst slot = await promise;
+\t\treleaseWorkerSlot(slot);
+\t}),
+);
+console.log(JSON.stringify(marker));
+`;
+			const child = spawnSync(process.execPath, ["-e", script], {
+				cwd: path.resolve(import.meta.dirname, "../../.."),
+				encoding: "utf8",
+				env: {
+					...process.env,
+					PATH: process.env.PATH === undefined ? wrapperDir : `${wrapperDir}:${process.env.PATH}`,
+					WORKER_SLOTS_TEST_DIR: dir,
+					WORKER_SLOTS_TEST_PS_CALLS: psCallsPath,
+				},
+			});
+
+			expect(child.status).toBe(0);
+			const marker = JSON.parse(child.stdout.trim());
+			expect(marker.contenderAcquired).toBe(0);
+			expect(marker.callsAfterAcquire).toBeGreaterThan(0);
+			expect(marker.callsWhileOccupied).toBe(marker.callsAfterAcquire);
+		} finally {
+			fs.rmSync(wrapperDir, { recursive: true, force: true });
+		}
+	});
+
+	it("heartbeat는 owner record를 갱신하고 release 뒤에는 같은 경로를 갱신하지 않는다", async () => {
+		dir = makeTmpDir();
+		const script = `
+import fs from "fs";
+import { acquireWorkerSlot, releaseWorkerSlot } from ${JSON.stringify(path.resolve(import.meta.dirname, "worker-slots.ts"))};
+
+const dir = process.env.WORKER_SLOTS_TEST_DIR;
+if (typeof dir !== "string") process.exit(2);
+
+const slot = await acquireWorkerSlot({ dir, slotCount: 1, pollMs: 20 });
+let heartbeatObserved = false;
+let markerChangedAfterRelease = false;
+try {
+\tconst initialMtimeMs = fs.statSync(slot.ownerRecordPath).mtimeMs;
+\tconst heartbeatDeadline = Date.now() + 2500;
+\twhile (Date.now() < heartbeatDeadline) {
+\t\tif (fs.statSync(slot.ownerRecordPath).mtimeMs > initialMtimeMs) {
+\t\t\theartbeatObserved = true;
+\t\t\tbreak;
+\t\t}
+\t\tawait new Promise((resolve) => setTimeout(resolve, 20));
+\t}
+
+\treleaseWorkerSlot(slot);
+\tfs.mkdirSync(slot.slotPath);
+\tfs.writeFileSync(slot.ownerRecordPath, "released-owner-marker");
+\tconst markerMtimeMs = fs.statSync(slot.ownerRecordPath).mtimeMs;
+\tconst releaseDeadline = Date.now() + 1500;
+\twhile (Date.now() < releaseDeadline) {
+\t\tif (fs.statSync(slot.ownerRecordPath).mtimeMs !== markerMtimeMs) {
+\t\t\tmarkerChangedAfterRelease = true;
+\t\t\tbreak;
+\t\t}
+\t\tawait new Promise((resolve) => setTimeout(resolve, 20));
+\t}
+} finally {
+\treleaseWorkerSlot(slot);
+\tif (fs.existsSync(slot.slotPath)) fs.rmSync(slot.slotPath, { recursive: true, force: true });
+}
+console.log(JSON.stringify({ heartbeatObserved, markerChangedAfterRelease }));
+`;
+		const child = spawnSync(process.execPath, ["-e", script], {
+			cwd: path.resolve(import.meta.dirname, "../../.."),
+			encoding: "utf8",
+			env: { ...process.env, WORKER_SLOTS_TEST_DIR: dir },
+		});
+
+		expect(child.status).toBe(0);
+		const marker = JSON.parse(child.stdout.trim());
+		expect(marker.heartbeatObserved).toBe(true);
+		expect(marker.markerChangedAfterRelease).toBe(false);
+	});
+
 	it("점유 중이던 프로세스가 이미 죽었으면 대기 없이(폴링 주기를 기다리지 않고) 슬롯을 즉시 회수한다", async () => {
 		dir = makeTmpDir();
 		fs.mkdirSync(dir, { recursive: true });

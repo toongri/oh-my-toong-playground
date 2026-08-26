@@ -14,10 +14,11 @@
  * Slot claim uses a directory lock with a UUID owner record. The directory's
  * mkdir is the atomic no-replace acquisition step, and a dead- or reused-pid
  * owner is reclaimed via the same pid + pidStartedAt witness
- * getProcessStartedAt already provides — the exact "kill -0 equivalent, but
- * pid-reuse-safe" liveness check this codebase already established for
- * workerPgid liveness (see judgePgidSignal in generic-job.ts) and reuses here
- * rather than inventing a second liveness mechanism.
+ * getProcessStartedAt already provides. Live owners heartbeat their unique
+ * record every second; occupied polling uses kill-0 plus that heartbeat and
+ * only consults the ps-backed witness when the heartbeat is stale. A matching
+ * stale owner is re-heartbeated after the witness check so multiple waiters do
+ * not repeat ps work in the same stale window.
  */
 
 import { randomUUID } from "node:crypto";
@@ -43,6 +44,27 @@ export interface AcquireWorkerSlotOptions {
 }
 
 const DEFAULT_POLL_MS = 1500;
+const HEARTBEAT_INTERVAL_MS = 1000;
+const HEARTBEAT_STALE_MS = 5000;
+
+const heartbeatTimers = new WeakMap<WorkerSlot, ReturnType<typeof setInterval>>();
+
+/** Best-effort mtime heartbeat for one owner generation. */
+function touchOwnerRecord(ownerRecordPath: string): void {
+	try {
+		const now = new Date();
+		fs.utimesSync(ownerRecordPath, now, now);
+	} catch {
+		// A released or externally reclaimed record no longer needs heartbeats.
+	}
+}
+
+/** Start the owner-generation heartbeat without keeping the process alive. */
+function startOwnerHeartbeat(ownerRecordPath: string): ReturnType<typeof setInterval> {
+	const timer = setInterval(() => touchOwnerRecord(ownerRecordPath), HEARTBEAT_INTERVAL_MS);
+	timer.unref();
+	return timer;
+}
 
 /**
  * A slot directory that exists but carries no readable/valid owner pid is either
@@ -83,7 +105,7 @@ type DeadSlot = { ownerRecordPath: string | null };
  * owner-witness lookup. The completed owner record is prepared in a private
  * sibling directory and moved into the reserved slot, so a contender can
  * never replace a live slot directory with a late rename. Reserving first
- * also keeps the existing ps-backed witness cost off the occupied-slot path.
+ * also keeps the one-time ps-backed witness lookup off the occupied-slot path.
  */
 function claimFreshSlot(slotPath: string): string | null {
 	const claimPath = path.join(path.dirname(slotPath), `.${path.basename(slotPath)}.claim-${randomUUID()}`);
@@ -140,6 +162,7 @@ interface SlotOwner {
 function ownerIsDead(slotPath: string): DeadSlot | null {
 	let ownerRecordPath: string;
 	let slotMtimeMs: number;
+	let ownerRecordMtimeMs: number;
 	try {
 		const slotStat = fs.lstatSync(slotPath);
 		if (!slotStat.isDirectory() || slotStat.isSymbolicLink()) return null;
@@ -152,6 +175,7 @@ function ownerIsDead(slotPath: string): DeadSlot | null {
 		ownerRecordPath = path.join(slotPath, entries[0]);
 		const ownerStat = fs.lstatSync(ownerRecordPath);
 		if (!ownerStat.isFile() || ownerStat.isSymbolicLink()) return null;
+		ownerRecordMtimeMs = ownerStat.mtimeMs;
 	} catch {
 		return null;
 	}
@@ -179,13 +203,23 @@ function ownerIsDead(slotPath: string): DeadSlot | null {
 			? { ownerRecordPath: observedOwnerRecordPath }
 			: null;
 	}
-	// pid is alive — but is it still OUR owner, or has the OS handed this
-	// number to an unrelated process since the record was written?
+	// A live pid with a fresh owner heartbeat is occupied. The heartbeat avoids
+	// running the synchronous ps-backed witness lookup on every poll.
+	if (Date.now() - ownerRecordMtimeMs <= HEARTBEAT_STALE_MS) return null;
+
+	// The heartbeat is stale — is this still OUR owner, or has the OS handed
+	// this number to an unrelated process since the record was written?
 	const storedStartedAt = typeof owner.pidStartedAt === "string" ? owner.pidStartedAt : null;
+	if (storedStartedAt === null) return null;
 	const currentStartedAt = getProcessStartedAt(pid);
-	return storedStartedAt !== null && currentStartedAt !== null && storedStartedAt !== currentStartedAt
-		? { ownerRecordPath: observedOwnerRecordPath }
-		: null;
+	if (currentStartedAt === null) return null;
+	if (storedStartedAt !== currentStartedAt) return { ownerRecordPath: observedOwnerRecordPath };
+
+	// The stale check proved that this is still the same owner. Refreshing the
+	// exact record path coalesces later waiters' stale checks into this heartbeat
+	// window without ever touching another generation's record.
+	touchOwnerRecord(observedOwnerRecordPath);
+	return null;
 }
 
 /** Claim slotPath, reclaiming a dead/reused-pid owner's abandoned slot first. */
@@ -226,17 +260,25 @@ export async function acquireWorkerSlot(options: AcquireWorkerSlotOptions = {}):
 			const slotPath = path.join(dir, `slot-${i}`);
 			const ownerRecordPath = tryClaimSlot(slotPath);
 			if (ownerRecordPath !== null) {
-				return { slotPath, ownerRecordPath };
+				const slot = { slotPath, ownerRecordPath };
+				heartbeatTimers.set(slot, startOwnerHeartbeat(ownerRecordPath));
+				return slot;
 			}
 		}
 		await sleepMs(pollMs);
 	}
 }
 
-/** Release a previously-acquired slot by removing only this claim's owner
- * record, then removing the slot directory only if it is empty. Safe to call
- * even if the slot was already reclaimed (double release or a late release). */
+/** Release a previously-acquired slot by stopping this generation's heartbeat,
+ * removing only its owner record, then removing the slot directory only if it
+ * is empty. Safe to call even if the slot was already reclaimed (double
+ * release or a late release). */
 export function releaseWorkerSlot(slot: WorkerSlot): void {
+	const heartbeatTimer = heartbeatTimers.get(slot);
+	if (heartbeatTimer !== undefined) {
+		clearInterval(heartbeatTimer);
+		heartbeatTimers.delete(slot);
+	}
 	try {
 		fs.unlinkSync(slot.ownerRecordPath);
 	} catch {
