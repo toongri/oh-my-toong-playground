@@ -18,9 +18,9 @@ describe("resolveSlotCount", () => {
 		else process.env.OMT_WORKER_SLOTS = originalEnv;
 	});
 
-	it("OMT_WORKER_SLOTS가 없으면 max(1, 논리 코어 수 - 2)를 기본값으로 쓴다", () => {
+	it("OMT_WORKER_SLOTS가 없으면 12를 기본값으로 쓴다", () => {
 		delete process.env.OMT_WORKER_SLOTS;
-		expect(resolveSlotCount()).toBe(Math.max(1, os.cpus().length - 2));
+		expect(resolveSlotCount()).toBe(12);
 	});
 
 	it("OMT_WORKER_SLOTS로 슬롯 수를 오버라이드할 수 있다", () => {
@@ -31,7 +31,7 @@ describe("resolveSlotCount", () => {
 	it("0 이하이거나 숫자가 아닌 오버라이드 값은 무시하고 기본값으로 되돌아간다", () => {
 		for (const bad of ["0", "-1", "abc", "", "1.5"]) {
 			process.env.OMT_WORKER_SLOTS = bad;
-			expect(resolveSlotCount()).toBe(Math.max(1, os.cpus().length - 2));
+			expect(resolveSlotCount()).toBe(12);
 		}
 	});
 });

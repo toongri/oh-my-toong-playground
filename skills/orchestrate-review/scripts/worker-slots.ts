@@ -21,7 +21,6 @@
  */
 
 import fs from "fs";
-import os from "os";
 import path from "path";
 
 import { ensureDir, sleepMs } from "@lib/job-utils";
@@ -54,14 +53,15 @@ const DEFAULT_POLL_MS = 1500;
  */
 const CORRUPT_SLOT_STALE_MS = 60_000;
 
+const DEFAULT_SLOT_COUNT = 12;
+
 export function resolveSlotCount(): number {
 	const raw = process.env.OMT_WORKER_SLOTS;
 	if (raw !== undefined && raw.trim() !== "") {
 		const n = Number(raw);
 		if (Number.isFinite(n) && Number.isInteger(n) && n > 0) return n;
 	}
-	const cpuCount = os.cpus().length || 1;
-	return Math.max(1, cpuCount - 2);
+	return DEFAULT_SLOT_COUNT;
 }
 
 export function slotsDir(): string {
