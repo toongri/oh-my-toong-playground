@@ -164,7 +164,12 @@ rules:
     - convention-grounding
     - verification-discipline
     - e2e-driver-usage
+    - error-handling-docs
     - outbound-local-reference
     - toolchain-mise
     - component: codex-subagent-spawn
       platforms: [codex]
+
+docs:
+  items:
+    - components/typescript-error-handling
