@@ -619,7 +619,6 @@ _claude_pretooluse_expected_ids="pre-tool-enforcer.sh
 qa-driver-guard.sh
 review-exec-guard.sh
 label-commit-gate.sh
-local-path-ref-gate.sh
 explain-diff-artifact-guard.sh"
 
 _codex_pretooluse_expected_ids="codex-qa-seed.sh
@@ -628,7 +627,6 @@ codex-explain-diff-artifact-guard.sh
 codex-write-guard.sh
 codex-qa-driver-guard.sh
 codex-label-commit-gate.sh
-codex-local-path-ref-gate.sh
 codex-review-exec-guard.sh
 codex.verify-entrypoint-gate
 codex-spawn-depth-gate.sh
