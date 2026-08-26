@@ -43,13 +43,29 @@ describe("acquireWorkerSlot / releaseWorkerSlot", () => {
 		fs.rmSync(dir, { recursive: true, force: true });
 	});
 
-	it("빈 풀에서 첫 acquire는 즉시 성공하고, release 후 슬롯 파일이 사라진다", async () => {
+	it("빈 풀에서 첫 acquire는 즉시 성공하고, release 후 슬롯 디렉터리가 사라진다", async () => {
 		dir = makeTmpDir();
 		const slot = await acquireWorkerSlot({ dir, slotCount: 1, pollMs: 20 });
-		expect(fs.existsSync(slot.slotPath)).toBe(true);
+		expect(fs.statSync(slot.slotPath).isDirectory()).toBe(true);
+		expect(fs.readdirSync(slot.slotPath)).toEqual([path.basename(slot.ownerRecordPath)]);
+		expect(JSON.parse(fs.readFileSync(slot.ownerRecordPath, "utf8"))).toHaveProperty("pid", process.pid);
 
 		releaseWorkerSlot(slot);
 		expect(fs.existsSync(slot.slotPath)).toBe(false);
+		releaseWorkerSlot(slot);
+		expect(fs.existsSync(slot.slotPath)).toBe(false);
+	});
+
+	it("이전 세대의 늦은 release가 새 owner의 슬롯을 지우지 않는다", async () => {
+		dir = makeTmpDir();
+		const first = await acquireWorkerSlot({ dir, slotCount: 1, pollMs: 20 });
+		releaseWorkerSlot(first);
+
+		const second = await acquireWorkerSlot({ dir, slotCount: 1, pollMs: 20 });
+		releaseWorkerSlot(first);
+
+		expect(fs.existsSync(second.slotPath)).toBe(true);
+		releaseWorkerSlot(second);
 	});
 
 	it("슬롯이 가득 차면 대기하다가, 반납되면 그때 진행한다", async () => {
@@ -80,15 +96,17 @@ describe("acquireWorkerSlot / releaseWorkerSlot", () => {
 		fs.mkdirSync(dir, { recursive: true });
 
 		// Spawn a real, short-lived process and let it exit — a genuinely dead
-		// pid, not a guessed-unused number — then squat its slot file with that
+		// pid, not a guessed-unused number — then squat its slot directory with that
 		// now-dead pid, mirroring a worker that was SIGKILLed/panicked before
 		// it ever reached releaseWorkerSlot.
 		const child = spawnSync(process.execPath, ["-e", "process.exit(0)"]);
 		const deadPid = child.pid;
 		expect(typeof deadPid).toBe("number");
 
+		const slotPath = path.join(dir, "slot-0");
+		fs.mkdirSync(slotPath);
 		fs.writeFileSync(
-			path.join(dir, "slot-0"),
+			path.join(slotPath, "owner-dead.json"),
 			JSON.stringify({ pid: deadPid, pidStartedAt: "Thu Jan  1 00:00:00 1970" }),
 		);
 
@@ -105,14 +123,14 @@ describe("acquireWorkerSlot / releaseWorkerSlot", () => {
 		releaseWorkerSlot(slot);
 	});
 
-	it("소유자 pid 기록이 없는(쓰기 도중 죽은) 슬롯 파일은 오래됐을 때만 회수한다", async () => {
+	it("소유자 pid 기록이 없는(쓰기 도중 죽은) 슬롯 디렉터리는 오래됐을 때만 회수한다", async () => {
 		dir = makeTmpDir();
 		fs.mkdirSync(dir, { recursive: true });
 		const slotPath = path.join(dir, "slot-0");
 
-		// Empty file mirrors a slot whose owner opened it (O_EXCL) but was
-		// killed before writeOwnerRecord's writeFileSync ever landed.
-		fs.writeFileSync(slotPath, "");
+		// Empty directory mirrors a slot whose owner reserved the directory but
+		// was killed before the completed owner record was installed.
+		fs.mkdirSync(slotPath);
 		// Fresh (mtime "now"): must NOT be reclaimed yet — indistinguishable
 		// from the normal sub-millisecond open/write race.
 		let claimedWhileFresh = false;
@@ -129,6 +147,30 @@ describe("acquireWorkerSlot / releaseWorkerSlot", () => {
 
 		const slot = await pending;
 		expect(claimedWhileFresh).toBe(true);
+		releaseWorkerSlot(slot);
+	});
+
+	it("malformed owner record는 fresh 상태에서 유지되고 stale 상태에서만 회수한다", async () => {
+		dir = makeTmpDir();
+		const slotPath = path.join(dir, "slot-0");
+		const ownerRecordPath = path.join(slotPath, "owner-dead.json");
+		fs.mkdirSync(slotPath);
+		fs.writeFileSync(ownerRecordPath, "not-json");
+
+		let claimedWhileFresh = false;
+		const pending = acquireWorkerSlot({ dir, slotCount: 1, pollMs: 20 }).then((slot) => {
+			claimedWhileFresh = true;
+			return slot;
+		});
+		await new Promise((resolve) => setTimeout(resolve, 80));
+		expect(claimedWhileFresh).toBe(false);
+
+		const past = new Date(Date.now() - 5 * 60 * 1000);
+		fs.utimesSync(slotPath, past, past);
+
+		const slot = await pending;
+		expect(claimedWhileFresh).toBe(true);
+		expect(fs.existsSync(ownerRecordPath)).toBe(false);
 		releaseWorkerSlot(slot);
 	});
 });

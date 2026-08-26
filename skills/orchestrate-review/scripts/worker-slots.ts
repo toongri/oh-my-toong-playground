@@ -11,15 +11,16 @@
  * $OMT_DIR is the one thing every worker.ts process on this machine shares,
  * regardless of which job or which conductor spawned it.
  *
- * Slot claim primitive mirrors job.ts's acquireIdentityClaim (same file,
- * `cmdStart`): O_EXCL create is the atomic acquisition step, and a dead- or
- * reused-pid owner is reclaimed via the same pid + pidStartedAt witness
+ * Slot claim uses a directory lock with a UUID owner record. The directory's
+ * mkdir is the atomic no-replace acquisition step, and a dead- or reused-pid
+ * owner is reclaimed via the same pid + pidStartedAt witness
  * getProcessStartedAt already provides — the exact "kill -0 equivalent, but
  * pid-reuse-safe" liveness check this codebase already established for
  * workerPgid liveness (see judgePgidSignal in generic-job.ts) and reuses here
  * rather than inventing a second liveness mechanism.
  */
 
+import { randomUUID } from "node:crypto";
 import fs from "fs";
 import path from "path";
 
@@ -29,6 +30,7 @@ import { getProcessStartedAt } from "@lib/generic-job";
 
 export interface WorkerSlot {
 	slotPath: string;
+	ownerRecordPath: string;
 }
 
 export interface AcquireWorkerSlotOptions {
@@ -43,7 +45,7 @@ export interface AcquireWorkerSlotOptions {
 const DEFAULT_POLL_MS = 1500;
 
 /**
- * A slot file that exists but carries no readable/valid owner pid is either
+ * A slot directory that exists but carries no readable/valid owner pid is either
  * genuinely corrupt, or caught in the sub-millisecond window between its
  * owner's openSync(wx) and writeFileSync (see writeOwnerRecord) — or, worse,
  * its owner was SIGKILLed/panicked/OOM'd in exactly that window and will
@@ -72,20 +74,60 @@ function ownerRecord(): string {
 	return JSON.stringify({ pid: process.pid, pidStartedAt: getProcessStartedAt(process.pid) });
 }
 
-/** Atomic create-if-absent: true iff this call is the one that created slotPath. */
-function claimFreshSlot(slotPath: string): boolean {
-	let fd: number;
+const OWNER_RECORD_NAME = /^owner-[0-9a-f-]+\.json$/i;
+
+type DeadSlot = { ownerRecordPath: string | null };
+
+/**
+ * Atomically reserve the slot directory with mkdir before doing the one
+ * owner-witness lookup. The completed owner record is prepared in a private
+ * sibling directory and moved into the reserved slot, so a contender can
+ * never replace a live slot directory with a late rename. Reserving first
+ * also keeps the existing ps-backed witness cost off the occupied-slot path.
+ */
+function claimFreshSlot(slotPath: string): string | null {
+	const claimPath = path.join(path.dirname(slotPath), `.${path.basename(slotPath)}.claim-${randomUUID()}`);
+	const ownerName = `owner-${randomUUID()}.json`;
+	const temporaryOwnerPath = path.join(claimPath, ownerName);
+	const ownerRecordPath = path.join(slotPath, ownerName);
+	let slotCreated = false;
+	let claimCreated = false;
+	let ownerInstalled = false;
+
 	try {
-		fd = fs.openSync(slotPath, "wx");
+		fs.mkdirSync(slotPath);
+		slotCreated = true;
+		fs.mkdirSync(claimPath);
+		claimCreated = true;
+		fs.writeFileSync(temporaryOwnerPath, ownerRecord(), { flag: "wx" });
+		fs.renameSync(temporaryOwnerPath, ownerRecordPath);
+		ownerInstalled = true;
+		return ownerRecordPath;
 	} catch {
-		return false;
-	}
-	try {
-		fs.writeFileSync(fd, ownerRecord());
+		return null;
 	} finally {
-		fs.closeSync(fd);
+		if (!ownerInstalled) {
+			try {
+				fs.unlinkSync(temporaryOwnerPath);
+			} catch {
+				// Best-effort cleanup of this claim's private owner record.
+			}
+		}
+		if (claimCreated) {
+			try {
+				fs.rmdirSync(claimPath);
+			} catch {
+				// Best-effort cleanup; never recursively remove a claim directory.
+			}
+		}
+		if (slotCreated && !ownerInstalled) {
+			try {
+				fs.rmdirSync(slotPath);
+			} catch {
+				// Only an empty directory can be removed here.
+			}
+		}
 	}
-	return true;
 }
 
 interface SlotOwner {
@@ -93,22 +135,38 @@ interface SlotOwner {
 	pidStartedAt?: unknown;
 }
 
-/** Judge whether slotPath's current owner is gone, reusing generic-job.ts's
- *  pid+pidStartedAt reused-pid witness rather than a bare `kill -0`. */
-function ownerIsDead(slotPath: string): boolean {
+/** Judge whether slotPath's observed owner is gone, returning that exact
+ * owner record path for the caller's conditional cleanup. */
+function ownerIsDead(slotPath: string): DeadSlot | null {
+	let ownerRecordPath: string;
+	let slotMtimeMs: number;
+	try {
+		const slotStat = fs.lstatSync(slotPath);
+		if (!slotStat.isDirectory() || slotStat.isSymbolicLink()) return null;
+		slotMtimeMs = slotStat.mtimeMs;
+		const entries = fs.readdirSync(slotPath);
+		if (entries.length === 0) {
+			return Date.now() - slotMtimeMs > CORRUPT_SLOT_STALE_MS ? { ownerRecordPath: null } : null;
+		}
+		if (entries.length !== 1 || !OWNER_RECORD_NAME.test(entries[0])) return null;
+		ownerRecordPath = path.join(slotPath, entries[0]);
+		const ownerStat = fs.lstatSync(ownerRecordPath);
+		if (!ownerStat.isFile() || ownerStat.isSymbolicLink()) return null;
+	} catch {
+		return null;
+	}
+	const observedOwnerRecordPath = ownerRecordPath;
+
 	let owner: SlotOwner | null;
 	try {
-		owner = JSON.parse(fs.readFileSync(slotPath, "utf8"));
+		owner = JSON.parse(fs.readFileSync(observedOwnerRecordPath, "utf8"));
 	} catch {
 		owner = null;
 	}
-
 	if (owner === null || typeof owner.pid !== "number" || !Number.isFinite(owner.pid)) {
-		try {
-			return Date.now() - fs.statSync(slotPath).mtimeMs > CORRUPT_SLOT_STALE_MS;
-		} catch {
-			return false; // vanished mid-check — treat as still contended, retry later
-		}
+		return Date.now() - slotMtimeMs > CORRUPT_SLOT_STALE_MS
+			? { ownerRecordPath: observedOwnerRecordPath }
+			: null;
 	}
 
 	const pid = owner.pid;
@@ -117,24 +175,37 @@ function ownerIsDead(slotPath: string): boolean {
 	} catch (error) {
 		// Same idiom as job.ts's acquireIdentityClaim: only ESRCH is proof of
 		// death; any other outcome (e.g. EPERM) is inconclusive, not dead.
-		return error instanceof Error && "code" in error && error.code === "ESRCH";
+		return error instanceof Error && "code" in error && error.code === "ESRCH"
+			? { ownerRecordPath: observedOwnerRecordPath }
+			: null;
 	}
 	// pid is alive — but is it still OUR owner, or has the OS handed this
 	// number to an unrelated process since the record was written?
 	const storedStartedAt = typeof owner.pidStartedAt === "string" ? owner.pidStartedAt : null;
 	const currentStartedAt = getProcessStartedAt(pid);
-	return storedStartedAt !== null && currentStartedAt !== null && storedStartedAt !== currentStartedAt;
+	return storedStartedAt !== null && currentStartedAt !== null && storedStartedAt !== currentStartedAt
+		? { ownerRecordPath: observedOwnerRecordPath }
+		: null;
 }
 
 /** Claim slotPath, reclaiming a dead/reused-pid owner's abandoned slot first. */
-function tryClaimSlot(slotPath: string): boolean {
-	if (claimFreshSlot(slotPath)) return true;
-	if (!ownerIsDead(slotPath)) return false;
+function tryClaimSlot(slotPath: string): string | null {
+	const freshOwnerRecordPath = claimFreshSlot(slotPath);
+	if (freshOwnerRecordPath !== null) return freshOwnerRecordPath;
+	const deadSlot = ownerIsDead(slotPath);
+	if (deadSlot === null) return null;
 
+	if (deadSlot.ownerRecordPath !== null) {
+		try {
+			fs.unlinkSync(deadSlot.ownerRecordPath);
+		} catch {
+			// Another contender may have reclaimed this exact owner record first.
+		}
+	}
 	try {
-		fs.unlinkSync(slotPath);
+		fs.rmdirSync(slotPath);
 	} catch {
-		// Another contender may have reclaimed it first — fall through and retry.
+		// A new owner record or another directory entry keeps this generation live.
 	}
 	return claimFreshSlot(slotPath);
 }
@@ -153,21 +224,27 @@ export async function acquireWorkerSlot(options: AcquireWorkerSlotOptions = {}):
 	for (;;) {
 		for (let i = 0; i < slotCount; i++) {
 			const slotPath = path.join(dir, `slot-${i}`);
-			if (tryClaimSlot(slotPath)) {
-				return { slotPath };
+			const ownerRecordPath = tryClaimSlot(slotPath);
+			if (ownerRecordPath !== null) {
+				return { slotPath, ownerRecordPath };
 			}
 		}
 		await sleepMs(pollMs);
 	}
 }
 
-/** Release a previously-acquired slot. Safe to call even if the slot file was
- *  already reclaimed by another contender's dead-owner sweep (double release,
- *  or a false-positive dead judgment racing this same release). */
+/** Release a previously-acquired slot by removing only this claim's owner
+ * record, then removing the slot directory only if it is empty. Safe to call
+ * even if the slot was already reclaimed (double release or a late release). */
 export function releaseWorkerSlot(slot: WorkerSlot): void {
 	try {
-		fs.unlinkSync(slot.slotPath);
+		fs.unlinkSync(slot.ownerRecordPath);
 	} catch {
-		// Already gone — fine either way.
+		// This generation's owner record is already gone — fine either way.
+	}
+	try {
+		fs.rmdirSync(slot.slotPath);
+	} catch {
+		// A different generation's owner record keeps the slot live.
 	}
 }
