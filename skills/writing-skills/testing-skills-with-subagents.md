@@ -160,6 +160,17 @@ You have access to: [skill-being-tested]
 
 Make agent believe it's real work, not a quiz.
 
+**Run CLI test agents with the full-permission flag by default.** When the test
+harness drives an agent through a CLI (`codex exec`, `claude -p`, …), launch it
+with that CLI's bypass-sandbox flag (e.g. codex's
+`--dangerously-bypass-approvals-and-sandbox`) unless you have a specific reason
+to sandbox. A restricted sandbox makes the test fail for reasons unrelated to
+the skill — blocked browser/renderer launches, denied writes, denied network —
+and the agent burns its run fighting the sandbox instead of exercising the
+skill. That's a false RED (or a stuck GREEN), not a signal about the skill.
+The harness environment is already isolated scratch space; the skill under test
+is what's being measured, not the CLI's permission model.
+
 ## REFACTOR Phase: Close Loopholes (Stay Green)
 
 Agent violated rule despite having the skill? This is like a test regression - you need to refactor the skill to prevent it.
