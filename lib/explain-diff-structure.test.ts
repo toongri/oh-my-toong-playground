@@ -167,6 +167,70 @@ describe("evidence 스텝 — R1 등재형", () => {
 		expect(item?.detail).toContain("원천");
 	});
 
+	test("HTML 주석 안의 원천 heading과 표만 있으면 실패한다", () => {
+		const doc = `# 설명
+
+## Evidence
+
+| 파일 | 분류 |
+|---|---|
+| \`lib/state-lock.ts\` | signal |
+
+<!--
+### 원천
+
+| 종류 | 식별자/경로 | 확보 | 내용 요약 |
+|---|---|---|---|
+| 코드 | \`lib/state-lock.ts\` | 열람 | hidden comment example |
+-->
+`;
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("원천");
+	});
+
+	test("필수 셀이 모두 공백인 데이터 행은 실패한다", () => {
+		const doc = evidenceOnlyDoc("lib/state-lock.ts").replace(
+			"| 코드 | `lib/state-lock.ts` | 열람 | 변경된 구현과 호출 경로를 확인 |",
+			"|   | \t |   | \t |",
+		);
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("데이터 행");
+	});
+
+	test("들여쓴 코드 블록 안의 원천 표만 있으면 실패한다", () => {
+		const doc = `# 설명
+
+## Evidence
+
+| 파일 | 분류 |
+|---|---|
+| \`lib/state-lock.ts\` | signal |
+
+### 원천
+
+    | 종류 | 식별자/경로 | 확보 | 내용 요약 |
+    |---|---|---|---|
+    | 코드 | \`lib/state-lock.ts\` | 열람 | indented code example |
+`;
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("원천");
+	});
+
 	test("빠진 파일이 있으면 실패하고 그 경로를 사유에 담는다", () => {
 		const r = checkStructure(evidenceOnlyDoc("lib/state-lock.ts"), {
 			signalFiles: ["lib/state-lock.ts", "tools/x/scripts/y.ts"],

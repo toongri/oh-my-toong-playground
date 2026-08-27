@@ -163,6 +163,17 @@ function maskFenced(text: string): string {
 	return text.replace(FENCE_RE, (m) => m.replace(/[^\n]/g, " "));
 }
 
+/** Masks Markdown that is not visible content for structural predicates. */
+function maskNonVisibleMarkdown(text: string): string {
+	const withoutComments = maskFenced(text).replace(
+		/<!--[\s\S]*?(?:-->|$)/g,
+		(m) => m.replace(/[^\n]/g, " "),
+	);
+	return withoutComments.replace(/^(?: {4}|\t)[^\r\n]*(?:\r?\n|$)/gm, (m) =>
+		m.replace(/[^\n]/g, " "),
+	);
+}
+
 /** Removes fenced and inline Markdown code, which can describe styles without applying them. */
 function withoutMarkdownCode(text: string): string {
 	return withoutFencedCode(text).replace(/`+[^`\n]*`+/g, "");
@@ -235,11 +246,11 @@ function groupSlices(text: string): Array<{ title: string; body: string }> {
 
 /** The source table required inside `## Evidence` > `### 원천`. */
 const EVIDENCE_SOURCE_TABLE =
-	/^[ \t]*\|[ \t]*종류[ \t]*\|[ \t]*식별자\/경로[ \t]*\|[ \t]*확보[ \t]*\|[ \t]*내용 요약[ \t]*\|\r?\n[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|\r?\n(?![ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*(?:\r?\n|$))[ \t]*\|[^|\r\n]*\|[^|\r\n]*\|[^|\r\n]*\|[^|\r\n]*\|[ \t]*(?:\r?\n|$)/m;
+	/^ {0,3}\|[ \t]*종류[ \t]*\|[ \t]*식별자\/경로[ \t]*\|[ \t]*확보[ \t]*\|[ \t]*내용 요약[ \t]*\|\r?\n {0,3}\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|\r?\n(?! {0,3}\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*(?:\r?\n|$))(?= {0,3}\|[^\r\n]*[^\s|][^\r\n]*\|[ \t]*(?:\r?\n|$)) {0,3}\|[^|\r\n]*\|[^|\r\n]*\|[^|\r\n]*\|[^|\r\n]*\|[ \t]*(?:\r?\n|$)/m;
 
 /** Returns the missing structure in the Evidence source sweep, if any. */
 function checkEvidenceSourceStructure(text: string): string {
-	const evidence = sectionSlice(maskFenced(text), "Evidence");
+	const evidence = sectionSlice(maskNonVisibleMarkdown(text), "Evidence");
 	if (evidence === null) return "## Evidence 섹션이 없습니다";
 
 	const source = levelSlice(evidence, "원천");
