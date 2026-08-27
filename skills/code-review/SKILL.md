@@ -60,17 +60,17 @@ These premises must be reflected in the finder-job prompt — see Step 4. Review
 ### Context Budget
 
 **Allowed in orchestrator context:**
-- `git diff {range} --stat` output
-- `git diff {range} --name-only` output
-- `git diff {range} --numstat` output
-- `git log {range} --oneline` output
+- `["git", "diff", range, "--stat"]` output
+- `["git", "diff", range, "--name-only"]` output
+- `["git", "diff", range, "--numstat"]` output
+- `["git", "log", range, "--oneline"]` output
 - CLAUDE.md file content
 - chunk-reviewer results (candidate findings)
 - Phase 2 inline judgment output (reasoning, verdicts, enriched findings for non-escalated candidates)
 - Escalated verifier subagent verdicts + enriched findings (Phase 2, candidates below confidence threshold)
 - Code reading via Read/Grep for Phase 2 inline candidate judgment
 
-The orchestrator never inspects, loads, or displays diff text as general raw-diff review input. The candidate-scoped diff inspection exception in Step 3 is for integrity judgment only: for each candidate derived file, read only `git diff {range} -- <candidate-path>` and compare its changed bytes with authored source/generator evidence. Its diff result is not forwarded to a finder prompt, candidate aggregation, or general orchestrator context. This exception does not permit project tests, builds, linters, formatters, migrations, or other project execution, and it does not relax the ban on general raw diff text. The separate prescribed binary `git diff --no-ext-diff --binary ...` stdout byte stream flows directly to SHA-256 outside model context for `diffFingerprint`; stderr is excluded and a nonzero exit aborts. Finder jobs execute the review diff from the prompt.
+The orchestrator never inspects, loads, or displays diff text as general raw-diff review input. The candidate-scoped diff inspection exception in Step 3 is for integrity judgment only: for each candidate derived file, read only the candidate-scoped diff using the argv-safe argument vector or separately quoted Bash form specified in Step 3 and compare its changed bytes with authored source/generator evidence. Its diff result is not forwarded to a finder prompt, candidate aggregation, or general orchestrator context. This exception does not permit project tests, builds, linters, formatters, migrations, or other project execution, and it does not relax the ban on general raw diff text. The separate prescribed binary `git diff --no-ext-diff --binary ...` stdout byte stream flows directly to SHA-256 outside model context for `diffFingerprint`; stderr is excluded and a nonzero exit aborts. Finder jobs execute the review diff from the prompt.
 
 ## Step 0: Input Parsing
 
@@ -129,13 +129,13 @@ If the working directory is dirty (uncommitted changes) or the caller is not in 
 
 All range formats use **three-dot syntax** (`A...B`), which is equivalent to `git diff $(git merge-base A B)..B`. This shows only changes introduced by the target since the common ancestor — not changes on the base branch. This prevents false positives when `origin/main` has moved ahead after branching.
 
-All subsequent steps use `{range}` from this table. All diff commands use `git diff {range} -- <files>` for path-filtered output. After checkout, code reading via Read/Grep/Glob reflects the **post-change** state, which is the intended behavior — diff shows the delta, the working directory shows the result.
+All subsequent steps use `{range}` from this table. All subsequent commands that receive range or path values must use argv-safe arguments; if Bash is required, quote each dynamic value as a separate argument. After checkout, code reading via Read/Grep/Glob reflects the **post-change** state, which is the intended behavior — diff shows the delta, the working directory shows the result.
 
 ### Early Exit
 
 After the range is resolved and (PR mode) the checkout is done, before proceeding to Step 1:
 
-1. Run `git diff {range} --stat` (using the range determined above)
+1. Run `["git", "diff", range, "--stat"]` (using the range determined above)
 2. If empty diff: report "No changes detected (between <base> and <target>)" and exit immediately
 3. If the diff is binary-only: report "Only binary file changes detected"; use the complete `--name-only` manifest to list every binary changed path under Out of Scope (one entry per path), state that you do not dispatch a finder job, and then exit
 
@@ -270,10 +270,10 @@ When the deferral is an explicit *human* code-quality-only deferral (a person ty
 
 Collect in parallel (using `{range}` from Step 0):
 
-1. `git diff {range} --stat` (change overview; not the scale input)
-2. `git diff {range} --name-only` (file list)
-3. `git diff {range} --numstat` (per-file insertion/deletion counts)
-4. `git log {range} --oneline` (commit history)
+1. `["git", "diff", range, "--stat"]` (change overview; not the scale input)
+2. `["git", "diff", range, "--name-only"]` (file list)
+3. `["git", "diff", range, "--numstat"]` (per-file insertion/deletion counts)
+4. `["git", "log", range, "--oneline"]` (commit history)
 5. CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)
 
 ## Step 3: Chunking Decision
@@ -298,9 +298,13 @@ The filenames above are illustrations of the three categories, not a closed list
 
 Keep the two manifests as separate values. Never substitute one for the other. Before exclusion and before any path-filtered finder command, inspect each candidate derived file in the complete changed-file manifest against authored source/generator evidence. For each candidate, read only this candidate-scoped diff:
 
+Execute this candidate-scoped diff through Bash. The preferred form is argv-safe direct process execution with the argument vector `["git", "diff", range, "--", candidatePath]`; if Bash must run the command, quote the diff range and candidate path as separate arguments:
+
 ```bash
-git diff {range} -- <candidate-path>
+git diff "$range" -- "$candidatePath"
 ```
+
+Raw interpolation is forbidden. Git's `--` only separates revisions from pathspecs; it is not shell escaping. These rules apply even when a changed filename contains spaces, shell metacharacters, command substitution, or newlines.
 
 This candidate-scoped diff inspection exception is for integrity judgment only. Compare the changed bytes with authored source/generator evidence to decide whether the output is meaningful, stale, manually altered, or otherwise unexplained. Its diff result is not forwarded to a finder prompt, candidate aggregation, or general orchestrator context. Project tests, builds, linters, formatters, migrations, and other project execution remain forbidden. A `.d.ts` is excluded only with generated evidence; an authored `.d.ts` remains reviewable and contributes to `reviewableInsertionLines`. Authored migrations and DDL remain reviewable, including when a neighboring migration snapshot is derived.
 
@@ -331,19 +335,19 @@ Chunking heuristic: group files sharing a directory prefix or import relationshi
 
 ### Per-Chunk Diff Command Construction
 
-For each non-empty chunk, construct the path-filtered finder command using git's native path filtering:
+For each non-empty chunk, construct the path-filtered finder command using git's native path filtering and execute it through Bash. The preferred form is argv-safe direct process execution with the argument vector `["git", "diff", range, "--", ...chunkPaths]`; if Bash must run the command, quote the diff range and every chunk path as separate arguments:
 
 ```bash
-git diff {range} -- <file1> <file2> ... <fileN>
+git diff "$range" -- "$file1" "$file2" ... "$fileN"
 ```
 
-The orchestrator constructs this command string for the configured finder CLIs; each finder executes it independently inside the direct job.
+Raw interpolation is forbidden. Git's `--` is not shell escaping. The orchestrator constructs this safely for the configured finder CLIs; each finder executes it independently inside the direct job.
 
 ## Step 4: Direct Finder-Job Dispatch
 
 1. Read the chunk-reviewer prompt template and interpolate the existing inputs: {WHAT_WAS_IMPLEMENTED}, {DESCRIPTION}, {REQUIREMENTS}, {PROJECT_CONTEXT}, {NON_GOAL}, {FILE_LIST}, {DIFF_COMMAND}, and {COMMIT_HISTORY}. Set {FILE_LIST} to the current chunk's reviewable files only; {DIFF_COMMAND} is constructed from that same chunk list. Never pass the complete changed-file manifest or derived-artifact Out of Scope list as finder scope. Preserve the named-field completion-gate parsing and result aggregation/angle coverage semantics used by later phases.
 2. Each independent review receives one fresh cryptographically random, path-safe `invocationId`; never derive it from content or reuse it. Before any finder starts, durably persist a frozen invocation manifest containing the target, resolved launch context, chunk plan, and required job metadata. Recovery uses that ID and frozen values; conflicting state is rejected, not reused.
-3. The logical job key is `(invocationId, chunkId, attempt)`. Same keys idempotently attach; different invocation IDs never share jobs or artifacts. Validate ownership and path containment on recovery, attaching rather than respawning. If `invocationId` is lost, safely start a new independent review rather than rediscovering by content. Pass commands, paths, and external values safely; exact serialization/quoting is left to implementation judgment.
+3. The logical job key is `(invocationId, chunkId, attempt)`. Same keys idempotently attach; different invocation IDs never share jobs or artifacts. Validate ownership and path containment on recovery, attaching rather than respawning. If `invocationId` is lost, safely start a new independent review rather than rediscovering by content. Pass commands, paths, and external values safely; use argv-safe direct process execution as the preferred form. If Bash is required, quote the range and every path explicitly; raw interpolation is forbidden.
 4. Start every chunk before polling. Poll each direct `job.ts` job (`start`, `collect`, `status`, `results`) to terminal. Poll progress, interruption, or a running/ready job is never a retry. Attempt 2 is allowed once only for terminal infrastructure failure, unavailable angle, or diff-command failure; preserve the same invocation/chunk identity, merge original and retry outputs, and accept partial coverage if both fail.
 5. Read every terminal output, merge and deduplicate candidates by normalized location and defect reason, union `found by` angles/evidence, and emit one coverage record per configured angle (including unavailable angles). Atomically persist `candidates.json` before `usage-summary`. Leave job cleanup to GC/orphan reaper; do not run `clean`.
 6. Use the existing direct finder CLIs and prompt interpolation; do not dispatch chunk-reviewer subagents. Keep the review static-only and preserve all raw finder fields required by the aggregation contract.

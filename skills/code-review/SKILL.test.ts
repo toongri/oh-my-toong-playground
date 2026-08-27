@@ -46,7 +46,9 @@ describe("code-review direct finder-job contract", () => {
 		expect(step4).toContain("terminal infrastructure failure");
 		expect(step4).toContain("If `invocationId` is lost, safely start a new independent review");
 		expect(step4).toContain("Atomically persist `candidates.json` before `usage-summary`");
-		expect(step4).toContain("exact serialization/quoting is left to implementation judgment");
+		expect(step4).toContain("argv-safe direct process execution");
+		expect(step4).toContain("raw interpolation is forbidden");
+		expect(step4).not.toContain("exact serialization/quoting is left to implementation judgment");
 	});
 
 	test("Step 4 removes the superseded identity and lifecycle protocol", () => {
@@ -130,6 +132,37 @@ describe("code-review static-only premises", () => {
 	});
 });
 
+describe("code-review runtime range command safety contract", () => {
+	const contextBudget = extractSection(skillMd, "### Context Budget", "## Step 0:");
+	const step0 = extractSection(skillMd, "## Step 0: Input Parsing", "## Step 1:");
+	const step2 = extractSection(skillMd, "## Step 2: Context Gathering", "## Step 3:");
+
+	test("describes allowed context output with argv-safe range arguments", () => {
+		expect(contextBudget).toContain('`["git", "diff", range, "--stat"]` output');
+		expect(contextBudget).toContain('`["git", "diff", range, "--name-only"]` output');
+		expect(contextBudget).toContain('`["git", "diff", range, "--numstat"]` output');
+		expect(contextBudget).toContain('`["git", "log", range, "--oneline"]` output');
+	});
+
+	test("uses argv-safe range arguments for early exit and context gathering", () => {
+		expect(step0).toContain('Run `["git", "diff", range, "--stat"]` (using the range determined above)');
+		expect(step2).toContain('`["git", "diff", range, "--stat"]` (change overview; not the scale input)');
+		expect(step2).toContain('`["git", "diff", range, "--name-only"]` (file list)');
+		expect(step2).toContain('`["git", "diff", range, "--numstat"]` (per-file insertion/deletion counts)');
+		expect(step2).toContain('`["git", "log", range, "--oneline"]` (commit history)');
+	});
+
+	test("requires safe dynamic command construction and forbids raw range interpolation", () => {
+		expect(step0).toContain(
+			"All subsequent commands that receive range or path values must use argv-safe arguments",
+		);
+		expect(step0).toContain("if Bash is required, quote each dynamic value as a separate argument");
+		expect(skillMd).not.toContain("git diff {range} -- <candidate-path>");
+		expect(skillMd).not.toContain("git diff {range} -- <files>");
+		expect(skillMd).not.toMatch(/git (?:diff|log) \{range\}/);
+	});
+});
+
 describe("code-review Step 3 partition and scale contract", () => {
 	const step2 = extractSection(skillMd, "## Step 2: Context Gathering", "## Step 3:");
 	const step3 = extractSection(skillMd, "## Step 3: Chunking Decision", "## Step 4:");
@@ -191,13 +224,34 @@ describe("code-review Step 3 partition and scale contract", () => {
 		);
 
 		expect(integrity).toContain("each candidate derived file in the complete changed-file manifest");
-		expect(integrity).toContain("git diff {range} -- <candidate-path>");
+		expect(integrity).toContain("Execute this candidate-scoped diff through Bash");
+		expect(integrity).toContain("argv-safe direct process execution");
+		expect(integrity).toContain('["git", "diff", range, "--", candidatePath]');
+		expect(integrity).toContain('git diff "$range" -- "$candidatePath"');
+		expect(integrity).toContain("quote the diff range and candidate path as separate arguments");
+		expect(integrity).toContain("Raw interpolation is forbidden");
+		expect(integrity).not.toContain("git diff {range} -- <candidate-path>");
 		expect(integrity).toContain("authored source/generator evidence");
 		expect(integrity).toContain("candidate-scoped diff inspection exception");
 		expect(integrity).toContain("integrity judgment only");
 		expect(integrity).toContain(
 			"not forwarded to a finder prompt, candidate aggregation, or general orchestrator context",
 		);
+	});
+
+	test("constructs path-filtered chunk diffs with safe arguments", () => {
+		const chunkDiff = extractSection(
+			step3,
+			"### Per-Chunk Diff Command Construction",
+			"## Step 4:",
+		);
+
+		expect(chunkDiff).toContain("argv-safe direct process execution");
+		expect(chunkDiff).toContain('["git", "diff", range, "--", ...chunkPaths]');
+		expect(chunkDiff).toContain('git diff "$range" -- "$file1" "$file2" ... "$fileN"');
+		expect(chunkDiff).toContain("quote the diff range and every chunk path as separate arguments");
+		expect(chunkDiff).toContain("Raw interpolation is forbidden");
+		expect(chunkDiff).not.toContain("git diff {range} -- <file1> <file2> ... <fileN>");
 	});
 
 	test("separates the complete manifest from the post-integrity reviewable finder scope", () => {
@@ -235,10 +289,10 @@ describe("code-review Step 3 partition and scale contract", () => {
 		expect(step3).not.toContain("`*.d.ts`");
 	});
 
-	test("labels raw --stat as context rather than the scale input", () => {
+	test("labels argv-safe --stat as context rather than the scale input", () => {
 		expect(step2).not.toContain("`git diff {range} --stat` (change scale)");
 		expect(step2).toContain(
-			"`git diff {range} --stat` (change overview; not the scale input)",
+			'`["git", "diff", range, "--stat"]` (change overview; not the scale input)',
 		);
 	});
 });
