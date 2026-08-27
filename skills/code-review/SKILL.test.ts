@@ -139,17 +139,39 @@ describe("code-review runtime range command safety contract", () => {
 
 	test("describes allowed context output with argv-safe range arguments", () => {
 		expect(contextBudget).toContain('`["git", "diff", range, "--stat"]` output');
-		expect(contextBudget).toContain('`["git", "diff", range, "--name-only"]` output');
-		expect(contextBudget).toContain('`["git", "diff", range, "--numstat"]` output');
+		expect(contextBudget).toContain(
+			'`["git", "diff", range, "--name-only", "-z", "--no-renames"]` output',
+		);
+		expect(contextBudget).toContain(
+			'`["git", "diff", range, "--numstat", "-z", "--no-renames"]` output',
+		);
 		expect(contextBudget).toContain('`["git", "log", range, "--oneline"]` output');
 	});
 
 	test("uses argv-safe range arguments for early exit and context gathering", () => {
 		expect(step0).toContain('Run `["git", "diff", range, "--stat"]` (using the range determined above)');
 		expect(step2).toContain('`["git", "diff", range, "--stat"]` (change overview; not the scale input)');
-		expect(step2).toContain('`["git", "diff", range, "--name-only"]` (file list)');
-		expect(step2).toContain('`["git", "diff", range, "--numstat"]` (per-file insertion/deletion counts)');
+		expect(step2).toContain(
+			'`["git", "diff", range, "--name-only", "-z", "--no-renames"]` (file list)',
+		);
+		expect(step2).toContain(
+			'`["git", "diff", range, "--numstat", "-z", "--no-renames"]` (per-file insertion/deletion counts)',
+		);
 		expect(step2).toContain('`["git", "log", range, "--oneline"]` (commit history)');
+	});
+
+	test("preserves arbitrary changed-file pathnames with NUL manifests", () => {
+		expect(step2).not.toContain('`["git", "diff", range, "--name-only"]`');
+		expect(step2).not.toContain('`["git", "diff", range, "--numstat"]`');
+		expect(step2).toContain("Parse raw stdout as NUL-delimited records");
+		expect(step2).toContain("Never use newline, line, or word splitting");
+		expect(step2).toContain("never use shell command substitution");
+		expect(step2).toContain("A name-only record is one path");
+		expect(step2).toContain(
+			"a numstat record splits only its first two tab fields while preserving the remainder as the path",
+		);
+		expect(step2).toContain("newline, tab, quote, and backslash filenames");
+		expect(step2).toContain("`--no-renames` avoids old/new pair ambiguity");
 	});
 
 	test("requires safe dynamic command construction and forbids raw range interpolation", () => {
@@ -226,11 +248,19 @@ describe("code-review Step 3 partition and scale contract", () => {
 		expect(integrity).toContain("each candidate derived file in the complete changed-file manifest");
 		expect(integrity).toContain("Execute this candidate-scoped diff through Bash");
 		expect(integrity).toContain("argv-safe direct process execution");
-		expect(integrity).toContain('["git", "diff", range, "--", candidatePath]');
-		expect(integrity).toContain('git diff "$range" -- "$candidatePath"');
+		expect(integrity).toContain('["git", "--literal-pathspecs", "diff", range, "--", candidatePath]');
+		expect(integrity).toContain('git --literal-pathspecs diff "$range" -- "$candidatePath"');
+		expect(integrity).not.toContain('["git", "diff", range, "--", candidatePath]');
+		expect(integrity).not.toContain('git diff "$range" -- "$candidatePath"');
 		expect(integrity).toContain("quote the diff range and candidate path as separate arguments");
 		expect(integrity).toContain("Raw interpolation is forbidden");
 		expect(integrity).not.toContain("git diff {range} -- <candidate-path>");
+		expect(integrity).toContain(
+			"`--` separates revisions from pathspecs but does not disable Git pathspec magic",
+		);
+		expect(integrity).toContain("`--literal-pathspecs` must be before `diff`");
+		expect(integrity).toContain("not shell escaping");
+		expect(integrity).toContain("including `:(exclude)*`");
 		expect(integrity).toContain("authored source/generator evidence");
 		expect(integrity).toContain("candidate-scoped diff inspection exception");
 		expect(integrity).toContain("integrity judgment only");
@@ -247,11 +277,18 @@ describe("code-review Step 3 partition and scale contract", () => {
 		);
 
 		expect(chunkDiff).toContain("argv-safe direct process execution");
-		expect(chunkDiff).toContain('["git", "diff", range, "--", ...chunkPaths]');
-		expect(chunkDiff).toContain('git diff "$range" -- "$file1" "$file2" ... "$fileN"');
+		expect(chunkDiff).toContain('["git", "--literal-pathspecs", "diff", range, "--", ...chunkPaths]');
+		expect(chunkDiff).toContain('git --literal-pathspecs diff "$range" -- "$file1" "$file2" ... "$fileN"');
+		expect(chunkDiff).not.toContain('["git", "diff", range, "--", ...chunkPaths]');
+		expect(chunkDiff).not.toContain('git diff "$range" -- "$file1" "$file2" ... "$fileN"');
 		expect(chunkDiff).toContain("quote the diff range and every chunk path as separate arguments");
 		expect(chunkDiff).toContain("Raw interpolation is forbidden");
 		expect(chunkDiff).not.toContain("git diff {range} -- <file1> <file2> ... <fileN>");
+		expect(chunkDiff).toContain(
+			"`--` separates revisions from pathspecs but does not disable Git pathspec magic",
+		);
+		expect(chunkDiff).toContain("`--literal-pathspecs` must be before `diff`");
+		expect(chunkDiff).toContain("not shell escaping");
 	});
 
 	test("separates the complete manifest from the post-integrity reviewable finder scope", () => {

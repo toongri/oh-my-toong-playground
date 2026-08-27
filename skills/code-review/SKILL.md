@@ -61,8 +61,8 @@ These premises must be reflected in the finder-job prompt — see Step 4. Review
 
 **Allowed in orchestrator context:**
 - `["git", "diff", range, "--stat"]` output
-- `["git", "diff", range, "--name-only"]` output
-- `["git", "diff", range, "--numstat"]` output
+- `["git", "diff", range, "--name-only", "-z", "--no-renames"]` output
+- `["git", "diff", range, "--numstat", "-z", "--no-renames"]` output
 - `["git", "log", range, "--oneline"]` output
 - CLAUDE.md file content
 - chunk-reviewer results (candidate findings)
@@ -271,10 +271,12 @@ When the deferral is an explicit *human* code-quality-only deferral (a person ty
 Collect in parallel (using `{range}` from Step 0):
 
 1. `["git", "diff", range, "--stat"]` (change overview; not the scale input)
-2. `["git", "diff", range, "--name-only"]` (file list)
-3. `["git", "diff", range, "--numstat"]` (per-file insertion/deletion counts)
+2. `["git", "diff", range, "--name-only", "-z", "--no-renames"]` (file list)
+3. `["git", "diff", range, "--numstat", "-z", "--no-renames"]` (per-file insertion/deletion counts)
 4. `["git", "log", range, "--oneline"]` (commit history)
 5. CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)
+
+Parse raw stdout as NUL-delimited records from both manifest commands. Never use newline, line, or word splitting, and never use shell command substitution. A name-only record is one path; a numstat record splits only its first two tab fields while preserving the remainder as the path. This preserves arbitrary Git pathnames, including newline, tab, quote, and backslash filenames. `--no-renames` avoids old/new pair ambiguity by emitting separate single-path records for each side of rename/copy changes.
 
 ## Step 3: Chunking Decision
 
@@ -298,13 +300,13 @@ The filenames above are illustrations of the three categories, not a closed list
 
 Keep the two manifests as separate values. Never substitute one for the other. Before exclusion and before any path-filtered finder command, inspect each candidate derived file in the complete changed-file manifest against authored source/generator evidence. For each candidate, read only this candidate-scoped diff:
 
-Execute this candidate-scoped diff through Bash. The preferred form is argv-safe direct process execution with the argument vector `["git", "diff", range, "--", candidatePath]`; if Bash must run the command, quote the diff range and candidate path as separate arguments:
+Execute this candidate-scoped diff through Bash. The preferred form is argv-safe direct process execution with the argument vector `["git", "--literal-pathspecs", "diff", range, "--", candidatePath]`; if Bash must run the command, quote the diff range and candidate path as separate arguments:
 
 ```bash
-git diff "$range" -- "$candidatePath"
+git --literal-pathspecs diff "$range" -- "$candidatePath"
 ```
 
-Raw interpolation is forbidden. Git's `--` only separates revisions from pathspecs; it is not shell escaping. These rules apply even when a changed filename contains spaces, shell metacharacters, command substitution, or newlines.
+Raw interpolation is forbidden. Git's `--` separates revisions from pathspecs but does not disable Git pathspec magic. `--literal-pathspecs` must be before `diff`; it treats the candidate path literally and is not shell escaping. These rules apply even when a changed filename contains spaces, shell metacharacters, command substitution, or newlines, including `:(exclude)*`.
 
 This candidate-scoped diff inspection exception is for integrity judgment only. Compare the changed bytes with authored source/generator evidence to decide whether the output is meaningful, stale, manually altered, or otherwise unexplained. Its diff result is not forwarded to a finder prompt, candidate aggregation, or general orchestrator context. Project tests, builds, linters, formatters, migrations, and other project execution remain forbidden. A `.d.ts` is excluded only with generated evidence; an authored `.d.ts` remains reviewable and contributes to `reviewableInsertionLines`. Authored migrations and DDL remain reviewable, including when a neighboring migration snapshot is derived.
 
@@ -335,13 +337,13 @@ Chunking heuristic: group files sharing a directory prefix or import relationshi
 
 ### Per-Chunk Diff Command Construction
 
-For each non-empty chunk, construct the path-filtered finder command using git's native path filtering and execute it through Bash. The preferred form is argv-safe direct process execution with the argument vector `["git", "diff", range, "--", ...chunkPaths]`; if Bash must run the command, quote the diff range and every chunk path as separate arguments:
+For each non-empty chunk, construct the path-filtered finder command using git's native path filtering and execute it through Bash. The preferred form is argv-safe direct process execution with the argument vector `["git", "--literal-pathspecs", "diff", range, "--", ...chunkPaths]`; if Bash must run the command, quote the diff range and every chunk path as separate arguments:
 
 ```bash
-git diff "$range" -- "$file1" "$file2" ... "$fileN"
+git --literal-pathspecs diff "$range" -- "$file1" "$file2" ... "$fileN"
 ```
 
-Raw interpolation is forbidden. Git's `--` is not shell escaping. The orchestrator constructs this safely for the configured finder CLIs; each finder executes it independently inside the direct job.
+Raw interpolation is forbidden. Git's `--` separates revisions from pathspecs but does not disable Git pathspec magic. `--literal-pathspecs` must be before `diff` and is not shell escaping; apply it to every chunk path, including `:(exclude)*`. The orchestrator constructs this safely for the configured finder CLIs; each finder executes it independently inside the direct job.
 
 ## Step 4: Direct Finder-Job Dispatch
 
