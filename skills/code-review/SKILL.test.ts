@@ -123,3 +123,70 @@ describe("code-review static-only premises", () => {
 		expect(skillMd).toContain("do not run tests, builds, linters");
 	});
 });
+
+describe("code-review Step 3 partition and scale contract", () => {
+	const step2 = extractSection(skillMd, "## Step 2: Context Gathering", "## Step 3:");
+	const step3 = extractSection(skillMd, "## Step 3: Chunking Decision", "## Step 4:");
+
+	test("partitions before scale and derives reviewable file and insertion counts", () => {
+		const partition = step3.indexOf("### Derived-artifact partition (runs first)");
+		const derive = step3.indexOf("derive `reviewableFileCount`");
+		const scale = step3.indexOf("### Scale");
+
+		expect(partition).toBeGreaterThanOrEqual(0);
+		expect(derive).toBeGreaterThanOrEqual(0);
+		expect(step3).toContain("`reviewableInsertionLines` from their `--numstat` insertion counts");
+		expect(partition).toBeLessThan(derive);
+		expect(derive).toBeLessThan(scale);
+	});
+
+	test("uses the reviewable subset for both scale thresholds", () => {
+		const scale = extractSection(step3, "### Scale", "### Per-Chunk Diff Command Construction");
+
+		expect(scale).toContain("`reviewableInsertionLines` < 2000");
+		expect(scale).toContain("`reviewableFileCount` < 30");
+		expect(scale).not.toContain("changed files < 30");
+		expect(scale).not.toContain("changed files >= 30");
+	});
+
+	test("handles an empty reviewable subset without dispatching an empty review", () => {
+		const zeroScope = step3.indexOf("### Zero-reviewable-files review");
+		const diffCommand = step3.indexOf("### Per-Chunk Diff Command Construction");
+
+		expect(zeroScope).toBeGreaterThanOrEqual(0);
+		expect(step3).toContain("valid zero-reviewable-files review");
+		expect(step3).toContain("If `reviewableFileCount` is 0");
+		expect(step3).toContain("do not dispatch a finder job");
+		expect(step3).toContain("do not create an empty chunk or pathless diff");
+		expect(step3).toContain("all changed derived artifacts under Out of Scope");
+		expect(zeroScope).toBeLessThan(diffCommand);
+	});
+
+	test("checks derived-output integrity before exclusion and path-filtered commands", () => {
+		const integrity = step3.indexOf("### Derived-output integrity (before exclusion)");
+		const exclusion = step3.indexOf("**Handling:** derived artifacts are excluded");
+		const pathFilteredCommand = step3.indexOf("path-filtered finder command");
+
+		expect(integrity).toBeGreaterThanOrEqual(0);
+		expect(step3).toContain("complete changed-file manifest");
+		expect(step3).toContain("Meaningful, stale, manually altered, or otherwise unexplained output");
+		expect(step3).toContain("re-included as the exact file and removed from Out of Scope");
+		expect(step3).toContain("before any path-filtered finder command");
+		expect(integrity).toBeLessThan(exclusion);
+		expect(integrity).toBeLessThan(pathFilteredCommand);
+	});
+
+	test("requires evidence before excluding declarations and scales authored declarations", () => {
+		expect(step3).toContain("A `.d.ts` is excluded only with generated evidence");
+		expect(step3).toContain("an authored `.d.ts` remains reviewable");
+		expect(step3).toContain("contributes to `reviewableInsertionLines`");
+		expect(step3).not.toContain("`*.d.ts`");
+	});
+
+	test("labels raw --stat as context rather than the scale input", () => {
+		expect(step2).not.toContain("`git diff {range} --stat` (change scale)");
+		expect(step2).toContain(
+			"`git diff {range} --stat` (change overview; not the scale input)",
+		);
+	});
+});
