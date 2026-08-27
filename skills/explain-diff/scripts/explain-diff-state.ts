@@ -112,7 +112,13 @@ function withLock<T>(path: string, fn: () => T): T {
 	throw new Error(`could not acquire state lock: ${path}.lock`);
 }
 
-function read(sessionId: string): Persisted | null {
+interface ReadSnapshot {
+	state: Persisted;
+	needsRenderProofMigration: boolean;
+}
+
+/** Reads and normalizes one state-file snapshot without acquiring a lock or writing. */
+function readSnapshot(sessionId: string): ReadSnapshot | null {
 	try {
 		const parsed: unknown = JSON.parse(readFileSync(statePath(sessionId), "utf8"));
 		const base = normalizeExplainDiffState(parsed);
@@ -145,7 +151,8 @@ function read(sessionId: string): Persisted | null {
 			state.structural_ok.includes("render") ||
 			state.passed.includes("render") ||
 			state.step === "quiz";
-		if (!hasCurrentRenderProofContract && hasRenderProof) {
+		const needsRenderProofMigration = !hasCurrentRenderProofContract && hasRenderProof;
+		if (needsRenderProofMigration) {
 			state.structural_ok = state.structural_ok.filter((step) => step !== "render");
 			state.passed = state.passed.filter((step) => step !== "render");
 			state.render_proof = null;
@@ -154,15 +161,28 @@ function read(sessionId: string): Persisted | null {
 				step: "render",
 				items: ["기존 render 증거가 현재 체크리스트 계약으로 검증되지 않았습니다."],
 			};
-			// Persist the rewind so the external guard cannot observe the old proof
-			// after this reader has invalidated it in memory.
-			write(sessionId, state);
 		}
 		state.derived = computeDerived(state);
-		return state;
+		return { state, needsRenderProofMigration };
 	} catch {
 		return null;
 	}
+}
+
+/**
+ * Reads the state for the CLI. A legacy render-proof rewind is the one read path
+ * that mutates state, so it owns the lock and re-reads after acquiring it; a
+ * competing submit/pass can therefore never be overwritten by the first snapshot.
+ */
+function read(sessionId: string): Persisted | null {
+	const snapshot = readSnapshot(sessionId);
+	if (!snapshot || !snapshot.needsRenderProofMigration) return snapshot?.state ?? null;
+	return withLock(statePath(sessionId), () => {
+		const latest = readSnapshot(sessionId);
+		if (!latest) return null;
+		if (latest.needsRenderProofMigration) write(sessionId, latest.state);
+		return latest.state;
+	});
 }
 
 /** Every write recomputes `derived` — the booleans the hooks read are never stale. */
@@ -175,9 +195,12 @@ function write(sessionId: string, state: Persisted): void {
 }
 
 function mustRead(sessionId: string): Persisted {
-	const s = read(sessionId);
-	if (!s) throw new Error("explain-diff 상태가 없습니다. 먼저 `start` 를 실행하세요.");
-	return s;
+	const snapshot = readSnapshot(sessionId);
+	if (!snapshot) throw new Error("explain-diff 상태가 없습니다. 먼저 `start` 를 실행하세요.");
+	// Every caller of mustRead already owns the operation's outer lock. Reuse it
+	// for the legacy rewind instead of trying to acquire the same lock again.
+	if (snapshot.needsRenderProofMigration) write(sessionId, snapshot.state);
+	return snapshot.state;
 }
 
 /** Normalizes one persisted hunk side and rejects malformed line metadata. */

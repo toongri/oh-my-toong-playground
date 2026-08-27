@@ -177,6 +177,60 @@ function rewriteState(mutator: (current: Record<string, any>) => void): void {
 	);
 }
 
+function seedLegacyRenderProof(): void {
+	const legacyProof = {
+		doc_path: join(sandbox, "legacy-doc.md"),
+		html_path: join(sandbox, "legacy-doc.html"),
+		writing_report_path: join(sandbox, "legacy-writing.md"),
+		checklist_path: join(sandbox, "legacy-checklist.md"),
+	};
+	rewriteState((current) => {
+		delete current.render_proof_contract_version;
+		current.render_proof = legacyProof;
+		current.structural_ok = ["render"];
+		current.passed = ["render"];
+		current.step = "quiz";
+		current.last_failure = null;
+	});
+}
+
+describe("legacy render-proof migration locking", () => {
+	test("read migrates legacy state only after acquiring the state lock", async () => {
+		const { read, start } = await cli();
+		start(SID, "r", "s");
+		seedLegacyRenderProof();
+		const stateFile = join(sandbox, `explain-diff-state-${SID}.json`);
+		const before = readFileSync(stateFile, "utf8");
+		const lockPath = `${stateFile}.lock`;
+		mkdirSync(lockPath);
+
+		try {
+			let error: unknown;
+			try {
+				read(SID);
+			} catch (caught) {
+				error = caught;
+			}
+			expect(error instanceof Error ? error.message : error).toBe(
+				`could not acquire state lock: ${lockPath}`,
+			);
+			expect(readFileSync(stateFile, "utf8")).toBe(before);
+		} finally {
+			rmSync(lockPath, { recursive: true, force: true });
+		}
+
+		const migrated = read(SID);
+		expect(migrated?.render_proof).toBeNull();
+		expect(migrated?.step).toBe("render");
+		expect(migrated?.structural_ok).not.toContain("render");
+		expect(migrated?.passed).not.toContain("render");
+		expect(state().render_proof).toBeNull();
+		expect(state().step).toBe("render");
+		expect(state().structural_ok).not.toContain("render");
+		expect(state().passed).not.toContain("render");
+	});
+});
+
 describe("start", () => {
 	test("첫 스텝은 evidence 이고 산출물 쓰기가 열려 있다", async () => {
 		const { start } = await cli();
