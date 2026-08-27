@@ -48,7 +48,7 @@ isolation — this is deliberate. Do not look for other issues; do not review th
 
 ## Review scope
 
-- **Diff for this candidate's file**: `git diff {RANGE} -- {CANDIDATE_FILE}`
+- **Diff for this candidate's file**: use argv-safe direct process execution with `"{RANGE}"` and `"{CANDIDATE_FILE}"` as separate argv values: `["git", "--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "{RANGE}", "--", "{CANDIDATE_FILE}"]`. The placeholders {RANGE} and {CANDIDATE_FILE} are separate argv values; never interpolate either value into a shell command or raw diff template.
 - **Author intent / user instructions**: {INTENT}
 - **Conventions**: consult this project's own rules and recommended patterns (CLAUDE.md, rule docs,
   the project's skills) as the authoritative frame — they override generic best practices, both for

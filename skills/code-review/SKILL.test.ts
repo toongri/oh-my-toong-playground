@@ -11,6 +11,10 @@ const chunkReviewerPrompt = readFileSync(
 	join(import.meta.dir, "../orchestrate-review/scripts/chunk-reviewer-prompt.md"),
 	"utf8",
 );
+const verifierPrompt = readFileSync(
+	join(import.meta.dir, "references/verifier-prompt.md"),
+	"utf8",
+);
 
 function extractSection(markdown: string, heading: string, nextHeading: string) {
 	const start = markdown.indexOf(heading);
@@ -248,17 +252,22 @@ describe("code-review Step 3 partition and scale contract", () => {
 		expect(integrity).toContain("each candidate derived file in the complete changed-file manifest");
 		expect(integrity).toContain("Execute this candidate-scoped diff through Bash");
 		expect(integrity).toContain("argv-safe direct process execution");
-		expect(integrity).toContain('["git", "--literal-pathspecs", "diff", range, "--", candidatePath]');
-		expect(integrity).toContain('git --literal-pathspecs diff "$range" -- "$candidatePath"');
+		expect(integrity).toContain(
+			'["git", "--literal-pathspecs", "diff", "--binary", "--no-ext-diff", "--no-textconv", range, "--", candidatePath]',
+		);
+		expect(integrity).toContain(
+			'git --literal-pathspecs diff --binary --no-ext-diff --no-textconv "$range" -- "$candidatePath"',
+		);
 		expect(integrity).not.toContain('["git", "diff", range, "--", candidatePath]');
 		expect(integrity).not.toContain('git diff "$range" -- "$candidatePath"');
 		expect(integrity).toContain("quote the diff range and candidate path as separate arguments");
 		expect(integrity).toContain("Raw interpolation is forbidden");
 		expect(integrity).not.toContain("git diff {range} -- <candidate-path>");
 		expect(integrity).toContain(
-			"`--` separates revisions from pathspecs but does not disable Git pathspec magic",
+			"`--` is only the revision/pathspec separator; it does not disable Git pathspec magic, external diff drivers, or textconv filters",
 		);
 		expect(integrity).toContain("`--literal-pathspecs` must be before `diff`");
+		expect(integrity).toContain("`--no-ext-diff` and `--no-textconv`");
 		expect(integrity).toContain("not shell escaping");
 		expect(integrity).toContain("including `:(exclude)*`");
 		expect(integrity).toContain("authored source/generator evidence");
@@ -277,17 +286,23 @@ describe("code-review Step 3 partition and scale contract", () => {
 		);
 
 		expect(chunkDiff).toContain("argv-safe direct process execution");
-		expect(chunkDiff).toContain('["git", "--literal-pathspecs", "diff", range, "--", ...chunkPaths]');
-		expect(chunkDiff).toContain('git --literal-pathspecs diff "$range" -- "$file1" "$file2" ... "$fileN"');
+		expect(chunkDiff).toContain(
+			'["git", "--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", range, "--", ...chunkPaths]',
+		);
+		expect(chunkDiff).toContain(
+			'git --literal-pathspecs diff --no-ext-diff --no-textconv "$range" -- "$file1" "$file2" ... "$fileN"',
+		);
+		expect(chunkDiff).not.toContain("--binary");
 		expect(chunkDiff).not.toContain('["git", "diff", range, "--", ...chunkPaths]');
 		expect(chunkDiff).not.toContain('git diff "$range" -- "$file1" "$file2" ... "$fileN"');
 		expect(chunkDiff).toContain("quote the diff range and every chunk path as separate arguments");
 		expect(chunkDiff).toContain("Raw interpolation is forbidden");
 		expect(chunkDiff).not.toContain("git diff {range} -- <file1> <file2> ... <fileN>");
 		expect(chunkDiff).toContain(
-			"`--` separates revisions from pathspecs but does not disable Git pathspec magic",
+			"`--` is only the revision/pathspec separator; it does not disable Git pathspec magic, external diff drivers, or textconv filters",
 		);
 		expect(chunkDiff).toContain("`--literal-pathspecs` must be before `diff`");
+		expect(chunkDiff).toContain("`--no-ext-diff` and `--no-textconv`");
 		expect(chunkDiff).toContain("not shell escaping");
 	});
 
@@ -331,6 +346,19 @@ describe("code-review Step 3 partition and scale contract", () => {
 		expect(step2).toContain(
 			'`["git", "diff", range, "--stat"]` (change overview; not the scale input)',
 		);
+	});
+});
+
+describe("code-review Phase 2 verifier diff safety contract", () => {
+	test("uses separate literal argv values and keeps verifier read-only", () => {
+		expect(verifierPrompt).toContain(
+			'["git", "--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "{RANGE}", "--", "{CANDIDATE_FILE}"]',
+		);
+		expect(verifierPrompt).toContain("{RANGE} and {CANDIDATE_FILE} are separate argv values");
+		expect(verifierPrompt).not.toContain("git diff {RANGE} -- {CANDIDATE_FILE}");
+		expect(verifierPrompt).not.toMatch(/git diff\s+\{RANGE\}.*\{CANDIDATE_FILE\}/);
+		expect(verifierPrompt).toContain("READ-ONLY.");
+		expect(verifierPrompt).toContain("Do not edit, write, or modify any file");
 	});
 });
 
