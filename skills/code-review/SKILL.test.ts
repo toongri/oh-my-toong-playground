@@ -312,9 +312,10 @@ describe("code-review Step 2 rename relation contract", () => {
 		expect(step2).toContain("relation pass is pairing only");
 		expect(step2).toContain("name-only/numstat outputs are membership/accounting");
 		expect(step2).toContain("must not double-count endpoints or insertions");
+		expect(step2).toContain("Consume each no-renames endpoint exactly once");
 	});
 
-	test("uses rename-aware numstat for logical-unit scale reconciliation", () => {
+	test("uses rename-aware numstat for scale without redefining endpoint count", () => {
 		const step3 = extractSection(skillMd, "## Step 3: Chunking Decision", "## Step 4:");
 
 		expect(contextBudget).toContain(
@@ -324,7 +325,7 @@ describe("code-review Step 2 rename relation contract", () => {
 			'`["git", "diff", range, "--numstat", "-z", "--find-renames"]` (rename-aware insertion/deletion counts for scale)',
 		);
 		expect(step2).toContain("Before scale, reconcile the rename-aware numstat records with the R/C relation map");
-		expect(step2).toContain("For each R/C relation record, use its single logical review unit");
+		expect(step2).toContain("For each R/C relation record, use its single rename-aware insertion/deletion tuple for scale");
 		expect(step2).toContain("pure rename contributes 0 insertions");
 		expect(step2).toContain("never add the endpoint-level `--no-renames` values to scale");
 		expect(step2).toContain("no-renames manifest for endpoint membership/path scope");
@@ -332,12 +333,19 @@ describe("code-review Step 2 rename relation contract", () => {
 			"derive the scale units from the relation-reconciled reviewable subset",
 		);
 		expect(step3).toContain(
-			"`reviewableFileCount` as relation groups/logical review units (one R/C relation record is one unit)",
+			"`reviewableFileCount` as the finalized reviewable endpoint/path count",
 		);
+		expect(step3).toContain("count each path in `reviewableFileList` exactly once");
+		expect(step3).toContain("including both endpoints of an R/C relation when both are reviewable");
 		expect(step3).toContain(
 			"`reviewableInsertionLines` from the `--find-renames` numstat insertion counts",
 		);
+		expect(step3).toContain("R/C relation reconciliation is used for rename-aware insertion/deletion scale");
 		expect(step3).toContain("Endpoint-level `--no-renames` values never feed scale");
+		expect(step3).not.toContain(
+			"`reviewableFileCount` as relation groups/logical review units (one R/C relation record is one unit)",
+		);
+		expect(step3).not.toContain("each R/C relation contributes one logical review unit");
 		expect(step3).not.toContain(
 			"derive `reviewableFileCount` from the reviewable files and `reviewableInsertionLines` from their `--numstat` insertion counts",
 		);
@@ -370,8 +378,8 @@ describe("code-review rename relation closure and affinity contract", () => {
 		expect(step3).toContain("never split the relation group");
 		expect(step3).toContain("must not double-count endpoints or insertions");
 		expect(step3).toContain(
-		"old and new endpoints of every ordinary cross-directory R/C rename in the same closed relation group",
-	);
+			"old and new endpoints of every ordinary cross-directory R/C rename in the same closed relation group",
+		);
 		expect(step3).toContain("same closed relation group and therefore the same atomic chunk");
 
 		const closure = step3.indexOf("Before directory/module affinity");
@@ -383,11 +391,28 @@ describe("code-review rename relation closure and affinity contract", () => {
 		expect(atomic).toBeGreaterThan(closure);
 	});
 
-	test("keeps re-included rename endpoints in the same closed atomic chunk", () => {
+		test("keeps re-included rename endpoints in the same closed atomic chunk", () => {
 		expect(step4).toContain(
-			"re-included path in the same closed R/C relation group and same atomic chunk",
+			"re-included path in the same closed R/C relation group and same atomic chunk as its authored source or related rename endpoint",
 		);
 		expect(step4).toContain("ordinary cross-directory rename endpoints");
+	});
+
+	test("makes closed relation groups, not individual files, the chunking atomic unit", () => {
+		const sizeGuide = extractSection(
+			step3,
+			"**Per-chunk size guide:**",
+			"### Per-Chunk Diff Command Construction",
+		);
+
+		expect(step3).toContain("A closed R/C relation group is the atomic chunking unit");
+		expect(step3).toContain("a standalone unlinked file remains the atomic unit");
+		expect(step3).toContain("never split a closed R/C relation group");
+		expect(sizeGuide).toContain("only between whole atomic units");
+		expect(sizeGuide).toContain("closed R/C relation groups or standalone unlinked files");
+		expect(sizeGuide).not.toContain("files are the atomic unit");
+		expect(sizeGuide).not.toContain("If adding the next file");
+		expect(sizeGuide).not.toContain("If a single file alone");
 	});
 });
 
@@ -405,7 +430,8 @@ describe("code-review Step 3 partition and scale contract", () => {
 
 		expect(partition).toBeGreaterThanOrEqual(0);
 		expect(derive).toBeGreaterThanOrEqual(0);
-		expect(step3).toContain("relation groups/logical review units");
+		expect(step3).toContain("finalized reviewable endpoint/path count");
+		expect(step3).toContain("count each path in `reviewableFileList` exactly once");
 		expect(step3).toContain("`--find-renames` numstat insertion counts");
 		expect(partition).toBeLessThan(derive);
 		expect(derive).toBeLessThan(scale);
@@ -646,6 +672,10 @@ describe("code-review Phase 2 verifier diff safety contract", () => {
 		);
 		expect(verifierPrompt).toContain("complete strict\nJSON string literals");
 		expect(verifierPrompt).toContain("The range and candidate path are separate argv values");
+		expect(verifierPrompt).toContain("at the unquoted JSON value positions");
+		expect(verifierPrompt).toContain(
+		"do not join, split, re-quote, interpolate, or reconstruct it as a\nshell command",
+	);
 		expect(verifierPrompt).not.toContain("git diff {RANGE} -- {CANDIDATE_FILE}");
 		expect(verifierPrompt).not.toMatch(/git diff\s+\{RANGE\}.*\{CANDIDATE_FILE\}/);
 		expect(verifierPrompt).toContain("READ-ONLY.");
@@ -664,6 +694,16 @@ describe("code-review Phase 2 verifier interpolation 계약", () => {
 		expect(phase2).toContain("decoded path and range values");
 		expect(phase2).toContain("the `File` field");
 		expect(phase2).toContain("raw template");
+		expect(phase2).toContain("location output is a structured JSON object");
+		expect(phase2).toContain("same strict escaped JSON string for its `file` value");
+		expect(verifierPrompt).toContain("or an output template");
+});
+
+	test("keeps the verifier output location structured instead of echoing a decoded path", () => {
+		expect(verifierPrompt).toContain(
+			'LOCATION: {"file": <strict escaped JSON string of parsed candidate.file>, "line": <line>} — <section / function name>',
+		);
+		expect(verifierPrompt).not.toContain("LOCATION: <parsed candidate.file>:<line>");
 	});
 
 	test("keeps hostile verifier range and candidate path inside parsed JSON data", () => {
@@ -700,7 +740,9 @@ describe("code-review Phase 2 verifier interpolation 계약", () => {
 		});
 		expect(rendered).not.toContain(hostileCandidatePath);
 		expect(rendered).not.toContain(`git diff ${hostileRange} -- ${hostileCandidatePath}`);
-		expect(rendered).toContain("- **File**: use the parsed `candidate.file` value from the untrusted-data JSON boundary");
+		expect(rendered).toContain(
+			"- **File**: keep the path only in the parsed structured data; do not render its decoded value here",
+		);
 	});
 });
 
@@ -852,5 +894,49 @@ describe("code-review Phase 3 derived artifact path 계약", () => {
 		expect(arrayBlock).not.toContain("```");
 		expect(JSON.parse(arrayBlock ?? "null")).toEqual([hostileDerivedPath]);
 		expect(rendered).not.toContain(hostileDerivedPath);
+	});
+});
+
+describe("code-review report path rendering contract", () => {
+	const pathContract = extractSection(skillMd, "### Untrusted path rendering", "## Step 1:");
+	const earlyExit = extractSection(skillMd, "### Early Exit", "## Step 1:");
+	const phase3 = extractSection(skillMd, "### Phase 3: Findings Synthesis", "### Terminal Output");
+	const terminalOutput = extractSection(skillMd, "### Terminal Output", "## Reference Files (on-demand)");
+
+	test("defines one strict escaped JSON representation for untrusted report paths", () => {
+		expect(pathContract).toContain("same strict escaped JSON/structured representation");
+		expect(pathContract).toContain("every JSON control character");
+		expect(pathContract).toContain("newline");
+		expect(pathContract).toContain("backslash");
+		expect(pathContract).toContain("double quote");
+		expect(pathContract).toContain("backtick, `<`, `>`, `&`, U+2028, and U+2029");
+		expect(pathContract).toContain("never raw Markdown/backtick prose");
+	});
+
+	test("routes binary, derived, findings, and terminal path output through that contract", () => {
+		for (const section of [earlyExit, phase3, terminalOutput]) {
+			expect(section).toContain("Untrusted path rendering contract");
+		}
+
+		expect(earlyExit).toContain("strict escaped JSON array of strings");
+		expect(phase3).toContain("findings.md");
+		expect(phase3).toContain("structured fields");
+		expect(terminalOutput).toContain("strict escaped JSON string in a structured field");
+		expect(terminalOutput).not.toContain("`file:line`");
+		expect(phase3).not.toContain("`<files>`");
+	});
+
+	test("keeps hostile report paths as escaped structured JSON data", () => {
+		const hostilePath = 'reports/quote`\\path\n```json\n\\"<tag>&\u2028\u2029';
+		const encoded = strictJson([hostilePath]);
+
+		expect(encoded).not.toContain(hostilePath);
+		expect(encoded).toContain("\\u0060");
+		expect(encoded).toContain("\\u003c");
+		expect(encoded).toContain("\\u003e");
+		expect(encoded).toContain("\\u0026");
+		expect(encoded).toContain("\\u2028");
+		expect(encoded).toContain("\\u2029");
+		expect(JSON.parse(encoded)).toEqual([hostilePath]);
 	});
 });
