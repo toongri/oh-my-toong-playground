@@ -413,7 +413,39 @@ function checkReport(
 	}
 }
 
-/** A final all-pass marker cannot override an explicit FAIL status anywhere in the checklist. */
+interface ChecklistAxisRow {
+	number: number;
+	axis: string;
+	status: string;
+	evidence: string;
+}
+
+const CHECKLIST_AXIS_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
+
+/** Reads the four-column Markdown table used by the final nine-axis checklist. */
+function parseChecklistAxisRows(text: string): ChecklistAxisRow[] {
+	const rows: ChecklistAxisRow[] = [];
+	for (const line of text.split(/\r?\n/)) {
+		const cells = line.trim().split("|");
+		if (cells[0] === "") cells.shift();
+		if (cells.at(-1) === "") cells.pop();
+		if (cells.length !== 4) continue;
+
+		const numberText = cells[0]?.trim() ?? "";
+		if (!/^\d+$/.test(numberText)) continue;
+		const number = Number(numberText);
+		if (!Number.isSafeInteger(number)) continue;
+		rows.push({
+			number,
+			axis: cells[1]?.trim() ?? "",
+			status: cells[2]?.trim() ?? "",
+			evidence: cells[3]?.trim() ?? "",
+		});
+	}
+	return rows;
+}
+
+/** A final all-pass marker is valid only with one grounded verdict for each axis. */
 function checkChecklistReport(checklistPath: string | undefined, failedItems: string[]): void {
 	checkReport(
 		"체크리스트",
@@ -431,15 +463,40 @@ function checkChecklistReport(checklistPath: string | undefined, failedItems: st
 	} catch {
 		return;
 	}
-	const hasExplicitFail = text.split(/\r?\n/).some((line) => {
-		const trimmed = line.trim();
-		return (
-			trimmed === "FAIL" ||
-			/(?:^|[|:：\-–—])\s*FAIL\s*(?=$|[|:：\-–—,(])/.test(trimmed)
-		);
-	});
-	if (hasExplicitFail) {
-		failedItems.push(`체크리스트에 FAIL 항목이 남아 있습니다: ${checklistPath}`);
+
+	const rows = parseChecklistAxisRows(text);
+	if (rows.length === 0) {
+		failedItems.push(`체크리스트에 9개 축 행이 없습니다: ${checklistPath}`);
+		return;
+	}
+
+	const seen = new Set<number>();
+	for (const row of rows) {
+		if (!CHECKLIST_AXIS_NUMBERS.includes(row.number as (typeof CHECKLIST_AXIS_NUMBERS)[number])) {
+			failedItems.push(`체크리스트의 축 번호가 1~9 범위를 벗어났습니다: ${row.number}`);
+			continue;
+		}
+		if (seen.has(row.number)) {
+			failedItems.push(`체크리스트에 축 ${row.number}가 중복됩니다: ${checklistPath}`);
+			continue;
+		}
+		seen.add(row.number);
+
+		if (row.axis.length === 0) {
+			failedItems.push(`체크리스트의 축 ${row.number} 이름이 비어 있습니다: ${checklistPath}`);
+		}
+		if (row.status !== "PASS" && row.status !== "N.A") {
+			failedItems.push(`체크리스트 축 ${row.number}의 상태가 허용되지 않습니다: ${row.status || "(빈 상태)"}`);
+			continue;
+		}
+		if (row.evidence.length === 0) {
+			failedItems.push(`체크리스트 축 ${row.number}의 근거가 비어 있습니다: ${checklistPath}`);
+		}
+	}
+
+	const missing = CHECKLIST_AXIS_NUMBERS.filter((number) => !seen.has(number));
+	if (missing.length > 0) {
+		failedItems.push(`체크리스트의 축이 누락되었습니다: ${missing.join(", ")}`);
 	}
 }
 
@@ -491,7 +548,7 @@ export function setRenderForTesting(renderer?: FreshRenderer): void {
  * the HTML exists and is not empty, every authored mermaid block actually
  * became an inline SVG, and the technical-writing prose review ran and closed
  * with its machine-checkable verdict line. The final checklist must also close
- * with its machine-checkable all-pass verdict. Visual layout is not reviewed
+ * with its machine-checkable all-pass verdict and nine grounded axis rows. Visual layout is not reviewed
  * per document — it is a deterministic property render.ts owns (wide-diagram
  * legibility is sealed by normalizeSvgWidth + the figure scroll container,
  * regression-guarded by render.test.ts), so there is no per-document visual-qa

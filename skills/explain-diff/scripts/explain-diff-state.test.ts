@@ -801,7 +801,7 @@ function reportFiles(): { writing: string; checklist: string } {
 	const writing = join(sandbox, "writing-report.md");
 	writeFileSync(writing, "지적 2건 반영.\nREVIEW: APPLIED\n", "utf8");
 	const checklist = join(sandbox, "final-checklist.md");
-	writeFileSync(checklist, "모든 render 산출물 확인.\nCHECKLIST: ALL PASS\n", "utf8");
+	writeFileSync(checklist, checklistReport(), "utf8");
 	return { writing, checklist };
 }
 
@@ -818,6 +818,37 @@ function projectRenderedHtml(markdown: string): string {
 	const rendered = renderToHtml(renderedMarkdown, title);
 	projectRenderedHtmlCache.set(markdown, rendered);
 	return rendered;
+}
+
+const CHECKLIST_AXES = [
+	["1", "시스템 분해"],
+	["2", "양측 커버리지"],
+	["3", "목표→그림→해석"],
+	["4", "상태 다이어그램"],
+	["5", "로직 flowchart"],
+	["6", "실재 식별자+변경 마커"],
+	["7", "시퀀스 완결성"],
+	["8", "사용자 여정"],
+	["9", "HTML 렌더"],
+] as const;
+
+function checklistReport(
+	rows: Array<{ number: string; axis: string; status: string; evidence: string }> = CHECKLIST_AXES.map(
+		([number, axis]) => ({
+			number,
+			axis,
+			status: number === "2" || number === "4" ? "N.A" : "PASS",
+			evidence: `${axis} 근거를 문서에서 확인했다.`,
+		}),
+	),
+): string {
+	return [
+		"| # | 축 | 판정 | 근거 |",
+		"|---|---|---|---|",
+		...rows.map(({ number, axis, status, evidence }) => `| ${number} | ${axis} | ${status} | ${evidence} |`),
+		"CHECKLIST: ALL PASS",
+		"",
+	].join("\n");
 }
 
 describe("render 산출물 검사", () => {
@@ -901,6 +932,76 @@ describe("render 산출물 검사", () => {
 		expect(state().last_failure?.items.join(" ")).toContain("CHECKLIST: ALL PASS");
 	});
 
+	test("마지막 ALL PASS 표식만 있고 9개 축 행이 없으면 render 제출을 거부한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		writeFileSync(rep.checklist, "CHECKLIST: ALL PASS\n", "utf8");
+
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(1);
+		expect(state().step).toBe("render");
+		expect(state().last_failure?.items.join(" ")).toContain("9개");
+	});
+
+	test("1~9 각 축이 PASS 또는 N.A이고 비어 있지 않은 근거가 있으면 통과한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		writeFileSync(rep.checklist, checklistReport(), "utf8");
+
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(0);
+		expect(state().structural_ok).toContain("render");
+	});
+
+	test("장식된 FAIL 행은 마지막 ALL PASS 표식이 있어도 거부한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		for (const status of ["**FAIL**", "'FAIL'", "<strong>FAIL</strong>"]) {
+			writeFileSync(
+				rep.checklist,
+				checklistReport(
+					CHECKLIST_AXES.map(([number, axis]) => ({
+						number,
+						axis,
+						status: number === "1" ? status : "PASS",
+						evidence: "수정이 필요하다.",
+					})),
+				),
+				"utf8",
+			);
+			expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(1);
+			expect(state().step).toBe("render");
+		}
+	});
+
+	test("축 중복·누락·허용되지 않은 상태는 마지막 ALL PASS 표식이 있어도 거부한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		const validRows = CHECKLIST_AXES.map(([number, axis]) => ({
+			number,
+			axis,
+			status: "PASS",
+			evidence: "문서에서 확인했다.",
+		}));
+		const invalidRows = [
+			validRows.map((row) => (row.number === "9" ? { ...row, number: "1" } : row)),
+			validRows.slice(0, 8),
+			validRows.map((row) => (row.number === "1" ? { ...row, status: "MAYBE" } : row)),
+		];
+
+		for (const rows of invalidRows) {
+			writeFileSync(rep.checklist, checklistReport(rows), "utf8");
+			expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(1);
+			expect(state().step).toBe("render");
+		}
+	});
+
 	test("앞선 FAIL 행이 있어도 마지막 ALL PASS 표식만으로 통과하지 못한다", async () => {
 		const { submitStep, doc } = await driveToRender();
 		const htmlPath = join(sandbox, "doc.html");
@@ -922,11 +1023,7 @@ describe("render 산출물 검사", () => {
 		const htmlPath = join(sandbox, "doc.html");
 		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
 		const rep = reportFiles();
-		writeFileSync(
-			rep.checklist,
-			"| # | 축 | 판정 | 근거 |\n|---|---|---|---|\n| 1 | 시스템 분해 | PASS | 확인 |\n| 2 | 양측 커버리지 | N.A | 해당 없음 |\nCHECKLIST: ALL PASS   \n\t\n",
-			"utf8",
-		);
+		writeFileSync(rep.checklist, `${checklistReport().trimEnd()}   \n\t\n`, "utf8");
 
 		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(0);
 		expect(state().structural_ok).toContain("render");
