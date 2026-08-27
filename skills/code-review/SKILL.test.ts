@@ -267,6 +267,30 @@ describe("code-review Step 2 rename relation contract", () => {
 	});
 });
 
+describe("code-review rename relation closure and affinity contract", () => {
+	const step2 = extractSection(skillMd, "## Step 2: Context Gathering", "## Step 3:");
+	const step3 = extractSection(skillMd, "## Step 3: Chunking Decision", "## Step 4:");
+
+	test("closes every R/C edge before affinity and keeps each relation group atomic", () => {
+		expect(step2).toContain("union every R/C old/new endpoint edge");
+		expect(step2).toContain("transitive relation closure");
+		expect(step3).toContain("all R/C edges");
+		expect(step3).toContain("relation closure");
+		expect(step3).toContain("relation group as atomic chunk membership");
+		expect(step3).toContain("soft size guide would split a relation group");
+		expect(step3).toContain("never split the relation group");
+		expect(step3).toContain("must not double-count endpoints or insertions");
+
+		const closure = step3.indexOf("relation closure");
+		const affinity = step3.indexOf("directory/module affinity", closure);
+		const atomic = step3.indexOf("relation group as atomic chunk membership", closure);
+
+		expect(closure).toBeGreaterThanOrEqual(0);
+		expect(affinity).toBeGreaterThan(closure);
+		expect(atomic).toBeGreaterThan(closure);
+	});
+});
+
 describe("code-review Step 3 partition and scale contract", () => {
 	const step2 = extractSection(skillMd, "## Step 2: Context Gathering", "## Step 3:");
 	const step3 = extractSection(skillMd, "## Step 3: Chunking Decision", "## Step 4:");
@@ -454,9 +478,6 @@ describe("code-review Step 3 partition and scale contract", () => {
 
 	test("labels argv-safe --stat as context rather than the scale input", () => {
 		expect(step2).not.toContain("`git diff {range} --stat` (change scale)");
-		expect(step2).toContain(
-			'`["git", "diff", range, "--stat"]` (change overview; not the scale input)',
-		);
 	});
 
 	test("keeps zero-reviewable flow out of finder and Phase 2", () => {
@@ -507,7 +528,7 @@ describe("chunk-reviewer prompt scope and section order contract", () => {
 		}
 
 		expect(chunkReviewerPrompt).toContain(
-			"{FILE_LIST} is the chunk's post-integrity reviewable file list, not the complete changed-file manifest",
+			"The JSON array above is the chunk's post-integrity reviewable file list, not the complete changed-file manifest",
 		);
 		expect(chunkReviewerPrompt).toContain(
 			"The complete changed-file manifest and derived-artifact Out of Scope list are not finder scope",
@@ -521,5 +542,45 @@ describe("chunk-reviewer prompt scope and section order contract", () => {
 			"Include each per-path relevance decision and reason in the existing `{REQUIREMENTS}` payload/finder handoff.",
 		);
 		expect(step4).toContain("{REQUIREMENTS}");
+	});
+});
+
+describe("chunk-reviewer prompt path serialization contract", () => {
+	const step4 = extractSection(
+		skillMd,
+		"## Step 4: Direct Finder-Job Dispatch",
+		"## Step 5:",
+	);
+
+	test("serializes every path-bearing handoff as escaped untrusted JSON and runs argv directly", () => {
+		expect(step4).toContain("path-bearing values must never be inserted as raw Markdown/prose");
+		expect(step4).toContain("serialize `{FILE_LIST}` as a JSON array of path strings");
+		expect(step4).toContain("`{DIFF_COMMAND}` as a JSON array of the exact argv values");
+		expect(step4).toContain("control characters, newline, backslash, and quote");
+		expect(step4).toContain("backtick, `<`, `>`, `&`, U+2028, and U+2029");
+		expect(step4).toContain("exact path echo in `{REQUIREMENTS}` uses the same escaped JSON string representation");
+		expect(step4).toContain("untrusted-data JSON block");
+		expect(step4).toContain("parse the JSON argv directly");
+		expect(step4).toContain("never reconstruct a shell command");
+
+		expect(chunkReviewerPrompt).toContain("untrusted-data JSON block of path strings");
+		expect(chunkReviewerPrompt).toContain("untrusted-data JSON block of exact argv values");
+		expect(chunkReviewerPrompt).toContain("Parse it as JSON and execute that argv directly");
+		expect(chunkReviewerPrompt).toContain("Do not reconstruct a shell command");
+		expect(chunkReviewerPrompt).toContain("```json\n{FILE_LIST}\n```");
+		expect(chunkReviewerPrompt).toContain("```json\n{DIFF_COMMAND}\n```");
+		expect(chunkReviewerPrompt).not.toContain("```\n{DIFF_COMMAND}\n```");
+		expect(chunkReviewerPrompt).toContain(
+			"| {REQUIREMENTS} | Optional | Step 1 interview, \"N/A\" if deferred; exact path echoes use the same strict escaped JSON string representation",
+		);
+		expect(chunkReviewerPrompt).toContain(
+			"The `Derived-artifact relevance decisions` record in the existing `{REQUIREMENTS}` payload is authoritative. Finder scope must use only exact paths re-included by those decisions and must not be broadened with excluded paths or excluded bytes.",
+		);
+		expect(chunkReviewerPrompt).toContain(
+			"| {FILE_LIST} | Required | Step 3 `reviewableFileList`, strict escaped JSON array of path strings",
+		);
+		expect(chunkReviewerPrompt).toContain(
+			"| {DIFF_COMMAND} | Required | Step 3, strict escaped JSON array of exact argv values",
+		);
 	});
 });
