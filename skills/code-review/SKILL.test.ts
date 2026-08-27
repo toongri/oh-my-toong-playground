@@ -454,6 +454,9 @@ describe("code-review Step 3 partition and scale contract", () => {
 
 	test("labels argv-safe --stat as context rather than the scale input", () => {
 		expect(step2).not.toContain("`git diff {range} --stat` (change scale)");
+		expect(step2).toContain(
+			'`["git", "diff", range, "--stat"]` (change overview; not the scale input)',
+		);
 	});
 
 	test("keeps zero-reviewable flow out of finder and Phase 2", () => {

@@ -28,8 +28,6 @@ Findings must be limited to files in the list above. Cross-references and explor
 ## Requirements/Plan
 
 {REQUIREMENTS}
-
-The `Derived-artifact relevance decisions` record in the existing `{REQUIREMENTS}` payload is authoritative. Finder scope must use only exact paths re-included by those decisions and must not be broadened with excluded paths or excluded bytes.
 <!-- /section:requirements -->
 
 <!-- section:project_context -->
