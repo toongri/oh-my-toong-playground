@@ -118,7 +118,7 @@
 
 | 레벨 | 질문 | 권장 mermaid |
 |---|---|---|
-| 시스템 레벨 | 어떤 **서로 다른 프로세스·서비스·배포 단위·저장소**가 관여하고, 이 diff는 그중 어느 경계에 닿는가 | `flowchart` + `subgraph`(경계) — 각 subgraph 안에 그 시스템에서 변경이 흐르는 핵심 자원(모듈·저장소·매핑 테이블) 2–5개를 실명으로 채운다; 변경이 닿는 노드/간선에 `:::changed` |
+| 시스템 레벨 | 어떤 **서로 다른 프로세스·서비스·배포 단위·저장소**가 관여하고, 이 diff는 그중 어느 경계에 닿는가 | `flowchart` + `subgraph`(경계) — 각 subgraph 안에 그 시스템에서 변경이 흐르는 관련 핵심 자원(모듈·저장소·매핑 테이블)을 실명으로 채운다 — 관련 자원이 2개 이상이면 최소 2개(최대 5개)를, 정확히 1개뿐이면 그 하나와 하나뿐인 이유를 문서에 명시할 때만 허용한다; 변경이 닿는 노드/간선에 `:::changed` |
 | 컴포넌트 레벨 | 모듈·도메인 사이 의존이 변경 전후로 어떻게 달라지는가 | `flowchart` 두 개(Before/After) 또는 한 개에 추가/제거 간선 구분 |
 | 도메인 레벨 | 엔티티·개념·불변식이 무엇이고 무엇이 바뀌는가 | `erDiagram`/`classDiagram`; 건드린 개념에 3+ 상태나 명명된 전이(잠금·재시도 초과·확정·만료)가 있으면 `stateDiagram-v2`를 추가로 그린다(전이 라벨=실제 가드) — 정말 없으면 없음을 한 줄로 적는다 |
 
@@ -128,8 +128,10 @@
 `구조 변화 없음: <사유>` 마커를 쓴다.
 
 **subgraph 내부를 채운다.** 관여하는 프로세스·서비스·저장소마다 `subgraph`를 만들고, 그
-안에 그 시스템에서 이 변경이 흐르는 핵심 자원 — 모듈·저장소·매핑 테이블 — 을 실명 노드로
-2–5개 채운다(변경 흐름이 지나는 내부 의존 간선도 환영). 독자가 한 그림에서 얻어야 하는 것:
+안에 그 시스템에서 이 변경이 흐르는 관련 핵심 자원 — 모듈·저장소·매핑 테이블 — 을 실명
+노드로 채운다. 관련 자원이 2개 이상이면 최소 2개(최대 5개)를, 정확히 1개뿐인 subgraph는
+그 하나와 하나뿐인 이유를 문서에 명시할 때만 채운다(변경 흐름이 지나는 내부 의존 간선도 환영).
+독자가 한 그림에서 얻어야 하는 것:
 시스템 단위 + 각 시스템의 내부 핵심 구성 + 시스템 사이 계약. subgraph 라벨을 되풀이하는
 단일 노드는 경계만 보여주고 구성을 보여주지 못한다 — 실제 부품을 이름으로 채운다. 위
 경계 규칙은 그대로다: 경계를 넘지 않는 diff는 여전히 waiver를 쓰고, 내부 노드가
@@ -444,6 +446,10 @@ flowchart LR
   class guard,lock changed
 ```
 
+이 작례의 범위에서 Redis와 PostgreSQL은 이 흐름에 관련된 핵심 자원이 각각 하나뿐이다 —
+Redis는 `coupon_lock:{couponId}` 잠금 키만, PostgreSQL은 `coupons.redeemed_at` 컬럼만
+해당하므로 각 subgraph에 하나씩만 실명으로 둔다.
+
 `CouponAttemptGuard`와 `coupon_lock:{couponId}`만 변경 마커를 달고 있어, 이 diff가
 검증 경로에 잠금 한 겹을 끼웠을 뿐 `CouponService`→`coupons.redeemed_at`의 기존 쓰기
 경로는 그대로임이 그림에서 바로 읽힌다. 잠금 키가 테이블이 아니라 Redis subgraph에
@@ -539,9 +545,10 @@ suffix를 파싱하고, 그 앞의 경로가 감싸는 파일 블록의 경로�
 ```html
 <div class="arch-entity" data-change="new">
 <p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>
-<p><strong>레이어</strong> commerce/entities/supplement/api</p>
+<p><strong>패키지</strong> commerce/entities/supplement/api</p>
 <p><strong>책임</strong> fail-closed 해소기를 카드에 공급</p>
 <p><strong>인터페이스</strong> <code>{ resolveAlias, resolveDisplay, areCatalogsSettled }</code></p>
+<p><strong>변경점</strong> 해소기 훅 신설 — 기존에는 카드 컴포넌트가 카탈로그 query를 직접 조회해 fail-open이었다</p>
 </div>
 ```
 
