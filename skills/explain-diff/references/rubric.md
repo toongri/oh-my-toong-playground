@@ -52,6 +52,11 @@ Not one file classified as signal is dropped. The required form differs at the t
 
 - **Listing form (evidence step)** — Change Groups are not written yet, so the file path merely needs to
   appear somewhere in the document.
+- **Source sweep (evidence step)** — `## Evidence` must contain a **real rendered Markdown table** under
+  the real `### 원천` heading. Its header has exactly four columns — `종류 | 식별자/경로 | 확보 | 내용 요약` —
+  followed by the four-column separator `|---|---|---|---|` and at least one non-empty, non-separator data row. A fenced or
+  comment-hidden heading/table/row, a header/separator-only table, or a malformed header/separator/data row
+  does not count; fenced content is masked before the structure check scans it.
 - **Coverage form (code step)** — the unit is the change, not the file, so each signal file must be
   **cited by at least one change block's `바뀐 위치` (cf-loc) anchors**. Zero citations means the
   walkthrough silently dropped that file — fail. A file cited by several changes is fine (one file

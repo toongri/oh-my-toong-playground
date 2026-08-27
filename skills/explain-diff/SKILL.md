@@ -76,7 +76,7 @@ Then split the changed files into **signal** and **noise**.
 3. **Repo docs that govern the touched area** — look for docs/wiki pages about the modules the diff touches.
 4. **External trackers/docs (Linear, Notion, Slack)** — when a tool for them is connected, fetch the extracted keys/links and read them; when not, record the key/link as a lead marked 접근 불가 rather than dropping it.
 
-Record the sweep as the `### 원천` table inside `## Evidence` (see `markdown-template.md`): one row per source — 종류/식별자·경로/확보(열람·접근 불가)/내용 요약, and `없음 — <확인한 곳>` for a class that truly has none. Background and 목표 are written FROM this table, and `### 출처` later names what each row contributed.
+Record the sweep as a **real rendered Markdown table** under the real `### 원천` heading inside `## Evidence` (see `markdown-template.md`). Its header must have exactly four columns — `종류 | 식별자/경로 | 확보 | 내용 요약` — followed by the four-column separator `|---|---|---|---|` and at least one non-empty, non-separator data row. A fenced or comment-hidden heading/table/row, a header/separator-only table, or a malformed header/separator/data row does not count; fenced content is masked before the structure check scans it. Keep one row per source — 종류/식별자·경로/확보(열람·접근 불가)/내용 요약, and `없음 — <확인한 곳>` for a class that truly has none. Background and 목표 are written FROM this table, and `### 출처` later names what each row contributed.
 
 From here on, every step's document accumulates into a single markdown file:
 `$OMT_DIR/explain-diff/YYYY-MM-DD-<slug>.md`
