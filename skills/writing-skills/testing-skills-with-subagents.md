@@ -160,16 +160,15 @@ You have access to: [skill-being-tested]
 
 Make agent believe it's real work, not a quiz.
 
-**Run CLI test agents with the full-permission flag by default.** When the test
-harness drives an agent through a CLI (`codex exec`, `claude -p`, …), launch it
-with that CLI's bypass-sandbox flag (e.g. codex's
-`--dangerously-bypass-approvals-and-sandbox`) unless you have a specific reason
-to sandbox. A restricted sandbox makes the test fail for reasons unrelated to
-the skill — blocked browser/renderer launches, denied writes, denied network —
-and the agent burns its run fighting the sandbox instead of exercising the
-skill. That's a false RED (or a stuck GREEN), not a signal about the skill.
-The harness environment is already isolated scratch space; the skill under test
-is what's being measured, not the CLI's permission model.
+**Run CLI test agents with restricted, workspace-scoped execution by default.**
+When the test harness drives an agent through a CLI (`codex exec`, `claude -p`,
+…), launch it without bypass/full-permission flags and keep its filesystem
+access scoped to the test workspace. Allow bypass/full-permission only when an
+actual external sandbox (a container or VM) isolates the entire run from the
+host; a local CLI flag is not itself a security boundary. Provision
+dependencies, browser/renderer prerequisites, and writable fixtures inside
+that workspace so failures exercise the skill rather than unrelated setup
+gaps.
 
 ## REFACTOR Phase: Close Loopholes (Stay Green)
 
