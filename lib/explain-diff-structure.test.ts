@@ -1533,6 +1533,12 @@ describe("모든 저작 스텝 — R11 스타일 발명 금지", () => {
 		expect(r.failedItems.join(" ")).toContain("my-fancy-box");
 	});
 
+	test("카드 v2 멤버 칩 클래스(ae-members·chg)는 render.ts가 CSS를 소유하므로 위반이 아니다", () => {
+		const doc = `${evidenceOnlyDoc("a.ts")}\n<ul class="ae-members"><li><code>userId</code></li><li><code class="chg">status</code></li></ul>\n`;
+		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "evidence" });
+		expect(r.pass).toBe(true);
+	});
+
 	test("승인된 컴포넌트 클래스(cf 계열 포함)만 쓰면 통과한다", () => {
 		const doc = `${evidenceOnlyDoc("a.ts")}
 <div class="flow">

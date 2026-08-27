@@ -1137,6 +1137,8 @@ const SANCTIONED_CLASSES = new Set([
 	"cf-src",
 	"cf-loc",
 	"arch-entity",
+	"ae-members",
+	"chg",
 ]);
 
 // R11 — the document authors content, the renderer owns presentation.

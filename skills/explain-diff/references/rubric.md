@@ -150,6 +150,13 @@ The code section is organized with the commit as its spine, and its unit is the 
 > pointed only at location anchors and showed not one line of the actual logic. Making the commit the group's
 > spine and requiring code per file joins the two.
 
+> **RED — real artifact (`pr-3621`, user review).** A change block's content was numbered role labels stating
+> only the post-state — "책임 1 — 가구 참여 발급 … `reserveCode()`에 넘기고 `householdInviteCodeOfKey()`를
+> 만들지 않는다". The reader could not tell whether the responsibility itself changed or what the symbol did
+> before — "그럼 이전엔 어떻다는거지". The authoring contract (SKILL.md step 7 + template) now anchors each
+> entry on the symbol and tells it before→after: **기존**/**변경** (or **신설**/**삭제**). Not machine-forced;
+> the checklist and this note hold the judge to it.
+
 ### R14. Three system-level change-contract axes
 
 `### 시스템 레벨`, beyond the diagram (or waiver marker), enumerates the contracts this diff changes across three axes — `서버 API`, `DB 스키마`, `클라이언트 의존`. All three axis labels must be present. The table must be **real rendered content**: fenced code is masked before the axes are scanned, so a contract table that appears only inside a fenced example (the template ships one) does not satisfy R14. What each axis says about its contract is the author's to fill.
@@ -297,6 +304,13 @@ internally, but the *output* forbids naming the methodology or its axes.
 Between Background and Architecture the document carries a `## 목표` section with three sub-slots — `### 무엇을·왜` (what the change achieves + why it was needed), `### 핵심` (the one-line core the reader should hold before any code), and `### 출처` (where the purpose/context understanding came from — a Linear issue, Notion doc, Slack thread, PR description, commit body, wiki path, or `코드 추론`). Read on the fence-masked text so a `###` inside a code example does not stand in for the real slot. What each slot says is the author's to fill; the gate forces the three slots present. The `출처` slot applies R3's provenance discipline to the document's whole purpose — the reader can trace and trust the WHY.
 
 > **RED — real artifact (`pr-3412`, luna max).** The 목표 section was rated clear and understandable, but nothing said where the understanding came from — a reader could not tell whether the stated purpose was grounded in a Linear/Notion/PR source or invented. The `출처` slot closes that: name the source, or say `코드 추론`, never blank.
+
+> **RED — real artifact (`pr-3621`, user review).** The `출처` slot existed but held only generic bullets
+> ("PR 본문", "실제 구현") — no sweep of the issue key the PR title itself carried (B2C-6542), the related
+> PRs its body linked, the wiki doc the diff changed, or the external tracker behind the issue key. The
+> Background read as code-derived while collectable sources sat unread. The authoring contract (SKILL.md
+> step 1 source sweep + the `### 원천` table in Evidence) now forces the sweep to be recorded row by row —
+> 종류/식별자/확보(열람·접근 불가)/요약 — and `출처` to name what each row contributed.
 
 > **RED — real artifact (`boostpack-tool-helper-restore`).** The document ran Evidence → Background →
 > Architecture with no statement anywhere of what the change was for or its one-line takeaway. The "왜"

@@ -69,12 +69,21 @@ Then split the changed files into **signal** and **noise**.
   something to explain per file — a set whose count is its whole meaning is not signal
 - Record the classification result as a table in the `## Evidence` block at the top of the document
 
+**Then run the source sweep.** The diff never carries its own context — issues, tickets, and docs do. Collect every document source before writing a word of background:
+
+1. **PR body and commit messages** — read them fully; extract every issue key (Linear `ABC-123` style), document link (Notion, wiki), and referenced PR number they carry.
+2. **Docs changed inside the diff** — a `docs/`·wiki file in the diff is a source the author shipped with the change; read each one.
+3. **Repo docs that govern the touched area** — look for docs/wiki pages about the modules the diff touches.
+4. **External trackers/docs (Linear, Notion, Slack)** — when a tool for them is connected, fetch the extracted keys/links and read them; when not, record the key/link as a lead marked 접근 불가 rather than dropping it.
+
+Record the sweep as the `### 원천` table inside `## Evidence` (see `markdown-template.md`): one row per source — 종류/식별자·경로/확보(열람·접근 불가)/내용 요약, and `없음 — <확인한 곳>` for a class that truly has none. Background and 목표 are written FROM this table, and `### 출처` later names what each row contributed.
+
 From here on, every step's document accumulates into a single markdown file:
 `$OMT_DIR/explain-diff/YYYY-MM-DD-<slug>.md`
 
 ## Step 2 — background
 
-Write **both** tiers.
+Write **both** tiers, **from the source sweep**: the facts a collected source taught go into the matching tier with the source named inline in parentheses (the decision doc's rationale into 좁은 배경, the system overview a wiki page gave into 깊은 배경). A background written only from code reading while the 원천 table holds unread rows is incomplete.
 
 ```markdown
 ## Background
@@ -106,7 +115,7 @@ State the **goal and the one-line core before any structure or code** — the wa
 <이 목적·컨텍스트를 파악하는 데 실제로 쓴 근거 — Linear 이슈, Notion 문서, Slack 스레드, PR 설명, 커밋 본문, 위키 문서 경로, 또는 코드 추론. 접근할 수 있으면 식별자/경로를, 없으면 어디서 왔는지 한 줄>
 ```
 
-All three sub-headings are verified by the structure check (R16). What each says is yours to fill. The `### 출처` names where the WHY came from so the reader can trace and trust it — the same provenance discipline R3 applies to each change's 왜, here applied to the whole document's purpose. In a sandbox with no external tools, cite the in-repo grounds (commit body, PR description, wiki) or say `코드 추론`; never leave it blank.
+All three sub-headings are verified by the structure check (R16). What each says is yours to fill. The `### 출처` names where the WHY came from so the reader can trace and trust it — the same provenance discipline R3 applies to each change's 왜, here applied to the whole document's purpose. Fill it from the `### 원천` table: one line per row saying what that source contributed to this document (not just its name). In a sandbox with no external tools, cite the in-repo grounds (commit body, PR description, wiki) or say `코드 추론`; never leave it blank.
 
 ## Step 4 — architecture
 
@@ -188,7 +197,7 @@ Commit hashes are compared against the list that `start` pinned into the state �
 
 ## Step 7 — code
 
-The unit is the **change (변경)**, not the file, and **the spine is the commit.** A Change Group (a concern) descends commit by commit; under a commit come **change blocks** (`#### 변경 N: <한 일>`). **A change is not a file** — one change is realized by several **책임(responsibilities)**, the class/function duties that were edited together for one reason. So a change block lists those responsibilities, each naming the class/function it touched and **where that symbol lives** (which layer/domain — pointing back to the architecture cards). The file appears only as a location citation in the `cf-loc` slot, never as the heading. A signal file may be cited by more than one change; what must not happen is a signal file no change cites (R1).
+The unit is the **change (변경)**, not the file, and **the spine is the commit.** A Change Group (a concern) descends commit by commit; under a commit come **change blocks** (`#### 변경 N: <한 일>`). **A change is not a file** — one change is realized by the responsibility shifts of several **symbols**, the classes/functions edited together for one reason. So a change block carries one entry per symbol, and **each entry's subject is the symbol, told before→after**: `<code>symbol</code>` + where it lives (which layer/domain — pointing back to the architecture cards), then **기존** (the responsibility and behavior that symbol carried) and **변경** (how this diff changed it), as complete sentences. A newly created symbol writes **신설** (the responsibility it now takes) instead of 기존; a removed one writes **삭제** (where its duty went). Numbered role labels that state only the post-state ("책임 1 — <역할> … 이제 하는 일") leave the reader unable to tell what it was like before — a measured defect. The file appears only as a location citation in the `cf-loc` slot, never as the heading. A signal file may be cited by more than one change; what must not happen is a signal file no change cites (R1).
 
 ```markdown
 ## Change Group 1: <관심사>
@@ -200,8 +209,8 @@ The unit is the **change (변경)**, not the file, and **the spine is the commit
 
 #### 변경 1: <이 변경이 이룬 것 — 파일명이 아니라 한 일로>
 <div class="cf" data-change="mod">
-<p><strong>책임 1 — <역할></strong> — <code>Class.method()</code> (<어느 레이어·도메인의 무엇인지 배치>). <이 책임이 이제 하는 일 — 완결 문장>.</p>
-<p><strong>책임 2 — <역할></strong> — <code>otherFn()</code> (<배치>). <한 일>.</p>
+<p><strong><code>Class.method()</code></strong> (<어느 레이어·도메인의 무엇인지 배치>) — <strong>기존</strong> <지던 책임과 동작>. <strong>변경</strong> <이번 diff로 어떻게 달라졌는지>.</p>
+<p><strong><code>otherFn()</code></strong> (<배치>) — <strong>신설</strong> <새로 지는 책임>.</p>
 <p><strong>왜</strong> — <이 변경이 필요한 이유> <span class="cf-src">근거</span> "<원문 인용>"</p>
 <p><strong>효과·사이드이펙트</strong> — <이 변경이 부른 결과·부작용 — 완결 문장></p>
 <p><strong>검증</strong> — <이 변경을 고정하는 테스트와 무엇을 잠그는지></p>
@@ -213,7 +222,7 @@ The unit is the **change (변경)**, not the file, and **the spine is the commit
 ​```
 ```
 
-The slots fill R13, R3, and R5. The `왜`·`효과·사이드이펙트`·`검증`·code are at the change level; the `책임` entries and `바뀐 위치` carry the symbols and their files. The component, field labels, and code-fence rules follow `markdown-template.md`.
+The slots fill R13, R3, and R5. The `왜`·`효과·사이드이펙트`·`검증`·code are at the change level; the symbol entries (기존/변경/신설/삭제) and `바뀐 위치` carry the symbols and their files. The component, field labels, and code-fence rules follow `markdown-template.md`.
 
 - **Commit subsection** (`### \`hash\``): at least one per group. The hash must be a range commit that `start` pinned (R13).
 - **Core-logic code**: one code fence per change block — the few lines that reveal the change's core (the central responsibility). Location anchors alone do not read as "what was done" (R13).
