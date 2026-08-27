@@ -167,6 +167,16 @@ function state(): Record<string, any> {
 	return JSON.parse(readFileSync(join(sandbox, `explain-diff-state-${SID}.json`), "utf8"));
 }
 
+function rewriteState(mutator: (current: Record<string, any>) => void): void {
+	const current = state();
+	mutator(current);
+	writeFileSync(
+		join(sandbox, `explain-diff-state-${SID}.json`),
+		`${JSON.stringify(current, null, 2)}\n`,
+		"utf8",
+	);
+}
+
 describe("start", () => {
 	test("첫 스텝은 evidence 이고 산출물 쓰기가 열려 있다", async () => {
 		const { start } = await cli();
@@ -889,6 +899,68 @@ describe("render 산출물 검사", () => {
 		expect(rc).toBe(1);
 		expect(state().step).toBe("render");
 		expect(state().last_failure?.items.join(" ")).toContain("CHECKLIST: ALL PASS");
+	});
+
+	test("앞선 FAIL 행이 있어도 마지막 ALL PASS 표식만으로 통과하지 못한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		writeFileSync(
+			rep.checklist,
+			"| # | 축 | 판정 | 근거 |\n|---|---|---|---|\n| 1 | 시스템 분해 | FAIL | 수정 필요 |\nCHECKLIST: ALL PASS\n",
+			"utf8",
+		);
+
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(1);
+		expect(state().step).toBe("render");
+		expect(state().structural_ok).not.toContain("render");
+	});
+
+	test("PASS와 N.A 행은 trailing whitespace 뒤의 ALL PASS 표식과 함께 통과한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		writeFileSync(
+			rep.checklist,
+			"| # | 축 | 판정 | 근거 |\n|---|---|---|---|\n| 1 | 시스템 분해 | PASS | 확인 |\n| 2 | 양측 커버리지 | N.A | 해당 없음 |\nCHECKLIST: ALL PASS   \n\t\n",
+			"utf8",
+		);
+
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(0);
+		expect(state().structural_ok).toContain("render");
+	});
+
+	test("구 계약이 없는 render proof는 pass-step 전에 무효화된다", async () => {
+		const { passStep, doc } = await driveToRender();
+		rewriteState((current) => {
+			delete current.render_proof_contract_version;
+			current.structural_ok = ["render"];
+		});
+
+		expect(() => passStep(SID, "render", doc, [])).toThrow(/submit-step/);
+		expect(state().step).toBe("render");
+		expect(state().structural_ok).not.toContain("render");
+	});
+
+	test("구 계약 render proof로 이미 quiz에 있어도 render로 되돌아간다", async () => {
+		const { submitStep, passStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(0);
+		expect(passStep(SID, "render", doc, [])).toBe(0);
+		expect(state().step).toBe("quiz");
+
+		rewriteState((current) => {
+			current.render_proof_contract_version = 0;
+		});
+
+		expect(() => passStep(SID, "render", doc, [])).toThrow(/submit-step/);
+		expect(state().step).toBe("render");
+		expect(state().structural_ok).not.toContain("render");
+		expect(state().passed).not.toContain("render");
 	});
 
 	test("Markdown 산문이 바뀐 뒤 예전 renderer HTML은 Mermaid 패리티가 같아도 거부하고 현재 산출물은 통과한다", async () => {

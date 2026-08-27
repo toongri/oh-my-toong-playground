@@ -32,12 +32,15 @@ interface Persisted extends ExplainDiffState {
 	slug: string;
 	/** Steps whose structural checks passed but whose judge review has not run. */
 	structural_ok: Step[];
+	/** Render proof contract used by the persisted structural render verdict. */
+	render_proof_contract_version: number;
 	diff_hunks: DiffHunk[];
 	started_at: string;
 	last_touched_at: string;
 	derived: ReturnType<typeof computeDerived>;
 }
 
+const CURRENT_RENDER_PROOF_CONTRACT_VERSION = 1;
 const renderedDocumentCache = new Map<string, string>();
 type FreshRenderer = (docPath: string) => string;
 
@@ -81,11 +84,14 @@ function read(sessionId: string): Persisted | null {
 		const r: Record<string, unknown> = {};
 		Object.assign(r, parsed);
 		const structuralRaw = r["structural_ok"];
-		return {
+		const hasCurrentRenderProofContract =
+			r["render_proof_contract_version"] === CURRENT_RENDER_PROOF_CONTRACT_VERSION;
+		const state: Persisted = {
 			...base,
 			structural_ok: Array.isArray(structuralRaw)
 				? structuralRaw.flatMap((x) => STEP_ORDER.find((s) => s === x) ?? [])
 				: [],
+			render_proof_contract_version: CURRENT_RENDER_PROOF_CONTRACT_VERSION,
 			diff_hunks: normalizeStoredDiffHunks(r["diff_hunks"]),
 			range: typeof r["range"] === "string" ? r["range"] : "",
 			slug: typeof r["slug"] === "string" ? r["slug"] : "",
@@ -95,6 +101,24 @@ function read(sessionId: string): Persisted | null {
 			// Recomputed on every write; the persisted copy is never trusted on read.
 			derived: computeDerived(base),
 		};
+		const hasRenderProof =
+			state.structural_ok.includes("render") ||
+			state.passed.includes("render") ||
+			state.step === "quiz";
+		if (!hasCurrentRenderProofContract && hasRenderProof) {
+			state.structural_ok = state.structural_ok.filter((step) => step !== "render");
+			state.passed = state.passed.filter((step) => step !== "render");
+			if (state.step === "quiz") state.step = "render";
+			state.last_failure = {
+				step: "render",
+				items: ["기존 render 증거가 현재 체크리스트 계약으로 검증되지 않았습니다."],
+			};
+			// Persist the rewind so the external guard cannot observe the old proof
+			// after this reader has invalidated it in memory.
+			write(sessionId, state);
+		}
+		state.derived = computeDerived(state);
+		return state;
 	} catch {
 		return null;
 	}
@@ -340,6 +364,7 @@ function start(sessionId: string, range: string, slug: string): void {
 		step: "evidence",
 		passed: [],
 		structural_ok: [],
+		render_proof_contract_version: CURRENT_RENDER_PROOF_CONTRACT_VERSION,
 		concepts: [],
 		bank: [],
 		commit_hashes: enumerateCommits(range),
@@ -385,6 +410,36 @@ function checkReport(
 	const closingLine = text.trimEnd().split(/\r?\n/).at(-1) ?? "";
 	if (!marker.test(closingLine)) {
 		failedItems.push(`${label} 리포트에 \`${markerName}\` 줄이 없습니다: ${reportPath}`);
+	}
+}
+
+/** A final all-pass marker cannot override an explicit FAIL status anywhere in the checklist. */
+function checkChecklistReport(checklistPath: string | undefined, failedItems: string[]): void {
+	checkReport(
+		"체크리스트",
+		"--checklist",
+		checklistPath,
+		/^CHECKLIST:\s*ALL PASS$/,
+		"CHECKLIST: ALL PASS",
+		failedItems,
+	);
+	if (!checklistPath) return;
+
+	let text: string;
+	try {
+		text = readFileSync(checklistPath, "utf8");
+	} catch {
+		return;
+	}
+	const hasExplicitFail = text.split(/\r?\n/).some((line) => {
+		const trimmed = line.trim();
+		return (
+			trimmed === "FAIL" ||
+			/(?:^|[|:：\-–—])\s*FAIL\s*(?=$|[|:：\-–—,(])/.test(trimmed)
+		);
+	});
+	if (hasExplicitFail) {
+		failedItems.push(`체크리스트에 FAIL 항목이 남아 있습니다: ${checklistPath}`);
 	}
 }
 
@@ -501,14 +556,7 @@ function checkRenderOutput(
 		"REVIEW: APPLIED",
 		failedItems,
 	);
-	checkReport(
-		"체크리스트",
-		"--checklist",
-		checklistPath,
-		/^CHECKLIST: ALL PASS$/,
-		"CHECKLIST: ALL PASS",
-		failedItems,
-	);
+	checkChecklistReport(checklistPath, failedItems);
 	return { pass: failedItems.length === 0, failedItems };
 }
 
@@ -551,6 +599,9 @@ function submitStep(
 			return 1;
 		}
 		s.last_failure = null;
+		if (step === "render") {
+			s.render_proof_contract_version = CURRENT_RENDER_PROOF_CONTRACT_VERSION;
+		}
 		if (!s.structural_ok.includes(step)) s.structural_ok.push(step);
 		write(sessionId, s);
 		return 0;
