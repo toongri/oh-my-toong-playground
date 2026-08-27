@@ -949,6 +949,31 @@ function checkR21(text: string): CheckItem {
 		missing.push(
 			"객체 다이어그램의 클래스 박스가 비어 있음 — 각 객체의 멤버 변수와 메소드(메시지)를 채운다",
 		);
+	const hasStructuredCoreMemberRow = (body: string): boolean => {
+		const rowPattern = /<p\b[^>]*\sclass\s*=\s*(["'])([^"']*)\1[^>]*>([\s\S]*?)<\/p\s*>/gi;
+		let row: RegExpExecArray | null = rowPattern.exec(body);
+		while (row !== null) {
+			const classes = row[2]?.split(/\s+/) ?? [];
+			if (
+				classes.includes("ae-members") &&
+				(row[3] ?? "").includes("핵심 멤버") &&
+				/<code\b[^>]*>\s*[^<\s][^<]*<\/code\s*>/i.test(row[3] ?? "")
+			)
+				return true;
+			row = rowPattern.exec(body);
+		}
+		return false;
+	};
+	const hasNoMembersReason = (body: string): boolean => {
+		const rowPattern = /<p\b[^>]*>([\s\S]*?)<\/p\s*>/gi;
+		let row: RegExpExecArray | null = rowPattern.exec(body);
+		while (row !== null) {
+			const rowText = (row[1] ?? "").replace(/<[^>]*>/g, " ");
+			if (/핵심 멤버 없음\s*—\s*\S/.test(rowText)) return true;
+			row = rowPattern.exec(body);
+		}
+		return false;
+	};
 	if (!ARCH_WAIVER.test(slice)) {
 		const cards = archEntityCards(slice);
 		if (cards.length === 0) {
@@ -956,6 +981,11 @@ function checkR21(text: string): CheckItem {
 		} else {
 			cards.forEach((card, index) => {
 				const cardMissing: string[] = DOMAIN_CARD_MARKERS.filter((label) => !card.body.includes(label));
+				if (
+					!hasStructuredCoreMemberRow(card.body) &&
+					!hasNoMembersReason(card.body)
+				)
+					cardMissing.push("핵심 멤버");
 				if (!card.validDataChange) cardMissing.push("변경종류(data-change: new|mod|del)");
 				if (cardMissing.length > 0) missing.push(`카드 ${index + 1}: ${cardMissing.join(", ")}`);
 			});

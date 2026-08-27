@@ -1283,6 +1283,111 @@ classDiagram
 		expect(item?.detail).toContain("핵심 멤버");
 	});
 
+	test("도메인 엔티티 카드의 핵심 멤버가 산문뿐이면 R21이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+
+<div class="arch-entity" data-change="mod">
+<p><strong>이름</strong> <code>User</code></p>
+<p><strong>책임</strong> 사용자 정체성을 보유한다</p>
+<p><strong>핵심 멤버</strong> userId</p>
+<p><strong>변경점</strong> 사용자 정체성 조회를 변경한다</p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("핵심 멤버");
+	});
+
+	test("도메인 엔티티 카드가 핵심 멤버 없음 사유를 명시하면 R21을 통과한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+
+<div class="arch-entity" data-change="mod">
+<p><strong>이름</strong> <code>ExternalUser</code></p>
+<p><strong>책임</strong> 외부 인증 시스템의 사용자 정체성을 참조한다</p>
+<p><strong>핵심 멤버 없음</strong> — 사용자 멤버는 외부 인증 시스템이 소유한다</p>
+<p><strong>변경점</strong> 외부 사용자 참조 방식을 변경한다</p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(true);
+	});
+
+	test("ae-members 행의 라벨이 다르고 핵심 멤버가 별도 산문이면 R21이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+
+<div class="arch-entity" data-change="mod">
+<p><strong>이름</strong> <code>User</code></p>
+<p><strong>책임</strong> 사용자 정체성을 보유한다</p>
+<p class="ae-members"><strong>외부 키</strong> <code>userId</code></p>
+<p><strong>핵심 멤버</strong> userId</p>
+<p><strong>변경점</strong> 사용자 정체성 조회를 변경한다</p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("핵심 멤버");
+	});
+
+	test("핵심 멤버 없음 행이 다음 필드의 텍스트를 사유로 빌릴 수 없다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+
+<div class="arch-entity" data-change="mod">
+<p><strong>이름</strong> <code>User</code></p>
+<p><strong>책임</strong> 사용자 정체성을 보유한다</p>
+<p><strong>핵심 멤버 없음</strong> —</p>
+<p><strong>변경점</strong> 사용자 정체성 조회를 변경한다</p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("핵심 멤버");
+	});
+
+	test("data-class만 있는 행은 ae-members 구조화 행으로 인정하지 않는다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+
+<div class="arch-entity" data-change="mod">
+<p><strong>이름</strong> <code>User</code></p>
+<p><strong>책임</strong> 사용자 정체성을 보유한다</p>
+<p data-class="ae-members"><strong>핵심 멤버</strong> <code>userId</code></p>
+<p><strong>변경점</strong> 사용자 정체성 조회를 변경한다</p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("핵심 멤버");
+	});
+
 	// R18/R21 — 다이어그램 노드는 컴포넌트/도메인 이름이지 파일 경로가 아니다.
 	// 실측(luna max): 컴포넌트 다이어그램 노드가 전체 파일 경로라 화면에서 중간이
 	// 잘렸다(`health-`, `proposal-`). 위치는 카드의 레이어 슬롯이 말한다.
