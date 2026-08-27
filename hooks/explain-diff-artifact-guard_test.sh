@@ -68,6 +68,42 @@ write_state() {
         > "$SBX/omt/explain-diff-state-${SID}.json"
 }
 
+# write_render_state <step> <passed-json> <legacy>
+# Keep the legacy fixture shaped like a pre-contract state: the raw state says
+# render is complete and the derived boolean is open, but the proof contract is
+# absent. The current fixture carries the exact four-path contract written by
+# the state CLI after a successful render step.
+write_render_state() {
+    local step="$1" passed_json="$2" legacy="$3"
+    local now touched
+    now=$(date +%s)
+    touched=$(date -r "$now" -Iseconds 2>/dev/null) \
+        || touched=$(date -d "@$now" -Iseconds 2>/dev/null) \
+        || touched=$(date -Iseconds)
+    if [ "$legacy" = true ]; then
+        jq -n \
+            --arg step "$step" \
+            --argjson passed "$passed_json" \
+            --arg touched "$touched" \
+            '{active:true,step:$step,passed:$passed,
+              derived:{artifact_write_allowed:true,block_reason:""},
+              started_at:$touched,last_touched_at:$touched}' \
+            > "$SBX/omt/explain-diff-state-${SID}.json"
+    else
+        jq -n \
+            --arg step "$step" \
+            --argjson passed "$passed_json" \
+            --arg touched "$touched" \
+            '{active:true,step:$step,passed:$passed,
+              render_proof_contract_version:1,
+              render_proof:{doc_path:"/tmp/doc.md",html_path:"/tmp/doc.html",
+                writing_report_path:"/tmp/writing-report.md",checklist_path:"/tmp/checklist.md"},
+              derived:{artifact_write_allowed:true,block_reason:""},
+              started_at:$touched,last_touched_at:$touched}' \
+            > "$SBX/omt/explain-diff-state-${SID}.json"
+    fi
+}
+
 claude_payload() {
     local path="$1"
     jq -n --arg path "$path" --arg sid "$SID" \
@@ -203,6 +239,39 @@ test_complete_step_allows_artifact_write() {
     return "$result"
 }
 
+test_legacy_render_complete_denies_on_both_platforms() {
+    new_sandbox
+    local out result=0
+    write_render_state quiz '["evidence","background","intuition","code","render"]' true
+    out=$(run_claude "$ARTIFACT") || true
+    assert_denied "$out" claude-legacy-quiz || result=1
+    assert_deny_reason_contains "$out" "render 증거 계약" claude-legacy-quiz-reason || result=1
+    out=$(run_codex "$ARTIFACT") || true
+    assert_denied "$out" codex-legacy-quiz || result=1
+    assert_deny_reason_contains "$out" "render 증거 계약" codex-legacy-quiz-reason || result=1
+
+    write_render_state background '["render"]' true
+    out=$(run_claude "$ARTIFACT") || true
+    assert_denied "$out" claude-legacy-passed-render || result=1
+    out=$(run_codex "$ARTIFACT") || true
+    assert_denied "$out" codex-legacy-passed-render || result=1
+    cleanup_sandbox
+    return "$result"
+}
+
+test_current_render_complete_allows_on_both_platforms() {
+    new_sandbox
+    local out rc=0 result=0
+    write_render_state quiz '["evidence","background","intuition","code","render"]' false
+    out=$(run_claude "$ARTIFACT") || rc=$?
+    assert_allowed "$out" "$rc" claude-current-render || result=1
+    rc=0
+    out=$(run_codex "$ARTIFACT") || rc=$?
+    assert_allowed "$out" "$rc" codex-current-render || result=1
+    cleanup_sandbox
+    return "$result"
+}
+
 test_non_artifact_paths_are_untouched() {
     new_sandbox
     local out rc=0 result=0
@@ -270,6 +339,8 @@ for test_name in \
     test_inactive_state_denies \
     test_jq_absent_denies_artifact_path_only \
     test_complete_step_allows_artifact_write \
+    test_legacy_render_complete_denies_on_both_platforms \
+    test_current_render_complete_allows_on_both_platforms \
     test_non_artifact_paths_are_untouched \
     test_sibling_prefix_directory_is_not_guarded \
     test_claude_and_codex_deny_json_are_byte_identical; do
