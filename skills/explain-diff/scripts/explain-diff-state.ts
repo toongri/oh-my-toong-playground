@@ -472,7 +472,7 @@ function checkChecklistReport(checklistPath: string | undefined, failedItems: st
 
 	const seen = new Set<number>();
 	for (const row of rows) {
-		if (!CHECKLIST_AXIS_NUMBERS.includes(row.number as (typeof CHECKLIST_AXIS_NUMBERS)[number])) {
+		if (!CHECKLIST_AXIS_NUMBERS.some((axisNumber) => axisNumber === row.number)) {
 			failedItems.push(`체크리스트의 축 번호가 1~9 범위를 벗어났습니다: ${row.number}`);
 			continue;
 		}
