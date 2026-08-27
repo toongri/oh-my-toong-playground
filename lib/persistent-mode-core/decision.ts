@@ -1,4 +1,4 @@
-import { HookOutput, UltragoalState } from "./types.ts";
+import { HookOutput, PrometheusState, UltragoalState } from "./types.ts";
 import { statSync } from "fs";
 import {
 	readDeepInterviewStateRaw,
@@ -26,6 +26,8 @@ import {
 	touchSessionStates,
 	readQaStateRaw,
 	readExplainDiffStateRaw,
+	stageAPresentationPath,
+	stageAPresentationStatus,
 } from "@lib/state-core";
 import { computeDerived, type ExplainDiffState } from "@lib/explain-diff-core";
 import {
@@ -189,6 +191,42 @@ INSTRUCTIONS:
 ${continuationContract("preferred", askToolName)}
 
 </prometheus-continuation>
+
+---
+`;
+}
+
+/**
+ * Done-token Stage A gate: <prometheus-done/> may not tear the session down while a
+ * written plan has no fresh presentation render. The F7 gate in prometheus-state.ts
+ * only fires when the model voluntarily records phase S6+ — a session that skips
+ * every S5+ state write (observed in production: plan finished, terminal summary
+ * presented, "Finish" chosen, done token emitted, presentation never rendered)
+ * bypasses it entirely. The done token is the one signal the model cannot skip.
+ *
+ * Returns null (gate open) when: no plan was written (pre-plan abort), plan_path is
+ * absent/legacy, the plan file is gone (unverifiable — fail open), or the
+ * presentation is present and fresh. Blocks only on presentation-missing/stale.
+ */
+function prometheusStageAGateReason(state: PrometheusState): string | null {
+	const planPath = state.plan_path ?? "";
+	if (planPath === "" || state.steps?.plan?.done !== true) return null;
+	const status = stageAPresentationStatus(planPath);
+	if (status !== "presentation-missing" && status !== "stale") return null;
+	const presentationPath = stageAPresentationPath(planPath);
+	const problem =
+		status === "stale"
+			? `the Stage A presentation at ${presentationPath} predates the plan — the plan was revised after that render, so the presentation is stale`
+			: `the Stage A presentation is absent at ${presentationPath}`;
+	return `<prometheus-stage-a-gate>
+
+[PROMETHEUS DONE REFUSED — STAGE A PRESENTATION MISSING]
+
+<prometheus-done/> was refused: the plan at ${planPath} is written, but ${problem}.
+
+"Finish" defers execution only — it never skips S5. Render the plan to ${presentationPath} now (review-pipeline.md Stage A: faithful render, Bird's-Eye coverage table + triggered diagrams, Review Digest, collapsed plan body), then emit <prometheus-done/> again.
+
+</prometheus-stage-a-gate>
 
 ---
 `;
@@ -655,6 +693,14 @@ export function makeDecision(context: DecisionContext): HookOutput {
 	if (prometheusState && prometheusState.active) {
 		const prometheusAttemptId = `prometheus-${attemptId}`;
 		if (detectPrometheusDone(lastAssistantMessage)) {
+			// Stage A gate before honoring the token. The block-count cap keeps this
+			// walk-away safe: a wedged session escapes (and tears down) after
+			// MAX_BLOCK_COUNT refusals, same bound as the token-less branch.
+			const gateReason = prometheusStageAGateReason(prometheusState);
+			if (gateReason !== null && getBlockCount(stateDir, prometheusAttemptId) < MAX_BLOCK_COUNT) {
+				incrementBlockCount(stateDir, prometheusAttemptId);
+				return formatBlockOutput(gateReason);
+			}
 			cleanupPrometheusState(sessionId);
 			cleanupBlockCountFiles(stateDir, prometheusAttemptId);
 		} else if (isProgressLive(prometheusState, nowEpoch)) {

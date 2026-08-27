@@ -13,7 +13,6 @@
  */
 
 import { existsSync, readFileSync, unlinkSync, statSync } from "fs";
-import { basename, dirname, join } from "path";
 import { execSync } from "child_process";
 import { getOmtDir } from "@lib/omt-dir";
 import {
@@ -23,6 +22,8 @@ import {
 	adopt,
 	writeFileNoCreate,
 	ensureSeed,
+	stageAPresentationPath,
+	stageAPresentationStatus,
 } from "@lib/state-core";
 
 export interface PrometheusState {
@@ -217,45 +218,36 @@ export function setPrometheusState(
 			);
 		}
 
-		const presentationPath = join(
-			dirname(resolvedPlanPath),
-			"presentation",
-			basename(resolvedPlanPath),
-		);
-		if (!existsSync(presentationPath)) {
-			refuse(
-				`the Stage A presentation is absent at ${presentationPath}. Render the plan ` +
-					`there (S5 Stage A) first — skipping it hands the user an unrendered plan.`,
-			);
-		}
-
-		// Existence alone passes a render left behind by an EARLIER pass through S5. The
+		// Predicate shared with the persistent-mode Stop hook's done-token gate
+		// (lib/state-core.ts stageAPresentationStatus) — one definition of "fresh
+		// presentation" for both enforcement points. Staleness matters because the
 		// loop-backs (scoped re-review after a Momus REQUEST_CHANGES, and the S7→S0
-		// revise) rewrite the plan at the same path, and the presentation stem is pinned
-		// to the plan stem — so the previous render sits exactly where this check looks,
-		// and nothing deletes it. A stale review document is worse than a missing one:
-		// the user reviews it believing it describes the current plan.
-		const mtimeOf = (p: string): number | null => {
-			try {
-				return statSync(p).mtimeMs;
-			} catch {
-				return null;
-			}
-		};
-		const planMtime = mtimeOf(resolvedPlanPath);
-		if (planMtime === null) {
-			refuse(
-				`plan_path is set to ${resolvedPlanPath} but no file resolves there, so the ` +
-					`presentation cannot be checked against the plan it claims to render.`,
-			);
-		}
-		const presentationMtime = mtimeOf(presentationPath);
-		if (presentationMtime !== null && presentationMtime < planMtime) {
-			refuse(
-				`the Stage A presentation at ${presentationPath} predates the plan it renders. ` +
-					`The plan was revised after that render, so the presentation is stale — ` +
-					`re-run Stage A before recording ${opts.phase}.`,
-			);
+		// revise) rewrite the plan at the same path while the earlier render sits
+		// exactly where the check looks — a stale review document is worse than a
+		// missing one: the user reviews it believing it describes the current plan.
+		const presentationPath = stageAPresentationPath(resolvedPlanPath);
+		switch (stageAPresentationStatus(resolvedPlanPath)) {
+			case "plan-missing":
+				refuse(
+					`plan_path is set to ${resolvedPlanPath} but no file resolves there, so the ` +
+						`presentation cannot be checked against the plan it claims to render.`,
+				);
+				break;
+			case "presentation-missing":
+				refuse(
+					`the Stage A presentation is absent at ${presentationPath}. Render the plan ` +
+						`there (S5 Stage A) first — skipping it hands the user an unrendered plan.`,
+				);
+				break;
+			case "stale":
+				refuse(
+					`the Stage A presentation at ${presentationPath} predates the plan it renders. ` +
+						`The plan was revised after that render, so the presentation is stale — ` +
+						`re-run Stage A before recording ${opts.phase}.`,
+				);
+				break;
+			case "ok":
+				break;
 		}
 	}
 
