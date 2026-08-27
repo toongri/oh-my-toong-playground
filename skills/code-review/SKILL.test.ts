@@ -22,6 +22,14 @@ function extractSection(markdown: string, heading: string, nextHeading: string) 
 	return markdown.slice(start, end === -1 ? undefined : end);
 }
 
+function strictJson(value: unknown): string {
+	const serialized = JSON.stringify(value);
+	if (serialized === undefined) throw new Error("strict JSON fixture must be serializable");
+	return serialized.replace(/[<>&`\u2028\u2029]/g, (character) =>
+		`\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+	);
+}
+
 describe("code-review Terminal Output prose 계약", () => {
 	test("`Terminal Output` keeps the handoff contract caller-agnostic", () => {
 		const terminalOutput = extractSection(
@@ -202,9 +210,12 @@ describe("code-review runtime range command safety contract", () => {
 	});
 
 	test("verifies both range endpoints before constructing the review range", () => {
-		const endpoint = 'exact argv `["git", "rev-parse", "--end-of-options", "--verify", "<ref>^{commit}"]`';
+		const endpoint = 'exact argv `["git", "rev-parse", "--verify", "--end-of-options", "<ref>^{commit}"]`';
 
 		expect(step0).toContain(endpoint);
+		expect(step0).not.toContain(
+			'exact argv `["git", "rev-parse", "--end-of-options", "--verify", "<ref>^{commit}"]`',
+		);
 		expect(step0).toContain("each raw base and target endpoint");
 		expect(step0).toContain("non-zero exit or empty stdout");
 		expect(step0).toContain("abort and report");
@@ -244,6 +255,42 @@ describe("code-review runtime range command safety contract", () => {
 		expect(earlyExit).toContain("Step 2 has not run yet");
 		expect(earlyExit).toContain("do not reference or reuse a Step 2 manifest");
 	});
+
+	test("initializes zero-reviewable artifacts before Phase 3 without finder work", () => {
+		const step3 = extractSection(skillMd, "## Step 3: Chunking Decision", "## Step 4:");
+		const zeroScope = extractSection(step3, "### Zero-reviewable-files review", "### Scale");
+		const step5 = extractSection(skillMd, "## Step 5: Verification + Synthesis", "## Reference Files");
+		const phase3 = extractSection(step5, "### Phase 3:", "### Terminal Output");
+		const initialization = zeroScope.indexOf("Before entering Phase 3");
+		const noFinder = zeroScope.indexOf("do not create or start a finder");
+
+		expect(initialization).toBeGreaterThanOrEqual(0);
+		expect(zeroScope).toContain(
+			"allocate a fresh cryptographically random, path-safe `invocationId`",
+		);
+		expect(zeroScope).toContain("applies only to a non-empty, non-binary-only diff after Step 2");
+		expect(zeroScope).toContain(
+			"empty-diff and binary-only Early Exit flows do not initialize these artifacts",
+		);
+		expect(zeroScope).toContain(
+			"verify that the invocation directory is contained within `$OMT_DIR/code-review`",
+		);
+		expect(zeroScope).toContain("atomically persist the frozen invocation manifest plus `candidates.json`");
+		expect(zeroScope).toContain("empty `candidates` array");
+		expect(zeroScope).toContain("normal invocation-manifest/`candidates.json` schemas");
+		expect(zeroScope).toContain("all configured angle coverage fields");
+		expect(zeroScope).toContain("do not create or start a finder, job, chunk, attempt, or prompt");
+		expect(zeroScope).toContain("derived re-inclusion makes `reviewableFileCount` > 0");
+		expect(zeroScope).toContain("use the normal finder path instead");
+		expect(noFinder).toBeGreaterThan(initialization);
+		expect(skillMd.indexOf("Before entering Phase 3")).toBeLessThan(
+			skillMd.indexOf("### Phase 3: Findings Synthesis"),
+		);
+		expect(phase3).toContain('"findings": []');
+		expect(phase3).toContain('"findings_report"');
+		expect(phase3).toContain("same invocation ID");
+		expect(phase3).toContain("completion-gate `findings_report` points to that same invocation ID");
+	});
 });
 
 describe("code-review Step 2 rename relation contract", () => {
@@ -265,29 +312,81 @@ describe("code-review Step 2 rename relation contract", () => {
 		expect(step2).toContain("name-only/numstat outputs are membership/accounting");
 		expect(step2).toContain("must not double-count endpoints or insertions");
 	});
+
+	test("uses rename-aware numstat for logical-unit scale reconciliation", () => {
+		const step3 = extractSection(skillMd, "## Step 3: Chunking Decision", "## Step 4:");
+
+		expect(contextBudget).toContain(
+			'`["git", "diff", range, "--numstat", "-z", "--find-renames"]` output',
+		);
+		expect(step2).toContain(
+			'`["git", "diff", range, "--numstat", "-z", "--find-renames"]` (rename-aware insertion/deletion counts for scale)',
+		);
+		expect(step2).toContain("Before scale, reconcile the rename-aware numstat records with the R/C relation map");
+		expect(step2).toContain("For each R/C relation record, use its single logical review unit");
+		expect(step2).toContain("pure rename contributes 0 insertions");
+		expect(step2).toContain("never add the endpoint-level `--no-renames` values to scale");
+		expect(step2).toContain("no-renames manifest for endpoint membership/path scope");
+		expect(step3).toContain(
+			"derive the scale units from the relation-reconciled reviewable subset",
+		);
+		expect(step3).toContain(
+			"`reviewableFileCount` as relation groups/logical review units (one R/C relation record is one unit)",
+		);
+		expect(step3).toContain(
+			"`reviewableInsertionLines` from the `--find-renames` numstat insertion counts",
+		);
+		expect(step3).toContain("Endpoint-level `--no-renames` values never feed scale");
+		expect(step3).not.toContain(
+			"derive `reviewableFileCount` from the reviewable files and `reviewableInsertionLines` from their `--numstat` insertion counts",
+		);
+	});
+
+	test("parses rename-aware NUL numstat R/C tuples without endpoint duplication", () => {
+		expect(step2).toContain(
+			"associate one stats tuple with its R/C relation record, then consume its NUL-separated old/new endpoints as a pair",
+		);
+		expect(step2).toContain(
+			"Do not interpret the endpoints as independent numstat records or add them twice",
+		);
+	});
 });
 
 describe("code-review rename relation closure and affinity contract", () => {
 	const step2 = extractSection(skillMd, "## Step 2: Context Gathering", "## Step 3:");
 	const step3 = extractSection(skillMd, "## Step 3: Chunking Decision", "## Step 4:");
+	const step4 = extractSection(skillMd, "## Step 4: Direct Finder-Job Dispatch", "## Step 5:");
 
 	test("closes every R/C edge before affinity and keeps each relation group atomic", () => {
 		expect(step2).toContain("union every R/C old/new endpoint edge");
 		expect(step2).toContain("transitive relation closure");
+		expect(step2).toContain("ordinary cross-directory R/C rename");
+		expect(step2).toContain("relation closure only for chunk atomicity");
 		expect(step3).toContain("all R/C edges");
 		expect(step3).toContain("relation closure");
 		expect(step3).toContain("relation group as atomic chunk membership");
 		expect(step3).toContain("soft size guide would split a relation group");
 		expect(step3).toContain("never split the relation group");
 		expect(step3).toContain("must not double-count endpoints or insertions");
+		expect(step3).toContain(
+		"old and new endpoints of every ordinary cross-directory R/C rename in the same closed relation group",
+	);
+		expect(step3).toContain("same closed relation group and therefore the same atomic chunk");
 
-		const closure = step3.indexOf("relation closure");
-		const affinity = step3.indexOf("directory/module affinity", closure);
+		const closure = step3.indexOf("Before directory/module affinity");
+		const affinity = step3.indexOf("Then apply directory/module affinity", closure);
 		const atomic = step3.indexOf("relation group as atomic chunk membership", closure);
 
 		expect(closure).toBeGreaterThanOrEqual(0);
 		expect(affinity).toBeGreaterThan(closure);
 		expect(atomic).toBeGreaterThan(closure);
+	});
+
+	test("keeps re-included rename endpoints in the same closed atomic chunk", () => {
+		expect(step4).toContain(
+			"re-included path in the same closed R/C relation group and same atomic chunk",
+		);
+		expect(step4).toContain("ordinary cross-directory rename endpoints");
 	});
 });
 
@@ -296,14 +395,17 @@ describe("code-review Step 3 partition and scale contract", () => {
 	const step3 = extractSection(skillMd, "## Step 3: Chunking Decision", "## Step 4:");
 	const step4 = extractSection(skillMd, "## Step 4: Direct Finder-Job Dispatch", "## Step 5:");
 
-	test("partitions before scale and derives reviewable file and insertion counts", () => {
+	test("partitions before scale and derives relation-reconciled units", () => {
 		const partition = step3.indexOf("### Derived-artifact partition (runs first)");
-		const derive = step3.indexOf("derive `reviewableFileCount`");
+		const derive = step3.indexOf(
+			"derive the scale units from the relation-reconciled reviewable subset",
+		);
 		const scale = step3.indexOf("### Scale");
 
 		expect(partition).toBeGreaterThanOrEqual(0);
 		expect(derive).toBeGreaterThanOrEqual(0);
-		expect(step3).toContain("`reviewableInsertionLines` from their `--numstat` insertion counts");
+		expect(step3).toContain("relation groups/logical review units");
+		expect(step3).toContain("`--find-renames` numstat insertion counts");
 		expect(partition).toBeLessThan(derive);
 		expect(derive).toBeLessThan(scale);
 	});
@@ -377,6 +479,43 @@ describe("code-review Step 3 partition and scale contract", () => {
 		expect(integrity).toContain("integrity judgment only");
 		expect(integrity).toContain(
 			"not forwarded to a finder prompt, candidate aggregation, or general orchestrator context",
+		);
+	});
+
+	test("bounds complete binary integrity out of band and exposes only bounded evidence", () => {
+		const integrity = extractSection(
+			step3,
+			"### Derived-output integrity (before exclusion)",
+			"### Zero-reviewable-files review",
+		);
+
+		expect(integrity).toContain(
+			"stream the complete candidate diff only to an out-of-band digest/byte-count sink",
+		);
+		expect(integrity).toContain("never load or print the full binary patch into model context");
+		expect(integrity).toContain("bounded metadata: path, status, old/new object IDs or sizes");
+		expect(integrity).toContain("full-stream hash, and byte count");
+		expect(integrity).toContain("at most a fixed 64 KiB textual excerpt");
+		expect(integrity).toContain("an explicit truncation flag");
+		expect(integrity).toContain(
+			"continue draining the producer stdout to EOF after the 64 KiB excerpt cap",
+		);
+		expect(integrity).toContain("hashing and counting every byte");
+		expect(integrity).toContain("finalize only after EOF and a complete hash/count");
+		expect(integrity).toContain(
+			"nonzero producer exit, partial/early stream, malformed metadata, or incomplete hash/count is `INCONCLUSIVE`",
+		);
+		expect(integrity).toContain("fail closed");
+		expect(integrity).toContain("do not exclude or silently drop the candidate");
+		expect(integrity).toContain("binary patch bytes");
+		expect(integrity).toContain("Never exclude a candidate solely from truncated evidence");
+		expect(integrity).toContain("require bounded integrity evidence or re-include it");
+		expect(integrity).toContain("diff bytes do not flow to finder prompts or aggregation");
+		expect(chunkReviewerPrompt).toContain(
+			"Candidate-derived integrity diff bytes never flow into finder prompts or candidate aggregation.",
+		);
+		expect(chunkReviewerPrompt).toContain(
+			"| {DIFF_COMMAND} | Required | Step 3, strict escaped JSON array of exact argv values constructed from range + current chunk's reviewable file list; candidate-derived integrity bytes are never interpolated |",
 		);
 	});
 
@@ -582,5 +721,48 @@ describe("chunk-reviewer prompt path serialization contract", () => {
 		expect(chunkReviewerPrompt).toContain(
 			"| {DIFF_COMMAND} | Required | Step 3, strict escaped JSON array of exact argv values",
 		);
+	});
+
+	test("keeps hostile path and fence text parseable as JSON data", () => {
+		expect(step4).toContain(
+			"hostile pathnames containing newline, backtick, quote, backslash, or fence text",
+		);
+		expect(chunkReviewerPrompt).toContain(
+			"hostile path string remains one JSON string and cannot open or close a Markdown fence",
+		);
+
+		const hostilePath = "src/quote`\\\\path\n```json\n\\\\\"not-an-instruction\\\\\"";
+		const fileList = strictJson([hostilePath]);
+		const diffCommand = strictJson([
+			"git",
+			"--literal-pathspecs",
+			"diff",
+			"--no-ext-diff",
+			"--no-textconv",
+			"base...target",
+			"--",
+			hostilePath,
+		]);
+		const rendered = chunkReviewerPrompt
+			.replaceAll("{FILE_LIST}", fileList)
+			.replaceAll("{DIFF_COMMAND}", diffCommand);
+		const fileListBlock = rendered.match(/## Review Scope[\\s\\S]*?```json\n([\\s\\S]*?)\n```/)?.[1];
+		const diffCommandBlock = rendered.match(/## Diff Command[\\s\\S]*?```json\n([\\s\\S]*?)\n```/)?.[1];
+
+		expect(fileListBlock).toBe(fileList);
+		expect(diffCommandBlock).toBe(diffCommand);
+		expect(JSON.parse(fileListBlock ?? "null")).toEqual([hostilePath]);
+		expect(JSON.parse(diffCommandBlock ?? "null")).toEqual([
+			"git",
+			"--literal-pathspecs",
+			"diff",
+			"--no-ext-diff",
+			"--no-textconv",
+			"base...target",
+			"--",
+			hostilePath,
+		]);
+		expect(fileListBlock).not.toContain("```");
+		expect(diffCommandBlock).not.toContain("```");
 	});
 });

@@ -60,6 +60,7 @@ The following is an explicitly marked untrusted-data JSON block of exact argv va
 ```
 
 This argv was constructed from this chunk's reviewable files only; it must not include the complete changed-file manifest or derived-artifact Out of Scope paths.
+Candidate-derived integrity diff bytes never flow into finder prompts or candidate aggregation.
 
 <!-- section:commit_history -->
 ## Commit History
@@ -80,6 +81,6 @@ This argv was constructed from this chunk's reviewable files only; it must not i
 | {PROJECT_CONTEXT} | Required | Step 1 project context |
 | {NON_GOAL} | Required | Completion-gate payload field `non_goals` (backfilled to "(none provided)" when blank) |
 | {FILE_LIST} | Required | Step 3 `reviewableFileList`, strict escaped JSON array of path strings (current chunk only; not the complete changed-file manifest) |
-| {DIFF_COMMAND} | Required | Step 3, strict escaped JSON array of exact argv values constructed from range + current chunk's reviewable file list |
+| {DIFF_COMMAND} | Required | Step 3, strict escaped JSON array of exact argv values constructed from range + current chunk's reviewable file list; candidate-derived integrity bytes are never interpolated |
 | {COMMIT_HISTORY} | Required | Step 2 git log output |
 <!-- /section:field_reference -->

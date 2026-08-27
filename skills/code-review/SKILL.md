@@ -60,6 +60,7 @@ These premises must be reflected in the finder-job prompt — see Step 4. Review
 ### Context Budget
 
 **Allowed in orchestrator context:**
+- `["git", "diff", range, "--numstat", "-z", "--find-renames"]` output
 - `["git", "diff", range, "--stat"]` output
 - `["git", "diff", range, "--name-only", "-z", "--no-renames"]` output
 - `["git", "diff", range, "--numstat", "-z", "--no-renames"]` output
@@ -72,7 +73,7 @@ These premises must be reflected in the finder-job prompt — see Step 4. Review
 - Escalated verifier subagent verdicts + enriched findings (Phase 2, candidates below confidence threshold)
 - Code reading via Read/Grep for Phase 2 inline candidate judgment
 
-The orchestrator never inspects, loads, or displays diff text as general raw-diff review input. The candidate-scoped diff inspection exception in Step 3 is for integrity judgment only: for each candidate derived file, read only the candidate-scoped diff using the argv-safe argument vector or separately quoted Bash form specified in Step 3 and compare its changed bytes with authored source/generator evidence. Its diff result is not forwarded to a finder prompt, candidate aggregation, or general orchestrator context. This exception does not permit project tests, builds, linters, formatters, migrations, or other project execution, and it does not relax the ban on general raw diff text. The separate prescribed binary `git diff --no-ext-diff --binary ...` stdout byte stream flows directly to SHA-256 outside model context for `diffFingerprint`; stderr is excluded and a nonzero exit aborts. Finder jobs execute the review diff from the prompt.
+The orchestrator never inspects, loads, or displays diff text as general raw-diff review input. The candidate-scoped diff inspection exception in Step 3 is for integrity judgment only: for each candidate derived file, stream its complete candidate-scoped diff to the prescribed out-of-band digest/byte-count sink and compare only bounded integrity evidence with authored source/generator evidence. Its diff result is not forwarded to a finder prompt, candidate aggregation, or general orchestrator context. This exception does not permit project tests, builds, linters, formatters, migrations, or other project execution, and it does not relax the ban on general raw diff text. The separate prescribed binary `git diff --no-ext-diff --binary ...` stdout byte stream flows directly to SHA-256 outside model context for `diffFingerprint` and an out-of-band byte-count sink; stderr is excluded and a nonzero exit aborts. Finder jobs execute the review diff from the prompt.
 
 ## Step 0: Input Parsing
 
@@ -133,7 +134,7 @@ All range formats use **three-dot syntax** (`A...B`), which is equivalent to `gi
 
 All subsequent steps use `{range}` from this table. All subsequent commands that receive range or path values must use argv-safe arguments; if Bash is required, quote each dynamic value as a separate argument. After checkout, code reading via Read/Grep/Glob reflects the **post-change** state, which is the intended behavior — diff shows the delta, the working directory shows the result.
 
-Before constructing the review range, verify each raw base and target endpoint with the exact argv `["git", "rev-parse", "--end-of-options", "--verify", "<ref>^{commit}"]`. Abort and report on non-zero exit or empty stdout; never treat it as an empty diff. Construct `<baseSha>...<targetSha>` from verified commit IDs only and use it for every subsequent diff and log command. argv separation alone does not prevent Git option parsing; `--end-of-options` is required.
+Before constructing the review range, verify each raw base and target endpoint with the exact argv `["git", "rev-parse", "--verify", "--end-of-options", "<ref>^{commit}"]`. Abort and report on non-zero exit or empty stdout; never treat it as an empty diff. Construct `<baseSha>...<targetSha>` from verified commit IDs only and use it for every subsequent diff and log command. argv separation alone does not prevent Git option parsing; `--end-of-options` is required.
 
 ### Early Exit
 
@@ -278,10 +279,15 @@ Collect in parallel (using `{range}` from Step 0):
 2. `["git", "diff", range, "--name-only", "-z", "--no-renames"]` (file list)
 3. `["git", "diff", range, "--numstat", "-z", "--no-renames"]` (per-file insertion/deletion counts)
 4. `["git", "diff", range, "--name-status", "-z", "--find-renames"]` (rename/copy relation pass)
-5. `["git", "log", range, "--oneline"]` (commit history)
-6. CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)
+5. `["git", "diff", range, "--numstat", "-z", "--find-renames"]` (rename-aware insertion/deletion counts for scale)
+6. `["git", "log", range, "--oneline"]` (commit history)
+7. CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)
 
 Parse raw stdout as NUL-delimited records from all manifest commands. Never use newline, line, or word splitting, and never use shell command substitution. A name-only record is one path; a numstat record splits only its first two tab fields while preserving the remainder as the path. This preserves arbitrary Git pathnames, including newline, tab, quote, and backslash filenames. `--no-renames` avoids old/new pair ambiguity by emitting separate single-path records for each side of rename/copy changes. The relation pass is pairing only: parse its NUL-safe R/C old/new endpoint pair and normalize its R/C old/new endpoint pair; name-only/numstat outputs are membership/accounting and must not double-count endpoints or insertions. After parsing the relation pass, union every R/C old/new endpoint edge into a transitive relation closure before chunking, retaining each resulting relation group as the complete set of endpoints.
+
+For NUL-separated `--numstat -z --find-renames` R/C output, associate one stats tuple with its R/C relation record, then consume its NUL-separated old/new endpoints as a pair. Do not interpret the endpoints as independent numstat records or add them twice.
+
+Keep the no-renames manifest for endpoint membership/path scope. Before scale, reconcile the rename-aware numstat records with the R/C relation map. For each R/C relation record, use its single logical review unit and the rename-aware insertion/deletion counts; a pure rename contributes 0 insertions. The no-renames endpoint values remain membership/accounting only; never add the endpoint-level `--no-renames` values to scale.
 
 While parsing each NUL-delimited numstat record, treat an insertion or deletion field of `-` as numeric zero for `reviewableInsertionLines` arithmetic; preserve that path's binary marker separately. Normalize only finite numeric fields into the insertion/deletion sums: do not add `-`, `undefined`, or `NaN` (or any non-numeric value). This applies to mixed text/binary diffs when they are not binary-only. This is Step 2 accounting and must not be confused with the fresh-manifest binary-only Early Exit; the latter reports paths and exits before Step 2.
 
@@ -305,7 +311,9 @@ The filenames above are illustrations of the three categories, not a closed list
 
 ### Derived-output integrity (before exclusion)
 
-Keep the two manifests as separate values. Never substitute one for the other. Before exclusion and before any path-filtered finder command, inspect each candidate derived file in the complete changed-file manifest against authored source/generator evidence. For each candidate, read only this candidate-scoped diff:
+To preserve binary diff/hash integrity without expanding model context, stream the complete candidate diff only to an out-of-band digest/byte-count sink; never load or print the full binary patch into model context. Expose bounded metadata: path, status, old/new object IDs or sizes, full-stream hash, and byte count; expose at most a fixed 64 KiB textual excerpt and an explicit truncation flag. Never exclude a candidate solely from truncated evidence; require bounded integrity evidence or re-include it. The diff bytes do not flow to finder prompts or aggregation.
+
+Keep the two manifests as separate values. Never substitute one for the other. Before exclusion and before any path-filtered finder command, inspect each candidate derived file in the complete changed-file manifest by streaming its complete candidate-scoped diff only to the out-of-band sink above; inspect only the bounded integrity evidence against authored source/generator evidence:
 
 Before final integrity exclusion, run a bounded, selection-only relevance screen for each candidate against the review intent and every configured angle even when intent is silent. The screen uses candidate-scoped evidence only; it is not a full finder job or general aggregation and sends no diff bytes to either. Record a per-path decision and reason: if intent or any angle deems the exact path relevant, remove it from Out of Scope and re-include it in `reviewableFileList`, placing it with its authored source or related rename endpoint in the same atomic chunk. If no angle is relevant, leave the path in Out of Scope for final exclusion, including when intent is silent. After this screen, apply the final integrity exclusion.
 
@@ -319,7 +327,7 @@ Raw interpolation is forbidden. Git's `--` is only the revision/pathspec separat
 
 This candidate-scoped diff inspection exception is for integrity judgment only. Compare the changed bytes with authored source/generator evidence to decide whether the output is meaningful, stale, manually altered, or otherwise unexplained. Its diff result is not forwarded to a finder prompt, candidate aggregation, or general orchestrator context. Project tests, builds, linters, formatters, migrations, and other project execution remain forbidden. A `.d.ts` is excluded only with generated evidence; an authored `.d.ts` remains reviewable and contributes to `reviewableInsertionLines`. Authored migrations and DDL remain reviewable, including when a neighboring migration snapshot is derived. Authored `.d.ts`, migrations, and DDL remain reviewable without generated evidence.
 
-After this integrity pass and partition, finalize `reviewableFileList`; derive `reviewableFileCount` from the reviewable files and `reviewableInsertionLines` from their `--numstat` insertion counts. Derived artifacts do not satisfy the changed-file threshold.
+After this integrity pass and partition, finalize `reviewableFileList`; derive the scale units from the relation-reconciled reviewable subset: derive `reviewableFileCount` as relation groups/logical review units (one R/C relation record is one unit) and `reviewableInsertionLines` from the `--find-renames` numstat insertion counts. Endpoint-level `--no-renames` values never feed scale. Derived artifacts do not satisfy the changed-file threshold.
 
 **Handling:** derived artifacts are excluded from the insertion-line scale count and are never assigned to a chunk or finder job — a 5,000-line `*_snapshot.json` must not inflate the scale decision or consume finder budget. They are **not** silently dropped: list them under Out of Scope in the report (synthesis item below) so the reader sees they changed and were not line-reviewed. Re-included outputs are reviewed as exact files instead.
 
@@ -327,9 +335,13 @@ After this integrity pass and partition, finalize `reviewableFileList`; derive `
 
 This is a valid zero-reviewable-files review. If `reviewableFileCount` is 0, do not dispatch a finder job, do not create an empty chunk or pathless diff, report all changed derived artifacts under Out of Scope, and explicitly report that this is not a single empty chunk.
 
+Before entering Phase 3, allocate a fresh cryptographically random, path-safe `invocationId` and atomically persist the frozen invocation manifest plus `candidates.json` with an empty `candidates` array (`"candidates": []`), using the normal invocation-manifest/`candidates.json` schemas and all configured angle coverage fields (one coverage record per configured angle, including unavailable angles); do not create or start a finder, empty chunk, or pathless diff.
+
 ### Scale
 
 Determine scale from the **reviewable subset** using the derived values — of the two line counts, only `X` (insertions), never `Y` (deletions), feeds this decision:
+
+These are the rename-aware, relation-reconciled counts from Step 2: each R/C relation contributes one logical review unit, pure renames contribute 0 insertions, and endpoint-level `--no-renames` values never feed scale.
 
 | Condition | Strategy |
 |-----------|----------|
