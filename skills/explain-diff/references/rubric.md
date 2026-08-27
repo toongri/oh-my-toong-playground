@@ -161,7 +161,7 @@ The code section is organized with the commit as its spine, and its unit is the 
 
 ### R15. Boundary / dependency / use-case change map
 
-The Architecture section closes with a `### 경계·의존·유스케이스` block that is a **use-case change map**, not a static layer-classification table. Because a feature/use case mostly carries an orchestration responsibility, the block must **show the flow as a mermaid diagram** (a `sequenceDiagram` is the recommended type) — who calls whom in what order, with the changed step marked — or a reasoned `구조 변화 없음: <사유>` waiver when the diff changes no use-case flow. Beyond the diagram, the block must contain a renderer-recognized `arch-entity` opening tag whose `data-change` is one of `new`, `mod`, or `del`, plus the `영향 인터페이스` and `의존 방향` slots. Prose-only mentions of `data-change`, or unsupported values, do not count. The orchestration-diagram check reads the raw sub-slice (a mermaid fence is masked away, so it is looked for before masking); the slot checks read the fence-masked sub-slice. What each slot says is the author's to fill. The vocabulary follows the `architecture-boundaries` rule but the output speaks the codebase's own terms (enforced by R19).
+The Architecture section closes with a `### 경계·의존·유스케이스` block that is a **use-case change map**, not a static layer-classification table. Its unit of account is the **execution unit**: one card = one thing that is invoked and runs end to end (a service method, an HTTP endpoint, a batch script, a hook). A cross-cutting property — a transaction boundary, idempotency, consistency — is never its own card; it is described inside the `한 일` of the execution unit that owns it. Each card's `한 일` opens by stating the unit's identity (what kind of thing it is and which module owns it), so a bare identifier never reaches the reader unexplained. Because a feature/use case mostly carries an orchestration responsibility, the block must **show the flow as a mermaid diagram** (a `sequenceDiagram` is the recommended type) — who calls whom in what order, with the changed step marked — or a reasoned `구조 변화 없음: <사유>` waiver when the diff changes no use-case flow. Beyond the diagram, the block must contain a renderer-recognized `arch-entity` opening tag whose `data-change` is one of `new`, `mod`, or `del`, plus the `영향 인터페이스` and `의존 방향` slots. Prose-only mentions of `data-change`, or unsupported values, do not count. The orchestration-diagram check reads the raw sub-slice (a mermaid fence is masked away, so it is looked for before masking); the slot checks read the fence-masked sub-slice. What each slot says is the author's to fill. The vocabulary follows the `architecture-boundaries` rule but the output speaks the codebase's own terms (enforced by R19).
 
 > **RED — the v4 static table.** The earlier R15 forced a `파트/레이어/협력자/영향·수정` classification table
 > with a binary `수직 도메인 / 수평 유스케이스` layer choice. On an FSD codebase this miscategorised parts that
@@ -170,6 +170,11 @@ The Architecture section closes with a `### 경계·의존·유스케이스` blo
 > exists" rather than "what this diff did to the boundary". The rewrite drops the static classification: each
 > behaviour unit is an `arch-entity` carrying its change kind and affected interface, closed by the direction
 > verdict — the same "change contract, not inventory" shape that made R14 work.
+>
+> **RED — real artifact (`pr-3619`, user review).** The block mixed cards of unstated identity: a card
+> named `온보딩 승인 트랜잭션` (a transaction property posing as a unit — the reader asked "얘의 정체는
+> 뭐야?") and a card named `update_onboarding_status` with no statement of what kind of thing it is or
+> which module owns it. The execution-unit account and the identity-first `한 일` sentence close this.
 
 ### R17. System-level standing-interface table
 
@@ -206,12 +211,15 @@ The 컴포넌트 레벨 may use a reasoned `구조 변화 없음: <사유>` waiv
 structure change. The diagram's **nodes must be module/concept names** (a feature, use case, hook,
 service, schema module), **never source file paths** — the checker rejects a component diagram whose
 nodes are file paths (a path with a code extension), and this ban holds even under the waiver. Where a
-component lives is stated in the card's `레이어` slot at package/layer granularity, not as a node
-label. Otherwise, every authored `arch-entity` card in the slice is checked independently for the
-`레이어`, `책임`, and `인터페이스` fields and an allowed `data-change` value: `new`, `mod`, or `del`.
-One complete card cannot mask an incomplete or invalid card. Prose-only card descriptions and invalid
-`data-change` values do not count. Pure data/contract-only content cannot simply omit cards; it needs
-the reasoned waiver if no valid card is present.
+component lives is stated in the card's `패키지` slot at package granularity, not as a node
+label (the slot holds a directory path, so it is named 패키지 — calling it a "layer" misleads).
+Otherwise, every authored `arch-entity` card in the slice is checked independently for the
+`패키지`, `책임`, `인터페이스`, and `변경점` fields and an allowed `data-change` value: `new`, `mod`,
+or `del`. The `변경점` field carries WHAT this diff changed in the component (before→after in one
+line) — `data-change` alone only names the kind. One complete card cannot mask an incomplete or
+invalid card. Prose-only card descriptions and invalid `data-change` values do not count. Pure
+data/contract-only content cannot simply omit cards; it needs the reasoned waiver if no valid card
+is present.
 
 > **RED — real artifact (`b2c-6105`).** The component level was a bare chain of class/function names —
 > `CurrentBoostPackInfoCard`, `useBoostPackSupplementCatalogResolvers` — with no responsibility, interface, or
@@ -221,13 +229,23 @@ the reasoned waiver if no valid card is present.
 > **RED — real artifact (`pr-3412`, luna max).** The component diagram's nodes were full source file paths
 > (`apps/backend/src/domains/health-profiles/routers/health-v2.router.ts`) that truncated mid-path in the
 > render (`health-`, `proposal-`), telling the reader a location instead of a module. A component is a module
-> unit; its location belongs in the card's `레이어`, not in the node label.
+> unit; its location belongs in the card's `패키지`, not in the node label.
+>
+> **RED — real artifact (`pr-3619`, user review).** The card's locating slot was labeled `레이어` while
+> holding `apps/backend/src/domains/health-profiles/services` — a package path, not a layer — and the
+> cards stated responsibility and interface but never WHAT this diff changed in the node. The slot was
+> renamed `패키지` and the `변경점` field was made required.
 
 ### R21. Domain-level entity cards
 
 The `### 도메인 레벨` may use a reasoned `구조 변화 없음: <사유>` waiver when the diff changes no
 domain object. Otherwise, above the entity/relation diagram, every touched domain object gets an
-`arch-entity` card checked independently for the `책임` field (the duty/invariant it holds) and an
+`arch-entity` card checked independently for the `책임` field (the object's duty, invariants, and the
+business logic it already owns — prose, without enumerating member variables), the `핵심 멤버` field
+(member variables/keys/core methods as structured code chips — `<p class="ae-members">` with
+`<code class="chg">` on members this diff touched; a member-less value concept writes
+`핵심 멤버 없음 — <사유>`), the `변경점` field (which of those responsibilities this diff
+added/changed/removed, before→after) and an
 allowed `data-change` value (`new`, `mod`, `del`). One complete card cannot mask an incomplete or
 invalid card. Nodes and cards must name **real business concepts** — the things the domain models
 (a Program, an intake-time slot, an onboarding vs regular request kind) — in the codebase's own terms;
@@ -248,6 +266,14 @@ only) fails. This is the domain-level counterpart to R18.
 > `erDiagram` and one prose paragraph. A reader could not tell which domain object this diff added or
 > modified, or what invariant it now holds — the component level had cards (R18) but the domain level
 > had no counterpart, the same asymmetry R21 closes.
+
+> **RED — real artifact (`pr-3619`, user review).** The domain cards carried one-line responsibilities
+> (`has_completed_tutorial 로 온보딩 완료 이력을 보유한다`) with no member variables, no owned business
+> logic, and no statement of what this diff changed in the object — on the level the reader called the
+> most important one. The `책임` contract was widened to the object's full picture and `변경점` was made
+> a required field. A follow-up review found member variables enumerated inside the `책임` prose
+> unscannable ("멤버변수를 글로 서술하는 건 좀 애매한 느낌") — members moved to the structured
+> `핵심 멤버` chip slot, with changed members highlighted and `←변경` marking in the classDiagram.
 
 ### R19. No methodology name or axis label in Architecture prose
 

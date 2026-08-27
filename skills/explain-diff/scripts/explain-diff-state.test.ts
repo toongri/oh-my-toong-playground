@@ -95,9 +95,10 @@ flowchart LR
 
 <div class="arch-entity" data-change="new">
 <p><strong>이름</strong> <code>state-lock</code></p>
-<p><strong>레이어</strong> lib/상태-인프라</p>
+<p><strong>패키지</strong> lib/상태-인프라</p>
 <p><strong>책임</strong> 상태 파일 락 소유</p>
 <p><strong>인터페이스</strong> withLock</p>
+<p><strong>변경점</strong> 두 CLI에 흩어져 있던 락 획득/해제를 공용 모듈로 추출</p>
 </div>
 
 ### 도메인 레벨

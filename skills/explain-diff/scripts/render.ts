@@ -317,7 +317,7 @@ h1, h2, h3, h4, p, li, blockquote, th, td { word-break: keep-all; }
 
 /* arch-entity — 아키텍처 노드/동작단위 하나의 구조 카드. cf 와 같은 필드 규칙에
    변경종류 배지(data-change)를 더한다. 색은 render.ts 가 소유한다 — 저자는 종류만 준다.
-   컴포넌트 레벨(레이어·책임·인터페이스)과 경계 블록(한 일·영향 인터페이스)이 함께 쓴다. */
+   컴포넌트 레벨(패키지·책임·인터페이스·변경점)과 경계 블록(한 일·영향 인터페이스)이 함께 쓴다. */
 .arch-entity {
   margin: 0.6rem 0 1rem; padding: 0.55rem 0.9rem;
   border: 1px solid var(--rule); border-left: 3px solid var(--rule);
@@ -335,6 +335,17 @@ h1, h2, h3, h4, p, li, blockquote, th, td { word-break: keep-all; }
 .arch-entity[data-change="mod"]::before { content: "변경"; background: var(--ae-mod); }
 .arch-entity[data-change="del"] { border-left-color: var(--ae-del); }
 .arch-entity[data-change="del"]::before { content: "삭제"; background: var(--ae-del); }
+
+/* ae-members — 도메인 카드의 핵심 멤버/메소드 칩 행. 산문 나열 대신 스캔 가능한
+   칩으로 구조화하고, 이번 diff가 추가/변경한 멤버는 class="chg"로 변경색을 입힌다. */
+.arch-entity p.ae-members code {
+  display: inline-block; margin: 0.12rem 0.18rem 0.12rem 0; padding: 0.05rem 0.55rem;
+  border: 1px solid var(--rule); border-radius: 999px; font-size: 0.85rem;
+  background: transparent;
+}
+.arch-entity p.ae-members code.chg {
+  border-color: var(--ae-mod); color: var(--ae-mod); font-weight: 600;
+}
 
 /* mermaid SVG는 밝은 테마 색으로 구워지므로, 다크 모드에서도 흰 카드 위에 놓는다. */
 figure.diagram {

@@ -805,9 +805,10 @@ flowchart LR
 
 <div class="arch-entity" data-change="new">
 <p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>
-<p><strong>레이어</strong> entities/supplement/api</p>
+<p><strong>패키지</strong> entities/supplement/api</p>
 <p><strong>책임</strong> fail-closed 해소기 공급</p>
 <p><strong>인터페이스</strong> resolveAlias, resolveDisplay</p>
+<p><strong>변경점</strong> 두 카탈로그 query를 묶는 해소기 신설 — 기존에는 카드가 직접 조회했다</p>
 </div>
 
 ### 도메인 레벨
@@ -1008,8 +1009,9 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 	test("완전한 카드가 다른 카드의 누락된 인터페이스를 가리지 못한다", () => {
 		const incompleteCard = `<div class="arch-entity" data-change="mod">
 <p><strong>이름</strong> secondaryNode</p>
-<p><strong>레이어</strong> features/catalog</p>
+<p><strong>패키지</strong> features/catalog</p>
 <p><strong>책임</strong> 보조 경로 연결</p>
+<p><strong>변경점</strong> 보조 경로가 해소기를 경유하도록 변경</p>
 </div>`;
 		const doc = withBackground(
 			ARCH_OK.replace("</div>\n\n### 도메인 레벨", `</div>\n\n${incompleteCard}\n\n### 도메인 레벨`),
@@ -1024,9 +1026,10 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 	test("유효한 카드가 다른 카드의 잘못된 data-change를 가리지 못한다", () => {
 		const invalidCard = `<div class="arch-entity" data-change="changed">
 <p><strong>이름</strong> invalidNode</p>
-<p><strong>레이어</strong> features/catalog</p>
+<p><strong>패키지</strong> features/catalog</p>
 <p><strong>책임</strong> 잘못된 변경 종류를 가진 경로</p>
 <p><strong>인터페이스</strong> resolveInvalid</p>
+<p><strong>변경점</strong> 해소기 경유로 변경</p>
 </div>`;
 		const doc = withBackground(
 			ARCH_OK.replace("</div>\n\n### 도메인 레벨", `</div>\n\n${invalidCard}\n\n### 도메인 레벨`),
@@ -1036,6 +1039,22 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 		);
 		expect(item?.pass).toBe(false);
 		expect(item?.detail).toContain("data-change");
+	});
+
+	// 변경점 슬롯 — 실측(3619 리뷰): 카드가 책임·인터페이스는 말하면서 정작 이 diff로
+	// 무엇이 바뀌었는지는 말하지 않아, 독자가 변경 내용을 알 수 없었다.
+	test("컴포넌트 카드에 변경점 슬롯이 없으면 R18이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"<p><strong>변경점</strong> 두 카탈로그 query를 묶는 해소기 신설 — 기존에는 카드가 직접 조회했다</p>\n",
+				"",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("변경점");
 	});
 
 	test("컴포넌트 레벨에 arch-entity 카드 라벨이 없으면 R18이 실패한다", () => {
@@ -1211,6 +1230,8 @@ classDiagram
 <div class="arch-entity" data-change="new">
 <p><strong>이름</strong> <code>SupplementCategory</code></p>
 <p><strong>책임</strong> 영양제의 canonical 정체성을 보유하고, 상품 교체와 무관하게 유지된다</p>
+<p class="ae-members"><strong>핵심 멤버</strong> <code>code</code> <code>displayName</code> <code class="chg">isActive()</code></p>
+<p><strong>변경점</strong> canonical 정체성 개념 신설 — 기존에는 판매 상품 키가 정체성을 겸했다</p>
 </div>`,
 			),
 		);
@@ -1218,6 +1239,48 @@ classDiagram
 			(i) => i.id === "R21",
 		);
 		expect(item?.pass).toBe(true);
+	});
+
+	test("도메인 엔티티 카드에 변경점 슬롯이 없으면 R21이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+
+<div class="arch-entity" data-change="mod">
+<p><strong>이름</strong> <code>SupplementCategory</code></p>
+<p><strong>책임</strong> 영양제의 canonical 정체성을 보유한다</p>
+<p class="ae-members"><strong>핵심 멤버</strong> <code>code</code></p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("변경점");
+	});
+
+	// 핵심 멤버 칩 — 실측(3619 리뷰): 멤버 변수를 책임 산문 안에 늘어놓아 스캔이 안 됐다.
+	// 멤버는 구조화된 칩 슬롯으로 분리하고, 멤버가 없는 개념은 "핵심 멤버 없음 — <사유>"로 채운다.
+	test("도메인 엔티티 카드에 핵심 멤버 슬롯이 없으면 R21이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+
+<div class="arch-entity" data-change="mod">
+<p><strong>이름</strong> <code>SupplementCategory</code></p>
+<p><strong>책임</strong> 영양제의 canonical 정체성을 보유한다</p>
+<p><strong>변경점</strong> canonical 정체성 개념 신설</p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("핵심 멤버");
 	});
 
 	// R18/R21 — 다이어그램 노드는 컴포넌트/도메인 이름이지 파일 경로가 아니다.

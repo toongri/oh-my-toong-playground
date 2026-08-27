@@ -607,7 +607,7 @@ function diagramNodeLabels(fence: string): string[] {
 
 // Component/domain diagram nodes must name a MODULE/concept (a feature, use case,
 // hook, service, entity), not a source file path — a file path is WHERE a symbol
-// lives (the card's `레이어` slot), not WHAT the component is. Measured gap: the
+// lives (the card's `패키지` slot), not WHAT the component is. Measured gap: the
 // component diagram nodes were full file paths that truncated mid-path
 // (`health-`, `proposal-`) and told the reader a location, not a module.
 function diagramFilePathNodes(rawSlice: string): boolean {
@@ -828,7 +828,7 @@ function checkR17(text: string): CheckItem {
 }
 
 /** The labels each 컴포넌트 레벨 arch-entity card must carry (R18). */
-const COMPONENT_CARD_MARKERS = ["레이어", "책임", "인터페이스"] as const;
+const COMPONENT_CARD_MARKERS = ["패키지", "책임", "인터페이스", "변경점"] as const;
 
 /** Every authored arch-entity card, including cards with an invalid change kind. */
 const ARCH_ENTITY_OPENING_TAG =
@@ -891,7 +891,7 @@ function checkR18(text: string): CheckItem {
 	const missing: string[] = [];
 	if (pathNode)
 		missing.push(
-			"다이어그램 노드가 파일 경로 — 컴포넌트 노드는 모듈/개념 이름(피처·유스케이스·훅·서비스)으로 적고, 위치는 카드의 레이어 슬롯에 패키지/레이어 단위로 적는다",
+			"다이어그램 노드가 파일 경로 — 컴포넌트 노드는 모듈/개념 이름(피처·유스케이스·훅·서비스)으로 적고, 위치는 카드의 패키지 슬롯에 패키지 단위로 적는다",
 		);
 	if (!ARCH_WAIVER.test(slice)) {
 		const cards = archEntityCards(slice);
@@ -911,13 +911,13 @@ function checkR18(text: string): CheckItem {
 		pass: missing.length === 0,
 		detail:
 			missing.length > 0
-				? `컴포넌트 노드 카드에 없는 슬롯: ${missing.join(", ")} — 변경 노드마다 arch-entity로 레이어·책임·인터페이스·변경종류를 적는다`
+				? `컴포넌트 노드 카드에 없는 슬롯: ${missing.join(", ")} — 변경 노드마다 arch-entity로 패키지·책임·인터페이스·변경점(이 diff로 무엇이 어떻게 바뀌었나)·변경종류를 적는다`
 				: "",
 	};
 }
 
-/** The label each 도메인 레벨 arch-entity card must carry (R21). */
-const DOMAIN_CARD_MARKERS = ["책임"] as const;
+/** The labels each 도메인 레벨 arch-entity card must carry (R21). */
+const DOMAIN_CARD_MARKERS = ["책임", "핵심 멤버", "변경점"] as const;
 
 // R21 — the domain level, beyond the entity/relation diagram (R9/R12), decodes
 // each touched domain object with an arch-entity card: what it is responsible for
@@ -967,7 +967,7 @@ function checkR21(text: string): CheckItem {
 		pass: missing.length === 0,
 		detail:
 			missing.length > 0
-				? `도메인 엔티티 카드에 없는 슬롯: ${missing.join(", ")} — 이 diff가 건드린 도메인 객체마다 arch-entity로 책임(불변식)·변경종류를 적는다(서사용 가짜 개념이 아니라 실재 도메인 객체)`
+				? `도메인 엔티티 카드에 없는 슬롯: ${missing.join(", ")} — 이 diff가 건드린 도메인 객체마다 arch-entity로 책임(불변식·보유 비즈니스 로직 산문)·핵심 멤버(코드 칩 나열, 없으면 "핵심 멤버 없음 — <사유>")·변경점(무엇이 이번에 추가/변경됐나)·변경종류를 적는다(서사용 가짜 개념이 아니라 실재 도메인 객체)`
 				: "",
 	};
 }
