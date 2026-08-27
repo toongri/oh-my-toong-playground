@@ -233,20 +233,41 @@ function groupSlices(text: string): Array<{ title: string; body: string }> {
 	return out;
 }
 
+/** The source table required inside `## Evidence` > `### 원천`. */
+const EVIDENCE_SOURCE_TABLE =
+	/^[ \t]*\|[ \t]*종류[ \t]*\|[ \t]*식별자\/경로[ \t]*\|[ \t]*확보[ \t]*\|[ \t]*내용 요약[ \t]*\|\r?\n[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|\r?\n(?![ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*(?:\r?\n|$))[ \t]*\|[^|\r\n]*\|[^|\r\n]*\|[^|\r\n]*\|[^|\r\n]*\|[ \t]*(?:\r?\n|$)/m;
+
+/** Returns the missing structure in the Evidence source sweep, if any. */
+function checkEvidenceSourceStructure(text: string): string {
+	const evidence = sectionSlice(maskFenced(text), "Evidence");
+	if (evidence === null) return "## Evidence 섹션이 없습니다";
+
+	const source = levelSlice(evidence, "원천");
+	if (source === null) return "## Evidence 안에 ### 원천 heading이 없습니다";
+	if (!EVIDENCE_SOURCE_TABLE.test(source)) {
+		return "원천 표가 없습니다 — 정확한 4열 헤더(종류 | 식별자/경로 | 확보 | 내용 요약), 구분선, 최소 1개 데이터 행이 필요합니다";
+	}
+	return "";
+}
+
 // R1, listing form (evidence step) — every signal file appears somewhere in
-// the document. The empty signal set fails rather than passing vacuously.
+// the document, and the Evidence source sweep has its required table. The
+// empty signal set fails rather than passing vacuously.
 function checkR1Listing(text: string, signalFiles: string[]): CheckItem {
 	const missing = signalFiles.filter((p) => !text.includes(p));
+	const problems: string[] = [];
+	if (signalFiles.length === 0) {
+		problems.push("signal 파일이 하나도 분류되지 않았습니다 — evidence 스텝의 분류표를 확인하세요.");
+	} else if (missing.length > 0) {
+		problems.push(`문서에 등장하지 않는 파일: ${missing.join(", ")}`);
+	}
+	const sourceProblem = checkEvidenceSourceStructure(text);
+	if (sourceProblem !== "") problems.push(sourceProblem);
 	return {
 		id: "R1",
 		title: "R1 signal 파일 전수 등장 (등재형)",
-		pass: signalFiles.length > 0 && missing.length === 0,
-		detail:
-			signalFiles.length === 0
-				? "signal 파일이 하나도 분류되지 않았습니다 — evidence 스텝의 분류표를 확인하세요."
-				: missing.length > 0
-					? `문서에 등장하지 않는 파일: ${missing.join(", ")}`
-					: "",
+		pass: problems.length === 0,
+		detail: problems.join(" / "),
 	};
 }
 
@@ -830,6 +851,27 @@ function checkR17(text: string): CheckItem {
 /** The labels each 컴포넌트 레벨 arch-entity card must carry (R18). */
 const COMPONENT_CARD_MARKERS = ["패키지", "책임", "인터페이스", "변경점"] as const;
 
+/** A field row has the label as the first strong child of a paragraph. */
+const ARCH_ENTITY_FIELD_ROW =
+	/<p\b[^>]*>\s*<strong\b[^>]*>\s*([^<]*?)\s*<\/strong>\s*([\s\S]*?)<\/p\s*>/gi;
+
+/** Whether an arch-entity card has a non-empty, independently structured field row. */
+function hasArchEntityField(body: string, label: string): boolean {
+	const withoutComments = body.replace(/<!--[\s\S]*?(?:-->|$)/g, "");
+	ARCH_ENTITY_FIELD_ROW.lastIndex = 0;
+	let row: RegExpExecArray | null = ARCH_ENTITY_FIELD_ROW.exec(withoutComments);
+	while (row !== null) {
+		const rowLabel = (row[1] ?? "").trim();
+		const value = (row[2] ?? "")
+			.replace(/<[^>]*>/g, " ")
+			.replace(/&(?:nbsp|#160|#xA0);/gi, " ")
+			.trim();
+		if (rowLabel === label && value.length > 0) return true;
+		row = ARCH_ENTITY_FIELD_ROW.exec(withoutComments);
+	}
+	return false;
+}
+
 /** Every authored arch-entity card, including cards with an invalid change kind. */
 const ARCH_ENTITY_OPENING_TAG =
 	/<([A-Za-z][\w-]*)\b(?=[^>]*\bclass=(["'])(?:[^"'\s]+\s+)*arch-entity(?:\s+[^"'\s]+)*\2)[^>]*>/gi;
@@ -899,7 +941,9 @@ function checkR18(text: string): CheckItem {
 			missing.push("arch-entity 카드", "변경종류(data-change: new|mod|del)");
 		} else {
 			cards.forEach((card, index) => {
-				const cardMissing: string[] = COMPONENT_CARD_MARKERS.filter((label) => !card.body.includes(label));
+				const cardMissing: string[] = COMPONENT_CARD_MARKERS.filter(
+					(label) => !hasArchEntityField(card.body, label),
+				);
 				if (!card.validDataChange) cardMissing.push("변경종류(data-change: new|mod|del)");
 				if (cardMissing.length > 0) missing.push(`카드 ${index + 1}: ${cardMissing.join(", ")}`);
 			});
@@ -980,12 +1024,15 @@ function checkR21(text: string): CheckItem {
 			missing.push("arch-entity 카드", "변경종류(data-change: new|mod|del)");
 		} else {
 			cards.forEach((card, index) => {
-				const cardMissing: string[] = DOMAIN_CARD_MARKERS.filter((label) => !card.body.includes(label));
-				if (
-					!hasStructuredCoreMemberRow(card.body) &&
-					!hasNoMembersReason(card.body)
-				)
-					cardMissing.push("핵심 멤버");
+				const cardMissing: string[] = [];
+				for (const label of DOMAIN_CARD_MARKERS) {
+					if (label === "핵심 멤버") {
+						if (!hasStructuredCoreMemberRow(card.body) && !hasNoMembersReason(card.body))
+							cardMissing.push(label);
+					} else if (!hasArchEntityField(card.body, label)) {
+						cardMissing.push(label);
+					}
+				}
 				if (!card.validDataChange) cardMissing.push("변경종류(data-change: new|mod|del)");
 				if (cardMissing.length > 0) missing.push(`카드 ${index + 1}: ${cardMissing.join(", ")}`);
 			});

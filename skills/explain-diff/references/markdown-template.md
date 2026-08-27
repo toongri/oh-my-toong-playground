@@ -338,10 +338,11 @@ sequenceDiagram
   participant Chat as 상담챗 feature
   participant Resolver as entities resolver
   participant Backend as backend catalog
-  Chat->>Resolver: resolveDisplay(code)
-  Resolver->>Backend: GET /v1/supplement-catalog?includeDeletedCategories=true
+  Chat->>+Resolver: resolveDisplay(code)
+  Resolver->>+Backend: GET /v1/supplement-catalog?includeDeletedCategories=true
   Note over Resolver,Backend: 이 diff — 삭제 카테고리까지 포함해 조회
-  Backend-->>Resolver: 표시 카탈로그(삭제 포함)
+  Backend-->>-Resolver: 표시 카탈로그(삭제 포함)
+  Resolver-->>-Chat: 카드용 표시 카탈로그
 ​```
 
 <div class="arch-entity" data-change="new">
@@ -492,9 +493,11 @@ export const SupplementCostItem = z.strictObject({
 
 코드 섹션의 변경 블록(`#### 변경 N: <한 일>`) 바로 아래에 온다. **파일이 아니라 변경 하나**를
 설명하는 블록이다. 한 변경은 여러 **책임**(함께 바뀐 class·function의 duty)으로 이뤄지므로
-`책임 N — <역할>` 항목을 각각 `<p>` 하나로 세운다 — 각 항목은 어떤 클래스의 어떤 함수인지와
-그 함수가 어느 레이어·도메인에 사는지(배치)를 밝힌다. 그 아래 `왜`·`효과·사이드이펙트`·`검증`은
-변경 레벨에 하나씩, 완결 문장으로 쓴다. 출처는 `cf-src` 배지로, 위치는 `cf-loc` 슬롯으로
+각 책임 행은 그 책임을 지는 심볼을 주어로 삼아 `<code>심볼</code>`로 시작한다. 심볼이 어느
+레이어·도메인에 사는지(배치)를 밝힌 뒤 같은 `<p>` 안에 `<strong>기존</strong>`과
+`<strong>변경</strong>`을 각각 완결 문장으로 쓴다. 처음 생기는 심볼은 기존 대신
+`<strong>신설</strong>`, 사라지는 심볼은 `<strong>삭제</strong>`를 쓴다. 그 아래
+`왜`·`효과·사이드이펙트`·`검증`은 변경 레벨에 하나씩, 완결 문장으로 쓴다. 출처는 `cf-src` 배지로, 위치는 `cf-loc` 슬롯으로
 산문 밖에 둔다. 변경종류(신설·변경·삭제) 배지는 `data-change` 로 싣고 색·라벨은 render.ts가
 붙인다 — 저자는 `new`·`mod`·`del` 종류만 준다. 필드 라벨은 `<strong>` 으로 쓴다 — 마크다운
 `**…**` 는 div 안에서 살지 않는다. `cf-loc` 슬롯은 흐름이 아니라 **위치 인용**이다 — 흐름은
@@ -514,11 +517,8 @@ suffix를 파싱하고, 그 앞의 경로가 감싸는 파일 블록의 경로�
 
 ```html
 <div class="cf" data-change="mod">
-<p><strong>책임 1 — 비용 item 계약</strong> — <code>SupplementCostItem</code> 스키마
-   (packages/schemas의 commerce 비용 계약, 서버·클라이언트가 공유). 두 식별자 축을
-   <code>supplementCategoryId</code> 단독 strict 로 축소한다.</p>
-<p><strong>책임 2 — 요청 검증</strong> — 이 스키마를 쓰는 비용 요청 파서. category 축만
-   받으므로 product 축이 섞인 구 요청을 파싱 단계에서 걸러낸다.</p>
+<p><strong><code>SupplementCostItem</code></strong> (packages/schemas의 commerce 비용 계약, 서버·클라이언트가 공유) — <strong>기존</strong> 두 식별자 축을 함께 허용했다. <strong>변경</strong> <code>supplementCategoryId</code> 단독 strict 계약으로 축소한다.</p>
+<p><strong><code>parseSupplementCostRequest()</code></strong> (packages/schemas의 비용 요청 파서) — <strong>기존</strong> product 축이 섞인 비용 요청도 파싱할 수 있었다. <strong>변경</strong> category 축만 받아 구 요청을 파싱 단계에서 거부한다.</p>
 <p><strong>왜</strong> — 비용 계약의 두 축 공존을 끝내고 category 하나로 고정하기 위해
    <span class="cf-src">근거</span> "feat!: 카테고리 축으로 고정"</p>
 <p><strong>효과·사이드이펙트</strong> — 이미 배포된 구 클라이언트가 product 축으로 보내는

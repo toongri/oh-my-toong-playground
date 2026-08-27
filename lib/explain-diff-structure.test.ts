@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 import { checkStructure, type DiffHunk } from "./explain-diff-structure";
 
@@ -40,9 +42,22 @@ const BACKGROUND = `## Background
 내용
 `;
 
-/** Evidence 절만 있는 문서 — signal 경로가 표에 등장할 뿐 Change Group은 없다. */
+/** Evidence 절만 있는 문서 — signal 분류표와 원천 스윕 표만 있고 Change Group은 없다. */
 function evidenceOnlyDoc(signalPath: string): string {
-	return `# 설명\n\n## Evidence\n\n| 파일 | 분류 |\n|---|---|\n| \`${signalPath}\` | signal |\n`;
+	return `# 설명
+
+## Evidence
+
+| 파일 | 분류 |
+|---|---|
+| \`${signalPath}\` | signal |
+
+### 원천
+
+| 종류 | 식별자/경로 | 확보 | 내용 요약 |
+|---|---|---|---|
+| 코드 | \`${signalPath}\` | 열람 | 변경된 구현과 호출 경로를 확인 |
+`;
 }
 
 function withBackground(body: string): string {
@@ -57,6 +72,99 @@ describe("evidence 스텝 — R1 등재형", () => {
 		});
 		expect(r.pass).toBe(true);
 		expect(r.items.find((i) => i.id === "R1")?.pass).toBe(true);
+	});
+
+	test("signal 파일은 있으나 Evidence 안에 원천 heading이 없으면 실패한다", () => {
+		const doc = evidenceOnlyDoc("lib/state-lock.ts").replace(/\n### 원천[\s\S]*$/, "");
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("원천");
+	});
+
+	test("원천 heading만 있고 표가 없으면 실패한다", () => {
+		const doc = evidenceOnlyDoc("lib/state-lock.ts").replace(
+			/\n### 원천[\s\S]*$/,
+			"\n### 원천\n",
+		);
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("원천 표");
+	});
+
+	test("원천 표의 열이 정확히 네 개가 아니면 실패한다", () => {
+		const doc = evidenceOnlyDoc("lib/state-lock.ts").replace(
+			"| 종류 | 식별자/경로 | 확보 | 내용 요약 |",
+			"| 종류 | 식별자/경로 | 확보 |",
+		);
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("종류 | 식별자/경로 | 확보 | 내용 요약");
+	});
+
+	test("원천 표의 구분선이 네 열이 아니면 실패한다", () => {
+		const doc = evidenceOnlyDoc("lib/state-lock.ts").replace(
+			"|---|---|---|---|\n| 코드",
+			"|---|---|---|\n| 코드",
+		);
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("구분선");
+	});
+
+	test("원천 표에 데이터 행이 없으면 실패한다", () => {
+		const doc = evidenceOnlyDoc("lib/state-lock.ts").replace(
+			"| 코드 | `lib/state-lock.ts` | 열람 | 변경된 구현과 호출 경로를 확인 |\n",
+			"",
+		);
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("데이터 행");
+	});
+
+	test("fenced code 안의 원천 heading과 표만 있으면 실패한다", () => {
+		const doc = `# 설명
+
+## Evidence
+
+| 파일 | 분류 |
+|---|---|
+| \`lib/state-lock.ts\` | signal |
+
+\`\`\`markdown
+### 원천
+
+| 종류 | 식별자/경로 | 확보 | 내용 요약 |
+|---|---|---|---|
+| 코드 | \`lib/state-lock.ts\` | 열람 | fenced example |
+\`\`\`
+`;
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("원천");
 	});
 
 	test("빠진 파일이 있으면 실패하고 그 경로를 사유에 담는다", () => {
@@ -993,6 +1101,54 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 		expect(item?.pass).toBe(false);
 	});
 
+	test("컴포넌트 카드의 한 행 라벨 충돌은 독립 필드로 인정하지 않는다", () => {
+		const collisionCard = `<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>
+<p><strong>책임</strong> 패키지와 인터페이스 변경점을 설명한다</p>
+</div>`;
+		const doc = withBackground(
+			ARCH_OK.replace(
+				/<div class="arch-entity" data-change="new">\n<p><strong>이름<\/strong> <code>useSupplementCodeResolver<\/code><\/p>[\s\S]*?<\/div>/,
+				collisionCard,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("패키지");
+		expect(item?.detail).toContain("인터페이스");
+		expect(item?.detail).toContain("변경점");
+	});
+
+	test("컴포넌트 카드의 독립된 필드 행은 R18을 통과한다", () => {
+		const item = checkStructure(withBackground(ARCH_OK), {
+			signalFiles: ["a.ts"],
+			step: "architecture",
+		}).items.find((i) => i.id === "R18");
+		expect(item?.pass).toBe(true);
+	});
+
+	test("컴포넌트 카드의 산문·인라인 코드·주석 속 라벨은 필드가 아니다", () => {
+		const misleadingCard = `<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>
+<p>산문에 패키지 책임 인터페이스 변경점을 나열한다.</p>
+<p><code>패키지</code> <code>책임</code> <code>인터페이스</code> <code>변경점</code></p>
+<!-- <p><strong>패키지</strong> 주석 속 값</p> -->
+</div>`;
+		const doc = withBackground(
+			ARCH_OK.replace(
+				/<div class="arch-entity" data-change="new">\n<p><strong>이름<\/strong> <code>useSupplementCodeResolver<\/code><\/p>[\s\S]*?<\/div>/,
+				misleadingCard,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("패키지");
+	});
+
 	test("컴포넌트 카드 밖 산문의 data-change는 R18을 통과시키지 않는다", () => {
 		const doc = withBackground(
 			ARCH_OK.replace(
@@ -1239,6 +1395,35 @@ classDiagram
 			(i) => i.id === "R21",
 		);
 		expect(item?.pass).toBe(true);
+	});
+
+	test("도메인 카드의 한 행 라벨 충돌은 책임·변경점 독립 필드로 인정하지 않는다", () => {
+		const domainLevel = `### 도메인 레벨
+\`\`\`mermaid
+classDiagram
+  class SupplementCategory {
+    +code: string
+    +displayName: string
+    +isActive() bool
+  }
+\`\`\`
+
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>SupplementCategory</code></p>
+<p><strong>책임</strong> 책임과 변경점을 한 행에 함께 설명한다</p>
+<p class="ae-members"><strong>핵심 멤버</strong> <code>code</code></p>
+</div>`;
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				domainLevel,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("변경점");
 	});
 
 	test("도메인 엔티티 카드에 변경점 슬롯이 없으면 R21이 실패한다", () => {
@@ -1522,6 +1707,37 @@ classDiagram
 		);
 		expect(item?.pass).toBe(false);
 		expect(item?.detail).toContain("멤버");
+	});
+});
+
+describe("markdown-template canonical examples", () => {
+	const template = readFileSync(
+		join(import.meta.dir, "..", "skills", "explain-diff", "references", "markdown-template.md"),
+		"utf8",
+	);
+
+	test("승인된 cf 예제가 심볼 주어와 기존·변경 필드를 유지한다", () => {
+		const cfSectionStart = template.indexOf("### `cf` / `cf-src` / `cf-loc`");
+		const cfSectionEnd = template.indexOf("### `arch-entity`", cfSectionStart);
+		const cfSection = template.slice(cfSectionStart, cfSectionEnd);
+
+		expect(cfSection).not.toContain("책임 N — <역할>");
+		expect(cfSection).not.toContain("책임 1 — 비용 item 계약");
+		expect(cfSection).not.toContain("책임 2 — 요청 검증");
+		expect(cfSection).toMatch(
+			/<p><strong><code>SupplementCostItem<\/code><\/strong>[\s\S]*?<strong>기존<\/strong>[\s\S]*?<strong>변경<\/strong>[\s\S]*?<\/p>/,
+		);
+		expect(cfSection).toMatch(
+			/<p><strong><code>parseSupplementCostRequest\(\)<\/code><\/strong>[\s\S]*?<strong>기존<\/strong>[\s\S]*?<strong>변경<\/strong>[\s\S]*?<\/p>/,
+		);
+	});
+
+	test("승인된 sequence 예제가 호출·반환 activation을 균형 있게 유지한다", () => {
+		expect(template).toMatch(
+			/Chat->>\+Resolver: resolveDisplay\(code\)[\s\S]*?Resolver->>\+Backend: GET \/v1\/supplement-catalog\?includeDeletedCategories=true[\s\S]*?Backend-->>-Resolver: 표시 카탈로그\(삭제 포함\)[\s\S]*?Resolver-->>-Chat: 카드용 표시 카탈로그/,
+		);
+		expect(template).not.toContain("Chat->>Resolver: resolveDisplay(code)");
+		expect(template).not.toContain("Resolver->>Backend: GET /v1/supplement-catalog?includeDeletedCategories=true");
 	});
 });
 

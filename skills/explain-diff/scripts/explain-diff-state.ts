@@ -435,8 +435,9 @@ export function setRenderForTesting(renderer?: FreshRenderer): void {
  * already earned at `code`, so this checks the artifacts of the derivation:
  * the HTML exists and is not empty, every authored mermaid block actually
  * became an inline SVG, and the technical-writing prose review ran and closed
- * with its machine-checkable verdict line. Visual layout is not reviewed per
- * document — it is a deterministic property render.ts owns (wide-diagram
+ * with its machine-checkable verdict line. The final checklist must also close
+ * with its machine-checkable all-pass verdict. Visual layout is not reviewed
+ * per document — it is a deterministic property render.ts owns (wide-diagram
  * legibility is sealed by normalizeSvgWidth + the figure scroll container,
  * regression-guarded by render.test.ts), so there is no per-document visual-qa
  * gate here.
@@ -445,6 +446,7 @@ function checkRenderOutput(
 	htmlPath: string | undefined,
 	docPath: string,
 	writingReport: string | undefined,
+	checklistPath: string | undefined,
 ): { pass: boolean; failedItems: string[] } {
 	const failedItems: string[] = [];
 	if (!htmlPath) {
@@ -499,6 +501,14 @@ function checkRenderOutput(
 		"REVIEW: APPLIED",
 		failedItems,
 	);
+	checkReport(
+		"체크리스트",
+		"--checklist",
+		checklistPath,
+		/^CHECKLIST: ALL PASS$/,
+		"CHECKLIST: ALL PASS",
+		failedItems,
+	);
 	return { pass: failedItems.length === 0, failedItems };
 }
 
@@ -516,6 +526,7 @@ function submitStep(
 	addedFiles: string[],
 	htmlPath?: string,
 	writingReport?: string,
+	checklistPath?: string,
 ): number {
 	return withLock(statePath(sessionId), () => {
 		const s = mustRead(sessionId);
@@ -524,8 +535,8 @@ function submitStep(
 		}
 		const result =
 			step === "render"
-				? checkRenderOutput(htmlPath, docPath, writingReport)
-				: checkStructure(readFileSync(docPath, "utf8"), {
+					? checkRenderOutput(htmlPath, docPath, writingReport, checklistPath)
+					: checkStructure(readFileSync(docPath, "utf8"), {
 						signalFiles,
 						addedFiles,
 						commitHashes: s.commit_hashes,
@@ -764,10 +775,11 @@ function main(): void {
 						reqStep(args, "step"),
 						req(args, "doc"),
 						csv(req(args, "signal-files")),
-						csv(typeof args["added-files"] === "string" ? args["added-files"] : ""),
-						typeof args["html"] === "string" ? args["html"] : undefined,
-						typeof args["writing-report"] === "string" ? args["writing-report"] : undefined,
-					),
+							csv(typeof args["added-files"] === "string" ? args["added-files"] : ""),
+							typeof args["html"] === "string" ? args["html"] : undefined,
+							typeof args["writing-report"] === "string" ? args["writing-report"] : undefined,
+							typeof args["checklist"] === "string" ? args["checklist"] : undefined,
+						),
 				);
 				break;
 			case "pass-step":

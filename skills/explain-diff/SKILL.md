@@ -269,7 +269,7 @@ What this gate actually looks at differs per step — it inspects only the slots
 | intuition | No item of its own — the substantive verdict is the judgment's (R6) |
 | commits | With two or more commits, does every hash appear in the Commit Journey overview (R10); a single commit may use the waiver marker |
 | code | Change Group title/herald/order-rationale three slots (R2), a provenance tag on every 왜 (R3), cf-loc traceability (R5), every signal file cited by at least one change block's `바뀐 위치` anchors (R1 — a file may be cited by several changes), a commit subsection with a valid hash per group + core-logic code per change block (R13). `start` passes the original range unchanged to `git diff` (preserving `A...B` merge-base semantics); only `git rev-list` enumeration normalizes it to `A..B`. At `code` submission, R5 keys every `base:`/`head:` anchor by its own cited path and checks per signal file that its before/after are cited and land in real hunks; a file with no textual hunk uses the legacy presence/placeholder fallback. A legitimate first-line hunk may use `base:…:1 → head:…:1`; added files need `head:` only, deleted files `base:` only, and a zero-count side has no file lines. |
-| render | See Step 8 — it inspects the artifact HTML, mermaid render parity, and the technical-writing report |
+| render | See Step 8 — it inspects the artifact HTML, mermaid render parity, the technical-writing report, and the final checklist verdict |
 
 **Common to all authoring steps**: the whole accumulated document is checked for `<style>`, inline `style=`, and unsanctioned classes (R11).
 
@@ -315,11 +315,16 @@ After rendering, before moving to the quiz, **run the one verification the machi
    document, ending with `CHECKLIST: ALL PASS`. Any FAIL → fix the document, re-run render.ts,
    re-grade from the top. The quiz does not start while a FAIL remains.
 
+The render artifact gate requires all three artifacts: `--html`, `--writing-report`, and `--checklist`.
+The checklist file must exist and its last non-whitespace line must be exactly `CHECKLIST: ALL PASS`.
+Missing or invalid checklist evidence keeps the state at `render`, so the quiz cannot start.
+
 ```bash
-# Gate 1 — artifact check: HTML re-rendered from the current Markdown, mermaid→SVG parity, technical-writing report
+# Gate 1 — artifact check: current HTML, mermaid→SVG parity, technical-writing report, final checklist verdict
 $CLI submit-step --step render --doc "<문서.md>" --signal-files "a.ts,b.ts" \
   --html "<문서.html>" \
-  --writing-report "<slug>-writing-report.md"
+  --writing-report "<slug>-writing-report.md" \
+  --checklist "<slug>-final-checklist.md"
 
 # Gate 2 — judgment (the render step has no judge item, so pass it with an empty array)
 $CLI pass-step --step render --doc "<문서.md>" --judge-json '[]'
@@ -327,7 +332,7 @@ $CLI pass-step --step render --doc "<문서.md>" --judge-json '[]'
 
 The render submission also confirms the HTML is an artifact re-generated from the Markdown current at submission time. Submitting old HTML after editing the Markdown is rejected as a stale artifact, so re-run render.ts after every document edit, then submit.
 
-When the render is done, tell the user the two paths and ask them to read the document.
+When the render is done, tell the user the document, HTML, writing-report, and final-checklist paths and ask them to read the document.
 
 ## Step 9 — quiz
 

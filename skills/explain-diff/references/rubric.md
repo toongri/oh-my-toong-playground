@@ -38,7 +38,7 @@ The document is written one step at a time, accumulating. So an item is evaluate
 | R19 | script | architecture |
 | R21 | script | architecture |
 
-The `intuition` step has no slot of its own — only R6 (judge) and the common R11 decide it. `render` and `quiz` score none of this table's items: `render` looks at the artifact check (HTML present and non-empty, mermaid→SVG parity, technical-writing `REVIEW: APPLIED`), and `quiz` runs a separate grading path (`grade`). Visual layout is not scored per document — it is a deterministic property render.ts owns (wide-diagram legibility is sealed by `normalizeSvgWidth` + the figure scroll container, regression-guarded by `render.test.ts`), so there is no visual-qa gate.
+The `intuition` step has no slot of its own — only R6 (judge) and the common R11 decide it. `render` and `quiz` score none of this table's items: `render` looks at the artifact check (HTML present and non-empty, mermaid→SVG parity, technical-writing `REVIEW: APPLIED`, final checklist ending with `CHECKLIST: ALL PASS`), and `quiz` runs a separate grading path (`grade`). Visual layout is not scored per document — it is a deterministic property render.ts owns (wide-diagram legibility is sealed by `normalizeSvgWidth` + the figure scroll container, regression-guarded by `render.test.ts`), so there is no visual-qa gate.
 
 ---
 
