@@ -179,6 +179,18 @@ describe("code-review runtime range command safety contract", () => {
 		expect(step2).toContain("`--no-renames` avoids old/new pair ambiguity");
 	});
 
+	test("normalizes binary numstat fields before numeric accounting", () => {
+		const normalize = step2.indexOf("treat an insertion or deletion field of `-` as numeric zero");
+		const marker = step2.indexOf("preserve that path's binary marker separately");
+		const skipInvalid = step2.indexOf("do not add `-`, `undefined`, or `NaN`");
+
+		expect(normalize).toBeGreaterThanOrEqual(0);
+		expect(marker).toBeGreaterThan(normalize);
+		expect(skipInvalid).toBeGreaterThan(marker);
+		expect(step2).toContain("for `reviewableInsertionLines` arithmetic");
+		expect(step2).toContain("insertion/deletion sums");
+	});
+
 	test("requires safe dynamic command construction and forbids raw range interpolation", () => {
 		expect(step0).toContain(
 			"All subsequent commands that receive range or path values must use argv-safe arguments",
