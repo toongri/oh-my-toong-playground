@@ -215,7 +215,9 @@ body {
   margin: 0; background: var(--bg); color: var(--fg);
   font: 16px/1.75 -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", sans-serif;
 }
-main { max-width: 46rem; margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+/* 본문 폭 — 좁은 고정 컬럼(46rem)은 다이어그램·카드가 잘리는 실측 결함이었다.
+   뷰포트에 반응해 최대 92rem(≈1472px)까지 쓰고, 창이 좁아지면 94vw로 따라간다. */
+main { max-width: min(92rem, 94vw); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
 h1, h2, h3, h4 { line-height: 1.3; margin: 2.5rem 0 0.75rem; }
 h1 { font-size: 1.9rem; margin-top: 0; }
 h2 { font-size: 1.4rem; border-bottom: 1px solid var(--rule); padding-bottom: 0.35rem; }

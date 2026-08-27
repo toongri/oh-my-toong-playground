@@ -240,4 +240,9 @@ describe("figure.diagram svg CSS — 넓은 다이어그램은 축소가 아니�
 		expect(printCss).toBeDefined();
 		expect(printCss).toMatch(/figure\.diagram svg\s*\{[^}]*max-width:\s*100%/);
 	});
+
+	test("본문 폭은 뷰포트 반응형이다 — 46rem 고정 컬럼은 다이어그램이 잘리는 결함이었다", () => {
+		expect(html).toMatch(/main\s*\{[^}]*max-width:\s*min\(/);
+		expect(html).not.toMatch(/main\s*\{[^}]*max-width:\s*46rem/);
+	});
 });
