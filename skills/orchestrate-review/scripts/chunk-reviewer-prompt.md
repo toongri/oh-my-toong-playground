@@ -12,7 +12,9 @@ These premises override any reflex to "review just what is in the diff."
 
 ## Review Scope
 
-**Findings target ONLY these files:** {FILE_LIST}
+**Findings target ONLY these reviewable files in this chunk:** {FILE_LIST}
+
+{FILE_LIST} is the chunk's post-integrity reviewable file list, not the complete changed-file manifest. The complete changed-file manifest and derived-artifact Out of Scope list are not finder scope and are not included here.
 
 Findings must be limited to files in the list above. Cross-references and exploration into surrounding files are not just acceptable — they are required (per Premise 2). Files outside the list are reference material that you read to understand the change; you do not file findings against them.
 
@@ -46,13 +48,15 @@ Each declared non-goal has the form `- {what this change deliberately does not d
 
 ## Diff Command
 
-**Files in this chunk:** {FILE_LIST}
+**Reviewable files in this chunk:** {FILE_LIST}
 
 Execute the following command to obtain the diff for review. You MUST run this command and use the output as the basis for your review:
 
 ```
 {DIFF_COMMAND}
 ```
+
+This command was constructed from this chunk's reviewable files only; it must not include the complete changed-file manifest or derived-artifact Out of Scope paths.
 
 <!-- section:commit_history -->
 ## Commit History
@@ -72,7 +76,7 @@ Execute the following command to obtain the diff for review. You MUST run this c
 | {REQUIREMENTS} | Optional | Step 1 interview, "N/A" if deferred |
 | {PROJECT_CONTEXT} | Required | Step 1 project context |
 | {NON_GOAL} | Required | Completion-gate payload field `non_goals` (backfilled to "(none provided)" when blank) |
-| {FILE_LIST} | Required | Step 2 git diff --name-only |
-| {DIFF_COMMAND} | Required | Step 3 — constructed from range + chunk file list |
+| {FILE_LIST} | Required | Step 3 reviewableFileList (current chunk only; not the complete changed-file manifest) |
+| {DIFF_COMMAND} | Required | Step 3 — constructed from range + current chunk's reviewable file list |
 | {COMMIT_HISTORY} | Required | Step 2 git log output |
 <!-- /section:field_reference -->

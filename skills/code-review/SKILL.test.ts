@@ -7,6 +7,10 @@ const codeReviewerAgent = readFileSync(
 	join(import.meta.dir, "../../agents/code-reviewer.md"),
 	"utf8",
 );
+const chunkReviewerPrompt = readFileSync(
+	join(import.meta.dir, "../orchestrate-review/scripts/chunk-reviewer-prompt.md"),
+	"utf8",
+);
 
 function extractSection(markdown: string, heading: string, nextHeading: string) {
 	const start = markdown.indexOf(heading);
@@ -93,12 +97,14 @@ describe("code-review direct finder-job contract", () => {
 		expect(step4).toContain("partial coverage");
 	});
 
-	test("orchestrator uses hash-only diff exception and agent uses direct jobs", () => {
+	test("orchestrator limits diff access to integrity and hashing while agent uses direct jobs", () => {
 		expect(skillMd).toContain("never inspects, loads, or displays diff text");
 		expect(skillMd).toContain(
-			"stdout byte stream, which flows directly to SHA-256 outside model context",
+			"stdout byte stream flows directly to SHA-256 outside model context",
 		);
-		expect(skillMd).not.toContain("unconditional prohibition");
+		expect(skillMd).toContain("candidate-scoped diff inspection exception");
+		expect(skillMd).toContain("integrity judgment only");
+		expect(skillMd).toContain("not forwarded to a finder prompt, candidate aggregation, or general orchestrator context");
 		expect(codeReviewerAgent).toContain("direct finder-job lifecycle");
 		expect(codeReviewerAgent).toContain("start/attach direct finder jobs");
 		expect(codeReviewerAgent).not.toContain("chunk-reviewer dispatch");
@@ -127,6 +133,7 @@ describe("code-review static-only premises", () => {
 describe("code-review Step 3 partition and scale contract", () => {
 	const step2 = extractSection(skillMd, "## Step 2: Context Gathering", "## Step 3:");
 	const step3 = extractSection(skillMd, "## Step 3: Chunking Decision", "## Step 4:");
+	const step4 = extractSection(skillMd, "## Step 4: Direct Finder-Job Dispatch", "## Step 5:");
 
 	test("partitions before scale and derives reviewable file and insertion counts", () => {
 		const partition = step3.indexOf("### Derived-artifact partition (runs first)");
@@ -165,15 +172,60 @@ describe("code-review Step 3 partition and scale contract", () => {
 	test("checks derived-output integrity before exclusion and path-filtered commands", () => {
 		const integrity = step3.indexOf("### Derived-output integrity (before exclusion)");
 		const exclusion = step3.indexOf("**Handling:** derived artifacts are excluded");
-		const pathFilteredCommand = step3.indexOf("path-filtered finder command");
+		const pathFilteredCommand = step3.indexOf("### Per-Chunk Diff Command Construction");
 
 		expect(integrity).toBeGreaterThanOrEqual(0);
 		expect(step3).toContain("complete changed-file manifest");
-		expect(step3).toContain("Meaningful, stale, manually altered, or otherwise unexplained output");
-		expect(step3).toContain("re-included as the exact file and removed from Out of Scope");
+		expect(step3).toContain("output is meaningful, stale, manually altered, or otherwise unexplained");
+		expect(step3).toContain("Re-included outputs are reviewed as exact files instead");
 		expect(step3).toContain("before any path-filtered finder command");
 		expect(integrity).toBeLessThan(exclusion);
 		expect(integrity).toBeLessThan(pathFilteredCommand);
+	});
+
+	test("routes integrity comparison through a candidate-scoped diff inspection", () => {
+		const integrity = extractSection(
+			step3,
+			"### Derived-output integrity (before exclusion)",
+			"### Zero-reviewable-files review",
+		);
+
+		expect(integrity).toContain("each candidate derived file in the complete changed-file manifest");
+		expect(integrity).toContain("git diff {range} -- <candidate-path>");
+		expect(integrity).toContain("authored source/generator evidence");
+		expect(integrity).toContain("candidate-scoped diff inspection exception");
+		expect(integrity).toContain("integrity judgment only");
+		expect(integrity).toContain(
+			"not forwarded to a finder prompt, candidate aggregation, or general orchestrator context",
+		);
+	});
+
+	test("separates the complete manifest from the post-integrity reviewable finder scope", () => {
+		expect(step3).toContain("`completeChangedFileManifest`");
+		expect(step3).toContain("`reviewableFileList`");
+		expect(step3).toContain("Never substitute one for the other");
+		expect(step4).toContain("{FILE_LIST} to the current chunk's reviewable files only");
+		expect(step4).toContain("{DIFF_COMMAND} is constructed from that same chunk list");
+		expect(step4).toContain(
+			"Never pass the complete changed-file manifest or derived-artifact Out of Scope list as finder scope",
+		);
+	});
+
+	test("reports binary-only paths under Out of Scope before the quick exit", () => {
+		const earlyExit = extractSection(skillMd, "### Early Exit", "## Step 1:");
+		const binary = earlyExit.indexOf("If the diff is binary-only");
+		const outOfScope = earlyExit.indexOf("list every binary changed path under Out of Scope");
+		const noFinder = earlyExit.indexOf("do not dispatch a finder job");
+		const exit = earlyExit.indexOf("then exit");
+
+		expect(earlyExit).toContain(
+			'If empty diff: report "No changes detected (between <base> and <target>)" and exit immediately',
+		);
+		expect(earlyExit).not.toContain("If binary-only diff: report \"Only binary file changes detected\" and exit");
+		expect(binary).toBeGreaterThanOrEqual(0);
+		expect(outOfScope).toBeGreaterThan(binary);
+		expect(noFinder).toBeGreaterThan(outOfScope);
+		expect(exit).toBeGreaterThan(noFinder);
 	});
 
 	test("requires evidence before excluding declarations and scales authored declarations", () => {
@@ -187,6 +239,42 @@ describe("code-review Step 3 partition and scale contract", () => {
 		expect(step2).not.toContain("`git diff {range} --stat` (change scale)");
 		expect(step2).toContain(
 			"`git diff {range} --stat` (change overview; not the scale input)",
+		);
+	});
+});
+
+describe("chunk-reviewer prompt scope and section order contract", () => {
+	test("keeps the review sections ordered and binds placeholders to the chunk reviewable list", () => {
+		const headings = [
+			"## Review Scope",
+			"## What Was Implemented",
+			"## Requirements/Plan",
+			"## Project Context",
+			"## Non-Goals",
+			"## Diff Command",
+		];
+		let previous = -1;
+
+		for (const heading of headings) {
+			const position = chunkReviewerPrompt.indexOf(heading);
+			expect(position).toBeGreaterThan(previous);
+			previous = position;
+		}
+
+		expect(chunkReviewerPrompt).toContain(
+			"{FILE_LIST} is the chunk's post-integrity reviewable file list, not the complete changed-file manifest",
+		);
+		expect(chunkReviewerPrompt).toContain(
+			"The complete changed-file manifest and derived-artifact Out of Scope list are not finder scope",
+		);
+		expect(chunkReviewerPrompt).toContain(
+			"This command was constructed from this chunk's reviewable files only",
+		);
+		expect(chunkReviewerPrompt).toContain(
+			"Step 3 reviewableFileList (current chunk only; not the complete changed-file manifest)",
+		);
+		expect(chunkReviewerPrompt).toContain(
+			"Step 3 — constructed from range + current chunk's reviewable file list",
 		);
 	});
 });
