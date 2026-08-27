@@ -1573,6 +1573,26 @@ classDiagram
 		expect(item?.pass).toBe(true);
 	});
 
+	test("책임 행이 핵심 멤버 없음 문구를 포함해도 실제 핵심 멤버 필드가 아니면 R21이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+
+<div class="arch-entity" data-change="mod">
+<p><strong>이름</strong> <code>ExternalUser</code></p>
+<p><strong>책임</strong> 외부 인증 시스템이 소유하므로 핵심 멤버 없음 — 이 행은 책임 설명이다</p>
+<p><strong>변경점</strong> 외부 사용자 참조 방식을 변경한다</p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("핵심 멤버");
+	});
+
 	test("ae-members 행의 라벨이 다르고 핵심 멤버가 별도 산문이면 R21이 실패한다", () => {
 		const doc = withBackground(
 			ARCH_OK.replace(

@@ -864,7 +864,7 @@ const COMPONENT_CARD_MARKERS = ["패키지", "책임", "인터페이스", "변�
 
 /** A field row has the label as the first strong child of a paragraph. */
 const ARCH_ENTITY_FIELD_ROW =
-	/<p\b[^>]*>\s*<strong\b[^>]*>\s*([^<]*?)\s*<\/strong>\s*([\s\S]*?)<\/p\s*>/gi;
+	/(<p\b[^>]*>)\s*<strong\b[^>]*>\s*([^<]*?)\s*<\/strong>\s*([\s\S]*?)<\/p\s*>/gi;
 
 /** Whether an arch-entity card has a non-empty, independently structured field row. */
 function hasArchEntityField(body: string, label: string): boolean {
@@ -872,8 +872,8 @@ function hasArchEntityField(body: string, label: string): boolean {
 	ARCH_ENTITY_FIELD_ROW.lastIndex = 0;
 	let row: RegExpExecArray | null = ARCH_ENTITY_FIELD_ROW.exec(withoutComments);
 	while (row !== null) {
-		const rowLabel = (row[1] ?? "").trim();
-		const value = (row[2] ?? "")
+		const rowLabel = (row[2] ?? "").trim();
+		const value = (row[3] ?? "")
 			.replace(/<[^>]*>/g, " ")
 			.replace(/&(?:nbsp|#160|#xA0);/gi, " ")
 			.trim();
@@ -1005,27 +1005,34 @@ function checkR21(text: string): CheckItem {
 			"객체 다이어그램의 클래스 박스가 비어 있음 — 각 객체의 멤버 변수와 메소드(메시지)를 채운다",
 		);
 	const hasStructuredCoreMemberRow = (body: string): boolean => {
-		const rowPattern = /<p\b[^>]*\sclass\s*=\s*(["'])([^"']*)\1[^>]*>([\s\S]*?)<\/p\s*>/gi;
-		let row: RegExpExecArray | null = rowPattern.exec(body);
+		const withoutComments = body.replace(/<!--[\s\S]*?(?:-->|$)/g, "");
+		ARCH_ENTITY_FIELD_ROW.lastIndex = 0;
+		let row: RegExpExecArray | null = ARCH_ENTITY_FIELD_ROW.exec(withoutComments);
 		while (row !== null) {
-			const classes = row[2]?.split(/\s+/) ?? [];
+			const classes =
+				row[1]?.match(/\sclass\s*=\s*(["'])([^"']*)\1/i)?.[2]?.split(/\s+/) ?? [];
 			if (
 				classes.includes("ae-members") &&
-				(row[3] ?? "").includes("핵심 멤버") &&
+				(row[2] ?? "").trim() === "핵심 멤버" &&
 				/<code\b[^>]*>\s*[^<\s][^<]*<\/code\s*>/i.test(row[3] ?? "")
 			)
 				return true;
-			row = rowPattern.exec(body);
+			row = ARCH_ENTITY_FIELD_ROW.exec(withoutComments);
 		}
 		return false;
 	};
 	const hasNoMembersReason = (body: string): boolean => {
-		const rowPattern = /<p\b[^>]*>([\s\S]*?)<\/p\s*>/gi;
-		let row: RegExpExecArray | null = rowPattern.exec(body);
+		const withoutComments = body.replace(/<!--[\s\S]*?(?:-->|$)/g, "");
+		ARCH_ENTITY_FIELD_ROW.lastIndex = 0;
+		let row: RegExpExecArray | null = ARCH_ENTITY_FIELD_ROW.exec(withoutComments);
 		while (row !== null) {
-			const rowText = (row[1] ?? "").replace(/<[^>]*>/g, " ");
-			if (/핵심 멤버 없음\s*—\s*\S/.test(rowText)) return true;
-			row = rowPattern.exec(body);
+			const rowLabel = (row[2] ?? "").trim();
+			const rowText = (row[3] ?? "")
+				.replace(/<[^>]*>/g, " ")
+				.replace(/&(?:nbsp|#160|#xA0);/gi, " ")
+				.trim();
+			if (rowLabel === "핵심 멤버 없음" && /^—\s*\S/.test(rowText)) return true;
+			row = ARCH_ENTITY_FIELD_ROW.exec(withoutComments);
 		}
 		return false;
 	};
