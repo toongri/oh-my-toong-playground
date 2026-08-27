@@ -28,6 +28,8 @@ Diagrams are organized by lens (the altitude or concern each diagram addresses).
 
 **Existence vs content source (general rule for all lenses).** Separate a lens's *existence* from its *content source*. Existence is per-lens: each lens's diagram is REQUIRED when its own trigger FACT (the table above) holds, and nothing else. Content source is the SAME for every triggered lens: the diagram is sourced from content decided in `plan.md` — whether that content is recorded as a structural D-item OR as decided plan prose. A triggered lens therefore never gets skipped merely because the plan carries no structural D-item; it sources the decided edges / relationships from the plan prose instead. (The no-invention bound still holds: the diagram cannot draw an edge the plan never decided, and cannot be vaguer than the plan it visualizes.)
 
+**Per-system evaluation (boundary-complete coverage).** A lens's trigger FACT is evaluated **per system** — once for each vertical system the System topology lens draws (e.g. a client app AND a backend service), never once globally for the whole plan. When the FACT holds in more than one system, the lens covers EVERY system where it holds — one diagram spanning the systems, or one diagram per system; both are valid, silence on a triggered system is not. A lens rendered for only one side while `plan.md` also decides matching content on another side is an INCOMPLETE lens, the same defect class as a skipped lens: a server-only service/repo `classDiagram` when the plan also decides the client's repository/usecase/mapping structure; a server-only ingest branching `flowchart` when the plan also decides client-side branching (retry, chunking, partial-failure resend, permission-derivation); a server-only entity `stateDiagram-v2` when the plan also decides a client-held lifecycle (connection/permission/sync-anchor states). Each system is drawn in its **own decided architecture vocabulary** — whatever layering that side's plan content uses (presentation/domain/data layers, feature slices, router/service/repo) — never by forcing one side's vocabulary onto the other, and never skipped because its layering differs from the side already drawn.
+
 System topology applies that general rule, with two specifics preserved: its existence trigger is ">= 2 components" (and `review-pipeline.md` gates its existence on that same fact — never change this trigger); and its richest form, the decision-log-derived ownership TABLE plus its flow mermaid, is still gated on structural enumeration (Complex/Architecture). So when the plan has >= 2 components but carries NO structural enumeration (e.g. a Scoped plan), the System topology diagram still EXISTS, drawn from the plan-decided component interactions / topology, while the decision-log ownership table is omitted; when there IS structural enumeration, the richer ownership-table + flow mermaid is drawn. This is a content-source distinction, not an existence escape: the diagram is never skipped once >= 2 components holds.
 
 **Two-axis rendering.** When the plan carries a `### Boundary Map` (structural enumeration present), the System topology diagram visualizes both boundary axes that block already decides: group vertical domains as distinct nodes/subgraphs, keep the horizontal use-case layer visibly separate from the domains it orchestrates, and draw every dependency arrow in its decided direction so a reader can check unidirectionality (a domain→domain back-reference or a cycle shows up as an arrow, not as prose). This is re-visualization of the Boundary Map, not new authorship — the axes, parts, and directions all come from `plan.md`; the no-invention bound (Fidelity Bounds) still holds. Vocabulary follows the `architecture-boundaries` rule (vertical domain / horizontal use-case), not any one methodology.
@@ -47,6 +49,13 @@ This table is an audit ledger for lens coverage: a mechanical check catches
 a lying `drawn` row (fence count mismatch), while a wrong `trigger FALSE`
 reason is caught by human review. A blank Status cell is a defect, not an
 acceptable omission.
+
+When the System topology lens draws >= 2 systems, each `drawn` row's Trigger
+FACT cell names every system where that lens's FACT holds (per-system
+evaluation above), and the lens's diagram set must render each named system.
+A `drawn` row whose FACT holds in a system the diagrams never render is a
+lying row — the same defect class as a fence-count mismatch, caught by the
+per-system audit item in the post-draw checklist.
 
 Note: this coverage table follows the lens composition defined by this guide's
 taxonomy: it includes `classDiagram` and excludes `erDiagram`.
@@ -154,5 +163,6 @@ The ledger is a working step. It is not written into the presentation file.
 - [ ] Every decided ownership member within the diagram's scope appears as a node
 - [ ] No signature or field in the diagram is absent from `plan.md`
 - [ ] Every claim in the Interpretation corresponds to an edge or node actually drawn — the Interpretation describes the diagram, not the plan
+- [ ] Per-system coverage: for each system where this lens's trigger FACT holds (client and server alike), the lens's diagram set renders that system's decided content — a one-sided render of a two-sided FACT is a failed item
 
 Fix any failed item before injection. If an item cannot be fixed without making a decision `plan.md` never made, that is a plan defect — STOP per Fidelity Bounds and revise the plan instead.

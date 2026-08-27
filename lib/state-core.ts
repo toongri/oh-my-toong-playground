@@ -45,8 +45,9 @@ import {
 	openSync,
 	writeSync,
 	closeSync,
+	statSync,
 } from "fs";
-import { join } from "path";
+import { join, dirname, basename } from "path";
 // lib-internal imports must be relative — deployed copies under .claude/lib/ have no @lib alias
 // (the sync alias-rewriter skips lib/** files). Relative imports let `make sync`'s dep collector
 // follow the path and deploy omt-dir alongside this module.
@@ -1068,4 +1069,40 @@ export function touchSessionStates(sessionId: string): void {
 			continue; // any other per-file error must not abort the sweep
 		}
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Prometheus Stage A presentation gate (shared predicate)
+// ---------------------------------------------------------------------------
+
+export type StageAPresentationStatus = "ok" | "plan-missing" | "presentation-missing" | "stale";
+
+/** The presentation stem is pinned to the plan stem: `<plan dir>/presentation/<plan basename>`. */
+export function stageAPresentationPath(planPath: string): string {
+	return join(dirname(planPath), "presentation", basename(planPath));
+}
+
+/**
+ * Single source of truth for "does this plan have a fresh Stage A render?" —
+ * consumed by BOTH enforcement points: prometheus-state.ts refuses to record
+ * phase S6+ on a non-ok status (F7), and the persistent-mode Stop hook refuses
+ * <prometheus-done/> on presentation-missing/stale when a plan was written.
+ * Two callers, one predicate: divergence here would let a plan pass one gate
+ * and fail the other.
+ */
+export function stageAPresentationStatus(planPath: string): StageAPresentationStatus {
+	const mtimeOf = (p: string): number | null => {
+		try {
+			return statSync(p).mtimeMs;
+		} catch {
+			return null;
+		}
+	};
+	const planMtime = mtimeOf(planPath);
+	if (planMtime === null) return "plan-missing";
+	const presentationPath = stageAPresentationPath(planPath);
+	if (!existsSync(presentationPath)) return "presentation-missing";
+	const presentationMtime = mtimeOf(presentationPath);
+	if (presentationMtime !== null && presentationMtime < planMtime) return "stale";
+	return "ok";
 }

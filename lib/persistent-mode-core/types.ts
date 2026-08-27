@@ -80,6 +80,16 @@ export interface PrometheusState {
 	/** Heartbeat timestamps (managed StateType) — read by the isStateLive TTL check. */
 	last_touched_at?: string;
 	started_at?: string;
+	/**
+	 * Written by prometheus-state.ts (set at S2, preserved by later writes). The
+	 * Stop-hook's done-token Stage A gate reads plan_path + steps.plan.done to
+	 * decide whether <prometheus-done/> may tear the session down without a fresh
+	 * presentation render. Absent on legacy/foreign states — fail open.
+	 */
+	plan_path?: string;
+	steps?: {
+		plan?: { done?: boolean };
+	};
 }
 
 /**

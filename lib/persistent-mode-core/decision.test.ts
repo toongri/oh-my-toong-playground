@@ -1207,6 +1207,128 @@ describe("makeDecision", () => {
 		});
 	});
 
+	describe("Priority 1.5: Prometheus done-token Stage A gate", () => {
+		// Production baseline: a session finished its plan, skipped every S5+ state
+		// write (so the F7 phase gate in prometheus-state.ts never ran), presented a
+		// terminal summary + Stage C question directly, and emitted <prometheus-done/>
+		// on "Finish" — teardown succeeded with no presentation ever rendered. The
+		// done token is the one signal the model cannot skip, so the gate lives here.
+		const planDirFor = () => join(omtDir, "plans");
+		const planPathFor = () => join(planDirFor(), "my-plan.md");
+		const presentationPathFor = () => join(planDirFor(), "presentation", "my-plan.md");
+
+		const writePlanOnDisk = async () => {
+			await mkdir(planDirFor(), { recursive: true });
+			await writeFile(planPathFor(), "# plan\n");
+		};
+
+		const writeStateWithPlanDone = async () => {
+			await writeFile(
+				join(omtDir, "prometheus-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					sessionId: "test-session",
+					started_at: new Date().toISOString(),
+					last_touched_at: new Date().toISOString(),
+					plan_path: planPathFor(),
+					steps: { plan: { done: true } },
+				}),
+			);
+		};
+
+		it("refuses <prometheus-done/> while the written plan has no Stage A presentation", async () => {
+			await writePlanOnDisk();
+			await writeStateWithPlanDone();
+
+			const context = createContext({ lastAssistantMessage: "Plan complete. <prometheus-done/>" });
+
+			const result = makeDecision(context);
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("Stage A");
+			expect(result.reason).toContain(presentationPathFor());
+			// State survives — the session is still in-flight until the render lands.
+			expect(fs.existsSync(join(omtDir, "prometheus-state-test-session.json"))).toBe(true);
+		});
+
+		it("refuses <prometheus-done/> when the presentation predates the plan (stale render)", async () => {
+			await writePlanOnDisk();
+			await mkdir(join(planDirFor(), "presentation"), { recursive: true });
+			await writeFile(presentationPathFor(), "# presentation\n");
+			// presentation rendered at T-60s, plan revised now
+			const past = (Date.now() - 60_000) / 1000;
+			fs.utimesSync(presentationPathFor(), past, past);
+			await writeStateWithPlanDone();
+
+			const context = createContext({ lastAssistantMessage: "Done. <prometheus-done/>" });
+
+			const result = makeDecision(context);
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("Stage A");
+			expect(fs.existsSync(join(omtDir, "prometheus-state-test-session.json"))).toBe(true);
+		});
+
+		it("honors <prometheus-done/> once a fresh presentation exists", async () => {
+			await writePlanOnDisk();
+			await mkdir(join(planDirFor(), "presentation"), { recursive: true });
+			await writeFile(presentationPathFor(), "# presentation\n");
+			await writeStateWithPlanDone();
+
+			const context = createContext({ lastAssistantMessage: "Done. <prometheus-done/>" });
+
+			const result = makeDecision(context);
+
+			expect(result.decision).not.toBe("block");
+			expect(fs.existsSync(join(omtDir, "prometheus-state-test-session.json"))).toBe(false);
+		});
+
+		it("honors <prometheus-done/> on a pre-plan abort (plan step not done)", async () => {
+			// Aborting mid-interview: no plan was written, nothing to render — the gate
+			// must not wedge an abandonment.
+			await writeFile(
+				join(omtDir, "prometheus-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					sessionId: "test-session",
+					started_at: new Date().toISOString(),
+					last_touched_at: new Date().toISOString(),
+				}),
+			);
+
+			const context = createContext({ lastAssistantMessage: "Aborted. <prometheus-done/>" });
+
+			const result = makeDecision(context);
+
+			expect(result.decision).not.toBe("block");
+			expect(fs.existsSync(join(omtDir, "prometheus-state-test-session.json"))).toBe(false);
+		});
+
+		it("fails open when plan_path points at a missing file (unverifiable)", async () => {
+			await writeStateWithPlanDone(); // state claims a plan, but nothing on disk
+
+			const context = createContext({ lastAssistantMessage: "Done. <prometheus-done/>" });
+
+			const result = makeDecision(context);
+
+			expect(result.decision).not.toBe("block");
+			expect(fs.existsSync(join(omtDir, "prometheus-state-test-session.json"))).toBe(false);
+		});
+
+		it("escapes at MAX_BLOCK_COUNT — a wedged session can still walk away", async () => {
+			await writePlanOnDisk();
+			await writeStateWithPlanDone();
+			await writeFile(join(stateDir, "block-count-prometheus-test-session"), "5");
+
+			const context = createContext({ lastAssistantMessage: "Done. <prometheus-done/>" });
+
+			const result = makeDecision(context);
+
+			expect(result.decision).not.toBe("block");
+			expect(fs.existsSync(join(omtDir, "prometheus-state-test-session.json"))).toBe(false);
+		});
+	});
+
 	// -------------------------------------------------------------------------
 	// Priority 1.45: Ultragoal autonomous pursuit loop
 	// -------------------------------------------------------------------------
