@@ -34,10 +34,19 @@ interface Persisted extends ExplainDiffState {
 	structural_ok: Step[];
 	/** Render proof contract used by the persisted structural render verdict. */
 	render_proof_contract_version: number;
+	/** Exact artifact paths bound by the successful render submission. */
+	render_proof: RenderProofBinding | null;
 	diff_hunks: DiffHunk[];
 	started_at: string;
 	last_touched_at: string;
 	derived: ReturnType<typeof computeDerived>;
+}
+
+interface RenderProofBinding {
+	doc_path: string;
+	html_path: string;
+	writing_report_path: string;
+	checklist_path: string;
 }
 
 const CURRENT_RENDER_PROOF_CONTRACT_VERSION = 1;
@@ -46,6 +55,33 @@ type FreshRenderer = (docPath: string) => string;
 
 function statePath(sessionId: string): string {
 	return `${getOmtDir()}/${STATE_PREFIX["explain-diff"]}${sessionId}.json`;
+}
+
+function normalizeRenderProofBinding(raw: unknown): RenderProofBinding | null {
+	if (raw === null || typeof raw !== "object") return null;
+	const record: Record<string, unknown> = {};
+	Object.assign(record, raw);
+	const docPath = record["doc_path"];
+	const htmlPath = record["html_path"];
+	const writingReportPath = record["writing_report_path"];
+	const checklistPath = record["checklist_path"];
+	if (
+		typeof docPath !== "string" ||
+		docPath.length === 0 ||
+		typeof htmlPath !== "string" ||
+		htmlPath.length === 0 ||
+		typeof writingReportPath !== "string" ||
+		writingReportPath.length === 0 ||
+		typeof checklistPath !== "string" ||
+		checklistPath.length === 0
+	)
+		return null;
+	return {
+		doc_path: docPath,
+		html_path: htmlPath,
+		writing_report_path: writingReportPath,
+		checklist_path: checklistPath,
+	};
 }
 
 // mkdir is atomic, which is the property this needs: two CLI processes racing on
@@ -84,14 +120,17 @@ function read(sessionId: string): Persisted | null {
 		const r: Record<string, unknown> = {};
 		Object.assign(r, parsed);
 		const structuralRaw = r["structural_ok"];
+		const renderProof = normalizeRenderProofBinding(r["render_proof"]);
 		const hasCurrentRenderProofContract =
-			r["render_proof_contract_version"] === CURRENT_RENDER_PROOF_CONTRACT_VERSION;
+			r["render_proof_contract_version"] === CURRENT_RENDER_PROOF_CONTRACT_VERSION &&
+			renderProof !== null;
 		const state: Persisted = {
 			...base,
 			structural_ok: Array.isArray(structuralRaw)
 				? structuralRaw.flatMap((x) => STEP_ORDER.find((s) => s === x) ?? [])
 				: [],
 			render_proof_contract_version: CURRENT_RENDER_PROOF_CONTRACT_VERSION,
+			render_proof: renderProof,
 			diff_hunks: normalizeStoredDiffHunks(r["diff_hunks"]),
 			range: typeof r["range"] === "string" ? r["range"] : "",
 			slug: typeof r["slug"] === "string" ? r["slug"] : "",
@@ -102,12 +141,14 @@ function read(sessionId: string): Persisted | null {
 			derived: computeDerived(base),
 		};
 		const hasRenderProof =
+			state.render_proof !== null ||
 			state.structural_ok.includes("render") ||
 			state.passed.includes("render") ||
 			state.step === "quiz";
 		if (!hasCurrentRenderProofContract && hasRenderProof) {
 			state.structural_ok = state.structural_ok.filter((step) => step !== "render");
 			state.passed = state.passed.filter((step) => step !== "render");
+			state.render_proof = null;
 			if (state.step === "quiz") state.step = "render";
 			state.last_failure = {
 				step: "render",
@@ -365,6 +406,7 @@ function start(sessionId: string, range: string, slug: string): void {
 		passed: [],
 		structural_ok: [],
 		render_proof_contract_version: CURRENT_RENDER_PROOF_CONTRACT_VERSION,
+		render_proof: null,
 		concepts: [],
 		bank: [],
 		commit_hashes: enumerateCommits(range),
@@ -651,13 +693,23 @@ function submitStep(
 		if (!result.pass) {
 			s.last_failure = { step, items: result.failedItems };
 			s.structural_ok = s.structural_ok.filter((x) => x !== step);
+			if (step === "render") s.render_proof = null;
 			write(sessionId, s);
 			process.stderr.write(`${result.failedItems.join("\n")}\n`);
 			return 1;
 		}
 		s.last_failure = null;
 		if (step === "render") {
+			if (htmlPath === undefined || writingReport === undefined || checklistPath === undefined) {
+				throw new Error("render 제출이 성공했지만 증거 경로가 없습니다.");
+			}
 			s.render_proof_contract_version = CURRENT_RENDER_PROOF_CONTRACT_VERSION;
+			s.render_proof = {
+				doc_path: docPath,
+				html_path: htmlPath,
+				writing_report_path: writingReport,
+				checklist_path: checklistPath,
+			};
 		}
 		if (!s.structural_ok.includes(step)) s.structural_ok.push(step);
 		write(sessionId, s);
@@ -686,8 +738,31 @@ function passStep(sessionId: string, step: Step, docPath: string, judge: JudgeIt
 		if (!s.structural_ok.includes(step)) {
 			throw new Error(`${step} 구조 검사를 먼저 통과시키세요 (\`submit-step\`).`);
 		}
-		const text = readFileSync(docPath, "utf8");
+		let text = "";
 		const bad: string[] = [];
+		if (step === "render") {
+			const proof = s.render_proof;
+			if (proof === null) {
+				throw new Error("render 증거 바인딩이 없습니다. 다시 submit-step 하세요.");
+			}
+			if (docPath !== proof.doc_path) {
+				bad.push(`render pass-step의 docPath가 제출 시 저장한 경로와 다릅니다: ${docPath}`);
+			}
+			const renderResult = checkRenderOutput(
+				proof.html_path,
+				proof.doc_path,
+				proof.writing_report_path,
+				proof.checklist_path,
+			);
+			bad.push(...renderResult.failedItems);
+			try {
+				text = readFileSync(proof.doc_path, "utf8");
+			} catch {
+				// checkRenderOutput already records the missing/unreadable document.
+			}
+		} else {
+			text = readFileSync(docPath, "utf8");
+		}
 		// A required id missing from the payload entirely is refused before the
 		// per-item loop runs — an empty (or off-topic) judge array must not
 		// vacuously satisfy a step whose rubric depends on the judge's review.
