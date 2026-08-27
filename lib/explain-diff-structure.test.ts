@@ -207,6 +207,59 @@ describe("evidence 스텝 — R1 등재형", () => {
 		expect(item?.detail).toContain("데이터 행");
 	});
 
+	for (const [index, entity] of ["&nbsp;", "&#160;", "&#xA0;"].entries()) {
+		test(`데이터 행의 ${index + 1}번째 셀이 ${entity}뿐이면 실패한다`, () => {
+			const cells = ["코드", "`lib/state-lock.ts`", "열람", "변경된 구현과 호출 경로를 확인"];
+			cells[index] = entity;
+			const doc = evidenceOnlyDoc("lib/state-lock.ts").replace(
+				"| 코드 | `lib/state-lock.ts` | 열람 | 변경된 구현과 호출 경로를 확인 |",
+				`| ${cells.join(" | ")} |`,
+			);
+			const r = checkStructure(doc, {
+				signalFiles: ["lib/state-lock.ts"],
+				step: "evidence",
+			});
+			const item = r.items.find((i) => i.id === "R1");
+			expect(item?.pass).toBe(false);
+			expect(item?.detail).toContain("데이터 행");
+		});
+	}
+
+	test("정상적인 네 열과 인라인 코드 경로가 있는 데이터 행은 통과한다", () => {
+		const r = checkStructure(evidenceOnlyDoc("lib/state-lock.ts"), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(true);
+	});
+
+	test("raw HTML pre 블록 안에만 있는 원천 표는 실패한다", () => {
+		const doc = `# 설명
+
+## Evidence
+
+| 파일 | 분류 |
+|---|---|
+| \`lib/state-lock.ts\` | signal |
+
+<pre>
+### 원천
+
+| 종류 | 식별자/경로 | 확보 | 내용 요약 |
+|---|---|---|---|
+| 코드 | \`lib/state-lock.ts\` | 열람 | raw HTML example |
+</pre>
+`;
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("원천");
+	});
+
 	test("들여쓴 코드 블록 안의 원천 표만 있으면 실패한다", () => {
 		const doc = `# 설명
 

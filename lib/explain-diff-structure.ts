@@ -115,6 +115,9 @@ const PROVENANCE =
 /** Fenced code, matched so it can be stripped or length-preserving masked. */
 const FENCE_RE = /^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^(?:`{3,}|~{3,})[^\n]*$/gm;
 
+/** Raw HTML preformatted blocks, which are not visible Markdown content. */
+const RAW_PRE_RE = /<pre\b[^>]*>[\s\S]*?(?:<\/pre\s*>|$)/gi;
+
 /** Fenced code with its info string and body captured, so a mermaid-only or
  *  empty fence can be told apart from an actual core-logic fence. */
 const CODE_FENCE = /^(`{3,}|~{3,})([^\n]*)\n([\s\S]*?)^(?:`{3,}|~{3,})[^\n]*$/gm;
@@ -169,7 +172,8 @@ function maskNonVisibleMarkdown(text: string): string {
 		/<!--[\s\S]*?(?:-->|$)/g,
 		(m) => m.replace(/[^\n]/g, " "),
 	);
-	return withoutComments.replace(/^(?: {4}|\t)[^\r\n]*(?:\r?\n|$)/gm, (m) =>
+	const withoutRawPre = withoutComments.replace(RAW_PRE_RE, (m) => m.replace(/[^\n]/g, " "));
+	return withoutRawPre.replace(/^(?: {4}|\t)[^\r\n]*(?:\r?\n|$)/gm, (m) =>
 		m.replace(/[^\n]/g, " "),
 	);
 }
@@ -246,7 +250,19 @@ function groupSlices(text: string): Array<{ title: string; body: string }> {
 
 /** The source table required inside `## Evidence` > `### 원천`. */
 const EVIDENCE_SOURCE_TABLE =
-	/^ {0,3}\|[ \t]*종류[ \t]*\|[ \t]*식별자\/경로[ \t]*\|[ \t]*확보[ \t]*\|[ \t]*내용 요약[ \t]*\|\r?\n {0,3}\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|\r?\n(?! {0,3}\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*(?:\r?\n|$))(?= {0,3}\|[^\r\n]*[^\s|][^\r\n]*\|[ \t]*(?:\r?\n|$)) {0,3}\|[^|\r\n]*\|[^|\r\n]*\|[^|\r\n]*\|[^|\r\n]*\|[ \t]*(?:\r?\n|$)/m;
+	/^ {0,3}\|[ \t]*종류[ \t]*\|[ \t]*식별자\/경로[ \t]*\|[ \t]*확보[ \t]*\|[ \t]*내용 요약[ \t]*\|\r?\n {0,3}\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|[ \t]*:?-+:?[ \t]*\|\r?\n/m;
+
+/** One four-cell data row following the source table header and separator. */
+const EVIDENCE_SOURCE_DATA_ROW =
+	/^ {0,3}\|([^|\r\n]*)\|([^|\r\n]*)\|([^|\r\n]*)\|([^|\r\n]*)\|[ \t]*(?:\r?\n|$)/gm;
+
+/** Returns whether a table cell contains visible semantic text. */
+function hasVisibleCellText(cell: string): boolean {
+	return cell
+		.replace(/<[^>]*>/g, "")
+		.replace(/&(?:nbsp|#160|#xA0);/gi, "")
+		.trim() !== "";
+}
 
 /** Returns the missing structure in the Evidence source sweep, if any. */
 function checkEvidenceSourceStructure(text: string): string {
@@ -255,7 +271,21 @@ function checkEvidenceSourceStructure(text: string): string {
 
 	const source = levelSlice(evidence, "원천");
 	if (source === null) return "## Evidence 안에 ### 원천 heading이 없습니다";
-	if (!EVIDENCE_SOURCE_TABLE.test(source)) {
+	const table = EVIDENCE_SOURCE_TABLE.exec(source);
+	let hasDataRow = false;
+	if (table !== null) {
+		EVIDENCE_SOURCE_DATA_ROW.lastIndex = table.index + table[0].length;
+		let row: RegExpExecArray | null = EVIDENCE_SOURCE_DATA_ROW.exec(source);
+		while (row !== null) {
+			const cells = row.slice(1, 5);
+			if (cells.length === 4 && cells.every((cell) => hasVisibleCellText(cell))) {
+				hasDataRow = true;
+				break;
+			}
+			row = EVIDENCE_SOURCE_DATA_ROW.exec(source);
+		}
+	}
+	if (table === null || !hasDataRow) {
 		return "원천 표가 없습니다 — 정확한 4열 헤더(종류 | 식별자/경로 | 확보 | 내용 요약), 구분선, 최소 1개 데이터 행이 필요합니다";
 	}
 	return "";
