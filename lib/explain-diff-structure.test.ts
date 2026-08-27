@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 import { checkStructure, type DiffHunk } from "./explain-diff-structure";
 
@@ -40,9 +42,22 @@ const BACKGROUND = `## Background
 내용
 `;
 
-/** Evidence 절만 있는 문서 — signal 경로가 표에 등장할 뿐 Change Group은 없다. */
+/** Evidence 절만 있는 문서 — signal 분류표와 원천 스윕 표만 있고 Change Group은 없다. */
 function evidenceOnlyDoc(signalPath: string): string {
-	return `# 설명\n\n## Evidence\n\n| 파일 | 분류 |\n|---|---|\n| \`${signalPath}\` | signal |\n`;
+	return `# 설명
+
+## Evidence
+
+| 파일 | 분류 |
+|---|---|
+| \`${signalPath}\` | signal |
+
+### 원천
+
+| 종류 | 식별자/경로 | 확보 | 내용 요약 |
+|---|---|---|---|
+| 코드 | \`${signalPath}\` | 열람 | 변경된 구현과 호출 경로를 확인 |
+`;
 }
 
 function withBackground(body: string): string {
@@ -57,6 +72,216 @@ describe("evidence 스텝 — R1 등재형", () => {
 		});
 		expect(r.pass).toBe(true);
 		expect(r.items.find((i) => i.id === "R1")?.pass).toBe(true);
+	});
+
+	test("signal 파일은 있으나 Evidence 안에 원천 heading이 없으면 실패한다", () => {
+		const doc = evidenceOnlyDoc("lib/state-lock.ts").replace(/\n### 원천[\s\S]*$/, "");
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("원천");
+	});
+
+	test("원천 heading만 있고 표가 없으면 실패한다", () => {
+		const doc = evidenceOnlyDoc("lib/state-lock.ts").replace(
+			/\n### 원천[\s\S]*$/,
+			"\n### 원천\n",
+		);
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("원천 표");
+	});
+
+	test("원천 표의 열이 정확히 네 개가 아니면 실패한다", () => {
+		const doc = evidenceOnlyDoc("lib/state-lock.ts").replace(
+			"| 종류 | 식별자/경로 | 확보 | 내용 요약 |",
+			"| 종류 | 식별자/경로 | 확보 |",
+		);
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("종류 | 식별자/경로 | 확보 | 내용 요약");
+	});
+
+	test("원천 표의 구분선이 네 열이 아니면 실패한다", () => {
+		const doc = evidenceOnlyDoc("lib/state-lock.ts").replace(
+			"|---|---|---|---|\n| 코드",
+			"|---|---|---|\n| 코드",
+		);
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("구분선");
+	});
+
+	test("원천 표에 데이터 행이 없으면 실패한다", () => {
+		const doc = evidenceOnlyDoc("lib/state-lock.ts").replace(
+			"| 코드 | `lib/state-lock.ts` | 열람 | 변경된 구현과 호출 경로를 확인 |\n",
+			"",
+		);
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("데이터 행");
+	});
+
+	test("fenced code 안의 원천 heading과 표만 있으면 실패한다", () => {
+		const doc = `# 설명
+
+## Evidence
+
+| 파일 | 분류 |
+|---|---|
+| \`lib/state-lock.ts\` | signal |
+
+\`\`\`markdown
+### 원천
+
+| 종류 | 식별자/경로 | 확보 | 내용 요약 |
+|---|---|---|---|
+| 코드 | \`lib/state-lock.ts\` | 열람 | fenced example |
+\`\`\`
+`;
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("원천");
+	});
+
+	test("HTML 주석 안의 원천 heading과 표만 있으면 실패한다", () => {
+		const doc = `# 설명
+
+## Evidence
+
+| 파일 | 분류 |
+|---|---|
+| \`lib/state-lock.ts\` | signal |
+
+<!--
+### 원천
+
+| 종류 | 식별자/경로 | 확보 | 내용 요약 |
+|---|---|---|---|
+| 코드 | \`lib/state-lock.ts\` | 열람 | hidden comment example |
+-->
+`;
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("원천");
+	});
+
+	test("필수 셀이 모두 공백인 데이터 행은 실패한다", () => {
+		const doc = evidenceOnlyDoc("lib/state-lock.ts").replace(
+			"| 코드 | `lib/state-lock.ts` | 열람 | 변경된 구현과 호출 경로를 확인 |",
+			"|   | \t |   | \t |",
+		);
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("데이터 행");
+	});
+
+	for (const [index, entity] of ["&nbsp;", "&#160;", "&#xA0;"].entries()) {
+		test(`데이터 행의 ${index + 1}번째 셀이 ${entity}뿐이면 실패한다`, () => {
+			const cells = ["코드", "`lib/state-lock.ts`", "열람", "변경된 구현과 호출 경로를 확인"];
+			cells[index] = entity;
+			const doc = evidenceOnlyDoc("lib/state-lock.ts").replace(
+				"| 코드 | `lib/state-lock.ts` | 열람 | 변경된 구현과 호출 경로를 확인 |",
+				`| ${cells.join(" | ")} |`,
+			);
+			const r = checkStructure(doc, {
+				signalFiles: ["lib/state-lock.ts"],
+				step: "evidence",
+			});
+			const item = r.items.find((i) => i.id === "R1");
+			expect(item?.pass).toBe(false);
+			expect(item?.detail).toContain("데이터 행");
+		});
+	}
+
+	test("정상적인 네 열과 인라인 코드 경로가 있는 데이터 행은 통과한다", () => {
+		const r = checkStructure(evidenceOnlyDoc("lib/state-lock.ts"), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(true);
+	});
+
+	test("raw HTML pre 블록 안에만 있는 원천 표는 실패한다", () => {
+		const doc = `# 설명
+
+## Evidence
+
+| 파일 | 분류 |
+|---|---|
+| \`lib/state-lock.ts\` | signal |
+
+<pre>
+### 원천
+
+| 종류 | 식별자/경로 | 확보 | 내용 요약 |
+|---|---|---|---|
+| 코드 | \`lib/state-lock.ts\` | 열람 | raw HTML example |
+</pre>
+`;
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("원천");
+	});
+
+	test("들여쓴 코드 블록 안의 원천 표만 있으면 실패한다", () => {
+		const doc = `# 설명
+
+## Evidence
+
+| 파일 | 분류 |
+|---|---|
+| \`lib/state-lock.ts\` | signal |
+
+### 원천
+
+    | 종류 | 식별자/경로 | 확보 | 내용 요약 |
+    |---|---|---|---|
+    | 코드 | \`lib/state-lock.ts\` | 열람 | indented code example |
+`;
+		const r = checkStructure(doc, {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "evidence",
+		});
+		const item = r.items.find((i) => i.id === "R1");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("원천");
 	});
 
 	test("빠진 파일이 있으면 실패하고 그 경로를 사유에 담는다", () => {
@@ -805,9 +1030,10 @@ flowchart LR
 
 <div class="arch-entity" data-change="new">
 <p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>
-<p><strong>레이어</strong> entities/supplement/api</p>
+<p><strong>패키지</strong> entities/supplement/api</p>
 <p><strong>책임</strong> fail-closed 해소기 공급</p>
 <p><strong>인터페이스</strong> resolveAlias, resolveDisplay</p>
+<p><strong>변경점</strong> 두 카탈로그 query를 묶는 해소기 신설 — 기존에는 카드가 직접 조회했다</p>
 </div>
 
 ### 도메인 레벨
@@ -992,6 +1218,93 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 		expect(item?.pass).toBe(false);
 	});
 
+	test("컴포넌트 카드의 한 행 라벨 충돌은 독립 필드로 인정하지 않는다", () => {
+		const collisionCard = `<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>
+<p><strong>책임</strong> 패키지와 인터페이스 변경점을 설명한다</p>
+</div>`;
+		const doc = withBackground(
+			ARCH_OK.replace(
+				/<div class="arch-entity" data-change="new">\n<p><strong>이름<\/strong> <code>useSupplementCodeResolver<\/code><\/p>[\s\S]*?<\/div>/,
+				collisionCard,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("패키지");
+		expect(item?.detail).toContain("인터페이스");
+		expect(item?.detail).toContain("변경점");
+	});
+
+	test("컴포넌트 카드의 독립된 필드 행은 R18을 통과한다", () => {
+		const item = checkStructure(withBackground(ARCH_OK), {
+			signalFiles: ["a.ts"],
+			step: "architecture",
+		}).items.find((i) => i.id === "R18");
+		expect(item?.pass).toBe(true);
+	});
+
+	for (const [container, hiddenCard] of [
+		[
+			"HTML 주석",
+			`<!--
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>
+<p><strong>패키지</strong> entities/supplement/api</p>
+<p><strong>책임</strong> fail-closed 해소기 공급</p>
+<p><strong>인터페이스</strong> resolveAlias, resolveDisplay</p>
+<p><strong>변경점</strong> 두 카탈로그 query를 묶는 해소기 신설</p>
+</div>
+-->`,
+		],
+		[
+			"들여쓴 코드",
+			`    <div class="arch-entity" data-change="new">
+    <p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>
+    <p><strong>패키지</strong> entities/supplement/api</p>
+    <p><strong>책임</strong> fail-closed 해소기 공급</p>
+    <p><strong>인터페이스</strong> resolveAlias, resolveDisplay</p>
+    <p><strong>변경점</strong> 두 카탈로그 query를 묶는 해소기 신설</p>
+    </div>`,
+		],
+	] as const) {
+		test(`${container} 안의 완전한 컴포넌트 카드도 R18에서 세지 않는다`, () => {
+			const doc = withBackground(
+				ARCH_OK.replace(
+					/<div class="arch-entity" data-change="new">[\s\S]*?<\/div>/,
+					hiddenCard,
+				),
+			);
+			const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+				(i) => i.id === "R18",
+			);
+			expect(item?.pass).toBe(false);
+			expect(item?.detail).toContain("arch-entity 카드");
+		});
+	}
+
+	test("컴포넌트 카드의 산문·인라인 코드·주석 속 라벨은 필드가 아니다", () => {
+		const misleadingCard = `<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>
+<p>산문에 패키지 책임 인터페이스 변경점을 나열한다.</p>
+<p><code>패키지</code> <code>책임</code> <code>인터페이스</code> <code>변경점</code></p>
+<!-- <p><strong>패키지</strong> 주석 속 값</p> -->
+</div>`;
+		const doc = withBackground(
+			ARCH_OK.replace(
+				/<div class="arch-entity" data-change="new">\n<p><strong>이름<\/strong> <code>useSupplementCodeResolver<\/code><\/p>[\s\S]*?<\/div>/,
+				misleadingCard,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("패키지");
+	});
+
 	test("컴포넌트 카드 밖 산문의 data-change는 R18을 통과시키지 않는다", () => {
 		const doc = withBackground(
 			ARCH_OK.replace(
@@ -1008,8 +1321,9 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 	test("완전한 카드가 다른 카드의 누락된 인터페이스를 가리지 못한다", () => {
 		const incompleteCard = `<div class="arch-entity" data-change="mod">
 <p><strong>이름</strong> secondaryNode</p>
-<p><strong>레이어</strong> features/catalog</p>
+<p><strong>패키지</strong> features/catalog</p>
 <p><strong>책임</strong> 보조 경로 연결</p>
+<p><strong>변경점</strong> 보조 경로가 해소기를 경유하도록 변경</p>
 </div>`;
 		const doc = withBackground(
 			ARCH_OK.replace("</div>\n\n### 도메인 레벨", `</div>\n\n${incompleteCard}\n\n### 도메인 레벨`),
@@ -1024,9 +1338,10 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 	test("유효한 카드가 다른 카드의 잘못된 data-change를 가리지 못한다", () => {
 		const invalidCard = `<div class="arch-entity" data-change="changed">
 <p><strong>이름</strong> invalidNode</p>
-<p><strong>레이어</strong> features/catalog</p>
+<p><strong>패키지</strong> features/catalog</p>
 <p><strong>책임</strong> 잘못된 변경 종류를 가진 경로</p>
 <p><strong>인터페이스</strong> resolveInvalid</p>
+<p><strong>변경점</strong> 해소기 경유로 변경</p>
 </div>`;
 		const doc = withBackground(
 			ARCH_OK.replace("</div>\n\n### 도메인 레벨", `</div>\n\n${invalidCard}\n\n### 도메인 레벨`),
@@ -1036,6 +1351,22 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 		);
 		expect(item?.pass).toBe(false);
 		expect(item?.detail).toContain("data-change");
+	});
+
+	// 변경점 슬롯 — 실측(3619 리뷰): 카드가 책임·인터페이스는 말하면서 정작 이 diff로
+	// 무엇이 바뀌었는지는 말하지 않아, 독자가 변경 내용을 알 수 없었다.
+	test("컴포넌트 카드에 변경점 슬롯이 없으면 R18이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"<p><strong>변경점</strong> 두 카탈로그 query를 묶는 해소기 신설 — 기존에는 카드가 직접 조회했다</p>\n",
+				"",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R18",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("변경점");
 	});
 
 	test("컴포넌트 레벨에 arch-entity 카드 라벨이 없으면 R18이 실패한다", () => {
@@ -1126,6 +1457,34 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 		expect(r.pass).toBe(false);
 	});
 
+	test("HTML 주석 안의 waiver-looking line은 R9를 면제하지 않는다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				"<!-- 구조 변화 없음: 주석 속 사유 -->",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R9",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("도메인 레벨");
+	});
+
+	test("전용 marker line이 아닌 산문의 waiver-looking phrase는 R9를 면제하지 않는다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				"이번 변경은 구조 변화 없음: 산문 속 문구일 뿐이다.",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R9",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("도메인 레벨");
+	});
+
 	test("시스템 레벨에 계약 3축 중 하나라도 빠지면 R14가 실패하고 빠진 축을 담는다", () => {
 		const doc = withBackground(ARCH_OK.replace(/\| DB 스키마 \|[^\n]*\n/, ""));
 		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" });
@@ -1211,6 +1570,8 @@ classDiagram
 <div class="arch-entity" data-change="new">
 <p><strong>이름</strong> <code>SupplementCategory</code></p>
 <p><strong>책임</strong> 영양제의 canonical 정체성을 보유하고, 상품 교체와 무관하게 유지된다</p>
+<p class="ae-members"><strong>핵심 멤버</strong> <code>code</code> <code>displayName</code> <code class="chg">isActive()</code></p>
+<p><strong>변경점</strong> canonical 정체성 개념 신설 — 기존에는 판매 상품 키가 정체성을 겸했다</p>
 </div>`,
 			),
 		);
@@ -1218,6 +1579,262 @@ classDiagram
 			(i) => i.id === "R21",
 		);
 		expect(item?.pass).toBe(true);
+	});
+
+	for (const [container, hiddenCard] of [
+		[
+			"HTML 주석",
+			`<!--
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>SupplementCategory</code></p>
+<p><strong>책임</strong> 영양제의 canonical 정체성을 보유한다</p>
+<p class="ae-members"><strong>핵심 멤버</strong> <code>code</code></p>
+<p><strong>변경점</strong> canonical 정체성 개념 신설</p>
+</div>
+-->`,
+		],
+		[
+			"들여쓴 코드",
+			`    <div class="arch-entity" data-change="new">
+    <p><strong>이름</strong> <code>SupplementCategory</code></p>
+    <p><strong>책임</strong> 영양제의 canonical 정체성을 보유한다</p>
+    <p class="ae-members"><strong>핵심 멤버</strong> <code>code</code></p>
+    <p><strong>변경점</strong> canonical 정체성 개념 신설</p>
+    </div>`,
+		],
+	] as const) {
+		test(`${container} 안의 완전한 도메인 카드도 R21에서 세지 않는다`, () => {
+			const doc = withBackground(
+				ARCH_OK.replace(
+					"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+					`### 도메인 레벨\n${hiddenCard}`,
+				),
+			);
+			const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+				(i) => i.id === "R21",
+			);
+			expect(item?.pass).toBe(false);
+			expect(item?.detail).toContain("arch-entity 카드");
+		});
+	}
+
+	for (const memberChip of ["&nbsp;", "&#160;", "&#xA0;"]) {
+		test(`ae-members의 ${memberChip}뿐인 code chip은 R21에서 비어 있는 것으로 본다`, () => {
+			const doc = withBackground(
+				ARCH_OK.replace(
+					"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+					`### 도메인 레벨
+
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>SupplementCategory</code></p>
+<p><strong>책임</strong> 영양제의 canonical 정체성을 보유한다</p>
+<p class="ae-members"><strong>핵심 멤버</strong> <code>${memberChip}</code></p>
+<p><strong>변경점</strong> canonical 정체성 개념 신설</p>
+</div>`,
+				),
+			);
+			const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+				(i) => i.id === "R21",
+			);
+			expect(item?.pass).toBe(false);
+			expect(item?.detail).toContain("핵심 멤버");
+		});
+	}
+
+	test("도메인 카드의 한 행 라벨 충돌은 책임·변경점 독립 필드로 인정하지 않는다", () => {
+		const domainLevel = `### 도메인 레벨
+\`\`\`mermaid
+classDiagram
+  class SupplementCategory {
+    +code: string
+    +displayName: string
+    +isActive() bool
+  }
+\`\`\`
+
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>SupplementCategory</code></p>
+<p><strong>책임</strong> 책임과 변경점을 한 행에 함께 설명한다</p>
+<p class="ae-members"><strong>핵심 멤버</strong> <code>code</code></p>
+</div>`;
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				domainLevel,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("변경점");
+	});
+
+	test("도메인 엔티티 카드에 변경점 슬롯이 없으면 R21이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+
+<div class="arch-entity" data-change="mod">
+<p><strong>이름</strong> <code>SupplementCategory</code></p>
+<p><strong>책임</strong> 영양제의 canonical 정체성을 보유한다</p>
+<p class="ae-members"><strong>핵심 멤버</strong> <code>code</code></p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("변경점");
+	});
+
+	// 핵심 멤버 칩 — 실측(3619 리뷰): 멤버 변수를 책임 산문 안에 늘어놓아 스캔이 안 됐다.
+	// 멤버는 구조화된 칩 슬롯으로 분리하고, 멤버가 없는 개념은 "핵심 멤버 없음 — <사유>"로 채운다.
+	test("도메인 엔티티 카드에 핵심 멤버 슬롯이 없으면 R21이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+
+<div class="arch-entity" data-change="mod">
+<p><strong>이름</strong> <code>SupplementCategory</code></p>
+<p><strong>책임</strong> 영양제의 canonical 정체성을 보유한다</p>
+<p><strong>변경점</strong> canonical 정체성 개념 신설</p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("핵심 멤버");
+	});
+
+	test("도메인 엔티티 카드의 핵심 멤버가 산문뿐이면 R21이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+
+<div class="arch-entity" data-change="mod">
+<p><strong>이름</strong> <code>User</code></p>
+<p><strong>책임</strong> 사용자 정체성을 보유한다</p>
+<p><strong>핵심 멤버</strong> userId</p>
+<p><strong>변경점</strong> 사용자 정체성 조회를 변경한다</p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("핵심 멤버");
+	});
+
+	test("도메인 엔티티 카드가 핵심 멤버 없음 사유를 명시하면 R21을 통과한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+
+<div class="arch-entity" data-change="mod">
+<p><strong>이름</strong> <code>ExternalUser</code></p>
+<p><strong>책임</strong> 외부 인증 시스템의 사용자 정체성을 참조한다</p>
+<p><strong>핵심 멤버 없음</strong> — 사용자 멤버는 외부 인증 시스템이 소유한다</p>
+<p><strong>변경점</strong> 외부 사용자 참조 방식을 변경한다</p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(true);
+	});
+
+	test("책임 행이 핵심 멤버 없음 문구를 포함해도 실제 핵심 멤버 필드가 아니면 R21이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+
+<div class="arch-entity" data-change="mod">
+<p><strong>이름</strong> <code>ExternalUser</code></p>
+<p><strong>책임</strong> 외부 인증 시스템이 소유하므로 핵심 멤버 없음 — 이 행은 책임 설명이다</p>
+<p><strong>변경점</strong> 외부 사용자 참조 방식을 변경한다</p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("핵심 멤버");
+	});
+
+	test("ae-members 행의 라벨이 다르고 핵심 멤버가 별도 산문이면 R21이 실패한다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+
+<div class="arch-entity" data-change="mod">
+<p><strong>이름</strong> <code>User</code></p>
+<p><strong>책임</strong> 사용자 정체성을 보유한다</p>
+<p class="ae-members"><strong>외부 키</strong> <code>userId</code></p>
+<p><strong>핵심 멤버</strong> userId</p>
+<p><strong>변경점</strong> 사용자 정체성 조회를 변경한다</p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("핵심 멤버");
+	});
+
+	test("핵심 멤버 없음 행이 다음 필드의 텍스트를 사유로 빌릴 수 없다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+
+<div class="arch-entity" data-change="mod">
+<p><strong>이름</strong> <code>User</code></p>
+<p><strong>책임</strong> 사용자 정체성을 보유한다</p>
+<p><strong>핵심 멤버 없음</strong> —</p>
+<p><strong>변경점</strong> 사용자 정체성 조회를 변경한다</p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("핵심 멤버");
+	});
+
+	test("data-class만 있는 행은 ae-members 구조화 행으로 인정하지 않는다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				`### 도메인 레벨
+
+<div class="arch-entity" data-change="mod">
+<p><strong>이름</strong> <code>User</code></p>
+<p><strong>책임</strong> 사용자 정체성을 보유한다</p>
+<p data-class="ae-members"><strong>핵심 멤버</strong> <code>userId</code></p>
+<p><strong>변경점</strong> 사용자 정체성 조회를 변경한다</p>
+</div>`,
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R21",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("핵심 멤버");
 	});
 
 	// R18/R21 — 다이어그램 노드는 컴포넌트/도메인 이름이지 파일 경로가 아니다.
@@ -1357,6 +1974,37 @@ classDiagram
 	});
 });
 
+describe("markdown-template canonical examples", () => {
+	const template = readFileSync(
+		join(import.meta.dir, "..", "skills", "explain-diff", "references", "markdown-template.md"),
+		"utf8",
+	);
+
+	test("승인된 cf 예제가 심볼 주어와 기존·변경 필드를 유지한다", () => {
+		const cfSectionStart = template.indexOf("### `cf` / `cf-src` / `cf-loc`");
+		const cfSectionEnd = template.indexOf("### `arch-entity`", cfSectionStart);
+		const cfSection = template.slice(cfSectionStart, cfSectionEnd);
+
+		expect(cfSection).not.toContain("책임 N — <역할>");
+		expect(cfSection).not.toContain("책임 1 — 비용 item 계약");
+		expect(cfSection).not.toContain("책임 2 — 요청 검증");
+		expect(cfSection).toMatch(
+			/<p><strong><code>SupplementCostItem<\/code><\/strong>[\s\S]*?<strong>기존<\/strong>[\s\S]*?<strong>변경<\/strong>[\s\S]*?<\/p>/,
+		);
+		expect(cfSection).toMatch(
+			/<p><strong><code>parseSupplementCostRequest\(\)<\/code><\/strong>[\s\S]*?<strong>기존<\/strong>[\s\S]*?<strong>변경<\/strong>[\s\S]*?<\/p>/,
+		);
+	});
+
+	test("승인된 sequence 예제가 호출·반환 activation을 균형 있게 유지한다", () => {
+		expect(template).toMatch(
+			/Chat->>\+Resolver: resolveDisplay\(code\)[\s\S]*?Resolver->>\+Backend: GET \/v1\/supplement-catalog\?includeDeletedCategories=true[\s\S]*?Backend-->>-Resolver: 표시 카탈로그\(삭제 포함\)[\s\S]*?Resolver-->>-Chat: 카드용 표시 카탈로그/,
+		);
+		expect(template).not.toContain("Chat->>Resolver: resolveDisplay(code)");
+		expect(template).not.toContain("Resolver->>Backend: GET /v1/supplement-catalog?includeDeletedCategories=true");
+	});
+});
+
 const OVERVIEW = `## Commit Journey
 
 1. \`ab12cd3\` feat — 첫 커밋 → 그룹 1
@@ -1468,6 +2116,12 @@ describe("모든 저작 스텝 — R11 스타일 발명 금지", () => {
 		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "evidence" });
 		expect(r.pass).toBe(false);
 		expect(r.failedItems.join(" ")).toContain("my-fancy-box");
+	});
+
+	test("카드 v2 멤버 칩 클래스(ae-members·chg)는 render.ts가 CSS를 소유하므로 위반이 아니다", () => {
+		const doc = `${evidenceOnlyDoc("a.ts")}\n<ul class="ae-members"><li><code>userId</code></li><li><code class="chg">status</code></li></ul>\n`;
+		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "evidence" });
+		expect(r.pass).toBe(true);
 	});
 
 	test("승인된 컴포넌트 클래스(cf 계열 포함)만 쓰면 통과한다", () => {

@@ -134,5 +134,40 @@ explain_diff_guard_core_verdict() {
         return 0
     fi
 
+    # The state CLI rewinds legacy render-complete state on read, but this hook
+    # can run first. Do not trust the derived allow bit while raw state still
+    # claims render is complete and lacks the current proof contract. The
+    # check is intentionally limited to that bypass: the author may write
+    # render artifacts while the current step is still render.
+    local render_complete
+    render_complete=$(jq -r '
+        if .step == "quiz" then "true"
+        elif (.passed | type) != "array" then "false"
+        elif any(.passed[]?; . == "render") then "true"
+        else "false"
+        end
+    ' "$state_file" 2>/dev/null) || render_complete="false"
+    if [ "$render_complete" = "true" ]; then
+        local render_proof_valid
+        render_proof_valid=$(jq -r '
+            if .render_proof_contract_version != 1 then false
+            elif (.render_proof | type) != "object" then false
+            elif (.render_proof.doc_path | type) != "string" then false
+            elif (.render_proof.doc_path | length) == 0 then false
+            elif (.render_proof.html_path | type) != "string" then false
+            elif (.render_proof.html_path | length) == 0 then false
+            elif (.render_proof.writing_report_path | type) != "string" then false
+            elif (.render_proof.writing_report_path | length) == 0 then false
+            elif (.render_proof.checklist_path | type) != "string" then false
+            elif (.render_proof.checklist_path | length) == 0 then false
+            else true
+            end
+        ' "$state_file" 2>/dev/null) || render_proof_valid="false"
+        if [ "$render_proof_valid" != "true" ]; then
+            printf '%s' "Blocked: explain-diff 산출물 경로 쓰기가 거부됐습니다. render 증거 계약이 없거나 legacy 상태입니다. 상태 CLI를 읽어 마이그레이션한 뒤 다시 시도하세요."
+            return 0
+        fi
+    fi
+
     return 0
 }

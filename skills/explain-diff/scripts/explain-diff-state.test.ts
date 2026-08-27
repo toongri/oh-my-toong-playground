@@ -37,6 +37,18 @@ async function cli() {
 
 const GOOD_DOC = `# 설명
 
+## Evidence
+
+| 파일 | 분류 |
+|---|---|
+| \`lib/state-lock.ts\` | signal |
+
+### 원천
+
+| 종류 | 식별자/경로 | 확보 | 내용 요약 |
+|---|---|---|---|
+| 코드 | \`lib/state-lock.ts\` | 열람 | 락 구현과 호출 경로를 확인 |
+
 ## Background
 
 ### 깊은 배경
@@ -95,9 +107,10 @@ flowchart LR
 
 <div class="arch-entity" data-change="new">
 <p><strong>이름</strong> <code>state-lock</code></p>
-<p><strong>레이어</strong> lib/상태-인프라</p>
+<p><strong>패키지</strong> lib/상태-인프라</p>
 <p><strong>책임</strong> 상태 파일 락 소유</p>
 <p><strong>인터페이스</strong> withLock</p>
+<p><strong>변경점</strong> 두 CLI에 흩어져 있던 락 획득/해제를 공용 모듈로 추출</p>
 </div>
 
 ### 도메인 레벨
@@ -153,6 +166,70 @@ function docFile(text: string): string {
 function state(): Record<string, any> {
 	return JSON.parse(readFileSync(join(sandbox, `explain-diff-state-${SID}.json`), "utf8"));
 }
+
+function rewriteState(mutator: (current: Record<string, any>) => void): void {
+	const current = state();
+	mutator(current);
+	writeFileSync(
+		join(sandbox, `explain-diff-state-${SID}.json`),
+		`${JSON.stringify(current, null, 2)}\n`,
+		"utf8",
+	);
+}
+
+function seedLegacyRenderProof(): void {
+	const legacyProof = {
+		doc_path: join(sandbox, "legacy-doc.md"),
+		html_path: join(sandbox, "legacy-doc.html"),
+		writing_report_path: join(sandbox, "legacy-writing.md"),
+		checklist_path: join(sandbox, "legacy-checklist.md"),
+	};
+	rewriteState((current) => {
+		delete current.render_proof_contract_version;
+		current.render_proof = legacyProof;
+		current.structural_ok = ["render"];
+		current.passed = ["render"];
+		current.step = "quiz";
+		current.last_failure = null;
+	});
+}
+
+describe("legacy render-proof migration locking", () => {
+	test("read migrates legacy state only after acquiring the state lock", async () => {
+		const { read, start } = await cli();
+		start(SID, "r", "s");
+		seedLegacyRenderProof();
+		const stateFile = join(sandbox, `explain-diff-state-${SID}.json`);
+		const before = readFileSync(stateFile, "utf8");
+		const lockPath = `${stateFile}.lock`;
+		mkdirSync(lockPath);
+
+		try {
+			let error: unknown;
+			try {
+				read(SID);
+			} catch (caught) {
+				error = caught;
+			}
+			expect(error instanceof Error ? error.message : error).toBe(
+				`could not acquire state lock: ${lockPath}`,
+			);
+			expect(readFileSync(stateFile, "utf8")).toBe(before);
+		} finally {
+			rmSync(lockPath, { recursive: true, force: true });
+		}
+
+		const migrated = read(SID);
+		expect(migrated?.render_proof).toBeNull();
+		expect(migrated?.step).toBe("render");
+		expect(migrated?.structural_ok).not.toContain("render");
+		expect(migrated?.passed).not.toContain("render");
+		expect(state().render_proof).toBeNull();
+		expect(state().step).toBe("render");
+		expect(state().structural_ok).not.toContain("render");
+		expect(state().passed).not.toContain("render");
+	});
+});
 
 describe("start", () => {
 	test("첫 스텝은 evidence 이고 산출물 쓰기가 열려 있다", async () => {
@@ -401,7 +478,7 @@ describe("구조 검사 게이트", () => {
 	});
 });
 
-// Evidence 절만 있고 signal 경로가 표에만 적힌, 문서화된 흐름의 실제 첫 호출 모양의 문서.
+// Evidence 절과 원천 스윕 표만 있는, 문서화된 흐름의 실제 첫 호출 모양의 문서.
 const EVIDENCE_ONLY_DOC = `# 설명
 
 ## Evidence
@@ -409,6 +486,12 @@ const EVIDENCE_ONLY_DOC = `# 설명
 | 파일 | 분류 |
 |---|---|
 | \`lib/state-lock.ts\` | signal |
+
+### 원천
+
+| 종류 | 식별자/경로 | 확보 | 내용 요약 |
+|---|---|---|---|
+| 코드 | \`lib/state-lock.ts\` | 열람 | 락 구현과 호출 경로를 확인 |
 `;
 
 const WITH_BACKGROUND_DOC = `${EVIDENCE_ONLY_DOC}
@@ -768,10 +851,12 @@ async function driveToRender(): Promise<{
 }
 
 /** render 게이트가 요구하는 검증 리포트(technical-writing)를 통과 형태로 만든다. */
-function reportFiles(): { writing: string } {
+function reportFiles(): { writing: string; checklist: string } {
 	const writing = join(sandbox, "writing-report.md");
 	writeFileSync(writing, "지적 2건 반영.\nREVIEW: APPLIED\n", "utf8");
-	return { writing };
+	const checklist = join(sandbox, "final-checklist.md");
+	writeFileSync(checklist, checklistReport(), "utf8");
+	return { writing, checklist };
 }
 
 const projectRenderedHtmlCache = new Map<string, string>();
@@ -787,6 +872,37 @@ function projectRenderedHtml(markdown: string): string {
 	const rendered = renderToHtml(renderedMarkdown, title);
 	projectRenderedHtmlCache.set(markdown, rendered);
 	return rendered;
+}
+
+const CHECKLIST_AXES = [
+	["1", "시스템 분해"],
+	["2", "양측 커버리지"],
+	["3", "목표→그림→해석"],
+	["4", "상태 다이어그램"],
+	["5", "로직 flowchart"],
+	["6", "실재 식별자+변경 마커"],
+	["7", "시퀀스 완결성"],
+	["8", "사용자 여정"],
+	["9", "HTML 렌더"],
+] as const;
+
+function checklistReport(
+	rows: Array<{ number: string; axis: string; status: string; evidence: string }> = CHECKLIST_AXES.map(
+		([number, axis]) => ({
+			number,
+			axis,
+			status: number === "2" || number === "4" ? "N.A" : "PASS",
+			evidence: `${axis} 근거를 문서에서 확인했다.`,
+		}),
+	),
+): string {
+	return [
+		"| # | 축 | 판정 | 근거 |",
+		"|---|---|---|---|",
+		...rows.map(({ number, axis, status, evidence }) => `| ${number} | ${axis} | ${status} | ${evidence} |`),
+		"CHECKLIST: ALL PASS",
+		"",
+	].join("\n");
 }
 
 describe("render 산출물 검사", () => {
@@ -819,9 +935,183 @@ describe("render 산출물 검사", () => {
 		const htmlPath = join(sandbox, "doc.html");
 		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
 		const rep = reportFiles();
-		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.writing);
+		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist);
 		expect(rc).toBe(0);
 		expect(state().structural_ok).toContain("render");
+	});
+
+	test("--checklist 없이 제출하면 실패하고 현재 스텝은 render 에 남는다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+
+		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.writing);
+		expect(rc).toBe(1);
+		expect(state().step).toBe("render");
+		expect(state().last_failure?.items.join(" ")).toContain("--checklist");
+	});
+
+	test("존재하지 않는 checklist 파일은 실패한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+
+		const rc = submitStep(
+			SID,
+			"render",
+			doc,
+			[],
+			[],
+			htmlPath,
+			rep.writing,
+			join(sandbox, "없는-checklist.md"),
+		);
+		expect(rc).toBe(1);
+		expect(state().step).toBe("render");
+		expect(state().last_failure?.items.join(" ")).toContain("체크리스트 리포트");
+	});
+
+	test("checklist 마지막 verdict가 CHECKLIST: ALL PASS가 아니면 실패한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		writeFileSync(rep.checklist, "체크리스트 검토 결과\nCHECKLIST: NOT PASS\n", "utf8");
+
+		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist);
+		expect(rc).toBe(1);
+		expect(state().step).toBe("render");
+		expect(state().last_failure?.items.join(" ")).toContain("CHECKLIST: ALL PASS");
+	});
+
+	test("마지막 ALL PASS 표식만 있고 9개 축 행이 없으면 render 제출을 거부한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		writeFileSync(rep.checklist, "CHECKLIST: ALL PASS\n", "utf8");
+
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(1);
+		expect(state().step).toBe("render");
+		expect(state().last_failure?.items.join(" ")).toContain("9개");
+	});
+
+	test("1~9 각 축이 PASS 또는 N.A이고 비어 있지 않은 근거가 있으면 통과한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		writeFileSync(rep.checklist, checklistReport(), "utf8");
+
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(0);
+		expect(state().structural_ok).toContain("render");
+	});
+
+	test("장식된 FAIL 행은 마지막 ALL PASS 표식이 있어도 거부한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		for (const status of ["**FAIL**", "'FAIL'", "<strong>FAIL</strong>"]) {
+			writeFileSync(
+				rep.checklist,
+				checklistReport(
+					CHECKLIST_AXES.map(([number, axis]) => ({
+						number,
+						axis,
+						status: number === "1" ? status : "PASS",
+						evidence: "수정이 필요하다.",
+					})),
+				),
+				"utf8",
+			);
+			expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(1);
+			expect(state().step).toBe("render");
+		}
+	});
+
+	test("축 중복·누락·허용되지 않은 상태는 마지막 ALL PASS 표식이 있어도 거부한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		const validRows = CHECKLIST_AXES.map(([number, axis]) => ({
+			number,
+			axis,
+			status: "PASS",
+			evidence: "문서에서 확인했다.",
+		}));
+		const invalidRows = [
+			validRows.map((row) => (row.number === "9" ? { ...row, number: "1" } : row)),
+			validRows.slice(0, 8),
+			validRows.map((row) => (row.number === "1" ? { ...row, status: "MAYBE" } : row)),
+		];
+
+		for (const rows of invalidRows) {
+			writeFileSync(rep.checklist, checklistReport(rows), "utf8");
+			expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(1);
+			expect(state().step).toBe("render");
+		}
+	});
+
+	test("앞선 FAIL 행이 있어도 마지막 ALL PASS 표식만으로 통과하지 못한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		writeFileSync(
+			rep.checklist,
+			"| # | 축 | 판정 | 근거 |\n|---|---|---|---|\n| 1 | 시스템 분해 | FAIL | 수정 필요 |\nCHECKLIST: ALL PASS\n",
+			"utf8",
+		);
+
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(1);
+		expect(state().step).toBe("render");
+		expect(state().structural_ok).not.toContain("render");
+	});
+
+	test("PASS와 N.A 행은 trailing whitespace 뒤의 ALL PASS 표식과 함께 통과한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		writeFileSync(rep.checklist, `${checklistReport().trimEnd()}   \n\t\n`, "utf8");
+
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(0);
+		expect(state().structural_ok).toContain("render");
+	});
+
+	test("구 계약이 없는 render proof는 pass-step 전에 무효화된다", async () => {
+		const { passStep, doc } = await driveToRender();
+		rewriteState((current) => {
+			delete current.render_proof_contract_version;
+			current.structural_ok = ["render"];
+		});
+
+		expect(() => passStep(SID, "render", doc, [])).toThrow(/submit-step/);
+		expect(state().step).toBe("render");
+		expect(state().structural_ok).not.toContain("render");
+	});
+
+	test("구 계약 render proof로 이미 quiz에 있어도 render로 되돌아간다", async () => {
+		const { submitStep, passStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(0);
+		expect(passStep(SID, "render", doc, [])).toBe(0);
+		expect(state().step).toBe("quiz");
+
+		rewriteState((current) => {
+			current.render_proof_contract_version = 0;
+		});
+
+		expect(() => passStep(SID, "render", doc, [])).toThrow(/submit-step/);
+		expect(state().step).toBe("render");
+		expect(state().structural_ok).not.toContain("render");
+		expect(state().passed).not.toContain("render");
 	});
 
 	test("Markdown 산문이 바뀐 뒤 예전 renderer HTML은 Mermaid 패리티가 같아도 거부하고 현재 산출물은 통과한다", async () => {
@@ -833,11 +1123,11 @@ describe("render 산출물 검사", () => {
 		writeFileSync(htmlPath, projectRenderedHtml(oldMarkdown), "utf8");
 		const rep = reportFiles();
 
-		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing)).toBe(1);
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(1);
 		expect(state().last_failure.items.join(" ")).toContain("현재 Markdown");
 
 		writeFileSync(htmlPath, projectRenderedHtml(currentMarkdown), "utf8");
-		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing)).toBe(0);
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(0);
 	});
 
 	test("visual-qa 리포트 없이도 통과한다 — 넓은 다이어그램 가독성은 render.ts 가 결정적으로 봉인한다", async () => {
@@ -848,7 +1138,7 @@ describe("render 산출물 검사", () => {
 		const htmlPath = join(sandbox, "doc.html");
 		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
 		const rep = reportFiles();
-		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.writing);
+		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist);
 		expect(rc).toBe(0);
 		expect(state().structural_ok).toContain("render");
 	});
@@ -858,9 +1148,9 @@ describe("render 산출물 검사", () => {
 		const htmlPath = join(sandbox, "doc.html");
 		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
 		const rep = reportFiles();
-		expect(submitStep(SID, "render", doc, [], [], htmlPath, undefined)).toBe(1);
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, undefined, rep.checklist)).toBe(1);
 		writeFileSync(rep.writing, "리뷰만 하고 반영 안 함\n", "utf8");
-		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing)).toBe(1);
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(1);
 		expect(state().last_failure.items.join(" ")).toContain("REVIEW: APPLIED");
 	});
 
@@ -871,7 +1161,7 @@ describe("render 산출물 검사", () => {
 		const rep = reportFiles();
 		writeFileSync(rep.writing, "REVIEW: APPLIED\n미반영 지적\n", "utf8");
 
-		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing)).toBe(1);
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(1);
 		expect(state().last_failure.items.join(" ")).toContain("REVIEW: APPLIED");
 	});
 
@@ -881,9 +1171,86 @@ describe("render 산출물 검사", () => {
 		// FULL_DOC 은 mermaid 블록 1개를 갖는다 — svg 0개인 HTML은 렌더 누락이다.
 		writeFileSync(htmlPath, "<html>svg 없음</html>", "utf8");
 		const rep = reportFiles();
-		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.writing);
+		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist);
 		expect(rc).toBe(1);
 		expect(state().last_failure.items.join(" ")).toContain("mermaid");
+	});
+
+	test("유효한 render 제출 뒤 checklist가 FAIL이면 pass-step이 재검증에 실패한다", async () => {
+		const { submitStep, passStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(0);
+		writeFileSync(
+			rep.checklist,
+			checklistReport(
+				CHECKLIST_AXES.map(([number, axis]) => ({
+					number,
+					axis,
+					status: number === "1" ? "FAIL" : "PASS",
+					evidence: "변경된 판정",
+				})),
+			),
+			"utf8",
+		);
+
+		expect(passStep(SID, "render", doc, [])).toBe(1);
+		expect(state().step).toBe("render");
+		expect(state().last_failure?.items.join(" ")).toContain("허용되지 않습니다");
+	});
+
+	test("유효한 render 제출 뒤 다른 docPath로 pass-step을 호출하면 거부한다", async () => {
+		const { submitStep, passStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		const otherDoc = join(sandbox, "other-doc.md");
+		writeFileSync(otherDoc, readFileSync(doc, "utf8"), "utf8");
+
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(0);
+		expect(passStep(SID, "render", otherDoc, [])).toBe(1);
+		expect(state().step).toBe("render");
+		expect(state().last_failure?.items.join(" ")).toContain("docPath");
+	});
+
+	test("유효한 render 제출 뒤 HTML·report·checklist가 바뀌면 pass-step 재검증에 실패한다", async () => {
+		const { submitStep, passStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		const validSubmit = () =>
+			submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist);
+
+		expect(validSubmit()).toBe(0);
+
+		writeFileSync(htmlPath, `${readFileSync(htmlPath, "utf8")}\n변경된 HTML\n`, "utf8");
+		expect(passStep(SID, "render", doc, [])).toBe(1);
+		expect(state().step).toBe("render");
+
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		expect(validSubmit()).toBe(0);
+		writeFileSync(rep.writing, "변경된 report\n", "utf8");
+		expect(passStep(SID, "render", doc, [])).toBe(1);
+		expect(state().step).toBe("render");
+
+		writeFileSync(rep.writing, "지적 2건 반영.\nREVIEW: APPLIED\n", "utf8");
+		expect(validSubmit()).toBe(0);
+		writeFileSync(
+			rep.checklist,
+			checklistReport(
+				CHECKLIST_AXES.map(([number, axis]) => ({
+					number,
+					axis,
+					status: number === "1" ? "FAIL" : "PASS",
+					evidence: "변경된 판정",
+				})),
+			),
+			"utf8",
+		);
+		expect(passStep(SID, "render", doc, [])).toBe(1);
+		expect(state().step).toBe("render");
 	});
 
 	test("render 통과 후 pass-step 은 심사 항목 없이 quiz 로 넘긴다", async () => {
@@ -891,7 +1258,7 @@ describe("render 산출물 검사", () => {
 		const htmlPath = join(sandbox, "doc.html");
 		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
 		const rep = reportFiles();
-		submitStep(SID, "render", doc, [], [], htmlPath, rep.writing);
+		submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist);
 		const rc = passStep(SID, "render", doc, []);
 		expect(rc).toBe(0);
 		expect(state().step).toBe("quiz");
@@ -921,7 +1288,7 @@ describe("render 산출물 검사", () => {
 		const htmlPath = join(sandbox, "doc.html");
 		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
 		const rep = reportFiles();
-		submitStep(SID, "render", doc, [], [], htmlPath, rep.writing);
+		submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist);
 		passStep(SID, "render", doc, []);
 		expect(state().step).toBe("quiz");
 		addConcept(SID, "c1", true);

@@ -160,6 +160,16 @@ You have access to: [skill-being-tested]
 
 Make agent believe it's real work, not a quiz.
 
+**Run CLI test agents with restricted, workspace-scoped execution by default.**
+When the test harness drives an agent through a CLI (`codex exec`, `claude -p`,
+…), launch it without bypass/full-permission flags and keep its filesystem
+access scoped to the test workspace. Allow bypass/full-permission only when an
+actual external sandbox (a container or VM) isolates the entire run from the
+host; a local CLI flag is not itself a security boundary. Provision
+dependencies, browser/renderer prerequisites, and writable fixtures inside
+that workspace so failures exercise the skill rather than unrelated setup
+gaps.
+
 ## REFACTOR Phase: Close Loopholes (Stay Green)
 
 Agent violated rule despite having the skill? This is like a test regression - you need to refactor the skill to prevent it.

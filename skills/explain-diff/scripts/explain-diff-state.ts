@@ -32,17 +32,56 @@ interface Persisted extends ExplainDiffState {
 	slug: string;
 	/** Steps whose structural checks passed but whose judge review has not run. */
 	structural_ok: Step[];
+	/** Render proof contract used by the persisted structural render verdict. */
+	render_proof_contract_version: number;
+	/** Exact artifact paths bound by the successful render submission. */
+	render_proof: RenderProofBinding | null;
 	diff_hunks: DiffHunk[];
 	started_at: string;
 	last_touched_at: string;
 	derived: ReturnType<typeof computeDerived>;
 }
 
+interface RenderProofBinding {
+	doc_path: string;
+	html_path: string;
+	writing_report_path: string;
+	checklist_path: string;
+}
+
+const CURRENT_RENDER_PROOF_CONTRACT_VERSION = 1;
 const renderedDocumentCache = new Map<string, string>();
 type FreshRenderer = (docPath: string) => string;
 
 function statePath(sessionId: string): string {
 	return `${getOmtDir()}/${STATE_PREFIX["explain-diff"]}${sessionId}.json`;
+}
+
+function normalizeRenderProofBinding(raw: unknown): RenderProofBinding | null {
+	if (raw === null || typeof raw !== "object") return null;
+	const record: Record<string, unknown> = {};
+	Object.assign(record, raw);
+	const docPath = record["doc_path"];
+	const htmlPath = record["html_path"];
+	const writingReportPath = record["writing_report_path"];
+	const checklistPath = record["checklist_path"];
+	if (
+		typeof docPath !== "string" ||
+		docPath.length === 0 ||
+		typeof htmlPath !== "string" ||
+		htmlPath.length === 0 ||
+		typeof writingReportPath !== "string" ||
+		writingReportPath.length === 0 ||
+		typeof checklistPath !== "string" ||
+		checklistPath.length === 0
+	)
+		return null;
+	return {
+		doc_path: docPath,
+		html_path: htmlPath,
+		writing_report_path: writingReportPath,
+		checklist_path: checklistPath,
+	};
 }
 
 // mkdir is atomic, which is the property this needs: two CLI processes racing on
@@ -73,7 +112,13 @@ function withLock<T>(path: string, fn: () => T): T {
 	throw new Error(`could not acquire state lock: ${path}.lock`);
 }
 
-function read(sessionId: string): Persisted | null {
+interface ReadSnapshot {
+	state: Persisted;
+	needsRenderProofMigration: boolean;
+}
+
+/** Reads and normalizes one state-file snapshot without acquiring a lock or writing. */
+function readSnapshot(sessionId: string): ReadSnapshot | null {
 	try {
 		const parsed: unknown = JSON.parse(readFileSync(statePath(sessionId), "utf8"));
 		const base = normalizeExplainDiffState(parsed);
@@ -81,11 +126,17 @@ function read(sessionId: string): Persisted | null {
 		const r: Record<string, unknown> = {};
 		Object.assign(r, parsed);
 		const structuralRaw = r["structural_ok"];
-		return {
+		const renderProof = normalizeRenderProofBinding(r["render_proof"]);
+		const hasCurrentRenderProofContract =
+			r["render_proof_contract_version"] === CURRENT_RENDER_PROOF_CONTRACT_VERSION &&
+			renderProof !== null;
+		const state: Persisted = {
 			...base,
 			structural_ok: Array.isArray(structuralRaw)
 				? structuralRaw.flatMap((x) => STEP_ORDER.find((s) => s === x) ?? [])
 				: [],
+			render_proof_contract_version: CURRENT_RENDER_PROOF_CONTRACT_VERSION,
+			render_proof: renderProof,
 			diff_hunks: normalizeStoredDiffHunks(r["diff_hunks"]),
 			range: typeof r["range"] === "string" ? r["range"] : "",
 			slug: typeof r["slug"] === "string" ? r["slug"] : "",
@@ -95,9 +146,43 @@ function read(sessionId: string): Persisted | null {
 			// Recomputed on every write; the persisted copy is never trusted on read.
 			derived: computeDerived(base),
 		};
+		const hasRenderProof =
+			state.render_proof !== null ||
+			state.structural_ok.includes("render") ||
+			state.passed.includes("render") ||
+			state.step === "quiz";
+		const needsRenderProofMigration = !hasCurrentRenderProofContract && hasRenderProof;
+		if (needsRenderProofMigration) {
+			state.structural_ok = state.structural_ok.filter((step) => step !== "render");
+			state.passed = state.passed.filter((step) => step !== "render");
+			state.render_proof = null;
+			if (state.step === "quiz") state.step = "render";
+			state.last_failure = {
+				step: "render",
+				items: ["기존 render 증거가 현재 체크리스트 계약으로 검증되지 않았습니다."],
+			};
+		}
+		state.derived = computeDerived(state);
+		return { state, needsRenderProofMigration };
 	} catch {
 		return null;
 	}
+}
+
+/**
+ * Reads the state for the CLI. A legacy render-proof rewind is the one read path
+ * that mutates state, so it owns the lock and re-reads after acquiring it; a
+ * competing submit/pass can therefore never be overwritten by the first snapshot.
+ */
+function read(sessionId: string): Persisted | null {
+	const snapshot = readSnapshot(sessionId);
+	if (!snapshot || !snapshot.needsRenderProofMigration) return snapshot?.state ?? null;
+	return withLock(statePath(sessionId), () => {
+		const latest = readSnapshot(sessionId);
+		if (!latest) return null;
+		if (latest.needsRenderProofMigration) write(sessionId, latest.state);
+		return latest.state;
+	});
 }
 
 /** Every write recomputes `derived` — the booleans the hooks read are never stale. */
@@ -110,9 +195,12 @@ function write(sessionId: string, state: Persisted): void {
 }
 
 function mustRead(sessionId: string): Persisted {
-	const s = read(sessionId);
-	if (!s) throw new Error("explain-diff 상태가 없습니다. 먼저 `start` 를 실행하세요.");
-	return s;
+	const snapshot = readSnapshot(sessionId);
+	if (!snapshot) throw new Error("explain-diff 상태가 없습니다. 먼저 `start` 를 실행하세요.");
+	// Every caller of mustRead already owns the operation's outer lock. Reuse it
+	// for the legacy rewind instead of trying to acquire the same lock again.
+	if (snapshot.needsRenderProofMigration) write(sessionId, snapshot.state);
+	return snapshot.state;
 }
 
 /** Normalizes one persisted hunk side and rejects malformed line metadata. */
@@ -340,6 +428,8 @@ function start(sessionId: string, range: string, slug: string): void {
 		step: "evidence",
 		passed: [],
 		structural_ok: [],
+		render_proof_contract_version: CURRENT_RENDER_PROOF_CONTRACT_VERSION,
+		render_proof: null,
 		concepts: [],
 		bank: [],
 		commit_hashes: enumerateCommits(range),
@@ -385,6 +475,93 @@ function checkReport(
 	const closingLine = text.trimEnd().split(/\r?\n/).at(-1) ?? "";
 	if (!marker.test(closingLine)) {
 		failedItems.push(`${label} 리포트에 \`${markerName}\` 줄이 없습니다: ${reportPath}`);
+	}
+}
+
+interface ChecklistAxisRow {
+	number: number;
+	axis: string;
+	status: string;
+	evidence: string;
+}
+
+const CHECKLIST_AXIS_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
+
+/** Reads the four-column Markdown table used by the final nine-axis checklist. */
+function parseChecklistAxisRows(text: string): ChecklistAxisRow[] {
+	const rows: ChecklistAxisRow[] = [];
+	for (const line of text.split(/\r?\n/)) {
+		const cells = line.trim().split("|");
+		if (cells[0] === "") cells.shift();
+		if (cells.at(-1) === "") cells.pop();
+		if (cells.length !== 4) continue;
+
+		const numberText = cells[0]?.trim() ?? "";
+		if (!/^\d+$/.test(numberText)) continue;
+		const number = Number(numberText);
+		if (!Number.isSafeInteger(number)) continue;
+		rows.push({
+			number,
+			axis: cells[1]?.trim() ?? "",
+			status: cells[2]?.trim() ?? "",
+			evidence: cells[3]?.trim() ?? "",
+		});
+	}
+	return rows;
+}
+
+/** A final all-pass marker is valid only with one grounded verdict for each axis. */
+function checkChecklistReport(checklistPath: string | undefined, failedItems: string[]): void {
+	checkReport(
+		"체크리스트",
+		"--checklist",
+		checklistPath,
+		/^CHECKLIST:\s*ALL PASS$/,
+		"CHECKLIST: ALL PASS",
+		failedItems,
+	);
+	if (!checklistPath) return;
+
+	let text: string;
+	try {
+		text = readFileSync(checklistPath, "utf8");
+	} catch {
+		return;
+	}
+
+	const rows = parseChecklistAxisRows(text);
+	if (rows.length === 0) {
+		failedItems.push(`체크리스트에 9개 축 행이 없습니다: ${checklistPath}`);
+		return;
+	}
+
+	const seen = new Set<number>();
+	for (const row of rows) {
+		if (!CHECKLIST_AXIS_NUMBERS.some((axisNumber) => axisNumber === row.number)) {
+			failedItems.push(`체크리스트의 축 번호가 1~9 범위를 벗어났습니다: ${row.number}`);
+			continue;
+		}
+		if (seen.has(row.number)) {
+			failedItems.push(`체크리스트에 축 ${row.number}가 중복됩니다: ${checklistPath}`);
+			continue;
+		}
+		seen.add(row.number);
+
+		if (row.axis.length === 0) {
+			failedItems.push(`체크리스트의 축 ${row.number} 이름이 비어 있습니다: ${checklistPath}`);
+		}
+		if (row.status !== "PASS" && row.status !== "N.A") {
+			failedItems.push(`체크리스트 축 ${row.number}의 상태가 허용되지 않습니다: ${row.status || "(빈 상태)"}`);
+			continue;
+		}
+		if (row.evidence.length === 0) {
+			failedItems.push(`체크리스트 축 ${row.number}의 근거가 비어 있습니다: ${checklistPath}`);
+		}
+	}
+
+	const missing = CHECKLIST_AXIS_NUMBERS.filter((number) => !seen.has(number));
+	if (missing.length > 0) {
+		failedItems.push(`체크리스트의 축이 누락되었습니다: ${missing.join(", ")}`);
 	}
 }
 
@@ -435,8 +612,9 @@ export function setRenderForTesting(renderer?: FreshRenderer): void {
  * already earned at `code`, so this checks the artifacts of the derivation:
  * the HTML exists and is not empty, every authored mermaid block actually
  * became an inline SVG, and the technical-writing prose review ran and closed
- * with its machine-checkable verdict line. Visual layout is not reviewed per
- * document — it is a deterministic property render.ts owns (wide-diagram
+ * with its machine-checkable verdict line. The final checklist must also close
+ * with its machine-checkable all-pass verdict and nine grounded axis rows. Visual layout is not reviewed
+ * per document — it is a deterministic property render.ts owns (wide-diagram
  * legibility is sealed by normalizeSvgWidth + the figure scroll container,
  * regression-guarded by render.test.ts), so there is no per-document visual-qa
  * gate here.
@@ -445,6 +623,7 @@ function checkRenderOutput(
 	htmlPath: string | undefined,
 	docPath: string,
 	writingReport: string | undefined,
+	checklistPath: string | undefined,
 ): { pass: boolean; failedItems: string[] } {
 	const failedItems: string[] = [];
 	if (!htmlPath) {
@@ -499,6 +678,7 @@ function checkRenderOutput(
 		"REVIEW: APPLIED",
 		failedItems,
 	);
+	checkChecklistReport(checklistPath, failedItems);
 	return { pass: failedItems.length === 0, failedItems };
 }
 
@@ -516,6 +696,7 @@ function submitStep(
 	addedFiles: string[],
 	htmlPath?: string,
 	writingReport?: string,
+	checklistPath?: string,
 ): number {
 	return withLock(statePath(sessionId), () => {
 		const s = mustRead(sessionId);
@@ -524,8 +705,8 @@ function submitStep(
 		}
 		const result =
 			step === "render"
-				? checkRenderOutput(htmlPath, docPath, writingReport)
-				: checkStructure(readFileSync(docPath, "utf8"), {
+					? checkRenderOutput(htmlPath, docPath, writingReport, checklistPath)
+					: checkStructure(readFileSync(docPath, "utf8"), {
 						signalFiles,
 						addedFiles,
 						commitHashes: s.commit_hashes,
@@ -535,11 +716,24 @@ function submitStep(
 		if (!result.pass) {
 			s.last_failure = { step, items: result.failedItems };
 			s.structural_ok = s.structural_ok.filter((x) => x !== step);
+			if (step === "render") s.render_proof = null;
 			write(sessionId, s);
 			process.stderr.write(`${result.failedItems.join("\n")}\n`);
 			return 1;
 		}
 		s.last_failure = null;
+		if (step === "render") {
+			if (htmlPath === undefined || writingReport === undefined || checklistPath === undefined) {
+				throw new Error("render 제출이 성공했지만 증거 경로가 없습니다.");
+			}
+			s.render_proof_contract_version = CURRENT_RENDER_PROOF_CONTRACT_VERSION;
+			s.render_proof = {
+				doc_path: docPath,
+				html_path: htmlPath,
+				writing_report_path: writingReport,
+				checklist_path: checklistPath,
+			};
+		}
 		if (!s.structural_ok.includes(step)) s.structural_ok.push(step);
 		write(sessionId, s);
 		return 0;
@@ -567,8 +761,31 @@ function passStep(sessionId: string, step: Step, docPath: string, judge: JudgeIt
 		if (!s.structural_ok.includes(step)) {
 			throw new Error(`${step} 구조 검사를 먼저 통과시키세요 (\`submit-step\`).`);
 		}
-		const text = readFileSync(docPath, "utf8");
+		let text = "";
 		const bad: string[] = [];
+		if (step === "render") {
+			const proof = s.render_proof;
+			if (proof === null) {
+				throw new Error("render 증거 바인딩이 없습니다. 다시 submit-step 하세요.");
+			}
+			if (docPath !== proof.doc_path) {
+				bad.push(`render pass-step의 docPath가 제출 시 저장한 경로와 다릅니다: ${docPath}`);
+			}
+			const renderResult = checkRenderOutput(
+				proof.html_path,
+				proof.doc_path,
+				proof.writing_report_path,
+				proof.checklist_path,
+			);
+			bad.push(...renderResult.failedItems);
+			try {
+				text = readFileSync(proof.doc_path, "utf8");
+			} catch {
+				// checkRenderOutput already records the missing/unreadable document.
+			}
+		} else {
+			text = readFileSync(docPath, "utf8");
+		}
 		// A required id missing from the payload entirely is refused before the
 		// per-item loop runs — an empty (or off-topic) judge array must not
 		// vacuously satisfy a step whose rubric depends on the judge's review.
@@ -764,10 +981,11 @@ function main(): void {
 						reqStep(args, "step"),
 						req(args, "doc"),
 						csv(req(args, "signal-files")),
-						csv(typeof args["added-files"] === "string" ? args["added-files"] : ""),
-						typeof args["html"] === "string" ? args["html"] : undefined,
-						typeof args["writing-report"] === "string" ? args["writing-report"] : undefined,
-					),
+							csv(typeof args["added-files"] === "string" ? args["added-files"] : ""),
+							typeof args["html"] === "string" ? args["html"] : undefined,
+							typeof args["writing-report"] === "string" ? args["writing-report"] : undefined,
+							typeof args["checklist"] === "string" ? args["checklist"] : undefined,
+						),
 				);
 				break;
 			case "pass-step":
