@@ -139,6 +139,7 @@ describe("code-review static-only premises", () => {
 describe("code-review runtime range command safety contract", () => {
 	const contextBudget = extractSection(skillMd, "### Context Budget", "## Step 0:");
 	const step0 = extractSection(skillMd, "## Step 0: Input Parsing", "## Step 1:");
+	const earlyExit = extractSection(skillMd, "### Early Exit", "## Step 1:");
 	const step2 = extractSection(skillMd, "## Step 2: Context Gathering", "## Step 3:");
 
 	test("describes allowed context output with argv-safe range arguments", () => {
@@ -186,6 +187,71 @@ describe("code-review runtime range command safety contract", () => {
 		expect(skillMd).not.toContain("git diff {range} -- <candidate-path>");
 		expect(skillMd).not.toContain("git diff {range} -- <files>");
 		expect(skillMd).not.toMatch(/git (?:diff|log) \{range\}/);
+	});
+
+	test("verifies both range endpoints before constructing the review range", () => {
+		const endpoint = 'exact argv `["git", "rev-parse", "--end-of-options", "--verify", "<ref>^{commit}"]`';
+
+		expect(step0).toContain(endpoint);
+		expect(step0).toContain("each raw base and target endpoint");
+		expect(step0).toContain("non-zero exit or empty stdout");
+		expect(step0).toContain("abort and report");
+		expect(step0).toContain("never treat it as an empty diff");
+		expect(step0).toContain("verified commit IDs only");
+		expect(step0).toContain("<baseSha>...<targetSha>");
+		expect(step0).toContain("every subsequent diff and log command");
+		expect(step0).toContain("argv separation alone does not prevent Git option parsing");
+		expect(step0).toContain("`--end-of-options` is required");
+	});
+
+	test("collects a fresh NUL manifest after non-empty stat and before binary-only reporting", () => {
+		const stat = earlyExit.indexOf('Run `["git", "diff", range, "--stat"]`');
+		const empty = earlyExit.indexOf("If empty diff");
+		const nonEmpty = earlyExit.indexOf("If the stat is non-empty");
+		const freshManifest = earlyExit.indexOf(
+			'collect a fresh `completeChangedFileManifest` with `["git", "diff", range, "--name-only", "-z", "--no-renames"]`',
+		);
+		const nulParse = earlyExit.indexOf("parse its stdout as NUL-delimited paths");
+		const binary = earlyExit.indexOf("If the manifest/stat identifies a binary-only diff");
+		const outOfScope = earlyExit.indexOf("enumerate every binary changed path under Out of Scope");
+		const noFinder = earlyExit.indexOf("no finder has run");
+		const noFinderDispatch = earlyExit.indexOf("no finder job is dispatched");
+		const exit = earlyExit.indexOf("then exit");
+
+		expect(stat).toBeGreaterThanOrEqual(0);
+		expect(empty).toBeGreaterThan(stat);
+		expect(nonEmpty).toBeGreaterThan(empty);
+		expect(freshManifest).toBeGreaterThan(nonEmpty);
+		expect(nulParse).toBeGreaterThan(freshManifest);
+		expect(binary).toBeGreaterThan(nulParse);
+		expect(outOfScope).toBeGreaterThan(binary);
+		expect(noFinder).toBeGreaterThan(outOfScope);
+		expect(noFinderDispatch).toBeGreaterThan(noFinder);
+		expect(exit).toBeGreaterThan(noFinderDispatch);
+		expect(earlyExit).toContain("empty diff exits immediately without manifest collection");
+		expect(earlyExit).toContain("Step 2 has not run yet");
+		expect(earlyExit).toContain("do not reference or reuse a Step 2 manifest");
+	});
+});
+
+describe("code-review Step 2 rename relation contract", () => {
+	const contextBudget = extractSection(skillMd, "### Context Budget", "## Step 0:");
+	const step2 = extractSection(skillMd, "## Step 2: Context Gathering", "## Step 3:");
+
+	test("keeps rename relations separate from membership and accounting", () => {
+		expect(contextBudget).toContain(
+			'`["git", "diff", range, "--name-status", "-z", "--find-renames"]` output',
+		);
+		expect(contextBudget).toContain("`--no-renames` name-only/numstat output is inventory/accounting only");
+		expect(step2).toContain(
+			'`["git", "diff", range, "--name-status", "-z", "--find-renames"]` (rename/copy relation pass)',
+		);
+		expect(step2).toContain("NUL-safe");
+		expect(step2).toContain("R/C old/new endpoint pair");
+		expect(step2).toContain("normalize its R/C old/new endpoint pair");
+		expect(step2).toContain("relation pass is pairing only");
+		expect(step2).toContain("name-only/numstat outputs are membership/accounting");
+		expect(step2).toContain("must not double-count endpoints or insertions");
 	});
 });
 
@@ -317,11 +383,44 @@ describe("code-review Step 3 partition and scale contract", () => {
 		);
 	});
 
+	test("screens derived relevance by bounded angles and records exact re-inclusion", () => {
+		const integrity = extractSection(
+			step3,
+			"### Derived-output integrity (before exclusion)",
+			"### Zero-reviewable-files review",
+		);
+		const screen = integrity.indexOf("bounded, selection-only relevance screen");
+		const finalExclusion = integrity.indexOf("After this screen, apply the final integrity exclusion");
+		const handoff = step4.indexOf(
+			"Include each per-path relevance decision and reason in the existing `{REQUIREMENTS}` payload/finder handoff.",
+		);
+		const requirementsPlaceholder = step4.indexOf("{REQUIREMENTS}");
+		const freeze = step4.indexOf("then freeze the final `reviewableFileList`");
+
+		expect(screen).toBeGreaterThanOrEqual(0);
+		expect(finalExclusion).toBeGreaterThan(screen);
+		expect(integrity).toContain("every configured angle even when intent is silent");
+		expect(integrity).toContain("candidate-scoped evidence only");
+		expect(integrity).toContain("not a full finder job or general aggregation");
+		expect(integrity).toContain("exact path");
+		expect(integrity).toContain("remove it from Out of Scope and re-include it in `reviewableFileList`");
+		expect(integrity).toContain("authored source or related rename endpoint in the same atomic chunk");
+		expect(integrity).toContain("If no angle is relevant, leave the path in Out of Scope");
+		expect(requirementsPlaceholder).toBeGreaterThanOrEqual(0);
+		expect(handoff).toBeGreaterThanOrEqual(0);
+		expect(handoff).toBeGreaterThan(requirementsPlaceholder);
+		expect(step4).toContain("pre-dispatch bounded, selection-only relevance results");
+		expect(freeze).toBeGreaterThan(handoff);
+		expect(step4).toContain("final `reviewableFileList`");
+		expect(step4).toContain("exact path finder scope");
+		expect(step4).toContain("existing inputs: {WHAT_WAS_IMPLEMENTED}, {DESCRIPTION}, {REQUIREMENTS}");
+	});
+
 	test("reports binary-only paths under Out of Scope before the quick exit", () => {
 		const earlyExit = extractSection(skillMd, "### Early Exit", "## Step 1:");
-		const binary = earlyExit.indexOf("If the diff is binary-only");
-		const outOfScope = earlyExit.indexOf("list every binary changed path under Out of Scope");
-		const noFinder = earlyExit.indexOf("do not dispatch a finder job");
+		const binary = earlyExit.indexOf("if the diff is binary-only");
+		const outOfScope = earlyExit.indexOf("every binary changed path under Out of Scope");
+		const noFinder = earlyExit.indexOf("no finder job is dispatched");
 		const exit = earlyExit.indexOf("then exit");
 
 		expect(earlyExit).toContain(
@@ -346,6 +445,21 @@ describe("code-review Step 3 partition and scale contract", () => {
 		expect(step2).toContain(
 			'`["git", "diff", range, "--stat"]` (change overview; not the scale input)',
 		);
+	});
+
+	test("keeps zero-reviewable flow out of finder and Phase 2", () => {
+		const step5 = extractSection(skillMd, "## Step 5: Verification + Synthesis", "## Reference Files");
+		const phase2 = extractSection(step5, "### Phase 2:", "### Phase 3:");
+		const phase3 = extractSection(step5, "### Phase 3:", "### Terminal Output");
+
+		expect(skillMd).toContain("zero-reviewable exception");
+		expect(step5).toContain("proceed directly to Phase 3");
+		expect(phase2).toContain("SKIP FOR ZERO-REVIEWABLE");
+		expect(phase2).toContain("do not create a finder job, empty chunk, pathless diff");
+		expect(phase3).toContain("record all changed paths under Out of Scope");
+		expect(phase3).toContain("zero-reviewable flow");
+		expect(skillMd).toContain('"findings": []');
+		expect(skillMd).toContain('"findings_report"');
 	});
 });
 
@@ -386,14 +500,14 @@ describe("chunk-reviewer prompt scope and section order contract", () => {
 		expect(chunkReviewerPrompt).toContain(
 			"The complete changed-file manifest and derived-artifact Out of Scope list are not finder scope",
 		);
-		expect(chunkReviewerPrompt).toContain(
-			"This command was constructed from this chunk's reviewable files only",
+		const step4 = extractSection(
+			skillMd,
+			"## Step 4: Direct Finder-Job Dispatch",
+			"## Step 5:",
 		);
-		expect(chunkReviewerPrompt).toContain(
-			"Step 3 reviewableFileList (current chunk only; not the complete changed-file manifest)",
+		expect(step4).toContain(
+			"Include each per-path relevance decision and reason in the existing `{REQUIREMENTS}` payload/finder handoff.",
 		);
-		expect(chunkReviewerPrompt).toContain(
-			"Step 3 — constructed from range + current chunk's reviewable file list",
-		);
+		expect(step4).toContain("{REQUIREMENTS}");
 	});
 });

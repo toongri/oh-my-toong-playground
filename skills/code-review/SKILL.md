@@ -63,6 +63,8 @@ These premises must be reflected in the finder-job prompt — see Step 4. Review
 - `["git", "diff", range, "--stat"]` output
 - `["git", "diff", range, "--name-only", "-z", "--no-renames"]` output
 - `["git", "diff", range, "--numstat", "-z", "--no-renames"]` output
+- `["git", "diff", range, "--name-status", "-z", "--find-renames"]` output
+- `--no-renames` name-only/numstat output is inventory/accounting only
 - `["git", "log", range, "--oneline"]` output
 - CLAUDE.md file content
 - chunk-reviewer results (candidate findings)
@@ -131,15 +133,17 @@ All range formats use **three-dot syntax** (`A...B`), which is equivalent to `gi
 
 All subsequent steps use `{range}` from this table. All subsequent commands that receive range or path values must use argv-safe arguments; if Bash is required, quote each dynamic value as a separate argument. After checkout, code reading via Read/Grep/Glob reflects the **post-change** state, which is the intended behavior — diff shows the delta, the working directory shows the result.
 
+Before constructing the review range, verify each raw base and target endpoint with the exact argv `["git", "rev-parse", "--end-of-options", "--verify", "<ref>^{commit}"]`. Abort and report on non-zero exit or empty stdout; never treat it as an empty diff. Construct `<baseSha>...<targetSha>` from verified commit IDs only and use it for every subsequent diff and log command. argv separation alone does not prevent Git option parsing; `--end-of-options` is required.
+
 ### Early Exit
 
 After the range is resolved and (PR mode) the checkout is done, before proceeding to Step 1:
 
 1. Run `["git", "diff", range, "--stat"]` (using the range determined above)
-2. If empty diff: report "No changes detected (between <base> and <target>)" and exit immediately
-3. If the diff is binary-only: report "Only binary file changes detected"; use the complete `--name-only` manifest to list every binary changed path under Out of Scope (one entry per path), state that you do not dispatch a finder job, and then exit
+2. If empty diff: report "No changes detected (between <base> and <target>)" and exit immediately without collecting this manifest
+3. If the stat is non-empty, before deciding whether it is binary-only or reporting any binary-only result, collect a fresh `completeChangedFileManifest` with `["git", "diff", range, "--name-only", "-z", "--no-renames"]` and parse its stdout as NUL-delimited paths. Step 2 has not run yet; do not reference or reuse a Step 2 manifest. If the manifest/stat identifies a binary-only diff (if the diff is binary-only), enumerate every binary changed path under Out of Scope (one entry per path), state that no finder has run and no finder job is dispatched, and then exit
 
-Early Exit runs before intent acquisition on purpose — an empty diff exits immediately; a binary-only diff reports its paths under Out of Scope and exits without dispatching a finder job.
+Early Exit runs before intent acquisition on purpose — an empty diff exits immediately without manifest collection; after a non-empty stat, a fresh complete manifest is collected and parsed NUL-safely before binary-only determination/reporting, then binary paths are reported under Out of Scope before any finder runs and the review exits without dispatching a finder job.
 
 ## Step 1: Intent and Context Acquisition
 
@@ -273,10 +277,11 @@ Collect in parallel (using `{range}` from Step 0):
 1. `["git", "diff", range, "--stat"]` (change overview; not the scale input)
 2. `["git", "diff", range, "--name-only", "-z", "--no-renames"]` (file list)
 3. `["git", "diff", range, "--numstat", "-z", "--no-renames"]` (per-file insertion/deletion counts)
-4. `["git", "log", range, "--oneline"]` (commit history)
-5. CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)
+4. `["git", "diff", range, "--name-status", "-z", "--find-renames"]` (rename/copy relation pass)
+5. `["git", "log", range, "--oneline"]` (commit history)
+6. CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)
 
-Parse raw stdout as NUL-delimited records from both manifest commands. Never use newline, line, or word splitting, and never use shell command substitution. A name-only record is one path; a numstat record splits only its first two tab fields while preserving the remainder as the path. This preserves arbitrary Git pathnames, including newline, tab, quote, and backslash filenames. `--no-renames` avoids old/new pair ambiguity by emitting separate single-path records for each side of rename/copy changes.
+Parse raw stdout as NUL-delimited records from all manifest commands. Never use newline, line, or word splitting, and never use shell command substitution. A name-only record is one path; a numstat record splits only its first two tab fields while preserving the remainder as the path. This preserves arbitrary Git pathnames, including newline, tab, quote, and backslash filenames. `--no-renames` avoids old/new pair ambiguity by emitting separate single-path records for each side of rename/copy changes. The relation pass is pairing only: parse its NUL-safe R/C old/new endpoint pair and normalize its R/C old/new endpoint pair; name-only/numstat outputs are membership/accounting and must not double-count endpoints or insertions.
 
 ## Step 3: Chunking Decision
 
@@ -300,6 +305,8 @@ The filenames above are illustrations of the three categories, not a closed list
 
 Keep the two manifests as separate values. Never substitute one for the other. Before exclusion and before any path-filtered finder command, inspect each candidate derived file in the complete changed-file manifest against authored source/generator evidence. For each candidate, read only this candidate-scoped diff:
 
+Before final integrity exclusion, run a bounded, selection-only relevance screen for each candidate against the review intent and every configured angle even when intent is silent. The screen uses candidate-scoped evidence only; it is not a full finder job or general aggregation and sends no diff bytes to either. Record a per-path decision and reason: if intent or any angle deems the exact path relevant, remove it from Out of Scope and re-include it in `reviewableFileList`, placing it with its authored source or related rename endpoint in the same atomic chunk. If no angle is relevant, leave the path in Out of Scope for final exclusion, including when intent is silent. After this screen, apply the final integrity exclusion.
+
 Execute this candidate-scoped diff through Bash. The preferred form is argv-safe direct process execution with the argument vector `["git", "--literal-pathspecs", "diff", "--binary", "--no-ext-diff", "--no-textconv", range, "--", candidatePath]`; if Bash must run the command, quote the diff range and candidate path as separate arguments:
 
 ```bash
@@ -308,7 +315,7 @@ git --literal-pathspecs diff --binary --no-ext-diff --no-textconv "$range" -- "$
 
 Raw interpolation is forbidden. Git's `--` is only the revision/pathspec separator; it does not disable Git pathspec magic, external diff drivers, or textconv filters. `--literal-pathspecs` must be before `diff`; `--binary` is required, and `--no-ext-diff` and `--no-textconv` are required for this candidate integrity read. `--literal-pathspecs` treats the candidate path literally and is not shell escaping. These rules apply even when a changed filename contains spaces, shell metacharacters, command substitution, or newlines, including `:(exclude)*`.
 
-This candidate-scoped diff inspection exception is for integrity judgment only. Compare the changed bytes with authored source/generator evidence to decide whether the output is meaningful, stale, manually altered, or otherwise unexplained. Its diff result is not forwarded to a finder prompt, candidate aggregation, or general orchestrator context. Project tests, builds, linters, formatters, migrations, and other project execution remain forbidden. A `.d.ts` is excluded only with generated evidence; an authored `.d.ts` remains reviewable and contributes to `reviewableInsertionLines`. Authored migrations and DDL remain reviewable, including when a neighboring migration snapshot is derived.
+This candidate-scoped diff inspection exception is for integrity judgment only. Compare the changed bytes with authored source/generator evidence to decide whether the output is meaningful, stale, manually altered, or otherwise unexplained. Its diff result is not forwarded to a finder prompt, candidate aggregation, or general orchestrator context. Project tests, builds, linters, formatters, migrations, and other project execution remain forbidden. A `.d.ts` is excluded only with generated evidence; an authored `.d.ts` remains reviewable and contributes to `reviewableInsertionLines`. Authored migrations and DDL remain reviewable, including when a neighboring migration snapshot is derived. Authored `.d.ts`, migrations, and DDL remain reviewable without generated evidence.
 
 After this integrity pass and partition, finalize `reviewableFileList`; derive `reviewableFileCount` from the reviewable files and `reviewableInsertionLines` from their `--numstat` insertion counts. Derived artifacts do not satisfy the changed-file threshold.
 
@@ -347,7 +354,7 @@ Raw interpolation is forbidden. Git's `--` is only the revision/pathspec separat
 
 ## Step 4: Direct Finder-Job Dispatch
 
-1. Read the chunk-reviewer prompt template and interpolate the existing inputs: {WHAT_WAS_IMPLEMENTED}, {DESCRIPTION}, {REQUIREMENTS}, {PROJECT_CONTEXT}, {NON_GOAL}, {FILE_LIST}, {DIFF_COMMAND}, and {COMMIT_HISTORY}. Set {FILE_LIST} to the current chunk's reviewable files only; {DIFF_COMMAND} is constructed from that same chunk list. Never pass the complete changed-file manifest or derived-artifact Out of Scope list as finder scope. Preserve the named-field completion-gate parsing and result aggregation/angle coverage semantics used by later phases.
+1. Read the chunk-reviewer prompt template and interpolate the existing inputs: {WHAT_WAS_IMPLEMENTED}, {DESCRIPTION}, {REQUIREMENTS}, {PROJECT_CONTEXT}, {NON_GOAL}, {FILE_LIST}, {DIFF_COMMAND}, and {COMMIT_HISTORY}. Include each per-path relevance decision and reason in the existing `{REQUIREMENTS}` payload/finder handoff. These are the pre-dispatch bounded, selection-only relevance results evaluated against the review intent and every configured angle; then freeze the final `reviewableFileList`. Set {FILE_LIST} to the current chunk's reviewable files only; {DIFF_COMMAND} is constructed from that same chunk list. Remove meaningful paths from Out of Scope and pass them as exact path finder scope. Preserve the authored source or related rename endpoint in the same atomic chunk. Never pass the complete changed-file manifest or derived-artifact Out of Scope list as finder scope. Preserve the named-field completion-gate parsing and result aggregation/angle coverage semantics used by later phases.
 2. Each independent review receives one fresh cryptographically random, path-safe `invocationId`; never derive it from content or reuse it. Before any finder starts, durably persist a frozen invocation manifest containing the target, resolved launch context, chunk plan, and required job metadata. Recovery uses that ID and frozen values; conflicting state is rejected, not reused.
 3. The logical job key is `(invocationId, chunkId, attempt)`. Same keys idempotently attach; different invocation IDs never share jobs or artifacts. Validate ownership and path containment on recovery, attaching rather than respawning. If `invocationId` is lost, safely start a new independent review rather than rediscovering by content. Pass commands, paths, and external values safely; use argv-safe direct process execution as the preferred form. If Bash is required, quote the range and every path explicitly; raw interpolation is forbidden.
 4. Start every chunk before polling. Poll each direct `job.ts` job (`start`, `collect`, `status`, `results`) to terminal. Poll progress, interruption, or a running/ready job is never a retry. Attempt 2 is allowed once only for terminal infrastructure failure, unavailable angle, or diff-command failure; preserve the same invocation/chunk identity, merge original and retry outputs, and accept partial coverage if both fail.
@@ -365,7 +372,11 @@ Raw interpolation is forbidden. Git's `--` is only the revision/pathspec separat
 
 After all finder jobs reach terminal state, produce the final findings in two phases: per-candidate inline judgment with selective escalation (Phase 2), and findings synthesis (Phase 3). The terminal deliverable is the **Phase 3 findings text** — no walkthrough, no diagrams, no HTML.
 
+The zero-reviewable exception applies when Step 3 yields no reviewable files: proceed directly to Phase 3. Phase 2: SKIP FOR ZERO-REVIEWABLE; do not create a finder job, empty chunk, pathless diff. Phase 3 must record all changed paths under Out of Scope and label this the zero-reviewable flow. The completion-gate artifact uses `"findings": []` and retains `"findings_report"`.
+
 ### Phase 2: Candidate Verification (MANDATORY)
+
+For the zero-reviewable flow, SKIP FOR ZERO-REVIEWABLE; do not create a finder job, empty chunk, pathless diff.
 
 Finders surface candidates; they do not judge them. You judge each deduped candidate **inline** — reasoning through the evidence, reading the relevant code in your context, and issuing a confidence score and verdict.
 
@@ -419,6 +430,8 @@ Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json
 ### Phase 3: Findings Synthesis (report-only)
 
 This is a **report**. You surface verified findings, ranked by what matters most. You do NOT decide whether to merge and you do NOT decide whether to fix — that is the reader's call.
+
+For the zero-reviewable flow, record all changed paths under Out of Scope and preserve the completion-gate artifact with `"findings": []` and `"findings_report"`.
 
 1. **Merge** verified findings that describe the same defect (same root cause, across chunks) — combine their evidence and note the corroborating angles. (Near-duplicates within a chunk were already deduped before verification.)
 2. **Class** each finding by the angle that found it — the angle→class mapping is 1:1: the **correctness** angle → **correctness** (the change behaves wrong), the **regression** angle → **regression** (previously-working behavior the change breaks), the **cleanup** angle → **cleanup** (behaves correctly but is low quality), the **requirement** angle → **requirement-gap** (an AC or stated requirement is absent — the behavior is missing, not wrong). A finding corroborated by multiple angles takes the class of the angle whose lens names its defect mechanism.
