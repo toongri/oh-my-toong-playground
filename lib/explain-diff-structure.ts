@@ -167,15 +167,30 @@ function maskFenced(text: string): string {
 }
 
 /** Masks Markdown that is not visible content for structural predicates. */
-function maskNonVisibleMarkdown(text: string): string {
-	const withoutComments = maskFenced(text).replace(
+function maskNonVisibleContainers(text: string): string {
+	const withoutComments = text.replace(
 		/<!--[\s\S]*?(?:-->|$)/g,
 		(m) => m.replace(/[^\n]/g, " "),
 	);
 	const withoutRawPre = withoutComments.replace(RAW_PRE_RE, (m) => m.replace(/[^\n]/g, " "));
-	return withoutRawPre.replace(/^(?: {4}|\t)[^\r\n]*(?:\r?\n|$)/gm, (m) =>
-		m.replace(/[^\n]/g, " "),
-	);
+	const maskIndentedCode = (segment: string): string =>
+		segment.replace(/^(?: {4}|\t)[^\r\n]*(?:\r?\n|$)/gm, (m) => m.replace(/[^\n]/g, " "));
+	FENCE_RE.lastIndex = 0;
+	let masked = "";
+	let lastIndex = 0;
+	let fence: RegExpExecArray | null = FENCE_RE.exec(withoutRawPre);
+	while (fence !== null) {
+		masked += maskIndentedCode(withoutRawPre.slice(lastIndex, fence.index));
+		masked += fence[0];
+		lastIndex = fence.index + fence[0].length;
+		fence = FENCE_RE.exec(withoutRawPre);
+	}
+	return masked + maskIndentedCode(withoutRawPre.slice(lastIndex));
+}
+
+/** Masks fenced Markdown as well as non-visible containers. */
+function maskNonVisibleMarkdown(text: string): string {
+	return maskNonVisibleContainers(maskFenced(text));
 }
 
 /** Removes fenced and inline Markdown code, which can describe styles without applying them. */
@@ -586,8 +601,13 @@ function checkR5(
 /** Levels the Architecture section must cover, each with a diagram or an explicit waiver. */
 const ARCH_LEVELS = ["시스템 레벨", "컴포넌트 레벨", "도메인 레벨"] as const;
 
-/** A waived level must say WHY in the same line — a bare marker is an opt-out, not a claim. */
-const ARCH_WAIVER = /구조 변화 없음\s*[:：—-]\s*\S/;
+/** A waived level must be a dedicated line that says WHY — a bare marker is an opt-out, not a claim. */
+const ARCH_WAIVER = /^[ \t]*구조 변화 없음[ \t]*[:：—-][ \t]*(\S[^\r\n]*)$/m;
+
+function hasArchWaiver(text: string): boolean {
+	const match = ARCH_WAIVER.exec(text);
+	return match !== null && hasVisibleCellText(match[1] ?? "");
+}
 
 /** The three system-contract axes the 시스템 레벨 must enumerate (R14). */
 const SYSTEM_CONTRACT_AXES = ["서버 API", "DB 스키마", "클라이언트 의존"] as const;
@@ -748,13 +768,14 @@ function classDiagramMissingMembers(rawSlice: string): boolean {
 function checkR9(text: string): CheckItem {
 	const problems: string[] = [];
 	for (const level of ARCH_LEVELS) {
-		const slice = levelSlice(text, level);
+		const slice = levelSlice(maskNonVisibleMarkdown(text), level);
+		const diagramSlice = levelSlice(maskNonVisibleContainers(text), level);
 		if (slice === null) {
 			problems.push(`${level} 헤딩(### ${level})이 없습니다`);
 			continue;
 		}
-		const hasDiagram = /```mermaid/.test(slice);
-		if (!hasDiagram && !ARCH_WAIVER.test(slice)) {
+		const hasDiagram = diagramSlice !== null && /```mermaid/.test(diagramSlice);
+		if (!hasDiagram && !hasArchWaiver(slice)) {
 			problems.push(
 				`${level}에 mermaid 다이어그램도, 사유를 단 생략 마커("구조 변화 없음: <사유>")도 없습니다`,
 			);
@@ -824,9 +845,9 @@ const BOUNDARY_MARKERS = ["영향 인터페이스", "의존 방향"] as const;
 // with the changed step marked (leveling/marker judged by R12), alongside the
 // existing behaviour-unit cards and the dependency-direction verdict.
 function checkR15(text: string): CheckItem {
-	const rawSlice = levelSlice(text, "경계·의존·유스케이스");
-	const slice = levelSlice(maskFenced(text), "경계·의존·유스케이스");
-	if (slice === null || rawSlice === null) {
+	const diagramSlice = levelSlice(maskNonVisibleContainers(text), "경계·의존·유스케이스");
+	const slice = levelSlice(maskNonVisibleMarkdown(text), "경계·의존·유스케이스");
+	if (slice === null || diagramSlice === null) {
 		return {
 			id: "R15",
 			title: "R15 경계·의존·유스케이스 블록",
@@ -843,8 +864,8 @@ function checkR15(text: string): CheckItem {
 	// changed step) is shown, not narrated. A reasoned waiver stands in when the
 	// diff genuinely changes no use-case flow.
 	const hasOrchestration =
-		mermaidFences(rawSlice).some((fence) => /^\s*sequenceDiagram\b/m.test(fence)) ||
-		ARCH_WAIVER.test(rawSlice);
+		mermaidFences(diagramSlice).some((fence) => /^\s*sequenceDiagram\b/m.test(fence)) ||
+		hasArchWaiver(slice);
 	if (!hasOrchestration) missing.push("오케스트레이션 다이어그램(mermaid sequenceDiagram)");
 	return {
 		id: "R15",
@@ -955,9 +976,9 @@ function hasValidArchEntity(slice: string): boolean {
 // and interface (functions), plus a change kind. Measured gap: the component
 // diagram was bare class names — `CurrentBoostPackInfoCard` alone read as opaque.
 function checkR18(text: string): CheckItem {
-	const rawSlice = levelSlice(text, "컴포넌트 레벨");
-	const slice = levelSlice(maskFenced(text), "컴포넌트 레벨");
-	if (slice === null || rawSlice === null) {
+	const diagramSlice = levelSlice(maskNonVisibleContainers(text), "컴포넌트 레벨");
+	const slice = levelSlice(maskNonVisibleMarkdown(text), "컴포넌트 레벨");
+	if (slice === null || diagramSlice === null) {
 		return {
 			id: "R18",
 			title: "R18 컴포넌트 레벨 노드 카드",
@@ -967,8 +988,8 @@ function checkR18(text: string): CheckItem {
 	}
 	// The diagram-node ban applies whether or not the level is waived — a waiver
 	// says "no structural change", not "file paths are fine as nodes".
-	const pathNode = diagramFilePathNodes(rawSlice);
-	if (ARCH_WAIVER.test(slice) && !pathNode) {
+	const pathNode = diagramFilePathNodes(diagramSlice);
+	if (hasArchWaiver(slice) && !pathNode) {
 		return { id: "R18", title: "R18 컴포넌트 레벨 노드 카드", pass: true, detail: "" };
 	}
 	const missing: string[] = [];
@@ -976,7 +997,7 @@ function checkR18(text: string): CheckItem {
 		missing.push(
 			"다이어그램 노드가 파일 경로 — 컴포넌트 노드는 모듈/개념 이름(피처·유스케이스·훅·서비스)으로 적고, 위치는 카드의 패키지 슬롯에 패키지 단위로 적는다",
 		);
-	if (!ARCH_WAIVER.test(slice)) {
+	if (!hasArchWaiver(slice)) {
 		const cards = archEntityCards(slice);
 		if (cards.length === 0) {
 			missing.push("arch-entity 카드", "변경종류(data-change: new|mod|del)");
@@ -1013,9 +1034,9 @@ const DOMAIN_CARD_MARKERS = ["책임", "핵심 멤버", "변경점"] as const;
 // this diff added or modified, or what it now guarantees. A reasoned
 // `구조 변화 없음: <사유>` waiver stands in when the diff changes no domain object.
 function checkR21(text: string): CheckItem {
-	const rawSlice = levelSlice(text, "도메인 레벨");
-	const slice = levelSlice(maskFenced(text), "도메인 레벨");
-	if (slice === null || rawSlice === null) {
+	const diagramSlice = levelSlice(maskNonVisibleContainers(text), "도메인 레벨");
+	const slice = levelSlice(maskNonVisibleMarkdown(text), "도메인 레벨");
+	if (slice === null || diagramSlice === null) {
 		return {
 			id: "R21",
 			title: "R21 도메인 레벨 엔티티 카드",
@@ -1026,11 +1047,11 @@ function checkR21(text: string): CheckItem {
 	const missing: string[] = [];
 	// The diagram bans hold even under a waiver: an object diagram, if drawn, must
 	// name domain concepts (not file paths) and must show each object's members.
-	if (diagramFilePathNodes(rawSlice))
+	if (diagramFilePathNodes(diagramSlice))
 		missing.push(
 			"다이어그램 노드가 파일 경로 — 도메인 노드는 실재 비즈니스 개념/엔티티 이름으로 적는다",
 		);
-	if (classDiagramMissingMembers(rawSlice))
+	if (classDiagramMissingMembers(diagramSlice))
 		missing.push(
 			"객체 다이어그램의 클래스 박스가 비어 있음 — 각 객체의 멤버 변수와 메소드(메시지)를 채운다",
 		);
@@ -1044,7 +1065,9 @@ function checkR21(text: string): CheckItem {
 			if (
 				classes.includes("ae-members") &&
 				(row[2] ?? "").trim() === "핵심 멤버" &&
-				/<code\b[^>]*>\s*[^<\s][^<]*<\/code\s*>/i.test(row[3] ?? "")
+				[...((row[3] ?? "").matchAll(/<code\b[^>]*>([\s\S]*?)<\/code\s*>/gi))].some((chip) =>
+					hasVisibleCellText(chip[1] ?? ""),
+				)
 			)
 				return true;
 			row = ARCH_ENTITY_FIELD_ROW.exec(withoutComments);
@@ -1066,7 +1089,7 @@ function checkR21(text: string): CheckItem {
 		}
 		return false;
 	};
-	if (!ARCH_WAIVER.test(slice)) {
+	if (!hasArchWaiver(slice)) {
 		const cards = archEntityCards(slice);
 		if (cards.length === 0) {
 			missing.push("arch-entity 카드", "변경종류(data-change: new|mod|del)");

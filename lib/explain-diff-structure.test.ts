@@ -1246,6 +1246,45 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 		expect(item?.pass).toBe(true);
 	});
 
+	for (const [container, hiddenCard] of [
+		[
+			"HTML 주석",
+			`<!--
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>
+<p><strong>패키지</strong> entities/supplement/api</p>
+<p><strong>책임</strong> fail-closed 해소기 공급</p>
+<p><strong>인터페이스</strong> resolveAlias, resolveDisplay</p>
+<p><strong>변경점</strong> 두 카탈로그 query를 묶는 해소기 신설</p>
+</div>
+-->`,
+		],
+		[
+			"들여쓴 코드",
+			`    <div class="arch-entity" data-change="new">
+    <p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>
+    <p><strong>패키지</strong> entities/supplement/api</p>
+    <p><strong>책임</strong> fail-closed 해소기 공급</p>
+    <p><strong>인터페이스</strong> resolveAlias, resolveDisplay</p>
+    <p><strong>변경점</strong> 두 카탈로그 query를 묶는 해소기 신설</p>
+    </div>`,
+		],
+	] as const) {
+		test(`${container} 안의 완전한 컴포넌트 카드도 R18에서 세지 않는다`, () => {
+			const doc = withBackground(
+				ARCH_OK.replace(
+					/<div class="arch-entity" data-change="new">[\s\S]*?<\/div>/,
+					hiddenCard,
+				),
+			);
+			const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+				(i) => i.id === "R18",
+			);
+			expect(item?.pass).toBe(false);
+			expect(item?.detail).toContain("arch-entity 카드");
+		});
+	}
+
 	test("컴포넌트 카드의 산문·인라인 코드·주석 속 라벨은 필드가 아니다", () => {
 		const misleadingCard = `<div class="arch-entity" data-change="new">
 <p><strong>이름</strong> <code>useSupplementCodeResolver</code></p>
@@ -1418,6 +1457,34 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 		expect(r.pass).toBe(false);
 	});
 
+	test("HTML 주석 안의 waiver-looking line은 R9를 면제하지 않는다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				"<!-- 구조 변화 없음: 주석 속 사유 -->",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R9",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("도메인 레벨");
+	});
+
+	test("전용 marker line이 아닌 산문의 waiver-looking phrase는 R9를 면제하지 않는다", () => {
+		const doc = withBackground(
+			ARCH_OK.replace(
+				"구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+				"이번 변경은 구조 변화 없음: 산문 속 문구일 뿐이다.",
+			),
+		);
+		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+			(i) => i.id === "R9",
+		);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("도메인 레벨");
+	});
+
 	test("시스템 레벨에 계약 3축 중 하나라도 빠지면 R14가 실패하고 빠진 축을 담는다", () => {
 		const doc = withBackground(ARCH_OK.replace(/\| DB 스키마 \|[^\n]*\n/, ""));
 		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" });
@@ -1513,6 +1580,66 @@ classDiagram
 		);
 		expect(item?.pass).toBe(true);
 	});
+
+	for (const [container, hiddenCard] of [
+		[
+			"HTML 주석",
+			`<!--
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>SupplementCategory</code></p>
+<p><strong>책임</strong> 영양제의 canonical 정체성을 보유한다</p>
+<p class="ae-members"><strong>핵심 멤버</strong> <code>code</code></p>
+<p><strong>변경점</strong> canonical 정체성 개념 신설</p>
+</div>
+-->`,
+		],
+		[
+			"들여쓴 코드",
+			`    <div class="arch-entity" data-change="new">
+    <p><strong>이름</strong> <code>SupplementCategory</code></p>
+    <p><strong>책임</strong> 영양제의 canonical 정체성을 보유한다</p>
+    <p class="ae-members"><strong>핵심 멤버</strong> <code>code</code></p>
+    <p><strong>변경점</strong> canonical 정체성 개념 신설</p>
+    </div>`,
+		],
+	] as const) {
+		test(`${container} 안의 완전한 도메인 카드도 R21에서 세지 않는다`, () => {
+			const doc = withBackground(
+				ARCH_OK.replace(
+					"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+					`### 도메인 레벨\n${hiddenCard}`,
+				),
+			);
+			const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+				(i) => i.id === "R21",
+			);
+			expect(item?.pass).toBe(false);
+			expect(item?.detail).toContain("arch-entity 카드");
+		});
+	}
+
+	for (const memberChip of ["&nbsp;", "&#160;", "&#xA0;"]) {
+		test(`ae-members의 ${memberChip}뿐인 code chip은 R21에서 비어 있는 것으로 본다`, () => {
+			const doc = withBackground(
+				ARCH_OK.replace(
+					"### 도메인 레벨\n구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.",
+					`### 도메인 레벨
+
+<div class="arch-entity" data-change="new">
+<p><strong>이름</strong> <code>SupplementCategory</code></p>
+<p><strong>책임</strong> 영양제의 canonical 정체성을 보유한다</p>
+<p class="ae-members"><strong>핵심 멤버</strong> <code>${memberChip}</code></p>
+<p><strong>변경점</strong> canonical 정체성 개념 신설</p>
+</div>`,
+				),
+			);
+			const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
+				(i) => i.id === "R21",
+			);
+			expect(item?.pass).toBe(false);
+			expect(item?.detail).toContain("핵심 멤버");
+		});
+	}
 
 	test("도메인 카드의 한 행 라벨 충돌은 책임·변경점 독립 필드로 인정하지 않는다", () => {
 		const domainLevel = `### 도메인 레벨
