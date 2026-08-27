@@ -16,7 +16,7 @@ quiz로 넘어가는 경로는 없다.
 | 3 | 목표→그림→해석 | 모든 mermaid 앞에 이 그림으로 확인할 구체 목표 1문장, 뒤에 실제 그려진 엣지/노드에서 나온 구조적 관찰이 있다. "이 그림은 흐름을 보여준다" 류 일반론은 FAIL |
 | 4 | 상태 다이어그램 | diff가 건드린 개념이 생명주기(3+ 상태 또는 잠금·만료·확정 같은 명명된 전이)를 가지면 stateDiagram-v2가 있고 전이 트리거가 라벨돼 있다. 생명주기가 정말 없으면 N.A(이유 명기) |
 | 5 | 로직 flowchart | 변경된 로직 중 3+ 분기(에러·엣지 경로 포함)를 가진 것이 flowchart로 있다. 그런 로직이 없으면 N.A |
-| 6 | 실재 식별자+변경 마커 | 노드·participant·라벨이 코드베이스의 실재 식별자이고, 이 diff가 바꾼 요소에 `:::changed`/`classDef changed` 마커가 있다. generic 노드("service→DB")는 FAIL |
+| 6 | 실재 식별자+변경 마커 | 노드·participant·라벨이 코드베이스의 실재 식별자이고, 이 diff가 바꾼 요소에 다이어그램 타입에 맞는 변경 마커(`:::changed`/`classDef changed`, `sequenceDiagram`에서는 변경 단계를 지목하는 `Note`)가 있다. generic 노드("service→DB")는 FAIL |
 | 7 | 시퀀스 완결성 | sequenceDiagram의 동기 호출이 activation(+)·return(−) 쌍으로 균형이고, 반환 없는 메시지는 async(`-)`)로 명시돼 있다 |
 | 8 | 사용자 여정 | 사용자 대면 표면(화면·입력·표시·알림·진입점)을 건드린 diff면, 사용자의 첫 행동에서 시작해 실제 분기를 지나 최종적으로 보는 것까지의 여정 flowchart가 경계 블록에 있다. 사용자 대면 표면이 없으면 경계 블록의 근거 있는 waiver 문장을 인용하고 N.A |
 | 9 | HTML 렌더 | render.ts가 exit 0으로 끝났고, HTML이 현재 마크다운에서 재생성된 것이다(마크다운을 고쳤으면 재렌더) |
