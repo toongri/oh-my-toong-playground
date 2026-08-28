@@ -337,7 +337,7 @@ do not collapse a prediction into a TBD.
 
 **Model-A boundary** (both forms). The section names the metric/prediction and how it will be observed — it
 does **not** specify instrumentation, event schemas, or dashboard construction ("add event E with property P",
-"build dashboard D" is HOW — Model-B work for `prometheus` / `sisyphus` downstream). And — **for Form 1
+"build dashboard D" is HOW — work-decomposition for `craft-tasks` downstream). And — **for Form 1
 only** — a "the code ran" count is not a value outcome: a sent push or a fired trigger proves the feature
 executed, not that adherence or conversion moved, so do not pass an execution count off as a Form-1 metric.
 (In Form 2 a success log is a legitimate confirmation shape — just the weakest, per its bullet above.)
@@ -494,8 +494,11 @@ reproduction` gate, so the re-run is always available when an AC is written.
 ### Slice Gate
 
 INVEST is the slice gate. An issue passes the gate if and only if it satisfies all six criteria
-below. File-count and LOC atomicity are NOT the requirement-stage gate — those are Model-B
-(work decomposition) signals, which belong to `prometheus` / `sisyphus` downstream.
+below. File-count and LOC atomicity are NOT the requirement-stage gate — those are
+work-decomposition (HOW) signals, owned by `craft-tasks` downstream **after the design is
+settled** (then `prometheus`/`ultragoal`), never by this WHAT-slicing stage. (This rubric is the
+WHAT half — sometimes called "Model A". The HOW half — "Model B" / work decomposition — is
+`craft-tasks`, a separate skill, not this stage.)
 
 ### INVEST Checklist (Bill Wake)
 
@@ -535,10 +538,15 @@ For each child:
 
   [ ] Or has the solution for this child been decided ("implementation-planning" stage,
       HOW is known)?
-      → This child is "settled". Hand off to `prometheus` (for planning) or `sisyphus`
-        (for execution) as the next step. Do NOT emit fields that decide or fix the
-        implementation method (fixed-architecture commitments, DoR implementation fields,
-        prescriptive edit instructions) here. Observational pre-context remains allowed.
+      → This child is "settled". Hand it off DOWN THE CHAIN — `deep-interview` (rigorously
+        settle design + intent — the core gate; run it even when a solution is already
+        *informally* decided, since craft-issue's "settled" is a team hunch, not a validated
+        design) → `craft-tasks` (decompose into task tickets) → `prometheus`
+        (plan a task, optional) → `ultragoal`/`sisyphus` (execute). Do NOT emit fields that
+        decide or fix the implementation method (fixed-architecture commitments, DoR
+        implementation fields, prescriptive edit instructions) here, and do NOT decompose it
+        into tasks here — `craft-tasks` owns that after design. Observational pre-context
+        remains allowed.
 ```
 
 A partially-settled intake splits naturally: open sub-units stay as Model-A WHAT children;
@@ -546,7 +554,7 @@ settled sub-units receive a handoff recommendation rather than being pre-solved.
 
 ### Candidate-seam heuristics (SECONDARY to the value test) + dependency-ordering
 
-These heuristics locate where an issue *could* be divided. They are **secondary to the Slice Unit value test, never parallel to it**: a candidate seam becomes its own child ONLY if each resulting side independently passes **V**. A side that fails V is a task — fold it, even when the work is internally sequential or joined by "and". Splitting a value-less step because the work is sequential is Model-B work decomposition; it belongs to `prometheus`/`sisyphus` downstream, not to requirement-stage issue slicing.
+These heuristics locate where an issue *could* be divided. They are **secondary to the Slice Unit value test, never parallel to it**: a candidate seam becomes its own child ONLY if each resulting side independently passes **V**. A side that fails V is a task — fold it, even when the work is internally sequential or joined by "and". Splitting a value-less step because the work is sequential is work-decomposition (HOW); it belongs to `craft-tasks` downstream (after design), not to requirement-stage issue slicing.
 
 | Smell | Action (apply only after each side independently passes V) |
 |---|---|
@@ -582,6 +590,6 @@ The rule's motive: WHAT is decided here; HOW belongs to `prometheus` (planning) 
 
 When a child is at implementation-planning stage (HOW is decided):
 
-1. Record the settled decision in the child issue body (under a "Design Decision" note, not in an implementation-path field).
-2. State in the issue: "Handoff to `prometheus` for planning" or "Handoff to `sisyphus` for execution".
-3. Do not emit fields that fix the implementation method (Model-B decomposition). The handoff target owns that decomposition. Observational pre-context already recorded in the body remains intact.
+1. Record the settled decision **on** the child issue — in the body under a "Design Decision" note when the child is being **created** this run, or as a **decision comment** when the child **already has a body** (Append-Only History Contract: an existing body is immutable, never rewritten). Because a handoff record retires no existing body line, the Append Comment Shape's 대체 대상 and its section-restatement of 정정 후 상태 do **not** apply — the comment simply states the settled decision and the next-step pointer (step 2). Not in an implementation-path field either way.
+2. State the next step down the chain: "Handoff to `deep-interview` → `craft-tasks`" (settle design, then materialize task tickets).
+3. Do not emit fields that fix the implementation method, and do not decompose the child into tasks here — that is HOW / work-decomposition, owned downstream by `craft-tasks` (then `prometheus`). Observational pre-context already recorded remains intact.

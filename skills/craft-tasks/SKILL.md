@@ -1,0 +1,136 @@
+---
+name: craft-tasks
+description: Use when a design is already settled (intent, approach, invariants, and boundary decided — typically after deep-interview) and it must be broken into concrete implementation tasks filed as shareable child tickets in the PM tool (Linear sub-issue / Notion / Jira) for the team to track. Triggers include "작업 분해", "task로 쪼개서 티켓 만들어", "설계 끝났으니 sub-issue로 나눠줘", "이 설계 실행 단위로 만들어", "decompose the design into tasks", "break this into tickets", "file the work items". NOT for requirement-stage WHAT slicing (that is craft-issue), and NOT for an AI-execution plan doc (that is prometheus).
+---
+
+# Craft-Tasks — Post-Design Work-Decomposition Pipeline
+
+Turns a **settled design** (the WHAT and the approach are decided) into a set of concrete implementation **tasks**, materialized as **shareable child tickets in the PM tool** for the team to track. This is HOW-decomposition — the deliberate **inverse** of craft-issue's WHAT-slicing.
+
+---
+
+## Where this sits (the chain)
+
+```
+craft-issue          deep-interview        craft-tasks           prometheus         ultragoal
+(WHAT/story)    →    (design + intent) →   (HOW → task tickets) → (plan per task) → (execute)
+                       the core                 THIS SKILL          optional·usual
+```
+
+craft-tasks is the **output-materializer** of the design core: deep-interview settles a unit's design; craft-tasks projects that design into trackable work.
+
+## When to use / when NOT
+
+- **Use** when: the design of one unit is settled and you need trackable task tickets in the PM tool.
+- **NOT** when the requirement/WHAT is still open, or no design exists yet → that is **craft-issue** (it produces the requirement unit; it must run before this).
+- **NOT** when you only need an AI-execution plan, not team-facing tickets → that is **prometheus**.
+
+**REQUIRED BACKGROUND:** the design contract and PM-tool write machinery this skill reuses live in `craft-issue` (`../craft-issue/references/issue-craft.md`). This skill owns the *decomposition judgment*; it borrows craft-issue's *write tail*.
+
+---
+
+## Precondition Gate — is the design actually settled?
+
+Do **not** decompose, and do **not** invent the missing design, if any of these is still open for the input unit:
+
+- **Intent** — what outcome the unit delivers and why.
+- **Approach** — the decided way to build it (the ADR-level choices).
+- **Invariants** — the rules that must always hold.
+- **Boundary** — which services/layers/components the unit touches.
+
+If any is open, **route back**: an open *approach/intent* → `deep-interview`; an open *WHAT* (the requirement itself is unclear) → `craft-issue`. Decomposing an unsettled design manufactures HOW that nobody decided — the exact "one giant plan that needs constant mid-course correction" failure this pipeline exists to prevent.
+
+---
+
+## The Inversion — craft-tasks rules are the OPPOSITE of craft-issue
+
+An agent reaching for craft-issue on a post-design job will **value-slice into requirement units and fold the real work items away** (observed baseline failure). On a settled design the rules invert. ("WHAT-unit" and "work item" below name *roles*, not any PM-tool level — a team may call them story/task, issue/sub-issue, or anything else.) Hold the right column:
+
+| Axis | craft-issue (WHAT — requirement unit) | **craft-tasks (HOW — work item)** |
+|---|---|---|
+| **Cut by** | user/business value | **implementation step / component** |
+| **Layer/platform split** (BE / RN / device / DB) | FORBIDDEN — worthless-until-integrated anti-pattern | **EXPECTED and correct** — each layer is a real, separately-mergeable unit |
+| **Implementation step** (schema, guard, calc, wiring) | FOLD into the requirement unit | **MATERIALIZE as its own work-item ticket** |
+| **Produces** | the requirement units (design open) | **the work items of a settled unit** (see the state rule below) |
+| **Ordering** | mostly independent | **explicit `blocked-by` chains are normal** — work items are sequenced |
+
+**The point of the inversion:** craft-issue folds implementation steps *because they have no stand-alone user value*. craft-tasks materializes them *because a trackable, assignable, separately-mergeable unit of work is exactly the team artifact being asked for.* Folding here destroys the deliverable.
+
+---
+
+## What routes a unit here is a STATE, not a level or label
+
+The one thing that puts a unit in craft-tasks' hands is that **its design is settled** — not what the PM tool labels it (project, epic, story, issue, ticket — the label varies by team and does not matter). Vocabulary is per-team; **role and state are what decide.**
+
+- **Decompose the settled unit into its work items** — the next-finer trackable child tickets your PM tool offers (in Linear, Sub-issues; the label is irrelevant). Create them under the settled unit.
+- **Do not decompose a unit whose design is still open** — route it back (see the Precondition Gate).
+- **Recursion, not fixed levels, is the "fractal":** if a work item is itself too large to implement as one unit, it re-enters the loop — `deep-interview` settles ITS design, then `craft-tasks` breaks it down further. There is no level-name to get right; there is only "is this unit's design settled, and does it still need breaking into trackable work items?"
+
+The same ticket is `craft-issue`'s subject while its design is open, and `craft-tasks`' subject once the design is settled. It flows through both as its state advances — it does not change level.
+
+---
+
+## Scope Fidelity — decompose only what the design contains
+
+Materialize a task **only for work the settled design actually names.** Do **not** invent scope: no QA task, no analytics/telemetry task, no notification task, no hardening task **unless the design names it.** (Baseline agents invented a QA ticket and a notification ticket the design never mentioned — that silently expands the committed work.)
+
+- A genuinely-implied-but-unstated piece (e.g., "this requires a push the design didn't mention") is **surfaced as a flagged question to the design owner**, recorded as `TBD — needs confirmation`, and left OUT of the created task set until confirmed — never silently filed as a task.
+- Telemetry/analytics/tests that ride *inside* a component's own work fold into that component's task's done-check; they do not become separate tasks unless the design schedules them separately.
+
+## Granularity Contract — where one task begins and ends
+
+**One task = the smallest unit of work that a single developer can implement, review, and merge on its own (≈ one PR) and that has a defined done-check.** Stop splitting below that.
+
+- This is **not** file-count or LOC. A task may touch several files; it is one task if it is one coherent, separately-mergeable change with one done-check.
+- Two steps that can only be reviewed and merged together are **one** task, not two.
+- A step with no independent done-check (it cannot be verified until a sibling lands) folds into the sibling — unless the design deliberately sequences it as its own deliverable with a `blocked-by` link.
+
+This contract is what makes two runs land on the same grain instead of one cutting 3 tasks and another cutting 9.
+
+---
+
+## Task Body Shape
+
+Each task ticket carries, in the team's working language (Korean by default):
+
+- **목적** — what this task delivers toward the settled design (one or two sentences; cite the design decision it implements).
+- **변경 대상** — the component / layer / files this touches. Observational, evidence-backed (from the design's boundary map). This IS allowed here — unlike craft-issue, a task legitimately states HOW.
+- **완료 조건 (DoD)** — verifiable done-checks, each with a verification method (test / query / manual step). Same observable-AC bar as craft-issue's rubric (`../craft-issue/references/issue-craft.md` §2).
+- **의존** — `blocked-by` predecessor tasks, if any.
+
+**Shared design invariants are referenced, not restated.** Cross-cutting rules (the design's invariants, shared definitions) live once on the **parent** unit; each task references the parent rather than re-declaring them — the same Tier-A placement craft-issue uses. This keeps the invariant single-sourced so tasks cannot drift it.
+
+---
+
+## Write Tail — reuse craft-issue's machinery
+
+The mechanical write is **identical** to craft-issue's Stage 6 — reuse it, do not reinvent it:
+
+- **Create each task as a real ticket** in the PM tool. Set `parentId` to the input unit; set `blocked-by` for sequenced tasks; apply labels.
+- **Existing ticket → append comment, never rewrite the body** (craft-issue's Append-Only History Contract; Append Comment Shape in `../craft-issue/references/issue-craft.md`).
+- **Humanizer pass** on Korean reader-facing prose before the write (`Skill(humanizer)`), then write.
+- **Runtime tool binding** is resolved at write time (Linear MCP: `save_issue` to create, `parentId`, `blockedBy`, `create_comment` for an existing ticket) — same binding note as craft-issue.
+
+### The materialize-don't-propose loophole (inherited from craft-issue Stage 5)
+
+"Decompose into tasks" is a **write action** — create the child tickets in the PM tool. Listing the tasks as a **"proposed breakdown / 작업 분해 (제안)" section in the parent body instead of creating them is a FAILURE**, not compliance: the work stays un-trackable and the caller must re-ask. Create the tickets. The only thing that defers creation is an **explicit caller instruction not to create sub-issues.**
+
+**Violating the letter (not materializing the tasks) is violating the spirit (the work stays un-trackable).**
+
+---
+
+## Red Flags — STOP, you are doing craft-issue's job instead
+
+- You are **folding** an implementation step "because it has no stand-alone user value" → that is the craft-issue rule; on a settled design you **materialize** it.
+- You **refused a layer/platform split** as an anti-pattern → correct for requirement units, wrong for work items; the layer split is the point here.
+- You produced **value-sliced requirement units** when the input's design was already settled → you did craft-issue's job; produce the settled unit's **work items** instead.
+- You created a **QA / analytics / notification** work item the design never named → scope creep; surface it as a flagged question, don't file it.
+- You wrote a **"작업 분해 (제안)"** section in the parent body instead of creating the tickets.
+
+**All of these mean: you are applying WHAT-slicing to a HOW job. Re-read The Inversion and produce the settled unit's work-item tickets.**
+
+---
+
+## lazy / deferred
+
+- **No automated review gate in v1.** craft-issue's `issue-reviewer` is tuned for WHAT-issue bodies and would mis-flag a task body for legitimately containing HOW. Add a task-tuned reviewer only if task-body quality proves a recurring problem.

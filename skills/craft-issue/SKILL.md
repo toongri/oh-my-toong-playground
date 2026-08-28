@@ -5,7 +5,9 @@ description: Use when creating, refining, or managing requirement-stage PM issue
 
 # Craft-Issue — Requirement-Stage Issue Pipeline
 
-A context-synthesis pipeline that turns an assigned PM issue OR an abstract free-text requirement into a well-formed, cross-linked issue (and INVEST-sliced sub-issues when large), written autonomously to the PM tool.
+A context-synthesis pipeline that gathers the real information and current state a requirement needs — so design and decisions can be made on it — and organizes that onto a well-formed, cross-linked issue (and requirement-sliced sub-issues when large). Its primary value is **gathering**; it **creates or enriches** tickets as the way to persist what it gathered. When tickets already exist (the usual case), it enriches them; when none exist (ad-hoc, raw), it synthesizes them.
+
+**This is the WHAT stage — before design, before HOW.** craft-issue records what is needed and the current situation; it never decides how to build. Once a unit's design is settled (via `deep-interview`), breaking it into implementation **tasks filed as shareable tickets** is `craft-tasks` (the downstream HOW-decomposition skill), not this skill.
 
 ---
 
@@ -146,9 +148,10 @@ Read `references/issue-craft.md` (already loaded in Stage 4 — re-read only if 
 
 **Slice gate decision:**
 
+- **Input already decomposed into a well-formed tree** (a Linear Project / parent issue whose children each already pass INVEST as single units — the usual state when a PM handed you an organized tree): the slice gate does **not** re-fire. There is no mega-issue to cut. Do **not** create new children or re-slice — that would file duplicates (Duplicate Policy). "정리 / organize" here means **validate + enrich + gap-fill**: verify each existing child against INVEST, reconcile relations/labels, add a missing child only for a genuine coverage gap, and enrich via **append comment** (bodies are immutable). A pure-validation pass that finds nothing to correct writes nothing (Lean by Default). The discriminator for this branch is **whether the children already pass INVEST as single units — never the word "정리/organize" itself.** The "Slicing means CREATING" rationalization table and Red Flags below apply ONLY when the gate FIRES on an un-decomposed requirement; they do not reach this already-decomposed branch.
 - If the issue passes INVEST as a single unit: proceed to Stage 6 (write as-is).
 - If the issue is too large (fails Independent or Estimable or Small): slice into child issues, each passing the per-child stage-check ("requirement-understanding vs implementation-planning"). Then apply the **Parent-Issue Body Shape** in `references/issue-craft.md` to the parent — as its body when this run is creating the parent, or as an **append comment** on it when the parent already exists (Append-Only History Contract; the restructure is written as Effective State over the sections it changes, never as a body rewrite) — follow its required/conditional column in full (the parent keeps its own Pre-Context; shared context placement follows the **Tiered Shared-Context Placement** rule there — Tier A parent-inline for small/stable context regardless of reuse count, Tier C canonical-document link for substantial/evolving context, Tier B full duplication only for a cross-team/external handoff). Each child carries its own Problem, Pre-Context, AC, and Non-Goals and references the canonical location (parent or Tier-C document) for shared definitions rather than duplicating them (except a Tier-B handoff child, which restates them in full).
-- Settled child issues hand off to `prometheus` (for planning) or `sisyphus` (for execution) as appropriate.
+- Settled child issues hand off **down the chain**: `deep-interview` (settle the design and intent) → `craft-tasks` (decompose into task tickets) → `prometheus` (plan a task, optional) → `ultragoal`/`sisyphus` (execute). A settled child is NOT decomposed into implementation tasks here — that is `craft-tasks`' job after design.
 
 INVEST is the slice gate. File-count or LOC atomicity is NOT the gate.
 
