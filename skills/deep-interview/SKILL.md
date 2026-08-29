@@ -498,6 +498,8 @@ After the spec is written, choose the recommended execution route from the spec'
 - **Rule 3:** Otherwise (planning and/or multi-step execution without a request for team-facing task tickets), route by the active-component count in `state.topology`: exactly 1 active component → recommend **`ultragoal`** directly; otherwise (0 or ≥2 active components) → recommend **`prometheus`**, for feasibility/design review, plan-reliability review, and a human-readable plan that ultragoal can execute from. This count chooses only the default route; it does not determine the number of stories either skill will derive. The count is frozen at Round 0 with user confirmation, so the router never judges its own spec. A missing `topology` field is `legacy_missing`; Round 0 must run first rather than routing it here.
 - **Rule 4:** Never recommend `sisyphus` directly — ultragoal uses it as the sole executor.
 
+**`craft-tasks` parent handoff:** When a known PM parent exists, pass its `parentId` or URL with the settled spec. When no parent is known, pass the spec alone and rely on `craft-tasks`' parent-resolution gate; this direct spec-only flow is valid. `craft-tasks` must resolve and verify the parent before reading or creating any child.
+
 **Question:** "Your spec is ready (ambiguity: {score}%). How would you like to proceed?"
 
 **Build the options like this** (recommended route first, tagged "(Recommended)", with a one-sentence rationale tied to THIS spec):
@@ -508,7 +510,7 @@ After the spec is written, choose the recommended execution route from the spec'
 - When `prometheus` is recommended, offer `ultragoal` as an explicit override.
 - **Continue interviewing** — "Continue interviewing to improve clarity (current: {score}%)" → return to the Phase 2 loop.
 
-Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec file path as context (the team-facing task-ticket option invokes `Skill(skill: "craft-tasks")`; the planning/execution option invokes `Skill(skill: "prometheus")` or `Skill(skill: "ultragoal")` according to the active-component count).
+Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec file path as context (the team-facing task-ticket option invokes `Skill(skill: "craft-tasks")` and includes the known `parentId`/URL when available; otherwise it passes only the spec and relies on the parent-resolution gate; the planning/execution option invokes `Skill(skill: "prometheus")` or `Skill(skill: "ultragoal")` according to the active-component count).
 
 **IMPORTANT:** On execution selection, **MUST** invoke the chosen skill via `Skill()`. Do NOT implement directly. The deep-interview agent is a requirements agent, not an execution agent. Pass the spec file path forward (and the prompt-safe summary, if the initial context was summarized) — never the raw oversized source material.
 

@@ -73,10 +73,13 @@ skills:
     - component: pin-setup
       platforms: [claude, codex]
     - scan-pdf-to-notes
-    - craft-issue
+    - component: craft-issue
+      platforms: [claude, codex]
     - humanizer
-    - craft-tasks
-    - deep-interview
+    - component: craft-tasks
+      platforms: [claude, codex]
+    - component: deep-interview
+      platforms: [claude, codex]
     - component: meeting-notes
       platforms: [claude, codex]
     # 전역 등록된 SessionStart 훅 orphan-reaper.sh(claude.yaml)가

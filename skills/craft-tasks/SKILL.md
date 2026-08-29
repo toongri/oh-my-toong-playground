@@ -115,9 +115,19 @@ Each task ticket carries, in the team's working language (Korean by default):
 
 The mechanical write is **identical** to craft-issue's Stage 6 — reuse it, do not reinvent it:
 
+### Parent-resolution gate
+
+Before reading any child tree or creating any child, establish exactly one verified parent:
+
+1. If the handoff includes a `parentId` or parent URL, use it as the candidate. Re-read it in the PM tool and verify that it is the settled-design parent by matching the settled design anchor.
+2. Otherwise, search the PM tool by the settled design anchor. Adopt exactly one verified match. If no match exists, create one parent from the settled spec.
+3. Re-read and verify the supplied, found, or created parent against the settled design anchor. Continue only when it resolves to one verified `parentId`; every child must use that same resolved `parentId`.
+
+An ambiguous or multiple search result, a parent mismatch, failed parent creation, or interrupted parent creation is a stop/re-search condition. Do not create a replacement or duplicate parent; re-search before any retry and proceed only with one verified match (or stop).
+
 ### Existing-child / duplicate gate
 
-Before any create, read the input unit's current child tree and use the organized-tree pattern: **validate → enrich → gap-fill**.
+After the parent-resolution gate, and before any child create, read the verified parent's current child tree and use the organized-tree pattern: **validate → enrich → gap-fill**.
 
 - Match each intended task to an existing child by a stable identity composed of the settled design anchor, purpose, and changed target; **title alone is insufficient**.
 - Preserve every matched existing ticket and append/enrich it under the append-only contract; never rewrite its body.
@@ -126,14 +136,14 @@ Before any create, read the input unit's current child tree and use the organize
 
 Only after this gate passes:
 
-- **Create each unmatched genuine gap as a real ticket** in the PM tool. Set `parentId` to the input unit; set `blocked-by` for sequenced tasks; apply labels.
+- **Create each unmatched genuine gap as a real ticket** in the PM tool. Set `parentId` to the resolved parentId; set `blocked-by` for sequenced tasks; apply labels.
 - **Existing ticket → append comment, never rewrite the body** (craft-issue's Append-Only History Contract; Append Comment Shape in `../craft-issue/references/issue-craft.md`).
 - **Humanizer pass** on Korean reader-facing prose before the write (`Skill(humanizer)`), then write.
 - **Runtime tool binding** is resolved at write time (Linear MCP: `save_issue` to create, `parentId`, `blockedBy`, `create_comment` for an existing ticket) — same binding note as craft-issue.
 
 ### The materialize-don't-propose loophole (inherited from craft-issue Stage 5)
 
-"Decompose into tasks" is a **write action** — create the child tickets in the PM tool. Listing the tasks as a **"proposed breakdown / 작업 분해 (제안)" section in the parent body instead of creating them is a FAILURE**, not compliance: the work stays un-trackable and the caller must re-ask. Create the tickets. **After the precondition gate passes**, the only thing that defers creation is an **explicit caller instruction not to create sub-issues**; that exception does not override an unsettled-design block.
+"Decompose into tasks" is a **write action** — create the child tickets in the PM tool. Listing the tasks as a **"proposed breakdown / 작업 분해 (제안)" section in the parent body instead of creating them is a FAILURE**, not compliance: the work stays un-trackable and the caller must re-ask. Create the tickets only after the settled-design and parent-resolution gates pass, using the resolved `parentId` for every child. **After the precondition gate passes**, the only thing that defers creation is an **explicit caller instruction not to create sub-issues**; that exception does not override an unsettled-design block.
 
 **Violating the letter (not materializing the tasks) is violating the spirit (the work stays un-trackable).**
 
