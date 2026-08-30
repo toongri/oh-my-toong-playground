@@ -9,7 +9,8 @@
 | Complexity | Approach | When to Use |
 |------------|----------|-------------|
 | **Simple** | Just prompt | Quick fixes, single-file changes |
-| **Fuzzy scope** | `/deep-interview` -> conditional `/ultragoal` or `/prometheus` | You have an idea but requirements are unclear |
+| **Team task tickets** | `/deep-interview` -> `/craft-tasks` -> optional `/prometheus` per task -> `/ultragoal` -> `/sisyphus` | You need a settled design turned into shareable, trackable implementation task tickets |
+| **Fuzzy scope** | `/deep-interview` -> AI execution only: `/ultragoal` (or `/prometheus` -> `/ultragoal`) -> `/sisyphus` | You have an idea but requirements are unclear |
 | **Complex** | `/prometheus` -> `/ultragoal` -> `/sisyphus` | Multi-step work requiring planning and orchestration |
 
 **Decision Flow:**
@@ -18,7 +19,13 @@
 Is it a quick fix or simple task?
   |-- YES -> Just prompt normally
   |-- NO  -> Are the requirements clear?
-              |-- NO  -> /deep-interview to crystallize a spec -> /ultragoal if exactly one topology component is active; otherwise /prometheus
+              |-- NO  -> /deep-interview to crystallize a spec
+                          |-- Need shareable, trackable implementation task tickets?
+                                |-- YES -> /craft-tasks to resolve/enrich the parent and materialize child tickets
+                                          -> /prometheus only when a task needs its own plan
+                                          -> /ultragoal -> /sisyphus
+                                |-- NO  -> /ultragoal if exactly one topology component is active
+                                          otherwise /prometheus -> /ultragoal -> /sisyphus
               |-- YES -> Do you need multi-step execution?
                           |-- YES -> /prometheus for planning -> /ultragoal -> /sisyphus for execution
                           |-- NO  -> Just prompt with context
@@ -38,6 +45,7 @@ Oh-My-Toong solves this by clearly separating roles:
 | Role | Agent | Responsibility |
 |------|-------|----------------|
 | **Definition** | deep-interview | Resolves ambiguity into a spec, NEVER writes code |
+| **Task ticketing** | craft-tasks | Decomposes a settled design into shareable child task tickets, resolving and enriching the parent before creation |
 | **Planning** | prometheus | Strategic planning, NEVER writes code |
 | **Story execution** | ultragoal | Sequentially dispatches plan stories to sisyphus |
 | **Execution** | sisyphus | Orchestrates via delegation, NEVER works alone |
@@ -58,11 +66,20 @@ flowchart TD
 
     subgraph Definition Phase
         DeepInterview --> SpecFile["$OMT_DIR/deep-interview/{slug}.md"]
-        SpecFile --> Route{Exactly one active<br/>topology component?}
+        SpecFile --> Output{Spec output shape?}
+        Output -->|Team-facing task tickets| CraftTasks["/craft-tasks"]
+        Output -->|AI execution only| Route{Exactly one active<br/>topology component?}
+    end
+
+    subgraph Task Ticket Phase
+        CraftTasks --> Parent["Resolve and enrich<br/>verified parent"]
+        Parent --> ChildTickets["PM tool: materialize<br/>child task tickets"]
+        ChildTickets --> TaskPlan{Plan needed<br/>per task?}
     end
 
     subgraph Planning Phase
         Route -->|No| Prometheus["/prometheus"]
+        TaskPlan -->|Yes| Prometheus
         Prometheus --> Metis[metis<br/>Gap Analysis]
         Metis --> Prometheus
         Prometheus --> PlanFile["~/.omt/{OMT_PROJECT}/plans/*.md"]
@@ -70,6 +87,7 @@ flowchart TD
 
     subgraph Execution Phase
         Route -->|Yes| Ultragoal["/ultragoal"]
+        TaskPlan -->|No| Ultragoal
         PlanFile --> Ultragoal
         Ultragoal -->|Sequentially dispatches stories| Sisyphus["/sisyphus"]
         Sisyphus --> Junior[sisyphus-junior]
@@ -89,8 +107,15 @@ flowchart TD
 - **Role**: Crystallizes a vague idea into a spec before autonomous execution
 - **Constraint**: Won't proceed to execution while the ambiguity score stays above threshold. Never implements directly.
 - **Output**: `$OMT_DIR/deep-interview/{slug}.md`
-- **Workflow**: One question at a time, targeting the weakest clarity dimension -> measure ambiguity -> finalize spec once below threshold -> in Phase 5, recommend `/ultragoal` when exactly one topology component is active; otherwise recommend `/prometheus`. Present the non-recommended skill as an explicit override.
+- **Workflow**: One question at a time, targeting the weakest clarity dimension -> measure ambiguity -> finalize the spec once below threshold -> in Phase 5, recommend `/craft-tasks` when the output calls for shareable, trackable implementation task tickets; otherwise, when only AI execution is needed, recommend `/ultragoal` for exactly one active topology component or `/prometheus` otherwise. Present the non-recommended skill as an explicit override.
 - **Origin**: Borrowed almost as-is from oh-my-claudecode (omc), whose implementation was simply too good to reinvent (originally inspired by [Ouroboros](https://github.com/Q00/ouroboros))
+
+### craft-tasks (The Task Ticket Materializer)
+
+- **Role**: Decomposes a settled design into shareable, trackable implementation task tickets for the team
+- **Constraint**: Use only after intent, approach, invariants, and boundary are settled. If you only need an AI-execution plan, use `prometheus` instead.
+- **Output**: Child task tickets materialized in the PM tool under a verified parent
+- **Workflow**: Uses the deep-interview spec to resolve and enrich the parent, validates existing child tickets, then materializes only the missing implementation tasks. Use `/prometheus` optionally per generated task when it needs a separate AI-execution plan, then execute through `/ultragoal` -> `/sisyphus`.
 
 ### prometheus (The Planner)
 
@@ -98,6 +123,7 @@ flowchart TD
 - **Constraint**: **READ-ONLY**. NEVER writes code.
 - **Output**: `~/.omt/{OMT_PROJECT}/plans/{name}.md` (via `$OMT_DIR`)
 - **Workflow**: Scope split gate -> Interview -> Research -> Metis consultation -> Plan creation -> hand off to `/ultragoal`
+- **When to use**: Use it for the AI-execution-only route, or only when an individual task created by `craft-tasks` needs a separate AI-execution plan.
 - **Scope split**: Complex and Architecture requests first settle whether a subset could be merged on its own and leave the system working. If one could, only the first subset becomes this run's scope; the rest each become their own prometheus run.
 
 ### ultragoal (The Story Executor)
@@ -141,11 +167,13 @@ When requirements are unclear, crystallize a spec with `/deep-interview` before 
 
 1. **One question at a time**: Targets the weakest clarity dimension
 2. **Ambiguity gating**: Repeats until the score drops below threshold
-3. **Spec finalization and route selection**: Save to `$OMT_DIR/deep-interview/{slug}.md`. In Phase 5, recommend `/ultragoal` when exactly one topology component is active; otherwise recommend `/prometheus`. Present the non-recommended skill as an explicit override.
+3. **Spec finalization and route selection**: Save to `$OMT_DIR/deep-interview/{slug}.md`. In Phase 5, recommend `/craft-tasks` when the spec calls for shareable, trackable implementation task tickets. `craft-tasks` resolves and enriches the verified parent and materializes child task tickets; use `/prometheus` only when an individual task needs an AI-execution plan. AI execution then runs through `/ultragoal` -> `/sisyphus`. When the spec only needs AI execution and no team-facing task tickets, preserve the existing route: recommend `/ultragoal` for exactly one active topology component, or `/prometheus` -> `/ultragoal` -> `/sisyphus` otherwise. Present the non-recommended skill as an explicit override.
 
 ### Phase 1: Planning
 
-When requirements are clear, use `/prometheus`:
+When a settled design must become shareable, trackable task tickets, use `/craft-tasks`. It resolves and enriches the parent and materializes child tickets; use `/prometheus` only when an individual task needs an AI-execution plan.
+
+When requirements are clear and you only need an AI-execution plan, use `/prometheus`:
 
 1. **Scope Split Gate**: Complex and Architecture only. If a subset could be merged on its own, the subsets are listed in order and only the first becomes this run's scope
 2. **Interview Mode**: Collects context through questions
@@ -173,6 +201,7 @@ With a plan ready, `/ultragoal` sequentially dispatches its stories to `/sisyphu
 | Command | Purpose | Output |
 |---------|---------|--------|
 | `/deep-interview <idea>` | Crystallize a spec via ambiguity gating | `$OMT_DIR/deep-interview/{slug}.md` |
+| `/craft-tasks <spec>` | Decompose a settled design into shareable task tickets after resolving and enriching the parent | Parent and child task tickets in the PM tool |
 | `/prometheus <task>` | Create work plan | `~/.omt/{OMT_PROJECT}/plans/*.md` |
 | `/ultragoal` | Sequentially dispatch plan stories to sisyphus | Story-by-story execution progress |
 | `/sisyphus` | Orchestrate execution of a dispatched story | Verified code changes |
@@ -192,7 +221,7 @@ When the inline verify requests changes, fix them. Don't argue or skip. The prot
 
 ### 3. Use Interview Mode for Unclear Requirements
 
-If you find yourself repeatedly clarifying requirements during prometheus, answer more thoroughly or let the interview mode collect sufficient context first.
+If you find yourself repeatedly clarifying requirements during prometheus, answer more thoroughly or let deep-interview collect sufficient context first. If the settled design must become team-facing task tickets, use craft-tasks after deep-interview and add prometheus only for tasks that need their own AI-execution plan.
 
 ### 4. Let Agents Do Their Jobs
 
@@ -202,7 +231,7 @@ If you find yourself repeatedly clarifying requirements during prometheus, answe
 
 ### 5. Single Plan Principle
 
-Contain all TODOs in one plan file. This prevents context fragmentation and makes progress tracking easier.
+Keep one plan file per AI-execution scope. In the team-ticket route, craft-tasks owns the parent and child tickets, while prometheus remains optional per task.
 
 ---
 
@@ -211,6 +240,7 @@ Contain all TODOs in one plan file. This prevents context fragmentation and make
 | Problem | Solution |
 |---------|----------|
 | Prometheus keeps interviewing | It needs more context. Answer thoroughly or say "generate plan now". |
+| craft-tasks does not create child tickets | Check that intent, approach, invariants, and boundary are settled and that exactly one parent can be verified. |
 | Sisyphus won't stop | This is by design. ultragoal counts consecutive no-progress Stops and may soft-stop as `budget_limited` at `max_iterations` (default 10), preserving state. |
 | Inline verify keeps failing | Review the feedback carefully. The issues are real. |
 
@@ -219,4 +249,4 @@ Contain all TODOs in one plan file. This prevents context fragmentation and make
 ## See Also
 
 - [README](../README.en.md) - Project overview
-- [Core Pipeline Skills](skills/core-pipeline.en.md) - deep-interview · prometheus · ultragoal · sisyphus details
+- [Core Pipeline Skills](skills/core-pipeline.en.md) - deep-interview · craft-tasks · prometheus · ultragoal · sisyphus details

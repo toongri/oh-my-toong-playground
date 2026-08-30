@@ -9,7 +9,8 @@
 | 복잡도 | 접근 방식 | 사용 시점 |
 |--------|----------|-----------|
 | **단순** | 그냥 프롬프트 | 빠른 수정, 단일 파일 변경 |
-| **범위 흐림** | `/deep-interview` -> 조건부 `/ultragoal` 또는 `/prometheus` | 아이디어는 있지만 요구사항이 불명확한 작업 |
+| **팀 작업 티켓** | `/deep-interview` -> `/craft-tasks` -> task별 선택적 `/prometheus` -> `/ultragoal` -> `/sisyphus` | 확정된 설계를 팀이 공유·추적할 구현 task 티켓으로 만들 때 |
+| **범위 흐림** | `/deep-interview` -> AI 실행만 필요하면 `/ultragoal` (또는 `/prometheus` -> `/ultragoal`) -> `/sisyphus` | 아이디어는 있지만 요구사항이 불명확한 작업 |
 | **복잡** | `/prometheus` -> `/ultragoal` -> `/sisyphus` | 기획과 조율이 필요한 다단계 작업 |
 
 **결정 흐름:**
@@ -18,7 +19,13 @@
 빠른 수정이나 단순 작업인가?
   |-- 예 -> 그냥 평소처럼 프롬프트
   |-- 아니오 -> 요구사항이 명확한가?
-                  |-- 아니오 -> /deep-interview로 명세 수렴 -> 활성 토폴로지 컴포넌트가 정확히 하나면 /ultragoal, 아니면 /prometheus
+                  |-- 아니오 -> /deep-interview로 명세 수렴
+                                |-- 팀이 공유·추적할 구현 task 티켓이 필요한가?
+                                      |-- 예 -> /craft-tasks로 부모 확인·보강 및 자식 티켓 생성
+                                               -> task별 필요할 때만 /prometheus
+                                               -> /ultragoal -> /sisyphus
+                                      |-- 아니오 -> 활성 토폴로지 컴포넌트가 정확히 하나면 /ultragoal
+                                                   아니면 /prometheus -> /ultragoal -> /sisyphus
                   |-- 예 -> 다단계 실행이 필요한가?
                               |-- 예 -> /prometheus로 기획 -> /ultragoal -> /sisyphus로 실행
                               |-- 아니오 -> 컨텍스트와 함께 프롬프트
@@ -38,6 +45,7 @@ Oh-My-Toong은 역할을 명확히 분리하여 이를 해결합니다:
 | 역할 | 에이전트 | 책임 |
 |------|----------|------|
 | **정의** | deep-interview | 모호성을 해소해 명세로 수렴, 절대 코드 작성 안 함 |
+| **작업 티켓화** | craft-tasks | 확정된 설계를 팀이 공유·추적할 자식 task 티켓으로 분해하고 부모를 확인·보강한 뒤 생성 |
 | **기획** | prometheus | 전략적 기획, 절대 코드 작성 안 함 |
 | **스토리 실행** | ultragoal | 계획의 스토리를 순서대로 sisyphus에 전달 |
 | **실행** | sisyphus | 위임을 통한 조율, 절대 단독 작업 안 함 |
@@ -58,11 +66,20 @@ flowchart TD
 
     subgraph 정의 단계
         DeepInterview --> SpecFile["$OMT_DIR/deep-interview/{slug}.md"]
-        SpecFile --> Route{활성 토폴로지<br/>컴포넌트가 정확히 하나인가?}
+        SpecFile --> Output{명세의 산출물 형태?}
+        Output -->|팀 공유·추적 task 티켓| CraftTasks["/craft-tasks"]
+        Output -->|AI 실행만| Route{활성 토폴로지<br/>컴포넌트가 정확히 하나인가?}
+    end
+
+    subgraph 작업 티켓 단계
+        CraftTasks --> Parent["검증된 부모<br/>확인·보강"]
+        Parent --> ChildTickets["PM 도구에 자식<br/>task 티켓 생성"]
+        ChildTickets --> TaskPlan{task별 AI<br/>계획이 필요한가?}
     end
 
     subgraph 기획 단계
         Route -->|아니오| Prometheus["/prometheus"]
+        TaskPlan -->|예| Prometheus
         Prometheus --> Metis[metis<br/>갭 분석]
         Metis --> Prometheus
         Prometheus --> PlanFile["~/.omt/{OMT_PROJECT}/plans/*.md"]
@@ -70,6 +87,7 @@ flowchart TD
 
     subgraph 실행 단계
         Route -->|예| Ultragoal["/ultragoal"]
+        TaskPlan -->|아니오| Ultragoal
         PlanFile --> Ultragoal
         Ultragoal -->|스토리를 순서대로 전달| Sisyphus["/sisyphus"]
         Sisyphus --> Junior[sisyphus-junior]
@@ -89,8 +107,15 @@ flowchart TD
 - **역할**: 모호한 아이디어를 자율 실행 전에 명세로 수렴
 - **제약**: 모호성 점수가 임계값을 넘으면 실행으로 넘어가지 않음. 직접 구현 안 함.
 - **출력**: `$OMT_DIR/deep-interview/{slug}.md`
-- **워크플로우**: 한 번에 한 질문, 가장 약한 명확성 차원을 겨냥 -> 모호성 측정 -> 임계값 이하면 명세 확정 -> 5단계에서 활성 토폴로지 컴포넌트가 정확히 하나면 `/ultragoal`, 아니면 `/prometheus` 권장. 권장하지 않은 다른 스킬은 명시적 재정의 옵션으로 제시
+- **워크플로우**: 한 번에 한 질문, 가장 약한 명확성 차원을 겨냥 -> 모호성 측정 -> 임계값 이하면 명세 확정 -> 5단계에서 산출물이 팀이 공유·추적할 구현 task 티켓이면 `/craft-tasks`를 권장하고, 그렇지 않고 AI 실행만 필요하면 활성 토폴로지 컴포넌트가 정확히 하나일 때 `/ultragoal`, 아니면 `/prometheus`를 권장. 권장하지 않은 다른 스킬은 명시적 재정의 옵션으로 제시
 - **출처**: oh-my-claudecode(omc)의 구현이 워낙 잘 만들어져 거의 그대로 가져와 다듬었습니다 (originally [Ouroboros](https://github.com/Q00/ouroboros) 영감)
+
+### craft-tasks (작업 티켓 생성자)
+
+- **역할**: 확정된 설계를 팀이 공유·추적할 수 있는 구현 task 티켓으로 분해
+- **제약**: 의도·접근 방식·불변식·경계가 확정된 설계에만 사용합니다. AI 실행 계획만 필요하면 `prometheus`를 사용합니다.
+- **출력**: 검증된 부모 아래 PM 도구에 생성된 자식 task 티켓
+- **워크플로우**: deep-interview 명세를 바탕으로 부모를 확인·보강하고 기존 자식 티켓을 검증한 뒤, 누락된 구현 task만 자식 티켓으로 생성합니다. 생성된 각 task에 AI 실행 계획이 필요할 때만 task별로 `/prometheus`를 선택하고, 이후 `/ultragoal` -> `/sisyphus`로 실행합니다.
 
 ### prometheus (기획자)
 
@@ -98,6 +123,7 @@ flowchart TD
 - **제약**: **READ-ONLY**. 절대 코드 작성 안 함.
 - **출력**: `~/.omt/{OMT_PROJECT}/plans/{name}.md` (`$OMT_DIR` 경유)
 - **워크플로우**: 범위 분할 판정 -> 인터뷰 -> 조사 -> Metis 상담 -> 계획 작성 -> `/ultragoal`에 전달
+- **사용 시점**: 팀 task 티켓이 필요 없는 AI 실행 경로에서 사용하거나, `craft-tasks`가 만든 각 task에 별도 AI 실행 계획이 필요할 때만 선택합니다.
 - **범위 분할**: Complex·Architecture 요청은 인터뷰 전에 "혼자 머지해도 시스템이 도는 부분집합이 있나"를 먼저 묻고, 있으면 첫 덩어리만 이번 실행의 범위로 삼습니다. 나머지는 각자 별도 prometheus 실행이 됩니다.
 
 ### ultragoal (스토리 실행자)
@@ -141,11 +167,13 @@ flowchart TD
 
 1. **한 질문씩**: 가장 약한 명확성 차원을 겨냥해 질문
 2. **모호성 게이팅**: 점수가 임계값 아래로 떨어질 때까지 반복
-3. **명세 확정 및 경로 선택**: `$OMT_DIR/deep-interview/{slug}.md`에 저장. 5단계에서 활성 토폴로지 컴포넌트가 정확히 하나면 `/ultragoal`, 아니면 `/prometheus`를 권장하고, 권장하지 않은 스킬은 명시적 재정의 옵션으로 제시
+3. **명세 확정 및 경로 선택**: `$OMT_DIR/deep-interview/{slug}.md`에 저장합니다. 5단계에서 산출물이 팀이 공유·추적할 구현 task 티켓이면 `/craft-tasks`를 권장합니다. `craft-tasks`는 검증된 부모를 확인·보강하고 PM 도구에 자식 task 티켓을 생성하며, 각 task에 AI 실행 계획이 필요할 때만 `/prometheus`를 선택적으로 적용합니다. 이후 AI 실행은 `/ultragoal`이 `/sisyphus`에 전달합니다. 팀 task 티켓이 필요하지 않고 AI 실행만 필요한 명세는 기존대로 활성 토폴로지 컴포넌트가 정확히 하나면 `/ultragoal`, 아니면 `/prometheus` -> `/ultragoal` -> `/sisyphus`를 권장하고, 권장하지 않은 스킬은 명시적 재정의 옵션으로 제시합니다.
 
 ### 1단계: 기획
 
-요구사항이 명확할 때 `/prometheus` 사용:
+확정된 설계를 팀이 공유·추적할 task 티켓으로 만들려면 `/craft-tasks`를 사용합니다. `craft-tasks`가 부모를 확인·보강하고 자식 티켓을 생성한 뒤, 각 task의 AI 실행 계획이 필요할 때만 `/prometheus`를 선택적으로 사용합니다.
+
+팀 task 티켓 없이 AI 실행 계획이 필요하고 요구사항이 명확할 때 `/prometheus`를 사용합니다:
 
 1. **범위 분할 판정**: Complex·Architecture 요청만 해당. 혼자 머지해도 시스템이 도는 부분집합이 있으면 덩어리를 순서대로 나열하고 첫 덩어리만 이번 범위로 잡습니다
 2. **인터뷰 모드**: 질문을 통해 컨텍스트 수집
@@ -173,6 +201,7 @@ flowchart TD
 | 명령어 | 용도 | 출력 |
 |--------|------|------|
 | `/deep-interview <아이디어>` | 모호성 게이팅으로 명세 수렴 | `$OMT_DIR/deep-interview/{slug}.md` |
+| `/craft-tasks <명세>` | 확정된 설계를 팀이 공유·추적할 task 티켓으로 분해하고 부모 확인·보강 후 자식 티켓 생성 | PM 도구의 부모·자식 task 티켓 |
 | `/prometheus <작업>` | 작업 계획 생성 | `~/.omt/{OMT_PROJECT}/plans/*.md` |
 | `/ultragoal` | 계획의 스토리를 순서대로 sisyphus에 전달 | 스토리별 실행 진행 |
 | `/sisyphus` | 전달된 스토리를 조율해 실행 | 검증된 코드 변경 |
@@ -192,7 +221,7 @@ flowchart TD
 
 ### 3. 불명확한 요구사항에는 인터뷰 모드를 활용하세요
 
-prometheus 도중 요구사항을 반복적으로 명확히 해야 한다면, 더 충분한 답변을 제공하거나 인터뷰 모드에서 컨텍스트를 먼저 정리하세요.
+prometheus 도중 요구사항을 반복적으로 명확히 해야 한다면, 더 충분한 답변을 제공하거나 deep-interview에서 컨텍스트를 먼저 정리하세요. 확정된 설계를 팀 task 티켓으로 남기려면 deep-interview 다음에 craft-tasks를 사용하고, AI 실행 계획이 필요할 때만 task별로 prometheus를 이어서 사용합니다.
 
 ### 4. 에이전트가 자기 일을 하게 두세요
 
@@ -202,7 +231,7 @@ prometheus 도중 요구사항을 반복적으로 명확히 해야 한다면, �
 
 ### 5. 단일 계획 원칙
 
-모든 TODO를 하나의 계획 파일에 담으세요. 컨텍스트 분산을 방지하고 진행 추적을 쉽게 합니다.
+AI 실행 계획을 만들 때 하나의 실행 범위는 하나의 계획 파일에 담으세요. 팀 task 티켓 경로에서는 craft-tasks가 부모·자식 티켓을 만들고, 각 task의 계획이 필요할 때만 task별 prometheus를 선택합니다.
 
 ---
 
@@ -211,6 +240,7 @@ prometheus 도중 요구사항을 반복적으로 명확히 해야 한다면, �
 | 문제 | 해결책 |
 |------|--------|
 | Prometheus가 계속 인터뷰함 | 더 많은 컨텍스트가 필요합니다. 자세히 답하거나 "지금 계획을 생성해"라고 말하세요. |
+| craft-tasks가 자식 티켓을 만들지 않음 | 설계의 의도·접근 방식·불변식·경계가 확정됐는지, 부모가 하나로 확인되는지 점검하세요. |
 | Sisyphus가 멈추지 않음 | 설계된 대로입니다. ultragoal은 진전 없는 Stop을 `iteration`으로 세고, `max_iterations`(기본 10)에서 `budget_limited`로 상태를 보존한 채 소프트 정지할 수 있습니다. |
 | 인라인 검증이 계속 실패함 | 피드백을 주의 깊게 검토하세요. 이슈는 실제입니다. |
 
@@ -219,4 +249,4 @@ prometheus 도중 요구사항을 반복적으로 명확히 해야 한다면, �
 ## 참고 자료
 
 - [README](../README.md) - 프로젝트 개요
-- [핵심 파이프라인 스킬](skills/core-pipeline.md) - deep-interview · prometheus · ultragoal · sisyphus 상세
+- [핵심 파이프라인 스킬](skills/core-pipeline.md) - deep-interview · craft-tasks · prometheus · ultragoal · sisyphus 상세
