@@ -111,28 +111,37 @@ Each task ticket carries, in the team's working language (Korean by default):
 
 ---
 
-## Write Tail — reuse craft-issue's machinery
+## Write Tail — reuse only applicable craft-issue Stage 6 mechanics
 
-The mechanical write is **identical** to craft-issue's Stage 6 — reuse it, do not reinvent it:
+craft-issue's Stage 6 is not copied wholesale. Reuse only the applicable **plain-language/humanizer** pass, the **append-only** history contract, the **abstract relation/label/write mechanics**, and the **runtime binding**. The design-anchor and parent/child gates below are owned by craft-tasks.
+
+Do not reuse **WHAT-only slicing** or the **mandatory issue-reviewer Checklist Review Gate**. craft-tasks v1 has **no automated task reviewer**; the mandatory issue-reviewer gate is not applicable and must not run here.
+
+### Design-anchor gate
+
+The handoff carries one immutable shared metadata value in `designAnchor`:
+`designAnchor: "design-anchor: deep-interview:<state.interview_id>"`.
+Accept only the exact canonical value `design-anchor: deep-interview:<state.interview_id>`, where `<state.interview_id>` is the non-empty identifier persisted in the settled spec's `state.interview_id`. Reject a **missing or invalid anchor** — including an anchor derived from a title, slug, timestamp, or hash — **before any child-tree/create** operation.
 
 ### Parent-resolution gate
 
-Before reading any child tree or creating any child, establish exactly one verified parent:
+After the design-anchor gate and before reading any child tree or creating any child, establish exactly one verified parent:
 
-1. If the handoff includes a `parentId` or parent URL, use it as the candidate. Re-read it in the PM tool and verify that it is the settled-design parent by matching the settled design anchor.
-2. Otherwise, search the PM tool by the settled design anchor. Adopt exactly one verified match. If no match exists, create one parent from the settled spec.
-3. Re-read and verify the supplied, found, or created parent against the settled design anchor. Continue only when it resolves to one verified `parentId`; every child must use that same resolved `parentId`.
+1. If the handoff includes a `parentId` or parent URL, use it as the candidate. Re-read it in the PM tool and verify that it is the settled-design parent; it must **match the exact anchor** through the exact `designAnchor`. A known parent with a different anchor is a mismatch and a hard stop.
+2. If the identified existing parent is a legacy WHAT parent that lacks the anchor, do not replace it. Enrich it with **one append-only design-handoff comment** containing the exact anchor, the settled goal, approach, invariants, boundary, and any canonical external design URL; never use a local session path, `$OMT_DIR` path, or `file://` URL in that comment.
+3. Otherwise, search the PM tool by the exact settled design anchor. Adopt exactly one verified match. If no match exists, create one parent from the settled spec. **A new parent persists the same anchor.**
+4. **Re-read and verify effective state after append/create** for the supplied, found, enriched, or created parent. Continue only when it resolves to one verified `parentId` whose effective state contains the exact anchor and settled design handoff; every child must use that same resolved `parentId`.
 
-An ambiguous or multiple search result, a parent mismatch, failed parent creation, or interrupted parent creation is a stop/re-search condition. Do not create a replacement or duplicate parent; re-search before any retry and proceed only with one verified match (or stop).
+Any ambiguity, mismatch, append failure, re-read failure, or interruption stops before child creation. Do not create a replacement or duplicate parent; re-search only after the interrupted or failed operation is recoverable, and proceed only with one verified match.
 
 ### Existing-child / duplicate gate
 
 After the parent-resolution gate, and before any child create, read the verified parent's current child tree and use the organized-tree pattern: **validate → enrich → gap-fill**.
 
-- Match each intended task to an existing child by a stable identity composed of the settled design anchor, purpose, and changed target; **title alone is insufficient**.
-- Preserve every matched existing ticket and append/enrich it under the append-only contract; never rewrite its body.
-- Create only unmatched, genuine coverage gaps. If a match is ambiguous, stop and surface the ambiguity instead of creating.
-- After an interruption or create failure, re-read the current child tree before retrying, rematch, and create only the remaining gaps.
+- Match each intended task to an existing child by this rule: **identity is the exact tuple: anchor + purpose + changed target**; **title alone is insufficient**. A child that cannot prove the exact anchor is not a match; treat a possible legacy match as an ambiguity and stop rather than creating a replacement.
+- **Every child carries the same anchor and `parentId`**. For matched children, preserve/enrich matched tickets append-only; never rewrite their bodies.
+- For gaps, create only unmatched gaps that are genuine coverage gaps. If a match is ambiguous, stop and surface the ambiguity instead of creating.
+- After every append/create, **re-read and verify effective state after append/create** before continuing. After an interruption or create failure, re-read the current child tree, rematch, and create only the remaining gaps; any re-read failure or interruption stops before another child is created.
 
 Only after this gate passes:
 

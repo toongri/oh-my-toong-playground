@@ -5,6 +5,8 @@
 
 ## Metadata
 - Interview ID: {uuid}
+- Design anchor: design-anchor: deep-interview:<state.interview_id>
+- Anchor source: persisted state.interview_id; stable across resume; never from title, slug, timestamp, or hash
 - Rounds: {count}
 - Final Ambiguity Score: {score}%
 - Type: greenfield | brownfield

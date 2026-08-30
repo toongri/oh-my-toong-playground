@@ -478,6 +478,8 @@ When the Design Interview phase has exited with all design branches resolved, or
 
 1. **Generate the specification** with the prompt-safe transcript, using the design decisions recorded during the Design Interview phase for the Approach section; on a user-forced escape hatch, include any unresolved requirements gap or design branch as a risk-note instead. **Spec template: you MUST read `deep-interview-spec-template.md` now, before composing the spec.** Do not write the spec from memory.
 
+**Immutable design anchor:** read the persisted state before composing the spec and derive the one shared metadata value exactly as `design-anchor: deep-interview:<state.interview_id>`. The anchor is derived only from persisted state.interview_id, remains stable across resume, and is never from title, slug, timestamp, or hash. Put this exact value in the template's Metadata section; do not invent or normalize a second anchor.
+
 **Boundary Map (required section).** The spec's `## Boundary Map` places the Topology components on the two boundary axes — a definition table naming each part by layer (vertical domain · horizontal use-case), responsibility, collaborators, and **affected vs modified**, followed by a **Dependency direction** verdict (unidirectional per axis; flag any back-reference, cycle, or inner→outer import as a coupling defect). This renders the boundary picture the Topology scores and Ontology entities leave implicit. Vocabulary follows the `architecture-boundaries` rule — method names (DDD · FSD · Clean-arch) as vocabulary only, never a methodology mandate.
 
 **Diagram-authoring guidance**: **you MUST read `diagram-guide.md` in full before authoring the spec's `## Diagrams` section.** Author the 6-row coverage table using the canonical literals verbatim — header `| Lens | Trigger FACT | Status |`, and per-row status of either `drawn` or `trigger FALSE: <reason>` (these are control-plane tokens; never translate or paraphrase them). Draw every lens whose trigger FACT holds. Each diagram follows the Why → Diagram → Interpretation format. All mermaid fences live inside the `## Diagrams` section (fence-locality) — no mermaid block appears outside it.
@@ -498,7 +500,14 @@ After the spec is written, choose the recommended execution route from the spec'
 - **Rule 3:** Otherwise (planning and/or multi-step execution without a request for team-facing task tickets), route by the active-component count in `state.topology`: exactly 1 active component → recommend **`ultragoal`** directly; otherwise (0 or ≥2 active components) → recommend **`prometheus`**, for feasibility/design review, plan-reliability review, and a human-readable plan that ultragoal can execute from. This count chooses only the default route; it does not determine the number of stories either skill will derive. The count is frozen at Round 0 with user confirmation, so the router never judges its own spec. A missing `topology` field is `legacy_missing`; Round 0 must run first rather than routing it here.
 - **Rule 4:** Never recommend `sisyphus` directly — ultragoal uses it as the sole executor.
 
-**`craft-tasks` parent handoff:** When a known PM parent exists, pass its `parentId` or URL with the settled spec. When no parent is known, pass the spec alone and rely on `craft-tasks`' parent-resolution gate; this direct spec-only flow is valid. `craft-tasks` must resolve and verify the parent before reading or creating any child.
+**`craft-tasks` parent handoff:** Carry the exact `designAnchor` from the spec Metadata unchanged into the downstream handoff:
+
+```text
+designAnchor: "design-anchor: deep-interview:<state.interview_id>"
+parentId: "<known parent ID or URL, when available>"
+```
+
+The placeholder is replaced only with the persisted `state.interview_id`; never recompute it from the spec title, slug, timestamp, hash, or local session path. When a known PM parent exists, pass its `parentId` or URL with the settled spec. When no parent is known, pass the spec and exact `designAnchor` alone and rely on `craft-tasks`' parent-resolution gate; this direct spec-only flow is valid. `craft-tasks` must resolve and verify the parent before reading or creating any child.
 
 **Question:** "Your spec is ready (ambiguity: {score}%). How would you like to proceed?"
 
