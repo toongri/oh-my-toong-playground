@@ -54,7 +54,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 
 | 문서 | 내용 |
 |------|------|
-| [코어 파이프라인](docs/skills/core-pipeline.md) | 정의→기획→실행→검증 파이프라인 (deep-interview · prometheus · sisyphus · clarify · momus · diagnose · agent-council) + 위임 에이전트 13종 |
+| [코어 파이프라인](docs/skills/core-pipeline.md) | 정의→기획→실행→검증 파이프라인 (deep-interview · prometheus · sisyphus · clarify · momus · diagnose · agent-council · craft-tasks) + 위임 에이전트 13종 |
 | [리뷰/품질](docs/skills/review-quality.md) | code-review · orchestrate-review · design-review · slides-review · qa · explain-diff |
 | [프론트엔드 디자인](docs/skills/frontend-design.md) | frontend · visual-qa — 웹 UI 설계·구현과 렌더링 결과 독립 검증 |
 | [리서치](docs/skills/research.md) | ultraresearch · insane-browsing — 포화 리서치 엔진과 차단 소스 브라우징 |

@@ -54,7 +54,7 @@ The details of the library's skills (46) and agents (13) live under `docs/`.
 
 | Doc | Contents |
 |-----|----------|
-| [Core Pipeline](docs/skills/core-pipeline.en.md) | Definition→Planning→Execution→Verification pipeline (deep-interview · prometheus · sisyphus · clarify · momus · diagnose · agent-council) + 13 delegation agents |
+| [Core Pipeline](docs/skills/core-pipeline.en.md) | Definition→Planning→Execution→Verification pipeline (deep-interview · prometheus · sisyphus · clarify · momus · diagnose · agent-council · craft-tasks) + 13 delegation agents |
 | [Review/Quality](docs/skills/review-quality.en.md) | code-review · orchestrate-review · design-review · slides-review · qa · explain-diff |
 | [Frontend Design](docs/skills/frontend-design.en.md) | frontend · visual-qa — web UI design, implementation, and independent rendered-result verification |
 | [Research](docs/skills/research.en.md) | ultraresearch · insane-browsing — saturation research engine and blocked-source browsing |
