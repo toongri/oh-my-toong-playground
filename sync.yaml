@@ -37,6 +37,10 @@ provision:
 # feature-platforms.agents가 [claude, codex]라 bare 선언으로 충분하다.
 agents:
   items:
+    - issue-reviewer
+    - explore
+    - oracle
+    - librarian
     - code-reviewer
     - sisyphus-junior
 
