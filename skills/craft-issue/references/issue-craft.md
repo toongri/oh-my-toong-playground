@@ -495,10 +495,12 @@ reproduction` gate, so the re-run is always available when an AC is written.
 
 INVEST is the slice gate. An issue passes the gate if and only if it satisfies all six criteria
 below. File-count and LOC atomicity are NOT the requirement-stage gate — those are
-work-decomposition (HOW) signals, owned by `craft-tasks` downstream **after the design is
-settled** (then `prometheus`/`ultragoal`), never by this WHAT-slicing stage. (This rubric is the
-WHAT half — sometimes called "Model A". The HOW half — "Model B" / work decomposition — is
-`craft-tasks`, a separate skill, not this stage.)
+work-decomposition (HOW) signals, owned by `craft-tasks` downstream after `deep-interview` settles the
+design, never by this WHAT-slicing stage. Where the surrounding contract allows it, `prometheus`
+remains the optional planning/review step before `ultragoal`. `ultragoal` is the direct execution
+route; `sisyphus` is only `ultragoal`'s internal executor and is never presented as the direct route.
+(This rubric is the WHAT half — sometimes called "Model A". The HOW half — "Model B" / work
+decomposition — is `craft-tasks`, a separate skill, not this stage.)
 
 ### INVEST Checklist (Bill Wake)
 
@@ -541,12 +543,13 @@ For each child:
       → This child is "settled". Hand it off DOWN THE CHAIN — `deep-interview` (rigorously
         settle design + intent — the core gate; run it even when a solution is already
         *informally* decided, since craft-issue's "settled" is a team hunch, not a validated
-        design) → `craft-tasks` (decompose into task tickets) → `prometheus`
-        (plan a task, optional) → `ultragoal`/`sisyphus` (execute). Do NOT emit fields that
-        decide or fix the implementation method (fixed-architecture commitments, DoR
-        implementation fields, prescriptive edit instructions) here, and do NOT decompose it
-        into tasks here — `craft-tasks` owns that after design. Observational pre-context
-        remains allowed.
+        design) → `craft-tasks` (decompose HOW into task tickets) → `ultragoal` (direct execution).
+        Where the surrounding contract allows it, `prometheus` remains the optional planning/review
+        step before `ultragoal`. `sisyphus` is only `ultragoal`'s internal executor and is never
+        presented as the direct route. Do NOT emit fields that decide or fix the implementation
+        method (fixed-architecture commitments, DoR implementation fields, prescriptive edit
+        instructions) here, and do NOT decompose it into tasks here — `craft-tasks` owns that after
+        design. Observational pre-context remains allowed.
 ```
 
 A partially-settled intake splits naturally: open sub-units stay as Model-A WHAT children;
@@ -584,12 +587,12 @@ The test is **intent, not form**: does the text close HOW decisions, or record c
 - "Could block if the retry queue is not idempotent — needs verification via load test"
 - Pre-Context sub-items (Affected Areas, Premises, Blockers & Risks) filled from investigation results
 
-The rule's motive: WHAT is decided here; HOW belongs to `prometheus` (planning) and `sisyphus` (execution) after handoff. Recording where a requirement lands and what premises must hold is not pre-solving — it reduces PM round-trips and gives workers a confirmed starting point.
+The rule's motive: WHAT is decided here. After `deep-interview` settles the design, HOW decomposition belongs to `craft-tasks`. Where the surrounding contract allows it, `prometheus` remains the optional planning/review step before `ultragoal`. `ultragoal` is the direct execution route; `sisyphus` is only `ultragoal`'s internal executor and is never presented as the direct route. Recording where a requirement lands and what premises must hold is not pre-solving — it reduces PM round-trips and gives workers a confirmed starting point.
 
 ### Settled Child Handoff
 
 When a child is at implementation-planning stage (HOW is decided):
 
 1. Record the settled decision **on** the child issue — in the body under a "Design Decision" note when the child is being **created** this run, or as a **decision comment** when the child **already has a body** (Append-Only History Contract: an existing body is immutable, never rewritten). Because a handoff record retires no existing body line, the Append Comment Shape's 대체 대상 and its section-restatement of 정정 후 상태 do **not** apply — the comment simply states the settled decision and the next-step pointer (step 2). Not in an implementation-path field either way.
-2. State the next step down the chain: "Handoff to `deep-interview` → `craft-tasks`" (settle design, then materialize task tickets).
-3. Do not emit fields that fix the implementation method, and do not decompose the child into tasks here — that is HOW / work-decomposition, owned downstream by `craft-tasks` (then `prometheus`). Observational pre-context already recorded remains intact.
+2. State the next step down the chain: "Handoff to `deep-interview` → `craft-tasks`" (settle design, then materialize task tickets). After that, `ultragoal` is the direct execution route. Where the surrounding contract allows it, `prometheus` remains the optional planning/review step before `ultragoal`; `sisyphus` is only `ultragoal`'s internal executor and is never presented as the direct route.
+3. Do not emit fields that fix the implementation method, and do not decompose the child into tasks here — that is HOW / work-decomposition, owned downstream by `craft-tasks` after `deep-interview` settles the design. Observational pre-context already recorded remains intact.

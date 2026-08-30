@@ -204,6 +204,96 @@ describe("deep-interview-state CLI main()", () => {
 		expect(state["current_phase"]).toBe("deep-interview");
 	});
 
+	// Routing metadata is part of the persisted design identity: all three output
+	// shapes must be accepted, parent identity must update, and re-init must carry
+	// both fields forward when omitted. Revisions may explicitly pass the same
+	// interview/parent identity again, while an omitted interview id stays stable.
+	test("routing metadata round-trips through init/update/re-init and preserves the stable interview identity", () => {
+		writeSeed();
+		run(
+			'init --initial-idea "routing metadata" --interview-id design-284 --output-shape task-tickets --parent-id "https://linear.app/algocare/issue/ALG-284"',
+		);
+
+		let nested = rawState()["state"] as Record<string, unknown>;
+		expect(nested["output_shape"]).toBe("task-tickets");
+		expect(nested["parent_id"]).toBe("https://linear.app/algocare/issue/ALG-284");
+		expect(nested["interview_id"]).toBe("design-284");
+
+		for (const shape of ["ai-execution-plan", "domain-output"]) {
+			run(`update --output-shape ${shape}`);
+			nested = rawState()["state"] as Record<string, unknown>;
+			expect(nested["output_shape"]).toBe(shape);
+		}
+		run('update --parent-id "https://linear.app/algocare/issue/ALG-285"');
+
+		// A resumed/revised init that omits routing metadata and interview_id must not
+		// manufacture or discard the established design identity.
+		run('init --initial-idea "routing metadata revision"');
+		nested = rawState()["state"] as Record<string, unknown>;
+		expect(nested["output_shape"]).toBe("domain-output");
+		expect(nested["parent_id"]).toBe("https://linear.app/algocare/issue/ALG-285");
+		expect(nested["interview_id"]).toBe("design-284");
+
+		// A revision of the known PM parent can pass both established identities again.
+		run(
+			'init --initial-idea "routing metadata revision" --interview-id design-284 --output-shape task-tickets --parent-id "https://linear.app/algocare/issue/ALG-285"',
+		);
+		nested = rawState()["state"] as Record<string, unknown>;
+		expect(nested["interview_id"]).toBe("design-284");
+		expect(nested["parent_id"]).toBe("https://linear.app/algocare/issue/ALG-285");
+		expect(nested["output_shape"]).toBe("task-tickets");
+	});
+
+	test.each(['""', "freeform-prose"])(
+		"CLI init rejects %s as output_shape and leaves the state unchanged",
+		(rawValue) => {
+			writeSeed();
+			const path = resolveStatePath(SID);
+			const before = readFileSync(path, "utf8");
+			expect(() => run(`init --initial-idea "x" --output-shape ${rawValue}`)).toThrow();
+			expect(readFileSync(path, "utf8")).toBe(before);
+		},
+	);
+
+	test("CLI init rejects a missing output_shape value", () => {
+		writeSeed();
+		const path = resolveStatePath(SID);
+		const before = readFileSync(path, "utf8");
+		expect(() => run('init --initial-idea "x" --output-shape')).toThrow();
+		expect(readFileSync(path, "utf8")).toBe(before);
+	});
+
+	test("CLI update rejects an unknown output_shape and leaves the state unchanged", () => {
+		writeSeed();
+		run('init --initial-idea "x" --output-shape task-tickets');
+		const path = resolveStatePath(SID);
+		const before = readFileSync(path, "utf8");
+		expect(() => run("update --output-shape freeform-prose")).toThrow();
+		expect(readFileSync(path, "utf8")).toBe(before);
+	});
+
+	test("writer rejects an invalid output_shape before writing on init and update", () => {
+		writeSeed();
+		const path = resolveStatePath(SID);
+		const seedBefore = readFileSync(path, "utf8");
+		expect(() =>
+			initDeepInterviewState(SID, {
+				initial_idea: "x",
+				output_shape: "freeform-prose",
+			} as never),
+		).toThrow();
+		expect(readFileSync(path, "utf8")).toBe(seedBefore);
+
+		initDeepInterviewState(SID, { initial_idea: "x" });
+		const beforeUpdate = readFileSync(path, "utf8");
+		expect(() =>
+			updateDeepInterviewState(SID, {
+				output_shape: "",
+			} as never),
+		).toThrow();
+		expect(readFileSync(path, "utf8")).toBe(beforeUpdate);
+	});
+
 	// CLI update subcommand — current_ambiguity must land under state (SKILL.md:93)
 	test("update subcommand writes current_ambiguity under state.current_ambiguity", () => {
 		writeSeed();
