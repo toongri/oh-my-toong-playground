@@ -14,22 +14,54 @@ excludes `classDiagram`.
 | System topology | components >= 2 | `flowchart` (group vertical domains vs the horizontal use-case layer; draw dependency arrows in their decided direction so unidirectionality is checkable — see `## Boundary Map`) |
 | Module / API | the approach decides module interaction | `sequenceDiagram` |
 | Actor scenario | a user-facing scenario exists | `sequenceDiagram` (actor) |
-| Entity lifecycle | non-trivial state transitions exist | `stateDiagram-v2` |
 | Domain entity | the ontology is non-empty — an EMPTY ontology makes this row `trigger FALSE` | `erDiagram` |
+| Entity lifecycle | non-trivial state transitions exist | `stateDiagram-v2` |
 | Logic branching | complex branching logic | `flowchart` |
+
+**Lens order matters: Domain entity precedes Entity lifecycle.** The model (what
+exists) is drawn before the lifecycle (how a modelled thing transitions), so a
+lifecycle state — a `ProductOnly` storage phase, a `Draft` status — is never read
+as if it were the domain model. Author and list the two lenses in that order.
 
 ## Coverage Table (audit ledger)
 
 The spec's `## Diagrams` section starts with a 6-row coverage table, header
 exactly `| Lens | Trigger FACT | Status |`. Every Status cell is exactly
 `drawn` or `trigger FALSE: <reason>` — never blank. The count of `drawn`
-rows MUST match the number of mermaid fences in the spec, and every mermaid
-fence in the spec lives inside the `## Diagrams` section (fence-locality).
+rows MUST match the number of mermaid fences **in the `## Diagrams` section**.
+Mermaid fences live only in `## Diagrams` and in `## Boundary Map` (which carries
+exactly one dependency diagram of its own) — nowhere else (fence-locality). The
+Boundary Map diagram is NOT counted by the coverage table.
 
 This table is an audit ledger for lens coverage: a mechanical check catches
 a lying `drawn` row (fence count mismatch), while a wrong `trigger FALSE`
 reason is caught by human review. A blank Status cell is a defect, not an
 acceptable omission.
+
+## Node & Participant Naming
+
+Every node, `subgraph`, and `sequenceDiagram` participant is named for a **real
+element of the system at a consistent level of abstraction** — a module, a domain
+concept, a service, a store, an actor. Naming is NEVER:
+
+- an **internal / private function name** (`_get_previous_*_totals`) — that is an
+  implementation symbol, not a participant; name the module or role that owns it
+  (e.g. `영양소 총량 계산 서비스`) and put the symbol in the prose if it matters;
+- a **glob or placeholder** (`_get_previous_*`, `foo_*`) — a `*` reads as a typo;
+  spell out the concept or split it into the concrete cases;
+- a **bare DB column or table** standing in for a component (`proposal 저장 컬럼`)
+  while its sibling participants are services/adapters — either model the store as
+  its own consistently-named participant, or fold the column into the message text.
+
+**Keep one abstraction level per diagram.** Mixing a service, an adapter, a
+concrete repository class, and a DB column as sibling participants (as the
+b2c-6578 Module-API sequence did) makes the diagram unreadable — pick the level
+(all modules, or all concrete classes) and stay there.
+
+**A refactor sequence shows before→after, not just the end state.** A
+`sequenceDiagram` that draws only the post-change flow cannot teach what changed;
+contrast the old and new call order — two small diagrams, or one `Note` marking
+the removed/added hop — the same way the other lenses mark `:::changed`.
 
 ## Guardrail
 
