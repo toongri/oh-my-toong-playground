@@ -396,18 +396,17 @@ describe("template: approach and design decisions section", () => {
 });
 
 // ---------------------------------------------------------------------------
-// TEMPLATE: mermaid ontology erDiagram slot relocated to a "## Diagrams"
-// section, out of "## Ontology (Key Entities)" (must FAIL before T9
-// rewrites the template — RED)
+// ontology-dedup: entities are decoded in ONE home — the Domain entity lens
+// inside "## Diagrams" — instead of being restated across a standalone
+// "## Ontology (Key Entities)" table AND the erDiagram AND Ontology
+// Convergence. The standalone section is removed and its type/fields/relations
+// table moves under the Domain entity lens beside its erDiagram.
+// (must FAIL before the template rewrite — RED)
 // ---------------------------------------------------------------------------
 
-describe("template: mermaid ontology erDiagram slot", () => {
-	test("erDiagram is absent from the Ontology (Key Entities) section", () => {
-		const start = template.indexOf("## Ontology (Key Entities)");
-		expect(start).not.toBe(-1);
-		const end = template.indexOf("\n## ", start + 1);
-		const section = end === -1 ? template.slice(start) : template.slice(start, end);
-		expect(section).not.toContain("erDiagram");
+describe("template: entity ontology is decoded in one place, not duplicated across sections", () => {
+	test("the standalone `## Ontology (Key Entities)` section is removed (merged into the Domain entity lens)", () => {
+		expect(template).not.toContain("## Ontology (Key Entities)");
 	});
 
 	test("erDiagram is present in the Diagrams section", () => {
@@ -416,6 +415,14 @@ describe("template: mermaid ontology erDiagram slot", () => {
 		const end = template.indexOf("\n## ", start + 1);
 		const section = end === -1 ? template.slice(start) : template.slice(start, end);
 		expect(section).toContain("erDiagram");
+	});
+
+	test("the Domain entity lens carries the entity decode table (Type/Fields/Relationships), so entities have one home beside the erDiagram", () => {
+		const dStart = template.indexOf("### Domain entity");
+		expect(dStart).toBeGreaterThan(-1);
+		const nextSub = template.indexOf("\n### ", dStart + 1);
+		const section = nextSub === -1 ? template.slice(dStart) : template.slice(dStart, nextSub);
+		expect(section).toContain("| Entity | Type | Fields | Relationships |");
 	});
 });
 
@@ -1111,7 +1118,8 @@ describe("interviewer is instructed to call set-nongoals when a non-goal decider
 
 describe("output shape is an explicit persisted execution contract", () => {
 	const metadataStart = template.indexOf("## Metadata");
-	const metadataEnd = template.indexOf("## Clarity Breakdown", metadataStart);
+	// Metadata now runs to Goal (Clarity Breakdown moved to the Interview Audit appendix).
+	const metadataEnd = template.indexOf("## Goal", metadataStart);
 	const metadata = metadataStart === -1 ? "" : template.slice(metadataStart, metadataEnd === -1 ? undefined : metadataEnd);
 	const phase4Start = skillMd.indexOf("## Phase 4: Crystallize Spec");
 	const phaseStart = skillMd.indexOf("## Phase 5: Execution Bridge");
@@ -1280,6 +1288,14 @@ describe("template: Boundary Map renders the two boundary axes", () => {
 	test("defers vocabulary to the architecture-boundaries rule, not a methodology", () => {
 		expect(section).toContain("`architecture-boundaries` rule");
 	});
+
+	test("leads with a mermaid dependency diagram — the boundary picture, not only a table", () => {
+		expect(section).toContain("```mermaid");
+	});
+
+	test("the placement table splits the vertical domain from the horizontal layer/role into distinct columns, so a same-domain part on a different use-case cannot be mislabeled with an inconsistent hand-written layer string", () => {
+		expect(section).toContain("| Part | Domain");
+	});
 });
 
 describe("SKILL: Phase 4 requires the Boundary Map section", () => {
@@ -1289,5 +1305,114 @@ describe("SKILL: Phase 4 requires the Boundary Map section", () => {
 
 	test("Final Checklist gates on the Boundary Map", () => {
 		expect(skillMd).toContain("Spec includes a Boundary Map");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// audit-separation: the scoring/convergence telemetry (Clarity Breakdown,
+// Ontology Convergence, the full round transcript) is what an interview
+// PRODUCES to justify itself, not what a downstream skill (craft-tasks,
+// prometheus, ultragoal) CONSUMES. The b2c-6578 baseline interleaved it with
+// the deliverable body, which drew the "왜 round 얘기를 하냐 / 아무 의미 없다"
+// reaction. It moves into a single collapsed "Interview Audit" appendix after
+// the body, so the body reads as the spec and the appendix as its provenance.
+// (must FAIL before the template rewrite — RED)
+// ---------------------------------------------------------------------------
+
+describe("template: interview-scoring telemetry is separated into an Interview Audit appendix, not interleaved with the downstream-consumed body", () => {
+	test('an "Interview Audit" appendix marker is present', () => {
+		expect(template).toContain("Interview Audit");
+	});
+
+	test("the appendix is a collapsed <details> block", () => {
+		const idx = template.indexOf("<strong>Interview Audit</strong>");
+		expect(idx).toBeGreaterThan(-1);
+		const region = template.slice(Math.max(0, idx - 200), idx);
+		expect(region).toContain("<details>");
+	});
+
+	test("Ontology Convergence (round-by-round telemetry) sits in the appendix, after the Technical Context body section", () => {
+		const tc = template.indexOf("## Technical Context");
+		const conv = template.indexOf("Ontology Convergence");
+		expect(tc).toBeGreaterThan(-1);
+		expect(conv).toBeGreaterThan(tc);
+	});
+
+	test("Clarity Breakdown (scoring telemetry) also sits after the Technical Context body section", () => {
+		const tc = template.indexOf("## Technical Context");
+		const cb = template.indexOf("Clarity Breakdown");
+		expect(cb).toBeGreaterThan(tc);
+	});
+
+	test("the Goal — the first thing downstream reads — comes before the audit appendix", () => {
+		const goal = template.indexOf("## Goal");
+		const audit = template.indexOf("Interview Audit");
+		expect(goal).toBeGreaterThan(-1);
+		expect(goal).toBeLessThan(audit);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// technical-context-leak: the b2c-6578 output rendered the heading as
+// "## Technical Context (brownfield)" — the template's {brownfield:…}/
+// {greenfield:…} CONTENT conditional leaked into the HEADING. The type
+// qualifier is meaningless in the deliverable. The template must state the
+// heading is literally "## Technical Context" with no parenthetical type.
+// (must FAIL before the template edit — RED)
+// ---------------------------------------------------------------------------
+
+describe("template: Technical Context heading carries no project-type qualifier", () => {
+	test("the template never shows a type-qualified Technical Context heading", () => {
+		expect(template).not.toContain("## Technical Context (brownfield)");
+		expect(template).not.toContain("## Technical Context (greenfield)");
+	});
+
+	test("the template explicitly forbids leaking the type qualifier into the heading", () => {
+		const start = template.indexOf("## Technical Context");
+		const end = template.indexOf("\n## ", start + 1);
+		const section = end === -1 ? template.slice(start) : template.slice(start, end);
+		// The conditional is about CONTENT (what to write for brownfield vs
+		// greenfield), never the heading text.
+		expect(section.toLowerCase()).toContain("heading");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// diagram-naming + lens-order: diagram-guide.md gains (1) a node/participant
+// naming rule — real module/domain/concept names, never an internal private
+// function name, a glob, or a bare DB column, at a consistent abstraction
+// level — which the b2c-6578 "python service (_get_previous_*_totals)"
+// participant violated; and (2) a lens order placing Domain entity (the model)
+// before Entity lifecycle (its transitions), so "ProductOnly" can't be read as
+// the domain model.
+// (must FAIL before the diagram-guide edit — RED)
+// ---------------------------------------------------------------------------
+
+describe("diagram-guide: node/participant naming discipline and domain-before-lifecycle lens order", () => {
+	const guide = readFileSync(join(import.meta.dir, "diagram-guide.md"), "utf8");
+
+	test("the guide has a naming rule forbidding internal private function names / globs / bare DB columns as nodes or participants", () => {
+		expect(guide.toLowerCase()).toContain("participant");
+		expect(guide.toLowerCase()).toContain("naming");
+	});
+
+	test("the naming rule names the abstraction-consistency requirement", () => {
+		expect(guide.toLowerCase()).toContain("abstraction");
+	});
+
+	test("Domain entity is listed before Entity lifecycle in the 6-lens table (model before its lifecycle)", () => {
+		const dom = guide.indexOf("Domain entity");
+		const life = guide.indexOf("Entity lifecycle");
+		expect(dom).toBeGreaterThan(-1);
+		expect(life).toBeGreaterThan(-1);
+		expect(dom).toBeLessThan(life);
+	});
+
+	test("the template coverage table lists Domain entity before Entity lifecycle too", () => {
+		const dom = template.indexOf("| Domain entity |");
+		const life = template.indexOf("| Entity lifecycle |");
+		expect(dom).toBeGreaterThan(-1);
+		expect(life).toBeGreaterThan(-1);
+		expect(dom).toBeLessThan(life);
 	});
 });
