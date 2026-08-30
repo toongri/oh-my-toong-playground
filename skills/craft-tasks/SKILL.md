@@ -123,14 +123,32 @@ The handoff carries one immutable shared metadata value in `designAnchor`:
 `designAnchor: "design-anchor: deep-interview:<state.interview_id>"`.
 Accept only the exact canonical value `design-anchor: deep-interview:<state.interview_id>`, where `<state.interview_id>` is the non-empty identifier persisted in the settled spec's `state.interview_id`. Reject a **missing or invalid anchor** — including an anchor derived from a title, slug, timestamp, or hash — **before any child-tree/create** operation.
 
+### Settled-parent record shape
+
+Use one **settled-parent record** for every `supplied`, `found`, `enriched`, and `created` parent branch:
+
+```text
+designAnchor: "design-anchor: deep-interview:<state.interview_id>"
+goal: "<settled goal>"
+approach: "<settled approach>"
+invariants: "<settled invariants>"
+boundary: "<settled boundary>"
+canonicalExternalDesignUrl: "<canonical external design URL, or none>"
+```
+
+The record carries the exact `designAnchor`, settled goal, approach, invariants, boundary, and canonical external design URL. It is the one shape used for supplied, found, enriched, and created branches. For an existing parent, missing fields are completed append-only; new parents persist the complete shape.
+
+The local spec path is input-only: use it to read the settled spec, never to populate a write. Any parent or child body or comment must contain portable inline context or a canonical external URL; never `$OMT_DIR`, a machine-local path, or `file://`. If no canonical external design URL exists, keep the settled context inline rather than emitting a local path.
+
 ### Parent-resolution gate
 
 After the design-anchor gate and before reading any child tree or creating any child, establish exactly one verified parent:
 
-1. If the handoff includes a `parentId` or parent URL, use it as the candidate. Re-read it in the PM tool and verify that it is the settled-design parent; it must **match the exact anchor** through the exact `designAnchor`. A known parent with a different anchor is a mismatch and a hard stop.
-2. If the identified existing parent is a legacy WHAT parent that lacks the anchor, do not replace it. Enrich it with **one append-only design-handoff comment** containing the exact anchor, the settled goal, approach, invariants, boundary, and any canonical external design URL; never use a local session path, `$OMT_DIR` path, or `file://` URL in that comment.
-3. Otherwise, search the PM tool by the exact settled design anchor. Adopt exactly one verified match. If no match exists, create one parent from the settled spec. **A new parent persists the same anchor.**
-4. **Re-read and verify effective state after append/create** for the supplied, found, enriched, or created parent. Continue only when it resolves to one verified `parentId` whose effective state contains the exact anchor and settled design handoff; every child must use that same resolved `parentId`.
+1. If the handoff includes a `parentId` or parent URL, re-read it in the PM tool and first verify that it is a real existing parent record in the parent role.
+   - If it lacks a `designAnchor`, verify that it is a real existing legacy WHAT parent with no `designAnchor`; handle this branch before applying the exact-anchor requirement. If it is not a real existing legacy WHAT parent, stop. Do not replace a verified legacy parent. Then enrich it once, append-only, by adding one append-only design-handoff comment carrying the settled-parent record: the exact anchor, settled goal, approach, invariants, boundary, and canonical external design URL; never use a local session path, `$OMT_DIR` path, or `file://` URL in that comment. Then re-read effective state; continue only after the exact anchor is present.
+   - For an existing parent with a non-empty `designAnchor`, apply the exact-anchor requirement: it must **match the exact anchor** through the exact `designAnchor`. An existing parent with a non-empty different anchor remains a hard stop. Complete any other missing settled-parent fields append-only.
+2. With no supplied candidate, use a **parent-only search** by the exact settled design anchor. Filter PM search results to verified parent records/parent role before applying the exactly-one cardinality rule. Children sharing an anchor must never be adopted as a parent. Adopt exactly one verified match and stop on cardinality ambiguity. For a found parent, complete missing settled-parent fields append-only. If no match exists, create one parent from the complete settled-parent record. A new parent persists the same anchor and the complete settled-parent record.
+3. **Re-read and verify effective state after append/create** for the supplied, found, enriched, or created parent. Continue only when it resolves to one verified `parentId` whose effective state contains the exact anchor and complete settled-parent record; every child must use that same resolved `parentId`.
 
 Any ambiguity, mismatch, append failure, re-read failure, or interruption stops before child creation. Do not create a replacement or duplicate parent; re-search only after the interrupted or failed operation is recoverable, and proceed only with one verified match.
 

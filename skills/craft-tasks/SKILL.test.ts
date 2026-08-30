@@ -24,10 +24,16 @@ function lineOf(content: string, literal: string): number {
 
 function sectionBetween(content: string, startHeading: string, endHeading: string): string {
 	const start = content.indexOf(startHeading);
-	if (start === -1) return "";
+	if (start === -1) throw new Error(`sectionBetween: missing start heading "${startHeading}"`);
 	const end = content.indexOf(endHeading, start + startHeading.length);
-	return content.slice(start, end === -1 ? undefined : end);
+	if (end === -1) throw new Error(`sectionBetween: missing end heading "${endHeading}"`);
+	return content.slice(start, end);
 }
+
+test("sectionBetween requires both headings", () => {
+	expect(() => sectionBetween("## Start", "## Missing", "## End")).toThrow("missing start heading");
+	expect(() => sectionBetween("## Start", "## Start", "## Missing")).toThrow("missing end heading");
+});
 
 describe("design anchor: one immutable shared value", () => {
 	test("the spec template declares the exact canonical metadata value", () => {
@@ -58,10 +64,12 @@ describe("deep-interview to craft-tasks handoff", () => {
 		expect(phase5).toContain("unchanged");
 	});
 
-	test("known parent identity remains alongside the exact anchor", () => {
-		expect(phase5).toContain("parentId");
-		expect(phase5).toContain("designAnchor");
-		expect(phase5.indexOf("parentId")).toBeLessThan(phase5.lastIndexOf("designAnchor"));
+	test("known parent identity is carried in the paired handoff block", () => {
+		const handoffBlock = [
+			`designAnchor: "${DESIGN_ANCHOR}"`,
+			'parentId: "<known parent ID or URL, when available>"',
+		].join("\n");
+		expect(phase5).toContain(handoffBlock);
 	});
 });
 
@@ -90,6 +98,51 @@ describe("craft-tasks parent-resolution safety gate", () => {
 			expect(parent).toContain(field);
 		}
 		expect(parent).toContain("never use a local session path");
+	});
+
+	test("a legacy parent is verified and enriched before the exact-anchor comparison", () => {
+		const parent = sectionBetween(craftTasks, "### Parent-resolution gate", "### Existing-child / duplicate gate");
+		const legacy = parent.indexOf("verify that it is a real existing legacy WHAT parent with no `designAnchor`");
+		const exactAnchor = parent.indexOf("For an existing parent with a non-empty `designAnchor`, apply the exact-anchor requirement");
+		expect(legacy).toBeGreaterThanOrEqual(0);
+		expect(exactAnchor).toBeGreaterThan(legacy);
+		const legacyBranch = parent.slice(legacy, exactAnchor);
+		expect(legacyBranch).toContain("enrich it once, append-only");
+		expect(legacyBranch).toContain("re-read effective state");
+		expect(legacyBranch).toContain("continue only after the exact anchor is present");
+	});
+
+	test("an existing non-empty different anchor remains a hard stop", () => {
+		const parent = sectionBetween(craftTasks, "### Parent-resolution gate", "### Existing-child / duplicate gate");
+		expect(parent).toContain("existing parent with a non-empty different anchor remains a hard stop");
+	});
+
+	test("anchor search is parent-only before exactly-one cardinality", () => {
+		const parent = sectionBetween(craftTasks, "### Parent-resolution gate", "### Existing-child / duplicate gate");
+		const search = parent.indexOf("parent-only search");
+		const filter = parent.indexOf("Filter PM search results to verified parent records/parent role");
+		const cardinality = parent.indexOf("applying the exactly-one cardinality rule");
+		expect(search).toBeGreaterThanOrEqual(0);
+		expect(filter).toBeGreaterThan(search);
+		expect(cardinality).toBeGreaterThan(filter);
+		expect(parent).toContain("Children sharing an anchor must never be adopted as a parent");
+	});
+
+	test("every parent branch uses one complete settled-parent record shape", () => {
+		const record = sectionBetween(craftTasks, "### Settled-parent record shape", "### Parent-resolution gate");
+		expect(record).toContain("supplied, found, enriched, and created");
+		for (const field of [
+			"exact `designAnchor`",
+			"settled goal",
+			"approach",
+			"invariants",
+			"boundary",
+			"canonical external design URL",
+		]) {
+			expect(record).toContain(field);
+		}
+		expect(record).toContain("missing fields are completed append-only");
+		expect(record).toContain("new parents persist the complete shape");
 	});
 
 	test("parent enrichment or creation is re-read and verified before child-tree access", () => {
@@ -144,5 +197,11 @@ describe("craft-tasks v1 Stage 6 reuse boundary", () => {
 	test("v1 has no automated task reviewer", () => {
 		expect(writeTail).toContain("no automated task reviewer");
 		expect(writeTail).not.toContain("dispatch the `issue-reviewer`");
+	});
+
+	test("the local spec path is input-only and written context stays portable", () => {
+		expect(writeTail).toContain("local spec path is input-only");
+		expect(writeTail).toContain("Any parent or child body or comment must contain portable inline context or a canonical external URL");
+		expect(writeTail).toContain("never `$OMT_DIR`, a machine-local path, or `file://`");
 	});
 });
