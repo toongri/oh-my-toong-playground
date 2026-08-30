@@ -7,6 +7,8 @@
 - Interview ID: {uuid}
 - Design anchor: design-anchor: deep-interview:<state.interview_id>
 - Anchor source: persisted state.interview_id; stable across resume; never from title, slug, timestamp, or hash
+- Output shape: {task-tickets | ai-execution-plan | domain-output}
+- Output shape source: persisted state.output_shape; copy the exact enum without prose or synonyms
 - Rounds: {count}
 - Final Ambiguity Score: {score}%
 - Type: greenfield | brownfield

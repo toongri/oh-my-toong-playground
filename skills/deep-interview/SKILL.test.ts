@@ -1103,6 +1103,88 @@ describe("interviewer is instructed to call set-nongoals when a non-goal decider
 });
 
 // ---------------------------------------------------------------------------
+// PR #284: execution-bridge output shape and revision identity contracts.
+// These assertions are intentionally prose/template-focused: the state runtime
+// already owns flag validation and persistence mechanics.
+// (must FAIL before the corresponding SKILL.md/template edits -- RED)
+// ---------------------------------------------------------------------------
+
+describe("output shape is an explicit persisted execution contract", () => {
+	const metadataStart = template.indexOf("## Metadata");
+	const metadataEnd = template.indexOf("## Clarity Breakdown", metadataStart);
+	const metadata = metadataStart === -1 ? "" : template.slice(metadataStart, metadataEnd === -1 ? undefined : metadataEnd);
+	const phase4Start = skillMd.indexOf("## Phase 4: Crystallize Spec");
+	const phaseStart = skillMd.indexOf("## Phase 5: Execution Bridge");
+	const phaseEnd = skillMd.indexOf("</Steps>", phaseStart);
+	const phase4 = phase4Start === -1 ? "" : skillMd.slice(phase4Start, phaseStart === -1 ? undefined : phaseStart);
+	const phase5 = phaseStart === -1 ? "" : skillMd.slice(phaseStart, phaseEnd === -1 ? undefined : phaseEnd);
+	const lifecycle = `${phase4}\n${phase5}`;
+
+	test("spec Metadata carries exactly the three persisted output-shape values", () => {
+		expect(metadata).toContain("- Output shape: {task-tickets | ai-execution-plan | domain-output}");
+	});
+
+	test("Phase 4 confirms and persists output shape before the Phase 5 route", () => {
+		const confirmation = lifecycle.indexOf("confirm exactly one output shape");
+		const persist = lifecycle.indexOf("deep-interview-state.ts update");
+		const route = lifecycle.indexOf("state.output_shape");
+		expect(confirmation).toBeGreaterThan(-1);
+		expect(persist).toBeGreaterThan(confirmation);
+		expect(lifecycle.slice(persist, route)).toContain("--output-shape");
+		expect(route).toBeGreaterThan(persist);
+	});
+
+	test("task-tickets routes by the exact state value to craft-tasks", () => {
+		expect(phase5).toContain('state.output_shape === "task-tickets"');
+		expect(phase5).toContain("recommend **`craft-tasks`**");
+		expect(phase5).toContain('Skill(skill: "craft-tasks")');
+	});
+
+	test("ai-execution-plan keeps the topology-based ultragoal/prometheus routing", () => {
+		expect(phase5).toContain('state.output_shape === "ai-execution-plan"');
+		expect(phase5).toContain("exactly 1 active component → recommend **`ultragoal`**");
+		expect(phase5).toContain("otherwise (0 or ≥2 active components) → recommend **`prometheus`**");
+	});
+
+	test("domain-output routes by the matching available domain skill", () => {
+		expect(phase5).toContain('state.output_shape === "domain-output"');
+		expect(phase5).toContain("matching domain skill");
+	});
+});
+
+describe("revision identity remains anchored to the established design", () => {
+	const phase1Start = skillMd.indexOf("## Phase 1: Initialize");
+	const phase2Start = skillMd.indexOf("## Phase 2: Interview Loop", phase1Start);
+	const phase1 = phase1Start === -1 ? "" : skillMd.slice(phase1Start, phase2Start === -1 ? undefined : phase2Start);
+	const phase5Start = skillMd.indexOf("## Phase 5: Execution Bridge");
+	const phase5End = skillMd.indexOf("</Steps>", phase5Start);
+	const phase5 = phase5Start === -1 ? "" : skillMd.slice(phase5Start, phase5End === -1 ? undefined : phase5End);
+
+	test("a known-parent revision reuses or starts with both established identities", () => {
+		expect(phase1).toContain("revision of an existing PM parent");
+		expect(phase1).toContain("resume/adopt");
+		expect(phase1).toContain("--interview-id");
+		expect(phase1).toContain("--parent-id");
+		expect(phase1).toContain("Never pair a newly generated UUID/anchor with an old known parent");
+	});
+
+	test("unrecoverable identity is explicitly a new design without the old parent", () => {
+		expect(phase5).toContain("If the established identity cannot be recovered");
+		expect(phase5).toContain("omit the old `parentId`");
+		expect(phase5).toContain("let `craft-tasks` resolve/create a parent by the new anchor");
+		expect(phase5).toContain("do not claim it revises the old parent");
+	});
+
+	test("known-parent handoff copies the persisted parent identity before the handoff block", () => {
+		const identity = phase5.indexOf("persisted `state.parent_id`");
+		const handoff = phase5.indexOf("**`craft-tasks` parent handoff:**");
+		expect(identity).toBeGreaterThan(-1);
+		expect(handoff).toBeGreaterThan(identity);
+		expect(phase5).toContain("parentId MUST be copied from persisted `state.parent_id`");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Phase-5 route contract: topology selects the recommendation, not a claim
 // about how many stories the later executor will derive. The other planning
 // skill remains a deliberate override, and both paths stay skill-dispatched.
