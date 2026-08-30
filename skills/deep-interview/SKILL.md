@@ -7,7 +7,7 @@ level: 3
 ---
 
 <Purpose>
-Deep Interview implements Ouroboros-inspired Socratic questioning with mathematical ambiguity scoring. It replaces vague ideas with crystal-clear specifications by asking targeted questions that expose hidden assumptions, measuring clarity across weighted dimensions, and refusing to proceed until ambiguity drops below the resolved threshold for this run. The output feeds into an execution route chosen from the spec itself: **deep-interview → planning/execution via `prometheus` or `ultragoal`, or a directly matching domain skill for terminal domain outputs**, ensuring maximum clarity at every stage.
+Deep Interview implements Ouroboros-inspired Socratic questioning with mathematical ambiguity scoring. It replaces vague ideas with crystal-clear specifications by asking targeted questions that expose hidden assumptions, measuring clarity across weighted dimensions, and refusing to proceed until ambiguity drops below the resolved threshold for this run. The output feeds into an execution route chosen from the spec itself: **deep-interview → `craft-tasks` when the output shape calls for team-facing task tickets, planning/execution via `prometheus` or `ultragoal` when it calls for an AI execution plan, or a directly matching domain skill for terminal domain outputs**, ensuring maximum clarity at every stage.
 </Purpose>
 
 <Use_When>
@@ -83,6 +83,9 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
      ```
    - Every named component is either **active** (scored across all 6 dimensions in Phase 2) or explicitly **deferred** (visible in `state.topology`, excluded from active-component floor pressure) — never silently dropped.
    - **Resume + legacy migration (topology-floor-evolution Stage 6, UC11)**: when resuming an interrupted session, `deep-interview-state.ts get`'s output carries a `migration_status` field derived from `computeTopologyMigrationStatus`. If `migration_status` is `legacy_missing` — this state predates the `topology` field entirely, never having run Round 0 — run this Round 0 gate now, before any further per-component scoring write, even if the resumed state already has rounds or a scored ambiguity from before topology existed. `current` means topology is already locked; resume straight into Phase 2 as usual.
+3.8. **Revision identity gate**:
+   - A revision of an existing PM parent must either resume/adopt the established interview state or start the current state with the established `interview_id` and `parent_id`. For the latter, pass both `--interview-id "<established interview_id>"` and `--parent-id "<established parent ID or URL>"` to `init`; do not generate a new UUID for a known parent.
+   - **Never pair a newly generated UUID/anchor with an old known parent.** If the established identity cannot be recovered, explicitly treat this as a new design: use a new interview ID, omit the old `parentId`, let `craft-tasks` resolve/create a parent by the new anchor, and do not claim it revises the old parent.
 4. **Initialize state** by invoking the CLI:
 
 ```bash
@@ -476,7 +479,21 @@ Continue this loop until **all design branches** are resolved — no open decisi
 
 When the Design Interview phase has exited with all design branches resolved, or when a user-forced escape hatch fires:
 
+0. **Confirm and persist the output shape** before composing the spec or routing. Via `AskUserQuestion`, confirm exactly one output shape: `task-tickets`, `ai-execution-plan`, or `domain-output`; a vague prose description or synonym is not a valid value. After the user confirms, persist it before any route selection:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+  --output-shape "<confirmedOutputShape>"
+# <confirmedOutputShape> must be exactly task-tickets, ai-execution-plan, or domain-output
+```
+
+Wait for the update to succeed, then read state and use the exact persisted `state.output_shape` value for the spec Metadata and the Phase 5 route. Do not infer the value from the spec's prose.
+
 1. **Generate the specification** with the prompt-safe transcript, using the design decisions recorded during the Design Interview phase for the Approach section; on a user-forced escape hatch, include any unresolved requirements gap or design branch as a risk-note instead. **Spec template: you MUST read `deep-interview-spec-template.md` now, before composing the spec.** Do not write the spec from memory.
+
+**Immutable design anchor:** read the persisted state before composing the spec and derive the one shared metadata value exactly as `design-anchor: deep-interview:<state.interview_id>`. The anchor is derived only from persisted state.interview_id, remains stable across resume, and is never from title, slug, timestamp, or hash. Put this exact value in the template's Metadata section; do not invent or normalize a second anchor.
+
+The Metadata `Output shape` value must be copied exactly from persisted `state.output_shape` and must be one of `task-tickets`, `ai-execution-plan`, or `domain-output`.
 
 **Boundary Map (required section).** The spec's `## Boundary Map` places the Topology components on the two boundary axes — a definition table naming each part by layer (vertical domain · horizontal use-case), responsibility, collaborators, and **affected vs modified**, followed by a **Dependency direction** verdict (unidirectional per axis; flag any back-reference, cycle, or inner→outer import as a coupling defect). This renders the boundary picture the Topology scores and Ontology entities leave implicit. Vocabulary follows the `architecture-boundaries` rule — method names (DDD · FSD · Clean-arch) as vocabulary only, never a methodology mandate.
 
@@ -490,23 +507,37 @@ When the Design Interview phase has exited with all design branches resolved, or
 
 ## Phase 5: Execution Bridge
 
-After the spec is written, choose the recommended execution route from the spec's own characteristics, and present options via `AskUserQuestion`.
+After the spec is written, read the state returned by `deep-interview-state.ts get`. Do not route until the preceding `update --output-shape` has succeeded and `state.output_shape` is present.
 
-**Recommend the route by judging the spec you just wrote — its output shape and the topology frozen during the interview:**
-- **Rule 1:** If the spec's output maps cleanly to a single domain skill available in this session (e.g., documentation → `technical-writing`, slides → `create-slides`), recommend that skill **directly**. Read the live available-skills list to find the match — do NOT hardcode a skill catalog here, because the available skills change.
-- **Rule 2:** Otherwise (planning and/or multi-step execution), route by the active-component count in `state.topology`: exactly 1 active component → recommend **`ultragoal`** directly; otherwise (0 or ≥2 active components) → recommend **`prometheus`**, for feasibility/design review, plan-reliability review, and a human-readable plan that ultragoal can execute from. This count chooses only the default route; it does not determine the number of stories either skill will derive. The count is frozen at Round 0 with user confirmation, so the router never judges its own spec. A missing `topology` field is `legacy_missing`; Round 0 must run first rather than routing it here.
-- **Rule 3:** Never recommend `sisyphus` directly — ultragoal uses it as the sole executor.
+**Route only by the exact persisted `state.output_shape` value, never by vague prose, title, or a guessed route:**
+- When `state.output_shape === "task-tickets"`, recommend **`craft-tasks`** to materialize team-facing task tickets and invoke `Skill(skill: "craft-tasks")` if selected.
+- When `state.output_shape === "ai-execution-plan"`, keep the existing topology-based rule: exactly 1 active component → recommend **`ultragoal`** directly; otherwise (0 or ≥2 active components) → recommend **`prometheus`**, for feasibility/design review, plan-reliability review, and a human-readable plan that ultragoal can execute from. This count chooses only the default route; it does not determine the number of stories either skill will derive. The count is frozen at Round 0 with user confirmation, so the router never judges its own spec. A missing `topology` field is `legacy_missing`; Round 0 must run first rather than routing it here.
+- When `state.output_shape === "domain-output"`, read the live available-skills list, identify the matching domain skill, and recommend/invoke that domain skill directly. Do not hardcode a skill catalog because the available skills change.
+- If `state.output_shape` is missing or invalid, stop and return to output-shape confirmation; do not infer a route.
+- **Rule 4:** Never recommend `sisyphus` directly — ultragoal uses it as the sole executor.
+
+**Revision identity decision — state this before the handoff:** for a revision of an existing PM parent, state whether the established interview state was resumed/adopted or the current state was started with the established `interview_id` and `parent_id` using `--interview-id` and `--parent-id`. Before the handoff, read state and use the persisted `state.parent_id` when it is available. Never pair a newly generated UUID/anchor with an old known parent. If the established identity cannot be recovered, state explicitly that this is a new design, omit the old `parentId`, let `craft-tasks` resolve/create a parent by the new anchor, and do not claim it revises the old parent.
+
+**`craft-tasks` parent handoff:** Carry the exact `designAnchor` from the spec Metadata unchanged into the downstream handoff:
+
+```text
+designAnchor: "design-anchor: deep-interview:<state.interview_id>"
+parentId: "<known parent ID or URL, when available>"
+```
+
+The placeholder is replaced only with the persisted `state.interview_id`; never recompute it from the spec title, slug, timestamp, hash, or local session path. When a known PM parent exists, parentId MUST be copied from persisted `state.parent_id` when available; if it is known but not yet persisted, persist it with `update --parent-id` before constructing the handoff. When no parent is known, pass the spec and exact `designAnchor` alone and rely on `craft-tasks`' parent-resolution gate; this direct spec-only flow is valid. `craft-tasks` must resolve and verify the parent before reading or creating any child.
 
 **Question:** "Your spec is ready (ambiguity: {score}%). How would you like to proceed?"
 
 **Build the options like this** (recommended route first, tagged "(Recommended)", with a one-sentence rationale tied to THIS spec):
-- The recommended route from the rules above (a domain skill directly, `ultragoal` for exactly 1 active component, or `prometheus` otherwise), tagged "(Recommended)" with its spec-tied rationale.
+- The recommended route from the rules above (a team-facing task-ticket spec → `craft-tasks`, a domain skill directly, `ultragoal` for exactly 1 active component, or `prometheus` otherwise), tagged "(Recommended)" with its spec-tied rationale.
+- When the spec calls for team-facing task tickets, offer **`craft-tasks`** as the recommended execution option; when tickets are not requested, use the active-component defaults above instead.
 - Offer a domain skill as an override only if the spec plausibly maps to one.
 - When `ultragoal` is recommended, offer `prometheus` as an explicit override.
 - When `prometheus` is recommended, offer `ultragoal` as an explicit override.
 - **Continue interviewing** — "Continue interviewing to improve clarity (current: {score}%)" → return to the Phase 2 loop.
 
-Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec file path as context (the planning/execution option invokes `Skill(skill: "prometheus")` or `Skill(skill: "ultragoal")` according to the active-component count).
+Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec file path as context (the `task-tickets` option invokes `Skill(skill: "craft-tasks")` and includes the persisted `state.parent_id` as `parentId` when available; the `ai-execution-plan` option invokes `Skill(skill: "prometheus")` or `Skill(skill: "ultragoal")` according to the active-component count; the `domain-output` option invokes the matching domain skill).
 
 **IMPORTANT:** On execution selection, **MUST** invoke the chosen skill via `Skill()`. Do NOT implement directly. The deep-interview agent is a requirements agent, not an execution agent. Pass the spec file path forward (and the prompt-safe summary, if the initial context was summarized) — never the raw oversized source material.
 

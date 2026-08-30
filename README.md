@@ -50,18 +50,18 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 
 ## 문서
 
-라이브러리에 담긴 스킬(46종)·에이전트(13종)의 상세는 `docs/`에 정리되어 있습니다.
+라이브러리에 담긴 스킬(47종)·에이전트(13종)의 상세는 `docs/`에 정리되어 있습니다.
 
 | 문서 | 내용 |
 |------|------|
-| [코어 파이프라인](docs/skills/core-pipeline.md) | 정의→기획→실행→검증 파이프라인 (deep-interview · prometheus · sisyphus · clarify · momus · diagnose · agent-council) + 위임 에이전트 13종 |
+| [코어 파이프라인](docs/skills/core-pipeline.md) | 정의→기획→실행→검증 파이프라인 (deep-interview → craft-tasks → 선택적 prometheus → ultragoal → sisyphus; sisyphus는 ultragoal의 내부 실행자이며 직접 경로가 아님) + 위임 에이전트 13종 |
 | [리뷰/품질](docs/skills/review-quality.md) | code-review · orchestrate-review · design-review · slides-review · qa · explain-diff |
 | [프론트엔드 디자인](docs/skills/frontend-design.md) | frontend · visual-qa — 웹 UI 설계·구현과 렌더링 결과 독립 검증 |
 | [리서치](docs/skills/research.md) | ultraresearch · insane-browsing — 포화 리서치 엔진과 차단 소스 브라우징 |
 | [문서/콘텐츠·유틸](docs/skills/authoring.md) | create-slides · technical-writing · technical-copywriting · humanizer · make-pr · scan-pdf-to-notes · git-master |
 | [지식 그래프(pins)](docs/skills/knowledge-graph-pins.md) | pins 지식 그래프 — pin-setup · record · query · audit · wrap-up |
 | [유틸·개인 워크플로우](docs/skills/utilities-personal.md) | agent-device · agent-browser · dogfood · hud · resume · jd · mock-interview 등 |
-| [오케스트레이션 가이드](docs/ORCHESTRATION.md) | prometheus → sisyphus 워크플로우와 사용법 |
+| [오케스트레이션 가이드](docs/ORCHESTRATION.md) | deep-interview → craft-tasks → 선택적 prometheus → ultragoal → sisyphus 워크플로우 (sisyphus는 ultragoal의 내부 실행자이며 직접 경로가 아님)와 사용법 |
 | [모델 배정](docs/model-assignment.md) | 에이전트별 모델 등급 배정 원칙과 `model-map` 치환 규칙 |
 | [플랫폼 YAML 설정 배포](docs/platform-yaml-config-deployment.md) | 플랫폼별 설정·훅·MCP의 배포·병합·삭제 규칙 |
 | [외부 반출 로컬 참조 게이트](docs/outbound-local-reference-gate.md) | 커밋·PR 생성/수정/댓글·Notion·Slack·Linear로 내보내는 로컬 경로 참조의 판정·범위·처방 |

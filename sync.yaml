@@ -37,6 +37,10 @@ provision:
 # feature-platforms.agents가 [claude, codex]라 bare 선언으로 충분하다.
 agents:
   items:
+    - issue-reviewer
+    - explore
+    - oracle
+    - librarian
     - code-reviewer
     - sisyphus-junior
 
@@ -73,6 +77,13 @@ skills:
     - component: pin-setup
       platforms: [claude, codex]
     - scan-pdf-to-notes
+    - component: craft-issue
+      platforms: [claude, codex]
+    - humanizer
+    - component: craft-tasks
+      platforms: [claude, codex]
+    - component: deep-interview
+      platforms: [claude, codex]
     - component: meeting-notes
       platforms: [claude, codex]
     # 전역 등록된 SessionStart 훅 orphan-reaper.sh(claude.yaml)가

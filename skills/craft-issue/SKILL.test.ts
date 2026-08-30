@@ -532,6 +532,36 @@ describe("G5: dedup — one dispatch per open decision", () => {
 	});
 });
 
+describe("I1: settled-design task-ticket route and execution ownership", () => {
+	const routeDocs = [
+		["SKILL.md", skillMd],
+		["issue-craft.md", issueCraftMd],
+	] as const;
+
+	for (const [name, content] of routeDocs) {
+		test(name + " assigns HOW decomposition after deep-interview to craft-tasks", () => {
+			expect(content).toContain("After `deep-interview` settles the design, HOW decomposition belongs to `craft-tasks`");
+		});
+
+		test(name + " keeps prometheus optional before ultragoal", () => {
+			expect(content).toContain(
+				"Where the surrounding contract allows it, `prometheus` remains the optional planning/review step before `ultragoal`.",
+			);
+		});
+
+		test(name + " names ultragoal as the direct route and sisyphus as internal", () => {
+			expect(content).toContain(
+				"`ultragoal` is the direct execution route; `sisyphus` is only `ultragoal`'s internal executor and is never presented as the direct route.",
+			);
+		});
+
+		test(name + " removes the stale direct prometheus/sisyphus route", () => {
+			expect(content).not.toContain("`ultragoal`/`sisyphus` (execute)");
+			expect(content).not.toContain("HOW belongs to `prometheus` (planning) and `sisyphus` (execution)");
+		});
+	}
+});
+
 // ---------------------------------------------------------------------------
 // Append-Only History Contract — an existing issue's body is immutable; new
 // material lands as a comment shaped by the Append Comment Shape.

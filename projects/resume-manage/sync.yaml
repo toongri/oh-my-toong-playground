@@ -18,6 +18,7 @@ agents:
 skills:
   items:
     - component: deep-interview
+      platforms: [claude, codex]
     # 아래 [claude, codex] 항목 전부에 적용되는 개방 근거 — 두 겹이 다 필요하다.
     # (1) .md — rewrite 규칙 6a가 Skill() 호출을 $X mention sigil로 치환한다
     #     (tools/lib/rewrite-rules.ts의 id "6a" 규칙). make validate의 codex-rewrite

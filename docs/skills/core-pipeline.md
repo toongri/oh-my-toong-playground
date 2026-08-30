@@ -24,12 +24,13 @@ oh-my-toong은 AI 에이전트 설정을 중앙에서 버전 관리하고 프로
 - **목표 이탈**: 구현 도중 원래 의도를 놓칩니다.
 - **AI 슬롭**: 제대로 된 명세 없이 급하게 작성한 저품질 코드가 쌓입니다.
 
-핵심 파이프라인은 관심사를 분리해 이를 막습니다. **정의 → 기획 → 실행 → 검증**의 각 단계를 별도 역할이 맡고, 단계 사이는 파일(명세, 계획)로 넘깁니다. 앞 단계가 충분히 명확해지기 전에는 다음 단계로 넘어가지 않습니다.
+핵심 파이프라인은 관심사를 분리해 이를 막습니다. **정의 → 작업 티켓화·기획 → 실행 → 검증**의 각 단계와 분기를 별도 역할이 맡고, 단계 사이는 파일(명세, 계획)이나 PM 도구의 자식 티켓으로 넘깁니다. 앞 단계가 충분히 명확해지기 전에는 다음 단계로 넘어가지 않습니다.
 
 | 단계 | 스킬 | 책임 | 산출물 |
 |------|------|------|--------|
-| 정의 | deep-interview | 모호성을 해소해 명세로 수렴 | `$OMT_DIR/deep-interview/{slug}.md` |
-| 기획 | ultragoal (활성 토폴로지 컴포넌트 1개) / prometheus (그 외) | Phase 5에서 권장 경로를 고르고, 다른 기획·실행 스킬은 명시적 오버라이드로 제공 | ultragoal 실행 / 사람이 읽을 수 있는 계획 |
+| 정의 | deep-interview | 모호성을 해소하고 요구사항·설계를 확정 | `$OMT_DIR/deep-interview/{slug}.md` |
+| 작업 티켓화 | craft-tasks (팀용 작업 티켓이 필요한 경우) | 확정된 설계를 공유 가능한 자식 티켓으로 분해 | PM 도구의 공유 가능한 자식 티켓 |
+| 기획 | ultragoal (활성 토폴로지 컴포넌트 1개) / prometheus (그 외) | 팀용 작업 티켓을 요청하지 않은 스펙의 Phase 5 AI 기획·실행 경로를 고르고, 다른 경로를 명시적 오버라이드로 제공 | ultragoal 실행 / 사람이 읽을 수 있는 계획 |
 | 실행 | ultragoal → sisyphus | ultragoal이 스토리를 sisyphus에 위임해 실행 조율 | 검증된 코드 변경 |
 | 검증 | sisyphus (인라인) | verify 태스크의 AC 명령을 직접 실행해 구현 품질·계획 준수·지시 이행 확인 | APPROVE / REQUEST_CHANGES |
 
@@ -37,14 +38,17 @@ oh-my-toong은 AI 에이전트 설정을 중앙에서 버전 관리하고 프로
 
 ---
 
-## 2. 정의 → 기획 → 실행 파이프라인
+## 2. 정의 → 작업 티켓화·기획 → 실행 파이프라인
 
-세 가지 기반 스킬이 파이프라인의 척추를 이룹니다.
+네 가지 기반 스킬이 파이프라인의 척추를 이룹니다.
 
 ```mermaid
 flowchart LR
     subgraph 정의
         deep["deep-interview"]
+    end
+    subgraph 작업 티켓화
+        craft["craft-tasks"]
     end
     subgraph 기획
         prometheus["prometheus"]
@@ -54,25 +58,28 @@ flowchart LR
         sisyphus["sisyphus"]
     end
 
-    deep -->|"$OMT_DIR/deep-interview/{slug}.md"| Route{활성 토폴로지<br/>컴포넌트가 정확히 1개?}
+    deep -->|"$OMT_DIR/deep-interview/{slug}.md"| Shape{출력 형태가<br/>팀용 작업 티켓인가?}
+    Shape -->|예: craft-tasks 권장| craft
+    Shape -->|아니오| Route{활성 토폴로지<br/>컴포넌트가 정확히 1개?}
     Route -->|예: ultragoal 권장| ultragoal
     Route -->|아니오: prometheus 권장| prometheus
     Route -.->|1개일 때 prometheus 오버라이드| prometheus
     Route -.->|그 외 ultragoal 오버라이드| ultragoal
+    craft -->|"공유 가능한 자식 티켓"| Tickets((팀 추적용 작업))
     prometheus -->|"$OMT_DIR/plans/*.md"| ultragoal
     ultragoal -->|"스토리 순차 디스패치"| sisyphus
     sisyphus -->|"검증된 코드"| Done((완료))
 ```
 
-각 화살표는 파일 핸드오프입니다. deep-interview의 Phase 5는 활성 토폴로지 컴포넌트가 정확히 1개면 ultragoal을, 그 외에는 prometheus를 권장하고, 권장하지 않은 기획·실행 스킬은 명시적 오버라이드로 제공합니다. prometheus를 선택하면 사람이 읽을 수 있는 계획을 만들어 ultragoal에 넘기며, ultragoal은 스토리를 sisyphus에 순차 디스패치하고 sisyphus는 검증된 코드 변경으로 마무리합니다. 단계를 건너뛰어도 동작하지만, 앞 단계의 명확성이 뒤 단계의 품질을 결정합니다.
+각 화살표는 파일 또는 PM 도구 핸드오프입니다. deep-interview의 Phase 5는 먼저 명세의 출력 형태를 확인합니다. 팀용 작업 티켓을 요청하면 설계 이후의 작업 티켓화 단계인 craft-tasks를 권장하고, 확정된 설계를 공유 가능한 자식 티켓으로 분해합니다. 팀용 작업 티켓을 요청하지 않으면 활성 토폴로지 컴포넌트가 정확히 1개일 때 ultragoal을, 그 외에는 prometheus를 권장하고 다른 경로는 명시적 오버라이드로 제공합니다. prometheus를 선택하면 사람이 읽을 수 있는 계획을 만들어 ultragoal에 넘기며, ultragoal은 스토리를 sisyphus에 순차 디스패치하고 sisyphus는 검증된 코드 변경으로 마무리합니다. 단계를 건너뛰어도 동작하지만, 앞 단계의 명확성이 뒤 단계의 품질을 결정합니다.
 
 ---
 
 ## 3. deep-interview — 소크라테스식 심층 인터뷰
 
-**목적**: 모호한 아이디어를 자율 실행 전에 명확한 명세로 수렴시킵니다. 가중치 기반 모호성 점수가 임계값 아래로 떨어질 때까지, 한 번에 하나씩, 가장 약한 차원을 겨냥해 질문합니다.
+**목적**: 모호한 아이디어를 자율 실행이나 작업 티켓 분해 전에 명확한 요구사항과 설계로 수렴시킵니다. 가중치 기반 모호성 점수가 임계값 아래로 떨어질 때까지, 한 번에 하나씩, 가장 약한 차원을 겨냥해 질문합니다.
 
-**핵심 제약**: 모호성이 임계값을 넘으면 실행으로 넘어가지 않습니다. 직접 구현하지 않고 명세를 만든 뒤, Phase 5에서 활성 토폴로지 컴포넌트 수에 따라 ultragoal 또는 prometheus를 권장하며 다른 경로는 명시적 오버라이드로 제공합니다.
+**핵심 제약**: 모호성이 임계값을 넘으면 다음 단계로 넘어가지 않습니다. 직접 구현하지 않고 요구사항과 설계를 확정한 뒤, Phase 5에서 명세의 출력 형태를 먼저 확인합니다. 팀용 작업 티켓을 요청하면 craft-tasks를 권장해 확정된 설계를 공유 가능한 자식 티켓으로 분해하고, 그렇지 않으면 활성 토폴로지 컴포넌트 수에 따라 ultragoal 또는 prometheus를 권장하며 다른 경로는 명시적 오버라이드로 제공합니다.
 
 **언제 쓰나**: 아이디어는 있지만 범위가 흐릿할 때, "물어봐줘", "넘겨짚지 마", "확실히 이해했는지 봐줘" 같은 요청이 있을 때 씁니다. 반대로 파일 경로·함수명·인수 기준까지 명확한 요청이라면 인터뷰 없이 바로 실행하는 게 맞습니다.
 
@@ -82,15 +89,17 @@ flowchart TB
     Ask --> Score[모호성 점수 측정]
     Score --> Gate{모호성 ≤ 임계값?}
     Gate -->|아니오| Ask
-    Gate -->|예| Spec[명세 crystallize]
-    Spec --> Route{활성 토폴로지<br/>컴포넌트가 정확히 1개?}
+    Gate -->|예| Spec[요구사항·설계 확정]
+    Spec --> Shape{출력 형태?}
+    Shape -->|팀용 작업 티켓: craft-tasks 권장| Tasks([craft-tasks로 전달])
+    Shape -->|AI 계획·실행| Route{활성 토폴로지<br/>컴포넌트가 정확히 1개?}
     Route -->|예: ultragoal 권장| Ultra([ultragoal로 전달])
     Route -->|아니오: prometheus 권장| Prom([prometheus로 전달])
     Route -.->|1개일 때 prometheus 오버라이드| Prom
     Route -.->|그 외 ultragoal 오버라이드| Ultra
 ```
 
-**파이프라인 연결**: 출력 명세는 `$OMT_DIR/deep-interview/{slug}.md`에 저장됩니다. Phase 5는 활성 토폴로지 컴포넌트가 정확히 1개면 ultragoal을, 그 외에는 prometheus를 권장하고 권장하지 않은 경로는 명시적 오버라이드로 제공합니다. prometheus를 선택하면 이 명세를 바탕으로 사람이 읽을 수 있는 계획을 작성해 ultragoal에 넘깁니다. 이 흐름은 "specification quality가 AI 개발의 핵심 병목"이라는 전제 위에 설계되었습니다.
+**파이프라인 연결**: 출력 명세는 `$OMT_DIR/deep-interview/{slug}.md`에 요구사항과 설계가 확정된 상태로 저장됩니다. Phase 5는 먼저 출력 형태를 확인합니다. 팀용 작업 티켓을 요청하면 craft-tasks를 권장해 확정된 설계를 공유 가능한 자식 티켓으로 분해합니다. 팀용 작업 티켓을 요청하지 않으면 활성 토폴로지 컴포넌트가 정확히 1개일 때 ultragoal을, 그 외에는 prometheus를 권장하고 권장하지 않은 경로는 명시적 오버라이드로 제공합니다. prometheus를 선택하면 이 명세를 바탕으로 사람이 읽을 수 있는 계획을 작성해 ultragoal에 넘깁니다. 이 흐름은 "specification quality가 AI 개발의 핵심 병목"이라는 전제 위에 설계되었습니다.
 
 > 이 스킬은 [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode)(omc)의 구현이 워낙 잘 만들어져 거의 그대로 가져와 다듬은 것입니다 (originally [Ouroboros](https://github.com/Q00/ouroboros) 영감).
 

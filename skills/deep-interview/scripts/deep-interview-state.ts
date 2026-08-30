@@ -15,8 +15,10 @@
  * Subcommands:
  *   init   [--initial-idea <text>] [--interview-id <id>] [--type greenfield|brownfield]
  *          [--current-phase <phase>] [--threshold <n>] [--codebase-context <text>]
+ *          [--output-shape task-tickets|ai-execution-plan|domain-output] [--parent-id <id-or-url>]
  *          Strict overlay of the rich shape into the EXISTING seed file.
  *   update [--current-phase <phase>] [--current-ambiguity <n>]
+ *          [--output-shape task-tickets|ai-execution-plan|domain-output] [--parent-id <id-or-url>]
  *          [--append-round '<json>'] [--append-ontology-snapshot '<json>']
  *          [--append-round-stdin] [--append-ontology-snapshot-stdin]
  *          [--challenge-mode <name>]
@@ -197,8 +199,15 @@ export interface EstablishedFactInput {
 	supersedes?: string;
 }
 
+/** Explicit execution output route selected by the settled design. */
+export type OutputShape = "task-tickets" | "ai-execution-plan" | "domain-output";
+
 export interface DeepInterviewStateContent {
 	interview_id?: string;
+	/** Explicit execution output route; absent on legacy states. */
+	output_shape?: OutputShape;
+	/** Known PM parent identifier or URL for a settled design handoff; absent when unknown. */
+	parent_id?: string;
 	type?: "greenfield" | "brownfield";
 	initial_idea?: string;
 	initial_context_summary?: string | null;
@@ -270,6 +279,19 @@ export interface DeepInterviewState {
 // Public API
 // ---------------------------------------------------------------------------
 
+function isOutputShape(value: unknown): value is OutputShape {
+	return value === "task-tickets" || value === "ai-execution-plan" || value === "domain-output";
+}
+
+function validateOutputShape(value: unknown, subcommand: "init" | "update"): void {
+	if (value === undefined) return;
+	if (!isOutputShape(value)) {
+		throw new Error(
+			`${subcommand}: refused — output_shape must be one of task-tickets, ai-execution-plan, or domain-output, got ${String(value)}`,
+		);
+	}
+}
+
 /**
  * Strict overlay of the rich shape into the EXISTING seeded file.
  * Absent file → throws (ADR-7). Never writes a sessionId field.
@@ -283,6 +305,8 @@ export function initDeepInterviewState(
 		current_phase?: string;
 		threshold?: number;
 		codebase_context?: string;
+		output_shape?: OutputShape;
+		parent_id?: string;
 	},
 ): void {
 	// Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
@@ -313,6 +337,7 @@ export function initDeepInterviewState(
 			);
 		}
 	}
+	validateOutputShape(payload.output_shape, "init");
 
 	// Build the state object: merge with any existing state content
 	const priorState: DeepInterviewStateContent = isRecord(prior["state"])
@@ -331,6 +356,8 @@ export function initDeepInterviewState(
 	const newState: DeepInterviewStateContent = {
 		...priorState,
 		interview_id: payload.interview_id ?? priorState.interview_id,
+		output_shape: payload.output_shape ?? priorState.output_shape,
+		parent_id: payload.parent_id ?? priorState.parent_id,
 		type: payload.type ?? priorState.type,
 		initial_idea: payload.initial_idea ?? priorState.initial_idea,
 		initial_context_summary: priorState.initial_context_summary ?? null,
@@ -375,6 +402,8 @@ export function updateDeepInterviewState(
 		append_round?: unknown;
 		append_ontology_snapshot?: unknown;
 		challenge_mode?: string;
+		output_shape?: OutputShape;
+		parent_id?: string;
 		/** Append one provenance record (evidence_id + label) to evidence_provenance. */
 		append_provenance_item?: EvidenceProvenanceItem;
 		/** Append one stance string to stance_history (ordered, NOT deduped). */
@@ -397,6 +426,7 @@ export function updateDeepInterviewState(
 				"or this session was adopted by another session.",
 		);
 	}
+	validateOutputShape(partial.output_shape, "update");
 
 	const overlay: Record<string, unknown> = {};
 	if (partial.current_phase !== undefined) {
@@ -408,6 +438,8 @@ export function updateDeepInterviewState(
 		partial.append_round !== undefined ||
 		partial.append_ontology_snapshot !== undefined ||
 		partial.challenge_mode !== undefined ||
+		partial.output_shape !== undefined ||
+		partial.parent_id !== undefined ||
 		partial.append_provenance_item !== undefined ||
 		partial.append_stance !== undefined ||
 		partial.establish_fact !== undefined ||
@@ -418,6 +450,13 @@ export function updateDeepInterviewState(
 		const priorState: Record<string, unknown> = isRecord(prior["state"]) ? prior["state"] : {};
 
 		const updatedState: Record<string, unknown> = { ...priorState };
+
+		if (partial.output_shape !== undefined) {
+			updatedState["output_shape"] = partial.output_shape;
+		}
+		if (partial.parent_id !== undefined) {
+			updatedState["parent_id"] = partial.parent_id;
+		}
 
 		if (partial.append_round !== undefined) {
 			const existing: unknown[] = Array.isArray(priorState["rounds"]) ? priorState["rounds"] : [];
@@ -901,6 +940,20 @@ function asInterviewType(v: string | undefined): "greenfield" | "brownfield" | u
 	return v === "greenfield" || v === "brownfield" ? v : undefined;
 }
 
+function outputShapeFlag(
+	raw: string | boolean | undefined,
+	subcommand: "init" | "update",
+): OutputShape | undefined {
+	if (raw === undefined) return undefined;
+	const value = str(raw);
+	if (value !== undefined && isOutputShape(value)) return value;
+	const display = raw === true ? "<missing>" : String(raw);
+	process.stderr.write(
+		`deep-interview-state ${subcommand}: --output-shape: must be one of task-tickets, ai-execution-plan, or domain-output, got "${display}"\n`,
+	);
+	process.exit(1);
+}
+
 /**
  * Raw-string decimal guard for the two operands of the Stop-hook's convergence comparison
  * (`state.current_ambiguity > state.threshold`). Validated on the raw string BEFORE
@@ -946,6 +999,8 @@ function main(): void {
 				current_phase: str(args["current-phase"]),
 				threshold: decimalFlag(str(args["threshold"]), "init", "--threshold"),
 				codebase_context: str(args["codebase-context"]),
+				output_shape: outputShapeFlag(args["output-shape"], "init"),
+				parent_id: str(args["parent-id"]),
 			});
 		} catch (e) {
 			process.stderr.write(`deep-interview-state init: ${String(e)}\n`);
@@ -958,6 +1013,8 @@ function main(): void {
 		const appendRoundStdin = args["append-round-stdin"] === true;
 		const appendSnapshotStdin = args["append-ontology-snapshot-stdin"] === true;
 		const challengeMode = str(args["challenge-mode"]);
+		const outputShape = outputShapeFlag(args["output-shape"], "update");
+		const parentId = str(args["parent-id"]);
 		const appendProvenanceItemRaw = str(args["append-provenance-item"]);
 		const appendStance = str(args["append-stance"]);
 
@@ -1089,6 +1146,8 @@ function main(): void {
 				append_round: appendRound,
 				append_ontology_snapshot: appendSnapshot,
 				challenge_mode: challengeMode,
+				output_shape: outputShape,
+				parent_id: parentId,
 				append_provenance_item: appendProvenanceItem,
 				append_stance: appendStance,
 				establish_fact: establishFact,
@@ -1178,7 +1237,9 @@ function main(): void {
 			"Usage: deep-interview-state.ts <init|update|set-topology|set-nongoals|get|list-others|adopt> [options]\n" +
 				"  init   --initial-idea <text> [--interview-id <id>] [--type greenfield|brownfield]\n" +
 				"         [--current-phase <phase>] [--threshold <n>] [--codebase-context <text>]\n" +
+				"         [--output-shape task-tickets|ai-execution-plan|domain-output] [--parent-id <id-or-url>]\n" +
 				"  update [--current-phase <phase>] [--current-ambiguity <n>]\n" +
+				"         [--output-shape task-tickets|ai-execution-plan|domain-output] [--parent-id <id-or-url>]\n" +
 				"         [--append-round '<json>'] [--append-ontology-snapshot '<json>']\n" +
 				"         [--append-round-stdin]            (recommended for free-text: read JSON from stdin)\n" +
 				"         [--append-ontology-snapshot-stdin] (recommended for free-text: read JSON from stdin)\n" +

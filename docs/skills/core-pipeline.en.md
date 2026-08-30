@@ -24,12 +24,13 @@ The conventional approach mixes planning and execution in a single session, whic
 - **Goal drift**: the original intent is lost mid-implementation.
 - **AI slop**: low-quality code, written in a hurry without a proper spec, piles up.
 
-The core pipeline prevents this by separating concerns. Each stage of **define → plan → execute → verify** is owned by a distinct role, and stages hand off through files (specs, plans). No stage proceeds until the previous one is clear enough.
+The core pipeline prevents this by separating concerns. Each stage and branch of **define → task ticketing/planning → execute → verify** is owned by a distinct role, and stages hand off through files (specs, plans) or child tickets in the PM tool. No stage proceeds until the previous one is clear enough.
 
 | Stage | Skill | Responsibility | Output |
 |-------|-------|----------------|--------|
-| Define | deep-interview | Resolve ambiguity, converge to a spec | `$OMT_DIR/deep-interview/{slug}.md` |
-| Plan | ultragoal (exactly 1 active topology component) / prometheus (otherwise) | Choose the recommended Phase 5 route; offer the other planning/execution skill as an explicit override | ultragoal execution / human-readable plan |
+| Define | deep-interview | Resolve ambiguity and settle requirements/design | `$OMT_DIR/deep-interview/{slug}.md` |
+| Task ticketing | craft-tasks (when team-facing task tickets are needed) | Decompose the settled design into shareable child tickets | Shareable child tickets in the PM tool |
+| Plan | ultragoal (exactly 1 active topology component) / prometheus (otherwise) | For specs that do not request team-facing task tickets, choose the Phase 5 AI planning/execution route and offer the other route as an explicit override | ultragoal execution / human-readable plan |
 | Execute | ultragoal → sisyphus | ultragoal dispatches stories to sisyphus to orchestrate execution | Verified code changes |
 | Verify | sisyphus (inline) | Run a verify task's AC commands to confirm implementation quality, plan compliance, instruction fulfillment | APPROVE / REQUEST_CHANGES |
 
@@ -37,14 +38,17 @@ Supporting roles attach to this spine. **clarify** is a gate that halts whenever
 
 ---
 
-## 2. The Define → Plan → Execute Pipeline
+## 2. The Define → Task Ticketing/Planning → Execute Pipeline
 
-Three foundational skills form the spine of the pipeline.
+Four foundational skills form the spine of the pipeline.
 
 ```mermaid
 flowchart LR
     subgraph Define
         deep["deep-interview"]
+    end
+    subgraph Task Ticketing
+        craft["craft-tasks"]
     end
     subgraph Plan
         prometheus["prometheus"]
@@ -54,25 +58,28 @@ flowchart LR
         sisyphus["sisyphus"]
     end
 
-    deep -->|"$OMT_DIR/deep-interview/{slug}.md"| Route{Exactly 1 active<br/>topology component?}
+    deep -->|"$OMT_DIR/deep-interview/{slug}.md"| Shape{Team-facing task<br/>tickets requested?}
+    Shape -->|Yes: recommend craft-tasks| craft
+    Shape -->|No| Route{Exactly 1 active<br/>topology component?}
     Route -->|Yes: recommend ultragoal| ultragoal
     Route -->|No: recommend prometheus| prometheus
     Route -.->|Prometheus override when 1| prometheus
     Route -.->|ultragoal override otherwise| ultragoal
+    craft -->|"shareable child tickets"| Tickets((Team-tracked work))
     prometheus -->|"$OMT_DIR/plans/*.md"| ultragoal
     ultragoal -->|"story-by-story dispatch"| sisyphus
     sisyphus -->|"verified code"| Done((Done))
 ```
 
-Each arrow is a file handoff. In Phase 5, deep-interview recommends ultragoal when there is exactly one active topology component and prometheus otherwise, while offering the non-recommended planning/execution skill as an explicit override. If prometheus is selected, it produces a human-readable plan and hands it to ultragoal; ultragoal dispatches stories to sisyphus one at a time, and sisyphus closes out with verified code changes. Skipping a stage still works, but the clarity of each stage determines the quality of the next.
+Each arrow represents a file or PM-tool handoff. In Phase 5, deep-interview first checks the spec's output shape. When team-facing task tickets are requested, it recommends craft-tasks as the post-design task-ticket stage, which decomposes the settled design into shareable child tickets. When team-facing task tickets are not requested, it recommends ultragoal when there is exactly one active topology component and prometheus otherwise, while offering the non-recommended route as an explicit override. If prometheus is selected, it produces a human-readable plan and hands it to ultragoal; ultragoal dispatches stories to sisyphus one at a time, and sisyphus closes out with verified code changes. Skipping a stage still works, but the clarity of each stage determines the quality of the next.
 
 ---
 
 ## 3. deep-interview — Socratic Deep Interview
 
-**Purpose**: Converge a vague idea into a clear specification before autonomous execution. It asks one question at a time, targeting the weakest dimension, until a weighted ambiguity score drops below the threshold.
+**Purpose**: Converge a vague idea into clear requirements and a settled design before autonomous execution or task decomposition. It asks one question at a time, targeting the weakest dimension, until a weighted ambiguity score drops below the threshold.
 
-**Core constraint**: It does not proceed to execution while ambiguity exceeds the threshold. It never implements directly; after producing a spec, Phase 5 recommends ultragoal or prometheus by the active topology-component count and offers the other route as an explicit override.
+**Core constraint**: It does not proceed to the next stage while ambiguity exceeds the threshold. It never implements directly; after settling requirements and design, Phase 5 first checks the spec's output shape. When team-facing task tickets are requested, it recommends craft-tasks to decompose the settled design into shareable child tickets; otherwise, it recommends ultragoal or prometheus by the active topology-component count and offers the other route as an explicit override.
 
 **When to use**: Use it when you have an idea but the scope is fuzzy, or when you say "interview me", "don't assume", "make sure you understand". Conversely, if the request already names file paths, function names, and acceptance criteria, it is right to execute directly without an interview.
 
@@ -82,15 +89,17 @@ flowchart TB
     Ask --> Score[Measure ambiguity score]
     Score --> Gate{Ambiguity ≤ threshold?}
     Gate -->|No| Ask
-    Gate -->|Yes| Spec[Crystallize spec]
-    Spec --> Route{Exactly 1 active<br/>topology component?}
+    Gate -->|Yes| Spec[Settle requirements<br/>and design]
+    Spec --> Shape{Output shape?}
+    Shape -->|Team-facing task tickets:<br/>recommend craft-tasks| Tasks([Hand off to craft-tasks])
+    Shape -->|AI plan/execution| Route{Exactly 1 active<br/>topology component?}
     Route -->|Yes: recommend ultragoal| Ultra([Hand off to ultragoal])
     Route -->|No: recommend prometheus| Prom([Hand off to prometheus])
     Route -.->|Prometheus override when 1| Prom
     Route -.->|ultragoal override otherwise| Ultra
 ```
 
-**Pipeline link**: The output spec is saved to `$OMT_DIR/deep-interview/{slug}.md`. In Phase 5, deep-interview recommends ultragoal when there is exactly one active topology component and prometheus otherwise, while offering the non-recommended route as an explicit override. If prometheus is selected, it uses the spec to produce a human-readable plan and hands it to ultragoal. This flow is built on the premise that specification quality is the primary bottleneck in AI-assisted development.
+**Pipeline link**: The output spec is saved to `$OMT_DIR/deep-interview/{slug}.md` with requirements and design settled. In Phase 5, deep-interview first checks the output shape. When team-facing task tickets are requested, it recommends craft-tasks to decompose the settled design into shareable child tickets. When team-facing task tickets are not requested, it recommends ultragoal when there is exactly one active topology component and prometheus otherwise, while offering the non-recommended route as an explicit override. If prometheus is selected, it uses the spec to produce a human-readable plan and hands it to ultragoal. This flow is built on the premise that specification quality is the primary bottleneck in AI-assisted development.
 
 > This skill was borrowed almost as-is from [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode) (omc), whose implementation was simply too good to reinvent (originally inspired by [Ouroboros](https://github.com/Q00/ouroboros)).
 
