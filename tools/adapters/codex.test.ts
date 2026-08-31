@@ -534,18 +534,18 @@ describe("CodexAdapter", () => {
 		});
 
 		it("reflects the source frontmatter `tools` allowlist in the leaf guard text via `syncAgentsDirect`", async () => {
-			const sourceFile = path.join(tmpDir, "chunk-reviewer.md");
+			const sourceFile = path.join(tmpDir, "finder-worker.md");
 			await fs.writeFile(
 				sourceFile,
 				[
 					"---",
-					"name: chunk-reviewer",
-					"description: Chunk reviewer",
+					"name: finder-worker",
+					"description: Finder worker",
 					"model: sonnet",
 					"tools: Bash, Read",
 					"---",
 					"",
-					"You are the chunk-reviewer agent.",
+					"You are the finder-worker agent.",
 					"",
 				].join("\n"),
 			);
@@ -554,7 +554,7 @@ describe("CodexAdapter", () => {
 
 			await adapter.syncAgentsDirect(
 				targetBase,
-				"chunk-reviewer",
+				"finder-worker",
 				sourceFile,
 				[],
 				[],
@@ -562,7 +562,7 @@ describe("CodexAdapter", () => {
 				modelMap,
 			);
 
-			const targetFile = path.join(targetBase, ".codex", "agents", "chunk-reviewer.toml");
+			const targetFile = path.join(targetBase, ".codex", "agents", "finder-worker.toml");
 			const parsed = parse(await fs.readFile(targetFile, "utf-8")) as Record<string, unknown>;
 
 			// The guard names the actual tools list from frontmatter (Bash, Read) —
@@ -622,7 +622,7 @@ describe("CodexAdapter", () => {
 					"model: opus",
 					"---",
 					"",
-					"You are the code-reviewer. Fan out chunk-reviewer and verifiers.",
+					"You are the code-reviewer. Fan out finder workers and verifiers.",
 					"",
 				].join("\n"),
 			);
@@ -635,7 +635,7 @@ describe("CodexAdapter", () => {
 			const parsed = parse(await fs.readFile(targetFile, "utf-8")) as Record<string, unknown>;
 			expect(parsed.developer_instructions).not.toContain("native_subagent_leaf_guard");
 			expect(parsed.developer_instructions).toBe(
-				"You are the code-reviewer. Fan out chunk-reviewer and verifiers.",
+				"You are the code-reviewer. Fan out finder workers and verifiers.",
 			);
 		});
 

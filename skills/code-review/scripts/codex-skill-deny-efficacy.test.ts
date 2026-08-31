@@ -23,7 +23,7 @@ import path from "path";
 import { buildAugmentedCommand } from "@lib/generic-job";
 import { splitCommand } from "@lib/worker-utils";
 
-const CONFIG_PATH = path.join(import.meta.dir, "..", "orchestrate-review.config.yaml");
+const CONFIG_PATH = path.join(import.meta.dir, "..", "code-review.config.yaml");
 const SKILLS_DIR = path.join(import.meta.dir, "..", "..");
 
 /** 같은 선언 집합을 들고 있어야 하는 나머지 job config들 — [경로, 최상위 키]. */
@@ -230,7 +230,7 @@ describe("codex 축 실효성 — settings.deny.skills가 실제 프롬프트에
  * 오타 검출 — 순수 파일시스템 검사, codex 불필요.
  *
  * 위 실효성 테스트는 baseline === 0인 이름을 "측정 불가"로 면제한다. 그래서
- * orchestrate-reviewX 같은 오타를 두 config에 똑같이 넣으면(codex 배포 스코프에
+ * code-reviewX 같은 오타를 두 config에 똑같이 넣으면(codex 배포 스코프에
  * 당연히 없으므로 baseline 0) 실효성 단언은 통과하고, "두 config가 같은 집합"
  * 단언만 깨진다 — 두 config에 같은 오타가 들어가면 아무것도 안 잡힌다. 이 테스트는
  * 그 틈을 "baseline 0"과 "이름 자체가 존재하지 않음"을 분리해 메운다.
@@ -243,8 +243,8 @@ function skillMdPath(name: string): string {
 
 /**
  * Case-exact existence check. This repo lives on a case-insensitive filesystem
- * (macOS default), so `fs.existsSync(skillMdPath("ORCHESTRATE-REVIEW"))` returns
- * true even though the real directory on disk is spelled "orchestrate-review" —
+ * (macOS default), so `fs.existsSync(skillMdPath("CODE-REVIEW"))` returns
+ * true even though the real directory on disk is spelled "code-review" —
  * codex itself is case-sensitive, so a miscased deny name silently fails to
  * suppress anything while this guard waves it through. readdirSync returns the
  * actual on-disk spelling, so comparing against it (not just existsSync) catches

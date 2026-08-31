@@ -479,7 +479,7 @@ test_function_call_fixture_nonexistent_path_allows() {
 
 test_angle_placeholder_generalized_allows() {
     local out rc=0
-    out=$(local_path_ref_gate_core_check "$REPO" '// (<worktree>/skills/orchestrate-review/scripts/), which is neither a') || rc=$?
+    out=$(local_path_ref_gate_core_check "$REPO" '// (<worktree>/skills/code-review/scripts/), which is neither a') || rc=$?
     [[ "$rc" -eq 1 && -z "$out" ]]
 }
 

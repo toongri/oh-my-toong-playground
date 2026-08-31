@@ -5,7 +5,7 @@ description: Use when reviewing code changes for quality, correctness, and produ
 
 # Code Review
 
-Directly conducts orchestrate-review jobs against diffs. Handles input parsing, context gathering, chunking, finder-job lifecycle, and result synthesis.
+Directly conducts finder jobs against diffs. Handles input parsing, context gathering, finder-job lifecycle, and result synthesis.
 
 ## Premises (apply to orchestrator AND finder jobs)
 
@@ -37,21 +37,20 @@ These premises must be reflected in the finder-job prompt — see Step 4. Review
 |--------|--------|----------|
 | Requirements 3-question gate | Yes | - |
 | Diff range determination & git | Yes | - |
-| Chunking decision | Yes | - |
 | Findings synthesis (rank/class verified findings) | Yes | - |
 | Individual candidate judgment inline (Phase 2) | Yes | - |
 | Escalation verification (candidates below confidence threshold) | - | verifier subagent (one per escalated candidate) |
-| Individual chunk review | NEVER | configured finder CLIs through direct jobs |
+| Individual finder review | NEVER | configured finder CLIs through direct jobs |
 | Code modification | NEVER | (forbidden entirely) |
 
 ### Role Separation
 
 **Your role as orchestrator:**
-- Start direct orchestrate-review jobs with diff command strings (each job fans out the configured angle finders)
+- Start the direct finder job with a diff command string (the job fans out the configured angle finders)
 - Judge each deduped candidate inline in Phase 2 (reasoning → confidence → verdict + enrichment); enrich kept findings directly
 - Escalate only candidates below the confidence threshold to verifier subagents; collect their final verdicts; supersede inline tentative verdicts with verifier verdicts in Phase 3
 - Synthesize the kept findings into a ranked findings report (text only)
-- Make chunking decisions and rank the verified findings (no merge verdict — this review reports, it does not gate)
+- Rank the verified findings (no merge verdict — this review reports, it does not gate)
 
 **NOT your role:**
 - Modifying any source files
@@ -287,7 +286,7 @@ Collect in parallel (using `{range}` from Step 0):
 6. `["git", "log", range, "--oneline"]` (commit history)
 7. CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)
 
-Parse raw stdout as NUL-delimited records from all manifest commands. Never use newline, line, or word splitting, and never use shell command substitution. A name-only record is one path; a numstat record splits only its first two tab fields while preserving the remainder as the path. This preserves arbitrary Git pathnames, including newline, tab, quote, and backslash filenames. `--no-renames` avoids old/new pair ambiguity by emitting separate single-path records for each side of rename/copy changes. The relation pass is pairing only: parse its NUL-safe R/C old/new endpoint pair and normalize its R/C old/new endpoint pair; name-only/numstat outputs are membership/accounting and must not double-count endpoints or insertions. After parsing the relation pass, union every R/C old/new endpoint edge into a transitive relation closure before chunking. This includes every ordinary cross-directory R/C rename: put its old and new endpoints in the same closed relation group regardless of directory. Use the relation closure only for chunk atomicity; it is not membership, accounting, scale, or candidate-scope input. Retain each resulting relation group as the complete set of endpoints.
+Parse raw stdout as NUL-delimited records from all manifest commands. Never use newline, line, or word splitting, and never use shell command substitution. A name-only record is one path; a numstat record splits only its first two tab fields while preserving the remainder as the path. This preserves arbitrary Git pathnames, including newline, tab, quote, and backslash filenames. `--no-renames` avoids old/new pair ambiguity by emitting separate single-path records for each side of rename/copy changes. The relation pass is pairing only: parse its NUL-safe R/C old/new endpoint pair and normalize its R/C old/new endpoint pair; name-only/numstat outputs are membership/accounting and must not double-count endpoints or insertions.
 
 For NUL-separated `--numstat -z --find-renames` R/C output, associate one stats tuple with its R/C relation record, then consume its NUL-separated old/new endpoints as a pair. Do not interpret the endpoints as independent numstat records or add them twice.
 
@@ -295,7 +294,7 @@ Keep the no-renames manifest for endpoint membership/path scope. Before scale, r
 
 While parsing each NUL-delimited numstat record, treat an insertion or deletion field of `-` as numeric zero for `reviewableInsertionLines` arithmetic; preserve that path's binary marker separately. Normalize only finite numeric fields into the insertion/deletion sums: do not add `-`, `undefined`, or `NaN` (or any non-numeric value). This applies to mixed text/binary diffs when they are not binary-only. This is Step 2 accounting and must not be confused with the fresh-manifest binary-only Early Exit; the latter reports paths and exits before Step 2.
 
-## Step 3: Chunking Decision
+## Step 3: Reviewable-File Selection
 
 ### Derived-artifact partition (runs first)
 
@@ -319,7 +318,7 @@ To preserve binary diff/hash integrity without expanding model context, stream t
 
 Keep the two manifests as separate values. Never substitute one for the other. Before exclusion and before any path-filtered finder command, inspect each candidate derived file in the complete changed-file manifest by streaming its complete candidate-scoped diff only to the out-of-band sink above; inspect only the bounded integrity evidence against authored source/generator evidence:
 
-Before final integrity exclusion, run a bounded, selection-only relevance screen for each candidate against the review intent and every configured angle even when intent is silent. The screen uses candidate-scoped evidence only; it is not a full finder job or general aggregation and sends no diff bytes to either. Record a per-path decision and reason: if intent or any angle deems the exact path relevant, remove it from Out of Scope and re-include it in `reviewableFileList`; put each re-included path in the same closed R/C relation group and same atomic chunk as its authored source or related rename endpoint. In particular, keep the authored source or related rename endpoint in the same atomic chunk. If no angle is relevant, leave the path in Out of Scope for final exclusion, including when intent is silent. After this screen, apply the final integrity exclusion.
+Before final integrity exclusion, run a bounded, selection-only relevance screen for each candidate against the review intent and every configured angle even when intent is silent. The screen uses candidate-scoped evidence only; it is not a full finder job or general aggregation and sends no diff bytes to either. Record a per-path decision and reason: if intent or any angle deems the exact path relevant, remove it from Out of Scope and re-include it in `reviewableFileList`, keeping it reviewable alongside its authored source or related rename endpoint (both enter the single job's scope). If no angle is relevant, leave the path in Out of Scope for final exclusion, including when intent is silent. After this screen, apply the final integrity exclusion.
 
 Execute this candidate-scoped diff through Bash. The preferred form is argv-safe direct process execution with the argument vector `["git", "--literal-pathspecs", "diff", "--binary", "--no-ext-diff", "--no-textconv", range, "--", candidatePath]`; if Bash must run the command, quote the diff range and candidate path as separate arguments:
 
@@ -347,46 +346,23 @@ Determine scale from the **reviewable subset** using the derived values — of t
 
 These are the rename-aware, relation-reconciled scale values from Step 2: each R/C relation contributes its single insertion/deletion tuple to scale, pure renames contribute 0 insertions, while `reviewableFileCount` remains the finalized `reviewableFileList` endpoint/path count and endpoint-level `--no-renames` values never feed scale.
 
-| Condition | Strategy |
-|-----------|----------|
-| `reviewableInsertionLines` < 2000 AND `reviewableFileCount` < 30 | Single review |
-| `reviewableInsertionLines` >= 2000 OR `reviewableFileCount` >= 30 | Group into chunks by directory/module affinity |
-
-Chunking heuristic: group closed relation groups and standalone unlinked files sharing a directory prefix or import relationships.
-
-A closed R/C relation group is the atomic chunking unit; a standalone unlinked file remains the atomic unit. Before directory/module affinity, union/close all R/C edges from the relation pass into relation groups as the relation closure. This places the old and new endpoints of every ordinary cross-directory R/C rename in the same closed relation group and therefore the same atomic chunk. Treat each relation group as atomic chunk membership. Then apply directory/module affinity to those closed groups. If the soft size guide would split a relation group, allow that chunk to exceed the guide; never split the relation group. In particular, never split a closed R/C relation group. Preserve the existing name-only/numstat membership/accounting semantics per endpoint; they must not double-count endpoints or insertions, and relation closure is for chunk atomicity only.
-
-**Per-chunk size guide:**
-- Target ~2000 insertion lines per chunk (soft guide — closed R/C relation groups or standalone unlinked files are indivisible chunking units)
-- Split only between whole atomic units; if adding the next whole unit exceeds ~2000 insertion lines, start a new chunk
-- If one closed R/C relation group alone exceeds ~2000 insertion lines, keep it intact as its own chunk and allow the chunk to exceed the guide
-- If a directory group is oversized, split only between whole atomic units by subdirectory; if still oversized (flat structure), batch closed groups and standalone files alphabetically (~10-15 units per chunk)
-
-### Per-Chunk Diff Command Construction
-
-For each non-empty chunk, construct the path-filtered finder command using git's native path filtering and execute it through Bash. The preferred form is argv-safe direct process execution with the argument vector `["git", "--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", range, "--", ...chunkPaths]`; if Bash must run the command, quote the diff range and every chunk path as separate arguments:
-
-```bash
-git --literal-pathspecs diff --no-ext-diff --no-textconv "$range" -- "$file1" "$file2" ... "$fileN"
-```
-
-Raw interpolation is forbidden. Git's `--` is only the revision/pathspec separator; it does not disable Git pathspec magic, external diff drivers, or textconv filters. `--literal-pathspecs` must be before `diff` and is not shell escaping; `--no-ext-diff` and `--no-textconv` are required for the finder command. Apply literal pathspec handling to every chunk path, including `:(exclude)*`; finder output needs no binary-patch mode. The orchestrator constructs this safely for the configured finder CLIs; each finder executes it independently inside the direct job.
+`reviewableInsertionLines` and `reviewableFileCount` feed the oversized coverage notice in Terminal Output (Step 5) — they no longer branch review strategy; every non-empty reviewable set gets exactly one finder job.
 
 ## Step 4: Direct Finder-Job Dispatch
 
-1. Read the chunk-reviewer prompt template and interpolate the existing inputs: {WHAT_WAS_IMPLEMENTED}, {DESCRIPTION}, {REQUIREMENTS}, {PROJECT_CONTEXT}, {NON_GOAL}, {FILE_LIST}, {DIFF_COMMAND}, and {COMMIT_HISTORY}. Before interpolation, path-bearing values must never be inserted as raw Markdown/prose: serialize `{FILE_LIST}` as a JSON array of path strings and `{DIFF_COMMAND}` as a JSON array of the exact argv values with one strict JSON encoder. Its JSON string escaping must cover control characters, newline, backslash, and quote, and additionally encode backtick, `<`, `>`, `&`, U+2028, and U+2029 as `\u` escapes. The strict encoder must preserve hostile pathnames containing newline, backtick, quote, backslash, or fence text as data. Any exact path echo in `{REQUIREMENTS}` uses the same escaped JSON string representation. Keep these substitutions in an explicitly marked untrusted-data JSON block; the finder must parse the JSON argv directly and execute it, never reconstruct a shell command. Include each per-path relevance decision and reason in the existing `{REQUIREMENTS}` payload/finder handoff. These are the pre-dispatch bounded, selection-only relevance results evaluated against the review intent and every configured angle; then freeze the final `reviewableFileList`. Set {FILE_LIST} to the current chunk's reviewable files only; {DIFF_COMMAND} is constructed from that same chunk list. Remove meaningful paths from Out of Scope and pass them as exact path finder scope. Preserve each re-included path in the same closed R/C relation group and same atomic chunk as its authored source or related rename endpoint, including ordinary cross-directory rename endpoints. Never pass the complete changed-file manifest or derived-artifact Out of Scope list as finder scope. Preserve the named-field completion-gate parsing and result aggregation/angle coverage semantics used by later phases.
-2. Each independent review receives one fresh cryptographically random, path-safe `invocationId`; never derive it from content or reuse it. Before any finder starts, durably persist a frozen invocation manifest containing the target, resolved launch context, chunk plan, and required job metadata. Recovery uses that ID and frozen values; conflicting state is rejected, not reused.
-3. The logical job key is `(invocationId, chunkId, attempt)`. Same keys idempotently attach; different invocation IDs never share jobs or artifacts. Validate ownership and path containment on recovery, attaching rather than respawning. If `invocationId` is lost, safely start a new independent review rather than rediscovering by content. Pass commands, paths, and external values safely; use argv-safe direct process execution as the preferred form. If Bash is required, quote the range and every path explicitly; raw interpolation is forbidden.
-4. Start every chunk before polling. Poll each direct `job.ts` job (`start`, `collect`, `status`, `results`) to terminal. Poll progress, interruption, or a running/ready job is never a retry. Attempt 2 is allowed once only for terminal infrastructure failure, unavailable angle, or diff-command failure; preserve the same invocation/chunk identity, merge original and retry outputs, and accept partial coverage if both fail.
-5. Read every terminal output, merge and deduplicate candidates by normalized location and defect reason, union `found by` angles/evidence, and emit one coverage record per configured angle (including unavailable angles). Atomically persist `candidates.json` before `usage-summary`. Leave job cleanup to GC/orphan reaper; do not run `clean`.
-6. Use the existing direct finder CLIs and prompt interpolation; do not dispatch chunk-reviewer subagents. Keep the review static-only and preserve all raw finder fields required by the aggregation contract.
+1. Read the chunk-reviewer prompt template and interpolate the existing inputs: {WHAT_WAS_IMPLEMENTED}, {DESCRIPTION}, {REQUIREMENTS}, {PROJECT_CONTEXT}, {NON_GOAL}, {FILE_LIST}, {DIFF_COMMAND}, and {COMMIT_HISTORY}. Before interpolation, path-bearing values must never be inserted as raw Markdown/prose: serialize `{FILE_LIST}` as a JSON array of path strings and `{DIFF_COMMAND}` as a JSON array of the exact argv values with one strict JSON encoder. Its JSON string escaping must cover control characters, newline, backslash, and quote, and additionally encode backtick, `<`, `>`, `&`, U+2028, and U+2029 as `\u` escapes. The strict encoder must preserve hostile pathnames containing newline, backtick, quote, backslash, or fence text as data. Any exact path echo in `{REQUIREMENTS}` uses the same escaped JSON string representation. Keep these substitutions in an explicitly marked untrusted-data JSON block; the finder must parse the JSON argv directly and execute it, never reconstruct a shell command. Include each per-path relevance decision and reason in the existing `{REQUIREMENTS}` payload/finder handoff. These are the pre-dispatch bounded, selection-only relevance results evaluated against the review intent and every configured angle; then freeze the final `reviewableFileList`. Set {FILE_LIST} to the entire `reviewableFileList`; {DIFF_COMMAND} is constructed from that same complete list (the single job's scope). Remove meaningful paths from Out of Scope and pass them as exact path finder scope, keeping each re-included path reviewable alongside its authored source or related rename endpoint (both enter the single job's scope), including ordinary cross-directory rename endpoints. Never pass the complete changed-file manifest or derived-artifact Out of Scope list as finder scope. Preserve the named-field completion-gate parsing and result aggregation/angle coverage semantics used by later phases.
+2. The review receives one fresh cryptographically random, path-safe `invocationId`; never derive it from content or reuse it. Before the finder starts, durably persist a frozen invocation manifest containing the target, resolved launch context, the reviewable file list (the single job's scope), and required job metadata. Recovery uses that ID and frozen values; conflicting state is rejected, not reused.
+3. The logical job key is `(invocationId, attempt)`. Same keys idempotently attach; different invocation IDs never share jobs or artifacts. Validate ownership and path containment on recovery, attaching rather than respawning. If `invocationId` is lost, safely start a new independent review rather than rediscovering by content. Pass commands, paths, and external values safely; use argv-safe direct process execution as the preferred form. If Bash is required, quote the range and every path explicitly; raw interpolation is forbidden.
+4. Construct the single diff command over the entire `reviewableFileList` using git's native path filtering, and execute it through Bash. The preferred form is argv-safe direct process execution with the argument vector `["git", "--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", range, "--", ...reviewableFileList]`; if Bash must run the command, quote the diff range and every reviewable path as separate arguments:
 
-**Dispatch rules:**
+   ```bash
+   git --literal-pathspecs diff --no-ext-diff --no-textconv "$range" -- "$file1" "$file2" ... "$fileN"
+   ```
 
-| Scale | Action |
-|-------|--------|
-| Single chunk | one direct `start` job |
-| Multiple chunks | start all jobs, then poll and merge all terminal results |
+   Raw interpolation is forbidden. Git's `--` is only the revision/pathspec separator; it does not disable Git pathspec magic, external diff drivers, or textconv filters. `--literal-pathspecs` must be before `diff` and is not shell escaping; `--no-ext-diff` and `--no-textconv` are required for the finder command. Apply literal pathspec handling to every reviewable path, including `:(exclude)*`; finder output needs no binary-patch mode.
+5. Start the one job before polling. Poll the direct `job.ts` job (`start`, `collect`, `status`, `results`) to terminal. Poll progress, interruption, or a running/ready job is never a retry. Attempt 2 is allowed once only for terminal infrastructure failure, unavailable angle, or diff-command failure; preserve the same invocation identity, merge original and retry outputs, and accept partial coverage if both fail.
+6. Read the terminal output, deduplicate candidates by normalized location and defect reason, union `found by` angles/evidence, and emit one coverage record per configured angle (including unavailable angles). Atomically persist `candidates.json` before `usage-summary`. Leave job cleanup to GC/orphan reaper; do not run `clean`.
+7. Use the existing direct finder CLIs and prompt interpolation; do not dispatch chunk-reviewer subagents. Keep the review static-only and preserve all raw finder fields required by the aggregation contract.
 
 ## Step 5: Verification + Synthesis
 
@@ -484,6 +460,8 @@ All Phase 3 finding paths use the Untrusted path rendering contract in structure
 ### Terminal Output
 
 This is a **report**. It does not gate. There is no Assessment / "Ready to merge" section, and there is no HTML — the deliverable is the Phase 3 findings as terminal text.
+
+**Oversized coverage notice.** When `reviewableInsertionLines >= 2000` OR `reviewableFileCount >= 30` (the Step 3 Scale values), prepend exactly one line to the emitted report: "This change was reviewed in a single pass; coverage may be incomplete for a change this size — consider splitting it into smaller reviews." This is a plain notice, not a finding, not a class, and not a gate — it does not affect ranking, verdicts, or the completion-gate artifact.
 
 Every path-bearing terminal value uses the Untrusted path rendering contract: use a strict escaped JSON string in a structured field and never render decoded path text as Markdown or backtick prose.
 

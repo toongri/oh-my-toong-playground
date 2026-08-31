@@ -379,7 +379,7 @@ export const OUT_OF_SCOPE_TOKENS: readonly { token: string; reason: string }[] =
 	{
 		token: "CLAUDE_CODE_EFFORT_LEVEL",
 		reason:
-			'appears inside a comment that explains the per-platform difference ("claude: env CLAUDE_CODE_EFFORT_LEVEL, codex: -c flag") in skills/agent-council/council.config.yaml:16; rewriting it destroys the distinction it documents. The other carrier, skills/orchestrate-review/scripts/job.test.ts:831, is a *.test.ts file excluded from deploy by DEFAULT_EXCLUDE.',
+			'appears inside a comment that explains the per-platform difference ("claude: env CLAUDE_CODE_EFFORT_LEVEL, codex: -c flag") in skills/agent-council/council.config.yaml:16; rewriting it destroys the distinction it documents. The other carrier, skills/code-review/scripts/job.test.ts:1083, is a *.test.ts file excluded from deploy by DEFAULT_EXCLUDE.',
 	},
 	{
 		token: "CLAUDE_PID",

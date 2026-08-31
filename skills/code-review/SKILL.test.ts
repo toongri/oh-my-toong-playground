@@ -8,7 +8,7 @@ const codeReviewerAgent = readFileSync(
 	"utf8",
 );
 const chunkReviewerPrompt = readFileSync(
-	join(import.meta.dir, "../orchestrate-review/scripts/chunk-reviewer-prompt.md"),
+	join(import.meta.dir, "scripts/chunk-reviewer-prompt.md"),
 	"utf8",
 );
 const verifierPrompt = readFileSync(
@@ -50,12 +50,15 @@ describe("code-review direct finder-job contract", () => {
 	const step4 = extractSection(skillMd, "## Step 4: Direct Finder-Job Dispatch", "## Step 5:");
 
 	test("Step 4 is a concise invocationId contract", () => {
-		expect(step4.split("\n").length).toBeLessThanOrEqual(46);
+		expect(step4.split("\n").length).toBeLessThanOrEqual(56);
 		expect(step4).toContain("fresh cryptographically random, path-safe `invocationId`");
 		expect(step4).toContain("frozen invocation manifest");
-		expect(step4).toContain("target, resolved launch context, chunk plan, and required job metadata");
-		expect(step4).toContain("(invocationId, chunkId, attempt)");
-		expect(step4).toContain("Start every chunk before polling");
+		expect(step4).toContain(
+			"target, resolved launch context, the reviewable file list (the single job's scope), and required job metadata",
+		);
+		expect(step4).toContain("(invocationId, attempt)");
+		expect(step4).not.toContain("chunkId");
+		expect(step4).toContain("Start the one job before polling");
 		expect(step4).toContain("terminal infrastructure failure");
 		expect(step4).toContain("If `invocationId` is lost, safely start a new independent review");
 		expect(step4).toContain("Atomically persist `candidates.json` before `usage-summary`");
@@ -258,7 +261,7 @@ describe("code-review runtime range command safety contract", () => {
 	});
 
 	test("initializes zero-reviewable artifacts before Phase 3 without finder work", () => {
-		const step3 = extractSection(skillMd, "## Step 3: Chunking Decision", "## Step 4:");
+		const step3 = extractSection(skillMd, "## Step 3: Reviewable-File Selection", "## Step 4:");
 		const zeroScope = extractSection(step3, "### Zero-reviewable-files review", "### Scale");
 		const step5 = extractSection(skillMd, "## Step 5: Verification + Synthesis", "## Reference Files");
 		const phase3 = extractSection(step5, "### Phase 3:", "### Terminal Output");
@@ -316,7 +319,7 @@ describe("code-review Step 2 rename relation contract", () => {
 	});
 
 	test("uses rename-aware numstat for scale without redefining endpoint count", () => {
-		const step3 = extractSection(skillMd, "## Step 3: Chunking Decision", "## Step 4:");
+		const step3 = extractSection(skillMd, "## Step 3: Reviewable-File Selection", "## Step 4:");
 
 		expect(contextBudget).toContain(
 			'`["git", "diff", range, "--numstat", "-z", "--find-renames"]` output',
@@ -361,64 +364,31 @@ describe("code-review Step 2 rename relation contract", () => {
 	});
 });
 
-describe("code-review rename relation closure and affinity contract", () => {
+describe("code-review single-job scope contract (post-dechunk)", () => {
 	const step2 = extractSection(skillMd, "## Step 2: Context Gathering", "## Step 3:");
-	const step3 = extractSection(skillMd, "## Step 3: Chunking Decision", "## Step 4:");
 	const step4 = extractSection(skillMd, "## Step 4: Direct Finder-Job Dispatch", "## Step 5:");
 
-	test("closes every R/C edge before affinity and keeps each relation group atomic", () => {
-		expect(step2).toContain("union every R/C old/new endpoint edge");
-		expect(step2).toContain("transitive relation closure");
-		expect(step2).toContain("ordinary cross-directory R/C rename");
-		expect(step2).toContain("relation closure only for chunk atomicity");
-		expect(step3).toContain("all R/C edges");
-		expect(step3).toContain("relation closure");
-		expect(step3).toContain("relation group as atomic chunk membership");
-		expect(step3).toContain("soft size guide would split a relation group");
-		expect(step3).toContain("never split the relation group");
-		expect(step3).toContain("must not double-count endpoints or insertions");
-		expect(step3).toContain(
-			"old and new endpoints of every ordinary cross-directory R/C rename in the same closed relation group",
-		);
-		expect(step3).toContain("same closed relation group and therefore the same atomic chunk");
-
-		const closure = step3.indexOf("Before directory/module affinity");
-		const affinity = step3.indexOf("Then apply directory/module affinity", closure);
-		const atomic = step3.indexOf("relation group as atomic chunk membership", closure);
-
-		expect(closure).toBeGreaterThanOrEqual(0);
-		expect(affinity).toBeGreaterThan(closure);
-		expect(atomic).toBeGreaterThan(closure);
+	test("Step 2 keeps rename pairing/accounting but drops the chunk-atomicity relation closure", () => {
+		expect(step2).toContain("relation pass is pairing only");
+		expect(step2).toContain("name-only/numstat outputs are membership/accounting");
+		expect(step2).toContain("must not double-count endpoints or insertions");
+		expect(step2).not.toContain("transitive relation closure");
+		expect(step2).not.toContain("relation closure only for chunk atomicity");
+		expect(step2).not.toContain("before chunking");
 	});
 
-		test("keeps re-included rename endpoints in the same closed atomic chunk", () => {
+	test("keeps re-included rename endpoints reviewable in the single job's scope", () => {
 		expect(step4).toContain(
-			"re-included path in the same closed R/C relation group and same atomic chunk as its authored source or related rename endpoint",
+			"keeping each re-included path reviewable alongside its authored source or related rename endpoint (both enter the single job's scope)",
 		);
 		expect(step4).toContain("ordinary cross-directory rename endpoints");
-	});
-
-	test("makes closed relation groups, not individual files, the chunking atomic unit", () => {
-		const sizeGuide = extractSection(
-			step3,
-			"**Per-chunk size guide:**",
-			"### Per-Chunk Diff Command Construction",
-		);
-
-		expect(step3).toContain("A closed R/C relation group is the atomic chunking unit");
-		expect(step3).toContain("a standalone unlinked file remains the atomic unit");
-		expect(step3).toContain("never split a closed R/C relation group");
-		expect(sizeGuide).toContain("only between whole atomic units");
-		expect(sizeGuide).toContain("closed R/C relation groups or standalone unlinked files");
-		expect(sizeGuide).not.toContain("files are the atomic unit");
-		expect(sizeGuide).not.toContain("If adding the next file");
-		expect(sizeGuide).not.toContain("If a single file alone");
+		expect(step4).not.toContain("same closed R/C relation group and same atomic chunk");
 	});
 });
 
 describe("code-review Step 3 partition and scale contract", () => {
 	const step2 = extractSection(skillMd, "## Step 2: Context Gathering", "## Step 3:");
-	const step3 = extractSection(skillMd, "## Step 3: Chunking Decision", "## Step 4:");
+	const step3 = extractSection(skillMd, "## Step 3: Reviewable-File Selection", "## Step 4:");
 	const step4 = extractSection(skillMd, "## Step 4: Direct Finder-Job Dispatch", "## Step 5:");
 
 	test("partitions before scale and derives relation-reconciled units", () => {
@@ -437,18 +407,31 @@ describe("code-review Step 3 partition and scale contract", () => {
 		expect(derive).toBeLessThan(scale);
 	});
 
-	test("uses the reviewable subset for both scale thresholds", () => {
-		const scale = extractSection(step3, "### Scale", "### Per-Chunk Diff Command Construction");
+	test("Scale no longer branches strategy — it feeds the oversized coverage notice instead", () => {
+		const scale = extractSection(step3, "### Scale", "## Step 4:");
+		const terminalOutput = extractSection(
+			skillMd,
+			"### Terminal Output",
+			"## Reference Files (on-demand)",
+		);
 
-		expect(scale).toContain("`reviewableInsertionLines` < 2000");
-		expect(scale).toContain("`reviewableFileCount` < 30");
-		expect(scale).not.toContain("changed files < 30");
-		expect(scale).not.toContain("changed files >= 30");
+		expect(scale).not.toContain("| Condition | Strategy |");
+		expect(scale).not.toContain("Single review");
+		expect(scale).not.toContain("Group into chunks");
+		expect(scale).not.toContain("Chunking heuristic");
+		expect(scale).toContain("feed the oversized coverage notice");
+		expect(scale).toContain("every non-empty reviewable set gets exactly one finder job");
+		expect(terminalOutput).toContain("Oversized coverage notice");
+		expect(terminalOutput).toContain("`reviewableInsertionLines >= 2000`");
+		expect(terminalOutput).toContain("`reviewableFileCount >= 30`");
+		expect(terminalOutput).toContain("reviewed in a single pass");
+		expect(terminalOutput).toContain("consider splitting it into smaller reviews");
+		expect(terminalOutput).toContain("not a finding, not a class, and not a gate");
 	});
 
 	test("handles an empty reviewable subset without dispatching an empty review", () => {
 		const zeroScope = step3.indexOf("### Zero-reviewable-files review");
-		const diffCommand = step3.indexOf("### Per-Chunk Diff Command Construction");
+		const scale = step3.indexOf("### Scale");
 
 		expect(zeroScope).toBeGreaterThanOrEqual(0);
 		expect(step3).toContain("valid zero-reviewable-files review");
@@ -456,13 +439,12 @@ describe("code-review Step 3 partition and scale contract", () => {
 		expect(step3).toContain("do not dispatch a finder job");
 		expect(step3).toContain("do not create an empty chunk or pathless diff");
 		expect(step3).toContain("all changed derived artifacts under Out of Scope");
-		expect(zeroScope).toBeLessThan(diffCommand);
+		expect(zeroScope).toBeLessThan(scale);
 	});
 
-	test("checks derived-output integrity before exclusion and path-filtered commands", () => {
+	test("checks derived-output integrity before exclusion", () => {
 		const integrity = step3.indexOf("### Derived-output integrity (before exclusion)");
 		const exclusion = step3.indexOf("**Handling:** derived artifacts are excluded");
-		const pathFilteredCommand = step3.indexOf("### Per-Chunk Diff Command Construction");
 
 		expect(integrity).toBeGreaterThanOrEqual(0);
 		expect(step3).toContain("complete changed-file manifest");
@@ -470,7 +452,6 @@ describe("code-review Step 3 partition and scale contract", () => {
 		expect(step3).toContain("Re-included outputs are reviewed as exact files instead");
 		expect(step3).toContain("before any path-filtered finder command");
 		expect(integrity).toBeLessThan(exclusion);
-		expect(integrity).toBeLessThan(pathFilteredCommand);
 	});
 
 	test("routes integrity comparison through a candidate-scoped diff inspection", () => {
@@ -546,40 +527,38 @@ describe("code-review Step 3 partition and scale contract", () => {
 		);
 	});
 
-	test("constructs path-filtered chunk diffs with safe arguments", () => {
-		const chunkDiff = extractSection(
-			step3,
-			"### Per-Chunk Diff Command Construction",
-			"## Step 4:",
+	test("constructs a single path-filtered diff over the entire reviewable file list with safe arguments", () => {
+		expect(step3).not.toContain("### Per-Chunk Diff Command Construction");
+		expect(step4).toContain(
+			"Construct the single diff command over the entire `reviewableFileList` using git's native path filtering",
 		);
-
-		expect(chunkDiff).toContain("argv-safe direct process execution");
-		expect(chunkDiff).toContain(
-			'["git", "--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", range, "--", ...chunkPaths]',
+		expect(step4).toContain("argv-safe direct process execution");
+		expect(step4).toContain(
+			'["git", "--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", range, "--", ...reviewableFileList]',
 		);
-		expect(chunkDiff).toContain(
+		expect(step4).toContain(
 			'git --literal-pathspecs diff --no-ext-diff --no-textconv "$range" -- "$file1" "$file2" ... "$fileN"',
 		);
-		expect(chunkDiff).not.toContain("--binary");
-		expect(chunkDiff).not.toContain('["git", "diff", range, "--", ...chunkPaths]');
-		expect(chunkDiff).not.toContain('git diff "$range" -- "$file1" "$file2" ... "$fileN"');
-		expect(chunkDiff).toContain("quote the diff range and every chunk path as separate arguments");
-		expect(chunkDiff).toContain("Raw interpolation is forbidden");
-		expect(chunkDiff).not.toContain("git diff {range} -- <file1> <file2> ... <fileN>");
-		expect(chunkDiff).toContain(
+		expect(step4).not.toContain("--binary");
+		expect(step4).not.toContain('["git", "diff", range, "--", ...reviewableFileList]');
+		expect(step4).toContain("quote the diff range and every reviewable path as separate arguments");
+		expect(step4).toContain("Raw interpolation is forbidden");
+		expect(step4).not.toContain("git diff {range} -- <file1> <file2> ... <fileN>");
+		expect(step4).toContain(
 			"`--` is only the revision/pathspec separator; it does not disable Git pathspec magic, external diff drivers, or textconv filters",
 		);
-		expect(chunkDiff).toContain("`--literal-pathspecs` must be before `diff`");
-		expect(chunkDiff).toContain("`--no-ext-diff` and `--no-textconv`");
-		expect(chunkDiff).toContain("not shell escaping");
+		expect(step4).toContain("`--literal-pathspecs` must be before `diff`");
+		expect(step4).toContain("`--no-ext-diff` and `--no-textconv`");
+		expect(step4).toContain("not shell escaping");
 	});
 
 	test("separates the complete manifest from the post-integrity reviewable finder scope", () => {
 		expect(step3).toContain("`completeChangedFileManifest`");
 		expect(step3).toContain("`reviewableFileList`");
 		expect(step3).toContain("Never substitute one for the other");
-		expect(step4).toContain("{FILE_LIST} to the current chunk's reviewable files only");
-		expect(step4).toContain("{DIFF_COMMAND} is constructed from that same chunk list");
+		expect(step4).toContain("{FILE_LIST} to the entire `reviewableFileList`");
+		expect(step4).toContain("{DIFF_COMMAND} is constructed from that same complete list");
+		expect(step4).not.toContain("current chunk's reviewable files only");
 		expect(step4).toContain(
 			"Never pass the complete changed-file manifest or derived-artifact Out of Scope list as finder scope",
 		);
@@ -606,7 +585,10 @@ describe("code-review Step 3 partition and scale contract", () => {
 		expect(integrity).toContain("not a full finder job or general aggregation");
 		expect(integrity).toContain("exact path");
 		expect(integrity).toContain("remove it from Out of Scope and re-include it in `reviewableFileList`");
-		expect(integrity).toContain("authored source or related rename endpoint in the same atomic chunk");
+		expect(integrity).toContain(
+			"keeping it reviewable alongside its authored source or related rename endpoint (both enter the single job's scope)",
+		);
+		expect(integrity).not.toContain("same atomic chunk");
 		expect(integrity).toContain("If no angle is relevant, leave the path in Out of Scope");
 		expect(requirementsPlaceholder).toBeGreaterThanOrEqual(0);
 		expect(handoff).toBeGreaterThanOrEqual(0);

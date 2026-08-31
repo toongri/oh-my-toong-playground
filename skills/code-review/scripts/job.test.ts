@@ -352,14 +352,14 @@ describe("parseChunkReviewConfig", () => {
 	});
 
 	test("real config registers the 4 angle members", async () => {
-		const realPath = path.join(import.meta.dirname, "..", "orchestrate-review.config.yaml");
+		const realPath = path.join(import.meta.dirname, "..", "code-review.config.yaml");
 		const result = await parseChunkReviewConfig(realPath);
 		const names = result["chunk-review"].members.map((r) => (r as { name: string }).name);
 		expect(names).toEqual(["correctness", "regression", "cleanup", "requirement"]);
 	});
 
 	test("모든 멤버의 해석된 명령이 `-c agents.enabled=false` 를 포함한다", async () => {
-		const realPath = path.join(import.meta.dirname, "..", "orchestrate-review.config.yaml");
+		const realPath = path.join(import.meta.dirname, "..", "code-review.config.yaml");
 		const result = await parseChunkReviewConfig(realPath);
 		const settings = result["chunk-review"].settings as unknown as Record<string, unknown>;
 		const denySkills = extractDenySkills(settings);
@@ -373,7 +373,7 @@ describe("parseChunkReviewConfig", () => {
 	});
 
 	test('real config declares settings.mcps.allow as exactly ["codegraph"]', async () => {
-		const realPath = path.join(import.meta.dirname, "..", "orchestrate-review.config.yaml");
+		const realPath = path.join(import.meta.dirname, "..", "code-review.config.yaml");
 		const result = await parseChunkReviewConfig(realPath);
 		expect(result["chunk-review"].settings.mcps).toEqual({ allow: ["codegraph"] });
 	});

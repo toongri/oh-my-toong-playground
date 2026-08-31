@@ -36,7 +36,7 @@ review:
       # named in `plugin:skill` colon form, which `lib/generic-job.ts`'s `assertDenyShape`
       # rejects outright. Fail-open by design: a skill added later stays loadable — unlisted
       # means visible, the safe direction. Kept in lockstep with the other job configs
-      # (`orchestrate-review`, `agent-council`, `design-review`, `diagnose`) —
+      # (`code-review`, `agent-council`, `design-review`, `diagnose`) —
       # `codex-skill-deny-efficacy.test.ts` asserts all four declare the same set.
       skills:
         - agent-browser
@@ -60,7 +60,6 @@ review:
         - make-pr
         - meeting-notes
         - momus
-        - orchestrate-review
         - pin-audit
         - pin-query
         - pin-record

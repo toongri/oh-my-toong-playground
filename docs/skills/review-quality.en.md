@@ -12,8 +12,7 @@ oh-my-toong's review and quality skills systematically verify the completeness o
 
 | Skill | One-line role | Primary input | When to use |
 |-------|---------------|---------------|-------------|
-| `code-review` | Correctness-bug review of PRs and diffs | PR number, branch name, or current branch | Before merging code changes |
-| `orchestrate-review` | Multi-AI angle-finder orchestration | Chunk prompt (called internally by code-review) | Called by code-review internally — rarely invoke directly |
+| `code-review` | Correctness-bug review of PRs and diffs. Directly dispatches its own multi-AI angle-finder job | PR number, branch name, or current branch | Before merging code changes |
 | `design-review` | Tradeoff tension analysis of designs and plans | Design question, plan doc, architectural concerns | Reviewing an architecture decision or implementation plan |
 | `slides-review` | Visual design review of HTML slides | HTML file path | After create-slides, or when improving HTML slide aesthetics |
 | `qa` | Implementation correctness verification guardian | QA REQUEST (Spec + Scope + verification method) | After implementation is done and needs independent QA |
@@ -25,19 +24,38 @@ oh-my-toong's review and quality skills systematically verify the completeness o
 
 ### code-review
 
-**Purpose**: Reviews code changes for correctness bugs before merge. The unit of review is not the diff alone but the *system the diff produces*.
+**Purpose**: Reviews code changes for correctness bugs before merge. The unit of review is not the diff alone but the *system the diff produces*. Candidate findings are sourced directly by code-review's own multi-AI angle-finder engine (`skills/code-review/scripts/`), with no separate orchestration skill in between.
 
 **What it reviews**:
 - Correctness bugs — whether changed code behaves correctly end-to-end against the surrounding system
 - Dependencies, callers, callees, interfaces, configurations, and runtime context across file boundaries
 - Classifies each finding candidate as CONFIRMED / PLAUSIBLE / REFUTED
-- The orchestrator then assigns each verified finding a class (`correctness`/`regression`/`cleanup`/`requirement-gap`, 1:1 with the angles) and an impact (`HIGH`/`MEDIUM`/`LOW`, by case lists + angle defaults) — verdict measures confidence, impact measures harm
+- Assigns each verified finding a class (`correctness`/`regression`/`cleanup`/`requirement-gap`, 1:1 with the angles) and an impact (`HIGH`/`MEDIUM`/`LOW`, by case lists + angle defaults) — verdict measures confidence, impact measures harm
 - Persists the full 7-field cards to `$OMT_DIR/code-review/<sid>/findings.md` — the basis for later re-adjudication
 - At higher effort levels, may also include simplification, reuse, and efficiency findings
 
 **Non-negotiable premises**:
 1. **Working directory = post-change state**: Read the file system freely to trace dependencies.
 2. **No diff-only review**: A diff is a delta. The review target is the system it produces.
+
+**Multi-AI angle-finder job**: code-review dispatches a **single finder job** scoped to the entire reviewable diff. Previously a large diff was split into chunks that a separate orchestration skill (`orchestrate-review`, now retired) coordinated as conductor; now the whole reviewable file set always goes into one job, with no chunking and no separate conductor step, regardless of diff size.
+
+- **Split across 4 angles** — `correctness` (correctness + exploitability; absorbed former line-scan + cross-file + security) · `regression` · `cleanup` (cleanup plus a light-touch Test value lens) · `requirement` (AC mapping or intent inference; absorbed former coverage). Each angle is a separate CLI invocation fanned out in parallel inside the one finder job, and each collects candidates independently — none assigns a verdict (CONFIRMED/PLAUSIBLE/REFUTED); that is left to code-review's own verification step.
+- **Oversized diffs get a single pass plus a notice, not chunking** — when `reviewableInsertionLines ≥ 2000` or `reviewableFileCount ≥ 30`, the report gets exactly one prepended line: "this change was reviewed in a single pass; coverage may be incomplete for a change this size — consider splitting it into smaller reviews." This is a plain notice, not a finding, a class, or a gate — it does not affect ranking, verdicts, or completion.
+- **Static review only**: finders and the in-session fallback do not run tests, builds, linters, installers/installs, or project code. Candidates are grounded with the diff, source reads, and searches only; when static evidence cannot resolve something, the review surfaces uncertainty or a coverage limitation instead of executing it. The job's lifecycle commands (`job.ts` `start`, `collect`, `resume-member`, `results`, `stop`, `clean`, plus `usage-summary.ts`) remain available.
+- **If all finders are unavailable** (no config, CLI not installed, timeout), code-review itself falls back to in-session finder mode directly. The static-review restriction still applies to the fallback.
+- `requirement` only maps supplied acceptance criteria (ACs), or infers intent from the diff when ACs are absent.
+- `cleanup` owns a light-touch Test value lens: false confidence or fake coverage, verification value versus feedback-loop cost, and implementation-coupled or unstable tests. It is not a scoring rubric.
+
+**How the execution restriction is applied**:
+- A prompt contract and dedicated Claude/Codex PreToolUse guard twins (`review-exec-guard.sh` / `codex-review-exec-guard.sh`) work together. Both guards use one shared shell invariant to judge the same high-cost commands.
+- At the JVM boundary, only calls whose basenames are `gradle`, `gradlew`, `mvn`, or `mvnw` are covered, and only enumerated high-cost Gradle tasks and Maven phases are blocked. Gradle blocks `test` (including qualified/suffixed forms), `build`, `check`, `assemble*`, `compile*`, `classes`, `lint*`, `ktlint*`, and `detekt*`; Maven blocks `compile`, `test-compile`, `test`, `integration-test`, `package`, `verify`, `install`, `ktlint:check`, and `detekt:check`.
+- Direct lint/compiler execution through `ktlint`, `detekt`, `kotlinc`, and `javac`, plus project-code runtime execution through `java` and `kotlin`, is also blocked. Conversely, unenumerated Gradle/Maven calls default to allow; only pure help/metadata queries and version queries receive special query-exception treatment. A call that mixes a query with execution is not an exception.
+- This query exception does not mean zero-cost or purely static work. Gradle/Maven queries may still configure projects or resolve and access plugins and dependencies, so they are deliberately narrow usability exceptions within static review.
+- Workers receive `OMT_REVIEW_ROLE=member` to mark member review context. A conductor is in scope only when its job metadata's `conductorSessionId` and a live job directory establish review context.
+- The restriction activates only in review context. The same high-cost command remains unblocked by these guards in a normal development session.
+
+**Process cleanup**: Each finder runs as its own worker process, reaped through three independent paths — the worker's own exit path, job cleanup (`clean`), and reclamation when a new session starts. The latter two only signal when they can confirm the process group is still this job's own, so a conductor that never reaches its own cleanup step isn't always backed up by the other paths. Which MCP servers a worker can start is also restricted by an allowlist (`mcps.allow`) in the job config; leaving it unset blocks every server this engine enumerates (opt-in, fail-closed). Its sibling setting under the same `settings:` block, `deny.skills` (which blocks specific skills a review worker can invoke), defaults the opposite way: leaving it unset blocks nothing (a no-op). A worker's ability to spawn subagents is switched off by `deny.subagents: true` in the same block — all four job-dispatching skills (code-review, design-review, diagnose, agent-council) declare it, and it is translated per member CLI (codex: `agents.enabled=false`, claude: a permission deny on the spawn tool, opencode: `permission.task: deny`). Declaring either axis while a member runs a CLI with no enforcement lever (gemini, unrecognized) makes `start` exit 1 before any job directory is created.
 
 **How to invoke**:
 ```
@@ -51,41 +69,6 @@ oh-my-toong's review and quality skills systematically verify the completeness o
 - `--fix` — Apply findings to the working tree directly
 
 **When to use**: Before merging any code change. Works without a PR via branch comparison or auto-detect mode.
-
----
-
-### orchestrate-review
-
-**Purpose**: A multi-AI review orchestrator called internally by `code-review`. It fans out AI finders in parallel — each with a distinct review lens (angle) — collects their independent candidate findings, and merges them into a single deduplicated candidate list.
-
-**What it does**:
-- Splits the work across 4 angles — `correctness` (correctness + exploitability; absorbed former line-scan + cross-file + security) · `regression` · `cleanup` (cleanup plus a light-touch Test value lens) · `requirement` (AC mapping or intent inference; absorbed former coverage)
-- Collects candidates from each angle finder independently
-- Deduplicates and aggregates — does not assign verdicts (CONFIRMED/PLAUSIBLE/REFUTED)
-- Returns the un-judged candidate set to the upstream `code-review` for verification
-
-**Static review only**:
-- Members, the conductor, and the in-session fallback all perform static review only. They do not run tests, builds, linters, installers/installs, or project code.
-- Candidates are grounded with the diff, source reads, and searches. When static evidence cannot resolve something, the review surfaces uncertainty or a coverage limitation instead of executing it.
-- The conductor may still run orchestration lifecycle commands: `job.ts` `start`, `collect`, `resume-member`, `results`, `stop`, and `clean`, plus `usage-summary.ts`. The static-review restriction still applies to the fallback.
-
-**Role boundary**:
-- "Conductor, not a reviewer" — does not read code itself, assign severity, or decide whether anything should be merged.
-- If all finders are unavailable (no config, CLI not installed, timeout), falls back to in-session finder mode directly.
-- `requirement` only maps supplied acceptance criteria (ACs), or infers intent from the diff when ACs are absent.
-- `cleanup` owns a light-touch Test value lens: false confidence or fake coverage, verification value versus feedback-loop cost, and implementation-coupled or unstable tests. It is not a scoring rubric.
-
-**How the execution restriction is applied**:
-- A prompt contract and dedicated Claude/Codex PreToolUse guard twins (`review-exec-guard.sh` / `codex-review-exec-guard.sh`) work together. Both guards use one shared shell invariant to judge the same high-cost commands.
-- At the JVM boundary, only calls whose basenames are `gradle`, `gradlew`, `mvn`, or `mvnw` are covered, and only enumerated high-cost Gradle tasks and Maven phases are blocked. Gradle blocks `test` (including qualified/suffixed forms), `build`, `check`, `assemble*`, `compile*`, `classes`, `lint*`, `ktlint*`, and `detekt*`; Maven blocks `compile`, `test-compile`, `test`, `integration-test`, `package`, `verify`, `install`, `ktlint:check`, and `detekt:check`.
-- Direct lint/compiler execution through `ktlint`, `detekt`, `kotlinc`, and `javac`, plus project-code runtime execution through `java` and `kotlin`, is also blocked. Conversely, unenumerated Gradle/Maven calls default to allow; only pure help/metadata queries and version queries receive special query-exception treatment. A call that mixes a query with execution is not an exception.
-- This query exception does not mean zero-cost or purely static work. Gradle/Maven queries may still configure projects or resolve and access plugins and dependencies, so they are deliberately narrow usability exceptions within static review.
-- Workers receive `OMT_REVIEW_ROLE=member` to mark member review context. A conductor is in scope only when its job metadata's `conductorSessionId` and a live job directory establish review context.
-- The restriction activates only in review context. The same high-cost command remains unblocked by these guards in a normal development session.
-
-**Process cleanup**: Each finder runs as its own worker process, reaped through three independent paths — the worker's own exit path, job cleanup (`clean`), and reclamation when a new session starts. The latter two only signal when they can confirm the process group is still this job's own, so a conductor that never reaches its own cleanup step isn't always backed up by the other paths. Which MCP servers a worker can start is also restricted by an allowlist (`mcps.allow`) in the job config; leaving it unset blocks every server this engine enumerates (opt-in, fail-closed). Its sibling setting under the same `settings:` block, `deny.skills` (which blocks specific skills a review worker can invoke), defaults the opposite way: leaving it unset blocks nothing (a no-op). A worker's ability to spawn subagents is switched off by `deny.subagents: true` in the same block — all four job-dispatching skills (orchestrate-review, design-review, diagnose, agent-council) declare it, and it is translated per member CLI (codex: `agents.enabled=false`, claude: a permission deny on the spawn tool, opencode: `permission.task: deny`). Declaring either axis while a member runs a CLI with no enforcement lever (gemini, unrecognized) makes `start` exit 1 before any job directory is created.
-
-**When to use**: In most cases, `code-review` calls this internally and you do not need to invoke it directly. It can be wired directly when building a custom multi-AI review pipeline.
 
 ---
 
@@ -185,8 +168,8 @@ Need to understand it first?
   |-- A human must understand the change -> explain-diff (then code-review)
 
 When you run code-review:
-  orchestrate-review coordinates multi-AI finders internally.
-  You rarely need to invoke orchestrate-review directly.
+  It dispatches its own multi-AI angle-finder job directly (single job, no chunking).
+  There is no separate orchestration skill to invoke first.
 ```
 
 ---

@@ -39,7 +39,7 @@ The skills below form the owner's job-search pipeline. Each entry is intentional
 
 - [README](../../README.en.md) — Project overview
 - [Core Pipeline Skills](./core-pipeline.en.md) — deep-interview, prometheus, sisyphus
-- [Review Quality Skills](./review-quality.en.md) — code-review, orchestrate-review, qa
+- [Review Quality Skills](./review-quality.en.md) — code-review, qa
 - [Research Skills](./research.en.md) — ultraresearch, insane-browsing
 - [Authoring Skills](./authoring.en.md) — Document and content authoring + shared utils
 - [Knowledge Graph & Pins](./knowledge-graph-pins.en.md) — pin skill series

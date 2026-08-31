@@ -18,7 +18,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { cmdResumeMember } from "../skills/orchestrate-review/scripts/job.ts";
+import { cmdResumeMember } from "../skills/code-review/scripts/job.ts";
 import { atomicWriteJson } from "@lib/job-utils";
 import type { RunOnceOpts } from "./worker-utils.ts";
 import type { AgentDriver } from "./agent-drivers/types.ts";

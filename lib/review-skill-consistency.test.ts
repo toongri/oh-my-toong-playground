@@ -6,22 +6,17 @@ import { join } from "node:path";
 /**
  * Review/advisory skills wrap the shared generic-job framework with a per-skill
  * `scripts/job.ts` CLI plus a SKILL.md that tells an agent how to drive it. The
- * doc and the CLI must stay in sync. These tests pin the two drift classes that
- * a cloud review surfaced as bugs — a documented resume-member invocation whose
- * argument form did not match the handler's parsing, and an "Allowed Bash Usage"
- * whitelist that omitted commands the workflow elsewhere instructs the agent to
- * run — so the same drift is caught for free here instead of by an expensive
- * external review. The check discovers skills from disk, so a newly added review
- * skill is covered automatically; skills that document neither concern are
- * skipped, not asserted against.
+ * doc and the CLI must stay in sync. This test pins the drift class that a cloud
+ * review surfaced as a bug — a documented resume-member invocation whose
+ * argument form did not match the handler's parsing — so the same drift is
+ * caught for free here instead of by an expensive external review. The check
+ * discovers skills from disk, so a newly added review skill is covered
+ * automatically; skills that document no resume-member invocation are skipped,
+ * not asserted against.
  */
 
 const REPO_ROOT = join(import.meta.dir, "..");
 const SKILLS_DIR = join(REPO_ROOT, "skills");
-
-// All job.ts subcommands the framework exposes; used to recognise command
-// references in prose without matching unrelated `job.ts` mentions.
-const SUBCOMMAND = "(?:start|collect|results|stop|clean|status|resume-member)";
 
 type ArgForm = "flag" | "positional";
 
@@ -80,31 +75,6 @@ function docResumeForms(skillMd: string): ArgForm[] {
 		.map((l) => (/--(?:job|member|prompt)\b/.test(l) ? "flag" : "positional"));
 }
 
-/** Subcommands referenced anywhere in the SKILL.md body. */
-function bodySubcommands(skillMd: string): Set<string> {
-	const subs = new Set<string>();
-	const re = new RegExp(`job\\.ts"? (${SUBCOMMAND})\\b`, "g");
-	for (const m of readFileSync(skillMd, "utf-8").matchAll(re)) subs.add(m[1]);
-	return subs;
-}
-
-/**
- * Subcommands listed under the "Allowed Bash Usage" heading, or null when the
- * skill has no such whitelist (only the Chairman orchestration skills do).
- */
-function whitelistSubcommands(skillMd: string): Set<string> | null {
-	const lines = readFileSync(skillMd, "utf-8").split("\n");
-	const start = lines.findIndex((l) => /^#{1,6}\s+Allowed Bash Usage/.test(l));
-	if (start === -1) return null;
-	const subs = new Set<string>();
-	const re = new RegExp(`job\\.ts"? (${SUBCOMMAND})\\b`, "g");
-	for (let i = start + 1; i < lines.length; i++) {
-		if (/^#{1,6}\s/.test(lines[i])) break; // next heading ends the section
-		for (const m of lines[i].matchAll(re)) subs.add(m[1]);
-	}
-	return subs;
-}
-
 const SKILLS = jobSkills();
 
 describe("review skill family — resume-member arg form (doc ↔ impl)", () => {
@@ -123,28 +93,6 @@ describe("review skill family — resume-member arg form (doc ↔ impl)", () => 
 			expect(s.impl).not.toBeNull();
 			const mismatched = s.docForms.filter((f) => f !== s.impl);
 			expect(mismatched).toEqual([]);
-		});
-	}
-});
-
-describe("review skill family — Allowed Bash whitelist completeness", () => {
-	const chairman = SKILLS.map((s) => ({
-		name: s.name,
-		whitelist: whitelistSubcommands(s.skillMd),
-		body: bodySubcommands(s.skillMd),
-	})).filter(
-		(s): s is { name: string; whitelist: Set<string>; body: Set<string> } => s.whitelist !== null,
-	);
-
-	it("at least one Chairman skill exposes an Allowed Bash Usage section (parser guard)", () => {
-		expect(chairman.length).toBeGreaterThanOrEqual(1);
-	});
-
-	for (const s of chairman) {
-		it(`${s.name}: every job.ts subcommand used in the body is whitelisted`, () => {
-			expect(s.whitelist.size).toBeGreaterThan(0);
-			const missing = [...s.body].filter((c) => !s.whitelist.has(c)).sort();
-			expect(missing).toEqual([]);
 		});
 	}
 });

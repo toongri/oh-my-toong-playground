@@ -329,9 +329,9 @@ function readRepoFile(rel: string): string {
 }
 
 describe("스킬 문서 계약 회귀 검사", () => {
-	test("orchestrate-review/SKILL.md의 finder severity 금지 문장이 그대로 남아 있다 (finder 무변경)", () => {
-		const text = readRepoFile("skills/orchestrate-review/SKILL.md");
-		expect(text).toContain("MUST NOT assign severity, priority, or P-levels");
+	test("code-review 파인더 prompt의 severity 금지 문장이 그대로 남아 있다 (finder 무변경)", () => {
+		const text = readRepoFile("skills/code-review/scripts/prompts/default.md");
+		expect(text).toContain("Do NOT assign severity, priority, P-levels");
 	});
 
 	test("verifier-prompt.md에 requirement-gap 번역 문단이 cleanup 문단과 같은 형식으로 존재한다", () => {

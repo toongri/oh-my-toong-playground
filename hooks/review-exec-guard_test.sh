@@ -175,7 +175,7 @@ test_no_marker_malformed_unsafe_mismatch_and_no_jq_fail_open() {
 test_static_and_orchestration_commands_allow() {
     new_sandbox
     local command out rc result=0
-    for command in 'git diff' 'rg conductorSessionId hooks' 'grep -R review hooks' 'cat hooks/lib/omt-dir.sh' 'bun skills/orchestrate-review/job.ts collect'; do
+    for command in 'git diff' 'rg conductorSessionId hooks' 'grep -R review hooks' 'cat hooks/lib/omt-dir.sh' 'bun skills/code-review/job.ts collect'; do
         rc=0; out=$(payload "$command" | env -u OMT_SESSION_ID -u CODEX_THREAD_ID OMT_DIR="$SBX/omt" OMT_REVIEW_ROLE=member bash "$HOOK") || rc=$?
         assert_allowed "$out" "$rc" "allowed-$command" || result=1
     done

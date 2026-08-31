@@ -77,7 +77,6 @@ verdict, but the verdict actually comes from the `Verdict` enum in
 | `metis` | fable | Absence judgment with no mandated evidence anchoring (all four absence-judgment conditions) |
 | `momus` | opus | Judges with its own model |
 | `tech-claim-examiner` | opus | Judges with its own model |
-| `chunk-reviewer` | sonnet | Delegation structure (`orchestrate-review`) |
 | `daedalus` | sonnet | Conflict cell — delegation structure wins |
 | `oracle` | sonnet | Conflict cell — delegation structure wins |
 | `explore` | sonnet | Search |

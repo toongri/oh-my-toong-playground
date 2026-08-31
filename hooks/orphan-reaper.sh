@@ -2,10 +2,10 @@
 # =============================================================================
 # Orphan Reaper -- SessionStart hook (3계층 방어의 계층 3, 두 번째 트리거)
 #
-# orchestrate-review의 chunk-review job은 워커를 detached 프로세스 그룹으로
+# code-review의 chunk-review job은 워커를 detached 프로세스 그룹으로
 # 띄운다. 컨덕터(conductor)가 teardown에 도달하지 못하고 죽으면 그 워커들이
 # 고아로 남는다 -- lib/generic-job.ts의 findOrphanJobs/reapOrphanJobs(커밋
-# e41027e4)가 판정/회수 엔진이고, job.ts reap(skills/orchestrate-review/
+# e41027e4)가 판정/회수 엔진이고, job.ts reap(skills/code-review/
 # scripts/job.ts, 커밋 a8edc7d3)이 그 서브커맨드다. 지금까지 이 회수의
 # 유일한 트리거는 cmdStart -- 즉 "다음 job을 새로 시작할 때"뿐이라, 리뷰를
 # 다시 돌리지 않으면 고아는 영영 회수되지 않는다. 이 훅은 "새 세션을 열면
@@ -50,7 +50,7 @@
 # 않으므로(실측: 하위 디렉터리에서 실행하면 상위의 bunfig가 적용되지
 # 않음), cwd를 OMT 소유 디렉터리($SCRIPT_DIR)로 고정하는 것만으로 이
 # 경로가 닫힌다. OMT_DIR을 명시로 함께 넘기는 이유: job.ts의
-# DEFAULT_JOBS_DIR(skills/orchestrate-review/scripts/job.ts)은 모듈
+# DEFAULT_JOBS_DIR(skills/code-review/scripts/job.ts)은 모듈
 # 레벨 상수라 서브커맨드와 무관하게 import 시점에 getOmtDir()를 호출하고,
 # 그것이 mkdirSync(recursive)로 디렉터리를 생성한다 -- cwd만 SCRIPT_DIR로
 # 옮기면 배포 레이아웃($HOME/.claude/hooks, git 레포 아님)에서
@@ -61,13 +61,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-JOB_TS="$SCRIPT_DIR/../skills/orchestrate-review/scripts/job.ts"
+JOB_TS="$SCRIPT_DIR/../skills/code-review/scripts/job.ts"
 
-# fail-open: orchestrate-review가 배포되지 않은 타겟에서는 아무것도 하지
+# fail-open: code-review가 배포되지 않은 타겟에서는 아무것도 하지
 # 않고 조용히 성공 종료한다. 이 상대경로는 레포 레이아웃
-# (<repo>/hooks/../skills/orchestrate-review/scripts/job.ts)과 배포 후
-# 레이아웃($HOME/.claude/hooks/../skills/orchestrate-review/scripts/job.ts
-# = $HOME/.claude/skills/orchestrate-review/scripts/job.ts) 양쪽에서 성립한다.
+# (<repo>/hooks/../skills/code-review/scripts/job.ts)과 배포 후
+# 레이아웃($HOME/.claude/hooks/../skills/code-review/scripts/job.ts
+# = $HOME/.claude/skills/code-review/scripts/job.ts) 양쪽에서 성립한다.
 if [ ! -f "$JOB_TS" ]; then
   exit 0
 fi

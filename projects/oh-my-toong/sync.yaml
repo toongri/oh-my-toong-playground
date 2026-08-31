@@ -10,7 +10,6 @@ agents:
     - momus
     - oracle
     - daedalus
-    - chunk-reviewer
     - code-reviewer
     - sisyphus-junior
     - hermes

@@ -6,7 +6,7 @@
 # trigger for the 3-layer defense's layer 3 (see that file's header for the
 # full rationale). This file verifies only the hook-level contract:
 #   1. stdout is byte-empty on every path (cache-safe context injection).
-#   2. fail-open when job.ts is absent (undeployed orchestrate-review target).
+#   2. fail-open when job.ts is absent (undeployed code-review target).
 #   3. fail-open when jq is absent (existing hook convention).
 #   4. the reap is detached -- the hook never waits for its `bun` child,
 #      which is what keeps it inside the 10s SessionStart budget.
@@ -82,13 +82,13 @@ test_stdout_is_completely_empty() {
 # Test 2: job.ts absent -> fail-open, exit 0, stdout still empty.
 # Built against an isolated deploy-layout copy (not the real repo's job.ts,
 # which must stay untouched) so the BASH_SOURCE-relative resolution
-# (hooks/../skills/orchestrate-review/scripts/job.ts) genuinely misses.
+# (hooks/../skills/code-review/scripts/job.ts) genuinely misses.
 # =============================================================================
 test_missing_job_ts_fails_open() {
     local fake_hooks_dir="$TEST_TMP_DIR/fake-deploy/hooks"
     mkdir -p "$fake_hooks_dir"
     cp "$SCRIPT_DIR/orphan-reaper.sh" "$fake_hooks_dir/orphan-reaper.sh"
-    # Deliberately no skills/orchestrate-review/scripts/job.ts under fake-deploy.
+    # Deliberately no skills/code-review/scripts/job.ts under fake-deploy.
 
     local output status
     output=$(printf '{"cwd": "%s"}' "$TEST_TMP_DIR" | bash "$fake_hooks_dir/orphan-reaper.sh")
@@ -276,7 +276,7 @@ EOF
         log_failure=1
     elif ! grep -qF "reaped orphan job" "$log_file"; then
         # job.ts reap's other message on this path ("no orphan jobs found",
-        # skills/orchestrate-review/scripts/job.ts) also leaves the log
+        # skills/code-review/scripts/job.ts) also leaves the log
         # non-empty while meaning the opposite of what this test claims, so a
         # bare non-empty check is not enough.
         echo "ASSERTION FAILED: '$log_file' does not contain 'reaped orphan job' -- got:"

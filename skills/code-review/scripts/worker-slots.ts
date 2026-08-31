@@ -1,7 +1,7 @@
 /**
  * Machine-wide worker concurrency cap.
  *
- * orchestrate-review's conductor dispatches up to 4 members per chunk-review
+ * code-review's conductor dispatches up to 4 members per chunk-review
  * job (job.ts's spawnWorkers), and the orchestrator itself may run several
  * chunk-review jobs at once — each spawned worker.ts then runs a heavy CLI
  * child (`codex exec` and friends) via runOneTurn/resumeOneTurn. The cap this

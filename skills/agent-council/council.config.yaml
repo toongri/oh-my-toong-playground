@@ -74,7 +74,7 @@ council:
       # List stops at 41 (OpenAI-bundled plugin skills use `plugin:skill` colon form, rejected by
       # `lib/generic-job.ts`'s `assertDenyShape`); fail-open by design (unlisted means visible,
       # the safe direction).
-      # Kept in lockstep with the other job configs (`orchestrate-review`, `agent-council`,
+      # Kept in lockstep with the other job configs (`code-review`, `agent-council`,
       # `design-review`, `diagnose`) — `codex-skill-deny-efficacy.test.ts` asserts all four
       # declare the same set.
       skills:
@@ -99,7 +99,6 @@ council:
         - make-pr
         - meeting-notes
         - momus
-        - orchestrate-review
         - pin-audit
         - pin-query
         - pin-record

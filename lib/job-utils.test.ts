@@ -57,12 +57,12 @@ describe("detectHostRole", () => {
 	// not `.codex/skills/`. Without this branch a codex-deployed skill reads
 	// "unknown", and resolveAutoRole turns that into "claude".
 	test("returns codex for paths containing /.agents/skills/", () => {
-		expect(detectHostRole("/home/user/.agents/skills/orchestrate-review")).toBe("codex");
+		expect(detectHostRole("/home/user/.agents/skills/code-review")).toBe("codex");
 	});
 
 	test("resolveAutoRole yields codex for an .agents/skills path under role=auto", () => {
 		expect(
-			resolveAutoRole("auto", detectHostRole("/home/user/.agents/skills/orchestrate-review")),
+			resolveAutoRole("auto", detectHostRole("/home/user/.agents/skills/code-review")),
 		).toBe("codex");
 	});
 
@@ -106,7 +106,7 @@ describe("detectHostRole", () => {
 	// "claude". With the env fallback, hostRole itself resolves to "codex".
 	test("resolves hostRole to codex for a source-tree job path with an active codex session env", () => {
 		const hostRole = detectHostRole(
-			"/Users/x/repos/oh-my-toong-playground/main/skills/orchestrate-review/scripts",
+			"/Users/x/repos/oh-my-toong-playground/main/skills/code-review/scripts",
 			{ CODEX_THREAD_ID: "019fe2d6-07a8-70a1-ad24-2d6491ed6fd2", OMT_SESSION_ID: undefined },
 		);
 		expect(resolveAutoRole("auto", hostRole)).toBe("codex");

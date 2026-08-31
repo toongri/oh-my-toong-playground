@@ -9,7 +9,7 @@ const SKILL_MD = join(REPO_ROOT, "skills", "code-review", "SKILL.md");
 const TEMPLATE_MD = join(
 	REPO_ROOT,
 	"skills",
-	"orchestrate-review",
+	"code-review",
 	"scripts",
 	"chunk-reviewer-prompt.md",
 );
@@ -214,7 +214,7 @@ describe("dispatch JSON-field binding (completion-gate reference <-> serializeRe
 	});
 });
 
-const ORCHESTRATE_REVIEW_DIR = join(REPO_ROOT, "skills", "orchestrate-review");
+const CODE_REVIEW_DIR = join(REPO_ROOT, "skills", "code-review");
 const MEMBER_ROLE_PROMPTS = [
 	"correctness",
 	"regression",
@@ -222,13 +222,8 @@ const MEMBER_ROLE_PROMPTS = [
 	"requirement",
 	"default",
 ] as const;
-const MEMBER_PROMPT_DIR = join(ORCHESTRATE_REVIEW_DIR, "scripts", "prompts");
-const IN_SESSION_FALLBACK_PROMPT = join(ORCHESTRATE_REVIEW_DIR, "prompts", "default.md");
-const ORCHESTRATE_REVIEW_SKILL = join(ORCHESTRATE_REVIEW_DIR, "SKILL.md");
-const ORCHESTRATE_REVIEW_CONFIG = join(
-	ORCHESTRATE_REVIEW_DIR,
-	"orchestrate-review.config.yaml",
-);
+const MEMBER_PROMPT_DIR = join(CODE_REVIEW_DIR, "scripts", "prompts");
+const CODE_REVIEW_CONFIG = join(CODE_REVIEW_DIR, "code-review.config.yaml");
 
 function expectStaticReviewOnlyContract(content: string, fixture: string): void {
 	expect(
@@ -238,7 +233,7 @@ function expectStaticReviewOnlyContract(content: string, fixture: string): void 
 }
 
 describe("정적 리뷰와 Test value 책임 경계 계약", () => {
-	it("`all member prompts and the in-session fallback declare STATIC REVIEW ONLY`", () => {
+	it("`all member prompts declare STATIC REVIEW ONLY`", () => {
 		// Keep this list explicit: adding a member prompt without the contract must fail.
 		for (const member of MEMBER_ROLE_PROMPTS) {
 			const fixture = `scripts/prompts/${member}.md`;
@@ -247,11 +242,6 @@ describe("정적 리뷰와 Test value 책임 경계 계약", () => {
 				fixture,
 			);
 		}
-
-		expectStaticReviewOnlyContract(
-			readFileSync(IN_SESSION_FALLBACK_PROMPT, "utf-8"),
-			"prompts/default.md",
-		);
 	});
 
 	it("`cleanup owns one light-touch Test value lens with the approved categories`", () => {
@@ -273,17 +263,13 @@ describe("정적 리뷰와 Test value 책임 경계 계약", () => {
 		expect(requirement).toContain("implements and/or tests it");
 	});
 
-	it("`fallbacks, conductor, and configuration synchronize the static-only responsibility split`", () => {
+	it("`the dispatch fallback and configuration synchronize the static-only responsibility split`", () => {
 		const dispatchFallback = readFileSync(join(MEMBER_PROMPT_DIR, "default.md"), "utf-8");
-		const inSessionFallback = readFileSync(IN_SESSION_FALLBACK_PROMPT, "utf-8");
-		const skill = readFileSync(ORCHESTRATE_REVIEW_SKILL, "utf-8");
-		const config = readFileSync(ORCHESTRATE_REVIEW_CONFIG, "utf-8");
+		const config = readFileSync(CODE_REVIEW_CONFIG, "utf-8");
 
 		for (const [fixture, content] of [
 			["scripts/prompts/default.md", dispatchFallback],
-			["prompts/default.md", inSessionFallback],
-			["SKILL.md", skill],
-			["orchestrate-review.config.yaml", config],
+			["code-review.config.yaml", config],
 		] as const) {
 			expectStaticReviewOnlyContract(content, fixture);
 			expect(content, `${fixture} must assign Test value to cleanup.`).toMatch(

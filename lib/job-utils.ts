@@ -33,15 +33,15 @@ export function detectHostRole(
 	// Codex has TWO skill roots, not one. `.codex/skills/` is the historical
 	// layout; the sync tool's codex adapter actually lands skills in
 	// `.agents/skills/<name>` (deployLocationForManifest, tools/sync.ts) —
-	// measured: ~/.agents/skills/orchestrate-review exists,
-	// ~/.codex/skills/orchestrate-review does not. Recognizing only the former
+	// measured: ~/.agents/skills/code-review exists,
+	// ~/.codex/skills/code-review does not. Recognizing only the former
 	// makes every codex-deployed skill read as "unknown", which
 	// resolveAutoRole below silently resolves to "claude".
 	if (normalized.includes("/.codex/skills/")) return "codex";
 	if (normalized.includes("/.agents/skills/")) return "codex";
 	// Env fallback for paths with no platform skill-root segment at all — e.g.
 	// a job script run directly from the OMT source tree
-	// (<worktree>/skills/orchestrate-review/scripts/), which is neither a
+	// (<worktree>/skills/code-review/scripts/), which is neither a
 	// claude nor codex deploy target. Without this, hostRole falls through to
 	// "unknown" and resolveAutoRole below used to hardcode that to "claude"
 	// even inside an active Codex session — this actually happened on
@@ -51,7 +51,7 @@ export function detectHostRole(
 	// distinction: lib/state-core.ts documents them as "neither
 	// OMT_SESSION_ID (Claude) nor CODEX_THREAD_ID (Codex)" being present,
 	// hooks/session-start.sh sets OMT_SESSION_ID, and
-	// skills/orchestrate-review/scripts/job.ts's resolveConductorSessionId()
+	// skills/code-review/scripts/job.ts's resolveConductorSessionId()
 	// already reads both. Path signal above always takes priority; this is
 	// checked last, before the unknown fallback.
 	if (env.CODEX_THREAD_ID) return "codex";

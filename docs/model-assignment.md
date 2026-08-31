@@ -66,7 +66,6 @@ verdict를 자기가 만드는 것처럼 보이지만 실제로는 `skills/insan
 | `metis` | fable | 강제 증거 대조 없는 부재 판정 (부재 판정 원칙 4조건) |
 | `momus` | opus | 자기 모델로 직접 판정 |
 | `tech-claim-examiner` | opus | 자기 모델로 직접 판정 |
-| `chunk-reviewer` | sonnet | 위임 구조 (`orchestrate-review`) |
 | `daedalus` | sonnet | 충돌 셀 — 위임 구조 우선 |
 | `oracle` | sonnet | 충돌 셀 — 위임 구조 우선 |
 | `explore` | sonnet | 탐색 |

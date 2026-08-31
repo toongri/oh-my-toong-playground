@@ -256,7 +256,7 @@ EOF
 }
 
 # =============================================================================
-# orphan-reaper.sh -- the second recovery trigger for the orchestrate-review
+# orphan-reaper.sh -- the second recovery trigger for the code-review
 # 3-layer defense's layer 3 (job.ts reap, lib/generic-job.ts reapOrphanJobs).
 # The first trigger is cmdStart (job start time); without this SessionStart
 # registration, an orphaned job.json group is never swept unless someone

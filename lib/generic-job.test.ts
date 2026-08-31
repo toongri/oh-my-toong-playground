@@ -453,7 +453,7 @@ describe("buildAugmentedCommand", () => {
 			const result = buildAugmentedCommand(
 				{
 					command: "opencode run",
-					deny: ["orchestrate-review"],
+					deny: ["code-review"],
 					env: {
 						OPENCODE_CONFIG_CONTENT: JSON.stringify({
 							provider: { anthropic: { apiKey: "x" } },
@@ -469,7 +469,7 @@ describe("buildAugmentedCommand", () => {
 			expect(parsed.model).toBe("opencode-go/glm-5.2");
 			expect(parsed.permission.bash).toBe("ask");
 			expect(parsed.permission.skill["existing-skill"]).toBe("allow");
-			expect(parsed.permission.skill["orchestrate-review"]).toBe("deny");
+			expect(parsed.permission.skill["code-review"]).toBe("deny");
 		});
 
 		test("ambient process.env axis — workerEnv wins at spawn, so it must merge here too", () => {
@@ -487,7 +487,7 @@ describe("buildAugmentedCommand", () => {
 			const result = buildAugmentedCommand(
 				{
 					command: "opencode run",
-					deny: ["orchestrate-review"],
+					deny: ["code-review"],
 					env: {
 						OPENCODE_CONFIG_CONTENT: JSON.stringify({ permission: { skill: { "*": "deny" } } }),
 					},
@@ -496,7 +496,7 @@ describe("buildAugmentedCommand", () => {
 			);
 			const parsed = JSON.parse(result.env.OPENCODE_CONFIG_CONTENT);
 			expect(parsed.permission.skill["*"]).toBe("deny");
-			expect(parsed.permission.skill["orchestrate-review"]).toBe("deny");
+			expect(parsed.permission.skill["code-review"]).toBe("deny");
 		});
 
 		test("unparseable inherited config still enforces deny", () => {

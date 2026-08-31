@@ -12,8 +12,7 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 
 | 스킬 | 역할 한 줄 요약 | 주요 입력 | 언제 사용하나 |
 |------|----------------|-----------|---------------|
-| `code-review` | PR·diff의 정확성 버그 리뷰 | PR 번호, 브랜치 이름, 또는 현재 브랜치 | 코드 변경 사항을 병합 전에 검토할 때 |
-| `orchestrate-review` | 다중 AI 각도-파인더 오케스트레이션 | chunk 프롬프트 (code-review 내부에서 호출) | code-review가 내부적으로 호출 — 직접 호출 거의 없음 |
+| `code-review` | PR·diff의 정확성 버그 리뷰. 내부적으로 다중 AI 각도-파인더 job을 직접 dispatch | PR 번호, 브랜치 이름, 또는 현재 브랜치 | 코드 변경 사항을 병합 전에 검토할 때 |
 | `design-review` | 설계·계획의 트레이드오프 긴장 분석 | 설계 질문, 플랜 문서, 아키텍처 고려사항 | 아키텍처 결정 또는 구현 계획을 검토할 때 |
 | `slides-review` | HTML 슬라이드 시각 디자인 리뷰 | HTML 파일 경로 | create-slides 후처리 또는 직접 HTML 슬라이드 개선 시 |
 | `qa` | 구현 정확성 검증 가디언 | QA REQUEST (Spec + Scope + 검증 방법) | 구현 완료 후 품질을 보증받을 때 |
@@ -25,19 +24,38 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 
 ### code-review
 
-**목적**: 코드 변경 사항을 병합 전에 정확성 버그 위주로 검토합니다. 단순히 diff를 훑는 것이 아니라, diff가 만들어내는 *시스템 전체*를 리뷰 단위로 삼습니다.
+**목적**: 코드 변경 사항을 병합 전에 정확성 버그 위주로 검토합니다. 단순히 diff를 훑는 것이 아니라, diff가 만들어내는 *시스템 전체*를 리뷰 단위로 삼습니다. 후보 발견은 별도 오케스트레이션 스킬을 거치지 않고 code-review 자신이 소유한 다중 AI 각도-파인더 엔진(`skills/code-review/scripts/`)으로 직접 조달합니다.
 
 **검토하는 것**:
 - 정확성 버그 — 변경된 코드가 주변 시스템과 맞물려 올바르게 동작하는지
 - 의존성·호출자·인터페이스·설정·런타임 컨텍스트를 파일 경계를 넘어 추적
 - 리뷰 candidate를 CONFIRMED / PLAUSIBLE / REFUTED 세 등급으로 판정
-- 검증을 통과한 finding에 orchestrator가 class(`correctness`/`regression`/`cleanup`/`requirement-gap`, 앵글과 1:1)와 impact(`HIGH`/`MEDIUM`/`LOW`, 케이스 목록 + 앵글 기본값)를 배정 — verdict는 신뢰도, impact는 해악을 잼
+- 검증을 통과한 finding에 class(`correctness`/`regression`/`cleanup`/`requirement-gap`, 앵글과 1:1)와 impact(`HIGH`/`MEDIUM`/`LOW`, 케이스 목록 + 앵글 기본값)를 배정 — verdict는 신뢰도, impact는 해악을 잼
 - 카드 전문(7필드)을 `$OMT_DIR/code-review/<sid>/findings.md`로 영속 — 사후 재판정의 근거
 - effort 수준에 따라 단순화·재사용·효율화 항목도 포함 가능
 
 **핵심 원칙** — 두 가지는 협상 불가:
 1. **작업 디렉터리 = 변경 후 상태**: 파일 시스템을 읽어 의존성을 추적할 수 있습니다.
 2. **diff-only 리뷰 금지**: diff는 변화의 기록, 리뷰 대상은 그 결과물인 시스템입니다.
+
+**다중 AI 각도-파인더 job**: code-review는 리뷰 가능한 diff 전체를 스코프로 삼는 **단일 파인더 job**을 dispatch합니다. 이전에는 큰 diff를 chunk로 나눠 별도 오케스트레이션 스킬(`orchestrate-review`, 폐지됨)이 컨덕터로 조율했지만, 지금은 diff 크기와 무관하게 청킹이나 별도 컨덕터 단계 없이 리뷰 가능한 파일 집합 전체가 항상 하나의 job으로 들어갑니다.
+
+- **4개 앵글로 분담** — `correctness`(정확성·공격 가능성, 구 line-scan·cross-file·security 흡수) · `regression`(회귀) · `cleanup`(정리와 가벼운 Test value 관점) · `requirement`(AC 매핑 또는 의도 추론, 구 coverage 흡수). 각 앵글은 하나의 finder job 안에서 병렬로 fan-out되는 별도 CLI 호출이며, 각자 독립적으로 candidate를 수집합니다 — 판정(CONFIRMED/PLAUSIBLE/REFUTED)은 하지 않고, code-review 자신의 검증 단계로 넘깁니다.
+- **오버사이즈 diff는 단일 패스 + 안내 문구** — `reviewableInsertionLines ≥ 2000` 또는 `reviewableFileCount ≥ 30`이면 청크로 쪼개는 대신 리포트 첫 줄에 "단일 패스로 리뷰했으며 이 정도 규모에서는 커버리지가 불완전할 수 있으니 리뷰를 더 작게 나누는 것을 고려하라"는 안내 한 줄만 덧붙입니다. 이 안내는 finding도 class도 게이트도 아니며 판정·순위·완료 여부에 영향을 주지 않습니다.
+- **정적 검토 전용** — 파인더와 in-session fallback 모두 테스트·빌드·린터·설치·프로젝트 코드를 실행하지 않습니다. 후보는 diff, 소스 읽기, 검색으로만 뒷받침하며, 정적으로 판단할 수 없는 부분은 실행으로 해소하지 않고 불확실성 또는 커버리지 한계로 드러냅니다. job의 lifecycle 명령(`job.ts`의 `start`·`collect`·`resume-member`·`results`·`stop`·`clean`, `usage-summary.ts`)은 계속 사용할 수 있습니다.
+- **파인더가 모두 불가능한 경우**(설정 없음·CLI 미설치·타임아웃) in-session fallback으로 code-review 자신이 직접 파인더 역할을 수행합니다. fallback에도 정적 검토 제한은 그대로 적용됩니다.
+- `requirement`는 제공된 AC를 매핑하고, AC가 없으면 diff에서 의도를 추론하는 역할만 맡습니다.
+- `cleanup`은 Test value를 가볍게 살핍니다. 거짓 신뢰·가짜 커버리지, 검증 가치 대비 피드백 루프 비용, 구현 결합적이거나 불안정한 테스트를 다루며, 점수화 기준은 아닙니다.
+
+**실행 제한 적용**:
+- 프롬프트 계약과 전용 Claude/Codex PreToolUse 가드 쌍(`review-exec-guard.sh` / `codex-review-exec-guard.sh`)이 함께 적용합니다. 두 가드는 공유 shell 불변식으로 같은 고비용 명령을 판정합니다.
+- JVM 경계에서는 basename이 `gradle`, `gradlew`, `mvn`, `mvnw`인 호출만 대상으로 하며, 열거된 고비용 Gradle task와 Maven phase만 차단합니다. Gradle은 `test`(qualified/suffixed 포함), `build`, `check`, `assemble*`, `compile*`, `classes`, `lint*`, `ktlint*`, `detekt*`를, Maven은 `compile`, `test-compile`, `test`, `integration-test`, `package`, `verify`, `install`, `ktlint:check`, `detekt:check`를 차단합니다.
+- `ktlint`, `detekt`, `kotlinc`, `javac`의 직접 lint/컴파일 실행과 `java`, `kotlin`의 프로젝트 코드 런타임 실행도 차단합니다. 반대로 열거되지 않은 Gradle/Maven 호출은 기본적으로 허용하며, 순수한 help/metadata 조회와 version 조회만 특별히 조회 예외로 취급합니다. 조회와 실행을 섞은 호출은 예외가 아닙니다.
+- 이 조회 예외는 무비용 또는 순수 정적 작업이라는 뜻이 아닙니다. Gradle/Maven 조회도 프로젝트를 설정하거나 플러그인·의존성을 해석하고 접근할 수 있으므로, 정적 검토에서 의도적으로 남겨 둔 좁은 사용성 예외입니다.
+- 워커는 `OMT_REVIEW_ROLE=member`를 받아 멤버 검토 컨텍스트를 표시합니다. 컨덕터는 job 메타데이터의 `conductorSessionId`와 살아 있는 job 디렉터리로 검토 컨텍스트가 확인될 때만 적용 대상이 됩니다.
+- 따라서 이 제한은 검토 컨텍스트에서만 활성화됩니다. 같은 고비용 명령도 일반 개발 세션에서는 이 가드에 의해 차단되지 않습니다.
+
+**프로세스 정리**: 각 파인더는 별도 워커 프로세스로 실행되며, 워커 자신의 종료 경로·job 정리(`clean`)·새 세션 시작 시 회수라는 세 가지 경로로 그 프로세스를 거둡니다. 다만 뒤의 두 경로는 그 프로세스 그룹이 이 job의 것임을 확인할 수 있을 때만 신호를 보내므로, 컨덕터가 정리 단계에 도달하지 못해도 나머지 경로가 항상 뒤를 받쳐주는 것은 아닙니다. 워커가 기동할 수 있는 MCP 서버도 설정 파일의 화이트리스트(`mcps.allow`)로 제한되며, 화이트리스트를 지정하지 않으면 이 엔진이 열거하는 서버가 모두 차단됩니다(opt-in, fail-closed). 같은 `settings:` 블록의 형제 설정인 `deny.skills`(리뷰 워커가 호출할 수 없는 스킬을 지정하는 설정)는 기본값 방향이 정반대여서, 지정하지 않으면 아무것도 차단하지 않습니다(no-op). 워커가 서브에이전트를 스폰하는 능력은 같은 블록의 `deny.subagents: true`가 끕니다 — job을 dispatch하는 스킬 4종(code-review·design-review·diagnose·agent-council)이 모두 켜 두었으며, 멤버 CLI별로 번역됩니다(codex는 `agents.enabled=false`, claude는 스폰 툴 permission deny, opencode는 `permission.task: deny`). 두 축 중 하나라도 선언한 채 집행 레버가 없는 CLI(gemini·미인식)를 멤버로 두면 `start`가 job 디렉터리를 만들기 전에 exit 1로 막습니다.
 
 **호출 방법**:
 ```
@@ -51,41 +69,6 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 - `--fix` — 발견 사항을 워킹 트리에 직접 적용
 
 **언제 사용하나**: 코드 변경 사항을 병합 전에 검토할 때. PR이 없는 경우에도 브랜치 비교나 자동 감지 모드로 사용할 수 있습니다.
-
----
-
-### orchestrate-review
-
-**목적**: `code-review` 내부에서 호출되는 다중 AI 리뷰 오케스트레이터입니다. 각기 다른 검토 렌즈(angle)를 가진 AI 파인더들을 병렬로 fan-out하고, 각자의 candidate 발견 목록을 받아 하나의 중복 제거된 후보 목록으로 합칩니다.
-
-**검토하는 것**:
-- 4개 앵글로 분담 — `correctness`(정확성·공격 가능성, 구 line-scan·cross-file·security 흡수) · `regression`(회귀) · `cleanup`(정리와 가벼운 Test value 관점) · `requirement`(AC 매핑 또는 의도 추론, 구 coverage 흡수)
-- 각 파인더가 독립적으로 발견한 candidate를 각도별로 수집
-- 중복 제거 및 집계 — 판정(CONFIRMED/PLAUSIBLE/REFUTED)은 하지 않음
-- 상위 `code-review`에 판정 대상 후보 목록 반환
-
-**정적 검토 전용**:
-- 멤버, 컨덕터, 그리고 in-session fallback은 모두 정적 검토만 합니다. 테스트·빌드·린터·설치·프로젝트 코드를 실행하지 않습니다.
-- 후보는 diff, 소스 읽기, 검색으로 뒷받침합니다. 정적으로 판단할 수 없는 부분은 실행으로 해소하지 않고 불확실성 또는 커버리지 한계로 드러냅니다.
-- 컨덕터의 orchestration lifecycle 명령(`job.ts`의 `start`·`collect`·`resume-member`·`results`·`stop`·`clean`, `usage-summary.ts`)은 계속 사용할 수 있습니다. fallback에도 정적 검토 제한은 그대로 적용됩니다.
-
-**역할 경계**:
-- "컨덕터이지 리뷰어가 아닙니다" — 코드를 직접 읽거나, 심각도를 부여하거나, 병합 여부를 판단하지 않습니다.
-- 파인더가 모두 불가능한 경우(설정 없음·CLI 미설치·타임아웃) in-session fallback으로 직접 파인더 역할을 수행합니다.
-- `requirement`는 제공된 AC를 매핑하고, AC가 없으면 diff에서 의도를 추론하는 역할만 맡습니다.
-- `cleanup`은 Test value를 가볍게 살핍니다. 거짓 신뢰·가짜 커버리지, 검증 가치 대비 피드백 루프 비용, 구현 결합적이거나 불안정한 테스트를 다루며, 점수화 기준은 아닙니다.
-
-**실행 제한 적용**:
-- 프롬프트 계약과 전용 Claude/Codex PreToolUse 가드 쌍(`review-exec-guard.sh` / `codex-review-exec-guard.sh`)이 함께 적용합니다. 두 가드는 공유 shell 불변식으로 같은 고비용 명령을 판정합니다.
-- JVM 경계에서는 basename이 `gradle`, `gradlew`, `mvn`, `mvnw`인 호출만 대상으로 하며, 열거된 고비용 Gradle task와 Maven phase만 차단합니다. Gradle은 `test`(qualified/suffixed 포함), `build`, `check`, `assemble*`, `compile*`, `classes`, `lint*`, `ktlint*`, `detekt*`를, Maven은 `compile`, `test-compile`, `test`, `integration-test`, `package`, `verify`, `install`, `ktlint:check`, `detekt:check`를 차단합니다.
-- `ktlint`, `detekt`, `kotlinc`, `javac`의 직접 lint/컴파일 실행과 `java`, `kotlin`의 프로젝트 코드 런타임 실행도 차단합니다. 반대로 열거되지 않은 Gradle/Maven 호출은 기본적으로 허용하며, 순수한 help/metadata 조회와 version 조회만 특별히 조회 예외로 취급합니다. 조회와 실행을 섞은 호출은 예외가 아닙니다.
-- 이 조회 예외는 무비용 또는 순수 정적 작업이라는 뜻이 아닙니다. Gradle/Maven 조회도 프로젝트를 설정하거나 플러그인·의존성을 해석하고 접근할 수 있으므로, 정적 검토에서 의도적으로 남겨 둔 좁은 사용성 예외입니다.
-- 워커는 `OMT_REVIEW_ROLE=member`를 받아 멤버 검토 컨텍스트를 표시합니다. 컨덕터는 job 메타데이터의 `conductorSessionId`와 살아 있는 job 디렉터리로 검토 컨텍스트가 확인될 때만 적용 대상이 됩니다.
-- 따라서 이 제한은 검토 컨텍스트에서만 활성화됩니다. 같은 고비용 명령도 일반 개발 세션에서는 이 가드에 의해 차단되지 않습니다.
-
-**프로세스 정리**: 각 파인더는 별도 워커 프로세스로 실행되며, 워커 자신의 종료 경로·job 정리(`clean`)·새 세션 시작 시 회수라는 세 가지 경로로 그 프로세스를 거둡니다. 다만 뒤의 두 경로는 그 프로세스 그룹이 이 job의 것임을 확인할 수 있을 때만 신호를 보내므로, 컨덕터가 정리 단계에 도달하지 못해도 나머지 경로가 항상 뒤를 받쳐주는 것은 아닙니다. 워커가 기동할 수 있는 MCP 서버도 설정 파일의 화이트리스트(`mcps.allow`)로 제한되며, 화이트리스트를 지정하지 않으면 이 엔진이 열거하는 서버가 모두 차단됩니다(opt-in, fail-closed). 같은 `settings:` 블록의 형제 설정인 `deny.skills`(리뷰 워커가 호출할 수 없는 스킬을 지정하는 설정)는 기본값 방향이 정반대여서, 지정하지 않으면 아무것도 차단하지 않습니다(no-op). 워커가 서브에이전트를 스폰하는 능력은 같은 블록의 `deny.subagents: true`가 끕니다 — job을 dispatch하는 스킬 4종(orchestrate-review·design-review·diagnose·agent-council)이 모두 켜 두었으며, 멤버 CLI별로 번역됩니다(codex는 `agents.enabled=false`, claude는 스폰 툴 permission deny, opencode는 `permission.task: deny`). 두 축 중 하나라도 선언한 채 집행 레버가 없는 CLI(gemini·미인식)를 멤버로 두면 `start`가 job 디렉터리를 만들기 전에 exit 1로 막습니다.
-
-**언제 사용하나**: 대부분의 경우 `code-review`가 내부적으로 호출하므로 직접 호출할 일은 거의 없습니다. 커스텀 멀티-AI 리뷰 파이프라인을 설계할 때는 직접 연결할 수 있습니다.
 
 ---
 
@@ -185,8 +168,8 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
   |-- 코드 변경을 사람에게 이해시켜야 함 -> explain-diff (그 다음 code-review)
 
 code-review를 실행하면:
-  내부에서 orchestrate-review가 다중 AI 파인더를 조율합니다.
-  orchestrate-review를 직접 호출할 필요는 거의 없습니다.
+  자체 다중 AI 각도-파인더 job(단일 job, 청킹 없음)을 직접 dispatch합니다.
+  별도로 조율 스킬을 먼저 호출할 필요가 없습니다.
 ```
 
 ---

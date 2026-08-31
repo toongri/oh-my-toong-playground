@@ -238,7 +238,7 @@ flowchart TB
 
 ## 7. Delegation Agent Roster
 
-If skills are the *methodologies*, agents are the *delegation targets*. sisyphus and prometheus pick from the agents below by task type and have them work in isolated subagent contexts. There are currently 13 agents. (A verify task needing a PASS/FAIL verdict is not a delegation target — sisyphus handles it inline itself.)
+If skills are the *methodologies*, agents are the *delegation targets*. sisyphus and prometheus pick from the agents below by task type and have them work in isolated subagent contexts. There are currently 12 agents. (A verify task needing a PASS/FAIL verdict is not a delegation target — sisyphus handles it inline itself.)
 
 | Agent | Role | When used |
 |-------|------|-----------|
@@ -250,9 +250,8 @@ If skills are the *methodologies*, agents are the *delegation targets*. sisyphus
 | momus | Returns simulation-based work-plan critique with certainty-classified findings and a verdict | When critiquing a work plan before execution |
 | daedalus | Reviews designs with steelman antithesis and tradeoff tension analysis | When weighing the soundness of a plan/design |
 | mnemosyne | Git specialist performing atomic commits in an isolated context | When preventing commits from polluting the conversation context |
-| chunk-reviewer | Reviews a completed major step against the original plan and coding standards | When wrapping up a large step and running a review round |
 | tech-claim-examiner | CTO-perspective examiner evaluating resume technical claims with a 5-axis framework | When verifying technical claims on a resume |
-| code-reviewer | Orchestrator that runs the full code-review skill in an isolated context — intent acquisition → chunk-reviewer dispatch → per-candidate verifier fan-out → findings synthesis | When a pure code review needs to run in an isolated context and return findings only |
+| code-reviewer | Orchestrator that runs the full code-review skill in an isolated context — intent acquisition → single finder job fanning out angle finders (correctness/regression/cleanup/requirement) → per-candidate verifier fan-out → findings synthesis | When a pure code review needs to run in an isolated context and return findings only |
 | hermes | Depth-escalation peer to explore/librarian that extracts blocked, authenticated, or bot-protected sources through three tiers — curl_cffi → agent-reach → Chrome stealth | When fetching content from a source that resists plain HTTP (blocked, auth-gated, bot-protected) |
 | issue-reviewer | READ-ONLY checklist reviewer — at craft-issue Stage 6's Checklist Review Gate, checks the issue set being written against the rule files already in the repo, immediately before any write | When craft-issue gates an issue set against the checklist before writing (it never writes itself) |
 

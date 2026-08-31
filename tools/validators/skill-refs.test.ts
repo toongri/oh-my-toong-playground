@@ -58,7 +58,7 @@ describe("skill 경로 참조 검증기", () => {
 		const violations = await withRoot((root) => {
 			writeFixture(
 				root,
-				"skills/orchestrate-review/scripts/template-consistency.test.ts",
+				"skills/code-review/scripts/template-consistency.test.ts",
 				'import "../../ultragoal/scripts/ultragoal-state.ts";\n',
 			);
 			mkdirSync(join(root, "skills", "ultragoal"), { recursive: true });

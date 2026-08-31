@@ -1740,7 +1740,7 @@ export function cmdClean(
 
 	// Reap each member's process group before deleting the directory. Anchor
 	// is job.json's members[].workerPgid (written by cmdStart's spawnWorkers,
-	// e.g. skills/orchestrate-review/scripts/job.ts) — never status.json's
+	// e.g. skills/code-review/scripts/job.ts) — never status.json's
 	// `pid`, which is the codex-exec child's pid, not the worker's own PGID.
 	// Absent/null workerPgid (or an unreadable job.json) means "don't know
 	// what to kill" — skip the kill entirely rather than guess. Under-reaping

@@ -117,7 +117,7 @@ function isCliType(value: string): value is CliType {
 
 /**
  * Parses caller-provided worker environment values while pinning the role for every
- * orchestrate-review finder process. This object is passed unchanged through both
+ * code-review finder process. This object is passed unchanged through both
  * initial and resumed driver commands, then persisted in status.json for resume.
  */
 export function buildWorkerEnv(rawArgs: string[]): Record<string, string> {
