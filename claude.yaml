@@ -113,6 +113,17 @@ plugins:
   items:
     - code-review
     - frontend-design
+    - name: figma@claude-plugins-official
+      check: jq -e '.plugins["figma@claude-plugins-official"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1
+      pre-commands:
+        - claude plugin marketplace add anthropics/claude-plugins-official
+    # 디바이스 간 드리프트로 수동 설치됐던 플러그인 — 전 디바이스에서 제거 통일
+    - name: vercel@claude-plugins-official
+      state: absent
+    - name: playwright@claude-plugins-official
+      state: absent
+    - name: serena@claude-plugins-official
+      state: absent
     - name: claude-md-management@claude-plugins-official
       check: jq -e '.plugins["claude-md-management@claude-plugins-official"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1
       pre-commands:
