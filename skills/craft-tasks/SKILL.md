@@ -89,25 +89,39 @@ This contract is what makes two runs land on the same grain instead of one cutti
 
 ---
 
-## Task Body Shape
+## Task Title & Body Shape
 
-Each task ticket carries, in the team's working language (Korean by default):
+### Title — name the change, not its position
+
+A task title names the **concrete change this task makes**, in the team's working language (Korean by default) — component/layer plus the action, specific enough to tell apart from its siblings without opening the body (e.g. `[모바일] 프로그램 상세: 미장착 슬롯 흐림 처리 복원`).
+
+- **No decomposition ordinals.** Never append `(item N)`, `(task 3)`, `#2`, or any index from your internal task list — that number is a scratchpad artifact, meaningless to whoever reads the board.
+- **Match sibling ticket titles** for any layer/platform prefix; do not invent a new prefix scheme on the spot.
+
+### Body — reader-facing prose only
+
+Each task body carries exactly these three sections, in the team's working language, and **nothing else**:
 
 - **목적** — what this task delivers toward the settled design (one or two sentences; cite the design decision it implements).
 - **변경 대상** — the component / layer / files this touches. Observational, evidence-backed (from the design's boundary map). This IS allowed here — unlike craft-issue, a task legitimately states HOW.
 - **완료 조건 (DoD)** — verifiable done-checks, each with a verification method (test / query / manual step). Same observable-AC bar as craft-issue's rubric (`../craft-issue/references/issue-craft.md` §2).
-- **의존** — `blocked-by` predecessor tasks, if any.
 
-**Shared design invariants are referenced, not restated.** Cross-cutting rules (the design's invariants, shared definitions) live once on the **parent** unit; each task references the parent rather than re-declaring them — the same Tier-A placement craft-issue uses. This keeps the invariant single-sourced so tasks cannot drift it.
+Everything else about a task is expressed through the PM tool's **native fields, not body prose**:
+
+- **Dependencies → native relation field, never body prose.** A sequenced task's predecessor is set through the PM tool's own relation (Linear `blockedBy` / `blocks`), which the team sees on the ticket and filters on. Never write a `## 의존` section or a "blocked by X" sentence in the body — a hard dependency described only in prose is invisible to the board. No hard dependency → no relation to set and nothing to write.
+- **Design anchor + parent link → structural metadata, never body prose.** The `designAnchor` (`design-anchor: deep-interview:<state.interview_id>`) is internal identity carried as a label/identity field (see the gates below), not a line of body text. A child reaches its shared invariants through the native **parent relation** (sub-issue → parent), which the reader clicks through — never through a prose sentence like "부모 X의 설계 확정 코멘트 참조". Both the raw anchor string and any "see the parent comment" boilerplate are leaks; keep them out of the body.
+
+**Shared design invariants are single-sourced on the parent.** Cross-cutting rules (the design's invariants, shared definitions) live once on the **parent** unit; each task inherits them through the native parent relation rather than re-declaring or prose-referencing them — the same Tier-A placement craft-issue uses. This keeps the invariant single-sourced so tasks cannot drift it.
 
 ### 예시 — 확정된 부모 설계와 자식 티켓 1개
 
 - **부모 설계(확정)** — `sync.yaml`의 `skills.items`를 시작점으로 삼아 각 `SKILL.md`의 `Skill(...)` 참조를 재귀적으로 해석하고, 중복을 제거한 스킬 의존성 폐쇄만 대상 플랫폼의 스킬 디렉터리에 배포한다. 누락·순환 참조는 동기화를 실패시키며 폐쇄 밖의 스킬은 건드리지 않는다. 경계는 `tools/sync.ts`, `tools/sync.test.ts`, 플랫폼별 스킬 배포 경로다.
-- **자식 티켓: 스킬 의존성 폐쇄 수집 단계 추가**
+- **자식 티켓 제목** — `sync: 스킬 의존성 폐쇄 수집 단계 추가` (순번·`(item N)` 없이 변경 내용만)
   - **목적** — 확정된 부모 설계에 따라 `skills.items`와 각 `SKILL.md`의 참조를 재귀 수집해 플랫폼별 배포 단계가 동일한 폐쇄 집합을 사용하게 한다.
   - **변경 대상** — `tools/sync.ts`의 `skills.items` 해석·배포 대상 수집 로직과 `tools/sync.test.ts`의 중복·누락·순환 참조 테스트.
   - **완료 조건 (DoD)** — `skills.items: [craft-tasks]`에서 시작해 참조된 스킬을 중복 없이 배포 대상에 포함하고 폐쇄 밖의 스킬은 포함하지 않는다(검증: `bun test tools/sync.test.ts`). 누락·순환 참조는 부분 배포 없이 명시적 오류로 실패한다(검증: `bun test tools/sync.test.ts`).
-  - **의존** — 없음(부모 설계 확정 후 착수).
+
+(body는 위 세 섹션뿐이다. 의존·앵커·부모 링크는 body에 쓰지 않는다 — hard 의존 없음이면 관계 필드도 미설정, 앵커는 라벨/네이티브 부모 관계로만 존재.)
 
 ---
 
@@ -157,7 +171,7 @@ Any ambiguity, mismatch, append failure, re-read failure, or interruption stops 
 After the parent-resolution gate, and before any child create, read the verified parent's current child tree and use the organized-tree pattern: **validate → enrich → gap-fill**.
 
 - Match each intended task to an existing child by this rule: **identity is the exact tuple: anchor + purpose + changed target**; **title alone is insufficient**. A child that cannot prove the exact anchor is not a match; treat a possible legacy match as an ambiguity and stop rather than creating a replacement.
-- **Every child carries the same anchor and `parentId`**. For matched children, preserve/enrich matched tickets append-only; never rewrite their bodies.
+- **Every child carries the same anchor and `parentId`** — as identity/relation metadata: the anchor as a label/identity field and the parent as the native parent relation, **never as body prose** (see Task Title & Body Shape). For matched children, preserve/enrich matched tickets append-only; never rewrite their bodies.
 - For gaps, create only unmatched gaps that are genuine coverage gaps. If a match is ambiguous, stop and surface the ambiguity instead of creating.
 - After every append/create, **re-read and verify effective state after append/create** before continuing. After an interruption or create failure, re-read the current child tree, rematch, and create only the remaining gaps; any re-read failure or interruption stops before another child is created.
 
@@ -176,7 +190,9 @@ Only after this gate passes:
 
 ---
 
-## Red Flags — STOP, you are doing craft-issue's job instead
+## Red Flags
+
+### STOP — you are doing craft-issue's job instead
 
 - You are **folding** an implementation step "because it has no stand-alone user value" → that is the craft-issue rule; on a settled design you **materialize** it.
 - You **refused a layer/platform split** as an anti-pattern → correct for requirement units, wrong for work items; the layer split is the point here.
@@ -185,6 +201,14 @@ Only after this gate passes:
 - You wrote a **"작업 분해 (제안)"** section in the parent body instead of creating the tickets.
 
 **All of these mean: you are applying WHAT-slicing to a HOW job. Re-read The Inversion and produce the settled unit's work-item tickets.**
+
+### STOP — your write leaked internal metadata or mis-shaped the ticket
+
+- The **title carries an ordinal** — `(item 3)`, `#2`, `task 3` — pulled from your internal task list; the board reader has no such list.
+- The **design anchor string** (`design-anchor: deep-interview:…`) or a **"부모 X 코멘트 참조"** sentence landed in a **child body** → that is internal identity/linkage metadata; it belongs on the anchor label and the native parent relation, not in reader-facing prose.
+- A **`## 의존`** section (or a "blocked by X" sentence) sits in a **task body** → dependencies are the PM tool's native relation field (Linear `blockedBy` / `blocks`), never body prose.
+
+**All of these mean: the body is reader-facing prose only. Fix the title, move the anchor to its label, and set the dependency on the native relation field.**
 
 ---
 
