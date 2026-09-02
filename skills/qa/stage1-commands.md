@@ -28,7 +28,7 @@ Run automated checks BEFORE any code analysis. This is not optional.
 4. **If still unclear, ask user** for build/test/lint commands
 5. **Save discovered commands** to `~/.omt/{project}/project-commands.md`
 
-**Mining for stack/seed/auth, not just build/test/lint.** When ADVERSARIAL E2E needs to know how to stand up the local stack, seed data, or authenticate — and that information is not already known — mine the same sources above (`README.md`/`CONTRIBUTING.md`, `Makefile`, `docker-compose.yml`/`docker-compose.*.yml`, `scripts/`) for it before asking the user or declaring a precondition unreachable. This is Discovery Order applied to bootstrap, not a separate lookup.
+**Mining for stack/seed/auth, not just build/test/lint.** When ADVERSARIAL E2E needs to know how to stand up the local stack, seed data, or authenticate — and that information is not already known — mine the same sources above (`README.md`/`CONTRIBUTING.md`, `docs/`, `rules/`, `Makefile`, `docker-compose.yml`/`docker-compose.*.yml`, `scripts/`) for it before asking the user or declaring a precondition unreachable. This includes the **pre-provisioned QA test-account list and its data states, and any admin/operator QA seeding tool** — read this documented provisioning protocol and pick the prescribed account/tool before improvising signup/onboarding, token minting, or dummy-credential injection. This is Discovery Order applied to bootstrap, not a separate lookup.
 
 ### Memory File Format
 

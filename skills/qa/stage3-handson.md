@@ -267,7 +267,9 @@ The stop-driving classes exist so an expensive cycle is not spent against a surf
 | "It worked in the test suite" | Test suite mocks may hide real integration issues. |
 | "No test data available" | Create minimal test data. No excuses. |
 | "The branch isn't deployed to stage/dev" | For an undeployed source change, deployment is an environment choice — run the full stack locally and point the app at it. When the deployment itself is under test, its absence or 404 is the FAIL. |
-| "No account / the flag lives on another platform" | Sign up, inject a test token, and launch the precondition platform too — multi-platform setup is setup cost, not an obstacle. |
+| "The local backend won't start / the local stack is shared, so I stopped" | Read the documented env-setup and stand up your own isolated instance (own ports/data/containers). A startup config gap is a fix; a shared or fragile env is neither a blocker nor something to corrupt. Run local QA against a stack you own for maximum freedom to seed/mutate/interrupt/reset. |
+| "No account / the flag lives on another platform" | Use the project's documented pre-provisioned account / admin QA seeder first; only if none is documented do you sign up or inject a test token. Launch the precondition platform too — multi-platform setup is setup cost, not an obstacle. |
+| "The seeded account lacks the data, so I'll onboard manually / inject dummy creds" | Read the documented QA provisioning and local-env setup first — improvising around a documented account, seeder, or env prerequisite is a wrong detour, not bootstrap. |
 | "Skip for internal changes" | If truly internal, document skip. Don't use as escape hatch. |
 | "E2E tests simulate HTTP" | MockMvc/WebTestClient operate without a servlet container. They are not real HTTP. |
 
