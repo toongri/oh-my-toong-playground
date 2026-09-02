@@ -109,7 +109,7 @@ Each task body carries exactly these three sections, in the team's working langu
 Everything else about a task is expressed through the PM tool's **native fields, not body prose**:
 
 - **Dependencies → native relation field, never body prose.** A sequenced task's predecessor is set through the PM tool's own relation (Linear `blockedBy` / `blocks`), which the team sees on the ticket and filters on. Never write a `## 의존` section or a "blocked by X" sentence in the body — a hard dependency described only in prose is invisible to the board. No hard dependency → no relation to set and nothing to write.
-- **Design anchor + parent link → structural metadata, never body prose.** The `designAnchor` (`design-anchor: deep-interview:<state.interview_id>`) is internal identity carried as a label/identity field (see the gates below), not a line of body text. A child reaches its shared invariants through the native **parent relation** (sub-issue → parent), which the reader clicks through — never through a prose sentence like "부모 X의 설계 확정 코멘트 참조". Both the raw anchor string and any "see the parent comment" boilerplate are leaks; keep them out of the body.
+- **Design anchor + parent link → structural metadata, never body prose.** The `designAnchor` (`design-anchor: deep-interview:<state.interview_id>`) lives once on the **parent** (in its settled-parent record; see the gates below) and reaches each child through the native **parent relation** (sub-issue → parent) — a child proves its anchor by belonging to the resolved anchor-bearing parent via `parentId`, so it needs no anchor string, comment, or per-child label of its own. The anchor is never a line of body text, and the child reaches its shared invariants through that same parent relation the reader clicks through — never through a prose sentence like "부모 X의 설계 확정 코멘트 참조". Both the raw anchor string and any "see the parent comment" boilerplate are leaks; keep them out of the body.
 
 **Shared design invariants are single-sourced on the parent.** Cross-cutting rules (the design's invariants, shared definitions) live once on the **parent** unit; each task inherits them through the native parent relation rather than re-declaring or prose-referencing them — the same Tier-A placement craft-issue uses. This keeps the invariant single-sourced so tasks cannot drift it.
 
@@ -121,7 +121,7 @@ Everything else about a task is expressed through the PM tool's **native fields,
   - **변경 대상** — `tools/sync.ts`의 `skills.items` 해석·배포 대상 수집 로직과 `tools/sync.test.ts`의 중복·누락·순환 참조 테스트.
   - **완료 조건 (DoD)** — `skills.items: [craft-tasks]`에서 시작해 참조된 스킬을 중복 없이 배포 대상에 포함하고 폐쇄 밖의 스킬은 포함하지 않는다(검증: `bun test tools/sync.test.ts`). 누락·순환 참조는 부분 배포 없이 명시적 오류로 실패한다(검증: `bun test tools/sync.test.ts`).
 
-(body는 위 세 섹션뿐이다. 의존·앵커·부모 링크는 body에 쓰지 않는다 — hard 의존 없음이면 관계 필드도 미설정, 앵커는 라벨/네이티브 부모 관계로만 존재.)
+(body는 위 세 섹션뿐이다. 의존·앵커·부모 링크는 body에 쓰지 않는다 — hard 의존 없음이면 관계 필드도 미설정, 앵커는 부모의 settled-parent record에만 있고 자식은 `parentId`로 상속한다.)
 
 ---
 
@@ -171,7 +171,7 @@ Any ambiguity, mismatch, append failure, re-read failure, or interruption stops 
 After the parent-resolution gate, and before any child create, read the verified parent's current child tree and use the organized-tree pattern: **validate → enrich → gap-fill**.
 
 - Match each intended task to an existing child by this rule: **identity is the exact tuple: anchor + purpose + changed target**; **title alone is insufficient**. A child that cannot prove the exact anchor is not a match; treat a possible legacy match as an ambiguity and stop rather than creating a replacement.
-- **Every child carries the same anchor and `parentId`** — as identity/relation metadata: the anchor as a label/identity field and the parent as the native parent relation, **never as body prose** (see Task Title & Body Shape). For matched children, preserve/enrich matched tickets append-only; never rewrite their bodies.
+- **Every child carries the same anchor and `parentId`** — the anchor is inherited through the native parent relation (the child belongs to the resolved anchor-bearing parent via `parentId`), not stamped on the child as its own label, comment, or **body prose** (see Task Title & Body Shape). For matched children, preserve/enrich matched tickets append-only; never rewrite their bodies.
 - For gaps, create only unmatched gaps that are genuine coverage gaps. If a match is ambiguous, stop and surface the ambiguity instead of creating.
 - After every append/create, **re-read and verify effective state after append/create** before continuing. After an interruption or create failure, re-read the current child tree, rematch, and create only the remaining gaps; any re-read failure or interruption stops before another child is created.
 
@@ -205,10 +205,10 @@ Only after this gate passes:
 ### STOP — your write leaked internal metadata or mis-shaped the ticket
 
 - The **title carries an ordinal** — `(item 3)`, `#2`, `task 3` — pulled from your internal task list; the board reader has no such list.
-- The **design anchor string** (`design-anchor: deep-interview:…`) or a **"부모 X 코멘트 참조"** sentence landed in a **child body** → that is internal identity/linkage metadata; it belongs on the anchor label and the native parent relation, not in reader-facing prose.
+- The **design anchor string** (`design-anchor: deep-interview:…`) or a **"부모 X 코멘트 참조"** sentence landed in a **child body** → that is internal identity/linkage metadata; the anchor stays on the parent and the child inherits it through the native parent relation, not in reader-facing prose.
 - A **`## 의존`** section (or a "blocked by X" sentence) sits in a **task body** → dependencies are the PM tool's native relation field (Linear `blockedBy` / `blocks`), never body prose.
 
-**All of these mean: the body is reader-facing prose only. Fix the title, move the anchor to its label, and set the dependency on the native relation field.**
+**All of these mean: the body is reader-facing prose only. Fix the title, keep the anchor on the parent (the child inherits it through the parent relation), and set the dependency on the native relation field.**
 
 ---
 
