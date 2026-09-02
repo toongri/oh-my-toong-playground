@@ -47,7 +47,7 @@ ADVERSARIAL E2E Result: SKIPPED (internal logic only / non-code change)
 1. Discover the start command (same discovery logic as BASELINE command discovery)
 2. Run the server/application in background using `run_in_background`
 3. Wait for readiness (health check endpoint, port listening, or startup log message)
-4. If startup fails after reasonable timeout, report as ADVERSARIAL E2E FAIL
+4. If startup fails, first distinguish a **correctable setup/config gap** (a missing/misconfigured env var or local config) from an **application startup defect**. A setup gap is bootstrap work, not a FAIL: read the documented env-setup, supply the missing config on your own isolated instance, and retry (Precondition bootstrap rung 1 / Local-first stance in `SKILL.md`). Report ADVERSARIAL E2E FAIL only when startup still fails after that bootstrap, or when the failure is an application defect rather than a setup gap.
 5. After successful readiness, export `$API_BASE_URL` (e.g., `export API_BASE_URL=http://localhost:${PORT:?PORT must be set after server start}`) so AC verification commands using the executor-provided variables — `$API_BASE_URL`, `$IOS_UDID`, `$ANDROID_SERIAL`, and `$evidence_xml` — resolve correctly.
 
 ### Executor Variable Setup
@@ -72,7 +72,7 @@ After ALL verification completes (pass or fail):
 
 | Failure | Action |
 |---------|--------|
-| Server won't start | REQUEST_CHANGES ("server fails to start") |
+| Server won't start | First distinguish a correctable setup/config gap (missing env/local config) — bootstrap it (env-setup read, isolated instance, retry) — from an application startup defect. REQUEST_CHANGES ("server fails to start") only when startup still fails after that bootstrap |
 | Server crashes during test | REQUEST_CHANGES ("server crashed during verification") |
 | Server won't stop | Kill process forcefully, report as finding |
 
@@ -268,7 +268,7 @@ The stop-driving classes exist so an expensive cycle is not spent against a surf
 | "No test data available" | Create minimal test data. No excuses. |
 | "The branch isn't deployed to stage/dev" | For an undeployed source change, deployment is an environment choice — run the full stack locally and point the app at it. When the deployment itself is under test, its absence or 404 is the FAIL. |
 | "The local backend won't start / the local stack is shared, so I stopped" | Read the documented env-setup and stand up your own isolated instance (own ports/data/containers). A startup config gap is a fix; a shared or fragile env is neither a blocker nor something to corrupt. Run local QA against a stack you own for maximum freedom to seed/mutate/interrupt/reset. |
-| "No account / the flag lives on another platform" | Use the project's documented pre-provisioned account / admin QA seeder first; only if none is documented do you sign up or inject a test token. Launch the precondition platform too — multi-platform setup is setup cost, not an obstacle. |
+| "No account / the flag lives on another platform" | Use the project's documented pre-provisioned account / admin QA seeder first; only if none is documented, or the documented path was tried and proved unusable (expired credentials, broken/unavailable tool, or it cannot produce the required state), do you sign up or inject a test token. Launch the precondition platform too — multi-platform setup is setup cost, not an obstacle. |
 | "The seeded account lacks the data, so I'll onboard manually / inject dummy creds" | Read the documented QA provisioning and local-env setup first — improvising around a documented account, seeder, or env prerequisite is a wrong detour, not bootstrap. |
 | "Skip for internal changes" | If truly internal, document skip. Don't use as escape hatch. |
 | "E2E tests simulate HTTP" | MockMvc/WebTestClient operate without a servlet container. They are not real HTTP. |
