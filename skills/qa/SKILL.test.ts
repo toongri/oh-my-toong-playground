@@ -1047,6 +1047,105 @@ describe("new-prose: precondition bootstrap precedes unreachability", () => {
 	});
 });
 
+// ---------------------------------------------------------------------------
+// NEW-PROSE: documented QA provisioning protocol precedes improvisation.
+// Origin: two live failures where the verifier hit "seeded account has no
+// Program data" and "local DynamoDB access 500s", then improvised (manual
+// onboarding; injected dummy AWS creds) instead of reading the project's
+// documented pre-provisioned-account list, admin QA seeding tool, and local-env
+// setup. See tests/precondition-bootstrap-scenario.md (surrender #7).
+// ---------------------------------------------------------------------------
+
+describe("new-prose: documented provisioning protocol precedes improvisation", () => {
+	test("PLAN.1 requires reading the provisioning protocol before touching a driver", () => {
+		expect(skillMd).toContain(
+			"read the project's provisioning protocol before authoring",
+		);
+		expect(skillMd).toContain("documented, never improvised");
+		expect(skillMd).toContain("pre-provisioned test accounts");
+		expect(skillMd).toContain("before you touch a driver");
+	});
+
+	test("the provisioning lookup is conditional on a precondition, with a no-protocol fallback", () => {
+		// Comment ②: the lookup must not fire for a change with no account/auth/data
+		// precondition, and PLAN may record "no documented protocol" and fall through.
+		expect(skillMd).toContain(
+			"When a scenario needs an account, auth, or a data state",
+		);
+		expect(skillMd).toContain(
+			"never block on this lookup a change that has no account/auth/data precondition at all",
+		);
+	});
+
+	test("the bootstrap ladder gates improvisation behind the documented protocol", () => {
+		expect(skillMd).toContain("Documented protocol first — before any rung below");
+		expect(skillMd).toContain(
+			"only when the project documents no such account or tool",
+		);
+	});
+
+	test("rung 3 leads with the pre-provisioned account, not signup", () => {
+		expect(skillMd).toContain(
+			"first use the pre-provisioned QA account the documented protocol prescribes",
+		);
+	});
+
+	test("red flags name the manual-onboarding and dummy-cred detours", () => {
+		expect(skillMd).toContain("so I'll run onboarding to create it");
+		expect(skillMd).toContain("so I'll inject dummy creds and keep going");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// NEW-PROSE: local-first stance — stand up an isolated stack you own; a local
+// startup config gap is a fix, not a stop; a shared/fragile env is neither a
+// blocker nor something to corrupt.
+// Origin: a live failure where the verifier abandoned local QA because the
+// local backend would not boot (config gap) and the local stack was shared.
+// See tests/precondition-bootstrap-scenario.md (surrender #8 / P9).
+// ---------------------------------------------------------------------------
+
+describe("new-prose: local-first stance stands up an isolated stack, never surrenders", () => {
+	test("the local-first stance is stated as a bootstrap posture", () => {
+		expect(skillMd).toContain("Local-first stance");
+		expect(skillMd).toContain("stand up an isolated stack you own");
+	});
+
+	test("a local startup config gap is bootstrap work, not a stop", () => {
+		expect(skillMd).toContain("A local stack that fails to boot on a missing or misconfigured env");
+		expect(skillMd).toContain("a startup config gap is bootstrap work, not a stop");
+	});
+
+	test("env-setup commands/docs are read and applied", () => {
+		expect(skillMd).toContain("environment-setup commands and docs");
+	});
+
+	test("standup is necessity-driven, not a fixed checklist tied to what changed", () => {
+		// Comment ①: a component comes up because a scenario depends on it, not
+		// because it was the thing changed; a command-boundary change may have no
+		// service/db/bundler to stand up at all.
+		expect(skillMd).toContain(
+			"Stand up whatever the scenario needs to run and to give you that control — never a fixed checklist",
+		);
+		expect(skillMd).toContain(
+			"not because it was the thing that changed",
+		);
+		expect(skillMd).toContain(
+			"may have no service, database, or bundler behind it at all",
+		);
+	});
+
+	test("a shared/fragile env is neither a blocker nor something to corrupt", () => {
+		expect(skillMd).toContain("neither a blocker");
+		expect(skillMd).toContain("nor something you corrupt");
+	});
+
+	test("red flags name the won't-start and shared-stack surrenders", () => {
+		expect(skillMd).toContain("so I stopped");
+		expect(skillMd).toContain("so I left it alone and didn't run local QA");
+	});
+});
+
 describe("new-prose: product use-case breadth is a required derivation axis", () => {
 	// The gap this closes: journey scenarios appeared in probes only when the
 	// prompt handed the verifier a feature map. Real runs hand nothing — the
