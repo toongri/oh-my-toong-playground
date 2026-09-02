@@ -1059,10 +1059,22 @@ describe("new-prose: precondition bootstrap precedes unreachability", () => {
 describe("new-prose: documented provisioning protocol precedes improvisation", () => {
 	test("PLAN.1 requires reading the provisioning protocol before touching a driver", () => {
 		expect(skillMd).toContain(
-			"QA accounts, auth, and tooling are documented, never improvised",
+			"read the project's provisioning protocol before authoring",
 		);
+		expect(skillMd).toContain("documented, never improvised");
 		expect(skillMd).toContain("pre-provisioned test accounts");
 		expect(skillMd).toContain("before you touch a driver");
+	});
+
+	test("the provisioning lookup is conditional on a precondition, with a no-protocol fallback", () => {
+		// Comment ②: the lookup must not fire for a change with no account/auth/data
+		// precondition, and PLAN may record "no documented protocol" and fall through.
+		expect(skillMd).toContain(
+			"When a scenario needs an account, auth, or a data state",
+		);
+		expect(skillMd).toContain(
+			"never block on this lookup a change that has no account/auth/data precondition at all",
+		);
 	});
 
 	test("the bootstrap ladder gates improvisation behind the documented protocol", () => {
@@ -1106,6 +1118,21 @@ describe("new-prose: local-first stance stands up an isolated stack, never surre
 
 	test("env-setup commands/docs are read and applied", () => {
 		expect(skillMd).toContain("environment-setup commands and docs");
+	});
+
+	test("standup is necessity-driven, not a fixed checklist tied to what changed", () => {
+		// Comment ①: a component comes up because a scenario depends on it, not
+		// because it was the thing changed; a command-boundary change may have no
+		// service/db/bundler to stand up at all.
+		expect(skillMd).toContain(
+			"Stand up whatever the scenario needs to run and to give you that control — never a fixed checklist",
+		);
+		expect(skillMd).toContain(
+			"not because it was the thing that changed",
+		);
+		expect(skillMd).toContain(
+			"may have no service, database, or bundler behind it at all",
+		);
 	});
 
 	test("a shared/fragile env is neither a blocker nor something to corrupt", () => {
