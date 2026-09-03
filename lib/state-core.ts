@@ -47,7 +47,7 @@ import {
 	closeSync,
 	statSync,
 } from "fs";
-import { join, dirname, basename } from "path";
+import { join, dirname, basename, extname } from "path";
 // lib-internal imports must be relative — deployed copies under .claude/lib/ have no @lib alias
 // (the sync alias-rewriter skips lib/** files). Relative imports let `make sync`'s dep collector
 // follow the path and deploy omt-dir alongside this module.
@@ -1077,9 +1077,17 @@ export function touchSessionStates(sessionId: string): void {
 
 export type StageAPresentationStatus = "ok" | "plan-missing" | "presentation-missing" | "stale";
 
-/** The presentation stem is pinned to the plan stem: `<plan dir>/presentation/<plan basename>`. */
-export function stageAPresentationPath(planPath: string): string {
+/** The authored presentation source is pinned to the plan stem: `<plan dir>/presentation/<plan basename>`. */
+export function stageAPresentationMarkdownPath(planPath: string): string {
 	return join(dirname(planPath), "presentation", basename(planPath));
+}
+
+/** The shareable Stage A render is derived beside its authored Markdown source as HTML. */
+export function stageAPresentationPath(planPath: string): string {
+	const planBasename = basename(planPath);
+	const planExtension = extname(planBasename);
+	const planStem = planExtension ? planBasename.slice(0, -planExtension.length) : planBasename;
+	return join(dirname(planPath), "presentation", `${planStem}.html`);
 }
 
 /**
@@ -1100,9 +1108,13 @@ export function stageAPresentationStatus(planPath: string): StageAPresentationSt
 	};
 	const planMtime = mtimeOf(planPath);
 	if (planMtime === null) return "plan-missing";
+	const authoredPath = stageAPresentationMarkdownPath(planPath);
+	if (!existsSync(authoredPath)) return "presentation-missing";
+	const authoredMtime = mtimeOf(authoredPath);
+	if (authoredMtime === null || authoredMtime < planMtime) return "stale";
 	const presentationPath = stageAPresentationPath(planPath);
 	if (!existsSync(presentationPath)) return "presentation-missing";
 	const presentationMtime = mtimeOf(presentationPath);
-	if (presentationMtime !== null && presentationMtime < planMtime) return "stale";
+	if (presentationMtime === null || presentationMtime < authoredMtime) return "stale";
 	return "ok";
 }

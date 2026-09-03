@@ -748,10 +748,69 @@ describe("Stage A presentation gate (F7)", () => {
 		return planPath;
 	}
 
-	function writePresentation(name = "plan.md"): void {
-		mkdirSync(`${tmpDir}/plans/presentation`, { recursive: true });
-		writeFileSync(`${tmpDir}/plans/presentation/${name}`, "# presentation\n", "utf8");
+	function presentationMarkdownPath(name = "plan.md"): string {
+		return `${tmpDir}/plans/presentation/${name}`;
 	}
+
+	function presentationHtmlPath(name = "plan.md"): string {
+		return `${tmpDir}/plans/presentation/${name.replace(/\.md$/, ".html")}`;
+	}
+
+	function writePresentationMarkdownOnly(name = "plan.md"): void {
+		mkdirSync(`${tmpDir}/plans/presentation`, { recursive: true });
+		writeFileSync(presentationMarkdownPath(name), "# presentation\n", "utf8");
+	}
+
+	function writePresentation(name = "plan.md"): void {
+		writePresentationMarkdownOnly(name);
+		writeFileSync(presentationHtmlPath(name), "<!doctype html><title>presentation</title>\n", "utf8");
+	}
+
+	test("S6 with authored presentation Markdown but no derived HTML exits non-zero", () => {
+		const planPath = seedPlan("gateHtmlMissing");
+		writePresentationMarkdownOnly();
+		const { code, out } = runPromCliMerged(`set --phase S6 --plan-path ${planPath}`, {
+			OMT_SESSION_ID: "gateHtmlMissing",
+			OMT_DIR: tmpDir,
+		});
+		expect(code).not.toBe(0);
+		expect(out).toMatch(/html|render/i);
+		const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-gateHtmlMissing.json`, "utf8"));
+		expect(state.phase).toBe("S0");
+	});
+
+	test("S6 with derived HTML older than authored presentation Markdown exits non-zero", () => {
+		const planPath = seedPlan("gateHtmlStale");
+		writePresentation();
+		const planBeforePresentation = new Date(Date.now() - 120_000);
+		utimesSync(planPath, planBeforePresentation, planBeforePresentation);
+		const authored = new Date();
+		const rendered = new Date(authored.getTime() - 60_000);
+		utimesSync(presentationHtmlPath(), rendered, rendered);
+		utimesSync(presentationMarkdownPath(), authored, authored);
+		const { code, out } = runPromCliMerged(`set --phase S6 --plan-path ${planPath}`, {
+			OMT_SESSION_ID: "gateHtmlStale",
+			OMT_DIR: tmpDir,
+		});
+		expect(code).not.toBe(0);
+		expect(out).toMatch(/stale|older|re-render|재렌더/i);
+		const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-gateHtmlStale.json`, "utf8"));
+		expect(state.phase).toBe("S0");
+	});
+
+	test("S6 succeeds when authored presentation Markdown and derived HTML are fresh", () => {
+		const planPath = seedPlan("gateHtmlFresh");
+		writePresentation();
+		const planBeforePresentation = new Date(Date.now() - 60_000);
+		utimesSync(planPath, planBeforePresentation, planBeforePresentation);
+		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${planPath}`, {
+			OMT_SESSION_ID: "gateHtmlFresh",
+			OMT_DIR: tmpDir,
+		});
+		expect(code).toBe(0);
+		const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-gateHtmlFresh.json`, "utf8"));
+		expect(state.phase).toBe("S6");
+	});
 
 	// (F7-missing) S6 with no presentation file — the skip this gate exists to catch
 	test("S6 without the presentation file exits non-zero and does not advance", () => {
@@ -829,7 +888,7 @@ describe("Stage A presentation gate (F7)", () => {
 		writePresentation();
 		// presentation rendered at T, plan revised at T+60s
 		const rendered = new Date(Date.now() - 60_000);
-		utimesSync(`${tmpDir}/plans/presentation/plan.md`, rendered, rendered);
+		utimesSync(presentationMarkdownPath(), rendered, rendered);
 		const revised = new Date();
 		utimesSync(planPath, revised, revised);
 		const { code, out } = runPromCliMerged(`set --phase S6 --plan-path ${planPath}`, {
@@ -849,7 +908,7 @@ describe("Stage A presentation gate (F7)", () => {
 		const revised = new Date(Date.now() - 60_000);
 		utimesSync(planPath, revised, revised);
 		const rendered = new Date();
-		utimesSync(`${tmpDir}/plans/presentation/plan.md`, rendered, rendered);
+		utimesSync(presentationMarkdownPath(), rendered, rendered);
 		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${planPath}`, {
 			OMT_SESSION_ID: "gateRerendered",
 			OMT_DIR: tmpDir,
@@ -878,6 +937,7 @@ describe("Stage A presentation gate (F7)", () => {
 		mkdirSync(`${altDir}/plans/presentation`, { recursive: true });
 		writeFileSync(`${altDir}/plans/alt.md`, "# plan\n", "utf8");
 		writeFileSync(`${altDir}/plans/presentation/alt.md`, "# presentation\n", "utf8");
+		writeFileSync(`${altDir}/plans/presentation/alt.html`, "<!doctype html><title>presentation</title>\n", "utf8");
 		writePristinePromState("gateAltDir");
 		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${altDir}/plans/alt.md`, {
 			OMT_SESSION_ID: "gateAltDir",
