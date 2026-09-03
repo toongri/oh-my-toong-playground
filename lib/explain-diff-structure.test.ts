@@ -2355,6 +2355,34 @@ describe("code 스텝 — R22 근거 소스 대조", () => {
 		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(false);
 	});
 
+	test("코어 로직 펜스 안의 불완전한 legacy 근거 표기는 R22에 새지 않고 visible prose에서는 실패한다", () => {
+		const fencedBody = GOOD_GROUP.replace(
+			"// 획득 → fn() → 해제",
+			"// literal [근거: value",
+		);
+		const fenced = checkStructure(withBackground(fencedBody), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: GROUND,
+		});
+		const prose = checkStructure(
+			withBackground(GOOD_GROUP.replace(
+				/<span class="cf-src">근거<\/span> "[^"]*"/,
+				"[근거: value",
+			)),
+			{
+				signalFiles: ["lib/state-lock.ts"],
+				step: "code",
+				commitHashes: ["ab12cd3f00"],
+				sourceCorpus: GROUND,
+			},
+		);
+
+		expect(fenced.items.find((i) => i.id === "R22")?.pass).toBe(true);
+		expect(prose.items.find((i) => i.id === "R22")?.pass).toBe(false);
+	});
+
 	test("소스가 하드랩·짝지은 마크다운 강조로 달라도 정규화 후 통과한다(오탐 방지)", () => {
 		// 커밋 본문은 흔히 하드랩되고 짝이 맞는 **강조**·`백틱`을 쓴다. 문서
 		// 인용은 그것을 펴서 담는다. 정당한 마크다운 마커만 제거해야 이 인용이

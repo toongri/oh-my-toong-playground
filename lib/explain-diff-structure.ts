@@ -466,7 +466,7 @@ function checkR22(text: string, sourceCorpus: string | undefined): CheckItem {
 	if (sourceCorpus === undefined || sourceCorpus.trim().length === 0) {
 		return { id: "R22", title: "R22 근거 소스 대조", pass: true, detail: "" };
 	}
-	if (hasIncompleteLegacyGroundMarker(text)) {
+	if (hasIncompleteLegacyGroundMarker(maskNonVisibleMarkdown(text))) {
 		return {
 			id: "R22",
 			title: "R22 근거 소스 대조",
