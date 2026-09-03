@@ -459,7 +459,7 @@ describe("code 스텝 — R2·R3·R5·R1(커버리지형)·R13", () => {
 			commitHashes: ["ab12cd3f00"],
 		});
 		expect(r.pass).toBe(false);
-		expect(r.items.map((i) => i.id)).toEqual(["R2", "R3", "R5", "R1", "R13", "R11"]);
+		expect(r.items.map((i) => i.id)).toEqual(["R2", "R3", "R5", "R1", "R13", "R22", "R11"]);
 	});
 
 	test("완전한 문서는 code 스텝에서 통과한다", () => {
@@ -2258,5 +2258,69 @@ flowchart LR
 			step: "architecture",
 		});
 		expect(r.items.find((i) => i.id === "R14")?.pass).toBe(false);
+	});
+});
+
+describe("code 스텝 — R22 근거 소스 대조", () => {
+	// GOOD_GROUP 의 근거 인용: "fix: 상태 갱신 락 통합"
+	const GROUND = "fix: 상태 갱신 락 통합";
+
+	test("근거 인용이 소스 코퍼스에 없으면 R22가 실패한다", () => {
+		const r = checkStructure(withBackground(GOOD_GROUP), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: "이 코퍼스에는 완전히 무관한 커밋 본문과 diff만 들어 있다",
+		});
+		const item = r.items.find((i) => i.id === "R22");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain(GROUND);
+	});
+
+	test("근거 인용이 소스 코퍼스에 verbatim 존재하면 R22가 통과한다", () => {
+		const r = checkStructure(withBackground(GOOD_GROUP), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: `무관한 앞부분\n${GROUND}\n무관한 뒷부분`,
+		});
+		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(true);
+	});
+
+	test("소스가 하드랩·마크다운 강조로 달라도 정규화 후 통과한다(오탐 방지)", () => {
+		// 커밋 본문은 흔히 하드랩되고 **강조**·`백틱`을 쓴다. 문서 인용은 그것을
+		// 펴서 담는다. 정규화(공백 제거 + 마크다운 마커 제거) 없이는 정당한 인용이
+		// 오탐으로 거부된다.
+		const wrapped = "앞\nfix: 상태 갱신\n**락** `통합`\n뒤";
+		const r = checkStructure(withBackground(GOOD_GROUP), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: wrapped,
+		});
+		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(true);
+	});
+
+	test("소스 코퍼스가 없으면(git 실패) R22는 fail-open 통과한다", () => {
+		const r = checkStructure(withBackground(GOOD_GROUP), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+		});
+		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(true);
+	});
+
+	test("추론 배지는 소스 대조 대상이 아니다 — 코퍼스에 없어도 통과", () => {
+		const body = GOOD_GROUP.replace(
+			/<span class="cf-src">근거<\/span> "[^"]*"/,
+			'<span class="cf-src">추론</span> 커밋 제목이 통합이라 말한다',
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: "근거가 전혀 없는 코퍼스",
+		});
+		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(true);
 	});
 });

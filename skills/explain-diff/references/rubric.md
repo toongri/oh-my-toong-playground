@@ -37,6 +37,7 @@ The document is written one step at a time, accumulating. So an item is evaluate
 | R18 | script | architecture |
 | R19 | script | architecture |
 | R21 | script | architecture |
+| R22 | script | code |
 
 The `intuition` step has no slot of its own — only R6 (judge) and the common R11 decide it. `render` and `quiz` score none of this table's items: `render` looks at the artifact check (HTML present and non-empty, mermaid→SVG parity, technical-writing `REVIEW: APPLIED`, final checklist ending with `CHECKLIST: ALL PASS`), and `quiz` runs a separate grading path (`grade`). Visual layout is not scored per document — it is a deterministic property render.ts owns (wide-diagram legibility is sealed by `normalizeSvgWidth` + the figure scroll container, regression-guarded by `render.test.ts`), so there is no visual-qa gate.
 
@@ -324,6 +325,12 @@ Between Background and Architecture the document carries a `## 목표` section w
 > talk lists "커밋 목표 및 핵심 전달" — state the goal before the code, like a math teacher — as a first-class
 > document component; the pre-R16 skill had dropped it. Same pattern as R2/R9/R14: a beat requested in prose
 > does not land, so it is forced as a slot.
+
+### R22. 근거 quote source fidelity
+
+Every `근거` provenance quote in the code section must be a **real substring of the range's own source** — the concatenation of every in-range commit body with the range's net diff text. The check compares both sides after removing whitespace and markdown emphasis markers (`` ` `` `*` `_` `~`), so a commit body's hard-wrapped, `**emphasized**` sentence still matches the document's unwrapped, plain quote, while a paraphrase or a sentence taken from the PR description — which appears nowhere in the source — does not. Undefined corpus (a Git failure at capture) fail-opens, the same "git failed ≠ everything fabricated" degradation R13 uses for hashes. R22 is deliberately narrow: it proves the quote is *real*, not that it belongs to the *specific commit* the block attributes it to — wrong-commit attribution, code-fence fidelity, and per-commit-vs-net-diff reality stay with the author and the fact-check pass (discipline.md Remainder 5).
+
+> **RED — real artifacts (`pr-3776 household-lock`, `pr-3766 radar`).** A green-test declared PASS on documents whose `근거` badges quoted paraphrases and PR-body prose that sat in no commit body — invention wearing a ground-truth badge, caught only by an external verifier, never by the skill. Measuring the confirmed outputs after normalization: 67 hand-verified `근거` quotes across five documents all matched their source (0 false positives), while a synthetic paraphrase was caught every time. The check is a structure item, not a judge item, because substring-against-source is exactly what a machine can decide.
 
 ---
 

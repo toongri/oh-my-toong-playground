@@ -58,6 +58,15 @@ export interface StructureInput {
 	 * degrades to section presence, and R13's hash-validity check is skipped.
 	 */
 	commitHashes?: string[];
+	/**
+	 * Every commit body in the range concatenated with the range's net diff
+	 * text, captured from Git at submit time. R22 (근거 소스 대조) checks that each
+	 * `근거` quote is a normalized substring of this corpus, so a paraphrase or a
+	 * PR-body sentence that never appears in the actual source cannot be dressed
+	 * as ground truth. Undefined means the capture failed — R22 then fail-opens,
+	 * the same "git failed ≠ everything fake" degradation R13 uses for hashes.
+	 */
+	sourceCorpus?: string;
 	/** Which step's document just closed — decides which items below run. */
 	step: Step;
 }
@@ -79,7 +88,8 @@ export interface CheckItem {
 		| "R17"
 		| "R18"
 		| "R19"
-		| "R21";
+		| "R21"
+		| "R22";
 	title: string;
 	pass: boolean;
 	detail: string;
@@ -367,6 +377,65 @@ function checkR2(text: string): CheckItem {
 		title: "R2 Change Group 구조",
 		pass: r2Missing.length === 0,
 		detail: r2Missing.length > 0 ? `채워지지 않은 슬롯: ${r2Missing.join(", ")}` : "",
+	};
+}
+
+/** Every `근거` badge's quote in the document (the required companion of a 근거
+ *  provenance tag). Both HTML (`cf-src">근거</span> "…"`) and legacy bracket
+ *  (`[근거: …]`) forms are extracted so R22 covers the same surface R3 accepts. */
+function collectGroundQuotes(text: string): string[] {
+	const out: string[] = [];
+	const html = /<span[^>]*class=["']cf-src["'][^>]*>\s*근거\s*<\/span>\s*"([^"]+)"/g;
+	const bracket = /\[근거:\s*([^\]]+)\]/g;
+	for (const re of [html, bracket]) {
+		let m: RegExpExecArray | null = re.exec(text);
+		while (m !== null) {
+			const q = (m[1] ?? "").trim();
+			if (q.length > 0) out.push(q);
+			m = re.exec(text);
+		}
+	}
+	return out;
+}
+
+/** Whitespace-free, marker-free view for verbatim comparison. Commit bodies are
+ *  hard-wrapped and use `**강조**`/`백틱`; a faithful quote unwraps them and drops
+ *  the markers. Collapsing both sides to their non-whitespace, non-marker glyphs
+ *  lets a faithful respacing pass while a genuine paraphrase — different words —
+ *  still fails. */
+function normalizeForSource(s: string): string {
+	return s.replace(/[`*_~]/g, "").replace(/\s+/g, "");
+}
+
+// R22 — 근거 소스 대조. R3 checks a 왜 field CARRIES a 근거 badge; R22 checks the
+// quote inside that badge is real. Each 근거 quote must be a normalized substring
+// of the range's own source (every commit body ∪ the net diff text). This is the
+// one machine check that catches invention: a paraphrase, or a sentence lifted
+// from the PR description, appears nowhere in the source and fails here. It does
+// NOT prove attribution (that the quote sits in the SPECIFIC commit the block
+// names) — a quote verbatim in commit Y but attributed to commit X still passes;
+// that residue is left to discipline.md and the fact-check subagent.
+// lazy: union-of-corpus membership, no per-commit attribution; tighten to
+// per-commit bodies if wrong-commit quotes start recurring.
+function checkR22(text: string, sourceCorpus: string | undefined): CheckItem {
+	const quotes = collectGroundQuotes(text);
+	// Undefined/empty corpus = capture failed. Fail-open, like R13's empty hashes:
+	// "git failed" must not read as "every quote is fabricated".
+	if (sourceCorpus === undefined || sourceCorpus.trim().length === 0) {
+		return { id: "R22", title: "R22 근거 소스 대조", pass: true, detail: "" };
+	}
+	const corpus = normalizeForSource(sourceCorpus);
+	const missing = quotes.filter((q) => !corpus.includes(normalizeForSource(q)));
+	return {
+		id: "R22",
+		title: "R22 근거 소스 대조",
+		pass: missing.length === 0,
+		detail:
+			missing.length > 0
+				? `커밋 본문·넷 diff 어디에도 없는 근거 인용(패러프레이즈·PR 본문 발명 의심): ${missing
+						.map((q) => `"${q}"`)
+						.join(", ")}`
+				: "",
 	};
 }
 
@@ -1349,6 +1418,7 @@ export function checkStructure(text: string, input: StructureInput): StructureRe
 			items.push(checkR5(blocks, input.signalFiles, input.addedFiles, input.diffHunks));
 			items.push(checkR1Coverage(blocks, input.signalFiles));
 			items.push(checkR13(text, blocks, input.commitHashes));
+			items.push(checkR22(text, input.sourceCorpus));
 			break;
 		case "render":
 		case "quiz":
