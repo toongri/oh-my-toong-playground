@@ -151,6 +151,7 @@ Three rules govern the quote slot:
 
 - **It decides that edge — the pair AND the direction.** Two facts that each mention one endpoint do not decide the arrow between them. `plan.md` naming `RETRY_SCHEDULED` in one sentence and `SENDING` in another decides neither a transition between those two states nor which way it runs.
 - **It is quoted plan text, not your reading of the plan.** If what you are about to put in the slot is an inference — "it follows that", "presumably", "the natural reading is", "the queue must therefore" — the edge is undecided.
+- **It is the chosen Decision, not a documented reject.** A plan names its rejected / invalidated / reversed / superseded alternatives on purpose, to record why they lost ("nest it inside `AmountRuleSchema` — rejected"; "this reverses an initial X proposal"). That text is quoted plan text and it names the pair and direction, so it slips past the two rules above — yet quoting it draws the design the plan THREW AWAY. Take the quote from the item's **Decision** field (the chosen commitment) only, never from its Invalidated-alternative / rejected-option / reversed-proposal text. When the plan reversed a proposal, the final decision is the only form that may appear — the superseded form must not surface as chosen in any node, edge, field, or Interpretation.
 - **An edge with no quote is a plan gap.** Do not quietly delete it, do not redraw it vaguer, do not merge it into a neighbouring edge. STOP per Fidelity Bounds and name the specific decision `plan.md` is missing, so the plan can be revised and the pipeline re-run.
 
 The ledger is a working step. It is not written into the presentation file.
@@ -162,6 +163,7 @@ The ledger is a working step. It is not written into the presentation file.
 - [ ] Every participant/node label appears verbatim in `plan.md`
 - [ ] Every decided ownership member within the diagram's scope appears as a node
 - [ ] No signature or field in the diagram is absent from `plan.md`
+- [ ] Every drawn field/edge/ownership is quoted from the item's chosen **Decision**, never from a rejected / invalidated / reversed alternative the plan documents (a superseded design must not appear as chosen)
 - [ ] Every claim in the Interpretation corresponds to an edge or node actually drawn — the Interpretation describes the diagram, not the plan
 - [ ] Per-system coverage: for each system where this lens's trigger FACT holds (client and server alike), the lens's diagram set renders that system's decided content — a one-sided render of a two-sided FACT is a failed item
 

@@ -83,7 +83,7 @@ digraph prometheus_flow {
     "Write plan to $OMT_DIR/plans/*.md" [shape=box];
     "Momus review" [shape=box];
     "Momus verdict?" [shape=diamond];
-    "Stage A: Markdown Render" [shape=box];
+    "Stage A: Presentation Render" [shape=box];
     "Stage B: Execution Recommendation" [shape=box];
     "Stage C: Execution Bridge" [shape=ellipse];
     "User's choice?" [shape=diamond];
@@ -111,8 +111,8 @@ digraph prometheus_flow {
     "Momus verdict?" -> "Momus review" [label="REQUEST_CHANGES (default: scoped re-review)\nrevise plan → re-run only Momus (fresh instance), upstream preserved"];
     "Momus verdict?" -> "Requirements Interview" [label="REQUEST_CHANGES (exception)\nrequirements root cause → re-Metis → … → re-Momus"];
     "Momus verdict?" -> "Co-Design Interview\n(in-phase Daedalus advisory folded in)" [label="REQUEST_CHANGES (exception)\ndesign root cause → human gate → re-plan → re-Momus"];
-    "Momus verdict?" -> "Stage A: Markdown Render" [label="APPROVE/COMMENT"];
-    "Stage A: Markdown Render" -> "Stage B: Execution Recommendation";
+    "Momus verdict?" -> "Stage A: Presentation Render" [label="APPROVE/COMMENT"];
+    "Stage A: Presentation Render" -> "Stage B: Execution Recommendation";
     "Stage B: Execution Recommendation" -> "Stage C: Execution Bridge";
     "Stage C: Execution Bridge" -> "User's choice?";
     "User's choice?" -> "S8: Execution Dispatch\n(invoke ultragoal with the plan path)" [label="(1) Continue to ultragoal\n(fresh S4 APPROVE/COMMENT)"];
@@ -808,6 +808,8 @@ Architecture Decision Record — one entry per significant design choice in the 
 
 - **Contested tier** — a decision whose alternatives stand in a genuine tradeoff relationship, co-decided with the human. It carries the full 7-field MADR (fields listed below). An item whose **Decision** field is left empty is the open-fork representation: an unresolved contested decision still under co-design.
 - **Solo tier** — an uncontested decision, including every structural allocation and runtime edge. It carries lightweight fields: **Decision** / **Why** / **Invalidated alternative (one line)** / **Cites** (`file:symbol` for existing code, `(new)` for greenfield). A solo structural item also declares its **ownership** — what it owns, and **what it must NOT own** — and its **edges** `(caller→callee, side effect, failure path)`, or explicitly declares `Edges: none` (the close gate treats an explicit none as a complete enumeration, not an omission). When no Must-NOT boundary applies, the item must state it explicitly — e.g., `Must NOT own: none — <one-line reason>` — rather than omitting the field.
+  - **Edge callee grounding + internal consistency.** Every callee symbol named in an `edges` field is the **exact** symbol the caller invokes at that call site — read the caller's real code and transcribe it, never a plausible same-family sibling (a device-token axis that calls the member-check-free `getForHousehold` must be drawn `→getForHousehold`, never the member-checking `getForUser`, which it structurally cannot call because it lacks the `userId` that variant requires). A same-family sibling is still invention. And the method named for a given collaboration in one place MUST match the method named for that same collaboration everywhere else in the log — the item's own **Decision** / **Cites**, and any other D-item's `edges` describing the same caller→callee pair. An item whose `edges` name `getForUser` while its own Decision (or a sibling D-item) names `getForHousehold` for the same call is an **internal contradiction**, not a stylistic variance; the close gate rejects it.
+  - **Count grounding + internal consistency.** Every count of a code-defined set the plan states — enum members, probe/route targets, procedures, files, call sites — is obtained by COUNTING the actual code definition (read it and count), never asserted from memory or inference, and MUST agree with every corroborating statement of that same count elsewhere in the plan (a label/enumeration map, a sibling D-item, a diagram note). A stated `8 targets` that contradicts the plan's own 7-entry label map or 7-member enumeration is an internal contradiction the close gate rejects — and a fabricated count is not laundered by withholding the extra member's name: if you 'protect' a count by not naming its Nth member, re-count the code, because the missing name is the signal the member does not exist. State a count only at the cardinality you can enumerate by name from the code.
 
 By the time the plan is written at S3, the plan's `## ADR` section is a **refined copy** of this co-authored log (the same fields, cleaned up for the executor), not a freshly authored record.
 
@@ -829,7 +831,7 @@ This full-item gate covers both tiers: contested and solo items alike populate t
 
 **MUST enumeration rule.** At **Complex** and **Architecture** intent, **every component the change creates or modifies** is enumerated as a solo `D-N` item declaring its ownership and its edges (or an explicit none). Structural enumeration is Complex and Architecture ONLY — there is **no structural-enumeration path below the Complex band**. It is a distinct gate from full-item output, which starts at Scoped+.
 
-**Close gate.** S2 closes on the structural set only when this is answerable YES: **Can a sequence/component diagram be drawn from the full set of D-items WITHOUT inventing new ownership or edges? (YES/NO)** YES means every component item gives its owner + Must-NOT boundary and every edge is enumerated (an explicit `Edges: none` or `Must NOT own: none` counts as a declared boundary, not an omission). NO keeps the loop open. This gate is **loop-closure, not coverage** — whether every eventually-touched file appears is the human co-owner's call at the design gate, never folded into this question.
+**Close gate.** S2 closes on the structural set only when this is answerable YES: **Can a sequence/component diagram be drawn from the full set of D-items WITHOUT inventing new ownership or edges? (YES/NO)** YES means every component item gives its owner + Must-NOT boundary and every edge is enumerated (an explicit `Edges: none` or `Must NOT own: none` counts as a declared boundary, not an omission), **AND every enumerated edge's callee symbol is the exact symbol the caller invokes at that call site (not a plausible same-family sibling) and agrees with the method named for that same collaboration everywhere else in the log** (the item's own Decision / Cites, or another item's edges), **AND every count of a code-defined set the plan states (enum members, probe/route targets, procedures, files, call sites) was obtained by counting the actual code definition and agrees with every corroborating enumeration or label map of that same set elsewhere in the plan** — a stated cardinality the plan cannot back by naming each member from the code is a NO. NO keeps the loop open — an edge naming a method the caller cannot invoke, a count contradicting the plan's own enumeration, or a cardinality with an unnameable Nth member, is a NO. This gate is **loop-closure, not coverage** — whether every eventually-touched file appears is the human co-owner's call at the design gate, never folded into this question.
 
 **Anti-ceremony escape.** Structural enumeration may be skipped **only** when the change introduces **no new ownership and no new edges** (triviality derived from the change itself, not the planner's effort). Skipping requires recording a **named, specific** consequence of skipping — **not boilerplate** ("low risk", "trivial", "no impact" are rejected). Example of a good named consequence: "skips enumeration because this change only edits copy inside `Formatter.render`; if that turns out to also move the rounding rule, the unowned-rounding fork goes uncaught." A boilerplate consequence fails this clause and forces enumeration.
 
@@ -915,7 +917,7 @@ Each TODO is a checkbox line `- [ ] N. Title` with body containing:
    - **External**: official docs, RFCs + WHY
    - Every implementation TODO needs ≥1 Pattern or API/Type reference. Greenfield → "Greenfield — no existing pattern" explicitly.
    - **FINAL wave exemption**: F1-F4 audit tasks (Wave: FINAL) do NOT require Pattern/API/Type/Test/External references — their target IS the plan itself + the executed work. References field is optional for FINAL wave.
-5. **Parallelization** — `Blocked By: [list]`, `Blocks: [list]`, `Wave: N` (1-based, OR `Wave: FINAL` for F1-F4)
+5. **Parallelization** — `Blocked By: <comma-separated TODO ids, or none>`, `Blocks: <comma-separated TODO ids, or none>`, `Wave: N` (1-based, OR `Wave: FINAL` for F1-F4). Write ids bare (`Blocked By: 1, 3` / `Blocks: none`) — NOT bracketed (`[1, 3]`); the validator splits on commas and rejects bracket characters.
 6. **Acceptance Criteria** — Follow `## Acceptance Criteria (Mandatory Contract)` above.
 7. **QA Scenarios** — Minimum 2 per TODO (happy path + failure/edge case), 7-field structured block (see below)
 

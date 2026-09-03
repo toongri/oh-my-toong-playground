@@ -109,6 +109,32 @@ describe("presence assertions — new ADR-log tokens", () => {
 	it("N16: Boundary Map follows the architecture-boundaries rule as vocabulary only", () => {
 		expect(skillContent).toContain("`architecture-boundaries` rule");
 	});
+
+	it("N17: solo-tier edges carry the callee-grounding + internal-consistency rule", () => {
+		// Guards the hardening against plausible-sibling edge callees (e.g. an
+		// edge naming the member-checking `getForUser` where the device axis
+		// actually calls the member-check-free `getForHousehold`).
+		expect(skillContent).toContain("Edge callee grounding + internal consistency");
+	});
+
+	it("N18: close gate requires each edge callee be the exact call-site symbol", () => {
+		expect(skillContent).toContain(
+			"every enumerated edge's callee symbol is the exact symbol the caller invokes at that call site",
+		);
+	});
+
+	it("N19: solo-tier items carry the count-grounding + internal-consistency rule", () => {
+		// Guards the hardening against fabricated cardinalities of code-defined
+		// sets (e.g. a stated "8 targets" contradicting the plan's own 7-entry
+		// label map / 7-member enumeration, "protected" by withholding the 8th name).
+		expect(skillContent).toContain("Count grounding + internal consistency");
+	});
+
+	it("N20: close gate rejects a cardinality whose Nth member cannot be named from code", () => {
+		expect(skillContent).toContain(
+			"a cardinality with an unnameable Nth member",
+		);
+	});
 });
 
 // ---------------------------------------------------------------------------

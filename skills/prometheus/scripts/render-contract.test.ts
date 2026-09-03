@@ -39,8 +39,14 @@ describe("absence — HTML render machinery removed", () => {
 		expect(skillContent.toLowerCase()).not.toContain("html");
 	});
 
-	it("A3: review-pipeline.md carries no html literal (case-insensitive)", () => {
-		expect(reviewPipelineContent.toLowerCase()).not.toContain("html");
+	it("A3: review-pipeline.md wires the shareable render.ts HTML render alongside the gated .md", () => {
+		// The markdown-only lockdown removed the OLD fragile HTML template
+		// (templates/plan-presentation.html + Rule 6/7 placeholder machinery —
+		// still asserted gone by A1/A5-A7). HTML output itself is REINTRODUCED
+		// via render.ts (mermaid baked to inline SVG), a different mechanism: the
+		// authored .md stays the gated source, the .html is the shareable render.
+		expect(reviewPipelineContent).toContain("scripts/render.ts");
+		expect(reviewPipelineContent).toContain(".html");
 	});
 
 	it("A4: diagram-guide.md carries no html literal (case-insensitive)", () => {
