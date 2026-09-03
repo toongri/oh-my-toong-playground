@@ -112,15 +112,20 @@ const COMMIT_SUBSECTION = /^###\s+`([0-9a-fA-F]{6,40})`/gm;
 
 /** The 왜 field, as an HTML paragraph (the cf component authors it). */
 const WHY_PARAGRAPH = /<p>\s*<strong>\s*왜[\s\S]*?<\/p>/;
+/** Complete legacy provenance, with a non-whitespace payload and closing bracket. */
+const LEGACY_PROVENANCE =
+	/\[(근거|추론):\s*([^\]\s](?:[^\]]*?[^\]\s])?)\s*\]/;
+
 /** A provenance tag a 왜 field may carry. The cf-src badge must be a valid label
  *  WITH its required companion — `근거` followed by a quote, `추론` followed by a
  *  ground (a non-tag char, so `추론</span></p>` fails), or a standalone
  *  `Unknown / not supplied`. The class alone, an empty/garbage label, or a bare
  *  badge with nothing after is a flat assertion. Whether an 추론's ground is real
- *  stays a human call (discipline.md); this only checks the badge's form. Legacy
- *  bracket forms remain accepted. */
+ *  stays a human call (discipline.md); this only checks the badge's form. */
 const PROVENANCE =
-	/<span[^>]*class=["']cf-src["'][^>]*>\s*근거\s*<\/span>\s*"[^"]+"|<span[^>]*class=["']cf-src["'][^>]*>\s*추론\s*<\/span>\s*[^<\s]|<span[^>]*class=["']cf-src["'][^>]*>\s*Unknown\s*\/\s*not supplied\s*<\/span>|\[근거:|\[추론:/;
+	new RegExp(
+		String.raw`<span[^>]*class=["']cf-src["'][^>]*>\s*근거\s*<\/span>\s*"[^"]+"|<span[^>]*class=["']cf-src["'][^>]*>\s*추론\s*<\/span>\s*[^<\s]|<span[^>]*class=["']cf-src["'][^>]*>\s*Unknown\s*\/\s*not supplied\s*<\/span>|${LEGACY_PROVENANCE.source}`,
+	);
 
 /** Fenced code, matched so it can be stripped or length-preserving masked. */
 const FENCE_RE = /^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^(?:`{3,}|~{3,})[^\n]*$/gm;
@@ -381,21 +386,34 @@ function checkR2(text: string): CheckItem {
 }
 
 /** Every `근거` badge's quote in the document (the required companion of a 근거
- *  provenance tag). Both HTML (`cf-src">근거</span> "…"`) and legacy bracket
- *  (`[근거: …]`) forms are extracted so R22 covers the same surface R3 accepts. */
+ *  provenance tag). Both HTML (`cf-src">근거</span> "…"`) and complete legacy
+ *  bracket forms are extracted so R22 covers the same surface R3 accepts. */
 function collectGroundQuotes(text: string): string[] {
 	const out: string[] = [];
 	const html = /<span[^>]*class=["']cf-src["'][^>]*>\s*근거\s*<\/span>\s*"([^"]+)"/g;
-	const bracket = /\[근거:\s*([^\]]+)\]/g;
-	for (const re of [html, bracket]) {
+	const legacy = new RegExp(LEGACY_PROVENANCE.source, "g");
+	for (const re of [html, legacy]) {
 		let m: RegExpExecArray | null = re.exec(text);
 		while (m !== null) {
-			const q = (m[1] ?? "").trim();
-			if (q.length > 0) out.push(q);
+			const isGround = re === html || m[1] === "근거";
+			const q = (re === html ? m[1] : m[2] ?? "").trim();
+			if (isGround && q.length > 0) out.push(q);
 			m = re.exec(text);
 		}
 	}
 	return out;
+}
+
+/** An incomplete legacy ground marker must not become an empty quote set. */
+function hasIncompleteLegacyGroundMarker(text: string): boolean {
+	const starts = /\[근거:/g;
+	let m: RegExpExecArray | null = starts.exec(text);
+	while (m !== null) {
+		const complete = text.slice(m.index).match(LEGACY_PROVENANCE);
+		if (complete === null || complete.index !== 0) return true;
+		m = starts.exec(text);
+	}
+	return false;
 }
 
 /** Whitespace-free view for verbatim comparison. Commit bodies are hard-wrapped
@@ -447,6 +465,14 @@ function checkR22(text: string, sourceCorpus: string | undefined): CheckItem {
 	// "git failed" must not read as "every quote is fabricated".
 	if (sourceCorpus === undefined || sourceCorpus.trim().length === 0) {
 		return { id: "R22", title: "R22 근거 소스 대조", pass: true, detail: "" };
+	}
+	if (hasIncompleteLegacyGroundMarker(text)) {
+		return {
+			id: "R22",
+			title: "R22 근거 소스 대조",
+			pass: false,
+			detail: "닫히지 않았거나 내용이 비어 있는 legacy [근거: ...] 표기",
+		};
 	}
 	const corpus = normalizeForSource(sourceCorpus);
 	const missing = quotes.filter((q) => !corpus.includes(normalizeForSource(q)));

@@ -512,6 +512,60 @@ describe("code 스텝 — R2·R3·R5·R1(커버리지형)·R13", () => {
 		expect(r.items.find((i) => i.id === "R3")?.pass).toBe(true);
 	});
 
+	test("완전한 legacy 근거 표기도 R3와 R22를 통과시킨다", () => {
+		const body = GOOD_GROUP.replace(
+			/<span class="cf-src">근거<\/span> "[^"]*"/,
+			"[근거: fix: 상태 갱신 락 통합]",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: "fix: 상태 갱신 락 통합",
+		});
+		expect(r.items.find((i) => i.id === "R3")?.pass).toBe(true);
+		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(true);
+	});
+
+	test("완전한 legacy 추론 표기는 R3를 통과시킨다", () => {
+		const body = GOOD_GROUP.replace(
+			/<span class="cf-src">근거<\/span> "[^"]*"/,
+			"[추론: 커밋 제목과 변경된 호출 경로를 함께 읽은 결론]",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+		});
+		expect(r.items.find((i) => i.id === "R3")?.pass).toBe(true);
+	});
+
+	test("닫는 괄호가 없는 legacy 근거 표기는 R3에서 실패한다", () => {
+		const body = GOOD_GROUP.replace(
+			/<span class="cf-src">근거<\/span> "[^"]*"/,
+			"[근거: fix: 상태 갱신 락 통합",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+		});
+		expect(r.items.find((i) => i.id === "R3")?.pass).toBe(false);
+	});
+
+	test("닫는 괄호가 없는 legacy 추론 표기는 R3에서 실패한다", () => {
+		const body = GOOD_GROUP.replace(
+			/<span class="cf-src">근거<\/span> "[^"]*"/,
+			"[추론: 커밋 제목과 변경된 호출 경로를 함께 읽은 결론",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+		});
+		expect(r.items.find((i) => i.id === "R3")?.pass).toBe(false);
+	});
+
 	test("코드 펜스 주석 안의 왜 단어는 R3의 출처 판정에 새지 않는다", () => {
 		// 핵심 로직 코드 펜스에 `// 왜냐하면` 같은 주석이 있어도, 변경 블록의 진짜
 		// 왜 필드에 출처 태그가 없으면 실패해야 한다 — 펜스를 벗겨내고 판정한다.
@@ -2285,6 +2339,20 @@ describe("code 스텝 — R22 근거 소스 대조", () => {
 			sourceCorpus: `무관한 앞부분\n${GROUND}\n무관한 뒷부분`,
 		});
 		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(true);
+	});
+
+	test("닫는 괄호가 없는 legacy 근거 표기는 R22를 빈 인용으로 통과시키지 않는다", () => {
+		const body = GOOD_GROUP.replace(
+			/<span class="cf-src">근거<\/span> "[^"]*"/,
+			"[근거: fix: 상태 갱신 락 통합",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: "fix: 상태 갱신 락 통합",
+		});
+		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(false);
 	});
 
 	test("소스가 하드랩·짝지은 마크다운 강조로 달라도 정규화 후 통과한다(오탐 방지)", () => {

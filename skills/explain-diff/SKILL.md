@@ -250,6 +250,8 @@ The slots fill R13, R3, and R5. The `왜`·`효과·사이드이펙트`·`검증
 
 Leave the third case **as an open question inside the document.** Do not ask the user in conversation — steps 1–8 run without a person.
 
+For backward compatibility, the accepted legacy bracket forms are exactly `[근거: <원문 인용>]` and `[추론: <추론의 근거>]`. The payload in either form must contain non-whitespace content, and the closing `]` is required; `[근거:` or `[추론:` without a complete payload and closing bracket is not a provenance tag. Prefer the HTML `cf-src` forms above for new documents.
+
 **A `근거` quote is machine-checked against the real source (R22).** At the `code` step the structure check concatenates every in-range commit body with the range's net diff and requires each `근거` quote to be a substring of it — compared after whitespace is removed and only actual paired inline Markdown delimiters are removed: matching backtick code spans, paired `*`/`_` emphasis, and `~~` strike markers. Unpaired markers, or marker glyphs embedded in identifiers and expressions such as `user_id` and `a*b`, remain meaningful; therefore a faithfully hard-wrapped or paired-formatted quote passes while a punctuation-different paraphrase or a sentence lifted from the PR description (which lives nowhere in the source) fails. If R22 rejects a quote, it is not verbatim ground: copy the exact words from the commit body or the diff, or, if the reason genuinely comes from reading the code rather than any written source, downgrade the tag to `추론` with its real inference ground. Never invent a quote to satisfy the badge. (R22 checks the quote is real, not that it sits in the specific commit the block names — that attribution stays your responsibility.)
 
 ## Passing a step
