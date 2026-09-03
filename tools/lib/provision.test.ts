@@ -161,9 +161,10 @@ function writeStub(dir: string, name: string, script: string): void {
 }
 
 // The check strings shell out to bash/grep/sort/head (printf is a bash builtin,
-// no binary needed). PATH is built stub-dir-first so a stubbed agent-device/
-// agent-browser always shadows any real install on this machine, with /bin and
-// /usr/bin appended only so bash itself and those coreutils can still resolve.
+// no binary needed). PATH is built stub-dir-first so a stubbed agent-device/,
+// agent-browser, or mmdc always shadows any real install on this machine, with
+// /bin and /usr/bin appended only so bash itself and those coreutils can still
+// resolve.
 function stubPath(stubDir: string): string {
 	return `${stubDir}:/bin:/usr/bin`;
 }
@@ -261,5 +262,94 @@ describe("sync.yaml provision: agent-browser Chrome readiness 체크 (doctor)", 
 		writeStub(dir, "agent-browser", '#!/bin/sh\necho "  fail  Google Chrome not found"\n');
 
 		expect(runCheck(check, dir)).not.toBe(0);
+	});
+});
+
+describe("sync.yaml provision: mmdc readiness 체크", () => {
+	const tmpdirs: string[] = [];
+
+	afterEach(() => {
+		for (const d of tmpdirs.splice(0)) {
+			try {
+				fs.rmSync(d, { recursive: true, force: true });
+			} catch {
+				// best-effort
+			}
+		}
+	});
+
+	function newStubDir(): string {
+		const d = fs.mkdtempSync(path.join(os.tmpdir(), "provision-check-test-"));
+		tmpdirs.push(d);
+		return d;
+	}
+
+	it("mmdc가 PATH에 없음 — exit != 0 (프로비저닝 필요)", () => {
+		const check = findCheckByCommandSubstring(
+			loadRootProvisionItems(),
+			"@mermaid-js/mermaid-cli",
+		);
+		const dir = newStubDir();
+
+		expect(runCheck(check, dir)).not.toBe(0);
+	});
+
+	it("mmdc가 PATH에 있음 — exit 0 (통과)", () => {
+		const check = findCheckByCommandSubstring(
+			loadRootProvisionItems(),
+			"@mermaid-js/mermaid-cli",
+		);
+		const dir = newStubDir();
+		writeStub(dir, "mmdc", "#!/bin/sh\nexit 0\n");
+
+		expect(runCheck(check, dir)).toBe(0);
+	});
+});
+
+describe("sync.yaml provision: mmdc Chrome headless shell smoke 체크", () => {
+	const tmpdirs: string[] = [];
+
+	afterEach(() => {
+		for (const d of tmpdirs.splice(0)) {
+			try {
+				fs.rmSync(d, { recursive: true, force: true });
+			} catch {
+				// best-effort
+			}
+		}
+	});
+
+	function newStubDir(): string {
+		const d = fs.mkdtempSync(path.join(os.tmpdir(), "provision-check-test-"));
+		tmpdirs.push(d);
+		return d;
+	}
+
+	function smokeCheck(): string {
+		const item = loadRootProvisionItems().find((candidate) =>
+			candidate.check?.includes("mmdc -i"),
+		);
+		if (!item?.check) {
+			throw new Error("no mmdc smoke provision check found");
+		}
+		return item.check;
+	}
+
+	it("mmdc가 렌더에 실패 — exit != 0 (브라우저 프로비저닝 필요)", () => {
+		const dir = newStubDir();
+		writeStub(dir, "mmdc", "#!/bin/sh\nexit 1\n");
+
+		expect(runCheck(smokeCheck(), dir)).not.toBe(0);
+	});
+
+	it("mmdc가 작은 SVG를 렌더 — exit 0 (headless shell 준비 완료)", () => {
+		const dir = newStubDir();
+		writeStub(
+			dir,
+			"mmdc",
+			'#!/bin/sh\noutput=""\nwhile [ "$#" -gt 0 ]; do\n  case "$1" in\n    -o) output="$2"; shift 2 ;;\n    *) shift ;;\n  esac\ndone\n[ -n "$output" ] || exit 1\nprintf "%s\\n" "<svg xmlns=\\"http://www.w3.org/2000/svg\\"></svg>" >"$output"\n',
+		);
+
+		expect(runCheck(smokeCheck(), dir)).toBe(0);
 	});
 });

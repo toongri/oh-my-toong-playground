@@ -37,6 +37,13 @@ interface Persisted extends ExplainDiffState {
 	/** Exact artifact paths bound by the successful render submission. */
 	render_proof: RenderProofBinding | null;
 	diff_hunks: DiffHunk[];
+	/**
+	 * Commit-body ∪ net-diff corpus for R22 (근거 소스 대조), captured once at
+	 * `start` — the one moment the CLI is guaranteed to run inside the repo —
+	 * and read (never re-fetched) at the `code` submit, exactly like diff_hunks.
+	 * Empty means capture failed; R22 then fail-opens.
+	 */
+	source_corpus: string;
 	started_at: string;
 	last_touched_at: string;
 	derived: ReturnType<typeof computeDerived>;
@@ -138,6 +145,7 @@ function readSnapshot(sessionId: string): ReadSnapshot | null {
 			render_proof_contract_version: CURRENT_RENDER_PROOF_CONTRACT_VERSION,
 			render_proof: renderProof,
 			diff_hunks: normalizeStoredDiffHunks(r["diff_hunks"]),
+			source_corpus: typeof r["source_corpus"] === "string" ? r["source_corpus"] : "",
 			range: typeof r["range"] === "string" ? r["range"] : "",
 			slug: typeof r["slug"] === "string" ? r["slug"] : "",
 			started_at: typeof r["started_at"] === "string" ? r["started_at"] : nowStamp(),
@@ -401,6 +409,42 @@ function captureDiffHunks(range: string): DiffHunk[] {
 }
 
 /**
+ * Builds the source-fidelity corpus for R22: every in-range commit body joined
+ * with the range's net diff text. R22 (근거 소스 대조) asks that each 근거 quote be a
+ * normalized substring of THIS — so a paraphrase or a PR-body sentence that
+ * appears nowhere in the real source cannot pose as a verbatim ground. Captured
+ * fresh at the `code` submit (not stored at `start`) because it is only read
+ * once. Failure is fail-open (empty string): a git error must not read as "every
+ * quote is fabricated", matching captureDiffHunks / enumerateCommits.
+ */
+function captureSourceCorpus(range: string, hashes: string[]): string {
+	const parts: string[] = [];
+	for (const h of hashes) {
+		try {
+			parts.push(
+				execFileSync("git", ["show", "-s", "--format=%B", h], {
+					encoding: "utf8",
+					stdio: ["ignore", "pipe", "ignore"],
+				}),
+			);
+		} catch {
+			// A single unreachable hash drops out; the rest of the corpus stands.
+		}
+	}
+	try {
+		parts.push(
+			execFileSync("git", ["diff", "--no-ext-diff", "--no-color", range], {
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+			}),
+		);
+	} catch {
+		// No diff text — commit bodies alone still ground most quotes.
+	}
+	return parts.join("\n");
+}
+
+/**
  * Enumerates the commits of `range`, oldest first, at the only moment the CLI
  * is guaranteed to run inside the repo. `A...B` is normalized to `A..B`: the
  * diff convention (merge-base diff) and the commit-list convention (commits on
@@ -423,6 +467,7 @@ function enumerateCommits(range: string): string[] {
 
 function start(sessionId: string, range: string, slug: string): void {
 	const ts = nowStamp();
+	const commitHashes = enumerateCommits(range);
 	const seed: Persisted = {
 		active: true,
 		step: "evidence",
@@ -432,8 +477,9 @@ function start(sessionId: string, range: string, slug: string): void {
 		render_proof: null,
 		concepts: [],
 		bank: [],
-		commit_hashes: enumerateCommits(range),
+		commit_hashes: commitHashes,
 		diff_hunks: captureDiffHunks(range),
+		source_corpus: captureSourceCorpus(range, commitHashes),
 		awaiting_answer: false,
 		no_progress: { key: "", count: 0, doc_digest: "" },
 		last_failure: null,
@@ -711,6 +757,7 @@ function submitStep(
 						addedFiles,
 						commitHashes: s.commit_hashes,
 						diffHunks: s.diff_hunks,
+						sourceCorpus: step === "code" ? s.source_corpus : undefined,
 						step,
 					});
 		if (!result.pass) {

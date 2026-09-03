@@ -1215,7 +1215,8 @@ describe("makeDecision", () => {
 		// done token is the one signal the model cannot skip, so the gate lives here.
 		const planDirFor = () => join(omtDir, "plans");
 		const planPathFor = () => join(planDirFor(), "my-plan.md");
-		const presentationPathFor = () => join(planDirFor(), "presentation", "my-plan.md");
+		const presentationMarkdownPathFor = () => join(planDirFor(), "presentation", "my-plan.md");
+		const presentationPathFor = () => join(planDirFor(), "presentation", "my-plan.html");
 
 		const writePlanOnDisk = async () => {
 			await mkdir(planDirFor(), { recursive: true });
@@ -1254,8 +1255,9 @@ describe("makeDecision", () => {
 		it("refuses <prometheus-done/> when the presentation predates the plan (stale render)", async () => {
 			await writePlanOnDisk();
 			await mkdir(join(planDirFor(), "presentation"), { recursive: true });
+			await writeFile(presentationMarkdownPathFor(), "# presentation\n");
 			await writeFile(presentationPathFor(), "# presentation\n");
-			// presentation rendered at T-60s, plan revised now
+			// HTML rendered at T-60s, after the authored Markdown was written.
 			const past = (Date.now() - 60_000) / 1000;
 			fs.utimesSync(presentationPathFor(), past, past);
 			await writeStateWithPlanDone();
@@ -1272,6 +1274,7 @@ describe("makeDecision", () => {
 		it("honors <prometheus-done/> once a fresh presentation exists", async () => {
 			await writePlanOnDisk();
 			await mkdir(join(planDirFor(), "presentation"), { recursive: true });
+			await writeFile(presentationMarkdownPathFor(), "# presentation\n");
 			await writeFile(presentationPathFor(), "# presentation\n");
 			await writeStateWithPlanDone();
 

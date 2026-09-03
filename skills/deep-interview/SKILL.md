@@ -504,7 +504,15 @@ The Metadata `Output shape` value must be copied exactly from persisted `state.o
 
 **Inline self-review** (after writing), 6 checks: placeholder / consistency / scope / non-goal-decider / invariant / ambiguity — confirm no unfilled placeholders, no section contradictions, full interview coverage, every Non-Goals bullet carries a decider, every Invariants bullet carries `paths:` and `check:` with no path listed there contradicted by a Risks entry, no ambiguous text remains.
 
-3. **Emit the handoff token** in the final assistant message before proceeding to Phase 5. The literal token `<deep-interview-done/>` must appear in the assistant turn that announces spec completion. This signals downstream hooks that the interview phase is complete and state cleanup may proceed.
+3. **Author the presentation** — a human-facing companion to the spec (deep-interview's counterpart to prometheus's Plan Presentation). The spec just written is the precise AI-facing SSOT; the presentation explains that same work to a **colleague or lead with no prior context on this codebase or domain**, so that from the presentation alone they grasp what the work does and what to be aware of when modifying this code next. It carries the spec's full design content and **every diagram the spec drew** at full fidelity — rich explanation alongside the diagrams is welcome, there is no word-count ceiling; it drops only the interview machinery (clarity breakdown, ontology convergence, transcript, scoring internals). **Read `presentation.md` in full now** and follow its contract; the single hard rule is that the presentation must never invent or contradict the spec (no invented "why", no merging spec-separate concerns, no fabricated concrete values, no diagram the spec did not draw). Author the presentation markdown at `$OMT_DIR/deep-interview/{slug}.presentation.md`, then render it to a single self-contained HTML file:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/render.ts --in $OMT_DIR/deep-interview/{slug}.presentation.md --out $OMT_DIR/deep-interview/{slug}.presentation.html
+```
+
+Fix any mermaid error and re-render until it succeeds. The presentation is derived and non-authoritative — the spec on disk is never rewritten to match it. Render its prose in the session's conversation language (same detect-at-render-time rule as the spec).
+
+4. **Emit the handoff token** in the final assistant message before proceeding to Phase 5. The literal token `<deep-interview-done/>` must appear in the assistant turn that announces spec completion. This signals downstream hooks that the interview phase is complete and state cleanup may proceed.
 
 ## Phase 5: Execution Bridge
 
@@ -578,6 +586,7 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 - [ ] Challenge stances selected by the Step 2-head Dialectic Rhythm Guard at the correct rotation conditions (Contrarian round 4+, Simplifier round 6+, Ontologist on stall or round 8+ with ambiguity > 0.3)
 - [ ] Spec file written to `$OMT_DIR/deep-interview/{slug}.md`
 - [ ] Inline self-review (6 checks: placeholder / consistency / scope / non-goal-decider / invariant / ambiguity) performed
+- [ ] presentation authored per `presentation.md` and rendered to `$OMT_DIR/deep-interview/{slug}.presentation.html` (carries the spec's design content + every diagram it drew; self-audit passed: invents/contradicts nothing in the spec)
 - [ ] Spec includes: goal, constraints, invariants, acceptance criteria, Approach & Design Decisions, clarity breakdown, transcript
 - [ ] Token `<deep-interview-done/>` emitted in the final assistant message before handoff
 - [ ] Execution bridge presented via AskUserQuestion
@@ -603,5 +612,6 @@ Read these files at the moment indicated — not speculatively upfront.
 | `deep-interview-examples.md` | Question-quality calibration examples (Good/Bad) | When calibrating or debugging question quality |
 | `deep-interview-advanced.md` | Resume, configuration (ambiguityThreshold), cross-session continuation, and the weights / challenge-modes / score-interpretation tables | When resuming, configuring, continuing across sessions, or needing the interpretation tables |
 | `diagram-guide.md` | The 6-lens table with trigger FACTs, the coverage-table rule and its canonical status literals, the node cap, the post-draw self-audit, and mermaid-validity rules | Before authoring the spec's `## Diagrams` section (Phase 4 crystallize) |
+| `presentation.md` | The presentation authoring contract (maintainer altitude — carries the spec's full design content + every diagram it drew, invent-nothing hard rule, gloss/diagram recipe, self-contained HTML format) | Before authoring the presentation (Phase 4 crystallize, after the spec is written) |
 
 Task: {{ARGUMENTS}}

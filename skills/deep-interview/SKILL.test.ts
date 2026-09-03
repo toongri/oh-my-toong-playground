@@ -245,6 +245,30 @@ describe("removed: spec-presentation render target", () => {
 	});
 });
 
+// The legacy fragile spec-presentation.html template target stays gone (above).
+// deep-interview now produces a DIFFERENT presentation — a maintainer-facing
+// explainer that carries the spec's full design content + every diagram it drew,
+// rendered via the clean scripts/render.ts converter (not a placeholder
+// template), governed by presentation.md. This block locks that wiring.
+describe("present: presentation wiring", () => {
+	test("Phase 4 authors the presentation governed by presentation.md", () => {
+		expect(skillMd).toContain("presentation.md");
+	});
+
+	test("the presentation renders to a self-contained page via render.ts", () => {
+		expect(skillMd).toContain("scripts/render.ts");
+		expect(skillMd).toContain("{slug}.presentation.html");
+	});
+
+	test("the presentation contract file exists", () => {
+		expect(existsSync(join(import.meta.dir, "presentation.md"))).toBe(true);
+	});
+
+	test("no ELI5 label leaks into the wiring", () => {
+		expect(skillMd.toLowerCase()).not.toContain("eli5");
+	});
+});
+
 describe("removed: ontology-preview on-demand render", () => {
 	test("ontology-preview.html render target is absent", () => {
 		expect(skillMd).not.toContain("ontology-preview.html");

@@ -459,7 +459,7 @@ describe("code 스텝 — R2·R3·R5·R1(커버리지형)·R13", () => {
 			commitHashes: ["ab12cd3f00"],
 		});
 		expect(r.pass).toBe(false);
-		expect(r.items.map((i) => i.id)).toEqual(["R2", "R3", "R5", "R1", "R13", "R11"]);
+		expect(r.items.map((i) => i.id)).toEqual(["R2", "R3", "R5", "R1", "R13", "R22", "R11"]);
 	});
 
 	test("완전한 문서는 code 스텝에서 통과한다", () => {
@@ -510,6 +510,60 @@ describe("code 스텝 — R2·R3·R5·R1(커버리지형)·R13", () => {
 			commitHashes: ["ab12cd3f00"],
 		});
 		expect(r.items.find((i) => i.id === "R3")?.pass).toBe(true);
+	});
+
+	test("완전한 legacy 근거 표기도 R3와 R22를 통과시킨다", () => {
+		const body = GOOD_GROUP.replace(
+			/<span class="cf-src">근거<\/span> "[^"]*"/,
+			"[근거: fix: 상태 갱신 락 통합]",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: "fix: 상태 갱신 락 통합",
+		});
+		expect(r.items.find((i) => i.id === "R3")?.pass).toBe(true);
+		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(true);
+	});
+
+	test("완전한 legacy 추론 표기는 R3를 통과시킨다", () => {
+		const body = GOOD_GROUP.replace(
+			/<span class="cf-src">근거<\/span> "[^"]*"/,
+			"[추론: 커밋 제목과 변경된 호출 경로를 함께 읽은 결론]",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+		});
+		expect(r.items.find((i) => i.id === "R3")?.pass).toBe(true);
+	});
+
+	test("닫는 괄호가 없는 legacy 근거 표기는 R3에서 실패한다", () => {
+		const body = GOOD_GROUP.replace(
+			/<span class="cf-src">근거<\/span> "[^"]*"/,
+			"[근거: fix: 상태 갱신 락 통합",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+		});
+		expect(r.items.find((i) => i.id === "R3")?.pass).toBe(false);
+	});
+
+	test("닫는 괄호가 없는 legacy 추론 표기는 R3에서 실패한다", () => {
+		const body = GOOD_GROUP.replace(
+			/<span class="cf-src">근거<\/span> "[^"]*"/,
+			"[추론: 커밋 제목과 변경된 호출 경로를 함께 읽은 결론",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+		});
+		expect(r.items.find((i) => i.id === "R3")?.pass).toBe(false);
 	});
 
 	test("코드 펜스 주석 안의 왜 단어는 R3의 출처 판정에 새지 않는다", () => {
@@ -2258,5 +2312,147 @@ flowchart LR
 			step: "architecture",
 		});
 		expect(r.items.find((i) => i.id === "R14")?.pass).toBe(false);
+	});
+});
+
+describe("code 스텝 — R22 근거 소스 대조", () => {
+	// GOOD_GROUP 의 근거 인용: "fix: 상태 갱신 락 통합"
+	const GROUND = "fix: 상태 갱신 락 통합";
+
+	test("근거 인용이 소스 코퍼스에 없으면 R22가 실패한다", () => {
+		const r = checkStructure(withBackground(GOOD_GROUP), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: "이 코퍼스에는 완전히 무관한 커밋 본문과 diff만 들어 있다",
+		});
+		const item = r.items.find((i) => i.id === "R22");
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain(GROUND);
+	});
+
+	test("공백만 있는 HTML 근거 인용은 R22를 통과시키지 않는다", () => {
+		const body = GOOD_GROUP.replace(
+			/<span class="cf-src">근거<\/span> "[^"]*"/,
+			'<span class="cf-src">근거</span> "   "',
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: "이 코퍼스에는 완전히 무관한 커밋 본문과 diff만 들어 있다",
+		});
+		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(false);
+	});
+
+	test("근거 인용이 소스 코퍼스에 verbatim 존재하면 R22가 통과한다", () => {
+		const r = checkStructure(withBackground(GOOD_GROUP), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: `무관한 앞부분\n${GROUND}\n무관한 뒷부분`,
+		});
+		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(true);
+	});
+
+	test("닫는 괄호가 없는 legacy 근거 표기는 R22를 빈 인용으로 통과시키지 않는다", () => {
+		const body = GOOD_GROUP.replace(
+			/<span class="cf-src">근거<\/span> "[^"]*"/,
+			"[근거: fix: 상태 갱신 락 통합",
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: "fix: 상태 갱신 락 통합",
+		});
+		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(false);
+	});
+
+	test("코어 로직 펜스 안의 불완전한 legacy 근거 표기는 R22에 새지 않고 visible prose에서는 실패한다", () => {
+		const fencedBody = GOOD_GROUP.replace(
+			"// 획득 → fn() → 해제",
+			"// literal [근거: value",
+		);
+		const fenced = checkStructure(withBackground(fencedBody), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: GROUND,
+		});
+		const prose = checkStructure(
+			withBackground(GOOD_GROUP.replace(
+				/<span class="cf-src">근거<\/span> "[^"]*"/,
+				"[근거: value",
+			)),
+			{
+				signalFiles: ["lib/state-lock.ts"],
+				step: "code",
+				commitHashes: ["ab12cd3f00"],
+				sourceCorpus: GROUND,
+			},
+		);
+
+		expect(fenced.items.find((i) => i.id === "R22")?.pass).toBe(true);
+		expect(prose.items.find((i) => i.id === "R22")?.pass).toBe(false);
+	});
+
+	test("소스가 하드랩·짝지은 마크다운 강조로 달라도 정규화 후 통과한다(오탐 방지)", () => {
+		// 커밋 본문은 흔히 하드랩되고 짝이 맞는 **강조**·`백틱`을 쓴다. 문서
+		// 인용은 그것을 펴서 담는다. 정당한 마크다운 마커만 제거해야 이 인용이
+		// 오탐으로 거부되지 않는다.
+		const wrapped = "앞\nfix: 상태 갱신\n**락** `통합`\n뒤";
+		const r = checkStructure(withBackground(GOOD_GROUP), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: wrapped,
+		});
+		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(true);
+	});
+
+	test("식별자 내부의 밑줄을 제거한 인용은 R22가 통과시키지 않는다", () => {
+		const body = GOOD_GROUP.replace(GROUND, "userid");
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: "user_id",
+		});
+		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(false);
+	});
+
+	test("표현식 내부의 별표를 제거한 인용은 R22가 통과시키지 않는다", () => {
+		const body = GOOD_GROUP.replace(GROUND, "ab");
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: "a*b",
+		});
+		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(false);
+	});
+
+	test("소스 코퍼스가 없으면(git 실패) R22는 fail-open 통과한다", () => {
+		const r = checkStructure(withBackground(GOOD_GROUP), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+		});
+		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(true);
+	});
+
+	test("추론 배지는 소스 대조 대상이 아니다 — 코퍼스에 없어도 통과", () => {
+		const body = GOOD_GROUP.replace(
+			/<span class="cf-src">근거<\/span> "[^"]*"/,
+			'<span class="cf-src">추론</span> 커밋 제목이 통합이라 말한다',
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: "근거가 전혀 없는 코퍼스",
+		});
+		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(true);
 	});
 });

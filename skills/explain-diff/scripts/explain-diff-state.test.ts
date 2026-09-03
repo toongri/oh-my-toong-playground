@@ -553,7 +553,9 @@ describe("diff hunk 메타데이터 전달", () => {
 		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "base");
 		writeFileSync(file, "export const mode = \"new\";\nexport const stable = true;\n", "utf8");
 		git("add", "lib/state-lock.ts");
-		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "change");
+		// 커밋 메시지에 GOOD_DOC 의 근거 인용을 담아 R22(근거 소스 대조)와 픽스처를
+		// 내부 일관되게 만든다 — 문서가 근거로 인용하는 문장은 실제 소스에 있어야 한다.
+		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "fix: ultragoal 상태 갱신 락 통합");
 		const shortHash = git("rev-parse", "--short", "HEAD").trim();
 
 		const prev = process.cwd();

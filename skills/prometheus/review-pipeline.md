@@ -2,7 +2,7 @@
 
 **This file is lookup-only.** The mandatory review-pipeline rules are defined inline in `SKILL.md > ## Review Pipeline (Mandatory Contract)`. The contract is authoritative.
 
-Read this file when you are about to execute a SPECIFIC reviewer invocation, Stage A markdown render, Stage B signal-table computation, or Stage C option presentation. Read the corresponding section in full at that moment.
+Read this file when you are about to execute a SPECIFIC reviewer invocation, Stage A presentation render, Stage B signal-table computation, or Stage C option presentation. Read the corresponding section in full at that moment.
 
 ---
 
@@ -68,14 +68,21 @@ Momus verifies both document quality and codebase feasibility: it reads the refe
 
 ---
 
-## Stage A: Markdown Render — Procedure
+## Stage A: Presentation Render — Procedure
 
-Render `$OMT_DIR/plans/{name}.md` into a single presentation markdown file so the user can read the plan in a readable, navigable form.
+Render `$OMT_DIR/plans/{name}.md` into a presentation markdown file, then render that markdown to a shareable, self-contained HTML page so the plan can be read in a navigable, portable form.
+
+**Purpose & perspective.** Write this presentation in the first person of the implementer explaining the plan they authored — the problem they scoped, the design they chose, and the decisions they made — to **a colleague or team-lead with no prior context on this work**. The bar: from this page alone, that reader richly and correctly understands what the plan does, why it is designed this way, and what they must be aware of when they next modify this code. Keep the explanation clear and accessible — plain language, domain terms glossed on first use, big-picture diagrams (the ELI5 spirit of "explain it simply") — but never dumb it down or thin it out. This is not a simplified overview: the plan's full design content and every triggered diagram (see Bird's-Eye View / `diagram-guide.md`) are carried across at full fidelity — accessible AND rich, rich explanation alongside the diagrams welcome, never a word-count ceiling.
 
 **Requirements:**
-- **Output artifact**: `$OMT_DIR/plans/presentation/{name}.md` — `{name}` is the same stem as the plan markdown (`{name}.md`), so each plan owns its own presentation file and concurrent or successive plans never overwrite a shared file. Create the `presentation/` directory if it does not yet exist.
-- **Content fidelity (faithful, not verbatim)**: Render the plan faithfully — no plan content may be omitted, weakened, or contradicted. Within that bound, prose MAY be rewritten for readability (see Translation Rule) and MAY carry readability callouts (see Readability Enrichment). The rendered markdown is a presentation for the human reader, not a second source of truth.
+- **Authored source (gated)**: `$OMT_DIR/plans/presentation/{name}.md` — `{name}` is the same stem as the plan markdown (`{name}.md`), so each plan owns its own presentation file and concurrent or successive plans never overwrite a shared file. Create the `presentation/` directory if it does not yet exist. This `.md` is the artifact the Stage A freshness gate checks.
+- **Content fidelity (faithful, not verbatim)**: Render the plan faithfully — no plan content may be omitted, weakened, or contradicted. Within that bound, prose MAY be rewritten for readability (see Translation Rule) and MAY carry readability callouts (see Readability Enrichment). The rendered presentation is for the human reader, not a second source of truth.
+  - **Render the chosen Decision, never a reversed one.** A contested D-item records both its chosen **Decision** and the alternatives it rejected — and a plan that reversed a proposal mid-design keeps the superseded form on the page as the named reject ("Invalidated alternative: nest it inside `X` — rejected"; "this reverses an initial X proposal"). The presentation states and cites each decision from its **Decision** field ONLY. Surfacing the rejected/invalidated/reversed alternative — in prose, an ADR restatement, a field placement, or a cited `file:line` — as the chosen design is a contradiction of the plan, the exact defect that makes a reader implement the design the plan threw away. When a decision was reversed, the final form is the only one that may appear as chosen; scan every design claim against the plan's Decision field before rendering.
 - **Production**: author the presentation markdown directly, following the Presentation Section Order below. No template, no format converter, no placeholder-substitution engine — the agent reads the section order and writes the file.
+- **Shareable HTML render**: after authoring the presentation markdown, render it to a single self-contained HTML page via `render.ts` (mermaid fences baked to inline SVG, no runtime JS, no external references) — the shareable deliverable. The `.md` stays the authored, gated source; the `.html` is derived and re-made on every Stage A pass:
+  ```bash
+  bun ${CLAUDE_SKILL_DIR}/scripts/render.ts --in $OMT_DIR/plans/presentation/{name}.md --out $OMT_DIR/plans/presentation/{name}.html
+  ```
 
 ### Presentation Components
 
