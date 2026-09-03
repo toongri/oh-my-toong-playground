@@ -397,7 +397,7 @@ function collectGroundQuotes(text: string): string[] {
 		while (m !== null) {
 			const isGround = re === html || m[1] === "근거";
 			const q = (re === html ? m[1] : m[2] ?? "").trim();
-			if (isGround && q.length > 0) out.push(q);
+			if (isGround) out.push(q);
 			m = re.exec(text);
 		}
 	}
@@ -475,7 +475,10 @@ function checkR22(text: string, sourceCorpus: string | undefined): CheckItem {
 		};
 	}
 	const corpus = normalizeForSource(sourceCorpus);
-	const missing = quotes.filter((q) => !corpus.includes(normalizeForSource(q)));
+	const missing = quotes.filter((q) => {
+		const normalized = normalizeForSource(q);
+		return normalized.length === 0 || !corpus.includes(normalized);
+	});
 	return {
 		id: "R22",
 		title: "R22 근거 소스 대조",

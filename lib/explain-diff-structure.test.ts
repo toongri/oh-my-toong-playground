@@ -2331,6 +2331,20 @@ describe("code 스텝 — R22 근거 소스 대조", () => {
 		expect(item?.detail).toContain(GROUND);
 	});
 
+	test("공백만 있는 HTML 근거 인용은 R22를 통과시키지 않는다", () => {
+		const body = GOOD_GROUP.replace(
+			/<span class="cf-src">근거<\/span> "[^"]*"/,
+			'<span class="cf-src">근거</span> "   "',
+		);
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: "이 코퍼스에는 완전히 무관한 커밋 본문과 diff만 들어 있다",
+		});
+		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(false);
+	});
+
 	test("근거 인용이 소스 코퍼스에 verbatim 존재하면 R22가 통과한다", () => {
 		const r = checkStructure(withBackground(GOOD_GROUP), {
 			signalFiles: ["lib/state-lock.ts"],
