@@ -2287,10 +2287,10 @@ describe("code 스텝 — R22 근거 소스 대조", () => {
 		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(true);
 	});
 
-	test("소스가 하드랩·마크다운 강조로 달라도 정규화 후 통과한다(오탐 방지)", () => {
-		// 커밋 본문은 흔히 하드랩되고 **강조**·`백틱`을 쓴다. 문서 인용은 그것을
-		// 펴서 담는다. 정규화(공백 제거 + 마크다운 마커 제거) 없이는 정당한 인용이
-		// 오탐으로 거부된다.
+	test("소스가 하드랩·짝지은 마크다운 강조로 달라도 정규화 후 통과한다(오탐 방지)", () => {
+		// 커밋 본문은 흔히 하드랩되고 짝이 맞는 **강조**·`백틱`을 쓴다. 문서
+		// 인용은 그것을 펴서 담는다. 정당한 마크다운 마커만 제거해야 이 인용이
+		// 오탐으로 거부되지 않는다.
 		const wrapped = "앞\nfix: 상태 갱신\n**락** `통합`\n뒤";
 		const r = checkStructure(withBackground(GOOD_GROUP), {
 			signalFiles: ["lib/state-lock.ts"],
@@ -2299,6 +2299,28 @@ describe("code 스텝 — R22 근거 소스 대조", () => {
 			sourceCorpus: wrapped,
 		});
 		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(true);
+	});
+
+	test("식별자 내부의 밑줄을 제거한 인용은 R22가 통과시키지 않는다", () => {
+		const body = GOOD_GROUP.replace(GROUND, "userid");
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: "user_id",
+		});
+		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(false);
+	});
+
+	test("표현식 내부의 별표를 제거한 인용은 R22가 통과시키지 않는다", () => {
+		const body = GOOD_GROUP.replace(GROUND, "ab");
+		const r = checkStructure(withBackground(body), {
+			signalFiles: ["lib/state-lock.ts"],
+			step: "code",
+			commitHashes: ["ab12cd3f00"],
+			sourceCorpus: "a*b",
+		});
+		expect(r.items.find((i) => i.id === "R22")?.pass).toBe(false);
 	});
 
 	test("소스 코퍼스가 없으면(git 실패) R22는 fail-open 통과한다", () => {

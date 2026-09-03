@@ -398,13 +398,37 @@ function collectGroundQuotes(text: string): string[] {
 	return out;
 }
 
-/** Whitespace-free, marker-free view for verbatim comparison. Commit bodies are
- *  hard-wrapped and use `**강조**`/`백틱`; a faithful quote unwraps them and drops
- *  the markers. Collapsing both sides to their non-whitespace, non-marker glyphs
- *  lets a faithful respacing pass while a genuine paraphrase — different words —
- *  still fails. */
+/** Whitespace-free view for verbatim comparison. Commit bodies are hard-wrapped
+ *  and use paired inline Markdown formatting; a faithful quote unwraps those
+ *  markers. Only paired code/emphasis/strike delimiters are removed, so the
+ *  punctuation in an identifier or expression remains meaningful. */
 function normalizeForSource(s: string): string {
-	return s.replace(/[`*_~]/g, "").replace(/\s+/g, "");
+	const codeSpans: string[] = [];
+	const maskedCode = s.replace(
+		/(?<!`)(`+)(?!`)([\s\S]*?)(?<!`)\1(?!`)/g,
+		(match: string, _delimiter: string, content: string) => {
+			if (content.trim().length === 0) return match;
+			const token = `\uE000${codeSpans.length}\uE001`;
+			codeSpans.push(content);
+			return token;
+		},
+	);
+
+	const withoutFormatting = maskedCode
+		.replace(
+			/(?<![\p{L}\p{N}_])(\*\*|__|~~)(?!\s)([\s\S]*?)(?<!\s)\1(?![\p{L}\p{N}_])/gu,
+			"$2",
+		)
+		.replace(
+			/(?<![\p{L}\p{N}_])([*_])(?!\s)([\s\S]*?)(?<!\s)\1(?![\p{L}\p{N}_])/gu,
+			"$2",
+		);
+
+	const restoredCode = withoutFormatting.replace(
+		/\uE000(\d+)\uE001/g,
+		(match: string, index: string) => codeSpans[Number(index)] ?? match,
+	);
+	return restoredCode.replace(/\s+/g, "");
 }
 
 // R22 — 근거 소스 대조. R3 checks a 왜 field CARRIES a 근거 badge; R22 checks the
