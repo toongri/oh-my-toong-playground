@@ -72,9 +72,32 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 
 - Claude Code CLI 설치됨
 - Node.js v18+ (HUD 기능용)
+- `npm`/`npx` (Mermaid 렌더러 프로비저닝용)
 - `jq` (훅이 페이로드 파싱에 사용 — 없으면 가드가 차단하지 않음)
 - `sqlite3` (Codex detector가 `state_5.sqlite` 상태 데이터베이스를 조회하는 데 사용 — 없으면 detector가 0건을 세고 stderr에 진단 1건을 출력)
 - macOS 또는 Linux
+
+`mmdc`와 Puppeteer의 `chrome-headless-shell`은 저장소에 포함하지 않으며,
+발표자료를 직접 렌더할 때 필요한 외부 도구입니다. `make sync`는 root
+`sync.yaml`의 provision을 선언 순서대로 각 배포 대상에 적용합니다. `mmdc`가
+없으면 `npm i -g @mermaid-js/mermaid-cli`를 실행하고, 이어서 작은 flowchart를
+실제 `mmdc`로 임시 SVG에 렌더해 headless shell을 확인합니다. 이 smoke check가
+실패하면 `npx --yes puppeteer browsers install chrome-headless-shell`을
+실행합니다.
+
+이 provision은 대상별·비치명적이며 `make sync-dry`에서는 실행하지 않고 의도만
+미리 보여줍니다. 렌더러 자체는 npm 패키지를 설치하지 않습니다. `make sync`를
+거치지 않고 발표자료 렌더러를 직접 실행하거나 provision이 실패한 경우에는
+다음 명령을 수동으로 실행하세요.
+
+```bash
+npm i -g @mermaid-js/mermaid-cli
+npx --yes puppeteer browsers install chrome-headless-shell
+```
+
+Mermaid render-gate 훅은 `mmdc`가 없을 때 일반 Markdown 작성을 막지 않도록
+fail-open하지만, mandatory presentation render는 `mmdc`와 headless shell이
+모두 준비되어야 완료됩니다.
 
 ### 설정
 

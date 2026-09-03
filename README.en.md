@@ -72,9 +72,32 @@ The details of the library's skills (46) and agents (12) live under `docs/`.
 
 - Claude Code CLI installed
 - Node.js v18+ (for HUD functionality)
+- `npm`/`npx` (for Mermaid renderer provisioning)
 - `jq` (hooks parse payloads with it — guards do not block when it is unavailable)
 - `sqlite3` (the Codex detector queries the `state_5.sqlite` state database with it — when unavailable, the detector counts zero and emits one stderr diagnostic)
 - macOS or Linux
+
+`mmdc` and Puppeteer's `chrome-headless-shell` are external tools, not vendored in
+the repository, and are needed when rendering presentations directly. `make sync`
+applies the root `sync.yaml` provision items to each deploy target in declaration
+order. If `mmdc` is missing, it runs `npm i -g @mermaid-js/mermaid-cli`, then renders
+a tiny flowchart to a temporary SVG with the real `mmdc` command to check the
+headless shell. If that smoke check fails, it runs
+`npx --yes puppeteer browsers install chrome-headless-shell`.
+
+Provisioning is per-target and non-fatal, and `make sync-dry` only previews the
+intent without executing it. The renderer itself never installs npm packages. If a
+presentation renderer is run directly without `make sync`, or provisioning failed,
+run these commands manually:
+
+```bash
+npm i -g @mermaid-js/mermaid-cli
+npx --yes puppeteer browsers install chrome-headless-shell
+```
+
+The Mermaid render-gate hook fails open when `mmdc` is absent so ordinary Markdown
+writes are not blocked, but mandatory presentation renders require both `mmdc` and
+the headless shell to be ready.
 
 ### Setup
 
