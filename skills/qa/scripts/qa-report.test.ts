@@ -770,6 +770,13 @@ describe("qa-report presentation layer", () => {
 		expect(html).toContain("flag-ON일 때 재고 화면을 v2로 교체하는 변경");
 	});
 
+	test("공백만 있는 기능 개요 서사는 누락 gap으로 렌더한다", () => {
+		const html = renderQaReport(baseView(), { presentation: { overview: " \t\n " } }, fakeReader, fakeMermaid)!;
+		const overview = html.slice(html.indexOf("기능 개요"), html.indexOf("Acceptance Criteria"));
+		expect(overview).toContain('class="gap"');
+		expect(overview).toContain("기능 개요 서사가 없습니다");
+	});
+
 	test("renders a visible gap marker for each required slot when no presentation is supplied", () => {
 		const view = baseView({ acceptance_criteria: ["flag ON이면 v2 재고 화면"] });
 		const html = renderQaReport(view, {}, fakeReader, fakeMermaid)!;
@@ -811,6 +818,14 @@ describe("qa-report presentation layer", () => {
 		expect(affected).toContain('class="gap"'); // actor-2 has no prose -> gap
 	});
 
+	test("공백만 있는 기록된 액터의 사용·영향 서사는 누락 gap으로 렌더한다", () => {
+		const narrative: QaReportNarrative = { presentation: { affectedUsers: { "actor-1": " \t\n " } } };
+		const html = renderQaReport(baseView(), narrative, fakeReader, fakeMermaid)!;
+		const affected = html.slice(html.indexOf("액터"), html.indexOf("유저 시나리오 · 근거"));
+		expect(affected).toContain('class="gap"');
+		expect(affected).toContain("이 유저의 사용·영향 서사가 없습니다");
+	});
+
 	test("anchors each story's flow narrative inline in the reader scenario section, beside its evidence", () => {
 		const html = renderQaReport(baseView(), fullPresentation(), fakeReader, fakeMermaid)!;
 		const scenarios = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
@@ -822,6 +837,14 @@ describe("qa-report presentation layer", () => {
 		expect(scenarios).toContain("확인한 관점:"); // plain coverage summary
 	});
 
+	test("공백만 있는 시나리오 흐름 서사는 누락 gap으로 렌더한다", () => {
+		const narrative: QaReportNarrative = { presentation: { scenarioFlows: { "story-1": " \t\n " } } };
+		const html = renderQaReport(baseView(), narrative, fakeReader, fakeMermaid)!;
+		const scenarios = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
+		expect(scenarios).toContain('class="gap"');
+		expect(scenarios).toContain("이 액터가 어떤 시나리오들을 검증했는지에 대한 개요 서사가 없습니다");
+	});
+
 	test("maps each recorded acceptance criterion to a satisfaction badge and evidence prose", () => {
 		const view = baseView({ acceptance_criteria: ["flag ON이면 v2 재고 화면"] });
 		const html = renderQaReport(view, fullPresentation(), fakeReader, fakeMermaid)!;
@@ -829,6 +852,25 @@ describe("qa-report presentation layer", () => {
 		expect(mapping).toContain("flag ON이면 v2 재고 화면");
 		expect(mapping).toContain("story-1 cls1 통과 — before/after 캡처");
 		expect(mapping).toContain("satisfied-yes");
+	});
+
+	test("공백만 있는 요구사항 충족 근거는 누락 gap으로 렌더한다", () => {
+		const view = baseView({ acceptance_criteria: ["flag ON이면 v2 재고 화면"] });
+		const narrative: QaReportNarrative = {
+			presentation: {
+				requirementMapping: {
+					"0": {
+						satisfied: "yes",
+						cellRefs: [{ story: "story-1", cls: 1 }],
+						evidence: " \t\n ",
+					},
+				},
+			},
+		};
+		const html = renderQaReport(view, narrative, fakeReader, fakeMermaid)!;
+		const mapping = html.slice(html.indexOf("Acceptance Criteria"), html.indexOf("큰 그림"));
+		expect(mapping).toContain('class="gap"');
+		expect(mapping).toContain("충족 근거 서사가 없습니다");
 	});
 
 	test("accepts yes, no, partial, and unverified mappings when their current-cycle refs match the claimed status", () => {

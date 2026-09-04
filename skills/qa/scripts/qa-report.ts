@@ -309,7 +309,7 @@ function gap(what: string): string {
 
 /** A block of author prose, escaped; or a gap marker when it is absent. */
 function proseOrGap(prose: string | undefined, whatMissing: string): string {
-	return prose ? `<p>${escapeHtml(prose)}</p>` : gap(whatMissing);
+	return prose?.trim() ? `<p>${escapeHtml(prose)}</p>` : gap(whatMissing);
 }
 
 function renderBigPicture(presentation: QaReportPresentation | undefined, renderMermaid: MermaidRenderer): string {
