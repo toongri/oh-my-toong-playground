@@ -952,9 +952,13 @@ describe("final-check: each scenario's observation names its medium (screen vs A
 		expect(checklist).toContain("names the medium it was observed through");
 		expect(checklist).toContain("`unverified` at the screen");
 		expect(checklist).toContain("API-only");
-		// the other blocking gates are on the list too
+		// the other blocking gates are on the list too — the QA gate is the
+		// adversarial E2E at the boundary, NOT a build/test/lint pass
 		expect(checklist).toContain("`H`-priority");
-		expect(checklist).toContain("BASELINE");
+		expect(checklist).toContain("ADVERSARIAL E2E");
+		// build/test/lint is an upstream phase gate, not a verdict-time item —
+		// keep the QA checklist centered on user-boundary verification
+		expect(checklist).not.toContain("build / test / lint");
 	});
 });
 

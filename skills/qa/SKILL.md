@@ -448,9 +448,9 @@ REPORT:     STATE renders self-contained HTML (qa-report.ts) after set-verdict, 
 
 ## Final Checklist
 
-**Run this list explicitly right before emitting the verdict — read each line and tick its box against the actual roster.** It sits last on purpose: it is the final gate every cycle passes through. **Any unchecked box blocks APPROVE.** It restates the blocking gates above as one scannable list; where a box and an earlier section disagree, the stricter reading wins.
+**Run this list explicitly right before emitting the verdict — read each line and tick its box against the actual roster.** **Any unchecked box blocks APPROVE.** It restates the blocking gates above as one scannable list; where a box and an earlier section disagree, the stricter reading wins.
 
-- [ ] **BASELINE green** (build / test / lint) **and** the full ADVERSARIAL E2E — provided scenarios + the 6-axis matrix — passed.
+- [ ] **The full ADVERSARIAL E2E passed** — every provided scenario plus the 6-axis matrix ran and passed at the user boundary.
 - [ ] **Every actor is in the Actor Roster**, and each scenario was driven from **that actor's boundary** (`driven-at` confirms it; calling the changed unit directly is a unit check, not a scenario run).
 - [ ] **Each scenario's observation names the medium it was observed through** — a screen/device capture, or an API/CLI response. A human actor's result read only through an API/CLI was not seen at that actor's screen boundary → that scenario is `unverified` at the screen (not PASS). Exception: an **API-only** change with no screen built yet — declare the actor an API/system client; never dress an API reading as a human-screen observation.
 - [ ] **Every verified scenario carries a reader-visible record** — an authored observation OR a screenshot. Raw curl / HTTP / JSON / test-runner logs are never the reader's evidence (they live in the audit section).
