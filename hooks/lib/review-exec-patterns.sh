@@ -3,10 +3,98 @@
 # their platform payload extraction, then use these functions for identity,
 # review-context, and command judgment.
 
-# Spawn-time role marker on the finder-worker process — the sole arming
-# signal for this guard. It is set to "member" in the worker's environment
-# at spawn, independent of session identity, and gone once the worker exits,
-# so a session that merely conducted a review is never gated after it ends.
+review_exec_session_id() {
+    local payload_sid="$1" candidate="" value=""
+    for value in "${OMT_SESSION_ID:-}" "${CODEX_THREAD_ID:-}" "$payload_sid"; do
+        [ -n "$value" ] || continue
+        case "$value" in
+            *[!A-Za-z0-9_-]*|?*)
+                if ! printf '%s' "$value" | grep -qE '^[A-Za-z0-9_-]{1,200}$'; then
+                    echo "review-exec-guard: unsafe session identity; allowing command" >&2
+                    return 1
+                fi
+                ;;
+        esac
+        if [ -n "$candidate" ] && [ "$candidate" != "$value" ]; then
+            echo "review-exec-guard: session identities disagree; allowing command" >&2
+            return 1
+        fi
+        candidate="$value"
+    done
+    [ -n "$candidate" ] || return 1
+    printf '%s\n' "$candidate"
+}
+
+# Resolves the deployed location of the code-review job CLI relative to this
+# shared lib file's own path, since the lib deploys to a different directory
+# per platform: hooks_dir is this file's parent's parent (the hooks root),
+# so this works whether hooks_dir is the source tree's hooks/, Claude's
+# .claude/hooks/, or Codex's .codex/hooks/.
+review_exec_job_cli() {
+    local hooks_dir candidate
+    hooks_dir="$(dirname "$(dirname "${BASH_SOURCE[0]}")")"
+    for candidate in \
+        "$hooks_dir/../skills/code-review/scripts/job.ts" \
+        "$hooks_dir/../../.agents/skills/code-review/scripts/job.ts"; do
+        if [ -f "$candidate" ]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Judges whether a session identified as a matching chunk-review job's
+# conductor should be gated: "active" (a matching job has an active member,
+# deny), "allow" (no matching job, or all matching jobs are inactive), or
+# "indeterminate" (activity could not be established, fail closed). Echoes
+# exactly one of those three tokens.
+review_exec_should_gate_conductor() {
+    local omt_dir="$1" session_id="$2"
+    local job_file job_dir conductor
+    local -a matched_jobs
+    matched_jobs=()
+
+    for job_file in "$omt_dir"/jobs/chunk-review-*/job.json; do
+        [ -f "$job_file" ] && [ ! -L "$job_file" ] || continue
+        job_dir=$(dirname "$job_file")
+        conductor=$(jq -er '.conductorSessionId | strings' "$job_file" 2>/dev/null) || continue
+        [ "$conductor" = "$session_id" ] || continue
+        matched_jobs[${#matched_jobs[@]}]="$job_dir"
+    done
+
+    if [ "${#matched_jobs[@]}" -eq 0 ]; then
+        echo "allow"
+        return 0
+    fi
+
+    local cli
+    cli=$(review_exec_job_cli) || { echo "indeterminate"; return 0; }
+
+    local out rc=0
+    out=$(bun "$cli" active-members "${matched_jobs[@]}" 2>/dev/null) || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo "indeterminate"
+        return 0
+    fi
+
+    local activity
+    activity=$(printf '%s' "$out" | jq -er '.activity' 2>/dev/null) || { echo "indeterminate"; return 0; }
+    [ -n "$activity" ] || { echo "indeterminate"; return 0; }
+
+    case "$activity" in
+        inactive) echo "allow" ;;
+        active) echo "active" ;;
+        *) echo "indeterminate" ;;
+    esac
+}
+
+# Spawn-time role marker on the worker process, deliberately independent of
+# session identity: a Claude conductor spawns the default Codex finders with its
+# own OMT_SESSION_ID inherited through the environment while the nested Codex
+# session supplies its own CODEX_THREAD_ID, so those two identities disagree and
+# review_exec_session_id refuses to resolve. Callers must consult this BEFORE
+# reconciling identities, or the guard falls open on that very path.
 review_exec_is_member() {
     [ "${OMT_REVIEW_ROLE:-}" = "member" ]
 }

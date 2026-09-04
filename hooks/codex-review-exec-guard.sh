@@ -20,15 +20,47 @@ case "$tool_name" in
 esac
 
 command=$(printf '%s' "$input" | jq -er '.tool_input.cmd // .tool_input.command // empty' 2>/dev/null) || exit 0
+payload_sid=$(printf '%s' "$input" | jq -er '.session_id // empty' 2>/dev/null) || exit 0
 
-review_exec_is_member || exit 0
 review_exec_command_denied "$command" || exit 0
 
-jq -nc --arg reason 'Review is static-only: tests, builds, installs, and linters must not run here. Use static inspection (diffs, searches, and source reading) instead.' '
-    {
-        hookSpecificOutput: {
-            hookEventName: "PreToolUse",
-            permissionDecision: "deny",
-            permissionDecisionReason: $reason
-        }
-    }'
+REASON_ACTIVE='Review is static-only: tests, builds, installs, and linters must not run here. Use static inspection (diffs, searches, and source reading) instead.'
+REASON_INDETERMINATE='Review job activity could not be determined; blocking conservatively. Review is static-only — use static inspection (diffs, searches, and source reading) instead.'
+
+emit_deny() {
+    jq -nc --arg reason "$1" '
+        {
+            hookSpecificOutput: {
+                hookEventName: "PreToolUse",
+                permissionDecision: "deny",
+                permissionDecisionReason: $reason
+            }
+        }'
+}
+
+if review_exec_is_member; then
+    emit_deny "$REASON_ACTIVE"
+    exit 0
+fi
+
+session_id=$(review_exec_session_id "$payload_sid") || exit 0
+omt_dir="${OMT_DIR:-}"
+if [ -z "$omt_dir" ]; then
+    cwd=$(printf '%s' "$input" | jq -er '.cwd // empty' 2>/dev/null) || exit 0
+    [ -n "$cwd" ] || exit 0
+    omt_dir=$(source "$SCRIPT_DIR/lib/omt-dir.sh" && unset OMT_DIR && resolve_omt_dir "$cwd") || exit 0
+fi
+[ -n "$omt_dir" ] || exit 0
+
+gate=$(review_exec_should_gate_conductor "$omt_dir" "$session_id")
+case "$gate" in
+    active)
+        emit_deny "$REASON_ACTIVE"
+        ;;
+    indeterminate)
+        emit_deny "$REASON_INDETERMINATE"
+        ;;
+    *)
+        exit 0
+        ;;
+esac
