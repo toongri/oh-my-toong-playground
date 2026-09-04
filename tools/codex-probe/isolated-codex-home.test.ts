@@ -1,7 +1,7 @@
 /**
  * Hermetic tests for buildIsolatedCodexHome — no codex spawn. Uses a fixture
  * `auth.json` (never real credentials) so this test never touches this
- * machine's real `~/.codex/auth.json`.
+ * machine's real `$CODEX_HOME/auth.json` (default `~/.codex/auth.json`).
  */
 
 import { describe, expect, it, beforeEach, afterEach } from "bun:test";

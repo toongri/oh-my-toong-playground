@@ -690,11 +690,20 @@ export async function resumeOneTurn(
 // reapOwnProcessGroup — worker self-reap on its own exit path
 // ---------------------------------------------------------------------------
 
+export type ReapOwnProcessGroupDeps = {
+	/** @default process.kill — 주입 시 실제 시그널 없이 호출만 기록해 빠른 유닛 테스트가 가능하다. */
+	kill?: (pid: number, signal: NodeJS.Signals) => void;
+	/** @default 5000 — 그룹 SIGTERM 후 SIGKILL 에스컬레이션까지의 유예(ms). */
+	graceMs?: number;
+	/** @default process.on("SIGTERM", handler) — self-survive 핸들러 설치 지점. */
+	installSelfSigtermHandler?: (handler: () => void) => void;
+};
+
 /**
- * Reap this worker's own process group: SIGTERM the whole group, wait 5s,
- * then SIGKILL the whole group. A detached-spawned worker is the leader of
- * its own process group, and codex exec plus its descendant MCP processes
- * hang off it under that same PGID — this reaps all of them.
+ * Reap this worker's own process group: SIGTERM the whole group, wait 5s
+ * (default graceMs), then SIGKILL the whole group. A detached-spawned worker
+ * is the leader of its own process group, and codex exec plus its descendant
+ * MCP processes hang off it under that same PGID — this reaps all of them.
  *
  * Must be called from inside the worker's own normal exit path (its `.then`
  * after the turn completes). Scope limit, not optional: this layer only runs
@@ -710,15 +719,27 @@ export async function resumeOneTurn(
  * — expected, since this only runs on a path where the worker was about to
  * exit anyway.
  */
-export async function reapOwnProcessGroup(): Promise<void> {
+export async function reapOwnProcessGroup(deps: ReapOwnProcessGroupDeps = {}): Promise<void> {
+	const kill =
+		deps.kill ??
+		((pid, signal) => {
+			process.kill(pid, signal);
+		});
+	const graceMs = deps.graceMs ?? 5000;
+	const installSelfSigtermHandler =
+		deps.installSelfSigtermHandler ??
+		((handler) => {
+			process.on("SIGTERM", handler);
+		});
+
 	// Must be installed BEFORE the SIGTERM below, not after — otherwise the
 	// worker kills itself with the very signal it's about to send its group.
-	process.on("SIGTERM", () => {
+	installSelfSigtermHandler(() => {
 		/* ignore: this worker is part of the group it's about to signal */
 	});
 
 	try {
-		process.kill(-process.pid, "SIGTERM");
+		kill(-process.pid, "SIGTERM");
 	} catch {
 		/* group already empty (ESRCH) — nothing to reap */
 	}
@@ -727,11 +748,11 @@ export async function reapOwnProcessGroup(): Promise<void> {
 	// ref'd (no unref()) — an unref'd timer lets the process exit before it
 	// fires, so the SIGKILL escalation below never runs.
 	await new Promise<void>((resolve) => {
-		setTimeout(resolve, 5000);
+		setTimeout(resolve, graceMs);
 	});
 
 	try {
-		process.kill(-process.pid, "SIGKILL");
+		kill(-process.pid, "SIGKILL");
 	} catch {
 		/* group already empty (ESRCH) — nothing to reap */
 	}

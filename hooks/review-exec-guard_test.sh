@@ -34,10 +34,58 @@ cleanup_sandbox() {
     rm -rf "$SBX"
 }
 
-payload() {
+# Fake `bun` stub + fake job.ts deployment tree, so the active-gating tests
+# never touch the real job.ts/bun. install_fake_bun writes a `bun` script
+# ahead of PATH that intercepts `active-members` and answers with a fixed
+# activity, logging every invocation to $SBX/bun-calls.log so tests can
+# assert it was (or wasn't) called. install_fake_job_cli lays out a fake
+# job.ts at the given deployed-tree location so review_exec_job_cli resolves
+# it; when omitted, path resolution deliberately fails (job.ts missing).
+install_fake_bun() {
+    local activity="$1" exit_code="${2:-0}"
+    mkdir -p "$SBX/bin"
+    cat > "$SBX/bin/bun" <<EOF
+#!/bin/bash
+echo "\$*" >> "$SBX/bun-calls.log"
+if [ "$exit_code" -ne 0 ]; then
+    echo "fake bun: forced failure" >&2
+    exit $exit_code
+fi
+echo '{"activity":"$activity","jobs":[]}'
+EOF
+    chmod +x "$SBX/bin/bun"
+}
+
+bun_was_called() {
+    [ -f "$SBX/bun-calls.log" ]
+}
+
+# Places job.json for `conductor` under a fresh chunk-review job. The real
+# job.ts already exists in this repo's own skills/code-review/scripts/, so
+# review_exec_job_cli resolves it via candidate 1 without any faking here —
+# only the fake `bun` on PATH determines the activity answer.
+new_matching_job() {
+    mkdir -p "$JOBS/chunk-review-one"
+    printf '%s\n' '{"conductorSessionId":"conductor"}' > "$JOBS/chunk-review-one/job.json"
+}
+
+run_hook_with_path() {
     local command="$1" sid="${2:-reviewer}"
-    jq -n --arg command "$command" --arg sid "$sid" \
-        '{tool_name:"Bash",tool_input:{command:$command},session_id:$sid,cwd:"/safe/project"}'
+    payload "$command" "$sid" | env -u CODEX_THREAD_ID OMT_DIR="$SBX/omt" OMT_SESSION_ID="$sid" PATH="$SBX/bin:$PATH" bash "$HOOK"
+}
+
+assert_indeterminate_reason() {
+    local out="$1" label="$2"
+    if ! printf '%s' "$out" | grep -qi 'could not be determined'; then
+        echo "ASSERTION FAILED $label: expected indeterminate reason, got '$out'"
+        return 1
+    fi
+}
+
+payload() {
+    local command="$1" sid="${2:-reviewer}" cwd="${3:-/safe/project}"
+    jq -n --arg command "$command" --arg sid "$sid" --arg cwd "$cwd" \
+        '{tool_name:"Bash",tool_input:{command:$command},session_id:$sid,cwd:$cwd}'
 }
 
 run_hook() {
@@ -121,49 +169,274 @@ test_interpreter_module_and_python_runner_targets_denied() {
     return "$result"
 }
 
-test_matching_conductor_denies_even_done_status() {
+test_member_denies_without_job_scan() {
     new_sandbox
-    mkdir -p "$JOBS/chunk-review-one"
-    printf '%s\n' '{"conductorSessionId":"conductor","status":"done"}' > "$JOBS/chunk-review-one/job.json"
-    printf '%s\n' '{"status":"done"}' > "$JOBS/chunk-review-one/status.json"
+    new_matching_job
+    install_fake_bun active
     local out result=0
-    out=$(run_hook 'pnpm test' conductor)
-    assert_denied "$out" conductor-done || result=1
+    out=$(payload 'pnpm test' conductor | env -u OMT_SESSION_ID -u CODEX_THREAD_ID OMT_DIR="$SBX/omt" OMT_REVIEW_ROLE=member PATH="$SBX/bin:$PATH" bash "$HOOK")
+    assert_denied "$out" member-skips-job-scan || result=1
+    if bun_was_called; then
+        echo "ASSERTION FAILED member-skips-job-scan: fake bun should not be called for a member"
+        result=1
+    fi
     cleanup_sandbox
     return "$result"
 }
 
-test_other_session_and_removed_job_allow() {
+test_matching_conductor_active_denies() {
     new_sandbox
-    mkdir -p "$JOBS/chunk-review-one"
-    printf '%s\n' '{"conductorSessionId":"conductor"}' > "$JOBS/chunk-review-one/job.json"
-    local out rc=0 result=0
-    out=$(run_hook 'pnpm test' another) || rc=$?
-    assert_allowed "$out" "$rc" other-session || result=1
-    rm -rf "$JOBS/chunk-review-one"
-    rc=0
-    out=$(run_hook 'pnpm test' conductor) || rc=$?
-    assert_allowed "$out" "$rc" removed-job || result=1
+    new_matching_job
+    install_fake_bun active
+    local out result=0
+    out=$(run_hook_with_path 'pnpm test' conductor)
+    assert_denied "$out" conductor-active || result=1
+    if printf '%s' "$out" | grep -qi 'could not be determined'; then
+        echo "ASSERTION FAILED conductor-active: expected the active reason, got indeterminate wording"
+        result=1
+    fi
+    bun_was_called || { echo "ASSERTION FAILED conductor-active: expected fake bun to be called"; result=1; }
     cleanup_sandbox
     return "$result"
 }
 
-test_no_marker_malformed_unsafe_mismatch_and_no_jq_fail_open() {
+# 5050fa3f fixed a stale-job bug: a conductor must not stay gated once every
+# member of its matching job has finished. This is the regression that fix
+# guards against — keep it passing.
+test_matching_conductor_all_members_done_allows() {
+    new_sandbox
+    new_matching_job
+    install_fake_bun inactive
+    local out rc=0 result=0
+    out=$(run_hook_with_path 'pnpm test' conductor) || rc=$?
+    assert_allowed "$out" "$rc" conductor-inactive-allows || result=1
+    bun_was_called || { echo "ASSERTION FAILED conductor-inactive-allows: expected fake bun to be called"; result=1; }
+    cleanup_sandbox
+    return "$result"
+}
+
+test_matching_conductor_malformed_status_denies_indeterminate() {
+    new_sandbox
+    new_matching_job
+    install_fake_bun indeterminate
+    local out result=0
+    out=$(run_hook_with_path 'pnpm test' conductor)
+    assert_denied "$out" conductor-malformed || result=1
+    assert_indeterminate_reason "$out" conductor-malformed || result=1
+    cleanup_sandbox
+    return "$result"
+}
+
+test_matching_conductor_bun_failure_denies_indeterminate() {
+    new_sandbox
+    new_matching_job
+    install_fake_bun active 1
+    local out result=0
+    out=$(run_hook_with_path 'pnpm test' conductor)
+    assert_denied "$out" conductor-bun-failure || result=1
+    assert_indeterminate_reason "$out" conductor-bun-failure || result=1
+    cleanup_sandbox
+    return "$result"
+}
+
+test_active_and_indeterminate_reasons_differ() {
+    local active_out indeterminate_out result=0
+
+    new_sandbox
+    new_matching_job
+    install_fake_bun active
+    active_out=$(run_hook_with_path 'pnpm test' conductor)
+    cleanup_sandbox
+
+    new_sandbox
+    new_matching_job
+    install_fake_bun indeterminate
+    indeterminate_out=$(run_hook_with_path 'pnpm test' conductor)
+    cleanup_sandbox
+
+    if [ "$active_out" = "$indeterminate_out" ]; then
+        echo "ASSERTION FAILED reason-mismatch: active and indeterminate denials must differ"
+        result=1
+    fi
+    return "$result"
+}
+
+test_matching_conductor_missing_job_cli_denies_indeterminate_without_bun() {
+    local tmp deploy_hooks out result=0
+    tmp=$(mktemp -d)
+    deploy_hooks="$tmp/.claude/hooks"
+    mkdir -p "$deploy_hooks/lib" "$tmp/.claude/omt/jobs/chunk-review-one" "$tmp/bin"
+    cp "$SCRIPT_DIR/review-exec-guard.sh" "$deploy_hooks/review-exec-guard.sh"
+    cp "$SCRIPT_DIR/lib/review-exec-patterns.sh" "$deploy_hooks/lib/review-exec-patterns.sh"
+    cp "$SCRIPT_DIR/lib/omt-dir.sh" "$deploy_hooks/lib/omt-dir.sh"
+    printf '%s\n' '{"conductorSessionId":"conductor"}' > "$tmp/.claude/omt/jobs/chunk-review-one/job.json"
+    # Deliberately no skills/code-review/scripts/job.ts anywhere reachable from
+    # this deploy tree, so both candidate paths miss and resolution fails.
+    cat > "$tmp/bin/bun" <<EOF
+#!/bin/bash
+echo "\$*" >> "$tmp/bun-calls.log"
+echo '{"activity":"active","jobs":[]}'
+EOF
+    chmod +x "$tmp/bin/bun"
+
+    out=$(payload 'pnpm test' conductor | env -u CODEX_THREAD_ID OMT_DIR="$tmp/.claude/omt" OMT_SESSION_ID=conductor PATH="$tmp/bin:$PATH" bash "$deploy_hooks/review-exec-guard.sh")
+    assert_denied "$out" job-cli-missing || result=1
+    assert_indeterminate_reason "$out" job-cli-missing || result=1
+    if [ -f "$tmp/bun-calls.log" ]; then
+        echo "ASSERTION FAILED job-cli-missing: fake bun should not be called when job.ts cannot be resolved"
+        result=1
+    fi
+    rm -rf "$tmp"
+    return "$result"
+}
+
+# Path resolution: a Claude deploy puts this shared lib at .claude/hooks/lib/,
+# so candidate 1 (hooks_dir/../skills/code-review/scripts/job.ts) must resolve
+# to .claude/skills/code-review/scripts/job.ts.
+test_path_resolution_claude_deploy_finds_candidate_one() {
+    local tmp deploy_hooks out result=0
+    tmp=$(mktemp -d)
+    deploy_hooks="$tmp/.claude/hooks"
+    mkdir -p "$deploy_hooks/lib" "$tmp/.claude/skills/code-review/scripts" "$tmp/.claude/omt/jobs/chunk-review-one" "$tmp/bin"
+    cp "$SCRIPT_DIR/review-exec-guard.sh" "$deploy_hooks/review-exec-guard.sh"
+    cp "$SCRIPT_DIR/lib/review-exec-patterns.sh" "$deploy_hooks/lib/review-exec-patterns.sh"
+    cp "$SCRIPT_DIR/lib/omt-dir.sh" "$deploy_hooks/lib/omt-dir.sh"
+    touch "$tmp/.claude/skills/code-review/scripts/job.ts"
+    printf '%s\n' '{"conductorSessionId":"conductor"}' > "$tmp/.claude/omt/jobs/chunk-review-one/job.json"
+    cat > "$tmp/bin/bun" <<EOF
+#!/bin/bash
+echo "\$*" >> "$tmp/bun-calls.log"
+echo '{"activity":"active","jobs":[]}'
+EOF
+    chmod +x "$tmp/bin/bun"
+
+    out=$(payload 'pnpm test' conductor | env -u CODEX_THREAD_ID OMT_DIR="$tmp/.claude/omt" OMT_SESSION_ID=conductor PATH="$tmp/bin:$PATH" bash "$deploy_hooks/review-exec-guard.sh")
+    assert_denied "$out" path-candidate-one || result=1
+    if [ ! -f "$tmp/bun-calls.log" ]; then
+        echo "ASSERTION FAILED path-candidate-one: expected fake bun to be called"
+        result=1
+    elif ! grep -q "code-review/scripts/job.ts" "$tmp/bun-calls.log"; then
+        echo "ASSERTION FAILED path-candidate-one: bun was not invoked with the candidate-1 job.ts path"
+        result=1
+    fi
+    rm -rf "$tmp"
+    return "$result"
+}
+
+test_real_bun_preload_in_reviewed_cwd_does_not_execute() {
+    local tmp reviewed_cwd deploy_hooks marker control_marker out result=0
+    tmp=$(mktemp -d)
+    reviewed_cwd="$tmp/reviewed"
+    deploy_hooks="$tmp/.claude/hooks"
+    marker="$reviewed_cwd/PWNED-PRELOAD-RAN"
+    control_marker="$reviewed_cwd/CONTROL-PRELOAD-RAN"
+    mkdir -p "$reviewed_cwd" "$deploy_hooks/lib" \
+        "$tmp/.claude/skills/code-review/scripts" \
+        "$tmp/.claude/omt/jobs/chunk-review-one"
+    cp "$SCRIPT_DIR/review-exec-guard.sh" "$deploy_hooks/review-exec-guard.sh"
+    cp "$SCRIPT_DIR/lib/review-exec-patterns.sh" "$deploy_hooks/lib/review-exec-patterns.sh"
+    cp "$SCRIPT_DIR/lib/omt-dir.sh" "$deploy_hooks/lib/omt-dir.sh"
+    printf '%s\n' 'process.stdout.write(JSON.stringify({activity:"active",jobs:[]}));' \
+        > "$tmp/.claude/skills/code-review/scripts/job.ts"
+    printf '%s\n' '{"conductorSessionId":"conductor"}' \
+        > "$tmp/.claude/omt/jobs/chunk-review-one/job.json"
+    printf '%s\n' 'process.exit(0);' > "$reviewed_cwd/noop.ts"
+    printf '%s\n' 'import { writeFileSync } from "fs"; writeFileSync(process.env.PRELOAD_MARKER, "control");' \
+        > "$reviewed_cwd/control-pwn.ts"
+    printf 'preload = ["%s"]\n' "$reviewed_cwd/control-pwn.ts" > "$reviewed_cwd/bunfig.toml"
+
+    (cd "$reviewed_cwd" && PRELOAD_MARKER="$control_marker" bun "$reviewed_cwd/noop.ts") >/dev/null 2>&1 || true
+    if [ ! -f "$control_marker" ]; then
+        echo "ASSERTION FAILED real-bun-preload-claude: positive control never fired"
+        rm -rf "$tmp"
+        return 1
+    fi
+
+    printf '%s\n' 'import { writeFileSync } from "fs"; writeFileSync(process.env.PRELOAD_MARKER, "pwned");' \
+        > "$reviewed_cwd/pwn.ts"
+    printf 'preload = ["%s"]\n' "$reviewed_cwd/pwn.ts" > "$reviewed_cwd/bunfig.toml"
+    out=$(cd "$reviewed_cwd" && \
+        payload 'pnpm test' conductor "$reviewed_cwd" | \
+        env -u CODEX_THREAD_ID -u OMT_REVIEW_ROLE OMT_DIR="$tmp/.claude/omt" \
+            OMT_SESSION_ID=conductor PRELOAD_MARKER="$marker" PATH="$PATH" \
+            bash "$deploy_hooks/review-exec-guard.sh")
+    assert_denied "$out" real-bun-preload-claude || result=1
+    if printf '%s' "$out" | grep -qi 'could not be determined'; then
+        echo "ASSERTION FAILED real-bun-preload-claude: expected active denial, got indeterminate wording"
+        result=1
+    fi
+    if [ -f "$marker" ]; then
+        echo "ASSERTION FAILED real-bun-preload-claude: reviewed cwd preload ran"
+        result=1
+    fi
+    rm -rf "$tmp"
+    return "$result"
+}
+
+test_other_session_job_allows() {
+    new_sandbox
+    new_matching_job
+    install_fake_bun active
+    local out rc=0 result=0
+    out=$(run_hook_with_path 'pnpm test' another) || rc=$?
+    assert_allowed "$out" "$rc" other-session-allows || result=1
+    if bun_was_called; then
+        echo "ASSERTION FAILED other-session-allows: fake bun should not be called when no job matches this session"
+        result=1
+    fi
+    cleanup_sandbox
+    return "$result"
+}
+
+test_no_matching_job_allows() {
+    new_sandbox
+    install_fake_bun active
+    local out rc=0 result=0
+    out=$(run_hook_with_path 'pnpm test' conductor) || rc=$?
+    assert_allowed "$out" "$rc" no-matching-job-allows || result=1
+    if bun_was_called; then
+        echo "ASSERTION FAILED no-matching-job-allows: fake bun should not be called when there is no matching job"
+        result=1
+    fi
+    cleanup_sandbox
+    return "$result"
+}
+
+test_non_member_unsafe_session_id_allows() {
+    new_sandbox
+    new_matching_job
+    install_fake_bun active
+    local out rc=0 result=0
+    out=$(payload 'pnpm test' 'unsafe/session' | env -u CODEX_THREAD_ID OMT_DIR="$SBX/omt" OMT_SESSION_ID='unsafe/session' PATH="$SBX/bin:$PATH" bash "$HOOK") || rc=$?
+    assert_allowed "$out" "$rc" unsafe-session-id-allows || result=1
+    if bun_was_called; then
+        echo "ASSERTION FAILED unsafe-session-id-allows: fake bun should not be called when identity is unsafe"
+        result=1
+    fi
+    cleanup_sandbox
+    return "$result"
+}
+
+test_harmless_command_with_active_job_allows_without_bun_call() {
+    new_sandbox
+    new_matching_job
+    install_fake_bun active
+    local out rc=0 result=0
+    out=$(run_hook_with_path 'git diff' conductor) || rc=$?
+    assert_allowed "$out" "$rc" harmless-command-allows || result=1
+    if bun_was_called; then
+        echo "ASSERTION FAILED harmless-command-allows: fake bun should not be called for a non-high-cost command"
+        result=1
+    fi
+    cleanup_sandbox
+    return "$result"
+}
+
+test_no_marker_and_no_jq_fail_open() {
     new_sandbox
     local out rc=0 result=0
     out=$(run_hook 'pnpm test') || rc=$?
     assert_allowed "$out" "$rc" no-marker || result=1
-    mkdir -p "$JOBS/chunk-review-malformed"
-    printf '%s\n' '{not json' > "$JOBS/chunk-review-malformed/job.json"
-    rc=0; out=$(run_hook 'pnpm test') || rc=$?
-    assert_allowed "$out" "$rc" malformed-job || result=1
-    rm -rf "$JOBS/chunk-review-malformed"
-    mkdir -p "$JOBS/chunk-review-unsafe"
-    printf '%s\n' '{"conductorSessionId":"unsafe/session"}' > "$JOBS/chunk-review-unsafe/job.json"
-    rc=0; out=$(run_hook 'pnpm test' 'unsafe/session') || rc=$?
-    assert_allowed "$out" "$rc" unsafe-session || result=1
-    rc=0; out=$(payload 'pnpm test' conductor | env OMT_DIR="$SBX/omt" OMT_SESSION_ID=conductor CODEX_THREAD_ID=other bash "$HOOK") || rc=$?
-    assert_allowed "$out" "$rc" identity-mismatch || result=1
     mkdir -p "$SBX/no-bin"
     ln -s /usr/bin/dirname "$SBX/no-bin/dirname"
     rc=0; out=$(payload 'pnpm test' | env -u OMT_SESSION_ID -u CODEX_THREAD_ID OMT_DIR="$SBX/omt" OMT_REVIEW_ROLE=member PATH="$SBX/no-bin" /bin/bash "$HOOK") || rc=$?
@@ -266,9 +539,20 @@ main() {
     run_test test_member_denies_despite_identity_disagreement
     run_test test_package_runner_targets_denied
     run_test test_interpreter_module_and_python_runner_targets_denied
-    run_test test_matching_conductor_denies_even_done_status
-    run_test test_other_session_and_removed_job_allow
-    run_test test_no_marker_malformed_unsafe_mismatch_and_no_jq_fail_open
+    run_test test_member_denies_without_job_scan
+    run_test test_matching_conductor_active_denies
+    run_test test_matching_conductor_all_members_done_allows
+    run_test test_matching_conductor_malformed_status_denies_indeterminate
+    run_test test_matching_conductor_bun_failure_denies_indeterminate
+    run_test test_active_and_indeterminate_reasons_differ
+    run_test test_matching_conductor_missing_job_cli_denies_indeterminate_without_bun
+    run_test test_path_resolution_claude_deploy_finds_candidate_one
+    run_test test_real_bun_preload_in_reviewed_cwd_does_not_execute
+    run_test test_other_session_job_allows
+    run_test test_no_matching_job_allows
+    run_test test_non_member_unsafe_session_id_allows
+    run_test test_harmless_command_with_active_job_allows_without_bun_call
+    run_test test_no_marker_and_no_jq_fail_open
     run_test test_static_and_orchestration_commands_allow
     run_test test_chained_and_quoted_runners_cannot_bypass
     run_test jvm-deny-gradle-test test_jvm_denied_row 'gradle test' jvm-deny-gradle-test

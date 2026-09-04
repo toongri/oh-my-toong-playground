@@ -273,7 +273,7 @@ describe("parseChunkReviewConfig", () => {
 	});
 
 	test("returns fallback when config file does not exist", async () => {
-		const result = await parseChunkReviewConfig(path.join(tmpDir, "missing.yaml"));
+		const result = parseChunkReviewConfig(path.join(tmpDir, "missing.yaml"));
 		expect(result["chunk-review"]).toBeTruthy();
 		expect(Array.isArray(result["chunk-review"].members)).toBeTruthy();
 		expect(result["chunk-review"].members.length > 0).toBeTruthy();
@@ -281,7 +281,7 @@ describe("parseChunkReviewConfig", () => {
 	});
 
 	test("fallback contains default members (claude, codex)", async () => {
-		const result = await parseChunkReviewConfig(path.join(tmpDir, "nope.yaml"));
+		const result = parseChunkReviewConfig(path.join(tmpDir, "nope.yaml"));
 		const names = result["chunk-review"].members.map((r) => (r as { name: string }).name);
 		expect(names.includes("claude")).toBeTruthy();
 		expect(names.includes("codex")).toBeTruthy();
@@ -289,7 +289,7 @@ describe("parseChunkReviewConfig", () => {
 	});
 
 	test("fallback contains default settings", async () => {
-		const result = await parseChunkReviewConfig(path.join(tmpDir, "nope.yaml"));
+		const result = parseChunkReviewConfig(path.join(tmpDir, "nope.yaml"));
 		expect(result["chunk-review"].settings.exclude_chairman_from_members).toBe(true);
 		expect(result["chunk-review"].settings.timeout).toBe(5400);
 	});
@@ -309,7 +309,7 @@ describe("parseChunkReviewConfig", () => {
 				"    timeout: 600",
 			].join("\n"),
 		);
-		const result = await parseChunkReviewConfig(configPath);
+		const result = parseChunkReviewConfig(configPath);
 		expect(result["chunk-review"].chairman.role).toBe("gemini");
 		expect(result["chunk-review"].members.length).toBe(1);
 		expect((result["chunk-review"].members[0] as { name: string }).name).toBe("alice");
@@ -319,13 +319,13 @@ describe("parseChunkReviewConfig", () => {
 	test("merges settings with defaults from fallback", async () => {
 		const configPath = path.join(tmpDir, "config.yaml");
 		fs.writeFileSync(configPath, ["chunk-review:", "  settings:", "    timeout: 999"].join("\n"));
-		const result = await parseChunkReviewConfig(configPath);
+		const result = parseChunkReviewConfig(configPath);
 		expect(result["chunk-review"].settings.timeout).toBe(999);
 		expect(result["chunk-review"].settings.exclude_chairman_from_members).toBe(true);
 	});
 
 	test("returns structure with chunk-review top-level key", async () => {
-		const result = await parseChunkReviewConfig(path.join(tmpDir, "nope.yaml"));
+		const result = parseChunkReviewConfig(path.join(tmpDir, "nope.yaml"));
 		const keys = Object.keys(result);
 		expect(keys).toEqual(["chunk-review"]);
 	});
@@ -344,7 +344,7 @@ describe("parseChunkReviewConfig", () => {
 				"        KIMI_MODEL: kimi-k2",
 			].join("\n"),
 		);
-		const result = await parseChunkReviewConfig(configPath);
+		const result = parseChunkReviewConfig(configPath);
 		expect((result["chunk-review"].members[0] as { env: unknown }).env).toEqual({
 			KIMI_API_KEY: "test-key",
 			KIMI_MODEL: "kimi-k2",
@@ -353,14 +353,14 @@ describe("parseChunkReviewConfig", () => {
 
 	test("real config registers the 4 angle members", async () => {
 		const realPath = path.join(import.meta.dirname, "..", "code-review.config.yaml");
-		const result = await parseChunkReviewConfig(realPath);
+		const result = parseChunkReviewConfig(realPath);
 		const names = result["chunk-review"].members.map((r) => (r as { name: string }).name);
 		expect(names).toEqual(["correctness", "regression", "cleanup", "requirement"]);
 	});
 
 	test("모든 멤버의 해석된 명령이 `-c agents.enabled=false` 를 포함한다", async () => {
 		const realPath = path.join(import.meta.dirname, "..", "code-review.config.yaml");
-		const result = await parseChunkReviewConfig(realPath);
+		const result = parseChunkReviewConfig(realPath);
 		const settings = result["chunk-review"].settings as unknown as Record<string, unknown>;
 		const denySkills = extractDenySkills(settings);
 		const denySubagents = extractDenySubagents(settings);
@@ -374,7 +374,7 @@ describe("parseChunkReviewConfig", () => {
 
 	test('real config declares settings.mcps.allow as exactly ["codegraph"]', async () => {
 		const realPath = path.join(import.meta.dirname, "..", "code-review.config.yaml");
-		const result = await parseChunkReviewConfig(realPath);
+		const result = parseChunkReviewConfig(realPath);
 		expect(result["chunk-review"].settings.mcps).toEqual({ allow: ["codegraph"] });
 	});
 });
@@ -5949,5 +5949,140 @@ describe("start durable review identity", () => {
 		await expect(mod.cmdStart(options, "prompt")).rejects.toThrow("spawn failed");
 		expect(spawnCount).toBe(2);
 		expect(fs.readFileSync(marker, "utf8")).toBe("xx");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// active-members: read-only activity check that shells out to
+// findActiveMembers(entitiesDir) (@lib/generic-job) — the exact predicate
+// cmdClean's active-member guard and findOrphanJobs already share. These
+// tests run the real subcommand as a subprocess to prove its stdout/exit-code
+// contract, not just the underlying predicate (which has its own coverage).
+// ---------------------------------------------------------------------------
+
+describe("job.ts active-members", () => {
+	const SCRIPT = path.join(import.meta.dirname, "job.ts");
+	let tmpDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	function writeMemberStatus(jobDir: string, memberName: string, status: unknown): void {
+		const memberDir = path.join(jobDir, "members", memberName);
+		fs.mkdirSync(memberDir, { recursive: true });
+		fs.writeFileSync(path.join(memberDir, "status.json"), JSON.stringify(status));
+	}
+
+	function writeMalformedMemberStatus(jobDir: string, memberName: string): void {
+		const memberDir = path.join(jobDir, "members", memberName);
+		fs.mkdirSync(memberDir, { recursive: true });
+		fs.writeFileSync(path.join(memberDir, "status.json"), "{not json");
+	}
+
+	test("running 멤버(heartbeat 신선) 하나 → activity active, activeMembers에 포함된다", () => {
+		const jobDir = path.join(tmpDir, "job-active");
+		fs.mkdirSync(jobDir, { recursive: true });
+		writeMemberStatus(jobDir, "correctness", {
+			state: "running",
+			lastHeartbeat: new Date().toISOString(),
+		});
+
+		const result = execFileSync(process.execPath, [SCRIPT, "active-members", jobDir], {
+			stdio: "pipe",
+		});
+		const lines = result.toString().split("\n").filter(Boolean);
+		expect(lines.length).toBe(1);
+		const output = JSON.parse(lines[0]);
+		expect(output).toEqual({
+			activity: "active",
+			jobs: [{ jobDir, activity: "active", activeMembers: ["correctness"] }],
+		});
+	});
+
+	test("멤버 state가 done이면 → activity inactive", () => {
+		const jobDir = path.join(tmpDir, "job-done");
+		fs.mkdirSync(jobDir, { recursive: true });
+		writeMemberStatus(jobDir, "correctness", { state: "done" });
+
+		const result = execFileSync(process.execPath, [SCRIPT, "active-members", jobDir], {
+			stdio: "pipe",
+		});
+		const output = JSON.parse(result.toString().trim());
+		expect(output.activity).toBe("inactive");
+		expect(output.jobs).toEqual([{ jobDir, activity: "inactive", activeMembers: [] }]);
+	});
+
+	test("running이지만 heartbeat가 stale(70초 이상 과거)이면 → activity inactive", () => {
+		const jobDir = path.join(tmpDir, "job-stale");
+		fs.mkdirSync(jobDir, { recursive: true });
+		const staleHeartbeat = new Date(Date.now() - 70_000).toISOString();
+		writeMemberStatus(jobDir, "correctness", { state: "running", lastHeartbeat: staleHeartbeat });
+
+		const result = execFileSync(process.execPath, [SCRIPT, "active-members", jobDir], {
+			stdio: "pipe",
+		});
+		const output = JSON.parse(result.toString().trim());
+		expect(output.activity).toBe("inactive");
+		expect(output.jobs).toEqual([{ jobDir, activity: "inactive", activeMembers: [] }]);
+	});
+
+	test("깨진 status.json → activity indeterminate", () => {
+		const jobDir = path.join(tmpDir, "job-malformed");
+		fs.mkdirSync(jobDir, { recursive: true });
+		writeMalformedMemberStatus(jobDir, "correctness");
+
+		const result = execFileSync(process.execPath, [SCRIPT, "active-members", jobDir], {
+			stdio: "pipe",
+		});
+		const output = JSON.parse(result.toString().trim());
+		expect(output.activity).toBe("indeterminate");
+		expect(output.jobs).toEqual([{ jobDir, activity: "indeterminate", activeMembers: [] }]);
+	});
+
+	test("members 디렉토리가 없는 jobDir → activity inactive", () => {
+		const jobDir = path.join(tmpDir, "job-no-members");
+		fs.mkdirSync(jobDir, { recursive: true });
+
+		const result = execFileSync(process.execPath, [SCRIPT, "active-members", jobDir], {
+			stdio: "pipe",
+		});
+		const output = JSON.parse(result.toString().trim());
+		expect(output.activity).toBe("inactive");
+		expect(output.jobs).toEqual([{ jobDir, activity: "inactive", activeMembers: [] }]);
+	});
+
+	test("여러 jobDir 중 하나라도 active면 aggregate activity는 active다", () => {
+		const activeJobDir = path.join(tmpDir, "job-mixed-active");
+		const doneJobDir = path.join(tmpDir, "job-mixed-done");
+		fs.mkdirSync(activeJobDir, { recursive: true });
+		fs.mkdirSync(doneJobDir, { recursive: true });
+		writeMemberStatus(activeJobDir, "correctness", {
+			state: "running",
+			lastHeartbeat: new Date().toISOString(),
+		});
+		writeMemberStatus(doneJobDir, "correctness", { state: "done" });
+
+		const result = execFileSync(
+			process.execPath,
+			[SCRIPT, "active-members", activeJobDir, doneJobDir],
+			{ stdio: "pipe" },
+		);
+		const output = JSON.parse(result.toString().trim());
+		expect(output.activity).toBe("active");
+		expect(output.jobs).toEqual([
+			{ jobDir: activeJobDir, activity: "active", activeMembers: ["correctness"] },
+			{ jobDir: doneJobDir, activity: "inactive", activeMembers: [] },
+		]);
+	});
+
+	test("jobDir 인자 없이 실행하면 non-zero exit로 실패한다", () => {
+		expect(() => {
+			execFileSync(process.execPath, [SCRIPT, "active-members"], { stdio: "pipe" });
+		}).toThrow();
 	});
 });

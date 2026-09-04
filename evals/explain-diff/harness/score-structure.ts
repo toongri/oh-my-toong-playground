@@ -9,6 +9,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { checkStructure } from "../../../lib/explain-diff-structure.ts";
 
 interface Fixture {
@@ -37,7 +38,7 @@ function say(line: string): void {
 }
 
 const EVAL = process.env["OMT_EVAL_ROOT"] ?? `${process.env["HOME"]}/.omt/oh-my-toong-playground/explain-diff-eval`;
-const manifest = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), "manifest.json"), "utf8"));
+const manifest = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "manifest.json"), "utf8"));
 const ARM = process.argv[2] || "green";
 const CONTROLS = (process.argv[3] || "skill").split(",");
 
