@@ -1111,6 +1111,21 @@ describe("qa-report per-scenario evidence", () => {
 		expect(reader).toContain('class="gap"');
 		expect(reader).toContain("실제 소프트웨어 관찰");
 	});
+
+	test("공백·탭·개행만 있는 관찰은 리더 근거로 취급하지 않고 missing-observation gap을 렌더한다", () => {
+		const view = baseView();
+		view.cells![0].evidence = { path: "/evidence/api.log", surface: "curl" }; // text-only, NO screenshot
+		view.cells![1].status = "na";
+		const narrative: QaReportNarrative = {
+			scenarios: { "story-1:1:": { observed: " \t\n  " } },
+		};
+		const html = renderQaReport(view, narrative, () => ({ kind: "text", content: "raw" }))!;
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
+		const firstCard = reader.split('class="scenario-card').slice(1)[0];
+		expect(firstCard).toContain('class="gap"');
+		expect(firstCard).toContain("실제 소프트웨어 관찰");
+		expect(firstCard).not.toContain('class="sc-observed"');
+	});
 });
 
 describe("defaultEvidenceReader", () => {

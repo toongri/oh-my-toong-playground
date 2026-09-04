@@ -541,7 +541,7 @@ function renderScenarios(view: QaView, narrative: QaReportNarrative, readEvidenc
 						return `<div class="scenario-card sc-unverified">${head}<div class="sc-body">${gap(NOT_RUN_LABEL)}</div></div>`;
 					}
 					const observed = narrative.scenarios?.[cellKey(cell)]?.observed;
-					const observedBlock = observed ? `<p class="sc-observed">${escapeHtml(observed)}</p>` : "";
+					const observedBlock = observed?.trim() ? `<p class="sc-observed">${escapeHtml(observed)}</p>` : "";
 					const e = cell.evidence;
 					// De-dupe evidence paths WITHIN this one card (e.g. evidence.action ===
 					// evidence.path for CLI/API scenarios with no separate before/after) so
