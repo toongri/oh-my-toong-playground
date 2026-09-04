@@ -197,9 +197,10 @@ Command execution is **non-blocking only**: every command either returns control
 
 ### CHECK
 
-Is the goal met — BASELINE green and the full ADVERSARIAL E2E pass (provided scenarios + matrix)? Judge each scenario on its own row, then ask the two questions that a per-scenario PASS does not answer:
+Is the goal met — BASELINE green and the full ADVERSARIAL E2E pass (provided scenarios + matrix)? Judge each scenario on its own row, then ask the questions that a per-scenario PASS does not answer:
 
 - Did each scenario traverse the changed surface from its actor's boundary all the way through, or did it stop at an inner layer? Read `driven-at`, not the PASS.
+- Final check — does each scenario's observation **name the medium it was observed through**: a screen/device capture, or an API/CLI response? Run this over every row before APPROVE; it is the last gate against a readable observation that quietly over-claims its boundary. A human actor's result read only through an API or CLI was **not** seen at that actor's screen boundary — an API or CLI reading never stands in for a screen observation, so that scenario is `unverified` at the screen, not PASS. The one exception: when **no user-facing surface exists yet** (an API-only change with no screen built), the actor *is* an API/system client and the API response is its real boundary — declare it as such on the scenario; never dress an API reading as a human-screen observation.
 - Is any `H`-priority scenario still `NOT-RUN`? Then the goal is not met, whatever the other rows say.
 
 A FAILED scenario row blocks CHECK, with exactly one carve-out: a failed **self-authored `M`/`L`** row whose finding scores **50–74** — the `nitpick (non-blocking)` band, which [feedback-protocol.md]'s scale defines as *real but minor, rarely happens in practice* — leaves the cycle a **soft pass**: the row stays FAIL in the roster, the finding is reported as a LOW note, and the verdict is COMMENT, never APPROVE.

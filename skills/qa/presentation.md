@@ -208,6 +208,12 @@ marker** (`class="gap"`) — what was skipped shows in the report.
 - [ ] Does **every verified scenario** carry its own reader-visible record — an
       authored observation OR a screenshot on its card — with none separated from
       its proof and none left a silent hole (a card with neither is a loud gap)?
+- [ ] Does **every scenario's** observation name its medium — a screen/device
+      capture, or an API/CLI response — and does that medium match the actor's
+      real boundary? A human actor read only through API/CLI is `unverified` at
+      the screen (not a green pass), unless no user-facing surface exists yet, in
+      which case the actor is declared an API/system client and API is its real
+      boundary.
 - [ ] Does the big-picture diagram carry the user flow, with a why + interpretation
       · zero gap markers?
 - [ ] Is each requirement mapped to a verdict + backing scenarios/evidence, and does
@@ -232,7 +238,8 @@ works, and therefore whether the requirements were met?**
 | "The UI/admin wouldn't boot, so I ran the service's test suite and marked the requirement `yes`." | That is not the user boundary — the requirement is **unverified**. Mark `satisfied: "unverified"`; it renders loudly as not done. Never `yes`/`partial` on a green suite. |
 | "Prose is enough; no diagram needed." | The big picture is the strongest way to convey flow to a no-context reader — it is a required slot. |
 | "The scenario list is separate; evidence can live elsewhere." | Every scenario is shown with its evidence, even if the document grows heavy. |
-| "I drove it with curl, so pasting the curl/HTTP output is the evidence." | A PO cannot read `HTTP=404` or a JSON body as "it works." Convert it: "we requested another user's item and got a not-found with no data leak." Raw curl belongs in the audit. |
+| "I drove it with curl, so pasting the curl/HTTP output is the evidence." | A PO cannot read `HTTP=404` or a JSON body as "it works." Convert it, **naming the medium**: "via the API we requested another user's item and got a not-found with no data leak." Raw curl belongs in the audit. |
+| "I converted the curl transcript to prose, so the screen actor's scenario passes." | Converting the words does not change the medium. If the actor is a human at a screen but you only read the result through an API/CLI, that scenario is `unverified` at the screen, not PASS — the conversion must say "observed via API," never "the user saw." The one exception: no screen exists yet (API-only change) — then declare the actor an API/system client, don't launder it as a human-screen observation. |
 | "Showing the test output proves the scenario ran." | A test log is not a scenario a PO reads. State the scenario and its outcome in words; the log stays in BASELINE/audit. |
 
 ## Red flags — STOP
@@ -242,6 +249,7 @@ works, and therefore whether the requirements were met?**
 - A scenario shows a raw curl/HTTP/JSON dump (`HTTP=404`, `{"error":...}`, `table row count before=6`) as its proof → convert it to a natural-language "we ran this scenario and observed X"; the raw bytes belong in the audit section, not the reader
 - A requirement's user boundary was never driven but it reads `yes`/`partial` → mark `satisfied: "unverified"` (renders loud "미검증")
 - A verified scenario's card has neither an observation nor a screenshot → it renders a loud gap; write its per-scenario `observed` (convert any curl/API transcript) or attach its before/action/after
+- A human actor's scenario is observed only through an API/CLI response but reads as if the screen was driven → name the medium; a screen-boundary claim needs a screen/device capture. If no user-facing surface exists yet, declare the actor an API/system client — never let an API reading pass as a human-screen observation
 - Internal jargon (`cls`, source tags) is visible to the reader → remove it
 - The narrative names more users/scenarios/requirements than the records hold → invention; fix the records
 - A fulfillment verdict contradicts the recorded pass/fail → match the verification log

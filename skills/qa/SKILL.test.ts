@@ -905,6 +905,41 @@ describe("new-prose: reader evidence is per-scenario natural language + screensh
 });
 
 // ---------------------------------------------------------------------------
+// FINAL-CHECK: the completion self-audit forces each scenario's observation to
+// name the MEDIUM it was captured through (screen/device capture vs API/CLI
+// response). This closes the laundering path a real luna-max e2e exposed: an
+// agent drove a screen-facing feature entirely via curl, then converted the
+// transcripts to readable prose that read as user-boundary observations and
+// passed every gate. Naming the medium — with the API-only-PR carve-out — is
+// the forcing predicate that catches it without false-failing legit backend PRs.
+// ---------------------------------------------------------------------------
+
+describe("final-check: each scenario's observation names its medium (screen vs API/CLI)", () => {
+	test("CHECK phase forces a per-scenario medium self-check with the API-only carve-out", () => {
+		const checkStart = skillMd.indexOf("### CHECK");
+		expect(checkStart).not.toBe(-1);
+		const checkEnd = skillMd.indexOf("### DIAGNOSIS", checkStart + 1);
+		expect(checkEnd).not.toBe(-1);
+		const check = skillMd.slice(checkStart, checkEnd);
+		expect(check).toContain("name the medium it was observed through");
+		expect(check).toContain(
+			"an API or CLI reading never stands in for a screen observation",
+		);
+		expect(check).toContain("no user-facing surface exists yet");
+	});
+
+	test("presentation self-audit carries the medium final-check item", () => {
+		expect(presentationMd).toContain("name its medium");
+	});
+
+	test("presentation red flag catches an API reading dressed as a screen observation", () => {
+		expect(presentationMd).toContain(
+			"A human actor's scenario is observed only through an API/CLI response but reads as if the screen was driven",
+		);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // NEW-PROSE: scenario-authoring.md's actor layer binds actor -> boundary
 // ---------------------------------------------------------------------------
 
