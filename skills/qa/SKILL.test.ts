@@ -888,14 +888,18 @@ describe("new-prose: setup cost never justifies NOT-RUN", () => {
 // raw curl/HTTP dumps belong in the audit
 // ---------------------------------------------------------------------------
 
-describe("new-prose: reader evidence is natural language, not raw dumps", () => {
-	test("presentation.md requires scenarioFlows to be a converted NL observed-outcome narrative", () => {
-		expect(presentationMd).toContain("natural-language account of what was done and what was observed");
-		expect(presentationMd).toContain("**convert** it to");
+describe("new-prose: reader evidence is per-scenario natural language + screenshots, not raw dumps", () => {
+	test("presentation.md keys the reader evidence PER scenario via scenarios[...].observed", () => {
+		expect(presentationMd).toContain("Per-scenario observation");
+		expect(presentationMd).toContain("scenarios");
 	});
 
-	test("presentation.md keeps raw curl/HTTP dumps out of the reader (screenshots only)", () => {
-		expect(presentationMd).toContain("screenshots only");
+	test("presentation.md forces every verified scenario to carry a reader-visible record (observation OR screenshot)", () => {
+		expect(presentationMd).toContain("an authored observation OR a screenshot");
+	});
+
+	test("presentation.md converts a raw API/CLI transcript to a per-scenario NL observation, raw stays in the audit", () => {
+		expect(presentationMd).toContain("**convert** it to");
 		expect(presentationMd).toContain("Raw curl belongs in the audit");
 	});
 });

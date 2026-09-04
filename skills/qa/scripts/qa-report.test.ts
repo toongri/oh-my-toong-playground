@@ -562,6 +562,56 @@ describe("qa-report presentation layer", () => {
 	});
 });
 
+// ---------------------------------------------------------------------------
+// Per-scenario evidence (reader restructure): every VERIFIED scenario must carry
+// its own reader-visible real-software record — an authored observation (the
+// reader form of an API/CLI transcript, whose raw bytes stay in the audit) OR a
+// screenshot — inside its own scenario card, never a merged evidence wall and
+// never a silent hole. This is the "왜 evidence가 전 시나리오에 없나" fix.
+// ---------------------------------------------------------------------------
+describe("qa-report per-scenario evidence", () => {
+	test("리더는 검증된 시나리오마다 독립 카드를 렌더한다 (병합된 근거 벽이 아니라)", () => {
+		const html = renderQaReport(baseView(), {}, fakeReader)!;
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		// baseView: cls1 pass + cls2 fail → 2 scenario cards
+		expect((reader.match(/class="scenario-card/g) ?? []).length).toBe(2);
+	});
+
+	test("각 시나리오의 스크린샷은 그 시나리오 카드 안에 묶여 렌더된다", () => {
+		const html = renderQaReport(baseView(), {}, fakeReader)!;
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		const cards = reader.split('class="scenario-card').slice(1);
+		expect(cards.length).toBe(2);
+		expect(cards[0]).toContain("data:image/png;base64,AAAA"); // cls1's own captures
+		expect(cards[1]).toContain("data:image/png;base64,AAAA"); // cls2's own capture
+	});
+
+	test("API/CLI 텍스트 경계 시나리오는 저자가 쓴 관찰 자연어를 리더에 보여준다 (raw transcript는 감사에만)", () => {
+		const view = baseView();
+		view.cells![0].evidence = { path: "/evidence/api.log", surface: "curl" }; // text-only boundary
+		view.cells![1].status = "na"; // isolate to the one API cell
+		const narrative: QaReportNarrative = {
+			scenarios: { "story-1:1:": { observed: "로그인 없이 요청하니 서버가 401을 돌려주며 게이트 모달이 유지됐다" } },
+		};
+		const html = renderQaReport(view, narrative, () => ({ kind: "text", content: "HTTP/1.1 401 RAW" }))!;
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		const audit = html.slice(html.indexOf("시나리오 상세 기록"));
+		expect(reader).toContain("로그인 없이 요청하니 서버가 401을 돌려주며 게이트 모달이 유지됐다");
+		expect(reader).not.toContain("HTTP/1.1 401 RAW"); // raw transcript never in the reader
+		expect(audit).toContain("HTTP/1.1 401 RAW"); // preserved in the audit
+	});
+
+	test("스크린샷도 관찰 자연어도 없는 검증 시나리오는 리더에 크게 갭을 낸다 (raw 로그만으로는 리더 근거가 아님)", () => {
+		const view = baseView();
+		view.cells![0].evidence = { path: "/evidence/api.log", surface: "curl" }; // text-only, NO authored observation
+		view.cells![1].status = "na";
+		const html = renderQaReport(view, {}, () => ({ kind: "text", content: "raw" }))!;
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		expect(reader).toContain('class="gap"');
+		expect(reader).toContain("실제 소프트웨어 관찰");
+	});
+});
+
 describe("defaultEvidenceReader", () => {
 	test("returns missing for a nonexistent path", () => {
 		expect(defaultEvidenceReader("/definitely/not/here.png").kind).toBe("missing");

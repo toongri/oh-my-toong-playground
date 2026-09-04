@@ -70,6 +70,15 @@ export interface QaReportNarrativeIssue {
 }
 
 export interface QaReportScenarioNarrative {
+	/**
+	 * Reader-facing: what was done at this scenario's user boundary and what the
+	 * real software rendered, in plain language. This IS the reader evidence for a
+	 * scenario verified at a non-visual boundary (API/CLI) — it stands in for the
+	 * raw transcript, which stays in the audit. For a UI scenario it narrates the
+	 * screenshots beside it. Required for every verified (pass/fail) cell that has
+	 * no screenshot; its absence there renders a loud gap.
+	 */
+	observed?: string;
 	expectedVsActual?: string;
 	oracleDiagnosis?: string;
 }
@@ -383,11 +392,15 @@ const CLS_LABEL: Record<number, string> = {
 const COVERAGE_MARK: Record<string, string> = { pass: "확인", fail: "실패", na: "해당없음" };
 
 /**
- * The reader-facing scenario section — clean, at the STORY level (a story is the
- * user scenario; cells are QA coverage axes against it). Per story it shows the
- * actor's name, the authored user-boundary flow (`scenarioFlows`), that story's
- * evidence (baseline + every cell's before/action/after), and a plain-language
- * coverage summary (axis name + result, never the `cls` number).
+ * The reader-facing scenario section. Per story (a story is the user scenario;
+ * cells are QA coverage axes against it) it shows the actor's name, a short
+ * "which scenarios were checked" intro (`scenarioFlows`), then ONE card per
+ * scenario (cell) — each with its coverage axis, its result, its authored
+ * real-software observation and/or its own screenshots — and a plain-language
+ * coverage summary (axis name + result, never the `cls` number). Every verified
+ * scenario card is forced to carry a reader-visible record: an observation or a
+ * screenshot, else a loud gap. This is what lets a PO see, per scenario, whether
+ * the software drew the UX correctly and whether every requirement was met.
  *
  * It deliberately renders NONE of the cell record's implementation-flavored
  * fields — `driven_at`, `why_needed`, `na_reason`, `attack_point`, the boundary
@@ -402,38 +415,43 @@ function renderScenarios(view: QaView, narrative: QaReportNarrative, readEvidenc
 		.map((story) => {
 			const actor = actorFor(view, story);
 			const heading = `<h3>${escapeHtml(actor?.name ?? actor?.id ?? story.id)}</h3>`;
-			const flow = `<div class="scenario-flow">${proseOrGap(p?.scenarioFlows?.[story.id], "이 시나리오에서 무엇을 했고 무엇을 관찰했는지에 대한 자연어 서사가 없습니다")}</div>`;
+			// The intro is now a short "who + which scenarios" overview, not the whole
+			// account — each scenario's own observation lives on its card below.
+			const flow = `<div class="scenario-flow">${proseOrGap(p?.scenarioFlows?.[story.id], "이 액터가 어떤 시나리오들을 검증했는지에 대한 개요 서사가 없습니다")}</div>`;
 			const cells = cellsForStory(view, story.id);
 
-			// Reader proof = SCREENSHOTS ONLY. A rendered screen is directly readable by
-			// a PO. Raw text evidence (curl/HTTP/JSON/logs) is NOT dumped here — the
-			// natural-language flow above carries the observed outcome, and the raw
-			// bytes live in the audit section. Baseline build/test logs never appear in
-			// the reader at all (they are not a user-boundary observation).
-			const shots: string[] = [];
-			for (const cell of cells) {
-				const e = cell.evidence;
-				if (!e) continue;
-				for (const path of [e.before, e.action, e.after, e.path]) {
-					shots.push(imageSlot("화면", path, readEvidence, context));
-				}
-			}
-			const slots = shots.filter(Boolean).join("");
-
-			// qa mandates evidence for a recorded pass/fail scenario. Key the gap to the
-			// RECORD (was any evidence captured?), not to what the reader rendered — a
-			// text-only API scenario has real evidence that lives in the audit, so it
-			// must not trip the gap. A story with all-`na` cells legitimately has none.
-			const hasVerified = cells.some((cell) => cell.status === "pass" || cell.status === "fail");
-			const hasRecordedEvidence = cells.some((cell) => {
-				const e = cell.evidence;
-				return e && (e.path || e.before || e.action || e.after);
-			});
-			const evidenceBlock = slots
-				? `<div class="evidence-slots">${slots}</div>`
-				: hasVerified && !hasRecordedEvidence
-					? gap("이 시나리오에 기록된 근거가 없습니다 (qa는 pass/fail 시나리오에 근거를 필수로 요구)")
-					: "";
+			// One card PER scenario (cell), each carrying its own reader-visible
+			// real-software record tied to that scenario — never a merged evidence wall.
+			// A verified (pass/fail) scenario MUST show an authored observation (the
+			// reader form of an API/CLI transcript, whose raw bytes stay in the audit)
+			// OR a screenshot; neither → a loud gap, never a silent hole. `na` is the
+			// one evidence-free status. Raw text (curl/HTTP/JSON/logs) and baseline
+			// build/test logs never appear here — they are audit-only.
+			const cards = cells
+				.map((cell) => {
+					const st = String(cell.status ?? "");
+					const axis = escapeHtml(CLS_LABEL[cell.cls] ?? `축 ${cell.cls}`) + (cell.sub ? ` · ${escapeHtml(cell.sub)}` : "");
+					const head =
+						`<div class="sc-head"><span class="sc-axis">${axis}</span>` +
+						`<span class="cov cov-${escapeHtml(st)}">${escapeHtml(COVERAGE_MARK[st] ?? st)}</span></div>`;
+					if (st === "na") {
+						return `<div class="scenario-card sc-na">${head}<div class="sc-body sc-muted">해당없음</div></div>`;
+					}
+					const observed = narrative.scenarios?.[cellKey(cell)]?.observed;
+					const observedBlock = observed ? `<p class="sc-observed">${escapeHtml(observed)}</p>` : "";
+					const e = cell.evidence;
+					const shots = e
+						? [e.before, e.action, e.after, e.path].map((path) => imageSlot("화면", path, readEvidence, context)).filter(Boolean).join("")
+						: "";
+					const shotBlock = shots ? `<div class="sc-shots">${shots}</div>` : "";
+					const body =
+						observedBlock || shotBlock
+							? observedBlock + shotBlock
+							: gap("이 시나리오의 실제 소프트웨어 관찰 근거가 없습니다 — qa는 검증 시나리오에 근거를 필수로 요구합니다 (raw 로그만으로는 리더 근거가 되지 않습니다)");
+					return `<div class="scenario-card sc-${escapeHtml(st)}">${head}<div class="sc-body">${body}</div></div>`;
+				})
+				.join("");
+			const evidenceBlock = cards ? `<div class="scenarios">${cards}</div>` : "";
 
 			// Plain coverage summary: one entry per distinct axis, its result the worst
 			// across that axis's cells (fail > pass > na).
@@ -698,6 +716,17 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .audit-note { color: var(--muted); font-size: 0.85rem; }
 .story-block { margin: 1.75rem 0; }
 .story-block > h3 { border-bottom: 1px solid var(--rule); padding-bottom: 0.3rem; }
+.scenarios { display: flex; flex-direction: column; gap: 0.85rem; margin: 0.85rem 0; }
+.scenario-card { border: 1px solid var(--rule); border-left: 3px solid var(--rule); border-radius: 10px; padding: 0.75rem 0.9rem; }
+.scenario-card.sc-pass { border-left-color: var(--pass); }
+.scenario-card.sc-fail { border-left-color: var(--fail); }
+.scenario-card.sc-na { border-left-color: var(--na); opacity: 0.75; }
+.sc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.5rem; }
+.sc-axis { font-weight: 600; }
+.sc-body { }
+.sc-observed { margin: 0 0 0.6rem; }
+.sc-muted { color: var(--muted); font-size: 0.9rem; }
+.sc-shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.75rem; }
 .evidence-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.75rem; margin: 0.75rem 0; }
 .evidence-slot { border: 1px solid var(--rule); border-radius: 8px; padding: 0.5rem; }
 .evidence-slot-label { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.03em; color: var(--muted); margin-bottom: 0.35rem; }

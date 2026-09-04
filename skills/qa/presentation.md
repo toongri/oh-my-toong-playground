@@ -72,23 +72,31 @@ presentation adds only **narrative and diagrams** on top, keyed to those records
 - **Affected users (`affectedUsers`, keyed by actor id)** — for each recorded
   actor: how this user normally uses the product, and how this change affects that
   use — at their boundary, per the hard rule above.
-- **User scenario flows (`scenarioFlows`, keyed by story id)** — for each recorded
-  story (a story *is* the user scenario; the cells beneath it are QA coverage
-  axes): a **natural-language account of what was done and what was observed** at
-  the user boundary — "이런 사용자가 이런 상황에서 이렇게 했더니, 화면/응답이 이렇게
-  되더라." This narrative **is the reader's proof**, so it must state the observed
-  outcome in plain language, not just the setup. A raw curl transcript, an
-  HTTP/JSON dump, a build/test log, or a `vitest`/`jest` result is **never** shown
-  to the reader — even when you drove the scenario for real with curl, you
-  **convert** it to "we ran this scenario and observed X", in words a PO/designer
-  reads. The renderer shows each story with this narrative, **screenshots only**
-  (a rendered screen a PO can read directly — raw text evidence and baseline
-  build/test logs are moved to the audit section, never the reader), and a
-  plain-language coverage summary (the six axes by name). It does **not** surface
-  the cell record's technical fields (`driven_at`, `attack_point`, `na_reason`,
-  `cls`, the boundary code path); those live in the record-faithful audit section
-  below. Write `scenarioFlows` as the clean, converted user-boundary story — the
-  renderer keeps implementation and raw dumps out of the reader for you.
+- **Scenario overview (`scenarioFlows`, keyed by story id)** — for each recorded
+  story (a story *is* the user scenario; the cells beneath it are the individual
+  scenarios/QA coverage axes): a **short intro** — who this actor is and which
+  scenarios you checked for them — 1–3 sentences. It is the lead-in, **not** the
+  place the evidence lives; each scenario's own observation lives on its card
+  (next bullet).
+- **Per-scenario observation (`scenarios`, keyed by `<story>:<cls>:<sub>`, the
+  cell key — write it under the top-level `scenarios` object, field `observed`)** —
+  this is the reader's proof, **one per scenario**. For each verified scenario,
+  state in plain language what you did at that scenario's user boundary and what
+  the real software rendered — "이 시나리오에서 이렇게 했더니 화면/응답이 이렇게
+  되더라." The renderer draws ONE card per scenario, and every verified
+  (pass/fail) scenario must carry a reader-visible real-software record:
+  **an authored observation OR a screenshot** — a scenario with neither renders a
+  loud gap, never a silent hole. This is what lets a PO judge, per scenario, whether
+  the software drew the UX right and whether the change had side effects. A raw
+  curl transcript, an HTTP/JSON dump, a build/test log, or a `vitest`/`jest`
+  result is **never** shown to the reader — even when you drove the scenario for
+  real with curl, you **convert** it to a per-scenario observation ("we ran this
+  scenario and observed X"), in words a PO/designer reads; the raw bytes stay in
+  the audit. A scenario driven at a visual boundary shows **screenshots** on its
+  card (a rendered screen a PO reads directly). The card does **not** surface the
+  cell record's technical fields (`driven_at`, `attack_point`, `na_reason`, `cls`,
+  the boundary code path); those live in the record-faithful audit section below.
+  `na` is the one status that needs no evidence.
 - **Big picture (`bigPicture`)** — a mermaid diagram of the user flows / affected
   users, baked to inline SVG at build time. The strongest way to convey flow to a
   no-context reader.
@@ -152,10 +160,13 @@ of `qa-report.ts --narrative <json>` (never persisted to disk):
   "presentation": {
     "overview": "product-level what & why prose",
     "affectedUsers": { "<actor-id>": "how this user uses the product + how the change affects them, at their boundary" },
-    "scenarioFlows": { "<story-id>": "the user-boundary flow, rich" },
+    "scenarioFlows": { "<story-id>": "short intro: who this actor is + which scenarios were checked" },
     "requirementMapping": { "0": { "satisfied": "yes|no|partial|unverified", "evidence": "the scenarios + evidence that back this verdict" } },
     "bigPicture": "flowchart LR\n  Owner --> StockScreen",
     "bigPictureCaption": "one-line interpretation of the diagram"
+  },
+  "scenarios": {
+    "<story-id>:<cls>:<sub>": { "observed": "what you did at this scenario's boundary and what the real software rendered, in plain language (the per-scenario reader proof; convert any curl/API transcript here — raw bytes stay in the audit)" }
   }
 }
 ```
@@ -179,8 +190,9 @@ marker** (`class="gap"`) — what was skipped shows in the report.
 - [ ] Is each user's product (software + hardware) scenario flow rich and detailed,
       **at the user boundary** — zero implementation mechanism (cache, id, type,
       function name), zero unit-test narration?
-- [ ] Is every scenario shown **with its own evidence** (before/action/after) — none
-      separated from its proof?
+- [ ] Does **every verified scenario** carry its own reader-visible record — an
+      authored observation OR a screenshot on its card — with none separated from
+      its proof and none left a silent hole (a card with neither is a loud gap)?
 - [ ] Does the big-picture diagram carry the user flow, with a why + interpretation
       · zero gap markers?
 - [ ] Is each requirement mapped to a verdict + backing scenarios/evidence, and does
@@ -214,7 +226,7 @@ works, and therefore whether the requirements were met?**
 - A user flow slot holds unit tests or build logs → replace with user-boundary observation
 - A scenario shows a raw curl/HTTP/JSON dump (`HTTP=404`, `{"error":...}`, `table row count before=6`) as its proof → convert it to a natural-language "we ran this scenario and observed X"; the raw bytes belong in the audit section, not the reader
 - A requirement's user boundary was never driven but it reads `yes`/`partial` → mark `satisfied: "unverified"` (renders loud "미검증")
-- A scenario appears without its evidence → attach the before/action/after
+- A verified scenario's card has neither an observation nor a screenshot → it renders a loud gap; write its per-scenario `observed` (convert any curl/API transcript) or attach its before/action/after
 - Internal jargon (`cls`, source tags) is visible to the reader → remove it
 - The narrative names more users/scenarios/requirements than the records hold → invention; fix the records
 - A fulfillment verdict contradicts the recorded pass/fail → match the verification log
