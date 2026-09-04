@@ -495,7 +495,7 @@ function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvi
 	const table = rows
 		? `<table><thead><tr><th>story</th><th>coverage (cls)</th><th>attack point</th><th>driven at</th><th>result</th><th>evidence</th></tr></thead><tbody>${rows}</tbody></table>`
 		: `<p class="evidence-note">기록된 시나리오 셀 없음</p>`;
-	return `<h2>시나리오 상세 기록 (감사)</h2>${table}${renderRawEvidence(cells, readEvidence, context)}`;
+	return `<h2>시나리오 상세 기록 (감사)</h2>${table}${renderRawEvidence(cells, readEvidence, context)}${renderBaselineAudit(view, readEvidence, context)}`;
 }
 
 /**
@@ -505,26 +505,58 @@ function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvi
  * been rendered in the reader, so it is skipped here (de-duped via the shared
  * context). No JS: `<details>` is native HTML.
  */
+/**
+ * Embeds one text evidence file as a collapsed `<details>` block (de-duped and
+ * budget-capped via the shared context); returns null for a missing path, an
+ * already-embedded path, a non-text (image/too-large) embed, or a budget
+ * overflow. `label` prefixes the summary (e.g. a baseline story id).
+ */
+function embedTextEvidence(path: string | undefined, label: string, readEvidence: EvidenceReader, context: EvidenceRenderContext): string | null {
+	if (!path || context.renderedPaths.has(path)) return null;
+	const embed = readEvidence(path);
+	if (embed.kind !== "text") return null; // images live in the reader; skip missing/too-large
+	const embedBytes = embeddedByteLength(embed);
+	if (embedBytes > 0 && context.embeddedBytes + embedBytes > MAX_TOTAL_EMBED_BYTES) return null;
+	context.renderedPaths.add(path);
+	context.embeddedBytes += embedBytes;
+	return (
+		`<details class="raw-evidence"><summary>${label ? `${escapeHtml(label)} — ` : ""}<code>${escapeHtml(path)}</code></summary>` +
+		`<pre>${escapeHtml(embed.content)}</pre></details>`
+	);
+}
+
 function renderRawEvidence(cells: QaCell[], readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
 	const blocks: string[] = [];
 	for (const cell of cells) {
 		const e = cell.evidence;
 		if (!e) continue;
 		for (const path of [e.before, e.action, e.after, e.path]) {
-			if (!path || context.renderedPaths.has(path)) continue;
-			const embed = readEvidence(path);
-			if (embed.kind !== "text") continue; // images live in the reader; skip missing/too-large
-			const embedBytes = embeddedByteLength(embed);
-			if (embedBytes > 0 && context.embeddedBytes + embedBytes > MAX_TOTAL_EMBED_BYTES) continue;
-			context.renderedPaths.add(path);
-			context.embeddedBytes += embedBytes;
-			blocks.push(
-				`<details class="raw-evidence"><summary><code>${escapeHtml(path)}</code></summary>` +
-				`<pre>${escapeHtml(embed.content)}</pre></details>`,
-			);
+			const block = embedTextEvidence(path, "", readEvidence, context);
+			if (block) blocks.push(block);
 		}
 	}
 	return blocks.length ? `<h3>원본 관찰 로그 (감사용)</h3>${blocks.join("")}` : "";
+}
+
+/**
+ * Embeds current-cycle BASELINE evidence (build/test/lint proof) into the audit
+ * layer as collapsed `<details>`. It never enters the reader view — a test log is
+ * not a user-boundary observation — but a recipient holding only the self-contained
+ * HTML must still be able to audit the baseline, so its content is embedded here.
+ */
+function renderBaselineAudit(view: QaView, readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
+	const blocks: string[] = [];
+	for (const story of view.stories ?? []) {
+		const baseline = story.baseline;
+		if (!baseline || baseline.cycle !== view.cycle) continue;
+		const e = baseline.evidence;
+		if (!e) continue;
+		for (const path of [e.before, e.action, e.after, e.path]) {
+			const block = embedTextEvidence(path, `${story.id} / baseline`, readEvidence, context);
+			if (block) blocks.push(block);
+		}
+	}
+	return blocks.length ? `<h3>BASELINE 증빙 (build/test/lint · 감사용)</h3>${blocks.join("")}` : "";
 }
 
 function renderFailures(view: QaView, narrative: QaReportNarrative): string {

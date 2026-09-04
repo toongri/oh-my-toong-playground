@@ -359,6 +359,30 @@ describe("qa-report renderer", () => {
 		expect(reader).not.toContain("변경 전 기준선");
 	});
 
+	test("current-cycle baseline evidence is embedded in the audit (self-contained build/test/lint proof), not merely path-listed", () => {
+		const view = baseView({
+			stories: [
+				{
+					id: "story-1",
+					actor: "actor-1",
+					baseline: {
+						result: "pass",
+						cycle: 0,
+						evidence: { path: "/evidence/baseline.log", surface: "bash" },
+					},
+				},
+			],
+		});
+		const html = renderQaReport(view, {}, fakeReader)!;
+		// The audit layer embeds the actual baseline log content, so a recipient
+		// holding only the HTML can audit the build/test/lint proof.
+		const audit = html.slice(html.indexOf("시나리오 상세 기록"), html.indexOf("Evidence Files"));
+		expect(audit).toContain("contents of /evidence/baseline.log");
+		// But the reader scenario section stays clean of it (not a boundary observation).
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
+		expect(reader).not.toContain("contents of /evidence/baseline.log");
+	});
+
 	test("renders the waived sub-scenario in the verdict identifier", () => {
 		const html = renderQaReport(
 			baseView({
