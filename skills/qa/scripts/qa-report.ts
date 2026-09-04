@@ -324,7 +324,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function validateAcMapping(view: QaView, value: unknown): QaReportAcMapping | null {
+type ValidAcMapping = Omit<QaReportAcMapping, "satisfied" | "cellRefs"> & {
+	satisfied: NonNullable<QaReportAcMapping["satisfied"]>;
+	cellRefs: NonNullable<QaReportAcMapping["cellRefs"]>;
+};
+
+function validateAcMapping(view: QaView, value: unknown): ValidAcMapping | null {
 	if (!isRecord(value)) return null;
 	const mapping = value;
 	const satisfied = mapping.satisfied;
