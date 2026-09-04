@@ -312,7 +312,11 @@ function proseOrGap(prose: string | undefined, whatMissing: string): string {
 	return prose?.trim() ? `<p>${escapeHtml(prose)}</p>` : gap(whatMissing);
 }
 
-function renderBigPicture(presentation: QaReportPresentation | undefined, renderMermaid: MermaidRenderer): string {
+function renderBigPicture(
+	presentation: QaReportPresentation | undefined,
+	renderMermaid: MermaidRenderer,
+	onMermaidRenderError?: (error: unknown) => void,
+): string {
 	const source = presentation?.bigPicture;
 	if (!source) return `<h2>큰 그림</h2>${gap("큰 그림 다이어그램이 없습니다")}`;
 	const caption = presentation?.bigPictureCaption;
@@ -322,8 +326,9 @@ function renderBigPicture(presentation: QaReportPresentation | undefined, render
 			(caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : "") +
 			`</figure>`;
 	} catch (e) {
-		// Never abort the terminal report over a diagram: keep the raw source so
-		// the reader still sees the intended structure, and name the failure.
+			onMermaidRenderError?.(e);
+			// Never abort the terminal report over a diagram: keep the raw source so
+			// the reader still sees the intended structure, and name the failure.
 		figure =
 			`<p class="evidence-note">다이어그램 렌더 실패 (${escapeHtml(String(e))})</p>` +
 			`<pre>${escapeHtml(source)}</pre>`;
@@ -810,6 +815,7 @@ export function renderQaReport(
 	narrative: QaReportNarrative = {},
 	readEvidence: EvidenceReader = defaultEvidenceReader,
 	renderMermaid: MermaidRenderer = mmdcRenderSvg,
+	onMermaidRenderError?: (error: unknown) => void,
 ): string | null {
 	if ((view.actors ?? []).length === 0) return null;
 	const title = `QA Report — ${view.target || view.phase}`;
@@ -825,7 +831,7 @@ export function renderQaReport(
 		// failures, verdict, evidence files).
 		renderOverview(narrative),
 		renderRequirementFulfillment(view, narrative),
-		renderBigPicture(narrative.presentation, renderMermaid),
+		renderBigPicture(narrative.presentation, renderMermaid, onMermaidRenderError),
 		renderActors(view, narrative),
 		renderScenarios(view, narrative, readEvidence, evidenceContext),
 		renderScenarioAudit(view, narrative, readEvidence, evidenceContext),
@@ -961,7 +967,16 @@ function main(): void {
 		process.stderr.write(`qa-report: no state found for session "${session}"\n`);
 		process.exit(1);
 	}
-	const html = renderQaReport(view, narrative);
+	let mermaidRenderFailed = false;
+	let mermaidRenderError: unknown;
+	const html = renderQaReport(view, narrative, defaultEvidenceReader, mmdcRenderSvg, (error) => {
+		mermaidRenderFailed = true;
+		mermaidRenderError = error;
+	});
+	if (mermaidRenderFailed) {
+		process.stderr.write(`qa-report: Mermaid rendering failed — ${String(mermaidRenderError)}\n`);
+		process.exit(1);
+	}
 	if (html === null) {
 		process.stdout.write("qa-report: no roster recorded this cycle — report not generated (PRE-FLIGHT fail-fast)\n");
 		return;

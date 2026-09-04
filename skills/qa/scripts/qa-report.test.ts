@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import { mkdtempSync, mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -1236,6 +1236,34 @@ describe("qa-report CLI", () => {
 		expect(html).toContain("<style>");
 		expect(html).toContain("User");
 		expect(html).not.toContain("<script");
+	});
+
+	test("Mermaid 렌더링 실패 시 필수 CLI는 실패하고 보고서를 성공 생성하지 않는다", () => {
+		runState("set --phase PLAN");
+		runState('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
+
+		const binDir = join(tmpDir, "bin");
+		mkdirSync(binDir);
+		writeFileSync(join(binDir, "mmdc"), "#!/bin/sh\nprintf '%s\\n' 'forced mmdc failure' >&2\nexit 17\n", {
+			mode: 0o755,
+		});
+		const narrative = join(tmpDir, "narrative.json");
+		writeFileSync(narrative, JSON.stringify({ presentation: { bigPicture: "flowchart LR\n  A --> B" } }));
+		const out = join(tmpDir, "report.html");
+		const result = spawnSync(
+			process.execPath,
+			[reportScript, "--session", S, "--out", out, "--narrative", narrative],
+			{
+				encoding: "utf8",
+				env: { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ""}` },
+			},
+		);
+
+		expect(result.status).not.toBe(0);
+		expect(result.stderr).toContain("qa-report: Mermaid rendering failed");
+		expect(result.stderr).toContain("forced mmdc failure");
+		expect(result.stdout).not.toContain(out);
+		expect(existsSync(out)).toBe(false);
 	});
 
 	test("is a no-op (writes nothing, reports so) when the roster is empty", () => {
