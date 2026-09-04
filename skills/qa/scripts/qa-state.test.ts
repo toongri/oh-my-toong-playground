@@ -309,6 +309,27 @@ describe("qa-state CLI wiring", () => {
 		).toThrow();
 	});
 
+	test("record-cell inspects the TAIL too: a trailing test-runner summary after a large body is still REJECTED", () => {
+		authorCompleteChain();
+		// A test-runner summary sits at the END of the log. Reading only the head
+		// prefix misses it once the preceding output exceeds the window; the guard
+		// must inspect a bounded tail as well.
+		const p = join(tmpDir, "big-tail-summary.txt");
+		writeFileSync(p, "x".repeat(200_000) + "\n" + "1 pass" + "ed in 0.04s\n");
+		expect(() =>
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${p} --evidence-surface bash`),
+		).toThrow();
+	});
+
+	test("record-cell REJECTS a cached go test summary (ok pkg (cached), no numeric duration)", () => {
+		authorCompleteChain();
+		const p = join(tmpDir, "go-cached.txt");
+		writeFileSync(p, "o" + "k  \tmy/pkg\t(cached)\n");
+		expect(() =>
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${p} --evidence-surface bash`),
+		).toThrow();
+	});
+
 	test("record-cell ACCEPTS a real boundary observation (client-received response, no test-runner signature)", () => {
 		authorCompleteChain();
 		const apiPath = join(tmpDir, "cls1-response.txt");

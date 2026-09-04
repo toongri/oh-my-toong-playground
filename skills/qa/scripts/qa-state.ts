@@ -166,7 +166,7 @@ const TEST_RUNNER_SIGNATURES: RegExp[] = [
 	/=+\s*(test session starts|\d+ passed)/, // pytest banner / normal summary
 	/^\s*\d+ (passed|failed|error|errors|skipped|xfailed|xpassed|deselected)\b[^\n]*\bin [\d.]+s/m, // pytest quiet summary (no === banner; covers fail/error too)
 	/^--- (PASS|FAIL):/m, // go test -v
-	/^(ok|FAIL)\s+\S+\s+[\d.]+s\s*$/m, // go test summary
+	/^(ok|FAIL)\s+\S+\s+([\d.]+s|\(cached\))\s*$/m, // go test summary (incl. cached reuse)
 ];
 
 // Prefix scanned for a test-runner signature. A report's summary/banner always
@@ -187,23 +187,33 @@ const NON_TEXT_EVIDENCE_EXT = new Set([
  */
 function assertBoundaryObservation(absolute: string): void {
 	if (NON_TEXT_EVIDENCE_EXT.has(extname(absolute).toLowerCase())) return;
-	let head: string;
+	let scanned: string;
 	try {
-		// Read only the inspected prefix — record-cell imposes no evidence-size
-		// limit, so decoding the whole file (as readFileSync would) could consume
-		// memory proportional to an oversized capture. Cap the read at the source.
+		// Scan a bounded HEAD and TAIL — never the whole file. record-cell imposes no
+		// evidence-size limit, so decoding the entire capture (as readFileSync would)
+		// could exhaust memory. A test-runner BANNER sits at the head while its SUMMARY
+		// (`1 passed in ...`, `ok pkg`, `N passing`) sits at the tail, so a large log
+		// with either at an end must still be caught; the unscanned middle is the
+		// documented blind spot of a bounded read.
 		const fd = openSync(absolute, "r");
 		try {
-			const buf = Buffer.alloc(EVIDENCE_SCAN_BYTES);
-			const bytesRead = readSync(fd, buf, 0, EVIDENCE_SCAN_BYTES, 0);
-			head = buf.subarray(0, bytesRead).toString("utf8");
+			const size = statSync(absolute).size;
+			const readAt = (offset: number, length: number): string => {
+				const buf = Buffer.alloc(length);
+				const n = readSync(fd, buf, 0, length, offset);
+				return buf.subarray(0, n).toString("utf8");
+			};
+			scanned =
+				size <= 2 * EVIDENCE_SCAN_BYTES
+					? readAt(0, size)
+					: readAt(0, EVIDENCE_SCAN_BYTES) + "\n" + readAt(size - EVIDENCE_SCAN_BYTES, EVIDENCE_SCAN_BYTES);
 		} finally {
 			closeSync(fd);
 		}
 	} catch {
 		return; // unreadable/binary — probe* already validated existence+size
 	}
-	if (TEST_RUNNER_SIGNATURES.some((re) => re.test(head))) {
+	if (TEST_RUNNER_SIGNATURES.some((re) => re.test(scanned))) {
 		throw new Error(
 			`evidence "${absolute}" is a unit/integration test-runner report, which proves code in ` +
 				`isolation — NOT the user boundary. A scenario cell's evidence must be a boundary ` +
