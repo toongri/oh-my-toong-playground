@@ -121,14 +121,13 @@ test_interpreter_module_and_python_runner_targets_denied() {
     return "$result"
 }
 
-test_matching_conductor_denies_even_done_status() {
+test_conductor_session_allowed_despite_matching_job() {
     new_sandbox
     mkdir -p "$JOBS/chunk-review-one"
-    printf '%s\n' '{"conductorSessionId":"conductor","status":"done"}' > "$JOBS/chunk-review-one/job.json"
-    printf '%s\n' '{"status":"done"}' > "$JOBS/chunk-review-one/status.json"
-    local out result=0
-    out=$(run_hook 'pnpm test' conductor)
-    assert_denied "$out" conductor-done || result=1
+    printf '%s\n' '{"conductorSessionId":"conductor"}' > "$JOBS/chunk-review-one/job.json"
+    local out rc=0 result=0
+    out=$(run_hook 'pnpm test' conductor) || rc=$?
+    assert_allowed "$out" "$rc" conductor-not-gated || result=1
     cleanup_sandbox
     return "$result"
 }
@@ -148,22 +147,11 @@ test_other_session_and_removed_job_allow() {
     return "$result"
 }
 
-test_no_marker_malformed_unsafe_mismatch_and_no_jq_fail_open() {
+test_no_marker_and_no_jq_fail_open() {
     new_sandbox
     local out rc=0 result=0
     out=$(run_hook 'pnpm test') || rc=$?
     assert_allowed "$out" "$rc" no-marker || result=1
-    mkdir -p "$JOBS/chunk-review-malformed"
-    printf '%s\n' '{not json' > "$JOBS/chunk-review-malformed/job.json"
-    rc=0; out=$(run_hook 'pnpm test') || rc=$?
-    assert_allowed "$out" "$rc" malformed-job || result=1
-    rm -rf "$JOBS/chunk-review-malformed"
-    mkdir -p "$JOBS/chunk-review-unsafe"
-    printf '%s\n' '{"conductorSessionId":"unsafe/session"}' > "$JOBS/chunk-review-unsafe/job.json"
-    rc=0; out=$(run_hook 'pnpm test' 'unsafe/session') || rc=$?
-    assert_allowed "$out" "$rc" unsafe-session || result=1
-    rc=0; out=$(payload 'pnpm test' conductor | env OMT_DIR="$SBX/omt" OMT_SESSION_ID=conductor CODEX_THREAD_ID=other bash "$HOOK") || rc=$?
-    assert_allowed "$out" "$rc" identity-mismatch || result=1
     mkdir -p "$SBX/no-bin"
     ln -s /usr/bin/dirname "$SBX/no-bin/dirname"
     rc=0; out=$(payload 'pnpm test' | env -u OMT_SESSION_ID -u CODEX_THREAD_ID OMT_DIR="$SBX/omt" OMT_REVIEW_ROLE=member PATH="$SBX/no-bin" /bin/bash "$HOOK") || rc=$?
@@ -266,9 +254,9 @@ main() {
     run_test test_member_denies_despite_identity_disagreement
     run_test test_package_runner_targets_denied
     run_test test_interpreter_module_and_python_runner_targets_denied
-    run_test test_matching_conductor_denies_even_done_status
+    run_test test_conductor_session_allowed_despite_matching_job
     run_test test_other_session_and_removed_job_allow
-    run_test test_no_marker_malformed_unsafe_mismatch_and_no_jq_fail_open
+    run_test test_no_marker_and_no_jq_fail_open
     run_test test_static_and_orchestration_commands_allow
     run_test test_chained_and_quoted_runners_cannot_bypass
     run_test jvm-deny-gradle-test test_jvm_denied_row 'gradle test' jvm-deny-gradle-test

@@ -15,19 +15,8 @@ fi
 tool_name=$(printf '%s' "$input" | jq -er '.tool_name // .toolName // empty' 2>/dev/null) || exit 0
 [ "$tool_name" = "Bash" ] || exit 0
 command=$(printf '%s' "$input" | jq -er '.tool_input.command // empty' 2>/dev/null) || exit 0
-payload_sid=$(printf '%s' "$input" | jq -er '.session_id // empty' 2>/dev/null) || exit 0
 
-if ! review_exec_is_member; then
-    session_id=$(review_exec_session_id "$payload_sid") || exit 0
-    omt_dir="${OMT_DIR:-}"
-    if [ -z "$omt_dir" ]; then
-        cwd=$(printf '%s' "$input" | jq -er '.cwd // empty' 2>/dev/null) || exit 0
-        [ -n "$cwd" ] || exit 0
-        omt_dir=$(source "$SCRIPT_DIR/lib/omt-dir.sh" && unset OMT_DIR && resolve_omt_dir "$cwd") || exit 0
-    fi
-    [ -n "$omt_dir" ] || exit 0
-    review_exec_is_conductor "$omt_dir" "$session_id" || exit 0
-fi
+review_exec_is_member || exit 0
 review_exec_command_denied "$command" || exit 0
 
 printf '%s\n' '{"continue":false,"reason":"Review is static-only: tests, builds, installs, and linters must not run here. Use static inspection (diffs, searches, and source reading) instead."}'

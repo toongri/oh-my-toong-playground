@@ -120,13 +120,13 @@ test_interpreter_module_and_python_runner_targets_denied() {
     return "$result"
 }
 
-test_conductor_env_absent_payload_identity_and_other_session() {
+test_conductor_and_other_session_allowed() {
     new_sandbox
     mkdir -p "$JOBS/chunk-review-one"
-    printf '%s\n' '{"conductorSessionId":"conductor","status":"done"}' > "$JOBS/chunk-review-one/job.json"
+    printf '%s\n' '{"conductorSessionId":"conductor"}' > "$JOBS/chunk-review-one/job.json"
     local out rc=0 result=0
-    out=$(payload exec_command cmd 'pnpm test' conductor | env -u OMT_SESSION_ID -u CODEX_THREAD_ID OMT_DIR="$SBX/omt" bash "$HOOK")
-    assert_denied "$out" payload-identity || result=1
+    out=$(payload exec_command cmd 'pnpm test' conductor | env -u OMT_SESSION_ID -u CODEX_THREAD_ID OMT_DIR="$SBX/omt" bash "$HOOK") || rc=$?
+    assert_allowed "$out" "$rc" conductor-not-gated || result=1
     out=$(run_codex exec_command cmd 'pnpm test' another) || rc=$?
     assert_allowed "$out" "$rc" other-session || result=1
     rm -rf "$JOBS/chunk-review-one"
@@ -146,15 +146,8 @@ test_fail_open_and_non_shell_routes() {
     rc=0; out=$(run_codex exec_command cmd 'pnpm test') || rc=$?
     assert_allowed "$out" "$rc" malformed-job || result=1
     rm -rf "$JOBS/chunk-review-malformed"
-    # An unsafe session identity fails open only where identity is what arms the
-    # guard -- the conductor route. The member marker is set at worker spawn and
-    # carries no identity claim, so it arms the guard regardless.
-    rc=0; out=$(payload exec_command cmd 'pnpm test' 'unsafe/session' | env -u OMT_SESSION_ID -u CODEX_THREAD_ID -u OMT_REVIEW_ROLE OMT_DIR="$SBX/omt" bash "$HOOK") || rc=$?
-    assert_allowed "$out" "$rc" unsafe-id || result=1
     out=$(payload exec_command cmd 'pnpm test' 'unsafe/session' | env -u OMT_SESSION_ID -u CODEX_THREAD_ID OMT_DIR="$SBX/omt" OMT_REVIEW_ROLE=member bash "$HOOK")
     assert_denied "$out" unsafe-id-member || result=1
-    rc=0; out=$(payload exec_command cmd 'pnpm test' conductor | env OMT_DIR="$SBX/omt" OMT_SESSION_ID=conductor CODEX_THREAD_ID=other bash "$HOOK") || rc=$?
-    assert_allowed "$out" "$rc" identity-mismatch || result=1
     rc=0; out=$(payload edit command 'pnpm test' | env -u OMT_SESSION_ID -u CODEX_THREAD_ID OMT_DIR="$SBX/omt" OMT_REVIEW_ROLE=member bash "$HOOK") || rc=$?
     assert_allowed "$out" "$rc" non-shell || result=1
     rc=0; out=$(printf '%s' '{bad json' | env OMT_DIR="$SBX/omt" OMT_REVIEW_ROLE=member bash "$HOOK") || rc=$?
@@ -271,7 +264,7 @@ main() {
     run_test test_member_denies_despite_identity_disagreement
     run_test test_package_runner_targets_denied
     run_test test_interpreter_module_and_python_runner_targets_denied
-    run_test test_conductor_env_absent_payload_identity_and_other_session
+    run_test test_conductor_and_other_session_allowed
     run_test test_fail_open_and_non_shell_routes
     run_test test_static_and_orchestration_commands_allow
     run_test test_matches_claude_reason_and_verdict

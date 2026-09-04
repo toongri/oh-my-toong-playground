@@ -3,47 +3,10 @@
 # their platform payload extraction, then use these functions for identity,
 # review-context, and command judgment.
 
-review_exec_session_id() {
-    local payload_sid="$1" candidate="" value=""
-    for value in "${OMT_SESSION_ID:-}" "${CODEX_THREAD_ID:-}" "$payload_sid"; do
-        [ -n "$value" ] || continue
-        case "$value" in
-            *[!A-Za-z0-9_-]*|?*)
-                if ! printf '%s' "$value" | grep -qE '^[A-Za-z0-9_-]{1,200}$'; then
-                    echo "review-exec-guard: unsafe session identity; allowing command" >&2
-                    return 1
-                fi
-                ;;
-        esac
-        if [ -n "$candidate" ] && [ "$candidate" != "$value" ]; then
-            echo "review-exec-guard: session identities disagree; allowing command" >&2
-            return 1
-        fi
-        candidate="$value"
-    done
-    [ -n "$candidate" ] || return 1
-    printf '%s\n' "$candidate"
-}
-
-review_exec_is_conductor() {
-    local omt_dir="$1" session_id="$2" job_file job_dir conductor
-    [ -d "$omt_dir/jobs" ] || return 1
-    for job_file in "$omt_dir"/jobs/chunk-review-*/job.json; do
-        [ -f "$job_file" ] && [ ! -L "$job_file" ] || continue
-        job_dir=$(dirname "$job_file")
-        [ -d "$job_dir" ] || continue
-        conductor=$(jq -er '.conductorSessionId | strings' "$job_file" 2>/dev/null) || continue
-        [ "$conductor" = "$session_id" ] && return 0
-    done
-    return 1
-}
-
-# Spawn-time role marker on the worker process, deliberately independent of
-# session identity: a Claude conductor spawns the default Codex finders with its
-# own OMT_SESSION_ID inherited through the environment while the nested Codex
-# session supplies its own CODEX_THREAD_ID, so those two identities disagree and
-# review_exec_session_id refuses to resolve. Callers must consult this BEFORE
-# reconciling identities, or the guard falls open on that very path.
+# Spawn-time role marker on the finder-worker process — the sole arming
+# signal for this guard. It is set to "member" in the worker's environment
+# at spawn, independent of session identity, and gone once the worker exits,
+# so a session that merely conducted a review is never gated after it ends.
 review_exec_is_member() {
     [ "${OMT_REVIEW_ROLE:-}" = "member" ]
 }
