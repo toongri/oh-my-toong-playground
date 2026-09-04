@@ -12,11 +12,6 @@ import {
 import { join } from "path";
 import { tmpdir } from "os";
 import { EventEmitter } from "events";
-import { spawn as spawnChild, execSync } from "child_process";
-// reapOwnProcessGroup는 여기서 직접 import하지 않는다 — 자기 프로세스 그룹을
-// 대상으로 동작해 인프로세스 호출이 불가능하므로, 하단 "reapOwnProcessGroup"
-// describe 블록이 절대 경로(WORKER_UTILS_ABS_PATH)로 별도 스크립트에서 import해
-// 자식 프로세스 하니스로 검증한다.
 import {
 	splitCommand,
 	atomicWriteJson,
@@ -24,6 +19,7 @@ import {
 	runOnce,
 	runOneTurn,
 	resumeOneTurn,
+	reapOwnProcessGroup,
 	type RunOnceOpts,
 	type RunOneTurnOpts,
 } from "./worker-utils.ts";
@@ -36,16 +32,6 @@ function makeTmpDir(): string {
 function sleepMsAsync(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
-// 실제 프로세스를 띄우는 테스트들의 시간 상한. 이 값들은 "얼마나 기다렸다가
-// 실패를 선언하는가"만 정하며 단언을 전혀 완화하지 않는다 — 마커가 끝내 안
-// 나타나거나 프로세스가 끝내 안 죽으면 그대로 실패한다. 상한을 넉넉히 두는
-// 이유는 여기서 기다리는 대상이 bun 프로세스 기동이고, 전체 스위트를 돌릴 때
-// 워커들이 코어를 다투면서 단일 테스트가 5.8초까지 늘어난 것이 실측됐기 때문
-// 이다. 3~4초짜리 상한은 그 부하 아래에서 결함이 아니라 부하 때문에 터진다.
-const SPAWN_MARKER_DEADLINE_MS = 30_000;
-const REAP_OBSERVE_DEADLINE_MS = 30_000;
-const PROCESS_GROUP_TEST_TIMEOUT_MS = 120_000;
 
 describe("splitCommand", () => {
 	test("splits a simple command", () => {
@@ -1611,333 +1597,77 @@ describe("executeOneTurn parsed truthy non-final terminal — state preservation
 // ---------------------------------------------------------------------------
 // reapOwnProcessGroup — 워커 자가 프로세스 그룹 회수
 //
-// reapOwnProcessGroup은 호출한 프로세스 자신을 대상으로 동작하므로 이 테스트
-// 프로세스 안에서 직접 부르면 bun 테스트 러너 자신이 죽는다. 대신 실제
-// lib/worker-utils.ts의 reapOwnProcessGroup을 import하는 별도 스크립트를 만들어
-// detached 자식 프로세스로 실행하는 자식 프로세스 하니스로 검증한다.
+// reapOwnProcessGroup은 자기 프로세스 그룹을 대상으로 동작해 실제 OS 시그널을
+// 보내므로, 이 테스트 프로세스 안에서 실제 시그널로 검증하면 테스트 러너
+// 자신이 죽는다. 대신 주입 seam(kill/graceMs/installSelfSigtermHandler)으로
+// 실제 프로세스 스폰 없이 로직만 검증한다 — OS의 그룹-kill 동작 자체는 이
+// 함수의 책임 범위 밖이라 여기서 재검증하지 않는다.
 // ---------------------------------------------------------------------------
 
-const WORKER_UTILS_ABS_PATH = new URL("./worker-utils.ts", import.meta.url).pathname;
-
 describe("reapOwnProcessGroup", () => {
-	let tmpDir: string;
-	let spawnedPgids: number[];
+	test("그룹 SIGTERM 후 graceMs 뒤 그룹 SIGKILL로 에스컬레이션", async () => {
+		const calls: Array<[number, NodeJS.Signals]> = [];
+		const promise = reapOwnProcessGroup({
+			kill: (pid, signal) => {
+				calls.push([pid, signal]);
+			},
+			graceMs: 20,
+			installSelfSigtermHandler: () => {},
+		});
 
-	function isPgidAlive(pgid: number): boolean {
-		try {
-			const out = execSync("ps -o pgid= -A", { encoding: "utf8" });
-			return out
-				.split("\n")
-				.map((l) => Number(l.trim()))
-				.some((n) => n === pgid);
-		} catch {
-			return false;
-		}
-	}
+		// async 함수는 첫 await 전까지 동기 실행되므로, 반환된 프로미스가
+		// settle하기 전이라도 이 시점엔 이미 SIGTERM만 기록돼 있어야 한다.
+		expect(calls).toEqual([[-process.pid, "SIGTERM"]]);
 
-	function isPidAlive(pid: number): boolean {
-		try {
-			process.kill(pid, 0);
-			return true;
-		} catch {
-			return false;
-		}
-	}
+		await promise;
 
-	beforeEach(() => {
-		tmpDir = mkdtempSync(join(tmpdir(), "reap-own-pgroup-"));
-		spawnedPgids = [];
+		expect(calls).toEqual([
+			[-process.pid, "SIGTERM"],
+			[-process.pid, "SIGKILL"],
+		]);
 	});
 
-	afterEach(() => {
-		for (const pgid of spawnedPgids) {
-			try {
-				process.kill(-pgid, "SIGKILL");
-			} catch {
-				// 이미 회수됨 — 정리할 것 없음
-			}
-		}
-		rmSync(tmpDir, { recursive: true, force: true });
+	test("그룹에 시그널을 보내기 전에 self-survive SIGTERM 핸들러를 설치", async () => {
+		const events: string[] = [];
+		await reapOwnProcessGroup({
+			kill: (_pid, signal) => {
+				events.push(`kill:${signal}`);
+			},
+			graceMs: 10,
+			installSelfSigtermHandler: () => {
+				events.push("install");
+			},
+		});
+
+		expect(events[0]).toBe("install");
+		expect(events.indexOf("install")).toBeLessThan(events.indexOf("kill:SIGTERM"));
 	});
 
-	// 그룹 SIGTERM → 5초 대기 → 그룹 SIGKILL 에스컬레이션이 sleep 자손까지
-	// 포함한 프로세스 그룹 전체를 회수하는지 검증 (하니스 스크립트가 실제
-	// reapOwnProcessGroup을 import해서 호출).
-	test(
-		"자손 프로세스를 포함한 프로세스 그룹 전체를 회수해 잔여 프로세스를 0개로 만듦",
-		async () => {
-			const scriptPath = join(tmpDir, "reap-script.ts");
-			const spawnedMarkerPath = join(tmpDir, "sleep-spawned.txt");
-			writeFileSync(
-				scriptPath,
-				[
-					`import { spawn } from "child_process";`,
-					`import fs from "fs";`,
-					`import { reapOwnProcessGroup } from ${JSON.stringify(WORKER_UTILS_ABS_PATH)};`,
-					``,
-					`const markerPath = process.argv[2];`,
-					`const sleepChild = spawn("sleep", ["30"], { stdio: "ignore" });`,
-					`fs.writeFileSync(markerPath, String(sleepChild.pid));`,
-					``,
-					`reapOwnProcessGroup().then(() => process.exit(0));`,
-					``,
-				].join("\n"),
-				"utf8",
-			);
+	test("자기 프로세스 그룹(-pid)만 시그널하고 다른 pgid는 건드리지 않음", async () => {
+		const pids: number[] = [];
+		await reapOwnProcessGroup({
+			kill: (pid) => {
+				pids.push(pid);
+			},
+			graceMs: 10,
+			installSelfSigtermHandler: () => {},
+		});
 
-			const harness = spawnChild(process.execPath, [scriptPath, spawnedMarkerPath], {
-				detached: true,
-				stdio: "ignore",
-			});
-			const pgid = harness.pid;
-			if (pgid === undefined) throw new Error("spawn failed to produce a pid");
-			spawnedPgids.push(pgid);
+		expect(pids.length).toBeGreaterThan(0);
+		for (const pid of pids) {
+			expect(pid).toBe(-process.pid);
+		}
+	});
 
-			// sleep 자손이 실제로 떴는지 먼저 확인 — 스크립트가 import 단계에서
-			// 죽으면(예: reapOwnProcessGroup 미구현) 이 마커가 끝까지 나타나지
-			// 않아 아래 단언에서 실패한다. 이게 없으면 "회수 전 대상이 하나도
-			// 없어서 우연히 0개"인 거짓 통과를 걸러내지 못한다.
-			const spawnDeadline = Date.now() + SPAWN_MARKER_DEADLINE_MS;
-			while (!existsSync(spawnedMarkerPath) && Date.now() < spawnDeadline) {
-				await sleepMsAsync(50);
-			}
-			expect(existsSync(spawnedMarkerPath)).toBe(true);
-			const sleepPid = Number(readFileSync(spawnedMarkerPath, "utf8").trim());
-			expect(Number.isInteger(sleepPid)).toBe(true);
-
-			await new Promise<void>((resolve) => {
-				harness.on("exit", () => resolve());
-			});
-
-			// 그룹 전체 SIGKILL 이후 OS가 좀비를 회수하기를 기다린다. 고정 500ms
-			// 관찰창은 부하 걸린 머신에서 회수가 늦어지면 그대로 거짓 실패가 된다
-			// — 폴링은 빨리 끝나면 즉시 통과하고, 끝내 비지 않으면 여전히 실패한다.
-			const livePgidLines = (): string[] =>
-				execSync("ps -o pgid=,pid= -A", { encoding: "utf8" })
-					.split("\n")
-					.map((line) => line.trim())
-					.filter((line) => line.length > 0)
-					.filter((line) => Number(line.split(/\s+/)[0]) === pgid);
-			const reapDeadline = Date.now() + REAP_OBSERVE_DEADLINE_MS;
-			while (livePgidLines().length > 0 && Date.now() < reapDeadline) {
-				await sleepMsAsync(50);
-			}
-
-			expect(livePgidLines()).toHaveLength(0);
-		},
-		PROCESS_GROUP_TEST_TIMEOUT_MS,
-	);
-
-	// AC1 이행 증거: 그룹 전체 SIGTERM을 보내기 "전에" 무시 핸들러를 설치해야
-	// 워커 자신이 자기가 보낸 시그널에 죽지 않는다. 5초 SIGKILL 에스컬레이션
-	// 유예 구간 한가운데(2초 지점)에서 스크립트가 여전히 살아서 완료 표식을
-	// 남기는지로 이를 검증한다.
-	test(
-		"워커 자신은 자기가 그룹에 보낸 SIGTERM으로 죽지 않고 계속 실행됨",
-		async () => {
-			const scriptPath = join(tmpDir, "survive-script.ts");
-			const markerPath = join(tmpDir, "alive-after-sigterm.txt");
-			writeFileSync(
-				scriptPath,
-				[
-					`import fs from "fs";`,
-					`import { reapOwnProcessGroup } from ${JSON.stringify(WORKER_UTILS_ABS_PATH)};`,
-					``,
-					`const markerPath = process.argv[2];`,
-					`setTimeout(() => {`,
-					`	fs.writeFileSync(markerPath, "alive-after-own-sigterm");`,
-					`}, 2000);`,
-					``,
-					`reapOwnProcessGroup();`,
-					``,
-				].join("\n"),
-				"utf8",
-			);
-
-			const harness = spawnChild(process.execPath, [scriptPath, markerPath], {
-				detached: true,
-				stdio: "ignore",
-			});
-			const pgid = harness.pid;
-			if (pgid === undefined) throw new Error("spawn failed to produce a pid");
-			spawnedPgids.push(pgid);
-
-			// 고정 sleep 대신 폴링 — 스케줄링 지연에 덜 취약함
-			const deadline = Date.now() + SPAWN_MARKER_DEADLINE_MS;
-			while (!existsSync(markerPath) && Date.now() < deadline) {
-				await sleepMsAsync(100);
-			}
-
-			expect(existsSync(markerPath)).toBe(true);
-			expect(readFileSync(markerPath, "utf8")).toBe("alive-after-own-sigterm");
-		},
-		PROCESS_GROUP_TEST_TIMEOUT_MS,
-	);
-
-	// 오살 방지 증명: reapOwnProcessGroup은 process.kill(-pgid, ...)로 그룹
-	// "전체"에 신호를 보내므로, 대상 범위가 의도치 않게 넓어지는 것(예: 잘못된
-	// pgid 계산으로 남의 그룹까지 건드리는 회귀)이 바로 이 방관자가 잡아내는
-	// 회귀 클래스다. lib/generic-job.test.ts:3115-3130의 방관자 패턴과 같은 결.
-	test(
-		"회수 대상과 무관한 방관자 프로세스 그룹은 하니스 실행 전후 모두 살아남는다",
-		async () => {
-			const bystander = spawnChild("sleep", ["30"], { detached: true, stdio: "ignore" });
-			const bystanderPgid = bystander.pid;
-			if (bystanderPgid === undefined) throw new Error("spawn failed to produce a pid");
-			spawnedPgids.push(bystanderPgid);
-
-			// 선행 단언: 하니스 실행 전에 방관자가 실제로 살아있음을 먼저 확인한다
-			// — 없으면 사후 단언이 "애초에 살아있지 않았다"와 구분되지 않는다.
-			expect(isPgidAlive(bystanderPgid)).toBe(true);
-
-			const scriptPath = join(tmpDir, "reap-bystander-script.ts");
-			const markerPath = join(tmpDir, "sleep-spawned-bystander.txt");
-			writeFileSync(
-				scriptPath,
-				[
-					`import { spawn } from "child_process";`,
-					`import fs from "fs";`,
-					`import { reapOwnProcessGroup } from ${JSON.stringify(WORKER_UTILS_ABS_PATH)};`,
-					``,
-					`const markerPath = process.argv[2];`,
-					`const sleepChild = spawn("sleep", ["30"], { stdio: "ignore" });`,
-					`fs.writeFileSync(markerPath, String(sleepChild.pid));`,
-					``,
-					`reapOwnProcessGroup().then(() => process.exit(0));`,
-					``,
-				].join("\n"),
-				"utf8",
-			);
-
-			const harness = spawnChild(process.execPath, [scriptPath, markerPath], {
-				detached: true,
-				stdio: "ignore",
-			});
-			const pgid = harness.pid;
-			if (pgid === undefined) throw new Error("spawn failed to produce a pid");
-			spawnedPgids.push(pgid);
-
-			const spawnDeadline = Date.now() + SPAWN_MARKER_DEADLINE_MS;
-			while (!existsSync(markerPath) && Date.now() < spawnDeadline) {
-				await sleepMsAsync(50);
-			}
-			expect(existsSync(markerPath)).toBe(true);
-
-			await new Promise<void>((resolve) => {
-				harness.on("exit", () => resolve());
-			});
-
-			// 그룹 전체 SIGKILL 이후 OS가 좀비를 회수할 여유 시간
-			await sleepMsAsync(500);
-
-			// 오살 방지 음성 대조군: 이 하니스와 무관한 프로세스 그룹은 살아남아야 한다.
-			expect(isPgidAlive(bystanderPgid)).toBe(true);
-		},
-		PROCESS_GROUP_TEST_TIMEOUT_MS,
-	);
-
-	// SIGKILL 에스컬레이션 증거: 계층 1 픽스처의 자손이 전부 평범한 sleep이면
-	// 첫 SIGTERM에 죽어버려 5초 유예 뒤의 SIGKILL 단계가 한 번도 실행되지
-	// 않는다. SIGTERM을 무시하는 자손(`trap "" TERM; exec sleep 30` — exec로
-	// 이미지가 교체돼도 SIG_IGN 디스포지션은 exec를 넘어 보존된다는 POSIX
-	// 시그널 규약을 이용)을 넣어야 SIGKILL 단계가 비로소 load-bearing해진다.
-	test(
-		"SIGTERM을 무시하는 자손은 첫 SIGTERM에 살아남고 5초 뒤 SIGKILL로 결국 죽는다",
-		async () => {
-			const scriptPath = join(tmpDir, "reap-trap-script.ts");
-			const trapPidPath = join(tmpDir, "trap-child-pid.txt");
-			const trapReadyPath = join(tmpDir, "trap-child-ready.txt");
-			const midGraceMarkerPath = join(tmpDir, "trap-child-mid-grace.txt");
-			writeFileSync(
-				scriptPath,
-				[
-					`import { spawn } from "child_process";`,
-					`import fs from "fs";`,
-					`import { reapOwnProcessGroup } from ${JSON.stringify(WORKER_UTILS_ABS_PATH)};`,
-					``,
-					`const trapPidPath = process.argv[2];`,
-					`const trapReadyPath = process.argv[3];`,
-					`const midMarkerPath = process.argv[4];`,
-					// trap ""로 SIGTERM을 SIG_IGN 처리한 뒤 ready 마커를 touch하고 나서야
-					// exec으로 sleep에 자기 자신을 교체한다 — SIG_IGN 디스포지션은 exec를
-					// 넘어 보존되므로 이 시점 이후로는 신호 유예가 확정된다. ready 마커가
-					// 나타나기 전에 SIGTERM을 보내면, bash가 아직 trap을 설치하기 전이라
-					// 기본 동작(종료)으로 죽어버리는 경합이 생긴다 — 그 경합을 이 동기화로
-					// 닫는다.
-					`const trapChild = spawn(`,
-					`	"bash",`,
-					`	["-c", 'trap "" TERM; touch "$1"; exec sleep 30', "_", trapReadyPath],`,
-					`	{ stdio: "ignore" },`,
-					`);`,
-					`fs.writeFileSync(trapPidPath, String(trapChild.pid));`,
-					``,
-					`function waitReadyThenReap() {`,
-					`	if (!fs.existsSync(trapReadyPath)) {`,
-					`		setTimeout(waitReadyThenReap, 10);`,
-					`		return;`,
-					`	}`,
-					`	setTimeout(() => {`,
-					`		let alive = true;`,
-					`		try {`,
-					`			process.kill(trapChild.pid, 0);`,
-					`		} catch {`,
-					`			alive = false;`,
-					`		}`,
-					`		fs.writeFileSync(midMarkerPath, alive ? "alive" : "dead");`,
-					`	}, 2000);`,
-					`	reapOwnProcessGroup().then(() => process.exit(0));`,
-					`}`,
-					`waitReadyThenReap();`,
-					``,
-				].join("\n"),
-				"utf8",
-			);
-
-			const harness = spawnChild(
-				process.execPath,
-				[scriptPath, trapPidPath, trapReadyPath, midGraceMarkerPath],
-				{
-					detached: true,
-					stdio: "ignore",
+	test("이미 빈 그룹의 ESRCH를 삼켜 throw하지 않음", async () => {
+		await expect(
+			reapOwnProcessGroup({
+				kill: () => {
+					throw Object.assign(new Error("ESRCH"), { code: "ESRCH" });
 				},
-			);
-			const pgid = harness.pid;
-			if (pgid === undefined) throw new Error("spawn failed to produce a pid");
-			spawnedPgids.push(pgid);
-
-			const spawnDeadline = Date.now() + SPAWN_MARKER_DEADLINE_MS;
-			while (!existsSync(trapPidPath) && Date.now() < spawnDeadline) {
-				await sleepMsAsync(50);
-			}
-			expect(existsSync(trapPidPath)).toBe(true);
-			const trapPid = Number(readFileSync(trapPidPath, "utf8").trim());
-			expect(Number.isInteger(trapPid)).toBe(true);
-
-			// 선행 단언: 그룹 SIGTERM 이후에도(스크립트 자체 타이머로 2초 지점 —
-			// 아직 5초 SIGKILL 전) SIGTERM을 무시하는 이 자손이 여전히 살아있음을
-			// 확인한다 — 없으면 뒤의 "결국 죽음" 단언이 SIGKILL 에스컬레이션의
-			// 효과인지, 애초에 살아있지 않았던 건지 구분할 수 없다.
-			const midDeadline = Date.now() + SPAWN_MARKER_DEADLINE_MS;
-			while (!existsSync(midGraceMarkerPath) && Date.now() < midDeadline) {
-				await sleepMsAsync(50);
-			}
-			expect(existsSync(midGraceMarkerPath)).toBe(true);
-			expect(readFileSync(midGraceMarkerPath, "utf8")).toBe("alive");
-
-			await new Promise<void>((resolve) => {
-				harness.on("exit", () => resolve());
-			});
-
-			// 5초 유예 종료 + SIGKILL 전파/좀비 회수를 기다린다. 고정 500ms 관찰창은
-			// 전파가 그보다 늦어지는 순간 거짓 실패가 된다 — 폴링은 죽는 즉시
-			// 통과하고, 끝내 살아 있으면 여전히 실패한다.
-			const deathDeadline = Date.now() + REAP_OBSERVE_DEADLINE_MS;
-			while (isPidAlive(trapPid) && Date.now() < deathDeadline) {
-				await sleepMsAsync(50);
-			}
-
-			expect(isPidAlive(trapPid)).toBe(false);
-		},
-		PROCESS_GROUP_TEST_TIMEOUT_MS,
-	);
+				graceMs: 10,
+				installSelfSigtermHandler: () => {},
+			}),
+		).resolves.toBeUndefined();
+	});
 });
