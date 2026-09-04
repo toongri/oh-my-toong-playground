@@ -32,7 +32,11 @@ export type EvidenceEmbed =
 	| { kind: "image"; dataUri: string }
 	| { kind: "text"; content: string }
 	| { kind: "missing"; path: string }
-	| { kind: "too-large"; path: string; size: number };
+	// `media` records whether the oversized file was an image or plain text, so
+	// `imageSlot` can tell a too-large screenshot (still shows the placeholder)
+	// from too-large text/API/CLI evidence (never a screenshot placeholder).
+	// Absent (existing injected test readers) behaves as before: image.
+	| { kind: "too-large"; path: string; size: number; media?: "image" | "text" };
 
 export type EvidenceReader = (path: string) => EvidenceEmbed;
 
@@ -50,8 +54,8 @@ export function defaultEvidenceReader(path: string): EvidenceEmbed {
 	const absolute = resolve(path);
 	try {
 		const size = statSync(absolute).size;
-		if (size > MAX_EMBED_BYTES) return { kind: "too-large", path, size };
 		const mime = IMAGE_MIME[extname(absolute).toLowerCase()];
+		if (size > MAX_EMBED_BYTES) return { kind: "too-large", path, size, media: mime ? "image" : "text" };
 		if (mime) {
 			const data = readFileSync(absolute);
 			return { kind: "image", dataUri: `data:${mime};base64,${data.toString("base64")}` };
@@ -253,6 +257,12 @@ function imageSlot(label: string, path: string | undefined, readEvidence: Eviden
 	// enter the audit, so there is no reader/audit collision to guard here.)
 	const embed = readEvidence(path);
 	if (embed.kind === "too-large") {
+		// Oversized TEXT evidence (a large curl/API transcript, not a screenshot)
+		// is not a screenshot placeholder candidate — fall through to the
+		// text/missing branch below so the card keeps its real-observation gap
+		// instead of a false "screenshot too large" claim. `media` absent (older
+		// injected test readers) behaves as before: treated as an image.
+		if (embed.media === "text") return "";
 		// The screenshot EXISTS but is too big to inline — show a placeholder with the
 		// path so the card does not misread as "no evidence recorded" (a false gap).
 		const mib = (embed.size / (1024 * 1024)).toFixed(1);
@@ -445,8 +455,13 @@ function renderScenarios(view: QaView, narrative: QaReportNarrative, readEvidenc
 					const observed = narrative.scenarios?.[cellKey(cell)]?.observed;
 					const observedBlock = observed ? `<p class="sc-observed">${escapeHtml(observed)}</p>` : "";
 					const e = cell.evidence;
+					// De-dupe evidence paths WITHIN this one card (e.g. evidence.action ===
+					// evidence.path for CLI/API scenarios with no separate before/after) so
+					// the same file is not rendered — and budget-counted — twice on one
+					// card. Card-local only: the same screenshot shared by a DIFFERENT card
+					// still renders there (imageSlot is per-card, not de-duped globally).
 					const shots = e
-						? [e.before, e.action, e.after, e.path].map((path) => imageSlot("화면", path, readEvidence, context)).filter(Boolean).join("")
+						? [...new Set([e.before, e.action, e.after, e.path])].map((path) => imageSlot("화면", path, readEvidence, context)).filter(Boolean).join("")
 						: "";
 					const shotBlock = shots ? `<div class="sc-shots">${shots}</div>` : "";
 					const body =

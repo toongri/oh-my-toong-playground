@@ -1,12 +1,14 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { execSync } from "child_process";
-import { mkdtempSync, mkdirSync, rmSync, existsSync, readFileSync } from "fs";
+import { mkdtempSync, mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
 import {
 	renderQaReport,
 	defaultEvidenceReader,
+	MAX_EMBED_BYTES,
+	MAX_TOTAL_EMBED_BYTES,
 	type EvidenceReader,
 	type QaReportNarrative,
 	type MermaidRenderer,
@@ -425,6 +427,61 @@ describe("qa-report renderer", () => {
 		const imgCount = (scen.match(/<img /g) ?? []).length;
 		expect(imgCount).toBeGreaterThanOrEqual(2);
 		expect(scen).not.toContain("실제 소프트웨어 관찰 근거가 없습니다");
+	});
+
+	// Regression (PR #291): the size cap in `defaultEvidenceReader` was applied
+	// BEFORE the image/text branch, so an oversized non-image evidence file (a
+	// large curl/API transcript, not a screenshot) came back as `too-large` —
+	// the same shape a real oversized screenshot returns — and `imageSlot` then
+	// rendered it as a screenshot placeholder. That falsely satisfied the
+	// reader-facing visual evidence slot for a scenario with no screenshot at
+	// all, silently swallowing the required real-software-observation gap.
+	test("초과 크기 텍스트/API/CLI 증거 파일은 defaultEvidenceReader로 읽어도 스크린샷 placeholder를 렌더하지 않고, 시나리오 카드는 실제 소프트웨어 관찰 갭을 유지한다", () => {
+		const dir = mkdtempSync(join(tmpdir(), "qa-report-oversized-text-"));
+		const bigTextPath = join(dir, "api-response.log");
+		try {
+			writeFileSync(bigTextPath, "x".repeat(MAX_EMBED_BYTES + 1024));
+			const view = baseView();
+			view.cells![0].evidence = { path: bigTextPath, surface: "curl" }; // text-only boundary, no screenshot
+			view.cells![1].status = "na"; // isolate to the one oversized-text cell
+			const html = renderQaReport(view, {}, defaultEvidenceReader)!;
+			const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
+			// must NOT satisfy the reader-facing visual evidence slot with a fake
+			// "screenshot too large" placeholder — this evidence was never an image
+			expect(reader).not.toContain("너무 커서");
+			expect(reader).not.toContain('class="evidence-slot"');
+			// the scenario card must retain the required real-software-observation gap
+			expect(reader).toContain('class="gap"');
+			expect(reader).toContain("실제 소프트웨어 관찰");
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	// Regression (PR #291): `imageSlot` is called once per evidence field
+	// (before/action/after/path) with no per-card path dedup. When a scenario
+	// records `evidence.action === evidence.path` (the common CLI/API shape
+	// with no separate before/after), the SAME image is embedded twice within
+	// one card. A single image whose data URI nearly fills the total embed
+	// budget then trips the budget guard on its second (duplicate) occurrence,
+	// showing a false "budget exceeded" note that exists only because of the
+	// duplicate slot, not because two distinct images were embedded.
+	test("evidence.action === evidence.path인 시나리오에서 예산에 거의 꽉 차는 이미지는 카드에 정확히 한 번만 임베드되고, 중복 경로로 인한 예산 초과 안내를 보여주지 않는다", () => {
+		const nearBudget = "A".repeat(MAX_TOTAL_EMBED_BYTES - 40);
+		const dupPath = "/evidence/dup.png";
+		const needle = `data:image/png;base64,${nearBudget}`;
+		const reader: EvidenceReader = (path) => (path === dupPath ? { kind: "image", dataUri: needle } : { kind: "text", content: "x" });
+		const view = baseView({
+			cells: [
+				{ ...baseView().cells![0], evidence: { path: dupPath, action: dupPath, surface: "agent-device" } },
+				{ ...baseView().cells![1], status: "na" },
+			],
+		});
+		const html = renderQaReport(view, {}, reader)!;
+		const scen = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
+		const occurrences = scen.split(needle).length - 1;
+		expect(occurrences).toBe(1); // embedded exactly once, not once-per-duplicate-field
+		expect(scen).not.toContain("임베드 예산 초과"); // no false over-budget note from the duplicate
 	});
 
 	test("renders the waived sub-scenario in the verdict identifier", () => {
