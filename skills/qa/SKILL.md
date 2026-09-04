@@ -443,3 +443,18 @@ ROSTER:     ## Scenarios Executed is a precondition for verdict issuance; absent
 FEEDBACK:   feedback-protocol.md for Confidence Scoring; CONFIDENCE 0-49 discard, 50-74 nitpick, 75+ blocking
 REPORT:     STATE renders self-contained HTML (qa-report.ts) after set-verdict, before complete; leads with a reader-facing presentation layer (product/user perspective, not code-diff — affected users · user-boundary flows · big-picture diagram · AC→충족 mapping) via --narrative presentation object, anchored to recorded actors/stories/ACs; unwritten required slots render visible gap markers. presentation.md owns the contract
 ```
+
+---
+
+## Final Checklist
+
+**Run this list explicitly right before emitting the verdict — read each line and tick its box against the actual roster.** It sits last on purpose: it is the final gate every cycle passes through. **Any unchecked box blocks APPROVE.** It restates the blocking gates above as one scannable list; where a box and an earlier section disagree, the stricter reading wins.
+
+- [ ] **BASELINE green** (build / test / lint) **and** the full ADVERSARIAL E2E — provided scenarios + the 6-axis matrix — passed.
+- [ ] **Every actor is in the Actor Roster**, and each scenario was driven from **that actor's boundary** (`driven-at` confirms it; calling the changed unit directly is a unit check, not a scenario run).
+- [ ] **Each scenario's observation names the medium it was observed through** — a screen/device capture, or an API/CLI response. A human actor's result read only through an API/CLI was not seen at that actor's screen boundary → that scenario is `unverified` at the screen (not PASS). Exception: an **API-only** change with no screen built yet — declare the actor an API/system client; never dress an API reading as a human-screen observation.
+- [ ] **Every verified scenario carries a reader-visible record** — an authored observation OR a screenshot. Raw curl / HTTP / JSON / test-runner logs are never the reader's evidence (they live in the audit section).
+- [ ] **No `H`-priority scenario is `NOT-RUN`** — a single `H`-priority `NOT-RUN` blocks APPROVE, whatever the other rows say.
+- [ ] **No FAILED row remains** — the only carve-out is a self-authored `M`/`L` row scoring 50–74 (nitpick band), which soft-passes to COMMENT, never APPROVE.
+- [ ] **Each requirement (AC) maps to a verdict + backing scenarios**, and any requirement whose user boundary was never driven reads `unverified` (never `yes`/`partial`).
+- [ ] **The verdict does not contradict the recorded pass/fail** of the scenarios behind it.

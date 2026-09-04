@@ -937,6 +937,25 @@ describe("final-check: each scenario's observation names its medium (screen vs A
 			"A human actor's scenario is observed only through an API/CLI response but reads as if the screen was driven",
 		);
 	});
+
+	test("SKILL.md ends with an explicit checkbox completion checklist carrying the medium gate", () => {
+		const idx = skillMd.indexOf("## Final Checklist");
+		expect(idx).not.toBe(-1);
+		// it is placed LAST — after Quick Reference — so it lands at the bottom
+		// of the prompt where a final gate belongs (recency/salience).
+		expect(idx).toBeGreaterThan(skillMd.indexOf("## Quick Reference"));
+		const checklist = skillMd.slice(idx);
+		// explicit, tickable checkboxes — not prose
+		const boxes = checklist.match(/- \[ \]/g) ?? [];
+		expect(boxes.length).toBeGreaterThanOrEqual(6);
+		// the medium gate rides on the list, with the API-only carve-out
+		expect(checklist).toContain("names the medium it was observed through");
+		expect(checklist).toContain("`unverified` at the screen");
+		expect(checklist).toContain("API-only");
+		// the other blocking gates are on the list too
+		expect(checklist).toContain("`H`-priority");
+		expect(checklist).toContain("BASELINE");
+	});
 });
 
 // ---------------------------------------------------------------------------
