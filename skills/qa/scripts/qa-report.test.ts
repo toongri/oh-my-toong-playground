@@ -320,6 +320,81 @@ describe("qa-report renderer", () => {
 		expect(audit).toContain("contents of /evidence/required.log");
 	});
 
+	test("missing and oversized text evidence remain explicit audit placeholders", () => {
+		const missingPath = "/evidence/<missing>.log";
+		const oversizedPath = "/evidence/<oversized>.log";
+		const oversizedBytes = MAX_EMBED_BYTES + 123;
+		const view = baseView({
+			cells: [
+				{ ...baseView().cells![0], evidence: { path: missingPath, surface: "curl" } },
+				{ ...baseView().cells![1], status: "na" },
+			],
+		});
+		const reader: EvidenceReader = (path) =>
+			path === missingPath
+				? { kind: "missing", path }
+				: path === oversizedPath
+					? { kind: "too-large", path, size: oversizedBytes, media: "text" }
+					: { kind: "image", dataUri: "data:image/png;base64,AAAA" };
+		view.stories![0].baseline = {
+			result: "pass",
+			cycle: 0,
+			evidence: { path: oversizedPath, surface: "bash" },
+		};
+		const html = renderQaReport(view, {}, reader)!;
+		const readerSection = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
+		const audit = html.slice(html.indexOf("시나리오 상세 기록"));
+
+		expect(readerSection).not.toContain("스크린샷이 너무 커서");
+		expect(audit).toContain("&lt;missing&gt;");
+		expect(audit).toContain("읽을 수 없음");
+		expect(audit).toContain("원문 미포함");
+		expect(audit).toContain("&lt;oversized&gt;");
+		expect(audit).toContain(String(oversizedBytes));
+		expect(audit).toContain("2 MiB");
+		expect(audit).not.toContain("스크린샷이 너무 커서");
+	});
+
+	test("text evidence over the cumulative embed budget remains an audit placeholder", () => {
+		const firstPath = "/evidence/first.log";
+		const overBudgetPath = "/evidence/over-budget.log";
+		const view = baseView({
+			cells: [
+				{ ...baseView().cells![0], evidence: { path: firstPath, surface: "curl" } },
+				{ ...baseView().cells![1], status: "na", evidence: { path: overBudgetPath, surface: "curl" } },
+			],
+		});
+		const reader: EvidenceReader = (path) =>
+			path === firstPath
+				? { kind: "text", content: "A".repeat(MAX_TOTAL_EMBED_BYTES) }
+				: { kind: "text", content: "must not be embedded" };
+		const html = renderQaReport(view, {}, reader)!;
+		const audit = html.slice(html.indexOf("시나리오 상세 기록"));
+
+		expect(audit).toContain("/evidence/first.log");
+		expect(audit).toContain("/evidence/over-budget.log");
+		expect(audit).toContain("누적 텍스트 임베드 예산 초과");
+		expect(audit).toContain("원문 미포함");
+		expect(audit).not.toContain("must not be embedded");
+	});
+
+	test("an audit placeholder is de-duplicated across duplicate fields, cells, and baseline", () => {
+		const missingPath = "/evidence/shared-missing.log";
+		const view = baseView({
+			cells: [
+				{ ...baseView().cells![0], evidence: { path: missingPath, action: missingPath, surface: "curl" } },
+				{ ...baseView().cells![1], status: "na" },
+			],
+		});
+		view.stories![0].baseline = { result: "pass", cycle: 0, evidence: { path: missingPath, surface: "bash" } };
+		const reader: EvidenceReader = (path) =>
+			path === missingPath ? { kind: "missing", path } : { kind: "image", dataUri: "data:image/png;base64,AAAA" };
+		const html = renderQaReport(view, {}, reader)!;
+		const audit = html.slice(html.indexOf("시나리오 상세 기록"));
+
+		expect((audit.match(/읽을 수 없음/g) ?? []).length).toBe(1);
+	});
+
 	test("screenshots render in the reader; a sibling text evidence.path stays in the audit", () => {
 		const view = baseView();
 		view.cells![0].evidence = {

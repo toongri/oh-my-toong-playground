@@ -643,20 +643,38 @@ function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvi
  */
 /**
  * Embeds one text evidence file as a collapsed `<details>` block (de-duped and
- * budget-capped via the shared context); returns null for a missing path, an
- * already-embedded path, a non-text (image/too-large) embed, or a budget
- * overflow. `label` prefixes the summary (e.g. a baseline story id).
+ * budget-capped via the shared context). Missing and unembeddable text evidence
+ * stays in the audit as an explicit placeholder rather than disappearing.
+ * `label` prefixes the summary (e.g. a baseline story id).
  */
 function embedTextEvidence(path: string | undefined, label: string, readEvidence: EvidenceReader, context: EvidenceRenderContext): string | null {
 	if (!path || context.renderedPaths.has(path)) return null;
 	const embed = readEvidence(path);
-	if (embed.kind !== "text") return null; // images live in the reader; skip missing/too-large
+	const summary = `${label ? `${escapeHtml(label)} — ` : ""}<code>${escapeHtml(path)}</code>`;
+	if (embed.kind === "missing") {
+		context.renderedPaths.add(path);
+		return `<details class="raw-evidence raw-evidence-placeholder"><summary>${summary}</summary>` +
+			`<p class="evidence-note">읽을 수 없음 — 원문 미포함</p></details>`;
+	}
+	if (embed.kind === "too-large") {
+		// An absent media tag is an older injected reader's oversized image result;
+		// images remain reader-facing and are not duplicated in the audit.
+		if (embed.media !== "text") return null;
+		context.renderedPaths.add(path);
+		return `<details class="raw-evidence raw-evidence-placeholder"><summary>${summary}</summary>` +
+			`<p class="evidence-note">텍스트 증거가 개별 제한 2 MiB를 초과함 (실제 크기: ${escapeHtml(String(embed.size))} bytes) — 원문 미포함</p></details>`;
+	}
+	if (embed.kind !== "text") return null; // images live in the reader
 	const embedBytes = embeddedByteLength(embed);
-	if (embedBytes > 0 && context.embeddedBytes + embedBytes > MAX_TOTAL_EMBED_BYTES) return null;
+	if (embedBytes > 0 && context.embeddedBytes + embedBytes > MAX_TOTAL_EMBED_BYTES) {
+		context.renderedPaths.add(path);
+		return `<details class="raw-evidence raw-evidence-placeholder"><summary>${summary}</summary>` +
+			`<p class="evidence-note">누적 텍스트 임베드 예산 초과 — 원문 미포함</p></details>`;
+	}
 	context.renderedPaths.add(path);
 	context.embeddedBytes += embedBytes;
 	return (
-		`<details class="raw-evidence"><summary>${label ? `${escapeHtml(label)} — ` : ""}<code>${escapeHtml(path)}</code></summary>` +
+		`<details class="raw-evidence"><summary>${summary}</summary>` +
 		`<pre>${escapeHtml(embed.content)}</pre></details>`
 	);
 }
