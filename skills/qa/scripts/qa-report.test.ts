@@ -396,6 +396,28 @@ describe("qa-report renderer", () => {
 		expect(reader).not.toContain("contents of /evidence/baseline.log");
 	});
 
+	test("current-cycle passing baseline audit preserves its recorded result, note, and evidence", () => {
+		const view = baseView({
+			stories: [
+				{
+					id: "story-1",
+					actor: "actor-1",
+					baseline: {
+						result: "pass",
+						note: 'distinctive baseline note <keep> & "quoted"',
+						cycle: 0,
+						evidence: { path: "/evidence/passing-baseline.log", surface: "bash" },
+					},
+				},
+			],
+		});
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const audit = html.slice(html.indexOf("시나리오 상세 기록"), html.indexOf("Evidence Files"));
+		expect(audit).toContain("<code>story-1 / baseline</code> — pass");
+		expect(audit).toContain("distinctive baseline note &lt;keep&gt; &amp; &quot;quoted&quot;");
+		expect(audit).toContain("contents of /evidence/passing-baseline.log");
+	});
+
 	test("a green AC verdict with zero passing cells in the run renders a loud contradiction warning", () => {
 		const view = baseView({
 			acceptance_criteria: ["재고가 임계치 아래로 떨어지면 알림이 뜬다"],

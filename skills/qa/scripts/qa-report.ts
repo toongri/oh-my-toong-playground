@@ -657,6 +657,13 @@ function renderBaselineAudit(view: QaView, readEvidence: EvidenceReader, context
 	for (const story of view.stories ?? []) {
 		const baseline = story.baseline;
 		if (!baseline || baseline.cycle !== view.cycle) continue;
+		const result = recordedResult(baseline);
+		const note = recordedNote(baseline);
+		blocks.push(
+			`<p><code>${escapeHtml(story.id)} / baseline</code> — ${escapeHtml(result ?? "unrecorded")}` +
+			(note ? ` — ${escapeHtml(note)}` : "") +
+			`</p>`,
+		);
 		const e = baseline.evidence;
 		if (!e) continue;
 		for (const path of [e.before, e.action, e.after, e.path]) {
