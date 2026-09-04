@@ -29,7 +29,7 @@
  *   status
  */
 
-import { mkdirSync, readFileSync, rmSync, statSync } from "fs";
+import { closeSync, mkdirSync, openSync, readFileSync, readSync, rmSync, statSync } from "fs";
 import { execSync } from "child_process";
 import { extname, resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
@@ -163,10 +163,15 @@ const TEST_RUNNER_SIGNATURES: RegExp[] = [
 	/\bTest Suites:\s+\d+\s+(passed|failed|total)/, // jest
 	/^PASS\s+.+\.(test|spec)\.[cm]?[jt]sx?/m, // jest per-file
 	/\b\d+\s+passing\b/, // mocha
-	/=+\s*(test session starts|\d+ passed)/, // pytest
+	/=+\s*(test session starts|\d+ passed)/, // pytest banner / normal summary
+	/^\s*\d+ (passed|failed|error|errors|skipped|xfailed|xpassed|deselected)\b[^\n]*\bin [\d.]+s/m, // pytest quiet summary (no === banner; covers fail/error too)
 	/^--- (PASS|FAIL):/m, // go test -v
 	/^(ok|FAIL)\s+\S+\s+[\d.]+s\s*$/m, // go test summary
 ];
+
+// Prefix scanned for a test-runner signature. A report's summary/banner always
+// lands well within this window, so a longer capture need never be read in full.
+const EVIDENCE_SCAN_BYTES = 65536;
 
 const NON_TEXT_EVIDENCE_EXT = new Set([
 	".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".pdf",
@@ -184,7 +189,17 @@ function assertBoundaryObservation(absolute: string): void {
 	if (NON_TEXT_EVIDENCE_EXT.has(extname(absolute).toLowerCase())) return;
 	let head: string;
 	try {
-		head = readFileSync(absolute, "utf8").slice(0, 65536);
+		// Read only the inspected prefix — record-cell imposes no evidence-size
+		// limit, so decoding the whole file (as readFileSync would) could consume
+		// memory proportional to an oversized capture. Cap the read at the source.
+		const fd = openSync(absolute, "r");
+		try {
+			const buf = Buffer.alloc(EVIDENCE_SCAN_BYTES);
+			const bytesRead = readSync(fd, buf, 0, EVIDENCE_SCAN_BYTES, 0);
+			head = buf.subarray(0, bytesRead).toString("utf8");
+		} finally {
+			closeSync(fd);
+		}
 	} catch {
 		return; // unreadable/binary — probe* already validated existence+size
 	}

@@ -277,6 +277,38 @@ describe("qa-state CLI wiring", () => {
 		).toThrow();
 	});
 
+	// Quiet-mode pytest prints no `===` banner and its summary line names the
+	// outcome directly (`1 passed in 0.04s`, `1 failed in 0.04s`, `2 errors in
+	// 0.10s`). The earlier signature required a leading `=` and only recognized
+	// `passed`, so these slipped through and could back a green scenario with a
+	// test log — the exact laundering the guard exists to stop. Fragments are
+	// concatenated so THIS source file does not self-match.
+	const QUIET_PYTEST_PASS = "1 pass" + "ed in 0.04s\n";
+	const QUIET_PYTEST_FAIL = "1 fail" + "ed in 0.04s\n";
+	const QUIET_PYTEST_ERROR = "2 err" + "ors in 0.10s\n";
+
+	test("record-cell REJECTS a quiet-mode pytest summary (pass/fail/error, no === banner) as cell evidence", () => {
+		authorCompleteChain();
+		for (const [i, log] of [QUIET_PYTEST_PASS, QUIET_PYTEST_FAIL, QUIET_PYTEST_ERROR].entries()) {
+			const logPath = join(tmpDir, `quiet-pytest-${i}.txt`);
+			writeFileSync(logPath, log);
+			expect(() =>
+				run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface bash`),
+			).toThrow();
+		}
+	});
+
+	test("record-cell scans only the prefix but still REJECTS a signature within it on an oversized capture", () => {
+		authorCompleteChain();
+		// A test-runner signature in the first 64KB is caught even when the file is
+		// far larger — the guard reads only the inspected prefix, never the whole file.
+		const bigPath = join(tmpDir, "big-with-prefix-signature.txt");
+		writeFileSync(bigPath, VITEST_LOG + "x".repeat(200_000));
+		expect(() =>
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${bigPath} --evidence-surface bash`),
+		).toThrow();
+	});
+
 	test("record-cell ACCEPTS a real boundary observation (client-received response, no test-runner signature)", () => {
 		authorCompleteChain();
 		const apiPath = join(tmpDir, "cls1-response.txt");
