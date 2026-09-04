@@ -71,8 +71,9 @@ review_exec_should_gate_conductor() {
     local cli
     cli=$(review_exec_job_cli) || { echo "indeterminate"; return 0; }
 
-    local out rc=0
-    out=$(bun "$cli" active-members "${matched_jobs[@]}" 2>/dev/null) || rc=$?
+    local hooks_dir out rc=0
+    hooks_dir="$(dirname "$(dirname "${BASH_SOURCE[0]}")")"
+    out=$(cd "$hooks_dir" && OMT_DIR="$omt_dir" bun "$cli" active-members "${matched_jobs[@]}" 2>/dev/null) || rc=$?
     if [ "$rc" -ne 0 ]; then
         echo "indeterminate"
         return 0

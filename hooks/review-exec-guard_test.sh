@@ -83,9 +83,9 @@ assert_indeterminate_reason() {
 }
 
 payload() {
-    local command="$1" sid="${2:-reviewer}"
-    jq -n --arg command "$command" --arg sid "$sid" \
-        '{tool_name:"Bash",tool_input:{command:$command},session_id:$sid,cwd:"/safe/project"}'
+    local command="$1" sid="${2:-reviewer}" cwd="${3:-/safe/project}"
+    jq -n --arg command "$command" --arg sid "$sid" --arg cwd "$cwd" \
+        '{tool_name:"Bash",tool_input:{command:$command},session_id:$sid,cwd:$cwd}'
 }
 
 run_hook() {
@@ -323,6 +323,56 @@ EOF
     return "$result"
 }
 
+test_real_bun_preload_in_reviewed_cwd_does_not_execute() {
+    local tmp reviewed_cwd deploy_hooks marker control_marker out result=0
+    tmp=$(mktemp -d)
+    reviewed_cwd="$tmp/reviewed"
+    deploy_hooks="$tmp/.claude/hooks"
+    marker="$reviewed_cwd/PWNED-PRELOAD-RAN"
+    control_marker="$reviewed_cwd/CONTROL-PRELOAD-RAN"
+    mkdir -p "$reviewed_cwd" "$deploy_hooks/lib" \
+        "$tmp/.claude/skills/code-review/scripts" \
+        "$tmp/.claude/omt/jobs/chunk-review-one"
+    cp "$SCRIPT_DIR/review-exec-guard.sh" "$deploy_hooks/review-exec-guard.sh"
+    cp "$SCRIPT_DIR/lib/review-exec-patterns.sh" "$deploy_hooks/lib/review-exec-patterns.sh"
+    cp "$SCRIPT_DIR/lib/omt-dir.sh" "$deploy_hooks/lib/omt-dir.sh"
+    printf '%s\n' 'process.stdout.write(JSON.stringify({activity:"active",jobs:[]}));' \
+        > "$tmp/.claude/skills/code-review/scripts/job.ts"
+    printf '%s\n' '{"conductorSessionId":"conductor"}' \
+        > "$tmp/.claude/omt/jobs/chunk-review-one/job.json"
+    printf '%s\n' 'process.exit(0);' > "$reviewed_cwd/noop.ts"
+    printf '%s\n' 'import { writeFileSync } from "fs"; writeFileSync(process.env.PRELOAD_MARKER, "control");' \
+        > "$reviewed_cwd/control-pwn.ts"
+    printf 'preload = ["%s"]\n' "$reviewed_cwd/control-pwn.ts" > "$reviewed_cwd/bunfig.toml"
+
+    (cd "$reviewed_cwd" && PRELOAD_MARKER="$control_marker" bun "$reviewed_cwd/noop.ts") >/dev/null 2>&1 || true
+    if [ ! -f "$control_marker" ]; then
+        echo "ASSERTION FAILED real-bun-preload-claude: positive control never fired"
+        rm -rf "$tmp"
+        return 1
+    fi
+
+    printf '%s\n' 'import { writeFileSync } from "fs"; writeFileSync(process.env.PRELOAD_MARKER, "pwned");' \
+        > "$reviewed_cwd/pwn.ts"
+    printf 'preload = ["%s"]\n' "$reviewed_cwd/pwn.ts" > "$reviewed_cwd/bunfig.toml"
+    out=$(cd "$reviewed_cwd" && \
+        payload 'pnpm test' conductor "$reviewed_cwd" | \
+        env -u CODEX_THREAD_ID -u OMT_REVIEW_ROLE OMT_DIR="$tmp/.claude/omt" \
+            OMT_SESSION_ID=conductor PRELOAD_MARKER="$marker" PATH="$PATH" \
+            bash "$deploy_hooks/review-exec-guard.sh")
+    assert_denied "$out" real-bun-preload-claude || result=1
+    if printf '%s' "$out" | grep -qi 'could not be determined'; then
+        echo "ASSERTION FAILED real-bun-preload-claude: expected active denial, got indeterminate wording"
+        result=1
+    fi
+    if [ -f "$marker" ]; then
+        echo "ASSERTION FAILED real-bun-preload-claude: reviewed cwd preload ran"
+        result=1
+    fi
+    rm -rf "$tmp"
+    return "$result"
+}
+
 test_other_session_job_allows() {
     new_sandbox
     new_matching_job
@@ -497,6 +547,7 @@ main() {
     run_test test_active_and_indeterminate_reasons_differ
     run_test test_matching_conductor_missing_job_cli_denies_indeterminate_without_bun
     run_test test_path_resolution_claude_deploy_finds_candidate_one
+    run_test test_real_bun_preload_in_reviewed_cwd_does_not_execute
     run_test test_other_session_job_allows
     run_test test_no_matching_job_allows
     run_test test_non_member_unsafe_session_id_allows
