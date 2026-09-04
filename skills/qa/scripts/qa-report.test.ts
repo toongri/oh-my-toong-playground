@@ -406,12 +406,19 @@ describe("qa-report renderer", () => {
 		});
 		const html = renderQaReport(
 			view,
-			{ presentation: { requirementMapping: { "0": { satisfied: "yes", evidence: "동작 확인됨" } } } },
+			{
+				presentation: {
+					requirementMapping: {
+						"0": { satisfied: "yes", cellRefs: [{ story: "story-1", cls: 1 }], evidence: "동작 확인됨" },
+					},
+				},
+			},
 			fakeReader,
 		)!;
 		const ac = html.slice(html.indexOf("Acceptance Criteria"), html.indexOf("큰 그림"));
-		expect(ac).toContain("통과 시나리오");
-		expect(ac).toContain("불일치");
+		expect(ac).toContain("미판정");
+		expect(ac).toContain('class="gap"');
+		expect(ac).not.toContain("satisfied-yes");
 	});
 
 	test("an oversized (too-large) screenshot renders a placeholder in its card, not a false 'no evidence' gap", () => {
@@ -560,7 +567,13 @@ describe("qa-report presentation layer", () => {
 			overview: "flag-ON일 때 재고 화면을 v2로 교체하는 변경",
 			affectedUsers: { "actor-1": "가구 소유자는 매일 재고 화면을 열어 잔량을 확인한다" },
 			scenarioFlows: { "story-1": "소유자가 재고 화면에 진입하면 8슬롯 v2 화면이 보인다" },
-			requirementMapping: { "0": { satisfied: "yes", evidence: "story-1 cls1 통과 — before/after 캡처" } },
+			requirementMapping: {
+				"0": {
+					satisfied: "yes",
+					cellRefs: [{ story: "story-1", cls: 1 }],
+					evidence: "story-1 cls1 통과 — before/after 캡처",
+				},
+			},
 			bigPicture: "flowchart LR\n  Owner --> StockScreen",
 			bigPictureCaption: "소유자 재고 확인 흐름",
 		},
@@ -644,12 +657,167 @@ describe("qa-report presentation layer", () => {
 		expect(mapping).toContain("satisfied-yes");
 	});
 
+	test("accepts yes, no, partial, and unverified mappings when their current-cycle refs match the claimed status", () => {
+		const cell = (status: "pass" | "fail" | "na", cls: number) => ({
+			story: "story-1",
+			cls,
+			priority: "M" as const,
+			status,
+			cycle: 0,
+			...(status === "na" ? { na_reason: "유저 경계에 도달하지 못함" } : {}),
+		});
+		const cases = [
+			{ satisfied: "yes" as const, cells: [cell("pass", 1)], refs: [{ story: "story-1", cls: 1 }] },
+			{ satisfied: "no" as const, cells: [cell("fail", 1)], refs: [{ story: "story-1", cls: 1 }] },
+			{
+				satisfied: "partial" as const,
+				cells: [cell("pass", 1), cell("fail", 2)],
+				refs: [{ story: "story-1", cls: 1 }, { story: "story-1", cls: 2 }],
+			},
+			{ satisfied: "unverified" as const, cells: [cell("na", 1)], refs: [{ story: "story-1", cls: 1 }] },
+		];
+
+		for (const candidate of cases) {
+			const view = baseView({ acceptance_criteria: [candidate.satisfied], cells: candidate.cells });
+			const narrative = {
+				presentation: {
+					requirementMapping: {
+						"0": { satisfied: candidate.satisfied, cellRefs: candidate.refs, evidence: "상태에 맞는 설명" },
+					},
+				},
+			} as unknown as QaReportNarrative;
+			const html = renderQaReport(view, narrative, fakeReader, fakeMermaid)!;
+			const mapping = html.slice(html.indexOf("Acceptance Criteria"), html.indexOf("큰 그림"));
+			expect(mapping).toContain(`satisfied-${candidate.satisfied}`);
+		}
+	});
+
+	test("does not let a pass from another story satisfy an AC mapped to a failing story", () => {
+		const view = baseView({
+			acceptance_criteria: ["story-1 경로가 성공한다"],
+			actors: [
+				...baseView().actors!,
+				{ id: "actor-2", name: "Admin", boundary: "Admin Console", driver: "agent-browser", reachable: "yes" },
+			],
+			stories: [
+				{ id: "story-1", actor: "actor-1" },
+				{ id: "story-2", actor: "actor-2" },
+			],
+			cells: [
+				{ story: "story-1", cls: 1, priority: "H", status: "fail", cycle: 0 },
+				{ story: "story-2", cls: 1, priority: "H", status: "pass", cycle: 0 },
+			],
+		});
+		const narrative = {
+			presentation: {
+				requirementMapping: {
+					"0": { satisfied: "yes", cellRefs: [{ story: "story-1", cls: 1 }], evidence: "다른 story의 통과 설명" },
+				},
+			},
+		} as unknown as QaReportNarrative;
+		const html = renderQaReport(view, narrative, fakeReader, fakeMermaid)!;
+		const mapping = html.slice(html.indexOf("Acceptance Criteria"), html.indexOf("큰 그림"));
+		expect(mapping).toContain("미판정");
+		expect(mapping).toContain('class="gap"');
+		expect(mapping).not.toContain("satisfied-yes");
+	});
+
+	test("fails closed for legacy, missing, malformed, duplicate, stale-cycle, unknown-story, invalid-selector, and ineligible refs", () => {
+		const passCell = { story: "story-1", cls: 1, priority: "H" as const, status: "pass" as const, cycle: 0 };
+		const failCell = { story: "story-1", cls: 1, priority: "H" as const, status: "fail" as const, cycle: 0 };
+		const staleCell = { ...passCell, cycle: 1 };
+		const naCell = { story: "story-1", cls: 1, priority: "H" as const, status: "na" as const, cycle: 0 };
+		const naWithReasonCell = { ...naCell, cls: 3, na_reason: "유저 경계에 도달하지 못함" };
+		const cases: Array<{ label: string; view: QaView; mapping: unknown }> = [
+			{
+				label: "legacy",
+				view: baseView({ acceptance_criteria: ["legacy"] }),
+				mapping: { satisfied: "yes", evidence: "prose only" },
+			},
+			{
+				label: "missing refs",
+				view: baseView({ acceptance_criteria: ["missing"] }),
+				mapping: { satisfied: "yes", cellRefs: [], evidence: "empty refs" },
+			},
+			{
+				label: "malformed ref",
+				view: baseView({ acceptance_criteria: ["malformed"], cells: [passCell] }),
+				mapping: { satisfied: "yes", cellRefs: [{ story: "story-1", cls: "1" }], evidence: "wrong cls type" },
+			},
+			{
+				label: "duplicate ref",
+				view: baseView({ acceptance_criteria: ["duplicate"], cells: [passCell] }),
+				mapping: {
+					satisfied: "yes",
+					cellRefs: [{ story: "story-1", cls: 1 }, { story: "story-1", cls: 1 }],
+					evidence: "duplicate",
+				},
+			},
+			{
+				label: "stale cycle",
+				view: baseView({ acceptance_criteria: ["stale"], cells: [staleCell] }),
+				mapping: { satisfied: "yes", cellRefs: [{ story: "story-1", cls: 1 }], evidence: "stale" },
+			},
+			{
+				label: "unknown story",
+				view: baseView({ acceptance_criteria: ["unknown"] }),
+				mapping: { satisfied: "yes", cellRefs: [{ story: "ghost", cls: 1 }], evidence: "unknown" },
+			},
+			{
+				label: "invalid selector",
+				view: baseView({ acceptance_criteria: ["selector"], cells: [passCell] }),
+				mapping: { satisfied: "yes", cellRefs: [{ story: "story-1", cls: 2, sub: "hang-timeout" }], evidence: "wrong sub" },
+			},
+			{
+				label: "status ineligible",
+				view: baseView({ acceptance_criteria: ["ineligible"], cells: [failCell] }),
+				mapping: { satisfied: "yes", cellRefs: [{ story: "story-1", cls: 1 }], evidence: "fail is not yes" },
+			},
+			{
+				label: "partial includes na",
+				view: baseView({
+					acceptance_criteria: ["partial includes na"],
+					cells: [passCell, { ...failCell, cls: 2 }, naWithReasonCell],
+				}),
+				mapping: {
+					satisfied: "partial",
+					cellRefs: [{ story: "story-1", cls: 1 }, { story: "story-1", cls: 2 }, { story: "story-1", cls: 3 }],
+					evidence: "na must not make partial valid",
+				},
+			},
+			{
+				label: "unverified without reason",
+				view: baseView({ acceptance_criteria: ["unverified"], cells: [naCell] }),
+				mapping: { satisfied: "unverified", cellRefs: [{ story: "story-1", cls: 1 }], evidence: "missing na reason" },
+			},
+		];
+
+		for (const candidate of cases) {
+			const narrative = { presentation: { requirementMapping: { "0": candidate.mapping } } } as unknown as QaReportNarrative;
+			const html = renderQaReport(candidate.view, narrative, fakeReader, fakeMermaid)!;
+			const mapping = html.slice(html.indexOf("Acceptance Criteria"), html.indexOf("큰 그림"));
+			if (!mapping.includes("미판정") || !mapping.includes('class="gap"') || /satisfied-(yes|no|partial|unverified)/.test(mapping)) {
+				throw new Error(`${candidate.label}: expected a neutral fail-closed AC mapping`);
+			}
+		}
+	});
+
 	test("renders an unverified requirement LOUDLY (미검증 — 유저 경계 미구동), never as a quiet partial", () => {
-		const view = baseView({ acceptance_criteria: ["flag ON이면 v2 재고 화면"] });
+		const view = baseView({
+			acceptance_criteria: ["flag ON이면 v2 재고 화면"],
+			cells: [
+				...baseView().cells!,
+				{ story: "story-1", cls: 3, priority: "L", status: "na", na_reason: "어드민 화면이 부팅되지 않음", cycle: 0 },
+			],
+		});
 		const narrative: QaReportNarrative = {
 			presentation: {
 				requirementMapping: {
-					"0": { satisfied: "unverified", evidence: "어드민 화면이 부팅되지 않아 유저 경계를 구동하지 못함 — NOT-RUN" },
+					"0": {
+						satisfied: "unverified",
+						cellRefs: [{ story: "story-1", cls: 3 }],
+						evidence: "어드민 화면이 부팅되지 않아 유저 경계를 구동하지 못함 — NOT-RUN",
+					},
 				},
 			},
 		};
@@ -663,7 +831,11 @@ describe("qa-report presentation layer", () => {
 	test("renders a gap marker for a recorded AC that has no satisfaction mapping", () => {
 		const view = baseView({ acceptance_criteria: ["매핑된 AC", "매핑 안 된 AC"] });
 		const narrative: QaReportNarrative = {
-			presentation: { requirementMapping: { "0": { satisfied: "yes", evidence: "근거" } } },
+			presentation: {
+				requirementMapping: {
+					"0": { satisfied: "yes", cellRefs: [{ story: "story-1", cls: 1 }], evidence: "근거" },
+				},
+			},
 		};
 		const html = renderQaReport(view, narrative, fakeReader, fakeMermaid)!;
 		const mapping = html.slice(html.indexOf("Acceptance Criteria"), html.indexOf("큰 그림"));

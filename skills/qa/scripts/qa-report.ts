@@ -95,6 +95,12 @@ export interface QaReportScenarioNarrative {
  */
 export interface QaReportAcMapping {
 	satisfied?: "yes" | "no" | "partial" | "unverified";
+	/** Structured current-cycle cell selectors; legacy prose-only mappings fail closed. */
+	cellRefs?: Array<{
+		story: string;
+		cls: number;
+		sub?: "hang-timeout" | "flaky-green";
+	}>;
 	/** Which stories/scenarios/evidence prove (or fail) this criterion, in prose. */
 	evidence?: string;
 }
@@ -314,6 +320,70 @@ const SATISFIED_LABEL: Record<string, string> = {
 	unverified: "미검증 — 유저 경계 미구동",
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function validateAcMapping(view: QaView, value: unknown): QaReportAcMapping | null {
+	if (!isRecord(value)) return null;
+	const mapping = value;
+	const satisfied = mapping.satisfied;
+	if (satisfied !== "yes" && satisfied !== "no" && satisfied !== "partial" && satisfied !== "unverified") return null;
+	if (!Array.isArray(mapping.cellRefs) || mapping.cellRefs.length === 0) return null;
+
+	const refs: NonNullable<QaReportAcMapping["cellRefs"]> = [];
+	const seen = new Set<string>();
+	const cells: QaCell[] = [];
+	for (const value of mapping.cellRefs) {
+		if (!isRecord(value)) return null;
+		const ref = value;
+		const story = ref.story;
+		const cls = ref.cls;
+		const sub = ref.sub;
+		if (
+			typeof story !== "string" ||
+			story.trim() === "" ||
+			typeof cls !== "number" ||
+			!Number.isInteger(cls) ||
+			cls < 1 ||
+			cls > 6 ||
+			(sub !== undefined && sub !== "hang-timeout" && sub !== "flaky-green") ||
+			(sub === "hang-timeout" && cls !== 1) ||
+			(sub === "flaky-green" && cls !== 5)
+		) {
+			return null;
+		}
+		const key = `${story}:${cls}:${sub ?? ""}`;
+		if (seen.has(key)) return null;
+		seen.add(key);
+		const stories = (view.stories ?? []).filter((candidate) => candidate.id === story);
+		if (stories.length !== 1) return null;
+		const matches = (view.cells ?? []).filter(
+			(cell) => cell.story === story && cell.cls === cls && cell.sub === sub && cell.cycle === view.cycle,
+		);
+		if (matches.length !== 1) return null;
+		const cell = matches[0];
+		if (cell.status !== "pass" && cell.status !== "fail" && cell.status !== "na") return null;
+		if (cell.status === "na" && (typeof cell.na_reason !== "string" || cell.na_reason.trim() === "")) return null;
+		refs.push({ story, cls, ...(sub !== undefined ? { sub } : {}) });
+		cells.push(cell);
+	}
+
+	const statuses = cells.map((cell) => cell.status);
+	const validStatus =
+		(satisfied === "yes" && statuses.every((status) => status === "pass")) ||
+		(satisfied === "no" && statuses.every((status) => status === "fail")) ||
+		(satisfied === "partial" && !statuses.includes("na") && statuses.includes("pass") && statuses.includes("fail")) ||
+		(satisfied === "unverified" && statuses.includes("na"));
+	if (!validStatus) return null;
+
+	return {
+		satisfied,
+		cellRefs: refs,
+		...(typeof mapping.evidence === "string" ? { evidence: mapping.evidence } : {}),
+	};
+}
+
 /**
  * The reader-facing head: feature overview, affected users (anchored to the
  * roster), and the big-picture diagram — the "what / why / who / picture" a
@@ -364,26 +434,17 @@ function renderActors(view: QaView, narrative: QaReportNarrative): string {
 function renderRequirementFulfillment(view: QaView, narrative: QaReportNarrative): string {
 	const p = narrative.presentation;
 	const acItems = view.acceptance_criteria ?? [];
-	// Defense-in-depth against a false green: a `yes`/`partial` verdict cannot be
-	// evidence-backed when the run recorded no passing user-boundary scenario at
-	// all. The renderer cannot per-AC-map prose evidence to cells (no structured
-	// link), but a green verdict in a zero-pass run is definitionally a
-	// contradiction — surface it loudly rather than render a trusted green badge.
-	const hasBoundaryPass = (view.cells ?? []).some((cell) => cell.status === "pass");
 	const acRows = acItems
 		.map((criterion, i) => {
 			const m = p?.requirementMapping?.[String(i)];
-			const badge = m?.satisfied
-				? `<span class="badge satisfied-${escapeHtml(m.satisfied)}">${escapeHtml(SATISFIED_LABEL[m.satisfied] ?? m.satisfied)}</span>`
+			const valid = validateAcMapping(view, m);
+			const badge = valid
+				? `<span class="badge satisfied-${escapeHtml(valid.satisfied)}">${escapeHtml(SATISFIED_LABEL[valid.satisfied])}</span>`
 				: `<span class="badge">미판정</span>`;
-			const contradicts = (m?.satisfied === "yes" || m?.satisfied === "partial") && !hasBoundaryPass;
-			const warn = contradicts
-				? gap("기록된 통과 시나리오가 없어 이 충족 판정은 검증 로그와 불일치합니다 — 유저 경계에서 통과한 시나리오 없이는 충족(green)이 될 수 없습니다")
-				: "";
-			const body = m
-				? proseOrGap(m.evidence, "충족 근거 서사가 없습니다")
-				: gap("이 요구사항의 충족 판정이 없습니다");
-			return `<div class="ac-map"><h3>${badge} ${escapeHtml(criterion)}</h3>${warn}${body}</div>`;
+			const body = valid
+				? proseOrGap(valid.evidence, "충족 근거 서사가 없습니다")
+				: gap(m ? "이 요구사항의 시나리오 근거 매핑을 검증할 수 없습니다" : "이 요구사항의 충족 판정이 없습니다");
+			return `<div class="ac-map"><h3>${badge} ${escapeHtml(criterion)}</h3>${body}</div>`;
 		})
 		.join("");
 	return (
