@@ -116,13 +116,20 @@ there is no separate actor-roster table).
 - **Requirement fulfillment (`requirementMapping`, keyed by AC index)** — this is
   merged with the acceptance-criteria text into the single **Acceptance Criteria ·
   충족 현황** board near the top of the report (the AC text alone is no longer a
-  separate section). For each recorded acceptance criterion: met (`yes`) / not met
-  (`no`) / partial (`partial`) / **unverified (`unverified`)**, plus the scenarios
-  and evidence that back the verdict, in prose. Use `unverified` — never `yes`/`partial` — when the
-  requirement's user boundary could not be driven (unreachable environment, a
-  `NOT-RUN` scenario): it renders LOUDLY as "미검증 — 유저 경계 미구동", so a PO reads
-  it as *not done*, not as a mild partial. A green test suite is never grounds for
-  `yes`; only a user-boundary observation is.
+  separate section). Each entry must include a non-empty `cellRefs` array of
+  `{story, cls, optional sub}` selectors. The renderer validates every ref against
+  exactly one recorded current-cycle cell and its recorded status (`pass`, `fail`,
+  or `na`). The grounded status invariants are: `yes` requires every referenced
+  cell to be `pass`; `no` requires every referenced cell to be `fail`; `partial`
+  requires at least one `pass` and one `fail` and no `na`; `unverified` requires
+  at least one valid `na`. Missing/legacy/malformed/duplicate/stale/unknown/ineligible
+  mappings fail closed to a visible neutral gap (`미판정`) rather than a green
+  verdict. Prose evidence explains a verdict but cannot establish it. Use
+  **unverified (`unverified`)** — never `yes`/`partial` — when the requirement's user boundary could
+  not be driven (unreachable environment, a `NOT-RUN` scenario): it renders LOUDLY
+  as "미검증 — 유저 경계 미구동", so a PO reads it as *not done*, not as a mild
+  partial. A green test suite is never grounds for `yes`; only a user-boundary
+  observation is.
 
 ## Anchoring — no invention
 - **Do not invent a user the roster does not have.** If an affected user is
@@ -176,7 +183,7 @@ of `qa-report.ts --narrative <json>` (never persisted to disk):
     "overview": "product-level what & why prose",
     "affectedUsers": { "<actor-id>": "how this user uses the product + how the change affects them, at their boundary" },
     "scenarioFlows": { "<story-id>": "short intro: who this actor is + which scenarios were checked" },
-    "requirementMapping": { "0": { "satisfied": "yes|no|partial|unverified", "evidence": "the scenarios + evidence that back this verdict" } },
+    "requirementMapping": { "0": { "satisfied": "yes|no|partial|unverified", "cellRefs": [{ "story": "<story-id>", "cls": 1 }], "evidence": "the prose explains the grounded verdict" } },
     "bigPicture": "flowchart LR\n  Owner --> StockScreen",
     "bigPictureCaption": "one-line interpretation of the diagram"
   },
@@ -216,8 +223,10 @@ marker** (`class="gap"`) — what was skipped shows in the report.
       boundary.
 - [ ] Does the big-picture diagram carry the user flow, with a why + interpretation
       · zero gap markers?
-- [ ] Is each requirement mapped to a verdict + backing scenarios/evidence, and does
-      the verdict match the recorded pass/fail · zero gap markers · any requirement
+- [ ] Is each requirement mapped to a grounded verdict with a non-empty `cellRefs`
+      array, exactly one current-cycle recorded cell per ref, and status invariants
+      that match pass/fail/na · do invalid mappings fail closed to a visible neutral
+      gap · does prose explain a verdict without establishing it · any requirement
       whose user boundary was never driven marked `unverified` (never `yes`/`partial`)?
 - [ ] Only domain/code terms glossed on first use · no `cls`/internal jargon in the
       reader view · zero invention/contradiction

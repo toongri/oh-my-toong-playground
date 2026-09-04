@@ -905,6 +905,71 @@ describe("new-prose: reader evidence is per-scenario natural language + screensh
 });
 
 // ---------------------------------------------------------------------------
+// NEW-PROSE: requirementMapping is a structured, current-cycle grounding
+// contract; prose explains a grounded verdict but never establishes it.
+// ---------------------------------------------------------------------------
+
+describe("new-prose: requirement mappings are structurally grounded", () => {
+	const mappingSection = () => {
+		const start = presentationMd.indexOf("Requirement fulfillment");
+		const end = presentationMd.indexOf("## Anchoring", start + 1);
+		expect(start).not.toBe(-1);
+		expect(end).toBeGreaterThan(start);
+		return presentationMd.slice(start, end);
+	};
+
+	test("presentation.md requires non-empty cellRefs and exactly one current-cycle recorded cell per ref", () => {
+		const mapping = mappingSection();
+		expect(mapping).toContain("non-empty `cellRefs` array");
+		expect(mapping).toContain("{story, cls, optional sub}");
+		expect(mapping).toContain("exactly one recorded current-cycle cell");
+		expect(mapping).toContain("recorded status");
+		expect(mapping).toContain("`pass`, `fail`,");
+		expect(mapping).toContain("or `na`");
+	});
+
+	test("presentation.md defines grounded status invariants for all four verdicts", () => {
+		const mapping = mappingSection();
+		expect(mapping).toMatch(/`yes` requires every referenced\s+cell to be `pass`/);
+		expect(mapping).toMatch(/`no` requires every referenced\s+cell to be `fail`/);
+		expect(mapping).toMatch(/`partial`\s+requires at least one `pass` and one `fail` and no `na`/);
+		expect(mapping).toMatch(/`unverified` requires\s+at least one valid `na`/);
+	});
+
+	test("invalid mappings fail closed and prose cannot establish a verdict", () => {
+		const mapping = mappingSection();
+    expect(mapping).toMatch(/Missing\/legacy\/malformed\/duplicate\/stale\/unknown\/ineligible\s+mappings fail closed/);
+		expect(mapping).toContain("visible neutral gap");
+		expect(mapping).toContain("Prose evidence explains a verdict but cannot establish it");
+	});
+
+	test("the JSON example shows the structured cellRefs shape", () => {
+		const start = presentationMd.indexOf("```json");
+		const end = presentationMd.indexOf("```", start + 7);
+		expect(start).not.toBe(-1);
+		expect(end).toBeGreaterThan(start);
+		const example = presentationMd.slice(start, end);
+		expect(example).toContain('"cellRefs": [{ "story": "<story-id>", "cls": 1 }]');
+	});
+
+	test("the HTML Report and Final Checklist repeat the structural grounding gate", () => {
+		const htmlStart = skillMd.indexOf("### HTML Report");
+		const htmlEnd = skillMd.indexOf("\n---", htmlStart + 1);
+		expect(htmlStart).not.toBe(-1);
+		expect(htmlEnd).toBeGreaterThan(htmlStart);
+		const htmlReport = skillMd.slice(htmlStart, htmlEnd);
+		expect(htmlReport).toContain("non-empty `cellRefs` array");
+		expect(htmlReport).toContain("exactly one recorded current-cycle cell");
+		expect(htmlReport).toContain("visible neutral gap");
+		expect(htmlReport).toContain("Prose evidence explains a verdict but cannot establish it");
+
+		const checklist = skillMd.slice(skillMd.indexOf("## Final Checklist"));
+		expect(checklist).toContain("every `requirementMapping` entry has a non-empty `cellRefs`");
+		expect(checklist).toContain("Prose evidence explains a verdict but cannot establish it");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // FINAL-CHECK: the completion self-audit forces each scenario's observation to
 // name the MEDIUM it was captured through (screen/device capture vs API/CLI
 // response). This closes the laundering path a real luna-max e2e exposed: an
