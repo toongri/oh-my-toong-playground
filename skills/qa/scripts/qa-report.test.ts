@@ -230,18 +230,73 @@ describe("qa-report renderer", () => {
 		expect(scenarios).not.toContain("기록된 근거 없음");
 	});
 
-	test("does not gap a story whose only scenarios are na: na is the one evidence-free status, justified in the audit", () => {
+	test("renders an ordinary current-cycle na as a loud NOT-RUN gap, even when a partial fixture declares inert", () => {
 		const view = baseView({
+			inert: { declared: true, reason: "환경상 실행 불가", cycle: 0 },
 			cells: [{ story: "story-1", cls: 1, attack_point: "핵심 경로", priority: "M", status: "na", na_reason: "이 조건에서는 해당 화면이 노출되지 않음", cycle: 0 }],
 		});
 		const html = renderQaReport(view, {}, fakeReader)!;
 		const scenarios = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
-		// the na story must not raise the "no evidence" gap in the reader view
-		expect(scenarios).not.toContain("근거를 필수로 요구");
-		expect(scenarios).toContain("해당없음"); // coverage summary shows the na axis
+		expect(scenarios).toContain('class="scenario-card sc-unverified"');
+		expect(scenarios).toContain('class="gap"');
+		expect(scenarios).toContain("미검증 — 유저 경계 미구동 (NOT-RUN)");
+		expect(scenarios).not.toContain("해당없음");
 		// the na_reason lives in the audit section, not the reader view
 		expect(scenarios).not.toContain("이 조건에서는 해당 화면이 노출되지 않음");
 		expect(html.slice(html.indexOf("시나리오 상세 기록"))).toContain("이 조건에서는 해당 화면이 노출되지 않음");
+	});
+
+	test("preserves quiet 해당없음 only for a declared inert run with every required current-cycle cell na", () => {
+		const requiredNaCells = [
+			...[1, 2, 3, 4, 5, 6].map((cls) => ({
+				story: "story-1",
+				cls,
+				priority: "M" as const,
+				status: "na" as const,
+				na_reason: "inert run",
+				cycle: 0,
+			})),
+			{
+				story: "story-1",
+				cls: 1,
+				sub: "hang-timeout" as const,
+				priority: "M" as const,
+				status: "na" as const,
+				na_reason: "inert run",
+				cycle: 0,
+			},
+			{
+				story: "story-1",
+				cls: 5,
+				sub: "flaky-green" as const,
+				priority: "M" as const,
+				status: "na" as const,
+				na_reason: "inert run",
+				cycle: 0,
+			},
+		];
+		const view = baseView({
+			inert: { declared: true, reason: "런 전체 비활성", cycle: 0 },
+			cells: requiredNaCells,
+		});
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const scenarios = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
+		expect(scenarios).toContain("해당없음");
+		expect(scenarios).not.toContain("미검증 — 유저 경계 미구동 (NOT-RUN)");
+		expect(scenarios).not.toContain('class="scenario-card sc-unverified"');
+	});
+
+	test("coverage summary ranks same-axis na as unverified above pass", () => {
+		const view = baseView({
+			cells: [
+				baseView().cells![0],
+				{ story: "story-1", cls: 1, sub: "hang-timeout", priority: "M", status: "na", na_reason: "유저 경계 미구동", cycle: 0 },
+			],
+		});
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const scenarios = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
+		expect(scenarios).toContain("핵심·실패 경로 미검증");
+		expect(scenarios).not.toContain("핵심·실패 경로 확인");
 	});
 
 	test("evidence 없는 na 시나리오의 감사 기록은 actor의 boundary와 driver를 fallback으로 보존한다", () => {

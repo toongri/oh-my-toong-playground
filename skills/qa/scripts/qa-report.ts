@@ -19,7 +19,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from "os";
 import { dirname, extname, join, resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
-import type { QaBaseline, QaCell, QaResult, QaRunCheck, QaStory } from "@lib/qa-chain-core";
+import { requiredCells, type QaBaseline, type QaCell, type QaResult, type QaRunCheck, type QaStory } from "@lib/qa-chain-core";
 import { readQaView, type QaView } from "./qa-state.ts";
 
 // Keep individual evidence files small enough to inspect, and cap the total
@@ -162,6 +162,24 @@ function escapeHtml(s: string): string {
 
 function cellKey(cell: Pick<QaCell, "story" | "cls" | "sub">): string {
 	return `${cell.story}:${cell.cls}:${cell.sub ?? ""}`;
+}
+
+function currentCycle(view: QaView): number {
+	return typeof view.cycle === "number" ? view.cycle : 0;
+}
+
+function isQuietInertNaRun(view: QaView): boolean {
+	if (view.inert?.declared !== true) return false;
+	const cycle = currentCycle(view);
+	if (view.inert.cycle !== undefined && view.inert.cycle !== cycle) return false;
+	const cells = view.cells ?? [];
+	const required = requiredCells(view);
+	return (
+		required.length > 0 &&
+		required.every((requiredCell) =>
+			cells.find((cell) => cell.cycle === cycle && cellKey(cell) === cellKey(requiredCell))?.status === "na",
+		)
+	);
 }
 
 /**
@@ -470,7 +488,8 @@ const CLS_LABEL: Record<number, string> = {
 	6: "멱등성",
 };
 
-const COVERAGE_MARK: Record<string, string> = { pass: "확인", fail: "실패", na: "해당없음" };
+const COVERAGE_MARK: Record<string, string> = { pass: "확인", fail: "실패", na: "해당없음", unverified: "미검증" };
+const NOT_RUN_LABEL = "미검증 — 유저 경계 미구동 (NOT-RUN)";
 
 /**
  * The reader-facing scenario section. Per story (a story is the user scenario;
@@ -492,6 +511,7 @@ const COVERAGE_MARK: Record<string, string> = { pass: "확인", fail: "실패", 
  */
 function renderScenarios(view: QaView, narrative: QaReportNarrative, readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
 	const p = narrative.presentation;
+	const quietInertNaRun = isQuietInertNaRun(view);
 	const stories = (view.stories ?? [])
 		.map((story) => {
 			const actor = actorFor(view, story);
@@ -511,12 +531,14 @@ function renderScenarios(view: QaView, narrative: QaReportNarrative, readEvidenc
 			const cards = cells
 				.map((cell) => {
 					const st = String(cell.status ?? "");
+					const readerStatus = st === "na" && !quietInertNaRun ? "unverified" : st;
 					const axis = escapeHtml(CLS_LABEL[cell.cls] ?? `축 ${cell.cls}`) + (cell.sub ? ` · ${escapeHtml(cell.sub)}` : "");
 					const head =
 						`<div class="sc-head"><span class="sc-axis">${axis}</span>` +
-						`<span class="cov cov-${escapeHtml(st)}">${escapeHtml(COVERAGE_MARK[st] ?? st)}</span></div>`;
+						`<span class="cov cov-${escapeHtml(readerStatus)}">${escapeHtml(COVERAGE_MARK[readerStatus] ?? readerStatus)}</span></div>`;
 					if (st === "na") {
-						return `<div class="scenario-card sc-na">${head}<div class="sc-body sc-muted">해당없음</div></div>`;
+						if (quietInertNaRun) return `<div class="scenario-card sc-na">${head}<div class="sc-body sc-muted">해당없음</div></div>`;
+						return `<div class="scenario-card sc-unverified">${head}<div class="sc-body">${gap(NOT_RUN_LABEL)}</div></div>`;
 					}
 					const observed = narrative.scenarios?.[cellKey(cell)]?.observed;
 					const observedBlock = observed ? `<p class="sc-observed">${escapeHtml(observed)}</p>` : "";
@@ -540,11 +562,17 @@ function renderScenarios(view: QaView, narrative: QaReportNarrative, readEvidenc
 			const evidenceBlock = cards ? `<div class="scenarios">${cards}</div>` : "";
 
 			// Plain coverage summary: one entry per distinct axis, its result the worst
-			// across that axis's cells (fail > pass > na).
+			// across that axis's cells (fail > unverified > pass > quiet 해당없음).
 			const axes = [...new Set(cells.map((cell) => cell.cls))].sort((a, b) => a - b);
 			const worst = (cl: number): string => {
 				const ss = cells.filter((cell) => cell.cls === cl).map((cell) => cell.status);
-				const pick = ss.includes("fail") ? "fail" : ss.includes("pass") ? "pass" : (ss.find((s) => s) ?? "na");
+				const pick = ss.includes("fail")
+					? "fail"
+					: ss.includes("na") && !quietInertNaRun
+						? "unverified"
+						: ss.includes("pass")
+							? "pass"
+							: (ss.find((s) => s) ?? "na");
 				return String(pick);
 			};
 			const coverage = axes.length
@@ -847,6 +875,7 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .cov::after { content: ""; }
 .cov-pass { color: var(--pass); }
 .cov-fail { color: var(--fail); font-weight: 600; }
+.cov-unverified { color: var(--fail); font-weight: 600; }
 .cov-na { color: var(--muted); }
 .audit-note { color: var(--muted); font-size: 0.85rem; }
 .story-block { margin: 1.75rem 0; }
@@ -855,6 +884,7 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .scenario-card { border: 1px solid var(--rule); border-left: 3px solid var(--rule); border-radius: 10px; padding: 0.75rem 0.9rem; }
 .scenario-card.sc-pass { border-left-color: var(--pass); }
 .scenario-card.sc-fail { border-left-color: var(--fail); }
+.scenario-card.sc-unverified { border-left-color: var(--fail); }
 .scenario-card.sc-na { border-left-color: var(--na); opacity: 0.75; }
 .sc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.5rem; }
 .sc-axis { font-weight: 600; }
