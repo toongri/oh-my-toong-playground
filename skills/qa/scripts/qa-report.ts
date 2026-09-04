@@ -299,38 +299,44 @@ const SATISFIED_LABEL: Record<string, string> = {
  * (actor list) come from records; only prose and the diagram come from
  * `narrative.presentation`.
  */
-function renderPresentation(view: QaView, narrative: QaReportNarrative, renderMermaid: MermaidRenderer): string {
-	const p = narrative.presentation;
-
-	const overview = `<h2>기능 개요</h2>${proseOrGap(p?.overview, "기능 개요 서사가 없습니다")}`;
-
-	const actorBlocks = (view.actors ?? [])
-		.map((actor) => {
-			const prose = p?.affectedUsers?.[actor.id];
-			// Reader view carries the actor's name only — never `boundary`, which is a
-			// record field the QA engineer writes as the concrete driver target (URLs,
-			// tRPC procedures, service methods) and so leaks implementation. The
-			// boundary lives in the record-faithful Actor Roster below.
-			return (
-				`<div class="affected-user"><h3>${escapeHtml(actor.name ?? actor.id)}</h3>` +
-				`${proseOrGap(prose, "이 유저의 사용·영향 서사가 없습니다")}</div>`
-			);
-		})
-		.join("");
-	const affectedUsers =
-		`<h2>영향받는 유저</h2>` +
-		(actorBlocks || `<p class="evidence-note">기록된 actor 없음</p>`);
-
-	const bigPicture = renderBigPicture(p, renderMermaid);
-
-	return `<section class="presentation">${overview}${affectedUsers}${bigPicture}</section>`;
+function renderOverview(narrative: QaReportNarrative): string {
+	return `<h2>기능 개요</h2>${proseOrGap(narrative.presentation?.overview, "기능 개요 서사가 없습니다")}`;
 }
 
 /**
- * Requirement fulfillment: each recorded acceptance criterion mapped to a
- * met/not-met/partial verdict plus the backing evidence prose. Criterion text is
- * authoritative from records; the verdict and its backing come from
- * `narrative.presentation.requirementMapping`, keyed by AC index.
+ * The reader-facing actor section — ONE block per recorded actor, merging the
+ * roster and the affected-user narrative (they are the SAME actors, keyed by the
+ * same id, so listing them twice is the redundancy this merge removes). Shows the
+ * actor's name, how this user uses the product and how the change affects them
+ * (`affectedUsers` prose), and whether their boundary was reachable (a
+ * verification-status signal a PO needs — an unreachable actor is unverified).
+ * It deliberately omits the raw `boundary` string and `driver`: those are
+ * QA-technical / implementation-flavored (URLs, tRPC procedures, service methods)
+ * and live in the record-faithful Actor Roster audit table below.
+ */
+function renderActors(view: QaView, narrative: QaReportNarrative): string {
+	const p = narrative.presentation;
+	const blocks = (view.actors ?? [])
+		.map((actor) => {
+			const r = String(actor.reachable ?? "");
+			const reach = r ? ` <span class="badge ${r === "yes" ? "badge-pass" : "badge-fail"}">도달 ${escapeHtml(r)}</span>` : "";
+			return (
+				`<div class="affected-user"><h3>${escapeHtml(actor.name ?? actor.id)}${reach}</h3>` +
+				`${proseOrGap(p?.affectedUsers?.[actor.id], "이 유저의 사용·영향 서사가 없습니다")}</div>`
+			);
+		})
+		.join("");
+	return `<h2>액터 · 영향받는 유저</h2>` + (blocks || `<p class="evidence-note">기록된 actor 없음</p>`);
+}
+
+/**
+ * Acceptance Criteria + fulfillment, MERGED into one board near the top: each
+ * recorded acceptance criterion shown with its satisfaction verdict
+ * (yes/no/partial/unverified) and the backing evidence prose. Criterion text is
+ * authoritative from `qa-state` records; the verdict and its backing come from
+ * `narrative.presentation.requirementMapping`, keyed by AC index. This is the
+ * PO's at-a-glance "were the requirements met?" answer — the AC text alone (no
+ * verdict) is no longer a separate section.
  */
 function renderRequirementFulfillment(view: QaView, narrative: QaReportNarrative): string {
 	const p = narrative.presentation;
@@ -348,32 +354,8 @@ function renderRequirementFulfillment(view: QaView, narrative: QaReportNarrative
 		})
 		.join("");
 	return (
-		`<h2>요구사항 충족</h2>` +
-		(acRows || `<p class="evidence-note">기록된 acceptance criteria 없음</p>`)
-	);
-}
-
-function renderAcceptanceCriteria(view: QaView): string {
-	// Acceptance criteria are facts captured at PLAN; never promote render-time
-	// narrative values into the report's authoritative criteria section.
-	const items = view.acceptance_criteria ?? [];
-	const body = items.length
-		? `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
-		: `<p class="evidence-note">no acceptance-criteria recorded in qa-state</p>`;
-	return `<h2>Acceptance Criteria</h2>${body}`;
-}
-
-function renderActorRoster(view: QaView): string {
-	const rows = (view.actors ?? [])
-		.map(
-			(actor) =>
-				`<tr><td>${escapeHtml(actor.name ?? actor.id)}</td><td>${escapeHtml(actor.boundary ?? "")}</td>` +
-				`<td>${escapeHtml(actor.driver ?? "")}</td><td>${escapeHtml(String(actor.reachable ?? ""))}</td></tr>`,
-		)
-		.join("");
-	return (
-		`<h2>Actor Roster</h2><table><thead><tr><th>actor</th><th>boundary</th><th>driver</th><th>reachable</th></tr></thead>` +
-		`<tbody>${rows}</tbody></table>`
+		`<h2>Acceptance Criteria · 충족 현황</h2>` +
+		(acRows || `<p class="evidence-note">no acceptance-criteria recorded in qa-state</p>`)
 	);
 }
 
@@ -481,9 +463,11 @@ function renderScenarios(view: QaView, narrative: QaReportNarrative, readEvidenc
 /**
  * The record-faithful audit of every scenario cell — the technical trail a QA
  * engineer or reviewer traces: coverage axis (`cls`), the hostile probe
- * (`attack_point`), where it was driven (`driven_at`), the result with any
- * na-reason / expected-vs-actual / oracle diagnosis, and the recorded evidence
- * paths. This is the one place `cls` and implementation-level fields belong; the
+ * (`attack_point`), where and with what tool it was driven (`driven_at` + the
+ * evidence `surface`, i.e. the driver), the result with any na-reason /
+ * expected-vs-actual / oracle diagnosis, and the recorded evidence paths. This is
+ * the one place `cls` and implementation-level fields belong (including the
+ * per-scenario boundary + driver — there is no separate actor-roster table); the
  * reader-facing section above stays clean of them.
  */
 function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
@@ -502,7 +486,7 @@ function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvi
 				`<tr><td><code>${escapeHtml(cell.story)}</code></td>` +
 				`<td>cls ${escapeHtml(String(cell.cls))}${cell.sub ? `/${escapeHtml(cell.sub)}` : ""} — ${escapeHtml(CLS_LABEL[cell.cls] ?? "")}</td>` +
 				`<td>${escapeHtml(cell.attack_point ?? "")}${cell.why_needed ? `<br><span class="audit-note">${escapeHtml(cell.why_needed)}</span>` : ""}</td>` +
-				`<td>${escapeHtml(cell.driven_at ?? "")}</td>` +
+				`<td>${escapeHtml(cell.driven_at ?? "")}${e?.surface ? `<br><span class="audit-note">${escapeHtml(e.surface)}</span>` : ""}</td>` +
 				`<td>${result}</td>` +
 				`<td>${paths.map((pth) => `<code>${escapeHtml(pth)}</code>`).join("<br>") || "—"}</td></tr>`
 			);
@@ -642,11 +626,15 @@ export function renderQaReport(
 		`<ul class="doc-meta"><li><strong>Target</strong> ${escapeHtml(view.target)}</li>` +
 			`<li><strong>Cycle</strong> ${escapeHtml(String(view.cycle))}</li>` +
 			`<li><strong>Generated</strong> ${escapeHtml(view.last_touched_at)}</li></ul>`,
-		renderPresentation(view, narrative, renderMermaid),
-		renderScenarios(view, narrative, readEvidence, evidenceContext),
+		// Reader-first order: what was asked (overview + AC·충족), how it flows (큰
+		// 그림), who is affected (액터), what we observed per scenario (시나리오·근거) —
+		// then the record-faithful audit below (per-cell detail, technical roster,
+		// failures, verdict, evidence files).
+		renderOverview(narrative),
 		renderRequirementFulfillment(view, narrative),
-		renderAcceptanceCriteria(view),
-		renderActorRoster(view),
+		renderBigPicture(narrative.presentation, renderMermaid),
+		renderActors(view, narrative),
+		renderScenarios(view, narrative, readEvidence, evidenceContext),
 		renderScenarioAudit(view, narrative, readEvidence, evidenceContext),
 		renderFailures(view, narrative),
 		renderVerdict(view),

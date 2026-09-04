@@ -89,12 +89,20 @@ describe("qa-report renderer", () => {
 		expect(renderQaReport(baseView({ actors: [] }), {}, fakeReader)).toBeNull();
 	});
 
-	test("renders every section in the pinned order: 유저 시나리오·근거 -> 요구사항 충족 -> AC -> Actor Roster -> Failures -> Verdict -> Evidence Files", () => {
-		const html = renderQaReport(baseView(), { acceptanceCriteria: ["v2 screen visible when flag ON"] }, fakeReader);
+	test("renders every section in the pinned reader-first order: 기능 개요 -> AC·충족 -> 큰 그림 -> 액터 -> 시나리오·근거 -> 상세 기록(감사) -> Failures -> Verdict -> Evidence Files", () => {
+		const html = renderQaReport(baseView({ acceptance_criteria: ["v2 screen visible when flag ON"] }), {}, fakeReader);
 		expect(html).not.toBeNull();
-		const order = ["유저 시나리오 · 근거", "요구사항 충족", "Acceptance Criteria", "Actor Roster", "Failures", "Verdict", "Evidence Files"].map(
-			(needle) => html!.indexOf(needle),
-		);
+		const order = [
+			"기능 개요",
+			"Acceptance Criteria",
+			"큰 그림",
+			"액터",
+			"유저 시나리오 · 근거",
+			"시나리오 상세 기록",
+			"Failures",
+			"Verdict",
+			"Evidence Files",
+		].map((needle) => html!.indexOf(needle));
 		for (let i = 1; i < order.length; i++) {
 			expect(order[i - 1]).toBeGreaterThanOrEqual(0);
 			expect(order[i]).toBeGreaterThan(order[i - 1]);
@@ -110,7 +118,7 @@ describe("qa-report renderer", () => {
 
 	test("기록되지 않은 narrative acceptance criteria를 렌더하지 않음", () => {
 		const html = renderQaReport(baseView(), { acceptanceCriteria: ["narrative-only AC"] }, fakeReader)!;
-		const acceptanceSection = html.slice(html.indexOf("Acceptance Criteria"), html.indexOf("Actor Roster"));
+		const acceptanceSection = html.slice(html.indexOf("Acceptance Criteria"), html.indexOf("큰 그림"));
 		expect(acceptanceSection).not.toContain("narrative-only AC");
 		expect(acceptanceSection).toContain("no acceptance-criteria recorded");
 	});
@@ -120,7 +128,7 @@ describe("qa-report renderer", () => {
 		view.cells![0].driven_at = "CustomerLabelService.softDelete via PGlite";
 		view.actors![0].boundary = "tRPC customerLabelAdmin.delete mutation";
 		const html = renderQaReport(view, {}, fakeReader)!;
-		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
 		// coverage axes shown by plain name, never the cls number
 		expect(reader).toContain("핵심·실패 경로");
 		expect(reader).toContain("입력 경계·악성 입력");
@@ -145,11 +153,18 @@ describe("qa-report renderer", () => {
 		expect(audit).toContain("cls 2");
 	});
 
-	test("renders the recorded actor roster from state", () => {
+	test("renders each actor once (reader 액터 block: name + reachable); driver + per-cell boundary live in the audit, no separate roster table", () => {
 		const html = renderQaReport(baseView(), {}, fakeReader)!;
-		expect(html).toContain("Household Owner");
-		expect(html).toContain("Home App 재고 화면");
-		expect(html).toContain("agent-device");
+		// the actor's name appears in the merged reader 액터 section
+		const actorSection = html.slice(html.indexOf("액터"), html.indexOf("유저 시나리오 · 근거"));
+		expect(actorSection).toContain("Household Owner");
+		expect(actorSection).toContain("도달 yes"); // reachable badge
+		// there is no standalone Actor Roster table anymore
+		expect(html).not.toContain("Actor Roster");
+		// the driver (evidence surface) and the concrete per-cell boundary live in the audit
+		const audit = html.slice(html.indexOf("시나리오 상세 기록"));
+		expect(audit).toContain("agent-device"); // driver via evidence surface
+		expect(audit).toContain("app 재고 화면"); // per-cell driven_at boundary
 	});
 
 	test("renders recorded PASS/FAIL and evidence paths verbatim from state, not re-narrated", () => {
@@ -188,7 +203,7 @@ describe("qa-report renderer", () => {
 			],
 		});
 		const html = renderQaReport(view, {}, () => ({ kind: "text", content: "RAW CURL PROOF" }))!;
-		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
 		const audit = html.slice(html.indexOf("시나리오 상세 기록"));
 		// a PO must NOT meet a raw curl/HTTP dump in the reader view
 		expect(reader).not.toContain("RAW CURL PROOF");
@@ -207,7 +222,7 @@ describe("qa-report renderer", () => {
 			cells: [{ story: "story-1", cls: 1, attack_point: "핵심 경로", priority: "H", status: "fail", cycle: 0 }],
 		});
 		const html = renderQaReport(view, {}, fakeReader)!;
-		const scenarios = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		const scenarios = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
 		expect(scenarios).toContain('class="gap"');
 		expect(scenarios).toContain("근거를 필수로 요구");
 		expect(scenarios).not.toContain("기록된 근거 없음");
@@ -218,7 +233,7 @@ describe("qa-report renderer", () => {
 			cells: [{ story: "story-1", cls: 1, attack_point: "핵심 경로", priority: "M", status: "na", na_reason: "이 조건에서는 해당 화면이 노출되지 않음", cycle: 0 }],
 		});
 		const html = renderQaReport(view, {}, fakeReader)!;
-		const scenarios = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		const scenarios = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
 		// the na story must not raise the "no evidence" gap in the reader view
 		expect(scenarios).not.toContain("근거를 필수로 요구");
 		expect(scenarios).toContain("해당없음"); // coverage summary shows the na axis
@@ -231,7 +246,7 @@ describe("qa-report renderer", () => {
 		const view = baseView();
 		view.cells![0].evidence = { path: "/evidence/required.log", surface: "agent-device" };
 		const html = renderQaReport(view, {}, fakeReader)!;
-		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
 		const audit = html.slice(html.indexOf("시나리오 상세 기록"));
 		expect(reader).not.toContain("contents of /evidence/required.log");
 		expect(audit).toContain("contents of /evidence/required.log");
@@ -245,7 +260,7 @@ describe("qa-report renderer", () => {
 			before: "/evidence/before.png", // image
 		};
 		const html = renderQaReport(view, {}, fakeReader)!;
-		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
 		const audit = html.slice(html.indexOf("시나리오 상세 기록"));
 		// the screenshot is reader-facing (a PO can read it)
 		expect(reader).toContain("data:image/png;base64,AAAA");
@@ -283,7 +298,7 @@ describe("qa-report renderer", () => {
 			],
 		});
 		const html = renderQaReport(view, {}, budgetReader)!;
-		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
 		expect(reader).toContain("data:image/png;base64,AAAA"); // action screenshot embedded
 		expect(reader).not.toContain("data:image/png;base64,BBBB"); // recorded screenshot dropped (over budget)
 		expect(html.slice(html.indexOf("시나리오 상세 기록"))).toContain("/evidence/recorded.png"); // path still audited
@@ -338,7 +353,7 @@ describe("qa-report renderer", () => {
 			],
 		});
 		const html = renderQaReport(view, {}, () => ({ kind: "text", content: "vitest 72 passed" }))!;
-		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
 		// a build/test log must never be shown to a PO as scenario evidence
 		expect(reader).not.toContain("vitest 72 passed");
 		expect(reader).not.toContain("변경 전 기준선");
@@ -420,9 +435,11 @@ describe("qa-report presentation layer", () => {
 		const html = renderQaReport(view, fullPresentation(), fakeReader, fakeMermaid)!;
 		expect(html).not.toBeNull();
 		expect(html.indexOf("기능 개요")).toBeGreaterThanOrEqual(0);
-		// the whole presentation layer precedes the audit log's first section
+		// the reader layer (개요 -> AC·충족 -> 큰 그림 -> 액터 -> 시나리오) all precedes
+		// the record-faithful audit's first section (시나리오 상세 기록)
 		expect(html.indexOf("기능 개요")).toBeLessThan(html.indexOf("Acceptance Criteria"));
-		expect(html.indexOf("요구사항 충족")).toBeLessThan(html.indexOf("Acceptance Criteria"));
+		expect(html.indexOf("Acceptance Criteria")).toBeLessThan(html.indexOf("큰 그림"));
+		expect(html.indexOf("유저 시나리오 · 근거")).toBeLessThan(html.indexOf("시나리오 상세 기록"));
 	});
 
 	test("renders the feature overview prose", () => {
@@ -433,7 +450,9 @@ describe("qa-report presentation layer", () => {
 	test("renders a visible gap marker for each required slot when no presentation is supplied", () => {
 		const view = baseView({ acceptance_criteria: ["flag ON이면 v2 재고 화면"] });
 		const html = renderQaReport(view, {}, fakeReader, fakeMermaid)!;
-		const presentation = html.slice(0, html.indexOf("Acceptance Criteria"));
+		// the reader layer spans overview -> AC·충족 -> 큰 그림 -> 액터 -> 시나리오,
+		// ending at the audit's first section; each required slot left unwritten gaps
+		const presentation = html.slice(0, html.indexOf("시나리오 상세 기록"));
 		// gap markers carry a dedicated class so the reader sees what was skipped
 		expect(presentation).toContain('class="gap"');
 		expect((presentation.match(/class="gap"/g) ?? []).length).toBeGreaterThanOrEqual(4);
@@ -441,7 +460,7 @@ describe("qa-report presentation layer", () => {
 
 	test("anchors affected-users to the recorded roster: renders prose keyed by actor id", () => {
 		const html = renderQaReport(baseView(), fullPresentation(), fakeReader, fakeMermaid)!;
-		const affected = html.slice(html.indexOf("영향받는 유저"), html.indexOf("큰 그림"));
+		const affected = html.slice(html.indexOf("액터"), html.indexOf("유저 시나리오 · 근거"));
 		expect(affected).toContain("Household Owner");
 		expect(affected).toContain("가구 소유자는 매일 재고 화면을 열어 잔량을 확인한다");
 	});
@@ -463,7 +482,7 @@ describe("qa-report presentation layer", () => {
 		});
 		const narrative: QaReportNarrative = { presentation: { affectedUsers: { "actor-1": "소유자 서사" } } };
 		const html = renderQaReport(view, narrative, fakeReader, fakeMermaid)!;
-		const affected = html.slice(html.indexOf("영향받는 유저"), html.indexOf("큰 그림"));
+		const affected = html.slice(html.indexOf("액터"), html.indexOf("유저 시나리오 · 근거"));
 		expect(affected).toContain("소유자 서사");
 		expect(affected).toContain("Admin");
 		expect(affected).toContain('class="gap"'); // actor-2 has no prose -> gap
@@ -471,7 +490,7 @@ describe("qa-report presentation layer", () => {
 
 	test("anchors each story's flow narrative inline in the reader scenario section, beside its evidence", () => {
 		const html = renderQaReport(baseView(), fullPresentation(), fakeReader, fakeMermaid)!;
-		const scenarios = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		const scenarios = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
 		// the story is headed by its actor's name (not the internal story id), with its
 		// authored user-boundary flow and its evidence in the same block
 		expect(scenarios).toContain("Household Owner");
@@ -483,7 +502,7 @@ describe("qa-report presentation layer", () => {
 	test("maps each recorded acceptance criterion to a satisfaction badge and evidence prose", () => {
 		const view = baseView({ acceptance_criteria: ["flag ON이면 v2 재고 화면"] });
 		const html = renderQaReport(view, fullPresentation(), fakeReader, fakeMermaid)!;
-		const mapping = html.slice(html.indexOf("요구사항 충족"), html.indexOf("Acceptance Criteria"));
+		const mapping = html.slice(html.indexOf("Acceptance Criteria"), html.indexOf("큰 그림"));
 		expect(mapping).toContain("flag ON이면 v2 재고 화면");
 		expect(mapping).toContain("story-1 cls1 통과 — before/after 캡처");
 		expect(mapping).toContain("satisfied-yes");
@@ -499,7 +518,7 @@ describe("qa-report presentation layer", () => {
 			},
 		};
 		const html = renderQaReport(view, narrative, fakeReader, fakeMermaid)!;
-		const mapping = html.slice(html.indexOf("요구사항 충족"), html.indexOf("Acceptance Criteria"));
+		const mapping = html.slice(html.indexOf("Acceptance Criteria"), html.indexOf("큰 그림"));
 		expect(mapping).toContain("satisfied-unverified");
 		expect(mapping).toContain("미검증 — 유저 경계 미구동");
 		expect(mapping).not.toContain("충족</span>"); // never rendered as met/partial
@@ -511,7 +530,7 @@ describe("qa-report presentation layer", () => {
 			presentation: { requirementMapping: { "0": { satisfied: "yes", evidence: "근거" } } },
 		};
 		const html = renderQaReport(view, narrative, fakeReader, fakeMermaid)!;
-		const mapping = html.slice(html.indexOf("요구사항 충족"), html.indexOf("Acceptance Criteria"));
+		const mapping = html.slice(html.indexOf("Acceptance Criteria"), html.indexOf("큰 그림"));
 		expect(mapping).toContain("매핑된 AC");
 		expect(mapping).toContain("매핑 안 된 AC");
 		expect(mapping).toContain('class="gap"');
@@ -572,14 +591,14 @@ describe("qa-report presentation layer", () => {
 describe("qa-report per-scenario evidence", () => {
 	test("리더는 검증된 시나리오마다 독립 카드를 렌더한다 (병합된 근거 벽이 아니라)", () => {
 		const html = renderQaReport(baseView(), {}, fakeReader)!;
-		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
 		// baseView: cls1 pass + cls2 fail → 2 scenario cards
 		expect((reader.match(/class="scenario-card/g) ?? []).length).toBe(2);
 	});
 
 	test("각 시나리오의 스크린샷은 그 시나리오 카드 안에 묶여 렌더된다", () => {
 		const html = renderQaReport(baseView(), {}, fakeReader)!;
-		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
 		const cards = reader.split('class="scenario-card').slice(1);
 		expect(cards.length).toBe(2);
 		expect(cards[0]).toContain("data:image/png;base64,AAAA"); // cls1's own captures
@@ -594,7 +613,7 @@ describe("qa-report per-scenario evidence", () => {
 			scenarios: { "story-1:1:": { observed: "로그인 없이 요청하니 서버가 401을 돌려주며 게이트 모달이 유지됐다" } },
 		};
 		const html = renderQaReport(view, narrative, () => ({ kind: "text", content: "HTTP/1.1 401 RAW" }))!;
-		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
 		const audit = html.slice(html.indexOf("시나리오 상세 기록"));
 		expect(reader).toContain("로그인 없이 요청하니 서버가 401을 돌려주며 게이트 모달이 유지됐다");
 		expect(reader).not.toContain("HTTP/1.1 401 RAW"); // raw transcript never in the reader
@@ -606,7 +625,7 @@ describe("qa-report per-scenario evidence", () => {
 		view.cells![0].evidence = { path: "/evidence/api.log", surface: "curl" }; // text-only, NO authored observation
 		view.cells![1].status = "na";
 		const html = renderQaReport(view, {}, () => ({ kind: "text", content: "raw" }))!;
-		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
 		expect(reader).toContain('class="gap"');
 		expect(reader).toContain("실제 소프트웨어 관찰");
 	});

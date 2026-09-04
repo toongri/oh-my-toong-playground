@@ -67,11 +67,24 @@ Facts — the user list, the scenario list, the requirement text, and each
 scenario's pass/fail + evidence — are authoritative from `qa-state` records. The
 presentation adds only **narrative and diagrams** on top, keyed to those records.
 
+The report reads top-down in this order — **what was asked, then what we saw**:
+① 기능 개요 (overview) → ② **Acceptance Criteria · 충족 현황** (each AC + its
+met/not-met verdict — the PO's at-a-glance answer) → ③ 큰 그림 (the user-flow
+diagram) → ④ **액터 · 영향받는 유저** → ⑤ 유저 시나리오 · 근거 (per-scenario
+cards) → then the record-faithful **감사** sections (시나리오 상세 기록 — carrying
+each scenario's technical boundary + driver — failures, verdict, evidence files;
+there is no separate actor-roster table).
+
 - **Feature overview (`overview`)** — what this change is and why, in product
   language (the problem and stakes), never code.
-- **Affected users (`affectedUsers`, keyed by actor id)** — for each recorded
-  actor: how this user normally uses the product, and how this change affects that
-  use — at their boundary, per the hard rule above.
+- **Affected users (`affectedUsers`, keyed by actor id)** — the roster and the
+  affected-users narrative are the **same actors** (same ids), merged into ONE
+  block per actor: **there is no separate actor-roster table.** For each recorded
+  actor write how this user normally uses the product and how this change affects
+  that use — at their boundary, per the hard rule above. The reader block shows the
+  actor's name, this impact narrative, and whether the boundary was reachable; the
+  concrete per-scenario boundary + driver live in the 시나리오 상세 기록 audit, not
+  here — do not restate them in prose.
 - **Scenario overview (`scenarioFlows`, keyed by story id)** — for each recorded
   story (a story *is* the user scenario; the cells beneath it are the individual
   scenarios/QA coverage axes): a **short intro** — who this actor is and which
@@ -100,10 +113,12 @@ presentation adds only **narrative and diagrams** on top, keyed to those records
 - **Big picture (`bigPicture`)** — a mermaid diagram of the user flows / affected
   users, baked to inline SVG at build time. The strongest way to convey flow to a
   no-context reader.
-- **Requirement fulfillment (`requirementMapping`, keyed by AC index)** — for each
-  recorded acceptance criterion: met (`yes`) / not met (`no`) / partial
-  (`partial`) / **unverified (`unverified`)**, plus the scenarios and evidence that
-  back the verdict, in prose. Use `unverified` — never `yes`/`partial` — when the
+- **Requirement fulfillment (`requirementMapping`, keyed by AC index)** — this is
+  merged with the acceptance-criteria text into the single **Acceptance Criteria ·
+  충족 현황** board near the top of the report (the AC text alone is no longer a
+  separate section). For each recorded acceptance criterion: met (`yes`) / not met
+  (`no`) / partial (`partial`) / **unverified (`unverified`)**, plus the scenarios
+  and evidence that back the verdict, in prose. Use `unverified` — never `yes`/`partial` — when the
   requirement's user boundary could not be driven (unreachable environment, a
   `NOT-RUN` scenario): it renders LOUDLY as "미검증 — 유저 경계 미구동", so a PO reads
   it as *not done*, not as a mild partial. A green test suite is never grounds for
