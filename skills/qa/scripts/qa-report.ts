@@ -304,7 +304,7 @@ function imageSlot(label: string, path: string | undefined, readEvidence: Eviden
 
 /** A visible marker for a required presentation slot the author left unwritten. */
 function gap(what: string): string {
-	return `<p class="gap">${escapeHtml(what)} — presentation.md 참조</p>`;
+	return `<p class="gap">${escapeHtml(what)} — <span class="gap-reference">presentation.md 참조</span></p>`;
 }
 
 /** A block of author prose, escaped; or a gap marker when it is absent. */
@@ -619,17 +619,17 @@ function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvi
 				(n?.expectedVsActual ? `<br><span class="audit-note">${escapeHtml(n.expectedVsActual)}</span>` : "") +
 				(n?.oracleDiagnosis ? `<br><span class="audit-note">${escapeHtml(n.oracleDiagnosis)}</span>` : "");
 			return (
-					`<tr><td><code>${escapeHtml(cell.story)}</code></td>` +
-					`<td>cls ${escapeHtml(String(cell.cls))}${cell.sub ? `/${escapeHtml(cell.sub)}` : ""} — ${escapeHtml(CLS_LABEL[cell.cls] ?? "")}</td>` +
+					`<tr><td class="audit-story"><code>${escapeHtml(cell.story)}</code></td>` +
+					`<td class="audit-coverage">cls ${escapeHtml(String(cell.cls))}${cell.sub ? `/${escapeHtml(cell.sub)}` : ""} — ${escapeHtml(CLS_LABEL[cell.cls] ?? "")}</td>` +
 					`<td>${escapeHtml(cell.attack_point ?? "")}${cell.why_needed ? `<br><span class="audit-note">${escapeHtml(cell.why_needed)}</span>` : ""}</td>` +
-					`<td>${escapeHtml(boundary ?? "")}${driver ? `<br><span class="audit-note">${escapeHtml(driver)}</span>` : ""}</td>` +
+					`<td class="audit-boundary">${escapeHtml(boundary ?? "")}${driver ? `<br><span class="audit-note">${escapeHtml(driver)}</span>` : ""}</td>` +
 				`<td>${result}</td>` +
 				`<td>${paths.map((pth) => `<code>${escapeHtml(pth)}</code>`).join("<br>") || "—"}</td></tr>`
 			);
 		})
 		.join("");
 	const table = rows
-		? `<table><thead><tr><th>story</th><th>coverage (cls)</th><th>attack point</th><th>driven at</th><th>result</th><th>evidence</th></tr></thead><tbody>${rows}</tbody></table>`
+		? `<table><thead><tr><th class="audit-story">story</th><th class="audit-coverage">coverage (cls)</th><th>attack point</th><th class="audit-boundary">driven at</th><th>result</th><th>evidence</th></tr></thead><tbody>${rows}</tbody></table>`
 		: `<p class="evidence-note">기록된 시나리오 셀 없음</p>`;
 	return `<h2>시나리오 상세 기록 (감사)</h2>${table}${renderRawEvidence(cells, readEvidence, context)}${renderBaselineAudit(view, readEvidence, context)}`;
 }
@@ -922,6 +922,10 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .issue-LOW { color: var(--na); }
 .presentation { margin-bottom: 1rem; }
 .gap { color: var(--fail); background: var(--code-bg); border: 1px dashed var(--fail); border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.92rem; }
+.gap-reference { white-space: nowrap; }
+.audit-story { min-width: 6rem; white-space: nowrap; word-break: keep-all; }
+.audit-coverage { min-width: 11rem; word-break: keep-all; overflow-wrap: normal; }
+.audit-boundary { min-width: 12rem; word-break: keep-all; overflow-wrap: normal; }
 .affected-user, .scenario-flow, .ac-map { margin: 1rem 0; padding: 0.85rem 1rem; border: 1px solid var(--rule); border-radius: 10px; }
 .affected-user h3, .scenario-flow h3, .ac-map h3 { margin-top: 0; }
 .satisfied-yes { color: var(--pass); border-color: var(--pass); }

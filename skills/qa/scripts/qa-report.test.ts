@@ -230,6 +230,28 @@ describe("qa-report renderer", () => {
 		expect(scenarios).not.toContain("기록된 근거 없음");
 	});
 
+	test("gap 참조 문구를 하나의 non-breaking span으로 렌더한다", () => {
+		const html = renderQaReport(baseView({ cells: [{ story: "story-1", cls: 1, priority: "H", status: "fail", cycle: 0 }] }), {}, fakeReader)!;
+
+		expect(html).toContain('<span class="gap-reference">presentation.md 참조</span>');
+		expect(html).toContain(".gap-reference { white-space: nowrap; }");
+	});
+
+	test("감사 표의 story 식별자와 coverage/boundary 셀은 CJK 의미 단위 wrapping 계약을 갖고 가로 overflow를 유지한다", () => {
+		const view = baseView();
+		view.cells![0].driven_at = "브라우저 경계 미구동";
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const audit = html.slice(html.indexOf("시나리오 상세 기록"));
+
+		expect(audit).toContain('<td class="audit-story"><code>story-1</code></td>');
+		expect(audit).toContain('<td class="audit-coverage">cls 1 — 핵심·실패 경로</td>');
+		expect(audit).toContain('<td class="audit-boundary">브라우저 경계 미구동<br>');
+		expect(html).toContain("table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.94rem; display: block; overflow-x: auto; }");
+		expect(html).toContain(".audit-story { min-width: 6rem; white-space: nowrap; word-break: keep-all; }");
+		expect(html).toContain(".audit-coverage { min-width: 11rem; word-break: keep-all; overflow-wrap: normal; }");
+		expect(html).toContain(".audit-boundary { min-width: 12rem; word-break: keep-all; overflow-wrap: normal; }");
+	});
+
 	test("renders an ordinary current-cycle na as a loud NOT-RUN gap, even when a partial fixture declares inert", () => {
 		const view = baseView({
 			inert: { declared: true, reason: "환경상 실행 불가", cycle: 0 },
