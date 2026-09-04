@@ -6,6 +6,7 @@
  */
 
 import { join, dirname } from "path";
+import { fileURLToPath } from "node:url";
 import type { Platform } from "./types.ts";
 import { deepMergeOverlay } from "./deep-merge-overlay.ts";
 import { isPlainObject } from "./deep-merge.ts";
@@ -31,7 +32,7 @@ let cachePopulated = false;
 export function getRootDir(): string | null {
 	if (cachedRootDir !== null) return cachedRootDir;
 
-	let dir = dirname(new URL(import.meta.url).pathname);
+	let dir = dirname(fileURLToPath(import.meta.url));
 
 	// Walk up a reasonable number of levels
 	for (let i = 0; i < 10; i++) {
