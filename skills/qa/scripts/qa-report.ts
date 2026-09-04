@@ -514,6 +514,10 @@ function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvi
 		.map((cell) => {
 			const n = narrative.scenarios?.[cellKey(cell)];
 			const e = cell.evidence;
+			const story = (view.stories ?? []).find((candidate) => candidate.id === cell.story);
+			const actor = story ? actorFor(view, story) : undefined;
+			const boundary = cell.driven_at ?? actor?.boundary;
+			const driver = e?.surface ?? actor?.driver;
 			const paths = e ? [e.path, e.before, e.action, e.after].filter((p): p is string => Boolean(p)) : [];
 			const result =
 				statusBadge(cell.status) +
@@ -521,10 +525,10 @@ function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvi
 				(n?.expectedVsActual ? `<br><span class="audit-note">${escapeHtml(n.expectedVsActual)}</span>` : "") +
 				(n?.oracleDiagnosis ? `<br><span class="audit-note">${escapeHtml(n.oracleDiagnosis)}</span>` : "");
 			return (
-				`<tr><td><code>${escapeHtml(cell.story)}</code></td>` +
-				`<td>cls ${escapeHtml(String(cell.cls))}${cell.sub ? `/${escapeHtml(cell.sub)}` : ""} — ${escapeHtml(CLS_LABEL[cell.cls] ?? "")}</td>` +
-				`<td>${escapeHtml(cell.attack_point ?? "")}${cell.why_needed ? `<br><span class="audit-note">${escapeHtml(cell.why_needed)}</span>` : ""}</td>` +
-				`<td>${escapeHtml(cell.driven_at ?? "")}${e?.surface ? `<br><span class="audit-note">${escapeHtml(e.surface)}</span>` : ""}</td>` +
+					`<tr><td><code>${escapeHtml(cell.story)}</code></td>` +
+					`<td>cls ${escapeHtml(String(cell.cls))}${cell.sub ? `/${escapeHtml(cell.sub)}` : ""} — ${escapeHtml(CLS_LABEL[cell.cls] ?? "")}</td>` +
+					`<td>${escapeHtml(cell.attack_point ?? "")}${cell.why_needed ? `<br><span class="audit-note">${escapeHtml(cell.why_needed)}</span>` : ""}</td>` +
+					`<td>${escapeHtml(boundary ?? "")}${driver ? `<br><span class="audit-note">${escapeHtml(driver)}</span>` : ""}</td>` +
 				`<td>${result}</td>` +
 				`<td>${paths.map((pth) => `<code>${escapeHtml(pth)}</code>`).join("<br>") || "—"}</td></tr>`
 			);

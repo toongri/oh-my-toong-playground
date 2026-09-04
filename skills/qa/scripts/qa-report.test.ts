@@ -244,6 +244,17 @@ describe("qa-report renderer", () => {
 		expect(html.slice(html.indexOf("시나리오 상세 기록"))).toContain("이 조건에서는 해당 화면이 노출되지 않음");
 	});
 
+	test("evidence 없는 na 시나리오의 감사 기록은 actor의 boundary와 driver를 fallback으로 보존한다", () => {
+		const view = baseView({
+			actors: [{ ...baseView().actors![0], reachable: "unknown" }],
+			cells: [{ story: "story-1", cls: 1, priority: "M", status: "na", na_reason: "유저 경계에 도달하지 못함", cycle: 0 }],
+		});
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const audit = html.slice(html.indexOf("시나리오 상세 기록"));
+		expect(audit).toContain("Home App 재고 화면");
+		expect(audit).toContain("agent-device");
+	});
+
 	test("a text-only evidence.path is carried in the audit, never dumped in the reader", () => {
 		const view = baseView();
 		view.cells![0].evidence = { path: "/evidence/required.log", surface: "agent-device" };
