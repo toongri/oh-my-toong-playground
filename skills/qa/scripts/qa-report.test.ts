@@ -383,6 +383,50 @@ describe("qa-report renderer", () => {
 		expect(reader).not.toContain("contents of /evidence/baseline.log");
 	});
 
+	test("a green AC verdict with zero passing cells in the run renders a loud contradiction warning", () => {
+		const view = baseView({
+			acceptance_criteria: ["재고가 임계치 아래로 떨어지면 알림이 뜬다"],
+			cells: [
+				{ story: "story-1", cls: 1, attack_point: "a", priority: "H", status: "fail", cycle: 0, source: "self-authored", evidence: { path: "/evidence/x.png", surface: "agent-device" } },
+				{ story: "story-1", cls: 2, attack_point: "b", priority: "L", status: "na", cycle: 0, na_reason: "n/a", source: "self-authored" },
+			],
+		});
+		const html = renderQaReport(
+			view,
+			{ presentation: { requirementMapping: { "0": { satisfied: "yes", evidence: "동작 확인됨" } } } },
+			fakeReader,
+		)!;
+		const ac = html.slice(html.indexOf("Acceptance Criteria"), html.indexOf("큰 그림"));
+		expect(ac).toContain("통과 시나리오");
+		expect(ac).toContain("불일치");
+	});
+
+	test("an oversized (too-large) screenshot renders a placeholder in its card, not a false 'no evidence' gap", () => {
+		const reader: EvidenceReader = (path) => ({ kind: "too-large", path, size: 5 * 1024 * 1024 });
+		const html = renderQaReport(baseView(), {}, reader)!;
+		const scen = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
+		expect(scen).not.toContain("실제 소프트웨어 관찰 근거가 없습니다");
+		expect(scen).toContain("너무 커서");
+		expect(scen).toContain("/evidence/action.png");
+	});
+
+	test("a screenshot shared by two scenario cells renders on BOTH cards (no false gap on the second)", () => {
+		const shared = "/evidence/shared.png";
+		const view = baseView({
+			cells: [
+				{ story: "story-1", cls: 1, attack_point: "a", priority: "H", status: "pass", cycle: 0, source: "self-authored", evidence: { path: shared, surface: "agent-device" } },
+				{ story: "story-1", cls: 2, attack_point: "b", priority: "L", status: "pass", cycle: 0, source: "self-authored", evidence: { path: shared, surface: "agent-device" } },
+			],
+		});
+		const reader: EvidenceReader = (path) =>
+			path.endsWith(".png") ? { kind: "image", dataUri: "data:image/png;base64,AAAA" } : { kind: "text", content: "x" };
+		const html = renderQaReport(view, {}, reader)!;
+		const scen = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
+		const imgCount = (scen.match(/<img /g) ?? []).length;
+		expect(imgCount).toBeGreaterThanOrEqual(2);
+		expect(scen).not.toContain("실제 소프트웨어 관찰 근거가 없습니다");
+	});
+
 	test("renders the waived sub-scenario in the verdict identifier", () => {
 		const html = renderQaReport(
 			baseView({

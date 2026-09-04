@@ -238,21 +238,34 @@ function embeddedByteLength(embed: EvidenceEmbed): number {
  * bytes live in the audit section (`renderRawEvidence`). Non-image evidence
  * returns "" and is left unconsumed so the audit can still render it.
  */
-function imageSlot(label: string, path: string | undefined, readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
-	if (!path || context.renderedPaths.has(path)) return "";
-	const embed = readEvidence(path);
-	if (embed.kind !== "image") return ""; // text/too-large/missing → audit, not the reader
-	const embedBytes = embeddedByteLength(embed);
-	if (embedBytes > 0 && context.embeddedBytes + embedBytes > MAX_TOTAL_EMBED_BYTES) {
-		return ""; // over budget: the raw file stays referenced from the audit section
-	}
-	context.renderedPaths.add(path);
-	context.embeddedBytes += embedBytes;
+function evidenceSlotHtml(label: string, path: string, inner: string): string {
 	return (
-		`<div class="evidence-slot"><div class="evidence-slot-label">${escapeHtml(label)}</div>` +
-		`<img src="${escapeHtml(embed.dataUri)}" alt="${escapeHtml(label)} evidence">` +
+		`<div class="evidence-slot"><div class="evidence-slot-label">${escapeHtml(label)}</div>${inner}` +
 		`<div class="evidence-slot-path"><code>${escapeHtml(path)}</code></div></div>`
 	);
+}
+
+function imageSlot(label: string, path: string | undefined, readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
+	if (!path) return "";
+	// Images are NOT de-duped against `renderedPaths`: a screenshot legitimately
+	// shared by two scenario cells must show on BOTH cards, so image display is
+	// per-card. (Text evidence still de-dupes via renderRawEvidence; images never
+	// enter the audit, so there is no reader/audit collision to guard here.)
+	const embed = readEvidence(path);
+	if (embed.kind === "too-large") {
+		// The screenshot EXISTS but is too big to inline — show a placeholder with the
+		// path so the card does not misread as "no evidence recorded" (a false gap).
+		const mib = (embed.size / (1024 * 1024)).toFixed(1);
+		return evidenceSlotHtml(label, path, `<p class="evidence-note">스크린샷이 너무 커서 임베드하지 않음 (${escapeHtml(mib)} MiB) — 아래 경로로 확인</p>`);
+	}
+	if (embed.kind !== "image") return ""; // text/missing → audit, not the reader
+	const embedBytes = embeddedByteLength(embed);
+	if (embedBytes > 0 && context.embeddedBytes + embedBytes > MAX_TOTAL_EMBED_BYTES) {
+		// Over budget: keep the reference visible rather than dropping it into a false gap.
+		return evidenceSlotHtml(label, path, `<p class="evidence-note">임베드 예산 초과 — 아래 경로로 확인</p>`);
+	}
+	context.embeddedBytes += embedBytes;
+	return evidenceSlotHtml(label, path, `<img src="${escapeHtml(embed.dataUri)}" alt="${escapeHtml(label)} evidence">`);
 }
 
 /** A visible marker for a required presentation slot the author left unwritten. */
@@ -341,16 +354,26 @@ function renderActors(view: QaView, narrative: QaReportNarrative): string {
 function renderRequirementFulfillment(view: QaView, narrative: QaReportNarrative): string {
 	const p = narrative.presentation;
 	const acItems = view.acceptance_criteria ?? [];
+	// Defense-in-depth against a false green: a `yes`/`partial` verdict cannot be
+	// evidence-backed when the run recorded no passing user-boundary scenario at
+	// all. The renderer cannot per-AC-map prose evidence to cells (no structured
+	// link), but a green verdict in a zero-pass run is definitionally a
+	// contradiction — surface it loudly rather than render a trusted green badge.
+	const hasBoundaryPass = (view.cells ?? []).some((cell) => cell.status === "pass");
 	const acRows = acItems
 		.map((criterion, i) => {
 			const m = p?.requirementMapping?.[String(i)];
 			const badge = m?.satisfied
 				? `<span class="badge satisfied-${escapeHtml(m.satisfied)}">${escapeHtml(SATISFIED_LABEL[m.satisfied] ?? m.satisfied)}</span>`
 				: `<span class="badge">미판정</span>`;
+			const contradicts = (m?.satisfied === "yes" || m?.satisfied === "partial") && !hasBoundaryPass;
+			const warn = contradicts
+				? gap("기록된 통과 시나리오가 없어 이 충족 판정은 검증 로그와 불일치합니다 — 유저 경계에서 통과한 시나리오 없이는 충족(green)이 될 수 없습니다")
+				: "";
 			const body = m
 				? proseOrGap(m.evidence, "충족 근거 서사가 없습니다")
 				: gap("이 요구사항의 충족 판정이 없습니다");
-			return `<div class="ac-map"><h3>${badge} ${escapeHtml(criterion)}</h3>${body}</div>`;
+			return `<div class="ac-map"><h3>${badge} ${escapeHtml(criterion)}</h3>${warn}${body}</div>`;
 		})
 		.join("");
 	return (
