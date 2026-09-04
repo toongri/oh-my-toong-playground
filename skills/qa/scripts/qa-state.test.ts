@@ -263,6 +263,10 @@ describe("qa-state CLI wiring", () => {
 		" RUN  v" + "3.2.4 /Users/toong/repos/algocare-home/apps/backend\n\n" +
 		" ok test/domains/customer-label/delete-guard (7 tests)\n\n" +
 		" Test Fil" + "es  1 passed (1)\n      Test" + "s  1 passed | 6 skipped (7)\n   Duration  1.95s\nexit=0\n";
+	const BUN_TEST_SUMMARY =
+		"1 " + "pass\n" +
+		"0 " + "fail\n" +
+		"R" + "an 1 tests across 1 files.\n";
 
 	test("record-cell REJECTS a test-runner report as cell evidence (a test log is not a user-boundary observation)", () => {
 		authorCompleteChain();
@@ -274,6 +278,15 @@ describe("qa-state CLI wiring", () => {
 		// the same leak through a supplementary slot on a FAIL cell is blocked too
 		expect(() =>
 			run(`record-cell --story story-1 --cls 2 --status fail --na-reason x --evidence-action ${logPath}`),
+		).toThrow();
+	});
+
+	test("record-cell은 Bun 네이티브 테스트 요약을 시나리오 증거로 거부한다", () => {
+		authorCompleteChain();
+		const logPath = join(tmpDir, "bun-test-summary.txt");
+		writeFileSync(logPath, BUN_TEST_SUMMARY);
+		expect(() =>
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface bash`),
 		).toThrow();
 	});
 
