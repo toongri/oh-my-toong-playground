@@ -37,7 +37,11 @@
  * HOME to leak). `auth.json` is copied into the isolated `CODEX_HOME` rather
  * than pointed at the real one so a fully self-contained `CODEX_HOME` can
  * also carry its OWN `hooks.json` naming THIS REPO's source paths — see
- * `hooks` below.
+ * `hooks` below. The copy source defaults to the live `$CODEX_HOME/auth.json`
+ * (falling back to `~/.codex/auth.json` when `CODEX_HOME` is unset) — the
+ * same env var codex itself reads credentials from — so machines where
+ * `CODEX_HOME` points elsewhere (e.g. an account manager keeping live auth
+ * outside `~/.codex`) still copy valid, non-stale credentials.
  *
  * `hooks.json` entries point at absolute paths under THIS REPO (not a
  * deployed copy under any `~/.codex/`) deliberately: hook scripts (`.sh`/
@@ -73,7 +77,7 @@ export type HooksSpec = Record<string, HookEntry[]>;
 export type IsolatedCodexHome = { home: string; codexHome: string };
 
 export type BuildIsolatedCodexHomeOptions = {
-	/** @default `${os.homedir()}/.codex/auth.json` — override for hermetic tests (a fixture file, never real credentials). */
+	/** @default `$CODEX_HOME/auth.json` (falls back to `${os.homedir()}/.codex/auth.json` when `CODEX_HOME` is unset) — override for hermetic tests (a fixture file, never real credentials). */
 	authSourcePath?: string;
 };
 
@@ -95,7 +99,9 @@ export async function buildIsolatedCodexHome(
 	const codexHome = path.join(home, ".codex");
 	await fs.mkdir(codexHome, { recursive: true });
 
-	const authSource = options.authSourcePath ?? path.join(os.homedir(), ".codex", "auth.json");
+	const authSource =
+		options.authSourcePath ??
+		path.join(process.env.CODEX_HOME ?? path.join(os.homedir(), ".codex"), "auth.json");
 	await fs.copyFile(authSource, path.join(codexHome, "auth.json"));
 
 	if (Object.keys(hooks).length > 0) {

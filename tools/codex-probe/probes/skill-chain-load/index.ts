@@ -118,8 +118,9 @@ export type MainOptions = ProbeOptions & {
 	deployRoot?: string;
 	/**
 	 * Injectable `auth.json` source for buildIsolatedCodexHome — hermetic tests
-	 * only. @default `~/.codex/auth.json` (the real credential this probe's
-	 * isolated CODEX_HOME needs to authenticate a session). Tests MUST inject a
+	 * only. @default `$CODEX_HOME/auth.json` (falls back to `~/.codex/auth.json`
+	 * when `CODEX_HOME` is unset) — the real credential this probe's
+	 * isolated CODEX_HOME needs to authenticate a session. Tests MUST inject a
 	 * fixture: reading the developer's real auth.json would reintroduce exactly
 	 * the machine-dependence this isolation exists to remove.
 	 */

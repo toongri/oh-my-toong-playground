@@ -123,9 +123,10 @@ describe("runEntry / exit-code contract (probe.ts's trichotomy: 0 pass, 1 measur
 	/**
 	 * Writes a throwaway `auth.json` and hands its path to runEntry. Every case
 	 * here MUST use it: main() now builds an isolated CODEX_HOME, which copies
-	 * an auth.json in, and defaulting to the developer's real `~/.codex/auth.json`
-	 * would make these tests read live credentials and pass or fail by machine
-	 * state — the exact dependence this probe's isolation exists to remove.
+	 * an auth.json in, and defaulting to the developer's real `$CODEX_HOME/auth.json`
+	 * (default `~/.codex/auth.json`) would make these tests read live credentials
+	 * and pass or fail by machine state — the exact dependence this probe's
+	 * isolation exists to remove.
 	 */
 	async function withFixtureAuth<T>(fn: (authSourcePath: string) => Promise<T>): Promise<T> {
 		const parent = await fs.mkdtemp(path.join(os.tmpdir(), "skill-chain-load-auth-"));

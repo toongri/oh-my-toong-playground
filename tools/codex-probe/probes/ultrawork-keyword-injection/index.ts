@@ -90,7 +90,7 @@ export function parseArm(argv: readonly string[]): Arm {
 export type MainOptions = ProbeOptions & {
 	/** Injectable scratch root, bypassing this function's own mkdtemp — hermetic tests only. @default a fresh mkdtemp under os.tmpdir(). */
 	scratchRoot?: string;
-	/** Injectable auth.json source, bypassing the real `~/.codex/auth.json` — hermetic tests only. */
+	/** Injectable auth.json source, bypassing the real `$CODEX_HOME/auth.json` (default `~/.codex/auth.json`) — hermetic tests only. */
 	authSourcePath?: string;
 };
 
