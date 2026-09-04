@@ -267,6 +267,16 @@ describe("qa-state CLI wiring", () => {
 		"1 " + "pass\n" +
 		"0 " + "fail\n" +
 		"R" + "an 1 tests across 1 files.\n";
+	const NODE_TEST_REPORTER_SUMMARIES = [
+		"tests 1",
+		"suites 0",
+		"pass 1",
+		"fail 0",
+		"cancelled 0",
+		"skipped 0",
+		"todo 0",
+		"duration_ms 1.234",
+	];
 
 	test("record-cell REJECTS a test-runner report as cell evidence (a test log is not a user-boundary observation)", () => {
 		authorCompleteChain();
@@ -289,6 +299,17 @@ describe("qa-state CLI wiring", () => {
 			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface bash`),
 		).toThrow();
 	});
+
+	for (const [i, summary] of NODE_TEST_REPORTER_SUMMARIES.entries()) {
+		test(`record-cell REJECTS a Node test reporter summary line (${i}) as cell evidence`, () => {
+			authorCompleteChain();
+			const logPath = join(tmpDir, `node-test-summary-${i}.txt`);
+			writeFileSync(logPath, "ℹ " + summary + "\n");
+			expect(() =>
+				run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface bash`),
+			).toThrow();
+		});
+	}
 
 	// Quiet-mode pytest prints no `===` banner and its summary line names the
 	// outcome directly (`1 passed in 0.04s`, `1 failed in 0.04s`, `2 errors in

@@ -164,6 +164,8 @@ const TEST_RUNNER_SIGNATURES: RegExp[] = [
 	/^PASS\s+.+\.(test|spec)\.[cm]?[jt]sx?/m, // jest per-file
 	/\b\d+\s+passing\b/, // mocha
 	/^\s*\d+ (pass|fail)\s*$/m, // bun:test summary
+	/^\s*ℹ\s+(tests|suites|pass|fail|cancelled|skipped|todo)\s+\d+\s*$/m, // node:test spec summary
+	/^\s*ℹ\s+duration_ms\s+\d+(?:\.\d+)?\s*$/m, // node:test spec duration
 	/=+\s*(test session starts|\d+ (passed|failed|error|errors|skipped|xfailed|xpassed|deselected))/, // pytest banner / normal summary
 	/^\s*\d+ (passed|failed|error|errors|skipped|xfailed|xpassed|deselected)\b[^\n]*\bin [\d.]+s/m, // pytest quiet summary (no === banner; covers fail/error too)
 	/^--- (PASS|FAIL):/m, // go test -v
