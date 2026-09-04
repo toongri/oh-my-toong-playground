@@ -298,6 +298,28 @@ describe("qa-state CLI wiring", () => {
 		}
 	});
 
+	const PYTEST_BANNER_OUTCOMES = [
+		"pass" + "ed",
+		"fail" + "ed",
+		"err" + "or",
+		"err" + "ors",
+		"skip" + "ped",
+		"xfail" + "ed",
+		"xpass" + "ed",
+		"deselect" + "ed",
+	];
+
+	for (const [i, outcome] of PYTEST_BANNER_OUTCOMES.entries()) {
+		test(`record-cell REJECTS a bannered pytest ${outcome} outcome as cell evidence`, () => {
+			authorCompleteChain();
+			const logPath = join(tmpDir, `bannered-pytest-${i}.txt`);
+			writeFileSync(logPath, "===" + ` 1 ${outcome} in 0.04s ` + "===\n");
+			expect(() =>
+				run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface bash`),
+			).toThrow();
+		});
+	}
+
 	test("record-cell scans only the prefix but still REJECTS a signature within it on an oversized capture", () => {
 		authorCompleteChain();
 		// A test-runner signature in the first 64KB is caught even when the file is

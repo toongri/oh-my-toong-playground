@@ -163,7 +163,7 @@ const TEST_RUNNER_SIGNATURES: RegExp[] = [
 	/\bTest Suites:\s+\d+\s+(passed|failed|total)/, // jest
 	/^PASS\s+.+\.(test|spec)\.[cm]?[jt]sx?/m, // jest per-file
 	/\b\d+\s+passing\b/, // mocha
-	/=+\s*(test session starts|\d+ passed)/, // pytest banner / normal summary
+	/=+\s*(test session starts|\d+ (passed|failed|error|errors|skipped|xfailed|xpassed|deselected))/, // pytest banner / normal summary
 	/^\s*\d+ (passed|failed|error|errors|skipped|xfailed|xpassed|deselected)\b[^\n]*\bin [\d.]+s/m, // pytest quiet summary (no === banner; covers fail/error too)
 	/^--- (PASS|FAIL):/m, // go test -v
 	/^(ok|FAIL)\s+\S+\s+([\d.]+s|\(cached\))\s*$/m, // go test summary (incl. cached reuse)
