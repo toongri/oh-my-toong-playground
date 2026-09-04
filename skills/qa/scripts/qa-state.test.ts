@@ -386,6 +386,15 @@ describe("qa-state CLI wiring", () => {
 		).toThrow();
 	});
 
+	test("record-cell은 Go coverage 요약을 시나리오 증거로 거부한다", () => {
+		authorCompleteChain();
+		const p = join(tmpDir, "go-coverage.txt");
+		writeFileSync(p, "ok example/pkg 0.123s coverage: " + "75.0% of statements\n");
+		expect(() =>
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${p} --evidence-surface bash`),
+		).toThrow();
+	});
+
 	test("record-cell REJECTS a Go package no-test summary", () => {
 		authorCompleteChain();
 		const p = join(tmpDir, "go-no-tests.txt");

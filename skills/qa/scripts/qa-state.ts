@@ -169,7 +169,7 @@ const TEST_RUNNER_SIGNATURES: RegExp[] = [
 	/=+\s*(test session starts|\d+ (passed|failed|error|errors|skipped|xfailed|xpassed|deselected))/, // pytest banner / normal summary
 	/^\s*\d+ (passed|failed|error|errors|skipped|xfailed|xpassed|deselected)\b[^\n]*\bin [\d.]+s/m, // pytest quiet summary (no === banner; covers fail/error too)
 	/^--- (PASS|FAIL):/m, // go test -v
-	/^(ok|FAIL)\s+\S+\s+([\d.]+s|\(cached\))\s*$/m, // go test summary (incl. cached reuse)
+	/^(ok|FAIL)\s+\S+\s+([\d.]+s|\(cached\))(?:\s+coverage:\s+[\d.]+%\s+of\s+statements)?\s*$/m, // go test summary (incl. cached reuse and coverage)
 	/^\?\s+\S+\s+\[no test files\]\s*$/m, // go test package with no test files
 ];
 
