@@ -168,6 +168,7 @@ const TEST_RUNNER_SIGNATURES: RegExp[] = [
 	/^\s*\d+ (passed|failed|error|errors|skipped|xfailed|xpassed|deselected)\b[^\n]*\bin [\d.]+s/m, // pytest quiet summary (no === banner; covers fail/error too)
 	/^--- (PASS|FAIL):/m, // go test -v
 	/^(ok|FAIL)\s+\S+\s+([\d.]+s|\(cached\))\s*$/m, // go test summary (incl. cached reuse)
+	/^\?\s+\S+\s+\[no test files\]\s*$/m, // go test package with no test files
 ];
 
 // Prefix scanned for a test-runner signature. A report's summary/banner always

@@ -365,6 +365,24 @@ describe("qa-state CLI wiring", () => {
 		).toThrow();
 	});
 
+	test("record-cell REJECTS a Go package no-test summary", () => {
+		authorCompleteChain();
+		const p = join(tmpDir, "go-no-tests.txt");
+		writeFileSync(p, "? example/pkg [" + "no test" + " files]\n");
+		expect(() =>
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${p} --evidence-surface bash`),
+		).toThrow();
+	});
+
+	test("record-cell REJECTS a multiline Go package no-test summary", () => {
+		authorCompleteChain();
+		const p = join(tmpDir, "go-no-tests-multiline.txt");
+		writeFileSync(p, "go test ./...\n?\texample/pkg\t[" + "no test" + " files]\nfinished\n");
+		expect(() =>
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${p} --evidence-surface bash`),
+		).toThrow();
+	});
+
 	test("record-cell ACCEPTS a real boundary observation (client-received response, no test-runner signature)", () => {
 		authorCompleteChain();
 		const apiPath = join(tmpDir, "cls1-response.txt");
