@@ -8,6 +8,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 interface Fixture {
 	id: string;
@@ -40,7 +41,7 @@ const EVAL = process.env["OMT_EVAL_ROOT"] ?? `${process.env["HOME"]}/.omt/oh-my-
 // the GREEN arm passes its own arm/control so both trees run the same probe.
 const ARM = process.argv[2] || "red";
 const CONTROLS = (process.argv[3] || "naive,gist").split(",");
-const manifest = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), "manifest.json"), "utf8"));
+const manifest = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "manifest.json"), "utf8"));
 
 const NOISE = /(^|\/)(bun\.lock|package-lock\.json|.*\.snap|dist\/|.*\.generated\..*)$/;
 
