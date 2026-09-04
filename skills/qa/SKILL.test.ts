@@ -945,20 +945,25 @@ describe("final-check: each scenario's observation names its medium (screen vs A
 		// of the prompt where a final gate belongs (recency/salience).
 		expect(idx).toBeGreaterThan(skillMd.indexOf("## Quick Reference"));
 		const checklist = skillMd.slice(idx);
-		// explicit, tickable checkboxes — not prose
+		// explicit, tickable checkboxes — not prose. Kept tight (~5): each box
+		// is a distinct QA gate, no restatement of the same "all scenarios
+		// passed" idea across several rows.
 		const boxes = checklist.match(/- \[ \]/g) ?? [];
-		expect(boxes.length).toBeGreaterThanOrEqual(6);
+		expect(boxes.length).toBeGreaterThanOrEqual(5);
+		expect(boxes.length).toBeLessThanOrEqual(6);
 		// the medium gate rides on the list, with the API-only carve-out
 		expect(checklist).toContain("names the medium it was observed through");
 		expect(checklist).toContain("`unverified` at the screen");
 		expect(checklist).toContain("API-only");
-		// the other blocking gates are on the list too — the QA gate is the
-		// adversarial E2E at the boundary, NOT a build/test/lint pass
-		expect(checklist).toContain("`H`-priority");
+		// the QA gate is the adversarial E2E at the boundary
 		expect(checklist).toContain("ADVERSARIAL E2E");
 		// build/test/lint is an upstream phase gate, not a verdict-time item —
 		// keep the QA checklist centered on user-boundary verification
 		expect(checklist).not.toContain("build / test / lint");
+		// priority/scoring mechanics live in CHECK + Approval Decision, not in
+		// the scannable final checklist — keep them out to avoid restating them
+		expect(checklist).not.toContain("`H`-priority");
+		expect(checklist).not.toContain("nitpick");
 	});
 });
 
