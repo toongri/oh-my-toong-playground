@@ -31,7 +31,7 @@
 
 import { mkdirSync, readFileSync, rmSync, statSync } from "fs";
 import { execSync } from "child_process";
-import { resolve } from "path";
+import { extname, resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
 import {
 	mergeWithHeartbeat,
@@ -146,6 +146,59 @@ function probePlainFile(path: string): string {
 	})();
 	if (size <= 0) throw new Error(`evidence-path is empty: ${absolute}`);
 	return absolute;
+}
+
+// Signatures of a unit/integration test-RUNNER report (vitest, jest, pytest,
+// mocha, go test). A scenario cell's evidence must be a user-boundary
+// observation — a rendered screen/device capture, the client-received API
+// response, or the terminal a CLI user actually operates. A test-runner report
+// proves code in isolation, NOT the boundary an actor touches, so it can never
+// stand as a cell's proof. (BASELINE evidence is exempt — build/test/lint logs
+// are its whole point — so this is enforced only on record-cell.) Images and
+// other binaries can never be a test log, so they are skipped by extension.
+const TEST_RUNNER_SIGNATURES: RegExp[] = [
+	/\bRUN\s+v\d+\.\d+\.\d+/, // vitest banner
+	/\bTest Files\s+\d+\s+(passed|failed)/, // vitest summary
+	/\bTests\s+\d+\s+(passed|failed)/, // vitest / generic summary
+	/\bTest Suites:\s+\d+\s+(passed|failed|total)/, // jest
+	/^PASS\s+.+\.(test|spec)\.[cm]?[jt]sx?/m, // jest per-file
+	/\b\d+\s+passing\b/, // mocha
+	/=+\s*(test session starts|\d+ passed)/, // pytest
+	/^--- (PASS|FAIL):/m, // go test -v
+	/^(ok|FAIL)\s+\S+\s+[\d.]+s\s*$/m, // go test summary
+];
+
+const NON_TEXT_EVIDENCE_EXT = new Set([
+	".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".pdf",
+	".mp4", ".mov", ".webm", ".zip", ".ico", ".woff", ".woff2",
+]);
+
+/**
+ * Guards a scenario cell's evidence against being a test-runner report masquerading
+ * as user-boundary proof — the failure the QA presentation exists to prevent (a PO
+ * shown `vitest run … exit=0` as "requirement met"). Throws when the file's content
+ * matches a unit/integration test-runner report. Read-capped and image-skipping so
+ * the check is cheap and never fires on a screenshot / API-response capture.
+ */
+function assertBoundaryObservation(absolute: string): void {
+	if (NON_TEXT_EVIDENCE_EXT.has(extname(absolute).toLowerCase())) return;
+	let head: string;
+	try {
+		head = readFileSync(absolute, "utf8").slice(0, 65536);
+	} catch {
+		return; // unreadable/binary — probe* already validated existence+size
+	}
+	if (TEST_RUNNER_SIGNATURES.some((re) => re.test(head))) {
+		throw new Error(
+			`evidence "${absolute}" is a unit/integration test-runner report, which proves code in ` +
+				`isolation — NOT the user boundary. A scenario cell's evidence must be a boundary ` +
+				`observation: the rendered screen/device state, the client-received API response, or the ` +
+				`terminal a CLI user actually operates. If the real boundary is unreachable, record the ` +
+				`scenario as a NOT-RUN coverage delta — never as pass/na backed by a test log. ` +
+				`(BASELINE build/test/lint logs are exempt; this guard is for ADVERSARIAL E2E cells.) ` +
+				`See skills/qa/SKILL.md → ADVERSARIAL E2E / Boundary substitution.`,
+		);
+	}
 }
 
 const SCENARIO_SOURCES = ["self-authored", "caller-provided"] as const;
@@ -639,6 +692,14 @@ export function recordCell(sessionId: string, opts: RecordCellOpts): void {
 			...(slots.after !== undefined ? { after: slots.after } : {}),
 		};
 	}
+	// A cell's evidence is a user-boundary observation — never a test-runner report.
+	// Enforced here (record-cell), not on record-baseline where test/build/lint logs
+	// are the expected evidence.
+	if (evidence) {
+		for (const p of [evidence.path, evidence.before, evidence.action, evidence.after]) {
+			if (p) assertBoundaryObservation(p);
+		}
+	}
 	const next: QaCell = {
 		...selector,
 		attack_point: authored.attack_point,
@@ -1021,7 +1082,7 @@ function main(): void {
 			process.stdout.write((state ? state.phase : "absent") + "\n");
 		} else {
 			process.stderr.write(
-				"Usage: qa-state.ts <set|advance-phase|inc-cycle|record-fix-head|capture-dirty-set|note-failure|add-actor|add-story|author-cell|record-baseline|record-cell|record-run-check|set-verdict|start|waive|declare-inert|complete|get|status> [options]\n",
+				"Usage: qa-state.ts <set|set-acceptance|advance-phase|inc-cycle|record-fix-head|capture-dirty-set|note-failure|add-actor|add-story|author-cell|record-baseline|record-cell|record-run-check|set-verdict|start|waive|declare-inert|complete|get|status> [options]\n",
 			);
 			process.exit(1);
 		}

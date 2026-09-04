@@ -4,7 +4,13 @@ import { mkdtempSync, mkdirSync, rmSync, existsSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
-import { renderQaReport, defaultEvidenceReader, type EvidenceReader, type QaReportNarrative } from "./qa-report.ts";
+import {
+	renderQaReport,
+	defaultEvidenceReader,
+	type EvidenceReader,
+	type QaReportNarrative,
+	type MermaidRenderer,
+} from "./qa-report.ts";
 import type { QaView } from "./qa-state.ts";
 
 // ---------------------------------------------------------------------------
@@ -83,11 +89,11 @@ describe("qa-report renderer", () => {
 		expect(renderQaReport(baseView({ actors: [] }), {}, fakeReader)).toBeNull();
 	});
 
-	test("renders every section in the pinned AC order: AC -> Actor Roster -> Story tree -> Scenario Evidence -> Failures -> Verdict -> Evidence Files", () => {
+	test("renders every section in the pinned order: 유저 시나리오·근거 -> 요구사항 충족 -> AC -> Actor Roster -> Failures -> Verdict -> Evidence Files", () => {
 		const html = renderQaReport(baseView(), { acceptanceCriteria: ["v2 screen visible when flag ON"] }, fakeReader);
 		expect(html).not.toBeNull();
-		const order = ["Acceptance Criteria", "Actor Roster", "Story", "Scenario Evidence", "Failures", "Verdict", "Evidence Files"].map((needle) =>
-			html!.indexOf(needle),
+		const order = ["유저 시나리오 · 근거", "요구사항 충족", "Acceptance Criteria", "Actor Roster", "Failures", "Verdict", "Evidence Files"].map(
+			(needle) => html!.indexOf(needle),
 		);
 		for (let i = 1; i < order.length; i++) {
 			expect(order[i - 1]).toBeGreaterThanOrEqual(0);
@@ -109,12 +115,34 @@ describe("qa-report renderer", () => {
 		expect(acceptanceSection).toContain("no acceptance-criteria recorded");
 	});
 
-	test("renders each scenario's attack_point in the Scenario Evidence section", () => {
-		const html = renderQaReport(baseView(), {}, fakeReader)!;
-		const evidenceSection = html.slice(html.indexOf("Scenario Evidence"));
-		expect(evidenceSection).toContain("flag-ON stock screen");
+	test("keeps the reader scenario section clean: coverage axes by plain name, NO cls/attack_point/driven_at leakage", () => {
+		const view = baseView();
+		view.cells![0].driven_at = "CustomerLabelService.softDelete via PGlite";
+		view.actors![0].boundary = "tRPC customerLabelAdmin.delete mutation";
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		// coverage axes shown by plain name, never the cls number
+		expect(reader).toContain("핵심·실패 경로");
+		expect(reader).toContain("입력 경계·악성 입력");
+		expect(reader).not.toContain("cls 1");
+		expect(reader).not.toContain("cls 2");
+		// audit-layer / implementation fields never reach the reader view
+		expect(reader).not.toContain("CustomerLabelService.softDelete");
+		expect(reader).not.toContain("tRPC customerLabelAdmin.delete");
+		expect(reader).not.toContain("flag-ON stock screen"); // attack_point is audit-only
+	});
+
+	test("moves attack_point / driven_at / cls to the record-faithful audit section", () => {
+		const view = baseView();
+		view.cells![0].driven_at = "CustomerLabelService.softDelete via PGlite";
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const audit = html.slice(html.indexOf("시나리오 상세 기록"));
+		expect(audit).toContain("flag-ON stock screen");
 		// the injection-shaped attack_point is escaped, not executed
-		expect(evidenceSection).toContain("&lt;script&gt;alert(1)&lt;/script&gt; boundary probe");
+		expect(audit).toContain("&lt;script&gt;alert(1)&lt;/script&gt; boundary probe");
+		expect(audit).toContain("CustomerLabelService.softDelete via PGlite");
+		expect(audit).toContain("cls 1");
+		expect(audit).toContain("cls 2");
 	});
 
 	test("renders the recorded actor roster from state", () => {
@@ -144,7 +172,7 @@ describe("qa-report renderer", () => {
 		expect(html).toContain("curl status 200");
 	});
 
-	test("reads and renders duplicate evidence paths once while keeping distinct supplementary slots", () => {
+	test("raw TEXT evidence never appears in the reader; it lives in the audit as de-duped collapsibles", () => {
 		const view = baseView({
 			cells: [
 				{
@@ -159,41 +187,71 @@ describe("qa-report renderer", () => {
 				},
 			],
 		});
-		const readPaths: string[] = [];
-		const html = renderQaReport(view, {}, (path) => {
-			readPaths.push(path);
-			return { kind: "text", content: "proof" };
-		})!;
-		const scenarioEvidence = html.slice(html.indexOf("Scenario Evidence"), html.indexOf("Failures &amp; Mismatches"));
-		const occurrences = (value: string): number => scenarioEvidence.split(value).length - 1;
-
-		expect(readPaths).toEqual(["/evidence/action.log", "/evidence/before.log", "/evidence/after.log"]);
-		expect(occurrences("/evidence/action.log")).toBe(1);
-		expect(occurrences("/evidence/before.log")).toBe(1);
-		expect(occurrences("/evidence/after.log")).toBe(1);
-		expect(scenarioEvidence).toContain('class="evidence-slot-label">recorded</div>');
-		expect(scenarioEvidence).not.toContain('class="evidence-slot-label">action</div>');
+		const html = renderQaReport(view, {}, () => ({ kind: "text", content: "RAW CURL PROOF" }))!;
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		const audit = html.slice(html.indexOf("시나리오 상세 기록"));
+		// a PO must NOT meet a raw curl/HTTP dump in the reader view
+		expect(reader).not.toContain("RAW CURL PROOF");
+		// the raw bytes are preserved in the audit as collapsible details, de-duped
+		expect(audit).toContain("RAW CURL PROOF");
+		expect(audit).toContain('class="raw-evidence"');
+		const occ = (v: string): number => audit.split(v).length - 1;
+		// each distinct text file is embedded once; action.log is both a supplementary
+		// slot and the recorded path, so it de-dupes to a single embed → 3 total
+		expect(occ("<pre>RAW CURL PROOF</pre>")).toBe(3); // before, action(=path), after
 	});
 
-	test("renders required evidence.path when supplementary slots are absent", () => {
+	test("surfaces a loud gap (not a muted note) for a story whose verified scenarios have no evidence — qa mandates evidence", () => {
+		// a story with a single fail cell and no evidence at all is a contract violation
+		const view = baseView({
+			cells: [{ story: "story-1", cls: 1, attack_point: "핵심 경로", priority: "H", status: "fail", cycle: 0 }],
+		});
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const scenarios = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		expect(scenarios).toContain('class="gap"');
+		expect(scenarios).toContain("근거를 필수로 요구");
+		expect(scenarios).not.toContain("기록된 근거 없음");
+	});
+
+	test("does not gap a story whose only scenarios are na: na is the one evidence-free status, justified in the audit", () => {
+		const view = baseView({
+			cells: [{ story: "story-1", cls: 1, attack_point: "핵심 경로", priority: "M", status: "na", na_reason: "이 조건에서는 해당 화면이 노출되지 않음", cycle: 0 }],
+		});
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const scenarios = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		// the na story must not raise the "no evidence" gap in the reader view
+		expect(scenarios).not.toContain("근거를 필수로 요구");
+		expect(scenarios).toContain("해당없음"); // coverage summary shows the na axis
+		// the na_reason lives in the audit section, not the reader view
+		expect(scenarios).not.toContain("이 조건에서는 해당 화면이 노출되지 않음");
+		expect(html.slice(html.indexOf("시나리오 상세 기록"))).toContain("이 조건에서는 해당 화면이 노출되지 않음");
+	});
+
+	test("a text-only evidence.path is carried in the audit, never dumped in the reader", () => {
 		const view = baseView();
 		view.cells![0].evidence = { path: "/evidence/required.log", surface: "agent-device" };
 		const html = renderQaReport(view, {}, fakeReader)!;
-		const scenarioEvidence = html.slice(html.indexOf("Scenario Evidence"), html.indexOf("Failures &amp; Mismatches"));
-		expect(scenarioEvidence).toContain("contents of /evidence/required.log");
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		const audit = html.slice(html.indexOf("시나리오 상세 기록"));
+		expect(reader).not.toContain("contents of /evidence/required.log");
+		expect(audit).toContain("contents of /evidence/required.log");
 	});
 
-	test("부분 supplementary 슬롯이 있어도 필수 evidence.path를 함께 렌더함", () => {
+	test("screenshots render in the reader; a sibling text evidence.path stays in the audit", () => {
 		const view = baseView();
 		view.cells![0].evidence = {
-			path: "/evidence/required.log",
+			path: "/evidence/required.log", // text
 			surface: "agent-device",
-			before: "/evidence/before.png",
+			before: "/evidence/before.png", // image
 		};
 		const html = renderQaReport(view, {}, fakeReader)!;
-		const scenarioEvidence = html.slice(html.indexOf("Scenario Evidence"), html.indexOf("Failures &amp; Mismatches"));
-		expect(scenarioEvidence).toContain("contents of /evidence/required.log");
-		expect(scenarioEvidence).toContain("data:image/png;base64,AAAA");
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		const audit = html.slice(html.indexOf("시나리오 상세 기록"));
+		// the screenshot is reader-facing (a PO can read it)
+		expect(reader).toContain("data:image/png;base64,AAAA");
+		// the text log is not dumped in the reader; it lives in the audit
+		expect(reader).not.toContain("contents of /evidence/required.log");
+		expect(audit).toContain("contents of /evidence/required.log");
 	});
 
 	test("skips embedding and links by path when a file exceeds the embed size cap", () => {
@@ -203,10 +261,13 @@ describe("qa-report renderer", () => {
 		expect(html).toContain("/evidence/action.png");
 	});
 
-	test("누적 evidence 임베드 예산을 초과하면 이후 파일을 경로로 남김", () => {
+	test("once the embed budget is spent, a later screenshot is dropped from the reader but its path stays in the audit", () => {
 		const nearBudget = "A".repeat(16 * 1024 * 1024 - 40);
+		// reader renders images in order before → action → after → recorded path; the
+		// action screenshot (rendered first) nearly fills the budget, so the later
+		// recorded-path screenshot is not embedded — its path remains in the audit.
 		const budgetReader: EvidenceReader = (path) =>
-			path.endsWith("first.png")
+			path.endsWith("action.png")
 				? { kind: "image", dataUri: `data:image/png;base64,${nearBudget}` }
 				: { kind: "image", dataUri: "data:image/png;base64,BBBB" };
 		const view = baseView({
@@ -214,17 +275,18 @@ describe("qa-report renderer", () => {
 				{
 					...baseView().cells![0],
 					evidence: {
-						path: "/evidence/first.png",
+						path: "/evidence/recorded.png",
 						surface: "agent-device",
-						action: "/evidence/second.png",
+						action: "/evidence/action.png",
 					},
 				},
 			],
 		});
 		const html = renderQaReport(view, {}, budgetReader)!;
-		expect(html).toContain("data:image/png;base64,AAAA");
-		expect(html).toContain("embedding budget exhausted");
-		expect(html).toContain("/evidence/second.png");
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		expect(reader).toContain("data:image/png;base64,AAAA"); // action screenshot embedded
+		expect(reader).not.toContain("data:image/png;base64,BBBB"); // recorded screenshot dropped (over budget)
+		expect(html.slice(html.indexOf("시나리오 상세 기록"))).toContain("/evidence/recorded.png"); // path still audited
 	});
 
 	test("renders expected-vs-actual narrative supplied at render time, keyed per scenario", () => {
@@ -261,7 +323,7 @@ describe("qa-report renderer", () => {
 		expect(failures).not.toContain("no failures or mismatches recorded this cycle");
 	});
 
-	test("embeds readable baseline evidence in the Scenario Evidence section", () => {
+	test("baseline build/test evidence never appears in the reader scenario section (it is not a user-boundary observation)", () => {
 		const view = baseView({
 			stories: [
 				{
@@ -270,19 +332,16 @@ describe("qa-report renderer", () => {
 					baseline: {
 						result: "pass",
 						cycle: 0,
-						evidence: { path: "/evidence/baseline.log", surface: "agent-device" },
+						evidence: { path: "/evidence/baseline.log", surface: "bash" },
 					},
 				},
 			],
 		});
-		const readPaths: string[] = [];
-		const html = renderQaReport(view, {}, (path) => {
-			readPaths.push(path);
-			return { kind: "text", content: "baseline proof" };
-		})!;
-		const scenarioEvidence = html.slice(html.indexOf("Scenario Evidence"), html.indexOf("Failures &amp; Mismatches"));
-		expect(readPaths).toContain("/evidence/baseline.log");
-		expect(scenarioEvidence).toContain("baseline proof");
+		const html = renderQaReport(view, {}, () => ({ kind: "text", content: "vitest 72 passed" }))!;
+		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		// a build/test log must never be shown to a PO as scenario evidence
+		expect(reader).not.toContain("vitest 72 passed");
+		expect(reader).not.toContain("변경 전 기준선");
 	});
 
 	test("renders the waived sub-scenario in the verdict identifier", () => {
@@ -330,6 +389,176 @@ describe("qa-report renderer", () => {
 		const html = renderQaReport(baseView(), {}, fakeReader)!;
 		expect(html).toContain("<style>");
 		expect(html.match(/<script/g)).toBeNull();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Presentation layer: the reader-facing, product/user-centric narrative a
+// context-free PO reads first. Anchored to recorded facts (actors/stories/ACs);
+// only prose + the big-picture diagram flow in through --narrative. A required
+// slot with no narrative renders a visible gap marker (the forcing function).
+// ---------------------------------------------------------------------------
+
+// A fake mermaid renderer so tests exercise the diagram wrapping without mmdc.
+const fakeMermaid: MermaidRenderer = (source, index) =>
+	`<svg viewBox="0 0 300 100" width="100%" data-block="${index}">${source}</svg>`;
+
+describe("qa-report presentation layer", () => {
+	const fullPresentation = (): QaReportNarrative => ({
+		presentation: {
+			overview: "flag-ON일 때 재고 화면을 v2로 교체하는 변경",
+			affectedUsers: { "actor-1": "가구 소유자는 매일 재고 화면을 열어 잔량을 확인한다" },
+			scenarioFlows: { "story-1": "소유자가 재고 화면에 진입하면 8슬롯 v2 화면이 보인다" },
+			requirementMapping: { "0": { satisfied: "yes", evidence: "story-1 cls1 통과 — before/after 캡처" } },
+			bigPicture: "flowchart LR\n  Owner --> StockScreen",
+			bigPictureCaption: "소유자 재고 확인 흐름",
+		},
+	});
+
+	test("renders the presentation layer ABOVE the verification-log sections", () => {
+		const view = baseView({ acceptance_criteria: ["flag ON이면 v2 재고 화면"] });
+		const html = renderQaReport(view, fullPresentation(), fakeReader, fakeMermaid)!;
+		expect(html).not.toBeNull();
+		expect(html.indexOf("기능 개요")).toBeGreaterThanOrEqual(0);
+		// the whole presentation layer precedes the audit log's first section
+		expect(html.indexOf("기능 개요")).toBeLessThan(html.indexOf("Acceptance Criteria"));
+		expect(html.indexOf("요구사항 충족")).toBeLessThan(html.indexOf("Acceptance Criteria"));
+	});
+
+	test("renders the feature overview prose", () => {
+		const html = renderQaReport(baseView(), fullPresentation(), fakeReader, fakeMermaid)!;
+		expect(html).toContain("flag-ON일 때 재고 화면을 v2로 교체하는 변경");
+	});
+
+	test("renders a visible gap marker for each required slot when no presentation is supplied", () => {
+		const view = baseView({ acceptance_criteria: ["flag ON이면 v2 재고 화면"] });
+		const html = renderQaReport(view, {}, fakeReader, fakeMermaid)!;
+		const presentation = html.slice(0, html.indexOf("Acceptance Criteria"));
+		// gap markers carry a dedicated class so the reader sees what was skipped
+		expect(presentation).toContain('class="gap"');
+		expect((presentation.match(/class="gap"/g) ?? []).length).toBeGreaterThanOrEqual(4);
+	});
+
+	test("anchors affected-users to the recorded roster: renders prose keyed by actor id", () => {
+		const html = renderQaReport(baseView(), fullPresentation(), fakeReader, fakeMermaid)!;
+		const affected = html.slice(html.indexOf("영향받는 유저"), html.indexOf("큰 그림"));
+		expect(affected).toContain("Household Owner");
+		expect(affected).toContain("가구 소유자는 매일 재고 화면을 열어 잔량을 확인한다");
+	});
+
+	test("ignores affected-user prose for an actor id absent from the recorded roster (no invention)", () => {
+		const narrative: QaReportNarrative = {
+			presentation: { affectedUsers: { "ghost-actor": "존재하지 않는 유저 서사" } },
+		};
+		const html = renderQaReport(baseView(), narrative, fakeReader, fakeMermaid)!;
+		expect(html).not.toContain("존재하지 않는 유저 서사");
+	});
+
+	test("renders a gap marker for a rostered actor whose prose is missing", () => {
+		const view = baseView({
+			actors: [
+				{ id: "actor-1", name: "Household Owner", boundary: "Home App", driver: "agent-device", reachable: "yes" },
+				{ id: "actor-2", name: "Admin", boundary: "Admin Console", driver: "agent-browser", reachable: "yes" },
+			],
+		});
+		const narrative: QaReportNarrative = { presentation: { affectedUsers: { "actor-1": "소유자 서사" } } };
+		const html = renderQaReport(view, narrative, fakeReader, fakeMermaid)!;
+		const affected = html.slice(html.indexOf("영향받는 유저"), html.indexOf("큰 그림"));
+		expect(affected).toContain("소유자 서사");
+		expect(affected).toContain("Admin");
+		expect(affected).toContain('class="gap"'); // actor-2 has no prose -> gap
+	});
+
+	test("anchors each story's flow narrative inline in the reader scenario section, beside its evidence", () => {
+		const html = renderQaReport(baseView(), fullPresentation(), fakeReader, fakeMermaid)!;
+		const scenarios = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("요구사항 충족"));
+		// the story is headed by its actor's name (not the internal story id), with its
+		// authored user-boundary flow and its evidence in the same block
+		expect(scenarios).toContain("Household Owner");
+		expect(scenarios).toContain("소유자가 재고 화면에 진입하면 8슬롯 v2 화면이 보인다");
+		expect(scenarios).toContain("data:image/png;base64,AAAA"); // its evidence
+		expect(scenarios).toContain("확인한 관점:"); // plain coverage summary
+	});
+
+	test("maps each recorded acceptance criterion to a satisfaction badge and evidence prose", () => {
+		const view = baseView({ acceptance_criteria: ["flag ON이면 v2 재고 화면"] });
+		const html = renderQaReport(view, fullPresentation(), fakeReader, fakeMermaid)!;
+		const mapping = html.slice(html.indexOf("요구사항 충족"), html.indexOf("Acceptance Criteria"));
+		expect(mapping).toContain("flag ON이면 v2 재고 화면");
+		expect(mapping).toContain("story-1 cls1 통과 — before/after 캡처");
+		expect(mapping).toContain("satisfied-yes");
+	});
+
+	test("renders an unverified requirement LOUDLY (미검증 — 유저 경계 미구동), never as a quiet partial", () => {
+		const view = baseView({ acceptance_criteria: ["flag ON이면 v2 재고 화면"] });
+		const narrative: QaReportNarrative = {
+			presentation: {
+				requirementMapping: {
+					"0": { satisfied: "unverified", evidence: "어드민 화면이 부팅되지 않아 유저 경계를 구동하지 못함 — NOT-RUN" },
+				},
+			},
+		};
+		const html = renderQaReport(view, narrative, fakeReader, fakeMermaid)!;
+		const mapping = html.slice(html.indexOf("요구사항 충족"), html.indexOf("Acceptance Criteria"));
+		expect(mapping).toContain("satisfied-unverified");
+		expect(mapping).toContain("미검증 — 유저 경계 미구동");
+		expect(mapping).not.toContain("충족</span>"); // never rendered as met/partial
+	});
+
+	test("renders a gap marker for a recorded AC that has no satisfaction mapping", () => {
+		const view = baseView({ acceptance_criteria: ["매핑된 AC", "매핑 안 된 AC"] });
+		const narrative: QaReportNarrative = {
+			presentation: { requirementMapping: { "0": { satisfied: "yes", evidence: "근거" } } },
+		};
+		const html = renderQaReport(view, narrative, fakeReader, fakeMermaid)!;
+		const mapping = html.slice(html.indexOf("요구사항 충족"), html.indexOf("Acceptance Criteria"));
+		expect(mapping).toContain("매핑된 AC");
+		expect(mapping).toContain("매핑 안 된 AC");
+		expect(mapping).toContain('class="gap"');
+	});
+
+	test("bakes the big-picture mermaid source to an inline SVG via the injected renderer", () => {
+		const html = renderQaReport(baseView(), fullPresentation(), fakeReader, fakeMermaid)!;
+		const big = html.slice(html.indexOf("큰 그림"), html.indexOf("유저 시나리오 · 근거"));
+		expect(big).toContain("<svg");
+		expect(big).toContain("소유자 재고 확인 흐름"); // caption
+		// width="100%" is normalized to the viewBox pixel width so labels stay legible
+		expect(big).toContain('width="300"');
+		expect(big).not.toContain('width="100%"');
+	});
+
+	test("degrades gracefully to the mermaid source when the renderer throws (report never aborts)", () => {
+		const throwingMermaid: MermaidRenderer = () => {
+			throw new Error("mmdc 가 없습니다");
+		};
+		const html = renderQaReport(baseView(), fullPresentation(), fakeReader, throwingMermaid)!;
+		expect(html).not.toBeNull();
+		const big = html.slice(html.indexOf("큰 그림"), html.indexOf("유저 시나리오 · 근거"));
+		// the raw source survives so the reader still sees the intended structure
+		expect(big).toContain("flowchart LR");
+		expect(big).toContain("다이어그램 렌더 실패");
+	});
+
+	test("renders a gap marker when no big-picture diagram is supplied", () => {
+		const narrative: QaReportNarrative = { presentation: { overview: "개요만 있음" } };
+		const html = renderQaReport(baseView(), narrative, fakeReader, fakeMermaid)!;
+		const big = html.slice(html.indexOf("큰 그림"), html.indexOf("유저 시나리오 · 근거"));
+		expect(big).toContain('class="gap"');
+	});
+
+	test("escapes hostile presentation prose instead of injecting it raw", () => {
+		const narrative: QaReportNarrative = {
+			presentation: { overview: "<script>alert(1)</script>" },
+		};
+		const html = renderQaReport(baseView(), narrative, fakeReader, fakeMermaid)!;
+		expect(html).not.toContain("<script>alert(1)</script>");
+		expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+	});
+
+	test("keeps the report self-contained even with a baked diagram (no runtime script, no external ref)", () => {
+		const html = renderQaReport(baseView(), fullPresentation(), fakeReader, fakeMermaid)!;
+		expect(html.match(/<script/g)).toBeNull();
+		expect(html).not.toMatch(/https?:\/\//);
 	});
 });
 

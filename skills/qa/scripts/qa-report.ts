@@ -14,10 +14,12 @@
  * are never persisted to qa-state: issue descriptions, expected-vs-actual
  * prose, and oracle diagnosis. See skills/qa/SKILL.md "HTML Report".
  */
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "fs";
-import { dirname, extname, resolve } from "path";
+import { execFileSync } from "child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { dirname, extname, join, resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
-import type { QaBaseline, QaCell, QaEvidence, QaResult, QaRunCheck, QaStory } from "@lib/qa-chain-core";
+import type { QaBaseline, QaCell, QaResult, QaRunCheck, QaStory } from "@lib/qa-chain-core";
 import { readQaView, type QaView } from "./qa-state.ts";
 
 // Keep individual evidence files small enough to inspect, and cap the total
@@ -73,6 +75,47 @@ export interface QaReportScenarioNarrative {
 }
 
 /**
+ * One recorded acceptance criterion's satisfaction judgment (render-time).
+ * `unverified` is distinct from `no`: the requirement was NOT driven at its user
+ * boundary (unreachable environment / NOT-RUN scenarios), so it is neither proven
+ * met nor proven broken — it reads loudly as "미검증", never as a quiet partial.
+ */
+export interface QaReportAcMapping {
+	satisfied?: "yes" | "no" | "partial" | "unverified";
+	/** Which stories/scenarios/evidence prove (or fail) this criterion, in prose. */
+	evidence?: string;
+}
+
+/**
+ * The reader-facing presentation layer — the product/user-centric narrative a
+ * context-free PO/designer reads first to judge whether the change met the
+ * requirements, without opening code or the verification log below it.
+ *
+ * It is NOT a code-diff summary. Every part is anchored to a recorded fact so
+ * the layer cannot drift from what qa actually ran:
+ * - `affectedUsers` is keyed by recorded actor id (roster is authoritative);
+ *   prose for an id absent from the roster is ignored, never invented onto the page.
+ * - `scenarioFlows` is keyed by recorded story id.
+ * - `requirementMapping` is keyed by the recorded acceptance-criterion index
+ *   (as a string); the criterion text itself always comes from qa-state records.
+ * Only the prose and the big-picture diagram originate here. A required slot with
+ * no narrative renders a visible gap marker instead of silently vanishing.
+ */
+export interface QaReportPresentation {
+	/** 기능 개요 — what the change is and why, at the product level. */
+	overview?: string;
+	/** actor id → how this user uses the product + how the change affects them. */
+	affectedUsers?: Record<string, string>;
+	/** story id → the rich, user-boundary flow the reader should expect. */
+	scenarioFlows?: Record<string, string>;
+	/** AC index (as string) → its satisfaction judgment. */
+	requirementMapping?: Record<string, QaReportAcMapping>;
+	/** A big-picture mermaid source, baked to inline SVG at render time. */
+	bigPicture?: string;
+	bigPictureCaption?: string;
+}
+
+/**
  * The subjective half of the report — never persisted to qa-state. Keyed by
  * `${story}:${cls}:${sub ?? ""}` (matching qa-chain-core's cell key shape).
  */
@@ -84,7 +127,11 @@ export interface QaReportNarrative {
 	acceptanceCriteria?: string[];
 	issues?: QaReportNarrativeIssue[];
 	scenarios?: Record<string, QaReportScenarioNarrative>;
+	presentation?: QaReportPresentation;
 }
+
+/** Renders one mermaid source to an SVG string. Injected so tests skip mmdc. */
+export type MermaidRenderer = (source: string, index: number) => string;
 
 function escapeHtml(s: string): string {
 	return String(s)
@@ -98,8 +145,40 @@ function cellKey(cell: Pick<QaCell, "story" | "cls" | "sub">): string {
 	return `${cell.story}:${cell.cls}:${cell.sub ?? ""}`;
 }
 
-function cellLabel(cell: Pick<QaCell, "cls" | "sub">): string {
-	return `cls ${cell.cls}${cell.sub ? `/${cell.sub}` : ""}`;
+/**
+ * Rewrites a mermaid SVG's `width="100%"` root attribute to its viewBox pixel
+ * width so a wide diagram renders at natural size and its figure scrolls, rather
+ * than shrinking to the column and collapsing its labels to a few illegible
+ * pixels. Forked from explain-diff/scripts/render.ts — technique reused, no
+ * runtime dependency on that skill.
+ */
+export function normalizeSvgWidth(svg: string): string {
+	const viewBox = svg.match(/viewBox="0 0 ([\d.]+) [\d.]+"/);
+	if (!viewBox) return svg;
+	const width = Math.ceil(Number(viewBox[1]));
+	if (!Number.isFinite(width) || width <= 0) return svg;
+	return svg.replace(/(<svg\b[^>]*?)\swidth="100%"/, `$1 width="${width}"`);
+}
+
+/**
+ * Renders one mermaid source to SVG through mmdc (real mermaid inside headless
+ * Chromium — the same engine the mermaid-render-gate hook uses). Forked from
+ * explain-diff/scripts/render.ts. The `my-svg` id mmdc mints is de-duplicated
+ * per block so two diagrams on one page do not style each other.
+ */
+export function mmdcRenderSvg(source: string, index: number): string {
+	const dir = mkdtempSync(join(tmpdir(), "qa-report-mmd-"));
+	try {
+		const src = join(dir, "block.mmd");
+		const out = join(dir, "block.svg");
+		writeFileSync(src, source, "utf8");
+		execFileSync("mmdc", ["-i", src, "-o", out, "-b", "transparent", "-q"], {
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		return readFileSync(out, "utf8").replaceAll("my-svg", `mmd-${index}`);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
 }
 
 type RecordedCheck = QaBaseline | QaRunCheck | QaResult | null | undefined;
@@ -140,33 +219,129 @@ function embeddedByteLength(embed: EvidenceEmbed): number {
 	return 0;
 }
 
-function evidenceSlot(label: string, path: string | undefined, readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
+/**
+ * A reader-facing evidence slot — IMAGES ONLY. A screenshot / rendered screen is
+ * something a PO or designer can read directly, so it belongs in the reader view.
+ * Raw TEXT evidence (a curl transcript, an HTTP/JSON dump, a build/test log) is
+ * NOT rendered here: a context-free reader cannot read `HTTP=404` or
+ * `{"error":{"code":"NOT_FOUND"}}` as "the requirement works". Text evidence is
+ * conveyed by the natural-language scenario narrative in the reader, and its raw
+ * bytes live in the audit section (`renderRawEvidence`). Non-image evidence
+ * returns "" and is left unconsumed so the audit can still render it.
+ */
+function imageSlot(label: string, path: string | undefined, readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
 	if (!path || context.renderedPaths.has(path)) return "";
-	context.renderedPaths.add(path);
 	const embed = readEvidence(path);
-	let body: string;
+	if (embed.kind !== "image") return ""; // text/too-large/missing → audit, not the reader
 	const embedBytes = embeddedByteLength(embed);
-	const budgetExceeded = embedBytes > 0 && context.embeddedBytes + embedBytes > MAX_TOTAL_EMBED_BYTES;
-	if (budgetExceeded) {
-		body = `<p class="evidence-note">evidence embedding budget exhausted — see path below</p>`;
-	} else if (embed.kind === "image") {
-		context.embeddedBytes += embedBytes;
-		body = `<img src="${escapeHtml(embed.dataUri)}" alt="${escapeHtml(label)} evidence">`;
-	} else if (embed.kind === "text") {
-		context.embeddedBytes += embedBytes;
-		body = `<pre>${escapeHtml(embed.content)}</pre>`;
+	if (embedBytes > 0 && context.embeddedBytes + embedBytes > MAX_TOTAL_EMBED_BYTES) {
+		return ""; // over budget: the raw file stays referenced from the audit section
 	}
-	else if (embed.kind === "too-large") body = `<p class="evidence-note">too large to embed (${embed.size} bytes) — see path below</p>`;
-	else body = `<p class="evidence-note">evidence file missing</p>`;
+	context.renderedPaths.add(path);
+	context.embeddedBytes += embedBytes;
 	return (
-		`<div class="evidence-slot"><div class="evidence-slot-label">${escapeHtml(label)}</div>${body}` +
+		`<div class="evidence-slot"><div class="evidence-slot-label">${escapeHtml(label)}</div>` +
+		`<img src="${escapeHtml(embed.dataUri)}" alt="${escapeHtml(label)} evidence">` +
 		`<div class="evidence-slot-path"><code>${escapeHtml(path)}</code></div></div>`
 	);
 }
 
-function fieldRow(label: string, value: string | undefined): string {
-	if (!value) return "";
-	return `<p class="scenario-field"><strong>${escapeHtml(label)}</strong> ${escapeHtml(value)}</p>`;
+/** A visible marker for a required presentation slot the author left unwritten. */
+function gap(what: string): string {
+	return `<p class="gap">${escapeHtml(what)} — presentation.md 참조</p>`;
+}
+
+/** A block of author prose, escaped; or a gap marker when it is absent. */
+function proseOrGap(prose: string | undefined, whatMissing: string): string {
+	return prose ? `<p>${escapeHtml(prose)}</p>` : gap(whatMissing);
+}
+
+function renderBigPicture(presentation: QaReportPresentation | undefined, renderMermaid: MermaidRenderer): string {
+	const source = presentation?.bigPicture;
+	if (!source) return `<h2>큰 그림</h2>${gap("큰 그림 다이어그램이 없습니다")}`;
+	const caption = presentation?.bigPictureCaption;
+	let figure: string;
+	try {
+		figure = `<figure class="diagram">${normalizeSvgWidth(renderMermaid(source, 0))}` +
+			(caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : "") +
+			`</figure>`;
+	} catch (e) {
+		// Never abort the terminal report over a diagram: keep the raw source so
+		// the reader still sees the intended structure, and name the failure.
+		figure =
+			`<p class="evidence-note">다이어그램 렌더 실패 (${escapeHtml(String(e))})</p>` +
+			`<pre>${escapeHtml(source)}</pre>`;
+	}
+	return `<h2>큰 그림</h2>${figure}`;
+}
+
+const SATISFIED_LABEL: Record<string, string> = {
+	yes: "충족",
+	no: "미충족",
+	partial: "부분 충족",
+	unverified: "미검증 — 유저 경계 미구동",
+};
+
+/**
+ * The reader-facing head: feature overview, affected users (anchored to the
+ * roster), and the big-picture diagram — the "what / why / who / picture" a
+ * context-free PO reads first. Scenario flows live with their evidence in the
+ * merged Scenarios section; requirement verdicts have their own section. Facts
+ * (actor list) come from records; only prose and the diagram come from
+ * `narrative.presentation`.
+ */
+function renderPresentation(view: QaView, narrative: QaReportNarrative, renderMermaid: MermaidRenderer): string {
+	const p = narrative.presentation;
+
+	const overview = `<h2>기능 개요</h2>${proseOrGap(p?.overview, "기능 개요 서사가 없습니다")}`;
+
+	const actorBlocks = (view.actors ?? [])
+		.map((actor) => {
+			const prose = p?.affectedUsers?.[actor.id];
+			// Reader view carries the actor's name only — never `boundary`, which is a
+			// record field the QA engineer writes as the concrete driver target (URLs,
+			// tRPC procedures, service methods) and so leaks implementation. The
+			// boundary lives in the record-faithful Actor Roster below.
+			return (
+				`<div class="affected-user"><h3>${escapeHtml(actor.name ?? actor.id)}</h3>` +
+				`${proseOrGap(prose, "이 유저의 사용·영향 서사가 없습니다")}</div>`
+			);
+		})
+		.join("");
+	const affectedUsers =
+		`<h2>영향받는 유저</h2>` +
+		(actorBlocks || `<p class="evidence-note">기록된 actor 없음</p>`);
+
+	const bigPicture = renderBigPicture(p, renderMermaid);
+
+	return `<section class="presentation">${overview}${affectedUsers}${bigPicture}</section>`;
+}
+
+/**
+ * Requirement fulfillment: each recorded acceptance criterion mapped to a
+ * met/not-met/partial verdict plus the backing evidence prose. Criterion text is
+ * authoritative from records; the verdict and its backing come from
+ * `narrative.presentation.requirementMapping`, keyed by AC index.
+ */
+function renderRequirementFulfillment(view: QaView, narrative: QaReportNarrative): string {
+	const p = narrative.presentation;
+	const acItems = view.acceptance_criteria ?? [];
+	const acRows = acItems
+		.map((criterion, i) => {
+			const m = p?.requirementMapping?.[String(i)];
+			const badge = m?.satisfied
+				? `<span class="badge satisfied-${escapeHtml(m.satisfied)}">${escapeHtml(SATISFIED_LABEL[m.satisfied] ?? m.satisfied)}</span>`
+				: `<span class="badge">미판정</span>`;
+			const body = m
+				? proseOrGap(m.evidence, "충족 근거 서사가 없습니다")
+				: gap("이 요구사항의 충족 판정이 없습니다");
+			return `<div class="ac-map"><h3>${badge} ${escapeHtml(criterion)}</h3>${body}</div>`;
+		})
+		.join("");
+	return (
+		`<h2>요구사항 충족</h2>` +
+		(acRows || `<p class="evidence-note">기록된 acceptance criteria 없음</p>`)
+	);
 }
 
 function renderAcceptanceCriteria(view: QaView): string {
@@ -193,75 +368,161 @@ function renderActorRoster(view: QaView): string {
 	);
 }
 
-function renderStoryTree(view: QaView): string {
+// The six adversarial coverage axes, in plain reader language. The renderer
+// shows the axis NAME, never the internal `cls` number — a PO reads "입력 경계"
+// not "cls 2". Source of truth for the axes: skills/qa/scenario-authoring.md.
+const CLS_LABEL: Record<number, string> = {
+	1: "핵심·실패 경로",
+	2: "입력 경계·악성 입력",
+	3: "주입",
+	4: "중단·재개",
+	5: "오도된 성공 방지",
+	6: "멱등성",
+};
+
+const COVERAGE_MARK: Record<string, string> = { pass: "확인", fail: "실패", na: "해당없음" };
+
+/**
+ * The reader-facing scenario section — clean, at the STORY level (a story is the
+ * user scenario; cells are QA coverage axes against it). Per story it shows the
+ * actor's name, the authored user-boundary flow (`scenarioFlows`), that story's
+ * evidence (baseline + every cell's before/action/after), and a plain-language
+ * coverage summary (axis name + result, never the `cls` number).
+ *
+ * It deliberately renders NONE of the cell record's implementation-flavored
+ * fields — `driven_at`, `why_needed`, `na_reason`, `attack_point`, the boundary
+ * code path — because those are audit-layer facts the QA engineer writes
+ * technically on purpose; surfacing them here would leak implementation into a
+ * view meant for a context-free PO. The full per-cell record lives in the
+ * record-faithful "시나리오 상세 기록" audit section below.
+ */
+function renderScenarios(view: QaView, narrative: QaReportNarrative, readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
+	const p = narrative.presentation;
 	const stories = (view.stories ?? [])
 		.map((story) => {
 			const actor = actorFor(view, story);
-			const cells = cellsForStory(view, story.id)
-				.map(
-					(cell) =>
-						`<li>${escapeHtml(cellLabel(cell))} — <code>${escapeHtml(cell.attack_point ?? "")}</code> — ` +
-						`priority ${escapeHtml(cell.priority ?? "")} — ${statusBadge(cell.status)}</li>`,
-				)
-				.join("");
-			return (
-				`<li><strong>${escapeHtml(story.id)}</strong> — actor: ${escapeHtml(actor?.name ?? actor?.id ?? "unknown")}` +
-				` (${escapeHtml(actor?.boundary ?? "")})<ul>${cells}</ul></li>`
-			);
-		})
-		.join("");
-	return `<h2>Story &rarr; Scenario Tree</h2><ul class="story-tree">${stories}</ul>`;
-}
+			const heading = `<h3>${escapeHtml(actor?.name ?? actor?.id ?? story.id)}</h3>`;
+			const flow = `<div class="scenario-flow">${proseOrGap(p?.scenarioFlows?.[story.id], "이 시나리오에서 무엇을 했고 무엇을 관찰했는지에 대한 자연어 서사가 없습니다")}</div>`;
+			const cells = cellsForStory(view, story.id);
 
-function renderBaselineEvidence(view: QaView, readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
-	return (view.stories ?? [])
-		.map((story) => {
-			const baseline = story.baseline;
-			if (!baseline || baseline.cycle !== view.cycle || !baseline.evidence?.path) return "";
-			const status = recordedResult(baseline);
-			const note = recordedNote(baseline);
-			return (
-				`<div class="scenario"><h3>${escapeHtml(story.id)} / baseline ${statusBadge(status)}</h3>` +
-				(note ? `<p class="scenario-field">${escapeHtml(note)}</p>` : "") +
-				`<div class="evidence-slots">${evidenceSlot("baseline", baseline.evidence.path, readEvidence, context)}</div></div>`
-			);
-		})
-		.join("");
-}
+			// Reader proof = SCREENSHOTS ONLY. A rendered screen is directly readable by
+			// a PO. Raw text evidence (curl/HTTP/JSON/logs) is NOT dumped here — the
+			// natural-language flow above carries the observed outcome, and the raw
+			// bytes live in the audit section. Baseline build/test logs never appear in
+			// the reader at all (they are not a user-boundary observation).
+			const shots: string[] = [];
+			for (const cell of cells) {
+				const e = cell.evidence;
+				if (!e) continue;
+				for (const path of [e.before, e.action, e.after, e.path]) {
+					shots.push(imageSlot("화면", path, readEvidence, context));
+				}
+			}
+			const slots = shots.filter(Boolean).join("");
 
-function renderScenarioEvidence(view: QaView, narrative: QaReportNarrative, readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
-	const baselineBlocks = renderBaselineEvidence(view, readEvidence, context);
-	const cellBlocks = (view.stories ?? [])
-		.flatMap((story) => cellsForStory(view, story.id))
-		.map((cell) => {
-			const key = cellKey(cell);
-			const scenarioNarrative = narrative.scenarios?.[key];
-			const evidence: QaEvidence | undefined = cell.evidence;
-			const slots = evidence
-				? [
-					evidenceSlot("recorded", evidence.path, readEvidence, context),
-					evidenceSlot("before", evidence.before, readEvidence, context),
-					evidenceSlot("action", evidence.action, readEvidence, context),
-					evidenceSlot("after", evidence.after, readEvidence, context),
-				]
-					.filter(Boolean)
-					.join("")
+			// qa mandates evidence for a recorded pass/fail scenario. Key the gap to the
+			// RECORD (was any evidence captured?), not to what the reader rendered — a
+			// text-only API scenario has real evidence that lives in the audit, so it
+			// must not trip the gap. A story with all-`na` cells legitimately has none.
+			const hasVerified = cells.some((cell) => cell.status === "pass" || cell.status === "fail");
+			const hasRecordedEvidence = cells.some((cell) => {
+				const e = cell.evidence;
+				return e && (e.path || e.before || e.action || e.after);
+			});
+			const evidenceBlock = slots
+				? `<div class="evidence-slots">${slots}</div>`
+				: hasVerified && !hasRecordedEvidence
+					? gap("이 시나리오에 기록된 근거가 없습니다 (qa는 pass/fail 시나리오에 근거를 필수로 요구)")
+					: "";
+
+			// Plain coverage summary: one entry per distinct axis, its result the worst
+			// across that axis's cells (fail > pass > na).
+			const axes = [...new Set(cells.map((cell) => cell.cls))].sort((a, b) => a - b);
+			const worst = (cl: number): string => {
+				const ss = cells.filter((cell) => cell.cls === cl).map((cell) => cell.status);
+				const pick = ss.includes("fail") ? "fail" : ss.includes("pass") ? "pass" : (ss.find((s) => s) ?? "na");
+				return String(pick);
+			};
+			const coverage = axes.length
+				? `<p class="coverage">확인한 관점: ` +
+					axes
+						.map((cl) => {
+							const st = worst(cl);
+							return `<span class="cov cov-${escapeHtml(st)}">${escapeHtml(CLS_LABEL[cl] ?? `축 ${cl}`)} ${escapeHtml(COVERAGE_MARK[st] ?? st)}</span>`;
+						})
+						.join(" · ") +
+					`</p>`
 				: "";
+
+			return `<div class="story-block">${heading}${flow}${evidenceBlock}${coverage}</div>`;
+		})
+		.join("");
+	return `<h2>유저 시나리오 · 근거</h2>` + (stories || `<p class="evidence-note">기록된 story 없음</p>`);
+}
+
+/**
+ * The record-faithful audit of every scenario cell — the technical trail a QA
+ * engineer or reviewer traces: coverage axis (`cls`), the hostile probe
+ * (`attack_point`), where it was driven (`driven_at`), the result with any
+ * na-reason / expected-vs-actual / oracle diagnosis, and the recorded evidence
+ * paths. This is the one place `cls` and implementation-level fields belong; the
+ * reader-facing section above stays clean of them.
+ */
+function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
+	const cells = (view.stories ?? []).flatMap((story) => cellsForStory(view, story.id));
+	const rows = cells
+		.map((cell) => {
+			const n = narrative.scenarios?.[cellKey(cell)];
+			const e = cell.evidence;
+			const paths = e ? [e.path, e.before, e.action, e.after].filter((p): p is string => Boolean(p)) : [];
+			const result =
+				statusBadge(cell.status) +
+				(cell.na_reason ? `<br><span class="audit-note">${escapeHtml(cell.na_reason)}</span>` : "") +
+				(n?.expectedVsActual ? `<br><span class="audit-note">${escapeHtml(n.expectedVsActual)}</span>` : "") +
+				(n?.oracleDiagnosis ? `<br><span class="audit-note">${escapeHtml(n.oracleDiagnosis)}</span>` : "");
 			return (
-				`<div class="scenario"><h3>${escapeHtml(cell.story)} / ${escapeHtml(cellLabel(cell))} ` +
-				`<span class="badge">${escapeHtml(cell.priority ?? "")}</span> ` +
-				`<span class="src-badge">${escapeHtml(cell.source ?? "unspecified")}</span></h3>` +
-				fieldRow("attack", cell.attack_point) +
-				fieldRow("why-needed", cell.why_needed) +
-				fieldRow("driven-at", cell.driven_at) +
-				`<div class="evidence-slots">${slots}</div>` +
-				(scenarioNarrative?.expectedVsActual ? `<p class="expected-vs-actual">${escapeHtml(scenarioNarrative.expectedVsActual)}</p>` : "") +
-				(scenarioNarrative?.oracleDiagnosis ? `<p class="oracle-diagnosis">${escapeHtml(scenarioNarrative.oracleDiagnosis)}</p>` : "") +
-				`<p class="scenario-result">${statusBadge(cell.status)}${cell.na_reason ? ` — ${escapeHtml(cell.na_reason)}` : ""}</p></div>`
+				`<tr><td><code>${escapeHtml(cell.story)}</code></td>` +
+				`<td>cls ${escapeHtml(String(cell.cls))}${cell.sub ? `/${escapeHtml(cell.sub)}` : ""} — ${escapeHtml(CLS_LABEL[cell.cls] ?? "")}</td>` +
+				`<td>${escapeHtml(cell.attack_point ?? "")}${cell.why_needed ? `<br><span class="audit-note">${escapeHtml(cell.why_needed)}</span>` : ""}</td>` +
+				`<td>${escapeHtml(cell.driven_at ?? "")}</td>` +
+				`<td>${result}</td>` +
+				`<td>${paths.map((pth) => `<code>${escapeHtml(pth)}</code>`).join("<br>") || "—"}</td></tr>`
 			);
 		})
 		.join("");
-	return `<h2>Scenario Evidence</h2>${baselineBlocks}${cellBlocks}`;
+	const table = rows
+		? `<table><thead><tr><th>story</th><th>coverage (cls)</th><th>attack point</th><th>driven at</th><th>result</th><th>evidence</th></tr></thead><tbody>${rows}</tbody></table>`
+		: `<p class="evidence-note">기록된 시나리오 셀 없음</p>`;
+	return `<h2>시나리오 상세 기록 (감사)</h2>${table}${renderRawEvidence(cells, readEvidence, context)}`;
+}
+
+/**
+ * Raw text evidence (curl transcripts, HTTP/JSON dumps, terminal output),
+ * embedded as collapsed `<details>` blocks at the audit layer only — self-contained
+ * traceability that never intrudes on the reader view. Image evidence has already
+ * been rendered in the reader, so it is skipped here (de-duped via the shared
+ * context). No JS: `<details>` is native HTML.
+ */
+function renderRawEvidence(cells: QaCell[], readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
+	const blocks: string[] = [];
+	for (const cell of cells) {
+		const e = cell.evidence;
+		if (!e) continue;
+		for (const path of [e.before, e.action, e.after, e.path]) {
+			if (!path || context.renderedPaths.has(path)) continue;
+			const embed = readEvidence(path);
+			if (embed.kind !== "text") continue; // images live in the reader; skip missing/too-large
+			const embedBytes = embeddedByteLength(embed);
+			if (embedBytes > 0 && context.embeddedBytes + embedBytes > MAX_TOTAL_EMBED_BYTES) continue;
+			context.renderedPaths.add(path);
+			context.embeddedBytes += embedBytes;
+			blocks.push(
+				`<details class="raw-evidence"><summary><code>${escapeHtml(path)}</code></summary>` +
+				`<pre>${escapeHtml(embed.content)}</pre></details>`,
+			);
+		}
+	}
+	return blocks.length ? `<h3>원본 관찰 로그 (감사용)</h3>${blocks.join("")}` : "";
 }
 
 function renderFailures(view: QaView, narrative: QaReportNarrative): string {
@@ -269,7 +530,7 @@ function renderFailures(view: QaView, narrative: QaReportNarrative): string {
 	const cellRows = failedCells
 		.map(
 			(cell) =>
-				`<li><code>${escapeHtml(cell.story)} / ${escapeHtml(cellLabel(cell))}</code> — ${escapeHtml(cell.attack_point ?? "")}</li>`,
+				`<li><code>${escapeHtml(cell.story)}</code> — ${escapeHtml(cell.attack_point ?? "")}</li>`,
 		)
 		.join("");
 	const baselineRows = (view.stories ?? [])
@@ -349,7 +610,12 @@ function renderEvidenceFiles(view: QaView): string {
  * Renders the full report, or `null` when the cycle never reached a roster
  * (PRE-FLIGHT fail-fast) — a no-op, not an empty document.
  */
-export function renderQaReport(view: QaView, narrative: QaReportNarrative = {}, readEvidence: EvidenceReader = defaultEvidenceReader): string | null {
+export function renderQaReport(
+	view: QaView,
+	narrative: QaReportNarrative = {},
+	readEvidence: EvidenceReader = defaultEvidenceReader,
+	renderMermaid: MermaidRenderer = mmdcRenderSvg,
+): string | null {
 	if ((view.actors ?? []).length === 0) return null;
 	const title = `QA Report — ${view.target || view.phase}`;
 	const evidenceContext: EvidenceRenderContext = { embeddedBytes: 0, renderedPaths: new Set() };
@@ -358,10 +624,12 @@ export function renderQaReport(view: QaView, narrative: QaReportNarrative = {}, 
 		`<ul class="doc-meta"><li><strong>Target</strong> ${escapeHtml(view.target)}</li>` +
 			`<li><strong>Cycle</strong> ${escapeHtml(String(view.cycle))}</li>` +
 			`<li><strong>Generated</strong> ${escapeHtml(view.last_touched_at)}</li></ul>`,
+		renderPresentation(view, narrative, renderMermaid),
+		renderScenarios(view, narrative, readEvidence, evidenceContext),
+		renderRequirementFulfillment(view, narrative),
 		renderAcceptanceCriteria(view),
 		renderActorRoster(view),
-		renderStoryTree(view),
-		renderScenarioEvidence(view, narrative, readEvidence, evidenceContext),
+		renderScenarioAudit(view, narrative, readEvidence, evidenceContext),
 		renderFailures(view, narrative),
 		renderVerdict(view),
 		renderEvidenceFiles(view),
@@ -421,18 +689,37 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .badge-pass { color: var(--pass); border-color: var(--pass); }
 .badge-fail { color: var(--fail); border-color: var(--fail); }
 .badge-na { color: var(--na); border-color: var(--na); }
-.src-badge { font-size: 0.75rem; color: var(--muted); border: 1px solid var(--rule); border-radius: 999px; padding: 0 0.5rem; }
-.story-tree ul { margin: 0.35rem 0 0.75rem 1rem; }
-.scenario { margin: 1.25rem 0; padding: 1rem; border: 1px solid var(--rule); border-radius: 10px; }
-.scenario-field { margin: 0.25rem 0; font-size: 0.92rem; }
+.coverage { font-size: 0.88rem; color: var(--muted); margin: 0.75rem 0 0; }
+.cov { display: inline-block; margin: 0.15rem 0; }
+.cov::after { content: ""; }
+.cov-pass { color: var(--pass); }
+.cov-fail { color: var(--fail); font-weight: 600; }
+.cov-na { color: var(--muted); }
+.audit-note { color: var(--muted); font-size: 0.85rem; }
+.story-block { margin: 1.75rem 0; }
+.story-block > h3 { border-bottom: 1px solid var(--rule); padding-bottom: 0.3rem; }
 .evidence-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.75rem; margin: 0.75rem 0; }
 .evidence-slot { border: 1px solid var(--rule); border-radius: 8px; padding: 0.5rem; }
 .evidence-slot-label { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.03em; color: var(--muted); margin-bottom: 0.35rem; }
 .evidence-slot-path { font-size: 0.72rem; color: var(--muted); margin-top: 0.35rem; word-break: break-all; }
-.expected-vs-actual, .oracle-diagnosis { background: var(--code-bg); border-radius: 8px; padding: 0.6rem 0.8rem; font-size: 0.92rem; }
+.raw-evidence { margin: 0.4rem 0; border: 1px solid var(--rule); border-radius: 6px; padding: 0.35rem 0.6rem; }
+.raw-evidence summary { cursor: pointer; font-size: 0.75rem; color: var(--muted); word-break: break-all; }
+.raw-evidence pre { margin-top: 0.5rem; }
 .verdict { font-size: 1.2rem; font-weight: 700; }
 .issue-CRITICAL { color: var(--fail); }
 .issue-LOW { color: var(--na); }
+.presentation { margin-bottom: 1rem; }
+.gap { color: var(--fail); background: var(--code-bg); border: 1px dashed var(--fail); border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.92rem; }
+.affected-user, .scenario-flow, .ac-map { margin: 1rem 0; padding: 0.85rem 1rem; border: 1px solid var(--rule); border-radius: 10px; }
+.affected-user h3, .scenario-flow h3, .ac-map h3 { margin-top: 0; }
+.satisfied-yes { color: var(--pass); border-color: var(--pass); }
+.satisfied-no { color: var(--fail); border-color: var(--fail); }
+.satisfied-partial { color: var(--na); border-color: var(--na); }
+/* unverified = the user boundary was never driven; render it LOUD, never quiet — a PO must read it as "not done", not as a mild partial */
+.satisfied-unverified { color: #fff; background: var(--fail); border-color: var(--fail); font-weight: 700; }
+.diagram { margin: 1rem 0; overflow-x: auto; }
+.diagram svg { max-width: none; height: auto; }
+.diagram figcaption { color: var(--muted); font-size: 0.88rem; margin-top: 0.4rem; }
 `;
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, readFileSync, existsSync } from "fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from "fs";
 import { execSync } from "child_process";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -252,6 +252,48 @@ describe("qa-state CLI wiring", () => {
 			run(`author-cell --story story-1 --cls ${cls}${suffix} --attack-point "attack ${cls} ${sub}" --priority ${cls === 1 ? "H" : "L"}`);
 		}
 	};
+
+	// A cell's evidence must be a user-boundary observation, never a test-runner
+	// report. This is the failure the whole QA presentation exists to prevent:
+	// a PO shown `vitest run … exit=0` as proof a user-facing requirement is met.
+	// Fragments are concatenated at runtime so the assembled FILE matches the
+	// test-runner signatures, while THIS source file does not — otherwise the guard
+	// would fire on the many existing tests that use this source file as evidence.
+	const VITEST_LOG =
+		" RUN  v" + "3.2.4 /Users/toong/repos/algocare-home/apps/backend\n\n" +
+		" ok test/domains/customer-label/delete-guard (7 tests)\n\n" +
+		" Test Fil" + "es  1 passed (1)\n      Test" + "s  1 passed | 6 skipped (7)\n   Duration  1.95s\nexit=0\n";
+
+	test("record-cell REJECTS a test-runner report as cell evidence (a test log is not a user-boundary observation)", () => {
+		authorCompleteChain();
+		const logPath = join(tmpDir, "cls1-refuse.txt");
+		writeFileSync(logPath, VITEST_LOG);
+		expect(() =>
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface bash`),
+		).toThrow();
+		// the same leak through a supplementary slot on a FAIL cell is blocked too
+		expect(() =>
+			run(`record-cell --story story-1 --cls 2 --status fail --na-reason x --evidence-action ${logPath}`),
+		).toThrow();
+	});
+
+	test("record-cell ACCEPTS a real boundary observation (client-received response, no test-runner signature)", () => {
+		authorCompleteChain();
+		const apiPath = join(tmpDir, "cls1-response.txt");
+		writeFileSync(apiPath, "HTTP/1.1 409 Conflict\n\n{\"error\":\"label in use by 1 bundle\",\"deleted\":false}\n");
+		expect(() =>
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${apiPath} --evidence-surface bash`),
+		).not.toThrow();
+	});
+
+	test("record-baseline is EXEMPT: build/test/lint logs are its expected evidence", () => {
+		authorCompleteChain();
+		const logPath = join(tmpDir, "baseline-tests.txt");
+		writeFileSync(logPath, VITEST_LOG);
+		expect(() =>
+			run(`record-baseline --story story-1 --result pass --evidence-path ${logPath} --evidence-surface bash`),
+		).not.toThrow();
+	});
 
 	test("CLI set/get/status round-trip", () => {
 		run('set --phase PLAN --target "cli target"');

@@ -30,6 +30,10 @@ const feedbackMd = readFileSync(
 	join(import.meta.dir, "feedback-protocol.md"),
 	"utf8",
 );
+const presentationMd = readFileSync(
+	join(import.meta.dir, "presentation.md"),
+	"utf8",
+);
 
 // ---------------------------------------------------------------------------
 // NEW-PROSE: cycle phase vocabulary (must FAIL before rewrite — RED)
@@ -824,6 +828,79 @@ describe("new-prose: approval is gated on boundary depth", () => {
 });
 
 // ---------------------------------------------------------------------------
+// NEW-PROSE: a test-runner report is never scenario evidence; an undriven
+// boundary is `unverified`, never a green pass (three-layer contract)
+// ---------------------------------------------------------------------------
+
+describe("new-prose: test-runner logs are never scenario evidence", () => {
+	test("SKILL.md forbids a test-runner report as a cell's evidence", () => {
+		expect(skillMd).toContain(
+			"A scenario cell's evidence is a boundary OBSERVATION — a test-runner report is never it",
+		);
+		expect(skillMd).toContain("`record-cell` mechanically rejects a test-runner report");
+	});
+
+	test("SKILL.md excludes the app's own test suite from boundary substitution", () => {
+		expect(skillMd).toContain(
+			"Substitution replaces one unreachable hop — it never swaps the boundary for the app's test suite",
+		);
+		expect(skillMd).toContain("the requirement it covers is **unverified**");
+	});
+
+	test("scenario-authoring.md ties an unreachable boundary to NOT-RUN + unverified", () => {
+		expect(scenarioAuthoringMd).toContain(
+			"test-runner report (`vitest`/`jest`/`pytest`/`go test` output) is **never** a scenario's evidence",
+		);
+		expect(scenarioAuthoringMd).toContain("the scenario is `NOT-RUN`");
+	});
+
+	test("presentation.md maps an undriven user boundary to the loud unverified verdict", () => {
+		expect(presentationMd).toContain('unverified (`unverified`)');
+		expect(presentationMd).toContain("미검증 — 유저 경계 미구동");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// NEW-PROSE: NOT-RUN is physical impossibility only — setup cost / time-box
+// never justifies it; a caller's time-box does not override
+// ---------------------------------------------------------------------------
+
+describe("new-prose: setup cost never justifies NOT-RUN", () => {
+	test("SKILL.md reserves NOT-RUN for physical impossibility, not setup amount", () => {
+		expect(skillMd).toContain("NOT-RUN is reserved for physical impossibility, never for setup cost");
+		expect(skillMd).toContain(
+			"The amount of bootstrap work — full local stack, manual DB inserts, minting QA accounts and memberships",
+		);
+	});
+
+	test("SKILL.md rejects a caller-imposed time-box as an override", () => {
+		expect(skillMd).toContain("There is no time-box in this skill");
+		expect(skillMd).toContain("If someone (even the caller) tells you to time-box, that instruction does not override this");
+	});
+
+	test("SKILL.md treats absent seed data as rung 2/3 work, not a NOT-RUN verdict", () => {
+		expect(skillMd).toContain("Absent data is rung 2/3 work, not a verdict");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// NEW-PROSE: reader evidence is converted natural language + screenshots;
+// raw curl/HTTP dumps belong in the audit
+// ---------------------------------------------------------------------------
+
+describe("new-prose: reader evidence is natural language, not raw dumps", () => {
+	test("presentation.md requires scenarioFlows to be a converted NL observed-outcome narrative", () => {
+		expect(presentationMd).toContain("natural-language account of what was done and what was observed");
+		expect(presentationMd).toContain("**convert** it to");
+	});
+
+	test("presentation.md keeps raw curl/HTTP dumps out of the reader (screenshots only)", () => {
+		expect(presentationMd).toContain("screenshots only");
+		expect(presentationMd).toContain("Raw curl belongs in the audit");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // NEW-PROSE: scenario-authoring.md's actor layer binds actor -> boundary
 // ---------------------------------------------------------------------------
 
@@ -1232,10 +1309,11 @@ describe("new-prose: HTML report is the canonical deliverable", () => {
 		expect(skillMd).toContain("never persisted to qa-state");
 	});
 
-	test("the report preserves required evidence.path with partial actor slots", () => {
-		expect(skillMd).toContain("always renders the current-cycle baseline evidence and the required cell `evidence.path`");
-		expect(skillMd).toContain("partial slot sets alike");
-		expect(skillMd).toContain("recorded evidence slot");
+	test("the reader scenario section is story-level and clean; cls/attack_point/driven_at live in the audit section", () => {
+		expect(skillMd).toContain("the current-cycle baseline plus each scenario's `before` / `action` / `after` and recorded `evidence.path`");
+		expect(skillMd).toContain("the six adversarial axes by name, never the `cls` number");
+		expect(skillMd).toContain("시나리오 상세 기록 (감사)");
+		expect(skillMd).toContain("omits the cell record's implementation-flavored fields");
 	});
 
 	test("the report caps evidence embedding per file and cumulatively", () => {
