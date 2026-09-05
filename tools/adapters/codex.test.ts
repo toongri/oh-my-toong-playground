@@ -1031,6 +1031,93 @@ describe("CodexAdapter", () => {
 			}
 		}
 
+		async function interruptConfig() {
+			await expect(applyConfig(tmpDir, { model: "recovered" }, { async mutate(file, operation) {
+				await operation();
+				if (file.endsWith("codex-config-pending.json")) throw new Error("interrupted");
+			} })).rejects.toThrow("interrupted");
+		}
+
+		for (const route of ["omitted", "null", "direct"] as const) {
+			for (const dry of [true, false]) {
+				it(`MCP ${route} 경로는 pending을 ${dry ? "읽기 전용 거부" : "먼저 복구"}한다`, async () => {
+					await interruptConfig();
+					const before = await readConfigSnapshot(tmpDir);
+					const calls: string[] = [];
+					const fake = new CodexAdapter(async () => {
+						calls.push("list");
+						const snapshot = await readConfigSnapshot(tmpDir);
+						expect(snapshot.pendingBytes).toBeNull();
+						expect(snapshot.current.model).toBe("recovered");
+						return [];
+					}, async () => {
+						calls.push("add");
+						const file = path.join(tmpDir, ".codex/config.toml");
+						const config = parse(await fs.readFile(file, "utf8"));
+						config.mcp_servers = { added: { command: "node" } };
+						await fs.writeFile(file, stringify(config));
+					});
+					const transaction = dry ? null : await DeployTransaction.begin(tmpDir, false, [".omt/sync-manifest.json"]);
+					const observed: string[] = [];
+					const observer = (file: string) => { observed.push(file); };
+					const run = () => {
+						if (route === "direct") {
+							fake.accumulateMcp("added", { command: "node" });
+							return fake.flushMcpBlock(tmpDir, dry, observer, transaction ?? undefined);
+						}
+						return fake.syncPlatformYaml(tmpDir, { ...(route === "null" ? { config: null } : {}), mcps: { added: { command: "node" } } }, dry, undefined, observer, transaction ?? undefined);
+					};
+					if (dry) {
+						await expect(run()).rejects.toThrow(/recovery/i);
+						expect(calls).toEqual([]);
+						expect(observed).toEqual([]);
+						expect(await readConfigSnapshot(tmpDir)).toEqual(before);
+						expect(await fs.stat(path.join(tmpDir, ".omt/sync-manifest.json")).catch(() => null)).toBeNull();
+					} else {
+						try {
+							await run();
+							expect(calls).toEqual(["list", "add"]);
+							expect(observed).toEqual([path.join(tmpDir, ".codex/config.toml"), path.join(tmpDir, ".codex/config.toml")]);
+							await fake.syncConfig(tmpDir, { model: "recovered" });
+							await transaction!.rollback();
+							expect(await readConfigSnapshot(tmpDir)).toEqual(before);
+						} finally { await transaction!.finish(); }
+					}
+				});
+			}
+		}
+
+		it("pending의 외부 제3값 충돌은 MCP 실행과 모든 쓰기를 막는다", async () => {
+			await interruptConfig();
+			const file = path.join(tmpDir, ".codex/config.toml");
+			await fs.mkdir(path.dirname(file), { recursive: true });
+			await fs.writeFile(file, 'model = "third-value"\n');
+			const pendingFile = path.join(tmpDir, ".omt/codex-config-pending.json");
+			const pending = await fs.readFile(pendingFile, "utf8");
+			const fake = makeFakeMcpAdapter();
+			fake.adapter.accumulateMcp("added", { command: "node" });
+			for (const dry of [true, false]) {
+				await expect(fake.adapter.flushMcpBlock(tmpDir, dry)).rejects.toThrow(/recovery conflict/i);
+				expect(await fs.readFile(file, "utf8")).toBe('model = "third-value"\n');
+				expect(await fs.readFile(pendingFile, "utf8")).toBe(pending);
+			}
+			expect(fake.listCalls).toEqual([]);
+			expect(fake.addCalls).toEqual([]);
+			expect(await fs.stat(path.join(tmpDir, ".omt/sync-manifest.json")).catch(() => null)).toBeNull();
+		});
+
+		it("native 실행 직전 새 pending이 생기면 해당 명령과 manifest 쓰기를 거부한다", async () => {
+			const fake = makeFakeMcpAdapter();
+			fake.adapter.accumulateMcp("added", { command: "node" });
+			await expect(fake.adapter.flushMcpBlock(tmpDir, false, undefined, { async mutate(file, operation) {
+				if (file.endsWith("config.toml")) await interruptConfig();
+				await operation();
+			} })).rejects.toThrow(/recovery/i);
+			expect(fake.listCalls).toHaveLength(1);
+			expect(fake.addCalls).toEqual([]);
+			expect(await fs.stat(path.join(tmpDir, ".omt/sync-manifest.json")).catch(() => null)).toBeNull();
+		});
+
 		it("accumulates 3 servers into 3 `codex mcp add` calls via `flushMcpBlock`", async () => {
 			const { adapter: fakeAdapter, addCalls, removeCalls } = makeFakeMcpAdapter();
 			fakeAdapter.resetMcpAccumulator();

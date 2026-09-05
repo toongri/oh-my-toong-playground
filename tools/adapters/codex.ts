@@ -17,7 +17,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { stringify, parse } from "smol-toml";
-import { applyConfig, previewConfig } from "../lib/codex-config-store.ts";
+import { applyConfig, previewConfig, readConfigSnapshot } from "../lib/codex-config-store.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { readTextFile, readJsonFile, writeJsonFile } from "../lib/json.ts";
 import { isPlainObject } from "../lib/deep-merge.ts";
@@ -1109,6 +1109,19 @@ export class CodexAdapter implements PlatformAdapter {
 		const declaredNames = Object.keys(desired).sort();
 		const codexHome = path.join(targetPath, this.configDir);
 		const configFile = path.join(codexHome, "config.toml");
+		const recoveryError = () => new Error(`Codex config recovery required: ${configFile}; run a real sync to recover the pending transaction.`);
+		const snapshot = await readConfigSnapshot(targetPath);
+		if (snapshot.pendingBytes !== null) {
+			if (dryRun) throw recoveryError();
+			const recovered = await applyConfig(targetPath, {}, mutationHooks);
+			if (writeObserver && recovered.configBytes !== snapshot.configBytes) await writeObserver(configFile);
+		}
+		// Native Codex writers do not participate in the config-store lock protocol.
+		// Refuse a newly pending journal immediately before each mutation; this is
+		// a bounded recheck, not compare-and-swap protection against other writers.
+		const requireNoPending = async (): Promise<void> => {
+			if ((await readConfigSnapshot(targetPath)).pendingBytes !== null) throw recoveryError();
+		};
 		const manifestKey = "codex/mcps";
 		const manifest = await readManifest(targetPath);
 		const managedNames = new Set(manifest?.[manifestKey] ?? []);
@@ -1141,15 +1154,22 @@ export class CodexAdapter implements PlatformAdapter {
 				if (existing && mcpServerEquivalent(server, existing)) continue;
 				operation = () => this.mcpAdder(codexHome, name, mcpServerToAddArgs(server));
 			}
-			if (mutationHooks) await mutationHooks.mutate(configFile, operation);
-			else await operation();
+			const guardedOperation = async (): Promise<void> => {
+				await requireNoPending();
+				await operation();
+			};
+			if (mutationHooks) await mutationHooks.mutate(configFile, guardedOperation);
+			else await guardedOperation();
 			if (writeObserver) await writeObserver(configFile);
 			logInfo(`MCP server ${server === null ? "removed" : "added"}: ${name}`);
 		}
 
 		const nextManifest: ManifestData = { ...manifest, [manifestKey]: nextNames };
 		const manifestFile = path.join(targetPath, ".omt", "sync-manifest.json");
-		const writeManifestOp = async (): Promise<void> => { await writeManifest(targetPath, nextManifest); };
+		const writeManifestOp = async (): Promise<void> => {
+			await requireNoPending();
+			await writeManifest(targetPath, nextManifest);
+		};
 		if (mutationHooks) await mutationHooks.mutate(manifestFile, writeManifestOp);
 		else await writeManifestOp();
 		logInfo(`MCP manifest updated: ${nextNames.length} server(s) managed`);
