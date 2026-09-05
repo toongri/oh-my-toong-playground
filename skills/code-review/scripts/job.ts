@@ -49,7 +49,6 @@ import {
 	reapOrphanJobs,
 	doctorOrphanJobs,
 	getProcessStartedAt,
-	findActiveMembers,
 } from "@lib/generic-job";
 
 export { cmdResumeMember } from "@lib/generic-job";
@@ -224,41 +223,6 @@ function cmdResults(options: Record<string, unknown>, jobDir: string): void {
 	initLoggerFromJobDir(jobDir);
 	logInfo(`results: ${path.resolve(jobDir)}`);
 	_cmdResults(options, jobDir, CHUNK_REVIEW_JOB_CONFIG);
-}
-
-/**
- * Read-only activity check for the static review execution guard (a bash
- * PreToolUse hook) to shell out to via bun: for each given jobDir, judges
- * activity from the canonical findActiveMembers(entitiesDir) predicate in
- * @lib/generic-job — never a parallel re-implementation, so this stays in
- * lockstep with cmdClean's active-member guard and findOrphanJobs. Deliberately
- * skips initLoggerFromJobDir/logInfo and every other write/log side effect
- * cmdResults etc. use: the guard calls this on a hot PreToolUse path and must
- * not create log files, write status.json, or otherwise mutate job state.
- */
-type ActiveMembersJob = {
-	jobDir: string;
-	activity: "active" | "inactive" | "indeterminate";
-	activeMembers: string[];
-};
-function cmdActiveMembers(jobDirs: string[]): void {
-	const jobs: ActiveMembersJob[] = jobDirs.map((jobDir): ActiveMembersJob => {
-		const membersDir = path.join(jobDir, CHUNK_REVIEW_JOB_CONFIG.entityDirName);
-		const result = findActiveMembers(membersDir);
-		if (result === null) {
-			return { jobDir, activity: "indeterminate", activeMembers: [] };
-		}
-		if (result.length === 0) {
-			return { jobDir, activity: "inactive", activeMembers: [] };
-		}
-		return { jobDir, activity: "active", activeMembers: [...result].sort() };
-	});
-	const activity: "active" | "inactive" | "indeterminate" = jobs.some((j) => j.activity === "active")
-		? "active"
-		: jobs.some((j) => j.activity === "indeterminate")
-			? "indeterminate"
-			: "inactive";
-	process.stdout.write(`${JSON.stringify({ activity, jobs })}\n`);
 }
 
 /**
@@ -468,7 +432,6 @@ Usage:
   job.ts clean <jobDir>
   job.ts reap [--jobs-dir path] [--grace-ms N]
   job.ts doctor [--jobs-dir path] [--json]
-  job.ts active-members <jobDir> [<jobDir> ...]
 
 Notes:
   - start returns immediately and runs reviewers in parallel via detached Node workers
@@ -1240,11 +1203,6 @@ async function main(): Promise<void> {
 	}
 	if (command === "doctor") {
 		cmdDoctor(options);
-		return;
-	}
-	if (command === "active-members") {
-		if (rest.length === 0) exitWithError("active-members: missing jobDir");
-		cmdActiveMembers(rest);
 		return;
 	}
 	if (command === "resume-member") {
