@@ -121,11 +121,10 @@ source; choosing between `claude.yaml` and `claude.local.yaml` does not.
 ### The blind spot created by putting `hooks:` in `claude.local.yaml`
 
 The default rule above applies especially strongly to the `hooks:` block. The
-six core hooks (`keyword-detector.sh`, `pre-tool-enforcer.sh`,
-`review-exec-guard.sh`, `session-start.sh`, `orphan-reaper.sh`, and
+five core hooks (`keyword-detector.sh`, `pre-tool-enforcer.sh`,
+`session-start.sh`, `orphan-reaper.sh`, and
 `persistent-mode`) have no device-specific elements, so they must be placed in
-the tracked root `claude.yaml`. `review-exec-guard.sh` is registered globally,
-but internally activates only in review context. Putting the hooks in
+the tracked root `claude.yaml`. Putting the hooks in
 `claude.local.yaml` breaks two things in practice:
 
 - **A fresh clone has no hooks.** The overlay file is gitignored, so the entire
