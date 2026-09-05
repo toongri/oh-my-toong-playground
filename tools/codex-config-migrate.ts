@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
+import { randomUUID } from "node:crypto";
 import {
 	configPathId, configValuesEqual, isConfigPathPrefix, isConfigTable,
 	parseConfigValue, readConfigPath, serializeConfigValue,
@@ -24,14 +25,22 @@ function code(error: unknown): unknown {
 }
 async function saveBackup(target: string, bytes: string): Promise<void> {
 	const file = path.join(target, ".omt/codex-config-before-adoption.toml");
+	const temporary = `${file}.${randomUUID()}.tmp`;
+	let created = false;
 	try {
-		const handle = await fs.open(file, "wx", 0o600);
+		const handle = await fs.open(temporary, "wx", 0o600);
+		created = true;
 		try { await handle.writeFile(bytes, "utf8"); await handle.sync(); }
 		finally { await handle.close(); }
-	} catch (error) {
-		if (code(error) !== "EEXIST") throw error;
-		const stat = await fs.lstat(file);
-		if (!stat.isFile() || stat.isSymbolicLink()) throw new MigrationError("Unsafe adoption backup: use an ordinary backup file before retrying.");
+		// Publish only complete bytes; link is atomic and never replaces an earlier backup.
+		try { await fs.link(temporary, file); }
+		catch (error) {
+			if (code(error) !== "EEXIST") throw error;
+			const stat = await fs.lstat(file);
+			if (!stat.isFile() || stat.isSymbolicLink()) throw new MigrationError("Unsafe adoption backup: use an ordinary backup file before retrying.");
+		}
+	} finally {
+		if (created) await fs.unlink(temporary);
 	}
 }
 export type MigrationOptions = {

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -109,4 +109,34 @@ test("검토 후 config 경합은 소유권 쓰기를 거부", async () => {
 		async mutate(_file, operation) { await write(config, original + "# concurrent\n"); await operation(); },
 	} })).rejects.toThrow("changed");
 	expect((await readConfigSnapshot(target)).state).toBeUndefined();
+});
+
+for (const failure of ["write", "sync", "link"]) test(`백업 ${failure} 실패 시 최종 백업과 소유권을 게시하지 않음`, async () => {
+	const { migrateConfig } = await import("./codex-config-migrate");
+	const realOpen = fs.open;
+	const realLink = fs.link;
+	const openSpy = spyOn(fs, "open").mockImplementation(async (...args) => {
+		const handle = await realOpen(...args);
+		if (String(args[0]).startsWith(path.join(target, backup))) {
+			if (failure === "write") spyOn(handle, "writeFile").mockImplementation(async () => {
+				await handle.write("partial backup");
+				throw new Error("injected backup write failure");
+			});
+			if (failure === "sync") spyOn(handle, "sync").mockImplementation(async () => { throw new Error("injected backup sync failure"); });
+		}
+		return handle;
+	});
+	const linkSpy = spyOn(fs, "link").mockImplementation(async (...args) => {
+		if (failure === "link" && String(args[1]) === path.join(target, backup)) throw new Error("injected backup link failure");
+		await realLink(...args);
+	});
+	try {
+		await expect(migrateConfig({ target, keys: [["model"]], apply: true })).rejects.toThrow(`injected backup ${failure} failure`);
+	} finally { openSpy.mockRestore(); linkSpy.mockRestore(); }
+	expect(await fs.lstat(path.join(target, backup)).catch(() => null)).toBeNull();
+	expect((await readConfigSnapshot(target)).state).toBeUndefined();
+	expect(await fs.readdir(path.join(target, ".omt"))).toEqual([]);
+	expect(await read(config)).toBe(original);
+	expect((await migrateConfig({ target, keys: [["model"]], apply: true })).status).toBe("applied");
+	expect(await read(backup)).toBe(original);
 });
