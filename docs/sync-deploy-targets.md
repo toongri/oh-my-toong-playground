@@ -120,8 +120,26 @@ TOML 값으로 판단하며, `omt:config` 주석의 유무나 위치에 의존�
 `recovery-required`를 보고하고 복구 쓰기를 실행하지 않는다. 실제 적용은 저널에
 기록한 config/state의 `(이전, 이전)`, `(이후, 이전)`, `(이후, 이후)` 조합만
 인식하여 둘 다 이후 상태가 되도록 완료한다. 그 밖의 값은 충돌로 보고 보존한다.
-OMT 외부에서 설정을 쓰는 프로그램과 범용 compare-and-swap을 공유하지 않으므로
-모든 동시 쓰기를 방지한다고 보장하지 않는다.
+`config`를 생략하거나 `config: null`로 지정한 MCP 전용 실제 동기화도 native MCP
+명령 실행 전에 pending을 먼저 복구한다. MCP 전용 미리보기 역시 pending이 있으면
+실패하며 복구하지 않는다.
+
+설정 저장소는 `.omt/codex-config.lock`이 이미 있으면 항상 적용을 거부한다.
+PID나 파일 나이로 잠금을 자동 삭제하지 않는다. 일반 예외에서는 잠금을 해제하므로
+다음 실제 동기화에서 남은 pending을 복구할 수 있지만, 강제 종료 시에는 잠금이
+남을 수 있다. 이 경우 운영자가 해당 타겟을 사용하는 sync가 모두 종료되었고 새로
+시작되지 않도록 확인한 뒤, **배포 타겟 루트에서** 다음 명령으로 잠금만 제거한다.
+복구에 필요한 pending과 소유권 상태 파일은 삭제하지 않는다.
+
+```bash
+rm .omt/codex-config.lock
+```
+
+그런 다음 OMT 저장소의 기본 브랜치·clean tree 조건을 충족한 상태에서
+`make sync`를 다시 실행한다. native Codex MCP add/remove는 설정 저장소의 잠금을
+공유하지 않는다. 각 native 쓰기 직전 pending을 재확인하더라도 검사와 쓰기가
+원자적인 compare-and-swap은 아니므로, 같은 타겟의 동시 sync는 지원하지 않는다.
+OMT 외부 프로그램의 동시 설정 쓰기도 방지한다고 보장하지 않는다.
 
 설정 파일과 소유권 상태·pending 저널은 워크트리별 배포 transaction의 스냅샷에
 포함된다. native Codex MCP add/remove가 바꾼 설정과 기존 `codex/mcps` 이름
