@@ -15,6 +15,7 @@ type DeployTransactionEntry = {
 const DEFAULT_PATHS = [
 	".claude/settings.local.json", ".claude/settings.json", ".gemini/settings.json",
 	".codex/hooks.json", ".codex/config.toml", ".opencode/opencode.json",
+	".omt/codex-config-state.json", ".omt/codex-config-pending.json",
 ];
 
 function isWithin(root: string, candidate: string): boolean {
