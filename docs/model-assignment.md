@@ -60,20 +60,20 @@ verdict를 자기가 만드는 것처럼 보이지만 실제로는 `skills/insan
 
 ## 현재 배정
 
-| 에이전트 | 등급 | 판단 근거 |
-|---|---|---|
-| `code-reviewer` | opus | 자기 모델로 직접 판정 |
-| `issue-reviewer` | opus | 자기 모델로 직접 판정 |
-| `metis` | fable | 부재 판정 위험에 따른 기존 배정 유지; 현재 사실 대조 의무와 구분 |
-| `momus` | opus | 자기 모델로 직접 판정 |
-| `tech-claim-examiner` | opus | 자기 모델로 직접 판정 |
-| `daedalus` | sonnet | 충돌 셀 — 위임 구조 우선 |
-| `oracle` | sonnet | 충돌 셀 — 위임 구조 우선 |
-| `explore` | sonnet | 탐색 |
-| `librarian` | sonnet | 탐색 |
-| `hermes` | sonnet | 탐색 (explore/librarian의 depth peer) |
-| `mnemosyne` | sonnet | 생성 |
-| `sisyphus-junior` | sonnet | 생성 |
+| 에이전트 | 등급 | 초기 effort | 판단 근거 |
+|---|---|---|---|
+| `code-reviewer` | opus | high | 자기 모델로 직접 판정 |
+| `issue-reviewer` | opus | high | 자기 모델로 직접 판정 |
+| `metis` | fable | high | 부재 판정 위험에 따른 기존 배정 유지; 현재 사실 대조 의무와 구분 |
+| `momus` | opus | high | 자기 모델로 직접 판정 |
+| `tech-claim-examiner` | opus | high | 자기 모델로 직접 판정 |
+| `daedalus` | sonnet | medium | 충돌 셀 — 위임 구조 우선 |
+| `oracle` | sonnet | medium | 충돌 셀 — 위임 구조 우선 |
+| `explore` | sonnet | medium | 탐색 |
+| `librarian` | sonnet | medium | 탐색 |
+| `hermes` | sonnet | medium | 탐색 (explore/librarian의 depth peer) |
+| `mnemosyne` | sonnet | low | 생성 |
+| `sisyphus-junior` | sonnet | medium | 생성 |
 
 에이전트의 등급은 `agents/<name>.md` frontmatter의 `model:` 한 필드가 유일한 출처다.
 
@@ -98,18 +98,21 @@ verdict를 자기가 만드는 것처럼 보이지만 실제로는 `skills/insan
 ```yaml
 model-map:
   tiers:
-    fable:  { model: gpt-5.6-sol }
+    fable:  { model: gpt-5.6-sol, effort: high }
     opus:   { model: gpt-5.6-terra, effort: high }
-    sonnet: { model: gpt-5.6-luna }
+    sonnet: { model: gpt-5.6-luna, effort: medium }
+  agents:
+    mnemosyne: { model: gpt-5.6-luna, effort: low }
 ```
 
-**등급은 기본적으로 모델만 정한다.** `effort`를 적지 않으면 배포되는 role TOML에
-`model_reasoning_effort` 키가 실리지 않고, 각 에이전트는 세션에 설정된 effort를 따른다.
-sync 시점에 값을 얼려두지 않겠다는 뜻이다.
+**현재 effort는 초기 역할 기반 정책이다.** 측정으로 최적값을 확정한 것이 아니라, 생성·탐색·
+위임 역할에는 medium을, 직접 검증·판단 역할에는 high를, `mnemosyne`에는 low를 권장한다.
+이 값은 배포되는 role TOML의 `model_reasoning_effort`에 기록되어 sync 시점에 고정된다.
+등급의 모델 배정과 effort 권장은 서로 독립적으로 조정할 수 있다.
 
-예외는 `opus` 하나다(2026-08-11). 이 등급에 속한 에이전트는 전부 판정면이고 — 리뷰·진단·
-플랜 심사 — 그 산출물을 아무도 재검증하지 않는다. 세션이 low/medium으로 돌고 있다는 이유만으로
-판정 품질이 내려가면 안 되므로, 등급 자체에 `effort: high`를 고정한다.
+`fable`과 `opus`는 직접 검증·판단하는 역할이므로 등급 자체에 `effort: high`를 고정한다.
+`sonnet`은 생성·탐색·위임 역할의 공통 기본값으로 `effort: medium`을 사용한다. `mnemosyne`은
+등급의 모델을 그대로 쓰면서 `agents:`에서 `effort: low`로 전체 항목을 교체한다.
 
 ### `agents:`는 등급으로 표현 불가능한 것 전용
 
@@ -117,8 +120,8 @@ sync 시점에 값을 얼려두지 않겠다는 뜻이다.
 resolveCodexAgentModel: modelMap.agents?.[name] ?? modelMap.tiers[tier]
 ```
 
-`agents:`에 들어갈 자격이 있는 것은 **모델이든 effort든 어느 등급으로도 표현되지 않는
-에이전트**다 — 예를 들어 자기 등급의 고정값도, 세션값도 아닌 effort가 필요한 경우.
+`agents:`에 들어갈 자격이 있는 것은 **등급의 모델·effort 조합으로 표현되지 않는 에이전트**다.
+항목을 쓰면 tier entry 전체가 교체되므로 모델과 effort를 모두 적는다.
 
 순수한 모델 차등은 `agents:`가 아니라 등급으로 표현한다. 새 엔트리를 추가할 때는 그것이
 **왜 등급으로 표현될 수 없는지**를 함께 적어야 한다.
