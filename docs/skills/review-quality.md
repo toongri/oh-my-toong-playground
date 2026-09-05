@@ -47,13 +47,7 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 - `requirement`는 제공된 AC를 매핑하고, AC가 없으면 diff에서 의도를 추론하는 역할만 맡습니다.
 - `cleanup`은 Test value를 가볍게 살핍니다. 거짓 신뢰·가짜 커버리지, 검증 가치 대비 피드백 루프 비용, 구현 결합적이거나 불안정한 테스트를 다루며, 점수화 기준은 아닙니다.
 
-**실행 제한 적용**:
-- 프롬프트 계약과 전용 Claude/Codex PreToolUse 가드 쌍(`review-exec-guard.sh` / `codex-review-exec-guard.sh`)이 함께 적용합니다. 두 가드는 공유 shell 불변식으로 같은 고비용 명령을 판정합니다.
-- JVM 경계에서는 basename이 `gradle`, `gradlew`, `mvn`, `mvnw`인 호출만 대상으로 하며, 열거된 고비용 Gradle task와 Maven phase만 차단합니다. Gradle은 `test`(qualified/suffixed 포함), `build`, `check`, `assemble*`, `compile*`, `classes`, `lint*`, `ktlint*`, `detekt*`를, Maven은 `compile`, `test-compile`, `test`, `integration-test`, `package`, `verify`, `install`, `ktlint:check`, `detekt:check`를 차단합니다.
-- `ktlint`, `detekt`, `kotlinc`, `javac`의 직접 lint/컴파일 실행과 `java`, `kotlin`의 프로젝트 코드 런타임 실행도 차단합니다. 반대로 열거되지 않은 Gradle/Maven 호출은 기본적으로 허용하며, 순수한 help/metadata 조회와 version 조회만 특별히 조회 예외로 취급합니다. 조회와 실행을 섞은 호출은 예외가 아닙니다.
-- 이 조회 예외는 무비용 또는 순수 정적 작업이라는 뜻이 아닙니다. Gradle/Maven 조회도 프로젝트를 설정하거나 플러그인·의존성을 해석하고 접근할 수 있으므로, 정적 검토에서 의도적으로 남겨 둔 좁은 사용성 예외입니다.
-- 워커는 `OMT_REVIEW_ROLE=member`를 받아 멤버 검토 컨텍스트를 표시합니다(스폰 시 설정, 종료와 함께 소멸). 컨덕터 세션은 job 메타데이터의 `conductorSessionId`가 현재 세션과 일치하고, 그 chunk-review job이 아직 활성(살아 있는 finder 멤버가 있음 — 공유 predicate `findActiveMembers`로 판정)일 때만 차단 대상이 됩니다. 리뷰가 끝나 GC를 기다리는 잔존 job은 컨덕터를 차단하지 않으므로, 리뷰 종료 후 컨덕터의 정당한 실행은 오차단되지 않습니다.
-- 따라서 이 제한은 검토 컨텍스트에서만 활성화됩니다. 같은 고비용 명령도 일반 개발 세션에서는 이 가드에 의해 차단되지 않습니다.
+**정적 검토 지침**: 위 정적 검토 원칙은 code-review 파인더와 in-session fallback이 따르는 프롬프트 정책입니다.
 
 **프로세스 정리**: 각 파인더는 별도 워커 프로세스로 실행되며, 워커 자신의 종료 경로·job 정리(`clean`)·새 세션 시작 시 회수라는 세 가지 경로로 그 프로세스를 거둡니다. 다만 뒤의 두 경로는 그 프로세스 그룹이 이 job의 것임을 확인할 수 있을 때만 신호를 보내므로, 컨덕터가 정리 단계에 도달하지 못해도 나머지 경로가 항상 뒤를 받쳐주는 것은 아닙니다. 워커가 기동할 수 있는 MCP 서버도 설정 파일의 화이트리스트(`mcps.allow`)로 제한되며, 화이트리스트를 지정하지 않으면 이 엔진이 열거하는 서버가 모두 차단됩니다(opt-in, fail-closed). 같은 `settings:` 블록의 형제 설정인 `deny.skills`(리뷰 워커가 호출할 수 없는 스킬을 지정하는 설정)는 기본값 방향이 정반대여서, 지정하지 않으면 아무것도 차단하지 않습니다(no-op). 워커가 서브에이전트를 스폰하는 능력은 같은 블록의 `deny.subagents: true`가 끕니다 — job을 dispatch하는 스킬 4종(code-review·design-review·diagnose·agent-council)이 모두 켜 두었으며, 멤버 CLI별로 번역됩니다(codex는 `agents.enabled=false`, claude는 스폰 툴 permission deny, opencode는 `permission.task: deny`). 두 축 중 하나라도 선언한 채 집행 레버가 없는 CLI(gemini·미인식)를 멤버로 두면 `start`가 job 디렉터리를 만들기 전에 exit 1로 막습니다.
 

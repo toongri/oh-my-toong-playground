@@ -131,12 +131,11 @@ gitignore되므로, `claude.yaml`에 뒀든 `claude.local.yaml`에 뒀든 그 �
 
 ### `hooks:`를 `claude.local.yaml`에 두면 생기는 사각
 
-`hooks:` 블록은 위 기본 규칙이 특히 세게 적용된다. 6개 코어 훅
-(`keyword-detector.sh`·`pre-tool-enforcer.sh`·`review-exec-guard.sh`·
+`hooks:` 블록은 위 기본 규칙이 특히 세게 적용된다. 5개 코어 훅
+(`keyword-detector.sh`·`pre-tool-enforcer.sh`·
 `session-start.sh`·`orphan-reaper.sh`·`persistent-mode`)은 device-specific 요소가
-없으므로 반드시 추적되는 루트 `claude.yaml`에 둔다. 특히
-`review-exec-guard.sh`는 전역으로 등록하되, 내부적으로 review context에서만
-활성화된다. `claude.local.yaml`에 두면 실제로 두 가지가 깨진다:
+없으므로 반드시 추적되는 루트 `claude.yaml`에 둔다.
+`claude.local.yaml`에 두면 실제로 두 가지가 깨진다:
 
 - **새 클론에 훅이 없다.** 오버레이 파일은 gitignore되므로 다른 머신에서는 전역
   훅 등록이 통째로 비어 있다.
