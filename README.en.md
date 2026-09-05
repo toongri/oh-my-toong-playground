@@ -73,7 +73,7 @@ The details of the library's skills (46) and agents (12) live under `docs/`.
 - Claude Code CLI installed
 - Node.js v18+ (for HUD functionality)
 - `npm`/`npx` (for Mermaid renderer provisioning)
-- `jq` (hooks parse payloads with it — guards do not block when it is unavailable)
+- `jq` (hooks parse payloads with it — most guards fail open when it is unavailable, but `codex-spawn-context-gate.sh` and `codex-spawn-role-gate.sh` deny the call)
 - `sqlite3` (the Codex detector queries the `state_5.sqlite` state database with it — when unavailable, the detector counts zero and emits one stderr diagnostic)
 - macOS or Linux
 

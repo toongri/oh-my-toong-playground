@@ -34,7 +34,8 @@ bun test                                   # All TypeScript tests
 `bun`, `bash` (macOS 3.2 compatible), `node`/`npm` (including `npx`), `jq`, `sqlite3`
 
 `jq` is a runtime prerequisite, not just a dev tool: the shipped hooks parse their
-payloads with it and **fail open (no guard) when it is absent**. macOS
+payloads with it. Most fail open when it is absent, but
+`codex-spawn-context-gate.sh` and `codex-spawn-role-gate.sh` deny the call. macOS
 15+ ships it in the base system at `/usr/bin/jq`; older macOS needs it installed.
 
 `sqlite3` is a runtime prerequisite for Codex's active-ultragoal child detector. If
@@ -176,6 +177,8 @@ skills:
 - **codex-explain-diff-seed.sh**: Codex explain-diff invocation seed — arms the fail-closed artifact guard only on a `$explain-diff` prompt mention (prompt-only; opening a file does not seed it; Claude seeds the same skeleton from `pre-tool-enforcer.sh`'s Skill branch)
 - **codex-qa-seed.sh**: Codex QA invocation seed — creates the qa state skeleton and arms the same runtime gates on Codex, which has no native Skill invocation signal
 - **codex-spawn-depth-gate.sh**: Codex PreToolUse gate capping subagent spawn depth at 2 (Claude enforces the same cap natively via `claude.yaml`'s `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`)
+- **codex-spawn-context-gate.sh**: Codex PreToolUse hook normalizing every native `spawn_agent` call reaching the hook to `fork_turns: "none"` and removing legacy `fork_context` through `updatedInput`, regardless of the active skill. Preserves input fields other than these context controls, leaves already-normalized calls unchanged, and denies malformed payloads or missing/failing `jq`; disabled hooks and runtime timeouts are outside this guarantee.
+- **codex-spawn-role-gate.sh**: Codex PreToolUse gate requiring an explicit nonblank string `agent_type` for every native `spawn_agent` call reaching the hook. The generic `default` role is valid; missing, null, blank, or non-string values are denied without rewriting input. Unknown role names are validated by the native runtime. Malformed payloads or missing/failing `jq` are denied.
 
 ### Key Workflows
 
