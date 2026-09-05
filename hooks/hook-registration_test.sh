@@ -565,6 +565,8 @@ codex-write-guard.sh
 codex-qa-driver-guard.sh
 codex-label-commit-gate.sh
 codex.verify-entrypoint-gate
+codex-spawn-context-gate.sh
+codex-spawn-role-gate.sh
 codex-spawn-depth-gate.sh
 codex-review-dispatch-gate.sh"
 
