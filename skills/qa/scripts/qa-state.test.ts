@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, readFileSync, existsSync } from "fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from "fs";
 import { execSync } from "child_process";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -252,6 +252,184 @@ describe("qa-state CLI wiring", () => {
 			run(`author-cell --story story-1 --cls ${cls}${suffix} --attack-point "attack ${cls} ${sub}" --priority ${cls === 1 ? "H" : "L"}`);
 		}
 	};
+
+	// A cell's evidence must be a user-boundary observation, never a test-runner
+	// report. This is the failure the whole QA presentation exists to prevent:
+	// a PO shown `vitest run … exit=0` as proof a user-facing requirement is met.
+	// Fragments are concatenated at runtime so the assembled FILE matches the
+	// test-runner signatures, while THIS source file does not — otherwise the guard
+	// would fire on the many existing tests that use this source file as evidence.
+	const VITEST_LOG =
+		" RUN  v" + "3.2.4 /Users/toong/repos/algocare-home/apps/backend\n\n" +
+		" ok test/domains/customer-label/delete-guard (7 tests)\n\n" +
+		" Test Fil" + "es  1 passed (1)\n      Test" + "s  1 passed | 6 skipped (7)\n   Duration  1.95s\nexit=0\n";
+	const BUN_TEST_SUMMARY =
+		"1 " + "pass\n" +
+		"0 " + "fail\n" +
+		"R" + "an 1 tests across 1 files.\n";
+	const NODE_TEST_REPORTER_SUMMARIES = [
+		"tests 1",
+		"suites 0",
+		"pass 1",
+		"fail 0",
+		"cancelled 0",
+		"skipped 0",
+		"todo 0",
+		"duration_ms 1.234",
+	];
+
+	test("record-cell REJECTS a test-runner report as cell evidence (a test log is not a user-boundary observation)", () => {
+		authorCompleteChain();
+		const logPath = join(tmpDir, "cls1-refuse.txt");
+		writeFileSync(logPath, VITEST_LOG);
+		expect(() =>
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface bash`),
+		).toThrow();
+		// the same leak through a supplementary slot on a FAIL cell is blocked too
+		expect(() =>
+			run(`record-cell --story story-1 --cls 2 --status fail --na-reason x --evidence-action ${logPath}`),
+		).toThrow();
+	});
+
+	test("record-cell은 Bun 네이티브 테스트 요약을 시나리오 증거로 거부한다", () => {
+		authorCompleteChain();
+		const logPath = join(tmpDir, "bun-test-summary.txt");
+		writeFileSync(logPath, BUN_TEST_SUMMARY);
+		expect(() =>
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface bash`),
+		).toThrow();
+	});
+
+	for (const [i, summary] of NODE_TEST_REPORTER_SUMMARIES.entries()) {
+		test(`record-cell REJECTS a Node test reporter summary line (${i}) as cell evidence`, () => {
+			authorCompleteChain();
+			const logPath = join(tmpDir, `node-test-summary-${i}.txt`);
+			writeFileSync(logPath, "ℹ " + summary + "\n");
+			expect(() =>
+				run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface bash`),
+			).toThrow();
+		});
+	}
+
+	// Quiet-mode pytest prints no `===` banner and its summary line names the
+	// outcome directly (`1 passed in 0.04s`, `1 failed in 0.04s`, `2 errors in
+	// 0.10s`). The earlier signature required a leading `=` and only recognized
+	// `passed`, so these slipped through and could back a green scenario with a
+	// test log — the exact laundering the guard exists to stop. Fragments are
+	// concatenated so THIS source file does not self-match.
+	const QUIET_PYTEST_PASS = "1 pass" + "ed in 0.04s\n";
+	const QUIET_PYTEST_FAIL = "1 fail" + "ed in 0.04s\n";
+	const QUIET_PYTEST_ERROR = "2 err" + "ors in 0.10s\n";
+
+	test("record-cell REJECTS a quiet-mode pytest summary (pass/fail/error, no === banner) as cell evidence", () => {
+		authorCompleteChain();
+		for (const [i, log] of [QUIET_PYTEST_PASS, QUIET_PYTEST_FAIL, QUIET_PYTEST_ERROR].entries()) {
+			const logPath = join(tmpDir, `quiet-pytest-${i}.txt`);
+			writeFileSync(logPath, log);
+			expect(() =>
+				run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface bash`),
+			).toThrow();
+		}
+	});
+
+	const PYTEST_BANNER_OUTCOMES = [
+		"pass" + "ed",
+		"fail" + "ed",
+		"err" + "or",
+		"err" + "ors",
+		"skip" + "ped",
+		"xfail" + "ed",
+		"xpass" + "ed",
+		"deselect" + "ed",
+	];
+
+	for (const [i, outcome] of PYTEST_BANNER_OUTCOMES.entries()) {
+		test(`record-cell REJECTS a bannered pytest ${outcome} outcome as cell evidence`, () => {
+			authorCompleteChain();
+			const logPath = join(tmpDir, `bannered-pytest-${i}.txt`);
+			writeFileSync(logPath, "===" + ` 1 ${outcome} in 0.04s ` + "===\n");
+			expect(() =>
+				run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface bash`),
+			).toThrow();
+		});
+	}
+
+	test("record-cell scans only the prefix but still REJECTS a signature within it on an oversized capture", () => {
+		authorCompleteChain();
+		// A test-runner signature in the first 64KB is caught even when the file is
+		// far larger — the guard reads only the inspected prefix, never the whole file.
+		const bigPath = join(tmpDir, "big-with-prefix-signature.txt");
+		writeFileSync(bigPath, VITEST_LOG + "x".repeat(200_000));
+		expect(() =>
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${bigPath} --evidence-surface bash`),
+		).toThrow();
+	});
+
+	test("record-cell inspects the TAIL too: a trailing test-runner summary after a large body is still REJECTED", () => {
+		authorCompleteChain();
+		// A test-runner summary sits at the END of the log. Reading only the head
+		// prefix misses it once the preceding output exceeds the window; the guard
+		// must inspect a bounded tail as well.
+		const p = join(tmpDir, "big-tail-summary.txt");
+		writeFileSync(p, "x".repeat(200_000) + "\n" + "1 pass" + "ed in 0.04s\n");
+		expect(() =>
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${p} --evidence-surface bash`),
+		).toThrow();
+	});
+
+	test("record-cell REJECTS a cached go test summary (ok pkg (cached), no numeric duration)", () => {
+		authorCompleteChain();
+		const p = join(tmpDir, "go-cached.txt");
+		writeFileSync(p, "o" + "k  \tmy/pkg\t(cached)\n");
+		expect(() =>
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${p} --evidence-surface bash`),
+		).toThrow();
+	});
+
+	test("record-cell은 Go coverage 요약을 시나리오 증거로 거부한다", () => {
+		authorCompleteChain();
+		const p = join(tmpDir, "go-coverage.txt");
+		writeFileSync(p, "ok example/pkg 0.123s coverage: " + "75.0% of statements\n");
+		expect(() =>
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${p} --evidence-surface bash`),
+		).toThrow();
+	});
+
+	test("record-cell REJECTS a Go package no-test summary", () => {
+		authorCompleteChain();
+		const p = join(tmpDir, "go-no-tests.txt");
+		writeFileSync(p, "? example/pkg [" + "no test" + " files]\n");
+		expect(() =>
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${p} --evidence-surface bash`),
+		).toThrow();
+	});
+
+	test("record-cell REJECTS a multiline Go package no-test summary", () => {
+		authorCompleteChain();
+		const p = join(tmpDir, "go-no-tests-multiline.txt");
+		writeFileSync(p, "go test ./...\n?\texample/pkg\t[" + "no test" + " files]\nfinished\n");
+		expect(() =>
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${p} --evidence-surface bash`),
+		).toThrow();
+	});
+
+	test("record-cell ACCEPTS a real boundary observation (client-received response, no test-runner signature)", () => {
+		authorCompleteChain();
+		const apiPath = join(tmpDir, "cls1-response.txt");
+		writeFileSync(apiPath, "HTTP/1.1 409 Conflict\n\n{\"error\":\"label in use by 1 bundle\",\"deleted\":false}\n");
+		expect(() =>
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${apiPath} --evidence-surface bash`),
+		).not.toThrow();
+	});
+
+	test("record-baseline is EXEMPT: build/test/lint logs are its expected evidence", () => {
+		authorCompleteChain();
+		const logPath = join(tmpDir, "baseline-tests.txt");
+		writeFileSync(logPath, VITEST_LOG);
+		expect(() =>
+			run(`record-baseline --story story-1 --result pass --evidence-path ${logPath} --evidence-surface bash`),
+		).not.toThrow();
+	});
 
 	test("CLI set/get/status round-trip", () => {
 		run('set --phase PLAN --target "cli target"');

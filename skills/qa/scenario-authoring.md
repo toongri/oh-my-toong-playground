@@ -85,7 +85,7 @@ Every self-authored scenario is written in this six-field shape, in this order:
 1. **actor** — from Layer C: the roster actor plus its stance, carrying the boundary the steps must start at.
 2. **preconditions** — the reproduction gate from Layer B (or the literal `none`).
 3. **steps** — the concrete action sequence to execute, entered at the actor's boundary.
-4. **expected** — the observable outcome that proves pass or fail.
+4. **expected** — the observable outcome that proves pass or fail, stated at the actor's boundary (what renders on the screen / device / API response). The evidence that later backs this scenario is that same boundary observation — a screenshot, a rendered final state, an actual API response. A unit/integration test-runner report (`vitest`/`jest`/`pytest`/`go test` output) is **never** a scenario's evidence: it proves code in isolation, not the user boundary, and `record-cell` mechanically rejects it. If the boundary is genuinely unreachable (absent hardware, off-network third party), the scenario is `NOT-RUN`, recorded as `na` with a reason, and the requirement it covers is **unverified** — never marked pass on a green test suite.
 5. **why-needed** — **mandatory.** States the reason this scenario exists — mostly "what automation/e2e already misses" from the Layer A2 coverage-gap judgment. A scenario without a `why-needed` field is incomplete; this is what separates a derived scenario from a mechanically-generated one.
 6. **priority** — the `H/M/L` value from Layer A3.
 

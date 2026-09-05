@@ -30,6 +30,10 @@ const feedbackMd = readFileSync(
 	join(import.meta.dir, "feedback-protocol.md"),
 	"utf8",
 );
+const presentationMd = readFileSync(
+	join(import.meta.dir, "presentation.md"),
+	"utf8",
+);
 
 // ---------------------------------------------------------------------------
 // NEW-PROSE: cycle phase vocabulary (must FAIL before rewrite — RED)
@@ -824,6 +828,211 @@ describe("new-prose: approval is gated on boundary depth", () => {
 });
 
 // ---------------------------------------------------------------------------
+// NEW-PROSE: a test-runner report is never scenario evidence; an undriven
+// boundary is `unverified`, never a green pass (three-layer contract)
+// ---------------------------------------------------------------------------
+
+describe("new-prose: test-runner logs are never scenario evidence", () => {
+	test("SKILL.md forbids a test-runner report as a cell's evidence", () => {
+		expect(skillMd).toContain(
+			"A scenario cell's evidence is a boundary OBSERVATION — a test-runner report is never it",
+		);
+		expect(skillMd).toContain("`record-cell` mechanically rejects a test-runner report");
+	});
+
+	test("SKILL.md excludes the app's own test suite from boundary substitution", () => {
+		expect(skillMd).toContain(
+			"Substitution replaces one unreachable hop — it never swaps the boundary for the app's test suite",
+		);
+		expect(skillMd).toContain("the requirement it covers is **unverified**");
+	});
+
+	test("scenario-authoring.md ties an unreachable boundary to NOT-RUN + unverified", () => {
+		expect(scenarioAuthoringMd).toContain(
+			"test-runner report (`vitest`/`jest`/`pytest`/`go test` output) is **never** a scenario's evidence",
+		);
+		expect(scenarioAuthoringMd).toContain("the scenario is `NOT-RUN`");
+	});
+
+	test("presentation.md maps an undriven user boundary to the loud unverified verdict", () => {
+		expect(presentationMd).toContain('unverified (`unverified`)');
+		expect(presentationMd).toContain("미검증 — 유저 경계 미구동");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// NEW-PROSE: NOT-RUN is physical impossibility only — setup cost / time-box
+// never justifies it; a caller's time-box does not override
+// ---------------------------------------------------------------------------
+
+describe("new-prose: setup cost never justifies NOT-RUN", () => {
+	test("SKILL.md reserves NOT-RUN for physical impossibility, not setup amount", () => {
+		expect(skillMd).toContain("NOT-RUN is reserved for physical impossibility, never for setup cost");
+		expect(skillMd).toContain(
+			"The amount of bootstrap work — full local stack, manual DB inserts, minting QA accounts and memberships",
+		);
+	});
+
+	test("SKILL.md rejects a caller-imposed time-box as an override", () => {
+		expect(skillMd).toContain("There is no time-box in this skill");
+		expect(skillMd).toContain("If someone (even the caller) tells you to time-box, that instruction does not override this");
+	});
+
+	test("SKILL.md treats absent seed data as rung 2/3 work, not a NOT-RUN verdict", () => {
+		expect(skillMd).toContain("Absent data is rung 2/3 work, not a verdict");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// NEW-PROSE: reader evidence is converted natural language + screenshots;
+// raw curl/HTTP dumps belong in the audit
+// ---------------------------------------------------------------------------
+
+describe("new-prose: reader evidence is per-scenario natural language + screenshots, not raw dumps", () => {
+	test("presentation.md keys the reader evidence PER scenario via scenarios[...].observed", () => {
+		expect(presentationMd).toContain("Per-scenario observation");
+		expect(presentationMd).toContain("scenarios");
+	});
+
+	test("presentation.md forces every verified scenario to carry a reader-visible record (observation OR screenshot)", () => {
+		expect(presentationMd).toContain("an authored observation OR a screenshot");
+	});
+
+	test("presentation.md converts a raw API/CLI transcript to a per-scenario NL observation, raw stays in the audit", () => {
+		expect(presentationMd).toContain("**convert** it to");
+		expect(presentationMd).toContain("Raw curl belongs in the audit");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// NEW-PROSE: requirementMapping is a structured, current-cycle grounding
+// contract; prose explains a grounded verdict but never establishes it.
+// ---------------------------------------------------------------------------
+
+describe("new-prose: requirement mappings are structurally grounded", () => {
+	const mappingSection = () => {
+		const start = presentationMd.indexOf("Requirement fulfillment");
+		const end = presentationMd.indexOf("## Anchoring", start + 1);
+		expect(start).not.toBe(-1);
+		expect(end).toBeGreaterThan(start);
+		return presentationMd.slice(start, end);
+	};
+
+	test("presentation.md requires non-empty cellRefs and exactly one current-cycle recorded cell per ref", () => {
+		const mapping = mappingSection();
+		expect(mapping).toContain("non-empty `cellRefs` array");
+		expect(mapping).toContain("{story, cls, optional sub}");
+		expect(mapping).toContain("exactly one recorded current-cycle cell");
+		expect(mapping).toContain("recorded status");
+		expect(mapping).toContain("`pass`, `fail`,");
+		expect(mapping).toContain("or `na`");
+	});
+
+	test("presentation.md defines grounded status invariants for all four verdicts", () => {
+		const mapping = mappingSection();
+		expect(mapping).toMatch(/`yes` requires every referenced\s+cell to be `pass`/);
+		expect(mapping).toMatch(/`no` requires every referenced\s+cell to be `fail`/);
+		expect(mapping).toMatch(/`partial`\s+requires at least one `pass` and one `fail` and no `na`/);
+		expect(mapping).toMatch(/`unverified` requires\s+at least one valid `na`/);
+	});
+
+	test("invalid mappings fail closed and prose cannot establish a verdict", () => {
+		const mapping = mappingSection();
+    expect(mapping).toMatch(/Missing\/legacy\/malformed\/duplicate\/stale\/unknown\/ineligible\s+mappings fail closed/);
+		expect(mapping).toContain("visible neutral gap");
+		expect(mapping).toContain("Prose evidence explains a verdict but cannot establish it");
+	});
+
+	test("the JSON example shows the structured cellRefs shape", () => {
+		const start = presentationMd.indexOf("```json");
+		const end = presentationMd.indexOf("```", start + 7);
+		expect(start).not.toBe(-1);
+		expect(end).toBeGreaterThan(start);
+		const example = presentationMd.slice(start, end);
+		expect(example).toContain('"cellRefs": [{ "story": "<story-id>", "cls": 1 }]');
+	});
+
+	test("the HTML Report and Final Checklist repeat the structural grounding gate", () => {
+		const htmlStart = skillMd.indexOf("### HTML Report");
+		const htmlEnd = skillMd.indexOf("\n---", htmlStart + 1);
+		expect(htmlStart).not.toBe(-1);
+		expect(htmlEnd).toBeGreaterThan(htmlStart);
+		const htmlReport = skillMd.slice(htmlStart, htmlEnd);
+		expect(htmlReport).toContain("non-empty `cellRefs` array");
+		expect(htmlReport).toContain("exactly one recorded current-cycle cell");
+		expect(htmlReport).toContain("visible neutral gap");
+		expect(htmlReport).toContain("Prose evidence explains a verdict but cannot establish it");
+
+		const checklist = skillMd.slice(skillMd.indexOf("## Final Checklist"));
+		expect(checklist).toContain("every `requirementMapping` entry has a non-empty `cellRefs`");
+		expect(checklist).toContain("Prose evidence explains a verdict but cannot establish it");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// FINAL-CHECK: the completion self-audit forces each scenario's observation to
+// name the MEDIUM it was captured through (screen/device capture vs API/CLI
+// response). This closes the laundering path a real luna-max e2e exposed: an
+// agent drove a screen-facing feature entirely via curl, then converted the
+// transcripts to readable prose that read as user-boundary observations and
+// passed every gate. Naming the medium — with the API-only-PR carve-out — is
+// the forcing predicate that catches it without false-failing legit backend PRs.
+// ---------------------------------------------------------------------------
+
+describe("final-check: each scenario's observation names its medium (screen vs API/CLI)", () => {
+	test("CHECK phase forces a per-scenario medium self-check with the API-only carve-out", () => {
+		const checkStart = skillMd.indexOf("### CHECK");
+		expect(checkStart).not.toBe(-1);
+		const checkEnd = skillMd.indexOf("### DIAGNOSIS", checkStart + 1);
+		expect(checkEnd).not.toBe(-1);
+		const check = skillMd.slice(checkStart, checkEnd);
+		expect(check).toContain("name the medium it was observed through");
+		expect(check).toContain(
+			"an API or CLI reading never stands in for a screen observation",
+		);
+		expect(check).toContain("no user-facing surface exists yet");
+	});
+
+	test("presentation self-audit carries the medium final-check item", () => {
+		expect(presentationMd).toContain("name its medium");
+	});
+
+	test("presentation red flag catches an API reading dressed as a screen observation", () => {
+		expect(presentationMd).toContain(
+			"A human actor's scenario is observed only through an API/CLI response but reads as if the screen was driven",
+		);
+	});
+
+	test("SKILL.md ends with an explicit checkbox completion checklist carrying the medium gate", () => {
+		const idx = skillMd.indexOf("## Final Checklist");
+		expect(idx).not.toBe(-1);
+		// it is placed LAST — after Quick Reference — so it lands at the bottom
+		// of the prompt where a final gate belongs (recency/salience).
+		expect(idx).toBeGreaterThan(skillMd.indexOf("## Quick Reference"));
+		const checklist = skillMd.slice(idx);
+		// explicit, tickable checkboxes — not prose. Kept tight (~5): each box
+		// is a distinct QA gate, no restatement of the same "all scenarios
+		// passed" idea across several rows.
+		const boxes = checklist.match(/- \[ \]/g) ?? [];
+		expect(boxes.length).toBeGreaterThanOrEqual(5);
+		expect(boxes.length).toBeLessThanOrEqual(6);
+		// the medium gate rides on the list, with the API-only carve-out
+		expect(checklist).toContain("names the medium it was observed through");
+		expect(checklist).toContain("`unverified` at the screen");
+		expect(checklist).toContain("API-only");
+		// the QA gate is the adversarial E2E at the boundary
+		expect(checklist).toContain("ADVERSARIAL E2E");
+		// build/test/lint is an upstream phase gate, not a verdict-time item —
+		// keep the QA checklist centered on user-boundary verification
+		expect(checklist).not.toContain("build / test / lint");
+		// priority/scoring mechanics live in CHECK + Approval Decision, not in
+		// the scannable final checklist — keep them out to avoid restating them
+		expect(checklist).not.toContain("`H`-priority");
+		expect(checklist).not.toContain("nitpick");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // NEW-PROSE: scenario-authoring.md's actor layer binds actor -> boundary
 // ---------------------------------------------------------------------------
 
@@ -1232,10 +1441,11 @@ describe("new-prose: HTML report is the canonical deliverable", () => {
 		expect(skillMd).toContain("never persisted to qa-state");
 	});
 
-	test("the report preserves required evidence.path with partial actor slots", () => {
-		expect(skillMd).toContain("always renders the current-cycle baseline evidence and the required cell `evidence.path`");
-		expect(skillMd).toContain("partial slot sets alike");
-		expect(skillMd).toContain("recorded evidence slot");
+	test("the reader scenario section is story-level and clean; cls/attack_point/driven_at live in the audit section", () => {
+		expect(skillMd).toContain("the current-cycle baseline plus each scenario's `before` / `action` / `after` and recorded `evidence.path`");
+		expect(skillMd).toContain("the six adversarial axes by name, never the `cls` number");
+		expect(skillMd).toContain("시나리오 상세 기록 (감사)");
+		expect(skillMd).toContain("omits the cell record's implementation-flavored fields");
 	});
 
 	test("the report caps evidence embedding per file and cumulatively", () => {

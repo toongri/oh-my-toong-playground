@@ -146,7 +146,7 @@ skills:
 | clarify | Requirements clarification | MANDATORY gate before implementation |
 | git-master | Git conventions (commits + branch naming) | Korean messages, 50-char limit, atomic commits |
 | agent-council | Multi-AI advisory body | For trade-offs and subjective decisions |
-| qa | Quality Assurance verification | Enforced actor-roster → story → cell → record → verdict → complete chain; runtime gates block unrecorded drivers and Stop |
+| qa | Quality Assurance verification | Enforced actor-roster → story → cell → record → verdict → complete chain; runtime gates block unrecorded drivers and Stop; `record-cell` mechanically rejects a unit/integration test-runner report (`vitest`/`jest`/`pytest`/`go test` output) as scenario evidence (test logs live only in BASELINE); an undriven user boundary is `unverified`, never green; STATE HTML report leads with a context-free-PO presentation layer (product/user perspective, anchored to recorded actors/stories/ACs; `presentation.md`) |
 | explain-diff | Diff explanation ending in a comprehension quiz | Completion is the reader passing, not the document; evidence → background → goal → architecture → intuition → commits → code → render → quiz, goal states purpose+core before mechanism, system level = cross-process boundaries, template-owned visuals (style invention rejected), no quiz exemption |
 | agent-browser | Web and Electron E2E | Load this skill before using its driver CLI |
 | agent-device | iOS, tvOS, macOS, Android, Vega OS TV E2E | Load this skill before using its driver CLI; delegates runtime help |

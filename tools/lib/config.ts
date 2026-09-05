@@ -31,7 +31,9 @@ let cachePopulated = false;
  */
 export function getRootDir(): string | null {
 	if (cachedRootDir !== null) return cachedRootDir;
-
+	// fileURLToPath decodes percent-encoded bytes (e.g. a non-ASCII path like
+	// "qa-개선") and handles platform quirks; new URL(...).pathname does not, so a
+	// worktree under a non-ASCII path would fail to locate config.yaml.
 	let dir = dirname(fileURLToPath(import.meta.url));
 
 	// Walk up a reasonable number of levels
