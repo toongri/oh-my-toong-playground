@@ -24,15 +24,13 @@ config:
       # Do NOT add `enabled = true` here: it would force V1-model sessions
       # into V2 too, which is out of scope for this change.
       max_concurrent_threads_per_session: 20
-      # V2 hides `model`/`reasoning_effort` from the `spawn_agent` tool
-      # schema by default, so a child thread always inherits the parent
-      # session's model with no way to override it. This restores those
-      # fields to the schema. Arming the capability alone does not change
-      # any child's model -- only an orchestrator that explicitly passes
-      # `model` on spawn does, and nothing in OMT does that yet, so
-      # children still inherit the session model today.
+      # Expose optional `model`/`reasoning_effort` overrides in V2's
+      # `spawn_agent` schema. Schema availability does not select a model.
+      # When Codex discovers role TOMLs, native `agent_type` selection
+      # applies the role's model and effort without explicit overrides.
       expose_spawn_agent_model_overrides: true
-      # `expose_spawn_agent_model_overrides` alone 400s at spawn time:
+      # Historical codex 0.148.0 probe: enabling only
+      # `expose_spawn_agent_model_overrides` returned 400 at spawn time:
       # `collaboration` is a reserved tool namespace and the backend
       # rejects a modified schema under it. Renaming the namespace to
       # "agents" moves the emitted tool name from
@@ -176,6 +174,18 @@ hooks:
     - command: "bun run .codex/scripts/verify-entrypoint-gate/index.ts"
       trace-id: "codex.verify-entrypoint-gate"
       matcher: "Bash|bash|exec_command|shell_command"
+      timeout: 10
+    # Normalize native spawn history independently of skill instructions.
+    # Codex matches the whole flattened name, including configurable V2 namespaces.
+    - component: codex-spawn-context-gate.sh
+      type: command
+      matcher: ".*[sS]pawn_[aA]gent"
+      timeout: 10
+    # Require an explicit configured role (or default for generic tasks).
+    # Deny-only: a competing updatedInput would race the context normalizer.
+    - component: codex-spawn-role-gate.sh
+      type: command
+      matcher: ".*[sS]pawn_[aA]gent"
       timeout: 10
     # NOT a Claude<->Codex hook-parity mirror -- Claude enforces the same
     # nested-spawn-depth policy natively via the CLAUDE_CODE_MAX_SUBAGENT_
