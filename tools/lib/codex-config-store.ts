@@ -135,27 +135,16 @@ async function lock(target: string): Promise<() => Promise<void>> {
 	await fs.mkdir(path.join(target, ".omt"), { recursive: true, mode: 0o700 });
 	const file = path.join(target, LOCK);
 	const bytes = JSON.stringify({ version: 1, pid: process.pid, token: randomUUID() });
-	for (let attempt = 0; attempt < 2; attempt++) {
-		try {
-			const handle = await fs.open(file, "wx", 0o600);
-			try { await handle.writeFile(bytes); } finally { await handle.close(); }
-			return async () => { if (await readBytes(file) === bytes) await fs.unlink(file); };
-		} catch (error) { if (code(error) !== "EEXIST") throw error; }
-		const resident = await readBytes(file);
-		let pid: number;
-		try {
-			const input: unknown = JSON.parse(resident ?? "");
-			if (typeof input !== "object" || input === null || Reflect.get(input, "version") !== 1 || typeof Reflect.get(input, "token") !== "string") throw new Error();
-			const candidate: unknown = Reflect.get(input, "pid");
-			if (typeof candidate !== "number" || !Number.isSafeInteger(candidate) || candidate <= 0) throw new Error();
-			pid = candidate;
-		} catch { throw new Error("Invalid config lock; owner is uncertain"); }
-		try { process.kill(pid, 0); throw new Error("Config lock is held by a live process"); }
-		catch (error) { if (code(error) !== "ESRCH") throw new Error("Config lock owner is alive or uncertain", { cause: error }); }
-		if (await readBytes(file) !== resident) throw new Error("Config lock changed during stale recovery");
-		await fs.unlink(file);
+	try {
+		const handle = await fs.open(file, "wx", 0o600);
+		try { await handle.writeFile(bytes); } finally { await handle.close(); }
+		return async () => { if (await readBytes(file) === bytes) await fs.unlink(file); };
+	} catch (error) {
+		if (code(error) !== "EEXIST") throw error;
+		// A check followed by unlink cannot safely reclaim a lock: another reaper
+		// may have replaced it. PID metadata alone cannot establish ownership.
+		throw new Error("Config lock already exists. Confirm no sync is active before removing .omt/codex-config.lock manually.", { cause: error });
 	}
-	throw new Error("Config lock could not be acquired");
 }
 async function recover(target: string, hooks: DeployMutationHooks): Promise<void> {
 	const pendingBytes = await readBytes(path.join(target, PENDING));

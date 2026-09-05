@@ -57,6 +57,7 @@ test("충돌과 손상 상태는 config나 상태를 변경하지 않음", async
 for (const interrupted of [pending, config, state]) test(`${interrupted} 기록 후 중단을 검증하고 복구`, async () => {
 	await expect(applyConfig(target, { model: "first" }, failAfter(interrupted))).rejects.toThrow("interrupted");
 	const before = await read(pending);
+	expect(await fs.stat(path.join(target, lock)).catch(() => null)).toBeNull();
 	expect((await fs.stat(path.join(target, pending))).mode & 0o777).toBe(0o600);
 	expect((await previewConfig(target, { model: "first" })).status).toBe("recovery-required");
 	expect(await read(pending)).toBe(before);
@@ -86,14 +87,32 @@ test("교체 직전 외부 편집은 덮어쓰지 않음", async () => {
 	expect(await read(config)).toBe('model = "external"\n');
 });
 
-test("살아 있거나 불명확한 잠금은 거부하고 죽은 PID만 회수", async () => {
-	await write(lock, JSON.stringify({ version: 1, pid: process.pid, token: "owner" }));
+for (const [label, bytes] of [
+	["살아 있는 PID", JSON.stringify({ version: 1, pid: process.pid, token: "owner" })],
+	["죽은 PID", JSON.stringify({ version: 1, pid: 2147483647, token: "dead" })],
+	["손상된 내용", "invalid"],
+	["불명확한 PID", JSON.stringify({ version: 1, pid: -1, token: "uncertain" })],
+]) test(`${label}의 기존 잠금은 거부하며 바이트를 보존`, async () => {
+	if (bytes === undefined) throw new Error("missing fixture");
+	await write(lock, bytes);
 	await expect(applyConfig(target, { model: "first" })).rejects.toThrow("lock");
-	await write(lock, "invalid");
-	await expect(applyConfig(target, {})).rejects.toThrow("lock");
-	await write(lock, JSON.stringify({ version: 1, pid: 2147483647, token: "dead" }));
-	await applyConfig(target, { model: "first" });
-	expect(await fs.stat(path.join(target, lock)).catch(() => null)).toBeNull();
+	expect(await read(lock)).toBe(bytes);
+	expect(await fs.stat(path.join(target, config)).catch(() => null)).toBeNull();
+});
+
+test("죽은 PID 잠금의 동시 적용은 모두 실패하고 수동 복구를 안내", async () => {
+	const bytes = JSON.stringify({ version: 1, pid: 2147483647, token: "dead" });
+	await write(lock, bytes);
+	const results = await Promise.allSettled([
+		applyConfig(target, { model: "first" }),
+		applyConfig(target, { model: "second" }),
+	]);
+	for (const result of results) {
+		expect(result.status).toBe("rejected");
+		if (result.status === "rejected") expect(String(result.reason)).toContain("manually");
+	}
+	expect(await read(lock)).toBe(bytes);
+	expect(await fs.stat(path.join(target, config)).catch(() => null)).toBeNull();
 });
 
 test("저널 손상은 부트스트랩 대신 실패", async () => {
