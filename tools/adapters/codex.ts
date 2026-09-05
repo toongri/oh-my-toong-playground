@@ -8,15 +8,16 @@
  * - hooks: supported; command is a literal relative `bun run .codex/hooks/<name>/index.ts`
  * - skills, scripts: syncDirectory
  * - rules: supported, copied verbatim to `.codex/rules/<name>.md` (syncRulesDirect)
- * - config: TOML managed block in .codex/config.toml
+ * - config: owned leaf updates in .codex/config.toml, tracked in .omt state
  * - mcps: accumulate all servers, flush via native `codex mcp add/remove` CLI
- *   (idempotent add-if-changed + orphan removal tracked in
+ *   (idempotent add-if-changed + explicit removals tracked in
  *   .omt/sync-manifest.json — see flushMcpBlock)
  */
 
 import fs from "fs/promises";
 import path from "path";
 import { stringify, parse } from "smol-toml";
+import { applyConfig, previewConfig } from "../lib/codex-config-store.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { readTextFile, readJsonFile, writeJsonFile } from "../lib/json.ts";
 import { isPlainObject } from "../lib/deep-merge.ts";
@@ -124,6 +125,7 @@ function matchMarkerLines(content: string, marker: string): RegExpMatchArray[] {
 }
 
 /**
+ * Legacy compatibility utility; config and MCP deployment no longer use it.
  * Inserts or replaces a managed block in TOML content.
  *
  * Finds `# --- omt:{blockName} ---` / `# --- end omt:{blockName} ---` markers
@@ -256,8 +258,7 @@ export function insertManagedBlock(
 		);
 	}
 
-	// Backstop: parse the result before returning it. Callers write the
-	// return value straight to disk (syncConfig, flushMcpBlock) — a managed
+	// Backstop: parse the result before returning it. A managed
 	// block that duplicates a key already in the surrounding content (e.g. a
 	// stale block appended alongside a fresh one) must never reach the file.
 	let parsedResult: Record<string, unknown>;
@@ -1037,7 +1038,7 @@ export class CodexAdapter implements PlatformAdapter {
 	}
 
 	// ---------------------------------------------------------------------------
-	// syncConfig — write TOML managed block to .codex/config.toml
+	// syncConfig — plan and apply markerless owned leaf updates
 	// ---------------------------------------------------------------------------
 
 	async syncConfig(
@@ -1049,22 +1050,33 @@ export class CodexAdapter implements PlatformAdapter {
 	): Promise<void> {
 		const configFile = path.join(targetPath, this.configDir, "config.toml");
 
+		const preview = await previewConfig(targetPath, configJson);
+		if (preview.status === "recovery-required" && dryRun) {
+			throw new Error(`Codex config recovery required: ${configFile}; run a real sync to recover the pending transaction.`);
+		}
+		if (preview.plan.conflicts.length) {
+			const shellQuote = (value: string): string => "'" + value.replaceAll("'", "'\"'\"'") + "'";
+			const details = preview.plan.conflicts.map(({ path: key, reason }) => {
+				const keyJson = JSON.stringify(key);
+				const hint = reason === "adoption-required"
+					? `; review adoption: bun tools/codex-config-migrate.ts --target ${shellQuote(path.resolve(targetPath))} --key ${shellQuote(keyJson)}`
+					: "";
+				return `${keyJson}: ${reason}${hint}`;
+			});
+			throw new Error(`Codex config conflicts in ${configFile}:\n${details.join("\n")}`);
+		}
 		if (dryRun) {
-			logDry(`Config managed block: ${JSON.stringify(configJson)} -> ${configFile}`);
+			for (const edit of preview.plan.edits) {
+				logDry(`Config ${edit.kind}: ${JSON.stringify(edit.path)} -> ${configFile}`);
+			}
+			if (!preview.plan.edits.length) logDry(`Config ${preview.status}: ${configFile}`);
 			return;
 		}
 
-		const operation = async (): Promise<void> => {
-			await fs.mkdir(path.join(targetPath, this.configDir), { recursive: true });
-			const existing = await readTextFile(configFile);
-			const tomlContent = stringify(configJson);
-			const updated = insertManagedBlock(existing, "config", tomlContent);
-			await fs.writeFile(configFile, updated, "utf-8");
-		};
-		if (mutationHooks) await mutationHooks.mutate(configFile, operation);
-		else await operation();
-		if (writeObserver) await writeObserver(configFile);
-		logInfo(`Config managed block: ${configFile}`);
+		const before = await readTextFile(configFile);
+		const result = await applyConfig(targetPath, configJson, mutationHooks);
+		if (writeObserver && before !== (result.configBytes ?? "")) await writeObserver(configFile);
+		logInfo(`Config ${result.status}: ${configFile}`);
 	}
 
 	// ---------------------------------------------------------------------------

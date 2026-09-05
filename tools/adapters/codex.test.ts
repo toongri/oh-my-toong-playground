@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
@@ -20,6 +20,7 @@ import {
 import { planCategoryDestinationPaths } from "./destinations.ts";
 import type { ModelMap } from "../lib/types.ts";
 import { DeployTransaction, type DeployMutationHooks } from "../lib/deploy-transaction.ts";
+import { applyConfig, readConfigSnapshot, commitConfigState } from "../lib/codex-config-store.ts";
 import { writeManifest } from "../lib/deploy-manifest.ts";
 
 function plannedCodexPath(targetPath: string, category: "hooks" | "scripts", displayName: string): string {
@@ -830,21 +831,21 @@ describe("CodexAdapter", () => {
 	});
 
 	// ---------------------------------------------------------------------------
-	// syncConfig — TOML managed block
+	// syncConfig — markerless ownership
 	// ---------------------------------------------------------------------------
 
 	describe("syncConfig", () => {
-		it("writes config as TOML managed block in config.toml via `syncConfig`", async () => {
+		it("새 설정은 마커 없이 저장하고 소유권을 기록한다", async () => {
 			await adapter.syncConfig(tmpDir, { model: "o4-mini", temperature: 0.7 }, false);
 			const configFile = path.join(tmpDir, ".codex", "config.toml");
 			const content = await fs.readFile(configFile, "utf-8");
-			expect(content).toContain("# --- omt:config ---");
-			expect(content).toContain("# --- end omt:config ---");
+			expect(content).not.toContain("omt:config");
+			expect((await readConfigSnapshot(tmpDir)).state?.entries.map((entry) => entry.path)).toEqual([["model"], ["temperature"]]);
 			expect(content).toContain("model");
 			expect(content).toContain("o4-mini");
 		});
 
-		it("replaces managed block on re-call while preserving existing content via `syncConfig`", async () => {
+		it("설정 추가와 갱신은 기존 사용자 설정을 보존한다", async () => {
 			// Write initial user content
 			const configFile = path.join(tmpDir, ".codex", "config.toml");
 			await fs.mkdir(path.join(tmpDir, ".codex"), { recursive: true });
@@ -854,20 +855,26 @@ describe("CodexAdapter", () => {
 			const content = await fs.readFile(configFile, "utf-8");
 
 			expect(content).toContain("some_setting = true");
-			expect(content).toContain("# --- omt:config ---");
+			expect(content).not.toContain("omt:config");
 			expect(content).toContain("o4-mini");
 		});
 
 		it("skips config.toml creation in dry-run mode via `syncConfig`", async () => {
-			await adapter.syncConfig(tmpDir, { model: "o4-mini" }, true);
+			const logs: string[] = [];
+			const logger = spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => { logs.push(String(chunk)); return true; });
+			try { await adapter.syncConfig(tmpDir, { model: "o4-mini" }, true); }
+			finally { logger.mockRestore(); }
+			expect(logs.join("\n")).toContain('["model"]');
+			expect(logs.join("\n")).not.toContain("o4-mini");
 			const exists = await fs
 				.stat(path.join(tmpDir, ".codex", "config.toml"))
 				.then(() => true)
 				.catch(() => false);
 			expect(exists).toBe(false);
+			expect(await fs.readdir(tmpDir)).toEqual([]);
 		});
 
-		it("serializes a nested map as a dotted TOML table header via `syncConfig`", async () => {
+		it("중첩 설정의 TOML 경로와 값을 보존한다", async () => {
 			await adapter.syncConfig(
 				tmpDir,
 				{ features: { multi_agent_v2: { max_concurrent_threads_per_session: 20 } } },
@@ -875,27 +882,95 @@ describe("CodexAdapter", () => {
 			);
 			const configFile = path.join(tmpDir, ".codex", "config.toml");
 			const content = await fs.readFile(configFile, "utf-8");
-			expect(content).toContain("[features.multi_agent_v2]");
-			expect(content).toContain("max_concurrent_threads_per_session = 20");
+			expect(parse(content)).toEqual({ features: { multi_agent_v2: { max_concurrent_threads_per_session: 20 } } });
 		});
 
 		it("rejects an external config edit before the guarded read and preserves resident bytes", async () => {
 			const configFile = path.join(tmpDir, ".codex", "config.toml");
 			await fs.mkdir(path.dirname(configFile), { recursive: true });
-			await fs.writeFile(configFile, "resident\n", "utf-8");
+			await fs.writeFile(configFile, 'unrelated = "resident"\n', "utf-8");
 			const transaction = await DeployTransaction.begin(tmpDir, false, [".codex/config.toml"]);
 			expect(transaction).not.toBeNull();
-			await fs.writeFile(configFile, "external edit\n", "utf-8");
+			await fs.writeFile(configFile, 'unrelated = "external edit"\n', "utf-8");
 			const observed: string[] = [];
 			await expect(
 				adapter.syncConfig(tmpDir, { model: "o4-mini" }, false, (writtenPath) => {
 					observed.push(writtenPath);
 				}, transaction!),
 			).rejects.toThrow(/Deploy transaction conflict/);
-			expect(await fs.readFile(configFile, "utf-8")).toBe("external edit\n");
+			expect(await fs.readFile(configFile, "utf-8")).toBe('unrelated = "external edit"\n');
 			expect(observed).toEqual([]);
 			await transaction!.finish();
 		});
+
+		for (const markers of ["", "# --- omt:config ---\n", "# --- omt:config ---\n# --- omt:config ---\n"]) {
+			it(`기존 동일 값도 마커와 무관하게 명시 채택을 요구한다: ${JSON.stringify(markers)}`, async () => {
+				const file = path.join(tmpDir, ".codex/config.toml");
+				await fs.mkdir(path.dirname(file), { recursive: true });
+				const bytes = `${markers}model = "resident-secret"\n`;
+				await fs.writeFile(file, bytes);
+				for (const dry of [true, false]) {
+					const failure = await adapter.syncConfig(tmpDir, { model: "resident-secret" }, dry).then(() => "unexpected success", (error: unknown) => String(error));
+					expect(failure).toMatch(/codex-config-migrate\.ts.*--target.*--key/);
+					expect(failure).not.toContain("resident-secret");
+					expect(await fs.readFile(file, "utf8")).toBe(bytes);
+					expect(await fs.stat(path.join(tmpDir, ".omt")).catch(() => null)).toBeNull();
+				}
+			});
+		}
+
+		it("깨진 마커 파일을 명시 채택하면 갱신과 native 재직렬화 후 재동기화가 가능하다", async () => {
+			const file = path.join(tmpDir, ".codex/config.toml");
+			await fs.mkdir(path.dirname(file), { recursive: true });
+			await fs.writeFile(file, '# --- omt:config ---\nmodel = "old"\nuser = true\n');
+			await commitConfigState(tmpDir, await readConfigSnapshot(tmpDir), {
+				version: 1, target: ".codex/config.toml", entries: [{ path: ["model"], valueToml: 'value = "old"\n' }],
+			});
+			await adapter.syncConfig(tmpDir, { model: "new" });
+			await fs.writeFile(file, stringify(parse(await fs.readFile(file, "utf8"))));
+			await adapter.syncConfig(tmpDir, { model: "latest" });
+			expect(parse(await fs.readFile(file, "utf8"))).toEqual({ model: "latest", user: true });
+			const before = await readConfigSnapshot(tmpDir);
+			const writes: string[] = [];
+			await adapter.syncConfig(tmpDir, { model: "latest" }, false, (file) => { writes.push(file); });
+			expect(await readConfigSnapshot(tmpDir)).toEqual(before);
+			expect(writes).toEqual([]);
+		});
+
+		it("외부 값 충돌은 dry-run과 적용 모두 설정 및 상태와 다른 플랫폼 쓰기를 보존한다", async () => {
+			await adapter.syncConfig(tmpDir, { model: "owned" });
+			await fs.writeFile(path.join(tmpDir, ".codex/config.toml"), 'model = "external-secret"\n');
+			const before = await readConfigSnapshot(tmpDir);
+			const fake = makeFakeMcpAdapter();
+			for (const dry of [true, false]) {
+				await expect(fake.adapter.syncPlatformYaml(tmpDir, { config: { model: "wanted-secret" }, mcps: { add: { command: "node" } } }, dry)).rejects.toThrow(/model/);
+				expect(await readConfigSnapshot(tmpDir)).toEqual(before);
+			}
+			expect(fake.addCalls).toEqual([]);
+			expect(fake.listCalls).toEqual([]);
+		});
+
+		it("pending dry-run은 복구 필요를 보고하고 파일을 보존한다", async () => {
+			await expect(applyConfig(tmpDir, { model: "first" }, { async mutate(file, operation) {
+				await operation();
+				if (file.endsWith("codex-config-pending.json")) throw new Error("interrupt");
+			} })).rejects.toThrow("interrupt");
+			const before = await readConfigSnapshot(tmpDir);
+			await expect(adapter.syncConfig(tmpDir, { model: "second" }, true)).rejects.toThrow(/recovery/i);
+			expect(await readConfigSnapshot(tmpDir)).toEqual(before);
+		});
+
+		it("외부 배포 트랜잭션 롤백은 설정과 소유권 상태를 함께 복원한다", async () => {
+			await adapter.syncConfig(tmpDir, { model: "first" });
+			const before = await readConfigSnapshot(tmpDir);
+			const transaction = await DeployTransaction.begin(tmpDir, false);
+			if (!transaction) throw new Error("missing transaction");
+			await adapter.syncConfig(tmpDir, { model: "second" }, false, undefined, transaction);
+			await transaction.rollback();
+			await transaction.finish();
+			expect(await readConfigSnapshot(tmpDir)).toEqual(before);
+		});
+
 	});
 
 	// ---------------------------------------------------------------------------
@@ -1908,7 +1983,9 @@ describe("CodexAdapter", () => {
 			// Config, MCP commands, and the MCP manifest write route through
 			// mutationHooks — a direct manifest write would drift the
 			// DeployTransaction's tracked fingerprint (see flushMcpBlock).
-			expect(calls).toEqual([configFile, configFile, manifestFile]);
+			const pendingFile = path.join(tmpDir, ".omt", "codex-config-pending.json");
+			const stateFile = path.join(tmpDir, ".omt", "codex-config-state.json");
+			expect(calls).toEqual([pendingFile, configFile, stateFile, pendingFile, configFile, manifestFile]);
 			// writeObserver is not wired to the manifest write (mirrors
 			// reconcilePairManifest, which only routes through `mutate`).
 			expect(observed).toEqual([configFile, configFile]);
