@@ -87,7 +87,7 @@ oh-my-toong/
 ├── config.yaml      # Global defaults (use-platforms, feature-platforms, backup retention)
 ├── claude.yaml      # Per-platform config (config/hooks/mcps/plugins)
 ├── gemini.yaml      # Per-platform config (config/hooks/mcps)
-├── codex.yaml       # Per-platform config (hooks/mcps/model-map)
+├── codex.yaml       # Per-platform config (config/hooks/mcps/model-map)
 ├── opencode.yaml    # Per-platform config (config/mcps/model-map)
 └── sync.yaml        # Root sync definition (+ projects/*/sync.yaml per project)
 ```
@@ -122,7 +122,11 @@ skills:
 
 **Post-deploy format** (top-level `format: "<command>"` or `format: ["<arg>", …]`): Optional. When declared, the sync tool runs this command once at each target after deploy, so deployed files land already in the target's own formatter normal form. See `docs/sync-deploy-targets.md`.
 
-**Per-platform YAML** (`{platform}.yaml`): Colocated with `sync.yaml`, inheriting its `path`. Manages config/hooks/mcps/plugins per platform — separate from `sync.yaml` which handles component deployment only (agents, commands, skills, scripts, rules). Config/hooks deep-merge into the target's gitignored `.claude/settings.local.json` (global sync uses `settings.json`); a key set to `null` deletes that key (RFC 7386 JSON Merge Patch), while omission preserves existing state. Named MCP tombstones use `mcps.<name>: null`: Claude (root YAML at user scope, project YAML at that project's local MCP location), Codex, and OpenCode remove only the named server; Gemini rejects them. Claude plugin `{ name, state: absent }` uninstalls only that plugin at the matching user/project scope; omitted state remains `present`. A section-level `null` (`config:`/`hooks:`/`mcps:`) skips deployment for that run rather than deleting existing state. See `docs/platform-yaml-config-deployment.md` for platform destinations and the two-layer gitignore mechanism (why a personal absolute path is safe in `claude.yaml`, not just `claude.local.yaml`).
+**Per-platform YAML** (`{platform}.yaml`): Colocated with `sync.yaml`, inheriting its `path`. Manages config/hooks/mcps/plugins per platform — separate from `sync.yaml` which handles component deployment only (agents, commands, skills, scripts, rules). For Claude, config/hooks deep-merge into the target's gitignored `.claude/settings.local.json` (global sync uses `settings.json`); a key set to `null` deletes that key (RFC 7386 JSON Merge Patch), while omission preserves existing state. Named MCP tombstones use `mcps.<name>: null`: Claude (root YAML at user scope, project YAML at that project's local MCP location), Codex, and OpenCode remove only the named server; Gemini rejects them. Claude plugin `{ name, state: absent }` uninstalls only that plugin at the matching user/project scope; omitted state remains `present`. A section-level `null` (`config:`/`hooks:`/`mcps:`) skips deployment for that run rather than deleting existing state. See `docs/platform-yaml-config-deployment.md` for platform destinations and the two-layer gitignore mechanism (why a personal absolute path is safe in `claude.yaml`, not just `claude.local.yaml`).
+
+**Codex config ownership**: The default `.codex/config.toml` remains in use. Target-local `.omt/codex-config-state.json` tracks owned leaf paths and their `lastApplied` TOML values; comments, including old `omt:config` markers, do not establish ownership. Preexisting keys require explicit adoption. Omitted keys remain unchanged, explicit key-level `null` requests deletion, and conflicts preserve user settings. `make sync-dry` reads the real target and reports required adoption and conflicts without writing.
+
+**Codex recovery and MCPs**: `.omt/codex-config-pending.json` journals config/state transitions so an interrupted operation can resume when the files match recognized before/after states. This does not provide universal compare-and-swap protection against other writers. Native Codex MCP add/remove changes are captured in the same transaction; omission preserves servers and `mcps.<name>: null` deletes only that named server. The existing `codex/mcps` names manifest remains in use. See [Platform YAML Configuration Deployment](docs/platform-yaml-config-deployment.md) for ownership, adoption, and recovery details.
 
 > **Note**: `mcps/` directory is deprecated. MCPs are now defined inline in per-platform YAML files.
 
