@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import { parse } from "smol-toml";
+import { parse, stringify } from "smol-toml";
 import {
 	CodexAdapter,
 	insertManagedBlock,
@@ -903,6 +903,59 @@ describe("CodexAdapter", () => {
 	// ---------------------------------------------------------------------------
 
 	describe("MCP accumulator", () => {
+		it("명시적 null은 관리 이력 없이도 해당 서버만 제거하고 없는 서버는 건너뛴다", async () => {
+			await writeManifest(tmpDir, { "codex/mcps": ["kept", "missing"], "codex/skills": ["skill"] });
+			const { adapter: fakeAdapter, removeCalls } = makeFakeMcpAdapter([
+				{ name: "foreign", transport: { type: "stdio", command: "npx" } },
+			]);
+			await fakeAdapter.syncPlatformYaml(tmpDir, { mcps: { foreign: null, missing: null, added: { command: "node" } } }, false);
+			expect(removeCalls.map((call) => call.name)).toEqual(["foreign"]);
+			expect(JSON.parse(await fs.readFile(path.join(tmpDir, ".omt", "sync-manifest.json"), "utf-8"))).toEqual({
+				"codex/mcps": ["added", "kept"], "codex/skills": ["skill"],
+			});
+		});
+
+		for (const operation of ["add", "remove"] as const) {
+			for (const failure of ["downstream", "write-then-throw", "external-edit"] as const) {
+				it(`MCP ${operation}의 ${failure} 이후 rollback이 원본 또는 외부 편집을 보존한다`, async () => {
+					const configFile = path.join(tmpDir, ".codex", "config.toml");
+					const manifestFile = path.join(tmpDir, ".omt", "sync-manifest.json");
+					const baseline = '# --- omt:config ---\nmodel = "old"\n# --- end omt:config ---\n[mcp_servers.old]\ncommand = "node"\n';
+					await fs.mkdir(path.dirname(configFile), { recursive: true });
+					await fs.writeFile(configFile, baseline);
+					await writeManifest(tmpDir, { "codex/mcps": ["old"], "codex/skills": ["kept"] });
+					const manifestBaseline = await fs.readFile(manifestFile, "utf-8");
+					const command = async () => {
+						const config = parse(await fs.readFile(configFile, "utf-8"));
+						config.mcp_servers = operation === "add" ? { old: { command: "node" }, added: { command: "npx" } } : {};
+						await fs.writeFile(configFile, stringify(config));
+						if (failure === "write-then-throw") throw new Error("CLI failed after write");
+					};
+					const fakeAdapter = new CodexAdapter(async () => [
+						{ name: "old", transport: { type: "stdio", command: "node" } },
+					], command, command);
+					const transaction = await DeployTransaction.begin(tmpDir, false, [".omt/sync-manifest.json"]);
+					const observed: string[] = [];
+					try {
+						const run = async () => {
+							await fakeAdapter.syncPlatformYaml(tmpDir, {
+								mcps: operation === "add" ? { added: { command: "npx" } } : { old: null },
+							}, false, undefined, (file) => { observed.push(file); }, transaction!);
+							if (failure === "external-edit") await fs.appendFile(configFile, '# external edit\n');
+							throw new Error("downstream failed");
+						};
+						await expect(run()).rejects.toThrow(failure === "write-then-throw" ? "CLI failed after write" : "downstream failed");
+						const commandOutput = await fs.readFile(configFile, "utf-8");
+						expect(commandOutput).not.toContain("# --- omt:config ---");
+						await transaction!.rollback();
+						expect(await fs.readFile(configFile, "utf-8")).toBe(failure === "external-edit" ? commandOutput : baseline);
+						expect(await fs.readFile(manifestFile, "utf-8")).toBe(manifestBaseline);
+						expect(observed).toEqual(failure === "write-then-throw" ? [] : [configFile]);
+					} finally { await transaction!.finish(); }
+				});
+			}
+		}
+
 		it("accumulates 3 servers into 3 `codex mcp add` calls via `flushMcpBlock`", async () => {
 			const { adapter: fakeAdapter, addCalls, removeCalls } = makeFakeMcpAdapter();
 			fakeAdapter.resetMcpAccumulator();
@@ -932,7 +985,7 @@ describe("CodexAdapter", () => {
 			expect(addCalls.map((c) => c.name)).toEqual(["figma"]);
 		});
 
-		it("removes a manifest-tracked server no longer declared via `flushMcpBlock`", async () => {
+		it("생략된 관리 서버와 기존 manifest를 보존한다", async () => {
 			await writeManifest(tmpDir, { "codex/mcps": ["stale-server", "kept-server"] });
 			const { adapter: fakeAdapter, addCalls, removeCalls } = makeFakeMcpAdapter([
 				{ name: "stale-server", transport: { type: "stdio", command: "npx" } },
@@ -942,7 +995,7 @@ describe("CodexAdapter", () => {
 			fakeAdapter.accumulateMcp("kept-server", { command: "npx" });
 			await fakeAdapter.flushMcpBlock(tmpDir, false);
 
-			expect(removeCalls.map((c) => c.name)).toEqual(["stale-server"]);
+			expect(removeCalls).toEqual([]);
 			expect(addCalls).toEqual([]); // kept-server already equivalent, no re-add
 		});
 
@@ -974,7 +1027,7 @@ describe("CodexAdapter", () => {
 			expect(manifestExists).toBe(false);
 		});
 
-		it("`mcps: {}` removes every prior server and sets the manifest to [] via `flushMcpBlock`", async () => {
+		it("빈 mcps 선언은 기존 서버와 manifest를 보존한다", async () => {
 			await writeManifest(tmpDir, { "codex/mcps": ["old-a", "old-b"] });
 			const { adapter: fakeAdapter, removeCalls } = makeFakeMcpAdapter([
 				{ name: "old-a", transport: { type: "stdio", command: "npx" } },
@@ -983,11 +1036,11 @@ describe("CodexAdapter", () => {
 			fakeAdapter.resetMcpAccumulator();
 			await fakeAdapter.flushMcpBlock(tmpDir, false);
 
-			expect(removeCalls.map((c) => c.name).sort()).toEqual(["old-a", "old-b"]);
+			expect(removeCalls).toEqual([]);
 			const manifest = JSON.parse(
 				await fs.readFile(path.join(tmpDir, ".omt", "sync-manifest.json"), "utf-8"),
 			);
-			expect(manifest["codex/mcps"]).toEqual([]);
+			expect(manifest["codex/mcps"]).toEqual(["old-a", "old-b"]);
 		});
 
 		it("a first-ever run with 0 servers and no manifest is a clean no-op via `flushMcpBlock`", async () => {
@@ -1017,7 +1070,7 @@ describe("CodexAdapter", () => {
 			expect(addCalls.map((c) => c.name)).toEqual(["server-a"]);
 			const manifestFile = path.join(tmpDir, ".omt", "sync-manifest.json");
 			// (a) the manifest write went through `mutate`, not a direct `writeManifest`
-			expect(recorded).toEqual([manifestFile]);
+			expect(recorded).toEqual([path.join(tmpDir, ".codex", "config.toml"), manifestFile]);
 			// (b) the routed operation actually ran — the manifest reflects the new declared set
 			const manifest = JSON.parse(await fs.readFile(manifestFile, "utf-8"));
 			expect(manifest["codex/mcps"]).toEqual(["server-a"]);
@@ -1138,7 +1191,7 @@ describe("CodexAdapter", () => {
 			expect(result.modelMap).toBeUndefined();
 		});
 
-		it("removes every manifest-tracked server and includes 'mcps' in processedSections when mcps: {} via `syncPlatformYaml`", async () => {
+		it("빈 mcps 섹션은 처리하되 기존 서버를 보존한다", async () => {
 			await writeManifest(tmpDir, { "codex/mcps": ["old-server"] });
 			const { adapter: fakeAdapter, removeCalls } = makeFakeMcpAdapter([
 				{ name: "old-server", transport: { type: "stdio", command: "old-cmd" } },
@@ -1147,7 +1200,7 @@ describe("CodexAdapter", () => {
 			const result = await fakeAdapter.syncPlatformYaml(tmpDir, { mcps: {} }, false);
 
 			expect(result.processedSections).toContain("mcps");
-			expect(removeCalls.map((c) => c.name)).toEqual(["old-server"]);
+			expect(removeCalls).toEqual([]);
 		});
 	});
 
@@ -1805,7 +1858,7 @@ describe("CodexAdapter", () => {
 				await fs.stat(path.join(targetBase, ".codex", "hooks.json")).then(() => true).catch(() => false),
 			).toBe(false);
 		});
-		it("notifies after each successful OMT-owned config, hook bundle, and hooks.json write via `syncPlatformYaml` — MCP no longer writes config.toml", async () => {
+		it("설정·MCP·훅의 성공한 쓰기마다 observer를 호출한다", async () => {
 			const { adapter: fakeAdapter, addCalls } = makeFakeMcpAdapter();
 			const sourceHookDir = path.join(tmpDir, "external-hook");
 			await fs.mkdir(sourceHookDir, { recursive: true });
@@ -1827,13 +1880,12 @@ describe("CodexAdapter", () => {
 			const configFile = path.join(tmpDir, ".codex", "config.toml");
 			const hookDir = path.join(tmpDir, ".codex", "hooks", path.basename(sourceHookDir));
 			const hooksFile = path.join(tmpDir, ".codex", "hooks.json");
-			// config.toml is written ONCE, for the `config` section — MCP flush no
-			// longer touches config.toml at all, so it does not appear a second time.
-			expect(writes).toEqual([configFile, hookDir, hooksFile]);
+			// Config writes and the MCP command both notify the config path.
+			expect(writes).toEqual([configFile, configFile, hookDir, hooksFile]);
 			expect(addCalls.map((c) => c.name)).toEqual(["server-a"]);
 		});
 
-		it("forwards mutation hooks to both the config write and the MCP manifest write via `syncPlatformYaml`", async () => {
+		it("설정·MCP 명령·manifest 쓰기를 각각 mutation hook으로 감싼다", async () => {
 			const { adapter: fakeAdapter, addCalls } = makeFakeMcpAdapter();
 			const calls: string[] = [];
 			const observed: string[] = [];
@@ -1853,13 +1905,13 @@ describe("CodexAdapter", () => {
 			);
 			const configFile = path.join(tmpDir, ".codex", "config.toml");
 			const manifestFile = path.join(tmpDir, ".omt", "sync-manifest.json");
-			// Both the config write and the MCP manifest write route through
+			// Config, MCP commands, and the MCP manifest write route through
 			// mutationHooks — a direct manifest write would drift the
 			// DeployTransaction's tracked fingerprint (see flushMcpBlock).
-			expect(calls).toEqual([configFile, manifestFile]);
+			expect(calls).toEqual([configFile, configFile, manifestFile]);
 			// writeObserver is not wired to the manifest write (mirrors
 			// reconcilePairManifest, which only routes through `mutate`).
-			expect(observed).toEqual([configFile]);
+			expect(observed).toEqual([configFile, configFile]);
 			expect(addCalls.map((c) => c.name)).toEqual(["server"]);
 		});
 

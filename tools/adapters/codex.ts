@@ -28,7 +28,7 @@ import { parseFrontmatter } from "../lib/frontmatter.ts";
 import { PLATFORM_REWRITE_RULES, applyRewriteRules } from "../lib/rewrite-rules.ts";
 import { composePreToolTraceCommand } from "../lib/pretool-trace-command.ts";
 import { isGlobalSync } from "../lib/path-utils.ts";
-import { readManifest, computeOrphans, writeManifest, type ManifestData } from "../lib/deploy-manifest.ts";
+import { readManifest, writeManifest, type ManifestData } from "../lib/deploy-manifest.ts";
 import type {
 	ModelMap,
 	PlatformConfigResult,
@@ -722,7 +722,7 @@ export class CodexAdapter implements PlatformAdapter {
 	readonly contextFile = "AGENTS.md";
 
 	/** Accumulated MCP servers (reset at the start of each syncPlatformYaml call) */
-	private mcpAccumulator: Record<string, Record<string, unknown>> = {};
+	private mcpAccumulator: Record<string, Record<string, unknown> | null> = {};
 
 	/** Injected `codex mcp` CLI wrappers — swap out in tests. */
 	private readonly mcpLister: McpLister;
@@ -1077,95 +1077,70 @@ export class CodexAdapter implements PlatformAdapter {
 	}
 
 	/** Accumulate a single MCP server */
-	accumulateMcp(name: string, server: Record<string, unknown>): void {
+	accumulateMcp(name: string, server: Record<string, unknown> | null): void {
 		this.mcpAccumulator[name] = server;
 	}
 
 	/**
-	 * Flush all accumulated MCP servers via the native `codex mcp add`/`codex
-	 * mcp remove` CLI (no OMT-side config.toml write, so `writeObserver` is
-	 * unused here — kept in the signature only because `syncPlatformYaml`
-	 * passes it positionally to every section flush).
-	 *
-	 * Orphan tracking (a server declared in a previous run but not this one)
-	 * has no on-disk fingerprint of its own the way a deployed file does — the
-	 * CLI's own state doesn't record OMT ownership — so it goes through
-	 * `.omt/sync-manifest.json` (`readManifest`/`computeOrphans` from
-	 * deploy-manifest.ts) under the `"codex/mcps"` pair key, exactly like every
-	 * other category's orphan bookkeeping, except removal here is `codex mcp
-	 * remove` rather than a file delete. The manifest write at the end IS
-	 * routed through `mutationHooks` when present — a `DeployTransaction`
-	 * snapshots this file at transaction start, and a direct `writeManifest`
-	 * would drift its tracked fingerprint, tripping `Deploy transaction
-	 * conflict` when another category later reconciles its own manifest pair.
+	 * Apply explicit MCP declarations. Omission preserves servers and ownership;
+	 * only a named null tombstone authorizes removal. Native CLI commands rewrite
+	 * config.toml, so each command must participate in the deployment transaction.
+	 * Keep declarations after failures/dry runs so a retry can reconcile CLI state.
 	 */
 	async flushMcpBlock(
 		targetPath: string,
 		dryRun: boolean,
-		_writeObserver?: PlatformWriteObserver,
+		writeObserver?: PlatformWriteObserver,
 		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
-		const desired = this.mcpAccumulator;
+		const desired = { ...this.mcpAccumulator };
 		const declaredNames = Object.keys(desired).sort();
 		const codexHome = path.join(targetPath, this.configDir);
-		const deployRoot = targetPath;
+		const configFile = path.join(codexHome, "config.toml");
 		const manifestKey = "codex/mcps";
-
-		// BOOTSTRAP (readManifest -> null: absent/corrupt manifest) means no
-		// prior declared set is known — orphan removal is skipped entirely,
-		// same hard branch every other category's manifest reconciliation uses.
-		const manifest = await readManifest(deployRoot);
-		const prev = manifest === null ? null : (manifest[manifestKey] ?? []);
-		const orphans = prev === null ? [] : computeOrphans(prev, declaredNames);
+		const manifest = await readManifest(targetPath);
+		const managedNames = new Set(manifest?.[manifestKey] ?? []);
+		for (const name of declaredNames) {
+			if (desired[name] === null) managedNames.delete(name);
+			else managedNames.add(name);
+		}
+		const nextNames = [...managedNames].sort();
 
 		if (dryRun) {
 			for (const name of declaredNames) {
-				logDry(`codex mcp add ${name} (CODEX_HOME=${codexHome})`);
+				const action = desired[name] === null ? "remove" : "add";
+				logDry(`codex mcp ${action} ${name} (CODEX_HOME=${codexHome})`);
 			}
-			for (const name of orphans) {
-				logDry(`codex mcp remove ${name} (CODEX_HOME=${codexHome})`);
-			}
-			logDry(`MCP manifest pair '${manifestKey}': ${JSON.stringify(declaredNames)}`);
+			logDry(`MCP manifest pair '${manifestKey}': ${JSON.stringify(nextNames)}`);
 			return;
 		}
 
 		const current = await this.mcpLister(codexHome);
 		const byName = new Map(current.map((entry) => [entry.name, entry] as const));
-
 		for (const name of declaredNames) {
 			const server = desired[name];
 			const existing = byName.get(name);
-			// Add only when absent or changed — re-adding an unchanged http
-			// (`--url`) server re-triggers its OAuth flow (see the lazy: note on
-			// mcpServerToAddArgs), so an unnecessary add is not merely wasteful.
-			if (!existing || !mcpServerEquivalent(server, existing)) {
-				await this.mcpAdder(codexHome, name, mcpServerToAddArgs(server));
-				logInfo(`MCP server added: ${name}`);
+			let operation: () => Promise<void>;
+			if (server === null) {
+				if (!existing) continue;
+				operation = () => this.mcpRemover(codexHome, name);
+			} else {
+				// Re-adding an equivalent HTTP server can re-trigger OAuth.
+				if (existing && mcpServerEquivalent(server, existing)) continue;
+				operation = () => this.mcpAdder(codexHome, name, mcpServerToAddArgs(server));
 			}
+			if (mutationHooks) await mutationHooks.mutate(configFile, operation);
+			else await operation();
+			if (writeObserver) await writeObserver(configFile);
+			logInfo(`MCP server ${server === null ? "removed" : "added"}: ${name}`);
 		}
 
-		for (const name of orphans) {
-			// Only remove what the CLI still reports — an orphan already absent
-			// from `codex mcp list` needs no `codex mcp remove` call (idempotent
-			// either way, but this avoids a pointless subprocess + config parse).
-			if (byName.has(name)) {
-				await this.mcpRemover(codexHome, name);
-				logInfo(`MCP server removed: ${name}`);
-			}
-		}
-
-		const nextManifest: ManifestData = manifest !== null ? { ...manifest } : {};
-		nextManifest[manifestKey] = declaredNames;
-		// Route the manifest write through the DeployTransaction (when present) so it
-		// updates the tracked fingerprint — a direct writeManifest bypasses the
-		// transaction snapshot and trips `Deploy transaction conflict` when the
-		// pipeline later reconciles other pairs. Path must match manifestPath() in
-		// deploy-manifest.ts (and sync.ts's inline path.join(root,".omt","sync-manifest.json")).
-		const manifestFile = path.join(deployRoot, ".omt", "sync-manifest.json");
-		const writeManifestOp = async (): Promise<void> => { await writeManifest(deployRoot, nextManifest); };
+		const nextManifest: ManifestData = { ...manifest, [manifestKey]: nextNames };
+		const manifestFile = path.join(targetPath, ".omt", "sync-manifest.json");
+		const writeManifestOp = async (): Promise<void> => { await writeManifest(targetPath, nextManifest); };
 		if (mutationHooks) await mutationHooks.mutate(manifestFile, writeManifestOp);
 		else await writeManifestOp();
-		logInfo(`MCP manifest updated: ${declaredNames.length} server(s) declared`);
+		logInfo(`MCP manifest updated: ${nextNames.length} server(s) managed`);
 	}
 
 	// ---------------------------------------------------------------------------
@@ -1284,12 +1259,10 @@ export class CodexAdapter implements PlatformAdapter {
 
 		// --- mcps ---
 		if (yaml.mcps !== undefined && yaml.mcps !== null) {
-			// After overlay merge a server value can be null: a local override file
-			// uses `<name>: null` as a deletion marker to drop a server inherited from
-			// the base config. Skip those so the managed block omits them entirely.
+			// Preserve named null tombstones through accumulation; omission is not deletion.
 			const entries = Object.entries<Record<string, unknown> | null>(yaml.mcps);
 			for (const [name, server] of entries) {
-				if (server === undefined || server === null) continue;
+				if (server === undefined) continue;
 				this.accumulateMcp(name, server);
 				if (!dryRun) {
 					logInfo(`MCP accumulated: ${name}`);
