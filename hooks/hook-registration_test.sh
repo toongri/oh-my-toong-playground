@@ -22,8 +22,8 @@
 #     falsifying the earlier assumption that Codex lacked this event; the
 #     ledger write-guard is wired there just like Claude's, alongside the
 #     SessionStart recording instruction (rules-injector).
-#   - The six core Claude hooks (keyword-detector.sh, pre-tool-enforcer.sh,
-#     review-exec-guard.sh, session-start.sh, orphan-reaper.sh, persistent-mode)
+#   - The five core Claude hooks (keyword-detector.sh, pre-tool-enforcer.sh,
+#     session-start.sh, orphan-reaper.sh, persistent-mode)
 #     are registered in
 #     the TRACKED root claude.yaml, and in NO projects/*/claude.yaml. Two
 #     invariants the pairing check above cannot see:
@@ -234,7 +234,6 @@ test_codex_explain_diff_seed_not_registered_under_pretooluse() {
 # =============================================================================
 _CORE_HOOK_PAIRS="UserPromptSubmit:keyword-detector.sh
 PreToolUse:pre-tool-enforcer.sh
-PreToolUse:review-exec-guard.sh
 SessionStart:session-start.sh
 SessionStart:orphan-reaper.sh
 Stop:persistent-mode"
@@ -316,67 +315,6 @@ $_CORE_HOOK_PAIRS
 EOF
     done < <(_all_claude_yaml_files)
 
-    [ "$failed" -eq 0 ]
-}
-
-# =============================================================================
-# Review-execution guards are global shell routes. Claude's native Bash tool
-# uses the same supported matcher as label-commit-gate.sh; Codex's dispatcher
-# full-matches the configured regex, so every shell-tool spelling currently
-# used by the root config must be covered explicitly.
-# =============================================================================
-test_claude_review_exec_guard_registered_for_bash() {
-    local block matcher_line
-    block=$(_extract_hook_event_block "$REPO_DIR/claude.yaml" "PreToolUse")
-    if ! echo "$block" | grep -qF 'component: review-exec-guard.sh'; then
-        echo "ASSERTION FAILED: root claude.yaml PreToolUse must register review-exec-guard.sh"
-        return 1
-    fi
-    matcher_line=$(echo "$block" | grep -A2 'component: review-exec-guard.sh' | grep 'matcher:')
-    if ! echo "$matcher_line" | grep -qE 'matcher:[[:space:]]*"Bash"$'; then
-        echo "ASSERTION FAILED: review-exec-guard.sh must use the supported Claude Bash matcher (got: ${matcher_line:-<none>})"
-        return 1
-    fi
-}
-
-test_codex_review_exec_guard_registered_for_all_shell_tools() {
-    local block matcher_line matcher tool
-    block=$(_extract_hook_event_block "$REPO_DIR/codex.yaml" "PreToolUse")
-    if ! echo "$block" | grep -qF 'component: codex-review-exec-guard.sh'; then
-        echo "ASSERTION FAILED: codex.yaml PreToolUse must register codex-review-exec-guard.sh"
-        return 1
-    fi
-    matcher_line=$(echo "$block" | grep -A2 'component: codex-review-exec-guard.sh' | grep 'matcher:')
-    matcher=$(echo "$matcher_line" | sed -E 's/^[[:space:]]*matcher:[[:space:]]*"(.*)"[[:space:]]*$/\1/')
-    if [ -z "$matcher" ]; then
-        echo "ASSERTION FAILED: could not extract codex-review-exec-guard.sh's matcher (got: ${matcher_line:-<none>})"
-        return 1
-    fi
-    for tool in Bash bash shell_command exec_command; do
-        if ! printf '%s\n' "$tool" | grep -qE "^${matcher}\$"; then
-            echo "ASSERTION FAILED: codex-review-exec-guard.sh matcher \"$matcher\" must full-match shell tool \"$tool\""
-            return 1
-        fi
-    done
-}
-
-test_review_exec_guards_not_registered_in_local_or_project_yaml() {
-    local file component event block failed=0
-    while IFS= read -r file; do
-        [ -f "$file" ] || continue
-        case "$file" in
-            "$REPO_DIR/claude.yaml"|"$REPO_DIR/codex.yaml") continue ;;
-        esac
-        for component in review-exec-guard.sh codex-review-exec-guard.sh; do
-            for event in PreToolUse; do
-                block=$(_extract_hook_event_block "$file" "$event")
-                if echo "$block" | grep -qF "component: $component"; then
-                    echo "ASSERTION FAILED: $file re-declares global review execution guard $component under $event"
-                    failed=1
-                fi
-            done
-        done
-    done < <(find "$REPO_DIR" \( -name 'claude.yaml' -o -name 'codex.yaml' -o -name '*.local.yaml' \) -type f | sort)
     [ "$failed" -eq 0 ]
 }
 
@@ -617,7 +555,6 @@ EOF
 
 _claude_pretooluse_expected_ids="pre-tool-enforcer.sh
 qa-driver-guard.sh
-review-exec-guard.sh
 label-commit-gate.sh
 explain-diff-artifact-guard.sh"
 
@@ -627,7 +564,6 @@ codex-explain-diff-artifact-guard.sh
 codex-write-guard.sh
 codex-qa-driver-guard.sh
 codex-label-commit-gate.sh
-codex-review-exec-guard.sh
 codex.verify-entrypoint-gate
 codex-spawn-depth-gate.sh
 codex-review-dispatch-gate.sh"
@@ -732,9 +668,6 @@ main() {
     run_test test_core_claude_hooks_registered_in_tracked_root_yaml
     run_test test_orphan_reaper_registered_in_tracked_root_yaml
     run_test test_core_claude_hooks_not_duplicated_per_project
-    run_test test_claude_review_exec_guard_registered_for_bash
-    run_test test_codex_review_exec_guard_registered_for_all_shell_tools
-    run_test test_review_exec_guards_not_registered_in_local_or_project_yaml
     run_test test_codex_yaml_spawn_depth_gate_registered_with_full_match_matcher
     run_test test_codex_yaml_spawn_depth_gate_matcher_never_bare
     run_test test_codex_spawn_depth_gate_matcher_reaches_runtime_tool_name
