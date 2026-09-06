@@ -6,14 +6,9 @@
 # inert on the V2 spawn path (codex-spawn-depth-gate.sh now enforces that cap
 # instead). Deleting the whole `config:` key is not equivalent to emptying it:
 # syncPlatformYaml only calls syncConfig when `yaml.config` is present
-# (tools/adapters/codex.ts:715), so with the key absent the deployed
-# `.codex/config.toml` keeps whatever its `# --- omt:config ---` block last
-# received -- forever, on every subsequent sync. Installs synced before the
-# removal would silently retain `[agents] max_depth = 2` while fresh installs
-# get nothing, so "the key is gone" would be true only for new machines.
-# Any declared mapping -- empty or not -- keeps syncConfig reachable;
-# insertManagedBlock replaces the block wholesale each sync, so the deployed
-# block always matches exactly what's declared here, never a stale carryover.
+# (tools/adapters/codex.ts:1070), so with the key absent the deployed
+# `.codex/config.toml` can retain the previous value on later syncs.
+# Any declared mapping -- empty or not -- keeps syncConfig reachable.
 config:
   features:
     multi_agent_v2:

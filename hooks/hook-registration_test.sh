@@ -458,14 +458,13 @@ test_codex_yaml_keeps_config_section_declared_so_stale_keys_can_be_cleared() {
     if ! grep -qE '^config:' "$REPO_DIR/codex.yaml"; then
         echo "ASSERTION FAILED: codex.yaml declares no top-level 'config:' key."
         echo "  Deleting that key is NOT the same as emptying it. syncPlatformYaml calls"
-        echo "  syncConfig only when yaml.config is present (tools/adapters/codex.ts:715),"
-        echo "  so with the key absent the deployed .codex/config.toml keeps whatever its"
-        echo "  '# --- omt:config ---' block last received, on every subsequent sync."
+        echo "  syncConfig only when yaml.config is present (tools/adapters/codex.ts:1070),"
+        echo "  so with the key absent the deployed .codex/config.toml can retain its"
+        echo "  previous value on later syncs."
         echo "  Measured: after agents.max_depth was deleted from codex.yaml, this machine's"
         echo "  ~/.codex/config.toml still held '[agents] max_depth = 2' -- so the key was"
-        echo "  gone only on installs that had never synced it. Keep 'config: {}' declared;"
-        echo "  insertManagedBlock replaces the block wholesale, so an empty mapping is what"
-        echo "  actually clears it."
+        echo "  gone only on installs that had never synced it. Keep 'config: {}' declared"
+        echo "  so the ownership store can reconcile its keys on every sync."
         return 1
     fi
 }
