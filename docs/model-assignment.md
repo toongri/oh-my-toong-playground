@@ -40,8 +40,9 @@
 3. **실패가 관측되지 않는다** — 묻지 않은 질문은 산출물에 남지 않으므로 diff할 대상이 없다.
 4. **상류다** — 출력이 하류 산출물의 입력이 되어, 품질 저하가 전파되면서 출처 추적이 끊긴다.
 
-네 조건이 다 걸리는 것은 현재 `metis` 하나이고, 판별을 실제로 가르는 것은 두 번째 조건이다.
-적용 근거는 아래 개별 기록 참조.
+2026-07-30의 `metis` 상향 결정은 이 네 조건을 근거로 삼았다. 현재 계약에는 사실 주장에
+대한 직접 grep/read 의무가 있으므로, 두 번째 조건을 그대로 적용할 수 없다. 누락·부재
+판정의 잔여 위험과 당시 결정의 관계는 아래 개별 기록 참조.
 
 ### 원칙이 충돌할 때는 위임 구조 원칙이 이긴다
 
@@ -59,20 +60,20 @@ verdict를 자기가 만드는 것처럼 보이지만 실제로는 `skills/insan
 
 ## 현재 배정
 
-| 에이전트 | 등급 | 판단 근거 |
-|---|---|---|
-| `code-reviewer` | opus | 자기 모델로 직접 판정 |
-| `issue-reviewer` | opus | 자기 모델로 직접 판정 |
-| `metis` | fable | 강제 증거 대조 없는 부재 판정 (부재 판정 원칙 4조건) |
-| `momus` | opus | 자기 모델로 직접 판정 |
-| `tech-claim-examiner` | opus | 자기 모델로 직접 판정 |
-| `daedalus` | sonnet | 충돌 셀 — 위임 구조 우선 |
-| `oracle` | sonnet | 충돌 셀 — 위임 구조 우선 |
-| `explore` | sonnet | 탐색 |
-| `librarian` | sonnet | 탐색 |
-| `hermes` | sonnet | 탐색 (explore/librarian의 depth peer) |
-| `mnemosyne` | sonnet | 생성 |
-| `sisyphus-junior` | sonnet | 생성 |
+| 에이전트 | 등급 | 초기 effort | 판단 근거 |
+|---|---|---|---|
+| `code-reviewer` | opus | high | 자기 모델로 직접 판정 |
+| `issue-reviewer` | opus | high | 자기 모델로 직접 판정 |
+| `metis` | fable | high | 부재 판정 위험에 따른 기존 배정 유지; 현재 사실 대조 의무와 구분 |
+| `momus` | opus | high | 자기 모델로 직접 판정 |
+| `tech-claim-examiner` | opus | high | 자기 모델로 직접 판정 |
+| `daedalus` | sonnet | medium | 충돌 셀 — 위임 구조 우선 |
+| `oracle` | sonnet | medium | 충돌 셀 — 위임 구조 우선 |
+| `explore` | sonnet | medium | 탐색 |
+| `librarian` | sonnet | medium | 탐색 |
+| `hermes` | sonnet | medium | 탐색 (explore/librarian의 depth peer) |
+| `mnemosyne` | sonnet | low | 생성 |
+| `sisyphus-junior` | sonnet | medium | 생성 |
 
 에이전트의 등급은 `agents/<name>.md` frontmatter의 `model:` 한 필드가 유일한 출처다.
 
@@ -84,9 +85,10 @@ verdict를 자기가 만드는 것처럼 보이지만 실제로는 `skills/insan
 
 `fable`이 그 문턱을 넘은 근거는 부재 판정 원칙이고, 그 원칙은 Opus로는 표현되지 않는
 배정을 하나 만든다. 이 등급은 두 배포면 모두에서 실제로 갈린다 — claude는
-`claude-fable-5` vs Opus 5, codex는 `gpt-5.6-sol` vs `gpt-5.6-terra`다(2026-08-04
-재배정 이후. 그전에는 codex에 `gpt-5.6-sol` 위가 없어 `fable`과 `opus`가 같은 모델로
-떨어지는 플랫폼 비대칭이 있었다).
+`claude-fable-5` vs Opus 5, codex의 기본 tier 경로는 `gpt-5.6-sol` vs
+`gpt-5.6-terra`다(2026-08-04 재배정 이후. 그전에는 codex에 `gpt-5.6-sol` 위가 없어
+`fable`과 `opus`가 같은 모델로 떨어지는 플랫폼 비대칭이 있었다). Codex의 `metis`는
+`gpt-6-astra` 모델과 `effort: high`를 명시적으로 사용한다.
 
 ## 등급을 실제 모델로 치환하는 규칙
 
@@ -97,18 +99,21 @@ verdict를 자기가 만드는 것처럼 보이지만 실제로는 `skills/insan
 ```yaml
 model-map:
   tiers:
-    fable:  { model: gpt-5.6-sol }
+    fable:  { model: gpt-5.6-sol, effort: high }
     opus:   { model: gpt-5.6-terra, effort: high }
-    sonnet: { model: gpt-5.6-luna }
+    sonnet: { model: gpt-5.6-luna, effort: medium }
+  agents:
+    mnemosyne: { model: gpt-5.6-luna, effort: low }
 ```
 
-**등급은 기본적으로 모델만 정한다.** `effort`를 적지 않으면 배포되는 role TOML에
-`model_reasoning_effort` 키가 실리지 않고, 각 에이전트는 세션에 설정된 effort를 따른다.
-sync 시점에 값을 얼려두지 않겠다는 뜻이다.
+**현재 effort는 초기 역할 기반 정책이다.** 측정으로 최적값을 확정한 것이 아니라, 생성·탐색·
+위임 역할에는 medium을, 직접 검증·판단 역할에는 high를, `mnemosyne`에는 low를 권장한다.
+이 값은 배포되는 role TOML의 `model_reasoning_effort`에 기록되어 sync 시점에 고정된다.
+등급의 모델 배정과 effort 권장은 서로 독립적으로 조정할 수 있다.
 
-예외는 `opus` 하나다(2026-08-11). 이 등급에 속한 에이전트는 전부 판정면이고 — 리뷰·진단·
-플랜 심사 — 그 산출물을 아무도 재검증하지 않는다. 세션이 low/medium으로 돌고 있다는 이유만으로
-판정 품질이 내려가면 안 되므로, 등급 자체에 `effort: high`를 고정한다.
+`fable`과 `opus`는 직접 검증·판단하는 역할이므로 등급 자체에 `effort: high`를 고정한다.
+`sonnet`은 생성·탐색·위임 역할의 공통 기본값으로 `effort: medium`을 사용한다. `mnemosyne`은
+등급의 모델을 그대로 쓰면서 `agents:`에서 `effort: low`로 전체 항목을 교체한다.
 
 ### `agents:`는 등급으로 표현 불가능한 것 전용
 
@@ -116,8 +121,8 @@ sync 시점에 값을 얼려두지 않겠다는 뜻이다.
 resolveCodexAgentModel: modelMap.agents?.[name] ?? modelMap.tiers[tier]
 ```
 
-`agents:`에 들어갈 자격이 있는 것은 **모델이든 effort든 어느 등급으로도 표현되지 않는
-에이전트**다 — 예를 들어 자기 등급의 고정값도, 세션값도 아닌 effort가 필요한 경우.
+`agents:`에 들어갈 자격이 있는 것은 **등급의 모델·effort 조합으로 표현되지 않는 에이전트**다.
+항목을 쓰면 tier entry 전체가 교체되므로 모델과 effort를 모두 적는다.
 
 순수한 모델 차등은 `agents:`가 아니라 등급으로 표현한다. 새 엔트리를 추가할 때는 그것이
 **왜 등급으로 표현될 수 없는지**를 함께 적어야 한다.
@@ -138,12 +143,16 @@ resolveCodexAgentModel: modelMap.agents?.[name] ?? modelMap.tiers[tier]
 `momus`와의 대조로 결정했다. 둘 다 등급이 opus였고 역할도 같은 검증층이지만, 판정을 만드는
 구조가 다르다.
 
-`metis`의 계약(`agents/metis.md`)은 "Operate with available context only"이고, `momus`의
-Reference Verification(`skills/momus/SKILL.md`)에 대응하는 강제 조항이 없다. Read·Glob·Grep·
-Bash를 갖고 있어도 증거를 확인하러 가는 대신 `Unknown + Verification Plan`으로 표시한다. 그런데
-차단 축인 B1-B4 화이트리스트는 네 축이 전부 부재 판정이다 — 검증 가능한 AC가 없는 요구사항,
-진술된 스코프 경계 없음, 관측 가능한 종료상태가 없는 AC와 `| decider:` 절 부재, 검증도
-`Unknown` 표시도 안 된 가정. 강제된 앵커 없이 집합에 대한 부재를 주장하는 형태다. 반면
+당시 배정 근거는 `metis`의 부재 판정에 강제 증거 대조가 부족하다는 것이었다. 현재
+[계약](../agents/metis.md)은 사실 주장을 직접 grep/read로 확인하고 파일 경로를 인용하도록
+명시한다. 개수·목록·코드 동작 주장도 확인 대상이며, 증거가 없을 때
+`Unknown + Verification Plan`으로 표시한다. 따라서 현재 계약에 직접 증거 대조 의무가
+없다고 설명하면 틀리다.
+
+남는 위험은 누락·부재 판정이다. B1-B4는 요구사항의 AC, 스코프 경계, 관측 가능한 종료상태와
+결정자, 검증되지 않은 가정을 다룬다. 현재 계약은 코드 사실에 `file:line`, 문서의 누락에는
+절·인용 앵커를 요구하지만, 앵커가 있다고 검사 집합 전체의 누락을 빠짐없이 판정한 것은
+아니다. 이 구분은 기존 fable 배정을 설명하며, 모델이나 effort를 새로 변경하는 결정은 아니다. 반면
 `momus`는 Reference Verification이 MANDATORY고, verdict가 `[CERTAIN]` 유무로 기계적으로
 결정되며, 잘못된 `[CERTAIN]`은 저자가 한 라운드에서 반박한다 — 정확도가 읽기를 실제로
 했는가에서 나오고, 오류가 검출된다.
@@ -211,8 +220,20 @@ Claude 시절 frontmatter `model: haiku`를 코덱스 슬러그로 기계 번역
   같은 별칭 테이블에 실린 것을 확인했으나, 그 테이블이 에이전트 frontmatter 경로에도 쓰이는지는
   정적 확인으로 판별되지 않는다. 착지 확인 방법은 배포 후 metis를 실제로 디스패치해 어느
   모델이 돌았는지 보는 것뿐이다.
-- **codex** — role TOML의 `model` 키는 세션·CLI에서 지정한 모델을 이긴다. 배포된 값이
-  실행 시점의 값이다. 세 티어는 `gpt-5.6-sol`(`fable`)·`gpt-5.6-terra`(`opus`)·
+- **codex** — 활성 `CODEX_HOME`과 프로젝트 설정에서 role이 발견되고, 네이티브
+  `spawn_agent`의 `agent_type`으로 그 role을 선택해야 role TOML의 `model`이 적용된다.
+  `task_name`만 role 이름으로 지정해도 role이 선택되는 것은 아니다. 공식 CLI 0.153.4에서는
+  선택된 custom role의 모델이 부모·세션·CLI의 모델보다 우선하며, full-history fork에도
+  적용된다([role 적용 소스](https://github.com/openai/codex/blob/rust-v0.153.4/codex-rs/core/src/tools/handlers/multi_agents_v2/spawn.rs#L127-L145),
+  [full fork 테스트](https://github.com/openai/codex/blob/rust-v0.153.4/codex-rs/core/src/tools/handlers/multi_agents_tests.rs#L374-L407)).
+  일부 도구 인터페이스는 full fork의 per-call `model`/`reasoning_effort`를 금지하지만,
+  이는 별도 제약이다. 배포 파일의 존재만으로 실행 세션의 role 발견·선택·실행 모델을
+  보장하지 않으므로, 활성 설정과 도구가 노출한 `agent_type`, 실제 실행 기록을 확인한다.
+  OMT의 모든 네이티브 spawn은 별도의 [Codex spawn 규칙](../rules/codex-subagent-spawn.md)에
+  따라 `fork_turns: "none"`과 비어 있지 않은 `agent_type`을 명시한다. 일반 작업은
+  `default`, 전문 작업은 정확한 custom role 이름을 사용한다. OMT의 `explore`와
+  네이티브 `explorer`는 서로 다른 role이다. role 선택은 대화 이력 정책과 구분한다.
+  세 티어는 `gpt-5.6-sol`(`fable`)·`gpt-5.6-terra`(`opus`)·
   `gpt-5.6-luna`(`sonnet`)로 각각 갈린다 — 어느 티어든 `codex.yaml`에서 지우면
   `assertMappedTier`가 그 티어를 쓰는 에이전트의 codex 배포를 하드 실패시킨다
   (예: `fable` 삭제 → `metis` 실패).

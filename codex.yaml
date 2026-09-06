@@ -24,15 +24,13 @@ config:
       # Do NOT add `enabled = true` here: it would force V1-model sessions
       # into V2 too, which is out of scope for this change.
       max_concurrent_threads_per_session: 20
-      # V2 hides `model`/`reasoning_effort` from the `spawn_agent` tool
-      # schema by default, so a child thread always inherits the parent
-      # session's model with no way to override it. This restores those
-      # fields to the schema. Arming the capability alone does not change
-      # any child's model -- only an orchestrator that explicitly passes
-      # `model` on spawn does, and nothing in OMT does that yet, so
-      # children still inherit the session model today.
+      # Expose optional `model`/`reasoning_effort` overrides in V2's
+      # `spawn_agent` schema. Schema availability does not select a model.
+      # When Codex discovers role TOMLs, native `agent_type` selection
+      # applies the role's model and effort without explicit overrides.
       expose_spawn_agent_model_overrides: true
-      # `expose_spawn_agent_model_overrides` alone 400s at spawn time:
+      # Historical codex 0.148.0 probe: enabling only
+      # `expose_spawn_agent_model_overrides` returned 400 at spawn time:
       # `collaboration` is a reserved tool namespace and the backend
       # rejects a modified schema under it. Renaming the namespace to
       # "agents" moves the emitted tool name from
@@ -44,11 +42,9 @@ config:
       tool_namespace: "agents"
 
 model-map:
-  # A tier normally sets the model only. Omitting `effort` leaves
-  # `model_reasoning_effort` out of the emitted role TOML
-  # (tools/adapters/codex.ts:55), so each agent runs at whatever effort the
-  # session is configured for instead of a value frozen at sync time. `opus` is
-  # the exception -- see its entry.
+  # Tiers set the model and the initial role-based effort recommendation.
+  # `model_reasoning_effort` is emitted into each role TOML
+  # (tools/adapters/codex.ts:55), so these values are fixed at sync time.
   tiers:
     # Every tier named here is load-bearing regardless of what it resolves to:
     # `assertMappedTier` (tools/lib/model-map.ts:22) aborts sync for any
@@ -56,18 +52,18 @@ model-map:
     # `agents/metis.md` stops deploying to codex with a named ModelMapError.
     fable:
       model: gpt-5.6-sol
+      effort: high
     opus:
       model: gpt-5.6-terra
-      # The one tier that pins effort instead of following the session. Every
-      # opus agent is a judgment surface (review, diagnosis, plan critique)
-      # whose output nobody re-verifies, so it must not inherit a session that
-      # happens to be running low/medium.
       effort: high
     sonnet:
       model: gpt-5.6-luna
-  # `agents:` is for what a tier cannot express: an agent whose model or effort
-  # differs from every tier it could otherwise be spelled as -- e.g. one that
-  # needs an effort neither its tier's pin nor the session provides.
+      effort: medium
+  # `agents:` replaces the whole resolved tier entry for an agent whose model
+  # or effort differs from its tier. `mnemosyne` keeps the sonnet model but
+  # receives the lower initial effort recommendation.
+  # `metis` keeps its fable tier in frontmatter and is explicitly assigned
+  # gpt-6-astra with high effort on Codex.
   # It previously held code-reviewer/metis/momus/tech-claim-examiner,
   # all four byte-identical to `tiers.opus`, so they resolved to the same TOML
   # either way and were removed. A new entry must name what tier it could not
@@ -75,6 +71,13 @@ model-map:
   # resolution is `modelMap.agents?.[name] ?? modelMap.tiers[tier]`
   # (tools/adapters/codex.ts:54), and agent TOMLs are rewritten wholesale
   # (codex.ts:431), so nothing stale survives a sync.
+  agents:
+    metis:
+      model: gpt-6-astra
+      effort: high
+    mnemosyne:
+      model: gpt-5.6-luna
+      effort: low
 hooks:
   SessionStart:
     - component: rules-injector
@@ -176,6 +179,18 @@ hooks:
     - command: "bun run .codex/scripts/verify-entrypoint-gate/index.ts"
       trace-id: "codex.verify-entrypoint-gate"
       matcher: "Bash|bash|exec_command|shell_command"
+      timeout: 10
+    # Normalize native spawn history independently of skill instructions.
+    # Codex matches the whole flattened name, including configurable V2 namespaces.
+    - component: codex-spawn-context-gate.sh
+      type: command
+      matcher: ".*[sS]pawn_[aA]gent"
+      timeout: 10
+    # Require an explicit configured role (or default for generic tasks).
+    # Deny-only: a competing updatedInput would race the context normalizer.
+    - component: codex-spawn-role-gate.sh
+      type: command
+      matcher: ".*[sS]pawn_[aA]gent"
       timeout: 10
     # NOT a Claude<->Codex hook-parity mirror -- Claude enforces the same
     # nested-spawn-depth policy natively via the CLAUDE_CODE_MAX_SUBAGENT_

@@ -1,7 +1,7 @@
 # Design Review Configuration
-# External dispatch: one codex reviewer (gpt-5.6-sol, high reasoning) via `codex exec`.
+# External dispatch: one codex reviewer (gpt-6-astra, high reasoning) via `codex exec`.
 # model + effort_level + output_format resolve to:
-#   codex exec -m gpt-5.6-sol -c model_reasoning_effort=high --json --skip-git-repo-check
+#   codex exec -m gpt-6-astra -c model_reasoning_effort=high --json --skip-git-repo-check
 # codex uses bare model ids (no `openai/` prefix).
 
 review:
@@ -10,7 +10,7 @@ review:
       command: codex exec
       emoji: "🤖"
       color: "BLUE"
-      model: "gpt-5.6-sol"
+      model: "gpt-6-astra"
       effort_level: "high"
       output_format: json
 

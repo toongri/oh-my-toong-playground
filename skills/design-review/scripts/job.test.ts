@@ -509,7 +509,7 @@ describe("settings.mcps 배관", () => {
 				"  members:",
 				"    - name: tester",
 				"      command: codex exec",
-				"      model: gpt-5.6-sol",
+				"      model: gpt-6-astra",
 				"      effort_level: high",
 				"      env:",
 				"        REVIEW_MARKER: preserved",
@@ -551,7 +551,7 @@ describe("settings.mcps 배관", () => {
 		const output = JSON.parse(result.toString());
 		const member = output.members[0];
 		expect(member.mcpBlock).toEqual(["blocked"]);
-		expect(member.model).toBe("gpt-5.6-sol");
+		expect(member.model).toBe("gpt-6-astra");
 		expect(member.effort_level).toBe("high");
 		expect(member.env).toEqual({ REVIEW_MARKER: "preserved" });
 		// 상한은 실패 선언 시점만 정한다 — 파일이 끝내 안 생기면 그대로 실패한다.
