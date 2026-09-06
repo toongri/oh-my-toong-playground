@@ -31,11 +31,11 @@ council:
       effort_level: "high"
       output_format: json
 
-    - name: terra
+    - name: astra
       command: codex exec
       emoji: "🌍"
       color: "GREEN"
-      model: "gpt-5.6-terra"
+      model: "gpt-6-astra"
       effort_level: "high"
       output_format: json
 
