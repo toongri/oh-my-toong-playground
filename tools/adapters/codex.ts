@@ -8,15 +8,16 @@
  * - hooks: supported; command is a literal relative `bun run .codex/hooks/<name>/index.ts`
  * - skills, scripts: syncDirectory
  * - rules: supported, copied verbatim to `.codex/rules/<name>.md` (syncRulesDirect)
- * - config: TOML managed block in .codex/config.toml
+ * - config: owned leaf updates in .codex/config.toml, tracked in .omt state
  * - mcps: accumulate all servers, flush via native `codex mcp add/remove` CLI
- *   (idempotent add-if-changed + orphan removal tracked in
+ *   (idempotent add-if-changed + explicit removals tracked in
  *   .omt/sync-manifest.json — see flushMcpBlock)
  */
 
 import fs from "fs/promises";
 import path from "path";
-import { stringify, parse } from "smol-toml";
+import { stringify } from "smol-toml";
+import { applyConfig, previewConfig, readConfigSnapshot } from "../lib/codex-config-store.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { readTextFile, readJsonFile, writeJsonFile } from "../lib/json.ts";
 import { isPlainObject } from "../lib/deep-merge.ts";
@@ -28,7 +29,7 @@ import { parseFrontmatter } from "../lib/frontmatter.ts";
 import { PLATFORM_REWRITE_RULES, applyRewriteRules } from "../lib/rewrite-rules.ts";
 import { composePreToolTraceCommand } from "../lib/pretool-trace-command.ts";
 import { isGlobalSync } from "../lib/path-utils.ts";
-import { readManifest, computeOrphans, writeManifest, type ManifestData } from "../lib/deploy-manifest.ts";
+import { readManifest, writeManifest, type ManifestData } from "../lib/deploy-manifest.ts";
 import type {
 	ModelMap,
 	PlatformConfigResult,
@@ -75,224 +76,6 @@ export function resolveCodexAgentModel(
 	return entry.effort === undefined
 		? { model: entry.model }
 		: { model: entry.model, model_reasoning_effort: entry.effort };
-}
-
-// =============================================================================
-// TOML Managed Block Helpers
-// =============================================================================
-
-/** Escapes a literal string for embedding in a RegExp source. */
-function escapeRegExp(literal: string): string {
-	return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/**
- * Returns true when every leaf key/value `expected` declares is reachable
- * at the same path in `actual`. Plain objects recurse (actual may carry
- * extra sibling keys — e.g. a user-owned `[features]` table alongside the
- * managed one); everything else (string, number, boolean, array) is
- * compared by value, with arrays requiring an exact match rather than a
- * partial overlap.
- */
-function isDeepSubset(expected: unknown, actual: unknown): boolean {
-	if (isPlainObject(expected)) {
-		return (
-			isPlainObject(actual) &&
-			Object.entries(expected).every(([key, val]) => isDeepSubset(val, actual[key]))
-		);
-	}
-	if (Array.isArray(expected)) {
-		return Array.isArray(actual) && JSON.stringify(expected) === JSON.stringify(actual);
-	}
-	return expected === actual;
-}
-
-/**
- * Finds every line-anchored occurrence of `marker`: the marker must start
- * the line and may be followed only by trailing horizontal whitespace
- * before the line ends. Anchoring to whole lines (rather than a raw
- * substring match) keeps a marker literal sitting inside a TOML string
- * value or a plain comment from being mistaken for a structural marker.
- * Trailing-whitespace tolerance exists because Codex re-serializing
- * config.toml can append trailing spaces to the marker line — treating
- * that as "marker absent" would fall through to append and duplicate the
- * block.
- */
-function matchMarkerLines(content: string, marker: string): RegExpMatchArray[] {
-	const pattern = new RegExp(`^${escapeRegExp(marker)}[ \t]*$`, "gm");
-	return [...content.matchAll(pattern)];
-}
-
-/**
- * Inserts or replaces a managed block in TOML content.
- *
- * Finds `# --- omt:{blockName} ---` / `# --- end omt:{blockName} ---` markers
- * and replaces everything between them (inclusive) with the new block content.
- * If markers are not found, appends the block at the end.
- *
- * Content outside managed blocks is always preserved.
- */
-export function insertManagedBlock(
-	content: string,
-	blockName: string,
-	tomlContent: string,
-): string {
-	const startMarker = `# --- omt:${blockName} ---`;
-	const endMarker = `# --- end omt:${blockName} ---`;
-
-	const block = `${startMarker}\n${tomlContent}${endMarker}`;
-
-	// Count, not just detect, each marker's occurrences: a corrupted pairing
-	// (e.g. two start markers and one end marker, observed after a stale sync
-	// appended a fresh block onto a file whose end marker had already been
-	// clobbered) still satisfies a naive "both present, end after start"
-	// existence check, and the replace path below would then splice out
-	// everything between the FIRST start marker and the ONLY end marker —
-	// silently deleting any user-owned content sitting between the duplicates.
-	// Count and position come from the same line-anchored match (matchMarkerLines)
-	// so they can never disagree about which occurrence is "the" marker.
-	const startMatches = matchMarkerLines(content, startMarker);
-	const endMatches = matchMarkerLines(content, endMarker);
-	const startCount = startMatches.length;
-	const endCount = endMatches.length;
-
-	const startIdx = startMatches[0]?.index ?? -1;
-	const endIdx = endMatches[0]?.index ?? -1;
-
-	let result: string;
-
-	if (startCount === 1 && endCount === 1 && endIdx > startIdx) {
-		// Pre-replace backstop: confirm the matched marker pair actually wraps a
-		// real managed block before splicing it out. The line-anchored marker
-		// match only knows a marker sits at the start of its own line — it
-		// cannot tell that line is real structure rather than the BODY of a
-		// pre-existing multiline TOML string (e.g. `doc = """ ... """`) whose
-		// text happens to contain lines matching both marker literals. Mirrors
-		// the new-body landing-site backstop below, but on the existing side.
-		const existingBody = content.slice(startIdx + startMatches[0][0].length, endIdx);
-		let existingDeclared: Record<string, unknown>;
-		try {
-			existingDeclared = parse(existingBody);
-		} catch (err) {
-			const causeMessage = err instanceof Error ? err.message : String(err);
-			throw new Error(
-				`insertManagedBlock: existing content between the 'omt:${blockName}' markers does not parse as TOML ` +
-					`(not written) — ${causeMessage}. This happens when the matched markers are not a real managed ` +
-					`block, such as a multiline TOML string in the target file whose body happens to contain lines ` +
-					`matching the marker literals. Nothing was written.`,
-				{ cause: err },
-			);
-		}
-		// The original content may be malformed for unrelated reasons; if so the
-		// existing parse(result) backstop further down already catches it, so this
-		// reachability check is skipped rather than raising a second, redundant error.
-		let parsedOriginalContent: Record<string, unknown> | undefined;
-		try {
-			parsedOriginalContent = parse(content);
-		} catch {
-			parsedOriginalContent = undefined;
-		}
-		if (parsedOriginalContent && !isDeepSubset(existingDeclared, parsedOriginalContent)) {
-			throw new Error(
-				`insertManagedBlock: existing content between the 'omt:${blockName}' markers does not read back ` +
-					`at the top level of the target file (not written) — the matched markers are not wrapping a ` +
-					`real managed block. This happens when the target file has a structure such as a multiline ` +
-					`TOML string whose body contains lines matching the marker literals, trapping what looks like ` +
-					`a block body inside that string instead of as real top-level structure. Nothing was written.`,
-			);
-		}
-		// lazy: when the trapped body AND the new tomlContent are both comment-only,
-		// both this check and the landing-site backstop below pass vacuously (an
-		// empty declared structure is a subset of anything) — loss is negligible
-		// since comment-only text replaces comment-only text either way. Upgrade
-		// path: a TOML string-boundary scanner that excludes marker lines living
-		// inside string literals.
-
-		// Replace existing block (inclusive of markers)
-		const before = content.slice(0, startIdx);
-		const after = content.slice(endIdx + endMatches[0][0].length);
-		// Trim trailing newlines from before, trim leading newlines from after
-		const beforeTrimmed = before.replace(/\n+$/, "");
-		const afterTrimmed = after.replace(/^\n+/, "");
-		if (beforeTrimmed && afterTrimmed) {
-			result = `${beforeTrimmed}\n\n${block}\n\n${afterTrimmed}`;
-		} else if (beforeTrimmed) {
-			result = `${beforeTrimmed}\n\n${block}\n`;
-		} else if (afterTrimmed) {
-			result = `${block}\n\n${afterTrimmed}`;
-		} else {
-			result = `${block}\n`;
-		}
-	} else if (startCount === 0 && endCount === 0) {
-		// Append at end
-		const trimmed = content.replace(/\n+$/, "");
-		result = trimmed ? `${trimmed}\n\n${block}\n` : `${block}\n`;
-	} else {
-		// Orphaned or duplicated marker: anything other than exactly one start +
-		// one end (in start-before-end order) leaves the stale block's true
-		// extent unknown — guessing where it ends risks deleting config the
-		// user owns. This happens when something else rewrites the file and
-		// breaks the marker pairing (observed: Codex CLI rewriting
-		// .codex/config.toml to persist its own runtime state clobbered one
-		// side of an `omt:mcp` marker pair — and, separately, a stale sync
-		// re-appending a full block onto that already-clobbered file produced a
-		// duplicated start marker). Silently falling through to append or
-		// replace would either duplicate-declare keys (crashing the Codex CLI on
-		// a `duplicate key` parse error) or delete content between duplicate
-		// markers. Fail loud instead.
-		let reason: string;
-		if (startCount >= 1 && endCount === 0) {
-			reason = `start marker '${startMarker}' is present but end marker '${endMarker}' is missing`;
-		} else if (startCount === 0 && endCount >= 1) {
-			reason = `end marker '${endMarker}' is present but start marker '${startMarker}' is missing`;
-		} else if (startCount === 1 && endCount === 1) {
-			reason = `end marker '${endMarker}' appears before start marker '${startMarker}'`;
-		} else {
-			reason = `found ${startCount} occurrence(s) of start marker '${startMarker}' and ${endCount} occurrence(s) of end marker '${endMarker}' — expected exactly one of each`;
-		}
-		throw new Error(
-			`insertManagedBlock: orphaned marker for managed block 'omt:${blockName}' — ${reason}. ` +
-				`Remove the extra/orphaned marker(s) and any stale block body by hand, then re-run sync.`,
-		);
-	}
-
-	// Backstop: parse the result before returning it. Callers write the
-	// return value straight to disk (syncConfig, flushMcpBlock) — a managed
-	// block that duplicates a key already in the surrounding content (e.g. a
-	// stale block appended alongside a fresh one) must never reach the file.
-	let parsedResult: Record<string, unknown>;
-	try {
-		parsedResult = parse(result);
-	} catch (err) {
-		const causeMessage = err instanceof Error ? err.message : String(err);
-		throw new Error(
-			`insertManagedBlock: writing managed block 'omt:${blockName}' would produce invalid TOML (not written) — ${causeMessage}`,
-			{ cause: err },
-		);
-	}
-
-	// Landing-site backstop: valid TOML syntax alone isn't enough — the
-	// line-anchored marker match above only knows a marker sits at the
-	// start of its own line, not whether that line is real structure or
-	// the body of a pre-existing multiline TOML string (e.g. a user-authored
-	// `doc = """ ... """` whose text happens to contain a line matching the
-	// marker literal). In that case the replace still produces syntactically
-	// valid TOML — the block just ends up trapped inside the string instead
-	// of declared at the top level. Confirm every leaf key/value
-	// `tomlContent` declares is actually readable back from the parsed
-	// result at its intended path before this is allowed to reach disk.
-	const declaredStructure: Record<string, unknown> = parse(tomlContent);
-	if (!isDeepSubset(declaredStructure, parsedResult)) {
-		throw new Error(
-			`insertManagedBlock: managed block 'omt:${blockName}' did not land at its intended location (not written) — ` +
-				`the configuration this block declares does not read back from the result at its intended path. ` +
-				`This happens when the target file has a structure such as a multiline TOML string whose body ` +
-				`contains a line matching the marker literal, trapping the managed block inside that string instead ` +
-				`of as real top-level structure. Nothing was written.`,
-		);
-	}
-
-	return result;
 }
 
 // =============================================================================
@@ -722,7 +505,7 @@ export class CodexAdapter implements PlatformAdapter {
 	readonly contextFile = "AGENTS.md";
 
 	/** Accumulated MCP servers (reset at the start of each syncPlatformYaml call) */
-	private mcpAccumulator: Record<string, Record<string, unknown>> = {};
+	private mcpAccumulator: Record<string, Record<string, unknown> | null> = {};
 
 	/** Injected `codex mcp` CLI wrappers — swap out in tests. */
 	private readonly mcpLister: McpLister;
@@ -1037,7 +820,7 @@ export class CodexAdapter implements PlatformAdapter {
 	}
 
 	// ---------------------------------------------------------------------------
-	// syncConfig — write TOML managed block to .codex/config.toml
+	// syncConfig — plan and apply markerless owned leaf updates
 	// ---------------------------------------------------------------------------
 
 	async syncConfig(
@@ -1049,22 +832,33 @@ export class CodexAdapter implements PlatformAdapter {
 	): Promise<void> {
 		const configFile = path.join(targetPath, this.configDir, "config.toml");
 
+		const preview = await previewConfig(targetPath, configJson);
+		if (preview.status === "recovery-required" && dryRun) {
+			throw new Error(`Codex config recovery required: ${configFile}; run a real sync to recover the pending transaction.`);
+		}
+		if (preview.plan.conflicts.length) {
+			const shellQuote = (value: string): string => "'" + value.replaceAll("'", "'\"'\"'") + "'";
+			const details = preview.plan.conflicts.map(({ path: key, reason }) => {
+				const keyJson = JSON.stringify(key);
+				const hint = reason === "adoption-required"
+					? `; review adoption: bun tools/codex-config-migrate.ts --target ${shellQuote(path.resolve(targetPath))} --key ${shellQuote(keyJson)}`
+					: "";
+				return `${keyJson}: ${reason}${hint}`;
+			});
+			throw new Error(`Codex config conflicts in ${configFile}:\n${details.join("\n")}`);
+		}
 		if (dryRun) {
-			logDry(`Config managed block: ${JSON.stringify(configJson)} -> ${configFile}`);
+			for (const edit of preview.plan.edits) {
+				logDry(`Config ${edit.kind}: ${JSON.stringify(edit.path)} -> ${configFile}`);
+			}
+			if (!preview.plan.edits.length) logDry(`Config ${preview.status}: ${configFile}`);
 			return;
 		}
 
-		const operation = async (): Promise<void> => {
-			await fs.mkdir(path.join(targetPath, this.configDir), { recursive: true });
-			const existing = await readTextFile(configFile);
-			const tomlContent = stringify(configJson);
-			const updated = insertManagedBlock(existing, "config", tomlContent);
-			await fs.writeFile(configFile, updated, "utf-8");
-		};
-		if (mutationHooks) await mutationHooks.mutate(configFile, operation);
-		else await operation();
-		if (writeObserver) await writeObserver(configFile);
-		logInfo(`Config managed block: ${configFile}`);
+		const before = await readTextFile(configFile);
+		const result = await applyConfig(targetPath, configJson, mutationHooks);
+		if (writeObserver && before !== (result.configBytes ?? "")) await writeObserver(configFile);
+		logInfo(`Config ${result.status}: ${configFile}`);
 	}
 
 	// ---------------------------------------------------------------------------
@@ -1077,95 +871,90 @@ export class CodexAdapter implements PlatformAdapter {
 	}
 
 	/** Accumulate a single MCP server */
-	accumulateMcp(name: string, server: Record<string, unknown>): void {
+	accumulateMcp(name: string, server: Record<string, unknown> | null): void {
 		this.mcpAccumulator[name] = server;
 	}
 
 	/**
-	 * Flush all accumulated MCP servers via the native `codex mcp add`/`codex
-	 * mcp remove` CLI (no OMT-side config.toml write, so `writeObserver` is
-	 * unused here — kept in the signature only because `syncPlatformYaml`
-	 * passes it positionally to every section flush).
-	 *
-	 * Orphan tracking (a server declared in a previous run but not this one)
-	 * has no on-disk fingerprint of its own the way a deployed file does — the
-	 * CLI's own state doesn't record OMT ownership — so it goes through
-	 * `.omt/sync-manifest.json` (`readManifest`/`computeOrphans` from
-	 * deploy-manifest.ts) under the `"codex/mcps"` pair key, exactly like every
-	 * other category's orphan bookkeeping, except removal here is `codex mcp
-	 * remove` rather than a file delete. The manifest write at the end IS
-	 * routed through `mutationHooks` when present — a `DeployTransaction`
-	 * snapshots this file at transaction start, and a direct `writeManifest`
-	 * would drift its tracked fingerprint, tripping `Deploy transaction
-	 * conflict` when another category later reconciles its own manifest pair.
+	 * Apply explicit MCP declarations. Omission preserves servers and ownership;
+	 * only a named null tombstone authorizes removal. Native CLI commands rewrite
+	 * config.toml, so each command must participate in the deployment transaction.
+	 * Keep declarations after failures/dry runs so a retry can reconcile CLI state.
 	 */
 	async flushMcpBlock(
 		targetPath: string,
 		dryRun: boolean,
-		_writeObserver?: PlatformWriteObserver,
+		writeObserver?: PlatformWriteObserver,
 		mutationHooks?: DeployMutationHooks,
 	): Promise<void> {
-		const desired = this.mcpAccumulator;
+		const desired = { ...this.mcpAccumulator };
 		const declaredNames = Object.keys(desired).sort();
 		const codexHome = path.join(targetPath, this.configDir);
-		const deployRoot = targetPath;
+		const configFile = path.join(codexHome, "config.toml");
+		const recoveryError = () => new Error(`Codex config recovery required: ${configFile}; run a real sync to recover the pending transaction.`);
+		const snapshot = await readConfigSnapshot(targetPath);
+		if (snapshot.pendingBytes !== null) {
+			if (dryRun) throw recoveryError();
+			const recovered = await applyConfig(targetPath, {}, mutationHooks);
+			if (writeObserver && recovered.configBytes !== snapshot.configBytes) await writeObserver(configFile);
+		}
+		// Native Codex writers do not participate in the config-store lock protocol.
+		// Refuse a newly pending journal immediately before each mutation; this is
+		// a bounded recheck, not compare-and-swap protection against other writers.
+		const requireNoPending = async (): Promise<void> => {
+			if ((await readConfigSnapshot(targetPath)).pendingBytes !== null) throw recoveryError();
+		};
 		const manifestKey = "codex/mcps";
-
-		// BOOTSTRAP (readManifest -> null: absent/corrupt manifest) means no
-		// prior declared set is known — orphan removal is skipped entirely,
-		// same hard branch every other category's manifest reconciliation uses.
-		const manifest = await readManifest(deployRoot);
-		const prev = manifest === null ? null : (manifest[manifestKey] ?? []);
-		const orphans = prev === null ? [] : computeOrphans(prev, declaredNames);
+		const manifest = await readManifest(targetPath);
+		const managedNames = new Set(manifest?.[manifestKey] ?? []);
+		for (const name of declaredNames) {
+			if (desired[name] === null) managedNames.delete(name);
+			else managedNames.add(name);
+		}
+		const nextNames = [...managedNames].sort();
 
 		if (dryRun) {
 			for (const name of declaredNames) {
-				logDry(`codex mcp add ${name} (CODEX_HOME=${codexHome})`);
+				const action = desired[name] === null ? "remove" : "add";
+				logDry(`codex mcp ${action} ${name} (CODEX_HOME=${codexHome})`);
 			}
-			for (const name of orphans) {
-				logDry(`codex mcp remove ${name} (CODEX_HOME=${codexHome})`);
-			}
-			logDry(`MCP manifest pair '${manifestKey}': ${JSON.stringify(declaredNames)}`);
+			logDry(`MCP manifest pair '${manifestKey}': ${JSON.stringify(nextNames)}`);
 			return;
 		}
 
 		const current = await this.mcpLister(codexHome);
 		const byName = new Map(current.map((entry) => [entry.name, entry] as const));
-
 		for (const name of declaredNames) {
 			const server = desired[name];
 			const existing = byName.get(name);
-			// Add only when absent or changed — re-adding an unchanged http
-			// (`--url`) server re-triggers its OAuth flow (see the lazy: note on
-			// mcpServerToAddArgs), so an unnecessary add is not merely wasteful.
-			if (!existing || !mcpServerEquivalent(server, existing)) {
-				await this.mcpAdder(codexHome, name, mcpServerToAddArgs(server));
-				logInfo(`MCP server added: ${name}`);
+			let operation: () => Promise<void>;
+			if (server === null) {
+				if (!existing) continue;
+				operation = () => this.mcpRemover(codexHome, name);
+			} else {
+				// Re-adding an equivalent HTTP server can re-trigger OAuth.
+				if (existing && mcpServerEquivalent(server, existing)) continue;
+				operation = () => this.mcpAdder(codexHome, name, mcpServerToAddArgs(server));
 			}
+			const guardedOperation = async (): Promise<void> => {
+				await requireNoPending();
+				await operation();
+			};
+			if (mutationHooks) await mutationHooks.mutate(configFile, guardedOperation);
+			else await guardedOperation();
+			if (writeObserver) await writeObserver(configFile);
+			logInfo(`MCP server ${server === null ? "removed" : "added"}: ${name}`);
 		}
 
-		for (const name of orphans) {
-			// Only remove what the CLI still reports — an orphan already absent
-			// from `codex mcp list` needs no `codex mcp remove` call (idempotent
-			// either way, but this avoids a pointless subprocess + config parse).
-			if (byName.has(name)) {
-				await this.mcpRemover(codexHome, name);
-				logInfo(`MCP server removed: ${name}`);
-			}
-		}
-
-		const nextManifest: ManifestData = manifest !== null ? { ...manifest } : {};
-		nextManifest[manifestKey] = declaredNames;
-		// Route the manifest write through the DeployTransaction (when present) so it
-		// updates the tracked fingerprint — a direct writeManifest bypasses the
-		// transaction snapshot and trips `Deploy transaction conflict` when the
-		// pipeline later reconciles other pairs. Path must match manifestPath() in
-		// deploy-manifest.ts (and sync.ts's inline path.join(root,".omt","sync-manifest.json")).
-		const manifestFile = path.join(deployRoot, ".omt", "sync-manifest.json");
-		const writeManifestOp = async (): Promise<void> => { await writeManifest(deployRoot, nextManifest); };
+		const nextManifest: ManifestData = { ...manifest, [manifestKey]: nextNames };
+		const manifestFile = path.join(targetPath, ".omt", "sync-manifest.json");
+		const writeManifestOp = async (): Promise<void> => {
+			await requireNoPending();
+			await writeManifest(targetPath, nextManifest);
+		};
 		if (mutationHooks) await mutationHooks.mutate(manifestFile, writeManifestOp);
 		else await writeManifestOp();
-		logInfo(`MCP manifest updated: ${declaredNames.length} server(s) declared`);
+		logInfo(`MCP manifest updated: ${nextNames.length} server(s) managed`);
 	}
 
 	// ---------------------------------------------------------------------------
@@ -1284,12 +1073,10 @@ export class CodexAdapter implements PlatformAdapter {
 
 		// --- mcps ---
 		if (yaml.mcps !== undefined && yaml.mcps !== null) {
-			// After overlay merge a server value can be null: a local override file
-			// uses `<name>: null` as a deletion marker to drop a server inherited from
-			// the base config. Skip those so the managed block omits them entirely.
+			// Preserve named null tombstones through accumulation; omission is not deletion.
 			const entries = Object.entries<Record<string, unknown> | null>(yaml.mcps);
 			for (const [name, server] of entries) {
-				if (server === undefined || server === null) continue;
+				if (server === undefined) continue;
 				this.accumulateMcp(name, server);
 				if (!dryRun) {
 					logInfo(`MCP accumulated: ${name}`);

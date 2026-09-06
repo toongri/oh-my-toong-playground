@@ -14,6 +14,9 @@
 `assertCleanWorktree`) — 브랜치가 틀린 게 더 근본적인 문제이므로 브랜치를 먼저
 본다.
 
+배포는 default 브랜치의 clean 트리에서만 실행한다. 아래 구현 한계는 게이트를
+우회해도 된다는 뜻이 아니며, 환경이나 git 설정을 조작해 우회해서는 안 된다.
+
 - **default 브랜치 게이트** — 현재 브랜치가 `git symbolic-ref
   refs/remotes/origin/HEAD`로 해석한 default 브랜치가 아니면 non-zero exit.
   origin/HEAD를 해석할 수 없으면(설정 안 됨) 통과가 아니라 거부한다 — "모르겠으니
@@ -104,6 +107,48 @@
 - **0 워크트리 / git 오류**: 경로가 (bare·prunable 제외 후) 워크트리 0개로
   해석되거나 `git worktree list` 자체가 실패하면 `DeployTargetsError`로 **시끄럽게**
   실패한다. 조용히 빈 타겟을 반환하면 아무것도 안 쓰고도 성공처럼 보이기 때문이다.
+
+## Codex 설정 미리보기와 중단 복구
+
+`make sync-dry`는 각 타겟의 실제 `.codex/config.toml`과
+`.omt/codex-config-state.json`을 읽어 잘못된 TOML, 기존 키의 명시적 채택 필요,
+사용자 변경과의 충돌을 확인한다. 설정 소유권은 관리할 leaf 경로와 마지막 적용
+TOML 값으로 판단하며, `omt:config` 주석의 유무나 위치에 의존하지 않는다.
+미리보기는 설정·상태·디렉터리·잠금 파일을 만들거나 수정하지 않는다.
+
+`.omt/codex-config-pending.json`에 중단된 변경이 남아 있으면 미리보기는
+`recovery-required`를 보고하고 복구 쓰기를 실행하지 않는다. 실제 적용은 저널에
+기록한 config/state의 `(이전, 이전)`, `(이후, 이전)`, `(이후, 이후)` 조합만
+인식하여 둘 다 이후 상태가 되도록 완료한다. 그 밖의 값은 충돌로 보고 보존한다.
+`config`를 생략하거나 `config: null`로 지정한 MCP 전용 실제 동기화도 native MCP
+명령 실행 전에 pending을 먼저 복구한다. MCP 전용 미리보기 역시 pending이 있으면
+실패하며 복구하지 않는다.
+
+설정 저장소는 `.omt/codex-config.lock`이 이미 있으면 항상 적용을 거부한다.
+PID나 파일 나이로 잠금을 자동 삭제하지 않는다. 일반 예외에서는 잠금을 해제하므로
+다음 실제 동기화에서 남은 pending을 복구할 수 있지만, 강제 종료 시에는 잠금이
+남을 수 있다. 이 경우 운영자가 해당 타겟을 사용하는 sync가 모두 종료되었고 새로
+시작되지 않도록 확인한 뒤, **배포 타겟 루트에서** 다음 명령으로 잠금만 제거한다.
+복구에 필요한 pending과 소유권 상태 파일은 삭제하지 않는다.
+
+```bash
+rm .omt/codex-config.lock
+```
+
+그런 다음 OMT 저장소의 기본 브랜치·clean tree 조건을 충족한 상태에서
+`make sync`를 다시 실행한다. native Codex MCP add/remove는 설정 저장소의 잠금을
+공유하지 않는다. 각 native 쓰기 직전 pending을 재확인하더라도 검사와 쓰기가
+원자적인 compare-and-swap은 아니므로, 같은 타겟의 동시 sync는 지원하지 않는다.
+OMT 외부 프로그램의 동시 설정 쓰기도 방지한다고 보장하지 않는다.
+
+설정 파일과 소유권 상태·pending 저널은 워크트리별 배포 transaction의 스냅샷에
+포함된다. native Codex MCP add/remove가 바꾼 설정과 기존 `codex/mcps` 이름
+manifest도 transaction에 참여한다. MCP 실패 시 롤백 범위는 설정과 manifest이며,
+OAuth 인증 상태 같은 외부 효과는 포함하지 않는다. 선언에서 빠진 서버는 보존하고
+`mcps.<name>: null`로 명시한 서버만 삭제한다.
+
+기존 키 채택과 설정 이전·복구의 자세한 절차는
+[플랫폼 YAML 설정 배포](platform-yaml-config-deployment.md)를 참고한다.
 
 ## 배포후 포맷(format-on-deploy)
 

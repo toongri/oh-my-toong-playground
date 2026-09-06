@@ -74,7 +74,7 @@ export type PlatformYamlHookItem = {
 };
 
 export type PlatformYaml = {
-	config?: Record<string, unknown>;
+	config?: Record<string, unknown> | null;
 	hooks?: Record<string, PlatformYamlHookItem[]>;
 	mcps?: Record<string, Record<string, unknown> | null>;
 	plugins?: { items?: Array<string | PluginObjectItem> };

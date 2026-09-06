@@ -1,11 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import { parse } from "smol-toml";
+import { parse, stringify } from "smol-toml";
 import {
 	CodexAdapter,
-	insertManagedBlock,
 	resolveCodexAgentModel,
 	cleanupCodexSkillsFossil,
 	planCodexSkillsFossilCleanup,
@@ -20,6 +19,7 @@ import {
 import { planCategoryDestinationPaths } from "./destinations.ts";
 import type { ModelMap } from "../lib/types.ts";
 import { DeployTransaction, type DeployMutationHooks } from "../lib/deploy-transaction.ts";
+import { applyConfig, readConfigSnapshot, commitConfigState } from "../lib/codex-config-store.ts";
 import { writeManifest } from "../lib/deploy-manifest.ts";
 
 function plannedCodexPath(targetPath: string, category: "hooks" | "scripts", displayName: string): string {
@@ -49,229 +49,6 @@ function makeFakeMcpAdapter(listEntries: McpListEntry[] = []) {
 	const adapter = new CodexAdapter(lister, adder, remover);
 	return { adapter, listCalls, addCalls, removeCalls };
 }
-
-// =============================================================================
-// insertManagedBlock
-// =============================================================================
-
-describe("insertManagedBlock", () => {
-	it("creates a block in empty content via `insertManagedBlock`", () => {
-		const result = insertManagedBlock("", "config", 'key = "value"\n');
-		expect(result).toBe(`# --- omt:config ---\nkey = "value"\n# --- end omt:config ---\n`);
-	});
-
-	it("replaces existing block content via `insertManagedBlock`", () => {
-		const existing = `# --- omt:config ---\nold = "data"\n# --- end omt:config ---\n`;
-		const result = insertManagedBlock(existing, "config", `new = "data"\n`);
-		expect(result).toBe(`# --- omt:config ---\nnew = "data"\n# --- end omt:config ---\n`);
-	});
-
-	it("preserves user content outside managed block via `insertManagedBlock`", () => {
-		const existing = `# user config\nsome_setting = true\n\n# --- omt:config ---\nold = "data"\n# --- end omt:config ---\n\n# trailing comment\n`;
-		const result = insertManagedBlock(existing, "config", `new = "data"\n`);
-		expect(result).toContain("some_setting = true");
-		expect(result).toContain("# trailing comment");
-		expect(result).toContain(`new = "data"`);
-		expect(result).not.toContain(`old = "data"`);
-	});
-
-	it("preserves managed blocks with different names via `insertManagedBlock`", () => {
-		const existing = `# --- omt:mcp ---\nmcp_data = true\n# --- end omt:mcp ---\n`;
-		const result = insertManagedBlock(existing, "config", `config_data = true\n`);
-		// mcp block preserved
-		expect(result).toContain("# --- omt:mcp ---");
-		expect(result).toContain("mcp_data = true");
-		// new config block appended
-		expect(result).toContain("# --- omt:config ---");
-		expect(result).toContain("config_data = true");
-	});
-
-	it("creates block with markers when content is empty via `insertManagedBlock`", () => {
-		const result = insertManagedBlock("", "mcp", `server = "test"\n`);
-		expect(result).toContain("# --- omt:mcp ---");
-		expect(result).toContain("# --- end omt:mcp ---");
-		expect(result).toContain(`server = "test"`);
-	});
-
-	it("마커가 전혀 없으면 `insertManagedBlock`이 새 블록을 append한다", () => {
-		const existing = `# user config\nsome_setting = true\n`;
-		const result = insertManagedBlock(existing, "mcp", `server = "test"\n`);
-		expect(result).toContain("some_setting = true");
-		expect(result).toContain("# --- omt:mcp ---");
-		expect(result).toContain(`server = "test"`);
-	});
-
-	it("시작 마커는 남아 있고 끝 마커만 사라지면 `insertManagedBlock`이 예외를 던진다", () => {
-		// Reproduces the real incident: Codex CLI rewrote config.toml and left
-		// only the start marker behind, with the stale block body still in place.
-		const existing = `# --- omt:mcp ---\n[mcp_servers.figma]\ncommand = "npx"\nargs = ["-y", "figma-mcp"]\n`;
-		expect(() => insertManagedBlock(existing, "mcp", `server = "test"\n`)).toThrow(
-			/orphaned marker.*omt:mcp/,
-		);
-	});
-
-	it("끝 마커는 남아 있고 시작 마커만 사라지면 `insertManagedBlock`이 예외를 던진다", () => {
-		const existing = `[mcp_servers.figma]\ncommand = "npx"\n# --- end omt:mcp ---\n`;
-		expect(() => insertManagedBlock(existing, "mcp", `server = "test"\n`)).toThrow(
-			/orphaned marker.*omt:mcp/,
-		);
-	});
-
-	it("시작 마커가 중복되면 `insertManagedBlock`이 교체 대신 예외를 던지고, 중복 마커 사이의 사용자 테이블을 보존한다", () => {
-		// Reproduces the real incident from PR #262: a stale sync re-appended a
-		// full block onto a file whose end marker had already been clobbered,
-		// leaving TWO start markers and only ONE end marker. A naive
-		// existence-only check (`indexOf(...) !== -1`) treats the FIRST start
-		// marker and the ONLY end marker as a valid pair and replaces
-		// everything between them — silently deleting the Codex-runtime-owned
-		// `[hooks.state.*]` and `[tui.model_availability_nux]` tables that sit
-		// between the duplicate start markers. Asserting the throw (and thus
-		// the absence of any return value to write to disk) IS the assertion
-		// that those tables are never deleted — a thrown error means
-		// `insertManagedBlock` never produces a result for a caller to persist.
-		const existing = [
-			`# --- omt:mcp ---`,
-			`[mcp_servers.figma]`,
-			`command = "npx"`,
-			``,
-			`# --- omt:mcp ---`,
-			`[hooks.state.some_hook]`,
-			`enabled = true`,
-			``,
-			`[tui.model_availability_nux]`,
-			`seen = true`,
-			`# --- end omt:mcp ---`,
-			``,
-		].join("\n");
-		expect(() => insertManagedBlock(existing, "mcp", `server = "test"\n`)).toThrow(
-			/2 occurrence\(s\) of start marker.*1 occurrence\(s\) of end marker/,
-		);
-	});
-
-	it("끝 마커가 중복되면 `insertManagedBlock`이 예외를 던진다", () => {
-		const existing = [
-			`# --- omt:mcp ---`,
-			`[mcp_servers.figma]`,
-			`command = "npx"`,
-			`# --- end omt:mcp ---`,
-			``,
-			`some_other = true`,
-			`# --- end omt:mcp ---`,
-			``,
-		].join("\n");
-		expect(() => insertManagedBlock(existing, "mcp", `server = "test"\n`)).toThrow(
-			/1 occurrence\(s\) of start marker.*2 occurrence\(s\) of end marker/,
-		);
-	});
-
-	it("관리 블록 밖 TOML 문자열 값 안에 마커 리터럴이 들어 있어도 `insertManagedBlock`이 정상적으로 블록을 교체한다", () => {
-		// The start marker text appears mid-line inside a string value, not at
-		// the start of a line — a substring-based count (content.split(marker))
-		// would count this as a second start marker and misfire the "duplicate"
-		// throw path even though only one real structural marker pair exists.
-		const existing = [
-			`note = "see # --- omt:mcp --- for details"`,
-			`# --- omt:mcp ---`,
-			`old = "data"`,
-			`# --- end omt:mcp ---`,
-			``,
-		].join("\n");
-		const result = insertManagedBlock(existing, "mcp", `new = "data"\n`);
-		expect(result).toContain(`note = "see # --- omt:mcp --- for details"`);
-		expect(result).toContain(`new = "data"`);
-		expect(result).not.toContain(`old = "data"`);
-	});
-
-	it("결과 TOML에 키가 중복되면 `insertManagedBlock`이 예외를 던진다", () => {
-		// No markers present (append path), but the block being appended
-		// declares a table the surrounding content already declares — the
-		// exact duplicate-key shape that crashed Codex CLI on startup.
-		const existing = `[features.multi_agent_v2]\nenabled = true\n`;
-		expect(() =>
-			insertManagedBlock(existing, "mcp", `[features.multi_agent_v2]\nenabled = false\n`),
-		).toThrow(/invalid TOML/);
-	});
-
-	it("마커 리터럴이 대상 파일의 멀티라인 TOML 문자열 안에 단독 줄로 들어 있으면 `insertManagedBlock`이 예외를 던진다 — 반환값이 없다는 사실 자체가 사용자 문단이 훼손되지 않았다는 증거다", () => {
-		// Reproduces the PR #262 P1 finding: the line-anchored marker regex
-		// only knows a marker sits at the start of its own line — it cannot
-		// tell that line is the BODY of a pre-existing `doc = """ ... """`
-		// multiline string rather than real structure. The replace would
-		// otherwise produce syntactically valid TOML (the existing
-		// `parse(result)` backstop alone would let this through), with the
-		// generated block trapped inside the string instead of declared as
-		// real top-level structure — so the config it declares would never
-		// actually be deployed even though sync reports success.
-		//
-		// The pre-replace backstop now catches this first, on the EXISTING
-		// side: "사용자가 직접 쓴 설명 문단" is not valid TOML, so the matched
-		// markers cannot be wrapping a real managed block.
-		const existing = [
-			`[features]`,
-			`existing_flag = true`,
-			``,
-			`[owner]`,
-			`doc = """`,
-			`# --- omt:mcp ---`,
-			`사용자가 직접 쓴 설명 문단`,
-			`# --- end omt:mcp ---`,
-			`"""`,
-			``,
-		].join("\n");
-		expect(() =>
-			insertManagedBlock(
-				existing,
-				"mcp",
-				`[features.multi_agent_v2]\nmax_concurrent_threads_per_session = 4\n`,
-			),
-		).toThrow(/does not parse as TOML/);
-		// The throw IS the assertion that "사용자가 직접 쓴 설명 문단" was never
-		// spliced out: insertManagedBlock never produces a result for a
-		// caller to write to disk, so the original multiline string is left
-		// wherever the caller read `existing` from.
-	});
-
-	it("마커 리터럴이 멀티라인 TOML 문자열 안에 있고 새 본문이 주석뿐이어도 `insertManagedBlock`이 예외를 던진다 — 반환값이 없다는 사실 자체가 사용자 문단 보존의 증거다", () => {
-		// Reproduces the PR #262 P1 gap left by the previous fix: the new-body
-		// landing-site backstop (isDeepSubset(declaredStructure, parsedResult))
-		// only inspects what the NEW body declares. `flushMcpBlock` passes
-		// "# No MCP servers configured\n" when there are 0 MCP servers — that
-		// parses to `{}`, which is a subset of every object, so the backstop
-		// passes vacuously no matter where the block actually landed. This test
-		// validates the EXISTING side instead: the content trapped between the
-		// markers is not valid TOML (it's a plain user sentence), so replacing
-		// it must be refused before anything reaches disk.
-		const existing = [
-			`[features]`,
-			`existing_flag = true`,
-			``,
-			`[owner]`,
-			`doc = """`,
-			`# --- omt:mcp ---`,
-			`사용자가 직접 쓴 설명 문단`,
-			`# --- end omt:mcp ---`,
-			`"""`,
-			``,
-		].join("\n");
-		expect(() => insertManagedBlock(existing, "mcp", `# No MCP servers configured\n`)).toThrow(
-			/does not parse as TOML/,
-		);
-		// The throw IS the assertion that "사용자가 직접 쓴 설명 문단" was never
-		// spliced out: insertManagedBlock never produces a result for a caller
-		// to write to disk.
-	});
-
-	it("정상적인 기존 관리 블록을 주석뿐인 본문으로 교체하는 것은 여전히 성공한다 — 서버 0개 정리 경로의 회귀 방지", () => {
-		// Regression guard for the pre-replace backstop added above: a real
-		// managed block (valid TOML, reachable at the top level) must still be
-		// replaceable by the comment-only body `flushMcpBlock` writes when the
-		// MCP accumulator is empty.
-		const existing = `# --- omt:mcp ---\n[mcp_servers.figma]\ncommand = "npx"\n# --- end omt:mcp ---\n`;
-		const result = insertManagedBlock(existing, "mcp", `# No MCP servers configured\n`);
-		expect(result).toContain("# No MCP servers configured");
-		expect(result).not.toContain("mcp_servers.figma");
-	});
-});
 
 // =============================================================================
 // mcpServerToAddArgs / mcpServerEquivalent
@@ -830,21 +607,21 @@ describe("CodexAdapter", () => {
 	});
 
 	// ---------------------------------------------------------------------------
-	// syncConfig — TOML managed block
+	// syncConfig — markerless ownership
 	// ---------------------------------------------------------------------------
 
 	describe("syncConfig", () => {
-		it("writes config as TOML managed block in config.toml via `syncConfig`", async () => {
+		it("새 설정은 마커 없이 저장하고 소유권을 기록한다", async () => {
 			await adapter.syncConfig(tmpDir, { model: "o4-mini", temperature: 0.7 }, false);
 			const configFile = path.join(tmpDir, ".codex", "config.toml");
 			const content = await fs.readFile(configFile, "utf-8");
-			expect(content).toContain("# --- omt:config ---");
-			expect(content).toContain("# --- end omt:config ---");
+			expect(content).not.toContain("omt:config");
+			expect((await readConfigSnapshot(tmpDir)).state?.entries.map((entry) => entry.path)).toEqual([["model"], ["temperature"]]);
 			expect(content).toContain("model");
 			expect(content).toContain("o4-mini");
 		});
 
-		it("replaces managed block on re-call while preserving existing content via `syncConfig`", async () => {
+		it("설정 추가와 갱신은 기존 사용자 설정을 보존한다", async () => {
 			// Write initial user content
 			const configFile = path.join(tmpDir, ".codex", "config.toml");
 			await fs.mkdir(path.join(tmpDir, ".codex"), { recursive: true });
@@ -854,20 +631,26 @@ describe("CodexAdapter", () => {
 			const content = await fs.readFile(configFile, "utf-8");
 
 			expect(content).toContain("some_setting = true");
-			expect(content).toContain("# --- omt:config ---");
+			expect(content).not.toContain("omt:config");
 			expect(content).toContain("o4-mini");
 		});
 
 		it("skips config.toml creation in dry-run mode via `syncConfig`", async () => {
-			await adapter.syncConfig(tmpDir, { model: "o4-mini" }, true);
+			const logs: string[] = [];
+			const logger = spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => { logs.push(String(chunk)); return true; });
+			try { await adapter.syncConfig(tmpDir, { model: "o4-mini" }, true); }
+			finally { logger.mockRestore(); }
+			expect(logs.join("\n")).toContain('["model"]');
+			expect(logs.join("\n")).not.toContain("o4-mini");
 			const exists = await fs
 				.stat(path.join(tmpDir, ".codex", "config.toml"))
 				.then(() => true)
 				.catch(() => false);
 			expect(exists).toBe(false);
+			expect(await fs.readdir(tmpDir)).toEqual([]);
 		});
 
-		it("serializes a nested map as a dotted TOML table header via `syncConfig`", async () => {
+		it("중첩 설정의 TOML 경로와 값을 보존한다", async () => {
 			await adapter.syncConfig(
 				tmpDir,
 				{ features: { multi_agent_v2: { max_concurrent_threads_per_session: 20 } } },
@@ -875,34 +658,242 @@ describe("CodexAdapter", () => {
 			);
 			const configFile = path.join(tmpDir, ".codex", "config.toml");
 			const content = await fs.readFile(configFile, "utf-8");
-			expect(content).toContain("[features.multi_agent_v2]");
-			expect(content).toContain("max_concurrent_threads_per_session = 20");
+			expect(parse(content)).toEqual({ features: { multi_agent_v2: { max_concurrent_threads_per_session: 20 } } });
 		});
 
 		it("rejects an external config edit before the guarded read and preserves resident bytes", async () => {
 			const configFile = path.join(tmpDir, ".codex", "config.toml");
 			await fs.mkdir(path.dirname(configFile), { recursive: true });
-			await fs.writeFile(configFile, "resident\n", "utf-8");
+			await fs.writeFile(configFile, 'unrelated = "resident"\n', "utf-8");
 			const transaction = await DeployTransaction.begin(tmpDir, false, [".codex/config.toml"]);
 			expect(transaction).not.toBeNull();
-			await fs.writeFile(configFile, "external edit\n", "utf-8");
+			await fs.writeFile(configFile, 'unrelated = "external edit"\n', "utf-8");
 			const observed: string[] = [];
 			await expect(
 				adapter.syncConfig(tmpDir, { model: "o4-mini" }, false, (writtenPath) => {
 					observed.push(writtenPath);
 				}, transaction!),
 			).rejects.toThrow(/Deploy transaction conflict/);
-			expect(await fs.readFile(configFile, "utf-8")).toBe("external edit\n");
+			expect(await fs.readFile(configFile, "utf-8")).toBe('unrelated = "external edit"\n');
 			expect(observed).toEqual([]);
 			await transaction!.finish();
 		});
+
+		for (const markers of ["", "# --- omt:config ---\n", "# --- omt:config ---\n# --- omt:config ---\n"]) {
+			it(`기존 동일 값도 마커와 무관하게 명시 채택을 요구한다: ${JSON.stringify(markers)}`, async () => {
+				const file = path.join(tmpDir, ".codex/config.toml");
+				await fs.mkdir(path.dirname(file), { recursive: true });
+				const bytes = `${markers}model = "resident-secret"\n`;
+				await fs.writeFile(file, bytes);
+				for (const dry of [true, false]) {
+					const failure = await adapter.syncConfig(tmpDir, { model: "resident-secret" }, dry).then(() => "unexpected success", (error: unknown) => String(error));
+					expect(failure).toMatch(/codex-config-migrate\.ts.*--target.*--key/);
+					expect(failure).not.toContain("resident-secret");
+					expect(await fs.readFile(file, "utf8")).toBe(bytes);
+					expect(await fs.stat(path.join(tmpDir, ".omt")).catch(() => null)).toBeNull();
+				}
+			});
+		}
+
+		it("깨진 마커 파일을 명시 채택하면 갱신과 native 재직렬화 후 재동기화가 가능하다", async () => {
+			const file = path.join(tmpDir, ".codex/config.toml");
+			await fs.mkdir(path.dirname(file), { recursive: true });
+			await fs.writeFile(file, '# --- omt:config ---\nmodel = "old"\nuser = true\n');
+			await commitConfigState(tmpDir, await readConfigSnapshot(tmpDir), {
+				version: 1, target: ".codex/config.toml", entries: [{ path: ["model"], valueToml: 'value = "old"\n' }],
+			});
+			await adapter.syncConfig(tmpDir, { model: "new" });
+			await fs.writeFile(file, stringify(parse(await fs.readFile(file, "utf8"))));
+			await adapter.syncConfig(tmpDir, { model: "latest" });
+			expect(parse(await fs.readFile(file, "utf8"))).toEqual({ model: "latest", user: true });
+			const before = await readConfigSnapshot(tmpDir);
+			const writes: string[] = [];
+			await adapter.syncConfig(tmpDir, { model: "latest" }, false, (file) => { writes.push(file); });
+			expect(await readConfigSnapshot(tmpDir)).toEqual(before);
+			expect(writes).toEqual([]);
+		});
+
+		it("외부 값 충돌은 dry-run과 적용 모두 설정 및 상태와 다른 플랫폼 쓰기를 보존한다", async () => {
+			await adapter.syncConfig(tmpDir, { model: "owned" });
+			await fs.writeFile(path.join(tmpDir, ".codex/config.toml"), 'model = "external-secret"\n');
+			const before = await readConfigSnapshot(tmpDir);
+			const fake = makeFakeMcpAdapter();
+			for (const dry of [true, false]) {
+				await expect(fake.adapter.syncPlatformYaml(tmpDir, { config: { model: "wanted-secret" }, mcps: { add: { command: "node" } } }, dry)).rejects.toThrow(/model/);
+				expect(await readConfigSnapshot(tmpDir)).toEqual(before);
+			}
+			expect(fake.addCalls).toEqual([]);
+			expect(fake.listCalls).toEqual([]);
+		});
+
+		it("pending dry-run은 복구 필요를 보고하고 파일을 보존한다", async () => {
+			await expect(applyConfig(tmpDir, { model: "first" }, { async mutate(file, operation) {
+				await operation();
+				if (file.endsWith("codex-config-pending.json")) throw new Error("interrupt");
+			} })).rejects.toThrow("interrupt");
+			const before = await readConfigSnapshot(tmpDir);
+			await expect(adapter.syncConfig(tmpDir, { model: "second" }, true)).rejects.toThrow(/recovery/i);
+			expect(await readConfigSnapshot(tmpDir)).toEqual(before);
+		});
+
+		it("외부 배포 트랜잭션 롤백은 설정과 소유권 상태를 함께 복원한다", async () => {
+			await adapter.syncConfig(tmpDir, { model: "first" });
+			const before = await readConfigSnapshot(tmpDir);
+			const transaction = await DeployTransaction.begin(tmpDir, false);
+			if (!transaction) throw new Error("missing transaction");
+			await adapter.syncConfig(tmpDir, { model: "second" }, false, undefined, transaction);
+			await transaction.rollback();
+			await transaction.finish();
+			expect(await readConfigSnapshot(tmpDir)).toEqual(before);
+		});
+
 	});
 
 	// ---------------------------------------------------------------------------
-	// MCP accumulator: 3 servers → single managed block
+	// MCP accumulator: explicit native CLI updates
 	// ---------------------------------------------------------------------------
 
 	describe("MCP accumulator", () => {
+		it("명시적 null은 관리 이력 없이도 해당 서버만 제거하고 없는 서버는 건너뛴다", async () => {
+			await writeManifest(tmpDir, { "codex/mcps": ["kept", "missing"], "codex/skills": ["skill"] });
+			const { adapter: fakeAdapter, removeCalls } = makeFakeMcpAdapter([
+				{ name: "foreign", transport: { type: "stdio", command: "npx" } },
+			]);
+			await fakeAdapter.syncPlatformYaml(tmpDir, { mcps: { foreign: null, missing: null, added: { command: "node" } } }, false);
+			expect(removeCalls.map((call) => call.name)).toEqual(["foreign"]);
+			expect(JSON.parse(await fs.readFile(path.join(tmpDir, ".omt", "sync-manifest.json"), "utf-8"))).toEqual({
+				"codex/mcps": ["added", "kept"], "codex/skills": ["skill"],
+			});
+		});
+
+		for (const operation of ["add", "remove"] as const) {
+			for (const failure of ["downstream", "write-then-throw", "external-edit"] as const) {
+				it(`MCP ${operation}의 ${failure} 이후 rollback이 원본 또는 외부 편집을 보존한다`, async () => {
+					const configFile = path.join(tmpDir, ".codex", "config.toml");
+					const manifestFile = path.join(tmpDir, ".omt", "sync-manifest.json");
+					const baseline = '# --- omt:config ---\nmodel = "old"\n# --- end omt:config ---\n[mcp_servers.old]\ncommand = "node"\n';
+					await fs.mkdir(path.dirname(configFile), { recursive: true });
+					await fs.writeFile(configFile, baseline);
+					await writeManifest(tmpDir, { "codex/mcps": ["old"], "codex/skills": ["kept"] });
+					const manifestBaseline = await fs.readFile(manifestFile, "utf-8");
+					const command = async () => {
+						const config = parse(await fs.readFile(configFile, "utf-8"));
+						config.mcp_servers = operation === "add" ? { old: { command: "node" }, added: { command: "npx" } } : {};
+						await fs.writeFile(configFile, stringify(config));
+						if (failure === "write-then-throw") throw new Error("CLI failed after write");
+					};
+					const fakeAdapter = new CodexAdapter(async () => [
+						{ name: "old", transport: { type: "stdio", command: "node" } },
+					], command, command);
+					const transaction = await DeployTransaction.begin(tmpDir, false, [".omt/sync-manifest.json"]);
+					const observed: string[] = [];
+					try {
+						const run = async () => {
+							await fakeAdapter.syncPlatformYaml(tmpDir, {
+								mcps: operation === "add" ? { added: { command: "npx" } } : { old: null },
+							}, false, undefined, (file) => { observed.push(file); }, transaction!);
+							if (failure === "external-edit") await fs.appendFile(configFile, '# external edit\n');
+							throw new Error("downstream failed");
+						};
+						await expect(run()).rejects.toThrow(failure === "write-then-throw" ? "CLI failed after write" : "downstream failed");
+						const commandOutput = await fs.readFile(configFile, "utf-8");
+						expect(commandOutput).not.toContain("# --- omt:config ---");
+						await transaction!.rollback();
+						expect(await fs.readFile(configFile, "utf-8")).toBe(failure === "external-edit" ? commandOutput : baseline);
+						expect(await fs.readFile(manifestFile, "utf-8")).toBe(manifestBaseline);
+						expect(observed).toEqual(failure === "write-then-throw" ? [] : [configFile]);
+					} finally { await transaction!.finish(); }
+				});
+			}
+		}
+
+		async function interruptConfig() {
+			await expect(applyConfig(tmpDir, { model: "recovered" }, { async mutate(file, operation) {
+				await operation();
+				if (file.endsWith("codex-config-pending.json")) throw new Error("interrupted");
+			} })).rejects.toThrow("interrupted");
+		}
+
+		for (const route of ["omitted", "null", "direct"] as const) {
+			for (const dry of [true, false]) {
+				it(`MCP ${route} 경로는 pending을 ${dry ? "읽기 전용 거부" : "먼저 복구"}한다`, async () => {
+					await interruptConfig();
+					const before = await readConfigSnapshot(tmpDir);
+					const calls: string[] = [];
+					const fake = new CodexAdapter(async () => {
+						calls.push("list");
+						const snapshot = await readConfigSnapshot(tmpDir);
+						expect(snapshot.pendingBytes).toBeNull();
+						expect(snapshot.current.model).toBe("recovered");
+						return [];
+					}, async () => {
+						calls.push("add");
+						const file = path.join(tmpDir, ".codex/config.toml");
+						const config = parse(await fs.readFile(file, "utf8"));
+						config.mcp_servers = { added: { command: "node" } };
+						await fs.writeFile(file, stringify(config));
+					});
+					const transaction = dry ? null : await DeployTransaction.begin(tmpDir, false, [".omt/sync-manifest.json"]);
+					const observed: string[] = [];
+					const observer = (file: string) => { observed.push(file); };
+					const run = () => {
+						if (route === "direct") {
+							fake.accumulateMcp("added", { command: "node" });
+							return fake.flushMcpBlock(tmpDir, dry, observer, transaction ?? undefined);
+						}
+						return fake.syncPlatformYaml(tmpDir, { ...(route === "null" ? { config: null } : {}), mcps: { added: { command: "node" } } }, dry, undefined, observer, transaction ?? undefined);
+					};
+					if (dry) {
+						await expect(run()).rejects.toThrow(/recovery/i);
+						expect(calls).toEqual([]);
+						expect(observed).toEqual([]);
+						expect(await readConfigSnapshot(tmpDir)).toEqual(before);
+						expect(await fs.stat(path.join(tmpDir, ".omt/sync-manifest.json")).catch(() => null)).toBeNull();
+					} else {
+						try {
+							await run();
+							expect(calls).toEqual(["list", "add"]);
+							expect(observed).toEqual([path.join(tmpDir, ".codex/config.toml"), path.join(tmpDir, ".codex/config.toml")]);
+							await fake.syncConfig(tmpDir, { model: "recovered" });
+							await transaction!.rollback();
+							expect(await readConfigSnapshot(tmpDir)).toEqual(before);
+						} finally { await transaction!.finish(); }
+					}
+				});
+			}
+		}
+
+		it("pending의 외부 제3값 충돌은 MCP 실행과 모든 쓰기를 막는다", async () => {
+			await interruptConfig();
+			const file = path.join(tmpDir, ".codex/config.toml");
+			await fs.mkdir(path.dirname(file), { recursive: true });
+			await fs.writeFile(file, 'model = "third-value"\n');
+			const pendingFile = path.join(tmpDir, ".omt/codex-config-pending.json");
+			const pending = await fs.readFile(pendingFile, "utf8");
+			const fake = makeFakeMcpAdapter();
+			fake.adapter.accumulateMcp("added", { command: "node" });
+			for (const dry of [true, false]) {
+				await expect(fake.adapter.flushMcpBlock(tmpDir, dry)).rejects.toThrow(/recovery conflict/i);
+				expect(await fs.readFile(file, "utf8")).toBe('model = "third-value"\n');
+				expect(await fs.readFile(pendingFile, "utf8")).toBe(pending);
+			}
+			expect(fake.listCalls).toEqual([]);
+			expect(fake.addCalls).toEqual([]);
+			expect(await fs.stat(path.join(tmpDir, ".omt/sync-manifest.json")).catch(() => null)).toBeNull();
+		});
+
+		it("native 실행 직전 새 pending이 생기면 해당 명령과 manifest 쓰기를 거부한다", async () => {
+			const fake = makeFakeMcpAdapter();
+			fake.adapter.accumulateMcp("added", { command: "node" });
+			await expect(fake.adapter.flushMcpBlock(tmpDir, false, undefined, { async mutate(file, operation) {
+				if (file.endsWith("config.toml")) await interruptConfig();
+				await operation();
+			} })).rejects.toThrow(/recovery/i);
+			expect(fake.listCalls).toHaveLength(1);
+			expect(fake.addCalls).toEqual([]);
+			expect(await fs.stat(path.join(tmpDir, ".omt/sync-manifest.json")).catch(() => null)).toBeNull();
+		});
+
 		it("accumulates 3 servers into 3 `codex mcp add` calls via `flushMcpBlock`", async () => {
 			const { adapter: fakeAdapter, addCalls, removeCalls } = makeFakeMcpAdapter();
 			fakeAdapter.resetMcpAccumulator();
@@ -932,7 +923,7 @@ describe("CodexAdapter", () => {
 			expect(addCalls.map((c) => c.name)).toEqual(["figma"]);
 		});
 
-		it("removes a manifest-tracked server no longer declared via `flushMcpBlock`", async () => {
+		it("생략된 관리 서버와 기존 manifest를 보존한다", async () => {
 			await writeManifest(tmpDir, { "codex/mcps": ["stale-server", "kept-server"] });
 			const { adapter: fakeAdapter, addCalls, removeCalls } = makeFakeMcpAdapter([
 				{ name: "stale-server", transport: { type: "stdio", command: "npx" } },
@@ -942,7 +933,7 @@ describe("CodexAdapter", () => {
 			fakeAdapter.accumulateMcp("kept-server", { command: "npx" });
 			await fakeAdapter.flushMcpBlock(tmpDir, false);
 
-			expect(removeCalls.map((c) => c.name)).toEqual(["stale-server"]);
+			expect(removeCalls).toEqual([]);
 			expect(addCalls).toEqual([]); // kept-server already equivalent, no re-add
 		});
 
@@ -974,7 +965,7 @@ describe("CodexAdapter", () => {
 			expect(manifestExists).toBe(false);
 		});
 
-		it("`mcps: {}` removes every prior server and sets the manifest to [] via `flushMcpBlock`", async () => {
+		it("빈 mcps 선언은 기존 서버와 manifest를 보존한다", async () => {
 			await writeManifest(tmpDir, { "codex/mcps": ["old-a", "old-b"] });
 			const { adapter: fakeAdapter, removeCalls } = makeFakeMcpAdapter([
 				{ name: "old-a", transport: { type: "stdio", command: "npx" } },
@@ -983,11 +974,11 @@ describe("CodexAdapter", () => {
 			fakeAdapter.resetMcpAccumulator();
 			await fakeAdapter.flushMcpBlock(tmpDir, false);
 
-			expect(removeCalls.map((c) => c.name).sort()).toEqual(["old-a", "old-b"]);
+			expect(removeCalls).toEqual([]);
 			const manifest = JSON.parse(
 				await fs.readFile(path.join(tmpDir, ".omt", "sync-manifest.json"), "utf-8"),
 			);
-			expect(manifest["codex/mcps"]).toEqual([]);
+			expect(manifest["codex/mcps"]).toEqual(["old-a", "old-b"]);
 		});
 
 		it("a first-ever run with 0 servers and no manifest is a clean no-op via `flushMcpBlock`", async () => {
@@ -1017,7 +1008,7 @@ describe("CodexAdapter", () => {
 			expect(addCalls.map((c) => c.name)).toEqual(["server-a"]);
 			const manifestFile = path.join(tmpDir, ".omt", "sync-manifest.json");
 			// (a) the manifest write went through `mutate`, not a direct `writeManifest`
-			expect(recorded).toEqual([manifestFile]);
+			expect(recorded).toEqual([path.join(tmpDir, ".codex", "config.toml"), manifestFile]);
 			// (b) the routed operation actually ran — the manifest reflects the new declared set
 			const manifest = JSON.parse(await fs.readFile(manifestFile, "utf-8"));
 			expect(manifest["codex/mcps"]).toEqual(["server-a"]);
@@ -1138,7 +1129,7 @@ describe("CodexAdapter", () => {
 			expect(result.modelMap).toBeUndefined();
 		});
 
-		it("removes every manifest-tracked server and includes 'mcps' in processedSections when mcps: {} via `syncPlatformYaml`", async () => {
+		it("빈 mcps 섹션은 처리하되 기존 서버를 보존한다", async () => {
 			await writeManifest(tmpDir, { "codex/mcps": ["old-server"] });
 			const { adapter: fakeAdapter, removeCalls } = makeFakeMcpAdapter([
 				{ name: "old-server", transport: { type: "stdio", command: "old-cmd" } },
@@ -1147,7 +1138,7 @@ describe("CodexAdapter", () => {
 			const result = await fakeAdapter.syncPlatformYaml(tmpDir, { mcps: {} }, false);
 
 			expect(result.processedSections).toContain("mcps");
-			expect(removeCalls.map((c) => c.name)).toEqual(["old-server"]);
+			expect(removeCalls).toEqual([]);
 		});
 	});
 
@@ -1805,7 +1796,7 @@ describe("CodexAdapter", () => {
 				await fs.stat(path.join(targetBase, ".codex", "hooks.json")).then(() => true).catch(() => false),
 			).toBe(false);
 		});
-		it("notifies after each successful OMT-owned config, hook bundle, and hooks.json write via `syncPlatformYaml` — MCP no longer writes config.toml", async () => {
+		it("설정·MCP·훅의 성공한 쓰기마다 observer를 호출한다", async () => {
 			const { adapter: fakeAdapter, addCalls } = makeFakeMcpAdapter();
 			const sourceHookDir = path.join(tmpDir, "external-hook");
 			await fs.mkdir(sourceHookDir, { recursive: true });
@@ -1827,13 +1818,12 @@ describe("CodexAdapter", () => {
 			const configFile = path.join(tmpDir, ".codex", "config.toml");
 			const hookDir = path.join(tmpDir, ".codex", "hooks", path.basename(sourceHookDir));
 			const hooksFile = path.join(tmpDir, ".codex", "hooks.json");
-			// config.toml is written ONCE, for the `config` section — MCP flush no
-			// longer touches config.toml at all, so it does not appear a second time.
-			expect(writes).toEqual([configFile, hookDir, hooksFile]);
+			// Config writes and the MCP command both notify the config path.
+			expect(writes).toEqual([configFile, configFile, hookDir, hooksFile]);
 			expect(addCalls.map((c) => c.name)).toEqual(["server-a"]);
 		});
 
-		it("forwards mutation hooks to both the config write and the MCP manifest write via `syncPlatformYaml`", async () => {
+		it("설정·MCP 명령·manifest 쓰기를 각각 mutation hook으로 감싼다", async () => {
 			const { adapter: fakeAdapter, addCalls } = makeFakeMcpAdapter();
 			const calls: string[] = [];
 			const observed: string[] = [];
@@ -1853,13 +1843,15 @@ describe("CodexAdapter", () => {
 			);
 			const configFile = path.join(tmpDir, ".codex", "config.toml");
 			const manifestFile = path.join(tmpDir, ".omt", "sync-manifest.json");
-			// Both the config write and the MCP manifest write route through
+			// Config, MCP commands, and the MCP manifest write route through
 			// mutationHooks — a direct manifest write would drift the
 			// DeployTransaction's tracked fingerprint (see flushMcpBlock).
-			expect(calls).toEqual([configFile, manifestFile]);
+			const pendingFile = path.join(tmpDir, ".omt", "codex-config-pending.json");
+			const stateFile = path.join(tmpDir, ".omt", "codex-config-state.json");
+			expect(calls).toEqual([pendingFile, configFile, stateFile, pendingFile, configFile, manifestFile]);
 			// writeObserver is not wired to the manifest write (mirrors
 			// reconcilePairManifest, which only routes through `mutate`).
-			expect(observed).toEqual([configFile]);
+			expect(observed).toEqual([configFile, configFile]);
 			expect(addCalls.map((c) => c.name)).toEqual(["server"]);
 		});
 

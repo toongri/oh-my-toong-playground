@@ -32,6 +32,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 - **프로젝트별 분화** — 상향 탐색으로 글로벌 컴포넌트 위에 프로젝트 고유 컨벤션 오버라이드
 - **고아 정리** — 라이브러리에서 제거한 컴포넌트는 다음 sync 때 대상에서도 사라짐
 - **멀티플랫폼 지원** — Claude / Gemini / Codex / OpenCode를 어댑터로 추상화
+- **Codex 설정 소유권 추적** — 기본 `.codex/config.toml`을 유지하고, 주석과 무관하게 `.omt/codex-config-state.json`에서 관리할 키와 마지막 적용 값을 추적합니다. 기존 키는 명시적으로 관리 대상으로 채택해야 하며, 충돌 시 사용자 설정을 보존합니다. `make sync-dry`도 실제 대상에서 채택 필요 여부와 충돌을 확인합니다([플랫폼 YAML 설정 배포](docs/platform-yaml-config-deployment.md) 참고).
 - **표면별 E2E 라우팅** — 웹/Electron은 `agent-browser`, iOS·tvOS·macOS·Android·Vega OS TV는 `agent-device`로 검증
 - **QA 강제 게이트** — qa가 액터 로스터→스토리→셀→기록→판정→완료 사슬을 채우기 전 단계 전환·드라이버·Stop을 강제하고(PLAN 도달성 탐색은 허용), Claude/Codex의 `qa-driver-guard.sh`·`codex-qa-driver-guard.sh`와 Codex `codex-qa-seed.sh`가 같은 상태를 집행
 - **Ultragoal 최종 리뷰 수렴** — cleanup-only 완료를 허용하면서 active pursuing `code-reviewer` dispatch를 5회 창으로 제한하고 Claude/Codex 훅 패리티로 사용자 중재를 표면화
