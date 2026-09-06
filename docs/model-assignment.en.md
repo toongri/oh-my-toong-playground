@@ -97,10 +97,11 @@ tiers" is not enough.
 
 What cleared that bar for `fable` is the absence-judgment principle, which produces
 one assignment that opus cannot express. The tier now differentiates on both deploy
-surfaces — `claude-fable-5` vs Opus 5 on claude, `gpt-5.6-sol` vs `gpt-5.6-terra`
-on codex (since the 2026-08-04 remap; before it codex had nothing above
-`gpt-5.6-sol`, so `fable` and `opus` fell to the same model — the first platform
-asymmetry the tier vocabulary had admitted).
+surfaces — `claude-fable-5` vs Opus 5 on claude, and the default codex tier path is
+`gpt-5.6-sol` vs `gpt-5.6-terra` (since the 2026-08-04 remap; before it codex had
+nothing above `gpt-5.6-sol`, so `fable` and `opus` fell to the same model — the first
+platform asymmetry the tier vocabulary had admitted). Codex `metis` is explicitly
+assigned `gpt-6-astra` with high effort.
 
 ## Substituting a tier into a concrete model
 

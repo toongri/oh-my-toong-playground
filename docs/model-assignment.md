@@ -85,9 +85,10 @@ verdict를 자기가 만드는 것처럼 보이지만 실제로는 `skills/insan
 
 `fable`이 그 문턱을 넘은 근거는 부재 판정 원칙이고, 그 원칙은 Opus로는 표현되지 않는
 배정을 하나 만든다. 이 등급은 두 배포면 모두에서 실제로 갈린다 — claude는
-`claude-fable-5` vs Opus 5, codex는 `gpt-5.6-sol` vs `gpt-5.6-terra`다(2026-08-04
-재배정 이후. 그전에는 codex에 `gpt-5.6-sol` 위가 없어 `fable`과 `opus`가 같은 모델로
-떨어지는 플랫폼 비대칭이 있었다).
+`claude-fable-5` vs Opus 5, codex의 기본 tier 경로는 `gpt-5.6-sol` vs
+`gpt-5.6-terra`다(2026-08-04 재배정 이후. 그전에는 codex에 `gpt-5.6-sol` 위가 없어
+`fable`과 `opus`가 같은 모델로 떨어지는 플랫폼 비대칭이 있었다). Codex의 `metis`는
+`gpt-6-astra` 모델과 `effort: high`를 명시적으로 사용한다.
 
 ## 등급을 실제 모델로 치환하는 규칙
 

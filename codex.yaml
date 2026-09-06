@@ -62,6 +62,8 @@ model-map:
   # `agents:` replaces the whole resolved tier entry for an agent whose model
   # or effort differs from its tier. `mnemosyne` keeps the sonnet model but
   # receives the lower initial effort recommendation.
+  # `metis` keeps its fable tier in frontmatter and is explicitly assigned
+  # gpt-6-astra with high effort on Codex.
   # It previously held code-reviewer/metis/momus/tech-claim-examiner,
   # all four byte-identical to `tiers.opus`, so they resolved to the same TOML
   # either way and were removed. A new entry must name what tier it could not
@@ -70,6 +72,9 @@ model-map:
   # (tools/adapters/codex.ts:54), and agent TOMLs are rewritten wholesale
   # (codex.ts:431), so nothing stale survives a sync.
   agents:
+    metis:
+      model: gpt-6-astra
+      effort: high
     mnemosyne:
       model: gpt-5.6-luna
       effort: low
