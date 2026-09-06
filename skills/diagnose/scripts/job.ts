@@ -121,7 +121,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 				command: "codex exec",
 				emoji: "🔨",
 				color: "BLUE",
-				model: "gpt-5.6-sol",
+				model: "gpt-6-astra",
 				effort_level: "high",
 				output_format: "json",
 			},

@@ -372,6 +372,60 @@ describe("settings fallback 병합", () => {
 			});
 		} catch {}
 	});
+
+	test("`members`를 생략한 config에서 default model(gpt-6-astra)과 high effort가 유지된다", async () => {
+		const configPath = path.join(tmpDir, "diagnose.config.yaml");
+		fs.writeFileSync(configPath, ["review:", "  settings:", "    timeout: 10"].join("\n"), "utf8");
+
+		const jobsDir = path.join(tmpDir, "jobs");
+		const binDir = path.join(tmpDir, "bin");
+		const argvPath = path.join(tmpDir, "codex-argv.txt");
+		fs.mkdirSync(binDir, { recursive: true });
+		const stubPath = path.join(binDir, "codex");
+		fs.writeFileSync(stubPath, '#!/bin/sh\nprintf "%s\\n" "$@" > "$STUB_CODEX_ARGV"\n', "utf8");
+		fs.chmodSync(stubPath, 0o755);
+		const env = {
+			...process.env,
+			STUB_CODEX_ARGV: argvPath,
+			PATH: `${binDir}:${process.env.PATH || ""}`,
+		};
+
+		const result = execFileSync(
+			process.execPath,
+			[
+				SCRIPT,
+				"start",
+				"--config",
+				configPath,
+				"--jobs-dir",
+				jobsDir,
+				"--json",
+				"fallback model test",
+			],
+			{ stdio: "pipe", env },
+		);
+
+		const { jobDir, members } = JSON.parse(result.toString());
+		expect(members[0].model).toBe("gpt-6-astra");
+		expect(members[0].effort_level).toBe("high");
+
+		const argvDeadline = Date.now() + 45_000;
+		while (!fs.existsSync(argvPath) && Date.now() < argvDeadline)
+			await new Promise((resolve) => setTimeout(resolve, 20));
+		expect(fs.existsSync(argvPath)).toBe(true);
+		const argv = fs.readFileSync(argvPath, "utf8").split("\n").filter(Boolean);
+		expect(argv).toContain("gpt-6-astra");
+		expect(argv).toContain("model_reasoning_effort=high");
+
+		try {
+			execFileSync(process.execPath, [SCRIPT, "stop", jobDir], { stdio: "pipe" });
+		} catch {}
+		try {
+			execFileSync(process.execPath, [SCRIPT, "clean", jobDir, "--jobs-dir", jobsDir], {
+				stdio: "pipe",
+			});
+		} catch {}
+	});
 });
 
 describe("resume-member subcommand", () => {
@@ -567,10 +621,10 @@ describe("배포 config의 외부 디스패치 계약", () => {
 		return members[0] as Record<string, unknown>;
 	}
 
-	test("멤버는 codex exec를 gpt-5.6-sol/high로 실행한다", () => {
+	test("멤버는 codex exec를 gpt-6-astra/high로 실행한다", () => {
 		const member = readMember();
 		expect(member.command).toBe("codex exec");
-		expect(member.model).toBe("gpt-5.6-sol");
+		expect(member.model).toBe("gpt-6-astra");
 		expect(member.effort_level).toBe("high");
 	});
 
@@ -598,7 +652,7 @@ describe("배포 config의 외부 디스패치 계약", () => {
 			},
 			"codex",
 		);
-		expect(command).toContain("-m gpt-5.6-sol");
+		expect(command).toContain("-m gpt-6-astra");
 		expect(command).toContain("model_reasoning_effort=high");
 		expect(command).toContain("agents.enabled=false");
 	});
