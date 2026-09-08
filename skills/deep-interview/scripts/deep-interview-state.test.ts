@@ -62,8 +62,10 @@ describe("deep-interview state", () => {
 	test("HTML 제출 명령은 원본과 HTML을 state에 기록함", () => {
 		initDeepInterviewState(SID, { initial_idea: "presentation submission" });
 		const spec = join(tmpDir, "foo.md");
+		const presentationMarkdown = join(tmpDir, "foo.presentation.md");
 		const html = join(tmpDir, "foo.presentation.html");
 		writeFileSync(spec, "# Design\nA confirmed design.");
+		writeFileSync(presentationMarkdown, "# Presentation\nA confirmed presentation.");
 		writeFileSync(html, "<!doctype html><html><body><h1>Design</h1><p>A confirmed design.</p></body></html>");
 		const cli = join(import.meta.dir, "deep-interview-state.ts");
 		execSync(`bun '${cli}' submit-presentation --spec-path '${spec}' --html-path '${html}'`, { stdio: "pipe", env: { ...process.env } });
@@ -71,6 +73,23 @@ describe("deep-interview state", () => {
 		expect(state.presentation?.html_path).toBe(html);
 		updateDeepInterviewState(SID, { current_phase: "handoff" });
 		writeFileSync(spec, "# Revised design");
+		expect(() => updateDeepInterviewState(SID, { current_phase: "handoff" })).toThrow("presentation");
+	});
+
+	test("제출 후 중간 발표 Markdown을 수정하면 새 렌더 제출 없이는 인계할 수 없음", () => {
+		initDeepInterviewState(SID, { initial_idea: "presentation freshness" });
+		const spec = join(tmpDir, "foo.md");
+		const presentationMarkdown = join(tmpDir, "foo.presentation.md");
+		const html = join(tmpDir, "foo.presentation.html");
+		writeFileSync(spec, "# Design\nA confirmed design.");
+		writeFileSync(presentationMarkdown, "# Presentation\nOriginal explanation.");
+		writeFileSync(html, "<!doctype html><html><body><h1>Design</h1><p>Original explanation.</p></body></html>");
+		const cli = join(import.meta.dir, "deep-interview-state.ts");
+
+		execSync(`bun '${cli}' submit-presentation --spec-path '${spec}' --html-path '${html}'`, { stdio: "pipe", env: { ...process.env } });
+		updateDeepInterviewState(SID, { current_phase: "handoff" });
+		writeFileSync(presentationMarkdown, "# Presentation\nEdited explanation.");
+
 		expect(() => updateDeepInterviewState(SID, { current_phase: "handoff" })).toThrow("presentation");
 	});
 

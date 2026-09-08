@@ -1084,26 +1084,38 @@ export interface PresentationSubmission {
 	html_path: string;
 	source_sha256: string;
 	html_sha256: string;
+	presentation_markdown_path?: string;
+	presentation_markdown_sha256?: string;
 }
 
-export function createPresentationSubmission(sourcePath: string, htmlPath: string): PresentationSubmission {
+export function createPresentationSubmission(sourcePath: string, htmlPath: string, presentationMarkdownPath?: string): PresentationSubmission {
 	if (!sourcePath.trim() || !htmlPath.trim() || extname(htmlPath).toLowerCase() !== ".html") {
 		throw new Error("presentation requires a source file and an HTML file");
 	}
 	const source = readFileSync(sourcePath);
 	const html = readFileSync(htmlPath);
+	const intermediatePath = presentationMarkdownPath;
+	const presentationMarkdown = intermediatePath === undefined ? undefined : readFileSync(intermediatePath);
 	if (!source.toString("utf8").trim() || !/<html\b/i.test(html.toString("utf8")) || !/<body\b[^>]*>[\s\S]*\S[\s\S]*<\/body>/i.test(html.toString("utf8"))) {
 		throw new Error("presentation requires non-empty source and a complete HTML document");
 	}
 	if (statSync(htmlPath).mtimeMs < statSync(sourcePath).mtimeMs) {
 		throw new Error("presentation HTML predates its source; render again before submitting");
 	}
-	return {
+	if (presentationMarkdown !== undefined && intermediatePath !== undefined && statSync(htmlPath).mtimeMs < statSync(intermediatePath).mtimeMs) {
+		throw new Error("presentation HTML predates its intermediate Markdown; render again before submitting");
+	}
+	const submission: PresentationSubmission = {
 		source_path: resolve(sourcePath),
 		html_path: resolve(htmlPath),
 		source_sha256: createHash("sha256").update(source).digest("hex"),
 		html_sha256: createHash("sha256").update(html).digest("hex"),
 	};
+	if (presentationMarkdown !== undefined && intermediatePath !== undefined) {
+		submission.presentation_markdown_path = resolve(intermediatePath);
+		submission.presentation_markdown_sha256 = createHash("sha256").update(presentationMarkdown).digest("hex");
+	}
+	return submission;
 }
 
 export function presentationSubmissionCurrent(value: unknown, sourcePath?: string, htmlPath?: string): boolean {
@@ -1111,8 +1123,15 @@ export function presentationSubmissionCurrent(value: unknown, sourcePath?: strin
 	if (sourcePath !== undefined && resolve(sourcePath) !== value.source_path) return false;
 	if (htmlPath !== undefined && resolve(htmlPath) !== value.html_path) return false;
 	try {
-		const current = createPresentationSubmission(value.source_path, value.html_path);
-		return current.source_sha256 === value.source_sha256 && current.html_sha256 === value.html_sha256;
+		const hasIntermediate = value.presentation_markdown_path !== undefined || value.presentation_markdown_sha256 !== undefined;
+		let intermediatePath: string | undefined;
+		if (hasIntermediate) {
+			if (typeof value.presentation_markdown_path !== "string" || typeof value.presentation_markdown_sha256 !== "string") return false;
+			intermediatePath = value.presentation_markdown_path;
+		}
+		const current = createPresentationSubmission(value.source_path, value.html_path, intermediatePath);
+		return current.source_sha256 === value.source_sha256 && current.html_sha256 === value.html_sha256 &&
+			(!hasIntermediate || current.presentation_markdown_sha256 === value.presentation_markdown_sha256);
 	} catch {
 		return false;
 	}

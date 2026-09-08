@@ -902,7 +902,12 @@ export function submitDeepInterviewPresentation(sessionId: string, specPath: str
 	if (!specName.endsWith(".md") || resolve(htmlPath) !== expectedHtmlPath) {
 		throw new Error(`presentation HTML must be the sibling ${specName.replace(/\.md$/, ".presentation.html")} path`);
 	}
-	const presentation = createPresentationSubmission(specPath, htmlPath);
+	const presentationMarkdownPath = resolve(dirname(htmlPath), `${basename(specPath, ".md")}.presentation.md`);
+	const presentation = createPresentationSubmission(
+		specPath,
+		htmlPath,
+		existsSync(presentationMarkdownPath) ? presentationMarkdownPath : undefined,
+	);
 	const path = resolveStatePath(sessionId);
 	const prior = readRaw(path);
 	if (!prior || !isRecord(prior["state"])) throw new Error("presentation submission requires an initialized interview");
