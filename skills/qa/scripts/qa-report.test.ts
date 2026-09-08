@@ -87,6 +87,40 @@ const fakeReader: EvidenceReader = (path) =>
 	path.endsWith(".png") ? { kind: "image", dataUri: "data:image/png;base64,AAAA" } : { kind: "text", content: `contents of ${path}` };
 
 describe("qa-report renderer", () => {
+	test("최종 화면 보고서는 관찰 설명으로 누락 이미지를 대신할 수 없음", () => {
+		const view = baseView();
+		const narrative = { scenarios: { "story-1:1:": { observed: "내보내기 완료를 확인했다." } } };
+		expect(() => renderQaReport(view, narrative, () => ({ kind: "text", content: "HTTP 200" }), undefined, undefined, true)).toThrow("visual");
+	});
+
+	test("최종 화면 보고서는 큰 이미지를 경로로만 남기지 않음", () => {
+		const view = baseView();
+		const reader: EvidenceReader = () => ({ kind: "too-large", path: "/capture.png", size: MAX_EMBED_BYTES + 1, media: "image" });
+		expect(() => renderQaReport(view, {}, reader, undefined, undefined, true)).toThrow("visual");
+	});
+
+	test("최종 화면 보고서에 전후 이미지와 관찰을 함께 표시함", () => {
+		const view = baseView();
+		view.cells = view.cells!.slice(0, 1);
+		const narrative = { scenarios: { "story-1:1:": { observed: "연속 클릭 후에도 완료 화면은 한 번 표시됐다." } } };
+		const html = renderQaReport(view, narrative, fakeReader, undefined, undefined, true)!;
+		expect(html).toContain("연속 클릭 후에도 완료 화면은 한 번 표시됐다.");
+		expect(html.match(/<img /g)?.length).toBe(3);
+	});
+
+	test("최종 화면 보고서는 누적 이미지 예산 초과를 거부함", () => {
+		const view = baseView();
+		view.cells = view.cells!.slice(0, 1);
+		const narrative = { scenarios: { "story-1:1:": { observed: "결과 화면 확인" } } };
+		const dataUri = "data:image/png;base64," + "A".repeat(MAX_TOTAL_EMBED_BYTES / 2);
+		expect(() => renderQaReport(view, narrative, () => ({ kind: "image", dataUri }), undefined, undefined, true)).toThrow("budget");
+	});
+
+	test("최종 화면 보고서는 이미지가 있어도 관찰 설명 누락을 거부함", () => {
+		const view = baseView();
+		view.cells = view.cells!.slice(0, 1);
+		expect(() => renderQaReport(view, {}, fakeReader, undefined, undefined, true)).toThrow("visual observation");
+	});
 	test("renders null (no-op) when the roster is empty — PRE-FLIGHT fail-fast has no report", () => {
 		expect(renderQaReport(baseView({ actors: [] }), {}, fakeReader)).toBeNull();
 	});

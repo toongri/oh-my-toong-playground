@@ -253,6 +253,22 @@ describe("qa-state CLI wiring", () => {
 		}
 	};
 
+	test("화면 액터는 텍스트 근거만으로 성공을 기록할 수 없음", () => {
+		authorCompleteChain();
+		run('add-actor --id actor-1 --driver agent-browser --reachable yes');
+		const evidence = join(tmpDir, "observation.log");
+		writeFileSync(evidence, "Clicked export; received HTTP 200; screen showed success.");
+		expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${evidence} --evidence-surface agent-browser`)).toThrow();
+		const before = join(tmpDir, "before.png");
+		const after = join(tmpDir, "after.png");
+		const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6dAAAAABJRU5ErkJggg==", "base64");
+		writeFileSync(before, png);
+		writeFileSync(after, png);
+		expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${after} --evidence-surface agent-browser --evidence-before ${before} --evidence-action ${evidence} --evidence-after ${after}`)).not.toThrow();
+		writeFileSync(after, "This is a text log renamed as an image, not a screenshot.");
+		expect(() => run(`record-cell --story story-1 --cls 2 --status fail --evidence-before ${before} --evidence-action ${evidence} --evidence-after ${after}`)).toThrow();
+	});
+
 	// A cell's evidence must be a user-boundary observation, never a test-runner
 	// report. This is the failure the whole QA presentation exists to prevent:
 	// a PO shown `vitest run … exit=0` as proof a user-facing requirement is met.

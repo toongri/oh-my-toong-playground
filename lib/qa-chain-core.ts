@@ -36,9 +36,8 @@ export interface QaEvidence {
 	path: string;
 	surface: string;
 	/**
-	 * Optional 3-slot actor-perspective evidence (each an evidence file path).
-	 * Additive: chainComplete/recordComplete validate only `path`/`surface`,
-	 * never these — a cell with no 3-slot capture stays valid.
+	 * Actor-perspective evidence paths. Visual pass/fail cells require all three;
+	 * before/after are separate screenshot files, checked again at completion.
 	 */
 	before?: string;
 	action?: string;
@@ -143,7 +142,22 @@ export interface QaChainState {
 /** Backwards-compatible name for callers that refer to the chain as QaState. */
 export type QaState = QaChainState;
 
-export type EvidenceProbe = (path: string) => { exists: boolean; size: number };
+export type EvidenceProbe = (path: string) => { exists: boolean; size: number; image?: boolean };
+
+export function isVisualDriver(driver: QaDriver | undefined): boolean {
+	return driver === "agent-browser" || driver === "agent-device";
+}
+
+/** Visual cells carry two separate captures and the actor's action record. */
+export function visualEvidenceComplete(evidence: QaEvidence | undefined, probe: EvidenceProbe): boolean {
+	if (!evidence?.before || !evidence.action || !evidence.after || evidence.before === evidence.after) return false;
+	try {
+		return [evidence.before, evidence.action, evidence.after].every((path, index) => {
+			const file = probe(path);
+			return file.exists && file.size > 0 && (index === 1 || (/\.(png|jpe?g|webp|gif)$/i.test(path) && file.image !== false));
+		});
+	} catch { return false; }
+}
 
 export interface RequiredCell {
 	story: string;
@@ -256,6 +270,7 @@ export function recordComplete(state: QaChainState, probe: EvidenceProbe): boole
 		if (!cell || cell.status === null || cell.status === undefined || cell.cycle !== currentCycle(state)) return false;
 		if (cell.status === "na" && !cell.na_reason) return false;
 		const story = stories.find((candidate) => candidate.id === required.story);
+		if ((cell.status === "pass" || cell.status === "fail") && isVisualDriver(story ? actorFor(state, story)?.driver : undefined) && !visualEvidenceComplete(cell.evidence, probe)) return false;
 		if (cell.status === "pass" && !validEvidence(state, cell.evidence, story ? actorFor(state, story)?.driver : undefined, cell.cycle, probe)) return false;
 	}
 	const checks = state.run_checks ?? {};

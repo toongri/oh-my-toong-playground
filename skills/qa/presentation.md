@@ -8,6 +8,10 @@ never dumbed down, big-picture diagrams — different subject: **users and their
 product experience, not functions and files.**
 
 ## Core principle — the completion condition is a person, not a document
+For a visual user boundary, the required scenario-card structure is **before image → actor action and observed explanation → after image**. Both images are captures from that scenario's actual software/device run. An authored observation accompanies them; it does not replace either image. API/text-CLI scenarios instead carry an observation grounded in the actual received response/output. A screenshot of a log is not UI proof.
+
+The final `qa-report.ts` CLI validates visual images and observations before writing. Missing, unreadable, oversized, or cumulatively unembeddable images block the final report; a path-only placeholder does not satisfy visual proof. Optimize captures, update their recorded paths, and re-render. Inspect the actual HTML cards before completion, checking that each image shows the claimed actor, screen, and asserted state. Capture failure leaves an evidence gap, not an invented pass/fail or an `na` excuse.
+
 The report is done when a **PO/designer with no context** can, from the report
 alone, correctly understand: who this change affects, how those people use the
 product, what happens at their boundary, whether it works, and whether each
@@ -98,7 +102,7 @@ there is no separate actor-roster table).
   the real software rendered — "이 시나리오에서 이렇게 했더니 화면/응답이 이렇게
   되더라." The renderer draws ONE card per scenario, and every verified
   (pass/fail) scenario must carry a reader-visible real-software record:
-  **an authored observation OR a screenshot** — a scenario with neither renders a
+  **an authored observation AND before/after screenshots for visual boundaries; an authored observation backed by received output for API/text-CLI boundaries** — a scenario with neither renders a
   loud gap, never a silent hole. This is what lets a PO judge, per scenario, whether
   the software drew the UX right and whether the change had side effects. A raw
   curl transcript, an HTTP/JSON dump, a build/test log, or a `vitest`/`jest`
@@ -175,7 +179,7 @@ ordinary terms alone.
 ## Format — self-contained HTML + `--narrative` injection
 The verification log renders from `qa-state` records only. The presentation is
 subjective prose + diagrams, so it is injected through the `presentation` object
-of `qa-report.ts --narrative <json>` (never persisted to disk):
+of `qa-report.ts --narrative <json-file>` (never persisted to qa-state):
 
 ```json
 {
@@ -213,7 +217,7 @@ marker** (`class="gap"`) — what was skipped shows in the report.
       **at the user boundary** — zero implementation mechanism (cache, id, type,
       function name), zero unit-test narration?
 - [ ] Does **every verified scenario** carry its own reader-visible record — an
-      authored observation OR a screenshot on its card — with none separated from
+      observation plus before/after images for visual boundaries, or a grounded observation for text boundaries — with none separated from
       its proof and none left a silent hole (a card with neither is a loud gap)?
 - [ ] Does **every scenario's** observation name its medium — a screen/device
       capture, or an API/CLI response — and does that medium match the actor's
@@ -257,7 +261,7 @@ works, and therefore whether the requirements were met?**
 - A user flow slot holds unit tests or build logs → replace with user-boundary observation
 - A scenario shows a raw curl/HTTP/JSON dump (`HTTP=404`, `{"error":...}`, `table row count before=6`) as its proof → convert it to a natural-language "we ran this scenario and observed X"; the raw bytes belong in the audit section, not the reader
 - A requirement's user boundary was never driven but it reads `yes`/`partial` → mark `satisfied: "unverified"` (renders loud "미검증")
-- A verified scenario's card has neither an observation nor a screenshot → it renders a loud gap; write its per-scenario `observed` (convert any curl/API transcript) or attach its before/action/after
+- A visual scenario lacks either an observation or before/after images → capture the missing asserted state, record its path, and render again. Text-boundary scenarios need a grounded `observed` explanation of the received output.
 - A human actor's scenario is observed only through an API/CLI response but reads as if the screen was driven → name the medium; a screen-boundary claim needs a screen/device capture. If no user-facing surface exists yet, declare the actor an API/system client — never let an API reading pass as a human-screen observation
 - Internal jargon (`cls`, source tags) is visible to the reader → remove it
 - The narrative names more users/scenarios/requirements than the records hold → invention; fix the records

@@ -49,6 +49,8 @@ import {
 	cycleUntouched,
 	driverGateArmed,
 	recordComplete,
+	isVisualDriver,
+	visualEvidenceComplete,
 	rosterComplete,
 	type QaActor,
 	type QaBaseline,
@@ -278,9 +280,22 @@ function buildEvidenceSlots(
 	return { path: slot.action ?? slot.after ?? slot.before ?? "", ...slot };
 }
 
-function stateProbe(path: string): { exists: boolean; size: number } {
+function stateProbe(path: string): { exists: boolean; size: number; image?: boolean } {
 	try {
-		return { exists: true, size: statSync(path).size };
+		const file = statSync(path);
+		if (!file.isFile()) return { exists: false, size: 0 };
+		if (!/\.(png|jpe?g|webp|gif)$/i.test(path)) return { exists: true, size: file.size };
+		const fd = openSync(path, "r");
+		const header = Buffer.alloc(24);
+		let length: number;
+		try { length = readSync(fd, header, 0, header.length, 0); } finally { closeSync(fd); }
+		const image = length >= 24 && (
+			header.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ||
+			(header[0] === 255 && header[1] === 216 && header[2] === 255) ||
+			/^GIF8[79]a/.test(header.toString("ascii", 0, 6)) ||
+			(header.toString("ascii", 0, 4) === "RIFF" && header.toString("ascii", 8, 12) === "WEBP")
+		);
+		return { exists: true, size: file.size, image };
 	} catch {
 		return { exists: false, size: 0 };
 	}
@@ -707,7 +722,7 @@ export function recordCell(sessionId: string, opts: RecordCellOpts): void {
 	if (opts.status === "na" && !opts.naReason?.trim()) throw new Error("na status requires na-reason");
 	const scenarioPatch = scenarioFieldPatch(opts);
 	let evidence: QaCell["evidence"];
-	if (opts.status === "pass") {
+	if (opts.status === "pass" || (opts.status === "fail" && opts.evidencePath && opts.evidenceSurface)) {
 		if (!opts.evidencePath || !opts.evidenceSurface) throw new Error("pass cell requires evidence-path and evidence-surface");
 		evidence = { path: probeEvidence(opts.evidencePath, opts.evidenceSurface, actorDriver(prior, selector.story)), surface: opts.evidenceSurface };
 	}
@@ -728,6 +743,9 @@ export function recordCell(sessionId: string, opts: RecordCellOpts): void {
 		for (const p of [evidence.path, evidence.before, evidence.action, evidence.after]) {
 			if (p) assertBoundaryObservation(p);
 		}
+	}
+	if ((opts.status === "pass" || opts.status === "fail") && isVisualDriver(actorDriver(prior, selector.story)) && !visualEvidenceComplete(evidence, stateProbe)) {
+		throw new Error("visual cell requires separate before/after screenshot files and an action record; capture the asserted screen, then record-cell again");
 	}
 	const next: QaCell = {
 		...selector,

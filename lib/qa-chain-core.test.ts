@@ -55,12 +55,20 @@ function authoredState(): CompleteFixture {
 		priority: index === 0 ? "H" : "M",
 		status: "pass",
 		cycle: 2,
-		evidence: { path: `/evidence/${index}`, surface: "agent-device" },
+		evidence: { path: `/evidence/${index}`, surface: "agent-device", before: `/evidence/${index}-before.png`, action: `/evidence/${index}`, after: `/evidence/${index}-after.png` },
 	}));
 	return state;
 }
 
 describe("qa chain core", () => {
+	test("화면 시나리오의 전후 이미지 누락은 완료로 판정하지 않음", () => {
+		const state = authoredState();
+		for (const cell of state.cells) {
+			cell.evidence = { path: "/action.log", surface: "agent-device" };
+		}
+		expect(recordComplete(state, probe)).toBe(false);
+		expect(approveOk(state, probe)).toBe(false);
+	});
 	test("derives eight required cells per story", () => {
 		const state = authoredState();
 		expect(requiredCells(state)).toHaveLength(8);
@@ -270,7 +278,7 @@ describe("qa chain core: additive schema extension (3-slot evidence + structured
 		expect(cell.source).toBe("self-authored");
 	});
 
-	test("chainComplete/recordComplete/approveOk/commentOk are unaffected by the new optional fields, present or absent", () => {
+	test("구조화 설명을 추가해도 완전한 화면 근거의 판정은 유지됨", () => {
 		const state = authoredState();
 		expect(chainComplete(state)).toBe(true);
 		expect(recordComplete(state, probe)).toBe(true);
@@ -285,7 +293,7 @@ describe("qa chain core: additive schema extension (3-slot evidence + structured
 				why_needed: "why",
 				source: "self-authored" as const,
 				evidence: cell.evidence
-					? { ...cell.evidence, before: "/before", action: "/action", after: "/after" }
+					? { ...cell.evidence, before: "/before.png", action: "/action", after: "/after.png" }
 					: cell.evidence,
 			})),
 		};

@@ -19,7 +19,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from "os";
 import { dirname, extname, join, resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
-import { requiredCells, type QaBaseline, type QaCell, type QaResult, type QaRunCheck, type QaStory } from "@lib/qa-chain-core";
+import { requiredCells, isVisualDriver, type QaBaseline, type QaCell, type QaResult, type QaRunCheck, type QaStory } from "@lib/qa-chain-core";
 import { readQaView, type QaView } from "./qa-state.ts";
 
 // Keep individual evidence files small enough to inspect, and cap the total
@@ -246,6 +246,7 @@ function statusBadge(status: QaCell["status"]): string {
 }
 
 interface EvidenceRenderContext {
+	strictVisualEvidence?: boolean;
 	embeddedBytes: number;
 	renderedPaths: Set<string>;
 }
@@ -287,6 +288,7 @@ function imageSlot(label: string, path: string | undefined, readEvidence: Eviden
 		// instead of a false "screenshot too large" claim. `media` absent (older
 		// injected test readers) behaves as before: treated as an image.
 		if (embed.media === "text") return "";
+		if (context.strictVisualEvidence) throw new Error(`visual evidence cannot be embedded: ${path}; reduce the capture size and render again`);
 		// The screenshot EXISTS but is too big to inline — show a placeholder with the
 		// path so the card does not misread as "no evidence recorded" (a false gap).
 		const mib = (embed.size / (1024 * 1024)).toFixed(1);
@@ -295,6 +297,7 @@ function imageSlot(label: string, path: string | undefined, readEvidence: Eviden
 	if (embed.kind !== "image") return ""; // text/missing → audit, not the reader
 	const embedBytes = embeddedByteLength(embed);
 	if (embedBytes > 0 && context.embeddedBytes + embedBytes > MAX_TOTAL_EMBED_BYTES) {
+		if (context.strictVisualEvidence) throw new Error("visual evidence exceeds the total embed budget; optimize captures and render again");
 		// Over budget: keep the reference visible rather than dropping it into a false gap.
 		return evidenceSlotHtml(label, path, `<p class="evidence-note">임베드 예산 초과 — 아래 경로로 확인</p>`);
 	}
@@ -816,10 +819,27 @@ export function renderQaReport(
 	readEvidence: EvidenceReader = defaultEvidenceReader,
 	renderMermaid: MermaidRenderer = mmdcRenderSvg,
 	onMermaidRenderError?: (error: unknown) => void,
+	strictVisualEvidence = false,
 ): string | null {
 	if ((view.actors ?? []).length === 0) return null;
+	if (strictVisualEvidence) {
+		for (const story of view.stories ?? []) {
+			const actor = view.actors?.find((candidate) => candidate.id === (story.actor ?? story.actor_id));
+			if (!isVisualDriver(actor?.driver)) continue;
+			for (const cell of cellsForStory(view, story.id)) {
+				if (cell.status !== "pass" && cell.status !== "fail") continue;
+				for (const path of [cell.evidence?.before, cell.evidence?.after]) {
+					const embed = path ? readEvidence(path) : undefined;
+					if (embed?.kind !== "image" || !/^data:image\/(png|jpeg|webp|gif);base64,/.test(embed.dataUri)) {
+						throw new Error(`visual evidence missing or not embeddable for ${cellKey(cell)}: ${path ?? "missing before/after screenshot"}`);
+					}
+				}
+				if (!narrative.scenarios?.[cellKey(cell)]?.observed?.trim()) throw new Error(`visual observation required for ${cellKey(cell)}`);
+			}
+		}
+	}
 	const title = `QA Report — ${view.target || view.phase}`;
-	const evidenceContext: EvidenceRenderContext = { embeddedBytes: 0, renderedPaths: new Set() };
+	const evidenceContext: EvidenceRenderContext = { embeddedBytes: 0, renderedPaths: new Set(), strictVisualEvidence };
 	const body = [
 		`<h1>${escapeHtml(title)}</h1>`,
 		`<ul class="doc-meta"><li><strong>Target</strong> ${escapeHtml(view.target)}</li>` +
@@ -972,7 +992,7 @@ function main(): void {
 	const html = renderQaReport(view, narrative, defaultEvidenceReader, mmdcRenderSvg, (error) => {
 		mermaidRenderFailed = true;
 		mermaidRenderError = error;
-	});
+	}, true);
 	if (mermaidRenderFailed) {
 		process.stderr.write(`qa-report: Mermaid rendering failed — ${String(mermaidRenderError)}\n`);
 		process.exit(1);
