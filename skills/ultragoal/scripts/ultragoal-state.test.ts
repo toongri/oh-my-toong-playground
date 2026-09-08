@@ -1780,6 +1780,29 @@ describe("story layer: confirmation and phase gates", () => {
 		expect(s2.status).toBe("confirmed");
 	});
 
+	test("terminal replan clears inherited stories for single-story setup", () => {
+		seedWithOutcome(S);
+		setStories(S, [validStory]);
+		confirmStory(S, "S1");
+		setGoalState(S, { phase: "pursuing" });
+		setBlocked(S, "no actionable path");
+
+		setGoalState(S, {
+			phase: "planning",
+			outcome: "start a new objective",
+			verification_surface: "new objective verification",
+		});
+		setSingleStory(S);
+
+		const state = readGoalGet(S)!;
+		expect(state.stories).toHaveLength(1);
+		expect(state.stories![0]).toMatchObject({
+			id: "S1",
+			story: "start a new objective",
+			status: "confirmed",
+		});
+	});
+
 	// AC-12: set still cannot write complete or objective_verdict (regression with stories present)
 	test("set cannot write complete or objective_verdict", () => {
 		seedWithOutcome(S);

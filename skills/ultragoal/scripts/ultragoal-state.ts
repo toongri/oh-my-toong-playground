@@ -627,10 +627,12 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 		const scopeChanged = (
 			["outcome", "verification_surface", "constraints", "boundaries", "non_goals"] as const
 		).some((slot) => opts[slot] !== undefined && opts[slot] !== (prior[slot] ?? ""));
-		if (scopeChanged && Array.isArray(prior.stories)) {
-			next.stories = prior.stories.map((story) =>
-				story.status === "confirmed" ? { ...story, status: "unconfirmed" as const } : story,
-			);
+		if ((scopeChanged || prior.active === false) && Array.isArray(prior.stories)) {
+			next.stories = prior.active
+				? prior.stories.map((story) =>
+						story.status === "confirmed" ? { ...story, status: "unconfirmed" as const } : story,
+					)
+				: [];
 		}
 		// ADR-3: Stale verdict cannot survive a re-plan. Three verdict carriers must all be
 		// invalidated together:
