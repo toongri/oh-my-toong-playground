@@ -1,13 +1,13 @@
 ---
 name: deep-interview
-description: Socratic deep interview with mathematical ambiguity gating before autonomous execution
+description: Use when requirements or design decisions need deep clarification, assumptions need challenging, or the user asks for Socratic questioning or grilling before execution
 argument-hint: "<idea or vague description>"
 handoff: $OMT_DIR/deep-interview/{slug}.md
 level: 3
 ---
 
 <Purpose>
-Deep Interview implements Ouroboros-inspired Socratic questioning with mathematical ambiguity scoring. It replaces vague ideas with crystal-clear specifications by asking targeted questions that expose hidden assumptions, measuring clarity across weighted dimensions, and refusing to proceed until ambiguity drops below the resolved threshold for this run. The output feeds into an execution route chosen from the spec itself: **deep-interview → `craft-tasks` when the output shape calls for team-facing task tickets, planning/execution via `prometheus` or `ultragoal` when it calls for an AI execution plan, or a directly matching domain skill for terminal domain outputs**, ensuring maximum clarity at every stage.
+Deep Interview develops shared understanding through Socratic questioning: uncover the intent, challenge assumptions with concrete counterexamples, and follow the decisions each answer opens. There is no question or round limit. Clarity scores guide investigation; resolved decisions and a closure audit establish readiness. The resulting specification carries decisions, evidence, alternatives, and remaining assumptions into `craft-tasks`, planning/execution via `prometheus` or `ultragoal`, or a matching domain skill.
 </Purpose>
 
 <Use_When>
@@ -16,29 +16,26 @@ Deep Interview implements Ouroboros-inspired Socratic questioning with mathemati
 - User says "ouroboros", "socratic", "I have a vague idea", "not sure exactly what I want"
 - User wants to avoid "that's not what I meant" outcomes from autonomous execution
 - Task is complex enough that jumping to code would waste cycles on scope discovery
-- User wants mathematically-validated clarity before committing to execution
+- User wants evidence-backed clarity before committing to execution
 - User wants every design decision interrogated with alternatives before building -- not just requirements clarified
 </Use_When>
 
 <Do_Not_Use_When>
-- User has a detailed, specific request with file paths, function names, or acceptance criteria -- execute directly
-- User wants a quick fix or single change -- delegate to executor or sisyphus-junior
-- User says "just do it" or "skip the questions" -- respect their intent
-- User already has a PRD or plan file -- use prometheus or sisyphus with that plan
+- User requests implementation without an interview. Respect that direction.
+- A detailed request or existing PRD is useful starting evidence, not a reason to skip an explicitly requested interview.
 </Do_Not_Use_When>
 
 <Why_This_Exists>
-AI can build anything. The hard part is knowing what to build. Deep Interview applies Socratic methodology to iteratively expose assumptions and mathematically gate readiness, ensuring the AI has genuine clarity before spending execution cycles.
+AI can build anything. The hard part is knowing what to build. Deep Interview applies Socratic methodology to iteratively expose assumptions and test readiness against evidence and open decisions, ensuring the AI has genuine clarity before spending execution cycles.
 
 Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demonstrated that specification quality is the primary bottleneck in AI-assisted development.
 </Why_This_Exists>
 
 <Execution_Policy>
 - Ask ONE question at a time -- never batch multiple questions
-- Target the WEAKEST clarity dimension with each question
-- Make weakest-dimension targeting explicit every round: name the weakest dimension, state its score/gap, and explain why the next question is aimed there
-- Gather facts BEFORE asking the user about them (facts-before-judgment): `explore` for codebase facts, and `librarian`/`ultraresearch` for external facts a dimension turns on. The in-interview `librarian`/`ultraresearch` call is tier-capped at **Scoped (≤3 workers)** and **de-duplicated per dimension** (do not re-call for a dimension already grounded). When `ultraresearch` is unavailable (call fails or absent), gracefully degrade to the existing `explore`-only path — never block the round on it.
-- For brownfield confirmation questions, cite the repo evidence that triggered the question (file path, symbol, or pattern) instead of asking the user to rediscover it
+- Follow open decisions in dependency order. Choose the question whose answer most changes scope, behavior, architecture, or verification; use clarity scores to expose gaps rather than override an unresolved prerequisite.
+- Gather discoverable facts before asking the user: `explore` for code, `librarian` for external evidence. Reuse current evidence; investigate again when a new question or changed premise makes it insufficient. Failed research remains an explicit unknown, not an assumed fact or a change of project type.
+- Cite the evidence behind a question. Existing code describes current behavior; it does not decide the user's desired behavior.
 - Tag every evidence item by its ORIGIN at record time (provenance is assigned where evidence enters, never reconstructed later) and persist it in the `evidence_provenance` state field. Origin→label assignment: a codebase read → `[from-code]`; a codebase read confirmed by executed code → `[from-code][auto-confirmed]`; a `librarian`/`ultraresearch` external fact → `[from-research]`; a user answer → `[from-user]`. Append each item via the state CLI:
   ```bash
   bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
@@ -47,10 +44,10 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
 - Score ambiguity after every answer -- display the score transparently
 - Keep prompt payloads budgeted: summarize or trim oversized initial context/history before composing question, scoring, spec, or handoff prompts
 - If the user's initial context is oversized, create a concise prompt-safe summary first and wait for that summary before ambiguity scoring, question generation, or downstream execution handoff
-- Do not proceed to execution until ambiguity ≤ the resolved threshold for this run
-- Allow early exit with a clear warning if ambiguity is still high
+- Normal completion requires the closure audit below, including ambiguity ≤ the resolved threshold. A score is not proof of understanding.
+- Respect explicit stop, early delivery, and delegation; preserve unresolved decisions without presenting them as agreement.
 - Persist interview state for resume across session interruptions
-- Challenge agents activate at specific round thresholds to shift perspective
+- Challenge assumptions whenever their consequences matter, including the first question and any later reversal.
 </Execution_Policy>
 
 <Steps>
@@ -130,7 +127,7 @@ The `init` subcommand performs a strict overlay of the rich state shape into the
 
 5. **Announce the interview** to the user:
 
-> Starting deep interview. I'll ask targeted questions to understand your idea thoroughly before building anything. After each answer, I'll show your clarity score. We'll proceed to execution once ambiguity drops below <resolvedThresholdPercent>.
+> Starting deep interview. I'll ask targeted questions to understand your idea thoroughly before building anything. After each answer, I'll show your clarity score. We will work through open decisions and concrete counterexamples, then check readiness together. The <resolvedThresholdPercent> ambiguity threshold is one check, not an automatic finish.
 >
 > **Your idea:** "{initial_idea}"
 > **Project type:** {greenfield|brownfield}
@@ -138,11 +135,11 @@ The `init` subcommand performs a strict overlay of the rich state shape into the
 
 ## Phase 2: Interview Loop
 
-Repeat until `ambiguity ≤ threshold`; when the threshold is reached, run the residual-ambiguity seam (Step 2-exit, below) to decide whether to keep clarifying requirements or move on to the Design Interview phase. User-forced early exits (hard-cap, early-exit) and a literal user stop/cancel/abort are handled by the seam itself, as described there.
+Use the same decision loop for requirements and design. Keep going while an in-scope decision could change the agreed result, architecture, or verification. Round counts only describe history.
 
-### Step 2-exit: Residual-Ambiguity Seam
+### Step 2-exit: Closure Audit
 
-This is the single reusable stopping-and-checking pattern used at every phase exit in this skill — defined once here, referenced by both the requirements-threshold exit (Step 2d, below) and the design-completion exit (Design Interview phase, below). Do not bare-announce completion at either exit. Instead:
+Before transitioning from requirements to design, audit requirements decisions; before crystallizing, audit requirements and all design branches. A low score starts this audit, never skips it.
 
 **Closure Guard (precondition):** before running steps 1-2 below, check every active topology component's `clarity_scores` in state. If any active component still carries an unscored (`null`) dimension, convergence cannot be declared — loop back into the interview loop targeting that component's weakest (unscored) dimension instead of running this seam. An `ambiguity ≤ threshold` reading that ignores an unscored sibling component is not real convergence; it means the interview has not yet asked, not that there is nothing left to ask.
 
@@ -159,121 +156,105 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts set-nongoals \
 
 `set-nongoals` is a full-replace, same convention as `set-topology` — pass the complete accumulated list of non-goal/decider pairs on every call, not just the newest one.
 
-1. Reflect the residual ambiguity that remains — name any unresolved gap, weak dimension, or open design point, however small, instead of declaring the interview simply "done".
-2. Ask the user, via `AskUserQuestion`, whether to continue (keep clarifying requirements, or keep resolving design branches) or proceed to the next phase.
+1. Review the decision register across every active component, including dependencies between components. Check scope, ownership, contracts, lifecycle/recovery, and how success will be demonstrated. An open or reopened decision that can change these keeps the interview open regardless of score.
+2. For each settled decision, check its evidence and the concrete counterexample or failure scenario tested against it. Surface contradictions and unsupported assumptions. Wordsmithing with no effect on behavior is not a new decision.
+3. Restate the goal, selected approach, boundaries, and explicitly delegated/deferred assumptions. Ask whether this matches the user's understanding. A correction reopens the affected decisions and their dependents; incorporate it before repeating this audit. An earlier explicit confirmation still applies while its premises remain unchanged.
 
-User-forced early exits (hard-cap, early-exit) skip the interactive question and proceed directly, folding the residual ambiguity into the spec's risk-note instead. A literal user stop/cancel/abort halts and saves state for resume, crystallizing no spec.
+**User control:** stop/cancel pauses immediately and preserves state. An explicit request to deliver early produces a **DRAFT** with open decisions, their owners, and consequences; it is not a passed interview or an execution-ready design. Do not lower scores, mark gaps resolved, or emit `<deep-interview-done/>` to make a draft pass the normal completion gate. Explicit delegation ("your call") lets the agent research, recommend, and record a choice with its basis; uncertainty ("I don't know yet") keeps the decision open. A defer records what is excluded now and what would reopen it. Resolve the user's intent with one focused question when these meanings are unclear.
 
-### Step 2-head: Dialectic Rhythm Guard (pre-question stance selector)
+### Step 2-head: Update the Decision Register
 
-At the HEAD of every round — before generating the question — select this round's **stance** via the rotation rules below, then record it in the ordered `stance_history` field (D-E). This selector is the SINGLE owner of stance selection: it subsumes the previously ad-hoc Ontologist triggers so there are no longer two paths to the same stance.
+Maintain one register throughout requirements and design. Each entry contains:
 
-The five stances are EXISTING behaviors made explicit, not new agent modes:
-- **Clarify** — normal Socratic weakest-dimension questioning (the default round posture; Step 2a).
-- **Fact-ground** — the facts-before-judgment `explore`-or-`librarian`/`ultraresearch` call (the Execution_Policy dispatch), run instead of a user question when the weakest dimension turns on a discoverable fact.
-- **Contrarian** — challenge the core assumption (Phase 3, Round 4+).
-- **Simplifier** — probe whether complexity can be removed (Phase 3, Round 6+).
-- **Ontologist** — find the essence by examining the ontology (Phase 3).
+| Field | Content |
+|---|---|
+| `id`, `question`, `component` | Stable decision identity and the behavior it concerns |
+| `depends_on` | IDs of prerequisite decisions |
+| `status` | `open`, `settled`, `delegated`, or `deferred` |
+| `choice`, `basis` | Current choice, who decided it, and the user/code/research evidence; distinguish an agent's inference |
+| `alternatives` | Real alternatives considered, why rejected, and the tradeoff accepted |
+| `assumptions`, `checks` | Remaining assumptions and concrete counterexamples, failure cases, or verification that tested the choice |
+| `reopen_reason` | New evidence or changed premise invalidating the choice; empty while current |
 
-**Rotation rules** (evaluated in order; the first match selects the stance):
-1. **Fact-ground rule** — if the weakest dimension turns on a fact not yet grounded for that dimension, select **Fact-ground** (deduped per dimension — never re-ground an already-grounded dimension).
-2. **Stall rotation rule** → **Ontologist** — if ambiguity has stayed within ±0.05 for 3 rounds (the legacy stall trigger, formerly `<Escalation_And_Stop_Conditions>`), select **Ontologist** to reframe.
-3. **Late-stage rotation rule** → **Ontologist** — if Round ≥ 8 AND ambiguity > 0.3 (the legacy late-stage trigger, formerly Phase 3 Round 8+), select **Ontologist**.
-4. **Contrarian rule** — at Round 4+, if not yet used, select **Contrarian** once.
-5. **Simplifier rule** — at Round 6+, if not yet used, select **Simplifier** once.
-6. **Default** — otherwise select **Clarify**.
+After each answer or finding, update this register before asking again:
 
-Both Ontologist rotation rules (2 and 3) resolve to the SAME Ontologist stance; neither is dropped — they are the two named entry points to Ontologist, each preserved.
+1. Extract what was decided and what remains uncertain. Add the new decisions this answer exposes.
+2. Compare with prior decisions and assumptions. On contradiction, set the affected entry and every dependent entry back to `open`, preserving the old choice and why it is being reconsidered. Use the dispute mechanism in Step 2c for any established fact that was retracted.
+3. Select among open decisions with settled prerequisites. Resolve conflicting prerequisites first. When dependencies form a cycle, ask about the shared assumption tying them together rather than inventing an order.
+4. Look across all components and their interactions before drilling deeper. A newly exposed ownership or failure-path gap may matter more than another detail in the current topic.
 
-Record the selected stance at round head — ordered, NOT deduped (it tracks the sequence, so the same stance may appear more than once):
+Persist the **complete current register** as `decision_register` inside each recorded round (Step 2e, Step 2-fact, or a design round). This uses the existing JSON round payload, not a new CLI option. On resume, recover the most recent round containing `decision_register`; preserve all settled choices. For an older transcript without it, reconstruct the register from recorded evidence, leaving unsupported choices open.
+
+### Questioning Stance
+
+The five stances are existing questioning behaviors, not separate agents:
+- **Clarify** — sharpen the weakest unresolved meaning or requirement.
+- **Fact-ground** — investigate the evidence a decision depends on.
+- **Contrarian** — test a core assumption against its opposite or a concrete counterexample.
+- **Simplifier** — test whether removing complexity still achieves the required outcome.
+- **Ontologist** — examine what the core concept is and how its entities relate.
+
+Choose the stance for the selected decision's **current gap**. Missing discoverable evidence calls for Fact-ground even if another fact in the same dimension was researched earlier. An unsupported premise calls for Contrarian; unjustified complexity for Simplifier; unstable meaning or relationships for Ontologist; an unresolved concrete meaning for Clarify. A stance can be used on the first round and repeated when new evidence justifies it.
+
+**Numerical stagnation signal:** when ambiguity stays within ±0.05 for three rounds, inspect both the scores and the decision changes. If the same gap remains, explain what has not advanced and change the evidence source, counterexample, or stance. Stable entity definitions call for investigating the unresolved fact or tradeoff, not asking the same ontology question again. Use `stance_history` to notice neglected perspectives and unproductive repetition; it is not a once-only quota.
+
+Record the selected stance so the interview can inspect which perspectives it has used:
 
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
   --append-stance "<selected-stance>"
 ```
 
-`stance_history` is distinct from `challenge_modes_used` (which stays deduped/unordered for its existing once-each tracking of Contrarian/Simplifier/Ontologist).
+### Step 2-fact: Ground a Discoverable Fact
 
-**Branch on the selected stance:** if the selector chose **Fact-ground**, run **Step 2-fact** below and then return to the loop head for the next round — do NOT fall through to Step 2a (a fact-grounding round produces a fact, not a user answer, so the user-answer-assuming steps 2a–2e do not apply). For all four other stances (Clarify / Contrarian / Simplifier / Ontologist), continue to Step 2a as normal.
+When a decision needs a discoverable fact, investigate it before asking the user to decide. Record its provenance at entry, update the register, and re-score the affected component using Step 2c. Research results are evidence, not user answers:
 
-### Step 2-fact: Fact-ground Round (no user question)
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+  --append-round-stdin <<'OMT_DI_PAYLOAD_EOF'
+{"n":<round_number>,"kind":"fact-ground","component":"<component_id>","dimension":"<dimension>","fact":"<grounded fact>","provenance":"<origin label>","scores":{"intent":<intent>,"outcome":<outcome>,"scope":<scope>,"constraints":<constraints>,"success":<success>,"context":<context>},"ambiguity":<ambiguity>,"decision_register":[<current entries>]}
+OMT_DI_PAYLOAD_EOF
+```
 
-Taken ONLY when the selector chose Fact-ground. This round dispatches a research call instead of asking the user, then folds the new fact into the ambiguity score — there is no `AskUserQuestion`, no user answer.
-
-1. **Dispatch the facts-before-judgment call** for the weakest dimension's ungrounded fact, following the Execution_Policy dispatch rules: `explore` for codebase facts; `librarian`/`ultraresearch` (tier-capped at **Scoped (≤3 workers)**, de-duplicated per dimension) for external facts; gracefully degrade to the `explore`-only path when `ultraresearch` is unavailable.
-2. **Record the fact's provenance** via the existing CLI — label by origin (`[from-research]` for a `librarian`/`ultraresearch` external fact; `[from-code]` for a codebase read; `[from-code][auto-confirmed]` if confirmed by executed code):
-
-   ```bash
-   bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
-     --append-provenance-item '{"evidence_id":"<id>","label":"<one-of-[from-research]|[from-code]|[from-code][auto-confirmed]>"}'
-   ```
-3. **Re-score ambiguity** with the new fact folded into the scoring context (same Step 2c scoring prompt and ambiguity formula), but WITHOUT any user Q&A — the transcript gains a grounding event, not a user exchange. Mark the dimension's fact as grounded so the per-dimension dedup (rotation rule #1) does not re-ground it.
-4. **Report progress** as in Step 2d, noting that this round was a grounding event (no user question asked).
-5. **Append the round in a fact-derived shape** — mark it a grounding event rather than a user Q&A exchange. Do NOT stuff the fact into the `answer` field as if a user said it; omit `question`/`answer` and record the grounded fact and its provenance label instead, scoped to the one component this grounding round improves:
-
-   ```bash
-   bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
-     --append-round-stdin <<'OMT_DI_PAYLOAD_EOF'
-   {"n":<round_number>,"kind":"fact-ground","component":"<component_id>","dimension":"<weakest_dimension>","fact":"<grounded fact>","provenance":"<one-of-the-four-labels>","scores":{"intent":<intent>,"outcome":<outcome>,"scope":<scope>,"constraints":<constraints>,"success":<success>,"context":<context>},"ambiguity":<ambiguity>}
-   OMT_DI_PAYLOAD_EOF
-
-   bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
-     --current-phase "deep-interview" \
-     --current-ambiguity <ambiguity>
-   ```
-
-   `context` is always included in the `scores` object — every component, every round, unconditionally — exactly as Step 2e does. The `--append-round-stdin` payload accepts any valid JSON shape, so the fact-derived `kind:"fact-ground"` round persists alongside user Q&A rounds without a schema change. This `component`+`scores` payload also updates that component's `clarity_scores` in state — the write that lets the Closure Guard and the ambiguity floor's unscored count actually drop as scoring rounds land, not just the fact-ground round shown here.
-6. **Return to the loop head** (Step 2-head) for the next round. The fact-ground round is now part of the transcript and counts toward the soft/hard round limits in Step 2f.
+Include all six `scores`, including `context`, and write the overall ambiguity as in Step 2e. The round updates the component's stored scores. If evidence is unavailable, keep that gap visible and continue independent decisions; do not silently answer it or mark the dimension permanently researched.
 
 ### Step 2a: Generate Next Question
 
-Build the question generation prompt with:
-- The prompt-safe initial-context summary (if one was created), otherwise the user's original idea
-- Prior Q&A rounds trimmed or summarized to fit the prompt budget while preserving decisions, constraints, unresolved gaps, and ontology changes
-- Current clarity scores per dimension (which is weakest?)
-- Challenge agent template for the stance chosen at Step 2-head (Contrarian / Simplifier / Ontologist -- inject the matching Phase 3 template; for Clarify, no template)
-- Brownfield codebase context (if applicable), summarized to cited paths/symbols/patterns instead of raw dumps
+Use the prompt-safe original intent, current register, relevant evidence, and affected component's clarity gaps. Summaries preserve decisions, their dependencies, rejected alternatives, contradictions, and provenance. Compress raw history, not unsettled meaning.
 
-If any prompt input is too large, summarize it first and then continue from the summary. Do not ask the next `AskUserQuestion`, score ambiguity, or hand off to execution from an over-budget raw transcript.
+Choose a probe based on the actual gap:
 
-**Question targeting strategy:**
-- Identify the dimension with the LOWEST clarity score
-- Generate a question that specifically improves that dimension
-- State, in one sentence before the question, why this dimension is now the bottleneck to reducing ambiguity
-- Questions should expose ASSUMPTIONS, not gather feature lists
-- If the scope is still conceptually fuzzy (entities keep shifting, the user is naming symptoms, or the core noun is unstable), switch to an ontology-style question that asks what the thing fundamentally IS before returning to feature/detail questions
+| Gap | Socratic probe |
+|---|---|
+| Unclear purpose or term | Ask what the thing means through a concrete example and a contrasting non-example. |
+| Unsupported premise | Ask why it must hold and what evidence would change the decision. |
+| Apparently settled choice | Test it against a counterexample, failure, reversal, or competing requirement. |
+| Excess complexity | Compare with removing the mechanism: which required outcome would fail? |
+| Competing requirements | Present the collision and ask which outcome must win. |
+| Vague completion | Ask what observable result would distinguish success from a plausible failure. |
+| Non-Goal Decider | Ask how a finding would be classified inside or outside the exclusion. |
 
-**Question styles by dimension:**
-| Dimension | Question Style | Example |
-|-----------|---------------|---------|
-| Intent Clarity | "What exactly happens when...?" | "When you say 'manage tasks', what specific action does a user take first?" |
-| Outcome Clarity | "What does done look like?" | "If this shipped tomorrow, what would exist that doesn't exist today?" |
-| Scope Clarity | "What's in vs out?" | "Is user authentication part of this feature, or a separate concern to build later?" |
-| Constraint Clarity | "What are the boundaries?" | "Should this work offline, or is internet connectivity assumed?" |
-| Success Criteria | "How do we know it works?" | "If I showed you the finished product, what would make you say 'yes, that's it'?" |
-| Context Clarity | "How does this fit?" | "I found JWT auth middleware in `src/auth/` (pattern: passport + JWT). Should this feature extend that path or intentionally diverge from it?" |
-| Scope-fuzzy / ontology stress | "What IS the core thing here?" | "You have named Tasks, Projects, and Workspaces across the last rounds. Which one is the core entity, and which are supporting views or containers?" |
-| Non-Goal Decider | "How would you tell a finding belongs to that exclusion?" | "You said this feature won't handle refunds. If a bug report comes in about a failed charge, how would you decide whether it's a refund case you're excluding, or a charge case that's in scope?" |
+Explain briefly what decision the question will change and why it matters now. Ask **one at a time** and wait for the answer. For an open conceptual question use free text; for a concrete choice offer real alternatives and a reasoned recommendation. Investigate a forced path as a fact instead of manufacturing a strawman alternative.
 
 **Scope Over-Engineering Guard:** if a component's `scope` dimension is unscored (`null`) or scored below 0.5, the very next question for that component MUST be a boundary question — what's in vs what's out for this component — before any other dimension is targeted, even if another dimension scores lower. This guard exists to block gold-plating: a component is never considered understood while its boundary is still fuzzy, no matter how clear its other five dimensions look.
 
 ### Step 2b: Ask the Question
 
-Use `AskUserQuestion` with the generated question. Present it clearly with the current ambiguity context:
+Present a focused question with the decision context, not the entire register:
 
 ```
-Round {n} | Targeting: {weakest_dimension} | Why now: {one_sentence_targeting_rationale} | Ambiguity: {score}%
+Decision: {id and topic} | Why now: {consequence or conflicting premise} | Ambiguity: {score}%
 
-{question}
+{one question}
 ```
 
-Options should include contextually relevant choices plus free-text.
+Use the runtime's question tool for structured choices and ordinary text for open answers. Respect the user's available question interface; the number of fields a tool accepts is not an interview limit.
 
 ### Step 2c: Score Ambiguity
 
 After receiving the user's answer, score clarity **per active topology component** — every component in `state.topology.components` with `status:"active"` gets its own score across the same 6 dimensions below. A component's high scores never average away or hide a sibling component's gaps: an unscored sibling still holds the interview back (Closure Guard, Step 2-exit).
 
-**Scoring prompt** (run once per active component that has at least one unscored dimension; temperature 0.1 for consistency):
+**Scoring prompt** (re-score affected components, including previously scored ones whose decisions changed; score unscored components before closure):
 
 ```
 Given the following interview transcript for the component "{component_name}" (project type: {greenfield|brownfield}), score clarity on each dimension from 0.0 to 1.0. If the initial context or transcript was summarized for prompt safety, score from that summary plus the preserved round decisions/gaps; do not re-expand raw oversized context.
@@ -298,7 +279,7 @@ For each dimension provide:
 
 Also identify:
 - weakest_dimension: the single lowest-confidence dimension for this component this round
-- weakest_dimension_rationale: one sentence explaining why it is the highest-leverage target for the next question
+- weakest_dimension_rationale: the evidence gap behind the score; question priority also depends on unresolved prerequisites and consequences
 
 7. Ontology Extraction: Identify all key entities (nouns) discussed in the transcript.
 
@@ -386,9 +367,12 @@ Round {n} complete. | Component scored: {component_name}
 
 **Ontology:** {entity_count} entities | Stability: {stability_ratio} | New: {new} | Changed: {changed} | Stable: {stable}
 
-**Next target:** {weakest_component} / {weakest_dimension} — {weakest_dimension_rationale}
+**Change since previous round:** {previous ambiguity → current ambiguity; reason for increase/decrease or plateau}
+**Stance:** {selected stance and why it fits this gap}
+**Decision changes:** {settled/reopened IDs and reasons, including dependent decisions}
+**Next target:** {decision ID} — {why its consequence/prerequisites make it next; related component/dimension gap}
 
-{overall_ambiguity <= threshold && every active component fully scored ? "Threshold met — reflecting residual ambiguity via the Step 2-exit seam before proceeding." : "Focusing next question on: {weakest_component} / {weakest_dimension}"}
+{overall_ambiguity <= threshold && every active component fully scored ? "Score threshold met — inspect the open decisions and run the Closure Audit before proceeding." : "Continue investigating the stated gap."}
 ```
 
 ### Step 2e: Update State
@@ -398,7 +382,7 @@ Update interview state with the new round and scores by invoking the CLI twice �
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
   --append-round-stdin <<'OMT_DI_PAYLOAD_EOF'
-{"n":<round_number>,"component":"<component_id>","question":"<question>","answer":"<answer>","scores":{"intent":<intent>,"outcome":<outcome>,"scope":<scope>,"constraints":<constraints>,"success":<success>,"context":<context>},"ambiguity":<ambiguity>}
+{"n":<round_number>,"component":"<component_id>","question":"<question>","answer":"<answer>","scores":{"intent":<intent>,"outcome":<outcome>,"scope":<scope>,"constraints":<constraints>,"success":<success>,"context":<context>},"ambiguity":<ambiguity>,"decision_register":[<current entries>]}
 OMT_DI_PAYLOAD_EOF
 
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
@@ -417,68 +401,28 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
   --append-provenance-item '{"evidence_id":"<id>","label":"[from-user]"}'
 ```
 
-### Step 2f: Check Soft Limits
-
-- **Round 3+**: Allow early exit if user says "enough", "let's go", "build it"
-- **Round 10**: Show soft warning: "We're at 10 rounds. Current ambiguity: {score}%. Continue or proceed with current clarity?"
-- **Round 20**: Hard cap: "Maximum interview rounds reached. Proceeding with current clarity level ({score}%)."
-
-## Phase 3: Challenge Agent Prompt Templates
-
-These are the prompt-injection bodies for the Contrarian / Simplifier / Ontologist stances. They do NOT self-fire: the Step 2-head Dialectic Rhythm Guard is the sole gate that selects a stance (its rotation rules already encode the round/ambiguity conditions). When the selector chooses one of these stances, inject the matching template into the Step 2a question-generation prompt.
-
-### Contrarian template
-When the selector at Step 2-head selects **Contrarian**, inject:
-> You are now in CONTRARIAN mode. Your next question should challenge the user's core assumption. Ask "What if the opposite were true?" or "What if this constraint doesn't actually exist?" The goal is to test whether the user's framing is correct or just habitual.
-
-### Simplifier template
-When the selector at Step 2-head selects **Simplifier**, inject:
-> You are now in SIMPLIFIER mode. Your next question should probe whether complexity can be removed. Ask "What's the simplest version that would still be valuable?" or "Which of these constraints are actually necessary vs. assumed?" The goal is to find the minimal viable specification.
-
-### Ontologist template
-When the selector at Step 2-head selects **Ontologist** (via either Ontologist rotation rule — stall or late-stage), inject:
-> You are now in ONTOLOGIST mode. We may be addressing symptoms rather than the core problem. The tracked entities so far are: {current_entities_summary from latest ontology snapshot}. Ask "What IS this, really?" or "Looking at these entities, which one is the CORE concept and which are just supporting?" The goal is to find the essence by examining the ontology.
-
-Contrarian and Simplifier are used ONCE each (the selector's rules #4/#5 enforce this via `challenge_modes_used`), then normal Socratic questioning resumes. Track which modes have been used by invoking:
-
-```bash
-bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
-  --challenge-mode "<mode-name>"
-```
-
-(Duplicate names are silently deduped; safe to call even if the mode was already recorded.)
-
 ## Design Interview
 
-Once Phase 2 exits (via the residual-ambiguity seam, above) toward design work, interrogate the design **relentlessly** — probe **every aspect** of the design until reaching **shared understanding** with the user, going beyond requirements clarity.
+Use the same register and loop to interrogate every design decision **relentlessly** until reaching **shared understanding**. Examine every aspect that can change the agreed outcome: ownership, interfaces, data/state transitions, recovery, dependencies, and verification. Work through open decisions in dependency order; new design evidence may reopen requirements.
 
-**Interrogate every open design decision, one at a time, in dependency order.** Walk the design tree from its root — settle a decision that gates others before the branches that depend on it (an upstream answer can reshape or delete a downstream one's alternatives); never batch. Put each genuinely-open decision to the user (via `AskUserQuestion`) with **2-3 alternatives** and your reasoned recommendation among them — every real decision, including low-stakes, cheap-to-reverse ones, not just the hardest. Before asking, check whether the codebase already settles it; if so, run `explore` and fold the finding in rather than making the user rediscover it.
+For an architectural choice with genuinely different approaches, develop **2-3 alternatives** that solve the same agreed problem. Compare each through the same normal, failure, and change scenario: interface and invariants, ordering/error behavior, ownership, dependencies, what complexity it hides, and how it can be tested. Recommend one with reasons. Do not turn naming variations into design alternatives or build hypothetical extension points without an agreed use case.
 
-**Red flags — you're about to swallow a decision:**
-- *"User's in a hurry — batch the rest into one question"*
-- *"This one's low-risk / reversible — apply a default, let them veto"*
-- *"The sketch already covers it — close enough to settled"*
-
-All mean STOP. Under pressure you still put **every** open decision to the user with its real alternatives and a reasoned recommendation — pressure never thins the alternatives or skips the decision. The only thing settled without a question is a path the codebase or an external constraint **forces** onto a single path — a **fact** (ground it with `explore`/`librarian`; don't manufacture a **strawman** alternative around a forced path), not one you deem low-risk. An explicit early-exit (Step 2f) still exits.
-
-**Persist each decision to state:** after the user answers a design question (or a forced point is fact-grounded), append the decision to interview state *before* moving to the next question — the same mechanism Step 2e and Step 2-fact use, so the resume path (`get`/`adopt`) and Phase 4 crystallization recover the chosen alternatives even across a session interruption. Without this, the decision lives only in the in-context transcript and is lost on cross-session resume. The existing `--append-round-stdin` accepts this shape with no schema change (exactly as the `fact-ground` round does), marked as a design round so it is distinguishable from requirements Q&A:
+After the answer, record the choice, rejected alternatives, tradeoffs, counterexample results, and downstream consequences before continuing:
 
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
   --append-round-stdin <<'OMT_DI_PAYLOAD_EOF'
-{"n":<round_number>,"kind":"design","decision":"<design question>","choice":"<chosen alternative>","alternatives":[<offered alternatives>],"rationale":"<why chosen>"}
+{"n":<round_number>,"kind":"design","decision":"<question>","choice":"<chosen alternative>","alternatives":[<real alternatives>],"rationale":"<basis and tradeoffs>","decision_register":[<current entries>]}
 OMT_DI_PAYLOAD_EOF
 ```
 
-The same JSON-encoding rule as Step 2e applies: the heredoc guards shell quoting only; all substituted string values must be JSON-encoded (`\"`, `\\`, newlines as `\n`).
+If a design answer changes a scored requirement, also re-score that component through Step 2c–2e. All JSON payload string values must be JSON-encoded; quoted heredocs prevent shell expansion, not malformed JSON.
 
-Continue this loop until **all design branches** are resolved — no open decision, alternative, or design-facing gap remains.
-
-**Design-completion exit:** when all design branches are resolved, do not bare-announce completion. Run the residual-ambiguity seam (Step 2-exit, above): reflect the residual ambiguity left in the design (any unresolved tension, edge case, or soft spot), then ask the user via `AskUserQuestion` whether to continue resolving design branches or proceed to Phase 4 (Crystallize).
+When all design branches are settled or explicitly delegated/deferred without concealing an execution-changing gap, run the Closure Audit (Step 2-exit). Time spent, prepared artifacts, a low score, and a waiting executor do not settle an open decision.
 
 ## Phase 4: Crystallize Spec
 
-When the Design Interview phase has exited with all design branches resolved, or when a user-forced escape hatch fires:
+After the Closure Audit passes, crystallize the confirmed design. For an explicit early-delivery request, export a DRAFT with the register and unresolved consequences; normal handoff remains subject to the completion gate.
 
 0. **Confirm and persist the output shape** before composing the spec or routing. Via `AskUserQuestion`, confirm exactly one output shape: `task-tickets`, `ai-execution-plan`, or `domain-output`; a vague prose description or synonym is not a valid value. After the user confirms, persist it before any route selection:
 
@@ -490,7 +434,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
 
 Wait for the update to succeed, then read state and use the exact persisted `state.output_shape` value for the spec Metadata and the Phase 5 route. Do not infer the value from the spec's prose.
 
-1. **Generate the specification** with the prompt-safe transcript, using the design decisions recorded during the Design Interview phase for the Approach section; on a user-forced escape hatch, include any unresolved requirements gap or design branch as a risk-note instead. **Spec template: you MUST read `deep-interview-spec-template.md` now, before composing the spec.** Do not write the spec from memory.
+1. **Generate the specification** with the prompt-safe transcript, using the current decision register for the Approach section, including evidence, rejected alternatives, tested counterexamples, and explicit assumptions. For early delivery, preserve open decisions as open rather than filling them in. **Spec template: you MUST read `deep-interview-spec-template.md` now, before composing the spec.** Do not write the spec from memory.
 
 **Immutable design anchor:** read the persisted state before composing the spec and derive the one shared metadata value exactly as `design-anchor: deep-interview:<state.interview_id>`. The anchor is derived only from persisted state.interview_id, remains stable across resume, and is never from title, slug, timestamp, or hash. Put this exact value in the template's Metadata section; do not invent or normalize a second anchor.
 
@@ -564,37 +508,27 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 </Steps>
 
 <Tool_Usage>
-- Use `AskUserQuestion` for each interview question — provides clickable UI with contextual options
+- Use the runtime question tool for structured choices; use free text for open Socratic questions.
 - Use `Agent(subagent_type="explore")` for brownfield codebase exploration (run BEFORE asking user about codebase)
-- Use `librarian`/`ultraresearch` for the facts-before-judgment external-fact call when a dimension turns on external knowledge — tier-capped at **Scoped (≤3 workers)**, **de-duplicated per dimension**, and **gracefully degrading to the `explore`-only path** when `ultraresearch` is unavailable (call failure or absence). This is a bounded subroutine inside the round loop, NOT full saturation research.
-- Use temperature 0.1 for ambiguity scoring — consistency is critical
+- Use `librarian` for external evidence; keep failed or unavailable research visible as unknown.
 - Use `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts init` to initialize interview state (Phase-1 step 4)
 - Use `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update` to update state after each round (Phase-2 step 2e)
 - Use `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts get` to read back state when resuming an interrupted session — check its `migration_status` field: `legacy_missing` means this state predates `topology` and Round 0 (step 3.7) must run before any further per-component scoring
 - Use `Write` tool to save the final spec to `$OMT_DIR/deep-interview/{slug}.md`
 - Use `Skill()` to bridge to execution modes — never implement directly
-- Challenge agent modes are prompt injections, not separate agent spawns
 </Tool_Usage>
 
 **Question-quality calibration examples (Good/Bad): read `deep-interview-examples.md` when calibrating or debugging question quality.** Reference it before crafting interview questions if your questions feel shallow or off-target.
 
 <Escalation_And_Stop_Conditions>
-- **Hard cap at 20 rounds**: Proceed with whatever clarity exists, noting the risk
-- **Soft warning at 10 rounds**: Offer to continue or proceed
-- **Early exit (round 3+)**: Allow with warning if ambiguity > threshold
-- **User says "stop", "cancel", "abort"**: Stop immediately, save state for resume
-- **Ambiguity stalls** (same score +-0.05 for 3 rounds): handled by the Step 2-head Dialectic Rhythm Guard stall rotation rule (selects Ontologist) — no separate activation here
-- **Threshold reached**: `ambiguity ≤ threshold` routes to the residual-ambiguity seam (Step 2-exit) rather than straight to Phase 4 — the seam decides whether to keep clarifying requirements or move to the Design Interview phase.
-- **All dimensions at 0.9+**: Route through the residual-ambiguity seam (Step 2-exit) the same as ordinary threshold-reached handling.
-- **Codebase exploration fails**: Proceed as greenfield, note the limitation
+The Closure Audit is the single transition rule. An unresolved contradiction reopens decisions; stalled understanding calls for a different concrete example, evidence source, or framing. User stop, delegation, and early delivery follow the User control paragraph there.
 </Escalation_And_Stop_Conditions>
 
 <Final_Checklist>
-- [ ] Interview completed (ambiguity ≤ threshold with all design branches resolved via the Design Interview phase, OR user chose early exit)
+- [ ] Closure Audit passed: evidence-backed decisions, tested counterexamples, no open execution-changing gap, and shared understanding; early delivery is visibly DRAFT
 - [ ] Oversized initial context/history was summarized before scoring, question generation, spec generation, or execution handoff
 - [ ] Ambiguity score displayed after every round
-- [ ] Every round explicitly names the weakest dimension and why it is the next target
-- [ ] Challenge stances selected by the Step 2-head Dialectic Rhythm Guard at the correct rotation conditions (Contrarian round 4+, Simplifier round 6+, Ontologist on stall or round 8+ with ambiguity > 0.3)
+- [ ] Each question names the decision it changes; the register persists dependencies, provenance, rejected alternatives, checks, and any reopened decisions
 - [ ] Spec file written to `$OMT_DIR/deep-interview/{slug}.md`
 - [ ] Inline self-review (6 checks: placeholder / consistency / scope / non-goal-decider / invariant / ambiguity) performed
 - [ ] presentation authored per [presentation.md](presentation.md), rendered to `$OMT_DIR/deep-interview/{slug}.presentation.html`, submitted with `submit-presentation`, and accepted by `update --current-phase handoff` (current source/HTML hashes; self-audit passed)
@@ -605,13 +539,13 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 - [ ] State cleaned up after execution handoff
 - [ ] Brownfield confirmation questions cite repo evidence (file/path/pattern) before asking the user to decide
 - [ ] Scope-fuzzy tasks can trigger ontology-style questioning to stabilize the core entity before feature elaboration
-- [ ] Per-round ambiguity report includes Ontology row with entity count and stability ratio
+- [ ] Per-round component score table, weights, gaps, and ontology stability are displayed alongside changed decisions
 - [ ] Spec decodes entities in ONE home — the Domain entity lens (type/fields beside its erDiagram), not a separate Ontology (Key Entities) table; scoring & convergence telemetry (Clarity Breakdown, Ontology Convergence, transcript) is confined to the Interview Audit `<details>` appendix, not interleaved with the downstream-consumed body
 - [ ] `## Technical Context` heading carries no `(brownfield)`/`(greenfield)` qualifier
 - [ ] Spec includes a Boundary Map: a dependency diagram (domains as subgraphs, direction marked) plus a placement table with domain and layer/role as separate columns, collaborators, affected/modified mark, and a Dependency direction verdict
 </Final_Checklist>
 
-**Advanced topics (resume, configuration, ambiguityThreshold, cross-session continuation, weights / challenge-modes / score-interpretation tables): read `deep-interview-advanced.md` now** — do not guess at resume logic or configuration values from memory.
+**Advanced topics (resume, configuration, ambiguityThreshold, cross-session continuation, weights / score-interpretation tables): read `deep-interview-advanced.md` now** — do not guess at resume logic or configuration values from memory.
 
 ## Reference Files (on-demand)
 
@@ -621,7 +555,7 @@ Read these files at the moment indicated — not speculatively upfront.
 |---|---|---|
 | `deep-interview-spec-template.md` | The Phase 4 output spec markdown template | When composing the output spec (Phase 4 crystallize) |
 | `deep-interview-examples.md` | Question-quality calibration examples (Good/Bad) | When calibrating or debugging question quality |
-| `deep-interview-advanced.md` | Resume, configuration (ambiguityThreshold), cross-session continuation, and the weights / challenge-modes / score-interpretation tables | When resuming, configuring, continuing across sessions, or needing the interpretation tables |
+| `deep-interview-advanced.md` | Resume, configuration (ambiguityThreshold), cross-session continuation, and the weights / score-interpretation tables | When resuming, configuring, continuing across sessions, or needing the interpretation tables |
 | `diagram-guide.md` | The 6-lens table with trigger FACTs, the coverage-table rule and its canonical status literals, the node cap, the post-draw self-audit, and mermaid-validity rules | Before authoring the spec's `## Diagrams` section (Phase 4 crystallize) |
 | `presentation.md` | The presentation authoring contract (maintainer altitude — carries the spec's full design content + every diagram it drew, invent-nothing hard rule, gloss/diagram recipe, self-contained HTML format) | Before authoring the presentation (Phase 4 crystallize, after the spec is written) |
 

@@ -15,7 +15,7 @@
 - Generated: {timestamp}
 - Threshold: {threshold}
 - Initial Context Summarized: {yes|no}
-- Status: {PASSED | BELOW_THRESHOLD_EARLY_EXIT}
+- Status: {PASSED | DRAFT}
 
 ## Goal
 {crystal-clear goal statement derived from interview}
@@ -55,7 +55,21 @@ Properties that must hold in EVERY state, on EVERY path that can change what the
 - **Rationale:** {why the selected approach was chosen over alternatives}
 - **Tradeoffs:** {what is gained and what is given up with this approach}
 
-Downstream (prometheus) consumes this as a FIXED input — does not re-decide the approach. When a user-forced exit left a design branch unresolved, do NOT invent a Selected approach — record the fork under **Risks & Unresolved Forks** below.
+Downstream (prometheus) preserves settled decisions and their evidence. New evidence that invalidates a premise reopens that decision and its dependents with a recorded reason; it does not restart the entire interview. For a DRAFT, keep unresolved branches under **Risks & Unresolved Forks** rather than inventing a Selected approach.
+
+### Decision Register
+Copy the final persisted `decision_register`. This is part of the downstream-consumed design, not scoring telemetry.
+
+| ID / Question / Component | Depends on | Status / Choice | Basis / Decider | Alternatives / Rejection reasons | Assumptions / Checks | Reopen reason |
+|---|---|---|---|---|---|---|
+| {id, question, component} | {prerequisite IDs} | {open, settled, delegated, deferred; choice} | {user/code/research evidence; explicit delegation if any} | {real alternatives and tradeoffs} | {remaining assumptions; counterexamples and verification} | {changed premise or none} |
+
+### Closure Audit
+- **Coverage:** {ownership, contracts, lifecycle/recovery, cross-component dependencies, verification examined}
+- **Counterexamples:** {which concrete failure/change scenarios tested the important choices and what they revealed}
+- **Residual assumptions:** {explicitly accepted/delegated/deferred items, owner, consequence, and reopening condition}
+- **Shared understanding:** {user confirmation of the current goal, approach, and boundaries; or not confirmed for a DRAFT}
+- **Open decisions:** {none for PASSED; unresolved IDs and consequences for a DRAFT}
 
 ## Topology
 Round 0 (Topology Enumeration Gate) enumerated and confirmed the component list below. Every component is either **active** (scored across all 6 dimensions in Phase 2) or explicitly **deferred** (excluded from floor pressure, never silently dropped).

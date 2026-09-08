@@ -350,18 +350,14 @@ describe("new-prose: all design branches covered", () => {
 	});
 });
 
-describe("new-prose: residual-ambiguity seam on both exits", () => {
-	test('"residual ambiguity" appears at least twice (both exit paths)', () => {
-		const matches = skillMd.match(/residual ambiguity/g) || [];
-		expect(matches.length).toBeGreaterThanOrEqual(2);
+describe("요구사항과 설계 종료는 같은 감사 절차 사용", () => {
+	test("요구사항과 설계의 결정 범위를 구분해 감사", () => {
+		expect(skillMd).toContain("Before transitioning from requirements to design, audit requirements decisions");
+		expect(skillMd).toContain("before crystallizing, audit requirements and all design branches");
 	});
 
-	test("requirements-threshold exit call-site references the seam", () => {
-		expect(skillMd).toContain("reflecting residual ambiguity via the Step 2-exit seam");
-	});
-
-	test("design-completion exit call-site references the seam", () => {
-		expect(skillMd).toContain("Design-completion exit");
+	test("설계 종료 시 종료 감사 호출", () => {
+		expect(skillMd).toContain("run the Closure Audit (Step 2-exit)");
 	});
 });
 
@@ -876,9 +872,9 @@ describe("decider-gate: Scope Clarity scoring definition requires a decider on e
 	});
 });
 
-describe("decider-gate: question-style table gains a Non-Goal Decider row, distinct from the Scope Clarity row", () => {
-	const tableStart = skillMd.indexOf("**Question styles by dimension:**");
-	const tableEnd = skillMd.indexOf("**Scope Over-Engineering Guard:**");
+describe("제외 범위 판별 질문 유지", () => {
+	const tableStart = skillMd.indexOf("Choose a probe based on the actual gap:");
+	const tableEnd = skillMd.indexOf("### Step 2b: Ask the Question");
 	const region = tableStart === -1 ? "" : skillMd.slice(tableStart, tableEnd === -1 ? undefined : tableEnd);
 
 	test("table region exists (sanity)", () => {
@@ -894,21 +890,15 @@ describe("decider-gate: question-style table gains a Non-Goal Decider row, disti
 		// Anchored to include the verb phrase before the checked clause so a
 		// negator inserted right before "belongs" (preserving "belongs to that
 		// exclusion" verbatim) breaks the match instead of surviving inside it.
-		expect(region).toContain("tell a finding belongs to that exclusion");
+		expect(region).toContain("classified inside or outside the exclusion");
 		expect(region).not.toMatch(/tell a finding not belongs to that exclusion/);
 	});
 
-	test("Non-Goal Decider row sits after the Scope Clarity row (both present, distinct rows)", () => {
-		const scopeRowIdx = region.indexOf("| Scope Clarity |");
-		const nonGoalRowIdx = region.indexOf("| Non-Goal Decider |");
-		expect(scopeRowIdx).toBeGreaterThan(-1);
-		expect(nonGoalRowIdx).toBeGreaterThan(scopeRowIdx);
-	});
 });
 
 describe("decider-gate: Closure Guard gains a non-goal decider precondition, located inside Step 2-exit", () => {
-	const step2exitStart = skillMd.indexOf("### Step 2-exit: Residual-Ambiguity Seam");
-	const step2headStart = skillMd.indexOf("### Step 2-head: Dialectic Rhythm Guard");
+	const step2exitStart = skillMd.indexOf("### Step 2-exit: Closure Audit");
+	const step2headStart = skillMd.indexOf("### Step 2-head: Update the Decision Register");
 	const section = step2exitStart === -1 ? "" : skillMd.slice(step2exitStart, step2headStart === -1 ? undefined : step2headStart);
 
 	test("Step 2-exit section exists and precedes Step 2-head (sanity)", () => {
@@ -1081,7 +1071,7 @@ describe("invariant-slot: spec template carries an Invariants section between Co
 
 describe("non-goal decider Closure Guard gains a code-enforcement sentence, symmetric with the topology guard", () => {
 	const guardStart = skillMd.indexOf("**Closure Guard (non-goal decider precondition):**");
-	const guardEnd = skillMd.indexOf("1. Reflect the residual ambiguity", guardStart);
+	const guardEnd = skillMd.indexOf("1. Review the decision register", guardStart);
 	const section = guardStart === -1 ? "" : skillMd.slice(guardStart, guardEnd === -1 ? undefined : guardEnd);
 
 	test("non-goal decider Closure Guard section exists (sanity)", () => {
@@ -1115,7 +1105,7 @@ describe("non-goal decider Closure Guard gains a code-enforcement sentence, symm
 
 describe("interviewer is instructed to call set-nongoals when a non-goal decider is secured", () => {
 	const guardStart = skillMd.indexOf("**Closure Guard (non-goal decider precondition):**");
-	const guardEnd = skillMd.indexOf("1. Reflect the residual ambiguity", guardStart);
+	const guardEnd = skillMd.indexOf("1. Review the decision register", guardStart);
 	const section = guardStart === -1 ? "" : skillMd.slice(guardStart, guardEnd === -1 ? undefined : guardEnd);
 
 	test("the set-nongoals CLI call is present near the Closure Guard", () => {

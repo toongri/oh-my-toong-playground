@@ -23,7 +23,7 @@ If interrupted, run `/deep-interview` again. The skill reads state by invoking:
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts get
 ```
 
-and resumes from the last completed round.
+and resumes from the last completed round, recovering the latest `decision_register` from round history. Reopen decisions only when new evidence changes their premises; a resumed session does not reset questioning depth.
 
 ## Continuation Intent (cross-session adoption)
 
@@ -68,24 +68,24 @@ Every state write also runs `validateScoredTransition`, which fail-closed reject
 
 The scoring condition reads the interview's standing state, not the individual write: a later round that lowers ambiguity without re-scoring anything is refused just the same, because scoring and the drop can be split across two calls and a per-write check would be bypassed by sending them separately. This is not a wedge — raising or holding ambiguity stays allowed while a dispute is open, and superseding the disputed fact releases the block. Only lowering is refused, and only while the dispute stands.
 
-## Challenge Agent Modes
+## Long Interviews
 
-The Step 2-head Dialectic Rhythm Guard is the sole gate that selects these stances; the "Selected by guard when" column restates the rotation conditions it owns (these are NOT independent self-firing triggers). The prompt-injection bodies are the Phase 3 templates.
+Question count does not limit the interview. Preserve the latest `decision_register` in the round history, including reopened dependents and provenance, when summarizing or adopting state. Prompt sizes and individual research calls remain bounded operationally; hitting such a bound preserves progress rather than declaring the design ready.
 
-| Mode | Selected by guard when | Purpose | Prompt Injection |
-|------|------------------------|---------|-----------------|
-| Contrarian | Round 4+, if not yet used | Challenge assumptions | "What if the opposite were true?" |
-| Simplifier | Round 6+, if not yet used | Remove complexity | "What's the simplest version?" |
-| Ontologist | Stall (±0.05 for 3 rounds) OR Round 8+ with ambiguity > 0.3 | Find essence | "What IS this, really?" |
+`stance_history` records the ordered questioning perspectives; `challenge_modes_used` remains readable for older sessions. Inspect this history together with per-round scores to identify neglected perspectives and repeated questions. A stored stance name alone is not evidence that its underlying assumption was actually tested.
 
-Contrarian and Simplifier are used exactly once each (tracked in `challenge_modes_used`), then normal Socratic questioning resumes; Ontologist has two named rotation entry points (stall and late-stage) and may recur via either.
+## Quantitative Feedback and Stances
+
+Display the component's six scores, weights, weighted contributions, and gaps after each round, plus the previous/current ambiguity and ontology stability. These are model assessments backed by explanations, not calibrated probabilities that the design is correct. A plateau (±0.05 for three rounds) prompts inspection of why understanding has not advanced; it does not select Ontologist regardless of the gap.
+
+The five stances remain explicit: Clarify, Fact-ground, Contrarian, Simplifier, Ontologist. Choose by the current decision's missing evidence, premise, complexity, or meaning. Re-investigate a dimension when it contains a new unresolved fact, and revisit a perspective when new evidence warrants it.
 
 ## Ambiguity Score Interpretation
 
 | Score Range | Meaning | Action |
 |-------------|---------|--------|
-| 0.0 - 0.1 | Crystal clear | Proceed immediately |
-| At or below the resolved threshold | Clear enough | Proceed |
+| 0.0 - 0.1 | Few reported gaps | Run the Closure Audit; inspect evidence and open decisions |
+| At or below the resolved threshold | Candidate for closure | Run the Closure Audit |
 | Above the resolved threshold with minor gaps | Some gaps | Continue interviewing |
 | Moderate ambiguity | Significant gaps | Focus on weakest dimensions |
 | High ambiguity | Very unclear | May need reframing (Ontologist) |
