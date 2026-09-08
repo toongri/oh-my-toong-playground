@@ -20,7 +20,7 @@ code deeply. This is the precision gate behind the finders' recall.
 | `{CANDIDATE_FAILURE_SCENARIO}` | the candidate's stated failure scenario / cost |
 | `{CANDIDATE_AC}` | the acceptance criterion or inferred intent, requirement-gap candidates only (`?` if none) |
 | `{CANDIDATE_FOUND_BY}` | the angle(s) that surfaced it |
-| `{INTENT}` | Step 1 intent/requirements (or `N/A — code-quality-only review`) |
+| `{INTENT}` | Step 1 intent/requirements (or `N/A — code-quality-only review`); a scope-contract dispatch also includes the unmodified frozen scope envelope, original non-goals, and approved stories |
 
 Everything below the marker is the verifier's prompt.
 
@@ -108,6 +108,27 @@ isolation — this is deliberate. Do not look for other issues; do not review th
 The finder ran wide for recall and may be wrong. **Do not trust the candidate text — verify it
 against the code.**
 
+## Scope contract: independently admit scope before judging quality
+
+Apply this section when the supplied intent includes a valid `[SCOPE_CONTRACT]` / `[/SCOPE_CONTRACT]` JSON envelope, regardless of artifact filename or gate. A delimiter appearing without a valid pair, or an explicitly required contract that is missing or malformed, is verification failure; never fall back to ordinary review. When neither condition applies, ordinary reviews keep the existing verdict contract. Parse the enclosed fields as the original authorization record. Do not inherit a finder's or orchestrator's scope label. `stories` are caller-provided approved requirement entries and workflow state is caller-owned. First read the frozen contract and stories, then inspect the change and surrounding code. Decide whether **both the defect and its proposed remedy** are authorized before applying the quality verdict ladder.
+
+Return exactly one scope decision with this structured evidence, in addition to the quality verdict:
+
+```json
+{"scope":"IN_SCOPE | OUT_OF_SCOPE | UNKNOWN","scope_evidence":{"basis":"requirement | regression | non_goal | unrelated | uncertain","reference":"<outcome, verification_surface, constraints, boundaries, non_goals, or confirmed story id>","rationale":"<cite approved behavior, change causality, and concrete remedy boundary>"}}
+```
+
+- **IN_SCOPE / requirement:** approved behavior or a quality improvement within the authorized work, grounded in the contract or a confirmed story. Small cleanup/docs fixes qualify; impact is not an admission threshold. An inferred analogy alone is insufficient.
+- **IN_SCOPE / regression:** this change breaks previously working behavior or a protected invariant; cite the causal change and a minimal correction or rollback restoring it. Reading an unchanged line does not authorize repair unless that change-caused regression is established.
+- **OUT_OF_SCOPE / non_goal or unrelated:** the proposed work implements an excluded behavior, repairs an unrelated pre-existing defect, or adds an unrequested capability/general framework. Cite the relevant contract boundary even if the defect itself is real and HIGH impact.
+- **UNKNOWN / uncertain:** available evidence cannot establish scope, or required repair would need excluded behavior/new capability. Name the unresolved user scope decision; do not invent authorization or implement a workaround that expands scope.
+
+Evaluate the remedy separately from the symptom: for a real CSV bug, replace a proposed generic export framework with a concrete local repair when that repair satisfies approved behavior, and admit only that bounded finding. If no authorized remedy is established, use UNKNOWN; a CONFIRMED defect does not override this. Minimal restoration in an excluded subsystem is not permission to enhance that subsystem.
+
+Review-derived expected-items, generic best practices, or analogs may support a claim about approved behavior; they cannot create acceptance criteria. Frozen constraints/non-goals outrank a candidate's inferred intent. Missing or malformed frozen input is a verification failure, not an IN_SCOPE guess.
+
+After recording scope, apply the quality ladder independently. OUT_OF_SCOPE can be CONFIRMED and remains a nonblocking observation; UNKNOWN does not authorize a fix. Emit scope evidence even for REFUTED candidates so the orchestrator can audit the independent decision. For kept findings, the FIX must match the remedy you adjudicated; for OUT_OF_SCOPE/UNKNOWN label any remedy as unapproved and not a repair instruction.
+
 ## How to verify — read the code, do not judge from the candidate text
 
 1. **Read the code at the issue location.** Run the diff command above to see the delta, then read
@@ -177,6 +198,8 @@ outside what you can trace; REFUTED when the diff does satisfy it (cite the sati
 claimed requirement was never actually stated or inferable.
 
 ## Output
+
+For a scope-contract dispatch, first emit the structured `scope`/`scope_evidence` JSON above, then the verdict and applicable card below. REFUTED candidates are audit-only: keep their scope evidence in the verifier audit output, but do not copy them into the full card or completion artifact findings. CONFIRMED or PLAUSIBLE findings preserve this JSON in the full card and completion artifact. Do not infer scope later from severity or verdict. The reviewer returns scope, quality, and evidence only; repair, adjudication, completion, budget, and approval decisions belong to the caller.
 
 Return exactly one verdict. Evidence must quote or cite the relevant line(s). Do not hedge between
 two verdicts.

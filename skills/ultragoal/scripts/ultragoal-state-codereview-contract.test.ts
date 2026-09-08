@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import * as state from "./ultragoal-state";
 import {
 	dismissReviewFinding,
 	readCodeReviewArtifact,
@@ -65,7 +66,35 @@ function codeReviewArtifactPath(sid: string): string {
 }
 
 function writeArtifact(sid: string, obj: object): void {
-	writeFileSync(codeReviewArtifactPath(sid), JSON.stringify(obj), "utf8");
+	const input = obj as {
+		findings?: Array<Record<string, unknown>>;
+		scope_contract_sha256?: string;
+	};
+	const findings = Array.isArray(input.findings)
+		? input.findings.map((f) =>
+				f.scope === undefined
+					? {
+							...f,
+							scope: "IN_SCOPE",
+							scope_evidence: {
+								basis: "requirement",
+								reference: "outcome",
+								rationale: "test fixture",
+							},
+						}
+					: f,
+			)
+		: input.findings;
+	writeFileSync(
+		codeReviewArtifactPath(sid),
+		JSON.stringify({
+			...obj,
+			findings,
+			scope_contract_sha256:
+				input.scope_contract_sha256 ?? state.scopeContractSha256(state.readGoalState(sid) ?? {}),
+		}),
+		"utf8",
+	);
 }
 
 /**
@@ -234,7 +263,7 @@ describe("T7: requirement-gap 클래스 커버리지 계약 (regression guard)",
 	});
 
 	// 진짜 판별 케이스: PLAUSIBLE × LOW는 NOTE(non-blocking)이므로 위 BLOCK 케이스와 대조된다.
-	test("requirement-gap 클래스 PLAUSIBLE LOW finding — requestComplete refuse 안 함 (non-blocking 판별)", () => {
+	test("requirement-gap 클래스 PLAUSIBLE LOW finding — requestComplete는 adjudication으로 거부", () => {
 		buildObjectiveLaneGreenFixture(SID);
 		writeArtifact(SID, {
 			status: "COMPLETE",
@@ -243,7 +272,7 @@ describe("T7: requirement-gap 클래스 커버리지 계약 (regression guard)",
 			at: "2026-06-26T10:00:00",
 		});
 
-		expect(requestComplete(SID)).toBe(true);
+		expect(requestComplete(SID)).toBe(false);
 	});
 });
 
@@ -343,7 +372,7 @@ describe("T8: 사용자 승인 finding 무효화 (dismiss-review-finding)", () =
 		expect(requestComplete(SID)).toBe(false);
 	});
 
-	test("비차단 finding(CONFIRMED × LOW = FIX)은 무효화 대상이 아니다 — 완료를 막지 않음", () => {
+	test("IN_SCOPE CONFIRMED LOW도 차단 finding이라 무효화 대상이다", () => {
 		buildObjectiveLaneGreenFixture(SID);
 		writeBlockingArtifact(SID, [
 			{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW", ref: "src/log.ts:8" },
@@ -355,7 +384,7 @@ describe("T8: 사용자 승인 finding 무효화 (dismiss-review-finding)", () =
 				class: "cleanup",
 				rationale: "무의미한 무효화",
 			}),
-		).toBe(false);
+		).toBe(true);
 	});
 
 	test("빈 rationale은 거부한다 — 무효화는 근거 없이 기록되지 않는다", () => {
@@ -387,7 +416,7 @@ describe("T8: 사용자 승인 finding 무효화 (dismiss-review-finding)", () =
 		expect(requestComplete(SID)).toBe(false);
 	});
 
-	test("값 없는 --rationale은 거부한다 — parseArgs의 boolean true가 근거 \"true\"로 기록되면 안 됨", () => {
+	test('값 없는 --rationale은 거부한다 — parseArgs의 boolean true가 근거 "true"로 기록되면 안 됨', () => {
 		buildObjectiveLaneGreenFixture(SID);
 		writeBlockingArtifact(SID, [FALSE_POSITIVE]);
 

@@ -28,11 +28,11 @@ Because the orchestrator now runs this check on its own pursuit, the rubric is t
 
 For each non-retired story, map the story's acceptance criteria and verification surface to concrete evidence and render an `APPROVE` or `REQUEST_CHANGES` per-story verdict. A single non-APPROVE per-story entry blocks completion regardless of the `objective_verdict` field — `objective_verdict === 'APPROVE'` alone is never sufficient.
 
-`request-complete` reads the artifact from the conventional path internally (no path argument). It refuses if: the artifact is absent or schema-invalid; any non-retired story entry is non-APPROVE; any non-retired story is `unconfirmed`; an entry is missing for any non-retired story; zero non-retired stories exist; or the existing dual gate is unmet (`objective_verdict !== 'APPROVE'` in state, or empty `completion_evidence_paths`). As a second structural refusal lane, `request-complete` also reads the code-review artifact (`ultragoal-codereview-{sid}.json`) from its conventional path internally (no path argument) and refuses if that artifact is absent or schema-invalid (a missing `status` field is schema-invalid — there is no default-to-COMPLETE coercion, and a finding missing `impact` invalidates the whole artifact the same way), has `status: "INCONCLUSIVE"`, or contains an undismissed BLOCK-outcome finding per the verdict × impact diagonal (see code-review lane below); FIX and NOTE findings are non-blocking. This refusal is structural — it runs inside `request-complete` itself independent of the orchestrator loop, so completion is blocked even if the loop misbehaves. When all checks pass, `request-complete` writes `phase=complete` and `active=false`.
+`request-complete` reads the artifact from the conventional path internally (no path argument). It refuses if: the artifact is absent or schema-invalid; any non-retired story entry is non-APPROVE; any non-retired story is `unconfirmed`; an entry is missing for any non-retired story; zero non-retired stories exist; or the existing dual gate is unmet (`objective_verdict !== 'APPROVE'` in state, or empty `completion_evidence_paths`). The independent review gate additionally requires a valid `COMPLETE` artifact bound to the current scope contract, with no undismissed `IN_SCOPE` finding and no `UNKNOWN` finding. Missing scope evidence or a stale contract hash refuses completion, including an otherwise empty review. This check runs inside `request-complete`, independently of the orchestrator's judgment. Only when both lanes pass does it write `phase=complete` and `active=false`.
 
 <!-- story-layer:end -->
 
-**Code-review lane (runs once, at the final story — not per story).** Middle stories carry only the lightweight, self-attested per-story verdict above; no code-reviewer runs on them. Once every confirmed story's per-story verdict reads APPROVE, dispatch a fresh **code-reviewer** agent, independent of the builder (sisyphus), over the ENTIRE accumulated diff — all stories combined, not just the final one. Self-review by the builder is forbidden.
+**Code-review lane (starts at the final story; retries follow bounded admission).** Middle stories carry only the lightweight, self-attested per-story verdict above; no code-reviewer runs on them. Once every confirmed story's per-story verdict reads APPROVE, dispatch a fresh **code-reviewer** agent, independent of the builder (sisyphus), over the ENTIRE accumulated diff — all stories combined, not just the final one. Self-review by the builder is forbidden.
 
 - **Before dispatching**, run `bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts serialize-review-context` and put its full stdout JSON — the 5-slot payload `{what_was_implemented, description, requirements, project_context, non_goals}` — in the dispatch prompt. The code-review skill's Step 1 Intent Block Gate recognizes this shape (its "Non-interactive dispatch (completion-gate)" row) and skips its own user interview while still detecting requirement-gap findings.
 - **The code-reviewer writes `$OMT_DIR/ultragoal-codereview-{sid}.json` itself.** Pass it only the session-derived path; never transcribe finding content.
@@ -41,16 +41,50 @@ For each non-retired story, map the story's acceptance criteria and verification
 
 A code-reviewer may legitimately remain in flight for 2–3 hours. Elapsed time alone is not evidence to interrupt, cancel, or re-dispatch it. Keep waiting while it remains live; intervene only on concrete terminal evidence such as an explicit reviewer timeout or deadline, a canceled or error state, or verified loss of its live process or job artifact.
 
-**The code-reviewer dispatch prompt carries exactly two things — the `serialize-review-context` 5-slot JSON verbatim, and the artifact path — and nothing else, on the first dispatch and on every re-dispatch alike.** Both are mandatory, not an optional pair to pick from: the 5-slot payload (`what_was_implemented, description, requirements, project_context, non_goals`) is what the first-dispatch contract above already requires, and the artifact path is the other half of the same non-interactive-dispatch signal — `code-review/SKILL.md`'s Step 1 Intent Block Gate reads the two together, so dropping the path leaves the reviewer to open its own user interview instead of writing the artifact. Nothing else rides along: no diff range (the code-review skill already derives its own range when none is given — detecting the default branch for `<default>...HEAD` — and verifies HEAD is the target branch and the tree is clean before the review starts, aborting on a mismatch; the orchestrator has no more trustworthy a range than the reviewer's own derivation, so supplying one would only replace that derivation with the orchestrator's judgment instead of adding anything to it). This exclusion presumes the branch was cut for this objective and carries no commits outside this pursuit — only under that premise does the reviewer's self-derived `<default>...HEAD` equal the ENTIRE accumulated diff the code-review lane is required to run over; when the branch also carries commits no story here produced, the reviewer reviews those files too, and any BLOCK-outcome finding among them blocks `request-complete` and sends re-dispatch after files no story owns, the same as a genuine finding would. It also excludes any hand-written account of what to look for, whatever form that account takes — a defect-class ladder, "find the next instance of X" phrasing, or any other free-form steering. This has a concrete failure mode behind it, not just caution: a reviewer handed a named defect pattern in its prompt tends to produce the next instance of that same pattern, so the prompt becomes the review's real finding source instead of the diff — observed once as a review that converged once that free-form prose was stripped out and only the fixed 5-slot-plus-path payload remained. A rising finding count, round over round, is the occasion to check this contract, not the verdict by itself: genuine change in the reviewed diff between rounds is a competing cause and has to be ruled out first, and only once it is does a rise point at the prompt still supplying what to find rather than at the code. This reading detects the contract's violation, not payload content: under a held contract, the prompt names nothing to look for, so it cannot be the finding source — the payload may still differ each round, drawn fresh from session state. The test for what belongs in the prompt is never lexical, either — "ladder" and "instance" surface in plenty of legitimate prose, so a defect-class ladder or "find the next instance" phrasing is disqualified here only as a worked example, not a banned word; the only question that decides an item is whether it is the 5-slot JSON or the artifact path.
+**The code-reviewer dispatch prompt carries exactly two things:** the `serialize-review-context` 5-slot JSON verbatim and the session-derived artifact path. Keep this contract on every dispatch. The serializer embeds the frozen scope contract and its SHA-256 as JSON between `[SCOPE_CONTRACT]` and `[/SCOPE_CONTRACT]` inside `project_context`; copy it intact. Add no finding history, defect pattern, desired verdict, or hand-authored diff range. The reviewer derives its range itself. A broad branch diff is inspection material, never permission to repair unrelated commits.
+
+### Scope admission before repair
+
+Finders suppress scenarios fully explained by declared non-goals before candidate generation. For every generated candidate, the independent verifier records **scope first, validity second** against the frozen contract, evaluating the failure/cost AND the proposed remedy. OUT_OF_SCOPE records preserve generated candidates excluded during verification; they do not require a search for unrelated work:
+
+| Scope | Required evidence | Orchestrator action |
+|---|---|---|
+| `IN_SCOPE` / `requirement` | Cite an approved story/AC or outcome/verification clause; explain how the local repair improves that deliverable without adding capability | Every `CONFIRMED` item enters one repair batch, including LOW and cleanup |
+| `IN_SCOPE` / `regression` | Cite the preserved contract and the causal path from this pursuit's change to broken prior behavior | Restore prior behavior with the smallest repair or rollback of this pursuit's change |
+| `OUT_OF_SCOPE` / `non_goal` | Cite the matching non-goal decider | Record exclusion; no repair or new story |
+| `OUT_OF_SCOPE` / `unrelated` | Compare against the approved outcome and show no requirement or causal regression connection | Record exclusion; no repair or new story |
+| `UNKNOWN` / `uncertain` | Name the unresolved scope question with its contract reference | No repair; obtain independent clarification from evidence; a genuine product-scope choice belongs to the user |
+
+A file in the allowed boundary is only a location permission. Shared files, useful improvements, a senior reviewer's request, generic best practices, and codebase analogs do not authorize new goals. Derived expectations can explain an approved requirement; they cannot become new acceptance criteria. A real CSV defect can justify a local CSV fix, but cannot justify a non-goal multi-format framework. If the only known fix requires excluded behavior or a wider boundary, leave it `UNKNOWN` and seek a scope decision; never silently broaden the contract.
+
+A non-goal does not excuse damage introduced by this pursuit. Restore the prior behavior by correcting or reverting the offending change inside the boundary. Do not use the regression label to modernize the excluded subsystem or repair a pre-existing defect.
+
+**Executor handoff:** include only independently admitted `IN_SCOPE` + `CONFIRMED` findings, their scope evidence, the original story AC/verification surface, constraints, boundaries, and non-goals. The executor checks the remedy against this same contract before editing. A mismatch returns for adjudication; it is not a license to execute the reviewer's suggestion. Never dispatch an entire unfiltered findings report as a repair list.
+
+### Bounded re-review
+
+Repair all admitted confirmed findings together; run affected automated checks; then obtain a fresh independent review, including LOW-only batches. The reviewer checks the accumulated objective diff against the same frozen contract. Every newly discovered item must independently satisfy the same admission test; passing an earlier review neither authorizes new work nor excuses a newly proven in-scope defect. No review-driven story creation, contract rewriting, new feature, or generalization is permitted. Keep the existing finite dispatch budget; exhaustion leaves the pursuit incomplete rather than lowering the completion standard.
 
 The artifact schema the code-reviewer must emit:
 
 ```json
 {
   "status": "COMPLETE|INCONCLUSIVE",
-  "findings_report": "<path to findings.md>",
+  "scope_contract_sha256": "<hash copied from the serialized scope contract>",
+  "findings_report": "<findings.md 경로>",
   "findings": [
-    { "class": "correctness|regression|cleanup|requirement-gap", "verdict": "CONFIRMED|PLAUSIBLE", "impact": "HIGH|MEDIUM|LOW", "ref": "<file:line>" }
+    {
+      "class": "correctness|regression|cleanup|requirement-gap",
+      "verdict": "CONFIRMED|PLAUSIBLE",
+      "impact": "HIGH|MEDIUM|LOW",
+      "ref": "<file:line>",
+      "scope": "IN_SCOPE|OUT_OF_SCOPE|UNKNOWN",
+      "scope_evidence": {
+        "basis": "requirement|regression|non_goal|unrelated|uncertain",
+        "reference": "<contract field or confirmed story id>",
+        "rationale": "<quoted clause, causal evidence, and bounded remedy or exclusion reason>"
+      }
+    }
   ],
   "reviewer": "<reviewer id>",
   "at": "<ISO timestamp>"
@@ -61,25 +95,33 @@ The artifact schema the code-reviewer must emit:
 
 `impact` is **required on every finding** — a finding without one invalidates the whole artifact, exactly like a missing `status`; there is no default impact coercion. `verdict` measures confidence (assigned by the verifier); `impact` measures harm (assigned by the code-review orchestrator, per that skill's case lists). `findings_report` is the path to the review's `findings.md` — the full 7-field cards the summary findings were cut from, preserved so a finding can be re-adjudicated later from its original text.
 
-**Pass signal:** completion requires `status === "COMPLETE"` AND no BLOCK-outcome finding per the verdict × impact diagonal — except one the user dismissed against these exact artifact bytes (see Wrong blocking finding below). `class` does not enter the diagonal; any class blocks when its cell does:
+`scope` and `scope_evidence` are required for every finding. References resolve to `outcome`, `verification_surface`, `constraints`, `boundaries`, `non_goals`, or a confirmed active story ID. A requirement uses outcome/verification/story evidence; an exclusion uses its non-goal decider or outcome comparison. The runtime checks valid references, allowed scope/basis combinations, nonempty rationale, and the current contract hash. The independent verifier owns the semantic truth of that evidence; a hash is identity, not proof of correctness.
 
-```
-BLOCK ⟺ (CONFIRMED && impact ∈ {HIGH, MEDIUM}) || (PLAUSIBLE && impact == HIGH)
-FIX   ⟺ CONFIRMED && impact == LOW
-NOTE  ⟺ PLAUSIBLE && impact ∈ {MEDIUM, LOW}
-```
+**Pass signal:** `COMPLETE`, matching scope contract hash, no `UNKNOWN`, and no undismissed `IN_SCOPE` findings. Impact controls priority, never whether an improvement is done.
 
-BLOCK's verb depends on verdict: a `CONFIRMED` BLOCK means "fix it" — route to sisyphus, then a full re-review; a `PLAUSIBLE × HIGH` BLOCK means "adjudicate it" — the next review round confirms or refutes it, which is what re-review exists for. `status === "INCONCLUSIVE"` blocks regardless of findings.
+- `IN_SCOPE + CONFIRMED` at **every impact**: batch-repair, affected checks, then fresh independent review. There is no nonblocking LOW/FIX shortcut.
+- `IN_SCOPE + PLAUSIBLE` at **every impact**: independent adjudication before repair; do not leave an unresolved low-impact claim as report-only. If evidence refutes it, the reviewer removes it; if evidence confirms it, it joins the repair batch.
+- `OUT_OF_SCOPE`: nonblocking exclusion, retained in the report with its rationale. Do not fix it or ask for routine dismissal.
+- `UNKNOWN`, invalid/stale artifact, or `INCONCLUSIVE`: completion blocked; no speculative repair. Re-review when evidence can settle it. If the contract itself needs a product decision, ask the user without changing scope.
 
-**FIX findings (CONFIRMED × LOW).** Non-blocking, but not report-only: once the gate is otherwise pass-eligible, batch every FIX finding into ONE sisyphus dispatch, repair them all, then re-run the automated checks (build / test / lint) once — the per-story automated lane ran before the FIX batch existed, so without this re-run the safety net the FIX lane presumes does not actually cover it. Then proceed straight to `request-complete`. The FIX batch triggers no re-review, consumes no review dispatch, and needs no user approval.
+An old artifact without this contract must be re-reviewed. The orchestrator never upgrades it by adding scope fields or copying a current hash.
 
-**NOTE findings (PLAUSIBLE × MEDIUM/LOW).** Report-only: list each with its exact `file:line` reference and a one-line summary in the completion report. They are not confirmed work items and this rule does not require dispatching sisyphus to fix them.
+### Common mistakes under review pressure
+
+| Rationalization | Required response |
+|---|---|
+| “CONFIRMED/HIGH means fix, even though it is a non-goal” | Scope admission comes first; exclude the unrelated item |
+| “The helper works, but the reviewer requires a framework” | Compare the remedy to the original AC; retain a bounded implementation |
+| “LOW is only a note; CI is green” | Every admitted confirmed improvement remains incomplete until repaired and independently checked |
+| “Same file / analog / next review round makes it part of the goal” | Cite the frozen requirement or change-caused regression; otherwise exclude |
+
+**Red flags:** a repair list containing an excluded item; a story added from review feedback alone; a changed non-goal to obtain approval; completing with an unresolved in-scope LOW item. Stop that action and apply admission again.
 
 ### Wrong blocking finding: propose a dismissal
 
-A BLOCK-outcome finding blocks completion structurally. When such a finding is **wrong**, the loop has no other exit: fixing correct code to satisfy it makes the code worse, and the pursuit otherwise runs until the dispatch budget dies.
+An admitted `IN_SCOPE` + `CONFIRMED` finding blocks completion structurally. When such a finding is **wrong**, propose a user-authorized dismissal with a quoted refutation. PLAUSIBLE findings require independent adjudication and cannot use dismissal.
 
-**Trigger — when you can quote the refutation.** After reading a blocking finding, go to the cited `file:line` and look for the line, guard, or invariant that makes its failure scenario unreachable. If you can quote one, propose a dismissal on your next turn. If you cannot quote one, the finding stands: route it to sisyphus as an ordinary blocking finding. Disagreeing with a finding you cannot refute in a quoted line is not a trigger.
+**Trigger — when you can quote the refutation.** After reading a blocking finding, go to the cited `file:line` and look for the line, guard, or invariant that makes its failure scenario unreachable. If you can quote one, propose a dismissal on your next turn. If you cannot quote one, keep its scope/validity routing: confirmed in-scope items go to sisyphus; plausible items go to adjudication. Scope disagreement is resolved by the independent reviewer against the frozen contract, not by repairing excluded work. Disagreeing with a finding you cannot refute in a quoted line is not a trigger.
 
 **The proposal carries four parts, in this order:**
 
@@ -97,15 +139,15 @@ Then stop and wait. **You never run this command yourself** — a `PreToolUse` g
 
 **Scope of one dismissal.** It removes exactly one finding from the blocking set — remaining `CONFIRMED` blocking findings still block, and each needs its own proposal. It is pinned to the current artifact's exact bytes, so it lapses when the next review round writes a new artifact; a genuine defect that later appears at the same `file:line` blocks normally.
 
-The command refuses a missing or empty `--rationale`, and any `--ref` with no matching BLOCK-outcome finding in the current artifact — so a dismissal cannot be issued ahead of the finding it answers, and a FIX or NOTE finding (which never blocks) cannot be dismissed. It also refuses when the artifact holds **more than one** BLOCK-outcome finding at that same `ref` and `class`: a dismissal cannot tell them apart, so clearing one would clear the other too. Report both findings to the user instead; the block stands until the review round that produced them is superseded.
+The command refuses a missing or empty `--rationale`, and any `--ref` with no matching admitted `IN_SCOPE` + `CONFIRMED` finding in the current artifact — so a dismissal cannot be issued ahead of the finding it answers. PLAUSIBLE, OUT_OF_SCOPE, and UNKNOWN findings cannot be dismissed. It also refuses when the artifact holds **more than one** admitted `IN_SCOPE` finding at that same `ref` and `class`: a dismissal cannot tell them apart, so clearing one would clear the other too. Report both findings to the user instead; the block stands until the review round that produced them is superseded.
 
-**After the dismissal.** Re-run the completion check. If no blocking finding remains, proceed to `request-complete`; the dismissed finding is still reported in the completion summary, with its rationale. If the user declines the proposal, treat the finding as real and route it to sisyphus.
+**After the dismissal.** Re-run the completion check. If no blocking finding remains, proceed to `request-complete`; the dismissed finding is still reported in the completion summary, with its rationale. If the user declines the proposal, retain the finding and its scope/validity routing. Declining dismissal does not authorize a non-goal or turn a plausible claim into a confirmed defect.
 
 ### Five-round review dispatch budget
 
 Before an active `phase=pursuing` code-reviewer dispatch, the Claude and Codex `PreToolUse` hooks automatically run `claim-review-dispatch`; an allowed claim persists `used += 1` before dispatch. The initial cap is 5. Per-story dispatches, non-reviewer dispatches, and any non-pursuing state are unaffected. The hooks do not change `code-review` behavior; they only decide whether the already-planned code-reviewer dispatch may proceed.
 
-At the cap, the hook denies the next dispatch and the AI must ask the user whether to **마무리** or **계속**. A completion-eligible artifact (a `COMPLETE` artifact with no BLOCK-outcome finding — FIX-only or NOTE-only findings included) also denies re-dispatch until the AI either runs `request-complete` (after the FIX batch, when one exists) or asks to continue. To continue, the orchestrator presents this command and the **user** runs it — in their terminal, or by prefixing it with `!` in the prompt:
+At the cap, the hook denies the next dispatch and the AI must ask the user whether to **마무리** or **계속**. A completion-eligible artifact (a matching-scope `COMPLETE` artifact with no unresolved admitted finding and no `UNKNOWN`) also denies re-dispatch until the AI either runs `request-complete` or asks to continue. “마무리” cannot waive an unresolved item; when the gate fails it means stop incomplete. To continue, the orchestrator presents this command and the **user** runs it — in their terminal, or by prefixing it with `!` in the prompt:
 
 ```
 bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts approve-review-dispatch-renewal
@@ -113,7 +155,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts approve-review-dispatch-renew
 
 A `PreToolUse` guard denies this command on the orchestrator's own Bash path on both platforms, so "only after explicit user approval" is enforced by the harness rather than by the orchestrator's restraint. Each approval adds `cap += 5` and stores the SHA-256 of the current code-review artifact's exact raw bytes. That marker approves only that artifact version: a byte-changed completion-eligible artifact requires a new user approval. The hook alone calls `claim-review-dispatch`; the orchestrator must never edit the counters itself.
 
-The block reasons route differently: a `CONFIRMED` BLOCK finding (impact `HIGH` or `MEDIUM`, under `status: "COMPLETE"`) routes back to sisyphus re-dispatch targeted at those specific findings — the same concrete-progress shape as an objective-lane REQUEST_CHANGES verdict. A `PLAUSIBLE × HIGH` BLOCK finding routes to a **reviewer-only re-run** — the next round's job is to confirm or refute it, not to fix unconfirmed code. An `INCONCLUSIVE` status also routes to a reviewer-only re-run — re-dispatch a fresh **code-reviewer** over the same diff, NOT sisyphus (there is no confirmed work item to fix; the review itself just needs to finish).
+The routing table above applies at every round, regardless of impact. A reviewer-only retry consumes the same budget as a post-repair review; a retry never becomes a repair assignment merely because the budget is low.
 
 **Completion fires ONLY on an objective-lane APPROVE AND an objective-scope Evidence Audit pass.** A **COMMENT verdict is NOT sufficient** for completion — `request-complete` requires `objective_verdict=APPROVE`. COMMENT is a soft pass: no blocking issue but non-blocking notes remain; address those notes and re-verify until APPROVE. **On an APPROVE,** the Evidence Audit applies the verify-the-verifier shape to your own check: confirm the verdict HOLDS UP by reading the evidence you collected (does it demonstrate the verification surface was met?). If the evidence is missing or does not demonstrate the verification surface, it is an Evidence Gap → continue pursuit, do not complete.
 
@@ -147,19 +189,25 @@ APPROVE alone does NOT leave the ultragoal pursuit pursuing/active — the `requ
 
 **Once `request-complete` reaches terminal `complete`, hand off to the human for the final hands-on QA.** The loop never runs the hands-on adversarial matrix, so when you report completion, also prompt the user to run their own final hands-on pass before shipping — the heavy `Skill(skill: "qa")` battery is available if they want it.
 
-**Two lanes gate completion: the objective self-check and code-review.** The completion path runs both the objective-level self-check (correctness, completeness, and evidence audit) and the independent code-review lane (static quality and conventions) — both must pass for `request-complete` to pass. The code-review lane passes only with `status: "COMPLETE"` and no BLOCK-outcome finding per the verdict × impact diagonal; FIX findings are batch-repaired before `request-complete` and NOTE findings are reported but non-blocking. No design or architecture lane gates completion: daedalus and design-review are plan-time advisory only, not completion gates. Code-review is a completion-time quality lane and is distinct from design-review — the two must not be conflated.
+**Two lanes gate completion: the objective self-check and code-review.** The completion path runs both the objective-level self-check (correctness, completeness, and evidence audit) and the independent code-review lane (static quality and conventions) — both must pass for `request-complete` to pass. The code-review lane passes only with a matching-scope `COMPLETE` artifact, no `UNKNOWN`, and no undismissed admitted finding; excluded items remain visible without becoming work. Advisors are advisory only and do not gate completion. Code-review is a completion-time quality lane and is distinct from design review — the two must not be conflated.
+
+### Final-review advisory routing
+
+Use advisory analysis conditionally during final review. Any uncertain review result — `PLAUSIBLE`, `UNKNOWN`, or disputed scope, validity, or causality — goes to Oracle first for read-only analysis of requirement fit, causality, and a bounded remedy, using the frozen contract and cited finding evidence. Malformed or stale artifacts may be diagnosed as input failures; Oracle must not fabricate evidence. For design alternatives or trade-offs, ask Daedalus with the frozen contract, specific question, cited evidence, and bounded options. Advisors cannot approve scope, overwrite an independent reviewer verdict, create a story or acceptance criterion, or authorize a repair. Their evidence may inform a reviewer correction or refutation, but the reviewer remains the artifact owner and a final fresh review still runs. Sisyphus remains the sole executor. Clean reviews do not require an advisory dispatch; this is conditional routing, not a new mandatory gate.
+
+### Invalidate out-of-requirement repair requests
+
+Every generated finding must be checked against the approved requirements, boundaries, and non-goals. An out-of-requirement finding is retained as `OUT_OF_SCOPE` with its concrete reason and invalidates its proposed repair and any completion authority derived from it; it is not silently treated as a false bug or rewritten as `REFUTED`. If an artifact labels it `IN_SCOPE`, the independent reviewer reclassifies it. The orchestrator must not edit the artifact, hash, or dismissal record to bypass that result. If scope remains uncertain, retain `UNKNOWN` and do not apply a speculative fix. Insufficient finding authority never creates a story or acceptance criterion.
 
 ### Concrete progress action per non-APPROVE verdict
 
-Every non-APPROVE verdict drives a concrete progress action — never action-less spin. Each action is **scoped re-review**: it re-dispatches only the rejected unit (the named incomplete TODOs, or the specific CONFIRMED findings), never a full re-walk of already-passed work. A strategic plan inadequacy — where the decomposition itself is wrong, not merely unfinished — is steered directly rather than escaped to a separate planning tool:
+Every non-APPROVE verdict drives a concrete action within the frozen scope:
 
-- **REQUEST_CHANGES naming incomplete work items** (tactical — the work is unfinished, the plan is sound) → re-dispatch `Skill(skill: "sisyphus")` on the named incomplete TODOs. This stays inside sisyphus's junior loop; phase remains `pursuing`.
-- **Strategic plan inadequacy** (the plan itself cannot reach the objective — the decomposition is wrong, not merely unfinished) → steer the plan directly (correct the TODO breakdown yourself), then re-dispatch `Skill(skill: "sisyphus")` against the corrected TODOs; phase remains `pursuing`.
-- **COMMENT (soft pass — non-blocking notes)** → re-dispatch `Skill(skill: "sisyphus")` to address the self-check notes, then re-verify toward APPROVE; do NOT `request-complete` on a COMMENT (the code gate requires `objective_verdict=APPROVE`).
-- **Code-review lane: `CONFIRMED` BLOCK finding** (impact `HIGH` or `MEDIUM`, under `status: "COMPLETE"`) → re-dispatch `Skill(skill: "sisyphus")` on the specific findings in `ultragoal-codereview-{sid}.json`. When you can quote the line that refutes one of those findings, propose a dismissal for it first (see Wrong blocking finding above) rather than sending sisyphus after correct code. Phase remains `pursuing`; run a fresh code-review dispatch after sisyphus resolves the findings — that fresh dispatch carries the same fixed two-item payload as the dispatch-prompt contract above, not the finding history from the round that just closed.
-- **Code-review lane: `PLAUSIBLE × HIGH` BLOCK finding** (under `status: "COMPLETE"`, no `CONFIRMED` BLOCK alongside) → re-dispatch a fresh **code-reviewer** over the same diff — NOT sisyphus. The block's verb is "adjudicate": the next round confirms the finding (it becomes a `CONFIRMED` BLOCK) or refutes it (it drops out).
-- **Code-review lane: completion-eligible artifact (FIX-only and/or NOTE-only findings)** → batch every FIX (`CONFIRMED × LOW`) finding into one sisyphus dispatch, re-run the automated checks (build / test / lint) once, then run `request-complete` with the NOTE findings in the remaining-finding report. No re-review, no review-dispatch consumption, no user approval on this path. This routing does not change `code-review`; it only controls the ultragoal dispatch permission.
-- **Code-review lane: `status: "INCONCLUSIVE"`** (reviewer timeout, ack-only response, `BLOCKED` reviewer, or genuine reviewer uncertainty) → re-dispatch a **fresh code-reviewer only** over the same diff — NOT sisyphus, since no finding was confirmed. Phase remains `pursuing`.
+- **Unfinished story/COMMENT**: dispatch the named requirement gap to sisyphus, then re-verify. Commentary cannot invent an acceptance criterion.
+- **Tactical plan inadequacy**: adjust HOW within the approved WHAT. A change to WHAT, AC, constraints, boundaries, or non-goals follows the planning approval contract before dispatch.
+- **Admitted confirmed findings**: one bounded sisyphus repair batch, affected automated verification, then fresh independent review.
+- **Plausible/unknown/invalid/inconclusive review**: send uncertain or disputed results to Oracle first for evidence analysis. Malformed/stale input may be diagnosed but never fabricated. A user scope decision is required if evidence still cannot determine the product requirement. No speculative fixes.
+- **Only excluded findings remain**: report the exclusions, check the objective evidence, and request completion. Do not prolong the loop to improve the excluded areas.
 
 ### Blocked-stop
 

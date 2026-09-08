@@ -119,8 +119,7 @@ export interface Story {
  * suppress a genuine defect that later appears at the same location.
  *
  * `class` spans all four finding classes: blocking is decided by the
- * verdict × impact diagonal (classifyReviewFindingOutcome), not by class, so any
- * class can block. dismissReviewFinding still refuses non-BLOCK findings — the
+ * scope-first outcome (classifyReviewFindingOutcome), not by class or impact. dismissReviewFinding still refuses non-BLOCK findings — the
  * lever stays a completion unblock, never general finding suppression.
  */
 export interface DismissedReviewFinding {
@@ -600,6 +599,103 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 				"set: pursuing refused — verification_surface is frozen once pursuit has begun. Re-plan first (set --phase planning) to change it.",
 			);
 		}
+		for (const slot of ["constraints", "boundaries", "non_goals"] as const) {
+			if (opts[slot] !== undefined && opts[slot] !== (prior[slot] ?? "")) {
+				throw new Error(
+					`set: pursuing refused — ${slot} is frozen once pursuit has begun. Re-plan first (set --phase planning) to change it.`,
+				);
+			}
+		}
+	}
+	if (opts.phase === "planning") {
+		ensureSeed("ultragoal", sessionId);
+		const stateFilePath = resolveStatePath(sessionId);
+		withStateLock(stateFilePath, () => {
+			const prior = readPrior(sessionId);
+			const next: Partial<GoalState> = {
+				phase: opts.phase,
+				active: true,
+				outcome: opts.outcome,
+				verification_surface: opts.verification_surface,
+				constraints: opts.constraints,
+				boundaries: opts.boundaries,
+				non_goals: opts.non_goals,
+				max_iterations: opts.max_iterations,
+				blocked_stop: opts.blocked_stop,
+				plan_path: opts.plan_path,
+				resume_summary: opts.resume_summary,
+				completion_evidence_paths: opts.completion_evidence_paths,
+				codex_goal_objective: opts.codex_goal_objective,
+			};
+			const scopeChanged = (
+				["outcome", "verification_surface", "constraints", "boundaries", "non_goals"] as const
+			).some((slot) => opts[slot] !== undefined && opts[slot] !== (prior[slot] ?? ""));
+			if ((scopeChanged || prior.active === false) && Array.isArray(prior.stories)) {
+				next.stories = prior.active
+					? prior.stories.map((story) =>
+							story.status === "confirmed" ? { ...story, status: "unconfirmed" as const } : story,
+						)
+					: [];
+			}
+			// ADR-3: Stale verdict cannot survive a re-plan. Three verdict carriers must all be
+			// invalidated together:
+			//   1. objective_verdict state field → reset to 'absent'
+			//   2. completion_evidence_paths state field → cleared to []
+			//   3. ultragoal-verdict-{sid}.json artifact on disk → deleted
+			// Clearing (1) and (2) without deleting (3) allows requestComplete to read the old
+			// artifact and false-complete a new objective on a prior objective's evidence.
+			next.objective_verdict = "absent";
+			// Stale completion evidence cannot survive ANY planning transition — evidence is only
+			// ever valid from the current pursuit's completion audit, recorded fresh during the
+			// `pursuing` phase right before completing. A new objective must never complete on a
+			// prior objective's evidence.
+			next.completion_evidence_paths = [];
+			// Dismissals are a verdict carrier of the same species as the two fields above —
+			// per-round judgment about a specific review, not accumulated budget. Byte-pinning
+			// already makes a stale dismissal inert (the artifact is deleted below, so the next
+			// one hashes differently), so this clear keeps the carrier set literally complete
+			// rather than repairing a live hole.
+			next.dismissed_review_findings = [];
+			// A recorded codex_goal_objective is a FOURTH carrier of the same staleness, and it
+			// arms Gate 9. It names the native goal registered for the story that was being
+			// pursued — the very story a re-plan revises or retires. Left behind, the gate stays
+			// armed against a story that no longer exists, and if that orphaned native goal is
+			// ever closed as `complete` the objective matches and status matches, so the gate
+			// opens for a story set it was never registered against. Re-arming is the dispatch
+			// loop's job (step 3 calls create_goal again for the new current story), so clearing
+			// here degrades to the existing 8 gates rather than deadlocking.
+			next.codex_goal_objective = "";
+			// Delete the on-disk verdict artifact. ENOENT is ignored (no artifact = already clean).
+			// Fail-open: if deletion fails for any other reason, the re-plan still proceeds;
+			// the subsequent requestComplete will find an artifact with mismatched state and refuse.
+			try {
+				unlinkSync(resolveVerdictArtifactPath(sessionId));
+			} catch {
+				// ignore — ENOENT (no artifact) and other transient I/O errors are both safe to skip
+			}
+			// D-4: the code-review lane artifact must not survive a re-plan either (same ADR-3
+			// stale-vector — a prior objective's clean code-review must not false-complete a new
+			// objective). Error policy mirrors the ultragoal-verdict unlink above exactly.
+			try {
+				unlinkSync(resolveCodeReviewArtifactPath(sessionId));
+			} catch {
+				// ignore — ENOENT (no artifact) and other transient I/O errors are both safe to skip
+			}
+			// A FRESH goal (no active prior) must not inherit the dead goal's consumed iteration
+			// budget; a re-plan loop-back of the SAME active goal MUST (budget accumulates across
+			// re-plans). readGoalState returns non-null ONLY for an active prior → re-plan.
+			if (!readGoalState(sessionId)) {
+				next.iteration = 0;
+				// A terminal prior state can remain on disk for the same session. Its review
+				// dispatch budget and approval hash belong to the completed/blocked pursuit,
+				// never to the fresh one being planned now.
+				next.review_dispatch_used = 0;
+				next.review_dispatch_cap = DEFAULT_REVIEW_DISPATCH_CAP;
+				next.approved_review_artifact_sha256 = "";
+			}
+			mergeWriteLocked(sessionId, stateFilePath, next);
+		});
+		return;
 	}
 	const next: Partial<GoalState> = {
 		phase: opts.phase,
@@ -616,64 +712,6 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 		completion_evidence_paths: opts.completion_evidence_paths,
 		codex_goal_objective: opts.codex_goal_objective,
 	};
-	if (opts.phase === "planning") {
-		// ADR-3: Stale verdict cannot survive a re-plan. Three verdict carriers must all be
-		// invalidated together:
-		//   1. objective_verdict state field → reset to 'absent'
-		//   2. completion_evidence_paths state field → cleared to []
-		//   3. ultragoal-verdict-{sid}.json artifact on disk → deleted
-		// Clearing (1) and (2) without deleting (3) allows requestComplete to read the old
-		// artifact and false-complete a new objective on a prior objective's evidence.
-		next.objective_verdict = "absent";
-		// Stale completion evidence cannot survive ANY planning transition — evidence is only
-		// ever valid from the current pursuit's completion audit, recorded fresh during the
-		// `pursuing` phase right before completing. A new objective must never complete on a
-		// prior objective's evidence.
-		next.completion_evidence_paths = [];
-		// Dismissals are a verdict carrier of the same species as the two fields above —
-		// per-round judgment about a specific review, not accumulated budget. Byte-pinning
-		// already makes a stale dismissal inert (the artifact is deleted below, so the next
-		// one hashes differently), so this clear keeps the carrier set literally complete
-		// rather than repairing a live hole.
-		next.dismissed_review_findings = [];
-		// A recorded codex_goal_objective is a FOURTH carrier of the same staleness, and it
-		// arms Gate 9. It names the native goal registered for the story that was being
-		// pursued — the very story a re-plan revises or retires. Left behind, the gate stays
-		// armed against a story that no longer exists, and if that orphaned native goal is
-		// ever closed as `complete` the objective matches and status matches, so the gate
-		// opens for a story set it was never registered against. Re-arming is the dispatch
-		// loop's job (step 3 calls create_goal again for the new current story), so clearing
-		// here degrades to the existing 8 gates rather than deadlocking.
-		next.codex_goal_objective = "";
-		// Delete the on-disk verdict artifact. ENOENT is ignored (no artifact = already clean).
-		// Fail-open: if deletion fails for any other reason, the re-plan still proceeds;
-		// the subsequent requestComplete will find an artifact with mismatched state and refuse.
-		try {
-			unlinkSync(resolveVerdictArtifactPath(sessionId));
-		} catch {
-			// ignore — ENOENT (no artifact) and other transient I/O errors are both safe to skip
-		}
-		// D-4: the code-review lane artifact must not survive a re-plan either (same ADR-3
-		// stale-vector — a prior objective's clean code-review must not false-complete a new
-		// objective). Error policy mirrors the ultragoal-verdict unlink above exactly.
-		try {
-			unlinkSync(resolveCodeReviewArtifactPath(sessionId));
-		} catch {
-			// ignore — ENOENT (no artifact) and other transient I/O errors are both safe to skip
-		}
-		// A FRESH goal (no active prior) must not inherit the dead goal's consumed iteration
-		// budget; a re-plan loop-back of the SAME active goal MUST (budget accumulates across
-		// re-plans). readGoalState returns non-null ONLY for an active prior → re-plan.
-		if (!readGoalState(sessionId)) {
-			next.iteration = 0;
-			// A terminal prior state can remain on disk for the same session. Its review
-			// dispatch budget and approval hash belong to the completed/blocked pursuit,
-			// never to the fresh one being planned now.
-			next.review_dispatch_used = 0;
-			next.review_dispatch_cap = DEFAULT_REVIEW_DISPATCH_CAP;
-			next.approved_review_artifact_sha256 = "";
-		}
-	}
 	mergeWrite(sessionId, next);
 }
 
@@ -1103,34 +1141,44 @@ export function splitStory(
  *   surface    = verification_surface
  *   id         = 'S1'
  *   status     = 'confirmed'   (carve-out: user already stated this when setting the outcome)
- * Refuses when phase !== 'planning' or outcome is empty.
+ * Refuses when phase !== 'planning', stories already exist, or outcome is empty.
+ * Existing stories must use confirmStory after replanning.
  */
 export function setSingleStory(sessionId: string): void {
-	const prior = readPrior(sessionId);
-	if ((prior.phase ?? "planning") !== "planning") {
-		throw new Error(
-			`set-stories --single: refused — phase must be 'planning' (got "${prior.phase}")`,
-		);
-	}
-	if (!prior.outcome || prior.outcome.trim() === "") {
-		throw new Error(
-			"set-stories --single: refused — outcome must be set before auto-deriving a story",
-		);
-	}
-	const surface = prior.verification_surface ?? "";
-	if (surface.trim() === "") {
-		throw new Error(
-			"set-stories --single: refused — verification_surface must be set before auto-deriving a story",
-		);
-	}
-	const derived: Story = {
-		id: "S1",
-		story: prior.outcome,
-		acceptance_criteria: [surface],
-		verification_surface: surface,
-		status: "confirmed",
-	};
-	mergeWrite(sessionId, { stories: [derived] });
+	ensureSeed("ultragoal", sessionId);
+	const stateFilePath = resolveStatePath(sessionId);
+	withStateLock(stateFilePath, () => {
+		const prior = readPrior(sessionId);
+		if ((prior.phase ?? "planning") !== "planning") {
+			throw new Error(
+				`set-stories --single: refused — phase must be 'planning' (got "${prior.phase}")`,
+			);
+		}
+		if (!prior.outcome || prior.outcome.trim() === "") {
+			throw new Error(
+				"set-stories --single: refused — outcome must be set before auto-deriving a story",
+			);
+		}
+		if ((prior.stories ?? []).length > 0) {
+			throw new Error(
+				"set-stories --single: refused — stories already exist; use confirm-story after replanning",
+			);
+		}
+		const surface = prior.verification_surface ?? "";
+		if (surface.trim() === "") {
+			throw new Error(
+				"set-stories --single: refused — verification_surface must be set before auto-deriving a story",
+			);
+		}
+		const derived: Story = {
+			id: "S1",
+			story: prior.outcome,
+			acceptance_criteria: [surface],
+			verification_surface: surface,
+			status: "confirmed",
+		};
+		mergeWriteLocked(sessionId, stateFilePath, { stories: [derived] });
+	});
 }
 
 /**
@@ -1200,24 +1248,36 @@ interface VerdictArtifact {
 // ---------------------------------------------------------------------------
 // Code-review artifact types — the SECOND independent completion lane.
 // Mirrors the verdict artifact: read/validate only, authored by a fresh
-// code-reviewer agent. Blocking is decided by the verdict × impact diagonal
-// (classifyReviewFindingOutcome); `class` is carried for reporting and
+// code-reviewer agent. Blocking is decided by scope admission and confidence
+// (classifyReviewFindingOutcome); `class` and impact are carried for reporting and
 // dismissal keying but the gate does not branch on it.
 // ---------------------------------------------------------------------------
 
 export type ReviewFindingClass = "correctness" | "regression" | "cleanup" | "requirement-gap";
 export type ReviewImpact = "HIGH" | "MEDIUM" | "LOW";
-export type ReviewFindingOutcome = "BLOCK" | "FIX" | "NOTE";
+export type ReviewFindingOutcome = "BLOCK" | "NOTE" | "ADJUDICATE";
+export type ReviewScope = "IN_SCOPE" | "OUT_OF_SCOPE" | "UNKNOWN";
+export type ReviewScopeBasis =
+	"requirement" | "regression" | "non_goal" | "unrelated" | "uncertain";
+
+export interface ReviewScopeEvidence {
+	basis: ReviewScopeBasis;
+	reference: string;
+	rationale: string;
+}
 
 interface CodeReviewFinding {
 	class: ReviewFindingClass;
 	verdict: "CONFIRMED" | "PLAUSIBLE";
 	impact: ReviewImpact;
+	scope: ReviewScope;
+	scope_evidence: ReviewScopeEvidence;
 	ref?: string;
 }
 
 interface CodeReviewArtifact {
 	status: "COMPLETE" | "INCONCLUSIVE";
+	scope_contract_sha256: string;
 	findings: CodeReviewFinding[];
 	/** Path to the findings.md card report — the full 7-field cards the summary findings were cut from. */
 	findings_report?: string;
@@ -1226,24 +1286,19 @@ interface CodeReviewArtifact {
 }
 
 /**
- * The diagonal outcome grid — verdict (confidence, verifier-owned) × impact
- * (harm, orchestrator-owned). BLOCK's verb depends on verdict: CONFIRMED means
- * "fix it, then full re-review"; PLAUSIBLE × HIGH means "adjudicate it — the
- * next round confirms or refutes". FIX is repaired in one batch right before
- * completion without a re-review; NOTE is report-only.
- *
- *   BLOCK ⟺ (CONFIRMED && impact ∈ {HIGH, MEDIUM}) || (PLAUSIBLE && impact == HIGH)
- *   FIX   ⟺ CONFIRMED && impact == LOW
- *   NOTE  ⟺ PLAUSIBLE && impact ∈ {MEDIUM, LOW}
+ * Scope admission precedes confidence and impact. Every admitted confirmed
+ * improvement blocks until repaired; plausible claims require adjudication.
+ * Excluded observations are report-only; missing/unknown scope fails closed.
  */
 export function classifyReviewFindingOutcome(finding: {
 	verdict: "CONFIRMED" | "PLAUSIBLE";
 	impact: ReviewImpact;
+	scope: ReviewScope;
 }): ReviewFindingOutcome {
-	if (finding.verdict === "CONFIRMED") {
-		return finding.impact === "LOW" ? "FIX" : "BLOCK";
-	}
-	return finding.impact === "HIGH" ? "BLOCK" : "NOTE";
+	if (finding.scope === "OUT_OF_SCOPE") return "NOTE";
+	if (finding.scope === "UNKNOWN") return "BLOCK";
+	if (finding.scope === "IN_SCOPE") return finding.verdict === "PLAUSIBLE" ? "ADJUDICATE" : "BLOCK";
+	return "BLOCK";
 }
 
 /**
@@ -1325,6 +1380,11 @@ function isCodeReviewArtifact(value: unknown): value is CodeReviewArtifact {
 	// Required top-level fields
 	const VALID_STATUS = ["COMPLETE", "INCONCLUSIVE"];
 	if (!isOneOf(value["status"], VALID_STATUS)) return false;
+	if (
+		typeof value["scope_contract_sha256"] !== "string" ||
+		!/^[0-9a-f]{64}$/.test(value["scope_contract_sha256"])
+	)
+		return false;
 	if (!Array.isArray(value["findings"])) return false;
 	const reviewer = value["reviewer"];
 	if (typeof reviewer !== "string" || reviewer.length === 0) return false;
@@ -1345,6 +1405,21 @@ function isCodeReviewArtifact(value: unknown): value is CodeReviewArtifact {
 		if (!isOneOf(entry["class"], VALID_CLASSES)) return false;
 		if (!isOneOf(entry["verdict"], VALID_FINDING_VERDICTS)) return false;
 		if (!isOneOf(entry["impact"], VALID_IMPACTS)) return false;
+		if (!isOneOf(entry["scope"], ["IN_SCOPE", "OUT_OF_SCOPE", "UNKNOWN"] as const)) return false;
+		const evidence = entry["scope_evidence"];
+		if (
+			!isRecord(evidence) ||
+			typeof evidence["reference"] !== "string" ||
+			typeof evidence["rationale"] !== "string"
+		)
+			return false;
+		const basisByScope: Record<string, string[]> = {
+			IN_SCOPE: ["requirement", "regression"],
+			OUT_OF_SCOPE: ["non_goal", "unrelated"],
+			UNKNOWN: ["uncertain"],
+		};
+		if (!isOneOf(evidence["basis"], basisByScope[String(entry["scope"])] ?? [])) return false;
+		if (evidence["rationale"].trim() === "" || evidence["reference"].trim() === "") return false;
 	}
 	return true;
 }
@@ -1389,15 +1464,86 @@ function readCodeReviewArtifactRaw(
 function isCompletionEligibleCodeReview(
 	reviewed: { raw: string; artifact: CodeReviewArtifact },
 	dismissed: DismissedReviewFinding[],
+	currentScopeContractSha: string,
+	currentState: Partial<GoalState>,
 ): boolean {
 	const artifactSha = sha256(reviewed.raw);
 	return (
 		reviewed.artifact.status === "COMPLETE" &&
+		reviewed.artifact.scope_contract_sha256 === currentScopeContractSha &&
+		reviewed.artifact.findings.every((f) => isScopeEvidenceReferenceValid(f, currentState)) &&
 		!reviewed.artifact.findings.some(
 			(f) =>
-				classifyReviewFindingOutcome(f) === "BLOCK" && !isDismissed(f, artifactSha, dismissed)
+				(classifyReviewFindingOutcome(f) === "BLOCK" ||
+					classifyReviewFindingOutcome(f) === "ADJUDICATE") &&
+				!isDismissed(f, artifactSha, dismissed),
 		)
 	);
+}
+
+function isScopeEvidenceReferenceValid(
+	finding: CodeReviewFinding,
+	state: Partial<GoalState>,
+): boolean {
+	const reference = finding.scope_evidence.reference;
+	const storyIds = new Set(
+		(state.stories ?? []).filter((s) => s.status === "confirmed").map((s) => s.id),
+	);
+	if (
+		!["outcome", "verification_surface", "constraints", "boundaries", "non_goals"].includes(
+			reference,
+		) &&
+		!storyIds.has(reference)
+	)
+		return false;
+	const allowed: Record<ReviewScope, string[]> = {
+		IN_SCOPE: ["requirement", "regression"],
+		OUT_OF_SCOPE: ["non_goal", "unrelated"],
+		UNKNOWN: ["uncertain"],
+	};
+	if (!allowed[finding.scope].includes(finding.scope_evidence.basis)) return false;
+	if (
+		finding.scope === "IN_SCOPE" &&
+		finding.scope_evidence.basis === "requirement" &&
+		!["outcome", "verification_surface"].includes(reference) &&
+		!storyIds.has(reference)
+	)
+		return false;
+	if (
+		finding.scope === "IN_SCOPE" &&
+		finding.scope_evidence.basis === "regression" &&
+		!["constraints", "boundaries", "outcome"].includes(reference) &&
+		!storyIds.has(reference)
+	)
+		return false;
+	if (
+		finding.scope === "OUT_OF_SCOPE" &&
+		finding.scope_evidence.basis === "non_goal" &&
+		reference !== "non_goals"
+	)
+		return false;
+	if (
+		finding.scope === "OUT_OF_SCOPE" &&
+		finding.scope_evidence.basis === "unrelated" &&
+		reference !== "outcome"
+	)
+		return false;
+	if (finding.scope === "OUT_OF_SCOPE") {
+		const slotValue =
+			reference === "outcome"
+				? state.outcome
+				: reference === "non_goals"
+					? state.non_goals
+					: reference === "constraints"
+						? state.constraints
+						: reference === "boundaries"
+							? state.boundaries
+							: reference === "verification_surface"
+								? state.verification_surface
+								: undefined;
+		if (slotValue === undefined || slotValue.trim() === "") return false;
+	}
+	return true;
 }
 
 /**
@@ -1411,6 +1557,7 @@ function isDismissed(
 	artifactSha: string,
 	dismissed: DismissedReviewFinding[],
 ): boolean {
+	if (finding.scope !== "IN_SCOPE" || finding.verdict !== "CONFIRMED") return false;
 	if (!finding.ref) return false;
 	return dismissed.some(
 		(d) =>
@@ -1460,7 +1607,12 @@ export function claimReviewDispatch(sessionId: string): ReviewDispatchClaim {
 			const approved = prior.approved_review_artifact_sha256 ?? "";
 			if (
 				reviewed !== null &&
-				isCompletionEligibleCodeReview(reviewed, readDismissals(prior)) &&
+				isCompletionEligibleCodeReview(
+					reviewed,
+					readDismissals(prior),
+					scopeContractSha256(prior),
+					prior,
+				) &&
 				sha256(reviewed.raw) !== approved
 			) {
 				return { allowed: false, reason: "completion_eligible", used, cap };
@@ -1537,7 +1689,7 @@ function readDismissals(prior: Partial<GoalState>): DismissedReviewFinding[] {
  *
  * Deliberately narrow, so the lever unblocks a specific wrong call rather than
  * disabling the review lane. It refuses unless a BLOCK-outcome finding (per the
- * verdict × impact diagonal) with this exact `ref` and `class` is present in the
+ * scope-first outcome) with this exact `ref` and `class` is present in the
  * CURRENT artifact — a dismissal cannot be issued ahead of the finding it answers —
  * and it records the artifact's byte hash, so it lapses the moment the next review
  * round writes different bytes.
@@ -1586,6 +1738,9 @@ export function dismissReviewFinding(
 
 			const reviewed = readCodeReviewArtifactRaw(sessionId);
 			if (reviewed === null) return false;
+			if (reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(prior)) return false;
+			if (!reviewed.artifact.findings.every((f) => isScopeEvidenceReferenceValid(f, prior)))
+				return false;
 			const artifactSha = sha256(reviewed.raw);
 			// EXACTLY one match, not at-least-one. A dismissal is keyed by (artifact bytes,
 			// ref, class) and findings carry no identity of their own, so two DISTINCT
@@ -1593,16 +1748,14 @@ export function dismissReviewFinding(
 			// refuting one would silently clear the other and let a genuine defect complete,
 			// against the never-false-complete invariant. Refusing the ambiguous dismissal
 			// is the fail-closed direction: the user loses the escape hatch for that one
-			// finding, never the block on its twin. Only BLOCK-outcome findings match:
-			// dismissing a FIX or NOTE finding would be a no-op against a gate they never
-			// block, and accepting one would advertise general finding suppression.
+			// finding, never the block on its twin. Only admitted IN_SCOPE findings
+			// match; the sole match must be CONFIRMED. PLAUSIBLE requires independent
+			// adjudication, UNKNOWN cannot be cleared by dismissal, and excluded observations
+			// need no authorization to remain outside the repair list.
 			const matches = reviewed.artifact.findings.filter(
-				(f) =>
-					classifyReviewFindingOutcome(f) === "BLOCK" &&
-					f.class === opts.class &&
-					f.ref === opts.ref,
-			).length;
-			if (matches !== 1) return false;
+				(f) => f.scope === "IN_SCOPE" && f.class === opts.class && f.ref === opts.ref,
+			);
+			if (matches.length !== 1 || matches[0].verdict !== "CONFIRMED") return false;
 
 			const dismissed = readDismissals(prior);
 			const already = dismissed.some(
@@ -1718,129 +1871,140 @@ function extractCodexGoalStatus(snapshot: Record<string, unknown>): string | und
  * over a prior budget_limited (complete-wins, ADR-7).
  */
 export function requestComplete(sessionId: string, codexGoalArg?: string): boolean {
-	const prior = readPrior(sessionId);
-	const evidence = Array.isArray(prior.completion_evidence_paths)
-		? prior.completion_evidence_paths
-		: [];
-	// Structural gate: complete requires BOTH a recorded APPROVE verdict AND non-empty
-	// evidence. Evidence-only is insufficient — the documented sequence records evidence
-	// BEFORE flipping the verdict, so an absent/failed set-verdict must not be able to
-	// complete on already-recorded evidence (never-false-complete invariant).
-	if (evidence.length === 0 || prior.objective_verdict !== "APPROVE") {
-		return false;
-	}
-
-	// T4: Story-level artifact gate
-	const stories: Story[] = prior.stories ?? [];
-
-	// Gate 6: zero non-retired stories → refuse (completion structurally requires >=1)
-	const activeStories = stories.filter((s) => s.status !== "retired");
-	if (activeStories.length === 0) {
-		return false;
-	}
-
-	// Gate 1: artifact must exist and be schema-valid (schema includes duplicate-id rejection)
-	const artifact = readVerdictArtifact(sessionId);
-	if (artifact === null) {
-		return false;
-	}
-
-	// Gate 2 (artifact objective_verdict): the artifact is the trust anchor written by
-	// the orchestrator directly — its objective_verdict must itself be 'APPROVE'. COMMENT also blocks
-	// (never-false-complete invariant). This is independent of the state objective_verdict
-	// checked by the dual gate above.
-	if (artifact.objective_verdict !== "APPROVE") {
-		return false;
-	}
-
-	// Gate 3: artifact must not reference unknown story ids
-	const knownIds = new Set(stories.map((s) => s.id));
-	for (const entry of artifact.stories) {
-		if (!knownIds.has(entry.id)) {
-			return false;
-		}
-	}
-
-	// Build a map from story id → artifact entry for O(1) lookup
-	const artifactById = new Map<string, ArtifactStoryEntry>();
-	for (const entry of artifact.stories) {
-		artifactById.set(entry.id, entry);
-	}
-
-	for (const story of activeStories) {
-		// Gate 5: non-retired story must be confirmed
-		if (story.status !== "confirmed") {
+	ensureSeed("ultragoal", sessionId);
+	const stateFilePath = resolveStatePath(sessionId);
+	return withStateLock(stateFilePath, () => {
+		const prior = readPrior(sessionId);
+		const evidence = Array.isArray(prior.completion_evidence_paths)
+			? prior.completion_evidence_paths
+			: [];
+		// Structural gate: complete requires BOTH a recorded APPROVE verdict AND non-empty
+		// evidence. Evidence-only is insufficient — the documented sequence records evidence
+		// BEFORE flipping the verdict, so an absent/failed set-verdict must not be able to
+		// complete on already-recorded evidence (never-false-complete invariant).
+		if (evidence.length === 0 || prior.objective_verdict !== "APPROVE") {
 			return false;
 		}
 
-		// Gate 3: artifact must have an entry for every non-retired story
-		const entry = artifactById.get(story.id);
-		if (entry === undefined) {
+		// T4: Story-level artifact gate
+		const stories: Story[] = prior.stories ?? [];
+
+		// Gate 6: zero non-retired stories → refuse (completion structurally requires >=1)
+		const activeStories = stories.filter((s) => s.status !== "retired");
+		if (activeStories.length === 0) {
 			return false;
 		}
 
-		// Gate 4 (+ precedence rule D-3): every non-retired story entry must be APPROVE
-		if (entry.verdict !== "APPROVE") {
+		// Gate 1: artifact must exist and be schema-valid (schema includes duplicate-id rejection)
+		const artifact = readVerdictArtifact(sessionId);
+		if (artifact === null) {
 			return false;
 		}
-	}
 
-	// Code-review lane (D-3): the SECOND independent refusal lane, reached only after
-	// every objective-lane gate above passes — so "both lanes clean" is the completion condition.
-	// Absent/invalid artifact → block (never-false-complete: degrade toward block). The
-	// gate blocks BLOCK-outcome findings per the verdict × impact diagonal
-	// (classifyReviewFindingOutcome); FIX and NOTE findings are non-blocking and
-	// `class` is not branched on at all.
-	const codeReview = readCodeReviewArtifactRaw(sessionId);
-	if (codeReview === null) {
-		return false;
-	}
-	// INCONCLUSIVE (D1): the review itself did not finish (timeout/ack-only/BLOCKED/
-	// genuinely uncertain) — distinct from a finished review that found CONFIRMED work.
-	// Blocks completion without implying a sisyphus re-dispatch is warranted.
-	if (!isCompletionEligibleCodeReview(codeReview, readDismissals(prior))) {
-		return false;
-	}
+		// Gate 2 (artifact objective_verdict): the artifact is the trust anchor written by
+		// the orchestrator directly — its objective_verdict must itself be 'APPROVE'. COMMENT also blocks
+		// (never-false-complete invariant). This is independent of the state objective_verdict
+		// checked by the dual gate above.
+		if (artifact.objective_verdict !== "APPROVE") {
+			return false;
+		}
 
-	// Gate 9 (Codex native-goal snapshot cross-check): Codex's create_goal/update_goal
-	// tools carry no verification of their own — handle_update only checks the status
-	// enum before writing straight to its DB (pure self-grading). So on the Codex path,
-	// this CLI's own request-complete must independently cross-check the model's own
-	// native-goal claim against a snapshot of what it actually registered, rather than
-	// trust the native tool's bare "complete" write. Capability-as-state, not
-	// platform-detection: this gate is armed ONLY when codex_goal_objective is
-	// non-empty (i.e. `set --codex-goal-objective` was actually called — the Codex
-	// path). On the Claude path codex_goal_objective is always "" and every branch
-	// below is skipped, so gates 1-8 above are byte-for-byte unchanged for Claude.
-	const codexGoalObjective = prior.codex_goal_objective ?? "";
-	if (codexGoalObjective.trim() !== "") {
-		// Missing arg while the gate is armed is a REFUSAL, not a pass-through — this is
-		// the gate's core safety property: an omitted verification input must never be
-		// silently waved through.
-		if (codexGoalArg === undefined) {
+		// Gate 3: artifact must not reference unknown story ids
+		const knownIds = new Set(stories.map((s) => s.id));
+		for (const entry of artifact.stories) {
+			if (!knownIds.has(entry.id)) {
+				return false;
+			}
+		}
+
+		// Build a map from story id → artifact entry for O(1) lookup
+		const artifactById = new Map<string, ArtifactStoryEntry>();
+		for (const entry of artifact.stories) {
+			artifactById.set(entry.id, entry);
+		}
+
+		for (const story of activeStories) {
+			// Gate 5: non-retired story must be confirmed
+			if (story.status !== "confirmed") {
+				return false;
+			}
+
+			// Gate 3: artifact must have an entry for every non-retired story
+			const entry = artifactById.get(story.id);
+			if (entry === undefined) {
+				return false;
+			}
+
+			// Gate 4 (+ precedence rule D-3): every non-retired story entry must be APPROVE
+			if (entry.verdict !== "APPROVE") {
+				return false;
+			}
+		}
+
+		// Code-review lane (D-3): the SECOND independent refusal lane, reached only after
+		// every objective-lane gate above passes — so "both lanes clean" is the completion condition.
+		// Absent/invalid artifact → block (never-false-complete: degrade toward block). The
+		// gate requires a matching scope contract and no unresolved admitted finding.
+		// Excluded observations are non-blocking and
+		// `class` is not branched on at all.
+		const codeReview = readCodeReviewArtifactRaw(sessionId);
+		if (codeReview === null) {
 			return false;
 		}
-		const snapshot = parseCodexGoalSnapshot(codexGoalArg);
-		if (snapshot === null) {
-			return false;
-		}
-		const snapshotObjective = extractCodexGoalObjective(snapshot);
-		if (snapshotObjective === undefined) {
-			return false;
-		}
+		// INCONCLUSIVE (D1): the review itself did not finish (timeout/ack-only/BLOCKED/
+		// genuinely uncertain) — distinct from a finished review that found CONFIRMED work.
+		// Blocks completion without implying a sisyphus re-dispatch is warranted.
 		if (
-			normalizeWhitespaceForCompare(snapshotObjective) !==
-			normalizeWhitespaceForCompare(codexGoalObjective)
+			!isCompletionEligibleCodeReview(
+				codeReview,
+				readDismissals(prior),
+				scopeContractSha256(prior),
+				prior,
+			)
 		) {
 			return false;
 		}
-		if (extractCodexGoalStatus(snapshot) !== "complete") {
-			return false;
-		}
-	}
 
-	mergeWrite(sessionId, { phase: "complete", active: false });
-	return true;
+		// Gate 9 (Codex native-goal snapshot cross-check): Codex's create_goal/update_goal
+		// tools carry no verification of their own — handle_update only checks the status
+		// enum before writing straight to its DB (pure self-grading). So on the Codex path,
+		// this CLI's own request-complete must independently cross-check the model's own
+		// native-goal claim against a snapshot of what it actually registered, rather than
+		// trust the native tool's bare "complete" write. Capability-as-state, not
+		// platform-detection: this gate is armed ONLY when codex_goal_objective is
+		// non-empty (i.e. `set --codex-goal-objective` was actually called — the Codex
+		// path). On the Claude path codex_goal_objective is always "" and every branch
+		// below is skipped, so gates 1-8 above are byte-for-byte unchanged for Claude.
+		const codexGoalObjective = prior.codex_goal_objective ?? "";
+		if (codexGoalObjective.trim() !== "") {
+			// Missing arg while the gate is armed is a REFUSAL, not a pass-through — this is
+			// the gate's core safety property: an omitted verification input must never be
+			// silently waved through.
+			if (codexGoalArg === undefined) {
+				return false;
+			}
+			const snapshot = parseCodexGoalSnapshot(codexGoalArg);
+			if (snapshot === null) {
+				return false;
+			}
+			const snapshotObjective = extractCodexGoalObjective(snapshot);
+			if (snapshotObjective === undefined) {
+				return false;
+			}
+			if (
+				normalizeWhitespaceForCompare(snapshotObjective) !==
+				normalizeWhitespaceForCompare(codexGoalObjective)
+			) {
+				return false;
+			}
+			if (extractCodexGoalStatus(snapshot) !== "complete") {
+				return false;
+			}
+		}
+
+		mergeWriteLocked(sessionId, stateFilePath, { phase: "complete", active: false });
+		return true;
+	});
 }
 
 /**
@@ -1936,12 +2100,50 @@ export function serializeReviewContext(sessionId: string): {
 	const requirements = requirementsRaw !== "" ? requirementsRaw : BACKFILL_MARKER;
 
 	const projectContextSources = [constraints, boundaries].filter((s) => s.trim() !== "");
-	const project_context =
+	const projectContext =
 		projectContextSources.length > 0 ? projectContextSources.join("\n\n") : BACKFILL_MARKER;
 
 	const non_goals = nonGoals.trim() !== "" ? nonGoals : BACKFILL_MARKER;
 
+	const contract = scopeContract(state);
+	const project_context = `${projectContext}\n\n[SCOPE_CONTRACT]\n${JSON.stringify({ ...contract, scope_contract_sha256: sha256(JSON.stringify(contract)) })}\n[/SCOPE_CONTRACT]`;
 	return { what_was_implemented, description, requirements, project_context, non_goals };
+}
+
+type ScopeContract = {
+	outcome: string;
+	verification_surface: string;
+	constraints: string;
+	boundaries: string;
+	non_goals: string;
+	stories: Array<
+		Pick<Story, "id" | "story" | "acceptance_criteria" | "verification_surface" | "status">
+	>;
+};
+
+/** Canonical, machine-produced scope input shared with the independent reviewer. */
+function scopeContract(state: Partial<GoalState>): ScopeContract {
+	return {
+		outcome: state.outcome ?? "",
+		verification_surface: state.verification_surface ?? "",
+		constraints: state.constraints ?? "",
+		boundaries: state.boundaries ?? "",
+		non_goals: state.non_goals ?? "",
+		stories: (state.stories ?? [])
+			.filter((s) => s.status === "confirmed")
+			.map(({ id, story, acceptance_criteria, verification_surface, status }) => ({
+				id,
+				story,
+				acceptance_criteria,
+				verification_surface,
+				status,
+			}))
+			.sort((a, b) => a.id.localeCompare(b.id)),
+	};
+}
+
+export function scopeContractSha256(state: Partial<GoalState>): string {
+	return sha256(JSON.stringify(scopeContract(state)));
 }
 
 // ---------------------------------------------------------------------------
@@ -1993,7 +2195,10 @@ const FREE_TEXT_VALUE_FLAGS = new Set(["evidence", "rationale", "codex-goal-obje
  * fall back to boolean `true`, so a genuinely missing value is still caught by
  * callers checking for that.
  */
-function parseArgs(args: string[]): { flags: Record<string, string | boolean>; positionals: string[] } {
+function parseArgs(args: string[]): {
+	flags: Record<string, string | boolean>;
+	positionals: string[];
+} {
 	const flags: Record<string, string | boolean> = {};
 	const positionals: string[] = [];
 	for (let i = 0; i < args.length; i++) {

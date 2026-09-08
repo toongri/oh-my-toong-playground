@@ -1,6 +1,6 @@
 ---
 name: ultragoal
-description: Autonomous multi-story objective-pursuit executor — runs objective pursuit as a per-story sequential loop. Auto-generates and bulk-approves a Story set, dispatches each confirmed story to sisyphus one at a time gated by a per-story APPROVE verdict, then runs one independent code-review over the accumulated diff at the final story.
+description: Use when pursuing a falsifiable objective across sequential stories with autonomous execution and final code review, especially when review feedback risks scope creep or incomplete low-impact fixes.
 ---
 
 <Role>
@@ -8,6 +8,8 @@ description: Autonomous multi-story objective-pursuit executor — runs objectiv
 # Ultragoal — Sequential Multi-Story Objective-Pursuit Executor
 
 Ultragoal decomposes a single OBJECTIVE into the Seven Slots and an auto-generated Story set, has the user review and bulk-approve that set in one pass, then dispatches the confirmed stories to sisyphus **one story at a time, in sequence**: the next story is never dispatched until the current story's per-story verdict is `APPROVE`. Only after every confirmed story is APPROVE does a single independent code-review run over the accumulated diff. sisyphus remains the sole executor throughout — ultragoal never delegates execution to another skill at runtime. Codex's native goal tools (`create_goal`/`update_goal`/`get_goal`) are model-callable tools, not skill dispatches, and calling them is not a violation of this invariant.
+
+**Scope invariant:** review cannot enlarge the approved objective. Every repair must trace to an approved requirement or a regression caused by this pursuit, fit its boundaries, and respect its non-goals. All independently confirmed in-scope improvements are required, regardless of impact; excluded improvements never become work. See `references/completion-gate.md` for mandatory admission.
 
 **Design philosophy: autonomy is post-planning.** Planning carries a single human gate — bulk approval of the auto-generated Story set; that gate runs UN-wrapped. The autonomy begins after planning, during the per-story pursuit loop. The single load-bearing invariant of the whole design: **the loop never false-completes.** Every state-write or verdict-write failure degrades toward continued pursuit of the current story or block — never toward a claimed completion.
 
@@ -34,7 +36,7 @@ Subcommands used by this orchestrator:
 | `request-complete` | gate layer | The ONLY path to `phase=complete`; structurally gated on completion-evidence being present and `objective_verdict=APPROVE`. |
 | `claim-review-dispatch` | PreToolUse hook only | Atomically reserves one final code-review dispatch. The initial cap is 5; it persists the reservation before allowing the dispatch. The orchestrator never calls this command directly. |
 | `approve-review-dispatch-renewal` | **user only** — a PreToolUse guard denies it on the orchestrator's Bash path; present the command and have the user run it | Adds exactly 5 to the review-dispatch cap; when a valid code-review artifact exists, also records the SHA-256 of its exact raw bytes as the user-approved marker (an absent/invalid artifact still renews — sole recovery when all dispatches died before writing one). |
-| `dismiss-review-finding --ref <file:line> --class <correctness\|requirement-gap> --rationale <text>` | **user only** — same PreToolUse guard; propose it, never run it | Removes ONE wrong blocking code-review finding from the completion gate's blocking set. Refuses unless EXACTLY ONE `CONFIRMED` finding with that exact `ref` and `class` is in the current artifact (two are indistinguishable to a dismissal, so clearing one would clear both), and pins the dismissal to that artifact's raw bytes so it lapses on the next review round. Propose per `references/completion-gate.md`; never run it on your own judgment. |
+| `dismiss-review-finding --ref <file:line> --class <correctness\|regression\|cleanup\|requirement-gap> --rationale <text>` | **user only** — same PreToolUse guard; propose it, never run it | Removes ONE wrong admitted code-review finding from the completion gate's blocking set. Refuses unless EXACTLY ONE admitted `IN_SCOPE` finding with that exact `ref` and `class` is in the current artifact (two are indistinguishable to a dismissal, so clearing one would clear both), and pins the dismissal to that artifact's raw bytes so it lapses on the next review round. Propose per `references/completion-gate.md`; never run it on your own judgment. |
 | `resume-pursuit` | **user only** — a PreToolUse guard denies it on the orchestrator's Bash path; present the command and have the user run it | Recovers only a `budget_limited` pursuit, restoring `phase=pursuing`, `active=true`, and `iteration=0`; refuses from any other phase. |
 | `get` / `status` | read | Inspect current state / derived status. |
 
@@ -103,7 +105,7 @@ Ultragoal does not reimplement execution. It decomposes the objective into the S
    - **Not equal, and that objective belongs to a story that already carries an APPROVE verdict** → that story's closing call was interrupted. Call `update_goal({status:"complete"})`, then retry `create_goal` for this story and arm normally. Not laundering — the APPROVE is already in the verdict artifact. Leaving it open is a **permanent completion deadlock**: every later `create_goal` stays refused and the cross-check can never be satisfied.
    - **Not equal, anything else** (a non-APPROVE story's goal — the re-plan case) → leave it alone and do not arm. `set --phase planning` has already cleared `codex_goal_objective`, so the gate is disarmed and the remaining gates carry this story. Never close such a goal to unblock `create_goal`.
 
-   Dispatch ONLY that one story to sisyphus: `Skill(skill: "sisyphus")` with that story's WHAT statement, acceptance criteria, and verification surface, **plus the pursuit's `non_goals` slot value** — never the whole Story set at once. A Story carries no non-goal field of its own, so `non_goals` reaches the executor only if it rides along here. **Carry out the story's work on the basis of the sisyphus skill's discipline.**
+   Dispatch ONLY that one story to sisyphus: `Skill(skill: "sisyphus")` with that story's WHAT statement, acceptance criteria, and verification surface, **plus the pursuit's constraints, boundaries, and `non_goals` slot values** — never the whole Story set at once. These scope limits travel with every first dispatch and repair dispatch. The executor returns a scope conflict for adjudication before editing; a review suggestion is not new authorization. **Carry out the story's work on the basis of the sisyphus skill's discipline.**
 4. After sisyphus returns, run the per-story completion audit (see `references/completion-gate.md`) and re-derive that story's verdict.
 5. **Advance only on APPROVE.** A non-APPROVE per-story verdict re-dispatches `Skill(skill: "sisyphus")` at the SAME story — the loop does not proceed to the next story until this one reads APPROVE.
 
@@ -134,7 +136,7 @@ Initial path: `set --phase planning` (seed slots) → auto-generate the Story se
 
 **You MUST read `references/completion-gate.md` first** before rendering a per-story verdict, evaluating the final code-review lane, or running the completion sequence (`set-verdict`/`request-complete`) — it is the single owner of the evidence rubric, the per-story and code-review artifact schemas, the pass signal, the concrete-progress routing per verdict, and the blocked-stop conditions.
 
-Middle stories get a **lightweight, self-attested per-story verdict** — an inline objective self-check scoped to the one story just dispatched — no code-review runs per story. Only once every confirmed story is APPROVE does the independent code-review lane run, and it runs exactly once, over the accumulated diff of all stories, as the final completion code-review.
+Middle stories get a **lightweight, self-attested per-story verdict** — an inline objective self-check scoped to the one story just dispatched — no code-review runs per story. Only once every confirmed story is APPROVE does the independent code-review lane run, over the accumulated diff of all stories; admitted repairs require independent re-review under the same frozen scope and finite dispatch budget.
 
 ---
 
