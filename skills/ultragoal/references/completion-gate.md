@@ -45,7 +45,7 @@ A code-reviewer may legitimately remain in flight for 2–3 hours. Elapsed time 
 
 ### Scope admission before repair
 
-The independent candidate verifier records **scope first, validity second** against the frozen contract. For each candidate, evaluate the failure/cost AND the proposed remedy:
+Finders suppress scenarios fully explained by declared non-goals before candidate generation. For every generated candidate, the independent verifier records **scope first, validity second** against the frozen contract, evaluating the failure/cost AND the proposed remedy. OUT_OF_SCOPE records preserve generated candidates excluded during verification; they do not require a search for unrelated work:
 
 | Scope | Required evidence | Orchestrator action |
 |---|---|---|
@@ -119,7 +119,7 @@ An old artifact without this contract must be re-reviewed. The orchestrator neve
 
 ### Wrong blocking finding: propose a dismissal
 
-An admitted `IN_SCOPE` finding blocks completion structurally. When such a finding is **wrong**, the loop has no other exit: fixing correct code to satisfy it makes the code worse, and the pursuit otherwise runs until the dispatch budget dies.
+An admitted `IN_SCOPE` + `CONFIRMED` finding blocks completion structurally. When such a finding is **wrong**, propose a user-authorized dismissal with a quoted refutation. PLAUSIBLE findings require independent adjudication and cannot use dismissal.
 
 **Trigger — when you can quote the refutation.** After reading a blocking finding, go to the cited `file:line` and look for the line, guard, or invariant that makes its failure scenario unreachable. If you can quote one, propose a dismissal on your next turn. If you cannot quote one, keep its scope/validity routing: confirmed in-scope items go to sisyphus; plausible items go to adjudication. Scope disagreement is resolved by the independent reviewer against the frozen contract, not by repairing excluded work. Disagreeing with a finding you cannot refute in a quoted line is not a trigger.
 
@@ -139,7 +139,7 @@ Then stop and wait. **You never run this command yourself** — a `PreToolUse` g
 
 **Scope of one dismissal.** It removes exactly one finding from the blocking set — remaining `CONFIRMED` blocking findings still block, and each needs its own proposal. It is pinned to the current artifact's exact bytes, so it lapses when the next review round writes a new artifact; a genuine defect that later appears at the same `file:line` blocks normally.
 
-The command refuses a missing or empty `--rationale`, and any `--ref` with no matching admitted `IN_SCOPE` finding in the current artifact — so a dismissal cannot be issued ahead of the finding it answers, and an `OUT_OF_SCOPE` or `UNKNOWN` finding cannot be dismissed. It also refuses when the artifact holds **more than one** admitted `IN_SCOPE` finding at that same `ref` and `class`: a dismissal cannot tell them apart, so clearing one would clear the other too. Report both findings to the user instead; the block stands until the review round that produced them is superseded.
+The command refuses a missing or empty `--rationale`, and any `--ref` with no matching admitted `IN_SCOPE` + `CONFIRMED` finding in the current artifact — so a dismissal cannot be issued ahead of the finding it answers. PLAUSIBLE, OUT_OF_SCOPE, and UNKNOWN findings cannot be dismissed. It also refuses when the artifact holds **more than one** admitted `IN_SCOPE` finding at that same `ref` and `class`: a dismissal cannot tell them apart, so clearing one would clear the other too. Report both findings to the user instead; the block stands until the review round that produced them is superseded.
 
 **After the dismissal.** Re-run the completion check. If no blocking finding remains, proceed to `request-complete`; the dismissed finding is still reported in the completion summary, with its rationale. If the user declines the proposal, retain the finding and its scope/validity routing. Declining dismissal does not authorize a non-goal or turn a plausible claim into a confirmed defect.
 

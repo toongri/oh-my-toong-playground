@@ -47,6 +47,16 @@ severity/count suppression, and user-only scope authority.
 These are behavioral decision probes, not end-to-end proof that every future
 review is correct. Runtime tests separately exercise the completion predicates.
 
+Independent review found three scope-gate bypasses, each reproduced before its
+fix: re-planning while completion waits for the state lock, dismissing a plausible
+finding, and reusing single-story auto-confirmation after scope changes. Six new
+runtime cases cover those failures, including previously persisted dismissals.
+A follow-up application probe also correctly distinguished finder suppression of
+declared non-goals from retention of generated candidates excluded by a verifier,
+and hash-bound INCONCLUSIVE reviews from hashless, schema-invalid failure records.
+Both failure records block completion. A proposed change making report fields
+mandatory was excluded after comparison showed it was a pre-existing gap.
+
 ## Runtime regressions
 
 - `skills/ultragoal/scripts/ultragoal-state-scope-gate.test.ts`: schema, scope-first

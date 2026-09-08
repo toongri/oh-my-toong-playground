@@ -392,7 +392,7 @@ describe("범위 판정과 사용자 무효화의 경계", () => {
 					expect(requestComplete(SID)).toBe(scope === "OUT_OF_SCOPE");
 				});
 			}
-			test(`IN_SCOPE ${verdict} ${impact}: 정확한 finding 무효화 후에만 완료 가능`, () => {
+			test(`IN_SCOPE ${verdict} ${impact}: CONFIRMED만 무효화할 수 있고 PLAUSIBLE은 독립 판정 필요`, () => {
 				buildObjectiveLaneGreenFixture(SID);
 				writeCompleteArtifact(SID, [{ class: "correctness", verdict, impact, ref: "src/a.ts:1" }]);
 				expect(requestComplete(SID)).toBe(false);
@@ -402,8 +402,8 @@ describe("범위 판정과 사용자 무효화의 경계", () => {
 						ref: "src/a.ts:1",
 						rationale: "앞선 guard로 도달 불가",
 					}),
-				).toBe(true);
-				expect(requestComplete(SID)).toBe(true);
+				).toBe(verdict === "CONFIRMED");
+				expect(requestComplete(SID)).toBe(verdict === "CONFIRMED");
 			});
 		}
 	}

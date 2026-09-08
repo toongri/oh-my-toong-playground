@@ -1,5 +1,6 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { describe, expect, test, beforeEach, afterEach, spyOn } from "bun:test";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as state from "./ultragoal-state";
@@ -225,5 +226,76 @@ describe("범위 계약과 개별 무효화가 불완전한 완료를 거부한�
 			}),
 		).toBe(true);
 		expect(state.requestComplete(SID)).toBe(false);
+	});
+});
+
+
+describe("독립리뷰 회귀 방지", () => {
+	test("완료 잠금 대기 중 재계획하면 최신 범위와 승인으로 다시 검사한다", () => {
+		state.setGoalState(SID, { phase: "pursuing" });
+		writeObjectiveArtifact();
+		writeReview([]);
+		const lockPath = `${state.resolveStatePath(SID)}.lock`;
+		mkdirSync(lockPath);
+		writeFileSync(join(lockPath, "owner.json"), JSON.stringify({
+			ownerPid: process.pid, token: "replanner", startedAt: Date.now(),
+		}));
+		// Yield the held lock to a real replan at the first contention wait.
+		// The contender must then evaluate the new state, never its pre-lock snapshot.
+		const wait = spyOn(Atomics, "wait").mockImplementationOnce(() => {
+			rmSync(lockPath, { recursive: true, force: true });
+			state.setGoalState(SID, { phase: "planning", constraints: "new constraint" });
+			return "ok";
+		});
+		try {
+			expect(state.requestComplete(SID)).toBe(false);
+			expect(wait).toHaveBeenCalledTimes(1);
+			expect(state.readGoalState(SID)).toMatchObject({
+				phase: "planning", constraints: "new constraint",
+				stories: [ { id: "S1", status: "unconfirmed" } ],
+			});
+		} finally {
+			wait.mockRestore();
+		}
+	});
+
+	for (const impact of ["HIGH", "MEDIUM", "LOW"] as const) {
+		test(`범위 안 PLAUSIBLE ${impact}는 사용자 무효화로 독립 판정을 건너뛰지 않는다`, () => {
+			state.setGoalState(SID, { phase: "pursuing" });
+			writeObjectiveArtifact();
+			writeReview([finding("IN_SCOPE", "PLAUSIBLE", impact)]);
+			const before = readFileSync(state.resolveStatePath(SID), "utf8");
+			expect(state.dismissReviewFinding(SID, {
+				ref: "src/a.ts:1", class: "correctness", rationale: "user disagrees",
+			})).toBe(false);
+			expect(readFileSync(state.resolveStatePath(SID), "utf8")).toBe(before);
+			expect(state.requestComplete(SID)).toBe(false);
+		});
+	}
+
+	test("이미 저장된 PLAUSIBLE 무효화도 독립 판정을 대체하지 않는다", () => {
+		state.setGoalState(SID, { phase: "pursuing" });
+		writeObjectiveArtifact();
+		writeReview([finding("IN_SCOPE", "PLAUSIBLE", "LOW")]);
+		const path = state.resolveStatePath(SID);
+		const prior = JSON.parse(readFileSync(path, "utf8"));
+		const review = readFileSync(join(omtDir, `ultragoal-codereview-${SID}.json`), "utf8");
+		prior.dismissed_review_findings = [{
+			artifact_sha256: createHash("sha256").update(review).digest("hex"),
+			ref: "src/a.ts:1", class: "correctness", rationale: "previous user dismissal",
+		}];
+		writeFileSync(path, JSON.stringify(prior));
+		expect(state.requestComplete(SID)).toBe(false);
+	});
+
+	test("재계획된 S1은 single 자동승인 대신 명시적으로 재승인해야 한다", () => {
+		state.setGoalState(SID, { phase: "pursuing" });
+		state.setGoalState(SID, { phase: "planning", constraints: "new constraint" });
+		const before = readFileSync(state.resolveStatePath(SID), "utf8");
+		expect(() => state.setSingleStory(SID)).toThrow(/confirm-story/);
+		expect(readFileSync(state.resolveStatePath(SID), "utf8")).toBe(before);
+		state.confirmStory(SID, "S1");
+		state.setGoalState(SID, { phase: "pursuing" });
+		expect(state.readGoalState(SID)?.stories?.[0]?.status).toBe("confirmed");
 	});
 });

@@ -48,7 +48,7 @@ After capturing the seven slots and before dispatching to sisyphus, **auto-gener
 bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts set-stories --single
 ```
 
-This derives one story directly from the current `outcome` and marks it `confirmed` immediately (no separate approval call needed) — this is the single-story degrade path (see the Role section of SKILL.md). Use `--single` for objectives where slicing into multiple stories would introduce ceremony without value.
+On an initial plan with no existing stories, this derives one story directly from the current `outcome` and marks it `confirmed` immediately (no separate approval call needed). This is the single-story degrade path (see the Role section of SKILL.md). Once stories exist, `--single` refuses; after scope-changing re-planning, obtain fresh approval and use normal story confirmation. Use `--single` for initial objectives where slicing into multiple stories would introduce ceremony without value.
 
 For objectives with multiple distinct WHAT-slices, auto-generate the full set. For each story, derive:
 

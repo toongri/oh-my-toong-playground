@@ -1118,7 +1118,8 @@ export function splitStory(
  *   surface    = verification_surface
  *   id         = 'S1'
  *   status     = 'confirmed'   (carve-out: user already stated this when setting the outcome)
- * Refuses when phase !== 'planning' or outcome is empty.
+ * Refuses when phase !== 'planning', stories already exist, or outcome is empty.
+ * Existing stories must use confirmStory after replanning.
  */
 export function setSingleStory(sessionId: string): void {
 	const prior = readPrior(sessionId);
@@ -1130,6 +1131,11 @@ export function setSingleStory(sessionId: string): void {
 	if (!prior.outcome || prior.outcome.trim() === "") {
 		throw new Error(
 			"set-stories --single: refused — outcome must be set before auto-deriving a story",
+		);
+	}
+	if ((prior.stories ?? []).length > 0) {
+		throw new Error(
+			"set-stories --single: refused — stories already exist; use confirm-story after replanning",
 		);
 	}
 	const surface = prior.verification_surface ?? "";
@@ -1524,7 +1530,7 @@ function isDismissed(
 	artifactSha: string,
 	dismissed: DismissedReviewFinding[],
 ): boolean {
-	if (finding.scope !== "IN_SCOPE") return false;
+	if (finding.scope !== "IN_SCOPE" || finding.verdict !== "CONFIRMED") return false;
 	if (!finding.ref) return false;
 	return dismissed.some(
 		(d) =>
@@ -1716,12 +1722,13 @@ export function dismissReviewFinding(
 			// against the never-false-complete invariant. Refusing the ambiguous dismissal
 			// is the fail-closed direction: the user loses the escape hatch for that one
 			// finding, never the block on its twin. Only admitted IN_SCOPE findings
-			// match; UNKNOWN cannot be cleared by dismissal and excluded observations
+			// match; the sole match must be CONFIRMED. PLAUSIBLE requires independent
+			// adjudication, UNKNOWN cannot be cleared by dismissal, and excluded observations
 			// need no authorization to remain outside the repair list.
 			const matches = reviewed.artifact.findings.filter(
 				(f) => f.scope === "IN_SCOPE" && f.class === opts.class && f.ref === opts.ref,
-			).length;
-			if (matches !== 1) return false;
+			);
+			if (matches.length !== 1 || matches[0].verdict !== "CONFIRMED") return false;
 
 			const dismissed = readDismissals(prior);
 			const already = dismissed.some(
@@ -1837,136 +1844,140 @@ function extractCodexGoalStatus(snapshot: Record<string, unknown>): string | und
  * over a prior budget_limited (complete-wins, ADR-7).
  */
 export function requestComplete(sessionId: string, codexGoalArg?: string): boolean {
-	const prior = readPrior(sessionId);
-	const evidence = Array.isArray(prior.completion_evidence_paths)
-		? prior.completion_evidence_paths
-		: [];
-	// Structural gate: complete requires BOTH a recorded APPROVE verdict AND non-empty
-	// evidence. Evidence-only is insufficient — the documented sequence records evidence
-	// BEFORE flipping the verdict, so an absent/failed set-verdict must not be able to
-	// complete on already-recorded evidence (never-false-complete invariant).
-	if (evidence.length === 0 || prior.objective_verdict !== "APPROVE") {
-		return false;
-	}
-
-	// T4: Story-level artifact gate
-	const stories: Story[] = prior.stories ?? [];
-
-	// Gate 6: zero non-retired stories → refuse (completion structurally requires >=1)
-	const activeStories = stories.filter((s) => s.status !== "retired");
-	if (activeStories.length === 0) {
-		return false;
-	}
-
-	// Gate 1: artifact must exist and be schema-valid (schema includes duplicate-id rejection)
-	const artifact = readVerdictArtifact(sessionId);
-	if (artifact === null) {
-		return false;
-	}
-
-	// Gate 2 (artifact objective_verdict): the artifact is the trust anchor written by
-	// the orchestrator directly — its objective_verdict must itself be 'APPROVE'. COMMENT also blocks
-	// (never-false-complete invariant). This is independent of the state objective_verdict
-	// checked by the dual gate above.
-	if (artifact.objective_verdict !== "APPROVE") {
-		return false;
-	}
-
-	// Gate 3: artifact must not reference unknown story ids
-	const knownIds = new Set(stories.map((s) => s.id));
-	for (const entry of artifact.stories) {
-		if (!knownIds.has(entry.id)) {
-			return false;
-		}
-	}
-
-	// Build a map from story id → artifact entry for O(1) lookup
-	const artifactById = new Map<string, ArtifactStoryEntry>();
-	for (const entry of artifact.stories) {
-		artifactById.set(entry.id, entry);
-	}
-
-	for (const story of activeStories) {
-		// Gate 5: non-retired story must be confirmed
-		if (story.status !== "confirmed") {
+	ensureSeed("ultragoal", sessionId);
+	const stateFilePath = resolveStatePath(sessionId);
+	return withStateLock(stateFilePath, () => {
+		const prior = readPrior(sessionId);
+		const evidence = Array.isArray(prior.completion_evidence_paths)
+			? prior.completion_evidence_paths
+			: [];
+		// Structural gate: complete requires BOTH a recorded APPROVE verdict AND non-empty
+		// evidence. Evidence-only is insufficient — the documented sequence records evidence
+		// BEFORE flipping the verdict, so an absent/failed set-verdict must not be able to
+		// complete on already-recorded evidence (never-false-complete invariant).
+		if (evidence.length === 0 || prior.objective_verdict !== "APPROVE") {
 			return false;
 		}
 
-		// Gate 3: artifact must have an entry for every non-retired story
-		const entry = artifactById.get(story.id);
-		if (entry === undefined) {
+		// T4: Story-level artifact gate
+		const stories: Story[] = prior.stories ?? [];
+
+		// Gate 6: zero non-retired stories → refuse (completion structurally requires >=1)
+		const activeStories = stories.filter((s) => s.status !== "retired");
+		if (activeStories.length === 0) {
 			return false;
 		}
 
-		// Gate 4 (+ precedence rule D-3): every non-retired story entry must be APPROVE
-		if (entry.verdict !== "APPROVE") {
+		// Gate 1: artifact must exist and be schema-valid (schema includes duplicate-id rejection)
+		const artifact = readVerdictArtifact(sessionId);
+		if (artifact === null) {
 			return false;
 		}
-	}
 
-	// Code-review lane (D-3): the SECOND independent refusal lane, reached only after
-	// every objective-lane gate above passes — so "both lanes clean" is the completion condition.
-	// Absent/invalid artifact → block (never-false-complete: degrade toward block). The
-	// gate requires a matching scope contract and no unresolved admitted finding.
-	// Excluded observations are non-blocking and
-	// `class` is not branched on at all.
-	const codeReview = readCodeReviewArtifactRaw(sessionId);
-	if (codeReview === null) {
-		return false;
-	}
-	// INCONCLUSIVE (D1): the review itself did not finish (timeout/ack-only/BLOCKED/
-	// genuinely uncertain) — distinct from a finished review that found CONFIRMED work.
-	// Blocks completion without implying a sisyphus re-dispatch is warranted.
-	if (
-		!isCompletionEligibleCodeReview(
-			codeReview,
-			readDismissals(prior),
-			scopeContractSha256(prior),
-			prior,
-		)
-	) {
-		return false;
-	}
+		// Gate 2 (artifact objective_verdict): the artifact is the trust anchor written by
+		// the orchestrator directly — its objective_verdict must itself be 'APPROVE'. COMMENT also blocks
+		// (never-false-complete invariant). This is independent of the state objective_verdict
+		// checked by the dual gate above.
+		if (artifact.objective_verdict !== "APPROVE") {
+			return false;
+		}
 
-	// Gate 9 (Codex native-goal snapshot cross-check): Codex's create_goal/update_goal
-	// tools carry no verification of their own — handle_update only checks the status
-	// enum before writing straight to its DB (pure self-grading). So on the Codex path,
-	// this CLI's own request-complete must independently cross-check the model's own
-	// native-goal claim against a snapshot of what it actually registered, rather than
-	// trust the native tool's bare "complete" write. Capability-as-state, not
-	// platform-detection: this gate is armed ONLY when codex_goal_objective is
-	// non-empty (i.e. `set --codex-goal-objective` was actually called — the Codex
-	// path). On the Claude path codex_goal_objective is always "" and every branch
-	// below is skipped, so gates 1-8 above are byte-for-byte unchanged for Claude.
-	const codexGoalObjective = prior.codex_goal_objective ?? "";
-	if (codexGoalObjective.trim() !== "") {
-		// Missing arg while the gate is armed is a REFUSAL, not a pass-through — this is
-		// the gate's core safety property: an omitted verification input must never be
-		// silently waved through.
-		if (codexGoalArg === undefined) {
+		// Gate 3: artifact must not reference unknown story ids
+		const knownIds = new Set(stories.map((s) => s.id));
+		for (const entry of artifact.stories) {
+			if (!knownIds.has(entry.id)) {
+				return false;
+			}
+		}
+
+		// Build a map from story id → artifact entry for O(1) lookup
+		const artifactById = new Map<string, ArtifactStoryEntry>();
+		for (const entry of artifact.stories) {
+			artifactById.set(entry.id, entry);
+		}
+
+		for (const story of activeStories) {
+			// Gate 5: non-retired story must be confirmed
+			if (story.status !== "confirmed") {
+				return false;
+			}
+
+			// Gate 3: artifact must have an entry for every non-retired story
+			const entry = artifactById.get(story.id);
+			if (entry === undefined) {
+				return false;
+			}
+
+			// Gate 4 (+ precedence rule D-3): every non-retired story entry must be APPROVE
+			if (entry.verdict !== "APPROVE") {
+				return false;
+			}
+		}
+
+		// Code-review lane (D-3): the SECOND independent refusal lane, reached only after
+		// every objective-lane gate above passes — so "both lanes clean" is the completion condition.
+		// Absent/invalid artifact → block (never-false-complete: degrade toward block). The
+		// gate requires a matching scope contract and no unresolved admitted finding.
+		// Excluded observations are non-blocking and
+		// `class` is not branched on at all.
+		const codeReview = readCodeReviewArtifactRaw(sessionId);
+		if (codeReview === null) {
 			return false;
 		}
-		const snapshot = parseCodexGoalSnapshot(codexGoalArg);
-		if (snapshot === null) {
-			return false;
-		}
-		const snapshotObjective = extractCodexGoalObjective(snapshot);
-		if (snapshotObjective === undefined) {
-			return false;
-		}
+		// INCONCLUSIVE (D1): the review itself did not finish (timeout/ack-only/BLOCKED/
+		// genuinely uncertain) — distinct from a finished review that found CONFIRMED work.
+		// Blocks completion without implying a sisyphus re-dispatch is warranted.
 		if (
-			normalizeWhitespaceForCompare(snapshotObjective) !==
-			normalizeWhitespaceForCompare(codexGoalObjective)
+			!isCompletionEligibleCodeReview(
+				codeReview,
+				readDismissals(prior),
+				scopeContractSha256(prior),
+				prior,
+			)
 		) {
 			return false;
 		}
-		if (extractCodexGoalStatus(snapshot) !== "complete") {
-			return false;
-		}
-	}
 
-	mergeWrite(sessionId, { phase: "complete", active: false });
-	return true;
+		// Gate 9 (Codex native-goal snapshot cross-check): Codex's create_goal/update_goal
+		// tools carry no verification of their own — handle_update only checks the status
+		// enum before writing straight to its DB (pure self-grading). So on the Codex path,
+		// this CLI's own request-complete must independently cross-check the model's own
+		// native-goal claim against a snapshot of what it actually registered, rather than
+		// trust the native tool's bare "complete" write. Capability-as-state, not
+		// platform-detection: this gate is armed ONLY when codex_goal_objective is
+		// non-empty (i.e. `set --codex-goal-objective` was actually called — the Codex
+		// path). On the Claude path codex_goal_objective is always "" and every branch
+		// below is skipped, so gates 1-8 above are byte-for-byte unchanged for Claude.
+		const codexGoalObjective = prior.codex_goal_objective ?? "";
+		if (codexGoalObjective.trim() !== "") {
+			// Missing arg while the gate is armed is a REFUSAL, not a pass-through — this is
+			// the gate's core safety property: an omitted verification input must never be
+			// silently waved through.
+			if (codexGoalArg === undefined) {
+				return false;
+			}
+			const snapshot = parseCodexGoalSnapshot(codexGoalArg);
+			if (snapshot === null) {
+				return false;
+			}
+			const snapshotObjective = extractCodexGoalObjective(snapshot);
+			if (snapshotObjective === undefined) {
+				return false;
+			}
+			if (
+				normalizeWhitespaceForCompare(snapshotObjective) !==
+				normalizeWhitespaceForCompare(codexGoalObjective)
+			) {
+				return false;
+			}
+			if (extractCodexGoalStatus(snapshot) !== "complete") {
+				return false;
+			}
+		}
+
+		mergeWriteLocked(sessionId, stateFilePath, { phase: "complete", active: false });
+		return true;
+	});
 }
 
 /**
