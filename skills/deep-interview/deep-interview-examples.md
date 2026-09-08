@@ -28,6 +28,13 @@ The recommendation's code claim requires actual evidence. Without that evidence,
 
 ## Good: Challenge a premise when it matters
 
+For a one-condition permission probe, copy the confirmed request into a hypothetical
+case and vary its role while holding the requester, resource, amount, and initial
+state fixed. Changing both role and requester can also change ownership; a result
+from that pair does not isolate role permission. Keep the new result unanswered in
+the decision register until the user chooses. A separate interaction question may
+deliberately vary role and ownership together, stating that this is a joint case.
+
 “We have treated 10,000 concurrent users as a constraint, but the supplied traffic evidence only establishes 100. What event must the larger target support?”
 
 Ask this whenever the premise drives a decision. There is no round at which challenging assumptions becomes available or stops being useful.

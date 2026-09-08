@@ -247,6 +247,17 @@ Display the Step 2d report, then return to the loop head. A fact-grounding round
 
 ### Step 2a: Generate Next Question
 
+**Anchor a decision probe.** When testing the effect of one condition, use an
+independent hypothetical copy of a confirmed case: **fixed context → one changed
+field → outcome to decide → decision affected**. Keep other fields explicit and
+unchanged; changing a role and a requester identity is two changes. Repair a
+previously proposed compound case before using it to isolate one decision. Ask
+what should happen; the agent's predicted outcome remains a proposal until answered.
+Record the confirmed case, changed field, and unanswered/confirmed outcome in the
+existing register's `checks`, then carry that record into the spec. When the question
+instead tests an interaction, name the interacting conditions and record it as a
+joint case; it establishes no single-condition cause.
+
 Use the prompt-safe original intent, current register, relevant evidence, and affected component's clarity gaps. Summaries preserve decisions, their dependencies, rejected alternatives, contradictions, and provenance. Compress raw history, not unsettled meaning.
 
 Choose a probe based on the actual gap:
