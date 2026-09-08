@@ -21,7 +21,7 @@ Exception: When explaining the tool's own behavior, the tool may be the subject.
 Before: "애플리케이션이 실행되기 전에 설정이 완료되어야 합니다."
 After: "애플리케이션을 실행하기 전에 설정을 완료하세요."
 
-좋은 예:
+Good example:
 > 배포하기 전에 환경 변수를 설정하세요.
 
 ### Step 2: Conciseness
@@ -72,7 +72,7 @@ After: "에러가 발생하면 애플리케이션 서버에서 에러 로그 파
 Before: "데이터가 많을 때는 성능이 저하될 수 있습니다."
 After: "데이터가 10,000건을 넘으면 응답 시간이 1초 이상 걸립니다."
 
-좋은 예:
+Good example:
 > 캐시 TTL을 300초로 설정하면 데이터베이스 요청 횟수가 약 70% 줄어듭니다.
 
 **T16. Write to reveal actual behavior** (replace industry jargon/metaphors with expressions showing actual behavior):

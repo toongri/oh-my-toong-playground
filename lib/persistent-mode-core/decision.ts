@@ -1,5 +1,6 @@
 import { HookOutput, PrometheusState, UltragoalState } from "./types.ts";
-import { statSync } from "fs";
+import { readFileSync, statSync } from "fs";
+import { createHash } from "crypto";
 import {
 	readDeepInterviewStateRaw,
 	cleanupDeepInterviewState,
@@ -28,6 +29,7 @@ import {
 	readExplainDiffStateRaw,
 	stageAPresentationPath,
 	stageAPresentationStatus,
+	presentationSubmissionCurrent,
 } from "@lib/state-core";
 import { computeDerived, type ExplainDiffState } from "@lib/explain-diff-core";
 import {
@@ -36,6 +38,7 @@ import {
 	commentOk,
 	cycleUntouched,
 	recordComplete,
+	qaReportComplete,
 	type QaChainState,
 } from "@lib/qa-chain-core";
 import { evaluateProgress } from "./progress.ts";
@@ -205,13 +208,16 @@ ${continuationContract("preferred", askToolName)}
  * bypasses it entirely. The done token is the one signal the model cannot skip.
  *
  * Returns null (gate open) when: no plan was written (pre-plan abort), plan_path is
- * absent/legacy, the plan file is gone (unverifiable — fail open), or the
- * presentation is present and fresh. Blocks only on presentation-missing/stale.
+ * absent, or the HTML and its submission are current. A declared completed
+ * plan whose source disappeared is unverifiable and cannot satisfy submission.
  */
 function prometheusStageAGateReason(state: PrometheusState): string | null {
 	const planPath = state.plan_path ?? "";
 	if (planPath === "" || state.steps?.plan?.done !== true) return null;
 	const status = stageAPresentationStatus(planPath);
+	if ((status === "ok" || status === "plan-missing") && !presentationSubmissionCurrent(state.presentation, planPath, stageAPresentationPath(planPath))) {
+		return "<prometheus-stage-a-gate>Prometheus presentation submission missing or stale. Read review-pipeline.md Stage A, render HTML, then run prometheus-state.ts set --phase S5 --submit-presentation <html> before completion.</prometheus-stage-a-gate>";
+	}
 	if (status !== "presentation-missing" && status !== "stale") return null;
 	const presentationPath = stageAPresentationPath(planPath);
 	const problem =
@@ -276,10 +282,21 @@ ${continuationContract("preferred", askToolName)}
 `;
 }
 
-function probeQaEvidence(path: string): { exists: boolean; size: number } {
+function probeQaEvidence(path: string): { exists: boolean; size: number; image?: boolean; sha256?: string } {
 	try {
 		const stat = statSync(path);
-		return { exists: true, size: stat.size };
+		if (!stat.isFile()) return { exists: false, size: 0 };
+		const contents = readFileSync(path);
+		const sha256 = createHash("sha256").update(contents).digest("hex");
+		if (!/\.(png|jpe?g|webp|gif)$/i.test(path)) return { exists: true, size: stat.size, sha256 };
+		const header = contents.subarray(0, 24);
+		const image = contents.length >= 24 && (
+			header.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ||
+			(header[0] === 255 && header[1] === 216 && header[2] === 255) ||
+			/^GIF8[79]a/.test(header.toString("ascii", 0, 6)) ||
+			(header.toString("ascii", 0, 4) === "RIFF" && header.toString("ascii", 8, 12) === "WEBP")
+		);
+		return { exists: true, size: stat.size, image, sha256 };
 	} catch {
 		return { exists: false, size: 0 };
 	}
@@ -294,7 +311,9 @@ function buildQaContinuationMessage(
 	const unmet = !chainComplete(state)
 		? "chainComplete=false — run qa-state.ts add-actor/add-story/author-cell"
 		: !recordComplete(state, probe)
-			? "recordComplete=false — run qa-state.ts record-baseline/record-cell/record-run-check"
+			? "recordComplete=false — run qa-state.ts record-baseline/record-cell/review-evidence/record-run-check"
+			: !qaReportComplete(state, probe)
+				? "qaReportComplete=false — render qa-report, inspect its HTML, then qa-state.ts review-report --path <html>"
 			: verdict === "APPROVE"
 				? "approveOk=false — run qa-state.ts set-verdict REQUEST_CHANGES or complete the failed cells"
 				: verdict === "COMMENT"
@@ -572,6 +591,11 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			// Terminal marker — interview already concluded. Delete the orphan unconditionally.
 			cleanupDeepInterviewState(sessionId);
 		} else if (detectDeepInterviewDone(lastAssistantMessage)) {
+			if (deepInterviewStateRaw.state !== undefined &&
+				isProgressLive(deepInterviewStateRaw, nowEpoch) &&
+				!presentationSubmissionCurrent(deepInterviewStateRaw.state.presentation)) {
+				return formatBlockOutput("<deep-interview-continuation>Deep-interview presentation missing or stale. Read presentation.md, render HTML, then run deep-interview-state.ts submit-presentation --spec-path <spec> --html-path <html> before emitting <deep-interview-done/>.</deep-interview-continuation>");
+			}
 			// UC10 (topology-floor-evolution Stage 5): a done-token alone is not proof of
 			// genuine convergence — the interviewer LLM can claim done prematurely. Cross-
 			// validate against the code-enforced state.current_ambiguity/state.threshold
@@ -745,7 +769,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			verdict === "REQUEST_CHANGES" && (complete || untouched);
 		const escaped = getBlockCount(stateDir, qaAttemptId) >= MAX_BLOCK_COUNT;
 
-		if (allowApprove || allowComment || allowRequestChanges) {
+		if ((allowApprove || allowComment || allowRequestChanges) && qaReportComplete(qaState, qaProbe)) {
 			cleanupBlockCountFiles(stateDir, qaAttemptId);
 		} else if (escaped) {
 			cleanupBlockCountFiles(stateDir, qaAttemptId);

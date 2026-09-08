@@ -1,128 +1,128 @@
-# 범용 웹 추출 — Jina Reader
+# General Web Extraction — Jina Reader
 
-> `r.jina.ai/URL` 한 줄로 거의 모든 공개 URL을 마크다운으로 변환.
-> Puppeteer 기반 실제 브라우저 렌더링 — JS SPA까지 처리.
-> **API 키 불필요. 무료: 분당 500 RPM.**
+> Convert almost any public URL to Markdown with a single `r.jina.ai/URL` line.
+> Real browser rendering powered by Puppeteer — handles JS SPAs as well.
+> **No API key required. Free: 500 requests per minute.**
 
-## 기본 사용
+## Basic Usage
 
 ```bash
 curl -s "https://r.jina.ai/{URL}"
 ```
 
-## 고급 기능
+## Advanced Features
 
-### JSON 구조화 출력
+### Structured JSON Output
 
 ```bash
 curl -H "Accept: application/json" "https://r.jina.ai/{URL}"
 ```
 
-반환: `data.{title, description, url, content, metadata, external, usage}`
+Returns: `data.{title, description, url, content, metadata, external, usage}`
 
-**핵심**: `external.alternate`에서 사이트의 **RSS URL을 자동 발견** 가능.
+**Key point**: `external.alternate` can **automatically discover the site's RSS URL**.
 
-### CSS 선택자 타겟팅
+### CSS Selector Targeting
 
 ```bash
 curl -H "X-Target-Selector: .article-body" "https://r.jina.ai/{URL}"
 ```
 
-네비게이션/풋터 제거, 본문만 추출. 커뮤니티 게시판에서 특히 효과적.
+Remove navigation/footers and extract only the body. Especially effective for community forums.
 
-### SPA 스트리밍 모드
+### SPA Streaming Mode
 
 ```bash
 curl -H "Accept: text/event-stream" "https://r.jina.ai/{URL}"
 ```
 
-JS 로딩 완료까지 대기. 동적 콘텐츠가 완전히 렌더링된 최종 버전 반환.
+Wait for JS loading to complete. Return the final version with dynamic content fully rendered.
 
-### 스크린샷
+### Screenshots
 
 ```bash
 curl -H "X-Respond-With: screenshot" "https://r.jina.ai/{URL}"
 ```
 
-GCS 서명 URL 반환 (4시간 유효). 비주얼 검증 용도.
+Return a signed GCS URL (valid for 4 hours). Use for visual verification.
 
-### PDF 처리
+### PDF Processing
 
 ```bash
 curl -s "https://r.jina.ai/https://example.com/file.pdf"
 ```
 
-PDF → 마크다운 자동 변환. 페이지 수 메타데이터 포함.
+Automatically convert PDF → Markdown. Includes page-count metadata.
 
-### 쿠키 전달 (인증 사이트)
+### Forward Cookies (Authenticated Sites)
 
 ```bash
 curl -H "X-Set-Cookie: session=abc123" "https://r.jina.ai/{URL}"
 ```
 
-### 링크 보존
+### Preserve Links
 
 ```bash
 curl -H "X-With-Links: true" "https://r.jina.ai/{URL}"
 ```
 
-### 캐시 제어
+### Cache Control
 
 ```bash
-# 캐시 우회 (실시간 필요 시)
+# Bypass the cache (when real-time content is needed)
 curl -H "X-No-Cache: true" "https://r.jina.ai/{URL}"
 
-# 캐시 TTL 지정 (초)
+# Set cache TTL (seconds)
 curl -H "X-Cache-Tolerance: 600" "https://r.jina.ai/{URL}"
 ```
 
-### 순수 텍스트 / 원본 HTML
+### Plain Text / Raw HTML
 
 ```bash
-# body.innerText만
+# body.innerText only
 curl -H "X-Respond-With: text" "https://r.jina.ai/{URL}"
 
-# 원본 HTML
+# Raw HTML
 curl -H "X-Respond-With: html" "https://r.jina.ai/{URL}"
 ```
 
-## 검증된 성공 사이트
+## Verified Successful Sites
 
-| 사이트 | 결과 | 비고 |
+| Site | Result | Notes |
 |--------|------|------|
-| Threads | 성공 | 프로필 + 포스트 |
-| 클리앙 | 성공 | 게시글 목록 + 본문 |
-| 루리웹 | 성공 | 게시글 목록 + 본문 |
-| 뽐뿌 | 성공 | 게시글 + RSS도 가능 |
-| 네이버 뉴스 | 성공 | 기사 목록 + 본문 완전 |
-| 네이버 증권 | 성공 | 실시간 주가 |
-| 긱뉴스 | 성공 | 토픽 목록 + 본문 |
-| 44bits | 성공 | 기사 목록 |
-| 커리어리 | 성공 | JS 렌더링으로 추출 |
-| 브런치 | 성공 | 기사 전문 |
-| 한경 | 성공 | 뉴스 기사 |
-| 다음 뉴스 | 성공 | 뉴스 기사 |
-| Medium | 성공 | 기사 전문 (paywall 제외) |
-| Substack | 성공 | 뉴스레터 전문 |
-| dev.to | 성공 | 기사 전문 |
-| PDF (모든 URL) | 성공 | 자동 변환 |
+| Threads | Success | Profiles + posts |
+| Clien | Success | Post lists + bodies |
+| Ruliweb | Success | Post lists + bodies |
+| Ppomppu | Success | Posts + RSS also available |
+| Naver News | Success | Article lists + full bodies |
+| Naver Finance | Success | Real-time stock prices |
+| GeekNews | Success | Topic lists + bodies |
+| 44bits | Success | Article lists |
+| Careerly | Success | Extracted via JS rendering |
+| Brunch | Success | Full articles |
+| Hankyung | Success | News articles |
+| Daum News | Success | News articles |
+| Medium | Success | Full articles (excluding paywalls) |
+| Substack | Success | Full newsletters |
+| dev.to | Success | Full articles |
+| PDF (any URL) | Success | Automatic conversion |
 
-## 실패하는 사이트
+## Sites That Fail
 
-| 사이트 | 이유 |
+| Site | Reason |
 |--------|------|
-| X/Twitter | 402 — Syndication/oEmbed 사용 (twitter.md 참조) |
-| Reddit | 차단 — JSON API 사용 (json-api.md 참조) |
-| 디시인사이드 | 빈 본문 반환 |
-| 에펨코리아 | HTTP 430 |
-| 요즘IT | CloudFront 403 |
-| 네이버 쇼핑 | CAPTCHA |
-| 쿠팡 | WAF 차단 |
+| X/Twitter | 402 — use Syndication/oEmbed (see twitter.md) |
+| Reddit | Blocked — use JSON API (see json-api.md) |
+| DC Inside | Returns an empty body |
+| FM Korea | HTTP 430 |
+| YojeumIT | CloudFront 403 |
+| Naver Shopping | CAPTCHA |
+| Coupang | WAF block |
 
 
-## RSS 자동 발견
+## Automatic RSS Discovery
 
-Jina JSON 모드의 `external.alternate`에서 사이트의 RSS URL이 자동 노출됨:
+Jina JSON mode automatically exposes the site's RSS URL in `external.alternate`:
 
 ```bash
 curl -H "Accept: application/json" "https://r.jina.ai/{URL}" | \

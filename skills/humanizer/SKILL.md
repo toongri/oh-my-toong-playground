@@ -126,8 +126,8 @@ Do NOT mechanically keyword-match. Apply these judgment rules:
 | K2 word used regardless of positive/negative context | ALWAYS flag P1 | "혁신적인 기술 도입보다는..." — "혁신적인" is still P1 even in negative framing |
 | K5-like "중요하다" followed by concrete evidence | Do NOT flag | "이 문제는 중요하다. 장애의 40%가..." — importance backed by data |
 | K5 "중요하다" with no supporting evidence | Flag P1 | "테스트는 매우 중요합니다" — empty emphasis |
-| K12 접속부사 used once, logically connecting topics | Do NOT flag | Single "또한" bridging genuinely related points |
-| K12 접속부사 used 3+ times in short text | Flag P2 | "또한... 더불어... 나아가..." chain |
+| K12 conjunctive adverb used once, logically connecting topics | Do NOT flag | Single "또한" bridging genuinely related points |
+| K12 conjunctive adverb used 3+ times in short text | Flag P2 | "또한... 더불어... 나아가..." chain |
 | K2 "다양한" used 2+ times in one paragraph | Flag P1 | "다양한 기능... 다양한 환경... 다양한 용도" |
 
 ### Routing Triggers — read the matching reference file BEFORE Step 4

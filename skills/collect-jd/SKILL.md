@@ -119,7 +119,7 @@ One ledger file per source per session, used by Coverage Gate (Gate 8). Without 
 
 **Detail Split Auto Fan-out** — when a posting page advertises N positions in a single anchor, split into N separate JD files with `parent_url` + `sub_position` (presence-coupled).
 
-team-level granularity도 의무. body에 subsidiary 산하 team labels 명시 시 subsidiary × team 단위로 fan-out, `sub_position = '<subsidiary> / <team>'` format 사용. 단일 단어 stack tag(Kotlin 등)는 team label이 아님.
+Team-level granularity is also mandatory. When the body explicitly lists team labels under a subsidiary, fan out by subsidiary × team using the format `sub_position = '<subsidiary> / <team>'`. Single-word stack tags (Kotlin, etc.) are not team labels.
 
 → Details: [reference/ingest-and-curation.md](reference/ingest-and-curation.md#detail-split-auto-fan-out)
 

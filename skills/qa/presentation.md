@@ -8,11 +8,70 @@ never dumbed down, big-picture diagrams — different subject: **users and their
 product experience, not functions and files.**
 
 ## Core principle — the completion condition is a person, not a document
+For a visual user boundary, the required scenario-card structure is **before image → actor action and observed explanation → after image**. Both images are captures from that scenario's actual software/device run. An authored observation accompanies them; it does not replace either image. API/text-CLI scenarios instead carry an observation grounded in the actual received response/output. A screenshot of a log is not UI proof.
+
+The final `qa-report.ts` CLI validates visual images and observations before writing. Missing, unreadable, oversized, or cumulatively unembeddable images block the final report; a path-only placeholder does not satisfy visual proof. Optimize captures, update their recorded paths, and re-render. Inspect the actual HTML cards before completion, checking that each image shows the claimed actor, screen, and asserted state. Capture failure leaves an evidence gap, not an invented pass/fail or an `na` excuse.
+
 The report is done when a **PO/designer with no context** can, from the report
 alone, correctly understand: who this change affects, how those people use the
 product, what happens at their boundary, whether it works, and whether each
 requirement was met. If a reader who knows nothing about the codebase cannot
 judge "were our requirements reflected?" from this report, it is not done.
+
+## Claim review record
+
+After `record-cell`, inspect the raw images at readable size and the action
+record. List each asserted outcome as a separate claim, including intermediate
+error/recovery states. Record what the source actually shows before comparing it
+to the assertion. Existing capture guidance above still governs sufficiency.
+
+`review-evidence --story <id> --cls <n> [--sub <name>] --json-file <file>` accepts
+a nonempty JSON array. Each row requires `claim`, `verdict` (`supported` or
+`insufficient`), `observation`, `gap`, and nonempty `sources` with `path` and
+`location` (visible region or timestamp/log line). `gap` is empty for supported
+claims; otherwise it names the missing proof and next capture. For example:
+
+```json
+[
+  {
+    "claim": "저장 실패 안내가 표시됐다",
+    "verdict": "insufficient",
+    "observation": "편집 폼 상단만 보이며 실패 안내는 보이지 않는다",
+    "gap": "실패 안내가 표시된 순간을 읽을 수 있게 다시 캡처한다",
+    "sources": [{ "path": "evidence/save-after.png", "location": "전체 캡처" }]
+  }
+]
+```
+
+The CLI persists the review and hashes the scenario's evidence plus every cited
+source. Re-recording the cell, changing its scenario fields, actor assignment,
+actor boundary/driver, or evidence bytes invalidates the receipt. Review the new evidence and resubmit. These checks
+prove a review record exists and matches the files; they do not perform image
+understanding or prove that the reviewer told the truth.
+
+Cited text sources must also fit the final report's per-file and total embed
+budgets. For a large action log, save a bounded, faithful excerpt with the
+relevant timestamps and source location, then cite and review that excerpt.
+File validity is separate from embeddability: an oversized source is not a
+missing file, but the final report cannot omit the cited proof and complete.
+
+The reader card renders reviewed claims, observations, source locations, and
+images together. Missing/insufficient/stale reviews show **근거 미검증**; raw
+execution status remains in the audit. A timer claim needs a timed action trace
+and the resulting visible state; a persistence claim needs the relevant value
+before/after reopening. A still image of the form cannot establish either.
+Do not add outcomes in presentation prose that are absent from the claim review.
+Open the final HTML: every claimed result must remain legible in its embedded
+capture. If not, repair the presentation/capture and repeat the review.
+The renderer records a receipt for the generated HTML. After inspecting the
+actual final HTML, run `qa-state.ts review-report --path <html>` before `complete`.
+Changing the HTML or recorded facts requires re-rendering and another inspection.
+This is an inspection attestation, not automated visual understanding.
+Consume the browser/image inspection result before submitting `review-report`.
+Do not batch capture/view and attestation/completion in one unobserved tool call.
+A clipped diagram or unreadable claim is unfinished review: repair, re-render,
+and inspect again before attesting. Mechanical acceptance cannot excuse a defect
+you have not yet assessed.
 
 ## Purpose & perspective (the bar)
 Write the report in the **first person of the QA engineer who verified this
@@ -98,7 +157,7 @@ there is no separate actor-roster table).
   the real software rendered — "이 시나리오에서 이렇게 했더니 화면/응답이 이렇게
   되더라." The renderer draws ONE card per scenario, and every verified
   (pass/fail) scenario must carry a reader-visible real-software record:
-  **an authored observation OR a screenshot** — a scenario with neither renders a
+  **an authored observation AND before/after screenshots for visual boundaries; an authored observation backed by received output for API/text-CLI boundaries** — a scenario with neither renders a
   loud gap, never a silent hole. This is what lets a PO judge, per scenario, whether
   the software drew the UX right and whether the change had side effects. A raw
   curl transcript, an HTTP/JSON dump, a build/test log, or a `vitest`/`jest`
@@ -175,7 +234,7 @@ ordinary terms alone.
 ## Format — self-contained HTML + `--narrative` injection
 The verification log renders from `qa-state` records only. The presentation is
 subjective prose + diagrams, so it is injected through the `presentation` object
-of `qa-report.ts --narrative <json>` (never persisted to disk):
+of `qa-report.ts --narrative <json-file>` (never persisted to qa-state):
 
 ```json
 {
@@ -213,7 +272,7 @@ marker** (`class="gap"`) — what was skipped shows in the report.
       **at the user boundary** — zero implementation mechanism (cache, id, type,
       function name), zero unit-test narration?
 - [ ] Does **every verified scenario** carry its own reader-visible record — an
-      authored observation OR a screenshot on its card — with none separated from
+      observation plus before/after images for visual boundaries, or a grounded observation for text boundaries — with none separated from
       its proof and none left a silent hole (a card with neither is a loud gap)?
 - [ ] Does **every scenario's** observation name its medium — a screen/device
       capture, or an API/CLI response — and does that medium match the actor's
@@ -257,7 +316,7 @@ works, and therefore whether the requirements were met?**
 - A user flow slot holds unit tests or build logs → replace with user-boundary observation
 - A scenario shows a raw curl/HTTP/JSON dump (`HTTP=404`, `{"error":...}`, `table row count before=6`) as its proof → convert it to a natural-language "we ran this scenario and observed X"; the raw bytes belong in the audit section, not the reader
 - A requirement's user boundary was never driven but it reads `yes`/`partial` → mark `satisfied: "unverified"` (renders loud "미검증")
-- A verified scenario's card has neither an observation nor a screenshot → it renders a loud gap; write its per-scenario `observed` (convert any curl/API transcript) or attach its before/action/after
+- A visual scenario lacks either an observation or before/after images → capture the missing asserted state, record its path, and render again. Text-boundary scenarios need a grounded `observed` explanation of the received output.
 - A human actor's scenario is observed only through an API/CLI response but reads as if the screen was driven → name the medium; a screen-boundary claim needs a screen/device capture. If no user-facing surface exists yet, declare the actor an API/system client — never let an API reading pass as a human-screen observation
 - Internal jargon (`cls`, source tags) is visible to the reader → remove it
 - The narrative names more users/scenarios/requirements than the records hold → invention; fix the records

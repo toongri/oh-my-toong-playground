@@ -25,6 +25,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
+import { createPresentationSubmission } from "@lib/state-core";
 
 const CLI_PATH = join(import.meta.dirname, "cli.ts");
 
@@ -1063,7 +1064,7 @@ describe("codex-persistent-mode cli", () => {
 			expect(parsed.reason).toContain("<deep-interview-continuation>");
 		});
 
-		test("deep-interview done-token clears active state and allows stop", async () => {
+		test("deep-interview는 HTML 제출 전 종료를 막고 제출 후 종료한다", async () => {
 			const sid = "sid-deep-interview-done";
 			const statePath = join(omtDir, `deep-interview-active-state-${sid}.json`);
 			writeFileSync(
@@ -1085,6 +1086,21 @@ describe("codex-persistent-mode cli", () => {
 					},
 				}),
 			);
+			const missing = await runCli(
+				"stop",
+				stopPayload(sid, projectDir, "interview complete <deep-interview-done/>"),
+				omtDir,
+			);
+			expect(JSON.parse(missing.stdout).decision).toBe("block");
+			expect(missing.stdout).toContain("presentation missing or stale");
+			expect(existsSync(statePath)).toBe(true);
+			const specPath = join(omtDir, "interview.md");
+			const htmlPath = join(omtDir, "interview.html");
+			writeFileSync(specPath, "# Confirmed design");
+			writeFileSync(htmlPath, "<html><body>Confirmed design</body></html>");
+			const submitted = JSON.parse(readFileSync(statePath, "utf8"));
+			submitted.state.presentation = createPresentationSubmission(specPath, htmlPath);
+			writeFileSync(statePath, JSON.stringify(submitted));
 			const { exitCode, stdout } = await runCli(
 				"stop",
 				stopPayload(sid, projectDir, "interview complete <deep-interview-done/>"),

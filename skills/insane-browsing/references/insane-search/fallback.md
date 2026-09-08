@@ -1,79 +1,79 @@
-# 접근 실패 시 — 적응형 스케줄러
+# When Access Fails — Adaptive Scheduler
 
-> 인덱스 방법이 실패하거나 인덱스에 없는 사이트일 때 실행.
-> Phase 0 → 1 → 2 → 3 순서로 에스컬레이션. 각 Phase에서 성공하면 즉시 종료.
+> Run when the indexed method fails or the site is not in the index.
+> Escalate in order: Phase 0 → 1 → 2 → 3. Stop immediately on success in any Phase.
 
-## 원칙
+## Principles
 
-1. **어떤 방법도 미리 제외하지 않는다** — 되는지는 시도해봐야 안다
-2. **의존성이 없으면 설치하고 시도한다** — 미설치를 이유로 건너뛰지 않는다
-3. **Phase 간 전환은 신호 기반** — 실패 유형에 따라 에스컬레이션
-4. **결과 채택 기준**: 정확성/신뢰도 > 신선도 > 완전성 > 구조화 > 비용
-
----
-
-## Phase 0: 특수 엔드포인트 (인덱스 매칭)
-
-인덱스에 사이트가 있으면 해당 전용 방법을 **먼저** 시도.
-정확성과 비용이 가장 좋으므로 generic Phase 1보다 우선.
-
-성공 → 종료 / 실패 → Phase 1
+1. **Do not rule out any method in advance** — you must try it to know whether it works
+2. **Install missing dependencies and try** — do not skip because they are not installed
+3. **Transitions between Phases are signal-based** — escalate according to the failure type
+4. **Result acceptance criteria**: accuracy/reliability > freshness > completeness > structure > cost
 
 ---
 
-## Phase 1: 경량 프로브 (병렬)
+## Phase 0: Specialized Endpoints (Index Matching)
 
-**먼저 시도** (동시):
-- WebFetch (Claude 내장)
-- Jina Reader (기본 / JSON / SPA 모드)
+If the site is in the index, try its dedicated method **first**.
+It takes priority over generic Phase 1 because it offers the best accuracy and cost.
+
+Success → stop / failure → Phase 1
+
+---
+
+## Phase 1: Lightweight Probes (Parallel)
+
+**Try first** (concurrently):
+- WebFetch (built into Claude)
+- Jina Reader (basic / JSON / SPA modes)
 - curl Chrome Desktop UA
 
-**아직 성공 없으면 추가 시도**:
-- curl 모바일 UA + 모바일 URL (`m.{domain}`)
+**If none have succeeded, also try**:
+- curl mobile UA + mobile URL (`m.{domain}`)
 - curl Googlebot UA
-- URL 변형 시도: `.json`, `/rss`, `/feed`
+- Try URL variants: `.json`, `/rss`, `/feed`
 
-**사이드카** (1차와 동시, low-trust):
-- Google AMP 캐시
+**Sidecars** (concurrent with the initial attempts, low-trust):
+- Google AMP cache
 - archive.today
 - Wayback Machine
-→ **원본이 하나라도 성공하면 사이드카는 참고만.** 전부 실패 시에만 사이드카 채택 (provenance 태깅 필수)
+→ **If any original source succeeds, use sidecars for reference only.** Accept sidecars only when all originals fail (provenance tagging required)
 
-**모든 응답에서 메타데이터도 추출**: OGP, JSON-LD — [metadata.md](metadata.md) 참조
+**Also extract metadata from every response**: OGP, JSON-LD — see [metadata.md](metadata.md)
 
-상세: [jina.md](jina.md), [cache-archive.md](cache-archive.md), [rss.md](rss.md)
+Details: [jina.md](jina.md), [cache-archive.md](cache-archive.md), [rss.md](rss.md)
 
 ---
 
-## 에스컬레이션 신호
+## Escalation Signals
 
-Phase 1 → Phase 2 전환 조건:
+Conditions for transitioning from Phase 1 → Phase 2:
 
-| 신호 | 감지 방법 | 의미 |
+| Signal | Detection Method | Meaning |
 |------|-----------|------|
-| HTTP 403/430 | 상태 코드 | WAF/봇 차단 |
-| HTTP 429/503 | 상태 코드 | Rate limit (짧은 jitter retry 먼저, 실패 시 에스컬레이션) |
-| WAF 헤더 | `cf-ray`, `server: cloudflare`, `x-datadome` | Cloudflare/Akamai/DataDome |
-| WAF 쿠키 | `__cf_bm`, `_abck`, `datadome` | WAF 세션 |
-| 챌린지 본문 | `captcha`, `verify`, `enable javascript`, `check your browser` | JS 챌린지 |
-| 빈 SPA | `<div id="root"></div>` 외 콘텐츠 없음, 200자 미만 | JS 렌더링 필요 |
-| Redirect loop | 3회 이상 302/307 | 챌린지 리다이렉트 |
+| HTTP 403/430 | Status code | WAF/bot blocking |
+| HTTP 429/503 | Status code | Rate limit (try a short jittered retry first; escalate on failure) |
+| WAF headers | `cf-ray`, `server: cloudflare`, `x-datadome` | Cloudflare/Akamai/DataDome |
+| WAF cookies | `__cf_bm`, `_abck`, `datadome` | WAF session |
+| Challenge body | `captcha`, `verify`, `enable javascript`, `check your browser` | JS challenge |
+| Empty SPA | No content beyond `<div id="root"></div>`, fewer than 200 characters | JS rendering required |
+| Redirect loop | 3 or more 302/307 responses | Challenge redirects |
 
-**login/paywall 감지 시**: `login`, `sign in`, `로그인`, `subscribe`, `구독` 집중 → Phase 2/3으로 올려도 해결 안 됨. **"인증 필요"로 종료.**
+**When login/paywall is detected**: a concentration of `login`, `sign in`, `로그인`, `subscribe`, `구독` → escalation to Phase 2/3 will not resolve it. **Stop with "인증 필요".**
 
 ---
 
-## Phase 2: TLS 임퍼소네이션 (curl_cffi)
+## Phase 2: TLS Impersonation (curl_cffi)
 
-**조건**: Phase 1에서 WAF/봇 차단 신호 감지
+**Condition**: WAF/bot blocking signals detected in Phase 1
 
-**의존성 확보**:
+**Ensure dependencies**:
 ```bash
 python3 -c "import curl_cffi" 2>/dev/null || pip install curl_cffi -q
 ```
-설치 실패 시 → 즉시 Phase 3으로.
+If installation fails → go immediately to Phase 3.
 
-**다중 타겟 순차 시도**: safari → chrome → firefox
+**Try multiple targets sequentially**: safari → chrome → firefox
 
 ```python
 from curl_cffi import requests
@@ -91,23 +91,23 @@ for target in TARGETS:
         session.headers.update(HEADERS)
         resp = session.get("{URL}", timeout=20)
         if resp.status_code == 200 and len(resp.text) > 300:
-            # 성공 — JSON-LD도 같이 추출
+            # Success — also extract JSON-LD
             break
     except:
         continue
 ```
 
-성공 → 종료 / 실패 또는 JS 챌린지 → Phase 3
+Success → stop / failure or JS challenge → Phase 3
 
-상세: [tls-impersonate.md](tls-impersonate.md)
+Details: [tls-impersonate.md](tls-impersonate.md)
 
 ---
 
-## Phase 3: 로컬 real Chrome (브라우저)
+## Phase 3: Local Real Chrome (Browser)
 
-**조건**: Phase 2도 실패 또는 JS 챌린지/CAPTCHA 감지
+**Condition**: Phase 2 also fails, or a JS challenge/CAPTCHA is detected
 
-상주 브라우저 세션 없이, 필요할 때만 로컬 Chrome을 온디맨드로 기동한다:
+Launch local Chrome on demand only when needed, without a resident browser session:
 
 ```python
 from engine.executor import run_playwright_fallback
@@ -119,48 +119,48 @@ attempt, html = run_playwright_fallback(
 )
 ```
 
-내부적으로 `engine/templates/playwright_real_chrome.js`가 시스템 설치 실제 Chrome(`channel:'chrome'` + stealth)으로 페이지를 로드하고 HTML을 반환한다.
+Internally, `engine/templates/playwright_real_chrome.js` loads the page with system-installed real Chrome (`channel:'chrome'` + stealth) and returns HTML.
 
-**API 발견**: 숨은 JSON API 엔드포인트를 찾아야 하면 Tier 3 `agent-browser`(대화형 real Chrome 세션)로 전환해 네트워크 요청을 확인한 뒤 curl_cffi로 재사용한다 — [`SKILL.md`](../../SKILL.md) Tier 3 참고.
+**API discovery**: If you need to find hidden JSON API endpoints, switch to Tier 3 `agent-browser` (an interactive real Chrome session), inspect network requests, then reuse them with curl_cffi — see Tier 3 in [`SKILL.md`](../../SKILL.md).
 
-상세: [playwright.md](playwright.md)
+Details: [playwright.md](playwright.md)
 
 ---
 
-## 응답 검증
+## Response Validation
 
-| 판정 | 조건 | 결과 |
+| Verdict | Condition | Result |
 |------|------|------|
-| **성공** | 콘텐츠 타입에 맞는 분량 + 주제 관련 키워드 | 채택 |
-| **부분 성공** | OG 메타/JSON-LD만 (본문 없음) | 보조 소스 |
-| **실패 — 인증** | login/paywall 감지 | "인증 필요"로 종료 |
-| **실패 — 챌린지** | CAPTCHA/JS challenge | 다음 Phase로 |
-| **실패 — 에러** | 4xx/5xx | 다음 Phase로 |
-| **실패 — 빈 SPA** | 콘텐츠 없음 | 다음 Phase로 |
+| **Success** | Length appropriate for the content type + topic-related keywords | Accept |
+| **Partial success** | Only OG metadata/JSON-LD (no body) | Supporting source |
+| **Failure — authentication** | Login/paywall detected | Stop with "인증 필요" |
+| **Failure — challenge** | CAPTCHA/JS challenge | Next Phase |
+| **Failure — error** | 4xx/5xx | Next Phase |
+| **Failure — empty SPA** | No content | Next Phase |
 
-**콘텐츠 분량 기준** (유연하게):
-- 기사/블로그: 500자 이상
-- 상품 페이지: JSON-LD 있으면 성공
-- 트윗/짧은 글: 100자 이상
-- 프로필: JSON-LD Person 있으면 성공
+**Content length guidelines** (flexible):
+- Articles/blogs: at least 500 characters
+- Product pages: success if JSON-LD exists
+- Tweets/short posts: at least 100 characters
+- Profiles: success if JSON-LD Person exists
 
-## False-Positive 마커 (HTTP 200이지만 실패)
+## False-Positive Markers (HTTP 200 but Failure)
 
-| 패턴 | 감지 방법 | 처리 |
+| Pattern | Detection Method | Handling |
 |------|----------|------|
-| X SPA 셸 (247KB) | 200 OK + `Sign in to X` 또는 `hasResults: false` | 실패 — WebSearch+oEmbed 폴백 |
-| CAPTCHA 페이지 | 200 OK + `captcha\|recaptcha\|hcaptcha\|cf-turnstile` | 실패 — 다음 Phase |
-| 소프트 페이월 | 200 OK + `member-only\|subscribe to read\|구독하세요` | 부분 성공 — 메타만 채택 |
-| DDG 소프트 리밋 | 202 Accepted + body 15KB 미만 | 실패 — 다른 엔진 폴백 |
-| 빈 JSON | 200 OK + `hasResults.*false\|"entries":\s*\[\]` | 실패 — 다른 방법 시도 |
-| 지역 차단 | 200 OK + `not available in your region\|geo-restricted` | 실패 — "지역 차단" 알림 |
-| WAF 소프트 블록 | 200 OK + `checking your browser\|verify you are human` | 실패 — Phase 2/3 에스컬레이션 |
-| Akamai behavioral | 200 OK + `behavioral-content\|sec-if-cpt` + `_abck` 쿠키 | 실패 — JS 실행 필수 → Phase 3 직행 (TLS 타겟 변경 무의미) |
-| RSS Content-Type 오류 | RSS 기대 + `text/html` 응답 | 실패 — "RSS 미지원" |
-| 에러 JSON | 200 OK + JSON `"error"` 키 존재 | 실패 — 에러 내용 로깅 |
+| X SPA shell (247KB) | 200 OK + `Sign in to X` or `hasResults: false` | Failure — WebSearch+oEmbed fallback |
+| CAPTCHA page | 200 OK + `captcha\|recaptcha\|hcaptcha\|cf-turnstile` | Failure — next Phase |
+| Soft paywall | 200 OK + `member-only\|subscribe to read\|구독하세요` | Partial success — accept metadata only |
+| DDG soft limit | 202 Accepted + body under 15KB | Failure — fall back to another engine |
+| Empty JSON | 200 OK + `hasResults.*false\|"entries":\s*\[\]` | Failure — try another method |
+| Regional block | 200 OK + `not available in your region\|geo-restricted` | Failure — notify "지역 차단" |
+| WAF soft block | 200 OK + `checking your browser\|verify you are human` | Failure — escalate to Phase 2/3 |
+| Akamai behavioral | 200 OK + `behavioral-content\|sec-if-cpt` + `_abck` cookie | Failure — JS execution required → go directly to Phase 3 (changing TLS targets is pointless) |
+| RSS Content-Type error | RSS expected + `text/html` response | Failure — "RSS 미지원" |
+| Error JSON | 200 OK + JSON `"error"` key present | Failure — log error details |
 
-## 전부 실패 시
+## When All Attempts Fail
 
-1. 시도한 Phase와 각 실패 신호를 기록
-2. 사이드카 결과가 있으면 provenance 태깅하여 채택
-3. 사이드카도 없으면 사용자에게 실패 보고 + 시도 결과 공유
+1. Record the Phases attempted and each failure signal
+2. If sidecar results exist, accept them with provenance tags
+3. If no sidecars exist either, report failure to the user and share the attempt results

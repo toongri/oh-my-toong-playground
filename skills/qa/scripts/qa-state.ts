@@ -31,6 +31,7 @@
 
 import { closeSync, mkdirSync, openSync, readFileSync, readSync, rmSync, statSync } from "fs";
 import { execSync } from "child_process";
+import { createHash } from "crypto";
 import { extname, resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
 import {
@@ -49,6 +50,11 @@ import {
 	cycleUntouched,
 	driverGateArmed,
 	recordComplete,
+	isVisualDriver,
+	visualEvidenceComplete,
+	evidenceReviewSnapshot,
+	qaReportSnapshot,
+	qaReportComplete,
 	rosterComplete,
 	type QaActor,
 	type QaBaseline,
@@ -61,6 +67,7 @@ import {
 	type QaStory,
 	type QaWaive,
 	type QaInert,
+	type QaEvidenceClaim,
 } from "@lib/qa-chain-core";
 
 const DEFAULT_MAX_CYCLES = 5;
@@ -278,9 +285,23 @@ function buildEvidenceSlots(
 	return { path: slot.action ?? slot.after ?? slot.before ?? "", ...slot };
 }
 
-function stateProbe(path: string): { exists: boolean; size: number } {
+export function stateProbe(path: string): { exists: boolean; size: number; image?: boolean; sha256?: string } {
 	try {
-		return { exists: true, size: statSync(path).size };
+		const file = statSync(path);
+		if (!file.isFile()) return { exists: false, size: 0 };
+		const sha256 = createHash("sha256").update(readFileSync(path)).digest("hex");
+		if (!/\.(png|jpe?g|webp|gif)$/i.test(path)) return { exists: true, size: file.size, sha256 };
+		const fd = openSync(path, "r");
+		const header = Buffer.alloc(24);
+		let length: number;
+		try { length = readSync(fd, header, 0, header.length, 0); } finally { closeSync(fd); }
+		const image = length >= 24 && (
+			header.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ||
+			(header[0] === 255 && header[1] === 216 && header[2] === 255) ||
+			/^GIF8[79]a/.test(header.toString("ascii", 0, 6)) ||
+			(header.toString("ascii", 0, 4) === "RIFF" && header.toString("ascii", 8, 12) === "WEBP")
+		);
+		return { exists: true, size: file.size, image, sha256 };
 	} catch {
 		return { exists: false, size: 0 };
 	}
@@ -586,7 +607,14 @@ export function addActor(sessionId: string, opts: AddActorOpts): void {
 	const actor: QaActor = { id, name, boundary, driver, reachable };
 	if (index >= 0) actors[index] = actor;
 	else actors.push(actor);
-	mergeWrite(sessionId, { actors });
+	const changedBoundary = existing && (existing.boundary !== boundary || existing.driver !== driver);
+	const affectedStories = new Set((prior.stories ?? []).filter((story) => (story.actor ?? story.actor_id) === id).map((story) => story.id));
+	const cells = changedBoundary ? (prior.cells ?? []).map((cell) => {
+		if (!affectedStories.has(cell.story)) return cell;
+		const { evidence_review: _review, ...record } = cell;
+		return record;
+	}) : prior.cells;
+	mergeWrite(sessionId, { actors, ...(changedBoundary ? { cells } : {}) });
 }
 
 export interface AddStoryOpts {
@@ -606,7 +634,13 @@ export function addStory(sessionId: string, opts: AddStoryOpts): void {
 	const index = stories.findIndex((candidate) => candidate.id === id);
 	if (index >= 0) stories[index] = { ...stories[index], ...next };
 	else stories.push(next);
-	mergeWrite(sessionId, { stories });
+	const changedActor = index >= 0 && (prior.stories?.[index]?.actor ?? prior.stories?.[index]?.actor_id) !== actor;
+	const cells = changedActor ? (prior.cells ?? []).map((cell) => {
+		if (cell.story !== id) return cell;
+		const { evidence_review: _review, ...record } = cell;
+		return record;
+	}) : prior.cells;
+	mergeWrite(sessionId, { stories, ...(changedActor ? { cells } : {}) });
 }
 
 function validateCellSelector(story: string, cls: unknown, sub: string | undefined): { story: string; cls: number; sub?: "hang-timeout" | "flaky-green" } {
@@ -707,7 +741,7 @@ export function recordCell(sessionId: string, opts: RecordCellOpts): void {
 	if (opts.status === "na" && !opts.naReason?.trim()) throw new Error("na status requires na-reason");
 	const scenarioPatch = scenarioFieldPatch(opts);
 	let evidence: QaCell["evidence"];
-	if (opts.status === "pass") {
+	if (opts.status === "pass" || (opts.status === "fail" && opts.evidencePath && opts.evidenceSurface)) {
 		if (!opts.evidencePath || !opts.evidenceSurface) throw new Error("pass cell requires evidence-path and evidence-surface");
 		evidence = { path: probeEvidence(opts.evidencePath, opts.evidenceSurface, actorDriver(prior, selector.story)), surface: opts.evidenceSurface };
 	}
@@ -729,6 +763,9 @@ export function recordCell(sessionId: string, opts: RecordCellOpts): void {
 			if (p) assertBoundaryObservation(p);
 		}
 	}
+	if ((opts.status === "pass" || opts.status === "fail") && isVisualDriver(actorDriver(prior, selector.story)) && !visualEvidenceComplete(evidence, stateProbe)) {
+		throw new Error("visual cell requires separate before/after screenshot files and an action record; capture the asserted screen, then record-cell again");
+	}
 	const next: QaCell = {
 		...selector,
 		attack_point: authored.attack_point,
@@ -744,6 +781,62 @@ export function recordCell(sessionId: string, opts: RecordCellOpts): void {
 	const index = cells.findIndex((cell) => cell.cycle === cycle && sameCell(cell, selector));
 	cells[index] = next;
 	mergeWrite(sessionId, { cells });
+}
+
+/** Store a judgment made by opening the raw evidence; never infer it from filenames. */
+export function reviewEvidence(sessionId: string, story: string, cls: number, sub: string | undefined, input: unknown): void {
+	const selector = validateCellSelector(story, cls, sub);
+	withStateLock(resolveStatePath(sessionId), () => {
+		const prior = readPrior(sessionId);
+		const cells = [...(prior.cells ?? [])];
+		const index = cells.findIndex((cell) => cell.cycle === currentCycle(prior) && sameCell(cell, selector));
+		const cell = cells[index];
+		if (!cell || (cell.status !== "pass" && cell.status !== "fail") || !cell.evidence) throw new Error("review-evidence requires an executed current-cycle cell with evidence");
+		if (!Array.isArray(input) || input.length === 0) throw new Error("review-evidence requires a nonempty claim array");
+		const claims: QaEvidenceClaim[] = input.map((item) => {
+			if (!item || typeof item !== "object") throw new Error("invalid evidence claim");
+			const claim = nonEmpty(item.claim, "claim");
+			const observation = nonEmpty(item.observation, "observation");
+			if (item.verdict !== "supported" && item.verdict !== "insufficient") throw new Error("claim verdict must be supported or insufficient");
+			if (typeof item.gap !== "string" || (item.verdict === "supported" ? item.gap !== "" : !item.gap.trim())) throw new Error("supported claims require empty gap; insufficient claims require recapture instructions");
+			if (!Array.isArray(item.sources) || item.sources.length === 0) throw new Error("claim requires inspected sources");
+			const sources = item.sources.map((source: { path?: unknown; location?: unknown }) => ({ path: probePlainFile(nonEmpty(source?.path, "source path")), location: nonEmpty(source?.location, "source location") }));
+			return { claim, observation, verdict: item.verdict, gap: item.gap, sources };
+		});
+		if (new Set(claims.map((claim) => claim.claim.trim())).size !== claims.length) throw new Error("duplicate evidence claims");
+		const paths = [cell.evidence.path, cell.evidence.before, cell.evidence.action, cell.evidence.after, ...claims.flatMap((claim) => claim.sources.map((source) => source.path))];
+		const files: Record<string, string> = {};
+		for (const path of paths) {
+			if (!path) continue;
+			const file = stateProbe(path);
+			if (!file.exists || !file.size || !file.sha256) throw new Error(`review-evidence: unreadable file ${path}`);
+			files[path] = file.sha256;
+		}
+		cells[index] = { ...cell, evidence_review: { claims, files, cell_snapshot: evidenceReviewSnapshot(cell) } };
+		mergeWriteUnlocked(sessionId, { cells });
+	});
+}
+
+/** Called by the real renderer after writing the report for this state snapshot. */
+export function recordRenderedReport(sessionId: string, path: string, expectedSnapshot: string): void {
+	withStateLock(resolveStatePath(sessionId), () => {
+		const prior = readPrior(sessionId);
+		if (qaReportSnapshot(prior) !== expectedSnapshot) throw new Error("report: state changed during rendering; render again");
+		const absolute = probePlainFile(path);
+		const html = readFileSync(absolute, "utf8");
+		if (!/\.html$/i.test(absolute) || !/<html\b/i.test(html) || !/<body\b/i.test(html)) throw new Error("report: expected rendered HTML");
+		const sha256 = createHash("sha256").update(html).digest("hex");
+		mergeWriteUnlocked(sessionId, { report: { path: absolute, sha256, state_snapshot: expectedSnapshot, reviewed: false } });
+	});
+}
+
+export function reviewReport(sessionId: string, path: string): void {
+	withStateLock(resolveStatePath(sessionId), () => {
+		const prior = readPrior(sessionId);
+		const report = prior.report;
+		if (!report || resolve(path) !== report.path || !qaReportComplete({ ...prior, report: { ...report, reviewed: true } }, stateProbe)) throw new Error("review-report: render a current report first");
+		mergeWriteUnlocked(sessionId, { report: { ...report, reviewed: true } });
+	});
 }
 
 export interface RecordRunCheckOpts {
@@ -854,6 +947,7 @@ export function startQa(sessionId: string, target: string): void {
 			verdict: null,
 		};
 		delete reset.inert;
+		delete reset.report;
 		delete reset.run_checks_history;
 		reset.derived = {
 			chain_complete: chainComplete(reset),
@@ -878,6 +972,7 @@ export function completeQa(sessionId: string): void {
 	withStateLock(resolveStatePath(sessionId), () => {
 		ensureSeed("qa", sessionId);
 		const prior = readPrior(sessionId);
+		if (!qaReportComplete(prior, stateProbe)) throw new Error("complete: report missing, changed, or not visually reviewed; render qa-report then review-report --path <html>");
 		const verdict = prior.verdict;
 		const canComplete =
 			(verdict === "APPROVE" && approveOk(prior, stateProbe)) ||
@@ -891,6 +986,7 @@ export function completeQa(sessionId: string): void {
 }
 
 export type QaView = QaState & {
+	report_source_snapshot?: string;
 	prior_cycle_cells: QaCell[];
 	prior_cycle_waives: QaWaive[];
 	verdict_report: { verdict: QaState["verdict"]; cycle: number; waives: QaWaive[]; inert?: QaInert };
@@ -929,6 +1025,7 @@ export function readQaView(sessionId: string): QaView | null {
 		: state.run_checks;
 	return {
 		...state,
+		report_source_snapshot: qaReportSnapshot(state),
 		stories,
 		run_checks: runChecks,
 		cells: cells.filter((cell) => cell.cycle === cycle),
@@ -1075,6 +1172,10 @@ function main(): void {
 					evidenceAction: str(args["evidence-action"]),
 					evidenceAfter: str(args["evidence-after"]),
 				});
+			} else if (subcommand === "review-evidence") {
+				reviewEvidence(sessionId, requiredArg(args, "story"), Number(requiredArg(args, "cls")), str(args["sub"]), JSON.parse(readFileSync(requiredArg(args, "json-file"), "utf8")));
+			} else if (subcommand === "review-report") {
+				reviewReport(sessionId, requiredArg(args, "path"));
 			} else if (subcommand === "record-run-check") {
 				recordRunCheck(sessionId, {
 					check: requiredArg(args, "check"),
@@ -1111,7 +1212,7 @@ function main(): void {
 			process.stdout.write((state ? state.phase : "absent") + "\n");
 		} else {
 			process.stderr.write(
-				"Usage: qa-state.ts <set|set-acceptance|advance-phase|inc-cycle|record-fix-head|capture-dirty-set|note-failure|add-actor|add-story|author-cell|record-baseline|record-cell|record-run-check|set-verdict|start|waive|declare-inert|complete|get|status> [options]\n",
+				"Usage: qa-state.ts <set|set-acceptance|advance-phase|inc-cycle|record-fix-head|capture-dirty-set|note-failure|add-actor|add-story|author-cell|record-baseline|record-cell|review-evidence|record-run-check|set-verdict|start|waive|declare-inert|review-report|complete|get|status> [options]\n",
 			);
 			process.exit(1);
 		}

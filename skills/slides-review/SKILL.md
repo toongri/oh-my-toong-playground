@@ -1,149 +1,149 @@
 ---
 name: slides-review
-description: Gemini CLI를 활용한 HTML 디자인 리뷰 스킬. 생성된 HTML 파일을 Gemini에게 전달하여 시각 디자인 개선 지침을 받고, 메인 세션에서 CSS/HTML을 수정한다. Gemini 불가 시 in-session fallback. 트리거: "디자인 리뷰", "gemini review", "design review", "디자인 검토", "디자인 보완", "slides review", "슬라이드 리뷰".
+description: HTML design review skill using the Gemini CLI. Sends generated HTML files to Gemini for visual design improvement directives and edits CSS/HTML in the main session. Uses in-session fallback when Gemini is unavailable. Triggers: "디자인 리뷰", "gemini review", "design review", "디자인 검토", "디자인 보완", "slides review", "슬라이드 리뷰".
 ---
 
 # Slides Review
 
 ## Overview
 
-HTML 파일의 시각 디자인 품질을 Gemini CLI로 검토하고, 반환된 개선 지침을 메인 세션에서 직접 적용하는 스킬이다.
-다른 스킬(예: `create-slides`)의 후처리 단계로 호출되거나, 사용자가 직접 호출할 수 있다.
-에이전트(Gemini CLI)가 불가하거나 전원 실패하면 in-session fallback으로 직접 리뷰한다.
+This skill reviews the visual design quality of HTML files using the Gemini CLI and directly applies the returned improvement directives in the main session.
+It can be invoked as a post-processing step by another skill (e.g., `create-slides`) or directly by the user.
+If agents (Gemini CLI) are unavailable or all fail, perform the review directly through in-session fallback.
 
-**핵심 원칙**: gemini CLI가 불가하면(`missing_cli` 등) 아무 일도 하지 않는 대신 in-session fallback으로 직접 리뷰한다. 진짜 quiet pass는 리뷰 대상 HTML 파일 경로가 유효하지 않은 경우뿐이다.
+**Core principle**: If the gemini CLI is unavailable (`missing_cli`, etc.), perform the review directly through in-session fallback instead of doing nothing. A true quiet pass applies only when the target HTML file path is invalid.
 
 ---
 
 ## Input
 
-이 스킬은 아래 정보를 필요로 한다:
+This skill needs the following information:
 
-| 파라미터 | 필수 | 설명 |
+| Parameter | Required | Description |
 |---------|------|------|
-| HTML 파일 경로 | Yes | 리뷰 대상 HTML 파일의 절대 경로 |
-| 디자인 경로 | No | 사용된 디자인 스타일 (예: "frontend-design", "자체 심플", "직접 제공"). Gemini에게 맥락을 전달하여 디자인 방향에 맞는 리뷰를 유도한다 |
-| 보호 규칙 | No | 호출자가 지정하는 수정 금지 항목 (예: scroll-snap, 특정 폰트) |
+| HTML file path | Yes | Absolute path to the HTML file to review |
+| Design path | No | Design style used (e.g., "frontend-design", "자체 심플", "직접 제공"). Gives Gemini context to guide the review toward the design direction |
+| Protection rules | No | Items the caller specifies must not be modified (e.g., scroll-snap, a specific font) |
 
-**호출 패턴:**
+**Invocation patterns:**
 
-- **다른 스킬에서 호출**: 호출자가 파일 경로와 보호 규칙을 컨텍스트로 전달
-- **사용자 직접 호출**: 대화에서 HTML 파일 경로를 파악하거나 AskUserQuestion으로 확인
+- **Invoked by another skill**: The caller passes the file path and protection rules as context
+- **Invoked directly by the user**: Identify the HTML file path from the conversation or confirm with AskUserQuestion
 
 ---
 
 ## Workflow
 
-### Step 1: HTML 파일 확인
+### Step 1: Check the HTML File
 
-리뷰 대상 HTML 파일 경로를 확인한다.
-- 다른 스킬에서 호출 시: 호출자가 전달한 경로 사용
-- 사용자 직접 호출 시: 대화 컨텍스트에서 파악하거나 AskUserQuestion으로 확인
+Check the path of the HTML file to review.
+- When invoked by another skill: Use the path supplied by the caller
+- When invoked directly by the user: Identify it from conversation context or confirm with AskUserQuestion
 
-### Step 2: 리뷰 Job 시작
+### Step 2: Start the Review Job
 
-**CRITICAL**: 모든 Bash 호출에 `timeout: 180000`을 설정한다.
+**CRITICAL**: Set `timeout: 180000` on every Bash call.
 
-프롬프트 파일을 작성하고 job을 시작한다:
+Write a prompt file and start the job:
 
 ```bash
 PROMPT_FILE=$(mktemp)
 cat > "$PROMPT_FILE" << 'PROMPT_EOF'
-[HTML 파일 전체 내용을 여기에 포함]
+[Include the entire HTML file contents here]
 
 Design path used: {design-path}
 PROMPT_EOF
 JOB_DIR=$(bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --stdin < "$PROMPT_FILE")
 ```
 
-- HTML 파일 전문을 Read 도구로 읽은 뒤 프롬프트 파일에 포함
-- 디자인 경로가 없으면 `Design path used:` 행 생략
-- JOB_DIR이 stdout에 출력됨
+- Read the entire HTML file with the Read tool and include it in the prompt file
+- Omit the `Design path used:` line if there is no design path
+- JOB_DIR is printed to stdout
 
-**`start` 실패 시 in-session fallback**: `start`가 non-zero로 종료되거나 `$JOB_DIR`이 비어 있으면 Steps 3–5(collect/clean 없음)를 건너뛰고, `prompts/default.md`를 READ한 뒤 그 페르소나가 되어 in-session으로 HTML 디자인 리뷰를 수행한다. stderr에 `to dispatch`가 포함된 경우(멤버 0개 — 예상된 경로)는 조용히 fallback으로 진입한다. 그 외 non-zero 종료(디스크/권한 오류, spawn 실패 등 예상치 못한 실패)는 실패 사유(stderr 한 줄)를 출력한 뒤 in-session fallback을 수행한다.
+**In-session fallback when `start` fails**: If `start` exits non-zero or `$JOB_DIR` is empty, skip Steps 3–5 (no collect/clean), READ `prompts/default.md`, adopt its persona, and perform an HTML design review in-session. If stderr contains `to dispatch` (zero members — an expected path), enter fallback quietly. For other non-zero exits (unexpected failures such as disk/permission errors or spawn failures), print the failure reason (one line of stderr) before performing in-session fallback.
 
-### Step 3: 결과 수집
+### Step 3: Collect Results
 
 ```bash
 bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect "$JOB_DIR"
 ```
 
-- `"overallState": "done"` → Step 4로 진행
-- `"running"` / `"queued"` → `collect` 재호출 (동일 명령)
-- 멤버 상태가 `missing_cli` / `error` / `timed_out` / `canceled` / `non_retryable` → **in-session fallback** (아래 참조). "unavailable"로 끝내지 않는다.
-- 멤버 상태가 `awaiting_resume` 이거나 내용이 비-답변(플랜/프레이밍/대기 패턴) → `resume-member`로 완답을 이끌어낸다 (최대 3회). cap 소진 또는 실패 시 **in-session fallback**.
+- `"overallState": "done"` → Proceed to Step 4
+- `"running"` / `"queued"` → Call `collect` again (same command)
+- Member state is `missing_cli` / `error` / `timed_out` / `canceled` / `non_retryable` → **In-session fallback** (see below). Do not finish as "unavailable".
+- Member state is `awaiting_resume` or the content is a non-answer (plan/framing/waiting pattern) → Use `resume-member` to obtain a complete answer (up to 3 times). On cap exhaustion or failure, use **in-session fallback**.
 
-**in-session fallback 진입 시**: `prompts/default.md`를 READ하고 그 페르소나가 되어 in-session으로 HTML 디자인 리뷰를 수행한다. fallback 전에 `clean`을 먼저 실행하지 않는다 — `clean`은 모든 처리가 끝난 마지막 단계다.
+**When entering in-session fallback**: READ `prompts/default.md`, adopt its persona, and perform an HTML design review in-session. Do not run `clean` before fallback — `clean` is the final step after all processing is complete.
 
-### Step 4: 지침 적용
+### Step 4: Apply Directives
 
-collect 결과의 manifest에서 gemini의 `outputFilePath`를 Read 도구로 읽는다.
+Read gemini's `outputFilePath` from the collect result's manifest using the Read tool.
 
-Gemini가 반환한 개선 지침을 **그대로** Edit 도구로 CSS/HTML에 적용한다.
+Apply the improvement directives returned by Gemini to the CSS/HTML **exactly as provided**, using the Edit tool.
 
-**적용 원칙:**
-- Gemini의 지침을 있는 그대로 적용한다. Claude가 자체 판단으로 지침을 필터링하거나 추가 보정하지 않는다.
-- 각 지침의 Target(셀렉터)을 HTML에서 찾아 Fix에 명시된 값을 정확히 반영한다.
-- 지침에 없는 추가 개선을 임의로 수행하지 않는다.
+**Application principles:**
+- Apply Gemini's directives as written. Claude must not filter directives or make additional adjustments based on its own judgment.
+- Find each directive's Target (selector) in the HTML and apply the exact values specified in Fix.
+- Do not make arbitrary additional improvements absent from the directives.
 
-**호출자 보호 규칙만 예외:**
-호출자가 보호 규칙을 전달한 경우, 해당 규칙에 **정확히** 위배되는 지침만 제외한다.
+**Caller protection rules are the only exception:**
+If the caller supplied protection rules, exclude only directives that **directly** violate those rules.
 
-### Step 5: 정리 및 보고
+### Step 5: Clean Up and Report
 
 ```bash
 bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"
 ```
 
-**주의**: `clean`은 모든 처리가 끝난 마지막 단계다. quiet pass로 빠져나온 경우도 마찬가지로 `clean`을 호출해 임시 파일을 정리한다.
+**Caution**: `clean` is the final step after all processing is complete. Also call `clean` to remove temporary files when exiting through a quiet pass.
 
-적용 완료 후 사용자에게 간략히 요약:
+After applying the directives, give the user a brief summary:
 
 ```
-Gemini 디자인 리뷰 반영: {적용 항목 수}/{전체 지침 수}건 적용
-- {적용한 항목 1줄 요약}
+Gemini 디자인 리뷰 반영: {applied item count}/{total directive count}건 적용
+- {one-line summary of applied items}
 ...
 ```
 
-quiet pass인 경우 아무것도 출력하지 않는다.
+Print nothing for a quiet pass.
 
 ---
 
-## Quiet Pass 조건
+## Quiet Pass Conditions
 
-아래 경우에서 에러 없이 조용히 건너뛴다:
+Skip quietly without an error in the following case:
 
-| 조건 | 동작 |
+| Condition | Action |
 |------|------|
-| HTML 파일 경로가 유효하지 않음 | 즉시 종료, 메시지 없음 |
+| HTML file path is invalid | Exit immediately, no message |
 
-## In-Session Fallback 조건
+## In-Session Fallback Conditions
 
-아래 경우에서 `prompts/default.md`를 읽고 in-session 리뷰를 수행한다:
+Read `prompts/default.md` and perform an in-session review in the following cases:
 
-| 조건 | 동작 |
+| Condition | Action |
 |------|------|
-| `start` 비정상 종료 / `$JOB_DIR` 빔 (멤버 없음) | Steps 3–5 생략, in-session fallback 즉시 진입 (clean 없음) |
-| `gemini` CLI 미설치 (`missing_cli` 상태) | in-session fallback 수행 후 `clean` |
-| Gemini 호출 타임아웃 (`timed_out` 상태) | in-session fallback 수행 후 `clean` |
-| Gemini 호출 에러 (`error` 상태) | in-session fallback 수행 후 `clean` |
-| `awaiting_resume` — resume cap 소진 또는 전원 실패 | in-session fallback 수행 후 `clean` |
+| `start` exits abnormally / `$JOB_DIR` empty (no members) | Skip Steps 3–5, enter in-session fallback immediately (no clean) |
+| `gemini` CLI not installed (`missing_cli` state) | Perform in-session fallback, then `clean` |
+| Gemini call times out (`timed_out` state) | Perform in-session fallback, then `clean` |
+| Gemini call errors (`error` state) | Perform in-session fallback, then `clean` |
+| `awaiting_resume` — resume cap exhausted or all members fail | Perform in-session fallback, then `clean` |
 
 ---
 
 ## Anti-Patterns
 
-- Claude가 Gemini 지침을 자체 판단으로 필터링하거나 추가 보정하지 않는다 -- 보호 규칙 위반 외에는 전부 적용
-- 한 번에 전체 `<style>` 블럭을 교체하지 않는다 -- 개별 CSS 속성 단위로 Edit
-- Gemini 설치를 사용자에게 권유하지 않는다
-- 리뷰 실패를 에러로 취급하지 않는다 -- 이 스킬은 항상 "성공"으로 종료
+- Claude must not filter Gemini directives or make additional adjustments based on its own judgment -- apply all except those violating protection rules
+- Do not replace the entire `<style>` block at once -- Edit individual CSS properties
+- Do not suggest that the user install Gemini
+- Do not treat a review failure as an error -- this skill always exits with "success"
 
 ---
 
 ## Reference Files
 
-- `review.config.yaml`: Gemini 리뷰어 설정 (command, model, timeout)
-- `scripts/job.ts`: Job 매니저 (start/collect/clean). generic-job.ts 프레임워크 기반 thin wrapper.
-- `scripts/worker.ts`: Gemini CLI 워커. worker-utils.ts 기반.
-- `prompts/gemini.md`: Gemini에 전달하는 디자인 리뷰 시스템 프롬프트. 리뷰 기준 6가지, 출력 포맷(Target/Issue/Fix), 제약 조건 정의.
-- `prompts/default.md`: in-session fallback 페르소나 프롬프트 — 에이전트 불가 시 in-session fallback에서 로드. 동일한 리뷰 기준 6가지 + 직접 Edit 적용 지침.
+- `review.config.yaml`: Gemini reviewer configuration (command, model, timeout)
+- `scripts/job.ts`: Job manager (start/collect/clean). Thin wrapper around the generic-job.ts framework.
+- `scripts/worker.ts`: Gemini CLI worker. Based on worker-utils.ts.
+- `prompts/gemini.md`: Design review system prompt sent to Gemini. Defines six review criteria, output format (Target/Issue/Fix), and constraints.
+- `prompts/default.md`: In-session fallback persona prompt — loaded during in-session fallback when agents are unavailable. The same six review criteria + instructions to apply changes directly with Edit.

@@ -1,6 +1,6 @@
 ---
 name: scan-pdf-to-notes
-description: Use when extracting a page range or chapter from a scanned/OCR'd book PDF (ABBYY FineReader 등) into text, markdown, or study notes (정리) — triggers include "PDF 텍스트 발췌", "스캔본 PDF 추출", "책 챕터 정리", "정리본 만들기", "PDF to markdown", "표가 깨져서 안 나와", "pdftotext", "pymupdf4llm", "marker", "OCR 깨짐", "scanned book extraction", "extract chapter from PDF", "make study notes from PDF". Use whenever a book PDF must become text/notes and tables, code, or precise values need to survive.
+description: Use when extracting a page range or chapter from a scanned/OCR'd book PDF (ABBYY FineReader, etc.) into text, markdown, or study notes (정리) — triggers include "PDF 텍스트 발췌", "스캔본 PDF 추출", "책 챕터 정리", "정리본 만들기", "PDF to markdown", "표가 깨져서 안 나와", "pdftotext", "pymupdf4llm", "marker", "OCR 깨짐", "scanned book extraction", "extract chapter from PDF", "make study notes from PDF". Use whenever a book PDF must become text/notes and tables, code, or precise values need to survive.
 ---
 
 # Scan PDF to Notes

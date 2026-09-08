@@ -7,11 +7,11 @@ description: Use when reviewing, improving, or writing technical documentation i
 
 Reviews technical documents and suggests improvements. 3-phase sequential review: Type Classification → Information Architecture → Sentence Refinement.
 
-## 왜 테크니컬 라이팅인가
+## Why Technical Writing
 
-테크니컬 문서의 목적은 독자에게 정확한 **정보 전달**이지, 감정을 불러일으키는 글쓰기가 아니다.
+The purpose of technical documentation is to **convey information** accurately to readers, not to evoke emotion.
 
-테크니컬 라이팅이 어려운 이유는 세 가지다: (1) 작성자는 이미 답을 알고 있어 독자의 무지를 상상하기 어렵다(지식의 저주), (2) 정확성과 간결함이 동시에 요구되어 트레이드오프가 끊임없다, (3) 문서는 한 번 쓰고 끝이 아니라 코드·제품과 함께 변하므로 일관성 유지가 어렵다.
+Technical writing is difficult for three reasons: (1) writers already know the answer and struggle to imagine what readers do not know (the curse of knowledge), (2) accuracy and brevity are both required, creating constant trade-offs, and (3) documents evolve alongside code and products rather than being written once, making consistency difficult to maintain.
 
 ## The Iron Law
 
@@ -76,14 +76,14 @@ Each Area's review results use this format:
 
 ### Findings
 
-#### Finding 1: {제목}
-- **원칙**: {원칙 ID} - {원칙 이름}
+#### Finding 1: {Title}
+- **원칙**: {Principle ID} - {Principle name}
 - **심각도**: Critical / Suggestion
 - **Before**:
-  > {원본 텍스트}
+  > {Original text}
 - **After**:
-  > {개선된 텍스트}
-- **근거**: {왜 이 변경이 필요한지}
+  > {Improved text}
+- **근거**: {Why this change is needed}
 ```
 
 **Severity criteria:**

@@ -1,50 +1,50 @@
 ---
 name: create-slides
-description: 수직 스크롤 + scroll-snap 기반 단일 HTML 파일 발표자료를 생성한다. 슬라이드 라이브러리 없이 순수 HTML+CSS로 구현하며 다크/라이트 테마, frontend-design 스킬 연동, highlight.js·Mermaid·KaTeX·Chart.js·Iconify CDN을 지원한다.  트리거: "make a presentation", "create slides", "build a deck", "발표자료", "프레젠테이션", "슬라이드", "제안서", "발표 만들어", "ppt", "keynote", "pitch deck", "tech talk", "발표 만들어줘".
+description: Generates single-file HTML presentations with vertical scrolling and scroll-snap. Uses plain HTML+CSS without slide libraries and supports dark/light themes, frontend-design skill integration, and highlight.js·Mermaid·KaTeX·Chart.js·Iconify CDNs.  Triggers: "make a presentation", "create slides", "build a deck", "발표자료", "프레젠테이션", "슬라이드", "제안서", "발표 만들어", "ppt", "keynote", "pitch deck", "tech talk", "발표 만들어줘".
 ---
 
 # Scrollytelling Presentation Generator
 
 ## Philosophy
 
-이 skill은 reveal.js 같은 슬라이드 라이브러리를 사용하지 않는다.
-대신 **수직 스크롤 기반의 스토리텔링** 접근법을 사용한다.
+This skill does not use slide libraries such as reveal.js.
+Instead, it uses **storytelling through vertical scrolling**.
 
-핵심 원칙:
+Core principles:
 
-- **단일 HTML 파일**: 모든 CSS는 `<style>` 인라인, JS는 최소한만 허용
-- **100vh 섹션**: 각 섹션이 전체 화면을 차지하며 스크롤로 자연스럽게 이동
-- **콘텐츠 중심**: 화려한 애니메이션 대신 타이포그래피와 여백으로 깔끔함 달성
-- **디자인 시스템 기반**: 일관된 컴포넌트와 컬러 팔레트 사용
+- **Single HTML file**: All CSS inline in `<style>`; only minimal JS allowed
+- **100vh sections**: Each section fills the screen, with natural scrolling between sections
+- **Content first**: Achieve a clean presentation through typography and spacing instead of elaborate animations
+- **Design system based**: Use consistent components and color palettes
 
-품질 기준: 한국 디자인 에이전시가 만든 랜딩페이지 수준의 완성도.
+Quality bar: The polish of a landing page made by a Korean design agency.
 
 ---
 
 ## Workflow
 
-### Step 0: 콘텐츠 이해
+### Step 0: Understand the Content
 
-사용자 입력을 먼저 분석한다. 입력 형태는 다양할 수 있다:
+Analyze the user's input first. Input can take various forms:
 
-- 구체적인 아웃라인/본문 → 바로 구조화
-- 주제만 ("AI 에이전트에 대한 발표") → 적절한 수의 섹션 아웃라인을 제안하고 확인받기
-- 기존 문서/노트 → 핵심 메시지를 추출하여 슬라이드 구조로 변환
+- Detailed outline/body → Structure it directly
+- Topic only ("AI 에이전트에 대한 발표") → Propose an outline with an appropriate number of sections and get confirmation
+- Existing documents/notes → Extract key messages and convert them into a slide structure
 
-### Step 1: 사용자 컨펌 (필수)
+### Step 1: User Confirmation (Required)
 
-콘텐츠를 분석한 뒤, **반드시 AskUserQuestion으로 아래 항목을 한 번에 제안하고 사용자 확인을 받는다.**
-**이 절차는 생략할 수 없다.** AI가 추론한 결과를 제시하되, 최종 결정은 사용자가 한다.
-단, 사용자가 요청에서 모든 항목을 이미 명시한 경우에만(예: "다크 + frontend-design + 8장으로") 질문을 생략할 수 있다.
+After analyzing the content, **you must propose all the following items together using AskUserQuestion and obtain user confirmation.**
+**This procedure cannot be skipped.** Present the AI's inferred choices, but the user makes the final decision.
+The question may be skipped only if the user already specified every item in the request (e.g., "다크 + frontend-design + 8장으로").
 
-**제안 항목:**
+**Items to propose:**
 
-1. **테마**: Dark 또는 Light (콘텐츠 성격 기반 추천 이유 포함)
-2. **디자인 스타일**: frontend-design / 자체 심플 / 직접 제공
-3. **슬라이드 구성**: 각 슬라이드의 제목과 타입을 번호 목록으로 제안
-4. **악센트 컬러**: 콘텐츠에 어울리는 2~3색 조합 제안 (hex 코드 포함)
+1. **Theme**: Dark or Light (include a recommendation rationale based on the content)
+2. **Design style**: frontend-design / 자체 심플 / 직접 제공
+3. **Slide structure**: Propose each slide's title and type as a numbered list
+4. **Accent colors**: Propose a combination of 2–3 colors suited to the content (include hex codes)
 
-**제안 예시:**
+**Example proposal:**
 ```
 발표 내용을 분석했습니다. 아래 구성으로 진행할까요?
 
@@ -63,87 +63,87 @@ description: 수직 스크롤 + scroll-snap 기반 단일 HTML 파일 발표자�
 엔터만 누르면 위 구성으로 진행합니다.
 ```
 
-**테마 권장 기준:**
-- **Dark 권장**: 기술 발표, 개발 이야기, 해커톤, 라이브 코딩, 아키텍처 설명
-- **Light 권장**: 기획 제안, 비즈니스 전략, 제품 소개, 교육 자료
+**Theme recommendation criteria:**
+- **Recommend Dark**: Technical presentations, development stories, hackathons, live coding, architecture explanations
+- **Recommend Light**: Planning proposals, business strategy, product introductions, educational materials
 
-### Step 2: 디자인 소스 로드
+### Step 2: Load the Design Source
 
-사용자가 컨펌한 디자인 스타일에 따라 로드한다:
+Load according to the design style the user confirmed:
 
-| 선택       | 디자인 소스                                       | 특징                                              |
+| Choice       | Design source                                       | Characteristics                                              |
 | ---------- | ------------------------------------------------- | ------------------------------------------------- |
-| frontend-design (기본값) | frontend-design skill                  | 화려하고 창의적인 비주얼 (glassmorphism, glow 등) |
-| 자체 심플  | `references/design-system.md` (자체 디자인시스템) | 일관되고 절제된 미니멀 스타일 |
-| 직접 제공  | 사용자 제공 가이드                                | 사용자 지정 스타일                                |
+| frontend-design (default) | frontend-design skill                  | Elaborate, creative visuals (glassmorphism, glow, etc.) |
+| 자체 심플  | `references/design-system.md` (built-in design system) | Consistent, restrained minimal style |
+| 직접 제공  | User-provided guide                                | Custom user style                                |
 
-> **자체 심플 — 파일 없을 때:** `references/design-system.md`가 없으면 본 skill의 CSS 규칙과 폰트 fallback만으로 진행하고 사용자에게 알린다.
+> **자체 심플 — missing file:** If `references/design-system.md` is missing, proceed using only this skill's CSS rules and font fallback, and inform the user.
 
-**frontend-design 로드 방법:**
-1. 시스템에 `/frontend-design` skill이 설치되어 있으면 해당 skill을 호출한다.
-2. 설치되어 있지 않으면 아래 URL에서 SKILL.md를 WebFetch로 가져와 지침으로 사용한다:
+**How to load frontend-design:**
+1. If the `/frontend-design` skill is installed on the system, invoke it.
+2. If it is not installed, retrieve SKILL.md from the URL below using WebFetch and use it as guidance:
    `https://raw.githubusercontent.com/anthropics/skills/refs/heads/main/skills/frontend-design/SKILL.md`
 
-**frontend-design 사용 시 경계 규칙:**
-frontend-design skill의 **컬러, 그라디언트, 글래스모피즘, 텍스처 스타일**만 차용한다.
-레이아웃 구조(100vh 섹션, scroll-snap), 폰트(@font-face 나눔스퀘어 네오), JS 제한은 **본 스킬의 규칙을 우선**한다.
+**Boundary rules when using frontend-design:**
+Borrow only the frontend-design skill's **colors, gradients, glassmorphism, and texture styles**.
+For layout structure (100vh sections, scroll-snap), fonts (@font-face NanumSquareNeo), and JS limits, **this skill's rules take precedence**.
 
-**어떤 선택이든 유지되는 공통 규칙:**
-- 단일 HTML 파일 출력
-- `scroll-snap-type: y mandatory` + `height: 100vh` 페이지 단위 스크롤
-- 나눔스퀘어 네오 폰트 (@font-face)
-- highlight.js CDN (코드 블럭 포함 시)
+**Common rules retained for every choice:**
+- Single HTML file output
+- Page-by-page scrolling with `scroll-snap-type: y mandatory` + `height: 100vh`
+- NanumSquareNeo font (@font-face)
+- highlight.js CDN (when code blocks are included)
 
-**사용자 제공 가이드 사용 시:**
-- 사용자가 URL, 파일, 또는 텍스트로 디자인 가이드를 제공하면 해당 지침을 우선 적용한다.
-- 위의 공통 규칙은 동일하게 유지한다.
+**When using a user-provided guide:**
+- If the user provides a design guide as a URL, file, or text, apply that guidance first.
+- Keep the common rules above unchanged.
 
-### Step 3: 슬라이드 아웃라인 플래닝
+### Step 3: Plan the Slide Outline
 
-Step 1에서 사용자가 컨펌한 슬라이드 구성을 바탕으로, **구체적인 슬라이드 아웃라인**을 먼저 작성한다.
-이 단계에서 각 슬라이드의 실제 콘텐츠 요소를 상세히 설계하여, 이후 HTML 작성 시 일관성과 품질을 확보한다.
+First write a **detailed slide outline** based on the slide structure the user confirmed in Step 1.
+Design each slide's actual content elements in detail at this stage to ensure consistency and quality when writing the HTML later.
 
-**아웃라인 저장 방식 (분량에 따라 자율 판단):**
-- **10장 이하**: 인메모리(대화 컨텍스트 내)에서 관리
-- **11장 이상**: 임시 마크다운 파일(`{title-slug}-outline.md`)로 작성하여 참조. HTML 완성 후 삭제
+**Outline storage (use judgment based on length):**
+- **10 slides or fewer**: Manage in memory (within the conversation context)
+- **11 slides or more**: Write a temporary Markdown file (`{title-slug}-outline.md`) for reference. Delete it after completing the HTML
 
-**아웃라인 포맷** — 각 슬라이드마다 아래 항목을 명시한다:
+**Outline format** — Specify the following for every slide:
 
 ```markdown
-## Slide {N}: {제목} [{type}]
+## Slide {N}: {title} [{type}]
 
-- **Label**: {섹션 카테고리 텍스트}
-- **Heading**: {핵심 메시지}
-- **Content**: {본문 요약 또는 항목 목록}
-- **Visual**: {사용할 컴포넌트 — stat-box 3개, card 4개, code block 등}
-    - 다이어그램 타입 선택 기준:
+- **Label**: {section category text}
+- **Heading**: {key message}
+- **Content**: {body summary or list of items}
+- **Visual**: {components to use — 3 stat-boxes, 4 cards, code block, etc.}
+    - Diagram type selection criteria:
 
-      | 조건 | 사용 타입 |
+      | Condition | Type to use |
       |------|---------|
-      | sequence / 시퀀스 / 요청-응답 흐름 | Mermaid (`sequenceDiagram`) |
-      | flowchart / 분기 / if-else / 순서도 | Mermaid (`flowchart LR`) |
-      | ER / 테이블 관계 / DB 스키마 | Mermaid (`erDiagram`) |
-      | gantt / 일정 / 로드맵 | Mermaid (`gantt`) |
-      | 노드 4개 이상 아키텍처 | Mermaid (`flowchart`) |
-      | 단순 컴포넌트 관계, **노드 ≤3개**, 슬라이드 테마 색 필요 | Inline SVG (`diagram` 타입) |
+      | sequence / request-response flow | Mermaid (`sequenceDiagram`) |
+      | flowchart / branches / if-else | Mermaid (`flowchart LR`) |
+      | ER / table relationships / DB schema | Mermaid (`erDiagram`) |
+      | gantt / schedule / roadmap | Mermaid (`gantt`) |
+      | Architecture with 4 or more nodes | Mermaid (`flowchart`) |
+      | Simple component relationships, **≤3 nodes**, slide theme colors needed | Inline SVG (`diagram` type) |
 
-    - `diagram` 타입 (Inline SVG): `viewBox="0 0 600 {높이}"` — 노드 3개 이하 전용. 노드(`<g class="diag-node">`), 엣지(`<line class="diag-edge">`), `<defs>` 마커. fill/stroke는 CSS 변수 참조. **마커 id는 슬라이드마다 고유값** (예: `id="diag-arrow-s5"`) — Mermaid/다중 diagram 슬라이드 공존 시 id 중복 방지.
-    - `flow` 5-step 변형: `.workflow-grid` grid + `.wf-step::after` 화살표. `.flow-arrow` div 불필요.
-    - `title` 히어로 배지: `.hero-badge-row` + `.hero-badge`. Iconify 없이 dot + 텍스트로 키포인트 3-4개 표시.
-- **Notes**: {특이사항 — min-height 필요 여부, CDN 라이브러리, overflow 전환 등}
+    - `diagram` type (Inline SVG): `viewBox="0 0 600 {height}"` — Only for 3 nodes or fewer. Nodes (`<g class="diag-node">`), edges (`<line class="diag-edge">`), and `<defs>` markers. Reference CSS variables for fill/stroke. **Marker ids must be unique per slide** (e.g., `id="diag-arrow-s5"`) — Prevent duplicate ids when Mermaid/multiple diagram slides coexist.
+    - `flow` 5-step variant: `.workflow-grid` grid + `.wf-step::after` arrows. No `.flow-arrow` div needed.
+    - `title` hero badges: `.hero-badge-row` + `.hero-badge`. Show 3–4 key points with dots + text, without Iconify.
+- **Notes**: {special considerations — whether min-height is needed, CDN libraries, overflow switching, etc.}
 ```
 
-**구조 가이드라인:**
-- 콘텐츠가 5개 이하면 5~7개 섹션도 충분하다. 무리하게 늘리지 않는다.
-- 15장을 초과하면 목차 섹션을 추가하고 PART 디바이더로 챕터를 나눈다.
-- 구조 패턴: `title → context/problem → solution → details(2-4장) → evidence → next-steps → closing`
+**Structure guidelines:**
+- If there are 5 content items or fewer, 5–7 sections are enough. Do not inflate the count.
+- For more than 15 slides, add a table-of-contents section and divide chapters with PART dividers.
+- Structure pattern: `title → context/problem → solution → details(2–4 slides) → evidence → next-steps → closing`
 
-### Step 4: HTML Skeleton 작성
+### Step 4: Write the HTML Skeleton
 
-아웃라인이 확정되면, **HTML의 뼈대(Head + CSS)만 먼저 Write**한다.
-이 단계에서는 `<body>` 안에 슬라이드 콘텐츠를 넣지 않는다.
+Once the outline is finalized, **Write only the HTML skeleton (Head + CSS) first**.
+Do not put slide content inside `<body>` at this stage.
 
-**Write로 생성하는 Skeleton 구조:**
+**Skeleton structure created with Write:**
 
 ```html
 <!DOCTYPE html>
@@ -151,20 +151,20 @@ Step 1에서 사용자가 컨펌한 슬라이드 구성을 바탕으로, **구�
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{발표 제목}</title>
-    {highlight.js CSS CDN link — 코드 블럭이 있을 때만}
-    {기타 필요한 CDN CSS — KaTeX 등}
+    <title>{presentation title}</title>
+    {highlight.js CSS CDN link — only when code blocks are present}
+    {Other required CDN CSS — KaTeX, etc.}
     <style>
-      {나눔스퀘어 네오 @font-face 블럭 전체}
-      {CSS 변수 — :root 테마 정의}
-      {전체 레이아웃 CSS — scroll-snap, .slide 공통, 페이지 번호 counter}
-      {모든 슬라이드 타입별 CSS — slide--title, slide--content, slide--card-grid 등}
-      {반응형 @media 쿼리}
+      {Complete NanumSquareNeo @font-face blocks}
+      {CSS variables — :root theme definition}
+      {Overall layout CSS — scroll-snap, shared .slide styles, page number counter}
+      {CSS for every slide type — slide--title, slide--content, slide--card-grid, etc.}
+      {Responsive @media queries}
     </style>
   </head>
   <body>
 
-  {CDN scripts — highlight.js, Mermaid 등 필요한 것만}
+  {CDN scripts — only those needed, such as highlight.js and Mermaid}
   <script>
     hljs.highlightAll();
   </script>
@@ -172,190 +172,190 @@ Step 1에서 사용자가 컨펌한 슬라이드 구성을 바탕으로, **구�
 </html>
 ```
 
-**핵심**: CSS는 아웃라인에 명시된 **모든 슬라이드 타입의 스타일을 한 번에** 포함한다.
-이후 슬라이드 append 시 CSS를 추가로 수정할 필요가 없도록 설계한다.
+**Key point**: Include styles for **all slide types specified in the outline at once** in the CSS.
+Design it so that appending slides later requires no further CSS edits.
 
-### Step 5: 슬라이드 Append
+### Step 5: Append Slides
 
-Skeleton이 준비되면, **Edit 도구로 `</body>` 직전에 슬라이드를 순차 append**한다.
-한 번에 전체를 쓰지 않고, 적절한 단위로 나누어 추가한다.
+Once the skeleton is ready, **use the Edit tool to append slides sequentially just before `</body>`**.
+Add them in appropriate batches rather than writing everything at once.
 
-**Append 단위 (자율 판단):**
-- **기본**: 1~3개 슬라이드를 한 번의 Edit으로 추가
-- **단순한 슬라이드** (title, closing, quote 등): 2~3개씩 묶어도 됨
-- **복잡한 슬라이드** (code 30줄+, card-grid 4개+, timeline 5단계+): 1개씩 단독 추가
-- **전체 10장 이하의 간단한 발표**: 한 번에 모두 추가해도 무방
+**Append batches (use judgment):**
+- **Default**: Add 1–3 slides per Edit
+- **Simple slides** (title, closing, quote, etc.): May group 2–3 together
+- **Complex slides** (code 30+ lines, card-grid 4+ cards, timeline 5+ stages): Add one at a time
+- **Simple presentation with 10 slides or fewer in total**: May add all at once
 
-**Append 방법:**
+**How to append:**
 
-각 Edit에서 `</body>` 태그 또는 CDN `<script>` 블럭 직전의 빈 줄을 `old_string`으로 잡고,
-해당 위치에 `<section>` 블럭을 삽입한다.
+In each Edit, use the `</body>` tag or the blank line just before the CDN `<script>` block as `old_string`,
+and insert `<section>` blocks at that position.
 
 ```
 Edit:
-  old_string: "{이전 슬라이드의 closing </section> 태그 또는 body 내 마지막 콘텐츠}"
-  new_string: "{이전 콘텐츠}\n\n    {새 <section> 블럭들}"
+  old_string: "{previous slide's closing </section> tag or last content in body}"
+  new_string: "{previous content}\n\n    {new <section> blocks}"
 ```
 
-**진행 시 사용자에게 간단한 진척 상황을 알린다:**
-- `"슬라이드 1-3/8 추가 중..."` 식의 짧은 상태 업데이트
+**Give the user brief progress updates while working:**
+- A short status update such as `"슬라이드 1-3/8 추가 중..."`
 
-### Step 6: 마무리 및 파일 확인
+### Step 6: Finish and Check the File
 
-모든 슬라이드 append가 완료되면:
+After all slides have been appended:
 
-1. 최종 HTML 파일의 슬라이드 수가 아웃라인과 일치하는지 확인한다
-2. 페이지 번호 카운터의 총 수(`/ {N}`)가 실제 슬라이드 수와 맞는지 검증한다
-3. 임시 아웃라인 파일이 있으면 삭제한다
+1. Check that the slide count in the final HTML file matches the outline
+2. Verify that the page counter total (`/ {N}`) matches the actual slide count
+3. Delete the temporary outline file if one exists
 
-### Step 7: Gemini 디자인 리뷰 (선택적)
+### Step 7: Gemini Design Review (Optional)
 
-`slides-review` 스킬을 호출하여 HTML 디자인을 보완한다.
-gemini CLI 미설치 시 자동으로 quiet pass되므로 별도 분기 처리가 필요 없다.
+Invoke the `slides-review` skill to improve the HTML design.
+If the gemini CLI is not installed, it automatically performs a quiet pass, so no separate branch is needed.
 
-**호출 방법:**
+**How to invoke:**
 
-`slides-review` 스킬에 아래 컨텍스트를 전달한다:
-- **HTML 파일 경로**: 방금 생성한 HTML 파일의 절대 경로
-- **보호 규칙**: `scroll-snap 보호`, `폰트 보호: NanumSquareNeo`, `레이아웃 보호: 100vh`
+Pass the following context to the `slides-review` skill:
+- **HTML file path**: Absolute path to the HTML file just created
+- **Protection rules**: `scroll-snap 보호`, `폰트 보호: NanumSquareNeo`, `레이아웃 보호: 100vh`
 
-스킬이 지침을 적용하면 결과를 사용자에게 요약 보고하고, 스킵되면 아무 메시지 없이 다음 단계로 진행한다.
+If the skill applies guidance, summarize the result for the user; if skipped, proceed to the next step without a message.
 
-### Step 8: 최종 안내
+### Step 8: Final Guidance
 
-저장 경로를 사용자에게 알려준다: `현재 디렉토리에 {제목-slug}.html로 저장했습니다.`
+Tell the user the save path: `현재 디렉토리에 {title-slug}.html로 저장했습니다.`
 
 ---
 
 ## Slide Type Catalog
 
-각 섹션은 아래 타입 중 하나를 사용한다. 한 발표에서 같은 타입을 반복해도 된다.
-**매칭 힌트**를 참고하여 콘텐츠에 적합한 타입을 선택한다.
+Each section uses one of the types below. A presentation may repeat the same type.
+Use the **matching hints** to select a type suited to the content.
 
-| Type         | 용도          | 핵심 요소                                     | 매칭 힌트                            |
+| Type         | Purpose          | Key elements                                     | Matching hints                            |
 | ------------ | ------------- | --------------------------------------------- | ------------------------------------ |
-| `title`      | 표지 슬라이드 | gradient 텍스트 제목, badge/eyebrow, subtitle | 첫 슬라이드, 파트 디바이더           |
-| `content`    | 일반 내용     | label + heading + desc 본문                   | 설명/서술이 중심인 슬라이드          |
-| `stat-grid`  | 숫자 강조     | 2-4개의 stat-box (큰 숫자 + 라벨)             | 수치, KPI, 성과가 2개 이상 등장할 때 |
-| `card-grid`  | 항목 나열     | 2-4개의 카드 (아이콘 + 제목 + 설명)           | 병렬적 항목, 기능 목록, 장점 나열    |
-| `code`       | 코드 설명     | heading + highlight.js 코드 블럭 + 설명       | 코드 예시, CLI 명령, 설정 파일       |
-| `timeline`   | 단계/일정     | 세로 타임라인 (dot + title + desc)            | 시간순/단계별 순서가 명확할 때       |
-| `flow`       | 프로세스      | 가로 플로우 다이어그램 (step + arrow)         | 파이프라인, 워크플로우, 데이터 흐름  |
-| `quote`      | 인용/강조     | quote-box (좌측 보더 + 텍스트 + 출처)         | 핵심 메시지 강조, 사용자 후기, 인용  |
-| `comparison` | 비교          | 2열 비교 (before/after, A/B)                  | "기존 vs 신규", "A vs B" 대비 구조   |
-| `naming`     | 이름/공식     | naming-box (chip + 결과 + 설명)               | 브랜딩, 합성어 설명, 공식/수식       |
-| `code-comparison` | 코드 비교 | 2열 코드 블럭 (언어/버전/전후 비교)          | "JS vs TS", "before/after", 문법 비교 |
-| `closing`    | 마무리        | CTA 버튼, 감사 메시지, 연락처                 | 마지막 슬라이드, Q&A                 |
-| `diagram`    | SVG 아키텍처 다이어그램 | Inline SVG (`<rect>` + `<path>` + `<marker>` + CSS 변수 참조) | 컴포넌트 관계, 데이터 흐름 — JS 없이 테마 연동 다이어그램이 필요할 때 |
+| `title`      | Cover slide | Gradient text title, badge/eyebrow, subtitle | First slide, part divider           |
+| `content`    | General content     | label + heading + desc body                   | Slides centered on explanation/narration          |
+| `stat-grid`  | Emphasize numbers     | 2–4 stat-boxes (large number + label)             | Two or more figures, KPIs, or results |
+| `card-grid`  | List items     | 2–4 cards (icon + title + description)           | Parallel items, feature lists, benefits    |
+| `code`       | Explain code     | heading + highlight.js code block + explanation       | Code examples, CLI commands, configuration files       |
+| `timeline`   | Stages/schedule     | Vertical timeline (dot + title + desc)            | Clear chronological/stage ordering       |
+| `flow`       | Process      | Horizontal flow diagram (step + arrow)         | Pipelines, workflows, data flow  |
+| `quote`      | Quote/emphasis     | quote-box (left border + text + source)         | Key message emphasis, user testimonials, quotations  |
+| `comparison` | Comparison          | Two-column comparison (before/after, A/B)                  | Contrasting structures such as "기존 vs 신규", "A vs B"   |
+| `naming`     | Name/formula     | naming-box (chip + result + explanation)               | Branding, compound-word explanations, formulas/equations       |
+| `code-comparison` | Code comparison | Two-column code blocks (language/version/before-and-after comparison)          | "JS vs TS", "before/after", syntax comparison |
+| `closing`    | Closing        | CTA button, thank-you message, contact information                 | Last slide, Q&A                 |
+| `diagram`    | SVG architecture diagram | Inline SVG (`<rect>` + `<path>` + `<marker>` + CSS variable references) | Component relationships, data flow — when a theme-aware diagram is needed without JS |
 
-> **`flow` 5-step 변형**: step이 정확히 5개이면 `.workflow-grid` + `::after` 화살표 사용 권장. `.flow-arrow` div 불필요. `design-system.md` 섹션 5 참조.
+> **`flow` 5-step variant**: For exactly 5 steps, `.workflow-grid` + `::after` arrows are recommended. No `.flow-arrow` div needed. See section 5 of `design-system.md`.
 
 ---
 
 ## HTML Structure Rules
 
-1. **단일 파일**: 외부 CSS 파일 없음. 모든 스타일은 `<style>` 태그 안에
-2. **CSS 변수**: `:root`에 테마 변수 정의, 컴포넌트에서 참조
-3. **섹션 구조**: 테마와 무관하게 `<section class="slide slide--{type}">` 통일. 테마 차이는 CSS 변수와 body 클래스로만 처리
-4. **페이지 단위 스크롤**: `html { scroll-snap-type: y mandatory; }` + 각 섹션에 `scroll-snap-align: start;`
-5. **섹션 높이**: 기본 `height: 100vh` + `overflow: hidden`. 단, 콘텐츠가 많은 섹션(카드 5개 이상, 코드 30줄 이상, 타임라인 5단계 이상)은 `min-height: 100vh` + `overflow: visible`로 전환. `scroll-snap-align`은 유지
-6. **콘텐츠 폭**: 기본 텍스트 `max-width: 720px`. 카드 그리드, 비교, 플로우 등 다열 레이아웃은 `max-width: 960px`까지 허용
-7. **나눔스퀘어 네오 폰트**: `@font-face` 블럭으로 직접 선언. 폰트 URL 로드에 실패하면 `'Noto Sans KR', -apple-system, sans-serif`를 fallback으로 사용한다. 8. **반응형**: `@media (max-width: 768px)` 브레이크포인트 포함 9. **페이지 번호**: CSS counter로 자동 페이지 번호 표시. 반드시 `position: absolute` 사용 (`position: fixed` 금지 — fixed 사용 시 모든 슬라이드의 번호가 겹쳐 마지막 번호만 보이는 버그 발생). **폰트 선언·페이지 번호 CSS 구현은 반드시 `references/code-snippets.md`를 열어 복사한다** (직접 작성 금지).
+1. **Single file**: No external CSS files. All styles inside `<style>` tags
+2. **CSS variables**: Define theme variables in `:root` and reference them in components
+3. **Section structure**: Use `<section class="slide slide--{type}">` consistently regardless of theme. Handle theme differences only through CSS variables and body classes
+4. **Page-by-page scrolling**: `html { scroll-snap-type: y mandatory; }` + `scroll-snap-align: start;` on each section
+5. **Section height**: Default to `height: 100vh` + `overflow: hidden`. For content-heavy sections (5 or more cards, 30 or more code lines, 5 or more timeline stages), switch to `min-height: 100vh` + `overflow: visible`. Retain `scroll-snap-align`
+6. **Content width**: Default text `max-width: 720px`. Multi-column layouts such as card grids, comparisons, and flows may use up to `max-width: 960px`
+7. **NanumSquareNeo font**: Declare directly using `@font-face` blocks. If loading the font URL fails, use `'Noto Sans KR', -apple-system, sans-serif` as fallback. 8. **Responsive**: Include the `@media (max-width: 768px)` breakpoint 9. **Page numbers**: Automatically display page numbers with a CSS counter. Must use `position: absolute` (`position: fixed` is prohibited — fixed causes all slide numbers to overlap, leaving only the last number visible). **You must open `references/code-snippets.md` and copy the font declarations and page-number CSS implementation** (do not write them yourself).
 
-10. **접근성**: `<html lang="ko|en">` 설정. WCAG AA 이상의 색상 대비 유지. heading 레벨을 `h1` → `h2` → `h3` 순서로 사용
-11. **Flex 컨테이너 내 인라인 요소**: `.hero-badge-row`, badge, tag, pill 등 인라인 요소가 flex column 컨테이너의 직접 자식일 때 반드시 `align-self: center; width: fit-content;`을 추가한다. 누락 시 전체 너비로 늘어나는 버그 발생
+10. **Accessibility**: Set `<html lang="ko|en">`. Maintain WCAG AA or better color contrast. Use heading levels in `h1` → `h2` → `h3` order
+11. **Inline elements in flex containers**: When inline elements such as `.hero-badge-row`, badge, tag, or pill are direct children of a flex column container, you must add `align-self: center; width: fit-content;`. Omitting this causes them to stretch to full width
 
 ---
 
 ## Typography & Color
 
-### 공통 베이스라인 스케일
+### Shared Baseline Scale
 
-아래 값은 **모든 디자인 경로**(자체 심플, frontend-design, 직접 제공)에 적용되는 최소 베이스라인이다.
-AI는 이 값을 **하한선**으로 사용하되, 콘텐츠 밀도와 슬라이드 구성에 따라 더 크게 조정할 수 있다.
-단, 이 값보다 **작게** 설정하지 않는다.
+The following values are the minimum baseline for **all design paths** (자체 심플, frontend-design, 직접 제공).
+The AI must use these values as a **lower bound**, but may increase them based on content density and slide composition.
+Do not set them **smaller** than these values.
 
-**베이스라인 스케일 수치는 `references/code-snippets.md`에서 확인한다** (기억으로 작성 금지 — 수치 변동 가능).
+**Look up baseline scale values in `references/code-snippets.md`** (do not write them from memory — values may change).
 
-**3단 위계** — 모든 섹션에 일관되게 적용:
+**Three-level hierarchy** — Apply consistently to all sections:
 
-1. **Label**: 12px, uppercase, letter-spacing, accent color — 섹션 카테고리
-2. **Heading**: clamp() 반응형, bold/black weight — 핵심 메시지
-3. **Description**: 16px, muted color, line-height 1.8 — 상세 설명
+1. **Label**: 12px, uppercase, letter-spacing, accent color — Section category
+2. **Heading**: Responsive clamp(), bold/black weight — Key message
+3. **Description**: 16px, muted color, line-height 1.8 — Detailed explanation
 
-**강조 패턴**:
+**Emphasis patterns**:
 
-- gradient text (`-webkit-background-clip: text`) — 타이틀 슬라이드 제목
-- `<span class="em">` — 헤딩 내 키워드 강조
-- tag/chip — 인라인 태그 표시
+- gradient text (`-webkit-background-clip: text`) — Title slide heading
+- `<span class="em">` — Keyword emphasis within headings
+- tag/chip — Inline tags
 
-**컬러 제한**: 악센트 최대 3색. 테마별 권장 팔레트는 design-system.md 참조.
+**Color limit**: At most 3 accent colors. See design-system.md for recommended palettes by theme.
 
-**폰트**:
+**Fonts**:
 
-- 기본 본문 폰트: **나눔스퀘어 네오** (`NanumSquareNeo`) — @font-face 블럭은 HTML Structure Rules 7번 참조
-- 영어 전용 발표가 필요한 경우: Plus Jakarta Sans, Outfit, 또는 Geist (Google Fonts CDN)
+- Default body font: **NanumSquareNeo** (`NanumSquareNeo`) — For @font-face blocks, see HTML Structure Rules item 7
+- For English-only presentations: Plus Jakarta Sans, Outfit, or Geist (Google Fonts CDN)
 
 ---
 
 ## JavaScript Policy
 
-- **외부 라이브러리 추가 금지**. highlight.js CDN만 허용.
-- **Fullscreen 토글은 기본 포함**: `.fs-btn` 버튼과 `requestFullscreen` 기반 토글 스크립트는 모든 생성 결과물(dark/light)에 기본 포함한다. 사용자가 명시적으로 제외를 요청한 경우에만 생략한다. 상세 구현은 design-system.md의 "6. Fullscreen Toggle" 참조.
-- **그 외 발표 보조용 바닐라 JS는 허용**: 키보드 방향키(←→) 네비게이션, 현재 페이지 인디케이터 등 30줄 이내의 바닐라 JS는 사용자가 요청한 경우에만 추가한다.
-- 기본 생성 시에는 `hljs.highlightAll()`과 Fullscreen 토글 스크립트만 포함한다.
+- **Do not add external libraries**. Only the highlight.js CDN is allowed.
+- **Include the Fullscreen toggle by default**: Include the `.fs-btn` button and `requestFullscreen` toggle script in all generated outputs (dark/light) by default. Omit only when the user explicitly requests exclusion. See "6. Fullscreen Toggle" in design-system.md for the detailed implementation.
+- **Other vanilla JS presentation aids are allowed**: Add up to 30 lines of vanilla JS for keyboard arrow (←→) navigation, current-page indicators, etc. only when the user requests it.
+- Default generation includes only `hljs.highlightAll()` and the Fullscreen toggle script.
 
 ---
 
 ## Anti-Patterns
 
-- **슬라이드 라이브러리 금지**: reveal.js, impress.js, Marp 등을 사용하지 않는다
-- **일반 폰트 금지**: Arial, Inter, Roboto, system-ui를 메인 폰트로 쓰지 않는다
-- **CSS 프레임워크 금지**: Bootstrap, Tailwind 등을 사용하지 않는다
-- **과한 애니메이션 금지**: 스크롤 연동 애니메이션, 페이드인, 슬라이드인 등 사용하지 않는다 (scroll-hint bounce, hover 트랜지션은 예외)
-- **보라+흰 클리셰 금지**: 무조건 보라색 그라디언트를 쓰지 않는다. 콘텐츠에 맞는 악센트 선택
-- **base64 이미지 금지**: 인코딩된 이미지를 넣지 않는다
-- **데이터 날조 금지**: 사용자가 제공하지 않은 수치, 연도별 추이, 발표 제목, 프로젝트명, 직무 설명 등을 추측하여 작성하지 않는다. 원본 데이터에 없는 정보는 placeholder(`[TODO: 데이터 필요]`)로 남기고 사용자에게 확인을 요청한다
+- **No slide libraries**: Do not use reveal.js, impress.js, Marp, etc.
+- **No generic fonts**: Do not use Arial, Inter, Roboto, or system-ui as the main font
+- **No CSS frameworks**: Do not use Bootstrap, Tailwind, etc.
+- **No excessive animation**: Do not use scroll-linked animations, fade-ins, slide-ins, etc. (scroll-hint bounce and hover transitions are exceptions)
+- **No purple-and-white cliché**: Do not automatically use purple gradients. Choose accents suited to the content
+- **No base64 images**: Do not embed encoded images
+- **No fabricated data**: Do not guess figures, yearly trends, presentation titles, project names, job descriptions, etc. that the user did not provide. Leave information absent from the source data as placeholders (`[TODO: 데이터 필요]`) and ask the user to confirm
 
-**이미지/비주얼 대안**:
+**Image/visual alternatives**:
 
-- 아이콘이 필요한 경우 emoji를 기본으로 활용한다. 더 정교한 아이콘이 필요하면 Iconify CDN을 사용한다 (아래 허용 라이브러리 참조)
-- 간단한 다이어그램은 CSS+HTML로 직접 그린다. 복잡한 플로우/시퀀스/ER 다이어그램은 Mermaid를 사용한다
-- 실제 이미지(사진, 스크린샷)가 필요한 위치에는 비율과 의도를 명시한 placeholder를 넣고, 주석으로 권장 이미지 설명을 남긴다
-- 영상/오디오 등 멀티미디어는 지원하지 않으며, 스크린샷 placeholder + 링크로 대안을 제안한다
+- Use emoji by default when icons are needed. Use the Iconify CDN if more refined icons are needed (see allowed libraries below)
+- Draw simple diagrams directly with CSS+HTML. Use Mermaid for complex flow/sequence/ER diagrams
+- Where actual images (photos, screenshots) are needed, insert placeholders specifying aspect ratio and intent, and describe the recommended image in a comment
+- Multimedia such as video/audio is not supported; propose a screenshot placeholder + link as an alternative
 
 ---
 
 ## Allowed CDN Libraries
 
-**화이트리스트 방식**: 아래 목록의 라이브러리만 사용할 수 있다. 이 목록에 없는 라이브러리를 임의로 추가하지 않는다.
-모든 라이브러리는 **"필요할 때만 포함"** 원칙을 따른다. 해당 콘텐츠가 없으면 CDN을 포함하지 않는다.
+**Allowlist approach**: Only libraries listed below may be used. Do not arbitrarily add libraries outside this list.
+All libraries follow the **"include only when needed"** principle. If the corresponding content is absent, do not include the CDN.
 
-**CDN URL 규칙**: 아래 명시된 URL과 버전을 **그대로** 사용한다. 버전을 임의로 올리거나 다른 CDN 호스트로 변경하지 않는다. (cdnjs는 최신 버전 누락이 잦아 jsdelivr 또는 검증된 cdnjs URL만 사용)
+**CDN URL rules**: Use the specified URLs and versions **exactly as written**. Do not arbitrarily upgrade versions or switch CDN hosts. (Because cdnjs often lacks the latest versions, use only jsdelivr or verified cdnjs URLs.)
 
-**각 라이브러리의 CDN URL·마크업 패턴은 반드시 `references/cdn-libraries.md`를 열어 확인한다** (URL을 기억에서 작성하거나 임의 변경 금지).
+**You must open `references/cdn-libraries.md` to check each library's CDN URL and markup pattern** (do not write URLs from memory or change them arbitrarily).
 
-### 요약 테이블
+### Summary Table
 
-| 라이브러리   | 포함 조건                     | 슬라이드 타입 연관           |
+| Library   | Inclusion condition                     | Related slide type           |
 | ------------ | ----------------------------- | ---------------------------- |
-| highlight.js | 코드 블럭이 있을 때           | `code`                       |
-| Chart.js     | 수치를 차트로 시각화할 때     | `stat-grid` 보완             |
-| Mermaid      | 복잡한 다이어그램이 필요할 때 | `flow`, `timeline` 상위 대안 |
-| KaTeX        | 수학 수식이 등장할 때         | `content` (학술)             |
-| Iconify      | 정교한 아이콘이 필요할 때     | `card-grid`, `flow`          |
+| highlight.js | When code blocks are present           | `code`                       |
+| Chart.js     | When visualizing numbers as charts     | Supplements `stat-grid`             |
+| Mermaid      | When complex diagrams are needed | Advanced alternative to `flow`, `timeline` |
+| KaTeX        | When mathematical formulas appear         | `content` (academic)             |
+| Iconify      | When refined icons are needed     | `card-grid`, `flow`          |
 
 ---
 
 ## Reference Files
 
-이 스킬이 참조하는 파일 목록. 워크플로우 내 인라인 포인터가 있지만, 필요 시점을 놓쳤을 경우 이 인덱스에서 확인한다.
+Files referenced by this skill. The workflow contains inline pointers; use this index if you missed when to open a file.
 
-| 파일 | 역할 | 언제 열어야 하는가 |
+| File | Role | When to open |
 | ---- | ---- | ---------------- |
-| `references/design-system.md` | 자체 디자인시스템 — 컴포넌트 CSS, 팔레트, Fullscreen 토글 구현, flow 5-step 변형 등 | "자체 심플" 디자인 경로 선택 시; Fullscreen·flow 변형 등 상세 구현이 필요할 때 |
-| `references/code-snippets.md` | `@font-face` 폰트 선언, 페이지 번호 CSS counter, 타이포 베이스라인 스케일 수치 | **Step 4 HTML skeleton 작성 전 반드시** — 폰트·페이지 번호·스케일 수치를 기억으로 작성하지 않는다 |
-| `references/cdn-libraries.md` | 허용 라이브러리별 CDN URL 및 마크업 패턴 (highlight.js / Chart.js / Mermaid / KaTeX / Iconify) | **해당 라이브러리를 실제로 사용할 때 반드시** — URL을 기억으로 작성하거나 임의 변경하지 않는다 |
-| `assets/example-dark.html` | 다크 테마 4슬라이드 예시 (기술 발표) — 목표 품질 수준의 적용 예시 | 첫 출력 전 스타일·컴포넌트 배치 캘리브레이션 시 (템플릿 그대로 복사 금지, 슬라이드 구성/장수에 갇히지 말고 아웃라인에 맞게 자유롭게 변형) |
-| `assets/example-light.html` | 라이트 테마 4슬라이드 예시 (비즈니스 전략) — 목표 품질 수준의 적용 예시 | 첫 출력 전 스타일·컴포넌트 배치 캘리브레이션 시 (템플릿 그대로 복사 금지, 슬라이드 구성/장수에 갇히지 말고 아웃라인에 맞게 자유롭게 변형) |
-| `slides-review` skill | Gemini 디자인 리뷰 — 생성된 HTML에 시각 보완 피드백 적용 | Step 7 (선택적 디자인 리뷰); gemini CLI 미설치 시 quiet pass |
+| `references/design-system.md` | Built-in design system — component CSS, palettes, Fullscreen toggle implementation, flow 5-step variant, etc. | When selecting the "자체 심플" design path; when detailed implementations such as Fullscreen or flow variants are needed |
+| `references/code-snippets.md` | `@font-face` font declarations, page-number CSS counter, typography baseline scale values | **Required before writing the HTML skeleton in Step 4** — Do not write fonts, page numbers, or scale values from memory |
+| `references/cdn-libraries.md` | CDN URLs and markup patterns for allowed libraries (highlight.js / Chart.js / Mermaid / KaTeX / Iconify) | **Required when actually using the library** — Do not write URLs from memory or change them arbitrarily |
+| `assets/example-dark.html` | Dark theme 4-slide example (technical presentation) — example of the target quality level in practice | When calibrating style and component placement before the first output (do not copy the template verbatim; freely adapt to the outline without being constrained by the example's slide structure/count) |
+| `assets/example-light.html` | Light theme 4-slide example (business strategy) — example of the target quality level in practice | When calibrating style and component placement before the first output (do not copy the template verbatim; freely adapt to the outline without being constrained by the example's slide structure/count) |
+| `slides-review` skill | Gemini design review — apply visual improvement feedback to generated HTML | Step 7 (optional design review); quiet pass if the gemini CLI is not installed |

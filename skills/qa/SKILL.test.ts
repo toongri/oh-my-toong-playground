@@ -894,8 +894,8 @@ describe("new-prose: reader evidence is per-scenario natural language + screensh
 		expect(presentationMd).toContain("scenarios");
 	});
 
-	test("presentation.md forces every verified scenario to carry a reader-visible record (observation OR screenshot)", () => {
-		expect(presentationMd).toContain("an authored observation OR a screenshot");
+	test("화면 관찰에는 설명과 전후 이미지를 함께 요구함", () => {
+		expect(presentationMd).toContain("an authored observation AND before/after screenshots");
 	});
 
 	test("presentation.md converts a raw API/CLI transcript to a per-scenario NL observation, raw stays in the audit", () => {
@@ -944,7 +944,7 @@ describe("new-prose: requirement mappings are structurally grounded", () => {
 	});
 
 	test("the JSON example shows the structured cellRefs shape", () => {
-		const start = presentationMd.indexOf("```json");
+		const start = presentationMd.lastIndexOf("```json", presentationMd.indexOf('"cellRefs": [{ "story": "<story-id>"'));
 		const end = presentationMd.indexOf("```", start + 7);
 		expect(start).not.toBe(-1);
 		expect(end).toBeGreaterThan(start);
@@ -1435,8 +1435,9 @@ describe("new-prose: HTML report is the canonical deliverable", () => {
 		expect(skillMd).toContain("the report renders its Acceptance Criteria section from this record");
 	});
 
-	test("only subjective narrative is supplied at render time, never persisted to qa-state", () => {
-		expect(skillMd).toContain("Only subjective narrative");
+	test("실행 설명과 필수 근거 검토 기록의 저장 위치를 구분함", () => {
+		expect(skillMd).toContain("Execution-account narrative");
+		expect(skillMd).toContain("Evidence-review judgments are different");
 		expect(skillMd).toContain("supplied at render time");
 		expect(skillMd).toContain("never persisted to qa-state");
 	});
@@ -1450,7 +1451,7 @@ describe("new-prose: HTML report is the canonical deliverable", () => {
 
 	test("the report caps evidence embedding per file and cumulatively", () => {
 		expect(skillMd).toContain("2 MiB per file and 16 MiB cumulatively");
-		expect(skillMd).toContain("after the cumulative budget is exhausted");
+		expect(skillMd).toContain("visual images that exceed either budget block final report generation");
 	});
 
 	test("a fresh start clears prior acceptance criteria before the next report", () => {
