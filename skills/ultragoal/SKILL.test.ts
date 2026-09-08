@@ -123,55 +123,33 @@ describe("ported from goal: Completion Gate detail lives in references/completio
 describe("code-review dispatch payload contract: exactly two items, first dispatch and re-dispatch alike", () => {
 	test("dispatch payload contract detail is absent from SKILL.md body", () => {
 		expect(skillMd).not.toContain(
-			"carries exactly two things — the `serialize-review-context` 5-slot JSON verbatim, and the artifact path — and nothing else, on the first dispatch and on every re-dispatch alike",
+			"carries exactly two things:** the `serialize-review-context` 5-slot JSON verbatim and the session-derived artifact path",
 		);
 	});
 
 	test("dispatch payload contract detail is present in references/completion-gate.md", () => {
 		expect(completionGateMd).toContain(
-			"carries exactly two things — the `serialize-review-context` 5-slot JSON verbatim, and the artifact path — and nothing else, on the first dispatch and on every re-dispatch alike",
+			"carries exactly two things:** the `serialize-review-context` 5-slot JSON verbatim and the session-derived artifact path",
 		);
 	});
 
 	test("re-dispatch payload-fixity pointer is absent from SKILL.md body", () => {
 		expect(skillMd).not.toContain(
-			"that fresh dispatch carries the same fixed two-item payload as the dispatch-prompt contract above, not the finding history from the round that just closed",
+			"Keep this contract on every dispatch.",
 		);
 	});
 
 	test("re-dispatch payload-fixity pointer is present in references/completion-gate.md", () => {
 		expect(completionGateMd).toContain(
-			"that fresh dispatch carries the same fixed two-item payload as the dispatch-prompt contract above, not the finding history from the round that just closed",
+			"Keep this contract on every dispatch.",
 		);
 	});
 
-	// Placement, not just presence: the four toContain/not.toContain assertions
-	// above only pin WHICH file the contract paragraph lives in, not WHERE in
-	// that file. The requirement names a placement (after the last
-	// code-review-lane bullet, before the artifact schema block), and the prose
-	// itself is position-dependent — but the two "above" pointers name two
-	// different targets, not the same paragraph. Inside the contract paragraph
-	// itself, "the first-dispatch contract above" points at the "Code-review
-	// lane (runs once, at the final story — not per story)" paragraph, not at
-	// the contract paragraph — a paragraph cannot cite itself as "above". That
-	// reference travels with the contract paragraph, so it is the
-	// code-review-lane bullet ordering assertion below (which keeps the
-	// contract paragraph after that paragraph and its bullets) that keeps
-	// it valid. Separately, the "Code-review lane: `CONFIRMED` `correctness` or
-	// `requirement-gap` finding"
-	// bullet's "the dispatch-prompt contract above" points at the contract
-	// paragraph — and it is this one pointer that goes dangling if the
-	// contract paragraph moves below it; the sibling test below guards
-	// exactly that ordering. Both ordering tests below scope their comparison
-	// to the containing section via slice()-then-indexOf, the same idiom the
-	// "pursuing transition" test further down uses and explains: a bare
-	// whole-file indexOf comparison would have passed spuriously. indexOf
-	// existence is asserted first (`-1` compared against `-1` or a positive
-	// position would let a deleted anchor pass silently).
+	// Dispatch context must be defined before artifact schema and repair routing.
 	test("the dispatch-prompt contract paragraph sits after the last code-review-lane bullet and before the artifact schema block", () => {
 		const codeReviewLaneIntro =
-			"**Code-review lane (runs once, at the final story";
-		const contractParagraphLead = "carries exactly two things —";
+			"**Code-review lane (starts at the final story";
+		const contractParagraphLead = "carries exactly two things:**";
 		const artifactSchemaHeader =
 			"The artifact schema the code-reviewer must emit:";
 
@@ -198,34 +176,13 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 		);
 	});
 
-	test("the 'dispatch-prompt contract above' pointer at the concrete-progress bullet sits after the contract paragraph it points back at", () => {
-		const contractParagraphLead = "carries exactly two things —";
-		const confirmedFindingBullet =
-			"- **Code-review lane: `CONFIRMED` BLOCK finding**";
-		const inconclusiveBullet =
-			'- **Code-review lane: `status: "INCONCLUSIVE"`**';
-		const pointerPhrase = "dispatch-prompt contract above";
-
-		expect(
-			completionGateMd.indexOf(contractParagraphLead),
-		).toBeGreaterThan(-1);
-		expect(
-			completionGateMd.indexOf(confirmedFindingBullet),
-		).toBeGreaterThan(-1);
-		expect(completionGateMd.indexOf(inconclusiveBullet)).toBeGreaterThan(
-			-1,
-		);
-
-		const confirmedFindingBulletText = completionGateMd.slice(
-			completionGateMd.indexOf(confirmedFindingBullet),
-			completionGateMd.indexOf(inconclusiveBullet),
-		);
-
-		expect(confirmedFindingBulletText).toContain(pointerPhrase);
-
-		expect(completionGateMd.indexOf(contractParagraphLead)).toBeLessThan(
-			completionGateMd.indexOf(confirmedFindingBullet),
-		);
+	test("범위 계약이 재수정 경로보다 앞에 있고 재리뷰에도 유지된다", () => {
+		const contract = completionGateMd.indexOf("carries exactly two things:**");
+		const repairs = completionGateMd.indexOf("- **Admitted confirmed findings**");
+		expect(contract).toBeGreaterThan(-1);
+		expect(repairs).toBeGreaterThan(contract);
+		expect(completionGateMd).toContain("Keep this contract on every dispatch.");
+		expect(completionGateMd.slice(repairs)).toContain("then fresh independent review");
 	});
 });
 
@@ -272,12 +229,8 @@ describe("ported from goal (regression): required phrases survive somewhere in b
 	});
 
 	test("INCONCLUSIVE status routing survives in the union", () => {
-		expect(combined).toContain(
-			'`status === "INCONCLUSIVE"` blocks regardless of findings',
-		);
-		expect(combined).toContain(
-			"An `INCONCLUSIVE` status also routes to a reviewer-only re-run — re-dispatch a fresh **code-reviewer** over the same diff, NOT sisyphus",
-		);
+		expect(combined).toContain("or `INCONCLUSIVE`: completion blocked; no speculative repair");
+		expect(combined).toContain("**Plausible/unknown/invalid/inconclusive review**: reviewer-only adjudication");
 	});
 });
 
@@ -334,9 +287,9 @@ describe("axis 2: auto-generated decomposition + bulk approval via confirm-all-s
 });
 
 describe("gate cost model: per-story self-attested verdict mid-loop, code-review final-only", () => {
-	test("completion-gate.md states the code-review lane runs once, at the final story, over the accumulated diff", () => {
+	test("코드 리뷰는 마지막 스토리에서 시작하고 수정 후 같은 범위로 재검증한다", () => {
 		expect(completionGateMd).toContain(
-			"runs once, at the final story — not per story",
+			"starts at the final story; retries follow bounded admission",
 		);
 	});
 
@@ -430,18 +383,12 @@ describe("review dispatch budget runtime contract", () => {
 	);
 	});
 
-	// The 마무리/계속 discretion pair was replaced by the FIX/NOTE branch pair
-	// (verdict × impact diagonal): FIX = one pre-completion sisyphus batch with an
-	// automated-check re-run and no approval; NOTE = report-only with file:line.
-	test("completion-eligible findings route through the FIX/NOTE branch pair", () => {
-		expect(completionGateMd).not.toContain("**Completion-eligible discretion.**");
-		expect(completionGateMd).toContain("**FIX findings (CONFIRMED × LOW).**");
-		expect(completionGateMd).toContain("batch every FIX finding into ONE sisyphus dispatch");
-		expect(completionGateMd).toContain(
-			"The FIX batch triggers no re-review, consumes no review dispatch, and needs no user approval",
-		);
-		expect(completionGateMd).toContain("**NOTE findings (PLAUSIBLE × MEDIUM/LOW).**");
-		expect(completionGateMd).toContain("exact `file:line` reference and a one-line summary");
+	test("완료 전에 모든 범위 안 개선을 수정하고 범위 밖 지적은 제외한다", () => {
+		expect(completionGateMd).not.toContain("**FIX findings (CONFIRMED × LOW).**");
+		expect(completionGateMd).toContain("`IN_SCOPE + CONFIRMED` at **every impact**: batch-repair, affected checks, then fresh independent review");
+		expect(completionGateMd).toContain("`IN_SCOPE + PLAUSIBLE` at **every impact**: independent adjudication before repair");
+		expect(completionGateMd).toContain("`OUT_OF_SCOPE`: nonblocking exclusion");
+		expect(completionGateMd).toContain("no `UNKNOWN`, and no undismissed `IN_SCOPE` findings");
 	});
 });
 
