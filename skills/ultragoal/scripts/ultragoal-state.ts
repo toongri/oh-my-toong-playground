@@ -1122,36 +1122,40 @@ export function splitStory(
  * Existing stories must use confirmStory after replanning.
  */
 export function setSingleStory(sessionId: string): void {
-	const prior = readPrior(sessionId);
-	if ((prior.phase ?? "planning") !== "planning") {
-		throw new Error(
-			`set-stories --single: refused — phase must be 'planning' (got "${prior.phase}")`,
-		);
-	}
-	if (!prior.outcome || prior.outcome.trim() === "") {
-		throw new Error(
-			"set-stories --single: refused — outcome must be set before auto-deriving a story",
-		);
-	}
-	if ((prior.stories ?? []).length > 0) {
-		throw new Error(
-			"set-stories --single: refused — stories already exist; use confirm-story after replanning",
-		);
-	}
-	const surface = prior.verification_surface ?? "";
-	if (surface.trim() === "") {
-		throw new Error(
-			"set-stories --single: refused — verification_surface must be set before auto-deriving a story",
-		);
-	}
-	const derived: Story = {
-		id: "S1",
-		story: prior.outcome,
-		acceptance_criteria: [surface],
-		verification_surface: surface,
-		status: "confirmed",
-	};
-	mergeWrite(sessionId, { stories: [derived] });
+	ensureSeed("ultragoal", sessionId);
+	const stateFilePath = resolveStatePath(sessionId);
+	withStateLock(stateFilePath, () => {
+		const prior = readPrior(sessionId);
+		if ((prior.phase ?? "planning") !== "planning") {
+			throw new Error(
+				`set-stories --single: refused — phase must be 'planning' (got "${prior.phase}")`,
+			);
+		}
+		if (!prior.outcome || prior.outcome.trim() === "") {
+			throw new Error(
+				"set-stories --single: refused — outcome must be set before auto-deriving a story",
+			);
+		}
+		if ((prior.stories ?? []).length > 0) {
+			throw new Error(
+				"set-stories --single: refused — stories already exist; use confirm-story after replanning",
+			);
+		}
+		const surface = prior.verification_surface ?? "";
+		if (surface.trim() === "") {
+			throw new Error(
+				"set-stories --single: refused — verification_surface must be set before auto-deriving a story",
+			);
+		}
+		const derived: Story = {
+			id: "S1",
+			story: prior.outcome,
+			acceptance_criteria: [surface],
+			verification_surface: surface,
+			status: "confirmed",
+		};
+		mergeWriteLocked(sessionId, stateFilePath, { stories: [derived] });
+	});
 }
 
 /**

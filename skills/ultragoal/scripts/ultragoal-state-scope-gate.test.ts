@@ -288,6 +288,39 @@ describe("독립리뷰 회귀 방지", () => {
 		expect(state.requestComplete(SID)).toBe(false);
 	});
 
+	test("single 잠금 대기 중 추가된 스토리는 자동승인으로 덮어쓰지 않는다", () => {
+		const path = state.resolveStatePath(SID);
+		const prior = JSON.parse(readFileSync(path, "utf8"));
+		prior.stories = [];
+		writeFileSync(path, JSON.stringify(prior));
+		const lockPath = `${path}.lock`;
+		mkdirSync(lockPath);
+		writeFileSync(join(lockPath, "owner.json"), JSON.stringify({
+			ownerPid: process.pid, token: "story-writer", startedAt: Date.now(),
+		}));
+		let afterConcurrentWrite = "";
+		const wait = spyOn(Atomics, "wait").mockImplementationOnce(() => {
+			rmSync(lockPath, { recursive: true, force: true });
+			state.setStories(SID, [{
+				id: "S1", story: "review this revised story",
+				acceptance_criteria: ["revised tests pass"],
+				verification_surface: "revised tests", status: "unconfirmed",
+			}]);
+			afterConcurrentWrite = readFileSync(path, "utf8");
+			return "ok";
+		});
+		try {
+			expect(() => state.setSingleStory(SID)).toThrow(/confirm-story/);
+			expect(wait).toHaveBeenCalledTimes(1);
+			expect(readFileSync(path, "utf8")).toBe(afterConcurrentWrite);
+			expect(state.readGoalState(SID)?.stories?.[0]).toMatchObject({
+				story: "review this revised story", status: "unconfirmed",
+			});
+		} finally {
+			wait.mockRestore();
+		}
+	});
+
 	test("재계획된 S1은 single 자동승인 대신 명시적으로 재승인해야 한다", () => {
 		state.setGoalState(SID, { phase: "pursuing" });
 		state.setGoalState(SID, { phase: "planning", constraints: "new constraint" });
