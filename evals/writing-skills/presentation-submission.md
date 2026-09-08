@@ -31,6 +31,10 @@ The follow-up ran actual isolated applications:
   reviewer rejected a localized scope-decider sentence because the craft rubric
   still required the literal `| decider:` marker; the presentation example and
   rubric were inconsistent. This sample is not an unqualified GREEN.
+  One UI task also omitted re-enabling export after request completion. The
+  failed original was preserved; a corrected artifact added separate success
+  and failure retry outcomes with verification. This was an authoring correction,
+  not a UI execution test or a first-attempt five-of-five success.
 
 ### QA evidence review
 
@@ -62,6 +66,74 @@ history, clearing a previous report receipt on start, and additional claim-log
 embedding. Responsive inspection also exposed split Korean words and unreadable
 fit-width image details; keep-all prose and native original-size image expansion
 address those observed presentation failures.
+
+The scoped runtime/static regression run passed 774 tests across the QA
+chain, state, report, persistent Stop, and craft-issue contract suites;
+`make validate` passed. Browser inspection covered 38 full-page viewport frames
+at 375/768/1280px, original-size image expansion, and keyboard audit-table
+scrolling (0 to 120px). Both independent visual reviewers passed the introduced
+changes. Accessibility scanning reported zero violations and one incomplete
+contrast check; this is not full accessibility approval. Dark Mermaid connector
+contrast is pre-existing debt, unchanged in this patch. The image-diff artifact
+was an interim wrapping comparison, not final pixel-equality evidence.
+
+### Reviewer-rubric repair
+
+Five fresh baseline reviewers rejected the same Korean scope-decider sentence
+solely for lacking literal `| decider:` syntax (5/5). One also demanded separate
+Root Cause and Evidence headings for an ordinary unknown-cause bug. The rubric
+now specifies a reader-language exclusion plus observable classification
+condition, and treats bug investigation fields as information placed by the
+presentation template rather than mandatory extra headings.
+
+The first five repaired-rubric samples accepted the semantic scope condition;
+four passed the whole body and one requested post-release observation. After
+aligning the competing bug-order rule, five final fresh samples produced zero
+literal-marker rejections and zero standalone RCA-heading demands. Four passed
+the whole body; one correctly retained a separate reproduction-environment
+finding. All verdicts were read manually. The exact body/payload was unchanged;
+one transcription-error dispatch was interrupted and replaced before verdict.
+A grammar-only edit during the final dispatch means the rule bytes were not
+identical for every read. These are baseline-versus-repaired-rubric samples,
+not removal-of-the-full-skill controls or proof of model-wide reliability.
+
+The full test run subsequently exposed two stale expectations: the Codex
+deep-interview done-token fixture lacked the now-required HTML receipt, and an
+old Prometheus assertion prohibited any HTML mention. The corrected tests
+check missing-receipt rejection followed by submitted-HTML completion, and
+require HTML submission while keeping the removed legacy template absent.
+Their targeted rerun, including the final craft rubric, passed 218 tests.
+All Shell suites passed in the full run; the corrected full Bun rerun passed
+6,170 tests with zero failures. The final schema/component/reference/lint
+validation also passed.
+
+### Independent code review and regression recovery
+
+Independent review found three concrete gaps: a claim-cited action image could
+follow the after image; the capped embed reader misclassified a valid large
+timing log as missing while state validation accepted it; and changing a story's
+actor or actor boundary did not clear its old claim review. Failing regressions
+preceded fixes for each. The renderer now preserves primary before/action/after
+order, probes real source identity separately from embed limits, and rejects
+unembeddable claim sources in final mode. State mutations clear affected reviews.
+Additional RED/GREEN checks cover cumulative claim-log limits and repeated
+supplemental images consuming the budget twice. The focused code re-review
+reported no remaining finding after those fixes.
+
+An isolated actual CLI rerun confirmed actor-boundary and story reassignment
+invalidate reviews and reject approval, and a cited log over 2 MiB blocks final
+rendering. A faithful bounded trace excerpt plus renewed review recovered the
+report. Fresh browser captures and inspection of all seven embedded images
+preceded separate report attestation and completion. The mutation fixtures were
+preserved; positive completion used another isolated session with disclosed
+synthetic setup, not a real-product verdict. Both visual reviewers re-opened the
+38 regenerated responsive frames after the ordering fix and passed the scoped
+changes. The later supplemental-image de-duplication left that specimen's HTML
+byte-identical; old accessibility/zoom captures are not called fresh final checks.
+
+After the review fixes, the final full Bun run passed **6,174 tests, zero
+failures** across 184 files; `make validate` passed again. All Shell suites had
+passed in the earlier full run. No sync, push, or external ticket write was run.
 
 ## Scenario and scoring
 
