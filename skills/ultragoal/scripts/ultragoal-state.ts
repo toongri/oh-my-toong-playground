@@ -607,6 +607,96 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 			}
 		}
 	}
+	if (opts.phase === "planning") {
+		ensureSeed("ultragoal", sessionId);
+		const stateFilePath = resolveStatePath(sessionId);
+		withStateLock(stateFilePath, () => {
+			const prior = readPrior(sessionId);
+			const next: Partial<GoalState> = {
+				phase: opts.phase,
+				active: true,
+				outcome: opts.outcome,
+				verification_surface: opts.verification_surface,
+				constraints: opts.constraints,
+				boundaries: opts.boundaries,
+				non_goals: opts.non_goals,
+				max_iterations: opts.max_iterations,
+				blocked_stop: opts.blocked_stop,
+				plan_path: opts.plan_path,
+				resume_summary: opts.resume_summary,
+				completion_evidence_paths: opts.completion_evidence_paths,
+				codex_goal_objective: opts.codex_goal_objective,
+			};
+			const scopeChanged = (
+				["outcome", "verification_surface", "constraints", "boundaries", "non_goals"] as const
+			).some((slot) => opts[slot] !== undefined && opts[slot] !== (prior[slot] ?? ""));
+			if ((scopeChanged || prior.active === false) && Array.isArray(prior.stories)) {
+				next.stories = prior.active
+					? prior.stories.map((story) =>
+							story.status === "confirmed" ? { ...story, status: "unconfirmed" as const } : story,
+						)
+					: [];
+			}
+			// ADR-3: Stale verdict cannot survive a re-plan. Three verdict carriers must all be
+			// invalidated together:
+			//   1. objective_verdict state field → reset to 'absent'
+			//   2. completion_evidence_paths state field → cleared to []
+			//   3. ultragoal-verdict-{sid}.json artifact on disk → deleted
+			// Clearing (1) and (2) without deleting (3) allows requestComplete to read the old
+			// artifact and false-complete a new objective on a prior objective's evidence.
+			next.objective_verdict = "absent";
+			// Stale completion evidence cannot survive ANY planning transition — evidence is only
+			// ever valid from the current pursuit's completion audit, recorded fresh during the
+			// `pursuing` phase right before completing. A new objective must never complete on a
+			// prior objective's evidence.
+			next.completion_evidence_paths = [];
+			// Dismissals are a verdict carrier of the same species as the two fields above —
+			// per-round judgment about a specific review, not accumulated budget. Byte-pinning
+			// already makes a stale dismissal inert (the artifact is deleted below, so the next
+			// one hashes differently), so this clear keeps the carrier set literally complete
+			// rather than repairing a live hole.
+			next.dismissed_review_findings = [];
+			// A recorded codex_goal_objective is a FOURTH carrier of the same staleness, and it
+			// arms Gate 9. It names the native goal registered for the story that was being
+			// pursued — the very story a re-plan revises or retires. Left behind, the gate stays
+			// armed against a story that no longer exists, and if that orphaned native goal is
+			// ever closed as `complete` the objective matches and status matches, so the gate
+			// opens for a story set it was never registered against. Re-arming is the dispatch
+			// loop's job (step 3 calls create_goal again for the new current story), so clearing
+			// here degrades to the existing 8 gates rather than deadlocking.
+			next.codex_goal_objective = "";
+			// Delete the on-disk verdict artifact. ENOENT is ignored (no artifact = already clean).
+			// Fail-open: if deletion fails for any other reason, the re-plan still proceeds;
+			// the subsequent requestComplete will find an artifact with mismatched state and refuse.
+			try {
+				unlinkSync(resolveVerdictArtifactPath(sessionId));
+			} catch {
+				// ignore — ENOENT (no artifact) and other transient I/O errors are both safe to skip
+			}
+			// D-4: the code-review lane artifact must not survive a re-plan either (same ADR-3
+			// stale-vector — a prior objective's clean code-review must not false-complete a new
+			// objective). Error policy mirrors the ultragoal-verdict unlink above exactly.
+			try {
+				unlinkSync(resolveCodeReviewArtifactPath(sessionId));
+			} catch {
+				// ignore — ENOENT (no artifact) and other transient I/O errors are both safe to skip
+			}
+			// A FRESH goal (no active prior) must not inherit the dead goal's consumed iteration
+			// budget; a re-plan loop-back of the SAME active goal MUST (budget accumulates across
+			// re-plans). readGoalState returns non-null ONLY for an active prior → re-plan.
+			if (!readGoalState(sessionId)) {
+				next.iteration = 0;
+				// A terminal prior state can remain on disk for the same session. Its review
+				// dispatch budget and approval hash belong to the completed/blocked pursuit,
+				// never to the fresh one being planned now.
+				next.review_dispatch_used = 0;
+				next.review_dispatch_cap = DEFAULT_REVIEW_DISPATCH_CAP;
+				next.approved_review_artifact_sha256 = "";
+			}
+			mergeWriteLocked(sessionId, stateFilePath, next);
+		});
+		return;
+	}
 	const next: Partial<GoalState> = {
 		phase: opts.phase,
 		active: true,
@@ -622,75 +712,6 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 		completion_evidence_paths: opts.completion_evidence_paths,
 		codex_goal_objective: opts.codex_goal_objective,
 	};
-	if (opts.phase === "planning") {
-		const prior = readPrior(sessionId);
-		const scopeChanged = (
-			["outcome", "verification_surface", "constraints", "boundaries", "non_goals"] as const
-		).some((slot) => opts[slot] !== undefined && opts[slot] !== (prior[slot] ?? ""));
-		if ((scopeChanged || prior.active === false) && Array.isArray(prior.stories)) {
-			next.stories = prior.active
-				? prior.stories.map((story) =>
-						story.status === "confirmed" ? { ...story, status: "unconfirmed" as const } : story,
-					)
-				: [];
-		}
-		// ADR-3: Stale verdict cannot survive a re-plan. Three verdict carriers must all be
-		// invalidated together:
-		//   1. objective_verdict state field → reset to 'absent'
-		//   2. completion_evidence_paths state field → cleared to []
-		//   3. ultragoal-verdict-{sid}.json artifact on disk → deleted
-		// Clearing (1) and (2) without deleting (3) allows requestComplete to read the old
-		// artifact and false-complete a new objective on a prior objective's evidence.
-		next.objective_verdict = "absent";
-		// Stale completion evidence cannot survive ANY planning transition — evidence is only
-		// ever valid from the current pursuit's completion audit, recorded fresh during the
-		// `pursuing` phase right before completing. A new objective must never complete on a
-		// prior objective's evidence.
-		next.completion_evidence_paths = [];
-		// Dismissals are a verdict carrier of the same species as the two fields above —
-		// per-round judgment about a specific review, not accumulated budget. Byte-pinning
-		// already makes a stale dismissal inert (the artifact is deleted below, so the next
-		// one hashes differently), so this clear keeps the carrier set literally complete
-		// rather than repairing a live hole.
-		next.dismissed_review_findings = [];
-		// A recorded codex_goal_objective is a FOURTH carrier of the same staleness, and it
-		// arms Gate 9. It names the native goal registered for the story that was being
-		// pursued — the very story a re-plan revises or retires. Left behind, the gate stays
-		// armed against a story that no longer exists, and if that orphaned native goal is
-		// ever closed as `complete` the objective matches and status matches, so the gate
-		// opens for a story set it was never registered against. Re-arming is the dispatch
-		// loop's job (step 3 calls create_goal again for the new current story), so clearing
-		// here degrades to the existing 8 gates rather than deadlocking.
-		next.codex_goal_objective = "";
-		// Delete the on-disk verdict artifact. ENOENT is ignored (no artifact = already clean).
-		// Fail-open: if deletion fails for any other reason, the re-plan still proceeds;
-		// the subsequent requestComplete will find an artifact with mismatched state and refuse.
-		try {
-			unlinkSync(resolveVerdictArtifactPath(sessionId));
-		} catch {
-			// ignore — ENOENT (no artifact) and other transient I/O errors are both safe to skip
-		}
-		// D-4: the code-review lane artifact must not survive a re-plan either (same ADR-3
-		// stale-vector — a prior objective's clean code-review must not false-complete a new
-		// objective). Error policy mirrors the ultragoal-verdict unlink above exactly.
-		try {
-			unlinkSync(resolveCodeReviewArtifactPath(sessionId));
-		} catch {
-			// ignore — ENOENT (no artifact) and other transient I/O errors are both safe to skip
-		}
-		// A FRESH goal (no active prior) must not inherit the dead goal's consumed iteration
-		// budget; a re-plan loop-back of the SAME active goal MUST (budget accumulates across
-		// re-plans). readGoalState returns non-null ONLY for an active prior → re-plan.
-		if (!readGoalState(sessionId)) {
-			next.iteration = 0;
-			// A terminal prior state can remain on disk for the same session. Its review
-			// dispatch budget and approval hash belong to the completed/blocked pursuit,
-			// never to the fresh one being planned now.
-			next.review_dispatch_used = 0;
-			next.review_dispatch_cap = DEFAULT_REVIEW_DISPATCH_CAP;
-			next.approved_review_artifact_sha256 = "";
-		}
-	}
 	mergeWrite(sessionId, next);
 }
 
