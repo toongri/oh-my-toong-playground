@@ -93,6 +93,8 @@ function baseView(overrides: Partial<QaView> = {}): QaView {
 
 const fakeReader: EvidenceReader = (path) =>
 	path.endsWith(".png") ? { kind: "image", dataUri: "data:image/png;base64,AAAA" } : { kind: "text", content: `contents of ${path}` };
+const validImageReader: EvidenceReader = (path) =>
+	path.endsWith(".png") ? { kind: "image", dataUri: "data:image/png;base64,iVBORw0KGgoAAAAAAAAAAAAAAAAAAAAA" } : { kind: "text", content: `contents of ${path}` };
 
 describe("qa-report renderer", () => {
 	test("여러 주장이 같은 보조 이미지를 인용하면 한 번만 표시한다", () => {
@@ -140,6 +142,26 @@ describe("qa-report renderer", () => {
 			expect(() => renderQaReport(view, narrative, undefined, undefined, undefined, true)).toThrow("claim evidence not embeddable");
 		} finally { rmSync(dir, { recursive: true, force: true }); }
 	});
+	test("엄격한 보고서는 PNG 확장자의 손상된 주장 이미지를 거부한다", () => {
+		const dir = mkdtempSync(join(tmpdir(), "qa-corrupt-claim-image-"));
+		try {
+			const view = baseView();
+			view.cells = view.cells!.slice(0, 1);
+			const cell = view.cells[0];
+			const validImage = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+			for (const slot of ["before", "action", "after"] as const) {
+				const path = join(dir, `${slot}.png`);
+				writeFileSync(path, validImage);
+				cell.evidence![slot] = path;
+			}
+			const corrupt = join(dir, "claim.png");
+			writeFileSync(corrupt, "not an image");
+			cell.evidence_review!.claims[0].sources = [{ path: corrupt, location: "결과 영역" }];
+			const narrative = { scenarios: { "story-1:1:": { observed: "결과 화면 확인" } } };
+
+			expect(() => renderQaReport(view, narrative, undefined, undefined, undefined, true)).toThrow("claim evidence not embeddable");
+		} finally { rmSync(dir, { recursive: true, force: true }); }
+	});
 	test("좁은 화면에서도 근거를 읽도록 원본 크기 확대를 제공함", () => {
 		const html = renderQaReport(baseView(), {}, fakeReader)!;
 		expect(html).toContain("원본 크기로 확대");
@@ -178,7 +200,7 @@ describe("qa-report renderer", () => {
 		const view = baseView();
 		view.cells = view.cells!.slice(0, 1);
 		const narrative = { scenarios: { "story-1:1:": { observed: "연속 클릭 후에도 완료 화면은 한 번 표시됐다." } } };
-		const html = renderQaReport(view, narrative, fakeReader, undefined, undefined, true)!;
+		const html = renderQaReport(view, narrative, validImageReader, undefined, undefined, true)!;
 		expect(html).toContain("연속 클릭 후에도 완료 화면은 한 번 표시됐다.");
 		expect(html.match(/<img /g)?.length).toBe(3);
 	});
@@ -187,14 +209,14 @@ describe("qa-report renderer", () => {
 		const view = baseView();
 		view.cells = view.cells!.slice(0, 1);
 		const narrative = { scenarios: { "story-1:1:": { observed: "결과 화면 확인" } } };
-		const dataUri = "data:image/png;base64," + "A".repeat(MAX_TOTAL_EMBED_BYTES / 2);
+		const dataUri = "data:image/png;base64,iVBORw0KGgo" + "A".repeat(MAX_TOTAL_EMBED_BYTES / 2);
 		expect(() => renderQaReport(view, narrative, () => ({ kind: "image", dataUri }), undefined, undefined, true)).toThrow("budget");
 	});
 
 	test("최종 화면 보고서는 이미지가 있어도 관찰 설명 누락을 거부함", () => {
 		const view = baseView();
 		view.cells = view.cells!.slice(0, 1);
-		expect(() => renderQaReport(view, {}, fakeReader, undefined, undefined, true)).toThrow("visual observation");
+		expect(() => renderQaReport(view, {}, validImageReader, undefined, undefined, true)).toThrow("visual observation");
 	});
 	test("renders null (no-op) when the roster is empty — PRE-FLIGHT fail-fast has no report", () => {
 		expect(renderQaReport(baseView({ actors: [] }), {}, fakeReader)).toBeNull();

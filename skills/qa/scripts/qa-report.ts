@@ -258,6 +258,19 @@ function embeddedByteLength(embed: EvidenceEmbed): number {
 	return 0;
 }
 
+function hasValidImageSignature(dataUri: string): boolean {
+	const match = /^data:image\/(png|jpeg|webp|gif);base64,(.*)$/.exec(dataUri);
+	if (!match) return false;
+	const bytes = Buffer.from(match[2], "base64");
+	if (bytes.length < 24) return false;
+	return (
+		bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ||
+		(bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) ||
+		/^GIF8[79]a/.test(bytes.toString("ascii", 0, 6)) ||
+		(bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP")
+	);
+}
+
 /**
  * A reader-facing evidence slot — IMAGES ONLY. A screenshot / rendered screen is
  * something a PO or designer can read directly, so it belongs in the reader view.
@@ -857,6 +870,7 @@ export function renderQaReport(
 				for (const source of cell.evidence_review?.claims.flatMap((claim) => claim.sources) ?? []) {
 					const embed = readEvidence(source.path);
 					if (embed.kind === "missing" || embed.kind === "too-large") throw new Error(`visual claim evidence not embeddable for ${cellKey(cell)}: ${source.path}; record a bounded source and review again`);
+					if (embed.kind === "image" && !hasValidImageSignature(embed.dataUri)) throw new Error(`visual claim evidence not embeddable for ${cellKey(cell)}: ${source.path}; record a bounded source and review again`);
 				}
 				for (const path of [cell.evidence?.before, cell.evidence?.after]) {
 					const embed = path ? readEvidence(path) : undefined;
