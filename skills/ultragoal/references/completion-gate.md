@@ -189,7 +189,15 @@ APPROVE alone does NOT leave the ultragoal pursuit pursuing/active — the `requ
 
 **Once `request-complete` reaches terminal `complete`, hand off to the human for the final hands-on QA.** The loop never runs the hands-on adversarial matrix, so when you report completion, also prompt the user to run their own final hands-on pass before shipping — the heavy `Skill(skill: "qa")` battery is available if they want it.
 
-**Two lanes gate completion: the objective self-check and code-review.** The completion path runs both the objective-level self-check (correctness, completeness, and evidence audit) and the independent code-review lane (static quality and conventions) — both must pass for `request-complete` to pass. The code-review lane passes only with a matching-scope `COMPLETE` artifact, no `UNKNOWN`, and no undismissed admitted finding; excluded items remain visible without becoming work. No design or architecture lane gates completion: daedalus and design-review are plan-time advisory only, not completion gates. Code-review is a completion-time quality lane and is distinct from design-review — the two must not be conflated.
+**Two lanes gate completion: the objective self-check and code-review.** The completion path runs both the objective-level self-check (correctness, completeness, and evidence audit) and the independent code-review lane (static quality and conventions) — both must pass for `request-complete` to pass. The code-review lane passes only with a matching-scope `COMPLETE` artifact, no `UNKNOWN`, and no undismissed admitted finding; excluded items remain visible without becoming work. Advisors are advisory only and do not gate completion. Code-review is a completion-time quality lane and is distinct from design review — the two must not be conflated.
+
+### Final-review advisory routing
+
+Use advisory analysis conditionally during final review. Any uncertain review result — `PLAUSIBLE`, `UNKNOWN`, or disputed scope, validity, or causality — goes to Oracle first for read-only analysis of requirement fit, causality, and a bounded remedy, using the frozen contract and cited finding evidence. Malformed or stale artifacts may be diagnosed as input failures; Oracle must not fabricate evidence. For design alternatives or trade-offs, ask Daedalus with the frozen contract, specific question, cited evidence, and bounded options. Advisors cannot approve scope, overwrite an independent reviewer verdict, create a story or acceptance criterion, or authorize a repair. Their evidence may inform a reviewer correction or refutation, but the reviewer remains the artifact owner and a final fresh review still runs. Sisyphus remains the sole executor. Clean reviews do not require an advisory dispatch; this is conditional routing, not a new mandatory gate.
+
+### Invalidate out-of-requirement repair requests
+
+Every generated finding must be checked against the approved requirements, boundaries, and non-goals. An out-of-requirement finding is retained as `OUT_OF_SCOPE` with its concrete reason and invalidates its proposed repair and any completion authority derived from it; it is not silently treated as a false bug or rewritten as `REFUTED`. If an artifact labels it `IN_SCOPE`, the independent reviewer reclassifies it. The orchestrator must not edit the artifact, hash, or dismissal record to bypass that result. If scope remains uncertain, retain `UNKNOWN` and do not apply a speculative fix. Insufficient finding authority never creates a story or acceptance criterion.
 
 ### Concrete progress action per non-APPROVE verdict
 
@@ -198,7 +206,7 @@ Every non-APPROVE verdict drives a concrete action within the frozen scope:
 - **Unfinished story/COMMENT**: dispatch the named requirement gap to sisyphus, then re-verify. Commentary cannot invent an acceptance criterion.
 - **Tactical plan inadequacy**: adjust HOW within the approved WHAT. A change to WHAT, AC, constraints, boundaries, or non-goals follows the planning approval contract before dispatch.
 - **Admitted confirmed findings**: one bounded sisyphus repair batch, affected automated verification, then fresh independent review.
-- **Plausible/unknown/invalid/inconclusive review**: reviewer-only adjudication, or a user scope decision if existing evidence cannot determine the product requirement. No speculative fixes.
+- **Plausible/unknown/invalid/inconclusive review**: send uncertain or disputed results to Oracle first for evidence analysis. Malformed/stale input may be diagnosed but never fabricated. A user scope decision is required if evidence still cannot determine the product requirement. No speculative fixes.
 - **Only excluded findings remain**: report the exclusions, check the objective evidence, and request completion. Do not prolong the loop to improve the excluded areas.
 
 ### Blocked-stop

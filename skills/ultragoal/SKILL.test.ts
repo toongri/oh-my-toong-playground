@@ -230,7 +230,7 @@ describe("ported from goal (regression): required phrases survive somewhere in b
 
 	test("INCONCLUSIVE status routing survives in the union", () => {
 		expect(combined).toContain("or `INCONCLUSIVE`: completion blocked; no speculative repair");
-		expect(combined).toContain("**Plausible/unknown/invalid/inconclusive review**: reviewer-only adjudication");
+		expect(combined).toContain("**Plausible/unknown/invalid/inconclusive review**: send uncertain or disputed results to Oracle first");
 	});
 });
 

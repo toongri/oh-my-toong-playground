@@ -47,6 +47,20 @@ severity/count suppression, and user-only scope authority.
 These are behavioral decision probes, not end-to-end proof that every future
 review is correct. Runtime tests separately exercise the completion predicates.
 
+## Final-review advisory evaluation
+
+Five fresh baseline samples omitted the Oracle and Daedalus route and retained
+the reviewer-only adjudication wording; they also retained the contradictory
+plan-time-only advisory restriction. Five fresh treatment samples routed every
+uncertain result to Oracle first for bounded requirement-fit and causality
+analysis, used Daedalus only for design alternatives and trade-offs, and kept
+the independent reviewer artifact and final fresh review authoritative.
+
+Treatment samples invalidated out-of-requirement repair and completion authority
+while retaining `OUT_OF_SCOPE` with a reason; they did not rewrite an artifact or
+turn the finding into `REFUTED`. Ordinary clean reviews were unchanged. These
+were fresh-agent behavioral simulations, not executions of the full Oracle/Daedalus review workflow.
+
 Independent review found three scope-gate bypasses, each reproduced before its
 fix: re-planning while completion waits for the state lock, dismissing a plausible
 finding, and reusing single-story auto-confirmation after scope changes. Six new
