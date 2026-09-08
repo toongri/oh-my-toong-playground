@@ -303,7 +303,7 @@ function imageSlot(label: string, path: string | undefined, readEvidence: Eviden
 		return evidenceSlotHtml(label, path, `<p class="evidence-note">임베드 예산 초과 — 아래 경로로 확인</p>`);
 	}
 	context.embeddedBytes += embedBytes;
-	return evidenceSlotHtml(label, path, `<details class="image-view"><summary>원본 크기로 확대</summary></details><div class="image-frame" tabindex="0" role="region" aria-label="${escapeHtml(label)}"><img src="${escapeHtml(embed.dataUri)}" alt="${escapeHtml(label)} evidence"></div>`);
+	return evidenceSlotHtml(label, path, `<details class="image-view"><summary>원본 크기로 확대</summary></details><div class="image-frame" tabindex="0" role="group" aria-label="${escapeHtml(label)}"><img src="${escapeHtml(embed.dataUri)}" alt="${escapeHtml(label)} evidence"></div>`);
 }
 
 /** A visible marker for a required presentation slot the author left unwritten. */
