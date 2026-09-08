@@ -1,28 +1,28 @@
-# 최종 자가 검토 체크리스트 — render 이후, quiz 이전
+# Final self-review checklist — after render, before quiz
 
-마크다운과 HTML이 만들어진 뒤, 문서를 독자에게 넘기기 전에 아래 9축을 스스로
-채점한다. 각 축은 **PASS / N.A / FAIL** 중 하나이고, PASS와 N.A에는 근거(문서의
-줄/섹션 인용 또는 해당 없음의 이유)를 한 줄 적는다. FAIL이 하나라도 있으면
-문서를 고치고 render를 다시 돌린 뒤 처음부터 재채점한다 — FAIL을 남긴 채
-quiz로 넘어가는 경로는 없다.
+After producing the Markdown and HTML, grade yourself on the nine axes below before
+handing the document to the reader. Grade each axis **PASS / N.A / FAIL**; for PASS and N.A,
+write one line of evidence (a document line/section quote or the reason it does not apply).
+If any axis is FAIL, fix the document, run render again, and regrade from the beginning —
+there is no path to the quiz while a FAIL remains.
 
-결과는 `<slug>-final-checklist.md`로 문서 옆에 남긴다. 마지막 줄은
-`CHECKLIST: ALL PASS`여야 한다(N.A 포함 허용, FAIL 잔존 시 이 줄을 쓸 수 없다).
+Save the result beside the document as `<slug>-final-checklist.md`. The last line must be
+`CHECKLIST: ALL PASS` (N.A is allowed; this line cannot be written while any FAIL remains).
 
-| # | 축 | PASS 기준 |
+| # | Axis | PASS criteria |
 |---|---|---|
-| 1 | 시스템 분해 | 시스템 레벨 다이어그램이 관여 시스템을 subgraph 경계로 나누고, 각 subgraph 안에 그 시스템의 관련 핵심 자원(모듈·테이블·키)을 실명으로 보여주되, 관련 자원이 2개 이상이면 최소 2개를 보여주고, 정확히 1개뿐인 subgraph는 하나뿐인 이유를 문서에 명시할 때만 허용하며, 시스템 간 엣지에 계약(프로토콜+오가는 것)이 라벨돼 있다 |
-| 2 | 양측 커버리지 | diff가 2개 이상 프로세스(클라이언트+서버 등)에 걸치면, 컴포넌트·도메인·로직 설명이 양쪽 모두를 각자의 아키텍처 어휘로 다룬다. 한쪽 프로세스만 바꾸는 diff면 N.A |
-| 3 | 목표→그림→해석 | 모든 mermaid 앞에 이 그림으로 확인할 구체 목표 1문장, 뒤에 실제 그려진 엣지/노드에서 나온 구조적 관찰이 있다. "이 그림은 흐름을 보여준다" 류 일반론은 FAIL |
-| 4 | 상태 다이어그램 | diff가 건드린 개념이 생명주기(3+ 상태 또는 잠금·만료·확정 같은 명명된 전이)를 가지면 stateDiagram-v2가 있고 전이 트리거가 라벨돼 있다. 생명주기가 정말 없으면 N.A(이유 명기) |
-| 5 | 로직 flowchart | 변경된 로직 중 3+ 분기(에러·엣지 경로 포함)를 가진 것이 flowchart로 있다. 그런 로직이 없으면 N.A |
-| 6 | 실재 식별자+변경 마커 | 노드·participant·라벨이 코드베이스의 실재 식별자이고, 이 diff가 바꾼 요소에 다이어그램 타입에 맞는 변경 마커(`:::changed`/`classDef changed`, `sequenceDiagram`에서는 변경 단계를 지목하는 `Note`)가 있다. generic 노드("service→DB")는 FAIL |
-| 7 | 시퀀스 완결성 | sequenceDiagram의 동기 호출이 activation(+)·return(−) 쌍으로 균형이고, 반환 없는 메시지는 async(`-)`)로 명시돼 있다 |
-| 8 | 사용자 여정 | 사용자 대면 표면(화면·입력·표시·알림·진입점)을 건드린 diff면, 사용자의 첫 행동에서 시작해 실제 분기를 지나 최종적으로 보는 것까지의 여정 flowchart가 경계 블록에 있다. 사용자 대면 표면이 없으면 경계 블록의 근거 있는 waiver 문장을 인용하고 N.A |
-| 9 | HTML 렌더 | render.ts가 exit 0으로 끝났고, HTML이 현재 마크다운에서 재생성된 것이다(마크다운을 고쳤으면 재렌더) |
+| 1 | System decomposition | The system-level diagram separates involved systems with subgraph boundaries and names each system's relevant core resources (modules, tables, keys) inside its subgraph. Show at least two resources when two or more are relevant; a subgraph with exactly one is allowed only when the document explains why there is only one. Edges between systems are labeled with the contract (protocol + what flows). |
+| 2 | Both-sides coverage | If the diff spans two or more processes (such as client + server), component, domain, and logic explanations cover both sides in their respective architecture vocabulary. N.A if the diff changes only one process. |
+| 3 | Goal→diagram→interpretation | Every mermaid diagram has one sentence before it stating a concrete goal the picture lets the reader verify, and structural observations after it grounded in the edges/nodes actually drawn. Generic statements such as "이 그림은 흐름을 보여준다" are FAIL. |
+| 4 | State diagram | If a touched concept has a lifecycle (3+ states or named transitions such as lock, expire, or confirm), a stateDiagram-v2 is present with transition triggers labeled. N.A only if there truly is no lifecycle (state the reason). |
+| 5 | Logic flowchart | Changed logic with 3+ branches (including error and edge paths) is shown as a flowchart. N.A if no such logic exists. |
+| 6 | Real identifiers + change markers | Nodes, participants, and labels are real codebase identifiers, and elements changed by this diff have markers appropriate to the diagram type (`:::changed`/`classDef changed`, or a `Note` identifying the changed step in `sequenceDiagram`). Generic nodes ("service→DB") are FAIL. |
+| 7 | Sequence completeness | Synchronous calls in sequenceDiagram have balanced activation (+)/return (−) pairs, and messages without returns are explicitly async (`-)`). |
+| 8 | User journey | If the diff touches a user-facing surface (screen, input, display, notification, entry point), the boundary block has a journey flowchart from the user's first action through actual branches to what they finally see. If there is no user-facing surface, quote the reasoned waiver sentence in the boundary block and mark N.A. |
+| 9 | HTML render | render.ts exited with 0, and the HTML was regenerated from the current Markdown (rerender after Markdown edits). |
 
-축 8의 N.A는 waiver 문장이 문서에 실제로 존재할 때만 가능하다 — 체크리스트에만
-이유를 적고 문서에 waiver가 없으면 FAIL이다.
+Axis 8 can be N.A only when the waiver sentence actually exists in the document — a reason
+written only in the checklist, with no waiver in the document, is FAIL.
 
-<!-- lazy: 지침 레벨 체크리스트. 축이 반복적으로 새면 rubric.md R-항목 승격 +
-     structure-check 스크립트 검증이 업그레이드 경로다. -->
+<!-- lazy: Instruction-level checklist. If an axis repeatedly slips through, the upgrade path is
+     promotion to an R-item in rubric.md plus validation in the structure-check script. -->

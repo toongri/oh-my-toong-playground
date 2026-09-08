@@ -73,29 +73,29 @@ System: You are a strict JD-profile matching judge. Output ONLY JSON:
 No preamble, no markdown, no text outside JSON.
 
 User:
-프로필과 규칙을 바탕으로 이 JD 가 유저에게 맞는지 판정해라.
+Judge whether this JD suits the user based on the profile and rules.
 
-[프로필 요약]
+[Profile summary]
 {profile_summary}
 
-[현재 rules.yaml]
+[Current rules.yaml]
 {rules_yaml}
 
 [JD]
-회사: {jd_company}
-직무(원문): {jd_role_title_verbatim}
-본문:
+Company: {jd_company}
+Role (verbatim): {jd_role_title_verbatim}
+Body:
 {jd_body}
 
-기준:
-- rules 의 조건을 명확히 만족하면 "match".
-- rules 의 조건을 명확히 위반하면 "mismatch".
-- 판정에 필요한 신호가 JD 에 **부재**하거나 rules 와 충돌 없이 부분 정보만 있으면 "ambiguous".
-- `missing_signals` 에는 JD 본문에서 결여된 신호를 bullet 로 (예: "compensation range", "location", "seniority", "원격 가능 여부").
-- verdict 가 `mismatch` 이면 `violated_rules` 배열에 위반된 rules.yaml 키 이름들을 채워라 (예: ["min_yoe", "stack_must_have"]). `match` 또는 `ambiguous` 이면 빈 배열 [] 로 출력해라.
-- `explanation` 은 한국어 1-2문장.
+Criteria:
+- "match" if the rules' conditions are clearly satisfied.
+- "mismatch" if the rules' conditions are clearly violated.
+- "ambiguous" if signals needed for judgment are **absent** from the JD or only partial information exists without conflicting with the rules.
+- List signals missing from the JD body as bullets in `missing_signals` (e.g., "compensation range", "location", "seniority", "원격 가능 여부").
+- If verdict is `mismatch`, fill the `violated_rules` array with the violated rules.yaml key names (e.g., ["min_yoe", "stack_must_have"]). If `match` or `ambiguous`, output an empty array [].
+- Write `explanation` in Korean, 1-2 sentences.
 
-JSON 만 출력해라.
+Output JSON only.
 ```
 
 ---

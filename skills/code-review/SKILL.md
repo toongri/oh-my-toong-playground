@@ -90,7 +90,7 @@ Determine range and setup for subsequent steps:
 
 This skill assumes the orchestrator is already running inside a worktree dedicated to this review (the caller is responsible for creating the worktree). Therefore: **fetch the PR ref AND check it out**. The working directory must reflect the post-change state of the PR so that all subsequent code reading (Phase 2 verification, chunk-reviewer Step 2) sees the actual code under review.
 
-**PR ID 추출 규칙**: 사용자가 URL(`https://github.com/<org>/<repo>/pull/<N>`) 형식으로 호출하면, 아래 bash로 진입하기 *전에* trailing path segment에서 numeric `<N>`을 추출해 `<number>` 자리에 substitute하라. URL을 그대로 substitute하면 `git fetch origin pull/<URL>/head`가 invalid refspec으로 실패하고 `git checkout -B pr-<URL>`이 invalid 브랜치명으로 실패한다.
+**PR ID extraction rule**: When the user supplies a URL (`https://github.com/<org>/<repo>/pull/<N>`), extract numeric `<N>` from the trailing path segment and substitute it for `<number>` *before* entering the bash block below. Substituting the URL itself makes `git fetch origin pull/<URL>/head` fail with an invalid refspec and `git checkout -B pr-<URL>` fail with an invalid branch name.
 
 ```bash
 set -euo pipefail
@@ -203,7 +203,7 @@ A fresh code-reviewer agent has no ambient session to check for an active artifa
 
 When the user gives a vague answer that is not an explicit deferral, refine ONCE with a specific follow-up:
 
-각 follow-up 메시지는 deferral 옵션을 함께 안내하여 사용자가 "skip / 그냥 리뷰해줘 / 없어" 어휘를 몰라도 escape 가능하도록 한다.
+Include the deferral option in every follow-up so the user can opt out without already knowing the phrases "skip / 그냥 리뷰해줘 / 없어".
 
 | User says | Follow-up |
 |-----------|-----------|

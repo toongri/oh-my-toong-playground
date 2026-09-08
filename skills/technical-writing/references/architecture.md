@@ -133,7 +133,7 @@ Before:
 After:
 > 리버스 프록시 설정을 적용하면 네트워크 지연 문제를 최소화할 수 있어요.
 
-좋은 예:
+Good example:
 > 환경 변수를 사용하면 코드 수정 없이 스테이징과 프로덕션 설정을 분리할 수 있어요.
 
 **P13. Explain usefulness before listing features:**
@@ -146,7 +146,7 @@ After:
 
 **P26. Artifact-first: surface the primary deliverable early** (don't bury the copy-pasteable artifact):
 
-문서의 핵심 산출물이 복사해서 바로 실행할 수 있는 명령어, 코드 스니펫, 설정값인 경우, 해당 산출물을 문서 앞부분에 먼저 노출합니다. 한 줄 컨텍스트가 앞에 올 수 있고(P9와 호환), 옵션 상세 설명은 산출물 이후에 배치합니다. 이 원칙은 value-first(P12/P13)를 산출물 자체에 적용한 것입니다 — 정확성이나 운영 관련 주장이 아닙니다.
+When the document's primary deliverable is a command, code snippet, or configuration value that can be copied and run immediately, surface it near the beginning of the document. A single line of context may precede it (compatible with P9); place detailed option explanations after the deliverable. This principle applies value-first (P12/P13) to the deliverable itself — it makes no claims about correctness or operations.
 
 Before:
 > 컨테이너 로그를 실시간으로 확인하면 장애 원인을 빠르게 파악할 수 있습니다. `-f`는 실시간 추적, `--tail`은 마지막 N줄 출력, `web`은 대상 컨테이너를 의미합니다. 위 옵션을 조합한 명령은 다음과 같습니다.
@@ -161,7 +161,7 @@ After:
 > ```
 > `-f`는 실시간 추적, `--tail 100`은 마지막 100줄만 출력합니다.
 
-좋은 예:
+Good example:
 > 로컬 환경을 초기화하려면 다음을 실행하세요.
 > ```bash
 > ./scripts/setup.sh

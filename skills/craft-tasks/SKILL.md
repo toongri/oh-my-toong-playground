@@ -115,15 +115,15 @@ Everything else about a task is expressed through the PM tool's **native fields,
 
 **Shared design invariants are single-sourced on the parent.** Cross-cutting rules (the design's invariants, shared definitions) live once on the **parent** unit; each task inherits them through the native parent relation rather than re-declaring or prose-referencing them — the same Tier-A placement craft-issue uses. This keeps the invariant single-sourced so tasks cannot drift it.
 
-### 예시 — 확정된 부모 설계와 자식 티켓 1개
+### Example — a settled parent design and one child ticket
 
 - **부모 설계(확정)** — `sync.yaml`의 `skills.items`를 시작점으로 삼아 각 `SKILL.md`의 `Skill(...)` 참조를 재귀적으로 해석하고, 중복을 제거한 스킬 의존성 폐쇄만 대상 플랫폼의 스킬 디렉터리에 배포한다. 누락·순환 참조는 동기화를 실패시키며 폐쇄 밖의 스킬은 건드리지 않는다. 경계는 `tools/sync.ts`, `tools/sync.test.ts`, 플랫폼별 스킬 배포 경로다.
-- **자식 티켓 제목** — `sync: 스킬 의존성 폐쇄 수집 단계 추가` (순번·`(item N)` 없이 변경 내용만)
+- **자식 티켓 제목** — `sync: 스킬 의존성 폐쇄 수집 단계 추가` (only the change, without ordinals or `(item N)`)
   - **목적** — 확정된 부모 설계에 따라 `skills.items`와 각 `SKILL.md`의 참조를 재귀 수집해 플랫폼별 배포 단계가 동일한 폐쇄 집합을 사용하게 한다.
   - **변경 대상** — `tools/sync.ts`의 `skills.items` 해석·배포 대상 수집 로직과 `tools/sync.test.ts`의 중복·누락·순환 참조 테스트.
   - **완료 조건 (DoD)** — `skills.items: [craft-tasks]`에서 시작해 참조된 스킬을 중복 없이 배포 대상에 포함하고 폐쇄 밖의 스킬은 포함하지 않는다(검증: `bun test tools/sync.test.ts`). 누락·순환 참조는 부분 배포 없이 명시적 오류로 실패한다(검증: `bun test tools/sync.test.ts`).
 
-(body는 위 세 섹션뿐이다. 의존·앵커·부모 링크는 body에 쓰지 않는다 — hard 의존 없음이면 관계 필드도 미설정, 앵커는 부모의 settled-parent record에만 있고 자식은 `parentId`로 상속한다.)
+(The body contains only the three sections above. Do not write dependencies, anchors, or parent links in the body — with no hard dependency, leave the relation field unset too; the anchor lives only in the parent's settled-parent record, and the child inherits it through `parentId`.)
 
 ---
 

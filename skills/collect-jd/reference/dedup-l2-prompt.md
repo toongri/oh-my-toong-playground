@@ -63,26 +63,26 @@ The "reason" field must be written in Korean and must be concise (1-2 sentences)
 ### User
 
 ```
-아래 두 JD 가 "같은 채용 포지션"인지 판정해라.
+Judge whether the two JDs below represent "the same hiring position."
 
 [JD A]
-회사: {A_company}
-직무명(원문): {A_role_title}
-본문:
+Company: {A_company}
+Role title (verbatim): {A_role_title}
+Body:
 {A_body}
 
 [JD B]
-회사: {B_company}
-직무명(원문): {B_role_title}
-본문:
+Company: {B_company}
+Role title (verbatim): {B_role_title}
+Body:
 {B_body}
 
-판정 기준:
-- same=true: 같은 회사이고, 같은 팀·같은 롤·같은 seniority 레벨이면 중복으로 판정한다.
-- same=false: 같은 회사여도 팀이 다르거나, seniority 차이가 명확하거나, 주요 업무 범위가 다르면 별도 포지션으로 판정한다.
-- 회사가 다르면 항상 same=false.
+Judgment criteria:
+- same=true: Judge as duplicates if they have the same company, team, role, and seniority level.
+- same=false: Judge as separate positions even at the same company if the teams differ, seniority clearly differs, or the primary scope of responsibilities differs.
+- Always same=false if the companies differ.
 
-본문 전체를 비교하고, 결과를 JSON 만 출력해라.
+Compare the entire bodies and output the result as JSON only.
 ```
 
 ---
@@ -110,9 +110,10 @@ Field specification:
 
 ## 6. Decision Rules (how the skill code interprets the response)
 
-### Mechanical short-circuit (LLM 호출 전 선결정)
+<a id="mechanical-short-circuit-llm-호출-전-선결정"></a>
+### Mechanical short-circuit (Decision Before the LLM Call)
 
-`A.parent_url == B.parent_url AND A.sub_position != B.sub_position` → `same: false` (LLM 판정 없이 결정). 같은 parent의 fan-out 자식이 다른 `sub_position`이면 항상 별개 JD.
+`A.parent_url == B.parent_url AND A.sub_position != B.sub_position` → `same: false` (decide without LLM judgment). Fan-out children of the same parent with different `sub_position` values are always separate JDs.
 
 ### Normal response
 

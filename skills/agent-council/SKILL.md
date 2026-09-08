@@ -15,14 +15,14 @@ Advisory body providing multiple AI perspectives on uncertain decisions. When al
 
 ## Quick Reference
 
-| 상황 | Council 필요? | 이유 |
+| Situation | Council Needed? | Reason |
 |------|---------------|------|
-| 아키텍처 트레이드오프 | ✅ Yes | 다양한 관점 필요 |
-| 주관적 코드 품질 판단 | ✅ Yes | 명확한 정답 없음 |
-| 리스크 평가 불일치 | ✅ Yes | 관점에 따라 달라짐 |
-| 컴파일/문법 에러 | ❌ No | 객관적 해결책 존재 |
-| 코드 스타일 | ❌ No | ktlint가 처리 |
-| 명확한 스펙 요구사항 | ❌ No | 구현만 하면 됨 |
+| Architectural trade-offs | ✅ Yes | Multiple perspectives needed |
+| Subjective code quality judgments | ✅ Yes | No clear correct answer |
+| Risk assessment disagreements | ✅ Yes | Depends on perspective |
+| Compilation/syntax errors | ❌ No | An objective solution exists |
+| Code style | ❌ No | Handled by ktlint |
+| Clear spec requirements | ❌ No | Only implementation needed |
 
 ## When to Use vs When NOT to Use
 
@@ -238,20 +238,20 @@ Chairman synthesizes council opinions into:
 
 | Mistake | Why It's Wrong | Fix |
 |---------|----------------|-----|
-| 컴파일 에러에 council 호출 | 객관적 해결책 있음, 시간 낭비 | 직접 수정 |
-| context 없이 질문만 전달 | 맥락 없이 판단 불가 | 평가 기준, 프로젝트 컨텍스트 포함 |
-| council 결정을 그대로 수용 | council은 자문, 결정은 호출자 | 의견 참고 후 직접 결정 |
-| 모든 결정에 council 호출 | 불필요한 오버헤드 | 트레이드오프/주관적 판단에만 사용 |
-| 한국어로 council 호출 | 모델 간 일관성 저하 | 영어로 프롬프트 작성 |
+| Calling council for compilation errors | An objective solution exists; wastes time | Fix directly |
+| Sending only a question without context | Judgment is impossible without context | Include evaluation criteria and project context |
+| Accepting the council's decision as-is | Council advises; the caller decides | Consider the opinions and make your own decision |
+| Calling council for every decision | Unnecessary overhead | Use only for trade-offs/subjective judgments |
+| Calling council in Korean | Reduces consistency across models | Write prompts in English |
 
 ## Red Flags - STOP Before Calling Council
 
 | Red Flag | Reality |
 |----------|---------|
-| "빨리 결정해야 해서 council 생략" | 중요한 결정일수록 다양한 관점 필요 |
-| "내 판단이 맞으니까 확인만" | 확인 편향 - council은 반론을 들으려고 쓰는 것 |
-| "에러 메시지가 뭔지 모르겠어서" | 객관적 문제는 council 대상 아님 |
-| "council이 결정해줄 거야" | Council은 조언, 결정 책임은 호출자 |
+| "빨리 결정해야 해서 council 생략" | More important decisions need more diverse perspectives |
+| "내 판단이 맞으니까 확인만" | Confirmation bias — council is used to hear counterarguments |
+| "에러 메시지가 뭔지 모르겠어서" | Objective problems are outside council's scope |
+| "council이 결정해줄 거야" | Council advises; the caller is responsible for the decision |
 
 ## Degradation Policy
 

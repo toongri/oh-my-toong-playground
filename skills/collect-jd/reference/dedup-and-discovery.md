@@ -202,25 +202,25 @@ See [Per-Site Crawl Memory](#per-site-crawl-memory) for full schema semantics.
 ```yaml
 pagination:
   how:
-    origin: auto | interview         # 누가 만들었는지
+    origin: auto | interview         # who created it
     pattern: <enum 13>               # see Tier A (9) + Interview (4)
-    params: {}                       # pattern-specific (start, increment, stop_condition 등)
-    prose: |                         # 자유서술. interview 면 mandatory, auto 면 optional
+    params: {}                       # pattern-specific (start, increment, stop_condition, etc.)
+    prose: |                         # free-form. Mandatory for interview, optional for auto
       <free-form description>
   previous_how: []                   # 3-slot inline ring buffer (LRU; oldest evicted on 4th push)
-  invalidated_at: null               # ISO8601 (마지막 invalidation 시각). 정상 상태는 null
+  invalidated_at: null               # ISO8601 (last invalidation time). Null in normal state
 ```
 
-기존 `pagination.method` 필드는 **drop** (derivable from `how.origin`).
+**Drop** the existing `pagination.method` field (derivable from `how.origin`).
 
 | Field | Type | Description |
 |---|---|---|
-| `origin` | `auto` \| `interview` | `auto` = Tier A 자동 감지; `interview` = 사용자 인터뷰 결과 |
-| `pattern` | enum (13) | 아래 Tier A 9-pattern + Interview 4-pattern 중 하나 |
-| `params` | object | pattern-specific 파라미터 (예: `start: 1`, `increment: 50`, `stop_condition: empty_array`) |
-| `prose` | string | 자유서술. `origin: interview` 면 mandatory. `origin: auto` 면 optional. |
-| `previous_how` | array (max 3) | 3-slot inline ring buffer — 과거 invalidated how 목록 |
-| `invalidated_at` | ISO8601 \| null | 마지막 invalidation 시각. 정상 상태는 `null` |
+| `origin` | `auto` \| `interview` | `auto` = Tier A auto-detection; `interview` = user interview result |
+| `pattern` | enum (13) | One of the Tier A 9 patterns + Interview 4 patterns below |
+| `params` | object | Pattern-specific parameters (e.g., `start: 1`, `increment: 50`, `stop_condition: empty_array`) |
+| `prose` | string | Free-form description. Mandatory for `origin: interview`. Optional for `origin: auto`. |
+| `previous_how` | array (max 3) | 3-slot inline ring buffer — list of previously invalidated how values |
+| `invalidated_at` | ISO8601 \| null | Last invalidation time. `null` in normal state |
 
 ### Tier A 9-pattern Catalog
 
@@ -255,10 +255,10 @@ When Tier A completely fails (all 9 patterns unmatched), **AskUserQuestion is ma
 
 | `pattern` enum | Description | `prose` requirement |
 |---|---|---|
-| `manual_list` | 사용자가 URL 목록 또는 HTML 을 직접 붙여넣기 | mandatory — 복붙 방법 및 URL 목록 기술 |
-| `interview_script` | 사용자 제공 스크립트 경로 또는 명령어 | mandatory — 스크립트 경로 + 실행 방법 |
-| `interview_mcp` | 전용 MCP (예: `mcp:notion`) | mandatory — MCP 이름 + 호출 절차 |
-| `interview_api` | 사용자 제공 API URL 패턴 | mandatory — URL 패턴 + 반복 조건 (stop on empty 등) |
+| `manual_list` | User directly pastes a URL list or HTML | mandatory — describe the copy/paste method and URL list |
+| `interview_script` | User-provided script path or command | mandatory — script path + execution method |
+| `interview_mcp` | Dedicated MCP (e.g., `mcp:notion`) | mandatory — MCP name + invocation procedure |
+| `interview_api` | User-provided API URL pattern | mandatory — URL pattern + iteration condition (stop on empty, etc.) |
 
 Store result as `how={origin: interview, pattern: <one of 4>, params: {...}, prose: <free-form>}`. From next session onward, `pagination.how` is already set → skip Tier A → execute directly.
 
@@ -417,8 +417,8 @@ digraph discover_listing {
 | "first-page only 저장 + collection complete 보고" | ❌ First-page-only without exhaustive pagination is a violation |
 | "Skip pagination pattern check and fall back to manual URL list paste" | ❌ Tier A 9-pattern attempt is mandatory. Only if user explicitly says 'skip Tier A' may interview shortcut apply |
 | "Auto-detect succeeded but didn't confirm last page, collected only 3 pages" | ❌ Continue until empty response or `has_next_page == false` |
-| "First-time discovery skipping straight to AskUserQuestion without attempting Tier A 9-pattern catalog" | ❌ first-run 에 `pagination.how` 부재 시 Tier A 9 패턴 모두 시도 mandatory. user 직접 'skip Tier A' 발화 없이 인터뷰 shortcut 금지 |
-| "Returning 0 anchors when execution failed (or invalidation-retry-fail) silently" | ❌ `discover_listing` 은 raise 또는 explicit `was_invalidated: true` 반환만 허용. silent empty `[]` 반환은 Per-Site Memory 의 `discovered − seen = ∅` false-clean 위험 |
+| "First-time discovery skipping straight to AskUserQuestion without attempting Tier A 9-pattern catalog" | ❌ On first run, when `pagination.how` is absent, attempting all 9 Tier A patterns is mandatory. Interview shortcuts are forbidden unless the user explicitly says 'skip Tier A' |
+| "Returning 0 anchors when execution failed (or invalidation-retry-fail) silently" | ❌ `discover_listing` may only raise or return an explicit `was_invalidated: true`. Silently returning empty `[]` risks a false-clean `discovered − seen = ∅` result in Per-Site Memory |
 
 ### Counterexample
 
@@ -676,7 +676,7 @@ Crash recovery: skip invalid JSON lines in seen.jsonl + warn. After processing, 
 
 | Legacy field | New location | Notes |
 |---|---|---|
-| `marker_type` + `last_seen_marker` | → `seen.identifier_kind` + `seen.items_path` | Cursor-based rescan replaced by Algorithm B (L1 TTL canonical) — see "Re-crawl Algorithm (Algorithm B Canonical)" 섹션. |
+| `marker_type` + `last_seen_marker` | → `seen.identifier_kind` + `seen.items_path` | Cursor-based rescan replaced by Algorithm B (L1 TTL canonical) — see the "Re-crawl Algorithm (Algorithm B Canonical)" section. |
 | `coverage_verification` | → `coverage_proof` | Renamed; fields preserved |
 | top-level `range_covered` | → `audit_trail.range_covered` | Moved under `audit_trail` |
 | top-level `crawl_history` | → `audit_trail.crawl_history` | Moved under `audit_trail` |
@@ -748,8 +748,8 @@ One ledger file per source per crawl session. The ledger is the source of truth 
 
 ### Path Schema
 
-**`session_id` format**: `<UTC_ISO_compact>-<random8>` (예: `20260428T103015-a1b2c3d4`).
-한 collect-jd 호출 = 한 session_id. session_id는 호출 시점에 1회 생성되어 모든 source의 ledger 파일명에 동일 값으로 사용. 같은 날짜 재실행도 다른 session_id를 받으므로 ledger 파일이 분리되어 Coverage Gate 집계 오염을 형식적으로 봉쇄.
+**`session_id` format**: `<UTC_ISO_compact>-<random8>` (e.g., `20260428T103015-a1b2c3d4`).
+One collect-jd invocation = one session_id. Generate session_id once at invocation and use the same value in every source's ledger filename. Runs on the same date also receive different session_id values, separating ledger files and structurally preventing contamination of Coverage Gate aggregation.
 
 ```
 $OMT_DIR/collect-jd/crawl_state/<source>/ledger-<session_id>.jsonl
@@ -805,7 +805,7 @@ Gate 5 (L2 / TTL recheck)
             `fingerprint_check` save gate (see L2 Algorithm section, line 1040).
         Mapping:
             L2 same:true  → terminal_state=touch_only, classification=na
-            L2 same:false → terminal_state=new_ingest, classification stays pending (Gate 6 갱신)
+            L2 same:false → terminal_state=new_ingest, classification stays pending (updated at Gate 6)
 Gate 6  → row appended (event 3): same id, fresh ts, fanout_check + classification updated
 Gate 7  → row appended (event 4): same id, fresh ts, persist_status set,
             terminal_state finalized
@@ -993,7 +993,7 @@ User may change `identifier_kind` + `identifier_extractor` in `sources.yaml` at 
 Dedup L1/L2 **must always leave a gate execution record**. Silent-skip is forbidden in cases where `jobs/` is empty or L2 conditions are not met. If the `fingerprint_check` field is not set to an explicit value before JD save, reject the save.
 
 - **L1 gate** — must execute on every JD ingest:
-  - jobs empty → `L1_candidates_checked: 0`, `fingerprint_check: pending` (L2 미실행 표시), then proceed to L2 step.
+  - jobs empty → `L1_candidates_checked: 0`, `fingerprint_check: pending` (indicates L2 has not run), then proceed to L2 step.
   - candidates exist → perform normal normalize matching.
 - **L2 gate** — must be evaluated after L1 pass:
   - 0 other JDs with same `company_slug` in `jobs/<company_slug>/` (all sessions) → `L2_evaluated: not_applicable (no_sibling_jds)`, `fingerprint_check: unique`.

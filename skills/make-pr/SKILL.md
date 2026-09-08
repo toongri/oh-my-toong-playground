@@ -110,8 +110,8 @@ After presenting the evidence table, ask only for the target branch confirmation
 
 | # | header | question | options | Included when |
 |---|--------|----------|---------|---------------|
-| 1 | 타겟 브랜치 | 이 PR의 base 브랜치는 어디인가 | 탐지한 후보와 ahead/behind/change scale 근거를 보여주고 사용자가 확인 | Always |
-| 2 | 동기화 방식 | 타겟 브랜치가 앞서 있으면 그 커밋들을 어떻게 가져올까 | **merge** 또는 **rebase**의 의미와 결과를 설명 | Confirmed target is behind |
+| 1 | 타겟 브랜치 | 이 PR의 base 브랜치는 어디인가 | Show the detected candidates and ahead/behind/change scale evidence for user confirmation | Always |
+| 2 | 동기화 방식 | 타겟 브랜치가 앞서 있으면 그 커밋들을 어떻게 가져올까 | Explain the meaning and consequences of **merge** or **rebase** | Confirmed target is behind |
 | 3 | 충돌 처리 | 동기화 중 충돌이 나면 어떻게 처리할까 | **파일별로 확인**, **제안대로 자동 해결**, **현재 브랜치 우선**, **타겟 브랜치 우선** | Synchronization conflicts |
 
 The confirmed `{base-branch}` is used in subsequent git commands. Collect each later decision only when its prerequisite state exists.

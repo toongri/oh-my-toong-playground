@@ -26,7 +26,7 @@ Pass every candidate to Gate 2. Missing an owner or due at this stage is NOT a r
 
 Most candidates are false (chatter, brainstorming ideas, already-done work, hedged talk). A candidate must pass **all five** to be a real action item:
 
-1. **3-part test**: an action needs a concrete deliverable (무엇을); a single owner (누가) and a due (언제까지) complete it. *"If all three are absent, it is a note, not a task."* A missing owner or due does NOT fail the test — it is recovered from adjacent turns (§3) or marked `[미배정]`/`[기한 미정]`, never invented to make the item "pass".
+1. **3-part test**: an action needs a concrete deliverable (what); a single owner (who) and a due (by when) complete it. *"If all three are absent, it is a note, not a task."* A missing owner or due does NOT fail the test — it is recovered from adjacent turns (§3) or marked `[미배정]`/`[기한 미정]`, never invented to make the item "pass".
 2. **Verb-form filter**: an action item starts with a verb (review / approve / draft / send / update). *"Q3 리포트"* is a topic, not an instruction → it must be *"Q3 리포트 초안 작성"* to be an action.
 3. **Independent-completion test**: if one person can finish it independently, it is an action item. Otherwise decompose it or promote it to a project.
 4. **Uptake / agreement gate** (the academic core): a real action item is **ratified by someone in a following turn**. A proposal with no agreement is still at the planning/brainstorming stage → filter it out. (For a decision meeting, the uptake signal is the Approver's approval — see type-schemas.md §3.1.)

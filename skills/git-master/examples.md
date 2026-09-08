@@ -45,9 +45,9 @@ test: 포인트 엔티티 상태 전이 테스트 추가
 
 ## Example 6: Splitting by Concern (10+ Files)
 
-**Situation**: 인증 기능 전체 구현 — 12 파일 변경 (config 2, source 5, test 3, docs 2)
+**Situation**: Full authentication feature implementation — 12 files changed (config 2, source 5, test 3, docs 2)
 
-10+ files → 분할 분석 결과: 4가지 concern 감지 (config / source / test / docs)
+10+ files → split analysis: 4 concerns detected (config / source / test / docs)
 
 **Split result:**
 
@@ -69,24 +69,24 @@ docs: 인증 API 문서 작성
 ```
 
 **Why split?**
-- Config → Source → Test → Docs 순서 (의존성 순서)
-- 각 커밋이 독립적으로 revert 가능
-- `git bisect`로 문제 추적 용이
+- Config → Source → Test → Docs order (dependency order)
+- Each commit can be reverted independently
+- Easy problem tracing with `git bisect`
 
 ## Example 7: Cohesive Multi-File Change (Do NOT Split)
 
-**Situation**: 포인트 적립 기능 구현 — 4 파일 변경이지만 하나의 논리적 변경
+**Situation**: Point accrual feature implementation — 4 files changed, but one logical change
 
 Changed files:
-- `PointService.kt` (비즈니스 로직)
-- `PointRepository.kt` (데이터 접근)
-- `PointServiceTest.kt` (테스트)
-- `PointController.kt` (API 엔드포인트)
+- `PointService.kt` (business logic)
+- `PointRepository.kt` (data access)
+- `PointServiceTest.kt` (tests)
+- `PointController.kt` (API endpoint)
 
-3+ files → 분할 분석 결과: **분할 불필요**
-- 모든 파일이 하나의 기능(포인트 적립)에 종속
-- Service 없이 Controller 동작 불가, Repository 없이 Service 동작 불가
-- 분할하면 중간 커밋이 빌드 실패
+3+ files → split analysis: **no split needed**
+- All files depend on one feature (point accrual)
+- Controller cannot work without Service; Service cannot work without Repository
+- Splitting causes intermediate commits to fail the build
 
 ```
 feat: 포인트 적립 기능 구현
@@ -98,18 +98,18 @@ feat: 포인트 적립 기능 구현
 ```
 
 **Why NOT split?**
-- 4파일이지만 독립적으로 의미 있는 분할 불가능
-- 논리적 응집성 > 파일 수
+- Despite 4 files, no independently meaningful split is possible
+- Logical cohesion > file count
 
 ## Example 8: Different Concerns in Few Files (Must Split)
 
-**Situation**: 2 파일 변경이지만 서로 무관한 변경
+**Situation**: 2 files changed, but the changes are unrelated
 
 Changed files:
-- `AuthService.kt` — 로그인 null 체크 버그 수정 (fix)
-- `UserService.kt` — 변수명 리팩토링 (refactor)
+- `AuthService.kt` — fix a login null-check bug (fix)
+- `UserService.kt` — refactor variable names (refactor)
 
-2 files → 분석 결과: **다른 change type + 다른 도메인 → 분할 필요**
+2 files → analysis: **different change types + different domains → must split**
 
 **Split result:**
 
@@ -122,28 +122,28 @@ refactor: UserService 변수명 및 메서드명 개선
 ```
 
 **Why split?**
-- 다른 change type (fix vs refactor)
-- 다른 도메인 (auth vs user)
-- 각각 독립적으로 revert 가능
-- 파일 수는 적지만 논리적으로 무관
+- Different change types (fix vs refactor)
+- Different domains (auth vs user)
+- Each can be reverted independently
+- Few files, but logically unrelated
 
 ## Example 9: Mixed Changes Across 5 Files
 
-**Situation**: 결제 모듈 작업 중 5 파일 변경 — 버그 수정 + 새 기능 혼합
+**Situation**: 5 files changed while working on the payment module — bug fix + new feature mixed
 
 Changed files:
-- `PaymentService.kt` — 결제 금액 계산 버그 수정 (fix)
-- `PaymentController.kt` — 환불 API 엔드포인트 추가 (feat)
-- `RefundService.kt` — 환불 비즈니스 로직 구현 (feat)
-- `PaymentServiceTest.kt` — 수정된 계산 로직 테스트 (fix 관련)
-- `RefundServiceTest.kt` — 환불 로직 테스트 (feat 관련)
+- `PaymentService.kt` — fix a payment amount calculation bug (fix)
+- `PaymentController.kt` — add a refund API endpoint (feat)
+- `RefundService.kt` — implement refund business logic (feat)
+- `PaymentServiceTest.kt` — test the corrected calculation logic (related to fix)
+- `RefundServiceTest.kt` — test refund logic (related to feat)
 
-5 files → 분석 결과: **2가지 concern (bug fix + new feature) → 분할**
+5 files → analysis: **2 concerns (bug fix + new feature) → split**
 
 **Split result:**
 
 ```
-# Commit 1: Bug fix (먼저 — 더 긴급)
+# Commit 1: Bug fix (first — more urgent)
 fix: 결제 금액 계산 오류 수정
 
 # Commit 2: New feature
@@ -155,21 +155,22 @@ feat: 환불 기능 구현
 ```
 
 **Why split?**
-- Bug fix는 즉시 배포 가능해야 함 (cherry-pick 용이)
-- 새 기능은 별도 리뷰/롤백 가능해야 함
+- The bug fix must be immediately deployable (easy cherry-pick)
+- The new feature must be independently reviewable/revertible
 - Linux kernel: "Bug fixes must come first, then new features"
 
-## Example 10: 기능적 마크다운 파일 변경 — feat/refactor (docs 아님)
+<a id="example-10-기능적-마크다운-파일-변경--featrefactor-docs-아님"></a>
+## Example 10: Functional Markdown File Changes — feat/refactor (Not docs)
 
-**Situation**: oh-my-toong 프로젝트에서 스킬 동작 변경
+**Situation**: Changing skill behavior in the oh-my-toong project
 
 Changed files:
-- `skills/git-master/SKILL.md` — 커밋 타입 분류 기준 추가 (feat)
-- `agents/sisyphus-junior.md` — 위임 금지 규칙 강화 (refactor)
+- `skills/git-master/SKILL.md` — add commit type classification criteria (feat)
+- `agents/sisyphus-junior.md` — strengthen the no-delegation rule (refactor)
 
-**판단 기준**: "시스템 동작을 정의하면 기능, 인간 독자를 위한 참조/공유 정보면 문서"
-- SKILL.md는 AI가 읽고 동작을 결정하는 기능적 파일 → `feat`
-- agents/*.md는 서브에이전트 프롬프트를 정의하는 기능적 파일 → `refactor`
+**Judgment criterion**: "If it defines system behavior, it is functionality; if it provides reference/shared information for human readers, it is documentation"
+- SKILL.md is a functional file that AI reads to determine behavior → `feat`
+- agents/*.md are functional files defining subagent prompts → `refactor`
 
 **Split result:**
 
@@ -182,29 +183,30 @@ refactor: sisyphus-junior 위임 금지 규칙 강화
 ```
 
 **Why NOT docs?**
-- README.md, API 명세서 → 인간 독자를 위한 참조 정보 → `docs`
-- SKILL.md, agents/*.md, rules/*.md → 시스템 동작을 정의 → `feat`/`fix`/`refactor`
+- README.md, API specifications → reference information for human readers → `docs`
+- SKILL.md, agents/*.md, rules/*.md → define system behavior → `feat`/`fix`/`refactor`
 
-## Example 11: 코드 리뷰 수정 — Process가 아닌 Product 기술
+<a id="example-11-코드-리뷰-수정--process가-아닌-product-기술"></a>
+## Example 11: Code Review Changes — Describe Product, Not Process
 
-**Situation**: 코드 리뷰에서 3가지 지적 사항 수정 — 2 파일 변경
+**Situation**: Addressing 3 code review findings — 2 files changed
 
-리뷰 피드백:
-- P1-1: persistence 저장 시점이 Area 완료 단위여서 중간 진행 유실 가능
-- P2-1: wrapup 레퍼런스에 적용 대상이 빠져있음
-- P2-2: PointService 메서드 네이밍이 불명확
+Review feedback:
+- P1-1: persistence saves only on Area completion, risking loss of intermediate progress
+- P2-1: wrapup reference omits its applicable targets
+- P2-2: PointService method naming is unclear
 
 Changed files:
-- `persistence.md` — 저장 시점 변경 (P1-1) + wrapup 레퍼런스 내용 추가 (P2-1)
-- `PointService.kt` — 메서드명 개선 (P2-2)
+- `persistence.md` — change save timing (P1-1) + add wrapup reference content (P2-1)
+- `PointService.kt` — improve method names (P2-2)
 
-2 files → 분석 결과: 2 파일이지만 3가지 독립적 변경 → **분할 필요**
+2 files → analysis: 2 files, but 3 independent changes → **must split**
 
-| 리뷰 항목 | 실제 변경 | 타입 | 독립적? |
+| Review Item | Actual Change | Type | Independent? |
 |-----------|----------|------|--------|
-| P1-1 | 저장 시점을 Step 완료 단위로 변경 | fix | Yes |
-| P2-1 | wrapup 레퍼런스에 적용 대상 명시 | fix | Yes |
-| P2-2 | PointService 메서드명 개선 | refactor | Yes |
+| P1-1 | Change saving to occur on Step completion | fix | Yes |
+| P2-1 | Specify applicable targets in the wrapup reference | fix | Yes |
+| P2-2 | Improve PointService method names | refactor | Yes |
 
 **BAD (meta-commit):**
 
@@ -226,6 +228,6 @@ refactor: PointService 메서드명 개선
 ```
 
 **Why split and rename?**
-- 각 커밋이 독립적으로 revert 가능
-- `git log`만으로 변경 내용 파악 가능 (리뷰 문서 참조 불필요)
-- P2-2는 버그가 아닌 네이밍 개선 → `refactor` (리뷰에서 나왔다고 전부 `fix` 아님)
+- Each commit can be reverted independently
+- Changes are understandable from `git log` alone (no review document needed)
+- P2-2 improves naming rather than fixing a bug → `refactor` (review findings are not all `fix`)

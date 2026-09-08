@@ -99,7 +99,7 @@
 - Pick which structural section actually carries the writer's energy, expand it
 - Compress or delete the sections that exist only for completeness
 - Rewrite "헷갈렸던 지점" with one specific stuck moment rather than a polished list
-- If "한 줄 요약" wasn't earned (the body doesn't actually deliver a 한 줄's worth of insight), delete it
+- If "한 줄 요약" wasn't earned (the body doesn't actually deliver a single line's worth of insight), delete it
 
 ---
 

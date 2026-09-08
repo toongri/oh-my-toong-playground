@@ -1,13 +1,13 @@
-# Presentation Design System (심플)
+# Presentation Design System (Simple)
 
-디자인 스타일 선택에서 **"2. 자체 디자인 가이드 (심플)"**을 선택했을 때 사용되는 디자인 시스템.
-절제된 미니멀 스타일, 일관된 3단 타이포그래피 위계, 역공학으로 추출한 고품질 패턴 기반.
+The design system used when **"2. 자체 디자인 가이드 (심플)"** is selected as the design style.
+Based on a restrained minimal style, a consistent three-level typography hierarchy, and high-quality patterns extracted through reverse engineering.
 
-> `/frontend-design` 선택 시에는 이 문서 대신 frontend-design skill의 지침을 따른다.
+> When `/frontend-design` is selected, follow the frontend-design skill's guidance instead of this document.
 
 ---
 
-## 1. Dark Theme (기술 발표, 개발 주제)
+## 1. Dark Theme (Technical Presentations, Development Topics)
 
 ```css
 :root {
@@ -24,7 +24,7 @@
   --text-secondary: rgba(255, 255, 255, 0.7);
   --text-muted: rgba(255, 255, 255, 0.4);
 
-  /* Accents — 최대 3색, gradient 조합 가능 */
+  /* Accents — at most 3 colors, may be combined in gradients */
   --accent-1: #00d2ff;   /* cyan */
   --accent-2: #7b2ff7;   /* purple */
   --accent-3: #ff6b6b;   /* coral */
@@ -34,7 +34,7 @@
   --tag-bg: rgba(0, 210, 255, 0.15);
   --tag-color: #00d2ff;
 
-  /* Font — 나눔스퀘어 네오 (본문 기본), @font-face 블럭은 별도 삽입 */
+  /* Font — NanumSquareNeo (default body font), insert @font-face blocks separately */
   --font-family: 'NanumSquareNeo', -apple-system, sans-serif;
 
   /* highlight.js */
@@ -42,7 +42,7 @@
 }
 ```
 
-### Dark 배경 변형 (슬라이드별 미세 변화)
+### Dark Background Variants (Subtle Variation per Slide)
 ```css
 .slide--title  { background: var(--bg-gradient); }
 .slide--problem { background: linear-gradient(180deg, #0a0a0a, #1a0a0a); }
@@ -52,7 +52,7 @@
 
 ---
 
-## 2. Light Theme (기획 제안, 비즈니스 주제)
+## 2. Light Theme (Planning Proposals, Business Topics)
 
 ```css
 :root {
@@ -79,7 +79,7 @@
   --tag-bg: #F0EFFF;
   --tag-color: #6C5CE7;
 
-  /* Font — 나눔스퀘어 네오 (본문 기본), @font-face 블럭은 별도 삽입 */
+  /* Font — NanumSquareNeo (default body font), insert @font-face blocks separately */
   --font-family: 'NanumSquareNeo', -apple-system, sans-serif;
 
   /* highlight.js */
@@ -89,10 +89,10 @@
 
 ---
 
-## 3. 구조 CSS (공통)
+## 3. Structural CSS (Shared)
 
 ```css
-/* 나눔스퀘어 네오 @font-face (필수 weight만 포함) */
+/* NanumSquareNeo @font-face (include only required weights) */
 @font-face {
   font-family: 'NanumSquareNeo';
   src: url(https://hangeul.pstatic.net/hangeul_static/webfont/NanumSquareNeo/NanumSquareNeoTTF-aLt.woff2);
@@ -126,7 +126,7 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
-/* 페이지 단위 스크롤 스냅 */
+/* Page-by-page scroll snap */
 html {
   scroll-snap-type: y mandatory;
   scroll-behavior: smooth;
@@ -139,7 +139,7 @@ body {
   overflow-x: hidden;
 }
 
-/* 슬라이드 기본 — height 고정 + scroll-snap */
+/* Slide defaults — fixed height + scroll-snap */
 .slide {
   height: 100vh;
   display: flex;
@@ -157,7 +157,7 @@ body {
   width: 100%;
 }
 
-/* 다크 테마 슬라이드 구분선 */
+/* Dark theme slide separators */
 .slide + .slide {
   border-top: 1px solid var(--border);
 }
@@ -165,10 +165,10 @@ body {
 
 ---
 
-## 4. 타이포그래피 스케일
+## 4. Typography Scale
 
 ```css
-/* 섹션 라벨 — 작은 카테고리 표시 */
+/* Section label — small category indicator */
 .label {
   font-size: 12px;
   text-transform: uppercase;
@@ -178,7 +178,7 @@ body {
   margin-bottom: 12px;
 }
 
-/* 메인 헤딩 */
+/* Main heading */
 h1 {
   font-size: clamp(2.25rem, 8vw, 3.5rem);
   font-weight: 900;
@@ -199,7 +199,7 @@ h3 {
   margin-bottom: 12px;
 }
 
-/* 본문 설명 */
+/* Body description */
 .desc {
   font-size: 1rem;
   color: var(--text-secondary);
@@ -207,14 +207,14 @@ h3 {
   margin-bottom: 32px;
 }
 
-/* 통계 숫자 */
+/* Statistical figures */
 .stat-num {
   font-size: clamp(1.75rem, 6vw, 2.5rem);
   font-weight: 800;
   color: var(--accent-1);
 }
 
-/* 강조 텍스트 — gradient clip */
+/* Emphasized text — gradient clip */
 .gradient-text {
   background: var(--accent-gradient);
   -webkit-background-clip: text;
@@ -222,7 +222,7 @@ h3 {
   background-clip: text;
 }
 
-/* 헤딩 내 강조 */
+/* Emphasis within headings */
 h2 .em { color: var(--accent-1); }
 h2 .em2 { color: var(--accent-2); }
 h2 .em3 { color: var(--accent-3); }
@@ -230,7 +230,7 @@ h2 .em3 { color: var(--accent-3); }
 
 ---
 
-## 5. 컴포넌트 패턴
+## 5. Component Patterns
 
 ### Card
 ```css
@@ -362,7 +362,7 @@ h2 .em3 { color: var(--accent-3); }
 }
 ```
 
-### Code Block (highlight.js 연동)
+### Code Block (highlight.js Integration)
 ```css
 pre {
   border-radius: 12px;
@@ -440,7 +440,7 @@ pre code {
 
 ### Waterfall Diagram (CSS)
 ```css
-/* 의존성 타임라인, 스팬 소요시간 시각화에 사용 */
+/* Use for dependency timelines and span duration visualization */
 .waterfall { margin-bottom: 24px; }
 .wf-row {
   display: flex;
@@ -476,7 +476,7 @@ pre code {
 }
 ```
 
-HTML 패턴:
+HTML pattern:
 ```html
 <div class="waterfall">
   <div class="wf-row">
@@ -494,8 +494,8 @@ HTML 패턴:
 </div>
 ```
 
-`left`와 `width`는 퍼센트로 타임라인상 위치와 소요시간 비율을 표현한다.
-강조 바: `background: var(--accent-3)`으로 병목 구간 하이라이트.
+`left` and `width` express timeline position and proportional duration as percentages.
+Emphasis bar: Highlight bottleneck intervals with `background: var(--accent-3)`.
 
 ---
 
@@ -547,8 +547,8 @@ HTML 패턴:
 }
 ```
 
-SVG `<defs>` 마커 패턴:
-<!-- 슬라이드 번호를 N에 넣어 전역 id 충돌 방지 -->
+SVG `<defs>` marker pattern:
+<!-- Put the slide number in N to prevent global id collisions -->
 ```html
 <defs>
   <marker id="diag-arrow-s{N}" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
@@ -560,9 +560,9 @@ SVG `<defs>` 마커 패턴:
 </defs>
 ```
 
-> **주의**: HTML 문서에서 `id`는 전역 고유해야 합니다. 같은 프레젠테이션에 `diagram` 슬라이드가 여러 장이거나 Mermaid와 공존할 때, `id="arrow"` 중복은 `url(#arrow)` 참조 오작동을 유발합니다. 반드시 슬라이드 번호를 포함하세요 (예: `diag-arrow-s5`).
+> **Caution**: An `id` must be globally unique within an HTML document. When a presentation has multiple `diagram` slides or they coexist with Mermaid, duplicate `id="arrow"` values cause `url(#arrow)` references to malfunction. You must include the slide number (e.g., `diag-arrow-s5`).
 
-노드 7개 이하 → `diagram` 타입. 초과 또는 시퀀스/ER 다이어그램 → Mermaid CDN 사용.
+7 nodes or fewer → `diagram` type. More nodes, or sequence/ER diagrams → Use Mermaid CDN.
 
 ---
 
@@ -663,9 +663,9 @@ SVG `<defs>` 마커 패턴:
 ```
 
 
-## 6. Fullscreen Toggle (기본 활성)
+## 6. Fullscreen Toggle (Enabled by Default)
 
-발표 모드에서 브라우저 UI를 숨기기 위한 전체화면 토글 버튼. dark/light 모두 기본 포함한다. iOS Safari 등 `requestFullscreen` 미지원 환경에서는 feature detection으로 버튼이 자동 숨김된다.
+A fullscreen toggle button that hides browser UI during presentations. Include by default in both dark/light themes. Feature detection automatically hides the button in environments without `requestFullscreen` support, such as iOS Safari.
 
 ```css
 .fs-btn {
@@ -688,7 +688,7 @@ SVG `<defs>` 마커 패턴:
 @media print { .fs-btn { display: none; } }
 ```
 
-light 테마는 CSS 변수 대신 하드코딩 색상을 사용한다 (`background: rgba(255,255,255,0.75)`, `border: #E5E4E2`, `color: #666`, hover는 accent color).
+The light theme uses hardcoded colors instead of CSS variables (`background: rgba(255,255,255,0.75)`, `border: #E5E4E2`, `color: #666`, accent color on hover).
 
 HTML:
 
@@ -696,7 +696,7 @@ HTML:
 <button class="fs-btn" id="fsBtn" type="button" aria-label="전체화면 전환" title="전체화면 (F)">⛶</button>
 ```
 
-JS (body 끝, hljs 스크립트 뒤에 배치):
+JS (place at the end of body, after the hljs script):
 
 ```js
 (function () {
@@ -719,13 +719,13 @@ JS (body 끝, hljs 스크립트 뒤에 배치):
 })();
 ```
 
-- 아이콘: `⛶` (U+26F6) → 진입, `✕` (U+2715) → 종료
-- F 키 단축키: 전역 토글, input/textarea/contentEditable 포커스 시 비활성
-- `.slide::after` 페이지 번호(우하단)와 충돌하지 않도록 좌하단 배치
+- Icons: `⛶` (U+26F6) → Enter, `✕` (U+2715) → Exit
+- F keyboard shortcut: Global toggle, disabled when input/textarea/contentEditable has focus
+- Place at the bottom left to avoid conflicting with `.slide::after` page numbers (bottom right)
 
 ---
 
-## 7. Page Number (선택적, 다크 테마 기본 활성)
+## 7. Page Number (Optional, Enabled by Default for Dark Theme)
 
 ```css
 body { counter-reset: slide; }
@@ -743,7 +743,7 @@ body { counter-reset: slide; }
 
 ---
 
-## 8. 반응형 (768px 이하)
+## 8. Responsive (768px and Below)
 
 ```css
 @media (max-width: 768px) {
@@ -792,16 +792,16 @@ body { counter-reset: slide; }
 <!-- Light theme -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 
-<!-- 공통 스크립트 (body 끝) -->
+<!-- Shared script (end of body) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script>hljs.highlightAll();</script>
 ```
 
-코드 블럭 마크업:
+Code block markup:
 ```html
 <pre><code class="language-javascript">
 const hello = "world";
 </code></pre>
 ```
 
-지원 언어: `javascript`, `typescript`, `python`, `rust`, `go`, `java`, `kotlin`, `css`, `html`, `bash`, `json`, `yaml`, `sql` 등. `language-` 접두사 필수.
+Supported languages: `javascript`, `typescript`, `python`, `rust`, `go`, `java`, `kotlin`, `css`, `html`, `bash`, `json`, `yaml`, `sql`, etc. The `language-` prefix is required.

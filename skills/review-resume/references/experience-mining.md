@@ -310,7 +310,7 @@ Source secured → Record in Discovered Candidates → Mark as a P.A.R. reinforc
 
 ### Problem Chain Extraction (Problem-Solving sub-protocol)
 
-**Trigger:** 문제 해결 서술이 Isolated(단일 concern 또는 인과 연결 없는 복수 concern 나열) 패턴을 보이는 경우. 유저가 실제로 경험한 chained 구조를 기술하지 않았을 가능성이 높다.
+**Trigger:** The problem-solving narrative shows an Isolated pattern (a single concern, or multiple concerns listed without causal links). The user likely experienced a chained structure but has not described it.
 
 **Diagnostic Context Examples:**
 
@@ -346,10 +346,10 @@ BAD: "어떻게 해결했나요?"
 
 GOOD: "처음에 계획했던 것과 실제로 만든 것을 비교하면 — 어디서 계획이 바뀌었나요? 왜 바뀌었나요?"
 
-**Source quality for cascade extraction:** 답변에 최소 2개의 인과적으로 연결된 concern이 포함되어야 한다 (A가 B를 유발했거나, A가 옵션 X를 제거). 4개 질문 모두 진행한 후에도 병렬 concern만 나오면 → genuinely non-cascading으로 수용.
+**Source quality for cascade extraction:** The answers must include at least 2 causally connected concerns (A caused B, or A eliminated option X). If only parallel concerns emerge after all 4 questions → accept the experience as genuinely non-cascading.
 
 **Exhaustion Path:**
-4개 질문 후 cascade source 미확보 → 문제가 genuinely one-dimensional일 수 있음 → 현재 상태로 수용하고 다음 항목으로 이동.
+No cascade source secured after 4 questions → the problem may be genuinely one-dimensional → accept it as-is and move to the next item.
 
 ---
 

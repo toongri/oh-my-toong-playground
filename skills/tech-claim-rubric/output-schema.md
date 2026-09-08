@@ -1,28 +1,28 @@
-# 역할 어휘 — 이 문서 전용 정의
+# Role Vocabulary — Definitions Local to This Document
 
-- **orchestrator**: 이 schema의 INTERNAL 필드를 읽고 판정·라우팅 로직을 수행하는 downstream 소비자. 모든 내부 필드와 구현 세부사항에 접근할 수 있다.
-- **blackbox consumer**: 이 schema의 PUBLIC 필드만 읽어 안정된 계약을 사용하는 downstream 소비자. INTERNAL 필드와 구현 세부사항에는 접근하지 않는다.
+- **orchestrator**: a downstream consumer that reads this schema's INTERNAL fields and performs verdict and routing logic. It can access all internal fields and implementation details.
+- **blackbox consumer**: a downstream consumer that reads only this schema's PUBLIC fields to use a stable contract. It does not access INTERNAL fields or implementation details.
 
 # Examiner Output Schema (v4.1)
 
 <!-- schema_version: "v4.1" -->
 <!-- v4.0 changes:
-  - structural_verdict (PUBLIC) 필드 추가: A5 scanability 축의 PASS/P1/FAIL을 PUBLIC으로 노출.
-    blackbox consumer readability-fix routing trigger 및 orchestrator Loop 2 gate에서 사용.
-  - final_verdict 도출 기준: A1-A4 no FAIL AND count(P1 across A1-A4) < 3 AND structural_verdict ∈ {PASS, P1} → APPROVE.
-    (v3까지는 A1-A5 모두 PASS 조건; v4는 P1 최대 2개까지 허용하는 permissive 기준)
-  - ownership-scope critical_rule_flag 제거: A4 ownership-scope axis의 P1 verdict로 대체됨.
+  - Added structural_verdict (PUBLIC): exposes the A5 scanability axis's PASS/P1/FAIL as PUBLIC.
+    Used by the blackbox consumer readability-fix routing trigger and orchestrator Loop 2 gate.
+  - final_verdict derivation criterion: A1-A4 no FAIL AND count(P1 across A1-A4) < 3 AND structural_verdict ∈ {PASS, P1} → APPROVE.
+    (through v3, A1-A5 all had to PASS; v4 uses a permissive criterion allowing up to two P1 verdicts)
+  - Removed ownership-scope critical_rule_flag: replaced by the A4 ownership-scope axis's P1 verdict.
     (see a4-ownership-scope.md integrity_suspected)
 -->
 <!-- v4.1 changes:
-  - interview_hints content가 4-요소 앵커드 스캐폴드(인용/문제/이유/제안, newline-delimited)로 격상.
-    type은 여전히 string[]; final_verdict/structural_verdict 필드 및 도출 로직 불변.
-    Vocabulary rule 확장: 문제/이유/제안 줄에 A[1-5] 코드·영문 axis name(Scanability 포함) 금지. 인용: 줄은 면제.
+  - interview_hints content upgraded to a four-element anchored scaffold (인용/문제/이유/제안, newline-delimited).
+    The type remains string[]; final_verdict/structural_verdict fields and derivation logic are unchanged.
+    Expanded Vocabulary rule: A[1-5] codes and English axis names (including Scanability) are forbidden in 문제/이유/제안 lines. The 인용: line is exempt.
 -->
 
 ## Purpose
 
-이 문서는 `tech-claim-examiner` agent의 output contract를 정의. blackbox consumer / orchestrator 등 downstream skill이 이 schema를 참조해 examiner output을 parsing.
+This document defines the `tech-claim-examiner` agent's output contract. Downstream skills such as blackbox consumers / orchestrators refer to this schema when parsing examiner output.
 
 ---
 
@@ -30,7 +30,7 @@
 
 ### Top-level fields
 
-모든 필드에 PUBLIC / INTERNAL 태그 부여. INTERNAL 필드는 orchestrator만 접근 가능.
+Every field is tagged PUBLIC / INTERNAL. Only the orchestrator can access INTERNAL fields.
 
 ```yaml
 schema_version: string              # PUBLIC. ex: "v4.1"
@@ -74,33 +74,33 @@ critical_rule_flags:                # INTERNAL (orchestrator-only)
     reasoning: string               # INTERNAL
 
 final_verdict: APPROVE | REQUEST_CHANGES   # PUBLIC
-structural_verdict: PASS | P1 | FAIL       # PUBLIC. A5 scanability axis의 verdict를 직접 노출.
+structural_verdict: PASS | P1 | FAIL       # PUBLIC. Directly exposes the A5 scanability axis verdict.
                                            # consumer contract:
                                            #   - blackbox consumer: readability-fix routing trigger
-                                           #     (structural_verdict == FAIL AND {a1,a2,a3,a4} 모두 PASS/P1 AND count(P1 across A1-A4) < 3)
+                                           #     (structural_verdict == FAIL AND {a1,a2,a3,a4} all PASS/P1 AND count(P1 across A1-A4) < 3)
                                            #   - orchestrator: Loop 2 gate readability-fix path
                                            #     (A1-A4 no FAIL AND count(P1 across A1-A4) < 3 AND structural_verdict ∈ {PASS, P1} → APPROVE)
-interview_hints: string[]                  # PUBLIC (APPROVE/REQUEST_CHANGES 모두 user-facing — P1 hints는 항상 surface)
-                                           # language constraint: source bullet의 언어 = hint 언어 — 4-라벨 + hint 본문 모두.
-                                           # 한국어 bullet → 한국어 라벨(인용/문제/이유/제안)+hint; English bullet → English 라벨(Quote/Problem/Why/Suggestion)+hint. (bidirectional)
+interview_hints: string[]                  # PUBLIC (both APPROVE/REQUEST_CHANGES are user-facing — always surface P1 hints)
+                                           # language constraint: source bullet language = hint language — both the four labels and hint body.
+                                           # Korean bullet → Korean labels (인용/문제/이유/제안)+hint; English bullet → English labels (Quote/Problem/Why/Suggestion)+hint. (bidirectional)
 ```
 
 ---
 
 ## Stability Contract
 
-**Default policy**: 새 field는 default INTERNAL. PUBLIC 승격은 별도 plan + user approval 필요.
+**Default policy**: new fields default to INTERNAL. Promotion to PUBLIC requires a separate plan + user approval.
 
 | Tag | Meaning | Consumer |
 |-----|---------|----------|
-| PUBLIC | Stable contract, blackbox consumer 안심 접근 | blackbox consumer (and any future blackbox consumer) |
+| PUBLIC | Stable contract, safe access for blackbox consumers | blackbox consumer (and any future blackbox consumer) |
 | INTERNAL | May change without notice, orchestrator-only | orchestrator (axis-aware role) |
 
-**Promotion procedure**: INTERNAL → PUBLIC 승격 시:
-1. 신규 plan 수립
-2. User approval 획득
-3. 모든 blackbox consumer 영향 분석
-4. tag 변경 commit + plan 기록
+**Promotion procedure**: when promoting INTERNAL → PUBLIC:
+1. Create a new plan
+2. Obtain user approval
+3. Analyze the impact on all blackbox consumers
+4. Commit the tag change + record the plan
 
 ---
 
@@ -112,71 +112,71 @@ INVARIANT: critical_rule_flags.r_phys.triggered == true
            ⇒ final_verdict == "REQUEST_CHANGES"
 ```
 
-이 invariant 부재 시 review-resume이 blackbox로서 critical failure를 놓칠 위험. examiner 구현이 이 invariant를 statically guarantee해야 함 (예: final_verdict 결정 로직이 critical flags를 먼저 체크).
+Without this invariant, review-resume risks missing a critical failure as a blackbox consumer. The examiner implementation must statically guarantee this invariant (e.g., final_verdict decision logic checks critical flags first).
 
-ownership-scope flag는 v4에서 제거됨 — retired in v4, see `a4-ownership-scope.md` integrity_suspected. A4 axis의 verdict(FAIL 또는 P1)로 대체 처리되며, 구조적 overclaim인 경우 FAIL, 단순 scope 모호성인 경우 P1로 분류.
+The ownership-scope flag was removed in v4 — retired in v4, see `a4-ownership-scope.md` integrity_suspected. It is handled through the A4 axis verdict (FAIL or P1) instead: structural overclaim is FAIL; mere scope ambiguity is P1.
 
 ---
 
 ## A5 Co-failure Disambiguation — Full Routing Matrix
 
-이 matrix는 examiner Decision Sequence(`agents/tech-claim-examiner.md` §final_verdict Decision Sequence)와 1:1 대응하는 Single Source of Truth이다. `resume-forge/SKILL.md` §Step 1 Classify Feedback은 이 table을 참조한다.
+This matrix is the Single Source of Truth, corresponding 1:1 with the examiner Decision Sequence (`agents/tech-claim-examiner.md` §final_verdict Decision Sequence). `resume-forge/SKILL.md` §Step 1 Classify Feedback refers to this table.
 
-평가 순서는 early-return 우선순위를 반영한다: critical flags → cumulative P1 → axis FAIL → structural FAIL → APPROVE.
+The evaluation order reflects early-return priority: critical flags → cumulative P1 → axis FAIL → structural FAIL → APPROVE.
 
-| 우선순위 | 조건 | `final_verdict` | Consumer routing lane |
+| Priority | Condition | `final_verdict` | Consumer routing lane |
 |---------|------|----------------|----------------------|
-| 1 | `r_phys.triggered == true` | `REQUEST_CHANGES` | Source extraction — 사용자에게 physically impossible 수치 설명 및 수정 요청 |
-| 2 | `r_cross.triggered == true` | `REQUEST_CHANGES` | Source extraction — 사용자에게 cross-entry contradiction 설명 및 수정 요청 |
-| 3 | `count(P1 across A1-A4) >= 3` | `REQUEST_CHANGES` | Source extraction — 가장 약한 P1 축부터 순서대로 보강 |
-| 4 | A1-A4 중 하나 이상 `FAIL` (structural 무관) | `REQUEST_CHANGES` | Source extraction — FAIL 축 interview hints 기반 depth 보강 |
-| 5 | A1-A4 모두 PASS/P1 (count < 3) + `structural_verdict == FAIL` | `REQUEST_CHANGES` | Readability-only fix — depth 충분, scan 실패. 재구성·압축만으로 해결 (추가 인터뷰 불필요) |
-| 6 | A1-A4 모두 PASS/P1 (count < 3) + `structural_verdict ∈ {PASS, P1}` | `APPROVE` | Approve lane |
+| 1 | `r_phys.triggered == true` | `REQUEST_CHANGES` | Source extraction — explain the physically impossible number to the user and request correction |
+| 2 | `r_cross.triggered == true` | `REQUEST_CHANGES` | Source extraction — explain the cross-entry contradiction to the user and request correction |
+| 3 | `count(P1 across A1-A4) >= 3` | `REQUEST_CHANGES` | Source extraction — strengthen P1 axes in order, starting with the weakest |
+| 4 | At least one of A1-A4 is `FAIL` (regardless of structural) | `REQUEST_CHANGES` | Source extraction — strengthen depth using interview hints for FAIL axes |
+| 5 | A1-A4 all PASS/P1 (count < 3) + `structural_verdict == FAIL` | `REQUEST_CHANGES` | Readability-only fix — sufficient depth, failed scan. Resolve through restructuring/compression alone (no additional interview needed) |
+| 6 | A1-A4 all PASS/P1 (count < 3) + `structural_verdict ∈ {PASS, P1}` | `APPROVE` | Approve lane |
 
-**우선순위 4 세부 분기** (A1-A4 FAIL 있는 경우, structural_verdict 패턴별 의미):
+**Priority 4 sub-branches** (when A1-A4 contains FAIL, meaning by structural_verdict pattern):
 
-| structural_verdict | A1-A4 FAIL 여부 | 의미 | 라우팅 |
+| structural_verdict | A1-A4 FAIL status | Meaning | Routing |
 |-------------------|----------------|------|--------|
-| FAIL | A1-A4 중 FAIL 있음 | 깊이 부족이 scanability에도 영향 | Source extraction |
-| PASS 또는 P1 | A1-A4 중 FAIL 있음 | 내용 깊이 부족 (scan은 OK) | Source extraction |
+| FAIL | At least one FAIL in A1-A4 | Insufficient depth also affects scanability | Source extraction |
+| PASS or P1 | At least one FAIL in A1-A4 | Insufficient content depth (scan is OK) | Source extraction |
 
-**우선순위 5 주의사항**: A1-A4에 P1이 혼재해도 count < 3이고 FAIL이 없으면 우선순위 5(readability-only)로 라우팅. P1 존재 자체는 source extraction을 강제하지 않는다.
+**Priority 5 caveat**: even with mixed P1 verdicts in A1-A4, route to priority 5 (readability-only) when count < 3 and no FAIL is present. The presence of P1 itself does not require source extraction.
 
 ---
 
 ## Migration Table (v1 → v4)
 
-downstream skill들이 v1 examiner output 참조를 v4로 갱신할 때 사용:
+Used when downstream skills update v1 examiner output references to v4:
 
-| Old (v1) | New (v4) | Loop 의미 |
+| Old (v1) | New (v4) | Loop meaning |
 |----------|----------|-----------|
 | `Causal Chain Depth score >= 0.7` | `verdicts.a2_causal_honesty.verdict == PASS` | Loop 1 gate (resume-forge) |
 | `E3b Constraint Cascade Score >= 0.8 (CASCADING)` | `final_verdict == APPROVE && A1-A4 no FAIL AND count(P1 across A1-A4) < 3 AND structural_verdict ∈ {PASS, P1}` | Loop 2 gate (resume-forge) |
-| `E1-E6 failures` | `{a1, a2, a3, a4} 중 FAIL 있음` | Source extraction trigger |
-| `R1-R5 failures` | `structural_verdict == FAIL AND {a1, a2, a3, a4} 모두 PASS/P1 AND count(P1 across A1-A4) < 3` | Readability-only fix trigger |
+| `E1-E6 failures` | `At least one FAIL in {a1, a2, a3, a4}` | Source extraction trigger |
+| `R1-R5 failures` | `structural_verdict == FAIL AND {a1, a2, a3, a4} all PASS/P1 AND count(P1 across A1-A4) < 3` | Readability-only fix trigger |
 
 ---
 
 ## interview_hints Constraints
 
-1. **Scaffold format rule**: 각 `interview_hints` 원소는 하나의 문자열이며, 4개 라벨이 각각 별도 줄(newline-delimited, `/`-delimited 아님)에 온다. 라벨 자체가 source bullet 언어를 따른다 — 한국어 bullet:
+1. **Scaffold format rule**: each `interview_hints` element is one string, with each of the four labels on a separate line (newline-delimited, not `/`-delimited). The labels themselves follow the source bullet's language — for a Korean bullet:
    ```
-   인용: «원본 bullet의 verbatim substring»
-   문제: <그 인용 구간의 구체적 결함>
-   이유: <왜 문제인지 — 평이한 소스언어, 축 이름 없음>
-   제안: <구체적·실행가능한 수정안>
+   인용: «verbatim substring of the original bullet»
+   문제: <specific defect in that quoted span>
+   이유: <why it is a problem — plain source-language wording, no axis names>
+   제안: <concrete, actionable revision>
    ```
-   English bullet은 동일 구조에 영어 라벨셋을 쓴다: `Quote:` / `Problem:` / `Why:` / `Suggestion:` (콜론 뒤 한 칸 공백). 라벨 매핑: 인용=Quote, 문제=Problem, 이유=Why, 제안=Suggestion.
-   - `인용:`/`Quote:` 라인의 `«»` 내부는 원본 bullet의 글자 그대로 substring(paraphrase 금지), 언어와 무관하게 항상 «»로 감싼다. noleak 검증 시 «»로 감싼 이 verbatim 줄만 라인 단위로 제외한다.
-   - 이 스캐폴드는 surface되는 모든 hint에 적용된다 — REQUEST_CHANGES hint, APPROVE 시 P1 개선 hint, 그리고 구조(A5) P1 readability hint(`resume-forge/SKILL.md:210` — structural_verdict가 A1-A4와 동일하게 uniform하게 surface)도 포함.
-   - 예외: 완전 clean APPROVE는 여전히 `interview_hints: []` (스캐폴드를 억지로 채우지 않음).
-2. **Vocabulary rule**: `문제:`/`이유:`/`제안:` 세 줄(English bullet에서는 `Problem:`/`Why:`/`Suggestion:` — 동일 규칙)에는 axis identifier(`A[1-5]`, 즉 A1-A5) 또는 영문 axis name (Technical Credibility, Causal Honesty, Outcome Presence & Clarity, Ownership & Scope, Scanability) 포함 금지 — 자연스러운 서술로만. "이유:"/"Why:"는 평이한 소스언어로 설명한다. `인용:`/`Quote:` 라인은 원본 bullet의 verbatim substring이므로 이 규칙에서 면제(후보 기술명에 A1 등이 우연히 들어갈 수 있음).
+   English bullets use the same structure with English labels: `Quote:` / `Problem:` / `Why:` / `Suggestion:` (one space after the colon). Label mapping: 인용=Quote, 문제=Problem, 이유=Why, 제안=Suggestion.
+   - The text inside `«»` on the `인용:`/`Quote:` line must be a verbatim substring of the original bullet (no paraphrasing); always wrap it in «» regardless of language. For noleak verification, exclude only this verbatim «»-wrapped line, as a whole line.
+   - This scaffold applies to every surfaced hint — REQUEST_CHANGES hints, P1 improvement hints on APPROVE, and structural (A5) P1 readability hints (`resume-forge/SKILL.md:210` — structural_verdict is surfaced uniformly, just like A1-A4).
+   - Exception: a completely clean APPROVE still uses `interview_hints: []` (do not force-fill the scaffold).
+2. **Vocabulary rule**: the three `문제:`/`이유:`/`제안:` lines (`Problem:`/`Why:`/`Suggestion:` for English bullets — same rule) must not include axis identifiers (`A[1-5]`, i.e., A1-A5) or English axis names (Technical Credibility, Causal Honesty, Outcome Presence & Clarity, Ownership & Scope, Scanability) — use natural prose only. Explain "이유:"/"Why:" in plain source-language wording. The `인용:`/`Quote:` line is exempt because it is a verbatim substring of the original bullet (a candidate's technology name may happen to contain A1, etc.).
    - OK: "사용한 시스템과 선택 이유를 추가하면 기술 깊이가 더 잘 드러납니다"
-   - 금지: "A1 Technical Credibility FAIL — 시스템 명시 필요"
-3. **Actionability rule**: 각 hint는 구체적이고 실행 가능해야 함. "add more technical detail"처럼 generic한 hint 금지.
-4. **P1 coverage**: P1 verdict는 final_verdict가 APPROVE여도 interview_hints에 improvement suggestion으로 포함.
+   - Forbidden: "A1 Technical Credibility FAIL — 시스템 명시 필요"
+3. **Actionability rule**: each hint must be specific and actionable. Generic hints such as "add more technical detail" are forbidden.
+4. **P1 coverage**: include P1 verdicts in interview_hints as improvement suggestions even when final_verdict is APPROVE.
 
-이 규칙들은 `agents/tech-claim-examiner.md` prompt에서 본문 복제 없이 참조된다.
+The `agents/tech-claim-examiner.md` prompt references these rules without duplicating their body text.
 
 ---
 
@@ -184,29 +184,29 @@ downstream skill들이 v1 examiner output 참조를 v4로 갱신할 때 사용:
 
 ### resume-forge (axis-aware orchestrator)
 
-- **Allowed**: 모든 INTERNAL field (verdicts.*, critical_rule_flags.*, reasoning, evidence_quote)
+- **Allowed**: all INTERNAL fields (verdicts.*, critical_rule_flags.*, reasoning, evidence_quote)
 - **Use case**: source extraction routing, Loop 1/2 gate decision
-- **Note**: `skills/resume-forge/SKILL.md` 상단에 "axis-aware orchestrator" boundary 명시 (downstream skill 갱신 작업)
+- **Note**: state the "axis-aware orchestrator" boundary at the top of `skills/resume-forge/SKILL.md` (downstream skill update work)
 
 ### review-resume (blackbox consumer)
 
-- **Allowed**: `schema_version`, `final_verdict`, `structural_verdict`, `interview_hints`만
-- **Forbidden**: verdicts.a*, critical_rule_flags.*, evidence_quote, axis name 노출
+- **Allowed**: only `schema_version`, `final_verdict`, `structural_verdict`, `interview_hints`
+- **Forbidden**: exposing verdicts.a*, critical_rule_flags.*, evidence_quote, axis names
 - **Use case**: Phase 9 quality gate, HTML report user-facing hints
 
 ### Prohibited Token Patterns for review-resume
 
-review-resume가 생성하는 HTML report의 user-facing surface에 examiner internal tokens이 누출되지 않도록, 다음 정규식 3개를 canonical로 관리한다. `tests/phase9-loop-scenarios.md` SCN-6은 이 패턴 목록을 참조한다.
+Maintain the following three regular expressions as canonical to prevent examiner internal tokens from leaking onto user-facing surfaces of the HTML report generated by review-resume. `tests/phase9-loop-scenarios.md` SCN-6 refers to this pattern list.
 
 | Category | Pattern (ripgrep / PCRE) | What it forbids |
 |----------|--------------------------|-----------------|
-| Axis identifier | `\bA[1-5]\b` | `A1`~`A5` 단독 토큰. CSS class `.badge-p1` 등은 `P[0-3]`이라 false positive 없음 |
-| Axis name | `Technical Credibility\|Causal Honesty\|Outcome Presence & Clarity\|Ownership & Scope\|Scanability` | 5축 정식 이름 누출. `Ownership & Scope`는 일반 `Ownership`과 구분하기 위해 정확 매치 |
-| Internal struct | `verdicts\.\|critical_rule_flags\.\|evidence_quote\|reasoning:` | examiner output schema의 field key 누출 |
+| Axis identifier | `\bA[1-5]\b` | Standalone `A1`–`A5` tokens. CSS classes such as `.badge-p1` use `P[0-3]`, so they do not produce false positives |
+| Axis name | `Technical Credibility\|Causal Honesty\|Outcome Presence & Clarity\|Ownership & Scope\|Scanability` | Leaked official names of the five axes. Match `Ownership & Scope` exactly to distinguish it from ordinary `Ownership` |
+| Internal struct | `verdicts\.\|critical_rule_flags\.\|evidence_quote\|reasoning:` | Leaked field keys from the examiner output schema |
 
-**Verification usage**: rendered 내용이 §interview_hints Constraints의 4-요소 스캐폴드 hint(한국어: `인용:`/`문제:`/`이유:`/`제안:`, English: `Quote:`/`Problem:`/`Why:`/`Suggestion:`)를 포함하는 경우, 먼저 «»로 감싼 verbatim 줄(즉 `인용:`/`Quote:` 라벨 줄 — 원본 bullet의 verbatim substring이며, 후보 기술명 "AWS A1 instances"처럼 `A[1-5]`-모양 토큰이 정당하게 들어갈 수 있음)을 라인 단위로 제외한다. «»는 인용 줄에만 존재하므로 라벨 언어(한국어/영어)와 무관하게 이 줄을 식별할 수 있다. 그 뒤 남은 라인에 대해 `grep -E '<pattern>' <rendered-html>`을 3개 pattern 각각 실행하여 모두 0 matches이면 noleak 통과. «» 줄 제외 전처리 없이 whole-HTML에 naive하게 돌리면 인용 줄의 후보 토큰에서 false-positive가 난다(`tests/phase9-loop-scenarios.md` SCN-13 `FX-TECH-ECHO` 참조). «»로 감싼 인용 줄을 포함하지 않는 terse 출력(스캐폴드 이전 형태)에는 이 전처리가 불필요하며, 그 경우 기존 whole-content grep이 그대로 유효하다.
+**Verification usage**: when rendered content includes the four-element scaffold hints from §interview_hints Constraints (Korean: `인용:`/`문제:`/`이유:`/`제안:`, English: `Quote:`/`Problem:`/`Why:`/`Suggestion:`), first exclude the verbatim «»-wrapped lines as whole lines (the `인용:`/`Quote:` label lines — verbatim substrings of the original bullet that may legitimately contain `A[1-5]`-shaped tokens in candidate technology names such as "AWS A1 instances"). Because «» appears only on quote lines, these lines can be identified regardless of label language (Korean/English). Then run `grep -E '<pattern>' <rendered-html>` for each of the three patterns against the remaining lines; noleak passes if all return 0 matches. Naively running against whole HTML without preprocessing out «» lines produces false positives from candidate tokens in quote lines (see `tests/phase9-loop-scenarios.md` SCN-13 `FX-TECH-ECHO`). Terse output without «»-wrapped quote lines (the pre-scaffold form) does not need this preprocessing; the existing whole-content grep remains valid in that case.
 
-**Canonical regex** (shell에서 직접 사용, escape 없이):
+**Canonical regex** (use directly in the shell, without escaping):
 ```
 # Axis identifier
 \bA[1-5]\b
@@ -218,6 +218,6 @@ Technical Credibility|Causal Honesty|Outcome Presence & Clarity|Ownership & Scop
 verdicts\.|critical_rule_flags\.|evidence_quote|reasoning:
 ```
 
-> **Note**: 위 table 내 `\|`는 markdown table cell pipe 이스케이프로서 rendered 출력에서는 `|`로 표시된다. shell에서는 위 코드블럭 form을 사용할 것.
+> **Note**: `\|` in the table above escapes a pipe within a Markdown table cell and appears as `|` in rendered output. Use the code-block form above in the shell.
 
-**축 이름 변경 시**: A1-A5 이름이 변경되면 두 위치를 동시에 갱신한다 — 본 §Prohibited Token Patterns + §interview_hints Constraints Vocabulary rule. 갱신 누락 시 SCN-6은 stale pattern으로 false pass를 낸다.
+**When axis names change**: if A1-A5 names change, update both locations together — this §Prohibited Token Patterns + the §interview_hints Constraints Vocabulary rule. A missed update causes SCN-6 to falsely pass using stale patterns.

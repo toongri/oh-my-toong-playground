@@ -99,7 +99,7 @@ Launch the entire first wave in one response — every Phase-0 axis at once, as 
 
 - **Codebase (explore), per the tier floor.** Grep with 3+ keyword variations; structural/AST search; LSP definitions and references; file-name globs; `git log --all -S` and `--grep` for history including deleted code. Report absolute file paths, `file:line` patterns, and how findings connect — plus the quoted content at each coordinate (column definitions, enum values, signatures, endpoints): a coordinate alone does not tell the orchestrator what lives there.
 - **Web (librarian), per the tier floor.** At least 10 distinct websearch queries per worker, each with a different operator or angle; fetch the full page for every result that matters. Real-world usage via `gh search` and grep.app; official docs via sitemap discovery. Practitioner discourse is librarian territory, not browsing-gated: engineering-blog postmortems, `site:reddit.com OR site:news.ycombinator.com` discussions, and "how teams handle <symptom>" accounts answer the workflow and symptom axes that official docs cannot — a run whose axes include a workflow or symptom axis assigns at least one librarian to this territory.
-- **Browsing (hermes, insane-browsing 로드), per the tier floor.** Full authenticated and JavaScript-rendered page access for sources blocked or insufficiently covered by surface-level web retrieval; only dispatched when Phase-0 Browsing gate is `yes`.
+- **Browsing (hermes, load insane-browsing), per the tier floor.** Full authenticated and JavaScript-rendered page access for sources blocked or insufficiently covered by surface-level web retrieval; only dispatched when Phase-0 Browsing gate is `yes`.
 
 ## Phase 2 — EXPAND until convergence (the wave loop)
 

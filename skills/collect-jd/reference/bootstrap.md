@@ -320,9 +320,9 @@ Before ANY JD ingest (URL · text · file · company name · batch rescan), chec
 
 1. **Halt ingest immediately.** Do not call WebFetch, do not write JD files.
 2. Run a **3-round minimum** profile interview using `AskUserQuestion`. Each round covers one of:
-   - Round 1 — **경력 · 현재 역할 · 연차 · 선호 도메인**
-   - Round 2 — **기술 스택 · 강점 · 학습 중인 영역**
-   - Round 3 — **회사 · 연봉 · 지역 · 원격 여부 · exclude signal 취향**
+   - Round 1 — **Career history · current role · years of experience · preferred domains**
+   - Round 2 — **Tech stack · strengths · areas currently being learned**
+   - Round 3 — **Company · salary · location · remote work availability · exclusion-signal preferences**
 3. Write `$OMT_DIR/collect-jd/profile/profile.yaml` atomically (temp + rename). Include `version: 1` field in YAML. Map each round's answers to the corresponding section.
 4. After `profile.yaml` exists, **resume** the original ingest request.
 

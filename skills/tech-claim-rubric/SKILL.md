@@ -1,13 +1,13 @@
 ---
 name: tech-claim-rubric
-description: Use when evaluating technical claims in high-depth content section units (예: 문제 해결 / 상세 프로젝트 / 경력 기술서). Defines the 5-axis framework (A1 Technical Credibility, A2 Causal Honesty, A3 Outcome Presence & Clarity, A4 Ownership & Scope, A5 Scanability) plus 2 critical authenticity rules (R-Phys, R-Cross) used by tech-claim-examiner agent. Verb-scope inflation (previously a separate rule) is now caught by A4 integrity_suspected sub-flag (see a4-ownership-scope.md).
+description: Use when evaluating technical claims in high-depth content section units (e.g., 문제 해결 / 상세 프로젝트 / 경력 기술서). Defines the 5-axis framework (A1 Technical Credibility, A2 Causal Honesty, A3 Outcome Presence & Clarity, A4 Ownership & Scope, A5 Scanability) plus 2 critical authenticity rules (R-Phys, R-Cross) used by tech-claim-examiner agent. Verb-scope inflation (previously a separate rule) is now caught by A4 integrity_suspected sub-flag (see a4-ownership-scope.md).
 ---
 
-<!-- Purpose: 면접관 5각도 follow-up hook 보장 — 평가된 모든 section block이 5개 면접관 각도(기술 판단 / 인과 정직 / 결과 존재 / 오너십 정합 / 스캔 가독성)에서 follow-up 질문을 생성할 수 있는 깊이를 갖추도록 보장한다. -->
+<!-- Purpose: Guarantee follow-up hooks from five interviewer perspectives — ensure every evaluated section block has enough depth to generate follow-up questions about technical judgment, causal honesty, outcome presence, ownership coherence, and scanability. -->
 
 # Overview
 
-This document is the authoritative rubric definition used by the `tech-claim-examiner` agent to evaluate technical claims in high-depth content section units (예: 문제 해결 / 상세 프로젝트 / 경력 기술서). It does NOT perform evaluation itself — it defines the evaluation contract that the examiner follows.
+This document is the authoritative rubric definition used by the `tech-claim-examiner` agent to evaluate technical claims in high-depth content section units (e.g., 문제 해결 / 상세 프로젝트 / 경력 기술서). It does NOT perform evaluation itself — it defines the evaluation contract that the examiner follows.
 
 The rubric consists of:
 
@@ -56,13 +56,13 @@ Common resume bullet anti-patterns, the axis that catches them, and the verdict 
 
 | Anti-pattern | Axis | Verdict |
 |---|---|---|
-| Name-only mention (도구 이름만 나열, 메커니즘 없음) | A1 | FAIL or P1 |
-| Vanity outcome (팀 만족도 향상 등 정량 metric 없는 결과) | A3 | FAIL |
-| Verb inflation (주도/총괄 + scope marker 없음) | A4 | FAIL or A4 `integrity_suspected` |
+| Name-only mention (tool names listed without mechanisms) | A1 | FAIL or P1 |
+| Vanity outcome (an outcome without a quantitative metric, such as 팀 만족도 향상) | A3 | FAIL |
+| Verb inflation (주도/총괄 + no scope marker) | A4 | FAIL or A4 `integrity_suspected` |
 | Missing baseline (응답 시간 80% 단축 with no before/after window) | A2 (Rule 1) | P1 (Soft) |
-| Fuzzy noun outcome (성능 개선 / 처리량 향상 정량화 없음) | A3 (or A2 Rule 6) | P1 |
-| Offline-as-production (load-test 수치를 production metric으로 표기) | A2 (Rule 3) | FAIL (Hard) |
-| Arithmetic error (claimed delta math 일치 안 함) | A2 (Rule 1) | FAIL (Hard) |
+| Fuzzy noun outcome (성능 개선 / 처리량 향상 without quantification) | A3 (or A2 Rule 6) | P1 |
+| Offline-as-production (load-test numbers presented as production metrics) | A2 (Rule 3) | FAIL (Hard) |
+| Arithmetic error (claimed delta does not match the arithmetic) | A2 (Rule 1) | FAIL (Hard) |
 
 ---
 
@@ -70,11 +70,11 @@ Common resume bullet anti-patterns, the axis that catches them, and the verdict 
 
 | Axis | Standard | One-line | Reference file |
 |------|----------|----------|----------------|
-| **A1 Technical Credibility** | Absolute | 기술적 판단이 드러나는가 (5/5 signals strict) | `a1-technical-credibility.md` |
-| **A2 Causal Honesty** | Absolute | 원인→결과 logic + arithmetic 일관성 | `a2-causal-honesty.md` |
-| **A3 Outcome Presence & Clarity** | Absolute | tech OR business 결과 명시 (so what?) | `a3-outcome-presence-clarity.md` |
-| **A4 Ownership & Scope** | Absolute | 동사-scope coherence (led/built/contributed) | `a4-ownership-scope.md` |
-| **A5 Scanability** | Absolute (structure-agnostic) | 6-30s scan에 핵심 파악 가능 | `a5-scanability.md` |
+| **A1 Technical Credibility** | Absolute | Is technical judgment visible? (5/5 signals strict) | `a1-technical-credibility.md` |
+| **A2 Causal Honesty** | Absolute | Cause→effect logic + arithmetic consistency | `a2-causal-honesty.md` |
+| **A3 Outcome Presence & Clarity** | Absolute | Explicit tech OR business outcome (so what?) | `a3-outcome-presence-clarity.md` |
+| **A4 Ownership & Scope** | Absolute | Verb-scope coherence (led/built/contributed) | `a4-ownership-scope.md` |
+| **A5 Scanability** | Absolute (structure-agnostic) | Key message extractable in a 6–30s scan | `a5-scanability.md` |
 
 ### Axis Verdicts
 
@@ -92,7 +92,7 @@ A5 is **structure-agnostic**: it does not require a specific format (e.g., "acti
 
 ### A1 Evaluation Criteria
 
-**Question**: Does this bullet reveal technical judgment? (이 bullet에 기술적 판단이 드러나는가?)
+**Question**: Does this bullet reveal technical judgment?
 
 **PASS** — Bullet body explicitly shows **all 5 of the following** signals:
 1. **Constraint awareness** — technical constraint to solve (throughput bottleneck, race condition, consistency gap, legacy coupling, cost ceiling, etc.)
@@ -109,7 +109,7 @@ A5 is **structure-agnostic**: it does not require a specific format (e.g., "acti
 
 **P1** (canonical — a1-technical-credibility.md defers to this): Exactly 4 of 5 signals present (one signal absent), OR all 5 of 5 signals present but at least one signal is at name-level only (no mechanism or rationale behind it). Either condition fails the 5/5 strict PASS bar. Not vacuous enough to FAIL — examiner returns improvement hint targeting the shallowest signal.
 
-> **Section-wide signal mapping**: real-world에서 signal이 sub-bullets로 분산 가능 — section 전체에서 매핑 허용. 단일 bullet line에 모든 signal이 집중되지 않아도 section 전체에서 5 signals 모두 확인되면 PASS 판정 가능 — 단일 bullet line에 집중되지 않아도 허용.
+> **Section-wide signal mapping**: In real-world content, signals can be distributed across sub-bullets — mapping across the entire section is allowed. PASS is possible when all five signals are present across the section, even if they are not concentrated in one bullet line — concentration in a single line is not required.
 
 Years are not referenced for A1. Ownership signals belong to A4, not A1.
 
@@ -135,7 +135,7 @@ Examples of R-Phys violations:
 
 Example: Entry A claims "Designed and implemented the entire payment microservice from scratch." Entry B claims "Contributed to payment microservice API design alongside a team of 8 engineers." These contradict each other on ownership scope.
 
-**Applicability**: R-Cross는 항상 emit된다. cross-entry context가 제공되지 않은 경우 triggered: false로 기록하고, reasoning에 "cross-entry context not provided"와 같이 absence를 명시한다.
+**Applicability**: Always emit R-Cross. When cross-entry context is not provided, record triggered: false and explicitly state its absence in reasoning, for example "cross-entry context not provided".
 
 **Effect**: Automatic REQUEST_CHANGES regardless of A1–A4 verdicts and structural_verdict. The examiner must cite both entries and identify the specific contradiction.
 
@@ -177,7 +177,7 @@ THEN final_verdict = REQUEST_CHANGES
 | `count(P1 across A1-A4) ≥ 3` | REQUEST_CHANGES |
 | `structural_verdict == FAIL` | REQUEST_CHANGES |
 
-> **Note**: A5 verdict는 `structural_verdict`로 노출된다. `structural_verdict == FAIL AND A1-A4 모두 PASS/P1 AND count(P1 across A1-A4) < 3`인 경우 `final_verdict = REQUEST_CHANGES`를 트리거하되, consumer routing은 source-extraction이 아닌 readability-fix lane으로 처리된다. See `output-schema.md` §A5 Co-failure Disambiguation and `a5-scanability.md`.
+> **Note**: The A5 verdict is exposed as `structural_verdict`. When `structural_verdict == FAIL AND A1-A4 all PASS/P1 AND count(P1 across A1-A4) < 3`, trigger `final_verdict = REQUEST_CHANGES`, but route the consumer to the readability-fix lane rather than source-extraction. See `output-schema.md` §A5 Co-failure Disambiguation and `a5-scanability.md`.
 
 P1 verdicts do not block APPROVE but are surfaced in `interview_hints` as improvement recommendations.
 
@@ -200,7 +200,7 @@ The examiner's full output schema is defined in `output-schema.md`. Key fields:
 
 **PUBLIC fields** (returned to downstream caller):
 
-> Canonical definition: [`output-schema.md`](output-schema.md) §Output Schema. 이 테이블은 downstream consumer를 위한 요약이며 schema 변경 시 반드시 동기 수정.
+> Canonical definition: [`output-schema.md`](output-schema.md) §Output Schema. This table summarizes the schema for downstream consumers and MUST be updated in sync whenever the schema changes.
 
 | Field | Description |
 |-------|-------------|
@@ -241,7 +241,7 @@ The examiner verifies all of the following before delivering output:
 - [ ] A4 Ownership & Scope: reasoning written, evidence_quote included, verdict assigned
 - [ ] A5 Scanability: reasoning written, evidence_quote included, verdict assigned
 - [ ] R-Phys: triggered status explicitly stated (true / false)
-- [ ] R-Cross: triggered status explicitly stated (true / false). cross-entry context not provided인 경우 false로 기록하고 reasoning에 absence 명시
+- [ ] R-Cross: triggered status explicitly stated (true / false). If cross-entry context is not provided, record false and state its absence in reasoning
 - [ ] Critical rule invariant applied: if r_phys or r_cross triggered, final_verdict is REQUEST_CHANGES
 - [ ] interview_hints written in source bullet language, no axis identifiers in hint text
 - [ ] final_verdict determined and recorded

@@ -48,7 +48,7 @@ The artifact schema the code-reviewer must emit:
 ```json
 {
   "status": "COMPLETE|INCONCLUSIVE",
-  "findings_report": "<findings.md 경로>",
+  "findings_report": "<path to findings.md>",
   "findings": [
     { "class": "correctness|regression|cleanup|requirement-gap", "verdict": "CONFIRMED|PLAUSIBLE", "impact": "HIGH|MEDIUM|LOW", "ref": "<file:line>" }
   ],
