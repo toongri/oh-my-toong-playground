@@ -2130,7 +2130,7 @@ function scopeContract(state: Partial<GoalState>): ScopeContract {
 		boundaries: state.boundaries ?? "",
 		non_goals: state.non_goals ?? "",
 		stories: (state.stories ?? [])
-			.filter((s) => s.status !== "retired")
+			.filter((s) => s.status === "confirmed")
 			.map(({ id, story, acceptance_criteria, verification_surface, status }) => ({
 				id,
 				story,

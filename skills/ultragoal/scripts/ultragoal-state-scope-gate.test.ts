@@ -178,6 +178,45 @@ describe("범위 슬롯은 고정되고 변경 시 스토리 재승인이 필요
 		);
 		expect(payload).toMatchObject({ outcome: "ship it", constraints: "preserve API" });
 	});
+
+	test("추구 중 추가·수정된 미확정 스토리는 범위 계약에서 제외한다", () => {
+		state.setGoalState(SID, { phase: "pursuing" });
+		state.addStory(
+			SID,
+			{
+				id: "S2",
+				story: "review",
+				acceptance_criteria: ["review passes"],
+				verification_surface: "review",
+			},
+			"new requirement",
+			"cover the new requirement",
+		);
+		state.reviseStory(
+			SID,
+			"S2",
+			{ acceptance_criteria: ["revised review passes"] },
+			"review changed",
+			"align the acceptance criteria",
+		);
+
+		const serialized = state.serializeReviewContext(SID);
+		const marker = "[SCOPE_CONTRACT]\n";
+		const body = serialized.project_context.slice(
+			serialized.project_context.indexOf(marker) + marker.length,
+		);
+		const payload = JSON.parse(body.slice(0, body.indexOf("\n[/SCOPE_CONTRACT]")));
+
+		expect(payload.stories).toEqual([
+			{
+				id: "S1",
+				story: "ship",
+				acceptance_criteria: ["tests pass"],
+				verification_surface: "tests",
+				status: "confirmed",
+			},
+		]);
+	});
 });
 
 describe("범위 계약과 개별 무효화가 불완전한 완료를 거부한다", () => {
