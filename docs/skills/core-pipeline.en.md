@@ -77,6 +77,8 @@ Each arrow represents a file or PM-tool handoff. In Phase 5, deep-interview firs
 
 ## 3. deep-interview — Socratic Deep Interview
 
+The presentation explains the design and its reasons in the author's first person to a colleague or team-lead with no prior context. Use plain language, first-use domain glosses, and big-picture diagrams without thinning the design into an overview.
+
 A probe isolating one condition uses an independent hypothetical copy of a confirmed case and varies only that condition. Changing the requester or amount while testing a role confounds the comparison. Record the anchor case, changed condition, and unanswered or confirmed outcome in the decision register's `checks`, and carry it into the spec. Label interaction probes as joint cases.
 
 **Purpose**: Converge a vague idea into clear requirements and a settled design before autonomous execution or task decomposition. It asks one question at a time without a count limit, following prerequisites and the counterexamples, contradictions, and downstream decisions each answer reveals. Scores guide investigation; an audit of evidence and open decisions governs closure.
