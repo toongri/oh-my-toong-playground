@@ -142,6 +142,8 @@ flowchart TB
 
 **Pipeline link**: It proceeds interview → research (explore/librarian) → metis gap analysis → plan writing. The resulting plan is saved to `$OMT_DIR/plans/*.md` and becomes ultragoal's input. One prometheus run produces one plan — a request that splits into several plans is run one subset at a time.
 
+Question count does not end the interview. The requirements draft records decisions, dependencies, evidence, rejected alternatives, and counterexamples, carrying them into the design ADR and plan. Valid deep-interview agreements are reused; changed premises reopen only affected decisions and dependents. Silence and uncertainty are not delegation. Weighted score reports and five questioning stances remain, with librarian or ultraresearch verifying necessary external facts. Normal completion follows requirements closure audit → Metis → co-design and human approval → plan and Momus → HTML presentation. The new decision closure audit is a prompt contract and does not replace existing state or submission gates.
+
 ---
 
 ## 5. sisyphus — Task Orchestrator

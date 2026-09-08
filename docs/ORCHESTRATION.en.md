@@ -119,6 +119,8 @@ flowchart TD
 
 ### prometheus (The Planner)
 
+Questions have no count limit and resolve prerequisite decisions first. Each answer produces the six weighted scores and decision changes; unanswered choices stay open. Explicit delegation permits a reasoned choice, and settled deep-interview decisions reopen only when new evidence changes their premises. ultraresearch handles competing claims and multi-source verification; one investigation's resource budget does not limit interview depth. Readiness requires the phase's closure audit as well as its score. Metis, human design approval, Momus, and HTML submission remain in place.
+
 - **Role**: Strategic planning, requirements interviews
 - **Constraint**: **READ-ONLY**. NEVER writes code.
 - **Output**: `~/.omt/{OMT_PROJECT}/plans/{name}.md` (via `$OMT_DIR`)

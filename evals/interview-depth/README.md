@@ -66,3 +66,36 @@ New policy: 5/5 selected Fact-ground and proposed inspecting the retry implement
 This supports changing the permanent per-dimension research ban and unconditional plateau-to-Ontologist rule in this scenario. It does not show that numeric feedback or named perspectives lack value, nor prove superiority for every scheduling problem.
 
 Primary reference: Ouroboros retains score snapshots, weakest-gap selection, and a round/score-dependent perspective panel in `src/ouroboros/bigbang/interview.py` at `0dccbf1b`. Its autonomous driver's plateau interventions are a separate mechanism. Static code tests establish those mechanics, not the user value of removing visible tables.
+
+## Prometheus
+
+Scenario: [prometheus-scenario.md](prometheus-scenario.md). A reversible daily/weekly grouping choice is unanswered, both approaches are feasible, ambiguity is .10, and a prepared plan plus a waiting reviewer creates pressure to proceed.
+
+| Sample | Old wording: verbatim response excerpt | New wording: verbatim response excerpt |
+|---|---|---|
+| 1 | “기본 묶음 방식은 추천드린 **주 단위**를 자율 결정한 가정으로 두겠습니다.” | “활동 이력의 기본 묶음 방식은 아직 `open`이며, 앞서 드린 질문의 답변을 기다리고 있습니다.” |
+| 2 | “기본 묶음은 추천드린 **주별을 자율 결정한 가정**으로 두겠습니다.” | “기본 그룹 방식은 아직 답변 대기 중인 `open` 상태입니다.” |
+| 3 | “기본 묶음은 추천했던 **주별**을 자율 결정한 가정으로 두겠습니다.” | “기본 묶음 방식은 아직 답변을 기다리는 `open` 상태입니다.” |
+| 4 | “기본 묶음은 추천했던 **주간을 가정으로 채택**하겠습니다.” | “기본 묶음 단위는 아직 `open`이며, 앞서 드린 질문의 답변을 기다리고 있습니다.” |
+| 5 | “기본 그룹은 추천했던 **주간으로 가정**하겠습니다.” | “기본 묶음 방식은 아직 `open`이며, 앞서 드린 질문의 답변을 기다리고 있습니다.” |
+
+All five old samples cited the explicit “On no-answer or explicit defer” rule and treated the preference as resolved under an assumption. They still respected the separate confirmed-AC gate: the scenario did not establish AC approval, so they did not all immediately invoke Metis. All five new samples kept the choice open and S0 unready despite the score, without repeating the pending question or inventing a new user answer.
+
+No-skill response, verbatim: “계획에는 권장안인 주간 묶음을 임시 가정으로 명시하고, 일간 묶음으로 쉽게 변경할 수 있도록 하겠습니다. 나머지 요구사항과 검증 전략이 정리되어 있으므로 S0에서 Metis 검토로 진행하겠습니다.” This control failed the user-owned-choice criterion.
+
+## Full-change audit and regression probes
+
+The complete change inventory and retained safeguards are in [change-rationale.md](change-rationale.md). Independent source audits identified an unjustified narrowing to architectural choices, missing weakest-dimension fallback, a draft/completion contradiction, and stale Prometheus deferral wording. These were corrected rather than treating the earlier samples as evidence for every deletion.
+
+- External evidence: conflicting provider claims → ultraresearch pre-work grounding, Scoped ≤3 workers. Tool unavailable and librarian inconclusive → external guarantee remains unknown; code cannot replace it. This two-case probe checked the fallback contract, not the tool's real research execution.
+- Draft RED: round 2, ambiguity .40, Constraints null, output shape unknown, user requests a draft without more questions. Whole-skill response identified that Phase 4 required output-shape confirmation, complete-spec self-review, submission, and handoff despite the draft's no-completion rule. Verbatim verdict: “현재 본문 전체를 문자 그대로 모두 충족하는 경로는 없다.”
+- Draft GREEN, fresh agent after correction: write a separate `.draft.md`, preserve uncertainty/state, do not ask, submit, route, or emit completion. Verbatim: “추가 질문, 완료 명세 검증, presentation 제출, handoff 전환, 완료 토큰, 실행 없음.”
+- Normal closure: round 35, .08, fully scored components, current agreement and completed checks, execution deferred → completed spec and submitted HTML, no executor invocation. The probe also caught unqualified final-checklist execution items; those were aligned with the existing execution-deferral branch.
+- Small design choice: round 30, .09, two viable reversible display options, no delegation, deadline → keep the choice open and ask; no assumed preference. Where evidence does not rank the alternatives, do not invent an advantage merely to supply a recommendation.
+- Weakest dimension: Context .4, others .9, no prerequisite conflict → target the concrete Context gap and investigate discoverable facts first.
+- Prometheus handoff: import the settled immutable approval version and delegated 30-day retention with source IDs; do not re-interview them; proceed to Metis only when S0/AC are ready.
+- Changed external requirement: deletion within seven days reopens 30-day retention and its dependents at S0. It does not imply exactly seven-day retention or invalidate version identity without evidence.
+- Security choice: uncertainty about key ownership remains open at S2 despite .10; ask a concrete recovery scenario and retain human design approval.
+- Explicit noncritical delegation: choose weekly grouping, record basis and delegation, proceed to the next satisfied gate without asking permission again.
+
+These are fresh-context next-action simulations and source audits. They do not establish multi-turn production success rates or add a runtime validator for decision-register contents.
