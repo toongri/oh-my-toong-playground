@@ -7,7 +7,7 @@
  * Subcommands:
  *   set --phase <S> [--plan-path <p>] [--resume-summary <s>]
  *       [--record-ac '<json-array>' | --record-ac - (reads JSON array from stdin)]
- *       [--mark-design-done] [--mark-plan-done]
+ *       [--mark-design-done] [--mark-plan-done] [--submit-presentation <html>]
  *   get
  *   clear
  */
@@ -24,9 +24,13 @@ import {
 	ensureSeed,
 	stageAPresentationPath,
 	stageAPresentationStatus,
+	createPresentationSubmission,
+	presentationSubmissionCurrent,
+	type PresentationSubmission,
 } from "@lib/state-core";
 
 export interface PrometheusState {
+	presentation?: PresentationSubmission;
 	active: boolean;
 	/** Pipeline token: S0-S8 */
 	phase: string;
@@ -161,6 +165,7 @@ export function setPrometheusState(
 		mark_design_done?: boolean;
 		/** Sets steps.plan.done=true. */
 		mark_plan_done?: boolean;
+		submit_presentation?: string;
 	},
 ): void {
 	// Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
@@ -181,6 +186,12 @@ export function setPrometheusState(
 	}
 
 	const resolvedPlanPath = opts.plan_path ?? prior.plan_path ?? "";
+	const presentation = opts.submit_presentation !== undefined
+		? createPresentationSubmission(resolvedPlanPath, opts.submit_presentation)
+		: prior.presentation;
+	if (opts.submit_presentation !== undefined && !presentationSubmissionCurrent(presentation, resolvedPlanPath, stageAPresentationPath(resolvedPlanPath))) {
+		throw new Error("presentation must be submitted at the current plan's presentation/<stem>.html path");
+	}
 
 	// F6: marking design done with no plan_path would persist done=true, ref="" —
 	// resume then treats design as complete but has no ADR pointer. Loud error
@@ -249,6 +260,9 @@ export function setPrometheusState(
 			case "ok":
 				break;
 		}
+		if (!presentationSubmissionCurrent(presentation, resolvedPlanPath, presentationPath)) {
+			refuse("presentation submission missing or stale; use set --phase S5 --submit-presentation <html> after rendering");
+		}
 	}
 
 	const priorSteps = prior.steps ?? FRESH_STEPS;
@@ -266,6 +280,7 @@ export function setPrometheusState(
 	};
 
 	const partial: Omit<PrometheusState, "last_touched_at"> = {
+		...(presentation ? { presentation } : {}),
 		active: true,
 		phase: opts.phase,
 		plan_path: resolvedPlanPath,
@@ -392,6 +407,7 @@ function main(): void {
 				record_ac: recordAc,
 				mark_design_done: markDesignDone || undefined,
 				mark_plan_done: markPlanDone || undefined,
+				submit_presentation: typeof args["submit-presentation"] === "string" ? args["submit-presentation"] : undefined,
 			});
 		} else if (subcommand === "clear") {
 			clearPrometheusState(sessionId);

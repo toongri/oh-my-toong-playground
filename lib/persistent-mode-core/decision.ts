@@ -28,6 +28,7 @@ import {
 	readExplainDiffStateRaw,
 	stageAPresentationPath,
 	stageAPresentationStatus,
+	presentationSubmissionCurrent,
 } from "@lib/state-core";
 import { computeDerived, type ExplainDiffState } from "@lib/explain-diff-core";
 import {
@@ -205,13 +206,16 @@ ${continuationContract("preferred", askToolName)}
  * bypasses it entirely. The done token is the one signal the model cannot skip.
  *
  * Returns null (gate open) when: no plan was written (pre-plan abort), plan_path is
- * absent/legacy, the plan file is gone (unverifiable — fail open), or the
- * presentation is present and fresh. Blocks only on presentation-missing/stale.
+ * absent, or the HTML and its submission are current. A declared completed
+ * plan whose source disappeared is unverifiable and cannot satisfy submission.
  */
 function prometheusStageAGateReason(state: PrometheusState): string | null {
 	const planPath = state.plan_path ?? "";
 	if (planPath === "" || state.steps?.plan?.done !== true) return null;
 	const status = stageAPresentationStatus(planPath);
+	if ((status === "ok" || status === "plan-missing") && !presentationSubmissionCurrent(state.presentation, planPath, stageAPresentationPath(planPath))) {
+		return "<prometheus-stage-a-gate>Prometheus presentation submission missing or stale. Read review-pipeline.md Stage A, render HTML, then run prometheus-state.ts set --phase S5 --submit-presentation <html> before completion.</prometheus-stage-a-gate>";
+	}
 	if (status !== "presentation-missing" && status !== "stale") return null;
 	const presentationPath = stageAPresentationPath(planPath);
 	const problem =
@@ -572,6 +576,11 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			// Terminal marker — interview already concluded. Delete the orphan unconditionally.
 			cleanupDeepInterviewState(sessionId);
 		} else if (detectDeepInterviewDone(lastAssistantMessage)) {
+			if (deepInterviewStateRaw.state !== undefined &&
+				isProgressLive(deepInterviewStateRaw, nowEpoch) &&
+				!presentationSubmissionCurrent(deepInterviewStateRaw.state.presentation)) {
+				return formatBlockOutput("<deep-interview-continuation>Deep-interview presentation missing or stale. Read presentation.md, render HTML, then run deep-interview-state.ts submit-presentation --spec-path <spec> --html-path <html> before emitting <deep-interview-done/>.</deep-interview-continuation>");
+			}
 			// UC10 (topology-floor-evolution Stage 5): a done-token alone is not proof of
 			// genuine convergence — the interviewer LLM can claim done prematurely. Cross-
 			// validate against the code-enforced state.current_ambiguity/state.threshold

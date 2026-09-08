@@ -47,7 +47,8 @@ import {
 	closeSync,
 	statSync,
 } from "fs";
-import { join, dirname, basename, extname } from "path";
+import { join, dirname, basename, extname, resolve } from "path";
+import { createHash } from "crypto";
 // lib-internal imports must be relative — deployed copies under .claude/lib/ have no @lib alias
 // (the sync alias-rewriter skips lib/** files). Relative imports let `make sync`'s dep collector
 // follow the path and deploy omt-dir alongside this module.
@@ -1077,9 +1078,44 @@ export function touchSessionStates(sessionId: string): void {
 
 export type StageAPresentationStatus = "ok" | "plan-missing" | "presentation-missing" | "stale";
 
-/** The authored presentation source is pinned to the plan stem: `<plan dir>/presentation/<plan basename>`. */
-export function stageAPresentationMarkdownPath(planPath: string): string {
-	return join(dirname(planPath), "presentation", basename(planPath));
+/** A submission binds the reviewed source and the reader's HTML to their current bytes. */
+export interface PresentationSubmission {
+	source_path: string;
+	html_path: string;
+	source_sha256: string;
+	html_sha256: string;
+}
+
+export function createPresentationSubmission(sourcePath: string, htmlPath: string): PresentationSubmission {
+	if (!sourcePath.trim() || !htmlPath.trim() || extname(htmlPath).toLowerCase() !== ".html") {
+		throw new Error("presentation requires a source file and an HTML file");
+	}
+	const source = readFileSync(sourcePath);
+	const html = readFileSync(htmlPath);
+	if (!source.toString("utf8").trim() || !/<html\b/i.test(html.toString("utf8")) || !/<body\b[^>]*>[\s\S]*\S[\s\S]*<\/body>/i.test(html.toString("utf8"))) {
+		throw new Error("presentation requires non-empty source and a complete HTML document");
+	}
+	if (statSync(htmlPath).mtimeMs < statSync(sourcePath).mtimeMs) {
+		throw new Error("presentation HTML predates its source; render again before submitting");
+	}
+	return {
+		source_path: resolve(sourcePath),
+		html_path: resolve(htmlPath),
+		source_sha256: createHash("sha256").update(source).digest("hex"),
+		html_sha256: createHash("sha256").update(html).digest("hex"),
+	};
+}
+
+export function presentationSubmissionCurrent(value: unknown, sourcePath?: string, htmlPath?: string): boolean {
+	if (!isPlainObject(value) || typeof value.source_path !== "string" || typeof value.html_path !== "string") return false;
+	if (sourcePath !== undefined && resolve(sourcePath) !== value.source_path) return false;
+	if (htmlPath !== undefined && resolve(htmlPath) !== value.html_path) return false;
+	try {
+		const current = createPresentationSubmission(value.source_path, value.html_path);
+		return current.source_sha256 === value.source_sha256 && current.html_sha256 === value.html_sha256;
+	} catch {
+		return false;
+	}
 }
 
 /** The shareable Stage A render is derived beside its authored Markdown source as HTML. */
@@ -1091,7 +1127,8 @@ export function stageAPresentationPath(planPath: string): string {
 }
 
 /**
- * Single source of truth for "does this plan have a fresh Stage A render?" —
+ * File-level check for a fresh Stage A HTML render; submitted content hashes
+ * are additionally checked by presentationSubmissionCurrent at both gates.
  * consumed by BOTH enforcement points: prometheus-state.ts refuses to record
  * phase S6+ on a non-ok status (F7), and the persistent-mode Stop hook refuses
  * <prometheus-done/> on presentation-missing/stale when a plan was written.
@@ -1108,13 +1145,9 @@ export function stageAPresentationStatus(planPath: string): StageAPresentationSt
 	};
 	const planMtime = mtimeOf(planPath);
 	if (planMtime === null) return "plan-missing";
-	const authoredPath = stageAPresentationMarkdownPath(planPath);
-	if (!existsSync(authoredPath)) return "presentation-missing";
-	const authoredMtime = mtimeOf(authoredPath);
-	if (authoredMtime === null || authoredMtime < planMtime) return "stale";
 	const presentationPath = stageAPresentationPath(planPath);
 	if (!existsSync(presentationPath)) return "presentation-missing";
 	const presentationMtime = mtimeOf(presentationPath);
-	if (presentationMtime === null || presentationMtime < authoredMtime) return "stale";
+	if (presentationMtime === null || presentationMtime < planMtime) return "stale";
 	return "ok";
 }

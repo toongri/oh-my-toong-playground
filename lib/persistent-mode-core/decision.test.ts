@@ -6,6 +6,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { execFileSync } from "child_process";
 import { approveOk } from "@lib/qa-chain-core";
+import { createPresentationSubmission } from "@lib/state-core";
 
 // ---------------------------------------------------------------------------
 // Freshness assertions
@@ -72,6 +73,14 @@ describe("makeDecision", () => {
 		await rm(omtDir, { recursive: true, force: true });
 		await mkdir(stateDir, { recursive: true });
 	});
+
+	function submittedInterviewPresentation() {
+		const spec = join(omtDir, "spec.md");
+		const html = join(omtDir, "spec.html");
+		fs.writeFileSync(spec, "# Confirmed design");
+		fs.writeFileSync(html, "<html><body>Confirmed design</body></html>");
+		return createPresentationSubmission(spec, html);
+	}
 
 	afterEach(() => {
 		if (savedOmtDir === undefined) {
@@ -350,6 +359,15 @@ describe("makeDecision", () => {
 	});
 
 	describe("Priority 1.5: Deep Interview Protection", () => {
+		it("HTML 제출이 필수인 인터뷰는 완료 토큰만으로 종료되지 않음", async () => {
+			await writeFile(join(omtDir, "deep-interview-active-state-test-session.json"), JSON.stringify({
+				active: true, last_touched_at: new Date().toISOString(),
+				state: { non_goals: [{ item: "배포", decider: "배포 변경" }] },
+			}));
+			const result = makeDecision(createContext({ lastAssistantMessage: "<deep-interview-done/>" }));
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("submit-presentation");
+		});
 		it("makeDecision blocks with deep-interview-continuation when state active and no token", async () => {
 			const deepInterviewState = {
 				active: true,
@@ -379,6 +397,7 @@ describe("makeDecision", () => {
 				last_touched_at: new Date().toISOString(),
 				state: {
 					phase: "in_progress",
+					presentation: submittedInterviewPresentation(),
 					non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
 				},
 			};
@@ -442,6 +461,7 @@ describe("makeDecision", () => {
 						phase: "in_progress",
 						current_ambiguity: 0.1,
 						threshold: 0.15,
+						presentation: submittedInterviewPresentation(),
 						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
 					},
 				}),
@@ -564,6 +584,7 @@ describe("makeDecision", () => {
 						topology: {
 							components: [{ id: "c1", name: "C1", status: "active", clarity_scores: SCORED_DIMS }],
 						},
+						presentation: submittedInterviewPresentation(),
 						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
 					},
 				}),
@@ -597,6 +618,7 @@ describe("makeDecision", () => {
 								{ id: "c2", name: "C2", status: "deferred", clarity_scores: UNSCORED_DIMS },
 							],
 						},
+						presentation: submittedInterviewPresentation(),
 						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
 					},
 				}),
@@ -624,6 +646,7 @@ describe("makeDecision", () => {
 						phase: "in_progress",
 						current_ambiguity: 0.05,
 						threshold: 0.15,
+						presentation: submittedInterviewPresentation(),
 						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
 					},
 				}),
@@ -657,6 +680,7 @@ describe("makeDecision", () => {
 						phase: "in_progress",
 						current_ambiguity: 1,
 						threshold: null,
+						presentation: submittedInterviewPresentation(),
 						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
 					},
 				}),
@@ -689,6 +713,7 @@ describe("makeDecision", () => {
 						phase: "in_progress",
 						current_ambiguity: null,
 						threshold: 0.15,
+						presentation: submittedInterviewPresentation(),
 						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
 					},
 				}),
@@ -857,6 +882,7 @@ describe("makeDecision", () => {
 						non_goals: [
 							{ item: "out-of-scope thing", decider: "user confirmed out of scope in round 2" },
 						],
+						presentation: submittedInterviewPresentation(),
 					},
 				}),
 			);
@@ -1223,7 +1249,7 @@ describe("makeDecision", () => {
 			await writeFile(planPathFor(), "# plan\n");
 		};
 
-		const writeStateWithPlanDone = async () => {
+		const writeStateWithPlanDone = async (presentation?: ReturnType<typeof createPresentationSubmission>) => {
 			await writeFile(
 				join(omtDir, "prometheus-state-test-session.json"),
 				JSON.stringify({
@@ -1232,6 +1258,7 @@ describe("makeDecision", () => {
 					started_at: new Date().toISOString(),
 					last_touched_at: new Date().toISOString(),
 					plan_path: planPathFor(),
+					presentation,
 					steps: { plan: { done: true } },
 				}),
 			);
@@ -1275,8 +1302,8 @@ describe("makeDecision", () => {
 			await writePlanOnDisk();
 			await mkdir(join(planDirFor(), "presentation"), { recursive: true });
 			await writeFile(presentationMarkdownPathFor(), "# presentation\n");
-			await writeFile(presentationPathFor(), "# presentation\n");
-			await writeStateWithPlanDone();
+			await writeFile(presentationPathFor(), "<html><body>presentation</body></html>\n");
+			await writeStateWithPlanDone(createPresentationSubmission(planPathFor(), presentationPathFor()));
 
 			const context = createContext({ lastAssistantMessage: "Done. <prometheus-done/>" });
 
@@ -1307,15 +1334,15 @@ describe("makeDecision", () => {
 			expect(fs.existsSync(join(omtDir, "prometheus-state-test-session.json"))).toBe(false);
 		});
 
-		it("fails open when plan_path points at a missing file (unverifiable)", async () => {
+		it("완료된 플랜의 원본이 없으면 제출 검증 불가로 종료를 거부함", async () => {
 			await writeStateWithPlanDone(); // state claims a plan, but nothing on disk
 
 			const context = createContext({ lastAssistantMessage: "Done. <prometheus-done/>" });
 
 			const result = makeDecision(context);
 
-			expect(result.decision).not.toBe("block");
-			expect(fs.existsSync(join(omtDir, "prometheus-state-test-session.json"))).toBe(false);
+			expect(result.decision).toBe("block");
+			expect(fs.existsSync(join(omtDir, "prometheus-state-test-session.json"))).toBe(true);
 		});
 
 		it("escapes at MAX_BLOCK_COUNT — a wedged session can still walk away", async () => {
@@ -2059,6 +2086,7 @@ describe("makeDecision", () => {
 					progress_touched_at: staleIso,
 					state: {
 						phase: "in_progress",
+						presentation: submittedInterviewPresentation(),
 						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
 					},
 				}),
@@ -2132,6 +2160,7 @@ describe("makeDecision", () => {
 					progress_touched_at: fresh,
 					state: {
 						phase: "in_progress",
+						presentation: submittedInterviewPresentation(),
 						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
 					},
 				}),
@@ -2168,6 +2197,7 @@ describe("makeDecision", () => {
 					// no progress_touched_at — simulates a file written before this field existed
 					state: {
 						phase: "in_progress",
+						presentation: submittedInterviewPresentation(),
 						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
 					},
 				}),
@@ -2203,6 +2233,7 @@ describe("makeDecision", () => {
 					// no progress_touched_at — a state file written before this field existed
 					state: {
 						phase: "in_progress",
+						presentation: submittedInterviewPresentation(),
 						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
 					},
 				}),
@@ -2291,6 +2322,7 @@ describe("makeDecision", () => {
 					// no progress_touched_at — legacy shape, never touched by any GC-only writer
 					state: {
 						phase: "in_progress",
+						presentation: submittedInterviewPresentation(),
 						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
 					},
 				}),
@@ -2325,6 +2357,7 @@ describe("makeDecision", () => {
 						phase: "in_progress",
 						current_ambiguity: 0.9,
 						threshold: 0.15,
+						presentation: submittedInterviewPresentation(),
 						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
 					},
 				}),
@@ -2420,6 +2453,7 @@ describe("makeDecision", () => {
 						phase: "in_progress",
 						current_ambiguity: 0.9,
 						threshold: 0.15,
+						presentation: submittedInterviewPresentation(),
 						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
 					},
 				}),

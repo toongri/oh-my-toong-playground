@@ -82,6 +82,11 @@ maintainer 고도라 해도 이 규칙은 절대다: **SSOT(스펙)에 없는 �
 - **프로즈가 제 다이어그램과 일치** — "화살표가 왼쪽을 본다"가 `flowchart LR`와 어긋나지 않게.
 
 ## 형식 — 자립 HTML
+사람에게 전달하고 state에 제출하는 presentation은 **HTML 하나**다. 아래 Markdown은 렌더러의
+중간 입력이며 별도 제출물이 아니다. 렌더 후 `deep-interview-state.ts submit-presentation
+--spec-path <spec>.md --html-path <presentation>.html`을 실행한다. 성공 시 source/HTML 경로와
+해시가 `state.presentation`에 저장된다. 어느 파일이든 변경하면 다시 렌더하고 제출한다.
+
 `scripts/render.ts`로 렌더한 단일 자립 HTML(런타임 JS·외부 참조 0). 저자는 제약된 마크다운 +
 승인 컴포넌트만 쓰고 스타일은 렌더러가 소유. mermaid 펜스는 빌드타임 인라인 SVG로 구워진다.
 승인 컴포넌트: `doc-meta` · `flow`/`flow-step`/`flow-arrow` · `compare`/`compare-before`/`compare-after`

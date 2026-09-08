@@ -53,6 +53,27 @@ function rawState(sid: string = SID): Record<string, unknown> {
 }
 
 describe("deep-interview state", () => {
+	test("HTML 제출 없이 실행 인계를 선언할 수 없음", () => {
+		initDeepInterviewState(SID, { initial_idea: "presentation submission" });
+		expect(() => updateDeepInterviewState(SID, { current_phase: "handoff" })).toThrow("presentation");
+		expect(rawState()["current_phase"]).toBe("deep-interview");
+	});
+
+	test("HTML 제출 명령은 원본과 HTML을 state에 기록함", () => {
+		initDeepInterviewState(SID, { initial_idea: "presentation submission" });
+		const spec = join(tmpDir, "spec.md");
+		const html = join(tmpDir, "spec.presentation.html");
+		writeFileSync(spec, "# Design\nA confirmed design.");
+		writeFileSync(html, "<!doctype html><html><body><h1>Design</h1><p>A confirmed design.</p></body></html>");
+		const cli = join(import.meta.dir, "deep-interview-state.ts");
+		execSync(`bun '${cli}' submit-presentation --spec-path '${spec}' --html-path '${html}'`, { stdio: "pipe", env: { ...process.env } });
+		const state = rawState()["state"] as DeepInterviewStateContent;
+		expect(state.presentation?.html_path).toBe(html);
+		updateDeepInterviewState(SID, { current_phase: "handoff" });
+		writeFileSync(spec, "# Revised design");
+		expect(() => updateDeepInterviewState(SID, { current_phase: "handoff" })).toThrow("presentation");
+	});
+
 	// AC A4/A5 — init overlays into seed; update merges and refreshes heartbeat; single file
 	test("A4/A5: init overlays rich shape into seed; update merges and refreshes last_touched_at; one file throughout", async () => {
 		writeSeed();
