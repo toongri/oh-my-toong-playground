@@ -199,6 +199,15 @@ Commit hashes are compared against the list that `start` pinned into the state �
 
 ## Step 7 — code
 
+**Carry the example into its implementation.** For every Intuition example, fill the
+required **예시 연결** paragraph after the core-code fence in the change block that
+implements it: the same input → the actual symbol's condition or call → intermediate
+value → result. If the example crosses change blocks, continue its values in those
+blocks. For a behavior-preserving refactor, show the same result and where the
+responsibility moved. This paragraph applies to blocks traversed by the example;
+unrelated blocks keep their own explanation. Check each example against these
+paragraphs before submitting code. Merely repeating its name does not trace it.
+
 The unit is the **change (변경)**, not the file, and **the spine is the commit.** A Change Group (a concern) descends commit by commit; under a commit come **change blocks** (`#### 변경 N: <한 일>`). **A change is not a file** — one change is realized by the responsibility shifts of several **symbols**, the classes/functions edited together for one reason. So a change block carries one entry per symbol, and **each entry's subject is the symbol, told before→after**: `<code>symbol</code>` + where it lives (which layer/domain — pointing back to the architecture cards), then **기존** (the responsibility and behavior that symbol carried) and **변경** (how this diff changed it), as complete sentences. A newly created symbol writes **신설** (the responsibility it now takes) instead of 기존; a removed one writes **삭제** (where its duty went). Numbered role labels that state only the post-state ("책임 1 — <역할> … 이제 하는 일") leave the reader unable to tell what it was like before — a measured defect. The file appears only as a location citation in the `cf-loc` slot, never as the heading. A signal file may be cited by more than one change; what must not happen is a signal file no change cites (R1).
 
 ```markdown
@@ -222,6 +231,8 @@ The unit is the **change (변경)**, not the file, and **the spine is the commit
 ​```ts
 // Core logic — real code or pseudocode (one required per change block)
 ​```
+
+<p><strong>예시 연결</strong> <for a block traversed by the Intuition example: same input → actual condition/call → intermediate value → result></p>
 ```
 
 The slots fill R13, R3, and R5. The `왜`·`효과·사이드이펙트`·`검증`·code are at the change level; the symbol entries (기존/변경/신설/삭제) and `바뀐 위치` carry the symbols and their files. The component, field labels, and code-fence rules follow `markdown-template.md`.
@@ -359,6 +370,20 @@ The questions are all **short open-ended answers**, and each question fixes, alo
 - At least two rubric items per question
 - At least one of them a concrete value unknowable without reading the document (identifier, coordinate, condition, order)
 - Within the same concept, questions do not overlap in required rubric
+
+**Include a transfer question for each independent Intuition example.** Change one
+input or condition from that example and ask the reader to predict the result **and
+explain why**. Select a case whose exact result was not already worked out in the
+document, using only rules the document taught. A hypothetical code-condition change
+must be labeled hypothetical, not presented as part of the diff. For a refactor,
+ask whether the result remains the same and which preserved rule accounts for it.
+
+The author-only question record has four fields: **changed input/condition,
+question, expected result, causal reason**. The last two are separate grading
+items; a correct result with a missing reason is incomplete. Keep the expected
+result and reason out of the reader's document and question. These questions count
+toward the existing concept bank and its 20-concept cap; they do not create a
+second quiz or replace the required why/purpose question.
 
 ### Running it
 

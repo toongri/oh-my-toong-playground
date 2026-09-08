@@ -99,7 +99,29 @@ If read, 확보=열람; if no tool is available, 확보=접근 불가 (record th
 ​```ts
 // Core logic — the essential lines of this change (one required per change block)
 ​```
+
+<p><strong>예시 연결</strong> <required for a block traversed by an Intuition example: same input → actual condition/call → intermediate value → result></p>
 ```
+
+### Carrying an example into Code
+
+Each Intuition example continues in the change block that implements it, immediately
+after that block's code fence. A path crossing multiple blocks carries its intermediate
+values forward. Blocks outside that path do not require this paragraph.
+
+For example, if Intuition worked through `attempt = 3` and the actual code uses
+`attempt < 3`, the paragraph reads:
+
+```html
+<p><strong>예시 연결</strong> 앞의 <code>attempt = 3</code>을
+<code>nextAction(3)</code>에 넣으면 <code>3 &lt; 3</code>이
+<code>false</code>여서 <code>stop</code>을 반환한다.</p>
+```
+
+Use the inspected code's own identifiers and values. For a behavior-preserving
+refactor, trace the same result through the new owner of the responsibility.
+The author checks this cross-section continuity before submitting code; R6 still
+judges only the Intuition section, which is submitted before Code exists.
 
 **The unit is the change, and the spine is the commit.** A Change Group (concern) is the first-class
 grouping; descend within it by commit (`### \`hash\` — 제목`). Under each commit come its **change

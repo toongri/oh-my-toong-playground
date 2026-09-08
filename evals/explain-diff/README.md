@@ -60,6 +60,9 @@ bun evals/explain-diff/harness/score-structure.ts green skill
 
 ## 결과
 
+후속 예시·퀴즈 저작 실험은 [causal-examples/README.md](causal-examples/README.md)에
+별도로 기록한다. 아래 초기 평가와 다른 시나리오·범위이므로 수치를 합산하지 않는다.
+
 ### RED — 16건 (2 플랫폼 × 2 대조군 × 4 픽스처, 셀당 n=1)
 
 | 항목 | 나타난 문서 수 |

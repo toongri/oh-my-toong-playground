@@ -365,6 +365,16 @@ Only what cannot be narrowed by machine or by quote is left. When the items grow
 
 ### R8. Quiz question discrimination
 
+For every independent Intuition example, include a transfer question with an
+author-only record of **changed input/condition, question, expected result, causal
+reason**. Vary one input or condition and require both a prediction and its reason,
+using a case not already worked out in the document but derivable from the rules
+it teaches. Mark a hypothetical code change explicitly. For a refactor, ask about
+the preserved result and rule. Grade result and reason separately; a missing
+reason is incomplete. Keep the solution out of the reader's document/question.
+Transfer questions use the existing concept bank and cap, alongside the required
+purpose question. This is an author/quiz-grader judgment, not a new CLI predicate.
+
 Each question requires two or more rubric items, at least one of which is a concrete value unknowable without reading the document (identifier, coordinate, condition, order). Within the same concept, questions do not overlap in required rubric. **Questions test comprehension of the change — its purpose, mechanism, or consequence — not document metadata.** The git range, the signal/noise file counts, the commit count, and other bookkeeping prove nothing about whether the reader understood the change; such questions are banned. At least one required concept must be a why/purpose question whose answer must state the reason, not just the mechanic.
 
 > **Note — the controls' quiz form.** The gist control makes multiple-choice questions that show the options
