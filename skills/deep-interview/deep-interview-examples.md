@@ -1,5 +1,19 @@
 # Deep Interview Examples
 
+## Good: Target the weakest dimension with a focused question
+
+Intent=0.9, Constraints=0.4, Success=0.7. Constraints is the weakest dimension: “You said this should work on mobile. Does that mean a native app, a responsive web app, or a PWA?” Wait for the answer before asking which devices it must support. If another unresolved prerequisite controls this choice, resolve that prerequisite first and explain why.
+
+## Good: Ground the confirmation question
+
+An `explore` result establishes JWT authentication with passport.js in `src/auth/`. “The existing middleware uses JWT and passport.js. Should this feature extend that authentication flow or have a separate one?” The source establishes the current implementation; the user decides the intended behavior. Cite an actual finding, not this illustrative path.
+
+## Good: Inspect ontology convergence
+
+Round 3: User, Task, Project. Round 4 adds Tag: 3 stable of 4 entities, stability 75%. Round 5 has the same 4 entities: stability 100%.
+
+The vocabulary has stabilized across those two rounds; this is useful quantitative feedback, not proof that relationships, lifecycle rules, or requirements are correct. If the user instead keeps calling the product a workflow, inbox, and planner, ask: “Which is the core concept, and which are supporting views?”
+
 ## Good: Follow the consequence of an answer
 
 User: “An approval points to the current configuration.”

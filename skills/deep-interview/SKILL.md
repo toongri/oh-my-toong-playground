@@ -34,7 +34,8 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
 <Execution_Policy>
 - Ask ONE question at a time -- never batch multiple questions
 - Follow open decisions in dependency order. Choose the question whose answer most changes scope, behavior, architecture, or verification; use clarity scores to expose gaps rather than override an unresolved prerequisite.
-- Gather discoverable facts before asking the user: `explore` for code, `librarian` for external evidence. Reuse current evidence; investigate again when a new question or changed premise makes it insufficient. Failed research remains an explicit unknown, not an assumed fact or a change of project type.
+- Among decisions with settled prerequisites, target the weakest unscored/lowest-clarity dimension by default. Name its score and gap each round; explain when a prerequisite or consequence makes another target more urgent. Keep the displaced gap open in the register.
+- Gather discoverable facts before asking the user: `explore` for code, `librarian`/`ultraresearch` for external evidence. Reuse current evidence; investigate again when a new question or changed premise makes it insufficient. Failed research remains an explicit unknown, not an assumed fact or a change of project type.
 - Cite the evidence behind a question. Existing code describes current behavior; it does not decide the user's desired behavior.
 - Tag every evidence item by its ORIGIN at record time (provenance is assigned where evidence enters, never reconstructed later) and persist it in the `evidence_provenance` state field. Origin→label assignment: a codebase read → `[from-code]`; a codebase read confirmed by executed code → `[from-code][auto-confirmed]`; a `librarian`/`ultraresearch` external fact → `[from-research]`; a user answer → `[from-user]`. Append each item via the state CLI:
   ```bash
@@ -160,7 +161,9 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts set-nongoals \
 2. For each settled decision, check its evidence and the concrete counterexample or failure scenario tested against it. Surface contradictions and unsupported assumptions. Wordsmithing with no effect on behavior is not a new decision.
 3. Restate the goal, selected approach, boundaries, and explicitly delegated/deferred assumptions. Ask whether this matches the user's understanding. A correction reopens the affected decisions and their dependents; incorporate it before repeating this audit. An earlier explicit confirmation still applies while its premises remain unchanged.
 
-**User control:** stop/cancel pauses immediately and preserves state. An explicit request to deliver early produces a **DRAFT** with open decisions, their owners, and consequences; it is not a passed interview or an execution-ready design. Do not lower scores, mark gaps resolved, or emit `<deep-interview-done/>` to make a draft pass the normal completion gate. Explicit delegation ("your call") lets the agent research, recommend, and record a choice with its basis; uncertainty ("I don't know yet") keeps the decision open. A defer records what is excluded now and what would reopen it. Resolve the user's intent with one focused question when these meanings are unclear.
+**User control:** stop/cancel pauses immediately and preserves state. An explicit request to deliver early uses **Draft delivery** below; it is not a passed interview or an execution-ready design. Do not lower scores, mark gaps resolved, or emit `<deep-interview-done/>` to make a draft pass the normal completion gate. Explicit delegation ("your call") lets the agent research, recommend, and record a choice with its basis; uncertainty ("I don't know yet") keeps the decision open. A defer records what is excluded now and what would reopen it. Resolve the user's intent with one focused question when these meanings are unclear.
+
+**Draft delivery:** read the current state and spec template, then save the available content to `$OMT_DIR/deep-interview/{slug}.draft.md` with Status DRAFT, the existing design anchor, the complete decision register, and unresolved decisions, owners, and consequences. An unknown owner or metadata value stays explicitly unknown; do not invent an output shape or ask another question when the user requested delivery without questions. This incomplete working document uses the template as an outline, not as a completed-spec validation claim. Share the draft and preserve interview state for resume. Draft delivery ends here: Phase 4's completed-spec self-review, presentation submission, handoff transition, completion token, and Phase 5 execution bridge apply only after normal closure. A request to defer execution after a completed interview still receives the full spec and presentation.
 
 ### Step 2-head: Update the Decision Register
 
@@ -198,6 +201,13 @@ Choose the stance for the selected decision's **current gap**. Missing discovera
 
 **Numerical stagnation signal:** when ambiguity stays within ±0.05 for three rounds, inspect both the scores and the decision changes. If the same gap remains, explain what has not advanced and change the evidence source, counterexample, or stance. Stable entity definitions call for investigating the unresolved fact or tradeoff, not asking the same ontology question again. Use `stance_history` to notice neglected perspectives and unproductive repetition; it is not a once-only quota.
 
+**Perspective coverage:** before closure, inspect whether the load-bearing premises were challenged, unnecessary complexity was tested, and unstable concepts were clarified. Record the concrete probe and result in `checks`; a stance name or round count alone does not establish coverage.
+
+Use the matching question frame when it fits the gap:
+- **Contrarian:** “What if the opposite were true?” / “What if this constraint doesn't actually exist?” Test whether the framing is supported or habitual.
+- **Simplifier:** “What's the simplest version that would still be valuable?” / “Which constraints are necessary versus assumed?” Test which required outcome would fail without the complexity.
+- **Ontologist:** use the latest ontology snapshot's entities: “Which is the core concept, and which are supporting?” Test whether the discussion addresses a symptom instead of the underlying problem.
+
 Record the selected stance so the interview can inspect which perspectives it has used:
 
 ```bash
@@ -206,6 +216,10 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
 ```
 
 ### Step 2-fact: Ground a Discoverable Fact
+
+Use `explore` for codebase facts. Use `librarian` for a focused external source lookup; use `ultraresearch` in **pre-work grounding** posture when a decision needs multiple sources, competing claims resolved, or deeper verification. The in-interview research call remains **Scoped (≤3 workers)**: this bounds one investigation, not the number of questions or later investigations. Pass the precise unknown, its decision impact, prior evidence, and what would resolve the conflict. Reuse evidence for the same still-valid claim; a new fact or changed premise can trigger another call in the same dimension.
+
+If `ultraresearch` is unavailable or fails, continue with `librarian` for external facts and `explore` for code facts. Report what remains unverified; an available code lookup cannot substitute for missing external evidence. Continue independent decisions while a dependent question remains open.
 
 When a decision needs a discoverable fact, investigate it before asking the user to decide. Record its provenance at entry, update the register, and re-score the affected component using Step 2c. Research results are evidence, not user answers:
 
@@ -217,6 +231,8 @@ OMT_DI_PAYLOAD_EOF
 ```
 
 Include all six `scores`, including `context`, and write the overall ambiguity as in Step 2e. The round updates the component's stored scores. If evidence is unavailable, keep that gap visible and continue independent decisions; do not silently answer it or mark the dimension permanently researched.
+
+Display the Step 2d report, then return to the loop head. A fact-grounding round does not fall through to the user-answer steps or ask the user to repeat the finding.
 
 ### Step 2a: Generate Next Question
 
@@ -369,6 +385,7 @@ Round {n} complete. | Component scored: {component_name}
 
 **Change since previous round:** {previous ambiguity → current ambiguity; reason for increase/decrease or plateau}
 **Stance:** {selected stance and why it fits this gap}
+**Weakest dimension:** {component / dimension / score / gap; reason if another prerequisite takes priority}
 **Decision changes:** {settled/reopened IDs and reasons, including dependent decisions}
 **Next target:** {decision ID} — {why its consequence/prerequisites make it next; related component/dimension gap}
 
@@ -405,7 +422,11 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
 
 Use the same register and loop to interrogate every design decision **relentlessly** until reaching **shared understanding**. Examine every aspect that can change the agreed outcome: ownership, interfaces, data/state transitions, recovery, dependencies, and verification. Work through open decisions in dependency order; new design evidence may reopen requirements.
 
-For an architectural choice with genuinely different approaches, develop **2-3 alternatives** that solve the same agreed problem. Compare each through the same normal, failure, and change scenario: interface and invariants, ordering/error behavior, ownership, dependencies, what complexity it hides, and how it can be tested. Recommend one with reasons. Do not turn naming variations into design alternatives or build hypothetical extension points without an agreed use case.
+Put **every genuinely open design decision** to the user, including low-stakes and reversible choices, with **2-3 alternatives** that are real and a reasoned recommendation. A path forced by verified code or an external constraint is a fact; an explicit delegation authorizes a choice under User control. Being cheap to reverse does not settle a user-owned choice.
+
+Compare genuinely different approaches through the same normal, failure, and change scenario: interface and invariants, ordering/error behavior, ownership, dependencies, what complexity it hides, and how it can be tested. Do not turn naming variations into design alternatives or build hypothetical extension points without an agreed use case.
+
+**Pressure check:** “the user is in a hurry,” “this is low-risk,” and “the sketch already covers it” do not justify batching questions, silently choosing a default, or omitting real alternatives. Check the recorded answer, evidence, or delegation before treating a branch as settled.
 
 After the answer, record the choice, rejected alternatives, tradeoffs, counterexample results, and downstream consequences before continuing:
 
@@ -422,7 +443,7 @@ When all design branches are settled or explicitly delegated/deferred without co
 
 ## Phase 4: Crystallize Spec
 
-After the Closure Audit passes, crystallize the confirmed design. For an explicit early-delivery request, export a DRAFT with the register and unresolved consequences; normal handoff remains subject to the completion gate.
+After the Closure Audit passes, crystallize the confirmed design. An incomplete interview requested early uses Draft delivery above instead.
 
 0. **Confirm and persist the output shape** before composing the spec or routing. Via `AskUserQuestion`, confirm exactly one output shape: `task-tickets`, `ai-execution-plan`, or `domain-output`; a vague prose description or synonym is not a valid value. After the user confirms, persist it before any route selection:
 
@@ -434,7 +455,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
 
 Wait for the update to succeed, then read state and use the exact persisted `state.output_shape` value for the spec Metadata and the Phase 5 route. Do not infer the value from the spec's prose.
 
-1. **Generate the specification** with the prompt-safe transcript, using the current decision register for the Approach section, including evidence, rejected alternatives, tested counterexamples, and explicit assumptions. For early delivery, preserve open decisions as open rather than filling them in. **Spec template: you MUST read `deep-interview-spec-template.md` now, before composing the spec.** Do not write the spec from memory.
+1. **Generate the specification** with the prompt-safe transcript, using the current decision register for the Approach section, including evidence, rejected alternatives, tested counterexamples, and explicit assumptions. **Spec template: you MUST read `deep-interview-spec-template.md` now, before composing the spec.** Do not write the spec from memory.
 
 **Immutable design anchor:** read the persisted state before composing the spec and derive the one shared metadata value exactly as `design-anchor: deep-interview:<state.interview_id>`. The anchor is derived only from persisted state.interview_id, remains stable across resume, and is never from title, slug, timestamp, or hash. Put this exact value in the template's Metadata section; do not invent or normalize a second anchor.
 
@@ -463,7 +484,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts submit-presentation --sp
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update --current-phase handoff
 ```
 
-Use the actual saved spec path. Submission records `state.presentation` with source/HTML paths and content hashes; `handoff` and the completion hook require a current submission. Editing either file requires re-rendering and resubmission. On resume, check the submission before routing; legacy rich states with no submission are incomplete too. The same submission step applies to normal crystallization, user-forced crystallization, execution deferral, and every revised spec.
+Use the actual saved spec path. Submission records `state.presentation` with source/HTML paths and content hashes; `handoff` and the completion hook require a current submission. Editing either file requires re-rendering and resubmission. On resume, check the submission before routing; legacy rich states with no submission are incomplete too. The same submission step applies to normal crystallization, execution deferral after closure, and every revised completed spec.
 
 5. **Deliver the spec and HTML links, then emit the handoff token.** The literal `<deep-interview-done/>` signals completion only after submission succeeds. A rendered file on disk or a link in chat alone is not a state submission.
 
@@ -510,7 +531,8 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 <Tool_Usage>
 - Use the runtime question tool for structured choices; use free text for open Socratic questions.
 - Use `Agent(subagent_type="explore")` for brownfield codebase exploration (run BEFORE asking user about codebase)
-- Use `librarian` for external evidence; keep failed or unavailable research visible as unknown.
+- Use `librarian`/`ultraresearch` for external facts through Step 2-fact; keep its Scoped call budget separate from interview depth and preserve unavailable evidence as unknown.
+- Use temperature 0.1 for a scoring call when its runtime exposes that setting. Otherwise keep the same scoring rubric and do not claim a temperature was configured.
 - Use `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts init` to initialize interview state (Phase-1 step 4)
 - Use `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update` to update state after each round (Phase-2 step 2e)
 - Use `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts get` to read back state when resuming an interrupted session — check its `migration_status` field: `legacy_missing` means this state predates `topology` and Round 0 (step 3.7) must run before any further per-component scoring
@@ -525,6 +547,7 @@ The Closure Audit is the single transition rule. An unresolved contradiction reo
 </Escalation_And_Stop_Conditions>
 
 <Final_Checklist>
+This is the normal-completion checklist. A paused interview or delivered DRAFT retains unfinished items and state for resume.
 - [ ] Closure Audit passed: evidence-backed decisions, tested counterexamples, no open execution-changing gap, and shared understanding; early delivery is visibly DRAFT
 - [ ] Oversized initial context/history was summarized before scoring, question generation, spec generation, or execution handoff
 - [ ] Ambiguity score displayed after every round
@@ -534,9 +557,9 @@ The Closure Audit is the single transition rule. An unresolved contradiction reo
 - [ ] presentation authored per [presentation.md](presentation.md), rendered to `$OMT_DIR/deep-interview/{slug}.presentation.html`, submitted with `submit-presentation`, and accepted by `update --current-phase handoff` (current source/HTML hashes; self-audit passed)
 - [ ] Spec includes: goal, constraints, invariants, acceptance criteria, Approach & Design Decisions, clarity breakdown, transcript
 - [ ] Token `<deep-interview-done/>` emitted in the final assistant message before handoff
-- [ ] Execution bridge presented via AskUserQuestion
-- [ ] Selected execution mode invoked via Skill() (never direct implementation)
-- [ ] State cleaned up after execution handoff
+- [ ] Execution bridge presented via AskUserQuestion, or the user's execution deferral honored
+- [ ] Selected execution mode invoked via Skill() when execution was selected (never direct implementation)
+- [ ] State cleaned up only after completed handoff; unfinished draft/paused state preserved
 - [ ] Brownfield confirmation questions cite repo evidence (file/path/pattern) before asking the user to decide
 - [ ] Scope-fuzzy tasks can trigger ontology-style questioning to stabilize the core entity before feature elaboration
 - [ ] Per-round component score table, weights, gaps, and ontology stability are displayed alongside changed decisions
