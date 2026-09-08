@@ -265,6 +265,16 @@ describe("qa-state CLI wiring", () => {
 		writeFileSync(before, png);
 		writeFileSync(after, png);
 		expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${after} --evidence-surface agent-browser --evidence-before ${before} --evidence-action ${evidence} --evidence-after ${after}`)).not.toThrow();
+		const reviewFile = join(tmpDir, "review.json");
+		writeFileSync(reviewFile, JSON.stringify([{ claim: "오류 안내 표시", verdict: "insufficient", observation: "단색 픽셀만 보임", gap: "실제 실패 안내 화면을 다시 캡처", sources: [{ path: after, location: "전체 이미지" }] }]));
+		expect(() => run(`review-evidence --story story-1 --cls 1 --json-file ${reviewFile}`)).not.toThrow();
+		expect(rawState().cells[0].evidence_review.claims[0].verdict).toBe("insufficient");
+		expect(rawState().derived.record_complete).toBe(false);
+		const savedReview = rawState().cells[0].evidence_review;
+		expect(savedReview.files[after]).toMatch(/^[a-f0-9]{64}$/);
+		expect(savedReview.cell_snapshot).toContain("story-1");
+		writeFileSync(reviewFile, JSON.stringify([{ claim: "오류 안내 표시", verdict: "supported", observation: "보임", gap: "", sources: [] }]));
+		expect(() => run(`review-evidence --story story-1 --cls 1 --json-file ${reviewFile}`)).toThrow();
 		writeFileSync(after, "This is a text log renamed as an image, not a screenshot.");
 		expect(() => run(`record-cell --story story-1 --cls 2 --status fail --evidence-before ${before} --evidence-action ${evidence} --evidence-after ${after}`)).toThrow();
 	});
@@ -508,6 +518,9 @@ describe("qa-state CLI wiring", () => {
 		run("set-acceptance --json '[\"first cycle AC\"]'");
 		run("set-verdict REQUEST_CHANGES");
 		run("complete");
+		const completed = rawState();
+		completed.report = { path: "/old.html", sha256: "a".repeat(64), state_snapshot: "old", reviewed: true };
+		writeFileSync(resolveStatePath(S), JSON.stringify(completed));
 		run('start --target "second cycle"');
 		const reset = rawState();
 		expect(reset.active).toBe(true);
@@ -521,6 +534,7 @@ describe("qa-state CLI wiring", () => {
 		expect(reset.fix_head_before).toBe("");
 		expect(reset.user_dirty_set).toEqual([]);
 		expect(reset.acceptance_criteria).toEqual([]);
+		expect(reset.report).toBeUndefined();
 		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
 		const before = readFileSync(resolveStatePath(S), "utf8");
 		expect(() => run('start --target "launder"')).toThrow();
@@ -542,6 +556,16 @@ describe("qa-state CLI wiring", () => {
 		run("record-run-check --check dirty-worktree --result fail --note debris");
 		run("record-run-check --check flaky-rerun --result fail --note flaky");
 		run("set-verdict REQUEST_CHANGES");
+		expect(() => run("complete")).toThrow("report");
+		const report = join(tmpDir, "report.html");
+		execSync(`bun ${join(import.meta.dir, "qa-report.ts")} --session ${S} --out ${report}`, { env: process.env });
+		expect(() => run("complete")).toThrow("report");
+		run(`review-report --path ${report}`);
+		writeFileSync(report, readFileSync(report, "utf8") + "<!-- changed -->");
+		expect(() => run("complete")).toThrow("report");
+		expect(() => run(`review-report --path ${report}`)).toThrow("current report");
+		execSync(`bun ${join(import.meta.dir, "qa-report.ts")} --session ${S} --out ${report}`, { env: process.env });
+		run(`review-report --path ${report}`);
 		run("complete");
 		expect(rawState().active).toBe(false);
 	});
@@ -555,6 +579,14 @@ describe("qa-state CLI wiring", () => {
 		const view = JSON.parse(run("get"));
 		expect(view.verdict_report.waives[0].reason).toBe("user approved exception");
 		expect(view.verdict_report.inert.reason).toContain("no reachable");
+	});
+	test("이전 사이클 기록이 있어도 현재 보고서 제출이 가능함", () => {
+		authorCompleteChain();
+		run("record-cell --story story-1 --cls 1 --status na --na-reason setup");
+		run("inc-cycle");
+		const report = join(tmpDir, "next-cycle.html");
+		expect(() => execSync(`bun ${join(import.meta.dir, "qa-report.ts")} --session ${S} --out ${report}`, { env: process.env })).not.toThrow();
+		expect(rawState().report.path).toBe(report);
 	});
 
 	test("declare-inert all-na arm permits APPROVE but mixed pass/H-na does not", () => {
@@ -570,6 +602,9 @@ describe("qa-state CLI wiring", () => {
 		run('declare-inert --reason "nothing reachable"');
 		run("set-verdict APPROVE");
 		expect(rawState().verdict).toBe("APPROVE");
+		const report = join(tmpDir, "inert-report.html");
+		execSync(`bun ${join(import.meta.dir, "qa-report.ts")} --session ${S} --out ${report}`, { env: process.env });
+		run(`review-report --path ${report}`);
 		run("complete");
 		run('start --target "mixed inert"');
 		authorCompleteChain();

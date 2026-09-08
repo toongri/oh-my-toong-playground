@@ -18,6 +18,55 @@ product, what happens at their boundary, whether it works, and whether each
 requirement was met. If a reader who knows nothing about the codebase cannot
 judge "were our requirements reflected?" from this report, it is not done.
 
+## Claim review record
+
+After `record-cell`, inspect the raw images at readable size and the action
+record. List each asserted outcome as a separate claim, including intermediate
+error/recovery states. Record what the source actually shows before comparing it
+to the assertion. Existing capture guidance above still governs sufficiency.
+
+`review-evidence --story <id> --cls <n> [--sub <name>] --json-file <file>` accepts
+a nonempty JSON array. Each row requires `claim`, `verdict` (`supported` or
+`insufficient`), `observation`, `gap`, and nonempty `sources` with `path` and
+`location` (visible region or timestamp/log line). `gap` is empty for supported
+claims; otherwise it names the missing proof and next capture. For example:
+
+```json
+[
+  {
+    "claim": "저장 실패 안내가 표시됐다",
+    "verdict": "insufficient",
+    "observation": "편집 폼 상단만 보이며 실패 안내는 보이지 않는다",
+    "gap": "실패 안내가 표시된 순간을 읽을 수 있게 다시 캡처한다",
+    "sources": [{ "path": "evidence/save-after.png", "location": "전체 캡처" }]
+  }
+]
+```
+
+The CLI persists the review and hashes the scenario's evidence plus every cited
+source. Re-recording the cell, changing its scenario fields, or changing evidence
+bytes invalidates the receipt. Review the new evidence and resubmit. These checks
+prove a review record exists and matches the files; they do not perform image
+understanding or prove that the reviewer told the truth.
+
+The reader card renders reviewed claims, observations, source locations, and
+images together. Missing/insufficient/stale reviews show **근거 미검증**; raw
+execution status remains in the audit. A timer claim needs a timed action trace
+and the resulting visible state; a persistence claim needs the relevant value
+before/after reopening. A still image of the form cannot establish either.
+Do not add outcomes in presentation prose that are absent from the claim review.
+Open the final HTML: every claimed result must remain legible in its embedded
+capture. If not, repair the presentation/capture and repeat the review.
+The renderer records a receipt for the generated HTML. After inspecting the
+actual final HTML, run `qa-state.ts review-report --path <html>` before `complete`.
+Changing the HTML or recorded facts requires re-rendering and another inspection.
+This is an inspection attestation, not automated visual understanding.
+Consume the browser/image inspection result before submitting `review-report`.
+Do not batch capture/view and attestation/completion in one unobserved tool call.
+A clipped diagram or unreadable claim is unfinished review: repair, re-render,
+and inspect again before attesting. Mechanical acceptance cannot excuse a defect
+you have not yet assessed.
+
 ## Purpose & perspective (the bar)
 Write the report in the **first person of the QA engineer who verified this
 change**, explaining — to a colleague or team-lead with no prior context on it —

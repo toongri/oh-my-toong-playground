@@ -7,6 +7,7 @@ import {
 	commentOk,
 	cycleUntouched,
 	driverGateArmed,
+	evidenceReviewSnapshot,
 	recordComplete,
 	requiredCells,
 	rosterComplete,
@@ -29,7 +30,7 @@ type CompleteFixture = QaChainState & {
 	run_checks: NonNullable<QaChainState["run_checks"]>;
 };
 
-const probe = (path: string) => ({ exists: path !== "/missing", size: path === "/empty" ? 0 : 1 });
+const probe = (path: string) => ({ exists: path !== "/missing", size: path === "/empty" ? 0 : 1, sha256: "a".repeat(64) });
 
 function authoredState(): CompleteFixture {
 	const state: CompleteFixture = {
@@ -57,10 +58,32 @@ function authoredState(): CompleteFixture {
 		cycle: 2,
 		evidence: { path: `/evidence/${index}`, surface: "agent-device", before: `/evidence/${index}-before.png`, action: `/evidence/${index}`, after: `/evidence/${index}-after.png` },
 	}));
+	for (const cell of state.cells) {
+		cell.evidence_review = {
+			cell_snapshot: evidenceReviewSnapshot(cell),
+			files: Object.fromEntries([cell.evidence!.path, cell.evidence!.before!, cell.evidence!.action!, cell.evidence!.after!].map((path) => [path, "a".repeat(64)])),
+			claims: [{ claim: "오류 안내 표시", verdict: "supported", observation: "하단에 저장 실패 안내가 보임", gap: "", sources: [{ path: cell.evidence!.after!, location: "하단 알림" }] }],
+		};
+	}
 	return state;
 }
 
 describe("qa chain core", () => {
+	test("이미지 파일만 있고 주장 검토가 없으면 승인하지 않음", () => {
+		const state = authoredState();
+		delete state.cells[0].evidence_review;
+		expect(approveOk(state, probe)).toBe(false);
+	});
+	test("근거 부족 및 검토 후 파일 변경은 승인하지 않음", () => {
+		const state = authoredState();
+		expect(approveOk(state, probe)).toBe(true);
+		state.cells[0].evidence_review!.claims[0].verdict = "insufficient";
+		expect(approveOk(state, probe)).toBe(false);
+		state.cells[0].evidence_review!.claims[0].verdict = "supported";
+		expect(approveOk(state, (path) => ({ ...probe(path), sha256: "b".repeat(64) }))).toBe(false);
+		state.cells[0].attack_point = "다른 주장";
+		expect(approveOk(state, probe)).toBe(false);
+	});
 	test("화면 시나리오의 전후 이미지 누락은 완료로 판정하지 않음", () => {
 		const state = authoredState();
 		for (const cell of state.cells) {
@@ -177,6 +200,7 @@ describe("qa chain core", () => {
 	test("commentOk allows M/L failures but not H failures", () => {
 		const state = authoredState();
 		state.cells[1].status = "fail";
+		state.cells[1].evidence_review!.cell_snapshot = evidenceReviewSnapshot(state.cells[1]);
 		expect(commentOk(state, probe)).toBe(true);
 		state.cells[0].status = "fail";
 		expect(commentOk(state, probe)).toBe(false);
@@ -298,6 +322,11 @@ describe("qa chain core: additive schema extension (3-slot evidence + structured
 			})),
 		};
 		expect(chainComplete(withFields)).toBe(true);
+		expect(recordComplete(withFields, probe)).toBe(false);
+		for (const cell of withFields.cells!) {
+			cell.evidence_review!.cell_snapshot = evidenceReviewSnapshot(cell);
+			for (const path of [cell.evidence!.before!, cell.evidence!.action!, cell.evidence!.after!]) cell.evidence_review!.files[path] = "a".repeat(64);
+		}
 		expect(recordComplete(withFields, probe)).toBe(true);
 		expect(approveOk(withFields, probe)).toBe(true);
 		expect(commentOk(withFields, probe)).toBe(true);

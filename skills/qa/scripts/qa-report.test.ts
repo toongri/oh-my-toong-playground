@@ -3,6 +3,8 @@ import { execSync, spawnSync } from "child_process";
 import { mkdtempSync, mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { createHash } from "crypto";
+import { evidenceReviewSnapshot } from "@lib/qa-chain-core";
 
 import {
 	renderQaReport,
@@ -22,7 +24,7 @@ import type { QaView } from "./qa-state.ts";
 // ---------------------------------------------------------------------------
 
 function baseView(overrides: Partial<QaView> = {}): QaView {
-	return {
+	const view: QaView = {
 		active: true,
 		phase: "STATE",
 		cycle: 0,
@@ -81,12 +83,40 @@ function baseView(overrides: Partial<QaView> = {}): QaView {
 		verdict_report: { verdict: "COMMENT", cycle: 0, waives: [] },
 		...overrides,
 	};
+	for (const cell of view.cells ?? []) {
+		if (!cell.evidence) continue;
+		const paths = [cell.evidence.path, cell.evidence.before, cell.evidence.action, cell.evidence.after].filter((path): path is string => !!path);
+		cell.evidence_review = { cell_snapshot: evidenceReviewSnapshot(cell), claims: [{ claim: "결과 화면 확인", observation: "화면 결과가 기대와 일치", verdict: "supported", gap: "", sources: [{ path: cell.evidence.after ?? cell.evidence.path, location: "결과 영역" }] }], files: Object.fromEntries(paths.map((path) => [path, createHash("sha256").update(path.endsWith(".png") ? Buffer.from("AAAA", "base64") : Buffer.from(`contents of ${path}`)).digest("hex")])) };
+	}
+	return view;
 }
 
 const fakeReader: EvidenceReader = (path) =>
 	path.endsWith(".png") ? { kind: "image", dataUri: "data:image/png;base64,AAAA" } : { kind: "text", content: `contents of ${path}` };
 
 describe("qa-report renderer", () => {
+	test("좁은 화면에서도 근거를 읽도록 원본 크기 확대를 제공함", () => {
+		const html = renderQaReport(baseView(), {}, fakeReader)!;
+		expect(html).toContain("원본 크기로 확대");
+		expect(html).toContain(".image-view[open] + .image-frame img");
+	});
+	test("행동 전 화면은 검토한 결과보다 먼저 나오고 추가 주장 로그도 감사에 포함됨", () => {
+		const view = baseView();
+		const cell = view.cells![0];
+		cell.evidence_review!.claims[0].sources.push({ path: "/evidence/timing.txt", location: "요청과 응답 시각" });
+		const html = renderQaReport(view, {}, fakeReader)!;
+		expect(html.indexOf("행동 전 화면")).toBeLessThan(html.indexOf("결과 화면 확인</strong>"));
+		expect(html).toContain("contents of /evidence/timing.txt");
+	});
+	test("주장 검토 없는 사진은 확인 배지가 아니라 근거 미검증으로 표시함", () => {
+		const view = baseView();
+		view.cells = view.cells!.slice(0, 1);
+		delete view.cells[0].evidence_review;
+		const html = renderQaReport(view, { scenarios: { "story-1:1:": { observed: "실패 안내가 나타났다" } } }, fakeReader)!;
+		const cards = html.slice(html.indexOf('<div class="scenarios">'), html.indexOf("시나리오 상세 기록 (감사)</h2>"));
+		expect(cards).toContain("근거 미검증");
+		expect(cards).not.toContain('cov-pass');
+	});
 	test("최종 화면 보고서는 관찰 설명으로 누락 이미지를 대신할 수 없음", () => {
 		const view = baseView();
 		const narrative = { scenarios: { "story-1:1:": { observed: "내보내기 완료를 확인했다." } } };
@@ -496,6 +526,7 @@ describe("qa-report renderer", () => {
 				},
 			],
 		});
+		for (const cell of view.cells ?? []) delete cell.evidence_review;
 		const html = renderQaReport(view, {}, budgetReader)!;
 		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
 		expect(reader).toContain("data:image/png;base64,AAAA"); // action screenshot embedded
@@ -670,6 +701,7 @@ describe("qa-report renderer", () => {
 			const view = baseView();
 			view.cells![0].evidence = { path: bigTextPath, surface: "curl" }; // text-only boundary, no screenshot
 			view.cells![1].status = "na"; // isolate to the one oversized-text cell
+			for (const cell of view.cells ?? []) delete cell.evidence_review;
 			const html = renderQaReport(view, {}, defaultEvidenceReader)!;
 			const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
 			// must NOT satisfy the reader-facing visual evidence slot with a fake
@@ -914,6 +946,7 @@ describe("qa-report presentation layer", () => {
 			priority: "M" as const,
 			status,
 			cycle: 0,
+			evidence: { path: "/evidence/after.png", surface: "agent-device", after: "/evidence/after.png" },
 			...(status === "na" ? { na_reason: "유저 경계에 도달하지 못함" } : {}),
 		});
 		const cases = [
@@ -1181,6 +1214,7 @@ describe("qa-report per-scenario evidence", () => {
 	test("스크린샷도 관찰 자연어도 없는 검증 시나리오는 리더에 크게 갭을 낸다 (raw 로그만으로는 리더 근거가 아님)", () => {
 		const view = baseView();
 		view.cells![0].evidence = { path: "/evidence/api.log", surface: "curl" }; // text-only, NO authored observation
+		delete view.cells![0].evidence_review;
 		view.cells![1].status = "na";
 		const html = renderQaReport(view, {}, () => ({ kind: "text", content: "raw" }))!;
 		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
@@ -1191,6 +1225,7 @@ describe("qa-report per-scenario evidence", () => {
 	test("공백·탭·개행만 있는 관찰은 리더 근거로 취급하지 않고 missing-observation gap을 렌더한다", () => {
 		const view = baseView();
 		view.cells![0].evidence = { path: "/evidence/api.log", surface: "curl" }; // text-only, NO screenshot
+		delete view.cells![0].evidence_review;
 		view.cells![1].status = "na";
 		const narrative: QaReportNarrative = {
 			scenarios: { "story-1:1:": { observed: " \t\n  " } },

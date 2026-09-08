@@ -5,7 +5,8 @@ import { mkdir, mkdtemp, writeFile, rm, readFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { execFileSync } from "child_process";
-import { approveOk } from "@lib/qa-chain-core";
+import { approveOk, qaReportSnapshot } from "@lib/qa-chain-core";
+import { createHash } from "crypto";
 import { createPresentationSubmission } from "@lib/state-core";
 
 // ---------------------------------------------------------------------------
@@ -2919,7 +2920,13 @@ describe("QA Stop-gate decision table", () => {
 		};
 	}
 
-	function writeQaState(state: Record<string, unknown>, session = sid) {
+	function writeQaState(state: Record<string, unknown>, session = sid, reviewed = true) {
+		if (reviewed && Array.isArray(state.actors) && state.actors.length) {
+			const path = join(omtDir, `report-${session}.html`);
+			const html = "<!doctype html><html><body>Reviewed fixture report</body></html>";
+			fs.writeFileSync(path, html);
+			state.report = { path, sha256: createHash("sha256").update(html).digest("hex"), state_snapshot: qaReportSnapshot(state), reviewed: true };
+		}
 		fs.writeFileSync(join(omtDir, `qa-state-${session}.json`), JSON.stringify(state));
 	}
 
@@ -2944,6 +2951,11 @@ describe("QA Stop-gate decision table", () => {
 		writeQaState(state);
 		expect(approveOk(state as never, (path) => ({ exists: fs.existsSync(path), size: fs.statSync(path).size }))).toBe(true);
 		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+	it("qa 보고서 검토가 없으면 승인 상태도 Stop을 차단함", () => {
+		const state = completeQa("APPROVE");
+		writeQaState(state, sid, false);
+		expect(makeDecision(context())).toMatchObject({ decision: "block" });
 	});
 
 	it("qa inactive completed APPROVE with approveOk allows stop", () => {

@@ -70,15 +70,50 @@ export interface QaCell {
 	status?: QaResult | "waived" | null;
 	na_reason?: string;
 	evidence?: QaEvidence;
+	evidence_review?: QaEvidenceReview;
 	cycle?: number;
 	/**
-	 * Optional structured scenario fields (report-rendering detail). Additive:
-	 * no predicate below reads these, so a cell that never sets them stays
-	 * chain/record/approve/comment complete exactly as before.
+	 * Optional scenario detail. When present, the evidence-review snapshot binds
+	 * these fields too; changing the scenario requires a fresh review.
 	 */
 	driven_at?: string;
 	why_needed?: string;
 	source?: "self-authored" | "caller-provided";
+}
+
+export interface QaEvidenceClaim {
+	claim: string;
+	verdict: "supported" | "insufficient";
+	observation: string;
+	gap: string;
+	sources: Array<{ path: string; location: string }>;
+}
+
+export interface QaEvidenceReview {
+	claims: QaEvidenceClaim[];
+	/** Snapshot binds this review to the exact recorded scenario, not its filename. */
+	cell_snapshot: string;
+	files: Record<string, string>;
+}
+
+export function evidenceReviewSnapshot(cell: QaCell): string {
+	const { evidence_review: _review, ...record } = cell;
+	return JSON.stringify(record);
+}
+
+/** Structural receipt only: the reviewer, not this predicate, judges pixels. */
+export function evidenceReviewComplete(cell: QaCell, probe: EvidenceProbe): boolean {
+	const review = cell.evidence_review;
+	if (!review || review.cell_snapshot !== evidenceReviewSnapshot(cell) || !Array.isArray(review.claims) || !review.claims.length) return false;
+	const nonblank = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
+	if (!review.claims.every((claim) => claim && nonblank(claim.claim) && claim.verdict === "supported" && nonblank(claim.observation) && claim.gap === "" && Array.isArray(claim.sources) && claim.sources.length > 0 && claim.sources.every((source) => source && nonblank(source.path) && nonblank(source.location)))) return false;
+	const paths = [cell.evidence?.path, cell.evidence?.before, cell.evidence?.action, cell.evidence?.after, ...review.claims.flatMap((claim) => claim.sources.map((source) => source.path))];
+	try {
+		return paths.filter((path): path is string => !!path).every((path) => {
+			const file = probe(path);
+			return file.exists && file.size > 0 && /^[a-f0-9]{64}$/.test(review.files?.[path] ?? "") && file.sha256 === review.files[path];
+		});
+	} catch { return false; }
 }
 
 export interface QaRunCheck {
@@ -136,15 +171,30 @@ export interface QaChainState {
 	/** Acceptance criteria captured at PLAN; rendered by the report from records. */
 	acceptance_criteria?: string[];
 	derived?: QaDerived;
+	report?: { path: string; sha256: string; state_snapshot: string; reviewed: boolean };
 	[key: string]: unknown;
+}
+
+export function qaReportSnapshot(state: QaChainState): string {
+	return JSON.stringify([state.target, state.cycle, state.acceptance_criteria, state.actors, state.stories, state.cells, state.run_checks, state.waives, state.inert, state.verdict]);
+}
+
+export function qaReportComplete(state: QaChainState, probe: EvidenceProbe): boolean {
+	if (!(state.actors ?? []).length) return true;
+	const report = state.report;
+	if (!report || report.reviewed !== true || report.state_snapshot !== qaReportSnapshot(state) || !/\.html$/i.test(report.path)) return false;
+	try {
+		const file = probe(report.path);
+		return file.exists && file.size > 0 && /^[a-f0-9]{64}$/.test(report.sha256) && file.sha256 === report.sha256;
+	} catch { return false; }
 }
 
 /** Backwards-compatible name for callers that refer to the chain as QaState. */
 export type QaState = QaChainState;
 
-export type EvidenceProbe = (path: string) => { exists: boolean; size: number; image?: boolean };
+export type EvidenceProbe = (path: string) => { exists: boolean; size: number; image?: boolean; sha256?: string };
 
-export function isVisualDriver(driver: QaDriver | undefined): boolean {
+export function isVisualDriver(driver: string | undefined): boolean {
 	return driver === "agent-browser" || driver === "agent-device";
 }
 
@@ -270,7 +320,8 @@ export function recordComplete(state: QaChainState, probe: EvidenceProbe): boole
 		if (!cell || cell.status === null || cell.status === undefined || cell.cycle !== currentCycle(state)) return false;
 		if (cell.status === "na" && !cell.na_reason) return false;
 		const story = stories.find((candidate) => candidate.id === required.story);
-		if ((cell.status === "pass" || cell.status === "fail") && isVisualDriver(story ? actorFor(state, story)?.driver : undefined) && !visualEvidenceComplete(cell.evidence, probe)) return false;
+			if ((cell.status === "pass" || cell.status === "fail") && isVisualDriver(story ? actorFor(state, story)?.driver : undefined) && !visualEvidenceComplete(cell.evidence, probe)) return false;
+			if ((cell.status === "pass" || cell.status === "fail") && isVisualDriver(story ? actorFor(state, story)?.driver : undefined) && !evidenceReviewComplete(cell, probe)) return false;
 		if (cell.status === "pass" && !validEvidence(state, cell.evidence, story ? actorFor(state, story)?.driver : undefined, cell.cycle, probe)) return false;
 	}
 	const checks = state.run_checks ?? {};

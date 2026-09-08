@@ -1,5 +1,6 @@
 import { HookOutput, PrometheusState, UltragoalState } from "./types.ts";
-import { statSync } from "fs";
+import { readFileSync, statSync } from "fs";
+import { createHash } from "crypto";
 import {
 	readDeepInterviewStateRaw,
 	cleanupDeepInterviewState,
@@ -37,6 +38,7 @@ import {
 	commentOk,
 	cycleUntouched,
 	recordComplete,
+	qaReportComplete,
 	type QaChainState,
 } from "@lib/qa-chain-core";
 import { evaluateProgress } from "./progress.ts";
@@ -280,10 +282,10 @@ ${continuationContract("preferred", askToolName)}
 `;
 }
 
-function probeQaEvidence(path: string): { exists: boolean; size: number } {
+function probeQaEvidence(path: string): { exists: boolean; size: number; sha256?: string } {
 	try {
 		const stat = statSync(path);
-		return { exists: true, size: stat.size };
+		return { exists: stat.isFile(), size: stat.size, sha256: stat.isFile() ? createHash("sha256").update(readFileSync(path)).digest("hex") : undefined };
 	} catch {
 		return { exists: false, size: 0 };
 	}
@@ -298,7 +300,9 @@ function buildQaContinuationMessage(
 	const unmet = !chainComplete(state)
 		? "chainComplete=false — run qa-state.ts add-actor/add-story/author-cell"
 		: !recordComplete(state, probe)
-			? "recordComplete=false — run qa-state.ts record-baseline/record-cell/record-run-check"
+			? "recordComplete=false — run qa-state.ts record-baseline/record-cell/review-evidence/record-run-check"
+			: !qaReportComplete(state, probe)
+				? "qaReportComplete=false — render qa-report, inspect its HTML, then qa-state.ts review-report --path <html>"
 			: verdict === "APPROVE"
 				? "approveOk=false — run qa-state.ts set-verdict REQUEST_CHANGES or complete the failed cells"
 				: verdict === "COMMENT"
@@ -754,7 +758,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			verdict === "REQUEST_CHANGES" && (complete || untouched);
 		const escaped = getBlockCount(stateDir, qaAttemptId) >= MAX_BLOCK_COUNT;
 
-		if (allowApprove || allowComment || allowRequestChanges) {
+		if ((allowApprove || allowComment || allowRequestChanges) && qaReportComplete(qaState, qaProbe)) {
 			cleanupBlockCountFiles(stateDir, qaAttemptId);
 		} else if (escaped) {
 			cleanupBlockCountFiles(stateDir, qaAttemptId);
