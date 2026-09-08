@@ -842,6 +842,35 @@ describe("Stage A presentation gate (F7)", () => {
 		expect(state.phase).toBe("S6");
 	});
 
+	test("S6 rejects a derived HTML submission after the renderer Markdown is edited", () => {
+		const planPath = seedPlan("gateRendererInputStale");
+		writePresentation();
+		const planTime = new Date(Date.now() - 180_000);
+		const authoredTime = new Date(Date.now() - 120_000);
+		const renderedTime = new Date(Date.now() - 60_000);
+		utimesSync(planPath, planTime, planTime);
+		utimesSync(presentationMarkdownPath(), authoredTime, authoredTime);
+		utimesSync(presentationHtmlPath(), renderedTime, renderedTime);
+
+		const { code: submitCode } = runPromCliMerged(`set --phase S5 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()}`, {
+			OMT_SESSION_ID: "gateRendererInputStale",
+			OMT_DIR: tmpDir,
+		});
+		expect(submitCode).toBe(0);
+
+		writeFileSync(presentationMarkdownPath(), "# presentation revised\n", "utf8");
+		const editedTime = new Date();
+		utimesSync(presentationMarkdownPath(), editedTime, editedTime);
+		const { code, out } = runPromCliMerged("set --phase S6", {
+			OMT_SESSION_ID: "gateRendererInputStale",
+			OMT_DIR: tmpDir,
+		});
+		expect(code).not.toBe(0);
+		expect(out).toMatch(/stale|older|re-render|재렌더/i);
+		const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-gateRendererInputStale.json`, "utf8"));
+		expect(state.phase).toBe("S5");
+	});
+
 	// (F7-missing) S6 with no presentation file — the skip this gate exists to catch
 	test("S6 without the presentation file exits non-zero and does not advance", () => {
 		const planPath = seedPlan("gateMissing");

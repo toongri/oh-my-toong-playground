@@ -1149,5 +1149,11 @@ export function stageAPresentationStatus(planPath: string): StageAPresentationSt
 	if (!existsSync(presentationPath)) return "presentation-missing";
 	const presentationMtime = mtimeOf(presentationPath);
 	if (presentationMtime === null || presentationMtime < planMtime) return "stale";
+	// Modern Stage A renders derive HTML from the authored Markdown beside it.
+	// Keep the legacy HTML-only fallback, but never accept HTML that predates the
+	// renderer input when that input exists.
+	const rendererInputPath = join(dirname(planPath), "presentation", basename(planPath));
+	const rendererInputMtime = mtimeOf(rendererInputPath);
+	if (rendererInputMtime !== null && presentationMtime < rendererInputMtime) return "stale";
 	return "ok";
 }
