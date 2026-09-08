@@ -78,7 +78,7 @@ If the config file already has `pdf_output_dir_rule` etc., append the new keys w
 **3. Browse JD Source**
 
 Interpret `jd_source` and list available JDs:
-- **Local directory** → list files. 파일명에서 company/position/date를 먼저 추론하고 (예: `2026-03-25_toss_backend.md`), 파일명만으로 정보가 부족한 경우에만 최근 10개 이내의 파일 본문을 읽어 추출한다.
+- **Local directory** → list files. First infer company/position/date from filenames (e.g., `2026-03-25_toss_backend.md`); only when filenames provide insufficient information, read the contents of at most 10 recent files to extract it.
 - **URL** → fetch with WebFetch, parse page content to extract JD listings (company/position/date)
 - **Natural language rule** (e.g., "노션 취업 준비 페이지") → interpret the rule using available tools. If the source is not directly accessible, ask the user to provide the JD list or content.
 
@@ -128,13 +128,13 @@ Invoke the `review-resume` skill via the Skill tool.
 
 Keep the full JD text in context — the review-resume skill needs the target position/company to perform accurate evaluation.
 
-review-resume 스킬은 유저와의 인터랙션을 포함한 전체 평가 프로세스를 수행한다. 유저 승인까지 포함된 모든 과정이 완료될 때까지 Step 4로 진행하지 마라.
+The review-resume skill performs the full evaluation process, including interaction with the user. Do not proceed to Step 4 until the entire process, including user approval, is complete.
 
 ### Step 4: Apply Review Findings & Commit
 
-review-resume에서 승인된 수정사항을 `_config.yml`에 적용한다.
+Apply the changes approved in review-resume to `_config.yml`.
 
-적용 완료 후 커밋:
+Commit after applying the changes:
 ```bash
 git add _config.yml
 git commit -m "docs: {company} JD-based resume tailoring"

@@ -16,7 +16,7 @@ Collaboratively source, refine, and complete resume problem-solving entries with
 - **Critical partner**: Do not blindly accept user input. Challenge, propose alternatives, surface trade-offs. When the user proposes a content direction change, state your assessment before applying it:
   - BAD: User: "파티션 설계 내용도 넣자" → "좋아, 반영할게" → structural_verdict FAIL (scanability low: detail spill)
   - GOOD: User: "파티션 설계 내용도 넣자" → "structural_verdict 기준상 design rationale 없는 구현 디테일로 읽힐 가능성이 높다 — 넣을까, 한 문장 언급으로 깊이를 암시할까?"
-  - GOOD (agree): User: "goroutine이 아니라 속성 병렬 처리가 핵심 아니야?" → "맞다, goroutine은 Go 구현체 디테일이고 설계 결정은 속성 병렬 추론이다" → 바로 반영
+  - GOOD (agree): User: "goroutine이 아니라 속성 병렬 처리가 핵심 아니야?" → "맞다, goroutine은 Go 구현체 디테일이고 설계 결정은 속성 병렬 추론이다" → apply immediately
 - **Show full text**: Always show the complete entry before discussing. Never show fragments
 - **Guided interview**: Ask ONE focused question per turn. With each question, propose 2-3 candidate directions or framings — show the user what strong material looks like and how to frame their experience. Don't just extract raw facts; coach toward a compelling entry
 
@@ -27,7 +27,7 @@ digraph resume_forge {
     rankdir=TB;
     Setup [shape=box, style=filled, fillcolor=lightblue];
     Loop1 [shape=box, label="Loop 1: Problem Definition\na2_causal_honesty == PASS", style=filled, fillcolor=lightyellow];
-    Loop2 [shape=box, label="Loop 2: Entry approved\n(final_verdict APPROVE && 5축 verdict 종합)", style=filled, fillcolor=lightyellow];
+    Loop2 [shape=box, label="Loop 2: Entry approved\n(final_verdict APPROVE && combined five-axis verdicts)", style=filled, fillcolor=lightyellow];
     Done [shape=box, label="Save + Update State", style=filled, fillcolor=lightgreen];
 
     Setup -> Loop1;
@@ -136,7 +136,7 @@ digraph loop2 {
     confirm -> save [label="user: 확정"];
     confirm -> interview [label="user: 아직"];
     confirm -> pick [label="user: 다음\n(skip)"];
-    classify [shape=box, label="Step 1: Classify\n(5축 verdict 패턴)", style=filled, fillcolor=lightyellow];
+    classify [shape=box, label="Step 1: Classify\n(five-axis verdict patterns)", style=filled, fillcolor=lightyellow];
     classify -> r_fail [label="structural_verdict FAIL alone\n(apply immediately)"];
     classify -> e_fail [label="{a1/a2/a3/a4} FAIL\nor structural_verdict+co-failure"];
     e_fail -> revise;
@@ -202,7 +202,7 @@ Invoke via `Agent(subagent_type="tech-claim-examiner", ...)`.
 - `verdicts.a2_causal_honesty.verdict != FAIL`
 - `verdicts.a3_outcome_significance.verdict != FAIL`
 - `verdicts.a4_ownership_scope.verdict != FAIL`
-- `count(P1 across A1-A4) < 3`  ← cumulative P1 허용 상한: P1 최대 2개
+- `count(P1 across A1-A4) < 3`  ← cumulative P1 ceiling: at most 2 P1 verdicts
 - `structural_verdict ∈ {PASS, P1}`
 - `critical_rule_flags.r_phys.triggered == false`
 - `critical_rule_flags.r_cross.triggered == false`
@@ -213,16 +213,16 @@ Invoke via `Agent(subagent_type="tech-claim-examiner", ...)`.
 
 **On REQUEST_CHANGES:**
 
-**Step 1. Classify Feedback (5축 verdict 패턴)**
+**Step 1. Classify Feedback (five-axis verdict patterns)**
 
-`skills/tech-claim-rubric/output-schema.md` §A5 Co-failure Disambiguation Full Routing Matrix를 참조하여 emitted verdicts와 flags 기반으로 routing을 결정한다. 우선순위 순:
+Refer to `skills/tech-claim-rubric/output-schema.md` §A5 Co-failure Disambiguation Full Routing Matrix to determine routing from the emitted verdicts and flags. In priority order:
 
-- **r_phys.triggered == true** → Source extraction with impossibility explanation (사용자에게 physically impossible 수치 설명 요청)
-- **r_cross.triggered == true** → Source extraction with contradiction explanation (사용자에게 cross-entry contradiction 설명 요청)
+- **r_phys.triggered == true** → Source extraction with impossibility explanation (ask the user to explain the physically impossible figures)
+- **r_cross.triggered == true** → Source extraction with contradiction explanation (ask the user to explain the cross-entry contradiction)
 - **count(P1 across A1-A4) >= 3** → Source extraction via Step 3 Stages 1-4, starting with the weakest P1 axis (ascending strength order)
-- **{a1, a2, a3, a4} 중 FAIL 있음 AND structural_verdict ∈ {PASS, P1}** → per-axis Stage 1-4 Source extraction (FAIL 축 interview hints 기반 depth 보강)
-- **{a1, a2, a3, a4} 중 FAIL 있음 AND structural_verdict == FAIL** → Stage 5 multi-axis synthesis (co-failure: axis FAIL + structural FAIL 동시 발생)
-- **structural_verdict == FAIL + {a1, a2, a3, a4} 모두 PASS/P1 + count(P1 across A1-A4) < 3** → Readability-only fix (no interview needed — 재구성·압축만으로 해결)
+- **any of {a1, a2, a3, a4} is FAIL AND structural_verdict ∈ {PASS, P1}** → per-axis Stage 1-4 Source extraction (add depth using interview hints for the FAIL axes)
+- **any of {a1, a2, a3, a4} is FAIL AND structural_verdict == FAIL** → Stage 5 multi-axis synthesis (co-failure: axis FAIL + structural FAIL occur together)
+- **structural_verdict == FAIL + all of {a1, a2, a3, a4} are PASS/P1 + count(P1 across A1-A4) < 3** → Readability-only fix (no interview needed — resolve through restructuring and compression alone)
 
 Readability-only fixes can be applied by rearranging/compressing the same material — apply immediately. Source extraction failures require new depth material — apply the Source Extraction protocol below.
 
@@ -250,11 +250,11 @@ Progress per axis below PASS (FAIL first, then P1 by ascending strength). **One 
 
 | Stage | Trigger | Action |
 |-------|---------|--------|
-| Stage 1 | `a1_technical_credibility` FAIL or P1 | Named systems / mechanisms 보강: ask specifically about the technical decisions the examiner flagged. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
-| Stage 2 | `a2_causal_honesty` FAIL or P1 | Causal chain explicit화 + arithmetic 검증: reframe the question from 3 different angles to surface cause-effect logic. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
-| Stage 3 | `a3_outcome_significance` FAIL or P1 | Tech 또는 business outcome 추가 (vanity metric 회피): ask about adjacent experience or measurable results. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
-| Stage 4 | `a4_ownership_scope` FAIL or P1 | Verb-scope coherence 보강: probe daily work for hidden ownership evidence, monitoring discoveries, operational context. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
-| Stage 5 | `structural_verdict == FAIL` + (`a1`/`a2`/`a3`/`a4`) co-failure | Source extraction 종합 (multi-axis): apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) — AI synthesizes user's domain/stack and proposes scenarios typical for the context |
+| Stage 1 | `a1_technical_credibility` FAIL or P1 | Strengthen named systems / mechanisms: ask specifically about the technical decisions the examiner flagged. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
+| Stage 2 | `a2_causal_honesty` FAIL or P1 | Make the causal chain explicit + verify arithmetic: reframe the question from 3 different angles to surface cause-effect logic. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
+| Stage 3 | `a3_outcome_significance` FAIL or P1 | Add a technical or business outcome (avoid vanity metrics): ask about adjacent experience or measurable results. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
+| Stage 4 | `a4_ownership_scope` FAIL or P1 | Strengthen verb-scope coherence: probe daily work for hidden ownership evidence, monitoring discoveries, operational context. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
+| Stage 5 | `structural_verdict == FAIL` + (`a1`/`a2`/`a3`/`a4`) co-failure | Synthesize source extraction (multi-axis): apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) — AI synthesizes user's domain/stack and proposes scenarios typical for the context |
 
 **Source Quality Check:**
 

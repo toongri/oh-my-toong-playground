@@ -435,7 +435,7 @@ Two opt-out types are distinguished in the HTML report. Both use `.section-opt-o
 **System opt-out — interview-impossible** (owner not present, all alternatives failed):
 - `.opt-out-badge` displays "소유자 인터뷰 필요"
 - Each FAIL section rendered as an expanded `.fail-axis` div with generic `.hint-category` and `.axis-feedback` content (examiner's finding)
-- Interview Hints are displayed to the user as-is, item by item, in source bullet language (per §4 Interview-Impossible Mode Branch). Hints 제공의 의도는 "owner가 어떤 정보를 확인해줘야 할지"를 reviewer에게 시각화하는 것.
+- Interview Hints are displayed to the user as-is, item by item, in source bullet language (per §4 Interview-Impossible Mode Branch). The purpose of providing Hints is to show the reviewer what information the owner needs to confirm.
 
 ---
 
@@ -483,15 +483,15 @@ Defines how alternatives for each finding are displayed in the Phase 10 HTML rep
 ```html
 <div class="section-opt-out">
   <span class="opt-out-badge">미해결 피드백</span>
-  <div class="resume-line">{원본 bullet 텍스트}</div>
+  <div class="resume-line">{original bullet text}</div>
   <div class="unresolved-feedback">
     <div class="fail-axis">
-      <div class="hint-category">{interview_hints에서 도출된 피드백 카테고리 레이블}</div>
-      <div class="axis-feedback">{examiner 피드백 내용}</div>
+      <div class="hint-category">{feedback category label derived from interview_hints}</div>
+      <div class="axis-feedback">{examiner feedback content}</div>
     </div>
     <div class="fail-axis">
-      <div class="hint-category">{interview_hints에서 도출된 피드백 카테고리 레이블}</div>
-      <div class="axis-feedback">{examiner 피드백 내용}</div>
+      <div class="hint-category">{feedback category label derived from interview_hints}</div>
+      <div class="axis-feedback">{examiner feedback content}</div>
     </div>
   </div>
 </div>
@@ -501,15 +501,15 @@ Defines how alternatives for each finding are displayed in the Phase 10 HTML rep
 ```html
 <div class="section-opt-out">
   <span class="opt-out-badge">소유자 인터뷰 필요</span>
-  <div class="resume-line">{원본 bullet 텍스트}</div>
+  <div class="resume-line">{original bullet text}</div>
   <div class="unresolved-feedback">
     <div class="fail-axis">
-      <div class="hint-category">{interview_hints에서 도출된 피드백 카테고리 레이블}</div>
-      <div class="axis-feedback">{examiner 피드백 내용}</div>
+      <div class="hint-category">{feedback category label derived from interview_hints}</div>
+      <div class="axis-feedback">{examiner feedback content}</div>
     </div>
     <div class="fail-axis">
-      <div class="hint-category">{interview_hints에서 도출된 피드백 카테고리 레이블}</div>
-      <div class="axis-feedback">{examiner 피드백 내용}</div>
+      <div class="hint-category">{feedback category label derived from interview_hints}</div>
+      <div class="axis-feedback">{examiner feedback content}</div>
     </div>
   </div>
 </div>
@@ -631,7 +631,7 @@ User review → AskUserQuestion
 Feedback present?
     → YES (specific section issue): Re-enter Quality Gate for that section
     → YES (overall structure/direction issue): Re-enter Quality Gate for relevant sections
-    → NO (explicit termination signal only): Proceed to Phase 10 결과 전달
+    → NO (explicit termination signal only): Proceed to Phase 10 Result Delivery
 ```
 
 ### Feedback Classification and Handling
@@ -675,4 +675,4 @@ Repeat this full regeneration + re-review loop until the user sends an explicit 
 
 On force-exit signals such as "just move on":
 - Display an "Unresolved feedback" badge in the HTML report for any sections with unresolved feedback
-- Proceed to Phase 10 결과 전달
+- Proceed to Phase 10 Result Delivery

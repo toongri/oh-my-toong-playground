@@ -31,7 +31,7 @@ When a single listing anchor leads to a detail page containing multiple distinct
 
 | Signal | Example |
 |---|---|
-| (a) Explicit subsidiary or team headers | Section heading "토스뱅크", "Toss Securities", "Tech Team" within the body. subsidiary 헤더 직후 N개 team labels enumerate (예: '3개 포지션' 헤더 + Infra/Platform/Recommendation 라벨) → team-level fan-out 의무. 단일 단어 stack tag(Kotlin, TypeScript)와 구별. |
+| (a) Explicit subsidiary or team headers | Section heading "토스뱅크", "Toss Securities", "Tech Team" within the body. N team labels enumerated immediately after a subsidiary header (e.g., '3개 포지션' header + Infra/Platform/Recommendation labels) → team-level fan-out is mandatory. Distinguish these from single-word stack tags (Kotlin, TypeScript). |
 | (b) Separate sub-position sections with distinct requirements | Each sub-position has its own qualifications, responsibilities, or tech stack block |
 | (c) Multiple distinct apply CTAs | More than one "지원하기" / "Apply" button targeting different positions |
 
@@ -53,7 +53,7 @@ The distinction: weak signals name multiple entities in passing; strong signals 
    - `role_title_verbatim`: `"<original_title> — <sub_position>"`
    - `role_title_slug`: derived from `role_title_verbatim` (includes `sub_position` via slugify)
 4. All other frontmatter fields (company_slug, tags, etc.) inherit from the parent unless the child's content overrides them.
-5. If team labels enumerate within a subsidiary block (header `'<N>개 포지션'` followed by N distinct labels), produce N children per subsidiary. `role_title_verbatim = '<original_title> — <subsidiary> / <team>'`, `sub_position = '<subsidiary> / <team>'`. team과 subsidiary 모두 child의 distinguishing key.
+5. If team labels enumerate within a subsidiary block (header `'<N>개 포지션'` followed by N distinct labels), produce N children per subsidiary. `role_title_verbatim = '<original_title> — <subsidiary> / <team>'`, `sub_position = '<subsidiary> / <team>'`. Both team and subsidiary distinguish the child.
 
 ### Presence-Coupling Rule
 
@@ -71,13 +71,13 @@ The distinction: weak signals name multiple entities in passing; strong signals 
 - "sub_position is not always explicitly labeled so I'll just skip it or put a placeholder" — ❌ If `sub_position` cannot be reliably determined from the content, escalate to Tier 3 user interview rather than guessing. Presence-coupling forbids saving with only `parent_url`.
 - "The anchor text says 외 5개 계열사 — that's multiple companies so fan-out" — ❌ Anchor text mention alone is a weak signal. Check the detail page. If the detail page has separate content blocks per company, that is the strong signal. If not, single combined JD.
 - "parent_url is already in the frontmatter so sub_position is redundant — skip it" — ❌ Presence-coupling: if `parent_url` is set, `sub_position` must also be set.
-- "팀 라벨이 stack tag로 보인다고 무시" — ❌ subsidiary 헤더 직후에 enumerate된 라벨 ≥2 → team-level fan-out 의무. 단일 단어 stack tag(Kotlin)와 문맥으로 구별.
+- "팀 라벨이 stack tag로 보인다고 무시" — ❌ ≥2 labels enumerated immediately after a subsidiary header → team-level fan-out is mandatory. Use context to distinguish them from single-word stack tags (Kotlin).
 
 ### Counterexample
 
 - **Toss "백엔드 개발자 — 외 5개 계열사" anchor** → detail page has separate sections "토스", "토스뱅크", "토스증권" each with distinct requirements + 3 apply CTAs → **strong signal** → fan-out into 3 child JDs. Each child gets `parent_url` = anchor URL, `sub_position` = "토스" / "토스뱅크" / "토스증권". ✓
 - **Simple "XYZ 외 2개 계열사" anchor** → detail page body describes a single generic role with no subsidiary separation → **weak signal** → single combined JD, no `parent_url`/`sub_position`. ✓
-- **ML Engineer 토스증권 detail body: '3개 포지션' + 추천/Infra/Platform 라벨** → team-level fan-out → 3 children. `role_title_verbatim` 예: `'ML Engineer — 토스증권 / 추천'`, `'ML Engineer — 토스증권 / Infra'`, `'ML Engineer — 토스증권 / Platform'`. `sub_position` = `'토스증권 / 추천'` 등. team과 subsidiary 모두 child의 distinguishing key. ✓
+- **ML Engineer 토스증권 detail body: '3개 포지션' + 추천/Infra/Platform labels** → team-level fan-out → 3 children. `role_title_verbatim` examples: `'ML Engineer — 토스증권 / 추천'`, `'ML Engineer — 토스증권 / Infra'`, `'ML Engineer — 토스증권 / Platform'`. `sub_position` = `'토스증권 / 추천'`, etc. Both team and subsidiary distinguish the child. ✓
 
 ---
 
@@ -595,7 +595,7 @@ System: You are a strict JD role tagger. Output ONLY JSON:
 No text outside JSON. Temperature 0.
 
 User:
-다음 JD 에 맞는 role enum 을 선택해라. taxonomy 외의 값 사용 금지. 복수 선택 가능.
+Select role enum values matching the following JD. Values outside the taxonomy are forbidden. Multiple selections are allowed.
 
 [Taxonomy enum]
 {{taxonomy.roles}}
@@ -607,14 +607,14 @@ User:
 {{jd_body}}
 
 Rules:
-- 한국어 서버/backend 계열 제목 ("백엔드", "서버개발자", "서버사이드", "BE", "backend")은 **반드시** `backend` 를 포함할 것.
-- 한국어 프론트/FE 계열 ("프론트엔드", "프론트", "FE", "웹 클라이언트") 는 **반드시** `frontend` 를 포함할 것.
-- 한국어 풀스택 ("풀스택", "Full-stack", "FS") 는 **반드시** `fullstack` 포함 + 필요 시 `backend`+`frontend` 추가.
-- 한국어 데이터 ("데이터 엔지니어", "데이터 플랫폼", "DE") 는 **반드시** `data` 포함.
-- 위 규칙 외의 매핑은 JD body 기반 판단.
-- `reasoning` 은 1-2 문장 한국어.
+- Korean server/backend titles ("백엔드", "서버개발자", "서버사이드", "BE", "backend") **must** include `backend`.
+- Korean frontend/FE titles ("프론트엔드", "프론트", "FE", "웹 클라이언트") **must** include `frontend`.
+- Korean fullstack titles ("풀스택", "Full-stack", "FS") **must** include `fullstack`, adding `backend`+`frontend` when needed.
+- Korean data titles ("데이터 엔지니어", "데이터 플랫폼", "DE") **must** include `data`.
+- Judge mappings outside the above rules based on the JD body.
+- Write `reasoning` in Korean, 1-2 sentences.
 
-JSON 만 출력.
+Output JSON only.
 ```
 
 ### Rationalization Loopholes (MUST REJECT)

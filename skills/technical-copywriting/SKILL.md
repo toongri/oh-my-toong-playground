@@ -70,14 +70,14 @@ Each Area's review results use this format:
 
 ### Findings
 
-#### Finding 1: {제목}
-- **원칙**: {원칙 ID} - {원칙 이름}
+#### Finding 1: {Title}
+- **원칙**: {Principle ID} - {Principle name}
 - **심각도**: Critical / Suggestion
 - **Before**:
-  > {원본 텍스트}
+  > {Original text}
 - **After**:
-  > {개선된 텍스트}
-- **근거**: {왜 이 변경이 필요한지}
+  > {Improved text}
+- **근거**: {Why this change is needed}
 ```
 
 **Severity criteria:**

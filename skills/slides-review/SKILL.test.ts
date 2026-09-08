@@ -11,7 +11,7 @@ describe("slides-review 개요 문구 계약", () => {
 		expect(overviewMatch).not.toBeNull();
 		expect(overview).not.toContain("Claude");
 		expect(overview).toContain("Gemini CLI");
-		expect(overview).toContain("개선 지침");
-		expect(overview).toContain("직접 적용");
+		expect(overview).toContain("improvement directives");
+		expect(overview).toContain("directly applies");
 	});
 });

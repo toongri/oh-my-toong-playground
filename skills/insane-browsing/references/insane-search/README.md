@@ -6,100 +6,100 @@
 > Deep-dives in this folder: TLS impersonation, Playwright routing, fallback, metadata, Jina, cache/archive, RSS, JSON/public APIs, Twitter, Naver, media.
 
 
-> URL 접근이 차단될 때, **사이트 무관한** 우회 전략을 자동 선택한다.
+> Automatically select a **site-independent** bypass strategy when URL access is blocked.
 
-## 하네스 규칙 (Claude에게 강제되는 지침)
+## Harness Rules (Instructions Enforced on Claude)
 
-이 규칙은 Claude가 즉흥 판단으로 엇나가지 못하게 하기 위한 **고삐**다. 위반 시 이전 test.md 세션처럼 "chrome 200에서 break → safari 미시도 → Playwright 미설치라 포기" 식의 오판이 재현된다.
+These rules are **guardrails** to keep Claude from going off course with improvised decisions. Violating them reproduces mistakes like those in the previous test.md session: "break on chrome 200 → never try safari → give up because Playwright is not installed".
 
-**R1 — 일반 웹 URL 차단/403/402 감지 시**:
-1. WebFetch, 즉흥 curl, 수동 헤더 조합 **시도 금지**
-2. 즉시 다음을 실행:
+**R1 — When blocking/403/402 is detected for a general web URL**:
+1. **Do not attempt** WebFetch, improvised curl, or manual header combinations
+2. Immediately run:
    ```bash
    python3 -m engine "<URL>" [--selector "<CSS>"] [--device auto|desktop|mobile] [--trace]
    ```
-3. 종료코드 0(ok) 또는 1(fail) 받은 뒤 판단. trace를 먼저 읽고 재시도 결정.
-4. 실패 시에만 `--trace --json`으로 재호출해서 원인 진단 후 `--device` 또는 `user_hint` 조정.
+3. Decide after receiving exit code 0(ok) or 1(fail). Read the trace first, then decide whether to retry.
+4. Only on failure, rerun with `--trace --json` to diagnose the cause, then adjust `--device` or `user_hint`.
 
-**R2 — 첫 200에서 탈출 금지**: HTTP 200은 **검사 시작 조건**이지 성공이 아니다. `validate()`의 4-계층 검증을 통과해야 성공 선언. CLI는 이미 강제한다.
+**R2 — Do not exit on the first 200**: HTTP 200 is **the condition for starting validation**, not success. Declare success only after passing the four-layer validation in `validate()`. The CLI already enforces this.
 
-**R3 — 편향 금지**: `engine/**`, `waf_profiles.yaml`에 특정 사이트 도메인·셀렉터·브랜드명 하드코딩 금지. `python3 engine/bias_check.py`가 CI 게이트. 자세한 규칙은 **No-Site-Name Rule** 섹션.
+**R3 — No bias**: Do not hardcode specific site domains, selectors, or brand names in `engine/**` or `waf_profiles.yaml`. `python3 engine/bias_check.py` is the CI gate. See **No-Site-Name Rule** for detailed rules.
 
-**R4 — 힌트는 런타임에만**: 사이트 고유 정보(성공 셀렉터, 우선 Referer)는 CLI 인자 또는 `user_hint`로만 전달, 저장소에 고정 금지.
+**R4 — Hints are runtime-only**: Pass site-specific information (success selectors, preferred Referer) only through CLI arguments or `user_hint`; do not persist it in the repository.
 
-**R5 — Phase 0 공식 API 우선**: X/Reddit/YouTube/HN/arXiv 등 **공식 공개 엔드포인트**가 있는 플랫폼은 Phase 0 테이블을 먼저 확인하고 해당 API를 쓴다. 이건 편향이 아니라 합의된 접근 경로.
+**R5 — Prioritize official APIs in Phase 0**: For platforms with **official public endpoints**, such as X/Reddit/YouTube/HN/arXiv, check the Phase 0 table first and use the corresponding API. This is an agreed access path, not bias.
 
-**R6 — 실패 선언은 전수 시도 후에만**: 격자(URL 변환 × TLS impersonate × Referer × Playwright fallback)를 **모두** 돌린 뒤에만 "뚫을 수 없음" 결론. CLI의 `max_attempts` 기본 12가 이를 보장.
-단, R7 조건(WAF 조기 감지)이 성립하면 engine 격자는 계속 돌되, Claude가 **병렬로** `agent-browser` 정찰 루트를 시도할 수 있다. 빠른 쪽이 이긴다.
+**R6 — Declare failure only after exhaustive attempts**: Conclude "뚫을 수 없음" only after trying **every** combination in the grid (URL transformation × TLS impersonate × Referer × Playwright fallback). The CLI's default `max_attempts` of 12 guarantees this.
+However, when the R7 condition (early WAF detection) holds, the engine grid continues running while Claude may try the `agent-browser` reconnaissance route **in parallel**. The faster result wins.
 
-**R7 — WAF 조기 감지 시 API-first 병행 분기** (분기 결정은 자동이지만 사용자가 결과에서 확인 가능 — 어떤 우회 경로로 성공/실패했는지 결과 metadata에 명시):
-발동 조건 (AND):
-1. engine 실행 초기에 첫 2~3회 attempt가 모두 `verdict=challenge`
-2. `profile_used`가 `akamai_bot_manager`, `cloudflare_turnstile`, `datadome_probable`, `perimeterx_human`, `f5_big_ip`, `aws_waf` 중 하나로 확정
-3. **사용자 요청이 리스트/수집/반복 의도** (여러 페이지, N개 이상, "전부", "크롤링", 페이지네이션 등). 단건 본문 조회는 해당 없음.
+**R7 — Parallel API-first branch on early WAF detection** (the branch decision is automatic but visible to the user in the results — specify in result metadata which bypass path succeeded/failed):
+Activation conditions (AND):
+1. The first 2–3 attempts early in engine execution all have `verdict=challenge`
+2. `profile_used` is identified as one of `akamai_bot_manager`, `cloudflare_turnstile`, `datadome_probable`, `perimeterx_human`, `f5_big_ip`, `aws_waf`
+3. **The user request intends listing/collection/repetition** (multiple pages, at least N items, "전부", "크롤링", pagination, etc.). A single body lookup does not qualify.
 
-세 조건 모두 참일 때 Claude는 **병렬 경로**를 시작한다:
+When all three conditions are true, Claude starts a **parallel path**:
 
-**"병렬"의 실행 의미** (Claude 도구 호출이 순차이므로 명확화):
-- engine은 `run_in_background=true`로 Bash 툴에서 띄워둔다 — 격자는 그대로 돌되 블로킹하지 않음
-- Claude는 그 사이 foreground에서 Tier 3 `agent-browser` 정찰 루트를 진행 (온디맨드 real Chrome 세션 — 상주 브라우저 아님)
-- engine이 먼저 성공해도 좋고, 정찰로 얻은 API가 먼저 성공해도 좋음. 빠른 쪽 결과 채택
+**Execution meaning of "parallel"** (clarified because Claude tool calls are sequential):
+- Launch the engine in the Bash tool with `run_in_background=true` — the grid keeps running without blocking
+- Meanwhile, Claude follows the Tier 3 `agent-browser` reconnaissance route in the foreground (an on-demand real Chrome session — not a resident browser)
+- Either the engine or the API discovered through reconnaissance may succeed first. Accept the faster result
 
-**정찰 루트** (`agent-browser`, [`SKILL.md`](../../SKILL.md) Tier 3 참고):
-1. `agent-browser`로 대상 페이지를 열어 real Chrome 세션으로 렌더링
-2. 네트워크 요청 로그에서 `/api/`·`/graphql`·`\.json` 필터로 내부 엔드포인트 식별
-3. 식별된 JSON API URL을 `python3 -m engine <API_URL>`로 재호출 (백그라운드 engine과는 별개 호출). 대부분 API 레이어는 페이지 HTML보다 WAF 보호가 얕아 curl_cffi로 바로 수집됨
-4. 응답 스키마 파악 후 pagination / query parameter 조합해 반복 수집
+**Reconnaissance route** (`agent-browser`, see Tier 3 in [`SKILL.md`](../../SKILL.md)):
+1. Open the target page with `agent-browser` and render it in a real Chrome session
+2. Identify internal endpoints in network request logs using `/api/`, `/graphql`, and `\.json` filters
+3. Call the identified JSON API URL with `python3 -m engine <API_URL>` (a separate invocation from the background engine). Most API layers have lighter WAF protection than page HTML and can be collected directly with curl_cffi
+4. Understand the response schema, then combine pagination / query parameters for repeated collection
 
-**왜**: SPA + WAF 사이트(쇼핑몰·커머스 다수)는 마케팅 페이지(HTML)만 WAF로 중투자하고 내부 API는 gateway 레벨 기본 방어만 쓰는 경우가 많다. HTML 격자 전수 낭비(50회 × 0.5s + Playwright fallback 40s ≈ 65초)보다 **정찰 1회(5~10초) + API 재호출(0.5초)**가 훨씬 경제적이고 성공률 높음.
+**Why**: SPA + WAF sites (including many shopping/commerce sites) often invest heavily in WAF protection only for marketing pages (HTML), leaving internal APIs with basic gateway-level defenses. **One reconnaissance pass (5–10 seconds) + an API call (0.5 seconds)** is far more economical and has a higher success rate than wasting exhaustive attempts on the HTML grid (50 × 0.5s + 40s Playwright fallback ≈ 65 seconds).
 
-**R7을 쓰지 말아야 할 때**: 단일 페이지 본문 읽기만 필요한 단건 조회(문서 하나, 블로그 포스트 하나)는 engine만으로 충분하다 — 발동 조건 #3이 이를 배제한다.
+**When not to use R7**: The engine alone is sufficient for a single lookup that only needs one page's body (one document, one blog post) — activation condition #3 excludes it.
 
-**R7 편향 방지**: 내부 API URL·파라미터는 `engine/**`에 하드코딩 금지. 탐지된 URL은 런타임 호출에만 쓰고 저장소에 고정하지 않는다.
+**R7 bias prevention**: Do not hardcode internal API URLs or parameters in `engine/**`. Use detected URLs only in runtime calls; do not persist them in the repository.
 
 ---
 
-이 스킬의 핵심 불변식:
+Core invariants of this skill:
 
-- **단일 진입점**: 일반 웹 페이지는 항상 `python3 -m engine <URL>` 또는 `from engine import fetch; fetch(...)`.
-- **편향 금지**: `engine/**`, `waf_profiles.yaml`에 특정 사이트 하드코딩 금지.
-- **힌트는 런타임에만**: 사이트 고유 정보는 CLI/`user_hint` 경유.
+- **Single entry point**: For general web pages, always use `python3 -m engine <URL>` or `from engine import fetch; fetch(...)`.
+- **No bias**: Do not hardcode specific sites in `engine/**` or `waf_profiles.yaml`.
+- **Runtime-only hints**: Pass site-specific information through the CLI/`user_hint`.
 
-## 의도 분류 (Phase 0 진입 전)
+## Intent Classification (Before Entering Phase 0)
 
-| 사용자 입력 | 경로 |
+| User Input | Route |
 |------------|------|
-| URL 제공 (`https://...`) | → Phase 0 검사 후 없으면 Phase 1 (generic fetch chain) |
-| 핸들 제공 (`@username`) | → Phase 0 syndication/API |
-| 키워드만 ("X에서 AI 검색") | → WebSearch(`site:{domain} {keyword}`) 먼저 → URL 확보 후 재진입 |
+| URL provided (`https://...`) | → Check Phase 0, then Phase 1 (generic fetch chain) if absent |
+| Handle provided (`@username`) | → Phase 0 syndication/API |
+| Keywords only ("X에서 AI 검색") | → WebSearch(`site:{domain} {keyword}`) first → re-enter after obtaining URLs |
 
-> **한국어 신규 콘텐츠 한계**: 네이버/다음/한국 커뮤니티의 키워드 검색은 WebSearch 경유가 유일하며, 신규 콘텐츠 인덱싱이 지연될 수 있다.
+> **Limitation for new Korean content**: Keyword searches for Naver/Daum/Korean communities can only go through WebSearch, and indexing of new content may be delayed.
 
-## Phase 0 — 플랫폼 공식 API 인덱스
+## Phase 0 — Official Platform API Index
 
-> 플랫폼이 **공식 공개한** 전용 API/CLI만 여기에 둔다. 이건 편향이 아니라 합의된 엔드포인트 사용이다.
+> Include only dedicated APIs/CLIs **officially published** by the platform. This uses agreed endpoints and is not bias.
 
-### 소셜/커뮤니티 전용 API
+### Dedicated Social/Community APIs
 
-| 플랫폼 | 방법 | 상세 |
+| Platform | Method | Details |
 |--------|------|------|
-| X/Twitter | syndication (타임라인) + oEmbed (개별 트윗) + 키워드 검색: WebSearch → oEmbed | [twitter.md](twitter.md) |
+| X/Twitter | syndication (timeline) + oEmbed (individual tweets) + keyword search: WebSearch → oEmbed | [twitter.md](twitter.md) |
 | Reddit | URL + `.json` + Mobile UA | [json-api.md](json-api.md) |
 | Bluesky | AT Protocol (`public.api.bsky.app/xrpc/...`) | [public-api.md](public-api.md) |
-| Mastodon | 인스턴스별 공개 API | [public-api.md](public-api.md) |
+| Mastodon | Public API per instance | [public-api.md](public-api.md) |
 | Hacker News | Firebase API + Algolia Search | [json-api.md](json-api.md) |
 | Stack Overflow | SE API v2.3 | [public-api.md](public-api.md) |
-| Lobste.rs / V2EX / dev.to | 공개 JSON API | [json-api.md](json-api.md) |
+| Lobste.rs / V2EX / dev.to | Public JSON API | [json-api.md](json-api.md) |
 
-### 미디어 (CLI 도구 필수)
+### Media (CLI Tool Required)
 
-| 플랫폼 | 방법 | 상세 |
+| Platform | Method | Details |
 |--------|------|------|
-| YouTube/Vimeo/Twitch/TikTok/SoundCloud 등 1,858개 | `yt-dlp --dump-json` | [media.md](media.md) |
+| 1,858 sites including YouTube/Vimeo/Twitch/TikTok/SoundCloud | `yt-dlp --dump-json` | [media.md](media.md) |
 
-### 학술/레지스트리
+### Academic/Registries
 
-| 플랫폼 | 방법 | 상세 |
+| Platform | Method | Details |
 |--------|------|------|
 | arXiv | Atom API | [public-api.md](public-api.md) |
 | CrossRef | REST API | [public-api.md](public-api.md) |
@@ -109,25 +109,25 @@
 | npm / PyPI | Registry API | [json-api.md](json-api.md) |
 | Wayback Machine | CDX API | [public-api.md](public-api.md) |
 
-### 한국 전용 공식 API
+### Official APIs for Korean Services
 
-| 플랫폼 | 방법 | 상세 |
+| Platform | Method | Details |
 |--------|------|------|
-| 네이버 검색 | `search.naver.com` (통합/블로그/뉴스탭) | [naver.md](naver.md) |
-| 네이버 금융 시세 | `api.finance.naver.com/siseJson.naver` (비공식 JSON) | [naver.md](naver.md) |
+| Naver Search | `search.naver.com` (integrated/blog/news tabs) | [naver.md](naver.md) |
+| Naver Finance quotes | `api.finance.naver.com/siseJson.naver` (unofficial JSON) | [naver.md](naver.md) |
 
-**그 외 모든 사이트는 Phase 1(generic fetch chain)이 자동 처리한다.**
+**Phase 1 (generic fetch chain) automatically handles all other sites.**
 
 ## Phase 1 — Generic Fetch Chain
 
-### 단일 진입점
+### Single Entry Point
 
 ```python
 from engine import fetch
 
 result = fetch(
     "https://example.com/path",
-    success_selectors=["article", "[class*='product-card']"],  # 포지티브 프루프 (선택)
+    success_selectors=["article", "[class*='product-card']"],  # Positive proof (optional)
     device_class="auto",      # "auto" | "desktop" | "mobile"
     user_hint=None,           # {"referer_strategy": "self_root", "impersonate_first": "safari"}
     timeout=25,
@@ -137,65 +137,65 @@ if result.ok:
     print(result.verdict)     # strong_ok | weak_ok
     html = result.content
 else:
-    # Phase 3 폴백 실패 (로컬 real Chrome) — result.trace로 원인 진단
+    # Phase 3 fallback failed (local real Chrome) — diagnose via result.trace
     pass
 ```
 
-### 내부 단계 (디버깅용 노출)
+### Internal Stages (Exposed for Debugging)
 
-`fetch()`는 단일 API이지만 내부는 phase로 나뉘어 있다. `result.trace`에서 각 시도를 확인할 수 있다.
+`fetch()` is a single API, but is internally divided into phases. Inspect each attempt in `result.trace`.
 
 ```
-probe      — curl_cffi + safari + self-referer로 첫 시도
-validate   — 4-계층 검증 (marker / size / cookie / success_selectors)
-detect     — WAF 제품 감지 ([(profile_id, confidence)] 랭킹)
-plan       — 프로파일의 tls_candidates × url_transforms × referer 격자 구성
-execute    — 격자 전수 시도 (첫 200에서 탈출하지 않음)
-fallback   — capability 태그 기반 로컬 real Chrome 라우팅 (desktop or mobile)
+probe      — first attempt with curl_cffi + safari + self-referer
+validate   — four-layer validation (marker / size / cookie / success_selectors)
+detect     — detect WAF products ([(profile_id, confidence)] ranking)
+plan       — build the profile's tls_candidates × url_transforms × referer grid
+execute    — exhaustively try the grid (do not exit on the first 200)
+fallback   — capability-tag-based local real Chrome routing (desktop or mobile)
 report     — FetchResult(ok, verdict, profile_used, trace, summary)
 ```
 
-### 검증 원칙
+### Validation Principles
 
-- HTTP 200은 **검사 시작 조건**이지 성공이 아니다.
-- 성공 판정은 **4-계층 AND**:
-  1. 챌린지 마커 없음 (`sec-if-cpt-container`, `Access Denied`, `Just a moment...`, `DataDome`)
-  2. 비정상 크기 아님 (< 3KB 또는 WAF fingerprint 크기)
-  3. 쿠키 센서 상태 정상 (`_abck=~-1~` 아님)
-  4. `success_selectors` 중 하나 이상 매칭 (caller 제공 시 → `strong_ok`, 미제공 시 → `weak_ok`)
+- HTTP 200 is **the condition for starting validation**, not success.
+- Success requires **all four layers (AND)**:
+  1. No challenge markers (`sec-if-cpt-container`, `Access Denied`, `Just a moment...`, `DataDome`)
+  2. No abnormal size (< 3KB or WAF fingerprint size)
+  3. Normal cookie sensor state (not `_abck=~-1~`)
+  4. At least one `success_selectors` match (caller provides selectors → `strong_ok`; none provided → `weak_ok`)
 
-### 격자 축 (profile이 우선순위 추천, 격자는 전수 시도)
+### Grid Axes (Profile Recommends Priority; Grid Is Exhaustive)
 
-| 축 | 값 | 비고 |
+| Axis | Values | Notes |
 |----|-----|------|
-| `url_transforms` | `original`, `mobile_subdomain` (`www.→m.`), `am_prefix`, `drop_www` | 사이트명 없음, 규칙만 |
-| `tls_impersonate` | `safari`, `safari_ios`, `chrome99`, `chrome119`, `chrome131`, `chrome_android`, `firefox`... | 프로파일별 avoid 리스트 존재 |
+| `url_transforms` | `original`, `mobile_subdomain` (`www.→m.`), `am_prefix`, `drop_www` | No site names, only rules |
+| `tls_impersonate` | `safari`, `safari_ios`, `chrome99`, `chrome119`, `chrome131`, `chrome_android`, `firefox`... | Per-profile avoid lists exist |
 | `referer_strategy` | `self_root`, `google_search`, `none` | |
 
 **device_class**:
-- `"auto"` (기본) — 프로파일 전략 따름
-- `"desktop"` — TLS 데스크톱만 + `mobile_subdomain` 비활성
-- `"mobile"` — TLS 모바일만 + `mobile_subdomain` 활성
+- `"auto"` (default) — follow the profile strategy
+- `"desktop"` — desktop TLS only + disable `mobile_subdomain`
+- `"mobile"` — mobile TLS only + enable `mobile_subdomain`
 
-### Playwright 폴백 (capability-matched)
+### Playwright Fallback (Capability-Matched)
 
-`engine/executor.py`가 프로파일의 `capabilities_needed`를 읽고 실행기를 자동 선택:
+`engine/executor.py` reads the profile's `capabilities_needed` and automatically selects the runner:
 
-| 태그 | 실행기 | 언제 |
+| Tag | Runner | When |
 |------|--------|------|
-| `needs_real_tls_stack` + `needs_js_exec` | `playwright_real_chrome.js` (로컬 Node) | Akamai Bot Manager 등 — Chromium 번들 TLS는 탐지됨 |
-| `needs_js_exec` only | `playwright_real_chrome.js` (로컬 Node) | Cloudflare 기본 방어 등 |
-| `needs_mobile_context` (+ real_tls) | `playwright_mobile_chrome.js` | 모바일 디바이스 에뮬레이션 필요 |
+| `needs_real_tls_stack` + `needs_js_exec` | `playwright_real_chrome.js` (local Node) | Akamai Bot Manager, etc. — bundled Chromium TLS is detected |
+| `needs_js_exec` only | `playwright_real_chrome.js` (local Node) | Basic Cloudflare protection, etc. |
+| `needs_mobile_context` (+ real_tls) | `playwright_mobile_chrome.js` | Mobile device emulation required |
 
-자세한 선택 기준: [playwright.md](playwright.md).
+Detailed selection criteria: [playwright.md](playwright.md).
 
-### 로컬 real Chrome 호출 규칙
+### Local Real Chrome Invocation Rules
 
-`fetch_chain`의 Playwright 폴백은 `run_playwright_fallback()`이 subprocess로 `engine/templates/playwright_real_chrome.js`(또는 mobile 변종)를 자동 실행한다 — Claude가 브라우저 도구를 직접 호출할 필요는 없다. Node/Chrome 미설치 등으로 로컬 실행이 불가능하면 `result.summary`에 설치 안내가 담기며, 이 경우에만 Tier 3 `agent-browser`로 수동 전환한다([`SKILL.md`](../../SKILL.md) Tier 3 참고).
+In the `fetch_chain` Playwright fallback, `run_playwright_fallback()` automatically runs `engine/templates/playwright_real_chrome.js` (or the mobile variant) as a subprocess — Claude does not need to call browser tools directly. If local execution is impossible, for example because Node/Chrome is not installed, `result.summary` includes installation guidance; only in this case, manually switch to Tier 3 `agent-browser` (see Tier 3 in [`SKILL.md`](../../SKILL.md)).
 
-## Phase 2 — 수동 개입 (옵션)
+## Phase 2 — Manual Intervention (Optional)
 
-Phase 1이 `ok=False`를 반환하면 사용자 힌트를 받아 재시도:
+If Phase 1 returns `ok=False`, obtain user hints and retry:
 
 ```python
 result = fetch(
@@ -205,113 +205,113 @@ result = fetch(
 )
 ```
 
-힌트는 **현재 호출 1회에만** 적용되며 저장되지 않는다.
+Hints apply **only to the current invocation** and are not saved.
 
-## 의존성 자동 설치
+## Automatic Dependency Installation
 
-최초 호출 시 필요 패키지를 자동 설치한다:
+Automatically install required packages on the first invocation:
 ```bash
 python3 -c "import curl_cffi, bs4, yaml" 2>/dev/null || pip install curl_cffi beautifulsoup4 pyyaml -q
 ```
 
-Playwright 로컬 경로 사용 시 Node가 필요:
+Node is required for the local Playwright path:
 ```bash
 npm i -g playwright playwright-extra puppeteer-extra-plugin-stealth
 npx playwright install chrome
 ```
 
-## 빠른 참조 — Phase 0 명령어
+## Quick Reference — Phase 0 Commands
 
 ```bash
-# 범용 웹 (Jina Reader — 일반 HTML만, WAF 사이트엔 무효)
+# General web (Jina Reader — ordinary HTML only, ineffective for WAF sites)
 curl -s "https://r.jina.ai/{URL}"
 
-# yt-dlp — 1,858 사이트 미디어 메타데이터
+# yt-dlp — media metadata from 1,858 sites
 yt-dlp --dump-json "URL"
 
 # Reddit
 curl -sL -H "User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15" \
   "https://www.reddit.com/r/{sub}/hot.json?limit=10"
 
-# X/Twitter 타임라인
+# X/Twitter timeline
 curl -sL "https://syndication.twitter.com/srv/timeline-profile/screen-name/{handle}"
 
 # Hacker News
 curl -sL "https://hacker-news.firebaseio.com/v0/topstories.json?limitToFirst=10&orderBy=%22%24key%22"
 
-# YouTube 자막
+# YouTube subtitles
 yt-dlp --write-sub --write-auto-sub --sub-lang "en,ko" --skip-download -o "/tmp/%(id)s" "URL"
 ```
 
 ## No-Site-Name Rule
 
-`engine/**`, `waf_profiles.yaml`, `engine/templates/**` 파일에는 **특정 사이트의 도메인/URL/셀렉터/브랜드명을 하드코딩하지 않는다**.
+**Do not hardcode a specific site's domain/URL/selectors/brand name** in `engine/**`, `waf_profiles.yaml`, or `engine/templates/**`.
 
-### 금지
+### Prohibited
 
-- `"coupang.com": {...}` 같은 사이트별 레지스트리 엔트리
-- `if "coupang" in url: ...` 같은 도메인 분기
-- WAF 프로파일 `notes`에 특정 사이트 이름이나 경험적 byte 크기 박제
+- Site-specific registry entries such as `"coupang.com": {...}`
+- Domain branches such as `if "coupang" in url: ...`
+- Embedding specific site names or empirically observed byte sizes in WAF profile `notes`
 
-### 허용
+### Allowed
 
-- `SKILL.md` / `references/*.md`의 **설명 텍스트**에 사이트 이름 예시 (독자 이해용)
-- `Phase 0` 공식 API 인덱스 (플랫폼이 공식 공개한 엔드포인트)
-- `observations/*.jsonl` 로그 (append-only 관측 데이터 — 코드 경로에 영향 없음)
-- 호출자가 제공하는 `success_selectors`, `user_hint` (현재 호출에만 유효)
+- Site-name examples in **explanatory text** in `SKILL.md` / `references/*.md` (for reader understanding)
+- The `Phase 0` official API index (endpoints officially published by platforms)
+- `observations/*.jsonl` logs (append-only observation data — no effect on code paths)
+- Caller-provided `success_selectors`, `user_hint` (valid only for the current invocation)
 
-### 경계 사례 판단 기준
+### Criteria for Borderline Cases
 
-> "이 엔트리가 다른 사이트에서도 같은 WAF를 쓰면 일반적으로 유효한가?" → YES면 `waf_profiles.yaml`, NO면 runtime hint.
+> "Would this entry generally be valid for other sites using the same WAF?" → If YES, use `waf_profiles.yaml`; if NO, use a runtime hint.
 
-### 새 사이트가 안 뚫릴 때
+### When a New Site Cannot Be Accessed
 
-1. 먼저 `result.trace`에서 어느 phase가 실패했는지 확인
-2. 사용자의 `user_hint`로 1회 재시도
-3. 반복 성공 패턴이 관측되면 `observations/`에 로그 (아직 자동 기록 없음 — 수동)
-4. 3회+ 반복 확인되고 **동일 WAF를 쓰는 다른 사이트에도 유효**하면 `waf_profiles.yaml` 해당 프로파일의 `tls_impersonate_candidates` / `url_transform_order`를 튜닝 (사이트명 절대 넣지 않음)
-5. 여전히 안 되면 새 WAF 프로파일 후보 검토 (예: DataDome 세부화, Kasada 등)
+1. First check `result.trace` to see which phase failed
+2. Retry once with the user's `user_hint`
+3. If a repeated success pattern is observed, log it in `observations/` (not yet automatic — manual)
+4. If confirmed 3+ times and **also valid for other sites using the same WAF**, tune `tls_impersonate_candidates` / `url_transform_order` in the relevant `waf_profiles.yaml` profile (never include site names)
+5. If it still fails, consider candidates for new WAF profiles (e.g., finer DataDome distinctions, Kasada)
 
-## 관련 문서 (references/) — 언제 무엇을 읽을지
+## Related Documents (references/) — What to Read When
 
-이 섹션은 **참조 파일 선택 가이드**다. 문제가 생겼을 때 어떤 `references/*.md`를 열어야 할지 결정하는 기준으로 쓴다. Claude는 필요할 때만 해당 파일을 `Read`하고, 선제적으로 전부 읽지 않는다.
+This section is a **guide to selecting reference files**. Use it to decide which `references/*.md` to open when a problem arises. Claude should `Read` a file only when needed, rather than proactively reading all of them.
 
-### A. Engine 확장·진단 (하네스 내부)
+### A. Engine Extension and Diagnosis (Inside the Harness)
 
-| 파일 | 언제 읽는가 | 무엇을 다루는가 |
+| File | When to Read | Coverage |
 |------|-------------|-----------------|
-| [`tls-impersonate.md`](tls-impersonate.md) | curl_cffi 격자가 전부 `challenge`/`blocked`로 끝날 때, 새 impersonate 타겟을 `waf_profiles.yaml`에 추가할 때 | curl_cffi로 Safari/Chrome/Firefox TLS(JA3/JA4) 지문 복제하는 방법, WAF(Akamai/Cloudflare/F5 등)별 최적 타겟 조합, 임퍼소네이션 타겟 버전 목록, `tls_impersonate_avoid`의 실증 근거 |
-| [`playwright.md`](playwright.md) | engine이 Playwright fallback으로 넘어갈 때 | 로컬 Node + `channel:'chrome'` + stealth 온디맨드 real Chrome (Cloudflare 기본부터 Akamai Bot Manager급까지 단일 경로로 커버), 템플릿 파라미터 규격 |
-| [`fallback.md`](fallback.md) | `verdict`가 애매하거나 Phase 전환 타이밍 결정 필요할 때 | engine의 Phase 0→1→2→3 에스컬레이션 원칙, 응답 성공/실패 판정 기준 세부, 각 Phase 종료 조건 |
-| [`metadata.md`](metadata.md) | 본문 전체를 못 가져왔지만 제목·요약·가격·저자 같은 핵심만이라도 필요할 때 | OGP 메타 태그, JSON-LD (Schema.org), Twitter Card 파싱, 구조화 데이터 추출 패턴 |
+| [`tls-impersonate.md`](tls-impersonate.md) | When the entire curl_cffi grid ends in `challenge`/`blocked`, or when adding a new impersonate target to `waf_profiles.yaml` | Replicating Safari/Chrome/Firefox TLS (JA3/JA4) fingerprints with curl_cffi, optimal target combinations by WAF (Akamai/Cloudflare/F5, etc.), impersonation target versions, empirical basis for `tls_impersonate_avoid` |
+| [`playwright.md`](playwright.md) | When the engine moves to the Playwright fallback | Local Node + `channel:'chrome'` + stealth on-demand real Chrome (one path covering basic Cloudflare through Akamai Bot Manager), template parameter specifications |
+| [`fallback.md`](fallback.md) | When `verdict` is ambiguous or Phase transition timing needs a decision | Engine Phase 0→1→2→3 escalation principles, detailed response success/failure criteria, exit conditions for each Phase |
+| [`metadata.md`](metadata.md) | When the full body is unavailable but key details such as title, summary, price, or author are needed | OGP meta tags, JSON-LD (Schema.org), Twitter Card parsing, structured data extraction patterns |
 
-### B. 경량 대안 (engine 말고 다른 도구가 나은 상황)
+### B. Lightweight Alternatives (When Another Tool Is Better than the Engine)
 
-| 파일 | 언제 읽는가 | 무엇을 다루는가 |
+| File | When to Read | Coverage |
 |------|-------------|-----------------|
-| [`jina.md`](jina.md) | WAF 없는 일반 웹(블로그·뉴스·Wiki)의 깨끗한 마크다운 추출 필요할 때 | `r.jina.ai/URL` 한 줄로 Puppeteer 기반 JS SPA 렌더링, 마크다운 변환, 무료 500 RPM, API 키 불필요 |
-| [`cache-archive.md`](cache-archive.md) | 원본 사이트가 차단됐지만 과거 스냅샷으로라도 접근 필요할 때 | Wayback Machine CDX API, archive.today, AMP Cache (Google Cache는 2024-07 종료됨) |
-| [`rss.md`](rss.md) | 뉴스·블로그·커뮤니티의 시계열 업데이트를 구조화해 받고 싶을 때 | RSS/Atom 자동 발견, 피드 파싱, 인증 불필요 — 가장 깔끔한 시계열 데이터 소스 |
+| [`jina.md`](jina.md) | When clean Markdown extraction is needed from ordinary web pages without WAFs (blogs/news/wikis) | Puppeteer-based JS SPA rendering and Markdown conversion with one `r.jina.ai/URL` line, free 500 RPM, no API key required |
+| [`cache-archive.md`](cache-archive.md) | When the original site is blocked but access to a past snapshot would suffice | Wayback Machine CDX API, archive.today, AMP Cache (Google Cache shut down in 2024-07) |
+| [`rss.md`](rss.md) | When structured time-series updates from news/blogs/communities are needed | RSS/Atom autodiscovery, feed parsing, no authentication required — the cleanest time-series data source |
 
-### C. 플랫폼별 공식/공개 API (Phase 0 인덱스와 연결)
+### C. Platform-Specific Official/Public APIs (Linked to the Phase 0 Index)
 
-| 파일 | 언제 읽는가 | 무엇을 다루는가 |
+| File | When to Read | Coverage |
 |------|-------------|-----------------|
-| [`json-api.md`](json-api.md) | Reddit/Wikipedia/HN/npm/PyPI 등 **URL 변형만으로** JSON을 주는 사이트 | Reddit `/json` suffix + Mobile UA, HN Firebase, Algolia Search, Wikipedia REST, npm/PyPI Registry API |
-| [`public-api.md`](public-api.md) | Bluesky/Mastodon/arXiv/Stack Overflow/CrossRef/GitHub/OpenLibrary/Wayback 공식 API 사용 시 | 인증 없이 쓰는 공식 공개 REST/AT/Atom API 엔드포인트, 요청 형식, 공통 파라미터 |
-| [`twitter.md`](twitter.md) | X/Twitter 접근 — 프로필 타임라인, 특정 트윗, 키워드 검색 | `syndication.twitter.com` 타임라인, oEmbed 개별 트윗, 검색은 WebSearch로 URL 확보 후 oEmbed |
-| [`naver.md`](naver.md) | 네이버 블로그·뉴스·증권·검색 접근 | 서비스별 우회(블로그는 `m.blog.naver.com` 변환, 증권은 비공식 JSON, 검색은 `search.naver.com`), 한글 검색 쿼리 패턴 |
-| [`media.md`](media.md) | YouTube/Vimeo/Twitch/TikTok/SoundCloud 등 미디어 메타·자막·오디오 필요 시 | `yt-dlp --dump-json` 기반 1,858개 사이트 커버, 자막 다운로드(`--write-sub`), 포맷 선택, 라이브/팟캐스트 |
+| [`json-api.md`](json-api.md) | Sites such as Reddit/Wikipedia/HN/npm/PyPI that return JSON **just by changing the URL** | Reddit `/json` suffix + Mobile UA, HN Firebase, Algolia Search, Wikipedia REST, npm/PyPI Registry API |
+| [`public-api.md`](public-api.md) | When using official Bluesky/Mastodon/arXiv/Stack Overflow/CrossRef/GitHub/OpenLibrary/Wayback APIs | Unauthenticated official public REST/AT/Atom API endpoints, request formats, common parameters |
+| [`twitter.md`](twitter.md) | X/Twitter access — profile timelines, specific tweets, keyword searches | `syndication.twitter.com` timelines, oEmbed individual tweets; for search, obtain URLs through WebSearch, then use oEmbed |
+| [`naver.md`](naver.md) | Access to Naver Blog/News/Finance/Search | Service-specific bypasses (blogs via `m.blog.naver.com` conversion, finance via unofficial JSON, search via `search.naver.com`), Korean search query patterns |
+| [`media.md`](media.md) | When media metadata/subtitles/audio are needed from YouTube/Vimeo/Twitch/TikTok/SoundCloud, etc. | Coverage of 1,858 sites via `yt-dlp --dump-json`, subtitle downloads (`--write-sub`), format selection, live streams/podcasts |
 
-### D. Engine 코드 직접 읽을 때
+### D. When to Read Engine Code Directly
 
-| 파일 | 언제 읽는가 |
+| File | When to Read |
 |------|-------------|
-| `engine/fetch_chain.py` | 체인 단계 로직·`Attempt`/`FetchResult` schema 확인 |
-| `engine/validators.py` | 4-계층 검증 세부 (Verdict 분류, 챌린지 마커 목록) |
-| `engine/waf_detector.py` | WAF 랭킹 감지 알고리즘, `_LAST_LOAD_ERROR` 처리 |
-| `engine/waf_profiles.yaml` | 프로파일별 detectors·tls_candidates·capabilities_needed |
-| `engine/url_transforms.py` | URL 변환 규칙 추가할 때 |
-| `engine/executor.py` | 프로파일 태그 기반 local Playwright 실행기(real_chrome / mobile_chrome) 매칭 로직 |
-| `engine/templates/*.js` | Playwright 템플릿 튜닝 (warmup, reload, devices) |
-| `engine/bias_check.py` | 편향 린터 규칙 — brand denylist, URL_PATTERN, excluded dirs |
+| `engine/fetch_chain.py` | Check chain stage logic and `Attempt`/`FetchResult` schemas |
+| `engine/validators.py` | Four-layer validation details (Verdict classification, challenge marker list) |
+| `engine/waf_detector.py` | WAF ranking detection algorithm, `_LAST_LOAD_ERROR` handling |
+| `engine/waf_profiles.yaml` | Per-profile detectors, tls_candidates, capabilities_needed |
+| `engine/url_transforms.py` | When adding URL transformation rules |
+| `engine/executor.py` | Profile-tag-based matching logic for local Playwright runners (real_chrome / mobile_chrome) |
+| `engine/templates/*.js` | Playwright template tuning (warmup, reload, devices) |
+| `engine/bias_check.py` | Bias linter rules — brand denylist, URL_PATTERN, excluded dirs |

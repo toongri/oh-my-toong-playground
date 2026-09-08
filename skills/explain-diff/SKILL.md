@@ -108,13 +108,13 @@ State the **goal and the one-line core before any structure or code** — the wa
 ## 목표
 
 ### 무엇을·왜
-<이 변경이 이루려는 것 + 왜 필요했는가(해결하는 문제)>
+<what this change aims to achieve + why it was needed (the problem it solves)>
 
 ### 핵심
-<코드를 보기 전에 독자가 먼저 쥐어야 할 핵심 한 줄>
+<the one-line core the reader should hold before seeing code>
 
 ### 출처
-<이 목적·컨텍스트를 파악하는 데 실제로 쓴 근거 — Linear 이슈, Notion 문서, Slack 스레드, PR 설명, 커밋 본문, 위키 문서 경로, 또는 코드 추론. 접근할 수 있으면 식별자/경로를, 없으면 어디서 왔는지 한 줄>
+<the grounds actually used to understand this purpose/context — a Linear issue, Notion document, Slack thread, PR description, commit body, wiki document path, or 코드 추론. If accessible, give the identifier/path; otherwise, one line stating where it came from>
 ```
 
 All three sub-headings are verified by the structure check (R16). What each says is yours to fill. The `### 출처` names where the WHY came from so the reader can trace and trust it — the same provenance discipline R3 applies to each change's 왜, here applied to the whole document's purpose. Fill it from the `### 원천` table: one line per row saying what that source contributed to this document (not just its name). In a sandbox with no external tools, cite the in-repo grounds (commit body, PR description, wiki) or say `코드 추론`; never leave it blank.
@@ -131,13 +131,13 @@ Draw the structure needed to **understand this diff** at **three levels**. Each 
 | 컴포넌트 (component) | How dependencies between modules and domains differ before vs after the change | Module/domain structure within a process |
 | 도메인 (domain) | What the entities, concepts, and invariants are, and what changes | Entities, concepts, invariants |
 
-**Each system subgraph shows its interior.** Draw every involved process/service/store as a `subgraph`, and inside it the core resources this change flows through in that system — the modules, stores, and mapping tables a reader must know to follow the change (2–5 interior nodes per system is typical; internal dependency edges between them are welcome when the diff's flow runs through them). The picture a reader should get in one look: 시스템 단위 + 각 시스템의 내부 핵심 구성 + 시스템 사이의 계약. A subgraph whose only interior node restates the subgraph's own label shows a boundary but no composition — name the actual parts inside instead. This does not soften the boundary rule above: a diff that crosses no process boundary still uses the waiver, and interior nodes never substitute for the cross-process edge that makes this the system level.
+**Each system subgraph shows its interior.** Draw every involved process/service/store as a `subgraph`, and inside it the core resources this change flows through in that system — the modules, stores, and mapping tables a reader must know to follow the change (2–5 interior nodes per system is typical; internal dependency edges between them are welcome when the diff's flow runs through them). The picture a reader should get in one look: system units + each system's core internal composition + contracts between systems. A subgraph whose only interior node restates the subgraph's own label shows a boundary but no composition — name the actual parts inside instead. This does not soften the boundary rule above: a diff that crosses no process boundary still uses the waiver, and interior nodes never substitute for the cross-process edge that makes this the system level.
 
 **The system level does not end with a diagram alone.** Keep diagram edges to a **short protocol** (HTTP·SQL·REST) — long endpoints/queries on an edge break layout. Under the diagram (or waiver), place **two** tables. First, a **standing-interface table** (R17) naming which boundary talks over which endpoint, query, or screen URL, and what flows. It must be a real rendered Markdown table with exactly these three columns and at least one data row — prose-only labels, a fenced example, or a header/separator-only table do not count:
 
 | 경계 | 인터페이스 | 오가는 것 |
 |---|---|---|
-| <프로세스·서비스 경계> | <엔드포인트·쿼리·화면 URL> | <오가는 데이터> |
+| <process/service boundary> | <endpoint/query/screen URL> | <data exchanged> |
 
 **The `인터페이스` and `오가는 것` cells must show the actual message, not a naming-convention note.** A reader cannot tell what an interface does from "camelCase generationRequest" — write the signature and the request/response shape: the endpoint/procedure plus the fields it takes and returns, with types (`initiateGeneration(input: { generationRequest: { userRequest: string; intakeTimeCodes: string[] }, proposalType: enum }) → { asyncTaskId: string }`). Name the payload and response body concretely so the reader knows what value crosses the boundary; a bare field name or a convention label is not an interface.
 
@@ -202,25 +202,25 @@ Commit hashes are compared against the list that `start` pinned into the state �
 The unit is the **change (변경)**, not the file, and **the spine is the commit.** A Change Group (a concern) descends commit by commit; under a commit come **change blocks** (`#### 변경 N: <한 일>`). **A change is not a file** — one change is realized by the responsibility shifts of several **symbols**, the classes/functions edited together for one reason. So a change block carries one entry per symbol, and **each entry's subject is the symbol, told before→after**: `<code>symbol</code>` + where it lives (which layer/domain — pointing back to the architecture cards), then **기존** (the responsibility and behavior that symbol carried) and **변경** (how this diff changed it), as complete sentences. A newly created symbol writes **신설** (the responsibility it now takes) instead of 기존; a removed one writes **삭제** (where its duty went). Numbered role labels that state only the post-state ("책임 1 — <역할> … 이제 하는 일") leave the reader unable to tell what it was like before — a measured defect. The file appears only as a location citation in the `cf-loc` slot, never as the heading. A signal file may be cited by more than one change; what must not happen is a signal file no change cites (R1).
 
 ```markdown
-## Change Group 1: <관심사>
-> 예고: <what this group will do — 그룹 N presupposes 그룹 N-1>
+## Change Group 1: <concern>
+> 예고: <what this group will do — group N presupposes group N-1>
 > 순서: <one line on why this order>
 
-### `<short-hash>` — <커밋 제목>
+### `<short-hash>` — <commit title>
 <one or two sentences on what this commit did in this group. If it spans multiple groups, one spillover line.>
 
-#### 변경 1: <이 변경이 이룬 것 — 파일명이 아니라 한 일로>
+#### 변경 1: <what this change achieved — name what it did, not a file>
 <div class="cf" data-change="mod">
-<p><strong><code>Class.method()</code></strong> (<어느 레이어·도메인의 무엇인지 배치>) — <strong>기존</strong> <지던 책임과 동작>. <strong>변경</strong> <이번 diff로 어떻게 달라졌는지>.</p>
-<p><strong><code>otherFn()</code></strong> (<배치>) — <strong>신설</strong> <새로 지는 책임>.</p>
-<p><strong>왜</strong> — <이 변경이 필요한 이유> <span class="cf-src">근거</span> "<원문 인용>"</p>
-<p><strong>효과·사이드이펙트</strong> — <이 변경이 부른 결과·부작용 — 완결 문장></p>
-<p><strong>검증</strong> — <이 변경을 고정하는 테스트와 무엇을 잠그는지></p>
+<p><strong><code>Class.method()</code></strong> (<placement: what it is in which layer/domain>) — <strong>기존</strong> <previous responsibility and behavior>. <strong>변경</strong> <how this diff changed them>.</p>
+<p><strong><code>otherFn()</code></strong> (<placement>) — <strong>신설</strong> <new responsibility>.</p>
+<p><strong>왜</strong> — <why this change is needed> <span class="cf-src">근거</span> "<verbatim quote>"</p>
+<p><strong>효과·사이드이펙트</strong> — <consequences/side effects of this change — complete sentence></p>
+<p><strong>검증</strong> — <the test covering this change and what it locks down></p>
 <p class="cf-loc"><strong>바뀐 위치</strong> — <code>base:path/a.ts:12</code>→<code>head:path/a.ts:15</code>, <code>base:path/b.ts:40</code>→<code>head:path/b.ts:31</code></p>
 </div>
 
 ​```ts
-// 핵심 로직 — real code or pseudocode (one required per change block)
+// Core logic — real code or pseudocode (one required per change block)
 ​```
 ```
 

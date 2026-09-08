@@ -117,25 +117,25 @@ Every resume review follows this sequence. No step is optional.
 
 ```mermaid
 flowchart TB
-    NOTE["섹션별 리뷰에서도 Phase 1, 2, 9, 10은 필수"]
+    NOTE["Phases 1, 2, 9, 10 are mandatory even for section-specific reviews"]
     style NOTE fill:#fff3cd,stroke:#856404,color:#856404
     NOTE -.-> P_ID
     P_ID[Phase 1: Identity Confirmation\nRead owner from preferences.md] --> ID_CHK{owner\nconfirmed?}
-    ID_CHK -->|"YES: interview-possible"| P0[Phase 2: 사전 준비\nNote Load + Pre-Evaluation Research]
+    ID_CHK -->|"YES: interview-possible"| P0[Phase 2: Preparation\nNote Load + Pre-Evaluation Research]
     ID_CHK -->|"NO: interview-impossible"| P0
-    P0 --> P1[Phase 3: 자기소개 평가\nper-type + global + Type C sub-step]
-    P1 --> P2[Phase 4: 개발자 역량 평가\nC1-C5 Competency]
-    P2 --> P3[Phase 5: 섹션별 평가\nCareer + Problem-Solving 6 criteria\n+ Pushback Simulation]
-    P3 --> P4[Phase 6: First-Page + JD 매칭\nFirst-Page Primacy + JD Keyword Matching]
-    P4 --> P5CHK[Phase 7a: Mandatory Checklist\nverbose split · retrospective · portfolio diversity · 5줄 minimum]
+    P0 --> P1[Phase 3: Self-Introduction Evaluation\nper-type + global + Type C sub-step]
+    P1 --> P2[Phase 4: Developer Competency Assessment\nC1-C5 Competency]
+    P2 --> P3[Phase 5: Section-Specific Evaluation\nCareer + Problem-Solving 6 criteria\n+ Pushback Simulation]
+    P3 --> P4[Phase 6: First-Page + JD Matching\nFirst-Page Primacy + JD Keyword Matching]
+    P4 --> P5CHK[Phase 7a: Mandatory Checklist\nverbose split · retrospective · portfolio diversity · 5-line minimum]
     P5CHK --> P5[Phase 7b: P.A.R. + T1-T3 + Problem Chain]
-    P5 --> P6[Phase 8: AI 톤 감사\nSkill humanizer audit mode]
+    P5 --> P6[Phase 8: AI Tone Audit\nSkill humanizer audit mode]
     P6 --> P7DISPATCH[Phase 9: Content Quality Gate\nexaminer dispatch]
     P7DISPATCH --> P7VERDICT{All APPROVE\nor user opt-out?}
     P7VERDICT -->|"NO: REQUEST_CHANGES"| P7INTERVIEW[Per-item feedback\npresent interview_hints → interview\n→ regenerate alternatives]
     P7INTERVIEW --> P7DISPATCH
     P7VERDICT -->|YES| P7OPT[Strategic Options\n2-3 with trade-offs]
-    P7OPT --> P8[Phase 10: 결과 전달\nHTML Report + Note Accumulate]
+    P7OPT --> P8[Phase 10: Result Delivery\nHTML Report + Note Accumulate]
 
     P1 -->|"Interview trigger\n[interview-possible only]"| IG1[Read references/experience-mining.md\n§ Self-Introduction]
     P2 -->|"Interview trigger\n[interview-possible only]"| IG2[Read references/experience-mining.md\n§ C1-C5 Competency]
@@ -155,15 +155,15 @@ The Evaluation Protocol defines 10 phases. Resume reviews involve extensive back
 | Phase | Section | Reference |
 |-------|---------|-----------|
 | 1 | Identity Confirmation: owner check + session mode lock | (inline below) |
-| 2 | 사전 준비: Note Load + Pre-Evaluation Research | `references/note-system.md`, `references/pre-evaluation-research.md` |
-| 3 | 자기소개 평가: per-type + global + Type C sub-step | `references/self-introduction.md`, `references/experience-mining.md` § Self-Introduction |
-| 4 | 개발자 역량 평가: C1-C5 | `references/competency-assessment.md`, `references/experience-mining.md` § C1-C5 Competency |
-| 5 | 섹션별 평가: Career + Problem-Solving 6 criteria + Pushback | `references/section-evaluation.md`, `references/experience-mining.md` § Section-Specific Evaluation |
+| 2 | Preparation: Note Load + Pre-Evaluation Research | `references/note-system.md`, `references/pre-evaluation-research.md` |
+| 3 | Self-Introduction Evaluation: per-type + global + Type C sub-step | `references/self-introduction.md`, `references/experience-mining.md` § Self-Introduction |
+| 4 | Developer Competency Assessment: C1-C5 | `references/competency-assessment.md`, `references/experience-mining.md` § C1-C5 Competency |
+| 5 | Section-Specific Evaluation: Career + Problem-Solving 6 criteria + Pushback | `references/section-evaluation.md`, `references/experience-mining.md` § Section-Specific Evaluation |
 | 6 | First-Page Primacy + JD Keyword Matching | `references/section-evaluation.md`, `references/experience-mining.md` § JD Keyword Matching |
-| 7 | 문제해결 심화평가: P.A.R. dimensions + T1-T3 + Problem Chain | `references/problem-solving.md`, `references/experience-mining.md` § Problem-Solving |
-| 8 | AI 톤 감사: Skill(humanizer) audit mode | (inline below) |
+| 7 | In-Depth Problem-Solving Evaluation: P.A.R. dimensions + T1-T3 + Problem Chain | `references/problem-solving.md`, `references/experience-mining.md` § Problem-Solving |
+| 8 | AI Tone Audit: Skill(humanizer) audit mode | (inline below) |
 | 9 | Per-Section-Unit Content Quality Gate | `references/content-quality-gate.md` |
-| 10 | 결과 전달: HTML Report + Note Accumulate | `references/html-template.html`, `references/note-system.md` |
+| 10 | Result Delivery: HTML Report + Note Accumulate | `references/html-template.html`, `references/note-system.md` |
 
 ### Recognized Opt-Out Keywords
 
@@ -191,12 +191,12 @@ When Phase 1 sets mode to **interview-impossible** (user is not the resume owner
 |-------|--------------------------|----------------------|
 | 1 | Identity confirmation → interview-possible | Identity confirmation → interview-impossible (no change to Phase 1 itself) |
 | 2 | Note Load + Pre-Evaluation Research | No change — same procedure |
-| 3 | 자기소개 평가: type evaluation → interview on FAIL | Skip interview. Output evaluation results and flag FAIL axes only. Proceed. |
-| 4 | 개발자 역량 평가: C1-C5 → interview on WEAK/ABSENT | Skip interview. Output axis ratings with evidence citations only. Proceed. |
-| 5 | 섹션별 평가: 6-criteria + Pushback → interview on FAIL | Skip interview. Output evaluation and Pushback Simulation results only. Proceed. |
+| 3 | Self-Introduction Evaluation: type evaluation → interview on FAIL | Skip interview. Output evaluation results and flag FAIL axes only. Proceed. |
+| 4 | Developer Competency Assessment: C1-C5 → interview on WEAK/ABSENT | Skip interview. Output axis ratings with evidence citations only. Proceed. |
+| 5 | Section-Specific Evaluation: 6-criteria + Pushback → interview on FAIL | Skip interview. Output evaluation and Pushback Simulation results only. Proceed. |
 | 6 | First-Page Primacy + JD Matching → interview on 3+ missing keywords | Skip interview. Output keyword gap list only. Proceed. |
-| 7 | 문제해결 심화평가: P.A.R. + T1-T3 + Problem Chain → interview on FAIL | Skip interview. Output dimension scores and Isolated/Chained verdict only. Proceed. |
-| 8 | AI 톤 감사: Skill(humanizer) audit mode | No change — audit proceeds normally; no interview involved |
+| 7 | In-Depth Problem-Solving Evaluation: P.A.R. + T1-T3 + Problem Chain → interview on FAIL | Skip interview. Output dimension scores and Isolated/Chained verdict only. Proceed. |
+| 8 | AI Tone Audit: Skill(humanizer) audit mode | No change — audit proceeds normally; no interview involved |
 | 9 | Per-Section-Unit Content Quality Gate: interview → alternatives → examiner | Skip interview step. Generate alternatives from resume content only → dispatch to examiner. On REQUEST_CHANGES: auto-generate best revision with current content → confirm user opt-out ("소유자 인터뷰 필요"). See Phase 9 REQUEST_CHANGES Handling Protocol for details. |
 | 10 | HTML Report + Note Accumulate | No change — same procedure |
 
@@ -268,7 +268,9 @@ Read ONLY the `owner` field from `$OMT_DIR/review-resume/preferences.md`. Do NOT
 
 `[Phase 1/10: Identity Confirmation complete]`
 
-## Phase 2: 사전 준비
+<a id="phase-2-사전-준비"></a>
+
+## Phase 2: Preparation
 
 Load persistent note, then perform pre-evaluation research before any evaluation begins.
 
@@ -299,7 +301,9 @@ Research results feed into ALL paragraph type selections (A, B, C, D). Check `so
 
 `[Phase 2/10: 사전 준비 complete]`
 
-## Phase 3: 자기소개 평가
+<a id="phase-3-자기소개-평가"></a>
+
+## Phase 3: Self-Introduction Evaluation
 
 The self-introduction answers: **"What kind of engineer is this person?"** Each paragraph must reveal a different facet of this answer.
 
@@ -320,7 +324,9 @@ Evaluate each paragraph against type-specific criteria, then perform global eval
 
 `[Phase 3/10: 자기소개 평가 complete]`
 
-## Phase 4: 개발자 역량 평가 (C1-C5)
+<a id="phase-4-개발자-역량-평가-c1-c5"></a>
+
+## Phase 4: Developer Competency Assessment (C1-C5)
 
 Holistically assess the ENTIRE resume against 5 core competency axes. This answers: not "is this well-written?" but **"does this resume demonstrate a competent developer?"**
 
@@ -340,7 +346,9 @@ Rate each axis as STRONG / PRESENT / WEAK / ABSENT with evidence citations. All 
 
 `[Phase 4/10: 개발자 역량 평가 complete]`
 
-## Phase 5: 섹션별 평가
+<a id="phase-5-섹션별-평가"></a>
+
+## Phase 5: Section-Specific Evaluation
 
 Career and problem-solving sections answer fundamentally different questions:
 - **Career**: "What did this person achieve?" — direction and impact. Career bullets are interview **hooks**.
@@ -384,7 +392,9 @@ If the user cannot answer all 3 levels, that line will hurt more than help.
 
 `[Phase 5/10: 섹션별 평가 complete]`
 
-## Phase 6: First-Page Primacy + JD 매칭
+<a id="phase-6-first-page-primacy--jd-매칭"></a>
+
+## Phase 6: First-Page Primacy + JD Matching
 
 Check that the strongest content is on page 1 (the 7.4-second scan zone). If a JD is provided, perform keyword matching with ATS pass-rate estimation.
 
@@ -394,7 +404,9 @@ Check that the strongest content is on page 1 (the 7.4-second scan zone). If a J
 
 `[Phase 6/10: First-Page Primacy + JD 매칭 complete]`
 
-## Phase 7: 문제해결 심화평가
+<a id="phase-7-문제해결-심화평가"></a>
+
+## Phase 7: In-Depth Problem-Solving Evaluation
 
 All problem-solving entries (5+ lines) are evaluated under a unified framework combining P.A.R. narrative evaluation, T1-T3 Technical Substance Verification, and Problem Chain Extraction. Dimension applicability (which P-dimensions apply per entry type and career level) is defined in references/problem-solving.md §4.
 
@@ -410,7 +422,9 @@ All problem-solving entries (5+ lines) are evaluated under a unified framework c
 
 `[Phase 7/10: 문제해결 심화평가 complete]`
 
-## Phase 8: AI 톤 감사
+<a id="phase-8-ai-톤-감사"></a>
+
+## Phase 8: AI Tone Audit
 
 **MUST invoke the humanizer skill via the Skill tool.** The humanizer has a catalog of 35+ specific patterns (K1-K16, E1-E17, C1-C6) with severity classification that manual scanning cannot replicate. Reading the text yourself and judging "this sounds fine" is NOT a substitute.
 
@@ -567,7 +581,9 @@ For Working Set templates, lifecycle, and consumption rules, refer to `reference
 
 ---
 
-## Phase 10: 결과 전달
+<a id="phase-10-결과-전달"></a>
+
+## Phase 10: Result Delivery
 
 ### HTML Report Generation
 
@@ -596,7 +612,9 @@ HTML_FILE="${OMT_DIR:-$HOME/.omt/global}/reports/review-YYYYMMDD-HHmmss.html"
 
 **Strength Comment:** Per career bullet or problem-solving entry, only items that PASS all 6 section evaluation criteria get `.comment-strength`.
 
-### 제출 전 셀프 점검 (Pre-Submission Self-Check)
+<a id="제출-전-셀프-점검-pre-submission-self-check"></a>
+
+### Pre-Submission Self-Check ("제출 전 셀프 점검")
 
 At report generation, run a 6-item self-check sweep over the resume text and emit its result into the template's `<!-- SELF-CHECK CONTENT -->` slot (references/html-template.html). This is an advisory submission-readiness checklist the human reads last — NOT a blocking gate, NOT per-item scores/verdicts. Frame it as "제출 전 사람이 마지막으로 읽는 준비 체크리스트".
 
@@ -649,18 +667,18 @@ Before delivering Phase 10 output, verify every phase was completed or has a val
 ```
 [Review Completion Checklist — INTERNAL]
 - [ ] Phase 1: Identity Confirmation (session mode locked: interview-possible / interview-impossible)
-- [ ] Phase 2: 사전 준비 (Note Load + Pre-Evaluation Research)
-- [ ] Phase 3: 자기소개 평가 (per-type + global + Type C sub-step)
+- [ ] Phase 2: Preparation (Note Load + Pre-Evaluation Research)
+- [ ] Phase 3: Self-Introduction Evaluation (per-type + global + Type C sub-step)
 - [ ] Phase 3: Experience Mining Interview (DONE/SKIPPED-interview-impossible/N/A)
-- [ ] Phase 4: 개발자 역량 평가 (C1-C5)
+- [ ] Phase 4: Developer Competency Assessment (C1-C5)
 - [ ] Phase 4: Experience Mining Interview (DONE/SKIPPED-interview-impossible/N/A)
-- [ ] Phase 5: 섹션별 평가 (Career + Problem-Solving 6 criteria + Pushback)
+- [ ] Phase 5: Section-Specific Evaluation (Career + Problem-Solving 6 criteria + Pushback)
 - [ ] Phase 5: Experience Mining Interview (DONE/SKIPPED-interview-impossible/N/A)
-- [ ] Phase 6: First-Page Primacy + JD 매칭
+- [ ] Phase 6: First-Page Primacy + JD Matching
 - [ ] Phase 6: Experience Mining Interview (DONE/SKIPPED-interview-impossible/N/A)
-- [ ] Phase 7: 문제해결 심화평가 (P.A.R. + T1-T3 + Problem Chain)
+- [ ] Phase 7: In-Depth Problem-Solving Evaluation (P.A.R. + T1-T3 + Problem Chain)
 - [ ] Phase 7: Experience Mining Interview (DONE/SKIPPED-interview-impossible/N/A)
-- [ ] Phase 8: AI 톤 감사 (MUST invoke Skill(humanizer) — manual scan ≠ DONE)
+- [ ] Phase 8: AI Tone Audit (MUST invoke Skill(humanizer) — manual scan ≠ DONE)
 - [ ] Phase 9: Per-Section-Unit Content Quality Gate (tech-claim-examiner APPROVE or user opt-out per unit)
 - [ ] Phase 10: HTML Report + User Approval Gate (infinite loop until feedback reaches 0)
 - [ ] Phase 10: Note Accumulate (user confirmation required)

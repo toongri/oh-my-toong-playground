@@ -55,7 +55,7 @@ Interview contract: Ask one user decision at a time. Present detected target-bra
 | Deleting original branch after split | User cannot recover | Always preserve the original branch |
 | Pushing without confirming the branch has commits the base lacks | `gh pr create` fails with "No commits between base and head" | Check `git rev-list --count origin/{base-branch}..HEAD > 0` before push |
 | Gating PR creation on the remote target tip matching a SHA recorded earlier | On an active repo the target keeps moving during the interview, so the comparison never settles and the check re-fires indefinitely | Gate on the local ahead count instead — it is owned by the current branch and does not change when the target moves |
-| References를 클릭 불가능한 bare-text로 작성 | GitHub-renderable 아님; reviewer가 navigate 불가 | `[Title](URL)` markdown link 사용. URL 없으면 user에게 한 번 묻고, 없으면 bare-text 허용 (Slack 채널 단독 예외) |
+| Writing References as non-clickable bare text | Not rendered as links by GitHub; reviewers cannot navigate | Use `[Title](URL)` markdown links. If the URL is unknown, ask the user once; if none exists, allow bare text (Slack channel-only exception) |
 | Writing title from default style when the repo has a surveyed title convention | PR looks foreign in the repo's PR list | Survey result wins; defaults are fallback only |
 | Creating PR without `--assignee @me` | PR left unassigned; ownership unclear | Always include `--assignee @me` in `gh pr create` |
 | Applying a label that is not in `gh label list` | `gh pr create` fails or pollutes the label set | Only existing labels; if none fits, apply none |

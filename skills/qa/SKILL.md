@@ -465,7 +465,7 @@ STATE:      bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts <sub>; continue resumes 
 NESTING:    qa's fix-loop must NOT be called inside another fix-loop — doc contract, YAGNI; upgrade trigger: add a code guard when qa gains its first fix-loop-owning caller
 ROSTER:     ## Scenarios Executed is a precondition for verdict issuance; absent → verdict not issued, cycle incomplete. Exception: PRE-FLIGHT fail-fast issues REQUEST_CHANGES with no roster — never synthesize an empty one there; present+0 rows means inert refactor, a completed cycle
 FEEDBACK:   feedback-protocol.md for Confidence Scoring; CONFIDENCE 0-49 discard, 50-74 nitpick, 75+ blocking
-REPORT:     STATE renders self-contained HTML (qa-report.ts) after set-verdict, before complete; leads with a reader-facing presentation layer (product/user perspective, not code-diff — affected users · user-boundary flows · big-picture diagram · AC→충족 mapping) via --narrative presentation object, anchored to recorded actors/stories/ACs; unwritten required slots render visible gap markers. presentation.md owns the contract
+REPORT:     STATE renders self-contained HTML (qa-report.ts) after set-verdict, before complete; leads with a reader-facing presentation layer (product/user perspective, not code-diff — affected users · user-boundary flows · big-picture diagram · AC→fulfillment mapping) via --narrative presentation object, anchored to recorded actors/stories/ACs; unwritten required slots render visible gap markers. presentation.md owns the contract
 ```
 
 ---

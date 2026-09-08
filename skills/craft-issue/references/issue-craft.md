@@ -53,7 +53,7 @@ Korean-working teams, use this canonical mapping:
 | Effective State | 정정 후 상태 |
 | Notes | 메모 |
 | per-path status | 경로별 상태 |
-| References | References (그대로 둔다) |
+| References | References (leave unchanged) |
 
 The observable-AC two-line shape (§2) is unchanged — only its labels localize: `**[결과]**` + `**검증**`.
 

@@ -51,7 +51,7 @@ The following items must be checked when evaluating the problem-solving section,
 
 The resume's problem-solving entries are **detailed descriptions showing how this person solves problems**. All 5-line+ entries are evaluated with the same criteria.
 
-**Minimum length rule**: 5줄 미만이면 Career 불렛으로 이동. Problem-solving entries under 5 lines do not belong in the Problem-Solving section.
+**Minimum length rule**: Move entries under 5 lines to Career bullets. Problem-solving entries under 5 lines do not belong in the Problem-Solving section.
 
 ---
 

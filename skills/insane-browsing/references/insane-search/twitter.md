@@ -1,26 +1,26 @@
-# X/Twitter 접근 전략
+# X/Twitter Access Strategies
 
-> WebFetch는 402로 차단됨. 아래 방법으로 우회한다. 모두 API 키/인증 불필요.
+> WebFetch is blocked with 402. Use the methods below to work around it. None require an API key/authentication.
 
-## 검색 (트윗 발견)
+## Search (Discover Tweets)
 
 ```python
 WebSearch(query="site:x.com {검색어}")
 ```
 
-WebSearch는 X 포스트를 검색 결과로 반환한다. 제목, snippet, URL을 획득할 수 있지만 트윗 전문이나 engagement 수치는 없다.
+WebSearch returns X posts in search results. You can obtain titles, snippets, and URLs, but not full tweet text or engagement metrics.
 
-## 타임라인 조회 — Syndication API
+## Timeline Lookup — Syndication API
 
-특정 핸들의 최근 ~100개 트윗 + engagement 수치(likes, RTs) 제공.
+Provides the latest ~100 tweets for a specific handle + engagement metrics (likes, RTs).
 
-### 엔드포인트
+### Endpoint
 
 ```
 https://syndication.twitter.com/srv/timeline-profile/screen-name/{handle}
 ```
 
-### 원샷 스크립트
+### One-Shot Script
 
 ```bash
 curl -sL "https://syndication.twitter.com/srv/timeline-profile/screen-name/{handle}" | \
@@ -40,65 +40,65 @@ if match:
 "
 ```
 
-### 가져올 수 있는 데이터
+### Available Data
 
-| 필드 | 경로 | 예시 |
+| Field | Path | Example |
 |------|------|------|
-| 트윗 전문 | `tweet.full_text` | "Give your agent the..." |
-| 작성자 핸들 | `tweet.user.screen_name` | "openclaw" |
-| 작성자 이름 | `tweet.user.name` | "OpenClaw" |
-| 좋아요 수 | `tweet.favorite_count` | 1929 |
-| RT 수 | `tweet.retweet_count` | 169 |
-| 작성 시각 | `tweet.created_at` | "Mon Apr 06 04:04:08 +0000 2026" |
-| 트윗 ID | `tweet.id_str` | "2041003999856406714" |
-| 미디어 URL | `tweet.entities.media[].media_url_https` | 이미지/동영상 URL |
+| Full tweet text | `tweet.full_text` | "Give your agent the..." |
+| Author handle | `tweet.user.screen_name` | "openclaw" |
+| Author name | `tweet.user.name` | "OpenClaw" |
+| Like count | `tweet.favorite_count` | 1929 |
+| RT count | `tweet.retweet_count` | 169 |
+| Creation time | `tweet.created_at` | "Mon Apr 06 04:04:08 +0000 2026" |
+| Tweet ID | `tweet.id_str` | "2041003999856406714" |
+| Media URL | `tweet.entities.media[].media_url_https` | Image/video URL |
 
-### 제한
+### Limitations
 
-- 최근 ~100개 반환 (페이지네이션 불가)
-- 비공개 계정 접근 불가
-- 검색 기능 없음 (타임라인만)
-- **저팔로워/신규 계정**: `hasResults: false` 반환 가능. 이 경우 oEmbed 개별 트윗 접근은 정상 동작하므로 "조합 패턴"으로 폴백.
-- 비공식 엔드포인트 — X가 변경/차단 가능
+- Returns the latest ~100 tweets (no pagination)
+- Cannot access private accounts
+- No search function (timelines only)
+- **Low-follower/new accounts**: May return `hasResults: false`. Individual tweet access via oEmbed still works in this case, so fall back to the "Combined Pattern".
+- Unofficial endpoint — X may change/block it
 
-## 개별 트윗 조회 — oEmbed API
+## Individual Tweet Lookup — oEmbed API
 
-특정 트윗 URL을 알 때 전문 가져오기.
+Fetch the full text when you know a specific tweet URL.
 
-### 엔드포인트
+### Endpoint
 
 ```
 https://publish.twitter.com/oembed?url=https://x.com/{user}/status/{tweet_id}
 ```
 
-### 사용법
+### Usage
 
 ```bash
 curl -sL "https://publish.twitter.com/oembed?url=https://x.com/{user}/status/{tweet_id}"
 ```
 
-### 응답 (JSON)
+### Response (JSON)
 
-| 필드 | 설명 |
+| Field | Description |
 |------|------|
-| `author_name` | 작성자 표시 이름 |
-| `author_url` | 작성자 프로필 URL |
-| `html` | 트윗 전문이 포함된 HTML blockquote |
-| `url` | 트윗 원본 URL |
+| `author_name` | Author display name |
+| `author_url` | Author profile URL |
+| `html` | HTML blockquote containing the full tweet text |
+| `url` | Original tweet URL |
 
-## 조합 패턴 (검색 → 상세)
+## Combined Pattern (Search → Details)
 
 ```
-1단계: WebSearch(query="site:x.com {키워드}") → 트윗 URL 획득
-2단계: curl oEmbed API → 트윗 전문 획득
+Step 1: WebSearch(query="site:x.com {키워드}") → obtain tweet URLs
+Step 2: curl oEmbed API → obtain full tweet text
 ```
 
-## 실패하는 방법 (사용하지 말 것)
+## Methods That Fail (Do Not Use)
 
-| 방법 | 결과 | 원인 |
+| Method | Result | Cause |
 |------|------|------|
-| WebFetch | 402 Payment Required | Claude Code의 WebFetch 제한 |
-| Nitter | 빈 응답 | Nitter 인스턴스 대부분 종료됨 |
-| Wayback Machine | OG 메타태그만 | SPA 렌더링 안 됨 |
-| Mobile UA curl | OG 메타태그만 | SPA 렌더링 안 됨 |
-| RSS | 엔드포인트 없음 | X는 RSS 지원 중단 |
+| WebFetch | 402 Payment Required | Claude Code WebFetch restriction |
+| Nitter | Empty response | Most Nitter instances have shut down |
+| Wayback Machine | OG meta tags only | SPA not rendered |
+| Mobile UA curl | OG meta tags only | SPA not rendered |
+| RSS | No endpoint | X discontinued RSS support |

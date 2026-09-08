@@ -1,13 +1,13 @@
-# 네이버 계열 접근 전략
+# Access Strategies for Naver Services
 
-> 네이버 서비스별로 접근 방법이 다르다. 블로그는 모바일 URL, 뉴스/증권은 Jina Reader.
+> Access methods differ by Naver service. Use mobile URLs for blogs and Jina Reader for news/finance.
 
-## 네이버 블로그
+## Naver Blog
 
-WebFetch 차단. 모바일 URL 변환 + iPhone UA로 접근.
+WebFetch is blocked. Convert to a mobile URL and access with an iPhone UA.
 
 ```bash
-# blog.naver.com/{ID}/{NO} → m.blog.naver.com 변환
+# Convert blog.naver.com/{ID}/{NO} → m.blog.naver.com
 curl -sL \
   -H "User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1" \
   -H "Accept-Language: ko-KR,ko;q=0.9" \
@@ -15,48 +15,48 @@ curl -sL \
   "https://m.blog.naver.com/PostView.naver?blogId={ID}&logNo={NO}"
 ```
 
-RSS도 가능 (최신 50개, 본문 약 300자):
+RSS is also available (latest 50 posts, approximately 300 body characters):
 ```bash
 curl -sL "https://rss.blog.naver.com/{BLOG_ID}.xml"
 ```
 
-## 네이버 뉴스
+## Naver News
 
-Jina Reader로 완전 접근 가능.
+Full access is available through Jina Reader.
 
 ```bash
-# 기사 목록
+# Article list
 curl -s "https://r.jina.ai/https://news.naver.com/"
 
-# 개별 기사
+# Individual article
 curl -s "https://r.jina.ai/https://n.news.naver.com/article/{press_id}/{article_id}"
 ```
 
-## 네이버 증권
+## Naver Finance
 
-Jina Reader로 실시간 주가, 주요 뉴스 접근.
+Access real-time stock prices and major news through Jina Reader.
 
 ```bash
 curl -s "https://r.jina.ai/https://finance.naver.com/item/main.naver?code={종목코드}"
 ```
 
-## 네이버 금융 시세 (비공식, 무인증)
+## Naver Finance Quotes (Unofficial, Unauthenticated)
 
-인증 불필요. 주가 시계열 데이터 JSON 반환.
+No authentication required. Returns stock-price time-series data as JSON.
 
 ```bash
-# 일봉 시세 (삼성전자=005930)
+# Daily quotes (Samsung Electronics=005930)
 curl -sL "https://api.finance.naver.com/siseJson.naver?symbol=005930&requestType=1&startTime=20240101&endTime=20241231&timeframe=day"
 
-# 분봉
+# Minute candles
 curl -sL "https://api.finance.naver.com/siseJson.naver?symbol=005930&requestType=0&timeframe=minute&count=200"
 ```
 
-응답: `[[날짜, 시가, 고가, 저가, 종가, 거래량, 외국인거래율], ...]`
+Response: `[[날짜, 시가, 고가, 저가, 종가, 거래량, 외국인거래율], ...]`
 
-## 네이버 검색 (신원위장으로 직접 접근)
+## Naver Search (Direct Access via Impersonation)
 
-curl_cffi + 세션 쿠키 워밍으로 네이버 검색 결과를 직접 크롤링할 수 있다. API 키 불필요.
+Use curl_cffi + session cookie warm-up to crawl Naver search results directly. No API key required.
 
 ```python
 from curl_cffi import requests
@@ -67,40 +67,40 @@ s.headers.update({
     "Accept-Language": "ko-KR,ko;q=0.9",
     "Referer": "https://www.google.com/",
 })
-s.get("https://www.naver.com/", timeout=10)  # 쿠키 워밍
+s.get("https://www.naver.com/", timeout=10)  # Warm up cookies
 s.headers["Referer"] = "https://www.naver.com/"
 
-# 통합 검색 (블로그+뉴스+웹 혼합)
+# Integrated search (blogs + news + web combined)
 r = s.get(f"https://search.naver.com/search.naver?query={quote('검색어')}")
 
-# 블로그 탭
+# Blog tab
 r = s.get(f"https://search.naver.com/search.naver?where=post&query={quote('검색어')}")
 
-# 뉴스 탭
+# News tab
 r = s.get(f"https://search.naver.com/search.naver?where=news&query={quote('검색어')}")
 ```
 
-### 추출 가능한 데이터
+### Extractable Data
 
-| 탭 | URL 패턴 | 추출 |
+| Tab | URL Pattern | Extraction |
 |---|---|---|
-| 통합 | `search.naver?query=` | 블로그 URL, 외부 링크, 뉴스 |
-| 블로그 | `where=post&query=` | blog.naver.com URL, 제목, 스니펫 |
-| 뉴스 | `where=news&query=` | n.news.naver.com URL, 제목 |
+| Integrated | `search.naver?query=` | Blog URLs, external links, news |
+| Blog | `where=post&query=` | blog.naver.com URLs, titles, snippets |
+| News | `where=news&query=` | n.news.naver.com URLs, titles |
 
-### 한국어 키워드 검색의 핵심 경로
+### Primary Route for Korean Keyword Searches
 
-WebSearch는 한국어 신규 콘텐츠 인덱싱이 지연되지만, 네이버 검색은 한국어에 최적화되어 있다.
-**한국 사이트 키워드 검색 → 네이버 검색 직접 접근이 가장 정확하고 빠르다.**
+WebSearch is slow to index new Korean content, while Naver Search is optimized for Korean.
+**Keyword searches on Korean sites → direct Naver Search access is the most accurate and fastest route.**
 
-## 네이버 카페
+## Naver Cafe
 
-로그인 + iframe 이중 장벽. 본문 직접 접근 불가.
-fallback 체인에서 Phase 1~3을 시도하되, login/paywall 감지 시 "인증 필요"로 종료.
+A double barrier of login + iframe prevents direct access to the body.
+Try Phases 1–3 in the fallback chain, but stop with "인증 필요" when login/paywall is detected.
 
-## 네이버 TV
+## Naver TV
 
-yt-dlp로 접근 (media.md 참조).
+Access with yt-dlp (see media.md).
 
 ```bash
 yt-dlp --dump-json "https://tv.naver.com/v/{video_id}"

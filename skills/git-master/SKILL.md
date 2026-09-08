@@ -104,11 +104,11 @@ Add trailers at the end of body when needed:
 - WHY goes in body (optional)
 - Many files ≠ many commits — logical cohesion decides (see Atomic Commit Splitting)
 
-**Product, Not Process** — 커밋 메시지는 변경 자체를 설명한다.
+**Product, Not Process** — Commit messages describe the change itself.
 
-- 변경의 출처(코드 리뷰, 이슈 번호, 회의 결정)가 아니라 **무엇이 바뀌었는지** 기술
-- 6개월 뒤 `git log`를 읽는 사람은 "리뷰 P1-3 수정"이 무슨 뜻인지 모른다
-- 출처/맥락은 body나 trailer(`Fixes #123`)에 기록
+- Describe **what changed**, rather than the source of the change (code review, issue number, meeting decision)
+- Someone reading `git log` six months later will not know what "리뷰 P1-3 수정" means
+- Record the source/context in the body or a trailer (`Fixes #123`)
 
 ---
 
@@ -159,32 +159,32 @@ For each changed file, categorize:
 
 #### Mandatory Self-Check (3+ Files)
 
-3+ 파일 변경 시 커밋 전 반드시 자가 점검:
+When 3+ files change, you must perform this self-check before committing:
 
 ```
 "N개 파일을 M개 커밋으로 만든다."
 IF M == 1 AND N >= 3:
-  → 정말 하나의 논리적 변경인가?
-  → 각 파일이 함께여야 하는 이유를 한 문장으로 쓸 수 있는가?
-  → 쓸 수 없으면 → SPLIT
+  → Is this really one logical change?
+  → Can you explain in one sentence why these files must stay together?
+  → If you cannot → SPLIT
 ```
 
-**이것은 수치 공식이 아니다.** 3+ 파일이면 "생각을 거치라"는 것이지, "반드시 분할하라"는 것이 아니다. Example 7(포인트 적립 4파일 = 1커밋)처럼 논리적 응집성이 충분하면 단일 커밋이 정당하다.
+**This is not a numerical formula.** 3+ files means "think it through," not "always split." A single commit is justified when logical cohesion is sufficient, as in Example 7 (point accrual: 4 files = 1 commit).
 
 #### Commit Justification (3+ Files per Commit)
 
-하나의 커밋에 3개 이상 파일이 포함될 때, **왜 함께인지** 한 문장으로 기술해야 한다:
+When a commit includes 3 or more files, you must explain **why they belong together** in one sentence:
 
 ```
 "이 커밋은 [파일들]을 포함한다. 이유: [구체적 이유]"
 ```
 
-| 유효한 이유 | 무효한 이유 (→ 분할 필요) |
+| Valid Reason | Invalid Reason (→ must split) |
 |------------|------------------------|
-| 구현체 + 직접 테스트 파일 | "같은 기능 관련" (모호) |
-| 타입 정의 + 유일한 사용처 | "같은 PR에 포함" (이유 아님) |
-| 마이그레이션 + 모델 변경 (분리 시 빌드 실패) | "함께 변경됨" (이유 아님) |
-| 단일 rename 작업의 여러 파일 | "관련 있어서" (모호) |
+| Implementation + its direct test file | "같은 기능 관련" (vague) |
+| Type definition + its only consumer | "같은 PR에 포함" (not a reason) |
+| Migration + model change (splitting breaks the build) | "함께 변경됨" (not a reason) |
+| Multiple files in a single rename operation | "관련 있어서" (vague) |
 
 **IMPORTANT**: One feature ≠ one commit. A feature may contain multiple logical changes (config, domain, service, test, docs). Each independently meaningful layer is a separate commit. However, a single atomic operation (e.g., renaming across 10 files) IS one commit.
 
@@ -199,7 +199,7 @@ Split when ANY of these are true:
 | Independently revertable parts | Config change that works without the feature using it |
 | Description gets too long | "Fixed X and also added Y and refactored Z" |
 | Different architectural layers | Config + domain + service + test + docs for one feature |
-| Multiple independent changes (even in 1-2 files) | 리뷰 지적 3건이 각각 독립적 변경 → 3 커밋 |
+| Multiple independent changes (even in 1-2 files) | 3 review findings each require an independent change → 3 commits |
 
 #### When NOT to Split
 
@@ -232,17 +232,17 @@ Each split commit must:
 
 #### Test-Implementation Pairing
 
-테스트 파일은 반드시 대응하는 구현체와 **같은 커밋**에 포함한다:
+Test files must be included in the **same commit** as their corresponding implementation:
 
-| 테스트 패턴 | 구현 파일 |
+| Test Pattern | Implementation File |
 |------------|----------|
 | `*_test.sh` | `*.sh` |
 | `*.test.ts` | `*.ts` |
 | `*.spec.ts` | `*.ts` |
 | `*Test.kt` | `*.kt` |
-| `__tests__/*` | 대응하는 소스 |
+| `__tests__/*` | Corresponding source |
 
-**Anti-pattern**: 구현과 테스트를 별도 커밋으로 분리하는 것. 테스트 없는 구현 커밋은 중간 상태에서 검증 불가능하다.
+**Anti-pattern**: Splitting implementation and tests into separate commits. An implementation commit without tests cannot be verified in its intermediate state.
 
 ### Step 2: Verify No Workflow Files
 
@@ -259,15 +259,15 @@ If any match → Unstage them before proceeding.
 - Code restructured without behavior change → `refactor`
 - Only tests → `test`
 - Only docs → `docs`
-  - **기능 vs 문서 판단**: "시스템 동작을 정의하면 기능, 인간 독자를 위한 참조/공유 정보면 문서"
-  - 기능적 파일 (SKILL.md, agents/*.md, rules/*.md, hooks/*) 변경 → `feat`/`fix`/`refactor`
-  - 문서 파일 (README.md, API 명세서, 가이드) 변경 → `docs`
+  - **Functionality vs documentation**: "If it defines system behavior, it is functionality; if it provides reference/shared information for human readers, it is documentation"
+  - Changes to functional files (SKILL.md, agents/*.md, rules/*.md, hooks/*) → `feat`/`fix`/`refactor`
+  - Changes to documentation files (README.md, API specifications, guides) → `docs`
 - Build/config → `chore`
 - Performance → `perf`
 
 ### Step 4: Output Commit Plan (3+ Files — BLOCKING)
 
-3개 이상 파일 변경 시, 커밋을 실행하기 전에 반드시 커밋 계획을 출력한다:
+When 3 or more files change, you must output a commit plan before executing any commit:
 
 ```
 COMMIT PLAN
@@ -288,22 +288,23 @@ COMMIT 2: type: 제목
 (의존성 순서: Config → Source → Test → Docs)
 ```
 
-**이 출력 없이 커밋 실행으로 넘어가지 않는다.** 1-2개 파일 변경은 이 단계를 건너뛴다.
+**Do not proceed to commit execution without this output.** Skip this step for changes to 1-2 files.
 
-> **`fix` 타입 주의**: 코드 리뷰에서 나온 변경이 전부 `fix`는 아니다. 리뷰 지적이라도 새 기능이면 `feat`, 구조 개선이면 `refactor`. 실제 버그/오류 수정만 `fix`.
+> **Caution about `fix`**: Changes arising from code review are not all `fix`. Even for review findings, use `feat` for new functionality and `refactor` for structural improvements. Only actual bug/error fixes use `fix`.
 
 ### Step 5: Generate Commit Message
 
-#### MANDATORY Self-Check (제목 초안 작성 직후)
+<a id="mandatory-self-check-제목-초안-작성-직후"></a>
+#### MANDATORY Self-Check (Immediately After Drafting the Subject)
 
-제목을 쓴 직후, 커밋 실행 전 반드시 invented/opaque label 여부를 자가 검사한다. **하나라도 매칭되면 rewrite 후 재검사.** 이 검사가 지키는 표준은 `communication-style` 룰(`rules/communication-style.md`)의 anti-pattern 1(Invented/opaque label ban)이며, 판정 정규식의 canonical source는 `hooks/lib/label-patterns.sh`다 — git-master는 자체 사본을 두지 않는다.
+Immediately after drafting the subject and before committing, you must check it for invented/opaque labels. **If any pattern matches, rewrite and check again.** This check enforces anti-pattern 1 (Invented/opaque label ban) of the `communication-style` rule (`rules/communication-style.md`). The canonical source of the detection regexes is `hooks/lib/label-patterns.sh` — git-master does not keep its own copy.
 
-**왜 강제인가**: 작업자 본인은 plan 문서를 보고 있으니 plan 단계 번호나 AC ID가 명확하지만, git log 독자는 그 plan에 접근 불가 — 과거 실제 위반을 history rewrite로 교정해야 했던 사례가 있다.
+**Why this is mandatory**: Plan step numbers and AC IDs are clear to the worker viewing the plan, but git log readers cannot access that plan — past violations have required history rewrites to correct them.
 
-**위반 패턴 발견 시 변환:**
-- 토큰 단순 제거: `(Step 12)` → 삭제 (제목이 도메인 용어로 이미 자족적인 경우)
-- 토큰 → 도메인 용어로 치환: `align RN tooling lockstep with mobile (Step 4)` → `RN tooling mobile에 정렬`
-- 추적성이 정말 필요하면 body의 trailer로 이동: `Refs: dispenser-monorepo-absorption.md#step-12`
+**When a violating pattern is found:**
+- Simply remove the token: `(Step 12)` → delete (when the subject is already self-contained in domain terms)
+- Replace the token with domain terms: `align RN tooling lockstep with mobile (Step 4)` → `RN tooling mobile에 정렬`
+- If traceability is truly needed, move it to a body trailer: `Refs: dispenser-monorepo-absorption.md#step-12`
 
 **Subject rules (NON-NEGOTIABLE):**
 - Korean (한국어)
@@ -313,46 +314,46 @@ COMMIT 2: type: 제목
 
 **Subject content rule:**
 
-제목의 독자는 미래의 git log 독자다 — 6개월 뒤 또는 다른 개발자가 코드 archaeology 중에 만나는 줄. 제목은 그 독자가 외부 맥락 없이 무엇이 바뀌었는지 이해할 수 있어야 한다.
+The subject's audience is a future git log reader — someone encountering the line six months later or another developer doing code archaeology. The subject must let that reader understand what changed without external context.
 
-**독자 모델:**
+**Reader model:**
 
-| 독자가 가진 것 | 독자가 갖지 못한 것 |
+| What Readers Have | What Readers Do Not Have |
 |---|---|
-| 코드베이스 자체 | PR description, review thread |
-| commit body / diff | 작업 세션의 맥락 |
-| 도메인 지식 | 내부 분류 체계 (P-등급, 심각도 라벨) |
-| 다른 commit들의 history | 회의록, Slack 메시지 |
+| The codebase itself | PR description, review thread |
+| commit body / diff | Work session context |
+| Domain knowledge | Internal classification systems (P-ratings, severity labels) |
+| History of other commits | Meeting notes, Slack messages |
 
-**검증 질문** — 제목을 쓴 후 자문:
-1. "독자가 이 제목만 보고 무엇이 바뀌었는지 이해하는가?"
-2. "독자가 외부 문서/세션 맥락에 접근해야만 의미를 알 수 있는가?"
+**Validation questions** — ask yourself after writing the subject:
+1. "Can readers understand what changed from this subject alone?"
+2. "Do readers need access to external documents/session context to understand it?"
 
-1번이 NO 또는 2번이 YES면 → rewrite.
+If 1 is NO or 2 is YES → rewrite.
 
-**자주 실패하는 패턴** (외부 맥락에 의존):
+**Common failure patterns** (depend on external context):
 
-| 패턴 | 왜 실패하는가 |
+| Pattern | Why It Fails |
 |---|---|
-| 리뷰 분류 (`P0`/`P1`/`HIGH`/`CRITICAL` 등) | 독자는 그 분류 체계의 정의에 접근 불가 |
-| 워크플로우 라벨 (`잔여`/`residual`/`follow-up`) | 무엇의 잔여인지 세션 맥락 필요 |
-| 프로세스 참조 (`리뷰`/`audit`/`라운드`) | 어떤 리뷰/audit인지 외부 문서 필요 |
-| 모호한 카운트 (`3건`/`여러 건` 단독) | 무엇이 3건인지 본문 없이 불명 |
-| Plan 단계 번호 (`Step N`/`Step 7.6`/`Phase N`/`Round N`) | 어떤 plan의 N단계인지 외부 plan 문서 필요 |
-| Acceptance criteria ID (`AC M1`/`H4`/`(M3)`) | AC 정의가 plan/spec 외부에 있어 독자 접근 불가 |
+| Review classifications (`P0`/`P1`/`HIGH`/`CRITICAL`, etc.) | Readers cannot access the classification definitions |
+| Workflow labels (`잔여`/`residual`/`follow-up`) | Session context is needed to know what remains |
+| Process references (`리뷰`/`audit`/`라운드`) | External documents are needed to identify the review/audit |
+| Vague counts (`3건`/`여러 건` alone) | What the count refers to is unclear without the body |
+| Plan step numbers (`Step N`/`Step 7.6`/`Phase N`/`Round N`) | The external plan is needed to identify which plan's step N |
+| Acceptance criteria IDs (`AC M1`/`H4`/`(M3)`) | AC definitions are in an external plan/spec inaccessible to readers |
 
-이들은 작업 중인 본인에게는 명확하지만 git log 독자에게는 의미 없다. 출처/분류/카운트가 필요하면 body 또는 trailer로 — 제목은 변경 자체를 도메인 용어로 기술.
+These are clear to you during the work but meaningless to git log readers. Put any needed source/classification/count in the body or a trailer — describe the change itself in domain terms in the subject.
 
-**BAD vs GOOD subjects** (실제 사례):
+**BAD vs GOOD subjects** (real examples):
 
-| BAD (외부 맥락 의존) | GOOD (자족적, 도메인 용어) |
+| BAD (depends on external context) | GOOD (self-contained, domain terms) |
 |---|---|
 | `fix: collect-jd P1 스펙 드리프트 3건 정합` | `fix: ledger filename + canonical path + Gate 5 classification 정합` |
 | `refactor: SKILL.md HIGH 잔여 3섹션 cross-ref 전환` | `refactor: SKILL.md Session Lock + Atomic Write + L1/L2 cross-ref 전환` |
 | `fix: 코드 리뷰 P1/P2 이슈 수정` | `fix: persistence 저장 시점을 Step 완료 단위로 변경` |
 | `chore(dispenser): remove per-app husky (AC M1)` | `chore(dispenser): per-app husky 제거` |
 
-GOOD 제목들은 외부 문서 없이도 변경 영역(파일/모듈/도메인 개념)이 직접 보인다.
+GOOD subjects directly reveal the changed area (file/module/domain concept) without external documents.
 
 **If subject > 50 chars:**
 1. Identify the ONE core change
@@ -455,10 +456,10 @@ See `examples.md` for commit message examples.
 | Period at end of title | Unnecessary character | Remove period |
 | Title exceeding 50 characters | Truncated in git log | Keep core message, move details to body |
 | Committing plan.md | Workflow files mixed in | git reset HEAD plan.md |
-| Meta-commit: "리뷰 이슈 수정" | 변경 내용이 불투명, git log 무의미 | 실제 변경 기술: "저장 시점을 Step 완료 단위로 변경" |
-| Opaque reference: "P1-1, P2-3 반영" | 외부 문서 없이 해독 불가 | 참조는 body/trailer, 제목은 변경 자체 |
-| 외부 맥락에 의존하는 제목 (`P1 X`, `HIGH 잔여 Y`, `리뷰 N건`) | git log 독자는 분류 체계/세션 맥락에 접근 불가 — 의미 전달 실패 | 도메인 용어로 변경 자체를 기술; 분류/맥락은 body·trailer로 |
-| Plan-step / AC ID 박기 | plan 문서 없으면 git log 독자 해독 불가 — 작업자 본인 외에 의미 없는 토큰 | Step 5 MANDATORY Self-Check로 자동 검사(canonical 패턴: `hooks/lib/label-patterns.sh`); 추적은 PR description 또는 trailer로 |
+| Meta-commit: "리뷰 이슈 수정" | The change is opaque; git log becomes meaningless | Describe the actual change: "저장 시점을 Step 완료 단위로 변경" |
+| Opaque reference: "P1-1, P2-3 반영" | Cannot be decoded without external documents | Put references in the body/trailer and the change itself in the subject |
+| Subjects depending on external context (`P1 X`, `HIGH 잔여 Y`, `리뷰 N건`) | git log readers cannot access the classification system/session context — meaning is lost | Describe the change itself in domain terms; put classification/context in the body or trailer |
+| Embedding plan-step / AC IDs | git log readers cannot decode them without the plan — tokens meaningful only to the worker | Automatically check with Step 5 MANDATORY Self-Check (canonical patterns: `hooks/lib/label-patterns.sh`); put traceability in the PR description or trailer |
 
 ---
 
