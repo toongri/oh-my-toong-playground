@@ -25,6 +25,18 @@ const repoRoot = join(import.meta.dir, "..", "..");
 const reviewerMd = readFileSync(join(repoRoot, "agents/issue-reviewer.md"), "utf8");
 const issueCraftMd = readFileSync(join(import.meta.dir, "references/issue-craft.md"), "utf8");
 
+test("범위 제외 기준은 독자 언어의 의미 구조로 심사한다", () => {
+	const row = issueCraftMd.split("\n").find((line) => line.startsWith("| **Non-Goals** |"));
+	expect(row).toContain("excluded scope — observable condition");
+	expect(row).toContain("reader's working language");
+	expect(row).not.toContain("`\\| decider:");
+});
+
+test("일반 버그의 조사 필드는 발표 템플릿의 본문에 배치한다", () => {
+	expect(issueCraftMd).toContain("This is required information, not three additional headings");
+	expect(issueCraftMd).not.toContain("For bug issues the ordering is:");
+});
+
 describe("A1: agents/issue-reviewer.md frontmatter", () => {
 	test("declares name: issue-reviewer", () => {
 		expect(reviewerMd).toMatch(/^name: issue-reviewer$/m);
