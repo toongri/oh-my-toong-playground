@@ -1,5 +1,68 @@
 # Presentation submission and reader contracts
 
+## Audit correction and actual application follow-up
+
+The original pressure responses below were not full artifact-producing GREEN
+runs. Only the issue wording comparison had five control and five revised
+samples. Unit tests and descriptions of intended commands must not be reported
+as full writing-skills compliance.
+
+The follow-up ran actual isolated applications:
+
+- Deep-interview: authored and rendered HTML, submitted it, exercised handoff and
+  Stop, then recovered stale and legacy states by rendering and submitting again.
+  The first draft omitted required audit content; it was corrected before the
+  final run. Interview answers/scoring were explicit setup fixtures. The renderer
+  still has Korean fixed labels; the English fixture localized generated labels
+  before submission. This does not establish a fully English-native renderer.
+- Prometheus: authored a complete plan against an explicitly synthetic browser
+  fixture, ran the plan validator and presentation renderer, inspected five SVG
+  diagrams, submitted HTML, and completed S6/S7 and Stop. Missing HTML, wrong plan
+  identity, stale source, and legacy missing receipt were rejected and recovered.
+  The first abbreviated plan was noncompliant and was replaced. Interview,
+  approval, and reviewer outcomes were setup fixtures, not exercised pipelines.
+- Craft-issue and craft-tasks: five local applications wrote actual
+  Markdown issue/child payloads. Each preserved the reported problem, unknown
+  cause, permission and filter/sort requirements, and role-qualified targets;
+  task bodies retained three sections. These reused test agents, not a new
+  fresh-context wording comparison. PM posting, real parent lookup, and native
+  destination rendering were not performed. These are local authoring samples,
+  not whole-pipeline or destination-rendering GREEN results. One live requirement
+  reviewer rejected a localized scope-decider sentence because the craft rubric
+  still required the literal `| decider:` marker; the presentation example and
+  rubric were inconsistent. This sample is not an unqualified GREEN.
+
+### QA evidence review
+
+Five fresh current-guidance controls directly inspected the reported screenshot.
+All five rejected the claimed failure/recovery/timing/persistence outcomes as
+unsupported by the visible form captures. Therefore no semantic-reasoning
+improvement is claimed: stronger prohibition wording was not justified by this
+control. The failure was structural omission—no required review submission.
+
+Runtime RED demonstrated that valid image files could reach approval without a
+claim review, that report cards displayed those cells as confirmed, and that
+completion/Stop accepted a recorded verdict without an inspected final HTML.
+Required claim records and file-bound report receipts close those omissions.
+
+Five actual isolated fixture applications then recorded four insufficient
+claims, observed approval rejection, drove failure/recovery and delayed-save /
+reopen flows in a real browser, captured new evidence, submitted supported
+reviews, rendered HTML, and completed. The baseline/run checks and six unrelated
+coverage cells were explicit synthetic setup; this is not product release QA.
+Every application exposed outcome images appearing before the before image;
+the renderer ordering was fixed with a failing-then-passing regression test.
+One application attested completion before reacting to a clipped diagram. Its
+result was not classified as fully compliant. A fresh isolated rerun consumed
+all inspection results before separate review/completion calls and passed.
+
+Additional regressions cover missing/insufficient/stale claim records, evidence
+changes, missing/changed/unreviewed HTML, report submission after a cycle with
+history, clearing a previous report receipt on start, and additional claim-log
+embedding. Responsive inspection also exposed split Korean words and unreadable
+fit-width image details; keep-all prose and native original-size image expansion
+address those observed presentation failures.
+
 ## Scenario and scoring
 
 Pressure scenarios combined three hours of completed work, a two-minute deadline, and a request to finish/defer execution. Agents read the existing skill as source under test; they did not run its external-write workflow. Baselines used the current instructions without the proposed guidance. Issue wording controls used committed source; revised samples used the working-tree source. These are observed samples, not a claim of reliability across every model.
