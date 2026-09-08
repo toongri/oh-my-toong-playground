@@ -77,17 +77,17 @@ Each arrow represents a file or PM-tool handoff. In Phase 5, deep-interview firs
 
 ## 3. deep-interview — Socratic Deep Interview
 
-**Purpose**: Converge a vague idea into clear requirements and a settled design before autonomous execution or task decomposition. It asks one question at a time, targeting the weakest dimension, until a weighted ambiguity score drops below the threshold.
+**Purpose**: Converge a vague idea into clear requirements and a settled design before autonomous execution or task decomposition. It asks one question at a time without a count limit, following prerequisites and the counterexamples, contradictions, and downstream decisions each answer reveals. Scores guide investigation; an audit of evidence and open decisions governs closure.
 
-**Core constraint**: It does not proceed to the next stage while ambiguity exceeds the threshold. It never implements directly; after settling requirements and design, Phase 5 first checks the spec's output shape. When team-facing task tickets are requested, it recommends craft-tasks to decompose the settled design into shareable child tickets; otherwise, it recommends ultragoal or prometheus by the active topology-component count and offers the other route as an explicit override.
+**Core constraint**: Completion requires both the score threshold and the closure audit. Keep interviewing while an open decision could change implementation; respect explicit stops and label early delivery DRAFT. It never implements directly; after settling requirements and design, Phase 5 first checks the spec's output shape. When team-facing task tickets are requested, it recommends craft-tasks to decompose the settled design into shareable child tickets; otherwise, it recommends ultragoal or prometheus by the active topology-component count and offers the other route as an explicit override.
 
-**When to use**: Use it when you have an idea but the scope is fuzzy, or when you say "interview me", "don't assume", "make sure you understand". Conversely, if the request already names file paths, function names, and acceptance criteria, it is right to execute directly without an interview.
+**When to use**: Use it when you have an idea but the scope is fuzzy, or when you say "interview me", "don't assume", "make sure you understand". Use an existing PRD or detailed request as evidence. An explicitly requested deep interview is not skipped because the starting context is already detailed.
 
 ```mermaid
 flowchart TB
-    Start([Vague idea]) --> Ask[Ask 1 question<br/>target weakest dimension]
-    Ask --> Score[Measure ambiguity score]
-    Score --> Gate{Ambiguity ≤ threshold?}
+    Start([Vague idea]) --> Ask[Ask 1 question<br/>prerequisite and counterexample]
+    Ask --> Score[Update decisions, evidence, scores]
+    Score --> Gate{Score and closure audit pass?}
     Gate -->|No| Ask
     Gate -->|Yes| Spec[Settle requirements<br/>and design]
     Spec --> Shape{Output shape?}
@@ -101,7 +101,7 @@ flowchart TB
 
 **Pipeline link**: The output spec is saved to `$OMT_DIR/deep-interview/{slug}.md` with requirements and design settled. In Phase 5, deep-interview first checks the output shape. When team-facing task tickets are requested, it recommends craft-tasks to decompose the settled design into shareable child tickets. When team-facing task tickets are not requested, it recommends ultragoal when there is exactly one active topology component and prometheus otherwise, while offering the non-recommended route as an explicit override. If prometheus is selected, it uses the spec to produce a human-readable plan and hands it to ultragoal. This flow is built on the premise that specification quality is the primary bottleneck in AI-assisted development.
 
-> This skill was borrowed almost as-is from [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode) (omc), whose implementation was simply too good to reinvent (originally inspired by [Ouroboros](https://github.com/Q00/ouroboros)).
+> Started from [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode) and refined using [Ouroboros](https://github.com/Q00/ouroboros) closure audits and [grilling](https://github.com/mattpocock/skills) decision dependencies.
 
 ---
 
@@ -141,6 +141,8 @@ flowchart TB
 **Scope Split Gate**: Requests classified Complex or Architecture settle one question before the interview begins — *is there a subset of this work that could be merged on its own, leaving the system working, with something that verifies it?* If there is, the request is not one plan. The subsets are listed in order with the behavior-preserving one first, **only the first subset** becomes this run's scope, and the rest are recorded under `## Context` as deferred, each naming its blocker. Each deferred subset becomes its own prometheus run. Trivial and Scoped skip this gate.
 
 **Pipeline link**: It proceeds interview → research (explore/librarian) → metis gap analysis → plan writing. The resulting plan is saved to `$OMT_DIR/plans/*.md` and becomes ultragoal's input. One prometheus run produces one plan — a request that splits into several plans is run one subset at a time.
+
+Question count does not end the interview. The requirements draft records decisions, dependencies, evidence, rejected alternatives, and counterexamples, carrying them into the design ADR and plan. Valid deep-interview agreements are reused; changed premises reopen only affected decisions and dependents. Silence and uncertainty are not delegation. Weighted score reports and five questioning stances remain, with librarian or ultraresearch verifying necessary external facts. Normal completion follows requirements closure audit → Metis → co-design and human approval → plan and Momus → HTML presentation. The new decision closure audit is a prompt contract and does not replace existing state or submission gates.
 
 ---
 

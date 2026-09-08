@@ -105,10 +105,10 @@ flowchart TD
 ### deep-interview (The Definer)
 
 - **Role**: Crystallizes a vague idea into a spec before autonomous execution
-- **Constraint**: Won't proceed to execution while the ambiguity score stays above threshold. Never implements directly.
+- **Constraint**: Tracks open decisions without a question-count limit. Completion requires both the score threshold and a closure audit. Never implements directly.
 - **Output**: `$OMT_DIR/deep-interview/{slug}.md`
-- **Workflow**: One question at a time, targeting the weakest clarity dimension -> measure ambiguity -> finalize the spec once below threshold -> in Phase 5, recommend `/craft-tasks` when the output calls for shareable, trackable implementation task tickets; otherwise, when only AI execution is needed, recommend `/ultragoal` for exactly one active topology component or `/prometheus` otherwise. Present the non-recommended skill as an explicit override.
-- **Origin**: Borrowed almost as-is from oh-my-claudecode (omc), whose implementation was simply too good to reinvent (originally inspired by [Ouroboros](https://github.com/Q00/ouroboros))
+- **Workflow**: One question at a time, tracking decisions, counterexamples, and contradictions -> reopen affected dependents -> audit evidence and residual assumptions -> finalize the spec -> in Phase 5, recommend `/craft-tasks` when the output calls for shareable, trackable implementation task tickets; otherwise, when only AI execution is needed, recommend `/ultragoal` for exactly one active topology component or `/prometheus` otherwise. Present the non-recommended skill as an explicit override.
+- **Origin**: Started from oh-my-claudecode and refined using [Ouroboros](https://github.com/Q00/ouroboros) closure audits and [grilling](https://github.com/mattpocock/skills) decision dependencies.
 
 ### craft-tasks (The Task Ticket Materializer)
 
@@ -118,6 +118,8 @@ flowchart TD
 - **Workflow**: Uses the deep-interview spec to resolve and enrich the parent, validates existing child tickets, then materializes only the missing implementation tasks. Use `/prometheus` optionally per generated task when it needs a separate AI-execution plan, then execute through `/ultragoal` -> `/sisyphus`.
 
 ### prometheus (The Planner)
+
+Questions have no count limit and resolve prerequisite decisions first. Each answer produces the six weighted scores and decision changes; unanswered choices stay open. Explicit delegation permits a reasoned choice, and settled deep-interview decisions reopen only when new evidence changes their premises. ultraresearch handles competing claims and multi-source verification; one investigation's resource budget does not limit interview depth. Readiness requires the phase's closure audit as well as its score. Metis, human design approval, Momus, and HTML submission remain in place.
 
 - **Role**: Strategic planning, requirements interviews
 - **Constraint**: **READ-ONLY**. NEVER writes code.
@@ -165,8 +167,8 @@ flowchart TD
 
 When requirements are unclear, crystallize a spec with `/deep-interview` before planning:
 
-1. **One question at a time**: Targets the weakest clarity dimension
-2. **Ambiguity gating**: Repeats until the score drops below threshold
+1. **One question at a time, without a count limit**: Settle prerequisites and follow the branches, counterexamples, and contradictions each answer reveals.
+2. **Closure audit**: Scores guide investigation. Resolve decisions that could change implementation, examine evidence/failure scenarios/residual assumptions, and confirm shared understanding. Respect a stop immediately; label early delivery DRAFT.
 3. **Spec finalization and route selection**: Save to `$OMT_DIR/deep-interview/{slug}.md`. In Phase 5, recommend `/craft-tasks` when the spec calls for shareable, trackable implementation task tickets. `craft-tasks` resolves and enriches the verified parent and materializes child task tickets; use `/prometheus` only when an individual task needs an AI-execution plan. AI execution then runs through `/ultragoal` -> `/sisyphus`. When the spec only needs AI execution and no team-facing task tickets, preserve the existing route: recommend `/ultragoal` for exactly one active topology component, or `/prometheus` -> `/ultragoal` -> `/sisyphus` otherwise. Present the non-recommended skill as an explicit override.
 
 ### Phase 1: Planning
