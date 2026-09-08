@@ -273,6 +273,12 @@ describe("qa-state CLI wiring", () => {
 		const savedReview = rawState().cells[0].evidence_review;
 		expect(savedReview.files[after]).toMatch(/^[a-f0-9]{64}$/);
 		expect(savedReview.cell_snapshot).toContain("story-1");
+		run('add-actor --id actor-1 --boundary "another user boundary" --reachable yes');
+		expect(rawState().cells[0].evidence_review).toBeUndefined();
+		run(`review-evidence --story story-1 --cls 1 --json-file ${reviewFile}`);
+		run('add-actor --id actor-2 --name "Other" --boundary "other home" --driver agent-browser --reachable yes');
+		run('add-story --id story-1 --actor actor-2');
+		expect(rawState().cells[0].evidence_review).toBeUndefined();
 		writeFileSync(reviewFile, JSON.stringify([{ claim: "오류 안내 표시", verdict: "supported", observation: "보임", gap: "", sources: [] }]));
 		expect(() => run(`review-evidence --story story-1 --cls 1 --json-file ${reviewFile}`)).toThrow();
 		writeFileSync(after, "This is a text log renamed as an image, not a screenshot.");

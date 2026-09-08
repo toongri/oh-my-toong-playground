@@ -21,7 +21,7 @@ import { tmpdir } from "os";
 import { dirname, extname, join, resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
 import { requiredCells, isVisualDriver, evidenceReviewComplete, type QaBaseline, type QaCell, type QaResult, type QaRunCheck, type QaStory } from "@lib/qa-chain-core";
-import { readQaView, recordRenderedReport, type QaView } from "./qa-state.ts";
+import { readQaView, recordRenderedReport, stateProbe, type QaView } from "./qa-state.ts";
 
 // Keep individual evidence files small enough to inspect, and cap the total
 // embedded payload so a full scenario matrix cannot produce an impractical
@@ -561,10 +561,15 @@ function renderScenarios(view: QaView, narrative: QaReportNarrative, readEvidenc
 					// still renders there (imageSlot is per-card, not de-duped globally).
 					const claims = isVisualDriver(actor?.driver) ? cell.evidence_review?.claims : undefined;
 					const beforeBlock = imageSlot("행동 전 화면", e?.before, readEvidence, context);
-					const claimBlocks = Array.isArray(claims) ? claims.map((claim) => `<div class="evidence-slot"><p><strong>${escapeHtml(claim.claim)}</strong> · ${escapeHtml(claim.verdict === "supported" && !evidenceGap ? "입증" : "근거 미검증")}</p><p>${escapeHtml(claim.observation)}</p>${claim.gap ? gap(claim.gap) : ""}${(claim.sources ?? []).map((source) => `<p>${escapeHtml(source.location)}</p>${source.path === e?.before ? "" : imageSlot(`${claim.claim} — ${source.location}`, source.path, readEvidence, context)}`).join("")}</div>`).join("") : "";
-					const claimedPaths = new Set(claims?.flatMap((claim) => claim.sources.map((source) => source.path)) ?? []);
+					const primaryPaths = new Set([e?.before, e?.action, e?.after, e?.path]);
+					const claimImage = (path: string, label: string): string => {
+						if (primaryPaths.has(path)) return "";
+						primaryPaths.add(path);
+						return imageSlot(label, path, readEvidence, context);
+					};
+					const claimBlocks = Array.isArray(claims) ? claims.map((claim) => `<div class="evidence-slot"><p><strong>${escapeHtml(claim.claim)}</strong> · ${escapeHtml(claim.verdict === "supported" && !evidenceGap ? "입증" : "근거 미검증")}</p><p>${escapeHtml(claim.observation)}</p>${claim.gap ? gap(claim.gap) : ""}${(claim.sources ?? []).map((source) => `<p>${escapeHtml(source.location)}</p>${claimImage(source.path, `${claim.claim} — ${source.location}`)}`).join("")}</div>`).join("") : "";
 					const shots = e
-						? [...new Set([e.action, e.after, e.path])].filter((path) => path !== e.before && (!path || !claimedPaths.has(path))).map((path) => imageSlot(path === e.after ? "행동 후 화면" : "행동 기록", path, readEvidence, context)).filter(Boolean).join("")
+						? [...new Set([e.action, e.after, e.path])].filter((path) => path !== e.before).map((path) => imageSlot(path === e.after ? "행동 후 화면" : "행동 기록", path, readEvidence, context)).filter(Boolean).join("")
 						: "";
 					const shotBlock = (shots ? `<div class="sc-shots">${shots}</div>` : "") + claimBlocks;
 					const body =
@@ -662,7 +667,7 @@ function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvi
  * stays in the audit as an explicit placeholder rather than disappearing.
  * `label` prefixes the summary (e.g. a baseline story id).
  */
-function embedTextEvidence(path: string | undefined, label: string, readEvidence: EvidenceReader, context: EvidenceRenderContext): string | null {
+function embedTextEvidence(path: string | undefined, label: string, readEvidence: EvidenceReader, context: EvidenceRenderContext, requiredClaim = false): string | null {
 	if (!path || context.renderedPaths.has(path)) return null;
 	const embed = readEvidence(path);
 	const summary = `${label ? `${escapeHtml(label)} — ` : ""}<code>${escapeHtml(path)}</code>`;
@@ -682,6 +687,7 @@ function embedTextEvidence(path: string | undefined, label: string, readEvidence
 	if (embed.kind !== "text") return null; // images live in the reader
 	const embedBytes = embeddedByteLength(embed);
 	if (embedBytes > 0 && context.embeddedBytes + embedBytes > MAX_TOTAL_EMBED_BYTES) {
+		if (requiredClaim && context.strictVisualEvidence) throw new Error(`claim evidence exceeds total embed budget: ${path}; record a bounded source and review again`);
 		context.renderedPaths.add(path);
 		return `<details class="raw-evidence raw-evidence-placeholder"><summary>${summary}</summary>` +
 			`<p class="evidence-note">누적 텍스트 임베드 예산 초과 — 원문 미포함</p></details>`;
@@ -696,11 +702,12 @@ function embedTextEvidence(path: string | undefined, label: string, readEvidence
 
 function renderRawEvidence(cells: QaCell[], readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
 	const blocks: string[] = [];
+	const requiredPaths = new Set(cells.flatMap((cell) => cell.evidence_review?.claims.flatMap((claim) => claim.sources.map((source) => source.path)) ?? []));
 	for (const cell of cells) {
 		const e = cell.evidence;
 		if (!e) continue;
 		for (const path of [e.before, e.action, e.after, e.path, ...(cell.evidence_review?.claims.flatMap((claim) => claim.sources.map((source) => source.path)) ?? [])]) {
-			const block = embedTextEvidence(path, "", readEvidence, context);
+			const block = embedTextEvidence(path, "", readEvidence, context, path !== undefined && requiredPaths.has(path));
 			if (block) blocks.push(block);
 		}
 	}
@@ -830,7 +837,7 @@ export function renderQaReport(
 ): string | null {
 	if ((view.actors ?? []).length === 0) return null;
 	const unverified = new Set<string>();
-	const probe = (path: string) => {
+	const probe = readEvidence === defaultEvidenceReader ? stateProbe : (path: string) => {
 		const embed = readEvidence(path);
 		const bytes = embed.kind === "image" ? Buffer.from(embed.dataUri.split(",")[1] ?? "", "base64") : embed.kind === "text" ? Buffer.from(embed.content) : Buffer.alloc(0);
 		return { exists: bytes.length > 0, size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
@@ -847,6 +854,10 @@ export function renderQaReport(
 			if (!isVisualDriver(actor?.driver)) continue;
 			for (const cell of cellsForStory(view, story.id)) {
 				if (cell.status !== "pass" && cell.status !== "fail") continue;
+				for (const source of cell.evidence_review?.claims.flatMap((claim) => claim.sources) ?? []) {
+					const embed = readEvidence(source.path);
+					if (embed.kind === "missing" || embed.kind === "too-large") throw new Error(`visual claim evidence not embeddable for ${cellKey(cell)}: ${source.path}; record a bounded source and review again`);
+				}
 				for (const path of [cell.evidence?.before, cell.evidence?.after]) {
 					const embed = path ? readEvidence(path) : undefined;
 					if (embed?.kind !== "image" || !/^data:image\/(png|jpeg|webp|gif);base64,/.test(embed.dataUri)) {

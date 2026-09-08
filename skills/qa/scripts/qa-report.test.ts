@@ -95,6 +95,51 @@ const fakeReader: EvidenceReader = (path) =>
 	path.endsWith(".png") ? { kind: "image", dataUri: "data:image/png;base64,AAAA" } : { kind: "text", content: `contents of ${path}` };
 
 describe("qa-report renderer", () => {
+	test("여러 주장이 같은 보조 이미지를 인용하면 한 번만 표시한다", () => {
+		const view = baseView();
+		view.cells = view.cells!.slice(0, 1);
+		const original = view.cells[0].evidence_review!.claims[0];
+		view.cells[0].evidence_review!.claims = ["실패 안내", "화면 유지"].map((claim) => ({ ...original, claim, sources: [{ path: "/extra.png", location: claim }] }));
+		const html = renderQaReport(view, {}, fakeReader)!;
+		expect(html.match(/<img /g)?.length).toBe(4);
+		expect(html).toContain("실패 안내</strong>");
+		expect(html).toContain("화면 유지</strong>");
+	});
+	test("주장이 행동 이미지를 인용해도 행동은 결과 화면보다 먼저 나온다", () => {
+		const view = baseView();
+		view.cells = view.cells!.slice(0, 1);
+		view.cells[0].evidence_review!.claims[0].sources = [{ path: "/evidence/action.png", location: "클릭 순간" }];
+		const html = renderQaReport(view, {}, fakeReader)!;
+		expect(html.indexOf("/evidence/action.png")).toBeLessThan(html.indexOf("/evidence/after.png"));
+		expect(html.match(/<img /g)?.length).toBe(3);
+	});
+	test("주장 로그는 누적 예산 초과 시에도 최종 보고서에서 누락할 수 없다", () => {
+		const view = baseView();
+		view.cells = view.cells!.slice(0, 1);
+		view.cells[0].evidence_review!.claims[0].sources = Array.from({ length: 9 }, (_, i) => ({ path: `/timing-${i}.log`, location: "시각" }));
+		const reader: EvidenceReader = (path) => path.endsWith(".log") ? { kind: "text", content: "x".repeat(MAX_EMBED_BYTES) } : fakeReader(path);
+		expect(() => renderQaReport(view, { scenarios: { "story-1:1:": { observed: "시간 확인" } } }, reader, undefined, undefined, true)).toThrow("claim evidence exceeds total");
+	});
+	test("큰 주장 로그의 유효성과 첨부 가능 여부를 구분하고 최종 제출은 막는다", () => {
+		const dir = mkdtempSync(join(tmpdir(), "qa-large-claim-"));
+		try {
+			const view = baseView();
+			view.cells = view.cells!.slice(0, 1);
+			const cell = view.cells[0];
+			const log = join(dir, "timing.log");
+			writeFileSync(log, "x".repeat(MAX_EMBED_BYTES + 1));
+			for (const slot of ["path", "before", "action", "after"] as const) {
+				const path = join(dir, `${slot}.png`);
+				writeFileSync(path, Buffer.from("AAAA", "base64"));
+				cell.evidence![slot] = path;
+			}
+			cell.evidence_review = { cell_snapshot: evidenceReviewSnapshot(cell), claims: [{ claim: "3초 제한", observation: "요청 시간차 3000ms", verdict: "supported", gap: "", sources: [{ path: log, location: "요청과 응답 시각" }] }], files: Object.fromEntries([...Object.values(cell.evidence!).filter((p) => p.startsWith(dir)), log].map((path) => [path, createHash("sha256").update(readFileSync(path)).digest("hex")])) };
+			const narrative = { scenarios: { "story-1:1:": { observed: "3초 후 실패 안내" } } };
+			const html = renderQaReport(view, narrative)!;
+			expect(html).not.toContain("근거 미검증 — 제품 실패");
+			expect(() => renderQaReport(view, narrative, undefined, undefined, undefined, true)).toThrow("claim evidence not embeddable");
+		} finally { rmSync(dir, { recursive: true, force: true }); }
+	});
 	test("좁은 화면에서도 근거를 읽도록 원본 크기 확대를 제공함", () => {
 		const html = renderQaReport(baseView(), {}, fakeReader)!;
 		expect(html).toContain("원본 크기로 확대");

@@ -44,10 +44,16 @@ claims; otherwise it names the missing proof and next capture. For example:
 ```
 
 The CLI persists the review and hashes the scenario's evidence plus every cited
-source. Re-recording the cell, changing its scenario fields, or changing evidence
-bytes invalidates the receipt. Review the new evidence and resubmit. These checks
+source. Re-recording the cell, changing its scenario fields, actor assignment,
+actor boundary/driver, or evidence bytes invalidates the receipt. Review the new evidence and resubmit. These checks
 prove a review record exists and matches the files; they do not perform image
 understanding or prove that the reviewer told the truth.
+
+Cited text sources must also fit the final report's per-file and total embed
+budgets. For a large action log, save a bounded, faithful excerpt with the
+relevant timestamps and source location, then cite and review that excerpt.
+File validity is separate from embeddability: an oversized source is not a
+missing file, but the final report cannot omit the cited proof and complete.
 
 The reader card renders reviewed claims, observations, source locations, and
 images together. Missing/insufficient/stale reviews show **근거 미검증**; raw

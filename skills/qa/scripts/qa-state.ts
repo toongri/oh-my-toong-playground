@@ -607,7 +607,14 @@ export function addActor(sessionId: string, opts: AddActorOpts): void {
 	const actor: QaActor = { id, name, boundary, driver, reachable };
 	if (index >= 0) actors[index] = actor;
 	else actors.push(actor);
-	mergeWrite(sessionId, { actors });
+	const changedBoundary = existing && (existing.boundary !== boundary || existing.driver !== driver);
+	const affectedStories = new Set((prior.stories ?? []).filter((story) => (story.actor ?? story.actor_id) === id).map((story) => story.id));
+	const cells = changedBoundary ? (prior.cells ?? []).map((cell) => {
+		if (!affectedStories.has(cell.story)) return cell;
+		const { evidence_review: _review, ...record } = cell;
+		return record;
+	}) : prior.cells;
+	mergeWrite(sessionId, { actors, ...(changedBoundary ? { cells } : {}) });
 }
 
 export interface AddStoryOpts {
@@ -627,7 +634,13 @@ export function addStory(sessionId: string, opts: AddStoryOpts): void {
 	const index = stories.findIndex((candidate) => candidate.id === id);
 	if (index >= 0) stories[index] = { ...stories[index], ...next };
 	else stories.push(next);
-	mergeWrite(sessionId, { stories });
+	const changedActor = index >= 0 && (prior.stories?.[index]?.actor ?? prior.stories?.[index]?.actor_id) !== actor;
+	const cells = changedActor ? (prior.cells ?? []).map((cell) => {
+		if (cell.story !== id) return cell;
+		const { evidence_review: _review, ...record } = cell;
+		return record;
+	}) : prior.cells;
+	mergeWrite(sessionId, { stories, ...(changedActor ? { cells } : {}) });
 }
 
 function validateCellSelector(story: string, cls: unknown, sub: string | undefined): { story: string; cls: number; sub?: "hang-timeout" | "flaky-green" } {
