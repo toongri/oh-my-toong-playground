@@ -42,6 +42,8 @@ GOOD:
 
 ## Rich Context Pattern (for complex design decisions)
 
+Carry settled decisions forward from a deep-interview spec with their evidence and source IDs. For example, an approval's immutable version may be settled while retention depends on a still-open deletion requirement. Ask the deletion scenario first; do not reopen version identity without evidence that invalidates it. Compare real alternatives against the same normal, failure, and change cases, and record why the rejected approach loses under the agreed constraints.
+
 For complex technical decisions, provide rich context via markdown BEFORE asking AskUserQuestion.
 
 **Structure:**

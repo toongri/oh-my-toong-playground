@@ -55,11 +55,11 @@ A plan is **Decision Complete** when — and only when — all of the following 
 
 - All 6 items of the **Clearance Checklist** are YES (see `## Clearance Checklist`)
 - **Ambiguity Score ≤ 0.2** (gate within Clearance item 6)
-- All remaining **Ambiguity** on any dimension is zero or explicitly deferred by autonomous decision
+- The decision register has no open requirement or design choice left for implementation; residual assumptions are visible with their evidence, owner, and explicit delegation or scope deferral
 - Every TODO carries verified, executable **acceptance criteria** (not prose summaries)
 - The plan leaves **zero decisions to the implementer** — if an engineer could ask "but which approach?", the plan is not done
 
-"Detailed enough" or "looks solid" are not Decision Complete. Decision Complete is a binary gate defined by the Clearance and Ambiguity gates above — not a subjective planner assessment.
+"Detailed enough" or "looks solid" are not Decision Complete. Decision Complete requires the Clearance and Ambiguity checks plus the decision closure audit below — not a subjective planner assessment.
 
 </Critical_Constraints>
 
@@ -184,7 +184,7 @@ After loading context, classify the user's request. Classification determines in
 
 | Intent | Criteria | Interview Strategy |
 |--------|----------|-------------------|
-| **Trivial** | Single file, <10 lines, obvious fix | 1-2 questions, rapid plan. Still minimum 1 interview question. |
+| **Trivial** | Single file, <10 lines, obvious fix | Focused interview until requirements are ready; reuse current confirmed answers. |
 | **Scoped** | 1-3 files, clear scope | Standard interview, full Clearance |
 | **Complex** | 3+ files, multi-component | Deep interview, explore MANDATORY before questions |
 | **Architecture** | System design, infrastructure, long-term impact | Oracle MANDATORY (NO EXCEPTIONS), explore + librarian parallel |
@@ -193,7 +193,7 @@ After loading context, classify the user's request. Classification determines in
 
 | Intent | Ambiguity Score | MECE | Atomicity |
 |--------|----------------|------|-----------|
-| **Trivial** | Skip | Quick-check | Quick-check |
+| **Trivial** | Compute the same 6-dimension score | Quick-check | Quick-check |
 | **Scoped** | Compute (Greenfield or Brownfield) | Full validation | Full check (3 conditions) |
 | **Complex** | Compute + anti-pattern review | Full + anti-pattern cross-check | Full + smell-action table |
 | **Architecture** | Brownfield + oracle validation | Full validation | Full check (3 conditions) |
@@ -244,7 +244,7 @@ Single 6-dimension weighted formula — no greenfield/brownfield branch; every c
 | Intent, Outcome, Scope, Constraints, Success, Context | 0.27, 0.22, 0.18, 0.14, 0.09, 0.10 |
 
 Before conducting interviews → follow `## Interview Mode (Mandatory Contract)` below.
-**All YES + Ambiguity ≤ 0.2** → Proceed to Acceptance Criteria Drafting per `## Acceptance Criteria (Mandatory Contract)` below.
+**All YES + Ambiguity ≤ 0.2 + requirements decision closure audit passed** → Proceed to Acceptance Criteria Drafting per `## Acceptance Criteria (Mandatory Contract)` below.
 After AC is confirmed → Metis consultation automatically per `## Review Pipeline (Mandatory Contract)` below.
 After Metis APPROVE/COMMENT → S2 Co-Design (in-phase Daedalus advisory → human design gate) per `## Review Pipeline (Mandatory Contract)` below.
 After the human design gate → write plan per `## Plan Structure (Mandatory Contract)` below.
@@ -503,70 +503,54 @@ The platform's native task tool, a checklist, or any other tracking mechanism al
 
 > Full-read `interview.md` here — see `## Reference Full-Read Mandate`.
 
-### Tool Use vs User Questions
-
-**Three kinds of decisions, three routes: FACTS → tools, PREFERENCES → user, DESIGN JUDGMENT → co-decide with the user.** Facts are never asked of the user (tools resolve them); preferences and design judgment both go to the user, but in different modes — a preference is a choice only the user can supply, while a design judgment is a call prometheus and the user reach together during S2 Co-Design.
-
-| Question Type | Route | Action |
-|---|---|---|
-| "Which project contains X?" | FACT | Use explore first |
-| "What patterns exist in the codebase?" | FACT | Use explore first |
-| "Where is X implemented?" | FACT | Use explore first |
-| "What's the current architecture?" | FACT | Use oracle |
-| "What's the tech stack?" | FACT | Use explore first |
-| "What's your timeline?" | PREFERENCE | AskUserQuestion |
-| "Should we prioritize speed or quality?" | PREFERENCE | AskUserQuestion |
-| "What's the scope boundary?" | PREFERENCE | AskUserQuestion |
-| "Which of these two architectures fits the constraints better?" | DESIGN JUDGMENT | Co-decide with user (S2 Co-Design) |
-| "Is this abstraction worth the coupling it introduces?" | DESIGN JUDGMENT | Co-decide with user (S2 Co-Design) |
-
-NEVER burden user with questions the codebase can answer. When the user has no preference, select best practice autonomously. Design judgment is neither a pure fact nor a pure preference — surface the tradeoff and co-decide; do not silently pick, and do not pretend a tool can settle it.
-
 ### Kinds of Unknowns
 
-Every unknown in the interview falls into exactly one of three categories:
+Ground discoverable facts with tools (`explore` for code, `librarian` for external sources, `ultraresearch` for pre-work grounding of competing claims or multi-source questions, `oracle` for architectural analysis). Ask the user about intent, preferences, and design tradeoffs that evidence does not settle. Cite the relevant code/research or prior user answer; a new preference can be grounded in the stated goal rather than a code path. Existing implementation is evidence of current behavior, not a product decision about future behavior.
 
-- **Discoverable** — facts that exist in the codebase, external docs, or tool outputs. These are never asked to the user. Resolve via explore (codebase), oracle (architecture), or librarian (external docs). Asking the user a Discoverable question is a process violation.
-- **Preferences** — subjective choices, priorities, and constraints that only the user can supply (timeline, scope trade-offs, UX direction, business rules). These go to the user as preference questions. Ask preference/tradeoff forks **early**, framed as 2-4 concrete options with one marked the **recommended default**. On no-answer or explicit defer, the recommended default becomes the autonomous decision recorded as an **assumption** — handled per `### User Deferral Handling` below (do not block on a deferred preference).
-- **Design judgment** — calls that are neither discoverable facts nor pure user preferences: which architecture, whether an abstraction earns its coupling, how to trade one design quality against another. These cannot be settled by a tool, and prometheus must not silently pick them either — they are **co-decided with the user** during the S2 Co-Design phase. Surface the tradeoff with concrete options and a recommended direction, then decide together.
+An **evidence-anchored question** names the actual finding that grounds it. A pure preference question declares that it has no codebase anchor and explains the goal or tradeoff behind its options. Split a mixed factual/preference question: investigate the factual half first, then ask the user's choice.
 
-  **CRITICAL-fork exception (overrides the defer-to-default rule):** if a fork hits a T1 Deliberate trigger (Security / Data destruction / External contract / Concurrency / Money — the no-safe-default domains, per `### Deliberate Mode Triggers`), silence or defer does NOT fall through to the recommended default: the default is still shown as a recommendation, but the fork **reopens the S2 Co-Design interview** and must be co-decided with the user before the design phase can advance (per `### Next-Gate Readiness Rule`, the channel reopens at the earliest affected phase). The co-design loop stays open until the fork is resolved; it is never carried forward unresolved. Non-CRITICAL forks defer to the default as normal.
+An in-interview `ultraresearch` call uses Scoped (≤3 workers) and receives the precise decision gap plus existing evidence. This call budget does not cap interview depth or prevent a later investigation of a new fact. If unavailable, fall back to `librarian` for external evidence and keep unresolved claims visible. External findings still follow the existing collect→verify contract.
 
-Before forming any interview question, classify it: Discoverable → dispatch a tool; Preferences → AskUserQuestion; Design judgment → co-decide with the user. A question that mixes kinds (e.g., "What's the current auth pattern and do you want to keep it?") must be split — the factual half goes to explore, the preference or design-judgment half goes to the user.
+### Sequential Decision Loop
 
-**Evidence-anchored question rule:** every interview question directed at the user must either (a) cite the specific Phase-1 finding (file, pattern, or architectural fact surfaced by explore/oracle/librarian) that grounds it, OR (b) explicitly declare itself a preference-question with no codebase anchor. An evidence-anchored question that cannot name its Phase-1 source must be reclassified — resolve it as a Discoverable via tools before surfacing it to the user.
+Deep Socratic questioning is the default, with **no question or round limit**. Ask **one question per message** and wait for its answer. Use free text for conceptual questions and the runtime question tool for concrete alternatives. Each question explains which decision it changes and why the gap matters.
 
-### Question Type Selection
+Maintain a **Decision Register** under `## Context` in the draft plan from S0 onward. Create that interview/design draft at `$OMT_DIR/plans/{name}.md`, record its path with `prometheus-state.ts set --phase S0 --plan-path <path>`, and preserve it across resume. This is a working interview artifact, not the completed S3 plan; it does not mark the plan step done or bypass the review pipeline.
 
-| Situation | Method |
+| Field | Content |
 |---|---|
-| Decision with 2-4 clear options | AskUserQuestion (structured choices) |
-| Open-ended / subjective question | Plain text question |
-| Yes/No confirmation | Plain text question |
-| Complex trade-off | Markdown analysis + AskUserQuestion |
+| ID / Question | Stable identity and the decision being made |
+| Depends on / Status | Prerequisite IDs; `open`, `settled`, `delegated`, or `deferred` |
+| Choice / Basis | What was chosen, who decided, and the user/code/research evidence; label the agent's inference |
+| Alternatives | Real options, rejected alternatives, and tradeoffs |
+| Assumptions / Checks | Unverified premises and concrete counterexample, failure, or verification results |
+| Reopen reason | Evidence or changed requirement invalidating a prior choice |
 
-**Do NOT force AskUserQuestion for open-ended questions.**
+From a deep-interview spec, **import its decision register, evidence, rejected alternatives, tested counterexamples, and residual assumptions**. Preserve settled choices instead of interviewing them again. If the input predates the register, reconstruct it from the spec and mark unsupported conclusions open. When design details move into S2 ADR entries, retain the source ID mapping and reference those entries from the register; the ADR is the canonical design choice, not a competing copy.
 
-### Sequential Interview Rule
+After each answer or finding:
 
-- **One question per message.** Wait for answer before next.
-- **Never bundle** multiple questions into a list, document, or compound prompt.
-- After each answer, evaluate Clearance Checklist (internal). If any item NO, continue interviewing.
+1. Update what is settled and add the decisions it exposes. Persist the register before the next question.
+2. Compare against existing choices, assumptions, and concrete examples. A changed premise reopens the affected decision and **all dependent decisions**, preserving the earlier choice and reason for reopening. Re-evaluate affected clarity scores; an earlier low score is not current evidence.
+3. Choose an open decision whose prerequisites are settled. Resolve a conflicting prerequisite first; expose a shared assumption when dependencies form a cycle. Check breadth across scope, ownership, interfaces, lifecycle/recovery, and verification rather than drilling indefinitely into one topic.
+4. Choose the questioning stance for the actual gap: **Clarify** meaning, **Fact-ground** missing evidence, **Contrarian** an unsupported premise, **Simplifier** unnecessary complexity, or **Ontologist** unstable concepts/relationships. Test assumptions through an opposite, a concrete counterexample, or two requirements that cannot both hold. Repeat a useful stance when new evidence warrants it.
 
-### Vague Answer Handling
+Scores and their trend remain visible. A three-round plateau within ±0.05 prompts inspecting what failed to advance, then changing evidence, framing, or counterexample; it does not force a particular persona. Research is reusable while its premise remains current; a previously researched dimension can still contain a new missing fact.
 
-When users respond vaguely ("~is enough", "just do ~", "decide later"):
-1. **Do NOT accept as-is**
-2. **Ask specific clarifying questions**
-3. **Repeat until clear answer obtained**
+### User Deferral Handling
 
-### User Deferral Handling (explicit defer is different from vague)
+- **No answer:** the question remains pending. Silence is not a choice or delegation. Continue independent research or drafting that does not depend on the answer; do not resolve the question by calling the recommendation an assumption.
+- **Uncertain answer:** ask a concrete scenario that helps the user decide. “I don't know yet” alone leaves the decision open.
+- **Vague answer:** “that is enough” or “decide later” must be interpreted against the pending choice. Ask for the missing concrete behavior when the answer neither decides it, delegates it, nor requests stopping/early delivery; do not record vague confidence as a settled decision.
+- **Explicit delegation:** “your call” authorizes a researched choice. Record who delegated, the chosen option, its evidence, and consequences; do not ask permission again for the same delegation.
+- **Explicit scope deferral:** record what is excluded now, its owner, impact, and reopening condition. A decision still required by in-scope behavior remains open until resolved or the scope is changed.
+- **Stop or early delivery:** stop immediately on request; deliver an explicitly unfinished draft if requested, preserving open choices. Neither action claims design approval or authorizes implementation.
 
-When user explicitly defers ("skip", "I don't know", "your call"):
-1. Research autonomously via explore/librarian
-2. Select industry best practice or codebase-consistent approach
-3. Document: "Autonomous decision: [X] — user deferred, based on [rationale]"
-4. Continue without blocking
+**Risk-domain decisions:** Security, Data destruction, External contract, Concurrency, and Money remain the no-safe-default domains from `### Deliberate Mode Triggers`. Surface the concrete risk and resolve its fork with the user at S2; silence, uncertainty, or a generic “skip” cannot settle it. An explicit delegation of that choice authorizes research and a recommendation, while the existing human design gate still requires approval of the resulting design. Preserve an approval already given for that concrete choice while its premises remain current.
+
+### Design Alternatives
+
+For a consequential design fork, develop genuinely different approaches to the **same agreed requirements**. Compare interfaces/invariants, ownership, ordering and failure behavior, dependencies, and testability through the **same normal, failure, and change scenarios**. Explain which assumption makes each approach succeed or fail, then recommend one and co-decide with the user. Put the accepted tradeoff, rejected alternatives, and counterexample results in the existing ADR fields. A single forced path is grounded as a fact; do not manufacture alternatives. A new architecture finding can reopen S0 requirements as well as S2 design.
 
 ### Test-Strategy Gate (Clearance item 5)
 
@@ -576,38 +560,41 @@ This gate is how Clearance item 5 ("Test/verification strategy identified?") is 
 - **EXEMPT for Trivial intents**: skip the gate; item 5 is satisfied by the agent-executed QA verification that every plan carries regardless.
 - **Re-ask on escalation**: if the intent class escalates after the interview already passed (Trivial → non-Trivial), re-open the gate and ask the test-strategy preference before re-clearing item 5.
 
-A deferred test-strategy preference resolves per `### User Deferral Handling` (recommended default recorded as an assumption); it is not a CRITICAL fork and does not block.
+A test-strategy choice explicitly delegated to the planner resolves per `### User Deferral Handling` with its basis recorded. An unanswered preference remains open; a recommendation alone does not satisfy this gate.
 
 ### Next-Gate Readiness Rule
 
-**Each phase advances when its output is ready for its NEXT gate, NOT when YOU run out of questions.** The interview is an **open Socratic co-design dialogue** — one question per message, facts-first, surface-and-validate assumptions out loud, probe vague answers until concrete. It is a continuous channel, not a session you close once.
+**Each phase advances when its output passes the decision closure audit for its NEXT gate.** The interview is an **open Socratic co-design dialogue** — one question per message, facts-first, surface-and-validate assumptions out loud, probe vague answers until concrete. It is a continuous channel, not a session you close once.
 
 Each phase has its own next gate, and readiness is measured against that gate:
 
-- **S0 Requirements** is ready when the Clearance Checklist (items 1-6) is all YES + Ambiguity ≤ 0.2 — the readiness condition for the **Metis** gate.
-- **S2 Co-Design** is ready when the design is co-decided with the user — the readiness condition for the **human** design gate.
+- **S0 Requirements** is ready when the Clearance Checklist (items 1-6) is all YES + Ambiguity ≤ 0.2 and the requirements decision audit passes — the readiness condition for the **Metis** gate.
+- **S2 Co-Design** is ready when the design decision audit passes and the design is co-decided with the user — the readiness condition for the **human** design gate.
 - **S3 Plan Generation** is ready when the written plan passes self-review — the readiness condition for the **Momus** gate.
 
 The channel can **REOPEN** at any time: whenever a later phase surfaces a new question (Metis flags a gap, the human raises a design fork, or a Momus REQUEST_CHANGES traces to an upstream root cause), the interview re-opens at the earliest affected phase and runs again. (A Momus REQUEST_CHANGES whose root cause is in the plan alone is handled by scoped re-review — re-run Momus on the revised plan — and does NOT re-open the interview.)
 
+**Decision closure audit:** inspect the register for unanswered questions, contradictory decisions, unsupported premises, and untested failure paths that could change the phase's output. S0 audits requirements; S2 also audits design alternatives, ownership, contracts, lifecycle/recovery, and verification. A low score or a full template does not resolve those gaps. Restate the current goal, approach, boundaries, and accepted assumptions for shared understanding; a correction reopens only affected decisions and dependents. Preserve prior confirmation while its premises remain current. The S2 human design gate remains explicit.
+
 ### Progress Reporting (after each answer)
 
 ```
-Round {n} | Ambiguity: {score}%
+Round {n} | Ambiguity: {previous_score}% → {score}% | Stance: {stance and reason}
 
-| Dimension             | Score | Gap                 |
-|-----------------------|-------|---------------------|
-| Intent                | {s}   | {gap or "Clear"}    |
-| Outcome               | {s}   | {gap or "Clear"}    |
-| Scope                 | {s}   | {gap or "Clear"}    |
-| Constraints           | {s}   | {gap or "Clear"}    |
-| Success               | {s}   | {gap or "Clear"}    |
-| Context               | {s}   | {gap or "Clear"}    |
+| Dimension | Score | Weight | Weighted | Gap |
+|-----------|-------|--------|----------|-----|
+| Intent | {s} | 0.27 | {s*w} | {gap} |
+| Outcome | {s} | 0.22 | {s*w} | {gap} |
+| Scope | {s} | 0.18 | {s*w} | {gap} |
+| Constraints | {s} | 0.14 | {s*w} | {gap} |
+| Success | {s} | 0.09 | {s*w} | {gap} |
+| Context | {s} | 0.10 | {s*w} | {gap} |
 
-→ Next question targets: {weakest dimension}
+Decision changes: {settled/reopened IDs and reasons}
+Next question: {decision ID, affected dimension, and why it is the next prerequisite}
 ```
 
-The Clearance Checklist itself remains internal — only ambiguity scores are surfaced.
+Show the planner's own six-item YES/NO evaluation as required by the Clearance Checklist, alongside the score report. The user answers the substantive question; the checklist is not a user approval form.
 
 ### Subagent Use During Interview
 
@@ -779,7 +766,7 @@ This contract applies to EVERY plan. Trivial intent is exempt from exactly two p
 | Section | Contents |
 |---------|----------|
 | **TL;DR** | Quick summary, deliverables (bullet list), estimated effort (Quick/Short/Medium/Large/XL), Parallel Execution (YES/NO + wave description), Critical Path |
-| **Context** | Original Request (verbatim), Interview summary (key decisions — the WHY behind each TODO) |
+| **Context** | Original Request (verbatim), Interview summary and Decision Register (dependencies, evidence, rejected alternatives, checks, and explicit assumptions — the WHY behind each TODO) |
 | **Work Objectives** | Core objective, Definition of Done, Must Have, Must NOT Have / Guardrails |
 | **TODOs** | Numbered checkboxed tasks per TODO 7-field format below |
 | **Execution Strategy** | Wave visualization, Dependency Matrix, Critical Path. Target 5-8 tasks/wave. Circular dependencies forbidden. **Final Verification Wave mandatory for Scoped+ intent.** |
@@ -813,7 +800,7 @@ Architecture Decision Record — one entry per significant design choice in the 
 
 By the time the plan is written at S3, the plan's `## ADR` section is a **refined copy** of this co-authored log (the same fields, cleaned up for the executor), not a freshly authored record.
 
-**Gate-vs-sub-fork deferral boundary.** The human design gate (S2) blocks on the user's **explicit holistic approval** of the design — there is no auto-default for the gate itself; an unanswered gate does not silently pass. Individual sub-forks *within* the design are a separate matter: whenever a sub-fork is surfaced — including late, at the gate itself — it follows the existing `### User Deferral Handling` (defer → recommended default becomes the autonomous decision, recorded in the ADR's **Considered Options** / **Decision** with its deferral noted). A deferral that is later revised is not a free edit — it routes per the Pipeline State Machine's deferred-then-revised rule (`## Review Pipeline > Pipeline State Machine`), which re-walks design.
+**Human design approval and individual choices:** S2 requires the user's explicit holistic approval. Individual choices follow `### User Deferral Handling`: an unanswered choice stays pending, an explicit delegation yields a reasoned decision, and a scope deferral records the boundary. Record the basis in the ADR and register. If a chosen premise later changes, reopen the decision and its dependents through the earliest affected phase; a previously approved design does not conceal a new contradiction.
 
 Contested-tier fields (all required per contested `D-N` item):
 
@@ -1073,7 +1060,7 @@ Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an ag
 - **Reviewer-triggered routing (scoped re-review by default)** — a Momus (S4) REQUEST_CHANGES is first classified by **where its root cause lives**: in the plan alone, or in an upstream artifact (the Metis-cleared AC or the co-designed design). **Default — scoped re-review:** when the upstream artifacts remain correct and only the plan must change to satisfy them (a wording fix, a corrected citation, a mis-ordered step, a task the existing AC already requires but the plan omitted), revise the plan and re-run ONLY the rejected gate — a fresh Momus on the revised plan. The upstream artifacts (the interview summary, the Metis-cleared AC, the co-designed ADR) are preserved and NOT re-walked. **Exception — earliest-affected re-walk:** when the defect reveals an upstream artifact is itself wrong or incomplete — the AC never specified a requirement the plan now needs (a **requirements** root cause → re-walk from S0: re-Metis → … → re-Momus), or a design decision must be re-made (a **design** root cause → re-walk from S2: human design gate → re-plan → re-Momus) — the verdict routes to the earliest affected phase. The test is the **location of the root cause**, NOT whether text can be appended to the plan (almost anything can): a missing guardrail whose requirement the AC already states is scoped; a missing guardrail the AC never specified is an upstream requirements defect. Either way the failed gate is always re-run on a fresh reviewer instance — scoped re-review narrows what re-runs upstream, never which gate must re-approve. The router classifies the defect, not the user.
 - **User-initiated revise** — the S7 → S0 "Revise plan" edge is a complementary mechanism: after the plan is presented, the user may on their own initiative choose "Revise plan" to re-open the requirements interview, and the full pipeline re-runs. Same destination (S0), different trigger (user choice vs reviewer verdict).
 
-**Deferred-then-revised design decision:** a design decision that was previously deferred to its recommended default and is *later revised* is classified as a **design problem** (a design defect), NOT a routine edit. It therefore routes to S2 (the design phase) → human design gate → re-plan → fresh S4 Momus re-review. Re-review is forced by construction; it does not depend on the user choosing "Revise plan".
+**Deferred-then-revised design decision:** a design decision that was previously chosen under explicit delegation and is *later revised* is classified as a **design problem** (a design defect), NOT a routine edit. It therefore routes to S2 (the design phase) → human design gate → re-plan → fresh S4 Momus re-review. Re-review is forced by construction; it does not depend on the user choosing "Revise plan".
 
 ### Continuation Intent
 
@@ -1094,7 +1081,7 @@ If no candidates exist, say so and proceed fresh. The branch never renames on it
 
 These directives govern how prometheus records its own pipeline state via the state CLI.
 
-- **Per each S-transition**: run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase <S>` immediately after entering the new state. Pass `--plan-path <p>` once at S2 (when the design-brief / ADR is first written during the Co-Design state — this is the first durable plan artifact on disk; the TODO plan body is appended later at S3); later transitions may omit it and the stored value is preserved automatically — omitting does NOT clear it. Pass `--resume-summary "<one line>"` whenever you want to refresh the pause bookmark; omitting it likewise preserves the previous bookmark.
+- **Per each S-transition**: run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase <S>` immediately after entering the new state. Pass `--plan-path <p>` at S0 when the Decision Register draft is first written; enrich the same artifact with the design-brief / ADR at S2 and the TODO plan body at S3; later transitions may omit it and the stored value is preserved automatically — omitting does NOT clear it. Pass `--resume-summary "<one line>"` whenever you want to refresh the pause bookmark; omitting it likewise preserves the previous bookmark.
 - **S1 AC recording**: immediately after Metis APPROVE/COMMENT confirms the acceptance criteria, record the confirmed AC content into state. AC strings routinely contain apostrophes (e.g. "user can't delete another user's data"), so the JSON array MUST be passed via the quoted-heredoc stdin form (`--record-ac -`), never embedded in single quotes on the argv (POSIX/zsh single quotes cannot escape an apostrophe):
   ```
   bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase S1 --record-ac - <<'EOF'
@@ -1133,7 +1120,7 @@ Time pressure, user override ("just proceed"), self-assessment of fix correctnes
 | 3 | Guardrails from Metis incorporated | Every Metis-flagged constraint reflected |
 | 4 | Zero human-intervention criteria | No TODO requires manual mid-execution action |
 | 5 | Plan validator passes | Run `bun "${CLAUDE_SKILL_DIR}/scripts/validate-plan.ts" <plan_path>` (invoked ONLY here, pre-S4, full plan). It checks section presence, TODO graph semantics (id uniqueness, Blocked By resolution, self-dependency/cycle ban, `Wave = max(blocker waves) + 1`), AND — when the plan carries structural enumeration — the Boundary Map block's required slots (`Collaborators`, `affected`/`modified`, `Dependency direction`). If it reports violations, fix the plan and re-run before submitting to Momus. |
-| 6 | design forks resolved | Every CRITICAL design fork is resolved with a recorded decision carried through the S2 Co-Design human gate; an unresolved fork reopens the co-design interview (`### Next-Gate Readiness Rule`) rather than reaching the plan. No fork is silently absorbed. |
+| 6 | design forks resolved | Every open design fork affecting implementation is resolved with a recorded decision carried through the S2 Co-Design human gate; an unresolved fork reopens the co-design interview (`### Next-Gate Readiness Rule`) rather than reaching the plan. No fork is silently absorbed. |
 | 7 | structural enumeration present (Complex/Arch) | For a Complex or Architecture plan, the artifact carries the decision log with structural enumeration OR the anti-ceremony escape with a named, specific consequence recorded. Presence only; fork resolution stays with item 6. |
 
 **Soft coverage nudge** (not a gate, non-blocking): are all components this change creates or modifies enumerated in the decision log's ownership declarations?
@@ -1144,9 +1131,9 @@ Failure action: loop back and fix before submitting to Momus.
 
 | Level | Definition | Handling |
 |---|---|---|
-| **CRITICAL** | Requires user input | A requirements fork returns to the S0 Requirements interview; a design fork is surfaced and resolved at the S2 Co-Design human design gate (the co-design loop stays open and the channel reopens for it per `### Next-Gate Readiness Rule`). An **unresolved structural fork** (a contested `D-N` item with an empty **Decision** field, the same severity class as a **T1** risk fork) is **CRITICAL** by this mapping — co-decided at the human gate, never absorbed and never carried forward unresolved; the channel stays open until it is co-decided. A design decision deferred to its default and later revised is a **design problem** that re-walks from S2 → human gate → re-plan → re-Momus. |
+| **CRITICAL** | Requires user input | A requirements fork returns to the S0 Requirements interview; a design fork is surfaced and resolved at the S2 Co-Design human design gate (the co-design loop stays open and the channel reopens for it per `### Next-Gate Readiness Rule`). An **unresolved structural fork** (a contested `D-N` item with an empty **Decision** field, the same severity class as a **T1** risk fork) is **CRITICAL** by this mapping — co-decided at the human gate, never absorbed and never carried forward unresolved; the channel stays open until it is co-decided. A design decision chosen under explicit delegation and later revised is a **design problem** that re-walks from S2 → human gate → re-plan → re-Momus. |
 | **MINOR** | Self-resolvable from context | Resolve inline during plan revision |
-| **AMBIGUOUS** | Standard convention / safe default exists | Apply documented default, note in plan |
+| **AMBIGUOUS** | Evidence or a user choice is missing | Investigate discoverable facts; keep user-owned choices open or resolve an explicit delegation per User Deferral Handling |
 
 ### Design Consensus (reconciling Daedalus advisory input)
 
@@ -1166,7 +1153,7 @@ This step CANNOT be skipped. After Momus APPROVE/COMMENT, prometheus MUST execut
 
 **Required submission.** Read [review-pipeline.md](review-pipeline.md) Stage A before authoring; it owns the reader, section order, fidelity checks, render command, and HTML submission command. `prometheus-state.ts set --phase S5 --submit-presentation <html>` records the plan/HTML paths and content hashes in `presentation`. S6 or later refuses to advance unless:
 
-- `plan_path` is set (it is set at S2 and preserved; empty here means that write was skipped)
+- `plan_path` is set (it is set at S0 and preserved; empty here means that write was skipped)
 - the HTML exists at `<plan directory>/presentation/<plan stem>.html`
 - a current submission binds this plan and HTML; changing either requires re-rendering and resubmission
 

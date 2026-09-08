@@ -240,6 +240,27 @@ describe("prometheus state", () => {
 		expect(second!.started_at).toBe(firstStartedAt);
 	});
 
+	test("요구사항 초안 경로는 재개와 설계 전환에 보존되고 완료로 간주되지 않음", () => {
+		process.env.OMT_SESSION_ID = "test-session";
+		seedFile("test-session");
+		const draftPath = join(tmpDir, "interview.md");
+		const draft = "## Context\nApproval validity: open; retention depends on approval validity.\n";
+		writeFileSync(draftPath, draft);
+		setPrometheusState("test-session", { phase: "S0", plan_path: draftPath });
+
+		setPrometheusState("test-session", { phase: "S0", resume_summary: "approval validity remains open" });
+		const resumed = readPrometheusState("test-session")!;
+		expect(readFileSync(resumed.plan_path, "utf8")).toBe(draft);
+		expect(resumed.steps.plan.done).toBe(false);
+		expect(resumed.steps.design_decisions.done).toBe(false);
+
+		setPrometheusState("test-session", { phase: "S2" });
+		const designing = readPrometheusState("test-session")!;
+		expect(designing.plan_path).toBe(draftPath);
+		expect(designing.steps.plan.done).toBe(false);
+		expect(designing.steps.design_decisions.done).toBe(false);
+	});
+
 	// --- (A5) prometheus-state refreshes last_touched_at on every write ---
 	test("(A5) prometheus-state refreshes last_touched_at on every write", async () => {
 		process.env.OMT_SESSION_ID = "test-session";

@@ -199,7 +199,7 @@ export function setPrometheusState(
 	if (opts.mark_design_done && resolvedPlanPath === "") {
 		process.stderr.write(
 			"prometheus-state: --mark-design-done requires plan_path to be set " +
-				"(pass --plan-path or set it earlier at S2)\n",
+			"(write the draft first, then pass --plan-path)\n",
 		);
 		process.exit(1);
 	}
@@ -219,13 +219,13 @@ export function setPrometheusState(
 			process.exit(1);
 		};
 
-		// plan_path is set at S2 and preserved by later writes, so an empty one here
+		// plan_path is set when the interview draft is written and preserved by later writes, so an empty one here
 		// means that write was skipped. Treating the underivable check as success would
 		// leave the whole gate bypassable by never passing --plan-path.
 		if (resolvedPlanPath === "") {
 			refuse(
-				`plan_path is empty. It is set at S2 and preserved afterwards, so an empty ` +
-					`plan_path at ${opts.phase} means the S2 state write was skipped. Pass --plan-path.`,
+				`plan_path is empty. It is preserved after the draft's first state write, so an empty ` +
+					`plan_path at ${opts.phase} means that write was skipped. Pass --plan-path.`,
 			);
 		}
 
