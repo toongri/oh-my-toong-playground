@@ -188,11 +188,11 @@ flowchart TB
 
 **대상**: 스토리별 sisyphus 실행과 자기 검증은 바뀌지 않습니다. 이 제어는 모든 스토리가 `APPROVE`된 뒤 누적 diff에 대해 실행하는 최종 `code-reviewer` dispatch에만 적용됩니다.
 
-**판정**: 완료 차단은 class가 아니라 신뢰도(verdict) × 임팩트(impact) 대각선이 정합니다 — `BLOCK ⟺ (CONFIRMED × HIGH/MEDIUM) ∨ (PLAUSIBLE × HIGH)`. `CONFIRMED × LOW`는 FIX(완료 직전 sisyphus 일괄 수정 + 자동 검사 1회 재실행, 재리뷰·사용자 승인 불요), `PLAUSIBLE × MEDIUM/LOW`는 NOTE(보고만)입니다. `impact`는 finding마다 필수이며 부재 시 artifact 전체가 schema-invalid이고, `INCONCLUSIVE` review는 여전히 완료를 막습니다. 카드 전문은 `findings.md`로 영속되어 artifact가 그 경로를 `findings_report`로 참조합니다.
+**판정**: 완료 차단은 impact 대각선이 아니라 scope를 먼저 봅니다. `OUT_OF_SCOPE`는 근거와 함께 보고만 하는 비차단 제외이고, `UNKNOWN`은 완료를 차단합니다. 모든 impact에서 `IN_SCOPE + CONFIRMED`는 완료를 차단하며, 일괄 수정·영향받은 검사·새 독립 리뷰가 모두 필요합니다. 모든 impact에서 `IN_SCOPE + PLAUSIBLE`도 독립 adjudication이 끝날 때까지 완료를 차단합니다. `impact`는 finding마다 필수이며 부재 시 artifact 전체가 schema-invalid이고, `INCONCLUSIVE` review는 여전히 완료를 막습니다. 카드 전문은 `findings.md`로 영속되어 artifact가 그 경로를 `findings_report`로 참조합니다.
 
 **5회 창과 사용자 중재**: Claude와 Codex의 `PreToolUse` hook은 active `phase=pursuing` `code-reviewer` dispatch를 자동 claim/count합니다. 초기 창은 5회이며 cap 소진 또는 완료 가능 artifact의 재dispatch는 deny합니다. 계속하려면 `approve-review-dispatch-renewal` 명령어를 제시하고 사용자가 직접 실행해 cap을 5 늘린 뒤 다음 최종 리뷰를 dispatch합니다 — PreToolUse 가드가 AI의 Bash 경로에서 이 명령을 deny하므로 "사용자 승인 후에만"이 문구가 아니라 하네스로 강제됩니다.
 
-**잘못된 차단 finding 무효화**: 차단 finding이 틀렸을 때의 유일한 탈출구입니다. AI는 그 finding을 무력화하는 소스 줄을 인용할 수 있을 때만 무효화를 제안하고, 사용자가 승인하면 사용자가 직접 `dismiss-review-finding --ref <file:line> --class <correctness|regression|cleanup|requirement-gap> --rationale <근거>`를 실행합니다. 차단 여부가 class가 아닌 대각선으로 정해지므로 4종 class 전부 무효화 대상이며, BLOCK이 아닌 finding(FIX/NOTE)의 무효화는 거부됩니다. 한 번에 finding 하나만 차단 집합에서 빠지며, 무효화는 해당 artifact의 raw 바이트에 고정되어 다음 리뷰 라운드에는 이월되지 않습니다.
+**잘못된 차단 finding 무효화**: 잘못된 `IN_SCOPE + CONFIRMED` finding을 무효화할 때의 유일한 탈출구입니다. AI는 그 finding의 실패 시나리오가 도달 불가능함을 보여 주는 소스 줄을 인용할 수 있을 때만 무효화를 제안하고, 사용자가 승인하면 사용자가 직접 `dismiss-review-finding --ref <file:line> --class <correctness|regression|cleanup|requirement-gap> --rationale <근거>`를 실행합니다. `IN_SCOPE + PLAUSIBLE`은 독립 adjudication을 거쳐야 하며 무효화할 수 없습니다. `OUT_OF_SCOPE`와 `UNKNOWN`도 무효화 대상이 아닙니다. 한 번에 finding 하나만 차단 집합에서 빠지며, 무효화는 해당 artifact의 raw 바이트에 고정되어 다음 리뷰 라운드에는 이월되지 않습니다.
 
 ### ultragoal 반복 예산·진전 없음·재개
 

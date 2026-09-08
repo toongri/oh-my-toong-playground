@@ -11,6 +11,14 @@ const completionGateMd = readFileSync(
 	join(import.meta.dir, "references/completion-gate.md"),
 	"utf8",
 );
+const corePipelineKoMd = readFileSync(
+	join(import.meta.dir, "../../docs/skills/core-pipeline.md"),
+	"utf8",
+);
+const corePipelineEnMd = readFileSync(
+	join(import.meta.dir, "../../docs/skills/core-pipeline.en.md"),
+	"utf8",
+);
 // Union of body + both references — the behavior-preservation surface ported
 // from goal's SKILL.test.ts. A required phrase must survive SOMEWHERE in this
 // union; which file it lives in is a routing detail, not a contract.
@@ -390,6 +398,35 @@ describe("review dispatch budget runtime contract", () => {
 		expect(completionGateMd).toContain("`OUT_OF_SCOPE`: nonblocking exclusion");
 		expect(completionGateMd).toContain("no `UNKNOWN`, and no undismissed `IN_SCOPE` findings");
 	});
+});
+
+describe("core-pipeline documents mirror the scope-first completion contract", () => {
+	for (const [language, corePipelineMd] of [
+		["한국어", corePipelineKoMd],
+		["English", corePipelineEnMd],
+	] as const) {
+		test(`${language} documents scope-first verdict routing at every impact`, () => {
+			expect(corePipelineMd).toContain("OUT_OF_SCOPE");
+			expect(corePipelineMd).toContain("UNKNOWN");
+			expect(corePipelineMd).toContain("IN_SCOPE + CONFIRMED");
+			expect(corePipelineMd).toContain("IN_SCOPE + PLAUSIBLE");
+			if (language === "한국어") {
+				expect(corePipelineMd).toContain("모든 impact");
+				expect(corePipelineMd).toContain("독립 adjudication");
+			} else {
+				expect(corePipelineMd).toContain("every impact");
+				expect(corePipelineMd).toContain("independent adjudication");
+			}
+		});
+
+		test(`${language} documents do not use the removed diagonal routing`, () => {
+			expect(corePipelineMd).not.toContain("diagonal");
+			expect(corePipelineMd).not.toContain("CONFIRMED × LOW");
+			expect(corePipelineMd).not.toContain("PLAUSIBLE × MEDIUM/LOW");
+			expect(corePipelineMd).not.toContain("FIX");
+			expect(corePipelineMd).not.toContain("NOTE");
+		});
+	}
 });
 
 // ---------------------------------------------------------------------------
