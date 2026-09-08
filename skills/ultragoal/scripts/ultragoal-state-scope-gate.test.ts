@@ -188,6 +188,7 @@ describe("범위 슬롯은 고정되고 변경 시 스토리 재승인이 필요
 				story: "review",
 				acceptance_criteria: ["review passes"],
 				verification_surface: "review",
+				status: "unconfirmed",
 			},
 			"new requirement",
 			"cover the new requirement",

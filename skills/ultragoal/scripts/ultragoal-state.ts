@@ -613,7 +613,7 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 		withStateLock(stateFilePath, () => {
 			const prior = readPrior(sessionId);
 			const next: Partial<GoalState> = {
-				phase: opts.phase,
+				phase: "planning",
 				active: true,
 				outcome: opts.outcome,
 				verification_surface: opts.verification_surface,
