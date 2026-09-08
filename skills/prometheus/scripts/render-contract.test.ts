@@ -6,8 +6,8 @@ import { join } from "node:path";
 // Render contract tokens: verbatim literals that MUST be present/absent after
 // the remove-html-render-add-uml-markdown rewrite (plan TODO 2, RED-only —
 // TODO 7/8/9 make this GREEN). Mirrors the adr-log-contract.test.ts /
-// verify-lane-contract.test.ts both-halves pattern: HTML render machinery is
-// asserted absent, the markdown + 6-lens coverage-table contract is asserted
+// verify-lane-contract.test.ts both-halves pattern: the old HTML template is
+// asserted absent, required HTML submission and the 6-lens coverage table are asserted
 // present, and the untouched Stage B / Stage C headings are asserted to
 // survive the rewrite. All reads are file-pinned (no directory scan) — this
 // file's own literals would otherwise self-match a directory scan of "html".
@@ -26,25 +26,26 @@ const diagramGuideContent = readFileSync(diagramGuidePath, "utf8");
 const templatePath = join(import.meta.dir, "..", "templates", "plan-presentation.html");
 
 // ---------------------------------------------------------------------------
-// ABSENCE assertions — HTML render machinery that MUST be gone after the
-// rewrite.
+// Removed-template assertions plus the replacement HTML submission contract.
 // ---------------------------------------------------------------------------
 
-describe("absence — HTML render machinery removed", () => {
+describe("render contract — old template removed, HTML submission required", () => {
 	it("A1: templates/plan-presentation.html no longer exists", () => {
 		expect(existsSync(templatePath)).toBe(false);
 	});
 
-	it("A2: SKILL.md carries no html literal (case-insensitive)", () => {
-		expect(skillContent.toLowerCase()).not.toContain("html");
+	it("A2: HTML 제출은 필수이며 제거한 템플릿은 참조하지 않는다", () => {
+		expect(skillContent).toContain("--submit-presentation <html>");
+		expect(skillContent).toContain("[review-pipeline.md](review-pipeline.md)");
+		expect(skillContent).not.toContain("templates/plan-presentation.html");
 	});
 
-	it("A3: review-pipeline.md wires the shareable render.ts HTML render alongside the gated .md", () => {
+	it("A3: review-pipeline.md wires the shareable render.ts HTML render", () => {
 		// The markdown-only lockdown removed the OLD fragile HTML template
 		// (templates/plan-presentation.html + Rule 6/7 placeholder machinery —
 		// still asserted gone by A1/A5-A7). HTML output itself is REINTRODUCED
 		// via render.ts (mermaid baked to inline SVG), a different mechanism: the
-		// authored .md stays the gated source, the .html is the shareable render.
+		// authored .md is renderer input; the .html is the submitted deliverable.
 		expect(reviewPipelineContent).toContain("scripts/render.ts");
 		expect(reviewPipelineContent).toContain(".html");
 	});
