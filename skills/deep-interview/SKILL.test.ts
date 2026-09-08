@@ -614,6 +614,22 @@ describe("phase-3 [from-user] Step 2e content probe (SKILL.md content, not CLI b
 	});
 });
 
+describe("fact-ground state persistence contract", () => {
+	const factStart = skillMd.indexOf("### Step 2-fact: Ground a Discoverable Fact");
+	const nextHeading = skillMd.indexOf("\n### ", factStart + 1);
+	const factRegion = nextHeading === -1 ? skillMd.slice(factStart) : skillMd.slice(factStart, nextHeading);
+
+	test("persists the fact-ground round, calculated ambiguity, and evidence provenance in order", () => {
+		const appendRound = factRegion.indexOf("--append-round-stdin");
+		const currentAmbiguity = factRegion.indexOf("--current-ambiguity");
+		const appendProvenance = factRegion.indexOf("--append-provenance-item");
+
+		expect(appendRound).toBeGreaterThan(-1);
+		expect(currentAmbiguity).toBeGreaterThan(appendRound);
+		expect(appendProvenance).toBeGreaterThan(currentAmbiguity);
+	});
+});
+
 describe("phase-3 fixture absence: stale deep-interview test fixtures removed", () => {
 	test("deep-interview/tests/application-scenarios.md does not exist", () => {
 		expect(existsSync(join(import.meta.dir, "tests/application-scenarios.md"))).toBe(false);

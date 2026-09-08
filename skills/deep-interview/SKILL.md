@@ -230,7 +230,18 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
 OMT_DI_PAYLOAD_EOF
 ```
 
-Include all six `scores`, including `context`, and write the overall ambiguity as in Step 2e. The round updates the component's stored scores. If evidence is unavailable, keep that gap visible and continue independent decisions; do not silently answer it or mark the dimension permanently researched.
+After appending the round, persist the calculated overall ambiguity in the dedicated state field, then persist the grounded evidence's `evidence_id` and origin label in the dedicated provenance state field. Reuse the four origin labels above (`[from-code]`, `[from-code][auto-confirmed]`, `[from-research]`, or `[from-user]`):
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+  --current-phase "deep-interview" \
+  --current-ambiguity <ambiguity>
+
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+  --append-provenance-item '{"evidence_id":"<evidence_id>","label":"<origin label>"}'
+```
+
+Include all six `scores`, including `context`, and write the overall ambiguity in both the round payload and `--current-ambiguity`. The round updates the component's stored scores. If evidence is unavailable, keep that gap visible and continue independent decisions; do not silently answer it or mark the dimension permanently researched.
 
 Display the Step 2d report, then return to the loop head. A fact-grounding round does not fall through to the user-answer steps or ask the user to repeat the finding.
 
