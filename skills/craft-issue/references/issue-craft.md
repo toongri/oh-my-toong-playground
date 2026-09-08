@@ -7,6 +7,8 @@ It is read at Stage 4 (record) and Stage 5 (slice). Follow it in full at each st
 
 ## 1. Best-Practice Body Shape
 
+**Reader-facing projection:** [presentation.md](presentation.md) owns the ordered body templates and reader check. Use its ordinary-bug template when a cause is unknown; the detailed RCA shape below is investigation material unless the user explicitly requests a full incident/RCA report. Preserve every requirement and grounded fact while giving each one a single place in the body.
+
 The Standard Body Shape below is the **full menu** of sections. Two principles govern how much of
 that menu a given issue emits — read them before the menu, because most issues use far less than
 the full set. Sections that do not apply to a given issue genre are omitted rather than left blank.
@@ -450,7 +452,7 @@ where they are not being used as a verification criterion.
 
 ### Named Contract: diagnose Bug-Report shape
 
-When the issue is a runtime bug, the Root Cause section uses this sub-template:
+When investigating a runtime bug, use this sub-template for the investigation record. Emit it in full when the user explicitly requests a full incident/RCA report. For an ordinary bug ticket, project the record through [presentation.md](presentation.md), including the cause or its next validation step once:
 
 ```
 **Symptom**: What the caller observes.
@@ -468,7 +470,7 @@ rubric: per the Render Contract and Working-Language Localization table in Secti
 the issue body as their localized label (증상 / 근본 원인 / 재현 / 수정 방향 / 검증 단계 / 유사
 사례) when the working language is Korean, never as raw English.
 
-All six fields are required for bug-genre issues. If any field cannot be filled from gathered
+All six fields are required in the investigation record, not as repeated sections in the ordinary issue body. If any field cannot be filled from gathered
 evidence, write `TBD — needs validation via {method}` rather than omitting the field or
 speculating.
 
