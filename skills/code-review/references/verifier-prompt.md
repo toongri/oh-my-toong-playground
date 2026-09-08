@@ -199,7 +199,7 @@ claimed requirement was never actually stated or inferable.
 
 ## Output
 
-For a scope-contract dispatch, first emit the structured `scope`/`scope_evidence` JSON above, then the verdict and applicable card below. Preserve this JSON in the full card and completion artifact; do not infer scope later from severity or verdict. The reviewer returns scope, quality, and evidence only; repair, adjudication, completion, budget, and approval decisions belong to the caller.
+For a scope-contract dispatch, first emit the structured `scope`/`scope_evidence` JSON above, then the verdict and applicable card below. REFUTED candidates are audit-only: keep their scope evidence in the verifier audit output, but do not copy them into the full card or completion artifact findings. CONFIRMED or PLAUSIBLE findings preserve this JSON in the full card and completion artifact. Do not infer scope later from severity or verdict. The reviewer returns scope, quality, and evidence only; repair, adjudication, completion, budget, and approval decisions belong to the caller.
 
 Return exactly one verdict. Evidence must quote or cite the relevant line(s). Do not hedge between
 two verdicts.

@@ -665,6 +665,16 @@ describe("code-review Phase 2 verifier diff safety contract", () => {
 	});
 });
 
+describe("code-review verifier finding artifact contract", () => {
+	test("keeps scope evidence only for kept findings in completion artifacts", () => {
+		const output = extractSection(verifierPrompt, "## Output", "##");
+
+		expect(output).toContain("REFUTED candidates are audit-only");
+		expect(output).toContain("do not copy them into the full card or completion artifact findings");
+		expect(output).toContain("CONFIRMED or PLAUSIBLE findings preserve this JSON");
+	});
+});
+
 describe("code-review Phase 2 verifier interpolation 계약", () => {
 	const phase2 = extractSection(skillMd, "### Phase 2: Candidate Verification", "### Phase 3:");
 
