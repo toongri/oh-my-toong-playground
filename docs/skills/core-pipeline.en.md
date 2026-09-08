@@ -77,17 +77,17 @@ Each arrow represents a file or PM-tool handoff. In Phase 5, deep-interview firs
 
 ## 3. deep-interview — Socratic Deep Interview
 
-**Purpose**: Converge a vague idea into clear requirements and a settled design before autonomous execution or task decomposition. It asks one question at a time, targeting the weakest dimension, until a weighted ambiguity score drops below the threshold.
+**Purpose**: Converge a vague idea into clear requirements and a settled design before autonomous execution or task decomposition. It asks one question at a time without a count limit, following prerequisites and the counterexamples, contradictions, and downstream decisions each answer reveals. Scores guide investigation; an audit of evidence and open decisions governs closure.
 
-**Core constraint**: It does not proceed to the next stage while ambiguity exceeds the threshold. It never implements directly; after settling requirements and design, Phase 5 first checks the spec's output shape. When team-facing task tickets are requested, it recommends craft-tasks to decompose the settled design into shareable child tickets; otherwise, it recommends ultragoal or prometheus by the active topology-component count and offers the other route as an explicit override.
+**Core constraint**: Completion requires both the score threshold and the closure audit. Keep interviewing while an open decision could change implementation; respect explicit stops and label early delivery DRAFT. It never implements directly; after settling requirements and design, Phase 5 first checks the spec's output shape. When team-facing task tickets are requested, it recommends craft-tasks to decompose the settled design into shareable child tickets; otherwise, it recommends ultragoal or prometheus by the active topology-component count and offers the other route as an explicit override.
 
-**When to use**: Use it when you have an idea but the scope is fuzzy, or when you say "interview me", "don't assume", "make sure you understand". Conversely, if the request already names file paths, function names, and acceptance criteria, it is right to execute directly without an interview.
+**When to use**: Use it when you have an idea but the scope is fuzzy, or when you say "interview me", "don't assume", "make sure you understand". Use an existing PRD or detailed request as evidence. An explicitly requested deep interview is not skipped because the starting context is already detailed.
 
 ```mermaid
 flowchart TB
-    Start([Vague idea]) --> Ask[Ask 1 question<br/>target weakest dimension]
-    Ask --> Score[Measure ambiguity score]
-    Score --> Gate{Ambiguity ≤ threshold?}
+    Start([Vague idea]) --> Ask[Ask 1 question<br/>prerequisite and counterexample]
+    Ask --> Score[Update decisions, evidence, scores]
+    Score --> Gate{Score and closure audit pass?}
     Gate -->|No| Ask
     Gate -->|Yes| Spec[Settle requirements<br/>and design]
     Spec --> Shape{Output shape?}
@@ -101,7 +101,7 @@ flowchart TB
 
 **Pipeline link**: The output spec is saved to `$OMT_DIR/deep-interview/{slug}.md` with requirements and design settled. In Phase 5, deep-interview first checks the output shape. When team-facing task tickets are requested, it recommends craft-tasks to decompose the settled design into shareable child tickets. When team-facing task tickets are not requested, it recommends ultragoal when there is exactly one active topology component and prometheus otherwise, while offering the non-recommended route as an explicit override. If prometheus is selected, it uses the spec to produce a human-readable plan and hands it to ultragoal. This flow is built on the premise that specification quality is the primary bottleneck in AI-assisted development.
 
-> This skill was borrowed almost as-is from [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode) (omc), whose implementation was simply too good to reinvent (originally inspired by [Ouroboros](https://github.com/Q00/ouroboros)).
+> Started from [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode) and refined using [Ouroboros](https://github.com/Q00/ouroboros) closure audits and [grilling](https://github.com/mattpocock/skills) decision dependencies.
 
 ---
 
