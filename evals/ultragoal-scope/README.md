@@ -86,3 +86,29 @@ from severity, batched repairs, and finite retries. Not adopted: advisory-only L
 handling, severity-authorized scope expansion, or a new review-generation ledger.
 The existing independent artifact and dispatch cap suffice for this change;
 review remains over the accumulated diff with a frozen scope admission contract.
+
+## Portable caller-neutral evaluation
+
+The original `f2f2d367` behavior was evaluated in five fresh baseline samples and
+five fresh treatment samples using the same `release-codereview-demo.json` payload.
+Baseline samples required the artifact filename to contain the special mode name,
+so the valid contract did not activate full candidate verification. Treatment
+samples selected the mode from the caller-supplied `[SCOPE_CONTRACT]` payload;
+renaming the artifact to a special or ordinary filename did not change behavior.
+
+The treatment scenario used 30 candidates: 20 LOW local cleanups, a HIGH unrelated
+legacy billing defect, and nine plausible findings under a ten-minute deadline.
+All 30 received independent scope and remedy checks before quality judgment; LOW
+findings were retained and no top-15 cap applied. The original contract hash and
+scope evidence were preserved. Repair batching, adjudication, completion status,
+budget, and goal completion remained caller decisions. A lone delimiter or a
+missing/malformed contract when explicitly required produced `INCONCLUSIVE`, while
+an ordinary review with no contract retained its existing behavior.
+
+These ten runs were behavioral simulations based on full instruction reads, not
+30 actual verifier jobs, and do not claim a newly installed runtime. Manual review
+of all outputs found no core defect. A pathless automatic-intent proposal was
+excluded as a new feature; the ordinary intent gate remains unchanged. An interim
+probe found residual caller-policy wording and it was removed before the final
+five treatment samples. The relevant checks finished with 91 passing tests and
+zero failures; `git diff --check` also passed.

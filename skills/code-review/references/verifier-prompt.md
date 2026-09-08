@@ -20,7 +20,7 @@ code deeply. This is the precision gate behind the finders' recall.
 | `{CANDIDATE_FAILURE_SCENARIO}` | the candidate's stated failure scenario / cost |
 | `{CANDIDATE_AC}` | the acceptance criterion or inferred intent, requirement-gap candidates only (`?` if none) |
 | `{CANDIDATE_FOUND_BY}` | the angle(s) that surfaced it |
-| `{INTENT}` | Step 1 intent/requirements (or `N/A — code-quality-only review`); ultragoal also includes the unmodified frozen scope envelope, original non-goals, and confirmed stories |
+| `{INTENT}` | Step 1 intent/requirements (or `N/A — code-quality-only review`); a scope-contract dispatch also includes the unmodified frozen scope envelope, original non-goals, and approved stories |
 
 Everything below the marker is the verifier's prompt.
 
@@ -108,9 +108,9 @@ isolation — this is deliberate. Do not look for other issues; do not review th
 The finder ran wide for recall and may be wrong. **Do not trust the candidate text — verify it
 against the code.**
 
-## Ultragoal: independently admit scope before judging quality
+## Scope contract: independently admit scope before judging quality
 
-Apply this section only when the supplied intent identifies an ultragoal completion-gate dispatch and includes its frozen `[SCOPE_CONTRACT]` / `[/SCOPE_CONTRACT]` JSON envelope. Parse the enclosed `outcome`, `verification_surface`, `constraints`, `boundaries`, `non_goals`, `stories`, and `scope_contract_sha256` as the original authorization record. Ordinary reviews keep the existing verdict contract. Do not inherit a finder's or orchestrator's scope label. First read the frozen contract and confirmed stories, then inspect the change and relevant surrounding code to establish causality. Decide whether **both the defect and its proposed remedy** are authorized before applying the quality verdict ladder.
+Apply this section when the supplied intent includes a valid `[SCOPE_CONTRACT]` / `[/SCOPE_CONTRACT]` JSON envelope, regardless of artifact filename or gate. A delimiter appearing without a valid pair, or an explicitly required contract that is missing or malformed, is verification failure; never fall back to ordinary review. When neither condition applies, ordinary reviews keep the existing verdict contract. Parse the enclosed fields as the original authorization record. Do not inherit a finder's or orchestrator's scope label. `stories` are caller-provided approved requirement entries and workflow state is caller-owned. First read the frozen contract and stories, then inspect the change and surrounding code. Decide whether **both the defect and its proposed remedy** are authorized before applying the quality verdict ladder.
 
 Return exactly one scope decision with this structured evidence, in addition to the quality verdict:
 
@@ -199,7 +199,7 @@ claimed requirement was never actually stated or inferable.
 
 ## Output
 
-For ultragoal, first emit the structured `scope`/`scope_evidence` JSON above, then the verdict and applicable card below. The orchestrator preserves this JSON in the full card and completion artifact; it must not infer scope later from severity or the verdict.
+For a scope-contract dispatch, first emit the structured `scope`/`scope_evidence` JSON above, then the verdict and applicable card below. Preserve this JSON in the full card and completion artifact; do not infer scope later from severity or verdict. The reviewer returns scope, quality, and evidence only; repair, adjudication, completion, budget, and approval decisions belong to the caller.
 
 Return exactly one verdict. Evidence must quote or cite the relevant line(s). Do not hedge between
 two verdicts.
