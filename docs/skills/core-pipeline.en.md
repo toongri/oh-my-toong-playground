@@ -77,6 +77,10 @@ Each arrow represents a file or PM-tool handoff. In Phase 5, deep-interview firs
 
 ## 3. deep-interview — Socratic Deep Interview
 
+The presentation explains the design and its reasons in the author's first person to a colleague or team-lead with no prior context. Use plain language, first-use domain glosses, and big-picture diagrams without thinning the design into an overview.
+
+A probe isolating one condition uses an independent hypothetical copy of a confirmed case and varies only that condition. Changing the requester or amount while testing a role confounds the comparison. Record the anchor case, changed condition, and unanswered or confirmed outcome in the decision register's `checks`, and carry it into the spec. Label interaction probes as joint cases.
+
 **Purpose**: Converge a vague idea into clear requirements and a settled design before autonomous execution or task decomposition. It asks one question at a time without a count limit, following prerequisites and the counterexamples, contradictions, and downstream decisions each answer reveals. Scores guide investigation; an audit of evidence and open decisions governs closure.
 
 **Core constraint**: Completion requires both the score threshold and the closure audit. Keep interviewing while an open decision could change implementation; respect explicit stops and label early delivery DRAFT. It never implements directly; after settling requirements and design, Phase 5 first checks the spec's output shape. When team-facing task tickets are requested, it recommends craft-tasks to decompose the settled design into shareable child tickets; otherwise, it recommends ultragoal or prometheus by the active topology-component count and offers the other route as an explicit override.

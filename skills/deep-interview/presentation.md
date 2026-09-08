@@ -8,29 +8,23 @@ is a self-contained, human-readable HTML artifact accompanying the spec.
 ## Two artifacts, two audiences
 - **SSOT (spec)** — for AI, execution, and precise verification. Precise and immutable. Includes
   interview machinery such as clarity scores, ontology convergence, and interview transcripts.
-- **presentation** — a human explanation derived from the spec. **The reader is a colleague or
-  team-lead-level practitioner with no prior context about this codebase or domain.** Explain
-  your spec, design, implementation plan, and implementation to them from the author's perspective.
-  This page alone must let them immediately understand **what this work did and what they need
-  to know or consult when they next modify this code.**
+- **presentation** — a human explanation derived from the spec, for a colleague or team-lead
+  with no prior context on this work.
 
-**The reader has an ordinary software engineer's knowledge.** They know general technical terms
-such as commits, APIs, caches, arrays, and transactions, but not **project- or domain-specific
-concepts** (unique identifiers, internal component names, domain concepts, project abbreviations).
-Explain only the latter; use the former as they are. Explaining everything helpfully can add
-parentheses to every sentence and become verbose and less intuitive. Treat the reader as a
-**capable colleague who only lacks context**, not as an uninformed person.
+**Purpose & perspective.** Write this presentation in the first person of the author
+explaining the spec and design they defined — what they propose and why — to a
+colleague or team-lead with no prior context on it. The bar: from this page alone,
+that reader richly and correctly understands what the work does, why it is designed
+this way, and what they must be aware of when they next modify this code. Keep it
+clear and accessible — plain language, domain terms glossed on first use, big-picture
+diagrams (the ELI5 spirit of "explain it simply") — but never dumb it down or thin it
+out: **accessible AND rich, never a thinned-out overview.**
 
 ## Faithful restatement, not simplification — rich explanation is welcome
 The presentation is **not** an abridgment retaining only the big picture. Carry over all design
 content decided in the spec and **every diagram it draws.** There is no character limit;
 explanations that enrich the content alongside diagrams are always welcome. Remove only the
 interview and AI machinery listed below.
-
-**Keep the ELI5 spirit (plain language, first-use explanations of domain terms, big-picture
-diagrams), without dumbing things down.** The author explains the spec and design they defined
-in first person to colleagues and team leads without context, so this document alone gives them
-a **rich, accurate** understanding. Make it accessible and rich, not thin.
 
 ### What to carry over (derived from the spec)
 Restate all the following spec content at maintainer level — omit none:
@@ -74,10 +68,8 @@ edge), node naming, and Mermaid validity — **read it fully before authoring.**
 - **Diagrams invite invention more readily than prose.** Do not draw a source or edge elsewhere
   when the spec mentions it only in one place. Include only nodes and edges whose relationships the spec decides.
 
-## First-use glosses (domain and code only)
+## First-use glosses
 Explain project/domain-specific terms and code identifiers in one line at their first appearance.
-Do not explain general technical terms (commits, APIs, arrays, filters, transactions, etc.); readers know them.
-- BAD (excessive): "커밋(코드 변경을 묶어 저장하는 단위)" / GOOD: "커밋"
 - GOOD (domain): "household_id(가구를 가리키는 식별자)", "merge-patch(적힌 항목만 덮어쓰는 부분 갱신)"
 - Expand abbreviations on first use; connect new concepts inside identifiers on the spot ("= 앞서 말한 …");
   use one name per concept; no forward references to undefined labels; reconcile
@@ -116,11 +108,11 @@ bun ${CLAUDE_SKILL_DIR}/scripts/render.ts --in <presentation>.md --out <presenta
       constraints/invariants, non-goals (deciders)/boundaries, AC, and Risks? **Omit nothing.**
 - [ ] **Does it carry every diagram drawn by the spec** — zero missing lenses, zero invented diagrams absent from the spec?
       Each has Why→Diagram→Interpretation, element footnotes for code-named nodes, and arrow/color legends.
-- [ ] First-use glosses for domain/code-specific terms only (leave general technical terms as-is); zero use before definition; one name per concept.
+- [ ] First-use glosses for domain/code-specific terms; zero use before definition; one name per concept.
 - [ ] **Zero concrete values absent from the spec** — intervals, schedulers, quantities, examples. Keep general what the spec leaves general.
 - [ ] Interview/AI machinery (Clarity Breakdown, Ontology Convergence, Transcript, scoring values) removed.
 - [ ] Lead enumeration = section enumeration; overview is a true subset of details; apparent contradictions reconciled; prose matches diagrams.
 - [ ] Zero invention or contradiction against the SSOT.
 
-The sole passing criterion: **can a capable colleague with no prior context understand from this
+The sole passing criterion: **can a colleague or team-lead with no prior context understand from this
 page alone what the work did and what to know or consult when next modifying this code?**
