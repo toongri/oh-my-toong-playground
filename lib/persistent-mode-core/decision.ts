@@ -282,10 +282,21 @@ ${continuationContract("preferred", askToolName)}
 `;
 }
 
-function probeQaEvidence(path: string): { exists: boolean; size: number; sha256?: string } {
+function probeQaEvidence(path: string): { exists: boolean; size: number; image?: boolean; sha256?: string } {
 	try {
 		const stat = statSync(path);
-		return { exists: stat.isFile(), size: stat.size, sha256: stat.isFile() ? createHash("sha256").update(readFileSync(path)).digest("hex") : undefined };
+		if (!stat.isFile()) return { exists: false, size: 0 };
+		const contents = readFileSync(path);
+		const sha256 = createHash("sha256").update(contents).digest("hex");
+		if (!/\.(png|jpe?g|webp|gif)$/i.test(path)) return { exists: true, size: stat.size, sha256 };
+		const header = contents.subarray(0, 24);
+		const image = contents.length >= 24 && (
+			header.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ||
+			(header[0] === 255 && header[1] === 216 && header[2] === 255) ||
+			/^GIF8[79]a/.test(header.toString("ascii", 0, 6)) ||
+			(header.toString("ascii", 0, 4) === "RIFF" && header.toString("ascii", 8, 12) === "WEBP")
+		);
+		return { exists: true, size: stat.size, image, sha256 };
 	} catch {
 		return { exists: false, size: 0 };
 	}

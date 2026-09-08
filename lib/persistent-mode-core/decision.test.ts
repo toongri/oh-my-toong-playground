@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, writeFile, rm, readFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { execFileSync } from "child_process";
-import { approveOk, qaReportSnapshot } from "@lib/qa-chain-core";
+import { approveOk, evidenceReviewSnapshot, qaReportSnapshot } from "@lib/qa-chain-core";
 import { createHash } from "crypto";
 import { createPresentationSubmission } from "@lib/state-core";
 
@@ -3098,6 +3098,47 @@ describe("QA Stop-gate decision table", () => {
 		state.cells = (state.cells as Array<Record<string, unknown>>).map((current) => ({ ...current, evidence: { path: tempEvidence, surface: "bash" } }));
 		writeQaState(state);
 		fs.unlinkSync(tempEvidence);
+		expect(makeDecision(context())).toMatchObject({ decision: "block" });
+	});
+
+	it("qa visual evidence: corrupt image-extension bytes cannot satisfy the Stop-gate", () => {
+		const actionEvidence = join(omtDir, "qa-action.txt");
+		const corruptBefore = join(omtDir, "qa-before.png");
+		const corruptAfter = join(omtDir, "qa-after.jpg");
+		fs.writeFileSync(actionEvidence, "action evidence");
+		fs.writeFileSync(corruptBefore, "not an image but long enough to be non-empty");
+		fs.writeFileSync(corruptAfter, "not an image but long enough to be non-empty");
+
+		const state = completeQa("APPROVE");
+		state.actors = [{ id: "actor-1", name: "Actor", boundary: "local boundary", driver: "agent-browser", reachable: "yes" }];
+		state.stories = [
+			{
+				id: "story-1",
+				actor: "actor-1",
+				baseline: { result: "pass", cycle: 0, evidence: { path: actionEvidence, surface: "agent-browser" } },
+			},
+		];
+		state.cells = (state.cells as Array<Record<string, any>>).map((current, index) => {
+			if (index !== 0) return { ...current, status: "waived" };
+			const evidence = {
+				path: actionEvidence,
+				surface: "agent-browser",
+				before: corruptBefore,
+				action: actionEvidence,
+				after: corruptAfter,
+			};
+			const cellWithEvidence = { ...current, evidence };
+			return {
+				...cellWithEvidence,
+				evidence_review: {
+					claims: [{ claim: "visual state", verdict: "supported", observation: "reviewed", gap: "", sources: [{ path: actionEvidence, location: "fixture" }] }],
+					cell_snapshot: evidenceReviewSnapshot(cellWithEvidence as never),
+					files: Object.fromEntries([actionEvidence, corruptBefore, corruptAfter].map((path) => [path, createHash("sha256").update(fs.readFileSync(path)).digest("hex")])),
+				},
+			};
+		});
+		writeQaState(state);
+
 		expect(makeDecision(context())).toMatchObject({ decision: "block" });
 	});
 });
