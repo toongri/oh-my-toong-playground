@@ -57,6 +57,7 @@
  */
 
 import { readFileSync, existsSync } from "fs";
+import { basename, dirname, resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
 import {
 	resolveSessionIdOrThrow,
@@ -893,6 +894,14 @@ export function readDeepInterviewState(sessionId: string): Record<string, unknow
 }
 
 export function submitDeepInterviewPresentation(sessionId: string, specPath: string, htmlPath: string): void {
+	const specName = basename(specPath);
+	const expectedHtmlPath = resolve(
+		dirname(specPath),
+		`${specName.slice(0, -".md".length)}.presentation.html`,
+	);
+	if (!specName.endsWith(".md") || resolve(htmlPath) !== expectedHtmlPath) {
+		throw new Error(`presentation HTML must be the sibling ${specName.replace(/\.md$/, ".presentation.html")} path`);
+	}
 	const presentation = createPresentationSubmission(specPath, htmlPath);
 	const path = resolveStatePath(sessionId);
 	const prior = readRaw(path);

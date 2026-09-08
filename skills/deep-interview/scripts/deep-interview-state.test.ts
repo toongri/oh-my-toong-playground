@@ -61,8 +61,8 @@ describe("deep-interview state", () => {
 
 	test("HTML 제출 명령은 원본과 HTML을 state에 기록함", () => {
 		initDeepInterviewState(SID, { initial_idea: "presentation submission" });
-		const spec = join(tmpDir, "spec.md");
-		const html = join(tmpDir, "spec.presentation.html");
+		const spec = join(tmpDir, "foo.md");
+		const html = join(tmpDir, "foo.presentation.html");
 		writeFileSync(spec, "# Design\nA confirmed design.");
 		writeFileSync(html, "<!doctype html><html><body><h1>Design</h1><p>A confirmed design.</p></body></html>");
 		const cli = join(import.meta.dir, "deep-interview-state.ts");
@@ -72,6 +72,24 @@ describe("deep-interview state", () => {
 		updateDeepInterviewState(SID, { current_phase: "handoff" });
 		writeFileSync(spec, "# Revised design");
 		expect(() => updateDeepInterviewState(SID, { current_phase: "handoff" })).toThrow("presentation");
+	});
+
+	test("HTML 제출 명령은 원본과 다른 slug의 HTML을 거부하고 state를 유지함", () => {
+		initDeepInterviewState(SID, { initial_idea: "presentation submission" });
+		const spec = join(tmpDir, "foo.md");
+		const html = join(tmpDir, "bar.presentation.html");
+		writeFileSync(spec, "# Design\nA confirmed design.");
+		writeFileSync(html, "<!doctype html><html><body><h1>Design</h1><p>A confirmed design.</p></body></html>");
+		const before = readFileSync(resolveStatePath(SID), "utf8");
+		const cli = join(import.meta.dir, "deep-interview-state.ts");
+
+		expect(() =>
+			execSync(`bun '${cli}' submit-presentation --spec-path '${spec}' --html-path '${html}'`, {
+				stdio: "pipe",
+				env: { ...process.env },
+			}),
+		).toThrow();
+		expect(readFileSync(resolveStatePath(SID), "utf8")).toBe(before);
 	});
 
 	// AC A4/A5 — init overlays into seed; update merges and refreshes heartbeat; single file
