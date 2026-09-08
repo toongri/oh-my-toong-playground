@@ -119,8 +119,7 @@ export interface Story {
  * suppress a genuine defect that later appears at the same location.
  *
  * `class` spans all four finding classes: blocking is decided by the
- * verdict × impact diagonal (classifyReviewFindingOutcome), not by class, so any
- * class can block. dismissReviewFinding still refuses non-BLOCK findings — the
+ * scope-first outcome (classifyReviewFindingOutcome), not by class or impact. dismissReviewFinding still refuses non-BLOCK findings — the
  * lever stays a completion unblock, never general finding suppression.
  */
 export interface DismissedReviewFinding {
@@ -600,6 +599,13 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 				"set: pursuing refused — verification_surface is frozen once pursuit has begun. Re-plan first (set --phase planning) to change it.",
 			);
 		}
+		for (const slot of ["constraints", "boundaries", "non_goals"] as const) {
+			if (opts[slot] !== undefined && opts[slot] !== (prior[slot] ?? "")) {
+				throw new Error(
+					`set: pursuing refused — ${slot} is frozen once pursuit has begun. Re-plan first (set --phase planning) to change it.`,
+				);
+			}
+		}
 	}
 	const next: Partial<GoalState> = {
 		phase: opts.phase,
@@ -617,6 +623,15 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 		codex_goal_objective: opts.codex_goal_objective,
 	};
 	if (opts.phase === "planning") {
+		const prior = readPrior(sessionId);
+		const scopeChanged = (
+			["outcome", "verification_surface", "constraints", "boundaries", "non_goals"] as const
+		).some((slot) => opts[slot] !== undefined && opts[slot] !== (prior[slot] ?? ""));
+		if (scopeChanged && Array.isArray(prior.stories)) {
+			next.stories = prior.stories.map((story) =>
+				story.status === "confirmed" ? { ...story, status: "unconfirmed" as const } : story,
+			);
+		}
 		// ADR-3: Stale verdict cannot survive a re-plan. Three verdict carriers must all be
 		// invalidated together:
 		//   1. objective_verdict state field → reset to 'absent'
@@ -1200,24 +1215,36 @@ interface VerdictArtifact {
 // ---------------------------------------------------------------------------
 // Code-review artifact types — the SECOND independent completion lane.
 // Mirrors the verdict artifact: read/validate only, authored by a fresh
-// code-reviewer agent. Blocking is decided by the verdict × impact diagonal
-// (classifyReviewFindingOutcome); `class` is carried for reporting and
+// code-reviewer agent. Blocking is decided by scope admission and confidence
+// (classifyReviewFindingOutcome); `class` and impact are carried for reporting and
 // dismissal keying but the gate does not branch on it.
 // ---------------------------------------------------------------------------
 
 export type ReviewFindingClass = "correctness" | "regression" | "cleanup" | "requirement-gap";
 export type ReviewImpact = "HIGH" | "MEDIUM" | "LOW";
-export type ReviewFindingOutcome = "BLOCK" | "FIX" | "NOTE";
+export type ReviewFindingOutcome = "BLOCK" | "NOTE" | "ADJUDICATE";
+export type ReviewScope = "IN_SCOPE" | "OUT_OF_SCOPE" | "UNKNOWN";
+export type ReviewScopeBasis =
+	"requirement" | "regression" | "non_goal" | "unrelated" | "uncertain";
+
+export interface ReviewScopeEvidence {
+	basis: ReviewScopeBasis;
+	reference: string;
+	rationale: string;
+}
 
 interface CodeReviewFinding {
 	class: ReviewFindingClass;
 	verdict: "CONFIRMED" | "PLAUSIBLE";
 	impact: ReviewImpact;
+	scope: ReviewScope;
+	scope_evidence: ReviewScopeEvidence;
 	ref?: string;
 }
 
 interface CodeReviewArtifact {
 	status: "COMPLETE" | "INCONCLUSIVE";
+	scope_contract_sha256: string;
 	findings: CodeReviewFinding[];
 	/** Path to the findings.md card report — the full 7-field cards the summary findings were cut from. */
 	findings_report?: string;
@@ -1226,24 +1253,19 @@ interface CodeReviewArtifact {
 }
 
 /**
- * The diagonal outcome grid — verdict (confidence, verifier-owned) × impact
- * (harm, orchestrator-owned). BLOCK's verb depends on verdict: CONFIRMED means
- * "fix it, then full re-review"; PLAUSIBLE × HIGH means "adjudicate it — the
- * next round confirms or refutes". FIX is repaired in one batch right before
- * completion without a re-review; NOTE is report-only.
- *
- *   BLOCK ⟺ (CONFIRMED && impact ∈ {HIGH, MEDIUM}) || (PLAUSIBLE && impact == HIGH)
- *   FIX   ⟺ CONFIRMED && impact == LOW
- *   NOTE  ⟺ PLAUSIBLE && impact ∈ {MEDIUM, LOW}
+ * Scope admission precedes confidence and impact. Every admitted confirmed
+ * improvement blocks until repaired; plausible claims require adjudication.
+ * Excluded observations are report-only; missing/unknown scope fails closed.
  */
 export function classifyReviewFindingOutcome(finding: {
 	verdict: "CONFIRMED" | "PLAUSIBLE";
 	impact: ReviewImpact;
+	scope: ReviewScope;
 }): ReviewFindingOutcome {
-	if (finding.verdict === "CONFIRMED") {
-		return finding.impact === "LOW" ? "FIX" : "BLOCK";
-	}
-	return finding.impact === "HIGH" ? "BLOCK" : "NOTE";
+	if (finding.scope === "OUT_OF_SCOPE") return "NOTE";
+	if (finding.scope === "UNKNOWN") return "BLOCK";
+	if (finding.scope === "IN_SCOPE") return finding.verdict === "PLAUSIBLE" ? "ADJUDICATE" : "BLOCK";
+	return "BLOCK";
 }
 
 /**
@@ -1325,6 +1347,11 @@ function isCodeReviewArtifact(value: unknown): value is CodeReviewArtifact {
 	// Required top-level fields
 	const VALID_STATUS = ["COMPLETE", "INCONCLUSIVE"];
 	if (!isOneOf(value["status"], VALID_STATUS)) return false;
+	if (
+		typeof value["scope_contract_sha256"] !== "string" ||
+		!/^[0-9a-f]{64}$/.test(value["scope_contract_sha256"])
+	)
+		return false;
 	if (!Array.isArray(value["findings"])) return false;
 	const reviewer = value["reviewer"];
 	if (typeof reviewer !== "string" || reviewer.length === 0) return false;
@@ -1345,6 +1372,21 @@ function isCodeReviewArtifact(value: unknown): value is CodeReviewArtifact {
 		if (!isOneOf(entry["class"], VALID_CLASSES)) return false;
 		if (!isOneOf(entry["verdict"], VALID_FINDING_VERDICTS)) return false;
 		if (!isOneOf(entry["impact"], VALID_IMPACTS)) return false;
+		if (!isOneOf(entry["scope"], ["IN_SCOPE", "OUT_OF_SCOPE", "UNKNOWN"] as const)) return false;
+		const evidence = entry["scope_evidence"];
+		if (
+			!isRecord(evidence) ||
+			typeof evidence["reference"] !== "string" ||
+			typeof evidence["rationale"] !== "string"
+		)
+			return false;
+		const basisByScope: Record<string, string[]> = {
+			IN_SCOPE: ["requirement", "regression"],
+			OUT_OF_SCOPE: ["non_goal", "unrelated"],
+			UNKNOWN: ["uncertain"],
+		};
+		if (!isOneOf(evidence["basis"], basisByScope[String(entry["scope"])] ?? [])) return false;
+		if (evidence["rationale"].trim() === "" || evidence["reference"].trim() === "") return false;
 	}
 	return true;
 }
@@ -1389,15 +1431,86 @@ function readCodeReviewArtifactRaw(
 function isCompletionEligibleCodeReview(
 	reviewed: { raw: string; artifact: CodeReviewArtifact },
 	dismissed: DismissedReviewFinding[],
+	currentScopeContractSha: string,
+	currentState: Partial<GoalState>,
 ): boolean {
 	const artifactSha = sha256(reviewed.raw);
 	return (
 		reviewed.artifact.status === "COMPLETE" &&
+		reviewed.artifact.scope_contract_sha256 === currentScopeContractSha &&
+		reviewed.artifact.findings.every((f) => isScopeEvidenceReferenceValid(f, currentState)) &&
 		!reviewed.artifact.findings.some(
 			(f) =>
-				classifyReviewFindingOutcome(f) === "BLOCK" && !isDismissed(f, artifactSha, dismissed)
+				(classifyReviewFindingOutcome(f) === "BLOCK" ||
+					classifyReviewFindingOutcome(f) === "ADJUDICATE") &&
+				!isDismissed(f, artifactSha, dismissed),
 		)
 	);
+}
+
+function isScopeEvidenceReferenceValid(
+	finding: CodeReviewFinding,
+	state: Partial<GoalState>,
+): boolean {
+	const reference = finding.scope_evidence.reference;
+	const storyIds = new Set(
+		(state.stories ?? []).filter((s) => s.status === "confirmed").map((s) => s.id),
+	);
+	if (
+		!["outcome", "verification_surface", "constraints", "boundaries", "non_goals"].includes(
+			reference,
+		) &&
+		!storyIds.has(reference)
+	)
+		return false;
+	const allowed: Record<ReviewScope, string[]> = {
+		IN_SCOPE: ["requirement", "regression"],
+		OUT_OF_SCOPE: ["non_goal", "unrelated"],
+		UNKNOWN: ["uncertain"],
+	};
+	if (!allowed[finding.scope].includes(finding.scope_evidence.basis)) return false;
+	if (
+		finding.scope === "IN_SCOPE" &&
+		finding.scope_evidence.basis === "requirement" &&
+		!["outcome", "verification_surface"].includes(reference) &&
+		!storyIds.has(reference)
+	)
+		return false;
+	if (
+		finding.scope === "IN_SCOPE" &&
+		finding.scope_evidence.basis === "regression" &&
+		!["constraints", "boundaries", "outcome"].includes(reference) &&
+		!storyIds.has(reference)
+	)
+		return false;
+	if (
+		finding.scope === "OUT_OF_SCOPE" &&
+		finding.scope_evidence.basis === "non_goal" &&
+		reference !== "non_goals"
+	)
+		return false;
+	if (
+		finding.scope === "OUT_OF_SCOPE" &&
+		finding.scope_evidence.basis === "unrelated" &&
+		reference !== "outcome"
+	)
+		return false;
+	if (finding.scope === "OUT_OF_SCOPE") {
+		const slotValue =
+			reference === "outcome"
+				? state.outcome
+				: reference === "non_goals"
+					? state.non_goals
+					: reference === "constraints"
+						? state.constraints
+						: reference === "boundaries"
+							? state.boundaries
+							: reference === "verification_surface"
+								? state.verification_surface
+								: undefined;
+		if (slotValue === undefined || slotValue.trim() === "") return false;
+	}
+	return true;
 }
 
 /**
@@ -1411,6 +1524,7 @@ function isDismissed(
 	artifactSha: string,
 	dismissed: DismissedReviewFinding[],
 ): boolean {
+	if (finding.scope !== "IN_SCOPE") return false;
 	if (!finding.ref) return false;
 	return dismissed.some(
 		(d) =>
@@ -1460,7 +1574,12 @@ export function claimReviewDispatch(sessionId: string): ReviewDispatchClaim {
 			const approved = prior.approved_review_artifact_sha256 ?? "";
 			if (
 				reviewed !== null &&
-				isCompletionEligibleCodeReview(reviewed, readDismissals(prior)) &&
+				isCompletionEligibleCodeReview(
+					reviewed,
+					readDismissals(prior),
+					scopeContractSha256(prior),
+					prior,
+				) &&
 				sha256(reviewed.raw) !== approved
 			) {
 				return { allowed: false, reason: "completion_eligible", used, cap };
@@ -1537,7 +1656,7 @@ function readDismissals(prior: Partial<GoalState>): DismissedReviewFinding[] {
  *
  * Deliberately narrow, so the lever unblocks a specific wrong call rather than
  * disabling the review lane. It refuses unless a BLOCK-outcome finding (per the
- * verdict × impact diagonal) with this exact `ref` and `class` is present in the
+ * scope-first outcome) with this exact `ref` and `class` is present in the
  * CURRENT artifact — a dismissal cannot be issued ahead of the finding it answers —
  * and it records the artifact's byte hash, so it lapses the moment the next review
  * round writes different bytes.
@@ -1586,6 +1705,9 @@ export function dismissReviewFinding(
 
 			const reviewed = readCodeReviewArtifactRaw(sessionId);
 			if (reviewed === null) return false;
+			if (reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(prior)) return false;
+			if (!reviewed.artifact.findings.every((f) => isScopeEvidenceReferenceValid(f, prior)))
+				return false;
 			const artifactSha = sha256(reviewed.raw);
 			// EXACTLY one match, not at-least-one. A dismissal is keyed by (artifact bytes,
 			// ref, class) and findings carry no identity of their own, so two DISTINCT
@@ -1593,14 +1715,11 @@ export function dismissReviewFinding(
 			// refuting one would silently clear the other and let a genuine defect complete,
 			// against the never-false-complete invariant. Refusing the ambiguous dismissal
 			// is the fail-closed direction: the user loses the escape hatch for that one
-			// finding, never the block on its twin. Only BLOCK-outcome findings match:
-			// dismissing a FIX or NOTE finding would be a no-op against a gate they never
-			// block, and accepting one would advertise general finding suppression.
+			// finding, never the block on its twin. Only admitted IN_SCOPE findings
+			// match; UNKNOWN cannot be cleared by dismissal and excluded observations
+			// need no authorization to remain outside the repair list.
 			const matches = reviewed.artifact.findings.filter(
-				(f) =>
-					classifyReviewFindingOutcome(f) === "BLOCK" &&
-					f.class === opts.class &&
-					f.ref === opts.ref,
+				(f) => f.scope === "IN_SCOPE" && f.class === opts.class && f.ref === opts.ref,
 			).length;
 			if (matches !== 1) return false;
 
@@ -1788,8 +1907,8 @@ export function requestComplete(sessionId: string, codexGoalArg?: string): boole
 	// Code-review lane (D-3): the SECOND independent refusal lane, reached only after
 	// every objective-lane gate above passes — so "both lanes clean" is the completion condition.
 	// Absent/invalid artifact → block (never-false-complete: degrade toward block). The
-	// gate blocks BLOCK-outcome findings per the verdict × impact diagonal
-	// (classifyReviewFindingOutcome); FIX and NOTE findings are non-blocking and
+	// gate requires a matching scope contract and no unresolved admitted finding.
+	// Excluded observations are non-blocking and
 	// `class` is not branched on at all.
 	const codeReview = readCodeReviewArtifactRaw(sessionId);
 	if (codeReview === null) {
@@ -1798,7 +1917,14 @@ export function requestComplete(sessionId: string, codexGoalArg?: string): boole
 	// INCONCLUSIVE (D1): the review itself did not finish (timeout/ack-only/BLOCKED/
 	// genuinely uncertain) — distinct from a finished review that found CONFIRMED work.
 	// Blocks completion without implying a sisyphus re-dispatch is warranted.
-	if (!isCompletionEligibleCodeReview(codeReview, readDismissals(prior))) {
+	if (
+		!isCompletionEligibleCodeReview(
+			codeReview,
+			readDismissals(prior),
+			scopeContractSha256(prior),
+			prior,
+		)
+	) {
 		return false;
 	}
 
@@ -1936,12 +2062,50 @@ export function serializeReviewContext(sessionId: string): {
 	const requirements = requirementsRaw !== "" ? requirementsRaw : BACKFILL_MARKER;
 
 	const projectContextSources = [constraints, boundaries].filter((s) => s.trim() !== "");
-	const project_context =
+	const projectContext =
 		projectContextSources.length > 0 ? projectContextSources.join("\n\n") : BACKFILL_MARKER;
 
 	const non_goals = nonGoals.trim() !== "" ? nonGoals : BACKFILL_MARKER;
 
+	const contract = scopeContract(state);
+	const project_context = `${projectContext}\n\n[SCOPE_CONTRACT]\n${JSON.stringify({ ...contract, scope_contract_sha256: sha256(JSON.stringify(contract)) })}\n[/SCOPE_CONTRACT]`;
 	return { what_was_implemented, description, requirements, project_context, non_goals };
+}
+
+type ScopeContract = {
+	outcome: string;
+	verification_surface: string;
+	constraints: string;
+	boundaries: string;
+	non_goals: string;
+	stories: Array<
+		Pick<Story, "id" | "story" | "acceptance_criteria" | "verification_surface" | "status">
+	>;
+};
+
+/** Canonical, machine-produced scope input shared with the independent reviewer. */
+function scopeContract(state: Partial<GoalState>): ScopeContract {
+	return {
+		outcome: state.outcome ?? "",
+		verification_surface: state.verification_surface ?? "",
+		constraints: state.constraints ?? "",
+		boundaries: state.boundaries ?? "",
+		non_goals: state.non_goals ?? "",
+		stories: (state.stories ?? [])
+			.filter((s) => s.status !== "retired")
+			.map(({ id, story, acceptance_criteria, verification_surface, status }) => ({
+				id,
+				story,
+				acceptance_criteria,
+				verification_surface,
+				status,
+			}))
+			.sort((a, b) => a.id.localeCompare(b.id)),
+	};
+}
+
+export function scopeContractSha256(state: Partial<GoalState>): string {
+	return sha256(JSON.stringify(scopeContract(state)));
 }
 
 // ---------------------------------------------------------------------------
@@ -1993,7 +2157,10 @@ const FREE_TEXT_VALUE_FLAGS = new Set(["evidence", "rationale", "codex-goal-obje
  * fall back to boolean `true`, so a genuinely missing value is still caught by
  * callers checking for that.
  */
-function parseArgs(args: string[]): { flags: Record<string, string | boolean>; positionals: string[] } {
+function parseArgs(args: string[]): {
+	flags: Record<string, string | boolean>;
+	positionals: string[];
+} {
 	const flags: Record<string, string | boolean> = {};
 	const positionals: string[] = [];
 	for (let i = 0; i < args.length; i++) {

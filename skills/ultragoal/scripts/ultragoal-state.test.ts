@@ -15,6 +15,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import {
 	readGoalState,
+	readGoalStateRaw,
 	setGoalState,
 	setBudgetLimited,
 	resumePursuit,
@@ -36,6 +37,7 @@ import {
 	serializeRequirements,
 	BACKFILL_MARKER,
 	readCodeReviewArtifact,
+	scopeContractSha256,
 	claimReviewDispatch,
 	approveReviewDispatchRenewal,
 	type GoalPhase,
@@ -93,7 +95,7 @@ describe("review dispatch budget", () => {
 	function writeCleanReview(): void {
 		writeCodeReviewArtifact(S, {
 			status: "COMPLETE",
-			findings: [{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW" }],
+			findings: [],
 			reviewer: "reviewer",
 			at: "2026-07-30T00:00:00",
 		});
@@ -1714,11 +1716,11 @@ describe("story layer: confirmation and phase gates", () => {
 		// stories should survive; S1 remains confirmed after a non-story set write
 		// (this also tests that set cannot flip status to anything)
 		const afterSet = readGoalGet(S)!;
-		expect(afterSet.stories![0].status).toBe("confirmed");
+		expect(afterSet.stories![0].status).toBe("unconfirmed");
 
 		// set-verdict cannot produce confirmed on a story
 		setVerdict(S, "APPROVE");
-		expect(readGoalGet(S)!.stories![0].status).toBe("confirmed"); // still confirmed, not changed by set-verdict
+		expect(readGoalGet(S)!.stories![0].status).toBe("unconfirmed"); // scope change requires re-confirmation
 
 		// Confirm refused on unknown id
 		let errUnknown: Error | undefined;
@@ -2304,7 +2306,35 @@ function codeReviewArtifactPath(sid: string): string {
 }
 
 function writeCodeReviewArtifact(sid: string, obj: object): void {
-	writeFileSync(codeReviewArtifactPath(sid), JSON.stringify(obj), "utf8");
+	const input = obj as {
+		findings?: Array<Record<string, unknown>>;
+		scope_contract_sha256?: string;
+	};
+	const findings = Array.isArray(input.findings)
+		? input.findings.map((f) =>
+				f.scope === undefined
+					? {
+							...f,
+							scope: "IN_SCOPE",
+							scope_evidence: {
+								basis: "requirement",
+								reference: "outcome",
+								rationale: "test fixture",
+							},
+						}
+					: f,
+			)
+		: input.findings;
+	writeFileSync(
+		codeReviewArtifactPath(sid),
+		JSON.stringify({
+			...obj,
+			findings,
+			scope_contract_sha256:
+				input.scope_contract_sha256 ?? scopeContractSha256(readGoalStateRaw(sid) ?? {}),
+		}),
+		"utf8",
+	);
 }
 
 /** Build a fully-satisfied gate fixture for one session:
@@ -2876,7 +2906,16 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 		writeVerdictArtifact(S, artifact); // objective lane fully green
 		writeCodeReviewArtifact(S, {
 			status: "COMPLETE",
-			findings: [{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW", ref: "foo.ts:1" }],
+			findings: [
+				{
+					class: "cleanup",
+					scope: "OUT_OF_SCOPE",
+					scope_evidence: { basis: "unrelated", reference: "outcome", rationale: "outside" },
+					verdict: "CONFIRMED",
+					impact: "LOW",
+					ref: "foo.ts:1",
+				},
+			],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
 		});
@@ -2911,7 +2950,7 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 		expect(rawState().phase).toBe("complete");
 	});
 
-	test("code-review clean permits completion (PLAUSIBLE only)", () => {
+	test("code-review plausible finding requires adjudication", () => {
 		const artifact = buildSatisfiedFixture(S);
 		writeVerdictArtifact(S, artifact);
 		writeCodeReviewArtifact(S, {
@@ -2920,8 +2959,8 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
 		});
-		expect(requestComplete(S)).toBe(true);
-		expect(rawState().phase).toBe("complete");
+		expect(requestComplete(S)).toBe(false);
+		expect(rawState().phase).toBe("pursuing");
 	});
 
 	// AC3: absent / corrupt / unknown-verdict / empty-reviewer each refuses (no throw),
@@ -3074,17 +3113,26 @@ describe("requirement-gap class: validator accepts and gate keys on verdict", ()
 	// A PLAUSIBLE requirement-gap finding must NOT block completion — the gate
 	// keys only on verdict===CONFIRMED, class is informational.
 	// RED: currently VALID_CLASSES=['correctness','cleanup'] → artifact null → false (not true).
-	test("PLAUSIBLE requirement-gap finding does not block completion", () => {
+	test("PLAUSIBLE requirement-gap finding requires adjudication", () => {
 		const artifact = buildSatisfiedFixture(S);
 		writeVerdictArtifact(S, artifact);
 		writeCodeReviewArtifact(S, {
 			status: "COMPLETE",
-			findings: [{ class: "requirement-gap", verdict: "PLAUSIBLE", impact: "LOW", ref: "foo.ts:1" }],
+			findings: [
+				{
+					class: "requirement-gap",
+					scope: "IN_SCOPE",
+					scope_evidence: { basis: "requirement", reference: "outcome", rationale: "adjudicate" },
+					verdict: "PLAUSIBLE",
+					impact: "LOW",
+					ref: "foo.ts:1",
+				},
+			],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
 		});
-		expect(requestComplete(S)).toBe(true);
-		expect(rawState().phase).toBe("complete");
+		expect(requestComplete(S)).toBe(false);
+		expect(rawState().phase).toBe("pursuing");
 	});
 
 	// A CONFIRMED requirement-gap finding must block completion (verdict gate).
@@ -3218,7 +3266,7 @@ describe("serialize-review-context subcommand", () => {
 
 		expect(parsed.what_was_implemented).toBe(BACKFILL_MARKER);
 		expect(parsed.description).toBe(BACKFILL_MARKER);
-		expect(parsed.project_context).toBe(BACKFILL_MARKER);
+		expect(parsed.project_context).toContain(BACKFILL_MARKER);
 		expect(parsed.requirements).toBe(BACKFILL_MARKER);
 		expect(parsed.non_goals).toBe(BACKFILL_MARKER);
 	});
@@ -3242,7 +3290,7 @@ describe("serialize-review-context subcommand", () => {
 		);
 		expect(parsed.what_was_implemented).toBe("ship it");
 		expect(parsed.description).toBe("in progress");
-		expect(parsed.project_context).toBe("no new deps\n\nno billing changes");
+		expect(parsed.project_context).toContain("no new deps\n\nno billing changes");
 	});
 
 	// `non_goals` is a standalone slot: its value must round-trip verbatim into
@@ -3259,9 +3307,11 @@ describe("serialize-review-context subcommand", () => {
 		const out = runCli("serialize-review-context");
 		const parsed = JSON.parse(out);
 
-		expect(parsed.non_goals).toBe("- SENTINEL_NON_GOALS: no i18n support | decider: touches locale files");
-		expect(parsed.project_context).toBe("no new deps\n\nno billing changes");
-		expect(parsed.project_context).not.toContain("SENTINEL_NON_GOALS");
+		expect(parsed.non_goals).toBe(
+			"- SENTINEL_NON_GOALS: no i18n support | decider: touches locale files",
+		);
+		expect(parsed.project_context).toContain("no new deps\n\nno billing changes");
+		expect(parsed.project_context).toContain("SENTINEL_NON_GOALS");
 	});
 });
 

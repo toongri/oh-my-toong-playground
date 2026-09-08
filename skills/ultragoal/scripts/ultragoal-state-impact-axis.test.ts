@@ -15,15 +15,10 @@ import {
 } from "./ultragoal-state";
 
 // ---------------------------------------------------------------------------
-// 임팩트 축 신설 — block 판정을 verdict 단일 축에서 verdict × impact 대각선으로.
-//
-//   BLOCK ⟺ (CONFIRMED && impact ∈ {HIGH, MEDIUM}) || (PLAUSIBLE && impact == HIGH)
-//   FIX   ⟺ CONFIRMED && impact == LOW
-//   NOTE  ⟺ PLAUSIBLE && impact ∈ {MEDIUM, LOW}
-//
-// 게이트는 class를 판정에서 뺀다(온톨로지: FindingClass는 게이트에서 빠짐).
-// class enum은 regression을 더해 4종으로 확장되고, `impact`는 필수 필드다 —
-// 부재 시 아티팩트 전체가 schema-invalid (`status` 부재와 동일 취급).
+// 범위 우선 판정 — impact는 우선순위이며 완료 면제 근거가 아니다.
+// IN_SCOPE CONFIRMED는 BLOCK, PLAUSIBLE은 ADJUDICATE (모든 impact).
+// OUT_OF_SCOPE는 NOTE, UNKNOWN은 차단하며 무효화할 수 없다.
+// scope, scope_evidence, 현재 계약 해시와 impact는 필수다.
 // ---------------------------------------------------------------------------
 
 let tmpDir: string;
@@ -50,7 +45,35 @@ function codeReviewArtifactPath(sid: string): string {
 }
 
 function writeArtifact(sid: string, obj: object): void {
-	writeFileSync(codeReviewArtifactPath(sid), JSON.stringify(obj), "utf8");
+	const input = obj as {
+		findings?: Array<Record<string, unknown>>;
+		scope_contract_sha256?: string;
+	};
+	const findings = Array.isArray(input.findings)
+		? input.findings.map((f) =>
+				f.scope === undefined
+					? {
+							...f,
+							scope: "IN_SCOPE",
+							scope_evidence: {
+								basis: "requirement",
+								reference: "outcome",
+								rationale: "test fixture",
+							},
+						}
+					: f,
+			)
+		: input.findings;
+	writeFileSync(
+		codeReviewArtifactPath(sid),
+		JSON.stringify({
+			...obj,
+			findings,
+			scope_contract_sha256:
+				input.scope_contract_sha256 ?? state.scopeContractSha256(state.readGoalState(sid) ?? {}),
+		}),
+		"utf8",
+	);
 }
 
 function verdictArtifactPath(sid: string): string {
@@ -82,13 +105,11 @@ function writeCompleteArtifact(sid: string, findings: object[], at = "2026-08-09
 	writeArtifact(sid, { status: "COMPLETE", findings, reviewer: "code-reviewer", at });
 }
 
-// 아직 export되지 않았을 수 있는 판정 함수를 동적으로 집는다 — RED에서는 undefined,
-// GREEN에서는 (finding) => "BLOCK" | "FIX" | "NOTE".
+// 범위와 확신도에 따른 판정 함수의 공개 계약을 확인한다.
 const classify = (state as Record<string, unknown>)["classifyReviewFindingOutcome"] as
-	| ((f: { verdict: string; impact: string }) => string)
-	| undefined;
+	((f: { verdict: string; impact: string; scope?: string }) => string) | undefined;
 
-describe("6칸 대각선 판정식: classifyReviewFindingOutcome (verdict 2종 × impact 3종 전수)", () => {
+describe("범위 우선 판정식: classifyReviewFindingOutcome (verdict 2종 × impact 3종 전수)", () => {
 	test("판정 함수가 export되어 있다", () => {
 		expect(classify).toBeDefined();
 	});
@@ -96,15 +117,15 @@ describe("6칸 대각선 판정식: classifyReviewFindingOutcome (verdict 2종 �
 	const CELLS: Array<[string, string, string]> = [
 		["CONFIRMED", "HIGH", "BLOCK"],
 		["CONFIRMED", "MEDIUM", "BLOCK"],
-		["CONFIRMED", "LOW", "FIX"],
-		["PLAUSIBLE", "HIGH", "BLOCK"],
-		["PLAUSIBLE", "MEDIUM", "NOTE"],
-		["PLAUSIBLE", "LOW", "NOTE"],
+		["CONFIRMED", "LOW", "BLOCK"],
+		["PLAUSIBLE", "HIGH", "ADJUDICATE"],
+		["PLAUSIBLE", "MEDIUM", "ADJUDICATE"],
+		["PLAUSIBLE", "LOW", "ADJUDICATE"],
 	];
 
 	for (const [verdict, impact, outcome] of CELLS) {
 		test(`${verdict} × ${impact} → ${outcome}`, () => {
-			expect(classify?.({ verdict, impact })).toBe(outcome);
+			expect(classify?.({ verdict, impact, scope: "IN_SCOPE" })).toBe(outcome);
 		});
 	}
 });
@@ -152,8 +173,8 @@ describe("스키마: impact 필수 + class 4종 확장 (하위 호환)", () => {
 	});
 });
 
-describe("완료 게이트: 대각선 판정식이 class가 아닌 verdict × impact로 차단을 정한다", () => {
-	test("RED 관찰 사례: requirement-gap CONFIRMED LOW (docs/wiki/apps/mobile.md:37)가 완료를 막지 않는다", () => {
+describe("완료 게이트: 모든 범위 내 finding이 impact와 class에 관계없이 차단한다", () => {
+	test("requirement-gap CONFIRMED LOW (docs/wiki/apps/mobile.md:37)도 완료를 막는다", () => {
 		buildObjectiveLaneGreenFixture(SID);
 		writeCompleteArtifact(SID, [
 			{
@@ -163,7 +184,7 @@ describe("완료 게이트: 대각선 판정식이 class가 아닌 verdict × im
 				ref: "docs/wiki/apps/mobile.md:37",
 			},
 		]);
-		expect(requestComplete(SID)).toBe(true);
+		expect(requestComplete(SID)).toBe(false);
 	});
 
 	test("CONFIRMED × HIGH는 class와 무관하게 차단한다 — cleanup도 예외가 아니다", () => {
@@ -190,13 +211,13 @@ describe("완료 게이트: 대각선 판정식이 class가 아닌 verdict × im
 		expect(requestComplete(SID)).toBe(false);
 	});
 
-	test("PLAUSIBLE × MEDIUM / LOW는 NOTE — 완료를 막지 않는다", () => {
+	test("PLAUSIBLE × MEDIUM / LOW도 ADJUDICATE — 완료를 막는다", () => {
 		buildObjectiveLaneGreenFixture(SID);
 		writeCompleteArtifact(SID, [
 			{ class: "regression", verdict: "PLAUSIBLE", impact: "MEDIUM", ref: "src/b.ts:7" },
 			{ class: "cleanup", verdict: "PLAUSIBLE", impact: "LOW", ref: "src/c.ts:9" },
 		]);
-		expect(requestComplete(SID)).toBe(true);
+		expect(requestComplete(SID)).toBe(false);
 	});
 
 	test("regression CONFIRMED HIGH는 차단한다 — 새 class가 게이트에 실제로 도달한다", () => {
@@ -239,7 +260,7 @@ describe("dismiss-review-finding: 차단 여부가 class가 아니므로 4종 cl
 		expect(requestComplete(SID)).toBe(true);
 	});
 
-	test("차단하지 않는 finding(FIX: CONFIRMED × LOW)은 무효화를 거부한다 — 완료 unblock 전용 레버 유지", () => {
+	test("IN_SCOPE CONFIRMED × LOW도 사용자의 finding 단위 무효화를 허용한다", () => {
 		buildObjectiveLaneGreenFixture(SID);
 		writeCompleteArtifact(SID, [
 			{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW", ref: "src/log.ts:8" },
@@ -248,9 +269,10 @@ describe("dismiss-review-finding: 차단 여부가 class가 아니므로 4종 cl
 			dismissReviewFinding(SID, {
 				ref: "src/log.ts:8",
 				class: "cleanup" as never,
-				rationale: "무의미한 무효화",
+				rationale: "인용한 로그는 실행 경로에 없음",
 			}),
-		).toBe(false);
+		).toBe(true);
+		expect(requestComplete(SID)).toBe(true);
 	});
 
 	test("무효화는 여전히 finding 단위 — 남은 BLOCK finding은 계속 차단한다", () => {
@@ -279,7 +301,16 @@ describe("dismiss-review-finding: 차단 여부가 class가 아니므로 4종 cl
 		const runDismiss = (cls: string, ref: string) =>
 			spawnSync(
 				"bun",
-				[script, "dismiss-review-finding", "--ref", ref, "--class", cls, "--rationale", "실측 근거"],
+				[
+					script,
+					"dismiss-review-finding",
+					"--ref",
+					ref,
+					"--class",
+					cls,
+					"--rationale",
+					"실측 근거",
+				],
 				{
 					encoding: "utf8",
 					env: { ...process.env, OMT_DIR: process.env.OMT_DIR!, OMT_SESSION_ID: SID },
@@ -328,6 +359,115 @@ function readRepoFile(rel: string): string {
 	return readFileSync(join(REPO_ROOT, rel), "utf8");
 }
 
+describe("범위 판정과 사용자 무효화의 경계", () => {
+	for (const verdict of ["CONFIRMED", "PLAUSIBLE"]) {
+		for (const impact of ["HIGH", "MEDIUM", "LOW"]) {
+			for (const scope of ["OUT_OF_SCOPE", "UNKNOWN"]) {
+				test(`${scope} ${verdict} ${impact}: 범위를 먼저 판정하고 무효화를 거부한다`, () => {
+					buildObjectiveLaneGreenFixture(SID);
+					writeCompleteArtifact(SID, [
+						{
+							class: "cleanup",
+							verdict,
+							impact,
+							ref: "src/a.ts:1",
+							scope,
+							scope_evidence: {
+								basis: scope === "OUT_OF_SCOPE" ? "unrelated" : "uncertain",
+								reference: "outcome",
+								rationale: "계약과의 관계를 검토한 근거",
+							},
+						},
+					]);
+					expect(classify?.({ scope, verdict, impact })).toBe(
+						scope === "OUT_OF_SCOPE" ? "NOTE" : "BLOCK",
+					);
+					expect(
+						dismissReviewFinding(SID, {
+							class: "cleanup",
+							ref: "src/a.ts:1",
+							rationale: "범위 내 finding만 무효화 가능",
+						}),
+					).toBe(false);
+					expect(requestComplete(SID)).toBe(scope === "OUT_OF_SCOPE");
+				});
+			}
+			test(`IN_SCOPE ${verdict} ${impact}: 정확한 finding 무효화 후에만 완료 가능`, () => {
+				buildObjectiveLaneGreenFixture(SID);
+				writeCompleteArtifact(SID, [{ class: "correctness", verdict, impact, ref: "src/a.ts:1" }]);
+				expect(requestComplete(SID)).toBe(false);
+				expect(
+					dismissReviewFinding(SID, {
+						class: "correctness",
+						ref: "src/a.ts:1",
+						rationale: "앞선 guard로 도달 불가",
+					}),
+				).toBe(true);
+				expect(requestComplete(SID)).toBe(true);
+			});
+		}
+	}
+
+	for (const findings of [undefined, null, {}]) {
+		test(`findings ${JSON.stringify(findings)}는 빈 배열로 보정하지 않는다`, () => {
+			buildObjectiveLaneGreenFixture(SID);
+			writeArtifact(SID, {
+				status: "COMPLETE",
+				findings,
+				reviewer: "code-reviewer",
+				at: "2026-08-09T10:00:00",
+			});
+			expect(readCodeReviewArtifact(SID)).toBeNull();
+			expect(requestComplete(SID)).toBe(false);
+		});
+	}
+
+	for (const missing of ["scope", "scope_evidence", "scope_contract_sha256"]) {
+		test(`${missing} 없는 이전 아티팩트는 완료할 수 없다`, () => {
+			buildObjectiveLaneGreenFixture(SID);
+			writeCompleteArtifact(SID, [
+				{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW", ref: "src/a.ts:1" },
+			]);
+			const artifact = JSON.parse(readFileSync(codeReviewArtifactPath(SID), "utf8"));
+			if (missing === "scope_contract_sha256") delete artifact[missing];
+			else delete artifact.findings[0][missing];
+			writeFileSync(codeReviewArtifactPath(SID), JSON.stringify(artifact));
+			expect(readCodeReviewArtifact(SID)).toBeNull();
+			expect(requestComplete(SID)).toBe(false);
+		});
+	}
+
+	test("다음 아티팩트의 같은 ref/class에는 이전 무효화가 적용되지 않는다", () => {
+		buildObjectiveLaneGreenFixture(SID);
+		const findings = [{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW", ref: "src/a.ts:1" }];
+		writeCompleteArtifact(SID, findings);
+		expect(
+			dismissReviewFinding(SID, {
+				class: "cleanup",
+				ref: "src/a.ts:1",
+				rationale: "앞선 guard로 도달 불가",
+			}),
+		).toBe(true);
+		writeCompleteArtifact(SID, findings, "2026-08-09T11:00:00");
+		expect(requestComplete(SID)).toBe(false);
+	});
+
+	test("현재 scope 계약과 다른 아티팩트는 무효화도 완료도 거부한다", () => {
+		buildObjectiveLaneGreenFixture(SID);
+		writeArtifact(SID, {
+			status: "COMPLETE",
+			scope_contract_sha256: "0".repeat(64),
+			findings: [{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW", ref: "src/a.ts:1" }],
+			reviewer: "code-reviewer",
+			at: "2026-08-09T10:00:00",
+		});
+		expect(
+			dismissReviewFinding(SID, { class: "cleanup", ref: "src/a.ts:1", rationale: "오래된 근거" }),
+		).toBe(false);
+		expect(requestComplete(SID)).toBe(false);
+	});
+});
+
 describe("스킬 문서 계약 회귀 검사", () => {
 	test("code-review 파인더 prompt의 severity 금지 문장이 그대로 남아 있다 (finder 무변경)", () => {
 		const text = readRepoFile("skills/code-review/scripts/prompts/default.md");
@@ -368,18 +508,17 @@ describe("스킬 문서 계약 회귀 검사", () => {
 		expect(text).toContain("findings_report");
 	});
 
-	test("completion-gate.md가 FIX/NOTE 2분기를 담고, FIX 경로는 approve-review-dispatch-renewal을 요구하지 않는다", () => {
+	test("completion-gate.md가 모든 impact의 범위 우선 repair/adjudication/exclusion 계약을 담는다", () => {
 		const text = readRepoFile("skills/ultragoal/references/completion-gate.md");
-		expect(text).toContain("FIX");
-		expect(text).toContain("NOTE");
-		// 이전 이원 구조의 마무리/계속 discretion 섹션은 FIX/NOTE 분기로 교체된다.
+		expect(text).toContain("`IN_SCOPE + CONFIRMED` at **every impact**");
+		expect(text).toContain("`IN_SCOPE + PLAUSIBLE` at **every impact**");
+		expect(text).toContain("including LOW-only batches");
+		expect(text).toContain("`OUT_OF_SCOPE`: nonblocking exclusion");
+		expect(text).toContain("Do not fix it");
+		expect(text).toContain(
+			"`UNKNOWN`, invalid/stale artifact, or `INCONCLUSIVE`: completion blocked",
+		);
+		expect(text).toContain("An old artifact without this contract must be re-reviewed");
 		expect(text).not.toContain("Completion-eligible discretion");
-		// FIX 분기 문단은 renewal 승인 요구와 같은 문단에 있으면 안 된다 — FIX 경로 서술을 찾아
-		// 그 문단 안에 approve-review-dispatch-renewal이 없음을 확인한다.
-		const fixParagraph = text
-			.split("\n\n")
-			.find((p) => p.includes("**FIX") || p.includes("FIX 경로") || p.includes("FIX findings"));
-		expect(fixParagraph).toBeDefined();
-		expect(fixParagraph).not.toContain("approve-review-dispatch-renewal");
 	});
 });

@@ -1778,7 +1778,7 @@ test_regression_ambient_claude_env_file_not_leaked_by_unscrubbed_call() {
 
 rdg_seed_pursuing() {
     cat > "$OMT_DIR/ultragoal-state-$OMT_SESSION_ID.json" <<'EOF'
-{"active":true,"phase":"pursuing","iteration":0,"max_iterations":10,"started_at":"2026-01-01T00:00:00","last_touched_at":"2026-01-01T00:00:00"}
+{"active":true,"phase":"pursuing","iteration":0,"max_iterations":10,"outcome":"ship it","started_at":"2026-01-01T00:00:00","last_touched_at":"2026-01-01T00:00:00"}
 EOF
 }
 
@@ -1806,10 +1806,10 @@ test_rdg_sixth_candidate_denied_without_increment() {
     [ "$(jq -r '.review_dispatch_used' "$OMT_DIR/ultragoal-state-$OMT_SESSION_ID.json")" = "5" ]
 }
 
-test_rdg_clean_and_cleanup_reviews_deny_with_completion_actions() {
+test_rdg_out_of_scope_review_denies_with_completion_actions() {
     local out
     rdg_seed_pursuing
-    printf '%s' '{"status":"COMPLETE","findings":[{"class":"cleanup","verdict":"CONFIRMED","impact":"LOW"}],"reviewer":"r","at":"now"}' > "$OMT_DIR/ultragoal-codereview-$OMT_SESSION_ID.json"
+    printf '%s' '{"status":"COMPLETE","scope_contract_sha256":"f92f8daed0f3442495084d1ab9bc72a75ae01a9f120d8b7781c8494ab83def95","findings":[{"class":"cleanup","verdict":"CONFIRMED","impact":"LOW","scope":"OUT_OF_SCOPE","scope_evidence":{"basis":"unrelated","reference":"outcome","rationale":"cleanup finding is unrelated to the active review contract"}}],"reviewer":"r","at":"now"}' > "$OMT_DIR/ultragoal-codereview-$OMT_SESSION_ID.json"
     out=$(rdg_agent_payload "code-reviewer" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
     hg_is_deny "$out" || { echo "ASSERTION FAILED rdg completion eligible: $out"; return 1; }
     printf '%s' "$out" | grep -q 'request-complete' || return 1
@@ -2014,7 +2014,7 @@ main() {
     run_test test_cr17_bash_mv_source_goal_codereview_no_agent_type_large_candidates_denied
     run_test test_rdg_matching_claude_candidate_allows_and_increments
     run_test test_rdg_sixth_candidate_denied_without_increment
-    run_test test_rdg_clean_and_cleanup_reviews_deny_with_completion_actions
+    run_test test_rdg_out_of_scope_review_denies_with_completion_actions
     run_test test_rdg_planning_nonreviewer_and_nonagent_pass_without_count
     run_test test_rdg_malformed_claim_state_denies_safely
     run_test test_rdg_schema_valid_malformed_states_fail_closed_or_pass_known_inactive

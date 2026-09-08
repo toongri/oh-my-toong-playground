@@ -24,13 +24,14 @@ const PROMPTS_DIR = path.resolve(import.meta.dirname, "prompts");
  * Per-angle allowlist of the conditional sections in chunk-reviewer-prompt.md
  * (spec: orchestrate-review-4angle-redesign.md §2.3). The 4 common sections — Review
  * Premises, Review Scope, What Was Implemented, Diff Command — carry no marker and
- * always pass through; `project_context` is never listed for any angle.
+ * always pass through; `project_context` is shared by every angle so finders can judge
+ * whether a candidate is reachable in the reviewed system.
  */
 const ANGLE_SECTION_ALLOWLIST: Record<string, string[]> = {
-	correctness: [],
-	regression: ["commit_history"],
-	cleanup: ["non_goal"],
-	requirement: ["requirements", "non_goal", "commit_history"],
+	correctness: ["project_context", "non_goal"],
+	regression: ["project_context", "non_goal", "commit_history"],
+	cleanup: ["project_context", "non_goal"],
+	requirement: ["project_context", "requirements", "non_goal", "commit_history"],
 };
 
 /**
