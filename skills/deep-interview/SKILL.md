@@ -512,9 +512,20 @@ bun ${CLAUDE_SKILL_DIR}/scripts/render.ts --in $OMT_DIR/deep-interview/{slug}.pr
 
 Fix any mermaid error and re-render until it succeeds. The presentation is derived and non-authoritative — the spec on disk is never rewritten to match it. Render its prose in the session's conversation language (same detect-at-render-time rule as the spec).
 
-4. **Emit the handoff token** in the final assistant message before proceeding to Phase 5. The literal token `<deep-interview-done/>` must appear in the assistant turn that announces spec completion. This signals downstream hooks that the interview phase is complete and state cleanup may proceed.
+4. **Submit the HTML before announcing completion or offering any Phase 5 route.** The human-facing deliverable is HTML; presentation Markdown is only renderer input. Read [presentation.md](presentation.md) for the authoring contract and self-audit, then submit the completed render:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts submit-presentation --spec-path "$OMT_DIR/deep-interview/{slug}.md" --html-path "$OMT_DIR/deep-interview/{slug}.presentation.html"
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update --current-phase handoff
+```
+
+Use the actual saved spec path. Submission records `state.presentation` with source/HTML paths and content hashes; `handoff` and the completion hook require a current submission. Editing either file requires re-rendering and resubmission. On resume, check the submission before routing; legacy rich states with no submission are incomplete too. The same submission step applies to normal crystallization, user-forced crystallization, execution deferral, and every revised spec.
+
+5. **Deliver the spec and HTML links, then emit the handoff token.** The literal `<deep-interview-done/>` signals completion only after submission succeeds. A rendered file on disk or a link in chat alone is not a state submission.
 
 ## Phase 5: Execution Bridge
+
+If the user has already chosen to defer execution, deliver the spec and submitted HTML and finish after the handoff check; no execution question or downstream invocation is required. On resume, `update --current-phase handoff` is the current-submission check; `get` only displays records. A change to intermediate presentation Markdown also requires re-rendering and resubmission.
 
 After the spec is written, read the state returned by `deep-interview-state.ts get`. Do not route until the preceding `update --output-shape` has succeeded and `state.output_shape` is present.
 
@@ -586,7 +597,7 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 - [ ] Challenge stances selected by the Step 2-head Dialectic Rhythm Guard at the correct rotation conditions (Contrarian round 4+, Simplifier round 6+, Ontologist on stall or round 8+ with ambiguity > 0.3)
 - [ ] Spec file written to `$OMT_DIR/deep-interview/{slug}.md`
 - [ ] Inline self-review (6 checks: placeholder / consistency / scope / non-goal-decider / invariant / ambiguity) performed
-- [ ] presentation authored per `presentation.md` and rendered to `$OMT_DIR/deep-interview/{slug}.presentation.html` (carries the spec's design content + every diagram it drew; self-audit passed: invents/contradicts nothing in the spec)
+- [ ] presentation authored per [presentation.md](presentation.md), rendered to `$OMT_DIR/deep-interview/{slug}.presentation.html`, submitted with `submit-presentation`, and accepted by `update --current-phase handoff` (current source/HTML hashes; self-audit passed)
 - [ ] Spec includes: goal, constraints, invariants, acceptance criteria, Approach & Design Decisions, clarity breakdown, transcript
 - [ ] Token `<deep-interview-done/>` emitted in the final assistant message before handoff
 - [ ] Execution bridge presented via AskUserQuestion

@@ -136,6 +136,8 @@ If neither condition holds, do not create a Decisions Needed section for this pu
 
 ## Stage 4: Record
 
+**Required reader contract:** read [references/presentation.md](references/presentation.md) in full before drafting. It supplies the destination-native body template for the evidence actually available and a context-free reader check. Apply it again to the exact outgoing body at the Stage 6 write gate.
+
 Read `references/issue-craft.md` now (using the Read tool with path `references/issue-craft.md`). That file contains the best-practice body shape, the observable-AC rubric, the RCA shape, and anti-fluff rules. Follow it in full.
 
 Apply the body shape to the gathered context. Do not invent plausible requirements — missing information is filled with `TBD — needs validation via {method}`.

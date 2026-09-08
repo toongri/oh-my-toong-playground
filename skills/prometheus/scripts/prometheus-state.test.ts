@@ -64,6 +64,36 @@ afterEach(() => {
 });
 
 describe("prometheus state", () => {
+	test("다른 플랜의 HTML을 제출하면 거부함", () => {
+		const plan = join(tmpDir, "plan.md");
+		const html = join(tmpDir, "other.html");
+		writeFileSync(plan, "# Plan");
+		writeFileSync(html, "<html><body>Other</body></html>");
+		expect(() => setPrometheusState("wrong-html", { phase: "S5", plan_path: plan, submit_presentation: html })).toThrow("presentation");
+	});
+	test("presentation Markdown 없이 HTML 제출만으로 진행하며 변경 후에는 재제출 필요", () => {
+		const plan = join(tmpDir, "plan.md");
+		mkdirSync(join(tmpDir, "presentation"));
+		const html = join(tmpDir, "presentation", "plan.html");
+		writeFileSync(plan, "# Plan");
+		writeFileSync(html, "<html><body>Plan</body></html>");
+		setPrometheusState("html-only", { phase: "S5", plan_path: plan, submit_presentation: html });
+		const cli = join(import.meta.dir, "prometheus-state.ts");
+		const run = () => execSync(`bun '${cli}' set --phase S6`, { env: { ...process.env, OMT_SESSION_ID: "html-only" }, stdio: "pipe" });
+		expect(run).not.toThrow();
+		writeFileSync(html, "<html><body>Changed</body></html>");
+		expect(run).toThrow();
+	});
+	test("HTML 파일이 있어도 제출 기록 없이 다음 단계로 이동할 수 없음", () => {
+		const plan = join(tmpDir, "plan.md");
+		mkdirSync(join(tmpDir, "presentation"));
+		writeFileSync(plan, "# Plan");
+		writeFileSync(join(tmpDir, "presentation", "plan.md"), "# Presentation");
+		writeFileSync(join(tmpDir, "presentation", "plan.html"), "<html><body>Plan</body></html>");
+		setPrometheusState("submission", { phase: "S5", plan_path: plan });
+		const cli = join(import.meta.dir, "prometheus-state.ts");
+		expect(() => execSync(`bun '${cli}' set --phase S6`, { env: { ...process.env, OMT_SESSION_ID: "submission" }, stdio: "pipe" })).toThrow();
+	});
 	test("prometheus roundtrip", () => {
 		process.env.OMT_SESSION_ID = "test-session";
 		seedFile("test-session");
@@ -763,7 +793,7 @@ describe("Stage A presentation gate (F7)", () => {
 
 	function writePresentation(name = "plan.md"): void {
 		writePresentationMarkdownOnly(name);
-		writeFileSync(presentationHtmlPath(name), "<!doctype html><title>presentation</title>\n", "utf8");
+		writeFileSync(presentationHtmlPath(name), "<!doctype html><html><body>presentation</body></html>\n", "utf8");
 	}
 
 	test("S6 with authored presentation Markdown but no derived HTML exits non-zero", () => {
@@ -803,13 +833,42 @@ describe("Stage A presentation gate (F7)", () => {
 		writePresentation();
 		const planBeforePresentation = new Date(Date.now() - 60_000);
 		utimesSync(planPath, planBeforePresentation, planBeforePresentation);
-		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${planPath}`, {
+		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()}`, {
 			OMT_SESSION_ID: "gateHtmlFresh",
 			OMT_DIR: tmpDir,
 		});
 		expect(code).toBe(0);
 		const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-gateHtmlFresh.json`, "utf8"));
 		expect(state.phase).toBe("S6");
+	});
+
+	test("S6 rejects a derived HTML submission after the renderer Markdown is edited", () => {
+		const planPath = seedPlan("gateRendererInputStale");
+		writePresentation();
+		const planTime = new Date(Date.now() - 180_000);
+		const authoredTime = new Date(Date.now() - 120_000);
+		const renderedTime = new Date(Date.now() - 60_000);
+		utimesSync(planPath, planTime, planTime);
+		utimesSync(presentationMarkdownPath(), authoredTime, authoredTime);
+		utimesSync(presentationHtmlPath(), renderedTime, renderedTime);
+
+		const { code: submitCode } = runPromCliMerged(`set --phase S5 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()}`, {
+			OMT_SESSION_ID: "gateRendererInputStale",
+			OMT_DIR: tmpDir,
+		});
+		expect(submitCode).toBe(0);
+
+		writeFileSync(presentationMarkdownPath(), "# presentation revised\n", "utf8");
+		const editedTime = new Date();
+		utimesSync(presentationMarkdownPath(), editedTime, editedTime);
+		const { code, out } = runPromCliMerged("set --phase S6", {
+			OMT_SESSION_ID: "gateRendererInputStale",
+			OMT_DIR: tmpDir,
+		});
+		expect(code).not.toBe(0);
+		expect(out).toMatch(/stale|older|re-render|재렌더/i);
+		const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-gateRendererInputStale.json`, "utf8"));
+		expect(state.phase).toBe("S5");
 	});
 
 	// (F7-missing) S6 with no presentation file — the skip this gate exists to catch
@@ -830,7 +889,7 @@ describe("Stage A presentation gate (F7)", () => {
 	test("S6 succeeds once the presentation file exists", () => {
 		const planPath = seedPlan("gatePresent");
 		writePresentation();
-		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${planPath}`, {
+		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()}`, {
 			OMT_SESSION_ID: "gatePresent",
 			OMT_DIR: tmpDir,
 		});
@@ -909,7 +968,7 @@ describe("Stage A presentation gate (F7)", () => {
 		utimesSync(planPath, revised, revised);
 		const rendered = new Date();
 		utimesSync(presentationMarkdownPath(), rendered, rendered);
-		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${planPath}`, {
+		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()}`, {
 			OMT_SESSION_ID: "gateRerendered",
 			OMT_DIR: tmpDir,
 		});
@@ -937,9 +996,9 @@ describe("Stage A presentation gate (F7)", () => {
 		mkdirSync(`${altDir}/plans/presentation`, { recursive: true });
 		writeFileSync(`${altDir}/plans/alt.md`, "# plan\n", "utf8");
 		writeFileSync(`${altDir}/plans/presentation/alt.md`, "# presentation\n", "utf8");
-		writeFileSync(`${altDir}/plans/presentation/alt.html`, "<!doctype html><title>presentation</title>\n", "utf8");
+		writeFileSync(`${altDir}/plans/presentation/alt.html`, "<!doctype html><html><body>presentation</body></html>\n", "utf8");
 		writePristinePromState("gateAltDir");
-		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${altDir}/plans/alt.md`, {
+		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${altDir}/plans/alt.md --submit-presentation ${altDir}/plans/presentation/alt.html`, {
 			OMT_SESSION_ID: "gateAltDir",
 			OMT_DIR: tmpDir,
 		});

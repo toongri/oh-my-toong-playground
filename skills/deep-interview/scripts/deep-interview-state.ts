@@ -46,6 +46,8 @@
  *          set-topology. Unlike set-topology, an empty array IS allowed — "0 recorded
  *          non-goals" is itself the signal a downstream hook gates on. Refuses any
  *          item with a blank `item` or `decider` (existence check only, not precision).
+ *   submit-presentation --spec-path <spec.md> --html-path <presentation.html>
+ *          Records the source and HTML paths and hashes; required before handoff.
  *   get    Print the state JSON, plus a derived `migration_status` field
  *          ("legacy_missing" | "current") from computeTopologyMigrationStatus,
  *          so the resume path (get/adopt) can detect a pre-topology state.
@@ -55,6 +57,7 @@
  */
 
 import { readFileSync, existsSync } from "fs";
+import { basename, dirname, resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
 import {
 	resolveSessionIdOrThrow,
@@ -64,6 +67,9 @@ import {
 	listOthers,
 	adopt,
 	ensureSeed,
+	createPresentationSubmission,
+	presentationSubmissionCurrent,
+	type PresentationSubmission,
 } from "@lib/state-core";
 
 // ---------------------------------------------------------------------------
@@ -203,6 +209,7 @@ export interface EstablishedFactInput {
 export type OutputShape = "task-tickets" | "ai-execution-plan" | "domain-output";
 
 export interface DeepInterviewStateContent {
+	presentation?: PresentationSubmission;
 	interview_id?: string;
 	/** Explicit execution output route; absent on legacy states. */
 	output_shape?: OutputShape;
@@ -427,6 +434,9 @@ export function updateDeepInterviewState(
 		);
 	}
 	validateOutputShape(partial.output_shape, "update");
+	if (partial.current_phase === "handoff" && !presentationSubmissionCurrent(isRecord(prior["state"]) ? prior["state"]["presentation"] : undefined)) {
+		throw new Error("handoff requires a current presentation; run submit-presentation first");
+	}
 
 	const overlay: Record<string, unknown> = {};
 	if (partial.current_phase !== undefined) {
@@ -883,6 +893,29 @@ export function readDeepInterviewState(sessionId: string): Record<string, unknow
 	return readRaw(resolveStatePath(sessionId));
 }
 
+export function submitDeepInterviewPresentation(sessionId: string, specPath: string, htmlPath: string): void {
+	const specName = basename(specPath);
+	const expectedHtmlPath = resolve(
+		dirname(specPath),
+		`${specName.slice(0, -".md".length)}.presentation.html`,
+	);
+	if (!specName.endsWith(".md") || resolve(htmlPath) !== expectedHtmlPath) {
+		throw new Error(`presentation HTML must be the sibling ${specName.replace(/\.md$/, ".presentation.html")} path`);
+	}
+	const presentationMarkdownPath = resolve(dirname(htmlPath), `${basename(specPath, ".md")}.presentation.md`);
+	const presentation = createPresentationSubmission(
+		specPath,
+		htmlPath,
+		existsSync(presentationMarkdownPath) ? presentationMarkdownPath : undefined,
+	);
+	const path = resolveStatePath(sessionId);
+	const prior = readRaw(path);
+	if (!prior || !isRecord(prior["state"])) throw new Error("presentation submission requires an initialized interview");
+	writeFileNoCreate(path, JSON.stringify(mergeWithHeartbeat(prior, {
+		state: { ...prior["state"], presentation },
+	}), null, 2));
+}
+
 /**
  * Round 0 Topology Enumeration Gate migration status (topology-floor-evolution Stage 6):
  * "legacy_missing" for any state written before the `topology` field existed (Stage 1) —
@@ -1197,6 +1230,13 @@ function main(): void {
 			process.stderr.write(`deep-interview-state set-nongoals: ${String(e)}\n`);
 			process.exit(1);
 		}
+	} else if (subcommand === "submit-presentation") {
+		try {
+			submitDeepInterviewPresentation(sessionId, str(args["spec-path"]) ?? "", str(args["html-path"]) ?? "");
+		} catch (e) {
+			process.stderr.write(`deep-interview-state submit-presentation: ${String(e)}\n`);
+			process.exit(1);
+		}
 	} else if (subcommand === "get") {
 		const result = readDeepInterviewState(sessionId);
 		const output =
@@ -1234,7 +1274,8 @@ function main(): void {
 		}
 	} else {
 		process.stderr.write(
-			"Usage: deep-interview-state.ts <init|update|set-topology|set-nongoals|get|list-others|adopt> [options]\n" +
+			"Usage: deep-interview-state.ts <init|update|set-topology|set-nongoals|submit-presentation|get|list-others|adopt> [options]\n" +
+				"  submit-presentation --spec-path <spec.md> --html-path <presentation.html>\n" +
 				"  init   --initial-idea <text> [--interview-id <id>] [--type greenfield|brownfield]\n" +
 				"         [--current-phase <phase>] [--threshold <n>] [--codebase-context <text>]\n" +
 				"         [--output-shape task-tickets|ai-execution-plan|domain-output] [--parent-id <id-or-url>]\n" +

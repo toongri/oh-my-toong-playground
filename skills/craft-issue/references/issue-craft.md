@@ -7,6 +7,8 @@ It is read at Stage 4 (record) and Stage 5 (slice). Follow it in full at each st
 
 ## 1. Best-Practice Body Shape
 
+**Reader-facing projection:** [presentation.md](presentation.md) owns the ordered body templates and reader check. Use its ordinary-bug template when a cause is unknown; the detailed RCA shape below is investigation material unless the user explicitly requests a full incident/RCA report. Preserve every requirement and grounded fact while giving each one a single place in the body.
+
 The Standard Body Shape below is the **full menu** of sections. Two principles govern how much of
 that menu a given issue emits — read them before the menu, because most issues use far less than
 the full set. Sections that do not apply to a given issue genre are omitted rather than left blank.
@@ -145,12 +147,12 @@ every Conditional row in its table to fire together.
 | **Pre-Context** | Background facts on scope and risk the reader needs before implementation begins — three sub-items (**Affected Areas**, **Premises**, **Blockers & Risks**). See Pre-Context Rules below. |
 | **AC** | Acceptance criteria (see Section 2 below). At least one AC per issue. |
 | **Post-Release Observation** | What is watched after release — an aspirational outcome metric and/or a falsifiable predicted post-release state (value, movement, invariant, or success log) — distinct from AC, which only confirms the change was built. Escalation section; see Post-Release Observation Section below. |
-| **Non-Goals** | What this issue explicitly does NOT address. Prevents scope creep. Each item pairs with `\| decider: {how to tell a finding belongs here}`. |
+| **Non-Goals** | What this issue explicitly does NOT address. Each item has the semantic shape `excluded scope — observable condition that identifies a finding as outside this issue`, expressed in the reader's working language. Review the classification condition, not an English field label. |
 | **References** | PRDs, design docs, Slack threads, incident records, code commits/PRs, and logs use markdown links. Related PM issues are linked through the native relation step, not by duplicating the relationship in the body. PM-issue mentions that must appear in the body without becoming related use a form your PM tool does not auto-link into a relation, with a one-sentence note explaining why they are context rather than related-issue links. |
 
 ### Bug-Genre Additions
 
-Bug issues add three fields, placed between Problem and AC:
+Bug issues carry the following investigation information. This is required information, not three additional headings in an ordinary ticket:
 
 | Field | Content |
 |---|---|
@@ -158,7 +160,7 @@ Bug issues add three fields, placed between Problem and AC:
 | **Root Cause** | (promoted from standard, filled from Stage 3 code investigation output) |
 | **Evidence** | Logs, stack traces, error output, or metric anomalies that confirm the symptom. |
 
-For bug issues the ordering is: Problem → Reproduction → Root Cause → Evidence → Pre-Context → AC → Post-Release Observation → Non-Goals → References. Post-Release Observation appears only when its escalation trigger holds — for a bug, the production symptom-rate floor (see the Post-Release Observation Section); omit it when the fix's value is fully delivered the moment the Reproduction re-run passes.
+For ordinary bugs, [presentation.md](presentation.md) owns the body order: place observed evidence with reproduction, and the established cause or unknown-cause/next-check statement in its prescribed location. A user-requested full incident/RCA report uses §3's full investigation shape. Post-Release Observation appears only when its escalation trigger holds — for a bug, the production symptom-rate floor (see the Post-Release Observation Section); omit it when the fix's value is fully delivered the moment the Reproduction re-run passes.
 
 ### Pre-Context Rules
 
@@ -450,7 +452,7 @@ where they are not being used as a verification criterion.
 
 ### Named Contract: diagnose Bug-Report shape
 
-When the issue is a runtime bug, the Root Cause section uses this sub-template:
+When investigating a runtime bug, use this sub-template for the investigation record. Emit it in full when the user explicitly requests a full incident/RCA report. For an ordinary bug ticket, project the record through [presentation.md](presentation.md), including the cause or its next validation step once:
 
 ```
 **Symptom**: What the caller observes.
@@ -468,7 +470,7 @@ rubric: per the Render Contract and Working-Language Localization table in Secti
 the issue body as their localized label (증상 / 근본 원인 / 재현 / 수정 방향 / 검증 단계 / 유사
 사례) when the working language is Korean, never as raw English.
 
-All six fields are required for bug-genre issues. If any field cannot be filled from gathered
+All six fields are required in the investigation record, not as repeated sections in the ordinary issue body. If any field cannot be filled from gathered
 evidence, write `TBD — needs validation via {method}` rather than omitting the field or
 speculating.
 

@@ -91,6 +91,8 @@ This contract is what makes two runs land on the same grain instead of one cutti
 
 ## Task Title & Body Shape
 
+**Required reader template:** read [presentation.md](presentation.md) before drafting and apply its reader check to the exact outgoing body. The reader is an implementing/reviewing engineer without the design conversation. Every 변경 대상 entry includes the component's role in this change beside its name/location; the three-section body and native relation rules below remain authoritative.
+
 ### Title — name the change, not its position
 
 A task title names the **concrete change this task makes**, in the team's working language (Korean by default) — component/layer plus the action, specific enough to tell apart from its siblings without opening the body (e.g. `[모바일] 프로그램 상세: 미장착 슬롯 흐림 처리 복원`).

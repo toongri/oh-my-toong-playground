@@ -40,6 +40,7 @@ export interface DeepInterviewState {
 	 * is missing rather than assume a shape that isn't there.
 	 */
 	state?: {
+		presentation?: unknown;
 		current_ambiguity?: number;
 		threshold?: number;
 		/**
@@ -76,6 +77,7 @@ export interface DeepInterviewState {
  * replacing the file with this minimal shape discards in-flight prometheus data.
  */
 export interface PrometheusState {
+	presentation?: unknown;
 	active: boolean;
 	/** Heartbeat timestamps (managed StateType) — read by the isStateLive TTL check. */
 	last_touched_at?: string;
