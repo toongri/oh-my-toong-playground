@@ -1010,7 +1010,7 @@ _cwg_process_shell_text() {
     # publisher/consumer code owns artifact validation.
     local submit_agent_type submit_out
     submit_agent_type=$(printf '%s' "$input" | jq -r '.agent_type // empty' 2>/dev/null) || submit_agent_type=""
-    submit_out=$(write_guard_core_check_reviewer_submit_command "$masked" "$omt_dir" "$submit_agent_type")
+    submit_out=$(write_guard_core_check_reviewer_submit_command "$masked" "$omt_dir" "$submit_agent_type" "$shell_cmd")
     if [ -n "$submit_out" ]; then
         printf '%s\n' "$submit_out"
         exit 0

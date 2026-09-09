@@ -2433,6 +2433,41 @@ test_reviewer_submit_cli_nonreviewer_denied() {
     rm -rf "$SBX"
 }
 
+test_reviewer_submit_nested_shell_wrapper_identity_matrix() {
+    new_sandbox
+    local cmd out rc=0
+    for cmd in \
+        "bash -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -lc 'bun /repo/skills/code-review/scripts/../scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "sh -c 'env -i X=1 bun run --silent \${CLAUDE_SKILL_DIR}/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "env -i bash -c 'echo ok; bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'"; do
+        out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg nested code-reviewer --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.,agent_type:$nested},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+        if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+            rm -rf "$SBX"; echo "ASSERTION FAILED reviewer-submit nested nonreviewer: $out"; return 1
+        fi
+        rc=0
+        out=$(printf '%s' "$cmd" | jq -Rs --arg at code-reviewer --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+        assert_allow "$out" "$rc" "reviewer-submit nested reviewer" || { rm -rf "$SBX"; return 1; }
+    done
+    rm -rf "$SBX"
+}
+
+test_reviewer_submit_nested_shell_wrapper_false_positives_allow() {
+    new_sandbox
+    local cmd out rc=0
+    for cmd in \
+        "bash -c 'echo bun /repo/skills/code-review/scripts/submit-review.ts'" \
+        "bash -c bun /repo/skills/code-review/scripts/submit-review.ts" \
+        "bash -c '' bun /repo/skills/code-review/scripts/submit-review.ts" \
+        "bash -n -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -c 'bun --cwd /repo/skills/code-review/scripts/submit-review.ts /tmp/other.ts'"; do
+        out=$(printf '%s' "$cmd" | jq -Rs --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd}' | run_hook) || rc=$?
+        assert_allow "$out" "$rc" "reviewer-submit nested false-positive" || { rm -rf "$SBX"; return 1; }
+        rc=0
+    done
+    rm -rf "$SBX"
+}
+
 test_reviewer_submit_dot_segment_publisher_identity_matrix() {
     new_sandbox
     local cmd out rc=0 result=0
@@ -3237,6 +3272,8 @@ main() {
     run_test test_codereview_shell_command_agent_type_sisyphus_junior_denies
     run_test test_reviewer_submit_cli_code_reviewer_function_newline_allowed
     run_test test_reviewer_submit_cli_nonreviewer_denied
+    run_test test_reviewer_submit_nested_shell_wrapper_identity_matrix
+    run_test test_reviewer_submit_nested_shell_wrapper_false_positives_allow
     run_test test_reviewer_submit_dot_segment_publisher_identity_matrix
     run_test test_reviewer_submit_variable_publisher_identity_matrix
     run_test test_reviewer_submit_bun_wrapper_identity_matrix

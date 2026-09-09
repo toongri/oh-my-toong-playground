@@ -340,7 +340,101 @@ write_guard_core_check_user_authorized_command() {
     return 0
 }
 
-# write_guard_core_check_reviewer_submit_command <masked-command> <unused-dir> <agent_type>
+# _wg_core_check_nested_reviewer_submit <raw-command> <agent_type>
+# Extracts only the supported quoted operand of `bash|sh -c|-lc`, optionally
+# behind `env -i`, and feeds that operand back through the existing publisher
+# state machine. This is deliberately a bounded wrapper check, not a shell
+# interpreter: unquoted -c operands, other shell options, and other wrappers
+# remain outside the guard's scope.
+_wg_core_check_nested_reviewer_submit() {
+    local raw="$1" agent_type="${2:-}"
+    case "$raw" in
+        *"bash -c '"*|*"bash -c \""*|*"bash -lc '"*|*"bash -lc \""*|\
+        *"sh -c '"*|*"sh -c \""*|*"env -i bash -c '"*|*"env -i bash -c \""*|\
+        *"env -i sh -c '"*|*"env -i sh -c \""*) ;;
+        *) return 0 ;;
+    esac
+    local i=0 n=${#raw} c next token="" had_quote=0 quote="" escaped=0 count=0
+    local idx wrapper operand
+    local -a tokens quoted
+
+    while [ "$i" -lt "$n" ]; do
+        c="${raw:$i:1}"
+        if [ -n "$quote" ]; then
+            if [ "$quote" = "'" ]; then
+                if [ "$c" = "'" ]; then quote=""; else token="$token$c"; fi
+            else
+                if [ "$c" = '"' ]; then
+                    quote=""
+                elif [ "$c" = "\\" ] && [ $((i + 1)) -lt "$n" ]; then
+                    i=$((i + 1)); token="$token${raw:$i:1}"
+                else
+                    token="$token$c"
+                fi
+            fi
+        else
+            case "$c" in
+                "'"|'"') quote="$c"; had_quote=1 ;;
+                "\\")
+                    if [ $((i + 1)) -lt "$n" ]; then
+                        i=$((i + 1)); token="$token${raw:$i:1}"
+                    fi
+                    ;;
+                [[:space:]])
+                    if [ -n "$token" ] || [ "$had_quote" -eq 1 ]; then
+                        tokens[$count]="$token"; quoted[$count]="$had_quote"; count=$((count + 1))
+                        token=""; had_quote=0
+                    fi
+                    ;;
+                ';'|'|'|'&')
+                    if [ -n "$token" ] || [ "$had_quote" -eq 1 ]; then
+                        tokens[$count]="$token"; quoted[$count]="$had_quote"; count=$((count + 1))
+                        token=""; had_quote=0
+                    fi
+                    tokens[$count]="$c"; quoted[$count]=0; count=$((count + 1))
+                    ;;
+                *) token="$token$c" ;;
+            esac
+        fi
+        i=$((i + 1))
+    done
+    if [ -n "$token" ] || [ "$had_quote" -eq 1 ]; then
+        tokens[$count]="$token"; quoted[$count]="$had_quote"; count=$((count + 1))
+    fi
+
+    i=0
+    while [ "$i" -lt "$count" ]; do
+        case "${tokens[$i]}" in
+            ';'|'|'|'&'|'&&'|'||') i=$((i + 1)); continue ;;
+        esac
+        wrapper="$i"
+        if [ "${tokens[$wrapper]}" = "env" ] && [ $((wrapper + 1)) -lt "$count" ] && [ "${tokens[$((wrapper + 1))]}" = "-i" ]; then
+            wrapper=$((wrapper + 2))
+            while [ "$wrapper" -lt "$count" ] && [[ "${tokens[$wrapper]}" == [A-Za-z_]*=* ]]; do
+                wrapper=$((wrapper + 1))
+            done
+        fi
+        if [ "$wrapper" -lt "$count" ] && { [ "${tokens[$wrapper]}" = "bash" ] || [ "${tokens[$wrapper]}" = "sh" ]; } \
+            && [ $((wrapper + 2)) -lt "$count" ] \
+            && { [ "${tokens[$((wrapper + 1))]}" = "-c" ] || [ "${tokens[$((wrapper + 1))]}" = "-lc" ]; } \
+            && [ "${quoted[$((wrapper + 2))]}" -eq 1 ]; then
+            operand="${tokens[$((wrapper + 2))]}"
+            if [ -n "$operand" ]; then
+                write_guard_core_check_reviewer_submit_command "$operand" "" "$agent_type"
+                return 0
+            fi
+        fi
+        while [ "$i" -lt "$count" ]; do
+            case "${tokens[$i]}" in
+                ';'|'|'|'&'|'&&'|'||') break ;;
+            esac
+            i=$((i + 1))
+        done
+    done
+    return 0
+}
+
+# write_guard_core_check_reviewer_submit_command <masked-command> <unused-dir> <agent_type> [raw-command]
 # Detects the neutral code-review submit-review publisher on shell/exec routes. The caller
 # supplies quote-masked command text (so quoted paths, newlines, and function
 # bodies are represented as ordinary tokens). The publisher and consumer own
@@ -348,7 +442,7 @@ write_guard_core_check_user_authorized_command() {
 # the caller identity. The command's --agent-type/other tool_input fields are
 # irrelevant.
 write_guard_core_check_reviewer_submit_command() {
-    local command_text="$1" agent_type="${3:-}"
+    local command_text="$1" agent_type="${3:-}" raw_command="${4:-}"
     local normalized token raw_token clean_token previous_executable='' saw_cli=0
     local command_position=1 command_terminator=0
 
@@ -473,8 +567,19 @@ write_guard_core_check_reviewer_submit_command() {
         fi
     done
 
+    if [ -n "$raw_command" ] && [ "$agent_type" != "code-reviewer" ]; then
+        local nested_out
+        nested_out=$(_wg_core_check_nested_reviewer_submit "$raw_command" "$agent_type")
+        if [ -n "$nested_out" ]; then
+            printf '%s\n' "$nested_out"
+            return 0
+        fi
+    fi
     [ "$saw_cli" -eq 1 ] || return 0
     if [ "$agent_type" = "code-reviewer" ]; then
+        if [ -n "$raw_command" ]; then
+            _wg_core_check_nested_reviewer_submit "$raw_command" "$agent_type" >/dev/null
+        fi
         return 0
     fi
     printf '%s\n' "$_wg_core_reviewer_submit_deny_json"

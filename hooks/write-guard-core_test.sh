@@ -1121,6 +1121,42 @@ test_reviewer_submit_bun_argument_false_positives_allow() {
     done
 }
 
+test_reviewer_submit_nested_shell_wrapper_identity_matrix() {
+    local cmd out
+    for cmd in \
+        "bash -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -lc 'bun /repo/skills/code-review/scripts/../scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "sh -c 'env -i X=1 bun run --silent \${CLAUDE_SKILL_DIR}/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "env -i bash -c 'echo ok; bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'"; do
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior' \"\$1\"" _ "$cmd")
+        if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+            echo "ASSERTION FAILED reviewer-submit-nested-nonreviewer: expected deny for '$cmd', got '$out'"
+            return 1
+        fi
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer' \"\$1\"" _ "$cmd")
+        if [ -n "$out" ]; then
+            echo "ASSERTION FAILED reviewer-submit-nested-reviewer: expected allow for '$cmd', got '$out'"
+            return 1
+        fi
+    done
+}
+
+test_reviewer_submit_nested_shell_wrapper_false_positives_allow() {
+    local cmd out
+    for cmd in \
+        "bash -c 'echo bun /repo/skills/code-review/scripts/submit-review.ts'" \
+        "bash -c bun /repo/skills/code-review/scripts/submit-review.ts" \
+        "bash -c '' bun /repo/skills/code-review/scripts/submit-review.ts" \
+        "bash -n -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -c 'bun --cwd /repo/skills/code-review/scripts/submit-review.ts /tmp/other.ts'"; do
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior' \"\$1\"" _ "$cmd")
+        if [ -n "$out" ]; then
+            echo "ASSERTION FAILED reviewer-submit-nested-false-positive: expected allow for '$cmd', got '$out'"
+            return 1
+        fi
+    done
+}
+
 # codereview_guard_core_run <OMT_DIR> <session_id> <agent_type> tests
 # (code-review-artifact-guard-core plan) -- identity-conditional guard: unlike
 # write_guard_core_run's unconditional deny, this one allows the SAME guarded
@@ -1518,6 +1554,8 @@ main() {
     run_test test_reviewer_submit_neutral_publisher_nonreviewer_denied
     run_test test_reviewer_submit_path_only_arguments_allow
     run_test test_reviewer_submit_bun_argument_false_positives_allow
+    run_test test_reviewer_submit_nested_shell_wrapper_identity_matrix
+    run_test test_reviewer_submit_nested_shell_wrapper_false_positives_allow
     run_test test_reviewer_submit_review_cli_absent_identity_denied
     run_test test_negative_double_space_nondangerous_allows
     run_test test_ac_codereview_byte_identical_deny

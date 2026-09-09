@@ -1761,6 +1761,33 @@ test_reviewer_submit_cli_absent_identity_denied() {
     hg_is_deny "$out" || { echo "ASSERTION FAILED reviewer-submit absent identity: $out"; return 1; }
 }
 
+test_reviewer_submit_nested_shell_wrapper_identity_matrix() {
+    local cmd out
+    for cmd in \
+        "bash -c 'bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "bash -lc 'bun $SCRIPT_DIR/../skills/code-review/scripts/../scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "sh -c 'env -i X=1 bun run --silent \${CLAUDE_SKILL_DIR}/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "env -i bash -c 'echo ok; bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'"; do
+        out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg nested code-reviewer '{tool_name:"Bash",tool_input:{command:.,agent_type:$nested},agent_type:$at}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+        hg_is_deny "$out" || { echo "ASSERTION FAILED reviewer-submit nested nonreviewer: $out"; return 1; }
+        out=$(printf '%s' "$cmd" | jq -Rs --arg at code-reviewer '{tool_name:"Bash",tool_input:{command:.},agent_type:$at}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+        hg_is_allow "$out" || { echo "ASSERTION FAILED reviewer-submit nested reviewer: $out"; return 1; }
+    done
+}
+
+test_reviewer_submit_nested_shell_wrapper_false_positives_allow() {
+    local cmd out
+    for cmd in \
+        "bash -c 'echo bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts'" \
+        "bash -c bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts" \
+        "bash -c '' bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts" \
+        "bash -n -c 'bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "bash -c 'bun --cwd $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts /tmp/other.ts'"; do
+        out=$(printf '%s' "$cmd" | jq -Rs '{tool_name:"Bash",tool_input:{command:.}}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+        hg_is_allow "$out" || { echo "ASSERTION FAILED reviewer-submit nested false-positive: $out"; return 1; }
+    done
+}
+
 test_regression_ambient_claude_env_file_not_leaked_by_unscrubbed_call() {
     # Regression guard for the ambient CLAUDE_ENV_FILE leak: AC9's session-
     # start.sh invocation (test_ac9_started_at_parseable_by_stale_cleanup)
@@ -2036,6 +2063,8 @@ main() {
     run_test test_reviewer_submit_cli_orchestrator_denied
     run_test test_reviewer_submit_cli_code_reviewer_allowed
     run_test test_reviewer_submit_cli_absent_identity_denied
+    run_test test_reviewer_submit_nested_shell_wrapper_identity_matrix
+    run_test test_reviewer_submit_nested_shell_wrapper_false_positives_allow
     run_test test_rdg_matching_claude_candidate_allows_and_increments
     run_test test_rdg_sixth_candidate_denied_without_increment
     run_test test_rdg_out_of_scope_review_denies_with_completion_actions

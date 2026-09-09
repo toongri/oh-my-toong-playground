@@ -348,7 +348,7 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
             # regular codereview guard; enforce trusted top-level identity on
             # the whole masked command.
             _wg_agent_type=$(echo "$input" | jq -r '.agent_type // empty' 2>/dev/null) || _wg_agent_type=""
-            _wg_submit_out=$(write_guard_core_check_reviewer_submit_command "$_wg_scan" "$_wg_omt_dir" "$_wg_agent_type")
+            _wg_submit_out=$(write_guard_core_check_reviewer_submit_command "$_wg_scan" "$_wg_omt_dir" "$_wg_agent_type" "$_wg_cmd")
             if [[ -n "$_wg_submit_out" ]]; then
                 printf '%s\n' "$_wg_submit_out"
                 exit 0
