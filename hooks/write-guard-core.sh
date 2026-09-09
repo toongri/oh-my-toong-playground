@@ -349,7 +349,8 @@ write_guard_core_check_user_authorized_command() {
 # irrelevant.
 write_guard_core_check_reviewer_submit_command() {
     local command_text="$1" agent_type="${3:-}"
-    local normalized token clean_token saw_cli=0
+    local normalized token raw_token clean_token previous_executable='' saw_cli=0
+    local command_position=1 command_terminator=0
 
     normalized="${command_text#"${command_text%%[![:space:]]*}"}"
     normalized="$(printf '%s' "$normalized" | tr -s '[:space:]' ' ')"
@@ -358,6 +359,16 @@ write_guard_core_check_reviewer_submit_command() {
     # removed quote characters. As with the surrounding shell guards, token
     # forms containing embedded whitespace are outside this lightweight scan.
     for token in $normalized; do
+        raw_token="$token"
+        command_terminator=0
+        case "$raw_token" in
+            ';'|'|'|'||'|'&&'|'{'|'}')
+                command_position=1
+                previous_executable=''
+                continue
+                ;;
+            *';'|*'}') command_terminator=1 ;;
+        esac
         # Function bodies and newline-separated shell forms commonly glue a
         # command terminator to the final stdin marker or artifact token
         # (`-; }`). These punctuation characters are shell syntax, not part
@@ -372,14 +383,39 @@ write_guard_core_check_reviewer_submit_command() {
         # below after removing shell-equivalent dot segments.
         _wg_core_norm_publisher_token "$clean_token"
         clean_token="$_wg_core_norm_publisher_token_result"
-        token="$clean_token"
         if [ "$saw_cli" -eq 0 ]; then
-            case "$token" in
-                */code-review/scripts/submit-review.ts) saw_cli=1 ;;
-                \$\{[A-Za-z_][A-Za-z0-9_]*\}/scripts/submit-review.ts) saw_cli=1 ;;
-                \$[A-Za-z_][A-Za-z0-9_]*/scripts/submit-review.ts) saw_cli=1 ;;
-            esac
-            continue
+            # The publisher path is meaningful only as the script argument of
+            # the documented `bun <publisher-path>` invocation. In particular,
+            # a path in git diff/test/echo arguments must not identify an
+            # invocation. Require bun to have been the command word at the
+            # beginning of the current simple command.
+            if [ "$previous_executable" = "bun" ]; then
+                case "$clean_token" in
+                    */code-review/scripts/submit-review.ts) saw_cli=1 ;;
+                    \$\{[A-Za-z_][A-Za-z0-9_]*\}/scripts/submit-review.ts) saw_cli=1 ;;
+                    \$[A-Za-z_][A-Za-z0-9_]*/scripts/submit-review.ts) saw_cli=1 ;;
+                esac
+            fi
+        fi
+
+        previous_executable=''
+        if [ "$command_position" -eq 1 ]; then
+            if [ "$raw_token" = "bun" ]; then
+                previous_executable='bun'
+                command_position=0
+            else
+                case "$clean_token" in
+                    [A-Za-z_]*=*)
+                        # Shell assignments before the command word keep the
+                        # parser at simple-command position.
+                        ;;
+                    *) command_position=0 ;;
+                esac
+            fi
+        fi
+        if [ "$command_terminator" -eq 1 ]; then
+            command_position=1
+            previous_executable=''
         fi
     done
 

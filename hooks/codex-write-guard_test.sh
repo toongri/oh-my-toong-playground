@@ -2484,6 +2484,40 @@ test_reviewer_submit_cli_nested_agent_type_spoof_denied() {
     rm -rf "$SBX"
 }
 
+test_reviewer_submit_path_only_arguments_allow() {
+    new_sandbox
+    local cmd out rc=0 result=0
+    for cmd in \
+        'git diff -- skills/code-review/scripts/submit-review.ts' \
+        'test -f skills/code-review/scripts/submit-review.ts' \
+        'echo skills/code-review/scripts/submit-review.ts'; do
+        out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+        if ! assert_allow "$out" "$rc" "reviewer-submit-path-only"; then
+            result=1
+        fi
+        rc=0
+    done
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_reviewer_submit_bun_argument_false_positives_allow() {
+    new_sandbox
+    local cmd out rc=0 result=0
+    for cmd in \
+        'echo bun skills/code-review/scripts/submit-review.ts' \
+        'test bun skills/code-review/scripts/submit-review.ts' \
+        'git diff -- bun skills/code-review/scripts/submit-review.ts'; do
+        out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+        if ! assert_allow "$out" "$rc" "reviewer-submit-bun-argument"; then
+            result=1
+        fi
+        rc=0
+    done
+    rm -rf "$SBX"
+    return "$result"
+}
+
 # =============================================================================
 # AC6 -- false-positive negative controls: agent_type absent targeting paths
 # the code-review identity guard does NOT cover at all (ultragoal-verdict-
@@ -3110,6 +3144,8 @@ main() {
     run_test test_reviewer_submit_dot_segment_publisher_identity_matrix
     run_test test_reviewer_submit_variable_publisher_identity_matrix
     run_test test_reviewer_submit_cli_nested_agent_type_spoof_denied
+    run_test test_reviewer_submit_path_only_arguments_allow
+    run_test test_reviewer_submit_bun_argument_false_positives_allow
     run_test test_codereview_negative_control_ultragoal_verdict_allows
     run_test test_codereview_negative_control_candidates_json_allows
     run_test test_ac4_codex_claude_deny_json_byte_identical

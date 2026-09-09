@@ -1005,6 +1005,34 @@ test_reviewer_submit_review_cli_absent_identity_denied() {
     return 1
 }
 
+test_reviewer_submit_path_only_arguments_allow() {
+    local cmd out
+    for cmd in \
+        'git diff -- skills/code-review/scripts/submit-review.ts' \
+        'test -f skills/code-review/scripts/submit-review.ts' \
+        'echo skills/code-review/scripts/submit-review.ts'; do
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior'" _ "$cmd")
+        if [ -n "$out" ]; then
+            echo "ASSERTION FAILED reviewer-submit-path-only: expected allow for '$cmd', got '$out'"
+            return 1
+        fi
+    done
+}
+
+test_reviewer_submit_bun_argument_false_positives_allow() {
+    local cmd out
+    for cmd in \
+        'echo bun skills/code-review/scripts/submit-review.ts' \
+        'test bun skills/code-review/scripts/submit-review.ts' \
+        'git diff -- bun skills/code-review/scripts/submit-review.ts'; do
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior'" _ "$cmd")
+        if [ -n "$out" ]; then
+            echo "ASSERTION FAILED reviewer-submit-bun-argument: expected allow for '$cmd', got '$out'"
+            return 1
+        fi
+    done
+}
+
 # codereview_guard_core_run <OMT_DIR> <session_id> <agent_type> tests
 # (code-review-artifact-guard-core plan) -- identity-conditional guard: unlike
 # write_guard_core_run's unconditional deny, this one allows the SAME guarded
@@ -1398,6 +1426,8 @@ main() {
     run_test test_reviewer_submit_neutral_publisher_bare_variable_reviewer_allowed
     run_test test_reviewer_submit_neutral_publisher_arbitrary_artifact_allowed
     run_test test_reviewer_submit_neutral_publisher_nonreviewer_denied
+    run_test test_reviewer_submit_path_only_arguments_allow
+    run_test test_reviewer_submit_bun_argument_false_positives_allow
     run_test test_reviewer_submit_review_cli_absent_identity_denied
     run_test test_negative_double_space_nondangerous_allows
     run_test test_ac_codereview_byte_identical_deny
