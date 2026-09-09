@@ -1003,6 +1003,47 @@ test_reviewer_submit_bun_wrapper_identity_matrix() {
     done
 }
 
+test_reviewer_submit_bun_and_env_option_identity_matrix() {
+    local cmd out
+    for cmd in \
+        'bun --smol /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env FOO=bar bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env -i bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env -i FOO=bar bun run --silent /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env -u FOO bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env --unset FOO bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env --unset=FOO bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env X=1 bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env _=1 bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'X=1 bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env -i -- X=1 FOO=bar bun --smol /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env --ignore-environment bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env -- bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env FOO=bar bun run /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'bun run --silent /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'bun --cwd /tmp /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'bun --cwd=/tmp /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'bun run --cwd /tmp /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -'; do
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior'" _ "$cmd")
+        if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+            echo "ASSERTION FAILED reviewer-submit-options-nonreviewer: expected deny for '$cmd', got '$out'"
+            return 1
+        fi
+
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' ''" _ "$cmd")
+        if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+            echo "ASSERTION FAILED reviewer-submit-options-absent: expected deny for '$cmd', got '$out'"
+            return 1
+        fi
+
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer'" _ "$cmd")
+        if [ -n "$out" ]; then
+            echo "ASSERTION FAILED reviewer-submit-options-reviewer: expected allow for '$cmd', got '$out'"
+            return 1
+        fi
+    done
+}
+
 test_reviewer_submit_neutral_publisher_bare_variable_reviewer_allowed() {
     local cmd out
     cmd='bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -'
@@ -1044,7 +1085,20 @@ test_reviewer_submit_path_only_arguments_allow() {
     for cmd in \
         'git diff -- skills/code-review/scripts/submit-review.ts' \
         'test -f skills/code-review/scripts/submit-review.ts' \
-        'echo skills/code-review/scripts/submit-review.ts'; do
+        'echo skills/code-review/scripts/submit-review.ts' \
+        'echo P' \
+        'test -f P' \
+        'git diff -- P' \
+        'echo bun P' \
+        'test bun P' \
+        'git diff -- bun P' \
+        'env -i echo bun P' \
+        'env FOO=bar echo bun P' \
+        'bun --smol /tmp/other.ts P' \
+        'bun --help P' \
+        'bun --version P' \
+        'bun --cwd P /tmp/other.ts' \
+        'env -u bun echo P'; do
         out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior'" _ "$cmd")
         if [ -n "$out" ]; then
             echo "ASSERTION FAILED reviewer-submit-path-only: expected allow for '$cmd', got '$out'"
@@ -1458,6 +1512,7 @@ main() {
     run_test test_reviewer_submit_variable_publisher_reviewer_allowed
     run_test test_reviewer_submit_bare_variable_publisher_identity_matrix
     run_test test_reviewer_submit_bun_wrapper_identity_matrix
+    run_test test_reviewer_submit_bun_and_env_option_identity_matrix
     run_test test_reviewer_submit_neutral_publisher_bare_variable_reviewer_allowed
     run_test test_reviewer_submit_neutral_publisher_arbitrary_artifact_allowed
     run_test test_reviewer_submit_neutral_publisher_nonreviewer_denied

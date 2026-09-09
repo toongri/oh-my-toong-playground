@@ -399,28 +399,74 @@ write_guard_core_check_reviewer_submit_command() {
             fi
         fi
 
-        case "$previous_executable:$raw_token" in
-            env:bun) previous_executable='bun' ;;
-            bun:run) previous_executable='bun-run' ;;
+        case "$previous_executable" in
+            env)
+                case "$raw_token" in
+                    bun) previous_executable='bun' ;;
+                    -u|--unset) previous_executable='env-unset' ;;
+                    -i|--ignore-environment|--|--unset=*|[A-Za-z_]=*|[A-Za-z_][A-Za-z0-9_]*=*)
+                        # Keep env state across the supported env options and
+                        # assignments until its wrapped command word appears.
+                        ;;
+                    *) previous_executable='' ;;
+                esac
+                ;;
+            env-unset)
+                # `env -u NAME` and `env --unset NAME` consume NAME as an
+                # option argument. It cannot be the wrapped command or a
+                # publisher path.
+                previous_executable='env'
+                ;;
+            bun)
+                case "$raw_token" in
+                    run) previous_executable='bun-run' ;;
+                    --help|--version) previous_executable='' ;;
+                    --cwd|--preload|--eval|-r) previous_executable='bun-value' ;;
+                    -*)
+                        # Bun runtime options precede the publisher path.
+                        ;;
+                    *) previous_executable='' ;;
+                esac
+                ;;
+            bun-value)
+                # The preceding bun option consumed this token as its value;
+                # resume looking for the actual script argument afterwards.
+                previous_executable='bun'
+                ;;
+            bun-run)
+                case "$raw_token" in
+                    --help|--version) previous_executable='' ;;
+                    --cwd|--preload|--eval|-r) previous_executable='bun-run-value' ;;
+                    -*)
+                        # `bun run` options also precede the publisher path.
+                        ;;
+                    *) previous_executable='' ;;
+                esac
+                ;;
+            bun-run-value)
+                previous_executable='bun-run'
+                ;;
+            '')
+                if [ "$command_position" -eq 1 ]; then
+                    if [ "$raw_token" = "bun" ]; then
+                        previous_executable='bun'
+                        command_position=0
+                    elif [ "$raw_token" = "env" ]; then
+                        previous_executable='env'
+                        command_position=0
+                    else
+                        case "$clean_token" in
+                            [A-Za-z_]=*|[A-Za-z_][A-Za-z0-9_]*=*)
+                                # Shell assignments before the command word
+                                # keep the parser at simple-command position.
+                                ;;
+                            *) command_position=0 ;;
+                        esac
+                    fi
+                fi
+                ;;
             *) previous_executable='' ;;
         esac
-        if [ "$command_position" -eq 1 ]; then
-            if [ "$raw_token" = "bun" ]; then
-                previous_executable='bun'
-                command_position=0
-            elif [ "$raw_token" = "env" ]; then
-                previous_executable='env'
-                command_position=0
-            else
-                case "$clean_token" in
-                    [A-Za-z_]*=*)
-                        # Shell assignments before the command word keep the
-                        # parser at simple-command position.
-                        ;;
-                    *) command_position=0 ;;
-                esac
-            fi
-        fi
         if [ "$command_terminator" -eq 1 ]; then
             command_position=1
             previous_executable=''
