@@ -127,7 +127,7 @@ describe("code-review direct finder-job contract", () => {
 		expect(codeReviewerAgent).toContain("start/attach direct finder jobs");
 		expect(codeReviewerAgent).not.toContain("chunk-reviewer dispatch");
 		expect(codeReviewerAgent).not.toContain("dispatch chunk-reviewer agents");
-		expect(codeReviewerAgent).toContain("do not start finder jobs");
+		expect(codeReviewerAgent).toContain("Do not start finder jobs");
 	});
 
 	test("aggregation contract is raw-field, reason-deduped, and angle-complete", () => {
