@@ -141,7 +141,21 @@ flowchart TD
 
 #### 최종 리뷰 결과 계약
 
-최종 `code-reviewer`에는 직렬화된 리뷰 컨텍스트와 caller가 소유한 opaque artifact destination만 전달합니다. generic code-review publisher가 원본 CodeReviewArtifact JSON을 저장하고 `{path, sha256}`만 반환하며, parent orchestrator가 `get-review-result`로 결과를 읽습니다. scope를 먼저 판정해 `OUT_OF_SCOPE`은 NOTE, `UNKNOWN`은 추측 수리 없이 REQUEST_CHANGES로 라우팅합니다. confirmed HIGH/MEDIUM은 BLOCK, confirmed LOW는 수리 목록 FIX/COMMENT, plausible HIGH는 adjudication, plausible MEDIUM/LOW는 NOTE/COMMENT입니다. BLOCK/ADJUDICATE가 있으면 REQUEST_CHANGES, 아니면 FIX/NOTE는 COMMENT, 비어 있으면 APPROVE입니다. COMMENT는 confirmed 목록을 수리하고 영향받은 검사를 실행한 뒤 `record-comment-resolution --artifact-sha256 <sha> --evidence <경로들>`을 기록합니다. COMMENT/APPROVE는 재리뷰하지 않으며 초기 5회 예산은 REQUEST_CHANGES 라운드와 reviewer 부재 재시도에만 씁니다.
+최종 리뷰는 기존 네 가지 finder 관점(정확성, 회귀, 정리, 요구사항 누락)을 유지합니다. `impact`는 발생했을 때의 순수한 피해만 나타내며, 발생 빈도·노출·패치 크기·유지보수 비용·finder 관점을 대리값으로 사용하지 않습니다. `priority`는 대응 권고입니다. 실제 노출과 피해를 기준으로, 최소 remedy가 만드는 영구적 복잡성·유지보수 부담·회귀 위험까지 비교해 HIGH/MEDIUM/LOW를 정하며, 구현 난이도나 작업량 자체로 낮추지 않습니다. `COMPLETE`의 모든 finding에는 `unfixed_cost`, `exposure`, `remedy`, `added_cost`, `rationale` 다섯 assessment 문자열이 모두 비어 있지 않아야 합니다.
+
+최종 `code-reviewer`에는 직렬화된 리뷰 컨텍스트와 caller가 소유한 opaque artifact destination만 전달합니다. generic code-review publisher는 원본 CodeReviewArtifact JSON을 그대로 저장하고 `{path, sha256}` transport receipt만 반환합니다. publisher는 ultragoal을 알지 못하며 priority, scope, 수리, 완료, 예산 또는 승인 정책을 결정하지 않습니다. parent orchestrator는 receipt를 직접 해석하지 않고 `get-review-result` CLI를 명시적으로 호출해 원본 결과를 가져온 뒤 아래 consumer 정책을 적용합니다.
+
+Consumer는 먼저 scope를 판정합니다. `OUT_OF_SCOPE`는 비차단 NOTE로 남기고, `UNKNOWN`은 수리 없이 차단합니다. `PLAUSIBLE` 검증이 해소되지 않거나 scope 판정이 미완료이면 reviewer artifact의 `INCONCLUSIVE` 상태를 그대로 소비하고, consumer가 이를 기록하거나 덮어쓰지 않은 채 `REQUEST_CHANGES`로 라우팅합니다.
+
+확정된(`CONFIRMED`) IN_SCOPE finding의 라우팅은 다음과 같습니다.
+
+| Priority | Consumer 처리 |
+|---|---|
+| HIGH | `REQUEST_CHANGES` → 수리, 영향받은 검사, 새 리뷰 |
+| MEDIUM | `COMMENT` → 수리, 영향받은 검사, `record-comment-resolution --artifact-sha256 <sha> --evidence <경로들>`로 hash-bound 증거 기록; 재리뷰 없음 |
+| LOW | `COMMENT` → 보고만 함; 수리·검사 증거·재리뷰 없음 |
+
+혼합 결과의 우선순위는 `REQUEST_CHANGES` > `COMMENT` > `APPROVE`입니다. 진짜 finding이 하나도 없을 때만 `APPROVE`이며, `OUT_OF_SCOPE` NOTE만 있으면 `COMMENT`, `UNKNOWN` 또는 `INCONCLUSIVE`가 있으면 `REQUEST_CHANGES`입니다. 초기 5회 review budget은 `REQUEST_CHANGES` 라운드와 reviewer 부재 재시도에만 사용하며, `COMMENT`와 `APPROVE`는 추가 dispatch를 허용하지 않고 budget renewal로도 이 규칙을 우회할 수 없습니다. objective와 기타 completion gate는 계속 적용됩니다.
 
 ### sisyphus (오케스트레이터)
 
