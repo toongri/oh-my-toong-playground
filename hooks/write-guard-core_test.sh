@@ -898,6 +898,45 @@ test_negative_subcommand_name_as_prose_allows() {
     fi
 }
 
+# Reviewer submit-review CLI is a separate command route from direct artifact
+# writes. It must use the parent-session artifact explicitly and only the
+# trusted reviewer identity may invoke it.
+test_reviewer_submit_review_cli_orchestrator_denied() {
+    local cmd out
+    cmd="bun /repo/skills/ultragoal/scripts/ultragoal-state.ts submit-review --artifact $OD/ultragoal-codereview-parent.json --json -"
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior'" _ "$cmd")
+    if printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then return 0; fi
+    echo "ASSERTION FAILED reviewer-submit-orchestrator: expected deny, got '$out'"
+    return 1
+}
+
+test_reviewer_submit_review_cli_reviewer_allowed() {
+    local cmd out
+    cmd="bun /repo/skills/ultragoal/scripts/ultragoal-state.ts submit-review --artifact $OD/ultragoal-codereview-parent.json --json -"
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer'" _ "$cmd")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED reviewer-submit-reviewer: expected allow, got '$out'"
+    return 1
+}
+
+test_reviewer_submit_review_cli_bare_omt_variable_reviewer_allowed() {
+    local cmd out
+    cmd='bun /repo/skills/ultragoal/scripts/ultragoal-state.ts submit-review --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -'
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer'" _ "$cmd")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED reviewer-submit-bare-omt-reviewer: expected allow, got '$out'"
+    return 1
+}
+
+test_reviewer_submit_review_cli_absent_identity_denied() {
+    local cmd out
+    cmd="bun /repo/skills/ultragoal/scripts/ultragoal-state.ts submit-review --artifact $OD/ultragoal-codereview-parent.json --json -"
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' ''" _ "$cmd")
+    if printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then return 0; fi
+    echo "ASSERTION FAILED reviewer-submit-absent: expected deny, got '$out'"
+    return 1
+}
+
 # codereview_guard_core_run <OMT_DIR> <session_id> <agent_type> tests
 # (code-review-artifact-guard-core plan) -- identity-conditional guard: unlike
 # write_guard_core_run's unconditional deny, this one allows the SAME guarded
@@ -1282,6 +1321,10 @@ main() {
     run_test test_negative_ultragoal_request_complete_allows
     run_test test_negative_ultragoal_set_verdict_allows
     run_test test_negative_subcommand_name_as_prose_allows
+    run_test test_reviewer_submit_review_cli_orchestrator_denied
+    run_test test_reviewer_submit_review_cli_reviewer_allowed
+    run_test test_reviewer_submit_review_cli_bare_omt_variable_reviewer_allowed
+    run_test test_reviewer_submit_review_cli_absent_identity_denied
     run_test test_negative_double_space_nondangerous_allows
     run_test test_ac_codereview_byte_identical_deny
     run_test test_codereview_guard_ultragoal_empty_agent_type_denies

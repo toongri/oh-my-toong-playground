@@ -1740,6 +1740,27 @@ test_cr17_bash_mv_source_goal_codereview_no_agent_type_large_candidates_denied()
     hg_is_deny "$HG_OUT" || { echo "ASSERTION FAILED CR17: expected the already-computed deny JSON to survive the oversized candidate pipe, not be discarded. Got: $HG_OUT"; return 1; }
 }
 
+test_reviewer_submit_cli_orchestrator_denied() {
+    local cmd out
+    cmd=$'run() { bun "'$SCRIPT_DIR'/../skills/ultragoal/scripts/ultragoal-state.ts" submit-review --artifact "'$OMT_DIR'/ultragoal-codereview-parent.json" --json -; }\nrun'
+    out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior '{tool_name:"Bash",tool_input:{command:.},agent_type:$at}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED reviewer-submit orchestrator: $out"; return 1; }
+}
+
+test_reviewer_submit_cli_code_reviewer_allowed() {
+    local cmd out
+    cmd=$'run() { bun "'$SCRIPT_DIR'/../skills/ultragoal/scripts/ultragoal-state.ts" submit-review --artifact "'$OMT_DIR'/ultragoal-codereview-parent.json" --json -; }\nrun'
+    out=$(printf '%s' "$cmd" | jq -Rs --arg at code-reviewer '{tool_name:"Bash",tool_input:{command:.},agent_type:$at}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED reviewer-submit reviewer: $out"; return 1; }
+}
+
+test_reviewer_submit_cli_absent_identity_denied() {
+    local cmd out
+    cmd="bun \"$SCRIPT_DIR/../skills/ultragoal/scripts/ultragoal-state.ts\" submit-review --artifact \"$OMT_DIR/ultragoal-codereview-parent.json\" --json -"
+    out=$(printf '%s' "$cmd" | jq -Rs '{tool_name:"Bash",tool_input:{command:.}}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED reviewer-submit absent identity: $out"; return 1; }
+}
+
 test_regression_ambient_claude_env_file_not_leaked_by_unscrubbed_call() {
     # Regression guard for the ambient CLAUDE_ENV_FILE leak: AC9's session-
     # start.sh invocation (test_ac9_started_at_parseable_by_stale_cleanup)
@@ -1812,8 +1833,8 @@ test_rdg_out_of_scope_review_denies_with_completion_actions() {
     printf '%s' '{"status":"COMPLETE","scope_contract_sha256":"f92f8daed0f3442495084d1ab9bc72a75ae01a9f120d8b7781c8494ab83def95","findings":[{"class":"cleanup","verdict":"CONFIRMED","impact":"LOW","scope":"OUT_OF_SCOPE","scope_evidence":{"basis":"unrelated","reference":"outcome","rationale":"cleanup finding is unrelated to the active review contract"}}],"reviewer":"r","at":"now"}' > "$OMT_DIR/ultragoal-codereview-$OMT_SESSION_ID.json"
     out=$(rdg_agent_payload "code-reviewer" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
     hg_is_deny "$out" || { echo "ASSERTION FAILED rdg completion eligible: $out"; return 1; }
-    printf '%s' "$out" | grep -q 'request-complete' || return 1
-    printf '%s' "$out" | grep -q 'approve-review-dispatch-renewal' || return 1
+    printf '%s' "$out" | grep -q 'get-review-result' || return 1
+    ! printf '%s' "$out" | grep -q 'approve-review-dispatch-renewal' || return 1
     [ "$(jq -r '.review_dispatch_used // 0' "$OMT_DIR/ultragoal-state-$OMT_SESSION_ID.json")" = "0" ]
 }
 
@@ -2012,6 +2033,9 @@ main() {
     run_test test_cr15_bash_mv_source_ledger_denied
     run_test test_cr16_bash_mv_source_goal_codereview_code_reviewer_large_candidates_allowed
     run_test test_cr17_bash_mv_source_goal_codereview_no_agent_type_large_candidates_denied
+    run_test test_reviewer_submit_cli_orchestrator_denied
+    run_test test_reviewer_submit_cli_code_reviewer_allowed
+    run_test test_reviewer_submit_cli_absent_identity_denied
     run_test test_rdg_matching_claude_candidate_allows_and_increments
     run_test test_rdg_sixth_candidate_denied_without_increment
     run_test test_rdg_out_of_scope_review_denies_with_completion_actions

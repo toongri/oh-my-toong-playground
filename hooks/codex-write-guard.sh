@@ -1005,6 +1005,17 @@ _cwg_process_shell_text() {
     local masked
     masked=$(_cwg_mask_quoted "$shell_cmd")
 
+    # Reviewer-only submit-review CLI guard. This runs after Codex has
+    # resolved `omt_dir`, which may be derived from the payload cwd rather
+    # than inherited OMT_DIR (reviewer and parent have different SIDs).
+    local submit_agent_type submit_out
+    submit_agent_type=$(printf '%s' "$input" | jq -r '.agent_type // empty' 2>/dev/null) || submit_agent_type=""
+    submit_out=$(write_guard_core_check_reviewer_submit_command "$masked" "$omt_dir" "$submit_agent_type")
+    if [ -n "$submit_out" ]; then
+        printf '%s\n' "$submit_out"
+        exit 0
+    fi
+
     # Redirect / tee / rm classifier, per chain segment (split on
     # && || ; |, matching pre-tool-enforcer.sh's segmentation) -- single-awk-
     # process rewrite (O(1) forks regardless of segment count): the sed
