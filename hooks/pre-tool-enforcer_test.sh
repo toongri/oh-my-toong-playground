@@ -1830,7 +1830,7 @@ test_rdg_sixth_candidate_denied_without_increment() {
 test_rdg_out_of_scope_review_denies_with_completion_actions() {
     local out
     rdg_seed_pursuing
-    printf '%s' '{"status":"COMPLETE","scope_contract_sha256":"f92f8daed0f3442495084d1ab9bc72a75ae01a9f120d8b7781c8494ab83def95","findings":[{"class":"cleanup","verdict":"CONFIRMED","impact":"LOW","scope":"OUT_OF_SCOPE","scope_evidence":{"basis":"unrelated","reference":"outcome","rationale":"cleanup finding is unrelated to the active review contract"}}],"reviewer":"r","at":"now"}' > "$OMT_DIR/ultragoal-codereview-$OMT_SESSION_ID.json"
+    printf '%s' '{"status":"COMPLETE","scope_contract_sha256":"f92f8daed0f3442495084d1ab9bc72a75ae01a9f120d8b7781c8494ab83def95","findings":[{"class":"cleanup","verdict":"CONFIRMED","impact":"LOW","priority":"LOW","assessment":{"unfixed_cost":"low","exposure":"low","remedy":"defer cleanup","added_cost":"low","rationale":"unrelated cleanup"},"scope":"OUT_OF_SCOPE","scope_evidence":{"basis":"unrelated","reference":"outcome","rationale":"cleanup finding is unrelated to the active review contract"}}],"reviewer":"r","at":"now"}' > "$OMT_DIR/ultragoal-codereview-$OMT_SESSION_ID.json"
     out=$(rdg_agent_payload "code-reviewer" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
     hg_is_deny "$out" || { echo "ASSERTION FAILED rdg completion eligible: $out"; return 1; }
     printf '%s' "$out" | grep -q 'get-review-result' || return 1
