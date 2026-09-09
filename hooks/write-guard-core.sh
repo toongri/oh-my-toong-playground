@@ -313,6 +313,8 @@ write_guard_core_check_reviewer_submit_command() {
         if [ "$saw_cli" -eq 0 ]; then
             case "$token" in
                 */code-review/scripts/submit-review.ts) saw_cli=1 ;;
+                \$\{[A-Za-z_][A-Za-z0-9_]*\}/scripts/submit-review.ts) saw_cli=1 ;;
+                \$[A-Za-z_][A-Za-z0-9_]*/scripts/submit-review.ts) saw_cli=1 ;;
             esac
             continue
         fi
