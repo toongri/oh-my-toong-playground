@@ -1005,9 +1005,9 @@ _cwg_process_shell_text() {
     local masked
     masked=$(_cwg_mask_quoted "$shell_cmd")
 
-    # Reviewer-only submit-review CLI guard. This runs after Codex has
-    # resolved `omt_dir`, which may be derived from the payload cwd rather
-    # than inherited OMT_DIR (reviewer and parent have different SIDs).
+    # Reviewer-only neutral submit-review publisher guard. It runs on the
+    # resolved shell/exec command surface and trusts only top-level identity;
+    # publisher/consumer code owns artifact validation.
     local submit_agent_type submit_out
     submit_agent_type=$(printf '%s' "$input" | jq -r '.agent_type // empty' 2>/dev/null) || submit_agent_type=""
     submit_out=$(write_guard_core_check_reviewer_submit_command "$masked" "$omt_dir" "$submit_agent_type")

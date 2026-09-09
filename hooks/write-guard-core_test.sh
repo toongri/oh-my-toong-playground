@@ -903,7 +903,7 @@ test_negative_subcommand_name_as_prose_allows() {
 # trusted reviewer identity may invoke it.
 test_reviewer_submit_review_cli_orchestrator_denied() {
     local cmd out
-    cmd="bun /repo/skills/ultragoal/scripts/ultragoal-state.ts submit-review --artifact $OD/ultragoal-codereview-parent.json --json -"
+    cmd="bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OD/ultragoal-codereview-parent.json --json -"
     out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior'" _ "$cmd")
     if printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then return 0; fi
     echo "ASSERTION FAILED reviewer-submit-orchestrator: expected deny, got '$out'"
@@ -912,25 +912,43 @@ test_reviewer_submit_review_cli_orchestrator_denied() {
 
 test_reviewer_submit_review_cli_reviewer_allowed() {
     local cmd out
-    cmd="bun /repo/skills/ultragoal/scripts/ultragoal-state.ts submit-review --artifact $OD/ultragoal-codereview-parent.json --json -"
+    cmd="bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OD/ultragoal-codereview-parent.json --json -"
     out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer'" _ "$cmd")
     if [ -z "$out" ]; then return 0; fi
     echo "ASSERTION FAILED reviewer-submit-reviewer: expected allow, got '$out'"
     return 1
 }
 
-test_reviewer_submit_review_cli_bare_omt_variable_reviewer_allowed() {
+test_reviewer_submit_neutral_publisher_bare_variable_reviewer_allowed() {
     local cmd out
-    cmd='bun /repo/skills/ultragoal/scripts/ultragoal-state.ts submit-review --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -'
+    cmd='bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -'
     out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer'" _ "$cmd")
     if [ -z "$out" ]; then return 0; fi
     echo "ASSERTION FAILED reviewer-submit-bare-omt-reviewer: expected allow, got '$out'"
     return 1
 }
 
+test_reviewer_submit_neutral_publisher_arbitrary_artifact_allowed() {
+    local cmd out
+    cmd='bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -'
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer'" _ "$cmd")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED reviewer-neutral-publisher: expected allow, got '$out'"
+    return 1
+}
+
+test_reviewer_submit_neutral_publisher_nonreviewer_denied() {
+    local cmd out
+    cmd='bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -'
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior'" _ "$cmd")
+    if printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then return 0; fi
+    echo "ASSERTION FAILED reviewer-neutral-nonreviewer: expected deny, got '$out'"
+    return 1
+}
+
 test_reviewer_submit_review_cli_absent_identity_denied() {
     local cmd out
-    cmd="bun /repo/skills/ultragoal/scripts/ultragoal-state.ts submit-review --artifact $OD/ultragoal-codereview-parent.json --json -"
+    cmd="bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OD/ultragoal-codereview-parent.json --json -"
     out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' ''" _ "$cmd")
     if printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then return 0; fi
     echo "ASSERTION FAILED reviewer-submit-absent: expected deny, got '$out'"
@@ -1323,7 +1341,9 @@ main() {
     run_test test_negative_subcommand_name_as_prose_allows
     run_test test_reviewer_submit_review_cli_orchestrator_denied
     run_test test_reviewer_submit_review_cli_reviewer_allowed
-    run_test test_reviewer_submit_review_cli_bare_omt_variable_reviewer_allowed
+    run_test test_reviewer_submit_neutral_publisher_bare_variable_reviewer_allowed
+    run_test test_reviewer_submit_neutral_publisher_arbitrary_artifact_allowed
+    run_test test_reviewer_submit_neutral_publisher_nonreviewer_denied
     run_test test_reviewer_submit_review_cli_absent_identity_denied
     run_test test_negative_double_space_nondangerous_allows
     run_test test_ac_codereview_byte_identical_deny

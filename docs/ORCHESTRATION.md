@@ -141,7 +141,7 @@ flowchart TD
 
 #### 최종 리뷰 결과 계약
 
-최종 `code-reviewer`에는 직렬화된 리뷰 컨텍스트와 caller가 소유한 parent artifact 경로만 전달합니다. ultragoal에서는 리뷰어가 원본 CodeReviewArtifact JSON을 따옴표 heredoc으로 sibling state CLI의 `submit-review --artifact '<parent-artifact-path>' --json -`에 제출하고 결과는 읽을 때 파생됩니다. 다른 code-review caller는 기존 direct write를 유지합니다. parent orchestrator가 `get-review-result`로 결과를 읽습니다. scope를 먼저 판정해 `OUT_OF_SCOPE`은 NOTE, `UNKNOWN`은 추측 수리 없이 REQUEST_CHANGES로 라우팅합니다. confirmed HIGH/MEDIUM은 BLOCK, confirmed LOW는 수리 목록 FIX/COMMENT, plausible HIGH는 adjudication, plausible MEDIUM/LOW는 NOTE/COMMENT입니다. BLOCK/ADJUDICATE가 있으면 REQUEST_CHANGES, 아니면 FIX/NOTE는 COMMENT, 비어 있으면 APPROVE입니다. COMMENT는 confirmed 목록을 수리하고 영향받은 검사를 실행한 뒤 `record-comment-resolution --artifact-sha256 <sha> --evidence <경로들>`을 기록합니다. COMMENT/APPROVE는 재리뷰하지 않으며 초기 5회 예산은 REQUEST_CHANGES 라운드와 reviewer 부재 재시도에만 씁니다.
+최종 `code-reviewer`에는 직렬화된 리뷰 컨텍스트와 caller가 소유한 opaque artifact destination만 전달합니다. generic code-review publisher가 원본 CodeReviewArtifact JSON을 저장하고 `{path, sha256}`만 반환하며, parent orchestrator가 `get-review-result`로 결과를 읽습니다. scope를 먼저 판정해 `OUT_OF_SCOPE`은 NOTE, `UNKNOWN`은 추측 수리 없이 REQUEST_CHANGES로 라우팅합니다. confirmed HIGH/MEDIUM은 BLOCK, confirmed LOW는 수리 목록 FIX/COMMENT, plausible HIGH는 adjudication, plausible MEDIUM/LOW는 NOTE/COMMENT입니다. BLOCK/ADJUDICATE가 있으면 REQUEST_CHANGES, 아니면 FIX/NOTE는 COMMENT, 비어 있으면 APPROVE입니다. COMMENT는 confirmed 목록을 수리하고 영향받은 검사를 실행한 뒤 `record-comment-resolution --artifact-sha256 <sha> --evidence <경로들>`을 기록합니다. COMMENT/APPROVE는 재리뷰하지 않으며 초기 5회 예산은 REQUEST_CHANGES 라운드와 reviewer 부재 재시도에만 씁니다.
 
 ### sisyphus (오케스트레이터)
 

@@ -61,10 +61,10 @@ _wg_core_codereview_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUs
 # byte-identical deny text.
 _wg_core_user_authorized_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: 이 명령은 사용자만 실행할 수 있습니다. AI는 실행하지 말고, 근거와 함께 명령어 전문을 제시한 뒤 사용자가 직접 실행하도록 요청하세요 (터미널에서 직접, 또는 프롬프트에 ! 를 붙여서)."}}'
 
-# Deny JSON for the reviewer-only submit-review route. The reviewer writes the
-# artifact through the state CLI rather than a direct file write, so this gate
-# must protect the command itself. Keep the message shared by Claude and Codex.
-_wg_core_reviewer_submit_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: ultragoal submit-review는 부모 코드 리뷰 artifact를 사용하는 code-reviewer subagent만 실행할 수 있습니다."}}'
+# Deny JSON for the reviewer-only submit-review publisher route. The publisher
+# hides artifact writes, so this gate protects the command's caller identity.
+# Keep the message shared by Claude and Codex.
+_wg_core_reviewer_submit_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: submit-review publisher는 code-reviewer subagent만 실행할 수 있습니다."}}'
 
 _wg_core_qa_state_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the current session QA state (qa-state-*.json). Use the qa-state.ts CLI instead."}}'
 
@@ -283,23 +283,23 @@ write_guard_core_check_user_authorized_command() {
     return 0
 }
 
-# write_guard_core_check_reviewer_submit_command <masked-command> <OMT_DIR> <agent_type>
-# Detects the reviewer submit-review CLI on shell/exec routes. The caller
+# write_guard_core_check_reviewer_submit_command <masked-command> <unused-dir> <agent_type>
+# Detects the neutral code-review submit-review publisher on shell/exec routes. The caller
 # supplies quote-masked command text (so quoted paths, newlines, and function
-# bodies are represented as ordinary tokens). The state CLI itself validates
-# the canonical parent artifact, SID, schema, and options; this hook only
-# protects the caller identity. The command's --agent-type/other tool_input
-# fields are irrelevant.
+# bodies are represented as ordinary tokens). The publisher and consumer own
+# artifact path, SID, schema, and option validation; this hook only protects
+# the caller identity. The command's --agent-type/other tool_input fields are
+# irrelevant.
 write_guard_core_check_reviewer_submit_command() {
-    local command_text="$1" omt_dir="$2" agent_type="${3:-}"
-    local normalized token clean_token saw_cli=0 saw_submit=0
+    local command_text="$1" agent_type="${3:-}"
+    local normalized token clean_token saw_cli=0
 
     normalized="${command_text#"${command_text%%[![:space:]]*}"}"
     normalized="$(printf '%s' "$normalized" | tr -s '[:space:]' ' ')"
 
     # Shell word splitting is intentional here: both shims have already
-    # removed quote characters and the existing path guard does not support
-    # whitespace-containing OMT_DIR values.
+    # removed quote characters. As with the surrounding shell guards, token
+    # forms containing embedded whitespace are outside this lightweight scan.
     for token in $normalized; do
         # Function bodies and newline-separated shell forms commonly glue a
         # command terminator to the final stdin marker or artifact token
@@ -310,23 +310,15 @@ write_guard_core_check_reviewer_submit_command() {
         clean_token="${clean_token%;}"
         clean_token="${clean_token%\}}"
         token="$clean_token"
-        case "$token" in
-            '\$OMT_DIR/'*) token="$omt_dir/${token#\$OMT_DIR/}" ;;
-            '\${OMT_DIR}/'*) token="$omt_dir/${token#\${OMT_DIR}/}" ;;
-        esac
         if [ "$saw_cli" -eq 0 ]; then
             case "$token" in
-                */ultragoal-state.ts|ultragoal-state.ts) saw_cli=1 ;;
+                */code-review/scripts/submit-review.ts) saw_cli=1 ;;
             esac
-            continue
-        fi
-        if [ "$saw_submit" -eq 0 ]; then
-            [ "$token" = "submit-review" ] && saw_submit=1
             continue
         fi
     done
 
-    [ "$saw_cli" -eq 1 ] && [ "$saw_submit" -eq 1 ] || return 0
+    [ "$saw_cli" -eq 1 ] || return 0
     if [ "$agent_type" = "code-reviewer" ]; then
         return 0
     fi

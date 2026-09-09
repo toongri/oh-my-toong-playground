@@ -2418,7 +2418,7 @@ test_codereview_shell_command_agent_type_sisyphus_junior_denies() {
 test_reviewer_submit_cli_code_reviewer_function_newline_allowed() {
     new_sandbox
     local cmd out rc=0
-    cmd=$'run() { bun /repo/skills/ultragoal/scripts/ultragoal-state.ts submit-review --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -; }\nrun'
+    cmd=$'run() { bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -; }\nrun'
     out=$(printf '%s' "$cmd" | jq -Rs --arg at code-reviewer --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.,agent_type:"spoofed",cwd:$cwd},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
     assert_allow "$out" "$rc" "reviewer-submit-function" || { rm -rf "$SBX"; return 1; }
     rm -rf "$SBX"
@@ -2427,7 +2427,7 @@ test_reviewer_submit_cli_code_reviewer_function_newline_allowed() {
 test_reviewer_submit_cli_nonreviewer_denied() {
     new_sandbox
     local cmd out rc=0
-    cmd='bun /repo/skills/ultragoal/scripts/ultragoal-state.ts submit-review --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -'
+    cmd='bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -'
     out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
     if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then rm -rf "$SBX"; echo "ASSERTION FAILED reviewer-submit-nonreviewer: $out"; return 1; fi
     rm -rf "$SBX"
@@ -2436,7 +2436,7 @@ test_reviewer_submit_cli_nonreviewer_denied() {
 test_reviewer_submit_cli_nested_agent_type_spoof_denied() {
     new_sandbox
     local cmd out rc=0
-    cmd='bun /repo/skills/ultragoal/scripts/ultragoal-state.ts submit-review --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -'
+    cmd='bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -'
     out=$(printf '%s' "$cmd" | jq -Rs --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.,agent_type:"code-reviewer"},session_id:$sid,cwd:$cwd}' | run_hook) || rc=$?
     if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then rm -rf "$SBX"; echo "ASSERTION FAILED reviewer-submit-nested-spoof: $out"; return 1; fi
     rm -rf "$SBX"

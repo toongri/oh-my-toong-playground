@@ -210,12 +210,12 @@ Before exiting Step 1, the state must be one of:
 |-------|--------|
 | **Intent confirmed** — author's goal, approach, and constraints are understood from artifacts and/or interview | Proceed to Step 2 |
 | **User explicit deferral** — user says "skip", "그냥 리뷰해줘", "없어", "code quality only", or unambiguous equivalent | Set {REQUIREMENTS} = "N/A — code-quality-only review (user deferred)" and proceed |
-| **Non-interactive dispatch (completion-gate)** — the dispatch prompt itself carries a `{gate}-codereview-{sid}.json` artifact path alongside a 5-slot intent payload (`what_was_implemented`/`description`/`requirements`/`project_context`/`non_goals`) | Treat as **Intent confirmed (non-interactive, no user interview)** and proceed to Step 2. Acquisition steps 1-3 (PR/branch artifacts, linked references, codebase signals) still run — they backfill any slot whose value is the `(none provided)` marker. Only step 4 (user interview) is replaced by the payload. |
+| **Non-interactive dispatch (completion-gate)** — the dispatch prompt itself carries a supplied artifact destination alongside a 5-slot intent payload (`what_was_implemented`/`description`/`requirements`/`project_context`/`non_goals`) | Treat as **Intent confirmed (non-interactive, no user interview)** and proceed to Step 2. Acquisition steps 1-3 (PR/branch artifacts, linked references, codebase signals) still run — they backfill any slot whose value is the `(none provided)` marker. Only step 4 (user interview) is replaced by the payload. The destination is opaque; do not infer workflow from its basename. |
 | **Neither** — artifacts thin and user not yet asked, OR user gave vague answers without explicit deferral | **BLOCK**. Do not proceed. Continue interview until one of the two states above is reached. |
 
 There is no "I tried hard enough, just review" path. The block IS the safety mechanism.
 
-A fresh code-reviewer agent has no ambient session to check for an active artifact path — the non-interactive discriminator above is prompt-borne: whether the dispatch prompt includes the path, not whether a session-scoped artifact happens to exist. This is the same `{gate}-codereview-{sid}.json` signal Step 4 later reads for the named-field placeholder mapping; Step 1 is where it first enters the pipeline. When the signal is absent, the main-session interactive gate above (**Neither** → BLOCK) is unchanged.
+A fresh code-reviewer agent has no ambient session to check for an active artifact path — the non-interactive discriminator above is prompt-borne: whether the dispatch prompt includes the supplied destination, not whether a session-scoped artifact happens to exist. The destination is opaque and may use any basename. When the signal is absent, the main-session interactive gate above (**Neither** → BLOCK) is unchanged.
 
 ### Vague answer refinement
 
@@ -489,9 +489,16 @@ This is a **report**. It does not gate. There is no Assessment / "Ready to merge
 
 Every path-bearing terminal value uses the Untrusted path rendering contract: use a strict escaped JSON string in a structured field and never render decoded path text as Markdown or backtick prose.
 
-**Exception — ultragoal completion-gate dispatch.** When the completion-gate dispatch signal identifies ultragoal's state CLI, submit the original `CodeReviewArtifact` JSON through `bun ${CLAUDE_SKILL_DIR}/../ultragoal/scripts/ultragoal-state.ts submit-review --artifact '<parent-artifact-path>' --json -` using a safe quoted heredoc; do not write the ultragoal parent artifact directly. Input retains `status`, `scope_contract_sha256`, optional `findings_report`, `reviewer`, `at`, and full `findings` cards with `scope_evidence`. The script derives the result on read (`verdict`, `artifact_sha256`, `reason`, and nested `findings: {repair, adjudicate, notes}`). Do not add a third dispatch-prompt field, hand-set the aggregate, or resolve the CLI from repository CWD or a hardcoded home path. The parent orchestrator calls `get-review-result`. Valid hash-bearing `INCONCLUSIVE` input routes to `REQUEST_CHANGES`; invalid or hashless input is rejected. `COMPLETE` in the parent artifact means review finished, not caller goal completion.
+**Structured artifact publisher.** When the caller supplies an artifact destination, publish the original `CodeReviewArtifact` JSON through the generic bundled publisher with a safe quoted heredoc:
 
-For every non-ultragoal completion-gate artifact, retain the ordinary direct-write contract: write the original CodeReviewArtifact JSON to the exact caller-provided path. The ultragoal submission CLI is not a global replacement for code-review's artifact writer.
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/submit-review.ts \
+  --artifact '<supplied-output-path>' --json - <<'REVIEW'
+{"status":"COMPLETE|INCONCLUSIVE","findings_report":"<optional findings.md path>","reviewer":"<reviewer id>","at":"<ISO timestamp>","findings":[{"class":"correctness|regression|cleanup|requirement-gap","verdict":"CONFIRMED|PLAUSIBLE","impact":"HIGH|MEDIUM|LOW","ref":"<file:line>","scope":"IN_SCOPE|OUT_OF_SCOPE|UNKNOWN","scope_evidence":{"basis":"requirement|regression|non_goal|unrelated|uncertain","reference":"<contract field or story id>","rationale":"<evidence>"}}]}
+REVIEW
+```
+
+The publisher validates and atomically saves the original review JSON bytes, returning only the transport receipt `{"path":"<path>","sha256":"<hash>"}`. It has no caller, goal, session, aggregate, repair, or completion policy and never classifies destinations by filename. Valid or hashless `INCONCLUSIVE` diagnostics are published as supplied; the caller owns scope validation and all subsequent policy.
 
 The ordinary CodeReviewArtifact schema is fixed:
 
@@ -499,9 +506,9 @@ The ordinary CodeReviewArtifact schema is fixed:
 {"status":"COMPLETE|INCONCLUSIVE","scope_contract_sha256":"<hash>","findings_report":"<findings.md path>","reviewer":"<reviewer id>","at":"<ISO timestamp>","findings":[{"class":"correctness|regression|cleanup|requirement-gap","verdict":"CONFIRMED|PLAUSIBLE","impact":"HIGH|MEDIUM|LOW","ref":"<file:line>","scope":"IN_SCOPE|OUT_OF_SCOPE|UNKNOWN","scope_evidence":{"basis":"requirement|regression|non_goal|unrelated|uncertain","reference":"<contract field or story id>","rationale":"<evidence>"}]}
 ```
 
-For ultragoal, this exact JSON is the input to `submit-review`; the derived result is read separately by the parent orchestrator. For other callers, this exact JSON is written directly to the caller's path.
+This exact JSON is the input to `submit-review`; any caller may read or validate the resulting transport receipt according to its own policy.
 
-For a valid scope-contract artifact, additionally include the original `scope_contract_sha256` at top level and every finding's reviewer-authored `scope` and `scope_evidence` as defined above. These are required even for LOW findings and OUT_OF_SCOPE/UNKNOWN observations. Incomplete independent verification writes `status: "INCONCLUSIVE"` with the verified original hash. For ultragoal, a valid hash-bearing `INCONCLUSIVE` input is submitted through the sibling CLI and routes to `REQUEST_CHANGES`; a missing/hashless input is rejected. For other callers, preserve the ordinary direct-write failure record. Never invent a hash or reconstruct one from mutable state to make it valid.
+For a valid scope-contract artifact, additionally include the original `scope_contract_sha256` at top level and every finding's reviewer-authored `scope` and `scope_evidence` as defined above. These are required even for LOW findings and OUT_OF_SCOPE/UNKNOWN observations. Incomplete independent verification writes `status: "INCONCLUSIVE"` with the verified original hash; if no trustworthy hash exists, publish the hashless diagnostic as supplied. Never invent a hash or reconstruct one from mutable state to make it valid.
 
 Emit the ranked findings directly: each finding carries its verdict (CONFIRMED / PLAUSIBLE), class (correctness / cleanup / requirement-gap), and represents its path as a strict escaped JSON string in a structured field (the `location.file` value), with its `line` separate, plus enriched evidence (current code, what's wrong, failure scenario, fix, blast radius — the enrichment shape from `references/verifier-prompt.md`, produced inline for non-escalated findings or by the escalated verifier for superseded ones). Apply the Untrusted path rendering contract in `findings.md` and in terminal text; do not render a raw path or inline path-and-line prose. Pre-existing findings go under Out of Scope. This findings text is also the handoff contract consumed by any caller that dispatches a code-reviewer agent that runs this skill — do not invent a different format.
 

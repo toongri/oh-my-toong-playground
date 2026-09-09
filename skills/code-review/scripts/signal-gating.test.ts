@@ -87,7 +87,7 @@ describe("code-review SKILL.md: 신호-게이팅 불변식 (regression guard: ma
 			expect(neitherRow).toContain("BLOCK");
 		});
 
-		it("`Non-interactive dispatch (completion-gate)` 행은 `{gate}-codereview-{sid}.json` discriminator에 조건부다 (무조건 대체가 아니다)", () => {
+		it("`Non-interactive dispatch (completion-gate)` 행은 supplied artifact destination discriminator에 조건부다 (무조건 대체가 아니다)", () => {
 			expect(states).toContain("Non-interactive dispatch (completion-gate)");
 
 			const nonInteractiveRow = gateSection
@@ -102,7 +102,7 @@ describe("code-review SKILL.md: 신호-게이팅 불변식 (regression guard: ma
 			// Conditional: the row's own text ties the state to the dispatch
 			// prompt carrying the artifact path — not an unconditional check.
 			expect(nonInteractiveRow).toContain("the dispatch prompt itself carries a");
-			expect(nonInteractiveRow).toContain("{gate}-codereview-{sid}.json");
+			expect(nonInteractiveRow).toContain("supplied artifact destination");
 		});
 
 		it("신호 부재시 메인세션 대화형 게이트가 unchanged로 명시된다", () => {

@@ -2,6 +2,15 @@ import { describe, test, expect } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
 
+const codeReviewMd = readFileSync(
+	join(import.meta.dir, "../code-review/SKILL.md"),
+	"utf8",
+);
+const reviewerAgentMd = readFileSync(
+	join(import.meta.dir, "../../agents/code-reviewer.md"),
+	"utf8",
+);
+
 const skillMd = readFileSync(join(import.meta.dir, "SKILL.md"), "utf8");
 const planningMd = readFileSync(
 	join(import.meta.dir, "references/planning.md"),
@@ -151,7 +160,7 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 			"**Code-review lane (starts at the final story";
 		const contractParagraphLead = "The code-reviewer dispatch prompt carries exactly two things:**";
 		const artifactSchemaHeader =
-			"The parent artifact schema that `submit-review` validates (the script derives the result without rewriting this input artifact):";
+			"The original `CodeReviewArtifact` consumed and scope-validated by `ultragoal-state.ts get-review-result`:";
 
 		expect(completionGateMd.indexOf(codeReviewLaneIntro)).toBeGreaterThan(
 			-1,
@@ -825,11 +834,49 @@ describe("stale duplicate sentence removed from Execution Dispatch closing (line
 });
 
 describe("deterministic ultragoal review routing contract", () => {
-	test("completion gate owns the result and reviewer submits through the bundled CLI", () => {
-		expect(completionGateMd).toContain("submit-review");
+	test("code-review producer docs are caller-agnostic", () => {
+		for (const source of [codeReviewMd, reviewerAgentMd]) {
+			expect(source).not.toContain("ultragoal");
+			expect(source).not.toContain("get-review-result");
+			expect(source).not.toContain("record-comment-resolution");
+			expect(source).not.toContain("../ultragoal");
+		}
+	});
+
+	test("code-review producer publishes a generic receipt, not a caller aggregate", () => {
+		expect(codeReviewMd).toContain("scripts/submit-review.ts");
+		expect(codeReviewMd).toContain('"path":"<path>"');
+		expect(codeReviewMd).toContain('"sha256":"<hash>"');
+		expect(codeReviewMd).toContain("original review JSON");
+	});
+
+	test("ultragoal consumer docs do not embed the removed state-CLI publisher", () => {
+		expect(skillMd).not.toContain("ultragoal-state.ts submit-review");
+		expect(completionGateMd).not.toContain("ultragoal-state.ts submit-review");
+		expect(completionGateMd).not.toContain("resolved-ultragoal-skill-dir");
+	});
+
+	test("project-facing consumer docs do not branch publisher behavior by caller", () => {
+		for (const source of [
+			readFileSync(join(import.meta.dir, "../../docs/ORCHESTRATION.md"), "utf8"),
+			readFileSync(join(import.meta.dir, "../../docs/ORCHESTRATION.en.md"), "utf8"),
+			readFileSync(join(import.meta.dir, "../../docs/skills/core-pipeline.md"), "utf8"),
+			readFileSync(join(import.meta.dir, "../../docs/skills/core-pipeline.en.md"), "utf8"),
+		]) {
+			expect(source).not.toContain("Other code-review callers");
+			expect(source).not.toContain("다른 code-review caller");
+			expect(source).not.toContain("ultragoal-state.ts submit-review");
+		}
+	});
+
+	test("completion gate consumes the generic publisher receipt and owns the reducer", () => {
+		expect(completionGateMd).toContain(
+		"The original `CodeReviewArtifact` consumed and scope-validated by `ultragoal-state.ts get-review-result`:",
+	);
 		expect(completionGateMd).toContain("get-review-result");
 		expect(completionGateMd).toContain("record-comment-resolution");
-		expect(completionGateMd).toContain("script computes the review result");
+		expect(completionGateMd).toContain("{path, sha256}");
+		expect(completionGateMd).not.toContain("ultragoal-state.ts submit-review");
 	});
 
 	test("scope-first routing distinguishes confirmed and plausible impact", () => {
@@ -847,21 +894,15 @@ describe("deterministic ultragoal review routing contract", () => {
 	});
 
 	test("reviewer writes only the final JSON submission and rejects hashless inconclusive input", () => {
-		expect(completionGateMd).toContain("invalid or hashless input is rejected");
-		expect(completionGateMd).toMatch(/never fabricate a scope-contract hash/i);
-		expect(skillMd).toContain(
-			"actual submission path must resolve the bundled sibling skill script",
-		);
+		expect(codeReviewMd).toContain("Valid or hashless `INCONCLUSIVE` diagnostics are published as supplied");
+		expect(codeReviewMd).toMatch(/Never invent a hash/i);
+		expect(skillMd).toContain("pass the supplied artifact destination opaquely");
 	});
 
 	test("submit example preserves the original CodeReviewArtifact input schema", () => {
-		const submitExample = completionGateMd.slice(
-			completionGateMd.indexOf("submit-review"),
-			completionGateMd.indexOf("Use a quoted heredoc", completionGateMd.indexOf("submit-review")),
-		);
-		expect(submitExample).toContain('"status": "COMPLETE|INCONCLUSIVE"');
-		expect(submitExample).toContain('"findings"');
-		expect(submitExample).not.toContain('"verdict":"..."');
+		expect(codeReviewMd).toContain('"status":"COMPLETE|INCONCLUSIVE"');
+		expect(codeReviewMd).toContain('"findings"');
+		expect(codeReviewMd).not.toContain('"verdict":"..."');
 	});
 
 	test("lower completion-gate prose does not reintroduce unconditional review routing", () => {

@@ -1742,21 +1742,21 @@ test_cr17_bash_mv_source_goal_codereview_no_agent_type_large_candidates_denied()
 
 test_reviewer_submit_cli_orchestrator_denied() {
     local cmd out
-    cmd=$'run() { bun "'$SCRIPT_DIR'/../skills/ultragoal/scripts/ultragoal-state.ts" submit-review --artifact "'$OMT_DIR'/ultragoal-codereview-parent.json" --json -; }\nrun'
+    cmd=$'run() { bun "'$SCRIPT_DIR'/../skills/code-review/scripts/submit-review.ts" --artifact "'$OMT_DIR'/ultragoal-codereview-parent.json" --json -; }\nrun'
     out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior '{tool_name:"Bash",tool_input:{command:.},agent_type:$at}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
     hg_is_deny "$out" || { echo "ASSERTION FAILED reviewer-submit orchestrator: $out"; return 1; }
 }
 
 test_reviewer_submit_cli_code_reviewer_allowed() {
     local cmd out
-    cmd=$'run() { bun "'$SCRIPT_DIR'/../skills/ultragoal/scripts/ultragoal-state.ts" submit-review --artifact "'$OMT_DIR'/ultragoal-codereview-parent.json" --json -; }\nrun'
+    cmd=$'run() { bun "'$SCRIPT_DIR'/../skills/code-review/scripts/submit-review.ts" --artifact "'$OMT_DIR'/ultragoal-codereview-parent.json" --json -; }\nrun'
     out=$(printf '%s' "$cmd" | jq -Rs --arg at code-reviewer '{tool_name:"Bash",tool_input:{command:.},agent_type:$at}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
     hg_is_allow "$out" || { echo "ASSERTION FAILED reviewer-submit reviewer: $out"; return 1; }
 }
 
 test_reviewer_submit_cli_absent_identity_denied() {
     local cmd out
-    cmd="bun \"$SCRIPT_DIR/../skills/ultragoal/scripts/ultragoal-state.ts\" submit-review --artifact \"$OMT_DIR/ultragoal-codereview-parent.json\" --json -"
+    cmd="bun \"$SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts\" --artifact \"$OMT_DIR/ultragoal-codereview-parent.json\" --json -"
     out=$(printf '%s' "$cmd" | jq -Rs '{tool_name:"Bash",tool_input:{command:.}}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
     hg_is_deny "$out" || { echo "ASSERTION FAILED reviewer-submit absent identity: $out"; return 1; }
 }

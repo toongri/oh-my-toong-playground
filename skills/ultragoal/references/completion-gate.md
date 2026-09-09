@@ -35,25 +35,7 @@ For each non-retired story, map the story's acceptance criteria and verification
 **Code-review lane (starts at the final story; retries follow bounded admission).** Middle stories carry only the lightweight, self-attested per-story verdict above; no code-reviewer runs on them. Once every confirmed story's per-story verdict reads APPROVE, dispatch a fresh **code-reviewer** agent, independent of the builder (sisyphus), over the ENTIRE accumulated diff — all stories combined, not just the final one. Self-review by the builder is forbidden.
 
 - **Before dispatching**, run `bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts serialize-review-context` and put its full stdout JSON — the 5-slot payload `{what_was_implemented, description, requirements, project_context, non_goals}` — in the dispatch prompt. The code-review skill's Step 1 Intent Block Gate recognizes this shape (its "Non-interactive dispatch (completion-gate)" row) and skips its own user interview while still detecting requirement-gap findings.
-- **The reviewer submits only final JSON through the bundled sibling CLI.** Pass the exact caller-owned parent artifact path in the prompt; the reviewer must not write the artifact directly or hand-set any aggregate result. The actual submission path must resolve the bundled sibling skill script via the documented runtime skill directory, never the repository CWD or a hardcoded home path:
-
-  The parent artifact remains `$OMT_DIR/ultragoal-codereview-{sid}.json`; its namespace is caller-owned even though the reviewer cannot write it directly.
-
-  ```bash
-  bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts submit-review \
-    --artifact '<parent-artifact-path>' --json - <<'REVIEW'
-  {
-    "status": "COMPLETE|INCONCLUSIVE",
-    "scope_contract_sha256": "<hash>",
-    "findings_report": "<findings.md path>",
-    "reviewer": "<reviewer id>",
-    "at": "<ISO timestamp>",
-    "findings": [{"class":"correctness|regression|cleanup|requirement-gap","verdict":"CONFIRMED|PLAUSIBLE","impact":"HIGH|MEDIUM|LOW","ref":"<file:line>","scope":"IN_SCOPE|OUT_OF_SCOPE|UNKNOWN","scope_evidence":{"basis":"requirement|regression|non_goal|unrelated|uncertain","reference":"<contract field or story id>","rationale":"<evidence>"}}]
-  }
-  REVIEW
-  ```
-
-  Use a quoted heredoc. The reviewer submits the original `CodeReviewArtifact` JSON; the script validates it and derives the result on read without rewriting the input artifact. **The script computes the review result; neither reviewer nor orchestrator hand-sets the aggregate.** The derived result exposes `verdict`, `artifact_sha256`, `reason`, and nested `findings: {repair, adjudicate, notes}` (plus any `resolution` metadata). Valid `INCONCLUSIVE` input is accepted and routes to `REQUEST_CHANGES`; invalid or hashless input is rejected. Never fabricate a scope-contract hash or other identity field.
+- **Publication:** Pass the exact artifact destination opaquely with the two-field dispatch context. This pursuit's destination is `$OMT_DIR/ultragoal-codereview-{sid}.json`, but the producer treats it as an opaque path. The generic `code-review` publisher receives the original `CodeReviewArtifact` JSON and returns only its `{path, sha256}` transport receipt. The parent orchestrator then calls `ultragoal-state.ts get-review-result`, which computes the session result and feeds the scope reducer below; the reviewer never computes aggregate repair or completion policy.
 - **The sibling `$OMT_DIR/ultragoal-verdict-{sid}.json` is NOT guarded** — the orchestrator is its author.
 
 A code-reviewer may legitimately remain in flight for 2–3 hours. Elapsed time alone is not evidence to interrupt, cancel, or re-dispatch it. Keep waiting while it remains live; intervene only on concrete terminal evidence such as an explicit reviewer timeout or deadline, a canceled or error state, or verified loss of its live process or job artifact.
@@ -80,7 +62,7 @@ A non-goal does not excuse damage introduced by this pursuit. Restore the prior 
 
 ### Deterministic review result and bounded re-review
 
-The reviewer submits the original `CodeReviewArtifact` JSON through `submit-review`; the script derives the aggregate on read. Use `get-review-result` from the parent orchestrator to read the current session result. The derived result fields are `verdict`, `artifact_sha256`, `reason`, and nested `findings: {repair, adjudicate, notes}`; `artifact_sha256` is the exact hash of the submitted artifact. Do not add a third dispatch-prompt field: the two-field context/artifact contract is sufficient to derive the CLI invocation.
+The parent orchestrator consumes the generic publisher receipt and calls the bundled `ultragoal-state.ts get-review-result`; that command computes the deterministic `verdict` and returns `artifact_sha256`, `reason`, and nested `findings: {repair, adjudicate, notes}`. The receipt hash identifies the original submitted artifact; the parent consumes this computed result and does not subjectively reclassify it. Do not add a third dispatch-prompt field: the two-field context/artifact contract is sufficient to derive publication.
 
 Admission is scope-first. `OUT_OF_SCOPE` => `NOTE`; `UNKNOWN` => `REQUEST_CHANGES` with no speculative repair. For in-scope findings, route by verifier confidence and impact:
 
@@ -93,14 +75,14 @@ The aggregate rule is deterministic: **Any BLOCK/ADJUDICATE => REQUEST_CHANGES; 
 
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts record-comment-resolution \
-  --artifact-sha256 '<sha returned by submit-review>' --evidence '<comma-separated evidence paths>'
+  --artifact-sha256 '<artifact_sha256 returned by get-review-result>' --evidence '<comma-separated evidence paths>'
 ```
 
 The acknowledgment binds evidence to the exact artifact hash. Repair correctness remains the executor's self-attestation; this command does not claim that the machine understands semantic correctness. `COMMENT` and `APPROVE` never trigger a code-review re-review, even after user budget renewal. `set-verdict` remains the objective lane only and is separate from the code-review result.
 
 For `REQUEST_CHANGES`, repair confirmed findings and adjudicate plausible HIGH findings, run affected checks, then dispatch a fresh independent review. Every new item is admitted against the same frozen contract. A reviewer-only retry is allowed only when the prior reviewer is absent or the submission failed; the initial five-review budget is for those retries and `REQUEST_CHANGES` rounds, not a reason to waive a required fresh review. No review-driven story creation, contract rewriting, new feature, or generalization is permitted.
 
-The parent artifact schema that `submit-review` validates (the script derives the result without rewriting this input artifact):
+The original `CodeReviewArtifact` consumed and scope-validated by `ultragoal-state.ts get-review-result`:
 
 ```json
 {

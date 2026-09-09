@@ -34,7 +34,6 @@ Subcommands used by this orchestrator:
 | `reorder-stories --order <id1,id2,...>` | orchestrator | Planning-only reorder of the story array to an exact permutation of the current ids — steers the sequential dispatch order before pursuit begins. |
 | `set-verdict --verdict <APPROVE\|REQUEST_CHANGES\|COMMENT\|absent>` | gate layer | The ONLY writer of `objective_verdict`. |
 | `request-complete` | gate layer | The ONLY path to `phase=complete`; structurally gated on completion-evidence being present and `objective_verdict=APPROVE`. |
-| `submit-review --artifact <path> --json -` | code-review lane | Ultragoal-only submission of the original CodeReviewArtifact JSON through the bundled sibling skill script; the script validates it and computes the review result. |
 | `get-review-result` | code-review lane | Read the current session's script-derived code-review result; reviewer/orchestrator never hand-sets the aggregate. |
 | `record-comment-resolution --artifact-sha256 <sha> --evidence <paths>` | code-review lane | Record hash-bound evidence after repairing the confirmed repair-list and running affected checks. |
 | `claim-review-dispatch` | PreToolUse hook only | Atomically reserves one final code-review dispatch. The initial cap is 5; it persists the reservation before allowing the dispatch. The orchestrator never calls this command directly. |
@@ -47,7 +46,7 @@ Subcommands used by this orchestrator:
 
 During pursuit, `iteration` counts consecutive Stop turns with no observed progress. A diff-carrying commit or a story status transition resets it to `0`; Stops waiting for background work are not counted. Reaching `max_iterations` soft-stops the pursuit as `budget_limited` (state is preserved and no new work is dispatched). After draining any in-flight work and checking the completion gate, recovery from that pause requires the user to run `resume-pursuit`, which resets the counter and re-arms the pursuing phase.
 
-For the final review lane, the actual submission path must resolve the bundled sibling skill script using the runtime skill-directory variable, never the repository CWD or a hardcoded home path. The reviewer submits the original CodeReviewArtifact JSON via `submit-review --artifact <parent-artifact-path> --json -` on a safe quoted heredoc; the script computes the aggregate result. `set-verdict` remains objective-lane-only.
+For the final review lane, pass the supplied artifact destination opaquely and defer publication to the generic `code-review` publisher contract. The parent orchestrator then calls `ultragoal-state.ts get-review-result`, which computes the session verdict; it does not subjectively reclassify that result. `set-verdict` remains objective-lane-only.
 
 ---
 

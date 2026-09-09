@@ -55,10 +55,9 @@
  *   or whitespace-only values are refused (ADR D-4).
  */
 
-import { readFileSync, unlinkSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { readFileSync, unlinkSync, statSync } from "node:fs";
 import { execSync } from "child_process";
 import { createHash } from "crypto";
-import { resolve as resolvePath, basename } from "node:path";
 import { getOmtDir } from "@lib/omt-dir";
 import { withStateLock } from "@lib/persistent-mode-core/state-lock";
 import {
@@ -120,7 +119,7 @@ export interface Story {
  * suppress a genuine defect that later appears at the same location.
  *
  * `class` spans all four finding classes: blocking is decided by the
- * scope-first outcome (classifyReviewFindingOutcome), not by class or impact. dismissReviewFinding still refuses non-BLOCK findings — the
+ * scope-first outcome (classifyReviewFindingOutcome), including impact. dismissReviewFinding still refuses non-BLOCK findings — the
  * lever stays a completion unblock, never general finding suppression.
  */
 export interface DismissedReviewFinding {
@@ -1253,9 +1252,9 @@ interface VerdictArtifact {
 // ---------------------------------------------------------------------------
 // Code-review artifact types — the SECOND independent completion lane.
 // Mirrors the verdict artifact: read/validate only, authored by a fresh
-// code-reviewer agent. Blocking is decided by scope admission and confidence
-// (classifyReviewFindingOutcome); `class` and impact are carried for reporting and
-// dismissal keying but the gate does not branch on it.
+// code-reviewer agent. Blocking is decided by scope admission, confidence, and
+// impact (classifyReviewFindingOutcome); `class` is carried for reporting and
+// dismissal keying.
 // ---------------------------------------------------------------------------
 
 export type ReviewFindingClass = "correctness" | "regression" | "cleanup" | "requirement-gap";
@@ -1544,32 +1543,6 @@ export function getReviewResult(sessionId: string): ReviewResult {
 	return reviewResultFromArtifact(reviewed.raw, reviewed.artifact, state, readDismissals(state));
 }
 
-function parentSidFromArtifactPath(artifactPath: string): string {
-	const match = /^ultragoal-codereview-(.+)\.json$/.exec(basename(artifactPath));
-	if (!match || !match[1] || match[1].length > 200 || !/^[A-Za-z0-9_-]+$/.test(match[1]) || resolvePath(artifactPath) !== resolvePath(resolveCodeReviewArtifactPath(match[1]))) throw new Error("submit-review: --artifact must be the canonical parent ultragoal-codereview-<sid>.json path");
-	return match[1];
-}
-
-export function submitReviewArtifact(artifactPath: string, raw: string): ReviewResult {
-	const sessionId = parentSidFromArtifactPath(artifactPath);
-	const stateFilePath = resolveStatePath(sessionId);
-	return withStateLock(stateFilePath, () => {
-		const state = readPrior(sessionId);
-		if (!state.active || state.phase !== "pursuing") throw new Error("submit-review: parent is not an active pursuit");
-		let parsed: unknown;
-		try { parsed = JSON.parse(raw); } catch { throw new Error("submit-review: invalid JSON artifact"); }
-		if (!isCodeReviewArtifact(parsed)) throw new Error("submit-review: invalid review artifact schema");
-		if (parsed.scope_contract_sha256 !== scopeContractSha256(state)) throw new Error("submit-review: stale scope contract");
-		if (!parsed.findings.every((f) => isScopeEvidenceReferenceValid(f, state))) throw new Error("submit-review: invalid scope evidence");
-		const canonical = resolvePath(resolveCodeReviewArtifactPath(sessionId));
-		const temp = `${canonical}.tmp-${process.pid}`;
-		writeFileSync(temp, raw, { encoding: "utf8", mode: 0o600 });
-		try { renameSync(temp, canonical); } catch (error) { unlinkSync(temp); throw error; }
-		mergeWriteLocked(sessionId, stateFilePath, { review_resolution: undefined });
-		return reviewResultFromArtifact(raw, parsed, { ...state, review_resolution: undefined }, readDismissals(state));
-	});
-}
-
 export function recordCommentResolution(sessionId: string, artifactSha256: string, evidence: string[]): ReviewResult {
 	if (!/^[0-9a-f]{64}$/.test(artifactSha256) || !Array.isArray(evidence) || evidence.length === 0) throw new Error("record-comment-resolution: artifact hash and evidence are required");
 	const paths = evidence.map((p) => p.trim());
@@ -1589,7 +1562,7 @@ export function recordCommentResolution(sessionId: string, artifactSha256: strin
 }
 
 /**
- * Single completion predicate shared by requestComplete and review-dispatch eligibility.
+ * Completion eligibility predicate used by requestComplete after the shared reducer.
  *
  * Takes the raw bytes alongside the parsed artifact because a dismissal only counts
  * against the exact artifact it was issued for — see `isDismissed`.
@@ -2578,14 +2551,6 @@ function main(): void {
 			const result = claimReviewDispatch(sessionId);
 			process.stdout.write(JSON.stringify(result) + "\n");
 			if (!result.allowed) process.exit(1);
-		} else if (subcommand === "submit-review") {
-			const artifactPath = str(args["artifact"]);
-			if (!artifactPath || str(args["json"]) !== "-") {
-				process.stderr.write("submit-review: --artifact <canonical-path> --json - is required\n");
-				process.exit(1);
-			}
-			const result = submitReviewArtifact(artifactPath, readFileSync(0, "utf8"));
-			process.stdout.write(JSON.stringify(result) + "\n");
 		} else if (subcommand === "get-review-result") {
 			process.stdout.write(JSON.stringify(getReviewResult(sessionId)) + "\n");
 		} else if (subcommand === "record-comment-resolution") {
@@ -2810,7 +2775,7 @@ function main(): void {
 			process.stdout.write(JSON.stringify(serializeReviewContext(sessionId)) + "\n");
 		} else {
 			process.stderr.write(
-				"Usage: ultragoal-state.ts <set|set-verdict|set-budget-limited|resume-pursuit|set-blocked|request-complete|claim-review-dispatch|submit-review|get-review-result|record-comment-resolution|approve-review-dispatch-renewal|dismiss-review-finding|get|status|list-others|adopt|set-stories|confirm-story|confirm-all-stories|reorder-stories|revise-story|add-story|retire-story|split-story|serialize-requirements|serialize-review-context> [options]\n",
+				"Usage: ultragoal-state.ts <set|set-verdict|set-budget-limited|resume-pursuit|set-blocked|request-complete|claim-review-dispatch|get-review-result|record-comment-resolution|approve-review-dispatch-renewal|dismiss-review-finding|get|status|list-others|adopt|set-stories|confirm-story|confirm-all-stories|reorder-stories|revise-story|add-story|retire-story|split-story|serialize-requirements|serialize-review-context> [options]\n",
 			);
 			process.exit(1);
 		}
