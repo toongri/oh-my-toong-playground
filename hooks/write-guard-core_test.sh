@@ -1157,6 +1157,49 @@ test_reviewer_submit_nested_shell_wrapper_false_positives_allow() {
     done
 }
 
+test_reviewer_submit_nested_shell_wrapper_scans_all_segments_once() {
+    local cmd out deny_count
+    for cmd in \
+        "bash -c 'echo safe; bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -c 'echo safe && bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -c 'echo safe | bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -; echo safe'" \
+        "bash -c 'echo safe; echo safer'" \
+        "X=1 bash -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "env X=1 bash -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'"; do
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior' \"\$1\"" _ "$cmd")
+        deny_count=$(printf '%s\n' "$out" | grep -c 'permissionDecision":"deny"' || true)
+        if [ "$cmd" = "bash -c 'echo safe; echo safer'" ]; then
+            if [ "$deny_count" -ne 0 ]; then
+                echo "ASSERTION FAILED reviewer-submit-nested-multiple-safe: expected allow, got '$out'"
+                return 1
+            fi
+        elif [ "$deny_count" -ne 1 ]; then
+            echo "ASSERTION FAILED reviewer-submit-nested-segments-nonreviewer: expected one deny for '$cmd', got '$out'"
+            return 1
+        fi
+
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer' \"\$1\"" _ "$cmd")
+        if [ -n "$out" ]; then
+            echo "ASSERTION FAILED reviewer-submit-nested-segments-reviewer: expected allow for '$cmd', got '$out'"
+            return 1
+        fi
+    done
+
+    cmd=$(printf "bash -c 'echo safe\\nbun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'")
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior' \"\$1\"" _ "$cmd")
+    deny_count=$(printf '%s\n' "$out" | grep -c 'permissionDecision":"deny"' || true)
+    if [ "$deny_count" -ne 1 ]; then
+        echo "ASSERTION FAILED reviewer-submit-nested-newline-nonreviewer: expected one deny, got '$out'"
+        return 1
+    fi
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer' \"\$1\"" _ "$cmd")
+    if [ -n "$out" ]; then
+        echo "ASSERTION FAILED reviewer-submit-nested-newline-reviewer: expected allow, got '$out'"
+        return 1
+    fi
+}
+
 # codereview_guard_core_run <OMT_DIR> <session_id> <agent_type> tests
 # (code-review-artifact-guard-core plan) -- identity-conditional guard: unlike
 # write_guard_core_run's unconditional deny, this one allows the SAME guarded
@@ -1556,6 +1599,7 @@ main() {
     run_test test_reviewer_submit_bun_argument_false_positives_allow
     run_test test_reviewer_submit_nested_shell_wrapper_identity_matrix
     run_test test_reviewer_submit_nested_shell_wrapper_false_positives_allow
+    run_test test_reviewer_submit_nested_shell_wrapper_scans_all_segments_once
     run_test test_reviewer_submit_review_cli_absent_identity_denied
     run_test test_negative_double_space_nondangerous_allows
     run_test test_ac_codereview_byte_identical_deny

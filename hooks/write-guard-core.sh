@@ -340,12 +340,57 @@ write_guard_core_check_user_authorized_command() {
     return 0
 }
 
+# _wg_core_check_nested_operand <operand> <agent_type>
+# Scans the already-extracted shell-script operand one command segment at a
+# time. Quotes are tracked only to keep separators and newlines inside quoted
+# words from becoming boundaries; this remains a bounded lexical check.
+_wg_core_check_nested_operand() {
+    local operand="$1" agent_type="${2:-}"
+    local i=0 n=${#operand} c quote="" segment="" escaped=0 nested_out nested_found=0
+
+    while [ "$i" -lt "$n" ]; do
+        c="${operand:$i:1}"
+        if [ -n "$quote" ]; then
+            if [ "$c" = "$quote" ]; then
+                quote=""
+            else
+                segment="$segment$c"
+            fi
+        elif [ "$escaped" -eq 1 ]; then
+            segment="$segment$c"
+            escaped=0
+        else
+            case "$c" in
+                "'"|'"') quote="$c" ;;
+                "\\") escaped=1 ;;
+                ';'|'|'|'&'|$'\n')
+                    if [ -n "$segment" ]; then
+                        nested_out=$(write_guard_core_check_reviewer_submit_command "$segment" "" "$agent_type")
+                        [ -n "$nested_out" ] && nested_found=1
+                        segment=""
+                    fi
+                    ;;
+                *) segment="$segment$c" ;;
+            esac
+        fi
+        i=$((i + 1))
+    done
+    if [ "$escaped" -eq 1 ]; then segment="$segment\\"; fi
+    if [ -n "$segment" ]; then
+        nested_out=$(write_guard_core_check_reviewer_submit_command "$segment" "" "$agent_type")
+        [ -n "$nested_out" ] && nested_found=1
+    fi
+    if [ "$nested_found" -eq 1 ]; then
+        printf '%s\n' "$_wg_core_reviewer_submit_deny_json"
+    fi
+    return 0
+}
+
 # _wg_core_check_nested_reviewer_submit <raw-command> <agent_type>
 # Extracts only the supported quoted operand of `bash|sh -c|-lc`, optionally
-# behind `env -i`, and feeds that operand back through the existing publisher
-# state machine. This is deliberately a bounded wrapper check, not a shell
-# interpreter: unquoted -c operands, other shell options, and other wrappers
-# remain outside the guard's scope.
+# behind an env wrapper, and feeds that operand back through the bounded
+# segment scanner above. Unquoted -c operands, other shell options, and other
+# wrappers remain outside the guard's scope.
 _wg_core_check_nested_reviewer_submit() {
     local raw="$1" agent_type="${2:-}"
     case "$raw" in
@@ -380,6 +425,13 @@ _wg_core_check_nested_reviewer_submit() {
                         i=$((i + 1)); token="$token${raw:$i:1}"
                     fi
                     ;;
+                $'\n')
+                    if [ -n "$token" ] || [ "$had_quote" -eq 1 ]; then
+                        tokens[$count]="$token"; quoted[$count]="$had_quote"; count=$((count + 1))
+                        token=""; had_quote=0
+                    fi
+                    tokens[$count]=$'\n'; quoted[$count]=0; count=$((count + 1))
+                    ;;
                 [[:space:]])
                     if [ -n "$token" ] || [ "$had_quote" -eq 1 ]; then
                         tokens[$count]="$token"; quoted[$count]="$had_quote"; count=$((count + 1))
@@ -403,34 +455,53 @@ _wg_core_check_nested_reviewer_submit() {
     fi
 
     i=0
+    local nested_out nested_found=0 segment_end
     while [ "$i" -lt "$count" ]; do
         case "${tokens[$i]}" in
-            ';'|'|'|'&'|'&&'|'||') i=$((i + 1)); continue ;;
+            ';'|'|'|'&'|'&&'|'||'|$'\n') i=$((i + 1)); continue ;;
         esac
+        segment_end="$i"
+        while [ "$segment_end" -lt "$count" ]; do
+            case "${tokens[$segment_end]}" in
+                ';'|'|'|'&'|'&&'|'||'|$'\n') break ;;
+            esac
+            segment_end=$((segment_end + 1))
+        done
         wrapper="$i"
-        if [ "${tokens[$wrapper]}" = "env" ] && [ $((wrapper + 1)) -lt "$count" ] && [ "${tokens[$((wrapper + 1))]}" = "-i" ]; then
-            wrapper=$((wrapper + 2))
-            while [ "$wrapper" -lt "$count" ] && [[ "${tokens[$wrapper]}" == [A-Za-z_]*=* ]]; do
+        if [ "${tokens[$wrapper]}" = "env" ]; then
+            wrapper=$((wrapper + 1))
+            if [ "$wrapper" -lt "$segment_end" ] && [ "${tokens[$wrapper]}" = "-i" ]; then
                 wrapper=$((wrapper + 1))
+            fi
+            while [ "$wrapper" -lt "$segment_end" ]; do
+                case "${tokens[$wrapper]}" in
+                    [A-Za-z_]*=*) wrapper=$((wrapper + 1)) ;;
+                    *) break ;;
+                esac
+            done
+        else
+            while [ "$wrapper" -lt "$segment_end" ]; do
+                case "${tokens[$wrapper]}" in
+                    [A-Za-z_]*=*) wrapper=$((wrapper + 1)) ;;
+                    *) break ;;
+                esac
             done
         fi
-        if [ "$wrapper" -lt "$count" ] && { [ "${tokens[$wrapper]}" = "bash" ] || [ "${tokens[$wrapper]}" = "sh" ]; } \
-            && [ $((wrapper + 2)) -lt "$count" ] \
+        if [ "$wrapper" -lt "$segment_end" ] && { [ "${tokens[$wrapper]}" = "bash" ] || [ "${tokens[$wrapper]}" = "sh" ]; } \
+            && [ $((wrapper + 2)) -lt "$segment_end" ] \
             && { [ "${tokens[$((wrapper + 1))]}" = "-c" ] || [ "${tokens[$((wrapper + 1))]}" = "-lc" ]; } \
             && [ "${quoted[$((wrapper + 2))]}" -eq 1 ]; then
             operand="${tokens[$((wrapper + 2))]}"
             if [ -n "$operand" ]; then
-                write_guard_core_check_reviewer_submit_command "$operand" "" "$agent_type"
-                return 0
+                nested_out=$(_wg_core_check_nested_operand "$operand" "$agent_type")
+                [ -n "$nested_out" ] && nested_found=1
             fi
         fi
-        while [ "$i" -lt "$count" ]; do
-            case "${tokens[$i]}" in
-                ';'|'|'|'&'|'&&'|'||') break ;;
-            esac
-            i=$((i + 1))
-        done
+        i="$segment_end"
     done
+    if [ "$nested_found" -eq 1 ]; then
+        printf '%s\n' "$_wg_core_reviewer_submit_deny_json"
+    fi
     return 0
 }
 
