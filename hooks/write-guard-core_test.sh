@@ -969,6 +969,40 @@ test_reviewer_submit_bare_variable_publisher_identity_matrix() {
     return 1
 }
 
+test_reviewer_submit_bun_wrapper_identity_matrix() {
+    local wrapper path cmd out
+    for wrapper in \
+        'env bun' \
+        'bun run' \
+        'env bun run'; do
+        for path in \
+            '/repo/skills/code-review/scripts/submit-review.ts' \
+            '/repo/skills/code-review/scripts/../scripts/submit-review.ts' \
+            '${CLAUDE_SKILL_DIR}/scripts/submit-review.ts' \
+            '$CLAUDE_SKILL_DIR/scripts/submit-review.ts'; do
+            cmd="$wrapper $path --artifact /tmp/quality-result.json --json -"
+
+            out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior'" _ "$cmd")
+            if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+                echo "ASSERTION FAILED reviewer-submit-bun-wrapper-nonreviewer: expected deny for '$cmd', got '$out'"
+                return 1
+            fi
+
+            out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' ''" _ "$cmd")
+            if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+                echo "ASSERTION FAILED reviewer-submit-bun-wrapper-absent: expected deny for '$cmd', got '$out'"
+                return 1
+            fi
+
+            out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer'" _ "$cmd")
+            if [ -n "$out" ]; then
+                echo "ASSERTION FAILED reviewer-submit-bun-wrapper-reviewer: expected allow for '$cmd', got '$out'"
+                return 1
+            fi
+        done
+    done
+}
+
 test_reviewer_submit_neutral_publisher_bare_variable_reviewer_allowed() {
     local cmd out
     cmd='bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -'
@@ -1423,6 +1457,7 @@ main() {
     run_test test_reviewer_submit_variable_publisher_nonreviewer_denied
     run_test test_reviewer_submit_variable_publisher_reviewer_allowed
     run_test test_reviewer_submit_bare_variable_publisher_identity_matrix
+    run_test test_reviewer_submit_bun_wrapper_identity_matrix
     run_test test_reviewer_submit_neutral_publisher_bare_variable_reviewer_allowed
     run_test test_reviewer_submit_neutral_publisher_arbitrary_artifact_allowed
     run_test test_reviewer_submit_neutral_publisher_nonreviewer_denied

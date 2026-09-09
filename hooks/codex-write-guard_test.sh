@@ -2475,6 +2475,44 @@ test_reviewer_submit_variable_publisher_identity_matrix() {
     return "$result"
 }
 
+test_reviewer_submit_bun_wrapper_identity_matrix() {
+    new_sandbox
+    local wrapper path cmd out rc=0 result=0
+    for wrapper in \
+        'env bun' \
+        'bun run' \
+        'env bun run'; do
+        for path in \
+            '/repo/skills/code-review/scripts/submit-review.ts' \
+            '/repo/skills/code-review/scripts/../scripts/submit-review.ts' \
+            '${CLAUDE_SKILL_DIR}/scripts/submit-review.ts' \
+            '$CLAUDE_SKILL_DIR/scripts/submit-review.ts'; do
+            cmd="$wrapper $path --artifact \$OMT_DIR/ultragoal-codereview-parent.json --json -"
+
+            out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.,agent_type:"spoofed",cwd:$cwd},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+            if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+                echo "ASSERTION FAILED reviewer-submit-bun-wrapper-nonreviewer: expected deny for '$cmd', got '$out'"
+                result=1
+            fi
+
+            rc=0
+            out=$(printf '%s' "$cmd" | jq -Rs --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.,cwd:$cwd},session_id:$sid,cwd:$cwd}' | run_hook) || rc=$?
+            if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+                echo "ASSERTION FAILED reviewer-submit-bun-wrapper-absent: expected deny for '$cmd', got '$out'"
+                result=1
+            fi
+
+            rc=0
+            out=$(printf '%s' "$cmd" | jq -Rs --arg at code-reviewer --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.,cwd:$cwd},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+            if ! assert_allow "$out" "$rc" "reviewer-submit-bun-wrapper-reviewer"; then
+                result=1
+            fi
+        done
+    done
+    rm -rf "$SBX"
+    return "$result"
+}
+
 test_reviewer_submit_cli_nested_agent_type_spoof_denied() {
     new_sandbox
     local cmd out rc=0
@@ -3143,6 +3181,7 @@ main() {
     run_test test_reviewer_submit_cli_nonreviewer_denied
     run_test test_reviewer_submit_dot_segment_publisher_identity_matrix
     run_test test_reviewer_submit_variable_publisher_identity_matrix
+    run_test test_reviewer_submit_bun_wrapper_identity_matrix
     run_test test_reviewer_submit_cli_nested_agent_type_spoof_denied
     run_test test_reviewer_submit_path_only_arguments_allow
     run_test test_reviewer_submit_bun_argument_false_positives_allow

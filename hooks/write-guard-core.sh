@@ -385,11 +385,12 @@ write_guard_core_check_reviewer_submit_command() {
         clean_token="$_wg_core_norm_publisher_token_result"
         if [ "$saw_cli" -eq 0 ]; then
             # The publisher path is meaningful only as the script argument of
-            # the documented `bun <publisher-path>` invocation. In particular,
+            # the documented `bun <publisher-path>` invocation and its supported
+            # `bun run <publisher-path>` / `env bun ...` forms. In particular,
             # a path in git diff/test/echo arguments must not identify an
             # invocation. Require bun to have been the command word at the
             # beginning of the current simple command.
-            if [ "$previous_executable" = "bun" ]; then
+            if [ "$previous_executable" = "bun" ] || [ "$previous_executable" = "bun-run" ]; then
                 case "$clean_token" in
                     */code-review/scripts/submit-review.ts) saw_cli=1 ;;
                     \$\{[A-Za-z_][A-Za-z0-9_]*\}/scripts/submit-review.ts) saw_cli=1 ;;
@@ -398,10 +399,17 @@ write_guard_core_check_reviewer_submit_command() {
             fi
         fi
 
-        previous_executable=''
+        case "$previous_executable:$raw_token" in
+            env:bun) previous_executable='bun' ;;
+            bun:run) previous_executable='bun-run' ;;
+            *) previous_executable='' ;;
+        esac
         if [ "$command_position" -eq 1 ]; then
             if [ "$raw_token" = "bun" ]; then
                 previous_executable='bun'
+                command_position=0
+            elif [ "$raw_token" = "env" ]; then
+                previous_executable='env'
                 command_position=0
             else
                 case "$clean_token" in
