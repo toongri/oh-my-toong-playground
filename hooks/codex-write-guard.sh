@@ -1005,6 +1005,17 @@ _cwg_process_shell_text() {
     local masked
     masked=$(_cwg_mask_quoted "$shell_cmd")
 
+    # Reviewer-only neutral submit-review publisher guard. It runs on the
+    # resolved shell/exec command surface and trusts only top-level identity;
+    # publisher/consumer code owns artifact validation.
+    local submit_agent_type submit_out
+    submit_agent_type=$(printf '%s' "$input" | jq -r '.agent_type // empty' 2>/dev/null) || submit_agent_type=""
+    submit_out=$(write_guard_core_check_reviewer_submit_command "$masked" "$omt_dir" "$submit_agent_type" "$shell_cmd")
+    if [ -n "$submit_out" ]; then
+        printf '%s\n' "$submit_out"
+        exit 0
+    fi
+
     # Redirect / tee / rm classifier, per chain segment (split on
     # && || ; |, matching pre-tool-enforcer.sh's segmentation) -- single-awk-
     # process rewrite (O(1) forks regardless of segment count): the sed

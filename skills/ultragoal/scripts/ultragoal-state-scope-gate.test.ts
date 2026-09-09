@@ -94,6 +94,14 @@ function finding(
 		scope_evidence: { basis, reference: "outcome", rationale: "contract evidence" },
 		verdict,
 		impact,
+		priority: impact,
+		assessment: {
+			unfixed_cost: "test unfixed cost",
+			exposure: "test exposure",
+			remedy: "test remedy",
+			added_cost: "test added cost",
+			rationale: "test rationale",
+		},
 		ref: "src/a.ts:1",
 	};
 }
@@ -107,20 +115,22 @@ describe("범위 판정이 심각도보다 먼저 적용된다", () => {
 		expect(classify(finding("OUT_OF_SCOPE", "PLAUSIBLE", "LOW"))).toBe("NOTE");
 	});
 
-	test("범위 안 확정 지적은 모든 심각도에서 완료를 막는다", () => {
+	test("범위 안 확정 지적은 HIGH만 차단하고 MEDIUM은 수정, LOW는 메모로 분류한다", () => {
 		const classify = (state as Record<string, unknown>)["classifyReviewFindingOutcome"] as (
 			finding: object,
 		) => string;
-		for (const impact of ["HIGH", "MEDIUM", "LOW"])
-			expect(classify(finding("IN_SCOPE", "CONFIRMED", impact as "HIGH"))).toBe("BLOCK");
+		expect(classify(finding("IN_SCOPE", "CONFIRMED", "HIGH"))).toBe("BLOCK");
+		expect(classify(finding("IN_SCOPE", "CONFIRMED", "MEDIUM"))).toBe("FIX");
+		expect(classify(finding("IN_SCOPE", "CONFIRMED", "LOW"))).toBe("NOTE");
 	});
 
-	test("범위 안 미확정 지적은 모든 심각도에서 독립 판정이 필요하다", () => {
+	test("범위 안 PLAUSIBLE 지적은 우선 독립 adjudication 대상으로 남긴다", () => {
 		const classify = (state as Record<string, unknown>)["classifyReviewFindingOutcome"] as (
 			finding: object,
 		) => string;
-		for (const impact of ["HIGH", "MEDIUM", "LOW"])
-			expect(classify(finding("IN_SCOPE", "PLAUSIBLE", impact as "HIGH"))).toBe("ADJUDICATE");
+		expect(classify(finding("IN_SCOPE", "PLAUSIBLE", "HIGH"))).toBe("ADJUDICATE");
+		expect(classify(finding("IN_SCOPE", "PLAUSIBLE", "MEDIUM"))).toBe("ADJUDICATE");
+		expect(classify(finding("IN_SCOPE", "PLAUSIBLE", "LOW"))).toBe("ADJUDICATE");
 	});
 
 	test("범위 미확정은 모든 심각도에서 수정 없이 완료를 막는다", () => {
@@ -147,7 +157,12 @@ describe("범위 근거는 필수이며 완료 전에 검증된다", () => {
 		test(`${scope} ${verdict} ${impact} 범위 게이트 판정을 따른다`, () => {
 			writeObjectiveArtifact();
 			writeReview([finding(scope, verdict, impact)]);
-			expect(state.requestComplete(SID)).toBe(scope === "OUT_OF_SCOPE");
+			expect(state.requestComplete(SID)).toBe(
+				scope === "OUT_OF_SCOPE" ||
+				(scope === "IN_SCOPE" && verdict === "CONFIRMED" && impact === "LOW")
+					? true
+					: false,
+		);
 		});
 });
 

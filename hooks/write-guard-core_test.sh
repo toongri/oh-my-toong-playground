@@ -898,6 +898,308 @@ test_negative_subcommand_name_as_prose_allows() {
     fi
 }
 
+# Reviewer submit-review CLI is a separate command route from direct artifact
+# writes. It must use the parent-session artifact explicitly and only the
+# trusted reviewer identity may invoke it.
+test_reviewer_submit_review_cli_orchestrator_denied() {
+    local cmd out
+    cmd="bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OD/ultragoal-codereview-parent.json --json -"
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior'" _ "$cmd")
+    if printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then return 0; fi
+    echo "ASSERTION FAILED reviewer-submit-orchestrator: expected deny, got '$out'"
+    return 1
+}
+
+test_reviewer_submit_review_cli_reviewer_allowed() {
+    local cmd out
+    cmd="bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OD/ultragoal-codereview-parent.json --json -"
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer'" _ "$cmd")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED reviewer-submit-reviewer: expected allow, got '$out'"
+    return 1
+}
+
+test_reviewer_submit_dot_segment_publisher_identity_matrix() {
+    local cmd out
+    cmd='bun /repo/skills/code-review/scripts/../scripts/submit-review.ts --artifact /tmp/quality-result.json --json -'
+
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior'" _ "$cmd")
+    if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED reviewer-submit-dot-segment-nonreviewer: expected deny, got '$out'"
+        return 1
+    fi
+
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer'" _ "$cmd")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED reviewer-submit-dot-segment-reviewer: expected allow, got '$out'"
+    return 1
+}
+
+test_reviewer_submit_variable_publisher_nonreviewer_denied() {
+    local cmd out
+    cmd='bun ${CLAUDE_SKILL_DIR}/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -'
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior'" _ "$cmd")
+    if printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then return 0; fi
+    echo "ASSERTION FAILED reviewer-submit-variable-nonreviewer: expected deny, got '$out'"
+    return 1
+}
+
+test_reviewer_submit_variable_publisher_reviewer_allowed() {
+    local cmd out
+    cmd='bun ${CLAUDE_SKILL_DIR}/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -'
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer'" _ "$cmd")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED reviewer-submit-variable-reviewer: expected allow, got '$out'"
+    return 1
+}
+
+test_reviewer_submit_bare_variable_publisher_identity_matrix() {
+    local cmd out
+    cmd='bun $CLAUDE_SKILL_DIR/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -'
+
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior'" _ "$cmd")
+    if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED reviewer-submit-bare-variable-nonreviewer: expected deny, got '$out'"
+        return 1
+    fi
+
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer'" _ "$cmd")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED reviewer-submit-bare-variable-reviewer: expected allow, got '$out'"
+    return 1
+}
+
+test_reviewer_submit_bun_wrapper_identity_matrix() {
+    local wrapper path cmd out
+    for wrapper in \
+        'env bun' \
+        'bun run' \
+        'env bun run'; do
+        for path in \
+            '/repo/skills/code-review/scripts/submit-review.ts' \
+            '/repo/skills/code-review/scripts/../scripts/submit-review.ts' \
+            '${CLAUDE_SKILL_DIR}/scripts/submit-review.ts' \
+            '$CLAUDE_SKILL_DIR/scripts/submit-review.ts'; do
+            cmd="$wrapper $path --artifact /tmp/quality-result.json --json -"
+
+            out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior'" _ "$cmd")
+            if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+                echo "ASSERTION FAILED reviewer-submit-bun-wrapper-nonreviewer: expected deny for '$cmd', got '$out'"
+                return 1
+            fi
+
+            out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' ''" _ "$cmd")
+            if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+                echo "ASSERTION FAILED reviewer-submit-bun-wrapper-absent: expected deny for '$cmd', got '$out'"
+                return 1
+            fi
+
+            out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer'" _ "$cmd")
+            if [ -n "$out" ]; then
+                echo "ASSERTION FAILED reviewer-submit-bun-wrapper-reviewer: expected allow for '$cmd', got '$out'"
+                return 1
+            fi
+        done
+    done
+}
+
+test_reviewer_submit_bun_and_env_option_identity_matrix() {
+    local cmd out
+    for cmd in \
+        'bun --smol /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env FOO=bar bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env -i bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env -i FOO=bar bun run --silent /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env -u FOO bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env --unset FOO bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env --unset=FOO bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env X=1 bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env _=1 bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'X=1 bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env -i -- X=1 FOO=bar bun --smol /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env --ignore-environment bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env -- bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'env FOO=bar bun run /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'bun run --silent /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'bun --cwd /tmp /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'bun --cwd=/tmp /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -' \
+        'bun run --cwd /tmp /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -'; do
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior'" _ "$cmd")
+        if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+            echo "ASSERTION FAILED reviewer-submit-options-nonreviewer: expected deny for '$cmd', got '$out'"
+            return 1
+        fi
+
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' ''" _ "$cmd")
+        if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+            echo "ASSERTION FAILED reviewer-submit-options-absent: expected deny for '$cmd', got '$out'"
+            return 1
+        fi
+
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer'" _ "$cmd")
+        if [ -n "$out" ]; then
+            echo "ASSERTION FAILED reviewer-submit-options-reviewer: expected allow for '$cmd', got '$out'"
+            return 1
+        fi
+    done
+}
+
+test_reviewer_submit_neutral_publisher_bare_variable_reviewer_allowed() {
+    local cmd out
+    cmd='bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -'
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer'" _ "$cmd")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED reviewer-submit-bare-omt-reviewer: expected allow, got '$out'"
+    return 1
+}
+
+test_reviewer_submit_neutral_publisher_arbitrary_artifact_allowed() {
+    local cmd out
+    cmd='bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -'
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer'" _ "$cmd")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED reviewer-neutral-publisher: expected allow, got '$out'"
+    return 1
+}
+
+test_reviewer_submit_neutral_publisher_nonreviewer_denied() {
+    local cmd out
+    cmd='bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -'
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior'" _ "$cmd")
+    if printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then return 0; fi
+    echo "ASSERTION FAILED reviewer-neutral-nonreviewer: expected deny, got '$out'"
+    return 1
+}
+
+test_reviewer_submit_review_cli_absent_identity_denied() {
+    local cmd out
+    cmd="bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OD/ultragoal-codereview-parent.json --json -"
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' ''" _ "$cmd")
+    if printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then return 0; fi
+    echo "ASSERTION FAILED reviewer-submit-absent: expected deny, got '$out'"
+    return 1
+}
+
+test_reviewer_submit_path_only_arguments_allow() {
+    local cmd out
+    for cmd in \
+        'git diff -- skills/code-review/scripts/submit-review.ts' \
+        'test -f skills/code-review/scripts/submit-review.ts' \
+        'echo skills/code-review/scripts/submit-review.ts' \
+        'echo P' \
+        'test -f P' \
+        'git diff -- P' \
+        'echo bun P' \
+        'test bun P' \
+        'git diff -- bun P' \
+        'env -i echo bun P' \
+        'env FOO=bar echo bun P' \
+        'bun --smol /tmp/other.ts P' \
+        'bun --help P' \
+        'bun --version P' \
+        'bun --cwd P /tmp/other.ts' \
+        'env -u bun echo P'; do
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior'" _ "$cmd")
+        if [ -n "$out" ]; then
+            echo "ASSERTION FAILED reviewer-submit-path-only: expected allow for '$cmd', got '$out'"
+            return 1
+        fi
+    done
+}
+
+test_reviewer_submit_bun_argument_false_positives_allow() {
+    local cmd out
+    for cmd in \
+        'echo bun skills/code-review/scripts/submit-review.ts' \
+        'test bun skills/code-review/scripts/submit-review.ts' \
+        'git diff -- bun skills/code-review/scripts/submit-review.ts'; do
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior'" _ "$cmd")
+        if [ -n "$out" ]; then
+            echo "ASSERTION FAILED reviewer-submit-bun-argument: expected allow for '$cmd', got '$out'"
+            return 1
+        fi
+    done
+}
+
+test_reviewer_submit_nested_shell_wrapper_identity_matrix() {
+    local cmd out
+    for cmd in \
+        "bash -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -lc 'bun /repo/skills/code-review/scripts/../scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "sh -c 'env -i X=1 bun run --silent \${CLAUDE_SKILL_DIR}/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "env -i bash -c 'echo ok; bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'"; do
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior' \"\$1\"" _ "$cmd")
+        if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+            echo "ASSERTION FAILED reviewer-submit-nested-nonreviewer: expected deny for '$cmd', got '$out'"
+            return 1
+        fi
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer' \"\$1\"" _ "$cmd")
+        if [ -n "$out" ]; then
+            echo "ASSERTION FAILED reviewer-submit-nested-reviewer: expected allow for '$cmd', got '$out'"
+            return 1
+        fi
+    done
+}
+
+test_reviewer_submit_nested_shell_wrapper_false_positives_allow() {
+    local cmd out
+    for cmd in \
+        "bash -c 'echo bun /repo/skills/code-review/scripts/submit-review.ts'" \
+        "bash -c bun /repo/skills/code-review/scripts/submit-review.ts" \
+        "bash -c '' bun /repo/skills/code-review/scripts/submit-review.ts" \
+        "bash -n -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -c 'bun --cwd /repo/skills/code-review/scripts/submit-review.ts /tmp/other.ts'"; do
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior' \"\$1\"" _ "$cmd")
+        if [ -n "$out" ]; then
+            echo "ASSERTION FAILED reviewer-submit-nested-false-positive: expected allow for '$cmd', got '$out'"
+            return 1
+        fi
+    done
+}
+
+test_reviewer_submit_nested_shell_wrapper_scans_all_segments_once() {
+    local cmd out deny_count
+    for cmd in \
+        "bash -c 'echo safe; bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -c 'echo safe && bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -c 'echo safe | bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -; echo safe'" \
+        "bash -c 'echo safe; echo safer'" \
+        "X=1 bash -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "env X=1 bash -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'"; do
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior' \"\$1\"" _ "$cmd")
+        deny_count=$(printf '%s\n' "$out" | grep -c 'permissionDecision":"deny"' || true)
+        if [ "$cmd" = "bash -c 'echo safe; echo safer'" ]; then
+            if [ "$deny_count" -ne 0 ]; then
+                echo "ASSERTION FAILED reviewer-submit-nested-multiple-safe: expected allow, got '$out'"
+                return 1
+            fi
+        elif [ "$deny_count" -ne 1 ]; then
+            echo "ASSERTION FAILED reviewer-submit-nested-segments-nonreviewer: expected one deny for '$cmd', got '$out'"
+            return 1
+        fi
+
+        out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer' \"\$1\"" _ "$cmd")
+        if [ -n "$out" ]; then
+            echo "ASSERTION FAILED reviewer-submit-nested-segments-reviewer: expected allow for '$cmd', got '$out'"
+            return 1
+        fi
+    done
+
+    cmd=$(printf "bash -c 'echo safe\\nbun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'")
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior' \"\$1\"" _ "$cmd")
+    deny_count=$(printf '%s\n' "$out" | grep -c 'permissionDecision":"deny"' || true)
+    if [ "$deny_count" -ne 1 ]; then
+        echo "ASSERTION FAILED reviewer-submit-nested-newline-nonreviewer: expected one deny, got '$out'"
+        return 1
+    fi
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer' \"\$1\"" _ "$cmd")
+    if [ -n "$out" ]; then
+        echo "ASSERTION FAILED reviewer-submit-nested-newline-reviewer: expected allow, got '$out'"
+        return 1
+    fi
+}
+
 # codereview_guard_core_run <OMT_DIR> <session_id> <agent_type> tests
 # (code-review-artifact-guard-core plan) -- identity-conditional guard: unlike
 # write_guard_core_run's unconditional deny, this one allows the SAME guarded
@@ -1282,6 +1584,23 @@ main() {
     run_test test_negative_ultragoal_request_complete_allows
     run_test test_negative_ultragoal_set_verdict_allows
     run_test test_negative_subcommand_name_as_prose_allows
+    run_test test_reviewer_submit_review_cli_orchestrator_denied
+    run_test test_reviewer_submit_review_cli_reviewer_allowed
+    run_test test_reviewer_submit_dot_segment_publisher_identity_matrix
+    run_test test_reviewer_submit_variable_publisher_nonreviewer_denied
+    run_test test_reviewer_submit_variable_publisher_reviewer_allowed
+    run_test test_reviewer_submit_bare_variable_publisher_identity_matrix
+    run_test test_reviewer_submit_bun_wrapper_identity_matrix
+    run_test test_reviewer_submit_bun_and_env_option_identity_matrix
+    run_test test_reviewer_submit_neutral_publisher_bare_variable_reviewer_allowed
+    run_test test_reviewer_submit_neutral_publisher_arbitrary_artifact_allowed
+    run_test test_reviewer_submit_neutral_publisher_nonreviewer_denied
+    run_test test_reviewer_submit_path_only_arguments_allow
+    run_test test_reviewer_submit_bun_argument_false_positives_allow
+    run_test test_reviewer_submit_nested_shell_wrapper_identity_matrix
+    run_test test_reviewer_submit_nested_shell_wrapper_false_positives_allow
+    run_test test_reviewer_submit_nested_shell_wrapper_scans_all_segments_once
+    run_test test_reviewer_submit_review_cli_absent_identity_denied
     run_test test_negative_double_space_nondangerous_allows
     run_test test_ac_codereview_byte_identical_deny
     run_test test_codereview_guard_ultragoal_empty_agent_type_denies

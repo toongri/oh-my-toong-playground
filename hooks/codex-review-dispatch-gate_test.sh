@@ -89,7 +89,8 @@ test_completion_eligible_denied() {
     printf '%s' '{"status":"COMPLETE","scope_contract_sha256":"e70a5f7b6f94b69ff54071b2dd4d9417fd30e48336ffa51b2721907d9bc55d95","findings":[],"reviewer":"r","at":"now"}' > "$OMT_DIR/ultragoal-codereview-$OMT_SESSION_ID.json"
     out=$(payload "collaborationspawn_agent" "code-reviewer" | run_hook) || rc=$?
     assert_deny "$out" "$rc" "completion eligible" || return 1
-    printf '%s' "$out" | grep -q 'request-complete'
+    printf '%s' "$out" | grep -q 'get-review-result' || return 1
+    ! printf '%s' "$out" | grep -q 'approve-review-dispatch-renewal'
 }
 
 test_planning_nonreviewer_and_nontool_pass() {

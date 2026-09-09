@@ -1740,6 +1740,76 @@ test_cr17_bash_mv_source_goal_codereview_no_agent_type_large_candidates_denied()
     hg_is_deny "$HG_OUT" || { echo "ASSERTION FAILED CR17: expected the already-computed deny JSON to survive the oversized candidate pipe, not be discarded. Got: $HG_OUT"; return 1; }
 }
 
+test_reviewer_submit_cli_orchestrator_denied() {
+    local cmd out
+    cmd=$'run() { bun "'$SCRIPT_DIR'/../skills/code-review/scripts/submit-review.ts" --artifact "'$OMT_DIR'/ultragoal-codereview-parent.json" --json -; }\nrun'
+    out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior '{tool_name:"Bash",tool_input:{command:.},agent_type:$at}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED reviewer-submit orchestrator: $out"; return 1; }
+}
+
+test_reviewer_submit_cli_code_reviewer_allowed() {
+    local cmd out
+    cmd=$'run() { bun "'$SCRIPT_DIR'/../skills/code-review/scripts/submit-review.ts" --artifact "'$OMT_DIR'/ultragoal-codereview-parent.json" --json -; }\nrun'
+    out=$(printf '%s' "$cmd" | jq -Rs --arg at code-reviewer '{tool_name:"Bash",tool_input:{command:.},agent_type:$at}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED reviewer-submit reviewer: $out"; return 1; }
+}
+
+test_reviewer_submit_cli_absent_identity_denied() {
+    local cmd out
+    cmd="bun \"$SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts\" --artifact \"$OMT_DIR/ultragoal-codereview-parent.json\" --json -"
+    out=$(printf '%s' "$cmd" | jq -Rs '{tool_name:"Bash",tool_input:{command:.}}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED reviewer-submit absent identity: $out"; return 1; }
+}
+
+test_reviewer_submit_nested_shell_wrapper_identity_matrix() {
+    local cmd out deny_count newline_cmd
+    newline_cmd=$(printf "bash -c 'echo safe\nbun %s --artifact %s/result.json --json -'" "$SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts" "$OMT_DIR")
+    for cmd in \
+        "bash -c 'bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "bash -lc 'bun $SCRIPT_DIR/../skills/code-review/scripts/../scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "sh -c 'env -i X=1 bun run --silent \${CLAUDE_SKILL_DIR}/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "env -i bash -c 'echo ok; bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "bash -c 'echo safe'; bash -c 'bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "bash -c 'echo safe && bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "bash -c 'echo safe | bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -; bash -c 'echo safe'" \
+        "X=1 bash -c 'bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "env X=1 bash -c 'bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "$newline_cmd"; do
+        out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg nested code-reviewer '{tool_name:"Bash",tool_input:{command:.,agent_type:$nested},agent_type:$at}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+        hg_is_deny "$out" || { echo "ASSERTION FAILED reviewer-submit nested nonreviewer: $out"; return 1; }
+        deny_count=$(printf '%s' "$out" | grep -o '"permissionDecision":"deny"' | wc -l | tr -d ' ')
+        [ "$deny_count" -eq 1 ] || { echo "ASSERTION FAILED reviewer-submit nested nonreviewer: expected one deny output for '$cmd', got $deny_count: $out"; return 1; }
+        out=$(printf '%s' "$cmd" | jq -Rs --arg at code-reviewer '{tool_name:"Bash",tool_input:{command:.},agent_type:$at}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+        hg_is_allow "$out" || { echo "ASSERTION FAILED reviewer-submit nested reviewer: $out"; return 1; }
+        out=$(printf '%s' "$cmd" | jq -Rs '{tool_name:"Bash",tool_input:{command:.}}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+        hg_is_deny "$out" || { echo "ASSERTION FAILED reviewer-submit nested absent identity: $out"; return 1; }
+        deny_count=$(printf '%s' "$out" | grep -o '"permissionDecision":"deny"' | wc -l | tr -d ' ')
+        [ "$deny_count" -eq 1 ] || { echo "ASSERTION FAILED reviewer-submit nested absent identity: expected one deny output for '$cmd', got $deny_count: $out"; return 1; }
+    done
+
+    cmd="bash -c 'echo safe'; bash -c 'echo also-safe'"
+    out=$(printf '%s' "$cmd" | jq -Rs '{tool_name:"Bash",tool_input:{command:.}}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED reviewer-submit nested multiple-safe-only: $out"; return 1; }
+
+    cmd=$(printf "bash -c 'echo safe\nbun %s --artifact %s/result.json --json -'" "$SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts" "$OMT_DIR")
+    out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior '{tool_name:"Bash",tool_input:{command:.},agent_type:$at}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED reviewer-submit nested newline nonreviewer: $out"; return 1; }
+}
+
+test_reviewer_submit_nested_shell_wrapper_false_positives_allow() {
+    local cmd out
+    for cmd in \
+        "bash -c 'echo bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts'" \
+        "bash -c bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts" \
+        "bash -c '' bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts" \
+        "bash -n -c 'bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "bash -c 'bun --cwd $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts /tmp/other.ts'"; do
+        out=$(printf '%s' "$cmd" | jq -Rs '{tool_name:"Bash",tool_input:{command:.}}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+        hg_is_allow "$out" || { echo "ASSERTION FAILED reviewer-submit nested false-positive: $out"; return 1; }
+    done
+}
+
 test_regression_ambient_claude_env_file_not_leaked_by_unscrubbed_call() {
     # Regression guard for the ambient CLAUDE_ENV_FILE leak: AC9's session-
     # start.sh invocation (test_ac9_started_at_parseable_by_stale_cleanup)
@@ -1809,11 +1879,11 @@ test_rdg_sixth_candidate_denied_without_increment() {
 test_rdg_out_of_scope_review_denies_with_completion_actions() {
     local out
     rdg_seed_pursuing
-    printf '%s' '{"status":"COMPLETE","scope_contract_sha256":"f92f8daed0f3442495084d1ab9bc72a75ae01a9f120d8b7781c8494ab83def95","findings":[{"class":"cleanup","verdict":"CONFIRMED","impact":"LOW","scope":"OUT_OF_SCOPE","scope_evidence":{"basis":"unrelated","reference":"outcome","rationale":"cleanup finding is unrelated to the active review contract"}}],"reviewer":"r","at":"now"}' > "$OMT_DIR/ultragoal-codereview-$OMT_SESSION_ID.json"
+    printf '%s' '{"status":"COMPLETE","scope_contract_sha256":"f92f8daed0f3442495084d1ab9bc72a75ae01a9f120d8b7781c8494ab83def95","findings":[{"class":"cleanup","verdict":"CONFIRMED","impact":"LOW","priority":"LOW","assessment":{"unfixed_cost":"low","exposure":"low","remedy":"defer cleanup","added_cost":"low","rationale":"unrelated cleanup"},"scope":"OUT_OF_SCOPE","scope_evidence":{"basis":"unrelated","reference":"outcome","rationale":"cleanup finding is unrelated to the active review contract"}}],"reviewer":"r","at":"now"}' > "$OMT_DIR/ultragoal-codereview-$OMT_SESSION_ID.json"
     out=$(rdg_agent_payload "code-reviewer" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
     hg_is_deny "$out" || { echo "ASSERTION FAILED rdg completion eligible: $out"; return 1; }
-    printf '%s' "$out" | grep -q 'request-complete' || return 1
-    printf '%s' "$out" | grep -q 'approve-review-dispatch-renewal' || return 1
+    printf '%s' "$out" | grep -q 'get-review-result' || return 1
+    ! printf '%s' "$out" | grep -q 'approve-review-dispatch-renewal' || return 1
     [ "$(jq -r '.review_dispatch_used // 0' "$OMT_DIR/ultragoal-state-$OMT_SESSION_ID.json")" = "0" ]
 }
 
@@ -2012,6 +2082,11 @@ main() {
     run_test test_cr15_bash_mv_source_ledger_denied
     run_test test_cr16_bash_mv_source_goal_codereview_code_reviewer_large_candidates_allowed
     run_test test_cr17_bash_mv_source_goal_codereview_no_agent_type_large_candidates_denied
+    run_test test_reviewer_submit_cli_orchestrator_denied
+    run_test test_reviewer_submit_cli_code_reviewer_allowed
+    run_test test_reviewer_submit_cli_absent_identity_denied
+    run_test test_reviewer_submit_nested_shell_wrapper_identity_matrix
+    run_test test_reviewer_submit_nested_shell_wrapper_false_positives_allow
     run_test test_rdg_matching_claude_candidate_allows_and_increments
     run_test test_rdg_sixth_candidate_denied_without_increment
     run_test test_rdg_out_of_scope_review_denies_with_completion_actions

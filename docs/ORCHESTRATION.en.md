@@ -139,6 +139,24 @@ Questions have no count limit and resolve prerequisite decisions first. Each ans
 - Reaching `max_iterations` (default 10) soft-stops without dispatching new work as non-complete `budget_limited`, preserving state. After in-flight work drains and the completion gate is checked, only the user may run `resume-pursuit` to restore `pursuing` with `iteration=0`.
 - `blocked` is separate: it is reported only for B1 (no actionable incomplete work) or when the configured `blocked-stop` predicate is met.
 
+#### Final review result contract
+
+The final review retains the four finder angles: correctness, regression, cleanup, and requirement gap. `impact` describes harm if the scenario occurs, and is not a proxy for occurrence frequency, exposure, patch size, maintenance cost, or finder angle. `priority` is a response recommendation. Assign HIGH/MEDIUM/LOW from actual exposure and harm against the permanent complexity, maintenance burden, and regression risk introduced by the minimum remedy; implementation difficulty or effort alone must not lower it. Every `COMPLETE` finding must have five nonblank assessment strings: `unfixed_cost`, `exposure`, `remedy`, `added_cost`, and `rationale`.
+
+The final `code-reviewer` receives exactly the serialized review context and the caller-owned opaque artifact destination. The generic code-review publisher stores the original CodeReviewArtifact JSON unchanged and returns only the transport receipt `{path, sha256}`. The publisher does not know ultragoal and does not assign priority, scope, repair, completion, budget, or approval policy. The parent orchestrator must explicitly invoke the `get-review-result` CLI to obtain the original result; it must not read the receipt and apply subjective policy itself.
+
+The consumer decides scope first. `OUT_OF_SCOPE` is retained as a non-blocking NOTE; `UNKNOWN` blocks without repair. If `PLAUSIBLE` verification remains unresolved, or scope admission is incomplete, consume the reviewer's `INCONCLUSIVE` artifact status as-is and route to `REQUEST_CHANGES` without recording or rewriting reviewer status and without speculative repair.
+
+Routing for confirmed (`CONFIRMED`) IN_SCOPE findings:
+
+| Priority | Consumer handling |
+|---|---|
+| HIGH | `REQUEST_CHANGES` → repair, affected checks, and a fresh review |
+| MEDIUM | `COMMENT` → repair, affected checks, and hash-bound evidence via `record-comment-resolution --artifact-sha256 <sha> --evidence <paths>`; no re-review |
+| LOW | `COMMENT` → report only; no repair, check evidence, or re-review |
+
+Mixed results use the precedence `REQUEST_CHANGES` > `COMMENT` > `APPROVE`. `APPROVE` applies only when there are truly no findings; OUT_OF_SCOPE-only notes produce `COMMENT`, while any `UNKNOWN` or `INCONCLUSIVE` produces `REQUEST_CHANGES`. The initial five-review budget is used only for `REQUEST_CHANGES` rounds and absent-reviewer retries. `COMMENT` and `APPROVE` deny any extra dispatch, and review-budget renewal cannot bypass that rule. Objective and other completion gates remain in force.
+
 ### sisyphus (The Orchestrator)
 
 - **Role**: Execution and delegation

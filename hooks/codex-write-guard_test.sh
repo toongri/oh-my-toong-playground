@@ -2412,6 +2412,278 @@ test_codereview_shell_command_agent_type_sisyphus_junior_denies() {
     return "$result"
 }
 
+# Reviewer submit-review is guarded by trusted top-level agent_type only. The
+# state CLI owns argument/path validation, so a reviewer-shaped malformed call
+# reaches the CLI (and is allowed by this PreToolUse identity gate).
+test_reviewer_submit_cli_code_reviewer_function_newline_allowed() {
+    new_sandbox
+    local cmd out rc=0
+    cmd=$'run() { bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -; }\nrun'
+    out=$(printf '%s' "$cmd" | jq -Rs --arg at code-reviewer --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.,agent_type:"spoofed",cwd:$cwd},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+    assert_allow "$out" "$rc" "reviewer-submit-function" || { rm -rf "$SBX"; return 1; }
+    rm -rf "$SBX"
+}
+
+test_reviewer_submit_cli_nonreviewer_denied() {
+    new_sandbox
+    local cmd out rc=0
+    cmd='bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -'
+    out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then rm -rf "$SBX"; echo "ASSERTION FAILED reviewer-submit-nonreviewer: $out"; return 1; fi
+    rm -rf "$SBX"
+}
+
+test_reviewer_submit_nested_shell_wrapper_identity_matrix() {
+    new_sandbox
+    local cmd out deny_count newline_cmd rc=0
+    newline_cmd=$(printf "bash -c 'echo safe\nbun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'")
+    for cmd in \
+        "bash -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -lc 'bun /repo/skills/code-review/scripts/../scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "sh -c 'env -i X=1 bun run --silent \${CLAUDE_SKILL_DIR}/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "env -i bash -c 'echo ok; bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -c 'echo safe'; bash -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -c 'echo safe && bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -c 'echo safe | bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -; bash -c 'echo safe'" \
+        "X=1 bash -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "env X=1 bash -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "$newline_cmd"; do
+        out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg nested code-reviewer --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.,agent_type:$nested},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+        if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+            rm -rf "$SBX"; echo "ASSERTION FAILED reviewer-submit nested nonreviewer: $out"; return 1
+        fi
+        deny_count=$(printf '%s' "$out" | grep -o '"permissionDecision":"deny"' | wc -l | tr -d ' ')
+        if [ "$deny_count" -ne 1 ]; then
+            rm -rf "$SBX"; echo "ASSERTION FAILED reviewer-submit nested nonreviewer: expected one deny output for '$cmd', got $deny_count: $out"; return 1
+        fi
+        rc=0
+        out=$(printf '%s' "$cmd" | jq -Rs --arg at code-reviewer --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+        assert_allow "$out" "$rc" "reviewer-submit nested reviewer" || { rm -rf "$SBX"; return 1; }
+        rc=0
+        out=$(printf '%s' "$cmd" | jq -Rs --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd}' | run_hook) || rc=$?
+        if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+            rm -rf "$SBX"; echo "ASSERTION FAILED reviewer-submit nested absent identity: $out"; return 1
+        fi
+        deny_count=$(printf '%s' "$out" | grep -o '"permissionDecision":"deny"' | wc -l | tr -d ' ')
+        if [ "$deny_count" -ne 1 ]; then
+            rm -rf "$SBX"; echo "ASSERTION FAILED reviewer-submit nested absent identity: expected one deny output for '$cmd', got $deny_count: $out"; return 1
+        fi
+    done
+    rc=0
+    out=$(printf '%s' "bash -c 'echo safe'; bash -c 'echo also-safe'" | jq -Rs --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd}' | run_hook) || rc=$?
+    assert_allow "$out" "$rc" "reviewer-submit nested multiple-safe-only" || { rm -rf "$SBX"; return 1; }
+
+    cmd=$(printf "bash -c 'echo safe\nbun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'")
+    rc=0
+    out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.,},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+    if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+        rm -rf "$SBX"; echo "ASSERTION FAILED reviewer-submit nested newline nonreviewer: $out"; return 1
+    fi
+    deny_count=$(printf '%s' "$out" | grep -o '"permissionDecision":"deny"' | wc -l | tr -d ' ')
+    if [ "$deny_count" -ne 1 ]; then
+        rm -rf "$SBX"; echo "ASSERTION FAILED reviewer-submit nested newline nonreviewer: expected one deny output, got $deny_count: $out"; return 1
+    fi
+    rm -rf "$SBX"
+}
+
+test_reviewer_submit_nested_shell_wrapper_false_positives_allow() {
+    new_sandbox
+    local cmd out rc=0
+    for cmd in \
+        "bash -c 'echo bun /repo/skills/code-review/scripts/submit-review.ts'" \
+        "bash -c bun /repo/skills/code-review/scripts/submit-review.ts" \
+        "bash -c '' bun /repo/skills/code-review/scripts/submit-review.ts" \
+        "bash -n -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -c 'bun --cwd /repo/skills/code-review/scripts/submit-review.ts /tmp/other.ts'"; do
+        out=$(printf '%s' "$cmd" | jq -Rs --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd}' | run_hook) || rc=$?
+        assert_allow "$out" "$rc" "reviewer-submit nested false-positive" || { rm -rf "$SBX"; return 1; }
+        rc=0
+    done
+    rm -rf "$SBX"
+}
+
+test_reviewer_submit_dot_segment_publisher_identity_matrix() {
+    new_sandbox
+    local cmd out rc=0 result=0
+    cmd='bun /repo/skills/code-review/scripts/../scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -'
+
+    out=$(printf '%s' "$cmd" | jq -Rs --arg at code-reviewer --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "reviewer-submit-dot-segment-reviewer"; then
+        result=1
+    fi
+
+    rc=0
+    out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+    if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED reviewer-submit-dot-segment-nonreviewer: expected deny, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_reviewer_submit_variable_publisher_identity_matrix() {
+    new_sandbox
+    local cmd out rc=0 result=0
+    cmd='bun ${CLAUDE_SKILL_DIR}/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -'
+
+    out=$(printf '%s' "$cmd" | jq -Rs --arg at code-reviewer --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "reviewer-submit-variable-reviewer"; then
+        result=1
+    fi
+
+    rc=0
+    out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED reviewer-submit-variable-nonreviewer: expected deny, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_reviewer_submit_bun_wrapper_identity_matrix() {
+    new_sandbox
+    local wrapper path cmd out rc=0 result=0
+    for wrapper in \
+        'env bun' \
+        'bun run' \
+        'env bun run'; do
+        for path in \
+            '/repo/skills/code-review/scripts/submit-review.ts' \
+            '/repo/skills/code-review/scripts/../scripts/submit-review.ts' \
+            '${CLAUDE_SKILL_DIR}/scripts/submit-review.ts' \
+            '$CLAUDE_SKILL_DIR/scripts/submit-review.ts'; do
+            cmd="$wrapper $path --artifact \$OMT_DIR/ultragoal-codereview-parent.json --json -"
+
+            out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.,agent_type:"spoofed",cwd:$cwd},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+            if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+                echo "ASSERTION FAILED reviewer-submit-bun-wrapper-nonreviewer: expected deny for '$cmd', got '$out'"
+                result=1
+            fi
+
+            rc=0
+            out=$(printf '%s' "$cmd" | jq -Rs --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.,cwd:$cwd},session_id:$sid,cwd:$cwd}' | run_hook) || rc=$?
+            if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+                echo "ASSERTION FAILED reviewer-submit-bun-wrapper-absent: expected deny for '$cmd', got '$out'"
+                result=1
+            fi
+
+            rc=0
+            out=$(printf '%s' "$cmd" | jq -Rs --arg at code-reviewer --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.,cwd:$cwd},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+            if ! assert_allow "$out" "$rc" "reviewer-submit-bun-wrapper-reviewer"; then
+                result=1
+            fi
+        done
+    done
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_reviewer_submit_bun_and_env_option_identity_matrix() {
+    new_sandbox
+    local cmd out rc=0 result=0
+    for cmd in \
+        'bun --smol /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -' \
+        'env FOO=bar bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -' \
+        'env -i bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -' \
+        'env -i FOO=bar bun run --silent /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -' \
+        'env -u FOO bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -' \
+        'env --unset FOO bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -' \
+        'env --unset=FOO bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -' \
+        'env X=1 bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -' \
+        'env _=1 bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -' \
+        'X=1 bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -' \
+        'env -i -- X=1 FOO=bar bun --smol /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -' \
+        'env --ignore-environment bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -' \
+        'env -- bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -' \
+        'env FOO=bar bun run /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -' \
+        'bun run --silent /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -' \
+        'bun --cwd /tmp /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -' \
+        'bun --cwd=/tmp /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -' \
+        'bun run --cwd /tmp /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -'; do
+        out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.,cwd:$cwd},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+        if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+            echo "ASSERTION FAILED reviewer-submit-options-nonreviewer: expected deny for '$cmd', got '$out'"
+            result=1
+        fi
+
+        rc=0
+        out=$(printf '%s' "$cmd" | jq -Rs --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.,cwd:$cwd},session_id:$sid,cwd:$cwd}' | run_hook) || rc=$?
+        if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+            echo "ASSERTION FAILED reviewer-submit-options-absent: expected deny for '$cmd', got '$out'"
+            result=1
+        fi
+
+        rc=0
+        out=$(printf '%s' "$cmd" | jq -Rs --arg at code-reviewer --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.,cwd:$cwd},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+        if ! assert_allow "$out" "$rc" "reviewer-submit-options-reviewer"; then
+            result=1
+        fi
+    done
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_reviewer_submit_cli_nested_agent_type_spoof_denied() {
+    new_sandbox
+    local cmd out rc=0
+    cmd='bun /repo/skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -'
+    out=$(printf '%s' "$cmd" | jq -Rs --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.,agent_type:"code-reviewer"},session_id:$sid,cwd:$cwd}' | run_hook) || rc=$?
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then rm -rf "$SBX"; echo "ASSERTION FAILED reviewer-submit-nested-spoof: $out"; return 1; fi
+    rm -rf "$SBX"
+}
+
+test_reviewer_submit_path_only_arguments_allow() {
+    new_sandbox
+    local cmd out rc=0 result=0
+    for cmd in \
+        'git diff -- skills/code-review/scripts/submit-review.ts' \
+        'test -f skills/code-review/scripts/submit-review.ts' \
+        'echo skills/code-review/scripts/submit-review.ts'; do
+        out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+        if ! assert_allow "$out" "$rc" "reviewer-submit-path-only"; then
+            result=1
+        fi
+        rc=0
+    done
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_reviewer_submit_bun_argument_false_positives_allow() {
+    new_sandbox
+    local cmd out rc=0 result=0
+    for cmd in \
+        'echo bun skills/code-review/scripts/submit-review.ts' \
+        'test bun skills/code-review/scripts/submit-review.ts' \
+        'git diff -- bun skills/code-review/scripts/submit-review.ts' \
+        'echo P' \
+        'test -f P' \
+        'git diff -- P' \
+        'echo bun P' \
+        'test bun P' \
+        'git diff -- bun P' \
+        'env -i echo bun P' \
+        'env FOO=bar echo bun P' \
+        'bun --smol /tmp/other.ts P' \
+        'bun --help P' \
+        'bun --version P' \
+        'bun --cwd P /tmp/other.ts' \
+        'env -u bun echo P'; do
+        out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+        if ! assert_allow "$out" "$rc" "reviewer-submit-bun-argument"; then
+            result=1
+        fi
+        rc=0
+    done
+    rm -rf "$SBX"
+    return "$result"
+}
+
 # =============================================================================
 # AC6 -- false-positive negative controls: agent_type absent targeting paths
 # the code-review identity guard does NOT cover at all (ultragoal-verdict-
@@ -3033,6 +3305,17 @@ main() {
     run_test test_codereview_shell_command_agent_type_absent_denies
     run_test test_codereview_shell_command_agent_type_code_reviewer_allows
     run_test test_codereview_shell_command_agent_type_sisyphus_junior_denies
+    run_test test_reviewer_submit_cli_code_reviewer_function_newline_allowed
+    run_test test_reviewer_submit_cli_nonreviewer_denied
+    run_test test_reviewer_submit_nested_shell_wrapper_identity_matrix
+    run_test test_reviewer_submit_nested_shell_wrapper_false_positives_allow
+    run_test test_reviewer_submit_dot_segment_publisher_identity_matrix
+    run_test test_reviewer_submit_variable_publisher_identity_matrix
+    run_test test_reviewer_submit_bun_wrapper_identity_matrix
+    run_test test_reviewer_submit_bun_and_env_option_identity_matrix
+    run_test test_reviewer_submit_cli_nested_agent_type_spoof_denied
+    run_test test_reviewer_submit_path_only_arguments_allow
+    run_test test_reviewer_submit_bun_argument_false_positives_allow
     run_test test_codereview_negative_control_ultragoal_verdict_allows
     run_test test_codereview_negative_control_candidates_json_allows
     run_test test_ac4_codex_claude_deny_json_byte_identical

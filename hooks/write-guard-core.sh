@@ -61,6 +61,11 @@ _wg_core_codereview_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUs
 # byte-identical deny text.
 _wg_core_user_authorized_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: 이 명령은 사용자만 실행할 수 있습니다. AI는 실행하지 말고, 근거와 함께 명령어 전문을 제시한 뒤 사용자가 직접 실행하도록 요청하세요 (터미널에서 직접, 또는 프롬프트에 ! 를 붙여서)."}}'
 
+# Deny JSON for the reviewer-only submit-review publisher route. The publisher
+# hides artifact writes, so this gate protects the command's caller identity.
+# Keep the message shared by Claude and Codex.
+_wg_core_reviewer_submit_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: submit-review publisher는 code-reviewer subagent만 실행할 수 있습니다."}}'
+
 _wg_core_qa_state_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the current session QA state (qa-state-*.json). Use the qa-state.ts CLI instead."}}'
 
 # Deny JSON for the explain-diff step machine's state. Same anchor treatment as
@@ -108,6 +113,63 @@ _wg_core_normpath() {
         else { out = substr(out, 2); if (out == "") out = "." }
         print out
     }'
+}
+
+# _wg_core_norm_publisher_token <path>
+# Bash-only lexical normalization for the publisher scan. The shared path
+# normalizer above is intentionally awk-backed for the larger path matcher,
+# but this function runs once per shell token and must not fork per token.
+_wg_core_norm_publisher_token_result=''
+_wg_core_norm_publisher_token() {
+    local path="$1" segment normalized="" absolute=0 top=0 i
+    local old_ifs="$IFS"
+    local -a segments stack
+    segments=()
+    stack=()
+
+    case "$path" in
+        /*) absolute=1 ;;
+    esac
+
+    IFS=/ read -r -a segments <<< "$path"
+    IFS="$old_ifs"
+
+    for segment in "${segments[@]-}"; do
+        case "$segment" in
+            ""|.)
+                ;;
+            ..)
+                if [ "$top" -gt 0 ] && [ "${stack[$((top - 1))]}" != ".." ]; then
+                    top=$((top - 1))
+                elif [ "$absolute" -eq 0 ]; then
+                    stack[$top]=".."
+                    top=$((top + 1))
+                fi
+                ;;
+            *)
+                stack[$top]="$segment"
+                top=$((top + 1))
+                ;;
+        esac
+    done
+
+    if [ "$absolute" -eq 1 ]; then
+        normalized="/"
+    fi
+    for ((i = 0; i < top; i++)); do
+        if [ "$normalized" = "/" ]; then
+            normalized="/${stack[$i]}"
+        elif [ -n "$normalized" ]; then
+            normalized="$normalized/${stack[$i]}"
+        else
+            normalized="${stack[$i]}"
+        fi
+    done
+
+    if [ -z "$normalized" ]; then
+        if [ "$absolute" -eq 1 ]; then normalized="/"; else normalized="."; fi
+    fi
+    _wg_core_norm_publisher_token_result="$normalized"
 }
 
 # _wg_core_pathwise_glob_match <candidate-pattern-path> <concrete-ledger-path>
@@ -275,6 +337,323 @@ write_guard_core_check_user_authorized_command() {
             esac
             ;;
     esac
+    return 0
+}
+
+# _wg_core_check_nested_operand <operand> <agent_type>
+# Scans the already-extracted shell-script operand one command segment at a
+# time. Quotes are tracked only to keep separators and newlines inside quoted
+# words from becoming boundaries; this remains a bounded lexical check.
+_wg_core_check_nested_operand() {
+    local operand="$1" agent_type="${2:-}"
+    local i=0 n=${#operand} c quote="" segment="" escaped=0 nested_out nested_found=0
+
+    while [ "$i" -lt "$n" ]; do
+        c="${operand:$i:1}"
+        if [ -n "$quote" ]; then
+            if [ "$c" = "$quote" ]; then
+                quote=""
+            else
+                segment="$segment$c"
+            fi
+        elif [ "$escaped" -eq 1 ]; then
+            segment="$segment$c"
+            escaped=0
+        else
+            case "$c" in
+                "'"|'"') quote="$c" ;;
+                "\\") escaped=1 ;;
+                ';'|'|'|'&'|$'\n')
+                    if [ -n "$segment" ]; then
+                        nested_out=$(write_guard_core_check_reviewer_submit_command "$segment" "" "$agent_type")
+                        [ -n "$nested_out" ] && nested_found=1
+                        segment=""
+                    fi
+                    ;;
+                *) segment="$segment$c" ;;
+            esac
+        fi
+        i=$((i + 1))
+    done
+    if [ "$escaped" -eq 1 ]; then segment="$segment\\"; fi
+    if [ -n "$segment" ]; then
+        nested_out=$(write_guard_core_check_reviewer_submit_command "$segment" "" "$agent_type")
+        [ -n "$nested_out" ] && nested_found=1
+    fi
+    if [ "$nested_found" -eq 1 ]; then
+        printf '%s\n' "$_wg_core_reviewer_submit_deny_json"
+    fi
+    return 0
+}
+
+# _wg_core_check_nested_reviewer_submit <raw-command> <agent_type>
+# Extracts only the supported quoted operand of `bash|sh -c|-lc`, optionally
+# behind an env wrapper, and feeds that operand back through the bounded
+# segment scanner above. Unquoted -c operands, other shell options, and other
+# wrappers remain outside the guard's scope.
+_wg_core_check_nested_reviewer_submit() {
+    local raw="$1" agent_type="${2:-}"
+    case "$raw" in
+        *"bash -c '"*|*"bash -c \""*|*"bash -lc '"*|*"bash -lc \""*|\
+        *"sh -c '"*|*"sh -c \""*|*"env -i bash -c '"*|*"env -i bash -c \""*|\
+        *"env -i sh -c '"*|*"env -i sh -c \""*) ;;
+        *) return 0 ;;
+    esac
+    local i=0 n=${#raw} c next token="" had_quote=0 quote="" escaped=0 count=0
+    local idx wrapper operand
+    local -a tokens quoted
+
+    while [ "$i" -lt "$n" ]; do
+        c="${raw:$i:1}"
+        if [ -n "$quote" ]; then
+            if [ "$quote" = "'" ]; then
+                if [ "$c" = "'" ]; then quote=""; else token="$token$c"; fi
+            else
+                if [ "$c" = '"' ]; then
+                    quote=""
+                elif [ "$c" = "\\" ] && [ $((i + 1)) -lt "$n" ]; then
+                    i=$((i + 1)); token="$token${raw:$i:1}"
+                else
+                    token="$token$c"
+                fi
+            fi
+        else
+            case "$c" in
+                "'"|'"') quote="$c"; had_quote=1 ;;
+                "\\")
+                    if [ $((i + 1)) -lt "$n" ]; then
+                        i=$((i + 1)); token="$token${raw:$i:1}"
+                    fi
+                    ;;
+                $'\n')
+                    if [ -n "$token" ] || [ "$had_quote" -eq 1 ]; then
+                        tokens[$count]="$token"; quoted[$count]="$had_quote"; count=$((count + 1))
+                        token=""; had_quote=0
+                    fi
+                    tokens[$count]=$'\n'; quoted[$count]=0; count=$((count + 1))
+                    ;;
+                [[:space:]])
+                    if [ -n "$token" ] || [ "$had_quote" -eq 1 ]; then
+                        tokens[$count]="$token"; quoted[$count]="$had_quote"; count=$((count + 1))
+                        token=""; had_quote=0
+                    fi
+                    ;;
+                ';'|'|'|'&')
+                    if [ -n "$token" ] || [ "$had_quote" -eq 1 ]; then
+                        tokens[$count]="$token"; quoted[$count]="$had_quote"; count=$((count + 1))
+                        token=""; had_quote=0
+                    fi
+                    tokens[$count]="$c"; quoted[$count]=0; count=$((count + 1))
+                    ;;
+                *) token="$token$c" ;;
+            esac
+        fi
+        i=$((i + 1))
+    done
+    if [ -n "$token" ] || [ "$had_quote" -eq 1 ]; then
+        tokens[$count]="$token"; quoted[$count]="$had_quote"; count=$((count + 1))
+    fi
+
+    i=0
+    local nested_out nested_found=0 segment_end
+    while [ "$i" -lt "$count" ]; do
+        case "${tokens[$i]}" in
+            ';'|'|'|'&'|'&&'|'||'|$'\n') i=$((i + 1)); continue ;;
+        esac
+        segment_end="$i"
+        while [ "$segment_end" -lt "$count" ]; do
+            case "${tokens[$segment_end]}" in
+                ';'|'|'|'&'|'&&'|'||'|$'\n') break ;;
+            esac
+            segment_end=$((segment_end + 1))
+        done
+        wrapper="$i"
+        if [ "${tokens[$wrapper]}" = "env" ]; then
+            wrapper=$((wrapper + 1))
+            if [ "$wrapper" -lt "$segment_end" ] && [ "${tokens[$wrapper]}" = "-i" ]; then
+                wrapper=$((wrapper + 1))
+            fi
+            while [ "$wrapper" -lt "$segment_end" ]; do
+                case "${tokens[$wrapper]}" in
+                    [A-Za-z_]*=*) wrapper=$((wrapper + 1)) ;;
+                    *) break ;;
+                esac
+            done
+        else
+            while [ "$wrapper" -lt "$segment_end" ]; do
+                case "${tokens[$wrapper]}" in
+                    [A-Za-z_]*=*) wrapper=$((wrapper + 1)) ;;
+                    *) break ;;
+                esac
+            done
+        fi
+        if [ "$wrapper" -lt "$segment_end" ] && { [ "${tokens[$wrapper]}" = "bash" ] || [ "${tokens[$wrapper]}" = "sh" ]; } \
+            && [ $((wrapper + 2)) -lt "$segment_end" ] \
+            && { [ "${tokens[$((wrapper + 1))]}" = "-c" ] || [ "${tokens[$((wrapper + 1))]}" = "-lc" ]; } \
+            && [ "${quoted[$((wrapper + 2))]}" -eq 1 ]; then
+            operand="${tokens[$((wrapper + 2))]}"
+            if [ -n "$operand" ]; then
+                nested_out=$(_wg_core_check_nested_operand "$operand" "$agent_type")
+                [ -n "$nested_out" ] && nested_found=1
+            fi
+        fi
+        i="$segment_end"
+    done
+    if [ "$nested_found" -eq 1 ]; then
+        printf '%s\n' "$_wg_core_reviewer_submit_deny_json"
+    fi
+    return 0
+}
+
+# write_guard_core_check_reviewer_submit_command <masked-command> <unused-dir> <agent_type> [raw-command]
+# Detects the neutral code-review submit-review publisher on shell/exec routes. The caller
+# supplies quote-masked command text (so quoted paths, newlines, and function
+# bodies are represented as ordinary tokens). The publisher and consumer own
+# artifact path, SID, schema, and option validation; this hook only protects
+# the caller identity. The command's --agent-type/other tool_input fields are
+# irrelevant.
+write_guard_core_check_reviewer_submit_command() {
+    local command_text="$1" agent_type="${3:-}" raw_command="${4:-}"
+    local normalized token raw_token clean_token previous_executable='' saw_cli=0
+    local command_position=1 command_terminator=0
+
+    normalized="${command_text#"${command_text%%[![:space:]]*}"}"
+    normalized="$(printf '%s' "$normalized" | tr -s '[:space:]' ' ')"
+
+    # Shell word splitting is intentional here: both shims have already
+    # removed quote characters. As with the surrounding shell guards, token
+    # forms containing embedded whitespace are outside this lightweight scan.
+    for token in $normalized; do
+        raw_token="$token"
+        command_terminator=0
+        case "$raw_token" in
+            ';'|'|'|'||'|'&&'|'{'|'}')
+                command_position=1
+                previous_executable=''
+                continue
+                ;;
+            *';'|*'}') command_terminator=1 ;;
+        esac
+        # Function bodies and newline-separated shell forms commonly glue a
+        # command terminator to the final stdin marker or artifact token
+        # (`-; }`). These punctuation characters are shell syntax, not part
+        # of the CLI arguments.
+        clean_token="$token"
+        clean_token="${clean_token#\{}"
+        clean_token="${clean_token%;}"
+        clean_token="${clean_token%\}}"
+        # Normalize only the candidate token's spelling. This is lexical
+        # normalization: it does not execute the command or inspect the
+        # filesystem, and preserves the existing literal/variable matching
+        # below after removing shell-equivalent dot segments.
+        _wg_core_norm_publisher_token "$clean_token"
+        clean_token="$_wg_core_norm_publisher_token_result"
+        if [ "$saw_cli" -eq 0 ]; then
+            # The publisher path is meaningful only as the script argument of
+            # the documented `bun <publisher-path>` invocation and its supported
+            # `bun run <publisher-path>` / `env bun ...` forms. In particular,
+            # a path in git diff/test/echo arguments must not identify an
+            # invocation. Require bun to have been the command word at the
+            # beginning of the current simple command.
+            if [ "$previous_executable" = "bun" ] || [ "$previous_executable" = "bun-run" ]; then
+                case "$clean_token" in
+                    */code-review/scripts/submit-review.ts) saw_cli=1 ;;
+                    \$\{[A-Za-z_][A-Za-z0-9_]*\}/scripts/submit-review.ts) saw_cli=1 ;;
+                    \$[A-Za-z_][A-Za-z0-9_]*/scripts/submit-review.ts) saw_cli=1 ;;
+                esac
+            fi
+        fi
+
+        case "$previous_executable" in
+            env)
+                case "$raw_token" in
+                    bun) previous_executable='bun' ;;
+                    -u|--unset) previous_executable='env-unset' ;;
+                    -i|--ignore-environment|--|--unset=*|[A-Za-z_]=*|[A-Za-z_][A-Za-z0-9_]*=*)
+                        # Keep env state across the supported env options and
+                        # assignments until its wrapped command word appears.
+                        ;;
+                    *) previous_executable='' ;;
+                esac
+                ;;
+            env-unset)
+                # `env -u NAME` and `env --unset NAME` consume NAME as an
+                # option argument. It cannot be the wrapped command or a
+                # publisher path.
+                previous_executable='env'
+                ;;
+            bun)
+                case "$raw_token" in
+                    run) previous_executable='bun-run' ;;
+                    --help|--version) previous_executable='' ;;
+                    --cwd|--preload|--eval|-r) previous_executable='bun-value' ;;
+                    -*)
+                        # Bun runtime options precede the publisher path.
+                        ;;
+                    *) previous_executable='' ;;
+                esac
+                ;;
+            bun-value)
+                # The preceding bun option consumed this token as its value;
+                # resume looking for the actual script argument afterwards.
+                previous_executable='bun'
+                ;;
+            bun-run)
+                case "$raw_token" in
+                    --help|--version) previous_executable='' ;;
+                    --cwd|--preload|--eval|-r) previous_executable='bun-run-value' ;;
+                    -*)
+                        # `bun run` options also precede the publisher path.
+                        ;;
+                    *) previous_executable='' ;;
+                esac
+                ;;
+            bun-run-value)
+                previous_executable='bun-run'
+                ;;
+            '')
+                if [ "$command_position" -eq 1 ]; then
+                    if [ "$raw_token" = "bun" ]; then
+                        previous_executable='bun'
+                        command_position=0
+                    elif [ "$raw_token" = "env" ]; then
+                        previous_executable='env'
+                        command_position=0
+                    else
+                        case "$clean_token" in
+                            [A-Za-z_]=*|[A-Za-z_][A-Za-z0-9_]*=*)
+                                # Shell assignments before the command word
+                                # keep the parser at simple-command position.
+                                ;;
+                            *) command_position=0 ;;
+                        esac
+                    fi
+                fi
+                ;;
+            *) previous_executable='' ;;
+        esac
+        if [ "$command_terminator" -eq 1 ]; then
+            command_position=1
+            previous_executable=''
+        fi
+    done
+
+    if [ -n "$raw_command" ] && [ "$agent_type" != "code-reviewer" ]; then
+        local nested_out
+        nested_out=$(_wg_core_check_nested_reviewer_submit "$raw_command" "$agent_type")
+        if [ -n "$nested_out" ]; then
+            printf '%s\n' "$nested_out"
+            return 0
+        fi
+    fi
+    [ "$saw_cli" -eq 1 ] || return 0
+    if [ "$agent_type" = "code-reviewer" ]; then
+        if [ -n "$raw_command" ]; then
+            _wg_core_check_nested_reviewer_submit "$raw_command" "$agent_type" >/dev/null
+        fi
+        return 0
+    fi
+    printf '%s\n' "$_wg_core_reviewer_submit_deny_json"
     return 0
 }
 

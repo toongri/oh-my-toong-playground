@@ -341,8 +341,18 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
                         }
                         out = out c
                     }
-                    print out
-                }')
+                        print out
+                    }')
+            # Reviewer-only neutral submit-review publisher guard. Unlike
+            # direct artifact writes, this route has no candidate path for the
+            # regular codereview guard; enforce trusted top-level identity on
+            # the whole masked command.
+            _wg_agent_type=$(echo "$input" | jq -r '.agent_type // empty' 2>/dev/null) || _wg_agent_type=""
+            _wg_submit_out=$(write_guard_core_check_reviewer_submit_command "$_wg_scan" "$_wg_omt_dir" "$_wg_agent_type" "$_wg_cmd")
+            if [[ -n "$_wg_submit_out" ]]; then
+                printf '%s\n' "$_wg_submit_out"
+                exit 0
+            fi
             # User-authorized ultragoal-state subcommands (approve-review-dispatch-
             # renewal / dismiss-review-finding). Runs on the WHOLE masked command,
             # deliberately OUTSIDE the segment loop below: a `sub=<subcommand>;`

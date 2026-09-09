@@ -77,6 +77,10 @@ verdict를 자기가 만드는 것처럼 보이지만 실제로는 `skills/insan
 
 에이전트의 등급은 `agents/<name>.md` frontmatter의 `model:` 한 필드가 유일한 출처다.
 
+Codex의 `code-reviewer`는 `codex.yaml`의 개별 override로 `gpt-5.6-sol` +
+`medium`을 시험한다. 공통 opus 등급과 다른 플랫폼 배정은 유지하며, 현재 어떤 tier도
+이 모델·effort 조합을 표현하지 않아 개별 매핑을 사용한다. merge 후 `make sync` 시 반영된다.
+
 ## 등급 어휘는 세 개다
 
 `fable`·`opus`·`sonnet`. 2026-07-30에 `fable`이 추가되기 전까지는 둘이었고, 추가 문턱은
