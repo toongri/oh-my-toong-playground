@@ -919,6 +919,22 @@ test_reviewer_submit_review_cli_reviewer_allowed() {
     return 1
 }
 
+test_reviewer_submit_dot_segment_publisher_identity_matrix() {
+    local cmd out
+    cmd='bun /repo/skills/code-review/scripts/../scripts/submit-review.ts --artifact /tmp/quality-result.json --json -'
+
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'sisyphus-junior'" _ "$cmd")
+    if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED reviewer-submit-dot-segment-nonreviewer: expected deny, got '$out'"
+        return 1
+    fi
+
+    out=$(bash -c "source '$CORE'; write_guard_core_check_reviewer_submit_command \"\$1\" '$OD' 'code-reviewer'" _ "$cmd")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED reviewer-submit-dot-segment-reviewer: expected allow, got '$out'"
+    return 1
+}
+
 test_reviewer_submit_variable_publisher_nonreviewer_denied() {
     local cmd out
     cmd='bun ${CLAUDE_SKILL_DIR}/scripts/submit-review.ts --artifact /tmp/quality-result.json --json -'
@@ -1375,6 +1391,7 @@ main() {
     run_test test_negative_subcommand_name_as_prose_allows
     run_test test_reviewer_submit_review_cli_orchestrator_denied
     run_test test_reviewer_submit_review_cli_reviewer_allowed
+    run_test test_reviewer_submit_dot_segment_publisher_identity_matrix
     run_test test_reviewer_submit_variable_publisher_nonreviewer_denied
     run_test test_reviewer_submit_variable_publisher_reviewer_allowed
     run_test test_reviewer_submit_bare_variable_publisher_identity_matrix

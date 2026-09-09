@@ -2433,6 +2433,27 @@ test_reviewer_submit_cli_nonreviewer_denied() {
     rm -rf "$SBX"
 }
 
+test_reviewer_submit_dot_segment_publisher_identity_matrix() {
+    new_sandbox
+    local cmd out rc=0 result=0
+    cmd='bun /repo/skills/code-review/scripts/../scripts/submit-review.ts --artifact $OMT_DIR/ultragoal-codereview-parent.json --json -'
+
+    out=$(printf '%s' "$cmd" | jq -Rs --arg at code-reviewer --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "reviewer-submit-dot-segment-reviewer"; then
+        result=1
+    fi
+
+    rc=0
+    out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+    if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED reviewer-submit-dot-segment-nonreviewer: expected deny, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
 test_reviewer_submit_variable_publisher_identity_matrix() {
     new_sandbox
     local cmd out rc=0 result=0
@@ -3086,6 +3107,7 @@ main() {
     run_test test_codereview_shell_command_agent_type_sisyphus_junior_denies
     run_test test_reviewer_submit_cli_code_reviewer_function_newline_allowed
     run_test test_reviewer_submit_cli_nonreviewer_denied
+    run_test test_reviewer_submit_dot_segment_publisher_identity_matrix
     run_test test_reviewer_submit_variable_publisher_identity_matrix
     run_test test_reviewer_submit_cli_nested_agent_type_spoof_denied
     run_test test_codereview_negative_control_ultragoal_verdict_allows

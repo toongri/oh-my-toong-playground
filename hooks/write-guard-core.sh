@@ -115,6 +115,63 @@ _wg_core_normpath() {
     }'
 }
 
+# _wg_core_norm_publisher_token <path>
+# Bash-only lexical normalization for the publisher scan. The shared path
+# normalizer above is intentionally awk-backed for the larger path matcher,
+# but this function runs once per shell token and must not fork per token.
+_wg_core_norm_publisher_token_result=''
+_wg_core_norm_publisher_token() {
+    local path="$1" segment normalized="" absolute=0 top=0 i
+    local old_ifs="$IFS"
+    local -a segments stack
+    segments=()
+    stack=()
+
+    case "$path" in
+        /*) absolute=1 ;;
+    esac
+
+    IFS=/ read -r -a segments <<< "$path"
+    IFS="$old_ifs"
+
+    for segment in "${segments[@]-}"; do
+        case "$segment" in
+            ""|.)
+                ;;
+            ..)
+                if [ "$top" -gt 0 ] && [ "${stack[$((top - 1))]}" != ".." ]; then
+                    top=$((top - 1))
+                elif [ "$absolute" -eq 0 ]; then
+                    stack[$top]=".."
+                    top=$((top + 1))
+                fi
+                ;;
+            *)
+                stack[$top]="$segment"
+                top=$((top + 1))
+                ;;
+        esac
+    done
+
+    if [ "$absolute" -eq 1 ]; then
+        normalized="/"
+    fi
+    for ((i = 0; i < top; i++)); do
+        if [ "$normalized" = "/" ]; then
+            normalized="/${stack[$i]}"
+        elif [ -n "$normalized" ]; then
+            normalized="$normalized/${stack[$i]}"
+        else
+            normalized="${stack[$i]}"
+        fi
+    done
+
+    if [ -z "$normalized" ]; then
+        if [ "$absolute" -eq 1 ]; then normalized="/"; else normalized="."; fi
+    fi
+    _wg_core_norm_publisher_token_result="$normalized"
+}
+
 # _wg_core_pathwise_glob_match <candidate-pattern-path> <concrete-ledger-path>
 # Component-wise glob match WITH depth (segment-count) equality: splits both
 # paths on '/' and compares segment-by-segment, using each candidate segment
@@ -309,6 +366,12 @@ write_guard_core_check_reviewer_submit_command() {
         clean_token="${clean_token#\{}"
         clean_token="${clean_token%;}"
         clean_token="${clean_token%\}}"
+        # Normalize only the candidate token's spelling. This is lexical
+        # normalization: it does not execute the command or inspect the
+        # filesystem, and preserves the existing literal/variable matching
+        # below after removing shell-equivalent dot segments.
+        _wg_core_norm_publisher_token "$clean_token"
+        clean_token="$_wg_core_norm_publisher_token_result"
         token="$clean_token"
         if [ "$saw_cli" -eq 0 ]; then
             case "$token" in
