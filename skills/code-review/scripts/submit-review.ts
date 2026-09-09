@@ -11,6 +11,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+const assessmentKeys = ["unfixed_cost", "exposure", "remedy", "added_cost", "rationale"] as const;
+const assessmentKeySet = new Set<string>(assessmentKeys);
+
+function validatePriority(value: unknown): void {
+	if (value !== "HIGH" && value !== "MEDIUM" && value !== "LOW") throw new Error("submit-review: finding priority must be HIGH, MEDIUM, or LOW");
+}
+
+function validateAssessment(value: unknown): void {
+	if (!isRecord(value) || Object.keys(value).some((key) => !assessmentKeySet.has(key)) || Object.keys(value).length !== assessmentKeys.length) throw new Error("submit-review: finding assessment must contain exactly five known fields");
+	for (const key of assessmentKeys) {
+		if (typeof value[key] !== "string" || value[key].trim() === "") throw new Error(`submit-review: finding assessment.${key} must be a non-empty string`);
+	}
+}
+
 function validateReviewJson(value: unknown): void {
 	if (!isRecord(value) || (value.status !== "COMPLETE" && value.status !== "INCONCLUSIVE")) throw new Error("submit-review: status must be COMPLETE or INCONCLUSIVE");
 	if (typeof value.reviewer !== "string" || value.reviewer.trim() === "") throw new Error("submit-review: reviewer must be a non-empty string");
@@ -19,6 +33,8 @@ function validateReviewJson(value: unknown): void {
 	for (const finding of value.findings) {
 		if (!isRecord(finding) || typeof finding.class !== "string" || finding.class.trim() === "" || (finding.verdict !== "CONFIRMED" && finding.verdict !== "PLAUSIBLE") || (finding.impact !== "HIGH" && finding.impact !== "MEDIUM" && finding.impact !== "LOW")) throw new Error("submit-review: finding requires class, verdict, and impact");
 		if (finding.ref !== undefined && typeof finding.ref !== "string") throw new Error("submit-review: finding ref must be a string when present");
+		if (value.status === "COMPLETE" || finding.priority !== undefined) validatePriority(finding.priority);
+		if (value.status === "COMPLETE" || finding.assessment !== undefined) validateAssessment(finding.assessment);
 	}
 }
 
