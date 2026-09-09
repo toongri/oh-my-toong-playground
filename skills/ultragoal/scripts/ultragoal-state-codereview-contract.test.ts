@@ -372,7 +372,7 @@ describe("T8: 사용자 승인 finding 무효화 (dismiss-review-finding)", () =
 		expect(requestComplete(SID)).toBe(false);
 	});
 
-	test("IN_SCOPE CONFIRMED LOW도 차단 finding이라 무효화 대상이다", () => {
+	test("IN_SCOPE CONFIRMED LOW는 FIX이므로 무효화 대상이 아니다", () => {
 		buildObjectiveLaneGreenFixture(SID);
 		writeBlockingArtifact(SID, [
 			{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW", ref: "src/log.ts:8" },
@@ -384,7 +384,7 @@ describe("T8: 사용자 승인 finding 무효화 (dismiss-review-finding)", () =
 				class: "cleanup",
 				rationale: "무의미한 무효화",
 			}),
-		).toBe(true);
+		).toBe(false);
 	});
 
 	test("빈 rationale은 거부한다 — 무효화는 근거 없이 기록되지 않는다", () => {

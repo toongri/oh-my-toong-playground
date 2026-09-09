@@ -139,6 +139,10 @@ Questions have no count limit and resolve prerequisite decisions first. Each ans
 - Reaching `max_iterations` (default 10) soft-stops without dispatching new work as non-complete `budget_limited`, preserving state. After in-flight work drains and the completion gate is checked, only the user may run `resume-pursuit` to restore `pursuing` with `iteration=0`.
 - `blocked` is separate: it is reported only for B1 (no actionable incomplete work) or when the configured `blocked-stop` predicate is met.
 
+#### Final review result contract
+
+The final `code-reviewer` receives exactly the serialized review context and the caller-owned parent artifact path. For ultragoal, it submits the original CodeReviewArtifact JSON through `submit-review --artifact '<parent-artifact-path>' --json -` with a quoted heredoc; the script derives the result on read. Other code-review callers retain direct artifact writes. The parent orchestrator calls `get-review-result`. Scope routes `OUT_OF_SCOPE` to NOTE and `UNKNOWN` to REQUEST_CHANGES without speculative repair; confirmed HIGH/MEDIUM blocks, confirmed LOW is a repair-list FIX/COMMENT, plausible HIGH requires adjudication, and plausible MEDIUM/LOW is NOTE/COMMENT. Any BLOCK/ADJUDICATE is REQUEST_CHANGES; otherwise FIX/NOTE is COMMENT and empty is APPROVE. A COMMENT repairs the confirmed list, runs affected checks, and records `record-comment-resolution --artifact-sha256 <sha> --evidence <paths>`. COMMENT/APPROVE never trigger re-review; the initial five-review budget is only for REQUEST_CHANGES rounds and absent-reviewer retries.
+
 ### sisyphus (The Orchestrator)
 
 - **Role**: Execution and delegation

@@ -34,6 +34,9 @@ Subcommands used by this orchestrator:
 | `reorder-stories --order <id1,id2,...>` | orchestrator | Planning-only reorder of the story array to an exact permutation of the current ids — steers the sequential dispatch order before pursuit begins. |
 | `set-verdict --verdict <APPROVE\|REQUEST_CHANGES\|COMMENT\|absent>` | gate layer | The ONLY writer of `objective_verdict`. |
 | `request-complete` | gate layer | The ONLY path to `phase=complete`; structurally gated on completion-evidence being present and `objective_verdict=APPROVE`. |
+| `submit-review --artifact <path> --json -` | code-review lane | Ultragoal-only submission of the original CodeReviewArtifact JSON through the bundled sibling skill script; the script validates it and computes the review result. |
+| `get-review-result` | code-review lane | Read the current session's script-derived code-review result; reviewer/orchestrator never hand-sets the aggregate. |
+| `record-comment-resolution --artifact-sha256 <sha> --evidence <paths>` | code-review lane | Record hash-bound evidence after repairing the confirmed repair-list and running affected checks. |
 | `claim-review-dispatch` | PreToolUse hook only | Atomically reserves one final code-review dispatch. The initial cap is 5; it persists the reservation before allowing the dispatch. The orchestrator never calls this command directly. |
 | `approve-review-dispatch-renewal` | **user only** — a PreToolUse guard denies it on the orchestrator's Bash path; present the command and have the user run it | Adds exactly 5 to the review-dispatch cap; when a valid code-review artifact exists, also records the SHA-256 of its exact raw bytes as the user-approved marker (an absent/invalid artifact still renews — sole recovery when all dispatches died before writing one). |
 | `dismiss-review-finding --ref <file:line> --class <correctness\|regression\|cleanup\|requirement-gap> --rationale <text>` | **user only** — same PreToolUse guard; propose it, never run it | Removes ONE wrong admitted code-review finding from the completion gate's blocking set. Refuses unless EXACTLY ONE admitted `IN_SCOPE` finding with that exact `ref` and `class` is in the current artifact (two are indistinguishable to a dismissal, so clearing one would clear both), and pins the dismissal to that artifact's raw bytes so it lapses on the next review round. Propose per `references/completion-gate.md`; never run it on your own judgment. |
@@ -43,6 +46,8 @@ Subcommands used by this orchestrator:
 `set-budget-limited` and `set-blocked --reason <text>` are system-only setters (the hook layer writes `budget_limited`; `set-blocked` records a reported blocker). The orchestrator never writes `complete`, `budget_limited`, or a fabricated verdict by any other route — the narrow gates are structural, not vigilance-based.
 
 During pursuit, `iteration` counts consecutive Stop turns with no observed progress. A diff-carrying commit or a story status transition resets it to `0`; Stops waiting for background work are not counted. Reaching `max_iterations` soft-stops the pursuit as `budget_limited` (state is preserved and no new work is dispatched). After draining any in-flight work and checking the completion gate, recovery from that pause requires the user to run `resume-pursuit`, which resets the counter and re-arms the pursuing phase.
+
+For the final review lane, the actual submission path must resolve the bundled sibling skill script using the runtime skill-directory variable, never the repository CWD or a hardcoded home path. The reviewer submits the original CodeReviewArtifact JSON via `submit-review --artifact <parent-artifact-path> --json -` on a safe quoted heredoc; the script computes the aggregate result. `set-verdict` remains objective-lane-only.
 
 ---
 
@@ -136,7 +141,7 @@ Initial path: `set --phase planning` (seed slots) → auto-generate the Story se
 
 **You MUST read `references/completion-gate.md` first** before rendering a per-story verdict, evaluating the final code-review lane, or running the completion sequence (`set-verdict`/`request-complete`) — it is the single owner of the evidence rubric, the per-story and code-review artifact schemas, the pass signal, the concrete-progress routing per verdict, and the blocked-stop conditions.
 
-Middle stories get a **lightweight, self-attested per-story verdict** — an inline objective self-check scoped to the one story just dispatched — no code-review runs per story. Only once every confirmed story is APPROVE does the independent code-review lane run, over the accumulated diff of all stories; admitted repairs require independent re-review under the same frozen scope and finite dispatch budget.
+Middle stories get a **lightweight, self-attested per-story verdict** — an inline objective self-check scoped to the one story just dispatched — no code-review runs per story. Only once every confirmed story is APPROVE does the independent code-review lane run, over the accumulated diff of all stories; only a `REQUEST_CHANGES` result requiring confirmed repair or plausible HIGH adjudication triggers fresh independent review under the same frozen scope.
 
 ---
 

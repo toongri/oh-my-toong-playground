@@ -117,10 +117,10 @@ describe("범위 우선 판정식: classifyReviewFindingOutcome (verdict 2종 ×
 	const CELLS: Array<[string, string, string]> = [
 		["CONFIRMED", "HIGH", "BLOCK"],
 		["CONFIRMED", "MEDIUM", "BLOCK"],
-		["CONFIRMED", "LOW", "BLOCK"],
+		["CONFIRMED", "LOW", "FIX"],
 		["PLAUSIBLE", "HIGH", "ADJUDICATE"],
-		["PLAUSIBLE", "MEDIUM", "ADJUDICATE"],
-		["PLAUSIBLE", "LOW", "ADJUDICATE"],
+		["PLAUSIBLE", "MEDIUM", "NOTE"],
+		["PLAUSIBLE", "LOW", "NOTE"],
 	];
 
 	for (const [verdict, impact, outcome] of CELLS) {
@@ -260,7 +260,7 @@ describe("dismiss-review-finding: 차단 여부가 class가 아니므로 4종 cl
 		expect(requestComplete(SID)).toBe(true);
 	});
 
-	test("IN_SCOPE CONFIRMED × LOW도 사용자의 finding 단위 무효화를 허용한다", () => {
+	test("IN_SCOPE CONFIRMED × LOW는 FIX이므로 사용자 무효화를 허용하지 않는다", () => {
 		buildObjectiveLaneGreenFixture(SID);
 		writeCompleteArtifact(SID, [
 			{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW", ref: "src/log.ts:8" },
@@ -271,8 +271,8 @@ describe("dismiss-review-finding: 차단 여부가 class가 아니므로 4종 cl
 				class: "cleanup" as never,
 				rationale: "인용한 로그는 실행 경로에 없음",
 			}),
-		).toBe(true);
-		expect(requestComplete(SID)).toBe(true);
+		).toBe(false);
+		expect(requestComplete(SID)).toBe(false);
 	});
 
 	test("무효화는 여전히 finding 단위 — 남은 BLOCK finding은 계속 차단한다", () => {
@@ -389,7 +389,7 @@ describe("범위 판정과 사용자 무효화의 경계", () => {
 							rationale: "범위 내 finding만 무효화 가능",
 						}),
 					).toBe(false);
-					expect(requestComplete(SID)).toBe(scope === "OUT_OF_SCOPE");
+					expect(requestComplete(SID)).toBe(false);
 				});
 			}
 			test(`IN_SCOPE ${verdict} ${impact}: CONFIRMED만 무효화할 수 있고 PLAUSIBLE은 독립 판정 필요`, () => {
@@ -402,8 +402,8 @@ describe("범위 판정과 사용자 무효화의 경계", () => {
 						ref: "src/a.ts:1",
 						rationale: "앞선 guard로 도달 불가",
 					}),
-				).toBe(verdict === "CONFIRMED");
-				expect(requestComplete(SID)).toBe(verdict === "CONFIRMED");
+				).toBe(verdict === "CONFIRMED" && impact !== "LOW");
+				expect(requestComplete(SID)).toBe(verdict === "CONFIRMED" && impact !== "LOW");
 			});
 		}
 	}
@@ -447,7 +447,7 @@ describe("범위 판정과 사용자 무효화의 경계", () => {
 				ref: "src/a.ts:1",
 				rationale: "앞선 guard로 도달 불가",
 			}),
-		).toBe(true);
+		).toBe(false);
 		writeCompleteArtifact(SID, findings, "2026-08-09T11:00:00");
 		expect(requestComplete(SID)).toBe(false);
 	});
@@ -510,14 +510,15 @@ describe("스킬 문서 계약 회귀 검사", () => {
 
 	test("completion-gate.md가 모든 impact의 범위 우선 repair/adjudication/exclusion 계약을 담는다", () => {
 		const text = readRepoFile("skills/ultragoal/references/completion-gate.md");
-		expect(text).toContain("`IN_SCOPE + CONFIRMED` at **every impact**");
-		expect(text).toContain("`IN_SCOPE + PLAUSIBLE` at **every impact**");
-		expect(text).toContain("including LOW-only batches");
-		expect(text).toContain("`OUT_OF_SCOPE`: nonblocking exclusion");
-		expect(text).toContain("Do not fix it");
-		expect(text).toContain(
-			"`UNKNOWN`, invalid/stale artifact, or `INCONCLUSIVE`: completion blocked",
-		);
+		expect(text).toContain("`IN_SCOPE + CONFIRMED + HIGH/MEDIUM`");
+		expect(text).toContain("`IN_SCOPE + CONFIRMED + LOW`");
+		expect(text).toContain("`IN_SCOPE + PLAUSIBLE + HIGH`");
+		expect(text).toContain("`IN_SCOPE + PLAUSIBLE + MEDIUM/LOW`");
+		expect(text).toContain("OUT_OF_SCOPE");
+		expect(text).toContain("no repair or new story");
+		expect(text).toContain("UNKNOWN");
+		expect(text).toContain("UNKNOWN");
+		expect(text).toContain("valid `INCONCLUSIVE` is `REQUEST_CHANGES`");
 		expect(text).toContain("An old artifact without this contract must be re-reviewed");
 		expect(text).not.toContain("Completion-eligible discretion");
 	});

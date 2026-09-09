@@ -55,9 +55,10 @@
  *   or whitespace-only values are refused (ADR D-4).
  */
 
-import { readFileSync, unlinkSync } from "node:fs";
+import { readFileSync, unlinkSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { execSync } from "child_process";
 import { createHash } from "crypto";
+import { resolve as resolvePath, basename } from "node:path";
 import { getOmtDir } from "@lib/omt-dir";
 import { withStateLock } from "@lib/persistent-mode-core/state-lock";
 import {
@@ -175,6 +176,8 @@ export interface GoalState {
 	 * subagent. Absent field reads as [] (backward-compatible).
 	 */
 	dismissed_review_findings?: DismissedReviewFinding[];
+	/** Self-attested fix/check evidence bound to the exact COMMENT artifact bytes. */
+	review_resolution?: ReviewResolution;
 	/**
 	 * WHAT-slices of the objective. Defined during planning, tracked through completion.
 	 * Absent field reads as [] (backward-compatible). Writers: setStories, setSingleStory,
@@ -352,6 +355,7 @@ function mergeWriteLocked(sessionId: string, stateFilePath: string, next: Partia
 		// the user already unblocked. Sole writer: dismissReviewFinding.
 		dismissed_review_findings:
 			next.dismissed_review_findings ?? prior.dismissed_review_findings ?? [],
+		review_resolution: "review_resolution" in next ? next.review_resolution : prior.review_resolution,
 	};
 	const state: GoalState = mergeWithHeartbeat(partial, {});
 	try {
@@ -656,6 +660,7 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 			// one hashes differently), so this clear keeps the carrier set literally complete
 			// rather than repairing a live hole.
 			next.dismissed_review_findings = [];
+			next.review_resolution = undefined;
 			// A recorded codex_goal_objective is a FOURTH carrier of the same staleness, and it
 			// arms Gate 9. It names the native goal registered for the story that was being
 			// pursued — the very story a re-plan revises or retires. Left behind, the gate stays
@@ -1255,7 +1260,7 @@ interface VerdictArtifact {
 
 export type ReviewFindingClass = "correctness" | "regression" | "cleanup" | "requirement-gap";
 export type ReviewImpact = "HIGH" | "MEDIUM" | "LOW";
-export type ReviewFindingOutcome = "BLOCK" | "NOTE" | "ADJUDICATE";
+export type ReviewFindingOutcome = "BLOCK" | "FIX" | "NOTE" | "ADJUDICATE";
 export type ReviewScope = "IN_SCOPE" | "OUT_OF_SCOPE" | "UNKNOWN";
 export type ReviewScopeBasis =
 	"requirement" | "regression" | "non_goal" | "unrelated" | "uncertain";
@@ -1266,7 +1271,7 @@ export interface ReviewScopeEvidence {
 	rationale: string;
 }
 
-interface CodeReviewFinding {
+export interface CodeReviewFinding {
 	class: ReviewFindingClass;
 	verdict: "CONFIRMED" | "PLAUSIBLE";
 	impact: ReviewImpact;
@@ -1275,7 +1280,7 @@ interface CodeReviewFinding {
 	ref?: string;
 }
 
-interface CodeReviewArtifact {
+export interface CodeReviewArtifact {
 	status: "COMPLETE" | "INCONCLUSIVE";
 	scope_contract_sha256: string;
 	findings: CodeReviewFinding[];
@@ -1285,10 +1290,53 @@ interface CodeReviewArtifact {
 	at: string;
 }
 
+export interface ReviewResolution {
+	artifact_sha256: string;
+	evidence: string[];
+	evidence_sha256: Record<string, string>;
+	at: string;
+}
+
+export interface ReviewResult {
+	verdict: "REQUEST_CHANGES" | "COMMENT" | "APPROVE";
+	artifact_sha256: string;
+	findings: {
+		repair: CodeReviewFinding[];
+		adjudicate: CodeReviewFinding[];
+		notes: CodeReviewFinding[];
+	};
+	reason?: string;
+	resolution?: ReviewResolution;
+}
+
+function isReviewResolution(value: unknown): value is ReviewResolution {
+	if (
+		!isRecord(value) ||
+		typeof value.artifact_sha256 !== "string" ||
+		!/^[0-9a-f]{64}$/.test(value.artifact_sha256) ||
+		!Array.isArray(value.evidence) ||
+		!isRecord(value.evidence_sha256) ||
+		typeof value.at !== "string"
+	)
+		return false;
+	const hashes = value.evidence_sha256;
+	if (!isRecord(hashes)) return false;
+	return (
+		value.evidence.length > 0 &&
+		value.evidence.every(
+			(path) => {
+				if (typeof path !== "string" || path.trim() === "") return false;
+				const hash = hashes[path];
+				return typeof hash === "string" && /^[0-9a-f]{64}$/.test(hash);
+			},
+		)
+	);
+}
+
 /**
- * Scope admission precedes confidence and impact. Every admitted confirmed
- * improvement blocks until repaired; plausible claims require adjudication.
- * Excluded observations are report-only; missing/unknown scope fails closed.
+ * Scope admission precedes confidence and impact. Confirmed high/medium findings
+ * block, confirmed low findings are repair comments, and plausible high findings
+ * require adjudication. Excluded observations are report-only; unknown scope fails closed.
  */
 export function classifyReviewFindingOutcome(finding: {
 	verdict: "CONFIRMED" | "PLAUSIBLE";
@@ -1297,7 +1345,10 @@ export function classifyReviewFindingOutcome(finding: {
 }): ReviewFindingOutcome {
 	if (finding.scope === "OUT_OF_SCOPE") return "NOTE";
 	if (finding.scope === "UNKNOWN") return "BLOCK";
-	if (finding.scope === "IN_SCOPE") return finding.verdict === "PLAUSIBLE" ? "ADJUDICATE" : "BLOCK";
+	if (finding.scope === "IN_SCOPE") {
+		if (finding.verdict === "PLAUSIBLE") return finding.impact === "HIGH" ? "ADJUDICATE" : "NOTE";
+		return finding.impact === "LOW" ? "FIX" : "BLOCK";
+	}
 	return "BLOCK";
 }
 
@@ -1455,6 +1506,88 @@ function readCodeReviewArtifactRaw(
 	return isCodeReviewArtifact(obj) ? { raw, artifact: obj } : null;
 }
 
+function emptyReviewGroups(): ReviewResult["findings"] {
+	return { repair: [], adjudicate: [], notes: [] };
+}
+
+function reviewResultFromArtifact(raw: string, artifact: CodeReviewArtifact, state: Partial<GoalState>, dismissed: DismissedReviewFinding[] = []): ReviewResult {
+	const result: ReviewResult = { verdict: "APPROVE", artifact_sha256: sha256(raw), findings: emptyReviewGroups() };
+	if (artifact.status !== "COMPLETE") return { ...result, verdict: "REQUEST_CHANGES", reason: "inconclusive review" };
+	for (const finding of artifact.findings) {
+		if (isDismissed(finding, result.artifact_sha256, dismissed)) continue;
+		const outcome = classifyReviewFindingOutcome(finding);
+		if (outcome === "BLOCK") {
+			if (finding.scope === "UNKNOWN") result.findings.adjudicate.push(finding);
+			else result.findings.repair.push(finding);
+		} else if (outcome === "FIX") result.findings.repair.push(finding);
+		else if (outcome === "ADJUDICATE") result.findings.adjudicate.push(finding);
+		else result.findings.notes.push(finding);
+	}
+	if (result.findings.adjudicate.length > 0 || result.findings.repair.some((f) => classifyReviewFindingOutcome(f) === "BLOCK")) result.verdict = "REQUEST_CHANGES";
+	else if (result.findings.repair.length > 0 || result.findings.notes.length > 0) result.verdict = "COMMENT";
+	const resolution = state.review_resolution;
+	if (isReviewResolution(resolution) && resolution.artifact_sha256 === result.artifact_sha256) result.resolution = resolution;
+	return result;
+}
+
+function invalidReviewResult(reason: string): ReviewResult {
+	return { verdict: "REQUEST_CHANGES", artifact_sha256: "", findings: emptyReviewGroups(), reason };
+}
+
+export function getReviewResult(sessionId: string): ReviewResult {
+	const state = readGoalStateRaw(sessionId);
+	const reviewed = readCodeReviewArtifactRaw(sessionId);
+	if (!state || !state.active || state.phase !== "pursuing") return invalidReviewResult("no active pursuing parent");
+	if (!reviewed) return invalidReviewResult("missing or invalid review artifact");
+	if (reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(state)) return invalidReviewResult("stale scope contract");
+	if (!reviewed.artifact.findings.every((f) => isScopeEvidenceReferenceValid(f, state))) return invalidReviewResult("invalid scope evidence");
+	return reviewResultFromArtifact(reviewed.raw, reviewed.artifact, state, readDismissals(state));
+}
+
+function parentSidFromArtifactPath(artifactPath: string): string {
+	const match = /^ultragoal-codereview-(.+)\.json$/.exec(basename(artifactPath));
+	if (!match || !match[1] || match[1].length > 200 || !/^[A-Za-z0-9_-]+$/.test(match[1]) || resolvePath(artifactPath) !== resolvePath(resolveCodeReviewArtifactPath(match[1]))) throw new Error("submit-review: --artifact must be the canonical parent ultragoal-codereview-<sid>.json path");
+	return match[1];
+}
+
+export function submitReviewArtifact(artifactPath: string, raw: string): ReviewResult {
+	const sessionId = parentSidFromArtifactPath(artifactPath);
+	const stateFilePath = resolveStatePath(sessionId);
+	return withStateLock(stateFilePath, () => {
+		const state = readPrior(sessionId);
+		if (!state.active || state.phase !== "pursuing") throw new Error("submit-review: parent is not an active pursuit");
+		let parsed: unknown;
+		try { parsed = JSON.parse(raw); } catch { throw new Error("submit-review: invalid JSON artifact"); }
+		if (!isCodeReviewArtifact(parsed)) throw new Error("submit-review: invalid review artifact schema");
+		if (parsed.scope_contract_sha256 !== scopeContractSha256(state)) throw new Error("submit-review: stale scope contract");
+		if (!parsed.findings.every((f) => isScopeEvidenceReferenceValid(f, state))) throw new Error("submit-review: invalid scope evidence");
+		const canonical = resolvePath(resolveCodeReviewArtifactPath(sessionId));
+		const temp = `${canonical}.tmp-${process.pid}`;
+		writeFileSync(temp, raw, { encoding: "utf8", mode: 0o600 });
+		try { renameSync(temp, canonical); } catch (error) { unlinkSync(temp); throw error; }
+		mergeWriteLocked(sessionId, stateFilePath, { review_resolution: undefined });
+		return reviewResultFromArtifact(raw, parsed, { ...state, review_resolution: undefined }, readDismissals(state));
+	});
+}
+
+export function recordCommentResolution(sessionId: string, artifactSha256: string, evidence: string[]): ReviewResult {
+	if (!/^[0-9a-f]{64}$/.test(artifactSha256) || !Array.isArray(evidence) || evidence.length === 0) throw new Error("record-comment-resolution: artifact hash and evidence are required");
+	const paths = evidence.map((p) => p.trim());
+	if (paths.some((p) => !p)) throw new Error("record-comment-resolution: evidence paths must be non-empty");
+	for (const path of paths) { try { if (!statSync(path).isFile()) throw new Error(); } catch { throw new Error(`record-comment-resolution: unreadable evidence path: ${path}`); } }
+	const stateFilePath = resolveStatePath(sessionId);
+	return withStateLock(stateFilePath, () => {
+		const reviewed = readCodeReviewArtifactRaw(sessionId);
+		if (!reviewed || sha256(reviewed.raw) !== artifactSha256) throw new Error("record-comment-resolution: artifact hash does not match current artifact");
+		const current = getReviewResult(sessionId);
+		if (current.verdict !== "COMMENT") throw new Error("record-comment-resolution: current review is not COMMENT");
+		const hashes: Record<string, string> = {};
+		for (const path of paths) hashes[path] = sha256(readFileSync(path, "utf8"));
+		mergeWriteLocked(sessionId, stateFilePath, { review_resolution: { artifact_sha256: artifactSha256, evidence: paths, evidence_sha256: hashes, at: new Date().toISOString() } });
+		return getReviewResult(sessionId);
+	});
+}
+
 /**
  * Single completion predicate shared by requestComplete and review-dispatch eligibility.
  *
@@ -1467,18 +1600,19 @@ function isCompletionEligibleCodeReview(
 	currentScopeContractSha: string,
 	currentState: Partial<GoalState>,
 ): boolean {
-	const artifactSha = sha256(reviewed.raw);
-	return (
-		reviewed.artifact.status === "COMPLETE" &&
-		reviewed.artifact.scope_contract_sha256 === currentScopeContractSha &&
-		reviewed.artifact.findings.every((f) => isScopeEvidenceReferenceValid(f, currentState)) &&
-		!reviewed.artifact.findings.some(
-			(f) =>
-				(classifyReviewFindingOutcome(f) === "BLOCK" ||
-					classifyReviewFindingOutcome(f) === "ADJUDICATE") &&
-				!isDismissed(f, artifactSha, dismissed),
-		)
-	);
+	if (reviewed.artifact.scope_contract_sha256 !== currentScopeContractSha) return false;
+	if (!reviewed.artifact.findings.every((f) => isScopeEvidenceReferenceValid(f, currentState))) return false;
+	const result = reviewResultFromArtifact(reviewed.raw, reviewed.artifact, currentState, dismissed);
+	return result.verdict === "APPROVE" || (result.verdict === "COMMENT" && result.findings.adjudicate.length === 0 && result.findings.repair.every((f) => classifyReviewFindingOutcome(f) === "FIX"));
+}
+
+function isCurrentCommentResolutionValid(result: ReviewResult, state: Partial<GoalState>): boolean {
+	if (result.verdict !== "COMMENT") return true;
+	const resolution = state.review_resolution;
+	if (!isReviewResolution(resolution) || resolution.artifact_sha256 !== result.artifact_sha256) return false;
+	return resolution.evidence.every((path) => {
+		try { return statSync(path).isFile() && sha256(readFileSync(path, "utf8")) === resolution.evidence_sha256[path]; } catch { return false; }
+	});
 }
 
 function isScopeEvidenceReferenceValid(
@@ -1601,22 +1735,13 @@ export function claimReviewDispatch(sessionId: string): ReviewDispatchClaim {
 			const cap = validNonNegativeInteger(prior.review_dispatch_cap)
 				? prior.review_dispatch_cap
 				: DEFAULT_REVIEW_DISPATCH_CAP;
+			const reviewed = readCodeReviewArtifactRaw(sessionId);
+			if (reviewed !== null) {
+				const result = getReviewResult(sessionId);
+				if (result.verdict === "APPROVE" || result.verdict === "COMMENT") return { allowed: false, reason: "completion_eligible", used, cap };
+			}
 			if (used >= cap) return { allowed: false, reason: "budget_exhausted", used, cap };
 
-			const reviewed = readCodeReviewArtifactRaw(sessionId);
-			const approved = prior.approved_review_artifact_sha256 ?? "";
-			if (
-				reviewed !== null &&
-				isCompletionEligibleCodeReview(
-					reviewed,
-					readDismissals(prior),
-					scopeContractSha256(prior),
-					prior,
-				) &&
-				sha256(reviewed.raw) !== approved
-			) {
-				return { allowed: false, reason: "completion_eligible", used, cap };
-			}
 
 			const state = mergeWriteLocked(sessionId, stateFilePath, {
 				review_dispatch_used: used + 1,
@@ -1753,7 +1878,7 @@ export function dismissReviewFinding(
 			// adjudication, UNKNOWN cannot be cleared by dismissal, and excluded observations
 			// need no authorization to remain outside the repair list.
 			const matches = reviewed.artifact.findings.filter(
-				(f) => f.scope === "IN_SCOPE" && f.class === opts.class && f.ref === opts.ref,
+				(f) => f.scope === "IN_SCOPE" && f.class === opts.class && f.ref === opts.ref && classifyReviewFindingOutcome(f) === "BLOCK",
 			);
 			if (matches.length !== 1 || matches[0].verdict !== "CONFIRMED") return false;
 
@@ -1964,6 +2089,8 @@ export function requestComplete(sessionId: string, codexGoalArg?: string): boole
 		) {
 			return false;
 		}
+		const reviewResult = reviewResultFromArtifact(codeReview.raw, codeReview.artifact, prior, readDismissals(prior));
+		if (!isCurrentCommentResolutionValid(reviewResult, prior)) return false;
 
 		// Gate 9 (Codex native-goal snapshot cross-check): Codex's create_goal/update_goal
 		// tools carry no verification of their own — handle_update only checks the status
@@ -2451,6 +2578,25 @@ function main(): void {
 			const result = claimReviewDispatch(sessionId);
 			process.stdout.write(JSON.stringify(result) + "\n");
 			if (!result.allowed) process.exit(1);
+		} else if (subcommand === "submit-review") {
+			const artifactPath = str(args["artifact"]);
+			if (!artifactPath || str(args["json"]) !== "-") {
+				process.stderr.write("submit-review: --artifact <canonical-path> --json - is required\n");
+				process.exit(1);
+			}
+			const result = submitReviewArtifact(artifactPath, readFileSync(0, "utf8"));
+			process.stdout.write(JSON.stringify(result) + "\n");
+		} else if (subcommand === "get-review-result") {
+			process.stdout.write(JSON.stringify(getReviewResult(sessionId)) + "\n");
+		} else if (subcommand === "record-comment-resolution") {
+			const hash = str(args["artifact-sha256"]);
+			const rawEvidence = str(args["evidence"]);
+			if (!hash || !rawEvidence) {
+				process.stderr.write("record-comment-resolution: --artifact-sha256 and --evidence are required\n");
+				process.exit(1);
+			}
+			const result = recordCommentResolution(sessionId, hash, rawEvidence.split(",").map((p) => p.trim()).filter(Boolean));
+			process.stdout.write(JSON.stringify(result) + "\n");
 		} else if (subcommand === "approve-review-dispatch-renewal") {
 			const result = approveReviewDispatchRenewal(sessionId);
 			process.stdout.write(JSON.stringify(result) + "\n");
@@ -2664,7 +2810,7 @@ function main(): void {
 			process.stdout.write(JSON.stringify(serializeReviewContext(sessionId)) + "\n");
 		} else {
 			process.stderr.write(
-				"Usage: ultragoal-state.ts <set|set-verdict|set-budget-limited|resume-pursuit|set-blocked|request-complete|claim-review-dispatch|approve-review-dispatch-renewal|dismiss-review-finding|get|status|list-others|adopt|set-stories|confirm-story|confirm-all-stories|reorder-stories|revise-story|add-story|retire-story|split-story|serialize-requirements|serialize-review-context> [options]\n",
+				"Usage: ultragoal-state.ts <set|set-verdict|set-budget-limited|resume-pursuit|set-blocked|request-complete|claim-review-dispatch|submit-review|get-review-result|record-comment-resolution|approve-review-dispatch-renewal|dismiss-review-finding|get|status|list-others|adopt|set-stories|confirm-story|confirm-all-stories|reorder-stories|revise-story|add-story|retire-story|split-story|serialize-requirements|serialize-review-context> [options]\n",
 			);
 			process.exit(1);
 		}

@@ -149,9 +149,9 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 	test("the dispatch-prompt contract paragraph sits after the last code-review-lane bullet and before the artifact schema block", () => {
 		const codeReviewLaneIntro =
 			"**Code-review lane (starts at the final story";
-		const contractParagraphLead = "carries exactly two things:**";
+		const contractParagraphLead = "The code-reviewer dispatch prompt carries exactly two things:**";
 		const artifactSchemaHeader =
-			"The artifact schema the code-reviewer must emit:";
+			"The parent artifact schema that `submit-review` validates (the script derives the result without rewriting this input artifact):";
 
 		expect(completionGateMd.indexOf(codeReviewLaneIntro)).toBeGreaterThan(
 			-1,
@@ -178,7 +178,7 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 
 	test("범위 계약이 재수정 경로보다 앞에 있고 재리뷰에도 유지된다", () => {
 		const contract = completionGateMd.indexOf("carries exactly two things:**");
-		const repairs = completionGateMd.indexOf("- **Admitted confirmed findings**");
+		const repairs = completionGateMd.indexOf("- **REQUEST_CHANGES result**");
 		expect(contract).toBeGreaterThan(-1);
 		expect(repairs).toBeGreaterThan(contract);
 		expect(completionGateMd).toContain("Keep this contract on every dispatch.");
@@ -229,8 +229,8 @@ describe("ported from goal (regression): required phrases survive somewhere in b
 	});
 
 	test("INCONCLUSIVE status routing survives in the union", () => {
-		expect(combined).toContain("or `INCONCLUSIVE`: completion blocked; no speculative repair");
-		expect(combined).toContain("**Plausible/unknown/invalid/inconclusive review**: send uncertain or disputed results to Oracle first");
+		expect(combined).toMatch(/`INCONCLUSIVE`[^\n]*no speculative repair/);
+		expect(combined).toContain("Plausible HIGH / unknown / invalid / inconclusive review");
 	});
 });
 
@@ -384,11 +384,10 @@ describe("review dispatch budget runtime contract", () => {
 	});
 
 	test("완료 전에 모든 범위 안 개선을 수정하고 범위 밖 지적은 제외한다", () => {
-		expect(completionGateMd).not.toContain("**FIX findings (CONFIRMED × LOW).**");
-		expect(completionGateMd).toContain("`IN_SCOPE + CONFIRMED` at **every impact**: batch-repair, affected checks, then fresh independent review");
-		expect(completionGateMd).toContain("`IN_SCOPE + PLAUSIBLE` at **every impact**: independent adjudication before repair");
-		expect(completionGateMd).toContain("`OUT_OF_SCOPE`: nonblocking exclusion");
-		expect(completionGateMd).toContain("no `UNKNOWN`, and no undismissed `IN_SCOPE` findings");
+		expect(completionGateMd).toContain("IN_SCOPE + CONFIRMED + LOW");
+		expect(completionGateMd).toContain("IN_SCOPE + PLAUSIBLE + HIGH");
+		expect(completionGateMd).toContain("OUT_OF_SCOPE");
+		expect(completionGateMd).toContain("`UNKNOWN`");
 	});
 });
 
@@ -822,6 +821,60 @@ describe("stale duplicate sentence removed from Execution Dispatch closing (line
 		expect(skillMd).not.toContain(
 			"sisyphus stays the sole executor throughout this loop — ultragoal never swaps sisyphus for goal and never invokes the goal skill at runtime.",
 		);
+	});
+});
+
+describe("deterministic ultragoal review routing contract", () => {
+	test("completion gate owns the result and reviewer submits through the bundled CLI", () => {
+		expect(completionGateMd).toContain("submit-review");
+		expect(completionGateMd).toContain("get-review-result");
+		expect(completionGateMd).toContain("record-comment-resolution");
+		expect(completionGateMd).toContain("script computes the review result");
+	});
+
+	test("scope-first routing distinguishes confirmed and plausible impact", () => {
+		expect(completionGateMd).toContain("IN_SCOPE + CONFIRMED + LOW");
+		expect(completionGateMd).toContain("IN_SCOPE + PLAUSIBLE + MEDIUM/LOW");
+		expect(completionGateMd).toContain("`OUT_OF_SCOPE` => `NOTE`");
+		expect(completionGateMd).toContain("`UNKNOWN` => `REQUEST_CHANGES`");
+	});
+
+	test("comment and approve do not trigger a code-review re-review", () => {
+		expect(completionGateMd).toContain("`COMMENT` and `APPROVE` never trigger a code-review re-review");
+		expect(completionGateMd).toContain(
+			"Any BLOCK/ADJUDICATE => REQUEST_CHANGES",
+		);
+	});
+
+	test("reviewer writes only the final JSON submission and rejects hashless inconclusive input", () => {
+		expect(completionGateMd).toContain("invalid or hashless input is rejected");
+		expect(completionGateMd).toMatch(/never fabricate a scope-contract hash/i);
+		expect(skillMd).toContain(
+			"actual submission path must resolve the bundled sibling skill script",
+		);
+	});
+
+	test("submit example preserves the original CodeReviewArtifact input schema", () => {
+		const submitExample = completionGateMd.slice(
+			completionGateMd.indexOf("submit-review"),
+			completionGateMd.indexOf("Use a quoted heredoc", completionGateMd.indexOf("submit-review")),
+		);
+		expect(submitExample).toContain('"status": "COMPLETE|INCONCLUSIVE"');
+		expect(submitExample).toContain('"findings"');
+		expect(submitExample).not.toContain('"verdict":"..."');
+	});
+
+	test("lower completion-gate prose does not reintroduce unconditional review routing", () => {
+		expect(combined).not.toContain(
+			"Admitted confirmed findings: one bounded sisyphus repair batch, affected automated verification, then fresh independent review",
+		);
+		expect(combined).not.toContain(
+			"Any uncertain review result — `PLAUSIBLE`, `UNKNOWN`, or disputed scope, validity, or causality — goes to Oracle first",
+		);
+		expect(combined).not.toContain(
+			"no undismissed admitted finding",
+		);
+		expect(combined).toContain("record-comment-resolution");
 	});
 });
 

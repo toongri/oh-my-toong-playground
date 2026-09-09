@@ -119,16 +119,16 @@ describe("review dispatch budget", () => {
 		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "budget_exhausted", used: 5, cap: 5 });
 	});
 
-	test("clean eligible artifact denies without consuming, but approval renews and exact bytes bypass", () => {
+	test("APPROVE artifact remains terminal after renewal and exact-byte approval", () => {
 		writeCleanReview();
 		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "completion_eligible", used: 0, cap: 5 });
 		const approval = approveReviewDispatchRenewal(S);
 		expect(approval).toMatchObject({ allowed: true, reason: "allowed", used: 0, cap: 10 });
 		expect(rawState().approved_review_artifact_sha256).toMatch(/^[0-9a-f]{64}$/);
-		expect(claimReviewDispatch(S)).toMatchObject({ allowed: true, reason: "allowed", used: 1, cap: 10 });
-		// Schema-equivalent but byte-changed content is a new eligible artifact and must deny again.
+		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "completion_eligible", used: 0, cap: 10 });
+		// Schema-equivalent but byte-changed content remains terminal and must deny again.
 		writeFileSync(codeReviewArtifactPath(S), `${readFileSync(codeReviewArtifactPath(S), "utf8")}\n`, "utf8");
-		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "completion_eligible", used: 1, cap: 10 });
+		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "completion_eligible", used: 0, cap: 10 });
 	});
 
 	test("INCONCLUSIVE review is not completion eligible and therefore consumes budget", () => {
@@ -180,7 +180,7 @@ describe("review dispatch budget", () => {
 	test("fresh pursuit resets inherited review dispatch budget and approval hash", () => {
 		writeCleanReview();
 		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: true, cap: 10 });
-		expect(claimReviewDispatch(S)).toMatchObject({ allowed: true, used: 1, cap: 10 });
+		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "completion_eligible", used: 0, cap: 10 });
 
 		setBudgetLimited(S);
 		setGoalState(S, { phase: "planning" });
@@ -2922,9 +2922,8 @@ describe("story layer: request-complete verdict gate (T4)", () => {
 // ---------------------------------------------------------------------------
 
 describe("story layer: code-review completion lane (TODO 1)", () => {
-	// AC1: a CONFIRMED cleanup finding permits completion when the objective lane
-	// is fully green; cleanup-only findings are non-blocking quality notes.
-	test("code-review CONFIRMED cleanup permits completion", () => {
+	// OUT_OF_SCOPE findings are COMMENT notes and require explicit acknowledgment.
+	test("code-review OUT_OF_SCOPE cleanup requires COMMENT acknowledgment", () => {
 		const artifact = buildSatisfiedFixture(S);
 		writeVerdictArtifact(S, artifact); // objective lane fully green
 		writeCodeReviewArtifact(S, {
@@ -2942,8 +2941,8 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
 		});
-		expect(requestComplete(S)).toBe(true);
-		expect(rawState().phase).toBe("complete");
+		expect(requestComplete(S)).toBe(false);
+		expect(rawState().phase).toBe("pursuing");
 	});
 
 	test("code-review CONFIRMED blocks completion (correctness class)", () => {
