@@ -1762,17 +1762,39 @@ test_reviewer_submit_cli_absent_identity_denied() {
 }
 
 test_reviewer_submit_nested_shell_wrapper_identity_matrix() {
-    local cmd out
+    local cmd out deny_count newline_cmd
+    newline_cmd=$(printf "bash -c 'echo safe\nbun %s --artifact %s/result.json --json -'" "$SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts" "$OMT_DIR")
     for cmd in \
         "bash -c 'bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
         "bash -lc 'bun $SCRIPT_DIR/../skills/code-review/scripts/../scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
         "sh -c 'env -i X=1 bun run --silent \${CLAUDE_SKILL_DIR}/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
-        "env -i bash -c 'echo ok; bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'"; do
+        "env -i bash -c 'echo ok; bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "bash -c 'echo safe'; bash -c 'bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "bash -c 'echo safe && bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "bash -c 'echo safe | bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -; bash -c 'echo safe'" \
+        "X=1 bash -c 'bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "env X=1 bash -c 'bun $SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts --artifact $OMT_DIR/result.json --json -'" \
+        "$newline_cmd"; do
         out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg nested code-reviewer '{tool_name:"Bash",tool_input:{command:.,agent_type:$nested},agent_type:$at}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
         hg_is_deny "$out" || { echo "ASSERTION FAILED reviewer-submit nested nonreviewer: $out"; return 1; }
+        deny_count=$(printf '%s' "$out" | grep -o '"permissionDecision":"deny"' | wc -l | tr -d ' ')
+        [ "$deny_count" -eq 1 ] || { echo "ASSERTION FAILED reviewer-submit nested nonreviewer: expected one deny output for '$cmd', got $deny_count: $out"; return 1; }
         out=$(printf '%s' "$cmd" | jq -Rs --arg at code-reviewer '{tool_name:"Bash",tool_input:{command:.},agent_type:$at}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
         hg_is_allow "$out" || { echo "ASSERTION FAILED reviewer-submit nested reviewer: $out"; return 1; }
+        out=$(printf '%s' "$cmd" | jq -Rs '{tool_name:"Bash",tool_input:{command:.}}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+        hg_is_deny "$out" || { echo "ASSERTION FAILED reviewer-submit nested absent identity: $out"; return 1; }
+        deny_count=$(printf '%s' "$out" | grep -o '"permissionDecision":"deny"' | wc -l | tr -d ' ')
+        [ "$deny_count" -eq 1 ] || { echo "ASSERTION FAILED reviewer-submit nested absent identity: expected one deny output for '$cmd', got $deny_count: $out"; return 1; }
     done
+
+    cmd="bash -c 'echo safe'; bash -c 'echo also-safe'"
+    out=$(printf '%s' "$cmd" | jq -Rs '{tool_name:"Bash",tool_input:{command:.}}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED reviewer-submit nested multiple-safe-only: $out"; return 1; }
+
+    cmd=$(printf "bash -c 'echo safe\nbun %s --artifact %s/result.json --json -'" "$SCRIPT_DIR/../skills/code-review/scripts/submit-review.ts" "$OMT_DIR")
+    out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior '{tool_name:"Bash",tool_input:{command:.},agent_type:$at}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED reviewer-submit nested newline nonreviewer: $out"; return 1; }
 }
 
 test_reviewer_submit_nested_shell_wrapper_false_positives_allow() {

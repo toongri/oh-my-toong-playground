@@ -2435,20 +2435,55 @@ test_reviewer_submit_cli_nonreviewer_denied() {
 
 test_reviewer_submit_nested_shell_wrapper_identity_matrix() {
     new_sandbox
-    local cmd out rc=0
+    local cmd out deny_count newline_cmd rc=0
+    newline_cmd=$(printf "bash -c 'echo safe\nbun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'")
     for cmd in \
         "bash -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
         "bash -lc 'bun /repo/skills/code-review/scripts/../scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
         "sh -c 'env -i X=1 bun run --silent \${CLAUDE_SKILL_DIR}/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
-        "env -i bash -c 'echo ok; bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'"; do
+        "env -i bash -c 'echo ok; bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -c 'echo safe'; bash -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -c 'echo safe && bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bash -c 'echo safe | bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -; bash -c 'echo safe'" \
+        "X=1 bash -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "env X=1 bash -c 'bun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'" \
+        "$newline_cmd"; do
         out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg nested code-reviewer --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.,agent_type:$nested},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
         if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
             rm -rf "$SBX"; echo "ASSERTION FAILED reviewer-submit nested nonreviewer: $out"; return 1
         fi
+        deny_count=$(printf '%s' "$out" | grep -o '"permissionDecision":"deny"' | wc -l | tr -d ' ')
+        if [ "$deny_count" -ne 1 ]; then
+            rm -rf "$SBX"; echo "ASSERTION FAILED reviewer-submit nested nonreviewer: expected one deny output for '$cmd', got $deny_count: $out"; return 1
+        fi
         rc=0
         out=$(printf '%s' "$cmd" | jq -Rs --arg at code-reviewer --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
         assert_allow "$out" "$rc" "reviewer-submit nested reviewer" || { rm -rf "$SBX"; return 1; }
+        rc=0
+        out=$(printf '%s' "$cmd" | jq -Rs --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd}' | run_hook) || rc=$?
+        if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+            rm -rf "$SBX"; echo "ASSERTION FAILED reviewer-submit nested absent identity: $out"; return 1
+        fi
+        deny_count=$(printf '%s' "$out" | grep -o '"permissionDecision":"deny"' | wc -l | tr -d ' ')
+        if [ "$deny_count" -ne 1 ]; then
+            rm -rf "$SBX"; echo "ASSERTION FAILED reviewer-submit nested absent identity: expected one deny output for '$cmd', got $deny_count: $out"; return 1
+        fi
     done
+    rc=0
+    out=$(printf '%s' "bash -c 'echo safe'; bash -c 'echo also-safe'" | jq -Rs --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.},session_id:$sid,cwd:$cwd}' | run_hook) || rc=$?
+    assert_allow "$out" "$rc" "reviewer-submit nested multiple-safe-only" || { rm -rf "$SBX"; return 1; }
+
+    cmd=$(printf "bash -c 'echo safe\nbun /repo/skills/code-review/scripts/submit-review.ts --artifact /tmp/result.json --json -'")
+    rc=0
+    out=$(printf '%s' "$cmd" | jq -Rs --arg at sisyphus-junior --arg sid cx --arg cwd "$GITDIR" '{tool_name:"exec_command",tool_input:{command:.,},session_id:$sid,cwd:$cwd,agent_type:$at}' | run_hook) || rc=$?
+    if ! printf '%s' "$out" | grep -q 'permissionDecision":"deny"'; then
+        rm -rf "$SBX"; echo "ASSERTION FAILED reviewer-submit nested newline nonreviewer: $out"; return 1
+    fi
+    deny_count=$(printf '%s' "$out" | grep -o '"permissionDecision":"deny"' | wc -l | tr -d ' ')
+    if [ "$deny_count" -ne 1 ]; then
+        rm -rf "$SBX"; echo "ASSERTION FAILED reviewer-submit nested newline nonreviewer: expected one deny output, got $deny_count: $out"; return 1
+    fi
     rm -rf "$SBX"
 }
 
