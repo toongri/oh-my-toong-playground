@@ -1574,7 +1574,7 @@ export function recordCommentResolution(sessionId: string, artifactSha256: strin
 		const reviewed = readCodeReviewArtifactRaw(sessionId);
 		if (!reviewed || sha256(reviewed.raw) !== artifactSha256) throw new Error("record-comment-resolution: artifact hash does not match current artifact");
 		const current = getReviewResult(sessionId);
-		if (current.verdict !== "COMMENT") throw new Error("record-comment-resolution: current review is not COMMENT");
+		if (current.verdict !== "COMMENT" || current.findings.repair.length === 0) throw new Error("record-comment-resolution: current review has no repair findings");
 		const hashes: Record<string, string> = {};
 		for (const path of paths) hashes[path] = sha256(readFileSync(path, "utf8"));
 		mergeWriteLocked(sessionId, stateFilePath, { review_resolution: { artifact_sha256: artifactSha256, evidence: paths, evidence_sha256: hashes, at: new Date().toISOString() } });

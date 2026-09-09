@@ -99,6 +99,21 @@ describe("리뷰 제출 reducer", () => {
 		expect(getReviewResult(SID).resolution?.evidence).toEqual([join(dir, "check.log")]);
 	});
 
+	test("수리 finding 없는 COMMENT는 resolution evidence를 저장하지 않는다", () => {
+		const check = join(dir, "check.log");
+		writeFileSync(check, "checked\n");
+		for (const reviewFinding of [
+			finding("IN_SCOPE", "CONFIRMED", "LOW", "LOW"),
+			finding("OUT_OF_SCOPE", "CONFIRMED", "HIGH", "HIGH"),
+		]) {
+			const result = publish(join(dir, `ultragoal-codereview-${SID}.json`), JSON.stringify(artifact([reviewFinding])));
+			expect(result.verdict).toBe("COMMENT");
+			expect(result.findings.repair).toEqual([]);
+			expect(() => recordCommentResolution(SID, result.artifact_sha256, [check])).toThrow();
+			expect(readGoalStateRaw(SID)?.review_resolution).toBeUndefined();
+		}
+	});
+
 	test("cap 소진이나 renewal 전후에도 COMMENT 재리뷰를 거부한다", () => {
 		const path = join(dir, `ultragoal-codereview-${SID}.json`);
 		const raw = JSON.stringify(artifact([{ class: "correctness", verdict: "CONFIRMED", impact: "LOW", priority: "LOW", assessment: { unfixed_cost: "c", exposure: "e", remedy: "r", added_cost: "a", rationale: "why" }, scope: "IN_SCOPE", scope_evidence: { basis: "requirement", reference: "outcome", rationale: "r" }, ref: "a.ts:1" }]));
@@ -196,7 +211,7 @@ describe("리뷰 제출 reducer", () => {
 
 	test("re-plan은 COMMENT resolution과 아티팩트를 초기화한다", () => {
 		const path = join(dir, `ultragoal-codereview-${SID}.json`);
-		const result = publish(path, JSON.stringify(artifact([finding("IN_SCOPE", "CONFIRMED", "LOW")] )));
+		const result = publish(path, JSON.stringify(artifact([finding("IN_SCOPE", "CONFIRMED", "LOW", "MEDIUM")] )));
 		const check = join(dir, "check.log");
 		writeFileSync(check, "ok");
 		recordCommentResolution(SID, result.artifact_sha256, [check]);
