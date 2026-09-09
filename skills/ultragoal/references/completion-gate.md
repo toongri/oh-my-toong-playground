@@ -28,14 +28,14 @@ Because the orchestrator now runs this check on its own pursuit, the rubric is t
 
 For each non-retired story, map the story's acceptance criteria and verification surface to concrete evidence and render an `APPROVE` or `REQUEST_CHANGES` per-story verdict. A single non-APPROVE per-story entry blocks completion regardless of the `objective_verdict` field — `objective_verdict === 'APPROVE'` alone is never sufficient.
 
-`request-complete` reads the artifact from the conventional path internally (no path argument). It refuses if: the artifact is absent or schema-invalid; any non-retired story entry is non-APPROVE; any non-retired story is `unconfirmed`; an entry is missing for any non-retired story; zero non-retired stories exist; or the existing dual gate is unmet (`objective_verdict !== 'APPROVE'` in state, or empty `completion_evidence_paths`). The ultragoal review gate additionally requires a valid `COMPLETE` artifact bound to the current scope contract and either a derived `APPROVE` or a derived `COMMENT` with valid hash-bound `record-comment-resolution` evidence; `COMMENT` remains `COMMENT` and is not promoted to `APPROVE`. Missing scope evidence or a stale contract hash refuses completion. This check runs inside `request-complete`, independently of the orchestrator's judgment. Only when both lanes pass does it write `phase=complete` and `active=false`.
+`request-complete` reads the artifact from the conventional path internally (no path argument). It refuses if: the artifact is absent or schema-invalid; any non-retired story entry is non-APPROVE; any non-retired story is `unconfirmed`; an entry is missing for any non-retired story; zero non-retired stories exist; or the existing dual gate is unmet (`objective_verdict !== 'APPROVE'` in state, or empty `completion_evidence_paths`). The ultragoal review gate additionally requires a valid `COMPLETE` artifact bound to the current scope contract and either a derived `APPROVE`, or a derived `COMMENT` with hash-bound `record-comment-resolution` evidence when a MEDIUM repair was required; LOW/OUT_OF_SCOPE-only COMMENT needs no resolution. `COMMENT` remains `COMMENT` and is not promoted to `APPROVE`. Missing scope evidence or a stale contract hash refuses completion. This check runs inside `request-complete`, independently of the orchestrator's judgment. Only when both lanes pass does it write `phase=complete` and `active=false`.
 
 <!-- story-layer:end -->
 
 **Code-review lane (starts at the final story; retries follow bounded admission).** Middle stories carry only the lightweight, self-attested per-story verdict above; no code-reviewer runs on them. Once every confirmed story's per-story verdict reads APPROVE, dispatch a fresh **code-reviewer** agent, independent of the builder (sisyphus), over the ENTIRE accumulated diff — all stories combined, not just the final one. Self-review by the builder is forbidden.
 
 - **Before dispatching**, run `bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts serialize-review-context` and put its full stdout JSON — the 5-slot payload `{what_was_implemented, description, requirements, project_context, non_goals}` — in the dispatch prompt. The code-review skill's Step 1 Intent Block Gate recognizes this shape (its "Non-interactive dispatch (completion-gate)" row) and skips its own user interview while still detecting requirement-gap findings.
-- **Publication:** Pass the exact artifact destination opaquely with the two-field dispatch context. This pursuit's destination is `$OMT_DIR/ultragoal-codereview-{sid}.json`, but the producer treats it as an opaque path. The generic `code-review` publisher receives the original `CodeReviewArtifact` JSON and returns only its `{path, sha256}` transport receipt. The parent orchestrator then calls `ultragoal-state.ts get-review-result`, which computes the session result and feeds the scope reducer below; the reviewer never computes aggregate repair or completion policy.
+- **Publication:** Pass the exact artifact destination opaquely with the two-field dispatch context. This pursuit's destination is `$OMT_DIR/ultragoal-codereview-{sid}.json`, but the producer treats it as an opaque path. The generic `code-review` publisher receives the original artifact bytes and returns only its `{path, sha256}` transport receipt; it has no aggregate or caller policy knowledge. The parent orchestrator then calls `ultragoal-state.ts get-review-result`, which computes the session result and feeds the scope reducer below; the reviewer never computes aggregate repair or completion policy.
 - **The sibling `$OMT_DIR/ultragoal-verdict-{sid}.json` is NOT guarded** — the orchestrator is its author.
 
 A code-reviewer may legitimately remain in flight for 2–3 hours. Elapsed time alone is not evidence to interrupt, cancel, or re-dispatch it. Keep waiting while it remains live; intervene only on concrete terminal evidence such as an explicit reviewer timeout or deadline, a canceled or error state, or verified loss of its live process or job artifact.
@@ -48,30 +48,27 @@ Finders suppress scenarios fully explained by declared non-goals before candidat
 
 | Scope | Required evidence | Orchestrator action |
 |---|---|---|
-| `IN_SCOPE` / `requirement` | Cite an approved story/AC or outcome/verification clause; explain how the local repair improves that deliverable without adding capability | Every `CONFIRMED` item enters one repair batch, including LOW and cleanup |
-| `IN_SCOPE` / `regression` | Cite the preserved contract and the causal path from this pursuit's change to broken prior behavior | Restore prior behavior with the smallest repair or rollback of this pursuit's change |
+| `IN_SCOPE` / `requirement` | Cite an approved story/AC or outcome/verification clause; explain how the local repair improves that deliverable without adding capability | Route by verified priority; LOW remains notes-only |
+| `IN_SCOPE` / `regression` | Cite the preserved contract and the causal path from this pursuit's change to broken prior behavior | Apply priority routing after admission; a LOW regression is notes-only, while a mandatory AC failure or admitted HIGH/MEDIUM priority requires the minimum repair |
 | `OUT_OF_SCOPE` / `non_goal` | Cite the matching non-goal decider | Record exclusion; no repair or new story |
 | `OUT_OF_SCOPE` / `unrelated` | Compare against the approved outcome and show no requirement or causal regression connection | Record exclusion; no repair or new story |
 | `UNKNOWN` / `uncertain` | Name the unresolved scope question with its contract reference | No repair; obtain independent clarification from evidence; a genuine product-scope choice belongs to the user |
 
 A file in the allowed boundary is only a location permission. Shared files, useful improvements, a senior reviewer's request, generic best practices, and codebase analogs do not authorize new goals. Derived expectations can explain an approved requirement; they cannot become new acceptance criteria. A real CSV defect can justify a local CSV fix, but cannot justify a non-goal multi-format framework. If the only known fix requires excluded behavior or a wider boundary, leave it `UNKNOWN` and seek a scope decision; never silently broaden the contract.
 
-A non-goal does not excuse damage introduced by this pursuit. Restore the prior behavior by correcting or reverting the offending change inside the boundary. Do not use the regression label to modernize the excluded subsystem or repair a pre-existing defect.
+A causal regression is not excluded by a non-goal: repair it when a mandatory AC fails or an independently admitted `IN_SCOPE` + `CONFIRMED` finding has priority `HIGH` or `MEDIUM`; `LOW` remains notes-only. Do not use the regression label to modernize the excluded subsystem or repair a pre-existing defect.
 
-**Executor handoff:** include only independently admitted `IN_SCOPE` + `CONFIRMED` findings, their scope evidence, the original story AC/verification surface, constraints, boundaries, and non-goals. The executor checks the remedy against this same contract before editing. A mismatch returns for adjudication; it is not a license to execute the reviewer's suggestion. Never dispatch an entire unfiltered findings report as a repair list.
+**Executor handoff:** include only independently admitted `IN_SCOPE` + `CONFIRMED` HIGH or MEDIUM findings, their scope evidence and assessment, the original story AC/verification surface, constraints, boundaries, and non-goals. The executor checks the remedy against this same contract before editing. A mismatch returns for adjudication; it is not a license to execute the reviewer's suggestion. LOW findings remain notes and are never dispatched as repair work. Never dispatch an entire unfiltered findings report as a repair list.
 
 ### Deterministic review result and bounded re-review
 
 The parent orchestrator consumes the generic publisher receipt and calls the bundled `ultragoal-state.ts get-review-result`; that command computes the deterministic `verdict` and returns `artifact_sha256`, `reason`, and nested `findings: {repair, adjudicate, notes}`. The receipt hash identifies the original submitted artifact; the parent consumes this computed result and does not subjectively reclassify it. Do not add a third dispatch-prompt field: the two-field context/artifact contract is sufficient to derive publication.
 
-Admission is scope-first. `OUT_OF_SCOPE` => `NOTE`; `UNKNOWN` => `REQUEST_CHANGES` with no speculative repair. For in-scope findings, route by verifier confidence and impact:
+Admission is scope-first. `OUT_OF_SCOPE` => `NOTE`; `UNKNOWN` => `REQUEST_CHANGES` with no repair. A valid `COMPLETE` artifact with verified findings routes by `priority`: HIGH => `REQUEST_CHANGES` and repair/check/fresh review; MEDIUM => `COMMENT` and repair/check plus hash-bound resolution; LOW => `COMMENT` notes only, with no fix and no invented repair or test evidence. A result containing both MEDIUM and LOW requires the MEDIUM repair and resolution; LOW-only or OUT_OF_SCOPE-only results do not. An empty finding set => `APPROVE`. `INCONCLUSIVE` remains `REQUEST_CHANGES` and does not authorize speculative repair.
 
-- `IN_SCOPE + CONFIRMED + HIGH/MEDIUM` => `BLOCK` / `REQUEST_CHANGES`.
-- `IN_SCOPE + CONFIRMED + LOW` => `FIX` / `COMMENT` (repair-list cleanup is still required, but no fresh reviewer is required).
-- `IN_SCOPE + PLAUSIBLE + HIGH` => `ADJUDICATE` / `REQUEST_CHANGES`.
-- `IN_SCOPE + PLAUSIBLE + MEDIUM/LOW` => `NOTE` / `COMMENT` (no speculative fixes).
+An unresolved `IN_SCOPE` + `PLAUSIBLE` finding remains `INCONCLUSIVE`; it does not become a repair assignment merely because its priority is HIGH or MEDIUM. No speculative repair is allowed.
 
-The aggregate rule is deterministic: **Any BLOCK/ADJUDICATE => REQUEST_CHANGES; otherwise FIX/NOTE => COMMENT; empty => APPROVE.** A `COMMENT` repairs only the confirmed repair-list items, reports notes, runs affected checks, then records hash-bound acknowledgment with:
+The aggregate rule is deterministic: **any `IN_SCOPE` + `CONFIRMED` finding with `priority=HIGH`, or any `UNKNOWN`, unresolved `IN_SCOPE` + `PLAUSIBLE`, or `INCONCLUSIVE` result => REQUEST_CHANGES; otherwise any admitted MEDIUM => COMMENT; otherwise LOW or OUT_OF_SCOPE notes => COMMENT; empty => APPROVE.** `COMMENT` performs only the required MEDIUM repairs and affected checks, reports LOW/OUT_OF_SCOPE notes, then records hash-bound acknowledgment only when a MEDIUM repair exists:
 
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts record-comment-resolution \
@@ -80,7 +77,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts record-comment-resolution \
 
 The acknowledgment binds evidence to the exact artifact hash. Repair correctness remains the executor's self-attestation; this command does not claim that the machine understands semantic correctness. `COMMENT` and `APPROVE` never trigger a code-review re-review, even after user budget renewal. `set-verdict` remains the objective lane only and is separate from the code-review result.
 
-For `REQUEST_CHANGES`, repair confirmed findings and adjudicate plausible HIGH findings, run affected checks, then dispatch a fresh independent review. Every new item is admitted against the same frozen contract. A reviewer-only retry is allowed only when the prior reviewer is absent or the submission failed; the initial five-review budget is for those retries and `REQUEST_CHANGES` rounds, not a reason to waive a required fresh review. No review-driven story creation, contract rewriting, new feature, or generalization is permitted.
+For `REQUEST_CHANGES`, repair all required HIGH and MEDIUM findings, run affected checks, then dispatch a fresh independent review. A fresh review is also allowed to recover an unresolved or failed review submission; it is not limited to confirmed HIGH repair. Every new item is admitted against the same frozen contract. A reviewer-only retry is allowed only when the prior reviewer is absent or the submission failed; the initial five-review budget is for those retries and `REQUEST_CHANGES` rounds, not a reason to waive a required fresh review. No review-driven story creation, contract rewriting, new feature, or generalization is permitted.
 
 The original `CodeReviewArtifact` consumed and scope-validated by `ultragoal-state.ts get-review-result`:
 
@@ -94,6 +91,14 @@ The original `CodeReviewArtifact` consumed and scope-validated by `ultragoal-sta
       "class": "correctness|regression|cleanup|requirement-gap",
       "verdict": "CONFIRMED|PLAUSIBLE",
       "impact": "HIGH|MEDIUM|LOW",
+      "priority": "HIGH|MEDIUM|LOW",
+      "assessment": {
+        "unfixed_cost": "<nonblank string>",
+        "exposure": "<nonblank string>",
+        "remedy": "<nonblank string>",
+        "added_cost": "<nonblank string>",
+        "rationale": "<nonblank string>"
+      },
       "ref": "<file:line>",
       "scope": "IN_SCOPE|OUT_OF_SCOPE|UNKNOWN",
       "scope_evidence": {
@@ -110,11 +115,11 @@ The original `CodeReviewArtifact` consumed and scope-validated by `ultragoal-sta
 
 `status` is **required** in the submitted parent artifact. `COMPLETE` = the reviewer rendered a verdict over the diff; `INCONCLUSIVE` = the review did not finish — reviewer timeout, ack-only response, a `BLOCKED` reviewer, or genuine uncertainty — and is accepted but routes to `REQUEST_CHANGES`. An artifact missing `status` or scope hash is rejected; there is no default-to-COMPLETE coercion.
 
-`impact` is **required on every finding** — a finding without one invalidates the whole artifact, exactly like a missing `status`; there is no default impact coercion. `verdict` measures confidence (assigned by the verifier); `impact` measures harm (assigned by the code-review orchestrator, per that skill's case lists). `findings_report` is the path to the review's `findings.md` — the full 7-field cards the summary findings were cut from, preserved so a finding can be re-adjudicated later from its original text.
+`impact` is **required on every finding** and records harm as `HIGH|MEDIUM|LOW`. `priority` and `assessment` are required for `COMPLETE` artifacts; an `INCONCLUSIVE` artifact may omit them, but any supplied values are validated. Each `COMPLETE` finding must carry a `class`, `verdict`, `impact`, `priority`, and an `assessment` whose five values (`unfixed_cost`, `exposure`, `remedy`, `added_cost`, `rationale`) are nonblank strings. The final conductor grades realistic exposure and harm against the minimum remedy, permanent complexity/maintenance, and new-regression risk; it must not infer priority from confidence alone. `findings_report` is the path to the review's `findings.md` — the full cards the summary findings were cut from, preserved as source context.
 
-`scope` and `scope_evidence` are required for every finding. References resolve to `outcome`, `verification_surface`, `constraints`, `boundaries`, `non_goals`, or a confirmed active story ID. A requirement uses outcome/verification/story evidence; an exclusion uses its non-goal decider or outcome comparison. The runtime checks valid references, allowed scope/basis combinations, nonempty rationale, and the current contract hash. The independent verifier owns the semantic truth of that evidence; a hash is identity, not proof of correctness. The derived `findings` object groups repair, adjudication, and notes; it is not part of the submitted artifact schema.
+`scope` and `scope_evidence` are required for every finding. References resolve to `outcome`, `verification_surface`, `constraints`, `boundaries`, `non_goals`, or a confirmed active story ID. A requirement uses outcome/verification/story evidence; an exclusion uses its non-goal decider or outcome comparison. The runtime checks valid references, allowed scope/basis combinations, nonempty rationale, and the current contract hash. The independent verifier owns the semantic truth of that evidence; a hash is identity, not proof of correctness. The derived `findings` object groups repair, adjudicate, and notes; it is not part of the submitted artifact schema.
 
-**Pass signal:** a valid submitted artifact with matching scope-contract hash and either a derived `APPROVE` or a derived `COMMENT` with valid hash-bound `record-comment-resolution` evidence; `COMMENT` remains `COMMENT` and is not promoted to `APPROVE`. `OUT_OF_SCOPE` is a nonblocking note; `UNKNOWN`, invalid/stale artifact, or valid `INCONCLUSIVE` is `REQUEST_CHANGES` with no speculative repair. Impact controls routing, never whether an admitted repair is in scope.
+**Pass signal:** a valid submitted artifact with matching scope-contract hash and either a derived `APPROVE`, or a derived `COMMENT` with valid hash-bound `record-comment-resolution` evidence when (and only when) at least one MEDIUM repair was required; LOW/OUT_OF_SCOPE-only COMMENT needs no resolution. `COMMENT` remains `COMMENT` and is not promoted to `APPROVE`. `OUT_OF_SCOPE` is a nonblocking note; `UNKNOWN`, invalid/stale artifact, or valid `INCONCLUSIVE` is `REQUEST_CHANGES` with no speculative repair. Priority controls routing after scope admission; it never expands scope. Objective and story gates remain unchanged and cannot be waived by LOW.
 
 An old artifact without this contract must be re-reviewed. The orchestrator never upgrades it by adding scope fields or copying a current hash.
 
@@ -124,16 +129,16 @@ An old artifact without this contract must be re-reviewed. The orchestrator neve
 |---|---|
 | “CONFIRMED/HIGH means fix, even though it is a non-goal” | Scope admission comes first; exclude the unrelated item |
 | “The helper works, but the reviewer requires a framework” | Compare the remedy to the original AC; retain a bounded implementation |
-| “LOW is only a note; CI is green” | A confirmed LOW is a bounded repair-list item: fix it, run affected checks, and record COMMENT resolution; it does not require a fresh reviewer |
+| “LOW is only a note; CI is green” | LOW is notes-only: do not fix it or manufacture repair/test evidence; resolve only any MEDIUM finding in the same artifact |
 | “Same file / analog / next review round makes it part of the goal” | Cite the frozen requirement or change-caused regression; otherwise exclude |
 
-**Red flags:** a repair list containing an excluded item; a story added from review feedback alone; a changed non-goal to obtain approval; completing with an unresolved in-scope LOW item. Stop that action and apply admission again.
+**Red flags:** a repair list containing an excluded item; a story added from review feedback alone; a changed non-goal to obtain approval; completing with an unresolved in-scope HIGH or MEDIUM item. Stop that action and apply admission again.
 
 ### Wrong blocking finding: propose a dismissal
 
-An admitted `IN_SCOPE` + `CONFIRMED` HIGH/MEDIUM finding blocks completion structurally. When such a finding is **wrong**, propose a user-authorized dismissal with a quoted refutation. PLAUSIBLE HIGH findings require independent adjudication; LOW/MEDIUM plausible notes do not authorize speculative repair and cannot use dismissal.
+An admitted `IN_SCOPE` + `CONFIRMED` HIGH finding blocks completion structurally. When such a finding is **wrong**, propose a user-authorized dismissal with a quoted refutation. Dismissal applies only to a confirmed in-scope blocking HIGH finding; it never expands to MEDIUM or other priorities.
 
-**Trigger — when you can quote the refutation.** After reading a blocking finding, go to the cited `file:line` and look for the line, guard, or invariant that makes its failure scenario unreachable. If you can quote one, propose a dismissal on your next turn. If you cannot quote one, keep its scope/validity routing: confirmed blocking items go to sisyphus; plausible HIGH items go to adjudication; plausible LOW/MEDIUM items remain notes. Scope disagreement is resolved by the independent reviewer against the frozen contract, not by repairing excluded work. Disagreeing with a finding you cannot refute in a quoted line is not a trigger.
+**Trigger — when you can quote the refutation.** After reading a blocking HIGH finding, go to the cited `file:line` and look for the line, guard, or invariant that makes its failure scenario unreachable. If you can quote one, propose a dismissal on your next turn. If you cannot quote one, keep its scope and priority routing: confirmed HIGH items go to sisyphus; MEDIUM items follow the bounded COMMENT repair; LOW items remain notes. Scope disagreement is resolved by the independent reviewer against the frozen contract, not by repairing excluded work. Disagreeing with a finding you cannot refute in a quoted line is not a trigger.
 
 **The proposal carries four parts, in this order:**
 
@@ -167,7 +172,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts approve-review-dispatch-renew
 
 A `PreToolUse` guard denies this command on the orchestrator's own Bash path on both platforms, so "only after explicit user approval" is enforced by the harness rather than by the orchestrator's restraint. Each approval adds `cap += 5`; the hook alone calls `claim-review-dispatch`; the orchestrator must never edit the counters itself.
 
-The routing table above applies at every round. A reviewer-only retry consumes the same budget as a post-repair review; a retry never becomes a repair assignment merely because the budget is low. COMMENT and APPROVE do not create a terminal re-review request.
+The routing table above applies at every round. A reviewer-only retry consumes the same budget as a post-repair review; a retry never becomes a repair assignment merely because the budget is low. COMMENT and APPROVE deny any terminal re-review request, including after user budget renewal.
 
 **Completion fires ONLY on an objective-lane APPROVE AND an objective-scope Evidence Audit pass.** A **COMMENT verdict is NOT sufficient** for completion — `request-complete` requires `objective_verdict=APPROVE`. COMMENT is a soft pass: no blocking issue but non-blocking notes remain; address those notes and re-verify until APPROVE. **On an APPROVE,** the Evidence Audit applies the verify-the-verifier shape to your own check: confirm the verdict HOLDS UP by reading the evidence you collected (does it demonstrate the verification surface was met?). If the evidence is missing or does not demonstrate the verification surface, it is an Evidence Gap → continue pursuit, do not complete.
 
@@ -201,11 +206,11 @@ APPROVE alone does NOT leave the ultragoal pursuit pursuing/active — the `requ
 
 **Once `request-complete` reaches terminal `complete`, hand off to the human for the final hands-on QA.** The loop never runs the hands-on adversarial matrix, so when you report completion, also prompt the user to run their own final hands-on pass before shipping — the heavy `Skill(skill: "qa")` battery is available if they want it.
 
-**Two lanes gate completion: the objective self-check and code-review.** The completion path runs both the objective-level self-check (correctness, completeness, and evidence audit) and the independent code-review lane (static quality and conventions) — both must pass for `request-complete` to pass. The ultragoal review gate additionally requires a valid `COMPLETE` artifact bound to the current scope contract and either a derived `APPROVE` or a derived `COMMENT` with valid hash-bound `record-comment-resolution` evidence; `COMMENT` remains `COMMENT` and is not promoted to `APPROVE`. Excluded items remain visible without becoming work. Advisors are advisory only and do not gate completion. Code-review is a completion-time quality lane and is distinct from design review — the two must not be conflated.
+**Two lanes gate completion: the objective self-check and code-review.** The completion path runs both the objective-level self-check (correctness, completeness, and evidence audit) and the independent code-review lane (static quality and conventions) — both must pass for `request-complete` to pass. The ultragoal review gate additionally requires a valid `COMPLETE` artifact bound to the current scope contract and either a derived `APPROVE`, or a derived `COMMENT` with hash-bound `record-comment-resolution` evidence when a MEDIUM repair was required; LOW/OUT_OF_SCOPE-only COMMENT needs no resolution. `COMMENT` remains `COMMENT` and is not promoted to `APPROVE`. Excluded items remain visible without becoming work. Advisors are advisory only and do not gate completion. Code-review is a completion-time quality lane and is distinct from design review — the two must not be conflated.
 
 ### Final-review advisory routing
 
-Use advisory analysis only for a blocking `REQUEST_CHANGES` result: `IN_SCOPE + PLAUSIBLE + HIGH`, `UNKNOWN`, or disputed scope/validity/causality. Oracle supplies read-only evidence analysis; it does not authorize repair or replace the reviewer. `IN_SCOPE + PLAUSIBLE + MEDIUM/LOW`, `OUT_OF_SCOPE`, and ordinary `COMMENT` notes do not require Oracle and never trigger a fresh review. Malformed or stale artifacts may be diagnosed as input failures; Oracle must not fabricate evidence. For design alternatives or trade-offs, ask Daedalus with the frozen contract, specific question, cited evidence, and bounded options. Sisyphus remains the sole executor.
+Use advisory analysis only for a blocking `REQUEST_CHANGES` result: unresolved `IN_SCOPE + PLAUSIBLE`, `UNKNOWN`, or disputed scope/validity/causality. Oracle supplies read-only evidence analysis; it does not authorize repair or replace the reviewer. An unresolved plausible finding remains `INCONCLUSIVE` with no speculative fix; `OUT_OF_SCOPE`, LOW, and ordinary `COMMENT` notes do not require Oracle and never trigger a fresh review. Malformed or stale artifacts may be diagnosed as input failures; Oracle must not fabricate evidence. For design alternatives or trade-offs, ask Daedalus with the frozen contract, specific question, cited evidence, and bounded options. Sisyphus remains the sole executor.
 
 ### Invalidate out-of-requirement repair requests
 
@@ -217,9 +222,9 @@ Every non-APPROVE verdict drives a concrete action within the frozen scope:
 
 - **Unfinished story/COMMENT**: dispatch the named requirement gap to sisyphus, then re-verify. Commentary cannot invent an acceptance criterion.
 - **Tactical plan inadequacy**: adjust HOW within the approved WHAT. A change to WHAT, AC, constraints, boundaries, or non-goals follows the planning approval contract before dispatch.
-- **REQUEST_CHANGES result**: repair the confirmed repair-list and adjudicate plausible HIGH findings, run affected checks, then fresh independent review.
-- **Plausible HIGH / unknown / invalid / inconclusive review**: send the blocking uncertainty to Oracle first for evidence analysis. Plausible MEDIUM/LOW is a nonblocking NOTE with no speculative fix. Malformed/stale input may be diagnosed but never fabricated. A user scope decision is required if evidence still cannot determine the product requirement.
-- **Only excluded findings or COMMENT notes remain**: report them, run the required affected checks, record `record-comment-resolution` against the exact artifact hash with evidence paths, and request completion. Scope exclusions never become repair work.
+- **REQUEST_CHANGES result**: repair all required HIGH and MEDIUM findings and run affected checks, then fresh independent review; unresolved or failed review input may also take this recovery path without speculative repair.
+- **UNKNOWN / invalid / inconclusive review**: send the blocking uncertainty to Oracle first for evidence analysis. LOW is a nonblocking note with no fix or fabricated test evidence. Malformed/stale input may be diagnosed but never fabricated. A user scope decision is required if evidence still cannot determine the product requirement.
+- **Only MEDIUM repairs, excluded findings, or COMMENT notes remain**: when MEDIUM repairs exist, perform them and affected checks, then record `record-comment-resolution` against the exact artifact hash with evidence paths; for LOW/OUT_OF_SCOPE-only notes, report them without recording resolution, then request completion. Scope exclusions never become repair work.
 
 ### Blocked-stop
 

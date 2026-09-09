@@ -45,10 +45,10 @@ function writeObjective(): void {
 	writeFileSync(join(dir, `ultragoal-verdict-${SID}.json`), JSON.stringify({ objective_verdict: "APPROVE", stories: [{ id: "S1", verdict: "APPROVE", evidence_refs: ["evidence.md"] }], verifier: "v", at: "now" }));
 }
 
-function finding(scope: "IN_SCOPE" | "OUT_OF_SCOPE" | "UNKNOWN", verdict: "CONFIRMED" | "PLAUSIBLE", impact: "HIGH" | "MEDIUM" | "LOW"): CodeReviewArtifact["findings"][number] {
+function finding(scope: "IN_SCOPE" | "OUT_OF_SCOPE" | "UNKNOWN", verdict: "CONFIRMED" | "PLAUSIBLE", impact: "HIGH" | "MEDIUM" | "LOW", priority: "HIGH" | "MEDIUM" | "LOW" = impact): CodeReviewArtifact["findings"][number] {
 	const basis = scope === "IN_SCOPE" ? "requirement" : scope === "OUT_OF_SCOPE" ? "non_goal" : "uncertain";
 	const reference = scope === "OUT_OF_SCOPE" ? "non_goals" : "outcome";
-	return { class: "correctness", verdict, impact, scope, scope_evidence: { basis, reference, rationale: "evidence" }, ref: `${scope}-${verdict}-${impact}` };
+	return { class: "correctness", verdict, impact, priority, assessment: { unfixed_cost: "cost", exposure: "exposure", remedy: "remedy", added_cost: "added cost", rationale: "rationale" }, scope, scope_evidence: { basis, reference, rationale: "evidence" }, ref: `${scope}-${verdict}-${priority}` };
 }
 
 function publish(path: string, raw: string) {
@@ -70,8 +70,8 @@ afterEach(() => {
 describe("리뷰 제출 reducer", () => {
 	test("FIX와 NOTE 그룹을 계산하고 아티팩트 해시를 고정한다", () => {
 		const raw = JSON.stringify(artifact([
-			{ class: "correctness", verdict: "CONFIRMED", impact: "LOW", scope: "IN_SCOPE", scope_evidence: { basis: "requirement", reference: "outcome", rationale: "r" }, ref: "a.ts:1" },
-			{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW", scope: "OUT_OF_SCOPE", scope_evidence: { basis: "non_goal", reference: "non_goals", rationale: "n" }, ref: "b.ts:1" },
+			{ class: "correctness", verdict: "CONFIRMED", impact: "LOW", priority: "MEDIUM", assessment: { unfixed_cost: "c", exposure: "e", remedy: "r", added_cost: "a", rationale: "why" }, scope: "IN_SCOPE", scope_evidence: { basis: "requirement", reference: "outcome", rationale: "r" }, ref: "a.ts:1" },
+			{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW", priority: "LOW", assessment: { unfixed_cost: "c", exposure: "e", remedy: "r", added_cost: "a", rationale: "why" }, scope: "OUT_OF_SCOPE", scope_evidence: { basis: "non_goal", reference: "non_goals", rationale: "n" }, ref: "b.ts:1" },
 		]));
 		const path = join(dir, `ultragoal-codereview-${SID}.json`);
 		const result = publish(path, raw);
@@ -90,7 +90,7 @@ describe("리뷰 제출 reducer", () => {
 
 	test("COMMENT 해소에 아티팩트 결합 evidence를 요구한다", () => {
 		const path = join(dir, `ultragoal-codereview-${SID}.json`);
-		const raw = JSON.stringify(artifact([{ class: "correctness", verdict: "CONFIRMED", impact: "LOW", scope: "IN_SCOPE", scope_evidence: { basis: "requirement", reference: "outcome", rationale: "r" }, ref: "a.ts:1" }]));
+		const raw = JSON.stringify(artifact([{ class: "correctness", verdict: "CONFIRMED", impact: "LOW", priority: "MEDIUM", assessment: { unfixed_cost: "c", exposure: "e", remedy: "r", added_cost: "a", rationale: "why" }, scope: "IN_SCOPE", scope_evidence: { basis: "requirement", reference: "outcome", rationale: "r" }, ref: "a.ts:1" }]));
 		const result = publish(path, raw);
 		expect(() => recordCommentResolution(SID, "wrong", ["check.log"])).toThrow();
 		expect(() => recordCommentResolution(SID, result.artifact_sha256, [])).toThrow();
@@ -101,7 +101,7 @@ describe("리뷰 제출 reducer", () => {
 
 	test("cap 소진이나 renewal 전후에도 COMMENT 재리뷰를 거부한다", () => {
 		const path = join(dir, `ultragoal-codereview-${SID}.json`);
-		const raw = JSON.stringify(artifact([{ class: "correctness", verdict: "CONFIRMED", impact: "LOW", scope: "IN_SCOPE", scope_evidence: { basis: "requirement", reference: "outcome", rationale: "r" }, ref: "a.ts:1" }]));
+		const raw = JSON.stringify(artifact([{ class: "correctness", verdict: "CONFIRMED", impact: "LOW", priority: "LOW", assessment: { unfixed_cost: "c", exposure: "e", remedy: "r", added_cost: "a", rationale: "why" }, scope: "IN_SCOPE", scope_evidence: { basis: "requirement", reference: "outcome", rationale: "r" }, ref: "a.ts:1" }]));
 		publish(path, raw);
 		const state = JSON.parse(readFileSync(resolveStatePath(SID), "utf8"));
 		state.review_dispatch_used = 5;
@@ -109,12 +109,12 @@ describe("리뷰 제출 reducer", () => {
 		expect(claimReviewDispatch(SID)).toMatchObject({ allowed: false, reason: "completion_eligible" });
 	});
 
-	test("scope·confidence·impact 전체 reducer 행렬을 검증한다", () => {
+	test("scope·verdict·priority 전체 reducer 행렬을 검증한다", () => {
 		for (const scope of ["IN_SCOPE", "OUT_OF_SCOPE", "UNKNOWN"] as const)
 			for (const verdict of ["CONFIRMED", "PLAUSIBLE"] as const)
-				for (const impact of ["HIGH", "MEDIUM", "LOW"] as const) {
-					const result = publish(join(dir, `ultragoal-codereview-${SID}.json`), JSON.stringify(artifact([finding(scope, verdict, impact)])));
-					const expected = scope === "UNKNOWN" || (scope === "IN_SCOPE" && verdict === "CONFIRMED" && impact !== "LOW") || (scope === "IN_SCOPE" && verdict === "PLAUSIBLE" && impact === "HIGH") ? "REQUEST_CHANGES" : "COMMENT";
+				for (const priority of ["HIGH", "MEDIUM", "LOW"] as const) {
+					const result = publish(join(dir, `ultragoal-codereview-${SID}.json`), JSON.stringify(artifact([finding(scope, verdict, "HIGH", priority)])));
+					const expected = scope === "UNKNOWN" || (scope === "IN_SCOPE" && (verdict === "PLAUSIBLE" || priority === "HIGH")) ? "REQUEST_CHANGES" : "COMMENT";
 					expect(result.verdict).toBe(expected);
 				}
 	});
@@ -169,7 +169,7 @@ describe("리뷰 제출 reducer", () => {
 	test("COMMENT는 acknowledgment 후 완료하고 evidence 변경 시 무효화된다", () => {
 		writeObjective();
 		const path = join(dir, `ultragoal-codereview-${SID}.json`);
-		const raw = JSON.stringify(artifact([finding("IN_SCOPE", "CONFIRMED", "LOW")]));
+		const raw = JSON.stringify(artifact([finding("IN_SCOPE", "CONFIRMED", "LOW", "MEDIUM")]));
 		const result = publish(path, raw);
 		setVerdict(SID, "APPROVE");
 		expect(requestComplete(SID)).toBe(false);

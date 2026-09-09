@@ -1259,6 +1259,7 @@ interface VerdictArtifact {
 
 export type ReviewFindingClass = "correctness" | "regression" | "cleanup" | "requirement-gap";
 export type ReviewImpact = "HIGH" | "MEDIUM" | "LOW";
+export type ReviewPriority = "HIGH" | "MEDIUM" | "LOW";
 export type ReviewFindingOutcome = "BLOCK" | "FIX" | "NOTE" | "ADJUDICATE";
 export type ReviewScope = "IN_SCOPE" | "OUT_OF_SCOPE" | "UNKNOWN";
 export type ReviewScopeBasis =
@@ -1274,6 +1275,14 @@ export interface CodeReviewFinding {
 	class: ReviewFindingClass;
 	verdict: "CONFIRMED" | "PLAUSIBLE";
 	impact: ReviewImpact;
+	priority: ReviewPriority;
+	assessment: {
+		unfixed_cost: string;
+		exposure: string;
+		remedy: string;
+		added_cost: string;
+		rationale: string;
+	};
 	scope: ReviewScope;
 	scope_evidence: ReviewScopeEvidence;
 	ref?: string;
@@ -1340,13 +1349,14 @@ function isReviewResolution(value: unknown): value is ReviewResolution {
 export function classifyReviewFindingOutcome(finding: {
 	verdict: "CONFIRMED" | "PLAUSIBLE";
 	impact: ReviewImpact;
+	priority: ReviewPriority;
 	scope: ReviewScope;
 }): ReviewFindingOutcome {
 	if (finding.scope === "OUT_OF_SCOPE") return "NOTE";
 	if (finding.scope === "UNKNOWN") return "BLOCK";
 	if (finding.scope === "IN_SCOPE") {
-		if (finding.verdict === "PLAUSIBLE") return finding.impact === "HIGH" ? "ADJUDICATE" : "NOTE";
-		return finding.impact === "LOW" ? "FIX" : "BLOCK";
+		if (finding.verdict === "PLAUSIBLE") return "ADJUDICATE";
+		return finding.priority === "HIGH" ? "BLOCK" : finding.priority === "MEDIUM" ? "FIX" : "NOTE";
 	}
 	return "BLOCK";
 }
@@ -1444,17 +1454,28 @@ function isCodeReviewArtifact(value: unknown): value is CodeReviewArtifact {
 	const report = value["findings_report"];
 	if (report !== undefined && typeof report !== "string") return false;
 	// Validate each finding; any enum violation → whole artifact null.
-	// `impact` is REQUIRED — a finding without one is schema-invalid exactly like
+	// `impact`, `priority`, and `assessment` are REQUIRED for COMPLETE findings — a finding without one is schema-invalid exactly like
 	// an artifact without `status`: no default-to-LOW (or any) coercion, because a
 	// silently defaulted impact would let a reviewer omission decide the gate.
 	const VALID_CLASSES = ["correctness", "regression", "cleanup", "requirement-gap"];
 	const VALID_FINDING_VERDICTS = ["CONFIRMED", "PLAUSIBLE"];
 	const VALID_IMPACTS = ["HIGH", "MEDIUM", "LOW"];
+	const VALID_PRIORITIES = ["HIGH", "MEDIUM", "LOW"];
+	const ASSESSMENT_KEYS = ["unfixed_cost", "exposure", "remedy", "added_cost", "rationale"];
 	for (const entry of value["findings"]) {
 		if (!isRecord(entry)) return false;
 		if (!isOneOf(entry["class"], VALID_CLASSES)) return false;
 		if (!isOneOf(entry["verdict"], VALID_FINDING_VERDICTS)) return false;
 		if (!isOneOf(entry["impact"], VALID_IMPACTS)) return false;
+		if (value["status"] === "COMPLETE" || entry["priority"] !== undefined) {
+			if (!isOneOf(entry["priority"], VALID_PRIORITIES)) return false;
+		}
+		if (value["status"] === "COMPLETE" || entry["assessment"] !== undefined) {
+			const assessment = entry["assessment"];
+			if (!isRecord(assessment) || Object.keys(assessment).length !== ASSESSMENT_KEYS.length) return false;
+			if (Object.keys(assessment).some((key) => !ASSESSMENT_KEYS.includes(key))) return false;
+			if (ASSESSMENT_KEYS.some((key) => typeof assessment[key] !== "string" || assessment[key].trim() === "")) return false;
+		}
 		if (!isOneOf(entry["scope"], ["IN_SCOPE", "OUT_OF_SCOPE", "UNKNOWN"] as const)) return false;
 		const evidence = entry["scope_evidence"];
 		if (
@@ -1516,8 +1537,8 @@ function reviewResultFromArtifact(raw: string, artifact: CodeReviewArtifact, sta
 		if (isDismissed(finding, result.artifact_sha256, dismissed)) continue;
 		const outcome = classifyReviewFindingOutcome(finding);
 		if (outcome === "BLOCK") {
-			if (finding.scope === "UNKNOWN") result.findings.adjudicate.push(finding);
-			else result.findings.repair.push(finding);
+			if (finding.scope === "IN_SCOPE") result.findings.repair.push(finding);
+			else result.findings.adjudicate.push(finding);
 		} else if (outcome === "FIX") result.findings.repair.push(finding);
 		else if (outcome === "ADJUDICATE") result.findings.adjudicate.push(finding);
 		else result.findings.notes.push(finding);
@@ -1581,6 +1602,7 @@ function isCompletionEligibleCodeReview(
 
 function isCurrentCommentResolutionValid(result: ReviewResult, state: Partial<GoalState>): boolean {
 	if (result.verdict !== "COMMENT") return true;
+	if (result.findings.repair.length === 0) return true;
 	const resolution = state.review_resolution;
 	if (!isReviewResolution(resolution) || resolution.artifact_sha256 !== result.artifact_sha256) return false;
 	return resolution.evidence.every((path) => {

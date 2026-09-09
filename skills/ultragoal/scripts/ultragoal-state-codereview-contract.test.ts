@@ -71,10 +71,18 @@ function writeArtifact(sid: string, obj: object): void {
 		scope_contract_sha256?: string;
 	};
 	const findings = Array.isArray(input.findings)
-		? input.findings.map((f) =>
-				f.scope === undefined
+		? input.findings.map((f) => ({
+				...f,
+				priority: f.priority ?? f.impact,
+				assessment: f.assessment ?? {
+					unfixed_cost: "test unfixed cost",
+					exposure: "test exposure",
+					remedy: "test remedy",
+					added_cost: "test added cost",
+					rationale: "test rationale",
+				},
+				...(f.scope === undefined
 					? {
-							...f,
 							scope: "IN_SCOPE",
 							scope_evidence: {
 								basis: "requirement",
@@ -82,8 +90,8 @@ function writeArtifact(sid: string, obj: object): void {
 								rationale: "test fixture",
 							},
 						}
-					: f,
-			)
+					: {}),
+			}))
 		: input.findings;
 	writeFileSync(
 		codeReviewArtifactPath(sid),
@@ -372,7 +380,7 @@ describe("T8: 사용자 승인 finding 무효화 (dismiss-review-finding)", () =
 		expect(requestComplete(SID)).toBe(false);
 	});
 
-	test("IN_SCOPE CONFIRMED LOW는 FIX이므로 무효화 대상이 아니다", () => {
+	test("IN_SCOPE CONFIRMED LOW는 NOTE이므로 무효화 대상이 아니다", () => {
 		buildObjectiveLaneGreenFixture(SID);
 		writeBlockingArtifact(SID, [
 			{ class: "cleanup", verdict: "CONFIRMED", impact: "LOW", ref: "src/log.ts:8" },

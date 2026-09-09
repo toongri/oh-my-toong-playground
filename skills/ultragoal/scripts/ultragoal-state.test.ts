@@ -2334,19 +2334,27 @@ function writeCodeReviewArtifact(sid: string, obj: object): void {
 		scope_contract_sha256?: string;
 	};
 	const findings = Array.isArray(input.findings)
-		? input.findings.map((f) =>
-				f.scope === undefined
+		? input.findings.map((f) => ({
+				...f,
+				priority: f.priority ?? f.impact,
+				assessment: f.assessment ?? {
+					unfixed_cost: "test unfixed cost",
+					exposure: "test exposure",
+					remedy: "test remedy",
+					added_cost: "test added cost",
+					rationale: "test rationale",
+				},
+				...(f.scope === undefined
 					? {
-							...f,
-							scope: "IN_SCOPE",
-							scope_evidence: {
-								basis: "requirement",
-								reference: "outcome",
-								rationale: "test fixture",
-							},
-						}
-					: f,
-			)
+						scope: "IN_SCOPE",
+						scope_evidence: {
+							basis: "requirement",
+							reference: "outcome",
+							rationale: "test fixture",
+						},
+					}
+					: {}),
+			}))
 		: input.findings;
 	writeFileSync(
 		codeReviewArtifactPath(sid),
@@ -2922,8 +2930,8 @@ describe("story layer: request-complete verdict gate (T4)", () => {
 // ---------------------------------------------------------------------------
 
 describe("story layer: code-review completion lane (TODO 1)", () => {
-	// OUT_OF_SCOPE findings are COMMENT notes and require explicit acknowledgment.
-	test("code-review OUT_OF_SCOPE cleanup requires COMMENT acknowledgment", () => {
+	// OUT_OF_SCOPE findings are nonblocking NOTE entries.
+	test("code-review OUT_OF_SCOPE cleanup remains a nonblocking NOTE", () => {
 		const artifact = buildSatisfiedFixture(S);
 		writeVerdictArtifact(S, artifact); // objective lane fully green
 		writeCodeReviewArtifact(S, {
@@ -2941,8 +2949,8 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
 		});
-		expect(requestComplete(S)).toBe(false);
-		expect(rawState().phase).toBe("pursuing");
+		expect(requestComplete(S)).toBe(true);
+		expect(rawState().phase).toBe("complete");
 	});
 
 	test("code-review CONFIRMED blocks completion (correctness class)", () => {

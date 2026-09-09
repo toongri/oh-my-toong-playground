@@ -157,6 +157,8 @@ skills:
 | agent-device | iOS, tvOS, macOS, Android, Vega OS TV E2E | Load this skill before using its driver CLI; delegates runtime help |
 | dogfood | Mobile exploratory QA | Load this skill before using its driver CLI |
 
+Ultragoal final-review consumers use scope-first admission: `OUT_OF_SCOPE` is a note and `UNKNOWN` blocks without repair. Findings retain `class`, `verdict`, and harm `impact`, and add `priority` (`HIGH|MEDIUM|LOW`) plus five nonblank assessment strings (`unfixed_cost`, `exposure`, `remedy`, `added_cost`, `rationale`). Verified HIGH requires repair, checks, and fresh review; MEDIUM requires repair, checks, and hash-bound COMMENT resolution; LOW is notes-only with no fix or fabricated evidence. Mixed MEDIUM/LOW resolves MEDIUM; LOW-only or excluded-only needs no resolution. Empty findings APPROVE. COMMENT/APPROVE do not trigger re-review, and objective/story gates cannot be waived by LOW.
+
 ### Hooks
 
 - **Husky v9 lifecycle**: `package.json` declares `prepare: husky`; installation activates `.husky/_/` wrappers that route to the tracked plain `.husky/pre-commit` and `.husky/pre-push` files. `pre-commit` runs `bun run lint`; `pre-push` runs `bun run lint` followed by `make test`.

@@ -239,7 +239,7 @@ describe("ported from goal (regression): required phrases survive somewhere in b
 
 	test("INCONCLUSIVE status routing survives in the union", () => {
 		expect(combined).toMatch(/`INCONCLUSIVE`[^\n]*no speculative repair/);
-		expect(combined).toContain("Plausible HIGH / unknown / invalid / inconclusive review");
+		expect(combined).toContain("UNKNOWN / invalid / inconclusive review");
 	});
 });
 
@@ -393,8 +393,8 @@ describe("review dispatch budget runtime contract", () => {
 	});
 
 	test("완료 전에 모든 범위 안 개선을 수정하고 범위 밖 지적은 제외한다", () => {
-		expect(completionGateMd).toContain("IN_SCOPE + CONFIRMED + LOW");
-		expect(completionGateMd).toContain("IN_SCOPE + PLAUSIBLE + HIGH");
+		expect(completionGateMd).toContain("HIGH => `REQUEST_CHANGES`");
+		expect(completionGateMd).toContain("LOW => `COMMENT` notes only");
 		expect(completionGateMd).toContain("OUT_OF_SCOPE");
 		expect(completionGateMd).toContain("`UNKNOWN`");
 	});
@@ -880,8 +880,8 @@ describe("deterministic ultragoal review routing contract", () => {
 	});
 
 	test("scope-first routing distinguishes confirmed and plausible impact", () => {
-		expect(completionGateMd).toContain("IN_SCOPE + CONFIRMED + LOW");
-		expect(completionGateMd).toContain("IN_SCOPE + PLAUSIBLE + MEDIUM/LOW");
+		expect(completionGateMd).toContain("priority");
+		expect(completionGateMd).toContain("MEDIUM => `COMMENT`");
 		expect(completionGateMd).toContain("`OUT_OF_SCOPE` => `NOTE`");
 		expect(completionGateMd).toContain("`UNKNOWN` => `REQUEST_CHANGES`");
 	});
@@ -889,7 +889,7 @@ describe("deterministic ultragoal review routing contract", () => {
 	test("comment and approve do not trigger a code-review re-review", () => {
 		expect(completionGateMd).toContain("`COMMENT` and `APPROVE` never trigger a code-review re-review");
 		expect(completionGateMd).toContain(
-			"Any BLOCK/ADJUDICATE => REQUEST_CHANGES",
+			"any `IN_SCOPE` + `CONFIRMED` finding with `priority=HIGH`",
 		);
 	});
 
