@@ -13,6 +13,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const assessmentKeys = ["unfixed_cost", "exposure", "remedy", "added_cost", "rationale"] as const;
 const assessmentKeySet = new Set<string>(assessmentKeys);
+const findingClassSet = new Set(["correctness", "regression", "cleanup", "requirement-gap"]);
 
 function validatePriority(value: unknown): void {
 	if (value !== "HIGH" && value !== "MEDIUM" && value !== "LOW") throw new Error("submit-review: finding priority must be HIGH, MEDIUM, or LOW");
@@ -31,7 +32,7 @@ function validateReviewJson(value: unknown): void {
 	if (typeof value.at !== "string") throw new Error("submit-review: at must be a string");
 	if (!Array.isArray(value.findings)) throw new Error("submit-review: findings must be an array");
 	for (const finding of value.findings) {
-		if (!isRecord(finding) || typeof finding.class !== "string" || finding.class.trim() === "" || (finding.verdict !== "CONFIRMED" && finding.verdict !== "PLAUSIBLE") || (finding.impact !== "HIGH" && finding.impact !== "MEDIUM" && finding.impact !== "LOW")) throw new Error("submit-review: finding requires class, verdict, and impact");
+		if (!isRecord(finding) || typeof finding.class !== "string" || !findingClassSet.has(finding.class) || (finding.verdict !== "CONFIRMED" && finding.verdict !== "PLAUSIBLE") || (finding.impact !== "HIGH" && finding.impact !== "MEDIUM" && finding.impact !== "LOW")) throw new Error("submit-review: finding requires a supported class, verdict, and impact");
 		if (finding.ref !== undefined && typeof finding.ref !== "string") throw new Error("submit-review: finding ref must be a string when present");
 		if (value.status === "COMPLETE" || finding.priority !== undefined) validatePriority(finding.priority);
 		if (value.status === "COMPLETE" || finding.assessment !== undefined) validateAssessment(finding.assessment);

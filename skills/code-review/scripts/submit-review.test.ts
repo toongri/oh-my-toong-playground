@@ -90,6 +90,15 @@ describe("중립 리뷰 publisher", () => {
 		expect(readFileSync(path, "utf8")).toBe(original);
 	});
 
+	test("지원하지 않는 finding class는 기존 아티팩트를 덮어쓰지 않는다", () => {
+		const path = join(dir, "existing-class.json");
+		const original = base();
+		submitReviewArtifact(path, original);
+		const invalidClass = JSON.stringify({ status: "COMPLETE", reviewer: "r", at: "now", findings: [finding({ class: "correctnes" })] });
+		expect(() => submitReviewArtifact(path, invalidClass)).toThrow();
+		expect(readFileSync(path, "utf8")).toBe(original);
+	});
+
 	test("malformed base JSON은 기존 아티팩트를 덮어쓰지 않는다", () => {
 		const path = join(dir, "existing.json");
 		const raw = base();
