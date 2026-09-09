@@ -30,7 +30,9 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 - 정확성 버그 — 변경된 코드가 주변 시스템과 맞물려 올바르게 동작하는지
 - 의존성·호출자·인터페이스·설정·런타임 컨텍스트를 파일 경계를 넘어 추적
 - 리뷰 candidate를 CONFIRMED / PLAUSIBLE / REFUTED 세 등급으로 판정
-- 검증을 통과한 finding에 class(`correctness`/`regression`/`cleanup`/`requirement-gap`, 앵글과 1:1)와 impact(`HIGH`/`MEDIUM`/`LOW`, 케이스 목록 + 앵글 기본값)를 배정 — verdict는 신뢰도, impact는 해악을 잼
+- 검증을 통과한 finding에 class(`correctness`/`regression`/`cleanup`/`requirement-gap`, 앵글과 1:1)와 impact(`HIGH`/`MEDIUM`/`LOW`)를 배정합니다. impact는 발생했을 때의 순수한 해악만 나타내며 class·앵글, 발생 가능성·노출도, 패치 크기·유지보수 비용을 대리값으로 쓰지 않습니다.
+- 최종 priority(`HIGH`/`MEDIUM`/`LOW`)는 실제 발생 가능성·노출도·해악을 최소 remedy가 만드는 영구적 복잡성·유지보수 부담·회귀 위험과 비교해 정합니다. 구현 난이도나 작업량만으로 priority를 낮추지 않습니다.
+- `COMPLETE`의 모든 finding에는 비어 있지 않은 `assessment` 다섯 필드(`unfixed_cost`, `exposure`, `remedy`, `added_cost`, `rationale`)가 필요합니다. 숫자 confidence는 conductor의 내부 검증에만 쓰며 grading이나 완료 판정 기준이 아닙니다.
 - 카드 전문(7필드)을 `$OMT_DIR/code-review/<sid>/findings.md`로 영속 — 사후 재판정의 근거
 - effort 수준에 따라 단순화·재사용·효율화 항목도 포함 가능
 
@@ -41,6 +43,7 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 **다중 AI 각도-파인더 job**: code-review는 리뷰 가능한 diff 전체를 스코프로 삼는 **단일 파인더 job**을 dispatch합니다. 이전에는 큰 diff를 chunk로 나눠 별도 오케스트레이션 스킬(`orchestrate-review`, 폐지됨)이 컨덕터로 조율했지만, 지금은 diff 크기와 무관하게 청킹이나 별도 컨덕터 단계 없이 리뷰 가능한 파일 집합 전체가 항상 하나의 job으로 들어갑니다.
 
 - **4개 앵글로 분담** — `correctness`(정확성·공격 가능성, 구 line-scan·cross-file·security 흡수) · `regression`(회귀) · `cleanup`(정리와 가벼운 Test value 관점) · `requirement`(AC 매핑 또는 의도 추론, 구 coverage 흡수). 각 앵글은 하나의 finder job 안에서 병렬로 fan-out되는 별도 CLI 호출이며, 각자 독립적으로 candidate를 수집합니다 — 판정(CONFIRMED/PLAUSIBLE/REFUTED)은 하지 않고, code-review 자신의 검증 단계로 넘깁니다.
+- **중립 publisher** — 구조화된 publisher는 원본 `CodeReviewArtifact` JSON을 그대로 저장하고 transport receipt만 반환합니다. caller, ultragoal, priority·scope·수리·완료·예산·승인 정책을 알거나 결정하지 않으며, producer에 ultragoal 전용 동작을 추가하지 않습니다.
 - **오버사이즈 diff는 단일 패스 + 안내 문구** — `reviewableInsertionLines ≥ 2000` 또는 `reviewableFileCount ≥ 30`이면 청크로 쪼개는 대신 리포트 첫 줄에 "단일 패스로 리뷰했으며 이 정도 규모에서는 커버리지가 불완전할 수 있으니 리뷰를 더 작게 나누는 것을 고려하라"는 안내 한 줄만 덧붙입니다. 이 안내는 finding도 class도 게이트도 아니며 판정·순위·완료 여부에 영향을 주지 않습니다.
 - **정적 검토 전용** — 파인더와 in-session fallback 모두 테스트·빌드·린터·설치·프로젝트 코드를 실행하지 않습니다. 후보는 diff, 소스 읽기, 검색으로만 뒷받침하며, 정적으로 판단할 수 없는 부분은 실행으로 해소하지 않고 불확실성 또는 커버리지 한계로 드러냅니다. job의 lifecycle 명령(`job.ts`의 `start`·`collect`·`resume-member`·`results`·`stop`·`clean`, `usage-summary.ts`)은 계속 사용할 수 있습니다.
 - **파인더가 모두 불가능한 경우**(설정 없음·CLI 미설치·타임아웃) in-session fallback으로 code-review 자신이 직접 파인더 역할을 수행합니다. fallback에도 정적 검토 제한은 그대로 적용됩니다.
