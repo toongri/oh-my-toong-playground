@@ -78,6 +78,73 @@ describe("deep-interview to craft-tasks handoff", () => {
 		].join("\n");
 		expect(phase5).toContain(handoffBlock);
 	});
+
+	test("Phase 5 carries prior per-child identities for later maintenance", () => {
+		expect(phase5).toContain("optional `taskIdentities` collection");
+		expect(phase5).toContain("taskKey");
+		expect(phase5).toContain("childId");
+		expect(phase5).toContain("preserving each immutable taskKey");
+	});
+});
+
+describe("stable child task identity contract", () => {
+	const identity = () =>
+		sectionBetween(craftTasks, "### Existing-child / duplicate gate", "### Task maintenance");
+
+	test("craft-tasks generates an opaque immutable key once for each new gap", () => {
+		const text = identity();
+		expect(text).toContain("non-empty opaque immutable `taskKey`");
+		expect(text).toContain("generate the key once before creation");
+		expect(text).toContain("never derive it from mutable fields or shared identities");
+		for (const forbidden of ["designAnchor", "parentId", "title", "purpose", "changed target", "slug", "timestamp", "hash"])
+			expect(text).toContain(forbidden);
+	});
+
+	test("task handoff requires existing taskKey and optional verified childId", () => {
+		const text = identity();
+		expect(text).toContain("taskKey: the existing immutable key for a known task");
+		expect(text).toContain("required when updating an existing child");
+		expect(text).toContain("childId: the verified PM child ID when known");
+		expect(text).toContain("optional when the task key is available");
+		expect(text).toContain("New gaps may omit taskKey only until craft-tasks generates it");
+	});
+
+	test("identity comment is canonical, append-only, portable, and verified after writes", () => {
+		const text = identity();
+		expect(text).toContain("Task identity");
+		expect(text).toContain("taskKey");
+		expect(text).toContain("append-only identity comment");
+		expect(text).toContain("existing `create_comment` mechanism");
+		expect(text).toContain("separate from reader-facing body sections and change comments");
+		expect(text).toContain("missing or mismatched identity comment is not a successful create/update");
+		expect(text).toContain("machine-local paths");
+	});
+
+	test("every write and recovery re-read returns taskIdentities and never replaces an uncertain child", () => {
+		const text = identity();
+		expect(text).toContain("After every create/update and on recovery, re-read the child and identity comment");
+		expect(text).toContain("Return a `taskIdentities` result containing `taskKey` and `childId` for every child");
+		expect(text).toContain("next handoff carries that result");
+		expect(text).toContain("If identity is missing, inconsistent, or the re-read fails, stop without creating a replacement");
+	});
+
+	test("matching precedence is verified childId, then taskKey plus parent and exact anchor", () => {
+		const text = identity();
+		const childId = text.indexOf("supplied verified `childId` first");
+		const taskKey = text.indexOf("then `taskKey` plus the verified shared `parentId` and exact `designAnchor`");
+		expect(childId).toBeGreaterThanOrEqual(0);
+		expect(taskKey).toBeGreaterThan(childId);
+		for (const forbidden of ["title", "purpose", "changed target", "slug"])
+			expect(text).toContain(`Never match by ${forbidden}`);
+		expect(text).toContain("A different `taskKey` is a genuine gap");
+	});
+
+	test("legacy ambiguity and body shape are explicit", () => {
+		const text = identity();
+		expect(text).toContain("Legacy children with neither a verified childId nor taskKey stop as ambiguity");
+		expect(text).toContain("task bodies contain only the three reader-facing sections");
+		expect(text).toContain("identity metadata in body prose or machine-local paths in comments/handoffs");
+	});
 });
 
 describe("부모 처리 위임과 작업 최신화", () => {
@@ -108,7 +175,7 @@ describe("부모 처리 위임과 작업 최신화", () => {
 		expect(craftTasks).toContain("verified child ID or a stable task key");
 		expect(craftTasks).toContain("purpose and changed target are mutable");
 		expect(craftTasks).toContain("shared anchor");
-		expect(craftTasks).toContain("a stable-key match remains the same task when either changes");
+		expect(craftTasks).toContain("A stable-key match remains the same task when either purpose or changed target changes");
 		expect(craftTasks).toContain("title alone is insufficient");
 		expect(craftTasks).toContain("create only unmatched gaps");
 	});

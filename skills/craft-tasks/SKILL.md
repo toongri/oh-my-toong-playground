@@ -159,10 +159,34 @@ The local spec path is input-only. Outgoing bodies, comments, and delegated writ
 
 After the parent-resolution gate, and before any child create, read the verified parent's current child tree and use the organized-tree pattern: **validate → update → gap-fill**.
 
-- Match each intended task to an existing child by a verified child ID or a stable task key carried through the handoff together with the shared anchor. **purpose and changed target are mutable work-definition fields, not identity fields**; a stable-key match remains the same task when either changes. **title alone is insufficient.** If the stable key or verified child ID is absent for a legacy task, stop with ambiguity rather than creating a replacement. A child that cannot prove the shared anchor is not a match.
+#### Immutable child identity
+
+Every child task has a non-empty opaque immutable `taskKey`, distinct from `designAnchor`, `parentId`, title, purpose, changed target, slug, timestamp, and hash. For a new genuine gap, generate the key once before creation from fresh opaque identity material; never derive it from mutable fields or shared identities, and never regenerate it during update or recovery.
+
+The task plan/handoff carries these per-child fields:
+
+```text
+taskKey: "<existing immutable key for a known task>"
+childId: "<verified PM child ID when known>"
+```
+
+taskKey: the existing immutable key for a known task; it is required when updating an existing child. childId: the verified PM child ID when known; it is optional when the task key is available. New gaps may omit taskKey only until craft-tasks generates it. The handoff may also carry `taskIdentities`, the prior result collection of `{ taskKey, childId }`, so a later maintenance run can preserve keys even when the caller does not know every child ID.
+
+Persist each generated key through the existing `create_comment` mechanism as one durable, portable, append-only identity comment, separate from reader-facing body sections and change comments. Use this canonical shape exactly:
+
+```text
+<!-- Task identity
+taskKey: <opaque immutable task key>
+-->
+```
+
+Never put identity metadata in body prose or machine-local paths in comments/handoffs. A missing or mismatched identity comment is not a successful create/update.
+
+Match in this order: supplied verified `childId` first, then `taskKey` plus the verified shared `parentId` and exact `designAnchor`. Verify the matched child still belongs to that parent and anchor before writing. **purpose and changed target are mutable work-definition fields, not identity fields**; an existing task with the same `taskKey` updates in place when either changes. A different `taskKey` is a genuine gap. Never match by title. Never match by purpose. Never match by changed target. Never match by slug. Legacy children with neither a verified childId nor taskKey stop as ambiguity rather than creating a replacement. A child that cannot prove the shared anchor is not a match.
+The matching input is a verified child ID or a stable task key. A stable-key match remains the same task when either purpose or changed target changes; title alone is insufficient. If the stable key or verified child ID is absent for a legacy task, stop with ambiguity.
 - **Every child carries the same anchor and `parentId`** through the native parent relation. For matched children, update the existing task body in place using Task maintenance below.
 - For gaps, create only unmatched gaps that are genuine coverage gaps. If a match is ambiguous, stop and surface the ambiguity instead of creating.
-- After each write, re-read and verify its result before continuing. After an interruption or failure, re-read the current child tree and comments, rematch, and complete only the missing writes. Verify the body, relations, and required change comment before declaring a task updated; a successful body write alone is not completion when its comment is missing. Reuse the recorded change context on recovery and do not duplicate an existing comment. A failed re-read stops further writes.
+- After every create/update and on recovery, re-read the child and identity comment. Return a `taskIdentities` result containing `taskKey` and `childId` for every child; the next handoff carries that result. If identity is missing, inconsistent, or the re-read fails, stop without creating a replacement. After an interruption or failure, re-read the current child tree and comments, rematch using the same precedence, and complete only the missing writes. Verify the body, native relations, identity comment, and required change comment before declaring a task updated; a successful body write alone is not completion when its comment is missing. Reuse the recorded change context on recovery and do not duplicate an existing comment. Verify the body, relations, and required change comment before declaring completion.
 
 Only after this gate passes:
 
@@ -170,6 +194,8 @@ Only after this gate passes:
 - **Existing task → update in place**, with a change comment when Task maintenance requires one.
 - **Humanizer pass** on Korean reader-facing prose before the write (`Skill(humanizer)`), then write.
 - **Runtime tool binding** is resolved at write time (Linear MCP: `save_issue` to create or update a task by ID, `parentId`, `blockedBy`, `create_comment` for change context) — same binding note as craft-issue.
+
+The task bodies contain only the three reader-facing sections above: `목적`, `변경 대상`, and `완료 조건 (DoD)`. Identity metadata stays in the canonical comment; do not put it in body prose or in machine-local paths in comments/handoffs.
 
 ### Task maintenance
 
