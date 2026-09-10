@@ -329,17 +329,41 @@ describe("durable task-write runtime contract", () => {
 		expect(text).toContain("Verify that `parentId` is injected");
 	});
 
-	test("terminal transitions compact intents and unlink an empty journal", () => {
+	test("terminal receipts remain pending until explicit receipt acknowledgment", () => {
 		const text = sectionBetween(craftTasks, "#### Durable create-intent protocol", "#### Recovery and manual stop");
-		expect(text).toContain("Terminal transitions compact terminal intents immediately");
-		expect(text).toContain("unlink the journal when no intents remain");
+		expect(text).toContain("Terminal `complete` and `manual-reconciliation-required` intents remain durable");
+		expect(text).toContain("continue to appear in `list --pending`");
+		expect(text).toContain("until an explicit `receipt-ack`");
+		expect(text).toContain("`receipt-ack` alone compacts/unlinks");
 	});
 
 	test("task journals are protected from generic TTL cleanup", () => {
 		const text = craftTasks;
 		expect(text).toContain("excluded from generic `SESSION_ARTIFACT_PREFIXES` TTL deletion");
-		expect(text).toContain("valid journal names are recognition-only to the state-liveness unclassified-file classifier");
-		expect(text).toContain("pending or malformed journal content is preserved for explicit recovery");
+		expect(text).toContain("recognized names are recognition-only to the state-liveness unclassified-file classifier");
+		expect(text).toContain("Preserve them for explicit recovery");
+	});
+
+	test("documents terminal receipt fields, idempotent replay, and recovery commands", () => {
+		const create = sectionBetween(craftTasks, "#### Durable create-intent protocol", "#### Durable update-intent protocol");
+		const recovery = sectionBetween(craftTasks, "#### Recovery and manual stop", "Match in this order:");
+		for (const command of ["receipt-ack", "manual-reconciliation-missing", "quarantine-journal", "list --reconciliation"])
+			expect(craftTasks).toContain(`\`${command}\``);
+		expect(create).toContain("create entries also expose `taskKey`");
+		expect(create).toContain("exact optional `childId`");
+		expect(create).toContain("Replaying `create-complete` with the identical");
+		expect(create).toContain("is idempotent");
+		expect(recovery).toContain("without changing the unrelated journal");
+		expect(recovery).toContain("preserves the exact bytes as a quarantine artifact");
+		expect(recovery).toContain("A quarantined session is sealed");
+		expect(recovery).toContain("deterministically exposes missing-ID receipts");
+	});
+
+	test("documents source-session allowlist and durable taskIdentities handoff", () => {
+		const text = sectionBetween(craftTasks, "#### Durable create-intent protocol", "#### Durable update-intent protocol");
+		expect(text).toContain("The caller must durably retain the `taskIdentities` result");
+		expect(text).toContain("`create-prepare`, `update-prepare`, and `list` reject `--source-session`");
+		expect(text).toContain("Recovery never infers or replaces a child identity");
 	});
 
 	test("lock acquisition publishes initialized owners and handles transient and unsafe locks", () => {
