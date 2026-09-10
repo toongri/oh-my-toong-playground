@@ -17,6 +17,9 @@
 | 위임된 부모 핸드오프 | 확정된 `designAnchor`, `settled` 설계 컨텍스트, 부모 처리 위임, 반환된 `parentId` 후보 | 정확한 `designAnchor`와 `settled` 컨텍스트를 포함해 `Skill(skill: "craft-issue")`를 연쇄 호출하고, 반환된 `parentId`가 같은 앵커의 부모인지 검증한 뒤에만 자식 작업을 처리 | 컨텍스트가 누락·변형된 채 위임하거나, `parentId` 반환·검증 전에 자식 작업을 생성·갱신 |
 | 정식 craft-issue 연쇄 호출 | 부모가 필요하고 craft-issue가 부모 생성 정책의 소유자 | 호출 형식에 `Skill(skill: "craft-issue")`가 그대로 존재하며, 부모 생성 결과를 반환받는 순서가 드러남 | 이름이 다른 호출, 설명만 하는 위임, 또는 정식 `Skill(skill: "craft-issue")` 호출 생략 |
 | 첫 자식 생성과 안정 identity 기록 | 기존 자식에 대한 검증된 identity가 없고, 생성에 필요한 `designAnchor`와 부모 연결이 확정됨 | 새 자식마다 불투명하고 변경하지 않는 `taskKey`를 생성하고, PM에 아래 canonical append-only 댓글을 그대로 기록하며 `taskIdentities`에 `{ taskKey, childId }`를 반환 | taskKey를 생략·추측 가능한 값으로 만들거나, 댓글 형식을 바꾸거나, 반환 결과에서 `taskIdentities` 또는 `childId`를 누락 |
+| 생성 의도 저널과 코멘트 재시도 | `save_issue`가 성공해 `childId`가 반환·저널링됐지만 identity `create_comment`가 실패하고 세션이 중단됨 | `createIntentId`와 exact payload를 `prepared`로 먼저 저널링하고, `childId`를 `child-created`로 저널링한 뒤, 재개 시 부모·exact anchor를 검증하고 exact canonical identity comment만 재시도한다. 성공한 재조회 뒤 intent를 `complete`로 바꾸고 `taskIdentities`를 반환한다 | childId를 보존하지 않거나 새 taskKey·자식을 만들거나 reader-facing body에 identity를 넣거나 불확실한 코멘트를 중복 작성 |
+| 코멘트 응답 유실 재조회 | `create_comment` 요청 결과가 유실됐지만 재조회에서 exact canonical identity comment가 확인됨 | 코멘트를 다시 쓰지 않고 exact comment를 검증한 뒤 intent를 `complete`로 표시하고 `taskIdentities`를 반환 | 응답 유실을 실패로만 처리해 중복 코멘트를 쓰거나 새 자식을 생성 |
+| childId/result 기록 전 중단 | `save_issue` 전후에 intent 또는 childId/result 기록이 없거나 intent를 읽을 수 없음 | 실제로 문서화된 PM idempotency/client-request lookup이 존재할 때만 조회하고, 그렇지 않으면 `manual-reconciliation-required`로 중단하며 replacement creation을 하지 않음 | childId를 child 내용·제목·시간 등에서 재구성하거나, 불확실한 partial child를 대체 생성 |
 | taskKey 유지와 제자리 갱신 | 이전 핸드오프의 `taskIdentities`와 기존 자식의 identity가 일치하고, purpose 또는 changed target만 변경됨 | childId-first matching으로 기존 자식을 먼저 확인하고, 같은 `taskKey`를 유지한 채 기존 자식을 제자리에서 갱신하며 갱신 결과에도 같은 identity를 반환 | mutable purpose나 changed target을 새 taskKey로 바꾸거나 새 자식을 생성하거나, taskKey가 같은지 확인하지 않고 본문만 갱신 |
 | identity 불일치와 복구 중단 | canonical identity 댓글이 없거나 taskKey·parentId·`designAnchor`가 맞지 않거나, 댓글 작성 뒤 재조회가 실패함 | identity를 다시 읽고 검증하며, 불일치 또는 failed post-write re-read이면 recovery를 중단하고 대체 자식을 생성하지 않음 | 검증되지 않은 identity로 기존 자식을 확정하거나, 재조회 실패를 성공으로 간주해 중복 자식을 생성 |
 | 동일 앵커·동일 안정 키의 의미 변경 | 기존 작업의 `designAnchor`와 stable key는 같지만 목적 또는 대상이 변경됨 | 기존 작업을 새 작업으로 만들지 않고 제자리에서 갱신하며, 목적·대상 변경의 계기와 판단 근거를 change comment로 기록 | 새 작업을 중복 생성하거나 본문만 덮고 change comment를 생략 |
@@ -80,6 +83,9 @@ Read-only application test of skills/craft-tasks/SKILL.md and presentation.md. N
 |---|---|---|
 | 부모 처리 | craft-issue에 맡기고 반환된 연결을 검증 | craft-tasks가 부모 쓰기 정책을 정해 직접 보완 |
 | 자식 identity 생성 | opaque immutable taskKey를 만들고 canonical `Task identity` append-only 댓글과 `taskIdentities`의 `{ taskKey, childId }`를 함께 반환 | taskKey를 생략·재사용하거나 댓글·반환 결과 중 하나만 남김 |
+| partial-create journal 순서 | `save_issue` 전에 `createIntentId`·taskKey·검증된 parentId·exact anchor·exact payload를 `prepared`로 기록하고, 반환된 childId를 `child-created`로 기록한 뒤 identity comment를 작성 | comment를 먼저 쓰거나 childId를 기록하지 않고 재시도·완료 처리 |
+| journal 기반 comment recovery | journalized childId로 parent·exact anchor를 검증하고 누락된 exact canonical comment만 재시도; 성공한 재조회 뒤 `complete`와 `taskIdentities` 반환 | 새 자식·새 키·다른 comment를 만들거나 response loss를 성공 재조회로 해소하지 못함 |
+| childId/result 없는 중단 | 문서화된 PM idempotency/client-request primitive이 실제 있을 때만 사용하고, 없으면 `manual-reconciliation-required`로 중단하며 중복 생성하지 않음 | childId/result를 추측·재생성하거나 uncertain partial child를 replacement로 만듦 |
 | 자식 identity 매칭 | childId-first로 확인하고, 없으면 taskKey·검증된 parentId·exact designAnchor를 모두 확인해 기존 자식을 제자리 갱신 | mutable purpose나 changed target을 identity로 삼거나 일부 필드만으로 매칭 |
 | identity 복구 중단 | 댓글 누락·불일치 또는 post-write re-read 실패 시 재조회·검증 후 recovery를 중단하고 대체 자식을 만들지 않음 | 검증 실패를 성공으로 처리하거나 중복 자식 생성 |
 | 의미 있는 정정 | 기존 T 본문 갱신 + 계기·판단 근거·변경 영향 댓글 | 본문을 두고 댓글만 쓰거나 경위 기록 생략 |

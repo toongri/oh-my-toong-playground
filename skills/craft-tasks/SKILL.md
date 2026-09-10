@@ -161,7 +161,7 @@ After the parent-resolution gate, and before any child create, read the verified
 
 #### Immutable child identity
 
-Every child task has a non-empty opaque immutable `taskKey`, distinct from `designAnchor`, `parentId`, title, purpose, changed target, slug, timestamp, and hash. For a new genuine gap, generate the key once before creation from fresh opaque identity material; never derive it from mutable fields or shared identities, and never regenerate it during update or recovery.
+Every child task has a non-empty opaque immutable `taskKey`, distinct from `designAnchor`, `parentId`, title, purpose, changed target, slug, timestamp, and hash. For a new genuine gap, generate the key once before creation from fresh opaque identity material; never derive it from mutable fields or shared identities, and never regenerate it during update or recovery. A new gap also gets a fresh opaque `createIntentId` distinct from `taskKey`; never derive or regenerate `taskKey`/`createIntentId` from `childId`, title, purpose, changed target, slug, timestamp, hash, `parentId`, anchor, list order, or body similarity.
 
 The task plan/handoff carries these per-child fields:
 
@@ -181,6 +181,14 @@ taskKey: <opaque immutable task key>
 ```
 
 Never put identity metadata in body prose or machine-local paths in comments/handoffs. A missing or mismatched identity comment is not a successful create/update.
+
+#### Durable create-intent protocol
+
+The runtime maintains a durable create-intent journal for the gap between `save_issue` and `create_comment`. For every new gap, before `save_issue`, generate a fresh `createIntentId` and durably record an intent containing `createIntentId`, `taskKey`, the verified `parentId`, the exact `designAnchor`, the exact proposed creation payload, and state `prepared`. The proposed creation payload is the exact payload that will be passed to `save_issue`; do not put identity metadata in the reader-facing body or invent a PM custom field.
+
+After `save_issue` returns, verify the returned child belongs to the verified `parentId` and exact `designAnchor`, durably record its verified `childId`, and change the intent to state `child-created` before attempting `create_comment`. Then write the exact canonical identity comment. After `create_comment` and a successful re-read of the child and comment, mark the intent `complete` and return `taskIdentities`. If the comment write response is lost, re-read the exact canonical identity comment; when it is present and valid, mark the intent `complete` without duplicating the comment.
+
+On recovery, use only a verified intent-to-child association. When the intent records a `childId`, verify its parent and exact anchor, then retry only missing identity/comment writes. If the intent has no `childId`/result, use a documented PM idempotency/client-request lookup only when that PM primitive actually exists; otherwise surface `manual-reconciliation-required` and stop. An unreadable/missing intent also stops safely. Never create a replacement for an uncertain partial child.
 
 Match in this order: supplied verified `childId` first, then `taskKey` plus the verified shared `parentId` and exact `designAnchor`. Verify the matched child still belongs to that parent and anchor before writing. **purpose and changed target are mutable work-definition fields, not identity fields**; an existing task with the same `taskKey` updates in place when either changes. A different `taskKey` is a genuine gap. Never match by title. Never match by purpose. Never match by changed target. Never match by slug. Legacy children with neither a verified childId nor taskKey stop as ambiguity rather than creating a replacement. A child that cannot prove the shared anchor is not a match.
 The matching input is a verified child ID or a stable task key. A stable-key match remains the same task when either purpose or changed target changes; title alone is insufficient. If the stable key or verified child ID is absent for a legacy task, stop with ambiguity.

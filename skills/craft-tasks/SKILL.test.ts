@@ -128,6 +128,40 @@ describe("stable child task identity contract", () => {
 		expect(text).toContain("If identity is missing, inconsistent, or the re-read fails, stop without creating a replacement");
 	});
 
+	test("durable create intent is journaled in write order", () => {
+		const text = identity();
+		for (const field of ["createIntentId", "taskKey", "verified `parentId`", "exact `designAnchor`", "exact proposed creation payload", "state `prepared`"]) {
+			expect(text).toContain(field);
+		}
+		expect(text).toContain("before `save_issue`");
+		expect(text).toContain("After `save_issue` returns");
+		expect(text).toContain("verified `childId`");
+		expect(text).toContain("state `child-created`");
+		expect(text).toContain("mark the intent `complete`");
+		expect(text).toContain("fresh opaque `createIntentId` distinct from `taskKey`");
+		expect(text).toContain("do not put identity metadata in the reader-facing body");
+		expect(text.indexOf("before `save_issue`")).toBeLessThan(text.indexOf("After `save_issue` returns"));
+		expect(text.indexOf("After `save_issue` returns")).toBeLessThan(text.indexOf("mark the intent `complete`"));
+	});
+
+	test("partial-create recovery is child-bound and stops safely without a result", () => {
+		const text = identity();
+		for (const phrase of [
+			"exact canonical identity comment",
+			"without duplicating the comment",
+			"only a verified intent-to-child association",
+			"verify its parent and exact anchor",
+			"retry only missing identity/comment writes",
+			"documented PM idempotency/client-request lookup",
+			"manual-reconciliation-required",
+			"unreadable/missing intent",
+			"never derive or regenerate `taskKey`/`createIntentId` from `childId`",
+			"Never create a replacement for an uncertain partial child",
+		]) {
+			expect(text).toContain(phrase);
+		}
+	});
+
 	test("matching precedence is verified childId, then taskKey plus parent and exact anchor", () => {
 		const text = identity();
 		const childId = text.indexOf("supplied verified `childId` first");
