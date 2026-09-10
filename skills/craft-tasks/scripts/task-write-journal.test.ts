@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { execFileSync } from "child_process";
+import { execFileSync, spawn } from "child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
 import { join, resolve } from "path";
 import {
@@ -155,6 +155,23 @@ describe("task write journal", () => {
 		expect(firstRaw).not.toContain("sessionId");
 		expect(existsSync(journalPath("other-session"))).toBe(true);
 		expect(readdirSync(omtDir).some((name) => name.includes(".tmp."))).toBe(false);
+	});
+
+	test("serializes concurrent appends to one session journal", async () => {
+		setup();
+		const modulePath = resolve("skills/craft-tasks/scripts/task-write-journal.ts");
+		const workers = 24;
+		const script = `import { createPrepare } from ${JSON.stringify(modulePath)}; createPrepare({ parentId: process.argv[1], designAnchor: ${JSON.stringify(anchor)}, creationPayload: { body: process.argv[1], relations: [] } });`;
+		await Promise.all(Array.from({ length: workers }, (_, index) => new Promise<void>((resolveWorker, rejectWorker) => {
+			const child = spawn("bun", ["-e", script, `parent-${index}`], {
+				env: { ...process.env, OMT_DIR: omtDir, OMT_SESSION_ID: sid },
+				stdio: "ignore",
+			});
+			child.once("error", rejectWorker);
+			child.once("exit", (code) => code === 0 ? resolveWorker() : rejectWorker(new Error(`worker exited with code ${code}`)));
+		})));
+		const journal = JSON.parse(readFileSync(journalPath(sid), "utf8")) as { intents: unknown[] };
+		expect(journal.intents).toHaveLength(workers);
 	});
 
 	test("lists pending intents from another session without changing journals", () => {

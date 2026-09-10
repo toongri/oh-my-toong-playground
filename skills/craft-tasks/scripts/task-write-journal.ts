@@ -2,7 +2,7 @@
 /** Session-scoped, crash-atomic journal for craft-tasks PM writes. */
 
 import { randomUUID } from "crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from "fs";
 import { isDeepStrictEqual } from "util";
 import { getOmtDir } from "@lib/omt-dir";
 import { resolveSessionIdOrThrow, isSafeSessionId } from "@lib/state-core";
@@ -145,15 +145,50 @@ function writeJournal(journal: Journal, sessionId = resolveSessionIdOrThrow()): 
 	}
 }
 
-function append<T extends Intent>(intent: T, sessionId?: string): T {
-	const journal = readJournal(sessionId);
-	const intentId = intent.kind === "create" ? intent.createIntentId : intent.updateIntentId;
-	if (journal.intents.some((entry) => (entry.kind === "create" ? entry.createIntentId : entry.updateIntentId) === intentId)) {
-		throw new Error("Intent ID collision");
+function withJournalLock<T>(sessionId: string | undefined, operation: () => T): T {
+	const lockPath = `${journalPath(sessionId)}.lock`;
+	mkdirSync(getOmtDir(), { recursive: true });
+	while (true) {
+		try {
+			mkdirSync(lockPath);
+			try {
+				writeFileSync(`${lockPath}/owner`, `${process.pid}\n`, "utf8");
+				return operation();
+			} finally {
+				try { unlinkSync(`${lockPath}/owner`); } catch { /* best effort */ }
+				try { rmdirSync(lockPath); } catch { /* best effort */ }
+			}
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+			let ownerPid: number | undefined;
+			try {
+				ownerPid = Number.parseInt(readFileSync(`${lockPath}/owner`, "utf8"), 10);
+			} catch { /* owner may be between mkdir and owner-file creation */ }
+			if (ownerPid !== undefined && !Number.isNaN(ownerPid)) {
+				try { process.kill(ownerPid, 0); } catch (probeError) {
+					if ((probeError as NodeJS.ErrnoException).code === "ESRCH") {
+						try { unlinkSync(`${lockPath}/owner`); } catch { /* best effort */ }
+						try { rmdirSync(lockPath); } catch { /* another waiter may have reclaimed it */ }
+						continue;
+					}
+				}
+			}
+			Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+		}
 	}
-	journal.intents.push(intent);
-	writeJournal(journal, sessionId);
-	return intent;
+}
+
+function append<T extends Intent>(intent: T, sessionId?: string): T {
+	return withJournalLock(sessionId, () => {
+		const journal = readJournal(sessionId);
+		const intentId = intent.kind === "create" ? intent.createIntentId : intent.updateIntentId;
+		if (journal.intents.some((entry) => (entry.kind === "create" ? entry.createIntentId : entry.updateIntentId) === intentId)) {
+			throw new Error("Intent ID collision");
+		}
+		journal.intents.push(intent);
+		writeJournal(journal, sessionId);
+		return intent;
+	});
 }
 
 function findIntent(id: string, sessionId?: string): { journal: Journal; index: number; intent: Intent } {
@@ -165,11 +200,20 @@ function findIntent(id: string, sessionId?: string): { journal: Journal; index: 
 }
 
 function replace<T extends Intent>(id: string, next: T, sessionId?: string): T {
-	const found = findIntent(id, sessionId);
-	if (TERMINAL_STATES.has(found.intent.state)) throw new Error("Cannot mutate a terminal intent");
-	found.journal.intents[found.index] = next;
-	writeJournal(found.journal, sessionId);
-	return next;
+	return withJournalLock(sessionId, () => {
+		const found = findIntent(id, sessionId);
+		if (TERMINAL_STATES.has(found.intent.state)) throw new Error("Cannot mutate a terminal intent");
+		const expectedState = next.state === "child-created" ? "prepared"
+			: next.state === "mutation-written" ? "prepared"
+			: next.state === "complete" ? (next.kind === "create" ? "child-created" : "mutation-written")
+			: undefined;
+		if (expectedState !== undefined && found.intent.state !== expectedState) throw new Error("Invalid concurrent journal transition");
+		found.journal.intents[found.index] = next.state === "manual-reconciliation-required"
+			? { ...found.intent, state: next.state, reason: next.reason }
+			: next;
+		writeJournal(found.journal, sessionId);
+		return next;
+	});
 }
 
 
