@@ -115,7 +115,15 @@ flowchart TD
 - **역할**: 확정된 설계를 팀이 공유·추적할 수 있는 구현 task 티켓으로 분해
 - **제약**: 의도·접근 방식·불변식·경계가 확정된 설계에만 사용합니다. AI 실행 계획만 필요하면 `prometheus`를 사용합니다.
 - **출력**: 검증된 부모 아래 PM 도구에 생성된 자식 task 티켓
-- **워크플로우**: deep-interview 명세를 바탕으로 부모 처리를 craft-issue에 맡기고, 반환된 부모 연결을 검증한 뒤 기존 작업의 본문을 최신화하고 누락된 구현 task만 생성합니다. 새 PM 자식을 `save_issue`로 만들기 전에 런타임은 새 `createIntentId`, 변경할 수 없는 `taskKey`, 검증된 `parentId`, 정확한 `designAnchor`, 정확한 생성 payload를 포함한 불투명한 create intent를 영속적으로 기록합니다. `save_issue`가 반환되면 반환된 자식이 `parentId`와 `designAnchor`에 맞는지 검증하고, canonical identity 코멘트를 쓰기 전에 `childId`를 영속적으로 기록합니다. identity 코멘트를 쓴 뒤 성공적으로 다시 읽으면 intent를 완료합니다. 쓰기 응답을 잃어도 정확한 재조회로 intent를 완료할 수 있으며, 이때 코멘트를 중복으로 쓰지 않습니다. 복구 재시도는 검증된 intent-to-child 연결을 통해서만 수행합니다. `childId`나 결과를 알 수 없으면, 실제로 존재하는 문서화된 PM idempotency 또는 client-request primitive만 사용하고, 그런 primitive가 없으면 명시적인 수동 조정에서 중단하며 대체 자식을 절대 생성하지 않습니다. 기존 PM `create_comment` 동작으로 `taskKey`를 이식 가능한 append-only `Task identity` 코멘트에 기록하며 `taskIdentities`를 반환합니다. 유지보수는 `childId-first matching`을 적용하고, `childId`가 없으면 검증된 `parentId`와 정확한 `designAnchor`가 함께 확인될 때만 `taskKey`로 매칭합니다. 목적이나 변경 대상이 바뀌어도 같은 자식을 제자리에서 갱신하며, identity가 없거나 읽을 수 없거나 일치하지 않거나 legacy ambiguity가 있으면 중복 생성을 시도하지 않고 `ambiguity/recovery stop`으로 중단합니다. PM custom field를 새로 만들지 않으며, reader-facing 본문 prose에 identity 메타데이터를 넣지 않습니다. 제목, 목적, 대상, timestamp, hash, 순서 또는 본문 유사성으로 identity를 추론하지 않습니다. 의미 있는 변경은 계기·판단 근거·영향을 코멘트로 남기며, 단순 오탈자는 본문만 수정합니다. 미결정 사항은 확정 후 반영합니다. 생성된 각 task에 AI 실행 계획이 필요할 때만 task별로 `/prometheus`를 선택하고, 이후 `/ultragoal` -> `/sisyphus`로 실행합니다.
+- **워크플로우**: deep-interview 명세를 바탕으로 부모 처리를 craft-issue에 맡기고, 반환된 부모 연결을 검증한 뒤 기존 작업의 본문을 최신화하고 누락된 구현 task만 생성합니다. 생성·업데이트의 실행 계약은 `skills/craft-tasks/SKILL.md`와 `skills/craft-tasks/scripts/task-write-journal.ts`에 있으며, 실제 PM API는 이 저장소의 harness 바깥에 있다는 기존 경계를 따릅니다.
+
+#### PM 쓰기 저널 계약과 복구
+
+`task-write-journal.ts`는 세션별 `$OMT_DIR/task-write-journal-<sessionId>.json`에 crash-atomic한 로컬 orchestration intent를 기록합니다. 이 저널은 PM 필드·코멘트·idempotency primitive가 아니므로 PM custom field나 존재하지 않는 idempotency primitive를 발명하지 않습니다.
+
+새 자식은 정확한 `save_issue` 생성 payload를 먼저 `create-prepare`로 기록한 뒤에만 `save_issue`를 호출합니다. 반환된 자식의 `parentId`와 정확한 `designAnchor`를 검증한 뒤 `create-child`로 `childId`를 기록하고, 그 다음 canonical identity comment를 씁니다. 자식·relations·identity comment를 다시 읽어 정확히 일치하는 것을 확인한 뒤에만 `create-complete`를 호출합니다. 응답이 사라지면 먼저 `get`으로 기존 intent를 읽고, 기록된 `childId`가 있으면 그 자식과 exact identity comment를 다시 읽어 누락된 쓰기만 재시도합니다. 정확한 결과가 없으면 `manual-reconciliation`을 호출해 `manual-reconciliation-required`를 기록하고 종료합니다. 제목·본문·시간·트리 위치로 자식을 추정하거나 대체 자식을 생성하지 않습니다.
+
+기존 자식의 본문·native relations를 바꿀 때는 PM mutation 전에 정확한 `before`·`after`·`changeComment`를 `update-prepare`로 저장합니다. PM mutation과 change comment를 쓴 직후 `update-mutation-written`을 기록하고, body·relations·change comment를 다시 읽어 확인한 뒤에만 `update-complete`를 호출합니다. 중단 시 `get`으로 intent의 변경 문맥을 보존하고 누락된 쓰기만 수행하며, 검증된 자식 결과가 없으면 위와 같은 terminal manual reconciliation으로 멈춥니다.
 
 ### prometheus (기획자)
 
