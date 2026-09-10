@@ -19,7 +19,7 @@
 | 첫 자식 생성과 안정 identity 기록 | 기존 자식에 대한 검증된 identity가 없고, 생성에 필요한 `designAnchor`와 부모 연결이 확정됨 | 새 자식마다 불투명하고 변경하지 않는 `taskKey`를 생성하고, PM에 아래 canonical append-only 댓글을 그대로 기록하며 `taskIdentities`에 `{ taskKey, childId }`를 반환 | taskKey를 생략·추측 가능한 값으로 만들거나, 댓글 형식을 바꾸거나, 반환 결과에서 `taskIdentities` 또는 `childId`를 누락 |
 | 생성 의도 저널과 코멘트 재시도 | `save_issue`가 성공해 `childId`가 반환·저널링됐지만 identity `create_comment`가 실패하고 세션이 중단됨 | PM용 `creationPayload`와 별도 canonical `identityComment`를 `prepared`로 먼저 저널링하고, `childId`를 `child-created`로 저널링한 뒤, 재개 시 부모·exact anchor를 검증하고 별도 identity comment만 재시도한다. 성공한 재조회 뒤 PM 필드와 identity comment를 각각 검증해 intent를 `complete`로 바꾸고 `taskIdentities`를 반환한다 | childId를 보존하지 않거나 새 taskKey·자식을 만들거나 identity를 PM payload 또는 reader-facing body에 넣거나 불확실한 코멘트를 중복 작성 |
 | 코멘트 응답 유실 재조회 | `create_comment` 요청 결과가 유실됐지만 재조회에서 exact canonical identity comment가 확인됨 | 코멘트를 다시 쓰지 않고 exact comment를 검증한 뒤 intent를 `complete`로 표시하고 `taskIdentities`를 반환 | 응답 유실을 실패로만 처리해 중복 코멘트를 쓰거나 새 자식을 생성 |
-| childId/result 기록 전 중단 | `save_issue` 전후에 intent 또는 childId/result 기록이 없거나 intent를 읽을 수 없음 | 실제로 문서화된 PM idempotency/client-request lookup이 존재할 때만 조회하고, 그렇지 않으면 `manual-reconciliation-required`로 중단하며 replacement creation을 하지 않음 | childId를 child 내용·제목·시간 등에서 재구성하거나, 불확실한 partial child를 대체 생성 |
+| childId/result 기록 전 중단 | `save_issue` 전후에 readable intent가 없거나 childId/result 기록이 없음 | 실제로 문서화된 PM idempotency/client-request lookup이 존재할 때만 조회하고, 그렇지 않으면 `manual-reconciliation-required`로 중단하며 replacement creation을 하지 않음 | childId를 child 내용·제목·시간 등에서 재구성하거나, 불확실한 partial child를 대체 생성 |
 | taskKey 유지와 제자리 갱신 | 이전 핸드오프의 `taskIdentities`와 기존 자식의 identity가 일치하고, purpose 또는 changed target만 변경됨 | childId-first matching으로 기존 자식을 먼저 확인하고, 같은 `taskKey`를 유지한 채 기존 자식을 제자리에서 갱신하며 갱신 결과에도 같은 identity를 반환 | mutable purpose나 changed target을 새 taskKey로 바꾸거나 새 자식을 생성하거나, taskKey가 같은지 확인하지 않고 본문만 갱신 |
 | identity 불일치와 복구 중단 | canonical identity 댓글이 없거나 taskKey·parentId·`designAnchor`가 맞지 않거나, 댓글 작성 뒤 재조회가 실패함 | identity를 다시 읽고 검증하며, 불일치 또는 failed post-write re-read이면 recovery를 중단하고 대체 자식을 생성하지 않음 | 검증되지 않은 identity로 기존 자식을 확정하거나, 재조회 실패를 성공으로 간주해 중복 자식을 생성 |
 | 동일 앵커·동일 안정 키의 의미 변경 | 기존 작업의 `designAnchor`와 stable key는 같지만 목적 또는 대상이 변경됨 | 기존 작업을 새 작업으로 만들지 않고 제자리에서 갱신하며, 목적·대상 변경의 계기와 판단 근거를 change comment로 기록 | 새 작업을 중복 생성하거나 본문만 덮고 change comment를 생략 |
@@ -27,7 +27,7 @@
 | 다른 안정 키 | 앵커는 같지만 기존 작업과 입력 작업의 stable key가 다름 | 기존 작업을 갱신하지 않고 실제 gap으로 판정해 새 자식 작업이 필요한 상태를 명시 | 안정 키 차이를 오타나 동일 작업으로 취급해 기존 작업을 덮어씀 |
 | 업데이트 저널 전이 | 확정된 기존 자식의 본문·관계·경위 코멘트가 의미 있게 변경됨 | `update-prepare`에 exact `before`·`after`·`changeComment`를 먼저 기록하고, PM mutation 뒤 `update-mutation-written`, body/relations/change-comment 재조회 뒤 `update-complete`를 기록 | PM mutation을 먼저 하거나 delta/comment를 저장하지 않고 완료 처리 |
 | 업데이트 중단 복구 | PM body/relation mutation은 성공했지만 change comment 또는 재조회가 중단됨 | 기존 update intent의 `after`와 `changeComment`를 보존하고 `get`으로 확인한 뒤 누락된 쓰기만 재시도하며, 세 재조회가 모두 통과할 때만 `complete` | 새 delta를 만들거나 이미 존재하는 코멘트를 중복 작성하거나 mutation 성공만으로 완료 |
-| 미확인 자식 수동 중단 | create intent에 검증된 `childId`/result가 없거나 intent가 읽히지 않음 | `manual-reconciliation`을 호출해 `manual-reconciliation-required`로 종료하고 replacement child를 만들지 않음 | 제목·본문·트리 위치로 자식을 추측하거나 새 자식을 생성 |
+| 미확인 자식 수동 중단 | readable create intent에 검증된 `childId`/result가 없음 | `manual-reconciliation`을 호출해 `manual-reconciliation-required`로 종료하고 replacement child를 만들지 않음 | 제목·본문·트리 위치로 자식을 추측하거나 새 자식을 생성 |
 
 첫 자식 생성 시 PM 댓글은 다음 canonical shape을 사용한다.
 
@@ -47,7 +47,8 @@ taskKey: <opaque immutable task key>
 
 ## 실행 가능한 journal 상태 전이 시나리오
 
-아래 명령은 `CLAUDE_SKILL_DIR/scripts/task-write-journal.ts`의 실제 CLI를 호출하는
+아래 명령은 번들된 `CLAUDE_SKILL_DIR/scripts/task-write-journal.ts`의 현재 런타임
+계약에 맞춰 실제 CLI를 호출하는
 모의 실행 계약이다. 각 명령은 JSON 한 줄을 stdin으로 받고 JSON 결과를 반환한다.
 `save_issue`와 `create_comment`는 모의 PM 함수로 대체하지만, journal 명령명·stdin
 필드·전이 순서·완료 조건은 실제 bundled script와 일치해야 한다.
@@ -69,16 +70,77 @@ taskKey: <opaque immutable task key>
    검증된 `parentId`를 포함한 PM 필드가 반환된 `creationPayload`와 모두 같고 identity comment가 별도 저장된
    `identityComment`와 같을 때만 `create-complete <createIntentId>`에
    `{ childId, parentId, designAnchor, creationPayload: { parentId, title, description, blockedBy? }, identityComment }`를
-   전달한다. 결과 state는 `"complete"`여야 한다.
+   전달한다. 결과 state는 `"complete"`여야 한다. 완료 뒤에도 terminal intent와
+   `childId`·`taskKey`를 포함한 receipt가 저널에 남아야 하며, 호출자는 반환된
+   `taskIdentities`를 보존해야 한다.
 
 ### 생성 응답 유실과 수동 중단
 
 `create_comment` 응답이 유실된 경우 canonical identity comment를 먼저 다시 읽는다.
 exact comment가 있으면 comment를 다시 쓰지 않고 위의 `create-complete`만 수행한다.
-`childId`/result가 journal에 없거나 intent를 읽을 수 없으면
+검증된 `childId`/result가 없는 readable existing intent는
 `manual-reconciliation <intentId>`에 `{ reason }`을 전달하고
-`"manual-reconciliation-required"`로 종료한다. child-tree rematching은 기존 verified
-identity가 있을 때만 허용하며 불확실한 새 child를 찾는 데 사용하지 않는다.
+`"manual-reconciliation-required"`로 종료한다. readable journal에서 intent ID 자체가
+없는 경우에는 `manual-reconciliation-missing <intentId>`에 `{ reason }`을 전달한다.
+journal 내용이 malformed JSON 또는 malformed shape이면 `quarantine-journal`에
+`{ reason }`을 전달한다. 파일시스템/I/O 오류로 source journal을 읽을 수 없는
+경우에는 오류를 표면화하고 rename, receipt 기록, 기타 mutation 없이 중단한다.
+missing 또는 malformed 상태를 ordinary `manual-reconciliation`으로 처리하지
+않으며, I/O 오류도 quarantine으로 우회하지 않는다. 각 terminal receipt도 ack 전까지
+저널과 `list --pending`에 남긴다. child-tree rematching은 기존 verified identity가
+있을 때만 허용하며 불확실한 새 child를 찾는 데 사용하지 않는다.
+
+### 완료 receipt, ack, 복구 artifact
+
+완료 또는 `manual-reconciliation-required`는 journal intent를 삭제하거나 즉시
+compact하지 않는 terminal 상태다. `list --pending`는 미완료 intent뿐 아니라 ack되지
+않은 terminal receipt도 결정적으로 반환한다. create receipt에는 `parentId`, exact
+`designAnchor`와 `taskKey`가 포함되고, child 결과가 journalized된 create-complete
+receipt에는 검증된 `childId`도 포함된다. update receipt에는 검증된
+`childId`, `parentId`, `designAnchor`가 포함되어야 한다.
+
+caller는 create 완료 결과의 `taskIdentities`를 보존한 뒤, PM에서 exact identity
+comment와 `{ taskKey, childId }`를 다시 확인해야 한다. 그 확인이 끝난 뒤에만
+`receipt-ack`을 호출할 수 있다. ack 입력은 저장된 association 전체와 일치해야 하며,
+일부 필드가 맞는 것만으로는 허용하지 않는다. 동일한 create-complete 입력을 다시
+제출하면 같은 complete 결과를 반환하는 idempotent replay여야 하지만, `childId`,
+`parentId`, `designAnchor`, native `creationPayload`, `identityComment` 중 하나라도
+달라지면 거부한다. ack는 해당 receipt만 제거하고, 다른 terminal/nonterminal intent는
+보존하며, 마지막 intent를 ack한 경우에만 journal 파일을 compact/remove한다.
+
+평가 하네스는 `receipt-ack <intentId>`에 caller가 보존한 identity 검증 결과를 JSON으로
+넣었는지와 PM 재조회 결과를 함께 제출했는지 확인한다. 결과를 보존하지 않은 채
+ack하거나, exact identity comment를 확인하지 않은 ack는 실패다. `list --pending`의
+순서와 각 receipt 필드는 반복 실행에서 동일해야 한다.
+
+intent가 존재하지 않는 누락 결과는 `manual-reconciliation-missing`으로 기록한다.
+이 명령은 읽을 수 있는 source journal의 bytes와 다른 intent를 변경하지 않고, 같은
+`sourceSessionId`·`intentId`에 반복해도 첫 receipt를 반환하는 idempotent 동작이어야
+한다. source journal 자체가 malformed JSON 또는 malformed shape이면 먼저
+`quarantine-journal`로 원본 bytes를 정확히 보존하는 quarantine artifact로 이동하고
+reconciliation receipt를 남긴다. 유효한 journal은 quarantine할 수 없다. 이미 격리된
+artifact는 이름과 내용으로 인식만 하며 자동 삭제·재생성하지 않는다.
+
+`list --reconciliation`은 missing/quarantine receipts, 미수습 quarantine orphan,
+malformed receipt JSON/shape/filename을 모두 포함한 error entry를 source session과
+receipt/artifact identity 기준으로 정렬해 매번 같은 순서로 반환해야 한다. 정상
+quarantine receipt가 가리키는 covered artifact는 목록에서 억제하고, receipt가 없는
+artifact만 orphan으로 정확히 한 번 노출한다. quarantine된
+source session은 sealed 상태로 취급해 그 session에 새 prepare를 쓰거나 journal을
+재생성할 수 없고, 새 session에서만 재개한다. `--source-session`은 prepare/list의
+호출자가 임의로 지정할 수 없으며, recovery 명령의 명시된 source session만 허용한다.
+
+평가할 CLI 순서는 다음과 같다. 읽을 수 있는 journal에서 없는 intent를 다룰 때는
+`manual-reconciliation-missing <intentId>`에 `{ reason }`을 넣고, malformed journal에는
+`quarantine-journal`에 `{ reason }`을 넣는다. 전자는 source journal의 기존 bytes와
+unrelated intents를 그대로 유지해야 하고, 후자는 기존 journal bytes를 재직렬화하지
+않은 채 `.quarantine.<artifactId>.json`으로 이동해야 한다. source journal의 파일
+읽기/rename 등 I/O 오류는 오류를 반환하고 source bytes와 디렉터리를 그대로 둔 채
+receipt 없이 중단해야 한다. `list --reconciliation`의
+반환에는 생성된 receipt가 포함되고, covered artifact는 중복 노출하지 않으며 receipt가
+없는 orphan artifact만 한 번 포함한다. 잘못된 receipt는 숨기지 않고
+`reconciliation-error`로 표시한다. source journal이 유효하면
+`quarantine-journal`은 실패하고 파일을 만들거나 바꾸지 않아야 한다.
 
 ### 업데이트 정상 전이와 복구
 
@@ -142,8 +204,15 @@ Read-only application test of skills/craft-tasks/SKILL.md and presentation.md. N
 | 부모 처리 | craft-issue에 맡기고 반환된 연결을 검증 | craft-tasks가 부모 쓰기 정책을 정해 직접 보완 |
 | 자식 identity 생성 | opaque immutable taskKey를 만들고 canonical `Task identity` append-only 댓글과 `taskIdentities`의 `{ taskKey, childId }`를 함께 반환 | taskKey를 생략·재사용하거나 댓글·반환 결과 중 하나만 남김 |
 | partial-create journal 순서 | `save_issue` 전에 `createIntentId`·taskKey·검증된 parentId·exact anchor·입력 native fields(선택적 `blockedBy`)에서 `parentId`를 주입한 PM용 `creationPayload`·별도 canonical `identityComment`를 `prepared`로 기록하고, 반환된 childId를 `child-created`로 기록한 뒤 `create_comment`에 identity comment를 전달 | identity comment를 PM payload에 섞거나 검증된 `parentId` 주입 없이 저장하거나 comment를 먼저 쓰거나 childId를 기록하지 않고 재시도·완료 처리 |
-| journal 기반 comment recovery | journalized childId로 parent·exact anchor를 검증하고 누락된 exact canonical comment만 재시도; 성공한 재조회 뒤 `complete`와 `taskIdentities` 반환 | 새 자식·새 키·다른 comment를 만들거나 response loss를 성공 재조회로 해소하지 못함 |
+| terminal receipt와 pending 조회 | complete/manual-reconciliation intent를 저널에 보존하고 create에는 `taskKey`, child 결과가 있으면 `childId`, update에는 `childId`를 담아 `list --pending`에서 보이게 함 | terminal intent를 누락하거나 즉시 삭제·compact해 receipt를 잃음 |
+| journal 기반 comment recovery | journalized childId로 parent·exact anchor를 검증하고 누락된 exact canonical comment만 재시도; 성공한 재조회 뒤 `complete`와 `taskIdentities`를 반환하고 receipt를 유지 | 새 자식·새 키·다른 comment를 만들거나 response loss를 성공 재조회로 해소하지 못함 |
+| create-complete replay | 모든 association과 native payload/comment가 동일한 반복은 같은 complete 결과로 처리하고, 불일치 반복은 거부 | 일부 필드만 확인하거나 다른 child를 complete로 덮음 |
+| receipt ack와 compaction | caller가 `taskIdentities`를 보존하고 exact PM identity를 재검증한 뒤 전체 association으로 `receipt-ack`; 대상만 제거하고 마지막일 때만 journal compact/remove | 검증 전 ack, 부분 identity ack, 다른 intent 삭제, 즉시 terminal compaction |
 | childId/result 없는 중단 | 문서화된 PM idempotency/client-request primitive이 실제 있을 때만 사용하고, 없으면 `manual-reconciliation-required`로 중단하며 중복 생성하지 않음 | childId/result를 추측·재생성하거나 uncertain partial child를 replacement로 만듦 |
+| 누락 intent 수동 조정 | 읽을 수 있는 source journal을 그대로 보존한 채 `manual-reconciliation-missing`을 같은 intent에 idempotently 기록하고 unrelated intent를 변경하지 않음 | 기존 intent를 missing으로 바꾸거나 journal을 덮어쓰거나 반복마다 receipt를 중복 생성 |
+| malformed journal quarantine | malformed JSON/shape의 원본 bytes를 exact하게 quarantine artifact로 이동하고 receipt를 남김; 유효 journal은 거부 | bytes를 재직렬화·삭제하거나 valid journal을 quarantine |
+| source journal I/O 오류 | 읽기·rename 등 filesystem 오류를 그대로 표면화하고 source journal, 디렉터리, receipt를 변경하지 않은 채 중단 | I/O 오류를 malformed로 오인해 quarantine artifact나 receipt를 생성 |
+| reconciliation 목록과 sealed session | `list --reconciliation`이 receipts/errors/orphans를 source와 artifact/receipt identity로 결정적으로 정렬하고, quarantine source는 sealed로 유지해 재생성·prepare를 거부 | malformed 항목을 숨기거나 정렬이 실행마다 달라지거나 artifact를 자동 청소·sealed source에 재기록 |
 | 자식 identity 매칭 | childId-first로 확인하고, 없으면 taskKey·검증된 parentId·exact designAnchor를 모두 확인해 기존 자식을 제자리 갱신 | mutable purpose나 changed target을 identity로 삼거나 일부 필드만으로 매칭 |
 | identity 복구 중단 | 댓글 누락·불일치 또는 post-write re-read 실패 시 재조회·검증 후 recovery를 중단하고 대체 자식을 만들지 않음 | 검증 실패를 성공으로 처리하거나 중복 자식 생성 |
 | 의미 있는 정정 | 기존 T 본문 갱신 + 계기·판단 근거·변경 영향 댓글 | 본문을 두고 댓글만 쓰거나 경위 기록 생략 |
