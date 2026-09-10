@@ -1714,6 +1714,70 @@ test_list_unclassified_enforces_safe_session_id_length_limit() {
   return 0
 }
 
+test_task_write_recovery_artifacts_survive_execute_and_dry_run_cleanup() {
+  local d="$TEST_TMP_DIR/omt"
+  local sid="recovery-session-76"
+  local receipt="12345678-1234-1234-1234-123456789abc"
+  local reconciliation="$d/task-write-reconciliation-$sid-$receipt.json"
+  local quarantine="$d/task-write-journal-$sid.quarantine.artifact-1.json"
+  mkdir -p "$d"
+  write_state "$reconciliation" '{"type":"missing-intent"}'
+  write_state "$quarantine" 'original bytes'
+  touch_ago "$reconciliation" 25200
+  touch_ago "$quarantine" 25200
+
+  reap_session_artifacts "$d" "__none__" "$NOW" 1 > /dev/null
+  [ -f "$reconciliation" ] || { echo "  ASSERTION FAILED: dry-run must preserve reconciliation receipt"; return 1; }
+  [ -f "$quarantine" ] || { echo "  ASSERTION FAILED: dry-run must preserve quarantine artifact"; return 1; }
+  reap_session_artifacts "$d" "__none__" "$NOW" 0 > /dev/null
+  [ -f "$reconciliation" ] || { echo "  ASSERTION FAILED: execute cleanup must preserve reconciliation receipt"; return 1; }
+  [ -f "$quarantine" ] || { echo "  ASSERTION FAILED: execute cleanup must preserve quarantine artifact"; return 1; }
+  return 0
+}
+
+test_list_unclassified_recognizes_task_write_recovery_artifacts() {
+  local d="$TEST_TMP_DIR"
+  local sid="recovery-session-77"
+  local receipt="abcdef12-3456-4abc-8def-0123456789ab"
+  write_state "$d/task-write-reconciliation-$sid-$receipt.json" "{}"
+  write_state "$d/task-write-journal-$sid.quarantine.quarantine-1.json" "{}"
+
+  local out
+  out=$(list_unclassified_session_files "$d")
+  if printf '%s\n' "$out" | grep -q 'task-write-'; then
+    echo "  ASSERTION FAILED: valid task-write recovery artifacts must be recognized"
+    echo "  got: $out"
+    return 1
+  fi
+  return 0
+}
+
+test_list_unclassified_reports_malformed_task_write_recovery_artifacts() {
+  local d="$TEST_TMP_DIR"
+  local sid="recovery-abcdef12-3456-4abc-8def-0123456789ab"
+  local receipt="abcdef12-3456-4abc-8def-0123456789ab"
+  write_state "$d/task-write-reconciliation-$sid-not-a-uuid.json" "{}"
+  write_state "$d/task-write-reconciliation-$sid-$receipt.extra.json" "{}"
+  write_state "$d/task-write-journal-$sid.quarantine..json" "{}"
+  write_state "$d/task-write-journal-$sid.quarantine.artifact_id.json" "{}"
+  write_state "$d/task-write-journal-$sid.quarantine.artifact.id.json" "{}"
+
+  local out
+  out=$(list_unclassified_session_files "$d")
+  for name in \
+    "task-write-reconciliation-$sid-not-a-uuid.json" \
+    "task-write-reconciliation-$sid-$receipt.extra.json" \
+    "task-write-journal-$sid.quarantine..json" \
+    "task-write-journal-$sid.quarantine.artifact_id.json" \
+    "task-write-journal-$sid.quarantine.artifact.id.json"; do
+    if ! printf '%s\n' "$out" | grep -Fq "$name"; then
+      echo "  ASSERTION FAILED: malformed recovery artifact must remain drift: $name"
+      return 1
+    fi
+  done
+  return 0
+}
+
 # =============================================================================
 # Batched-stat restructure (per-file stat fork elimination): fail-open on a
 # silently-omitted batch line, and correct mtime/path splitting for a
@@ -2356,6 +2420,9 @@ run_test test_task_write_journal_dry_run_preserves_and_does_not_report_candidate
 run_test test_list_unclassified_recognizes_uuid_task_write_journal
 run_test test_list_unclassified_reports_malformed_task_write_journal
 run_test test_list_unclassified_enforces_safe_session_id_length_limit
+run_test test_task_write_recovery_artifacts_survive_execute_and_dry_run_cleanup
+run_test test_list_unclassified_recognizes_task_write_recovery_artifacts
+run_test test_list_unclassified_reports_malformed_task_write_recovery_artifacts
 run_test test_reap_session_artifacts_batched_stat_omission_fails_open
 run_test test_reap_session_artifacts_space_bearing_dir_path_judged_correctly
 run_test test_list_live_session_ids_space_bearing_dir_witness_pass
