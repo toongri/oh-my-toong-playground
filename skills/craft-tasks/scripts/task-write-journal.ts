@@ -234,13 +234,12 @@ export function createPrepare(input: unknown, sessionId?: string): CreateIntent 
 	if (!record(input)) throw new Error("Expected a JSON object");
 	const { parentId, designAnchor } = validateAnchor(input.parentId, input.designAnchor);
 	const { createIntentId, taskKey } = newOpaquePair();
-	const proposedPayload = Object.prototype.hasOwnProperty.call(input, "creationPayload") ? input.creationPayload : input;
-	const exactPayload = exact(proposedPayload, "creationPayload");
+	const exactPayload = exact(input.creationPayload, "creationPayload");
 	if (!record(exactPayload)) throw new Error("Expected a JSON object");
 	if (Object.prototype.hasOwnProperty.call(exactPayload, "parentId") && exactPayload.parentId !== parentId) {
 		throw new Error("parentId mismatch");
 	}
-	const { identityComment: _callerIdentityComment, ...issueFields } = exactPayload;
+	const { identityComment: _callerIdentityComment, designAnchor: _designAnchor, ...issueFields } = exactPayload;
 	const creationPayload = { ...issueFields, parentId };
 	const identityComment = canonicalIdentityComment(taskKey);
 	return append({ kind: "create", createIntentId, taskKey, parentId, designAnchor, creationPayload, identityComment, state: "prepared" }, sessionId);

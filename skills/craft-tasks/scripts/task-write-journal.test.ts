@@ -39,12 +39,13 @@ describe("task write journal", () => {
 			title: "정확한 제목",
 			body: "목적\n...",
 			relations: [{ type: "blockedBy", id: "task-1" }],
+			designAnchor: anchor,
 		};
 		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload: payload });
 		expect(prepared.state).toBe("prepared");
 		expect(prepared.taskKey).not.toBe(prepared.createIntentId);
 		const canonicalComment = `<!-- Task identity\ntaskKey: ${prepared.taskKey}\n-->`;
-		expect(prepared.creationPayload).toEqual({ ...payload, parentId });
+		expect(prepared.creationPayload).toEqual({ title: payload.title, body: payload.body, relations: payload.relations, parentId });
 		expect(prepared.identityComment).toBe(canonicalComment);
 		expect(prepared.creationPayload).not.toHaveProperty("identityComment");
 		expect((prepared.creationPayload as Record<string, unknown>).body).toBe(payload.body);
@@ -66,7 +67,7 @@ describe("task write journal", () => {
 		expect(getIntent(prepared.createIntentId)).toMatchObject({
 			createIntentId: prepared.createIntentId,
 			taskKey: prepared.taskKey,
-			creationPayload: { ...payload, parentId },
+			creationPayload: { title: payload.title, body: payload.body, relations: payload.relations, parentId },
 			identityComment: canonicalComment,
 		});
 	});
@@ -78,6 +79,12 @@ describe("task write journal", () => {
 			designAnchor: anchor,
 			creationPayload: { parentId: "other-parent", title: "제목", body: "b", relations: [] },
 		})).toThrow("parentId mismatch");
+	});
+
+	test("rejects flattened create input when creationPayload is missing", () => {
+		setup();
+		expect(() => createPrepare({ parentId, designAnchor: anchor, title: "제목", body: "b", relations: [] }))
+			.toThrow("creationPayload is required");
 	});
 
 	test("rejects arbitrary or mismatched identity comments", () => {
@@ -244,16 +251,16 @@ describe("task write journal", () => {
 		expect(updateComplete(prepared.updateIntentId, { childId: "child-123", parentId, designAnchor: anchor, body: "new", relations: [], changeComment: "why" }, sid).state).toBe("complete");
 	});
 
-	test("CLI emits JSON and accepts the exact creation payload on stdin", () => {
+	test("CLI emits JSON and accepts the nested creation payload on stdin", () => {
 		setup();
 		const output = execFileSync("bun", [resolve("skills/craft-tasks/scripts/task-write-journal.ts"), "create-prepare"], {
-			input: JSON.stringify({ parentId, designAnchor: anchor, body: "b", relations: [], identityComment: "i" }),
+			input: JSON.stringify({ parentId, designAnchor: anchor, creationPayload: { body: "b", relations: [], identityComment: "i" } }),
 			env: { ...process.env, OMT_DIR: omtDir, OMT_SESSION_ID: sid },
 			encoding: "utf8",
 		});
 		const parsed = JSON.parse(output) as { state: string; taskKey: string; creationPayload: Record<string, unknown>; identityComment: string };
 		expect(parsed.state).toBe("prepared");
-		expect(parsed.creationPayload).toEqual({ parentId, designAnchor: anchor, body: "b", relations: [] });
+		expect(parsed.creationPayload).toEqual({ parentId, body: "b", relations: [] });
 		expect(parsed.identityComment).toBe(`<!-- Task identity\ntaskKey: ${parsed.taskKey}\n-->`);
 		expect(parsed.creationPayload).not.toHaveProperty("identityComment");
 });
