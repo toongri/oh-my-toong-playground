@@ -64,12 +64,8 @@ describe("task write journal", () => {
 			identityComment: canonicalComment,
 		});
 		expect(complete.state).toBe("complete");
-		expect(getIntent(prepared.createIntentId)).toMatchObject({
-			createIntentId: prepared.createIntentId,
-			taskKey: prepared.taskKey,
-			creationPayload: { title: payload.title, body: payload.body, relations: payload.relations, parentId },
-			identityComment: canonicalComment,
-		});
+		expect(existsSync(journalPath(sid))).toBe(false);
+		expect(() => getIntent(prepared.createIntentId)).toThrow(`Unknown intent: ${prepared.createIntentId}`);
 	});
 
 	test("rejects a creation payload parentId that conflicts with the verified parent", () => {
@@ -137,9 +133,38 @@ describe("task write journal", () => {
 		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload: { parentId, designAnchor: anchor } });
 		const reconciled = manualReconciliation(prepared.createIntentId, "PM response was lost");
 		expect(reconciled.state).toBe("manual-reconciliation-required");
-		expect(getIntent(prepared.createIntentId).reason).toBe("PM response was lost");
-		expect(readFileSync(journalPath(sid), "utf8")).not.toContain("replacement");
-		expect((getIntent(prepared.createIntentId) as { createIntentId: string }).createIntentId).toBe(prepared.createIntentId);
+		expect(existsSync(journalPath(sid))).toBe(false);
+		expect(() => getIntent(prepared.createIntentId)).toThrow(`Unknown intent: ${prepared.createIntentId}`);
+	});
+
+	test("removes the journal when completing its only intent while returning the terminal result", () => {
+		setup();
+		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload: { body: "b", relations: [] } });
+		createChild(prepared.createIntentId, { childId: "child-123", parentId, designAnchor: anchor });
+		const complete = createComplete(prepared.createIntentId, {
+			childId: "child-123", parentId, designAnchor: anchor, body: "b", relations: [], identityComment: prepared.identityComment,
+		});
+		expect(complete.state).toBe("complete");
+		expect(existsSync(journalPath(sid))).toBe(false);
+		expect(readdirSync(omtDir).some((name) => name.includes(".tmp."))).toBe(false);
+	});
+
+	test("compacts terminal intents and preserves every nonterminal intent and opaque payload", () => {
+		setup();
+		const terminal = createPrepare({ parentId: "terminal-parent", designAnchor: anchor, creationPayload: { body: "terminal", relations: [] } });
+		const pending = updatePrepare({
+			childId: "child-123", parentId, designAnchor: anchor,
+			before: { opaque: "before\\n\t\u0000" }, after: { opaque: "after", nested: [{ value: 7 }] }, changeComment: "keep exactly",
+		});
+		const before = JSON.parse(readFileSync(journalPath(sid), "utf8")) as { version: number; intents: unknown[] };
+		const result = manualReconciliation(terminal.createIntentId, "resolved");
+		const after = JSON.parse(readFileSync(journalPath(sid), "utf8")) as { version: number; intents: unknown[] };
+		expect(result.state).toBe("manual-reconciliation-required");
+		expect(after.version).toBe(before.version);
+		expect(after.intents).toEqual([before.intents[1]]);
+		expect(after.intents).toContainEqual(pending);
+		expect(readFileSync(journalPath(sid), "utf8")).not.toContain(terminal.createIntentId);
+		expect(readFileSync(journalPath(sid), "utf8")).not.toContain("manual-reconciliation-required");
 	});
 
 	test("update prepared -> mutation-written -> complete preserves delta and comment", () => {
@@ -154,7 +179,8 @@ describe("task write journal", () => {
 			body: after.body, relations: after.relations, changeComment: "결정 변경",
 		});
 		expect(complete.state).toBe("complete");
-		expect(getIntent(prepared.updateIntentId)).toMatchObject({ before, after, changeComment: "결정 변경" });
+		expect(existsSync(journalPath(sid))).toBe(false);
+		expect(() => getIntent(prepared.updateIntentId)).toThrow(`Unknown intent: ${prepared.updateIntentId}`);
 	});
 
 	test("rejects missing or mismatched completion verification", () => {

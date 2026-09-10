@@ -153,6 +153,15 @@ function writeJournal(journal: Journal, sessionId = resolveSessionIdOrThrow()): 
 	}
 }
 
+function compactJournal(journal: Journal, sessionId = resolveSessionIdOrThrow()): void {
+	const remaining = journal.intents.filter((intent) => !TERMINAL_STATES.has(intent.state));
+	if (remaining.length === 0) {
+		unlinkSync(journalPath(sessionId));
+		return;
+	}
+	writeJournal({ version: journal.version, intents: remaining }, sessionId);
+}
+
 function parseOwnerPid(raw: string): number | undefined {
 	const value = raw.trim();
 	if (!/^[1-9][0-9]*$/.test(value)) return undefined;
@@ -287,7 +296,8 @@ function replace<T extends Intent>(id: string, next: T, sessionId?: string): T {
 		found.journal.intents[found.index] = next.state === "manual-reconciliation-required"
 			? { ...found.intent, state: next.state, reason: next.reason }
 			: next;
-		writeJournal(found.journal, sessionId);
+		if (TERMINAL_STATES.has(next.state)) compactJournal(found.journal, sessionId);
+		else writeJournal(found.journal, sessionId);
 		return next;
 	});
 }
