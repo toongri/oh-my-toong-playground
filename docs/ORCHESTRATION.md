@@ -121,13 +121,17 @@ flowchart TD
 
 `task-write-journal.ts`는 세션별 `$OMT_DIR/task-write-journal-<sessionId>.json`에 crash-atomic한 로컬 orchestration intent를 기록합니다. 이 저널은 PM 필드·코멘트·idempotency primitive가 아니므로 PM custom field나 존재하지 않는 idempotency primitive를 발명하지 않습니다.
 
-`task-write-journal-*`은 `SESSION_ARTIFACT_PREFIXES`가 관리하는 일곱 번째 세션 아티팩트 계열이며, 기존 정책에 따라 현재 세션 파일은 보존하고 live 세션의 파일과 TTL 내 파일은 보호하며 TTL을 넘긴 파일은 정리합니다.
+`task-write-journal-<safe-session>.json`은 `SESSION_ARTIFACT_PREFIXES`의 generic TTL 정리 대상에서 의도적으로 제외합니다. 유효한 파일명은 drift 분류를 위한 인식만 하며 삭제 권한을 부여하지 않습니다. pending 및 malformed 저널 내용은 명시적 복구를 위해 남겨 둡니다.
+
+`create-prepare` 입력은 중첩된 `creationPayload`를 요구하며, 검증된 `parentId`를 PM payload에 주입하고 orchestration 전용 `designAnchor`와 `identityComment`는 PM payload에서 제거합니다. 반환되는 `creationPayload`는 `save_issue`에 그대로 전달하고, canonical `identityComment`는 별도 필드로 반환합니다.
 
 새 자식은 정확한 `save_issue` 생성 payload를 먼저 `create-prepare`로 기록한 뒤에만 `save_issue`를 호출합니다. `create-prepare`는 `parentId`를 검증해 정확한 `creationPayload`에 주입하고, `save_issue`에 그대로 전달할 그 payload와 별도로 canonical `identityComment`를 반환합니다. 반환된 자식의 `parentId`와 정확한 `designAnchor`를 검증한 뒤 `create-child`로 `childId`를 기록하고, 별도로 저장한 `identityComment`를 `create_comment`로 보냅니다. `create-complete`는 PM에서 다시 읽은 `title`(있으면)·`body`·`relations`가 저장된 `creationPayload`와 일치하는지, PM에서 다시 읽은 identity comment가 별도로 저장된 `identityComment`와 일치하는지를 검증한 뒤에만 완료 처리합니다. 응답이 사라지면 기존 intent를 다시 읽고, 기록된 `childId`가 있으면 그 자식과 정확한 identity comment를 다시 읽어 누락된 쓰기만 재시도합니다. 정확한 결과가 없으면 `manual-reconciliation`을 호출해 `manual-reconciliation-required`를 기록하고 종료합니다. 제목·본문·시간·트리 위치로 자식을 추정하거나 대체 자식을 생성하지 않습니다.
 
 교차 세션 복구는 `list --pending`으로 시작해 명시적으로 `sourceSessionId`를 선택한 다음 `get <intentId> --source-session <sourceSessionId>`로 해당 저널을 읽습니다. 이후 다른 세션의 intent를 전이할 때도 `create-child`, `create-complete`, `update-mutation-written`, `update-complete`, `manual-reconciliation`에 같은 `--source-session <sourceSessionId>`를 명시합니다. 인자를 생략한 조회·전이는 현재 세션 저널만 대상으로 합니다. `list --pending`은 읽기 전용이며 저널 파일과 intent ID를 정렬한 결정적 JSON을 반환하고, 손상된 저널은 `sourceSessionId`가 포함된 명시적 오류 항목으로 표면화합니다. 세션 간 자동 fallback, 저널 복사, 대체 자식 생성은 금지합니다.
 
 기존 자식의 본문·native relations를 바꿀 때는 PM mutation 전에 정확한 `before`·`after`·`changeComment`를 `update-prepare`로 저장합니다. PM mutation과 change comment를 쓴 직후 `update-mutation-written`을 기록하고, body·relations·change comment를 다시 읽어 확인한 뒤에만 `update-complete`를 호출합니다. 중단 시 `get`으로 intent의 변경 문맥을 보존하고 누락된 쓰기만 수행하며, 검증된 자식 결과가 없으면 위와 같은 terminal manual reconciliation으로 멈춥니다.
+
+터미널 전이는 terminal intent를 즉시 제거하고, 저널이 비면 저널 파일도 삭제합니다. 락은 초기화된 소유자를 원자적으로 공개하며, 일시적인 빈 release는 재시도하고 오래된 빈 legacy 락은 회수합니다. malformed 또는 live 락은 보존하고 제한 시간 내 실패합니다.
 
 ### prometheus (기획자)
 
