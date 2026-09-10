@@ -68,6 +68,8 @@ const TERMINAL_STATES = new Set<JournalState>(["complete", "manual-reconciliatio
 const LOCK_TIMEOUT_MS = 500;
 const LOCK_RETRY_MS = 5;
 const LOCK_INITIALIZATION_GRACE_MS = 1000;
+const RECEIPT_PREFIX = "task-write-reconciliation-";
+const QUARANTINE_MARKER = ".quarantine.";
 
 export type PendingEntry = {
 	sourceSessionId: string;
@@ -82,6 +84,12 @@ export type PendingEntry = {
 	sourceSessionId: string;
 	error: string;
 };
+
+export type MissingReconciliationReceipt = { type: "missing-intent"; receiptId: string; status: "manual-reconciliation-required"; sourceSessionId: string; intentId: string; reason: string };
+export type QuarantineReconciliationReceipt = { type: "quarantine"; receiptId: string; status: "manual-reconciliation-required"; sourceSessionId: string; reason: string; artifactId: string };
+export type QuarantineArtifact = { type: "quarantine-artifact"; sourceSessionId: string; artifactId: string };
+export type ReconciliationError = { type: "reconciliation-error"; sourceSessionId: string; receiptId?: string; error: string };
+export type ReconciliationEntry = MissingReconciliationReceipt | QuarantineReconciliationReceipt | QuarantineArtifact | ReconciliationError;
 
 function record(value: unknown): value is Record<string, unknown> {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("Expected a JSON object");
@@ -126,19 +134,36 @@ function emptyJournal(): Journal {
 	return { version: 1, intents: [] };
 }
 
+class JournalValidationError extends Error {}
+
 function readJournal(sessionId = resolveSessionIdOrThrow()): Journal {
 	const path = journalPath(sessionId);
 	if (!existsSync(path)) return emptyJournal();
 	let parsed: unknown;
-	try {
-		parsed = JSON.parse(readFileSync(path, "utf8"));
-	} catch {
-		throw new Error("Malformed task-write journal JSON");
+	const raw = readFileSync(path, "utf8");
+	try { parsed = JSON.parse(raw); }
+	catch { throw new JournalValidationError("Malformed task-write journal JSON"); }
+	if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new JournalValidationError("Expected a JSON object");
+	if (!record(parsed)) throw new JournalValidationError("Expected a JSON object");
+	if (parsed.version !== 1 || !Array.isArray(parsed.intents)) throw new JournalValidationError("Malformed task-write journal shape");
+	for (const intent of parsed.intents) {
+		if (typeof intent !== "object" || intent === null || Array.isArray(intent) || !record(intent) || (intent.kind !== "create" && intent.kind !== "update") || typeof intent.state !== "string") throw new JournalValidationError("Malformed task-write journal shape");
+		const id = intent.kind === "create" ? intent.createIntentId : intent.updateIntentId;
+		if (typeof id !== "string" || id.trim() === "") throw new JournalValidationError("Malformed task-write journal shape");
+		const required = intent.kind === "create"
+			? [intent.taskKey, intent.parentId, intent.designAnchor, intent.creationPayload, intent.identityComment]
+			: [intent.childId, intent.parentId, intent.designAnchor, intent.before, intent.after, intent.changeComment];
+		if (required.some((value) => value === undefined) || !["prepared", "child-created", "mutation-written", "complete", "manual-reconciliation-required"].includes(intent.state)) throw new JournalValidationError("Malformed task-write journal shape");
 	}
-	if (!record(parsed)) throw new Error("Expected a JSON object");
-	if (parsed.version !== 1 || !Array.isArray(parsed.intents)) throw new Error("Malformed task-write journal shape");
 	// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- shallow validation intentionally preserves opaque intent payloads.
 	return parsed as unknown as Journal;
+}
+
+function atomicWrite(path: string, value: string): void {
+	mkdirSync(getOmtDir(), { recursive: true });
+	const tmp = `${path}.tmp.${process.pid}.${randomUUID()}`;
+	try { writeFileSync(tmp, value, "utf8"); renameSync(tmp, path); }
+	catch (error) { try { unlinkSync(tmp); } catch { /* best effort */ } throw error; }
 }
 
 function writeJournal(journal: Journal, sessionId = resolveSessionIdOrThrow()): void {
@@ -264,6 +289,7 @@ function withJournalLock<T>(sessionId: string | undefined, operation: () => T): 
 
 function append<T extends Intent>(intent: T, sessionId?: string): T {
 	return withJournalLock(sessionId, () => {
+		if (isSessionSealed(sessionId ?? resolveSessionIdOrThrow())) throw new Error("Source session is quarantined; use a new session");
 		const journal = readJournal(sessionId);
 		const intentId = intent.kind === "create" ? intent.createIntentId : intent.updateIntentId;
 		if (journal.intents.some((entry) => (entry.kind === "create" ? entry.createIntentId : entry.updateIntentId) === intentId)) {
@@ -273,6 +299,111 @@ function append<T extends Intent>(intent: T, sessionId?: string): T {
 		writeJournal(journal, sessionId);
 		return intent;
 	});
+}
+
+function receiptPath(sessionId: string, receiptId: string): string { return `${getOmtDir()}/${RECEIPT_PREFIX}${sessionId}-${receiptId}.json`; }
+function artifactPath(sessionId: string, artifactId: string): string { return `${getOmtDir()}/${JOURNAL_PREFIX}${sessionId}${QUARANTINE_MARKER}${artifactId}.json`; }
+
+function readReceipts(): Array<MissingReconciliationReceipt | QuarantineReconciliationReceipt> {
+	if (!existsSync(getOmtDir())) return [];
+	const result: Array<MissingReconciliationReceipt | QuarantineReconciliationReceipt> = [];
+	const filenamePattern = new RegExp(`^${RECEIPT_PREFIX}([A-Za-z0-9_-]+)-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\\.json$`);
+	for (const name of readdirSync(getOmtDir()).sort()) {
+		if (!name.startsWith(RECEIPT_PREFIX) || !name.endsWith(".json")) continue;
+		try {
+			const value: unknown = JSON.parse(readFileSync(`${getOmtDir()}/${name}`, "utf8"));
+			if (!record(value) || value.status !== "manual-reconciliation-required" || typeof value.receiptId !== "string" || typeof value.sourceSessionId !== "string" || typeof value.reason !== "string" || value.reason.trim() === "") continue;
+			const filename = filenamePattern.exec(name);
+			if (!filename || value.sourceSessionId !== filename[1] || value.receiptId !== filename[2]) continue;
+			if (value.type === "missing-intent" && typeof value.intentId === "string") result.push({ type: "missing-intent", receiptId: value.receiptId, status: "manual-reconciliation-required", sourceSessionId: value.sourceSessionId, intentId: value.intentId, reason: value.reason });
+			if (value.type === "quarantine" && typeof value.artifactId === "string") result.push({ type: "quarantine", receiptId: value.receiptId, status: "manual-reconciliation-required", sourceSessionId: value.sourceSessionId, artifactId: value.artifactId, reason: value.reason });
+		} catch { /* ignore malformed receipt files */ }
+	}
+	return result;
+}
+
+function malformedReceiptEntries(): ReconciliationError[] {
+	if (!existsSync(getOmtDir())) return [];
+	const result: ReconciliationError[] = [];
+	const names = readdirSync(getOmtDir()).filter((name) => name.startsWith(RECEIPT_PREFIX) && name.endsWith(".json")).sort();
+	const filenamePattern = new RegExp(`^${RECEIPT_PREFIX}([A-Za-z0-9_-]+)-([A-Za-z0-9-]+)\\.json$`);
+	for (const name of names) {
+		const match = filenamePattern.exec(name);
+		try {
+			const value: unknown = JSON.parse(readFileSync(`${getOmtDir()}/${name}`, "utf8"));
+			const validPayload = record(value) && value.status === "manual-reconciliation-required" && typeof value.receiptId === "string" && typeof value.sourceSessionId === "string" && typeof value.reason === "string" && value.reason.trim() !== "" && ((value.type === "missing-intent" && typeof value.intentId === "string") || (value.type === "quarantine" && typeof value.artifactId === "string"));
+			if (!match || !validPayload || value.sourceSessionId !== match[1] || value.receiptId !== match[2]) result.push({ type: "reconciliation-error", sourceSessionId: match?.[1] ?? (record(value) && typeof value.sourceSessionId === "string" ? value.sourceSessionId : ""), receiptId: match?.[2], error: !match || (record(value) && (value.sourceSessionId !== match[1] || value.receiptId !== match[2])) ? "Malformed reconciliation receipt identity" : "Malformed reconciliation receipt shape" });
+		} catch { result.push({ type: "reconciliation-error", sourceSessionId: match?.[1] ?? "", receiptId: match?.[2], error: "Malformed reconciliation receipt JSON" }); }
+	}
+	return result;
+}
+
+function quarantineArtifacts(): QuarantineArtifact[] {
+	if (!existsSync(getOmtDir())) return [];
+	const result: QuarantineArtifact[] = [];
+	const pattern = new RegExp(`^${JOURNAL_PREFIX}([A-Za-z0-9_-]+)\\.quarantine\\.([A-Za-z0-9-]+)\\.json$`);
+	for (const name of readdirSync(getOmtDir()).sort()) {
+		const match = pattern.exec(name);
+		if (match) result.push({ type: "quarantine-artifact", sourceSessionId: match[1], artifactId: match[2] });
+	}
+	return result;
+}
+
+function isSessionSealed(sessionId: string): boolean {
+	return readReceipts().some((receipt) => receipt.type === "quarantine" && receipt.sourceSessionId === sessionId) || quarantineArtifacts().some((artifact) => artifact.sourceSessionId === sessionId);
+}
+
+export function manualReconciliationMissing(intentId: string, reason: unknown, sourceSessionId = resolveSessionIdOrThrow()): MissingReconciliationReceipt {
+	nonblank(intentId, "intent ID");
+	const cleanReason = nonblank(reason, "reason");
+	if (!isSafeSessionId(sourceSessionId)) throw new Error("Unsafe session id");
+	return withJournalLock(sourceSessionId, () => {
+		const existing = readReceipts().find((receipt): receipt is MissingReconciliationReceipt => receipt.type === "missing-intent" && receipt.sourceSessionId === sourceSessionId && receipt.intentId === intentId);
+		if (existing) return existing;
+		if (!existsSync(journalPath(sourceSessionId))) throw new Error(`Missing task-write journal: ${sourceSessionId}`);
+		const journal = readJournal(sourceSessionId);
+		if (journal.intents.some((intent) => (intent.kind === "create" ? intent.createIntentId : intent.updateIntentId) === intentId)) throw new Error("Intent exists; use ordinary manual-reconciliation");
+		const receipt: MissingReconciliationReceipt = { type: "missing-intent", receiptId: randomUUID(), status: "manual-reconciliation-required", sourceSessionId, intentId, reason: cleanReason };
+		atomicWrite(receiptPath(sourceSessionId, receipt.receiptId), `${JSON.stringify(receipt, null, 2)}\n`);
+		return receipt;
+	});
+}
+
+export function quarantineJournal(reason: unknown, sourceSessionId = resolveSessionIdOrThrow()): QuarantineReconciliationReceipt {
+	const cleanReason = nonblank(reason, "reason");
+	if (!isSafeSessionId(sourceSessionId)) throw new Error("Unsafe session id");
+	return withJournalLock(sourceSessionId, () => {
+		const existing = readReceipts().find((receipt): receipt is QuarantineReconciliationReceipt => receipt.type === "quarantine" && receipt.sourceSessionId === sourceSessionId);
+		if (existing) return existing;
+		const orphans = quarantineArtifacts().filter((artifact) => artifact.sourceSessionId === sourceSessionId);
+		if (orphans.length > 1) throw new Error("Ambiguous quarantine artifacts");
+		if (orphans.length === 1) {
+			const receipt: QuarantineReconciliationReceipt = { type: "quarantine", receiptId: randomUUID(), status: "manual-reconciliation-required", sourceSessionId, reason: cleanReason, artifactId: orphans[0].artifactId };
+			atomicWrite(receiptPath(sourceSessionId, receipt.receiptId), `${JSON.stringify(receipt, null, 2)}\n`);
+			return receipt;
+		}
+		const path = journalPath(sourceSessionId);
+		if (!existsSync(path)) throw new Error(`Missing task-write journal: ${sourceSessionId}`);
+		try { readJournal(sourceSessionId); } catch (error) {
+			if (!(error instanceof JournalValidationError)) throw error;
+			let artifactId = randomUUID();
+			while (existsSync(artifactPath(sourceSessionId, artifactId))) artifactId = randomUUID();
+			renameSync(path, artifactPath(sourceSessionId, artifactId));
+			const receipt: QuarantineReconciliationReceipt = { type: "quarantine", receiptId: randomUUID(), status: "manual-reconciliation-required", sourceSessionId, reason: cleanReason, artifactId };
+			atomicWrite(receiptPath(sourceSessionId, receipt.receiptId), `${JSON.stringify(receipt, null, 2)}\n`);
+			return receipt;
+		}
+		throw new Error("Task-write journal is valid; quarantine is not allowed");
+	});
+}
+
+export function listReconciliation(): ReconciliationEntry[] {
+	const receipts = readReceipts();
+	const covered = new Set(receipts.filter((receipt): receipt is QuarantineReconciliationReceipt => receipt.type === "quarantine").map((receipt) => `${receipt.sourceSessionId}\0${receipt.artifactId}`));
+	const orphanArtifacts = quarantineArtifacts().filter((artifact) => !covered.has(`${artifact.sourceSessionId}\0${artifact.artifactId}`));
+	const entries: ReconciliationEntry[] = [...receipts, ...orphanArtifacts, ...malformedReceiptEntries()];
+	const entryId = (entry: ReconciliationEntry): string => "receiptId" in entry ? entry.receiptId ?? "" : "artifactId" in entry ? entry.artifactId : "";
+	return entries.sort((a, b) => a.sourceSessionId.localeCompare(b.sourceSessionId) || entryId(a).localeCompare(entryId(b)));
 }
 
 function findIntent(id: string, sessionId?: string): { journal: Journal; index: number; intent: Intent } {
@@ -509,19 +640,20 @@ async function main(): Promise<void> {
 		}
 	}
 	if (sourceSessionId !== undefined && !isSafeSessionId(sourceSessionId)) throw new Error("Unsafe session id");
+	if (sourceSessionId !== undefined && (command === "create-prepare" || command === "update-prepare" || command === "list")) throw new Error("--source-session is not supported for this command");
 	const id = positional[0];
 	let result: unknown;
 	if (command === "list") {
-		if (positional.length !== 1 || positional[0] !== "--pending") throw new Error("Usage: list --pending");
-		result = listPending();
+		if (positional.length !== 1 || (positional[0] !== "--pending" && positional[0] !== "--reconciliation")) throw new Error("Usage: list --pending|--reconciliation");
+		result = positional[0] === "--pending" ? listPending() : listReconciliation();
 	} else if (command === "create-prepare") {
-		result = createPrepare(await readStdin());
+		result = createPrepare(await readStdin(), sourceSessionId);
 	} else if (command === "create-child") {
 		result = createChild(id ?? "", await readStdin(), sourceSessionId);
 	} else if (command === "create-complete") {
 		result = createComplete(id ?? "", await readStdin(), sourceSessionId);
 	} else if (command === "update-prepare") {
-		result = updatePrepare(await readStdin());
+		result = updatePrepare(await readStdin(), sourceSessionId);
 	} else if (command === "update-mutation-written") {
 		result = updateMutationWritten(id ?? "", await readStdin(), sourceSessionId);
 	} else if (command === "update-complete") {
@@ -530,6 +662,14 @@ async function main(): Promise<void> {
 		const input = await readStdin();
 		if (!record(input)) throw new Error("Expected a JSON object");
 		result = manualReconciliation(id ?? "", input.reason, sourceSessionId);
+	} else if (command === "manual-reconciliation-missing") {
+		const input = await readStdin();
+		if (!record(input)) throw new Error("Expected a JSON object");
+		result = manualReconciliationMissing(id ?? "", input.reason, sourceSessionId);
+	} else if (command === "quarantine-journal") {
+		const input = await readStdin();
+		if (!record(input)) throw new Error("Expected a JSON object");
+		result = quarantineJournal(input.reason, sourceSessionId);
 	} else if (command === "receipt-ack") {
 		result = receiptAck(id ?? "", await readStdin(), sourceSessionId);
 	} else if (command === "get") {

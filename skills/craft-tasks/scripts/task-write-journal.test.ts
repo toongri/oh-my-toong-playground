@@ -13,6 +13,9 @@ import {
 	updatePrepare,
 	journalPath,
 	listPending,
+	listReconciliation,
+	manualReconciliationMissing,
+	quarantineJournal,
 	receiptAck,
 } from "./task-write-journal";
 
@@ -26,6 +29,174 @@ afterEach(() => {
 	delete process.env.OMT_DIR;
 	delete process.env.OMT_SESSION_ID;
 	delete process.env.CODEX_THREAD_ID;
+});
+
+describe("terminal recovery receipts", () => {
+	test("records a missing intent without changing a valid source journal and is idempotent", () => {
+		setup();
+		const pending = createPrepare({ parentId, designAnchor: anchor, creationPayload: { body: "keep", relations: [] } });
+		const before = readFileSync(journalPath(sid), "utf8");
+		const first = manualReconciliationMissing("missing-intent", "PM result was not found", sid);
+		const second = manualReconciliationMissing("missing-intent", "different reason", sid);
+		expect(first).toEqual(second);
+		expect(first).toMatchObject({ sourceSessionId: sid, intentId: "missing-intent", reason: "PM result was not found", status: "manual-reconciliation-required" });
+		expect(readFileSync(journalPath(sid), "utf8")).toBe(before);
+		expect(getIntent(pending.createIntentId, sid).state).toBe("prepared");
+	});
+
+	test("quarantines malformed bytes, is idempotent, and discovers the receipt", () => {
+		setup();
+		mkdirSync(omtDir, { recursive: true });
+		writeFileSync(journalPath(sid), "{broken original bytes\n", "utf8");
+		const first = quarantineJournal("invalid JSON", sid);
+		const second = quarantineJournal("changed reason", sid);
+		expect(second).toEqual(first);
+		expect(first).toMatchObject({ sourceSessionId: sid, reason: "invalid JSON", status: "manual-reconciliation-required" });
+		expect(existsSync(journalPath(sid))).toBe(false);
+		expect(listReconciliation()).toContainEqual(first);
+	});
+
+	test("recovers one orphan artifact and rejects ambiguous orphan artifacts", () => {
+		setup();
+		mkdirSync(omtDir, { recursive: true });
+		const orphan = join(omtDir, `task-write-journal-${sid}.quarantine.orphan.json`);
+		writeFileSync(orphan, "original", "utf8");
+		const recovered = quarantineJournal("recover", sid);
+		expect(recovered.artifactId).toBe("orphan");
+		expect(readdirSync(omtDir).filter((name) => name.includes(".quarantine.") && name.endsWith(".json"))).toHaveLength(1);
+		expect(quarantineJournal("changed", sid)).toEqual(recovered);
+		const otherSid = "other-orphan";
+		const otherOne = join(omtDir, `task-write-journal-${otherSid}.quarantine.one.json`);
+		const otherTwo = join(omtDir, `task-write-journal-${otherSid}.quarantine.two.json`);
+		writeFileSync(otherOne, "one", "utf8");
+		writeFileSync(otherTwo, "two", "utf8");
+		const beforeAmbiguous = readdirSync(omtDir).sort().map((name) => [name, readFileSync(join(omtDir, name), "utf8")]);
+		expect(() => quarantineJournal("ambiguous", otherSid)).toThrow("Ambiguous");
+		expect(readdirSync(omtDir).sort().map((name) => [name, readFileSync(join(omtDir, name), "utf8")])).toEqual(beforeAmbiguous);
+	});
+
+	test("does not accept source-session for prepare or list CLI commands", () => {
+		setup();
+		const cli = resolve("skills/craft-tasks/scripts/task-write-journal.ts");
+		const env = { ...process.env, OMT_DIR: omtDir, OMT_SESSION_ID: sid };
+		expect(() => execFileSync("bun", [cli, "create-prepare", "--source-session", "other"], { input: "{}", env, stdio: "ignore" })).toThrow();
+		expect(() => execFileSync("bun", [cli, "list", "--pending", "--source-session", "other"], { env, stdio: "ignore" })).toThrow();
+	});
+
+	test("missing reconciliation rejects existing and absent journals without mutation", () => {
+		setup();
+		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload: { body: "x" } });
+		const before = readFileSync(journalPath(sid), "utf8");
+		expect(() => manualReconciliationMissing(prepared.createIntentId, "wrong", sid)).toThrow("ordinary manual-reconciliation");
+		expect(readFileSync(journalPath(sid), "utf8")).toBe(before);
+		process.env.OMT_SESSION_ID = "absent";
+		expect(() => manualReconciliationMissing("id", "reason", "absent")).toThrow("Missing task-write journal");
+		expect(readdirSync(omtDir).some((name) => name.includes("reconciliation"))).toBe(false);
+	});
+
+	test("quarantine preserves malformed JSON and malformed shape bytes", () => {
+		setup();
+		mkdirSync(omtDir, { recursive: true });
+		for (const [session, bytes] of [[sid, "not json\n"], ["bad-shape", "{\"version\":1,\"intents\":[{}]}\n"]] as const) {
+			writeFileSync(journalPath(session), bytes, "utf8");
+			const receipt = quarantineJournal("bad source", session);
+			const artifactName = readdirSync(omtDir).find((name) => name.includes(`.quarantine.${receipt.artifactId}.json`));
+			expect(artifactName).toBeDefined();
+			expect(readFileSync(join(omtDir, artifactName as string), "utf8")).toBe(bytes);
+			expect(() => getIntent("synthetic", session)).toThrow();
+		}
+	});
+
+	test("normal quarantine lists one covered receipt without duplicate artifact", () => {
+		setup();
+		mkdirSync(omtDir, { recursive: true });
+		writeFileSync(journalPath(sid), "{broken\n", "utf8");
+		const receipt = quarantineJournal("bad", sid);
+		expect(listReconciliation().filter((entry) => "sourceSessionId" in entry && entry.sourceSessionId === sid)).toEqual([receipt]);
+	});
+
+	test("sealed sessions reject direct and CLI prepares without recreating the journal", () => {
+		setup();
+		mkdirSync(omtDir, { recursive: true });
+		writeFileSync(journalPath(sid), "{broken\n", "utf8");
+		quarantineJournal("bad", sid);
+		expect(() => createPrepare({ parentId, designAnchor: anchor, creationPayload: {} }, sid)).toThrow("quarantined");
+		expect(() => updatePrepare({ childId: "c", parentId, designAnchor: anchor, before: {}, after: {}, changeComment: "why" }, sid)).toThrow("quarantined");
+		const cli = resolve("skills/craft-tasks/scripts/task-write-journal.ts");
+		const env = { ...process.env, OMT_DIR: omtDir, OMT_SESSION_ID: sid };
+		for (const [command, input] of [["create-prepare", { parentId, designAnchor: anchor, creationPayload: {} }], ["update-prepare", { childId: "c", parentId, designAnchor: anchor, before: {}, after: {}, changeComment: "why" }]] as const) {
+			expect(() => execFileSync("bun", [cli, command], { input: JSON.stringify(input), env, encoding: "utf8" })).toThrow(/quarantined/);
+		}
+		expect(() => execFileSync("bun", [cli, "update-prepare", "--source-session", sid], { input: JSON.stringify({ childId: "c", parentId, designAnchor: anchor, before: {}, after: {}, changeComment: "why" }), env, stdio: "ignore" })).toThrow();
+		expect(() => execFileSync("bun", [cli, "list", "--reconciliation", "--source-session", sid], { env, stdio: "ignore" })).toThrow();
+		expect(existsSync(journalPath(sid))).toBe(false);
+	});
+
+	test("mixed reconciliation output is stable, sorted, and exposes malformed receipts", () => {
+		setup();
+		mkdirSync(omtDir, { recursive: true });
+		writeFileSync(journalPath("z-session"), "{bad\n", "utf8");
+		quarantineJournal("z", "z-session");
+		writeFileSync(join(omtDir, "task-write-reconciliation-a-session-00000000-0000-0000-0000-000000000000.json"), JSON.stringify({ type: "missing-intent", status: "manual-reconciliation-required", sourceSessionId: "a-session", receiptId: "00000000-0000-0000-0000-000000000000", intentId: "i", reason: "r" }), "utf8");
+		writeFileSync(join(omtDir, "task-write-reconciliation-b-session-00000000-0000-0000-0000-000000000000.json"), JSON.stringify({ type: "missing-intent", status: "manual-reconciliation-required", sourceSessionId: "b-session", receiptId: "00000000-0000-0000-0000-000000000000", intentId: "i", reason: "r" }), "utf8");
+		writeFileSync(join(omtDir, "task-write-reconciliation-b-session-11111111-1111-1111-1111-111111111111.json"), JSON.stringify({ type: "missing-intent", status: "manual-reconciliation-required", sourceSessionId: "b-session", receiptId: "11111111-1111-1111-1111-111111111111", intentId: "j", reason: "r" }), "utf8");
+		writeFileSync(join(omtDir, "task-write-reconciliation-a-session-11111111-1111-1111-1111-111111111111.json"), JSON.stringify({ type: "missing-intent", status: "manual-reconciliation-required", sourceSessionId: "wrong", receiptId: "11111111-1111-1111-1111-111111111111", intentId: "i", reason: "r" }), "utf8");
+		const first = listReconciliation();
+		expect(first).toEqual(listReconciliation());
+		expect(first.some((entry) => entry.type === "reconciliation-error")).toBe(true);
+		for (let i = 1; i < first.length; i += 1) expect(first[i - 1].sourceSessionId.localeCompare(first[i].sourceSessionId) <= 0).toBe(true);
+		const bIds = first.filter((entry) => entry.sourceSessionId === "b-session").map((entry) => "receiptId" in entry ? entry.receiptId : "artifactId" in entry ? entry.artifactId : "");
+		expect(bIds).toEqual([...bIds].sort());
+	});
+
+	test("quarantine propagates source I/O errors without renaming a directory", () => {
+		setup();
+		mkdirSync(journalPath(sid), { recursive: true });
+		expect(() => quarantineJournal("io", sid)).toThrow(/EISDIR|directory/);
+		expect(existsSync(journalPath(sid))).toBe(true);
+		expect(readdirSync(omtDir).some((name) => name.includes(".quarantine.") || name.includes("reconciliation"))).toBe(false);
+	});
+
+	test("CLI recovery success paths and valid-journal quarantine rejection", () => {
+		setup();
+		const cli = resolve("skills/craft-tasks/scripts/task-write-journal.ts");
+		const env = { ...process.env, OMT_DIR: omtDir, OMT_SESSION_ID: sid };
+		createPrepare({ parentId, designAnchor: anchor, creationPayload: {} });
+		const missing = JSON.parse(execFileSync("bun", [cli, "manual-reconciliation-missing", "missing", "--source-session", sid], { input: JSON.stringify({ reason: "r" }), env, encoding: "utf8" }));
+		expect(missing.type).toBe("missing-intent");
+		const list = JSON.parse(execFileSync("bun", [cli, "list", "--reconciliation"], { env, encoding: "utf8" }));
+		expect(list.some((entry: { type: string }) => entry.type === "missing-intent")).toBe(true);
+		expect(() => execFileSync("bun", [cli, "quarantine-journal", "--source-session", sid], { input: JSON.stringify({ reason: "r" }), env, stdio: "ignore" })).toThrow();
+		const malformedSession = "cli-malformed";
+		writeFileSync(journalPath(malformedSession), "{broken\n", "utf8");
+		const quarantine = JSON.parse(execFileSync("bun", [cli, "quarantine-journal", "--source-session", malformedSession], { input: JSON.stringify({ reason: "bad" }), env, encoding: "utf8" }));
+		expect(quarantine.type).toBe("quarantine");
+	});
+
+	test("live and malformed owner locks block both recovery mutations without file changes", () => {
+		setup();
+		const path = journalPath(sid);
+		writeFileSync(path, "{broken\n", "utf8");
+		const before = readFileSync(path, "utf8");
+		for (const owner of [`${process.pid}\n`, "not-a-pid\n"]) {
+			const lock = `${path}.lock`;
+			mkdirSync(lock, { recursive: true });
+			writeFileSync(join(lock, "owner"), owner, "utf8");
+			for (const run of [() => manualReconciliationMissing("i", "r", sid), () => quarantineJournal("r", sid)]) expect(run).toThrow();
+			expect(readFileSync(path, "utf8")).toBe(before);
+			expect(readdirSync(omtDir).some((name) => name.includes("reconciliation") || name.includes("quarantine"))).toBe(false);
+			rmSync(lock, { recursive: true, force: true });
+		}
+	});
+
+	test("malformed receipt payload and filename identity are reconciliation errors", () => {
+		setup();
+		mkdirSync(omtDir, { recursive: true });
+		const id = "22222222-2222-2222-2222-222222222222";
+		writeFileSync(join(omtDir, `task-write-reconciliation-${sid}-${id}.json`), JSON.stringify({ type: "missing-intent", sourceSessionId: sid, receiptId: id, reason: "" }), "utf8");
+		writeFileSync(join(omtDir, `task-write-reconciliation-${sid}-33333333-3333-3333-3333-333333333333.json`), JSON.stringify({ type: "missing-intent", status: "manual-reconciliation-required", sourceSessionId: "other", receiptId: "33333333-3333-3333-3333-333333333333", intentId: "i", reason: "r" }), "utf8");
+		expect(listReconciliation().filter((entry) => entry.type === "reconciliation-error")).toHaveLength(2);
+	});
 });
 
 function setup() {
