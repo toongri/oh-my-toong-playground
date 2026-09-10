@@ -200,7 +200,7 @@ describe("stable child task identity contract", () => {
 			"retry only missing identity/comment writes",
 			"documented PM idempotency/client-request lookup",
 			"manual-reconciliation-required",
-			"unreadable/missing intent",
+			"unreadable source",
 			"never derive or regenerate `taskKey`/`createIntentId` from `childId`",
 			"Never create a replacement for an uncertain partial child",
 		]) {
@@ -354,7 +354,7 @@ describe("durable task-write runtime contract", () => {
 		expect(create).toContain("Replaying `create-complete` with the identical");
 		expect(create).toContain("is idempotent");
 		expect(recovery).toContain("without changing the unrelated journal");
-		expect(recovery).toContain("preserves the exact bytes as a quarantine artifact");
+		expect(recovery).toContain("preserving the exact bytes as a quarantine artifact");
 		expect(recovery).toContain("A quarantined session is sealed");
 		expect(recovery).toContain("deterministically exposes missing-ID receipts");
 	});
@@ -364,6 +364,15 @@ describe("durable task-write runtime contract", () => {
 		expect(text).toContain("The caller must durably retain the `taskIdentities` result");
 		expect(text).toContain("`create-prepare`, `update-prepare`, and `list` reject `--source-session`");
 		expect(text).toContain("Recovery never infers or replaces a child identity");
+	});
+
+	test("routes readable, malformed, and unreadable recovery artifacts distinctly", () => {
+		const text = sectionBetween(craftTasks, "#### Recovery and manual stop", "Match in this order:");
+		expect(text).toContain("an existing readable intent uses ordinary `manual-reconciliation`");
+		expect(text).toContain("a readable journal with a missing intent ID uses `manual-reconciliation-missing <intentId>`");
+		expect(text).toContain("malformed JSON or malformed journal shape uses `quarantine-journal`");
+		expect(text).toContain("Filesystem/I/O unreadable errors are surfaced and stop without rename, receipt creation, or other mutation");
+		expect(text).not.toContain("An unreadable/missing intent, or any path without a verified `childId`/result, ends with `manual-reconciliation`");
 	});
 
 	test("lock acquisition publishes initialized owners and handles transient and unsafe locks", () => {
