@@ -65,9 +65,9 @@ interface Journal {
 const JOURNAL_PREFIX = "task-write-journal-";
 const TERMINAL_STATES = new Set<JournalState>(["complete", "manual-reconciliation-required"]);
 
-function record(value: unknown): Record<string, unknown> {
+function record(value: unknown): value is Record<string, unknown> {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("Expected a JSON object");
-	return value as Record<string, unknown>;
+	return true;
 }
 
 function nonblank(value: unknown, name: string): string {
@@ -109,9 +109,10 @@ function readJournal(sessionId = resolveSessionIdOrThrow()): Journal {
 	} catch {
 		throw new Error("Malformed task-write journal JSON");
 	}
-	const data = record(parsed);
-	if (data.version !== 1 || !Array.isArray(data.intents)) throw new Error("Malformed task-write journal shape");
-	return data as unknown as Journal;
+	if (!record(parsed)) throw new Error("Expected a JSON object");
+	if (parsed.version !== 1 || !Array.isArray(parsed.intents)) throw new Error("Malformed task-write journal shape");
+	// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- shallow validation intentionally preserves opaque intent payloads.
+	return parsed as unknown as Journal;
 }
 
 function writeJournal(journal: Journal, sessionId = resolveSessionIdOrThrow()): void {
@@ -127,7 +128,7 @@ function writeJournal(journal: Journal, sessionId = resolveSessionIdOrThrow()): 
 	}
 }
 
-function append(intent: Intent, sessionId?: string): Intent {
+function append<T extends Intent>(intent: T, sessionId?: string): T {
 	const journal = readJournal(sessionId);
 	const intentId = intent.kind === "create" ? intent.createIntentId : intent.updateIntentId;
 	if (journal.intents.some((entry) => (entry.kind === "create" ? entry.createIntentId : entry.updateIntentId) === intentId)) {
@@ -146,7 +147,7 @@ function findIntent(id: string, sessionId?: string): { journal: Journal; index: 
 	return { journal, index, intent: journal.intents[index] };
 }
 
-function replace(id: string, next: Intent, sessionId?: string): Intent {
+function replace<T extends Intent>(id: string, next: T, sessionId?: string): T {
 	const found = findIntent(id, sessionId);
 	if (TERMINAL_STATES.has(found.intent.state)) throw new Error("Cannot mutate a terminal intent");
 	found.journal.intents[found.index] = next;
@@ -154,25 +155,29 @@ function replace(id: string, next: Intent, sessionId?: string): Intent {
 	return next;
 }
 
-function verifyAssociation(intent: Intent, association: Association): void {
+
+function verifyAssociation(intent: Intent, association: unknown): void {
+	if (!record(association)) throw new Error("Expected a JSON object");
 	const childId = nonblank(association.childId, "childId");
 	const { parentId, designAnchor } = validateAnchor(association.parentId, association.designAnchor);
 	if (intent.parentId !== parentId || intent.designAnchor !== designAnchor) throw new Error("Parent or designAnchor mismatch");
 	if ("childId" in intent && intent.childId !== undefined && intent.childId !== childId) throw new Error("childId mismatch");
 }
 
-export function createPrepare(input: CreatePrepareInput, sessionId?: string): CreateIntent {
-	const data = record(input);
-	const { parentId, designAnchor } = validateAnchor(data.parentId, data.designAnchor);
+export function createPrepare(input: unknown, sessionId?: string): CreateIntent {
+	if (!record(input)) throw new Error("Expected a JSON object");
+	const { parentId, designAnchor } = validateAnchor(input.parentId, input.designAnchor);
 	const { createIntentId, taskKey } = newOpaquePair();
-	return append({ kind: "create", createIntentId, taskKey, parentId, designAnchor, creationPayload: exact(data.creationPayload, "creationPayload"), state: "prepared" }, sessionId) as CreateIntent;
+	const creationPayload = Object.prototype.hasOwnProperty.call(input, "creationPayload") ? input.creationPayload : input;
+	return append({ kind: "create", createIntentId, taskKey, parentId, designAnchor, creationPayload: exact(creationPayload, "creationPayload"), state: "prepared" }, sessionId);
 }
 
-export function createChild(intentId: string, association: Association, sessionId?: string): CreateIntent {
+export function createChild(intentId: string, association: unknown, sessionId?: string): CreateIntent {
 	const found = findIntent(intentId, sessionId);
 	if (found.intent.kind !== "create" || found.intent.state !== "prepared") throw new Error("Invalid create-child transition");
 	verifyAssociation(found.intent, association);
-	return replace(intentId, { ...found.intent, childId: nonblank(association.childId, "childId"), state: "child-created" }, sessionId) as CreateIntent;
+	if (!record(association)) throw new Error("Expected a JSON object");
+	return replace(intentId, { ...found.intent, childId: nonblank(association.childId, "childId"), state: "child-created" }, sessionId);
 }
 
 export interface CreateCompleteVerification extends Association {
@@ -181,30 +186,32 @@ export interface CreateCompleteVerification extends Association {
 	identityComment: unknown;
 }
 
-export function createComplete(intentId: string, verification: CreateCompleteVerification, sessionId?: string): CreateIntent {
+export function createComplete(intentId: string, verification: unknown, sessionId?: string): CreateIntent {
 	const found = findIntent(intentId, sessionId);
 	if (found.intent.kind !== "create" || found.intent.state !== "child-created") throw new Error("Invalid create-complete transition");
+	if (!record(verification)) throw new Error("Expected a JSON object");
 	verifyAssociation(found.intent, verification);
-	const payload = record(found.intent.creationPayload);
+	const payload = found.intent.creationPayload;
+	if (!record(payload)) throw new Error("Expected a JSON object");
 	if (!isDeepStrictEqual(exact(verification.body, "body"), payload.body)) throw new Error("body verification mismatch");
 	if (!isDeepStrictEqual(exact(verification.relations, "relations"), payload.relations)) throw new Error("relations verification mismatch");
 	if (!isDeepStrictEqual(exact(verification.identityComment, "identityComment"), payload.identityComment)) throw new Error("identityComment verification mismatch");
-	return replace(intentId, { ...found.intent, state: "complete" }, sessionId) as CreateIntent;
+	return replace(intentId, { ...found.intent, state: "complete" }, sessionId);
 }
 
-export function updatePrepare(input: UpdatePrepareInput, sessionId?: string): UpdateIntent {
-	const data = record(input);
-	const childId = nonblank(data.childId, "childId");
-	const { parentId, designAnchor } = validateAnchor(data.parentId, data.designAnchor);
-	const changeComment = nonblank(data.changeComment, "changeComment");
-	return append({ kind: "update", updateIntentId: randomUUID(), childId, parentId, designAnchor, before: exact(data.before, "before"), after: exact(data.after, "after"), changeComment, state: "prepared" }, sessionId) as UpdateIntent;
+export function updatePrepare(input: unknown, sessionId?: string): UpdateIntent {
+	if (!record(input)) throw new Error("Expected a JSON object");
+	const childId = nonblank(input.childId, "childId");
+	const { parentId, designAnchor } = validateAnchor(input.parentId, input.designAnchor);
+	const changeComment = nonblank(input.changeComment, "changeComment");
+	return append({ kind: "update", updateIntentId: randomUUID(), childId, parentId, designAnchor, before: exact(input.before, "before"), after: exact(input.after, "after"), changeComment, state: "prepared" }, sessionId);
 }
 
-export function updateMutationWritten(intentId: string, association: Association, sessionId?: string): UpdateIntent {
+export function updateMutationWritten(intentId: string, association: unknown, sessionId?: string): UpdateIntent {
 	const found = findIntent(intentId, sessionId);
 	if (found.intent.kind !== "update" || found.intent.state !== "prepared") throw new Error("Invalid update-mutation-written transition");
 	verifyAssociation(found.intent, association);
-	return replace(intentId, { ...found.intent, state: "mutation-written" }, sessionId) as UpdateIntent;
+	return replace(intentId, { ...found.intent, state: "mutation-written" }, sessionId);
 }
 
 export interface UpdateCompleteVerification extends Association {
@@ -213,18 +220,20 @@ export interface UpdateCompleteVerification extends Association {
 	changeComment: unknown;
 }
 
-export function updateComplete(intentId: string, verification: UpdateCompleteVerification, sessionId?: string): UpdateIntent {
+export function updateComplete(intentId: string, verification: unknown, sessionId?: string): UpdateIntent {
 	const found = findIntent(intentId, sessionId);
 	if (found.intent.kind !== "update" || found.intent.state !== "mutation-written") throw new Error("Invalid update-complete transition");
+	if (!record(verification)) throw new Error("Expected a JSON object");
 	verifyAssociation(found.intent, verification);
-	const after = record(found.intent.after);
+	const after = found.intent.after;
+	if (!record(after)) throw new Error("Expected a JSON object");
 	if (!isDeepStrictEqual(exact(verification.body, "body"), after.body)) throw new Error("body verification mismatch");
 	if (!isDeepStrictEqual(exact(verification.relations, "relations"), after.relations)) throw new Error("relations verification mismatch");
 	if (!isDeepStrictEqual(exact(verification.changeComment, "changeComment"), found.intent.changeComment)) throw new Error("changeComment verification mismatch");
-	return replace(intentId, { ...found.intent, state: "complete" }, sessionId) as UpdateIntent;
+	return replace(intentId, { ...found.intent, state: "complete" }, sessionId);
 }
 
-export function manualReconciliation(intentId: string, reason: string, sessionId?: string): Intent {
+export function manualReconciliation(intentId: string, reason: unknown, sessionId?: string): Intent {
 	const found = findIntent(intentId, sessionId);
 	const cleanReason = nonblank(reason, "reason");
 	return replace(intentId, { ...found.intent, state: "manual-reconciliation-required", reason: cleanReason }, sessionId);
@@ -250,25 +259,21 @@ async function main(): Promise<void> {
 	if (!command) throw new Error("Missing command");
 	let result: unknown;
 	if (command === "create-prepare") {
-		const input = record(await readStdin());
-		result = createPrepare({
-			parentId: input.parentId as string,
-			designAnchor: input.designAnchor as string,
-			creationPayload: Object.prototype.hasOwnProperty.call(input, "creationPayload") ? input.creationPayload : input,
-		});
+		result = createPrepare(await readStdin());
 	} else if (command === "create-child") {
-		result = createChild(id ?? "", record(await readStdin()) as unknown as Association);
+		result = createChild(id ?? "", await readStdin());
 	} else if (command === "create-complete") {
-		result = createComplete(id ?? "", record(await readStdin()) as unknown as CreateCompleteVerification);
+		result = createComplete(id ?? "", await readStdin());
 	} else if (command === "update-prepare") {
-		result = updatePrepare(record(await readStdin()) as unknown as UpdatePrepareInput);
+		result = updatePrepare(await readStdin());
 	} else if (command === "update-mutation-written") {
-		result = updateMutationWritten(id ?? "", record(await readStdin()) as unknown as Association);
+		result = updateMutationWritten(id ?? "", await readStdin());
 	} else if (command === "update-complete") {
-		result = updateComplete(id ?? "", record(await readStdin()) as unknown as UpdateCompleteVerification);
+		result = updateComplete(id ?? "", await readStdin());
 	} else if (command === "manual-reconciliation") {
-		const input = record(await readStdin());
-		result = manualReconciliation(id ?? "", input.reason as string);
+		const input = await readStdin();
+		if (!record(input)) throw new Error("Expected a JSON object");
+		result = manualReconciliation(id ?? "", input.reason);
 	} else if (command === "get") {
 		result = getIntent(id ?? "");
 	} else {
