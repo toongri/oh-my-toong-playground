@@ -28,6 +28,7 @@ export interface CreateIntent {
 	parentId: string;
 	designAnchor: string;
 	creationPayload: unknown;
+	identityComment: string;
 	state: JournalState;
 	childId?: string;
 	reason?: string;
@@ -232,8 +233,13 @@ export function createPrepare(input: unknown, sessionId?: string): CreateIntent 
 	const proposedPayload = Object.prototype.hasOwnProperty.call(input, "creationPayload") ? input.creationPayload : input;
 	const exactPayload = exact(proposedPayload, "creationPayload");
 	if (!record(exactPayload)) throw new Error("Expected a JSON object");
-	const creationPayload = { ...exactPayload, identityComment: canonicalIdentityComment(taskKey) };
-	return append({ kind: "create", createIntentId, taskKey, parentId, designAnchor, creationPayload, state: "prepared" }, sessionId);
+	if (Object.prototype.hasOwnProperty.call(exactPayload, "parentId") && exactPayload.parentId !== parentId) {
+		throw new Error("parentId mismatch");
+	}
+	const { identityComment: _callerIdentityComment, ...issueFields } = exactPayload;
+	const creationPayload = { ...issueFields, parentId };
+	const identityComment = canonicalIdentityComment(taskKey);
+	return append({ kind: "create", createIntentId, taskKey, parentId, designAnchor, creationPayload, identityComment, state: "prepared" }, sessionId);
 }
 
 export function createChild(intentId: string, association: unknown, sessionId?: string): CreateIntent {
@@ -258,7 +264,7 @@ export function createComplete(intentId: string, verification: unknown, sessionI
 	verifyAssociation(found.intent, verification);
 	const payload = found.intent.creationPayload;
 	if (!record(payload)) throw new Error("Expected a JSON object");
-	if (!isDeepStrictEqual(exact(payload.identityComment, "identityComment"), canonicalIdentityComment(found.intent.taskKey))) {
+	if (!isDeepStrictEqual(found.intent.identityComment, canonicalIdentityComment(found.intent.taskKey))) {
 		throw new Error("stored identityComment mismatch");
 	}
 	if (Object.prototype.hasOwnProperty.call(payload, "title") && !isDeepStrictEqual(exact(verification.title, "title"), payload.title)) {
@@ -266,7 +272,7 @@ export function createComplete(intentId: string, verification: unknown, sessionI
 	}
 	if (!isDeepStrictEqual(exact(verification.body, "body"), payload.body)) throw new Error("body verification mismatch");
 	if (!isDeepStrictEqual(exact(verification.relations, "relations"), payload.relations)) throw new Error("relations verification mismatch");
-	if (!isDeepStrictEqual(exact(verification.identityComment, "identityComment"), payload.identityComment)) throw new Error("identityComment verification mismatch");
+	if (!isDeepStrictEqual(exact(verification.identityComment, "identityComment"), found.intent.identityComment)) throw new Error("identityComment verification mismatch");
 	return replace(intentId, { ...found.intent, state: "complete" }, sessionId);
 }
 

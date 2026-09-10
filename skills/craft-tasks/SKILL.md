@@ -202,7 +202,7 @@ printf '%s\n' '{"parentId":"<verified parent ID>","designAnchor":"design-anchor:
   | bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" create-prepare
 ```
 
-The caller supplies the exact proposed creation payload fields that `save_issue` will receive, including `title`, `body`, and `relations`; the journal generates the opaque `taskKey`, binds `identityComment` to the exact canonical comment for that key, and stores and returns the resulting `creationPayload`. Use the returned `creationPayload` as the value passed to `save_issue`, unchanged. Do not supply an arbitrary identity comment or replace the returned one. Keep identity metadata out of the reader-facing body; do not put identity metadata in the reader-facing body. Use the returned `createIntentId` to call `save_issue` only after the journal result has been persisted with state `prepared`.
+The caller supplies the exact proposed issue fields that `save_issue` will receive, including `title`, `body`, and `relations`; this is the exact proposed creation payload. The journal verifies and adds the resolved `parentId`, generates the opaque `taskKey`, and stores and returns the resulting `creationPayload` plus a separate `identityComment`. If the proposed payload already contains a different `parentId`, `create-prepare` rejects it. Use the returned `creationPayload` as the value passed to `save_issue`, unchanged. Use the returned `identityComment` as the comment body passed separately to `create_comment`; never add it to the `save_issue` payload. Do not supply an arbitrary identity comment or replace the returned one. Keep identity metadata out of the reader-facing body; do not put identity metadata in the reader-facing body. Use the returned `createIntentId` to call `save_issue` only after the journal result has been persisted with state `prepared`.
 
 After `save_issue` returns a child, verify its `parentId` and exact `designAnchor`. Only after that verified result, call `create-child` with the returned `childId`, the verified `parentId`, and the exact anchor. This changes the journal to state `child-created`:
 
@@ -211,7 +211,7 @@ printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>
   | bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" create-child <createIntentId>
 ```
 
-Then write the exact canonical identity comment. Re-read the child, its relations, and the canonical identity comment. Call `create-complete` only when all required re-reads pass, with `childId`, `parentId`, `designAnchor`, and the exact `body`, `relations`, and `identityComment` values; this marks the intent `complete`, so mark the intent `complete` only after those re-reads.
+Then pass the returned `identityComment` unchanged to `create_comment` as a separate comment write. Re-read the child, its relations, and the canonical identity comment. Call `create-complete` only when all required re-reads pass, with `childId`, `parentId`, `designAnchor`, and the exact `body`, `relations`, and `identityComment` values; this marks the intent `complete`, so mark the intent `complete` only after those re-reads.
 
 ```sh
 printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>","title":"<re-read title>","body":"<re-read body>","relations":[<re-read relations>],"identityComment":"<re-read canonical identity comment>"}' \

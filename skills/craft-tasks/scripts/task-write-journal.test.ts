@@ -44,7 +44,9 @@ describe("task write journal", () => {
 		expect(prepared.state).toBe("prepared");
 		expect(prepared.taskKey).not.toBe(prepared.createIntentId);
 		const canonicalComment = `<!-- Task identity\ntaskKey: ${prepared.taskKey}\n-->`;
-		expect(prepared.creationPayload).toEqual({ ...payload, identityComment: canonicalComment });
+		expect(prepared.creationPayload).toEqual({ ...payload, parentId });
+		expect(prepared.identityComment).toBe(canonicalComment);
+		expect(prepared.creationPayload).not.toHaveProperty("identityComment");
 		expect((prepared.creationPayload as Record<string, unknown>).body).toBe(payload.body);
 		expect((prepared.creationPayload as Record<string, unknown>).relations).toEqual(payload.relations);
 		expect((prepared.creationPayload as Record<string, unknown>).title).toBe(payload.title);
@@ -64,8 +66,18 @@ describe("task write journal", () => {
 		expect(getIntent(prepared.createIntentId)).toMatchObject({
 			createIntentId: prepared.createIntentId,
 			taskKey: prepared.taskKey,
-			creationPayload: { ...payload, identityComment: canonicalComment },
+			creationPayload: { ...payload, parentId },
+			identityComment: canonicalComment,
 		});
+	});
+
+	test("rejects a creation payload parentId that conflicts with the verified parent", () => {
+		setup();
+		expect(() => createPrepare({
+			parentId,
+			designAnchor: anchor,
+			creationPayload: { parentId: "other-parent", title: "제목", body: "b", relations: [] },
+		})).toThrow("parentId mismatch");
 	});
 
 	test("rejects arbitrary or mismatched identity comments", () => {
@@ -76,7 +88,8 @@ describe("task write journal", () => {
 			creationPayload: { title: "제목", body: "b", relations: [], identityComment: "arbitrary" },
 		});
 		const canonicalComment = `<!-- Task identity\ntaskKey: ${prepared.taskKey}\n-->`;
-		expect((prepared.creationPayload as Record<string, unknown>).identityComment).toBe(canonicalComment);
+		expect(prepared.identityComment).toBe(canonicalComment);
+		expect(prepared.creationPayload).not.toHaveProperty("identityComment");
 		createChild(prepared.createIntentId, { childId: "child-123", parentId, designAnchor: anchor });
 		expect(() => createComplete(prepared.createIntentId, {
 			childId: "child-123", parentId, designAnchor: anchor,
@@ -90,8 +103,8 @@ describe("task write journal", () => {
 		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload: { title: "제목", body: "b", relations: [] } });
 		createChild(prepared.createIntentId, { childId: "child-123", parentId, designAnchor: anchor });
 		const path = journalPath(sid);
-		const journal = JSON.parse(readFileSync(path, "utf8")) as { intents: Array<{ creationPayload: Record<string, unknown> }> };
-		journal.intents[0].creationPayload.identityComment = "<!-- Task identity\ntaskKey: forged\n-->";
+		const journal = JSON.parse(readFileSync(path, "utf8")) as { intents: Array<{ creationPayload: Record<string, unknown>; identityComment: string }> };
+		journal.intents[0].identityComment = "<!-- Task identity\ntaskKey: forged\n-->";
 		writeFileSync(path, `${JSON.stringify(journal)}\n`, "utf8");
 		expect(() => createComplete(prepared.createIntentId, {
 			childId: "child-123", parentId, designAnchor: anchor,
@@ -104,11 +117,11 @@ describe("task write journal", () => {
 		const prepared = createPrepare({
 			parentId,
 			designAnchor: anchor,
-			creationPayload: { parentId, designAnchor: anchor, body: "b", relations: [], identityComment: "i" },
+			creationPayload: { parentId, designAnchor: anchor, body: "b", relations: [] },
 		});
 		expect(() => createChild(prepared.createIntentId, { childId: "child-123", parentId: "other", designAnchor: anchor })).toThrow();
 		createChild(prepared.createIntentId, { childId: "child-123", parentId, designAnchor: anchor });
-		createComplete(prepared.createIntentId, { childId: "child-123", parentId, designAnchor: anchor, body: "b", relations: [], identityComment: (prepared.creationPayload as Record<string, unknown>).identityComment });
+		createComplete(prepared.createIntentId, { childId: "child-123", parentId, designAnchor: anchor, body: "b", relations: [], identityComment: prepared.identityComment });
 		expect(() => manualReconciliation(prepared.createIntentId, "late discovery")).toThrow();
 	});
 
@@ -238,8 +251,10 @@ describe("task write journal", () => {
 			env: { ...process.env, OMT_DIR: omtDir, OMT_SESSION_ID: sid },
 			encoding: "utf8",
 		});
-		const parsed = JSON.parse(output) as { state: string; taskKey: string; creationPayload: Record<string, unknown> };
+		const parsed = JSON.parse(output) as { state: string; taskKey: string; creationPayload: Record<string, unknown>; identityComment: string };
 		expect(parsed.state).toBe("prepared");
-		expect(parsed.creationPayload).toEqual({ parentId, designAnchor: anchor, body: "b", relations: [], identityComment: `<!-- Task identity\ntaskKey: ${parsed.taskKey}\n-->` });
+		expect(parsed.creationPayload).toEqual({ parentId, designAnchor: anchor, body: "b", relations: [] });
+		expect(parsed.identityComment).toBe(`<!-- Task identity\ntaskKey: ${parsed.taskKey}\n-->`);
+		expect(parsed.creationPayload).not.toHaveProperty("identityComment");
 });
 });
