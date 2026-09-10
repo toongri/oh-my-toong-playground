@@ -622,12 +622,36 @@ existing requirement-stage policy, append-only history rules, and applicable wri
 known identity does not transfer that ownership to `craft-tasks` and does not permit a second parent
 or an unverified substitute.
 
+#### Canonical carrier and write/recovery rules
+
+The parent has one canonical, portable carrier for the settled design anchor:
+
+```text
+**Design Anchor:** `design-anchor: deep-interview:<state.interview_id>`
+```
+
+The value after the label is the exact supplied `designAnchor`, including every byte. Before a
+successful handoff, write the canonical `Design Anchor` carrier through the PM write binding. A
+created parent carries the line once in its body; an existing parent with no carrier receives one
+append comment containing the line. The supplied, found, enriched, and created parent paths all
+converge on that same carrier and do not create a second parent.
+
+Before writing, inspect the supplied or found parent's body and comment history. If one matching
+carrier already exists, skip the carrier write and continue to verification. Never write a second
+carrier. If the carrier is missing after the required write, appears more than once, or has a value
+that differs from the input `designAnchor` byte-for-byte, stop without returning a successful
+handoff. An interrupted write is also a failed handoff; retry only after re-reading the parent and
+recovering through this same duplicate-prevention rule. The parent body remains immutable; existing
+parents are enriched only by append comment.
+
 #### Verification and output
 
-After parent handling, re-read the resulting parent and verify all of these facts before returning:
+After parent handling, re-read the resulting parent and re-read the carrier byte-for-byte. Verify all
+of these facts before returning:
 
 1. Exactly one parent was resolved, represented by one `parentId`.
-2. That parent is associated with the exact input `designAnchor`, byte-for-byte.
+2. That parent has exactly one canonical `Design Anchor` carrier associated with the exact input
+   `designAnchor`, byte-for-byte.
 3. The settled design context is accessible from the returned parent handoff, either through the
    canonical external URL or the returned portable inline context.
 

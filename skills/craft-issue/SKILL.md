@@ -159,7 +159,15 @@ Read `references/issue-craft.md` (already loaded in Stage 4 — re-read only if 
 
 When `craft-tasks` delegates parent handling to `craft-issue`, use the **Delegated Parent Handoff** contract in `references/issue-craft.md`. This is a parent/issue handoff only; it does not re-run HOW decomposition or create task children.
 
-The delegated request must provide the settled design context, the exact canonical `designAnchor`, and, when known, the parent identity. `craft-issue` owns finding the parent or creating, enriching, and associating it according to this skill's existing requirement-stage policy. It must return exactly one verified `parentId`, the exact anchor it verified, and settled design context that the caller can access.
+The delegated request must provide the settled design context, the exact canonical `designAnchor`, and, when known, the parent identity. `craft-issue` owns finding the parent or creating, enriching, and associating it according to this skill's existing requirement-stage policy. It must return exactly one verified `parentId`, the exact anchor it verified, and settled design context that the caller can access. The handoff returns exactly one verified `parentId` after the parent carries one canonical `Design Anchor` carrier.
+
+The canonical carrier is the portable, label-value line shown below. Write these exact bytes on the PM parent before handoff verification:
+
+```text
+**Design Anchor:** `design-anchor: deep-interview:<state.interview_id>`
+```
+
+Include it once in a newly created parent's body, or append it once in a comment when enriching an existing parent whose history has no carrier. A supplied or found parent is still resolved through this same rule. Re-read the parent after the write; if the exact carrier already exists, do not write a second carrier. If the carrier is missing, duplicated, or differs byte-for-byte from the supplied `designAnchor`, stop without a successful handoff. The append-only contract remains in force: never rewrite an existing body.
 
 Do not begin child work when the parent is ambiguous, the identity or anchor does not match, the settled context cannot be re-read and verified, or the operation is interrupted. Stop and return the handoff to `craft-tasks` for recovery. Ordinary requirement-stage calls continue through the normal intake, gather, investigate, record, slice, and write-tail behavior above.
 
