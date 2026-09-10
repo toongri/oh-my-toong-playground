@@ -450,11 +450,11 @@ test_head_red_probe_artifact_prefix_matches_current_session() {
   fi
 }
 
-# All 15 session-keyed forms on disk share one sid: 5 state prefixes + 6
+# All 16 session-keyed forms on disk share one sid: 6 state prefixes + 7
 # session-artifact whitelist prefixes + 4 unclassified/producerless forms.
 # is_current_session must recognize every one of them, including the two
 # double-extension .closed.bak forms and the extensionless block-count form.
-test_is_current_session_recognizes_all_fifteen_forms() {
+test_is_current_session_recognizes_all_sixteen_forms() {
   local sid="form-sid-2"
   local d="$TEST_TMP_DIR"
   mkdir -p "$d/state"
@@ -470,6 +470,7 @@ test_is_current_session_recognizes_all_fifteen_forms() {
   write_state "$d/goal-codereview-$sid.json" "{}"
   write_state "$d/ultragoal-verdict-$sid.json" "{}"
   write_state "$d/ultragoal-codereview-$sid.json" "{}"
+  write_state "$d/task-write-journal-$sid.json" "{}"
   write_state "$d/deep-interview-active-state-$sid.json.closed.bak" "{}"
   write_state "$d/prometheus-state-$sid.json.closed.bak" "{}"
   write_state "$d/handoff-consumed-$sid" "{}"
@@ -484,8 +485,8 @@ test_is_current_session_recognizes_all_fifteen_forms() {
     fi
   done
 
-  if [ "$n" -ne 15 ]; then
-    echo "  ASSERTION FAILED: expected 15 forms to match sid '$sid', got $n"
+  if [ "$n" -ne 16 ]; then
+    echo "  ASSERTION FAILED: expected 16 forms to match sid '$sid', got $n"
     return 1
   fi
 
@@ -1605,6 +1606,72 @@ test_reap_session_artifacts_stale_codex_todo_reaped_without_witness() {
   return 0
 }
 
+# task-write-journal-* is a mtime-only, session-scoped artifact. It must
+# participate in the same live-witness protection and stale cleanup as the
+# other session artifacts.
+test_task_write_journal_live_witness_survives_and_stale_is_reaped() {
+  local d="$TEST_TMP_DIR/omt"
+  mkdir -p "$d"
+
+  local live="$d/task-write-journal-live-journal-73.json"
+  local stale="$d/task-write-journal-stale-journal-74.json"
+  : > "$live"
+  : > "$stale"
+  touch_ago "$live" 25200
+  touch_ago "$stale" 25200
+
+  # A fresh state witness keeps the stale journal for that same session.
+  local witness="$d/goal-state-live-journal-73.json"
+  write_state "$witness" "{\"active\":true}"
+
+  reap_session_artifacts "$d" "__none__" "$NOW" 0 > /dev/null
+
+  if [ ! -f "$live" ]; then
+    echo "  ASSERTION FAILED: a stale task-write journal with a live state witness must survive"
+    return 1
+  fi
+  if [ -f "$stale" ]; then
+    echo "  ASSERTION FAILED: a stale task-write journal without a live witness must be reaped"
+    return 1
+  fi
+  return 0
+}
+
+test_task_write_journal_dry_run_reports_without_deleting() {
+  local d="$TEST_TMP_DIR/omt"
+  mkdir -p "$d"
+  local journal="$d/task-write-journal-dry-run-75.json"
+  : > "$journal"
+  touch_ago "$journal" 25200
+
+  local out
+  out=$(reap_session_artifacts "$d" "__none__" "$NOW" 1)
+  if ! printf '%s\n' "$out" | grep -Fq "$journal"; then
+    echo "  ASSERTION FAILED: dry-run must report a stale task-write journal"
+    return 1
+  fi
+  if [ ! -f "$journal" ]; then
+    echo "  ASSERTION FAILED: dry-run must preserve the task-write journal"
+    return 1
+  fi
+  return 0
+}
+
+test_list_unclassified_ignores_task_write_journal() {
+  local d="$TEST_TMP_DIR"
+  local uuid="c7d8e9f0-1234-4abc-8def-0123456789ab"
+  write_state "$d/task-write-journal-$uuid.json" "{}"
+
+  local out
+  out=$(list_unclassified_session_files "$d")
+  if printf '%s' "$out" | grep -Fq "task-write-journal-$uuid.json"; then
+    echo "  ASSERTION FAILED: managed task-write journal must not be reported as unclassified drift"
+    echo "  got: $out"
+    return 1
+  fi
+  return 0
+}
+
 # =============================================================================
 # Batched-stat restructure (per-file stat fork elimination): fail-open on a
 # silently-omitted batch line, and correct mtime/path splitting for a
@@ -2076,17 +2143,17 @@ test_state_prefixes_exactly_six_managed() {
 # unnoticed by every other test in this file.
 # =============================================================================
 
-test_session_artifact_prefixes_exactly_six_managed() {
+test_session_artifact_prefixes_exactly_seven_managed() {
   local count
   count=$(printf '%s\n' $SESSION_ARTIFACT_PREFIXES | grep -c '.' 2>/dev/null || true)
-  if [ "$count" -ne 6 ]; then
-    echo "  ASSERTION FAILED: SESSION_ARTIFACT_PREFIXES must have exactly 6 entries, found $count"
+  if [ "$count" -ne 7 ]; then
+    echo "  ASSERTION FAILED: SESSION_ARTIFACT_PREFIXES must have exactly 7 entries, found $count"
     echo "  SESSION_ARTIFACT_PREFIXES=$SESSION_ARTIFACT_PREFIXES"
     return 1
   fi
 
   local prefix
-  for prefix in codex-todo- state/block-count- goal-verdict- goal-codereview- ultragoal-verdict- ultragoal-codereview-; do
+  for prefix in codex-todo- state/block-count- goal-verdict- goal-codereview- ultragoal-verdict- ultragoal-codereview- task-write-journal-; do
     local n
     n=$(printf '%s\n' $SESSION_ARTIFACT_PREFIXES | grep -c "^${prefix}\$" 2>/dev/null || true)
     if [ "$n" -ne 1 ]; then
@@ -2200,7 +2267,7 @@ run_test test_is_current_session_matches_ultragoal_filename_sid
 run_test test_is_current_session_sid_quoting_prevents_glob_metachar_false_match_extensionless
 run_test test_is_current_session_sid_quoting_prevents_glob_metachar_false_match_extension_form
 run_test test_head_red_probe_artifact_prefix_matches_current_session
-run_test test_is_current_session_recognizes_all_fifteen_forms
+run_test test_is_current_session_recognizes_all_sixteen_forms
 run_test test_is_current_session_empty_sid_preserves
 run_test test_is_artifact_live_mtime_only_ignores_active_field
 run_test test_is_artifact_live_unreadable_mtime_fails_open
@@ -2237,6 +2304,9 @@ run_test test_reap_session_artifacts_dry_run_preserves_candidate_bytes
 run_test test_reap_session_artifacts_namespaced_block_count_survives_none_lane
 run_test test_reap_session_artifacts_stale_codex_todo_survives_via_fresh_block_count_witness
 run_test test_reap_session_artifacts_stale_codex_todo_reaped_without_witness
+run_test test_task_write_journal_live_witness_survives_and_stale_is_reaped
+run_test test_task_write_journal_dry_run_reports_without_deleting
+run_test test_list_unclassified_ignores_task_write_journal
 run_test test_reap_session_artifacts_batched_stat_omission_fails_open
 run_test test_reap_session_artifacts_space_bearing_dir_path_judged_correctly
 run_test test_list_live_session_ids_space_bearing_dir_witness_pass
@@ -2252,7 +2322,7 @@ run_test test_reap_dead_state_files_rm_failure_not_echoed_and_reported
 run_test test_reap_session_artifacts_rm_failure_not_echoed_and_reported
 run_test test_harmless_conditions_do_not_trip_set_e
 run_test test_state_prefixes_exactly_six_managed
-run_test test_session_artifact_prefixes_exactly_six_managed
+run_test test_session_artifact_prefixes_exactly_seven_managed
 run_test test_ttl_parity_with_state_core_ts
 run_test test_ttl_allowlist_no_stray_literals
 

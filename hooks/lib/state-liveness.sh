@@ -20,7 +20,7 @@ PRETOOL_TRACE_RETENTION_TTL=604800 # 7 days — strict mtime retention boundary
 # not end in `.json`, so it is invisible to `<prefix>*.json`).
 STATE_PREFIXES="goal-state- ultragoal-state- prometheus-state- deep-interview-active-state- qa-state- explain-diff-state-"
 
-# SESSION_ARTIFACT_PREFIXES — the 6 whitelisted session-artifact families
+# SESSION_ARTIFACT_PREFIXES — the 7 whitelisted session-artifact families
 # reap_session_artifacts is allowed to reap. An enumerated whitelist (over a
 # session-id-shaped pattern sweep) trades "a missed future family goes
 # unreaped" against a pattern sweep's power to delete any session-id-shaped
@@ -28,7 +28,7 @@ STATE_PREFIXES="goal-state- ultragoal-state- prometheus-state- deep-interview-ac
 # non-destructive, so it is the safer failure direction for an irreversible
 # delete path. reap_session_artifacts is deliberately NOT `.json`-anchored:
 # state/block-count-* files carry no extension at all.
-SESSION_ARTIFACT_PREFIXES="codex-todo- state/block-count- goal-verdict- goal-codereview- ultragoal-verdict- ultragoal-codereview-"
+SESSION_ARTIFACT_PREFIXES="codex-todo- state/block-count- goal-verdict- goal-codereview- ultragoal-verdict- ultragoal-codereview- task-write-journal-"
 
 # _pretool_trace_stale <file> <now_epoch>
 #
