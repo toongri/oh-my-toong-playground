@@ -85,10 +85,16 @@ describe("부모 처리 위임과 작업 최신화", () => {
 		sectionBetween(craftTasks, "### Parent-resolution gate", "### Existing-child / duplicate gate");
 	test("부모 처리 정책은 craft-issue에 위임한다", () => {
 		expect(parent()).toContain("REQUIRED SUB-SKILL: Use craft-issue");
+		expect(parent()).toContain('Skill(skill: "craft-issue")');
 		expect(parent()).toContain("returned `parentId`");
 		expect(craftTasks).not.toContain("### Settled-parent record shape");
 		expect(craftTasks).not.toContain("one append-only design-handoff comment");
 		expect(craftTasks).not.toContain("parent-only search");
+	});
+	test("craft-issue handoff carries parent, exact anchor, and settled context", () => {
+		expect(parent()).toContain('parentId: "<known parent ID or URL, when available>"');
+		expect(parent()).toContain(`designAnchor: "${DESIGN_ANCHOR}"`);
+		expect(parent()).toContain("settled design context");
 	});
 	test("부모 연결 검증 후에만 자식에 접근한다", () => {
 		expect(craftTasks).toContain("missing or invalid anchor");
@@ -98,10 +104,17 @@ describe("부모 처리 위임과 작업 최신화", () => {
 			lineOf(craftTasks, "### Existing-child / duplicate gate"),
 		);
 	});
-	test("작업의 동일성과 중복 방지를 유지한다", () => {
-		expect(craftTasks).toContain("identity is the exact tuple: anchor + purpose + changed target");
+	test("stable task identity survives mutable purpose and target changes", () => {
+		expect(craftTasks).toContain("verified child ID or a stable task key");
+		expect(craftTasks).toContain("purpose and changed target are mutable");
+		expect(craftTasks).toContain("shared anchor");
+		expect(craftTasks).toContain("a stable-key match remains the same task when either changes");
 		expect(craftTasks).toContain("title alone is insufficient");
 		expect(craftTasks).toContain("create only unmatched gaps");
+	});
+	test("legacy children without stable identity stop as ambiguous", () => {
+		expect(craftTasks).toContain("If the stable key or verified child ID is absent for a legacy task, stop with ambiguity");
+		expect(craftTasks).not.toContain("identity is the exact tuple: anchor + purpose + changed target");
 	});
 	test("기존 작업은 본문을 최신화하고 다른 사람의 기록을 보존한다", () => {
 		expect(craftTasks).toContain("update the existing task body in place");

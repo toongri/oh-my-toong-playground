@@ -141,7 +141,15 @@ Accept only the exact canonical value `design-anchor: deep-interview:<state.inte
 
 ### Parent-resolution gate
 
-**REQUIRED SUB-SKILL: Use craft-issue** whenever an issue or parent needs handling, including finding, creating, supplementing, or updating it. Pass the known parent identity (if any), exact `designAnchor`, and settled design context. craft-issue owns the handling policy and record shape; use its current instructions.
+**REQUIRED SUB-SKILL: Use craft-issue** whenever an issue or parent needs handling, including finding, creating, supplementing, or updating it. Invoke the repository canonical chained skill literally with `Skill(skill: "craft-issue")`. Carry this handoff to it:
+
+```text
+parentId: "<known parent ID or URL, when available>"
+designAnchor: "design-anchor: deep-interview:<state.interview_id>"
+settledContext: "<settled design context, inline or canonical external URL>"
+```
+
+Include `parentId` when known, preserve the exact `designAnchor`, and pass the settled design context. craft-issue owns the handling policy and record shape; use its current instructions.
 
 Before reading the child tree, re-read the returned `parentId` and verify that it identifies one parent associated with the exact `designAnchor` and accessible settled context. An already verified handoff needs no redundant parent write. Any ambiguity, mismatch, failure, or interruption stops child processing; return the issue/parent handling to craft-issue. Every child uses that verified `parentId`.
 
@@ -151,7 +159,7 @@ The local spec path is input-only. Outgoing bodies, comments, and delegated writ
 
 After the parent-resolution gate, and before any child create, read the verified parent's current child tree and use the organized-tree pattern: **validate → update → gap-fill**.
 
-- Match each intended task to an existing child by this rule: **identity is the exact tuple: anchor + purpose + changed target**; **title alone is insufficient**. A child that cannot prove the exact anchor is not a match; treat a possible legacy match as an ambiguity and stop rather than creating a replacement.
+- Match each intended task to an existing child by a verified child ID or a stable task key carried through the handoff together with the shared anchor. **purpose and changed target are mutable work-definition fields, not identity fields**; a stable-key match remains the same task when either changes. **title alone is insufficient.** If the stable key or verified child ID is absent for a legacy task, stop with ambiguity rather than creating a replacement. A child that cannot prove the shared anchor is not a match.
 - **Every child carries the same anchor and `parentId`** through the native parent relation. For matched children, update the existing task body in place using Task maintenance below.
 - For gaps, create only unmatched gaps that are genuine coverage gaps. If a match is ambiguous, stop and surface the ambiguity instead of creating.
 - After each write, re-read and verify its result before continuing. After an interruption or failure, re-read the current child tree and comments, rematch, and complete only the missing writes. Verify the body, relations, and required change comment before declaring a task updated; a successful body write alone is not completion when its comment is missing. Reuse the recorded change context on recovery and do not duplicate an existing comment. A failed re-read stops further writes.
