@@ -13,6 +13,7 @@ import {
 	updatePrepare,
 	journalPath,
 	listPending,
+	receiptAck,
 } from "./task-write-journal";
 
 const omtDir = join(process.cwd(), ".tmp-task-write-journal-test");
@@ -62,8 +63,8 @@ describe("task write journal", () => {
 			identityComment: canonicalComment,
 		});
 		expect(complete.state).toBe("complete");
-		expect(existsSync(journalPath(sid))).toBe(false);
-		expect(() => getIntent(prepared.createIntentId)).toThrow(`Unknown intent: ${prepared.createIntentId}`);
+		expect(existsSync(journalPath(sid))).toBe(true);
+		expect(getIntent(prepared.createIntentId).state).toBe("complete");
 	});
 
 	test("completes a Linear-native payload with description and multiple blockedBy relations", () => {
@@ -223,8 +224,8 @@ describe("task write journal", () => {
 		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload: { parentId, designAnchor: anchor } });
 		const reconciled = manualReconciliation(prepared.createIntentId, "PM response was lost");
 		expect(reconciled.state).toBe("manual-reconciliation-required");
-		expect(existsSync(journalPath(sid))).toBe(false);
-		expect(() => getIntent(prepared.createIntentId)).toThrow(`Unknown intent: ${prepared.createIntentId}`);
+		expect(existsSync(journalPath(sid))).toBe(true);
+		expect(getIntent(prepared.createIntentId).state).toBe("manual-reconciliation-required");
 	});
 
 	test("removes the journal when completing its only intent while returning the terminal result", () => {
@@ -235,7 +236,7 @@ describe("task write journal", () => {
 			childId: "child-123", parentId, designAnchor: anchor, creationPayload: prepared.creationPayload, identityComment: prepared.identityComment,
 		});
 		expect(complete.state).toBe("complete");
-		expect(existsSync(journalPath(sid))).toBe(false);
+		expect(existsSync(journalPath(sid))).toBe(true);
 		expect(readdirSync(omtDir).some((name) => name.includes(".tmp."))).toBe(false);
 	});
 
@@ -251,10 +252,11 @@ describe("task write journal", () => {
 		const after = JSON.parse(readFileSync(journalPath(sid), "utf8")) as { version: number; intents: unknown[] };
 		expect(result.state).toBe("manual-reconciliation-required");
 		expect(after.version).toBe(before.version);
-		expect(after.intents).toEqual([before.intents[1]]);
+		expect(after.intents).toHaveLength(2);
+		expect(after.intents[0]).toMatchObject({ ...before.intents[0] as object, state: "manual-reconciliation-required", reason: "resolved" });
 		expect(after.intents).toContainEqual(pending);
-		expect(readFileSync(journalPath(sid), "utf8")).not.toContain(terminal.createIntentId);
-		expect(readFileSync(journalPath(sid), "utf8")).not.toContain("manual-reconciliation-required");
+		expect(readFileSync(journalPath(sid), "utf8")).toContain(terminal.createIntentId);
+		expect(readFileSync(journalPath(sid), "utf8")).toContain("manual-reconciliation-required");
 	});
 
 	test("update prepared -> mutation-written -> complete preserves delta and comment", () => {
@@ -269,8 +271,8 @@ describe("task write journal", () => {
 			body: after.body, relations: after.relations, changeComment: "결정 변경",
 		});
 		expect(complete.state).toBe("complete");
-		expect(existsSync(journalPath(sid))).toBe(false);
-		expect(() => getIntent(prepared.updateIntentId)).toThrow(`Unknown intent: ${prepared.updateIntentId}`);
+		expect(existsSync(journalPath(sid))).toBe(true);
+		expect(getIntent(prepared.updateIntentId).state).toBe("complete");
 	});
 
 	test("rejects missing or mismatched completion verification", () => {
@@ -434,10 +436,12 @@ describe("task write journal", () => {
 		process.env.OMT_SESSION_ID = "another-session";
 		const third = createPrepare({ parentId, designAnchor: anchor, creationPayload: { body: "c", relations: [] } });
 		const pending = listPending();
-		expect(pending.map((entry) => {
+		const ids = pending.map((entry) => {
 			if ("error" in entry) throw new Error(entry.error);
 			return entry.intentId;
-		})).toEqual([third.createIntentId, second.createIntentId]);
+		});
+		expect(ids[0]).toBe(third.createIntentId);
+		expect(ids.slice(1)).toEqual([first.createIntentId, second.createIntentId].sort());
 	});
 
 	test("reports malformed matching journals and rejects unsafe explicit sessions", () => {
@@ -485,5 +489,53 @@ describe("task write journal", () => {
 			input: JSON.stringify({ childId: "child-cli", parentId, designAnchor: anchor, creationPayload: { ...prepared.creationPayload }, identityComment: prepared.identityComment }), env, encoding: "utf8",
 		})) as { state: string };
 		expect(complete.state).toBe("complete");
+	});
+
+	test("retains terminal create receipt and acknowledges it by exact identity", () => {
+		setup();
+		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload: { body: "b", relations: [] } });
+		createChild(prepared.createIntentId, { childId: "child-receipt", parentId, designAnchor: anchor });
+		const complete = createComplete(prepared.createIntentId, { childId: "child-receipt", parentId, designAnchor: anchor, creationPayload: prepared.creationPayload, identityComment: prepared.identityComment });
+		expect(complete.state).toBe("complete");
+		expect(getIntent(prepared.createIntentId).childId).toBe("child-receipt");
+		expect(listPending()).toEqual([{ sourceSessionId: sid, intentId: prepared.createIntentId, kind: "create", state: "complete", parentId, designAnchor: anchor, childId: "child-receipt", taskKey: prepared.taskKey }]);
+		receiptAck(prepared.createIntentId, { taskKey: prepared.taskKey, childId: "child-receipt", parentId, designAnchor: anchor });
+		expect(() => getIntent(prepared.createIntentId)).toThrow();
+		expect(existsSync(journalPath(sid))).toBe(false);
+	});
+
+	test("complete replay is idempotent only with full matching association", () => {
+		setup();
+		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload: { body: "b", relations: [] } });
+		createChild(prepared.createIntentId, { childId: "child-replay", parentId, designAnchor: anchor });
+		const verification = { childId: "child-replay", parentId, designAnchor: anchor, creationPayload: prepared.creationPayload, identityComment: prepared.identityComment };
+		createComplete(prepared.createIntentId, verification);
+		expect(createComplete(prepared.createIntentId, verification).state).toBe("complete");
+		expect(() => createComplete(prepared.createIntentId, { ...verification, childId: "other" })).toThrow();
+	});
+
+	test("ack preserves unrelated terminal and nonterminal intents and supports update", () => {
+		setup();
+		const first = createPrepare({ parentId, designAnchor: anchor, creationPayload: { body: "a", relations: [] } });
+		const update = updatePrepare({ childId: "child-u", parentId, designAnchor: anchor, before: {}, after: { body: "new", relations: [] }, changeComment: "why" });
+		manualReconciliation(first.createIntentId, "recover");
+		updateMutationWritten(update.updateIntentId, { childId: "child-u", parentId, designAnchor: anchor });
+		updateComplete(update.updateIntentId, { childId: "child-u", parentId, designAnchor: anchor, body: "new", relations: [], changeComment: "why" });
+		expect(() => receiptAck(update.updateIntentId, { childId: "wrong", parentId, designAnchor: anchor })).toThrow();
+		receiptAck(first.createIntentId, { taskKey: first.taskKey, parentId, designAnchor: anchor });
+		expect(getIntent(update.updateIntentId).state).toBe("complete");
+		receiptAck(update.updateIntentId, { childId: "child-u", parentId, designAnchor: anchor });
+		expect(existsSync(journalPath(sid))).toBe(false);
+	});
+
+	test("CLI receipt-ack removes a terminal receipt", () => {
+		setup();
+		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload: { body: "b", relations: [] } });
+		manualReconciliation(prepared.createIntentId, "recover");
+		const output = execFileSync("bun", [resolve("skills/craft-tasks/scripts/task-write-journal.ts"), "receipt-ack", prepared.createIntentId], {
+			input: JSON.stringify({ parentId, designAnchor: anchor, taskKey: prepared.taskKey }), env: { ...process.env, OMT_DIR: omtDir, OMT_SESSION_ID: sid }, encoding: "utf8",
+		});
+		expect(JSON.parse(output)).toMatchObject({ state: "manual-reconciliation-required", createIntentId: prepared.createIntentId });
+		expect(existsSync(journalPath(sid))).toBe(false);
 	});
 });

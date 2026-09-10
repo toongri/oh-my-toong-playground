@@ -77,6 +77,7 @@ export type PendingEntry = {
 	parentId: string;
 	designAnchor: string;
 	childId?: string;
+	taskKey?: string;
 } | {
 	sourceSessionId: string;
 	error: string;
@@ -151,15 +152,6 @@ function writeJournal(journal: Journal, sessionId = resolveSessionIdOrThrow()): 
 		try { unlinkSync(tmp); } catch { /* best effort */ }
 		throw error;
 	}
-}
-
-function compactJournal(journal: Journal, sessionId = resolveSessionIdOrThrow()): void {
-	const remaining = journal.intents.filter((intent) => !TERMINAL_STATES.has(intent.state));
-	if (remaining.length === 0) {
-		unlinkSync(journalPath(sessionId));
-		return;
-	}
-	writeJournal({ version: journal.version, intents: remaining }, sessionId);
 }
 
 function parseOwnerPid(raw: string): number | undefined {
@@ -303,8 +295,7 @@ function replace<T extends Intent>(id: string, next: T, sessionId?: string): T {
 		found.journal.intents[found.index] = next.state === "manual-reconciliation-required"
 			? { ...found.intent, state: next.state, reason: next.reason }
 			: next;
-		if (TERMINAL_STATES.has(next.state)) compactJournal(found.journal, sessionId);
-		else writeJournal(found.journal, sessionId);
+		writeJournal(found.journal, sessionId);
 		return next;
 	});
 }
@@ -348,7 +339,7 @@ export interface CreateCompleteVerification extends Association {
 
 export function createComplete(intentId: string, verification: unknown, sessionId?: string): CreateIntent {
 	const found = findIntent(intentId, sessionId);
-	if (found.intent.kind !== "create" || found.intent.state !== "child-created") throw new Error("Invalid create-complete transition");
+	if (found.intent.kind !== "create" || (found.intent.state !== "child-created" && found.intent.state !== "complete")) throw new Error("Invalid create-complete transition");
 	if (!record(verification)) throw new Error("Expected a JSON object");
 	verifyAssociation(found.intent, verification);
 	const payload = found.intent.creationPayload;
@@ -358,6 +349,7 @@ export function createComplete(intentId: string, verification: unknown, sessionI
 	}
 	if (!isDeepStrictEqual(exact(verification.creationPayload, "creationPayload"), payload)) throw new Error("creationPayload verification mismatch");
 	if (!isDeepStrictEqual(exact(verification.identityComment, "identityComment"), found.intent.identityComment)) throw new Error("identityComment verification mismatch");
+	if (found.intent.state === "complete") return found.intent;
 	return replace(intentId, { ...found.intent, state: "complete" }, sessionId);
 }
 
@@ -413,19 +405,26 @@ function pendingEntry(sourceSessionId: string, intent: Intent): PendingIntentEnt
 		const parentId = nonblank(intent.parentId, "parentId");
 		const designAnchor = nonblank(intent.designAnchor, "designAnchor");
 		if (!TERMINAL_STATES.has(intent.state) && !new Set<JournalState>(["prepared", "child-created"]).has(intent.state)) throw new Error("Malformed task-write journal state");
-		if (TERMINAL_STATES.has(intent.state)) return undefined;
 		const entry: PendingIntentEntry = { sourceSessionId, intentId, kind: intent.kind, state: intent.state, parentId, designAnchor };
 		if (intent.childId !== undefined) entry.childId = nonblank(intent.childId, "childId");
+		if (TERMINAL_STATES.has(intent.state)) {
+			entry.taskKey = nonblank(intent.taskKey, "taskKey");
+		}
 		return entry;
 	}
 	if (intent.kind !== "update") throw new Error("Malformed task-write journal kind");
 	const intentId = nonblank(intent.updateIntentId, "updateIntentId");
 	if (!TERMINAL_STATES.has(intent.state) && !new Set<JournalState>(["prepared", "mutation-written"]).has(intent.state)) throw new Error("Malformed task-write journal state");
 	if (TERMINAL_STATES.has(intent.state)) {
-		nonblank(intent.childId, "childId");
-		nonblank(intent.parentId, "parentId");
-		nonblank(intent.designAnchor, "designAnchor");
-		return undefined;
+		return {
+			sourceSessionId,
+			intentId,
+			kind: intent.kind,
+			state: intent.state,
+			parentId: nonblank(intent.parentId, "parentId"),
+			designAnchor: nonblank(intent.designAnchor, "designAnchor"),
+			childId: nonblank(intent.childId, "childId"),
+		};
 	}
 	return {
 		sourceSessionId,
@@ -436,6 +435,28 @@ function pendingEntry(sourceSessionId: string, intent: Intent): PendingIntentEnt
 		designAnchor: nonblank(intent.designAnchor, "designAnchor"),
 		childId: nonblank(intent.childId, "childId"),
 	};
+}
+
+export function receiptAck(intentId: string, verification: unknown, sessionId?: string): Intent {
+	return withJournalLock(sessionId, () => {
+		const found = findIntent(intentId, sessionId);
+		if (!TERMINAL_STATES.has(found.intent.state)) throw new Error("Cannot acknowledge a nonterminal intent");
+		if (!record(verification)) throw new Error("Expected a JSON object");
+		const { parentId, designAnchor } = validateAnchor(verification.parentId, verification.designAnchor);
+		if (found.intent.parentId !== parentId || found.intent.designAnchor !== designAnchor) throw new Error("Parent or designAnchor mismatch");
+		if (found.intent.kind === "create") {
+			if (verification.taskKey !== found.intent.taskKey) throw new Error("taskKey verification mismatch");
+			const storedHasChild = found.intent.childId !== undefined;
+			const verifiedHasChild = Object.prototype.hasOwnProperty.call(verification, "childId");
+			if (storedHasChild !== verifiedHasChild || (storedHasChild && verification.childId !== found.intent.childId)) throw new Error("childId verification mismatch");
+		} else if (verification.childId !== found.intent.childId) {
+			throw new Error("childId verification mismatch");
+		}
+		const remaining = found.journal.intents.filter((_intent, index) => index !== found.index);
+		if (remaining.length === 0) unlinkSync(journalPath(sessionId));
+		else writeJournal({ version: found.journal.version, intents: remaining }, sessionId);
+		return found.intent;
+	});
 }
 
 export function listPending(): PendingEntry[] {
@@ -509,6 +530,8 @@ async function main(): Promise<void> {
 		const input = await readStdin();
 		if (!record(input)) throw new Error("Expected a JSON object");
 		result = manualReconciliation(id ?? "", input.reason, sourceSessionId);
+	} else if (command === "receipt-ack") {
+		result = receiptAck(id ?? "", await readStdin(), sourceSessionId);
 	} else if (command === "get") {
 		result = getIntent(id ?? "", sourceSessionId);
 	} else {
