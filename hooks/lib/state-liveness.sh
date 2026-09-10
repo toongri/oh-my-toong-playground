@@ -20,7 +20,7 @@ PRETOOL_TRACE_RETENTION_TTL=604800 # 7 days — strict mtime retention boundary
 # not end in `.json`, so it is invisible to `<prefix>*.json`).
 STATE_PREFIXES="goal-state- ultragoal-state- prometheus-state- deep-interview-active-state- qa-state- explain-diff-state-"
 
-# SESSION_ARTIFACT_PREFIXES — the 7 whitelisted session-artifact families
+# SESSION_ARTIFACT_PREFIXES — the 6 whitelisted session-artifact families
 # reap_session_artifacts is allowed to reap. An enumerated whitelist (over a
 # session-id-shaped pattern sweep) trades "a missed future family goes
 # unreaped" against a pattern sweep's power to delete any session-id-shaped
@@ -28,7 +28,7 @@ STATE_PREFIXES="goal-state- ultragoal-state- prometheus-state- deep-interview-ac
 # non-destructive, so it is the safer failure direction for an irreversible
 # delete path. reap_session_artifacts is deliberately NOT `.json`-anchored:
 # state/block-count-* files carry no extension at all.
-SESSION_ARTIFACT_PREFIXES="codex-todo- state/block-count- goal-verdict- goal-codereview- ultragoal-verdict- ultragoal-codereview- task-write-journal-"
+SESSION_ARTIFACT_PREFIXES="codex-todo- state/block-count- goal-verdict- goal-codereview- ultragoal-verdict- ultragoal-codereview-"
 
 # _pretool_trace_stale <file> <now_epoch>
 #
@@ -1287,9 +1287,15 @@ STAT_LINES
 #     that lane exactly — a non-`.md` session-ledger-* form (e.g. an
 #     interrupted append's `.tmp`) is reaped by no lane and must surface as
 #     drift, not go silently unclassified.
+#   - `task-write-journal-<safe-session>.json` is recognized as a managed
+#     recovery record even though it is intentionally absent from
+#     SESSION_ARTIFACT_PREFIXES. Pending and malformed journals are preserved
+#     for explicit recovery; recognition here grants no deletion authority.
+#     The safe-session shape mirrors isSafeSessionId (`[A-Za-z0-9_-]+`) so
+#     oddly named forms remain visible as drift.
 list_unclassified_session_files() {
   local dir="$1"
-  local f base relpath prefix classified
+  local f base relpath prefix classified journal_sid
 
   for f in "$dir"/* "$dir"/state/*; do
     [ -f "$f" ] || continue
@@ -1334,6 +1340,20 @@ list_unclassified_session_files() {
     if [ "$classified" = "0" ]; then
       case "$relpath" in
         session-ledger-*.md) classified=1 ;;
+      esac
+    fi
+
+    if [ "$classified" = "0" ]; then
+      # Use a regex for the whole basename: a shell `*` would also admit
+      # dots and other unsafe characters inside the session id.
+      case "$relpath" in
+        task-write-journal-*.json)
+          if printf '%s\n' "$relpath" | grep -Eq '^task-write-journal-[A-Za-z0-9_-]+\.json$'; then
+            journal_sid="${relpath#task-write-journal-}"
+            journal_sid="${journal_sid%.json}"
+            [ "${#journal_sid}" -le 200 ] && classified=1
+          fi
+          ;;
       esac
     fi
 

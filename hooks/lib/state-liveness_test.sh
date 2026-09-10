@@ -1606,58 +1606,52 @@ test_reap_session_artifacts_stale_codex_todo_reaped_without_witness() {
   return 0
 }
 
-# task-write-journal-* is a mtime-only, session-scoped artifact. It must
-# participate in the same live-witness protection and stale cleanup as the
-# other session artifacts.
-test_task_write_journal_live_witness_survives_and_stale_is_reaped() {
+# Pending task journals are recovery records, so generic mtime cleanup must
+# preserve them even when stale and regardless of live session witnesses.
+test_task_write_journal_stale_prepared_survives_execute_cleanup() {
   local d="$TEST_TMP_DIR/omt"
   mkdir -p "$d"
 
-  local live="$d/task-write-journal-live-journal-73.json"
-  local stale="$d/task-write-journal-stale-journal-74.json"
-  : > "$live"
-  : > "$stale"
-  touch_ago "$live" 25200
-  touch_ago "$stale" 25200
-
-  # A fresh state witness keeps the stale journal for that same session.
-  local witness="$d/goal-state-live-journal-73.json"
-  write_state "$witness" "{\"active\":true}"
+  local journal="$d/task-write-journal-stale-journal-74.json"
+  write_state "$journal" '{"version":1,"intents":[{"state":"prepared"}]}'
+  touch_ago "$journal" 25200
 
   reap_session_artifacts "$d" "__none__" "$NOW" 0 > /dev/null
 
-  if [ ! -f "$live" ]; then
-    echo "  ASSERTION FAILED: a stale task-write journal with a live state witness must survive"
-    return 1
-  fi
-  if [ -f "$stale" ]; then
-    echo "  ASSERTION FAILED: a stale task-write journal without a live witness must be reaped"
+  if [ ! -f "$journal" ]; then
+    echo "  ASSERTION FAILED: stale prepared task-write journal must survive generic cleanup"
     return 1
   fi
   return 0
 }
 
-test_task_write_journal_dry_run_reports_without_deleting() {
+test_task_write_journal_dry_run_preserves_and_does_not_report_candidate() {
   local d="$TEST_TMP_DIR/omt"
   mkdir -p "$d"
   local journal="$d/task-write-journal-dry-run-75.json"
-  : > "$journal"
+  write_state "$journal" '{"version":1,"intents":[{"state":"prepared"}]}'
+  local before
+  before=$(sed -n '1p' "$journal")
   touch_ago "$journal" 25200
 
   local out
   out=$(reap_session_artifacts "$d" "__none__" "$NOW" 1)
-  if ! printf '%s\n' "$out" | grep -Fq "$journal"; then
-    echo "  ASSERTION FAILED: dry-run must report a stale task-write journal"
+  if printf '%s\n' "$out" | grep -Fq "$journal"; then
+    echo "  ASSERTION FAILED: dry-run must not report a task-write journal as generic deletion candidate"
     return 1
   fi
   if [ ! -f "$journal" ]; then
     echo "  ASSERTION FAILED: dry-run must preserve the task-write journal"
     return 1
   fi
+  if [ "$(sed -n '1p' "$journal")" != "$before" ]; then
+    echo "  ASSERTION FAILED: dry-run must leave task-write journal bytes unchanged"
+    return 1
+  fi
   return 0
 }
 
-test_list_unclassified_ignores_task_write_journal() {
+test_list_unclassified_recognizes_uuid_task_write_journal() {
   local d="$TEST_TMP_DIR"
   local uuid="c7d8e9f0-1234-4abc-8def-0123456789ab"
   write_state "$d/task-write-journal-$uuid.json" "{}"
@@ -1667,6 +1661,54 @@ test_list_unclassified_ignores_task_write_journal() {
   if printf '%s' "$out" | grep -Fq "task-write-journal-$uuid.json"; then
     echo "  ASSERTION FAILED: managed task-write journal must not be reported as unclassified drift"
     echo "  got: $out"
+    return 1
+  fi
+  return 0
+}
+
+test_list_unclassified_reports_malformed_task_write_journal() {
+  local d="$TEST_TMP_DIR"
+  local uuid="c7d8e9f0-1234-4abc-8def-0123456789ab"
+  write_state "$d/task-write-journal-$uuid.tmp" "{}"
+  write_state "$d/task-write-journal-$uuid.json.closed" "{}"
+  write_state "$d/task-write-journal-$uuid.with-dot.json" "{}"
+
+  local out
+  out=$(list_unclassified_session_files "$d")
+  if ! printf '%s' "$out" | grep -Fq "task-write-journal-$uuid.tmp"; then
+    echo "  ASSERTION FAILED: malformed task-write journal must remain visible as drift"
+    return 1
+  fi
+  if ! printf '%s' "$out" | grep -Fq "task-write-journal-$uuid.json.closed"; then
+    echo "  ASSERTION FAILED: oddly named task-write journal must remain visible as drift"
+    return 1
+  fi
+  if ! printf '%s' "$out" | grep -Fq "task-write-journal-$uuid.with-dot.json"; then
+    echo "  ASSERTION FAILED: task journal with unsafe dot in session id must remain visible as drift"
+    return 1
+  fi
+  return 0
+}
+
+test_list_unclassified_enforces_safe_session_id_length_limit() {
+  local d="$TEST_TMP_DIR"
+  local id_200="" id_201="" i
+  local uuid_tail="c7d8e9f0-1234-4abc-8def-0123456789ab"
+  for i in $(seq 1 163); do id_200="${id_200}a"; done
+  id_200="${id_200}-${uuid_tail}"
+  for i in $(seq 1 164); do id_201="${id_201}a"; done
+  id_201="${id_201}-${uuid_tail}"
+  write_state "$d/task-write-journal-$id_200.json" "{}"
+  write_state "$d/task-write-journal-$id_201.json" "{}"
+
+  local out
+  out=$(list_unclassified_session_files "$d")
+  if printf '%s\n' "$out" | grep -Fxq "$d/task-write-journal-$id_200.json"; then
+    echo "  ASSERTION FAILED: a 200-character safe session id must be recognized"
+    return 1
+  fi
+  if ! printf '%s\n' "$out" | grep -Fxq "$d/task-write-journal-$id_201.json"; then
+    echo "  ASSERTION FAILED: a 201-character safe session id must remain unclassified drift"
     return 1
   fi
   return 0
@@ -2143,17 +2185,17 @@ test_state_prefixes_exactly_six_managed() {
 # unnoticed by every other test in this file.
 # =============================================================================
 
-test_session_artifact_prefixes_exactly_seven_managed() {
+test_session_artifact_prefixes_exactly_six_managed() {
   local count
   count=$(printf '%s\n' $SESSION_ARTIFACT_PREFIXES | grep -c '.' 2>/dev/null || true)
-  if [ "$count" -ne 7 ]; then
-    echo "  ASSERTION FAILED: SESSION_ARTIFACT_PREFIXES must have exactly 7 entries, found $count"
+  if [ "$count" -ne 6 ]; then
+    echo "  ASSERTION FAILED: SESSION_ARTIFACT_PREFIXES must have exactly 6 entries, found $count"
     echo "  SESSION_ARTIFACT_PREFIXES=$SESSION_ARTIFACT_PREFIXES"
     return 1
   fi
 
   local prefix
-  for prefix in codex-todo- state/block-count- goal-verdict- goal-codereview- ultragoal-verdict- ultragoal-codereview- task-write-journal-; do
+  for prefix in codex-todo- state/block-count- goal-verdict- goal-codereview- ultragoal-verdict- ultragoal-codereview-; do
     local n
     n=$(printf '%s\n' $SESSION_ARTIFACT_PREFIXES | grep -c "^${prefix}\$" 2>/dev/null || true)
     if [ "$n" -ne 1 ]; then
@@ -2161,6 +2203,11 @@ test_session_artifact_prefixes_exactly_seven_managed() {
       return 1
     fi
   done
+
+  if printf '%s\n' $SESSION_ARTIFACT_PREFIXES | grep -q '^task-write-journal-$'; then
+    echo "  ASSERTION FAILED: task-write-journal- must not be a generic reaper prefix"
+    return 1
+  fi
 
   return 0
 }
@@ -2304,9 +2351,11 @@ run_test test_reap_session_artifacts_dry_run_preserves_candidate_bytes
 run_test test_reap_session_artifacts_namespaced_block_count_survives_none_lane
 run_test test_reap_session_artifacts_stale_codex_todo_survives_via_fresh_block_count_witness
 run_test test_reap_session_artifacts_stale_codex_todo_reaped_without_witness
-run_test test_task_write_journal_live_witness_survives_and_stale_is_reaped
-run_test test_task_write_journal_dry_run_reports_without_deleting
-run_test test_list_unclassified_ignores_task_write_journal
+run_test test_task_write_journal_stale_prepared_survives_execute_cleanup
+run_test test_task_write_journal_dry_run_preserves_and_does_not_report_candidate
+run_test test_list_unclassified_recognizes_uuid_task_write_journal
+run_test test_list_unclassified_reports_malformed_task_write_journal
+run_test test_list_unclassified_enforces_safe_session_id_length_limit
 run_test test_reap_session_artifacts_batched_stat_omission_fails_open
 run_test test_reap_session_artifacts_space_bearing_dir_path_judged_correctly
 run_test test_list_live_session_ids_space_bearing_dir_witness_pass
@@ -2322,7 +2371,7 @@ run_test test_reap_dead_state_files_rm_failure_not_echoed_and_reported
 run_test test_reap_session_artifacts_rm_failure_not_echoed_and_reported
 run_test test_harmless_conditions_do_not_trip_set_e
 run_test test_state_prefixes_exactly_six_managed
-run_test test_session_artifact_prefixes_exactly_seven_managed
+run_test test_session_artifact_prefixes_exactly_six_managed
 run_test test_ttl_parity_with_state_core_ts
 run_test test_ttl_allowlist_no_stray_literals
 
