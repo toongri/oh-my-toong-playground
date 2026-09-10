@@ -73,6 +73,8 @@ flowchart LR
 
 Each arrow represents a file or PM-tool handoff. In Phase 5, deep-interview first checks the spec's output shape. When team-facing task tickets are requested, it recommends craft-tasks as the post-design task-ticket stage, which decomposes the settled design into shareable child tickets. When team-facing task tickets are not requested, it recommends ultragoal when there is exactly one active topology component and prometheus otherwise, while offering the non-recommended route as an explicit override. If prometheus is selected, it produces a human-readable plan and hands it to ultragoal; ultragoal dispatches stories to sisyphus one at a time, and sisyphus closes out with verified code changes. Skipping a stage still works, but the clarity of each stage determines the quality of the next.
 
+craft-tasks keeps task bodies current and records the trigger, decision basis, and impact of meaningful changes in comments. It delegates issue and parent handling to craft-issue without duplicating that policy.
+
 ---
 
 ## 3. deep-interview — Socratic Deep Interview

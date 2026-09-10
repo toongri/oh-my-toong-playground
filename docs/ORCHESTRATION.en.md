@@ -21,7 +21,7 @@ Is it a quick fix or simple task?
   |-- NO  -> Are the requirements clear?
               |-- NO  -> /deep-interview to crystallize a spec
                           |-- Need shareable, trackable implementation task tickets?
-                                |-- YES -> /craft-tasks to resolve/enrich the parent and materialize child tickets
+                                |-- YES -> /craft-tasks to create/update tasks (parent handling via craft-issue)
                                           -> /prometheus only when a task needs its own plan
                                           -> /ultragoal -> /sisyphus
                                 |-- NO  -> /ultragoal if exactly one topology component is active
@@ -45,7 +45,7 @@ Oh-My-Toong solves this by clearly separating roles:
 | Role | Agent | Responsibility |
 |------|-------|----------------|
 | **Definition** | deep-interview | Resolves ambiguity into a spec, NEVER writes code |
-| **Task ticketing** | craft-tasks | Decomposes a settled design into shareable child task tickets, resolving and enriching the parent before creation |
+| **Task ticketing** | craft-tasks | Creates and updates child tasks from a settled design; delegates parent handling to craft-issue |
 | **Planning** | prometheus | Strategic planning, NEVER writes code |
 | **Story execution** | ultragoal | Sequentially dispatches plan stories to sisyphus |
 | **Execution** | sisyphus | Orchestrates via delegation, NEVER works alone |
@@ -72,7 +72,7 @@ flowchart TD
     end
 
     subgraph Task Ticket Phase
-        CraftTasks --> Parent["Resolve and enrich<br/>verified parent"]
+        CraftTasks --> Parent["Handle parent<br/>via craft-issue"]
         Parent --> ChildTickets["PM tool: materialize<br/>child task tickets"]
         ChildTickets --> TaskPlan{Plan needed<br/>per task?}
     end
@@ -115,7 +115,7 @@ flowchart TD
 - **Role**: Decomposes a settled design into shareable, trackable implementation task tickets for the team
 - **Constraint**: Use only after intent, approach, invariants, and boundary are settled. If you only need an AI-execution plan, use `prometheus` instead.
 - **Output**: Child task tickets materialized in the PM tool under a verified parent
-- **Workflow**: Uses the deep-interview spec to resolve and enrich the parent, validates existing child tickets, then materializes only the missing implementation tasks. Use `/prometheus` optionally per generated task when it needs a separate AI-execution plan, then execute through `/ultragoal` -> `/sisyphus`.
+- **Workflow**: Uses the deep-interview spec to delegate parent handling to craft-issue, verifies the returned parent association, updates existing task bodies, and creates only missing tasks. Meaningful changes receive a comment explaining the trigger, decision basis, and impact; typos need only a body correction. Open decisions are reflected after settlement. Use `/prometheus` optionally per generated task when it needs a separate AI-execution plan, then execute through `/ultragoal` -> `/sisyphus`.
 
 ### prometheus (The Planner)
 
@@ -187,11 +187,11 @@ When requirements are unclear, crystallize a spec with `/deep-interview` before 
 
 1. **One question at a time, without a count limit**: Settle prerequisites and follow the branches, counterexamples, and contradictions each answer reveals.
 2. **Closure audit**: Scores guide investigation. Resolve decisions that could change implementation, examine evidence/failure scenarios/residual assumptions, and confirm shared understanding. Respect a stop immediately; label early delivery DRAFT.
-3. **Spec finalization and route selection**: Save to `$OMT_DIR/deep-interview/{slug}.md`. In Phase 5, recommend `/craft-tasks` when the spec calls for shareable, trackable implementation task tickets. `craft-tasks` resolves and enriches the verified parent and materializes child task tickets; use `/prometheus` only when an individual task needs an AI-execution plan. AI execution then runs through `/ultragoal` -> `/sisyphus`. When the spec only needs AI execution and no team-facing task tickets, preserve the existing route: recommend `/ultragoal` for exactly one active topology component, or `/prometheus` -> `/ultragoal` -> `/sisyphus` otherwise. Present the non-recommended skill as an explicit override.
+3. **Spec finalization and route selection**: Save to `$OMT_DIR/deep-interview/{slug}.md`. In Phase 5, recommend `/craft-tasks` when the spec calls for shareable, trackable implementation task tickets. `craft-tasks` delegates parent handling to craft-issue and creates or updates child task tickets; use `/prometheus` only when an individual task needs an AI-execution plan. AI execution then runs through `/ultragoal` -> `/sisyphus`. When the spec only needs AI execution and no team-facing task tickets, preserve the existing route: recommend `/ultragoal` for exactly one active topology component, or `/prometheus` -> `/ultragoal` -> `/sisyphus` otherwise. Present the non-recommended skill as an explicit override.
 
 ### Phase 1: Planning
 
-When a settled design must become shareable, trackable task tickets, use `/craft-tasks`. It resolves and enriches the parent and materializes child tickets; use `/prometheus` only when an individual task needs an AI-execution plan.
+When a settled design must become shareable, trackable task tickets, use `/craft-tasks`. It delegates parent handling to craft-issue and creates or updates child tickets; use `/prometheus` only when an individual task needs an AI-execution plan.
 
 When requirements are clear and you only need an AI-execution plan, use `/prometheus`:
 
@@ -221,7 +221,7 @@ With a plan ready, `/ultragoal` sequentially dispatches its stories to `/sisyphu
 | Command | Purpose | Output |
 |---------|---------|--------|
 | `/deep-interview <idea>` | Crystallize a spec via ambiguity gating | `$OMT_DIR/deep-interview/{slug}.md` |
-| `/craft-tasks <spec>` | Decompose a settled design into shareable task tickets after resolving and enriching the parent | Parent and child task tickets in the PM tool |
+| `/craft-tasks <spec>` | Create or update tasks from a settled design; delegate parent handling to craft-issue | Child task tickets in the PM tool |
 | `/prometheus <task>` | Create work plan | `~/.omt/{OMT_PROJECT}/plans/*.md` |
 | `/ultragoal` | Sequentially dispatch plan stories to sisyphus | Story-by-story execution progress |
 | `/sisyphus` | Orchestrate execution of a dispatched story | Verified code changes |
@@ -251,7 +251,7 @@ If you find yourself repeatedly clarifying requirements during prometheus, answe
 
 ### 5. Single Plan Principle
 
-Keep one plan file per AI-execution scope. In the team-ticket route, craft-tasks owns the parent and child tickets, while prometheus remains optional per task.
+Keep one plan file per AI-execution scope. In the team-ticket route, craft-issue handles parents and craft-tasks creates and updates task tickets, while prometheus remains optional per task.
 
 ---
 

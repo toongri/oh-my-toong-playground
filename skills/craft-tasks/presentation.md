@@ -4,7 +4,7 @@ The reader is the engineer who will implement or review this task without the de
 
 ## Required template
 
-Keep the three existing sections, in this order:
+Use these three work-definition sections, in this order. On existing tasks, preserve contributor notes, progress, and decisions when updating the affected sections:
 
 | Section | Required content |
 |---|---|
@@ -12,7 +12,7 @@ Keep the three existing sections, in this order:
 | 변경 대상 | Each component's name **and role in this change**, followed by its repository-relative location when known. |
 | 완료 조건 (DoD) | One observable result per item, with its verification method directly below. |
 
-Native parent/dependency fields still own relationships. Shared invariants still live on the settled parent. This contract changes neither task granularity nor scope.
+Native parent/dependency fields still own relationships. Shared design context is resolved through craft-issue. This contract changes neither task granularity nor scope.
 
 ## Example
 

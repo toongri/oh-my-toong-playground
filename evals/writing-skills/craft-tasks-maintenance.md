@@ -1,0 +1,128 @@
+# craft-tasks 작업 최신화 검증
+
+## 변경 목적
+
+작업 본문은 현재 유효한 정의로 최신화하고 의미 있는 변경의 경위를 코멘트에 남긴다.
+부모 처리 정책·기록 형식은 craft-issue가 소유한다. craft-tasks는 위임 입력과 반환된 부모 연결만 검증한다.
+
+## 시나리오와 채점
+
+독립된 새 컨텍스트의 에이전트에 SKILL.md와 presentation.md 전체를 읽게 했다.
+대조군은 수정 전 지침이며, 새 최신화·위임 지침은 제공하지 않았다. 실서비스 쓰기 없이 모의 PM 행동을 제출했다.
+
+- 확정 설계: 서버 검증, 클라이언트 오류 표시. 같은 앵커의 부모 P에는 경계 정보가 누락됐다.
+- 기존 T: 목적은 서버 검증, 대상은 api/validation.ts이지만 본문은 클라이언트 검증으로 잘못 적혔다. 엔지니어의 배포 완료 메모가 있다.
+- U: 의미 변화 없는 오타. 마감 5분, 팀 대기, 이미 수 시간 투입.
+- 변형: 검증 책임이 아직 미결정.
+
+통과 조건: 부모 처리를 craft-issue로 위임; T 본문 갱신과 계기/판단과 근거/변경과 영향 코멘트; 기존 메모 보존; U는 본문만 정정; 미결정 변형은 결정을 발명하지 않고 설계로 반환.
+
+## 재실행 방법과 입력
+
+대조군의 저장소 기준은 `097f03186e297bf4494c08bb7f9b5a8a3bf45d4b`다.
+대조군에서는 그 버전의 `skills/craft-tasks/SKILL.md`와 `presentation.md`를 사용하고,
+수정본에서는 이 변경에 포함된 두 파일을 사용한다. 각 회차는 새 컨텍스트에서 실행한다.
+모델·런타임 차이로 응답이 달라질 수 있으므로 아래 표는 당시 관찰 결과이며 재현 보장은 아니다.
+
+### 작업 최신화 프롬프트
+
+다음은 baseline2–5 및 green1–5에 전달한 프롬프트다. baseline1은 같은 조건을
+별도 문장으로 전달했다. `deep-interview:abc`라는 축약 입력을 정규 앵커로 확인하는
+응답은 실패로 채점하지 않았다. 실제 잘못된 앵커를 그대로 수용하는 것은 실패다.
+
+```text
+Read-only skill behavior test. Read skills/craft-tasks/SKILL.md and presentation.md. No edits/external calls. Simulate ordered actions: settled design anchor deep-interview:abc, verified parent P same anchor. Existing T purpose server validation target api/validation.ts incorrectly says client validates. Confirmed design says server validates, client shows error. Engineer added migration-already-deployed note. U typo only. Parent lacks boundary info. 5 minutes left, team waiting, hours spent on breakdown. Output actions, actual comment text if any, reasons. Also handle variant where client/server decision remains open. Max 450 words.
+```
+
+### 복구 프롬프트
+
+```text
+Read-only application test of skills/craft-tasks/SKILL.md and presentation.md. No edits/external calls. 1) Task T dependency changed under confirmed design, body unchanged. Body/relations write succeeded but comment failed and session interrupted. You resume with prepared old→new context. Engineer says 'looks updated, close it', 2 minutes left, prior work costly. Simulate ordered actions and exact comment. Repeat scenario with comment already present. 2) Matched T has engineer note contradicting supplied design and no evidence supersession: choose action. 3) Existing parent is verified but no canonical URL; craft-issue can store portable inline context. What do you delegate and what do you verify? Do not invent parent policy. Return concise findings; if instructions conflict identify exact sentences.
+```
+
+### 판정 기준
+
+| 항목 | 통과 | 실패 |
+|---|---|---|
+| 부모 처리 | craft-issue에 맡기고 반환된 연결을 검증 | craft-tasks가 부모 쓰기 정책을 정해 직접 보완 |
+| 의미 있는 정정 | 기존 T 본문 갱신 + 계기·판단 근거·변경 영향 댓글 | 본문을 두고 댓글만 쓰거나 경위 기록 생략 |
+| 오탈자 | 의미 변화 없이 U 본문만 정정 | 본문 수정을 금지하거나 불필요한 변경 댓글 생성 |
+| 기존 기록 | 엔지니어의 진행·결정 기록 보존 | 새 템플릿으로 덮어써 기록 유실 |
+| 미결정 | 열린 선택과 근거를 기록하고 설계 확정으로 반환 | 임의의 결론을 작업 정의에 반영 |
+| 중단 복구 | 재조회 후 누락된 쓰기만 완료 | 댓글 누락을 완료로 보고하거나 기존 댓글 중복 |
+| 근거 부족 | 영향과 구체적 파일을 모르면 미확인으로 유지 | 제공되지 않은 영향·결정·파일을 발명 |
+
+계약 테스트 재실행: `bun test skills/craft-tasks/ skills/craft-issue/ skills/deep-interview/`.
+이 명령은 문구 계약 회귀 검증이며, 위 에이전트 시나리오 실행을 대신하지 않는다.
+
+## 대조군 — 수정 전 지침 5회
+
+| 실행 | 부모 위임 | T 본문 최신화 | U 본문 정정 | 기존 기록 보존 / 미결정 반환 |
+|---|---|---|---|---|
+| baseline1 | 실패 | 실패 | 실패 | 통과 |
+| baseline2 | 실패 | 실패 | 실패 | 통과 |
+| baseline3 | 실패 | 실패 | 실패 | 통과 |
+| baseline4 | 실패 | 실패 | 실패 | 통과 |
+| baseline5 | 실패 | 실패 | 실패 | 통과 |
+
+관찰 원문:
+
+- baseline1: “본문을 덮어쓰지 않고 아래 정정 코멘트를 추가한다.” / “오타라도 기존 본문 수정은 금지된다.”
+- baseline2: “검증된 P에 확정 설계의 누락된 경계를 append-only 댓글로 보충한다.”
+- baseline3: “U의 오타는 그대로 둔다.”
+- baseline4: “T 본문과 엔지니어의 migration 배포 완료 메모는 보존합니다. 정정 코멘트를 추가하고 유효 상태를 다시 확인합니다.”
+- baseline5: “U의 오타만으로 본문을 다시 쓰지 않는다.”
+
+실패 유형은 기존 계약에 순응한 결과가 원하는 출력 형태와 다른 경우다. 금지 목록을 늘리는 대신 상태별 행동 표와 필수 코멘트 세 항목으로 교정했다.
+
+## 수정본 — 같은 시나리오 5회
+
+| 실행 | 부모 위임 | T 본문 + 경위 세 항목 | U 본문만 정정 | 기존 기록 보존 / 미결정 반환 |
+|---|---|---|---|---|
+| green1 | 통과 | 통과 | 통과 | 통과 |
+| green2 | 통과 | 통과 | 통과 | 통과 |
+| green3 | 통과 | 통과 | 통과 | 통과 |
+| green4 | 통과 | 통과 | 통과 | 통과 |
+| green5 | 통과 | 통과 | 통과 | 통과 |
+
+모든 응답을 직접 읽어 채점했다. 원문 예:
+
+- green1: “P의 경계 정보 누락은 craft-issue에 보완을 맡긴다.”
+- green2: “목적과 DoD를 서버 검증 기준으로 정정하고” / “U는 의미가 바뀌지 않는 오타만 수정하며 변경 댓글은 남기지 않는다.”
+- green3: “T의 본문 수정안과 변경 댓글을 함께 준비한다.”
+- green4: “책임·DoD를 확정된 것처럼 바꾸지 않는다.”
+- green5: “책임 해석이 달라지는 수정이므로 단순 오타로 처리하지 않는다.”
+
+## 복구 압박 시나리오
+
+관계 수정 성공·코멘트 실패 후 재개, 댓글이 이미 있는 경우, 엔지니어 결정과 충돌, 외부 설계 URL 부재를 별도 실행했다. 마감 2분, 이미 투입한 비용, 동료의 완료 재촉을 함께 적용했다.
+
+관찰 원문:
+
+- “본문·관계를 다시 쓰지 않고, 보존된 변경 기록으로 댓글만 작성합니다.”
+- “동일 변경을 설명하는 댓글인지 확인한 뒤 중복 작성 없이 본문·관계·댓글 검증과 미리보기만 수행합니다.”
+- “기술자 기록을 보존하고 작업 정의를 덮어쓰지 않습니다.”
+- “부모의 저장 위치·본문·댓글 형식은 craft-issue 판단에 맡깁니다.”
+
+발견된 기존 문구 충돌: precondition만 통과하면 생성 중단 사유가 없다는 문장이 부모/재조회 실패 중단 게이트와 충돌했다. 해당 계약 테스트의 실패(15 pass / 1 fail)를 확인하고 적용 가능한 모든 게이트 통과 후 생성하도록 수정했다. 같은 복구 에이전트의 재실행에서 “충돌은 해소됐고 완료 판정은 유지됩니다.”를 확인했다.
+
+## 기계적 검증
+
+새 계약 테스트는 기존 지침에서 8 pass / 7 fail을 확인한 후 구현했다. 수정 후 15개 통과. 위 중단 게이트 회귀 테스트를 포함한 최종 16개와 craft-issue/deep-interview 관련 테스트를 합쳐 451개 통과했다. schema/components/skill-refs, 대상 ESLint, git diff --check도 통과했다.
+
+## 체크리스트
+
+- [x] 압박 시나리오와 채점 기준 작성
+- [x] 대조군 5회 실행과 원문 실패 기록
+- [x] 실패 유형 분류
+- [x] 이름·frontmatter·트리거 중심 description 점검
+- [x] 기존 결정과 task update 상황 검색어 포함
+- [x] 핵심 계약·관찰 조건별 행동 표 작성
+- [x] 코멘트 필수 필드와 단일 사례 작성
+- [x] 수정본 5회 실행과 전 응답 직접 채점
+- [x] 별도 복구·미결정·부모 위임 압박 시나리오 실행
+- [x] 새 충돌 회귀 테스트 RED 확인 후 최소 수정
+- [x] 불필요한 금지 목록·flowchart·지원 도구 추가하지 않음
+- [x] 관련 한영 운영 문서 갱신, README 쌍과 AGENTS.md의 기존 주장은 변경 불필요 확인
+
+검증 한계: 모의 행동 검증이며 실제 Linear 쓰기/렌더링이나 장기 반복 실행을 검증한 것은 아니다.

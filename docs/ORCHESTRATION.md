@@ -21,7 +21,7 @@
   |-- 아니오 -> 요구사항이 명확한가?
                   |-- 아니오 -> /deep-interview로 명세 수렴
                                 |-- 팀이 공유·추적할 구현 task 티켓이 필요한가?
-                                      |-- 예 -> /craft-tasks로 부모 확인·보강 및 자식 티켓 생성
+                                      |-- 예 -> /craft-tasks로 작업 생성·최신화 (부모 처리는 craft-issue)
                                                -> task별 필요할 때만 /prometheus
                                                -> /ultragoal -> /sisyphus
                                       |-- 아니오 -> 활성 토폴로지 컴포넌트가 정확히 하나면 /ultragoal
@@ -45,7 +45,7 @@ Oh-My-Toong은 역할을 명확히 분리하여 이를 해결합니다:
 | 역할 | 에이전트 | 책임 |
 |------|----------|------|
 | **정의** | deep-interview | 모호성을 해소해 명세로 수렴, 절대 코드 작성 안 함 |
-| **작업 티켓화** | craft-tasks | 확정된 설계를 팀이 공유·추적할 자식 task 티켓으로 분해하고 부모를 확인·보강한 뒤 생성 |
+| **작업 티켓화** | craft-tasks | 확정된 설계를 자식 task 티켓으로 생성·최신화하고 부모 처리는 craft-issue에 위임 |
 | **기획** | prometheus | 전략적 기획, 절대 코드 작성 안 함 |
 | **스토리 실행** | ultragoal | 계획의 스토리를 순서대로 sisyphus에 전달 |
 | **실행** | sisyphus | 위임을 통한 조율, 절대 단독 작업 안 함 |
@@ -72,7 +72,7 @@ flowchart TD
     end
 
     subgraph 작업 티켓 단계
-        CraftTasks --> Parent["검증된 부모<br/>확인·보강"]
+        CraftTasks --> Parent["craft-issue로<br/>부모 처리"]
         Parent --> ChildTickets["PM 도구에 자식<br/>task 티켓 생성"]
         ChildTickets --> TaskPlan{task별 AI<br/>계획이 필요한가?}
     end
@@ -115,7 +115,7 @@ flowchart TD
 - **역할**: 확정된 설계를 팀이 공유·추적할 수 있는 구현 task 티켓으로 분해
 - **제약**: 의도·접근 방식·불변식·경계가 확정된 설계에만 사용합니다. AI 실행 계획만 필요하면 `prometheus`를 사용합니다.
 - **출력**: 검증된 부모 아래 PM 도구에 생성된 자식 task 티켓
-- **워크플로우**: deep-interview 명세를 바탕으로 부모를 확인·보강하고 기존 자식 티켓을 검증한 뒤, 누락된 구현 task만 자식 티켓으로 생성합니다. 생성된 각 task에 AI 실행 계획이 필요할 때만 task별로 `/prometheus`를 선택하고, 이후 `/ultragoal` -> `/sisyphus`로 실행합니다.
+- **워크플로우**: deep-interview 명세를 바탕으로 부모 처리를 craft-issue에 맡기고, 반환된 부모 연결을 검증한 뒤 기존 작업의 본문을 최신화하고 누락된 구현 task만 생성합니다. 의미 있는 변경은 계기·판단 근거·영향을 코멘트로 남기며, 단순 오탈자는 본문만 수정합니다. 미결정 사항은 확정 후 반영합니다. 생성된 각 task에 AI 실행 계획이 필요할 때만 task별로 `/prometheus`를 선택하고, 이후 `/ultragoal` -> `/sisyphus`로 실행합니다.
 
 ### prometheus (기획자)
 
@@ -187,11 +187,11 @@ Consumer는 먼저 scope를 판정합니다. `OUT_OF_SCOPE`는 비차단 NOTE로
 
 1. **한 질문씩, 횟수 제한 없이**: 선행 결정부터 질문하고 답변이 드러낸 분기·반례·충돌을 추적
 2. **종료 점검**: 점수는 조사 방향을 돕습니다. 구현을 바꿀 미결정이 없고, 근거·실패 시나리오·남은 가정을 검토한 뒤 사용자와 이해를 확인합니다. 중단은 즉시 존중하고 조기 전달은 DRAFT로 표시합니다.
-3. **명세 확정 및 경로 선택**: `$OMT_DIR/deep-interview/{slug}.md`에 저장합니다. 5단계에서 산출물이 팀이 공유·추적할 구현 task 티켓이면 `/craft-tasks`를 권장합니다. `craft-tasks`는 검증된 부모를 확인·보강하고 PM 도구에 자식 task 티켓을 생성하며, 각 task에 AI 실행 계획이 필요할 때만 `/prometheus`를 선택적으로 적용합니다. 이후 AI 실행은 `/ultragoal`이 `/sisyphus`에 전달합니다. 팀 task 티켓이 필요하지 않고 AI 실행만 필요한 명세는 기존대로 활성 토폴로지 컴포넌트가 정확히 하나면 `/ultragoal`, 아니면 `/prometheus` -> `/ultragoal` -> `/sisyphus`를 권장하고, 권장하지 않은 스킬은 명시적 재정의 옵션으로 제시합니다.
+3. **명세 확정 및 경로 선택**: `$OMT_DIR/deep-interview/{slug}.md`에 저장합니다. 5단계에서 산출물이 팀이 공유·추적할 구현 task 티켓이면 `/craft-tasks`를 권장합니다. `craft-tasks`는 부모 처리를 craft-issue에 위임하고 PM 도구의 자식 task 티켓을 생성·최신화하며, 각 task에 AI 실행 계획이 필요할 때만 `/prometheus`를 선택적으로 적용합니다. 이후 AI 실행은 `/ultragoal`이 `/sisyphus`에 전달합니다. 팀 task 티켓이 필요하지 않고 AI 실행만 필요한 명세는 기존대로 활성 토폴로지 컴포넌트가 정확히 하나면 `/ultragoal`, 아니면 `/prometheus` -> `/ultragoal` -> `/sisyphus`를 권장하고, 권장하지 않은 스킬은 명시적 재정의 옵션으로 제시합니다.
 
 ### 1단계: 기획
 
-확정된 설계를 팀이 공유·추적할 task 티켓으로 만들려면 `/craft-tasks`를 사용합니다. `craft-tasks`가 부모를 확인·보강하고 자식 티켓을 생성한 뒤, 각 task의 AI 실행 계획이 필요할 때만 `/prometheus`를 선택적으로 사용합니다.
+확정된 설계를 팀이 공유·추적할 task 티켓으로 만들려면 `/craft-tasks`를 사용합니다. `craft-tasks`가 부모 처리를 craft-issue에 맡기고 자식 티켓을 생성·최신화한 뒤, 각 task의 AI 실행 계획이 필요할 때만 `/prometheus`를 선택적으로 사용합니다.
 
 팀 task 티켓 없이 AI 실행 계획이 필요하고 요구사항이 명확할 때 `/prometheus`를 사용합니다:
 
@@ -221,7 +221,7 @@ Consumer는 먼저 scope를 판정합니다. `OUT_OF_SCOPE`는 비차단 NOTE로
 | 명령어 | 용도 | 출력 |
 |--------|------|------|
 | `/deep-interview <아이디어>` | 모호성 게이팅으로 명세 수렴 | `$OMT_DIR/deep-interview/{slug}.md` |
-| `/craft-tasks <명세>` | 확정된 설계를 팀이 공유·추적할 task 티켓으로 분해하고 부모 확인·보강 후 자식 티켓 생성 | PM 도구의 부모·자식 task 티켓 |
+| `/craft-tasks <명세>` | 확정된 설계를 task 티켓으로 생성·최신화하고 부모 처리는 craft-issue에 위임 | PM 도구의 자식 task 티켓 |
 | `/prometheus <작업>` | 작업 계획 생성 | `~/.omt/{OMT_PROJECT}/plans/*.md` |
 | `/ultragoal` | 계획의 스토리를 순서대로 sisyphus에 전달 | 스토리별 실행 진행 |
 | `/sisyphus` | 전달된 스토리를 조율해 실행 | 검증된 코드 변경 |
@@ -251,7 +251,7 @@ prometheus 도중 요구사항을 반복적으로 명확히 해야 한다면, �
 
 ### 5. 단일 계획 원칙
 
-AI 실행 계획을 만들 때 하나의 실행 범위는 하나의 계획 파일에 담으세요. 팀 task 티켓 경로에서는 craft-tasks가 부모·자식 티켓을 만들고, 각 task의 계획이 필요할 때만 task별 prometheus를 선택합니다.
+AI 실행 계획을 만들 때 하나의 실행 범위는 하나의 계획 파일에 담으세요. 팀 task 티켓 경로에서는 craft-issue가 부모 처리를, craft-tasks가 작업 티켓의 생성·최신화를 맡고, 각 task의 계획이 필요할 때만 task별 prometheus를 선택합니다.
 
 ---
 
