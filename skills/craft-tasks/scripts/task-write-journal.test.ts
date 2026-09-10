@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { execFileSync, spawn } from "child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "fs";
 import { join, resolve } from "path";
 import {
 	createChild,
@@ -192,6 +192,75 @@ describe("task write journal", () => {
 		})));
 		const journal = JSON.parse(readFileSync(journalPath(sid), "utf8")) as { intents: unknown[] };
 		expect(journal.intents).toHaveLength(workers);
+	});
+
+	test("recovers a legacy empty ownerless lock", () => {
+		setup();
+		const lockPath = `${journalPath(sid)}.lock`;
+		mkdirSync(lockPath, { recursive: true });
+		const stale = new Date(Date.now() - 2000);
+		utimesSync(lockPath, stale, stale);
+		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload: { body: "b", relations: [] } });
+		expect(prepared.state).toBe("prepared");
+		expect(existsSync(lockPath)).toBe(false);
+	});
+
+	test("preserves a fresh empty legacy lock and fails boundedly without journal mutation", () => {
+		setup();
+		const lockPath = `${journalPath(sid)}.lock`;
+		mkdirSync(lockPath, { recursive: true });
+		const modulePath = resolve("skills/craft-tasks/scripts/task-write-journal.ts");
+		expect(() => execFileSync("bun", ["-e", `import { createPrepare } from ${JSON.stringify(modulePath)}; createPrepare({ parentId: "p", designAnchor: "a", creationPayload: { body: "b", relations: [] } });`], {
+			env: { ...process.env, OMT_DIR: omtDir, OMT_SESSION_ID: sid },
+			stdio: "ignore",
+			timeout: 1000,
+		})).toThrow();
+		expect(existsSync(lockPath)).toBe(true);
+		expect(existsSync(journalPath(sid))).toBe(false);
+	});
+
+	test("recovers an empty legacy lock older than the initialization grace", () => {
+		setup();
+		const lockPath = `${journalPath(sid)}.lock`;
+		mkdirSync(lockPath, { recursive: true });
+		const stale = new Date(Date.now() - 2000);
+		utimesSync(lockPath, stale, stale);
+		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload: { body: "b", relations: [] } });
+		expect(prepared.state).toBe("prepared");
+		expect(existsSync(lockPath)).toBe(false);
+	});
+
+	test("fails boundedly and preserves a malformed owner lock", () => {
+		setup();
+		const lockPath = `${journalPath(sid)}.lock`;
+		mkdirSync(lockPath, { recursive: true });
+		writeFileSync(`${lockPath}/owner`, "not-a-pid\n", "utf8");
+		const modulePath = resolve("skills/craft-tasks/scripts/task-write-journal.ts");
+		const started = Date.now();
+		expect(() => execFileSync("bun", ["-e", `import { createPrepare } from ${JSON.stringify(modulePath)}; createPrepare({ parentId: "p", designAnchor: "a", creationPayload: { body: "b", relations: [] } });`], {
+			env: { ...process.env, OMT_DIR: omtDir, OMT_SESSION_ID: sid },
+			stdio: "ignore",
+			timeout: 1000,
+		})).toThrow();
+		expect(Date.now() - started).toBeLessThan(900);
+		expect(readFileSync(`${lockPath}/owner`, "utf8")).toBe("not-a-pid\n");
+	});
+
+	test("fails boundedly and preserves a live owner lock without journal mutation", () => {
+		setup();
+		const lockPath = `${journalPath(sid)}.lock`;
+		mkdirSync(lockPath, { recursive: true });
+		writeFileSync(`${lockPath}/owner`, `${process.pid}\n`, "utf8");
+		const modulePath = resolve("skills/craft-tasks/scripts/task-write-journal.ts");
+		const started = Date.now();
+		expect(() => execFileSync("bun", ["-e", `import { createPrepare } from ${JSON.stringify(modulePath)}; createPrepare({ parentId: "p", designAnchor: "a", creationPayload: { body: "b", relations: [] } });`], {
+			env: { ...process.env, OMT_DIR: omtDir, OMT_SESSION_ID: sid },
+			stdio: "ignore",
+			timeout: 1000,
+		})).toThrow();
+		expect(Date.now() - started).toBeLessThan(900);
+		expect(readFileSync(`${lockPath}/owner`, "utf8")).toBe(`${process.pid}\n`);
+		expect(existsSync(journalPath(sid))).toBe(false);
 	});
 
 	test("lists pending intents from another session without changing journals", () => {

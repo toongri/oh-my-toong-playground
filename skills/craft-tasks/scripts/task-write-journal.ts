@@ -2,7 +2,7 @@
 /** Session-scoped, crash-atomic journal for craft-tasks PM writes. */
 
 import { randomUUID } from "crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, statSync, unlinkSync, writeFileSync } from "fs";
 import { isDeepStrictEqual } from "util";
 import { getOmtDir } from "@lib/omt-dir";
 import { resolveSessionIdOrThrow, isSafeSessionId } from "@lib/state-core";
@@ -65,6 +65,9 @@ interface Journal {
 
 const JOURNAL_PREFIX = "task-write-journal-";
 const TERMINAL_STATES = new Set<JournalState>(["complete", "manual-reconciliation-required"]);
+const LOCK_TIMEOUT_MS = 500;
+const LOCK_RETRY_MS = 5;
+const LOCK_INITIALIZATION_GRACE_MS = 1000;
 
 export type PendingEntry = {
 	sourceSessionId: string;
@@ -150,37 +153,105 @@ function writeJournal(journal: Journal, sessionId = resolveSessionIdOrThrow()): 
 	}
 }
 
-function withJournalLock<T>(sessionId: string | undefined, operation: () => T): T {
-	const lockPath = `${journalPath(sessionId)}.lock`;
-	mkdirSync(getOmtDir(), { recursive: true });
-	while (true) {
-		try {
-			mkdirSync(lockPath);
-			try {
-				writeFileSync(`${lockPath}/owner`, `${process.pid}\n`, "utf8");
-				return operation();
-			} finally {
-				try { unlinkSync(`${lockPath}/owner`); } catch { /* best effort */ }
-				try { rmdirSync(lockPath); } catch { /* best effort */ }
+function parseOwnerPid(raw: string): number | undefined {
+	const value = raw.trim();
+	if (!/^[1-9][0-9]*$/.test(value)) return undefined;
+	const pid = Number(value);
+	return Number.isSafeInteger(pid) ? pid : undefined;
+}
+
+function removeEmptyLegacyLock(lockPath: string): boolean {
+	try {
+		if (Date.now() - statSync(lockPath).mtimeMs <= LOCK_INITIALIZATION_GRACE_MS) return false;
+		const entries = readdirSync(lockPath);
+		if (entries.length === 1 && entries[0] === "owner" && readFileSync(`${lockPath}/owner`, "utf8").trim() === "") {
+			unlinkSync(`${lockPath}/owner`);
+		} else if (entries.length !== 0) return false;
+		rmdirSync(lockPath);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function isFreshEmptyLegacyLock(lockPath: string): boolean {
+	try {
+		if (Date.now() - statSync(lockPath).mtimeMs > LOCK_INITIALIZATION_GRACE_MS) return false;
+		const entries = readdirSync(lockPath);
+		return entries.length === 0 || (entries.length === 1 && entries[0] === "owner" && readFileSync(`${lockPath}/owner`, "utf8").trim() === "");
+	} catch {
+		return false;
+	}
+}
+
+function cleanAbandonedClaims(lockPath: string): void {
+	const prefix = `${lockPath}.claim.`;
+	let names: string[];
+	try { names = readdirSync(getOmtDir()); } catch { return; }
+	for (const name of names) {
+		const claimPath = `${getOmtDir()}/${name}`;
+		if (!claimPath.startsWith(prefix)) continue;
+		let ownerPid: number | undefined;
+		try { ownerPid = parseOwnerPid(readFileSync(`${claimPath}/owner`, "utf8")); } catch { continue; }
+		if (ownerPid === undefined) continue;
+		try { process.kill(ownerPid, 0); } catch (error) {
+			if (hasErrorCode(error, "ESRCH")) {
+				try { unlinkSync(`${claimPath}/owner`); } catch { /* best effort */ }
+				try { rmdirSync(claimPath); } catch { /* best effort */ }
 			}
-		} catch (error) {
-			if (!hasErrorCode(error, "EEXIST")) throw error;
-			let ownerPid: number | undefined;
-			try {
-				ownerPid = Number.parseInt(readFileSync(`${lockPath}/owner`, "utf8"), 10);
-			} catch { /* owner may be between mkdir and owner-file creation */ }
-			if (ownerPid !== undefined && !Number.isNaN(ownerPid)) {
-				try { process.kill(ownerPid, 0); } catch (probeError) {
-					if (hasErrorCode(probeError, "ESRCH")) {
-						try { unlinkSync(`${lockPath}/owner`); } catch { /* best effort */ }
-						try { rmdirSync(lockPath); } catch { /* another waiter may have reclaimed it */ }
-						continue;
-					}
-				}
-			}
-			Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
 		}
 	}
+}
+
+function withJournalLock<T>(sessionId: string | undefined, operation: () => T): T {
+	const lockPath = `${journalPath(sessionId)}.lock`;
+	const deadline = Date.now() + LOCK_TIMEOUT_MS;
+	mkdirSync(getOmtDir(), { recursive: true });
+	cleanAbandonedClaims(lockPath);
+	while (Date.now() < deadline) {
+		const claimPath = `${lockPath}.claim.${process.pid}.${randomUUID()}`;
+		let published = false;
+		try {
+			mkdirSync(claimPath);
+			writeFileSync(`${claimPath}/owner`, `${process.pid}\n`, "utf8");
+			try {
+				if (!isFreshEmptyLegacyLock(lockPath)) {
+					renameSync(claimPath, lockPath);
+					published = true;
+				}
+			} catch (error) {
+				if (!hasErrorCode(error, "EEXIST") && !hasErrorCode(error, "ENOTEMPTY")) throw error;
+			}
+			if (published) {
+				try { return operation(); }
+				finally {
+					try { unlinkSync(`${lockPath}/owner`); } catch { /* best effort */ }
+					try { rmdirSync(lockPath); } catch { /* best effort */ }
+				}
+			}
+		} finally {
+			if (!published) {
+				try { unlinkSync(`${claimPath}/owner`); } catch { /* best effort */ }
+				try { rmdirSync(claimPath); } catch { /* best effort */ }
+			}
+		}
+
+		if (!existsSync(lockPath)) continue;
+		if (removeEmptyLegacyLock(lockPath)) continue;
+		if (!existsSync(lockPath)) continue;
+		let ownerPid: number | undefined;
+		try { ownerPid = parseOwnerPid(readFileSync(`${lockPath}/owner`, "utf8")); } catch { /* inspect below */ }
+		if (ownerPid === undefined) throw new Error("Journal lock has a malformed or missing owner");
+		try { process.kill(ownerPid, 0); } catch (error) {
+			if (hasErrorCode(error, "ESRCH")) {
+				try { unlinkSync(`${lockPath}/owner`); } catch { /* best effort */ }
+				try { rmdirSync(lockPath); } catch { /* another waiter may have reclaimed it */ }
+				continue;
+			}
+		}
+		Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, LOCK_RETRY_MS);
+	}
+	throw new Error("Timed out waiting for task-write journal lock");
 }
 
 function append<T extends Intent>(intent: T, sessionId?: string): T {
