@@ -115,7 +115,7 @@ flowchart TD
 - **역할**: 확정된 설계를 팀이 공유·추적할 수 있는 구현 task 티켓으로 분해
 - **제약**: 의도·접근 방식·불변식·경계가 확정된 설계에만 사용합니다. AI 실행 계획만 필요하면 `prometheus`를 사용합니다.
 - **출력**: 검증된 부모 아래 PM 도구에 생성된 자식 task 티켓
-- **워크플로우**: deep-interview 명세를 바탕으로 부모 처리를 craft-issue에 맡기고, 반환된 부모 연결을 검증한 뒤 기존 작업의 본문을 최신화하고 누락된 구현 task만 생성합니다. 의미 있는 변경은 계기·판단 근거·영향을 코멘트로 남기며, 단순 오탈자는 본문만 수정합니다. 미결정 사항은 확정 후 반영합니다. 생성된 각 task에 AI 실행 계획이 필요할 때만 task별로 `/prometheus`를 선택하고, 이후 `/ultragoal` -> `/sisyphus`로 실행합니다.
+- **워크플로우**: deep-interview 명세를 바탕으로 부모 처리를 craft-issue에 맡기고, 반환된 부모 연결을 검증한 뒤 기존 작업의 본문을 최신화하고 누락된 구현 task만 생성합니다. 새 자식마다 불투명하고 변경할 수 없는 `taskKey`를 만들고, 기존 PM `create_comment` 동작으로 이 값을 이식 가능한 append-only `Task identity` 코멘트에 기록하며 `taskIdentities`를 반환합니다. 유지보수는 `childId-first matching`을 적용하고, `childId`가 없으면 검증된 `parentId`와 정확한 `designAnchor`가 함께 확인될 때만 `taskKey`로 매칭합니다. 목적이나 변경 대상이 바뀌어도 같은 자식을 제자리에서 갱신하며, identity가 없거나 읽을 수 없거나 일치하지 않거나 legacy ambiguity가 있으면 중복 생성을 시도하지 않고 `ambiguity/recovery stop`으로 중단합니다. 의미 있는 변경은 계기·판단 근거·영향을 코멘트로 남기며, 단순 오탈자는 본문만 수정합니다. 미결정 사항은 확정 후 반영합니다. 생성된 각 task에 AI 실행 계획이 필요할 때만 task별로 `/prometheus`를 선택하고, 이후 `/ultragoal` -> `/sisyphus`로 실행합니다.
 
 ### prometheus (기획자)
 
