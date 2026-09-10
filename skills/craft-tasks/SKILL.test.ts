@@ -301,3 +301,35 @@ describe("부모 처리 위임과 작업 최신화", () => {
 		expect(craftTasks).toContain("never `$OMT_DIR`, a machine-local path, or `file://`");
 	});
 });
+
+describe("durable task-write runtime contract", () => {
+	test("create-prepare requires nested creationPayload and strips orchestration metadata", () => {
+		const text = sectionBetween(craftTasks, "#### Durable create-intent protocol", "#### Durable update-intent protocol");
+		expect(text).toContain("`create-prepare` requires nested `creationPayload`");
+		expect(text).toContain("strips orchestration-only `designAnchor` and `identityComment` from the PM payload");
+		expect(text).toContain("injects the verified `parentId`");
+		expect(text).toContain("Verify that `parentId` is injected");
+	});
+
+	test("terminal transitions compact intents and unlink an empty journal", () => {
+		const text = sectionBetween(craftTasks, "#### Durable create-intent protocol", "#### Recovery and manual stop");
+		expect(text).toContain("Terminal transitions compact terminal intents immediately");
+		expect(text).toContain("unlink the journal when no intents remain");
+	});
+
+	test("task journals are protected from generic TTL cleanup", () => {
+		const text = craftTasks;
+		expect(text).toContain("excluded from generic `SESSION_ARTIFACT_PREFIXES` TTL deletion");
+		expect(text).toContain("valid journal names are recognition-only to the state-liveness unclassified-file classifier");
+		expect(text).toContain("pending or malformed journal content is preserved for explicit recovery");
+	});
+
+	test("lock acquisition publishes initialized owners and handles transient and unsafe locks", () => {
+		const text = sectionBetween(craftTasks, "#### Durable create-intent protocol", "#### Durable update-intent protocol");
+		expect(text).toContain("lock claim owner is fully initialized before atomic publication");
+		expect(text).toContain("retry transient empty release");
+		expect(text).toContain("stale empty legacy lock may be reclaimed");
+		expect(text).toContain("Preserve malformed or live owner locks");
+		expect(text).toContain("fail acquisition boundedly");
+	});
+});
