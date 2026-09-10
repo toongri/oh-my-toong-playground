@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "child_process";
-import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
 import { join, resolve } from "path";
 import {
 	createChild,
@@ -12,6 +12,7 @@ import {
 	updateMutationWritten,
 	updatePrepare,
 	journalPath,
+	listPending,
 } from "./task-write-journal";
 
 const omtDir = join(process.cwd(), ".tmp-task-write-journal-test");
@@ -154,6 +155,59 @@ describe("task write journal", () => {
 		expect(firstRaw).not.toContain("sessionId");
 		expect(existsSync(journalPath("other-session"))).toBe(true);
 		expect(readdirSync(omtDir).some((name) => name.includes(".tmp."))).toBe(false);
+	});
+
+	test("lists pending intents from another session without changing journals", () => {
+		setup();
+		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload: { body: "b", relations: [] } });
+		const before = readFileSync(journalPath(sid), "utf8");
+		process.env.OMT_SESSION_ID = "new-session";
+		expect(() => getIntent(prepared.createIntentId)).toThrow(`Unknown intent: ${prepared.createIntentId}`);
+		expect(listPending()).toEqual([{
+			sourceSessionId: sid,
+			intentId: prepared.createIntentId,
+			kind: "create",
+			state: "prepared",
+			parentId,
+			designAnchor: anchor,
+		}]);
+		expect(readFileSync(journalPath(sid), "utf8")).toBe(before);
+	});
+
+	test("keeps default lookup isolated and allows explicit source-session transitions", () => {
+		setup();
+		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload: { body: "b", relations: [] } });
+		process.env.OMT_SESSION_ID = "new-session";
+		expect(() => getIntent(prepared.createIntentId)).toThrow(`Unknown intent: ${prepared.createIntentId}`);
+		expect(getIntent(prepared.createIntentId, sid).state).toBe("prepared");
+		expect(createChild(prepared.createIntentId, { childId: "child-123", parentId, designAnchor: anchor }, sid).state).toBe("child-created");
+	});
+
+	test("lists deterministic nonterminal entries and omits terminal intents", () => {
+		setup();
+		const first = createPrepare({ parentId: "parent-z", designAnchor: anchor, creationPayload: { body: "z", relations: [] } });
+		const second = createPrepare({ parentId: "parent-a", designAnchor: anchor, creationPayload: { body: "a", relations: [] } });
+		manualReconciliation(first.createIntentId, "stop");
+		process.env.OMT_SESSION_ID = "another-session";
+		const third = createPrepare({ parentId, designAnchor: anchor, creationPayload: { body: "c", relations: [] } });
+		expect(listPending().map((entry) => entry.intentId)).toEqual([third.createIntentId, second.createIntentId]);
+	});
+
+	test("reports malformed matching journals and rejects unsafe explicit sessions", () => {
+		setup();
+		mkdirSync(omtDir, { recursive: true });
+		writeFileSync(join(omtDir, "task-write-journal-bad-session.json"), "{broken\n", "utf8");
+		writeFileSync(join(omtDir, "task-write-journal-unsafe.session.json"), "{broken\n", "utf8");
+		expect(listPending()).toEqual([{ sourceSessionId: "bad-session", error: "Malformed task-write journal JSON" }]);
+		expect(() => getIntent("anything", "unsafe.session")).toThrow("Unsafe session id");
+	});
+
+	test("explicit source-session supports update transition", () => {
+		setup();
+		const prepared = updatePrepare({ childId: "child-123", parentId, designAnchor: anchor, before: {}, after: { body: "new", relations: [] }, changeComment: "why" });
+		process.env.OMT_SESSION_ID = "new-session";
+		updateMutationWritten(prepared.updateIntentId, { childId: "child-123", parentId, designAnchor: anchor }, sid);
+		expect(updateComplete(prepared.updateIntentId, { childId: "child-123", parentId, designAnchor: anchor, body: "new", relations: [], changeComment: "why" }, sid).state).toBe("complete");
 	});
 
 	test("CLI emits JSON and accepts the exact creation payload on stdin", () => {

@@ -2,7 +2,7 @@
 /** Session-scoped, crash-atomic journal for craft-tasks PM writes. */
 
 import { randomUUID } from "crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from "fs";
 import { isDeepStrictEqual } from "util";
 import { getOmtDir } from "@lib/omt-dir";
 import { resolveSessionIdOrThrow, isSafeSessionId } from "@lib/state-core";
@@ -64,6 +64,19 @@ interface Journal {
 
 const JOURNAL_PREFIX = "task-write-journal-";
 const TERMINAL_STATES = new Set<JournalState>(["complete", "manual-reconciliation-required"]);
+
+export type PendingEntry = {
+	sourceSessionId: string;
+	intentId: string;
+	kind: Intent["kind"];
+	state: JournalState;
+	parentId: string;
+	designAnchor: string;
+	childId?: string;
+} | {
+	sourceSessionId: string;
+	error: string;
+};
 
 function record(value: unknown): value is Record<string, unknown> {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("Expected a JSON object");
@@ -256,6 +269,61 @@ export function getIntent(intentId: string, sessionId?: string): Intent {
 	return findIntent(intentId, sessionId).intent;
 }
 
+function pendingEntry(sourceSessionId: string, intent: Intent): PendingEntry | undefined {
+	if (intent.kind === "create") {
+		const intentId = nonblank(intent.createIntentId, "createIntentId");
+		const parentId = nonblank(intent.parentId, "parentId");
+		const designAnchor = nonblank(intent.designAnchor, "designAnchor");
+		if (!TERMINAL_STATES.has(intent.state) && !new Set<JournalState>(["prepared", "child-created"]).has(intent.state)) throw new Error("Malformed task-write journal state");
+		if (TERMINAL_STATES.has(intent.state)) return undefined;
+		const entry: PendingEntry = { sourceSessionId, intentId, kind: intent.kind, state: intent.state, parentId, designAnchor };
+		if (intent.childId !== undefined) entry.childId = nonblank(intent.childId, "childId");
+		return entry;
+	}
+	if (intent.kind !== "update") throw new Error("Malformed task-write journal kind");
+	const intentId = nonblank(intent.updateIntentId, "updateIntentId");
+	if (!TERMINAL_STATES.has(intent.state) && !new Set<JournalState>(["prepared", "mutation-written"]).has(intent.state)) throw new Error("Malformed task-write journal state");
+	if (TERMINAL_STATES.has(intent.state)) {
+		nonblank(intent.childId, "childId");
+		nonblank(intent.parentId, "parentId");
+		nonblank(intent.designAnchor, "designAnchor");
+		return undefined;
+	}
+	return {
+		sourceSessionId,
+		intentId,
+		kind: intent.kind,
+		state: intent.state,
+		parentId: nonblank(intent.parentId, "parentId"),
+		designAnchor: nonblank(intent.designAnchor, "designAnchor"),
+		childId: nonblank(intent.childId, "childId"),
+	};
+}
+
+export function listPending(): PendingEntry[] {
+	const omtDir = getOmtDir();
+	if (!existsSync(omtDir)) return [];
+	const files = readdirSync(omtDir)
+		.map((name) => ({ name, match: /^task-write-journal-([A-Za-z0-9_-]+)\.json$/.exec(name) }))
+		.filter((entry): entry is { name: string; match: RegExpExecArray } => entry.match !== null)
+		.sort((a, b) => a.match[1].localeCompare(b.match[1]));
+	const entries: PendingEntry[] = [];
+	for (const file of files) {
+		const sourceSessionId = file.match[1];
+		try {
+			const journal = readJournal(sourceSessionId);
+			const pending = journal.intents
+				.map((intent) => pendingEntry(sourceSessionId, intent))
+				.filter((entry): entry is PendingEntry => entry !== undefined)
+				.sort((a, b) => a.intentId.localeCompare(b.intentId));
+			entries.push(...pending);
+		} catch (error) {
+			entries.push({ sourceSessionId, error: error instanceof Error ? error.message : String(error) });
+		}
+	}
+	return entries;
+}
+
 async function readStdin(): Promise<unknown> {
 	let text = "";
 	for await (const chunk of process.stdin) text += chunk;
@@ -268,27 +336,43 @@ function jsonOutput(value: unknown): void {
 
 async function main(): Promise<void> {
 	const command = process.argv[2];
-	const id = process.argv[3];
 	if (!command) throw new Error("Missing command");
+	const args = process.argv.slice(3);
+	let sourceSessionId: string | undefined;
+	const positional: string[] = [];
+	for (let index = 0; index < args.length; index += 1) {
+		if (args[index] === "--source-session") {
+			if (sourceSessionId !== undefined || args[index + 1] === undefined) throw new Error("--source-session requires a session id");
+			sourceSessionId = args[index + 1];
+			index += 1;
+		} else {
+			positional.push(args[index]);
+		}
+	}
+	if (sourceSessionId !== undefined && !isSafeSessionId(sourceSessionId)) throw new Error("Unsafe session id");
+	const id = positional[0];
 	let result: unknown;
-	if (command === "create-prepare") {
+	if (command === "list") {
+		if (positional.length !== 1 || positional[0] !== "--pending") throw new Error("Usage: list --pending");
+		result = listPending();
+	} else if (command === "create-prepare") {
 		result = createPrepare(await readStdin());
 	} else if (command === "create-child") {
-		result = createChild(id ?? "", await readStdin());
+		result = createChild(id ?? "", await readStdin(), sourceSessionId);
 	} else if (command === "create-complete") {
-		result = createComplete(id ?? "", await readStdin());
+		result = createComplete(id ?? "", await readStdin(), sourceSessionId);
 	} else if (command === "update-prepare") {
 		result = updatePrepare(await readStdin());
 	} else if (command === "update-mutation-written") {
-		result = updateMutationWritten(id ?? "", await readStdin());
+		result = updateMutationWritten(id ?? "", await readStdin(), sourceSessionId);
 	} else if (command === "update-complete") {
-		result = updateComplete(id ?? "", await readStdin());
+		result = updateComplete(id ?? "", await readStdin(), sourceSessionId);
 	} else if (command === "manual-reconciliation") {
 		const input = await readStdin();
 		if (!record(input)) throw new Error("Expected a JSON object");
-		result = manualReconciliation(id ?? "", input.reason);
+		result = manualReconciliation(id ?? "", input.reason, sourceSessionId);
 	} else if (command === "get") {
-		result = getIntent(id ?? "");
+		result = getIntent(id ?? "", sourceSessionId);
 	} else {
 		throw new Error(`Unknown command: ${command}`);
 	}

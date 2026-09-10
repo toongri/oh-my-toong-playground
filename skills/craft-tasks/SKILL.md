@@ -184,7 +184,16 @@ Never put identity metadata in body prose or machine-local paths in comments/han
 
 #### Durable create-intent protocol
 
-The bundled script is the runtime contract. Invoke it through `${CLAUDE_SKILL_DIR}`; its journal is session-scoped local orchestration state, not a PM field, comment, or idempotency primitive. Do not invent a PM field or idempotency primitive: there is no invented PM field or idempotency primitive. The exact command names are `create-prepare`, `create-child`, `create-complete`, `manual-reconciliation`, and `get`. The create commands are create-prepare, create-child, and create-complete; the manual stop command is manual-reconciliation.
+The bundled script is the runtime contract. Invoke it through `${CLAUDE_SKILL_DIR}`; its journal is session-scoped local orchestration state, not a PM field, comment, or idempotency primitive. Do not invent a PM field or idempotency primitive: there is no invented PM field or idempotency primitive. The exact command names are `list --pending`, `create-prepare`, `create-child`, `create-complete`, `manual-reconciliation`, `update-prepare`, `update-mutation-written`, `update-complete`, and `get`. The create commands are create-prepare, create-child, and create-complete; the manual stop command is manual-reconciliation. `list --pending` is read-only and returns deterministic JSON entries for every nonterminal intent across `$OMT_DIR/task-write-journal-<safeSessionId>.json`, including `sourceSessionId`, `intentId`, `kind`, `state`, `parentId`, `designAnchor`, and `childId` when present. Complete and manual-reconciliation-required intents are omitted; malformed matching journals are returned as explicit error entries with `sourceSessionId`.
+
+The commands `get`, `create-child`, `create-complete`, `update-mutation-written`, `update-complete`, and `manual-reconciliation` accept the optional `--source-session <sessionId>` argument after the command's normal positional arguments. For example:
+
+```sh
+bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" list --pending
+bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" get <intentId> --source-session <sourceSessionId>
+```
+
+Without `--source-session`, these commands use the current session exactly as before. With it, the session ID must be safe and the command reads or writes only that source journal; there is no automatic fallback across sessions.
 
 For every genuine gap, generate the opaque `taskKey` and prepare the exact payload that will be sent to `save_issue`. This journal write happens before `save_issue`; call `create-prepare` and wait for its JSON result:
 
@@ -240,7 +249,14 @@ Journal `complete` means all required re-reads passed. A successful PM mutation 
 
 #### Recovery and manual stop
 
-Recovery starts by reading the existing session journal with `get`, then re-reading the PM child and relevant comments. A `child-created` create intent may retry only the missing exact identity comment after verifying its recorded `childId`, parent, and anchor. An update intent in `mutation-written` may retry only the missing body, relation, or change-comment write using its persisted before/after delta and comment. Re-run the corresponding completion command only after the required re-reads pass. An unreadable/missing intent, or any path without a verified `childId`/result, ends with `manual-reconciliation` and a clear reason. Manual reconciliation is terminal; it records the stop and never creates a replacement.
+Recovery starts by selecting the `sourceSessionId` from the pending list, then reading that exact journal with `get --source-session <sourceSessionId>`:
+
+```sh
+bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" list --pending
+bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" get <intentId> --source-session <sourceSessionId>
+```
+
+Current-session `get <intentId>` remains the default when no source session is supplied. Use the same explicit `--source-session <sourceSessionId>` on `create-child`, `create-complete`, `update-mutation-written`, `update-complete`, or `manual-reconciliation` when transitioning an intent found in another session. There is no automatic fallback, journal copying, or replacement creation. A `child-created` create intent may retry only the missing exact identity comment after verifying its recorded `childId`, parent, and anchor. An update intent in `mutation-written` may retry only the missing body, relation, or change-comment write using its persisted before/after delta and comment. Re-run the corresponding completion command only after the required re-reads pass. An unreadable/missing intent, or any path without a verified `childId`/result, ends with `manual-reconciliation` and a clear reason. Manual reconciliation is terminal; it records the stop and never creates a replacement.
 
 Match in this order: supplied verified `childId` first, then `taskKey` plus the verified shared `parentId` and exact `designAnchor`. Verify the matched child still belongs to that parent and anchor before writing. **purpose and changed target are mutable work-definition fields, not identity fields**; an existing task with the same `taskKey` updates in place when either changes. A different `taskKey` is a genuine gap. Never match by title. Never match by purpose. Never match by changed target. Never match by slug. Legacy children with neither a verified childId nor taskKey stop as ambiguity rather than creating a replacement. A child that cannot prove the shared anchor is not a match.
 The matching input is a verified child ID or a stable task key. A stable-key match remains the same task when either purpose or changed target changes; title alone is insufficient. If the stable key or verified child ID is absent for a legacy task, stop with ambiguity.
