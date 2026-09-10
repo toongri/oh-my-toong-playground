@@ -189,11 +189,11 @@ The bundled script is the runtime contract. Invoke it through `${CLAUDE_SKILL_DI
 For every genuine gap, generate the opaque `taskKey` and prepare the exact payload that will be sent to `save_issue`. This journal write happens before `save_issue`; call `create-prepare` and wait for its JSON result:
 
 ```sh
-printf '%s\n' '{"parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>","creationPayload":{"body":"<reader-facing task body>","relations":[<exact native relations>],"identityComment":"<exact canonical identity comment>"}}' \
+printf '%s\n' '{"parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>","creationPayload":{"title":"<exact task title>","body":"<reader-facing task body>","relations":[<exact native relations>]}}' \
   | bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" create-prepare
 ```
 
-The `creationPayload` object is the exact proposed creation payload: its `body`, `relations`, and `identityComment` values must be the values intended for the PM write. Keep identity metadata out of the reader-facing body; do not put identity metadata in the reader-facing body. Use the returned `createIntentId` to call `save_issue` only after the journal result has been persisted with state `prepared`.
+The caller supplies the exact proposed creation payload fields that `save_issue` will receive, including `title`, `body`, and `relations`; the journal generates the opaque `taskKey`, binds `identityComment` to the exact canonical comment for that key, and stores and returns the resulting `creationPayload`. Use the returned `creationPayload` as the value passed to `save_issue`, unchanged. Do not supply an arbitrary identity comment or replace the returned one. Keep identity metadata out of the reader-facing body; do not put identity metadata in the reader-facing body. Use the returned `createIntentId` to call `save_issue` only after the journal result has been persisted with state `prepared`.
 
 After `save_issue` returns a child, verify its `parentId` and exact `designAnchor`. Only after that verified result, call `create-child` with the returned `childId`, the verified `parentId`, and the exact anchor. This changes the journal to state `child-created`:
 
@@ -205,11 +205,11 @@ printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>
 Then write the exact canonical identity comment. Re-read the child, its relations, and the canonical identity comment. Call `create-complete` only when all required re-reads pass, with `childId`, `parentId`, `designAnchor`, and the exact `body`, `relations`, and `identityComment` values; this marks the intent `complete`, so mark the intent `complete` only after those re-reads.
 
 ```sh
-printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>","body":"<re-read body>","relations":[<re-read relations>],"identityComment":"<re-read canonical identity comment>"}' \
+printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>","title":"<re-read title>","body":"<re-read body>","relations":[<re-read relations>],"identityComment":"<re-read canonical identity comment>"}' \
   | bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" create-complete <createIntentId>
 ```
 
-If the `create_comment` response is lost, re-read the canonical identity comment before `create-complete`; specifically, re-read the exact canonical identity comment before `create-complete`. If the exact comment is already present and valid, never writes a duplicate: use the existing verified child and complete the journal without duplicating the comment after the required re-reads. If no verified `childId`/result exists, call `manual-reconciliation` with a nonblank reason and stop. Do not infer a child from title, body, time, or tree position, and do not create a replacement.
+`create-complete` first verifies that the stored `identityComment` is exactly the canonical comment derived from the intent's `taskKey`, then verifies that the PM re-read (`title` when supplied, `body`, `relations`, and `identityComment`) equals the stored `creationPayload`. An arbitrary or mismatched identity comment cannot complete the intent. If the `create_comment` response is lost, re-read the canonical identity comment before `create-complete`; specifically, re-read the exact canonical identity comment before `create-complete`. If the exact comment is already present and valid, never writes a duplicate: use the existing verified child and complete the journal without duplicating the comment after the required re-reads. If no verified `childId`/result exists, call `manual-reconciliation` with a nonblank reason and stop. Do not infer a child from title, body, time, or tree position, and do not create a replacement.
 
 On create-intent recovery, use only a verified intent-to-child association. When the create intent records a `childId`, verify its parent and exact anchor, then retry only missing identity/comment writes. If the intent has no `childId`/result, use a documented PM idempotency/client-request lookup only when that PM primitive actually exists; otherwise surface `manual-reconciliation-required` and stop. An unreadable/missing intent also stops safely. Never create a replacement for an uncertain partial child.
 

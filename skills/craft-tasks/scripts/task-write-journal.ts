@@ -91,6 +91,10 @@ function newOpaquePair(): { createIntentId: string; taskKey: string } {
 	return { createIntentId, taskKey };
 }
 
+export function canonicalIdentityComment(taskKey: string): string {
+	return `<!-- Task identity\ntaskKey: ${taskKey}\n-->`;
+}
+
 export function journalPath(sessionId = resolveSessionIdOrThrow()): string {
 	if (!isSafeSessionId(sessionId)) throw new Error("Unsafe session id");
 	return `${getOmtDir()}/${JOURNAL_PREFIX}${sessionId}.json`;
@@ -168,8 +172,10 @@ export function createPrepare(input: unknown, sessionId?: string): CreateIntent 
 	if (!record(input)) throw new Error("Expected a JSON object");
 	const { parentId, designAnchor } = validateAnchor(input.parentId, input.designAnchor);
 	const { createIntentId, taskKey } = newOpaquePair();
-	const creationPayload = Object.prototype.hasOwnProperty.call(input, "creationPayload") ? input.creationPayload : input;
-	return append({ kind: "create", createIntentId, taskKey, parentId, designAnchor, creationPayload: exact(creationPayload, "creationPayload"), state: "prepared" }, sessionId);
+	const proposedPayload = Object.prototype.hasOwnProperty.call(input, "creationPayload") ? input.creationPayload : input;
+	if (!record(exact(proposedPayload, "creationPayload"))) throw new Error("Expected a JSON object");
+	const creationPayload = { ...proposedPayload, identityComment: canonicalIdentityComment(taskKey) };
+	return append({ kind: "create", createIntentId, taskKey, parentId, designAnchor, creationPayload, state: "prepared" }, sessionId);
 }
 
 export function createChild(intentId: string, association: unknown, sessionId?: string): CreateIntent {
@@ -181,6 +187,7 @@ export function createChild(intentId: string, association: unknown, sessionId?: 
 }
 
 export interface CreateCompleteVerification extends Association {
+	title?: unknown;
 	body: unknown;
 	relations: unknown;
 	identityComment: unknown;
@@ -193,6 +200,12 @@ export function createComplete(intentId: string, verification: unknown, sessionI
 	verifyAssociation(found.intent, verification);
 	const payload = found.intent.creationPayload;
 	if (!record(payload)) throw new Error("Expected a JSON object");
+	if (!isDeepStrictEqual(exact(payload.identityComment, "identityComment"), canonicalIdentityComment(found.intent.taskKey))) {
+		throw new Error("stored identityComment mismatch");
+	}
+	if (Object.prototype.hasOwnProperty.call(payload, "title") && !isDeepStrictEqual(exact(verification.title, "title"), payload.title)) {
+		throw new Error("title verification mismatch");
+	}
 	if (!isDeepStrictEqual(exact(verification.body, "body"), payload.body)) throw new Error("body verification mismatch");
 	if (!isDeepStrictEqual(exact(verification.relations, "relations"), payload.relations)) throw new Error("relations verification mismatch");
 	if (!isDeepStrictEqual(exact(verification.identityComment, "identityComment"), payload.identityComment)) throw new Error("identityComment verification mismatch");
