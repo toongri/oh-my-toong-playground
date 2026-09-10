@@ -71,7 +71,7 @@ flowchart LR
     sisyphus -->|"검증된 코드"| Done((완료))
 ```
 
-각 화살표는 파일 또는 PM 도구 핸드오프입니다. deep-interview의 Phase 5는 먼저 명세의 출력 형태를 확인합니다. 팀용 작업 티켓을 요청하면 설계 이후의 작업 티켓화 단계인 craft-tasks를 권장하고, 확정된 설계를 공유 가능한 자식 티켓으로 분해합니다. 팀용 작업 티켓을 요청하지 않으면 활성 토폴로지 컴포넌트가 정확히 1개일 때 ultragoal을, 그 외에는 prometheus를 권장하고 다른 경로는 명시적 오버라이드로 제공합니다. prometheus를 선택하면 사람이 읽을 수 있는 계획을 만들어 ultragoal에 넘기며, ultragoal은 스토리를 sisyphus에 순차 디스패치하고 sisyphus는 검증된 코드 변경으로 마무리합니다. 단계를 건너뛰어도 동작하지만, 앞 단계의 명확성이 뒤 단계의 품질을 결정합니다.
+각 화살표는 파일 또는 PM 도구 핸드오프입니다. deep-interview의 Phase 5는 먼저 명세의 출력 형태를 확인합니다. 팀용 작업 티켓을 요청하면 설계 이후의 작업 티켓화 단계인 craft-tasks를 권장하고, exact `designAnchor`와 선택적 `parentId`, 기존 `taskIdentities`(`[{ taskKey, childId }]`)를 넘겨 확정된 설계를 공유 가능한 자식 티켓으로 분해합니다. craft-tasks는 새 자식마다 불투명하고 불변인 `taskKey`를 만들고 기존 PM `create_comment`로 이식 가능한 append-only `Task identity` 코멘트에 저장한 뒤 `taskIdentities`를 반환합니다. 유지보수 시에는 `childId`를 먼저 매칭하고, 없으면 검증된 `parentId`와 exact `designAnchor`를 함께 확인한 `taskKey`로 같은 자식을 갱신합니다. 식별자가 없거나 읽을 수 없거나 불일치하거나 레거시가 모호하면 중복 생성 대신 복구를 요구하며 멈춥니다. 팀용 작업 티켓을 요청하지 않으면 활성 토폴로지 컴포넌트가 정확히 1개일 때 ultragoal을, 그 외에는 prometheus를 권장하고 다른 경로는 명시적 오버라이드로 제공합니다. prometheus를 선택하면 사람이 읽을 수 있는 계획을 만들어 ultragoal에 넘기며, ultragoal은 스토리를 sisyphus에 순차 디스패치하고 sisyphus는 검증된 코드 변경으로 마무리합니다. 단계를 건너뛰어도 동작하지만, 앞 단계의 명확성이 뒤 단계의 품질을 결정합니다.
 
 craft-tasks는 작업 티켓의 본문을 현재 작업 정의로 유지하고, 의미 있는 변경의 계기·판단 근거·영향을 코멘트로 기록합니다. 이슈와 부모 티켓 처리는 craft-issue에 위임하며 해당 정책을 중복 정의하지 않습니다.
 
