@@ -248,8 +248,15 @@ function withJournalLock<T>(sessionId: string | undefined, operation: () => T): 
 		if (!existsSync(lockPath)) continue;
 		if (removeEmptyLegacyLock(lockPath)) continue;
 		if (!existsSync(lockPath)) continue;
-		let ownerPid: number | undefined;
-		try { ownerPid = parseOwnerPid(readFileSync(`${lockPath}/owner`, "utf8")); } catch { /* inspect below */ }
+		let ownerContents: string;
+		try { ownerContents = readFileSync(`${lockPath}/owner`, "utf8"); } catch {
+			continue;
+		}
+		if (ownerContents.trim() === "") {
+			Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, LOCK_RETRY_MS);
+			continue;
+		}
+		const ownerPid = parseOwnerPid(ownerContents);
 		if (ownerPid === undefined) throw new Error("Journal lock has a malformed or missing owner");
 		try { process.kill(ownerPid, 0); } catch (error) {
 			if (hasErrorCode(error, "ESRCH")) {

@@ -220,6 +220,27 @@ describe("task write journal", () => {
 		expect(journal.intents).toHaveLength(workers);
 	});
 
+	test("retries when a normal owner release briefly leaves an empty lock", async () => {
+		setup();
+		const lockPath = `${journalPath(sid)}.lock`;
+		mkdirSync(lockPath, { recursive: true });
+		const modulePath = resolve("skills/craft-tasks/scripts/task-write-journal.ts");
+		const child = spawn("bun", ["-e", `import { createPrepare } from ${JSON.stringify(modulePath)}; createPrepare({ parentId: "p", designAnchor: "a", creationPayload: { body: "b", relations: [] } });`], {
+			env: { ...process.env, OMT_DIR: omtDir, OMT_SESSION_ID: sid },
+			stdio: "ignore",
+		});
+		await new Promise((resolveRelease) => setTimeout(() => {
+			rmSync(lockPath, { recursive: true, force: true });
+			resolveRelease(undefined);
+		}, 25));
+		const exitCode = await new Promise<number>((resolveExit, rejectExit) => {
+			child.once("error", rejectExit);
+			child.once("exit", (code) => resolveExit(code ?? 1));
+		});
+		expect(exitCode).toBe(0);
+		expect(JSON.parse(readFileSync(journalPath(sid), "utf8")).intents).toHaveLength(1);
+	});
+
 	test("recovers a legacy empty ownerless lock", () => {
 		setup();
 		const lockPath = `${journalPath(sid)}.lock`;
