@@ -16,6 +16,19 @@ const verifierPrompt = readFileSync(
 	"utf8",
 );
 
+describe("후보 직접 검증 계약", () => {
+	test("모든 리뷰에서 직접 검증하며 점수와 검증 위임 분기를 제거한다", () => {
+		const phase2 = extractSection(skillMd, "### Phase 2: Candidate Verification", "### Phase 3:");
+		expect(phase2).toContain("For every review mode, verify each deduplicated candidate yourself");
+		expect(phase2).toContain("Do not spawn verifier subagents or assign numeric confidence scores");
+		expect(skillMd).not.toContain("escalationConfidenceThreshold");
+		expect(skillMd).not.toContain("escalationKCap");
+		for (const source of [skillMd, codeReviewerAgent, verifierPrompt, chunkReviewerPrompt]) {
+			expect(source).not.toMatch(/independent verifier|verifier subagent \(one|per-candidate verifier fan-out|sent to the subagent/i);
+		}
+	});
+});
+
 function extractSection(markdown: string, heading: string, nextHeading: string) {
 	const start = markdown.indexOf(heading);
 	const end = markdown.indexOf(nextHeading, start + heading.length);
@@ -722,6 +735,7 @@ describe("code-review Phase 2 verifier interpolation 계약", () => {
 					"git",
 					"--literal-pathspecs",
 					"diff",
+					"--binary",
 					"--no-ext-diff",
 					"--no-textconv",
 					hostileRange,
