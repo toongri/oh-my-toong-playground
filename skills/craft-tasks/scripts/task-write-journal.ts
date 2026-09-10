@@ -94,6 +94,10 @@ function exact(value: unknown, name: string): unknown {
 	return value;
 }
 
+function hasErrorCode(error: unknown, code: string): boolean {
+	return typeof error === "object" && error !== null && "code" in error && error.code === code;
+}
+
 function validateAnchor(parentId: unknown, designAnchor: unknown): { parentId: string; designAnchor: string } {
 	return { parentId: nonblank(parentId, "parentId"), designAnchor: nonblank(designAnchor, "designAnchor") };
 }
@@ -160,14 +164,14 @@ function withJournalLock<T>(sessionId: string | undefined, operation: () => T): 
 				try { rmdirSync(lockPath); } catch { /* best effort */ }
 			}
 		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+			if (!hasErrorCode(error, "EEXIST")) throw error;
 			let ownerPid: number | undefined;
 			try {
 				ownerPid = Number.parseInt(readFileSync(`${lockPath}/owner`, "utf8"), 10);
 			} catch { /* owner may be between mkdir and owner-file creation */ }
 			if (ownerPid !== undefined && !Number.isNaN(ownerPid)) {
 				try { process.kill(ownerPid, 0); } catch (probeError) {
-					if ((probeError as NodeJS.ErrnoException).code === "ESRCH") {
+					if (hasErrorCode(probeError, "ESRCH")) {
 						try { unlinkSync(`${lockPath}/owner`); } catch { /* best effort */ }
 						try { rmdirSync(lockPath); } catch { /* another waiter may have reclaimed it */ }
 						continue;
