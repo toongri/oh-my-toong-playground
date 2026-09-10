@@ -216,6 +216,71 @@ describe("resolveShellDependencies", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncShellDependencies", () => {
+	it("실제 explain-diff Claude/Codex shim 배포 후 shared guard가 실행됨", async () => {
+		const repositoryHooksDir = path.resolve(import.meta.dir, "../../hooks");
+		const omtDir = path.join(targetDir, "omt");
+		const artifactPath = path.join(omtDir, "explain-diff", "draft.md");
+		await fs.mkdir(path.dirname(artifactPath), { recursive: true });
+		await fs.writeFile(
+			path.join(omtDir, "explain-diff-state-deployment-test.json"),
+			JSON.stringify({ active: false }),
+			"utf8",
+		);
+		// write-guard-core.sh is deployed as its own registered hook dependency;
+		// this test isolates the shared explain-diff core's transitive closure.
+		await fs.copyFile(
+			path.join(repositoryHooksDir, "write-guard-core.sh"),
+			path.join(targetDir, "write-guard-core.sh"),
+		);
+
+		const cases = [
+			{
+				name: "claude",
+				entry: "explain-diff-artifact-guard.sh",
+				payload: {
+					session_id: "deployment-test",
+					tool_name: "Write",
+					tool_input: { file_path: artifactPath },
+				},
+			},
+			{
+				name: "codex",
+				entry: "codex-explain-diff-artifact-guard.sh",
+				payload: {
+					session_id: "deployment-test",
+					tool_name: "apply_patch",
+					tool_input: { file_path: artifactPath },
+				},
+			},
+		] as const;
+
+		for (const testCase of cases) {
+			const sourceEntry = path.join(repositoryHooksDir, testCase.entry);
+			const targetEntry = path.join(targetDir, testCase.entry);
+			await fs.copyFile(sourceEntry, targetEntry);
+			await fs.chmod(targetEntry, 0o755);
+			await syncShellDependencies(sourceEntry, repositoryHooksDir, targetDir, false);
+
+			const child = Bun.spawn(["bash", targetEntry], {
+				env: { ...process.env, OMT_DIR: omtDir, OMT_SESSION_ID: "deployment-test", CODEX_THREAD_ID: "" },
+				stdin: "pipe",
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+			child.stdin.write(JSON.stringify(testCase.payload));
+			child.stdin.end();
+			const [exitCode, stdout, stderr] = await Promise.all([
+				child.exited,
+				new Response(child.stdout).text(),
+				new Response(child.stderr).text(),
+			]);
+
+			expect(exitCode).toBe(0);
+			expect(stderr).toBe("");
+			expect(stdout).toContain("상태가 비활성입니다");
+		}
+	});
+
 	it("mutation hook이 exact target에서 operation을 감싸고 성공 뒤 legacy callback을 호출함", async () => {
 		const libFile = path.join(hooksDir, "lib", "hooked.sh");
 		await writeFile(libFile, "hooked");

@@ -27,6 +27,7 @@ _ed_core_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=hooks/write-guard-core.sh
 . "$_ed_core_lib_dir/../write-guard-core.sh"
 # shellcheck source=hooks/lib/state-liveness.sh
+# omt-hook-dep: lib/state-liveness.sh
 . "$_ed_core_lib_dir/state-liveness.sh"
 
 # The guarded directory's name, WITH its trailing slash. The slash is the whole
