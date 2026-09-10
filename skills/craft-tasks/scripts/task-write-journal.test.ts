@@ -190,7 +190,11 @@ describe("task write journal", () => {
 		manualReconciliation(first.createIntentId, "stop");
 		process.env.OMT_SESSION_ID = "another-session";
 		const third = createPrepare({ parentId, designAnchor: anchor, creationPayload: { body: "c", relations: [] } });
-		expect(listPending().map((entry) => entry.intentId)).toEqual([third.createIntentId, second.createIntentId]);
+		const pending = listPending();
+		expect(pending.map((entry) => {
+			if ("error" in entry) throw new Error(entry.error);
+			return entry.intentId;
+		})).toEqual([third.createIntentId, second.createIntentId]);
 	});
 
 	test("reports malformed matching journals and rejects unsafe explicit sessions", () => {

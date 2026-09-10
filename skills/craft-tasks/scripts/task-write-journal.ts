@@ -186,8 +186,9 @@ export function createPrepare(input: unknown, sessionId?: string): CreateIntent 
 	const { parentId, designAnchor } = validateAnchor(input.parentId, input.designAnchor);
 	const { createIntentId, taskKey } = newOpaquePair();
 	const proposedPayload = Object.prototype.hasOwnProperty.call(input, "creationPayload") ? input.creationPayload : input;
-	if (!record(exact(proposedPayload, "creationPayload"))) throw new Error("Expected a JSON object");
-	const creationPayload = { ...proposedPayload, identityComment: canonicalIdentityComment(taskKey) };
+	const exactPayload = exact(proposedPayload, "creationPayload");
+	if (!record(exactPayload)) throw new Error("Expected a JSON object");
+	const creationPayload = { ...exactPayload, identityComment: canonicalIdentityComment(taskKey) };
 	return append({ kind: "create", createIntentId, taskKey, parentId, designAnchor, creationPayload, state: "prepared" }, sessionId);
 }
 
@@ -269,14 +270,16 @@ export function getIntent(intentId: string, sessionId?: string): Intent {
 	return findIntent(intentId, sessionId).intent;
 }
 
-function pendingEntry(sourceSessionId: string, intent: Intent): PendingEntry | undefined {
+type PendingIntentEntry = Extract<PendingEntry, { intentId: string }>;
+
+function pendingEntry(sourceSessionId: string, intent: Intent): PendingIntentEntry | undefined {
 	if (intent.kind === "create") {
 		const intentId = nonblank(intent.createIntentId, "createIntentId");
 		const parentId = nonblank(intent.parentId, "parentId");
 		const designAnchor = nonblank(intent.designAnchor, "designAnchor");
 		if (!TERMINAL_STATES.has(intent.state) && !new Set<JournalState>(["prepared", "child-created"]).has(intent.state)) throw new Error("Malformed task-write journal state");
 		if (TERMINAL_STATES.has(intent.state)) return undefined;
-		const entry: PendingEntry = { sourceSessionId, intentId, kind: intent.kind, state: intent.state, parentId, designAnchor };
+		const entry: PendingIntentEntry = { sourceSessionId, intentId, kind: intent.kind, state: intent.state, parentId, designAnchor };
 		if (intent.childId !== undefined) entry.childId = nonblank(intent.childId, "childId");
 		return entry;
 	}
@@ -314,7 +317,7 @@ export function listPending(): PendingEntry[] {
 			const journal = readJournal(sourceSessionId);
 			const pending = journal.intents
 				.map((intent) => pendingEntry(sourceSessionId, intent))
-				.filter((entry): entry is PendingEntry => entry !== undefined)
+				.filter((entry): entry is PendingIntentEntry => entry !== undefined)
 				.sort((a, b) => a.intentId.localeCompare(b.intentId));
 			entries.push(...pending);
 		} catch (error) {
