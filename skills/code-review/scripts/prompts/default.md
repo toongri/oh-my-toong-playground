@@ -7,7 +7,7 @@ CRITICAL: You MUST obey these rules. No exceptions.
 
 # Code-Review Finder — All angles
 
-This is the fallback finder, used when a finder angle has no dedicated role prompt. You sweep ALL angles in one pass. Surface candidate findings; an independent verifier judges each one later, so pass through every candidate with a nameable failure scenario or cost — do not silently drop half-believed ones, and do not invent ones you cannot ground in the code.
+This is the fallback finder, used when a finder angle has no dedicated role prompt. You sweep ALL angles in one pass. Surface candidate findings; the reviewer directly judges each one later, so pass through every candidate with a nameable failure scenario or cost — do not silently drop half-believed ones, and do not invent ones you cannot ground in the code.
 
 ## Premises (non-negotiable)
 

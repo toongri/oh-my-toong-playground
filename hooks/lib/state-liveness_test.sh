@@ -450,11 +450,11 @@ test_head_red_probe_artifact_prefix_matches_current_session() {
   fi
 }
 
-# All 15 session-keyed forms on disk share one sid: 5 state prefixes + 6
+# All 16 session-keyed forms on disk share one sid: 6 state prefixes + 7
 # session-artifact whitelist prefixes + 4 unclassified/producerless forms.
 # is_current_session must recognize every one of them, including the two
 # double-extension .closed.bak forms and the extensionless block-count form.
-test_is_current_session_recognizes_all_fifteen_forms() {
+test_is_current_session_recognizes_all_sixteen_forms() {
   local sid="form-sid-2"
   local d="$TEST_TMP_DIR"
   mkdir -p "$d/state"
@@ -470,6 +470,7 @@ test_is_current_session_recognizes_all_fifteen_forms() {
   write_state "$d/goal-codereview-$sid.json" "{}"
   write_state "$d/ultragoal-verdict-$sid.json" "{}"
   write_state "$d/ultragoal-codereview-$sid.json" "{}"
+  write_state "$d/task-write-journal-$sid.json" "{}"
   write_state "$d/deep-interview-active-state-$sid.json.closed.bak" "{}"
   write_state "$d/prometheus-state-$sid.json.closed.bak" "{}"
   write_state "$d/handoff-consumed-$sid" "{}"
@@ -484,8 +485,8 @@ test_is_current_session_recognizes_all_fifteen_forms() {
     fi
   done
 
-  if [ "$n" -ne 15 ]; then
-    echo "  ASSERTION FAILED: expected 15 forms to match sid '$sid', got $n"
+  if [ "$n" -ne 16 ]; then
+    echo "  ASSERTION FAILED: expected 16 forms to match sid '$sid', got $n"
     return 1
   fi
 
@@ -1605,6 +1606,178 @@ test_reap_session_artifacts_stale_codex_todo_reaped_without_witness() {
   return 0
 }
 
+# Pending task journals are recovery records, so generic mtime cleanup must
+# preserve them even when stale and regardless of live session witnesses.
+test_task_write_journal_stale_prepared_survives_execute_cleanup() {
+  local d="$TEST_TMP_DIR/omt"
+  mkdir -p "$d"
+
+  local journal="$d/task-write-journal-stale-journal-74.json"
+  write_state "$journal" '{"version":1,"intents":[{"state":"prepared"}]}'
+  touch_ago "$journal" 25200
+
+  reap_session_artifacts "$d" "__none__" "$NOW" 0 > /dev/null
+
+  if [ ! -f "$journal" ]; then
+    echo "  ASSERTION FAILED: stale prepared task-write journal must survive generic cleanup"
+    return 1
+  fi
+  return 0
+}
+
+test_task_write_journal_dry_run_preserves_and_does_not_report_candidate() {
+  local d="$TEST_TMP_DIR/omt"
+  mkdir -p "$d"
+  local journal="$d/task-write-journal-dry-run-75.json"
+  write_state "$journal" '{"version":1,"intents":[{"state":"prepared"}]}'
+  local before
+  before=$(sed -n '1p' "$journal")
+  touch_ago "$journal" 25200
+
+  local out
+  out=$(reap_session_artifacts "$d" "__none__" "$NOW" 1)
+  if printf '%s\n' "$out" | grep -Fq "$journal"; then
+    echo "  ASSERTION FAILED: dry-run must not report a task-write journal as generic deletion candidate"
+    return 1
+  fi
+  if [ ! -f "$journal" ]; then
+    echo "  ASSERTION FAILED: dry-run must preserve the task-write journal"
+    return 1
+  fi
+  if [ "$(sed -n '1p' "$journal")" != "$before" ]; then
+    echo "  ASSERTION FAILED: dry-run must leave task-write journal bytes unchanged"
+    return 1
+  fi
+  return 0
+}
+
+test_list_unclassified_recognizes_uuid_task_write_journal() {
+  local d="$TEST_TMP_DIR"
+  local uuid="c7d8e9f0-1234-4abc-8def-0123456789ab"
+  write_state "$d/task-write-journal-$uuid.json" "{}"
+
+  local out
+  out=$(list_unclassified_session_files "$d")
+  if printf '%s' "$out" | grep -Fq "task-write-journal-$uuid.json"; then
+    echo "  ASSERTION FAILED: managed task-write journal must not be reported as unclassified drift"
+    echo "  got: $out"
+    return 1
+  fi
+  return 0
+}
+
+test_list_unclassified_reports_malformed_task_write_journal() {
+  local d="$TEST_TMP_DIR"
+  local uuid="c7d8e9f0-1234-4abc-8def-0123456789ab"
+  write_state "$d/task-write-journal-$uuid.tmp" "{}"
+  write_state "$d/task-write-journal-$uuid.json.closed" "{}"
+  write_state "$d/task-write-journal-$uuid.with-dot.json" "{}"
+
+  local out
+  out=$(list_unclassified_session_files "$d")
+  if ! printf '%s' "$out" | grep -Fq "task-write-journal-$uuid.tmp"; then
+    echo "  ASSERTION FAILED: malformed task-write journal must remain visible as drift"
+    return 1
+  fi
+  if ! printf '%s' "$out" | grep -Fq "task-write-journal-$uuid.json.closed"; then
+    echo "  ASSERTION FAILED: oddly named task-write journal must remain visible as drift"
+    return 1
+  fi
+  if ! printf '%s' "$out" | grep -Fq "task-write-journal-$uuid.with-dot.json"; then
+    echo "  ASSERTION FAILED: task journal with unsafe dot in session id must remain visible as drift"
+    return 1
+  fi
+  return 0
+}
+
+test_list_unclassified_enforces_safe_session_id_length_limit() {
+  local d="$TEST_TMP_DIR"
+  local id_200="" id_201="" i
+  local uuid_tail="c7d8e9f0-1234-4abc-8def-0123456789ab"
+  for i in $(seq 1 163); do id_200="${id_200}a"; done
+  id_200="${id_200}-${uuid_tail}"
+  for i in $(seq 1 164); do id_201="${id_201}a"; done
+  id_201="${id_201}-${uuid_tail}"
+  write_state "$d/task-write-journal-$id_200.json" "{}"
+  write_state "$d/task-write-journal-$id_201.json" "{}"
+
+  local out
+  out=$(list_unclassified_session_files "$d")
+  if printf '%s\n' "$out" | grep -Fxq "$d/task-write-journal-$id_200.json"; then
+    echo "  ASSERTION FAILED: a 200-character safe session id must be recognized"
+    return 1
+  fi
+  if ! printf '%s\n' "$out" | grep -Fxq "$d/task-write-journal-$id_201.json"; then
+    echo "  ASSERTION FAILED: a 201-character safe session id must remain unclassified drift"
+    return 1
+  fi
+  return 0
+}
+
+test_task_write_recovery_artifacts_survive_execute_and_dry_run_cleanup() {
+  local d="$TEST_TMP_DIR/omt"
+  local sid="recovery-session-76"
+  local receipt="12345678-1234-1234-1234-123456789abc"
+  local reconciliation="$d/task-write-reconciliation-$sid-$receipt.json"
+  local quarantine="$d/task-write-journal-$sid.quarantine.artifact-1.json"
+  mkdir -p "$d"
+  write_state "$reconciliation" '{"type":"missing-intent"}'
+  write_state "$quarantine" 'original bytes'
+  touch_ago "$reconciliation" 25200
+  touch_ago "$quarantine" 25200
+
+  reap_session_artifacts "$d" "__none__" "$NOW" 1 > /dev/null
+  [ -f "$reconciliation" ] || { echo "  ASSERTION FAILED: dry-run must preserve reconciliation receipt"; return 1; }
+  [ -f "$quarantine" ] || { echo "  ASSERTION FAILED: dry-run must preserve quarantine artifact"; return 1; }
+  reap_session_artifacts "$d" "__none__" "$NOW" 0 > /dev/null
+  [ -f "$reconciliation" ] || { echo "  ASSERTION FAILED: execute cleanup must preserve reconciliation receipt"; return 1; }
+  [ -f "$quarantine" ] || { echo "  ASSERTION FAILED: execute cleanup must preserve quarantine artifact"; return 1; }
+  return 0
+}
+
+test_list_unclassified_recognizes_task_write_recovery_artifacts() {
+  local d="$TEST_TMP_DIR"
+  local sid="recovery-session-77"
+  local receipt="abcdef12-3456-4abc-8def-0123456789ab"
+  write_state "$d/task-write-reconciliation-$sid-$receipt.json" "{}"
+  write_state "$d/task-write-journal-$sid.quarantine.quarantine-1.json" "{}"
+
+  local out
+  out=$(list_unclassified_session_files "$d")
+  if printf '%s\n' "$out" | grep -q 'task-write-'; then
+    echo "  ASSERTION FAILED: valid task-write recovery artifacts must be recognized"
+    echo "  got: $out"
+    return 1
+  fi
+  return 0
+}
+
+test_list_unclassified_reports_malformed_task_write_recovery_artifacts() {
+  local d="$TEST_TMP_DIR"
+  local sid="recovery-abcdef12-3456-4abc-8def-0123456789ab"
+  local receipt="abcdef12-3456-4abc-8def-0123456789ab"
+  write_state "$d/task-write-reconciliation-$sid-not-a-uuid.json" "{}"
+  write_state "$d/task-write-reconciliation-$sid-$receipt.extra.json" "{}"
+  write_state "$d/task-write-journal-$sid.quarantine..json" "{}"
+  write_state "$d/task-write-journal-$sid.quarantine.artifact_id.json" "{}"
+  write_state "$d/task-write-journal-$sid.quarantine.artifact.id.json" "{}"
+
+  local out
+  out=$(list_unclassified_session_files "$d")
+  for name in \
+    "task-write-reconciliation-$sid-not-a-uuid.json" \
+    "task-write-reconciliation-$sid-$receipt.extra.json" \
+    "task-write-journal-$sid.quarantine..json" \
+    "task-write-journal-$sid.quarantine.artifact_id.json" \
+    "task-write-journal-$sid.quarantine.artifact.id.json"; do
+    if ! printf '%s\n' "$out" | grep -Fq "$name"; then
+      echo "  ASSERTION FAILED: malformed recovery artifact must remain drift: $name"
+      return 1
+    fi
+  done
+  return 0
+}
+
 # =============================================================================
 # Batched-stat restructure (per-file stat fork elimination): fail-open on a
 # silently-omitted batch line, and correct mtime/path splitting for a
@@ -2095,6 +2268,11 @@ test_session_artifact_prefixes_exactly_six_managed() {
     fi
   done
 
+  if printf '%s\n' $SESSION_ARTIFACT_PREFIXES | grep -q '^task-write-journal-$'; then
+    echo "  ASSERTION FAILED: task-write-journal- must not be a generic reaper prefix"
+    return 1
+  fi
+
   return 0
 }
 
@@ -2200,7 +2378,7 @@ run_test test_is_current_session_matches_ultragoal_filename_sid
 run_test test_is_current_session_sid_quoting_prevents_glob_metachar_false_match_extensionless
 run_test test_is_current_session_sid_quoting_prevents_glob_metachar_false_match_extension_form
 run_test test_head_red_probe_artifact_prefix_matches_current_session
-run_test test_is_current_session_recognizes_all_fifteen_forms
+run_test test_is_current_session_recognizes_all_sixteen_forms
 run_test test_is_current_session_empty_sid_preserves
 run_test test_is_artifact_live_mtime_only_ignores_active_field
 run_test test_is_artifact_live_unreadable_mtime_fails_open
@@ -2237,6 +2415,14 @@ run_test test_reap_session_artifacts_dry_run_preserves_candidate_bytes
 run_test test_reap_session_artifacts_namespaced_block_count_survives_none_lane
 run_test test_reap_session_artifacts_stale_codex_todo_survives_via_fresh_block_count_witness
 run_test test_reap_session_artifacts_stale_codex_todo_reaped_without_witness
+run_test test_task_write_journal_stale_prepared_survives_execute_cleanup
+run_test test_task_write_journal_dry_run_preserves_and_does_not_report_candidate
+run_test test_list_unclassified_recognizes_uuid_task_write_journal
+run_test test_list_unclassified_reports_malformed_task_write_journal
+run_test test_list_unclassified_enforces_safe_session_id_length_limit
+run_test test_task_write_recovery_artifacts_survive_execute_and_dry_run_cleanup
+run_test test_list_unclassified_recognizes_task_write_recovery_artifacts
+run_test test_list_unclassified_reports_malformed_task_write_recovery_artifacts
 run_test test_reap_session_artifacts_batched_stat_omission_fails_open
 run_test test_reap_session_artifacts_space_bearing_dir_path_judged_correctly
 run_test test_list_live_session_ids_space_bearing_dir_witness_pass

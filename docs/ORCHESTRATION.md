@@ -21,7 +21,7 @@
   |-- 아니오 -> 요구사항이 명확한가?
                   |-- 아니오 -> /deep-interview로 명세 수렴
                                 |-- 팀이 공유·추적할 구현 task 티켓이 필요한가?
-                                      |-- 예 -> /craft-tasks로 부모 확인·보강 및 자식 티켓 생성
+                                      |-- 예 -> /craft-tasks로 작업 생성·최신화 (부모 처리는 craft-issue)
                                                -> task별 필요할 때만 /prometheus
                                                -> /ultragoal -> /sisyphus
                                       |-- 아니오 -> 활성 토폴로지 컴포넌트가 정확히 하나면 /ultragoal
@@ -45,7 +45,7 @@ Oh-My-Toong은 역할을 명확히 분리하여 이를 해결합니다:
 | 역할 | 에이전트 | 책임 |
 |------|----------|------|
 | **정의** | deep-interview | 모호성을 해소해 명세로 수렴, 절대 코드 작성 안 함 |
-| **작업 티켓화** | craft-tasks | 확정된 설계를 팀이 공유·추적할 자식 task 티켓으로 분해하고 부모를 확인·보강한 뒤 생성 |
+| **작업 티켓화** | craft-tasks | 확정된 설계를 자식 task 티켓으로 생성·최신화하고 부모 처리는 craft-issue에 위임 |
 | **기획** | prometheus | 전략적 기획, 절대 코드 작성 안 함 |
 | **스토리 실행** | ultragoal | 계획의 스토리를 순서대로 sisyphus에 전달 |
 | **실행** | sisyphus | 위임을 통한 조율, 절대 단독 작업 안 함 |
@@ -72,7 +72,7 @@ flowchart TD
     end
 
     subgraph 작업 티켓 단계
-        CraftTasks --> Parent["검증된 부모<br/>확인·보강"]
+        CraftTasks --> Parent["craft-issue로<br/>부모 처리"]
         Parent --> ChildTickets["PM 도구에 자식<br/>task 티켓 생성"]
         ChildTickets --> TaskPlan{task별 AI<br/>계획이 필요한가?}
     end
@@ -115,7 +115,23 @@ flowchart TD
 - **역할**: 확정된 설계를 팀이 공유·추적할 수 있는 구현 task 티켓으로 분해
 - **제약**: 의도·접근 방식·불변식·경계가 확정된 설계에만 사용합니다. AI 실행 계획만 필요하면 `prometheus`를 사용합니다.
 - **출력**: 검증된 부모 아래 PM 도구에 생성된 자식 task 티켓
-- **워크플로우**: deep-interview 명세를 바탕으로 부모를 확인·보강하고 기존 자식 티켓을 검증한 뒤, 누락된 구현 task만 자식 티켓으로 생성합니다. 생성된 각 task에 AI 실행 계획이 필요할 때만 task별로 `/prometheus`를 선택하고, 이후 `/ultragoal` -> `/sisyphus`로 실행합니다.
+- **워크플로우**: deep-interview 명세를 바탕으로 부모 처리를 craft-issue에 맡기고, 반환된 부모 연결을 검증한 뒤 기존 작업의 본문을 최신화하고 누락된 구현 task만 생성합니다. 생성·업데이트의 실행 계약은 `skills/craft-tasks/SKILL.md`와 `skills/craft-tasks/scripts/task-write-journal.ts`에 있으며, 실제 PM API는 이 저장소의 harness 바깥에 있다는 기존 경계를 따릅니다.
+
+#### PM 쓰기 저널 계약과 복구
+
+`task-write-journal.ts`는 세션별 `$OMT_DIR/task-write-journal-<sessionId>.json`에 crash-atomic한 로컬 orchestration intent를 기록합니다. 이 저널은 PM 필드·코멘트·idempotency primitive가 아니므로 PM custom field나 존재하지 않는 idempotency primitive를 발명하지 않습니다.
+
+`task-write-journal-<safe-session>.json`과 `task-write-reconciliation-<safe-session>-<receiptId>.json`, 격리된 `task-write-journal-<safe-session>.quarantine.<artifactId>.json`은 `SESSION_ARTIFACT_PREFIXES`의 generic TTL 정리 대상에서 의도적으로 제외합니다. 이 파일명 family는 drift 분류와 복구 항목 인식을 위한 것일 뿐 삭제 권한을 부여하지 않습니다. pending 및 malformed 저널 내용은 명시적 복구를 위해 남겨 두며, malformed 저널의 원본 바이트는 quarantine artifact로 보존합니다.
+
+`create-prepare` 입력은 PM 바인딩에 맞는 정확한 생성 필드를 담은 중첩 `creationPayload`를 요구합니다. Linear을 선택한 경우에는 `title`(선택)·`description`·선택적 `blockedBy`를 사용하고, 다른 PM 바인딩은 그에 대응하는 정확한 필드를 사용합니다. 검증된 `parentId`를 PM payload에 주입하고 orchestration 전용 `designAnchor`와 `identityComment`는 PM payload에서 제거합니다. 반환되는 정확한 `creationPayload`는 `save_issue`에 그대로 전달하고, canonical `identityComment`는 별도 필드로 반환합니다.
+
+새 자식은 정확한 `save_issue` 생성 payload를 먼저 `create-prepare`로 기록한 뒤에만 `save_issue`를 호출합니다. `create-prepare`는 `parentId`를 검증해 정확한 `creationPayload`에 주입하고, `save_issue`에 그대로 전달할 그 payload와 별도로 canonical `identityComment`를 반환합니다. Linear에서는 `title`·`description`·선택적 `blockedBy`를 포함한 Linear-native payload를 그대로 유지하며, `identityComment`는 별도 comment로만 전달합니다. 반환된 자식의 `parentId`와 정확한 `designAnchor`를 검증한 뒤 `create-child`로 `childId`를 기록하고, 별도로 저장한 `identityComment`를 `create_comment`로 보냅니다. `create-complete`는 association(`childId`, `parentId`, `designAnchor`)을 검증하고, PM에서 다시 읽은 생성 필드를 호출자가 중첩 `creationPayload`로 투영해 전달했는지 확인한 뒤 저장된 payload와 정확히 깊은 비교(deep comparison)하며, PM에서 다시 읽은 identity comment가 별도로 저장된 `identityComment`와 일치하는지도 검증한 뒤에만 완료 처리합니다. `create-complete`가 이미 `complete`인 intent를 같은 검증값으로 다시 받으면 결과를 그대로 반환하는 멱등적 complete replay를 수행합니다. 응답이 사라지면 기존 intent를 다시 읽고, 기록된 `childId`가 있으면 그 자식과 정확한 identity comment를 다시 읽어 누락된 쓰기만 재시도합니다. 정확한 결과가 없으면 `manual-reconciliation`을 호출해 `manual-reconciliation-required`를 기록하고 종료합니다. 제목·설명·시간·트리 위치로 자식을 추정하거나 대체 자식을 생성하지 않습니다. `taskKey`, `childId`로 구성된 반환 `taskIdentities`는 다음 handoff까지 보존해야 하며, 이후 terminal receipt를 삭제할 때도 이 보존된 identity를 다시 검증해야 합니다.
+
+교차 세션 복구는 `list --pending`으로 시작해 명시적으로 `sourceSessionId`를 선택한 다음 `get <intentId> --source-session <sourceSessionId>`로 해당 저널을 읽습니다. `list --pending`은 읽기 전용이며 저널 파일과 intent ID를 정렬한 결정적 JSON을 반환하고, 비터미널 intent뿐 아니라 아직 확인되지 않은 terminal intent도 receipt로 발견하게 합니다. 일치하는 malformed 저널은 `sourceSessionId`를 포함한 명시적 오류 항목으로 표면화됩니다. 이후 다른 세션의 intent를 전이할 때도 `create-child`, `create-complete`, `update-mutation-written`, `update-complete`, `manual-reconciliation`, `manual-reconciliation-missing`, `quarantine-journal`, `receipt-ack`에 같은 `--source-session <sourceSessionId>`를 명시합니다. `create-prepare`, `update-prepare`, `list`에는 `--source-session`을 사용할 수 없습니다. 인자를 생략한 조회·전이는 현재 세션 저널만 대상으로 합니다. 필요한 `taskIdentities`를 보존하고 PM 결과를 다시 확인한 뒤에만 `receipt-ack <intentId>`를 호출하며, `parentId`·`designAnchor`와 create의 `taskKey`·선택적 `childId` 또는 update의 `childId`를 저장값과 정확히 일치시켜야 terminal receipt와 intent가 제거됩니다. 세션 간 자동 fallback, 저널 복사, 대체 자식 생성은 금지합니다.
+
+기존 자식의 본문·native relations를 바꿀 때는 PM mutation 전에 정확한 `before`·`after`·`changeComment`를 `update-prepare`로 저장합니다. PM mutation과 change comment를 쓴 직후 `update-mutation-written`을 기록하고, body·relations·change comment를 다시 읽어 확인한 뒤에만 `update-complete`를 호출합니다. 중단 시 `get`으로 intent의 변경 문맥을 보존하고 누락된 쓰기만 수행하며, 검증된 자식 결과가 없으면 위와 같은 terminal manual reconciliation으로 멈춥니다. 완료 응답이 반복되면 동일한 검증값을 요구하는 멱등적 replay만 허용합니다.
+
+터미널 전이는 terminal intent를 즉시 compact하거나 누락하지 않습니다. `complete`와 `manual-reconciliation-required` intent는 확인되지 않은 terminal receipt로 저널에 남고 `list --pending`에서 발견됩니다. 보존된 `taskIdentities`와 PM의 정확한 association을 확인한 뒤 `receipt-ack`를 호출해야 해당 intent를 제거하며, 마지막 intent를 ack하면 저널 파일을 삭제합니다. 저널 파일을 읽을 수 있지만 해당 intent ID가 없으면 `manual-reconciliation-missing <intentId>`로 `manual-reconciliation-required` receipt를 남깁니다. 저널 JSON이 malformed JSON이거나 malformed journal shape이면 `quarantine-journal`이 원본 바이트를 그대로 `.quarantine.<artifactId>.json`으로 격리하고 `manual-reconciliation-required` receipt를 남깁니다. 파일시스템/I/O 읽기 오류는 표면화하고 rename·receipt·mutation 없이 중단합니다. 정상 quarantine receipt가 가리키는 artifact는 `list --reconciliation`에서 다시 orphan으로 보고하지 않으며, receipt가 없는 artifact만 orphan 항목입니다. 격리 receipt나 orphan 격리 artifact가 있는 source session은 sealed 상태가 되어 새 저널 append·prepare를 거부하며 새 세션을 사용해야 합니다. `list --reconciliation`은 receipt, receipt가 없는 orphan artifact, malformed receipt 및 identity/JSON 오류를 `sourceSessionId`와 receipt/artifact ID 기준으로 정렬한 결정적 결과로 보여 줍니다. 저널·reconciliation receipt·quarantine artifact 파일명 family는 모두 인식 전용이며 generic `SESSION_ARTIFACT_PREFIXES` TTL 정리에서 제외됩니다. 락은 초기화된 소유자를 원자적으로 공개하며, 일시적인 빈 release는 재시도하고 오래된 빈 legacy 락은 회수합니다. malformed 또는 live 락은 보존하고 제한 시간 내 실패합니다. 어떤 경우에도 제목·설명·시간·트리 위치로 identity를 추론하거나 대체 task를 만들지 않습니다.
 
 ### prometheus (기획자)
 
@@ -187,11 +203,11 @@ Consumer는 먼저 scope를 판정합니다. `OUT_OF_SCOPE`는 비차단 NOTE로
 
 1. **한 질문씩, 횟수 제한 없이**: 선행 결정부터 질문하고 답변이 드러낸 분기·반례·충돌을 추적
 2. **종료 점검**: 점수는 조사 방향을 돕습니다. 구현을 바꿀 미결정이 없고, 근거·실패 시나리오·남은 가정을 검토한 뒤 사용자와 이해를 확인합니다. 중단은 즉시 존중하고 조기 전달은 DRAFT로 표시합니다.
-3. **명세 확정 및 경로 선택**: `$OMT_DIR/deep-interview/{slug}.md`에 저장합니다. 5단계에서 산출물이 팀이 공유·추적할 구현 task 티켓이면 `/craft-tasks`를 권장합니다. `craft-tasks`는 검증된 부모를 확인·보강하고 PM 도구에 자식 task 티켓을 생성하며, 각 task에 AI 실행 계획이 필요할 때만 `/prometheus`를 선택적으로 적용합니다. 이후 AI 실행은 `/ultragoal`이 `/sisyphus`에 전달합니다. 팀 task 티켓이 필요하지 않고 AI 실행만 필요한 명세는 기존대로 활성 토폴로지 컴포넌트가 정확히 하나면 `/ultragoal`, 아니면 `/prometheus` -> `/ultragoal` -> `/sisyphus`를 권장하고, 권장하지 않은 스킬은 명시적 재정의 옵션으로 제시합니다.
+3. **명세 확정 및 경로 선택**: `$OMT_DIR/deep-interview/{slug}.md`에 저장합니다. 5단계에서 산출물이 팀이 공유·추적할 구현 task 티켓이면 `/craft-tasks`를 권장합니다. `craft-tasks`는 부모 처리를 craft-issue에 위임하고 PM 도구의 자식 task 티켓을 생성·최신화하며, 각 task에 AI 실행 계획이 필요할 때만 `/prometheus`를 선택적으로 적용합니다. 이후 AI 실행은 `/ultragoal`이 `/sisyphus`에 전달합니다. 팀 task 티켓이 필요하지 않고 AI 실행만 필요한 명세는 기존대로 활성 토폴로지 컴포넌트가 정확히 하나면 `/ultragoal`, 아니면 `/prometheus` -> `/ultragoal` -> `/sisyphus`를 권장하고, 권장하지 않은 스킬은 명시적 재정의 옵션으로 제시합니다.
 
 ### 1단계: 기획
 
-확정된 설계를 팀이 공유·추적할 task 티켓으로 만들려면 `/craft-tasks`를 사용합니다. `craft-tasks`가 부모를 확인·보강하고 자식 티켓을 생성한 뒤, 각 task의 AI 실행 계획이 필요할 때만 `/prometheus`를 선택적으로 사용합니다.
+확정된 설계를 팀이 공유·추적할 task 티켓으로 만들려면 `/craft-tasks`를 사용합니다. `craft-tasks`가 부모 처리를 craft-issue에 맡기고 자식 티켓을 생성·최신화한 뒤, 각 task의 AI 실행 계획이 필요할 때만 `/prometheus`를 선택적으로 사용합니다.
 
 팀 task 티켓 없이 AI 실행 계획이 필요하고 요구사항이 명확할 때 `/prometheus`를 사용합니다:
 
@@ -221,7 +237,7 @@ Consumer는 먼저 scope를 판정합니다. `OUT_OF_SCOPE`는 비차단 NOTE로
 | 명령어 | 용도 | 출력 |
 |--------|------|------|
 | `/deep-interview <아이디어>` | 모호성 게이팅으로 명세 수렴 | `$OMT_DIR/deep-interview/{slug}.md` |
-| `/craft-tasks <명세>` | 확정된 설계를 팀이 공유·추적할 task 티켓으로 분해하고 부모 확인·보강 후 자식 티켓 생성 | PM 도구의 부모·자식 task 티켓 |
+| `/craft-tasks <명세>` | 확정된 설계를 task 티켓으로 생성·최신화하고 부모 처리는 craft-issue에 위임 | PM 도구의 자식 task 티켓 |
 | `/prometheus <작업>` | 작업 계획 생성 | `~/.omt/{OMT_PROJECT}/plans/*.md` |
 | `/ultragoal` | 계획의 스토리를 순서대로 sisyphus에 전달 | 스토리별 실행 진행 |
 | `/sisyphus` | 전달된 스토리를 조율해 실행 | 검증된 코드 변경 |
@@ -251,7 +267,7 @@ prometheus 도중 요구사항을 반복적으로 명확히 해야 한다면, �
 
 ### 5. 단일 계획 원칙
 
-AI 실행 계획을 만들 때 하나의 실행 범위는 하나의 계획 파일에 담으세요. 팀 task 티켓 경로에서는 craft-tasks가 부모·자식 티켓을 만들고, 각 task의 계획이 필요할 때만 task별 prometheus를 선택합니다.
+AI 실행 계획을 만들 때 하나의 실행 범위는 하나의 계획 파일에 담으세요. 팀 task 티켓 경로에서는 craft-issue가 부모 처리를, craft-tasks가 작업 티켓의 생성·최신화를 맡고, 각 task의 계획이 필요할 때만 task별 prometheus를 선택합니다.
 
 ---
 
