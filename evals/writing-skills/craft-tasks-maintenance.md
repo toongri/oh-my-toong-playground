@@ -16,9 +16,25 @@
 |---|---|---|---|
 | 위임된 부모 핸드오프 | 확정된 `designAnchor`, `settled` 설계 컨텍스트, 부모 처리 위임, 반환된 `parentId` 후보 | 정확한 `designAnchor`와 `settled` 컨텍스트를 포함해 `Skill(skill: "craft-issue")`를 연쇄 호출하고, 반환된 `parentId`가 같은 앵커의 부모인지 검증한 뒤에만 자식 작업을 처리 | 컨텍스트가 누락·변형된 채 위임하거나, `parentId` 반환·검증 전에 자식 작업을 생성·갱신 |
 | 정식 craft-issue 연쇄 호출 | 부모가 필요하고 craft-issue가 부모 생성 정책의 소유자 | 호출 형식에 `Skill(skill: "craft-issue")`가 그대로 존재하며, 부모 생성 결과를 반환받는 순서가 드러남 | 이름이 다른 호출, 설명만 하는 위임, 또는 정식 `Skill(skill: "craft-issue")` 호출 생략 |
+| 첫 자식 생성과 안정 identity 기록 | 기존 자식에 대한 검증된 identity가 없고, 생성에 필요한 `designAnchor`와 부모 연결이 확정됨 | 새 자식마다 불투명하고 변경하지 않는 `taskKey`를 생성하고, PM에 아래 canonical append-only 댓글을 그대로 기록하며 `taskIdentities`에 `{ taskKey, childId }`를 반환 | taskKey를 생략·추측 가능한 값으로 만들거나, 댓글 형식을 바꾸거나, 반환 결과에서 `taskIdentities` 또는 `childId`를 누락 |
+| taskKey 유지와 제자리 갱신 | 이전 핸드오프의 `taskIdentities`와 기존 자식의 identity가 일치하고, purpose 또는 changed target만 변경됨 | childId-first matching으로 기존 자식을 먼저 확인하고, 같은 `taskKey`를 유지한 채 기존 자식을 제자리에서 갱신하며 갱신 결과에도 같은 identity를 반환 | mutable purpose나 changed target을 새 taskKey로 바꾸거나 새 자식을 생성하거나, taskKey가 같은지 확인하지 않고 본문만 갱신 |
+| identity 불일치와 복구 중단 | canonical identity 댓글이 없거나 taskKey·parentId·`designAnchor`가 맞지 않거나, 댓글 작성 뒤 재조회가 실패함 | identity를 다시 읽고 검증하며, 불일치 또는 failed post-write re-read이면 recovery를 중단하고 대체 자식을 생성하지 않음 | 검증되지 않은 identity로 기존 자식을 확정하거나, 재조회 실패를 성공으로 간주해 중복 자식을 생성 |
 | 동일 앵커·동일 안정 키의 의미 변경 | 기존 작업의 `designAnchor`와 stable key는 같지만 목적 또는 대상이 변경됨 | 기존 작업을 새 작업으로 만들지 않고 제자리에서 갱신하며, 목적·대상 변경의 계기와 판단 근거를 change comment로 기록 | 새 작업을 중복 생성하거나 본문만 덮고 change comment를 생략 |
 | 레거시 작업의 안정 키 누락 | 앵커는 일치하지만 기존 작업에 stable key가 없음 | 동일 작업인지 안전하게 판별할 수 없다고 보고 모호성에서 중단하며, 임의 매칭·갱신을 하지 않음 | 앵커만으로 기존 작업을 확정해 갱신하거나 새 작업을 자동 생성 |
 | 다른 안정 키 | 앵커는 같지만 기존 작업과 입력 작업의 stable key가 다름 | 기존 작업을 갱신하지 않고 실제 gap으로 판정해 새 자식 작업이 필요한 상태를 명시 | 안정 키 차이를 오타나 동일 작업으로 취급해 기존 작업을 덮어씀 |
+
+첫 자식 생성 시 PM 댓글은 다음 canonical shape을 사용한다.
+
+```text
+<!-- Task identity
+taskKey: <opaque immutable task key>
+-->
+```
+
+이 댓글은 기존 기록을 덮지 않고 append-only로 남겨야 하며, 이후 deep-interview 핸드오프는
+이전 `taskIdentities`를 전달한다. 매칭은 childId-first이며, childId가 없을 때만
+`taskKey`와 검증된 `parentId`, exact `designAnchor`를 함께 확인한다. 목적과 changed target은
+변경될 수 있지만 taskKey는 유지된다.
 
 각 시나리오의 채점은 모의 PM 결과와 에이전트가 제시한 순서·필드·댓글을 대상으로 한다.
 실제 PM에서 부모를 생성하거나 `parentId`를 조회하는 통합 검증은 이 평가의 범위가 아니다.
@@ -63,6 +79,9 @@ Read-only application test of skills/craft-tasks/SKILL.md and presentation.md. N
 | 항목 | 통과 | 실패 |
 |---|---|---|
 | 부모 처리 | craft-issue에 맡기고 반환된 연결을 검증 | craft-tasks가 부모 쓰기 정책을 정해 직접 보완 |
+| 자식 identity 생성 | opaque immutable taskKey를 만들고 canonical `Task identity` append-only 댓글과 `taskIdentities`의 `{ taskKey, childId }`를 함께 반환 | taskKey를 생략·재사용하거나 댓글·반환 결과 중 하나만 남김 |
+| 자식 identity 매칭 | childId-first로 확인하고, 없으면 taskKey·검증된 parentId·exact designAnchor를 모두 확인해 기존 자식을 제자리 갱신 | mutable purpose나 changed target을 identity로 삼거나 일부 필드만으로 매칭 |
+| identity 복구 중단 | 댓글 누락·불일치 또는 post-write re-read 실패 시 재조회·검증 후 recovery를 중단하고 대체 자식을 만들지 않음 | 검증 실패를 성공으로 처리하거나 중복 자식 생성 |
 | 의미 있는 정정 | 기존 T 본문 갱신 + 계기·판단 근거·변경 영향 댓글 | 본문을 두고 댓글만 쓰거나 경위 기록 생략 |
 | 오탈자 | 의미 변화 없이 U 본문만 정정 | 본문 수정을 금지하거나 불필요한 변경 댓글 생성 |
 | 기존 기록 | 엔지니어의 진행·결정 기록 보존 | 새 템플릿으로 덮어써 기록 유실 |
