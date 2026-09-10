@@ -303,10 +303,28 @@ describe("부모 처리 위임과 작업 최신화", () => {
 });
 
 describe("durable task-write runtime contract", () => {
+	test("create transitions bind exact nested PM payloads and separate identity comment", () => {
+		const text = sectionBetween(craftTasks, "#### Durable create-intent protocol", "#### Durable update-intent protocol");
+		expect(text).toContain("nested `creationPayload` containing the exact fields for the selected PM binding");
+		expect(text).toContain("when Linear is selected, use `title`, `description`, and optional `blockedBy`");
+		expect(text).toContain("Other selected PM bindings retain their native creation fields");
+		expect(text).toContain("optional array of predecessor task IDs");
+		expect(text).toContain('completion `creationPayload` includes the injected verified `parentId`');
+		expect(text).toContain("`createPrepare` injects the verified `parentId`");
+		expect(text).toContain("keeps `identityComment` separate from `creationPayload`");
+		expect(text).toContain("Pass the returned `creationPayload` unchanged to `save_issue`");
+		expect(text).toContain("The create-complete input is the verified association plus that nested `creationPayload`");
+		expect(text).toContain("The caller projects the exact re-read create fields into nested `creationPayload`");
+		expect(text).toContain("deep-compares the whole `creationPayload`");
+		expect(text).toContain("`identityComment` is a separate verification field");
+		expect(text).not.toContain("the PM re-read (`title` when supplied, `body`, `relations`, and `identityComment`)");
+		expect(text).not.toContain("equals the stored `creationPayload`");
+	});
+
 	test("create-prepare requires nested creationPayload and strips orchestration metadata", () => {
 		const text = sectionBetween(craftTasks, "#### Durable create-intent protocol", "#### Durable update-intent protocol");
 		expect(text).toContain("`create-prepare` requires nested `creationPayload`");
-		expect(text).toContain("strips orchestration-only `designAnchor` and `identityComment` from the PM payload");
+		expect(text).toContain("strips orchestration-only `designAnchor` and any caller-supplied `identityComment`");
 		expect(text).toContain("injects the verified `parentId`");
 		expect(text).toContain("Verify that `parentId` is injected");
 	});
