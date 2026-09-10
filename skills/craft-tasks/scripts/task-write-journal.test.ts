@@ -58,14 +58,104 @@ describe("task write journal", () => {
 			childId: "child-123",
 			parentId,
 			designAnchor: anchor,
-			title: payload.title,
-			body: payload.body,
-			relations: payload.relations,
+			creationPayload: prepared.creationPayload,
 			identityComment: canonicalComment,
 		});
 		expect(complete.state).toBe("complete");
 		expect(existsSync(journalPath(sid))).toBe(false);
 		expect(() => getIntent(prepared.createIntentId)).toThrow(`Unknown intent: ${prepared.createIntentId}`);
+	});
+
+	test("completes a Linear-native payload with description and multiple blockedBy relations", () => {
+		setup();
+		const creationPayload = {
+			description: "세부 내용",
+			blockedBy: ["task-1", "task-2"],
+		};
+		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload });
+		createChild(prepared.createIntentId, { childId: "child-native", parentId, designAnchor: anchor });
+		const complete = createComplete(prepared.createIntentId, {
+			childId: "child-native",
+			parentId,
+			designAnchor: anchor,
+			creationPayload: { ...creationPayload, parentId },
+			identityComment: prepared.identityComment,
+		});
+		expect(complete.state).toBe("complete");
+	});
+
+	test("completes a native payload when optional blockedBy is absent", () => {
+		setup();
+		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload: { description: "차단 없음" } });
+		createChild(prepared.createIntentId, { childId: "child-no-blockers", parentId, designAnchor: anchor });
+		expect(createComplete(prepared.createIntentId, {
+			childId: "child-no-blockers", parentId, designAnchor: anchor,
+			creationPayload: prepared.creationPayload, identityComment: prepared.identityComment,
+		}).state).toBe("complete");
+	});
+
+	test("requires nested creationPayload and rejects every exact-payload mismatch without terminalizing", () => {
+		setup();
+		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload: { description: "원문" } });
+		createChild(prepared.createIntentId, { childId: "child-exact", parentId, designAnchor: anchor });
+		const base = { childId: "child-exact", parentId, designAnchor: anchor, identityComment: prepared.identityComment };
+		for (const creationPayload of [
+			undefined,
+			{ description: "원문", extra: true, parentId },
+			{ description: "변경", parentId },
+			{ description: "원문", parentId },
+		]) {
+			const verification = { ...base, ...(creationPayload === undefined ? {} : { creationPayload }) };
+			if (creationPayload && creationPayload.description === "원문" && Object.keys(creationPayload).length === 2) continue;
+			expect(() => createComplete(prepared.createIntentId, verification)).toThrow();
+			expect(getIntent(prepared.createIntentId).state).toBe("child-created");
+		}
+		expect(createComplete(prepared.createIntentId, {
+			...base,
+			creationPayload: { description: "원문", parentId },
+		}).state).toBe("complete");
+	});
+
+	test("keeps child-created when an exact payload property is omitted", () => {
+		setup();
+		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload: {
+			description: "원문", blockedBy: ["task-1", "task-2"],
+		} });
+		createChild(prepared.createIntentId, { childId: "child-missing-property", parentId, designAnchor: anchor });
+		expect(() => createComplete(prepared.createIntentId, {
+			childId: "child-missing-property", parentId, designAnchor: anchor,
+			creationPayload: { description: "원문", parentId }, identityComment: prepared.identityComment,
+		})).toThrow("creationPayload verification mismatch");
+		expect(getIntent(prepared.createIntentId).state).toBe("child-created");
+	});
+
+	test("uses whole-payload equality for title presence and absence", () => {
+		setup();
+		const withoutTitle = createPrepare({ parentId, designAnchor: anchor, creationPayload: { description: "내용" } });
+		createChild(withoutTitle.createIntentId, { childId: "child-no-title", parentId, designAnchor: anchor });
+		expect(() => createComplete(withoutTitle.createIntentId, {
+			childId: "child-no-title", parentId, designAnchor: anchor,
+			creationPayload: { description: "내용", parentId, title: "추가" }, identityComment: withoutTitle.identityComment,
+		})).toThrow();
+		expect(getIntent(withoutTitle.createIntentId).state).toBe("child-created");
+
+		const withTitle = createPrepare({ parentId, designAnchor: anchor, creationPayload: { description: "내용", title: "제목" } });
+		createChild(withTitle.createIntentId, { childId: "child-title", parentId, designAnchor: anchor });
+		expect(() => createComplete(withTitle.createIntentId, {
+			childId: "child-title", parentId, designAnchor: anchor,
+			creationPayload: { description: "내용", parentId }, identityComment: withTitle.identityComment,
+		})).toThrow();
+	});
+
+	test("keeps identityComment separate from the exact creationPayload", () => {
+		setup();
+		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload: { description: "내용", identityComment: "caller" } });
+		expect(prepared.creationPayload).toEqual({ description: "내용", parentId });
+		createChild(prepared.createIntentId, { childId: "child-identity", parentId, designAnchor: anchor });
+		expect(createComplete(prepared.createIntentId, {
+			childId: "child-identity", parentId, designAnchor: anchor,
+			creationPayload: prepared.creationPayload, identityComment: prepared.identityComment,
+		}).identityComment).toBe(prepared.identityComment);
 	});
 
 	test("rejects a creation payload parentId that conflicts with the verified parent", () => {
@@ -96,7 +186,7 @@ describe("task write journal", () => {
 		createChild(prepared.createIntentId, { childId: "child-123", parentId, designAnchor: anchor });
 		expect(() => createComplete(prepared.createIntentId, {
 			childId: "child-123", parentId, designAnchor: anchor,
-			title: "제목", body: "b", relations: [], identityComment: "arbitrary",
+			creationPayload: prepared.creationPayload, identityComment: "arbitrary",
 		})).toThrow("identityComment verification mismatch");
 		expect(getIntent(prepared.createIntentId).state).toBe("child-created");
 	});
@@ -111,7 +201,7 @@ describe("task write journal", () => {
 		writeFileSync(path, `${JSON.stringify(journal)}\n`, "utf8");
 		expect(() => createComplete(prepared.createIntentId, {
 			childId: "child-123", parentId, designAnchor: anchor,
-			title: "제목", body: "b", relations: [], identityComment: "<!-- Task identity\ntaskKey: forged\n-->",
+			creationPayload: prepared.creationPayload, identityComment: "<!-- Task identity\ntaskKey: forged\n-->",
 		})).toThrow("stored identityComment mismatch");
 	});
 
@@ -124,7 +214,7 @@ describe("task write journal", () => {
 		});
 		expect(() => createChild(prepared.createIntentId, { childId: "child-123", parentId: "other", designAnchor: anchor })).toThrow();
 		createChild(prepared.createIntentId, { childId: "child-123", parentId, designAnchor: anchor });
-		createComplete(prepared.createIntentId, { childId: "child-123", parentId, designAnchor: anchor, body: "b", relations: [], identityComment: prepared.identityComment });
+		createComplete(prepared.createIntentId, { childId: "child-123", parentId, designAnchor: anchor, creationPayload: prepared.creationPayload, identityComment: prepared.identityComment });
 		expect(() => manualReconciliation(prepared.createIntentId, "late discovery")).toThrow();
 	});
 
@@ -142,7 +232,7 @@ describe("task write journal", () => {
 		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload: { body: "b", relations: [] } });
 		createChild(prepared.createIntentId, { childId: "child-123", parentId, designAnchor: anchor });
 		const complete = createComplete(prepared.createIntentId, {
-			childId: "child-123", parentId, designAnchor: anchor, body: "b", relations: [], identityComment: prepared.identityComment,
+			childId: "child-123", parentId, designAnchor: anchor, creationPayload: prepared.creationPayload, identityComment: prepared.identityComment,
 		});
 		expect(complete.state).toBe("complete");
 		expect(existsSync(journalPath(sid))).toBe(false);
@@ -379,5 +469,21 @@ describe("task write journal", () => {
 		expect(parsed.creationPayload).toEqual({ parentId, body: "b", relations: [] });
 		expect(parsed.identityComment).toBe(`<!-- Task identity\ntaskKey: ${parsed.taskKey}\n-->`);
 		expect(parsed.creationPayload).not.toHaveProperty("identityComment");
-});
+	});
+
+	test("CLI create-complete accepts the nested exact creation payload", () => {
+		setup();
+		const cli = resolve("skills/craft-tasks/scripts/task-write-journal.ts");
+		const env = { ...process.env, OMT_DIR: omtDir, OMT_SESSION_ID: sid };
+		const prepared = JSON.parse(execFileSync("bun", [cli, "create-prepare"], {
+			input: JSON.stringify({ parentId, designAnchor: anchor, creationPayload: { description: "CLI 내용", blockedBy: ["task-1", "task-2"] } }), env, encoding: "utf8",
+		})) as { createIntentId: string; taskKey: string; creationPayload: Record<string, unknown>; identityComment: string };
+		execFileSync("bun", [cli, "create-child", prepared.createIntentId], {
+			input: JSON.stringify({ childId: "child-cli", parentId, designAnchor: anchor }), env, encoding: "utf8",
+		});
+		const complete = JSON.parse(execFileSync("bun", [cli, "create-complete", prepared.createIntentId], {
+			input: JSON.stringify({ childId: "child-cli", parentId, designAnchor: anchor, creationPayload: { ...prepared.creationPayload }, identityComment: prepared.identityComment }), env, encoding: "utf8",
+		})) as { state: string };
+		expect(complete.state).toBe("complete");
+	});
 });

@@ -342,9 +342,7 @@ export function createChild(intentId: string, association: unknown, sessionId?: 
 }
 
 export interface CreateCompleteVerification extends Association {
-	title?: unknown;
-	body: unknown;
-	relations: unknown;
+	creationPayload: unknown;
 	identityComment: unknown;
 }
 
@@ -358,11 +356,7 @@ export function createComplete(intentId: string, verification: unknown, sessionI
 	if (!isDeepStrictEqual(found.intent.identityComment, canonicalIdentityComment(found.intent.taskKey))) {
 		throw new Error("stored identityComment mismatch");
 	}
-	if (Object.prototype.hasOwnProperty.call(payload, "title") && !isDeepStrictEqual(exact(verification.title, "title"), payload.title)) {
-		throw new Error("title verification mismatch");
-	}
-	if (!isDeepStrictEqual(exact(verification.body, "body"), payload.body)) throw new Error("body verification mismatch");
-	if (!isDeepStrictEqual(exact(verification.relations, "relations"), payload.relations)) throw new Error("relations verification mismatch");
+	if (!isDeepStrictEqual(exact(verification.creationPayload, "creationPayload"), payload)) throw new Error("creationPayload verification mismatch");
 	if (!isDeepStrictEqual(exact(verification.identityComment, "identityComment"), found.intent.identityComment)) throw new Error("identityComment verification mismatch");
 	return replace(intentId, { ...found.intent, state: "complete" }, sessionId);
 }
