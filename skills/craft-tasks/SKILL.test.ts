@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 
 // ---------------------------------------------------------------------------
@@ -10,6 +10,7 @@ import { join } from "path";
 // ---------------------------------------------------------------------------
 
 const craftTasks = readFileSync(join(import.meta.dir, "SKILL.md"), "utf8");
+const journalScript = join(import.meta.dir, "scripts", "task-write-journal.ts");
 const deepInterview = readFileSync(
 	join(import.meta.dir, "..", "deep-interview", "SKILL.md"),
 	"utf8",
@@ -142,6 +143,51 @@ describe("stable child task identity contract", () => {
 		expect(text).toContain("do not put identity metadata in the reader-facing body");
 		expect(text.indexOf("before `save_issue`")).toBeLessThan(text.indexOf("After `save_issue` returns"));
 		expect(text.indexOf("After `save_issue` returns")).toBeLessThan(text.indexOf("mark the intent `complete`"));
+	});
+
+	test("bundled journal CLI and executable create transitions are documented", () => {
+		expect(existsSync(journalScript)).toBe(true);
+		const text = identity();
+		for (const command of ["create-prepare", "create-child", "create-complete", "manual-reconciliation"])
+			expect(text).toContain(` ${command}`);
+		for (const field of ["creationPayload", "body", "relations", "identityComment"])
+			expect(text).toContain(`\`${field}\``);
+		expect(text).toContain("CLAUDE_SKILL_DIR");
+		expect(text).toContain("all required re-reads pass");
+		expect(text.indexOf('task-write-journal.ts" create-prepare')).toBeLessThan(text.indexOf("After `save_issue`"));
+		expect(text.indexOf("call `create-child`")).toBeGreaterThan(text.indexOf("After `save_issue` returns"));
+		expect(text.indexOf("Call `create-complete`")).toBeGreaterThan(text.indexOf("call `create-child`"));
+	});
+
+	test("response loss re-reads identity and never discovers an uncertain child", () => {
+		const text = identity();
+		expect(text).toContain("re-read the canonical identity comment before `create-complete`");
+		expect(text).toContain("never writes a duplicate");
+		expect(text).toContain("child-tree rematching is allowed only for an existing verified identity");
+		expect(text).toContain("never to discover an uncertain new child");
+		expect(text).toContain("manual-reconciliation");
+	});
+
+	test("bundled journal CLI and executable update transitions are documented", () => {
+		expect(existsSync(journalScript)).toBe(true);
+		const text = sectionBetween(craftTasks, "### Durable update-intent protocol", "### Recovery and manual stop");
+		for (const command of ["update-prepare", "update-mutation-written", "update-complete"])
+			expect(text).toContain(` ${command}`);
+		for (const field of ["before", "after", "changeComment", "body", "relations"])
+			expect(text).toContain(`\`${field}\``);
+		expect(text).toContain("before any meaningful body/relation mutation");
+		expect(text).toContain("after the PM mutation");
+		expect(text).toContain("body/relations/change-comment re-read");
+		expect(text.indexOf("update-prepare")).toBeLessThan(text.indexOf("After the PM body/relation mutation"));
+		expect(text.indexOf("update-mutation-written")).toBeLessThan(text.indexOf("body/relations/change-comment re-read"));
+	});
+
+	test("journal is orchestration state and ambiguous recovery is an explicit stop", () => {
+		const text = identity();
+		expect(text).toContain("local orchestration state");
+		expect(text).toContain("no invented PM field or idempotency primitive");
+		expect(text).toContain("manual-reconciliation-required");
+		expect(text).toContain("no verified `childId`/result");
 	});
 
 	test("partial-create recovery is child-bound and stops safely without a result", () => {

@@ -184,11 +184,63 @@ Never put identity metadata in body prose or machine-local paths in comments/han
 
 #### Durable create-intent protocol
 
-The runtime maintains a durable create-intent journal for the gap between `save_issue` and `create_comment`. For every new gap, before `save_issue`, generate a fresh `createIntentId` and durably record an intent containing `createIntentId`, `taskKey`, the verified `parentId`, the exact `designAnchor`, the exact proposed creation payload, and state `prepared`. The proposed creation payload is the exact payload that will be passed to `save_issue`; do not put identity metadata in the reader-facing body or invent a PM custom field.
+The bundled script is the runtime contract. Invoke it through `CLAUDE_SKILL_DIR`; its journal is session-scoped local orchestration state, not a PM field, comment, or idempotency primitive. Do not invent a PM field or idempotency primitive: there is no invented PM field or idempotency primitive. The exact command names are `create-prepare`, `create-child`, `create-complete`, `manual-reconciliation`, and `get`. The create commands are create-prepare, create-child, and create-complete; the manual stop command is manual-reconciliation.
 
-After `save_issue` returns, verify the returned child belongs to the verified `parentId` and exact `designAnchor`, durably record its verified `childId`, and change the intent to state `child-created` before attempting `create_comment`. Then write the exact canonical identity comment. After `create_comment` and a successful re-read of the child and comment, mark the intent `complete` and return `taskIdentities`. If the comment write response is lost, re-read the exact canonical identity comment; when it is present and valid, mark the intent `complete` without duplicating the comment.
+For every genuine gap, generate the opaque `taskKey` and prepare the exact payload that will be sent to `save_issue`. This journal write happens before `save_issue`; call `create-prepare` and wait for its JSON result:
 
-On recovery, use only a verified intent-to-child association. When the intent records a `childId`, verify its parent and exact anchor, then retry only missing identity/comment writes. If the intent has no `childId`/result, use a documented PM idempotency/client-request lookup only when that PM primitive actually exists; otherwise surface `manual-reconciliation-required` and stop. An unreadable/missing intent also stops safely. Never create a replacement for an uncertain partial child.
+```sh
+printf '%s\n' '{"parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>","creationPayload":{"body":"<reader-facing task body>","relations":[<exact native relations>],"identityComment":"<exact canonical identity comment>"}}' \
+  | bun "$CLAUDE_SKILL_DIR/scripts/task-write-journal.ts" create-prepare
+```
+
+The `creationPayload` object is the exact proposed creation payload: its `body`, `relations`, and `identityComment` values must be the values intended for the PM write. Keep identity metadata out of the reader-facing body; do not put identity metadata in the reader-facing body. Use the returned `createIntentId` to call `save_issue` only after the journal result has been persisted with state `prepared`.
+
+After `save_issue` returns a child, verify its `parentId` and exact `designAnchor`. Only after that verified result, call `create-child` with the returned `childId`, the verified `parentId`, and the exact anchor. This changes the journal to state `child-created`:
+
+```sh
+printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>"}' \
+  | bun "$CLAUDE_SKILL_DIR/scripts/task-write-journal.ts" create-child <createIntentId>
+```
+
+Then write the exact canonical identity comment. Re-read the child, its relations, and the canonical identity comment. Call `create-complete` only when all required re-reads pass, with `childId`, `parentId`, `designAnchor`, and the exact `body`, `relations`, and `identityComment` values; this marks the intent `complete`, so mark the intent `complete` only after those re-reads.
+
+```sh
+printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>","body":"<re-read body>","relations":[<re-read relations>],"identityComment":"<re-read canonical identity comment>"}' \
+  | bun "$CLAUDE_SKILL_DIR/scripts/task-write-journal.ts" create-complete <createIntentId>
+```
+
+If the `create_comment` response is lost, re-read the canonical identity comment before `create-complete`; specifically, re-read the exact canonical identity comment before `create-complete`. If the exact comment is already present and valid, never writes a duplicate: use the existing verified child and complete the journal without duplicating the comment after the required re-reads. If no verified `childId`/result exists, call `manual-reconciliation` with a nonblank reason and stop. Do not infer a child from title, body, time, or tree position, and do not create a replacement.
+
+On create-intent recovery, use only a verified intent-to-child association. When the create intent records a `childId`, verify its parent and exact anchor, then retry only missing identity/comment writes. If the intent has no `childId`/result, use a documented PM idempotency/client-request lookup only when that PM primitive actually exists; otherwise surface `manual-reconciliation-required` and stop. An unreadable/missing intent also stops safely. Never create a replacement for an uncertain partial child.
+
+#### Durable update-intent protocol
+
+For a meaningful body or native-relation mutation, first prepare the exact before/after delta and the required change comment. The update commands are update-prepare, update-mutation-written, and update-complete. Before any meaningful body/relation mutation, call `update-prepare` with the exact `childId`, verified `parentId`, exact `designAnchor`, `before`, `after`, and `changeComment`; wait for its JSON result with state `prepared`. This is before any meaningful body/relation mutation:
+
+```sh
+printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>","before":{"body":"<old body>","relations":[<old relations>]},"after":{"body":"<new body>","relations":[<new relations>]},"changeComment":"<exact change comment>"}' \
+  | bun "$CLAUDE_SKILL_DIR/scripts/task-write-journal.ts" update-prepare
+```
+
+The exact update fields are `before`, `after`, `changeComment`, `body`, and `relations`; they are persisted change context, not reader-facing identity metadata. After the PM body/relation mutation and the change comment write, call `update-mutation-written` with the verified association; this is after the PM mutation:
+
+```sh
+printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>"}' \
+  | bun "$CLAUDE_SKILL_DIR/scripts/task-write-journal.ts" update-mutation-written <updateIntentId>
+```
+
+Re-read the child body, native relations, and change comment. Call `update-complete` only after the body/relations/change-comment re-read passes, using the exact re-read values:
+
+```sh
+printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>","body":"<re-read body>","relations":[<re-read relations>],"changeComment":"<re-read change comment>"}' \
+  | bun "$CLAUDE_SKILL_DIR/scripts/task-write-journal.ts" update-complete <updateIntentId>
+```
+
+Journal `complete` means all required re-reads passed. A successful PM mutation alone never means complete. On interruption, use `get` to inspect the existing intent, preserve its recorded change context, and perform only missing writes. child-tree rematching is allowed only for an existing verified identity; it is never a way to discover an uncertain new child, never to discover an uncertain new child.
+
+#### Recovery and manual stop
+
+Recovery starts by reading the existing session journal with `get`, then re-reading the PM child and relevant comments. A `child-created` create intent may retry only the missing exact identity comment after verifying its recorded `childId`, parent, and anchor. An update intent in `mutation-written` may retry only the missing body, relation, or change-comment write using its persisted before/after delta and comment. Re-run the corresponding completion command only after the required re-reads pass. An unreadable/missing intent, or any path without a verified `childId`/result, ends with `manual-reconciliation` and a clear reason. Manual reconciliation is terminal; it records the stop and never creates a replacement.
 
 Match in this order: supplied verified `childId` first, then `taskKey` plus the verified shared `parentId` and exact `designAnchor`. Verify the matched child still belongs to that parent and anchor before writing. **purpose and changed target are mutable work-definition fields, not identity fields**; an existing task with the same `taskKey` updates in place when either changes. A different `taskKey` is a genuine gap. Never match by title. Never match by purpose. Never match by changed target. Never match by slug. Legacy children with neither a verified childId nor taskKey stop as ambiguity rather than creating a replacement. A child that cannot prove the shared anchor is not a match.
 The matching input is a verified child ID or a stable task key. A stable-key match remains the same task when either purpose or changed target changes; title alone is insufficient. If the stable key or verified child ID is absent for a legacy task, stop with ambiguity.
@@ -216,7 +268,7 @@ The task bodies contain only the three reader-facing sections above: `목적`, `
 | Confirmed change to scope, responsibility, DoD, or dependencies | Update the affected body/native fields and append a meaningful change comment below. |
 | Unresolved decision or conflicting evidence | Record the open question, evidence, and decision needed without asserting a resolution. Route design choices to deep-interview and requirement questions to craft-issue; update the work definition after settlement. |
 
-Before a meaningful change, prepare its body/relation delta and comment together. The comment has three required parts in this order, using the team's language:
+Before a meaningful change, prepare its body/relation delta and comment together, then persist that exact before/after delta and comment with `update-prepare` before any PM mutation. After the PM mutation, persist the verified association with `update-mutation-written`; after the body/relations/change-comment re-read passes, use `update-complete`. The comment has three required parts in this order, using the team's language:
 
 - **계기** — the ambiguity, mismatch, or new information that triggered the revision.
 - **판단과 근거** — what was settled and the decision/source supporting it; distinguish a correction to match an existing decision from a new decision.

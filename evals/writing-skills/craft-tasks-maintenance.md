@@ -25,6 +25,9 @@
 | 동일 앵커·동일 안정 키의 의미 변경 | 기존 작업의 `designAnchor`와 stable key는 같지만 목적 또는 대상이 변경됨 | 기존 작업을 새 작업으로 만들지 않고 제자리에서 갱신하며, 목적·대상 변경의 계기와 판단 근거를 change comment로 기록 | 새 작업을 중복 생성하거나 본문만 덮고 change comment를 생략 |
 | 레거시 작업의 안정 키 누락 | 앵커는 일치하지만 기존 작업에 stable key가 없음 | 동일 작업인지 안전하게 판별할 수 없다고 보고 모호성에서 중단하며, 임의 매칭·갱신을 하지 않음 | 앵커만으로 기존 작업을 확정해 갱신하거나 새 작업을 자동 생성 |
 | 다른 안정 키 | 앵커는 같지만 기존 작업과 입력 작업의 stable key가 다름 | 기존 작업을 갱신하지 않고 실제 gap으로 판정해 새 자식 작업이 필요한 상태를 명시 | 안정 키 차이를 오타나 동일 작업으로 취급해 기존 작업을 덮어씀 |
+| 업데이트 저널 전이 | 확정된 기존 자식의 본문·관계·경위 코멘트가 의미 있게 변경됨 | `update-prepare`에 exact `before`·`after`·`changeComment`를 먼저 기록하고, PM mutation 뒤 `update-mutation-written`, body/relations/change-comment 재조회 뒤 `update-complete`를 기록 | PM mutation을 먼저 하거나 delta/comment를 저장하지 않고 완료 처리 |
+| 업데이트 중단 복구 | PM body/relation mutation은 성공했지만 change comment 또는 재조회가 중단됨 | 기존 update intent의 `after`와 `changeComment`를 보존하고 `get`으로 확인한 뒤 누락된 쓰기만 재시도하며, 세 재조회가 모두 통과할 때만 `complete` | 새 delta를 만들거나 이미 존재하는 코멘트를 중복 작성하거나 mutation 성공만으로 완료 |
+| 미확인 자식 수동 중단 | create intent에 검증된 `childId`/result가 없거나 intent가 읽히지 않음 | `manual-reconciliation`을 호출해 `manual-reconciliation-required`로 종료하고 replacement child를 만들지 않음 | 제목·본문·트리 위치로 자식을 추측하거나 새 자식을 생성 |
 
 첫 자식 생성 시 PM 댓글은 다음 canonical shape을 사용한다.
 
@@ -41,6 +44,56 @@ taskKey: <opaque immutable task key>
 
 각 시나리오의 채점은 모의 PM 결과와 에이전트가 제시한 순서·필드·댓글을 대상으로 한다.
 실제 PM에서 부모를 생성하거나 `parentId`를 조회하는 통합 검증은 이 평가의 범위가 아니다.
+
+## 실행 가능한 journal 상태 전이 시나리오
+
+아래 명령은 `CLAUDE_SKILL_DIR/scripts/task-write-journal.ts`의 실제 CLI를 호출하는
+모의 실행 계약이다. 각 명령은 JSON 한 줄을 stdin으로 받고 JSON 결과를 반환한다.
+`save_issue`와 `create_comment`는 모의 PM 함수로 대체하지만, journal 명령명·stdin
+필드·전이 순서·완료 조건은 실제 bundled script와 일치해야 한다.
+
+### 생성 정상 전이
+
+1. `create-prepare`를 `save_issue` 전에 호출한다. 입력은
+   `{ parentId, designAnchor, creationPayload }`이고 `creationPayload`는 PM에 보낼 exact
+   `{ body, relations, identityComment }`다. 결과는 `createIntentId`, `taskKey`,
+   `state: "prepared"`를 보존한다.
+2. 모의 `save_issue`가 반환한 child가 검증된 부모와 exact anchor에 속하는지 확인한 뒤,
+   `create-child <createIntentId>`에 `{ childId, parentId, designAnchor }`를 전달한다.
+   결과 state는 `"child-created"`여야 한다.
+3. exact identity comment를 쓴 뒤 child·relations·identity comment를 다시 읽는다.
+   세 값이 creation payload와 같을 때만 `create-complete <createIntentId>`에
+   `{ childId, parentId, designAnchor, body, relations, identityComment }`를 전달한다.
+   결과 state는 `"complete"`여야 한다.
+
+### 생성 응답 유실과 수동 중단
+
+`create_comment` 응답이 유실된 경우 canonical identity comment를 먼저 다시 읽는다.
+exact comment가 있으면 comment를 다시 쓰지 않고 위의 `create-complete`만 수행한다.
+`childId`/result가 journal에 없거나 intent를 읽을 수 없으면
+`manual-reconciliation <intentId>`에 `{ reason }`을 전달하고
+`"manual-reconciliation-required"`로 종료한다. child-tree rematching은 기존 verified
+identity가 있을 때만 허용하며 불확실한 새 child를 찾는 데 사용하지 않는다.
+
+### 업데이트 정상 전이와 복구
+
+1. 의미 있는 body/relation 변경 전에 `update-prepare`를 호출한다. 입력은
+   `{ childId, parentId, designAnchor, before, after, changeComment }`이며 결과 state는
+   `"prepared"`다.
+2. 모의 PM body/relation mutation과 change comment write를 수행한 뒤
+   `update-mutation-written <updateIntentId>`에 `{ childId, parentId, designAnchor }`를
+   전달한다. PM mutation만 성공한 상태는 완료가 아니다.
+3. body·native relations·change comment를 다시 읽고 exact `after`와
+   `changeComment`와 일치할 때만 `update-complete <updateIntentId>`에
+   `{ childId, parentId, designAnchor, body, relations, changeComment }`를 전달한다.
+   세 재조회가 모두 통과한 결과만 state `"complete"`로 채점한다.
+4. mutation 뒤 중단되면 `get <updateIntentId>`로 기존 before/after delta와 comment를
+   읽고 누락된 쓰기만 재시도한다. 이미 있는 change comment는 중복 작성하지 않으며,
+   child-tree 재매칭은 verified identity에만 적용한다.
+
+이 상태 전이 검증은 journal의 로컬 orchestration 상태와 명령 계약을 검사한다. 실제
+Linear/PM API의 `save_issue`, `create_comment`, 관계 저장, 응답 유실, 재조회 일관성은
+이 저장소의 하네스 밖에 있으므로 이 평가가 실제 PM 동작을 보증하지는 않는다.
 
 ## 시나리오와 채점
 
