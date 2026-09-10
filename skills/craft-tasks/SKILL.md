@@ -184,13 +184,13 @@ Never put identity metadata in body prose or machine-local paths in comments/han
 
 #### Durable create-intent protocol
 
-The bundled script is the runtime contract. Invoke it through `CLAUDE_SKILL_DIR`; its journal is session-scoped local orchestration state, not a PM field, comment, or idempotency primitive. Do not invent a PM field or idempotency primitive: there is no invented PM field or idempotency primitive. The exact command names are `create-prepare`, `create-child`, `create-complete`, `manual-reconciliation`, and `get`. The create commands are create-prepare, create-child, and create-complete; the manual stop command is manual-reconciliation.
+The bundled script is the runtime contract. Invoke it through `${CLAUDE_SKILL_DIR}`; its journal is session-scoped local orchestration state, not a PM field, comment, or idempotency primitive. Do not invent a PM field or idempotency primitive: there is no invented PM field or idempotency primitive. The exact command names are `create-prepare`, `create-child`, `create-complete`, `manual-reconciliation`, and `get`. The create commands are create-prepare, create-child, and create-complete; the manual stop command is manual-reconciliation.
 
 For every genuine gap, generate the opaque `taskKey` and prepare the exact payload that will be sent to `save_issue`. This journal write happens before `save_issue`; call `create-prepare` and wait for its JSON result:
 
 ```sh
 printf '%s\n' '{"parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>","creationPayload":{"body":"<reader-facing task body>","relations":[<exact native relations>],"identityComment":"<exact canonical identity comment>"}}' \
-  | bun "$CLAUDE_SKILL_DIR/scripts/task-write-journal.ts" create-prepare
+  | bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" create-prepare
 ```
 
 The `creationPayload` object is the exact proposed creation payload: its `body`, `relations`, and `identityComment` values must be the values intended for the PM write. Keep identity metadata out of the reader-facing body; do not put identity metadata in the reader-facing body. Use the returned `createIntentId` to call `save_issue` only after the journal result has been persisted with state `prepared`.
@@ -199,14 +199,14 @@ After `save_issue` returns a child, verify its `parentId` and exact `designAncho
 
 ```sh
 printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>"}' \
-  | bun "$CLAUDE_SKILL_DIR/scripts/task-write-journal.ts" create-child <createIntentId>
+  | bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" create-child <createIntentId>
 ```
 
 Then write the exact canonical identity comment. Re-read the child, its relations, and the canonical identity comment. Call `create-complete` only when all required re-reads pass, with `childId`, `parentId`, `designAnchor`, and the exact `body`, `relations`, and `identityComment` values; this marks the intent `complete`, so mark the intent `complete` only after those re-reads.
 
 ```sh
 printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>","body":"<re-read body>","relations":[<re-read relations>],"identityComment":"<re-read canonical identity comment>"}' \
-  | bun "$CLAUDE_SKILL_DIR/scripts/task-write-journal.ts" create-complete <createIntentId>
+  | bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" create-complete <createIntentId>
 ```
 
 If the `create_comment` response is lost, re-read the canonical identity comment before `create-complete`; specifically, re-read the exact canonical identity comment before `create-complete`. If the exact comment is already present and valid, never writes a duplicate: use the existing verified child and complete the journal without duplicating the comment after the required re-reads. If no verified `childId`/result exists, call `manual-reconciliation` with a nonblank reason and stop. Do not infer a child from title, body, time, or tree position, and do not create a replacement.
@@ -219,21 +219,21 @@ For a meaningful body or native-relation mutation, first prepare the exact befor
 
 ```sh
 printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>","before":{"body":"<old body>","relations":[<old relations>]},"after":{"body":"<new body>","relations":[<new relations>]},"changeComment":"<exact change comment>"}' \
-  | bun "$CLAUDE_SKILL_DIR/scripts/task-write-journal.ts" update-prepare
+  | bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" update-prepare
 ```
 
 The exact update fields are `before`, `after`, `changeComment`, `body`, and `relations`; they are persisted change context, not reader-facing identity metadata. After the PM body/relation mutation and the change comment write, call `update-mutation-written` with the verified association; this is after the PM mutation:
 
 ```sh
 printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>"}' \
-  | bun "$CLAUDE_SKILL_DIR/scripts/task-write-journal.ts" update-mutation-written <updateIntentId>
+  | bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" update-mutation-written <updateIntentId>
 ```
 
 Re-read the child body, native relations, and change comment. Call `update-complete` only after the body/relations/change-comment re-read passes, using the exact re-read values:
 
 ```sh
 printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>","body":"<re-read body>","relations":[<re-read relations>],"changeComment":"<re-read change comment>"}' \
-  | bun "$CLAUDE_SKILL_DIR/scripts/task-write-journal.ts" update-complete <updateIntentId>
+  | bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" update-complete <updateIntentId>
 ```
 
 Journal `complete` means all required re-reads passed. A successful PM mutation alone never means complete. On interruption, use `get` to inspect the existing intent, preserve its recorded change context, and perform only missing writes. child-tree rematching is allowed only for an existing verified identity; it is never a way to discover an uncertain new child, never to discover an uncertain new child.
