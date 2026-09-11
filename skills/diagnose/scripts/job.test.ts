@@ -6,7 +6,7 @@ import path from "path";
 import os from "os";
 import { execFileSync } from "child_process";
 
-import { buildAugmentedCommand } from "@lib/generic-job";
+import { buildAugmentedCommand, getPgidSnapshot, judgePgidSignal } from "@lib/generic-job";
 
 const SCRIPT = path.join(import.meta.dirname, "job.ts");
 
@@ -27,6 +27,71 @@ function writeConfig(configPath: string) {
 		].join("\n"),
 		"utf8",
 	);
+}
+
+const TERMINAL_STATES = new Set([
+	"done",
+	"error",
+	"timed_out",
+	"canceled",
+	"missing_cli",
+	"non_retryable",
+]);
+
+async function waitForTerminalStatus(jobDir: string): Promise<string> {
+	const timeoutMs = 45_000;
+	const startedAt = Date.now();
+	let overallState = "";
+	while (Date.now() - startedAt < timeoutMs) {
+		try {
+			const result = execFileSync(process.execPath, [SCRIPT, "status", jobDir], { stdio: "pipe" });
+			const status = JSON.parse(result.toString()) as { overallState?: unknown };
+			overallState = typeof status.overallState === "string" ? status.overallState : "";
+		} catch {}
+		if (TERMINAL_STATES.has(overallState)) return overallState;
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
+	throw new Error(
+		`worker status did not become terminal within ${timeoutMs}ms (overallState=${overallState || "unavailable"})`,
+	);
+}
+
+function cleanupVerifiedFixtureWorkers(jobDir: string): void {
+	const jobPath = path.join(jobDir, "job.json");
+	if (!fs.existsSync(jobPath)) return;
+	let metadata: { members?: unknown[] };
+	try {
+		metadata = JSON.parse(fs.readFileSync(jobPath, "utf8")) as { members?: unknown[] };
+	} catch {
+		return;
+	}
+	let snapshot;
+	try {
+		snapshot = getPgidSnapshot();
+	} catch {
+		return;
+	}
+	for (const member of metadata.members ?? []) {
+		if (!member || typeof member !== "object") continue;
+		const record = member as { workerPgid?: unknown; workerPgidStartedAt?: unknown };
+		const pgid = record.workerPgid;
+		const startedAt = record.workerPgidStartedAt;
+		if (
+			typeof pgid !== "number" ||
+			!Number.isInteger(pgid) ||
+			pgid <= 0 ||
+			pgid === process.pid ||
+			typeof startedAt !== "string" ||
+			startedAt.trim() === ""
+		)
+			continue;
+		if (judgePgidSignal(pgid, startedAt, snapshot) !== "signal") continue;
+		try {
+			process.kill(-pgid, "SIGKILL");
+		} catch {
+			// The exact verified fixture group may have exited between snapshot and cleanup.
+		}
+	}
 }
 
 describe("diagnose job lifecycle", () => {
@@ -128,30 +193,7 @@ describe("diagnose job lifecycle", () => {
 		// persisted) and return before that worker writes its terminal status.
 		// Wait with a bounded, non-busy poll so clean does not race the status
 		// transition and refuse an otherwise safe deletion.
-		const pollStartedAt = Date.now();
-		// 워커는 별도 프로세스로 뜬다 — 전체 스위트 부하에서 기동만 5.8초까지
-		// 늘어난 것이 실측됐으므로 5초 상한은 결함 없이도 만료됐다. 상한은 실패
-		// 선언 시점만 정하고, 끝내 종료 상태에 못 가면 그대로 throw한다.
-		const pollTimeoutMs = 45_000;
-		const pollIntervalMs = 50;
-		let overallState = "";
-		while (Date.now() - pollStartedAt < pollTimeoutMs) {
-			try {
-				const statusResult = execFileSync(process.execPath, [SCRIPT, "status", jobDir], {
-					stdio: "pipe",
-				});
-				const status = JSON.parse(statusResult.toString()) as { overallState?: unknown };
-				overallState = typeof status.overallState === "string" ? status.overallState : "";
-			} catch {}
-			if (overallState === "done") break;
-			if (Date.now() - pollStartedAt >= pollTimeoutMs) break;
-			await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-		}
-		if (overallState !== "done") {
-			throw new Error(
-				`clean lifecycle: worker status did not become terminal within ${pollTimeoutMs}ms (overallState=${overallState || "unavailable"})`,
-			);
-		}
+		await waitForTerminalStatus(jobDir);
 
 		execFileSync(process.execPath, [SCRIPT, "clean", jobDir, "--jobs-dir", jobsDir], {
 			stdio: "pipe",
@@ -229,7 +271,7 @@ describe("diagnose job lifecycle", () => {
 		expect(anyJobJson).toBe(false);
 	});
 
-	test("status returns JSON with members after start", () => {
+	test("시작 후 상태 조회가 멤버를 포함한 JSON을 반환함", async () => {
 		const configPath = path.join(tmpDir, "diagnose.config.yaml");
 		writeConfig(configPath);
 		const jobsDir = path.join(tmpDir, "jobs");
@@ -243,23 +285,18 @@ describe("diagnose job lifecycle", () => {
 
 		const { jobDir } = JSON.parse(startResult.toString());
 
-		const statusResult = execFileSync(process.execPath, [SCRIPT, "status", jobDir], {
-			stdio: "pipe",
-		});
-
-		const status = JSON.parse(statusResult.toString());
-		expect(Array.isArray(status.members)).toBe(true);
-		expect(typeof status.overallState).toBe("string");
-		expect(typeof status.counts).toBe("object");
-
 		try {
-			execFileSync(process.execPath, [SCRIPT, "stop", jobDir], { stdio: "pipe" });
-		} catch {}
-		try {
-			execFileSync(process.execPath, [SCRIPT, "clean", jobDir, "--jobs-dir", jobsDir], {
+			const statusResult = execFileSync(process.execPath, [SCRIPT, "status", jobDir], {
 				stdio: "pipe",
 			});
-		} catch {}
+
+			const status = JSON.parse(statusResult.toString());
+			expect(Array.isArray(status.members)).toBe(true);
+			expect(typeof status.overallState).toBe("string");
+			expect(typeof status.counts).toBe("object");
+		} finally {
+			cleanupVerifiedFixtureWorkers(jobDir);
+		}
 	});
 
 	test("start applies settings.mcps.allow to job metadata and the real codex argv", async () => {
