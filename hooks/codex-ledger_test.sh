@@ -26,6 +26,124 @@ run_test() {
     fi
 }
 
+run_event() {
+    local od="$1" payload="$2"
+    printf '%s' "$payload" | OMT_DIR="$od" env -u OMT_SESSION_ID -u CODEX_THREAD_ID bash "$HOOK" 2>/dev/null
+}
+
+test_postcompact_bridges_next_context_event_once() {
+    local sbx od out first second
+    sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
+    printf '## Now\nBRIDGE-MARKER\n## User Corrections (verbatim)\n' > "$od/session-ledger-bridge-sid.md"
+    run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"bridge-sid\",\"cwd\":\"$sbx\"}" >/dev/null
+    [ -f "$od/codex-ledger-pending-bridge-sid" ] || { rm -rf "$sbx"; return 1; }
+    first=$(run_event "$od" "{\"hook_event_name\":\"PostToolUse\",\"session_id\":\"bridge-sid\",\"cwd\":\"$sbx\",\"tool_name\":\"Bash\"}")
+    second=$(run_event "$od" "{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"bridge-sid\",\"cwd\":\"$sbx\",\"prompt\":\"next\"}")
+    rm -rf "$sbx"
+    printf '%s' "$first" | jq -e '.hookSpecificOutput.hookEventName == "PostToolUse" and (.hookSpecificOutput.additionalContext | contains("BRIDGE-MARKER"))' >/dev/null \
+        && [ -z "$second" ]
+}
+
+test_postcompact_registration_and_context_events() {
+    local block
+    block=$(awk '/^  PostCompact:/{f=1;next} f && /^  [A-Za-z]/{f=0} f' "$SCRIPT_DIR/../codex.yaml")
+    printf '%s\n' "$block" | grep -q 'component: codex-ledger.sh' || return 1
+    for event in UserPromptSubmit PostToolUse; do
+        block=$(awk -v e="  $event:" '$0==e{f=1;next} f && /^  [A-Za-z]/{f=0} f' "$SCRIPT_DIR/../codex.yaml")
+        printf '%s\n' "$block" | grep -q 'component: codex-ledger.sh' || return 1
+    done
+}
+
+test_pending_invalid_identity_is_silent() {
+    local sbx od out
+    sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
+    out=$(run_event "$od" '{"hook_event_name":"PostCompact","session_id":"../escape","cwd":"/tmp"}')
+    rm -rf "$sbx"
+    [ -z "$out" ]
+}
+
+test_postcompact_requires_cwd_and_preserves_second_generation() {
+    local sbx od out
+    sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
+    out=$(run_event "$od" '{"hook_event_name":"PostCompact","session_id":"missing-cwd"}')
+    [ -z "$out" ] && [ ! -e "$od/codex-ledger-pending-missing-cwd" ] || { rm -rf "$sbx"; return 1; }
+    printf '## Now\nGENERATION-MARKER\n## User Corrections (verbatim)\n' > "$od/session-ledger-generation.md"
+    run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"generation\",\"cwd\":\"$sbx\"}" >/dev/null
+    run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"generation\",\"cwd\":\"$sbx\"}" >/dev/null
+    out=$(run_event "$od" "{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"generation\",\"cwd\":\"$sbx\",\"prompt\":\"x\"}")
+    [ -n "$out" ] && [ -f "$od/codex-ledger-pending-generation" ] || { rm -rf "$sbx"; return 1; }
+    rm -rf "$sbx"
+    printf '%s' "$out" | jq -e '.hookSpecificOutput.hookEventName == "UserPromptSubmit" and (.hookSpecificOutput.additionalContext | contains("GENERATION-MARKER"))' >/dev/null
+}
+
+test_concurrent_consumers_emit_one_recovery() {
+    local sbx od p1 p2 c1 c2 total
+    sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
+    printf '## Now\nCONCURRENT-MARKER\n## User Corrections (verbatim)\n' > "$od/session-ledger-concurrent.md"
+    run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"concurrent\",\"cwd\":\"$sbx\"}" >/dev/null
+    p1="$sbx/p1"; p2="$sbx/p2"
+    (run_event "$od" "{\"hook_event_name\":\"PostToolUse\",\"session_id\":\"concurrent\",\"cwd\":\"$sbx\"}" >"$p1") & c1=$!
+    (run_event "$od" "{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"concurrent\",\"cwd\":\"$sbx\"}" >"$p2") & c2=$!
+    wait "$c1"; wait "$c2"
+    total=$(cat "$p1" "$p2" | grep -c 'CONCURRENT-MARKER' || true)
+    rm -rf "$sbx"
+    [ "$total" -eq 1 ]
+}
+
+test_missing_ledger_does_not_ack_pending() {
+    local sbx od out
+    sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
+    run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"no-ledger\",\"cwd\":\"$sbx\"}" >/dev/null
+    out=$(run_event "$od" "{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"no-ledger\",\"cwd\":\"$sbx\"}")
+    [ -z "$out" ] && [ -f "$od/codex-ledger-pending-no-ledger" ]
+    rm -rf "$sbx"
+}
+
+test_dead_claim_is_reclaimable() {
+    local sbx od out marker
+    sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
+    printf '## Now\nSTALE-CLAIM-MARKER\n## User Corrections (verbatim)\n' > "$od/session-ledger-stale-claim.md"
+    run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"stale-claim\",\"cwd\":\"$sbx\"}" >/dev/null
+    marker="$od/codex-ledger-pending-stale-claim"
+    mkdir "$marker.claim"
+    printf '999999 1 dead-token\n' > "$marker.claim/owner"
+    out=$(run_event "$od" "{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"stale-claim\",\"cwd\":\"$sbx\"}")
+    rm -rf "$sbx"
+    printf '%s' "$out" | jq -e '.hookSpecificOutput.hookEventName == "UserPromptSubmit" and (.hookSpecificOutput.additionalContext | contains("STALE-CLAIM-MARKER"))' >/dev/null
+}
+
+test_postcompact_retries_transient_lock_contention() {
+    local sbx od marker rc
+    sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
+    marker="$od/codex-ledger-pending-transient"
+    mkdir "$marker.write-lock"
+    printf '%s %s\n' "$$" "$(date +%s)" > "$marker.write-lock/owner"
+    (sleep 0.08; rm -rf "$marker.write-lock") &
+    set +e
+    run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"transient\",\"cwd\":\"$sbx\"}" >/dev/null
+    rc=$?
+    set -e
+    wait
+    [ "$rc" -eq 0 ] && [ -f "$marker" ]
+    rc=$?
+    rm -rf "$sbx"
+    [ "$rc" -eq 0 ]
+}
+
+test_consumer_cannot_remove_foreign_live_lock() {
+    local sbx od marker before after rc
+    sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
+    printf '## Now\nFOREIGN-LOCK\n## User Corrections (verbatim)\n' > "$od/session-ledger-foreign-lock.md"
+    run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"foreign-lock\",\"cwd\":\"$sbx\"}" >/dev/null
+    marker="$od/codex-ledger-pending-foreign-lock"
+    mkdir "$marker.write-lock"; printf '%s %s\n' "$$" "$(date +%s)" > "$marker.write-lock/owner"
+    before=$(cat "$marker.write-lock/owner")
+    set +e; run_event "$od" "{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"foreign-lock\",\"cwd\":\"$sbx\"}" >/dev/null; rc=$?; set -e
+    after=$(cat "$marker.write-lock/owner" 2>/dev/null || true)
+    rm -rf "$sbx"
+    [ "$rc" -ne 0 ] && [ "$before" = "$after" ]
+}
+
 # =============================================================================
 # AC: source==compact emits SessionStart additionalContext with
 # [LEDGER RECOVERY] and OMITS `continue`.
@@ -282,6 +400,15 @@ main() {
     run_test test_jq_absent_recording_survives_no_continue
     run_test test_jq_failing_recording_survives_no_continue
     run_test test_malformed_stdin_does_not_abort_recording
+    run_test test_postcompact_bridges_next_context_event_once
+    run_test test_postcompact_registration_and_context_events
+    run_test test_pending_invalid_identity_is_silent
+    run_test test_postcompact_requires_cwd_and_preserves_second_generation
+    run_test test_concurrent_consumers_emit_one_recovery
+    run_test test_missing_ledger_does_not_ack_pending
+    run_test test_dead_claim_is_reclaimable
+    run_test test_postcompact_retries_transient_lock_contention
+    run_test test_consumer_cannot_remove_foreign_live_lock
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
