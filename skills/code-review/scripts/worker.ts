@@ -16,7 +16,6 @@ import {
 } from "@lib/worker-utils";
 import { detectCliType } from "@lib/generic-job";
 import type { CliType } from "@lib/agent-drivers/types";
-import { acquireWorkerSlot, releaseWorkerSlot } from "./worker-slots.ts";
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, "prompts");
 
@@ -208,13 +207,9 @@ async function main() {
 	const session = options.session;
 	const resumePrompt = options.prompt;
 
-	// Machine-wide concurrency cap: acquire a slot immediately before spawning
-	// the heavy CLI child (runOneTurn/resumeOneTurn spawn it synchronously,
-	// with no intervening await, the moment they're called below) — never
-	// after. See worker-slots.ts for why this cap is per-machine, not per-job.
-	const slot = await acquireWorkerSlot();
-	logInfo(`worker slot acquired: member=${member} slot=${slot.slotPath}`);
-
+	// runOneTurn/resumeOneTurn own the machine-wide slot for the complete turn.
+	// Keeping acquisition at that shared boundary ensures every worker family is
+	// capped and code-review does not double-acquire the same slot.
 	const turnPromise =
 		typeof session === "string" && session !== "" && typeof resumePrompt === "string" && resumePrompt !== ""
 			? resumeOneTurn(session, {
@@ -241,22 +236,7 @@ async function main() {
 					cliType,
 					promptsDir: PROMPTS_DIR,
 				});
-
-	let result: OneTurnResult;
-	try {
-		result = await turnPromise;
-	} finally {
-		// Release as soon as the CLI turn itself is over (success or failure) —
-		// not after reapOwnProcessGroup's fixed 5s SIGTERM grace below, which
-		// only cleans up leftover descendants and has nothing to do with the
-		// concurrency this cap bounds. A worker that dies before reaching this
-		// `finally` (SIGKILL/panic/OOM) leaves its slot file behind; the next
-		// contender's tryClaimSlot reclaims it via the dead/reused-pid check
-		// (worker-slots.ts) — the same two-layer self-reap/orphan-reap pattern
-		// reapOwnProcessGroup and the SessionStart orphan reaper already use
-		// for process groups.
-		releaseWorkerSlot(slot);
-	}
+	const result: OneTurnResult = await turnPromise;
 
 	logInfo(`worker done: member=${member} state=${result.state} exitCode=${result.exitCode}`);
 	logEnd();

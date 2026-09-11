@@ -12,6 +12,7 @@ import crypto from "crypto";
 import { spawn, type ChildProcess } from "child_process";
 import type { AgentDriver, CliType, ParseResult } from "./agent-drivers/types";
 import { pickDriver } from "./agent-drivers/types";
+import { acquireWorkerSlot, releaseWorkerSlot, type AcquireWorkerSlotOptions } from "./worker-slots";
 // Driver registration side effects:
 import "./agent-drivers/opencode";
 import "./agent-drivers/claudecode";
@@ -464,6 +465,8 @@ export interface RunOneTurnOpts {
 	driverFactory?: (cliType: CliType) => AgentDriver | null;
 	/** Test-only: override runOnce. */
 	runOnceFn?: typeof runOnce;
+	/** Test-only slot-pool override; production callers use the machine-wide defaults. */
+	workerSlotOptions?: AcquireWorkerSlotOptions;
 }
 
 export interface OneTurnResult {
@@ -656,7 +659,12 @@ export async function runOneTurn(opts: RunOneTurnOpts): Promise<OneTurnResult> {
 			})
 		: { program: opts.program, args: opts.args, env: opts.workerEnv ?? {} };
 
-	return executeOneTurn(builtCmd, opts, driver, runOnceFn);
+	const slot = await acquireWorkerSlot(opts.workerSlotOptions);
+	try {
+		return await executeOneTurn(builtCmd, opts, driver, runOnceFn);
+	} finally {
+		releaseWorkerSlot(slot);
+	}
 }
 
 /**
@@ -683,7 +691,12 @@ export async function resumeOneTurn(
 		workerEnv: opts.workerEnv ?? {},
 	});
 
-	return executeOneTurn(builtCmd, opts, driver, runOnceFn);
+	const slot = await acquireWorkerSlot(opts.workerSlotOptions);
+	try {
+		return await executeOneTurn(builtCmd, opts, driver, runOnceFn);
+	} finally {
+		releaseWorkerSlot(slot);
+	}
 }
 
 // ---------------------------------------------------------------------------

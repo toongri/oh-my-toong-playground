@@ -24,6 +24,7 @@ import {
 	type RunOneTurnOpts,
 } from "./worker-utils.ts";
 import type { AgentDriver, ParseResult, CliType } from "./agent-drivers/types.ts";
+import type { AcquireWorkerSlotOptions } from "./worker-slots.ts";
 
 function makeTmpDir(): string {
 	return mkdtempSync(join(tmpdir(), "worker-utils-test-"));
@@ -459,6 +460,22 @@ function makeOneTurnOpts(
 	};
 }
 
+function makeDeferredRunOnce() {
+	let calls = 0;
+	let releaseFirst!: () => void;
+	const firstReleased = new Promise<void>((resolve) => {
+		releaseFirst = resolve;
+	});
+	const fn = async (opts: RunOnceOpts): Promise<Record<string, unknown>> => {
+		calls++;
+		if (calls === 1) await firstReleased;
+		writeFileSync(join(opts.memberDir, "output.txt"), "raw");
+		writeFileSync(join(opts.memberDir, "error.txt"), "");
+		return { state: "done", exitCode: 0, member: opts.member, command: opts.command, attempt: 0 };
+	};
+	return { fn, get calls() { return calls; }, releaseFirst };
+}
+
 describe("runOneTurn / resumeOneTurn — caller-judgment single-turn pump", () => {
 	let tmpDir: string;
 
@@ -468,6 +485,44 @@ describe("runOneTurn / resumeOneTurn — caller-judgment single-turn pump", () =
 
 	afterEach(() => {
 		rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("runOneTurn과 resumeOneTurn은 같은 machine-wide 슬롯을 공유한다", async () => {
+		const slotOptions: AcquireWorkerSlotOptions = { dir: join(tmpDir, "slots"), slotCount: 1, pollMs: 10 };
+		const firstDir = join(tmpDir, "shared-first");
+		const secondDir = join(tmpDir, "shared-second");
+		mkdirSync(firstDir, { recursive: true });
+		mkdirSync(secondDir, { recursive: true });
+		const driver = makeOneTurnMockDriver({ sessionID: "session", terminal: "stop", text: "ok", rawEvents: [] });
+		const deferred = makeDeferredRunOnce();
+		const first = runOneTurn(makeOneTurnOpts(firstDir, { driverFactory: () => driver, runOnceFn: deferred.fn, workerSlotOptions: slotOptions }));
+		await new Promise((resolve) => setTimeout(resolve, 30));
+		const second = resumeOneTurn("session", makeOneTurnOpts(secondDir, { driverFactory: () => driver, runOnceFn: deferred.fn, workerSlotOptions: slotOptions }));
+		await new Promise((resolve) => setTimeout(resolve, 40));
+		expect(deferred.calls).toBe(1);
+		deferred.releaseFirst();
+		await first;
+		await second;
+		expect(deferred.calls).toBe(2);
+	});
+
+	test("turn 실행이 실패해도 슬롯을 반납한다", async () => {
+		const slotOptions: AcquireWorkerSlotOptions = { dir: join(tmpDir, "failure-slots"), slotCount: 1, pollMs: 10 };
+		const firstDir = join(tmpDir, "failure-first");
+		const secondDir = join(tmpDir, "failure-second");
+		mkdirSync(firstDir, { recursive: true });
+		mkdirSync(secondDir, { recursive: true });
+		const driver = makeOneTurnMockDriver({ sessionID: "session", terminal: "stop", text: "ok", rawEvents: [] });
+		let calls = 0;
+		const failing = async (_opts: RunOnceOpts): Promise<Record<string, unknown>> => {
+			calls++;
+			if (calls === 1) throw new Error("turn failed");
+			writeFileSync(join(secondDir, "output.txt"), "raw");
+			return { state: "done", exitCode: 0 };
+		};
+		await expect(runOneTurn(makeOneTurnOpts(firstDir, { driverFactory: () => driver, runOnceFn: failing, workerSlotOptions: slotOptions }))).rejects.toThrow("turn failed");
+		await expect(runOneTurn(makeOneTurnOpts(secondDir, { driverFactory: () => driver, runOnceFn: failing, workerSlotOptions: slotOptions }))).resolves.toMatchObject({ state: "done" });
+		expect(calls).toBe(2);
 	});
 
 	// AC-A1: state='done' on exit 0
