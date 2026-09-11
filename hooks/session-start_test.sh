@@ -1483,16 +1483,8 @@ EOF
     return 0
 }
 
-# AC (F1 regression): acute section content that itself contains a `## `
-# markdown line must survive recovery inline in full. The extractor must treat
-# ONLY the 6 known skeleton headers as section boundaries, not any `## ` line,
-# otherwise a subheader inside a Now/Corrections summary silently truncates the
-# inline at that line -- defeating the whole point of option D (acute inlined so
-# it survives compaction).
-test_session_start_ledger_recovery_preserves_hash_line_in_acute_legacy() {
-    local sid="ledger-recovery-hashline"
-    local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
-
+test_session_start_ledger_recovery_preserves_hash_line_in_acute() {
+    local sid="ledger-recovery-hashline" ledger_file="$TEST_OMT_DIR/session-ledger-ledger-recovery-hashline.md"
     cat > "$ledger_file" << 'EOF'
 ## Now
 Working on the recovery bug.
@@ -1505,34 +1497,26 @@ DECISIONS_SENTINEL_should_not_appear
 ## Pointers
 ## Learnings
 EOF
-
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-
-    local ctx
-    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
-
-    if ! echo "$ctx" | grep -qF 'POST_SUBHEADER_SENTINEL_must_survive'; then
-        echo "ASSERTION FAILED: Now content after an inner '## ' line must survive recovery inline (not be truncated)"
-        echo "  ctx: ${ctx:0:600}"
+    local output ctx now_segment
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | OMT_DIR="$TEST_OMT_DIR" "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext // ""' 2>/dev/null || echo "")
+    now_segment=$(echo "$ctx" | awk '/^legacy now \(unstructured\):$/{f=1; next} f && /^Corrections:/{f=0} f{print}')
+    if ! echo "$now_segment" | grep -qF '## Investigation notes'; then
+        echo "ASSERTION FAILED: unknown Now subheader must survive in legacy now segment"
         return 1
     fi
-    # The real Decisions content is a bulk section and must still be excluded.
-    if echo "$ctx" | grep -qF 'DECISIONS_SENTINEL_should_not_appear'; then
-        echo "ASSERTION FAILED: bulk Decisions content must not leak into the acute inline"
-        echo "  ctx: ${ctx:0:600}"
+    if ! echo "$now_segment" | grep -qF 'POST_SUBHEADER_SENTINEL_must_survive'; then
+        echo "ASSERTION FAILED: content after unknown Now subheader must survive in legacy now segment"
+        return 1
+    fi
+    if echo "$now_segment" | grep -qF 'DECISIONS_SENTINEL_should_not_appear'; then
+        echo "ASSERTION FAILED: Decisions bulk content must not enter legacy now segment"
         return 1
     fi
     return 0
 }
-
-# AC (S5 regression): a bulk section (Decisions) whose content contains a line
-# equal to a real acute header (`## Now`) must NOT have that injected content
-# extracted into the acute inline. Structural section identity, not substring.
-test_session_start_ledger_recovery_no_header_injection_from_bulk_legacy() {
-    local sid="ledger-recovery-inject"
-    local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
-
+test_session_start_ledger_recovery_no_header_injection_from_bulk() {
+    local sid="ledger-recovery-inject" ledger_file="$TEST_OMT_DIR/session-ledger-ledger-recovery-inject.md"
     cat > "$ledger_file" << 'EOF'
 ## Now
 REAL_NOW_SENTINEL
@@ -1545,40 +1529,27 @@ INJECTED_FROM_BULK_should_not_appear
 ## Pointers
 ## Learnings
 EOF
-
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-
-    local ctx
-    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
-
-    if ! echo "$ctx" | grep -qF 'REAL_NOW_SENTINEL'; then
-        echo "ASSERTION FAILED: the real Now content must be inlined"
-        echo "  ctx: ${ctx:0:600}"
+    local output ctx now_segment decisions_segment
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | OMT_DIR="$TEST_OMT_DIR" "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext // ""' 2>/dev/null || echo "")
+    now_segment=$(echo "$ctx" | awk '/^legacy now \(unstructured\):$/{f=1; next} f && /^Corrections:/{f=0} f{print}')
+    decisions_segment=$(echo "$ctx" | awk '/^decisions\/pending \(unstructured\):$/{f=1; next} f && /^pointers\/learnings \(unstructured\):/{f=0} f{print}')
+    if ! echo "$now_segment" | grep -qF 'REAL_NOW_SENTINEL'; then
+        echo "ASSERTION FAILED: real Now content must be in legacy now segment"
         return 1
     fi
-    if echo "$ctx" | grep -qF 'INJECTED_FROM_BULK_should_not_appear'; then
-        echo "ASSERTION FAILED: a '## Now' line injected inside a bulk section must NOT leak into the acute inline"
-        echo "  ctx: ${ctx:0:600}"
+    if echo "$now_segment" | grep -qF 'INJECTED_FROM_BULK_should_not_appear'; then
+        echo "ASSERTION FAILED: bulk-injected Now content must not enter legacy now segment"
+        return 1
+    fi
+    if ! echo "$decisions_segment" | grep -qF 'INJECTED_FROM_BULK_should_not_appear'; then
+        echo "ASSERTION FAILED: duplicate Now content must render only in legacy decisions segment"
         return 1
     fi
     return 0
 }
-
-# =============================================================================
-# Test (PR #162 P2 regression): a Now-section content line that collides with
-# a skeleton header string is written to disk ESCAPED by omt-ledger.sh (one
-# "OMT_ESC::" sentinel prefix -- see hooks/omt-ledger.sh). The recovery reader
-# here must unescape exactly that sentinel back off KEPT acute content lines,
-# so the literal "## Decisions" line survives, in order, between its
-# neighbors -- Now is fully inlined, not truncated -- while a real bulk
-# section is still excluded and no raw sentinel leaks into the output.
-# =============================================================================
-
-test_session_start_ledger_recovery_unescapes_header_collision_content_legacy() {
-    local sid="ledger-recovery-escaped-collision"
-    local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
-
+test_session_start_ledger_recovery_unescapes_header_collision_content() {
+    local sid="ledger-recovery-escaped-collision" ledger_file="$TEST_OMT_DIR/session-ledger-ledger-recovery-escaped-collision.md"
     cat > "$ledger_file" << 'EOF'
 ## Now
 NOW_A
@@ -1591,54 +1562,26 @@ REAL_BULK_DECISION_SHOULD_NOT_APPEAR
 ## Pointers
 ## Learnings
 EOF
-
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-
-    local ctx
-    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
-
-    # Now must be fully inlined, unescaped, and in order: NOW_A, then the bare
-    # (unescaped) "## Decisions" line, then NOW_B -- no truncation.
-    local now_lines
-    now_lines=$(echo "$ctx" | awk '/^NOW_A$/{f=1} f{print} /^NOW_B$/{f=0}')
-    local expected
+    local output ctx now_segment now_lines expected
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | OMT_DIR="$TEST_OMT_DIR" "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext // ""' 2>/dev/null || echo "")
+    now_segment=$(echo "$ctx" | awk '/^legacy now \(unstructured\):$/{f=1; next} f && /^Corrections:/{f=0} f{print}')
+    now_lines=$(echo "$now_segment" | awk '/^NOW_A$/{f=1} f{print} /^NOW_B$/{f=0}')
     expected=$'NOW_A\n## Decisions\nNOW_B'
     if [ "$now_lines" != "$expected" ]; then
-        echo "ASSERTION FAILED: Now section must inline NOW_A, an unescaped '## Decisions' content line, then NOW_B, in order"
+        echo "ASSERTION FAILED: legacy now segment must render NOW_A, one unescaped header, NOW_B"
         echo "  expected: ${expected}"
         echo "  got: ${now_lines}"
         return 1
     fi
-
-    # The raw sentinel must never leak into additionalContext.
-    if echo "$ctx" | grep -qF 'OMT_ESC::'; then
-        echo "ASSERTION FAILED: the raw escape sentinel must never leak into additionalContext"
-        echo "  ctx: ${ctx:0:600}"
-        return 1
-    fi
-
-    # The real bulk Decisions section must still be excluded from the inline.
-    if echo "$ctx" | grep -qF 'REAL_BULK_DECISION_SHOULD_NOT_APPEAR'; then
-        echo "ASSERTION FAILED: bulk Decisions content must not leak into the acute inline"
-        echo "  ctx: ${ctx:0:600}"
+    if echo "$now_segment" | grep -qF 'REAL_BULK_DECISION_SHOULD_NOT_APPEAR'; then
+        echo "ASSERTION FAILED: bulk Decisions content must not enter Now projection"
         return 1
     fi
     return 0
 }
-
-# =============================================================================
-# Test (double-escape round-trip, reader half): a content line double-escaped
-# by the writer (two sentinels, because the user's literal text already
-# looked like one sentinel + header) must have exactly ONE sentinel stripped
-# on recovery -- restoring the user's original one-sentinel text exactly, not
-# fully unescaped and not left with both sentinels.
-# =============================================================================
-
-test_session_start_ledger_recovery_double_escape_round_trip_legacy() {
-    local sid="ledger-recovery-double-escape"
-    local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
-
+test_session_start_ledger_recovery_double_escape_round_trip() {
+    local sid="ledger-recovery-double-escape" ledger_file="$TEST_OMT_DIR/session-ledger-ledger-recovery-double-escape.md"
     cat > "$ledger_file" << 'EOF'
 ## Now
 OMT_ESC::OMT_ESC::## Decisions
@@ -1648,49 +1591,23 @@ OMT_ESC::OMT_ESC::## Decisions
 ## Pointers
 ## Learnings
 EOF
-
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-
-    local ctx
-    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
-
-    # Exactly one sentinel must remain -- this is the round-trip of the
-    # user's original (already sentinel-shaped) literal content.
-    local match_count
-    match_count=$(echo "$ctx" | grep -cxF 'OMT_ESC::## Decisions')
+    local output ctx match_count
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | OMT_DIR="$TEST_OMT_DIR" "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext // ""' 2>/dev/null || echo "")
+    match_count=$(echo "$ctx" | grep -cxF 'OMT_ESC::## Decisions' || true)
     if [ "$match_count" -ne 1 ]; then
-        echo "ASSERTION FAILED: double-escaped content must recover to exactly one remaining sentinel + header line, found $match_count"
-        echo "  ctx: ${ctx:0:600}"
+        echo "ASSERTION FAILED: double-escaped line must render exactly one escape sentinel"
         return 1
     fi
     if echo "$ctx" | grep -qxF 'OMT_ESC::OMT_ESC::## Decisions'; then
-        echo "ASSERTION FAILED: both sentinels must not survive recovery (only one must be stripped)"
-        echo "  ctx: ${ctx:0:600}"
+        echo "ASSERTION FAILED: double-escaped line must not remain double-escaped"
         return 1
     fi
     if echo "$ctx" | grep -qxF '## Decisions'; then
-        echo "ASSERTION FAILED: the line must not be fully unescaped to bare '## Decisions' -- it was double-escaped, so exactly one sentinel must remain"
-        echo "  ctx: ${ctx:0:600}"
+        echo "ASSERTION FAILED: double-escaped line must not become a bare header"
         return 1
     fi
     return 0
-}
-
-# The old header-collision cases now share the structured event round-trip
-# fixture: header-shaped prose is no longer the recovery protocol, but each
-# regression slot still guards recovery, escaping, and bounded projection.
-test_session_start_ledger_recovery_preserves_hash_line_in_acute() {
-    test_session_start_ledger_recovery_inlines_now_and_corrections
-}
-test_session_start_ledger_recovery_no_header_injection_from_bulk() {
-    test_session_start_ledger_recovery_inlines_now_and_corrections
-}
-test_session_start_ledger_recovery_unescapes_header_collision_content() {
-    test_session_start_ledger_recovery_inlines_now_and_corrections
-}
-test_session_start_ledger_recovery_double_escape_round_trip() {
-    test_session_start_ledger_recovery_inlines_now_and_corrections
 }
 
 # =============================================================================
