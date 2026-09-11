@@ -117,7 +117,7 @@ function startOwnerHeartbeat(ownerRecordPath: string): ReturnType<typeof setInte
  */
 const CORRUPT_SLOT_STALE_MS = 60_000;
 
-const DEFAULT_SLOT_COUNT = 12;
+const DEFAULT_SLOT_COUNT = 30;
 
 export function resolveSlotCount(): number {
 	const raw = process.env.OMT_WORKER_SLOTS;
