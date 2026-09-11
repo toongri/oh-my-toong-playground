@@ -508,6 +508,20 @@ describe("syncShellDependencies", () => {
 		expect(await exists(path.join(targetDir, "lib", "ledger-events.mjs"))).toBe(false);
 	});
 
+	it("hooks root 밖을 가리키는 companion symlink는 배포하지 않음", async () => {
+		const outsideFile = path.join(tmpDir, "outside-ledger-events.mjs");
+		await writeFile(outsideFile, "export const secret = true;\n");
+		const linkedFile = path.join(hooksDir, "lib", "ledger-events.mjs");
+		await fs.mkdir(path.dirname(linkedFile), { recursive: true });
+		await fs.symlink(outsideFile, linkedFile);
+		const entryFile = path.join(hooksDir, "session-start.sh");
+		await writeFile(entryFile, "#!/bin/bash\n# omt-hook-dep: lib/ledger-events.mjs\n");
+
+		await syncShellDependencies(entryFile, hooksDir, targetDir, false);
+
+		expect(await exists(path.join(targetDir, "lib", "ledger-events.mjs"))).toBe(false);
+	});
+
 	it("dryRun=true 시 callback 호출 안 됨", async () => {
 		const libFile = path.join(hooksDir, "lib", "dry-callback.sh");
 		await writeFile(libFile, "# dry");

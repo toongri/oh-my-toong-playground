@@ -45,6 +45,8 @@ export async function resolveShellDependencies(
 	// Must be checked before the comment-skip below, since the directive is
 	// itself a `#` comment.
 	const HOOK_DEP_DIRECTIVE_RE = /^\s*#\s*omt-hook-dep:\s*([\w./-]+\.(?:sh|mjs))\s*$/;
+	const hooksRoot = path.resolve(hooksSourceDir);
+	const realHooksRoot = await fs.realpath(hooksRoot).catch(() => hooksRoot);
 
 	const deps: string[] = [];
 
@@ -62,6 +64,16 @@ export async function resolveShellDependencies(
 			}
 			try {
 				await fs.stat(absPath);
+				const realPath = await fs.realpath(absPath);
+				const realRelative = path.relative(realHooksRoot, realPath);
+				if (
+					realRelative.startsWith(`..${path.sep}`) ||
+					realRelative === ".." ||
+					path.isAbsolute(realRelative)
+				) {
+					logWarn(`Shell dependency escapes hooks source root, skipping: ${relPath}`);
+					continue;
+				}
 			} catch {
 				logWarn(`Shell dependency not found, skipping: ${absPath}`);
 				continue;
