@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { describe, expect, test, beforeEach, afterEach, spyOn } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -236,6 +237,96 @@ describe("scope-evidence 부분 무효화 (C)", () => {
 				rationale: "valid finding false positive",
 			}),
 		).toBe(true);
+	});
+});
+
+describe("OUT_OF_SCOPE 배제 페어링 복원", () => {
+	const getReviewResult = (state as Record<string, unknown>)["getReviewResult"] as (
+		sid: string,
+	) => { verdict: string; findings: { adjudicate: unknown[]; notes: unknown[] }; reason?: string };
+
+	test("OUT_OF_SCOPE non_goal이 non_goals가 아닌 슬롯을 참조하면 무효 → 차단 UNKNOWN 강등, reason에 대안", () => {
+		state.setGoalState(SID, { phase: "pursuing" });
+		writeObjectiveArtifact();
+		writeReview([
+			{
+				...finding("OUT_OF_SCOPE", "CONFIRMED", "HIGH"),
+				scope_evidence: { basis: "non_goal", reference: "constraints", rationale: "x" },
+			},
+		]);
+		const result = getReviewResult(SID);
+		expect(result.verdict).toBe("REQUEST_CHANGES");
+		expect(result.findings.adjudicate).toHaveLength(1);
+		expect(result.findings.notes).toHaveLength(0);
+		expect(result.reason ?? "").toContain("non_goals");
+	});
+
+	test("OUT_OF_SCOPE unrelated이 outcome이 아닌 슬롯을 참조하면 무효 → 차단 UNKNOWN 강등", () => {
+		state.setGoalState(SID, { phase: "pursuing" });
+		writeObjectiveArtifact();
+		writeReview([
+			{
+				...finding("OUT_OF_SCOPE", "CONFIRMED", "HIGH"),
+				scope_evidence: { basis: "unrelated", reference: "non_goals", rationale: "x" },
+			},
+		]);
+		const result = getReviewResult(SID);
+		expect(result.verdict).toBe("REQUEST_CHANGES");
+		expect(result.findings.adjudicate).toHaveLength(1);
+		expect(result.findings.notes).toHaveLength(0);
+	});
+
+	test("올바른 배제 페어링(non_goal→non_goals)은 비차단 NOTE 유지", () => {
+		writeObjectiveArtifact();
+		writeReview([
+			{
+				...finding("OUT_OF_SCOPE", "CONFIRMED", "HIGH"),
+				scope_evidence: { basis: "non_goal", reference: "non_goals", rationale: "x" },
+			},
+		]);
+		expect(state.requestComplete(SID)).toBe(true);
+	});
+
+	test("IN_SCOPE requirement는 constraints를 참조해도 여전히 유효 (IN_SCOPE narrowing은 복원하지 않음)", () => {
+		writeObjectiveArtifact();
+		writeReview([
+			{
+				...finding("IN_SCOPE", "CONFIRMED", "LOW"),
+				scope_evidence: { basis: "requirement", reference: "constraints", rationale: "x" },
+			},
+		]);
+		expect(state.requestComplete(SID)).toBe(true);
+	});
+});
+
+describe("validate-review-artifact CLI 게이트", () => {
+	function runValidate(): { exitCode: number | null; stderr: string; stdout: string } {
+		const run = spawnSync(
+			"bun",
+			[join(import.meta.dir, "ultragoal-state.ts"), "validate-review-artifact"],
+			{ encoding: "utf8", env: { ...process.env, OMT_DIR: omtDir, OMT_SESSION_ID: SID } },
+		);
+		return { exitCode: run.status, stderr: run.stderr, stdout: run.stdout };
+	}
+
+	test("잘못된 배제 페어링은 nonzero + 허용 대안 메시지", () => {
+		state.setGoalState(SID, { phase: "pursuing" });
+		writeReview([
+			{
+				...finding("OUT_OF_SCOPE", "CONFIRMED", "HIGH"),
+				scope_evidence: { basis: "non_goal", reference: "constraints", rationale: "x" },
+			},
+		]);
+		const run = runValidate();
+		expect(run.exitCode).not.toBe(0);
+		expect(run.stderr).toContain("non_goals");
+	});
+
+	test("유효한 아티팩트는 exit 0", () => {
+		state.setGoalState(SID, { phase: "pursuing" });
+		writeReview([finding("IN_SCOPE", "CONFIRMED", "LOW")]);
+		const run = runValidate();
+		expect(run.exitCode).toBe(0);
 	});
 });
 
