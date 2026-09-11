@@ -13,6 +13,16 @@ import { spawn, type ChildProcess } from "child_process";
 import type { AgentDriver, CliType, ParseResult } from "./agent-drivers/types";
 import { pickDriver } from "./agent-drivers/types";
 import { acquireWorkerSlot, releaseWorkerSlot, type AcquireWorkerSlotOptions } from "./worker-slots";
+export {
+	cleanupOwnedDescendants,
+	snapshotProcesses,
+	readProcessReceipt,
+	type ProcessRecord,
+	type ProcessSnapshot,
+	type ProcessReceipt,
+	type CleanupOwnedDescendantsDeps,
+} from "./worker-processes";
+import { cleanupOwnedDescendants, readProcessReceipt, type ProcessSnapshot } from "./worker-processes";
 // Driver registration side effects:
 import "./agent-drivers/opencode";
 import "./agent-drivers/claudecode";
@@ -181,6 +191,10 @@ export interface RunOnceOpts {
 	fallbackFile?: string;
 	reviewContent?: string;
 	heartbeatIntervalMs?: number;
+	/** Test-only process snapshot seam for descendant cleanup. */
+	processSnapshot?: () => ProcessSnapshot;
+	/** Test-only cleanup grace override; production retains the 5s default. */
+	cleanupGraceMs?: number;
 }
 
 /**
@@ -203,6 +217,8 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 		fallbackFile,
 		reviewContent,
 		heartbeatIntervalMs = HEARTBEAT_INTERVAL_MS,
+		processSnapshot,
+		cleanupGraceMs,
 	} = opts;
 
 	// Prompt assembly: attempt structured prompt from role files
@@ -245,6 +261,10 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 		});
 
 		let child: ChildProcess;
+		// Capture the detached worker's own group identity before starting the CLI.
+		// This receipt is the anchor used later; cleanup never adopts a fresh PID
+		// witness at cleanup time.
+		const leaderReceipt = readProcessReceipt(process.pid);
 		try {
 			child = spawnFn(program, [...args], {
 				stdio: ["pipe", "pipe", "pipe"],
@@ -292,6 +312,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 			}
 			return;
 		}
+		const childReceipt = child.pid === undefined ? null : readProcessReceipt(child.pid);
 
 		// Write prompt to stdin
 		if (child.stdin) {
@@ -331,27 +352,36 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 
 		let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
 		let timeoutTriggered = false;
+		let cleanupStarted = false;
+		let cleanupPromise: Promise<void> | null = null;
+		const startDescendantCleanup = () => {
+			if (cleanupStarted) return cleanupPromise ?? Promise.resolve();
+			cleanupStarted = true;
+			cleanupPromise = cleanupOwnedDescendants({
+				childPid: child.pid,
+				childReceipt,
+				leaderReceipt,
+				snapshot: processSnapshot,
+				graceMs: cleanupGraceMs,
+			}).catch(() => {
+				/* cleanup is best effort; the bounded drain still settles the turn */
+			});
+			return cleanupPromise;
+		};
 		if (Number.isFinite(timeoutSec) && timeoutSec > 0) {
 			timeoutHandle = setTimeout(() => {
 				timeoutTriggered = true;
-				if (child.pid !== undefined) {
-					try {
-						process.kill(child.pid, "SIGTERM");
-					} catch {
-						/* ignore */
-					}
-				}
-				// SIGKILL escalation after 5s grace period
-				const killHandle = setTimeout(() => {
-					if (child.pid !== undefined) {
-						try {
-							process.kill(child.pid, "SIGKILL");
-						} catch {
-							/* ignore */
-						}
-					}
-				}, 5000);
-				killHandle.unref();
+				finalize({
+					member,
+					state: "timed_out",
+					message: `Timed out after ${timeoutSec}s`,
+					finishedAt: new Date().toISOString(),
+					command,
+					exitCode: null,
+					signal: "SIGTERM",
+					pid: child.pid,
+					attempt,
+				});
 			}, timeoutSec * 1000);
 			timeoutHandle.unref();
 		}
@@ -364,6 +394,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 				clearInterval(heartbeatHandle);
 				heartbeatHandle = null;
 			}
+			if (timeoutHandle) clearTimeout(timeoutHandle);
 			try {
 				// The CLI child has exited, but the caller (executeOneTurn) still has to parse
 				// raw stdout and issue its own final status.json write. Persisting payload's
@@ -376,31 +407,54 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 			} catch {
 				/* ignore */
 			}
-			let closed = 0;
-			const total = 2;
-			const safetyTimeout = setTimeout(() => resolve(payload), 500);
-			const onClose = () => {
-				if (++closed === total) {
-					clearTimeout(safetyTimeout);
-					resolve(payload);
-				}
-			};
-			if (outStream.closed || outStream.destroyed) {
-				onClose();
-			} else {
-				outStream.on("close", onClose);
-			}
-			if (errStream.closed || errStream.destroyed) {
-				onClose();
-			} else {
-				errStream.on("close", onClose);
-			}
-			outStream.end();
-			errStream.end();
+			void (async () => {
+				let closed = 0;
+				let settled = false;
+				let cleanupDone = false;
+				let drainTimedOut = false;
+				const settle = (drainTimedOut: boolean) => {
+					if (settled) return;
+					if (!cleanupDone) return;
+					settled = true;
+					if (drainTimer) clearTimeout(drainTimer);
+					if (drainTimedOut && payload.state === "done") {
+						resolve({ ...payload, state: "error", message: "Output drain timed out" });
+					} else {
+						resolve(payload);
+					}
+				};
+				const onClose = () => {
+					closed++;
+					if (closed === 2) settle(false);
+				};
+				const drainTimer = setTimeout(() => {
+					drainTimedOut = true;
+					try {
+						child.stdout?.destroy();
+						child.stderr?.destroy();
+						outStream.destroy();
+						errStream.destroy();
+					} catch {
+						/* ignore */
+					}
+					settle(true);
+				}, 1000);
+				if (outStream.closed || outStream.destroyed) onClose();
+				else outStream.on("close", onClose);
+				if (errStream.closed || errStream.destroyed) onClose();
+				else errStream.on("close", onClose);
+				// A live child pipe owns stream completion. Ending the destination
+				// immediately would mask inherited-pipe leaks; the independent drain
+				// deadline below destroys streams that never close.
+				if (!child.stdout) outStream.end();
+				if (!child.stderr) errStream.end();
+				await startDescendantCleanup();
+				cleanupDone = true;
+				if (drainTimedOut || closed === 2) settle(drainTimedOut);
+			})();
 		};
 
 		child.on("error", (error: NodeJS.ErrnoException) => {
-			if (timeoutHandle) clearTimeout(timeoutHandle);
 			const isMissing = error && error.code === "ENOENT";
 			finalize({
 				member,
@@ -418,12 +472,8 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 		let exitSignal: string | null = null;
 
 		child.on("exit", (code: number | null, signal: string | null) => {
-			if (timeoutHandle) clearTimeout(timeoutHandle);
 			exitCode = typeof code === "number" ? code : null;
 			exitSignal = signal || null;
-		});
-
-		child.on("close", () => {
 			const timedOut = Boolean(timeoutTriggered);
 			const canceled = !timedOut && exitSignal === "SIGTERM";
 			finalize({

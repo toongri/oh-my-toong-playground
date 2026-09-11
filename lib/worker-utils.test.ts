@@ -12,6 +12,8 @@ import {
 import { join } from "path";
 import { tmpdir } from "os";
 import { EventEmitter } from "events";
+import { spawn } from "child_process";
+import { PassThrough } from "stream";
 import {
 	splitCommand,
 	atomicWriteJson,
@@ -20,6 +22,8 @@ import {
 	runOneTurn,
 	resumeOneTurn,
 	reapOwnProcessGroup,
+	cleanupOwnedDescendants,
+	type ProcessSnapshot,
 	type RunOnceOpts,
 	type RunOneTurnOpts,
 } from "./worker-utils.ts";
@@ -1724,5 +1728,193 @@ describe("reapOwnProcessGroup", () => {
 				installSelfSigtermHandler: () => {},
 			}),
 		).resolves.toBeUndefined();
+	});
+});
+
+describe("cleanupOwnedDescendants", () => {
+	test("자기 프로세스 그룹에서 확인된 멤버만 시그널하고 새 자손은 에스컬레이션함", async () => {
+		const first: ProcessSnapshot = {
+			processes: [
+				{ pid: 100, ppid: 1, pgid: 100, startedAt: "leader" },
+				{ pid: 101, ppid: 100, pgid: 100, startedAt: "child" },
+			],
+		};
+		const second: ProcessSnapshot = {
+			processes: [
+				{ pid: 100, ppid: 1, pgid: 100, startedAt: "leader" },
+				{ pid: 101, ppid: 100, pgid: 100, startedAt: "child" },
+				{ pid: 102, ppid: 100, pgid: 100, startedAt: "new-child" },
+				{ pid: 999, ppid: 1, pgid: 100, startedAt: "pid-reused" },
+				{ pid: 200, ppid: 1, pgid: 200, startedAt: "sibling" },
+			],
+		};
+		const calls: Array<[number, NodeJS.Signals]> = [];
+		let snapshots = 0;
+		await cleanupOwnedDescendants({
+			currentPid: 100,
+			childPid: 101,
+			childReceipt: { pid: 101, pgid: 100, startedAt: "child" },
+			graceMs: 0,
+			snapshot: () => (snapshots++ === 0 ? first : second),
+			kill: (pid, signal) => calls.push([pid, signal]),
+		});
+		expect(calls).toEqual([
+			[101, "SIGTERM"],
+			[101, "SIGKILL"],
+			[102, "SIGKILL"],
+		]);
+	});
+
+	test("호출자가 그룹 리더가 아니면 다른 프로세스 그룹을 소유하지 않음", async () => {
+		const calls: Array<[number, NodeJS.Signals]> = [];
+		await cleanupOwnedDescendants({
+			currentPid: 100,
+			childPid: 101,
+			childReceipt: { pid: 101, pgid: 50, startedAt: "child" },
+			graceMs: 0,
+			snapshot: () => ({
+				processes: [
+					{ pid: 100, ppid: 1, pgid: 50, startedAt: "caller" },
+					{ pid: 101, ppid: 100, pgid: 50, startedAt: "child" },
+					{ pid: 102, ppid: 1, pgid: 50, startedAt: "unrelated" },
+				],
+			}),
+			kill: (pid, signal) => calls.push([pid, signal]),
+		});
+		expect(calls).toEqual([[101, "SIGTERM"], [101, "SIGKILL"]]);
+	});
+
+	test("PID 시작 시각 증인이 변경된 프로세스에는 시그널하지 않음", async () => {
+		const calls: Array<[number, NodeJS.Signals]> = [];
+		await cleanupOwnedDescendants({
+			currentPid: 100,
+			childPid: 101,
+			childReceipt: { pid: 101, pgid: 100, startedAt: "child" },
+			graceMs: 0,
+			snapshot: () => ({
+				processes: [
+					{ pid: 100, ppid: 1, pgid: 100, startedAt: "leader" },
+					{ pid: 101, ppid: 100, pgid: 100, startedAt: "replacement" },
+				],
+			}),
+			kill: (pid, signal) => calls.push([pid, signal]),
+		});
+		expect(calls).toEqual([]);
+	});
+
+	test("직접 폴백은 공유 PGID에서도 확인된 자식을 정리함", async () => {
+		const calls: Array<[number, NodeJS.Signals]> = [];
+		await cleanupOwnedDescendants({
+			currentPid: 100,
+			childPid: 101,
+			childReceipt: { pid: 101, pgid: 100, startedAt: "child" },
+			leaderReceipt: { pid: 100, pgid: 100, startedAt: "old-leader" },
+			graceMs: 0,
+			snapshot: () => ({
+				processes: [
+					{ pid: 100, ppid: 1, pgid: 100, startedAt: "new-leader" },
+					{ pid: 101, ppid: 100, pgid: 100, startedAt: "child" },
+				],
+			}),
+			kill: (pid, signal) => calls.push([pid, signal]),
+		});
+		expect(calls).toEqual([[101, "SIGTERM"], [101, "SIGKILL"]]);
+	});
+});
+
+describe("runOnce detached descendant lifecycle", () => {
+	test("프로세스 스냅샷 실패와 상속 스트림 미종료 시 drain 오류로 제한 시간 내 종료함", async () => {
+		const tmpDir = makeTmpDir();
+		const memberDir = join(tmpDir, "member");
+		mkdirSync(memberDir, { recursive: true });
+		const fakeSpawn = () => {
+			const child = new EventEmitter() as any;
+			child.pid = 999999;
+			child.stdin = { on: () => child.stdin, write: () => true, end: () => {} };
+			child.stdout = new PassThrough();
+			child.stderr = new PassThrough();
+			process.nextTick(() => child.emit("exit", 0, null));
+			return child;
+		};
+		const startedAt = Date.now();
+		const result = await runOnce({
+			program: "fake",
+			args: [],
+			prompt: "",
+			member: "fake",
+			memberDir,
+			command: "fake",
+			timeoutSec: 0,
+			attempt: 0,
+			spawnFn: fakeSpawn as any,
+			heartbeatIntervalMs: 25,
+			processSnapshot: () => {
+				throw new Error("ps unavailable");
+			},
+		});
+		expect(result.state).toBe("error");
+		expect(result.message).toBe("Output drain timed out");
+		expect(Date.now() - startedAt).toBeLessThan(3000);
+		rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("분리된 워커 종료 전에 정리를 기다리고 무관한 형제 프로세스는 보존함", async () => {
+		const fixtureDir = makeTmpDir();
+		const memberDir = join(fixtureDir, "member");
+		mkdirSync(memberDir, { recursive: true });
+		const resultPath = join(fixtureDir, "result.json");
+		const grandchildPath = join(fixtureDir, "grandchild.pid");
+		const utilPath = join(import.meta.dir, "worker-utils.ts");
+		const fixturePath = join(fixtureDir, "worker-fixture.ts");
+		const commandScript = `bg=$!; (trap '' TERM; sleep 30) & bg=$!; echo $bg > ${grandchildPath}; exit 0`;
+		writeFileSync(
+			fixturePath,
+			`import { writeFileSync } from "fs";\nimport { runOnce } from ${JSON.stringify(utilPath)};\nconst result = await runOnce({ program: "/bin/sh", args: ["-c", ${JSON.stringify(commandScript)}], prompt: "", member: "fixture", memberDir: ${JSON.stringify(memberDir)}, command: ${JSON.stringify(`/bin/sh -c ${commandScript}`)}, timeoutSec: 5, attempt: 0, heartbeatIntervalMs: 25, cleanupGraceMs: 50 });\nwriteFileSync(${JSON.stringify(resultPath)}, JSON.stringify(result));\n`,
+		);
+		const sibling = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		const worker = spawn(process.execPath, [fixturePath], { detached: true, stdio: "ignore" });
+		try {
+			const deadline = Date.now() + 5000;
+			while (!existsSync(resultPath) && Date.now() < deadline) await sleepMsAsync(25);
+			expect(existsSync(resultPath)).toBe(true);
+			expect(JSON.parse(readFileSync(resultPath, "utf8")).state).toBe("done");
+			const grandchildDeadline = Date.now() + 2000;
+			while (existsSync(grandchildPath) && Date.now() < grandchildDeadline) {
+				const pid = Number(readFileSync(grandchildPath, "utf8").trim());
+				try {
+					process.kill(pid, 0);
+				} catch {
+					break;
+				}
+				await sleepMsAsync(25);
+			}
+			const grandchildPid = Number(readFileSync(grandchildPath, "utf8").trim());
+			let grandchildAlive = true;
+			try {
+				process.kill(grandchildPid, 0);
+			} catch {
+				grandchildAlive = false;
+			}
+			expect(grandchildAlive).toBe(false);
+			let siblingAlive = true;
+			try {
+				if (sibling.pid !== undefined) process.kill(sibling.pid, 0);
+			} catch {
+				siblingAlive = false;
+			}
+			expect(siblingAlive).toBe(true);
+		} finally {
+			try {
+				if (worker.pid !== undefined) process.kill(-worker.pid, "SIGKILL");
+			} catch {
+				/* fixture already exited */
+			}
+			try {
+				if (sibling.pid !== undefined) process.kill(-sibling.pid, "SIGKILL");
+			} catch {
+				/* sibling already exited */
+			}
+			rmSync(fixtureDir, { recursive: true, force: true });
+		}
 	});
 });
