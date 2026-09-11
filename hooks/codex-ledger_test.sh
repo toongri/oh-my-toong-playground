@@ -144,6 +144,20 @@ test_consumer_cannot_remove_foreign_live_lock() {
     [ "$rc" -ne 0 ] && [ "$before" = "$after" ]
 }
 
+test_postcompact_then_sessionstart_compact_recovers_once() {
+    local sbx od first second third total
+    sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
+    printf '## Now\nNATIVE-SEQUENCE-MARKER\n## User Corrections (verbatim)\n' > "$od/session-ledger-native-sequence.md"
+    run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"native-sequence\",\"cwd\":\"$sbx\"}" >/dev/null
+    first=$(run_event "$od" "{\"hook_event_name\":\"SessionStart\",\"source\":\"compact\",\"session_id\":\"native-sequence\",\"cwd\":\"$sbx\"}")
+    second=$(run_event "$od" "{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"native-sequence\",\"cwd\":\"$sbx\",\"prompt\":\"next\"}")
+    third=$(run_event "$od" "{\"hook_event_name\":\"PostToolUse\",\"session_id\":\"native-sequence\",\"cwd\":\"$sbx\"}")
+    total=$(printf '%s\n%s\n%s\n' "$first" "$second" "$third" | grep -c 'NATIVE-SEQUENCE-MARKER' || true)
+    printf '%s' "$first" | jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' >/dev/null
+    [ "$total" -eq 1 ] && [ ! -e "$od/codex-ledger-pending-native-sequence" ]
+    rm -rf "$sbx"
+}
+
 # =============================================================================
 # AC: source==compact emits SessionStart additionalContext with
 # [LEDGER RECOVERY] and OMITS `continue`.
@@ -409,6 +423,7 @@ main() {
     run_test test_dead_claim_is_reclaimable
     run_test test_postcompact_retries_transient_lock_contention
     run_test test_consumer_cannot_remove_foreign_live_lock
+    run_test test_postcompact_then_sessionstart_compact_recovers_once
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
