@@ -6,7 +6,7 @@ import path from "path";
 import os from "os";
 import { execFileSync } from "child_process";
 
-import { buildAugmentedCommand } from "@lib/generic-job";
+import { buildAugmentedCommand, getPgidSnapshot, judgePgidSignal } from "@lib/generic-job";
 
 const SCRIPT = path.join(import.meta.dirname, "job.ts");
 
@@ -54,6 +54,44 @@ async function waitForTerminalStatus(jobDir: string): Promise<string> {
 	throw new Error(
 		`worker status did not become terminal within ${timeoutMs}ms (overallState=${overallState || "unavailable"})`,
 	);
+}
+
+function cleanupVerifiedFixtureWorkers(jobDir: string): void {
+	const jobPath = path.join(jobDir, "job.json");
+	if (!fs.existsSync(jobPath)) return;
+	let metadata: { members?: unknown[] };
+	try {
+		metadata = JSON.parse(fs.readFileSync(jobPath, "utf8")) as { members?: unknown[] };
+	} catch {
+		return;
+	}
+	let snapshot;
+	try {
+		snapshot = getPgidSnapshot();
+	} catch {
+		return;
+	}
+	for (const member of metadata.members ?? []) {
+		if (!member || typeof member !== "object") continue;
+		const record = member as { workerPgid?: unknown; workerPgidStartedAt?: unknown };
+		const pgid = record.workerPgid;
+		const startedAt = record.workerPgidStartedAt;
+		if (
+			typeof pgid !== "number" ||
+			!Number.isInteger(pgid) ||
+			pgid <= 0 ||
+			pgid === process.pid ||
+			typeof startedAt !== "string" ||
+			startedAt.trim() === ""
+		)
+			continue;
+		if (judgePgidSignal(pgid, startedAt, snapshot) !== "signal") continue;
+		try {
+			process.kill(-pgid, "SIGKILL");
+		} catch {
+			// The exact verified fixture group may have exited between snapshot and cleanup.
+		}
+	}
 }
 
 describe("diagnose job lifecycle", () => {
@@ -247,24 +285,18 @@ describe("diagnose job lifecycle", () => {
 
 		const { jobDir } = JSON.parse(startResult.toString());
 
-		const statusResult = execFileSync(process.execPath, [SCRIPT, "status", jobDir], {
-			stdio: "pipe",
-		});
-
-		const status = JSON.parse(statusResult.toString());
-		expect(Array.isArray(status.members)).toBe(true);
-		expect(typeof status.overallState).toBe("string");
-		expect(typeof status.counts).toBe("object");
-		await waitForTerminalStatus(jobDir);
-
 		try {
-			execFileSync(process.execPath, [SCRIPT, "stop", jobDir], { stdio: "pipe" });
-		} catch {}
-		try {
-			execFileSync(process.execPath, [SCRIPT, "clean", jobDir, "--jobs-dir", jobsDir], {
+			const statusResult = execFileSync(process.execPath, [SCRIPT, "status", jobDir], {
 				stdio: "pipe",
 			});
-		} catch {}
+
+			const status = JSON.parse(statusResult.toString());
+			expect(Array.isArray(status.members)).toBe(true);
+			expect(typeof status.overallState).toBe("string");
+			expect(typeof status.counts).toBe("object");
+		} finally {
+			cleanupVerifiedFixtureWorkers(jobDir);
+		}
 	});
 
 	test("start applies settings.mcps.allow to job metadata and the real codex argv", async () => {
