@@ -88,10 +88,10 @@ verdict, but the verdict actually comes from the `Verdict` enum in
 The single source of truth for an agent's tier is the `model:` field in
 `agents/<name>.md` frontmatter.
 
-Codex `code-reviewer` trials `gpt-5.6-luna` with `xhigh` effort through a per-agent
-override in `codex.yaml`. Its shared opus tier and other platform assignments stay
-unchanged. No current tier expresses this model/effort pair, so it uses an individual
-mapping. It takes effect through `make sync` after merge.
+Codex `code-reviewer` uses `gpt-5.6-sol` with `medium` effort through a per-agent
+override in `codex.yaml` as a deliberate cost-focused mode. Its shared opus tier and
+other platform assignments stay unchanged. No current tier expresses this model/effort
+pair, so it uses an individual mapping. It takes effect through `make sync` after merge.
 
 ## The tier vocabulary is three values
 
