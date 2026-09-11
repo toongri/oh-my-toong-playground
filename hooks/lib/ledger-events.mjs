@@ -28,7 +28,7 @@ function sectionize(text) {
 
 function decodeEvents(parsed) {
   const events = [];
-  for (const [section, lines] of parsed.sections) for (const line of lines) {
+  for (const [section, lines] of parsed.sections) for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) { const line = lines[lineIndex];
     if (line.startsWith(PREFIX)) {
       let value;
       try { value = JSON.parse(line.slice(PREFIX.length)); } catch { fail("malformed OMT_EVENT marker"); }
@@ -42,7 +42,7 @@ function decodeEvents(parsed) {
       } else if (value.type === "checkpoint") {
         if (["goal", "scope", "user_updates", "done", "pending", "next"].some((k) => !validString(value[k])) || !Array.isArray(value.refs) || value.refs.some((x) => typeof x !== "string")) fail("invalid checkpoint event schema");
       } else fail(`unknown OMT_EVENT type '${value.type}'`);
-      events.push({ ...value, section });
+      events.push({ ...value, section, lineIndex });
     }
   }
   const ids = new Set();
@@ -67,8 +67,7 @@ function validId(v) { return validString(v) && /^[A-Za-z0-9_-]{1,200}$/.test(v);
 function readStdin() { return readFileSync(0, "utf8"); }
 function eventLine(v) { return PREFIX + JSON.stringify(v);
 }
-function insert(file, section, line) {
-  const state = readLedger(file);
+function insert(file, section, line, state = readLedger(file)) {
   const lines = state.text.split("\n");
   const sectionIndex = HEADERS.indexOf(section); const start = state.parsed.starts.find((s) => s.n === sectionIndex)?.i ?? -1;
   if (start < 0) fail(`section '${section}' not found`);
@@ -76,8 +75,8 @@ function insert(file, section, line) {
   lines.splice(end, 0, line);
   writeAtomic(file, lines.join("\n"));
 }
-function replaceSection(file, section, line) {
-  const state = readLedger(file); const lines = state.text.split("\n"); const sectionIndex = HEADERS.indexOf(section);
+function replaceSection(file, section, line, state = readLedger(file)) {
+  const lines = state.text.split("\n"); const sectionIndex = HEADERS.indexOf(section);
   const start = state.parsed.starts.find((s) => s.n === sectionIndex)?.i ?? -1; const next = state.parsed.starts.find((s) => s.i > start && s.n === sectionIndex + 1); const end = next?.i ?? lines.length;
   if (start < 0) fail(`section '${section}' not found`);
   lines.splice(start + 1, end - start - 1, line); writeAtomic(file, lines.join("\n"));
@@ -129,11 +128,11 @@ function checkpointProjection(event) {
 }
 function sectionBlocks(state, section, records, activeOnly) {
   const blocks = [];
-  for (const line of state.parsed.sections.get(section)) {
+  const eventByLine = new Map(state.events.filter((event) => event.section === section).map((event) => [event.lineIndex, event]));
+  for (const [lineIndex, line] of state.parsed.sections.get(section).entries()) {
     if (!line) continue;
     if (line.startsWith(PREFIX)) {
-      const raw = JSON.parse(line.slice(PREFIX.length));
-      const event = state.events.find((e) => e.section === section && e.type === raw.type && (e.id === raw.id || e.target === raw.target));
+      const event = eventByLine.get(lineIndex);
       if (event?.type === "record" && records.has(event.id) && (!activeOnly || records.get(event.id).status === "active")) blocks.push(projection(records.get(event.id)));
       else if (event?.type === "checkpoint") blocks.push(checkpointProjection(event));
       else if (event?.type !== "record" && !activeOnly) blocks.push(`${event?.type || "structured event"} (lifecycle metadata)`);
@@ -146,13 +145,13 @@ function command(cmd, args, file) {
   if (cmd === "record") {
     if (!HEADERS.includes(o.positional) || o.positional === "Now" || !validString(o.scope)) fail("record requires a durable non-Now section and nonblank --scope"); ensureSource(o.source);
     const id = o.id || randomUUID(); if (!validId(id) || state.events.some((e) => e.id === id)) fail(`invalid or duplicate id '${id}'`);
-    insert(file, o.positional, eventLine({ type: "record", id, source: o.source, scope: o.scope, refs: o.refs, payload: readStdin() })); return;
+    insert(file, o.positional, eventLine({ type: "record", id, source: o.source, scope: o.scope, refs: o.refs, payload: readStdin() }), state); return;
   }
   if (cmd === "resolve" || cmd === "supersede") {
     if (!validId(o.positional) || !records.has(o.positional)) fail("target ID is unknown"); ensureSource(o.source);
     const target = records.get(o.positional); if (target.status !== "active") fail("target ID is not active");
-    if (cmd === "resolve") insert(file, target.section, eventLine({ type: "resolve", target: o.positional, source: o.source, reason: readStdin() }));
-    else { if (!records.has(o.by) || o.by === o.positional || records.get(o.by).status !== "active") fail("replacement ID is unknown or inactive"); insert(file, target.section, eventLine({ type: "supersede", target: o.positional, replacement: o.by, source: o.source })); }
+    if (cmd === "resolve") insert(file, target.section, eventLine({ type: "resolve", target: o.positional, source: o.source, reason: readStdin() }), state);
+    else { if (!records.has(o.by) || o.by === o.positional || records.get(o.by).status !== "active") fail("replacement ID is unknown or inactive"); insert(file, target.section, eventLine({ type: "supersede", target: o.positional, replacement: o.by, source: o.source }), state); }
     return;
   }
   if (cmd === "checkpoint") {
@@ -162,7 +161,7 @@ function command(cmd, args, file) {
     if (Object.keys(c).some((key) => !allowed.has(key))) fail("checkpoint contains unsupported fields");
     for (const k of ["goal", "scope", "user_updates", "done", "pending", "next"]) if (!validString(c[k])) fail(`checkpoint field '${k}' must be a nonblank string`);
     if (!Array.isArray(c.refs) || c.refs.some((x) => typeof x !== "string")) fail("checkpoint refs must be strings[]");
-    replaceSection(file, "Now", eventLine({ ...c, type: "checkpoint" })); return;
+    replaceSection(file, "Now", eventLine({ ...c, type: "checkpoint" }), state); return;
   }
   if (cmd === "read" || cmd === "recover") {
     if (o.maxBytes !== undefined && (!Number.isInteger(o.maxBytes) || o.maxBytes < MIN_BYTES)) fail(`--max-bytes must be an integer >= ${MIN_BYTES}`);

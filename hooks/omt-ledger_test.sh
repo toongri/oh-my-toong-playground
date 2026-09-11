@@ -767,6 +767,20 @@ test_adjacent_section_and_checkpoint_projection_and_sentinel_literal() {
     assert_output_contains_local "$out" 'goal: g' "active Now read should retain checkpoint projection" || return 1
 }
 
+test_many_structured_records_project_with_statuses() {
+    local i out
+    i=1
+    while [ "$i" -le 80 ]; do
+        printf 'payload-%s' "$i" | "$LEDGER_SCRIPT" record Decisions --id "many-$i" --source hook --scope s >/dev/null
+        i=$((i + 1))
+    done
+    printf 'resolved' | "$LEDGER_SCRIPT" resolve many-1 --source user
+    out=$("$LEDGER_SCRIPT" read --section Decisions)
+    assert_output_contains_local "$out" 'id: many-80' "large projection should include final record" || return 1
+    out=$("$LEDGER_SCRIPT" read --id many-1)
+    assert_output_contains_local "$out" 'status: resolved' "status projection should remain correct across many records" || return 1
+}
+
 # =============================================================================
 # Main Test Runner
 # =============================================================================
@@ -805,6 +819,7 @@ main() {
     run_test test_paged_projection_reassembles_byte_for_byte
     run_test test_checkpoint_override_and_read_only_behavior
     run_test test_adjacent_section_and_checkpoint_projection_and_sentinel_literal
+    run_test test_many_structured_records_project_with_statuses
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
