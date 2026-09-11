@@ -19,8 +19,10 @@ The Codex hook sequence verified against Codex CLI `0.153.4` for manual
 compact is `PostCompact` followed by `SessionStart` with `source: compact`.
 `PostCompact` has no context-bearing output contract, so it leaves a pending
 token. Recovery uses the next supported context event (`SessionStart`, or the
-registered `UserPromptSubmit`/`PostToolUse` bridge), and succeeds at most once
-per token. A second compaction while recovery is running is retained as
+registered `UserPromptSubmit`/`PostToolUse` bridge). On a normal successful
+run, each token is consumed once; failed attempts remain retryable. There is
+no exactly-once guarantee across a process crash between output and durable
+acknowledgement. A second compaction while recovery is running is retained as
 `.next` for the next recovery. This is a version-qualified native-event probe,
 not a claim that every host or future CLI emits these events.
 
