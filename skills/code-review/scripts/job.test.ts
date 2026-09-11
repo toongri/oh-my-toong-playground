@@ -23,6 +23,7 @@ import { extractDenySkills, extractDenySubagents } from "@lib/generic-job";
 import * as GenericJob from "@lib/generic-job";
 import * as JobUtils from "@lib/job-utils";
 import { getOmtDir } from "@lib/omt-dir";
+import { tryAcquireWorkerSlot, releaseWorkerSlot } from "@lib/worker-slots";
 
 // Snapshot the real bindings before any test mocks "@lib/job-utils" — mock.module mutates the
 // shared module namespace object in place (and the swap leaks across this file's boundary since
@@ -1464,6 +1465,85 @@ describe("job.ts cmdReap — 생존 프로세스를 회수됐다고 보고하지
 		expect(isPgidAlive(pgid)).toBe(true);
 
 		killPgidIfAlive(pgid);
+	});
+});
+
+describe("job.ts cmdReap — jobsDir별 nonblocking singleton", () => {
+	test("점유된 reaper slot이면 stdout 없이 stderr skip하고 jobs root가 독립적이다", async () => {
+		const firstRoot = makeTmpDir();
+		const secondRoot = makeTmpDir();
+		const firstJobs = path.join(firstRoot, "jobs");
+		const secondJobs = path.join(secondRoot, "jobs");
+		fs.mkdirSync(firstJobs, { recursive: true });
+		fs.mkdirSync(secondJobs, { recursive: true });
+		const held = tryAcquireWorkerSlot({ dir: path.join(firstJobs, ".reaper-slots"), slotCount: 1 });
+		expect(held).not.toBeNull();
+
+		const stderrChunks: string[] = [];
+		const stdoutChunks: string[] = [];
+		const originalStderrWrite = process.stderr.write;
+		const originalStdoutWrite = process.stdout.write;
+		(process.stderr as unknown as { write: unknown }).write = (chunk: unknown) => {
+			stderrChunks.push(String(chunk));
+			return true;
+		};
+		(process.stdout as unknown as { write: unknown }).write = (chunk: unknown) => {
+			stdoutChunks.push(String(chunk));
+			return true;
+		};
+		let secondSlotsExist: boolean | undefined;
+		try {
+			await cmdReap({ "jobs-dir": firstJobs, "grace-ms": 0 });
+			await cmdReap({ "jobs-dir": secondJobs, "grace-ms": 0 });
+			const secondSlot = tryAcquireWorkerSlot({ dir: path.join(secondJobs, ".reaper-slots"), slotCount: 1 });
+			secondSlotsExist = secondSlot !== null;
+			if (secondSlot !== null) releaseWorkerSlot(secondSlot);
+		} finally {
+			process.stderr.write = originalStderrWrite;
+			process.stdout.write = originalStdoutWrite;
+			if (held !== null) releaseWorkerSlot(held);
+			fs.rmSync(firstRoot, { recursive: true, force: true });
+			fs.rmSync(secondRoot, { recursive: true, force: true });
+		}
+
+		expect(stderrChunks.join("")).toContain("another reaper is already running; skipping");
+		expect(stdoutChunks.join("")).toBe("");
+		expect(secondSlotsExist).toBe(true);
+	});
+
+	test("진단 예외에도 실제 Bun owner를 기록하고 slot을 finally로 반환한다", async () => {
+		const root = makeTmpDir();
+		const reapJobs = path.join(root, "jobs");
+		const slotDir = path.join(reapJobs, ".reaper-slots");
+		fs.mkdirSync(reapJobs, { recursive: true });
+		let owner: { pid?: unknown; pidStartedAt?: unknown } | undefined;
+		const originalStderrWrite = process.stderr.write;
+		(process.stderr as unknown as { write: unknown }).write = () => {
+			const slotName = fs.readdirSync(slotDir).find((entry) => entry.startsWith("slot-"));
+			if (slotName === undefined) throw new Error("missing reaper slot");
+			const ownerName = fs.readdirSync(path.join(slotDir, slotName))[0];
+			owner = JSON.parse(fs.readFileSync(path.join(slotDir, slotName, ownerName), "utf8")) as typeof owner;
+			throw new Error("diagnostic probe");
+		};
+		try {
+			let rejected = false;
+			try {
+				await cmdReap({ "jobs-dir": reapJobs, "grace-ms": 0 });
+			} catch (error) {
+				rejected = error instanceof Error && error.message === "diagnostic probe";
+			}
+			expect(rejected).toBe(true);
+		} finally {
+			process.stderr.write = originalStderrWrite;
+		}
+		expect(owner?.pid).toBe(process.pid);
+		expect(typeof owner?.pidStartedAt).toBe("string");
+		expect(String(owner?.pidStartedAt).length).toBeGreaterThan(0);
+
+		const recovered = tryAcquireWorkerSlot({ dir: slotDir, slotCount: 1 });
+		expect(recovered).not.toBeNull();
+		if (recovered !== null) releaseWorkerSlot(recovered);
+		fs.rmSync(root, { recursive: true, force: true });
 	});
 });
 
