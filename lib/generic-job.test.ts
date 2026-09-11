@@ -15,6 +15,7 @@ import type {
 } from "./generic-job.ts";
 import type { RunOneTurnOpts } from "./worker-utils.ts";
 import { splitCommand } from "./worker-utils.ts";
+import { requestWorkerCancellation } from "./worker-cancellation.ts";
 import * as JobUtils from "./job-utils.ts";
 
 // Snapshot the real bindings before any test mocks "./job-utils" — mock.module mutates the
@@ -2299,6 +2300,31 @@ describe("`spawnWorkers`", () => {
 		expect((result[0].workerPgidStartedAt as string).length).toBeGreaterThan(0);
 	});
 
+	test("job.json이 있으면 모든 spawnWorkers receipt를 내구적으로 저장한다", () => {
+		const fakeWorkerPath = path.join(tmpDir, "fake-worker.js");
+		fs.writeFileSync(fakeWorkerPath, "process.exit(0);\n");
+		const entitiesDir = path.join(tmpDir, "members");
+		fs.mkdirSync(entitiesDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(tmpDir, "job.json"),
+			JSON.stringify({ members: [{ name: "alice", command: "echo hi" }] }),
+		);
+
+		const result = spawnWorkers({
+			entities: [{ name: "alice", command: "echo hi" }],
+			workerPath: fakeWorkerPath,
+			jobDir: tmpDir,
+			entitiesDir,
+			timeoutSec: 30,
+			config: councilConfig,
+		});
+		spawnedPgids.push(result[0].workerPgid as number);
+
+		const metadata = JSON.parse(fs.readFileSync(path.join(tmpDir, "job.json"), "utf8"));
+		expect(metadata.members[0].workerPgid).toBe(result[0].workerPgid);
+		expect(metadata.members[0].workerPgidStartedAt).toBe(result[0].workerPgidStartedAt);
+	});
+
 	test("onSpawned 콜백은 다음 엔티티 실행 전에 호출된다", () => {
 		const fakeWorkerPath = path.join(tmpDir, "sleep-worker.js");
 		fs.writeFileSync(fakeWorkerPath, "setTimeout(() => {}, 30_000);\n");
@@ -3217,6 +3243,31 @@ describe("cmdResumeMember", () => {
 		).rejects.toThrow("member in non-resumable state: error");
 	});
 
+	test("marker가 있으면 resume_count를 늘리거나 재스폰하지 않는다", async () => {
+		const entityDir = path.join(jobDir, "members", "alice");
+		writeMemberStatus(entityDir, {
+			member: "alice",
+			state: "done",
+			sessionID: "sess-abc",
+			resume_count: 0,
+			command: "opencode",
+		});
+		requestWorkerCancellation(entityDir, "stop requested");
+		let resumeCalled = false;
+
+		await expect(
+			cmdResumeMember(jobDir, "alice", "follow up", membersConfig, {
+				driverFactory: () => makeMockDriver(),
+				resumeOneTurnFn: async () => {
+					resumeCalled = true;
+					return { state: "done", sessionID: "sess-abc", text: "", exitCode: 0 };
+				},
+			}),
+		).rejects.toThrow("canceled");
+			expect(resumeCalled).toBe(false);
+			expect(readMemberStatus(entityDir).resume_count).toBe(0);
+	});
+
 	test("wrong entityDirName does not find status.json in sibling directory", async () => {
 		// Status is in 'members/' but we pass reviewersConfig (entityDirName='reviewers')
 		const entityDir = path.join(jobDir, "members", "alice");
@@ -3749,13 +3800,22 @@ describe("cmdCollect — awaiting_resume 조기 반환", () => {
 // cmdStop — termination wait
 // ---------------------------------------------------------------------------
 
-describe("cmdStop — 종료 대기", () => {
+	describe("cmdStop — 종료 대기", () => {
 	let tmpDir: string;
-	const spawned: ReturnType<typeof Bun.spawn>[] = [];
+	const spawned: Array<{ kill: (signal?: NodeJS.Signals) => void }> = [];
 
 	function setupStopJob(jobDir: string, pid: number) {
 		fs.mkdirSync(jobDir, { recursive: true });
-		fs.writeFileSync(path.join(jobDir, "job.json"), JSON.stringify({ id: "stop-test" }));
+		let workerPgidStartedAt = "";
+		try {
+			workerPgidStartedAt = execSync(`LC_ALL=C ps -o lstart= -p ${pid}`, { encoding: "utf8" }).trim();
+		} catch {
+			// A dead-pid fixture intentionally has no live witness.
+		}
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({ id: "stop-test", members: [{ name: "alice", workerPgid: pid, workerPgidStartedAt }] }),
+		);
 		const entitiesDir = path.join(jobDir, chunkReviewConfig.entityDirName);
 		fs.mkdirSync(entitiesDir, { recursive: true });
 		const dir = path.join(entitiesDir, "alice");
@@ -3792,30 +3852,24 @@ describe("cmdStop — 종료 대기", () => {
 		mock.restore();
 	});
 
-	test("SIGTERM 후 대상 프로세스가 죽고 status가 done으로 전이된 뒤에 반환한다", async () => {
-		// 대기 축은 프로세스 생존이 아니라 status.json의 state다. 자식이 죽는 것만으로는
-		// cmdStop이 반환할 근거가 없다 — 실제 워커처럼 자식 종료 후 status를 done으로
-		// 갱신하는 비동기 작업을 함께 띄워, cmdStop이 "그 전이"를 기다리는지 검증한다.
+	test("fallback cleanup은 worker leader를 죽이지 않고 descendant만 정리한다", async () => {
 		const jobDir = path.join(tmpDir, "job-stop-wait");
-		const child = Bun.spawn(
-			["bash", "-c", "trap 'sleep 0.1; exit 0' TERM; while :; do sleep 0.05; done"],
-			{ stdout: "ignore", stderr: "ignore" },
-		);
+		const child = spawn("bash", ["-c", "sleep 30 & while :; do sleep 0.05; done"], {
+			detached: true,
+			stdio: "ignore",
+		});
 		spawned.push(child);
 		const pid = child.pid;
+		if (pid === undefined) throw new Error("stop fixture did not spawn a worker leader");
 		setupStopJob(jobDir, pid);
 		const statusPath = path.join(jobDir, chunkReviewConfig.entityDirName, "alice", "status.json");
-
-		(async () => {
-			while (isAlive(pid)) await new Promise((r) => setTimeout(r, 20));
-			fs.writeFileSync(statusPath, JSON.stringify({ member: "alice", state: "done", pid }));
-		})();
+		setTimeout(() => fs.writeFileSync(statusPath, JSON.stringify({ member: "alice", state: "canceled" })), 300);
 
 		await cmdStop({}, jobDir, chunkReviewConfig);
 
-		expect(isAlive(pid)).toBe(false);
+		expect(isAlive(pid)).toBe(true);
 		const status = JSON.parse(fs.readFileSync(statusPath, "utf8"));
-		expect(status.state).toBe("done");
+		expect(status.state).toBe("canceled");
 	}, 10000);
 
 	test("`pid가 죽어 있는 running 멤버는 status가 done으로 바뀌길 기다린 뒤 매니페스트에 outputFilePath가 채워진다`", async () => {
@@ -3861,7 +3915,7 @@ describe("cmdStop — 종료 대기", () => {
 		expect(alice.outputFilePath).toBe(outputPath);
 	}, 10000);
 
-	test("`pid가 null인 running 멤버만 있으면 대기하지 않고 즉시 반환한다`", async () => {
+	test("`pid가 null인 running 멤버도 marker 후 상태 전이를 기다린다`", async () => {
 		const jobDir = path.join(tmpDir, "job-stop-no-pid-no-wait");
 		fs.mkdirSync(jobDir, { recursive: true });
 		fs.writeFileSync(path.join(jobDir, "job.json"), JSON.stringify({ id: "stop-test" }));
@@ -3872,13 +3926,14 @@ describe("cmdStop — 종료 대기", () => {
 		fs.writeFileSync(
 			path.join(memberDir, "status.json"),
 			// pid: null — worker-utils.ts가 CLI 자식을 spawn하기 전 1단계 기록을 흉내낸다.
-			// 신호를 보낼 핸들이 없으므로 대기 집합에도 들어가면 안 된다.
+			// worker leader identity가 없어도 marker 기록 후 bounded status polling을 수행한다.
 			JSON.stringify({ member: "alice", state: "running", pid: null }),
 		);
 
-		// 시간 기반 단언은 flaky하므로 쓰지 않는다: sleepMs를 페이크로 잡아 폴링 루프가
-		// 단 한 번도 돌지 않았음(=대기하지 않고 즉시 반환)을 호출 횟수로 증명한다.
+		// 시간 기반 단언은 flaky하므로 쓰지 않는다: fake sleepMs 호출과 상태 전이로
+		// bounded polling이 실제로 실행됐음을 증명한다.
 		let sleepCallCount = 0;
+		let transitioned = false;
 		const clock = { now: 1_000_000 };
 		mock.module("./job-utils", () => ({
 			...JobUtils,
@@ -3886,6 +3941,13 @@ describe("cmdStop — 종료 대기", () => {
 				const msNum = Number(ms);
 				if (Number.isFinite(msNum) && msNum > 0) {
 					sleepCallCount++;
+					if (!transitioned) {
+						transitioned = true;
+						fs.writeFileSync(
+							path.join(memberDir, "status.json"),
+							JSON.stringify({ member: "alice", state: "canceled" }),
+						);
+					}
 					clock.now += msNum;
 				}
 			},
@@ -3901,10 +3963,24 @@ describe("cmdStop — 종료 대기", () => {
 			Date.now = realDateNow;
 		}
 
-		expect(sleepCallCount).toBe(0);
+		expect(sleepCallCount).toBeGreaterThan(0);
 		const status = JSON.parse(fs.readFileSync(path.join(memberDir, "status.json"), "utf8"));
-		expect(status.state).toBe("running");
+		expect(status.state).toBe("canceled");
 	}, 10000);
+
+	test("retrying 멤버도 marker 후 terminal 상태 전이를 기다린다", async () => {
+		const jobDir = path.join(tmpDir, "job-stop-retrying");
+		const memberDir = path.join(jobDir, "members", "alice");
+		fs.mkdirSync(memberDir, { recursive: true });
+		fs.writeFileSync(path.join(jobDir, "job.json"), JSON.stringify({ id: "stop-test" }));
+		const statusPath = path.join(memberDir, "status.json");
+		fs.writeFileSync(statusPath, JSON.stringify({ member: "alice", state: "retrying" }));
+		setTimeout(() => fs.writeFileSync(statusPath, JSON.stringify({ member: "alice", state: "canceled" })), 50);
+
+		await cmdStop({}, jobDir, chunkReviewConfig);
+		expect(fs.existsSync(path.join(memberDir, "cancel.json"))).toBe(true);
+		expect(JSON.parse(fs.readFileSync(statusPath, "utf8")).state).toBe("canceled");
+	});
 
 	test("대기 상한을 넘으면 상한에서 포기하고 반환한다", async () => {
 		const jobDir = path.join(tmpDir, "job-stop-cap");
@@ -3978,6 +4054,24 @@ describe("cmdClean 활성 멤버 guard — heartbeat stale 판정 공유", () =>
 		(process as any).exit = (code?: number) => {
 			throw new Error(`process.exit(${code})`);
 		};
+	});
+
+	test("queued 멤버는 신호 전에 cancel.json이 기록된다", async () => {
+		const jobDir = path.join(tmpDir, "job-stop-queued-marker");
+		fs.mkdirSync(path.join(jobDir, "members", "alice"), { recursive: true });
+		fs.writeFileSync(path.join(jobDir, "job.json"), JSON.stringify({ id: "stop-test" }));
+		const statusPath = path.join(jobDir, "members", "alice", "status.json");
+		fs.writeFileSync(statusPath, JSON.stringify({ member: "alice", state: "queued", pid: null }));
+		const transition = new Promise<void>((resolve) =>
+			setTimeout(() => {
+				fs.writeFileSync(statusPath, JSON.stringify({ member: "alice", state: "canceled" }));
+				resolve();
+			}, 20),
+		);
+
+		await cmdStop({}, jobDir, chunkReviewConfig);
+		await transition;
+		expect(fs.existsSync(path.join(jobDir, "members", "alice", "cancel.json"))).toBe(true);
 	});
 
 	afterEach(() => {

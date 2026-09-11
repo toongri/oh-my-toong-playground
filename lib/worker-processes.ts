@@ -70,8 +70,10 @@ function receiptMatches(record: ProcessRecord, receipt: ProcessReceipt): boolean
 }
 
 /**
- * Reap CLI descendants without ever signaling the worker itself or an
- * unrelated process group. Production workers are detached group leaders;
+ * Reap CLI descendants without ever signaling the worker leader itself or an
+ * unrelated process group. When `leaderReceipt` identifies a detached worker,
+ * that leader is deliberately protected; only verified non-leader descendants
+ * may receive TERM/KILL. Production workers are detached group leaders;
  * direct-library callers are not, so those callers are restricted to the
  * explicitly owned child PID and its still-attached tree.
  */
