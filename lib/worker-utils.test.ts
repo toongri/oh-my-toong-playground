@@ -324,6 +324,39 @@ describe("runOnce heartbeat", () => {
 
 		await promise;
 	});
+
+	test("processSnapshot 중 발생한 child exit을 놓치지 않음", async () => {
+		const memberDir = join(tmpDir, "snapshot-exit");
+		mkdirSync(memberDir, { recursive: true });
+		let snapshotCalls = 0;
+		const child = new EventEmitter() as any;
+		child.pid = 12345;
+		child.stdin = { on: () => child.stdin, write: () => true, end: () => {} };
+		child.stdout = null;
+		child.stderr = null;
+
+		const resultPromise = runOnce({
+			program: "fake",
+			args: [],
+			prompt: "",
+			member: "snapshot-exit",
+			memberDir,
+			command: "fake",
+			timeoutSec: 0.05,
+			attempt: 0,
+			spawnFn: () => child,
+			heartbeatIntervalMs: 25,
+			processSnapshot: () => {
+				snapshotCalls++;
+				if (snapshotCalls === 2) child.emit("exit", 0, null);
+				return { processes: [{ pid: child.pid, ppid: process.pid, pgid: child.pid, startedAt: "now" }] };
+			},
+		});
+
+		const result = await resultPromise;
+		expect(result.state).not.toBe("timed_out");
+		expect(result.state).toBe("done");
+	});
 });
 
 // ---------------------------------------------------------------------------

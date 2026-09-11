@@ -339,7 +339,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 			}
 			return;
 		}
-		const childReceipt = child.pid === undefined ? null : readProcessReceipt(child.pid, processSnapshot);
+		let childReceipt: ReturnType<typeof readProcessReceipt> = null;
 		const cancellationAfterSpawn = cancellationRequested(memberDir, signal);
 
 		// Write prompt to stdin
@@ -539,6 +539,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 				attempt,
 			});
 		});
+		childReceipt = child.pid === undefined ? null : readProcessReceipt(child.pid, processSnapshot);
 	});
 }
 
