@@ -1,14 +1,40 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { parseTranscript, modelToTier } from "./transcript.ts";
-import { mkdir, writeFile, rm } from "fs/promises";
+import {
+	parseTranscript,
+	modelToTier,
+	getTranscriptReadStats,
+	resetTranscriptReadStats,
+} from "./transcript.ts";
+import { mkdir, writeFile, rm, readdir, readFile, stat } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
+import { initCache } from "./cache.ts";
+import { splitJsonlBytes } from "./transcript-cache.ts";
+import { randomUUID } from "crypto";
+import { createHash } from "crypto";
+
+describe("splitJsonlBytes", () => {
+	it("keeps an incomplete UTF-8 JSONL suffix for the next append", () => {
+		const first = Buffer.from('{"name":"équipe"', "utf8");
+		const result = splitJsonlBytes(Buffer.concat([first, Buffer.from("\n")]), Buffer.alloc(0));
+		expect(result.lines.map((line) => line.toString("utf8"))).toEqual(['{"name":"équipe"']);
+		expect(result.pending).toEqual(Buffer.alloc(0));
+
+		const partial = Buffer.from('{"name":"équipe"', "utf8");
+		const pending = splitJsonlBytes(partial, Buffer.alloc(0));
+		expect(pending.lines).toHaveLength(0);
+		const completed = splitJsonlBytes(Buffer.from("}\n", "utf8"), pending.pending);
+		expect(completed.lines.map((line) => line.toString("utf8"))).toEqual(['{"name":"équipe"}']);
+	});
+});
 
 describe("parseTranscript", () => {
-	const testDir = join(tmpdir(), "hud-transcript-test-" + Date.now());
+	const testDir = join(tmpdir(), "hud-transcript-test-" + randomUUID());
 
 	beforeAll(async () => {
 		await mkdir(testDir, { recursive: true });
+		await mkdir(join(testDir, "cache"), { recursive: true });
+		initCache(join(testDir, "cache"));
 	});
 
 	afterAll(async () => {
@@ -508,6 +534,171 @@ describe("parseTranscript", () => {
 			id: "toolu_legacy",
 			name: undefined,
 		});
+	});
+
+	it("should reuse a persisted aggregate without rereading an unchanged transcript", async () => {
+		const transcriptPath = join(testDir, "persistent-cache.jsonl");
+		const lines = [
+			JSON.stringify({ tool: "Agent", status: "started", toolUseId: "warm-agent", model: "opus" }),
+			JSON.stringify({ tool: "Skill", name: "prometheus" }),
+		];
+		await writeFile(transcriptPath, lines.join("\n") + "\n", "utf8");
+
+		resetTranscriptReadStats();
+		const cold = await parseTranscript(transcriptPath);
+		const coldBytes = getTranscriptReadStats();
+		expect(coldBytes).toBeGreaterThan(0);
+		const key = createHash("sha256").update(transcriptPath).digest("hex").slice(0, 24);
+		const cacheFiles = (await readdir(join(testDir, "cache"))).filter(
+			(name) => name === `hud-transcript-${key}.json`,
+		);
+		expect(cacheFiles).toHaveLength(1);
+		const cachePath = join(testDir, "cache", cacheFiles[0]);
+		const cached = JSON.parse(await readFile(cachePath, "utf8"));
+		expect(cached.offset).toBe((await stat(transcriptPath)).size);
+
+		resetTranscriptReadStats();
+		const warm = await parseTranscript(transcriptPath);
+		expect(getTranscriptReadStats()).toBeLessThanOrEqual(512);
+		expect(warm).toEqual(cold);
+	});
+
+	it("should complete a partial UTF-8 line and then remove an agent on appended completion", async () => {
+		const transcriptPath = join(testDir, "append-cache.jsonl");
+		const start = JSON.stringify({
+			type: "assistant",
+			message: {
+				model: "sonnet",
+				content: [
+					{
+						type: "tool_use",
+						id: "append-agent",
+						name: "Agent",
+						input: { subagent_type: "équipe" },
+					},
+				],
+			},
+		});
+		await writeFile(transcriptPath, start.slice(0, -2), "utf8");
+		expect((await parseTranscript(transcriptPath)).runningAgents).toBe(0);
+
+		await writeFile(transcriptPath, start.slice(-2) + "\n", { flag: "a" });
+		resetTranscriptReadStats();
+		let result = await parseTranscript(transcriptPath);
+		expect(getTranscriptReadStats()).toBeLessThanOrEqual(512);
+		expect(result.runningAgents).toBe(1);
+		expect(result.agents[0]?.name).toBe("équipe");
+
+		await writeFile(
+			transcriptPath,
+			JSON.stringify({
+				type: "user",
+				message: { content: [{ type: "tool_result", tool_use_id: "append-agent" }] },
+			}) + "\n",
+			{ flag: "a" },
+		);
+		result = await parseTranscript(transcriptPath);
+		expect(result.runningAgents).toBe(0);
+	});
+
+	it("should discard a cache when the transcript is truncated and replaced", async () => {
+		const transcriptPath = join(testDir, "replacement-cache.jsonl");
+		await writeFile(transcriptPath, JSON.stringify({ tool: "Skill", name: "old" }) + "\n", "utf8");
+		expect((await parseTranscript(transcriptPath)).activeSkill).toBe("old");
+		await writeFile(transcriptPath, JSON.stringify({ tool: "Skill", name: "new" }) + "\n", "utf8");
+		expect((await parseTranscript(transcriptPath)).activeSkill).toBe("new");
+	});
+
+	it("should recover from a corrupt transcript cache", async () => {
+		const transcriptPath = join(testDir, "corrupt-cache.jsonl");
+		await writeFile(
+			transcriptPath,
+			JSON.stringify({ tool: "Skill", name: "recover" }) + "\n",
+			"utf8",
+		);
+		await parseTranscript(transcriptPath);
+		const cacheFiles = (await readdir(join(testDir, "cache"))).filter((name) =>
+			name.includes("transcript"),
+		);
+		expect(cacheFiles.length).toBeGreaterThan(0);
+		await writeFile(join(testDir, "cache", cacheFiles[cacheFiles.length - 1]), "not-json", "utf8");
+		expect((await parseTranscript(transcriptPath)).activeSkill).toBe("recover");
+	});
+
+	it("should return empty state when the transcript disappears despite a warm cache", async () => {
+		const transcriptPath = join(testDir, "missing-after-cache.jsonl");
+		await writeFile(
+			transcriptPath,
+			JSON.stringify({ tool: "Skill", name: "stale" }) + "\n",
+			"utf8",
+		);
+		expect((await parseTranscript(transcriptPath)).activeSkill).toBe("stale");
+		await rm(transcriptPath);
+		expect(await parseTranscript(transcriptPath)).toEqual({
+			runningAgents: 0,
+			activeSkill: null,
+			agents: [],
+			sessionStartedAt: null,
+		});
+	});
+
+	it("should reject cache entries with invalid agent shapes", async () => {
+		const transcriptPath = join(testDir, "invalid-cache-shape.jsonl");
+		await writeFile(transcriptPath, JSON.stringify({ tool: "Skill", name: "safe" }) + "\n", "utf8");
+		await parseTranscript(transcriptPath);
+		const key = createHash("sha256").update(transcriptPath).digest("hex").slice(0, 24);
+		const cachePath = join(testDir, "cache", `hud-transcript-${key}.json`);
+		const cache = JSON.parse(await readFile(cachePath, "utf8"));
+		cache.agents = [null];
+		await writeFile(cachePath, JSON.stringify(cache), "utf8");
+		expect((await parseTranscript(transcriptPath)).activeSkill).toBe("safe");
+	});
+
+	it("should reset when a same-file rewrite grows past the cached boundary", async () => {
+		const transcriptPath = join(testDir, "rewrite-grows.jsonl");
+		await writeFile(
+			transcriptPath,
+			JSON.stringify({ tool: "Skill", name: "before" }) + "\n",
+			"utf8",
+		);
+		expect((await parseTranscript(transcriptPath)).activeSkill).toBe("before");
+		await writeFile(
+			transcriptPath,
+			JSON.stringify({ tool: "Skill", name: "after", padding: "x".repeat(200) }) + "\n",
+			"utf8",
+		);
+		expect((await parseTranscript(transcriptPath)).activeSkill).toBe("after");
+	});
+
+	it("should complete a JSONL record split inside a UTF-8 code point", async () => {
+		const transcriptPath = join(testDir, "utf8-byte-split.jsonl");
+		const line = Buffer.from(JSON.stringify({ tool: "Skill", name: "équipe" }) + "\n", "utf8");
+		const splitAt = line.indexOf(Buffer.from("é", "utf8")) + 1;
+		await writeFile(transcriptPath, line.subarray(0, splitAt));
+		expect((await parseTranscript(transcriptPath)).activeSkill).toBeNull();
+		await writeFile(transcriptPath, line.subarray(splitAt), { flag: "a" });
+		expect((await parseTranscript(transcriptPath)).activeSkill).toBe("équipe");
+	});
+
+	it("should preserve parity for a large multi-chunk transcript", async () => {
+		const transcriptPath = join(testDir, "large-multichunk.jsonl");
+		const lines = Array.from({ length: 20_000 }, (_, index) =>
+			JSON.stringify({
+				timestamp: `2024-01-15T10:${String(index % 60).padStart(2, "0")}:00.000Z`,
+				tool: "Skill",
+				name: `skill-${index}`,
+			}),
+		);
+		await writeFile(transcriptPath, `${lines.join("\n")}\n`, "utf8");
+		resetTranscriptReadStats();
+		const cold = await parseTranscript(transcriptPath);
+		const coldBytes = getTranscriptReadStats();
+		expect(cold.activeSkill).toBe("skill-19999");
+		expect(coldBytes).toBeGreaterThan(10_000);
+		resetTranscriptReadStats();
+		const warm = await parseTranscript(transcriptPath);
+		expect(warm).toEqual(cold);
+		expect(getTranscriptReadStats()).toBeLessThanOrEqual(512);
 	});
 });
 
