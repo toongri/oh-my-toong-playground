@@ -9,7 +9,7 @@ import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
  * Scans the file for lines matching:
  *   source "$SOME_VAR/relative/path.sh"
  *   . "$SOME_VAR/relative/path.sh"
- *   # omt-hook-dep: relative/path.sh
+ *   # omt-hook-dep: relative/path.sh|relative/path.mjs
  * Captures the relative path (after the variable reference, or from the
  * explicit directive), resolves it under hooksSourceDir, and recurses (with
  * cycle detection). The directive covers companion files referenced only
@@ -17,7 +17,8 @@ import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
  * pattern can't see.
  *
  * Returns absolute paths of all discovered dependencies that exist on disk.
- * Test files (*_test.sh) are excluded.
+ * Test files (*_test.sh) are excluded; explicit .mjs dependencies are copied
+ * without scanning their contents as shell.
  */
 export async function resolveShellDependencies(
 	filePath: string,
@@ -38,12 +39,12 @@ export async function resolveShellDependencies(
 	// Handles both ${VAR} and $VAR, single or double quotes, optional quotes
 	const SOURCE_RE = /^\s*(?:source|\.)\s+["']?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?[/]([\w./-]+\.sh)["']?/;
 
-	// Explicit companion-dependency directive: `# omt-hook-dep: <relpath>.sh`.
+	// Explicit companion-dependency directive: `# omt-hook-dep: <relpath>.sh|.mjs`.
 	// Declares a file the scanner otherwise can't see (e.g. a path only
 	// referenced inside an injected instruction string, not a `source` line).
 	// Must be checked before the comment-skip below, since the directive is
 	// itself a `#` comment.
-	const HOOK_DEP_DIRECTIVE_RE = /^\s*#\s*omt-hook-dep:\s*([\w./-]+\.sh)\s*$/;
+	const HOOK_DEP_DIRECTIVE_RE = /^\s*#\s*omt-hook-dep:\s*([\w./-]+\.(?:sh|mjs))\s*$/;
 
 	const deps: string[] = [];
 
@@ -53,7 +54,12 @@ export async function resolveShellDependencies(
 			const relPath = directiveMatch[1];
 			if (relPath.endsWith("_test.sh")) continue;
 
-			const absPath = path.join(hooksSourceDir, relPath);
+			const absPath = path.resolve(hooksSourceDir, relPath);
+			const relative = path.relative(path.resolve(hooksSourceDir), absPath);
+			if (relative.startsWith(`..${path.sep}`) || relative === ".." || path.isAbsolute(relative)) {
+				logWarn(`Shell dependency escapes hooks source root, skipping: ${relPath}`);
+				continue;
+			}
 			try {
 				await fs.stat(absPath);
 			} catch {
@@ -63,8 +69,12 @@ export async function resolveShellDependencies(
 
 			if (!visited.has(absPath)) {
 				deps.push(absPath);
-				const transitive = await resolveShellDependencies(absPath, hooksSourceDir, visited);
-				deps.push(...transitive);
+				if (relPath.endsWith(".sh")) {
+					const transitive = await resolveShellDependencies(absPath, hooksSourceDir, visited);
+					deps.push(...transitive);
+				} else {
+					visited.add(absPath);
+				}
 			}
 			continue;
 		}
