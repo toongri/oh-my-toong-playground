@@ -50,6 +50,8 @@ export interface AcquireWorkerSlotOptions {
 	slotCount?: number;
 	/** Poll interval while every slot is occupied. Defaults to 1500ms (spec: 1-2s). */
 	pollMs?: number;
+	/** Cancel acquisition while waiting, or immediately after a race wins. */
+	signal?: AbortSignal;
 }
 
 const DEFAULT_POLL_MS = 1500;
@@ -57,6 +59,36 @@ const HEARTBEAT_INTERVAL_MS = 1000;
 const HEARTBEAT_STALE_MS = 5000;
 
 const heartbeatTimers = new WeakMap<WorkerSlot, ReturnType<typeof setInterval>>();
+
+function abortError(): Error {
+	const error = new Error("Worker slot acquisition aborted");
+	error.name = "AbortError";
+	return error;
+}
+
+function waitForPoll(ms: number, signal?: AbortSignal): Promise<void> {
+	if (signal?.aborted) return Promise.reject(abortError());
+	if (signal === undefined) return sleepMs(ms);
+
+	return new Promise((resolve, reject) => {
+		let settled = false;
+		const timer = setTimeout(() => {
+			settled = true;
+			signal.removeEventListener("abort", onAbort);
+			resolve();
+		}, Math.max(0, Math.trunc(Number(ms))));
+		timer.unref?.();
+		const onAbort = () => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			signal.removeEventListener("abort", onAbort);
+			reject(abortError());
+		};
+		signal.addEventListener("abort", onAbort, { once: true });
+		if (signal.aborted) onAbort();
+	});
+}
 
 /** Best-effort mtime heartbeat for one owner generation. */
 function touchOwnerRecord(ownerRecordPath: string): void {
@@ -263,18 +295,24 @@ export async function acquireWorkerSlot(options: AcquireWorkerSlotOptions = {}):
 	ensureDir(dir);
 	const slotCount = options.slotCount ?? resolveSlotCount();
 	const pollMs = options.pollMs ?? DEFAULT_POLL_MS;
+	const signal = options.signal;
 
 	for (;;) {
 		for (let i = 0; i < slotCount; i++) {
+			if (signal?.aborted) throw abortError();
 			const slotPath = path.join(dir, `slot-${i}`);
 			const ownerRecordPath = tryClaimSlot(slotPath);
 			if (ownerRecordPath !== null) {
 				const slot = { slotPath, ownerRecordPath };
+				if (signal?.aborted) {
+					releaseWorkerSlot(slot);
+					throw abortError();
+				}
 				heartbeatTimers.set(slot, startOwnerHeartbeat(ownerRecordPath));
 				return slot;
 			}
 		}
-		await sleepMs(pollMs);
+		await waitForPoll(pollMs, signal);
 	}
 }
 

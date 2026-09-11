@@ -121,6 +121,51 @@ describe("acquireWorkerSlot / releaseWorkerSlot", () => {
 		releaseWorkerSlot(second);
 	});
 
+	it("이미 abort된 signal은 슬롯을 주장하기 전에 AbortError로 거부한다", async () => {
+		dir = makeTmpDir();
+		const controller = new AbortController();
+		controller.abort();
+
+		await expect(acquireWorkerSlot({ dir, slotCount: 1, signal: controller.signal })).rejects.toMatchObject({
+			name: "AbortError",
+		});
+		expect(fs.readdirSync(dir)).toEqual([]);
+	});
+
+	it("풀이 가득 찬 동안 abort하면 polling timer를 남기지 않고 즉시 거부한다", async () => {
+		dir = makeTmpDir();
+		const first = await acquireWorkerSlot({ dir, slotCount: 1, pollMs: 5000 });
+		const controller = new AbortController();
+		const startedAt = Date.now();
+		const pending = acquireWorkerSlot({ dir, slotCount: 1, pollMs: 5000, signal: controller.signal });
+
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		controller.abort();
+		await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+		expect(Date.now() - startedAt).toBeLessThan(1000);
+		expect(fs.existsSync(first.slotPath)).toBe(true);
+
+		releaseWorkerSlot(first);
+		const replacement = await acquireWorkerSlot({ dir, slotCount: 1, pollMs: 20 });
+		releaseWorkerSlot(replacement);
+	});
+
+	it("acquire 중 signal이 abort되어도 방금 주장한 슬롯을 즉시 반납한다", async () => {
+		dir = makeTmpDir();
+		let reads = 0;
+		const signal = {
+			get aborted() {
+				reads += 1;
+				return reads > 1;
+			},
+			addEventListener() {},
+			removeEventListener() {},
+		} as unknown as AbortSignal;
+
+		await expect(acquireWorkerSlot({ dir, slotCount: 1, signal })).rejects.toMatchObject({ name: "AbortError" });
+		expect(fs.readdirSync(dir)).toEqual([]);
+	});
+
 	it("정상 live owner를 여러 contender가 polling해도 ps를 반복 호출하지 않는다", async () => {
 		dir = makeTmpDir();
 		const wrapperDir = makeTmpDir();
