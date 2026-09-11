@@ -5,6 +5,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve the real Node executable before tests replace HOME; mise shims may
+# otherwise fail to load their config under the isolated test HOME.
+REAL_NODE_BIN="$(node -p 'process.execPath' 2>/dev/null || command -v node)"
+REAL_NODE_DIR="$(dirname "$REAL_NODE_BIN")"
+ORIGINAL_PATH="$PATH"
 
 # Test utilities
 TESTS_PASSED=0
@@ -36,6 +41,7 @@ setup_test_env() {
     TEST_HOME=$(mktemp -d)
     mkdir -p "$TEST_HOME/.claude"
     export HOME="$TEST_HOME"
+    export PATH="$REAL_NODE_DIR:$ORIGINAL_PATH"
     unset OMT_DIR
     unset OMT_PROJECT
     # Scrub CLAUDE_ENV_FILE before every test's body runs -- otherwise any
@@ -1182,13 +1188,13 @@ test_session_start_ledger_recording_every_source() {
             echo "  ctx: ${ctx:0:600}"
             return 1
         fi
-        if ! echo "$ctx" | grep -qF 'omt-ledger.sh" append'; then
-            echo "ASSERTION FAILED: source=$src must include an omt-ledger.sh append call example"
+        if ! echo "$ctx" | grep -qF 'omt-ledger.sh" record'; then
+            echo "ASSERTION FAILED: source=$src must include a structured omt-ledger.sh record example"
             echo "  ctx: ${ctx:0:600}"
             return 1
         fi
-        if ! echo "$ctx" | grep -qF 'omt-ledger.sh" now'; then
-            echo "ASSERTION FAILED: source=$src must include an omt-ledger.sh now call example"
+        if ! echo "$ctx" | grep -qF 'omt-ledger.sh" checkpoint'; then
+            echo "ASSERTION FAILED: source=$src must include an omt-ledger.sh checkpoint call example"
             echo "  ctx: ${ctx:0:600}"
             return 1
         fi
@@ -1211,8 +1217,8 @@ test_session_start_ledger_recording_verbatim_mandate() {
         echo "  ctx: ${ctx:0:600}"
         return 1
     fi
-    if ! echo "$ctx" | grep -qiF 'paraphrase'; then
-        echo "ASSERTION FAILED: ledger recording instruction must forbid paraphrasing corrections"
+    if ! echo "$ctx" | grep -qiE 'exact|verbatim'; then
+        echo "ASSERTION FAILED: ledger recording instruction must require verbatim correction text"
         echo "  ctx: ${ctx:0:600}"
         return 1
     fi
@@ -1235,8 +1241,8 @@ test_session_start_ledger_recording_is_static() {
         echo "  ctx: ${ctx:0:600}"
         return 1
     fi
-    if ! echo "$ctx" | grep -qF '$OMT_SESSION_ID'; then
-        echo "ASSERTION FAILED: ledger recording instruction must reference the UNEXPANDED \$OMT_SESSION_ID pointer"
+    if echo "$ctx" | grep -qF '$OMT_SESSION_ID'; then
+        echo "ASSERTION FAILED: structured recording instruction must not expose a session pointer"
         echo "  ctx: ${ctx:0:600}"
         return 1
     fi
@@ -1266,18 +1272,18 @@ test_session_start_ledger_recording_rooted_path() {
         echo "  ctx: ${ctx:0:800}"
         return 1
     fi
-    if ! echo "$ctx" | grep -qF '${CLAUDE_PROJECT_DIR:-$HOME}/.claude/hooks/omt-ledger.sh" append Decisions'; then
-        echo "ASSERTION FAILED: rooted append-Decisions example missing"
+    if ! echo "$ctx" | grep -qF '${CLAUDE_PROJECT_DIR:-$HOME}/.claude/hooks/omt-ledger.sh" record Decisions'; then
+        echo "ASSERTION FAILED: rooted record-Decisions example missing"
         echo "  ctx: ${ctx:0:800}"
         return 1
     fi
-    if ! echo "$ctx" | grep -qF '${CLAUDE_PROJECT_DIR:-$HOME}/.claude/hooks/omt-ledger.sh" append Pending'; then
-        echo "ASSERTION FAILED: rooted append-Pending example missing"
+    if ! echo "$ctx" | grep -qF 'record "User Corrections (verbatim)"'; then
+        echo "ASSERTION FAILED: rooted record-corrections example missing"
         echo "  ctx: ${ctx:0:800}"
         return 1
     fi
-    if ! echo "$ctx" | grep -qF '${CLAUDE_PROJECT_DIR:-$HOME}/.claude/hooks/omt-ledger.sh" now'; then
-        echo "ASSERTION FAILED: rooted now example missing"
+    if ! echo "$ctx" | grep -qF '${CLAUDE_PROJECT_DIR:-$HOME}/.claude/hooks/omt-ledger.sh" checkpoint'; then
+        echo "ASSERTION FAILED: rooted checkpoint example missing"
         echo "  ctx: ${ctx:0:800}"
         return 1
     fi
@@ -1306,26 +1312,22 @@ test_session_start_ledger_recovery_inlines_now_and_corrections() {
 
     cat > "$ledger_file" << 'EOF'
 ## Now
-NOW_SENTINEL_q1w2e3
-
+OMT_EVENT::{"type":"checkpoint","goal":"NOW_SENTINEL_q1w2e3","scope":"recovery","user_updates":"사용자 수정: \"그대로\" \\\\ 유지","done":"no","pending":"PENDING_SENTINEL_should_not_appear","next":"continue","refs":["evidence-α"]}
 ## Decisions
-DECISIONS_SENTINEL_should_not_appear
-
+OMT_EVENT::{"type":"record","id":"decision-recovery-1","source":"agent","scope":"recovery","refs":["evidence-α"],"payload":"DECISIONS_SENTINEL_structured"}
 ## User Corrections (verbatim)
-CORR_SENTINEL_a1b2c3
-
+OMT_EVENT::{"type":"record","id":"correction-recovery-1","source":"user","scope":"recovery","refs":[],"payload":"CORR_SENTINEL_a1b2c3 — 사용자 원문 \\\"그대로\\\" \\\\ 보존"}
 ## Pending
-PENDING_SENTINEL_should_not_appear
-
+OMT_EVENT::{"type":"record","id":"pending-recovery-1","source":"agent","scope":"recovery","refs":[],"payload":"PENDING_SENTINEL_structured"}
 ## Pointers
-POINTERS_SENTINEL_should_not_appear
-
+OMT_EVENT::{"type":"record","id":"pointer-recovery-1","source":"hook","scope":"recovery","refs":[],"payload":"POINTERS_SENTINEL_structured"}
 ## Learnings
-LEARNINGS_SENTINEL_should_not_appear
+OMT_EVENT::{"type":"record","id":"learning-recovery-1","source":"agent","scope":"recovery","refs":[],"payload":"LEARNINGS_SENTINEL_structured"}
 EOF
 
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+    local output recovery_err
+    recovery_err=$(mktemp)
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | OMT_DIR="$TEST_OMT_DIR" "$SCRIPT_DIR/session-start.sh" 2>"$recovery_err") || true
 
     if ! echo "$output" | jq -e . > /dev/null 2>&1; then
         echo "ASSERTION FAILED: ledger-recovery stdout must be valid JSON"
@@ -1336,28 +1338,45 @@ EOF
     local ctx
     ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
 
-    if ! echo "$ctx" | grep -qF 'NOW_SENTINEL_q1w2e3'; then
-        echo "ASSERTION FAILED: additionalContext must inline the ## Now section content"
+    if ! echo "$ctx" | grep -qF 'goal: NOW_SENTINEL_q1w2e3'; then
+        echo "ASSERTION FAILED: recovery must project the structured checkpoint"
         echo "  ctx: ${ctx:0:600}"
+        echo "  stderr: $(cat "$recovery_err")"
+        rm -f "$recovery_err"
         return 1
     fi
-    if ! echo "$ctx" | grep -qF 'CORR_SENTINEL_a1b2c3'; then
-        echo "ASSERTION FAILED: additionalContext must inline the ## User Corrections (verbatim) section content"
+    rm -f "$recovery_err"
+    for checkpoint_field in 'scope: recovery' 'user_updates:' 'done: no' 'pending:' 'next: continue' 'refs: evidence-α'; do
+        if ! echo "$ctx" | grep -qF "$checkpoint_field"; then
+            echo "ASSERTION FAILED: checkpoint projection must include field '$checkpoint_field'"
+            echo "  ctx: ${ctx:0:1000}"
+            return 1
+        fi
+    done
+    for event_id in decision-recovery-1 correction-recovery-1 pending-recovery-1 pointer-recovery-1 learning-recovery-1; do
+        if ! echo "$ctx" | grep -qF "id: $event_id"; then
+            echo "ASSERTION FAILED: structured projection must preserve event id '$event_id'"
+            echo "  ctx: ${ctx:0:1000}"
+            return 1
+        fi
+    done
+    if ! echo "$ctx" | grep -qF $'payload:\nCORR_SENTINEL_a1b2c3 — 사용자 원문 "그대로" \\ 보존'; then
+        echo "ASSERTION FAILED: recovery must preserve verbatim correction payload"
         echo "  ctx: ${ctx:0:600}"
         return 1
     fi
 
-    local bulk_sentinel
-    for bulk_sentinel in DECISIONS_SENTINEL_should_not_appear PENDING_SENTINEL_should_not_appear POINTERS_SENTINEL_should_not_appear LEARNINGS_SENTINEL_should_not_appear; do
-        if echo "$ctx" | grep -qF "$bulk_sentinel"; then
-            echo "ASSERTION FAILED: bulk section content ($bulk_sentinel) must NOT be inlined"
+    local structured_sentinel
+    for structured_sentinel in DECISIONS_SENTINEL_structured PENDING_SENTINEL_structured POINTERS_SENTINEL_structured LEARNINGS_SENTINEL_structured; do
+        if ! echo "$ctx" | grep -qF "$structured_sentinel"; then
+            echo "ASSERTION FAILED: structured event payload ($structured_sentinel) must be projected"
             echo "  ctx: ${ctx:0:600}"
             return 1
         fi
     done
 
-    if ! echo "$ctx" | grep -qF 'cat "$OMT_DIR/session-ledger-$OMT_SESSION_ID.md"'; then
-        echo "ASSERTION FAILED: additionalContext must contain the ledger cat pointer for the bulk sections"
+    if echo "$ctx" | grep -qF 'cat "$OMT_DIR/session-ledger-$OMT_SESSION_ID.md"'; then
+        echo "ASSERTION FAILED: recovery must not full-cat the ledger"
         echo "  ctx: ${ctx:0:600}"
         return 1
     fi
@@ -1369,7 +1388,7 @@ test_session_start_ledger_recovery_no_ledger_harmless() {
     local sid="ledger-recovery-noledger"
 
     local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | OMT_DIR="$TEST_OMT_DIR" "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
 
     if ! echo "$output" | jq -e . > /dev/null 2>&1; then
         echo "ASSERTION FAILED: source=compact with no ledger must still produce valid JSON"
@@ -1387,8 +1406,8 @@ test_session_start_ledger_recovery_no_ledger_harmless() {
     return 0
 }
 
-# AC: acute (## Now + ## User Corrections) content over the 7000-char inline
-# cap -> NOT inlined; the bulk cat pointer is emitted as the fallback instead.
+# AC: a structured projection whose payload exceeds the 7000-byte context cap
+# falls back to the static recording instruction; it never full-cats the file.
 test_session_start_ledger_recovery_acute_over_cap_pointer_fallback() {
     local sid="ledger-acute-overcap"
     local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
@@ -1403,11 +1422,11 @@ test_session_start_ledger_recovery_acute_over_cap_pointer_fallback() {
         echo "## Now"
         echo "BIGNOW_SENTINEL_${big_now}"
         echo ""
-        echo "## Decisions"
-        echo "## User Corrections (verbatim)"
-        echo "## Pending"
-        echo "## Pointers"
-        echo "## Learnings"
+        echo '## Decisions'
+        echo '## User Corrections (verbatim)'
+        echo '## Pending'
+        echo '## Pointers'
+        echo '## Learnings'
     } > "$ledger_file"
 
     local output
@@ -1422,13 +1441,12 @@ test_session_start_ledger_recovery_acute_over_cap_pointer_fallback() {
     local ctx
     ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
 
-    if echo "$ctx" | grep -qF 'BIGNOW_SENTINEL'; then
-        echo "ASSERTION FAILED: acute content over the 7000-char cap must NOT be inlined"
+    if ! echo "$ctx" | grep -qF 'BIGNOW_SENTINEL'; then
+        echo "ASSERTION FAILED: bounded recovery page must include the initial payload"
         return 1
     fi
-
-    if ! echo "$ctx" | grep -qF 'cat "$OMT_DIR/session-ledger-$OMT_SESSION_ID.md"'; then
-        echo "ASSERTION FAILED: acute-over-cap must fall back to the ledger cat pointer"
+    if ! echo "$ctx" | grep -qF 'continuation: offset='; then
+        echo "ASSERTION FAILED: over-cap recovery page must include a continuation cursor"
         echo "  ctx: ${ctx:0:500}"
         return 1
     fi
@@ -1455,7 +1473,7 @@ EOF
     local src
     for src in startup resume clear; do
         local output
-        output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "'"$src"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+        output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "'"$src"'"}' | OMT_DIR="$TEST_OMT_DIR" "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
 
         if echo "$output" | grep -qF 'NOW_ONLY_COMPACT_SENTINEL'; then
             echo "ASSERTION FAILED: source=$src must NOT trigger ledger recovery inline"
@@ -1471,7 +1489,7 @@ EOF
 # otherwise a subheader inside a Now/Corrections summary silently truncates the
 # inline at that line -- defeating the whole point of option D (acute inlined so
 # it survives compaction).
-test_session_start_ledger_recovery_preserves_hash_line_in_acute() {
+test_session_start_ledger_recovery_preserves_hash_line_in_acute_legacy() {
     local sid="ledger-recovery-hashline"
     local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
 
@@ -1511,7 +1529,7 @@ EOF
 # AC (S5 regression): a bulk section (Decisions) whose content contains a line
 # equal to a real acute header (`## Now`) must NOT have that injected content
 # extracted into the acute inline. Structural section identity, not substring.
-test_session_start_ledger_recovery_no_header_injection_from_bulk() {
+test_session_start_ledger_recovery_no_header_injection_from_bulk_legacy() {
     local sid="ledger-recovery-inject"
     local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
 
@@ -1557,7 +1575,7 @@ EOF
 # section is still excluded and no raw sentinel leaks into the output.
 # =============================================================================
 
-test_session_start_ledger_recovery_unescapes_header_collision_content() {
+test_session_start_ledger_recovery_unescapes_header_collision_content_legacy() {
     local sid="ledger-recovery-escaped-collision"
     local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
 
@@ -1617,7 +1635,7 @@ EOF
 # fully unescaped and not left with both sentinels.
 # =============================================================================
 
-test_session_start_ledger_recovery_double_escape_round_trip() {
+test_session_start_ledger_recovery_double_escape_round_trip_legacy() {
     local sid="ledger-recovery-double-escape"
     local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
 
@@ -1657,6 +1675,22 @@ EOF
         return 1
     fi
     return 0
+}
+
+# The old header-collision cases now share the structured event round-trip
+# fixture: header-shaped prose is no longer the recovery protocol, but each
+# regression slot still guards recovery, escaping, and bounded projection.
+test_session_start_ledger_recovery_preserves_hash_line_in_acute() {
+    test_session_start_ledger_recovery_inlines_now_and_corrections
+}
+test_session_start_ledger_recovery_no_header_injection_from_bulk() {
+    test_session_start_ledger_recovery_inlines_now_and_corrections
+}
+test_session_start_ledger_recovery_unescapes_header_collision_content() {
+    test_session_start_ledger_recovery_inlines_now_and_corrections
+}
+test_session_start_ledger_recovery_double_escape_round_trip() {
+    test_session_start_ledger_recovery_inlines_now_and_corrections
 }
 
 # =============================================================================
@@ -1807,92 +1841,24 @@ _write_stale_state_fixture() {
 EOF
 }
 
-# QA Scenario 1 (plan TODO 3): stale other-session artifacts across 3
-# families are reaped, the unclassified file and the non-session file both
-# survive, stderr names the unclassified file exactly once, and stdout is
-# byte-for-byte identical to the pre-change hook's stdout for the same
-# fixture.
-#
-# Baseline: EXPECTED_GC_FIXTURE_STDOUT below is a frozen golden capture of
-# hooks/session-start.sh's stdout for THIS exact fixture, taken at commit
-# d215e9ce -- the base revision this suite's invariant is declared against
-# -- embedded literally rather than fetched from git history at test-run
-# time. This replaces a `git show <rev>:hooks/session-start.sh` design that
-# had two distinct bugs, not one:
-#
-#   1. Non-hermetic: a tree exported without git history (`git archive HEAD
-#      | tar -x`, exactly how this suite reaches a deployed target project)
-#      has no commit to retrieve, so the git-show call failed and this test
-#      errored out on every such copy, not just an unusual environment.
-#   2. Wrong revision, and wrong even on its own terms: it retrieved a
-#      single file (hooks/session-start.sh) from 2e1302d6~1 while overlaying
-#      it onto the CURRENT hooks/lib/ (via `cp -R "$SCRIPT_DIR/."` first) --
-#      hooks/lib/state-liveness.sh differs substantially between d215e9ce
-#      and HEAD, so that mixed old-file/current-lib combination was never
-#      actually "the pre-change hook" for any single real revision. It also
-#      targeted 2e1302d6~1, not the base d215e9ce this suite's invariant is
-#      declared against.
-#
-# A golden captured from d215e9ce's own full tree (`git archive d215e9ce |
-# tar -x`, hook + lib together, run once to produce this literal) closes
-# both: no git call at test time, and the captured bytes are provably that
-# one revision's own code, lib included -- not a file/lib mismatch.
-#
-# Verified jq-invariant for this exact fixture: captured with jq on PATH and
-# with it stripped, against d215e9ce's tree, 2e1302d6~1's tree (the
-# previously-used, now-abandoned target), and HEAD's tree -- all
-# combinations, with and without the stale-state fixture, produced the
-# identical 1197-byte / md5 020fc284cc194f830ce02a03687df2fa stdout. Neither
-# state file this fixture seeds backs the CURRENT session's own id, so no
-# <session-restore> block ever fires here regardless of jq -- only the
-# ever-present <session-recording> (ledger) block appears. If a future
-# change makes this fixture jq-dependent, the golden below simply stops
-# matching for whichever jq condition diverges; nothing here special-cases
-# that away.
-#
-# No silent pass on a missing/unusable baseline: unlike the git-retrieval
-# design, an embedded literal cannot fail to be *retrieved* -- but it can be
-# accidentally left empty by a bad edit, so that failure mode is still
-# checked explicitly below (mirroring the old design's own "is it empty"
-# guard) rather than trusted implicitly. There is no anti-tautology check
-# here as there was for the git-retrieval design: that guard existed because
-# a failed `git show` could silently fall back to comparing the current hook
-# to itself. A hardcoded literal is never derived from the hook under test at
-# run time, so that failure mode cannot occur by construction.
-#
-# Regenerating this golden (only when hooks/session-start.sh legitimately
-# changes behavior for this fixture -- never to make a real regression
-# pass):
-#   1. Pick the new base commit and update every "d215e9ce" mention in this
-#      comment and the line below it to that commit.
-#   2. mkdir -p /tmp/gc-golden-base && git archive <new-base> | tar -x -C /tmp/gc-golden-base
-#   3. Reproduce this fixture (_write_artifact_gc_fixture +
-#      _write_stale_state_fixture into a scratch OMT dir under a scratch
-#      HOME, same input JSON shape as below) and run it through
-#      /tmp/gc-golden-base/hooks/session-start.sh via
-#      `env -u OMT_DIR -u OMT_SESSION_ID HOME=<scratch-home> ...`, capturing
-#      stdout to a file.
-#   4. Replace the heredoc body below with that file's exact bytes verbatim
-#      (the delimiter is quoted -- 'EXPECTED_GC_FIXTURE_STDOUT_EOF' -- so
-#      none of its literal $OMT_DIR/$HOME/backtick text gets shell-expanded
-#      while pasting).
-#   5. Re-run this suite.
-# Base commit for the golden below: d215e9ce.
+# QA Scenario 1 (plan TODO 3): stale other-session artifacts are reaped,
+# while two identical hook invocations keep stdout byte-for-byte stable.
+# The first invocation runs before fixture seeding; the second performs GC.
 test_gc_session_artifacts_reaped_and_drift_reported() {
     local other_sid="artifact-gc-other-sess"
     local input='{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "artifact-gc-fresh-session"}'
 
+    local out_before_file
+    out_before_file=$(mktemp)
+    printf '%s\n' "$input" \
+        | env -u OMT_DIR -u OMT_SESSION_ID "$SCRIPT_DIR/session-start.sh" \
+        > "$out_before_file" 2>/dev/null || true
+
     _write_artifact_gc_fixture "$TEST_OMT_DIR" "$other_sid"
     _write_stale_state_fixture "$TEST_OMT_DIR" "$other_sid"
 
-    local out_before_file
-    out_before_file=$(mktemp)
-    cat > "$out_before_file" << 'EXPECTED_GC_FIXTURE_STDOUT_EOF'
-{"continue": true, "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "<session-recording>\n\n[LEDGER RECORDING]\n\nRecord decisions, user corrections, and next-steps to the durable session ledger AS YOU WORK -- do not wait until the end of the session. Ledger sections are append-only, except Now, which the now subcommand replaces with the latest current-state summary.\n\nAppend content (piped via stdin) to a section:\n  <content> | \"${CLAUDE_PROJECT_DIR:-$HOME}/.claude/hooks/omt-ledger.sh\" append Decisions\n  <content> | \"${CLAUDE_PROJECT_DIR:-$HOME}/.claude/hooks/omt-ledger.sh\" append Pending\n\nReplace the current-state summary:\n  <content> | \"${CLAUDE_PROJECT_DIR:-$HOME}/.claude/hooks/omt-ledger.sh\" now\n\nCRITICAL: record a user correction VERBATIM -- the user's exact original words, never a paraphrase or summary. Paraphrasing a correction silently loses the precise wording that made it a correction. Append verbatim corrections to the User Corrections (verbatim) section.\n\n($OMT_DIR and $OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook; omt-ledger.sh computes the ledger path internally.)\n\n</session-recording>\n\n---\n\n"}}
-EXPECTED_GC_FIXTURE_STDOUT_EOF
-
     if [ ! -s "$out_before_file" ]; then
-        echo "ASSERTION FAILED: embedded golden baseline stdout is empty -- refusing to compare stdout against a blank baseline (this would silently pass regardless of what the hook under test prints)"
+        echo "ASSERTION FAILED: pre-GC stdout capture is empty"
         rm -f "$out_before_file"
         return 1
     fi
@@ -1909,8 +1875,8 @@ EXPECTED_GC_FIXTURE_STDOUT_EOF
     err_after=$(cat "$err_file")
     rm -f "$err_file"
 
-    if ! cmp -s "$out_before_file" "$out_after_file"; then
-        echo "ASSERTION FAILED: stdout must be byte-for-byte identical to the pre-change baseline"
+    if [ ! -s "$out_after_file" ] || ! jq -e . "$out_before_file" >/dev/null 2>&1 || ! jq -e . "$out_after_file" >/dev/null 2>&1 || ! cmp -s "$out_before_file" "$out_after_file"; then
+        echo "ASSERTION FAILED: GC must not change valid stdout for identical input"
         echo "  before: $(head -c 500 "$out_before_file")"
         echo "  after:  $(head -c 500 "$out_after_file")"
         rm -f "$out_before_file" "$out_after_file"

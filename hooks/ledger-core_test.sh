@@ -60,7 +60,7 @@ test_ac1_claude_compact_inline_recovery_env_pointer() {
     SBX=$(mktemp -d)
     OD="$SBX/omt"
     mkdir -p "$OD"
-    printf '## Now\nCURRENT-STATE-XYZ\n## User Corrections (verbatim)\n' > "$OD/session-ledger-test-sid-1.md"
+    printf '## Now\nCURRENT-STATE-XYZ\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$OD/session-ledger-test-sid-1.md"
 
     out=$(printf '{"source":"compact","session_id":"test-sid-1","cwd":"%s"}' "$SBX" \
         | OMT_DIR="$OD" OMT_SESSION_ID=test-sid-1 bash -c "source '$LEDGER_CORE'; ledger_core_run claude")
@@ -77,9 +77,8 @@ test_ac1_claude_compact_inline_recovery_env_pointer() {
 }
 
 # =============================================================================
-# AC2: platform=codex, >7000-char ledger -> pointer branch. No CLAUDE_ENV_FILE,
-# no unexpanded $OMT_DIR/$OMT_SESSION_ID; DOES contain the resolved absolute
-# ledger path.
+# AC2: platform=codex, >7000-char ledger -> bounded projection. No full ledger
+# retrieval or unexpanded Claude environment pointers may enter the context.
 #
 # The 8000-char payload MUST live under the "## Now" header (not before it):
 # ledger-core.sh's recovery extractor keeps only content following the
@@ -101,7 +100,7 @@ test_ac2_codex_over_cap_pointer_no_leak() {
     {
         printf '## Now\n'
         head -c 8000 /dev/zero | tr '\0' 'x'
-        printf '\n## User Corrections (verbatim)\n'
+        printf '\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n'
     } > "$OD/session-ledger-test-sid-1.md"
 
     out=$(printf '{"source":"compact","session_id":"test-sid-1","cwd":"%s"}' "$SBX" \
@@ -111,10 +110,9 @@ test_ac2_codex_over_cap_pointer_no_leak() {
     if [ "$(printf '%s' "$out" | grep -c 'CLAUDE_ENV_FILE')" = "0" ] \
         && [ "$(printf '%s' "$out" | grep -c '\$OMT_DIR')" = "0" ] \
         && [ "$(printf '%s' "$out" | grep -c '\$OMT_SESSION_ID')" = "0" ] \
-        && echo "$out" | grep -q "$OD/session-ledger-test-sid-1.md" \
-        && echo "$out" | grep -qF 'exceed the inline cap' \
-        && [ "$(printf '%s' "$out" | grep -c 'inlined below')" = "0" ] \
-        && [ "$(printf '%s' "$out" | grep -cE 'x{50,}')" = "0" ]; then
+        && [ "$(printf '%s' "$out" | grep -cF 'continuation: offset=')" -ge 1 ] \
+        && printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext' | grep -q 'Now:' \
+        && [ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext' | wc -c | tr -d " ")" -le 7000 ]; then
         ok=1
     fi
 
@@ -132,7 +130,7 @@ test_ac3_codex_inline_no_leak() {
     SBX=$(mktemp -d)
     OD="$SBX/omt"
     mkdir -p "$OD"
-    printf '## Now\nSMALL-INLINE\n## User Corrections (verbatim)\n' > "$OD/session-ledger-test-sid-1.md"
+    printf '## Now\nSMALL-INLINE\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$OD/session-ledger-test-sid-1.md"
 
     out=$(printf '{"source":"compact","session_id":"test-sid-1","cwd":"%s"}' "$SBX" \
         | OMT_DIR="$OD" bash -c "unset OMT_SESSION_ID CODEX_THREAD_ID; source '$LEDGER_CORE'; ledger_core_run codex")
@@ -188,7 +186,7 @@ test_qa_recording_noncompact() {
 # Evidence: $OMT_DIR/evidence/codex-ledger-parity/ledger-core/jq-absent.txt
 # =============================================================================
 test_qa_jq_absent() {
-    local out rc ok=0
+    local out rc ok=0 err_file
 
     # Build a PATH that lacks jq but keeps cat/sed available: on this host jq
     # lives in /usr/bin alongside sed, so a blanket PATH=/nonexistent (or
@@ -210,17 +208,19 @@ test_qa_jq_absent() {
     # sidesteps that lookup entirely while still handing the child process
     # the restricted PATH, so `command -v jq` inside ledger_core_run
     # correctly reports jq as absent.
+    err_file="$jq_less_bin/stderr"
     out=$(printf '{"source":"compact","session_id":"s","cwd":"/tmp"}' \
-        | PATH="$jq_less_bin:/bin" OMT_DIR=/tmp/x OMT_SESSION_ID=s /bin/bash -c "source '$LEDGER_CORE'; ledger_core_run claude" 2>/dev/null)
+        | PATH="$jq_less_bin:/bin" OMT_DIR=/tmp/x OMT_SESSION_ID=s /bin/bash -c "source '$LEDGER_CORE'; ledger_core_run claude" 2>"$err_file")
     rc=$?
     set -e
-    rm -rf "$jq_less_bin"
 
     if [ "$rc" = "0" ] \
         && echo "$out" | grep -q '\[LEDGER RECORDING\]' \
-        && [ "$(printf '%s' "$out" | grep -c '\[LEDGER RECOVERY\]')" = "0" ]; then
+        && [ "$(printf '%s' "$out" | grep -c '\[LEDGER RECOVERY\]')" = "0" ] \
+        && grep -q 'recovery unavailable or malformed' "$err_file"; then
         ok=1
     fi
+    rm -rf "$jq_less_bin"
 
     local evidence_dir
     evidence_dir=$(bash -c "source '$SCRIPT_DIR/lib/omt-dir.sh'; resolve_omt_dir '$SCRIPT_DIR'")/evidence/codex-ledger-parity/ledger-core
@@ -302,7 +302,7 @@ test_ac4_claude_recovery_marker_has_compaction_suffix() {
     SBX=$(mktemp -d)
     OD="$SBX/omt"
     mkdir -p "$OD"
-    printf '## Now\nCURRENT-STATE-XYZ\n## User Corrections (verbatim)\n' > "$OD/session-ledger-test-sid-1.md"
+    printf '## Now\nCURRENT-STATE-XYZ\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$OD/session-ledger-test-sid-1.md"
 
     out=$(printf '{"source":"compact","session_id":"test-sid-1","cwd":"%s"}' "$SBX" \
         | OMT_DIR="$OD" OMT_SESSION_ID=test-sid-1 bash -c "source '$LEDGER_CORE'; ledger_core_run claude")
@@ -318,15 +318,14 @@ test_ac4_claude_recovery_marker_has_compaction_suffix() {
 
 # =============================================================================
 # AC5 (S2: recovery-marker ownership): platform=codex compact-recovery output
-# must carry the bare "[LEDGER RECOVERY]" marker -- no "-- compaction" suffix,
-# since Codex has no compaction-triggered restore concept to qualify.
+# must carry a recovery marker; the shared core owns the compaction qualifier.
 # =============================================================================
 test_ac5_codex_recovery_marker_is_bare() {
     local SBX OD out
     SBX=$(mktemp -d)
     OD="$SBX/omt"
     mkdir -p "$OD"
-    printf '## Now\nCURRENT-STATE-XYZ\n## User Corrections (verbatim)\n' > "$OD/session-ledger-test-sid-1.md"
+    printf '## Now\nCURRENT-STATE-XYZ\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$OD/session-ledger-test-sid-1.md"
 
     out=$(printf '{"source":"compact","session_id":"test-sid-1","cwd":"%s"}' "$SBX" \
         | OMT_DIR="$OD" bash -c "unset OMT_SESSION_ID CODEX_THREAD_ID; source '$LEDGER_CORE'; ledger_core_run codex")
@@ -415,6 +414,99 @@ test_codex_env_dash_u_scrub_routes_to_self_ledger() {
     [ "$ok" = "1" ]
 }
 
+test_compact_recovery_safe_under_nounset_and_utf8_cap() {
+    local SBX OD out context bytes rc=0
+    SBX=$(mktemp -d)
+    OD="$SBX/omt"
+    mkdir -p "$OD"
+    {
+        printf '## Now\n현재 상태: \\"따옴표\\"\\\\ <xml>\n'
+        head -c 100000 /dev/zero | tr '\0' '한'
+        printf '\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n'
+    } > "$OD/session-ledger-utf8-sid.md"
+
+    set +e
+    out=$(printf '{"source":"compact","session_id":"utf8-sid","cwd":"%s"}' "$SBX" \
+        | OMT_DIR="$OD" env -u OMT_SESSION_ID -u CODEX_THREAD_ID /bin/bash -euo pipefail -c "source '$LEDGER_CORE'; ledger_core_run claude")
+    rc=$?
+    set -e
+    [ "$rc" = 0 ]
+    context=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext')
+    bytes=$(printf '%s' "$context" | wc -c | tr -d ' ')
+    [ "$bytes" -le 7000 ]
+    printf '%s' "$context" | grep -q 'Now:'
+    printf '%s' "$context" | grep -q 'continuation: offset='
+    rm -rf "$SBX"
+}
+
+test_long_history_preserves_now_projection() {
+    local SBX OD out context
+    SBX=$(mktemp -d)
+    OD="$SBX/omt"
+    mkdir -p "$OD"
+    {
+        printf '## Now\nNOW-KEEP\n## Decisions\n'
+        head -c 100000 /dev/zero | tr '\0' 'd'
+        printf '\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n'
+    } > "$OD/session-ledger-history-sid.md"
+    out=$(printf '{"source":"compact","session_id":"history-sid","cwd":"%s"}' "$SBX" \
+        | OMT_DIR="$OD" /bin/bash -euo pipefail -c "source '$LEDGER_CORE'; ledger_core_run codex")
+    context=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext')
+    printf '%s' "$context" | grep -q 'Now:'
+    printf '%s' "$context" | grep -q 'NOW-KEEP'
+    rm -rf "$SBX"
+}
+
+test_malformed_marker_retries_without_recovery() {
+    local SBX OD out err
+    SBX=$(mktemp -d)
+    OD="$SBX/omt"
+    mkdir -p "$OD"
+    printf '## Now\nOMT_EVENT::{malformed\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$OD/session-ledger-bad-sid.md"
+    err="$SBX/err"
+    out=$(printf '{"source":"compact","session_id":"bad-sid","cwd":"%s"}' "$SBX" \
+        | OMT_DIR="$OD" /bin/bash -c "source '$LEDGER_CORE'; ledger_core_run claude" 2>"$err")
+    printf '%s' "$out" | grep -q '\[LEDGER RECORDING\]'
+    [ "$(printf '%s' "$out" | grep -c '\[LEDGER RECOVERY')" = 0 ]
+    grep -q 'recovery unavailable or malformed' "$err"
+    rm -rf "$SBX"
+}
+
+test_checkpoint_instruction_matches_cli_schema() {
+    local out json SBX OD
+    out=$(printf '{"source":"startup","session_id":"s","cwd":"/tmp"}' \
+        | OMT_DIR=/tmp/x OMT_SESSION_ID=s /bin/bash -c "source '$LEDGER_CORE'; ledger_core_run claude")
+    json=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext' | grep -o '{"goal":"\.\.\.","scope":"\.\.\.","user_updates":"\.\.\.","done":"\.\.\.","pending":"\.\.\.","next":"\.\.\.","refs":\["[^"]*"\]}' | head -1)
+    [ -n "$json" ]
+    printf '%s' "$json" | jq -e 'keys == ["done","goal","next","pending","refs","scope","user_updates"]' >/dev/null
+    SBX=$(mktemp -d)
+    OD="$SBX/omt"
+    mkdir -p "$OD"
+    printf '## Now\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$OD/session-ledger-s.md"
+    printf '%s' "$json" | OMT_DIR="$OD" OMT_SESSION_ID=s bash "$SCRIPT_DIR/omt-ledger.sh" checkpoint
+    OMT_DIR="$OD" OMT_SESSION_ID=s bash "$SCRIPT_DIR/omt-ledger.sh" recover --max-bytes 64 >/dev/null
+    rm -rf "$SBX"
+}
+
+test_envelope_is_single_line_with_exact_spacing() {
+    local out
+    out=$(printf '{"source":"startup","session_id":"s","cwd":"/tmp"}' \
+        | OMT_DIR=/tmp/x OMT_SESSION_ID=s /bin/bash -c "source '$LEDGER_CORE'; ledger_core_run claude")
+    [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" = 1 ]
+    printf '%s' "$out" | grep -qF '{"continue": true, "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": '
+}
+
+test_recording_contract_verbatim_unique_ids_and_boundary() {
+    local out context
+    out=$(printf '{"source":"startup","session_id":"s","cwd":"/tmp"}' \
+        | OMT_DIR=/tmp/x OMT_SESSION_ID=s /bin/bash -c "source '$LEDGER_CORE'; ledger_core_run codex")
+    context=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext')
+    printf '%s' "$context" | grep -q 'Preserve user corrections verbatim, including exact wording' || return 1
+    printf '%s' "$context" | grep -q 'choose a unique --id for each new semantic event' || return 1
+    printf '%s' "$context" | grep -q -- 'examples are illustrative IDs' || return 1
+    printf '%s' "$context" | grep -q -- $'---\n\n<session-restore>' || return 1
+}
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -437,6 +529,12 @@ main() {
     run_test test_codex_recording_scrubs_omt_session_id
     run_test test_claude_recording_no_scrub_omt_session_id
     run_test test_codex_env_dash_u_scrub_routes_to_self_ledger
+    run_test test_compact_recovery_safe_under_nounset_and_utf8_cap
+    run_test test_long_history_preserves_now_projection
+    run_test test_malformed_marker_retries_without_recovery
+    run_test test_checkpoint_instruction_matches_cli_schema
+    run_test test_envelope_is_single_line_with_exact_spacing
+    run_test test_recording_contract_verbatim_unique_ids_and_boundary
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
