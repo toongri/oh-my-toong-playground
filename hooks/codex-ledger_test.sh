@@ -66,7 +66,15 @@ test_postcompact_requires_cwd_and_preserves_second_generation() {
     local sbx od out
     sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
     out=$(run_event "$od" '{"hook_event_name":"PostCompact","session_id":"missing-cwd"}')
-    [ -z "$out" ] && [ ! -e "$od/codex-ledger-pending-missing-cwd" ] || { rm -rf "$sbx"; return 1; }
+    if [ -n "$out" ] || [ -e "$od/codex-ledger-pending-missing-cwd" ]; then
+        rm -rf "$sbx"
+        return 1
+    fi
+    out=$(run_event "$od" '{"hook_event_name":"PostCompact","session_id":"empty-cwd","cwd":""}')
+    if [ -n "$out" ] || [ -e "$od/codex-ledger-pending-empty-cwd" ]; then
+        rm -rf "$sbx"
+        return 1
+    fi
     printf '## Now\nGENERATION-MARKER\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$od/session-ledger-generation.md"
     run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"generation\",\"cwd\":\"$sbx\"}" >/dev/null
     run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"generation\",\"cwd\":\"$sbx\"}" >/dev/null
@@ -95,7 +103,10 @@ test_missing_ledger_does_not_ack_pending() {
     sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
     run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"no-ledger\",\"cwd\":\"$sbx\"}" >/dev/null
     out=$(run_event "$od" "{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"no-ledger\",\"cwd\":\"$sbx\"}")
-    [ -z "$out" ] && [ -f "$od/codex-ledger-pending-no-ledger" ]
+    if [ -n "$out" ] || [ ! -f "$od/codex-ledger-pending-no-ledger" ]; then
+        rm -rf "$sbx"
+        return 1
+    fi
     rm -rf "$sbx"
 }
 
@@ -113,21 +124,52 @@ test_dead_claim_is_reclaimable() {
 }
 
 test_postcompact_retries_transient_lock_contention() {
-    local sbx od marker rc
+    local sbx od marker rc bin real_mkdir ready release
     sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
     marker="$od/codex-ledger-pending-transient"
     mkdir "$marker.write-lock"
     printf '%s %s\n' "$$" "$(date +%s)" > "$marker.write-lock/owner"
-    (sleep 0.08; rm -rf "$marker.write-lock") &
+    bin="$sbx/bin"; mkdir "$bin"
+    real_mkdir=$(command -v mkdir)
+    ready="$sbx/mkdir-attempted"; release="$sbx/release-lock"
+    cat > "$bin/mkdir" <<'EOF'
+#!/bin/bash
+if [ "$#" -eq 1 ] && [ "${1:-}" = "${TRANSIENT_LOCK_PATH:-}" ] && [ -d "$TRANSIENT_LOCK_PATH" ]; then
+    "$TRANSIENT_REAL_MKDIR" "$1" 2>/dev/null
+    rc=$?
+    if [ "$rc" -eq 0 ]; then exit 1; fi
+    : > "$TRANSIENT_READY"
+    i=0; while [ ! -f "$TRANSIENT_RELEASE" ] && [ "$i" -lt 300 ]; do sleep 0.01; i=$((i + 1)); done
+    exit "$rc"
+fi
+exec "$TRANSIENT_REAL_MKDIR" "$@"
+EOF
+    chmod +x "$bin/mkdir"
+    (export PATH="$bin:$PATH" TRANSIENT_LOCK_PATH="$marker.write-lock" TRANSIENT_READY="$ready" TRANSIENT_RELEASE="$release" TRANSIENT_REAL_MKDIR="$real_mkdir"; \
+        printf '%s' "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"transient\",\"cwd\":\"$sbx\"}" | OMT_DIR="$od" env -u OMT_SESSION_ID -u CODEX_THREAD_ID bash "$HOOK" 2>/dev/null >/dev/null) &
+    local producer=$!
+    local i=0
+    while [ ! -f "$ready" ] && [ "$i" -lt 100 ]; do sleep 0.01; i=$((i + 1)); done
+    if [ ! -f "$ready" ]; then
+        kill "$producer" 2>/dev/null || true
+        rm -rf "$sbx"
+        return 1
+    fi
+    rm -rf "$marker.write-lock"
+    : > "$release"
     set +e
-    run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"transient\",\"cwd\":\"$sbx\"}" >/dev/null
-    rc=$?
+    wait "$producer"; rc=$?
     set -e
-    wait
-    [ "$rc" -eq 0 ] && [ -f "$marker" ]
-    rc=$?
+    if [ "$rc" -ne 0 ] || [ ! -f "$marker" ]; then
+        rm -rf "$sbx"
+        return 1
+    fi
+    if [ ! -f "$ready" ]; then
+        rm -rf "$sbx"
+        return 1
+    fi
     rm -rf "$sbx"
-    [ "$rc" -eq 0 ]
+    return 0
 }
 
 test_consumer_cannot_remove_foreign_live_lock() {
@@ -153,8 +195,130 @@ test_postcompact_then_sessionstart_compact_recovers_once() {
     second=$(run_event "$od" "{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"native-sequence\",\"cwd\":\"$sbx\",\"prompt\":\"next\"}")
     third=$(run_event "$od" "{\"hook_event_name\":\"PostToolUse\",\"session_id\":\"native-sequence\",\"cwd\":\"$sbx\"}")
     total=$(printf '%s\n%s\n%s\n' "$first" "$second" "$third" | grep -c 'NATIVE-SEQUENCE-MARKER' || true)
-    printf '%s' "$first" | jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' >/dev/null
-    [ "$total" -eq 1 ] && [ ! -e "$od/codex-ledger-pending-native-sequence" ]
+    if ! printf '%s' "$first" | jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' >/dev/null; then
+        rm -rf "$sbx"
+        return 1
+    fi
+    if [ "$total" -ne 1 ]; then
+        rm -rf "$sbx"
+        return 1
+    fi
+    if [ -e "$od/codex-ledger-pending-native-sequence" ]; then
+        rm -rf "$sbx"
+        return 1
+    fi
+    rm -rf "$sbx"
+}
+
+test_newline_cwd_round_trips_marker_identity() {
+    local sbx od cwd out
+    sbx=$(mktemp -d); cwd="$sbx/line-one
+line-two
+"; od="$sbx/omt"; mkdir -p "$od"
+    printf '## Now\nNEWLINE-CWD\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$od/session-ledger-newline-cwd.md"
+    run_event "$od" "$(jq -cn --arg cwd "$cwd" '{hook_event_name:"PostCompact",session_id:"newline-cwd",cwd:$cwd}')" >/dev/null
+    out=$(run_event "$od" "$(jq -cn --arg cwd "$cwd" '{hook_event_name:"UserPromptSubmit",session_id:"newline-cwd",cwd:$cwd}')")
+    rm -rf "$sbx"
+    printf '%s' "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("NEWLINE-CWD")' >/dev/null
+}
+
+test_invalid_current_promotes_valid_next() {
+    local sbx od marker out
+    sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
+    printf '## Now\nPROMOTED-NEXT\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$od/session-ledger-promote-next.md"
+    run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"promote-next\",\"cwd\":\"$sbx\"}" >/dev/null
+    run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"promote-next\",\"cwd\":\"$sbx\"}" >/dev/null
+    marker="$od/codex-ledger-pending-promote-next"
+    jq -nc '{token:"1-1",sid:"wrong",cwd_hash:"bad"}' > "$marker"
+    out=$(run_event "$od" "{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"promote-next\",\"cwd\":\"$sbx\"}")
+    [ -z "$out" ] || { rm -rf "$sbx"; return 1; }
+    out=$(run_event "$od" "{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"promote-next\",\"cwd\":\"$sbx\"}")
+    rm -rf "$sbx"
+    printf '%s' "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("PROMOTED-NEXT")' >/dev/null
+}
+
+test_generation_swapped_during_core_is_not_lost() {
+    local sbx od marker out1 out2 consumer i bin real_node ready release cwd_b64 token
+    sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
+    printf '## Now\nSWAPPED-GENERATION\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$od/session-ledger-swapped-generation.md"
+    run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"swapped-generation\",\"cwd\":\"$sbx\"}" >/dev/null
+    marker="$od/codex-ledger-pending-swapped-generation"
+    bin="$sbx/bin"; mkdir "$bin"; real_node=$(node -p 'process.execPath')
+    ready="$sbx/node-entered"; release="$sbx/node-release"
+    cat > "$bin/node" <<'EOF'
+#!/bin/bash
+case "$*" in
+  *ledger-events.mjs*)
+    : > "$NODE_GATE_READY"
+    i=0; while [ ! -f "$NODE_GATE_RELEASE" ] && [ "$i" -lt 300 ]; do sleep 0.01; i=$((i + 1)); done
+    [ -f "$NODE_GATE_RELEASE" ] || exit 1
+    ;;
+esac
+exec "$NODE_REAL" "$@"
+EOF
+    chmod +x "$bin/node"
+    (export PATH="$bin:$PATH" NODE_GATE_READY="$ready" NODE_GATE_RELEASE="$release" NODE_REAL="$real_node"; \
+        printf '%s' "{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"swapped-generation\",\"cwd\":\"$sbx\"}" | OMT_DIR="$od" env -u OMT_SESSION_ID -u CODEX_THREAD_ID bash "$HOOK" 2>/dev/null > "$sbx/recovery.out") & consumer=$!
+    (sleep 3; kill "$consumer" 2>/dev/null || true) & local consumer_watchdog=$!
+    i=0
+    while [ ! -d "$marker.claim" ] && [ "$i" -lt 100 ]; do sleep 0.01; i=$((i + 1)); done
+    while [ ! -f "$ready" ] && [ "$i" -lt 200 ]; do sleep 0.01; i=$((i + 1)); done
+    if [ ! -f "$ready" ]; then
+        kill "$consumer" 2>/dev/null || true
+        kill "$consumer_watchdog" 2>/dev/null || true
+        wait "$consumer_watchdog" 2>/dev/null || true
+        rm -rf "$sbx"
+        return 1
+    fi
+    cwd_b64=$(printf '%s' "$sbx" | base64 | tr -d '\n')
+    token="$(date +%s)-replacement"
+    jq -cn --arg token "$token" --arg sid swapped-generation --arg cwd "$cwd_b64" '{token:$token,sid:$sid,cwd_b64:$cwd}' > "$marker"
+    : > "$release"
+    set +e
+    wait "$consumer"
+    local consumer_rc=$?
+    set -e
+    kill "$consumer_watchdog" 2>/dev/null || true
+    wait "$consumer_watchdog" 2>/dev/null || true
+    if [ "$consumer_rc" -ne 0 ]; then
+        rm -rf "$sbx"
+        return 1
+    fi
+    out1=$(cat "$sbx/recovery.out")
+    if [ -n "$out1" ]; then
+        echo "  first consumer output: ${out1:0:300}"
+        rm -rf "$sbx"
+        return 1
+    fi
+    if [ ! -f "$marker" ] || ! grep -q 'replacement' "$marker"; then
+        rm -rf "$sbx"
+        return 1
+    fi
+    out2=$(run_event "$od" "{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"swapped-generation\",\"cwd\":\"$sbx\"}")
+    if ! printf '%s' "$out2" | jq -e '.hookSpecificOutput.additionalContext | contains("SWAPPED-GENERATION")' >/dev/null; then
+        echo "  next consumer output: ${out2:0:300}"
+        rm -rf "$sbx"
+        return 1
+    fi
+    if [ -e "$marker" ]; then
+        rm -rf "$sbx"
+        return 1
+    fi
+    rm -rf "$sbx"
+    return 0
+}
+
+test_invalid_current_without_next_is_removed() {
+    local sbx od marker
+    sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
+    run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"remove-invalid\",\"cwd\":\"$sbx\"}" >/dev/null
+    marker="$od/codex-ledger-pending-remove-invalid"
+    jq -nc '{token:"1-1",sid:"wrong",cwd_b64:"bad"}' > "$marker"
+    run_event "$od" "{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"remove-invalid\",\"cwd\":\"$sbx\"}" >/dev/null
+    if [ -e "$marker" ] || [ -e "$marker.next" ]; then
+        rm -rf "$sbx"
+        return 1
+    fi
     rm -rf "$sbx"
 }
 
@@ -424,6 +588,10 @@ main() {
     run_test test_postcompact_retries_transient_lock_contention
     run_test test_consumer_cannot_remove_foreign_live_lock
     run_test test_postcompact_then_sessionstart_compact_recovers_once
+    run_test test_newline_cwd_round_trips_marker_identity
+    run_test test_invalid_current_promotes_valid_next
+    run_test test_generation_swapped_during_core_is_not_lost
+    run_test test_invalid_current_without_next_is_removed
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

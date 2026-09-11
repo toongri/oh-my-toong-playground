@@ -46,13 +46,28 @@ EVENT=""
 SID=""
 CWD=""
 RAW_CWD=""
+CWD_B64=""
 if command -v jq >/dev/null 2>&1; then
-  EVENT=$(printf '%s' "$INPUT" | jq -r '.hook_event_name // .hookEventName // empty' 2>/dev/null) || EVENT=""
-  RAW_CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null) || RAW_CWD=""
+  # Prefix every field before TSV encoding: read's IFS processing otherwise
+  # collapses an empty middle field and shifts cwd into SID.
+  _meta=$(printf '%s' "$INPUT" | jq -r '["x" + (.hook_event_name // .hookEventName // ""), "x" + (.session_id // .sessionId // ""), "x" + ((.cwd // "") | @base64)] | @tsv' 2>/dev/null) || _meta=""
+  IFS="$(printf '\t')" read -r EVENT SID CWD_B64 <<EOF
+$_meta
+EOF
+  EVENT="${EVENT#x}"
+  SID="${SID#x}"
+  CWD_B64="${CWD_B64#x}"
+  if [ -n "$CWD_B64" ]; then
+    _cwd_sentinel='__OMT_CWD_END_6b1f__'
+    RAW_CWD=$(printf '%s' "$CWD_B64" | base64 -d 2>/dev/null; printf '%s' "$_cwd_sentinel") || RAW_CWD=""
+    RAW_CWD="${RAW_CWD%$_cwd_sentinel}"
+  else
+    RAW_CWD=""
+  fi
   CWD="$RAW_CWD"
-  SID=$(printf '%s' "$INPUT" | jq -r '.session_id // .sessionId // empty' 2>/dev/null) || SID=""
 fi
 [ -n "$CWD" ] || CWD=$(pwd)
+[ -n "$CWD_B64" ] || CWD_B64=$(printf '%s' "$CWD" | base64 | tr -d '\n')
 # Codex's thread identity is authoritative over a stale Claude carrier.
 [ -n "${CODEX_THREAD_ID:-}" ] && SID="$CODEX_THREAD_ID"
 case "$SID" in
@@ -113,6 +128,53 @@ bridge_cleanup_claim() {
 bridge_cleanup() { bridge_cleanup_claim; bridge_unlock; }
 trap bridge_cleanup EXIT
 
+read_marker() {
+  local file="$1" first
+  first=$(sed -n '1p' "$file" 2>/dev/null)
+  if [ "${first#\{}" != "$first" ] && command -v jq >/dev/null 2>&1; then
+    _pending_meta=$(cat "$file" | jq -r '[.token // "", .sid // "", .cwd_b64 // ""] | @tsv' 2>/dev/null) || return 1
+    IFS="$(printf '\t')" read -r _pending_token _pending_sid _pending_cwd_b64 <<EOF
+$_pending_meta
+EOF
+    [ -n "$_pending_token" ] && [ -n "$_pending_sid" ] && [ -n "$_pending_cwd_b64" ] || return 1
+    return 0
+  fi
+  # Compatibility with markers written before JSON metadata was introduced.
+  _pending_token="$first"
+  _pending_sid=$(sed -n '2p' "$file" 2>/dev/null)
+  _pending_cwd=$(sed -n '3p' "$file" 2>/dev/null)
+  _pending_cwd_b64=$(printf '%s' "$_pending_cwd" | base64 | tr -d '\n')
+  [ -n "$_pending_token" ] && [ -n "$_pending_sid" ]
+}
+
+marker_valid_for_event() {
+  local file="$1"
+  read_marker "$file" || return 1
+  _pending_when=${_pending_token%%-*}
+  case "$_pending_when" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$_pending_sid" = "$SID" ] || return 1
+  [ "$_pending_cwd_b64" = "$CWD_B64" ] || return 1
+  _pending_now=$(date +%s 2>/dev/null || printf '0')
+  [ "$_pending_when" != 0 ] && [ "$_pending_now" -ge "$_pending_when" ] && [ $((_pending_now - _pending_when)) -le 21600 ]
+}
+
+promote_valid_next() {
+  if [ -f "$PENDING.next" ] && marker_valid_for_event "$PENDING.next"; then
+    if mv -f "$PENDING.next" "$PENDING" 2>/dev/null; then
+      return 0
+    else
+      echo "codex-ledger: could not promote pending next generation" >&2
+      return 1
+    fi
+  fi
+  if [ -e "$PENDING.next" ]; then
+    echo "codex-ledger: discarding invalid pending next generation" >&2
+    rm -f "$PENDING.next" 2>/dev/null || true
+  fi
+  rm -f "$PENDING" 2>/dev/null || true
+  return 0
+}
+
 # PostCompact has no context-bearing output contract. Record a compact token
 # for the next reliable event; the generation includes the creation time and
 # pid so consumers can compare the exact token they claimed.
@@ -122,11 +184,13 @@ if [ "$EVENT" = "PostCompact" ]; then
     if bridge_lock; then
       if [ ! -f "$PENDING" ]; then
         _pending_tmp="$PENDING.tmp.$$"
-        printf '%s\n%s\n%s\n' "$(date +%s 2>/dev/null || printf '0')-$$" "$SID" "$CWD" > "$_pending_tmp" 2>/dev/null && mv -f "$_pending_tmp" "$PENDING" 2>/dev/null || rm -f "$_pending_tmp"
+        _pending_token="$(date +%s 2>/dev/null || printf '0')-$$"
+        jq -cn --arg token "$_pending_token" --arg sid "$SID" --arg cwd "$CWD_B64" '{token:$token,sid:$sid,cwd_b64:$cwd}' > "$_pending_tmp" 2>/dev/null && mv -f "$_pending_tmp" "$PENDING" 2>/dev/null || rm -f "$_pending_tmp"
       else
         # A second compaction during recovery is retained for the next event.
         _pending_tmp="$PENDING.next.$$"
-        printf '%s\n%s\n%s\n' "$(date +%s 2>/dev/null || printf '0')-$$" "$SID" "$CWD" > "$_pending_tmp" 2>/dev/null && mv -f "$_pending_tmp" "$PENDING.next" 2>/dev/null || rm -f "$_pending_tmp"
+        _pending_token="$(date +%s 2>/dev/null || printf '0')-$$"
+        jq -cn --arg token "$_pending_token" --arg sid "$SID" --arg cwd "$CWD_B64" '{token:$token,sid:$sid,cwd_b64:$cwd}' > "$_pending_tmp" 2>/dev/null && mv -f "$_pending_tmp" "$PENDING.next" 2>/dev/null || rm -f "$_pending_tmp"
       fi
       bridge_unlock
     else
@@ -162,29 +226,36 @@ if [ "$EVENT" = "SessionStart" ] || [ "$EVENT" = "UserPromptSubmit" ] || [ "$EVE
     fi
     if [ "$_claim_live" = 0 ] && mkdir "$CLAIM" 2>/dev/null; then
       _pending_claimed=1
-      _pending_token=$(sed -n '1p' "$PENDING" 2>/dev/null)
-      _pending_sid=$(sed -n '2p' "$PENDING" 2>/dev/null)
-      _pending_cwd=$(sed -n '3p' "$PENDING" 2>/dev/null)
-      _pending_now=$(date +%s 2>/dev/null || printf '0')
-      CLAIM_TOKEN="$_pending_token"
-      printf '%s %s %s\n' "$$" "$_pending_now" "$CLAIM_TOKEN" > "$CLAIM/owner" 2>/dev/null || true
-      _pending_when=${_pending_token%%-*}
-      _pending_valid=1
-      case "$_pending_when" in ''|*[!0-9]*) _pending_valid=0 ;; esac
-      [ "$_pending_sid" = "$SID" ] || _pending_valid=0
-      [ "$_pending_cwd" = "$CWD" ] || _pending_valid=0
-      [ "$_pending_when" != 0 ] && [ "$_pending_now" -ge "$_pending_when" ] && [ $((_pending_now - _pending_when)) -le 21600 ] || _pending_valid=0
-      if [ "$_pending_valid" = 1 ] && command -v jq >/dev/null 2>&1; then
-        RECOVERY_INPUT=$(printf '%s' "$INPUT" | jq -c --arg sid "$SID" --arg cwd "$CWD" '.source="compact" | .session_id=$sid | .cwd=$cwd' 2>/dev/null) || RECOVERY_INPUT=""
-        [ -n "$RECOVERY_INPUT" ] && RECOVERY_EVENT="$EVENT"
-      fi
-      if [ "$_pending_valid" != 1 ] || [ -z "$RECOVERY_EVENT" ]; then
-        bridge_unlock
-        bridge_cleanup_claim
-        [ "$_pending_valid" != 1 ] && rm -f "$PENDING" 2>/dev/null || true
-        _pending_claimed=0
+      if read_marker "$PENDING"; then
+        _pending_cwd=""
+        _pending_now=$(date +%s 2>/dev/null || printf '0')
+        CLAIM_TOKEN="$_pending_token"
+        printf '%s %s %s\n' "$$" "$_pending_now" "$CLAIM_TOKEN" > "$CLAIM/owner" 2>/dev/null || true
+        _pending_valid=1
+        marker_valid_for_event "$PENDING" || _pending_valid=0
+        if [ "$_pending_valid" = 1 ] && command -v jq >/dev/null 2>&1; then
+          RECOVERY_INPUT=$(printf '%s' "$INPUT" | jq -c --arg sid "$SID" --arg cwd "$CWD" '.source="compact" | .session_id=$sid | .cwd=$cwd' 2>/dev/null) || RECOVERY_INPUT=""
+          [ -n "$RECOVERY_INPUT" ] && RECOVERY_EVENT="$EVENT"
+        fi
+        if [ "$_pending_valid" != 1 ] || [ -z "$RECOVERY_EVENT" ]; then
+          if [ "$_pending_valid" != 1 ]; then
+            bridge_cleanup_claim
+            promote_valid_next || true
+          else
+            bridge_cleanup_claim
+          fi
+          bridge_unlock
+          _pending_claimed=0
+        else
+          bridge_unlock
+        fi
       else
+        # read_marker failed before CLAIM_TOKEN could be established; the
+        # freshly-created claim is still empty and must be removed directly.
+        rmdir "$CLAIM" 2>/dev/null || true
+        promote_valid_next || true
         bridge_unlock
+        _pending_claimed=0
       fi
     fi
   fi
@@ -236,8 +307,8 @@ if [ -n "$CORE_OUT" ]; then
             && [ -r "$PENDING_DIR/session-ledger-$SID.md" ] \
             && [ "${_pending_claimed:-0}" = 1 ] \
             && bridge_lock; then
-          _ack_token=$(sed -n '1p' "$PENDING" 2>/dev/null)
-          if [ "$_ack_token" = "$_pending_token" ]; then
+          if read_marker "$PENDING"; then _ack_token="$_pending_token"; else _ack_token=""; fi
+          if [ "$_ack_token" = "$CLAIM_TOKEN" ]; then
             # Emit first. If the receiving pipe is closed, retain both the
             # pending token and claim so the next event can retry safely.
             if printf '%s\n' "$CODEX_OUT"; then
