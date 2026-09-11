@@ -1533,7 +1533,8 @@ function emptyReviewGroups(): ReviewResult["findings"] {
 function reviewResultFromArtifact(raw: string, artifact: CodeReviewArtifact, state: Partial<GoalState>, dismissed: DismissedReviewFinding[] = []): ReviewResult {
 	const result: ReviewResult = { verdict: "APPROVE", artifact_sha256: sha256(raw), findings: emptyReviewGroups() };
 	if (artifact.status !== "COMPLETE") return { ...result, verdict: "REQUEST_CHANGES", reason: "inconclusive review" };
-	for (const finding of artifact.findings) {
+	for (const original of artifact.findings) {
+		const finding = effectiveReviewFinding(original, state);
 		if (isDismissed(finding, result.artifact_sha256, dismissed)) continue;
 		const outcome = classifyReviewFindingOutcome(finding);
 		if (outcome === "BLOCK") {
@@ -1560,7 +1561,9 @@ export function getReviewResult(sessionId: string): ReviewResult {
 	if (!state || !state.active || state.phase !== "pursuing") return invalidReviewResult("no active pursuing parent");
 	if (!reviewed) return invalidReviewResult("missing or invalid review artifact");
 	if (reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(state)) return invalidReviewResult("stale scope contract");
-	if (!reviewed.artifact.findings.every((f) => isScopeEvidenceReferenceValid(f, state))) return invalidReviewResult("invalid scope evidence");
+	// A finding with invalid scope evidence no longer nulls the whole result; the
+	// reducer degrades it to a blocking UNKNOWN (effectiveReviewFinding) while valid
+	// siblings still route. A stale contract hash above stays a whole-artifact reject.
 	return reviewResultFromArtifact(reviewed.raw, reviewed.artifact, state, readDismissals(state));
 }
 
@@ -1595,7 +1598,8 @@ function isCompletionEligibleCodeReview(
 	currentState: Partial<GoalState>,
 ): boolean {
 	if (reviewed.artifact.scope_contract_sha256 !== currentScopeContractSha) return false;
-	if (!reviewed.artifact.findings.every((f) => isScopeEvidenceReferenceValid(f, currentState))) return false;
+	// Invalid scope evidence degrades to a blocking UNKNOWN in the reducer (never
+	// completion-eligible), so no whole-artifact reject is needed here.
 	const result = reviewResultFromArtifact(reviewed.raw, reviewed.artifact, currentState, dismissed);
 	return result.verdict === "APPROVE" || (result.verdict === "COMMENT" && result.findings.adjudicate.length === 0 && result.findings.repair.every((f) => classifyReviewFindingOutcome(f) === "FIX"));
 }
@@ -1631,32 +1635,13 @@ function isScopeEvidenceReferenceValid(
 		UNKNOWN: ["uncertain"],
 	};
 	if (!allowed[finding.scope].includes(finding.scope_evidence.basis)) return false;
-	if (
-		finding.scope === "IN_SCOPE" &&
-		finding.scope_evidence.basis === "requirement" &&
-		!["outcome", "verification_surface"].includes(reference) &&
-		!storyIds.has(reference)
-	)
-		return false;
-	if (
-		finding.scope === "IN_SCOPE" &&
-		finding.scope_evidence.basis === "regression" &&
-		!["constraints", "boundaries", "outcome"].includes(reference) &&
-		!storyIds.has(reference)
-	)
-		return false;
-	if (
-		finding.scope === "OUT_OF_SCOPE" &&
-		finding.scope_evidence.basis === "non_goal" &&
-		reference !== "non_goals"
-	)
-		return false;
-	if (
-		finding.scope === "OUT_OF_SCOPE" &&
-		finding.scope_evidence.basis === "unrelated" &&
-		reference !== "outcome"
-	)
-		return false;
+	// No fine-grained basis→reference narrowing (e.g. requirement must NOT cite
+	// constraints): nothing downstream reads `basis`/`reference` — routing is
+	// f(scope, verdict, priority) — so the narrowing changed no decision and only
+	// rejected content-valid reviews on a clerical slot mismatch. Referential
+	// integrity (reference resolves to a real slot or confirmed story, checked
+	// above) and the OUT_OF_SCOPE non-empty-slot check below are the parts that
+	// carry weight and are kept.
 	if (finding.scope === "OUT_OF_SCOPE") {
 		const slotValue =
 			reference === "outcome"
@@ -1673,6 +1658,22 @@ function isScopeEvidenceReferenceValid(
 		if (slotValue === undefined || slotValue.trim() === "") return false;
 	}
 	return true;
+}
+
+/**
+ * Graded degradation (partial invalidation): a finding whose scope evidence does
+ * not validate against the current contract is no longer trusted at its stated
+ * scope — it degrades to a blocking UNKNOWN, so a single malformed finding still
+ * fails closed (never-false-complete) WITHOUT nulling the whole review result and
+ * hiding its valid siblings. Valid findings pass through unchanged. Every
+ * scope-evidence consumer (result reducer, completion eligibility, user dismissal)
+ * routes findings through here so the degradation is uniform.
+ */
+function effectiveReviewFinding(
+	finding: CodeReviewFinding,
+	state: Partial<GoalState>,
+): CodeReviewFinding {
+	return isScopeEvidenceReferenceValid(finding, state) ? finding : { ...finding, scope: "UNKNOWN" };
 }
 
 /**
@@ -1859,8 +1860,6 @@ export function dismissReviewFinding(
 			const reviewed = readCodeReviewArtifactRaw(sessionId);
 			if (reviewed === null) return false;
 			if (reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(prior)) return false;
-			if (!reviewed.artifact.findings.every((f) => isScopeEvidenceReferenceValid(f, prior)))
-				return false;
 			const artifactSha = sha256(reviewed.raw);
 			// EXACTLY one match, not at-least-one. A dismissal is keyed by (artifact bytes,
 			// ref, class) and findings carry no identity of their own, so two DISTINCT
@@ -1872,9 +1871,14 @@ export function dismissReviewFinding(
 			// match; the sole match must be CONFIRMED. PLAUSIBLE requires independent
 			// adjudication, UNKNOWN cannot be cleared by dismissal, and excluded observations
 			// need no authorization to remain outside the repair list.
-			const matches = reviewed.artifact.findings.filter(
-				(f) => f.scope === "IN_SCOPE" && f.class === opts.class && f.ref === opts.ref && classifyReviewFindingOutcome(f) === "BLOCK",
-			);
+			// Match on the degraded form: a finding whose scope evidence is invalid is
+			// coerced to UNKNOWN (effectiveReviewFinding) and so never matches an
+			// IN_SCOPE dismissal — its untrustworthy scope label cannot authorize a clear.
+			const matches = reviewed.artifact.findings
+				.map((f) => effectiveReviewFinding(f, prior))
+				.filter(
+					(f) => f.scope === "IN_SCOPE" && f.class === opts.class && f.ref === opts.ref && classifyReviewFindingOutcome(f) === "BLOCK",
+				);
 			if (matches.length !== 1 || matches[0].verdict !== "CONFIRMED") return false;
 
 			const dismissed = readDismissals(prior);

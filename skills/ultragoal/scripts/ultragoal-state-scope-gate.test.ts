@@ -166,6 +166,79 @@ describe("범위 근거는 필수이며 완료 전에 검증된다", () => {
 		});
 });
 
+describe("basis→reference 세부 페어링 narrowing 제거 (D)", () => {
+	test("IN_SCOPE requirement가 constraints를 참조해도 유효하며 LOW는 완료를 막지 않는다", () => {
+		writeObjectiveArtifact();
+		writeReview([
+			{
+				...finding("IN_SCOPE", "CONFIRMED", "LOW"),
+				scope_evidence: { basis: "requirement", reference: "constraints", rationale: "evidence" },
+			},
+		]);
+		expect(state.requestComplete(SID)).toBe(true);
+	});
+
+	test("IN_SCOPE regression이 verification_surface를 참조해도 유효하며 LOW는 완료를 막지 않는다", () => {
+		writeObjectiveArtifact();
+		writeReview([
+			{
+				...finding("IN_SCOPE", "CONFIRMED", "LOW"),
+				scope_evidence: { basis: "regression", reference: "verification_surface", rationale: "evidence" },
+			},
+		]);
+		expect(state.requestComplete(SID)).toBe(true);
+	});
+});
+
+describe("scope-evidence 부분 무효화 (C)", () => {
+	test("한 finding의 근거 참조가 무효여도 나머지 유효 finding은 살아남고 무효 finding은 차단 UNKNOWN으로 강등된다", () => {
+		state.setGoalState(SID, { phase: "pursuing" });
+		writeObjectiveArtifact();
+		writeReview([
+			{ ...finding("IN_SCOPE", "CONFIRMED", "HIGH"), ref: "src/valid.ts:1" },
+			{
+				...finding("IN_SCOPE", "CONFIRMED", "HIGH"),
+				ref: "src/bad.ts:1",
+				scope_evidence: { basis: "requirement", reference: "S99-nonexistent", rationale: "bad" },
+			},
+		]);
+		const getReviewResult = (state as Record<string, unknown>)["getReviewResult"] as (
+			sid: string,
+		) => {
+			verdict: string;
+			artifact_sha256: string;
+			findings: { repair: { ref?: string }[]; adjudicate: { ref?: string }[]; notes: unknown[] };
+		};
+		const result = getReviewResult(SID);
+		expect(result.artifact_sha256).toMatch(/^[0-9a-f]{64}$/);
+		expect(result.verdict).toBe("REQUEST_CHANGES");
+		expect(result.findings.repair).toHaveLength(1);
+		expect(result.findings.repair[0]?.ref).toBe("src/valid.ts:1");
+		expect(result.findings.adjudicate).toHaveLength(1);
+		expect(result.findings.adjudicate[0]?.ref).toBe("src/bad.ts:1");
+	});
+
+	test("한 finding의 근거가 무효여도 유효한 차단 finding에 대한 사용자 무효화는 허용된다", () => {
+		state.setGoalState(SID, { phase: "pursuing" });
+		writeObjectiveArtifact();
+		writeReview([
+			{ ...finding("IN_SCOPE", "CONFIRMED", "HIGH"), ref: "src/valid.ts:1" },
+			{
+				...finding("IN_SCOPE", "CONFIRMED", "HIGH"),
+				ref: "src/bad.ts:1",
+				scope_evidence: { basis: "requirement", reference: "S99-nonexistent", rationale: "bad" },
+			},
+		]);
+		expect(
+			state.dismissReviewFinding(SID, {
+				ref: "src/valid.ts:1",
+				class: "correctness",
+				rationale: "valid finding false positive",
+			}),
+		).toBe(true);
+	});
+});
+
 describe("범위 슬롯은 고정되고 변경 시 스토리 재승인이 필요하다", () => {
 	test("추구 중 범위 슬롯 변경을 거부한다", () => {
 		const opts = ["constraints", "boundaries", "non_goals"] as const;
