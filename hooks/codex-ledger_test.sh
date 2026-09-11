@@ -34,7 +34,7 @@ run_event() {
 test_postcompact_bridges_next_context_event_once() {
     local sbx od out first second
     sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
-    printf '## Now\nBRIDGE-MARKER\n## User Corrections (verbatim)\n' > "$od/session-ledger-bridge-sid.md"
+    printf '## Now\nBRIDGE-MARKER\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$od/session-ledger-bridge-sid.md"
     run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"bridge-sid\",\"cwd\":\"$sbx\"}" >/dev/null
     [ -f "$od/codex-ledger-pending-bridge-sid" ] || { rm -rf "$sbx"; return 1; }
     first=$(run_event "$od" "{\"hook_event_name\":\"PostToolUse\",\"session_id\":\"bridge-sid\",\"cwd\":\"$sbx\",\"tool_name\":\"Bash\"}")
@@ -67,7 +67,7 @@ test_postcompact_requires_cwd_and_preserves_second_generation() {
     sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
     out=$(run_event "$od" '{"hook_event_name":"PostCompact","session_id":"missing-cwd"}')
     [ -z "$out" ] && [ ! -e "$od/codex-ledger-pending-missing-cwd" ] || { rm -rf "$sbx"; return 1; }
-    printf '## Now\nGENERATION-MARKER\n## User Corrections (verbatim)\n' > "$od/session-ledger-generation.md"
+    printf '## Now\nGENERATION-MARKER\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$od/session-ledger-generation.md"
     run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"generation\",\"cwd\":\"$sbx\"}" >/dev/null
     run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"generation\",\"cwd\":\"$sbx\"}" >/dev/null
     out=$(run_event "$od" "{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"generation\",\"cwd\":\"$sbx\",\"prompt\":\"x\"}")
@@ -79,7 +79,7 @@ test_postcompact_requires_cwd_and_preserves_second_generation() {
 test_concurrent_consumers_emit_one_recovery() {
     local sbx od p1 p2 c1 c2 total
     sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
-    printf '## Now\nCONCURRENT-MARKER\n## User Corrections (verbatim)\n' > "$od/session-ledger-concurrent.md"
+    printf '## Now\nCONCURRENT-MARKER\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$od/session-ledger-concurrent.md"
     run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"concurrent\",\"cwd\":\"$sbx\"}" >/dev/null
     p1="$sbx/p1"; p2="$sbx/p2"
     (run_event "$od" "{\"hook_event_name\":\"PostToolUse\",\"session_id\":\"concurrent\",\"cwd\":\"$sbx\"}" >"$p1") & c1=$!
@@ -102,7 +102,7 @@ test_missing_ledger_does_not_ack_pending() {
 test_dead_claim_is_reclaimable() {
     local sbx od out marker
     sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
-    printf '## Now\nSTALE-CLAIM-MARKER\n## User Corrections (verbatim)\n' > "$od/session-ledger-stale-claim.md"
+    printf '## Now\nSTALE-CLAIM-MARKER\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$od/session-ledger-stale-claim.md"
     run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"stale-claim\",\"cwd\":\"$sbx\"}" >/dev/null
     marker="$od/codex-ledger-pending-stale-claim"
     mkdir "$marker.claim"
@@ -133,7 +133,7 @@ test_postcompact_retries_transient_lock_contention() {
 test_consumer_cannot_remove_foreign_live_lock() {
     local sbx od marker before after rc
     sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
-    printf '## Now\nFOREIGN-LOCK\n## User Corrections (verbatim)\n' > "$od/session-ledger-foreign-lock.md"
+    printf '## Now\nFOREIGN-LOCK\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$od/session-ledger-foreign-lock.md"
     run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"foreign-lock\",\"cwd\":\"$sbx\"}" >/dev/null
     marker="$od/codex-ledger-pending-foreign-lock"
     mkdir "$marker.write-lock"; printf '%s %s\n' "$$" "$(date +%s)" > "$marker.write-lock/owner"
@@ -147,7 +147,7 @@ test_consumer_cannot_remove_foreign_live_lock() {
 test_postcompact_then_sessionstart_compact_recovers_once() {
     local sbx od first second third total
     sbx=$(mktemp -d); od="$sbx/omt"; mkdir -p "$od"
-    printf '## Now\nNATIVE-SEQUENCE-MARKER\n## User Corrections (verbatim)\n' > "$od/session-ledger-native-sequence.md"
+    printf '## Now\nNATIVE-SEQUENCE-MARKER\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$od/session-ledger-native-sequence.md"
     run_event "$od" "{\"hook_event_name\":\"PostCompact\",\"session_id\":\"native-sequence\",\"cwd\":\"$sbx\"}" >/dev/null
     first=$(run_event "$od" "{\"hook_event_name\":\"SessionStart\",\"source\":\"compact\",\"session_id\":\"native-sequence\",\"cwd\":\"$sbx\"}")
     second=$(run_event "$od" "{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"native-sequence\",\"cwd\":\"$sbx\",\"prompt\":\"next\"}")
@@ -167,7 +167,7 @@ test_compact_emits_recovery_no_continue() {
     SBX=$(mktemp -d)
     OD="$SBX/omt"
     mkdir -p "$OD"
-    printf '## Now\nCX\n## User Corrections (verbatim)\n' > "$OD/session-ledger-cx-sid.md"
+    printf '## Now\nCX\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$OD/session-ledger-cx-sid.md"
 
     out=$(printf '{"source":"compact","session_id":"cx-sid","cwd":"%s"}' "$SBX" \
         | OMT_DIR="$OD" bash -c "unset OMT_SESSION_ID CODEX_THREAD_ID; exec bash '$HOOK'" 2>/dev/null)
@@ -196,8 +196,8 @@ test_codex_ambient_omt_session_id_does_not_shadow_self() {
     SBX=$(mktemp -d)
     OD="$SBX/omt"
     mkdir -p "$OD"
-    printf '## Now\nSELF-MARKER-XYZ\n## User Corrections (verbatim)\n' > "$OD/session-ledger-self-sid-1.md"
-    printf '## Now\nFOREIGN-MARKER-XYZ\n## User Corrections (verbatim)\n' > "$OD/session-ledger-foreign-sid-1.md"
+    printf '## Now\nSELF-MARKER-XYZ\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$OD/session-ledger-self-sid-1.md"
+    printf '## Now\nFOREIGN-MARKER-XYZ\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$OD/session-ledger-foreign-sid-1.md"
 
     out=$(printf '{"source":"compact","session_id":"self-sid-1","cwd":"%s"}' "$SBX" \
         | OMT_DIR="$OD" bash -c "unset OMT_SESSION_ID CODEX_THREAD_ID; export OMT_SESSION_ID=foreign-sid-1; export CODEX_THREAD_ID=self-sid-1; exec bash '$HOOK'" 2>/dev/null)
@@ -221,7 +221,7 @@ test_codex_thread_id_alone_recovers_self() {
     SBX=$(mktemp -d)
     OD="$SBX/omt"
     mkdir -p "$OD"
-    printf '## Now\nSELF-ONLY-MARKER\n## User Corrections (verbatim)\n' > "$OD/session-ledger-self-sid-2.md"
+    printf '## Now\nSELF-ONLY-MARKER\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$OD/session-ledger-self-sid-2.md"
 
     out=$(printf '{"source":"compact","session_id":"self-sid-2","cwd":"%s"}' "$SBX" \
         | OMT_DIR="$OD" bash -c "unset OMT_SESSION_ID CODEX_THREAD_ID; export CODEX_THREAD_ID=self-sid-2; exec bash '$HOOK'" 2>/dev/null)
