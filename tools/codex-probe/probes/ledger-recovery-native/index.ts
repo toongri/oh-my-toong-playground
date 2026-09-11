@@ -46,8 +46,17 @@ async function writeText(filePath: string, contents: string): Promise<void> {
 	await fs.writeFile(filePath, contents, "utf8");
 }
 
-async function readLine(reader: ReadableStreamDefaultReader<Uint8Array>, state: { buffer: string }): Promise<string | null> {
-	const decoder = new TextDecoder();
+export type LineReaderState = { buffer: string; decoder: TextDecoder };
+
+export function decodeChunk(state: LineReaderState, chunk: Uint8Array): void {
+	state.buffer += state.decoder.decode(chunk, { stream: true });
+}
+
+export function flushDecoded(state: LineReaderState): void {
+	state.buffer += state.decoder.decode();
+}
+
+async function readLine(reader: ReadableStreamDefaultReader<Uint8Array>, state: LineReaderState): Promise<string | null> {
 	for (;;) {
 		const newline = state.buffer.indexOf("\n");
 		if (newline >= 0) {
@@ -57,28 +66,35 @@ async function readLine(reader: ReadableStreamDefaultReader<Uint8Array>, state: 
 		}
 		const next = await reader.read();
 		if (next.done) {
+			flushDecoded(state);
 			if (state.buffer.length === 0) return null;
 			const line = state.buffer;
 			state.buffer = "";
 			return line;
 		}
-		state.buffer += decoder.decode(next.value, { stream: true });
+		decodeChunk(state, next.value);
 	}
 }
 
-async function readUntil(
+export async function readUntil(
 	reader: ReadableStreamDefaultReader<Uint8Array>,
-	state: { buffer: string },
+	state: LineReaderState,
 	seen: JsonObject[],
 	match: (message: JsonObject) => boolean,
 	deadline: number,
 ): Promise<JsonObject | null> {
 	while (Date.now() < deadline) {
 		const remaining = Math.max(1, deadline - Date.now());
-		const line = await Promise.race([
-			readLine(reader, state),
-			new Promise<string | null>((resolve) => setTimeout(() => resolve(null), remaining)),
+		const readPromise = readLine(reader, state).then((line) => ({ kind: "line" as const, line })).catch(() => ({ kind: "error" as const }));
+		const raced = await Promise.race([
+			readPromise,
+			new Promise<{ kind: "timeout" }>((resolve) => setTimeout(() => resolve({ kind: "timeout" }), remaining)),
 		]);
+		if (raced.kind !== "line") {
+			if (raced.kind === "timeout") await reader.cancel();
+			return null;
+		}
+		const line = raced.line;
 		if (line === null) return null;
 		if (line.trim() === "") continue;
 		let parsed: unknown;
@@ -93,6 +109,12 @@ async function readUntil(
 		if (match(parsed)) return parsed;
 	}
 	return null;
+}
+
+export function isAcceptedHookOrder(inputs: readonly unknown[], threadId: string): boolean {
+	const postCompactIndex = inputs.findIndex((input) => isObject(input) && input.hook_event_name === "PostCompact" && input.trigger === "manual" && input.session_id === threadId);
+	const compactSessionStartIndex = inputs.findIndex((input) => isObject(input) && input.hook_event_name === "SessionStart" && input.source === "compact" && input.session_id === threadId);
+	return postCompactIndex >= 0 && compactSessionStartIndex >= 0 && postCompactIndex < compactSessionStartIndex;
 }
 
 async function main(): Promise<number> {
@@ -139,7 +161,7 @@ async function main(): Promise<number> {
 		proc = Bun.spawn([CODEX, "app-server", "--listen", "stdio://"], { cwd, env, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
 		const stdoutReader = proc.stdout.getReader();
 		const stderrPromise = new Response(proc.stderr).text();
-		const state = { buffer: "" };
+		const state: LineReaderState = { buffer: "", decoder: new TextDecoder() };
 		const stdin = proc.stdin;
 		if (typeof stdin === "number" || stdin === undefined) throw new Error("app-server stdin was not piped");
 		const send = (message: JsonObject) => stdin.write(`${JSON.stringify(message)}\n`);
@@ -206,9 +228,11 @@ async function main(): Promise<number> {
 			});
 		} catch { /* no hook invocation is itself evidence */ }
 		const methods = messages.filter((message) => typeof message.method === "string").map((message) => message.method);
-		const postCompactHook = hookInputs.find((input) => isObject(input) && input.hook_event_name === "PostCompact" && input.trigger === "manual" && input.session_id === threadId);
-		const compactSessionStartHook = hookInputs.find((input) => isObject(input) && input.hook_event_name === "SessionStart" && input.source === "compact" && input.session_id === threadId);
-		const chainMeasured = Boolean(compactResponse && !isObject(compactResponse.error) && compactionItemCompleted && compactionTurnCompleted && completedFollowup && postCompactHook && compactSessionStartHook);
+		const postCompactIndex = hookInputs.findIndex((input) => isObject(input) && input.hook_event_name === "PostCompact" && input.trigger === "manual" && input.session_id === threadId);
+		const compactSessionStartIndex = hookInputs.findIndex((input) => isObject(input) && input.hook_event_name === "SessionStart" && input.source === "compact" && input.session_id === threadId);
+		const postCompactHook = postCompactIndex >= 0 ? hookInputs[postCompactIndex] : undefined;
+		const compactSessionStartHook = compactSessionStartIndex >= 0 ? hookInputs[compactSessionStartIndex] : undefined;
+		const chainMeasured = Boolean(compactResponse && !isObject(compactResponse.error) && compactionItemCompleted && compactionTurnCompleted && completedFollowup && postCompactHook && compactSessionStartHook && isAcceptedHookOrder(hookInputs, threadId));
 		evidence = {
 			status: chainMeasured ? "measured" : "inconclusive",
 			codexVersion,
@@ -224,7 +248,7 @@ async function main(): Promise<number> {
 			observedMessages: messages,
 			hookInputs,
 			stderr: stderr ? stderr.slice(0, 4000) : "",
-			acceptance: { compactionItemCompleted: Boolean(compactionItemCompleted), compactionTurnCompleted: Boolean(compactionTurnCompleted), followupCompleted: Boolean(completedFollowup), postCompactManualSameThread: Boolean(postCompactHook), sessionStartCompactSameThread: Boolean(compactSessionStartHook) },
+			acceptance: { compactionItemCompleted: Boolean(compactionItemCompleted), compactionTurnCompleted: Boolean(compactionTurnCompleted), followupCompleted: Boolean(completedFollowup), postCompactManualSameThread: Boolean(postCompactHook), sessionStartCompactSameThread: Boolean(compactSessionStartHook), postCompactBeforeSessionStart: postCompactIndex >= 0 && compactSessionStartIndex >= 0 && postCompactIndex < compactSessionStartIndex },
 			interpretation: chainMeasured ? "Complete same-thread native compaction and recovery hook chain observed." : "Native compaction ran, but the complete same-thread recovery hook chain was not observed.",
 		};
 		await writeText(evidencePath, `${jsonLine(evidence)}\n`);
