@@ -430,12 +430,12 @@ test_compact_recovery_safe_under_nounset_and_utf8_cap() {
         | OMT_DIR="$OD" env -u OMT_SESSION_ID -u CODEX_THREAD_ID /bin/bash -euo pipefail -c "source '$LEDGER_CORE'; ledger_core_run claude")
     rc=$?
     set -e
-    [ "$rc" = 0 ]
+    [ "$rc" = 0 ] || { rm -rf "$SBX"; return 1; }
     context=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext')
     bytes=$(printf '%s' "$context" | wc -c | tr -d ' ')
-    [ "$bytes" -le 7000 ]
-    printf '%s' "$context" | grep -q 'Now:'
-    printf '%s' "$context" | grep -q 'continuation: offset='
+    [ "$bytes" -le 7000 ] || { rm -rf "$SBX"; return 1; }
+    printf '%s' "$context" | grep -q 'Now:' || { rm -rf "$SBX"; return 1; }
+    printf '%s' "$context" | grep -q 'continuation: offset=' || { rm -rf "$SBX"; return 1; }
     rm -rf "$SBX"
 }
 
@@ -450,10 +450,10 @@ test_long_history_preserves_now_projection() {
         printf '\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n'
     } > "$OD/session-ledger-history-sid.md"
     out=$(printf '{"source":"compact","session_id":"history-sid","cwd":"%s"}' "$SBX" \
-        | OMT_DIR="$OD" /bin/bash -euo pipefail -c "source '$LEDGER_CORE'; ledger_core_run codex")
+        | OMT_DIR="$OD" env -u OMT_SESSION_ID -u CODEX_THREAD_ID /bin/bash -euo pipefail -c "source '$LEDGER_CORE'; ledger_core_run codex")
     context=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext')
-    printf '%s' "$context" | grep -q 'Now:'
-    printf '%s' "$context" | grep -q 'NOW-KEEP'
+    printf '%s' "$context" | grep -q 'Now:' || { rm -rf "$SBX"; return 1; }
+    printf '%s' "$context" | grep -q 'NOW-KEEP' || { rm -rf "$SBX"; return 1; }
     rm -rf "$SBX"
 }
 
@@ -466,9 +466,9 @@ test_malformed_marker_retries_without_recovery() {
     err="$SBX/err"
     out=$(printf '{"source":"compact","session_id":"bad-sid","cwd":"%s"}' "$SBX" \
         | OMT_DIR="$OD" /bin/bash -c "source '$LEDGER_CORE'; ledger_core_run claude" 2>"$err")
-    printf '%s' "$out" | grep -q '\[LEDGER RECORDING\]'
-    [ "$(printf '%s' "$out" | grep -c '\[LEDGER RECOVERY')" = 0 ]
-    grep -q 'recovery unavailable or malformed' "$err"
+    printf '%s' "$out" | grep -q '\[LEDGER RECORDING\]' || { rm -rf "$SBX"; return 1; }
+    [ "$(printf '%s' "$out" | grep -c '\[LEDGER RECOVERY')" = 0 ] || { rm -rf "$SBX"; return 1; }
+    grep -q 'recovery unavailable or malformed' "$err" || { rm -rf "$SBX"; return 1; }
     rm -rf "$SBX"
 }
 
@@ -477,14 +477,14 @@ test_checkpoint_instruction_matches_cli_schema() {
     out=$(printf '{"source":"startup","session_id":"s","cwd":"/tmp"}' \
         | OMT_DIR=/tmp/x OMT_SESSION_ID=s /bin/bash -c "source '$LEDGER_CORE'; ledger_core_run claude")
     json=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext' | grep -o '{"goal":"\.\.\.","scope":"\.\.\.","user_updates":"\.\.\.","done":"\.\.\.","pending":"\.\.\.","next":"\.\.\.","refs":\["[^"]*"\]}' | head -1)
-    [ -n "$json" ]
-    printf '%s' "$json" | jq -e 'keys == ["done","goal","next","pending","refs","scope","user_updates"]' >/dev/null
+    [ -n "$json" ] || return 1
+    printf '%s' "$json" | jq -e 'keys == ["done","goal","next","pending","refs","scope","user_updates"]' >/dev/null || return 1
     SBX=$(mktemp -d)
     OD="$SBX/omt"
     mkdir -p "$OD"
     printf '## Now\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$OD/session-ledger-s.md"
-    printf '%s' "$json" | OMT_DIR="$OD" OMT_SESSION_ID=s bash "$SCRIPT_DIR/omt-ledger.sh" checkpoint
-    OMT_DIR="$OD" OMT_SESSION_ID=s bash "$SCRIPT_DIR/omt-ledger.sh" recover --max-bytes 64 >/dev/null
+    printf '%s' "$json" | OMT_DIR="$OD" OMT_SESSION_ID=s bash "$SCRIPT_DIR/omt-ledger.sh" checkpoint || { rm -rf "$SBX"; return 1; }
+    OMT_DIR="$OD" OMT_SESSION_ID=s bash "$SCRIPT_DIR/omt-ledger.sh" recover --max-bytes 64 >/dev/null || { rm -rf "$SBX"; return 1; }
     rm -rf "$SBX"
 }
 
@@ -492,19 +492,27 @@ test_envelope_is_single_line_with_exact_spacing() {
     local out
     out=$(printf '{"source":"startup","session_id":"s","cwd":"/tmp"}' \
         | OMT_DIR=/tmp/x OMT_SESSION_ID=s /bin/bash -c "source '$LEDGER_CORE'; ledger_core_run claude")
-    [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" = 1 ]
-    printf '%s' "$out" | grep -qF '{"continue": true, "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": '
+    [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" = 1 ] || return 1
+    printf '%s' "$out" | grep -qF '{"continue": true, "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": ' || return 1
 }
 
 test_recording_contract_verbatim_unique_ids_and_boundary() {
-    local out context
-    out=$(printf '{"source":"startup","session_id":"s","cwd":"/tmp"}' \
-        | OMT_DIR=/tmp/x OMT_SESSION_ID=s /bin/bash -c "source '$LEDGER_CORE'; ledger_core_run codex")
+    local out context SBX OD
+    SBX=$(mktemp -d)
+    OD="$SBX/omt"
+    mkdir -p "$OD"
+    printf '## Now\nNOW\n## Decisions\n## User Corrections (verbatim)\n## Pending\n## Pointers\n## Learnings\n' > "$OD/session-ledger-s.md"
+    out=$(printf '{"source":"compact","session_id":"s","cwd":"%s"}' "$SBX" \
+        | OMT_DIR="$OD" OMT_SESSION_ID=s /bin/bash -c "source '$LEDGER_CORE'; ledger_core_run codex")
     context=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext')
-    printf '%s' "$context" | grep -q 'Preserve user corrections verbatim, including exact wording' || return 1
-    printf '%s' "$context" | grep -q 'choose a unique --id for each new semantic event' || return 1
-    printf '%s' "$context" | grep -q -- 'examples are illustrative IDs' || return 1
-    printf '%s' "$context" | grep -q -- $'---\n\n<session-restore>' || return 1
+    printf '%s' "$context" | grep -q 'Preserve user corrections verbatim, including exact wording' || { rm -rf "$SBX"; return 1; }
+    printf '%s' "$context" | grep -q 'choose a unique --id for each new semantic event' || { rm -rf "$SBX"; return 1; }
+    printf '%s' "$context" | grep -q -- 'examples are illustrative IDs' || { rm -rf "$SBX"; return 1; }
+    case "$context" in
+        *$'---\n\n<session-restore>'*) ;;
+        *) rm -rf "$SBX"; return 1 ;;
+    esac
+    rm -rf "$SBX"
 }
 
 # =============================================================================
