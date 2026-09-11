@@ -29,6 +29,7 @@ import {
 } from "./worker-utils.ts";
 import type { AgentDriver, ParseResult, CliType } from "./agent-drivers/types.ts";
 import type { AcquireWorkerSlotOptions } from "./worker-slots.ts";
+import { requestWorkerCancellation } from "./worker-cancellation.ts";
 
 function makeTmpDir(): string {
 	return mkdtempSync(join(tmpdir(), "worker-utils-test-"));
@@ -508,6 +509,124 @@ describe("runOneTurn / resumeOneTurn — caller-judgment single-turn pump", () =
 		await first;
 		await second;
 		expect(deferred.calls).toBe(2);
+	});
+
+	test("슬롯 대기 중 취소는 CLI를 실행하지 않고 기존 output을 보존함", async () => {
+		const slotOptions: AcquireWorkerSlotOptions = { dir: join(tmpDir, "cancel-slots"), slotCount: 1, pollMs: 10 };
+		const firstDir = join(tmpDir, "cancel-first");
+		const queuedDir = join(tmpDir, "cancel-queued");
+		mkdirSync(firstDir, { recursive: true });
+		mkdirSync(queuedDir, { recursive: true });
+		writeFileSync(join(queuedDir, "output.txt"), "prior output");
+		const driver = makeOneTurnMockDriver({ sessionID: "session", terminal: "stop", text: "ok", rawEvents: [] });
+		const deferred = makeDeferredRunOnce();
+		const first = runOneTurn(makeOneTurnOpts(firstDir, { driverFactory: () => driver, runOnceFn: deferred.fn, workerSlotOptions: slotOptions }));
+		await new Promise((resolve) => setTimeout(resolve, 30));
+		requestWorkerCancellation(queuedDir, "queued stop");
+		let queuedCalls = 0;
+		const queued = await runOneTurn(makeOneTurnOpts(queuedDir, {
+			driverFactory: () => driver,
+			runOnceFn: async () => {
+				queuedCalls++;
+				return { state: "done", exitCode: 0 };
+			},
+			workerSlotOptions: slotOptions,
+		}));
+		expect(queued.state).toBe("canceled");
+		expect(queuedCalls).toBe(0);
+		expect(readFileSync(join(queuedDir, "output.txt"), "utf8")).toBe("prior output");
+		deferred.releaseFirst();
+		await first;
+	});
+
+	test("터미널 파싱 직전 취소가 성공 결과를 덮어씀", async () => {
+		const memberDir = join(tmpDir, "parse-cancel");
+		mkdirSync(memberDir, { recursive: true });
+		const controller = new AbortController();
+		const driver = makeOneTurnMockDriver({ sessionID: "session", terminal: "stop", text: "parsed", rawEvents: [] });
+		const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+			driverFactory: () => driver,
+			signal: controller.signal,
+			runOnceFn: async (opts) => {
+				writeFileSync(join(opts.memberDir, "output.txt"), "raw");
+				controller.abort();
+				return { state: "done", exitCode: 0 };
+			},
+		}));
+		expect(result.state).toBe("canceled");
+		expect(JSON.parse(readFileSync(join(memberDir, "status.json"), "utf8")).state).toBe("canceled");
+		expect(readFileSync(join(memberDir, "output.txt"), "utf8")).toBe("raw");
+	});
+
+	test("driverFactory가 동기적으로 marker를 기록하면 initialCommand 전에 취소함", async () => {
+		const memberDir = join(tmpDir, "sync-factory-cancel");
+		mkdirSync(memberDir, { recursive: true });
+		let commandCalls = 0;
+		const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+			driverFactory: () => {
+				requestWorkerCancellation(memberDir, "factory stop");
+				return makeOneTurnMockDriver({ sessionID: "session", terminal: "stop", text: "ok", rawEvents: [] });
+			},
+			runOnceFn: async () => {
+				commandCalls++;
+				return { state: "done", exitCode: 0 };
+			},
+		}));
+		expect(result.state).toBe("canceled");
+		expect(commandCalls).toBe(0);
+	});
+
+	test("initialCommand가 동기적으로 marker를 기록하면 슬롯 획득 전에 취소함", async () => {
+		const memberDir = join(tmpDir, "sync-build-cancel");
+		mkdirSync(memberDir, { recursive: true });
+		let commandCalls = 0;
+		const driver = makeOneTurnMockDriver({ sessionID: "session", terminal: "stop", text: "ok", rawEvents: [] });
+		const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+			driverFactory: () => ({
+				...driver,
+				initialCommand: (opts) => {
+					requestWorkerCancellation(memberDir, "build stop");
+					return driver.initialCommand(opts);
+				},
+			}),
+			runOnceFn: async () => {
+				commandCalls++;
+				return { state: "done", exitCode: 0 };
+			},
+		}));
+		expect(result.state).toBe("canceled");
+		expect(commandCalls).toBe(0);
+	});
+
+	test("resumeCommand 예외에도 cancellation observation을 dispose함", async () => {
+		const memberDir = join(tmpDir, "resume-setup-error");
+		mkdirSync(memberDir, { recursive: true });
+		await expect(resumeOneTurn("session", makeOneTurnOpts(memberDir, {
+			driverFactory: () => ({
+				...makeOneTurnMockDriver(null),
+				resumeCommand: () => {
+					throw new Error("resume setup failed");
+				},
+			}),
+		}))).rejects.toThrow("resume setup failed");
+	});
+
+	test("parseStdout가 동기적으로 marker를 기록하면 성공 상태를 취소로 덮어씀", async () => {
+		const memberDir = join(tmpDir, "sync-parse-cancel");
+		mkdirSync(memberDir, { recursive: true });
+		const baseDriver = makeOneTurnMockDriver({ sessionID: "session", terminal: "stop", text: "parsed", rawEvents: [] });
+		const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+			driverFactory: () => ({
+				...baseDriver,
+				parseStdout: () => {
+					requestWorkerCancellation(memberDir, "parse stop");
+					return { sessionID: "session", terminal: "stop", text: "parsed", rawEvents: [] };
+				},
+			}),
+			runOnceFn: makeOneTurnMockRunOnce("raw", 0),
+		}));
+		expect(result.state).toBe("canceled");
+		expect(JSON.parse(readFileSync(join(memberDir, "status.json"), "utf8")).state).toBe("canceled");
 	});
 
 	test("turn 실행이 실패해도 슬롯을 반납한다", async () => {
@@ -1903,6 +2022,55 @@ describe("runOnce detached descendant lifecycle", () => {
 				siblingAlive = false;
 			}
 			expect(siblingAlive).toBe(true);
+		} finally {
+			try {
+				if (worker.pid !== undefined) process.kill(-worker.pid, "SIGKILL");
+			} catch {
+				/* fixture already exited */
+			}
+			try {
+				if (sibling.pid !== undefined) process.kill(-sibling.pid, "SIGKILL");
+			} catch {
+				/* sibling already exited */
+			}
+			rmSync(fixtureDir, { recursive: true, force: true });
+		}
+	});
+
+	test("실행 중 취소는 TERM 무시 자손까지 정리하고 슬롯 밖 형제는 보존함", async () => {
+		const fixtureDir = makeTmpDir();
+		const memberDir = join(fixtureDir, "member");
+		mkdirSync(memberDir, { recursive: true });
+		const resultPath = join(fixtureDir, "result.json");
+		const grandchildPath = join(fixtureDir, "grandchild.pid");
+		const utilPath = join(import.meta.dir, "worker-utils.ts");
+		const cancellationPath = join(import.meta.dir, "worker-cancellation.ts");
+		const fixturePath = join(fixtureDir, "cancel-fixture.ts");
+		const commandScript = ` (trap '' TERM; sleep 30) & bg=$!; echo $bg > ${grandchildPath}; wait $bg`;
+		writeFileSync(
+			fixturePath,
+			`import { writeFileSync } from "fs";\nimport { observeWorkerCancellation } from ${JSON.stringify(cancellationPath)};\nimport { runOnce } from ${JSON.stringify(utilPath)};\nconst memberDir = ${JSON.stringify(memberDir)};\nconst observation = observeWorkerCancellation(memberDir);\nconst result = await runOnce({ program: "/bin/sh", args: ["-c", ${JSON.stringify(commandScript)}], prompt: "", member: "fixture", memberDir, command: ${JSON.stringify(`/bin/sh -c ${commandScript}`)}, timeoutSec: 30, attempt: 0, signal: observation.signal, cleanupGraceMs: 50, heartbeatIntervalMs: 25 });\nwriteFileSync(${JSON.stringify(resultPath)}, JSON.stringify(result));\nobservation.dispose();\n`,
+		);
+		const sibling = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		const worker = spawn(process.execPath, [fixturePath], { detached: true, stdio: "ignore" });
+		try {
+			const pidDeadline = Date.now() + 3000;
+			while (!existsSync(grandchildPath) && Date.now() < pidDeadline) await sleepMsAsync(25);
+			expect(existsSync(grandchildPath)).toBe(true);
+			requestWorkerCancellation(memberDir, "active stop");
+			const resultDeadline = Date.now() + 3000;
+			while (!existsSync(resultPath) && Date.now() < resultDeadline) await sleepMsAsync(25);
+			expect(JSON.parse(readFileSync(resultPath, "utf8")).state).toBe("canceled");
+			const grandchildPid = Number(readFileSync(grandchildPath, "utf8").trim());
+			let grandchildAlive = true;
+			try {
+				process.kill(grandchildPid, 0);
+			} catch {
+				grandchildAlive = false;
+			}
+			expect(grandchildAlive).toBe(false);
+			const siblingPid = sibling.pid;
+			if (siblingPid !== undefined) expect(() => process.kill(siblingPid, 0)).not.toThrow();
 		} finally {
 			try {
 				if (worker.pid !== undefined) process.kill(-worker.pid, "SIGKILL");

@@ -13,6 +13,9 @@ import { spawn, type ChildProcess } from "child_process";
 import type { AgentDriver, CliType, ParseResult } from "./agent-drivers/types";
 import { pickDriver } from "./agent-drivers/types";
 import { acquireWorkerSlot, releaseWorkerSlot, type AcquireWorkerSlotOptions } from "./worker-slots";
+import { observeWorkerCancellation } from "./worker-cancellation";
+import { isWorkerCancellationRequested } from "./worker-cancellation";
+import type { WorkerSlot } from "./worker-slots";
 export {
 	cleanupOwnedDescendants,
 	snapshotProcesses,
@@ -47,6 +50,10 @@ function stringField(record: Record<string, unknown>, key: string): string | und
 
 /** runOnce states that must be preserved verbatim rather than collapsed to 'error'. */
 const PRESERVED_RUN_STATES = new Set(["missing_cli", "timed_out", "canceled"]);
+
+function cancellationRequested(memberDir: string, signal?: AbortSignal): boolean {
+	return Boolean(signal?.aborted) || isWorkerCancellationRequested(memberDir);
+}
 
 // ---------------------------------------------------------------------------
 // Command parsing
@@ -191,6 +198,8 @@ export interface RunOnceOpts {
 	fallbackFile?: string;
 	reviewContent?: string;
 	heartbeatIntervalMs?: number;
+	/** Shared cancellation signal; runOneTurn supplies the marker observation. */
+	signal?: AbortSignal;
 	/** Test-only process snapshot seam for descendant cleanup. */
 	processSnapshot?: () => ProcessSnapshot;
 	/** Test-only cleanup grace override; production retains the 5s default. */
@@ -219,6 +228,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 		heartbeatIntervalMs = HEARTBEAT_INTERVAL_MS,
 		processSnapshot,
 		cleanupGraceMs,
+		signal,
 	} = opts;
 
 	// Prompt assembly: attempt structured prompt from role files
@@ -240,6 +250,23 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 	const statusPath = path.join(memberDir, "status.json");
 	const outPath = path.join(memberDir, "output.txt");
 	const errPath = path.join(memberDir, "error.txt");
+	if (cancellationRequested(memberDir, signal)) {
+		const result = {
+			member,
+			state: "canceled",
+			message: "Canceled",
+			finishedAt: new Date().toISOString(),
+			command,
+			exitCode: null,
+			attempt,
+		};
+		try {
+			atomicWriteJson(statusPath, result);
+		} catch {
+			/* ignore */
+		}
+		return Promise.resolve(result);
+	}
 
 	return new Promise((resolve) => {
 		atomicWriteJson(statusPath, {
@@ -264,7 +291,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 		// Capture the detached worker's own group identity before starting the CLI.
 		// This receipt is the anchor used later; cleanup never adopts a fresh PID
 		// witness at cleanup time.
-		const leaderReceipt = readProcessReceipt(process.pid);
+		const leaderReceipt = readProcessReceipt(process.pid, processSnapshot);
 		try {
 			child = spawnFn(program, [...args], {
 				stdio: ["pipe", "pipe", "pipe"],
@@ -312,7 +339,8 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 			}
 			return;
 		}
-		const childReceipt = child.pid === undefined ? null : readProcessReceipt(child.pid);
+		const childReceipt = child.pid === undefined ? null : readProcessReceipt(child.pid, processSnapshot);
+		const cancellationAfterSpawn = cancellationRequested(memberDir, signal);
 
 		// Write prompt to stdin
 		if (child.stdin) {
@@ -352,6 +380,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 
 		let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
 		let timeoutTriggered = false;
+		let cancellationTriggered = false;
 		let cleanupStarted = false;
 		let cleanupPromise: Promise<void> | null = null;
 		const startDescendantCleanup = () => {
@@ -416,12 +445,14 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 					if (settled) return;
 					if (!cleanupDone) return;
 					settled = true;
+					signal?.removeEventListener("abort", onCancellation);
 					if (drainTimer) clearTimeout(drainTimer);
-					if (drainTimedOut && payload.state === "done") {
-						resolve({ ...payload, state: "error", message: "Output drain timed out" });
-					} else {
-						resolve(payload);
-					}
+					const effectivePayload = cancellationTriggered && payload.state !== "timed_out"
+						? { ...payload, state: "canceled", message: "Canceled" }
+						: drainTimedOut && payload.state === "done"
+							? { ...payload, state: "error", message: "Output drain timed out" }
+							: payload;
+					resolve(effectivePayload);
 				};
 				const onClose = () => {
 					closed++;
@@ -453,6 +484,26 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 				if (drainTimedOut || closed === 2) settle(drainTimedOut);
 			})();
 		};
+		const onCancellation = () => {
+			cancellationTriggered = true;
+			finalize({
+				member,
+				state: "canceled",
+				message: "Canceled",
+				finishedAt: new Date().toISOString(),
+				command,
+				exitCode: null,
+				signal: "SIGTERM",
+				pid: child.pid,
+				attempt,
+			});
+		};
+		if (signal) {
+			if (cancellationAfterSpawn || cancellationRequested(memberDir, signal)) onCancellation();
+			else signal.addEventListener("abort", onCancellation, { once: true });
+		} else if (cancellationAfterSpawn) {
+			onCancellation();
+		}
 
 		child.on("error", (error: NodeJS.ErrnoException) => {
 			const isMissing = error && error.code === "ENOENT";
@@ -517,6 +568,8 @@ export interface RunOneTurnOpts {
 	runOnceFn?: typeof runOnce;
 	/** Test-only slot-pool override; production callers use the machine-wide defaults. */
 	workerSlotOptions?: AcquireWorkerSlotOptions;
+	/** Optional upstream cancellation signal, relayed with the durable marker. */
+	signal?: AbortSignal;
 }
 
 export interface OneTurnResult {
@@ -526,13 +579,33 @@ export interface OneTurnResult {
 	exitCode: number | null;
 }
 
+function writeCanceledTurnStatus(opts: RunOneTurnOpts): OneTurnResult {
+	try {
+		atomicWriteJson(path.join(opts.memberDir, "status.json"), {
+			member: opts.member,
+			state: "canceled",
+			sessionID: null,
+			exitCode: null,
+			command: opts.command,
+			message: "Canceled",
+			finishedAt: new Date().toISOString(),
+		});
+	} catch {
+		/* ignore */
+	}
+	return { state: "canceled", sessionID: null, text: "", exitCode: null };
+}
+
 async function executeOneTurn(
 	builtCmd: { program: string; args: string[]; env: Record<string, string> },
 	opts: RunOneTurnOpts,
 	driverInstance: AgentDriver | null,
 	runOnceFn: typeof runOnce,
+	cancellationSignal?: AbortSignal,
 ): Promise<OneTurnResult> {
 	const { memberDir, member, command } = opts;
+	const canceledResult = () => writeCanceledTurnStatus(opts);
+	if (cancellationRequested(memberDir, cancellationSignal)) return canceledResult();
 
 	// Truncate output.txt and error.txt before each turn so each turn is semantically
 	// independent. runOnce always passes attempt:0 → flags:'a', meaning without this
@@ -548,6 +621,7 @@ async function executeOneTurn(
 	} catch {
 		/* ignore absent */
 	}
+	if (cancellationRequested(memberDir, cancellationSignal)) return canceledResult();
 
 	// Read existing status.json to preserve resume_count (legacy files may not have it)
 	// and to accumulate usage across resume turns (per-key sum when resume_count > 0).
@@ -587,7 +661,9 @@ async function executeOneTurn(
 		promptsDir: opts.promptsDir,
 		fallbackFile: opts.fallbackFile,
 		reviewContent: opts.reviewContent,
+		signal: cancellationSignal,
 	});
+	if (cancellationRequested(memberDir, cancellationSignal)) return canceledResult();
 
 	const exitCode = typeof runResult.exitCode === "number" ? runResult.exitCode : null;
 
@@ -618,6 +694,9 @@ async function executeOneTurn(
 	let state: string;
 	let sessionID: string | null;
 	let text: string;
+	if (cancellationRequested(memberDir, cancellationSignal) || runResult.state === "canceled") {
+		return canceledResult();
+	}
 
 	if (parsed) {
 		// Honor driver-reported terminal signal. Driver may detect error
@@ -638,6 +717,7 @@ async function executeOneTurn(
 		}
 		sessionID = parsed.sessionID;
 		text = parsed.text;
+		if (cancellationRequested(memberDir, cancellationSignal)) return canceledResult();
 		fs.writeFileSync(outputPath, parsed.text, "utf8");
 	} else if (driverInstance === null) {
 		// No driver registered for cliType: trust runOnce state directly.
@@ -674,6 +754,7 @@ async function executeOneTurn(
 		accumulatedUsage = merged;
 	}
 
+	if (cancellationRequested(memberDir, cancellationSignal)) return canceledResult();
 	atomicWriteJson(path.join(memberDir, "status.json"), {
 		member,
 		state,
@@ -696,24 +777,36 @@ async function executeOneTurn(
  * overwrites output.txt with parsed text, atomically writes status.json.
  */
 export async function runOneTurn(opts: RunOneTurnOpts): Promise<OneTurnResult> {
-	const driverFactory = opts.driverFactory ?? pickDriver;
-	const driver = driverFactory(opts.cliType);
-	const runOnceFn = opts.runOnceFn ?? runOnce;
-
-	const builtCmd = driver
-		? driver.initialCommand({
-				prompt: opts.prompt,
-				baseCommand: opts.program,
-				baseArgs: opts.args,
-				workerEnv: opts.workerEnv ?? {},
-			})
-		: { program: opts.program, args: opts.args, env: opts.workerEnv ?? {} };
-
-	const slot = await acquireWorkerSlot(opts.workerSlotOptions);
+	const observation = observeWorkerCancellation(
+		opts.memberDir,
+		opts.signal ?? opts.workerSlotOptions?.signal,
+	);
+	let slot: WorkerSlot | null = null;
 	try {
-		return await executeOneTurn(builtCmd, opts, driver, runOnceFn);
+		const driverFactory = opts.driverFactory ?? pickDriver;
+		const driver = driverFactory(opts.cliType);
+		const runOnceFn = opts.runOnceFn ?? runOnce;
+		if (cancellationRequested(opts.memberDir, observation.signal)) return writeCanceledTurnStatus(opts);
+		const builtCmd = driver
+			? driver.initialCommand({
+					prompt: opts.prompt,
+					baseCommand: opts.program,
+					baseArgs: opts.args,
+					workerEnv: opts.workerEnv ?? {},
+				})
+			: { program: opts.program, args: opts.args, env: opts.workerEnv ?? {} };
+		if (cancellationRequested(opts.memberDir, observation.signal)) return writeCanceledTurnStatus(opts);
+		try {
+			slot = await acquireWorkerSlot({ ...opts.workerSlotOptions, signal: observation.signal });
+		} catch (error) {
+			if (cancellationRequested(opts.memberDir, observation.signal)) return writeCanceledTurnStatus(opts);
+			throw error;
+		}
+		if (cancellationRequested(opts.memberDir, observation.signal)) return writeCanceledTurnStatus(opts);
+		return await executeOneTurn(builtCmd, opts, driver, runOnceFn, observation.signal);
 	} finally {
-		releaseWorkerSlot(slot);
+		if (slot) releaseWorkerSlot(slot);
+		observation.dispose();
 	}
 }
 
@@ -725,27 +818,38 @@ export async function resumeOneTurn(
 	sessionID: string,
 	opts: RunOneTurnOpts,
 ): Promise<OneTurnResult> {
-	const driverFactory = opts.driverFactory ?? pickDriver;
-	const driver = driverFactory(opts.cliType);
-	const runOnceFn = opts.runOnceFn ?? runOnce;
-
-	if (!driver) {
-		throw new Error(`resumeOneTurn: no driver for cliType '${opts.cliType}'`);
-	}
-
-	const builtCmd = driver.resumeCommand({
-		sessionID,
-		prompt: opts.prompt,
-		baseCommand: opts.program,
-		baseArgs: opts.args,
-		workerEnv: opts.workerEnv ?? {},
-	});
-
-	const slot = await acquireWorkerSlot(opts.workerSlotOptions);
+	const observation = observeWorkerCancellation(
+		opts.memberDir,
+		opts.signal ?? opts.workerSlotOptions?.signal,
+	);
+	let slot: WorkerSlot | null = null;
 	try {
-		return await executeOneTurn(builtCmd, opts, driver, runOnceFn);
+		const driverFactory = opts.driverFactory ?? pickDriver;
+		const driver = driverFactory(opts.cliType);
+		const runOnceFn = opts.runOnceFn ?? runOnce;
+		if (cancellationRequested(opts.memberDir, observation.signal)) return writeCanceledTurnStatus(opts);
+		if (!driver) {
+			throw new Error(`resumeOneTurn: no driver for cliType '${opts.cliType}'`);
+		}
+		const builtCmd = driver.resumeCommand({
+			sessionID,
+			prompt: opts.prompt,
+			baseCommand: opts.program,
+			baseArgs: opts.args,
+			workerEnv: opts.workerEnv ?? {},
+		});
+		if (cancellationRequested(opts.memberDir, observation.signal)) return writeCanceledTurnStatus(opts);
+		try {
+			slot = await acquireWorkerSlot({ ...opts.workerSlotOptions, signal: observation.signal });
+		} catch (error) {
+			if (cancellationRequested(opts.memberDir, observation.signal)) return writeCanceledTurnStatus(opts);
+			throw error;
+		}
+		if (cancellationRequested(opts.memberDir, observation.signal)) return writeCanceledTurnStatus(opts);
+		return await executeOneTurn(builtCmd, opts, driver, runOnceFn, observation.signal);
 	} finally {
-		releaseWorkerSlot(slot);
+		if (slot) releaseWorkerSlot(slot);
+		observation.dispose();
 	}
 }
 
