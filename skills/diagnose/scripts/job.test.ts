@@ -29,6 +29,33 @@ function writeConfig(configPath: string) {
 	);
 }
 
+const TERMINAL_STATES = new Set([
+	"done",
+	"error",
+	"timed_out",
+	"canceled",
+	"missing_cli",
+	"non_retryable",
+]);
+
+async function waitForTerminalStatus(jobDir: string): Promise<string> {
+	const timeoutMs = 45_000;
+	const startedAt = Date.now();
+	let overallState = "";
+	while (Date.now() - startedAt < timeoutMs) {
+		try {
+			const result = execFileSync(process.execPath, [SCRIPT, "status", jobDir], { stdio: "pipe" });
+			const status = JSON.parse(result.toString()) as { overallState?: unknown };
+			overallState = typeof status.overallState === "string" ? status.overallState : "";
+		} catch {}
+		if (TERMINAL_STATES.has(overallState)) return overallState;
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
+	throw new Error(
+		`worker status did not become terminal within ${timeoutMs}ms (overallState=${overallState || "unavailable"})`,
+	);
+}
+
 describe("diagnose job lifecycle", () => {
 	let tmpDir: string;
 
@@ -128,30 +155,7 @@ describe("diagnose job lifecycle", () => {
 		// persisted) and return before that worker writes its terminal status.
 		// Wait with a bounded, non-busy poll so clean does not race the status
 		// transition and refuse an otherwise safe deletion.
-		const pollStartedAt = Date.now();
-		// 워커는 별도 프로세스로 뜬다 — 전체 스위트 부하에서 기동만 5.8초까지
-		// 늘어난 것이 실측됐으므로 5초 상한은 결함 없이도 만료됐다. 상한은 실패
-		// 선언 시점만 정하고, 끝내 종료 상태에 못 가면 그대로 throw한다.
-		const pollTimeoutMs = 45_000;
-		const pollIntervalMs = 50;
-		let overallState = "";
-		while (Date.now() - pollStartedAt < pollTimeoutMs) {
-			try {
-				const statusResult = execFileSync(process.execPath, [SCRIPT, "status", jobDir], {
-					stdio: "pipe",
-				});
-				const status = JSON.parse(statusResult.toString()) as { overallState?: unknown };
-				overallState = typeof status.overallState === "string" ? status.overallState : "";
-			} catch {}
-			if (overallState === "done") break;
-			if (Date.now() - pollStartedAt >= pollTimeoutMs) break;
-			await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-		}
-		if (overallState !== "done") {
-			throw new Error(
-				`clean lifecycle: worker status did not become terminal within ${pollTimeoutMs}ms (overallState=${overallState || "unavailable"})`,
-			);
-		}
+		await waitForTerminalStatus(jobDir);
 
 		execFileSync(process.execPath, [SCRIPT, "clean", jobDir, "--jobs-dir", jobsDir], {
 			stdio: "pipe",
@@ -229,7 +233,7 @@ describe("diagnose job lifecycle", () => {
 		expect(anyJobJson).toBe(false);
 	});
 
-	test("status returns JSON with members after start", () => {
+	test("시작 후 상태 조회가 멤버를 포함한 JSON을 반환함", async () => {
 		const configPath = path.join(tmpDir, "diagnose.config.yaml");
 		writeConfig(configPath);
 		const jobsDir = path.join(tmpDir, "jobs");
@@ -251,6 +255,7 @@ describe("diagnose job lifecycle", () => {
 		expect(Array.isArray(status.members)).toBe(true);
 		expect(typeof status.overallState).toBe("string");
 		expect(typeof status.counts).toBe("object");
+		await waitForTerminalStatus(jobDir);
 
 		try {
 			execFileSync(process.execPath, [SCRIPT, "stop", jobDir], { stdio: "pipe" });
