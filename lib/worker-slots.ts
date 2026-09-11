@@ -77,7 +77,6 @@ function waitForPoll(ms: number, signal?: AbortSignal): Promise<void> {
 			signal.removeEventListener("abort", onAbort);
 			resolve();
 		}, Math.max(0, Math.trunc(Number(ms))));
-		timer.unref?.();
 		const onAbort = () => {
 			if (settled) return;
 			settled = true;
@@ -142,28 +141,31 @@ const OWNER_RECORD_NAME = /^owner-[0-9a-f-]+\.json$/i;
 type DeadSlot = { ownerRecordPath: string | null };
 
 /**
- * Atomically reserve the slot directory with mkdir before doing the one
- * owner-witness lookup. The completed owner record is prepared in a private
- * sibling directory and moved into the reserved slot, so a contender can
- * never replace a live slot directory with a late rename. Reserving first
- * also keeps the one-time ps-backed witness lookup off the occupied-slot path.
+ * Prepare a complete, non-empty candidate directory before touching the
+ * canonical slot path. Renaming that candidate into place is the publication
+ * step: an occupied generation makes the rename fail, and no contender can
+ * ever observe or remove an empty canonical directory belonging to us.
  */
 function claimFreshSlot(slotPath: string): string | null {
+	// Keep the occupied fast path cheap: do not prepare an owner record (which
+	// captures a ps-backed process witness) when the canonical generation exists.
+	if (fs.existsSync(slotPath)) return null;
 	const claimPath = path.join(path.dirname(slotPath), `.${path.basename(slotPath)}.claim-${randomUUID()}`);
 	const ownerName = `owner-${randomUUID()}.json`;
 	const temporaryOwnerPath = path.join(claimPath, ownerName);
 	const ownerRecordPath = path.join(slotPath, ownerName);
-	let slotCreated = false;
 	let claimCreated = false;
 	let ownerInstalled = false;
 
 	try {
-		fs.mkdirSync(slotPath);
-		slotCreated = true;
 		fs.mkdirSync(claimPath);
 		claimCreated = true;
 		fs.writeFileSync(temporaryOwnerPath, ownerRecord(), { flag: "wx" });
-		fs.renameSync(temporaryOwnerPath, ownerRecordPath);
+		// Never let rename replace an existing empty canonical directory. Fresh
+		// empty slots are intentionally left for ownerIsDead's 60s safeguard;
+		// stale recovery removes them before retrying this publication.
+		if (fs.existsSync(slotPath)) return null;
+		fs.renameSync(claimPath, slotPath);
 		ownerInstalled = true;
 		return ownerRecordPath;
 	} catch {
@@ -176,18 +178,11 @@ function claimFreshSlot(slotPath: string): string | null {
 				// Best-effort cleanup of this claim's private owner record.
 			}
 		}
-		if (claimCreated) {
+		if (claimCreated && !ownerInstalled) {
 			try {
 				fs.rmdirSync(claimPath);
 			} catch {
 				// Best-effort cleanup; never recursively remove a claim directory.
-			}
-		}
-		if (slotCreated && !ownerInstalled) {
-			try {
-				fs.rmdirSync(slotPath);
-			} catch {
-				// Only an empty directory can be removed here.
 			}
 		}
 	}
@@ -285,33 +280,41 @@ function tryClaimSlot(slotPath: string): string | null {
 	return claimFreshSlot(slotPath);
 }
 
+/** Attempt one synchronous, nonblocking scan of the slot pool. */
+export function tryAcquireWorkerSlot(options: AcquireWorkerSlotOptions = {}): WorkerSlot | null {
+	const dir = options.dir ?? slotsDir();
+	ensureDir(dir);
+	const slotCount = options.slotCount ?? resolveSlotCount();
+	const signal = options.signal;
+
+	for (let i = 0; i < slotCount; i++) {
+		if (signal?.aborted) throw abortError();
+		const slotPath = path.join(dir, `slot-${i}`);
+		const ownerRecordPath = tryClaimSlot(slotPath);
+		if (ownerRecordPath === null) continue;
+		const slot = { slotPath, ownerRecordPath };
+		if (signal?.aborted) {
+			releaseWorkerSlot(slot);
+			throw abortError();
+		}
+		heartbeatTimers.set(slot, startOwnerHeartbeat(ownerRecordPath));
+		return slot;
+	}
+	return null;
+}
+
 /**
  * Acquire one machine-wide worker slot, polling while the pool is full.
  * Resolves only once a slot is actually claimed — callers spawn their heavy
  * child process (e.g. `codex exec`) only after this resolves, never before.
  */
 export async function acquireWorkerSlot(options: AcquireWorkerSlotOptions = {}): Promise<WorkerSlot> {
-	const dir = options.dir ?? slotsDir();
-	ensureDir(dir);
-	const slotCount = options.slotCount ?? resolveSlotCount();
 	const pollMs = options.pollMs ?? DEFAULT_POLL_MS;
 	const signal = options.signal;
 
 	for (;;) {
-		for (let i = 0; i < slotCount; i++) {
-			if (signal?.aborted) throw abortError();
-			const slotPath = path.join(dir, `slot-${i}`);
-			const ownerRecordPath = tryClaimSlot(slotPath);
-			if (ownerRecordPath !== null) {
-				const slot = { slotPath, ownerRecordPath };
-				if (signal?.aborted) {
-					releaseWorkerSlot(slot);
-					throw abortError();
-				}
-				heartbeatTimers.set(slot, startOwnerHeartbeat(ownerRecordPath));
-				return slot;
-			}
-		}
+		const slot = tryAcquireWorkerSlot(options);
+		if (slot !== null) return slot;
 		await waitForPoll(pollMs, signal);
 	}
 }

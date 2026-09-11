@@ -2,9 +2,10 @@ import { describe, it, expect, afterEach } from "bun:test";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { spawnSync } from "child_process";
+import { spawn, spawnSync } from "child_process";
 
 import { resolveSlotCount, slotsDir, acquireWorkerSlot, releaseWorkerSlot } from "./worker-slots.ts";
+import { tryAcquireWorkerSlot } from "../../../lib/worker-slots.ts";
 
 function makeTmpDir(): string {
 	return fs.mkdtempSync(path.join(os.tmpdir(), "worker-slots-test-"));
@@ -119,6 +120,25 @@ describe("acquireWorkerSlot / releaseWorkerSlot", () => {
 		expect(second.slotPath).toBe(first.slotPath);
 
 		releaseWorkerSlot(second);
+	});
+
+	it("tryAcquireWorkerSlot은 빈 슬롯을 즉시 반환하고 점유 중에는 null을 반환한다", () => {
+		dir = makeTmpDir();
+		const first = tryAcquireWorkerSlot({ dir, slotCount: 1 });
+		expect(first).not.toBeNull();
+		expect(tryAcquireWorkerSlot({ dir, slotCount: 1 })).toBeNull();
+		releaseWorkerSlot(first!);
+	});
+
+	it("tryAcquireWorkerSlot은 abort된 signal에서 claim하지 않고 AbortError를 던진다", () => {
+		dir = makeTmpDir();
+		const controller = new AbortController();
+		controller.abort();
+
+		expect(() => tryAcquireWorkerSlot({ dir, slotCount: 1, signal: controller.signal })).toThrow(
+			 expect.objectContaining({ name: "AbortError" }),
+		);
+		expect(fs.readdirSync(dir)).toEqual([]);
 	});
 
 	it("이미 abort된 signal은 슬롯을 주장하기 전에 AbortError로 거부한다", async () => {
@@ -356,6 +376,72 @@ console.log(JSON.stringify({ heartbeatObserved, markerChangedAfterRelease }));
 		const slot = await pending;
 		expect(claimedWhileFresh).toBe(true);
 		releaseWorkerSlot(slot);
+	});
+
+	it("claim publication은 canonical slot을 빈 디렉터리로 만들지 않는다", async () => {
+		dir = makeTmpDir();
+		const dead = spawnSync(process.execPath, ["-e", "process.exit(0)"]);
+		const slotPath = path.join(dir, "slot-0");
+		fs.mkdirSync(slotPath);
+		fs.writeFileSync(path.join(slotPath, "owner-dead.json"), JSON.stringify({ pid: dead.pid }));
+
+		const originalRename = fs.renameSync;
+		let observedPublication = false;
+		fs.renameSync = ((from: fs.PathLike, to: fs.PathLike) => {
+			if (to === slotPath) {
+				observedPublication = true;
+				expect(fs.existsSync(slotPath)).toBe(false);
+				expect(fs.readdirSync(from as string)).toHaveLength(1);
+			}
+			return originalRename(from, to);
+		}) as typeof fs.renameSync;
+		try {
+			const slot = await acquireWorkerSlot({ dir, slotCount: 1, pollMs: 20 });
+			releaseWorkerSlot(slot);
+		} finally {
+			fs.renameSync = originalRename;
+		}
+		expect(observedPublication).toBe(true);
+	});
+
+	it("동시에 dead-owner를 회수해도 cap 1에서 한 contender만 claim한다", async () => {
+		dir = makeTmpDir();
+		const dead = spawnSync(process.execPath, ["-e", "process.exit(0)"]);
+		const slotPath = path.join(dir, "slot-0");
+		fs.mkdirSync(slotPath);
+		fs.writeFileSync(
+			path.join(slotPath, "owner-dead.json"),
+			JSON.stringify({ pid: dead.pid, pidStartedAt: "Thu Jan  1 00:00:00 1970" }),
+		);
+		const script = `
+import { tryAcquireWorkerSlot, releaseWorkerSlot } from ${JSON.stringify(path.resolve(import.meta.dirname, "../../../lib/worker-slots.ts"))};
+const slot = tryAcquireWorkerSlot({ dir: process.env.WORKER_SLOTS_TEST_DIR, slotCount: 1 });
+if (slot === null) process.stdout.write("miss");
+else {
+  process.stdout.write("hit");
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  releaseWorkerSlot(slot);
+}
+`;
+		const children = [1, 2].map(
+			() =>
+				new Promise<string>((resolve, reject) => {
+					const child = spawn(process.execPath, ["-e", script], {
+						cwd: path.resolve(import.meta.dirname, "../../.."),
+						env: { ...process.env, WORKER_SLOTS_TEST_DIR: dir },
+					});
+					let output = "";
+					if (child.stdout === null) {
+						reject(new Error("child stdout unavailable"));
+						return;
+					}
+					child.stdout.on("data", (chunk: Buffer) => (output += chunk.toString("utf8")));
+					child.on("error", reject);
+					child.on("close", (code) => (code === 0 ? resolve(output) : reject(new Error(`child exited ${code}`))));
+				}),
+		);
+		const results = await Promise.all(children);
+		expect(results.filter((result) => result === "hit")).toHaveLength(1);
 	});
 
 	it("malformed owner record는 fresh 상태에서 유지되고 stale 상태에서만 회수한다", async () => {
