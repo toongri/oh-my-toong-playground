@@ -1,6 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # omt-ledger.sh
+# omt-hook-dep: lib/ledger-events.mjs
 # Durable session-ledger append/replace helper (plan TODO 2, D4, D6).
 #
 # Interface:
@@ -20,7 +21,7 @@ SCRIPT_DIR_OL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR_OL/lib/omt-dir.sh"
 
 usage() {
-  echo "usage: omt-ledger.sh append <section> | omt-ledger.sh now" >&2
+  echo "usage: omt-ledger.sh append <section> | now | record <section> [options] | resolve ID [options] | supersede ID --by ID [options] | checkpoint | read [options] | recover [options]" >&2
   exit 1
 }
 
@@ -35,19 +36,25 @@ case "$SUBCOMMAND" in
     SECTION_NAME="Now"
     MODE="replace"
     ;;
+  record)
+    SECTION_NAME="${2:-}"
+    MODE="structured"
+    ;;
+  resolve|supersede|checkpoint|read|recover)
+    SECTION_NAME=""
+    MODE="structured"
+    ;;
   *)
     usage
     ;;
 esac
 
-case "$SECTION_NAME" in
-  "Now"|"Decisions"|"User Corrections (verbatim)"|"Pending"|"Pointers"|"Learnings")
-    ;;
-  *)
-    echo "omt-ledger: invalid section '$SECTION_NAME'" >&2
-    exit 1
-    ;;
-esac
+if [ "$MODE" != "structured" ]; then
+  case "$SECTION_NAME" in
+    "Now"|"Decisions"|"User Corrections (verbatim)"|"Pending"|"Pointers"|"Learnings") ;;
+    *) echo "omt-ledger: invalid section '$SECTION_NAME'" >&2; exit 1 ;;
+  esac
+fi
 
 # Session-id self-resolution (additive): OMT_SESSION_ID ?? CODEX_THREAD_ID
 # with STRICT EMPTY-ONLY coalescing, mirroring lib/state-core.ts:88-107
@@ -93,6 +100,11 @@ fi
 
 LEDGER_FILE="$OMT_DIR/session-ledger-$RESOLVED_SESSION_ID.md"
 
+# Read-only recovery never acquires the writer lock and never consumes stdin.
+if [ "$MODE" = "structured" ] && { [ "$SUBCOMMAND" = "read" ] || [ "$SUBCOMMAND" = "recover" ]; }; then
+  exec node "$SCRIPT_DIR_OL/lib/ledger-events.mjs" "$@" "$LEDGER_FILE"
+fi
+
 # Serialize the read-modify-write critical section below (skeleton bootstrap
 # through the final mv) across concurrent append/now invocations racing on
 # the same ledger file (PR #162 finding A, P2: without this, two concurrent
@@ -121,6 +133,16 @@ fi
 # branch all pass through this trap. TMP_FILE is unset until mktemp runs
 # below; ${TMP_FILE:-} tolerates that under `set -u`.
 trap 'rm -f "${TMP_FILE:-}" 2>/dev/null; rmdir "$LOCK_DIR" 2>/dev/null' EXIT
+
+if [ "$MODE" = "structured" ]; then
+  STRUCTURED_INPUT="$(mktemp "${LEDGER_FILE}.input.XXXXXX")"
+  trap 'rm -f "${TMP_FILE:-}" "${STRUCTURED_INPUT:-}" 2>/dev/null; rmdir "$LOCK_DIR" 2>/dev/null' EXIT
+  cat > "$STRUCTURED_INPUT"
+  # The module owns schema validation and the atomic replacement. Keeping the
+  # payload on a file avoids putting arbitrary/multiline input in argv/env.
+  node "$SCRIPT_DIR_OL/lib/ledger-events.mjs" "$@" "$LEDGER_FILE" < "$STRUCTURED_INPUT"
+  exit $?
+fi
 
 LEDGER_SKELETON='## Now
 ## Decisions
@@ -174,6 +196,9 @@ function escape_line(line,    stripped) {
   stripped = line
   while (index(stripped, SENTINEL) == 1) stripped = substr(stripped, length(SENTINEL) + 1)
   if (is_skeleton_header(stripped)) return SENTINEL line
+  # Legacy prose must never be able to forge a structured event.  Preserve
+  # the exact input through the normal one-sentinel unescape path.
+  if (index(stripped, "OMT_EVENT::") == 1) return SENTINEL line
   return line
 }
 function emit_content(   nlines, larr, i) {
