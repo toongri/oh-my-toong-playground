@@ -1,0 +1,6 @@
+{
+  "id": "record-and-restore-v3",
+  "facts": "Prepare the release-readiness report in this workspace. The user said verbatim: 'Keep the GraphQL-only scope; do not restore the removed REST examples.' A payment verification worker is already running under handle worker-payment-7. The previous validation result predates the latest token-expiry code change.",
+  "task": "Continue the report work. Inspect the workspace and make the report reflect the current facts. You may use the available workspace tools; do not access the network.",
+  "ledger": "## Now\nCurrent task: prepare release-readiness report\n## Decisions\nToken-expiry handling was changed; validation must be rerun.\n## User Corrections (verbatim)\nKeep the GraphQL-only scope; do not restore the removed REST examples.\n## Pending\nAwait payment worker result, then rerun validation and update the report.\n## Pointers\n- live delegated handle: worker-payment-7 (status=running)\n## Learnings\nEarlier notes are superseded; the full history is intentionally long.\n"
+}

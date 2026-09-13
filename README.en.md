@@ -37,6 +37,7 @@ oh-my-toong is an **agent central-management project**. It keeps skills, agents,
 - **QA enforcement gates** — qa blocks phase transitions, drivers, Stop, and completion until the actor-roster → story → cell → record → verdict → complete chain is satisfied (PLAN reachability probing remains available); Claude/Codex `qa-driver-guard.sh` / `codex-qa-driver-guard.sh` and the Codex `codex-qa-seed.sh` enforce the same state. Visual outcomes require claim reviews bound to evidence files; completion also requires an inspected final HTML receipt
 - **Ultragoal final-review convergence** — converge by priority: HIGH requires repair, checks, and a fresh review; MEDIUM requires repair and checks without re-review; LOW is notes-only. The deterministic CLI denies COMMENT/APPROVE dispatch and re-review while retaining the five-dispatch window
 - **Codex protected-skill trust boundary** — `disable-model-invocation: true` skills inject their body only from an explicit `$skill` UserPromptSubmit, direct `SKILL.md` shell reads are blocked, and the invocation marker is not authorization (see [Review/Quality](docs/skills/review-quality.en.md))
+- **Session ledger** — record structured checkpoints and records, tracking resolution/supersession lifecycle with `resolve`/`supersede`. `Now` may be replaced by the latest checkpoint, while the remaining durable original history is preserved. Hooks automatically restore current state, including guidance, within 7000 UTF-8 bytes after a compaction event; the `PostCompact` → `SessionStart(source=compact)` sequence was verified during manual compaction on Codex 0.153.4. The native compaction trigger is unchanged (see the [Session Ledger Operations Guide](docs/session-ledger.md)).
 
 ## Philosophy — Why This Design
 
@@ -66,13 +67,14 @@ The details of the library's skills (46) and agents (12) live under `docs/`.
 | [Model Assignment](docs/model-assignment.en.md) | Per-agent model tier principles and `model-map` substitution rules |
 | [Platform YAML Configuration Deployment](docs/platform-yaml-config-deployment.en.md) | Deployment, merge, and deletion rules for platform-specific settings, hooks, and MCPs |
 | [Outbound Local-Reference Gate](docs/outbound-local-reference-gate.en.md) | Predicate, scope, and remedies for local-path references sent to commits, PR creates/edits/comments, Notion, Slack, and Linear |
+| [Session Ledger Operations Guide](docs/session-ledger.md) | Structured checkpoint/record lifecycle, original-history preservation, compaction recovery, and the Codex event bridge |
 
 ## Quick Start
 
 ### Prerequisites
 
 - Claude Code CLI installed
-- Node.js v18+ (for HUD functionality)
+- Node.js v18+ (for HUD functionality and the `.mjs` session-ledger helper, which uses Node built-ins only)
 - `npm`/`npx` (for Mermaid renderer provisioning)
 - `jq` (hooks parse payloads with it — most guards fail open when it is unavailable, but `codex-spawn-context-gate.sh` and `codex-spawn-role-gate.sh` deny the call)
 - `sqlite3` (the Codex detector queries the `state_5.sqlite` state database with it — when unavailable, the detector counts zero and emits one stderr diagnostic)

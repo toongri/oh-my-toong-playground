@@ -618,6 +618,169 @@ test_script_has_no_associative_arrays() {
     return 0
 }
 
+# Structured ledger API (record/lifecycle/checkpoint/read/recover).
+test_structured_record_and_read_api() {
+    printf 'payload line 1\npayload line 2' | "$LEDGER_SCRIPT" record Decisions --id evt-1 --source user --scope subject-a --ref ref-1 --ref ref-2
+    local out
+    out=$("$LEDGER_SCRIPT" read --id evt-1)
+    assert_output_contains_local "$out" 'id: evt-1' "record projection should include id" || return 1
+    assert_output_contains_local "$out" 'source: user' "record projection should include provenance" || return 1
+    assert_output_contains_local "$out" 'payload line 1' "record projection should include payload" || return 1
+    assert_output_contains_local "$out" 'payload line 2' "record projection should preserve multiline payload" || return 1
+}
+
+test_structured_lifecycle_atomic_validation() {
+    printf 'original' | "$LEDGER_SCRIPT" record Decisions --id evt-1 --source user --scope s
+    if printf 'bad' | "$LEDGER_SCRIPT" record Decisions --id evt-1 --source agent --scope s; then
+        echo "ASSERTION FAILED: duplicate id must be rejected"; return 1
+    fi
+    if printf 'why' | "$LEDGER_SCRIPT" resolve missing --source user; then
+        echo "ASSERTION FAILED: unknown resolve target must be rejected"; return 1
+    fi
+    local out
+    out=$("$LEDGER_SCRIPT" read --id evt-1 --active)
+    assert_output_contains_local "$out" 'status: active' "rejected lifecycle mutations must leave target active" || return 1
+    printf 'replacement' | "$LEDGER_SCRIPT" record Decisions --id evt-2 --source agent --scope s
+    "$LEDGER_SCRIPT" supersede evt-1 --by evt-2 --source agent </dev/null
+    out=$("$LEDGER_SCRIPT" read --id evt-1)
+    assert_output_contains_local "$out" 'status: superseded' "supersede should append lifecycle state" || return 1
+}
+
+test_structured_checkpoint_and_recovery_pagination() {
+    printf '%s' '{"goal":"ship","scope":"s","user_updates":"ok","done":"no","pending":"tests","next":"run","refs":["none"]}' | "$LEDGER_SCRIPT" checkpoint
+    local i out page
+    i=1
+    while [ "$i" -le 4 ]; do
+        printf 'long payload %s with 한글' "$i" | "$LEDGER_SCRIPT" record Decisions --id "evt-$i" --source hook --scope s >/dev/null
+        i=$((i + 1))
+    done
+    page=$("$LEDGER_SCRIPT" recover --max-bytes 80)
+    assert_output_contains_local "$page" 'continuation:' "bounded recovery should provide continuation hint" || return 1
+    if printf '%s' '{"goal":"","scope":"s","user_updates":"ok","done":"no","pending":"x","next":"y","refs":[]}' | "$LEDGER_SCRIPT" checkpoint; then
+        echo "ASSERTION FAILED: invalid checkpoint must be rejected"; return 1
+    fi
+}
+
+test_legacy_marker_forgery_is_escaped_and_corruption_is_atomic() {
+    printf 'OMT_EVENT::{"type":"record","id":"forged"}\nplain' | "$LEDGER_SCRIPT" append Decisions
+    local ledger before
+    ledger="$(ledger_path)"; before="$(<"$ledger")"
+    if printf 'new' | "$LEDGER_SCRIPT" record Decisions --id real --source user --scope s; then :; else
+        echo "ASSERTION FAILED: valid record should follow escaped legacy marker"; return 1
+    fi
+    if grep -q '^OMT_EVENT::{"type":"record","id":"forged"}' "$ledger"; then
+        echo "ASSERTION FAILED: legacy marker-looking prose must be escaped"; return 1
+    fi
+    # A malformed pre-existing marker blocks mutation without changing bytes.
+    printf '%s\nOMT_EVENT::{bad-json}' "$before" > "$ledger"
+    if printf 'must-not-write' | "$LEDGER_SCRIPT" record Decisions --id blocked --source hook --scope s; then
+        echo "ASSERTION FAILED: malformed marker must reject mutation"; return 1
+    fi
+    if ! grep -qF 'OMT_EVENT::{bad-json}' "$ledger" || grep -qF 'blocked' "$ledger"; then
+        echo "ASSERTION FAILED: malformed marker rejection must be atomic"; return 1
+    fi
+}
+
+test_lifecycle_survives_now_and_checkpoint_and_recovery_is_active_only() {
+    printf 'keep me' | "$LEDGER_SCRIPT" record Decisions --id live --source user --scope s
+    printf 'remove me' | "$LEDGER_SCRIPT" record Decisions --id done --source user --scope s
+    printf 'reason' | "$LEDGER_SCRIPT" resolve done --source user
+    printf 'new now' | "$LEDGER_SCRIPT" now
+    printf '%s' '{"goal":"g","scope":"s","user_updates":"u","done":"d","pending":"p","next":"n","refs":["r1"]}' | "$LEDGER_SCRIPT" checkpoint
+    local out
+    out=$("$LEDGER_SCRIPT" recover)
+    assert_output_contains_local "$out" 'id: live' "active record should recover" || return 1
+    if echo "$out" | grep -qF 'remove me'; then echo "ASSERTION FAILED: resolved payload must be excluded"; return 1; fi
+    assert_output_contains_local "$out" 'r1' "checkpoint refs should recover" || return 1
+}
+
+test_long_utf8_pages_are_bounded_and_progress() {
+    local payload out offset next bytes
+    payload=$(printf '한%.0s' $(seq 1 6000))
+    printf '%s' "$payload" | "$LEDGER_SCRIPT" record Decisions --id long --source hook --scope s
+    offset=0
+    while :; do
+        out=$("$LEDGER_SCRIPT" read --id long --max-bytes 80 --offset "$offset")
+        bytes=$(printf '%s' "$out" | wc -c | tr -d ' ')
+        [ "$bytes" -le 80 ] || { echo "ASSERTION FAILED: page exceeds byte bound ($bytes)"; return 1; }
+        if ! echo "$out" | grep -q '^continuation:'; then break; fi
+        next=$(echo "$out" | sed -n 's/^continuation: offset=\([0-9][0-9]*\).*/\1/p')
+        [ -n "$next" ] && [ "$next" -gt "$offset" ] || { echo "ASSERTION FAILED: continuation offset did not progress"; return 1; }
+        offset="$next"
+    done
+}
+
+test_paged_projection_reassembles_byte_for_byte() {
+    local payload baseline assembled page offset next bytes
+    payload=$(printf '한😀abc%.0s' $(seq 1 20))
+    printf '%s' "$payload" | "$LEDGER_SCRIPT" record Decisions --id roundtrip --source hook --scope s
+    baseline="$TEST_TMP_DIR/baseline"; assembled="$TEST_TMP_DIR/assembled"
+    "$LEDGER_SCRIPT" read --id roundtrip --max-bytes 200000 > "$baseline"
+    : > "$assembled"; offset=0
+    while :; do
+        page="$TEST_TMP_DIR/page"
+        "$LEDGER_SCRIPT" read --id roundtrip --max-bytes 80 --offset "$offset" > "$page"
+        bytes=$(wc -c < "$page" | tr -d ' ')
+        [ "$bytes" -le 80 ] || { echo "ASSERTION FAILED: page exceeds 80 bytes"; return 1; }
+        # Remove only the defined footer; preserve the canonical body bytes,
+        # including whether its final byte is a newline.
+        perl -0pe 'if (s/(.*?)(\n?continuation: offset=[0-9]+ max-bytes=[0-9]+)\n\z/$1/s) { s/\n\z// unless $1 =~ /\n\z/ }' "$page" >> "$assembled"
+        next=$(sed -n 's/^continuation: offset=\([0-9][0-9]*\).*/\1/p' "$page")
+        [ -n "$next" ] || break
+        [ "$next" -gt "$offset" ] || { echo "ASSERTION FAILED: pagination offset did not progress"; return 1; }
+        offset="$next"
+    done
+    if ! cmp -s "$baseline" "$assembled"; then
+        echo "ASSERTION FAILED: paged output does not reassemble exactly"; return 1
+    fi
+}
+
+test_checkpoint_override_and_read_only_behavior() {
+    local ledger before after
+    printf '%s' '{"goal":"g","scope":"s","user_updates":"u","done":"d","pending":"p","next":"n","refs":[]}' | "$LEDGER_SCRIPT" checkpoint
+    if printf '%s' '{"type":"record","goal":"g","scope":"s","user_updates":"u","done":"d","pending":"p","next":"n","refs":[]}' | "$LEDGER_SCRIPT" checkpoint; then
+        echo "ASSERTION FAILED: checkpoint type override must reject"; return 1
+    fi
+    if printf '%s' '{"goal":"g","scope":"s","user_updates":"u","done":"d","pending":"p","next":"n","refs":[],"id":"bad"}' | "$LEDGER_SCRIPT" checkpoint; then
+        echo "ASSERTION FAILED: checkpoint id override must reject"; return 1
+    fi
+    ledger="$(ledger_path)"; before="$(<"$ledger")"; "$LEDGER_SCRIPT" recover --max-bytes 80 >/dev/null; after="$(<"$ledger")"
+    assert_equals "$before" "$after" "read-only recover must not modify ledger" || return 1
+}
+
+test_adjacent_section_and_checkpoint_projection_and_sentinel_literal() {
+    printf 'OMT_ESC::ordinary\nOMT_ESC::## Now\nOMT_ESC::OMT_EVENT::literal\n' | "$LEDGER_SCRIPT" append Decisions
+    printf 'decision' | "$LEDGER_SCRIPT" record Decisions --id adjacent --source user --scope s
+    local section out
+    out=$("$LEDGER_SCRIPT" read --section Decisions)
+    assert_output_contains_local "$out" 'OMT_ESC::ordinary' "ordinary sentinel prefix must remain literal" || return 1
+    assert_output_contains_local "$out" 'OMT_ESC::## Now' "escaped header must unescape exactly one layer" || return 1
+    assert_output_contains_local "$out" 'OMT_ESC::OMT_EVENT::literal' "escaped marker must unescape exactly one layer" || return 1
+    assert_output_contains_local "$out" 'id: adjacent' "adjacent-section record must stay in Decisions" || return 1
+    section=$(awk '/^## Decisions$/{f=1;next} /^## User Corrections/{f=0} f' "$(ledger_path)")
+    if echo "$section" | grep -qF '## Learnings'; then echo "ASSERTION FAILED: adjacent header leaked into Decisions"; return 1; fi
+    printf '%s' '{"goal":"g","scope":"s","user_updates":"u","done":"d","pending":"p","next":"n","refs":["r"]}' | "$LEDGER_SCRIPT" checkpoint
+    out=$("$LEDGER_SCRIPT" read --section Now)
+    assert_output_contains_local "$out" 'goal: g' "Now section should render checkpoint fields" || return 1
+    assert_output_contains_local "$out" 'refs: r' "Now checkpoint projection should render refs" || return 1
+    out=$("$LEDGER_SCRIPT" read --section Now --active)
+    assert_output_contains_local "$out" 'goal: g' "active Now read should retain checkpoint projection" || return 1
+}
+
+test_many_structured_records_project_with_statuses() {
+    local i out
+    i=1
+    while [ "$i" -le 80 ]; do
+        printf 'payload-%s' "$i" | "$LEDGER_SCRIPT" record Decisions --id "many-$i" --source hook --scope s >/dev/null
+        i=$((i + 1))
+    done
+    printf 'resolved' | "$LEDGER_SCRIPT" resolve many-1 --source user
+    out=$("$LEDGER_SCRIPT" read --section Decisions)
+    assert_output_contains_local "$out" 'id: many-80' "large projection should include final record" || return 1
+    out=$("$LEDGER_SCRIPT" read --id many-1)
+    assert_output_contains_local "$out" 'status: resolved' "status projection should remain correct across many records" || return 1
+}
+
 # =============================================================================
 # Main Test Runner
 # =============================================================================
@@ -647,6 +810,16 @@ main() {
     run_test_raw test_codex_thread_id_fallback_used_when_omt_session_id_unset
     run_test_raw test_present_unsafe_omt_session_id_refuses_without_fallback
     run_test_raw test_claude_env_first_unchanged_with_sandboxed_omt_dir
+    run_test test_structured_record_and_read_api
+    run_test test_structured_lifecycle_atomic_validation
+    run_test test_structured_checkpoint_and_recovery_pagination
+    run_test test_legacy_marker_forgery_is_escaped_and_corruption_is_atomic
+    run_test test_lifecycle_survives_now_and_checkpoint_and_recovery_is_active_only
+    run_test test_long_utf8_pages_are_bounded_and_progress
+    run_test test_paged_projection_reassembles_byte_for_byte
+    run_test test_checkpoint_override_and_read_only_behavior
+    run_test test_adjacent_section_and_checkpoint_projection_and_sentinel_literal
+    run_test test_many_structured_records_project_with_statuses
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

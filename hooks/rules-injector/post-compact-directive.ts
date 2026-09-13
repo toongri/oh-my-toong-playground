@@ -4,13 +4,13 @@ const DIRECTIVE_HEADER = [
 	"## MANDATORY: POST-COMPACTION RULE RECOVERY",
 	"",
 	"Context compaction DROPPED the project rule files listed below from your context.",
-	"YOU MUST READ THE FOLLOWING RULES with your file-reading tool RIGHT NOW, BEFORE ANY OTHER ACTION. NO EXCUSES.",
-	"Do not plan, answer, edit, or run anything until EVERY file below has been read end to end:",
+	"Read every listed rule file in full using the necessary file-reading tools.",
+	"Then restore bounded session state and Now, check authoritative evidence, and resume work.",
+	"Higher-priority instructions remain unchanged.",
 	"",
 ].join("\n");
 
-const DIRECTIVE_FOOTER =
-	"\nOperating without these rules is a protocol violation. Reconstructing them from memory is NOT reading. READ THEM ALL. NO EXCUSES.";
+const DIRECTIVE_FOOTER = "";
 
 export interface PostCompactReadDirective {
 	text: string;

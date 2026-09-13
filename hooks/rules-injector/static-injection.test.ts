@@ -42,12 +42,12 @@ test("C1: buildPostCompactReadDirective returns emittedPaths containing only pat
 		"## MANDATORY: POST-COMPACTION RULE RECOVERY",
 		"",
 		"Context compaction DROPPED the project rule files listed below from your context.",
-		"YOU MUST READ THE FOLLOWING RULES with your file-reading tool RIGHT NOW, BEFORE ANY OTHER ACTION. NO EXCUSES.",
-		"Do not plan, answer, edit, or run anything until EVERY file below has been read end to end:",
+		"Read every listed rule file in full using the necessary file-reading tools.",
+		"Then restore bounded session state and Now, check authoritative evidence, and resume work.",
+		"Higher-priority instructions remain unchanged.",
 		"",
 	].join("\n");
-	const footer =
-		"\nOperating without these rules is a protocol violation. Reconstructing them from memory is NOT reading. READ THEM ALL. NO EXCUSES.";
+	const footer = "";
 
 	const line1 = `- ${path1}`;
 	// Budget: header + footer + line1 + newline separator, but NOT line2.
@@ -75,6 +75,26 @@ test("C1: buildPostCompactReadDirective returns empty emittedPaths for empty inp
 
 	expect(result.emittedPaths).toEqual([]);
 	expect(result.text).toBe("");
+});
+
+test("post-compact directive states the rule-first recovery order", () => {
+	const result = buildPostCompactReadDirective(["/project/.codex/rules/example.md"], 100_000);
+
+	const readRules = "Read every listed rule file in full using the necessary file-reading tools.";
+	const restoreState = "restore bounded session state and Now";
+	const checkEvidence = "check authoritative evidence";
+	const resumeWork = "resume work";
+
+	expect(result.text).toContain(readRules);
+	expect(result.text).toContain(restoreState);
+	expect(result.text).toContain(checkEvidence);
+	expect(result.text).toContain(resumeWork);
+	expect(result.text.indexOf(readRules)).toBeLessThan(result.text.indexOf(restoreState));
+	expect(result.text.indexOf(restoreState)).toBeLessThan(result.text.indexOf(checkEvidence));
+	expect(result.text.indexOf(checkEvidence)).toBeLessThan(result.text.indexOf(resumeWork));
+	expect(result.text).toContain("Higher-priority instructions remain unchanged.");
+	expect(result.text).not.toContain("BEFORE ANY OTHER ACTION");
+	expect(result.text).not.toContain("NO EXCUSES");
 });
 
 // ---------------------------------------------------------------------------
@@ -130,7 +150,7 @@ test("C1: dropped listed rule is NOT marked injected and re-appears in next reco
 		dynamicDedup: {},
 	});
 
-	// The DIRECTIVE_HEADER is ~280 chars, DIRECTIVE_FOOTER ~160 chars.
+	// The directive header/footer lengths are fixed.
 	// Each path line is "- /path/to/.../rule1.md\n" — at least 50 chars for temp paths.
 	// Set maxResultChars = 430 (header+footer ≈ 440, so nothing fits → test relies on
 	// the first path always fitting since lines.length === 0 skips the budget check).

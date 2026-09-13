@@ -164,6 +164,8 @@ Ultragoal final-review consumers use scope-first admission: `OUT_OF_SCOPE` is a 
 - **Husky v9 lifecycle**: `package.json` declares `prepare: husky`; installation activates `.husky/_/` wrappers that route to the tracked plain `.husky/pre-commit` and `.husky/pre-push` files. `pre-commit` runs `bun run lint`; `pre-push` runs `bun run lint` followed by `make test`.
 
 - **session-start.sh**: Restores persistent mode state and garbage-collects `$OMT_DIR` on session start; emits an active, non-pristine explain-diff restoration banner while excluding the pristine initial seed
+- **ledger-core.sh** / **omt-ledger.sh**: Shared session-ledger recording and automatic, bounded compaction recovery; structured checkpoints and records preserve durable original history (apart from replaceable `Now`) and support `resolve`/`supersede` lifecycle events. Restored output, including guidance, is capped at 7000 UTF-8 bytes and does not change the native compaction trigger. `omt-ledger.sh` delegates structured parsing to the Node-built-in-only `hooks/lib/ledger-events.mjs` helper.
+- **codex-ledger.sh**: Codex 0.153.4 event bridge for the session ledger; records `PostCompact` in the resolved OMT state directory's `codex-ledger-pending-<session-id>` pending namespace with claim/lock files and consumes it on the next eligible `SessionStart` (also retryable on `UserPromptSubmit`/`PostToolUse`).
 - **orphan-reaper.sh**: SessionStart hook — reaps `code-review` finder worker process groups left behind when a conductor never reached teardown
 - **hooks/lib/state-liveness.sh**: Shared TTL/liveness definitions for state-file and session-artifact garbage collection
 - **scripts/omt-cleanup/**: `~/.omt` cleanup CLI, dry-run by default, `--execute` required to delete
