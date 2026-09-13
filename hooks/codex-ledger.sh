@@ -40,6 +40,10 @@
 SCRIPT_DIR_CL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=hooks/ledger-core.sh
 source "$SCRIPT_DIR_CL/ledger-core.sh"
+# ACTIVE_IDLE_TTL — the pending-marker freshness window is the 6h active-idle
+# TTL; sourced from its single definition site, never inlined as a literal.
+# shellcheck source=hooks/lib/state-liveness.sh
+source "$SCRIPT_DIR_CL/lib/state-liveness.sh"
 
 INPUT=$(cat)
 EVENT=""
@@ -155,7 +159,7 @@ marker_valid_for_event() {
   [ "$_pending_sid" = "$SID" ] || return 1
   [ "$_pending_cwd_b64" = "$CWD_B64" ] || return 1
   _pending_now=$(date +%s 2>/dev/null || printf '0')
-  [ "$_pending_when" != 0 ] && [ "$_pending_now" -ge "$_pending_when" ] && [ $((_pending_now - _pending_when)) -le 21600 ]
+  [ "$_pending_when" != 0 ] && [ "$_pending_now" -ge "$_pending_when" ] && [ $((_pending_now - _pending_when)) -le "$ACTIVE_IDLE_TTL" ]
 }
 
 promote_valid_next() {
