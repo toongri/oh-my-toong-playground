@@ -1287,9 +1287,20 @@ STAT_LINES
 #     that lane exactly — a non-`.md` session-ledger-* form (e.g. an
 #     interrupted append's `.tmp`) is reaped by no lane and must surface as
 #     drift, not go silently unclassified.
+#   - `task-write-journal-<safe-session>.json`,
+#     `task-write-reconciliation-<safe-session>-<receipt-uuid>.json`, and
+#     `task-write-journal-<safe-session>.quarantine.<artifact-id>.json` are
+#     recognized as managed recovery records even though they are intentionally
+#     absent from SESSION_ARTIFACT_PREFIXES. Pending, quarantined, and malformed
+#     recovery records are preserved for explicit recovery; recognition here
+#     grants no deletion authority. The safe-session shape mirrors
+#     isSafeSessionId (`[A-Za-z0-9_-]+`) and is capped at 200 characters;
+#     receipt UUIDs use the runtime's lowercase UUID shape, and quarantine
+#     artifact ids use the runtime's nonblank `[A-Za-z0-9-]+` shape, so oddly
+#     named forms remain visible as drift.
 list_unclassified_session_files() {
   local dir="$1"
-  local f base relpath prefix classified
+  local f base relpath prefix classified journal_sid reconciliation_sid artifact_id
 
   for f in "$dir"/* "$dir"/state/*; do
     [ -f "$f" ] || continue
@@ -1334,6 +1345,33 @@ list_unclassified_session_files() {
     if [ "$classified" = "0" ]; then
       case "$relpath" in
         session-ledger-*.md) classified=1 ;;
+      esac
+    fi
+
+    if [ "$classified" = "0" ]; then
+      # Use a regex for the whole basename: a shell `*` would also admit
+      # dots and other unsafe characters inside the session id.
+      case "$relpath" in
+        task-write-journal-*.quarantine.*.json)
+          if printf '%s\n' "$relpath" | grep -Eq '^task-write-journal-[A-Za-z0-9_-]+\.quarantine\.[A-Za-z0-9-]+\.json$'; then
+            journal_sid=$(printf '%s\n' "$relpath" | sed -E 's/^task-write-journal-([A-Za-z0-9_-]+)\.quarantine\.[A-Za-z0-9-]+\.json$/\1/')
+            artifact_id=$(printf '%s\n' "$relpath" | sed -E 's/^task-write-journal-[A-Za-z0-9_-]+\.quarantine\.([A-Za-z0-9-]+)\.json$/\1/')
+            [ "${#journal_sid}" -le 200 ] && [ -n "$artifact_id" ] && classified=1
+          fi
+          ;;
+        task-write-journal-*.json)
+          if printf '%s\n' "$relpath" | grep -Eq '^task-write-journal-[A-Za-z0-9_-]+\.json$'; then
+            journal_sid="${relpath#task-write-journal-}"
+            journal_sid="${journal_sid%.json}"
+            [ "${#journal_sid}" -le 200 ] && classified=1
+          fi
+          ;;
+        task-write-reconciliation-*.json)
+          if printf '%s\n' "$relpath" | grep -Eq '^task-write-reconciliation-[A-Za-z0-9_-]+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json$'; then
+            reconciliation_sid=$(printf '%s\n' "$relpath" | sed -E 's/^task-write-reconciliation-([A-Za-z0-9_-]+)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json$/\1/')
+            [ "${#reconciliation_sid}" -le 200 ] && classified=1
+          fi
+          ;;
       esac
     fi
 

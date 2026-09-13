@@ -37,6 +37,8 @@ import {
 	type RunOneTurnOpts,
 	type OneTurnResult,
 } from "./worker-utils";
+import { isWorkerCancellationRequested, requestWorkerCancellation } from "./worker-cancellation";
+import { cleanupOwnedDescendants } from "./worker-processes";
 
 // ---------------------------------------------------------------------------
 // Internal narrowing helpers (not exported — safe to type precisely)
@@ -641,6 +643,54 @@ export function getProcessStartedAt(pid: number): string | null {
 	}
 }
 
+/** Persist the worker's detached-process identity when a job metadata file exists. */
+function persistWorkerReceipt(
+	jobDir: string,
+	config: JobConfig,
+	worker: SpawnedWorker,
+): void {
+	const jobPath = path.join(jobDir, "job.json");
+	if (!fs.existsSync(jobPath)) return;
+	const raw = JSON.parse(fs.readFileSync(jobPath, "utf8"));
+	if (!isRecord(raw) || !Array.isArray(raw.members)) {
+		throw new Error(`cannot persist worker receipt: invalid ${jobPath}`);
+	}
+	let matched = false;
+	const members = raw.members.map((member) => {
+		if (!isRecord(member) || member.name !== worker.name) return member;
+		matched = true;
+		return {
+			...member,
+			workerPgid: worker.workerPgid,
+			workerPgidStartedAt: worker.workerPgidStartedAt,
+		};
+	});
+	if (!matched) {
+		throw new Error(`cannot persist worker receipt: unknown ${config.entitySingular} ${worker.name}`);
+	}
+	atomicWriteJson(jobPath, { ...raw, members });
+}
+
+function terminateSpawnedWorker(worker: SpawnedWorker): void {
+	if (
+		worker.workerPgid !== null &&
+		typeof worker.workerPgidStartedAt === "string" &&
+		worker.workerPgidStartedAt.trim() !== ""
+	) {
+		try {
+			const snapshot = getPgidSnapshot();
+			if (judgePgidSignal(worker.workerPgid, worker.workerPgidStartedAt, snapshot) === "signal") {
+				process.kill(-worker.workerPgid, "SIGKILL");
+				return;
+			}
+		} catch {
+			// Fail closed when ownership cannot be re-verified.
+		}
+	}
+	// The child handle is intentionally not signaled without a verified witness.
+	// Preserve the persistence error and fail closed against PID reuse.
+}
+
 export function spawnWorkers({
 	entities,
 	workerPath,
@@ -729,20 +779,18 @@ export function spawnWorkers({
 		};
 		if (onSpawned) {
 			try {
+				persistWorkerReceipt(jobDir, config, worker);
 				onSpawned(worker);
 			} catch (error) {
 				// Do not leave an unowned detached worker behind when durable persistence fails.
-				if (worker.workerPgid !== null) {
-					try {
-						process.kill(-worker.workerPgid, "SIGKILL");
-					} catch {
-						try {
-							child.kill("SIGKILL");
-						} catch {
-							// Best effort only — preserve the callback's original error.
-						}
-					}
-				}
+				terminateSpawnedWorker(worker);
+				throw error;
+			}
+		} else {
+			try {
+				persistWorkerReceipt(jobDir, config, worker);
+			} catch (error) {
+				terminateSpawnedWorker(worker);
 				throw error;
 			}
 		}
@@ -1458,6 +1506,7 @@ export function cmdResults(
 
 // Cap on waiting for a stopped member's own exit — must not hang indefinitely.
 const STOP_WAIT_CAP_MS = 10_000;
+const STOP_COOPERATIVE_GRACE_MS = 250;
 
 export async function cmdStop(
 	_options: Record<string, unknown>,
@@ -1469,50 +1518,72 @@ export async function cmdStop(
 	if (!fs.existsSync(entitiesRoot))
 		exitWithError(`No ${config.entityDirName} folder found: ${entitiesRoot}`);
 
-	// Wait axis: whether status.pid exists, not whether process.kill actually succeeded.
-	// worker-utils.ts writes status.json in two steps (state:"running" first with pid:null,
-	// then again with the real child.pid once the CLI child is spawned) — a member read in
-	// that gap has no pid to signal, so waiting on it can't hasten its exit, only babysit the
-	// CLI's own natural run to completion.
-	let hadRunning = false;
+	// Cancellation is durable and must be recorded before any signal or fallback cleanup.
+	// status.pid is the CLI child, not a verified worker-group identity, so it is never
+	// signaled directly here.
+	let hadCancelable = false;
 	const waitEntries: string[] = [];
 	for (const entry of fs.readdirSync(entitiesRoot)) {
+		const memberDir = path.join(entitiesRoot, entry);
 		const statusPath = path.join(entitiesRoot, entry, "status.json");
 		const status = readJsonIfExists(statusPath);
 		if (!isRecord(status)) continue;
-		if (status.state !== "running") continue;
-		hadRunning = true;
-
-		if (status.pid) {
-			try {
-				process.kill(Number(status.pid), "SIGTERM");
-			} catch {
-				// ESRCH: child already exited, but the worker itself hasn't flipped state yet
-				// (it's still parsing output) — still wait for that transition (bcb6c50d).
-			}
-			waitEntries.push(entry);
-		}
-		// else: no pid recorded yet — no handle to signal, and cmdStop's own pid is never
-		// persisted anywhere either (generic-job.ts spawns the worker detached + unref()s it),
-		// so there's nothing to wait on. Not waiting here is not a regression: main never
-		// waited on this member either, since it wasn't in the running set with a pid.
+		const state = String(status.state ?? "");
+		if (state !== "queued" && state !== "running" && state !== "retrying") continue;
+		hadCancelable = true;
+		requestWorkerCancellation(memberDir, "stop requested");
+		waitEntries.push(entry);
 	}
 
-	const stillRunning = (entry: string): boolean => {
+	const stillActive = (entry: string): boolean => {
 		const status = readJsonIfExists(path.join(entitiesRoot, entry, "status.json"));
-		return isRecord(status) && status.state === "running";
+		return (
+			isRecord(status) &&
+			(status.state === "queued" || status.state === "running" || status.state === "retrying")
+		);
 	};
 	const waitStart = Date.now();
-	while (waitEntries.some(stillRunning) && Date.now() - waitStart < STOP_WAIT_CAP_MS) {
+	const cooperativeDeadline = waitStart + Math.min(STOP_COOPERATIVE_GRACE_MS, STOP_WAIT_CAP_MS);
+	while (waitEntries.some(stillActive) && Date.now() < cooperativeDeadline) {
+		await sleepMs(250);
+	}
+
+	// Cooperative cancellation gets the full bounded wait above. Only if a member is
+	// still active do we use the persisted worker PGID and spawn-time witness as a safe
+	// fallback; never infer ownership from status.pid.
+	const jobMeta = readJsonIfExists(path.join(resolvedJobDir, "job.json"));
+	const members = isRecord(jobMeta) && Array.isArray(jobMeta.members) ? jobMeta.members : [];
+	const fallbackCleanups: Promise<void>[] = [];
+	for (const entry of waitEntries) {
+		if (!stillActive(entry)) continue;
+		const member = members.find((candidate) => isRecord(candidate) && candidate.name === entry);
+		if (!isRecord(member)) continue;
+		const pgid = member.workerPgid;
+		const startedAt = member.workerPgidStartedAt;
+		if (!(typeof pgid === "number" && Number.isInteger(pgid) && pgid > 0)) continue;
+		if (typeof startedAt !== "string" || startedAt.trim() === "") continue;
+		fallbackCleanups.push(
+			cleanupOwnedDescendants({
+				currentPid: pgid,
+				childPid: pgid,
+				leaderReceipt: { pid: pgid, pgid, startedAt },
+				graceMs: 5000,
+			}),
+		);
+	}
+	await Promise.all(fallbackCleanups);
+	const fallbackAttempted = fallbackCleanups.length > 0;
+	const waitDeadline = waitStart + STOP_WAIT_CAP_MS;
+	while (waitEntries.some(stillActive) && Date.now() < waitDeadline) {
 		await sleepMs(250);
 	}
 
 	const manifest = buildManifest(jobDir, config);
-	const stopMessage = !hadRunning
+	const stopMessage = !hadCancelable
 		? `stop: no running ${config.entityPlural}\n`
-		: waitEntries.length > 0
-			? `stop: sent SIGTERM to running ${config.entityPlural}\n`
-			: `stop: running ${config.entityPlural} found but none had a pid to signal\n`;
+		: `stop: cancellation requested for ${config.entityPlural}; ${
+			fallbackAttempted ? "verified descendant cleanup attempted; " : ""
+		}status reflects observed state only\n`;
 	process.stdout.write(`${stopMessage}${JSON.stringify(manifest, null, 2)}\n`);
 }
 
@@ -2315,6 +2386,9 @@ export async function cmdResumeMember(
 	} catch {
 		throw new Error("no resumable session");
 	}
+	if (isWorkerCancellationRequested(memberDir)) {
+		throw new Error("member canceled; a new job is required");
+	}
 
 	// Check sessionID
 	const sessionID = status.sessionID;
@@ -2421,6 +2495,17 @@ export async function cmdResumeMember(
 			stdio: "ignore",
 			env: process.env,
 		});
+		const worker: SpawnedWorker = {
+			name,
+			workerPgid: child.pid ?? null,
+			workerPgidStartedAt: child.pid !== undefined ? getProcessStartedAt(child.pid) : null,
+		};
+		try {
+			persistWorkerReceipt(jobDir, config, worker);
+		} catch (error) {
+			terminateSpawnedWorker(worker);
+			throw error;
+		}
 		child.unref();
 
 		process.stdout.write(`${JSON.stringify({ state: "dispatched", member: name })}\n`);

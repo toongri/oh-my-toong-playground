@@ -22,6 +22,7 @@ import {
 
 import { initLogger, logInfo, logStart, logEnd } from "@lib/logging";
 import { getOmtDir } from "@lib/omt-dir";
+import { tryAcquireWorkerSlot, releaseWorkerSlot } from "@lib/worker-slots";
 
 import {
 	type JobConfig,
@@ -806,33 +807,45 @@ function findExistingJobForIdentity(
 
 async function cmdReap(options: Record<string, unknown>): Promise<void> {
 	const jobsDir = resolveJobsDir(options);
-	const graceMs = optionalNumber(options["grace-ms"]);
-	const { reaped } = await reapOrphanJobs(
-		jobsDir,
-		CHUNK_REVIEW_JOB_CONFIG,
-		graceMs !== undefined ? { graceMs } : {},
-	);
-	// stdout MUST stay empty — see the Usage note above and the file-level
-	// cache-safe context-injection rule (CLAUDE.md) this exists to satisfy.
-	// Every diagnostic, including reapOrphanJobs' own surviving-PID report,
-	// goes to stderr only.
-	for (const verdict of classifyReapedOrphans(reaped)) {
-		// reapOrphanJobs already wrote its own "N process(es) survived group
-		// kill" line above for whatever didn't die — if this orphan's own pgid
-		// is one of them, don't also claim "reaped" here, or the same stderr
-		// stream carries two contradictory lines for the same process group.
-		if (verdict.survived) {
-			process.stderr.write(
-				`reap: signalled orphan job ${verdict.jobDir} (pgids: ${verdict.pgids.join(", ")}) — some process(es) survived the group kill, see above\n`,
-			);
-		} else {
-			process.stderr.write(
-				`reap: reaped orphan job ${verdict.jobDir} (pgids: ${verdict.pgids.join(", ")})\n`,
-			);
-		}
+	const reapSlot = tryAcquireWorkerSlot({
+		dir: path.join(jobsDir, ".reaper-slots"),
+		slotCount: 1,
+	});
+	if (reapSlot === null) {
+		process.stderr.write("reap: another reaper is already running; skipping\n");
+		return;
 	}
-	if (reaped.length === 0) {
-		process.stderr.write("reap: no orphan jobs found\n");
+	const graceMs = optionalNumber(options["grace-ms"]);
+	try {
+		const { reaped } = await reapOrphanJobs(
+			jobsDir,
+			CHUNK_REVIEW_JOB_CONFIG,
+			graceMs !== undefined ? { graceMs } : {},
+		);
+		// stdout MUST stay empty — see the Usage note above and the file-level
+		// cache-safe context-injection rule (CLAUDE.md) this exists to satisfy.
+		// Every diagnostic, including reapOrphanJobs' own surviving-PID report,
+		// goes to stderr only.
+		for (const verdict of classifyReapedOrphans(reaped)) {
+			// reapOrphanJobs already wrote its own "N process(es) survived group
+			// kill" line above for whatever didn't die — if this orphan's own pgid
+			// is one of them, don't also claim "reaped" here, or the same stderr
+			// stream carries two contradictory lines for the same process group.
+			if (verdict.survived) {
+				process.stderr.write(
+					`reap: signalled orphan job ${verdict.jobDir} (pgids: ${verdict.pgids.join(", ")}) — some process(es) survived the group kill, see above\n`,
+				);
+			} else {
+				process.stderr.write(
+					`reap: reaped orphan job ${verdict.jobDir} (pgids: ${verdict.pgids.join(", ")})\n`,
+				);
+			}
+		}
+		if (reaped.length === 0) {
+			process.stderr.write("reap: no orphan jobs found\n");
+		}
+	} finally {
+		releaseWorkerSlot(reapSlot);
 	}
 }
 

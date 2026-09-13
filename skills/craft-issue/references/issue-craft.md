@@ -598,3 +598,75 @@ When a child is at implementation-planning stage (HOW is decided):
 1. Record the settled decision **on** the child issue — in the body under a "Design Decision" note when the child is being **created** this run, or as a **decision comment** when the child **already has a body** (Append-Only History Contract: an existing body is immutable, never rewritten). Because a handoff record retires no existing body line, the Append Comment Shape's 대체 대상 and its section-restatement of 정정 후 상태 do **not** apply — the comment simply states the settled decision and the next-step pointer (step 2). Not in an implementation-path field either way.
 2. State the next step down the chain: "Handoff to `deep-interview` → `craft-tasks`" (settle design, then materialize task tickets). After that, `ultragoal` is the direct execution route. Where the surrounding contract allows it, `prometheus` remains the optional planning/review step before `ultragoal`; `sisyphus` is only `ultragoal`'s internal executor and is never presented as the direct route.
 3. Do not emit fields that fix the implementation method, and do not decompose the child into tasks here — that is HOW / work-decomposition, owned downstream by `craft-tasks` after `deep-interview` settles the design. Observational pre-context already recorded remains intact.
+
+### Delegated Parent Handoff
+
+This contract applies only when `craft-tasks` delegates parent or issue handling to
+`craft-issue`. It resolves the parent/issue handoff; it does not re-run HOW decomposition,
+inspect the child tree, or create or update task children. Ordinary requirement-stage calls
+continue to use the full craft-issue pipeline and its existing intake, gather, investigation,
+record, slice, duplicate, append-only, review, and write policies.
+
+#### Input
+
+The delegated request is valid only when it contains all of the following:
+
+| Input | Contract |
+|---|---|
+| Known parent identity | Optional. If supplied, it is a candidate identity to verify; it is not authorization to skip the parent re-read or to skip the existing parent policy. |
+| `designAnchor` | Required and exact. Accept only the canonical value `design-anchor: deep-interview:<state.interview_id>`, where `<state.interview_id>` is the non-empty identifier persisted in the settled design's `state.interview_id`. Do not derive, normalize, shorten, or replace it with a title, slug, timestamp, or hash. |
+| Settled design context | Required and complete enough to be read by the parent and task workers. If no canonical external URL is available, carry it as portable inline evidence. A machine-local path or `file://` reference is not accessible settled context. |
+
+`craft-issue` owns parent resolution. It may find the parent, create it, or enrich it, using the
+existing requirement-stage policy, append-only history rules, and applicable write gates. A supplied
+known identity does not transfer that ownership to `craft-tasks` and does not permit a second parent
+or an unverified substitute.
+
+#### Canonical carrier and write/recovery rules
+
+The parent has one canonical, portable carrier for the settled design anchor:
+
+```text
+**Design Anchor:** `design-anchor: deep-interview:<state.interview_id>`
+```
+
+The value after the label is the exact supplied `designAnchor`, including every byte. Before a
+successful handoff, write the canonical `Design Anchor` carrier through the PM write binding. A
+created parent carries the line once in its body; an existing parent with no carrier receives one
+append comment containing the line. The supplied, found, enriched, and created parent paths all
+converge on that same carrier and do not create a second parent.
+
+Before writing, inspect the supplied or found parent's body and comment history. If one matching
+carrier already exists, skip the carrier write and continue to verification. Never write a second
+carrier. If the carrier is missing after the required write, appears more than once, or has a value
+that differs from the input `designAnchor` byte-for-byte, stop without returning a successful
+handoff. An interrupted write is also a failed handoff; retry only after re-reading the parent and
+recovering through this same duplicate-prevention rule. The parent body remains immutable; existing
+parents are enriched only by append comment.
+
+#### Verification and output
+
+After parent handling, re-read the resulting parent and re-read the carrier byte-for-byte. Verify all
+of these facts before returning:
+
+1. Exactly one parent was resolved, represented by one `parentId`.
+2. That parent has exactly one canonical `Design Anchor` carrier associated with the exact input
+   `designAnchor`, byte-for-byte.
+3. The settled design context is accessible from the returned parent handoff, either through the
+   canonical external URL or the returned portable inline context.
+
+Return one verified handoff containing exactly:
+
+```text
+parentId: <one verified parent identity>
+designAnchor: <the exact canonical anchor supplied in the request>
+settledContext: <accessible settled design context or canonical external URL>
+```
+
+The result is not verified if parent candidates are ambiguous, the known identity resolves to a
+different parent, the parent carries a different or missing anchor, the settled context is missing
+or inaccessible, or the verification re-read fails. On any of those conditions, or on an
+interruption at any point, stop without reading the child tree and without creating, updating, or
+otherwise starting child work. Report the unresolved handoff so `craft-tasks` can recover through
+this contract. A successful parent write alone is not a successful handoff; the re-read and all
+three output facts are required.

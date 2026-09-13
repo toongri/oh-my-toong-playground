@@ -1533,7 +1533,11 @@ function emptyReviewGroups(): ReviewResult["findings"] {
 function reviewResultFromArtifact(raw: string, artifact: CodeReviewArtifact, state: Partial<GoalState>, dismissed: DismissedReviewFinding[] = []): ReviewResult {
 	const result: ReviewResult = { verdict: "APPROVE", artifact_sha256: sha256(raw), findings: emptyReviewGroups() };
 	if (artifact.status !== "COMPLETE") return { ...result, verdict: "REQUEST_CHANGES", reason: "inconclusive review" };
-	for (const finding of artifact.findings) {
+	const degraded: string[] = [];
+	for (const original of artifact.findings) {
+		const problem = scopeEvidenceReferenceProblem(original, state);
+		if (problem !== null) degraded.push(`${original.ref ?? "?"}: ${problem}`);
+		const finding = problem === null ? original : { ...original, scope: "UNKNOWN" as const };
 		if (isDismissed(finding, result.artifact_sha256, dismissed)) continue;
 		const outcome = classifyReviewFindingOutcome(finding);
 		if (outcome === "BLOCK") {
@@ -1543,6 +1547,9 @@ function reviewResultFromArtifact(raw: string, artifact: CodeReviewArtifact, sta
 		else if (outcome === "ADJUDICATE") result.findings.adjudicate.push(finding);
 		else result.findings.notes.push(finding);
 	}
+	// Degradation is not silent: surface each invalid finding and the fix so the
+	// caller sees why it blocks (never-false-complete) instead of a mystery UNKNOWN.
+	if (degraded.length > 0) result.reason = `scope evidence degraded to blocking UNKNOWN — ${degraded.join("; ")}`;
 	if (result.findings.adjudicate.length > 0 || result.findings.repair.some((f) => classifyReviewFindingOutcome(f) === "BLOCK")) result.verdict = "REQUEST_CHANGES";
 	else if (result.findings.repair.length > 0 || result.findings.notes.length > 0) result.verdict = "COMMENT";
 	const resolution = state.review_resolution;
@@ -1560,7 +1567,9 @@ export function getReviewResult(sessionId: string): ReviewResult {
 	if (!state || !state.active || state.phase !== "pursuing") return invalidReviewResult("no active pursuing parent");
 	if (!reviewed) return invalidReviewResult("missing or invalid review artifact");
 	if (reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(state)) return invalidReviewResult("stale scope contract");
-	if (!reviewed.artifact.findings.every((f) => isScopeEvidenceReferenceValid(f, state))) return invalidReviewResult("invalid scope evidence");
+	// A finding with invalid scope evidence no longer nulls the whole result; the
+	// reducer degrades it to a blocking UNKNOWN (effectiveReviewFinding) while valid
+	// siblings still route. A stale contract hash above stays a whole-artifact reject.
 	return reviewResultFromArtifact(reviewed.raw, reviewed.artifact, state, readDismissals(state));
 }
 
@@ -1595,7 +1604,8 @@ function isCompletionEligibleCodeReview(
 	currentState: Partial<GoalState>,
 ): boolean {
 	if (reviewed.artifact.scope_contract_sha256 !== currentScopeContractSha) return false;
-	if (!reviewed.artifact.findings.every((f) => isScopeEvidenceReferenceValid(f, currentState))) return false;
+	// Invalid scope evidence degrades to a blocking UNKNOWN in the reducer (never
+	// completion-eligible), so no whole-artifact reject is needed here.
 	const result = reviewResultFromArtifact(reviewed.raw, reviewed.artifact, currentState, dismissed);
 	return result.verdict === "APPROVE" || (result.verdict === "COMMENT" && result.findings.adjudicate.length === 0 && result.findings.repair.every((f) => classifyReviewFindingOutcome(f) === "FIX"));
 }
@@ -1610,54 +1620,48 @@ function isCurrentCommentResolutionValid(result: ReviewResult, state: Partial<Go
 	});
 }
 
-function isScopeEvidenceReferenceValid(
+const SCOPE_SLOTS = ["outcome", "verification_surface", "constraints", "boundaries", "non_goals"];
+const ALLOWED_BASIS_BY_SCOPE: Record<ReviewScope, string[]> = {
+	IN_SCOPE: ["requirement", "regression"],
+	OUT_OF_SCOPE: ["non_goal", "unrelated"],
+	UNKNOWN: ["uncertain"],
+};
+
+/**
+ * Returns null when the finding's scope evidence validates against the current
+ * contract, or an actionable message (naming the offending value and the allowed
+ * alternative) when it does not. This is the single source of truth for scope-
+ * evidence validity: the boolean predicate below and the `validate-review-artifact`
+ * CLI gate both call it, so a reviewer gets the fix at the CLI instead of a silent
+ * rejection.
+ *
+ * Fine-grained basis→reference narrowing is kept ONLY for OUT_OF_SCOPE, because
+ * OUT_OF_SCOPE is the nonblocking branch and its `reference` feeds the non-empty
+ * slot check below — a `non_goal` exclusion must cite the `non_goals` slot it
+ * claims to be excluded by, and that slot must be non-empty. IN_SCOPE `reference`
+ * feeds no gate decision (routing is f(scope, verdict, priority)), so no narrowing
+ * is imposed there.
+ */
+function scopeEvidenceReferenceProblem(
 	finding: CodeReviewFinding,
 	state: Partial<GoalState>,
-): boolean {
-	const reference = finding.scope_evidence.reference;
-	const storyIds = new Set(
-		(state.stories ?? []).filter((s) => s.status === "confirmed").map((s) => s.id),
-	);
-	if (
-		!["outcome", "verification_surface", "constraints", "boundaries", "non_goals"].includes(
-			reference,
-		) &&
-		!storyIds.has(reference)
-	)
-		return false;
-	const allowed: Record<ReviewScope, string[]> = {
-		IN_SCOPE: ["requirement", "regression"],
-		OUT_OF_SCOPE: ["non_goal", "unrelated"],
-		UNKNOWN: ["uncertain"],
-	};
-	if (!allowed[finding.scope].includes(finding.scope_evidence.basis)) return false;
-	if (
-		finding.scope === "IN_SCOPE" &&
-		finding.scope_evidence.basis === "requirement" &&
-		!["outcome", "verification_surface"].includes(reference) &&
-		!storyIds.has(reference)
-	)
-		return false;
-	if (
-		finding.scope === "IN_SCOPE" &&
-		finding.scope_evidence.basis === "regression" &&
-		!["constraints", "boundaries", "outcome"].includes(reference) &&
-		!storyIds.has(reference)
-	)
-		return false;
-	if (
-		finding.scope === "OUT_OF_SCOPE" &&
-		finding.scope_evidence.basis === "non_goal" &&
-		reference !== "non_goals"
-	)
-		return false;
-	if (
-		finding.scope === "OUT_OF_SCOPE" &&
-		finding.scope_evidence.basis === "unrelated" &&
-		reference !== "outcome"
-	)
-		return false;
+): string | null {
+	const { basis, reference } = finding.scope_evidence;
+	const storyIds = (state.stories ?? [])
+		.filter((s) => s.status === "confirmed")
+		.map((s) => s.id);
+	const storyHint = storyIds.length ? `, or a confirmed story id (${storyIds.join(", ")})` : "";
+
+	if (!SCOPE_SLOTS.includes(reference) && !storyIds.includes(reference))
+		return `reference "${reference}" does not resolve to a contract slot (${SCOPE_SLOTS.join(", ")})${storyHint}`;
+	if (!ALLOWED_BASIS_BY_SCOPE[finding.scope].includes(basis))
+		return `basis "${basis}" is not valid for scope ${finding.scope}; use one of: ${ALLOWED_BASIS_BY_SCOPE[finding.scope].join(", ")}`;
+
 	if (finding.scope === "OUT_OF_SCOPE") {
+		if (basis === "non_goal" && reference !== "non_goals")
+			return `OUT_OF_SCOPE + non_goal must reference "non_goals" (the non-goal it is excluded by), not "${reference}"`;
+		if (basis === "unrelated" && reference !== "outcome")
+			return `OUT_OF_SCOPE + unrelated must reference "outcome" (compared against the approved outcome), not "${reference}"`;
 		const slotValue =
 			reference === "outcome"
 				? state.outcome
@@ -1670,9 +1674,55 @@ function isScopeEvidenceReferenceValid(
 							: reference === "verification_surface"
 								? state.verification_surface
 								: undefined;
-		if (slotValue === undefined || slotValue.trim() === "") return false;
+		if (slotValue === undefined || slotValue.trim() === "")
+			return `OUT_OF_SCOPE reference "${reference}" points at an empty contract slot; the excluding slot must be non-empty`;
 	}
-	return true;
+	return null;
+}
+
+function isScopeEvidenceReferenceValid(
+	finding: CodeReviewFinding,
+	state: Partial<GoalState>,
+): boolean {
+	return scopeEvidenceReferenceProblem(finding, state) === null;
+}
+
+/**
+ * Pre-publish gate backing the `validate-review-artifact` CLI: reports every
+ * scope-evidence problem (and a stale contract hash) with an actionable message,
+ * so a reviewer catches a wrong value at the CLI rather than after a full review
+ * has degraded silently. `ok` is true only when the artifact would pass the gate.
+ */
+export function validateReviewArtifact(sessionId: string): { ok: boolean; problems: string[] } {
+	const state = readGoalStateRaw(sessionId);
+	if (!state) return { ok: false, problems: ["no goal state for this session"] };
+	const reviewed = readCodeReviewArtifactRaw(sessionId);
+	if (!reviewed)
+		return { ok: false, problems: ["no valid code-review artifact (missing or schema-invalid)"] };
+	const problems: string[] = [];
+	if (reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(state))
+		problems.push("scope_contract_sha256 is stale — re-copy the current [SCOPE_CONTRACT] hash and re-publish");
+	reviewed.artifact.findings.forEach((f, i) => {
+		const problem = scopeEvidenceReferenceProblem(f, state);
+		if (problem !== null) problems.push(`finding[${i}]${f.ref ? ` (${f.ref})` : ""}: ${problem}`);
+	});
+	return { ok: problems.length === 0, problems };
+}
+
+/**
+ * Graded degradation (partial invalidation): a finding whose scope evidence does
+ * not validate against the current contract is no longer trusted at its stated
+ * scope — it degrades to a blocking UNKNOWN, so a single malformed finding still
+ * fails closed (never-false-complete) WITHOUT nulling the whole review result and
+ * hiding its valid siblings. Valid findings pass through unchanged. Every
+ * scope-evidence consumer (result reducer, completion eligibility, user dismissal)
+ * routes findings through here so the degradation is uniform.
+ */
+function effectiveReviewFinding(
+	finding: CodeReviewFinding,
+	state: Partial<GoalState>,
+): CodeReviewFinding {
+	return isScopeEvidenceReferenceValid(finding, state) ? finding : { ...finding, scope: "UNKNOWN" };
 }
 
 /**
@@ -1859,8 +1909,6 @@ export function dismissReviewFinding(
 			const reviewed = readCodeReviewArtifactRaw(sessionId);
 			if (reviewed === null) return false;
 			if (reviewed.artifact.scope_contract_sha256 !== scopeContractSha256(prior)) return false;
-			if (!reviewed.artifact.findings.every((f) => isScopeEvidenceReferenceValid(f, prior)))
-				return false;
 			const artifactSha = sha256(reviewed.raw);
 			// EXACTLY one match, not at-least-one. A dismissal is keyed by (artifact bytes,
 			// ref, class) and findings carry no identity of their own, so two DISTINCT
@@ -1872,9 +1920,14 @@ export function dismissReviewFinding(
 			// match; the sole match must be CONFIRMED. PLAUSIBLE requires independent
 			// adjudication, UNKNOWN cannot be cleared by dismissal, and excluded observations
 			// need no authorization to remain outside the repair list.
-			const matches = reviewed.artifact.findings.filter(
-				(f) => f.scope === "IN_SCOPE" && f.class === opts.class && f.ref === opts.ref && classifyReviewFindingOutcome(f) === "BLOCK",
-			);
+			// Match on the degraded form: a finding whose scope evidence is invalid is
+			// coerced to UNKNOWN (effectiveReviewFinding) and so never matches an
+			// IN_SCOPE dismissal — its untrustworthy scope label cannot authorize a clear.
+			const matches = reviewed.artifact.findings
+				.map((f) => effectiveReviewFinding(f, prior))
+				.filter(
+					(f) => f.scope === "IN_SCOPE" && f.class === opts.class && f.ref === opts.ref && classifyReviewFindingOutcome(f) === "BLOCK",
+				);
 			if (matches.length !== 1 || matches[0].verdict !== "CONFIRMED") return false;
 
 			const dismissed = readDismissals(prior);
@@ -2575,6 +2628,15 @@ function main(): void {
 			if (!result.allowed) process.exit(1);
 		} else if (subcommand === "get-review-result") {
 			process.stdout.write(JSON.stringify(getReviewResult(sessionId)) + "\n");
+		} else if (subcommand === "validate-review-artifact") {
+			const result = validateReviewArtifact(sessionId);
+			if (result.ok) {
+				process.stdout.write("valid: review artifact scope evidence matches the current contract\n");
+			} else {
+				process.stderr.write("validate-review-artifact: refused — fix each problem below and re-publish:\n");
+				for (const p of result.problems) process.stderr.write(`  - ${p}\n`);
+				process.exit(1);
+			}
 		} else if (subcommand === "record-comment-resolution") {
 			const hash = str(args["artifact-sha256"]);
 			const rawEvidence = str(args["evidence"]);
@@ -2797,7 +2859,7 @@ function main(): void {
 			process.stdout.write(JSON.stringify(serializeReviewContext(sessionId)) + "\n");
 		} else {
 			process.stderr.write(
-				"Usage: ultragoal-state.ts <set|set-verdict|set-budget-limited|resume-pursuit|set-blocked|request-complete|claim-review-dispatch|get-review-result|record-comment-resolution|approve-review-dispatch-renewal|dismiss-review-finding|get|status|list-others|adopt|set-stories|confirm-story|confirm-all-stories|reorder-stories|revise-story|add-story|retire-story|split-story|serialize-requirements|serialize-review-context> [options]\n",
+				"Usage: ultragoal-state.ts <set|set-verdict|set-budget-limited|resume-pursuit|set-blocked|request-complete|claim-review-dispatch|get-review-result|record-comment-resolution|approve-review-dispatch-renewal|dismiss-review-finding|validate-review-artifact|get|status|list-others|adopt|set-stories|confirm-story|confirm-all-stories|reorder-stories|revise-story|add-story|retire-story|split-story|serialize-requirements|serialize-review-context> [options]\n",
 			);
 			process.exit(1);
 		}

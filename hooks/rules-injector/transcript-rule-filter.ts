@@ -1,7 +1,7 @@
-import { transcriptHasRuleMarker } from "./rules/index.js";
+import { ruleMarkerLine, transcriptHasRuleMarker } from "./rules/index.js";
 import type { LoadedRule } from "./rules/index.js";
 import type { TranscriptSearchOptions } from "./transcript-search.js";
-import { readTranscriptSearchText } from "./transcript-search.js";
+import { queryTranscriptRuleCache } from "./transcript-rule-cache.js";
 
 export function filterRulesAlreadyInTranscript(
 	rules: ReadonlyArray<LoadedRule>,
@@ -13,8 +13,23 @@ export function filterRulesAlreadyInTranscript(
 		return [...rules];
 	}
 
-	const transcriptText = readTranscriptSearchText(transcriptPath, options);
-	return filterRulesNotInTranscriptText(rules, transcriptText, markInjected);
+	const present = queryTranscriptRuleCache(
+		transcriptPath,
+		rules.map((rule) => ({
+			body: rule.body,
+			marker: [ruleMarkerLine(rule.path), ruleMarkerLine(rule.realPath)],
+		})),
+		options,
+	);
+	const pendingRules: LoadedRule[] = [];
+	for (const [index, rule] of rules.entries()) {
+		if (present[index] === true) {
+			markInjected(rule);
+		} else {
+			pendingRules.push(rule);
+		}
+	}
+	return pendingRules;
 }
 
 export function filterRulesNotInTranscriptText(

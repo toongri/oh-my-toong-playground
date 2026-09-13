@@ -32,7 +32,7 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 - 리뷰 candidate를 CONFIRMED / PLAUSIBLE / REFUTED 세 등급으로 판정
 - 검증을 통과한 finding에 class(`correctness`/`regression`/`cleanup`/`requirement-gap`, 앵글과 1:1)와 impact(`HIGH`/`MEDIUM`/`LOW`)를 배정합니다. impact는 발생했을 때의 순수한 해악만 나타내며 class·앵글, 발생 가능성·노출도, 패치 크기·유지보수 비용을 대리값으로 쓰지 않습니다.
 - 최종 priority(`HIGH`/`MEDIUM`/`LOW`)는 실제 발생 가능성·노출도·해악을 최소 remedy가 만드는 영구적 복잡성·유지보수 부담·회귀 위험과 비교해 정합니다. 구현 난이도나 작업량만으로 priority를 낮추지 않습니다.
-- `COMPLETE`의 모든 finding에는 비어 있지 않은 `assessment` 다섯 필드(`unfixed_cost`, `exposure`, `remedy`, `added_cost`, `rationale`)가 필요합니다. 숫자 confidence는 conductor의 내부 검증에만 쓰며 grading이나 완료 판정 기준이 아닙니다.
+- `COMPLETE`의 모든 finding에는 비어 있지 않은 `assessment` 다섯 필드(`unfixed_cost`, `exposure`, `remedy`, `added_cost`, `rationale`)가 필요합니다. 리뷰어가 모든 후보를 직접 검증하며, 숫자 confidence나 verifier 하위 에이전트를 사용하지 않습니다.
 - 카드 전문(7필드)을 `$OMT_DIR/code-review/<sid>/findings.md`로 영속 — 사후 재판정의 근거
 - effort 수준에 따라 단순화·재사용·효율화 항목도 포함 가능
 

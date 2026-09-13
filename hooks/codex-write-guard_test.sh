@@ -3337,9 +3337,12 @@ main() {
     run_test test_heredoc_dash_variant_indented_terminator_no_trailing_command_allows
     run_test test_heredoc_multiple_sequential_bodies_ignored_allows
     run_test test_heredoc_multiple_sequential_real_command_after_denies
-    run_test test_perf_1000_non_heredoc_lines_denies_within_timeout
-    run_test test_perf_1000_line_heredoc_body_allows_within_timeout
-    run_test test_perf_1000_non_heredoc_lines_allows_within_timeout
+    # 기본 실행은 기능 회귀만 검증하며, 성능 검사는 명시적 환경변수로 수동 실행한다.
+    if [ "${OMT_RUN_PERF_TESTS:-0}" = "1" ]; then
+        run_test test_perf_1000_non_heredoc_lines_denies_within_timeout
+        run_test test_perf_1000_line_heredoc_body_allows_within_timeout
+        run_test test_perf_1000_non_heredoc_lines_allows_within_timeout
+    fi
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

@@ -794,3 +794,32 @@ describe("H6: issues that predate the contract", () => {
 		);
 	});
 });
+
+describe("Delegated Parent Handoff: canonical designAnchor carrier", () => {
+	test("defines one portable labeled carrier on the PM parent", () => {
+		expect(issueCraftMd).toContain("**Design Anchor:** `design-anchor: deep-interview:<state.interview_id>`");
+		expect(issueCraftMd).toContain("one canonical `Design Anchor` carrier");
+		expect(skillMd).toContain(
+		"```text\n**Design Anchor:** `design-anchor: deep-interview:<state.interview_id>`\n```",
+	);
+	});
+
+	test("requires the carrier to be written before a successful handoff", () => {
+		expect(issueCraftMd).toContain("canonical `Design Anchor` carrier through the PM write binding");
+		expect(issueCraftMd).toContain("created parent carries the line once in its body");
+		expect(issueCraftMd).toContain("existing parent with no carrier receives one");
+	});
+
+	test("re-reads the exact carrier and rejects missing or mismatched values", () => {
+		expect(issueCraftMd).toContain("re-read the carrier byte-for-byte");
+		expect(issueCraftMd).toContain("carrier is missing after the required write");
+		expect(issueCraftMd).toContain("differs from the input `designAnchor` byte-for-byte");
+		expect(issueCraftMd).toContain("stop without returning a successful");
+	});
+
+	test("prevents duplicate carrier writes and converges all parent paths", () => {
+		expect(issueCraftMd).toContain("supplied, found, enriched, and created parent paths all");
+		expect(issueCraftMd).toContain("Never write a second");
+		expect(skillMd).toContain("exactly one verified `parentId`");
+	});
+});

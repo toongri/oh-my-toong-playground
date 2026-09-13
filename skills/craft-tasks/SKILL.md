@@ -1,6 +1,6 @@
 ---
 name: craft-tasks
-description: Use when a design is already settled (intent, approach, invariants, and boundary decided — typically after deep-interview) and it must be broken into concrete implementation tasks filed as shareable child tickets in the PM tool (Linear sub-issue / Notion / Jira) for the team to track. Triggers include "작업 분해", "task로 쪼개서 티켓 만들어", "설계 끝났으니 sub-issue로 나눠줘", "이 설계 실행 단위로 만들어", "decompose the design into tasks", "break this into tickets", "file the work items". NOT for requirement-stage WHAT slicing (that is craft-issue), and NOT for an AI-execution plan doc (that is prometheus).
+description: Use when a settled design needs decomposition into team-tracked implementation tasks, or those tasks need updating after confirmed decisions. Triggers include "작업 분해", "작업 티켓 최신화", "task로 쪼개서 티켓 만들어", "decompose the design into tasks", and "update task tickets". Not for open requirements or an AI-only execution plan.
 ---
 
 # Craft-Tasks — Post-Design Work-Decomposition Pipeline
@@ -25,7 +25,7 @@ craft-tasks is the **output-materializer** of the design core: deep-interview se
 - **NOT** when the requirement/WHAT is still open, or no design exists yet → that is **craft-issue** (it produces the requirement unit; it must run before this).
 - **NOT** when you only need an AI-execution plan, not team-facing tickets → that is **prometheus**.
 
-**REQUIRED BACKGROUND:** the design contract and PM-tool write machinery this skill reuses live in `craft-issue` (`../craft-issue/references/issue-craft.md`). This skill owns the *decomposition judgment*; it borrows craft-issue's *write tail*.
+**REQUIRED BACKGROUND:** the design contract and PM-tool write machinery this skill reuses live in `craft-issue` (`../craft-issue/references/issue-craft.md`). This skill owns decomposition and task maintenance. Issue/parent handling belongs to craft-issue; only shared PM mechanics are reused for task writes.
 
 ---
 
@@ -102,7 +102,7 @@ A task title names the **concrete change this task makes**, in the team's workin
 
 ### Body — reader-facing prose only
 
-Each task body carries exactly these three sections, in the team's working language, and **nothing else**:
+New task bodies carry exactly these three sections, in the team's working language. Existing task updates maintain these sections while preserving contributor records (see Task maintenance):
 
 - **목적** — what this task delivers toward the settled design (one or two sentences; cite the design decision it implements).
 - **변경 대상** — the component / layer / files this touches. Observational, evidence-backed (from the design's boundary map). This IS allowed here — unlike craft-issue, a task legitimately states HOW.
@@ -111,9 +111,9 @@ Each task body carries exactly these three sections, in the team's working langu
 Everything else about a task is expressed through the PM tool's **native fields, not body prose**:
 
 - **Dependencies → native relation field, never body prose.** A sequenced task's predecessor is set through the PM tool's own relation (Linear `blockedBy` / `blocks`), which the team sees on the ticket and filters on. Never write a `## 의존` section or a "blocked by X" sentence in the body — a hard dependency described only in prose is invisible to the board. No hard dependency → no relation to set and nothing to write.
-- **Design anchor + parent link → structural metadata, never body prose.** The `designAnchor` (`design-anchor: deep-interview:<state.interview_id>`) lives once on the **parent** (in its settled-parent record; see the gates below) and reaches each child through the native **parent relation** (sub-issue → parent) — a child proves its anchor by belonging to the resolved anchor-bearing parent via `parentId`, so it needs no anchor string, comment, or per-child label of its own. The anchor is never a line of body text, and the child reaches its shared invariants through that same parent relation the reader clicks through — never through a prose sentence like "부모 X의 설계 확정 코멘트 참조". Both the raw anchor string and any "see the parent comment" boilerplate are leaks; keep them out of the body.
+- **Design anchor + parent link → native parent relation.** Each child inherits the verified design association through `parentId`; put no raw anchor string, per-child anchor label, or "부모 X의 설계 확정 코멘트 참조" boilerplate in its body.
 
-**Shared design invariants are single-sourced on the parent.** Cross-cutting rules (the design's invariants, shared definitions) live once on the **parent** unit; each task inherits them through the native parent relation rather than re-declaring or prose-referencing them — the same Tier-A placement craft-issue uses. This keeps the invariant single-sourced so tasks cannot drift it.
+Use the shared design context resolved through craft-issue. Parent definitions and shared-context placement belong to craft-issue.
 
 ### Example — a settled parent design and one child ticket
 
@@ -123,15 +123,15 @@ Everything else about a task is expressed through the PM tool's **native fields,
   - **변경 대상** — `tools/sync.ts`의 `skills.items` 해석·배포 대상 수집 로직과 `tools/sync.test.ts`의 중복·누락·순환 참조 테스트.
   - **완료 조건 (DoD)** — `skills.items: [craft-tasks]`에서 시작해 참조된 스킬을 중복 없이 배포 대상에 포함하고 폐쇄 밖의 스킬은 포함하지 않는다(검증: `bun test tools/sync.test.ts`). 누락·순환 참조는 부분 배포 없이 명시적 오류로 실패한다(검증: `bun test tools/sync.test.ts`).
 
-(The body contains only the three sections above. Do not write dependencies, anchors, or parent links in the body — with no hard dependency, leave the relation field unset too; the anchor lives only in the parent's settled-parent record, and the child inherits it through `parentId`.)
+(The body contains only the three sections above. Do not write dependencies, anchors, or parent links in the body — with no hard dependency, leave the relation field unset too; the child inherits its verified design association through `parentId`.)
 
 ---
 
 ## Write Tail — reuse only applicable craft-issue Stage 6 mechanics
 
-craft-issue's Stage 6 is not copied wholesale. Reuse only the applicable **plain-language/humanizer** pass, the **append-only** history contract, the **abstract relation/label/write mechanics**, and the **runtime binding**. The design-anchor and parent/child gates below are owned by craft-tasks.
+For task writes, reuse the **plain-language/humanizer** pass, **abstract relation/label/write mechanics**, and **runtime binding**. Task maintenance below owns the task update policy.
 
-Do not reuse **WHAT-only slicing** or the **mandatory issue-reviewer Checklist Review Gate**. craft-tasks v1 has **no automated task reviewer**; the mandatory issue-reviewer gate is not applicable and must not run here.
+Tasks have **no automated task reviewer**: WHAT-only slicing and the mandatory issue-reviewer Checklist Review Gate do not apply to task bodies. **craft-issue runs its own workflow for delegated issue/parent work**, including its applicable review gates.
 
 ### Design-anchor gate
 
@@ -139,54 +139,172 @@ The handoff carries one immutable shared metadata value in `designAnchor`:
 `designAnchor: "design-anchor: deep-interview:<state.interview_id>"`.
 Accept only the exact canonical value `design-anchor: deep-interview:<state.interview_id>`, where `<state.interview_id>` is the non-empty identifier persisted in the settled spec's `state.interview_id`. Reject a **missing or invalid anchor** — including an anchor derived from a title, slug, timestamp, or hash — **before any child-tree/create** operation.
 
-### Settled-parent record shape
-
-Use one **settled-parent record** for every `supplied`, `found`, `enriched`, and `created` parent branch:
-
-```text
-designAnchor: "design-anchor: deep-interview:<state.interview_id>"
-goal: "<settled goal>"
-approach: "<settled approach>"
-invariants: "<settled invariants>"
-boundary: "<settled boundary>"
-canonicalExternalDesignUrl: "<canonical external design URL, or none>"
-```
-
-The record carries the exact `designAnchor`, settled goal, approach, invariants, boundary, and canonical external design URL. It is the one shape used for supplied, found, enriched, and created branches. For an existing parent, missing fields are completed append-only; new parents persist the complete shape.
-
-The local spec path is input-only: use it to read the settled spec, never to populate a write. Any parent or child body or comment must contain portable inline context or a canonical external URL; never `$OMT_DIR`, a machine-local path, or `file://`. If no canonical external design URL exists, keep the settled context inline rather than emitting a local path.
-
 ### Parent-resolution gate
 
-After the design-anchor gate and before reading any child tree or creating any child, establish exactly one verified parent:
+**REQUIRED SUB-SKILL: Use craft-issue** whenever an issue or parent needs handling, including finding, creating, supplementing, or updating it. Invoke the repository canonical chained skill literally with `Skill(skill: "craft-issue")`. Carry this handoff to it:
 
-1. If the handoff includes a `parentId` or parent URL, re-read it in the PM tool and first verify that it is a real existing parent record in the parent role.
-   - If it lacks a `designAnchor`, verify that it is a real existing legacy WHAT parent with no `designAnchor`; handle this branch before applying the exact-anchor requirement. If it is not a real existing legacy WHAT parent, stop. Do not replace a verified legacy parent. Then enrich it once, append-only, by adding one append-only design-handoff comment carrying the settled-parent record: the exact anchor, settled goal, approach, invariants, boundary, and canonical external design URL; never use a local session path, `$OMT_DIR` path, or `file://` URL in that comment. Then re-read effective state; continue only after the exact anchor is present.
-   - For an existing parent with a non-empty `designAnchor`, apply the exact-anchor requirement: it must **match the exact anchor** through the exact `designAnchor`. An existing parent with a non-empty different anchor remains a hard stop. Complete any other missing settled-parent fields append-only.
-2. With no supplied candidate, use a **parent-only search** by the exact settled design anchor. Filter PM search results to verified parent records/parent role before applying the exactly-one cardinality rule. Children sharing an anchor must never be adopted as a parent. Adopt exactly one verified match and stop on cardinality ambiguity. For a found parent, complete missing settled-parent fields append-only. If no match exists, create one parent from the complete settled-parent record. A new parent persists the same anchor and the complete settled-parent record.
-3. **Re-read and verify effective state after append/create** for the supplied, found, enriched, or created parent. Continue only when it resolves to one verified `parentId` whose effective state contains the exact anchor and complete settled-parent record; every child must use that same resolved `parentId`.
+```text
+parentId: "<known parent ID or URL, when available>"
+designAnchor: "design-anchor: deep-interview:<state.interview_id>"
+settledContext: "<settled design context, inline or canonical external URL>"
+```
 
-Any ambiguity, mismatch, append failure, re-read failure, or interruption stops before child creation. Do not create a replacement or duplicate parent; re-search only after the interrupted or failed operation is recoverable, and proceed only with one verified match.
+Include `parentId` when known, preserve the exact `designAnchor`, and pass the settled design context. craft-issue owns the handling policy and record shape; use its current instructions.
+
+Before reading the child tree, re-read the returned `parentId` and verify that it identifies one parent associated with the exact `designAnchor` and accessible settled context. An already verified handoff needs no redundant parent write. Any ambiguity, mismatch, failure, or interruption stops child processing; return the issue/parent handling to craft-issue. Every child uses that verified `parentId`.
+
+The local spec path is input-only. Outgoing bodies, comments, and delegated write context use portable inline evidence or a canonical external URL; never `$OMT_DIR`, a machine-local path, or `file://`. When no external design URL exists, pass the settled context inline.
 
 ### Existing-child / duplicate gate
 
-After the parent-resolution gate, and before any child create, read the verified parent's current child tree and use the organized-tree pattern: **validate → enrich → gap-fill**.
+After the parent-resolution gate, and before any child create, read the verified parent's current child tree and use the organized-tree pattern: **validate → update → gap-fill**.
 
-- Match each intended task to an existing child by this rule: **identity is the exact tuple: anchor + purpose + changed target**; **title alone is insufficient**. A child that cannot prove the exact anchor is not a match; treat a possible legacy match as an ambiguity and stop rather than creating a replacement.
-- **Every child carries the same anchor and `parentId`** — the anchor is inherited through the native parent relation (the child belongs to the resolved anchor-bearing parent via `parentId`), not stamped on the child as its own label, comment, or **body prose** (see Task Title & Body Shape). For matched children, preserve/enrich matched tickets append-only; never rewrite their bodies.
+#### Immutable child identity
+
+Every child task has a non-empty opaque immutable `taskKey`, distinct from `designAnchor`, `parentId`, title, purpose, changed target, slug, timestamp, and hash. For a new genuine gap, generate the key once before creation from fresh opaque identity material; never derive it from mutable fields or shared identities, and never regenerate it during update or recovery. A new gap also gets a fresh opaque `createIntentId` distinct from `taskKey`; never derive or regenerate `taskKey`/`createIntentId` from `childId`, title, purpose, changed target, slug, timestamp, hash, `parentId`, anchor, list order, or body similarity.
+
+The task plan/handoff carries these per-child fields:
+
+```text
+taskKey: "<existing immutable key for a known task>"
+childId: "<verified PM child ID when known>"
+```
+
+taskKey: the existing immutable key for a known task; it is required when updating an existing child. childId: the verified PM child ID when known; it is optional when the task key is available. New gaps may omit taskKey only until craft-tasks generates it. The handoff may also carry `taskIdentities`, the prior result collection of `{ taskKey, childId }`, so a later maintenance run can preserve keys even when the caller does not know every child ID.
+
+Persist each generated key through the existing `create_comment` mechanism as one durable, portable, append-only identity comment, separate from reader-facing body sections and change comments. Use this canonical shape exactly:
+
+```text
+<!-- Task identity
+taskKey: <opaque immutable task key>
+-->
+```
+
+Never put identity metadata in body prose or machine-local paths in comments/handoffs. A missing or mismatched identity comment is not a successful create/update.
+
+#### Durable create-intent protocol
+
+The bundled script is the runtime contract. Invoke it through `${CLAUDE_SKILL_DIR}`; its journal is session-scoped local orchestration state, not a PM field, comment, or idempotency primitive. Do not invent a PM field or idempotency primitive: there is no invented PM field or idempotency primitive. The exact command names are `list --pending`, `list --reconciliation`, `create-prepare`, `create-child`, `create-complete`, `manual-reconciliation`, `manual-reconciliation-missing`, `quarantine-journal`, `receipt-ack`, `update-prepare`, `update-mutation-written`, `update-complete`, and `get`. The create commands are create-prepare, create-child, and create-complete; the manual stop commands are manual-reconciliation, manual-reconciliation-missing, and quarantine-journal. `list --pending` is read-only and returns deterministic JSON entries for every intent that still needs a receipt acknowledgment across `$OMT_DIR/task-write-journal-<safeSessionId>.json`, including `sourceSessionId`, `intentId`, `kind`, `state`, `parentId`, `designAnchor`, and `childId` when present; terminal `complete` and `manual-reconciliation-required` intents remain listed, and create entries also expose `taskKey`. Malformed matching journals are returned as explicit error entries with `sourceSessionId`.
+
+The commands `get`, `create-child`, `create-complete`, `update-mutation-written`, `update-complete`, `manual-reconciliation`, `manual-reconciliation-missing`, `quarantine-journal`, and `receipt-ack` accept the optional `--source-session <sessionId>` argument after the command's normal positional arguments. `create-prepare`, `update-prepare`, and `list` reject `--source-session`; prepare always creates in the current session, and list scans all sessions. For example:
+
+```sh
+bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" list --pending
+bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" get <intentId> --source-session <sourceSessionId>
+```
+
+Without `--source-session`, these commands use the current session exactly as before. With it, the session ID must be safe and the command reads or writes only that source journal; there is no automatic fallback across sessions. A quarantined source session is sealed: prepare commands cannot write to it, and recovery must use a new session. Recovery never infers or replaces a child identity.
+
+For every genuine gap, generate the opaque `taskKey` and prepare the exact proposed creation payload that will be sent to `save_issue`. `create-prepare` requires nested `creationPayload` containing the exact fields for the selected PM binding; when Linear is selected, use `title`, `description`, and optional `blockedBy` as an optional array of predecessor task IDs (omit `blockedBy` when there is no dependency). Other selected PM bindings retain their native creation fields. This journal write happens before `save_issue`, so call `create-prepare` and wait for its JSON result:
+
+```sh
+printf '%s\n' '{"parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>","creationPayload":{"title":"<exact task title>","description":"<exact task description>","blockedBy":[<optional predecessor task IDs>]}}' \
+  | bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" create-prepare
+```
+
+The caller supplies the exact proposed PM-native fields for the selected binding inside `creationPayload`; when Linear is selected, these are `title`, `description`, and optional `blockedBy`. The journal strips orchestration-only `designAnchor` and any caller-supplied `identityComment` from that nested payload, verifies the `parentId`, and `createPrepare` injects the verified `parentId`, generates the opaque `taskKey`, stores and returns the resulting `creationPayload`, and keeps `identityComment` separate from `creationPayload`. If the proposed payload already contains a different `parentId`, `create-prepare` rejects it. Verify that `parentId` is injected in the returned `creationPayload`. Pass the returned `creationPayload` unchanged to `save_issue`. Use the returned `identityComment` as the comment body passed separately to `create_comment`; never add it to the `save_issue` payload. Do not supply an arbitrary identity comment or replace the returned one. Keep identity metadata out of the reader-facing body; do not put identity metadata in the reader-facing body. Use the returned `createIntentId` to call `save_issue` only after the journal result has been persisted with state `prepared`.
+
+After `save_issue` returns a child, verify its `parentId` and exact `designAnchor`. Only after that verified result, call `create-child` with the returned `childId`, the verified `parentId`, and the exact anchor. This changes the journal to state `child-created`:
+
+```sh
+printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>"}' \
+  | bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" create-child <createIntentId>
+```
+
+Then pass the returned `identityComment` unchanged to `create_comment` as a separate comment write. Re-read the child and its exact PM-native creation fields, plus the canonical identity comment. The caller projects the exact re-read create fields into nested `creationPayload`, including the injected verified `parentId`. The create-complete input is the verified association plus that nested `creationPayload` and a separate `identityComment`. Call `create-complete` only when all required re-reads pass with those values; this marks the intent `complete`, so mark the intent `complete` only after those re-reads.
+
+```sh
+printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>","creationPayload":{"title":"<re-read title>","description":"<re-read description>","blockedBy":[<re-read predecessor task IDs, when any>],"parentId":"<verified parent ID>"},"identityComment":"<re-read canonical identity comment>"}' \
+  | bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" create-complete <createIntentId>
+```
+
+`create-complete` receives the verified association, the nested exact `creationPayload` projected from the PM re-read, and a separate `identityComment`. The completion `creationPayload` includes the injected verified `parentId`. The `identityComment` is a separate verification field. It first verifies that the stored `identityComment` is exactly the canonical comment derived from the intent's `taskKey`, then deep-compares the whole `creationPayload` with the stored `creationPayload` and separately deep-compares the re-read `identityComment` with the stored identity comment. An arbitrary or mismatched identity comment cannot complete the intent. If the `create_comment` response is lost, re-read the canonical identity comment before `create-complete`; specifically, re-read the exact canonical identity comment before `create-complete`. If the exact comment is already present and valid, never writes a duplicate: use the existing verified child and complete the journal without duplicating the comment after the required re-reads. If no verified `childId`/result exists, call `manual-reconciliation` with a nonblank reason and stop. Do not infer a child from title, description, time, or tree position, and do not create a replacement. Replaying `create-complete` with the identical verified association, exact `creationPayload`, and exact `identityComment` is idempotent and returns the already-complete intent.
+
+On create-intent recovery, use only a verified intent-to-child association. When the create intent records a `childId`, verify its parent and exact anchor, then retry only missing identity/comment writes. If the intent has no `childId`/result, use a documented PM idempotency/client-request lookup only when that PM primitive actually exists; otherwise surface `manual-reconciliation-required` and stop. An unreadable source stops safely without a replacement child. Never create a replacement for an uncertain partial child.
+
+Terminal `complete` and `manual-reconciliation-required` intents remain durable in the journal and continue to appear in `list --pending` until an explicit `receipt-ack`. The caller must durably retain the `taskIdentities` result from every create/update or recovery, then acknowledge the exact receipt: use the exact `parentId` and `designAnchor`, plus the create `taskKey` and exact optional `childId` (or the update `childId`). `receipt-ack` alone compacts/unlinks the acknowledged intent; it does not perform PM writes. Task journals and recovery artifacts are excluded from generic `SESSION_ARTIFACT_PREFIXES` TTL deletion; their recognized names are recognition-only to the state-liveness unclassified-file classifier. Preserve them for explicit recovery.
+
+The lock claim owner is fully initialized before atomic publication; retry transient empty release. A stale empty legacy lock may be reclaimed. Preserve malformed or live owner locks and fail acquisition boundedly when they remain held.
+
+#### Durable update-intent protocol
+
+For a meaningful body or native-relation mutation, first prepare the exact before/after delta and the required change comment. The update commands are update-prepare, update-mutation-written, and update-complete. Before any meaningful body/relation mutation, call `update-prepare` with the exact `childId`, verified `parentId`, exact `designAnchor`, `before`, `after`, and `changeComment`; wait for its JSON result with state `prepared`. This is before any meaningful body/relation mutation:
+
+```sh
+printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>","before":{"body":"<old body>","relations":[<old relations>]},"after":{"body":"<new body>","relations":[<new relations>]},"changeComment":"<exact change comment>"}' \
+  | bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" update-prepare
+```
+
+The exact update fields are `before`, `after`, `changeComment`, `body`, and `relations`; they are persisted change context, not reader-facing identity metadata. After the PM body/relation mutation and the change comment write, call `update-mutation-written` with the verified association; this is after the PM mutation:
+
+```sh
+printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>"}' \
+  | bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" update-mutation-written <updateIntentId>
+```
+
+Re-read the child body, native relations, and change comment. Call `update-complete` only after the body/relations/change-comment re-read passes, using the exact re-read values:
+
+```sh
+printf '%s\n' '{"childId":"<verified child ID>","parentId":"<verified parent ID>","designAnchor":"design-anchor: deep-interview:<state.interview_id>","body":"<re-read body>","relations":[<re-read relations>],"changeComment":"<re-read change comment>"}' \
+  | bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" update-complete <updateIntentId>
+```
+
+Journal `complete` means all required re-reads passed. A successful PM mutation alone never means complete. On interruption, use `get` to inspect the existing intent, preserve its recorded change context, and perform only missing writes. child-tree rematching is allowed only for an existing verified identity; it is never a way to discover an uncertain new child, never to discover an uncertain new child.
+
+#### Recovery and manual stop
+
+Recovery starts by selecting the `sourceSessionId` from the pending list, then reading that exact journal with `get --source-session <sourceSessionId>`:
+
+```sh
+bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" list --pending
+bun "${CLAUDE_SKILL_DIR}/scripts/task-write-journal.ts" get <intentId> --source-session <sourceSessionId>
+```
+
+Current-session `get <intentId>` remains the default when no source session is supplied. Use the same explicit `--source-session <sourceSessionId>` on `create-child`, `create-complete`, `update-mutation-written`, `update-complete`, `manual-reconciliation`, `manual-reconciliation-missing`, `quarantine-journal`, or `receipt-ack` when transitioning an intent found in another session. There is no automatic fallback, journal copying, or replacement creation. A `child-created` create intent may retry only the missing exact identity comment after verifying its recorded `childId`, parent, and anchor. An update intent in `mutation-written` may retry only the missing body, relation, or change-comment write using its persisted before/after delta and comment. Re-run the corresponding completion command only after the required re-reads pass. Route recovery by source state: an existing readable intent uses ordinary `manual-reconciliation`; a readable journal with a missing intent ID uses `manual-reconciliation-missing <intentId>` with a nonblank reason, recording an idempotent terminal receipt without changing the unrelated journal; malformed JSON or malformed journal shape uses `quarantine-journal` with a nonblank reason, preserving the exact bytes as a quarantine artifact and recording a terminal receipt. Filesystem/I/O unreadable errors are surfaced and stop without rename, receipt creation, or other mutation. A quarantined session is sealed and prepare must use a new session. `list --reconciliation` deterministically exposes missing-ID receipts, quarantine receipts, orphan quarantine artifacts, and malformed receipt errors. Manual reconciliation is terminal; it records the stop and never creates a replacement.
+
+Match in this order: supplied verified `childId` first, then `taskKey` plus the verified shared `parentId` and exact `designAnchor`. Verify the matched child still belongs to that parent and anchor before writing. **purpose and changed target are mutable work-definition fields, not identity fields**; an existing task with the same `taskKey` updates in place when either changes. A different `taskKey` is a genuine gap. Never match by title. Never match by purpose. Never match by changed target. Never match by slug. Legacy children with neither a verified childId nor taskKey stop as ambiguity rather than creating a replacement. A child that cannot prove the shared anchor is not a match.
+The matching input is a verified child ID or a stable task key. A stable-key match remains the same task when either purpose or changed target changes; title alone is insufficient. If the stable key or verified child ID is absent for a legacy task, stop with ambiguity.
+- **Every child carries the same anchor and `parentId`** through the native parent relation. For matched children, update the existing task body in place using Task maintenance below.
 - For gaps, create only unmatched gaps that are genuine coverage gaps. If a match is ambiguous, stop and surface the ambiguity instead of creating.
-- After every append/create, **re-read and verify effective state after append/create** before continuing. After an interruption or create failure, re-read the current child tree, rematch, and create only the remaining gaps; any re-read failure or interruption stops before another child is created.
+- After every create/update and on recovery, re-read the child and identity comment. Return a `taskIdentities` result containing `taskKey` and `childId` for every child; the next handoff carries that result. If identity is missing, inconsistent, or the re-read fails, stop without creating a replacement. After an interruption or failure, re-read the current child tree and comments, rematch using the same precedence, and complete only the missing writes. Verify the body, native relations, identity comment, and required change comment before declaring a task updated; a successful body write alone is not completion when its comment is missing. Reuse the recorded change context on recovery and do not duplicate an existing comment. Verify the body, relations, and required change comment before declaring completion.
 
 Only after this gate passes:
 
 - **Create each unmatched genuine gap as a real ticket** in the PM tool. Set `parentId` to the resolved parentId; set `blocked-by` for sequenced tasks; apply labels.
-- **Existing ticket → append comment, never rewrite the body** (craft-issue's Append-Only History Contract; Append Comment Shape in `../craft-issue/references/issue-craft.md`).
+- **Existing task → update in place**, with a change comment when Task maintenance requires one.
 - **Humanizer pass** on Korean reader-facing prose before the write (`Skill(humanizer)`), then write.
-- **Runtime tool binding** is resolved at write time (Linear MCP: `save_issue` to create, `parentId`, `blockedBy`, `create_comment` for an existing ticket) — same binding note as craft-issue.
+- **Runtime tool binding** is resolved at write time (Linear MCP: `save_issue` to create or update a task by ID, `parentId`, `blockedBy`, `create_comment` for change context) — same binding note as craft-issue.
+
+The task bodies contain only the three reader-facing sections above: `목적`, `변경 대상`, and `완료 조건 (DoD)`. Identity metadata stays in the canonical comment; do not put it in body prose or in machine-local paths in comments/handoffs.
+
+### Task maintenance
+
+**The task body is the current effective work definition. Change comments explain why it changed.** Re-read the body, comments, and relations before drafting. Preserve contributor notes, progress, and decisions; update affected work-definition sections instead of replacing the ticket from an old generated draft. If an existing decision conflicts with the supplied design and its supersession is unclear, treat it as unresolved.
+
+| Observed change | Action |
+|---|---|
+| No effective change | Leave the task unchanged; no duplicate comment. |
+| Typo or wording only, with unchanged meaning | Correct the body; no change comment required. |
+| Confirmed change to scope, responsibility, DoD, or dependencies | Update the affected body/native fields and append a meaningful change comment below. |
+| Unresolved decision or conflicting evidence | Record the open question, evidence, and decision needed without asserting a resolution. Route design choices to deep-interview and requirement questions to craft-issue; update the work definition after settlement. |
+
+Before a meaningful change, prepare its body/relation delta and comment together, then persist that exact before/after delta and comment with `update-prepare` before any PM mutation. After the PM mutation, persist the verified association with `update-mutation-written`; after the body/relations/change-comment re-read passes, use `update-complete`. The comment has three required parts in this order, using the team's language:
+
+- **계기** — the ambiguity, mismatch, or new information that triggered the revision.
+- **판단과 근거** — what was settled and the decision/source supporting it; distinguish a correction to match an existing decision from a new decision.
+- **변경과 영향** — what changed from before to after and the effect on ongoing work or related tasks. State unknown impact as unknown.
+
+Example change comment:
+
+> **계기:** 서버 검증 작업의 본문에 검증 주체가 클라이언트로 적혀 있어 담당 범위가 혼동됐다.
+> **판단과 근거:** 전달된 확정 설계의 “서버가 검증하고 클라이언트는 오류를 표시한다”에 맞춰 잘못된 설명을 정정했다.
+> **변경과 영향:** 목적과 완료 조건을 서버 검증 기준으로 수정했다. 클라이언트의 오류 표시 범위는 그대로이며 기존 마이그레이션 배포 완료 메모도 보존했다.
+
+The comment explains the delta; the body contains the resulting task definition. Dependency changes use native relations and receive the same context even when body text stays unchanged.
 
 ### The materialize-don't-propose loophole (inherited from craft-issue Stage 5)
 
-"Decompose into tasks" is a **write action** — create the child tickets in the PM tool. Listing the tasks as a **"proposed breakdown / 작업 분해 (제안)" section in the parent body instead of creating them is a FAILURE**, not compliance: the work stays un-trackable and the caller must re-ask. Create the tickets only after the settled-design and parent-resolution gates pass, using the resolved `parentId` for every child. **After the precondition gate passes**, the only thing that defers creation is an **explicit caller instruction not to create sub-issues**; that exception does not override an unsettled-design block.
+"Decompose into tasks" is a **write action** — create the child tickets in the PM tool. Listing the tasks as a **"proposed breakdown / 작업 분해 (제안)" section in the parent body instead of creating them is a FAILURE**, not compliance: the work stays un-trackable and the caller must re-ask. Create the tickets only after the settled-design and parent-resolution gates pass, using the resolved `parentId` for every child. **After all applicable gates pass**, the only thing that defers creation is an **explicit caller instruction not to create sub-issues**; that exception does not override an unsettled-design block.
 
 **Violating the letter (not materializing the tasks) is violating the spirit (the work stays un-trackable).**
 

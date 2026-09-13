@@ -32,7 +32,7 @@ oh-my-toong's review and quality skills systematically verify the completeness o
 - Classifies each finding candidate as CONFIRMED / PLAUSIBLE / REFUTED
 - Assigns each verified finding a class (`correctness`/`regression`/`cleanup`/`requirement-gap`, 1:1 with the angles) and an impact (`HIGH`/`MEDIUM`/`LOW`). Impact describes pure harm if the scenario occurs; it must not proxy for the class or angle, occurrence likelihood, exposure, patch size, or maintenance cost.
 - Assigns final priority (`HIGH`/`MEDIUM`/`LOW`) by weighing actual occurrence, exposure, and harm against the minimum remedy's permanent complexity, maintenance burden, and regression risk. Implementation difficulty or effort alone must not lower priority.
-- Every `COMPLETE` finding requires five nonblank `assessment` fields: `unfixed_cost`, `exposure`, `remedy`, `added_cost`, and `rationale`. Numeric confidence is for the conductor's internal verification only; it is not a grading or completion criterion.
+- Every `COMPLETE` finding requires five nonblank `assessment` fields: `unfixed_cost`, `exposure`, `remedy`, `added_cost`, and `rationale`. The reviewer directly verifies every candidate without numeric confidence scores or verifier subagents.
 - Persists the full 7-field cards to `$OMT_DIR/code-review/<sid>/findings.md` — the basis for later re-adjudication
 - At higher effort levels, may also include simplification, reuse, and efficiency findings
 

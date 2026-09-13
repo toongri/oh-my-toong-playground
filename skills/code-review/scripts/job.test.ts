@@ -23,6 +23,7 @@ import { extractDenySkills, extractDenySubagents } from "@lib/generic-job";
 import * as GenericJob from "@lib/generic-job";
 import * as JobUtils from "@lib/job-utils";
 import { getOmtDir } from "@lib/omt-dir";
+import { tryAcquireWorkerSlot, releaseWorkerSlot } from "@lib/worker-slots";
 
 // Snapshot the real bindings before any test mocks "@lib/job-utils" — mock.module mutates the
 // shared module namespace object in place (and the swap leaks across this file's boundary since
@@ -156,6 +157,37 @@ function killPgidIfAlive(pgid: number): void {
 		process.kill(-pgid, "SIGKILL");
 	} catch {
 		// already reaped/exited — nothing to clean up
+	}
+}
+
+/** Kill only worker groups still matching their recorded start-time witnesses. */
+function cleanupStartedWorkerGroups(jobDir: string): void {
+	try {
+		const metadata = JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8")) as {
+			members?: Array<{ workerPgid?: unknown; workerPgidStartedAt?: unknown }>;
+		};
+		for (const member of metadata.members ?? []) {
+			if (
+				!Number.isInteger(member.workerPgid) ||
+				(member.workerPgid as number) <= 0 ||
+				member.workerPgid === process.pid ||
+				typeof member.workerPgidStartedAt !== "string" ||
+				member.workerPgidStartedAt.trim() === ""
+			) continue;
+			try {
+				const currentStartedAt = execFileSync("ps", ["-o", "lstart=", "-p", String(member.workerPgid)], {
+					encoding: "utf8",
+					env: { ...process.env, LC_ALL: "C" },
+				}).trim();
+				if (currentStartedAt && currentStartedAt === member.workerPgidStartedAt.trim()) {
+					killPgidIfAlive(member.workerPgid as number);
+				}
+			} catch {
+				/* worker already exited or ps lookup unavailable */
+			}
+		}
+	} catch {
+		/* fixture may have failed before job.json was written */
 	}
 }
 
@@ -1467,6 +1499,85 @@ describe("job.ts cmdReap — 생존 프로세스를 회수됐다고 보고하지
 	});
 });
 
+describe("job.ts cmdReap — jobsDir별 nonblocking singleton", () => {
+	test("점유된 reaper slot이면 stdout 없이 stderr skip하고 jobs root가 독립적이다", async () => {
+		const firstRoot = makeTmpDir();
+		const secondRoot = makeTmpDir();
+		const firstJobs = path.join(firstRoot, "jobs");
+		const secondJobs = path.join(secondRoot, "jobs");
+		fs.mkdirSync(firstJobs, { recursive: true });
+		fs.mkdirSync(secondJobs, { recursive: true });
+		const held = tryAcquireWorkerSlot({ dir: path.join(firstJobs, ".reaper-slots"), slotCount: 1 });
+		expect(held).not.toBeNull();
+
+		const stderrChunks: string[] = [];
+		const stdoutChunks: string[] = [];
+		const originalStderrWrite = process.stderr.write;
+		const originalStdoutWrite = process.stdout.write;
+		(process.stderr as unknown as { write: unknown }).write = (chunk: unknown) => {
+			stderrChunks.push(String(chunk));
+			return true;
+		};
+		(process.stdout as unknown as { write: unknown }).write = (chunk: unknown) => {
+			stdoutChunks.push(String(chunk));
+			return true;
+		};
+		let secondSlotsExist: boolean | undefined;
+		try {
+			await cmdReap({ "jobs-dir": firstJobs, "grace-ms": 0 });
+			await cmdReap({ "jobs-dir": secondJobs, "grace-ms": 0 });
+			const secondSlot = tryAcquireWorkerSlot({ dir: path.join(secondJobs, ".reaper-slots"), slotCount: 1 });
+			secondSlotsExist = secondSlot !== null;
+			if (secondSlot !== null) releaseWorkerSlot(secondSlot);
+		} finally {
+			process.stderr.write = originalStderrWrite;
+			process.stdout.write = originalStdoutWrite;
+			if (held !== null) releaseWorkerSlot(held);
+			fs.rmSync(firstRoot, { recursive: true, force: true });
+			fs.rmSync(secondRoot, { recursive: true, force: true });
+		}
+
+		expect(stderrChunks.join("")).toContain("another reaper is already running; skipping");
+		expect(stdoutChunks.join("")).toBe("");
+		expect(secondSlotsExist).toBe(true);
+	});
+
+	test("진단 예외에도 실제 Bun owner를 기록하고 slot을 finally로 반환한다", async () => {
+		const root = makeTmpDir();
+		const reapJobs = path.join(root, "jobs");
+		const slotDir = path.join(reapJobs, ".reaper-slots");
+		fs.mkdirSync(reapJobs, { recursive: true });
+		let owner: { pid?: unknown; pidStartedAt?: unknown } | undefined;
+		const originalStderrWrite = process.stderr.write;
+		(process.stderr as unknown as { write: unknown }).write = () => {
+			const slotName = fs.readdirSync(slotDir).find((entry) => entry.startsWith("slot-"));
+			if (slotName === undefined) throw new Error("missing reaper slot");
+			const ownerName = fs.readdirSync(path.join(slotDir, slotName))[0];
+			owner = JSON.parse(fs.readFileSync(path.join(slotDir, slotName, ownerName), "utf8")) as typeof owner;
+			throw new Error("diagnostic probe");
+		};
+		try {
+			let rejected = false;
+			try {
+				await cmdReap({ "jobs-dir": reapJobs, "grace-ms": 0 });
+			} catch (error) {
+				rejected = error instanceof Error && error.message === "diagnostic probe";
+			}
+			expect(rejected).toBe(true);
+		} finally {
+			process.stderr.write = originalStderrWrite;
+		}
+		expect(owner?.pid).toBe(process.pid);
+		expect(typeof owner?.pidStartedAt).toBe("string");
+		expect(String(owner?.pidStartedAt).length).toBeGreaterThan(0);
+
+		const recovered = tryAcquireWorkerSlot({ dir: slotDir, slotCount: 1 });
+		expect(recovered).not.toBeNull();
+		if (recovered !== null) releaseWorkerSlot(recovered);
+		fs.rmSync(root, { recursive: true, force: true });
+	});
+});
+
 // ---------------------------------------------------------------------------
 // job.ts doctor — reports orphan counts on stdout, never kills.
 // ---------------------------------------------------------------------------
@@ -2181,17 +2292,17 @@ describe("--exclude-chairman=false keeps chairman in reviewers", () => {
 		);
 
 		const output = JSON.parse(result.toString());
-		const memberNames = output.members.map((r: { name: string }) => r.name);
-		expect(memberNames.includes("claude")).toBe(true);
-		expect(output.settings.excludeChairmanFromMembers).toBe(false);
-
-		// cleanup spawned workers
 		try {
-			execFileSync(process.execPath, [SCRIPT, "stop", output.jobDir], { stdio: "pipe" });
-		} catch {}
-		try {
-			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
-		} catch {}
+			const memberNames = output.members.map((r: { name: string }) => r.name);
+			expect(memberNames.includes("claude")).toBe(true);
+			expect(output.settings.excludeChairmanFromMembers).toBe(false);
+		} finally {
+			// cleanup spawned workers
+			cleanupStartedWorkerGroups(output.jobDir);
+			try {
+				execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
+			} catch {}
+		}
 	});
 
 	test("--exclude-chairman (no value) DOES exclude the chairman reviewer", () => {
@@ -2235,17 +2346,17 @@ describe("--exclude-chairman=false keeps chairman in reviewers", () => {
 		);
 
 		const output = JSON.parse(result.toString());
-		const memberNames = output.members.map((r: { name: string }) => r.name);
-		expect(!memberNames.includes("claude")).toBe(true);
-		expect(output.settings.excludeChairmanFromMembers).toBe(true);
-
-		// cleanup spawned workers
 		try {
-			execFileSync(process.execPath, [SCRIPT, "stop", output.jobDir], { stdio: "pipe" });
-		} catch {}
-		try {
-			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
-		} catch {}
+			const memberNames = output.members.map((r: { name: string }) => r.name);
+			expect(!memberNames.includes("claude")).toBe(true);
+			expect(output.settings.excludeChairmanFromMembers).toBe(true);
+		} finally {
+			// cleanup spawned workers
+			cleanupStartedWorkerGroups(output.jobDir);
+			try {
+				execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
+			} catch {}
+		}
 	});
 
 	test("--exclude-chairman=false with --include-chairman=false falls back to config default", () => {
@@ -2291,20 +2402,20 @@ describe("--exclude-chairman=false keeps chairman in reviewers", () => {
 		);
 
 		const output = JSON.parse(result.toString());
-		const memberNames = output.members.map((r: { name: string }) => r.name);
-		// --exclude-chairman=false overrides config to false (don't exclude)
-		// --include-chairman=false means no force-include
-		// So excludeChairmanFromMembers=false, includeChairman=false → chairman included
-		expect(memberNames.includes("claude")).toBe(true);
-		expect(output.settings.excludeChairmanFromMembers).toBe(false);
-
-		// cleanup spawned workers
 		try {
-			execFileSync(process.execPath, [SCRIPT, "stop", output.jobDir], { stdio: "pipe" });
-		} catch {}
-		try {
-			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
-		} catch {}
+			const memberNames = output.members.map((r: { name: string }) => r.name);
+			// --exclude-chairman=false overrides config to false (don't exclude)
+			// --include-chairman=false means no force-include
+			// So excludeChairmanFromMembers=false, includeChairman=false → chairman included
+			expect(memberNames.includes("claude")).toBe(true);
+			expect(output.settings.excludeChairmanFromMembers).toBe(false);
+		} finally {
+			// cleanup spawned workers
+			cleanupStartedWorkerGroups(output.jobDir);
+			try {
+				execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
+			} catch {}
+		}
 	});
 
 	test("--exclude-chairman=true DOES exclude the chairman reviewer", () => {
@@ -2348,17 +2459,17 @@ describe("--exclude-chairman=false keeps chairman in reviewers", () => {
 		);
 
 		const output = JSON.parse(result.toString());
-		const memberNames = output.members.map((r: { name: string }) => r.name);
-		expect(!memberNames.includes("claude")).toBe(true);
-		expect(output.settings.excludeChairmanFromMembers).toBe(true);
-
-		// cleanup spawned workers
 		try {
-			execFileSync(process.execPath, [SCRIPT, "stop", output.jobDir], { stdio: "pipe" });
-		} catch {}
-		try {
-			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
-		} catch {}
+			const memberNames = output.members.map((r: { name: string }) => r.name);
+			expect(!memberNames.includes("claude")).toBe(true);
+			expect(output.settings.excludeChairmanFromMembers).toBe(true);
+		} finally {
+			// cleanup spawned workers
+			cleanupStartedWorkerGroups(output.jobDir);
+			try {
+				execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
+			} catch {}
+		}
 	});
 });
 
@@ -2421,19 +2532,19 @@ describe("--include-chairman=false normalizeBool parsing", () => {
 		);
 
 		const output = JSON.parse(result.toString());
-		const memberNames = output.members.map((r: { name: string }) => r.name);
-		// --include-chairman=false → includeChairman should be false
-		// excludeChairmanOverride should be null (fallback to config default: true)
-		// So chairman should be excluded
-		expect(!memberNames.includes("claude")).toBe(true);
-
-		// cleanup spawned workers
 		try {
-			execFileSync(process.execPath, [SCRIPT, "stop", output.jobDir], { stdio: "pipe" });
-		} catch {}
-		try {
-			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
-		} catch {}
+			const memberNames = output.members.map((r: { name: string }) => r.name);
+			// --include-chairman=false → includeChairman should be false
+			// excludeChairmanOverride should be null (fallback to config default: true)
+			// So chairman should be excluded
+			expect(!memberNames.includes("claude")).toBe(true);
+		} finally {
+			// cleanup spawned workers
+			cleanupStartedWorkerGroups(output.jobDir);
+			try {
+				execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
+			} catch {}
+		}
 	});
 
 	test("--include-chairman=true force-includes chairman even when config excludes", () => {
@@ -2477,17 +2588,17 @@ describe("--include-chairman=false normalizeBool parsing", () => {
 		);
 
 		const output = JSON.parse(result.toString());
-		const memberNames = output.members.map((r: { name: string }) => r.name);
-		// --include-chairman=true → includeChairman=true, force-include chairman
-		expect(memberNames.includes("claude")).toBe(true);
-
-		// cleanup spawned workers
 		try {
-			execFileSync(process.execPath, [SCRIPT, "stop", output.jobDir], { stdio: "pipe" });
-		} catch {}
-		try {
-			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
-		} catch {}
+			const memberNames = output.members.map((r: { name: string }) => r.name);
+			// --include-chairman=true → includeChairman=true, force-include chairman
+			expect(memberNames.includes("claude")).toBe(true);
+		} finally {
+			// cleanup spawned workers
+			cleanupStartedWorkerGroups(output.jobDir);
+			try {
+				execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
+			} catch {}
+		}
 	});
 
 	test("--include-chairman (no value) force-includes chairman", () => {
@@ -2531,17 +2642,17 @@ describe("--include-chairman=false normalizeBool parsing", () => {
 		);
 
 		const output = JSON.parse(result.toString());
-		const memberNames = output.members.map((r: { name: string }) => r.name);
-		// --include-chairman (boolean flag) → true → force-include
-		expect(memberNames.includes("claude")).toBe(true);
-
-		// cleanup spawned workers
 		try {
-			execFileSync(process.execPath, [SCRIPT, "stop", output.jobDir], { stdio: "pipe" });
-		} catch {}
-		try {
-			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
-		} catch {}
+			const memberNames = output.members.map((r: { name: string }) => r.name);
+			// --include-chairman (boolean flag) → true → force-include
+			expect(memberNames.includes("claude")).toBe(true);
+		} finally {
+			// cleanup spawned workers
+			cleanupStartedWorkerGroups(output.jobDir);
+			try {
+				execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
+			} catch {}
+		}
 	});
 
 	test("(no --include-chairman) falls back to config default for exclusion", () => {
@@ -2584,17 +2695,17 @@ describe("--include-chairman=false normalizeBool parsing", () => {
 		);
 
 		const output = JSON.parse(result.toString());
-		const memberNames = output.members.map((r: { name: string }) => r.name);
-		// No flag → config default (exclude=true), no force-include → chairman excluded
-		expect(!memberNames.includes("claude")).toBe(true);
-
-		// cleanup spawned workers
 		try {
-			execFileSync(process.execPath, [SCRIPT, "stop", output.jobDir], { stdio: "pipe" });
-		} catch {}
-		try {
-			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
-		} catch {}
+			const memberNames = output.members.map((r: { name: string }) => r.name);
+			// No flag → config default (exclude=true), no force-include → chairman excluded
+			expect(!memberNames.includes("claude")).toBe(true);
+		} finally {
+			// cleanup spawned workers
+			cleanupStartedWorkerGroups(output.jobDir);
+			try {
+				execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
+			} catch {}
+		}
 	});
 });
 
@@ -4060,17 +4171,17 @@ describe('exclude_chairman_from_members: 문자열 "no" (YAML 1.2) 회귀', () =
 		);
 
 		const output = JSON.parse(result.toString());
-		const memberNames = output.members.map((r: { name: string }) => r.name);
-		expect(output.settings.excludeChairmanFromMembers).toBe(false);
-		expect(memberNames.includes("claude")).toBe(true);
-
-		// cleanup spawned workers
 		try {
-			execFileSync(process.execPath, [SCRIPT, "stop", output.jobDir], { stdio: "pipe" });
-		} catch {}
-		try {
-			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
-		} catch {}
+			const memberNames = output.members.map((r: { name: string }) => r.name);
+			expect(output.settings.excludeChairmanFromMembers).toBe(false);
+			expect(memberNames.includes("claude")).toBe(true);
+		} finally {
+			// cleanup spawned workers
+			cleanupStartedWorkerGroups(output.jobDir);
+			try {
+				execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
+			} catch {}
+		}
 	});
 });
 
@@ -4264,14 +4375,14 @@ describe("start: settings.deny.skills recorded in job.json settings.denySkills",
 			{ stdio: "pipe", env: { ...process.env, PATH: `${sharedStubDir}:${process.env.PATH}` } },
 		);
 		const output = JSON.parse(result.toString());
-		expect(output.settings.denySkills).toEqual(["orchestrate-review", "code-review"]);
-
 		try {
-			execFileSync(process.execPath, [SCRIPT, "stop", output.jobDir], { stdio: "pipe" });
-		} catch {}
-		try {
-			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
-		} catch {}
+			expect(output.settings.denySkills).toEqual(["orchestrate-review", "code-review"]);
+		} finally {
+			cleanupStartedWorkerGroups(output.jobDir);
+			try {
+				execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
+			} catch {}
+		}
 	});
 
 	test("job.json settings.denySkills is an empty array when deny is not declared", () => {
@@ -4310,14 +4421,14 @@ describe("start: settings.deny.skills recorded in job.json settings.denySkills",
 			{ stdio: "pipe", env: { ...process.env, PATH: `${sharedStubDir}:${process.env.PATH}` } },
 		);
 		const output = JSON.parse(result.toString());
-		expect(output.settings.denySkills).toEqual([]);
-
 		try {
-			execFileSync(process.execPath, [SCRIPT, "stop", output.jobDir], { stdio: "pipe" });
-		} catch {}
-		try {
-			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
-		} catch {}
+			expect(output.settings.denySkills).toEqual([]);
+		} finally {
+			cleanupStartedWorkerGroups(output.jobDir);
+			try {
+				execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
+			} catch {}
+		}
 	});
 });
 
@@ -4638,16 +4749,16 @@ describe("start: assertDenyEnforceable gate wiring", () => {
 		expect(stdout).not.toContain("declares no deny");
 
 		const output = JSON.parse(stdout);
-		expect(output.settings.denySkills).toEqual([]);
-		const memberNames = output.members.map((m: { name: string }) => m.name);
-		expect(memberNames).toContain("bob");
-
 		try {
-			execFileSync(process.execPath, [SCRIPT, "stop", output.jobDir], { stdio: "pipe" });
-		} catch {}
-		try {
-			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
-		} catch {}
+			expect(output.settings.denySkills).toEqual([]);
+			const memberNames = output.members.map((m: { name: string }) => m.name);
+			expect(memberNames).toContain("bob");
+		} finally {
+			cleanupStartedWorkerGroups(output.jobDir);
+			try {
+				execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
+			} catch {}
+		}
 	});
 });
 

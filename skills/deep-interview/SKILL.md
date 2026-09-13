@@ -530,9 +530,10 @@ After the spec is written, read the state returned by `deep-interview-state.ts g
 ```text
 designAnchor: "design-anchor: deep-interview:<state.interview_id>"
 parentId: "<known parent ID or URL, when available>"
+taskIdentities: "<optional prior craft-tasks result: [{ taskKey, childId }] >"
 ```
 
-The placeholder is replaced only with the persisted `state.interview_id`; never recompute it from the spec title, slug, timestamp, hash, or local session path. When a known PM parent exists, parentId MUST be copied from persisted `state.parent_id` when available; if it is known but not yet persisted, persist it with `update --parent-id` before constructing the handoff. When no parent is known, pass the spec and exact `designAnchor` alone and rely on `craft-tasks`' parent-resolution gate; this direct spec-only flow is valid. `craft-tasks` must resolve and verify the parent before reading or creating any child.
+The placeholder is replaced only with the persisted `state.interview_id`; never recompute it from the spec title, slug, timestamp, hash, or local session path. When a known PM parent exists, parentId MUST be copied from persisted `state.parent_id` when available; if it is known but not yet persisted, persist it with `update --parent-id` before constructing the handoff. When prior craft-tasks output exists, carry its optional `taskIdentities` collection unchanged so later maintenance can preserve keys even when the caller does not know every child ID, including preserving each immutable taskKey. When no parent is known, pass the spec and exact `designAnchor` alone and rely on `craft-tasks`' parent-resolution gate; this direct spec-only flow is valid. `craft-tasks` must resolve and verify the parent before reading or creating any child.
 
 **Question:** "Your spec is ready (ambiguity: {score}%). How would you like to proceed?"
 
@@ -544,7 +545,7 @@ The placeholder is replaced only with the persisted `state.interview_id`; never 
 - When `prometheus` is recommended, offer `ultragoal` as an explicit override.
 - **Continue interviewing** — "Continue interviewing to improve clarity (current: {score}%)" → return to the Phase 2 loop.
 
-Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec file path as context (the `task-tickets` option invokes `Skill(skill: "craft-tasks")` and includes the persisted `state.parent_id` as `parentId` when available; the `ai-execution-plan` option invokes `Skill(skill: "prometheus")` or `Skill(skill: "ultragoal")` according to the active-component count; the `domain-output` option invokes the matching domain skill).
+Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec file path as context (the `task-tickets` option invokes `Skill(skill: "craft-tasks")` and includes the persisted `state.parent_id` as `parentId` and any prior `taskIdentities` collection when available; the `ai-execution-plan` option invokes `Skill(skill: "prometheus")` or `Skill(skill: "ultragoal")` according to the active-component count; the `domain-output` option invokes the matching domain skill).
 
 **IMPORTANT:** On execution selection, **MUST** invoke the chosen skill via `Skill()`. Do NOT implement directly. The deep-interview agent is a requirements agent, not an execution agent. Pass the spec file path forward (and the prompt-safe summary, if the initial context was summarized) — never the raw oversized source material.
 
