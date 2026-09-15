@@ -18,6 +18,7 @@ import { getOmtDir } from "@lib/omt-dir";
 import { nowStamp, resolveSessionIdOrThrow, STATE_PREFIX } from "@lib/state-core";
 import {
 	computeDerived,
+	CAPABILITY_STEP_MIGRATION_VERSION,
 	nextStep,
 	normalizeExplainDiffState,
 	REQUIRED_JUDGE_IDS,
@@ -121,6 +122,7 @@ function withLock<T>(path: string, fn: () => T): T {
 
 interface ReadSnapshot {
 	state: Persisted;
+	needsCapabilityStepMigration: boolean;
 	needsRenderProofMigration: boolean;
 }
 
@@ -132,6 +134,14 @@ function readSnapshot(sessionId: string): ReadSnapshot | null {
 		if (!base) return null;
 		const r: Record<string, unknown> = {};
 		Object.assign(r, parsed);
+		const rawStep = STEP_ORDER.find((step) => step === r["step"]);
+		const needsCapabilityStepMigration =
+			r["active"] === true &&
+			Object.prototype.hasOwnProperty.call(r, "commit_hashes") &&
+			!Object.prototype.hasOwnProperty.call(r, "capability_step_migration_version") &&
+			rawStep !== undefined &&
+			STEP_ORDER.indexOf(rawStep) > STEP_ORDER.indexOf("capability") &&
+			!base.passed.includes("capability");
 		const structuralRaw = r["structural_ok"];
 		const renderProof = normalizeRenderProofBinding(r["render_proof"]);
 		const hasCurrentRenderProofContract =
@@ -139,6 +149,9 @@ function readSnapshot(sessionId: string): ReadSnapshot | null {
 			renderProof !== null;
 		const state: Persisted = {
 			...base,
+			...(needsCapabilityStepMigration
+				? { capability_step_migration_version: CAPABILITY_STEP_MIGRATION_VERSION }
+				: {}),
 			structural_ok: Array.isArray(structuralRaw)
 				? structuralRaw.flatMap((x) => STEP_ORDER.find((s) => s === x) ?? [])
 				: [],
@@ -154,6 +167,11 @@ function readSnapshot(sessionId: string): ReadSnapshot | null {
 			// Recomputed on every write; the persisted copy is never trusted on read.
 			derived: computeDerived(base),
 		};
+		if (needsCapabilityStepMigration) {
+			state.structural_ok = state.structural_ok.filter(
+				(step) => STEP_ORDER.indexOf(step) < STEP_ORDER.indexOf("capability"),
+			);
+		}
 		const hasRenderProof =
 			state.render_proof !== null ||
 			state.structural_ok.includes("render") ||
@@ -171,7 +189,7 @@ function readSnapshot(sessionId: string): ReadSnapshot | null {
 			};
 		}
 		state.derived = computeDerived(state);
-		return { state, needsRenderProofMigration };
+		return { state, needsCapabilityStepMigration, needsRenderProofMigration };
 	} catch {
 		return null;
 	}
@@ -184,11 +202,16 @@ function readSnapshot(sessionId: string): ReadSnapshot | null {
  */
 function read(sessionId: string): Persisted | null {
 	const snapshot = readSnapshot(sessionId);
-	if (!snapshot || !snapshot.needsRenderProofMigration) return snapshot?.state ?? null;
+	if (
+		!snapshot ||
+		(!snapshot.needsCapabilityStepMigration && !snapshot.needsRenderProofMigration)
+	)
+		return snapshot?.state ?? null;
 	return withLock(statePath(sessionId), () => {
 		const latest = readSnapshot(sessionId);
 		if (!latest) return null;
-		if (latest.needsRenderProofMigration) write(sessionId, latest.state);
+		if (latest.needsCapabilityStepMigration || latest.needsRenderProofMigration)
+			write(sessionId, latest.state);
 		return latest.state;
 	});
 }
@@ -207,7 +230,8 @@ function mustRead(sessionId: string): Persisted {
 	if (!snapshot) throw new Error("explain-diff 상태가 없습니다. 먼저 `start` 를 실행하세요.");
 	// Every caller of mustRead already owns the operation's outer lock. Reuse it
 	// for the legacy rewind instead of trying to acquire the same lock again.
-	if (snapshot.needsRenderProofMigration) write(sessionId, snapshot.state);
+	if (snapshot.needsCapabilityStepMigration || snapshot.needsRenderProofMigration)
+		write(sessionId, snapshot.state);
 	return snapshot.state;
 }
 
@@ -471,6 +495,7 @@ function start(sessionId: string, range: string, slug: string): void {
 	const seed: Persisted = {
 		active: true,
 		step: "evidence",
+		capability_step_migration_version: CAPABILITY_STEP_MIGRATION_VERSION,
 		passed: [],
 		structural_ok: [],
 		render_proof_contract_version: CURRENT_RENDER_PROOF_CONTRACT_VERSION,
@@ -709,6 +734,18 @@ function checkRenderOutput(
 			if (svgs < fences || html.includes("```mermaid") || html.includes("language-mermaid")) {
 				failedItems.push(
 					`mermaid 블록 ${fences}개 중 인라인 SVG로 렌더된 것이 ${svgs}개입니다 — render.ts가 mmdc 사전 렌더에 실패했는지 확인하세요.`,
+				);
+			}
+			// Label-clipping regression catch. A <foreignObject> in the baked SVG is
+			// mermaid's htmlLabels:true fingerprint — a fixed-width HTML label box
+			// measured in the render font that CLIPS (hides) text when the viewer's
+			// font is wider (iOS/iCloud lacks "trebuchet ms"). render.ts pins
+			// htmlLabels:false so labels are SVG <text> that overflow-but-never-hide;
+			// if a foreignObject survives, the render regressed to the clipping mode.
+			const foreignObjects = (html.match(/<foreignObject/g) || []).length;
+			if (foreignObjects > 0) {
+				failedItems.push(
+					`다이어그램에 <foreignObject> 라벨이 ${foreignObjects}개 있습니다 — 뷰어 폰트가 넓으면 고정폭 박스가 글자를 잘라 숨깁니다. render.ts mmdc 설정에 htmlLabels:false 가 적용됐는지 확인하세요.`,
 				);
 			}
 		}

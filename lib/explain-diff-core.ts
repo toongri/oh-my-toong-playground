@@ -8,12 +8,13 @@
  * one place where "may this write land" and "may this session stop" are decided.
  */
 
-/** The nine steps, in the order a document is built. */
+/** The ten steps, in the order a document is built. */
 export const STEP_ORDER = [
 	"evidence",
 	"background",
 	"goal",
 	"architecture",
+	"capability",
 	"intuition",
 	"commits",
 	"code",
@@ -22,6 +23,9 @@ export const STEP_ORDER = [
 ] as const;
 
 export type Step = (typeof STEP_ORDER)[number];
+
+/** Schema/workflow marker for states that know about the capability step. */
+export const CAPABILITY_STEP_MIGRATION_VERSION = 1;
 
 /**
  * The steps the skill performs alone. `render` is a derivation, not authoring,
@@ -32,6 +36,7 @@ export const AUTHORING_STEPS = [
 	"background",
 	"goal",
 	"architecture",
+	"capability",
 	"intuition",
 	"commits",
 	"code",
@@ -40,17 +45,22 @@ export const AUTHORING_STEPS = [
 /**
  * Judge rubric items each step's judge review must certify before `pass-step`
  * may advance it. SKILL.md and references/judge-prompt.md assign the judge
- * exactly three items — R12 at `architecture`, R6 at `intuition`, R7 at `code`
- * — everything else in the rubric is scripted in explain-diff-structure.ts. An
- * empty required set is deliberate at the other six steps, not an oversight:
- * their coverage is already earned before the judge ever runs, so a judge
- * payload with nothing in it is correctly a no-op there, not a bypass.
+ * exactly four items — R12 at `architecture`, R23 at `capability`, R6 at
+ * `intuition`, R7 at `code` — everything else in the rubric is scripted in
+ * explain-diff-structure.ts. An empty required set is deliberate at the other
+ * six steps, not an oversight: their coverage is already earned before the
+ * judge ever runs, so a judge payload with nothing in it is correctly a no-op
+ * there, not a bypass. R23 is the capability step's semantic gate — that each
+ * chapter is a use-case (not a demoted domain function), that no chapter steals
+ * a collaborator's responsibility, and that the version classification is
+ * grounded — the discipline the structure check cannot mechanically see.
  */
 export const REQUIRED_JUDGE_IDS: Record<Step, readonly string[]> = {
 	evidence: [],
 	background: [],
 	goal: [],
 	architecture: ["R12"],
+	capability: ["R23"],
 	intuition: ["R6"],
 	commits: [],
 	code: ["R7"],
@@ -73,6 +83,8 @@ export interface StepFailure {
 export interface ExplainDiffState {
 	active: boolean;
 	step: Step;
+	/** Version of the workflow schema used to create this state. */
+	capability_step_migration_version?: number;
 	/** Steps whose structural checks AND judge review both passed. */
 	passed: Step[];
 	concepts: Concept[];
@@ -108,6 +120,7 @@ function toStep(v: unknown): Step | null {
 
 function recoverLegacyStep(step: Step): Step {
 	switch (step) {
+		case "capability":
 		case "intuition":
 		case "code":
 		case "render":
@@ -152,15 +165,31 @@ export function normalizeExplainDiffState(parsed: unknown): ExplainDiffState | n
 
 	const passedRaw = r["passed"];
 	const conceptsRaw = r["concepts"];
+	const passed = Array.isArray(passedRaw) ? passedRaw.flatMap((x) => toStep(x) ?? []) : [];
 	const parsedStep = toStep(r["step"]) ?? "evidence";
 	const legacy = r["active"] === true && !Object.prototype.hasOwnProperty.call(r, "commit_hashes");
-	const step = legacy ? recoverLegacyStep(parsedStep) : parsedStep;
-	const passed = Array.isArray(passedRaw) ? passedRaw.flatMap((x) => toStep(x) ?? []) : [];
+	const migrationVersion =
+		typeof r["capability_step_migration_version"] === "number"
+			? r["capability_step_migration_version"]
+			: undefined;
+	const needsCapabilityMigration =
+		!legacy &&
+		r["active"] === true &&
+		migrationVersion === undefined &&
+		parsedStep !== "capability" &&
+		STEP_ORDER.indexOf(parsedStep) > STEP_ORDER.indexOf("capability") &&
+		!passed.includes("capability");
+	const step = legacy ? recoverLegacyStep(parsedStep) : needsCapabilityMigration ? "capability" : parsedStep;
 	return {
 		active: r["active"] === true,
 		step,
+		...(migrationVersion !== undefined
+			? { capability_step_migration_version: migrationVersion }
+			: {}),
 		passed: legacy
 			? passed.filter((s) => STEP_ORDER.indexOf(s) < STEP_ORDER.indexOf(step))
+			: needsCapabilityMigration
+				? passed.filter((s) => STEP_ORDER.indexOf(s) < STEP_ORDER.indexOf("capability"))
 			: passed,
 		concepts: Array.isArray(conceptsRaw)
 			? conceptsRaw.flatMap((x) => {

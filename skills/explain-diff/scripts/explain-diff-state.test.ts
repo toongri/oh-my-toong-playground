@@ -3,7 +3,11 @@ import { execFileSync } from "child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { STEP_ORDER, type Step } from "@lib/explain-diff-core";
+import {
+	CAPABILITY_STEP_MIGRATION_VERSION,
+	STEP_ORDER,
+	type Step,
+} from "@lib/explain-diff-core";
 import { preRenderMermaid, renderToHtml } from "./render";
 
 const SID = "explain-diff-cli-test";
@@ -115,8 +119,22 @@ flowchart LR
 
 ### 도메인 레벨
 구조 변화 없음: 엔티티가 없다.
+`;
 
-### 경계·의존·유스케이스
+/** capability 스텝의 R15 — `## 기능 단위` 섹션의 `### <캐피빌리티>` 챕터. */
+const CAPABILITY_SECTION = `## 기능 단위
+
+### 상태 갱신 락 통합
+
+- 구현체: \`withLock\`
+- 버전: 버전 토큰 없음 · 신규 — 두 CLI의 상태 쓰기를 공용 락으로 직렬화하는 유스케이스를 추가했다.
+- 소속 도메인 + 협력: 상태 인프라가 소유한다. 두 CLI가 [의존=계약 위임]으로 withLock을 부른다.
+- 입구(트리거): 두 CLI의 상태 쓰기 경로 — \`withLock(경로, fn)\`. 기존 쓰기 경로 수정(mod).
+- 영향범위: ultragoal·explain-diff 두 CLI의 상태 쓰기가 직렬화된다. 파일 포맷 변경 없음.
+
+**책임** 나는 두 CLI의 상태 쓰기를 공용 락으로 직렬화한다. 실제 파일 IO는 저장소에 위임한다.
+
+락 획득→쓰기→해제 흐름을 확인한다.
 
 \`\`\`mermaid
 sequenceDiagram
@@ -127,13 +145,9 @@ sequenceDiagram
   Lock->>State: 락 획득 → 쓰기 → 해제
 \`\`\`
 
-<div class="arch-entity" data-change="new">
-<p><strong>이름</strong> 상태 갱신 락 통합</p>
-<p><strong>한 일</strong> 두 CLI의 상태 쓰기를 공용 락으로 직렬화</p>
-<p><strong>영향 인터페이스</strong> withLock(경로, fn)</p>
-</div>
+**개념/도메인 모델 연결** 상태 파일과 락 소유권을 연결한다.
 
-**의존 방향** — 두 CLI → 공용 락 모듈 단방향. 역참조 없음.
+의존 방향 판정: 두 CLI → 공용 락 모듈 단방향, 역참조 없음.
 `;
 
 const JOURNEY_SECTION = `## Commit Journey
@@ -155,7 +169,7 @@ const GOAL_SECTION = `## 목표
 `;
 
 /** 9스텝 전부의 구조 슬롯을 갖춘 문서. */
-const FULL_DOC = `${GOOD_DOC}\n${GOAL_SECTION}\n${ARCH_SECTION}\n${JOURNEY_SECTION}`;
+const FULL_DOC = `${GOOD_DOC}\n${GOAL_SECTION}\n${ARCH_SECTION}\n${CAPABILITY_SECTION}\n${JOURNEY_SECTION}`;
 
 function docFile(text: string): string {
 	const p = join(sandbox, "doc.md");
@@ -185,6 +199,7 @@ function seedLegacyRenderProof(): void {
 		checklist_path: join(sandbox, "legacy-checklist.md"),
 	};
 	rewriteState((current) => {
+		current.capability_step_migration_version = CAPABILITY_STEP_MIGRATION_VERSION;
 		delete current.render_proof_contract_version;
 		current.render_proof = legacyProof;
 		current.structural_ok = ["render"];
@@ -236,6 +251,9 @@ describe("start", () => {
 		const { start } = await cli();
 		start(SID, "HEAD~1..HEAD", "sample");
 		expect(state().step).toBe("evidence");
+		expect(state().capability_step_migration_version).toBe(
+			CAPABILITY_STEP_MIGRATION_VERSION,
+		);
 		expect(state().derived.artifact_write_allowed).toBe(true);
 	});
 
@@ -443,6 +461,119 @@ describe("start", () => {
 	});
 });
 
+describe("capability step migration persistence", () => {
+	function seedOldLaterState(start: (sessionId: string, range: string, slug: string) => void): void {
+		start(SID, "unavailable..range", "sample");
+		rewriteState((current) => {
+			delete current.capability_step_migration_version;
+			current.step = "intuition";
+			current.passed = ["evidence", "background", "goal", "architecture"];
+			current.structural_ok = ["evidence", "background", "goal", "architecture", "intuition"];
+			current.commit_hashes = ["abc1234"];
+		});
+	}
+
+	test("read가 commit_hashes-bearing old later state를 capability로 저장한다", async () => {
+		const { read, start } = await cli();
+		seedOldLaterState(start);
+
+		const migrated = read(SID);
+		expect(migrated?.step).toBe("capability");
+		expect(migrated?.capability_step_migration_version).toBe(
+			CAPABILITY_STEP_MIGRATION_VERSION,
+		);
+		expect(migrated?.passed).not.toContain("capability");
+		expect(migrated?.structural_ok).not.toContain("capability");
+		expect(state().step).toBe("capability");
+		expect(state().passed).toEqual(["evidence", "background", "goal", "architecture"]);
+		expect(state().structural_ok).toEqual(["evidence", "background", "goal", "architecture"]);
+		expect(state().derived).toEqual(migrated?.derived);
+	});
+
+	test("read가 migration을 감지한 뒤 잠긴 최신 snapshot을 덮어쓰지 않는다", async () => {
+		const { read, start } = await cli();
+		seedOldLaterState(start);
+		const stateFile = join(sandbox, `explain-diff-state-${SID}.json`);
+		const lockPath = `${stateFile}.lock`;
+		mkdirSync(lockPath);
+		try {
+			expect(() => read(SID)).toThrow(`could not acquire state lock: ${lockPath}`);
+			expect(state().step).toBe("intuition");
+		} finally {
+			rmSync(lockPath, { recursive: true, force: true });
+		}
+	});
+
+	test("migration 중 이미 갱신된 locked snapshot은 그대로 반환한다", async () => {
+		const { read, start } = await cli();
+		seedOldLaterState(start);
+		const stateFile = join(sandbox, `explain-diff-state-${SID}.json`);
+		rewriteState((current) => {
+			current.capability_step_migration_version = CAPABILITY_STEP_MIGRATION_VERSION;
+			current.step = "capability";
+			current.passed = ["evidence", "background", "goal", "architecture"];
+			current.structural_ok = current.passed.slice();
+			current.last_failure = null;
+		});
+		const latestBytes = readFileSync(stateFile, "utf8");
+		mkdirSync(`${stateFile}.lock`);
+		try {
+			const latest = read(SID);
+			expect(latest?.step).toBe("capability");
+			expect(readFileSync(stateFile, "utf8")).toBe(latestBytes);
+		} finally {
+			rmSync(`${stateFile}.lock`, { recursive: true, force: true });
+		}
+	});
+
+	test("mustRead outer lock 경로는 deadlock 없이 capability migration을 저장한다", async () => {
+		const { addConcept } = await cli();
+		const { start } = await cli();
+		seedOldLaterState(start);
+
+		addConcept(SID, "lock", true);
+		expect(state().step).toBe("capability");
+		expect(state().capability_step_migration_version).toBe(
+			CAPABILITY_STEP_MIGRATION_VERSION,
+		);
+		expect(state().concepts).toEqual([{ id: "lock", required: true, passed: false }]);
+	});
+
+	test("capability와 render-proof migration이 함께 발생한다", async () => {
+		const { read, start } = await cli();
+		seedOldLaterState(start);
+		seedLegacyRenderProof();
+		rewriteState((current) => {
+			delete current.capability_step_migration_version;
+			current.commit_hashes = ["abc1234"];
+		});
+
+		const migrated = read(SID);
+		expect(migrated?.step).toBe("capability");
+		expect(migrated?.capability_step_migration_version).toBe(
+			CAPABILITY_STEP_MIGRATION_VERSION,
+		);
+		expect(migrated?.render_proof).toBeNull();
+		expect(migrated?.structural_ok).not.toContain("render");
+		expect(migrated?.passed).not.toContain("render");
+	});
+
+	test("이미 표시된 capability 통과 상태는 뒤로 되돌리지 않는다", async () => {
+		const { read, start } = await cli();
+		start(SID, "unavailable..range", "sample");
+		rewriteState((current) => {
+			current.capability_step_migration_version = CAPABILITY_STEP_MIGRATION_VERSION;
+			current.step = "intuition";
+			current.passed = ["evidence", "background", "goal", "architecture", "capability"];
+			current.structural_ok = current.passed.slice();
+			current.commit_hashes = ["abc1234"];
+		});
+
+		expect(read(SID)?.step).toBe("intuition");
+		expect(state().passed).toContain("capability");
+	});
+});
+
 describe("구조 검사 게이트", () => {
 	test("검사 실패는 스텝을 넘기지 않고 실패 항목을 상태에 남긴다", async () => {
 		const { start, submitStep } = await cli();
@@ -505,7 +636,8 @@ const WITH_BACKGROUND_DOC = `${EVIDENCE_ONLY_DOC}
 `;
 
 /** advanceTo가 신규 스텝(goal·architecture·commits)을 건널 수 있는 문서. */
-const WITH_ARCH_DOC = () => `${WITH_BACKGROUND_DOC}\n${GOAL_SECTION}\n${ARCH_SECTION}\n${JOURNEY_SECTION}`;
+const WITH_ARCH_DOC = () =>
+	`${WITH_BACKGROUND_DOC}\n${GOAL_SECTION}\n${ARCH_SECTION}\n${CAPABILITY_SECTION}\n${JOURNEY_SECTION}`;
 
 /**
  * evidence 부터 `step` 직전까지 `docAtStep`이 준 문서로 통과시켜 그 스텝에 진입시킨다.
@@ -531,6 +663,7 @@ async function advanceTo(
 			{ id: "R6", pass: true, quote: "state-lock" },
 			{ id: "R7", pass: true, quote: "state-lock" },
 			{ id: "R12", pass: true, quote: "state-lock" },
+			{ id: "R23", pass: true, quote: "state-lock" },
 		]);
 	}
 	return { submitStep, passStep };
@@ -838,6 +971,7 @@ async function driveToRender(): Promise<{
 		"background",
 		"goal",
 		"architecture",
+		"capability",
 		"intuition",
 		"commits",
 		"code",
@@ -847,6 +981,7 @@ async function driveToRender(): Promise<{
 			{ id: "R6", pass: true, quote },
 			{ id: "R7", pass: true, quote },
 			{ id: "R12", pass: true, quote },
+			{ id: "R23", pass: true, quote },
 		]);
 	}
 	return { passStep, submitStep, doc };
@@ -1178,6 +1313,27 @@ describe("render 산출물 검사", () => {
 		expect(state().last_failure.items.join(" ")).toContain("mermaid");
 	});
 
+	test("다이어그램 SVG에 <foreignObject> 라벨이 남으면 실패한다 — 뷰어 폰트 넓으면 잘리는 회귀", async () => {
+		// 라벨 클리핑 회귀 감지: htmlLabels:true 는 고정폭 foreignObject 라벨을 굽고,
+		// 뷰어 폰트가 넓으면 글자가 잘려 숨는다. render.ts 는 htmlLabels:false 로 <text> 를
+		// 쓰지만, 회귀로 foreignObject 가 다시 나오면 이 게이트가 잡는다. 바이트 비교를
+		// 통과시키려 fresh renderer 와 제출 HTML 을 같은 foreignObject 포함본으로 맞춘다.
+		const stateCli = await import("./explain-diff-state");
+		const { submitStep, doc } = await driveToRender();
+		const withForeign = (docPath: string): string =>
+			projectRenderedHtml(readFileSync(docPath, "utf8")).replace(
+				'<svg data-i="0">',
+				'<svg data-i="0"><foreignObject width="80"><div>clipped</div></foreignObject>',
+			);
+		stateCli.setRenderForTesting(withForeign);
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, withForeign(doc), "utf8");
+		const rep = reportFiles();
+		const rc = submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist);
+		expect(rc).toBe(1);
+		expect(state().last_failure.items.join(" ")).toContain("foreignObject");
+	});
+
 	test("유효한 render 제출 뒤 checklist가 FAIL이면 pass-step이 재검증에 실패한다", async () => {
 		const { submitStep, passStep, doc } = await driveToRender();
 		const htmlPath = join(sandbox, "doc.html");
@@ -1276,6 +1432,7 @@ describe("render 산출물 검사", () => {
 			"background",
 			"goal",
 			"architecture",
+			"capability",
 			"intuition",
 			"commits",
 			"code",
@@ -1285,6 +1442,7 @@ describe("render 산출물 검사", () => {
 				{ id: "R6", pass: true, quote },
 				{ id: "R7", pass: true, quote },
 				{ id: "R12", pass: true, quote },
+				{ id: "R23", pass: true, quote },
 			]);
 		}
 		const htmlPath = join(sandbox, "doc.html");
