@@ -269,7 +269,8 @@ describe("normalizeExplainDiffState", () => {
 			no_progress: { key: "c1:R3", count: 1, doc_digest: "d" },
 			last_failure: { step: "code", items: ["R5 추적성"] },
 		});
-		expect(s?.step).toBe("quiz");
+		expect(s?.step).toBe("capability");
+		expect(s?.passed).toEqual(["evidence", "background"]);
 		expect(s?.awaiting_answer).toBe(true);
 		expect(s?.stalled).toBe(true);
 		expect(s?.last_failure).toEqual({ step: "code", items: ["R5 추적성"] });
@@ -293,5 +294,93 @@ describe("normalizeExplainDiffState", () => {
 		});
 		expect(s?.step).toBe("architecture");
 		expect(s?.passed).toEqual(["evidence", "background"]);
+	});
+
+	test.each(["intuition", "commits", "code", "render", "quiz"] as const)(
+		"커밋 해시가 있는 활성 무표시 %s 상태는 capability로 되감는다",
+		(step) => {
+			const s = normalizeExplainDiffState({
+				active: true,
+				step,
+				passed: ["evidence", "background", "goal", "architecture", "intuition", "code"],
+				commit_hashes: ["abc1234"],
+			});
+			expect(s?.step).toBe("capability");
+			expect(s?.passed).toEqual(["evidence", "background", "goal", "architecture"]);
+		},
+	);
+
+	test("capability 마이그레이션은 커밋 해시와 나머지 코어 상태를 보존한다", () => {
+		const input = {
+			active: true,
+			step: "code",
+			passed: ["evidence", "background", "goal", "architecture", "intuition", "code"],
+			commit_hashes: ["abc1234", "def5678"],
+			concepts: [{ id: "c1", required: true, passed: false }],
+			bank: [{ prompt: "질문" }],
+			awaiting_answer: true,
+			stalled: true,
+			no_progress: { key: "c1:R6", count: 1, doc_digest: "digest" },
+			last_failure: { step: "code", items: ["R7"] },
+		};
+		const s = normalizeExplainDiffState(input);
+		expect(s).toMatchObject({
+			active: true,
+			step: "capability",
+			passed: ["evidence", "background", "goal", "architecture"],
+			commit_hashes: ["abc1234", "def5678"],
+			concepts: input.concepts,
+			bank: input.bank,
+			awaiting_answer: true,
+			stalled: true,
+			no_progress: input.no_progress,
+			last_failure: input.last_failure,
+		});
+	});
+
+	test("현재 마이그레이션 표시는 후속 단계도 되감지하지 않으며 반복 정규화가 멱등적이다", () => {
+		const marked = normalizeExplainDiffState({
+			active: true,
+			step: "quiz",
+			passed: ["evidence", "background", "goal", "architecture", "intuition", "code", "render"],
+			commit_hashes: ["abc1234"],
+			capability_step_migration_version: 1,
+		});
+		expect(marked?.step).toBe("quiz");
+		expect(marked?.passed).toEqual(["evidence", "background", "goal", "architecture", "intuition", "code", "render"]);
+		expect(marked?.capability_step_migration_version).toBe(1);
+		expect(normalizeExplainDiffState(marked)).toEqual(marked);
+	});
+
+	test("이미 capability이거나 capability가 통과된 상태는 되감지 않는다", () => {
+		const atCapability = normalizeExplainDiffState({
+			active: true,
+			step: "capability",
+			passed: ["evidence", "background", "goal", "architecture"],
+			commit_hashes: ["abc1234"],
+		});
+		const passedCapability = normalizeExplainDiffState({
+			active: true,
+			step: "code",
+			passed: ["evidence", "background", "goal", "architecture", "capability", "intuition"],
+			commit_hashes: ["abc1234"],
+		});
+		expect(atCapability?.step).toBe("capability");
+		expect(passedCapability?.step).toBe("code");
+		expect(passedCapability?.passed).toContain("capability");
+	});
+
+	test("비활성·pristine·capability 이전 상태는 되감지하지 않는다", () => {
+		const inactive = normalizeExplainDiffState({ active: false, step: "quiz", passed: [], commit_hashes: ["abc1234"] });
+		const pristine = normalizeExplainDiffState({ active: true, step: "evidence", passed: [], commit_hashes: ["abc1234"] });
+		const beforeCapability = normalizeExplainDiffState({
+			active: true,
+			step: "architecture",
+			passed: ["evidence", "background", "goal"],
+			commit_hashes: ["abc1234"],
+		});
+		expect(inactive?.step).toBe("quiz");
+		expect(pristine?.step).toBe("evidence");
+		expect(beforeCapability?.step).toBe("architecture");
 	});
 });

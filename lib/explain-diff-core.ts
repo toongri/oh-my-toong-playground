@@ -24,6 +24,9 @@ export const STEP_ORDER = [
 
 export type Step = (typeof STEP_ORDER)[number];
 
+/** Schema/workflow marker for states that know about the capability step. */
+export const CAPABILITY_STEP_MIGRATION_VERSION = 1;
+
 /**
  * The steps the skill performs alone. `render` is a derivation, not authoring,
  * and `quiz` is the only step that needs the reader — so authoring ends at `code`.
@@ -80,6 +83,8 @@ export interface StepFailure {
 export interface ExplainDiffState {
 	active: boolean;
 	step: Step;
+	/** Version of the workflow schema used to create this state. */
+	capability_step_migration_version?: number;
 	/** Steps whose structural checks AND judge review both passed. */
 	passed: Step[];
 	concepts: Concept[];
@@ -160,15 +165,31 @@ export function normalizeExplainDiffState(parsed: unknown): ExplainDiffState | n
 
 	const passedRaw = r["passed"];
 	const conceptsRaw = r["concepts"];
+	const passed = Array.isArray(passedRaw) ? passedRaw.flatMap((x) => toStep(x) ?? []) : [];
 	const parsedStep = toStep(r["step"]) ?? "evidence";
 	const legacy = r["active"] === true && !Object.prototype.hasOwnProperty.call(r, "commit_hashes");
-	const step = legacy ? recoverLegacyStep(parsedStep) : parsedStep;
-	const passed = Array.isArray(passedRaw) ? passedRaw.flatMap((x) => toStep(x) ?? []) : [];
+	const migrationVersion =
+		typeof r["capability_step_migration_version"] === "number"
+			? r["capability_step_migration_version"]
+			: undefined;
+	const needsCapabilityMigration =
+		!legacy &&
+		r["active"] === true &&
+		migrationVersion === undefined &&
+		parsedStep !== "capability" &&
+		STEP_ORDER.indexOf(parsedStep) > STEP_ORDER.indexOf("capability") &&
+		!passed.includes("capability");
+	const step = legacy ? recoverLegacyStep(parsedStep) : needsCapabilityMigration ? "capability" : parsedStep;
 	return {
 		active: r["active"] === true,
 		step,
+		...(migrationVersion !== undefined
+			? { capability_step_migration_version: migrationVersion }
+			: {}),
 		passed: legacy
 			? passed.filter((s) => STEP_ORDER.indexOf(s) < STEP_ORDER.indexOf(step))
+			: needsCapabilityMigration
+				? passed.filter((s) => STEP_ORDER.indexOf(s) < STEP_ORDER.indexOf("capability"))
 			: passed,
 		concepts: Array.isArray(conceptsRaw)
 			? conceptsRaw.flatMap((x) => {
