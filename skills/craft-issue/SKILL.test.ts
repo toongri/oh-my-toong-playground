@@ -823,3 +823,94 @@ describe("Delegated Parent Handoff: canonical designAnchor carrier", () => {
 		expect(skillMd).toContain("exactly one verified `parentId`");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Value-Hypothesis Framing — feature/improvement requirements are recorded as a
+// hypothesis about a specific user's problem and the product's core value, not
+// as a raw feature order. Confirmed RED baseline: even a competent write of a
+// bare feature request omits the target/core user, the frequency, the
+// core-value link, the success signal, and the backlog flag. issue-craft.md is
+// the SSOT; SKILL.md routes to it; the reviewer reads it live (no reviewer copy).
+// Each LIT below is its own assertion so a failure names the exact missing byte.
+// ---------------------------------------------------------------------------
+
+describe("V1: Value-Hypothesis Framing rule in issue-craft.md", () => {
+	test("section heading present", () => {
+		expect(issueCraftMd).toContain("### Value-Hypothesis Framing");
+	});
+
+	test("scoped to feature/improvement, exempting bug and refactor/infra", () => {
+		expect(issueCraftMd).toContain("**Applies to feature and improvement requirements**");
+		expect(issueCraftMd).toContain("Bug-genre issues (§3) and pure refactor/infra issues are exempt");
+	});
+
+	test("Who clause requires a core/target user, not a generic user", () => {
+		expect(issueCraftMd).toContain('are a **core/target user** of the product or a peripheral segment');
+	});
+
+	test("What-problem clause carries the feature→problem reframe recipe", () => {
+		expect(issueCraftMd).toContain("판단할 근거가 없어 구독을 망설인다");
+	});
+
+	test("How-often clause requires frequency/impact", () => {
+		expect(issueCraftMd).toContain("**How often / impact**");
+	});
+
+	test("Core-value link clause is stated as a hypothesis", () => {
+		expect(issueCraftMd).toContain("**Core-value link**");
+		expect(issueCraftMd).toContain('"solving X is expected to strengthen core value V for user U"');
+	});
+
+	test("core-value link is a Soft gate, not a refuse-to-file", () => {
+		expect(issueCraftMd).toContain("**The core-value link is a Soft gate, not a refuse-to-file.**");
+	});
+
+	test("unestablished value hypothesis is TBD-marked and backlog-flagged, still filed", () => {
+		expect(issueCraftMd).toContain("**backlog-candidate flag**");
+		expect(issueCraftMd).toContain("The issue is still filed");
+	});
+
+	test("success signal / behavior change is delegated to Post-Release Observation", () => {
+		expect(issueCraftMd).toContain(
+			"they live in the\n**Post-Release Observation** section, whose trigger fires for any issue asserting a core-value link.",
+		);
+	});
+
+	test("clauses render as flowing prose, not body labels or process narration", () => {
+		expect(issueCraftMd).toContain("**These four are author-facing prompts, not body labels.**");
+		expect(issueCraftMd).toContain("never a `Who: / What problem: / …` mini-form");
+		expect(issueCraftMd).toContain(
+			"It states the **output** of the reframe — the user, their problem, and the value bet as settled prose — not the reframe as an event",
+		);
+		expect(issueCraftMd).toContain(
+			"The raw feature-shaped request is preserved by the Request-Coverage Rule and the Stage 6 verbatim payload, not re-narrated in the Problem.",
+		);
+	});
+});
+
+describe("V2: Problem row and Post-Release trigger wire to Value-Hypothesis Framing", () => {
+	test("Problem row routes feature/improvement requirements to the rule", () => {
+		const row = issueCraftMd.split("\n").find((line) => line.startsWith("| **Problem** |"));
+		expect(row).toContain("framed as the user's problem, not the requested feature");
+		expect(row).toContain("follow the **Value-Hypothesis Framing** rule below");
+	});
+
+	test("Post-Release Observation trigger expects Form-1 for a value-bearing issue", () => {
+		expect(issueCraftMd).toContain(
+			"An issue whose Problem asserts a core-value link (**Value-Hypothesis Framing**) is value-bearing: its Form-1 outcome is expected here, naming the behavior change that proves the value moved.",
+		);
+	});
+});
+
+describe("V3: SKILL.md routes to Value-Hypothesis Framing without copying the rule", () => {
+	test("Stage 1 reframes a bare feature order instead of filing it", () => {
+		expect(skillMd).toContain(
+			'A request shaped as a bare feature order ("OO 기능 추가해줘") is reframed into a user-problem + core-value hypothesis at Stage 4 (Value-Hypothesis Framing in `references/issue-craft.md`), never filed as a feature order.',
+		);
+	});
+
+	test("Stage 4 record pointer names the who/problem/frequency/value clauses and the backlog flag", () => {
+		expect(skillMd).toContain("follow **Value-Hypothesis Framing** in that file");
+		expect(skillMd).toContain("flag the issue as a backlog candidate in Notes rather than filing a feature order as ready work");
+	});
+});
