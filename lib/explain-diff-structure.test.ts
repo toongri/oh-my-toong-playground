@@ -2184,6 +2184,14 @@ describe("모든 저작 스텝 — R11 스타일 발명 금지", () => {
 		expect(r.pass).toBe(true);
 	});
 
+	// "쓰기 전에 소개" — 그림 속 코드명 요소를 그림 바로 밑에서 한 줄씩 푸는 각주 상자.
+	// render.ts 가 CSS 를 소유하므로(deep-interview/prometheus 와 동일) 승인 클래스다.
+	test("다이어그램 각주 gloss 박스(ul.gloss)는 render.ts가 CSS를 소유하므로 위반이 아니다", () => {
+		const doc = `${evidenceOnlyDoc("a.ts")}\n<ul class="gloss"><li><code>getDisplayCatalog</code> — 표시용 카탈로그를 읽는 함수</li></ul>\n`;
+		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "evidence" });
+		expect(r.pass).toBe(true);
+	});
+
 	test("승인된 컴포넌트 클래스(cf 계열 포함)만 쓰면 통과한다", () => {
 		const doc = `${evidenceOnlyDoc("a.ts")}
 <div class="flow">

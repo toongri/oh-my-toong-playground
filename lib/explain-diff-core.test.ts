@@ -66,7 +66,7 @@ describe("스텝 순서", () => {
 });
 
 describe("필수 심사 ID 배정", () => {
-	test("architecture는 R12, capability는 R23, intuition은 R6, code는 R7을 요구하고 나머지 여섯 스텝은 아무 것도 요구하지 않는다", () => {
+	test("architecture는 R12, capability는 R23, intuition은 R6, code는 R7·R24를 요구하고 나머지 여섯 스텝은 아무 것도 요구하지 않는다", () => {
 		expect(REQUIRED_JUDGE_IDS).toEqual({
 			evidence: [],
 			background: [],
@@ -75,7 +75,7 @@ describe("필수 심사 ID 배정", () => {
 			capability: ["R23"],
 			intuition: ["R6"],
 			commits: [],
-			code: ["R7"],
+			code: ["R7", "R24"],
 			render: [],
 			quiz: [],
 		});

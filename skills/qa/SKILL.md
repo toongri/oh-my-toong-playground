@@ -285,6 +285,13 @@ The chain-recording surface is: `set-acceptance`, `add-actor`, `add-story`, `aut
 
 Once the cycle concludes (any EXIT outcome — Goal Met, max_cycles, Same-Failure-3x, or Safety), first run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts set-verdict <APPROVE|COMMENT|REQUEST_CHANGES>`, then run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-report.ts --session <id> --out <path> [--narrative <json-file>]`, open the rendered HTML and verify all claim images remain legible, run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts review-report --path <html>`, then run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts complete`, and only then report the verdict prose. The renderer records the HTML/state identity; `review-report` records the visual inspection attestation. Editing the HTML or recorded facts requires re-render and re-review. `complete` is gated by the same predicates as Stop and refuses an unrecorded or falsely approved cycle; it marks an earned terminal state inactive so the finished cycle is not resurrected as "in progress" in a later session.
 
+**Presentation review (required, after `review-report`, before `complete`).** Dispatch the `presentation-reviewer` agent to contrast the report's reader-facing presentation layer against the actual evidence and the material this cycle verified against. It is skill-agnostic, so assemble the bundle:
+- **presentation**: the rendered report HTML (its top presentation layer) and the `--narrative` JSON you authored.
+- **sources**: the recorded evidence (screenshots, observations, run checks from qa-state) and the referenced plan/spec/ticket/docs the acceptance criteria came from.
+- **reader_persona**: "a context-free PO/designer who does not read code — judges from the report alone whether the change met its requirements, in product/user terms".
+
+Its verdict is `APPROVE` / `REQUEST_CHANGES` / `COMMENT`. On `REQUEST_CHANGES`, fix the narrative/report, re-render, re-`review-report`, and re-review before `complete`. This is a required review step, not an added CLI gate; run it every time. It never overrides a recorded pass/fail fact — those come from qa-state, and a fidelity finding against them means the narrative misread the record, not that the record changes.
+
 ---
 
 ## Fix-Loop Nesting Contract

@@ -531,7 +531,7 @@ interface ChecklistAxisRow {
 	evidence: string;
 }
 
-const CHECKLIST_AXIS_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
+const CHECKLIST_AXIS_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 
 /** Reads the four-column Markdown table used by the final nine-axis checklist. */
 function parseChecklistAxisRows(text: string): ChecklistAxisRow[] {
@@ -577,14 +577,14 @@ function checkChecklistReport(checklistPath: string | undefined, failedItems: st
 
 	const rows = parseChecklistAxisRows(text);
 	if (rows.length === 0) {
-		failedItems.push(`체크리스트에 9개 축 행이 없습니다: ${checklistPath}`);
+		failedItems.push(`체크리스트에 10개 축 행이 없습니다: ${checklistPath}`);
 		return;
 	}
 
 	const seen = new Set<number>();
 	for (const row of rows) {
 		if (!CHECKLIST_AXIS_NUMBERS.some((axisNumber) => axisNumber === row.number)) {
-			failedItems.push(`체크리스트의 축 번호가 1~9 범위를 벗어났습니다: ${row.number}`);
+			failedItems.push(`체크리스트의 축 번호가 1~10 범위를 벗어났습니다: ${row.number}`);
 			continue;
 		}
 		if (seen.has(row.number)) {

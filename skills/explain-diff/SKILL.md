@@ -27,6 +27,17 @@ Each step must pass two gates — **structure check (script) → judgment (subag
 
 **State purpose, not just mechanism — for the document and for each section.** The document opens (under the title, in the meta block from `markdown-template.md`) with **one line on what this document is for**: which change it teaches and why a reader should understand it. And each major section earns its place — begin Background, 목표, Architecture, 기능 단위, Intuition, Code with a short framing of *why this section exists and what the reader takes from it*, not just its content. A reader who lands mid-document should always know why they are reading this part. The skill's own steps carry the how; the sections must also carry the why.
 
+**쓰기 전에 소개 (introduce before you use).** The reader has no prior context, so **every first-class entity earns a plain-language introduction at its first appearance** — before the sentence, table, card, or diagram leans on it. This is the same first-occurrence discipline as the Purpose bar above, made concrete: a name the reader cannot decode from the page is a hole in the explanation, however correct the rest is. Right-size the introduction to what the entity is (deeper kinds already have a dedicated step/card — this rule is the floor, not a second copy):
+
+| 첫 등장하는 것 | 소개 깊이 |
+|---|---|
+| 용어·약어·코인된 표현 (도메인 단어, 코드베이스 은어, 상태 라벨) | 한 줄 뜻 — inline gloss on first use (`온보딩(첫 사용자 설정 흐름)`) |
+| 함수·리포지토리·메서드 심볼 | 한 줄 역할 — what it does, not just its name (Step 5 `구현체`, Step 8 change blocks carry this) |
+| 모듈·도메인 | 경계 + 소유 한두 줄 — what it owns and where it sits (Step 4 `arch-entity` 카드가 이 몫) |
+| 기능(유스케이스) | 기능 단위 챕터 하나 (Step 5) |
+
+**Diagram elements the cards do not already decode get a gloss footnote.** A `sequenceDiagram` or `flowchart` names its nodes/messages with raw code identifiers (`getDisplayCatalog`, `ProgramActivationTx`, a store name) that a no-context reader cannot decode from the picture alone. Where those identifiers are **not** already explained by a `## Architecture` component/domain card (R18/R21), place a `<ul class="gloss">` footnote **directly under the diagram** — one `<li><code>요소명</code> — 평이한 뜻</li>` per code-name element drawn. render.ts styles it as an "이 그림의 요소" box; it needs no explanation prose around it. (This is the same footnote deep-interview and prometheus already use; a self-evident node already aliased to plain language — `participant Backend as catalog` — needs no entry.)
+
 </Role>
 
 ## State CLI
@@ -324,9 +335,9 @@ $CLI pass-step --step <step> --doc "<문서 경로>" --judge-json '<판정 JSON>
 
 The judgment JSON is produced by the judging subagent. Give the judge the **fixed template** in `references/judge-prompt.md` verbatim. Do not compose one yourself.
 
-The judge decides only four of the whole rubric — `R12` (if the architecture has a diagram, do its labels and change markers correspond to grounds in the diff; if it has no diagram, are all three levels' reasoned waivers present), `R23` (per `## 기능 단위` chapter: is it a use-case rather than a demoted domain function, does it steal no collaborator's responsibility, is its version classification grounded), `R6` (does Intuition's concrete example actually exist and get reused in the prose), `R7` (does group N's herald presuppose group N-1). The rest are already decided by the structure check. Passing R12 requires the judge's quote. When a diagram exists the quote must carry the identifier and change-marker grounds; when none exists it must carry all three waiver sentences verbatim.
+The judge decides only five of the whole rubric — `R12` (if the architecture has a diagram, do its labels and change markers correspond to grounds in the diff; if it has no diagram, are all three levels' reasoned waivers present), `R23` (per `## 기능 단위` chapter: is it a use-case rather than a demoted domain function, does it steal no collaborator's responsibility, is its version classification grounded), `R6` (does Intuition's concrete example actually exist and get reused in the prose), `R7` (does group N's herald presuppose group N-1), and `R24` (쓰기 전에 소개 — is every first-class entity the accumulated document leans on introduced at first use, including each diagram code-name element decoded by a card or a `gloss` footnote). The rest are already decided by the structure check. Passing R12 requires the judge's quote. When a diagram exists the quote must carry the identifier and change-marker grounds; when none exists it must carry all three waiver sentences verbatim.
 
-Each of these four items is **required in exactly one step** — `architecture` for `R12`, `capability` for `R23`, `intuition` for `R6`, `code` for `R7`. The other six steps (evidence, background, goal, commits, render, quiz) have no required judge ID, so pass them with `--judge-json '[]'`. If the required ID is absent from the payload it is rejected on that alone, and attaching a real quote to an unrelated ID does not substitute for the missing required ID.
+Of these five items, four are **required in exactly one step** — `architecture` for `R12`, `capability` for `R23`, `intuition` for `R6` — and the `code` step requires **two**, `R7` and `R24`. The other six steps (evidence, background, goal, commits, render, quiz) have no required judge ID, so pass them with `--judge-json '[]'`. If any required ID is absent from the payload it is rejected on that alone, and attaching a real quote to an unrelated ID does not substitute for a missing required ID.
 
 ```json
 [{"id":"R6","pass":true,"quote":"문서에서 그대로 따온 문장"}]
@@ -351,11 +362,23 @@ After rendering, before moving to the quiz, **run the one verification the machi
    line of `REVIEW: APPLIED`. If you changed the document, re-run render.ts.
 
 2. **Final self-review checklist** — open `references/final-checklist.md` and grade the finished
-   document against its 9 axes (system decomposition, both-sides coverage, goal→diagram→interpretation,
+   document against its 10 axes (system decomposition, both-sides coverage, goal→diagram→interpretation,
    state diagram, logic flowchart, real identifiers + changed markers, sequence activation balance,
-   user journey, clean render). Write the graded table to `<slug>-final-checklist.md` next to the
+   user journey, clean render, 쓰기 전에 소개). Write the graded table to `<slug>-final-checklist.md` next to the
    document, ending with `CHECKLIST: ALL PASS`. Any FAIL → fix the document, re-run render.ts,
    re-grade from the top. The quiz does not start while a FAIL remains.
+
+3. **Presentation review (required, before the quiz)** — dispatch the `presentation-reviewer` agent to
+   contrast the finished document against its source material for the reader. It is skill-agnostic, so
+   assemble the bundle yourself:
+   - **presentation**: the document `.md` (and its `.html`).
+   - **sources**: the actual diff (the range's `git show`/`git diff`), the `### 원천` evidence table
+     from Step 1, and any plan/issue/ticket/docs that evidence table cites.
+   - **reader_persona**: "a colleague or team-lead with no prior context on this change — richly and
+     correctly understands what/why/what-to-watch from this page alone".
+   Its verdict is `APPROVE` / `REQUEST_CHANGES` / `COMMENT`. On `REQUEST_CHANGES`, fix the document,
+   re-run render.ts, re-grade the checklist, and re-review — the quiz does not start until the reviewer
+   no longer requests changes. This is a required review step, not a CLI gate; run it every time.
 
 The render artifact gate requires all three artifacts: `--html`, `--writing-report`, and `--checklist`.
 The checklist file must exist and its last non-whitespace line must be exactly `CHECKLIST: ALL PASS`.
@@ -451,6 +474,6 @@ Rejected if even one required concept remains. There is no bypass path.
 |---|---|
 | `references/markdown-template.md` | When you start writing the document — skeleton, per-architecture-level diagram types, full list of sanctioned components |
 | `references/rubric.md` | Which item is decided by whom, and what each item requires |
-| `references/final-checklist.md` | Step 9, after render — the 9-axis self-review gate before the quiz |
+| `references/final-checklist.md` | Step 9, after render — the 10-axis self-review gate before the quiz |
 | `references/judge-prompt.md` | When calling the judging subagent (fixed template) |
 | `references/discipline.md` | The discipline that could not be moved into structure |

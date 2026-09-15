@@ -858,6 +858,15 @@ describe("new-prose: test-runner logs are never scenario evidence", () => {
 		expect(presentationMd).toContain('unverified (`unverified`)');
 		expect(presentationMd).toContain("미검증 — 유저 경계 미구동");
 	});
+
+	// 쓰기 전에 소개 — 무맥락 PO가 생소한 제품/도메인 엔티티를 첫 등장에서 이해하도록,
+	// presentation.md가 first-occurrence 소개 리시피를 규정하는지 by-eye 대신 그린 테스트로 고정한다.
+	test("presentation.md documents the introduce-before-you-use gloss recipe in product language", () => {
+		expect(presentationMd).toContain("쓰기 전에 소개");
+		// 제품/도메인 언어로만 — 코드 심볼은 reader view에서 제거되므로 소개 대상이 아니다.
+		expect(presentationMd).toContain("product/user language");
+		expect(presentationMd).toContain("code symbols");
+	});
 });
 
 // ---------------------------------------------------------------------------
