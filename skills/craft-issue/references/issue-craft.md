@@ -108,6 +108,41 @@ requires reader-orientation for References entries ("a reader should understand 
 exists without opening it"); this contract generalizes that same principle to code symbols named in
 body prose.
 
+### Value-Hypothesis Framing
+
+**Applies to feature and improvement requirements** — a requirement that proposes new or changed
+user-facing capability. Bug-genre issues (§3) and pure refactor/infra issues are exempt: their
+affected user and their value are already fixed by the defect or the internal goal, and forcing this
+framing on them is scaffolding the reader skims past (Lean by Default).
+
+For the genres it covers, a requirement is recorded as a hypothesis about a **specific user's problem
+and the product's core value** — never as a raw feature order. A request that arrives shaped as "add
+feature Z" is reframed at record time into who hits what problem and why solving it matters to the
+value they already get; the feature is one candidate solution to that problem, not the requirement
+itself. The **Problem** section carries these clauses in one paragraph, each filled from gathered
+evidence or marked `TBD — needs validation via {method}` — never invented:
+
+- **Who** — the specific target user, named by the trait that makes this their problem, and whether
+  they are a **core/target user** of the product or a peripheral segment. Not "a user" / "사용자":
+  name the segment (e.g. the core persona the product is built for). A request that turns out to
+  serve a peripheral segment is recorded as such, so priority sees it rather than discovering it
+  post-build.
+- **What problem** — the user-observable problem, stated as the user's problem, not the missing
+  feature.
+  Reframe recipe: `"리뷰 탭이 없다" ✗ → "제품을 처음 접한 유저가 이 영양제가 자신에게 맞는지 판단할 근거가 없어 구독을 망설인다" ✓`.
+- **How often / impact** — how frequently the problem occurs and for how many, when known.
+- **Core-value link** — the hypothesis connecting the problem to the product's established value: how
+  solving it strengthens or extends the value this user already gets (or is meant to get). State it
+  as a bet — "solving X is expected to strengthen core value V for user U" — not as a settled fact.
+
+**These four are author-facing prompts, not body labels.** The Problem reads as one flowing problem statement in the reader's working language — who and their problem, with frequency and value as plain sentences, never a `Who: / What problem: / …` mini-form. It states the **output** of the reframe — the user, their problem, and the value bet as settled prose — not the reframe as an event: it does not recount how the request arrived or announce that it was reframed ("원 요청은 기능으로 들어왔고 … 가설로 재구성하면"). The raw feature-shaped request is preserved by the Request-Coverage Rule and the Stage 6 verbatim payload, not re-narrated in the Problem. This applies the Render Contract (authoring scaffolding never leaks into emitted prose) and the presentation.md reader check to these clauses.
+
+**The core-value link is a Soft gate, not a refuse-to-file.** When the request is a bare feature order and neither gather nor investigation can establish who / what-problem / core-value, do not invent them and do not refuse to file: mark the unresolved clauses `TBD — needs validation via {method}` and record a **backlog-candidate flag** in Notes (메모) — a feature-first idea parked until its core user and value are established, not a proven requirement to build now. The issue is still filed; the flag records that its value hypothesis is unproven, so priority does not read an unvalidated feature order as ready work.
+
+The **expected behavior change and success signal** — what the user does differently, and the
+post-release signal that proves the problem was solved — are not restated here: they live in the
+**Post-Release Observation** section, whose trigger fires for any issue asserting a core-value link.
+
 ### Lean by Default, Escalate on Need
 
 The **default** body is the minimal set — **Problem → (사전 확인) → AC → Non-Goals → References** —
@@ -125,7 +160,7 @@ it, never as a reflex:
 | **two-bucket** Confirmed-Facts / Needs-Verification grouping | the structured Pre-Context above is already in use AND a sub-item holds 3+ items. |
 | **Decisions Needed** | an open product/policy decision actually blocks or shapes the work. |
 | **Notes** | provenance (superseded attempts, deep-interview artifact path) that has no other home. |
-| **Post-Release Observation** | the issue moves a measurable outcome (adoption, conversion, adherence, latency, error rate — Form 1), OR the change implies a checkable expectation about logs / data / state to confirm after release (Form 2). Omit only when neither holds — a pure capability / readability refactor / infra issue whose value is fully delivered the moment its ACs pass. |
+| **Post-Release Observation** | the issue moves a measurable outcome (adoption, conversion, adherence, latency, error rate — Form 1), OR the change implies a checkable expectation about logs / data / state to confirm after release (Form 2). An issue whose Problem asserts a core-value link (**Value-Hypothesis Framing**) is value-bearing: its Form-1 outcome is expected here, naming the behavior change that proves the value moved. Omit only when neither holds — a pure capability / readability refactor / infra issue whose value is fully delivered the moment its ACs pass. |
 
 The test before emitting any escalation section: *would a lean sibling issue in this epic carry it?*
 If the house siblings stay flat, match them — do not emit scaffolding the reader skims past. A
@@ -141,7 +176,7 @@ every Conditional row in its table to fire together.
 
 | Section | Content |
 |---|---|
-| **Problem** | What user-observable or system-observable behavior is wrong or missing. One paragraph. |
+| **Problem** | Whose problem and what it is: the target user (by the trait that makes it their problem) and the user-observable or system-observable problem they hit — framed as the user's problem, not the requested feature. For a feature/improvement requirement, follow the **Value-Hypothesis Framing** rule below. One paragraph. |
 | **Evidence** | Concrete data supporting the problem: logs, error messages, screenshots, metric readings, witness accounts. Direct quotes or paste, not paraphrase. |
 | **Root Cause** | The underlying mechanism that produces the problem. Must be grounded in code, logs, or a reproducible trace — not speculation. If unknown, write `TBD — needs validation via {method}`. |
 | **Pre-Context** | Background facts on scope and risk the reader needs before implementation begins — three sub-items (**Affected Areas**, **Premises**, **Blockers & Risks**). See Pre-Context Rules below. |

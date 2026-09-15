@@ -61,7 +61,7 @@ required field of the append shape.
 Identify what was handed to you. Three input modes:
 
 - **Assigned PM issue**: an issue already exists; enrich and cross-link it by **appending a comment** — its body is immutable per the Append-Only History Contract above.
-- **Abstract free-text requirement**: no issue yet; synthesize one from scratch.
+- **Abstract free-text requirement**: no issue yet; synthesize one from scratch. A request shaped as a bare feature order ("OO 기능 추가해줘") is reframed into a user-problem + core-value hypothesis at Stage 4 (Value-Hypothesis Framing in `references/issue-craft.md`), never filed as a feature order.
 - **Symptom report (cause unknown)**: a bug, regression, incident, or support report describing wrong behavior whose root cause is not yet established. This mode routes Stage 3 to the diagnosis sub-pipeline (not the light investigation): the issue's Root Cause cannot be written until the cause is established by evidence or explicitly marked hypothesis-grade.
 
 Collect the input text and any ambient context (conversation thread, linked documents, slack messages) before proceeding to Stage 2.
@@ -141,6 +141,8 @@ If neither condition holds, do not create a Decisions Needed section for this pu
 Read `references/issue-craft.md` now (using the Read tool with path `references/issue-craft.md`). That file contains the best-practice body shape, the observable-AC rubric, the RCA shape, and anti-fluff rules. Follow it in full.
 
 Apply the body shape to the gathered context. Do not invent plausible requirements — missing information is filled with `TBD — needs validation via {method}`.
+
+For a feature/improvement requirement, follow **Value-Hypothesis Framing** in that file — the Problem records who (which target/core user), the user-problem (not the requested feature), frequency, and the core-value link; when the value hypothesis cannot be established, mark the unresolved clauses `TBD` and flag the issue as a backlog candidate in Notes rather than filing a feature order as ready work.
 
 ---
 
