@@ -58,12 +58,21 @@ If read, 확보=열람; if no tool is available, 확보=접근 불가 (record th
 <mermaid (erDiagram/classDiagram) — nodes name real business concepts (no file paths); fill each classDiagram box with member variables/methods — or "구조 변화 없음: <reason>">
 <arch-entity per domain object — 책임 (invariants) / 핵심 멤버 / 변경점 (what this diff changed) + change kind; see below (R21)>
 
-### 경계·의존·유스케이스
-<use-case orchestration mermaid sequenceDiagram (flow + changed step) or waiver>
-<if the diff touches a user-facing surface (screen/input/display/notification/entry point): user-journey flowchart —
- start at the user's first action `([사용자: …])`, pass through actual branches (permission denied/lock/retry),
- and end at what they see; mark changed steps — if none, state its absence in one line>
-<arch-entity per behavior unit — change kind + 한 일 + 영향 인터페이스, plus one-line 의존 방향 verdict — see below (R15)>
+## 기능 단위
+### <캐피빌리티 이름 — 유스케이스가 나르는 능력. 도메인 함수/리포지토리가 아니다 (R23)>
+- **구현체** <the symbol(s) that carry this use-case — a service method / endpoint / script, not a persistence method>
+- **버전** {라벨: <codebase version token, e.g. `program-v2`, or `버전 토큰 없음`>, 설명: <신규 | 동일버전 수정 | 버전 전이 vN→vN+1 (before→after 대조) | 폐기> — <what the transition changed>}
+- **소속 도메인 + 협력** <owning domain>; <each collaborator tagged `[의존=계약 위임]` or `[직접 핸들링]`, with direction>
+- **입구(트리거)** <trigger kind: 스케줄러/HTTP/tRPC/gRPC/메시지/이벤트/스크립트/display/in-tx 내부호출> <진입점> — <인터페이스 signature>. <변경 new|mod|del>
+- **영향범위** <blast radius — who reads/depends on this, how failure propagates>
+
+**책임** <only this use-case's own responsibility. A use-case orchestrates domains through their contracts; it does not steal a collaborator's responsibility or absorb a cross-cutting property (transaction/idempotency) that another path owns>
+
+<one sentence naming what the reader verifies with the flow — then a mermaid `sequenceDiagram` (real symbols, mark the step this diff changed) — then 2–3 sentences reading the drawn flow plus its 관련 흐름. If the diff touches a user-facing surface, a user-journey `flowchart` from the user's first action `([사용자: …])` through actual branches (권한 거부/락/재시도) to what they see may replace or accompany the sequence>
+
+**개념/도메인 모델 연결** <the domain models/concepts this use-case connects>
+
+의존 방향 판정 — <one line: which direction dependencies flow, and whether this change keeps/violates/restores unidirectionality>
 
 ## Intuition
 <one paragraph on the essence + toy-value example + flow/compare component>
@@ -308,48 +317,73 @@ To pass R21, the domain level must contain `arch-entity` cards with `책임`/`�
 labels and allowed `data-change` values (a reasoned waiver may replace cards). If a `classDiagram`
 is drawn, every box must also contain members/methods.
 
-## Boundary/dependency/use-case block (R15 required)
+## 기능 단위 chapters (R15 required)
 
-**What this block is**: a **change map of use cases — end-to-end execution paths from entry point
-to store — created or changed by this diff**. The system/component/domain levels explained the parts;
-this block explains **the paths in which those parts assemble and actually run**. Inclusion rule:
-**one card = one execution unit** — only things invoked and run, such as service methods, HTTP
-endpoints, batch scripts, and hooks, get cards. **Cross-cutting properties cannot have standalone
-cards**: describe transaction boundaries, idempotency, and consistency inside the owning execution
-unit's `한 일` field (property-named cards such as "온보딩 승인 트랜잭션" have unclear identity, a
-measured defect). Each card's `한 일` **opens by identifying the unit** — its kind (service method,
-endpoint, script) and owning module. A card with only an identifier, making the reader guess what
-`update_onboarding_status` is, fails.
+**What this section is**: a **change map of capabilities (use cases) — created or changed by this
+diff**, promoted to top-level `## 기능 단위` with **one `### <capability>` chapter per use-case**. The
+system/component/domain levels explained the *parts*; these chapters explain **the capabilities those
+parts assemble into and the paths in which they actually run**.
 
-Features/use cases mostly bear **orchestration responsibility**, so this block centers on **flow**:
-who calls whom, in what order, and which step this diff changed. **Draw that flow as a mermaid
-`sequenceDiagram`** (do not substitute prose in static cards), marking changed steps with `Note` or
-`:::changed`. Above it, add an `arch-entity` per behavior unit stating what it did and the affected
-interface, then give a one-line dependency-direction verdict.
+**The three layers — place each part on the right one.** A capability is the middle layer; do not
+confuse it with the layer above or below.
 
-- **Orchestration diagram** — Draw the use-case call flow as a `sequenceDiagram` (recommended).
-  Participants must be real module/service/function names (R12); mark the steps this diff changed.
-  If the flow truly does not change, use `구조 변화 없음: <사유>` instead. (R15 checks this block for
-  mermaid or a waiver.)
-- **Behavior units** — One `arch-entity` per **execution unit** added/deleted/changed. Carry the change
-  kind in `data-change`; each unit states **한 일 (identity and owning module in its first sentence)
-  + 영향 인터페이스**. Follow the two axes of the `architecture-boundaries` rule in vocabulary and
-  principle, but **write neither methodology names (DDD, FSD, Clean-arch, bounded context) nor axis
-  labels such as `수평`/`수직` in the output**. Name the touched areas in the codebase's actual domain
-  terms, rather than classifying parts on a horizontal/vertical grid. R19 checks both names and axis labels.
-- **Dependency-direction verdict** — State in one line which direction dependencies flow and whether
-  this change keeps, violates, or restores unidirectionality. Flag reach-ins, back-references, and cycles
-  as coupling defects. The `의존 방향` label is required.
+| Layer | What it is | Gets a chapter? |
+|---|---|---|
+| **입구 (trigger)** | what runs the capability: 스케줄러 / HTTP / tRPC / gRPC / 메시지 / 이벤트 / 스크립트 / display / in-tx 내부호출 | No — it is a **slot** (`입구`) of the capability it triggers |
+| **기능 단위 (use-case)** | one capability carried end to end — an **orchestrator** of domains through their contracts (Clean-arch use-case / FSD feature / DDD service) | **Yes — one chapter each** |
+| **도메인 함수·모델** | a repository/persistence method or domain operation (e.g. `markTutorialCompleted` = "mark completed and persist") | No — it surfaces as a **depended-on collaborator** inside a capability's `소속 도메인 + 협력` slot |
 
-R19 checks only rendered `## Architecture` prose. It ignores fenced blocks and inline-code examples,
-and rejects methodology/axis tokens only as **standalone tokens**, not embedded in identifiers
-(English methodology tokens are case-insensitive).
+**Inclusion rule: one chapter = one use-case, never a domain/persistence function.** A persistence
+method is not a capability just because it has a tRPC/HTTP adapter — its adapter belongs to whichever
+use-case orchestrates it. Mistaking a repository method for a capability is a measured defect (RED,
+luna max on pr-3619): `markTutorialCompleted` is `user` domain persistence, and the use-case that owns
+its orchestration is `ProposalApprovalService`.
+
+**A chapter states only its own responsibility.** A use-case orchestrates the domains it needs through
+their contracts; it does not **steal a collaborator's responsibility** or **absorb a cross-cutting
+property another path owns**. Describe a transaction boundary / idempotency / consistency inside the
+`책임` and flow of the use-case that actually owns it — a version-bumped feature is still the same
+feature (compare it across versions; do not treat it as a new one), and "온보딩 완료 기록" does not own
+"프로그램 활성화" (that atomicity belongs to the approval path).
+
+**Each chapter carries these header slots** (R15 checks their presence per chapter, plus a flow
+diagram; R23 — the judge — checks the semantic discipline the scan cannot see):
+
+- **구현체** — the symbol(s) that carry this use-case (service method / endpoint / script), so the
+  reader is not left guessing what an identifier is.
+- **버전** — `{라벨: <codebase version token, e.g. \`program-v2\`, or \`버전 토큰 없음\`>, 설명: <분류> — <what changed>}`.
+  The 분류 is one of **신규 / 동일버전 수정 / 버전 전이 vN→vN+1 / 폐기**. For a 버전 전이, contrast
+  before→after; the 라벨 anchors to a **real version token in the codebase**, not an invented one.
+- **소속 도메인 + 협력** — the owning domain, then each collaborator tagged `[의존=계약 위임]` (reached
+  through its contract) or `[직접 핸들링]` (handled inside this use-case), with direction.
+- **입구(트리거)** — the trigger kind + entry point + interface signature + change kind (new|mod|del).
+- **영향범위** — the blast radius: who reads/depends on this capability and how a failure propagates.
+
+Then the **narrative body** (judged, not scanned): **책임** (its own responsibility only), a mermaid
+`sequenceDiagram` of the flow with the changed step marked plus 2–3 sentences reading it and its
+관련 흐름, **개념/도메인 모델 연결**, and a one-line `의존 방향 판정`. Participants must be real
+module/service/function names (R12); if the flow truly does not change, a diff that changes no use-case
+uses a section-level `구조 변화 없음: <사유>` waiver in place of chapters.
+
+Follow the two axes of the `architecture-boundaries` rule in vocabulary and principle, but **write
+neither methodology names (DDD, FSD, Clean-arch, bounded context) nor axis labels such as `수평`/`수직`
+in the output** — name touched areas in the codebase's actual domain terms. R19 scans both the
+`## Architecture` and `## 기능 단위` prose for these standalone tokens (ignoring fenced blocks and
+inline code; English methodology tokens are case-insensitive).
 
 ```markdown
-### 경계·의존·유스케이스
+## 기능 단위
 
-> 유스케이스 — 부스트팩 상담챗이 표시 카탈로그를 읽어 카드를 그리는 흐름. 아래 시퀀스의
-> backend 조회 단계가 이 diff로 바뀐다.
+### 표시 카탈로그 조회
+- **구현체** `SupplementCatalogService.getDisplayCatalog` — 입구 어댑터는 `catalog.router.ts`
+- **버전** {라벨: 버전 토큰 없음, 설명: 신규 — 삭제 카테고리까지 포함한 표시용 카탈로그 조회 유스케이스를 추가했다.}
+- **소속 도메인 + 협력** commerce 도메인이 소유한다. `resolveDisplay`는 `[의존=계약 위임]`으로 entities resolver에 맡기고, 카탈로그 조립은 `[직접 핸들링]`한다.
+- **입구(트리거)** tRPC `catalog.getDisplay` — `getDisplayCatalog(): Promise<Catalog>`. 신규 입구(new).
+- **영향범위** 상담챗 카드 렌더가 삭제 카테고리를 포함해 읽는다. 읽기 전용이라 쓰기 계약 변경은 없다.
+
+**책임** 나는 삭제 카테고리까지 포함한 표시용 카탈로그를 조회해 카드에 공급한다. 카탈로그 영속화 자체는 저장소에 위임하고, 판매 여부 판정은 이 유스케이스에 두지 않는다.
+
+표시 카탈로그가 조립되어 상담챗 카드로 돌아가는 흐름을 확인한다.
 
 ​```mermaid
 sequenceDiagram
@@ -363,26 +397,24 @@ sequenceDiagram
   Resolver-->>-Chat: 카드용 표시 카탈로그
 ​```
 
-<div class="arch-entity" data-change="new">
-<p><strong>이름</strong> display catalog 조회</p>
-<p><strong>한 일</strong> backend catalog 라우터가 소유한 HTTP 조회 엔드포인트다 — 삭제 카테고리까지 포함한 표시용 카탈로그 경로를 신설하고, 조회는 단일 트랜잭션 없이 읽기 전용으로 동작한다.</p>
-<p><strong>영향 인터페이스</strong> <code>GET /v1/supplement-catalog?includeDeletedCategories=true</code></p>
-</div>
+`Resolver`가 `includeDeletedCategories=true`로 backend를 조회하는 단계가 이 diff로 바뀐다. 관련 흐름인 판매용 카탈로그 조회는 삭제 카테고리를 여전히 제외하므로 이 경로와 분리된다.
 
-**의존 방향** — commerce feature → entities resolver → shared schema → backend REST 단방향 유지.
-commerce가 catalog 내부 테이블을 직접 조회하지 않고 계약 뒤에 머문다 — 새 순환·경계 침투 없음.
+**개념/도메인 모델 연결** SupplementCategory의 canonical 정체성과 그 삭제 상태를 표시 판정에 연결한다 — 삭제된 카테고리도 표시용으로는 남는다.
+
+의존 방향 판정 — commerce feature → entities resolver → shared schema → backend REST 단방향 유지. commerce가 catalog 내부 테이블을 직접 조회하지 않고 계약 뒤에 머문다 — 새 순환·경계 침투 없음.
 ```
 
-R15 checks the **presence** of `영향 인터페이스`/`의존 방향` slots and a renderer-recognized
-`arch-entity` with allowed `data-change="new|mod|del"` in the actual fence-masked block (the same
-philosophy as R14). The author fills each slot's content. Prose mentions of `data-change` and
-unsupported values do not count as cards. Fenced examples are masked, so leaving the example above
-untouched cannot pass — write the block in the document with the actual change's content.
+R15 checks, **per chapter**, the presence of the `구현체`/`버전`/`소속 도메인`/`입구`/`영향범위` slots
+and a mermaid flow diagram (the same presence philosophy as R14). One complete chapter cannot mask an
+incomplete one — every `### <capability>` chapter is checked independently. The author fills each
+slot's content; R23 judges whether the chapter is a real use-case (not a demoted domain function),
+whether it steals a collaborator's responsibility, and whether the version classification is grounded.
 
 ## Mermaid authoring rules
 
 - Use a ` ```mermaid ` fence. `render.ts` bakes it into inline SVG through mmdc at build time —
-  the resulting HTML remains self-contained, with no runtime JS.
+  the resulting HTML remains self-contained, with no external references and no script needed to
+  render (its only script is an ESC/Enter shortcut for the zoom overlay that degrades away cleanly).
 - Use real system identifiers (service names, module paths, command names) for node labels — invented
   generic nouns ("service"→"DB") fit any diff and fail R12. Context nodes may be unchanged, but nodes/
   edges this diff changed must carry change markers. Judgment (R12) verifies label reality and change
@@ -548,13 +580,14 @@ The `cf-src` badge text is one of three: `근거` (verbatim source in the diff/c
 by a quote), `추론` (inferred from code, followed by the inference ground), or `Unknown / not supplied`
 (no reachable ground; leave it an open question). R3 rejects a 왜 field without this provenance tag.
 
-### `arch-entity` — structural card for one architecture node/behavior unit
+### `arch-entity` — structural card for one architecture node
 
-This single component serves both component-level nodes (R18) and boundary-block behavior units
-(R15). It uses the same `<p><strong>라벨</strong> 값>` field convention as `cf`, with the change kind
-in `data-change` supplying a badge. render.ts owns badge text and colors; authors provide only the
-kind (`new`/`mod`/`del`). Required labels vary by section (component: `패키지`/`책임`/`인터페이스`/`변경점`;
-boundary: `한 일`/`영향 인터페이스`). Under R18, every authored component-level card must satisfy
+This component carries **component-level nodes (R18)** and **domain-level objects (R21)**. (The
+`## 기능 단위` chapters are not cards — they are `### <capability>` subsections with header slots; see
+that section above.) It uses the same `<p><strong>라벨</strong> 값>` field convention as `cf`, with the
+change kind in `data-change` supplying a badge. render.ts owns badge text and colors; authors provide
+only the kind (`new`/`mod`/`del`). Required labels vary by section (component: `패키지`/`책임`/`인터페이스`/`변경점`;
+domain: `책임`/`핵심 멤버`/`변경점`). Under R18, every authored component-level card must satisfy
 these fields independently; one valid card cannot compensate for another card's missing/invalid fields.
 
 ```html

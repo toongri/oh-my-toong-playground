@@ -8,12 +8,13 @@
  * one place where "may this write land" and "may this session stop" are decided.
  */
 
-/** The nine steps, in the order a document is built. */
+/** The ten steps, in the order a document is built. */
 export const STEP_ORDER = [
 	"evidence",
 	"background",
 	"goal",
 	"architecture",
+	"capability",
 	"intuition",
 	"commits",
 	"code",
@@ -32,6 +33,7 @@ export const AUTHORING_STEPS = [
 	"background",
 	"goal",
 	"architecture",
+	"capability",
 	"intuition",
 	"commits",
 	"code",
@@ -40,17 +42,22 @@ export const AUTHORING_STEPS = [
 /**
  * Judge rubric items each step's judge review must certify before `pass-step`
  * may advance it. SKILL.md and references/judge-prompt.md assign the judge
- * exactly three items — R12 at `architecture`, R6 at `intuition`, R7 at `code`
- * — everything else in the rubric is scripted in explain-diff-structure.ts. An
- * empty required set is deliberate at the other six steps, not an oversight:
- * their coverage is already earned before the judge ever runs, so a judge
- * payload with nothing in it is correctly a no-op there, not a bypass.
+ * exactly four items — R12 at `architecture`, R23 at `capability`, R6 at
+ * `intuition`, R7 at `code` — everything else in the rubric is scripted in
+ * explain-diff-structure.ts. An empty required set is deliberate at the other
+ * six steps, not an oversight: their coverage is already earned before the
+ * judge ever runs, so a judge payload with nothing in it is correctly a no-op
+ * there, not a bypass. R23 is the capability step's semantic gate — that each
+ * chapter is a use-case (not a demoted domain function), that no chapter steals
+ * a collaborator's responsibility, and that the version classification is
+ * grounded — the discipline the structure check cannot mechanically see.
  */
 export const REQUIRED_JUDGE_IDS: Record<Step, readonly string[]> = {
 	evidence: [],
 	background: [],
 	goal: [],
 	architecture: ["R12"],
+	capability: ["R23"],
 	intuition: ["R6"],
 	commits: [],
 	code: ["R7"],
@@ -108,6 +115,7 @@ function toStep(v: unknown): Step | null {
 
 function recoverLegacyStep(step: Step): Step {
 	switch (step) {
+		case "capability":
 		case "intuition":
 		case "code":
 		case "render":

@@ -24,12 +24,13 @@ function state(partial: Partial<ExplainDiffState> = {}): ExplainDiffState {
 }
 
 describe("스텝 순서", () => {
-	test("`STEP_ORDER`는 9단계를 스펙이 정한 순서로 담는다 — goal이 background와 architecture 사이", () => {
+	test("`STEP_ORDER`는 10단계를 스펙이 정한 순서로 담는다 — capability가 architecture와 intuition 사이", () => {
 		expect(STEP_ORDER).toEqual([
 			"evidence",
 			"background",
 			"goal",
 			"architecture",
+			"capability",
 			"intuition",
 			"commits",
 			"code",
@@ -38,12 +39,13 @@ describe("스텝 순서", () => {
 		]);
 	});
 
-	test("`AUTHORING_STEPS`는 사람이 개입하지 않는 앞 7단계다", () => {
+	test("`AUTHORING_STEPS`는 사람이 개입하지 않는 앞 8단계다", () => {
 		expect(AUTHORING_STEPS).toEqual([
 			"evidence",
 			"background",
 			"goal",
 			"architecture",
+			"capability",
 			"intuition",
 			"commits",
 			"code",
@@ -54,7 +56,8 @@ describe("스텝 순서", () => {
 		expect(nextStep("evidence")).toBe("background");
 		expect(nextStep("background")).toBe("goal");
 		expect(nextStep("goal")).toBe("architecture");
-		expect(nextStep("architecture")).toBe("intuition");
+		expect(nextStep("architecture")).toBe("capability");
+		expect(nextStep("capability")).toBe("intuition");
 		expect(nextStep("intuition")).toBe("commits");
 		expect(nextStep("commits")).toBe("code");
 		expect(nextStep("code")).toBe("render");
@@ -63,12 +66,13 @@ describe("스텝 순서", () => {
 });
 
 describe("필수 심사 ID 배정", () => {
-	test("architecture는 R12, intuition은 R6, code는 R7을 요구하고 나머지 여섯 스텝은 아무 것도 요구하지 않는다", () => {
+	test("architecture는 R12, capability는 R23, intuition은 R6, code는 R7을 요구하고 나머지 여섯 스텝은 아무 것도 요구하지 않는다", () => {
 		expect(REQUIRED_JUDGE_IDS).toEqual({
 			evidence: [],
 			background: [],
 			goal: [],
 			architecture: ["R12"],
+			capability: ["R23"],
 			intuition: ["R6"],
 			commits: [],
 			code: ["R7"],
@@ -77,7 +81,7 @@ describe("필수 심사 ID 배정", () => {
 		});
 	});
 
-	test("아홉 스텝 전부에 배정이 있다 — 빠진 스텝이 무자격 통과를 만들지 않는다", () => {
+	test("열 스텝 전부에 배정이 있다 — 빠진 스텝이 무자격 통과를 만들지 않는다", () => {
 		for (const s of STEP_ORDER) expect(REQUIRED_JUDGE_IDS[s]).toBeDefined();
 	});
 });

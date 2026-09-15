@@ -711,6 +711,18 @@ function checkRenderOutput(
 					`mermaid 블록 ${fences}개 중 인라인 SVG로 렌더된 것이 ${svgs}개입니다 — render.ts가 mmdc 사전 렌더에 실패했는지 확인하세요.`,
 				);
 			}
+			// Label-clipping regression catch. A <foreignObject> in the baked SVG is
+			// mermaid's htmlLabels:true fingerprint — a fixed-width HTML label box
+			// measured in the render font that CLIPS (hides) text when the viewer's
+			// font is wider (iOS/iCloud lacks "trebuchet ms"). render.ts pins
+			// htmlLabels:false so labels are SVG <text> that overflow-but-never-hide;
+			// if a foreignObject survives, the render regressed to the clipping mode.
+			const foreignObjects = (html.match(/<foreignObject/g) || []).length;
+			if (foreignObjects > 0) {
+				failedItems.push(
+					`다이어그램에 <foreignObject> 라벨이 ${foreignObjects}개 있습니다 — 뷰어 폰트가 넓으면 고정폭 박스가 글자를 잘라 숨깁니다. render.ts mmdc 설정에 htmlLabels:false 가 적용됐는지 확인하세요.`,
+				);
+			}
 		}
 	} catch {
 		failedItems.push(`문서를 읽을 수 없습니다: ${docPath}`);
