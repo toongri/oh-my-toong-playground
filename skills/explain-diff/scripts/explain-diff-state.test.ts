@@ -3,7 +3,11 @@ import { execFileSync } from "child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { STEP_ORDER, type Step } from "@lib/explain-diff-core";
+import {
+	CAPABILITY_STEP_MIGRATION_VERSION,
+	STEP_ORDER,
+	type Step,
+} from "@lib/explain-diff-core";
 import { preRenderMermaid, renderToHtml } from "./render";
 
 const SID = "explain-diff-cli-test";
@@ -195,6 +199,7 @@ function seedLegacyRenderProof(): void {
 		checklist_path: join(sandbox, "legacy-checklist.md"),
 	};
 	rewriteState((current) => {
+		current.capability_step_migration_version = CAPABILITY_STEP_MIGRATION_VERSION;
 		delete current.render_proof_contract_version;
 		current.render_proof = legacyProof;
 		current.structural_ok = ["render"];
@@ -246,6 +251,9 @@ describe("start", () => {
 		const { start } = await cli();
 		start(SID, "HEAD~1..HEAD", "sample");
 		expect(state().step).toBe("evidence");
+		expect(state().capability_step_migration_version).toBe(
+			CAPABILITY_STEP_MIGRATION_VERSION,
+		);
 		expect(state().derived.artifact_write_allowed).toBe(true);
 	});
 
@@ -450,6 +458,119 @@ describe("start", () => {
 			base: { start: 1, count: 2 },
 			head: null,
 		});
+	});
+});
+
+describe("capability step migration persistence", () => {
+	function seedOldLaterState(start: (sessionId: string, range: string, slug: string) => void): void {
+		start(SID, "unavailable..range", "sample");
+		rewriteState((current) => {
+			delete current.capability_step_migration_version;
+			current.step = "intuition";
+			current.passed = ["evidence", "background", "goal", "architecture"];
+			current.structural_ok = ["evidence", "background", "goal", "architecture", "intuition"];
+			current.commit_hashes = ["abc1234"];
+		});
+	}
+
+	test("read가 commit_hashes-bearing old later state를 capability로 저장한다", async () => {
+		const { read, start } = await cli();
+		seedOldLaterState(start);
+
+		const migrated = read(SID);
+		expect(migrated?.step).toBe("capability");
+		expect(migrated?.capability_step_migration_version).toBe(
+			CAPABILITY_STEP_MIGRATION_VERSION,
+		);
+		expect(migrated?.passed).not.toContain("capability");
+		expect(migrated?.structural_ok).not.toContain("capability");
+		expect(state().step).toBe("capability");
+		expect(state().passed).toEqual(["evidence", "background", "goal", "architecture"]);
+		expect(state().structural_ok).toEqual(["evidence", "background", "goal", "architecture"]);
+		expect(state().derived).toEqual(migrated?.derived);
+	});
+
+	test("read가 migration을 감지한 뒤 잠긴 최신 snapshot을 덮어쓰지 않는다", async () => {
+		const { read, start } = await cli();
+		seedOldLaterState(start);
+		const stateFile = join(sandbox, `explain-diff-state-${SID}.json`);
+		const lockPath = `${stateFile}.lock`;
+		mkdirSync(lockPath);
+		try {
+			expect(() => read(SID)).toThrow(`could not acquire state lock: ${lockPath}`);
+			expect(state().step).toBe("intuition");
+		} finally {
+			rmSync(lockPath, { recursive: true, force: true });
+		}
+	});
+
+	test("migration 중 이미 갱신된 locked snapshot은 그대로 반환한다", async () => {
+		const { read, start } = await cli();
+		seedOldLaterState(start);
+		const stateFile = join(sandbox, `explain-diff-state-${SID}.json`);
+		rewriteState((current) => {
+			current.capability_step_migration_version = CAPABILITY_STEP_MIGRATION_VERSION;
+			current.step = "capability";
+			current.passed = ["evidence", "background", "goal", "architecture"];
+			current.structural_ok = current.passed.slice();
+			current.last_failure = null;
+		});
+		const latestBytes = readFileSync(stateFile, "utf8");
+		mkdirSync(`${stateFile}.lock`);
+		try {
+			const latest = read(SID);
+			expect(latest?.step).toBe("capability");
+			expect(readFileSync(stateFile, "utf8")).toBe(latestBytes);
+		} finally {
+			rmSync(`${stateFile}.lock`, { recursive: true, force: true });
+		}
+	});
+
+	test("mustRead outer lock 경로는 deadlock 없이 capability migration을 저장한다", async () => {
+		const { addConcept } = await cli();
+		const { start } = await cli();
+		seedOldLaterState(start);
+
+		addConcept(SID, "lock", true);
+		expect(state().step).toBe("capability");
+		expect(state().capability_step_migration_version).toBe(
+			CAPABILITY_STEP_MIGRATION_VERSION,
+		);
+		expect(state().concepts).toEqual([{ id: "lock", required: true, passed: false }]);
+	});
+
+	test("capability와 render-proof migration이 함께 발생한다", async () => {
+		const { read, start } = await cli();
+		seedOldLaterState(start);
+		seedLegacyRenderProof();
+		rewriteState((current) => {
+			delete current.capability_step_migration_version;
+			current.commit_hashes = ["abc1234"];
+		});
+
+		const migrated = read(SID);
+		expect(migrated?.step).toBe("capability");
+		expect(migrated?.capability_step_migration_version).toBe(
+			CAPABILITY_STEP_MIGRATION_VERSION,
+		);
+		expect(migrated?.render_proof).toBeNull();
+		expect(migrated?.structural_ok).not.toContain("render");
+		expect(migrated?.passed).not.toContain("render");
+	});
+
+	test("이미 표시된 capability 통과 상태는 뒤로 되돌리지 않는다", async () => {
+		const { read, start } = await cli();
+		start(SID, "unavailable..range", "sample");
+		rewriteState((current) => {
+			current.capability_step_migration_version = CAPABILITY_STEP_MIGRATION_VERSION;
+			current.step = "intuition";
+			current.passed = ["evidence", "background", "goal", "architecture", "capability"];
+			current.structural_ok = current.passed.slice();
+			current.commit_hashes = ["abc1234"];
+		});
+
+		expect(read(SID)?.step).toBe("intuition");
+		expect(state().passed).toContain("capability");
 	});
 });
 
