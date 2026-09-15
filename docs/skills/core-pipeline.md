@@ -256,7 +256,7 @@ flowchart TB
 
 ## 7. 위임 에이전트 명단
 
-스킬이 *방법론*이라면, 에이전트는 *위임 대상*입니다. sisyphus와 prometheus는 작업 유형에 따라 아래 에이전트를 골라 격리된 서브에이전트 컨텍스트에서 일을 시킵니다. 현재 12개 에이전트가 있습니다. (PASS/FAIL 판정이 필요한 검증 태스크는 위임 대상이 아니라 sisyphus가 인라인으로 직접 처리합니다.)
+스킬이 *방법론*이라면, 에이전트는 *위임 대상*입니다. sisyphus와 prometheus는 작업 유형에 따라 아래 에이전트를 골라 격리된 서브에이전트 컨텍스트에서 일을 시킵니다. 현재 13개 에이전트가 있습니다. (PASS/FAIL 판정이 필요한 검증 태스크는 위임 대상이 아니라 sisyphus가 인라인으로 직접 처리합니다.)
 
 | 에이전트 | 역할 | 언제 쓰나 |
 |----------|------|-----------|
@@ -272,6 +272,7 @@ flowchart TB
 | code-reviewer | intent 확보 → 단일 파인더 job으로 각도별(correctness/regression/cleanup/requirement) 파인더 팬아웃 → 리뷰어가 후보별 직접 검증 → findings 종합까지 code-review 스킬 전체를 격리된 컨텍스트에서 실행하는 오케스트레이터 | 순수 코드 리뷰를 격리된 컨텍스트에서 받아 findings만 얻을 때 |
 | hermes | curl_cffi → agent-reach → Chrome stealth 3단계로 깊이-에스컬레이션하며 차단·인증·봇방지 소스를 추출하는, explore/librarian의 깊이 피어 | 일반 HTTP로 막히는 차단·인증·봇방지 소스에서 콘텐츠를 가져와야 할 때 |
 | issue-reviewer | READ-ONLY 체크리스트 리뷰어 — craft-issue Stage 6의 Checklist Review Gate에서 write 직전 이슈 세트를 레포에 이미 있는 규칙 파일과 대조 | craft-issue 파이프라인이 write 전 이슈 세트를 체크리스트 게이트로 심사할 때 (write는 하지 않음) |
+| presentation-reviewer | 스킬 무지 범용 리뷰어 — 산출물(발표/플랜/스펙/QA 리포트)을 원본과 대조해 거짓·이격·페르소나 부적합·설명 누락을 잡고 APPROVE/REQUEST_CHANGES/COMMENT 판정 | explain-diff·deep-interview·qa·prometheus가 완료 직전 산출물을 원본에 대조시킬 때 (호출자가 원본·독자 페르소나를 조립해 전달) |
 
 ---
 

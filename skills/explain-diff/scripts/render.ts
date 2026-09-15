@@ -425,6 +425,24 @@ h1, h2, h3, h4, p, li, blockquote, th, td { word-break: keep-all; }
   border-color: var(--ae-mod); color: var(--ae-mod); font-weight: 600;
 }
 
+/* gloss — 다이어그램 바로 아래 붙는 요소 범례(각주). 그림 속 코드명 노드/화살표를
+   한 줄씩 평이하게 풀어, 무맥락 독자가 그림 요소의 뜻을 페이지만 보고 알 수 있게 한다.
+   저자는 <ul class="gloss"><li><code>노드명</code> — 평이한 뜻</li>… 로 쓴다. */
+ul.gloss {
+  margin: 0.4rem 0 1.5rem; padding: 0.7rem 1rem 0.7rem 1.2rem; list-style: none;
+  background: var(--code-bg); border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent); border-radius: 8px; font-size: 0.9rem;
+}
+ul.gloss::before {
+  content: "이 그림의 요소"; display: block; font-size: 0.74rem; font-weight: 700;
+  letter-spacing: 0.03em; color: var(--muted); margin-bottom: 0.4rem;
+}
+ul.gloss li { margin: 0.2rem 0; line-height: 1.6; }
+ul.gloss code {
+  background: transparent; border: 1px solid var(--rule); border-radius: 4px;
+  padding: 0.02em 0.3em; font-size: 0.85em; color: var(--fg);
+}
+
 /* mermaid SVG는 밝은 테마 색으로 구워지므로, 다크 모드에서도 흰 카드 위에 놓는다.
    기본은 컬럼 폭에 맞춰 축소해 페이지 가로 스크롤을 없애고, 우측 상단 확대 버튼이
    자연 크기 오버레이를 연다 — 넘겨보며 읽던 넓은 다이어그램을 한눈에 + 필요 시 크게. */

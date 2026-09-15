@@ -222,6 +222,13 @@ describe("컴포넌트 CSS — 렌더러가 시각 언어를 소유한다", () =
 	test("figure.diagram 스타일이 내장돼 있다 — 다크 모드에서도 다이어그램이 읽힌다", () => {
 		expect(html).toContain("figure.diagram");
 	});
+
+	test("ul.gloss 각주 상자 스타일이 내장돼 있다 — 다이어그램 밑 '이 그림의 요소'", () => {
+		// 그림 속 코드명 노드/화살표를 한 줄씩 풀어 무맥락 독자가 페이지만 보고 알게 한다.
+		// deep-interview/prometheus 렌더러엔 이미 있고 explain-diff 에만 없던 각주 상자.
+		expect(html).toContain("ul.gloss");
+		expect(html).toContain('content: "이 그림의 요소"');
+	});
 });
 
 // ---------------------------------------------------------------------------

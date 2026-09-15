@@ -49,6 +49,7 @@ If read, 확보=열람; if no tool is available, 확보=접근 불가 (record th
 ## Architecture
 ### 시스템 레벨
 <mermaid (edges = short protocols: HTTP/SQL/REST) or "구조 변화 없음: <reason>">
+<gloss footnote — `<ul class="gloss"><li><code>노드명</code> — 평이한 뜻</li>…` decoding each code-name node the diagram draws (process/store/mapping-table) that the standing-interface table does not already spell out; a plain-language node needs no entry (쓰기 전에 소개)>
 <standing-interface table — exact three-column header/separator and at least one data row; `인터페이스`/`오가는 것` state actual signatures/payloads/response bodies; see below (R17)>
 <change-contract table — three axes: 서버 API / DB 스키마 / 클라이언트 의존; see below (R14)>
 ### 컴포넌트 레벨
@@ -69,6 +70,7 @@ If read, 확보=열람; if no tool is available, 확보=접근 불가 (record th
 **책임** <only this use-case's own responsibility. A use-case orchestrates domains through their contracts; it does not steal a collaborator's responsibility or absorb a cross-cutting property (transaction/idempotency) that another path owns>
 
 <one sentence naming what the reader verifies with the flow — then a mermaid `sequenceDiagram` (real symbols, mark the step this diff changed) — then 2–3 sentences reading the drawn flow plus its 관련 흐름. If the diff touches a user-facing surface, a user-journey `flowchart` from the user's first action `([사용자: …])` through actual branches (권한 거부/락/재시도) to what they see may replace or accompany the sequence>
+<gloss footnote — `<ul class="gloss"><li><code>요소명</code> — 평이한 뜻</li>…` decoding each code-name message/participant the flow draws (`getDisplayCatalog`, a repository method) that no card above already explains; a participant aliased to plain language (`participant Backend as catalog`) needs no entry (쓰기 전에 소개)>
 
 **개념/도메인 모델 연결** <the domain models/concepts this use-case connects>
 
@@ -645,4 +647,21 @@ Write the wrapper yourself only when adding a caption:
   <!-- (When inserting a component combination other than mermaid) -->
   <figcaption>회수 커맨드의 경계</figcaption>
 </figure>
+```
+
+### `gloss` — "이 그림의 요소" footnote decoding a diagram's code-name elements
+
+Place **directly under a mermaid diagram** whose nodes/messages carry raw code identifiers a
+no-context reader cannot decode from the picture (a `sequenceDiagram`'s messages, a 시스템 레벨
+`flowchart`'s process/store nodes). One `<li>` per code-name element drawn — the element in
+`<code>`, then a plain-language reading. Skip an element already spelled out by an `arch-entity`
+card (R18/R21) or already aliased to plain language in the diagram (`participant Backend as catalog`);
+this footnote is for the identifiers the cards do not reach. render.ts supplies the "이 그림의 요소"
+label — do not write it yourself (쓰기 전에 소개).
+
+```html
+<ul class="gloss">
+  <li><code>getDisplayCatalog</code> — 삭제된 카테고리까지 포함해 표시용 카탈로그를 읽는 조회</li>
+  <li><code>ProgramActivationTx</code> — 프로그램을 활성화하는 단일 DB 트랜잭션</li>
+</ul>
 ```
