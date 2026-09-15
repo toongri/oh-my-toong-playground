@@ -132,6 +132,11 @@ describe("긴 점(dot) 라벨 줄바꿈 — softWrapLabels", () => {
 			'A["OrderRepo<br/>.findActiveByHousehold<br/>.count"]',
 		);
 	});
+
+	test("긴 따옴표 click URL은 원문을 그대로 보존한다", () => {
+		const source = 'click A "https://example.com/docs/very-long-click-target"';
+		expect(softWrapLabels(source)).toBe(source);
+	});
 });
 
 const MERMAID_DOC = `# 제목
@@ -312,6 +317,13 @@ describe("figure.diagram 크기 조절 CSS — 맞춤 기본 + 무-JS 확대 오
 		expect(printCss).toBeDefined();
 		expect(printCss).toMatch(/\.dz-btn\s*\{[^}]*display:\s*none/);
 		expect(printCss).toMatch(/max-width:\s*100%/);
+	});
+
+	test("인쇄에서는 체크된 확대 래퍼도 자연폭을 초기화한다", () => {
+		const printCss = html.match(/@media print\s*\{([\s\S]*?)\n\}/)?.[1];
+		expect(printCss).toMatch(
+			/\.dz-toggle:checked\s*~\s*\.dz-view\s+\.dz-scroll\s*\{[^}]*width:\s*100%[^}]*max-width:\s*100%/,
+		);
 	});
 
 	test("본문 폭은 뷰포트 반응형이다 — 46rem 고정 컬럼은 다이어그램이 잘리는 결함이었다", () => {
