@@ -116,7 +116,13 @@ export function zoomableFigure(svg: string, index: number): string {
 export function softWrapLabels(source: string): string {
 	const THRESHOLD = 22;
 	return source.replace(/"([^"\n]+)"/g, (whole, label: string) => {
-		if (label.length < THRESHOLD || !label.includes(".") || label.includes("<br")) return whole;
+		if (
+			label.length < THRESHOLD ||
+			!label.includes(".") ||
+			label.includes("<br") ||
+			/^(?:https?|mailto):\/\//i.test(label)
+		)
+			return whole;
 		// Break only at a dot that joins two identifier characters (a method/property
 		// separator), never inside a number or at a trailing dot.
 		return `"${label.replace(/([A-Za-z0-9)\]])\.([A-Za-z_])/g, "$1<br/>.$2")}"`;
@@ -498,6 +504,7 @@ figure.diagram figcaption { color: var(--muted); font-size: 0.85rem; margin-top:
   figure.diagram .dz-btn { display: none; }
   figure.diagram .dz-backdrop { display: none; }
   figure.diagram .dz-toggle:checked ~ .dz-view { position: static; background: none; padding: 0; overflow: visible; }
+  figure.diagram .dz-toggle:checked ~ .dz-view .dz-scroll { width: 100%; max-width: 100%; }
   figure.diagram .dz-scroll svg,
   figure.diagram .dz-toggle:checked ~ .dz-view .dz-scroll svg { max-width: 100%; }
 }
