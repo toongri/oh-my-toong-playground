@@ -8,6 +8,7 @@ import { execFileSync } from "child_process";
 import { approveOk, evidenceReviewSnapshot, qaReportSnapshot } from "@lib/qa-chain-core";
 import { createHash } from "crypto";
 import { createPresentationSubmission } from "@lib/state-core";
+import { CAPABILITY_STEP_MIGRATION_VERSION } from "@lib/explain-diff-core";
 
 // ---------------------------------------------------------------------------
 // Freshness assertions
@@ -3178,6 +3179,7 @@ describe("explain-diff Stop-gate decision table", () => {
 
 	const midSession = {
 		active: true,
+		capability_step_migration_version: CAPABILITY_STEP_MIGRATION_VERSION,
 		commit_hashes: [],
 		step: "code",
 		passed: ["evidence", "background", "intuition"],
