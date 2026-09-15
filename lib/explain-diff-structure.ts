@@ -945,24 +945,55 @@ function checkR14(text: string): CheckItem {
 
 /** The slice of `text` from a `## <name>` heading to the next depth-2 (`## `) heading. */
 function topSectionSlice(text: string, name: string): string | null {
+	const visible = maskNonVisibleMarkdown(text);
 	const re = new RegExp(`^##\\s*${name}.*$`, "m");
-	const m = re.exec(text);
+	const m = re.exec(visible);
 	if (!m) return null;
 	const start = m.index + m[0].length;
-	const next = text.slice(start).search(/^##\s/m);
+	const next = visible.slice(start).search(/^##\s/m);
 	return next >= 0 ? text.slice(start, start + next) : text.slice(start);
 }
 
 /** Each `### <title>` subsection inside a slice, as { title, raw-body } pairs. */
 function capabilityChapters(rawSlice: string): { title: string; body: string }[] {
+	const visible = maskNonVisibleMarkdown(rawSlice);
 	const out: { title: string; body: string }[] = [];
-	const parts = rawSlice.split(/^###\s+/m);
-	for (let i = 1; i < parts.length; i++) {
-		const p = parts[i] ?? "";
-		const nl = p.indexOf("\n");
-		const title = (nl >= 0 ? p.slice(0, nl) : p).trim();
-		const body = nl >= 0 ? p.slice(nl + 1) : "";
-		out.push({ title, body });
+	const re = /^###\s+/gm;
+	const headings: Array<{ title: string; start: number; index: number }> = [];
+	let match: RegExpExecArray | null = re.exec(visible);
+	while (match !== null) {
+		const headingEnd = visible.indexOf("\n", match.index);
+		const end = headingEnd >= 0 ? headingEnd : visible.length;
+		headings.push({
+			title: visible.slice(match.index + match[0].length, end).trim(),
+			start: end + 1,
+			index: match.index,
+		});
+		match = re.exec(visible);
+	}
+	for (let i = 0; i < headings.length; i++) {
+		const heading = headings[i];
+		if (!heading) continue;
+		const next = headings[i + 1]?.index;
+		out.push({ title: heading.title, body: rawSlice.slice(heading.start, next ?? rawSlice.length) });
+	}
+	return out;
+}
+
+/** Visible capability diagrams must be flow/sequence diagrams, not domain models. */
+function capabilityFlowDiagrams(rawSlice: string): string[] {
+	const visible = maskNonVisibleContainers(rawSlice);
+	const out: string[] = [];
+	CODE_FENCE.lastIndex = 0;
+	let match: RegExpExecArray | null = CODE_FENCE.exec(visible);
+	while (match !== null) {
+		if (
+			(match[2] ?? "").trim().toLowerCase() === "mermaid" &&
+			/^(?:flowchart|graph|sequenceDiagram)\b/im.test(match[3] ?? "")
+		) {
+			out.push(match[3] ?? "");
+		}
+		match = CODE_FENCE.exec(visible);
 	}
 	return out;
 }
@@ -1019,9 +1050,9 @@ function checkR15(text: string): CheckItem {
 	// checked independently for the header slots and a flow diagram.
 	const problems: string[] = [];
 	for (const ch of chapters) {
-		const masked = maskFenced(ch.body);
+		const masked = maskNonVisibleMarkdown(ch.body);
 		const missing: string[] = CAPABILITY_SLOTS.filter((label) => !masked.includes(label));
-		const hasFlow = mermaidFences(ch.body).length > 0 || hasArchWaiver(maskNonVisibleMarkdown(ch.body));
+		const hasFlow = capabilityFlowDiagrams(ch.body).length > 0 || hasArchWaiver(masked);
 		if (!hasFlow) missing.push("흐름 다이어그램(mermaid)");
 		if (missing.length > 0) problems.push(`「${ch.title}」: ${missing.join(", ")}`);
 	}

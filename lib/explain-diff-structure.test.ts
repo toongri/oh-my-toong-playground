@@ -1958,6 +1958,60 @@ describe("capability 스텝 — R15 기능 단위 챕터", () => {
 		expect(item?.detail).toContain("흐름 다이어그램");
 	});
 
+	test("HTML 주석과 Markdown 펜스 안의 heading·슬롯·Mermaid는 R15 증거가 아니다", () => {
+		const doc = `## 기능 단위
+
+### 실제 캐피빌리티
+
+<!--
+### 주석 캐피빌리티
+- 구현체: hidden
+- 버전: hidden
+- 소속 도메인: hidden
+- 입구: hidden
+- 영향범위: hidden
+\`\`\`mermaid
+flowchart LR
+  A --> B
+\`\`\`
+-->
+
+\`\`\`markdown
+### 펜스 캐피빌리티
+- 구현체: hidden
+- 버전: hidden
+- 소속 도메인: hidden
+- 입구: hidden
+- 영향범위: hidden
+
+\`\`\`mermaid
+flowchart LR
+  A --> B
+\`\`\`
+\`\`\`
+`;
+		const item = cap(doc);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("실제 캐피빌리티");
+	});
+
+	test("visible classDiagram은 R15의 흐름 다이어그램으로 인정하지 않는다", () => {
+		const doc = CAPABILITY_OK.replace(
+			/```mermaid[\s\S]*?```/,
+			"```mermaid\nclassDiagram\n  class Catalog\n```",
+		);
+		const item = cap(doc);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("흐름 다이어그램");
+	});
+
+	for (const diagram of ["flowchart LR\n  A --> B", "sequenceDiagram\n  A->>B: request"]) {
+		test(`visible ${diagram.split("\n", 1)[0]}은 필수 슬롯과 함께 R15를 통과한다`, () => {
+			const doc = CAPABILITY_OK.replace(/```mermaid[\s\S]*?```/, `\`\`\`mermaid\n${diagram}\n\`\`\``);
+			expect(cap(doc)?.pass).toBe(true);
+		});
+	}
+
 	test("## 기능 단위 섹션이 없으면 R15가 실패한다", () => {
 		const item = cap(withBackground(ARCH_OK));
 		expect(item?.pass).toBe(false);
