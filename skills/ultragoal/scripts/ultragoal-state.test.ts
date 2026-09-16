@@ -1503,7 +1503,7 @@ describe("recovery-and-guards: force-complete (user-only escape hatch)", () => {
 
 describe("set-blocked requires a nonblank reason", () => {
 	test("direct setBlocked rejects blank and whitespace-only reasons before mutation", () => {
-		setGoalState(S, { phase: "pursuing", blocked_reason: "prior blocker" });
+		setGoalState(S, { phase: "pursuing" });
 		const before = readFileSync(resolveStatePath(S), "utf8");
 
 		expect(() => setBlocked(S, "")).toThrow();
@@ -1512,7 +1512,7 @@ describe("set-blocked requires a nonblank reason", () => {
 	});
 
 	test("CLI rejects an omitted --reason and leaves the prior state unchanged", () => {
-		setGoalState(S, { phase: "pursuing", blocked_reason: "prior blocker" });
+		setGoalState(S, { phase: "pursuing" });
 		const before = readFileSync(resolveStatePath(S), "utf8");
 
 		const result = runCliCaptured("set-blocked");
@@ -1522,7 +1522,7 @@ describe("set-blocked requires a nonblank reason", () => {
 	});
 
 	test("CLI rejects a whitespace-only --reason and leaves the prior state unchanged", () => {
-		setGoalState(S, { phase: "pursuing", blocked_reason: "prior blocker" });
+		setGoalState(S, { phase: "pursuing" });
 		const before = readFileSync(resolveStatePath(S), "utf8");
 
 		const result = runCliCaptured("set-blocked --reason \t");
@@ -1532,7 +1532,7 @@ describe("set-blocked requires a nonblank reason", () => {
 	});
 
 	test("CLI rejects a trailing valueless --reason and does not record true", () => {
-		setGoalState(S, { phase: "pursuing", blocked_reason: "prior blocker" });
+		setGoalState(S, { phase: "pursuing" });
 		const before = readFileSync(resolveStatePath(S), "utf8");
 
 		const result = runCliCaptured("set-blocked --reason");
