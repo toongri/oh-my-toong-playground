@@ -7,6 +7,7 @@
  * Subcommands:
  *   set --phase <S> [--plan-path <p>] [--resume-summary <s>]
  *       [--record-ac '<json-array>' | --record-ac - (reads JSON array from stdin)]
+ *       [--record-non-goals '<lines>' | --record-non-goals - (reads lines from stdin)]
  *       [--mark-design-done] [--mark-plan-done] [--submit-presentation <html>]
  *   get
  *   clear
@@ -38,6 +39,8 @@ export interface PrometheusState {
 	plan_path: string;
 	/** Single-line pause bookmark, control chars normalized to spaces */
 	resume_summary: string;
+	/** Newline-delimited canonical non-goal/decider lines. */
+	non_goals: string;
 	/** Local ISO-8601 without milliseconds, seeded once via `date -Iseconds` */
 	started_at: string;
 	/** Refreshed on every write (heartbeat). Used by the GC liveness check. */
@@ -135,6 +138,21 @@ function normalizeResumeSummary(s: string): string {
 	return s.replace(/[\x00-\x1F]/g, " ");
 }
 
+/** Canonical non-goal declaration shape shared with Ultragoal's state boundary. */
+const NON_GOAL_LINE_PATTERN = /^-\s+\S.*\|\s*decider:\s*\S.*$/;
+
+function validateNonGoals(value: string): void {
+	if (value.trim() === "") return;
+	for (const line of value.split("\n")) {
+		if (line.trim() === "") continue;
+		if (!NON_GOAL_LINE_PATTERN.test(line)) {
+			throw new Error(
+				`non-goals refused — line does not match "- {excluded item} | decider: {membership test}" format: "${line}"`,
+			);
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -147,6 +165,7 @@ export function readPrometheusState(sessionId: string): PrometheusState | null {
 		// JSON.parse's return type is already `any`; the caller only relies on
 		// `.active`, so no assertion to PrometheusState is needed here.
 		const state = JSON.parse(content);
+		if (state.non_goals === undefined) state.non_goals = "";
 		return state.active ? state : null;
 	} catch {
 		return null;
@@ -159,6 +178,7 @@ export function setPrometheusState(
 		phase: string;
 		plan_path?: string;
 		resume_summary?: string;
+		non_goals?: string;
 		/** Parsed AC string array — sets steps.acceptance_criteria.{done,content,recorded_at=phase}. */
 		record_ac?: string[];
 		/** Sets steps.design_decisions.{done:true, ref=current plan_path}. */
@@ -186,6 +206,8 @@ export function setPrometheusState(
 	}
 
 	const resolvedPlanPath = opts.plan_path ?? prior.plan_path ?? "";
+	const resolvedNonGoals = opts.non_goals ?? prior.non_goals ?? "";
+	validateNonGoals(resolvedNonGoals);
 	const presentation = opts.submit_presentation !== undefined
 		? createPresentationSubmission(resolvedPlanPath, opts.submit_presentation)
 		: prior.presentation;
@@ -285,6 +307,7 @@ export function setPrometheusState(
 		phase: opts.phase,
 		plan_path: resolvedPlanPath,
 		resume_summary: normalizeResumeSummary(opts.resume_summary ?? prior.resume_summary ?? ""),
+		non_goals: resolvedNonGoals,
 		// Preserve existing started_at on subsequent writes; seed on first write
 		started_at: prior.started_at ?? seedStartedAt(),
 		steps,
@@ -397,6 +420,18 @@ function main(): void {
 				recordAc = parsed;
 			}
 
+			let nonGoals: string | undefined;
+			if (args["record-non-goals"] !== undefined) {
+				if (args["record-non-goals"] === true) {
+					process.stderr.write(
+						"prometheus-state: --record-non-goals requires a value or '-' for stdin\n",
+					);
+					process.exit(1);
+				}
+				const arg = String(args["record-non-goals"]);
+				nonGoals = arg === "-" ? readStdinSync() : arg;
+			}
+
 			const markDesignDone = args["mark-design-done"] === true;
 			const markPlanDone = args["mark-plan-done"] === true;
 
@@ -405,6 +440,7 @@ function main(): void {
 				plan_path: planPath,
 				resume_summary: resumeSummary,
 				record_ac: recordAc,
+				non_goals: nonGoals,
 				mark_design_done: markDesignDone || undefined,
 				mark_plan_done: markPlanDone || undefined,
 				submit_presentation: typeof args["submit-presentation"] === "string" ? args["submit-presentation"] : undefined,

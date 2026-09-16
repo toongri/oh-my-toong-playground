@@ -240,6 +240,33 @@ describe("prometheus state", () => {
 		expect(second!.started_at).toBe(firstStartedAt);
 	});
 
+	test("prometheus non_goals round-trip and record from stdin", () => {
+		const nonGoals = "- UI redesign | decider: touches frontend files\n- deployment | decider: changes release infrastructure";
+		writePristinePromState("nonGoals");
+		const { code } = runPromCliMerged("set --phase S1 --record-non-goals -", {
+			OMT_SESSION_ID: "nonGoals",
+			OMT_DIR: tmpDir,
+		}, nonGoals);
+		expect(code).toBe(0);
+		expect(JSON.parse(readFileSync(`${tmpDir}/prometheus-state-nonGoals.json`, "utf8")).non_goals).toBe(nonGoals);
+	});
+
+	test("prometheus rejects malformed non-goal lines", () => {
+		seedFile("invalidNonGoals");
+		expect(() => setPrometheusState("invalidNonGoals", {
+			phase: "S1",
+			non_goals: "- UI redesign without a decider",
+		})).toThrow(/non-goals|decider|format/i);
+	});
+
+	test("prometheus phase-only update preserves non_goals", () => {
+		const nonGoals = "- docs changes | decider: edits documentation only";
+		seedFile("preserveNonGoals");
+		setPrometheusState("preserveNonGoals", { phase: "S1", non_goals: nonGoals });
+		setPrometheusState("preserveNonGoals", { phase: "S2" });
+		expect(readPrometheusState("preserveNonGoals")!.non_goals).toBe(nonGoals);
+	});
+
 	test("요구사항 초안 경로는 재개와 설계 전환에 보존되고 완료로 간주되지 않음", () => {
 		process.env.OMT_SESSION_ID = "test-session";
 		seedFile("test-session");
@@ -565,6 +592,7 @@ describe("steps persistence", () => {
 			design_decisions: { done: false, ref: "" },
 			plan: { done: false },
 		});
+		expect(state!.non_goals).toBe("");
 	});
 
 	// (f) invalid --record-ac JSON exits non-zero (CLI test)
