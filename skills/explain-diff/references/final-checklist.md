@@ -18,7 +18,7 @@ Save the result beside the document as `<slug>-final-checklist.md`. The last lin
 | 5 | Logic flowchart | Changed logic with 3+ branches (including error and edge paths) is shown as a flowchart. N.A if no such logic exists. |
 | 6 | Real identifiers + change markers | Nodes, participants, and labels are real codebase identifiers, and elements changed by this diff have markers appropriate to the diagram type (`:::changed`/`classDef changed`, or a `Note` identifying the changed step in `sequenceDiagram`). Generic nodes ("service→DB") are FAIL. |
 | 7 | Sequence completeness | Synchronous calls in sequenceDiagram have balanced activation (+)/return (−) pairs, and messages without returns are explicitly async (`-)`). |
-| 8 | User journey | If the diff touches a user-facing surface (screen, input, display, notification, entry point), the boundary block has a journey flowchart from the user's first action through actual branches to what they finally see. If there is no user-facing surface, quote the reasoned waiver sentence in the boundary block and mark N.A. |
+| 8 | User journey | If the diff touches a user-facing surface (screen, input, display, notification, entry point), the relevant `## 기능 단위` capability chapter carries a journey flowchart from the user's first action through actual branches to what they finally see (alongside or in place of its sequence flow). If there is no user-facing surface, quote the reasoned waiver sentence (the chapter's or the section-level `구조 변화 없음`) and mark N.A. |
 | 9 | HTML render | render.ts exited with 0, and the HTML was regenerated from the current Markdown (rerender after Markdown edits). |
 
 Axis 8 can be N.A only when the waiver sentence actually exists in the document — a reason

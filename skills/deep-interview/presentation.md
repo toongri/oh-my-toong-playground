@@ -88,9 +88,11 @@ below is intermediate renderer input, not a separate deliverable. After renderin
 On success, the source/HTML paths and hashes are stored in `state.presentation`. If either file
 changes, render and submit again.
 
-Render a single self-contained HTML file with `scripts/render.ts` (zero runtime JS or external
-references). Authors use only constrained Markdown and approved components; the renderer owns
-styling. Mermaid fences become inline SVGs at build time.
+Render a single self-contained HTML file with `scripts/render.ts` (no external runtime
+dependencies or references). Authors use only constrained Markdown and approved components; the
+renderer owns styling. Mermaid fences become inline SVGs at build time. The renderer may emit one
+optional inline script that adds ESC/Enter keyboard convenience for closing the zoom overlay; the
+document, CSS zoom controls, and print layout remain usable when that enhancement is unavailable.
 Approved components: `doc-meta` · `flow`/`flow-step`/`flow-arrow` · `compare`/`compare-before`/`compare-after`
 · `callout` · `gloss` (element footnotes) · `arch-entity` (element cards) · `diagram`.
 No `<style>`, inline `style=`, or classes outside the approved list. No pasting raw code, schemas,

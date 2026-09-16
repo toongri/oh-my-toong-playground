@@ -985,10 +985,12 @@ describe("Stage A presentation gate (F7)", () => {
 	test("S6 succeeds when the presentation is newer than the plan", () => {
 		const planPath = seedPlan("gateRerendered");
 		writePresentation();
-		const revised = new Date(Date.now() - 60_000);
-		utimesSync(planPath, revised, revised);
-		const rendered = new Date();
-		utimesSync(presentationMarkdownPath(), rendered, rendered);
+		const planTime = new Date(Date.now() - 180_000);
+		const authored = new Date(Date.now() - 120_000);
+		const rendered = new Date(Date.now() - 60_000);
+		utimesSync(planPath, planTime, planTime);
+		utimesSync(presentationHtmlPath(), rendered, rendered);
+		utimesSync(presentationMarkdownPath(), authored, authored);
 		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${planPath} --submit-presentation ${presentationHtmlPath()}`, {
 			OMT_SESSION_ID: "gateRerendered",
 			OMT_DIR: tmpDir,

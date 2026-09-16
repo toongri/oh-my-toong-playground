@@ -1,6 +1,6 @@
 import { execFileSync } from "child_process";
 import { describe, expect, test } from "bun:test";
-import { mmdcRenderSvg, normalizeSvgWidth, renderToHtml, slugify } from "./render";
+import { mmdcRenderSvg, normalizeSvgWidth, renderToHtml, slugify, zoomableFigure } from "./render";
 
 function mmdcAvailable(): boolean {
 	try {
@@ -35,8 +35,11 @@ describe("자기완결성", () => {
 		expect(html).not.toMatch(/href\s*=\s*["']https?:\/\/[^"']*\.(css|js)/i);
 	});
 
-	test("런타임 스크립트가 없다", () => {
-		expect(html).not.toMatch(/<script/i);
+	test("스크립트는 정확히 하나 — 확대 오버레이 ESC/Enter 편의뿐, 콘텐츠는 무-JS로 렌더된다", () => {
+		expect(html.match(/<script/gi) ?? []).toHaveLength(1);
+		// 그 하나는 오직 키보드 단축키(확대 토글 해제)만 하고, 외부 소스를 부르지 않는다.
+		expect(html).toMatch(/<script>[\s\S]*keydown[\s\S]*dz-toggle:checked[\s\S]*<\/script>/);
+		expect(html).not.toMatch(/<script[^>]*\ssrc\s*=/i);
 	});
 
 	test("CSS 는 인라인으로 들어간다", () => {
@@ -102,7 +105,39 @@ describe("테마", () => {
 // ---------------------------------------------------------------------------
 // v3 — mermaid 사전 렌더 + 렌더러 소유 컴포넌트 CSS
 
-import { preRenderMermaid } from "./render";
+import { preRenderMermaid, softWrapLabels } from "./render";
+
+describe("긴 점(dot) 라벨 줄바꿈 — softWrapLabels", () => {
+	test("긴 dotted 라벨은 점 앞에서 <br/>로 나뉜다 — 단어 중간이 아니라 자연 경계", () => {
+		// 사용자가 좋다고 한 형태: ProductRepository / .update (한 줄로 넓어지는 대신 점에서 줄바꿈)
+		expect(softWrapLabels('A["ProductRepository.update"]')).toBe('A["ProductRepository<br/>.update"]');
+	});
+
+	test("짧은 dotted 라벨은 건드리지 않는다 — a.b 는 그대로", () => {
+		expect(softWrapLabels('A["a.b"]')).toBe('A["a.b"]');
+	});
+
+	test("점 없는 긴 라벨은 한 줄 유지 — 단어 중간을 쪼개지 않는다(wrappingWidth 가 담당)", () => {
+		const s = 'A["SmartSubscriptionBundleMappingRepo"]';
+		expect(softWrapLabels(s)).toBe(s);
+	});
+
+	test("저자가 이미 <br/> 를 넣었으면 다시 넣지 않는다", () => {
+		const s = 'A["ProductRepository<br/>.update"]';
+		expect(softWrapLabels(s)).toBe(s);
+	});
+
+	test("여러 점의 메서드 체인은 각 점에서 나뉜다", () => {
+		expect(softWrapLabels('A["OrderRepo.findActiveByHousehold.count"]')).toBe(
+			'A["OrderRepo<br/>.findActiveByHousehold<br/>.count"]',
+		);
+	});
+
+	test("긴 따옴표 click URL은 원문을 그대로 보존한다", () => {
+		const source = 'click A "https://example.com/docs/very-long-click-target"';
+		expect(softWrapLabels(source)).toBe(source);
+	});
+});
 
 const MERMAID_DOC = `# 제목
 
@@ -124,11 +159,18 @@ flowchart TB
 `;
 
 describe("mermaid 사전 렌더", () => {
-	test("mermaid 펜스는 렌더 함수를 거쳐 figure.diagram 으로 감싼 인라인 SVG 가 된다", () => {
+	test("mermaid 펜스는 렌더 함수를 거쳐 확대 가능한 figure.diagram 안 인라인 SVG 가 된다", () => {
 		const out = preRenderMermaid(MERMAID_DOC, (src, i) => `<svg data-i="${i}">${src.includes("A --> B") ? "AB" : "CD"}</svg>`);
 		expect(out).not.toContain("```mermaid");
-		expect(out).toContain('<figure class="diagram"><svg data-i="0">AB</svg></figure>');
-		expect(out).toContain('<figure class="diagram"><svg data-i="1">CD</svg></figure>');
+		// SVG 는 .dz-scroll 안에 들어가고, 블록마다 고유 id 의 확대 토글이 붙는다.
+		expect(out).toContain('<div class="dz-scroll"><svg data-i="0">AB</svg></div>');
+		expect(out).toContain('<div class="dz-scroll"><svg data-i="1">CD</svg></div>');
+		expect(out).toContain('id="dz-0"');
+		expect(out).toContain('id="dz-1"');
+		expect(out).toContain('<figure class="diagram">');
+		// 바깥 클릭으로 닫기: 각 figure 는 같은 토글을 가리키는 전체 화면 backdrop 라벨을 갖는다.
+		expect(out).toContain('<label for="dz-0" class="dz-backdrop"');
+		expect(out).toContain('<label for="dz-1" class="dz-backdrop"');
 	});
 
 	test("mermaid 가 아닌 코드 펜스는 건드리지 않는다", () => {
@@ -204,6 +246,13 @@ describe("넓은 mermaid 폭 정규화 (normalizeSvgWidth)", () => {
 		expect(out).not.toContain('width="100%"');
 	});
 
+	test("mmdc 가 구운 인라인 max-width 를 제거한다 — 스타일시트가 맞춤/확대 폭을 소유하게 한다", () => {
+		// 인라인 style 이 스타일시트를 이기므로, 남겨두면 .dz-scroll svg{max-width:100%}(맞춤)와
+		// .dz-view … svg{max-width:none}(확대)가 둘 다 무시돼 SVG 가 카드 밖으로 넘친다(깨짐).
+		const out = normalizeSvgWidth(wide);
+		expect(out).not.toMatch(/max-width:\s*[\d.]+px/);
+	});
+
 	test("viewBox 가 없으면 손대지 않는다", () => {
 		const noVb = `<svg id="mmd-0" width="100%" class="flowchart">x</svg>`;
 		expect(normalizeSvgWidth(noVb)).toBe(noVb);
@@ -217,32 +266,97 @@ describe("넓은 mermaid 폭 정규화 (normalizeSvgWidth)", () => {
 	test("preRenderMermaid 가 감싸는 SVG 에 폭 재작성이 적용된다", () => {
 		const doc = "```mermaid\nflowchart LR\n  A --> B\n```\n";
 		const out = preRenderMermaid(doc, () => wide);
-		expect(out).toContain('<figure class="diagram"><svg id="mmd-0" width="2262"');
+		expect(out).toContain('<div class="dz-scroll"><svg id="mmd-0" width="2262"');
 		expect(out).not.toContain('width="100%"');
 	});
 });
 
-describe("figure.diagram svg CSS — 넓은 다이어그램은 축소가 아니라 스크롤", () => {
+// ---------------------------------------------------------------------------
+// 다이어그램 크기 조절 — 기본은 컬럼에 맞춰 축소(가로 스크롤 제거), 확대는 무-JS 오버레이
+//
+// 이전 계약은 "넓은 다이어그램은 축소가 아니라 자연폭+스크롤"이었다. 실사용에서 그 가로
+// 스크롤이 불편하다는 피드백으로 계약을 뒤집는다: 기본은 컬럼 폭에 맞춰 축소해 페이지가
+// 가로로 넘치지 않게 하고, 잘 안 보이는 문제는 우측 상단 확대 버튼(자연 크기 오버레이)으로
+// 푼다. 무-JS 불변식은 체크박스 토글(:checked 형제 선택자)로 지킨다.
+
+describe("figure.diagram 크기 조절 CSS — 맞춤 기본 + 무-JS 확대 오버레이", () => {
 	const html = renderToHtml(DOC, "제목");
 
-	test("SVG 폭을 100% 로 캡하지 않는다 — max-width:100% 는 다운스케일 버그였다", () => {
+	test("기본은 컬럼 폭에 맞춰 축소한다 — .dz-scroll svg 가 max-width:100%", () => {
 		const screenCss = html.split("@media print", 1)[0];
-		expect(screenCss).not.toMatch(/figure\.diagram svg\s*\{[^}]*max-width:\s*100%/);
-		expect(screenCss).toMatch(/figure\.diagram svg\s*\{[^}]*max-width:\s*none/);
+		expect(screenCss).toMatch(/\.dz-scroll svg\s*\{[^}]*max-width:\s*100%/);
 	});
 
-	test("figure.diagram 은 가로 스크롤 컨테이너다 — 넓은 다이어그램이 넘치면 스크롤된다", () => {
-		expect(html).toMatch(/figure\.diagram\s*\{[^}]*overflow-x:\s*auto/);
+	test("확대 상태는 자연 크기다 — :checked ~ .dz-view .dz-scroll svg 가 max-width:none", () => {
+		expect(html).toMatch(/\.dz-toggle:checked ~ \.dz-view \.dz-scroll svg\s*\{[^}]*max-width:\s*none/);
 	});
 
-	test("인쇄에서는 figure.diagram SVG를 인쇄 가능 폭에 맞춘다", () => {
+	test("확대는 전체 뷰포트 오버레이다 — :checked ~ .dz-view 가 position:fixed", () => {
+		expect(html).toMatch(/\.dz-toggle:checked ~ \.dz-view\s*\{[^}]*position:\s*fixed/);
+	});
+
+	test("확대 자체는 CSS다 — 토글은 체크박스, 바깥클릭 닫기는 backdrop 라벨", () => {
+		expect(html).toContain("dz-toggle");
+		expect(html).toContain("dz-backdrop");
+		// 페이지의 유일한 스크립트는 ESC/Enter 편의뿐 — 콘텐츠·확대·바깥클릭 닫기는 그것 없이도 동작한다.
+		expect(html.match(/<script/gi) ?? []).toHaveLength(1);
+	});
+
+	test("native 확대 체크박스가 키보드 접근 가능하고 접근성 이름을 갖는다", () => {
+		const figure = zoomableFigure("<svg></svg>", 0);
+		expect(figure).toContain('<input type="checkbox" id="dz-0" class="dz-toggle" aria-label="다이어그램 확대">');
+		expect(figure).not.toMatch(/<input[^>]*aria-hidden=/);
+	});
+
+	test("확대 오버레이는 다이어그램 카드 밖 클릭으로 닫힌다 — backdrop 이 카드(z-index) 아래", () => {
+		expect(html).toMatch(/\.dz-toggle:checked ~ \.dz-view \.dz-backdrop\s*\{[^}]*position:\s*fixed/);
+		expect(html).toMatch(/\.dz-toggle:checked ~ \.dz-view \.dz-scroll\s*\{[^}]*z-index:\s*1/);
+	});
+
+	test("ESC/Enter 로 확대를 닫는 스크립트가 있고, 외부 소스를 부르지 않는다", () => {
+		expect(html).toMatch(/<script>[\s\S]*keydown[\s\S]*Escape[\s\S]*Enter[\s\S]*dz-toggle:checked[\s\S]*<\/script>/);
+		expect(html).not.toMatch(/<script[^>]*\ssrc\s*=/i);
+	});
+
+	test("인쇄에서는 확대 버튼을 숨기고 SVG를 인쇄 가능 폭에 맞춘다", () => {
 		const printCss = html.match(/@media print\s*\{([\s\S]*?)\n\}/)?.[1];
 		expect(printCss).toBeDefined();
-		expect(printCss).toMatch(/figure\.diagram svg\s*\{[^}]*max-width:\s*100%/);
+		expect(printCss).toMatch(/\.dz-btn\s*\{[^}]*display:\s*none/);
+		expect(printCss).toMatch(/max-width:\s*100%/);
+	});
+
+	test("인쇄에서는 체크된 확대 래퍼도 자연폭을 초기화한다", () => {
+		const printCss = html.match(/@media print\s*\{([\s\S]*?)\n\}/)?.[1];
+		expect(printCss).toMatch(
+			/\.dz-toggle:checked\s*~\s*\.dz-view\s+\.dz-scroll\s*\{[^}]*width:\s*100%[^}]*max-width:\s*100%/,
+		);
 	});
 
 	test("본문 폭은 뷰포트 반응형이다 — 46rem 고정 컬럼은 다이어그램이 잘리는 결함이었다", () => {
 		expect(html).toMatch(/main\s*\{[^}]*max-width:\s*min\(/);
 		expect(html).not.toMatch(/main\s*\{[^}]*max-width:\s*46rem/);
 	});
+});
+
+// ---------------------------------------------------------------------------
+// 라벨 클리핑 방지 — htmlLabels:false 로 foreignObject 클립 영역 제거 (폰트 독립)
+//
+// mermaid 기본 htmlLabels:true 는 노드 라벨을 foreignObject(고정폭 HTML)로 굽고, 폭은
+// 렌더 폰트로 측정된다. 그 폰트가 없는 뷰어(iOS/iCloud 엔 trebuchet ms 없음)는 더 넓은
+// 대체 폰트로 다시 배치하고 고정폭 박스가 넘치는 글자를 잘라 숨긴다. htmlLabels:false 는
+// 라벨을 SVG <text> 로 만들어 클립 영역 자체를 없앤다 — 넓어도 박스를 넘칠 뿐 안 숨는다.
+
+describe("라벨 클리핑 방지 — mmdc htmlLabels:false", () => {
+	test.skipIf(!mmdcAvailable())(
+		"긴 단일 토큰 식별자가 잘리거나 문자 중간에서 쪼개지지 않고 온전히 렌더된다",
+		() => {
+			const src =
+				'flowchart TD\n  A["OrderRepo.findActiveSmartSubscriptionSupplementsByHousehold"] --> B["x"]\n';
+			const svg = mmdcRenderSvg(src, 0);
+			// foreignObject(클립 영역)가 없어야 하고, 긴 식별자가 <text> 안에 통째로 있어야 한다.
+			expect(svg).not.toContain("<foreignObject");
+			const textContent = svg.replace(/<[^>]+>/g, "");
+			expect(textContent).toContain("findActiveSmartSubscriptionSupplementsByHousehold");
+		},
+	);
 });

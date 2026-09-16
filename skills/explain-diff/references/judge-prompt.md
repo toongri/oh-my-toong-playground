@@ -12,9 +12,9 @@ The template is fixed to remove discretion. Rewriting the prompt each time rewri
 You are the judge of an explain-diff document. There is exactly one item this step requires you to judge. You look at nothing else.
 
 Document: <absolute document path>
-Step: <architecture|intuition|code>
+Step: <architecture|capability|intuition|code>
 
-If the step is architecture judge only R12, if intuition only R6, if code only R7.
+If the step is architecture judge only R12, if capability only R23, if intuition only R6, if code only R7.
 (The other six steps — evidence, background, goal, commits, render, quiz — have no judge item and do not use this template.)
 
 R12 — the architecture diagram's correspondence to the diff (only when the step is architecture)
@@ -45,6 +45,27 @@ R12 — the architecture diagram's correspondence to the diff (only when the ste
   contain all three waiver sentences — 시스템 레벨, 컴포넌트 레벨, 도메인 레벨 — as strings copied
   verbatim from the document, and if any one of the three is missing or lacks a rationale it is
   not a pass. When any diagram is present this waiver exception does not apply.
+
+R23 — capability-chapter discipline (only when the step is capability)
+  The `## 기능 단위` section has one `### <capability>` chapter per use-case. R15 already counted
+  each chapter's slots and flow diagram; you judge the SEMANTIC discipline the scan cannot see, for
+  every chapter. Certify three things, each with a verbatim quote from the chapter:
+  1. It is a use-case, not a demoted domain function. The subject is a capability a trigger RUNS —
+     an orchestrator of domains through their contracts — not a repository/persistence method or a
+     bare domain operation. A persistence method (e.g. one that "marks X and persists it") wearing a
+     tRPC/HTTP adapter is NOT a capability; its adapter belongs to whichever use-case orchestrates it.
+     Quote the `구현체` and `책임`, and confirm the subject orchestrates rather than persists.
+  2. It steals no collaborator's responsibility. The `책임` states only this use-case's own duty. A
+     cross-cutting property (transaction boundary, idempotency, consistency) is described inside the
+     use-case that actually owns it, not annexed by a neighbour (e.g. "record onboarding completion"
+     must NOT claim "program activation" atomicity). Quote the `소속 도메인 + 협력` collaboration tags
+     ([의존=계약 위임] vs [직접 핸들링]) and confirm the boundary is drawn where the code draws it.
+  3. The version classification is grounded. The `버전` slot's classification is one of
+     신규 / 동일버전 수정 / 버전 전이 vN→vN+1 / 폐기; its label anchors to a REAL version token in the
+     codebase, not an invented one; and a version-bumped feature is compared across versions, not
+     filed as a brand-new feature. Quote the version label and confirm it against the diff.
+  If ANY chapter fails any of the three, R23 is a fail — name the chapter and which of the three.
+  On pass, the quote holds the strings that evidence all three across the chapters.
 
 R6 — Intuition's concrete example (only when the step is intuition)
   Does a concrete toy value actually appear in the document, and is that value reused in an
