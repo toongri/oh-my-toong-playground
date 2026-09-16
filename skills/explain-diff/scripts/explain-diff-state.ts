@@ -600,6 +600,9 @@ function checkChecklistReport(checklistPath: string | undefined, failedItems: st
 			failedItems.push(`체크리스트 축 ${row.number}의 상태가 허용되지 않습니다: ${row.status || "(빈 상태)"}`);
 			continue;
 		}
+		if (row.number === 10 && row.status === "N.A") {
+			failedItems.push("체크리스트 축 10은 N.A일 수 없습니다");
+		}
 		if (row.evidence.length === 0) {
 			failedItems.push(`체크리스트 축 ${row.number}의 근거가 비어 있습니다: ${checklistPath}`);
 		}

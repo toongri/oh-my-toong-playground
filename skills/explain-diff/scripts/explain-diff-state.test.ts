@@ -1041,6 +1041,28 @@ describe("render 산출물 검사", () => {
 		expect(state().structural_ok).toContain("render");
 	});
 
+	test("축 10의 N.A 판정은 거부한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		writeFileSync(
+			rep.checklist,
+			checklistReport(
+				CHECKLIST_AXES.map(([number, axis]) => ({
+					number,
+					axis,
+					status: number === "10" ? "N.A" : "PASS",
+					evidence: `${axis} 근거를 문서에서 확인했다.`,
+				})),
+			),
+			"utf8",
+		);
+
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(1);
+		expect(state().step).toBe("render");
+	});
+
 	test("장식된 FAIL 행은 마지막 ALL PASS 표식이 있어도 거부한다", async () => {
 		const { submitStep, doc } = await driveToRender();
 		const htmlPath = join(sandbox, "doc.html");
