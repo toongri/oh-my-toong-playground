@@ -871,7 +871,7 @@ When a T1 trigger fires (any one category matched), activate `### Risk-Domain Pr
 
 ### Risk-Domain Assessment
 
-Judge which no-safe-default domains (`### Deliberate Mode Triggers`) are in play — active judgment, not a per-plan checklist, regardless of whether the request named the risk. Resolve each live one with the user (never a silent default), which activates the Deliberate Mode artifacts; record each deliberately-excluded one as a non-goal-with-decider (e.g. `동시성 처리 안 함 | decider: 락/레이스/트랜잭션 finding은 out — 실행모델이 순차적`), which Metis and downstream code-review consume as an OUT-of-scope shield. **Absence is not an entry.**
+Judge which no-safe-default domains (`### Deliberate Mode Triggers`) are in play — active judgment, not a per-plan checklist, regardless of whether the request named the risk. Resolve each live one with the user (never a silent default), which activates the Deliberate Mode artifacts; record each deliberately-excluded one as a non-goal-with-decider (e.g. `- 동시성 처리 안 함 | decider: 락/레이스/트랜잭션 finding은 out — 실행모델이 순차적`), which Metis and downstream code-review consume as an OUT-of-scope shield. **Absence is not an entry.**
 
 ### Risk-Domain Pre-Mortem
 
@@ -1181,7 +1181,7 @@ The state CLI is only half the enforcement — a session that skips the S5+ stat
 
 **Stage A language gate — execute BEFORE rendering any prose:** First state the session's conversation language out loud, then render every prose string in the presentation markdown in that language — hero text, headings, body, callouts alike. Detection is render-time, never hard-coded. Only the preservation list stays verbatim (code blocks, file paths, CLI, `WI-N`, `AC#M`, `S0-S8`, `drawn`, `trigger FALSE:`); `plan.md` on disk is never rewritten. This gate is binding on its own; the full Translation Rule (3 invariants) in `review-pipeline.md` adds detail but is not a precondition for honoring it.
 
-On selection: Option 1 → `Skill(skill: "ultragoal")` with the plan path. Option 2 → emit `<prometheus-done/>`; the plan file AND its Stage A presentation are the deliverables — the Stop hook refuses the done token while a written plan lacks a fresh presentation, so Stage A must already be rendered when Finish is selected. Option 3 → return to the S0 Requirements interview (user-initiated revise).
+On selection: Option 1 → `Skill(skill: "ultragoal")` with the plan path and the stored `state.non_goals` value in Ultragoal's existing `--non-goals` slot. Option 2 → emit `<prometheus-done/>`; the plan file AND its Stage A presentation are the deliverables — the Stop hook refuses the done token while a written plan lacks a fresh presentation, so Stage A must already be rendered when Finish is selected. Option 3 → return to the S0 Requirements interview (user-initiated revise).
 
 **IMPORTANT**: On execution selection, MUST invoke via `Skill()` or delegate. Do NOT tell user to run a command manually.
 

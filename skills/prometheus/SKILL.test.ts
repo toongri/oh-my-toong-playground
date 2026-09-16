@@ -162,6 +162,18 @@ describe("canonical non-goal handoff contract", () => {
 		);
 	});
 
+	test("the operative Option 1 handler forwards state.non_goals through Ultragoal's existing slot", () => {
+		expect(skillMd).toContain(
+			'On selection: Option 1 → `Skill(skill: "ultragoal")` with the plan path and the stored `state.non_goals` value in Ultragoal\'s existing `--non-goals` slot.',
+		);
+	});
+
+	test("the Risk-Domain Assessment example starts with the canonical list prefix", () => {
+		expect(skillMd).toContain(
+			"- 동시성 처리 안 함 | decider: 락/레이스/트랜잭션 finding은 out — 실행모델이 순차적",
+		);
+	});
+
 	test("Ultragoal planning names Prometheus as the upstream producer of the existing slot and validator", () => {
 		expect(readFileSync(join(import.meta.dir, "..", "ultragoal", "references", "planning.md"), "utf8")).toMatch(
 			/Prometheus[\s\S]*upstream producer[\s\S]*stored canonical value[\s\S]*existing `--non-goals` slot[\s\S]*validator/,
