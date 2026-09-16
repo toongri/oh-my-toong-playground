@@ -47,7 +47,8 @@ skills:
     - momus
     - diagnose
     - design-review
-    - qa
+    - component: qa
+      platforms: [claude, codex]
     - component: code-review
       platforms: [claude, codex]
     - make-pr
