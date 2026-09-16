@@ -9,7 +9,7 @@ import { join } from "path";
 // (Automated checks / Spec-AC compliance / Hands-on execution) into a single
 // standalone stateful adversarial-e2e cycle:
 //   PRE-FLIGHT -> PLAN -> BASELINE -> ADVERSARIAL E2E -> CHECK ->
-//   [DIAGNOSIS -> FIX -> RE-VERIFY loop <=5] -> EXIT -> CLEANUP -> ROLLBACK -> STATE
+//   [DIAGNOSIS -> FIX -> RE-VERIFY loop <=5] -> EXIT -> CLEANUP -> STATE
 //
 // RED step (pre-rewrite state): the "new-prose" describe blocks below FAIL
 // because the cycle vocabulary/delegation lines do not exist yet in the old
@@ -74,10 +74,6 @@ describe("new-prose: cycle phase vocabulary", () => {
 
 	test("CLEANUP phase is present", () => {
 		expect(skillMd).toContain("CLEANUP");
-	});
-
-	test("ROLLBACK phase is present", () => {
-		expect(skillMd).toContain("ROLLBACK");
 	});
 
 	test("STATE phase is present", () => {
@@ -152,60 +148,12 @@ describe("new-prose: EXIT table conditions", () => {
 		expect(skillMd).toContain("5");
 	});
 
-	test("Same-Failure-3x condition is present", () => {
-		expect(skillMd).toContain("Same-Failure");
-	});
-
 	test("Safety condition is present", () => {
 		expect(skillMd).toContain("Safety");
 	});
 
 	test("cycle increments at FIX dispatch", () => {
 		expect(skillMd).toContain("cycle++ at FIX dispatch");
-	});
-
-	test("Same-Failure key is scenario-id + root-cause-file + root-cause-symbol/category", () => {
-		expect(skillMd).toContain("scenario-id");
-		expect(skillMd).toContain("root-cause-file");
-		expect(skillMd).toContain("root-cause-symbol");
-	});
-});
-
-// ---------------------------------------------------------------------------
-// NEW-PROSE: ROLLBACK safety scope
-// ---------------------------------------------------------------------------
-
-describe("new-prose: ROLLBACK safety scope", () => {
-	test("qa reverts only fix_head_before..HEAD via git revert", () => {
-		expect(skillMd).toContain("fix_head_before");
-		expect(skillMd).toContain("git revert");
-	});
-
-	test("git reset --hard is named as forbidden", () => {
-		expect(skillMd).toContain("NEVER");
-		expect(skillMd).toContain("git reset --hard");
-	});
-
-	test("linear-descendant refuse-on-amend guard is present", () => {
-		expect(skillMd).toContain("linear-descendant");
-	});
-
-	test("non-empty-range guard treats no-commit as ERROR", () => {
-		expect(skillMd).toContain("non-empty-range");
-		expect(skillMd).toContain("ERROR");
-	});
-
-	test("post-revert disjointness assertion on user_dirty_set is present", () => {
-		expect(skillMd).toContain("user_dirty_set");
-		expect(skillMd).toContain("disjointness");
-	});
-
-	test("qa refuses the cycle if a fix must touch a user_dirty_set file", () => {
-		expect(skillMd).toContain("REFUSE the cycle");
-	});
-
-	test("rm-rf/force auto-deny is honored", () => {
-		expect(skillMd).toContain("rm -rf");
 	});
 });
 
@@ -858,6 +806,15 @@ describe("new-prose: test-runner logs are never scenario evidence", () => {
 		expect(presentationMd).toContain('unverified (`unverified`)');
 		expect(presentationMd).toContain("미검증 — 유저 경계 미구동");
 	});
+
+	// 쓰기 전에 소개 — 무맥락 PO가 생소한 제품/도메인 엔티티를 첫 등장에서 이해하도록,
+	// presentation.md가 first-occurrence 소개 리시피를 규정하는지 by-eye 대신 그린 테스트로 고정한다.
+	test("presentation.md documents the introduce-before-you-use gloss recipe in product language", () => {
+		expect(presentationMd).toContain("쓰기 전에 소개");
+		// 제품/도메인 언어로만 — 코드 심볼은 reader view에서 제거되므로 소개 대상이 아니다.
+		expect(presentationMd).toContain("product/user language");
+		expect(presentationMd).toContain("code symbols");
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -1407,6 +1364,15 @@ describe("new-prose: HTML report is the canonical deliverable", () => {
 		const report = skillMd.indexOf(
 			"bun ${CLAUDE_SKILL_DIR}/scripts/qa-report.ts --session <id> --out <path> [--narrative <json-file>]",
 		);
+		const inspectHtml = skillMd.indexOf(
+			"open the rendered HTML and verify all claim images remain legible",
+		);
+		const reviewReport = skillMd.indexOf(
+			"bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts review-report --path <html>",
+		);
+		const presentationReview = skillMd.indexOf(
+			"dispatch the `presentation-reviewer`, handle its verdict",
+		);
 		const complete = skillMd.indexOf(
 			"bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts complete",
 		);
@@ -1414,10 +1380,17 @@ describe("new-prose: HTML report is the canonical deliverable", () => {
 
 		expect(setVerdict).not.toBe(-1);
 		expect(report).not.toBe(-1);
+		expect(inspectHtml).not.toBe(-1);
+		expect(reviewReport).not.toBe(-1);
+		expect(presentationReview).not.toBe(-1);
 		expect(complete).not.toBe(-1);
 		expect(verdictProse).not.toBe(-1);
 		expect(report).toBeGreaterThan(setVerdict);
+		expect(inspectHtml).toBeGreaterThan(report);
+		expect(reviewReport).toBeGreaterThan(inspectHtml);
+		expect(presentationReview).toBeGreaterThan(reviewReport);
 		expect(complete).toBeGreaterThan(report);
+		expect(complete).toBeGreaterThan(presentationReview);
 		expect(verdictProse).toBeGreaterThan(complete);
 	});
 

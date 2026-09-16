@@ -24,12 +24,13 @@ function state(partial: Partial<ExplainDiffState> = {}): ExplainDiffState {
 }
 
 describe("스텝 순서", () => {
-	test("`STEP_ORDER`는 9단계를 스펙이 정한 순서로 담는다 — goal이 background와 architecture 사이", () => {
+	test("`STEP_ORDER`는 10단계를 스펙이 정한 순서로 담는다 — capability가 architecture와 intuition 사이", () => {
 		expect(STEP_ORDER).toEqual([
 			"evidence",
 			"background",
 			"goal",
 			"architecture",
+			"capability",
 			"intuition",
 			"commits",
 			"code",
@@ -38,12 +39,13 @@ describe("스텝 순서", () => {
 		]);
 	});
 
-	test("`AUTHORING_STEPS`는 사람이 개입하지 않는 앞 7단계다", () => {
+	test("`AUTHORING_STEPS`는 사람이 개입하지 않는 앞 8단계다", () => {
 		expect(AUTHORING_STEPS).toEqual([
 			"evidence",
 			"background",
 			"goal",
 			"architecture",
+			"capability",
 			"intuition",
 			"commits",
 			"code",
@@ -54,7 +56,8 @@ describe("스텝 순서", () => {
 		expect(nextStep("evidence")).toBe("background");
 		expect(nextStep("background")).toBe("goal");
 		expect(nextStep("goal")).toBe("architecture");
-		expect(nextStep("architecture")).toBe("intuition");
+		expect(nextStep("architecture")).toBe("capability");
+		expect(nextStep("capability")).toBe("intuition");
 		expect(nextStep("intuition")).toBe("commits");
 		expect(nextStep("commits")).toBe("code");
 		expect(nextStep("code")).toBe("render");
@@ -63,21 +66,22 @@ describe("스텝 순서", () => {
 });
 
 describe("필수 심사 ID 배정", () => {
-	test("architecture는 R12, intuition은 R6, code는 R7을 요구하고 나머지 여섯 스텝은 아무 것도 요구하지 않는다", () => {
+	test("architecture는 R12, capability는 R23, intuition은 R6, code는 R7·R24를 요구하고 나머지 여섯 스텝은 아무 것도 요구하지 않는다", () => {
 		expect(REQUIRED_JUDGE_IDS).toEqual({
 			evidence: [],
 			background: [],
 			goal: [],
 			architecture: ["R12"],
+			capability: ["R23"],
 			intuition: ["R6"],
 			commits: [],
-			code: ["R7"],
+			code: ["R7", "R24"],
 			render: [],
 			quiz: [],
 		});
 	});
 
-	test("아홉 스텝 전부에 배정이 있다 — 빠진 스텝이 무자격 통과를 만들지 않는다", () => {
+	test("열 스텝 전부에 배정이 있다 — 빠진 스텝이 무자격 통과를 만들지 않는다", () => {
 		for (const s of STEP_ORDER) expect(REQUIRED_JUDGE_IDS[s]).toBeDefined();
 	});
 });
@@ -252,12 +256,13 @@ describe("normalizeExplainDiffState", () => {
 		expect(s?.concepts).toEqual([{ id: "c1", required: true, passed: true }]);
 	});
 
-	test("정상 상태는 그대로 통과한다", () => {
+	test("현재 마이그레이션 표시가 있는 정상 상태는 그대로 통과한다", () => {
 		const s = normalizeExplainDiffState({
 			active: true,
 			step: "quiz",
 			passed: ["evidence", "background", "intuition", "code", "render"],
 			commit_hashes: [],
+			capability_step_migration_version: 1,
 			concepts: [{ id: "c1", required: true, passed: false }],
 			bank: [1, 2],
 			awaiting_answer: true,
@@ -266,6 +271,7 @@ describe("normalizeExplainDiffState", () => {
 			last_failure: { step: "code", items: ["R5 추적성"] },
 		});
 		expect(s?.step).toBe("quiz");
+		expect(s?.passed).toEqual(["evidence", "background", "intuition", "code", "render"]);
 		expect(s?.awaiting_answer).toBe(true);
 		expect(s?.stalled).toBe(true);
 		expect(s?.last_failure).toEqual({ step: "code", items: ["R5 추적성"] });
@@ -289,5 +295,94 @@ describe("normalizeExplainDiffState", () => {
 		});
 		expect(s?.step).toBe("architecture");
 		expect(s?.passed).toEqual(["evidence", "background"]);
+	});
+
+	test.each(["intuition", "commits", "code", "render", "quiz"] as const)(
+		"커밋 해시가 있는 활성 무표시 %s 상태는 capability로 되감는다",
+		(step) => {
+			const s = normalizeExplainDiffState({
+				active: true,
+				step,
+				passed: ["evidence", "background", "goal", "architecture", "intuition", "code"],
+				commit_hashes: ["abc1234"],
+			});
+			expect(s?.step).toBe("capability");
+			expect(s?.passed).toEqual(["evidence", "background", "goal", "architecture"]);
+		},
+	);
+
+	test("capability 마이그레이션은 커밋 해시와 선행 통과 상태만 보존하고 퀴즈 상태를 초기화한다", () => {
+		const input = {
+			active: true,
+			step: "code",
+			passed: ["evidence", "background", "goal", "architecture", "intuition", "code"],
+			commit_hashes: ["abc1234", "def5678"],
+			concepts: [{ id: "c1", required: true, passed: false }],
+			bank: [{ prompt: "질문" }],
+			awaiting_answer: true,
+			stalled: true,
+			no_progress: { key: "c1:R6", count: 1, doc_digest: "digest" },
+			last_failure: { step: "code", items: ["R7"] },
+		};
+		const s = normalizeExplainDiffState(input);
+		expect(s).toMatchObject({
+			active: true,
+			step: "capability",
+			passed: ["evidence", "background", "goal", "architecture"],
+			commit_hashes: ["abc1234", "def5678"],
+			concepts: [],
+			bank: [],
+			awaiting_answer: false,
+			no_progress: { key: "", count: 0, doc_digest: "" },
+			last_failure: null,
+		});
+		expect(s?.stalled).toBeUndefined();
+		expect(computeDerived(s!)).toMatchObject({ quiz_passed: false, stop_allowed: false });
+	});
+
+	test("현재 마이그레이션 표시는 후속 단계도 되감지하지 않으며 반복 정규화가 멱등적이다", () => {
+		const marked = normalizeExplainDiffState({
+			active: true,
+			step: "quiz",
+			passed: ["evidence", "background", "goal", "architecture", "intuition", "code", "render"],
+			commit_hashes: ["abc1234"],
+			capability_step_migration_version: 1,
+		});
+		expect(marked?.step).toBe("quiz");
+		expect(marked?.passed).toEqual(["evidence", "background", "goal", "architecture", "intuition", "code", "render"]);
+		expect(marked?.capability_step_migration_version).toBe(1);
+		expect(normalizeExplainDiffState(marked)).toEqual(marked);
+	});
+
+	test("이미 capability이거나 capability가 통과된 상태는 되감지 않는다", () => {
+		const atCapability = normalizeExplainDiffState({
+			active: true,
+			step: "capability",
+			passed: ["evidence", "background", "goal", "architecture"],
+			commit_hashes: ["abc1234"],
+		});
+		const passedCapability = normalizeExplainDiffState({
+			active: true,
+			step: "code",
+			passed: ["evidence", "background", "goal", "architecture", "capability", "intuition"],
+			commit_hashes: ["abc1234"],
+		});
+		expect(atCapability?.step).toBe("capability");
+		expect(passedCapability?.step).toBe("code");
+		expect(passedCapability?.passed).toContain("capability");
+	});
+
+	test("비활성·pristine·capability 이전 상태는 되감지하지 않는다", () => {
+		const inactive = normalizeExplainDiffState({ active: false, step: "quiz", passed: [], commit_hashes: ["abc1234"] });
+		const pristine = normalizeExplainDiffState({ active: true, step: "evidence", passed: [], commit_hashes: ["abc1234"] });
+		const beforeCapability = normalizeExplainDiffState({
+			active: true,
+			step: "architecture",
+			passed: ["evidence", "background", "goal"],
+			commit_hashes: ["abc1234"],
+		});
+		expect(inactive?.step).toBe("quiz");
+		expect(pristine?.step).toBe("evidence");
+		expect(beforeCapability?.step).toBe("architecture");
 	});
 });

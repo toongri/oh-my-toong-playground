@@ -237,3 +237,13 @@ Pursuit stops as blocked (non-complete) ONLY on a decidable, point-in-time predi
 - **B2** — the captured **blocked-stop** slot's objective-specific condition is met.
 
 On either condition: run `set-blocked --reason "<blocker>"`, report the blocker to the user, and stop. A blocked pursuit is non-complete — `set-blocked` can never write `complete`.
+
+### Force-complete: the user's escape hatch, not yours
+
+When a pursuit is genuinely stuck — `blocked`, `budget_limited` with no useful recovery, or otherwise never satisfying the two-lane gate above — the user (never you) may force it to `phase=complete` directly:
+
+```
+bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts force-complete --reason '<why this is being force-completed>'
+```
+
+**You never run this command yourself** — the same `PreToolUse` guard that denies `resume-pursuit`, `dismiss-review-finding`, and `approve-review-dispatch-renewal` on your Bash path also denies `force-complete`, so this authorization is structural, not a rule you are trusted to follow. If you believe force-completion is warranted, report why and give the user the command to run; do not propose working around the gate any other way. It bypasses every gate this document describes — the objective self-check, the per-story artifact checks, and the code-review lane — by design, so it is not a substitute for actually satisfying them when satisfying them is possible.

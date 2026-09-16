@@ -76,16 +76,36 @@ Render `$OMT_DIR/plans/{name}.md` into a presentation markdown file, then render
 
 **Purpose & perspective.** Write this presentation in the first person of the implementer explaining the plan they authored — the problem they scoped, the design they chose, and the decisions they made — to **a colleague or team-lead with no prior context on this work**. The bar: from this page alone, that reader richly and correctly understands what the plan does, why it is designed this way, and what they must be aware of when they next modify this code. Keep the explanation clear and accessible — plain language, domain terms glossed on first use, big-picture diagrams (the ELI5 spirit of "explain it simply") — but never dumb it down or thin it out. This is not a simplified overview: the plan's full design content and every triggered diagram (see Bird's-Eye View / `diagram-guide.md`) are carried across at full fidelity — accessible AND rich, rich explanation alongside the diagrams welcome, never a word-count ceiling.
 
+**쓰기 전에 소개 (introduce before you use).** The reader has no prior context, so **every first-class entity the presentation leans on earns a plain-language introduction at its first appearance** — before the sentence, table, or diagram uses it. A name the reader cannot decode from the page is a hole in the explanation, however faithful the render is to the plan. This is the first-occurrence form of the Purpose bar above; size the introduction to what the entity is:
+
+| 첫 등장하는 것 | 소개 깊이 |
+|---|---|
+| 용어·약어·코인된 표현 (도메인 단어, 상태 라벨) | 한 줄 뜻 — inline gloss on first use |
+| 함수·리포지토리·메서드·컴포넌트 | 한 줄 역할 — what it does, not just its name |
+| 모듈·도메인 (Boundary Map의 소유 경계) | 경계 + 소유 한두 줄 — what it owns and where it sits |
+| 기능(유스케이스 / horizontal use-case) | 무엇을 위한 능력인지 한 문단 |
+
+For a diagram's code-name node/message not already introduced in the plan-body prose, add a
+`<ul class="gloss">` "이 그림의 요소" footnote directly under the diagram (render.ts styles it),
+one `<li><code>요소명</code> — 평이한 뜻</li>` per code-name element drawn; a node already carrying a
+plain-language name needs none. This is re-surfacing plan-decided meaning, never new authorship — the
+no-invention Fidelity Bounds still hold.
+
 **Requirements:**
 - **Intermediate renderer input**: `$OMT_DIR/plans/presentation/{name}.md` — use the plan's stem and create `presentation/` if absent. The sole submitted presentation is `{name}.html`; the Markdown is not a required submitted artifact.
 - **Content fidelity (faithful, not verbatim)**: Render the plan faithfully — no plan content may be omitted, weakened, or contradicted. Within that bound, prose MAY be rewritten for readability (see Translation Rule) and MAY carry readability callouts (see Readability Enrichment). The rendered presentation is for the human reader, not a second source of truth.
   - **Render the chosen Decision, never a reversed one.** A contested D-item records both its chosen **Decision** and the alternatives it rejected — and a plan that reversed a proposal mid-design keeps the superseded form on the page as the named reject ("Invalidated alternative: nest it inside `X` — rejected"; "this reverses an initial X proposal"). The presentation states and cites each decision from its **Decision** field ONLY. Surfacing the rejected/invalidated/reversed alternative — in prose, an ADR restatement, a field placement, or a cited `file:line` — as the chosen design is a contradiction of the plan, the exact defect that makes a reader implement the design the plan threw away. When a decision was reversed, the final form is the only one that may appear as chosen; scan every design claim against the plan's Decision field before rendering.
 - **Production**: author the presentation markdown directly, following the Presentation Section Order below. No template, no format converter, no placeholder-substitution engine — the agent reads the section order and writes the file.
-- **Shareable HTML render and submission**: render the presentation Markdown via `render.ts` (inline SVG, no runtime JS or external references), then submit the HTML. Repeat after every source, renderer-input, or HTML revision:
+- **Shareable HTML render and submission**: render the presentation Markdown via `render.ts` (inline SVG, no external references, content renders with no script — the only script is an ESC/Enter zoom-overlay shortcut that degrades away), then submit the HTML. Repeat after every source, renderer-input, or HTML revision:
   ```bash
   bun ${CLAUDE_SKILL_DIR}/scripts/render.ts --in $OMT_DIR/plans/presentation/{name}.md --out $OMT_DIR/plans/presentation/{name}.html
   bun ${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts set --phase S5 --submit-presentation "$OMT_DIR/plans/presentation/{name}.html"
   ```
+- **Presentation review (required, after render/submit, before `prometheus-done`)**: dispatch the `presentation-reviewer` agent to contrast the presentation against the plan it was rendered from, for its reader. It is skill-agnostic, so assemble the bundle:
+  - **presentation**: the presentation `.md` (renderer input) and its `.html`.
+  - **sources**: the durable plan `plan.md` (the SSOT the presentation re-surfaces — its decision log, AC, verification, boundary map), plus the **Stage B recommendation and Pipeline State session-state artifacts** that produced the two session-derived boxes (reviewer verdict records, the Stage B signal/recommendation record, and the pipeline-state journal). Do not copy those artifacts into `plan.md`; it remains the plan SSOT.
+  - **reader_persona**: "a colleague or team-lead with no prior context on this work — understands what the plan does, why it is designed this way, and what to watch, from this page alone".
+  Its verdict is `APPROVE` / `COMMENT` / `REQUEST_CHANGES` / `INCONCLUSIVE`. `APPROVE/COMMENT` may proceed. `REQUEST_CHANGES` requires repairs and re-reviews: repair the presentation or its source bundle, re-render, re-submit, and re-review. `INCONCLUSIVE` or a missing/malformed verdict blocks completion until the reviewer input bundle is repaired and a valid result is returned. This is a required review step, not a new gate; run it every time. It never rewrites `plan.md` — a fidelity finding means the presentation drifted from the plan (Fidelity Bounds), so fix the presentation, not the plan.
 
 ### Presentation Components
 

@@ -1,6 +1,6 @@
 # Final self-review checklist — after render, before quiz
 
-After producing the Markdown and HTML, grade yourself on the nine axes below before
+After producing the Markdown and HTML, grade yourself on the ten axes below before
 handing the document to the reader. Grade each axis **PASS / N.A / FAIL**; for PASS and N.A,
 write one line of evidence (a document line/section quote or the reason it does not apply).
 If any axis is FAIL, fix the document, run render again, and regrade from the beginning —
@@ -18,11 +18,13 @@ Save the result beside the document as `<slug>-final-checklist.md`. The last lin
 | 5 | Logic flowchart | Changed logic with 3+ branches (including error and edge paths) is shown as a flowchart. N.A if no such logic exists. |
 | 6 | Real identifiers + change markers | Nodes, participants, and labels are real codebase identifiers, and elements changed by this diff have markers appropriate to the diagram type (`:::changed`/`classDef changed`, or a `Note` identifying the changed step in `sequenceDiagram`). Generic nodes ("service→DB") are FAIL. |
 | 7 | Sequence completeness | Synchronous calls in sequenceDiagram have balanced activation (+)/return (−) pairs, and messages without returns are explicitly async (`-)`). |
-| 8 | User journey | If the diff touches a user-facing surface (screen, input, display, notification, entry point), the boundary block has a journey flowchart from the user's first action through actual branches to what they finally see. If there is no user-facing surface, quote the reasoned waiver sentence in the boundary block and mark N.A. |
+| 8 | User journey | If the diff touches a user-facing surface (screen, input, display, notification, entry point), the relevant `## 기능 단위` capability chapter carries a journey flowchart from the user's first action through actual branches to what they finally see (alongside or in place of its sequence flow). If there is no user-facing surface, quote the reasoned waiver sentence (the chapter's or the section-level `구조 변화 없음`) and mark N.A. |
 | 9 | HTML render | render.ts exited with 0, and the HTML was regenerated from the current Markdown (rerender after Markdown edits). |
+| 10 | 쓰기 전에 소개 (introduce before you use) | Every first-class entity the document leans on is introduced at first use, sized to its kind — a coined term/status label (한 줄 뜻), a function/repository symbol (한 줄 역할), a module/domain (경계+소유), a feature (기능 단위 챕터). Each diagram's code-name node/message is decoded either by an `arch-entity` card (R18/R21) or by a `<ul class="gloss">` "이 그림의 요소" footnote directly under it; a node already aliased to plain language (`participant Backend as catalog`) needs none. Quote one such introduced entity; FAIL if any leaned-on entity is used with no introduction before that use. |
 
 Axis 8 can be N.A only when the waiver sentence actually exists in the document — a reason
-written only in the checklist, with no waiver in the document, is FAIL.
+written only in the checklist, with no waiver in the document, is FAIL. Axis 10 has no N.A —
+a document always leans on at least one entity a no-context reader must have introduced.
 
 <!-- lazy: Instruction-level checklist. If an axis repeatedly slips through, the upgrade path is
      promotion to an R-item in rubric.md plus validation in the structure-check script. -->

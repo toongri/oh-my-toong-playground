@@ -717,6 +717,199 @@ test_explain_diff_state_glob_current_session_denies() {
     return 1
 }
 
+# =============================================================================
+# goal / ultragoal / prometheus / deep-interview state -- four more anchors
+# with the same "CLI is the sole writer" contract as qa/explain-diff above,
+# same exact-match + pathwise-glob-match treatment. deep-interview's prefix is
+# "deep-interview-active-state-" (lib/state-core.ts's STATE_PREFIX map) -- NOT
+# a bare "-state-" suffix -- so a dedicated exact-path test below pins that
+# infix, and a negative control confirms a naively-guessed
+# "deep-interview-state-" filename (missing "active-") is NOT this anchor.
+# =============================================================================
+test_goal_state_exact_path_denies() {
+    local out
+    out=$(printf '%s\n' "$OD/goal-state-$SID.json" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -qi 'goal state'; then return 0; fi
+    echo "ASSERTION FAILED goal-state-path: expected deny, got '$out'"
+    return 1
+}
+
+test_goal_state_other_session_allows() {
+    local out
+    out=$(printf '%s\n' "$OD/goal-state-other.json" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED goal-state-other: expected allow, got '$out'"
+    return 1
+}
+
+test_goal_state_glob_current_session_denies() {
+    local out cand
+    cand="$OD/goal-state-*.json"
+    out=$(printf '%s\n' "$cand" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -qi 'goal state'; then return 0; fi
+    echo "ASSERTION FAILED goal-state-glob-current: expected deny for '$cand', got '$out'"
+    return 1
+}
+
+test_goal_state_glob_other_session_allows() {
+    local out cand
+    cand="$OD/goal-state-other-*.json"
+    out=$(printf '%s\n' "$cand" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED goal-state-glob-other: expected allow for '$cand', got '$out'"
+    return 1
+}
+
+test_goal_state_bun_cli_invocation_allows() {
+    local out
+    out=$(printf '%s\n' "bun /Users/x/.claude/skills/goal/scripts/goal-state.ts get --sid $SID" \
+        | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED goal-state-bun-cli: expected allow, got '$out'"
+    return 1
+}
+
+test_ultragoal_state_exact_path_denies() {
+    local out
+    out=$(printf '%s\n' "$OD/ultragoal-state-$SID.json" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -qi 'ultragoal state'; then return 0; fi
+    echo "ASSERTION FAILED ultragoal-state-path: expected deny, got '$out'"
+    return 1
+}
+
+test_ultragoal_state_other_session_allows() {
+    local out
+    out=$(printf '%s\n' "$OD/ultragoal-state-other.json" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED ultragoal-state-other: expected allow, got '$out'"
+    return 1
+}
+
+test_ultragoal_state_glob_current_session_denies() {
+    local out cand
+    cand="$OD/ultragoal-state-*.json"
+    out=$(printf '%s\n' "$cand" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -qi 'ultragoal state'; then return 0; fi
+    echo "ASSERTION FAILED ultragoal-state-glob-current: expected deny for '$cand', got '$out'"
+    return 1
+}
+
+test_ultragoal_state_glob_other_session_allows() {
+    local out cand
+    cand="$OD/ultragoal-state-other-*.json"
+    out=$(printf '%s\n' "$cand" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED ultragoal-state-glob-other: expected allow for '$cand', got '$out'"
+    return 1
+}
+
+test_ultragoal_state_bun_cli_invocation_allows() {
+    local out
+    out=$(printf '%s\n' "$UGCLI get --sid $SID" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED ultragoal-state-bun-cli: expected allow, got '$out'"
+    return 1
+}
+
+test_prometheus_state_exact_path_denies() {
+    local out
+    out=$(printf '%s\n' "$OD/prometheus-state-$SID.json" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -qi 'prometheus state'; then return 0; fi
+    echo "ASSERTION FAILED prometheus-state-path: expected deny, got '$out'"
+    return 1
+}
+
+test_prometheus_state_other_session_allows() {
+    local out
+    out=$(printf '%s\n' "$OD/prometheus-state-other.json" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED prometheus-state-other: expected allow, got '$out'"
+    return 1
+}
+
+test_prometheus_state_glob_current_session_denies() {
+    local out cand
+    cand="$OD/prometheus-state-*.json"
+    out=$(printf '%s\n' "$cand" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -qi 'prometheus state'; then return 0; fi
+    echo "ASSERTION FAILED prometheus-state-glob-current: expected deny for '$cand', got '$out'"
+    return 1
+}
+
+test_prometheus_state_glob_other_session_allows() {
+    local out cand
+    cand="$OD/prometheus-state-other-*.json"
+    out=$(printf '%s\n' "$cand" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED prometheus-state-glob-other: expected allow for '$cand', got '$out'"
+    return 1
+}
+
+test_prometheus_state_bun_cli_invocation_allows() {
+    local out
+    out=$(printf '%s\n' "bun /Users/x/.claude/skills/prometheus/scripts/prometheus-state.ts set --phase S3" \
+        | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED prometheus-state-bun-cli: expected allow, got '$out'"
+    return 1
+}
+
+test_deep_interview_state_exact_path_denies() {
+    local out
+    out=$(printf '%s\n' "$OD/deep-interview-active-state-$SID.json" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -qi 'deep-interview state'; then return 0; fi
+    echo "ASSERTION FAILED deep-interview-state-path: expected deny, got '$out'"
+    return 1
+}
+
+test_deep_interview_state_other_session_allows() {
+    local out
+    out=$(printf '%s\n' "$OD/deep-interview-active-state-other.json" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED deep-interview-state-other: expected allow, got '$out'"
+    return 1
+}
+
+test_deep_interview_state_glob_current_session_denies() {
+    local out cand
+    cand="$OD/deep-interview-active-state-*.json"
+    out=$(printf '%s\n' "$cand" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -qi 'deep-interview state'; then return 0; fi
+    echo "ASSERTION FAILED deep-interview-state-glob-current: expected deny for '$cand', got '$out'"
+    return 1
+}
+
+test_deep_interview_state_glob_other_session_allows() {
+    local out cand
+    cand="$OD/deep-interview-active-state-other-*.json"
+    out=$(printf '%s\n' "$cand" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED deep-interview-state-glob-other: expected allow for '$cand', got '$out'"
+    return 1
+}
+
+test_deep_interview_state_bun_cli_invocation_allows() {
+    local out
+    out=$(printf '%s\n' "bun /Users/x/.claude/skills/deep-interview/scripts/deep-interview-state.ts get --sid $SID" \
+        | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED deep-interview-state-bun-cli: expected allow, got '$out'"
+    return 1
+}
+
+# Negative control for the infix pin above: a naively-guessed bare
+# "deep-interview-state-<sid>.json" (missing the "active-" segment
+# lib/state-core.ts's STATE_PREFIX actually uses) must NOT be treated as the
+# deep-interview anchor -- proving the match requires the exact
+# "deep-interview-active-state-" infix, not a loose "-state-" substring.
+test_deep_interview_state_naive_prefix_mismatch_allows() {
+    local out
+    out=$(printf '%s\n' "$OD/deep-interview-state-$SID.json" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED deep-interview-state-naive-prefix: expected allow (naive prefix guess is not the real anchor), got '$out'"
+    return 1
+}
+
 test_user_authorized_dismiss_review_finding_denies() {
     local out
     out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
@@ -785,6 +978,54 @@ test_user_authorized_resume_pursuit_whitespace_run_denies() {
         return 0
     else
         echo "ASSERTION FAILED user-authorized-resume-pursuit-whitespace-run: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+test_user_authorized_force_complete_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "$UGCLI force-complete --reason x")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED user-authorized-force-complete: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+test_user_authorized_force_complete_variable_indirection_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "sub=force-complete; $UGCLI \"\$sub\" --reason x")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED user-authorized-force-complete-variable-indirection: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+test_user_authorized_force_complete_reverse_order_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "s=force-complete && $UGCLI \"\$s\" --reason x")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED user-authorized-force-complete-reverse-order: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+test_user_authorized_force_complete_whitespace_run_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "$UGCLI  force-complete   --reason x")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED user-authorized-force-complete-whitespace-run: expected deny, got '$out'"
         return 1
     fi
 }
@@ -1560,6 +1801,10 @@ main() {
     run_test test_user_authorized_resume_pursuit_variable_indirection_denies
     run_test test_user_authorized_resume_pursuit_reverse_order_denies
     run_test test_user_authorized_resume_pursuit_whitespace_run_denies
+    run_test test_user_authorized_force_complete_denies
+    run_test test_user_authorized_force_complete_variable_indirection_denies
+    run_test test_user_authorized_force_complete_reverse_order_denies
+    run_test test_user_authorized_force_complete_whitespace_run_denies
     run_test test_user_authorized_qa_waive_denies
     run_test test_user_authorized_qa_waive_reverse_order_denies
     run_test test_user_authorized_qa_record_cell_noncollision_allows
@@ -1576,6 +1821,27 @@ main() {
     run_test test_explain_diff_state_exact_path_denies
     run_test test_explain_diff_state_other_session_allows
     run_test test_explain_diff_state_glob_current_session_denies
+    run_test test_goal_state_exact_path_denies
+    run_test test_goal_state_other_session_allows
+    run_test test_goal_state_glob_current_session_denies
+    run_test test_goal_state_glob_other_session_allows
+    run_test test_goal_state_bun_cli_invocation_allows
+    run_test test_ultragoal_state_exact_path_denies
+    run_test test_ultragoal_state_other_session_allows
+    run_test test_ultragoal_state_glob_current_session_denies
+    run_test test_ultragoal_state_glob_other_session_allows
+    run_test test_ultragoal_state_bun_cli_invocation_allows
+    run_test test_prometheus_state_exact_path_denies
+    run_test test_prometheus_state_other_session_allows
+    run_test test_prometheus_state_glob_current_session_denies
+    run_test test_prometheus_state_glob_other_session_allows
+    run_test test_prometheus_state_bun_cli_invocation_allows
+    run_test test_deep_interview_state_exact_path_denies
+    run_test test_deep_interview_state_other_session_allows
+    run_test test_deep_interview_state_glob_current_session_denies
+    run_test test_deep_interview_state_glob_other_session_allows
+    run_test test_deep_interview_state_bun_cli_invocation_allows
+    run_test test_deep_interview_state_naive_prefix_mismatch_allows
     run_test test_user_authorized_variable_indirection_denies
     run_test test_user_authorized_reverse_order_denies
     run_test test_user_authorized_whitespace_run_denies

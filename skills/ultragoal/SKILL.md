@@ -25,6 +25,8 @@ The autonomous loop is gated by a session-keyed state file driven through the bu
 bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts <subcommand> [options]
 ```
 
+Run `bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts help` to see the full command roster grouped by who may run each one — which is safe for the orchestrator to run itself versus which is user-only.
+
 Subcommands used by this orchestrator:
 
 | Subcommand | Authority | Purpose |
@@ -40,9 +42,10 @@ Subcommands used by this orchestrator:
 | `approve-review-dispatch-renewal` | **user only** — a PreToolUse guard denies it on the orchestrator's Bash path; present the command and have the user run it | Adds exactly 5 to the review-dispatch cap; when a valid code-review artifact exists, also records the SHA-256 of its exact raw bytes as the user-approved marker (an absent/invalid artifact still renews — sole recovery when all dispatches died before writing one). |
 | `dismiss-review-finding --ref <file:line> --class <correctness\|regression\|cleanup\|requirement-gap> --rationale <text>` | **user only** — same PreToolUse guard; propose it, never run it | Removes ONE wrong admitted code-review finding from the completion gate's blocking set. Refuses unless EXACTLY ONE admitted `IN_SCOPE` finding with that exact `ref` and `class` is in the current artifact (two are indistinguishable to a dismissal, so clearing one would clear both), and pins the dismissal to that artifact's raw bytes so it lapses on the next review round. Propose per `references/completion-gate.md`; never run it on your own judgment. |
 | `resume-pursuit` | **user only** — a PreToolUse guard denies it on the orchestrator's Bash path; present the command and have the user run it | Recovers only a `budget_limited` pursuit, restoring `phase=pursuing`, `active=true`, and `iteration=0`; refuses from any other phase. |
-| `get` / `status` | read | Inspect current state / derived status. |
+| `force-complete --reason <text>` | **user only** — same PreToolUse guard; never propose running it yourself | Escape hatch: forces `phase=complete` from any non-`complete` phase, bypassing every completion gate (verdict, story, code-review, artifact checks). Refuses on a missing/blank `--reason` or an already-`complete` state. Records `forced_complete: true` and the reason. |
+| `get` | read | Inspect current state. |
 
-`set-budget-limited` and `set-blocked --reason <text>` are system-only setters (the hook layer writes `budget_limited`; `set-blocked` records a reported blocker). The orchestrator never writes `complete`, `budget_limited`, or a fabricated verdict by any other route — the narrow gates are structural, not vigilance-based.
+`set-blocked --reason <text>` is an orchestrator-usable setter that records only `phase=blocked`, `active=false`, and the reported blocker; it cannot write `complete`, `budget_limited`, or `objective_verdict`. `budget_limited` is written directly by the hook layer (`lib/persistent-mode-core/decision.ts`), not through this CLI. The orchestrator never writes `complete`, `budget_limited`, or a fabricated verdict by any other route — the narrow gates are structural, not vigilance-based.
 
 During pursuit, `iteration` counts consecutive Stop turns with no observed progress. A diff-carrying commit or a story status transition resets it to `0`; Stops waiting for background work are not counted. Reaching `max_iterations` soft-stops the pursuit as `budget_limited` (state is preserved and no new work is dispatched). After draining any in-flight work and checking the completion gate, recovery from that pause requires the user to run `resume-pursuit`, which resets the counter and re-arms the pursuing phase.
 

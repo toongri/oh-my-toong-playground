@@ -224,11 +224,20 @@ it before authoring. For the big-picture diagram:
   relations the verification established. Node labels are users, screens, devices,
   data — never code symbols. Avoid double quotes inside mermaid node labels.
 
-## First-occurrence gloss (domain/code terms only)
-Gloss a product/domain term or code identifier the first time it appears; leave
-ordinary terms alone.
-- GOOD (domain): "Dispenser (the 8-slot auto-dispensing device)", "Program (the
-  AI-designed personalized daily supplement recipe)"
+## 쓰기 전에 소개 (introduce before you use) — first-occurrence gloss
+The reader is a PO/designer with no prior context, so **every product/domain entity the report leans
+on earns a plain-language introduction at its first appearance** — a term, an acronym, a status label,
+a coverage-axis name, a device/screen the flow names. A name the reader cannot decode from the page is
+a hole in the report. Introduce it in **product/user language**, never in implementation terms — code
+symbols (function/module/type names) are removed from the reader view entirely (see "No internal QA
+jargon"), so they are never what gets glossed here.
+
+| 첫 등장하는 것 | 소개 깊이 |
+|---|---|
+| 제품·도메인 용어 / 약어 / 상태 라벨 | 한 줄 뜻 — "Dispenser (the 8-slot auto-dispensing device)", "Program (the AI-designed personalized daily supplement recipe)" |
+| 커버리지 축·판정 이름 | 평이한 이름으로 (e.g. "입력 경계·악성 입력 확인") — never "cls 1 / unspecified" |
+| 다이어그램 노드 (사용자·화면·기기·데이터) | element gloss below the diagram (see Diagram discipline) — one plain line each |
+
 - Expand an acronym on first use · one name per concept · no label before its definition
 
 ## Format — self-contained HTML + `--narrative` injection
@@ -287,8 +296,9 @@ marker** (`class="gap"`) — what was skipped shows in the report.
       that match pass/fail/na · do invalid mappings fail closed to a visible neutral
       gap · does prose explain a verdict without establishing it · any requirement
       whose user boundary was never driven marked `unverified` (never `yes`/`partial`)?
-- [ ] Only domain/code terms glossed on first use · no `cls`/internal jargon in the
-      reader view · zero invention/contradiction
+- [ ] 쓰기 전에 소개 — every product/domain entity the reader meets (term/acronym/status
+      label/coverage-axis name/diagram node) introduced in product language at first use ·
+      no `cls`/internal jargon or code symbols in the reader view · zero invention/contradiction
 
 The one pass criterion: **can a PO/designer who knows nothing about the product,
 from this report alone, tell who is affected, what flows are expected, whether it

@@ -12,12 +12,12 @@ disable-model-invocation: true
 
 ## Overview
 
-Nine steps, passed in order. Steps 1–8 you do alone; the user does only two things — read the document and answer the quiz.
+Ten steps, passed in order. Steps 1–9 you do alone; the user does only two things — read the document and answer the quiz.
 
 **Purpose & perspective.** Write this document in the first person of the implementer explaining the change they made — the code they implemented and why — to a colleague or team-lead with no prior context on it. The bar: from this document alone, that reader richly and correctly understands what the change does, why it was made, and what they must be aware of when they next modify this code. Keep it clear and accessible — plain language, domain terms glossed on first use, big-picture diagrams (the ELI5 spirit of "explain it simply") — but never dumb it down or thin it out: accessible AND rich, never a thinned-out overview. (This does not relax the completion condition below — it is still not done until the reader passes the quiz.)
 
 ```
-evidence → background → goal → architecture → intuition → commits → code → render → quiz
+evidence → background → goal → architecture → capability → intuition → commits → code → render → quiz
 ```
 
 The document skeleton and the usable visual components are owned by `references/markdown-template.md`.
@@ -25,7 +25,18 @@ The document skeleton and the usable visual components are owned by `references/
 
 Each step must pass two gates — **structure check (script) → judgment (subagent, quote required)** — before it advances. The state CLI renders the pass verdict, and writes to the artifact path are permitted or rejected by a hook that reads that verdict. Steps cannot be skipped.
 
-**State purpose, not just mechanism — for the document and for each section.** The document opens (under the title, in the meta block from `markdown-template.md`) with **one line on what this document is for**: which change it teaches and why a reader should understand it. And each major section earns its place — begin Background, 목표, Architecture, Intuition, Code with a short framing of *why this section exists and what the reader takes from it*, not just its content. A reader who lands mid-document should always know why they are reading this part. The skill's own steps carry the how; the sections must also carry the why.
+**State purpose, not just mechanism — for the document and for each section.** The document opens (under the title, in the meta block from `markdown-template.md`) with **one line on what this document is for**: which change it teaches and why a reader should understand it. And each major section earns its place — begin Background, 목표, Architecture, 기능 단위, Intuition, Code with a short framing of *why this section exists and what the reader takes from it*, not just its content. A reader who lands mid-document should always know why they are reading this part. The skill's own steps carry the how; the sections must also carry the why.
+
+**쓰기 전에 소개 (introduce before you use).** The reader has no prior context, so **every first-class entity earns a plain-language introduction at its first appearance** — before the sentence, table, card, or diagram leans on it. This is the same first-occurrence discipline as the Purpose bar above, made concrete: a name the reader cannot decode from the page is a hole in the explanation, however correct the rest is. Right-size the introduction to what the entity is (deeper kinds already have a dedicated step/card — this rule is the floor, not a second copy):
+
+| 첫 등장하는 것 | 소개 깊이 |
+|---|---|
+| 용어·약어·코인된 표현 (도메인 단어, 코드베이스 은어, 상태 라벨) | 한 줄 뜻 — inline gloss on first use (`온보딩(첫 사용자 설정 흐름)`) |
+| 함수·리포지토리·메서드 심볼 | 한 줄 역할 — what it does, not just its name (Step 5 `구현체`, Step 8 change blocks carry this) |
+| 모듈·도메인 | 경계 + 소유 한두 줄 — what it owns and where it sits (Step 4 `arch-entity` 카드가 이 몫) |
+| 기능(유스케이스) | 기능 단위 챕터 하나 (Step 5) |
+
+**Diagram elements the cards do not already decode get a gloss footnote.** A `sequenceDiagram` or `flowchart` names its nodes/messages with raw code identifiers (`getDisplayCatalog`, `ProgramActivationTx`, a store name) that a no-context reader cannot decode from the picture alone. Where those identifiers are **not** already explained by a `## Architecture` component/domain card (R18/R21), place a `<ul class="gloss">` footnote **directly under the diagram** — one `<li><code>요소명</code> — 평이한 뜻</li>` per code-name element drawn. render.ts styles it as an "이 그림의 요소" box; it needs no explanation prose around it. (This is the same footnote deep-interview and prometheus already use; a self-evident node already aliased to plain language — `participant Backend as catalog` — needs no entry.)
 
 </Role>
 
@@ -36,6 +47,8 @@ Every state transition in this skill goes through the CLI. Editing the state fil
 ```bash
 CLI="bun ${CLAUDE_SKILL_DIR}/scripts/explain-diff-state.ts"
 ```
+
+Run `$CLI help` to see the full command roster; every command here is AI-usable — none are user-only.
 
 ## Step 1 — evidence
 
@@ -149,15 +162,13 @@ Then, a **change-contract table** (R14) across three axes — `서버 API` (endp
 
 **Stateful concepts get a state diagram.** When a concept this diff touches carries a lifecycle — three or more states, or named transitions like 잠금, 재시도 초과, 확정, 만료 (an input field that locks after N attempts is a lifecycle, not just a widget) — add a `stateDiagram-v2` to the domain level alongside the entity diagram, its transition labels carrying the actual guards/triggers from the code (`시도 5회 초과`, `cartridgeInfo.isInvalidData`), with side effects as notes. When no touched concept has such a lifecycle, one sentence saying so stands in — the reader learns the absence was checked, not overlooked.
 
-**The Architecture section closes with a boundary/dependency/use-case change map (R15).** After the three levels, add a `### 경계·의존·유스케이스` block. Its unit of account is the **execution unit** — one card per thing that is invoked and runs (a service method, an HTTP endpoint, a batch script, a hook); a cross-cutting property (a transaction boundary, idempotency) is never its own card but is described inside the `한 일` of the unit that owns it, and each card's `한 일` opens by stating the unit's identity (what kind of thing, which module owns it). A feature/use case mostly carries an **orchestration** responsibility, so this block's centre of gravity is the **flow**: show it as a mermaid `sequenceDiagram` — who calls whom in what order — and mark the step this diff changed (a `Note` or `:::changed`). A reasoned `구조 변화 없음: <사유>` waiver stands in when the diff changes no use-case flow (R15 checks the block for a mermaid diagram or that waiver). Above/around the diagram, add a renderer-recognized `arch-entity` per behaviour unit with an allowed `data-change="new|mod|del"`, plus the `영향 인터페이스` and `의존 방향` slots; prose-only mentions or unsupported change values do not count. The `영향 인터페이스` slot names the actual signature/payload the use case exposes or calls — endpoint/procedure plus the request and response shape — not a bare name. **This slot leaks the same sibling invention as code fences**: the signature must be the unit's real declaration in the code, not a plausible reconstruction — no invented parameter (`runForHousehold(householdId, userId)` when the real signature is `runForHousehold(householdId, beforeProductIds?)`), no sibling method the unit does not actually call (a raw-transaction data-migration's interface is not `SomeService.create`). Open the unit (`git show <hash>:<path>`) and read its actual declaration and calls; if it reaches a call only through a deeper private method, say so rather than hoisting that inner signature onto the outer one. See `discipline.md` (Remainder 5 — interface-signature fidelity). Close with a dependency-direction verdict (keeps/violates/restores unidirectional dependency; flag any reach-in, back-reference, or cycle). **Do not write methodology names (FSD·Feature-Sliced·Clean Architecture·DDD·bounded context) OR bare axis labels (`수평`/`수직`) in the Architecture prose (R19)** — name the touched areas in the codebase's own domain terms, not by sorting parts into a horizontal/vertical grid. The vocabulary follows the `architecture-boundaries` rule but the output speaks the codebase's own domain terms. Format follows `markdown-template.md`.
+The use-case / boundary / dependency view is no longer part of this step — it is its own **Step 5 — 기능 단위** below.
 
-**A user-facing change gets a user-journey view.** When the diff touches a surface a person interacts with — a screen, an input field, a badge or displayed status, a notification, an entry point — the 경계·의존·유스케이스 block also carries a **사용자 여정 `flowchart`** alongside the orchestration sequence: it starts at the user's first action (`([사용자: 진입 행 탭])`), passes through every decision and failure branch the user can actually hit (권한 거부, 입력 잠금, 재시도), and ends at what the user sees. The orchestration sequence says who calls whom; the journey says what the person experiences — a reader should be able to tell what the feature *is* from this one picture. Mark the steps this diff changed. When the diff touches no user-facing surface, one sentence saying so stands in.
+**Diagram count scales with the change.** The levels above are a floor, not a cap — a diff spanning several systems, stateful concepts, or branch-heavy functions carries as many diagrams as its triggered content demands (the state and 분기 rules above already multiply; the same applies per system side). Never consolidate two different concerns into one diagram to save space.
 
-**Diagram count scales with the change.** The levels and blocks above are a floor, not a cap — a diff spanning several systems, stateful concepts, or branch-heavy functions carries as many diagrams as its triggered content demands (the state and 분기 rules above already multiply; the same applies per system side). Never consolidate two different concerns into one diagram to save space.
+R19 scans the rendered prose of both `## Architecture` and `## 기능 단위` after ignoring fenced blocks and inline-code examples, and rejects only standalone methodology or axis tokens (methodology matching is case-insensitive). A token embedded in a code identifier or example is not prose. It runs at the architecture step (only Architecture present yet) and again at the capability step.
 
-R19 scans the rendered `## Architecture` prose after ignoring fenced blocks and inline-code examples, and rejects only standalone methodology or axis tokens (methodology matching is case-insensitive). A token embedded in a code identifier or example is not prose.
-
-**Every diagram reads as 읽는 목표 → 그림 → 해석.** Immediately above each mermaid fence, one sentence naming what the reader can verify or decide with this picture — a concrete objective, not a genre label ("이 그림은 흐름을 보여준다" teaches nothing). Immediately below it, 2–3 sentences of 해석 that name specific nodes/edges actually drawn and the structural fact they establish — a lifetime difference between two stores, the single edge that keeps a dependency one-way, the point where two cause-paths merge, which priority wins. The 해석 describes the drawing (a claim with no corresponding drawn node/edge belongs elsewhere), and this shape applies to every mermaid fence in the document — the three architecture levels, the 경계·의존·유스케이스 flow, and any 분기 diagram in Intuition alike.
+**Every diagram reads as 읽는 목표 → 그림 → 해석.** Immediately above each mermaid fence, one sentence naming what the reader can verify or decide with this picture — a concrete objective, not a genre label ("이 그림은 흐름을 보여준다" teaches nothing). Immediately below it, 2–3 sentences of 해석 that name specific nodes/edges actually drawn and the structural fact they establish — a lifetime difference between two stores, the single edge that keeps a dependency one-way, the point where two cause-paths merge, which priority wins. The 해석 describes the drawing (a claim with no corresponding drawn node/edge belongs elsewhere), and this shape applies to every mermaid fence in the document — the three architecture levels, the 기능 단위 flows, and any 분기 diagram in Intuition alike.
 
 **When the component level spans systems, group by system.** If the component diagram carries modules from two or more processes/services (a Node service and a Python service, a mobile app and a backend), wrap each system's modules in its own `subgraph` so the picture itself says which module lives in which process — cards and prose saying it is not enough when the drawing mixes them flat. Each system's modules keep that system's own layering vocabulary.
 
@@ -165,7 +176,33 @@ Write diagrams in a ` ```mermaid ` fence — they are baked to inline SVG at the
 
 A level with genuinely nothing to draw is replaced by `구조 변화 없음: <사유 한 문장>` — a marker with no rationale is rejected by the structure check. If there is no diagram at all and every one of the three levels carries this reasoned waiver, R12 can still be satisfied. In that case the judge's quote must include all three waiver sentences — system, component, domain — as strings copied verbatim from the document; if any is missing or lacks a rationale, it does not pass. This waiver exception does not apply once any diagram is present.
 
-## Step 5 — intuition
+## Step 5 — 기능 단위
+
+The three architecture levels explained the *parts*; this step explains the **capabilities** those parts assemble into. A capability is a **use-case** — one piece of behaviour carried end to end, an orchestrator of domains through their contracts (Clean-arch use-case / FSD feature / DDD service; write none of those names — R19). Promote it to a top-level `## 기능 단위` section with **one `### <capability>` chapter per use-case**.
+
+**Place each part on the right of three layers — a capability is the middle one.**
+
+| Layer | What it is | Gets a chapter? |
+|---|---|---|
+| 입구 (trigger) | what runs the capability: 스케줄러 / HTTP / tRPC / gRPC / 메시지 / 이벤트 / 스크립트 / display / in-tx 내부호출 | No — a **slot** (`입구`) of the capability it triggers |
+| **기능 단위 (use-case)** | one capability carried end to end, orchestrating domains through contracts | **Yes — one chapter each** |
+| 도메인 함수·모델 | a repository/persistence method or domain operation (e.g. `markTutorialCompleted` = "mark X and persist") | No — a **depended-on collaborator** inside a chapter's `소속 도메인 + 협력` slot |
+
+**One chapter = one use-case, never a domain/persistence function.** A persistence method is not a capability just because it has a tRPC/HTTP adapter — that adapter belongs to whichever use-case orchestrates it. Mistaking a repository method for a capability is a measured defect (RED, luna max on `pr-3619`): `markTutorialCompleted` is `user`-domain persistence, and `ProposalApprovalService` is the use-case that owns its orchestration. **A chapter states only its own responsibility** — it does not steal a collaborator's responsibility or absorb a cross-cutting property (transaction/idempotency) another path owns ("온보딩 완료 기록" does not own "프로그램 활성화" atomicity; that belongs to the approval path).
+
+**Each chapter carries five header slots** (R15 checks their presence per chapter, plus a flow diagram; the semantic discipline is R23's — see below):
+
+- **구현체** — the symbol(s) that carry this use-case (a service method / endpoint / script), so no identifier reaches the reader unexplained.
+- **버전** — `{라벨: <a real codebase version token, e.g. program-v2, or 버전 토큰 없음>, 설명: <분류> — <what changed>}`. The 분류 is one of **신규 / 동일버전 수정 / 버전 전이 vN→vN+1 / 폐기**. Anchor the 라벨 to a version token that actually exists in the code, never an invented one; for a 버전 전이 contrast before→after; and **do not treat a version-bumped feature as a brand-new feature** — compare it across versions.
+- **소속 도메인 + 협력** — the owning domain, then each collaborator tagged `[의존=계약 위임]` (reached through its contract) or `[직접 핸들링]` (handled inside this use-case), with direction. This is where a domain/persistence function surfaces — as a delegated collaborator, not a chapter.
+- **입구(트리거)** — trigger kind + entry point + interface signature + change kind (new|mod|del). The signature must be the unit's **real declaration** — no invented parameter, no sibling method it does not call (open it with `git show <hash>:<path>`; see `discipline.md` Remainder 5 — interface-signature fidelity).
+- **영향범위** — the blast radius: who reads/depends on this capability, and how a failure propagates.
+
+Then the **narrative body**: **책임** (its own duty only), a mermaid `sequenceDiagram` of the flow with the changed step marked (`Note`/`:::changed`) framed by 읽는 목표 → 그림 → 해석 and its 관련 흐름, **개념/도메인 모델 연결**, and a one-line `의존 방향 판정` (keeps/violates/restores unidirectionality; flag any reach-in, back-reference, cycle). Participants must be real symbols (R12-style reality). **A user-facing change gets a user-journey view**: when the diff touches a surface a person interacts with (screen, input, badge/status, notification, entry point), the relevant chapter also carries a 사용자 여정 `flowchart` from the user's first action (`([사용자: …])`) through the branches they can hit (권한 거부, 입력 잠금, 재시도) to what they see, alongside or in place of the sequence.
+
+A diff that changes no use-case replaces the chapters with a section-level reasoned `구조 변화 없음: <사유>` waiver. Format follows `markdown-template.md`. **R23 (judge)** then certifies, per chapter, the three things the scan cannot see: it is a use-case (not a demoted domain function), it steals no collaborator's responsibility (depend-vs-handle drawn where the code draws it), and its version classification is grounded.
+
+## Step 6 — intuition
 
 Write only the **essence** of the change. Detail is the next step's job. Make a concrete toy value actually appear, and reuse that value in the explaining sentence.
 
@@ -175,9 +212,9 @@ Draw with sanctioned components. Do not use ASCII diagrams, and do not invent st
 - Before/after contrast → `compare` component
 - A two-dimensional structure needing boundaries or branches → ` ```mermaid ` (same syntax as the architecture step)
 
-**Changed logic with 3+ branches gets a flowchart.** When a function this diff adds or changes carries three or more branch points counting error and edge paths — a priority resolution, a chunked retry, an attempt-limit lockout, a union-kind dispatch — draw its branching as a `flowchart` (here in Intuition, or beside the owning change block in step 7) with the real predicates as branch labels, and walk the toy value through it. Prose alone leaves the reader simulating the branches in their head; the picture is the simulation. Simpler logic (≤2 branches) stays prose — a flowchart there is noise.
+**Changed logic with 3+ branches gets a flowchart.** When a function this diff adds or changes carries three or more branch points counting error and edge paths — a priority resolution, a chunked retry, an attempt-limit lockout, a union-kind dispatch — draw its branching as a `flowchart` (here in Intuition, or beside the owning change block in step 8) with the real predicates as branch labels, and walk the toy value through it. Prose alone leaves the reader simulating the branches in their head; the picture is the simulation. Simpler logic (≤2 branches) stays prose — a flowchart there is noise.
 
-## Step 6 — commits
+## Step 7 — commits
 
 First pull the commit list for the range — this list is this step's subject:
 
@@ -197,7 +234,7 @@ What this step writes is a **one-line overview**. The deep narrative is the next
 
 Commit hashes are compared against the list that `start` pinned into the state — if any is missing from the overview, the structure check fails. Only when the command above is exactly one line, write the single line `단일 커밋 범위 — Commit Journey 생략.` instead of the section.
 
-## Step 7 — code
+## Step 8 — code
 
 **Carry the example into its implementation.** For every Intuition example, fill the
 required **예시 연결** paragraph after the core-code fence in the change block that
@@ -259,7 +296,7 @@ The slots fill R13, R3, and R5. The `왜`·`효과·사이드이펙트`·`검증
 | No ground, but it is inferred from the code | `<span class="cf-src">추론</span> <추론의 근거>` |
 | No reachable ground | `<span class="cf-src">Unknown / not supplied</span>` |
 
-Leave the third case **as an open question inside the document.** Do not ask the user in conversation — steps 1–8 run without a person.
+Leave the third case **as an open question inside the document.** Do not ask the user in conversation — steps 1–9 run without a person.
 
 For backward compatibility, the accepted legacy bracket forms are exactly `[근거: <원문 인용>]` and `[추론: <추론의 근거>]`. The payload in either form must contain non-whitespace content, and the closing `]` is required; `[근거:` or `[추론:` without a complete payload and closing bracket is not a provenance tag. Prefer the HTML `cf-src` forms above for new documents.
 
@@ -282,11 +319,12 @@ What this gate actually looks at differs per step — it inspects only the slots
 | evidence | Does every signal file appear somewhere in the document |
 | background | Deep/narrow two-tier background + skip marker |
 | goal | Does the `## 목표` section carry all three sub-slots — `### 무엇을·왜`, `### 핵심`, and `### 출처` (R16) |
-| architecture | Three level headings, each with a mermaid diagram or a reasoned waiver (R9); system level has the three change-contract axes (R14) and a real rendered three-column standing-interface table `경계`/`인터페이스`/`오가는 것` (R17); component level accepts a reasoned waiver or requires `arch-entity` cards with `패키지`/`책임`/`인터페이스`/`변경점` and `data-change`, and rejects a diagram whose nodes are file paths (R18); domain level accepts a reasoned waiver or requires `arch-entity` cards with `책임`/`핵심 멤버`/`변경점` and `data-change`, rejects file-path nodes, and requires a `classDiagram`'s boxes to carry members/methods (R21); boundary/use-case block requires an orchestration mermaid diagram (or waiver) plus a real `arch-entity` with allowed `data-change` and `영향 인터페이스`/`의존 방향` slots (R15); rendered Architecture prose uses standalone-token filtering (R19) |
+| architecture | Three level headings, each with a mermaid diagram or a reasoned waiver (R9); system level has the three change-contract axes (R14) and a real rendered three-column standing-interface table `경계`/`인터페이스`/`오가는 것` (R17); component level accepts a reasoned waiver or requires `arch-entity` cards with `패키지`/`책임`/`인터페이스`/`변경점` and `data-change`, and rejects a diagram whose nodes are file paths (R18); domain level accepts a reasoned waiver or requires `arch-entity` cards with `책임`/`핵심 멤버`/`변경점` and `data-change`, rejects file-path nodes, and requires a `classDiagram`'s boxes to carry members/methods (R21); rendered Architecture prose uses standalone-token filtering (R19) |
+| capability | The `## 기능 단위` section carries one `### <capability>` chapter per use-case, each with the `구현체`/`버전`/`소속 도메인`/`입구`/`영향범위` slots and a mermaid flow diagram — one complete chapter cannot mask an incomplete one; a diff that changes no use-case uses a section-level reasoned waiver (R15). Rendered `## 기능 단위` prose also uses standalone-token filtering (R19). The semantic discipline (is-a-use-case, no-stolen-responsibility, grounded-version) is the judge's (R23) |
 | intuition | No item of its own — the substantive verdict is the judgment's (R6) |
 | commits | With two or more commits, does every hash appear in the Commit Journey overview (R10); a single commit may use the waiver marker |
 | code | Change Group title/herald/order-rationale three slots (R2), a provenance tag on every 왜 (R3), cf-loc traceability (R5), every signal file cited by at least one change block's `바뀐 위치` anchors (R1 — a file may be cited by several changes), a commit subsection with a valid hash per group + core-logic code per change block (R13), and every `근거` quote a real substring of the commit-body ∪ net-diff corpus after whitespace removal plus contextual paired-Markdown normalization (R22; unpaired or identifier/expression punctuation is preserved). `start` passes the original range unchanged to `git diff` (preserving `A...B` merge-base semantics); only `git rev-list` enumeration normalizes it to `A..B`. At `code` submission, R5 keys every `base:`/`head:` anchor by its own cited path and checks per signal file that its before/after are cited and land in real hunks; a file with no textual hunk uses the legacy presence/placeholder fallback. A legitimate first-line hunk may use `base:…:1 → head:…:1`; added files need `head:` only, deleted files `base:` only, and a zero-count side has no file lines. |
-| render | See Step 8 — it inspects the artifact HTML, mermaid render parity, the technical-writing report, and the final checklist verdict |
+| render | See Step 9 — it inspects the artifact HTML, mermaid render parity, the technical-writing report, and the final checklist verdict |
 
 **Common to all authoring steps**: the whole accumulated document is checked for `<style>`, inline `style=`, and unsanctioned classes (R11).
 
@@ -299,9 +337,9 @@ $CLI pass-step --step <step> --doc "<문서 경로>" --judge-json '<판정 JSON>
 
 The judgment JSON is produced by the judging subagent. Give the judge the **fixed template** in `references/judge-prompt.md` verbatim. Do not compose one yourself.
 
-The judge decides only three of the whole rubric — `R12` (if the architecture has a diagram, do its labels and change markers correspond to grounds in the diff; if it has no diagram, are all three levels' reasoned waivers present), `R6` (does Intuition's concrete example actually exist and get reused in the prose), `R7` (does group N's herald presuppose group N-1). The rest are already decided by the structure check. Passing R12 requires the judge's quote. When a diagram exists the quote must carry the identifier and change-marker grounds; when none exists it must carry all three waiver sentences verbatim.
+The judge decides only five of the whole rubric — `R12` (if the architecture has a diagram, do its labels and change markers correspond to grounds in the diff; if it has no diagram, are all three levels' reasoned waivers present), `R23` (per `## 기능 단위` chapter: is it a use-case rather than a demoted domain function, does it steal no collaborator's responsibility, is its version classification grounded), `R6` (does Intuition's concrete example actually exist and get reused in the prose), `R7` (does group N's herald presuppose group N-1), and `R24` (쓰기 전에 소개 — is every first-class entity the accumulated document leans on introduced at first use, including each diagram code-name element decoded by a card or a `gloss` footnote). The rest are already decided by the structure check. Passing R12 requires the judge's quote. When a diagram exists the quote must carry the identifier and change-marker grounds; when none exists it must carry all three waiver sentences verbatim.
 
-Each of these three items is **required in exactly one step** — `architecture` for `R12`, `intuition` for `R6`, `code` for `R7`. The other six steps (evidence, background, goal, commits, render, quiz) have no required judge ID, so pass them with `--judge-json '[]'`. If the required ID is absent from the payload it is rejected on that alone, and attaching a real quote to an unrelated ID does not substitute for the missing required ID.
+Of these five items, four are **required in exactly one step** — `architecture` for `R12`, `capability` for `R23`, `intuition` for `R6` — and the `code` step requires **two**, `R7` and `R24`. The other six steps (evidence, background, goal, commits, render, quiz) have no required judge ID, so pass them with `--judge-json '[]'`. If any required ID is absent from the payload it is rejected on that alone, and attaching a real quote to an unrelated ID does not substitute for a missing required ID.
 
 ```json
 [{"id":"R6","pass":true,"quote":"문서에서 그대로 따온 문장"}]
@@ -309,7 +347,7 @@ Each of these three items is **required in exactly one step** — `architecture`
 
 Giving `pass` without a quote, or a quote that is not present in the document as a string, is auto-failed by the CLI.
 
-## Step 8 — render
+## Step 9 — render
 
 The markdown is the source; the HTML is derived.
 
@@ -317,20 +355,33 @@ The markdown is the source; the HTML is derived.
 bun ${CLAUDE_SKILL_DIR}/scripts/render.ts --in "<문서.md>" --out "<문서.html>"
 ```
 
-render.ts bakes ` ```mermaid ` fences to inline SVG via mmdc. The HTML is a single self-contained file with no runtime JS and no external references. If mmdc is absent or a block fails, the render dies with the failing block number — fix that block and re-render.
+render.ts bakes ` ```mermaid ` fences to inline SVG via mmdc. The HTML is a single self-contained file with no external references; its content renders with no script running (the one script it carries only adds an ESC/Enter shortcut to the zoom overlay and degrades away cleanly). If mmdc is absent or a block fails, the render dies with the failing block number — fix that block and re-render.
 
-After rendering, before moving to the quiz, **run the one verification the machine cannot do — technical-writing.** Do NOT screenshot-review the visual layout per document: style is owned by render.ts and is deterministic, so a layout defect is systematic (fix it once in render.ts + its test, never re-review). The one visual risk that used to justify a per-document pass — a wide mermaid diagram whose labels collapse below legibility — is now sealed at the renderer: `normalizeSvgWidth` keeps every diagram at its natural viewBox width and `figure.diagram` scrolls, guarded by `render.test.ts`. There is no `visual-qa` step here.
+After rendering, before moving to the quiz, **run the one verification the machine cannot do — technical-writing.** Do NOT screenshot-review the visual layout per document: style is owned by render.ts and is deterministic, so a layout defect is systematic (fix it once in render.ts + its test, never re-review). The two visual risks that used to justify a per-document pass are now sealed at the renderer. (1) Label clipping — mermaid's default `htmlLabels` bakes fixed-width `<foreignObject>` labels that a viewer with a wider font clips (hides); render.ts pins `htmlLabels:false` so labels are SVG `<text>` that overflow-but-never-hide, and `checkRenderOutput` fails the render step on any surviving `<foreignObject>`. (2) Wide-diagram legibility — each diagram fits its column by default (no forced horizontal page scroll) and a zoom control (top-right ⤢) opens a natural-size overlay for detail, closed by the ✕ button, a click anywhere off the diagram, or the ESC/Enter shortcut. Open, fit, and both click paths are CSS; only the keyboard shortcut uses the page's one small script, which degrades away cleanly. Both risks are guarded by `render.test.ts`.
 
 1. **technical-writing** — have the technical-writing skill review the markdown prose, and apply the
    accepted points to the document. Record what you applied in `<slug>-writing-report.md` with a last
    line of `REVIEW: APPLIED`. If you changed the document, re-run render.ts.
 
 2. **Final self-review checklist** — open `references/final-checklist.md` and grade the finished
-   document against its 9 axes (system decomposition, both-sides coverage, goal→diagram→interpretation,
+   document against its 10 axes (system decomposition, both-sides coverage, goal→diagram→interpretation,
    state diagram, logic flowchart, real identifiers + changed markers, sequence activation balance,
-   user journey, clean render). Write the graded table to `<slug>-final-checklist.md` next to the
+   user journey, clean render, 쓰기 전에 소개). Write the graded table to `<slug>-final-checklist.md` next to the
    document, ending with `CHECKLIST: ALL PASS`. Any FAIL → fix the document, re-run render.ts,
    re-grade from the top. The quiz does not start while a FAIL remains.
+
+3. **Presentation review (required, before the quiz)** — dispatch the `presentation-reviewer` agent to
+   contrast the finished document against its source material for the reader. It is skill-agnostic, so
+   assemble the bundle yourself:
+   - **presentation**: the document `.md` (and its `.html`).
+   - **sources**: the actual diff (the range's `git show`/`git diff`), Step 1's `### 원천` evidence table, and the plan/issue/ticket/docs cited by that table, plus only the **bounded unchanged code context** the explanation relies on. Identify every unchanged context excerpt by its repository-relative path and base/head revision; include the smallest relevant excerpt, not a whole file, repository snapshot, or unrelated source.
+   - **reader_persona**: "a colleague or team-lead with no prior context on this change — richly and
+     correctly understands what/why/what-to-watch from this page alone".
+   Its verdict is `APPROVE` / `COMMENT` / `REQUEST_CHANGES` / `INCONCLUSIVE`. `APPROVE/COMMENT` may proceed.
+   `REQUEST_CHANGES` requires repairs and re-reviews: repair the document or its source bundle,
+   re-run render.ts, re-grade the checklist, and re-review. `INCONCLUSIVE` or a missing/malformed verdict blocks completion until
+   the reviewer input bundle is repaired and a valid result is returned; the quiz does not start until
+   the reviewer no longer requests changes. This is a required review step, not a CLI gate; run it every time.
 
 The render artifact gate requires all three artifacts: `--html`, `--writing-report`, and `--checklist`.
 The checklist file must exist and its last non-whitespace line must be exactly `CHECKLIST: ALL PASS`.
@@ -351,7 +402,7 @@ The render submission also confirms the HTML is an artifact re-generated from th
 
 When the render is done, tell the user the document, HTML, writing-report, and final-checklist paths and ask them to read the document.
 
-## Step 9 — quiz
+## Step 10 — quiz
 
 The quiz is **a conversational stage, not a document section.** Do not write a `## Quiz` heading in the document — it would leave an empty clause in the rendered HTML. Manage the questions with the CLI below and pose them in plain prose.
 
@@ -426,6 +477,6 @@ Rejected if even one required concept remains. There is no bypass path.
 |---|---|
 | `references/markdown-template.md` | When you start writing the document — skeleton, per-architecture-level diagram types, full list of sanctioned components |
 | `references/rubric.md` | Which item is decided by whom, and what each item requires |
-| `references/final-checklist.md` | Step 8, after render — the 9-axis self-review gate before the quiz |
+| `references/final-checklist.md` | Step 9, after render — the 10-axis self-review gate before the quiz |
 | `references/judge-prompt.md` | When calling the judging subagent (fixed template) |
 | `references/discipline.md` | The discipline that could not be moved into structure |

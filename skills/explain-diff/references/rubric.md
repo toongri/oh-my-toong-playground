@@ -1,6 +1,6 @@
 # explain-diff unified rubric
 
-These 19 items are used as **one and the same set** in three places — per-step section judgment, the basis for generating quiz questions, and the RED/GREEN artifact comparison. If the three places hold different standards, "passed the gate" and "is a good document" split apart, and from then on the gate is a pass-through ritual.
+These 22 items are used as **one and the same set** in three places — per-step section judgment, the basis for generating quiz questions, and the RED/GREEN artifact comparison. If the three places hold different standards, "passed the gate" and "is a good document" split apart, and from then on the gate is a pass-through ritual.
 
 The items are **split three ways by who decides**. Absence is counted by the script, existence is proven by the judge with a quote, and pure judgment is kept minimal. Reducing the very surface on which the judge can exercise discretion is the purpose of the split.
 
@@ -31,15 +31,17 @@ The document is written one step at a time, accumulating. So an item is evaluate
 | R12 | judge | architecture |
 | R13 | script | code |
 | R14 | script | architecture |
-| R15 | script | architecture |
+| R15 | script | capability |
 | R16 | script | goal |
 | R17 | script | architecture |
 | R18 | script | architecture |
-| R19 | script | architecture |
+| R19 | script | architecture + capability |
 | R21 | script | architecture |
 | R22 | script | code |
+| R23 | judge | capability |
+| R24 | judge | code |
 
-The `intuition` step has no slot of its own — only R6 (judge) and the common R11 decide it. `render` and `quiz` score none of this table's items: `render` looks at the artifact check (HTML present and non-empty, mermaid→SVG parity, technical-writing `REVIEW: APPLIED`, final checklist ending with `CHECKLIST: ALL PASS`), and `quiz` runs a separate grading path (`grade`). Visual layout is not scored per document — it is a deterministic property render.ts owns (wide-diagram legibility is sealed by `normalizeSvgWidth` + the figure scroll container, regression-guarded by `render.test.ts`), so there is no visual-qa gate.
+The `intuition` step has no slot of its own — only R6 (judge) and the common R11 decide it. `render` and `quiz` score none of this table's items: `render` looks at the artifact check (HTML present and non-empty, mermaid→SVG parity, technical-writing `REVIEW: APPLIED`, final checklist ending with `CHECKLIST: ALL PASS`), and `quiz` runs a separate grading path (`grade`). Visual layout is not scored per document — it is a deterministic property render.ts owns. Label clipping is sealed by `htmlLabels:false` (SVG `<text>` labels never hide; `checkRenderOutput` fails on any surviving `<foreignObject>`), and wide-diagram legibility by fit-to-column default + a CSS-only zoom overlay, both regression-guarded by `render.test.ts`.
 
 ---
 
@@ -172,22 +174,36 @@ The code section is organized with the commit as its spine, and its unit is the 
 > and what the chat client must match were not enumerated in a table, so the "system-unit" explanation was
 > thin.
 
-### R15. Boundary / dependency / use-case change map
+### R15. 기능 단위 (capability) chapters
 
-The Architecture section closes with a `### 경계·의존·유스케이스` block that is a **use-case change map**, not a static layer-classification table. Its unit of account is the **execution unit**: one card = one thing that is invoked and runs end to end (a service method, an HTTP endpoint, a batch script, a hook). A cross-cutting property — a transaction boundary, idempotency, consistency — is never its own card; it is described inside the `한 일` of the execution unit that owns it. Each card's `한 일` opens by stating the unit's identity (what kind of thing it is and which module owns it), so a bare identifier never reaches the reader unexplained. Because a feature/use case mostly carries an orchestration responsibility, the block must **show the flow as a mermaid diagram** (a `sequenceDiagram` is the recommended type) — who calls whom in what order, with the changed step marked — or a reasoned `구조 변화 없음: <사유>` waiver when the diff changes no use-case flow. Beyond the diagram, the block must contain a renderer-recognized `arch-entity` opening tag whose `data-change` is one of `new`, `mod`, or `del`, plus the `영향 인터페이스` and `의존 방향` slots. Prose-only mentions of `data-change`, or unsupported values, do not count. The orchestration-diagram check reads the raw sub-slice (a mermaid fence is masked away, so it is looked for before masking); the slot checks read the fence-masked sub-slice. What each slot says is the author's to fill. The vocabulary follows the `architecture-boundaries` rule but the output speaks the codebase's own terms (enforced by R19).
+Use-case description is a **top-level `## 기능 단위` section**, no longer a block inside Architecture
+(v6). Each **capability = one `### <capability>` chapter**: a use-case that a trigger runs — the
+middle of three layers (입구 trigger → **기능 단위 use-case** → 도메인 함수·모델). A domain/persistence
+function (a repository method, a domain operation) is **not** a chapter; it surfaces as a depended-on
+collaborator inside a chapter's `소속 도메인 + 협력` slot. R15 checks, **per chapter**, the presence of
+five header slots — `구현체`, `버전`, `소속 도메인`, `입구`, `영향범위` — and a mermaid flow diagram; one
+complete chapter cannot mask an incomplete one, and every `### <capability>` chapter is checked
+independently. A diff that changes no use-case uses a section-level reasoned `구조 변화 없음: <사유>`
+waiver in place of chapters. Slot presence is read on the fence-masked chapter body; the flow diagram
+is a mermaid fence (or a per-chapter waiver). What each slot says, and the narrative body (`책임`,
+`개념/도메인 모델 연결`, `의존 방향 판정`), is the author's to fill — the *semantic* discipline is R23's,
+not the script's. The vocabulary follows the `architecture-boundaries` rule but the output speaks the
+codebase's own terms (enforced by R19, which now scans this section too).
 
 > **RED — the v4 static table.** The earlier R15 forced a `파트/레이어/협력자/영향·수정` classification table
 > with a binary `수직 도메인 / 수평 유스케이스` layer choice. On an FSD codebase this miscategorised parts that
 > are neither a clean vertical domain nor a horizontal use-case: a `resolver` (an `entities/lib` module) and a
 > `census` (a standalone backend CLI) were both forced into "수평 유스케이스", and the table answered "what
-> exists" rather than "what this diff did to the boundary". The rewrite drops the static classification: each
-> behaviour unit is an `arch-entity` carrying its change kind and affected interface, closed by the direction
-> verdict — the same "change contract, not inventory" shape that made R14 work.
+> exists" rather than "what this diff did to the boundary".
 >
-> **RED — real artifact (`pr-3619`, user review).** The block mixed cards of unstated identity: a card
-> named `온보딩 승인 트랜잭션` (a transaction property posing as a unit — the reader asked "얘의 정체는
-> 뭐야?") and a card named `update_onboarding_status` with no statement of what kind of thing it is or
-> which module owns it. The execution-unit account and the identity-first `한 일` sentence close this.
+> **RED — real artifact (`pr-3619`, user review), then luna max RED reps.** The v5 block still accounted at
+> **execution-method** granularity and never carried the capability's **version transition, owning domain,
+> blast radius, or the depend-vs-handle collaboration**; two `luna max` RED reps on `pr-3619` produced 11–17
+> execution-method cards yet **zero** of those five dimensions. Worse, a repository persistence method
+> (`markTutorialCompleted`) was mistaken for a capability, and one chapter stole another path's responsibility
+> ("온보딩 완료 기록" claiming "프로그램 활성화" atomicity). The v6 rewrite promotes each **use-case** to a
+> `### <capability>` chapter carrying `구현체 / 버전 / 소속 도메인 / 입구 / 영향범위` + a flow diagram, and hands
+> the three semantic checks — is-a-use-case, no-stolen-responsibility, grounded-version — to R23.
 
 ### R17. System-level standing-interface table
 
@@ -288,22 +304,27 @@ only) fails. This is the domain-level counterpart to R18.
 > unscannable ("멤버변수를 글로 서술하는 건 좀 애매한 느낌") — members moved to the structured
 > `핵심 멤버` chip slot, with changed members highlighted and `←변경` marking in the classDiagram.
 
-### R19. No methodology name or axis label in Architecture prose
+### R19. No methodology name or axis label in the structural prose
 
-The Architecture section's **rendered prose** speaks the codebase's own domain terms — no methodology
-proper name and no bare layer-axis label leaks in. The checker masks fenced blocks and removes
-inline-code examples before scanning, then requires standalone token matches (methodology matching
-is case-insensitive). None of these standalone tokens may appear: methodology names `FSD`,
-`Feature-Sliced`, `Clean Architecture`, `Clean-arch`, `DDD`, `Domain-Driven`, `bounded context`; or
-axis labels `수평`, `수직`. The plain words `유스케이스`/`도메인` are legitimate (the block heading
-uses them); only framework names and the horizontal/vertical axis labels are banned. The boundary
-block names what this diff touched in the codebase's own terms, not by sorting parts into a
-`수평`/`수직` grid — the boundary vocabulary still follows the `architecture-boundaries` rule
-internally, but the *output* forbids naming the methodology or its axes.
+The **rendered prose** of both structural sections — `## Architecture` and `## 기능 단위` — speaks the
+codebase's own domain terms: no methodology proper name and no bare layer-axis label leaks in. The ban
+follows where use-case description lives, so v6's promotion of that description out of Architecture
+into `## 기능 단위` extends R19 to scan both sections (whichever exist), and R19 now runs at **both** the
+architecture step (only Architecture present yet) and the capability step (`## 기능 단위` present in the
+cumulative doc). The checker masks fenced blocks and removes inline-code examples before scanning, then
+requires standalone token matches (methodology matching is case-insensitive). None of these standalone
+tokens may appear: methodology names `FSD`, `Feature-Sliced`, `Clean Architecture`, `Clean-arch`,
+`DDD`, `Domain-Driven`, `bounded context`; or axis labels `수평`, `수직`. The plain words
+`유스케이스`/`도메인` are legitimate (the section headings use them); only framework names and the
+horizontal/vertical axis labels are banned.
 
-> **RED — interview requirement.** The user asked that the boundary block think in the two axes but never surface
-> the framework names in the output ("이게 프롬프트에 굳이 드러나진 않았으면 좋겠어"). A literal token scan is
-> the precise, cheap enforcement — the names are proper nouns, so a grep catches them without judge discretion.
+> **RED — interview requirement.** The user asked that the use-case description think in the two axes but never
+> surface the framework names in the output ("이게 프롬프트에 굳이 드러나진 않았으면 좋겠어"). A literal token scan
+> is the precise, cheap enforcement — the names are proper nouns, so a grep catches them without judge discretion.
+>
+> **RED — luna max, boundary block.** The measured defect that motivated the axis-label ban ("닿은 곳" reintroducing
+> `수평: … 수직: …`) lived in what is now the `## 기능 단위` section. Relocating the content without extending R19's
+> scan would have re-opened exactly that hole — so the scan follows the content across both sections.
 
 ### R16. Goal / core-message beat
 
@@ -356,6 +377,60 @@ The Architecture diagram's node/edge labels are real identifiers of the actual s
 > an in-process call chain (only the mocked, unchanged `server` is a real other process) presented as the
 > system level. The picture had a change marker, so pre-R12-tightening it passed; the leveling error — an
 > in-process chain labeled 시스템 — is what the sharpened R12 catches.
+
+### R23. Capability-chapter discipline
+
+R15 counts a `## 기능 단위` chapter's slots and diagram; R23 is the **semantic** gate the scan cannot
+see. For each `### <capability>` chapter, the judge certifies three things with verbatim quotes from
+the chapter:
+
+1. **It is a use-case, not a demoted domain function.** The chapter's subject is a capability a trigger
+   runs (an orchestrator), not a repository/persistence method or bare domain operation. A persistence
+   method wearing a tRPC/HTTP adapter is not promoted to a capability — its adapter belongs to whichever
+   use-case orchestrates it. The judge quotes the `구현체` and `책임` and confirms the subject orchestrates
+   rather than persists.
+2. **It steals no collaborator's responsibility.** The `책임` states only this use-case's own duty; a
+   cross-cutting property (transaction boundary, idempotency, consistency) is described inside the
+   use-case that actually owns it, not annexed by a neighbour. The judge quotes the `소속 도메인 + 협력`
+   tags (`[의존=계약 위임]` vs `[직접 핸들링]`) and confirms the boundary is drawn where the code draws it.
+3. **The version classification is grounded.** The `버전` slot's 분류 is one of
+   신규 / 동일버전 수정 / 버전 전이 vN→vN+1 / 폐기, its 라벨 anchors to a **real version token in the
+   codebase** (not an invented one), and a version-bumped feature is compared across versions rather
+   than filed as a brand-new feature. The judge quotes the 라벨 and confirms it against the diff.
+
+A pass without a quote is auto-failed; a quote that is not a string in the document is auto-failed.
+
+### R24. 쓰기 전에 소개 (introduce before you use)
+
+The reader has no prior context, so a first-class entity the document leans on — a coined term or
+domain word, a function/repository/method symbol, a module/domain, a feature — must be introduced at
+its first use, sized to its kind (용어 → 한 줄 뜻 / 함수·리포지토리 → 한 줄 역할 / 모듈·도메인 →
+경계+소유 / 기능 → 기능 단위 챕터; see SKILL.md "쓰기 전에 소개"). This is the whole-document form of
+R18/R21/구현체, which each cover one surface; R24 catches the entity that slips **between** those
+surfaces — a coined status label in prose, a helper named in a code block, a store node in a diagram.
+
+The judge picks the **entities a no-context reader is least likely to know** that the document uses,
+and for each quotes the sentence/slot that introduces it before (or at) first use. **A pass requires,
+per named entity, a verbatim quote of its introduction.** If an entity is used but introduced nowhere
+before that use, the judge fails R24 naming that entity and quoting the bare use — an unintroduced
+entity is a hole in the explanation, however correct the surrounding prose is. For a diagram's
+code-name element, its introduction is either an `arch-entity` card (R18/R21) or a `<ul class="gloss">`
+entry under the diagram; a code-name node decoded by neither is a fail.
+
+A pass without a quote is auto-failed; a quote that is not a string in the document is auto-failed.
+
+> **RED — subagent baselines (introduce-before-use).** Given identifier-dense sections and no gloss
+> spotlight, models glossed some coined terms in freeform prose but produced **zero** structured
+> footnotes and left diagram code-name nodes undecoded — the introduction was inconsistent and, for the
+> diagram surface, absent. R24 (the judge) plus the `gloss` footnote slot make the introduction a
+> named, quotable requirement rather than a habit that fires only sometimes.
+
+> **RED — luna max, 2 reps on `pr-3619`.** Without the three-layer model, the reps (1) mistook
+> `markTutorialCompleted` (a `user`-domain persistence method) for a capability, and (2) let "온보딩 완료 기록"
+> claim the transaction atomicity that belongs to the approval path, and (3) conflated a same-version edit with
+> a version transition. The GREEN reps under the three-layer model recovered all three: the persistence method
+> was demoted to a `[의존=계약 위임]` collaborator, `ProposalApprovalService` owned the orchestration, and the
+> 버전 slots classified 신규/동일버전 수정/폐기 against the diff.
 
 ---
 

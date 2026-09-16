@@ -943,59 +943,126 @@ function checkR14(text: string): CheckItem {
 	};
 }
 
-/**
- * The boundary / dependency / use-case block the Architecture section must carry
- * (R15, v5 rewrite). The baseline that forced the rewrite: the earlier static
- * classification table (파트/레이어/협력자/영향·수정) miscategorised parts that are
- * neither a clean vertical domain nor a horizontal use-case, and answered "what
- * exists" instead of "what this diff did to the boundary". The block is now a
- * change map: each behaviour unit is an `arch-entity` carrying its change kind
- * (`data-change`) and the interface it affects (`영향 인터페이스`), closed by a
- * one-line dependency-direction verdict (`의존 방향`). The gate forces the slots
- * present; what each says is the author's to fill.
- */
-const BOUNDARY_MARKERS = ["영향 인터페이스", "의존 방향"] as const;
+/** The slice of `text` from a `## <name>` heading to the next depth-2 (`## `) heading. */
+function topSectionSlice(text: string, name: string): string | null {
+	const visible = maskNonVisibleMarkdown(text);
+	const re = new RegExp(`^##\\s*${name}.*$`, "m");
+	const m = re.exec(visible);
+	if (!m) return null;
+	const start = m.index + m[0].length;
+	const next = visible.slice(start).search(/^##\s/m);
+	return next >= 0 ? text.slice(start, start + next) : text.slice(start);
+}
 
-// R15 — the boundary / dependency / use-case change map, read on the
-// `### 경계·의존·유스케이스` sub-slice with fences masked for the slot check, but
-// the RAW slice for the orchestration-diagram check (a mermaid fence is masked
-// away, so it must be looked for before masking). Measured gap: the use-case
-// level was a list of static arch-entity cards with cryptic names
-// ("V2 proposal detail / active read") and no flow — a reader could not see the
-// call order or which step moved. The rewrite requires the block to SHOW the
-// orchestration as a mermaid diagram (a sequenceDiagram is the recommended type)
-// with the changed step marked (leveling/marker judged by R12), alongside the
-// existing behaviour-unit cards and the dependency-direction verdict.
+/** Each `### <title>` subsection inside a slice, as { title, raw-body } pairs. */
+function capabilityChapters(rawSlice: string): { title: string; body: string }[] {
+	const visible = maskNonVisibleMarkdown(rawSlice);
+	const out: { title: string; body: string }[] = [];
+	const re = /^###\s+/gm;
+	const headings: Array<{ title: string; start: number; index: number }> = [];
+	let match: RegExpExecArray | null = re.exec(visible);
+	while (match !== null) {
+		const headingEnd = visible.indexOf("\n", match.index);
+		const end = headingEnd >= 0 ? headingEnd : visible.length;
+		headings.push({
+			title: visible.slice(match.index + match[0].length, end).trim(),
+			start: end + 1,
+			index: match.index,
+		});
+		match = re.exec(visible);
+	}
+	for (let i = 0; i < headings.length; i++) {
+		const heading = headings[i];
+		if (!heading) continue;
+		const next = headings[i + 1]?.index;
+		out.push({ title: heading.title, body: rawSlice.slice(heading.start, next ?? rawSlice.length) });
+	}
+	return out;
+}
+
+/** Visible capability diagrams must be flow/sequence diagrams, not domain models. */
+function capabilityFlowDiagrams(rawSlice: string): string[] {
+	const visible = maskNonVisibleContainers(rawSlice);
+	const out: string[] = [];
+	CODE_FENCE.lastIndex = 0;
+	let match: RegExpExecArray | null = CODE_FENCE.exec(visible);
+	while (match !== null) {
+		if (
+			(match[2] ?? "").trim().toLowerCase() === "mermaid" &&
+			/^(?:flowchart|graph|sequenceDiagram)\b/im.test(match[3] ?? "")
+		) {
+			out.push(match[3] ?? "");
+		}
+		match = CODE_FENCE.exec(visible);
+	}
+	return out;
+}
+
+/**
+ * The scannable header slots each capability chapter must carry (R15, v6
+ * rewrite). The capability step promotes what used to be the Architecture
+ * section's `### 경계·의존·유스케이스` block into a top-level `## 기능 단위`
+ * section whose `### <capability>` chapters each account for one use-case (an
+ * orchestration unit that a trigger runs), NOT a domain function. The structure
+ * check forces these header slots and a flow diagram present per chapter; the
+ * narrative body (책임, 개념 연결) and the semantic discipline — that a chapter
+ * is a use-case and not a demoted repository/domain function, that no chapter
+ * steals a collaborator's responsibility, that the depend-vs-handle collaboration
+ * and the version classification are right — are the judge's (R23).
+ */
+const CAPABILITY_SLOTS = ["구현체", "버전", "소속 도메인", "입구", "영향범위"] as const;
+
+// R15 — the capability change map, read on the `## 기능 단위` section. Each
+// `### <capability>` chapter is a use-case (Clean-arch use-case / FSD feature /
+// DDD service): a trigger-driven orchestrator of domain functions. Measured gap
+// (RED, luna max on pr-3619): the earlier use-case block accounted at
+// execution-method granularity and never carried the capability's version
+// transition, owning domain, blast radius, or the depend-vs-handle collaboration
+// — and a repository persistence method was mistaken for a capability. The
+// rewrite requires one chapter per capability carrying 구현체 / 버전 /
+// 소속 도메인 / 입구 / 영향범위 and a flow diagram, or a reasoned section-level
+// `구조 변화 없음: <사유>` waiver when the diff changes no use-case.
 function checkR15(text: string): CheckItem {
-	const diagramSlice = levelSlice(maskNonVisibleContainers(text), "경계·의존·유스케이스");
-	const slice = levelSlice(maskNonVisibleMarkdown(text), "경계·의존·유스케이스");
-	if (slice === null || diagramSlice === null) {
+	const rawSlice = topSectionSlice(text, "기능 단위");
+	const title = "R15 기능 단위 챕터";
+	if (rawSlice === null) {
 		return {
 			id: "R15",
-			title: "R15 경계·의존·유스케이스 블록",
+			title,
 			pass: false,
-			detail: "경계·의존·유스케이스 헤딩(### 경계·의존·유스케이스)이 없습니다",
+			detail: "기능 단위 섹션(## 기능 단위)이 없습니다 — 유스케이스마다 ### 캐피빌리티 챕터를 두거나, 변경이 없으면 구조 변화 없음 waiver를 적는다",
 		};
 	}
-	const missing: string[] = BOUNDARY_MARKERS.filter((label) => !slice.includes(label));
-	// The change kind of each behaviour unit rides on a renderer-recognized
-	// arch-entity opening tag — prose mentions or unsupported values are not a
-	// change map.
-	if (!hasValidArchEntity(slice)) missing.push("변경종류(data-change: new|mod|del)");
-	// The orchestration must be a real diagram, not prose — the flow (call order,
-	// changed step) is shown, not narrated. A reasoned waiver stands in when the
-	// diff genuinely changes no use-case flow.
-	const hasOrchestration =
-		mermaidFences(diagramSlice).some((fence) => /^\s*sequenceDiagram\b/m.test(fence)) ||
-		hasArchWaiver(slice);
-	if (!hasOrchestration) missing.push("오케스트레이션 다이어그램(mermaid sequenceDiagram)");
+	const chapters = capabilityChapters(rawSlice);
+	// A diff that changes no use-case uses the section-level reasoned waiver.
+	if (chapters.length === 0) {
+		if (hasArchWaiver(maskNonVisibleMarkdown(rawSlice))) {
+			return { id: "R15", title, pass: true, detail: "" };
+		}
+		return {
+			id: "R15",
+			title,
+			pass: false,
+			detail: "기능 단위 섹션에 ### 캐피빌리티 챕터가 없습니다 (변경이 없으면 구조 변화 없음: <사유> waiver)",
+		};
+	}
+	// One complete chapter cannot mask an incomplete one — every chapter is
+	// checked independently for the header slots and a flow diagram.
+	const problems: string[] = [];
+	for (const ch of chapters) {
+		const masked = maskNonVisibleMarkdown(ch.body);
+		const missing: string[] = CAPABILITY_SLOTS.filter((label) => !masked.includes(label));
+		const hasFlow = capabilityFlowDiagrams(ch.body).length > 0 || hasArchWaiver(masked);
+		if (!hasFlow) missing.push("흐름 다이어그램(mermaid)");
+		if (missing.length > 0) problems.push(`「${ch.title}」: ${missing.join(", ")}`);
+	}
 	return {
 		id: "R15",
-		title: "R15 경계·의존·유스케이스 블록",
-		pass: missing.length === 0,
+		title,
+		pass: problems.length === 0,
 		detail:
-			missing.length > 0
-				? `경계·의존·유스케이스 블록에 없는 슬롯: ${missing.join(", ")} — 유스케이스마다 오케스트레이션(mermaid sequenceDiagram)으로 흐름과 바뀐 단계를 보이고, 동작 단위마다 변경종류(arch-entity data-change)·영향 인터페이스를 적고, 의존 방향을 판정한다 (architecture-boundaries rule 참조)`
+			problems.length > 0
+				? `기능 단위 챕터에 없는 슬롯 — ${problems.join(" · ")}. 각 캐피빌리티(### 챕터)는 구현체·버전·소속 도메인·입구·영향범위를 적고 흐름을 mermaid로 보인다 (architecture-boundaries rule 참조)`
 				: "",
 	};
 }
@@ -1060,10 +1127,6 @@ function hasArchEntityField(body: string, label: string): boolean {
 const ARCH_ENTITY_OPENING_TAG =
 	/<([A-Za-z][\w-]*)\b(?=[^>]*\bclass=(["'])(?:[^"'\s]+\s+)*arch-entity(?:\s+[^"'\s]+)*\2)[^>]*>/gi;
 
-/** A renderer-recognized arch-entity opening tag with an allowed change kind. */
-const VALID_ARCH_ENTITY_OPENING_TAG =
-	/<([A-Za-z][\w-]*)\b(?=[^>]*\bclass=(["'])(?:[^"'\s]+\s+)*arch-entity(?:\s+[^"'\s]+)*\2)(?=[^>]*\bdata-change=(["'])(?:new|mod|del)\3)[^>]*>/gi;
-
 interface ArchEntityCard {
 	body: string;
 	validDataChange: boolean;
@@ -1086,11 +1149,6 @@ function archEntityCards(slice: string): ArchEntityCard[] {
 		match = ARCH_ENTITY_OPENING_TAG.exec(slice);
 	}
 	return cards;
-}
-
-function hasValidArchEntity(slice: string): boolean {
-	VALID_ARCH_ENTITY_OPENING_TAG.lastIndex = 0;
-	return VALID_ARCH_ENTITY_OPENING_TAG.test(slice);
 }
 
 // R18 — the component level, beyond the dependency graph (R9/R12), decodes each
@@ -1275,12 +1333,19 @@ function hasStandaloneToken(text: string, token: string): boolean {
 	return new RegExp(`(?<![${identifierChars}])${escaped}(?![${identifierChars}])`, "iu").test(text);
 }
 
-// R19 — no methodology name OR layer-axis label leaks into the Architecture
-// prose. Read on the fence- and inline-code-stripped Architecture section so
-// examples and identifiers do not count as rendered prose.
+// R19 — no methodology name OR layer-axis label leaks into the structural
+// prose. The ban follows where use-case description lives: v6 promoted that
+// description out of Architecture into `## 기능 단위`, so R19 scans BOTH sections'
+// prose (whichever exist) on the fence- and inline-code-stripped text, so
+// examples and identifiers do not count as rendered prose. It runs at the
+// architecture step (where only Architecture exists yet) and again at the
+// capability step (where `## 기능 단위` is now present in the cumulative doc).
 function checkR19(text: string): CheckItem {
-	const slice = sectionSlice(maskFenced(text), "Architecture");
-	if (slice === null) {
+	const masked = maskFenced(text);
+	const slices = ["Architecture", "기능 단위"]
+		.map((name) => sectionSlice(masked, name))
+		.filter((s): s is string => s !== null);
+	if (slices.length === 0) {
 		return {
 			id: "R19",
 			title: "R19 방법론 명칭·축 라벨 비노출",
@@ -1288,7 +1353,7 @@ function checkR19(text: string): CheckItem {
 			detail: "## Architecture 섹션이 없습니다",
 		};
 	}
-	const prose = withoutMarkdownCode(slice);
+	const prose = slices.map(withoutMarkdownCode).join("\n");
 	const found = [
 		...METHODOLOGY_TOKENS.filter((t) => hasStandaloneToken(prose, t)),
 		...AXIS_LABEL_TOKENS.filter((t) => hasStandaloneToken(prose, t)),
@@ -1409,6 +1474,7 @@ const SANCTIONED_CLASSES = new Set([
 	"arch-entity",
 	"ae-members",
 	"chg",
+	"gloss",
 ]);
 
 // R11 — the document authors content, the renderer owns presentation.
@@ -1452,11 +1518,14 @@ export function checkStructure(text: string, input: StructureInput): StructureRe
 		case "architecture":
 			items.push(checkR9(text));
 			items.push(checkR14(text));
-			items.push(checkR15(text));
 			items.push(checkR17(text));
 			items.push(checkR18(text));
 			items.push(checkR19(text));
 			items.push(checkR21(text));
+			break;
+		case "capability":
+			items.push(checkR15(text));
+			items.push(checkR19(text));
 			break;
 		case "intuition":
 			// No slot of its own — R6 (the judge) is its rubric coverage; the

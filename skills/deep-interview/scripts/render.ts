@@ -2,11 +2,14 @@
 /**
  * explain-diff renderer — markdown source to a self-contained HTML page.
  *
- * The conversion happens here, at build time, and the page it produces runs no
- * JavaScript at all. That is the whole design: an explanation document outlives
+ * The conversion happens here, at build time, and the page it produces needs no
+ * JavaScript to render. That is the whole design: an explanation document outlives
  * the session that made it, gets mailed around, opened offline, and printed —
  * and every one of those breaks the moment the page needs a CDN to render
- * itself. A page with no script tag and no external reference cannot rot.
+ * itself. A page with no external reference, whose content renders with no script
+ * running, cannot rot. The one script it carries ({@link ZOOM_SCRIPT}) only adds an
+ * ESC/Enter shortcut to the zoom overlay; strip it and every pixel still renders and
+ * the overlay still closes by button or click-off. Enhancement, never dependency.
  *
  * Diagrams arrive two ways and leave one way: 1D flow strips and before/after
  * cards are authored as sanctioned component markup (classes this file's CSS
@@ -57,15 +60,81 @@ export function normalizeSvgWidth(svg: string): string {
 	if (!viewBox) return svg;
 	const width = Math.ceil(Number(viewBox[1]));
 	if (!Number.isFinite(width) || width <= 0) return svg;
-	return svg.replace(/(<svg\b[^>]*?)\swidth="100%"/, `$1 width="${width}"`);
+	return (
+		svg
+			.replace(/(<svg\b[^>]*?)\swidth="100%"/, `$1 width="${width}"`)
+			// mmdc bakes an inline `max-width:<px>` on the root <svg>. An inline style beats a
+			// stylesheet rule, so both `.dz-scroll svg{max-width:100%}` (fit) and `.dz-view …
+			// svg{max-width:none}` (zoom) are overridden and the SVG renders at natural width,
+			// overflowing its figure card into the page background (the "broken diagram"). Strip
+			// it so the stylesheet owns the width in both states.
+			.replace(/(<svg\b[^>]*?style="[^"]*?)max-width:\s*[\d.]+px;?\s*/, "$1")
+	);
+}
+
+/**
+ * Wraps a pre-rendered mermaid SVG in a figure carrying a CSS-only zoom control.
+ *
+ * The page runs no JavaScript (the self-containment invariant), so zoom is a
+ * checkbox toggle: unchecked, `.dz-scroll svg` fits its column (max-width:100%),
+ * so the diagram section no longer forces horizontal page scroll; checked, the
+ * `:checked ~ .dz-view` rule in STYLE turns `.dz-view` into a full-viewport
+ * overlay showing the SVG at natural width, scrollable and legible. `index` keys
+ * the checkbox id so diagrams on one page toggle independently. The ⤢ button sits
+ * top-right of each figure; ✕ closes the overlay, and so does clicking anywhere off
+ * the diagram — the full-viewport `.dz-backdrop` label is a second control for the
+ * same checkbox, so any click on the dark area outside the SVG card unchecks it.
+ */
+export function zoomableFigure(svg: string, index: number): string {
+	const id = `dz-${index}`;
+	return (
+		`<figure class="diagram">` +
+		`<input type="checkbox" id="${id}" class="dz-toggle" aria-label="다이어그램 확대">` +
+		`<label for="${id}" class="dz-btn dz-open" title="확대" aria-label="확대">⤢</label>` +
+		`<div class="dz-view">` +
+		`<label for="${id}" class="dz-backdrop" aria-hidden="true"></label>` +
+		`<label for="${id}" class="dz-btn dz-close" title="닫기" aria-label="닫기">✕</label>` +
+		`<div class="dz-scroll">${svg}</div>` +
+		`</div>` +
+		`</figure>`
+	);
+}
+
+/**
+ * Inserts a line break before the dot in long dotted labels so mermaid wraps a
+ * method-style label at its natural boundary — `ProductRepository.update` renders
+ * as `ProductRepository` / `.update`, two clean lines in a compact node — instead
+ * of one very wide node OR a mid-word character break (`Produ` / `ctRepository`),
+ * which is what mermaid does to a long single token on its own.
+ *
+ * Only double-quoted labels at or above the length threshold and containing a
+ * method-style dot are touched; short labels, non-method dots (`3.14`), dotless
+ * tokens (kept on one line by `flowchart.wrappingWidth`), and labels the author
+ * already broke with `<br/>` are left exactly as written. The transform is a pure,
+ * deterministic string rewrite, so the render stays byte-reproducible for the gate.
+ */
+export function softWrapLabels(source: string): string {
+	const THRESHOLD = 22;
+	return source.replace(/"([^"\n]+)"/g, (whole, label: string) => {
+		if (
+			label.length < THRESHOLD ||
+			!label.includes(".") ||
+			label.includes("<br") ||
+			/^[a-z][a-z\d+.-]*:\/\//i.test(label)
+		)
+			return whole;
+		// Break only at a dot that joins two identifier characters (a method/property
+		// separator), never inside a number or at a trailing dot.
+		return `"${label.replace(/([A-Za-z0-9)\]])\.([A-Za-z_])/g, "$1<br/>.$2")}"`;
+	});
 }
 
 /**
  * Replaces every ```mermaid fence with an inline SVG before markdown parsing.
  *
- * This is the build-time half of the "no runtime JS" invariant: the page keeps
- * rendering offline and in mail clients precisely because the diagram was
- * rendered HERE, once, rather than by a script the viewer must be able to run.
+ * This is the build-time half of the "content renders without a script running"
+ * invariant: the page keeps rendering offline and in mail clients precisely because
+ * the diagram was rendered HERE, once, rather than by a script the viewer must run.
  * `renderSvg` is injected so tests exercise the wrapping without Chromium; the
  * production caller passes {@link mmdcRenderSvg}.
  */
@@ -85,7 +154,7 @@ export function preRenderMermaid(
 				cause: e,
 			});
 		}
-		return `<figure class="diagram">${normalizeSvgWidth(svg)}</figure>`;
+		return zoomableFigure(normalizeSvgWidth(svg), i);
 	});
 }
 
@@ -102,7 +171,7 @@ export function mmdcRenderSvg(source: string, index: number): string {
 		const src = join(dir, "block.mmd");
 		const out = join(dir, "block.svg");
 		const cfg = join(dir, "config.json");
-		writeFileSync(src, source, "utf8");
+		writeFileSync(src, softWrapLabels(source), "utf8");
 		// mermaid is non-deterministic by default: it mints random element ids and
 		// draws shapes with rough.js hand-drawn strokes seeded from a random value,
 		// so the SAME source yields different SVG bytes every run. That breaks the
@@ -118,6 +187,18 @@ export function mmdcRenderSvg(source: string, index: number): string {
 				deterministicIDSeed: "explain-diff",
 				look: "classic",
 				handDrawnSeed: 42,
+				// Label clipping fix (font-independent). mermaid's default htmlLabels:true
+				// bakes node labels as <foreignObject> HTML with a FIXED pixel width measured
+				// in the render font; a viewer lacking that font (iOS/iCloud has no
+				// "trebuchet ms") re-lays the HTML wider and the fixed box CLIPS the overflow —
+				// text vanishes. htmlLabels:false makes labels SVG <text> (no clip region, so a
+				// wide font overflows the border but is never hidden). fontFamily pins a
+				// near-universal stack so render and viewer glyph widths match.
+				// flowchart.wrappingWidth keeps a long single-token identifier on one line
+				// instead of breaking it mid-word.
+				htmlLabels: false,
+				fontFamily: "Helvetica Neue, Helvetica, Arial, sans-serif",
+				flowchart: { htmlLabels: false, wrappingWidth: 1000 },
 			}),
 			"utf8",
 		);
@@ -178,6 +259,7 @@ export function renderToHtml(markdown: string, title: string): string {
 <nav class="toc" aria-label="목차"><h2>목차</h2><ul>${tocHtml}</ul></nav>
 ${bodyHtml}
 </main>
+${ZOOM_SCRIPT}
 </body>
 </html>
 `;
@@ -367,19 +449,52 @@ ul.gloss code {
   padding: 0.02em 0.3em; font-size: 0.85em; color: var(--fg);
 }
 
-/* mermaid SVG는 밝은 테마 색으로 구워지므로, 다크 모드에서도 흰 카드 위에 놓는다. */
+/* mermaid SVG는 밝은 테마 색으로 구워지므로, 다크 모드에서도 흰 카드 위에 놓는다.
+   기본은 컬럼 폭에 맞춰 축소해 페이지 가로 스크롤을 없애고, 우측 상단 확대 버튼이
+   자연 크기 오버레이를 연다 — 넘겨보며 읽던 넓은 다이어그램을 한눈에 + 필요 시 크게. */
 figure.diagram {
+  position: relative;
   margin: 1.25rem 0; padding: 1rem; background: #ffffff;
-  border: 1px solid var(--rule); border-radius: 10px; overflow-x: auto;
+  border: 1px solid var(--rule); border-radius: 10px;
 }
-/* A wide diagram (viewBox wider than the column) must scroll at natural size, not
-   shrink to fit. mmdc emits width="100%", which downscales the whole SVG and
-   collapses 16px labels to a few illegible pixels while figure's overflow-x never
-   fires. normalizeSvgWidth (below) rewrites that attribute to the viewBox's pixel
-   width, so max-width:none here lets the SVG keep its natural width and the figure
-   scrolls instead. A diagram narrower than the column stays its own size, centered
-   by margin:auto. */
-figure.diagram svg { max-width: none; height: auto; display: block; margin: 0 auto; }
+/* 무-JS 확대: 체크박스 토글(라벨 + :checked 형제 선택자). 외부 참조·스크립트 0 유지. */
+figure.diagram .dz-toggle {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  border: 0; opacity: 0; pointer-events: none;
+}
+figure.diagram .dz-btn {
+  position: absolute; top: 0.55rem; right: 0.55rem; z-index: 2;
+  display: flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem; border: 1px solid var(--rule); border-radius: 6px;
+  background: var(--bg); color: var(--fg); font-size: 1.05rem; line-height: 1;
+  cursor: pointer; user-select: none;
+}
+figure.diagram .dz-btn:hover { background: var(--code-bg); }
+figure.diagram .dz-toggle:focus-visible ~ .dz-open { outline: 2px solid var(--accent); outline-offset: 2px; }
+figure.diagram .dz-close { display: none; }
+figure.diagram .dz-backdrop { display: none; }
+/* 기본: 컬럼 폭에 맞춤(다운스케일) — 넓은 다이어그램이 페이지 가로 스크롤을 만들지 않는다.
+   자연 폭이 필요하면 확대 버튼으로 오버레이를 연다(아래). */
+figure.diagram .dz-scroll svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+/* 확대 상태: 전체 뷰포트 오버레이 + 자연 크기(normalizeSvgWidth 가 viewBox px 로 고정) + 내부 스크롤. */
+figure.diagram .dz-toggle:checked ~ .dz-open { display: none; }
+figure.diagram .dz-toggle:checked ~ .dz-view {
+  position: fixed; inset: 0; z-index: 1000; margin: 0;
+  padding: 3rem 1rem 1rem; background: rgba(0, 0, 0, 0.85); overflow: auto;
+}
+/* 바깥 클릭으로 닫기: 뷰포트를 덮는 backdrop 라벨이 같은 체크박스의 두 번째 컨트롤. SVG 카드
+   (.dz-scroll)는 그 위(z-index)로 올려 카드 클릭은 닫히지 않고, 어두운 바깥만 닫힌다. */
+figure.diagram .dz-toggle:checked ~ .dz-view .dz-backdrop {
+  display: block; position: fixed; inset: 0; z-index: 0; cursor: zoom-out;
+}
+figure.diagram .dz-toggle:checked ~ .dz-view .dz-close { display: flex; position: fixed; top: 1rem; right: 1rem; z-index: 2; }
+figure.diagram .dz-toggle:checked ~ .dz-view .dz-scroll {
+  position: relative; z-index: 1;
+  width: max-content; max-width: none; margin: 0 auto;
+  background: #ffffff; border-radius: 10px; padding: 1.25rem;
+}
+figure.diagram .dz-toggle:checked ~ .dz-view .dz-scroll svg { max-width: none; }
 figure.diagram figcaption { color: var(--muted); font-size: 0.85rem; margin-top: 0.6rem; text-align: center; }
 
 @media (max-width: 640px) {
@@ -391,9 +506,33 @@ figure.diagram figcaption { color: var(--muted); font-size: 0.85rem; margin-top:
 @media print {
   body { background: #fff; color: #000; }
   .toc { break-after: page; }
-  figure.diagram svg { max-width: 100%; }
+  figure.diagram .dz-btn { display: none; }
+  figure.diagram .dz-backdrop { display: none; }
+  figure.diagram .dz-toggle:checked ~ .dz-view { position: static; background: none; padding: 0; overflow: visible; }
+  figure.diagram .dz-toggle:checked ~ .dz-view .dz-scroll { width: auto; max-width: 100%; }
+  figure.diagram .dz-scroll svg,
+  figure.diagram .dz-toggle:checked ~ .dz-view .dz-scroll svg { max-width: 100%; }
 }
 `;
+
+/**
+ * The page's ONLY script: a keyboard convenience for the zoom overlay — ESC or
+ * Enter closes whichever diagram is open. It is deliberately the one exception to
+ * the no-runtime-JS design: it enhances, never enables. With it stripped or
+ * blocked (a mail client, a strict CSP), the content still renders, diagrams still
+ * zoom, and the overlay still closes via the ✕ button and the click-off backdrop —
+ * all CSS. Only the keyboard shortcut is lost. Static and deterministic, so the
+ * render stays byte-reproducible for checkRenderOutput.
+ */
+const ZOOM_SCRIPT = `<script>
+addEventListener("keydown",function(e){
+if(e.key!=="Escape"&&e.key!=="Enter")return;
+var o=document.querySelectorAll(".dz-toggle:checked");
+if(!o.length)return;
+e.preventDefault();
+for(var i=0;i<o.length;i++)o[i].checked=false;
+});
+</script>`;
 
 function main(): void {
 	const argv = process.argv.slice(2);

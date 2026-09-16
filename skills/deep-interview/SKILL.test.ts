@@ -267,6 +267,17 @@ describe("present: presentation wiring", () => {
 	test("no ELI5 label leaks into the wiring", () => {
 		expect(skillMd.toLowerCase()).not.toContain("eli5");
 	});
+
+	// 쓰기 전에 소개 — 무맥락 독자가 생소한 1급 엔티티를 첫 등장에서 이해하도록,
+	// presentation.md가 kind→depth 리시피와 다이어그램 요소 각주(gloss)를 규정하는지 고정한다.
+	test("presentation.md documents the introduce-before-you-use recipe with a kind→depth table", () => {
+		const presentation = readFileSync(join(import.meta.dir, "presentation.md"), "utf8");
+		expect(presentation).toContain("쓰기 전에 소개");
+		for (const kind of ["용어", "함수", "모듈", "도메인", "기능"]) {
+			expect(presentation).toContain(kind);
+		}
+		expect(presentation).toContain('<ul class="gloss">');
+	});
 });
 
 describe("removed: ontology-preview on-demand render", () => {

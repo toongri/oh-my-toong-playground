@@ -446,6 +446,8 @@ describe("settings fallback 병합", () => {
 		expect(members[0].model).toBe("gpt-6-astra");
 		expect(members[0].effort_level).toBe("high");
 
+		await waitForTerminalStatus(jobDir);
+
 		const argvDeadline = Date.now() + 45_000;
 		while (!fs.existsSync(argvPath) && Date.now() < argvDeadline)
 			await new Promise((resolve) => setTimeout(resolve, 20));

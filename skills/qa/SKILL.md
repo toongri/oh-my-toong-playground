@@ -52,7 +52,7 @@ To understand what changed, use `git diff $(git merge-base HEAD main) -- <path>`
 qa runs a single stateful cycle, in order:
 
 ```
-PRE-FLIGHT → PLAN → BASELINE → ADVERSARIAL E2E → CHECK → [DIAGNOSIS → FIX → RE-VERIFY loop, ≤5 cycles] → EXIT → CLEANUP → ROLLBACK → STATE
+PRE-FLIGHT → PLAN → BASELINE → ADVERSARIAL E2E → CHECK → [DIAGNOSIS → FIX → RE-VERIFY loop, ≤5 cycles] → EXIT → CLEANUP → STATE
 ```
 
 Every phase below runs once per pass, except the bracketed loop, which repeats on CHECK failure until an EXIT condition fires.
@@ -65,8 +65,6 @@ A **behavior-invisible contract check** — a narrow exception to qa's dynamic-o
 2. **B ⊆ A scope boundary.** Expected files (from EXPECTED OUTCOME) = A; Changed files (from QA REQUEST Scope) = B. PASS if B ⊆ A. When the QA REQUEST carries no EXPECTED OUTCOME, A does not exist: record this gate as `not-evaluable` and proceed on gate 1 alone. **Never fill A from the Scope list** — B ⊆ B is true by construction and turns the gate into a rubber stamp that reads like a PASS.
 
 **On violation: immediate REQUEST_CHANGES, cycle NOT executed** — fail-fast. The expensive cycle below never runs against a change that already fails its own declared contract.
-
-**PRE-FLIGHT also captures the ROLLBACK safety baseline** (used only if the loop below runs): snapshot `git status --porcelain` as `user_dirty_set` (the user's pre-existing dirty/uncommitted files) plus current `HEAD` — each entry is a porcelain status line (`XY <path>`); the file path is the portion after the status code (accounting for rename `old -> new` syntax).
 
 At cycle entry, create or re-enter the guarded state with `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts start --target "<what is being verified>"`. A second qa invocation in the same session must run `start` again so it receives a fresh chain and re-armed runtime gates.
 
@@ -119,7 +117,7 @@ Drive the changed surface for real and attack it. Two parts, both required when 
    1. **Derive candidate scenarios by breadth** via [scenario-authoring.md]: Layer A impact-map → coverage-gap → H/M/L priority, then Layer D product use-case breadth (arrival paths · adjacent state transitions · lifecycle stances) from a product-context map built from the repo.
    2. **Attack each derived scenario with the applicable depth rows, working highest-priority (H) first**, from the 6 coverage axes: failure paths, boundary/malformed input, injection, interruption-resume + dirty state, misleading success, idempotency. See [stage3-handson.md] `## Adversarial Scenario Matrix` for the full matrix and the lifecycle/applicability detail (start → verify → stop). Rows 7–9 (stale-state, dirty-worktree, flaky-rerun) are per-run checks recorded separately with `record-run-check`.
 
-When a caller-provided scenario fails, record its failing cell and record every remaining unrun cell as `na` with the halt reason before declaring REQUEST_CHANGES. Apply the same sweep after any EXIT fired following a FIX dispatch (max-cycles, Same-Failure-3x, or Safety): `inc-cycle` invalidates prior-cycle records, including baseline and run-check records in the current view, so record the current cycle's remaining cells explicitly rather than leaving the gate with unrecorded work. Prior-cycle records remain in the raw state/history for audit.
+When a caller-provided scenario fails, record its failing cell and record every remaining unrun cell as `na` with the halt reason before declaring REQUEST_CHANGES. Apply the same sweep after any EXIT fired following a FIX dispatch (max-cycles or Safety): `inc-cycle` invalidates prior-cycle records, including baseline and run-check records in the current view, so record the current cycle's remaining cells explicitly rather than leaving the gate with unrecorded work. Prior-cycle records remain in the raw state/history for audit.
 
 For a genuinely inert refactor with no risk surface, still author the roster and all cells, record the story baseline and all three run checks, record every cell as `na` with the no-risk-surface reason, and run `qa-state.ts declare-inert --reason "<why nothing is reachable>"` once. Without that declaration an H-priority `na` blocks APPROVE.
 
@@ -231,9 +229,7 @@ delegate to `oracle` (fresh, read-only, root cause + file:line). oracle never mo
 
 #### FIX
 
-delegate to `sisyphus-junior`. **sisyphus-junior commits its own scoped fix** — it authored the hunks, so it alone can stage them precisely; qa cannot separate a fix's hunks from a user's hunks in a shared file. Never `git commit -a`. qa records `fix_head_before` = HEAD at FIX dispatch, before this commit is made.
-
-**Overlap refusal:** if the FIX phase determines the fix must touch a file already in `user_dirty_set` (captured at PRE-FLIGHT) — overlap is matched on the path parsed from each porcelain entry, i.e. stripping the leading `XY ` status code — qa **REFUSE the cycle** at FIX with an explicit error ("file X has your uncommitted changes — commit or stash before qa can safely fix it") rather than let the fix's commit sweep the user's uncommitted hunks. This is a structural refusal, not a detect-after-the-fact check.
+delegate to `sisyphus-junior`. **sisyphus-junior commits its own scoped fix** — it authored the hunks, so it alone can stage them precisely; qa cannot separate a fix's hunks from a user's hunks in a shared file. Never `git commit -a`.
 
 `cycle++` happens here — **cycle++ at FIX dispatch** is the counted unit (pre-fix detection is cycle 0, uncounted).
 
@@ -250,30 +246,17 @@ Loop back to CHECK. Continue until an EXIT condition below fires.
 | **Goal Met** | CHECK passes (BASELINE + full matrix green) | PASS → APPROVE |
 | **Goal Met, soft pass** | CHECK soft-passes (one carve-out row, per `### CHECK`) | PASS → COMMENT, carrying the failed row and its LOW note |
 | **max_cycles=5** | `cycle` reaches `max_cycles` (5) still unresolved | Terminate, report unresolved with last diagnosis |
-| **Same-Failure-3x** | The same failure repeats 3 times | Terminate, report thrash |
-| **Safety** | A safety invariant (e.g. ROLLBACK guard) refuses to proceed | Terminate, report the refusal reason |
+| **Safety** | A safety invariant refuses to proceed | Terminate, report the refusal reason |
 
-- **Same-Failure key** = `scenario-id + root-cause-file + root-cause-symbol/category` (not `:line` — line numbers shift under fixes and would falsely reset the counter). Two failures are "the same" iff this key matches; the count resets to 1 when a different key appears.
 - **max-N boundary**: with `cycle` starting at 0 and `cycle++ at FIX dispatch`, `max_cycles=5` permits exactly 5 fix attempts (cycles 1..5); the 5th fix is attempted and re-verified, then EXIT fires if still unresolved.
 
 ### CLEANUP
 
 Kill every process and remove every artifact this cycle spawned (background servers, simulators/emulators started for ADVERSARIAL E2E, temp files) — regardless of whether the cycle ended in PASS or an EXIT condition. A leaked process corrupts the next run. **Never remove a path supplied through `--evidence-path`**, regardless of whether it came from a caller, a required-verification entry, or a self-authored scenario; completion re-probes every passing cell and baseline evidence path.
 
-### ROLLBACK
-
-On a regression caught by RE-VERIFY, qa reverts **only its own cycle's commit(s)** — never touching the user's pre-existing work:
-
-- **Mechanism:** `git revert fix_head_before..HEAD` (non-destructive). **NEVER `git reset --hard`** — it would destroy all working-tree dirty state, including the disjoint `user_dirty_set` files, with no way to recover content that was never committed.
-- **Three guards, evaluated independently** (no guard is skipped because an earlier one passed):
-  1. **Linear-descendant guard** — assert `HEAD` is a linear descendant of `fix_head_before` (`git merge-base --is-ancestor fix_head_before HEAD`). If not (history was amended/rebased), **refuse the revert** rather than risk reverting into pre-existing content.
-  2. **Non-empty-range guard** — if `fix_head_before == HEAD` (no commit was actually made), this is **ERROR, not silent success**: report ROLLBACK failure, do not exit-0 with the regression silently retained.
-  3. **Post-revert disjointness assertion** — after `git revert`, re-run `git status --porcelain`, filter to the paths recorded in `user_dirty_set`, and compare those lines byte-for-byte against the stored PRE-FLIGHT porcelain lines; the result must be byte-identical. Any drift is contamination and a hard failure.
-- `rm -rf`/force-flag operations remain auto-denied throughout — ROLLBACK never bypasses that gate.
-
 ### STATE
 
-Persist `phase`/`cycle` (plus `max_cycles`, `same_failure_key`/`same_failure_count`, `fix_head_before`, `user_dirty_set`) to a state file after every phase transition, via:
+Persist `phase`/`cycle` (plus `max_cycles`) to a state file after every phase transition, via:
 
 ```
 bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts <sub>
@@ -281,9 +264,16 @@ bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts <sub>
 
 A `continue` invocation reads this state and resumes at the last recorded phase/cycle rather than restarting the cycle from PRE-FLIGHT. (The CLI itself is authored elsewhere — this section only pins the invocation contract qa's cycle relies on.)
 
-The chain-recording surface is: `set-acceptance`, `add-actor`, `add-story`, `author-cell`, `record-baseline`, `record-cell`, `review-evidence`, and `record-run-check`. Use `set-verdict APPROVE|COMMENT|REQUEST_CHANGES` to persist the verdict; `waive --story … --cls … --reason "…"` is a **user-only** exception and is denied on the AI Bash path. For a no-risk-surface cycle, use `declare-inert --reason "…"`. Runtime gates consume the persisted chain/record predicates: the phase funnel blocks BASELINE until the roster→story→cell chain is complete, the driver guards block `agent-device`/`agent-browser`/`curl`/`bash` while the roster is incomplete or once BASELINE has been reached with an incomplete chain (PLAN reachability probes remain available), and the Stop gate validates the raw state on both Claude and Codex. Direct writes to `qa-state-*.json` are denied; use the CLI.
+The chain-recording surface is: `set-acceptance`, `add-actor`, `add-story`, `author-cell`, `record-baseline`, `record-cell`, `review-evidence`, and `record-run-check`. Use `set-verdict APPROVE|COMMENT|REQUEST_CHANGES` to persist the verdict; `waive --story … --cls … --reason "…"` is a **user-only** exception and is denied on the AI Bash path. For a no-risk-surface cycle, use `declare-inert --reason "…"`. Run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts help` to see the full command roster and which are user-only. Runtime gates consume the persisted chain/record predicates: the phase funnel blocks BASELINE until the roster→story→cell chain is complete, the driver guards block `agent-device`/`agent-browser`/`curl`/`bash` while the roster is incomplete or once BASELINE has been reached with an incomplete chain (PLAN reachability probes remain available), and the Stop gate validates the raw state on both Claude and Codex. Direct writes to `qa-state-*.json` are denied; use the CLI.
 
-Once the cycle concludes (any EXIT outcome — Goal Met, max_cycles, Same-Failure-3x, or Safety), first run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts set-verdict <APPROVE|COMMENT|REQUEST_CHANGES>`, then run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-report.ts --session <id> --out <path> [--narrative <json-file>]`, open the rendered HTML and verify all claim images remain legible, run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts review-report --path <html>`, then run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts complete`, and only then report the verdict prose. The renderer records the HTML/state identity; `review-report` records the visual inspection attestation. Editing the HTML or recorded facts requires re-render and re-review. `complete` is gated by the same predicates as Stop and refuses an unrecorded or falsely approved cycle; it marks an earned terminal state inactive so the finished cycle is not resurrected as "in progress" in a later session.
+Once the cycle concludes (any EXIT outcome — Goal Met, max_cycles, or Safety), first run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts set-verdict <APPROVE|COMMENT|REQUEST_CHANGES>`, then run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-report.ts --session <id> --out <path> [--narrative <json-file>]`, open the rendered HTML and verify all claim images remain legible, run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts review-report --path <html>`, dispatch the `presentation-reviewer`, handle its verdict, then run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts complete`, and only then report the verdict prose. The renderer records the HTML/state identity; `review-report` records the visual inspection attestation. Editing the HTML or recorded facts requires re-render and re-review. `complete` is gated by the same predicates as Stop and refuses an unrecorded or falsely approved cycle; it marks an earned terminal state inactive so the finished cycle is not resurrected as "in progress" in a later session.
+
+**Presentation review (required, after `review-report`, before `complete`).** Dispatch the `presentation-reviewer` agent to contrast the report's reader-facing presentation layer against the actual evidence and the material this cycle verified against. It is skill-agnostic, so assemble the bundle:
+- **presentation**: the rendered report HTML (its top presentation layer) and the `--narrative` JSON you authored.
+- **sources**: the recorded evidence (screenshots, observations, run checks from qa-state) and the referenced plan/spec/ticket/docs the acceptance criteria came from.
+- **reader_persona**: "a context-free PO/designer who does not read code — judges from the report alone whether the change met its requirements, in product/user terms".
+
+Its verdict is `APPROVE` / `REQUEST_CHANGES` / `COMMENT` / `INCONCLUSIVE`. Only `APPROVE` or `COMMENT` may proceed to `complete`; on `REQUEST_CHANGES`, fix the narrative/report, re-render, re-`review-report`, and re-review before `complete`. `INCONCLUSIVE` or a missing/malformed verdict blocks handoff and completion and requires fixing the presentation or re-supplying the review inputs. This is a required review step, not an added CLI gate; run it every time. It never overrides a recorded pass/fail fact — those come from qa-state, and a fidelity finding against them means the narrative misread the record, not that the record changes.
 
 ---
 
@@ -388,7 +378,7 @@ The report file is self-contained: inline `<style>`, zero runtime `<script>`, no
 | PRE-FLIGHT | PASS / REQUEST_CHANGES | [MUST-NOT-DO / B⊆A result] |
 | BASELINE | PASS / FAIL | [build/test/lint summary] |
 | ADVERSARIAL E2E | PASS / FAIL | [matrix + scenario summary] |
-| Cycles run | N / max_cycles | [Same-Failure key if terminated early] |
+| Cycles run | N / max_cycles | [reason if terminated early] |
 
 ## Actor Roster
 
@@ -435,7 +425,7 @@ Close the table with exactly one coverage-delta line naming the impact-map domai
 | Condition | Verdict |
 |-----------|---------|
 | PRE-FLIGHT contract violation | **REQUEST_CHANGES** (MUST-NOT-DO / B⊆A violated, cycle not executed) |
-| EXIT via max_cycles/Same-Failure-3x/Safety, unresolved | **REQUEST_CHANGES** (unresolved after cycle) |
+| EXIT via max_cycles/Safety, unresolved | **REQUEST_CHANGES** (unresolved after cycle) |
 | CHECK soft-passes (a failed self-authored `M`/`L` row, finding in the 50–74 nitpick band) | **COMMENT** (never APPROVE — the failed row stays FAIL in the roster) |
 | CHECK passes (BASELINE + full matrix green) | **APPROVE** (or **COMMENT** to surface LOW notes — see *On COMMENT* below) |
 
@@ -448,7 +438,7 @@ Every issue surfaced MUST include a confidence score. See [feedback-protocol.md]
 ## Quick Reference
 
 ```
-CYCLE:      PRE-FLIGHT → PLAN → BASELINE → ADVERSARIAL E2E → CHECK → [DIAGNOSIS → FIX → RE-VERIFY loop ≤5] → EXIT → CLEANUP → ROLLBACK → STATE
+CYCLE:      PRE-FLIGHT → PLAN → BASELINE → ADVERSARIAL E2E → CHECK → [DIAGNOSIS → FIX → RE-VERIFY loop ≤5] → EXIT → CLEANUP → STATE
 PRE-FLIGHT: MUST-NOT-DO scope + B⊆A only; violation = immediate REQUEST_CHANGES, cycle NOT executed. No EXPECTED OUTCOME → B⊆A is not-evaluable, never A:=Scope
 CHECK:      a FAILED row blocks, except a self-authored M/L row scoring 50-74 = soft pass → EXIT Goal Met, soft pass → COMMENT, never APPROVE. 75+ blocks, H blocks, caller-provided blocks, unscorable-below-50 = re-run not soft-pass
 ACTOR:      Actor Roster before scenarios — actor · boundary · driver · reachable; a function/class/module is never a boundary; internal change → trace the call graph outward; roster spans the actor's journey, not the diff — precondition platforms enter it too. Enter every scenario at its actor's boundary; substitute only the unreachable hop and record driven-at; otherwise NOT-RUN, never PASS. H-priority NOT-RUN blocks APPROVE
@@ -459,8 +449,7 @@ MATRIX:     6 categories — failure paths, boundary/malformed input, injection,
 USE-CASE:   Layer D — build the product-context map from the repo, then walk arrival paths · adjacent state transitions · lifecycle stances; each axis present in the map yields scenarios, and the coverage delta names all three
 DRIVERS:    API→curl, Frontend→agent-browser (fallback playwright, if available), Mobile/native UI→agent-device (load its skill first; use runtime help guidance), CLI→bash. No tmux.
 LOOP:       DIAGNOSIS→oracle (fresh, read-only) | FIX→sisyphus-junior (commits own scoped fix, never git commit -a) | RE-VERIFY→qa, full re-run, distrust fixer
-EXIT:       Goal Met / max_cycles=5 / Same-Failure-3x (scenario-id+root-cause-file+root-cause-symbol) / Safety
-ROLLBACK:   git revert fix_head_before..HEAD only, NEVER git reset --hard; 3 guards: linear-descendant, non-empty-range=ERROR, post-revert disjointness on user_dirty_set; REFUSE the cycle on user_dirty_set overlap; rm -rf/force auto-deny honored
+EXIT:       Goal Met / max_cycles=5 / Safety
 STATE:      bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts <sub>; continue resumes at last phase/cycle
 NESTING:    qa's fix-loop must NOT be called inside another fix-loop — doc contract, YAGNI; upgrade trigger: add a code guard when qa gains its first fix-loop-owning caller
 ROSTER:     ## Scenarios Executed is a precondition for verdict issuance; absent → verdict not issued, cycle incomplete. Exception: PRE-FLIGHT fail-fast issues REQUEST_CHANGES with no roster — never synthesize an empty one there; present+0 rows means inert refactor, a completed cycle

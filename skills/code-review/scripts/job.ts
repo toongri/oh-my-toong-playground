@@ -23,6 +23,7 @@ import {
 import { initLogger, logInfo, logStart, logEnd } from "@lib/logging";
 import { getOmtDir } from "@lib/omt-dir";
 import { tryAcquireWorkerSlot, releaseWorkerSlot } from "@lib/worker-slots";
+import { renderHelp, type CliCommand } from "@lib/cli-help";
 
 import {
 	type JobConfig,
@@ -420,6 +421,42 @@ function resolveJobsDir(options: Record<string, unknown>): string {
 // Chunk-review-specific start command
 // ---------------------------------------------------------------------------
 
+/**
+ * Single source of truth for this CLI's command roster: every subcommand `main()`
+ * dispatches, tagged with who may run it. `printHelp()` prints this via renderHelp()
+ * below the detailed per-command Usage block. Unlike the state CLIs' rosters, these
+ * tags are ADVISORY ONLY — code-review has no write-guard enforcement (see
+ * hooks/write-guard-core.sh), so nothing denies the AI's Bash path from running a
+ * `system`-tagged command; the tag documents intended usage, not an enforced boundary.
+ */
+const ROSTER: CliCommand[] = [
+	{ name: "start", authority: "ai", effect: "starts a new chunk-review job" },
+	{ name: "collect", authority: "ai", effect: "polls a job to terminal, collecting member results" },
+	{ name: "status", authority: "ai", effect: "reads a job's current status" },
+	{ name: "results", authority: "ai", effect: "reads a job's finished results" },
+	{ name: "clean", authority: "ai", effect: "removes a finished job's directory" },
+	{
+		name: "resume-member",
+		authority: "ai",
+		effect: "the chairman LLM's semantic retry of one stuck/failed member",
+	},
+	{
+		name: "stop",
+		authority: "system",
+		effect: "cancels a running job's members (manual cancellation, not part of the documented start/collect/status/results poll-to-terminal flow)",
+	},
+	{
+		name: "doctor",
+		authority: "system",
+		effect: "reports orphan job counts without killing anything (diagnostic only)",
+	},
+	{
+		name: "reap",
+		authority: "hook",
+		effect: "kills orphaned job process groups (invoked by orphan-reaper.sh)",
+	},
+];
+
 function printHelp(): void {
 	process.stdout.write(`Chunk Review (job mode)
 
@@ -441,6 +478,10 @@ Notes:
     stderr — stdout is always empty, since a SessionStart hook calls it and must not vary
   - doctor reports orphan counts on stdout without killing anything (diagnostic only)
 `);
+	process.stdout.write(renderHelp("code-review-job", ROSTER));
+	process.stdout.write(
+		"\nNote: the groups above are ADVISORY — code-review has no write-guard enforcement, so nothing denies running a system/hook-tagged command directly.\n",
+	);
 }
 
 /** Probe only — never signals. `kill(-pgid, 0)` sends no signal; ESRCH means

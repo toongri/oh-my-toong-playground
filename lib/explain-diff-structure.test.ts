@@ -1092,114 +1092,52 @@ flowchart LR
 
 ### 도메인 레벨
 구조 변화 없음: 엔티티 관계는 이 diff에서 바뀌지 않는다.
+`;
 
-### 경계·의존·유스케이스
+// v6 계약: 유스케이스 설명은 Architecture 밖으로 승격되어 `## 기능 단위` 섹션의
+// `### <캐피빌리티>` 챕터가 된다(R15 재작성). 각 챕터는 구현체·버전·소속 도메인·
+// 입구·영향범위 헤더 슬롯과 흐름 다이어그램을 갖는다. 도메인 함수(리포지토리 영속화
+// 메서드)는 챕터가 아니라 협력자로 표면화된다 — 그 판별은 R23(judge)의 몫.
+const CAPABILITY_OK = `## 기능 단위
 
-유스케이스: 표시 카탈로그 조회 흐름. 아래 시퀀스의 backend 조회 단계가 이 diff로 바뀐다.
+### 표시 카탈로그 조회
+
+- 구현체: \`SupplementCatalogService.getDisplayCatalog\`
+- 버전: 버전 토큰 없음 · 신규 — 삭제 카테고리까지 포함한 표시용 카탈로그 조회 유스케이스를 추가했다.
+- 소속 도메인 + 협력: commerce 도메인이 소유한다. \`resolveDisplay\`는 [의존=계약 위임], 카탈로그 조립은 [직접 핸들링].
+- 입구(트리거): tRPC \`catalog.getDisplay\` — \`getDisplayCatalog(): Promise<Catalog>\`. 신규 입구(new).
+- 영향범위: 상담챗 카드 렌더가 삭제 카테고리를 포함해 읽는다. 읽기 전용, 쓰기 계약 변경 없음.
+
+**책임** 나는 삭제 카테고리까지 포함한 표시용 카탈로그를 조회한다. 카탈로그 영속화는 저장소에 위임한다.
+
+표시 카탈로그가 조립되는 흐름을 확인한다.
 
 \`\`\`mermaid
 sequenceDiagram
-  participant Card as card
-  participant Resolver as resolver
-  participant Backend as Hono backend
-  Card->>Resolver: resolveDisplay(code)
-  Resolver->>Backend: GET /v1/supplement-catalog
-  Backend-->>Resolver: 표시 카탈로그
+  participant Chat as 상담챗
+  participant Backend as catalog
+  Chat->>Backend: getDisplayCatalog()
+  Backend-->>Chat: 표시 카탈로그(삭제 포함)
 \`\`\`
 
-<div class="arch-entity" data-change="new">
-<p><strong>이름</strong> display catalog 조회</p>
-<p><strong>한 일</strong> 삭제 포함 표시 카탈로그 경로 신설</p>
-<p><strong>영향 인터페이스</strong> GET /v1/supplement-catalog?includeDeletedCategories=true</p>
-</div>
+**개념/도메인 모델 연결** SupplementCategory와 그 삭제 상태를 연결한다.
 
-**의존 방향** — commerce feature → resolver → backend REST 단방향 유지.
+의존 방향 판정: commerce → backend REST 단방향 유지, 역참조·순환 없음.
 `;
 
-describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
-	test("세 레벨·계약3축·상시 인터페이스 표·컴포넌트 카드·경계 동작단위가 모두 있으면 통과한다", () => {
+describe("architecture 스텝 — R9·R14·R17·R18·R19·R21", () => {
+	test("세 레벨·계약3축·상시 인터페이스 표·컴포넌트 카드가 모두 있으면 통과한다", () => {
 		const r = checkStructure(withBackground(ARCH_OK), {
 			signalFiles: ["lib/state-lock.ts"],
 			step: "architecture",
 		});
 		const ids = r.items.map((i) => i.id as string);
-		for (const id of ["R9", "R14", "R15", "R17", "R18", "R19", "R21"]) {
+		for (const id of ["R9", "R14", "R17", "R18", "R19", "R21"]) {
 			expect(ids).toContain(id);
 		}
+		// R15는 architecture가 아니라 capability 스텝에서 채점된다.
+		expect(ids).not.toContain("R15");
 		expect(r.pass).toBe(true);
-	});
-
-	// R15 재작성 — 경계 블록은 동작단위 변경종류·영향 인터페이스·의존 방향을 요구한다.
-	test("경계 블록에 의존 방향이 빠지면 R15가 실패한다", () => {
-		const doc = withBackground(ARCH_OK.replace(/\*\*의존 방향\*\*[^\n]*\n/, ""));
-		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
-			(i) => i.id === "R15",
-		);
-		expect(item?.pass).toBe(false);
-		expect(item?.detail).toContain("의존 방향");
-	});
-
-	test("경계 블록에 영향 인터페이스 라벨이 빠지면 R15가 실패한다", () => {
-		const doc = withBackground(ARCH_OK.replace("영향 인터페이스", "무엇"));
-		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
-			(i) => i.id === "R15",
-		);
-		expect(item?.pass).toBe(false);
-		expect(item?.detail).toContain("영향 인터페이스");
-	});
-
-	test("경계 블록 동작단위에 변경종류(data-change)가 없으면 R15가 실패한다", () => {
-		const doc = withBackground(
-			ARCH_OK.replace(
-				'<div class="arch-entity" data-change="new">\n<p><strong>이름</strong> display catalog 조회</p>',
-				'<div class="arch-entity">\n<p><strong>이름</strong> display catalog 조회</p>',
-			),
-		);
-		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
-			(i) => i.id === "R15",
-		);
-		expect(item?.pass).toBe(false);
-	});
-
-	test("경계 동작단위의 data-change가 arch-entity 태그 밖 산문에만 있으면 R15가 실패한다", () => {
-		const doc = withBackground(
-			ARCH_OK.replace(
-				'<div class="arch-entity" data-change="new">\n<p><strong>이름</strong> display catalog 조회</p>',
-				'<div class="arch-entity">\n<p><strong>이름</strong> display catalog 조회</p>\n<p>data-change="new"</p>',
-			),
-		);
-		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
-			(i) => i.id === "R15",
-		);
-		expect(item?.pass).toBe(false);
-	});
-
-	test("경계 동작단위의 허용되지 않은 data-change 값은 R15가 거부한다", () => {
-		const doc = withBackground(
-			ARCH_OK.replace(
-				'<div class="arch-entity" data-change="new">\n<p><strong>이름</strong> display catalog 조회</p>',
-				'<div class="arch-entity" data-change="changed">\n<p><strong>이름</strong> display catalog 조회</p>',
-			),
-		);
-		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
-			(i) => i.id === "R15",
-		);
-		expect(item?.pass).toBe(false);
-	});
-
-	test("경계 동작단위는 data-change mod와 del도 R15에서 허용한다", () => {
-		for (const change of ["mod", "del"]) {
-			const doc = withBackground(
-				ARCH_OK.replace(
-					'<div class="arch-entity" data-change="new">\n<p><strong>이름</strong> display catalog 조회</p>',
-					`<div class="arch-entity" data-change="${change}">\n<p><strong>이름</strong> display catalog 조회</p>`,
-				),
-			);
-			const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
-				(i) => i.id === "R15",
-			);
-			expect(item?.pass).toBe(true);
-		}
 	});
 
 	// R17 — 시스템 레벨 상시 인터페이스 표.
@@ -1482,7 +1420,7 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 	// 분류가 되살아났다. 방법론 명칭 스캔과 같은 기계검사로 막는다.
 	test("Architecture 산문에 축 라벨(수평/수직)이 있으면 R19가 실패한다", () => {
 		const doc = withBackground(
-			ARCH_OK.replace("단방향 유지.", "단방향 유지. 수직 도메인은 catalog, 수평 레이어는 feature다."),
+			ARCH_OK.replace("설명.", "설명. 수직 도메인은 catalog, 수평 레이어는 feature다."),
 		);
 		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
 			(i) => i.id === "R19",
@@ -1545,43 +1483,6 @@ describe("architecture 스텝 — R9·R14·R15·R17·R18·R19", () => {
 		const item = r.items.find((i) => i.id === "R14");
 		expect(item?.pass).toBe(false);
 		expect(item?.detail).toContain("DB 스키마");
-	});
-
-	// R15 — 유스케이스 블록은 오케스트레이션을 다이어그램으로 보여야 한다(정적 카드가 아니라 흐름).
-	test("경계·유스케이스 블록에 오케스트레이션 다이어그램이 없으면 R15가 실패한다", () => {
-		const doc = withBackground(ARCH_OK.replace(/```mermaid\nsequenceDiagram[\s\S]*?```\n\n/, ""));
-		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
-			(i) => i.id === "R15",
-		);
-		expect(item?.pass).toBe(false);
-		expect(item?.detail).toContain("오케스트레이션");
-	});
-
-	test("경계 블록의 비오케스트레이션 Mermaid는 R15를 통과시키지 않는다", () => {
-		const doc = withBackground(
-			ARCH_OK.replace(
-				/```mermaid\nsequenceDiagram[\s\S]*?```\n\n/,
-				"```mermaid\nclassDiagram\n  class Boundary\n```\n\n",
-			),
-		);
-		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
-			(i) => i.id === "R15",
-		);
-		expect(item?.pass).toBe(false);
-		expect(item?.detail).toContain("오케스트레이션");
-	});
-
-	test("유스케이스 흐름이 정말 안 바뀌면 사유 있는 waiver로 R15 오케스트레이션을 대신할 수 있다", () => {
-		const doc = withBackground(
-			ARCH_OK.replace(
-				/유스케이스: 표시 카탈로그 조회 흐름[\s\S]*?```\n/,
-				"구조 변화 없음: 이 diff는 유스케이스 흐름을 바꾸지 않는다.\n",
-			),
-		);
-		const item = checkStructure(doc, { signalFiles: ["a.ts"], step: "architecture" }).items.find(
-			(i) => i.id === "R15",
-		);
-		expect(item?.pass).toBe(true);
 	});
 
 	// R21 — 도메인 레벨은 다이어그램만이 아니라 엔티티 카드(책임·변경종류)를 요구한다.
@@ -2028,6 +1929,165 @@ classDiagram
 	});
 });
 
+describe("capability 스텝 — R15 기능 단위 챕터", () => {
+	const cap = (text: string) =>
+		checkStructure(text, { signalFiles: ["a.ts"], step: "capability" }).items.find(
+			(i) => i.id === "R15",
+		);
+
+	test("구현체·버전·소속 도메인·입구·영향범위와 흐름 다이어그램을 갖춘 챕터는 통과한다", () => {
+		const r = checkStructure(CAPABILITY_OK, { signalFiles: ["a.ts"], step: "capability" });
+		const ids = r.items.map((i) => i.id as string);
+		expect(ids).toContain("R15");
+		expect(r.items.find((i) => i.id === "R15")?.pass).toBe(true);
+	});
+
+	for (const slot of ["구현체", "버전", "소속 도메인", "입구", "영향범위"]) {
+		test(`캐피빌리티 챕터에 ${slot} 슬롯이 빠지면 R15가 실패한다`, () => {
+			// 라벨이 값에도 등장할 수 있으므로(예: "버전 토큰 없음") 모든 등장을 치워야
+			// 그 챕터에서 슬롯이 사라진다.
+			const item = cap(CAPABILITY_OK.replaceAll(slot, "무엇"));
+			expect(item?.pass).toBe(false);
+			expect(item?.detail).toContain(slot);
+		});
+	}
+
+	test("캐피빌리티 챕터에 흐름 다이어그램이 없으면 R15가 실패한다", () => {
+		const item = cap(CAPABILITY_OK.replace(/```mermaid[\s\S]*?```\n/, ""));
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("흐름 다이어그램");
+	});
+
+	test("HTML 주석과 Markdown 펜스 안의 heading·슬롯·Mermaid는 R15 증거가 아니다", () => {
+		const doc = `## 기능 단위
+
+### 실제 캐피빌리티
+
+<!--
+### 주석 캐피빌리티
+- 구현체: hidden
+- 버전: hidden
+- 소속 도메인: hidden
+- 입구: hidden
+- 영향범위: hidden
+\`\`\`mermaid
+flowchart LR
+  A --> B
+\`\`\`
+-->
+
+\`\`\`markdown
+### 펜스 캐피빌리티
+- 구현체: hidden
+- 버전: hidden
+- 소속 도메인: hidden
+- 입구: hidden
+- 영향범위: hidden
+
+\`\`\`mermaid
+flowchart LR
+  A --> B
+\`\`\`
+\`\`\`
+`;
+		const item = cap(doc);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("실제 캐피빌리티");
+	});
+
+	test("visible classDiagram은 R15의 흐름 다이어그램으로 인정하지 않는다", () => {
+		const doc = CAPABILITY_OK.replace(
+			/```mermaid[\s\S]*?```/,
+			"```mermaid\nclassDiagram\n  class Catalog\n```",
+		);
+		const item = cap(doc);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("흐름 다이어그램");
+	});
+
+	for (const diagram of ["flowchart LR\n  A --> B", "sequenceDiagram\n  A->>B: request"]) {
+		test(`visible ${diagram.split("\n", 1)[0]}은 필수 슬롯과 함께 R15를 통과한다`, () => {
+			const doc = CAPABILITY_OK.replace(/```mermaid[\s\S]*?```/, `\`\`\`mermaid\n${diagram}\n\`\`\``);
+			expect(cap(doc)?.pass).toBe(true);
+		});
+	}
+
+	test("## 기능 단위 섹션이 없으면 R15가 실패한다", () => {
+		const item = cap(withBackground(ARCH_OK));
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("기능 단위 섹션");
+	});
+
+	test("유스케이스 변경이 정말 없으면 섹션 수준 waiver로 통과한다", () => {
+		const item = cap("## 기능 단위\n\n구조 변화 없음: 이 diff는 어떤 유스케이스도 바꾸지 않는다.\n");
+		expect(item?.pass).toBe(true);
+	});
+
+	test("완전한 챕터 하나가 슬롯이 빠진 다른 챕터를 가리지 못한다", () => {
+		const incomplete = `${CAPABILITY_OK}
+### 두 번째 캐피빌리티
+
+- 구현체: \`Other.thing\`
+- 버전: 버전 토큰 없음 · 신규
+- 입구(트리거): tRPC \`x.y\`
+- 영향범위: 없음
+
+\`\`\`mermaid
+sequenceDiagram
+  participant A
+  A->>A: noop
+\`\`\`
+`;
+		// 두 번째 챕터에는 소속 도메인 슬롯이 없다.
+		const item = cap(incomplete);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("두 번째 캐피빌리티");
+		expect(item?.detail).toContain("소속 도메인");
+	});
+
+	// R19 — 방법론/축 라벨 금지는 유스케이스 설명이 사는 곳을 따라간다. v6에서 그 설명이
+	// Architecture 밖 `## 기능 단위`로 승격됐으므로, 실측 결함(luna max: 경계 블록에
+	// "수평/수직" 재도입)을 막는 기계검사도 capability 스텝에서 그 섹션을 스캔해야 한다.
+	const capR19 = (text: string) =>
+		checkStructure(text, { signalFiles: ["a.ts"], step: "capability" }).items.find(
+			(i) => i.id === "R19",
+		);
+
+	test("깨끗한 기능 단위 챕터는 capability 스텝에서 R19를 통과한다", () => {
+		const item = capR19(CAPABILITY_OK);
+		expect(item?.pass).toBe(true);
+	});
+
+	test("기능 단위 산문에 축 라벨(수평/수직)이 있으면 capability 스텝의 R19가 실패한다", () => {
+		const doc = CAPABILITY_OK.replace(
+			"카탈로그 영속화는 저장소에 위임한다.",
+			"카탈로그 영속화는 저장소에 위임한다. 수평 레이어는 feature, 수직 도메인은 catalog다.",
+		);
+		const item = capR19(doc);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("수직");
+	});
+
+	test("기능 단위 산문에 방법론 명칭(FSD 등)이 있으면 capability 스텝의 R19가 실패한다", () => {
+		const doc = CAPABILITY_OK.replace(
+			"카탈로그 영속화는 저장소에 위임한다.",
+			"카탈로그 영속화는 저장소에 위임한다. 이건 FSD의 feature 슬라이스다.",
+		);
+		const item = capR19(doc);
+		expect(item?.pass).toBe(false);
+		expect(item?.detail).toContain("FSD");
+	});
+
+	test("기능 단위 펜스·인라인 코드의 방법론 토큰은 R19에서 무시한다", () => {
+		const doc = CAPABILITY_OK.replace(
+			"카탈로그 영속화는 저장소에 위임한다.",
+			"카탈로그 영속화는 저장소에 위임한다. 식별자 `FSD`와 `수평`은 예시다.\n\n```ts\nconst t = 'FSD DDD 수평 수직';\n```",
+		);
+		const item = capR19(doc);
+		expect(item?.pass).toBe(true);
+	});
+});
+
 describe("markdown-template canonical examples", () => {
 	const template = readFileSync(
 		join(import.meta.dir, "..", "skills", "explain-diff", "references", "markdown-template.md"),
@@ -2174,6 +2234,14 @@ describe("모든 저작 스텝 — R11 스타일 발명 금지", () => {
 
 	test("카드 v2 멤버 칩 클래스(ae-members·chg)는 render.ts가 CSS를 소유하므로 위반이 아니다", () => {
 		const doc = `${evidenceOnlyDoc("a.ts")}\n<ul class="ae-members"><li><code>userId</code></li><li><code class="chg">status</code></li></ul>\n`;
+		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "evidence" });
+		expect(r.pass).toBe(true);
+	});
+
+	// "쓰기 전에 소개" — 그림 속 코드명 요소를 그림 바로 밑에서 한 줄씩 푸는 각주 상자.
+	// render.ts 가 CSS 를 소유하므로(deep-interview/prometheus 와 동일) 승인 클래스다.
+	test("다이어그램 각주 gloss 박스(ul.gloss)는 render.ts가 CSS를 소유하므로 위반이 아니다", () => {
+		const doc = `${evidenceOnlyDoc("a.ts")}\n<ul class="gloss"><li><code>getDisplayCatalog</code> — 표시용 카탈로그를 읽는 함수</li></ul>\n`;
 		const r = checkStructure(doc, { signalFiles: ["a.ts"], step: "evidence" });
 		expect(r.pass).toBe(true);
 	});
