@@ -971,6 +971,29 @@ describe("no-safe-default-verdict: concurrency/race verdicts are earned from the
 		expect(region).toContain("is NOT a basis for PLAUSIBLE");
 	});
 
+	test("an unverified candidate has no finding verdict and remains in the INCONCLUSIVE diagnostic", () => {
+		expect(region).toContain("emits no finding verdict");
+		expect(region).toContain("review artifact `INCONCLUSIVE`");
+		expect(region).toContain("preserves the candidate in the diagnostic/findings report");
+	});
+
+	test("the no-safe-default exception is explicit and scoped apart from finding verdicts", () => {
+		const exception =
+			"The unverified no-safe-default case above is an exception to this output contract: emit no finding verdict or enriched finding card; stop the review, set the review artifact's status to INCONCLUSIVE, preserve the candidate and missing execution-model evidence in findings_report, and omit the candidate from artifact findings. Otherwise, return exactly one verdict. Evidence must quote or cite the relevant line(s). Do not hedge between two verdicts.";
+		const output = extractSection(verifierPrompt, "## Output", "##");
+
+		expect(verifierPrompt).toContain(exception);
+		expect(verifierPrompt).not.toContain("Return exactly one verdict.");
+		expect(output).toContain("emit no finding verdict or enriched finding card");
+		expect(output).toContain("stop the review");
+		expect(output).toContain("set the review artifact's status to INCONCLUSIVE");
+		expect(output).toContain("preserve the candidate and missing execution-model evidence in findings_report");
+		expect(output).toContain("omit the candidate from artifact findings");
+		expect(output).toContain("Otherwise, return exactly one verdict.");
+		expect(output.indexOf("Otherwise, return exactly one verdict.")).toBeGreaterThanOrEqual(0);
+		expect(output.indexOf(exception)).toBeGreaterThanOrEqual(0);
+	});
+
 	test("REFUTED when the dispatch model closes the interleaving window", () => {
 		expect(region).toContain("the dispatch model closes the window");
 	});

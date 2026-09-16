@@ -230,6 +230,10 @@ Earn it from the actual dispatch/execution model; never default to it:
   trace it against the caller's execution model (the "How to verify" checks above) before any
   verdict; do not fall back to default-PLAUSIBLE.
 
+When the execution model remains unestablished for a no-safe-default candidate, the candidate emits
+no finding verdict, the review stops and marks the review artifact `INCONCLUSIVE`, and the report
+preserves the candidate in the diagnostic/findings report.
+
 This is reachability gating the verdict, NOT occurrence gating harm — impact stays graded
 independently of occurrence (the orchestrator's rule). And it does not weaken the recall bias: a
 genuinely concurrent caller with an uncertain window stays PLAUSIBLE. It only forbids a verdict the
@@ -239,8 +243,7 @@ execution model was never consulted to support.
 
 For a scope-contract dispatch, first emit the structured `scope`/`scope_evidence` JSON above, then the verdict and applicable card below. REFUTED candidates are audit-only: keep their scope evidence in the direct verification audit output, but do not copy them into the full card or completion artifact findings. CONFIRMED or PLAUSIBLE findings preserve this JSON in the full card and completion artifact. Do not infer scope later from severity or verdict. An `IN_SCOPE` candidate whose quality verdict remains PLAUSIBLE requires the scoped review to be INCONCLUSIVE, even if its assessment fields are complete; preserve the diagnostic and never authorize speculative repair. UNKNOWN scope is a separate unresolved authorization decision and is also not a repair instruction. Record scope, quality, grounded facts, and assessment inputs here. The reviewer assigns priority during findings synthesis; repair, adjudication, completion, budget, and approval decisions belong to the caller.
 
-Return exactly one verdict. Evidence must quote or cite the relevant line(s). Do not hedge between
-two verdicts.
+The unverified no-safe-default case above is an exception to this output contract: emit no finding verdict or enriched finding card; stop the review, set the review artifact's status to INCONCLUSIVE, preserve the candidate and missing execution-model evidence in findings_report, and omit the candidate from artifact findings. Otherwise, return exactly one verdict. Evidence must quote or cite the relevant line(s). Do not hedge between two verdicts.
 
 If **REFUTED**:
 
