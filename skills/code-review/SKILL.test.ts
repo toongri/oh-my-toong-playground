@@ -946,3 +946,39 @@ describe("code-review report path rendering contract", () => {
 		expect(JSON.parse(encoded)).toEqual([hostilePath]);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// no-safe-default-verdict: for a candidate in a no-safe-default domain
+// (concurrency/races, data destruction, security, external-contract, money)
+// the verdict is a claim about the real runtime model, not the code shape, so
+// it must be earned from the actual dispatch/execution model -- never defaulted
+// to PLAUSIBLE on an untraced dispatch model. Reachability gates the verdict;
+// harm/impact stays graded independently; the recall bias for genuinely
+// concurrent state is preserved.
+// (must FAIL before the verifier-prompt.md edit -- RED)
+// ---------------------------------------------------------------------------
+
+describe("no-safe-default-verdict: concurrency/race verdicts are earned from the execution model, not defaulted", () => {
+	const start = verifierPrompt.indexOf("## No-safe-default domains: earn the verdict from the execution model");
+	const region = start === -1 ? "" : verifierPrompt.slice(start, start + 2000);
+
+	test("the no-safe-default verdict section is present in verifier-prompt.md", () => {
+		expect(start).toBeGreaterThan(-1);
+	});
+
+	test("an untraced dispatch model is not a basis for PLAUSIBLE", () => {
+		expect(region).toContain("is NOT a basis for PLAUSIBLE");
+	});
+
+	test("REFUTED when the dispatch model closes the interleaving window", () => {
+		expect(region).toContain("the dispatch model closes the window");
+	});
+
+	test("this is reachability gating the verdict, not occurrence gating harm (impact stays independent)", () => {
+		expect(region).toContain("reachability gating the verdict, NOT occurrence gating harm");
+	});
+
+	test("the recall bias for genuinely concurrent state is preserved", () => {
+		expect(region).toContain("does not weaken the recall bias");
+	});
+});

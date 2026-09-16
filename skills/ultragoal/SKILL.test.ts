@@ -944,3 +944,28 @@ describe("disambiguation clause: OMT goal skill vs Codex native goal tools", () 
 		expect(clauseIdx).toBeGreaterThan(sealedIdx);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// no-safe-default-terminal: the completion gate already forbids speculative
+// fixes on an uncertain finding; the gap is adherence under momentum pressure.
+// For a no-safe-default domain, an uncertain finding Oracle cannot collapse
+// routes to a MANDATORY user scope decision (handle vs accept-as-non-goal),
+// and autonomous speculative handling is explicitly not a sanctioned outcome.
+// (must FAIL before the completion-gate.md edit -- RED)
+// ---------------------------------------------------------------------------
+
+describe("no-safe-default-terminal: an uncertain no-safe-default finding escalates to the user, never autonomous handling", () => {
+	test("the rationalization table names the stuck-block speculative-fix trap", () => {
+		expect(completionGateMd).toContain("Stuck on the block, so I'll just add the lock/guard/handling");
+	});
+
+	test("autonomous handling of an uncertain no-safe-default risk is explicitly not sanctioned", () => {
+		expect(completionGateMd).toContain(
+			"autonomous handling of an uncertain no-safe-default risk is not a sanctioned outcome",
+		);
+	});
+
+	test("an accepted risk is recorded as a non-goal, not implemented", () => {
+		expect(completionGateMd).toContain("accept the risk and record it as a non-goal");
+	});
+});

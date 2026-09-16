@@ -133,6 +133,7 @@ An old artifact without this contract must be re-reviewed. The orchestrator neve
 | “The helper works, but the reviewer requires a framework” | Compare the remedy to the original AC; retain a bounded implementation |
 | “LOW is only a note; CI is green” | LOW is notes-only: do not fix it or manufacture repair/test evidence; resolve only any MEDIUM finding in the same artifact |
 | “Same file / analog / next review round makes it part of the goal” | Cite the frozen requirement or change-caused regression; otherwise exclude |
+| “Stuck on the block, so I'll just add the lock/guard/handling” | An uncertain no-safe-default finding routes to Oracle, then a mandatory user scope decision — never an autonomous speculative fix; an accepted risk becomes a non-goal, not code |
 
 **Red flags:** a repair list containing an excluded item; a story added from review feedback alone; a changed non-goal to obtain approval; completing with an unresolved in-scope HIGH or MEDIUM item. Stop that action and apply admission again.
 
@@ -225,7 +226,7 @@ Every non-APPROVE verdict drives a concrete action within the frozen scope:
 - **Unfinished story/COMMENT**: dispatch the named requirement gap to sisyphus, then re-verify. Commentary cannot invent an acceptance criterion.
 - **Tactical plan inadequacy**: adjust HOW within the approved WHAT. A change to WHAT, AC, constraints, boundaries, or non-goals follows the planning approval contract before dispatch.
 - **REQUEST_CHANGES result**: repair all required HIGH and MEDIUM findings and run affected checks, then fresh independent review; unresolved or failed review input may also take this recovery path without speculative repair.
-- **UNKNOWN / invalid / inconclusive review**: send the blocking uncertainty to Oracle first for evidence analysis. LOW is a nonblocking note with no fix or fabricated test evidence. Malformed/stale input may be diagnosed but never fabricated. A user scope decision is required if evidence still cannot determine the product requirement.
+- **UNKNOWN / invalid / inconclusive review**: send the blocking uncertainty to Oracle first for evidence analysis. LOW is a nonblocking note with no fix or fabricated test evidence. Malformed/stale input may be diagnosed but never fabricated. A user scope decision is required if evidence still cannot determine the product requirement. For a no-safe-default domain (concurrency, data destruction, security, external-contract, money), an uncertain finding Oracle cannot collapse routes to a mandatory user scope decision — handle it, or accept the risk and record it as a non-goal — and autonomous handling of an uncertain no-safe-default risk is not a sanctioned outcome.
 - **Only MEDIUM repairs, excluded findings, or COMMENT notes remain**: when MEDIUM repairs exist, perform them and affected checks, then record `record-comment-resolution` against the exact artifact hash with evidence paths; for LOW/OUT_OF_SCOPE-only notes, report them without recording resolution, then request completion. Scope exclusions never become repair work.
 
 ### Blocked-stop
