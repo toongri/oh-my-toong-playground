@@ -175,7 +175,7 @@ test_ac2_idempotent_seed_does_not_overwrite() {
     started_at_before=$(jq -r '.started_at' "$state_file")
 
     # Simulate model advancing phase via TS CLI
-    bun "$SCRIPT_DIR/../skills/prometheus/scripts/prometheus-state.ts" set --phase S3 > /dev/null 2>&1 \
+    bun "$SCRIPT_DIR/../skills/prometheus/scripts/prometheus-state.ts" set --phase S3 --record-non-goals '- test exclusion | decider: changes test state' > /dev/null 2>&1 \
         || { echo "ASSERTION FAILED: bun CLI set phase failed"; return 1; }
 
     jq -e '.phase == "S3"' "$state_file" > /dev/null 2>&1 \
@@ -318,7 +318,7 @@ test_ac10_seed_and_cli_set_phase_compose() {
     assert_file_exists "$state_file" "State file should exist after seed" || return 1
 
     # Advance phase via CLI
-    bun "$SCRIPT_DIR/../skills/prometheus/scripts/prometheus-state.ts" set --phase S3 > /dev/null 2>&1 \
+    bun "$SCRIPT_DIR/../skills/prometheus/scripts/prometheus-state.ts" set --phase S3 --record-non-goals '- test exclusion | decider: changes test state' > /dev/null 2>&1 \
         || { echo "ASSERTION FAILED: bun CLI set --phase failed"; return 1; }
 
     jq -e '.active == true' "$state_file" > /dev/null 2>&1 \
