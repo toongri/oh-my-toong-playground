@@ -638,7 +638,7 @@ Any bounded task excludes something — there is always work this iteration deli
 
 Each non-goal is one line in the `{excluded item} | decider: {how to tell whether a candidate finding falls inside this exclusion}` shape — the same decider shape deep-interview and ultragoal use, so it survives verbatim into the Metis SCOPE section and the downstream scope contract. A decider-less exclusion has no edge to any finding and does nothing.
 
-The canonical persisted value is newline-delimited and includes the leading `-` on every line: `- {excluded item} | decider: {membership test}`. After the user confirms the AC and non-goals, S1 persists that exact value in Prometheus state; downstream artifacts copy the stored lines verbatim.
+The canonical persisted value is newline-delimited and includes the leading `-` on every line: `- {excluded item} | decider: {membership test}`. After the user confirms the AC and non-goals, S1 persists that exact value as `state.non_goals` before invoking Metis; Metis reads that state value, and S3 plan generation copies the same stored lines verbatim.
 
 - **Scoped / Complex / Architecture**: **≥1 decider-bearing non-goal is REQUIRED for Scoped+** and flows verbatim into the Metis SCOPE `OUT of Scope` list (`review-pipeline.md`). The Metis B2 gate rejects a brief whose OUT-of-scope list is empty (Metis runs only for Scoped+, so the tier falls out of the pipeline). **Existence is mandatory; precision is not gated** — a mechanical existence check, never an interpretation dispute.
 - **Trivial**: no Metis phase and no decider ceremony — state the **one-line boundary** of what the fix does NOT touch.
@@ -1049,9 +1049,9 @@ Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an ag
 | State | Description | Transitions |
 |-------|-------------|-------------|
 | **S0: Requirements** | Open requirements interview + AC co-decide | → S1 on Metis-ready clearance |
-| **S1: Metis Invocation** | 3-Section prompt to Metis (requirements gate) | → S2 on APPROVE/COMMENT; → S0 on REQUEST_CHANGES until the Metis round cap (2) fires, then → S2 with the residual carried forward (`### State Lifecycle Directives`) |
+| **S1: Metis Invocation** | Persist confirmed `state.non_goals` before invoking Metis, then send the 3-Section prompt using that state value (requirements gate) | → S2 on APPROVE/COMMENT; → S0 on REQUEST_CHANGES until the Metis round cap (2) fires, then → S2 with the residual carried forward (`### State Lifecycle Directives`) |
 | **S2: Co-Design** | Open co-design interview + in-phase Daedalus advisory + HUMAN design gate; produces the design-brief / co-authored decision log, including the structural enumeration of D-items per `## Plan Structure > ADR` | → S3 on human design-gate approval; advisory Daedalus input folded in per `## Design Consensus` (no gating signal — the human gate gates this state) |
-| **S3: Plan Generation** | Writing the TODO plan to `$OMT_DIR/plans/{name}.md` from the approved design | → S4 on self-review pass |
+| **S3: Plan Generation** | Writing the TODO plan to `$OMT_DIR/plans/{name}.md` from the approved design and copying the same stored `state.non_goals` value into `## Work Objectives > ### Non-Goals` | → S4 on self-review pass |
 | **S4: Momus Invocation** | Plan path to Momus | → S5 on APPROVE/COMMENT or on the Momus round-cap (10) carried-forward terminal (a never-downgrade-class residual cannot take this terminal — it escalates to the user via Interview); on REQUEST_CHANGES → **scoped re-review by default**: revise the plan and re-run only S4 (fresh Momus), upstream preserved. Earliest-affected re-walk is the exception, taken only on an upstream root cause: → S0 on a requirements root cause (re-Metis → … → re-Momus), → S2 on a design root cause (human gate → re-plan → re-Momus) |
 | **S5: Plan Presentation** | Stage A render + present to user | → S6 on user views plan |
 | **S6: Execution Recommendation** | Compute Stage B recommendation | → S7 on user receives |
@@ -1092,7 +1092,7 @@ These directives govern how prometheus records its own pipeline state via the st
   ["AC1: ...", "AC2: user can't delete another user's data"]
   EOF
   ```
-- **S1 non-goal recording**: persist the user-confirmed canonical non-goal value in a separate invocation, after the AC invocation. Its newline-delimited stdin contains the leading `-` on every line; this is not a second consumer of the AC JSON stdin stream:
+- **S1 non-goal recording**: immediately after the user confirms the AC and non-goals, persist the canonical non-goal value in a separate invocation before invoking Metis. Its newline-delimited stdin contains the leading `-` on every line; this is not a second consumer of the AC JSON stdin stream:
   ```
   bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase S1 --record-non-goals - <<'EOF'
   - {excluded item} | decider: {membership test}

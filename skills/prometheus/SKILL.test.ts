@@ -113,6 +113,14 @@ describe("non-goal-existence-gate: Metis B2 rejects an empty OUT-of-scope list (
 });
 
 describe("canonical non-goal handoff contract", () => {
+	test("P1 persists non-goals before Metis and uses state.non_goals through S3", () => {
+		expect(skillMd).toContain(
+			"After the user confirms the AC and non-goals, S1 persists that exact value as `state.non_goals` before invoking Metis",
+		);
+		expect(reviewPipeline).toContain("verbatim canonical lines from `Prometheus state.non_goals`");
+		expect(reviewPipeline).toContain("S3 plan generation later copies the same stored value");
+	});
+
 	test("S1 stores canonical non-goals in a separate state invocation from AC stdin", () => {
 		expect(skillMd).toContain(
 			'prometheus-state.ts" set --phase S1 --record-non-goals -',
@@ -128,9 +136,9 @@ describe("canonical non-goal handoff contract", () => {
 		expect(planStructure).toMatch(/### Non-Goals[\s\S]*verbatim from the stored Prometheus state/);
 	});
 
-	test("Metis receives the plan's same canonical lines and S8 forwards stored value to Ultragoal", () => {
+	test("Metis receives canonical state lines and S8 forwards stored value to Ultragoal", () => {
 		expect(reviewPipeline).toMatch(
-		/OUT of Scope[\s\S]*verbatim canonical lines from the plan[\s\S]*transient brief/,
+			/OUT of Scope[\s\S]*verbatim canonical lines from `Prometheus state\.non_goals`[\s\S]*transient brief/,
 		);
 		expect(skillMd).toMatch(
 			/S8[\s\S]*stored canonical[\s\S]*--non-goals[\s\S]*presence-based alternate path/,
