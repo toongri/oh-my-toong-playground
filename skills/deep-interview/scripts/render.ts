@@ -89,7 +89,7 @@ export function zoomableFigure(svg: string, index: number): string {
 	const id = `dz-${index}`;
 	return (
 		`<figure class="diagram">` +
-		`<input type="checkbox" id="${id}" class="dz-toggle" aria-hidden="true">` +
+		`<input type="checkbox" id="${id}" class="dz-toggle" aria-label="다이어그램 확대">` +
 		`<label for="${id}" class="dz-btn dz-open" title="확대" aria-label="확대">⤢</label>` +
 		`<div class="dz-view">` +
 		`<label for="${id}" class="dz-backdrop" aria-hidden="true"></label>` +
@@ -458,7 +458,11 @@ figure.diagram {
   border: 1px solid var(--rule); border-radius: 10px;
 }
 /* 무-JS 확대: 체크박스 토글(라벨 + :checked 형제 선택자). 외부 참조·스크립트 0 유지. */
-figure.diagram .dz-toggle { position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none; }
+figure.diagram .dz-toggle {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  border: 0; opacity: 0; pointer-events: none;
+}
 figure.diagram .dz-btn {
   position: absolute; top: 0.55rem; right: 0.55rem; z-index: 2;
   display: flex; align-items: center; justify-content: center;
@@ -467,6 +471,7 @@ figure.diagram .dz-btn {
   cursor: pointer; user-select: none;
 }
 figure.diagram .dz-btn:hover { background: var(--code-bg); }
+figure.diagram .dz-toggle:focus-visible ~ .dz-open { outline: 2px solid var(--accent); outline-offset: 2px; }
 figure.diagram .dz-close { display: none; }
 figure.diagram .dz-backdrop { display: none; }
 /* 기본: 컬럼 폭에 맞춤(다운스케일) — 넓은 다이어그램이 페이지 가로 스크롤을 만들지 않는다.

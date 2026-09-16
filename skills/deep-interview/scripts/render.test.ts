@@ -1,6 +1,6 @@
 import { execFileSync } from "child_process";
 import { describe, expect, test } from "bun:test";
-import { mmdcRenderSvg, normalizeSvgWidth, renderToHtml, slugify } from "./render";
+import { mmdcRenderSvg, normalizeSvgWidth, renderToHtml, slugify, zoomableFigure } from "./render";
 
 function mmdcAvailable(): boolean {
 	try {
@@ -279,6 +279,15 @@ describe("figure.diagram 크기 조절 CSS — 맞춤 기본 + 무-JS 확대 오
 		expect(html).toContain("dz-backdrop");
 		// 페이지의 유일한 스크립트는 ESC/Enter 편의뿐 — 콘텐츠·확대·바깥클릭 닫기는 그것 없이도 동작한다.
 		expect(html.match(/<script/gi) ?? []).toHaveLength(1);
+	});
+
+	test("확대 토글은 키보드로 접근 가능한 이름 있는 native checkbox다", () => {
+		const figure = zoomableFigure('<svg viewBox="0 0 10 10"></svg>', 0);
+		expect(figure).toMatch(
+			/<input type="checkbox" id="dz-0" class="dz-toggle" aria-label="다이어그램 확대">/,
+		);
+		expect(figure).not.toContain('class="dz-toggle" aria-hidden="true"');
+		expect(html).toMatch(/\.dz-toggle:focus-visible\s*~\s*\.dz-open\s*\{[^}]*outline/);
 	});
 
 	test("확대 오버레이는 다이어그램 카드 밖 클릭으로 닫힌다 — backdrop 이 카드(z-index) 아래", () => {
