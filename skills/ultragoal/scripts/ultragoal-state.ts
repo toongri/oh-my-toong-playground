@@ -24,8 +24,8 @@
  *     `resume-pursuit`) that writes phase=complete from any non-complete phase
  *     with every gate above bypassed by design — an approved override, not a hole.
  *   - `set-verdict` is the ONLY writer of objective_verdict.
- *   - `set-blocked` is a system-only terminal setter and never writes
- *     phase=complete.
+ *   - `set-blocked` (orchestrator) records only phase=blocked and active=false;
+ *     it never writes phase=complete, budget_limited, or objective_verdict.
  *
  * Subcommands:
  *   set --phase <planning|pursuing> [--outcome ..] [--verification-surface ..]
@@ -36,7 +36,7 @@
  *   force-complete --reason <text>       (user-only escape hatch: forces phase=complete
  *                                          from any non-complete phase, bypassing every
  *                                          completion gate — see forceComplete below)
- *   set-blocked --reason <text>              (system-only)
+ *   set-blocked --reason <text>              (orchestrator; records blocked/inactive only)
  *   request-complete [--codex-goal-json <json|path>]
  *                                         (gated: requires objective_verdict=APPROVE and completion
  *                                          evidence; PLUS a Codex native-goal snapshot cross-check
@@ -2501,7 +2501,7 @@ function strFlagOrBlank(v: string | boolean | undefined): string {
  * dispatches, tagged with who may run it. `help` prints this via renderHelp() so the
  * AI can see, before acting, which commands it may run itself versus which are
  * user-only (a PreToolUse guard denies them on the AI's Bash path — see SKILL.md's
- * State CLI authority table) or system/hook-only (never invoked manually).
+ * State CLI authority table) or hook-only (never invoked manually).
  */
 const ROSTER: CliCommand[] = [
 	{ name: "resume-pursuit", authority: "user", effect: "recovers a budget_limited pursuit" },
@@ -2525,7 +2525,11 @@ const ROSTER: CliCommand[] = [
 		authority: "hook",
 		effect: "atomically reserves one final code-review dispatch",
 	},
-	{ name: "set-blocked", authority: "system", effect: "records a reported blocker" },
+	{
+		name: "set-blocked",
+		authority: "ai",
+		effect: "records phase=blocked and active=false with a reported blocker",
+	},
 	{ name: "set", authority: "ai", effect: "writes planning/pursuing state fields" },
 	{ name: "set-verdict", authority: "ai", effect: "records the objective verdict" },
 	{

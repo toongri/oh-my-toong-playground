@@ -4252,10 +4252,14 @@ describe("help subcommand", () => {
 		expect(aiSection).toContain("get —");
 	});
 
-	test("set-blocked is listed under SYSTEM-ONLY", () => {
+	test("set-blocked is listed under AI-USABLE, not SYSTEM-ONLY or HOOK-ONLY", () => {
 		const out = runCli("help");
+		const aiSection = out.slice(out.indexOf("AI-USABLE"), out.indexOf("USER-ONLY"));
 		const systemSection = out.slice(out.indexOf("SYSTEM-ONLY"), out.indexOf("HOOK-ONLY"));
-		expect(systemSection).toContain("set-blocked");
+		const hookSection = out.slice(out.indexOf("HOOK-ONLY"));
+		expect(aiSection).toContain("set-blocked —");
+		expect(systemSection).not.toContain("set-blocked");
+		expect(hookSection).not.toContain("set-blocked");
 	});
 
 	test("claim-review-dispatch is listed under HOOK-ONLY", () => {
