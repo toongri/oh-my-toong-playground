@@ -18,11 +18,16 @@
 재시도 결함을 거짓이 아니라 이격으로 분류했으나, 둘 다 fidelity 결함이라 판정(REQUEST_CHANGES)은
 동일하다 — 축 라벨 세부보다 "결함을 잡고 올바른 판정을 내렸는가"가 통과 기준이다.
 
+## 후속 검증에서 닫은 갭
+
+- **APPROVE 경로(false positive) + 실제 레퍼런스 + 실행 편차** — `RESULT-real-reference.md` 참조.
+  실제 병합 PR(algocare-home #1592, 렌탈 상태 전이 chokepoint) 기반 픽스처로, 실제 리뷰어
+  프롬프트를 실어 APPROVE 경로 3 rep(clean 발표 → 3/3 APPROVE, 헛경보 0) + RED 경로 2 rep
+  (이격 2개 → 2/2 REQUEST_CHANGES)을 쟀다. 리뷰어가 픽스처의 미세한 미지원 문구까지 일관
+  포착해 rubber-stamp도 환각도 아님을 확인.
+
 ## 아직 재지 않은 것
 
 - **호출자별 원본 번들 조립 품질** — 이 픽스처는 원본을 직접 줬다. 실제로는 각 스킬(explain-diff·
   deep-interview·qa·prometheus)이 diff/플랜/스펙/evidence를 얼마나 풍부하게 조립해 넘기느냐가
   대조 품질을 좌우한다. 그 조립은 각 스킬 문서의 몫이고, 이 eval은 리뷰어 프롬프트만 잰다.
-- **APPROVE 경로** — 결함 없는 산출물에 대해 리뷰어가 헛경보 없이 APPROVE하는지는 별도 셀에서
-  재야 한다(현재 n=1, RED 픽스처만).
-- **실행 간 편차** — n=1.

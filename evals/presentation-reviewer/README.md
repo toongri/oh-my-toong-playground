@@ -34,3 +34,7 @@ explain-diff·deep-interview·qa·prometheus는 각자 산출물의 **내부 구
 ## 결과
 
 - **GREEN (첫 검증):** `RESULT.md` 참조 — 리뷰어가 세 결함을 모두 잡고 `REQUEST_CHANGES` 판정.
+- **GREEN (실제 레퍼런스):** `RESULT-real-reference.md` + `fixtures/rental-chokepoint/` 참조 —
+  실제 병합 PR(algocare-home #1592) 기반으로 APPROVE 경로(clean → 3/3 APPROVE, false positive
+  0)와 RED 경로(이격 2개 → 2/2 REQUEST_CHANGES)를 실제 리뷰어 프롬프트로 검증. 첫 검증이 남긴
+  APPROVE 경로·실제 레퍼런스·실행 편차 갭을 닫음.
