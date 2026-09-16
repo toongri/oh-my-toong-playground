@@ -822,6 +822,9 @@ export function forceComplete(sessionId: string, reason: string): void {
 
 /** System-only terminal setter — never writes phase=complete. */
 export function setBlocked(sessionId: string, reason: string): void {
+	if (reason.trim() === "") {
+		throw new Error("set-blocked: refused — --reason is required (why this pursuit is blocked)");
+	}
 	mergeWrite(sessionId, {
 		phase: "blocked",
 		active: false,
@@ -2759,7 +2762,7 @@ function main(): void {
 		} else if (subcommand === "force-complete") {
 			forceComplete(sessionId, strFlagOrBlank(args["reason"]));
 		} else if (subcommand === "set-blocked") {
-			setBlocked(sessionId, String(args["reason"] ?? ""));
+			setBlocked(sessionId, strFlagOrBlank(args["reason"]));
 		} else if (subcommand === "request-complete") {
 			const codexGoalArg = resolveStdinValue(str(args["codex-goal-json"]));
 			const ok = requestComplete(sessionId, codexGoalArg);
