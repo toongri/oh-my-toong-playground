@@ -1501,6 +1501,66 @@ describe("recovery-and-guards: force-complete (user-only escape hatch)", () => {
 	});
 });
 
+describe("set-blocked requires a nonblank reason", () => {
+	test("direct setBlocked rejects blank and whitespace-only reasons before mutation", () => {
+		setGoalState(S, { phase: "pursuing" });
+		const before = readFileSync(resolveStatePath(S), "utf8");
+
+		expect(() => setBlocked(S, "")).toThrow();
+		expect(() => setBlocked(S, " \t ")).toThrow();
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+	});
+
+	test("CLI rejects an omitted --reason and leaves the prior state unchanged", () => {
+		setGoalState(S, { phase: "pursuing" });
+		const before = readFileSync(resolveStatePath(S), "utf8");
+
+		const result = runCliCaptured("set-blocked");
+
+		expect(result.status).not.toBe(0);
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+	});
+
+	test("CLI rejects a whitespace-only --reason and leaves the prior state unchanged", () => {
+		setGoalState(S, { phase: "pursuing" });
+		const before = readFileSync(resolveStatePath(S), "utf8");
+
+		const result = runCliCaptured("set-blocked --reason \t");
+
+		expect(result.status).not.toBe(0);
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+	});
+
+	test("CLI rejects a trailing valueless --reason and does not record true", () => {
+		setGoalState(S, { phase: "pursuing" });
+		const before = readFileSync(resolveStatePath(S), "utf8");
+
+		const result = runCliCaptured("set-blocked --reason");
+
+		expect(result.status).not.toBe(0);
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+		expect(rawState().blocked_reason).not.toBe("true");
+	});
+
+	test("direct setBlocked preserves valid reason normalization and blocks the pursuit", () => {
+		setGoalState(S, { phase: "pursuing" });
+
+		setBlocked(S, "API key\nrevoked");
+		expect(rawState()).toMatchObject({
+			phase: "blocked",
+			active: false,
+			blocked_reason: "API key revoked",
+		});
+	});
+
+	test("CLI records a valid reason and blocks the pursuit", () => {
+		setGoalState(S, { phase: "pursuing" });
+
+		expect(runCli('set-blocked --reason "API key revoked"')).toBe("");
+		expect(rawState()).toMatchObject({ phase: "blocked", active: false, blocked_reason: "API key revoked" });
+	});
+});
+
 // ---------------------------------------------------------------------------
 // F10/ADR-7: writeFileNoCreate — no TOCTOU race in merge-write path
 // ---------------------------------------------------------------------------

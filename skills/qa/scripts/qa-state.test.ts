@@ -116,6 +116,10 @@ describe("qa state: phase/target round-trip", () => {
 		expect(() => setQaState(S, { phase: "BOGUS-PHASE" })).toThrow();
 	});
 
+	test("set rejects ROLLBACK as a removed phase", () => {
+		expect(() => setQaState(S, { phase: "ROLLBACK" })).toThrow(/phase must be one of/);
+	});
+
 	test("advance-phase writes phase without touching target", () => {
 		setQaState(S, { phase: "PRE-FLIGHT", target: "feature Z" });
 		advancePhase(S, "PLAN");
@@ -127,6 +131,11 @@ describe("qa state: phase/target round-trip", () => {
 	test("advance-phase rejects an out-of-enum phase", () => {
 		setQaState(S, { phase: "PRE-FLIGHT" });
 		expect(() => advancePhase(S, "NOT-A-PHASE")).toThrow();
+	});
+
+	test("advance-phase rejects ROLLBACK as a removed phase", () => {
+		setQaState(S, { phase: "PRE-FLIGHT" });
+		expect(() => advancePhase(S, "ROLLBACK")).toThrow(/phase must be one of/);
 	});
 });
 

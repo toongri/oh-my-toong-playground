@@ -256,11 +256,16 @@ describe("qa chain core", () => {
 		expect(driverGateArmed(state)).toBe(true);
 	});
 
-	test("phase order preserves all twelve names", () => {
+	test("phase order preserves the eleven executable names", () => {
 		expect(QA_PHASES).toEqual([
 			"PRE-FLIGHT", "PLAN", "BASELINE", "ADVERSARIAL E2E", "CHECK", "DIAGNOSIS",
-			"FIX", "RE-VERIFY", "EXIT", "CLEANUP", "ROLLBACK", "STATE",
+			"FIX", "RE-VERIFY", "EXIT", "CLEANUP", "STATE",
 		]);
+		expect(BASELINE_INDEX).toBe(2);
+	});
+
+	test("ROLLBACK is not an executable phase", () => {
+		expect(QA_PHASES).not.toContain("ROLLBACK");
 	});
 });
 
