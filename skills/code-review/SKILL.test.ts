@@ -1018,6 +1018,24 @@ describe("no-safe-default-verdict: concurrency/race verdicts are earned from the
 	});
 });
 
+describe("primary Phase 2 no-safe-default exception contract", () => {
+	const phase2 = extractSection(skillMd, "### Phase 2: Candidate Verification", "### Phase 3:");
+
+	test("gates unresolved execution models before the mandatory verdict and transitions to diagnostic Phase 3", () => {
+		const gate = phase2.indexOf("Before the mandatory **VERDICT** step");
+		const verdict = phase2.indexOf("\n   **VERDICT** —");
+
+		expect(gate).toBeGreaterThanOrEqual(0);
+		expect(verdict).toBeGreaterThan(gate);
+		expect(phase2).toContain("no-safe-default candidate's execution model remains unestablished");
+		expect(phase2).toContain("emit no verdict or enriched finding card");
+		expect(phase2).toContain("Preserve the candidate and missing execution-model evidence in `findings_report`");
+		expect(phase2).toContain("set the review artifact status to `INCONCLUSIVE`");
+		expect(phase2).toContain("transition to Phase 3 findings synthesis");
+		expect(phase2).toContain("Candidates that pass this gate retain exactly one CONFIRMED / PLAUSIBLE / REFUTED verdict");
+	});
+});
+
 describe("verdict ladder: concurrency/races are not a generic PLAUSIBLE default", () => {
 	test("the realistic-state default paragraph excludes concurrency races", () => {
 		const verdictLadder = extractSection(verifierPrompt, "## Verdict ladder (recall-biased)", "## No-safe-default domains:");
