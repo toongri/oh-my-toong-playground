@@ -1631,6 +1631,41 @@ describe("job.ts doctor", () => {
 	});
 });
 
+describe("job.ts --help", () => {
+	// --help renders this CLI's roster via the shared lib/cli-help.ts renderer, grouped by
+	// authority, appended below the existing per-command Usage block. This pins the
+	// code-review-specific wiring (roster tags), not the renderer's own formatting —
+	// that's covered by lib/cli-help.test.ts. Authority here is advisory only:
+	// code-review has no write-guard enforcement.
+	const SCRIPT = path.join(import.meta.dirname, "job.ts");
+
+	test("start/collect/status/results/clean/resume-member are listed under AI-USABLE", () => {
+		const out = execFileSync(process.execPath, [SCRIPT, "--help"], { stdio: "pipe" }).toString();
+		const aiSection = out.slice(out.indexOf("AI-USABLE"), out.indexOf("SYSTEM-ONLY"));
+		for (const name of ["start", "collect", "status", "results", "clean", "resume-member"]) {
+			expect(aiSection).toContain(`${name} —`);
+		}
+	});
+
+	test("reap is listed under HOOK-ONLY", () => {
+		const out = execFileSync(process.execPath, [SCRIPT, "--help"], { stdio: "pipe" }).toString();
+		const hookSection = out.slice(out.indexOf("HOOK-ONLY"));
+		expect(hookSection).toContain("reap —");
+	});
+
+	test("stop/doctor are listed under SYSTEM-ONLY", () => {
+		const out = execFileSync(process.execPath, [SCRIPT, "--help"], { stdio: "pipe" }).toString();
+		const systemSection = out.slice(out.indexOf("SYSTEM-ONLY"), out.indexOf("HOOK-ONLY"));
+		expect(systemSection).toContain("stop —");
+		expect(systemSection).toContain("doctor —");
+	});
+
+	test("no session id or state precondition — prints from a bare invocation", () => {
+		const out = execFileSync(process.execPath, [SCRIPT], { stdio: "pipe" }).toString();
+		expect(out).toContain("code-review-job commands:");
+	});
+});
+
 // ---------------------------------------------------------------------------
 // cmdStart also reaps orphans at job-start time (in-process, real engine —
 // cmdStart is directly exported and imported at the top of this file).

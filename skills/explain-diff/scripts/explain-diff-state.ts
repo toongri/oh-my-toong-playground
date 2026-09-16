@@ -27,6 +27,7 @@ import {
 	type Step,
 } from "@lib/explain-diff-core";
 import { checkStructure, type DiffHunk, type DiffLineRange } from "@lib/explain-diff-structure";
+import { renderHelp, type CliCommand } from "@lib/cli-help";
 
 interface Persisted extends ExplainDiffState {
 	range: string;
@@ -1046,9 +1047,33 @@ function list(args: Record<string, string | string[] | boolean>, name: string): 
 	return Array.isArray(v) ? v : [v];
 }
 
+/**
+ * Single source of truth for this CLI's command roster: every subcommand `main()`
+ * dispatches, tagged with who may run it. `help` prints this via renderHelp() so the
+ * AI can see, before acting, which commands it may run itself. Every command here is
+ * ai-authority — no user/system/hook path exists for this CLI.
+ */
+const ROSTER: CliCommand[] = [
+	{ name: "start", authority: "ai", effect: "starts a new explain-diff reading session" },
+	{ name: "get", authority: "ai", effect: "reads the full session state" },
+	{ name: "submit-step", authority: "ai", effect: "submits a step's produced document" },
+	{ name: "pass-step", authority: "ai", effect: "records a step's judge verdict" },
+	{ name: "add-concept", authority: "ai", effect: "registers one concept for the quiz" },
+	{ name: "ask", authority: "ai", effect: "asks the next quiz question" },
+	{ name: "grade", authority: "ai", effect: "grades a quiz answer for one concept" },
+	{ name: "complete", authority: "ai", effect: "completes the reading session" },
+];
+
 function main(): void {
 	const sub = process.argv[2];
 	const args = parseArgs(process.argv.slice(3));
+	// help is a discovery command — it must print without a session id or seeded
+	// state, so it runs BEFORE resolveSessionIdOrThrow (every other subcommand's
+	// precondition is unchanged).
+	if (sub === "help") {
+		process.stdout.write(renderHelp("explain-diff-state", ROSTER));
+		return;
+	}
 	try {
 		const sessionId = resolveSessionIdOrThrow();
 		switch (sub) {
@@ -1096,7 +1121,7 @@ function main(): void {
 				break;
 			default:
 				process.stderr.write(
-					`Usage: explain-diff-state.ts <start|get|submit-step|pass-step|add-concept|ask|grade|complete> [options]\n` +
+					`Usage: explain-diff-state.ts <help|${ROSTER.map((c) => c.name).join("|")}> [options]\n` +
 						`Steps: ${STEP_ORDER.join(" -> ")}\n`,
 				);
 				process.exit(1);

@@ -17,19 +17,25 @@
  * write what, not by vigilance:
  *   - `set` (orchestrator) accepts ONLY phase planning|pursuing; it can never
  *     write phase=complete and never writes objective_verdict.
- *   - `request-complete` is the ONLY path to phase=complete, and it is gated on
+ *   - `request-complete` is the ONLY GATED path to phase=complete, and it is gated on
  *     `objective_verdict=APPROVE` AND completion-evidence being present.
+ *   - `force-complete` is the ONE deliberate exception: a user-only escape hatch
+ *     (denied on the orchestrator's Bash path by the shared write guard, same as
+ *     `resume-pursuit`) that writes phase=complete from any non-complete phase
+ *     with every gate above bypassed by design — an approved override, not a hole.
  *   - `set-verdict` is the ONLY writer of objective_verdict.
- *   - `set-budget-limited` / `set-blocked` are system-only terminal setters and
- *     can never write phase=complete.
+ *   - `set-blocked` is a system-only terminal setter and never writes
+ *     phase=complete.
  *
  * Subcommands:
  *   set --phase <planning|pursuing> [--outcome ..] [--verification-surface ..]
  *       [--constraints ..] [--boundaries ..] [--non-goals ..] [--max-iterations <n>]
  *       [--blocked-stop ..] [--plan-path ..] [--resume-summary ..]
  *       [--completion-evidence p1,p2] [--codex-goal-objective <text>]
- *   set-budget-limited                       (system-only)
  *   resume-pursuit                            (user-only recovery from budget_limited)
+ *   force-complete --reason <text>       (user-only escape hatch: forces phase=complete
+ *                                          from any non-complete phase, bypassing every
+ *                                          completion gate — see forceComplete below)
  *   set-blocked --reason <text>              (system-only)
  *   request-complete [--codex-goal-json <json|path>]
  *                                         (gated: requires objective_verdict=APPROVE and completion
@@ -37,7 +43,6 @@
  *                                          when codex_goal_objective is non-empty — see Gate 9 below)
  *   set-verdict --verdict <APPROVE|REQUEST_CHANGES|COMMENT|absent>
  *   get
- *   status
  *   set-stories --json '<array>' | --single
  *   confirm-story <id>                   (sole writer of confirmed — D-8)
  *   confirm-all-stories                  (bulk confirm-story over every unconfirmed story)
@@ -69,6 +74,7 @@ import {
 	isPristine,
 	ensureSeed,
 } from "@lib/state-core";
+import { renderHelp, type CliCommand } from "@lib/cli-help";
 
 export type GoalPhase = "planning" | "pursuing" | "budget_limited" | "blocked" | "complete";
 export type ObjectiveVerdict = "APPROVE" | "REQUEST_CHANGES" | "COMMENT" | "absent";
@@ -199,6 +205,16 @@ export interface GoalState {
 	last_seen_head?: string;
 	/** Digest of the last observed story set used by progress-fingerprint callers. */
 	last_seen_stories_digest?: string;
+	/**
+	 * Set ONLY by the user-only `force-complete` escape hatch — true iff the
+	 * terminal `phase: "complete"` state was written by forcibly bypassing every
+	 * completion gate (verdict, story, code-review, artifact checks), rather than
+	 * through `request-complete`'s gated path. Absent (every other writer) reads
+	 * as not forced — same optional/unset-is-falsy pattern as `last_seen_head`.
+	 */
+	forced_complete?: boolean;
+	/** The user-supplied reason accompanying a forced completion. Present iff `forced_complete` is true. */
+	forced_reason?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -355,6 +371,12 @@ function mergeWriteLocked(sessionId: string, stateFilePath: string, next: Partia
 		dismissed_review_findings:
 			next.dismissed_review_findings ?? prior.dismissed_review_findings ?? [],
 		review_resolution: "review_resolution" in next ? next.review_resolution : prior.review_resolution,
+		// Same D-5 hazard class as last_seen_head/last_seen_stories_digest above: forced_complete
+		// is the sole load-bearing marker distinguishing a force-complete write from an ordinary
+		// request-complete write, and it must survive being enumerated here or a later unrelated
+		// write (there are none once phase=complete, but the pattern is uniform) would drop it.
+		forced_complete: next.forced_complete ?? prior.forced_complete,
+		forced_reason: next.forced_reason ?? prior.forced_reason,
 	};
 	const state: GoalState = mergeWithHeartbeat(partial, {});
 	try {
@@ -480,13 +502,6 @@ export function readGoalGet(sessionId: string): (GoalState & { pristine: boolean
 	const pristine = isPristine("ultragoal", stateAsRecord);
 	// Default stories to [] when absent (backward-compatible with pre-story states)
 	return { ...state, stories: state.stories ?? [], pristine };
-}
-
-/**
- * status derives 1:1 from phase — the status token IS the phase token.
- */
-export function deriveStatus(state: Pick<GoalState, "phase">): GoalPhase {
-	return state.phase;
 }
 
 export interface SetGoalOpts {
@@ -752,6 +767,50 @@ export function resumePursuit(sessionId: string): void {
 			active: true,
 			iteration: 0,
 			budget_limit_notified: false,
+		});
+	});
+}
+
+/**
+ * User-only escape hatch: forcibly completes a stuck ultragoal from ANY
+ * non-terminal-complete phase (planning/pursuing/budget_limited/blocked),
+ * bypassing every gate `requestComplete` enforces — no verdict check, no
+ * per-story artifact check, no code-review lane, no completion-evidence check.
+ * That bypass is the entire point of this command; it exists only because the
+ * user, not the loop, is deciding the pursuit is done.
+ *
+ * Deliberately mirrors `resumePursuit`'s strict raw read/validate/write path —
+ * no seeding, no generic merge-write. The terminal write itself still goes
+ * through the same validated, locked `mergeWriteLocked` helper `requestComplete`
+ * uses (never a raw fs write), so the atomic-lock and schema-default guarantees
+ * hold even though the gate checks above it are skipped.
+ *
+ * Refuses only when:
+ *   - `reason` is missing or whitespace-only (same required-justification
+ *     posture as the steering mutations' `--evidence`/`--rationale`);
+ *   - no ultragoal state exists for this session, or
+ *   - the state is already `phase: "complete"` (no-op would hide that the
+ *     caller thinks something is still stuck; be explicit instead).
+ * All refusals: throws, state unchanged.
+ */
+export function forceComplete(sessionId: string, reason: string): void {
+	if (reason.trim() === "") {
+		throw new Error("force-complete: refused — --reason is required (why this pursuit is being forcibly completed)");
+	}
+	const stateFilePath = resolveStatePath(sessionId);
+	withStateLock(stateFilePath, () => {
+		const raw = readFileOrNull(stateFilePath);
+		if (raw === null) throw new Error("force-complete: refused — state file is absent");
+		const prior = parseClaimableState(raw);
+		if (prior === null) throw new Error("force-complete: refused — state is corrupt or invalid");
+		if (prior.phase === "complete") {
+			throw new Error("force-complete: refused — already complete");
+		}
+		mergeWriteLocked(sessionId, stateFilePath, {
+			phase: "complete",
+			active: false,
+			forced_complete: true,
+			forced_reason: normalize(reason),
 		});
 	});
 }
@@ -2432,9 +2491,102 @@ function strFlagOrBlank(v: string | boolean | undefined): string {
 	return typeof v === "string" ? v : "";
 }
 
+/**
+ * Single source of truth for this CLI's command roster: every subcommand `main()`
+ * dispatches, tagged with who may run it. `help` prints this via renderHelp() so the
+ * AI can see, before acting, which commands it may run itself versus which are
+ * user-only (a PreToolUse guard denies them on the AI's Bash path — see SKILL.md's
+ * State CLI authority table) or system/hook-only (never invoked manually).
+ */
+const ROSTER: CliCommand[] = [
+	{ name: "resume-pursuit", authority: "user", effect: "recovers a budget_limited pursuit" },
+	{
+		name: "approve-review-dispatch-renewal",
+		authority: "user",
+		effect: "adds 5 to the review-dispatch cap",
+	},
+	{
+		name: "dismiss-review-finding",
+		authority: "user",
+		effect: "removes one wrong admitted code-review finding from the completion gate",
+	},
+	{
+		name: "force-complete",
+		authority: "user",
+		effect: "escape hatch: forces phase=complete, bypassing every completion gate",
+	},
+	{
+		name: "claim-review-dispatch",
+		authority: "hook",
+		effect: "atomically reserves one final code-review dispatch",
+	},
+	{ name: "set-blocked", authority: "system", effect: "records a reported blocker" },
+	{ name: "set", authority: "ai", effect: "writes planning/pursuing state fields" },
+	{ name: "set-verdict", authority: "ai", effect: "records the objective verdict" },
+	{
+		name: "request-complete",
+		authority: "ai",
+		effect: "gated transition to phase=complete",
+	},
+	{ name: "get-review-result", authority: "ai", effect: "reads the code-review result" },
+	{
+		name: "validate-review-artifact",
+		authority: "ai",
+		effect: "checks the review artifact's scope evidence against the current contract",
+	},
+	{
+		name: "record-comment-resolution",
+		authority: "ai",
+		effect: "records evidence resolving a COMMENT-outcome finding",
+	},
+	{ name: "get", authority: "ai", effect: "reads the full goal state" },
+	{
+		name: "list-others",
+		authority: "ai",
+		effect: "lists other live sessions eligible for adoption",
+	},
+	{ name: "adopt", authority: "ai", effect: "re-keys another session's state into this one" },
+	{ name: "confirm-story", authority: "ai", effect: "confirms one unconfirmed story" },
+	{
+		name: "confirm-all-stories",
+		authority: "ai",
+		effect: "bulk-confirms every unconfirmed story",
+	},
+	{ name: "set-stories", authority: "ai", effect: "seeds the initial story set (planning)" },
+	{
+		name: "reorder-stories",
+		authority: "ai",
+		effect: "reorders the current story array (planning-only)",
+	},
+	{
+		name: "revise-story",
+		authority: "ai",
+		effect: "patches a story and resets it to unconfirmed",
+	},
+	{ name: "add-story", authority: "ai", effect: "appends a new unconfirmed story" },
+	{ name: "retire-story", authority: "ai", effect: "retires a story" },
+	{
+		name: "split-story",
+		authority: "ai",
+		effect: "retires a story and inserts its replacements",
+	},
+	{
+		name: "serialize-review-context",
+		authority: "ai",
+		effect: "serializes the context handed to a code-review dispatch",
+	},
+];
+
 function main(): void {
 	const { flags: args, positionals } = parseArgs(process.argv.slice(2));
 	const subcommand = positionals[0];
+	// help is a discovery command — it must print without a session id or seeded
+	// state, so it runs BEFORE resolveSessionIdOrThrow (every other subcommand's
+	// precondition is unchanged).
+	if (subcommand === "help") {
+		process.stdout.write(renderHelp("ultragoal-state", ROSTER));
+		return;
+	}
 	let sessionId: string;
 	try {
 		sessionId = resolveSessionIdOrThrow();
@@ -2593,10 +2745,10 @@ function main(): void {
 				process.stderr.write("set-verdict: phase auto-advanced planning -> pursuing\n");
 			}
 			setVerdict(sessionId, v);
-		} else if (subcommand === "set-budget-limited") {
-			setBudgetLimited(sessionId);
 		} else if (subcommand === "resume-pursuit") {
 			resumePursuit(sessionId);
+		} else if (subcommand === "force-complete") {
+			forceComplete(sessionId, strFlagOrBlank(args["reason"]));
 		} else if (subcommand === "set-blocked") {
 			setBlocked(sessionId, String(args["reason"] ?? ""));
 		} else if (subcommand === "request-complete") {
@@ -2678,9 +2830,6 @@ function main(): void {
 			process.stdout.write(`dismissed ${findingClass} finding at ${ref}\n`);
 		} else if (subcommand === "get") {
 			process.stdout.write(JSON.stringify(readGoalGet(sessionId)) + "\n");
-		} else if (subcommand === "status") {
-			const state = readGoalStateRaw(sessionId);
-			process.stdout.write((state ? deriveStatus(state) : "absent") + "\n");
 		} else if (subcommand === "list-others") {
 			const candidates = listOthers("ultragoal");
 			for (const c of candidates) {
@@ -2853,13 +3002,11 @@ function main(): void {
 				strFlagOrBlank(args["evidence"]),
 				strFlagOrBlank(args["rationale"]),
 			);
-		} else if (subcommand === "serialize-requirements") {
-			process.stdout.write(serializeRequirements(sessionId));
 		} else if (subcommand === "serialize-review-context") {
 			process.stdout.write(JSON.stringify(serializeReviewContext(sessionId)) + "\n");
 		} else {
 			process.stderr.write(
-				"Usage: ultragoal-state.ts <set|set-verdict|set-budget-limited|resume-pursuit|set-blocked|request-complete|claim-review-dispatch|get-review-result|record-comment-resolution|approve-review-dispatch-renewal|dismiss-review-finding|validate-review-artifact|get|status|list-others|adopt|set-stories|confirm-story|confirm-all-stories|reorder-stories|revise-story|add-story|retire-story|split-story|serialize-requirements|serialize-review-context> [options]\n",
+				`Usage: ultragoal-state.ts <help|${ROSTER.map((c) => c.name).join("|")}> [options]\n`,
 			);
 			process.exit(1);
 		}

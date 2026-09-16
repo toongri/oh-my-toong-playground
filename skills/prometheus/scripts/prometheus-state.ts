@@ -28,6 +28,7 @@ import {
 	presentationSubmissionCurrent,
 	type PresentationSubmission,
 } from "@lib/state-core";
+import { renderHelp, type CliCommand } from "@lib/cli-help";
 
 export interface PrometheusState {
 	presentation?: PresentationSubmission;
@@ -341,9 +342,30 @@ function parseArgs(args: string[]): Record<string, string | boolean> {
 	return result;
 }
 
+/**
+ * Single source of truth for this CLI's command roster: every subcommand `main()`
+ * dispatches, tagged with who may run it. `help` prints this via renderHelp() so the
+ * AI can see, before acting, which commands it may run itself. Every command here is
+ * ai-authority — no user/system/hook path exists for this CLI.
+ */
+const ROSTER: CliCommand[] = [
+	{ name: "set", authority: "ai", effect: "writes phase/plan/AC state fields" },
+	{ name: "get", authority: "ai", effect: "reads the full state" },
+	{ name: "clear", authority: "ai", effect: "clears the session's state" },
+	{ name: "list-others", authority: "ai", effect: "lists other live sessions eligible for adoption" },
+	{ name: "adopt", authority: "ai", effect: "re-keys another session's state into this one" },
+];
+
 function main(): void {
 	const args = parseArgs(process.argv.slice(2));
 	const subcommand = args["_subcommand"];
+	// help is a discovery command — it must print without a session id or seeded
+	// state, so it runs BEFORE resolveSessionIdOrThrow (every other subcommand's
+	// precondition is unchanged).
+	if (subcommand === "help") {
+		process.stdout.write(renderHelp("prometheus-state", ROSTER));
+		return;
+	}
 	let sessionId: string;
 	try {
 		sessionId = resolveSessionIdOrThrow();
@@ -461,7 +483,7 @@ function main(): void {
 			}
 		} else {
 			process.stderr.write(
-				"Usage: prometheus-state.ts <set|get|clear|list-others|adopt> [options]\n",
+				`Usage: prometheus-state.ts <help|${ROSTER.map((c) => c.name).join("|")}> [options]\n`,
 			);
 			process.exit(1);
 		}

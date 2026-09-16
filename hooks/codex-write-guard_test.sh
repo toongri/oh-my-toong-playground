@@ -1526,6 +1526,60 @@ test_user_authorized_resume_pursuit_whitespace_run_denies() {
     return "$result"
 }
 
+# force-complete mirrors resume-pursuit's wiring test: same direct/indirection/
+# order/whitespace shapes must all deny through the Codex shim.
+test_user_authorized_force_complete_direct_denies() {
+    new_sandbox
+    local cmd out result=0
+    cmd="bun /Users/x/.claude/skills/ultragoal/scripts/ultragoal-state.ts force-complete --reason x"
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED user-authorized-force-complete-direct: expected deny, got '$out'"
+        result=1
+    fi
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_user_authorized_force_complete_variable_indirection_denies() {
+    new_sandbox
+    local cmd out result=0
+    cmd='sub=force-complete; bun /Users/x/.claude/skills/ultragoal/scripts/ultragoal-state.ts "$sub" --reason x'
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED user-authorized-force-complete-variable-indirection: expected deny, got '$out'"
+        result=1
+    fi
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_user_authorized_force_complete_reverse_order_denies() {
+    new_sandbox
+    local cmd out result=0
+    cmd='s=force-complete && bun /Users/x/.claude/skills/ultragoal/scripts/ultragoal-state.ts "$s" --reason x'
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED user-authorized-force-complete-reverse-order: expected deny, got '$out'"
+        result=1
+    fi
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_user_authorized_force_complete_whitespace_run_denies() {
+    new_sandbox
+    local cmd out result=0
+    cmd='bun  /Users/x/.claude/skills/ultragoal/scripts/ultragoal-state.ts   force-complete   --reason x'
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED user-authorized-force-complete-whitespace-run: expected deny, got '$out'"
+        result=1
+    fi
+    rm -rf "$SBX"
+    return "$result"
+}
+
 # CONFIRMED BYPASS regression: a `<<EOF` token sitting inside a quoted string
 # opens no heredoc at real execution time, but the heredoc stripper used to
 # read it as an opener and drop every following line through `EOF` -- which
@@ -2950,6 +3004,86 @@ test_qa_cli_path_allowed() {
     assert_allow "$out" "$rc" "qa-cli-path"
 }
 
+# =============================================================================
+# goal / ultragoal / prometheus / deep-interview state -- same direct-write-
+# denied + cli-path-allowed pair as the QA state above, one per new anchor
+# write_guard_core_run now protects.
+# =============================================================================
+test_goal_state_direct_write_denied() {
+    new_sandbox
+    local target="$(dirname "$LED")/goal-state-cx.json" out rc=0
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo {} > %s"},"session_id":"cx","cwd":"%s"}' "$target" "$GITDIR" | run_hook) || rc=$?
+    rm -rf "$SBX"
+    if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"' && printf '%s' "$out" | grep -q 'goal state'; then return 0; fi
+    echo "ASSERTION FAILED goal-state-direct-write: rc=$rc out='$out'"
+    return 1
+}
+
+test_goal_cli_path_allowed() {
+    new_sandbox
+    local out rc=0
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"bun skills/goal/scripts/goal-state.ts get --sid cx"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook) || rc=$?
+    rm -rf "$SBX"
+    assert_allow "$out" "$rc" "goal-cli-path"
+}
+
+test_ultragoal_state_direct_write_denied() {
+    new_sandbox
+    local target="$(dirname "$LED")/ultragoal-state-cx.json" out rc=0
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo {} > %s"},"session_id":"cx","cwd":"%s"}' "$target" "$GITDIR" | run_hook) || rc=$?
+    rm -rf "$SBX"
+    if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"' && printf '%s' "$out" | grep -q 'ultragoal state'; then return 0; fi
+    echo "ASSERTION FAILED ultragoal-state-direct-write: rc=$rc out='$out'"
+    return 1
+}
+
+test_ultragoal_cli_path_allowed() {
+    new_sandbox
+    local out rc=0
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"bun skills/ultragoal/scripts/ultragoal-state.ts get --sid cx"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook) || rc=$?
+    rm -rf "$SBX"
+    assert_allow "$out" "$rc" "ultragoal-cli-path"
+}
+
+test_prometheus_state_direct_write_denied() {
+    new_sandbox
+    local target="$(dirname "$LED")/prometheus-state-cx.json" out rc=0
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo {} > %s"},"session_id":"cx","cwd":"%s"}' "$target" "$GITDIR" | run_hook) || rc=$?
+    rm -rf "$SBX"
+    if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"' && printf '%s' "$out" | grep -q 'prometheus state'; then return 0; fi
+    echo "ASSERTION FAILED prometheus-state-direct-write: rc=$rc out='$out'"
+    return 1
+}
+
+test_prometheus_cli_path_allowed() {
+    new_sandbox
+    local out rc=0
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"bun skills/prometheus/scripts/prometheus-state.ts set --phase S3"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook) || rc=$?
+    rm -rf "$SBX"
+    assert_allow "$out" "$rc" "prometheus-cli-path"
+}
+
+# deep-interview's prefix is "deep-interview-active-state-" (lib/state-core.ts's
+# STATE_PREFIX map) -- not a bare "-state-" suffix -- so the direct-write target
+# below pins that exact infix.
+test_deep_interview_state_direct_write_denied() {
+    new_sandbox
+    local target="$(dirname "$LED")/deep-interview-active-state-cx.json" out rc=0
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo {} > %s"},"session_id":"cx","cwd":"%s"}' "$target" "$GITDIR" | run_hook) || rc=$?
+    rm -rf "$SBX"
+    if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"' && printf '%s' "$out" | grep -q 'deep-interview state'; then return 0; fi
+    echo "ASSERTION FAILED deep-interview-state-direct-write: rc=$rc out='$out'"
+    return 1
+}
+
+test_deep_interview_cli_path_allowed() {
+    new_sandbox
+    local out rc=0
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"bun skills/deep-interview/scripts/deep-interview-state.ts get --sid cx"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook) || rc=$?
+    rm -rf "$SBX"
+    assert_allow "$out" "$rc" "deep-interview-cli-path"
+}
+
 test_qa_waive_denied_jq() {
     new_sandbox
     local out rc=0
@@ -3264,6 +3398,10 @@ main() {
     run_test test_user_authorized_resume_pursuit_variable_indirection_denies
     run_test test_user_authorized_resume_pursuit_reverse_order_denies
     run_test test_user_authorized_resume_pursuit_whitespace_run_denies
+    run_test test_user_authorized_force_complete_direct_denies
+    run_test test_user_authorized_force_complete_variable_indirection_denies
+    run_test test_user_authorized_force_complete_reverse_order_denies
+    run_test test_user_authorized_force_complete_whitespace_run_denies
     run_test test_ac4_negative_plain_rm_allows
     run_test test_ac4_negative_rm_r_allows
     run_test test_ac4_negative_git_push_no_force_allows
@@ -3324,6 +3462,14 @@ main() {
     run_test test_sigpipe_codereview_shell_command_no_agent_type_large_candidates_denied
     run_test test_qa_state_direct_write_denied
     run_test test_qa_cli_path_allowed
+    run_test test_goal_state_direct_write_denied
+    run_test test_goal_cli_path_allowed
+    run_test test_ultragoal_state_direct_write_denied
+    run_test test_ultragoal_cli_path_allowed
+    run_test test_prometheus_state_direct_write_denied
+    run_test test_prometheus_cli_path_allowed
+    run_test test_deep_interview_state_direct_write_denied
+    run_test test_deep_interview_cli_path_allowed
     run_test test_qa_waive_denied_jq
     run_test test_qa_waive_denied_nojq
     run_test test_codereview_shell_command_mv_source_denies

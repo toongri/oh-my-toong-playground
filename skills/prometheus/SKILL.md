@@ -1099,6 +1099,7 @@ These directives govern how prometheus records its own pipeline state via the st
   ```
 - **Teardown**: At S8 dispatch, on the Stage C Finish selection, and on abort, emit `<prometheus-done/>` as a standalone output token. The persistent-mode hook detects this token and performs the actual state-file deletion — the model does not call `clear` directly. The hook refuses the token while the plan step is done but the Stage A presentation is missing or stale — render the presentation first, then re-emit. Only a pre-plan abort tears down without one.
 - **Session key**: state is keyed by the exported `$OMT_SESSION_ID` environment variable. The CLI hard-fails with a non-zero exit when `OMT_SESSION_ID` is absent or unsafe — there is no fallback.
+- **Command roster**: run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" help` to see every subcommand; all of them are AI-usable — none are user-only.
 - **Restore**: on restore, you MUST:
   1. Run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" get` and read `steps.acceptance_criteria.content` from its output to recover the prior confirmed AC (do not re-derive AC that was already confirmed — use the stored content directly).
   2. Re-read the current plan file (use `plan_path` from state; if absent, restart from `resume_summary`).

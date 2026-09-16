@@ -37,6 +37,8 @@ Every state transition in this skill goes through the CLI. Editing the state fil
 CLI="bun ${CLAUDE_SKILL_DIR}/scripts/explain-diff-state.ts"
 ```
 
+Run `$CLI help` to see the full command roster; every command here is AI-usable — none are user-only.
+
 ## Step 1 — evidence
 
 **Open the state first.** With no state, every write to the artifact path is rejected, so nothing proceeds without this call.
