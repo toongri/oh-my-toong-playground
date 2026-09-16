@@ -337,6 +337,20 @@ describe("prometheus state", () => {
 		expect(JSON.parse(out).non_goals).toBe("");
 	});
 
+	test.each(["S0", "S1"])("malformed non_goals values are rejected during %s reads", (phase) => {
+		for (const [label, nonGoals] of Object.entries({ zero: 0, false: false, array: [], object: {} })) {
+			const sid = `malformed-${phase}-${label}`;
+			writePristinePromState(sid);
+			const path = `${tmpDir}/prometheus-state-${sid}.json`;
+			const state = JSON.parse(readFileSync(path, "utf8"));
+			state.phase = phase;
+			state.non_goals = nonGoals;
+			writeFileSync(path, JSON.stringify(state), "utf8");
+
+			expect(readPrometheusState(sid)).toBeNull();
+		}
+	});
+
 	test("prometheus phase-only update preserves non_goals", () => {
 		const nonGoals = "- docs changes | decider: edits documentation only";
 		seedFile("preserveNonGoals");
@@ -461,6 +475,40 @@ function runPromCli(args: string, env?: Record<string, string>): string {
 }
 
 describe("adoption: list-others + adopt (prometheus CLI)", () => {
+	test("legacy S2 source missing non_goals is omitted from list-others", () => {
+		writeLivePromState("legacy-list", `${tmpDir}/plans/legacy.md`);
+		const path = `${tmpDir}/prometheus-state-legacy-list.json`;
+		const legacy = JSON.parse(readFileSync(path, "utf8"));
+		legacy.phase = "S2";
+		delete legacy.non_goals;
+		writeFileSync(path, JSON.stringify(legacy), "utf8");
+
+		const out = runPromCli("list-others", { OMT_SESSION_ID: "destination" });
+		expect(out).not.toContain("legacy-list");
+	});
+
+	test("legacy S2 source missing non_goals is refused before adoption rename", () => {
+		writeLivePromState("legacy-adopt", `${tmpDir}/plans/legacy.md`);
+		const sourcePath = `${tmpDir}/prometheus-state-legacy-adopt.json`;
+		const destinationPath = `${tmpDir}/prometheus-state-destination.json`;
+		const legacy = JSON.parse(readFileSync(sourcePath, "utf8"));
+		legacy.phase = "S2";
+		delete legacy.non_goals;
+		writeFileSync(sourcePath, JSON.stringify(legacy), "utf8");
+		writePristinePromState("destination");
+		writeFileSync(`${tmpDir}/adoption.log`, "existing adoption log\n", "utf8");
+
+		const sourceBefore = readFileSync(sourcePath, "utf8");
+		const destinationBefore = readFileSync(destinationPath, "utf8");
+		const adoptionLogBefore = readFileSync(`${tmpDir}/adoption.log`, "utf8");
+		expect(() => runPromCli("adopt --src legacy-adopt", { OMT_SESSION_ID: "destination" })).toThrow();
+
+		expect(existsSync(sourcePath)).toBe(true);
+		expect(readFileSync(sourcePath, "utf8")).toBe(sourceBefore);
+		expect(readFileSync(destinationPath, "utf8")).toBe(destinationBefore);
+		expect(readFileSync(`${tmpDir}/adoption.log`, "utf8")).toBe(adoptionLogBefore);
+	});
+
 	// (F2-prom) list-others surfaces ACTIVE-live candidate, purpose = plan_path or phase
 	test("F2-prom: list-others shows A with plan_path as purpose, excludes self B", () => {
 		process.env.OMT_SESSION_ID = "B";
