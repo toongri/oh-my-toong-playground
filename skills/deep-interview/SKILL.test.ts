@@ -1446,3 +1446,34 @@ describe("diagram-guide: node/participant naming discipline and domain-before-li
 		expect(dom).toBeLessThan(life);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// risk-domain-walkthrough: the five no-safe-default domains (Security, Data
+// destruction, External contract, Concurrency, Money) must be explicitly
+// raised with the user before closure; a domain the user confirms not
+// applicable becomes a non-goal-with-decider so downstream review can exclude
+// spurious findings in it. Interview guidance, NOT a scored gate -- the
+// existing non-goal existence precondition stays existence-only.
+// (must FAIL before the corresponding SKILL.md edit -- RED)
+// ---------------------------------------------------------------------------
+
+describe("risk-domain-walkthrough: five no-safe-default domains are walked with the user, N becomes a non-goal", () => {
+	const start = skillMd.indexOf("**Risk-Domain Walkthrough (no-safe-default domains):**");
+	const region = start === -1 ? "" : skillMd.slice(start, start + 900);
+
+	test('"Risk-Domain Walkthrough" guidance is present', () => {
+		expect(start).toBeGreaterThan(-1);
+	});
+
+	test("all five no-safe-default domains are named", () => {
+		expect(region).toContain("Security, Data destruction, External contract, Concurrency, Money");
+	});
+
+	test("a user-confirmed not-applicable domain is recorded as a non-goal-with-decider", () => {
+		expect(region).toContain("record it as a non-goal-with-decider");
+	});
+
+	test("it is interview guidance, not a scored gate (existence precondition stays existence-only)", () => {
+		expect(region).toContain("interview guidance, not a scored gate");
+	});
+});

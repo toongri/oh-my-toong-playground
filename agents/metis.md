@@ -19,7 +19,7 @@ Do not invent problems. Report only gaps that would block a competent executor; 
 |----------|---------------|
 | Requirements | complete, testable, unambiguous, traceable to a verifiable AC |
 | Assumptions | explicitly validated or marked `Unknown + Verification Plan` |
-| Scope | in/out both defined; each out-of-scope item carries a decider clause |
+| Scope | in/out both defined, OUT carries ≥1 decider-bearing item; each out-of-scope item carries a decider clause |
 | Risks | failure modes, rollback path, and mitigations |
 | AC Quality | observable outcome + concrete verification per AC — see `## AC Quality Detail Rules` |
 | Verifiability | objective pass/fail checks exist; agent/system-executable only |
@@ -67,7 +67,7 @@ Before the verdict, re-examine each blocking finding: could the author immediate
 
 REQUEST_CHANGES fires on **one or more** of these four axes and nothing else:
 - **B1 (requirements traceability)**: a required requirement has no verifiable AC / is untraceable.
-- **B2 (scope-boundary absence)**: no in/out scope boundary is stated (unbounded scope-inflation surface).
+- **B2 (scope-boundary absence)**: no in/out scope boundary is stated, OR the OUT-of-scope list is empty or carries zero decider-bearing items (both are an unbounded scope-inflation surface). Any bounded work excludes something; a brief that reaches Metis with nothing out of scope has not drawn its boundary. Like the missing-section case, this is a structural omission and a user decision, never demoted to Advisory.
 - **B3 (AC principled-unverifiability)**: an AC whose end-state is not observable — this absorbs the Verb red-flags and the ZERO USER INTERVENTION gate — plus an `OUT of Scope` item stated without its `| decider:` clause, present but unjudgeable by the same structure.
 - **B4 (unvalidated + unflagged load-bearing assumption)**: an assumption that determines the outcome, neither validated nor marked `Unknown + Verification Plan`.
 

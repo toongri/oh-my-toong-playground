@@ -632,6 +632,17 @@ Briefly announce "Consulting Oracle for [reason]" before invocation.
 
 If user does not provide AC, you MUST draft them. Propose → user confirms → finalize. NEVER proceed to Metis without confirmed AC.
 
+### Non-Goals (co-confirmed with the user)
+
+Any bounded task excludes something — there is always work this iteration deliberately will NOT do — and an unstated exclusion is a scope-creep surface an executor or reviewer can walk right into. A non-goal is safe to touch AND safe to leave alone, just excluded by choice; it is distinct from a constraint (what must not regress). Draft the non-goals **during AC drafting and confirm them with the user together with the AC**, before Metis — the same "propose → user confirms → finalize" loop, so what goes to Metis is user-agreed, not planner-invented.
+
+Each non-goal is one line in the `{excluded item} | decider: {how to tell whether a candidate finding falls inside this exclusion}` shape — the same decider shape deep-interview and ultragoal use, so it survives verbatim into the Metis SCOPE section and the downstream scope contract. A decider-less exclusion has no edge to any finding and does nothing.
+
+- **Scoped / Complex / Architecture**: **≥1 decider-bearing non-goal is REQUIRED for Scoped+** and flows verbatim into the Metis SCOPE `OUT of Scope` list (`review-pipeline.md`). The Metis B2 gate rejects a brief whose OUT-of-scope list is empty (Metis runs only for Scoped+, so the tier falls out of the pipeline). **Existence is mandatory; precision is not gated** — a mechanical existence check, never an interpretation dispute.
+- **Trivial**: no Metis phase and no decider ceremony — state the **one-line boundary** of what the fix does NOT touch.
+
+Risk-domain non-goals come from `### Risk-Domain Assessment`: each domain the user confirms as not-applicable becomes a non-goal here, and populates the plan's `Must NOT Have / Guardrails`.
+
 ### AC Format (two-line, mandatory)
 
 ```
@@ -851,7 +862,7 @@ When a T1 trigger fires (any one category matched), activate `### Risk-Domain Pr
 
 ### Risk-Domain Assessment
 
-During the Interview Mode phase, the planner self-reports Y/N for each T1 category before drafting the plan:
+During the Interview Mode phase, the planner assesses Y/N for each T1 category before drafting the plan, then **surfaces the full Y/N assessment with a one-line basis per category to the user for confirmation** — a single confirmation pass, NOT five separate questions. A no-safe-default domain is never settled by silent self-assessment; the user confirms or corrects it.
 
 - Security? (Y/N)
 - Data destruction? (Y/N)
@@ -859,7 +870,7 @@ During the Interview Mode phase, the planner self-reports Y/N for each T1 catego
 - Concurrency? (Y/N)
 - Money? (Y/N)
 
-Any Y activates Deliberate Mode for that category. This Y/N self-assessment is the primary risk-domain detection signal.
+Any **Y** activates Deliberate Mode for that category, and its risk fork is resolved with the user per `### Deliberate Mode Triggers` (no-safe-default — silence, uncertainty, or a generic "skip" cannot settle it). **Each N the user confirms as not-applicable is recorded as a non-goal-with-decider** in `## Acceptance Criteria (Mandatory Contract) > ### Non-Goals` — e.g. `동시성 처리 안 함 | decider: 이 경로의 락/레이스/트랜잭션 finding은 out (실행모델이 순차적)`. This turns a silent "not applicable" into an explicit shield that Metis and downstream code-review consume as an OUT-of-scope exclusion, and it supplies the ≥1 non-goal the Scoped+ existence gate requires. This Y/N assessment (single confirmation pass for Scoped+; for Trivial the T1 risk-override in `### Deliberate Mode Triggers` still fires on a genuine risk keyword) is the primary risk-domain detection signal.
 
 ### Risk-Domain Pre-Mortem
 
