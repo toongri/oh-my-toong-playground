@@ -375,8 +375,8 @@ function mergeWriteLocked(sessionId: string, stateFilePath: string, next: Partia
 		// is the sole load-bearing marker distinguishing a force-complete write from an ordinary
 		// request-complete write, and it must survive being enumerated here or a later unrelated
 		// write (there are none once phase=complete, but the pattern is uniform) would drop it.
-		forced_complete: next.forced_complete ?? prior.forced_complete,
-		forced_reason: next.forced_reason ?? prior.forced_reason,
+		forced_complete: "forced_complete" in next ? next.forced_complete : prior.forced_complete,
+		forced_reason: "forced_reason" in next ? next.forced_reason : prior.forced_reason,
 	};
 	const state: GoalState = mergeWithHeartbeat(partial, {});
 	try {
@@ -705,6 +705,11 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 			// re-plans). readGoalState returns non-null ONLY for an active prior → re-plan.
 			if (!readGoalState(sessionId)) {
 				next.iteration = 0;
+				// Forced-completion markers belong only to the terminal pursuit that recorded them.
+				// Explicit undefined values make JSON.stringify omit these optional fields while
+				// leaving ordinary merge writes' preservation behavior unchanged.
+				next.forced_complete = undefined;
+				next.forced_reason = undefined;
 				// A terminal prior state can remain on disk for the same session. Its review
 				// dispatch budget and approval hash belong to the completed/blocked pursuit,
 				// never to the fresh one being planned now.

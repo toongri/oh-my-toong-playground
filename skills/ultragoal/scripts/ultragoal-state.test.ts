@@ -791,6 +791,16 @@ describe("goal state", () => {
 		expect(rawState().completion_evidence_paths).toEqual([]);
 	});
 
+	test("fresh pursuit omits forced-completion metadata from the prior pursuit", () => {
+		setGoalState(S, { phase: "pursuing" });
+		forceComplete(S, "manual completion");
+
+		setGoalState(S, { phase: "planning", outcome: "new pursuit" });
+		const persisted = JSON.parse(readFileSync(resolveStatePath(S), "utf8"));
+		expect(Object.prototype.hasOwnProperty.call(persisted, "forced_complete")).toBe(false);
+		expect(Object.prototype.hasOwnProperty.call(persisted, "forced_reason")).toBe(false);
+	});
+
 	// C1: a re-plan loop-back of the SAME active goal preserves the iteration budget —
 	// budget accumulates across re-plans (active prior present => re-plan, not fresh).
 	test("C1: re-plan over an active pursuing state preserves iteration", () => {
