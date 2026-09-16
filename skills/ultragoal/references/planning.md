@@ -10,6 +10,8 @@ Five content slots (from capture):
 4. **boundaries** (`--boundaries`) — the allowed files, tools, and resources the pursuit may touch.
 5. **non-goals** (`--non-goals`) — what this pursuit deliberately will NOT do, each with its own decider. Distinct from `boundaries` (which surface may be touched) and `constraints` (what must not regress): a non-goal is safe to touch AND safe to leave alone, just excluded by choice. Declare each as `- {what this pursuit will NOT do} | decider: {how to tell a finding belongs to this non-goal}` — a decider-less non-goal has no edge to any finding and does nothing. `set --non-goals` refuses any non-empty line that doesn't match that shape (existence check only, not a quality check).
 
+Prometheus is the upstream producer: it passes the stored canonical value to the existing `--non-goals` slot and validator. Do not invent a new encoding; preserve the newline-delimited lines and their leading `-`.
+
 ### Approved scope contract
 
 Present the outcome, story ACs, constraints, boundaries, and non-goal deciders together for approval. Each story must map to the requested outcome; a non-goal needs a concrete membership test. An allowed file is not permission to add any behavior in that file. For a single story, auto-confirm only the user's already explicit scope; resolve a genuine goal/non-goal conflict before pursuit.

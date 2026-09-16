@@ -638,6 +638,8 @@ Any bounded task excludes something — there is always work this iteration deli
 
 Each non-goal is one line in the `{excluded item} | decider: {how to tell whether a candidate finding falls inside this exclusion}` shape — the same decider shape deep-interview and ultragoal use, so it survives verbatim into the Metis SCOPE section and the downstream scope contract. A decider-less exclusion has no edge to any finding and does nothing.
 
+The canonical persisted value is newline-delimited and includes the leading `-` on every line: `- {excluded item} | decider: {membership test}`. After the user confirms the AC and non-goals, S1 persists that exact value in Prometheus state; downstream artifacts copy the stored lines verbatim.
+
 - **Scoped / Complex / Architecture**: **≥1 decider-bearing non-goal is REQUIRED for Scoped+** and flows verbatim into the Metis SCOPE `OUT of Scope` list (`review-pipeline.md`). The Metis B2 gate rejects a brief whose OUT-of-scope list is empty (Metis runs only for Scoped+, so the tier falls out of the pipeline). **Existence is mandatory; precision is not gated** — a mechanical existence check, never an interpretation dispute.
 - **Trivial**: no Metis phase and no decider ceremony — state the **one-line boundary** of what the fix does NOT touch.
 
@@ -797,6 +799,13 @@ Canonical required section headings (validator single source):
 ```
 
 Each plan section is emitted as exactly its canonical heading above (plus `## ADR` when Scoped+).
+
+Under `## Work Objectives`, every mandatory plan includes:
+
+### Non-Goals
+- {excluded item} | decider: {membership test}
+
+The lines in this section are verbatim from the stored Prometheus state, including the leading `-`; do not reconstruct, summarize, or omit ordinary confirmed exclusions.
 
 ### ADR
 
@@ -1047,7 +1056,7 @@ Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an ag
 | **S5: Plan Presentation** | Stage A render + present to user | → S6 on user views plan |
 | **S6: Execution Recommendation** | Compute Stage B recommendation | → S7 on user receives |
 | **S7: Execution Bridge** | Stage C mode choice ONLY — present the 3 execution options (Continue to ultragoal / Finish / Revise plan) and capture the user's selection | → S8 on "Continue to ultragoal" (option 1), valid ONLY against the fresh S4 APPROVE/COMMENT on the current artifact or the S4 carried-forward terminal (residual disclosed); → terminal on "Finish" (option 2, emit `<prometheus-done/>`); → S0 on "Revise plan" (user-initiated) |
-| **S8: Execution Dispatch** | Invoke `Skill(skill: "ultragoal")` with the plan path | (terminal) |
+| **S8: Execution Dispatch** | Invoke `Skill(skill: "ultragoal")` with the plan path and pass the stored canonical non-goals value to Ultragoal's existing `--non-goals` slot, without a presence-based alternate path that can omit ordinary exclusions. | (terminal) |
 
 **S8 reachability invariant:** S8 is reachable ONLY from an S7 execution selection taken against a **fresh S4 (Momus) APPROVE/COMMENT** on the current artifact, or the S4 round-cap carried-forward terminal (its residual disclosed in the S7 presentation). There is no plan-mutation-after-S4 → S8 path: any artifact change after S4 is a defect that routes to re-review per the S4 row above, and forces a fresh S4 re-review before S7 can offer execution again. Recording the carried-forward residual into the plan Context at the cap terminal is part of that terminal, not a post-S4 mutation. A never-downgrade-class residual (data loss, security breach, financial impact) cannot ride the carried-forward terminal — it blocks S5 until the user explicitly decides via Interview.
 
@@ -1081,6 +1090,12 @@ These directives govern how prometheus records its own pipeline state via the st
   ```
   bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase S1 --record-ac - <<'EOF'
   ["AC1: ...", "AC2: user can't delete another user's data"]
+  EOF
+  ```
+- **S1 non-goal recording**: persist the user-confirmed canonical non-goal value in a separate invocation, after the AC invocation. Its newline-delimited stdin contains the leading `-` on every line; this is not a second consumer of the AC JSON stdin stream:
+  ```
+  bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase S1 --record-non-goals - <<'EOF'
+  - {excluded item} | decider: {membership test}
   EOF
   ```
 - **S2 design step**: after the design-brief / ADR is written and `--plan-path` is set, mark the design step done:

@@ -5,6 +5,7 @@ import { join } from "node:path";
 const diagramGuide = readFileSync(join(import.meta.dir, "diagram-guide.md"), "utf8");
 const skillMd = readFileSync(join(import.meta.dir, "SKILL.md"), "utf8");
 const reviewPipeline = readFileSync(join(import.meta.dir, "review-pipeline.md"), "utf8");
+const planTemplate = readFileSync(join(import.meta.dir, "plan-template.md"), "utf8");
 const metisMd = readFileSync(join(import.meta.dir, "..", "..", "agents", "metis.md"), "utf8");
 
 function extractCoverageTableNote(markdown: string): string {
@@ -108,5 +109,37 @@ describe("non-goal-existence-gate: Metis B2 rejects an empty OUT-of-scope list (
 
 	test("the Scope analysis-framework row requires >=1 decider-bearing OUT item", () => {
 		expect(metisMd).toContain("OUT carries ≥1 decider-bearing item");
+	});
+});
+
+describe("canonical non-goal handoff contract", () => {
+	test("S1 stores canonical non-goals in a separate state invocation from AC stdin", () => {
+		expect(skillMd).toContain(
+			'prometheus-state.ts" set --phase S1 --record-non-goals -',
+		);
+		expect(skillMd).toMatch(/separate invocation[\s\S]*record-non-goals/);
+	});
+
+	test("the plan template requires verbatim stored non-goal lines under Work Objectives", () => {
+		expect(planTemplate).toMatch(
+		/## Work Objectives[\s\S]*### Non-Goals[\s\S]*- \{excluded item\} \| decider: \{membership test\}/,
+		);
+		const planStructure = skillMd.slice(skillMd.indexOf("## Plan Structure (Mandatory Contract)"));
+		expect(planStructure).toMatch(/### Non-Goals[\s\S]*verbatim from the stored Prometheus state/);
+	});
+
+	test("Metis receives the plan's same canonical lines and S8 forwards stored value to Ultragoal", () => {
+		expect(reviewPipeline).toMatch(
+		/OUT of Scope[\s\S]*verbatim canonical lines from the plan[\s\S]*transient brief/,
+		);
+		expect(skillMd).toMatch(
+			/S8[\s\S]*stored canonical[\s\S]*--non-goals[\s\S]*presence-based alternate path/,
+		);
+	});
+
+	test("Ultragoal planning names Prometheus as the upstream producer of the existing slot and validator", () => {
+		expect(readFileSync(join(import.meta.dir, "..", "ultragoal", "references", "planning.md"), "utf8")).toMatch(
+			/Prometheus[\s\S]*upstream producer[\s\S]*stored canonical value[\s\S]*existing `--non-goals` slot[\s\S]*validator/,
+		);
 	});
 });

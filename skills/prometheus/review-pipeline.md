@@ -17,7 +17,7 @@ Read this file when you are about to execute a SPECIFIC reviewer invocation, Sta
 
 ## 2. SCOPE
 - **IN Scope**: [what will be built]
-- **OUT of Scope**: [what is excluded] | decider: [how to tell a finding belongs to this exclusion]
+- **OUT of Scope**: paste the same verbatim canonical lines from the plan's `## Work Objectives > ### Non-Goals` section, including the leading `-`; ordinary confirmed non-goals must not exist only in a transient brief.
 
 ## 3. ACCEPTANCE CRITERIA
 [Confirmed AC in full — paste verbatim. No summarizing.]
@@ -25,7 +25,7 @@ Read this file when you are about to execute a SPECIFIC reviewer invocation, Sta
 
 **≥1 OUT-of-scope item is REQUIRED.** Metis runs only for Scoped+ intent, and any bounded work excludes something; a brief that reaches Metis with an empty `OUT of Scope` list has not drawn its boundary. Risk-domain non-goals the user deliberately excludes (`SKILL.md > ### Risk-Domain Assessment`) belong here. The gate in `agents/metis.md` (B2) rejects an empty OUT-of-scope list with REQUEST_CHANGES.
 
-Each `OUT of Scope` item must carry a decider — `| decider: {how to tell a finding belongs to this exclusion}` — so a reviewer can tell whether a candidate finding falls inside it. An exclusion without a decider has no edge to any finding, so it does nothing. The gate in `agents/metis.md` (B3) rejects an undecidered exclusion with REQUEST_CHANGES; this template fixes the format that gate checks.
+Each `OUT of Scope` item must carry a decider — `- {excluded item} | decider: {membership test}` — so a reviewer can tell whether a candidate finding falls inside it. Copy the canonical lines verbatim from the plan; do not derive them from a transient brief. An exclusion without a decider has no edge to any finding, so it does nothing. The gate in `agents/metis.md` (B3) rejects an undecidered exclusion with REQUEST_CHANGES; this template fixes the format that gate checks.
 
 **On Metis REQUEST_CHANGES**: Return to Interview Mode — and ask the user first. Metis rejection means requirements are incomplete — do NOT guess or hallucinate missing requirements to pass the gate. Before re-invoking Metis, ask the user to clarify the gaps Metis identified via the normal Interview question channel, and apply the answer and the resulting revision. Only then re-invoke Metis with the same 3-Section structure containing updated content. This loop is bounded by the Metis round cap (2 rounds) owned by prometheus (`SKILL.md > ### State Lifecycle Directives`); metis stays round-unaware.
 
