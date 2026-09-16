@@ -1070,15 +1070,13 @@ describe("help subcommand", () => {
 	// help renders this CLI's roster via the shared lib/cli-help.ts renderer, grouped by
 	// authority. This pins the prometheus-specific wiring (roster tags), not the
 	// renderer's own formatting — that's covered by lib/cli-help.test.ts.
-	test("every roster command is listed under AI-USABLE (no user/system/hook path exists)", () => {
+	test("clear is system-only and absent from AI-usable and hook-only sections", () => {
 		const out = runPromCli("help");
+		const aiSection = out.split("SYSTEM-ONLY")[0];
 		expect(out).toContain("AI-USABLE");
-		expect(out).not.toContain("USER-ONLY");
-		expect(out).not.toContain("SYSTEM-ONLY");
+		expect(aiSection).not.toContain("clear —");
+		expect(out).toMatch(/SYSTEM-ONLY[\s\S]*clear —/);
 		expect(out).not.toContain("HOOK-ONLY");
-		for (const name of ["set", "get", "clear", "list-others", "adopt"]) {
-			expect(out).toContain(`${name} —`);
-		}
 	});
 
 	test("Usage fallback lists help plus every roster command", () => {

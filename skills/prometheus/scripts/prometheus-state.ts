@@ -9,7 +9,7 @@
  *       [--record-ac '<json-array>' | --record-ac - (reads JSON array from stdin)]
  *       [--mark-design-done] [--mark-plan-done] [--submit-presentation <html>]
  *   get
- *   clear
+ *   clear (system-only internal teardown)
  */
 
 import { existsSync, readFileSync, unlinkSync, statSync } from "fs";
@@ -345,13 +345,14 @@ function parseArgs(args: string[]): Record<string, string | boolean> {
 /**
  * Single source of truth for this CLI's command roster: every subcommand `main()`
  * dispatches, tagged with who may run it. `help` prints this via renderHelp() so the
- * AI can see, before acting, which commands it may run itself. Every command here is
- * ai-authority — no user/system/hook path exists for this CLI.
+ * AI can see, before acting, which commands it may run itself. The persistent-mode
+ * hook performs teardown through its own cleanup path after the AI emits
+ * <prometheus-done/>; `clear` is retained as an internal system-only subcommand.
  */
 const ROSTER: CliCommand[] = [
 	{ name: "set", authority: "ai", effect: "writes phase/plan/AC state fields" },
 	{ name: "get", authority: "ai", effect: "reads the full state" },
-	{ name: "clear", authority: "ai", effect: "clears the session's state" },
+	{ name: "clear", authority: "system", effect: "internal session-state teardown" },
 	{ name: "list-others", authority: "ai", effect: "lists other live sessions eligible for adoption" },
 	{ name: "adopt", authority: "ai", effect: "re-keys another session's state into this one" },
 ];
