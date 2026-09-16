@@ -19,10 +19,10 @@ import {
 	setGoalState,
 	setBudgetLimited,
 	resumePursuit,
+	forceComplete,
 	setBlocked,
 	requestComplete,
 	setVerdict,
-	deriveStatus,
 	resolveStatePath,
 	readGoalGet,
 	setStories,
@@ -40,7 +40,6 @@ import {
 	scopeContractSha256,
 	claimReviewDispatch,
 	approveReviewDispatchRenewal,
-	type GoalPhase,
 	type Story,
 } from "./ultragoal-state.ts";
 
@@ -502,17 +501,6 @@ describe("goal state", () => {
 		expect(rawState().active).toBe(false);
 	});
 
-	// AC #6 — phase enum exhaustive, status 1:1
-	test("phase enum exhaustive and status derives 1:1", () => {
-		const phases: GoalPhase[] = ["planning", "pursuing", "budget_limited", "blocked", "complete"];
-		for (const p of phases) {
-			expect(deriveStatus({ phase: p })).toBe(p);
-		}
-		// status is exactly the phase token (1:1), nothing collapses
-		const seen = new Set(phases.map((p) => deriveStatus({ phase: p })));
-		expect(seen.size).toBe(phases.length);
-	});
-
 	// AC #7 — verdict round-trip; unset is absent
 	test("objective verdict stored and read back; unset is absent", () => {
 		setGoalState(S, { phase: "planning" });
@@ -801,6 +789,16 @@ describe("goal state", () => {
 		);
 		setGoalState(S, { phase: "planning" });
 		expect(rawState().completion_evidence_paths).toEqual([]);
+	});
+
+	test("fresh pursuit omits forced-completion metadata from the prior pursuit", () => {
+		setGoalState(S, { phase: "pursuing" });
+		forceComplete(S, "manual completion");
+
+		setGoalState(S, { phase: "planning", outcome: "new pursuit" });
+		const persisted = JSON.parse(readFileSync(resolveStatePath(S), "utf8"));
+		expect(Object.prototype.hasOwnProperty.call(persisted, "forced_complete")).toBe(false);
+		expect(Object.prototype.hasOwnProperty.call(persisted, "forced_reason")).toBe(false);
 	});
 
 	// C1: a re-plan loop-back of the SAME active goal preserves the iteration budget —
@@ -1354,11 +1352,6 @@ describe("get subcommand includes pristine field", () => {
 });
 
 describe("recovery-and-guards: resume-pursuit", () => {
-	test("status shows budget_limited", () => {
-		setBudgetLimited(S);
-		expect(runCli("status")).toBe("budget_limited\n");
-	});
-
 	test("get keeps active-fold contract", () => {
 		setBudgetLimited(S);
 		expect(readGoalGet(S)).toBeNull();
@@ -1419,6 +1412,92 @@ describe("recovery-and-guards: resume-pursuit", () => {
 		expect(runCli("resume-pursuit")).toBe("");
 		const usage = runCliCaptured("unknown");
 		expect(usage.stderr).toContain("resume-pursuit");
+	});
+});
+
+describe("recovery-and-guards: force-complete (user-only escape hatch)", () => {
+	test("writes phase=complete, active=false, forced_complete=true, and the reason", () => {
+		setGoalState(S, { phase: "planning", outcome: "obj" });
+		setGoalState(S, { phase: "pursuing" });
+		forceComplete(S, "stuck on an unfixable review false-positive; user accepts as done");
+		const state = rawState();
+		expect(state).toMatchObject({
+			phase: "complete",
+			active: false,
+			forced_complete: true,
+			forced_reason: "stuck on an unfixable review false-positive; user accepts as done",
+		});
+	});
+
+	test("refuses a missing or blank --reason, state unchanged", () => {
+		setGoalState(S, { phase: "planning", outcome: "obj" });
+		setGoalState(S, { phase: "pursuing" });
+		const before = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => forceComplete(S, "")).toThrow();
+		expect(() => forceComplete(S, "   ")).toThrow();
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+	});
+
+	test("refuses when no ultragoal state exists for the session", () => {
+		rmSync(resolveStatePath(S));
+		expect(() => forceComplete(S, "reason")).toThrow();
+		expect(existsSync(resolveStatePath(S))).toBe(false);
+	});
+
+	test("refuses when already complete, state unchanged", () => {
+		setGoalState(S, { phase: "planning", outcome: "obj" });
+		setGoalState(S, { phase: "pursuing" });
+		forceComplete(S, "first forced completion");
+		const before = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => forceComplete(S, "second attempt")).toThrow();
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+	});
+
+	// Proves the actual bypass: the same state that makes request-complete refuse
+	// (no verdict, no stories, no evidence, no verdict/code-review artifacts) still
+	// lets force-complete succeed — that gap is the entire point of this command.
+	test("succeeds where request-complete would refuse (no verdict, no stories, no artifacts)", () => {
+		setGoalState(S, { phase: "planning", outcome: "obj" });
+		setGoalState(S, { phase: "pursuing" });
+		expect(requestComplete(S)).toBe(false);
+		expect(rawState().phase).toBe("pursuing");
+
+		forceComplete(S, "user force-completed a stuck pursuit with no satisfied gate");
+		const state = rawState();
+		expect(state.phase).toBe("complete");
+		expect(state.active).toBe(false);
+		expect(state.forced_complete).toBe(true);
+	});
+
+	test("accepts from blocked and budget_limited phases, not only pursuing", () => {
+		setGoalState(S, { phase: "planning", outcome: "obj" });
+		setGoalState(S, { phase: "pursuing" });
+		setBlocked(S, "stuck");
+		forceComplete(S, "user overrides the block");
+		expect(rawState().phase).toBe("complete");
+
+		rmSync(resolveStatePath(S));
+		seedGoalFile(S);
+		setGoalState(S, { phase: "planning", outcome: "obj" });
+		setGoalState(S, { phase: "pursuing" });
+		setBudgetLimited(S);
+		forceComplete(S, "user overrides the budget cap");
+		expect(rawState().phase).toBe("complete");
+	});
+
+	test("CLI registers force-complete usage, requires --reason, and succeeds", () => {
+		setGoalState(S, { phase: "planning", outcome: "obj" });
+		setGoalState(S, { phase: "pursuing" });
+		const missing = runCliCaptured("force-complete");
+		expect(missing.status).not.toBe(0);
+		expect(missing.stderr).toContain("--reason");
+		expect(rawState().phase).not.toBe("complete");
+
+		expect(runCli(`force-complete --reason "forced via CLI"`)).toBe("");
+		expect(rawState()).toMatchObject({ phase: "complete", forced_complete: true, forced_reason: "forced via CLI" });
+
+		const usage = runCliCaptured("unknown");
+		expect(usage.stderr).toContain("force-complete");
 	});
 });
 
@@ -3182,7 +3261,7 @@ describe("requirement-gap class: validator accepts and gate keys on verdict", ()
 	});
 });
 
-describe("serialize-requirements subcommand", () => {
+describe("serializeRequirements (internal helper, used by serialize-review-context)", () => {
 	// Exact format: [id] story — AC: a1; a2 — verify: surface, one line per story + trailing newline.
 	// RED: serializeRequirements does not exist yet.
 	test("exact output for a confirmed multi-AC story", () => {
@@ -3226,24 +3305,6 @@ describe("serialize-requirements subcommand", () => {
 	test("empty output when no stories exist", () => {
 		const out = serializeRequirements(S);
 		expect(out).toBe("");
-	});
-
-	// CLI dispatch: serialize-requirements subcommand prints the confirmed story block.
-	test("CLI dispatch prints confirmed story block", () => {
-		setGoalState(S, { phase: "planning", outcome: "ship it" });
-		const story: Story = {
-			id: "S1",
-			story: "ship the feature",
-			acceptance_criteria: ["green", "deployed"],
-			verification_surface: "smoke test",
-			status: "unconfirmed",
-		};
-		setStories(S, [story]);
-		confirmStory(S, "S1");
-		const out = runCli("serialize-requirements");
-		expect(out).toContain("[S1] ship the feature");
-		expect(out).toContain("AC: green; deployed");
-		expect(out).toContain("verify: smoke test");
 	});
 });
 
@@ -4172,5 +4233,56 @@ describe("story layer: Codex native-goal snapshot cross-check gate (Gate 9)", ()
 		expect(r.status).not.toBe(0);
 		expect(r.stderr).toMatch(/codex-goal-json/);
 		expect(rawState().phase).not.toBe("complete");
+	});
+});
+
+describe("help subcommand", () => {
+	// help renders this CLI's roster via the shared lib/cli-help.ts renderer, grouped by
+	// authority. This pins the ultragoal-specific wiring (roster tags), not the renderer's
+	// own formatting — that's covered by lib/cli-help.test.ts.
+	test("force-complete is listed under USER-ONLY", () => {
+		const out = runCli("help");
+		const userSection = out.slice(out.indexOf("USER-ONLY"), out.indexOf("SYSTEM-ONLY"));
+		expect(userSection).toContain("force-complete");
+	});
+
+	test("get is listed under AI-USABLE", () => {
+		const out = runCli("help");
+		const aiSection = out.slice(out.indexOf("AI-USABLE"), out.indexOf("USER-ONLY"));
+		expect(aiSection).toContain("get —");
+	});
+
+	test("set-blocked is listed under AI-USABLE, not SYSTEM-ONLY or HOOK-ONLY", () => {
+		const out = runCli("help");
+		const aiSection = out.slice(out.indexOf("AI-USABLE"), out.indexOf("USER-ONLY"));
+		const systemSection = out.slice(out.indexOf("SYSTEM-ONLY"), out.indexOf("HOOK-ONLY"));
+		const hookSection = out.slice(out.indexOf("HOOK-ONLY"));
+		expect(aiSection).toContain("set-blocked —");
+		expect(systemSection).not.toContain("set-blocked");
+		expect(hookSection).not.toContain("set-blocked");
+	});
+
+	test("claim-review-dispatch is listed under HOOK-ONLY", () => {
+		const out = runCli("help");
+		const hookSection = out.slice(out.indexOf("HOOK-ONLY"));
+		expect(hookSection).toContain("claim-review-dispatch");
+	});
+
+	// status/serialize-requirements/set-budget-limited were removed from main()'s dispatch;
+	// the roster must not resurrect them.
+	test("does not list the removed status/serialize-requirements/set-budget-limited commands", () => {
+		const out = runCli("help");
+		expect(out).not.toMatch(/\bstatus\b/);
+		expect(out).not.toContain("serialize-requirements");
+		expect(out).not.toContain("set-budget-limited");
+	});
+
+	// help is a discovery command — it must not require resolveSessionIdOrThrow's
+	// precondition. What breaks if this regresses: help runs after the session-id
+	// resolution again and throws with no session id set.
+	test("prints without a session id set (session-independent discovery)", () => {
+		const r = runCliCaptured("help", { OMT_SESSION_ID: "", CODEX_THREAD_ID: "" });
+		expect(r.status).toBe(0);
+		expect(r.stdout).toContain("ultragoal-state commands:");
 	});
 });

@@ -74,6 +74,25 @@ _wg_core_qa_state_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse"
 # a finished explanation document without the reader ever passing the quiz.
 _wg_core_explain_diff_state_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the current session explain-diff state (explain-diff-state-*.json). Use the explain-diff-state.ts CLI instead."}}'
 
+# Deny JSON for the goal skill's persistent-mode state. Same anchor treatment
+# as QA/explain-diff above and for the same reason: goal-state.ts is the sole
+# writer, and a direct write here would let a session forge its own
+# iteration/phase and bypass the completion gate.
+_wg_core_goal_state_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the current session goal state (goal-state-*.json). Use the goal-state.ts CLI instead."}}'
+
+# Deny JSON for the ultragoal skill's persistent-mode state -- a structural
+# copy of the goal state above (see lib/persistent-mode-core/types.ts), with
+# its own separate file prefix.
+_wg_core_ultragoal_state_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the current session ultragoal state (ultragoal-state-*.json). Use the ultragoal-state.ts CLI instead."}}'
+
+# Deny JSON for the prometheus skill's planning-phase state.
+_wg_core_prometheus_state_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the current session prometheus state (prometheus-state-*.json). Use the prometheus-state.ts CLI instead."}}'
+
+# Deny JSON for the deep-interview skill's active-interview state. Prefix is
+# "deep-interview-active-state-" (NOT a bare "-state-" suffix -- see
+# lib/state-core.ts's STATE_PREFIX map), matched below with that exact infix.
+_wg_core_deep_interview_state_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the current session deep-interview state (deep-interview-active-state-*.json). Use the deep-interview-state.ts CLI instead."}}'
+
 # Deny JSON for the current-session skill-invocation marker namespace. Marker
 # files are audit/integrity records, not authorization state; direct writes
 # could forge or erase one without the UserPromptSubmit marker hook.
@@ -281,12 +300,13 @@ write_guard_core_check_dangerous_command() {
 }
 
 # write_guard_core_check_user_authorized_command <command-segment>
-# Denies the three ultragoal-state subcommands whose authority row reads
+# Denies the four ultragoal-state subcommands whose authority row reads
 # "orchestrator, only after explicit user approval":
 #   approve-review-dispatch-renewal -- extends the code-review dispatch budget
 #   dismiss-review-finding          -- removes a blocking finding from the gate
 #   resume-pursuit                  -- resumes a previously paused pursuit
-# All three let the loop clear its own completion gate, so leaving them to prose
+#   force-complete                  -- forces phase=complete, bypassing every gate
+# All four let the loop clear its own completion gate, so leaving them to prose
 # ("run this only after the user approves") makes the authorization
 # vigilance-based -- the exact property ultragoal/SKILL.md rejects for its
 # other gates. Denying the AI's Bash path makes it structural instead: the
@@ -320,7 +340,7 @@ write_guard_core_check_user_authorized_command() {
     case "$seg" in
         *"ultragoal-state.ts"*)
             case "$seg" in
-                *"dismiss-review-finding"* | *"approve-review-dispatch-renewal"* | *"resume-pursuit"*)
+                *"dismiss-review-finding"* | *"approve-review-dispatch-renewal"* | *"resume-pursuit"* | *"force-complete"*)
                     printf '%s\n' "$_wg_core_user_authorized_deny_json"
                     return 0
                     ;;
@@ -683,6 +703,14 @@ write_guard_core_run() {
     qa_state_path="$(_wg_core_normpath "$omt_dir/qa-state-$session_id.json")"
     local explain_diff_state_path
     explain_diff_state_path="$(_wg_core_normpath "$omt_dir/explain-diff-state-$session_id.json")"
+    local goal_state_path
+    goal_state_path="$(_wg_core_normpath "$omt_dir/goal-state-$session_id.json")"
+    local ultragoal_state_path
+    ultragoal_state_path="$(_wg_core_normpath "$omt_dir/ultragoal-state-$session_id.json")"
+    local prometheus_state_path
+    prometheus_state_path="$(_wg_core_normpath "$omt_dir/prometheus-state-$session_id.json")"
+    local deep_interview_state_path
+    deep_interview_state_path="$(_wg_core_normpath "$omt_dir/deep-interview-active-state-$session_id.json")"
     local marker_namespace_prefix marker_namespace_glob
     marker_namespace_prefix="$(_wg_core_normpath "$omt_dir/codex-skill-invocation-marker-$session_id-")"
     marker_namespace_glob="$(_wg_core_normpath "$omt_dir/codex-skill-invocation-marker-$session_id-*")"
@@ -708,6 +736,26 @@ write_guard_core_run() {
         fi
         if [ "$norm_candidate" = "$explain_diff_state_path" ]; then
             printf '%s\n' "$_wg_core_explain_diff_state_deny_json"
+            _wg_core_drain_stdin
+            return 0
+        fi
+        if [ "$norm_candidate" = "$goal_state_path" ]; then
+            printf '%s\n' "$_wg_core_goal_state_deny_json"
+            _wg_core_drain_stdin
+            return 0
+        fi
+        if [ "$norm_candidate" = "$ultragoal_state_path" ]; then
+            printf '%s\n' "$_wg_core_ultragoal_state_deny_json"
+            _wg_core_drain_stdin
+            return 0
+        fi
+        if [ "$norm_candidate" = "$prometheus_state_path" ]; then
+            printf '%s\n' "$_wg_core_prometheus_state_deny_json"
+            _wg_core_drain_stdin
+            return 0
+        fi
+        if [ "$norm_candidate" = "$deep_interview_state_path" ]; then
+            printf '%s\n' "$_wg_core_deep_interview_state_deny_json"
             _wg_core_drain_stdin
             return 0
         fi
@@ -746,6 +794,22 @@ write_guard_core_run() {
                     return 0
                 elif _wg_core_pathwise_glob_match "$norm_candidate" "$explain_diff_state_path"; then
                     printf '%s\n' "$_wg_core_explain_diff_state_deny_json"
+                    _wg_core_drain_stdin
+                    return 0
+                elif _wg_core_pathwise_glob_match "$norm_candidate" "$goal_state_path"; then
+                    printf '%s\n' "$_wg_core_goal_state_deny_json"
+                    _wg_core_drain_stdin
+                    return 0
+                elif _wg_core_pathwise_glob_match "$norm_candidate" "$ultragoal_state_path"; then
+                    printf '%s\n' "$_wg_core_ultragoal_state_deny_json"
+                    _wg_core_drain_stdin
+                    return 0
+                elif _wg_core_pathwise_glob_match "$norm_candidate" "$prometheus_state_path"; then
+                    printf '%s\n' "$_wg_core_prometheus_state_deny_json"
+                    _wg_core_drain_stdin
+                    return 0
+                elif _wg_core_pathwise_glob_match "$norm_candidate" "$deep_interview_state_path"; then
+                    printf '%s\n' "$_wg_core_deep_interview_state_deny_json"
                     _wg_core_drain_stdin
                     return 0
                 elif _wg_core_pathwise_glob_match "$norm_candidate" "$marker_namespace_glob"; then

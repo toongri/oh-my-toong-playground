@@ -21,12 +21,8 @@
  *   set --phase <phase> [--target <text>]
  *   advance-phase <phase>
  *   inc-cycle
- *   record-fix-head <sha>
- *   capture-dirty-set <json-array>
- *   note-failure <key>
  *   complete
  *   get
- *   status
  */
 
 import { closeSync, mkdirSync, openSync, readFileSync, readSync, rmSync, statSync } from "fs";
@@ -41,6 +37,7 @@ import {
 	ensureSeed,
 	STATE_PREFIX,
 } from "@lib/state-core";
+import { renderHelp, type CliCommand } from "@lib/cli-help";
 import {
 	BASELINE_INDEX,
 	QA_PHASES,
@@ -79,14 +76,6 @@ export interface QaState extends QaChainState {
 	cycle: number;
 	/** Finite cap on fix cycles. Terminate when cycle === max_cycles. */
 	max_cycles: number;
-	/** Equality key: scenario-id + root-cause-file + root-cause-symbol/category (NOT :line). */
-	same_failure_key: string;
-	/** Accumulates while same_failure_key is stable; resets to 1 on a new key. Terminate at 3. */
-	same_failure_count: number;
-	/** HEAD sha recorded at FIX dispatch — the ROLLBACK revert-range lower bound. */
-	fix_head_before: string;
-	/** PRE-FLIGHT `git status --porcelain` snapshot of the user's pre-existing dirty files, as porcelain status lines (`XY <path>`). */
-	user_dirty_set: string[];
 	/** The verification target/spec ref (short string; also the listOthers purpose, per sibling task). */
 	target: string;
 	/** Local ISO-8601 without milliseconds, seeded once. */
@@ -102,10 +91,6 @@ type QaStateSeed = Pick<
 	| "phase"
 	| "cycle"
 	| "max_cycles"
-	| "same_failure_key"
-	| "same_failure_count"
-	| "fix_head_before"
-	| "user_dirty_set"
 	| "target"
 	| "started_at"
 > & QaChainState;
@@ -343,11 +328,6 @@ function isQaState(value: Partial<ChainState>): value is QaState {
 		typeof value.max_cycles === "number" &&
 		Number.isInteger(value.max_cycles) &&
 		value.max_cycles >= 1 &&
-		typeof value.same_failure_key === "string" &&
-		typeof value.same_failure_count === "number" &&
-		typeof value.fix_head_before === "string" &&
-		Array.isArray(value.user_dirty_set) &&
-		value.user_dirty_set.every((item) => typeof item === "string") &&
 		typeof value.target === "string" &&
 		typeof value.started_at === "string" &&
 		typeof value.last_touched_at === "string"
@@ -447,10 +427,6 @@ function mergeWriteUnlocked(sessionId: string, next: Partial<ChainState>): QaSta
 			maxCyclesCandidate >= 1
 				? maxCyclesCandidate
 				: DEFAULT_MAX_CYCLES,
-		same_failure_key: next.same_failure_key ?? prior.same_failure_key ?? "",
-		same_failure_count: next.same_failure_count ?? prior.same_failure_count ?? 0,
-		fix_head_before: next.fix_head_before ?? prior.fix_head_before ?? "",
-		user_dirty_set: next.user_dirty_set ?? prior.user_dirty_set ?? [],
 		target: next.target ?? prior.target ?? "",
 		started_at: prior.started_at ?? seedStartedAt(),
 	};
@@ -553,35 +529,6 @@ export function incCycle(sessionId: string): { cycle: number; terminate: boolean
 	const next = cur + 1;
 	mergeWrite(sessionId, { cycle: next });
 	return { cycle: next, terminate: next === maxCycles };
-}
-
-/** Records the HEAD sha at FIX dispatch — the ROLLBACK revert-range lower bound. */
-export function recordFixHead(sessionId: string, sha: string): void {
-	mergeWrite(sessionId, { fix_head_before: sha });
-}
-
-/** Records the PRE-FLIGHT `git status --porcelain` snapshot of user-dirty files. */
-export function captureDirtySet(sessionId: string, files: string[]): void {
-	mergeWrite(sessionId, { user_dirty_set: files });
-}
-
-/**
- * Same-Failure bookkeeping: if `key` matches the stored `same_failure_key`,
- * increments `same_failure_count`; otherwise resets it to 1 and updates the
- * stored key. Terminate signaled at count >= 3 (a latch, not an equality
- * check — a resumed/repeated call after count already reached 3 must still
- * report terminate, not silently pass through).
- */
-export function noteFailure(
-	sessionId: string,
-	key: string,
-): { same_failure_count: number; terminate: boolean } {
-	const prior = readPrior(sessionId);
-	const priorKey = prior.same_failure_key ?? "";
-	const priorCount = prior.same_failure_count ?? 0;
-	const count = key === priorKey ? priorCount + 1 : 1;
-	mergeWrite(sessionId, { same_failure_key: key, same_failure_count: count });
-	return { same_failure_count: count, terminate: count >= 3 };
 }
 
 export interface AddActorOpts {
@@ -932,10 +879,6 @@ export function startQa(sessionId: string, target: string): void {
 			phase_max: 0,
 			cycle: 0,
 			max_cycles: prior.max_cycles ?? DEFAULT_MAX_CYCLES,
-			same_failure_key: "",
-			same_failure_count: 0,
-			fix_head_before: "",
-			user_dirty_set: [],
 			target: nonEmpty(target, "target"),
 			started_at: prior.started_at ?? seedStartedAt(),
 			actors: [],
@@ -964,7 +907,7 @@ export function startQa(sessionId: string, target: string): void {
 
 /**
  * Marks the qa cycle inactive at the terminal STATE phase (Goal Met / max_cycles /
- * Same-Failure-3x / Safety). Without this, `active` stays `true` forever (mergeWrite
+ * Safety). Without this, `active` stays `true` forever (mergeWrite
  * has no other path to `false`), and a completed cycle gets resurrected by the
  * session-start restore banner on the next session.
  */
@@ -1070,9 +1013,59 @@ function requiredArg(args: Record<string, string | boolean>, name: string): stri
 	return value;
 }
 
+/**
+ * Single source of truth for this CLI's command roster: every subcommand `main()`
+ * dispatches, tagged with who may run it. `help` prints this via renderHelp() so the
+ * AI can see, before acting, which commands it may run itself versus which are
+ * user-only (`waive` is denied on the AI's Bash path — see hooks/write-guard-core.sh).
+ */
+const ROSTER: CliCommand[] = [
+	{ name: "set", authority: "ai", effect: "writes phase/target state" },
+	{ name: "advance-phase", authority: "ai", effect: "advances to the named phase (chain-gated)" },
+	{ name: "inc-cycle", authority: "ai", effect: "increments the fix-loop cycle counter" },
+	{ name: "add-actor", authority: "ai", effect: "adds one actor to the roster" },
+	{ name: "add-story", authority: "ai", effect: "adds one story for an actor" },
+	{ name: "author-cell", authority: "ai", effect: "authors one scenario cell's attack plan" },
+	{ name: "record-baseline", authority: "ai", effect: "records a story's BASELINE result" },
+	{ name: "record-cell", authority: "ai", effect: "records one scenario cell's execution result" },
+	{
+		name: "review-evidence",
+		authority: "ai",
+		effect: "records the evidence-sufficiency review for a cell",
+	},
+	{
+		name: "review-report",
+		authority: "ai",
+		effect: "records the visual inspection attestation for the rendered HTML report",
+	},
+	{ name: "record-run-check", authority: "ai", effect: "records one of the three per-run checks" },
+	{ name: "set-verdict", authority: "ai", effect: "persists the cycle verdict" },
+	{ name: "start", authority: "ai", effect: "creates or re-enters the guarded state for a target" },
+	{ name: "set-acceptance", authority: "ai", effect: "records the acceptance criteria array" },
+	{
+		name: "waive",
+		authority: "user",
+		effect: "waives one cell's requirement with a reason",
+	},
+	{ name: "declare-inert", authority: "ai", effect: "declares a no-risk-surface cycle" },
+	{
+		name: "complete",
+		authority: "ai",
+		effect: "marks the finished, gate-satisfied cycle inactive",
+	},
+	{ name: "get", authority: "ai", effect: "reads the full recorded chain/view" },
+];
+
 function main(): void {
 	const args = parseArgs(process.argv.slice(2));
 	const subcommand = args["_subcommand"];
+	// help is a discovery command — it must print without a session id or seeded
+	// state, so it runs BEFORE resolveSessionIdOrThrow (every other subcommand's
+	// precondition is unchanged).
+	if (subcommand === "help") {
+		process.stdout.write(renderHelp("qa-state", ROSTER));
+		return;
+	}
 	let sessionId: string;
 	try {
 		sessionId = resolveSessionIdOrThrow();
@@ -1097,37 +1090,7 @@ function main(): void {
 		} else if (subcommand === "inc-cycle") {
 			const result = incCycle(sessionId);
 			process.stdout.write(JSON.stringify(result) + "\n");
-		} else if (subcommand === "record-fix-head") {
-			const sha = process.argv.slice(3).find((a) => !a.startsWith("--"));
-			if (!sha) {
-				process.stderr.write("record-fix-head: <sha> argument is required\n");
-				process.exit(1);
-			}
-			recordFixHead(sessionId, sha);
-		} else if (subcommand === "capture-dirty-set") {
-			const jsonArg = process.argv.slice(3).find((a) => !a.startsWith("--"));
-			if (!jsonArg) {
-				process.stderr.write("capture-dirty-set: <json-array> argument is required\n");
-				process.exit(1);
-			}
-			let parsed: string[];
-			try {
-				parsed = JSON.parse(jsonArg);
-				if (!Array.isArray(parsed)) throw new Error("expected JSON array");
-			} catch (e) {
-				process.stderr.write(`capture-dirty-set: invalid JSON — ${String(e)}\n`);
-				process.exit(1);
-			}
-			captureDirtySet(sessionId, parsed);
-			} else if (subcommand === "note-failure") {
-			const key = process.argv.slice(3).find((a) => !a.startsWith("--"));
-			if (!key) {
-				process.stderr.write("note-failure: <key> argument is required\n");
-				process.exit(1);
-			}
-				const result = noteFailure(sessionId, key);
-				process.stdout.write(JSON.stringify(result) + "\n");
-			} else if (subcommand === "add-actor") {
+		} else if (subcommand === "add-actor") {
 				addActor(sessionId, {
 					id: requiredArg(args, "id"),
 					name: str(args["name"]),
@@ -1207,12 +1170,9 @@ function main(): void {
 			completeQa(sessionId);
 		} else if (subcommand === "get") {
 			process.stdout.write(JSON.stringify(readQaView(sessionId)) + "\n");
-		} else if (subcommand === "status") {
-			const state = readQaState(sessionId);
-			process.stdout.write((state ? state.phase : "absent") + "\n");
 		} else {
 			process.stderr.write(
-				"Usage: qa-state.ts <set|set-acceptance|advance-phase|inc-cycle|record-fix-head|capture-dirty-set|note-failure|add-actor|add-story|author-cell|record-baseline|record-cell|review-evidence|record-run-check|set-verdict|start|waive|declare-inert|review-report|complete|get|status> [options]\n",
+				`Usage: qa-state.ts <help|${ROSTER.map((c) => c.name).join("|")}> [options]\n`,
 			);
 			process.exit(1);
 		}

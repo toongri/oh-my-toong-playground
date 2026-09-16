@@ -9,9 +9,6 @@ import {
 	setQaState,
 	advancePhase,
 	incCycle,
-	noteFailure,
-	recordFixHead,
-	captureDirtySet,
 	completeQa,
 	setVerdict,
 	resolveStatePath,
@@ -61,10 +58,6 @@ describe("qa state: seed shape", () => {
 			phase: "PRE-FLIGHT",
 			cycle: 0,
 			max_cycles: 5,
-			same_failure_key: "",
-			same_failure_count: 0,
-			fix_head_before: "",
-			user_dirty_set: [],
 			target: "",
 		});
 		expect(raw).toHaveProperty("started_at");
@@ -94,10 +87,6 @@ describe("qa state: seed shape", () => {
 		expect(s).toHaveProperty("phase");
 		expect(s).toHaveProperty("cycle");
 		expect(s).toHaveProperty("max_cycles");
-		expect(s).toHaveProperty("same_failure_key");
-		expect(s).toHaveProperty("same_failure_count");
-		expect(s).toHaveProperty("fix_head_before");
-		expect(s).toHaveProperty("user_dirty_set");
 		expect(s).toHaveProperty("target");
 		expect(s).toHaveProperty("started_at");
 		expect(s).toHaveProperty("last_touched_at");
@@ -159,66 +148,6 @@ describe("qa state: cycle counting", () => {
 		expect(() => incCycle(S)).toThrow();
 		// state unchanged at the cap
 		expect(readQaState(S)!.cycle).toBe(5);
-	});
-});
-
-describe("qa state: Same-Failure key semantics", () => {
-	test("same key 3x accumulates count to 3 and signals terminate", () => {
-		setQaState(S, { phase: "PLAN" });
-		let r = noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
-		expect(r.same_failure_count).toBe(1);
-		expect(r.terminate).toBe(false);
-		r = noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
-		expect(r.same_failure_count).toBe(2);
-		expect(r.terminate).toBe(false);
-		r = noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
-		expect(r.same_failure_count).toBe(3);
-		expect(r.terminate).toBe(true);
-		expect(readQaState(S)!.same_failure_key).toBe("scenario-1:file.ts:rootCauseSymbol");
-		expect(readQaState(S)!.same_failure_count).toBe(3);
-	});
-
-	// (P2 finding 2) noteFailure's terminate must be a latch (>=3), not an
-	// equality check (===3): a resumed run can call note-failure again after
-	// count already hit 3, landing on 4 — the 3x-exit must still fire.
-	test("same key 4x (resumed run past the 3x boundary) still signals terminate", () => {
-		setQaState(S, { phase: "PLAN" });
-		noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
-		noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
-		noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
-		const r = noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
-		expect(r.same_failure_count).toBe(4);
-		expect(r.terminate).toBe(true);
-	});
-
-	test("a different key resets count to 1 and updates same_failure_key", () => {
-		setQaState(S, { phase: "PLAN" });
-		noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
-		noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
-		const r = noteFailure(S, "scenario-2:other.ts:differentSymbol");
-		expect(r.same_failure_count).toBe(1);
-		expect(r.terminate).toBe(false);
-		const state = readQaState(S)!;
-		expect(state.same_failure_key).toBe("scenario-2:other.ts:differentSymbol");
-		expect(state.same_failure_count).toBe(1);
-	});
-});
-
-describe("qa state: fix_head_before + user_dirty_set", () => {
-	test("record-fix-head and capture-dirty-set persist and read back", () => {
-		setQaState(S, { phase: "PLAN" });
-		recordFixHead(S, "abc123deadbeef");
-		captureDirtySet(S, ["src/foo.ts", "src/bar.ts"]);
-		const state = readQaState(S)!;
-		expect(state.fix_head_before).toBe("abc123deadbeef");
-		expect(state.user_dirty_set).toEqual(["src/foo.ts", "src/bar.ts"]);
-	});
-
-	test("capture-dirty-set with empty array clears the set", () => {
-		setQaState(S, { phase: "PLAN" });
-		captureDirtySet(S, ["a.ts"]);
-		captureDirtySet(S, []);
-		expect(readQaState(S)!.user_dirty_set).toEqual([]);
 	});
 });
 
@@ -463,7 +392,7 @@ describe("qa-state CLI wiring", () => {
 		).not.toThrow();
 	});
 
-	test("CLI set/get/status round-trip", () => {
+	test("CLI set/get round-trip", () => {
 		run('set --phase PLAN --target "cli target"');
 		expect(rawState().phase).toBe("PLAN");
 		expect(rawState().target).toBe("cli target");
@@ -471,8 +400,6 @@ describe("qa-state CLI wiring", () => {
 		const parsed = JSON.parse(out);
 		expect(parsed.phase).toBe("PLAN");
 		expect(parsed.target).toBe("cli target");
-		const status = run("status").trim();
-		expect(status).toBe("PLAN");
 	});
 
 	test("CLI inc-cycle prints cycle+terminate JSON", () => {
@@ -480,15 +407,6 @@ describe("qa-state CLI wiring", () => {
 		const out = run("inc-cycle");
 		const parsed = JSON.parse(out);
 		expect(parsed.cycle).toBe(1);
-		expect(parsed.terminate).toBe(false);
-	});
-
-	test("CLI note-failure prints same_failure_count+terminate JSON", () => {
-		run("set --phase PLAN");
-		run('note-failure "k1"');
-		const out = run('note-failure "k1"');
-		const parsed = JSON.parse(out);
-		expect(parsed.same_failure_count).toBe(2);
 		expect(parsed.terminate).toBe(false);
 	});
 
@@ -535,10 +453,6 @@ describe("qa-state CLI wiring", () => {
 		expect(reset.verdict).toBeNull();
 		expect(reset.phase_max).toBe(0);
 		expect(reset.cycle).toBe(0);
-		expect(reset.same_failure_key).toBe("");
-		expect(reset.same_failure_count).toBe(0);
-		expect(reset.fix_head_before).toBe("");
-		expect(reset.user_dirty_set).toEqual([]);
 		expect(reset.acceptance_criteria).toEqual([]);
 		expect(reset.report).toBeUndefined();
 		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
@@ -852,16 +766,51 @@ describe("qa-state CLI wiring", () => {
 	});
 });
 
+describe("help subcommand", () => {
+	// help renders this CLI's roster via the shared lib/cli-help.ts renderer, grouped by
+	// authority. This pins the qa-specific wiring (roster tags), not the renderer's own
+	// formatting — that's covered by lib/cli-help.test.ts.
+	const script = join(import.meta.dir, "qa-state.ts");
+	const run = (cmd: string, env?: Record<string, string>) =>
+		execSync(`bun ${script} ${cmd}`, { encoding: "utf8", env: { ...process.env, ...env } });
+
+	test("waive is listed under USER-ONLY", () => {
+		const out = run("help");
+		const userSection = out.slice(out.indexOf("USER-ONLY"), out.indexOf("SYSTEM-ONLY"));
+		expect(userSection).toContain("waive");
+	});
+
+	test("set and get are listed under AI-USABLE", () => {
+		const out = run("help");
+		const aiSection = out.slice(out.indexOf("AI-USABLE"), out.indexOf("USER-ONLY"));
+		expect(aiSection).toContain("set —");
+		expect(aiSection).toContain("get —");
+	});
+
+	test("Usage fallback lists help plus every roster command", () => {
+		expect(() => run("bogus-subcommand")).toThrow();
+		try {
+			run("bogus-subcommand");
+		} catch (e: any) {
+			expect(e.stderr.toString()).toContain("help|set|");
+		}
+	});
+
+	// help is a discovery command — it must not require resolveSessionIdOrThrow's
+	// precondition. What breaks if this regresses: help runs after the session-id
+	// resolution again and throws with no session id set.
+	test("prints without a session id set (session-independent discovery)", () => {
+		const out = run("help", { OMT_SESSION_ID: "", CODEX_THREAD_ID: "" });
+		expect(out).toContain("qa-state commands:");
+	});
+});
+
 // Type-only compile-time smoke: ensures QaState shape is exported and usable.
 const _typeCheck: QaState = {
 	active: true,
 	phase: "PRE-FLIGHT",
 	cycle: 0,
 	max_cycles: 5,
-	same_failure_key: "",
-	same_failure_count: 0,
-	fix_head_before: "",
-	user_dirty_set: [],
 	target: "",
 	started_at: "2026-01-01T00:00:00",
 	last_touched_at: "2026-01-01T00:00:00",

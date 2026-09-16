@@ -1065,3 +1065,38 @@ describe("no-create write (TOCTOU)", () => {
 		expect(JSON.parse(readFileSync(path, "utf8")).phase).toBe("S2");
 	});
 });
+
+describe("help subcommand", () => {
+	// help renders this CLI's roster via the shared lib/cli-help.ts renderer, grouped by
+	// authority. This pins the prometheus-specific wiring (roster tags), not the
+	// renderer's own formatting — that's covered by lib/cli-help.test.ts.
+	test("clear is system-only and absent from AI-usable and hook-only sections", () => {
+		const out = runPromCli("help");
+		const aiSection = out.split("SYSTEM-ONLY")[0];
+		expect(out).toContain("AI-USABLE");
+		expect(aiSection).not.toContain("clear —");
+		expect(out).toMatch(/SYSTEM-ONLY[\s\S]*clear —/);
+		expect(out).not.toContain("HOOK-ONLY");
+	});
+
+	test("Usage fallback lists help plus every roster command", () => {
+		// A bogus subcommand hits the switch default (Usage fallback), which runs after
+		// resolveSessionIdOrThrow — so a session id must be set, unlike the session-free
+		// help path above. Mirrors the qa/explain-diff siblings, which set one in beforeEach.
+		const env = { OMT_SESSION_ID: "test-session" };
+		expect(() => runPromCli("bogus-subcommand", env)).toThrow();
+		try {
+			runPromCli("bogus-subcommand", env);
+		} catch (e: any) {
+			expect(e.stderr.toString()).toContain("help|set|get|clear|list-others|adopt");
+		}
+	});
+
+	// help is a discovery command — it must not require resolveSessionIdOrThrow's
+	// precondition. What breaks if this regresses: help runs after the session-id
+	// resolution again and throws with no session id set.
+	test("prints without a session id set (session-independent discovery)", () => {
+		const out = runPromCli("help", { OMT_SESSION_ID: "", CODEX_THREAD_ID: "" });
+		expect(out).toContain("prometheus-state commands:");
+	});
+});

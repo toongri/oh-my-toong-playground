@@ -106,7 +106,7 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 
 **목적**: 구현 정확성을 검증하는 품질 보증 가디언입니다. 이 스킬은 "아무것도 증명 없이 출시되지 않는다"는 원칙 아래 동작합니다.
 
-**사이클**: PRE-FLIGHT(계약 게이트) → PLAN(액터 로스터 + 시나리오 도출) → BASELINE(빌드·테스트·린트) → ADVERSARIAL E2E(실제 구동 + 6개 커버리지 축) → CHECK → 실패 시 DIAGNOSIS→FIX→RE-VERIFY 루프(최대 5회) → EXIT → CLEANUP → ROLLBACK → STATE. 한 번의 호출이 탐지부터 수정·재검증까지 전부 소유하며, 수정자(`sisyphus-junior`)는 자기 수정을 인증하지 못합니다. 7–9번은 stale-state·dirty-worktree·flaky-rerun **실행 단위 점검**으로 별도 기록합니다.
+**사이클**: PRE-FLIGHT(계약 게이트) → PLAN(액터 로스터 + 시나리오 도출) → BASELINE(빌드·테스트·린트) → ADVERSARIAL E2E(실제 구동 + 6개 커버리지 축) → CHECK → 실패 시 DIAGNOSIS→FIX→RE-VERIFY 루프(최대 5회) → EXIT → CLEANUP → STATE. 한 번의 호출이 탐지부터 수정·재검증까지 전부 소유하며, 수정자(`sisyphus-junior`)는 자기 수정을 인증하지 못합니다. 7–9번은 stale-state·dirty-worktree·flaky-rerun **실행 단위 점검**으로 별도 기록합니다.
 
 **강제되는 기록 사슬**: PLAN에서 액터 로스터를 고정한 뒤 액터마다 스토리를 만들고, 각 스토리에서 6개 커버리지 축과 `hang-timeout`(1번 축), `flaky-green`(5번 축) 하위 셀을 파생합니다. 셀의 공격 지점·우선순위와 baseline·셀·실행 단위 결과를 상태 CLI에 기록해야 다음 단계로 진행할 수 있습니다. `set-acceptance`는 비어 있지 않은 문자열만 담은 JSON 배열을 받습니다. 이 사슬의 완결성·참조 무결성·현재 사이클 증거는 phase funnel과 Claude/Codex Stop 게이트가 검사하며, 로스터가 없거나 BASELINE 이후 기록이 비어 있으면 드라이버도 차단합니다(PLAN 도달성 탐색은 허용).
 

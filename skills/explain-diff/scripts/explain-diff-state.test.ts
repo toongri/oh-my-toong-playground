@@ -1591,3 +1591,41 @@ describe("ask 없이 grade 를 부르면", () => {
 		expect(state().no_progress.count).toBe(1);
 	});
 });
+
+describe("help subcommand", () => {
+	// help renders this CLI's roster via the shared lib/cli-help.ts renderer, grouped by
+	// authority. This pins the explain-diff-specific wiring (roster tags), not the
+	// renderer's own formatting — that's covered by lib/cli-help.test.ts. Run through the
+	// real script (not the imported functions) since help lives in main()'s dispatch.
+	const script = join(import.meta.dir, "explain-diff-state.ts");
+	const run = (args: string[], env?: Record<string, string>) =>
+		execFileSync("bun", [script, ...args], { encoding: "utf8", env: { ...process.env, ...env } });
+
+	test("every roster command is listed under AI-USABLE (no user/system/hook path exists)", () => {
+		const out = run(["help"]);
+		expect(out).toContain("AI-USABLE");
+		expect(out).not.toContain("USER-ONLY");
+		expect(out).not.toContain("SYSTEM-ONLY");
+		expect(out).not.toContain("HOOK-ONLY");
+		for (const name of ["start", "get", "submit-step", "pass-step", "add-concept", "ask", "grade", "complete"]) {
+			expect(out).toContain(`${name} —`);
+		}
+	});
+
+	test("Usage fallback lists help plus every roster command", () => {
+		expect(() => run(["bogus-subcommand"])).toThrow();
+		try {
+			run(["bogus-subcommand"]);
+		} catch (e: any) {
+			expect(e.stderr.toString()).toContain("help|start|get|submit-step|pass-step|add-concept|ask|grade|complete");
+		}
+	});
+
+	// help is a discovery command — it must not require resolveSessionIdOrThrow's
+	// precondition. What breaks if this regresses: help runs after the session-id
+	// resolution again and throws with no session id set.
+	test("prints without a session id set (session-independent discovery)", () => {
+		const out = run(["help"], { OMT_SESSION_ID: "", CODEX_THREAD_ID: "" });
+		expect(out).toContain("explain-diff-state commands:");
+	});
+});
