@@ -642,6 +642,21 @@ describe("listOthers (AD-list-1..6)", () => {
 		expect(candidate).toBeDefined();
 		expect(candidate!.purpose).toBe("S2");
 	});
+
+	test("filters a source rejected by the compatibility predicate", () => {
+		writeState(omtDir, "goal-state-A.json", {
+			active: true,
+			outcome: "incompatible goal",
+			started_at: isoSecondsAgo(300),
+			last_touched_at: isoSecondsAgo(60),
+			phase: "pursuing",
+			iteration: 1,
+		});
+
+		const results = listOthers("goal", (parsed) => parsed["outcome"] !== "incompatible goal");
+
+		expect(results.find((candidate) => candidate.sid === "A")).toBeUndefined();
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -1253,6 +1268,35 @@ describe("adopt — pristine 소스 거부 (r8)", () => {
 			unknown
 		>;
 		expect(target["outcome"]).toBe("ship it");
+	});
+
+	test("rejects a source incompatible with the predicate without mutating either state", () => {
+		writeState(omtDir, "goal-state-A.json", {
+			active: true,
+			outcome: "incompatible goal",
+			started_at: isoSecondsAgo(300),
+			last_touched_at: isoSecondsAgo(60),
+			phase: "pursuing",
+			iteration: 2,
+		});
+		writeState(omtDir, "goal-state-B.json", {
+			active: true,
+			outcome: "",
+			started_at: isoSecondsAgo(10),
+			last_touched_at: isoSecondsAgo(5),
+			phase: "planning",
+			iteration: 0,
+		});
+		const srcPath = join(omtDir, "goal-state-A.json");
+		const dstPath = join(omtDir, "goal-state-B.json");
+		const srcBefore = readFileSync(srcPath, "utf8");
+		const dstBefore = readFileSync(dstPath, "utf8");
+
+		expect(() => adopt("goal", "A", (parsed) => parsed["outcome"] !== "incompatible goal")).toThrow();
+
+		expect(readFileSync(srcPath, "utf8")).toBe(srcBefore);
+		expect(readFileSync(dstPath, "utf8")).toBe(dstBefore);
+		expect(existsSync(join(omtDir, "adoption.log"))).toBe(false);
 	});
 });
 

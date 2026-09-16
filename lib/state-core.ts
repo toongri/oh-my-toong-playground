@@ -596,6 +596,8 @@ export interface AdoptionCandidate {
 	idleSeconds: number;
 }
 
+export type SourceCompatibilityPredicate = (parsed: Record<string, unknown>) => boolean;
+
 /**
  * Returns all ACTIVE + progress-live candidates of the given type OTHER than
  * the current session.
@@ -615,7 +617,10 @@ export interface AdoptionCandidate {
  *
  * Used in adoption UX: skill presents these candidates to the user before calling adopt().
  */
-export function listOthers(type: StateType): AdoptionCandidate[] {
+export function listOthers(
+	type: StateType,
+	sourceCompatibility?: SourceCompatibilityPredicate,
+): AdoptionCandidate[] {
 	const omtDir = getOmtDir();
 	const prefix = STATE_PREFIX[type];
 	const curSid = (process.env["OMT_SESSION_ID"] ?? process.env["CODEX_THREAD_ID"]) ?? "";
@@ -638,6 +643,7 @@ export function listOthers(type: StateType): AdoptionCandidate[] {
 		// Parse the file — skip malformed
 		const parsed = readParsed(join(omtDir, entry));
 		if (parsed === null) continue;
+		if (sourceCompatibility !== undefined && !sourceCompatibility(parsed)) continue;
 		// Only ACTIVE + progress-live candidates (r7 source filter). Progress axis,
 		// not GC axis: a source revived only by a heartbeat must not qualify.
 		if (parsed["active"] !== true) continue;
@@ -720,7 +726,11 @@ export function restampAfterAdopt(path: string): void {
  * Appends one line to $OMT_DIR/adoption.log after success:
  *   <ISO ts> <type> <srcSid> -> <curSid>
  */
-export function adopt(type: StateType, srcSid: string): void {
+export function adopt(
+	type: StateType,
+	srcSid: string,
+	sourceCompatibility?: SourceCompatibilityPredicate,
+): void {
 	const curSid = resolveSessionIdOrThrow();
 
 	// r2: validate both sids
@@ -751,6 +761,9 @@ export function adopt(type: StateType, srcSid: string): void {
 		throw new Error(
 			`adopt: source "${srcPath}" is missing or malformed (lost race or never existed)`,
 		);
+	}
+	if (sourceCompatibility !== undefined && !sourceCompatibility(srcParsed)) {
+		throw new Error(`adopt: source "${srcPath}" is incompatible with the requested adoption`);
 	}
 	if (srcParsed["active"] !== true) {
 		throw new Error(`adopt: source "${srcPath}" is not ACTIVE (r7: TERMINAL sources are refused)`);

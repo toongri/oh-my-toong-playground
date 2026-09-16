@@ -971,6 +971,29 @@ describe("no-safe-default-verdict: concurrency/race verdicts are earned from the
 		expect(region).toContain("is NOT a basis for PLAUSIBLE");
 	});
 
+	test("an unverified candidate has no finding verdict and remains in the INCONCLUSIVE diagnostic", () => {
+		expect(region).toContain("emits no finding verdict");
+		expect(region).toContain("review artifact `INCONCLUSIVE`");
+		expect(region).toContain("preserves the candidate in the diagnostic/findings report");
+	});
+
+	test("the no-safe-default exception is explicit and scoped apart from finding verdicts", () => {
+		const exception =
+			"The unverified no-safe-default case above is an exception to this output contract: emit no finding verdict or enriched finding card; stop the review, set the review artifact's status to INCONCLUSIVE, preserve the candidate and missing execution-model evidence in findings_report, and omit the candidate from artifact findings. Otherwise, return exactly one verdict. Evidence must quote or cite the relevant line(s). Do not hedge between two verdicts.";
+		const output = extractSection(verifierPrompt, "## Output", "##");
+
+		expect(verifierPrompt).toContain(exception);
+		expect(verifierPrompt).not.toContain("Return exactly one verdict.");
+		expect(output).toContain("emit no finding verdict or enriched finding card");
+		expect(output).toContain("stop the review");
+		expect(output).toContain("set the review artifact's status to INCONCLUSIVE");
+		expect(output).toContain("preserve the candidate and missing execution-model evidence in findings_report");
+		expect(output).toContain("omit the candidate from artifact findings");
+		expect(output).toContain("Otherwise, return exactly one verdict.");
+		expect(output.indexOf("Otherwise, return exactly one verdict.")).toBeGreaterThanOrEqual(0);
+		expect(output.indexOf(exception)).toBeGreaterThanOrEqual(0);
+	});
+
 	test("REFUTED when the dispatch model closes the interleaving window", () => {
 		expect(region).toContain("the dispatch model closes the window");
 	});
@@ -992,6 +1015,24 @@ describe("no-safe-default-verdict: concurrency/race verdicts are earned from the
 
 	test("the recall bias for genuinely concurrent state is preserved", () => {
 		expect(region).toContain("does not weaken the recall bias");
+	});
+});
+
+describe("primary Phase 2 no-safe-default exception contract", () => {
+	const phase2 = extractSection(skillMd, "### Phase 2: Candidate Verification", "### Phase 3:");
+
+	test("gates unresolved execution models before the mandatory verdict and transitions to diagnostic Phase 3", () => {
+		const gate = phase2.indexOf("Before the mandatory **VERDICT** step");
+		const verdict = phase2.indexOf("\n   **VERDICT** —");
+
+		expect(gate).toBeGreaterThanOrEqual(0);
+		expect(verdict).toBeGreaterThan(gate);
+		expect(phase2).toContain("no-safe-default candidate's execution model remains unestablished");
+		expect(phase2).toContain("emit no verdict or enriched finding card");
+		expect(phase2).toContain("Preserve the candidate and missing execution-model evidence in `findings_report`");
+		expect(phase2).toContain("set the review artifact status to `INCONCLUSIVE`");
+		expect(phase2).toContain("transition to Phase 3 findings synthesis");
+		expect(phase2).toContain("Candidates that pass this gate retain exactly one CONFIRMED / PLAUSIBLE / REFUTED verdict");
 	});
 });
 

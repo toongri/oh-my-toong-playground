@@ -28,6 +28,7 @@ import {
 	createPresentationSubmission,
 	presentationSubmissionCurrent,
 	type PresentationSubmission,
+	type SourceCompatibilityPredicate,
 } from "@lib/state-core";
 import { renderHelp, type CliCommand } from "@lib/cli-help";
 
@@ -142,22 +143,33 @@ function normalizeResumeSummary(s: string): string {
 /** Canonical non-goal declaration shape shared with Ultragoal's state boundary. */
 const NON_GOAL_LINE_PATTERN = /^-\s+\S.*\|\s*decider:\s*\S.*$/;
 
-function validateNonGoals(value: string, phase: string): void {
-	if (value.trim() === "") {
-		if (phase !== "S0" && phase !== "S1") {
-			throw new Error(`non-goals are required for ${phase} and must contain a canonical decider line`);
-		}
-		return;
+/** Returns the validated non-goals value, or null when the state is incompatible. */
+function validatedNonGoals(value: unknown, phase: unknown): string | null {
+	if (value !== null && value !== undefined && typeof value !== "string") return null;
+	const nonGoals = typeof value === "string" ? value : "";
+	const phaseName = typeof phase === "string" ? phase : "";
+	if (nonGoals.trim() === "") {
+		return phaseName === "S0" || phaseName === "S1" ? nonGoals : null;
 	}
-	for (const line of value.split("\n")) {
+	for (const line of nonGoals.split("\n")) {
 		if (line.trim() === "") continue;
-		if (!NON_GOAL_LINE_PATTERN.test(line)) {
-			throw new Error(
-				`non-goals refused — line does not match "- {excluded item} | decider: {membership test}" format: "${line}"`,
-			);
-		}
+		if (!NON_GOAL_LINE_PATTERN.test(line)) return null;
 	}
+	return nonGoals;
 }
+
+function assertValidNonGoals(value: string, phase: string): void {
+	if (validatedNonGoals(value, phase) !== null) return;
+	if (value.trim() === "" && phase !== "S0" && phase !== "S1") {
+		throw new Error(`non-goals are required for ${phase} and must contain a canonical decider line`);
+	}
+	throw new Error(
+		`non-goals refused — line does not match "- {excluded item} | decider: {membership test}" format: "${value}"`,
+	);
+}
+
+const prometheusSourceCompatibility: SourceCompatibilityPredicate = (parsed) =>
+	validatedNonGoals(parsed["non_goals"] ?? "", parsed["phase"]) !== null;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -172,8 +184,8 @@ export function readPrometheusState(sessionId: string): PrometheusState | null {
 		// `.active`, so no assertion to PrometheusState is needed here.
 		const state = JSON.parse(content);
 		if (!state.active) return null;
-		const nonGoals = state.non_goals ?? "";
-		validateNonGoals(nonGoals, state.phase);
+		const nonGoals = validatedNonGoals(state.non_goals ?? "", state.phase);
+		if (nonGoals === null) return null;
 		state.non_goals = nonGoals;
 		return state;
 	} catch {
@@ -216,7 +228,7 @@ export function setPrometheusState(
 
 	const resolvedPlanPath = opts.plan_path ?? prior.plan_path ?? "";
 	const resolvedNonGoals = opts.non_goals ?? prior.non_goals ?? "";
-	validateNonGoals(resolvedNonGoals, opts.phase);
+	assertValidNonGoals(resolvedNonGoals, opts.phase);
 	const presentation = opts.submit_presentation !== undefined
 		? createPresentationSubmission(resolvedPlanPath, opts.submit_presentation)
 		: prior.presentation;
@@ -479,7 +491,7 @@ function main(): void {
 		} else if (subcommand === "clear") {
 			clearPrometheusState(sessionId);
 		} else if (subcommand === "list-others") {
-			const candidates = listOthers("prometheus");
+			const candidates = listOthers("prometheus", prometheusSourceCompatibility);
 			for (const c of candidates) {
 				const shortSid = c.sid.slice(0, 8);
 				process.stdout.write(
@@ -502,7 +514,7 @@ function main(): void {
 				process.stderr.write("adopt: --src <sid> is required\n");
 				process.exit(1);
 			}
-			adopt("prometheus", srcSid);
+			adopt("prometheus", srcSid, prometheusSourceCompatibility);
 			// Additional check: stat the adopted state's plan_path and warn if it does not resolve
 			const dstPath = resolveStatePath(sessionId);
 			if (existsSync(dstPath)) {
