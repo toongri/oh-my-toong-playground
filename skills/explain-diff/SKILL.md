@@ -372,13 +372,14 @@ After rendering, before moving to the quiz, **run the one verification the machi
    contrast the finished document against its source material for the reader. It is skill-agnostic, so
    assemble the bundle yourself:
    - **presentation**: the document `.md` (and its `.html`).
-   - **sources**: the actual diff (the range's `git show`/`git diff`), the `### 원천` evidence table
-     from Step 1, and any plan/issue/ticket/docs that evidence table cites.
+   - **sources**: the actual diff (the range's `git show`/`git diff`), Step 1's `### 원천` evidence table, and the plan/issue/ticket/docs cited by that table, plus only the **bounded unchanged code context** the explanation relies on. Identify every unchanged context excerpt by its repository-relative path and base/head revision; include the smallest relevant excerpt, not a whole file, repository snapshot, or unrelated source.
    - **reader_persona**: "a colleague or team-lead with no prior context on this change — richly and
      correctly understands what/why/what-to-watch from this page alone".
-   Its verdict is `APPROVE` / `REQUEST_CHANGES` / `COMMENT`. On `REQUEST_CHANGES`, fix the document,
-   re-run render.ts, re-grade the checklist, and re-review — the quiz does not start until the reviewer
-   no longer requests changes. This is a required review step, not a CLI gate; run it every time.
+   Its verdict is `APPROVE` / `COMMENT` / `REQUEST_CHANGES` / `INCONCLUSIVE`. `APPROVE/COMMENT` may proceed.
+   `REQUEST_CHANGES` requires repairs and re-reviews: repair the document or its source bundle,
+   re-run render.ts, re-grade the checklist, and re-review. `INCONCLUSIVE` or a missing/malformed verdict blocks completion until
+   the reviewer input bundle is repaired and a valid result is returned; the quiz does not start until
+   the reviewer no longer requests changes. This is a required review step, not a CLI gate; run it every time.
 
 The render artifact gate requires all three artifacts: `--html`, `--writing-report`, and `--checklist`.
 The checklist file must exist and its last non-whitespace line must be exactly `CHECKLIST: ALL PASS`.

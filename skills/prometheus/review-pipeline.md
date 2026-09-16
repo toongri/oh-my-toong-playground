@@ -101,9 +101,9 @@ no-invention Fidelity Bounds still hold.
   ```
 - **Presentation review (required, after render/submit, before `prometheus-done`)**: dispatch the `presentation-reviewer` agent to contrast the presentation against the plan it was rendered from, for its reader. It is skill-agnostic, so assemble the bundle:
   - **presentation**: the presentation `.md` (renderer input) and its `.html`.
-  - **sources**: the durable plan `plan.md` (the SSOT the presentation re-surfaces — its decision log, AC, verification, boundary map).
+  - **sources**: the durable plan `plan.md` (the SSOT the presentation re-surfaces — its decision log, AC, verification, boundary map), plus the **Stage B recommendation and Pipeline State session-state artifacts** that produced the two session-derived boxes (reviewer verdict records, the Stage B signal/recommendation record, and the pipeline-state journal). Do not copy those artifacts into `plan.md`; it remains the plan SSOT.
   - **reader_persona**: "a colleague or team-lead with no prior context on this work — understands what the plan does, why it is designed this way, and what to watch, from this page alone".
-  Its verdict is `APPROVE` / `REQUEST_CHANGES` / `COMMENT`. On `REQUEST_CHANGES`, fix the presentation Markdown, re-render, re-submit, and re-review before emitting `prometheus-done`. This is a required review step, not a new gate; run it every time. It never rewrites `plan.md` — a fidelity finding means the presentation drifted from the plan (Fidelity Bounds), so fix the presentation, not the plan.
+  Its verdict is `APPROVE` / `COMMENT` / `REQUEST_CHANGES` / `INCONCLUSIVE`. `APPROVE/COMMENT` may proceed. `REQUEST_CHANGES` requires repairs and re-reviews: repair the presentation or its source bundle, re-render, re-submit, and re-review. `INCONCLUSIVE` or a missing/malformed verdict blocks completion until the reviewer input bundle is repaired and a valid result is returned. This is a required review step, not a new gate; run it every time. It never rewrites `plan.md` — a fidelity finding means the presentation drifted from the plan (Fidelity Bounds), so fix the presentation, not the plan.
 
 ### Presentation Components
 
