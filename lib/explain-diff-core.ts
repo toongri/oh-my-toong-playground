@@ -191,7 +191,9 @@ export function normalizeExplainDiffState(parsed: unknown): ExplainDiffState | n
 			: needsCapabilityMigration
 				? passed.filter((s) => STEP_ORDER.indexOf(s) < STEP_ORDER.indexOf("capability"))
 			: passed,
-		concepts: Array.isArray(conceptsRaw)
+		concepts: needsCapabilityMigration
+			? []
+			: Array.isArray(conceptsRaw)
 			? conceptsRaw.flatMap((x) => {
 					if (x === null || typeof x !== "object") return [];
 					const c: Record<string, unknown> = {};
@@ -201,18 +203,18 @@ export function normalizeExplainDiffState(parsed: unknown): ExplainDiffState | n
 					return [{ id, required: c["required"] === true, passed: c["passed"] === true }];
 				})
 			: [],
-		bank: Array.isArray(r["bank"]) ? r["bank"] : [],
+		bank: needsCapabilityMigration ? [] : Array.isArray(r["bank"]) ? r["bank"] : [],
 		commit_hashes: Array.isArray(r["commit_hashes"])
 			? r["commit_hashes"].filter((x): x is string => typeof x === "string")
 			: [],
-		awaiting_answer: r["awaiting_answer"] === true,
-		...(r["stalled"] === true ? { stalled: true } : {}),
+		awaiting_answer: needsCapabilityMigration ? false : r["awaiting_answer"] === true,
+		...(needsCapabilityMigration ? {} : r["stalled"] === true ? { stalled: true } : {}),
 		no_progress: {
-			key: typeof np["key"] === "string" ? np["key"] : "",
-			count: typeof np["count"] === "number" ? np["count"] : 0,
-			doc_digest: typeof np["doc_digest"] === "string" ? np["doc_digest"] : "",
+			key: needsCapabilityMigration ? "" : typeof np["key"] === "string" ? np["key"] : "",
+			count: needsCapabilityMigration ? 0 : typeof np["count"] === "number" ? np["count"] : 0,
+			doc_digest: needsCapabilityMigration ? "" : typeof np["doc_digest"] === "string" ? np["doc_digest"] : "",
 		},
-		last_failure,
+		last_failure: needsCapabilityMigration ? null : last_failure,
 	};
 }
 

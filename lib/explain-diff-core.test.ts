@@ -256,12 +256,13 @@ describe("normalizeExplainDiffState", () => {
 		expect(s?.concepts).toEqual([{ id: "c1", required: true, passed: true }]);
 	});
 
-	test("정상 상태는 그대로 통과한다", () => {
+	test("현재 마이그레이션 표시가 있는 정상 상태는 그대로 통과한다", () => {
 		const s = normalizeExplainDiffState({
 			active: true,
 			step: "quiz",
 			passed: ["evidence", "background", "intuition", "code", "render"],
 			commit_hashes: [],
+			capability_step_migration_version: 1,
 			concepts: [{ id: "c1", required: true, passed: false }],
 			bank: [1, 2],
 			awaiting_answer: true,
@@ -269,8 +270,8 @@ describe("normalizeExplainDiffState", () => {
 			no_progress: { key: "c1:R3", count: 1, doc_digest: "d" },
 			last_failure: { step: "code", items: ["R5 추적성"] },
 		});
-		expect(s?.step).toBe("capability");
-		expect(s?.passed).toEqual(["evidence", "background"]);
+		expect(s?.step).toBe("quiz");
+		expect(s?.passed).toEqual(["evidence", "background", "intuition", "code", "render"]);
 		expect(s?.awaiting_answer).toBe(true);
 		expect(s?.stalled).toBe(true);
 		expect(s?.last_failure).toEqual({ step: "code", items: ["R5 추적성"] });
@@ -310,7 +311,7 @@ describe("normalizeExplainDiffState", () => {
 		},
 	);
 
-	test("capability 마이그레이션은 커밋 해시와 나머지 코어 상태를 보존한다", () => {
+	test("capability 마이그레이션은 커밋 해시와 선행 통과 상태만 보존하고 퀴즈 상태를 초기화한다", () => {
 		const input = {
 			active: true,
 			step: "code",
@@ -329,13 +330,14 @@ describe("normalizeExplainDiffState", () => {
 			step: "capability",
 			passed: ["evidence", "background", "goal", "architecture"],
 			commit_hashes: ["abc1234", "def5678"],
-			concepts: input.concepts,
-			bank: input.bank,
-			awaiting_answer: true,
-			stalled: true,
-			no_progress: input.no_progress,
-			last_failure: input.last_failure,
+			concepts: [],
+			bank: [],
+			awaiting_answer: false,
+			no_progress: { key: "", count: 0, doc_digest: "" },
+			last_failure: null,
 		});
+		expect(s?.stalled).toBeUndefined();
+		expect(computeDerived(s!)).toMatchObject({ quiz_passed: false, stop_allowed: false });
 	});
 
 	test("현재 마이그레이션 표시는 후속 단계도 되감지하지 않으며 반복 정규화가 멱등적이다", () => {
