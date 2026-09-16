@@ -31,6 +31,23 @@ explain-diff·deep-interview·qa·prometheus는 각자 산출물의 **내부 구
 **통과 기준:** 판정 `REQUEST_CHANGES`, 그리고 세 결함(거짓 5회·이격 방향·미소개 `CouponReclaimSaga`)을
 각각 산출물 인용 + 원본 대조로 finding에 담아야 한다. 하나라도 놓치면 프롬프트를 조인다.
 
+## 입력 실패 계약
+
+`presentation`, `sources`, `reader_persona` 중 하나라도 누락되거나 읽을 수 없으면 리뷰를
+진행하지 않고 아래 기계 판독 가능한 차단 verdict를 반환한다. 각 영향받은 입력마다
+`INPUT`/`REASON` 쌍을 쓰며, 사용할 수 없는 입력에 대한 발표 인용이나 원본 finding을
+만들지 않는다.
+
+```
+VERDICT: INCONCLUSIVE
+INPUT: <presentation | sources | reader_persona>
+REASON: <입력이 누락되었거나 읽을 수 없는 사실상의 이유>
+```
+
+정상적으로 검토 가능한 입력에서 `APPROVE`/`REQUEST_CHANGES`/`COMMENT` 의미는 기존과 같다.
+그중 `APPROVE`와 `COMMENT`만 완료를 허용하며, `REQUEST_CHANGES`와 `INCONCLUSIVE`는 완료를
+차단한다. verdict가 없거나 형식이 잘못된 경우에도 완료를 허용하지 않는다.
+
 ## 결과
 
 - **GREEN (첫 검증):** `RESULT.md` 참조 — 리뷰어가 세 결함을 모두 잡고 `REQUEST_CHANGES` 판정.
