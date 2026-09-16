@@ -1,6 +1,6 @@
 import { execFileSync } from "child_process";
 import { describe, expect, test } from "bun:test";
-import { mmdcRenderSvg, normalizeSvgWidth, renderToHtml, slugify } from "./render";
+import { mmdcRenderSvg, normalizeSvgWidth, renderToHtml, slugify, zoomableFigure } from "./render";
 
 function mmdcAvailable(): boolean {
 	try {
@@ -263,6 +263,16 @@ describe("넓은 mermaid 폭 정규화 (normalizeSvgWidth)", () => {
 // 기본은 컬럼 폭에 맞추고, 잘 안 보이면 우측 상단 확대 버튼(자연 크기 오버레이)으로 본다.
 describe("figure.diagram 크기 조절 CSS — 맞춤 기본 + 무-JS 확대 오버레이", () => {
 	const html = renderToHtml(DOC, "제목");
+
+	test("확대 토글은 키보드로 접근 가능한 이름을 가진 네이티브 체크박스다", () => {
+		const figure = zoomableFigure('<svg viewBox="0 0 10 10"></svg>', 0);
+		expect(figure).toContain(
+			'<input type="checkbox" id="dz-0" class="dz-toggle" aria-label="다이어그램 확대">',
+		);
+		expect(figure).not.toContain('class="dz-toggle" aria-hidden="true"');
+		expect(html).toMatch(/\.dz-toggle\s*\{[^}]*width:\s*1px[^}]*height:\s*1px[^}]*clip:/);
+		expect(html).toContain(".dz-toggle:focus-visible + .dz-open");
+	});
 
 	test("기본은 컬럼 폭에 맞춰 축소한다 — .dz-scroll svg 가 max-width:100%", () => {
 		const screenCss = html.split("@media print", 1)[0];
