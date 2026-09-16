@@ -261,9 +261,41 @@ describe("prometheus state", () => {
 		})).toThrow(/non-goals|decider|format/i);
 	});
 
-	test("prometheus rejects blank non_goals when advancing past S0", () => {
+	test("prometheus allows blank non_goals at the S1 requirements gate", () => {
 		seedFile("blankNonGoals");
-		expect(() => setPrometheusState("blankNonGoals", { phase: "S1", non_goals: "" })).toThrow(/non-goals/i);
+		setPrometheusState("blankNonGoals", { phase: "S1", non_goals: "" });
+		expect(readPrometheusState("blankNonGoals")!.non_goals).toBe("");
+		const { code, out } = runPromCliMerged("get", {
+			OMT_SESSION_ID: "blankNonGoals",
+			OMT_DIR: tmpDir,
+		});
+		expect(code).toBe(0);
+		expect(JSON.parse(out).non_goals).toBe("");
+	});
+
+	test("prometheus rejects blank non_goals when advancing to S2", () => {
+		seedFile("blankNonGoalsS2");
+		setPrometheusState("blankNonGoalsS2", { phase: "S1", non_goals: "" });
+		expect(() => setPrometheusState("blankNonGoalsS2", { phase: "S2" })).toThrow(/non-goals/i);
+	});
+
+	test.each(["missing", "blank"])("legacy S1 %s non_goals is accepted by read and CLI get", (kind) => {
+		writePristinePromState(`legacyS1-${kind}`);
+		const path = `${tmpDir}/prometheus-state-legacyS1-${kind}.json`;
+		const legacy = JSON.parse(readFileSync(path, "utf8"));
+		legacy.phase = "S1";
+		if (kind === "missing") delete legacy.non_goals;
+		else legacy.non_goals = " \n ";
+		writeFileSync(path, JSON.stringify(legacy), "utf8");
+
+		const expectedNonGoals = kind === "missing" ? "" : " \n ";
+		expect(readPrometheusState(`legacyS1-${kind}`)!.non_goals).toBe(expectedNonGoals);
+		const { code, out } = runPromCliMerged("get", {
+			OMT_SESSION_ID: `legacyS1-${kind}`,
+			OMT_DIR: tmpDir,
+		});
+		expect(code).toBe(0);
+		expect(JSON.parse(out).non_goals).toBe(expectedNonGoals);
 	});
 
 	test.each(["missing", "blank"])("legacy downstream %s non_goals is rejected by read and CLI get", (kind) => {

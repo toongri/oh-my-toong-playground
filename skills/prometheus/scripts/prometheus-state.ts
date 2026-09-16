@@ -143,7 +143,7 @@ const NON_GOAL_LINE_PATTERN = /^-\s+\S.*\|\s*decider:\s*\S.*$/;
 
 function validateNonGoals(value: string, phase: string): void {
 	if (value.trim() === "") {
-		if (phase !== "S0") {
+		if (phase !== "S0" && phase !== "S1") {
 			throw new Error(`non-goals are required for ${phase} and must contain a canonical decider line`);
 		}
 		return;
