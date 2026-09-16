@@ -176,7 +176,7 @@ digraph verification_flow {
   Quote the line.
 - **PLAUSIBLE** — the mechanism is real but the trigger is uncertain (timing, env, config) or rests
   on realistic-but-unconfirmed runtime state. State what would confirm it. **Default here** when
-  the state is realistic: concurrency races; nil/undefined on a rare-but-reachable path (error
+  the state is realistic: nil/undefined on a rare-but-reachable path (error
   handler, cold cache, missing optional field); falsy-zero treated as missing; off-by-one on a
   boundary the code does not exclude; retry storms / partial failures; a regex/allowlist that lost
   an anchor.
@@ -185,7 +185,11 @@ digraph verification_flow {
   guard); or pure style with no observable effect.
 
 Do **NOT** refute a candidate merely for being "speculative" or "depends on runtime state" when the
-state is realistic — that is PLAUSIBLE.
+state is realistic — that is PLAUSIBLE. For a race specifically, REFUTED requires an established
+dispatch model that proves the entire read/modify/write interval is non-interleavable and that no other
+caller can reach the state. In particular, single-threaded event loop or `fixedDelay` alone is NOT sufficient;
+trace the actual handler/callback execution and competing callers. For those domains,
+an untraced dispatch model is not a basis for PLAUSIBLE.
 
 For a **cleanup** candidate, apply the same ladder to its stated cost: CONFIRMED when the
 duplication/waste/maintenance cost is real and present; PLAUSIBLE when the cost is real but
@@ -199,6 +203,37 @@ contains no code satisfying it — cite where you looked; PLAUSIBLE when the req
 wording is uncertain (an inferred intent, an ambiguous criterion) or the satisfying code may live
 outside what you can trace; REFUTED when the diff does satisfy it (cite the satisfying line) or the
 claimed requirement was never actually stated or inferable.
+
+## No-safe-default domains: earn the verdict from the execution model
+
+For a candidate in a **no-safe-default domain** — concurrency / races, data destruction, security,
+external-contract, money — the verdict is a claim about the real runtime model, not the code shape.
+Earn it from the actual dispatch/execution model; never default to it:
+
+- **CONFIRMED** requires naming a reachable real-model trigger and its harmful effect. For a race,
+  quote the concurrent callers, unsynchronized shared state, and reachable harmful interleaving.
+  For data destruction, security, external-contract, or money, quote the concrete trigger, affected
+  state/contract, and reachable path.
+- **PLAUSIBLE** requires a *stated, investigated* reason the trigger or its reachability is uncertain.
+  For a race, PLAUSIBLE requires a genuinely concurrent caller (HTTP thread pool, multi-consumer,
+  parallel invocation) with a timing-dependent window. For data destruction, security, external-contract,
+  and money, PLAUSIBLE requires a realistic, investigated trigger whose reachability is uncertain.
+  State what runtime fact would confirm it. "I did not trace the dispatch model" is NOT a basis for
+  PLAUSIBLE.
+- **REFUTED** requires an established model, invariant, guard, or boundary that proves the trigger
+  cannot occur. For a race, REFUTED when the dispatch model closes the window — it must prove the entire read/modify/write interval
+  is non-interleavable and no other caller can reach the state. A single-threaded event loop or
+  `fixedDelay` alone is NOT sufficient; an async handler can interleave at `await`. For data
+  destruction, security, external-contract, or money, cite the invariant, guard, or contract
+  boundary that makes the harmful trigger unreachable.
+- If you have not established the execution model either way, the candidate is **not yet verified** —
+  trace it against the caller's execution model (the "How to verify" checks above) before any
+  verdict; do not fall back to default-PLAUSIBLE.
+
+This is reachability gating the verdict, NOT occurrence gating harm — impact stays graded
+independently of occurrence (the orchestrator's rule). And it does not weaken the recall bias: a
+genuinely concurrent caller with an uncertain window stays PLAUSIBLE. It only forbids a verdict the
+execution model was never consulted to support.
 
 ## Output
 

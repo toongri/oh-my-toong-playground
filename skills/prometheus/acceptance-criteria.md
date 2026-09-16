@@ -140,8 +140,8 @@ Decompose by concern. Each finding type becomes its own AC with its own Verifica
 **Not covered:** role prompt 파일 내용 작성, Codex 에이전트 포맷 변환
 
 ### Out of Scope (explicitly excluded)
-- Dynamic member selection, sequential cross-validation
-- UI payload 구조 변경
+- Dynamic member selection, sequential cross-validation | decider: include only if the request explicitly requires runtime member selection or sequential cross-validation
+- UI payload 구조 변경 | decider: include only if the request explicitly requires changing the UI-facing payload structure
 
 ---
 **Please review:**

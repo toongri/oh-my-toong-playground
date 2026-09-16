@@ -235,7 +235,7 @@ Skill asks about a design choice (e.g., storage approach, file size limit, valid
 |---|-------|-------------------|
 | V1 | Work-item structure with responsibility | AC organized by work item, each with a responsibility statement explaining WHY the item exists separately |
 | V2 | Two-line criterion format | Each criterion follows Observable outcome + indented Verification line structure |
-| V3 | Out of Scope and Not covered | Per-item "Not covered" section + overall "Out of Scope" section present |
+| V3 | Out of Scope and Not covered | Per-item "Not covered" section + overall "Out of Scope" section present, with ≥1 decider-bearing non-goal (`{excluded item} \| decider: {…}`) co-confirmed with the user for Scoped+ intent |
 | V4 | Proposes to user for confirmation | Skill presents the draft AC to the user and asks for review/confirmation |
 
 ---

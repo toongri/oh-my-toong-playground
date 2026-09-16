@@ -276,6 +276,8 @@ Explain briefly what decision the question will change and why it matters now. A
 
 **Scope Over-Engineering Guard:** if a component's `scope` dimension is unscored (`null`) or scored below 0.5, the very next question for that component MUST be a boundary question — what's in vs what's out for this component — before any other dimension is targeted, even if another dimension scores lower. This guard exists to block gold-plating: a component is never considered understood while its boundary is still fuzzy, no matter how clear its other five dimensions look.
 
+**Risk-Domain Consideration (no-safe-default domains):** before closure, judge which no-safe-default domains — **Security, Data destruction, External contract, Concurrency, Money** — are in play, since a wrong silent default in one is a security hole, data loss, breaking change, race, or money bug, not a merely suboptimal choice. Active judgment, not a per-domain checklist. Resolve each live one with the user (never a silent default); record each deliberately-excluded one as a non-goal-with-decider (`{excluded item} | decider: {how to tell a finding belongs to this exclusion}`). **Absence is not an entry.** Interview guidance, not a scored gate.
+
 ### Step 2b: Ask the Question
 
 Present a focused question with the decision context, not the entire register:

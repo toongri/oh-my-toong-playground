@@ -23,6 +23,7 @@ import {
 let tmpDir: string;
 const originalOmtDir = process.env.OMT_DIR;
 const originalSessionId = process.env.OMT_SESSION_ID;
+const canonicalNonGoals = "- test exclusion | decider: changes test state";
 
 /** Seed the state file as the PreToolUse hook would (create-if-absent skeleton). */
 function seedFile(sessionId: string): string {
@@ -35,6 +36,7 @@ function seedFile(sessionId: string): string {
 				phase: "S0",
 				plan_path: "",
 				resume_summary: "",
+				non_goals: canonicalNonGoals,
 				started_at: new Date().toISOString().slice(0, 19),
 				last_touched_at: new Date().toISOString().slice(0, 19),
 			}),
@@ -69,7 +71,7 @@ describe("prometheus state", () => {
 		const html = join(tmpDir, "other.html");
 		writeFileSync(plan, "# Plan");
 		writeFileSync(html, "<html><body>Other</body></html>");
-		expect(() => setPrometheusState("wrong-html", { phase: "S5", plan_path: plan, submit_presentation: html })).toThrow("presentation");
+		expect(() => setPrometheusState("wrong-html", { phase: "S5", plan_path: plan, non_goals: canonicalNonGoals, submit_presentation: html })).toThrow("presentation");
 	});
 	test("presentation Markdown 없이 HTML 제출만으로 진행하며 변경 후에는 재제출 필요", () => {
 		const plan = join(tmpDir, "plan.md");
@@ -77,7 +79,7 @@ describe("prometheus state", () => {
 		const html = join(tmpDir, "presentation", "plan.html");
 		writeFileSync(plan, "# Plan");
 		writeFileSync(html, "<html><body>Plan</body></html>");
-		setPrometheusState("html-only", { phase: "S5", plan_path: plan, submit_presentation: html });
+		setPrometheusState("html-only", { phase: "S5", plan_path: plan, non_goals: canonicalNonGoals, submit_presentation: html });
 		const cli = join(import.meta.dir, "prometheus-state.ts");
 		const run = () => execSync(`bun '${cli}' set --phase S6`, { env: { ...process.env, OMT_SESSION_ID: "html-only" }, stdio: "pipe" });
 		expect(run).not.toThrow();
@@ -90,7 +92,7 @@ describe("prometheus state", () => {
 		writeFileSync(plan, "# Plan");
 		writeFileSync(join(tmpDir, "presentation", "plan.md"), "# Presentation");
 		writeFileSync(join(tmpDir, "presentation", "plan.html"), "<html><body>Plan</body></html>");
-		setPrometheusState("submission", { phase: "S5", plan_path: plan });
+		setPrometheusState("submission", { phase: "S5", plan_path: plan, non_goals: canonicalNonGoals });
 		const cli = join(import.meta.dir, "prometheus-state.ts");
 		expect(() => execSync(`bun '${cli}' set --phase S6`, { env: { ...process.env, OMT_SESSION_ID: "submission" }, stdio: "pipe" })).toThrow();
 	});
@@ -240,6 +242,109 @@ describe("prometheus state", () => {
 		expect(second!.started_at).toBe(firstStartedAt);
 	});
 
+	test("prometheus non_goals round-trip and record from stdin", () => {
+		const nonGoals = "- UI redesign | decider: touches frontend files\n- deployment | decider: changes release infrastructure";
+		writePristinePromState("nonGoals");
+		const { code } = runPromCliMerged("set --phase S1 --record-non-goals -", {
+			OMT_SESSION_ID: "nonGoals",
+			OMT_DIR: tmpDir,
+		}, nonGoals);
+		expect(code).toBe(0);
+		expect(JSON.parse(readFileSync(`${tmpDir}/prometheus-state-nonGoals.json`, "utf8")).non_goals).toBe(nonGoals);
+	});
+
+	test("prometheus rejects malformed non-goal lines", () => {
+		seedFile("invalidNonGoals");
+		expect(() => setPrometheusState("invalidNonGoals", {
+			phase: "S1",
+			non_goals: "- UI redesign without a decider",
+		})).toThrow(/non-goals|decider|format/i);
+	});
+
+	test("prometheus allows blank non_goals at the S1 requirements gate", () => {
+		seedFile("blankNonGoals");
+		setPrometheusState("blankNonGoals", { phase: "S1", non_goals: "" });
+		expect(readPrometheusState("blankNonGoals")!.non_goals).toBe("");
+		const { code, out } = runPromCliMerged("get", {
+			OMT_SESSION_ID: "blankNonGoals",
+			OMT_DIR: tmpDir,
+		});
+		expect(code).toBe(0);
+		expect(JSON.parse(out).non_goals).toBe("");
+	});
+
+	test("prometheus rejects blank non_goals when advancing to S2", () => {
+		seedFile("blankNonGoalsS2");
+		setPrometheusState("blankNonGoalsS2", { phase: "S1", non_goals: "" });
+		expect(() => setPrometheusState("blankNonGoalsS2", { phase: "S2" })).toThrow(/non-goals/i);
+	});
+
+	test.each(["missing", "blank"])("legacy S1 %s non_goals is accepted by read and CLI get", (kind) => {
+		writePristinePromState(`legacyS1-${kind}`);
+		const path = `${tmpDir}/prometheus-state-legacyS1-${kind}.json`;
+		const legacy = JSON.parse(readFileSync(path, "utf8"));
+		legacy.phase = "S1";
+		if (kind === "missing") delete legacy.non_goals;
+		else legacy.non_goals = " \n ";
+		writeFileSync(path, JSON.stringify(legacy), "utf8");
+
+		const expectedNonGoals = kind === "missing" ? "" : " \n ";
+		expect(readPrometheusState(`legacyS1-${kind}`)!.non_goals).toBe(expectedNonGoals);
+		const { code, out } = runPromCliMerged("get", {
+			OMT_SESSION_ID: `legacyS1-${kind}`,
+			OMT_DIR: tmpDir,
+		});
+		expect(code).toBe(0);
+		expect(JSON.parse(out).non_goals).toBe(expectedNonGoals);
+	});
+
+	test.each(["missing", "blank"])("legacy downstream %s non_goals is rejected by read and CLI get", (kind) => {
+		writePristinePromState(`legacyDownstream-${kind}`);
+		const path = `${tmpDir}/prometheus-state-legacyDownstream-${kind}.json`;
+		const legacy = JSON.parse(readFileSync(path, "utf8"));
+		legacy.phase = "S2";
+		if (kind === "missing") delete legacy.non_goals;
+		else legacy.non_goals = " \n ";
+		writeFileSync(path, JSON.stringify(legacy), "utf8");
+
+		expect(readPrometheusState(`legacyDownstream-${kind}`)).toBeNull();
+		const { code, out } = runPromCliMerged("get", {
+			OMT_SESSION_ID: `legacyDownstream-${kind}`,
+			OMT_DIR: tmpDir,
+		});
+		expect(code).not.toBe(0);
+		expect(out).toMatch(/non-goals|state/i);
+	});
+
+	test("valid canonical non_goals permits downstream advancement", () => {
+		const nonGoals = "- auditability | decider: changes persisted state";
+		seedFile("validNonGoals");
+		setPrometheusState("validNonGoals", { phase: "S1", non_goals: nonGoals });
+		setPrometheusState("validNonGoals", { phase: "S2" });
+		expect(readPrometheusState("validNonGoals")!.phase).toBe("S2");
+		expect(readPrometheusState("validNonGoals")!.non_goals).toBe(nonGoals);
+	});
+
+	test("S0 legacy state keeps the read compatibility fallback", () => {
+		writePristinePromState("legacyS0");
+		const path = `${tmpDir}/prometheus-state-legacyS0.json`;
+		const state = JSON.parse(readFileSync(path, "utf8"));
+		delete state.non_goals;
+		writeFileSync(path, JSON.stringify(state), "utf8");
+
+		expect(readPrometheusState("legacyS0")!.non_goals).toBe("");
+		const out = runPromCli("get", { OMT_SESSION_ID: "legacyS0", OMT_DIR: tmpDir });
+		expect(JSON.parse(out).non_goals).toBe("");
+	});
+
+	test("prometheus phase-only update preserves non_goals", () => {
+		const nonGoals = "- docs changes | decider: edits documentation only";
+		seedFile("preserveNonGoals");
+		setPrometheusState("preserveNonGoals", { phase: "S1", non_goals: nonGoals });
+		setPrometheusState("preserveNonGoals", { phase: "S2" });
+		expect(readPrometheusState("preserveNonGoals")!.non_goals).toBe(nonGoals);
+	});
+
 	test("요구사항 초안 경로는 재개와 설계 전환에 보존되고 완료로 간주되지 않음", () => {
 		process.env.OMT_SESSION_ID = "test-session";
 		seedFile("test-session");
@@ -280,11 +385,11 @@ describe("prometheus state", () => {
 	});
 
 	// --- (self-heal-prom) prometheus CLI seeds when the hook never fired ---
-	test("(self-heal-prom) setPrometheusState seeds then succeeds when file absent", () => {
+	test("(self-heal-prom) setPrometheusState seeds then succeeds at S0 when file absent", () => {
 		process.env.OMT_SESSION_ID = "absent-session";
 		// No file seeded (e.g. slash-command entry) — ensureSeed writes the pristine skeleton
 		expect(existsSync(resolveStatePath("absent-session"))).toBe(false);
-		expect(() => setPrometheusState("absent-session", { phase: "S1" })).not.toThrow();
+		expect(() => setPrometheusState("absent-session", { phase: "S0" })).not.toThrow();
 		expect(existsSync(resolveStatePath("absent-session"))).toBe(true);
 	});
 });
@@ -321,6 +426,7 @@ function writeLivePromState(sid: string, planPath: string): void {
 			phase: "S3",
 			plan_path: planPath,
 			resume_summary: "",
+			non_goals: canonicalNonGoals,
 			started_at: now,
 			last_touched_at: now,
 		}),
@@ -339,6 +445,7 @@ function writePristinePromState(sid: string): void {
 			phase: "S0",
 			plan_path: "",
 			resume_summary: "",
+			non_goals: canonicalNonGoals,
 			started_at: now,
 			last_touched_at: now,
 		}),
@@ -552,6 +659,7 @@ describe("steps persistence", () => {
 				phase: "S0",
 				plan_path: "",
 				resume_summary: "",
+				non_goals: canonicalNonGoals,
 				started_at: new Date().toISOString().slice(0, 19),
 				last_touched_at: new Date().toISOString().slice(0, 19),
 			}),
@@ -565,6 +673,7 @@ describe("steps persistence", () => {
 			design_decisions: { done: false, ref: "" },
 			plan: { done: false },
 		});
+		expect(state!.non_goals).toBe(canonicalNonGoals);
 	});
 
 	// (f) invalid --record-ac JSON exits non-zero (CLI test)
@@ -1052,15 +1161,16 @@ describe("no-create write (TOCTOU)", () => {
 				plan_path: "",
 				resume_summary: "",
 				started_at: "2024-01-01T00:00:00",
+				non_goals: canonicalNonGoals,
 				last_touched_at: "2024-01-01T00:00:00",
 			}),
 			"utf8",
 		);
-		setPrometheusState("toctouSession", { phase: "S1" });
+		setPrometheusState("toctouSession", { phase: "S1", non_goals: canonicalNonGoals });
 		expect(existsSync(path)).toBe(true);
 		// Delete with no adoption record → self-heal on the next write
 		unlinkSync(path);
-		expect(() => setPrometheusState("toctouSession", { phase: "S2" })).not.toThrow();
+		expect(() => setPrometheusState("toctouSession", { phase: "S2", non_goals: canonicalNonGoals })).not.toThrow();
 		expect(existsSync(path)).toBe(true);
 		expect(JSON.parse(readFileSync(path, "utf8")).phase).toBe("S2");
 	});

@@ -946,3 +946,67 @@ describe("code-review report path rendering contract", () => {
 		expect(JSON.parse(encoded)).toEqual([hostilePath]);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// no-safe-default-verdict: for a candidate in a no-safe-default domain
+// (concurrency/races, data destruction, security, external-contract, money)
+// the verdict is a claim about the real runtime model, not the code shape, so
+// it must be earned from the actual dispatch/execution model -- never defaulted
+// to PLAUSIBLE on an untraced dispatch model. Reachability gates the verdict;
+// harm/impact stays graded independently; the recall bias for genuinely
+// concurrent state is preserved.
+// (must FAIL before the verifier-prompt.md edit -- RED)
+// ---------------------------------------------------------------------------
+
+describe("no-safe-default-verdict: concurrency/race verdicts are earned from the execution model, not defaulted", () => {
+	const start = verifierPrompt.indexOf("## No-safe-default domains: earn the verdict from the execution model");
+	const region =
+		start === -1 ? "" : verifierPrompt.slice(start, start + 3200).replace(/\s+/g, " ");
+
+	test("the no-safe-default verdict section is present in verifier-prompt.md", () => {
+		expect(start).toBeGreaterThan(-1);
+	});
+
+	test("an untraced dispatch model is not a basis for PLAUSIBLE", () => {
+		expect(region).toContain("is NOT a basis for PLAUSIBLE");
+	});
+
+	test("REFUTED when the dispatch model closes the interleaving window", () => {
+		expect(region).toContain("the dispatch model closes the window");
+	});
+
+	test("REFUTED requires proof that the whole read/modify/write interval is non-interleavable", () => {
+		expect(region).toContain("entire read/modify/write interval");
+		expect(region).toContain("single-threaded event loop or `fixedDelay` alone is NOT sufficient");
+	});
+
+	test("concurrent caller and timing-dependent window are race-only PLAUSIBLE conditions", () => {
+		expect(region).toContain("For a race, PLAUSIBLE requires");
+		expect(region).toContain("For data destruction, security, external-contract, and money, PLAUSIBLE requires");
+		expect(region).toContain("a realistic, investigated trigger whose reachability is uncertain");
+	});
+
+	test("this is reachability gating the verdict, not occurrence gating harm (impact stays independent)", () => {
+		expect(region).toContain("reachability gating the verdict, NOT occurrence gating harm");
+	});
+
+	test("the recall bias for genuinely concurrent state is preserved", () => {
+		expect(region).toContain("does not weaken the recall bias");
+	});
+});
+
+describe("verdict ladder: concurrency/races are not a generic PLAUSIBLE default", () => {
+	test("the realistic-state default paragraph excludes concurrency races", () => {
+		const verdictLadder = extractSection(verifierPrompt, "## Verdict ladder (recall-biased)", "## No-safe-default domains:");
+
+		expect(verdictLadder).not.toMatch(
+			/\*\*Default here\*\* when\s+the state is realistic:\s+concurrency races;/,
+		);
+	});
+
+	test("generic race guidance does not treat single-threaded event loops or fixedDelay as sufficient proof", () => {
+		const verdictLadder = extractSection(verifierPrompt, "## Verdict ladder (recall-biased)", "## No-safe-default domains:");
+
+		expect(verdictLadder).toContain("single-threaded event loop or `fixedDelay` alone is NOT sufficient");
+	});
+});

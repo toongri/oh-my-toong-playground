@@ -4,6 +4,13 @@
 
 Read this file when you want to consult a worked example. You do NOT need to read it to know what the plan structure requires — that knowledge is already in SKILL.md.
 
+## Work Objectives
+
+### Non-Goals
+- {excluded item} | decider: {membership test}
+
+Copy each confirmed ordinary non-goal line verbatim from stored Prometheus state, including the leading `-`.
+
 ---
 
 ## TODO Example (worked example)
