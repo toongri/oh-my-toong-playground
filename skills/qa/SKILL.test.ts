@@ -1416,6 +1416,15 @@ describe("new-prose: HTML report is the canonical deliverable", () => {
 		const report = skillMd.indexOf(
 			"bun ${CLAUDE_SKILL_DIR}/scripts/qa-report.ts --session <id> --out <path> [--narrative <json-file>]",
 		);
+		const inspectHtml = skillMd.indexOf(
+			"open the rendered HTML and verify all claim images remain legible",
+		);
+		const reviewReport = skillMd.indexOf(
+			"bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts review-report --path <html>",
+		);
+		const presentationReview = skillMd.indexOf(
+			"dispatch the `presentation-reviewer`, handle its verdict",
+		);
 		const complete = skillMd.indexOf(
 			"bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts complete",
 		);
@@ -1423,10 +1432,17 @@ describe("new-prose: HTML report is the canonical deliverable", () => {
 
 		expect(setVerdict).not.toBe(-1);
 		expect(report).not.toBe(-1);
+		expect(inspectHtml).not.toBe(-1);
+		expect(reviewReport).not.toBe(-1);
+		expect(presentationReview).not.toBe(-1);
 		expect(complete).not.toBe(-1);
 		expect(verdictProse).not.toBe(-1);
 		expect(report).toBeGreaterThan(setVerdict);
+		expect(inspectHtml).toBeGreaterThan(report);
+		expect(reviewReport).toBeGreaterThan(inspectHtml);
+		expect(presentationReview).toBeGreaterThan(reviewReport);
 		expect(complete).toBeGreaterThan(report);
+		expect(complete).toBeGreaterThan(presentationReview);
 		expect(verdictProse).toBeGreaterThan(complete);
 	});
 

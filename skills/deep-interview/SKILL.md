@@ -512,7 +512,7 @@ Use the actual saved spec path. Submission records `state.presentation` with sou
    - **presentation**: the presentation `.md` (and its `.html`).
    - **sources**: the crystallized spec `$OMT_DIR/deep-interview/{slug}.md` (the AI-facing SSOT).
    - **reader_persona**: "a colleague or lead with no prior context on this codebase or domain — grasps what the work does and what to watch when modifying this code, from the presentation alone".
-   Its verdict is `APPROVE` / `REQUEST_CHANGES` / `COMMENT`. On `REQUEST_CHANGES`, fix the presentation Markdown, re-render, re-submit (step 4), and re-review before the token. This is a required review step, not a hook-enforced gate; run it every time.
+   Its verdict is `APPROVE` / `REQUEST_CHANGES` / `COMMENT` / `INCONCLUSIVE`. Only `APPROVE` or `COMMENT` may proceed to handoff and completion; on `REQUEST_CHANGES`, fix the presentation Markdown, re-render, re-submit (step 4), and re-review before the token. `INCONCLUSIVE` or a missing/malformed verdict blocks handoff and completion and requires fixing the presentation or re-supplying the review inputs. This is a required review step, not a hook-enforced gate; run it every time.
 
 6. **Deliver the spec and HTML links, then emit the handoff token.** The literal `<deep-interview-done/>` signals completion only after submission succeeds. A rendered file on disk or a link in chat alone is not a state submission.
 
