@@ -62,6 +62,7 @@ describe("non-goal-existence-gate: AC contract requires a co-confirmed Non-Goals
 	test("Trivial gets the light one-line boundary, no decider ceremony", () => {
 		expect(region).toContain("Trivial");
 		expect(region).toContain("one-line boundary");
+		expect(region).toContain("- {excluded item} | decider: {membership test}");
 	});
 
 	test("existence is gated, precision is not (mechanical, not an interpretation dispute)", () => {
@@ -113,9 +114,25 @@ describe("non-goal-existence-gate: Metis B2 rejects an empty OUT-of-scope list (
 });
 
 describe("canonical non-goal handoff contract", () => {
+	test("the canonical non-goal handoff applies to Trivial plans too", () => {
+		const planStructure = skillMd.slice(skillMd.indexOf("## Plan Structure (Mandatory Contract)"));
+
+		expect(planStructure).toContain("The Non-Goals handoff remains mandatory for every intent");
+		expect(planStructure).toContain("Trivial is not exempt from the canonical Non-Goals handoff");
+	});
+
+	test("S1 persists before any downstream artifact and S3 copies every intent's stored value", () => {
+		expect(skillMd).toContain(
+			"S1 persists that exact value as `state.non_goals` before creating any downstream artifact",
+		);
+		expect(skillMd).toContain(
+			"S3 plan generation copies the same stored lines verbatim for every intent",
+		);
+	});
+
 	test("P1 persists non-goals before Metis and uses state.non_goals through S3", () => {
 		expect(skillMd).toContain(
-			"After the user confirms the AC and non-goals, S1 persists that exact value as `state.non_goals` before invoking Metis",
+			"After the user confirms the AC and non-goals, S1 persists that exact value as `state.non_goals` before creating any downstream artifact",
 		);
 		expect(reviewPipeline).toContain("verbatim canonical lines from `Prometheus state.non_goals`");
 		expect(reviewPipeline).toContain("S3 plan generation later copies the same stored value");
