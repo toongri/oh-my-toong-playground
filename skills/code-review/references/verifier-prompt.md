@@ -176,7 +176,7 @@ digraph verification_flow {
   Quote the line.
 - **PLAUSIBLE** — the mechanism is real but the trigger is uncertain (timing, env, config) or rests
   on realistic-but-unconfirmed runtime state. State what would confirm it. **Default here** when
-  the state is realistic: concurrency races; nil/undefined on a rare-but-reachable path (error
+  the state is realistic: nil/undefined on a rare-but-reachable path (error
   handler, cold cache, missing optional field); falsy-zero treated as missing; off-by-one on a
   boundary the code does not exclude; retry storms / partial failures; a regex/allowlist that lost
   an anchor.

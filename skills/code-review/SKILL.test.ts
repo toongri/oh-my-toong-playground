@@ -982,3 +982,13 @@ describe("no-safe-default-verdict: concurrency/race verdicts are earned from the
 		expect(region).toContain("does not weaken the recall bias");
 	});
 });
+
+describe("verdict ladder: concurrency/races are not a generic PLAUSIBLE default", () => {
+	test("the realistic-state default paragraph excludes concurrency races", () => {
+		const verdictLadder = extractSection(verifierPrompt, "## Verdict ladder (recall-biased)", "## No-safe-default domains:");
+
+		expect(verdictLadder).not.toMatch(
+			/\*\*Default here\*\* when\s+the state is realistic:\s+concurrency races;/,
+		);
+	});
+});
