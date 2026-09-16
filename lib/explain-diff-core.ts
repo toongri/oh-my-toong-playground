@@ -45,15 +45,19 @@ export const AUTHORING_STEPS = [
 /**
  * Judge rubric items each step's judge review must certify before `pass-step`
  * may advance it. SKILL.md and references/judge-prompt.md assign the judge
- * exactly four items — R12 at `architecture`, R23 at `capability`, R6 at
- * `intuition`, R7 at `code` — everything else in the rubric is scripted in
+ * five items — R12 at `architecture`, R23 at `capability`, R6 at `intuition`,
+ * and R7 + R24 at `code` — everything else in the rubric is scripted in
  * explain-diff-structure.ts. An empty required set is deliberate at the other
  * six steps, not an oversight: their coverage is already earned before the
  * judge ever runs, so a judge payload with nothing in it is correctly a no-op
  * there, not a bypass. R23 is the capability step's semantic gate — that each
  * chapter is a use-case (not a demoted domain function), that no chapter steals
  * a collaborator's responsibility, and that the version classification is
- * grounded — the discipline the structure check cannot mechanically see.
+ * grounded — the discipline the structure check cannot mechanically see. R24 is
+ * the code step's "쓰기 전에 소개" gate — that every first-class entity the whole
+ * accumulated document leans on (a coined term, a symbol, a module, a diagram's
+ * code-name node) is introduced at first use, the hole that slips between the
+ * per-surface scripted checks (R18/R21/구현체).
  */
 export const REQUIRED_JUDGE_IDS: Record<Step, readonly string[]> = {
 	evidence: [],
@@ -63,7 +67,7 @@ export const REQUIRED_JUDGE_IDS: Record<Step, readonly string[]> = {
 	capability: ["R23"],
 	intuition: ["R6"],
 	commits: [],
-	code: ["R7"],
+	code: ["R7", "R24"],
 	render: [],
 	quiz: [],
 };

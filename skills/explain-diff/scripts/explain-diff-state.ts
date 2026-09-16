@@ -556,7 +556,7 @@ interface ChecklistAxisRow {
 	evidence: string;
 }
 
-const CHECKLIST_AXIS_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
+const CHECKLIST_AXIS_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 
 /** Reads the four-column Markdown table used by the final nine-axis checklist. */
 function parseChecklistAxisRows(text: string): ChecklistAxisRow[] {
@@ -602,14 +602,14 @@ function checkChecklistReport(checklistPath: string | undefined, failedItems: st
 
 	const rows = parseChecklistAxisRows(text);
 	if (rows.length === 0) {
-		failedItems.push(`체크리스트에 9개 축 행이 없습니다: ${checklistPath}`);
+		failedItems.push(`체크리스트에 10개 축 행이 없습니다: ${checklistPath}`);
 		return;
 	}
 
 	const seen = new Set<number>();
 	for (const row of rows) {
 		if (!CHECKLIST_AXIS_NUMBERS.some((axisNumber) => axisNumber === row.number)) {
-			failedItems.push(`체크리스트의 축 번호가 1~9 범위를 벗어났습니다: ${row.number}`);
+			failedItems.push(`체크리스트의 축 번호가 1~10 범위를 벗어났습니다: ${row.number}`);
 			continue;
 		}
 		if (seen.has(row.number)) {
@@ -624,6 +624,9 @@ function checkChecklistReport(checklistPath: string | undefined, failedItems: st
 		if (row.status !== "PASS" && row.status !== "N.A") {
 			failedItems.push(`체크리스트 축 ${row.number}의 상태가 허용되지 않습니다: ${row.status || "(빈 상태)"}`);
 			continue;
+		}
+		if (row.number === 10 && row.status === "N.A") {
+			failedItems.push("체크리스트 축 10은 N.A일 수 없습니다");
 		}
 		if (row.evidence.length === 0) {
 			failedItems.push(`체크리스트 축 ${row.number}의 근거가 비어 있습니다: ${checklistPath}`);

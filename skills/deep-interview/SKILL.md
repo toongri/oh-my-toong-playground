@@ -508,7 +508,13 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update --current-phase h
 
 Use the actual saved spec path. Submission records `state.presentation` with source/HTML paths and content hashes; `handoff` and the completion hook require a current submission. Editing either file requires re-rendering and resubmission. On resume, check the submission before routing; legacy rich states with no submission are incomplete too. The same submission step applies to normal crystallization, execution deferral after closure, and every revised completed spec.
 
-5. **Deliver the spec and HTML links, then emit the handoff token.** The literal `<deep-interview-done/>` signals completion only after submission succeeds. A rendered file on disk or a link in chat alone is not a state submission.
+5. **Presentation review (required, before the handoff token).** Dispatch the `presentation-reviewer` agent to contrast the presentation against the spec it was written from, for its reader. It is skill-agnostic, so assemble the bundle:
+   - **presentation**: the presentation `.md` (and its `.html`).
+   - **sources**: the crystallized spec `$OMT_DIR/deep-interview/{slug}.md` (the AI-facing SSOT).
+   - **reader_persona**: "a colleague or lead with no prior context on this codebase or domain — grasps what the work does and what to watch when modifying this code, from the presentation alone".
+   Its verdict is `APPROVE` / `REQUEST_CHANGES` / `COMMENT` / `INCONCLUSIVE`. Only `APPROVE` or `COMMENT` may proceed to handoff and completion; on `REQUEST_CHANGES`, fix the presentation Markdown, re-render, re-submit (step 4), and re-review before the token. `INCONCLUSIVE` or a missing/malformed verdict blocks handoff and completion and requires fixing the presentation or re-supplying the review inputs. This is a required review step, not a hook-enforced gate; run it every time.
+
+6. **Deliver the spec and HTML links, then emit the handoff token.** The literal `<deep-interview-done/>` signals completion only after submission succeeds. A rendered file on disk or a link in chat alone is not a state submission.
 
 ## Phase 5: Execution Bridge
 

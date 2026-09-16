@@ -39,6 +39,7 @@ The document is written one step at a time, accumulating. So an item is evaluate
 | R21 | script | architecture |
 | R22 | script | code |
 | R23 | judge | capability |
+| R24 | judge | code |
 
 The `intuition` step has no slot of its own — only R6 (judge) and the common R11 decide it. `render` and `quiz` score none of this table's items: `render` looks at the artifact check (HTML present and non-empty, mermaid→SVG parity, technical-writing `REVIEW: APPLIED`, final checklist ending with `CHECKLIST: ALL PASS`), and `quiz` runs a separate grading path (`grade`). Visual layout is not scored per document — it is a deterministic property render.ts owns. Label clipping is sealed by `htmlLabels:false` (SVG `<text>` labels never hide; `checkRenderOutput` fails on any surviving `<foreignObject>`), and wide-diagram legibility by fit-to-column default + a CSS-only zoom overlay, both regression-guarded by `render.test.ts`.
 
@@ -398,6 +399,31 @@ the chapter:
    than filed as a brand-new feature. The judge quotes the 라벨 and confirms it against the diff.
 
 A pass without a quote is auto-failed; a quote that is not a string in the document is auto-failed.
+
+### R24. 쓰기 전에 소개 (introduce before you use)
+
+The reader has no prior context, so a first-class entity the document leans on — a coined term or
+domain word, a function/repository/method symbol, a module/domain, a feature — must be introduced at
+its first use, sized to its kind (용어 → 한 줄 뜻 / 함수·리포지토리 → 한 줄 역할 / 모듈·도메인 →
+경계+소유 / 기능 → 기능 단위 챕터; see SKILL.md "쓰기 전에 소개"). This is the whole-document form of
+R18/R21/구현체, which each cover one surface; R24 catches the entity that slips **between** those
+surfaces — a coined status label in prose, a helper named in a code block, a store node in a diagram.
+
+The judge picks the **entities a no-context reader is least likely to know** that the document uses,
+and for each quotes the sentence/slot that introduces it before (or at) first use. **A pass requires,
+per named entity, a verbatim quote of its introduction.** If an entity is used but introduced nowhere
+before that use, the judge fails R24 naming that entity and quoting the bare use — an unintroduced
+entity is a hole in the explanation, however correct the surrounding prose is. For a diagram's
+code-name element, its introduction is either an `arch-entity` card (R18/R21) or a `<ul class="gloss">`
+entry under the diagram; a code-name node decoded by neither is a fail.
+
+A pass without a quote is auto-failed; a quote that is not a string in the document is auto-failed.
+
+> **RED — subagent baselines (introduce-before-use).** Given identifier-dense sections and no gloss
+> spotlight, models glossed some coined terms in freeform prose but produced **zero** structured
+> footnotes and left diagram code-name nodes undecoded — the introduction was inconsistent and, for the
+> diagram surface, absent. R24 (the judge) plus the `gloss` footnote slot make the introduction a
+> named, quotable requirement rather than a habit that fires only sometimes.
 
 > **RED — luna max, 2 reps on `pr-3619`.** Without the three-layer model, the reps (1) mistook
 > `markTutorialCompleted` (a `user`-domain persistence method) for a capability, and (2) let "온보딩 완료 기록"

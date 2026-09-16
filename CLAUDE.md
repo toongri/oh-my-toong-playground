@@ -224,6 +224,7 @@ On Codex, the marker is only an invocation audit/integrity record; it is not aut
 | Pre-planning analysis | metis |
 | Plan review | momus |
 | Quality Assurance | qa skill |
+| Presentation review (source fidelity, persona fit, concept introduction) | presentation-reviewer |
 
 ### sync.yaml Paths Are Machine-Specific
 

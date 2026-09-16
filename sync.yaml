@@ -54,6 +54,9 @@ agents:
     - librarian
     - code-reviewer
     - sisyphus-junior
+    # 범용 프레젠테이션 리뷰어. explain-diff·deep-interview·qa·prometheus가 완료 직전
+    # 산출물을 원본과 대조(거짓·이격·페르소나·설명누락)시키는 필수 리뷰 단계에 쓴다.
+    - presentation-reviewer
 
 skills:
   items:

@@ -56,7 +56,7 @@ The details of the library's skills (46) and agents (12) live under `docs/`.
 
 | Doc | Contents |
 |-----|----------|
-| [Core Pipeline](docs/skills/core-pipeline.en.md) | Definition→Planning→Execution→Verification pipeline (deep-interview → craft-tasks → optional prometheus → ultragoal → sisyphus; sisyphus is ultragoal's internal executor, not a direct route) + 12 delegation agents |
+| [Core Pipeline](docs/skills/core-pipeline.en.md) | Definition→Planning→Execution→Verification pipeline (deep-interview → craft-tasks → optional prometheus → ultragoal → sisyphus; sisyphus is ultragoal's internal executor, not a direct route) + 13 delegation agents |
 | [Review/Quality](docs/skills/review-quality.en.md) | code-review · design-review · slides-review · qa · explain-diff |
 | [Frontend Design](docs/skills/frontend-design.en.md) | frontend · visual-qa — web UI design, implementation, and independent rendered-result verification |
 | [Research](docs/skills/research.en.md) | ultraresearch · insane-browsing — saturation research engine and blocked-source browsing |

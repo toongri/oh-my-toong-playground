@@ -68,12 +68,24 @@ edge), node naming, and Mermaid validity — **read it fully before authoring.**
 - **Diagrams invite invention more readily than prose.** Do not draw a source or edge elsewhere
   when the spec mentions it only in one place. Include only nodes and edges whose relationships the spec decides.
 
-## First-use glosses
-Explain project/domain-specific terms and code identifiers in one line at their first appearance.
-- GOOD (domain): "household_id(가구를 가리키는 식별자)", "merge-patch(적힌 항목만 덮어쓰는 부분 갱신)"
+## 쓰기 전에 소개 (introduce before you use)
+The reader has no prior context, so **every first-class entity earns a plain-language introduction at
+its first appearance** — before the sentence, table, or diagram leans on it. A name the reader cannot
+decode from the page is a hole in the presentation, however faithful the rest is. Size the
+introduction to what the entity is:
+
+| 첫 등장하는 것 | 소개 깊이 |
+|---|---|
+| 용어·약어·코인된 표현 (도메인 단어, 상태 라벨) | 한 줄 뜻 — `household_id(가구를 가리키는 식별자)`, `merge-patch(적힌 항목만 덮어쓰는 부분 갱신)` |
+| 함수·리포지토리·메서드 | 한 줄 역할 — what it does, not just its name |
+| 모듈·도메인 | 경계 + 소유 한두 줄 — what it owns and where it sits |
+| 기능(유스케이스) | 무엇을 위한 능력인지 한 문단 |
+
 - Expand abbreviations on first use; connect new concepts inside identifiers on the spot ("= 앞서 말한 …");
   use one name per concept; no forward references to undefined labels; reconcile
   dual names in the spec by explaining their relationship in one line.
+- A diagram's code-name node/arrow is introduced by the element footnote (`gloss`) below it — see
+  Diagram discipline above; that footnote is where diagram elements get their one-line meaning.
 
 ## Internal document consistency
 - **One partition** — the lead's enumeration and the body sections have the same count, grouping, and order.
@@ -110,7 +122,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/render.ts --in <presentation>.md --out <presenta
       constraints/invariants, non-goals (deciders)/boundaries, AC, and Risks? **Omit nothing.**
 - [ ] **Does it carry every diagram drawn by the spec** — zero missing lenses, zero invented diagrams absent from the spec?
       Each has Why→Diagram→Interpretation, element footnotes for code-named nodes, and arrow/color legends.
-- [ ] First-use glosses for domain/code-specific terms; zero use before definition; one name per concept.
+- [ ] 쓰기 전에 소개 — every first-class entity (용어/함수/모듈·도메인/기능) introduced at first use, sized to its kind; zero use before definition; one name per concept; each diagram's code-name element covered by a `gloss` footnote.
 - [ ] **Zero concrete values absent from the spec** — intervals, schedulers, quantities, examples. Keep general what the spec leaves general.
 - [ ] Interview/AI machinery (Clarity Breakdown, Ontology Convergence, Transcript, scoring values) removed.
 - [ ] Lead enumeration = section enumeration; overview is a true subset of details; apparent contradictions reconciled; prose matches diagrams.
