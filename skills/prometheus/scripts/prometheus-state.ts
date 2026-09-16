@@ -141,8 +141,13 @@ function normalizeResumeSummary(s: string): string {
 /** Canonical non-goal declaration shape shared with Ultragoal's state boundary. */
 const NON_GOAL_LINE_PATTERN = /^-\s+\S.*\|\s*decider:\s*\S.*$/;
 
-function validateNonGoals(value: string): void {
-	if (value.trim() === "") return;
+function validateNonGoals(value: string, phase: string): void {
+	if (value.trim() === "") {
+		if (phase !== "S0") {
+			throw new Error(`non-goals are required for ${phase} and must contain a canonical decider line`);
+		}
+		return;
+	}
 	for (const line of value.split("\n")) {
 		if (line.trim() === "") continue;
 		if (!NON_GOAL_LINE_PATTERN.test(line)) {
@@ -165,8 +170,11 @@ export function readPrometheusState(sessionId: string): PrometheusState | null {
 		// JSON.parse's return type is already `any`; the caller only relies on
 		// `.active`, so no assertion to PrometheusState is needed here.
 		const state = JSON.parse(content);
-		if (state.non_goals === undefined) state.non_goals = "";
-		return state.active ? state : null;
+		if (!state.active) return null;
+		const nonGoals = state.non_goals ?? "";
+		validateNonGoals(nonGoals, state.phase);
+		state.non_goals = nonGoals;
+		return state;
 	} catch {
 		return null;
 	}
@@ -207,7 +215,7 @@ export function setPrometheusState(
 
 	const resolvedPlanPath = opts.plan_path ?? prior.plan_path ?? "";
 	const resolvedNonGoals = opts.non_goals ?? prior.non_goals ?? "";
-	validateNonGoals(resolvedNonGoals);
+	validateNonGoals(resolvedNonGoals, opts.phase);
 	const presentation = opts.submit_presentation !== undefined
 		? createPresentationSubmission(resolvedPlanPath, opts.submit_presentation)
 		: prior.presentation;
@@ -456,16 +464,15 @@ function main(): void {
 				);
 			}
 		} else if (subcommand === "get") {
-			const statePath = resolveStatePath(sessionId);
-			const content = readFileOrNull(statePath);
-			if (content === null) {
+			const state = readPrometheusState(sessionId);
+			if (state === null) {
 				process.stderr.write(
-					`prometheus-state: state file absent for session "${sessionId}". ` +
-						`Run the prometheus skill to seed state first.\n`,
+					`prometheus-state: state file absent or invalid for session "${sessionId}". ` +
+					`Run the prometheus skill to seed state first, or repair its non-goals.\n`,
 				);
 				process.exit(1);
 			}
-			process.stdout.write(content + "\n");
+			process.stdout.write(JSON.stringify(state, null, 2) + "\n");
 		} else if (subcommand === "adopt") {
 			const srcSid = args["src"] !== undefined ? String(args["src"]) : undefined;
 			if (!srcSid) {
