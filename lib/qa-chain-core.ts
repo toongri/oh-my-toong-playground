@@ -11,7 +11,6 @@ export const QA_PHASES = [
 	"RE-VERIFY",
 	"EXIT",
 	"CLEANUP",
-	"ROLLBACK",
 	"STATE",
 ] as const;
 
