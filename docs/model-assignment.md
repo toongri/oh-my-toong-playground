@@ -66,6 +66,7 @@ verdict를 자기가 만드는 것처럼 보이지만 실제로는 `skills/insan
 | `issue-reviewer` | opus | high | 자기 모델로 직접 판정 |
 | `metis` | fable | high | 부재 판정 위험에 따른 기존 배정 유지; 현재 사실 대조 의무와 구분 |
 | `momus` | opus | high | 자기 모델로 직접 판정 |
+| `presentation-reviewer` | opus | high | 자기 모델로 직접 판정 |
 | `tech-claim-examiner` | opus | high | 자기 모델로 직접 판정 |
 | `daedalus` | sonnet | medium | 충돌 셀 — 위임 구조 우선 |
 | `oracle` | sonnet | medium | 충돌 셀 — 위임 구조 우선 |

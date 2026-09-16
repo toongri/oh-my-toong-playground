@@ -256,7 +256,7 @@ flowchart TB
 
 ## 7. Delegation Agent Roster
 
-If skills are the *methodologies*, agents are the *delegation targets*. sisyphus and prometheus pick from the agents below by task type and have them work in isolated subagent contexts. There are currently 12 agents. (A verify task needing a PASS/FAIL verdict is not a delegation target — sisyphus handles it inline itself.)
+If skills are the *methodologies*, agents are the *delegation targets*. sisyphus and prometheus pick from the agents below by task type and have them work in isolated subagent contexts. There are currently 13 agents. (A verify task needing a PASS/FAIL verdict is not a delegation target — sisyphus handles it inline itself.)
 
 | Agent | Role | When used |
 |-------|------|-----------|
@@ -272,6 +272,7 @@ If skills are the *methodologies*, agents are the *delegation targets*. sisyphus
 | code-reviewer | Orchestrator that runs the full code-review skill in an isolated context — intent acquisition → single finder job fanning out angle finders (correctness/regression/cleanup/requirement) → direct per-candidate verification → findings synthesis | When a pure code review needs to run in an isolated context and return findings only |
 | hermes | Depth-escalation peer to explore/librarian that extracts blocked, authenticated, or bot-protected sources through three tiers — curl_cffi → agent-reach → Chrome stealth | When fetching content from a source that resists plain HTTP (blocked, auth-gated, bot-protected) |
 | issue-reviewer | READ-ONLY checklist reviewer — at craft-issue Stage 6's Checklist Review Gate, checks the issue set being written against the rule files already in the repo, immediately before any write | When craft-issue gates an issue set against the checklist before writing (it never writes itself) |
+| presentation-reviewer | Skill-agnostic generic reviewer — contrasts a produced presentation (explainer/plan/spec/QA report) against its source material to catch fabrication, discrepancy, persona mismatch, and unexplained concepts; returns APPROVE/REQUEST_CHANGES/COMMENT/INCONCLUSIVE. Missing or unreadable input returns machine-readable INCONCLUSIVE, while missing/malformed verdicts are blocked | When explain-diff·deep-interview·qa·prometheus contrast a finished presentation against its sources before completing (the caller assembles the sources + reader persona) |
 
 ---
 

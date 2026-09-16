@@ -657,13 +657,14 @@ async function advanceTo(
 		if (s === step) break;
 		const doc = docFile(docAtStep(s));
 		submitStep(SID, s, doc, ["lib/state-lock.ts"], []);
-		// R6·R7·R12를 매 스텝에 함께 싣는다 — 각 스텝이 요구하는 필수 ID를 놓치지
+		// R6·R7·R12·R23·R24를 매 스텝에 함께 싣는다 — 각 스텝이 요구하는 필수 ID를 놓치지
 		// 않기 위해서이고, 요구되지 않는 스텝에서는 여분의 검증된 통과 항목일 뿐이다.
 		passStep(SID, s, doc, [
 			{ id: "R6", pass: true, quote: "state-lock" },
 			{ id: "R7", pass: true, quote: "state-lock" },
 			{ id: "R12", pass: true, quote: "state-lock" },
 			{ id: "R23", pass: true, quote: "state-lock" },
+			{ id: "R24", pass: true, quote: "state-lock" },
 		]);
 	}
 	return { submitStep, passStep };
@@ -917,12 +918,25 @@ describe("필수 심사 ID 강제 — 빈 페이로드로 심사 관문을 건�
 		expect(state().last_failure.items.join(" ")).toContain("R7");
 	});
 
-	test("code 스텝은 R7을 pass:true + 실재 인용으로 제출해야 통과하고 render로 넘어간다", async () => {
+	test("code 스텝은 R7만으로는 통과하지 못한다 — R24 미제출", async () => {
 		const { submitStep, passStep } = await advanceTo("code", () => FULL_DOC);
 		const doc = docFile(GOOD_DOC);
 		submitStep(SID, "code", doc, ["lib/state-lock.ts"], []);
 		const rc = passStep(SID, "code", doc, [
 			{ id: "R7", pass: true, quote: "락을 공용 모듈로 뽑아낸다" },
+		]);
+		expect(rc).toBe(1);
+		expect(state().last_failure.items.join(" ")).toContain("R24");
+		expect(state().step).toBe("code");
+	});
+
+	test("code 스텝은 R7·R24를 pass:true + 실재 인용으로 제출해야 통과하고 render로 넘어간다", async () => {
+		const { submitStep, passStep } = await advanceTo("code", () => FULL_DOC);
+		const doc = docFile(GOOD_DOC);
+		submitStep(SID, "code", doc, ["lib/state-lock.ts"], []);
+		const rc = passStep(SID, "code", doc, [
+			{ id: "R7", pass: true, quote: "락을 공용 모듈로 뽑아낸다" },
+			{ id: "R24", pass: true, quote: "락을 공용 모듈로 뽑아낸다" },
 		]);
 		expect(rc).toBe(0);
 		expect(state().step).toBe("render");
@@ -982,6 +996,7 @@ async function driveToRender(): Promise<{
 			{ id: "R7", pass: true, quote },
 			{ id: "R12", pass: true, quote },
 			{ id: "R23", pass: true, quote },
+			{ id: "R24", pass: true, quote },
 		]);
 	}
 	return { passStep, submitStep, doc };
@@ -1021,6 +1036,7 @@ const CHECKLIST_AXES = [
 	["7", "시퀀스 완결성"],
 	["8", "사용자 여정"],
 	["9", "HTML 렌더"],
+	["10", "쓰기 전에 소개"],
 ] as const;
 
 function checklistReport(
@@ -1123,7 +1139,7 @@ describe("render 산출물 검사", () => {
 		expect(state().last_failure?.items.join(" ")).toContain("CHECKLIST: ALL PASS");
 	});
 
-	test("마지막 ALL PASS 표식만 있고 9개 축 행이 없으면 render 제출을 거부한다", async () => {
+	test("마지막 ALL PASS 표식만 있고 10개 축 행이 없으면 render 제출을 거부한다", async () => {
 		const { submitStep, doc } = await driveToRender();
 		const htmlPath = join(sandbox, "doc.html");
 		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
@@ -1132,10 +1148,10 @@ describe("render 산출물 검사", () => {
 
 		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(1);
 		expect(state().step).toBe("render");
-		expect(state().last_failure?.items.join(" ")).toContain("9개");
+		expect(state().last_failure?.items.join(" ")).toContain("10개");
 	});
 
-	test("1~9 각 축이 PASS 또는 N.A이고 비어 있지 않은 근거가 있으면 통과한다", async () => {
+	test("1~10 각 축이 PASS 또는 N.A이고 비어 있지 않은 근거가 있으면 통과한다", async () => {
 		const { submitStep, doc } = await driveToRender();
 		const htmlPath = join(sandbox, "doc.html");
 		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
@@ -1144,6 +1160,28 @@ describe("render 산출물 검사", () => {
 
 		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(0);
 		expect(state().structural_ok).toContain("render");
+	});
+
+	test("축 10의 N.A 판정은 거부한다", async () => {
+		const { submitStep, doc } = await driveToRender();
+		const htmlPath = join(sandbox, "doc.html");
+		writeFileSync(htmlPath, projectRenderedHtml(readFileSync(doc, "utf8")), "utf8");
+		const rep = reportFiles();
+		writeFileSync(
+			rep.checklist,
+			checklistReport(
+				CHECKLIST_AXES.map(([number, axis]) => ({
+					number,
+					axis,
+					status: number === "10" ? "N.A" : "PASS",
+					evidence: `${axis} 근거를 문서에서 확인했다.`,
+				})),
+			),
+			"utf8",
+		);
+
+		expect(submitStep(SID, "render", doc, [], [], htmlPath, rep.writing, rep.checklist)).toBe(1);
+		expect(state().step).toBe("render");
 	});
 
 	test("장식된 FAIL 행은 마지막 ALL PASS 표식이 있어도 거부한다", async () => {
@@ -1443,6 +1481,7 @@ describe("render 산출물 검사", () => {
 				{ id: "R7", pass: true, quote },
 				{ id: "R12", pass: true, quote },
 				{ id: "R23", pass: true, quote },
+				{ id: "R24", pass: true, quote },
 			]);
 		}
 		const htmlPath = join(sandbox, "doc.html");

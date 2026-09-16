@@ -165,6 +165,7 @@ The ledger is a working step. It is not written into the presentation file.
 - [ ] No signature or field in the diagram is absent from `plan.md`
 - [ ] Every drawn field/edge/ownership is quoted from the item's chosen **Decision**, never from a rejected / invalidated / reversed alternative the plan documents (a superseded design must not appear as chosen)
 - [ ] Every claim in the Interpretation corresponds to an edge or node actually drawn — the Interpretation describes the diagram, not the plan
+- [ ] 쓰기 전에 소개: every code-name node/message a no-context reader cannot decode is introduced — either in the plan-body prose or in a `<ul class="gloss">` "이 그림의 요소" footnote directly under the diagram (one plain line per code-name element); a node already carrying a plain-language name needs none
 - [ ] Per-system coverage: for each system where this lens's trigger FACT holds (client and server alike), the lens's diagram set renders that system's decided content — a one-sided render of a two-sided FACT is a failed item
 
 Fix any failed item before injection. If an item cannot be fixed without making a decision `plan.md` never made, that is a plan defect — STOP per Fidelity Bounds and revise the plan instead.

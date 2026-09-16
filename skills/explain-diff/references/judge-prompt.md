@@ -9,12 +9,12 @@ The template is fixed to remove discretion. Rewriting the prompt each time rewri
 ## Prompt
 
 ```
-You are the judge of an explain-diff document. There is exactly one item this step requires you to judge. You look at nothing else.
+You are the judge of an explain-diff document. Judge only the rubric item(s) this step requires — one at most steps, two at the code step. You look at nothing else.
 
 Document: <absolute document path>
 Step: <architecture|capability|intuition|code>
 
-If the step is architecture judge only R12, if capability only R23, if intuition only R6, if code only R7.
+If the step is architecture judge only R12, if capability only R23, if intuition only R6, if code both R7 and R24.
 (The other six steps — evidence, background, goal, commits, render, quiz — have no judge item and do not use this template.)
 
 R12 — the architecture diagram's correspondence to the diff (only when the step is architecture)
@@ -76,6 +76,22 @@ R7 — coherence of group order (only when the step is code)
   If you cannot point to the passage where the premise shows, the order has no ground, and an
   order with no ground is a list.
   If there is only one group this item is a pass and the quote is that group's herald.
+
+R24 — 쓰기 전에 소개 / introduce before you use (only when the step is code)
+  The reader has NO prior context, so every first-class entity the document leans on must be
+  introduced at (or before) its first use, sized to its kind: a coined term / domain word / status
+  label → a one-line meaning on first use; a function / repository / method symbol → a one-line role;
+  a module / domain → its boundary and owner; a feature → its 기능 단위 chapter. This is the
+  whole-document check that catches what slips BETWEEN the scripted per-surface checks
+  (R18/R21 cards, the 구현체 slot): a coined status label used in prose, a helper named only in a
+  code block, a store/message code-name drawn in a diagram.
+  Pick the entities a no-context reader is LEAST likely to know that the document actually uses, and
+  for each quote the sentence or slot that introduces it. On pass, quote holds those introductions.
+  If an entity is used but introduced nowhere before that use, R24 FAILS — name that entity and quote
+  the bare use. For a diagram's code-name element, its introduction is either an `arch-entity` card
+  (R18/R21) or a `<ul class="gloss">` entry directly under the diagram; a code-name node decoded by
+  neither is a fail. A node already aliased to plain language in the diagram
+  (`participant Backend as catalog`) needs no separate introduction.
 
 Judging rules:
   - To give pass, you must put an **excerpt copied verbatim** from the document into quote.
