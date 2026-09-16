@@ -960,7 +960,8 @@ describe("code-review report path rendering contract", () => {
 
 describe("no-safe-default-verdict: concurrency/race verdicts are earned from the execution model, not defaulted", () => {
 	const start = verifierPrompt.indexOf("## No-safe-default domains: earn the verdict from the execution model");
-	const region = start === -1 ? "" : verifierPrompt.slice(start, start + 2000);
+	const region =
+		start === -1 ? "" : verifierPrompt.slice(start, start + 3200).replace(/\s+/g, " ");
 
 	test("the no-safe-default verdict section is present in verifier-prompt.md", () => {
 		expect(start).toBeGreaterThan(-1);
@@ -972,6 +973,17 @@ describe("no-safe-default-verdict: concurrency/race verdicts are earned from the
 
 	test("REFUTED when the dispatch model closes the interleaving window", () => {
 		expect(region).toContain("the dispatch model closes the window");
+	});
+
+	test("REFUTED requires proof that the whole read/modify/write interval is non-interleavable", () => {
+		expect(region).toContain("entire read/modify/write interval");
+		expect(region).toContain("single-threaded event loop or `fixedDelay` alone is NOT sufficient");
+	});
+
+	test("concurrent caller and timing-dependent window are race-only PLAUSIBLE conditions", () => {
+		expect(region).toContain("For a race, PLAUSIBLE requires");
+		expect(region).toContain("For data destruction, security, external-contract, and money, PLAUSIBLE requires");
+		expect(region).toContain("a realistic, investigated trigger whose reachability is uncertain");
 	});
 
 	test("this is reachability gating the verdict, not occurrence gating harm (impact stays independent)", () => {
@@ -990,5 +1002,11 @@ describe("verdict ladder: concurrency/races are not a generic PLAUSIBLE default"
 		expect(verdictLadder).not.toMatch(
 			/\*\*Default here\*\* when\s+the state is realistic:\s+concurrency races;/,
 		);
+	});
+
+	test("generic race guidance does not treat single-threaded event loops or fixedDelay as sufficient proof", () => {
+		const verdictLadder = extractSection(verifierPrompt, "## Verdict ladder (recall-biased)", "## No-safe-default domains:");
+
+		expect(verdictLadder).toContain("single-threaded event loop or `fixedDelay` alone is NOT sufficient");
 	});
 });
