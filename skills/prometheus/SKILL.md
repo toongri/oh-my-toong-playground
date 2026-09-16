@@ -641,7 +641,7 @@ Each non-goal is one line in the `{excluded item} | decider: {how to tell whethe
 - **Scoped / Complex / Architecture**: **≥1 decider-bearing non-goal is REQUIRED for Scoped+** and flows verbatim into the Metis SCOPE `OUT of Scope` list (`review-pipeline.md`). The Metis B2 gate rejects a brief whose OUT-of-scope list is empty (Metis runs only for Scoped+, so the tier falls out of the pipeline). **Existence is mandatory; precision is not gated** — a mechanical existence check, never an interpretation dispute.
 - **Trivial**: no Metis phase and no decider ceremony — state the **one-line boundary** of what the fix does NOT touch.
 
-Risk-domain non-goals come from `### Risk-Domain Assessment`: each domain the user confirms as not-applicable becomes a non-goal here, and populates the plan's `Must NOT Have / Guardrails`.
+A deliberately-excluded risk domain is a non-goal like any other (see `### Risk-Domain Assessment`) and populates `Must NOT Have / Guardrails`. Absence is not an entry.
 
 ### AC Format (two-line, mandatory)
 
@@ -862,19 +862,11 @@ When a T1 trigger fires (any one category matched), activate `### Risk-Domain Pr
 
 ### Risk-Domain Assessment
 
-During the Interview Mode phase, the planner assesses Y/N for each T1 category before drafting the plan, then **surfaces the full Y/N assessment with a one-line basis per category to the user for confirmation** — a single confirmation pass, NOT five separate questions. A no-safe-default domain is never settled by silent self-assessment; the user confirms or corrects it.
-
-- Security? (Y/N)
-- Data destruction? (Y/N)
-- External contract? (Y/N)
-- Concurrency? (Y/N)
-- Money? (Y/N)
-
-Any **Y** activates Deliberate Mode for that category, and its risk fork is resolved with the user per `### Deliberate Mode Triggers` (no-safe-default — silence, uncertainty, or a generic "skip" cannot settle it). **Each N the user confirms as not-applicable is recorded as a non-goal-with-decider** in `## Acceptance Criteria (Mandatory Contract) > ### Non-Goals` — e.g. `동시성 처리 안 함 | decider: 이 경로의 락/레이스/트랜잭션 finding은 out (실행모델이 순차적)`. This turns a silent "not applicable" into an explicit shield that Metis and downstream code-review consume as an OUT-of-scope exclusion, and it supplies the ≥1 non-goal the Scoped+ existence gate requires. This Y/N assessment (single confirmation pass for Scoped+; for Trivial the T1 risk-override in `### Deliberate Mode Triggers` still fires on a genuine risk keyword) is the primary risk-domain detection signal.
+Judge which no-safe-default domains (`### Deliberate Mode Triggers`) are in play — active judgment, not a per-plan checklist, regardless of whether the request named the risk. Resolve each live one with the user (never a silent default), which activates the Deliberate Mode artifacts; record each deliberately-excluded one as a non-goal-with-decider (e.g. `동시성 처리 안 함 | decider: 락/레이스/트랜잭션 finding은 out — 실행모델이 순차적`), which Metis and downstream code-review consume as an OUT-of-scope shield. **Absence is not an entry.**
 
 ### Risk-Domain Pre-Mortem
 
-T1-gated — emit this section in the plan output only when a T1 trigger fires (Risk-Domain Assessment Y, or a Risk-Domain Backstop keyword-scan hit). Conduct a pre-mortem: imagine the change has shipped and caused an incident. Enumerate at least 3 failure scenarios (3 scenario minimum), each with the following structure:
+T1-gated — emit this section in the plan output only when a T1 trigger fires (a T1 keyword match per `### Deliberate Mode Triggers`, or the Risk-Domain Assessment finding a domain in play). Conduct a pre-mortem: imagine the change has shipped and caused an incident. Enumerate at least 3 failure scenarios (3 scenario minimum), each with the following structure:
 
 - **Scenario name** — Brief label
 - **Trigger condition** — What user action or system event causes this failure
@@ -891,14 +883,6 @@ T1-gated — emit this section in the plan output only when a T1 trigger fires. 
 - **observability** — Metrics, alerts, logs, tracing coverage that would surface failures in production
 
 These 4 layers are a classification lens over the existing `QA Scenario 7-Field Structure` entries, which stay authoritative and are what `F3. QA Scenario Execution` runs. Do not duplicate QA scenario content here; categorize existing scenarios by layer and identify coverage gaps.
-
-### Risk-Domain Backstop
-
-F1 Plan Compliance Audit includes a plan-body T1 keyword scan as a backstop. After verifying Must Have / Must NOT Have compliance, F1 scans the plan body for T1 keywords from all five categories (Security, Data destruction, External contract, Concurrency, Money).
-
-If the Risk-Domain Assessment marked a category N but the scan hits that category's keywords in the plan body, F1 returns REQUEST_CHANGES and routes back to re-confirm the risk assessment with the user.
-
-If the scan finds no T1 keywords and all categories were marked N, F1 proceeds normally. The backstop does not fire when T1 was already acknowledged (Y) and Deliberate Mode artifacts are present.
 
 ### TODO Task Format (7 fields, all required)
 

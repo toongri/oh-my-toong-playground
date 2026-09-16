@@ -33,9 +33,10 @@ describe("다이어그램 커버리지 표 호출자 중립성 문서 계약", (
 // non-goal-existence-gate: any bounded plan excludes something, so a plan must
 // carry >=1 decider-bearing non-goal, co-confirmed with the user before Metis.
 // The gate is deterministic at the Metis B2 axis (Metis runs only for Scoped+,
-// so the tier falls out of the architecture) and generated cheaply by the
-// risk-domain confirmation pass. Existence only, never precision -- grading
-// precision would turn a mechanical gate into an interpretation dispute.
+// so the tier falls out of the architecture), satisfied by the work's own
+// genuine exclusions -- never a manufactured per-domain record. Existence
+// only, never precision -- grading precision would turn a mechanical gate
+// into an interpretation dispute.
 // (must FAIL before the corresponding SKILL.md / review-pipeline.md / metis.md
 //  edits -- RED)
 // ---------------------------------------------------------------------------
@@ -67,7 +68,7 @@ describe("non-goal-existence-gate: AC contract requires a co-confirmed Non-Goals
 	});
 });
 
-describe("non-goal-existence-gate: risk-domain assessment is user-confirmed and each not-applicable N becomes a non-goal", () => {
+describe("risk-domain-consideration: no-safe-default domains are actively considered; deliberate exclusion becomes a non-goal, never-in-play stays absent", () => {
 	// Anchor on the newline-delimited headings so the backtick REFERENCES to
 	// these section names elsewhere in the doc are not matched instead.
 	const start = skillMd.indexOf("\n### Risk-Domain Assessment\n");
@@ -78,16 +79,17 @@ describe("non-goal-existence-gate: risk-domain assessment is user-confirmed and 
 		expect(start).toBeGreaterThan(-1);
 	});
 
-	test("the Y/N assessment is surfaced to the user for confirmation in a single pass", () => {
-		expect(region).toContain(
-			"surfaces the full Y/N assessment with a one-line basis per category to the user for confirmation",
-		);
+	test("the planner judges which domains are in play (not a per-plan checklist)", () => {
+		expect(region).toContain("Judge which no-safe-default domains");
+		expect(region).toContain("active judgment, not a per-plan checklist");
 	});
 
-	test("each user-confirmed N (not-applicable) is recorded as a non-goal-with-decider", () => {
-		expect(region).toContain(
-			"Each N the user confirms as not-applicable is recorded as a non-goal-with-decider",
-		);
+	test("a never-in-play domain stays absent (absence is not an entry)", () => {
+		expect(region).toContain("Absence is not an entry.");
+	});
+
+	test("only a deliberately-excluded domain is recorded as a non-goal-with-decider", () => {
+		expect(region).toContain("record each deliberately-excluded one as a non-goal-with-decider");
 	});
 });
 

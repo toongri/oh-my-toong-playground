@@ -23,7 +23,7 @@ Read this file when you are about to execute a SPECIFIC reviewer invocation, Sta
 [Confirmed AC in full — paste verbatim. No summarizing.]
 ```
 
-**≥1 OUT-of-scope item is REQUIRED.** Metis runs only for Scoped+ intent, and any bounded work excludes something; a brief that reaches Metis with an empty `OUT of Scope` list has not drawn its boundary. Risk-domain non-goals the user confirmed as not-applicable (`SKILL.md > ### Risk-Domain Assessment`) belong here. The gate in `agents/metis.md` (B2) rejects an empty OUT-of-scope list with REQUEST_CHANGES.
+**≥1 OUT-of-scope item is REQUIRED.** Metis runs only for Scoped+ intent, and any bounded work excludes something; a brief that reaches Metis with an empty `OUT of Scope` list has not drawn its boundary. Risk-domain non-goals the user deliberately excludes (`SKILL.md > ### Risk-Domain Assessment`) belong here. The gate in `agents/metis.md` (B2) rejects an empty OUT-of-scope list with REQUEST_CHANGES.
 
 Each `OUT of Scope` item must carry a decider — `| decider: {how to tell a finding belongs to this exclusion}` — so a reviewer can tell whether a candidate finding falls inside it. An exclusion without a decider has no edge to any finding, so it does nothing. The gate in `agents/metis.md` (B3) rejects an undecidered exclusion with REQUEST_CHANGES; this template fixes the format that gate checks.
 
