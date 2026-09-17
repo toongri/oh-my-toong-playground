@@ -173,6 +173,22 @@ Full rewritten text + change summary listing all applied pattern codes.
 
 ---
 
+## Completion gate — required deliverable
+
+Do NOT report this work as done until the deliverable below exists. If it is missing or incomplete, you MUST, in order:
+
+1. **Study the guideline** — read the reference that governs the deliverable before producing it.
+2. **Produce** the deliverable exactly per that guideline.
+3. **Deliver** it to its stated location.
+
+| Deliverable | Guideline to study | Delivered to |
+|---|---|---|
+| Mode-appropriate output — audit: Detection Report table; rewrite: full rewritten text + change summary | The reference file(s) matched by the Routing Triggers (`patterns-korean.md` / `patterns-english.md` / `patterns-common.md` / `soul-injection.md`) for every pattern flagged in Step 3, read before Step 4 | The assistant's response, formatted per Step 5 for the active mode |
+
+A "done" claim with no mode-appropriate output produced — or produced without reading the matched pattern reference file(s) first — is a failed completion, not a shortcut: study the guideline, produce the deliverable, then finish.
+
+---
+
 ## Always-On Critical Patterns
 
 > K17 and K18 fire on essentially every Korean invocation, so their full replacement guidance stays inline (not deferred). Detection cues are also in the cheatsheet above.

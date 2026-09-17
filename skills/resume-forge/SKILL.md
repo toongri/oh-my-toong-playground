@@ -373,6 +373,22 @@ When all scenarios have `loop2.status == "passed"`, delete the state file (`$OMT
 
 ---
 
+## Completion gate — required deliverable
+
+Do NOT report this work as done until the deliverable below exists. If it is missing or incomplete, you MUST, in order:
+
+1. **Study the guideline** — read the reference that governs the deliverable before producing it.
+2. **Produce** the deliverable exactly per that guideline.
+3. **Deliver** it to its stated path.
+
+| Deliverable | Guideline to study | Delivered to |
+|---|---|---|
+| `target_count` complete, examiner-APPROVEd problem-solving entries (Loop 2 passed) | `review-resume/references/note-system.md` candidate file format (tags frontmatter + body) | `$OMT_DIR/review-resume/problem-solving/` |
+
+A "done" claim with fewer than `target_count` entries saved to `problem-solving/` — with the rest left pending in `drafts/` or unresolved in state — is a failed completion, not a shortcut: study the guideline, produce the deliverable, then finish.
+
+---
+
 ## Writing Direction
 
 The examiner's core question: **"If I hire this person based on this claim, will they actually deliver?"**

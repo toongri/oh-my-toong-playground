@@ -95,6 +95,21 @@ The raw extraction is a "transcript" with OCR noise. The notes are the "study no
 - **Environment-dependent values** (absolute maxmemory figures, etc.) → annotate as "reference values".
 - **Do not fill gaps with inference** not present in the raw extraction.
 
+## Completion gate — required deliverables
+
+Do NOT report this work as done until both deliverables below exist. If either is missing or incomplete, you MUST, in order:
+
+1. **Study the guideline** — read the reference that governs the deliverable before producing it.
+2. **Produce** the deliverable exactly per that guideline.
+3. **Deliver** it to its stated location.
+
+| Deliverable | Guideline to study | Delivered to |
+|---|---|---|
+| Raw extraction (Tier 1 markdown/text, + Tier 2 tables when applicable) | Part A (steps 1–7): PDF-type detection, page-mapping verification, Tier 1/2 extraction, quality check | Working directory, named `<book>_p<a>-<b>` (per step 3) — kept, never deleted |
+| Study notes markdown (정리) | Part B (steps 8–9): re-narration rules, OCR-fix table, No-fabrication rules | Working directory, matching the existing series' naming (e.g. `<book>_7장_정리.md`) |
+
+A "done" claim with only one of the two artifacts produced — or with the raw extraction deleted — is a failed completion, not a shortcut: study the guideline, produce the deliverable, then finish.
+
 ## Tool Selection
 
 | Tool | Output | Strength | Limit |

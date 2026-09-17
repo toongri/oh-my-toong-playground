@@ -104,6 +104,20 @@ After all 3 Areas are complete:
 2. Priority-ordered improvement list (Critical → Suggestion)
 3. Generate improved full document upon user request
 
+## Completion gate — required deliverable
+
+Do NOT report this work as done until the deliverable below exists. If it is missing or incomplete, you MUST, in order:
+
+1. **Study the guideline** — read the reference that governs the deliverable before producing it.
+2. **Produce** the deliverable exactly per that guideline.
+3. **Deliver** it to its stated path.
+
+| Deliverable | Guideline to study | Delivered to |
+|---|---|---|
+| The completed 3-Area review (Before/After findings cited to a principle ID, per Review Output Format), and the improved full document when the user requests it | SKILL.md's 3-area protocol (Iron Law + Non-Negotiable Rules) and each Area's own reference (`references/type.md`, `references/architecture.md`, `references/sentence.md`) | Presented to the user in the conversation, in Korean |
+
+A "done" claim with an Area skipped, a finding missing its Before/After or principle citation, or (when requested) no improved document produced is a failed completion, not a shortcut: study the guideline, produce the deliverable, then finish.
+
 ## Language
 
 - Review results are written in Korean
