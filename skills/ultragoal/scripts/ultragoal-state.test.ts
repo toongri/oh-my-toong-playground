@@ -599,7 +599,7 @@ describe("goal state", () => {
 		const { stderr, status } = runCliCaptured("request-complete");
 		expect(status).not.toBe(0);
 		expect(stderr).toContain("request-complete: refused");
-		expect(stderr).toMatch(/SKILL\.md/);
+		expect(stderr).toMatch(/completion-gate\.md/);
 		expect(stderr).toMatch(/\b(read|study)\b/i);
 	});
 
