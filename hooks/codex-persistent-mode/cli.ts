@@ -1,40 +1,33 @@
 #!/usr/bin/env bun
 
 /**
- * Codex "don't stop while work is incomplete" hook pair.
+ * Codex "don't stop while work is incomplete" hook pair (skill-chain ratchet only).
  *
- * `hook post-tool-use` (writer, G6-2 + chain ratchet): on every `update_plan`
- * tool call, counts non-completed plan steps and merges `{"incomplete": <N>}`
- * into `$OMT_DIR/codex-todo-<sid>.json`. Always writes, including N=0 — that
- * zero-write is the release valve that unblocks the reader once a plan
- * finishes. On every shell/exec tool call whose command argument references a
- * `<skill>/SKILL.md` path that exists on disk, it also records the skill as
- * opened and — by reading that same file and matching `$name` sigils in its
- * body against real sibling skill directories (siblings of the opened
- * skill's own directory, so no deploy-path assumption is baked in) — records
- * any newly-referenced next-step skill as expected. Both writes merge into
- * the same mirror file rather than clobbering each other's fields. Before
- * either write, a shared `isFailedToolResponse` gate (`@lib/tool-response`,
- * moved out of the sibling extractor hooks/rules-injector/tool-paths.ts so
- * both consumers share one predicate) rejects a failed `tool_response` —
- * neither the todo-count mirror nor the skill-chain fields are written for a
- * failed `update_plan` or shell/exec call, so a rejected plan update can't
- * report false completion and a failed command can't report a skill as
- * opened.
+ * `hook post-tool-use` (writer, chain ratchet): on every shell/exec tool call
+ * whose command argument references a `<skill>/SKILL.md` path that exists on
+ * disk, it records the skill as opened and — by reading that same file and
+ * matching `$name` sigils in its body against real sibling skill directories
+ * (siblings of the opened skill's own directory, so no deploy-path assumption
+ * is baked in) — records any newly-referenced next-step skill as expected. The
+ * writes merge into `$OMT_DIR/codex-todo-<sid>.json`. Before writing, a shared
+ * `isFailedToolResponse` gate (`@lib/tool-response`, moved out of the sibling
+ * extractor hooks/rules-injector/tool-paths.ts so both consumers share one
+ * predicate) rejects a failed `tool_response` so a failed command can't report
+ * a skill as opened. The former `update_plan` todo-step counter was removed —
+ * the baseline todo-continuation Stop gate no longer exists (family state-gates
+ * are the sole Stop authority), so no plan-step count is collected.
  *
- * `hook stop` (reader, G6-1 / G6-3 + chain ratchet): reads that same file to
- * derive `incompleteTodoCount` (absent/unreadable/malformed → 0, never an
- * early return) and `pendingSkillChainSkills` (expected skills not yet
- * opened), and hands both, plus `last_assistant_message`, to the shared
- * `makeDecision` core (`@lib/persistent-mode-core/decision`) — the same
- * continuation contract hooks/persistent-mode/ (Claude) uses; Claude's
- * consumer never populates `pendingSkillChainSkills`, so the chain ratchet is
- * inert there. That core decides block vs. allow-stop: an `<awaiting-user/>`
- * or deep-interview done-token takes priority over a pending todo count or a
- * pending skill chain; otherwise it blocks (`{"decision":"block","reason":...}`)
- * iff incomplete > 0 or a next-step skill remains unopened. Codex's
- * allow-stop contract is silence (exit 0, no stdout) — this hook only ever
- * prints on an explicit block, never `{"continue":true}`. An unsafe
+ * `hook stop` (reader, chain ratchet): reads that same file to derive
+ * `pendingSkillChainSkills` (expected skills not yet opened; absent/unreadable/
+ * malformed → [], never an early return) and hands it, plus
+ * `last_assistant_message`, to the shared `makeDecision` core
+ * (`@lib/persistent-mode-core/decision`) — the same continuation contract
+ * hooks/persistent-mode/ (Claude) uses; Claude's consumer never populates
+ * `pendingSkillChainSkills`, so the chain ratchet is inert there. That core
+ * decides block vs. allow-stop from the family state-gates plus the skill chain;
+ * a family's own stop-allowed state (e.g. prometheus awaiting_user) permits the
+ * stop. Codex's allow-stop contract is silence (exit 0, no stdout) — this hook
+ * only ever prints on an explicit block, never `{"continue":true}`. An unsafe
  * session_id fails open with nothing printed.
  *
  * Deliberately independent of lib/state-core.ts's STATE_PREFIX registry —
@@ -114,15 +107,9 @@ function runPostToolUse(input: Record<string, unknown>): void {
 	// apart from a real one.
 	if (isFailedToolResponse(input["tool_response"])) return;
 
-	if (toolName === "update_plan") {
-		const omtDir = resolveOmtDir(cwdOf(input));
-		mkdirSync(omtDir, { recursive: true });
-		const incomplete = countIncomplete(input["tool_input"]);
-		const path = mirrorPath(omtDir, sessionId);
-		writeFileSync(path, JSON.stringify({ ...readMirror(path), incomplete }));
-		return;
-	}
-
+	// The baseline todo-continuation gate was removed (family state-gates are the
+	// sole Stop authority), so `update_plan` plan-step counts are no longer collected
+	// or consumed. Only the skill-chain ratchet writes to the mirror now.
 	if (typeof toolName === "string" && COMMAND_TOOL_NAMES.has(toolName)) {
 		recordSkillChain(input, sessionId);
 	}
@@ -239,23 +226,22 @@ function runStop(input: Record<string, unknown>): void {
 	process.env.OMT_DIR = resolveOmtDir(cwd);
 	const omtDir = process.env.OMT_DIR;
 
-	// Mirror read: absent/unreadable/malformed all collapse to 0/[] (no early
-	// return) so makeDecision is always reached — awaiting-user and
-	// deep-interview done-tokens must be checked regardless of todo/chain state.
-	let incompleteTodoCount = 0;
+	// Mirror read: absent/unreadable/malformed collapses to [] (no early return) so
+	// makeDecision is always reached — family stop-gates and done-tokens must be
+	// checked regardless of chain state. Only the skill-chain fields are read now;
+	// the baseline todo-continuation gate was removed (family state-gates are the
+	// sole Stop authority), so the mirror's `incomplete` count is no longer consumed.
 	let pendingSkillChainSkills: string[] = [];
 	try {
 		const raw = readFileSync(mirrorPath(omtDir, sessionId), "utf8");
 		const parsed: unknown = JSON.parse(raw);
 		if (isRecord(parsed)) {
-			const n = parsed["incomplete"];
-			if (typeof n === "number" && Number.isFinite(n) && n > 0) incompleteTodoCount = n;
 			const opened = stringArray(parsed["openedSkills"]);
 			const expected = stringArray(parsed["expectedSkills"]);
 			pendingSkillChainSkills = expected.filter((name) => !opened.includes(name));
 		}
 	} catch {
-		// absent/unreadable/malformed mirror file → 0/[]
+		// absent/unreadable/malformed mirror file → []
 	}
 
 	// `last_assistant_message`는 codex-rs 새 hooks 시스템 Stop payload의 확정 snake_case 키
@@ -271,7 +257,6 @@ function runStop(input: Record<string, unknown>): void {
 		sessionId,
 		lastAssistantMessage: typeof lam === "string" ? lam : null,
 		projectRoot: cwd,
-		incompleteTodoCount,
 		// Codex Stop payload's closed schema carries no background-task data, and completion
 		// is queued as context with trigger_turn:false, so it has no guaranteed wake/re-invocation.
 		// Shared invariant: Stop may bypass only if deferred re-invocation is guaranteed;
@@ -294,18 +279,6 @@ function runStop(input: Record<string, unknown>): void {
 	if (output.decision === "block") {
 		process.stdout.write(JSON.stringify(output));
 	}
-}
-
-/** Counts `plan` entries whose `status !== "completed"`. Never throws. */
-function countIncomplete(toolInput: unknown): number {
-	if (!isRecord(toolInput)) return 0;
-	const plan = toolInput["plan"];
-	if (!Array.isArray(plan)) return 0;
-	let count = 0;
-	for (const entry of plan) {
-		if (!isRecord(entry) || entry["status"] !== "completed") count++;
-	}
-	return count;
 }
 
 /**

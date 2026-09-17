@@ -124,6 +124,22 @@ The report body is Korean-first (the team's working language); this skill's own 
 
 ---
 
+## Completion gate — required deliverable
+
+Do NOT report this work as done until the deliverable below exists on disk. If it is missing or incomplete, you MUST, in order:
+
+1. **Study the guideline** — read the reference that governs the deliverable before producing it.
+2. **Produce** the deliverable exactly per that guideline.
+3. **Deliver** it to its stated path.
+
+| Deliverable | Guideline to study | Delivered to |
+|---|---|---|
+| ONE structured markdown report | `references/type-schemas.md` + `references/extract-actionitems.md` | `$OMT_DIR/meeting-notes/{slug}.md` |
+
+A "done" claim with no report file written — or a report missing a required schema field — is a failed completion, not a shortcut: study the guideline, produce the deliverable, then finish.
+
+---
+
 ## Inline Gates
 
 These gates apply before Stage 7 renders. Failing any gate blocks the render of the offending item — fix or drop it, then continue.

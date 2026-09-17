@@ -2,8 +2,9 @@
 
 /**
  * Hermetic tests for the codex-persistent-mode CLI: two subcommands over stdin,
- * `hook post-tool-use` (the update_plan writer, G6-2) and `hook stop` (the
- * fail-open reader, G6-1 / G6-3).
+ * `hook post-tool-use` (the skill-chain ratchet writer) and `hook stop` (the
+ * fail-open reader). The former update_plan todo-step writer/reader was removed
+ * with the baseline todo-continuation Stop gate.
  *
  * Every test spawns the real binary (`bun run cli.ts hook <sub>`) with
  * `env.OMT_DIR` pointed at a fresh mkdtemp dir, so `resolveOmtDir` never
@@ -124,96 +125,6 @@ describe("codex-persistent-mode cli", () => {
 		rmSync(projectDir, { recursive: true, force: true });
 	});
 
-	describe("hook post-tool-use (writer, G6-2)", () => {
-		test("3-step plan with 1 completed writes {incomplete:2}", async () => {
-			const sid = "sid-writer-1";
-			const payload = postToolUsePayload(sid, projectDir, "update_plan", {
-				plan: [{ status: "completed" }, { status: "pending" }, { status: "in_progress" }],
-			});
-			const { exitCode, stdout } = await runCli("post-tool-use", payload, omtDir);
-			expect(exitCode).toBe(0);
-			expect(stdout).toBe("");
-			const written = JSON.parse(readFileSync(mirrorPath(omtDir, sid), "utf8"));
-			expect(written).toEqual({ incomplete: 2 });
-		});
-
-		test("release valve: all-completed plan overwrites an existing file with {incomplete:0}", async () => {
-			const sid = "sid-valve-1";
-			const path = mirrorPath(omtDir, sid);
-			writeFileSync(path, JSON.stringify({ incomplete: 5 }));
-			const payload = postToolUsePayload(sid, projectDir, "update_plan", {
-				plan: [{ status: "completed" }, { status: "completed" }],
-			});
-			const { exitCode } = await runCli("post-tool-use", payload, omtDir);
-			expect(exitCode).toBe(0);
-			expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ incomplete: 0 });
-		});
-
-		test("non-completed count tracks the payload, not a constant (2 !== 0)", async () => {
-			const sidA = "sid-nonconst-a";
-			const sidB = "sid-nonconst-b";
-			await runCli(
-				"post-tool-use",
-				postToolUsePayload(sidA, projectDir, "update_plan", {
-					plan: [{ status: "pending" }, { status: "pending" }],
-				}),
-				omtDir,
-			);
-			await runCli(
-				"post-tool-use",
-				postToolUsePayload(sidB, projectDir, "update_plan", {
-					plan: [{ status: "completed" }, { status: "completed" }],
-				}),
-				omtDir,
-			);
-			const a = JSON.parse(readFileSync(mirrorPath(omtDir, sidA), "utf8"));
-			const b = JSON.parse(readFileSync(mirrorPath(omtDir, sidB), "utf8"));
-			expect(a.incomplete).not.toBe(b.incomplete);
-			expect(a).toEqual({ incomplete: 2 });
-			expect(b).toEqual({ incomplete: 0 });
-		});
-
-		test("tool_name other than update_plan writes no file at all", async () => {
-			const sid = "sid-other-tool";
-			const payload = postToolUsePayload(sid, projectDir, "exec_command", {
-				plan: [{ status: "pending" }],
-			});
-			const { exitCode, stdout } = await runCli("post-tool-use", payload, omtDir);
-			expect(exitCode).toBe(0);
-			expect(stdout).toBe("");
-			expect(existsSync(mirrorPath(omtDir, sid))).toBe(false);
-		});
-
-		test("defensive parse: missing/non-array/empty plan and status-less entries never throw", async () => {
-			const cases: Array<{ sid: string; toolInput: unknown; expected: number }> = [
-				{ sid: "sid-missing-plan", toolInput: {}, expected: 0 },
-				{ sid: "sid-nonarray-plan", toolInput: { plan: "not-an-array" }, expected: 0 },
-				{ sid: "sid-empty-plan", toolInput: { plan: [] }, expected: 0 },
-				{ sid: "sid-no-status", toolInput: { plan: [{ step: "do a thing" }] }, expected: 1 },
-				{
-					sid: "sid-nonobject-entry",
-					toolInput: { plan: [{ status: "completed" }, "garbage", 42] },
-					expected: 2,
-				},
-			];
-			for (const c of cases) {
-				const payload = postToolUsePayload(c.sid, projectDir, "update_plan", c.toolInput);
-				const { exitCode, stdout, stderr } = await runCli("post-tool-use", payload, omtDir);
-				expect({ sid: c.sid, exitCode, stdout, stderr }).toEqual({
-					sid: c.sid,
-					exitCode: 0,
-					stdout: "",
-					stderr: "",
-				});
-				const written = JSON.parse(readFileSync(mirrorPath(omtDir, c.sid), "utf8"));
-				expect({ sid: c.sid, written }).toEqual({
-					sid: c.sid,
-					written: { incomplete: c.expected },
-				});
-			}
-		});
-	});
-
 	describe("hook post-tool-use (writer): skill-chain ratchet observation", () => {
 		function writeSkill(name: string, body: string): void {
 			const dir = join(projectDir, "skills", name);
@@ -283,7 +194,7 @@ describe("codex-persistent-mode cli", () => {
 			expect(written.expectedSkills ?? []).toEqual([]);
 		});
 
-		test("a command with no SKILL.md reference writes nothing (preserves the update_plan-only regression test)", async () => {
+		test("a command with no SKILL.md reference writes nothing", async () => {
 			const sid = "sid-chain-no-ref";
 			const payload = postToolUsePayload(sid, projectDir, "exec_command", {
 				command: "ls -la",
@@ -292,34 +203,6 @@ describe("codex-persistent-mode cli", () => {
 			expect(exitCode).toBe(0);
 			expect(stdout).toBe("");
 			expect(existsSync(mirrorPath(omtDir, sid))).toBe(false);
-		});
-
-		test("a subsequent update_plan write merges with, rather than clobbers, prior skill-chain fields", async () => {
-			const sid = "sid-chain-merge";
-			writeSkill("chain-alpha", "Load $chain-bravo next.");
-			writeSkill("chain-bravo", "chain-bravo body.");
-
-			await runCli(
-				"post-tool-use",
-				postToolUsePayload(sid, projectDir, "exec_command", {
-					command: "cat skills/chain-alpha/SKILL.md",
-				}),
-				omtDir,
-			);
-			await runCli(
-				"post-tool-use",
-				postToolUsePayload(sid, projectDir, "update_plan", {
-					plan: [{ status: "pending" }],
-				}),
-				omtDir,
-			);
-
-			const written = JSON.parse(readFileSync(mirrorPath(omtDir, sid), "utf8"));
-			expect(written).toEqual({
-				incomplete: 1,
-				openedSkills: ["chain-alpha"],
-				expectedSkills: ["chain-bravo"],
-			});
 		});
 
 		test("opening the expected skill later merges into openedSkills without clobbering", async () => {
@@ -433,37 +316,6 @@ describe("codex-persistent-mode cli", () => {
 			writeFileSync(join(dir, "SKILL.md"), body);
 		}
 
-		test("arm 1: update_plan + tool_response {exit_code:1} writes no mirror (false-complete guard)", async () => {
-			const sid = "sid-gate-update-plan-failed";
-			const payload = postToolUsePayload(
-				sid,
-				projectDir,
-				"update_plan",
-				{ plan: [{ status: "completed" }, { status: "completed" }] },
-				{ exit_code: 1, error: "plan update rejected" },
-			);
-			const { exitCode, stdout } = await runCli("post-tool-use", payload, omtDir);
-			expect(exitCode).toBe(0);
-			expect(stdout).toBe("");
-			expect(existsSync(mirrorPath(omtDir, sid))).toBe(false);
-		});
-
-		test("arm 1b: update_plan + failed tool_response leaves a prior mirror value unchanged", async () => {
-			const sid = "sid-gate-update-plan-failed-preexisting";
-			const path = mirrorPath(omtDir, sid);
-			writeFileSync(path, JSON.stringify({ incomplete: 2 }));
-			const payload = postToolUsePayload(
-				sid,
-				projectDir,
-				"update_plan",
-				{ plan: [{ status: "completed" }, { status: "completed" }] },
-				{ exit_code: 1, error: "plan update rejected" },
-			);
-			const { exitCode } = await runCli("post-tool-use", payload, omtDir);
-			expect(exitCode).toBe(0);
-			expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ incomplete: 2 });
-		});
-
 		test("arm 2: exec_command referencing an existing SKILL.md + tool_response {exit_code:1} records nothing", async () => {
 			const sid = "sid-gate-exec-failed";
 			writeSkill("chain-alpha", "Body text. Next, load $chain-bravo to continue.");
@@ -520,39 +372,7 @@ describe("codex-persistent-mode cli", () => {
 			expect(parsed.reason).toContain("chain-bravo");
 		});
 
-		test("arm 4 (false-complete regression): a rejected 'all-complete' update_plan still blocks stop", async () => {
-			const sid = "sid-gate-false-complete";
-			const path = mirrorPath(omtDir, sid);
-
-			await runCli(
-				"post-tool-use",
-				postToolUsePayload(sid, projectDir, "update_plan", {
-					plan: [{ status: "pending" }, { status: "pending" }],
-				}),
-				omtDir,
-			);
-			expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ incomplete: 2 });
-
-			await runCli(
-				"post-tool-use",
-				postToolUsePayload(
-					sid,
-					projectDir,
-					"update_plan",
-					{ plan: [{ status: "completed" }, { status: "completed" }] },
-					{ exit_code: 1, error: "plan update rejected" },
-				),
-				omtDir,
-			);
-			expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ incomplete: 2 });
-
-			const stopResult = await runCli("stop", stopPayload(sid, projectDir), omtDir);
-			const parsed = JSON.parse(stopResult.stdout);
-			expect(parsed.decision).toBe("block");
-			expect(parsed.reason).toContain("2");
-		});
-
-		test("arm 5 (success control group): successful/absent tool_response shapes all record normally", async () => {
+		test("arm 5 (success control group): successful/absent tool_response shapes all record the skill chain", async () => {
 			const successShapes: Array<{ name: string; toolResponse: unknown }> = [
 				{ name: "exit_code-0", toolResponse: { exit_code: 0 } },
 				{ name: "null", toolResponse: null },
@@ -560,34 +380,36 @@ describe("codex-persistent-mode cli", () => {
 			];
 			for (const shape of successShapes) {
 				const sid = `sid-gate-success-${shape.name}`;
+				writeSkill(`chain-${shape.name}`, "chain body.");
 				const { exitCode } = await runCli(
 					"post-tool-use",
 					postToolUsePayload(
 						sid,
 						projectDir,
-						"update_plan",
-						{ plan: [{ status: "pending" }] },
+						"exec_command",
+						{ command: `cat skills/chain-${shape.name}/SKILL.md` },
 						shape.toolResponse,
 					),
 					omtDir,
 				);
 				expect(exitCode).toBe(0);
-				expect(JSON.parse(readFileSync(mirrorPath(omtDir, sid), "utf8"))).toEqual({
-					incomplete: 1,
-				});
+				expect(JSON.parse(readFileSync(mirrorPath(omtDir, sid), "utf8")).openedSkills).toEqual([
+					`chain-${shape.name}`,
+				]);
 			}
 
 			// tool_response field absent entirely (not merely null).
 			const sidAbsent = "sid-gate-success-field-absent";
-			const payloadAbsent = postToolUsePayload(sidAbsent, projectDir, "update_plan", {
-				plan: [{ status: "pending" }],
+			writeSkill("chain-absent", "chain body.");
+			const payloadAbsent = postToolUsePayload(sidAbsent, projectDir, "exec_command", {
+				command: "cat skills/chain-absent/SKILL.md",
 			});
 			delete (payloadAbsent as Record<string, unknown>)["tool_response"];
 			const { exitCode: exitCodeAbsent } = await runCli("post-tool-use", payloadAbsent, omtDir);
 			expect(exitCodeAbsent).toBe(0);
-			expect(JSON.parse(readFileSync(mirrorPath(omtDir, sidAbsent), "utf8"))).toEqual({
-				incomplete: 1,
-			});
+			expect(JSON.parse(readFileSync(mirrorPath(omtDir, sidAbsent), "utf8")).openedSkills).toEqual([
+				"chain-absent",
+			]);
 		});
 
 		test("arm 6 (failure-predicate axis): isError/error-string/status=error each block the write", async () => {
@@ -598,13 +420,14 @@ describe("codex-persistent-mode cli", () => {
 			];
 			for (const shape of failureShapes) {
 				const sid = `sid-gate-failure-${shape.name}`;
+				writeSkill(`chainf-${shape.name}`, "chain body.");
 				const { exitCode } = await runCli(
 					"post-tool-use",
 					postToolUsePayload(
 						sid,
 						projectDir,
-						"update_plan",
-						{ plan: [{ status: "pending" }] },
+						"exec_command",
+						{ command: `cat skills/chainf-${shape.name}/SKILL.md` },
 						shape.toolResponse,
 					),
 					omtDir,
@@ -963,18 +786,6 @@ describe("codex-persistent-mode cli", () => {
 					.filter((line) => line.includes("codex-persistent-mode: child detector failed")).length,
 			).toBe(1);
 		});
-		test("G6-1: incomplete:2 blocks with a non-empty reason naming the count", async () => {
-			const sid = "sid-block-1";
-			writeFileSync(mirrorPath(omtDir, sid), JSON.stringify({ incomplete: 2 }));
-			const { exitCode, stdout } = await runCli("stop", stopPayload(sid, projectDir), omtDir);
-			expect(exitCode).toBe(0);
-			const parsed = JSON.parse(stdout);
-			expect(parsed).toEqual({ decision: "block", reason: parsed.reason });
-			expect(typeof parsed.reason).toBe("string");
-			expect(parsed.reason.length).toBeGreaterThan(0);
-			expect(parsed.reason).toContain("2");
-		});
-
 		test("G6-3: mirror file absent prints 0 bytes, exit 0", async () => {
 			const sid = "sid-absent-1";
 			const { exitCode, stdout } = await runCli("stop", stopPayload(sid, projectDir), omtDir);
@@ -1000,9 +811,12 @@ describe("codex-persistent-mode cli", () => {
 	});
 
 	describe("hook stop: shared continuation contract (makeDecision integration)", () => {
-		test("payload with foreign background_tasks field + incomplete todos → still blocks (no background bypass)", async () => {
+		test("payload with foreign background_tasks field + unresolved skill chain → still blocks (no background bypass)", async () => {
 			const sid = "sid-foreign-background-blocks";
-			writeFileSync(mirrorPath(omtDir, sid), JSON.stringify({ incomplete: 2 }));
+			writeFileSync(
+				mirrorPath(omtDir, sid),
+				JSON.stringify({ openedSkills: ["chain-alpha"], expectedSkills: ["chain-bravo"] }),
+			);
 			const { exitCode, stdout } = await runCli(
 				"stop",
 				{
@@ -1014,31 +828,7 @@ describe("codex-persistent-mode cli", () => {
 			expect(exitCode).toBe(0);
 			const parsed = JSON.parse(stdout);
 			expect(parsed.decision).toBe("block");
-			expect(parsed.reason).toContain("2");
-		});
-
-		test("awaiting-user token allows stop even with incomplete=2 (priority over baseline-todo)", async () => {
-			const sid = "sid-awaiting-with-incomplete";
-			writeFileSync(mirrorPath(omtDir, sid), JSON.stringify({ incomplete: 2 }));
-			const { exitCode, stdout } = await runCli(
-				"stop",
-				stopPayload(sid, projectDir, "wrapping up for now <awaiting-user/>"),
-				omtDir,
-			);
-			expect(exitCode).toBe(0);
-			expect(stdout).toBe("");
-		});
-
-		test("awaiting-user token allows stop with incomplete=0", async () => {
-			const sid = "sid-awaiting-no-incomplete";
-			writeFileSync(mirrorPath(omtDir, sid), JSON.stringify({ incomplete: 0 }));
-			const { exitCode, stdout } = await runCli(
-				"stop",
-				stopPayload(sid, projectDir, "<awaiting-user/>"),
-				omtDir,
-			);
-			expect(exitCode).toBe(0);
-			expect(stdout).toBe("");
+			expect(parsed.reason).toContain("chain-bravo");
 		});
 
 		test("active deep-interview state blocks stop when no done-token", async () => {
@@ -1092,7 +882,7 @@ describe("codex-persistent-mode cli", () => {
 				omtDir,
 			);
 			expect(JSON.parse(missing.stdout).decision).toBe("block");
-			expect(missing.stdout).toContain("presentation missing or stale");
+			expect(missing.stdout).toContain("presentation is missing or stale");
 			expect(existsSync(statePath)).toBe(true);
 			const specPath = join(omtDir, "interview.md");
 			const htmlPath = join(omtDir, "interview.html");
@@ -1111,19 +901,22 @@ describe("codex-persistent-mode cli", () => {
 			expect(existsSync(statePath)).toBe(false);
 		});
 
-		test("last_assistant_message absent + incomplete=2 blocks (fail-open defers to incomplete count)", async () => {
+		test("last_assistant_message absent + unresolved skill chain blocks (fail-open defers to chain state)", async () => {
 			const sid = "sid-no-lam-blocks";
-			writeFileSync(mirrorPath(omtDir, sid), JSON.stringify({ incomplete: 2 }));
+			writeFileSync(
+				mirrorPath(omtDir, sid),
+				JSON.stringify({ openedSkills: ["chain-alpha"], expectedSkills: ["chain-bravo"] }),
+			);
 			const { exitCode, stdout } = await runCli("stop", stopPayload(sid, projectDir), omtDir);
 			expect(exitCode).toBe(0);
 			const parsed = JSON.parse(stdout);
 			expect(parsed.decision).toBe("block");
-			expect(parsed.reason).toContain("2");
+			expect(parsed.reason).toContain("chain-bravo");
 		});
 
-		test("last_assistant_message absent + incomplete=0 allows stop", async () => {
+		test("last_assistant_message absent + no pending state allows stop", async () => {
 			const sid = "sid-no-lam-allows";
-			writeFileSync(mirrorPath(omtDir, sid), JSON.stringify({ incomplete: 0 }));
+			writeFileSync(mirrorPath(omtDir, sid), JSON.stringify({}));
 			const { exitCode, stdout } = await runCli("stop", stopPayload(sid, projectDir), omtDir);
 			expect(exitCode).toBe(0);
 			expect(stdout).toBe("");
@@ -1136,7 +929,10 @@ describe("codex-persistent-mode cli", () => {
 		// defaults to "AskUserQuestion" only when the field is omitted (Claude).
 		test("block reason names request_user_input, never AskUserQuestion (Codex ask-tool vocabulary)", async () => {
 			const sid = "sid-ask-tool-vocabulary";
-			writeFileSync(mirrorPath(omtDir, sid), JSON.stringify({ incomplete: 2 }));
+			writeFileSync(
+				mirrorPath(omtDir, sid),
+				JSON.stringify({ openedSkills: ["chain-alpha"], expectedSkills: ["chain-bravo"] }),
+			);
 			const { exitCode, stdout } = await runCli("stop", stopPayload(sid, projectDir), omtDir);
 			expect(exitCode).toBe(0);
 			const parsed = JSON.parse(stdout);
@@ -1149,9 +945,13 @@ describe("codex-persistent-mode cli", () => {
 	describe("path-traversal guard", () => {
 		test("unsafe session_id: writer writes nothing, reader fails open, nothing escapes omtDir", async () => {
 			const unsafeSid = "../evil";
+			mkdirSync(join(projectDir, "skills", "chain-evil"), { recursive: true });
+			writeFileSync(join(projectDir, "skills", "chain-evil", "SKILL.md"), "chain body.");
 			const writerResult = await runCli(
 				"post-tool-use",
-				postToolUsePayload(unsafeSid, projectDir, "update_plan", { plan: [{ status: "pending" }] }),
+				postToolUsePayload(unsafeSid, projectDir, "exec_command", {
+					command: "cat skills/chain-evil/SKILL.md",
+				}),
 				omtDir,
 			);
 			expect(writerResult.exitCode).toBe(0);
@@ -1166,13 +966,20 @@ describe("codex-persistent-mode cli", () => {
 	});
 
 	describe("round trip: writer then reader on the same $OMT_DIR + session_id", () => {
-		test("blocks while incomplete, then releases once the plan is all-completed", async () => {
+		test("blocks while a next-step skill is unopened, then releases once it is opened", async () => {
 			const sid = "sid-roundtrip-1";
+			const writeSkill = (name: string, body: string) => {
+				const dir = join(projectDir, "skills", name);
+				mkdirSync(dir, { recursive: true });
+				writeFileSync(join(dir, "SKILL.md"), body);
+			};
+			writeSkill("chain-alpha", "Load $chain-bravo next.");
+			writeSkill("chain-bravo", "chain-bravo body.");
 
 			const writeResult1 = await runCli(
 				"post-tool-use",
-				postToolUsePayload(sid, projectDir, "update_plan", {
-					plan: [{ status: "pending" }, { status: "completed" }],
+				postToolUsePayload(sid, projectDir, "exec_command", {
+					command: "cat skills/chain-alpha/SKILL.md",
 				}),
 				omtDir,
 			);
@@ -1182,12 +989,12 @@ describe("codex-persistent-mode cli", () => {
 			expect(stopResult1.exitCode).toBe(0);
 			const parsed1 = JSON.parse(stopResult1.stdout);
 			expect(parsed1.decision).toBe("block");
-			expect(parsed1.reason.length).toBeGreaterThan(0);
+			expect(parsed1.reason).toContain("chain-bravo");
 
 			const writeResult2 = await runCli(
 				"post-tool-use",
-				postToolUsePayload(sid, projectDir, "update_plan", {
-					plan: [{ status: "completed" }, { status: "completed" }],
+				postToolUsePayload(sid, projectDir, "exec_command", {
+					command: "cat skills/chain-bravo/SKILL.md",
 				}),
 				omtDir,
 			);

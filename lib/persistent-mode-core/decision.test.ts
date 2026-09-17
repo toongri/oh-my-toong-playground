@@ -96,251 +96,33 @@ describe("makeDecision", () => {
 		projectRoot,
 		sessionId: "test-session",
 		lastAssistantMessage: null,
-		incompleteTodoCount: 0,
 		activeBackgroundTaskCount: 0,
 		...overrides,
 	});
 
 	describe("no blocking conditions", () => {
-		it("should return continue: true when no state files and no incomplete todos", () => {
+		it("should return continue: true when no state files exist", () => {
 			const context = createContext();
 
 			const result = makeDecision(context);
 
 			expect(result).toEqual({ continue: true });
 		});
-
-		it("should return continue: true when all todos are completed", () => {
-			const context = createContext({ incompleteTodoCount: 0 });
-
-			const result = makeDecision(context);
-
-			expect(result).toEqual({ continue: true });
-		});
 	});
 
-	describe("Priority 2: Baseline todo-continuation", () => {
-		it("should block and return todo-continuation message when incomplete todos exist", () => {
-			const context = createContext({ incompleteTodoCount: 5 });
-
-			const result = makeDecision(context);
-
-			expect(result.decision).toBe("block");
-			expect(result.reason).toContain("<todo-continuation>");
-			expect(result.reason).toContain("INCOMPLETE TASKS DETECTED - 5 remaining");
-			expect(result.reason).toContain("Review your remaining tasks");
-		});
-
-		it("should create attempt files when blocking for baseline todos", async () => {
-			const context = createContext({ incompleteTodoCount: 2 });
-
-			makeDecision(context);
-
-			const { existsSync } = await import("fs");
-			const attemptFile = join(stateDir, "block-count-test-session");
-			expect(existsSync(attemptFile)).toBe(true);
-		});
-
-		it("should allow stop after max continuation attempts (escape hatch)", async () => {
-			// Set attempt count to max
-			await writeFile(join(stateDir, "block-count-test-session"), "5");
-
-			const context = createContext({ incompleteTodoCount: 3 });
-
-			const result = makeDecision(context);
-
-			expect(result).toEqual({ continue: true });
-		});
-
-		it("should cleanup attempt files when escape hatch triggers", async () => {
-			// Set attempt count to max
-			await writeFile(join(stateDir, "block-count-test-session"), "5");
-
-			const context = createContext({ incompleteTodoCount: 3 });
-
-			makeDecision(context);
-
-			const { existsSync } = await import("fs");
-			expect(existsSync(join(stateDir, "block-count-test-session"))).toBe(false);
-		});
-
-		it("should allow stop when no incomplete todos", () => {
-			const context = createContext({ incompleteTodoCount: 0 });
-
-			const result = makeDecision(context);
-
-			expect(result).toEqual({ continue: true });
-		});
-
-		// Regression: the todo escape hatch (blockCount >= MAX_BLOCK_COUNT) returns a
-		// full stop-allow (continue), same as the no-blocking fallthrough that normally
-		// resets the skill-chain namespace — but the escape route bypassed that
-		// fallthrough entirely, leaking a leftover skill-chain block-count file past
-		// this return. The next skill-chain ratchet would then read that stale count
-		// and hit its own escape hatch earlier than a full MAX_BLOCK_COUNT budget.
-		it("cleans up a leaked skill-chain block-count file when the todo escape hatch triggers", async () => {
-			await writeFile(join(stateDir, "block-count-test-session"), "5");
-			await writeFile(join(stateDir, "block-count-skill-chain-test-session"), "3");
-
-			const context = createContext({ incompleteTodoCount: 3 });
-
-			const result = makeDecision(context);
-
-			expect(result).toEqual({ continue: true });
-			expect(fs.existsSync(join(stateDir, "block-count-skill-chain-test-session"))).toBe(false);
-		});
-
-		// Negative control: when the todo branch merely blocks (not escapes), the
-		// skill-chain namespace is untouched — the escape-path fix must not reach into
-		// the ordinary block path.
-		it("(control) leaves the skill-chain block-count file alone on an ordinary todo block", async () => {
-			await writeFile(join(stateDir, "block-count-skill-chain-test-session"), "3");
-
-			const context = createContext({ incompleteTodoCount: 3 });
-
-			const result = makeDecision(context);
-
-			expect(result.decision).toBe("block");
-			expect(fs.existsSync(join(stateDir, "block-count-skill-chain-test-session"))).toBe(true);
-			expect(fs.readFileSync(join(stateDir, "block-count-skill-chain-test-session"), "utf-8")).toBe(
-				"3",
-			);
-		});
-	});
-
-	describe("priority ordering", () => {
-		it("should use baseline todo-continuation when incomplete todos exist", () => {
-			const context = createContext({ incompleteTodoCount: 3 });
-
-			const result = makeDecision(context);
-
-			expect(result.decision).toBe("block");
-			expect(result.reason).toContain("<todo-continuation>");
-		});
-	});
-
-	describe("Priority 0.5: awaiting-user pause token", () => {
-		it("CRITICAL: awaiting-user token allows stop even during an active+live deep interview, keeps state, resets block-count", async () => {
-			const fresh = new Date().toISOString();
-			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
-			await writeFile(
-				markerPath,
-				JSON.stringify({
-					active: true,
-					sessionId: "test-session",
-					started_at: fresh,
-					last_touched_at: fresh,
-					state: { phase: "in_progress", answers: {} },
-				}),
-			);
-			await writeFile(join(stateDir, "block-count-test-session"), "3");
-
-			const context = createContext({
-				lastAssistantMessage: "Waiting on you to decide. <awaiting-user/>",
-			});
-
-			const result = makeDecision(context);
-
-			expect(result).toEqual({ continue: true });
-			// AC4: state is KEPT, not cleared — the interview marker still exists
-			const { existsSync } = await import("fs");
-			expect(existsSync(markerPath)).toBe(true);
-			// Block-count is reset
-			expect(existsSync(join(stateDir, "block-count-test-session"))).toBe(false);
-		});
-
-		it("AC3: awaiting-user allows stop during an active ultragoal pursuit, leaving iteration untouched", async () => {
-			const ultragoalPath = join(omtDir, "ultragoal-state-test-session.json");
-			await writeFile(
-				ultragoalPath,
-				JSON.stringify({
-					active: true,
-					phase: "pursuing",
-					objective_verdict: "",
-					iteration: 2,
-					max_iterations: 10,
-					outcome: "ultragoal objective text",
-				}),
-			);
-
-			const context = createContext({
-				lastAssistantMessage: "Need your input. <awaiting-user/>",
-			});
-
-			const result = makeDecision(context);
-
-			expect(result).toEqual({ continue: true });
-			const { readFileSync } = await import("fs");
-			const after = JSON.parse(readFileSync(ultragoalPath, "utf8"));
-			expect(after.iteration).toBe(2);
-		});
-
-		it("AC3: awaiting-user allows stop during an active prometheus session, keeping state", async () => {
+	// Family stop-allowed pause states (replaces the deleted global <awaiting-user/>
+	// token and baseline todo-continuation gate). A blocking family may end a turn
+	// without completing ONLY by recording its own stop-allowed state; there is no
+	// longer any global pause token or todo-count gate.
+	describe("family stop-allowed pause states", () => {
+		it("prometheus awaiting_user=true allows stop and keeps state, resetting the prometheus block-count", async () => {
 			const fresh = new Date().toISOString();
 			const prometheusPath = join(omtDir, "prometheus-state-test-session.json");
 			await writeFile(
 				prometheusPath,
 				JSON.stringify({
 					active: true,
-					sessionId: "test-session",
-					started_at: fresh,
-					last_touched_at: fresh,
-				}),
-			);
-
-			const context = createContext({
-				lastAssistantMessage: "Need your input. <awaiting-user/>",
-			});
-
-			const result = makeDecision(context);
-
-			expect(result).toEqual({ continue: true });
-			const { existsSync } = await import("fs");
-			expect(existsSync(prometheusPath)).toBe(true);
-		});
-
-		it("AC3: awaiting-user allows stop when only incomplete todos are outstanding", () => {
-			const context = createContext({
-				incompleteTodoCount: 5,
-				lastAssistantMessage: "Need your input. <awaiting-user/>",
-			});
-
-			const result = makeDecision(context);
-
-			expect(result).toEqual({ continue: true });
-		});
-
-		it("AC5: awaiting-user allows stop regardless of block-count value (distinct from MAX_BLOCK_COUNT escape)", async () => {
-			const fresh = new Date().toISOString();
-			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
-			await writeFile(
-				markerPath,
-				JSON.stringify({
-					active: true,
-					sessionId: "test-session",
-					started_at: fresh,
-					last_touched_at: fresh,
-					state: { phase: "in_progress", answers: {} },
-				}),
-			);
-			// No block-count file pre-loaded — count is 0, far below MAX_BLOCK_COUNT (5).
-
-			const context = createContext({
-				lastAssistantMessage: "Waiting on you. <awaiting-user/>",
-			});
-
-			const result = makeDecision(context);
-
-			expect(result).toEqual({ continue: true });
-		});
-
-		it("resets the prometheus-namespaced block-count (not just the base counter) on awaiting-user", async () => {
-			const fresh = new Date().toISOString();
-			const prometheusPath = join(omtDir, "prometheus-state-test-session.json");
-			await writeFile(
-				prometheusPath,
-				JSON.stringify({
-					active: true,
+					awaiting_user: true,
 					sessionId: "test-session",
 					started_at: fresh,
 					last_touched_at: fresh,
@@ -348,15 +130,218 @@ describe("makeDecision", () => {
 			);
 			await writeFile(join(stateDir, "block-count-prometheus-test-session"), "3");
 
-			const context = createContext({
-				lastAssistantMessage: "pausing. <awaiting-user/>",
-			});
+			const context = createContext({ lastAssistantMessage: "Waiting on your gate decision." });
 
 			const result = makeDecision(context);
 
 			expect(result).toEqual({ continue: true });
 			const { existsSync } = await import("fs");
+			// State is KEPT — the pause is not completion.
+			expect(existsSync(prometheusPath)).toBe(true);
+			// Block-count is reset — a legitimate pause is not a failure.
 			expect(existsSync(join(stateDir, "block-count-prometheus-test-session"))).toBe(false);
+		});
+
+		it("prometheus without awaiting_user still blocks (no global pause escape)", async () => {
+			const fresh = new Date().toISOString();
+			const prometheusPath = join(omtDir, "prometheus-state-test-session.json");
+			await writeFile(
+				prometheusPath,
+				JSON.stringify({
+					active: true,
+					sessionId: "test-session",
+					started_at: fresh,
+					last_touched_at: fresh,
+				}),
+			);
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "wrapping up for now" }));
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<prometheus-continuation>");
+		});
+
+		it("deep-interview awaiting_answer=true allows stop and keeps state", async () => {
+			const fresh = new Date().toISOString();
+			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
+			await writeFile(
+				markerPath,
+				JSON.stringify({
+					active: true,
+					sessionId: "test-session",
+					started_at: fresh,
+					last_touched_at: fresh,
+					state: { phase: "in_progress", awaiting_answer: true },
+				}),
+			);
+
+			const context = createContext({ lastAssistantMessage: "What outcome matters most here?" });
+
+			const result = makeDecision(context);
+
+			expect(result).toEqual({ continue: true });
+			const { existsSync } = await import("fs");
+			expect(existsSync(markerPath)).toBe(true);
+		});
+
+		it("deep-interview without awaiting_answer still blocks until the done-token", async () => {
+			const fresh = new Date().toISOString();
+			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
+			await writeFile(
+				markerPath,
+				JSON.stringify({
+					active: true,
+					sessionId: "test-session",
+					started_at: fresh,
+					last_touched_at: fresh,
+					state: { phase: "in_progress" },
+				}),
+			);
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "still thinking" }));
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<deep-interview-continuation>");
+		});
+
+		it("stale deep-interview awaiting_answer falls through so a later live family still blocks", async () => {
+			// An ABANDONED interview left paused (awaiting_answer=true, progress-stale) must not
+			// short-circuit makeDecision and swallow a later family's gate. Stale pause + a live
+			// prometheus → prometheus blocks (the stale pause did NOT allow stop).
+			const stale = "2020-01-01T00:00:00+00:00";
+			const fresh = new Date().toISOString();
+			await writeFile(
+				join(omtDir, "deep-interview-active-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					started_at: stale,
+					last_touched_at: stale,
+					state: { phase: "in_progress", awaiting_answer: true },
+				}),
+			);
+			await writeFile(
+				join(omtDir, "prometheus-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					sessionId: "test-session",
+					started_at: fresh,
+					last_touched_at: fresh,
+				}),
+			);
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "wrapping up" }));
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<prometheus-continuation>");
+		});
+
+		it("stale prometheus awaiting_user falls through so a later live family still blocks", async () => {
+			// Symmetric to the deep-interview case: an abandoned prometheus pause must not
+			// short-circuit makeDecision. Stale prometheus pause + a live explain-diff mid-doc →
+			// explain-diff blocks.
+			const stale = "2020-01-01T00:00:00+00:00";
+			await writeFile(
+				join(omtDir, "prometheus-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					awaiting_user: true,
+					sessionId: "test-session",
+					started_at: stale,
+					last_touched_at: stale,
+				}),
+			);
+			await writeFile(
+				join(omtDir, "explain-diff-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					capability_step_migration_version: CAPABILITY_STEP_MIGRATION_VERSION,
+					commit_hashes: [],
+					step: "code",
+					passed: ["evidence", "background", "intuition"],
+					concepts: [],
+					bank: [],
+					awaiting_answer: false,
+					no_progress: { key: "", count: 0, doc_digest: "" },
+					last_failure: null,
+				}),
+			);
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "wrapping up" }));
+
+			expect(result.decision).toBe("block");
+		});
+
+		it("fresh deep-interview pause does not short-circuit a live explain-diff gate", async () => {
+			// The pause grants Stop for the interview ONLY — even a LIVE paused interview must
+			// not swallow another active family's gate. Fresh awaiting_answer + a live
+			// explain-diff mid-doc → explain-diff still blocks (before the fall-through fix a
+			// live pause returned continue here and let the incomplete quiz stop).
+			const fresh = new Date().toISOString();
+			await writeFile(
+				join(omtDir, "deep-interview-active-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					started_at: fresh,
+					last_touched_at: fresh,
+					state: { phase: "in_progress", awaiting_answer: true },
+				}),
+			);
+			await writeFile(
+				join(omtDir, "explain-diff-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					capability_step_migration_version: CAPABILITY_STEP_MIGRATION_VERSION,
+					commit_hashes: [],
+					step: "code",
+					passed: ["evidence", "background", "intuition"],
+					concepts: [],
+					bank: [],
+					awaiting_answer: false,
+					no_progress: { key: "", count: 0, doc_digest: "" },
+					last_failure: null,
+				}),
+			);
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "What outcome matters most?" }));
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<explain-diff-continuation>");
+		});
+
+		it("fresh prometheus pause does not short-circuit a live explain-diff gate", async () => {
+			// Symmetric to the deep-interview case: a LIVE prometheus pause grants Stop for
+			// prometheus only, not for a live explain-diff with an incomplete quiz.
+			const fresh = new Date().toISOString();
+			await writeFile(
+				join(omtDir, "prometheus-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					awaiting_user: true,
+					sessionId: "test-session",
+					started_at: fresh,
+					last_touched_at: fresh,
+				}),
+			);
+			await writeFile(
+				join(omtDir, "explain-diff-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					capability_step_migration_version: CAPABILITY_STEP_MIGRATION_VERSION,
+					commit_hashes: [],
+					step: "code",
+					passed: ["evidence", "background", "intuition"],
+					concepts: [],
+					bank: [],
+					awaiting_answer: false,
+					no_progress: { key: "", count: 0, doc_digest: "" },
+					last_failure: null,
+				}),
+			);
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "wrapping up" }));
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<explain-diff-continuation>");
 		});
 	});
 
@@ -1658,7 +1643,7 @@ describe("makeDecision", () => {
 			expect(reason).not.toMatch(/(?:^|\n)\s*(?:kill|interrupt)\b/i);
 		});
 
-		it("ultragoal active non-pursuing (planning) suppresses baseline todo branch", async () => {
+		it("ultragoal active non-pursuing (planning) neither blocks nor completes here", async () => {
 			await writeUltragoal({
 				active: true,
 				phase: "planning",
@@ -1668,10 +1653,9 @@ describe("makeDecision", () => {
 				outcome: "ultragoal objective text",
 			});
 
-			const result = makeDecision(createContext({ incompleteTodoCount: 5 }));
+			const result = makeDecision(createContext());
 
 			expect(result).toEqual({ continue: true });
-			expect(result.reason ?? "").not.toContain("<todo-continuation>");
 		});
 
 		it("a legacy pursuing goal is inert while an ultragoal pursues", async () => {
@@ -1711,7 +1695,7 @@ describe("makeDecision", () => {
 	});
 
 	describe("legacy goal-state compatibility", () => {
-		it("treats planning, pursuing, terminal, pristine, and malformed goal files as inert to baseline todos", async () => {
+		it("treats planning, pursuing, terminal, pristine, and malformed goal files as inert (no goal-state Stop gate)", async () => {
 			const goalPath = join(omtDir, "goal-state-test-session.json");
 			const states: Record<string, unknown>[] = [
 				{ active: true, phase: "planning", iteration: 2, max_iterations: 10, outcome: "legacy" },
@@ -1723,10 +1707,11 @@ describe("makeDecision", () => {
 
 			for (const state of states) {
 				await writeFile(goalPath, JSON.stringify(state));
-				const result = makeDecision(createContext({ incompleteTodoCount: 1 }));
+				const result = makeDecision(createContext());
 
-				expect(result.decision).toBe("block");
-				expect(result.reason).toContain("<todo-continuation>");
+				// No goal-state branch exists in makeDecision — a legacy goal file never
+				// blocks and never has its iteration touched.
+				expect(result).toEqual({ continue: true });
 				if (typeof state.iteration === "number") {
 					const after = JSON.parse(await readFile(goalPath, "utf8"));
 					expect(after.iteration).toBe(state.iteration);
@@ -1746,7 +1731,6 @@ describe("makeDecision", () => {
 				createContext({
 					activeBackgroundTaskCount: 1,
 					deferredStopWakeGuaranteed: true,
-					incompleteTodoCount: 3,
 				}),
 			);
 			expect(result).toEqual({ continue: true });
@@ -1781,26 +1765,16 @@ describe("makeDecision", () => {
 			const noWake = makeDecision(
 				createContext({
 					activeBackgroundTaskCount: 1,
-					incompleteTodoCount: 2,
 					sessionId: "no-wake",
 				}),
 			);
 			const control = makeDecision(
 				createContext({
 					activeBackgroundTaskCount: 0,
-					incompleteTodoCount: 2,
 					sessionId: "control",
 				}),
 			);
 			expect(noWake).toEqual(control);
-		});
-
-		it("activeBackgroundTaskCount=0 with incompleteTodos still blocks (no subagent bypass)", () => {
-			const result = makeDecision(
-				createContext({ activeBackgroundTaskCount: 0, incompleteTodoCount: 3 }),
-			);
-			expect(result.decision).toBe("block");
-			expect(result.reason).toContain("<todo-continuation>");
 		});
 	});
 
@@ -2488,15 +2462,13 @@ describe("makeDecision", () => {
 	// -------------------------------------------------------------------------
 	// Story 3: the shared continuation-contract skeleton (continuationContract())
 	// must appear in every continuation builder's output, with per-family ask
-	// posture: "preferred" (deep-interview/prometheus/todo) vs "exceptional"
-	// (goal/ultragoal). Mirrors rules/continuation-contract.md (the SSOT).
+	// posture: "preferred" (deep-interview/prometheus/qa/skill-chain) vs
+	// "exceptional" (ultragoal). Mirrors rules/continuation-contract.md (the SSOT).
 	// -------------------------------------------------------------------------
 	describe("continuation message skeleton", () => {
 		const assertSharedSkeleton = (reason: string) => {
 			expect(reason).toContain("always-on Continuation Contract rule");
-			expect(reason).toContain("<awaiting-user/>");
 			expect(reason).toContain("should I continue?");
-			expect(reason).toContain("block-count escape");
 			expect(reason).toContain("AskUserQuestion");
 		};
 
@@ -2563,16 +2535,6 @@ describe("makeDecision", () => {
 			expect(reason).toContain("Prefer this");
 		});
 
-		it("todo continuation includes the shared skeleton (preferred posture)", () => {
-			const context = createContext({ incompleteTodoCount: 5 });
-			const result = makeDecision(context);
-
-			expect(result.decision).toBe("block");
-			const reason = result.reason!;
-			assertSharedSkeleton(reason);
-			expect(reason).toContain("Prefer this");
-		});
-
 		it("skill-chain continuation includes the shared skeleton (preferred posture)", () => {
 			const context = createContext({ pendingSkillChainSkills: ["chain-bravo"] });
 			const result = makeDecision(context);
@@ -2596,7 +2558,7 @@ describe("makeDecision", () => {
 	// -------------------------------------------------------------------------
 	describe("continuation contract ask-tool vocabulary (askToolName)", () => {
 		it("defaults to AskUserQuestion when askToolName is omitted (Claude)", () => {
-			const context = createContext({ incompleteTodoCount: 5 });
+			const context = createContext({ pendingSkillChainSkills: ["chain-bravo"] });
 			const result = makeDecision(context);
 
 			expect(result.decision).toBe("block");
@@ -2604,7 +2566,7 @@ describe("makeDecision", () => {
 		});
 
 		it("uses the platform-supplied askToolName instead of AskUserQuestion when provided (Codex)", () => {
-			const context = createContext({ incompleteTodoCount: 5, askToolName: "request_user_input" });
+			const context = createContext({ pendingSkillChainSkills: ["chain-bravo"], askToolName: "request_user_input" });
 			const result = makeDecision(context);
 
 			expect(result.decision).toBe("block");
@@ -2647,28 +2609,31 @@ describe("makeDecision", () => {
 			expect(result).toEqual({ continue: true });
 		});
 
-		it("awaiting-user token takes priority over a pending skill chain", () => {
+		it("a prometheus awaiting_user pause does not short-circuit a pending skill chain", async () => {
+			const fresh = new Date().toISOString();
+			await writeFile(
+				join(omtDir, "prometheus-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					awaiting_user: true,
+					sessionId: "test-session",
+					started_at: fresh,
+					last_touched_at: fresh,
+				}),
+			);
 			const context = createContext({
 				pendingSkillChainSkills: ["chain-bravo"],
-				lastAssistantMessage: "wrapping up <awaiting-user/>",
+				lastAssistantMessage: "waiting on your gate decision",
 			});
 
 			const result = makeDecision(context);
 
-			expect(result).toEqual({ continue: true });
-		});
-
-		it("baseline todo-continuation takes priority over a pending skill chain", () => {
-			const context = createContext({
-				pendingSkillChainSkills: ["chain-bravo"],
-				incompleteTodoCount: 2,
-			});
-
-			const result = makeDecision(context);
-
+			// A pause is permission for THAT family only — it no longer short-circuits the
+			// whole function. The prometheus branch (Priority 1.5) falls through, so the
+			// skill-chain ratchet (Priority 2.5) still evaluates and blocks until the chain
+			// resolves (the ratchet has its own block-count escape, so no permanent wedge).
 			expect(result.decision).toBe("block");
-			expect(result.reason).toContain("<todo-continuation>");
-			expect(result.reason).not.toContain("<skill-chain-continuation>");
+			expect(result.reason).toContain("<skill-chain-continuation>");
 		});
 
 		it("allows stop after max continuation attempts (escape hatch) — the chain ratchet must not block forever", async () => {
@@ -2734,7 +2699,7 @@ describe("makeDecision", () => {
 			});
 		});
 
-		it("<awaiting-user/> resets the skill-chain block-count alongside base and prometheus", () => {
+		it("resolving the chain (empty pending list) resets the skill-chain block-count", () => {
 			const chainCountFile = join(stateDir, "block-count-skill-chain-test-session");
 
 			for (let i = 0; i < 3; i++) {
@@ -2742,12 +2707,9 @@ describe("makeDecision", () => {
 			}
 			expect(fs.readFileSync(chainCountFile, "utf-8")).toBe("3");
 
-			const result = makeDecision(
-				createContext({
-					pendingSkillChainSkills: ["chain-alpha"],
-					lastAssistantMessage: "wrapping up <awaiting-user/>",
-				}),
-			);
+			// Chain resolved (nothing left pending) → the no-blocking fallthrough resets
+			// the skill-chain namespace so a later chain starts with a full budget.
+			const result = makeDecision(createContext({ pendingSkillChainSkills: [] }));
 			expect(result).toEqual({ continue: true });
 			expect(fs.existsSync(chainCountFile)).toBe(false);
 		});
@@ -2936,7 +2898,6 @@ describe("QA Stop-gate decision table", () => {
 			projectRoot,
 			sessionId: session,
 			lastAssistantMessage: null,
-			incompleteTodoCount: 0,
 			activeBackgroundTaskCount: 0,
 		};
 	}
@@ -3011,10 +2972,12 @@ describe("QA Stop-gate decision table", () => {
 		expect(fs.existsSync(join(stateDir, `block-count-qa-${sid}`))).toBe(false);
 	});
 
-	it("qa awaiting-user yield resets the QA namespace counter", async () => {
+	it("qa complete (APPROVE + reviewed report) resets the QA namespace counter", async () => {
 		writeQaState(completeQa("APPROVE"));
 		await writeFile(join(stateDir, `block-count-qa-${sid}`), "3");
-		expect(makeDecision({ ...context(), lastAssistantMessage: "pause <awaiting-user/>" })).toEqual({ continue: true });
+		// qa is autonomous — there is no global pause token. The QA counter is reset
+		// when the chain legitimately completes (allow), not by a yield token.
+		expect(makeDecision(context())).toEqual({ continue: true });
 		expect(fs.existsSync(join(stateDir, `block-count-qa-${sid}`))).toBe(false);
 	});
 
@@ -3029,6 +2992,16 @@ describe("QA Stop-gate decision table", () => {
 			expect(result.reason).toContain("qa");
 		});
 	}
+
+	it("qa block message carries the study-the-guideline contract clause", () => {
+		const state = completeQa("APPROVE");
+		state.verdict = "APPROVE";
+		(state.cells as Array<Record<string, unknown>>)[0].status = null;
+		writeQaState(state);
+		const reason = makeDecision(context()).reason ?? "";
+		expect(reason).toContain("Study the guideline");
+		expect(reason).toMatch(/\.md\b/);
+	});
 
 	it("qa empty-chain false APPROVE: recorded run checks do not make an empty chain approvable", () => {
 		writeQaState({
@@ -3172,7 +3145,6 @@ describe("explain-diff Stop-gate decision table", () => {
 			projectRoot,
 			sessionId: session,
 			lastAssistantMessage: null,
-			incompleteTodoCount: 0,
 			activeBackgroundTaskCount: 0,
 		};
 	}
@@ -3263,5 +3235,12 @@ describe("explain-diff Stop-gate decision table", () => {
 		writeEdState(midSession);
 		const out = makeDecision(context());
 		expect(JSON.stringify(out)).toContain("code");
+	});
+
+	it("차단 메시지는 관련 지침 문서를 숙지하라고 지시한다", () => {
+		writeEdState(midSession);
+		const reason = makeDecision(context()).reason ?? "";
+		expect(reason).toContain("지침 숙지");
+		expect(reason).toMatch(/\.md\b/);
 	});
 });

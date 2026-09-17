@@ -16,7 +16,6 @@ import {
 import {
 	detectDeepInterviewDone,
 	detectPrometheusDone,
-	detectAwaitingUser,
 } from "./transcript-detector.ts";
 import { generateAttemptId, ensureDir } from "./utils.ts";
 import { join } from "path";
@@ -32,6 +31,7 @@ import {
 	presentationSubmissionCurrent,
 } from "@lib/state-core";
 import { computeDerived, type ExplainDiffState } from "@lib/explain-diff-core";
+import { deliverableRefusalBody } from "@lib/deliverable-refusal";
 import {
 	approveOk,
 	chainComplete,
@@ -47,7 +47,6 @@ export interface DecisionContext {
 	projectRoot: string;
 	sessionId: string;
 	lastAssistantMessage: string | null;
-	incompleteTodoCount: number;
 	activeBackgroundTaskCount: number;
 	deferredStopWakeGuaranteed?: boolean;
 	/**
@@ -140,20 +139,34 @@ type AskPosture = "preferred" | "exceptional";
 // This is a post-Guard-2 projection of the always-on rule: background-wait
 // (case 4) is already ruled out because Guard 2 returned continue before any
 // block message is built, so only the three remaining cases are live options.
-// Only the case-2 ask posture varies per family: "preferred" (deep-interview/prometheus/todo)
-// vs "exceptional" (ultragoal — autonomy is post-planning, asking is the rare case).
+// Two axes vary per family:
+//   - askPosture (case 2): "preferred" (deep-interview/prometheus/qa/skill-chain)
+//     vs "exceptional" (ultragoal — autonomy is post-planning, asking is the rare case).
+//   - pauseInstruction (case 3): the family-specific command that records THIS family's
+//     stop-allowed state before the turn ends, or null for an autonomous family that
+//     has no turn-ending pause. There is no global pause token anymore — the only way
+//     to legitimately end a turn without completing is to set a family stop-allowed
+//     state through that family's own state CLI (the command named here).
 // `askToolName` names the "ask a structured question" tool for THIS platform
 // (see DecisionContext.askToolName's doc comment) — threaded in by every
 // caller from context, never hardcoded here.
-function continuationContract(askPosture: AskPosture, askToolName: string): string {
+function continuationContract(
+	askPosture: AskPosture,
+	askToolName: string,
+	pauseInstruction: string | null,
+): string {
 	const askLine =
 		askPosture === "preferred"
 			? `2. Need a user decision or fact only they hold? Ask via the ${askToolName} tool — asking is NOT stopping (a tool call keeps the turn alive). Prefer this over ending the turn with a question in prose.`
 			: `2. Asking is EXCEPTIONAL here — this loop is autonomous (autonomy is post-planning). Only when a decision is the user's alone (a human-only gate) or a boundary is unsafe, ask via the ${askToolName} tool — asking is NOT stopping. Otherwise keep working.`;
+	const case3 =
+		pauseInstruction === null
+			? `3. Only the user can decide, or a structured question was just declined? This loop is autonomous — it has NO turn-ending pause state. If you are genuinely blocked with no action you can take, report the blocker in prose and stop; you will be re-prompted, and the block-count escape prevents a permanent wedge.`
+			: `3. Only the user can decide, or a structured question was just declined? Pause the session: ${pauseInstruction} The hook then ALLOWS the stop, KEEPS all session state (this session resumes on the user's next reply), and does NOT mark the work complete — an intentional pause, never completion. Completion happens ONLY through this family's done gate.`;
 	return `Continuation contract (see the always-on Continuation Contract rule) — at this turn boundary, exactly ONE applies:
 1. Work remains? Keep working — do not stop, do not ask.
 ${askLine}
-3. Only the user can decide, or a structured question was just declined? Yield: end your turn with the literal token <awaiting-user/>. The hook allows the stop, KEEPS all session state (this session resumes on the user's next reply), and does NOT mark the work complete. This clean yield is distinct from being force-continued after repeated blocks (the block-count escape) — it is an intentional pause, not a failure.
+${case3}
 Never end a turn with a softener ("should I continue?", "If you want, I can…", "If you'd like, I can…", "Would you like me to…") — each is case 1, 2, or 3 in disguise; pick the real one.`;
 }
 
@@ -170,7 +183,7 @@ INSTRUCTIONS:
 3. When all questions have been fully answered, output: <deep-interview-done/>
 4. Do NOT stop until the interview is complete
 
-${continuationContract("preferred", askToolName)}
+${continuationContract("preferred", askToolName, "run `deep-interview-state.ts update --await-answer` to record that a plain-text question is outstanding, then end your turn (recording the answer via `--append-round` resumes the interview).")}
 
 </deep-interview-continuation>
 
@@ -191,7 +204,7 @@ INSTRUCTIONS:
 3. When the pipeline is fully complete or explicitly aborted, output: <prometheus-done/>
 4. Do NOT stop until <prometheus-done/> is emitted
 
-${continuationContract("preferred", askToolName)}
+${continuationContract("preferred", askToolName, "run `prometheus-state.ts set --await-user` to mark the human gate (S2/design gate/S7), then end your turn (the next progress write clears the pause).")}
 
 </prometheus-continuation>
 
@@ -252,31 +265,9 @@ INSTRUCTIONS:
 
 Do NOT stop until every referenced next-step skill has been loaded.
 
-${continuationContract("preferred", askToolName)}
+${continuationContract("preferred", askToolName, null)}
 
 </skill-chain-continuation>
-
----
-`;
-}
-
-function buildTodoContinuationMessage(incompleteCount: number, askToolName: string): string {
-	return `<todo-continuation>
-
-[INCOMPLETE TASKS DETECTED - ${incompleteCount} remaining]
-
-Your task list still has incomplete items. Please review and complete them.
-
-INSTRUCTIONS:
-1. Review your remaining tasks
-2. Complete remaining tasks
-3. Mark each task as completed when done
-
-Do NOT stop until all tasks are completed.
-
-${continuationContract("preferred", askToolName)}
-
-</todo-continuation>
 
 ---
 `;
@@ -308,18 +299,54 @@ function buildQaContinuationMessage(
 	probe: (path: string) => { exists: boolean; size: number },
 	askToolName: string,
 ): string {
-	const unmet = !chainComplete(state)
-		? "chainComplete=false — run qa-state.ts add-actor/add-story/author-cell"
+	const refusal = !chainComplete(state)
+		? {
+			deliverable: "actor roster and scenario chain",
+			problem: "chainComplete=false — the actor roster / stories / scenario cells are not authored",
+			guideline: "scenario-authoring.md (actor roster, story, and scenario-cell authoring)",
+			produce: "author the actor roster, stories, and scenario cells for every user boundary",
+			submit: "qa-state.ts add-actor / add-story / author-cell",
+		}
 		: !recordComplete(state, probe)
-			? "recordComplete=false — run qa-state.ts record-baseline/record-cell/review-evidence/record-run-check"
+			? {
+				deliverable: "recorded scenario evidence",
+				problem: "recordComplete=false — baseline / cell evidence / per-run checks are not recorded",
+				guideline: "stage3-handson.md (adversarial e2e execution and boundary-observation evidence)",
+				produce: "drive the real boundary and record each cell's boundary-observation evidence plus the per-run checks",
+				submit: "qa-state.ts record-baseline / record-cell / review-evidence / record-run-check",
+			}
 			: !qaReportComplete(state, probe)
-				? "qaReportComplete=false — render qa-report, inspect its HTML, then qa-state.ts review-report --path <html>"
+				? {
+					deliverable: "inspected QA HTML report",
+					problem: "qaReportComplete=false — the QA report is missing, changed, or not visually reviewed",
+					guideline: "presentation.md (QA report render and inspection)",
+					produce: "render the qa-report HTML and visually inspect it",
+					submit: "qa-state.ts review-report --path <html>",
+				}
 			: verdict === "APPROVE"
-				? "approveOk=false — run qa-state.ts set-verdict REQUEST_CHANGES or complete the failed cells"
+				? {
+					deliverable: "verdict-backing cell outcomes",
+					problem: "approveOk=false — APPROVE is unsupported while failed or undriven cells remain",
+					guideline: "SKILL.md (verdict rules — APPROVE / COMMENT / REQUEST_CHANGES)",
+					produce: "resolve or waive the failed cells, or downgrade the verdict",
+					submit: "qa-state.ts set-verdict REQUEST_CHANGES (or complete the failed cells)",
+				}
 				: verdict === "COMMENT"
-					? "commentOk=false — run qa-state.ts record-cell for every H-priority cell"
-					: "no QA Stop-gate arm matched — run qa-state.ts get and record the missing outcome";
-	return `<qa-continuation>\n\n[QA STOP-GATE]\n\nThe recorded QA session cannot stop yet. Unmet predicate: ${unmet}.\n\n${continuationContract("preferred", askToolName)}\n\n</qa-continuation>\n\n---\n`;
+					? {
+						deliverable: "H-priority cell records",
+						problem: "commentOk=false — H-priority cells are unresolved",
+						guideline: "feedback-protocol.md (priority and verdict resolution)",
+						produce: "record every H-priority cell",
+						submit: "qa-state.ts record-cell for each H-priority cell",
+					}
+					: {
+						deliverable: "the missing QA outcome",
+						problem: "no QA Stop-gate arm matched",
+						guideline: "SKILL.md (QA chain and completion gate)",
+						produce: "read the current state and record whatever outcome the chain is missing",
+						submit: "qa-state.ts get",
+					};
+	return `<qa-continuation>\n\n[QA STOP-GATE]\n\nThe recorded QA session cannot stop yet.\n\n${deliverableRefusalBody(refusal)}\n\n${continuationContract("preferred", askToolName, null)}\n\n</qa-continuation>\n\n---\n`;
 }
 
 /**
@@ -332,13 +359,34 @@ function buildExplainDiffContinuationMessage(
 	askToolName: string,
 ): string {
 	const remaining = state.concepts.filter((c) => c.required && !c.passed).map((c) => c.id);
-	const unmet =
+	const refusal =
 		state.step !== "quiz"
-			? `문서가 ${state.step} 스텝에서 멈춰 있습니다 — explain-diff-state.ts submit-step / pass-step 으로 ${state.step} 를 통과시키세요.`
+			? {
+				deliverable: `${state.step} 스텝 통과`,
+				problem: `문서가 ${state.step} 스텝에서 멈춰 있습니다`,
+				guideline: `explain-diff SKILL.md 의 ${state.step} 스텝 지침 (evidence→…→render 순서 계약)`,
+				produce: `${state.step} 스텝의 산출물을 지침대로 작성해 구조/심사 검사를 통과`,
+				submit: "explain-diff-state.ts submit-step / pass-step",
+				lang: "ko" as const,
+			}
 			: remaining.length > 0
-				? `퀴즈가 끝나지 않았습니다 — 아직 통과하지 못한 필수 개념: ${remaining.join(", ")}.`
-				: "퀴즈에 필수 개념이 하나도 없습니다 — explain-diff-state.ts add-concept --required 로 개념을 먼저 등록하세요.";
-	return `<explain-diff-continuation>\n\n[EXPLAIN-DIFF STOP-GATE]\n\n${unmet}\n\n${continuationContract("preferred", askToolName)}\n\n</explain-diff-continuation>\n\n---\n`;
+				? {
+					deliverable: "필수 개념 퀴즈 통과",
+					problem: `퀴즈가 끝나지 않았습니다 — 아직 통과하지 못한 필수 개념: ${remaining.join(", ")}`,
+					guideline: "explain-diff SKILL.md 의 quiz 스텝 지침",
+					produce: "남은 개념마다 문항을 내고 독자가 통과할 때까지 진행",
+					submit: "explain-diff-state.ts ask / grade",
+					lang: "ko" as const,
+				}
+				: {
+					deliverable: "필수 개념 등록",
+					problem: "퀴즈에 필수 개념이 하나도 없습니다",
+					guideline: "explain-diff SKILL.md 의 quiz 스텝 지침",
+					produce: "먼저 필수 개념을 등록",
+					submit: "explain-diff-state.ts add-concept --required",
+					lang: "ko" as const,
+				};
+	return `<explain-diff-continuation>\n\n[EXPLAIN-DIFF STOP-GATE]\n\n${deliverableRefusalBody(refusal)}\n\n${continuationContract("preferred", askToolName, "ask the next quiz question via `explain-diff-state.ts ask` — an outstanding question is a legitimate pause — then end your turn.")}\n\n</explain-diff-continuation>\n\n---\n`;
 }
 
 // The ultragoal continuation uses the autonomous loop envelope (iteration header,
@@ -380,7 +428,7 @@ B) You believe the objective is MET → do NOT stop here. Your 'done' is a claim
 
 Completion fires ONLY through request-complete. Stopping without it does NOT complete the objective. If you are truly blocked with no actionable next step, report the blocker and stop.
 
-${continuationContract("exceptional", askToolName)}
+${continuationContract("exceptional", askToolName, null)}
 
 </ultragoal-continuation>
 
@@ -397,7 +445,6 @@ export function makeDecision(context: DecisionContext): HookOutput {
 		projectRoot,
 		sessionId,
 		lastAssistantMessage,
-		incompleteTodoCount,
 		activeBackgroundTaskCount,
 		pendingSkillChainSkills,
 	} = context;
@@ -462,29 +509,9 @@ export function makeDecision(context: DecisionContext): HookOutput {
 	// Ensure state directory exists
 	ensureDir(stateDir);
 
-	// Priority 0.5: awaiting-user pause token — a legitimate model-originated yield.
-	// Placed BEFORE all family branches (incl. the deep-interview active+live always-block
-	// branch below, which otherwise blocks unconditionally until <deep-interview-done/>)
-	// so it is reachable for EVERY family. Semantics distinct from done-tokens: KEEP all state
-	// (no cleanup, no completion — we return before any family branch reads/writes/deletes state)
-	// and reset the block-count — the base counter (ultragoal/baseline-todo), the
-	// prometheus-namespaced counter (prometheus tracks its own under `prometheus-${attemptId}`),
-	// and the skill-chain-namespaced counter (Codex-only, tracks its own under
-	// `skill-chain-${attemptId}` — see Priority 2.5 below). Distinct from the MAX_BLOCK_COUNT
-	// failure-escape: this is an intentional pause, allowed regardless of the current
-	// block-count value.
-	if (detectAwaitingUser(lastAssistantMessage)) {
-		cleanupBlockCountFiles(stateDir, attemptId);
-		cleanupBlockCountFiles(stateDir, `prometheus-${attemptId}`);
-		cleanupBlockCountFiles(stateDir, `skill-chain-${attemptId}`);
-		cleanupBlockCountFiles(stateDir, `qa-${attemptId}`);
-		return formatContinueOutput();
-	}
-
 	// Priority 1.45: Ultragoal autonomous pursuit loop
 	// Reads/writes the separate ultragoal-state-<sid>.json prefix.
 	const ultragoalRaw = readUltragoalStateRaw(sessionId);
-	let ultragoalSuppressesBaselineTodo = false;
 	if (ultragoalRaw) {
 		// Single read; derive the active-only view locally (no second I/O, no TOCTOU).
 		const ultragoal = ultragoalRaw.active ? ultragoalRaw : null;
@@ -560,23 +587,11 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			incrementBlockCount(stateDir, attemptId);
 			return formatBlockOutput(message);
 		}
-		// Active non-pursuing phase OR terminal inactive: ultragoal owns lifecycle →
-		// suppress the baseline-todo branch.
-		//
-		// Pristine exception: a pristine seed (phase=planning, iteration=0, outcome="")
-		// was seeded by the PreToolUse hook before the ultragoal skill ran. A pristine
-		// state is INERT to all consumers — it must not suppress baseline-todo and must
-		// not be kept alive by a heartbeat refresh.
-		if (!isPristine("ultragoal", toRecord(ultragoalRaw))) {
-			ultragoalSuppressesBaselineTodo = true;
-			// ADR-8 (C2): every suppression read is a use — refresh the heartbeat.
-			// updateUltragoalState is no-create: absent file produces no write.
-			try {
-				updateUltragoalState(sessionId, {});
-			} catch {
-				/* M1: never degrade */
-			}
-		}
+		// Active non-pursuing phase OR terminal inactive: ultragoal owns its own
+		// lifecycle and neither blocks nor completes here — fall through. The GC-axis
+		// heartbeat this state needs was already stamped family-agnostically by
+		// touchSessionStates at the top of makeDecision (which itself skips pristine
+		// seeds), so no per-ultragoal refresh is needed here.
 	}
 
 	// Priority 1.5: Deep Interview Protection
@@ -594,7 +609,13 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			if (deepInterviewStateRaw.state !== undefined &&
 				isProgressLive(deepInterviewStateRaw, nowEpoch) &&
 				!presentationSubmissionCurrent(deepInterviewStateRaw.state.presentation)) {
-				return formatBlockOutput("<deep-interview-continuation>Deep-interview presentation missing or stale. Read presentation.md, render HTML, then run deep-interview-state.ts submit-presentation --spec-path <spec> --html-path <html> before emitting <deep-interview-done/>.</deep-interview-continuation>");
+				return formatBlockOutput(`<deep-interview-continuation>\n\n[DEEP INTERVIEW DONE REFUSED — PRESENTATION MISSING]\n\n${deliverableRefusalBody({
+					deliverable: "deep-interview presentation",
+					problem: "the deep-interview presentation is missing or stale",
+					guideline: "presentation.md (render + submission contract)",
+					produce: "render the spec to its sibling {spec}.presentation.html",
+					submit: "deep-interview-state.ts submit-presentation --spec-path <spec> --html-path <html>, then emit <deep-interview-done/>",
+				})}\n\n</deep-interview-continuation>`);
 			}
 			// UC10 (topology-floor-evolution Stage 5): a done-token alone is not proof of
 			// genuine convergence — the interviewer LLM can claim done prematurely. Cross-
@@ -688,6 +709,25 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			}
 			cleanupDeepInterviewState(sessionId);
 		} else if (
+			deepInterviewStateRaw.state?.awaiting_answer === true &&
+			isProgressLive(deepInterviewStateRaw, nowEpoch)
+		) {
+			// Stop-allowed pause for THIS family only: the model posed a plain-text Socratic
+			// question (the SKILL mandates turn-ending questions for open dialogue) and set
+			// awaiting_answer via `deep-interview-state.ts update --await-answer`. An
+			// intentional yield, NOT completion — the interview stays active and resumes
+			// (awaiting_answer cleared by `--append-round`) when the answer is recorded.
+			//
+			// FALL THROUGH — do NOT `return formatContinueOutput()`. Matching this branch
+			// already skips the always-block branch below (this family will not block), which
+			// is all the pause needs to do. A bare continue here would short-circuit the WHOLE
+			// function and swallow every later family's gate — e.g. this interview paused while
+			// a live explain-diff still has an incomplete quiz would wrongly let Stop through.
+			// Falling through lets prometheus/qa/explain-diff/skill-chain still evaluate; Stop
+			// is allowed only if every other active family also allows it. (A stale pause
+			// fails the isProgressLive guard above and falls through the block branch below,
+			// which is itself liveness-gated — same end result.)
+		} else if (
 			!isPristine("deep-interview", toRecord(deepInterviewStateRaw)) &&
 			isProgressLive(deepInterviewStateRaw, nowEpoch)
 		) {
@@ -726,6 +766,18 @@ export function makeDecision(context: DecisionContext): HookOutput {
 				return formatBlockOutput(gateReason);
 			}
 			cleanupPrometheusState(sessionId);
+			cleanupBlockCountFiles(stateDir, prometheusAttemptId);
+		} else if (prometheusState.awaiting_user === true && isProgressLive(prometheusState, nowEpoch)) {
+			// Stop-allowed pause for THIS family only: the model posed a plain-text question at
+			// a human gate (S2/design gate/S7) and set awaiting_user via `prometheus-state.ts
+			// set --await-user`. An intentional yield, NOT completion — the state stays active
+			// and is resumed (awaiting_user auto-cleared) on the next progress write. Reset
+			// this family's block count: a legitimate pause is not a failure.
+			//
+			// FALL THROUGH — do NOT `return formatContinueOutput()`, same reasoning as the
+			// deep-interview pause above: a bare continue would short-circuit the
+			// qa/explain-diff/skill-chain gates. Matching this branch already skips the block
+			// branch below; the block-count reset stays, only the short-circuiting return goes.
 			cleanupBlockCountFiles(stateDir, prometheusAttemptId);
 		} else if (isProgressLive(prometheusState, nowEpoch)) {
 			// Progress-stale (idle past ACTIVE_IDLE_TTL on the progress axis) → fall
@@ -797,28 +849,6 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			incrementBlockCount(stateDir, edAttemptId);
 			return formatBlockOutput(buildExplainDiffContinuationMessage(edState, askToolName));
 		}
-	}
-
-	// Priority 2: Baseline todo-continuation (suppressed when ultragoal owns the lifecycle)
-	if (!ultragoalSuppressesBaselineTodo && incompleteTodoCount > 0) {
-		// Check escape hatch
-		const blockCount = getBlockCount(stateDir, attemptId);
-		if (blockCount >= MAX_BLOCK_COUNT) {
-			cleanupBlockCountFiles(stateDir, attemptId);
-			// This escape returns a full stop-allow (continue), same as the no-blocking
-			// fallthrough below (line ~719) — reset the skill-chain namespace here too, or a
-			// chain-ratchet count left over from earlier in the session leaks past this
-			// return (the fallthrough that normally resets it is never reached) and the
-			// NEXT chain starts with a stale, partially-consumed budget instead of the full
-			// MAX_BLOCK_COUNT.
-			cleanupBlockCountFiles(stateDir, `skill-chain-${attemptId}`);
-			return formatContinueOutput();
-		}
-
-		// Increment block count and block
-		incrementBlockCount(stateDir, attemptId);
-		const message = buildTodoContinuationMessage(incompleteTodoCount, askToolName);
-		return formatBlockOutput(message);
 	}
 
 	// Priority 2.5 (Codex-only): chain ratchet. pendingSkillChainSkills is undefined for

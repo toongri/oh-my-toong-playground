@@ -359,6 +359,19 @@ describe("prometheus state", () => {
 		expect(readPrometheusState("preserveNonGoals")!.non_goals).toBe(nonGoals);
 	});
 
+	test("prometheus pause (await_user, absent phase) preserves the stored phase", () => {
+		// A human-gate pause runs `set --await-user` with no --phase; the CLI defaults an
+		// absent phase to "". That empty phase must NOT overwrite the stored S2 — clobbering
+		// it destroys the pipeline position needed for resume.
+		const nonGoals = "- docs changes | decider: edits documentation only";
+		seedFile("pausePreservePhase");
+		setPrometheusState("pausePreservePhase", { phase: "S2", non_goals: nonGoals });
+		setPrometheusState("pausePreservePhase", { phase: "", await_user: true });
+		const state = readPrometheusState("pausePreservePhase")!;
+		expect(state.phase).toBe("S2");
+		expect(state.awaiting_user).toBe(true);
+	});
+
 	test("요구사항 초안 경로는 재개와 설계 전환에 보존되고 완료로 간주되지 않음", () => {
 		process.env.OMT_SESSION_ID = "test-session";
 		seedFile("test-session");

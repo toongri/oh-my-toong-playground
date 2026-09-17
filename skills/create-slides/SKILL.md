@@ -227,6 +227,22 @@ Tell the user the save path: `현재 디렉토리에 {title-slug}.html로 저장
 
 ---
 
+## Completion gate — required deliverable
+
+Do NOT report this work as done until the deliverable below exists. If it is missing or incomplete, you MUST, in order:
+
+1. **Study the guideline** — read the reference that governs the deliverable before producing it.
+2. **Produce** the deliverable exactly per that guideline.
+3. **Deliver** it to its stated path.
+
+| Deliverable | Guideline to study | Delivered to |
+|---|---|---|
+| Single-file HTML presentation (`{title-slug}.html`) | The design source loaded in Step 2 (frontend-design skill or `references/design-system.md`) + `references/code-snippets.md` (fonts, page-number CSS, baseline scale — required before Step 4) | Current directory, saved as `{title-slug}.html` (per Step 8) |
+
+A "done" claim with no `{title-slug}.html` produced — or with a slide count / page-counter mismatch against the outline (Step 6) — is a failed completion, not a shortcut: study the guideline, produce the deliverable, then finish.
+
+---
+
 ## Slide Type Catalog
 
 Each section uses one of the types below. A presentation may repeat the same type.

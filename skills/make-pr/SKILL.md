@@ -523,6 +523,22 @@ Return the PR URL to the user after successful creation.
 
 ---
 
+## Completion gate — required deliverable
+
+Do NOT report this work as done until the deliverable below exists. If it is missing or incomplete, you MUST, in order:
+
+1. **Study the guideline** — read the reference that governs the deliverable before producing it.
+2. **Produce** the deliverable exactly per that guideline.
+3. **Deliver** it to its stated path.
+
+| Deliverable | Guideline to study | Delivered to |
+|---|---|---|
+| PR description (title + body), and, once the user approves, the created PR | `references/output-format.md` (definitive PR body template) | Presented to the user in the conversation; once approved, delivered via `gh pr create` and returned to the user as the PR URL |
+
+A "done" claim with no PR description drafted — or, after approval, no PR actually created — is a failed completion, not a shortcut: study the guideline, produce the deliverable, then finish.
+
+---
+
 ## Examples
 
 Read these to calibrate PR body style before writing:
