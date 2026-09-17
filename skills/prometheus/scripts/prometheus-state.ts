@@ -8,7 +8,7 @@
  *   set --phase <S> [--plan-path <p>] [--resume-summary <s>]
  *       [--record-ac '<json-array>' | --record-ac - (reads JSON array from stdin)]
  *       [--record-non-goals '<lines>' | --record-non-goals - (reads lines from stdin)]
- *       [--mark-design-done] [--mark-plan-done] [--submit-presentation <html>]
+ *       [--mark-design-done] [--mark-plan-done] [--submit-presentation <html>] [--await-user]
  *   get
  *   clear (system-only internal teardown)
  */
@@ -35,6 +35,15 @@ import { renderHelp, type CliCommand } from "@lib/cli-help";
 export interface PrometheusState {
 	presentation?: PresentationSubmission;
 	active: boolean;
+	/**
+	 * Set true by `set --await-user` when a plain-text question is posed at a
+	 * human-decision gate (S2 co-design, S7 execution bridge); cleared to false by
+	 * any later `set` that does not repeat the flag (i.e. the next progress write).
+	 * The persistent-mode Stop gate reads it as a legitimate pause and allows the
+	 * turn to end WITHOUT completing — the session resumes on the user's reply.
+	 * It never marks completion; only <prometheus-done/> + the Stage A gate does.
+	 */
+	awaiting_user: boolean;
 	/** Pipeline token: S0-S8 */
 	phase: string;
 	/** Absolute path under $OMT_DIR/plans/, empty string until plan written */
@@ -207,6 +216,8 @@ export function setPrometheusState(
 		/** Sets steps.plan.done=true. */
 		mark_plan_done?: boolean;
 		submit_presentation?: string;
+		/** Sets awaiting_user=true (legitimate pause at a human gate). Omitting it on any set clears the flag. */
+		await_user?: boolean;
 	},
 ): void {
 	// Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
@@ -325,6 +336,9 @@ export function setPrometheusState(
 	const partial: Omit<PrometheusState, "last_touched_at"> = {
 		...(presentation ? { presentation } : {}),
 		active: true,
+		// Recomputed every write: true only when THIS set passed --await-user, so any
+		// later progress write auto-clears the pause (mirrors explain-diff's grade clearing awaiting_answer).
+		awaiting_user: opts.await_user === true,
 		phase: opts.phase,
 		plan_path: resolvedPlanPath,
 		resume_summary: normalizeResumeSummary(opts.resume_summary ?? prior.resume_summary ?? ""),
@@ -477,6 +491,7 @@ function main(): void {
 
 			const markDesignDone = args["mark-design-done"] === true;
 			const markPlanDone = args["mark-plan-done"] === true;
+			const awaitUser = args["await-user"] === true;
 
 			setPrometheusState(sessionId, {
 				phase,
@@ -487,6 +502,7 @@ function main(): void {
 				mark_design_done: markDesignDone || undefined,
 				mark_plan_done: markPlanDone || undefined,
 				submit_presentation: typeof args["submit-presentation"] === "string" ? args["submit-presentation"] : undefined,
+				await_user: awaitUser || undefined,
 			});
 		} else if (subcommand === "clear") {
 			clearPrometheusState(sessionId);

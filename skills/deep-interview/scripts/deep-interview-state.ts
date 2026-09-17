@@ -30,6 +30,9 @@
  *          [--dispute-fact <id>]                (mark an established_fact disputed by id; raises the
  *                                                ambiguity floor +0.10 per unresolved disputed fact on the
  *                                                next --current-ambiguity write, no scorer re-call needed)
+ *          [--await-answer]                     (set state.awaiting_answer=true — a plain-text Socratic
+ *                                                question is posed; the Stop gate permits the wait.
+ *                                                Cleared by --append-round when the answer is recorded)
  *          Strict-overlay merge refreshing last_touched_at.
  *          Stdin flags (--append-round-stdin / --append-ontology-snapshot-stdin) read
  *          the JSON payload from stdin, avoiding shell-quoting hazards with free text
@@ -272,6 +275,14 @@ export interface DeepInterviewStateContent {
 	 * judge "0 non-empty deciders recorded" as a real measured state, not an unmeasured one.
 	 */
 	non_goals?: NonGoalDecider[];
+	/**
+	 * Pause flag set by `update --await-answer` when a plain-text Socratic question is
+	 * posed to the user (the SKILL mandates turn-ending questions for open dialogue).
+	 * The Stop gate reads it as a legitimate wait and permits the turn to end without
+	 * completing the interview; recording the answer via `--append-round` clears it.
+	 * Absent on legacy states — a reader treats missing the same as "not paused".
+	 */
+	awaiting_answer?: boolean;
 }
 
 export interface DeepInterviewState {
@@ -419,6 +430,8 @@ export function updateDeepInterviewState(
 		establish_fact?: EstablishedFactInput;
 		/** Mark the established_fact with this id disputed=true. Throws if the id is unknown. */
 		dispute_fact?: string;
+		/** Set state.awaiting_answer=true (a plain-text Socratic question is posed; the Stop gate permits the wait). Cleared by append_round. */
+		await_answer?: boolean;
 	},
 ): void {
 	// Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
@@ -453,7 +466,8 @@ export function updateDeepInterviewState(
 		partial.append_provenance_item !== undefined ||
 		partial.append_stance !== undefined ||
 		partial.establish_fact !== undefined ||
-		partial.dispute_fact !== undefined;
+		partial.dispute_fact !== undefined ||
+		partial.await_answer === true;
 
 	if (needsStateOverlay) {
 		// current_ambiguity lives under state per the SKILL.md rich shape
@@ -592,6 +606,18 @@ export function updateDeepInterviewState(
 				facts = facts.map((f, i) => (i === idx ? { ...f, disputed: true } : f));
 			}
 			updatedState["established_facts"] = facts;
+		}
+
+		// awaiting_answer pause flag (mirrors prometheus awaiting_user): recording an answer
+		// via append_round clears the pending question; --await-answer poses a new one. When
+		// both arrive in one call (an answer recorded, the next question posed), the set wins.
+		// The Stop gate reads state.awaiting_answer as a legitimate pause — the interview stays
+		// active and incomplete; only the done-token + convergence gate completes it.
+		if (partial.append_round !== undefined) {
+			updatedState["awaiting_answer"] = false;
+		}
+		if (partial.await_answer === true) {
+			updatedState["awaiting_answer"] = true;
 		}
 
 		// LAST among the update blocks, by requirement — not by accident. The floor and the
@@ -1169,6 +1195,7 @@ function main(): void {
 			};
 		}
 		const disputeFact = str(args["dispute-fact"]);
+		const awaitAnswer = args["await-answer"] === true;
 
 		const currentAmbiguity = decimalFlag(ambiguity, "update", "--current-ambiguity");
 
@@ -1185,6 +1212,7 @@ function main(): void {
 				append_stance: appendStance,
 				establish_fact: establishFact,
 				dispute_fact: disputeFact,
+				await_answer: awaitAnswer || undefined,
 			});
 		} catch (e) {
 			process.stderr.write(`deep-interview-state update: ${String(e)}\n`);
@@ -1292,6 +1320,8 @@ function main(): void {
 				"                                 floor pressure. Refused unless it names an unresolved disputed fact)\n" +
 				"         [--dispute-fact <id>]  (marks an established_fact disputed; raises the ambiguity\n" +
 				"                                floor +0.10 on the next --current-ambiguity write)\n" +
+				"         [--await-answer]       (set awaiting_answer=true — a plain-text question is posed;\n" +
+				"                                the Stop gate permits the wait. Cleared by --append-round)\n" +
 				'  set-topology --json \'[{"id":"<id>","name":"<name>","status":"active|deferred"}]\'\n' +
 				'  set-nongoals --json \'[{"item":"<text>","decider":"<text>"}]\'\n' +
 				"                                (non-goal decider Closure Guard; full-replace; empty array allowed)\n" +

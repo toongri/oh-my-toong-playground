@@ -44,6 +44,14 @@ export interface DeepInterviewState {
 		current_ambiguity?: number;
 		threshold?: number;
 		/**
+		 * Set by `deep-interview-state.ts update --await-answer` when a plain-text Socratic
+		 * question is posed to the user (the SKILL mandates turn-ending questions for open
+		 * dialogue). The Stop gate reads it as a legitimate pause and allows the turn to end
+		 * without completing the interview. Cleared by `--append-round`. Absent on legacy/foreign
+		 * states — fail closed to "not paused" (blocks, as before).
+		 */
+		awaiting_answer?: boolean;
+		/**
 		 * Round 0's locked component list. The Stop-hook reads it for the Closure Guard's
 		 * completeness check — an ACTIVE component carrying any null clarity dimension
 		 * means convergence cannot be declared, whatever the ambiguity magnitude says.
@@ -79,6 +87,13 @@ export interface DeepInterviewState {
 export interface PrometheusState {
 	presentation?: unknown;
 	active: boolean;
+	/**
+	 * Set by `prometheus-state.ts set --await-user` when a plain-text question is
+	 * posed at a human gate (S2/S7). The Stop gate reads it as a legitimate pause
+	 * and allows the turn to end without completing. Absent on legacy/foreign
+	 * states — fail closed to "not paused" (blocks, as before).
+	 */
+	awaiting_user?: boolean;
 	/** Heartbeat timestamps (managed StateType) — read by the isStateLive TTL check. */
 	last_touched_at?: string;
 	started_at?: string;

@@ -1,9 +1,7 @@
 import { readStdin, parseInput } from "./stdin.ts";
 import { getProjectRoot } from "@lib/persistent-mode-core/utils";
 import { makeDecision, DecisionContext } from "@lib/persistent-mode-core/decision";
-import { readTasksFromDirectory, countIncompleteTasks } from "@lib/task-reader";
-import { join } from "path";
-import { initLogger, logStart, logEnd, logInfo, logDebug, logError } from "@lib/logging";
+import { initLogger, logStart, logEnd, logInfo, logError } from "@lib/logging";
 import { getOmtDir } from "@lib/omt-dir";
 
 export async function main(): Promise<void> {
@@ -20,19 +18,11 @@ export async function main(): Promise<void> {
 		logStart();
 		logInfo(`stop hook invoked, sessionId=${input.sessionId}`);
 
-		// Read tasks from file-based directory
-		const homeDir = process.env.HOME || "/tmp";
-		const tasksDir = join(homeDir, ".claude", "tasks", input.sessionId);
-		const tasks = await readTasksFromDirectory(tasksDir);
-		const incompleteTodoCount = countIncompleteTasks(tasks);
-		logDebug(`tasks from ${tasksDir}: total=${tasks.length}, incomplete=${incompleteTodoCount}`);
-
 		// Build decision context
 		const context: DecisionContext = {
 			projectRoot,
 			sessionId: input.sessionId,
 			lastAssistantMessage: input.lastAssistantMessage,
-			incompleteTodoCount,
 			activeBackgroundTaskCount: input.activeBackgroundTaskCount,
 			deferredStopWakeGuaranteed: true,
 		};

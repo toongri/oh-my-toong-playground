@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, spyOn } from "bun:test";
 import { main } from "./index.ts";
 import * as stdinMod from "./stdin.ts";
-import { mkdir, writeFile, rm, readFile } from "fs/promises";
+import { mkdir, rm, readFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { Readable } from "stream";
@@ -194,82 +194,6 @@ describe("main entry point", () => {
 		});
 	});
 
-	describe("file-based task counting", () => {
-		const taskTestDir = join(tmpdir(), "persistent-mode-task-test-" + Date.now());
-		const taskProjectRoot = join(taskTestDir, "project");
-		const sessionId = "task-count-session";
-
-		// Mock homedir to use our test directory for ~/.claude/tasks
-		const originalHomedir = process.env.HOME;
-
-		beforeAll(async () => {
-			await mkdir(join(taskProjectRoot, ".omt"), { recursive: true });
-			await mkdir(join(taskProjectRoot, ".git"), { recursive: true });
-			// Create mock home directory structure for tasks
-			await mkdir(join(taskTestDir, "home", ".claude", "tasks", sessionId), { recursive: true });
-		});
-
-		afterAll(async () => {
-			await rm(taskTestDir, { recursive: true, force: true });
-		});
-
-		beforeEach(async () => {
-			process.env.HOME = join(taskTestDir, "home");
-			process.env.OMT_LOG_LEVEL = "DEBUG";
-			process.env.OMT_DIR = join(taskProjectRoot, ".omt");
-		});
-
-		afterEach(() => {
-			process.env.HOME = originalHomedir;
-			delete process.env.OMT_LOG_LEVEL;
-		});
-
-		it("should count tasks from file-based directory instead of transcript", async () => {
-			// Create task files in ~/.claude/tasks/{sessionId}/
-			const tasksDir = join(taskTestDir, "home", ".claude", "tasks", sessionId);
-
-			// Create 2 incomplete tasks and 1 completed task
-			await writeFile(
-				join(tasksDir, "1.json"),
-				JSON.stringify({ id: "1", subject: "Task 1", status: "pending" }),
-			);
-			await writeFile(
-				join(tasksDir, "2.json"),
-				JSON.stringify({ id: "2", subject: "Task 2", status: "in_progress" }),
-			);
-			await writeFile(
-				join(tasksDir, "3.json"),
-				JSON.stringify({ id: "3", subject: "Task 3", status: "completed" }),
-			);
-
-			const input = JSON.stringify({
-				sessionId: sessionId,
-				cwd: taskProjectRoot,
-				last_assistant_message: null,
-			});
-
-			const mockStdin = createMockStdin(input);
-			Object.defineProperty(process, "stdin", {
-				value: mockStdin,
-				writable: true,
-				configurable: true,
-			});
-
-			await main();
-
-			// Verify via logs that file-based task counting was used
-			const logsDir = join(taskProjectRoot, ".omt", "logs");
-			const logFile = join(logsDir, `persistent-mode-${sessionId}.log`);
-			const logContent = await readFile(logFile, "utf-8");
-
-			// Should log tasks from file-based directory with correct counts
-			expect(logContent).toContain("tasks from");
-			expect(logContent).toContain(".claude/tasks");
-			expect(logContent).toContain("total=3");
-			expect(logContent).toContain("incomplete=2");
-		});
-	});
-
 	describe("logging integration", () => {
 		const loggingTestDir = join(tmpdir(), "persistent-mode-logging-test-" + Date.now());
 		const loggingProjectRoot = join(loggingTestDir, "project");
@@ -387,29 +311,6 @@ describe("main entry point", () => {
 			// At minimum, log file should exist with proper start/end
 			const logFile = join(logsDir, "persistent-mode-log-error-test.log");
 			expect(existsSync(logFile)).toBe(true);
-		});
-
-		it("should log transcript detection details at DEBUG level", async () => {
-			const input = JSON.stringify({
-				sessionId: "log-detection-test",
-				cwd: loggingProjectRoot,
-				last_assistant_message: "Task #1 created successfully\nTask #2 created successfully",
-			});
-
-			const mockStdin = createMockStdin(input);
-			Object.defineProperty(process, "stdin", {
-				value: mockStdin,
-				writable: true,
-				configurable: true,
-			});
-
-			await main();
-
-			const logFile = join(logsDir, "persistent-mode-log-detection-test.log");
-			const logContent = await readFile(logFile, "utf-8");
-			// Should log detection patterns (at DEBUG level)
-			expect(logContent).toMatch(/DEBUG/);
-			expect(logContent).toMatch(/todo|task|detection|count/i);
 		});
 	});
 });

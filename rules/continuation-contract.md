@@ -1,7 +1,7 @@
 # Continuation Contract
 
 How to end — or not end — a turn while a persistent-mode session is active
-(deep-interview, prometheus, ultragoal, or a live todo list). The
+(deep-interview, prometheus, ultragoal, qa, or explain-diff). The
 persistent-mode Stop hook keeps you working when work remains; this contract
 names the FOUR distinct situations at a turn boundary, so "don't
 stop" never collapses into a blunt binary.
@@ -21,15 +21,27 @@ At every turn boundary, exactly one of these applies:
    question in prose.
 
 3. **Only the user can decide, or a structured question was just declined →
-   yield with `<awaiting-user/>`.** When the decision is the user's alone (a
-   human-only gate, an unsafe boundary), or you just offered a structured
-   question and the user declined it (re-firing it would ignore their
-   expressed preference), end your turn with the literal token
-   `<awaiting-user/>`. The hook treats this as a legitimate yield: it allows
-   the stop, keeps all session state intact (the interview or pursuit resumes on
-   the user's next reply), and does not mark the work complete.
-   `<awaiting-user/>` is the only sanctioned stop while no background work is
-   pending wake.
+   pause via this family's stop-allowed state.** There is no global pause
+   token. The only way to legitimately end a turn without completing is to
+   record THIS family's stop-allowed state through its own state CLI, then end
+   your turn. The hook reads that state, allows the stop, keeps all session
+   state intact (the session resumes on the user's next reply), and does NOT
+   mark the work complete — an intentional pause, never completion. Completion
+   happens only through the family's own done gate.
+
+   - **deep-interview**: run `deep-interview-state.ts update --await-answer`
+     (a plain-text Socratic question is outstanding), then end your turn.
+     Recording the answer via `--append-round` clears the pause.
+   - **prometheus**: run `prometheus-state.ts set --await-user` (a human gate
+     S2/design gate/S7), then end your turn. The next progress write clears it.
+   - **explain-diff**: ask the next quiz question via `explain-diff-state.ts
+     ask` (an outstanding question is a legitimate pause), then end your turn.
+   - **qa** and **ultragoal** are autonomous loops with NO turn-ending pause
+     state. If you are genuinely blocked with no action you can take, report
+     the blocker in prose and stop; you will be re-prompted, and the
+     block-count escape prevents a permanent wedge. (ultragoal additionally
+     reaches its own terminal `budget_limited`/`blocked` states, and its
+     `resume-pursuit` recovery is user-only.)
 
 4. **Background work is running or pending → follow the runtime's wake
    contract.** On Claude Code, ending the turn is a sanctioned wait, not a stop:
@@ -57,8 +69,9 @@ permission to continue. These are banned:
 
 Each is one of the four cases in disguise. If work remains, use case 1 (just
 continue). If you need a decision, use case 2 (`AskUserQuestion`). If only the
-user can decide, use case 3 (`<awaiting-user/>`). If background work is
-running or pending, use case 4: Claude Code may end the turn for its guaranteed
-wake, while Codex keeps the turn alive and polls. A softener is none of these —
-it stops without yielding cleanly and without continuing, which is exactly the
-ambiguity this contract removes.
+user can decide, use case 3 (record the family's stop-allowed state, or report
+the blocker for an autonomous loop). If background work is running or pending,
+use case 4: Claude Code may end the turn for its guaranteed wake, while Codex
+keeps the turn alive and polls. A softener is none of these — it stops without
+yielding cleanly and without continuing, which is exactly the ambiguity this
+contract removes.
