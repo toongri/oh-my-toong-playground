@@ -270,6 +270,79 @@ describe("makeDecision", () => {
 
 			expect(result.decision).toBe("block");
 		});
+
+		it("fresh deep-interview pause does not short-circuit a live explain-diff gate", async () => {
+			// The pause grants Stop for the interview ONLY — even a LIVE paused interview must
+			// not swallow another active family's gate. Fresh awaiting_answer + a live
+			// explain-diff mid-doc → explain-diff still blocks (before the fall-through fix a
+			// live pause returned continue here and let the incomplete quiz stop).
+			const fresh = new Date().toISOString();
+			await writeFile(
+				join(omtDir, "deep-interview-active-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					started_at: fresh,
+					last_touched_at: fresh,
+					state: { phase: "in_progress", awaiting_answer: true },
+				}),
+			);
+			await writeFile(
+				join(omtDir, "explain-diff-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					capability_step_migration_version: CAPABILITY_STEP_MIGRATION_VERSION,
+					commit_hashes: [],
+					step: "code",
+					passed: ["evidence", "background", "intuition"],
+					concepts: [],
+					bank: [],
+					awaiting_answer: false,
+					no_progress: { key: "", count: 0, doc_digest: "" },
+					last_failure: null,
+				}),
+			);
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "What outcome matters most?" }));
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<explain-diff-continuation>");
+		});
+
+		it("fresh prometheus pause does not short-circuit a live explain-diff gate", async () => {
+			// Symmetric to the deep-interview case: a LIVE prometheus pause grants Stop for
+			// prometheus only, not for a live explain-diff with an incomplete quiz.
+			const fresh = new Date().toISOString();
+			await writeFile(
+				join(omtDir, "prometheus-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					awaiting_user: true,
+					sessionId: "test-session",
+					started_at: fresh,
+					last_touched_at: fresh,
+				}),
+			);
+			await writeFile(
+				join(omtDir, "explain-diff-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					capability_step_migration_version: CAPABILITY_STEP_MIGRATION_VERSION,
+					commit_hashes: [],
+					step: "code",
+					passed: ["evidence", "background", "intuition"],
+					concepts: [],
+					bank: [],
+					awaiting_answer: false,
+					no_progress: { key: "", count: 0, doc_digest: "" },
+					last_failure: null,
+				}),
+			);
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "wrapping up" }));
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<explain-diff-continuation>");
+		});
 	});
 
 	describe("Priority 1.5: Deep Interview Protection", () => {
@@ -2536,7 +2609,7 @@ describe("makeDecision", () => {
 			expect(result).toEqual({ continue: true });
 		});
 
-		it("a prometheus awaiting_user pause takes priority over a pending skill chain", async () => {
+		it("a prometheus awaiting_user pause does not short-circuit a pending skill chain", async () => {
 			const fresh = new Date().toISOString();
 			await writeFile(
 				join(omtDir, "prometheus-state-test-session.json"),
@@ -2555,9 +2628,12 @@ describe("makeDecision", () => {
 
 			const result = makeDecision(context);
 
-			// The prometheus branch (Priority 1.5) runs before the skill-chain ratchet
-			// (Priority 2.5), so its stop-allowed pause short-circuits the chain block.
-			expect(result).toEqual({ continue: true });
+			// A pause is permission for THAT family only — it no longer short-circuits the
+			// whole function. The prometheus branch (Priority 1.5) falls through, so the
+			// skill-chain ratchet (Priority 2.5) still evaluates and blocks until the chain
+			// resolves (the ratchet has its own block-count escape, so no permanent wedge).
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<skill-chain-continuation>");
 		});
 
 		it("allows stop after max continuation attempts (escape hatch) — the chain ratchet must not block forever", async () => {

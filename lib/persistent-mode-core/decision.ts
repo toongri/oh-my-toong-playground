@@ -712,19 +712,21 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			deepInterviewStateRaw.state?.awaiting_answer === true &&
 			isProgressLive(deepInterviewStateRaw, nowEpoch)
 		) {
-			// Stop-allowed pause: the model posed a plain-text Socratic question (the SKILL
-			// mandates turn-ending questions for open dialogue) and set awaiting_answer via
-			// `deep-interview-state.ts update --await-answer`. This is an intentional yield,
-			// NOT completion — the interview stays active and resumes (awaiting_answer cleared
-			// by `--append-round`) when the answer is recorded. Allow the stop; a legitimate
-			// pause is not a failure. Placed before the always-block branch below so the pause
-			// short-circuits it.
-			// Liveness-gated like the block branch below: an ABANDONED interview left paused
-			// (awaiting_answer=true, progress-stale) must NOT short-circuit this whole function
-			// and swallow a later family's gate — e.g. a stale paused interview alongside a live
-			// explain-diff with an incomplete quiz. A stale pause falls through here so the
-			// prometheus/qa/explain-diff/skill-chain gates below still evaluate.
-			return formatContinueOutput();
+			// Stop-allowed pause for THIS family only: the model posed a plain-text Socratic
+			// question (the SKILL mandates turn-ending questions for open dialogue) and set
+			// awaiting_answer via `deep-interview-state.ts update --await-answer`. An
+			// intentional yield, NOT completion — the interview stays active and resumes
+			// (awaiting_answer cleared by `--append-round`) when the answer is recorded.
+			//
+			// FALL THROUGH — do NOT `return formatContinueOutput()`. Matching this branch
+			// already skips the always-block branch below (this family will not block), which
+			// is all the pause needs to do. A bare continue here would short-circuit the WHOLE
+			// function and swallow every later family's gate — e.g. this interview paused while
+			// a live explain-diff still has an incomplete quiz would wrongly let Stop through.
+			// Falling through lets prometheus/qa/explain-diff/skill-chain still evaluate; Stop
+			// is allowed only if every other active family also allows it. (A stale pause
+			// fails the isProgressLive guard above and falls through the block branch below,
+			// which is itself liveness-gated — same end result.)
 		} else if (
 			!isPristine("deep-interview", toRecord(deepInterviewStateRaw)) &&
 			isProgressLive(deepInterviewStateRaw, nowEpoch)
@@ -766,16 +768,17 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			cleanupPrometheusState(sessionId);
 			cleanupBlockCountFiles(stateDir, prometheusAttemptId);
 		} else if (prometheusState.awaiting_user === true && isProgressLive(prometheusState, nowEpoch)) {
-			// Stop-allowed pause: the model posed a plain-text question at a human gate
-			// (S2/design gate/S7) and set awaiting_user via `prometheus-state.ts set
-			// --await-user`. This is an intentional yield, NOT completion — the state stays
-			// active and is resumed (awaiting_user auto-cleared) on the next progress write.
-			// Allow the stop and reset the block count: a legitimate pause is not a failure.
-			// Liveness-gated like the block branch below: a stale ABANDONED pause must not
-			// short-circuit this function and swallow the qa/explain-diff/skill-chain gates —
-			// it falls through instead so they still evaluate.
+			// Stop-allowed pause for THIS family only: the model posed a plain-text question at
+			// a human gate (S2/design gate/S7) and set awaiting_user via `prometheus-state.ts
+			// set --await-user`. An intentional yield, NOT completion — the state stays active
+			// and is resumed (awaiting_user auto-cleared) on the next progress write. Reset
+			// this family's block count: a legitimate pause is not a failure.
+			//
+			// FALL THROUGH — do NOT `return formatContinueOutput()`, same reasoning as the
+			// deep-interview pause above: a bare continue would short-circuit the
+			// qa/explain-diff/skill-chain gates. Matching this branch already skips the block
+			// branch below; the block-count reset stays, only the short-circuiting return goes.
 			cleanupBlockCountFiles(stateDir, prometheusAttemptId);
-			return formatContinueOutput();
 		} else if (isProgressLive(prometheusState, nowEpoch)) {
 			// Progress-stale (idle past ACTIVE_IDLE_TTL on the progress axis) → fall
 			// through, no block. This does NOT mean session-start GC will reap the file
