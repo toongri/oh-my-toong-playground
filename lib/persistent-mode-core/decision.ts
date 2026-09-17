@@ -343,8 +343,8 @@ function buildQaContinuationMessage(
 						deliverable: "the missing QA outcome",
 						problem: "no QA Stop-gate arm matched",
 						guideline: "SKILL.md (QA chain and completion gate)",
-						produce: "read the current state and record whatever outcome the chain is missing",
-						submit: "qa-state.ts get",
+						produce: "read the current state and record whatever outcome the chain is missing (with the chain complete and no verdict, that outcome is the verdict)",
+						submit: "qa-state.ts get to inspect the chain, then qa-state.ts set-verdict <APPROVE|COMMENT|REQUEST_CHANGES> to record the missing verdict",
 					};
 	return `<qa-continuation>\n\n[QA STOP-GATE]\n\nThe recorded QA session cannot stop yet.\n\n${deliverableRefusalBody(refusal)}\n\n${continuationContract("preferred", askToolName, null)}\n\n</qa-continuation>\n\n---\n`;
 }

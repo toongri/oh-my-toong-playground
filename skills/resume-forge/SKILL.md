@@ -383,9 +383,9 @@ Do NOT report this work as done until the deliverable below exists. If it is mis
 
 | Deliverable | Guideline to study | Delivered to |
 |---|---|---|
-| `target_count` complete, examiner-APPROVEd problem-solving entries (Loop 2 passed) | `review-resume/references/note-system.md` candidate file format (tags frontmatter + body) | `$OMT_DIR/review-resume/problem-solving/` |
+| Every one of the `target_count` scenarios resolved — each either examiner-APPROVEd (Loop 2 passed) or explicitly user-skipped (`다음`, waived) — with the APPROVEd entries saved | `review-resume/references/note-system.md` candidate file format (tags frontmatter + body) | `$OMT_DIR/review-resume/problem-solving/` |
 
-A "done" claim with fewer than `target_count` entries saved to `problem-solving/` — with the rest left pending in `drafts/` or unresolved in state — is a failed completion, not a shortcut: study the guideline, produce the deliverable, then finish.
+A "done" claim with a scenario still unresolved — neither examiner-APPROVEd and saved to `problem-solving/`, nor explicitly skipped by the user (`다음`) — is a failed completion, not a shortcut: study the guideline, produce the deliverable, then finish. A scenario the user skipped with `다음` is waived (the documented user-skip path to Done), not a failure.
 
 ---
 
