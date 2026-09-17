@@ -75,6 +75,7 @@ import {
 	ensureSeed,
 } from "@lib/state-core";
 import { renderHelp, type CliCommand } from "@lib/cli-help";
+import { deliverableRefusalBody } from "@lib/deliverable-refusal";
 
 export type GoalPhase = "planning" | "pursuing" | "budget_limited" | "blocked" | "complete";
 export type ObjectiveVerdict = "APPROVE" | "REQUEST_CHANGES" | "COMMENT" | "absent";
@@ -2781,7 +2782,13 @@ function main(): void {
 					// mismatch report a cause that was already satisfied, sending the
 					// caller to fix the wrong thing.
 					process.stderr.write(
-						"request-complete: refused — requires objective_verdict=APPROVE, completion evidence present, and (when codex_goal_objective is recorded) a --codex-goal-json snapshot whose objective matches it with status=complete\n",
+						`request-complete: refused.\n\n${deliverableRefusalBody({
+							deliverable: "objective completion evidence and APPROVE verdict",
+							problem: "requires objective_verdict=APPROVE, completion evidence present, and (when codex_goal_objective is recorded) a --codex-goal-json snapshot whose objective matches it with status=complete",
+							guideline: "SKILL.md (completion gate — per-story verdict lane + final code-review lane)",
+							produce: "drive each story to an APPROVE verdict, record completion evidence for the verification surface, and run the final code-review lane over the accumulated diff",
+							submit: "ultragoal-state.ts set-verdict (per story), then ultragoal-state.ts request-complete",
+						})}\n`,
 					);
 				}
 				process.exit(1);

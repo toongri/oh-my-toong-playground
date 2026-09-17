@@ -592,6 +592,17 @@ describe("goal state", () => {
 		expect(rawState().active).toBe(true);
 	});
 
+	// A1: request-complete refusal stderr carries the study-the-guideline contract clause
+	test("request-complete refusal stderr names the guideline doc to study", () => {
+		setGoalState(S, { phase: "pursuing", completion_evidence_paths: [`${tmpDir}/a.md`] });
+		// verdict left absent → ordinary gate refusal path (not a --codex-goal-json parse error)
+		const { stderr, status } = runCliCaptured("request-complete");
+		expect(status).not.toBe(0);
+		expect(stderr).toContain("request-complete: refused");
+		expect(stderr).toMatch(/SKILL\.md/);
+		expect(stderr).toMatch(/\b(read|study)\b/i);
+	});
+
 	// A1: request-complete refused when completion_evidence_paths is not an array
 	test("request-complete refused when completion_evidence_paths is not an array", () => {
 		// Manually write a state where completion_evidence_paths is a string (corrupted)
