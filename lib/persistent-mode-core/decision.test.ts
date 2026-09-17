@@ -203,6 +203,73 @@ describe("makeDecision", () => {
 			expect(result.decision).toBe("block");
 			expect(result.reason).toContain("<deep-interview-continuation>");
 		});
+
+		it("stale deep-interview awaiting_answer falls through so a later live family still blocks", async () => {
+			// An ABANDONED interview left paused (awaiting_answer=true, progress-stale) must not
+			// short-circuit makeDecision and swallow a later family's gate. Stale pause + a live
+			// prometheus → prometheus blocks (the stale pause did NOT allow stop).
+			const stale = "2020-01-01T00:00:00+00:00";
+			const fresh = new Date().toISOString();
+			await writeFile(
+				join(omtDir, "deep-interview-active-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					started_at: stale,
+					last_touched_at: stale,
+					state: { phase: "in_progress", awaiting_answer: true },
+				}),
+			);
+			await writeFile(
+				join(omtDir, "prometheus-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					sessionId: "test-session",
+					started_at: fresh,
+					last_touched_at: fresh,
+				}),
+			);
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "wrapping up" }));
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<prometheus-continuation>");
+		});
+
+		it("stale prometheus awaiting_user falls through so a later live family still blocks", async () => {
+			// Symmetric to the deep-interview case: an abandoned prometheus pause must not
+			// short-circuit makeDecision. Stale prometheus pause + a live explain-diff mid-doc →
+			// explain-diff blocks.
+			const stale = "2020-01-01T00:00:00+00:00";
+			await writeFile(
+				join(omtDir, "prometheus-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					awaiting_user: true,
+					sessionId: "test-session",
+					started_at: stale,
+					last_touched_at: stale,
+				}),
+			);
+			await writeFile(
+				join(omtDir, "explain-diff-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					capability_step_migration_version: CAPABILITY_STEP_MIGRATION_VERSION,
+					commit_hashes: [],
+					step: "code",
+					passed: ["evidence", "background", "intuition"],
+					concepts: [],
+					bank: [],
+					awaiting_answer: false,
+					no_progress: { key: "", count: 0, doc_digest: "" },
+					last_failure: null,
+				}),
+			);
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "wrapping up" }));
+
+			expect(result.decision).toBe("block");
+		});
 	});
 
 	describe("Priority 1.5: Deep Interview Protection", () => {

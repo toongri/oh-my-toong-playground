@@ -708,7 +708,10 @@ export function makeDecision(context: DecisionContext): HookOutput {
 				return formatBlockOutput(buildDeepInterviewContinuationMessage(askToolName));
 			}
 			cleanupDeepInterviewState(sessionId);
-		} else if (deepInterviewStateRaw.state?.awaiting_answer === true) {
+		} else if (
+			deepInterviewStateRaw.state?.awaiting_answer === true &&
+			isProgressLive(deepInterviewStateRaw, nowEpoch)
+		) {
 			// Stop-allowed pause: the model posed a plain-text Socratic question (the SKILL
 			// mandates turn-ending questions for open dialogue) and set awaiting_answer via
 			// `deep-interview-state.ts update --await-answer`. This is an intentional yield,
@@ -716,6 +719,11 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			// by `--append-round`) when the answer is recorded. Allow the stop; a legitimate
 			// pause is not a failure. Placed before the always-block branch below so the pause
 			// short-circuits it.
+			// Liveness-gated like the block branch below: an ABANDONED interview left paused
+			// (awaiting_answer=true, progress-stale) must NOT short-circuit this whole function
+			// and swallow a later family's gate — e.g. a stale paused interview alongside a live
+			// explain-diff with an incomplete quiz. A stale pause falls through here so the
+			// prometheus/qa/explain-diff/skill-chain gates below still evaluate.
 			return formatContinueOutput();
 		} else if (
 			!isPristine("deep-interview", toRecord(deepInterviewStateRaw)) &&
@@ -757,12 +765,15 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			}
 			cleanupPrometheusState(sessionId);
 			cleanupBlockCountFiles(stateDir, prometheusAttemptId);
-		} else if (prometheusState.awaiting_user === true) {
+		} else if (prometheusState.awaiting_user === true && isProgressLive(prometheusState, nowEpoch)) {
 			// Stop-allowed pause: the model posed a plain-text question at a human gate
 			// (S2/design gate/S7) and set awaiting_user via `prometheus-state.ts set
 			// --await-user`. This is an intentional yield, NOT completion — the state stays
 			// active and is resumed (awaiting_user auto-cleared) on the next progress write.
 			// Allow the stop and reset the block count: a legitimate pause is not a failure.
+			// Liveness-gated like the block branch below: a stale ABANDONED pause must not
+			// short-circuit this function and swallow the qa/explain-diff/skill-chain gates —
+			// it falls through instead so they still evaluate.
 			cleanupBlockCountFiles(stateDir, prometheusAttemptId);
 			return formatContinueOutput();
 		} else if (isProgressLive(prometheusState, nowEpoch)) {
