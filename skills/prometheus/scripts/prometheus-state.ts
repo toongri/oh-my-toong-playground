@@ -237,9 +237,15 @@ export function setPrometheusState(
 		}
 	}
 
+	// Phase-preserving default: an absent --phase (CLI passes "") must NOT overwrite the
+	// stored phase. A pure pause write (`set --await-user`) at a human gate carries no
+	// --phase, and clobbering phase to "" would destroy the S2/S7 pipeline position needed
+	// for resume (and be rejected outright in early states, where "" fails the non-goals
+	// gate). Every real transition still passes an explicit --phase, which wins here.
+	const resolvedPhase = opts.phase !== "" ? opts.phase : prior.phase ?? "";
 	const resolvedPlanPath = opts.plan_path ?? prior.plan_path ?? "";
 	const resolvedNonGoals = opts.non_goals ?? prior.non_goals ?? "";
-	assertValidNonGoals(resolvedNonGoals, opts.phase);
+	assertValidNonGoals(resolvedNonGoals, resolvedPhase);
 	const presentation = opts.submit_presentation !== undefined
 		? createPresentationSubmission(resolvedPlanPath, opts.submit_presentation)
 		: prior.presentation;
@@ -339,7 +345,7 @@ export function setPrometheusState(
 		// Recomputed every write: true only when THIS set passed --await-user, so any
 		// later progress write auto-clears the pause (mirrors explain-diff's grade clearing awaiting_answer).
 		awaiting_user: opts.await_user === true,
-		phase: opts.phase,
+		phase: resolvedPhase,
 		plan_path: resolvedPlanPath,
 		resume_summary: normalizeResumeSummary(opts.resume_summary ?? prior.resume_summary ?? ""),
 		non_goals: resolvedNonGoals,
