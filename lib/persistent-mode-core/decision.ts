@@ -183,7 +183,7 @@ INSTRUCTIONS:
 3. When all questions have been fully answered, output: <deep-interview-done/>
 4. Do NOT stop until the interview is complete
 
-${continuationContract("preferred", askToolName, "run `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update --await-answer` to record that a plain-text question is outstanding, then end your turn (recording the answer via `--append-round` resumes the interview).")}
+${continuationContract("preferred", askToolName, "run `deep-interview-state.ts update --await-answer` to record that a plain-text question is outstanding, then end your turn (recording the answer via `--append-round` resumes the interview).")}
 
 </deep-interview-continuation>
 
@@ -204,7 +204,7 @@ INSTRUCTIONS:
 3. When the pipeline is fully complete or explicitly aborted, output: <prometheus-done/>
 4. Do NOT stop until <prometheus-done/> is emitted
 
-${continuationContract("preferred", askToolName, "run `bun ${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts set --await-user` to mark the human gate (S2/design gate/S7), then end your turn (the next progress write clears the pause).")}
+${continuationContract("preferred", askToolName, "run `prometheus-state.ts set --await-user` to mark the human gate (S2/design gate/S7), then end your turn (the next progress write clears the pause).")}
 
 </prometheus-continuation>
 
@@ -386,7 +386,7 @@ function buildExplainDiffContinuationMessage(
 					submit: "explain-diff-state.ts add-concept --required",
 					lang: "ko" as const,
 				};
-	return `<explain-diff-continuation>\n\n[EXPLAIN-DIFF STOP-GATE]\n\n${deliverableRefusalBody(refusal)}\n\n${continuationContract("preferred", askToolName, "ask the next quiz question via `bun ${CLAUDE_SKILL_DIR}/scripts/explain-diff-state.ts ask` — an outstanding question is a legitimate pause — then end your turn.")}\n\n</explain-diff-continuation>\n\n---\n`;
+	return `<explain-diff-continuation>\n\n[EXPLAIN-DIFF STOP-GATE]\n\n${deliverableRefusalBody(refusal)}\n\n${continuationContract("preferred", askToolName, "ask the next quiz question via `explain-diff-state.ts ask` — an outstanding question is a legitimate pause — then end your turn.")}\n\n</explain-diff-continuation>\n\n---\n`;
 }
 
 // The ultragoal continuation uses the autonomous loop envelope (iteration header,
