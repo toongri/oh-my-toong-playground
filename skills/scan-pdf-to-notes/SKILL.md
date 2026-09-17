@@ -97,7 +97,9 @@ The raw extraction is a "transcript" with OCR noise. The notes are the "study no
 
 ## Completion gate — required deliverables
 
-Do NOT report this work as done until both deliverables below exist. If either is missing or incomplete, you MUST, in order:
+**Scope: the full extract-plus-notes job.** For a raw-only request (per *When to Use / NOT* — "If only raw OCR text is needed and no notes, stop after Part A"), the raw extraction alone is the completion condition: skip the study-notes row below and do not produce unsolicited notes.
+
+For a full job, do NOT report this work as done until both deliverables below exist. If either is missing or incomplete, you MUST, in order:
 
 1. **Study the guideline** — read the reference that governs the deliverable before producing it.
 2. **Produce** the deliverable exactly per that guideline.
