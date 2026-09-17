@@ -29,13 +29,13 @@ At every turn boundary, exactly one of these applies:
    mark the work complete — an intentional pause, never completion. Completion
    happens only through the family's own done gate.
 
-   - **deep-interview**: run `deep-interview-state.ts update --await-answer`
+   - **deep-interview**: run `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update --await-answer`
      (a plain-text Socratic question is outstanding), then end your turn.
      Recording the answer via `--append-round` clears the pause.
-   - **prometheus**: run `prometheus-state.ts set --await-user` (a human gate
+   - **prometheus**: run `bun ${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts set --await-user` (a human gate
      S2/design gate/S7), then end your turn. The next progress write clears it.
-   - **explain-diff**: ask the next quiz question via `explain-diff-state.ts
-     ask` (an outstanding question is a legitimate pause), then end your turn.
+   - **explain-diff**: ask the next quiz question via `bun ${CLAUDE_SKILL_DIR}/scripts/explain-diff-state.ts ask`
+     (an outstanding question is a legitimate pause), then end your turn.
    - **qa** and **ultragoal** are autonomous loops with NO turn-ending pause
      state. If you are genuinely blocked with no action you can take, report
      the blocker in prose and stop; you will be re-prompted, and the
