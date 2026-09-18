@@ -506,11 +506,11 @@ export async function syncCategory(
 	if (!section || typeof section !== "object" || !("items" in section) || !Array.isArray(section.items)) {
 		return;
 	}
-	const previousManifest = category !== "rules" && options?.reconcile !== false && !context.dryRun
+	const previousManifest = options?.reconcile !== false && !context.dryRun
 		? await readManifest(deployRoot)
 		: null;
 	if (section.items.length === 0) {
-		if (category !== "rules" && previousManifest !== null && options?.reconcile !== false && !context.dryRun) {
+		if (previousManifest !== null && options?.reconcile !== false && !context.dryRun) {
 			for (const pair of Object.keys(previousManifest)) {
 				const [location, pairCategory] = pair.split("/");
 				if (pairCategory === category) {
@@ -538,9 +538,15 @@ export async function syncCategory(
 
 	// Entry names (displayName) this run declares for each platform, within this
 	// category — the manifest-scoped orphan removal below diffs this against the
-	// PREVIOUS run's recorded set instead of wiping the whole category dir.
-	// Never populated for "rules": rules are excluded from removal entirely (may
-	// hold user-managed files), exactly as the old wipe excluded them.
+	// PREVIOUS run's recorded set instead of wiping the whole category dir. This
+	// now includes "rules": only names OMT itself previously recorded deploying
+	// are ever removed, so a hand-authored rule file with no manifest record
+	// (bootstrap, or simply never declared) survives untouched — the same
+	// safety property agents/commands/skills/scripts already had. The one
+	// residual risk is indistinguishability by name: a user file later placed
+	// under a name OMT once deployed (e.g. a hand-written `foo.md` replacing a
+	// retired OMT rule `foo`) looks identical to an OMT orphan and would be
+	// removed on the next reconcile.
 	// Keyed by deploy LOCATION (deployLocationForManifest), not Platform directly —
 	// Codex skills accumulate under "agents", matching the physical .agents/skills
 	// pair its backup and manifest reconciliation actually own.
@@ -657,15 +663,13 @@ export async function syncCategory(
 
 			// Declare this entry for this platform×category pair (see deployedNames
 			// above) — the set diffed against the manifest's previous run below.
-			if (category !== "rules") {
-				const deployLocation = deployLocationForManifest(platform, category);
-				let names = deployedNames.get(deployLocation);
-				if (!names) {
-					names = new Set<string>();
-					deployedNames.set(deployLocation, names);
-				}
-				names.add(displayName);
+			const deployLocation = deployLocationForManifest(platform, category);
+			let names = deployedNames.get(deployLocation);
+			if (!names) {
+				names = new Set<string>();
+				deployedNames.set(deployLocation, names);
 			}
+			names.add(displayName);
 
 			// Record SOURCE paths for lib-dependency collection (independent of dryRun:
 			// the lib scan reads source, never the deployed tree). The component itself
@@ -747,14 +751,14 @@ export async function syncCategory(
 
 	// Manifest-scoped orphan removal: for each deploy location this category
 	// deployed to, remove only entries OMT itself previously deployed for this
-	// pair that are no longer declared — never a foreign resident, and never
-	// anything under "rules" (deployedNames stays empty for rules, so this loop
-	// is a no-op there). deployedNames is already keyed by deploy LOCATION
-	// (deployLocationForManifest), so no further mapping is needed here.
+	// pair that are no longer declared — never a foreign resident. This now
+	// applies to "rules" too, on the same terms as every other category.
+	// deployedNames is already keyed by deploy LOCATION (deployLocationForManifest),
+	// so no further mapping is needed here.
 	if (options?.reconcile !== false && !context.dryRun) {
 		const manifestMutationHooks: ManifestMutationHooks | undefined = transaction ?? undefined;
 		const locations = new Set<string>(deployedNames.keys());
-		if (category !== "rules" && previousManifest !== null) {
+		if (previousManifest !== null) {
 			for (const pair of Object.keys(previousManifest)) {
 				const [location, pairCategory] = pair.split("/");
 				// The legacy `.codex/skills` pair is handled by the dedicated fossil
@@ -1885,9 +1889,12 @@ export async function syncLib(
  * `codexSkillNames`): a caller — a direct unit-level call with no
  * `processYaml` around it, or `processYaml` itself when this run resolved
  * zero components for that platform — that doesn't pass owned names walks
- * NOTHING in `hooks/`/`rules/`, never everything. There is no manifest for
- * either subtree (they aren't in CATEGORIES's deploy-tracking), so
- * "resolved by OMT this run" is the only provenance signal available, and
+ * NOTHING in `hooks/`/`rules/`, never everything. `rules/` now has a
+ * REMOVAL-tracking manifest (syncCategory's manifest-scoped orphan
+ * reconciliation), but that manifest records deployed NAMES for deletion
+ * purposes, not which files this content-rewrite walk should open — and
+ * `hooks/` still has no manifest at all. So "resolved by OMT this run"
+ * remains the only provenance signal available here for either subtree, and
  * defaulting to unrestricted would silently clobber a team-owned file the
  * instant the platform becomes rewrite-eligible for ANY reason — including
  * one that resolves zero hooks/rules at all (e.g. a `scripts.items` entry
@@ -2136,9 +2143,12 @@ function isOwnedRulePath(relPath: string, ownedRuleNames: ReadonlySet<string>): 
  * default to fail-closed (an empty set): a subtree gated by an owned-names
  * set that has nothing in it — because the caller never passed one, not
  * because it deliberately declared zero components — walks nothing rather
- * than everything. There is no manifest or reconciliation mechanism for
- * hooks/rules (they aren't in CATEGORIES's deploy-tracking), so "resolved by
- * OMT this run" is the only provenance signal that exists; defaulting open
+ * than everything. `rules` now has a REMOVAL-tracking manifest (syncCategory's
+ * manifest-scoped orphan reconciliation), but that manifest exists to decide
+ * what to DELETE, not which files this content-rewrite walk should open —
+ * `hooks` still has no manifest or reconciliation mechanism at all. So
+ * "resolved by OMT this run" remains the only provenance signal this walk
+ * has for either subtree; defaulting open
  * would mean the one hand-authored file a team keeps at that root (e.g.
  * `.codex/hooks/README.md`, `.codex/rules/conventions.md`) is silently
  * rewritten the instant the platform becomes eligible for any unrelated
