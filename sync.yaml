@@ -175,7 +175,6 @@ rules:
     - architecture-boundaries
     - communication-style
     - contract-fidelity
-    - continuation-contract
     - convention-grounding
     - verification-discipline
     - e2e-driver-usage
@@ -184,6 +183,8 @@ rules:
     - prose-clarity
     - toolchain-mise
     - component: codex-subagent-spawn
+      platforms: [codex]
+    - component: codex-background-wait
       platforms: [codex]
 
 docs:

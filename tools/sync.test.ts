@@ -5403,16 +5403,16 @@ describe("processYaml — rules category deploys to codex with rewrite applied (
 		expect(deployed).toContain(".codex/rules/");
 	});
 
-	it("keeps Claude background wake semantics but tells Codex to wait and poll", async () => {
+	it("deploys the Codex background-wait rule to Codex only", async () => {
 		const source = await readFile(
-			path.join(import.meta.dir, "..", "rules", "continuation-contract.md"),
+			path.join(import.meta.dir, "..", "rules", "codex-background-wait.md"),
 		);
-		await writeFile(path.join(rootDir, "rules", "continuation-contract.md"), source);
+		await writeFile(path.join(rootDir, "rules", "codex-background-wait.md"), source);
 
 		const syncYamlPath = path.join(rootDir, "sync.yaml");
 		await writeFile(
 			syncYamlPath,
-			`path: ${targetPath}\nrules:\n  platforms: [claude, codex]\n  items:\n    - continuation-contract\n`,
+			`path: ${targetPath}\nrules:\n  platforms: [codex]\n  items:\n    - codex-background-wait\n`,
 		);
 
 		const adapters = new Map<Platform, PlatformAdapter>([
@@ -5422,21 +5422,16 @@ describe("processYaml — rules category deploys to codex with rewrite applied (
 
 		await processYaml(makeContext(), syncYamlPath, adapters, rootDir);
 
-		const claude = await readFile(
-			path.join(targetPath, ".claude", "rules", "continuation-contract.md"),
-		);
 		const codex = await readFile(
-			path.join(targetPath, ".codex", "rules", "continuation-contract.md"),
+			path.join(targetPath, ".codex", "rules", "codex-background-wait.md"),
 		);
 
-		expect(claude).toBe(source);
-		expect(claude).toContain("On Claude Code");
-		expect(claude).toContain("background_tasks");
-		expect(claude).toContain("task-notification");
-		expect(codex).toContain("Codex has no equivalent Stop payload");
 		expect(codex).toContain("write_stdin");
 		expect(codex).toContain("poll");
 		expect(codex).toContain("not end the turn solely to wait");
+		expect(
+			await exists(path.join(targetPath, ".claude", "rules", "codex-background-wait.md")),
+		).toBe(false);
 	});
 
 	it("dry-run reports the rule copy and the codex rewrite without writing files", async () => {
