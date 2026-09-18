@@ -30,7 +30,7 @@ oh-my-toong is an **agent central-management project**. It keeps skills, agents,
 - **Central library** — version-control skills, agents, hooks, rules, and docs in one repository
 - **Declarative sync** — deploy only the components you need into a target project's `.claude/` via `sync.yaml`
 - **Per-project differentiation** — override global components with project-specific conventions via upward search
-- **Orphan cleanup** — components removed from the library disappear from targets on the next sync
+- **Orphan cleanup** — remove only agents/skills/scripts/rules OMT recorded as deployed, once they drop from the declaration; files it never deployed are left alone
 - **Multi-platform support** — Claude / Gemini / Codex / OpenCode abstracted via adapters
 - **Codex configuration ownership** — retain the default `.codex/config.toml` and track owned keys and last-applied values in `.omt/codex-config-state.json`, independently of comments. Existing keys require explicit adoption; conflicts preserve user settings. `make sync-dry` also checks the real target for required adoption and conflicts (see [Platform YAML Configuration Deployment](docs/platform-yaml-config-deployment.en.md)).
 - **Surface-specific E2E routing** — validate web/Electron with `agent-browser`, and iOS, tvOS, macOS, Android, and Vega OS TV with `agent-device`

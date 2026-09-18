@@ -30,7 +30,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 - **중앙 라이브러리** — 스킬, 에이전트, 훅, 룰, 문서를 한 저장소에서 버전 관리
 - **선언적 동기화** — `sync.yaml`로 필요한 컴포넌트만 대상 프로젝트의 `.claude/`로 배포
 - **프로젝트별 분화** — 상향 탐색으로 글로벌 컴포넌트 위에 프로젝트 고유 컨벤션 오버라이드
-- **고아 정리** — 라이브러리에서 제거한 컴포넌트는 다음 sync 때 대상에서도 사라짐
+- **고아 정리** — OMT가 배포했다고 기록한 agents/skills/scripts/rules만 선언에서 빠지면 다음 sync 때 대상에서 지워짐. 배포한 적 없는 파일은 그대로 둠
 - **멀티플랫폼 지원** — Claude / Gemini / Codex / OpenCode를 어댑터로 추상화
 - **Codex 설정 소유권 추적** — 기본 `.codex/config.toml`을 유지하고, 주석과 무관하게 `.omt/codex-config-state.json`에서 관리할 키와 마지막 적용 값을 추적합니다. 기존 키는 명시적으로 관리 대상으로 채택해야 하며, 충돌 시 사용자 설정을 보존합니다. `make sync-dry`도 실제 대상에서 채택 필요 여부와 충돌을 확인합니다([플랫폼 YAML 설정 배포](docs/platform-yaml-config-deployment.md) 참고).
 - **표면별 E2E 라우팅** — 웹/Electron은 `agent-browser`, iOS·tvOS·macOS·Android·Vega OS TV는 `agent-device`로 검증
