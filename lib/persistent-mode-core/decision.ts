@@ -59,24 +59,6 @@ export interface DecisionContext {
 	 * file gates behavior per platform without a runtime flag.
 	 */
 	pendingSkillChainSkills?: string[];
-	/**
-	 * Platform-supplied name of the "ask a structured question" tool, quoted in
-	 * the continuation contract's case-2 line (continuationContract). Optional
-	 * and platform-gated by omission, exactly like pendingSkillChainSkills above:
-	 * Claude's hooks/persistent-mode/index.ts never sets it, so it stays
-	 * undefined there and defaults to "AskUserQuestion" (a real Claude tool
-	 * name). Codex's hooks/codex-persistent-mode/cli.ts sets it to
-	 * "request_user_input" — Codex's real analog (see rewrite rule 14 in
-	 * tools/lib/rewrite-rules.ts) — so the Stop hook's own runtime OUTPUT never
-	 * hardcodes Claude vocabulary for a platform that doesn't have that tool.
-	 * This is dependency injection at the call site, not a deploy-time text
-	 * rewrite: unlike every other Claude-ism in this codebase, this literal
-	 * lives inside executed code (a message string built at runtime), not
-	 * instruction prose in a deployed .md — the deploy-time rewrite pipeline
-	 * (rewritePlatformPaths) deliberately never opens .ts files at all (see its
-	 * doc comment), so rewriting this file's bytes was never a viable fix.
-	 */
-	askToolName?: string;
 }
 
 // isPristine (lib/state-core) takes an untyped Record<string, unknown> since the
@@ -147,30 +129,26 @@ type AskPosture = "preferred" | "exceptional";
 //     has no turn-ending pause. There is no global pause token anymore — the only way
 //     to legitimately end a turn without completing is to set a family stop-allowed
 //     state through that family's own state CLI (the command named here).
-// `askToolName` names the "ask a structured question" tool for THIS platform
-// (see DecisionContext.askToolName's doc comment) — threaded in by every
-// caller from context, never hardcoded here.
 function continuationContract(
 	askPosture: AskPosture,
-	askToolName: string,
 	pauseInstruction: string | null,
 ): string {
 	const askLine =
 		askPosture === "preferred"
-			? `2. Need a user decision or fact only they hold? Ask via the ${askToolName} tool — asking is NOT stopping (a tool call keeps the turn alive). Prefer this over ending the turn with a question in prose.`
-			: `2. Asking is EXCEPTIONAL here — this loop is autonomous (autonomy is post-planning). Only when a decision is the user's alone (a human-only gate) or a boundary is unsafe, ask via the ${askToolName} tool — asking is NOT stopping. Otherwise keep working.`;
+			? `2. Need a user decision or fact only they hold? Ask with a question tool call, proposing the alternatives each with its trade-offs — asking is NOT stopping (a tool call keeps the turn alive). Prefer this over ending the turn with a question in prose.`
+			: `2. Asking is EXCEPTIONAL here — this loop is autonomous (autonomy is post-planning). Only when a decision is the user's alone (a human-only gate) or a boundary is unsafe, ask with a question tool call — asking is NOT stopping. Otherwise keep working.`;
 	const case3 =
 		pauseInstruction === null
 			? `3. Only the user can decide, or a structured question was just declined? This loop is autonomous — it has NO turn-ending pause state. If you are genuinely blocked with no action you can take, report the blocker in prose and stop; you will be re-prompted, and the block-count escape prevents a permanent wedge.`
 			: `3. Only the user can decide, or a structured question was just declined? Pause the session: ${pauseInstruction} The hook then ALLOWS the stop, KEEPS all session state (this session resumes on the user's next reply), and does NOT mark the work complete — an intentional pause, never completion. Completion happens ONLY through this family's done gate.`;
-	return `Continuation contract (see the always-on Continuation Contract rule) — at this turn boundary, exactly ONE applies:
+	return `Continuation contract — at this turn boundary, exactly ONE applies:
 1. Work remains? Keep working — do not stop, do not ask.
 ${askLine}
 ${case3}
 Never end a turn with a softener ("should I continue?", "If you want, I can…", "If you'd like, I can…", "Would you like me to…") — each is case 1, 2, or 3 in disguise; pick the real one.`;
 }
 
-function buildDeepInterviewContinuationMessage(askToolName: string): string {
+function buildDeepInterviewContinuationMessage(): string {
 	return `<deep-interview-continuation>
 
 [DEEP INTERVIEW IN PROGRESS]
@@ -183,7 +161,7 @@ INSTRUCTIONS:
 3. When all questions have been fully answered, output: <deep-interview-done/>
 4. Do NOT stop until the interview is complete
 
-${continuationContract("preferred", askToolName, "run `deep-interview-state.ts update --await-answer` to record that a plain-text question is outstanding, then end your turn (recording the answer via `--append-round` resumes the interview).")}
+${continuationContract("preferred", "run `deep-interview-state.ts update --await-answer` to record that a plain-text question is outstanding, then end your turn (recording the answer via `--append-round` resumes the interview).")}
 
 </deep-interview-continuation>
 
@@ -191,7 +169,7 @@ ${continuationContract("preferred", askToolName, "run `deep-interview-state.ts u
 `;
 }
 
-function buildPrometheusContinuationMessage(askToolName: string): string {
+function buildPrometheusContinuationMessage(): string {
 	return `<prometheus-continuation>
 
 [PROMETHEUS SESSION IN PROGRESS]
@@ -204,7 +182,7 @@ INSTRUCTIONS:
 3. When the pipeline is fully complete or explicitly aborted, output: <prometheus-done/>
 4. Do NOT stop until <prometheus-done/> is emitted
 
-${continuationContract("preferred", askToolName, "run `prometheus-state.ts set --await-user` to mark the human gate (S2/design gate/S7), then end your turn (the next progress write clears the pause).")}
+${continuationContract("preferred", "run `prometheus-state.ts set --await-user` to mark the human gate (S2/design gate/S7), then end your turn (the next progress write clears the pause).")}
 
 </prometheus-continuation>
 
@@ -251,7 +229,7 @@ function prometheusStageAGateReason(state: PrometheusState): string | null {
 `;
 }
 
-function buildSkillChainContinuationMessage(pendingSkills: string[], askToolName: string): string {
+function buildSkillChainContinuationMessage(pendingSkills: string[]): string {
 	return `<skill-chain-continuation>
 
 [NEXT-STEP SKILL NOT LOADED - ${pendingSkills.join(", ")}]
@@ -265,7 +243,7 @@ INSTRUCTIONS:
 
 Do NOT stop until every referenced next-step skill has been loaded.
 
-${continuationContract("preferred", askToolName, null)}
+${continuationContract("preferred", null)}
 
 </skill-chain-continuation>
 
@@ -297,7 +275,6 @@ function buildQaContinuationMessage(
 	state: QaChainState,
 	verdict: string | null,
 	probe: (path: string) => { exists: boolean; size: number },
-	askToolName: string,
 ): string {
 	const refusal = !chainComplete(state)
 		? {
@@ -346,7 +323,7 @@ function buildQaContinuationMessage(
 						produce: "read the current state and record whatever outcome the chain is missing (with the chain complete and no verdict, that outcome is the verdict)",
 						submit: "qa-state.ts get to inspect the chain, then qa-state.ts set-verdict <APPROVE|COMMENT|REQUEST_CHANGES> to record the missing verdict",
 					};
-	return `<qa-continuation>\n\n[QA STOP-GATE]\n\nThe recorded QA session cannot stop yet.\n\n${deliverableRefusalBody(refusal)}\n\n${continuationContract("preferred", askToolName, null)}\n\n</qa-continuation>\n\n---\n`;
+	return `<qa-continuation>\n\n[QA STOP-GATE]\n\nThe recorded QA session cannot stop yet.\n\n${deliverableRefusalBody(refusal)}\n\n${continuationContract("preferred", null)}\n\n</qa-continuation>\n\n---\n`;
 }
 
 /**
@@ -356,7 +333,6 @@ function buildQaContinuationMessage(
  */
 function buildExplainDiffContinuationMessage(
 	state: ExplainDiffState,
-	askToolName: string,
 ): string {
 	const remaining = state.concepts.filter((c) => c.required && !c.passed).map((c) => c.id);
 	const refusal =
@@ -386,7 +362,7 @@ function buildExplainDiffContinuationMessage(
 					submit: "explain-diff-state.ts add-concept --required",
 					lang: "ko" as const,
 				};
-	return `<explain-diff-continuation>\n\n[EXPLAIN-DIFF STOP-GATE]\n\n${deliverableRefusalBody(refusal)}\n\n${continuationContract("preferred", askToolName, "ask the next quiz question via `explain-diff-state.ts ask` — an outstanding question is a legitimate pause — then end your turn.")}\n\n</explain-diff-continuation>\n\n---\n`;
+	return `<explain-diff-continuation>\n\n[EXPLAIN-DIFF STOP-GATE]\n\n${deliverableRefusalBody(refusal)}\n\n${continuationContract("preferred", "ask the next quiz question via `explain-diff-state.ts ask` — an outstanding question is a legitimate pause — then end your turn.")}\n\n</explain-diff-continuation>\n\n---\n`;
 }
 
 // The ultragoal continuation uses the autonomous loop envelope (iteration header,
@@ -398,7 +374,6 @@ function buildExplainDiffContinuationMessage(
 function buildUltragoalContinuationMessage(
 	ultragoal: UltragoalState,
 	iteration: number,
-	askToolName: string,
 ): string {
 	// S2: never yield on a missing objective — fall back to a generic placeholder.
 	const objective =
@@ -428,7 +403,7 @@ B) You believe the objective is MET → do NOT stop here. Your 'done' is a claim
 
 Completion fires ONLY through request-complete. Stopping without it does NOT complete the objective. If you are truly blocked with no actionable next step, report the blocker and stop.
 
-${continuationContract("exceptional", askToolName, null)}
+${continuationContract("exceptional", null)}
 
 </ultragoal-continuation>
 
@@ -448,9 +423,6 @@ export function makeDecision(context: DecisionContext): HookOutput {
 		activeBackgroundTaskCount,
 		pendingSkillChainSkills,
 	} = context;
-	// See DecisionContext.askToolName's doc comment: undefined for every Claude
-	// caller, so this defaults to the real Claude tool name there.
-	const askToolName = context.askToolName ?? "AskUserQuestion";
 
 	// The heartbeat (touchSessionStates) fires HERE — on entry to makeDecision,
 	// unconditionally, before Guard 2 below is even evaluated. It used to live
@@ -533,7 +505,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 					: {}),
 			};
 			if (progress.progressed) {
-				const message = buildUltragoalContinuationMessage(ultragoal, 0, askToolName);
+				const message = buildUltragoalContinuationMessage(ultragoal, 0);
 				try {
 					updateUltragoalState(sessionId, { iteration: 0, ...persistedFingerprint });
 					cleanupBlockCountFiles(stateDir, attemptId);
@@ -563,7 +535,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 				}
 				return formatBlockOutput(message);
 			}
-			const message = buildUltragoalContinuationMessage(ultragoal, newIteration, askToolName); // build FIRST (E1)
+			const message = buildUltragoalContinuationMessage(ultragoal, newIteration); // build FIRST (E1)
 			let writeOk = true;
 			// M1: swallow write failure — STILL block, never degrade to continue.
 			try {
@@ -705,7 +677,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 				(magnitudeUnconverged || hasUnscoredActiveComponent || hasNoNonGoalDecider) &&
 				isProgressLive(deepInterviewStateRaw, nowEpoch)
 			) {
-				return formatBlockOutput(buildDeepInterviewContinuationMessage(askToolName));
+				return formatBlockOutput(buildDeepInterviewContinuationMessage());
 			}
 			cleanupDeepInterviewState(sessionId);
 		} else if (
@@ -748,7 +720,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			//     revived only by a heartbeat must not look progressing to either consumer.
 			// The orphan is inert either way — it ages toward its own eventual reap once the
 			// owning session stops calling this hook (heartbeat ceases); neither blocks stop.
-			return formatBlockOutput(buildDeepInterviewContinuationMessage(askToolName));
+			return formatBlockOutput(buildDeepInterviewContinuationMessage());
 		}
 	}
 
@@ -798,7 +770,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 				return formatContinueOutput();
 			}
 			incrementBlockCount(stateDir, prometheusAttemptId);
-			return formatBlockOutput(buildPrometheusContinuationMessage(askToolName));
+			return formatBlockOutput(buildPrometheusContinuationMessage());
 		}
 	}
 
@@ -828,7 +800,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			return formatContinueOutput();
 		} else if (qaState.active === true || !untouched) {
 			incrementBlockCount(stateDir, qaAttemptId);
-			return formatBlockOutput(buildQaContinuationMessage(qaState, verdict, qaProbe, askToolName));
+			return formatBlockOutput(buildQaContinuationMessage(qaState, verdict, qaProbe));
 		}
 	}
 
@@ -847,7 +819,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			return formatContinueOutput();
 		} else {
 			incrementBlockCount(stateDir, edAttemptId);
-			return formatBlockOutput(buildExplainDiffContinuationMessage(edState, askToolName));
+			return formatBlockOutput(buildExplainDiffContinuationMessage(edState));
 		}
 	}
 
@@ -866,7 +838,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 		}
 		incrementBlockCount(stateDir, chainAttemptId);
 		return formatBlockOutput(
-			buildSkillChainContinuationMessage(pendingSkillChainSkills, askToolName),
+			buildSkillChainContinuationMessage(pendingSkillChainSkills),
 		);
 	}
 

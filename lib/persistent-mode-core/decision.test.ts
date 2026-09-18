@@ -2463,13 +2463,14 @@ describe("makeDecision", () => {
 	// Story 3: the shared continuation-contract skeleton (continuationContract())
 	// must appear in every continuation builder's output, with per-family ask
 	// posture: "preferred" (deep-interview/prometheus/qa/skill-chain) vs
-	// "exceptional" (ultragoal). Mirrors rules/continuation-contract.md (the SSOT).
+	// "exceptional" (ultragoal). The message itself is now the single source —
+	// it no longer points at a separate always-on rule.
 	// -------------------------------------------------------------------------
 	describe("continuation message skeleton", () => {
 		const assertSharedSkeleton = (reason: string) => {
-			expect(reason).toContain("always-on Continuation Contract rule");
+			expect(reason).toContain("Continuation contract — at this turn boundary");
 			expect(reason).toContain("should I continue?");
-			expect(reason).toContain("AskUserQuestion");
+			expect(reason).toContain("question tool call");
 		};
 
 		it("deep-interview continuation includes the shared skeleton (preferred posture)", async () => {
@@ -2547,32 +2548,20 @@ describe("makeDecision", () => {
 	});
 
 	// -------------------------------------------------------------------------
-	// runtime-leak fix: the continuation contract's ask-tool vocabulary is a
-	// platform-supplied parameter (DecisionContext.askToolName), not a hardcoded
-	// literal — the same "optional field, platform shim supplies it, undefined
-	// for Claude" pattern pendingSkillChainSkills already uses. Codex's Stop
-	// hook (hooks/codex-persistent-mode/cli.ts) passes askToolName:
-	// "request_user_input" (its real AskUserQuestion analog); Claude's Stop hook
-	// (hooks/persistent-mode/index.ts) never sets it, so it defaults to
-	// "AskUserQuestion" there — exactly like every test above.
+	// tool-agnostic ask line: the continuation contract's case-2 line no longer
+	// names any platform tool — it points at "a question tool call" generically,
+	// so the same message is correct for Claude and Codex alike.
 	// -------------------------------------------------------------------------
-	describe("continuation contract ask-tool vocabulary (askToolName)", () => {
-		it("defaults to AskUserQuestion when askToolName is omitted (Claude)", () => {
+	describe("continuation contract ask line is tool-agnostic", () => {
+		it("names no platform tool in the block message", () => {
 			const context = createContext({ pendingSkillChainSkills: ["chain-bravo"] });
 			const result = makeDecision(context);
 
 			expect(result.decision).toBe("block");
-			expect(result.reason).toContain("AskUserQuestion");
-		});
-
-		it("uses the platform-supplied askToolName instead of AskUserQuestion when provided (Codex)", () => {
-			const context = createContext({ pendingSkillChainSkills: ["chain-bravo"], askToolName: "request_user_input" });
-			const result = makeDecision(context);
-
-			expect(result.decision).toBe("block");
 			const reason = result.reason!;
-			expect(reason).toContain("request_user_input");
+			expect(reason).toContain("question tool call");
 			expect(reason).not.toContain("AskUserQuestion");
+			expect(reason).not.toContain("request_user_input");
 		});
 	});
 

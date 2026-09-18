@@ -264,11 +264,6 @@ function runStop(input: Record<string, unknown>): void {
 		activeBackgroundTaskCount,
 		deferredStopWakeGuaranteed: false,
 		pendingSkillChainSkills,
-		// Codex's real AskUserQuestion analog (rewrite rule 14 in
-		// tools/lib/rewrite-rules.ts) — see DecisionContext.askToolName's doc
-		// comment. Claude's hooks/persistent-mode/index.ts never sets this
-		// field, so makeDecision's own "AskUserQuestion" default applies there.
-		askToolName: "request_user_input",
 	};
 
 	const output = makeDecision(context);
