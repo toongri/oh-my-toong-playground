@@ -290,6 +290,8 @@ Decision: {id and topic} | Why now: {consequence or conflicting premise} | Ambig
 
 Use the runtime's question tool for structured choices and ordinary text for open answers. Respect the user's available question interface; the number of fields a tool accepts is not an interview limit.
 
+**Pausing for a plain-text question:** when the question above is posed as plain text rather than through the runtime's question tool, first run `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update --await-answer`, then end the turn. This records the pause, not completion — the session state is kept and the interview stays unmarked as done — and is cleared automatically when the answer is recorded via `--append-round` (Step 2e). A question asked through the runtime's question tool needs no pause, since a tool call does not end the turn.
+
 ### Step 2c: Score Ambiguity
 
 After receiving the user's answer, score clarity **per active topology component** — every component in `state.topology.components` with `status:"active"` gets its own score across the same 6 dimensions below. A component's high scores never average away or hide a sibling component's gaps: an unscored sibling still holds the interview back (Closure Guard, Step 2-exit).
