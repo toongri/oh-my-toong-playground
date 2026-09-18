@@ -63,7 +63,7 @@ General rule: **All parameters not on the removal list are kept as-is.**
 
 If `new URL(input)` throws (malformed input, missing protocol, relative URL, empty string, etc.), `normalizeUrl` returns `null` immediately without further processing.
 
-Caller responsibility: a `null` return must be handled explicitly. The recommended action is to trigger `AskUserQuestion` to ask the user for a corrected URL. Silent skip (discarding the null without user notification) is forbidden.
+Caller responsibility: a `null` return must be handled explicitly. The recommended action is to ask the user for a corrected URL. Silent skip (discarding the null without user notification) is forbidden.
 
 Examples of inputs that return `null`:
 - `""` (empty string)

@@ -31,7 +31,7 @@ digraph dedup_matching_flow {
   start [label="Session start\n(Storage Backend Interview complete)", shape=ellipse, style=filled, fillcolor=lightgreen];
   sources_load [label="sources.yaml load", style=filled, fillcolor=khaki];
   sources_empty [label="sources empty?", shape=diamond];
-  ask_register [label="Propose registration\n(AskUserQuestion)", style=filled, fillcolor=salmon];
+  ask_register [label="Propose registration\n(ask user)", style=filled, fillcolor=salmon];
   source_iter [label="Iterate each source", style=filled, fillcolor=lightblue];
   pagination_tierA [label="Pagination Tier A\n(auto-detect)", shape=diamond];
   pagination_tierB [label="Pagination Tier B\n(interview → record how)", style=filled, fillcolor=salmon];
@@ -61,7 +61,7 @@ digraph dedup_matching_flow {
   phase2 [label="Phase 2: LLM verdict\n(ambiguity-prompt.md, temp 0)", shape=diamond];
   vmatch [label="match → status: included\n(auto)", style=filled, fillcolor=lightgreen];
   vmismatch [label="mismatch → status: excluded\n(auto, → Exclude Flow)", style=filled, fillcolor=lightgreen];
-  vambig [label="ambiguous → Phase 3:\nAskUserQuestion\n(auto-verdict forbidden)", style=filled, fillcolor=salmon];
+  vambig [label="ambiguous → Phase 3:\nask user\n(auto-verdict forbidden)", style=filled, fillcolor=salmon];
 
   start -> sources_load -> sources_empty;
   sources_empty -> ask_register [label="yes"];
@@ -110,7 +110,7 @@ digraph dedup_matching_flow {
 
 ### Specification (MANDATORY)
 
-At session start, load `$OMT_DIR/collect-jd/sources.yaml`. If empty or absent, propose via a **single AskUserQuestion**: "Do you have JD source sites to register?" Skippable — not as mandatory as Profile Interview. When user provides a URL, atomic append with `{slug, name, careers_url, added_at, pagination, crawl_state}` structure.
+At session start, load `$OMT_DIR/collect-jd/sources.yaml`. If empty or absent, propose via a **single user question**: "Do you have JD source sites to register?" Skippable — not as mandatory as Profile Interview. When user provides a URL, atomic append with `{slug, name, careers_url, added_at, pagination, crawl_state}` structure.
 
 ### Trigger phrases (Reusable Crawl)
 
@@ -180,7 +180,7 @@ See [Per-Site Crawl Memory](#per-site-crawl-memory) for full schema semantics.
 
 ### Counterexample (normal flow)
 
-- Session start → sources.yaml absent → "Do you have JD source sites to register?" AskUserQuestion → user provides "https://toss.im/career" → `{slug: toss, name: Toss, careers_url: ..., added_at: today}` atomic append → crawl proceeds normally. ✓
+- Session start → sources.yaml absent → "Do you have JD source sites to register?" ask user → user provides "https://toss.im/career" → `{slug: toss, name: Toss, careers_url: ..., added_at: today}` atomic append → crawl proceeds normally. ✓
 - User "싹 돌려" → sources.yaml has toss, kakao (2 entries) → crawl toss (Listing Pagination → per-JD) → crawl kakao → append `seen.jsonl` + update `audit_trail` → report. ✓
 - User "싹 돌려" → sources.yaml empty → report "등록된 소스가 없어요. 등록할 사이트가 있나요?" + prompt registration. ✓
 
@@ -193,9 +193,9 @@ See [Per-Site Crawl Memory](#per-site-crawl-memory) for full schema semantics.
 **Single source of truth: `pagination.how`**. All listing discovery — first-time auto-detect, user-interview fallback, cached re-execution, invalidation re-interview — collapses into one algorithm `discover_listing(source)`.
 
 **Algorithm (3 steps)**:
-1. If `pagination.how` absent → try Tier A 9-pattern catalog. On success, serialize as `how={origin: auto, pattern, params}` and atomic write. On all-9-fail → AskUserQuestion mandatory → `how={origin: interview, pattern, params, prose}` and atomic write.
+1. If `pagination.how` absent → try Tier A 9-pattern catalog. On success, serialize as `how={origin: auto, pattern, params}` and atomic write. On all-9-fail → asking the user is mandatory → `how={origin: interview, pattern, params, prose}` and atomic write.
 2. Execute `pagination.how`.
-3. On execution failure → classify trigger (transient: 1-retry then invalidate; structural: invalidate immediately). Push current `how` to `previous_how` 3-slot ring → set `how=null`, `invalidated_at=now()` → AskUserQuestion 3-option (new method / Tier A retry / skip). skip → **raise** `InvalidationSkipped`. retry-fail → **raise** `NewMethodAlsoFailed`. Silent empty `[]` return is **forbidden**.
+3. On execution failure → classify trigger (transient: 1-retry then invalidate; structural: invalidate immediately). Push current `how` to `previous_how` 3-slot ring → set `how=null`, `invalidated_at=now()` → ask user 3-option (new method / Tier A retry / skip). skip → **raise** `InvalidationSkipped`. retry-fail → **raise** `NewMethodAlsoFailed`. Silent empty `[]` return is **forbidden**.
 
 ### γ Schema for `pagination.how`
 
@@ -242,7 +242,7 @@ Tier A success criterion: additional pages exist and can be fetched. A single-pa
 
 ### Interview Patterns (4)
 
-When Tier A completely fails (all 9 patterns unmatched), **AskUserQuestion is mandatory**:
+When Tier A completely fails (all 9 patterns unmatched), **asking the user is mandatory**:
 
 ```
 이 사이트({{source.careers_url}})의 전체 JD 목록을 어떻게 가져올 수 있나요?
@@ -276,7 +276,7 @@ discover_listing(source) -> { anchors, executed_how, was_invalidated }:
         prose: auto_result.description  # optional
       }
     else:
-      # all 9 patterns failed → AskUserQuestion mandatory
+      # all 9 patterns failed → asking the user is mandatory
       response = ask_user_for_method(source)
       source.pagination.how = {
         origin: "interview",
@@ -302,7 +302,7 @@ discover_listing(source) -> { anchors, executed_how, was_invalidated }:
     source.pagination.invalidated_at = now()
     atomic_write(sources.yaml)
 
-    # AskUserQuestion: re-interview / Tier A retry / skip
+    # ask the user: re-interview / Tier A retry / skip
     response = ask_user_for_invalidation_choice(source, error=result.error)
     if response == "skip":
       raise InvalidationSkipped(source)  # caller handles — does NOT silently return empty
@@ -363,7 +363,7 @@ digraph discover_listing {
   how_exists [label="pagination.how exists?", shape=diamond];
   tier_a [label="try_tier_a_auto_detect\n(9 patterns, catalog order)", shape=diamond];
   record_auto [label="how = {origin: auto, pattern, params}\natomic_write(sources.yaml)", style=filled, fillcolor=lightgreen];
-  ask_user [label="AskUserQuestion\n(interview: 4 options)", style=filled, fillcolor=salmon];
+  ask_user [label="Ask user\n(interview: 4 options)", style=filled, fillcolor=salmon];
   record_interview [label="how = {origin: interview, pattern, params, prose}\natomic_write(sources.yaml)", style=filled, fillcolor=lightgreen];
   execute_how [label="execute(how)"];
   invalidation [label="is_invalidation_trigger(result)?", shape=diamond];
@@ -371,7 +371,7 @@ digraph discover_listing {
   retry [label="sleep(60)\nexecute(how) retry"];
   retry_ok [label="retry OK?", shape=diamond];
   push_ring [label="push_to_previous_how_ring(how)\nhow = null, invalidated_at = now()\natomic_write(sources.yaml)", style=filled, fillcolor=khaki];
-  ask_choice [label="AskUserQuestion\n(new method / Tier A retry / skip)", style=filled, fillcolor=salmon];
+  ask_choice [label="Ask user\n(new method / Tier A retry / skip)", style=filled, fillcolor=salmon];
   skip_raise [label="raise InvalidationSkipped", style=filled, fillcolor=red, fontcolor=white];
   tier_a_retry [label="return discover_listing(source)\n(recurse — how is null)", style=filled, fillcolor=lightblue];
   new_interview_exec [label="execute(new how)"];
@@ -412,19 +412,19 @@ digraph discover_listing {
 
 | Temptation pattern | Rejection basis |
 |---|---|
-| "On Tier A failure, save first-page only and 'collection complete'" | ❌ Must escalate to AskUserQuestion interview |
+| "On Tier A failure, save first-page only and 'collection complete'" | ❌ Must escalate to a user interview |
 | "interview 결과 `pagination.how` 미저장 (Tier B answer used once, not recorded)" | ❌ `pagination.how` atomic write is mandatory. Reuse in next session is mandatory |
 | "first-page only 저장 + collection complete 보고" | ❌ First-page-only without exhaustive pagination is a violation |
 | "Skip pagination pattern check and fall back to manual URL list paste" | ❌ Tier A 9-pattern attempt is mandatory. Only if user explicitly says 'skip Tier A' may interview shortcut apply |
 | "Auto-detect succeeded but didn't confirm last page, collected only 3 pages" | ❌ Continue until empty response or `has_next_page == false` |
-| "First-time discovery skipping straight to AskUserQuestion without attempting Tier A 9-pattern catalog" | ❌ On first run, when `pagination.how` is absent, attempting all 9 Tier A patterns is mandatory. Interview shortcuts are forbidden unless the user explicitly says 'skip Tier A' |
+| "First-time discovery skipping straight to asking the user without attempting Tier A 9-pattern catalog" | ❌ On first run, when `pagination.how` is absent, attempting all 9 Tier A patterns is mandatory. Interview shortcuts are forbidden unless the user explicitly says 'skip Tier A' |
 | "Returning 0 anchors when execution failed (or invalidation-retry-fail) silently" | ❌ `discover_listing` may only raise or return an explicit `was_invalidated: true`. Silently returning empty `[]` risks a false-clean `discovered − seen = ∅` result in Per-Site Memory |
 
 ### Counterexample
 
 - **Auto success (γ schema)**: `?page=` pattern detected → sequential fetch pages 1~5 → page 6 response empty → 87 URLs total. Saved as `how = { origin: auto, pattern: page_increment, params: { start: 1, stop_condition: empty_response } }`. `was_invalidated: false` → Coverage Verification fires. ✓
-- **Interview success (γ schema)**: All 9 patterns fail → AskUserQuestion → user provides "API: GET /careers/api/jobs?limit=50&offset=X". Saved as `how = { origin: interview, pattern: interview_api, params: { limit: 50, increment: 50, stop_condition: empty_array }, prose: "GET /careers/api/jobs?limit=50&offset=X repeat (offset += 50, stop on empty)" }`. Next session: `pagination.how` present → execute directly. ✓
-- **Invalidation → skip**: `page_increment` how executes, HTTP 404 on page 2 (structural). Push to `previous_how`, `how = null`, `invalidated_at = now()`. AskUserQuestion → user chooses "skip". `raise InvalidationSkipped`. Caller logs skip + no Coverage Verification + no `range_covered` append. ✓
+- **Interview success (γ schema)**: All 9 patterns fail → ask user → user provides "API: GET /careers/api/jobs?limit=50&offset=X". Saved as `how = { origin: interview, pattern: interview_api, params: { limit: 50, increment: 50, stop_condition: empty_array }, prose: "GET /careers/api/jobs?limit=50&offset=X repeat (offset += 50, stop on empty)" }`. Next session: `pagination.how` present → execute directly. ✓
+- **Invalidation → skip**: `page_increment` how executes, HTTP 404 on page 2 (structural). Push to `previous_how`, `how = null`, `invalidated_at = now()`. Ask user → user chooses "skip". `raise InvalidationSkipped`. Caller logs skip + no Coverage Verification + no `range_covered` append. ✓
 
 ---
 
@@ -1121,7 +1121,7 @@ Ingest path #4 (company name only) operates **only within sites registered in `s
 4. **Match not found (unregistered):**
    - WebFetch call **forbidden**.
    - LLM open-world search · Google search · LinkedIn exploration all **forbidden**.
-   - Trigger `AskUserQuestion`: "XYZCorp 의 공식 채용 페이지 URL 을 알려주세요. 등록하면 다음부터 회사명만으로 수집 가능합니다."
+   - Ask the user: "XYZCorp 의 공식 채용 페이지 URL 을 알려주세요. 등록하면 다음부터 회사명만으로 수집 가능합니다."
    - Options:
      - `URL input`: user provides URL → append to `sources.yaml`'s `companies[]` (`{slug, name, careers_url, added: <ISO date>}`) → return to step 3
      - `skip`: abandon collection. Report "XYZCorp 는 등록되지 않아 건너뛰었습니다."
@@ -1146,12 +1146,12 @@ blacklist:
 
 - "User provides company name so obviously need to search Google — that's being helpful" — ❌ Open-web search is absolutely forbidden (plan non-goal).
 - "Not registered but try WebFetch with a guessed URL anyway" — ❌ WebFetch call forbidden.
-- "Skip AskUserQuestion and quietly skip unregistered companies" — ❌ Must notify user (transparency).
+- "Skip asking the user and quietly skip unregistered companies" — ❌ Must notify user (transparency).
 - "Let skill auto-append to sources.yaml without user confirmation" — ❌ Append only after user provides URL. Auto-inference forbidden.
 - "Blacklisted companies: skip without even asking for registration — don't even throw registration question" — ⭕ OK (blacklist is user explicit intent). But must include one line in report noting blacklist triggered.
 
 ### Counterexample
 
 - User "Toss 채용공고 가져와줘" → `toss` exists in `sources.yaml.companies` → fetch `https://toss.im/career` → standard flow.
-- User "XYZCorp 채용" → unregistered → AskUserQuestion → user provides URL → append to `sources.yaml` → fetch.
+- User "XYZCorp 채용" → unregistered → ask user → user provides URL → append to `sources.yaml` → fetch.
 - User "어제 등록한 xyz 회사" → found in blacklist → quietly skip + report line "XYZCorp blacklist (reason: 이미 수집 완료)".
