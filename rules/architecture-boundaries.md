@@ -3,14 +3,9 @@
 Modules in any codebase are organized along two boundary axes. Keep both
 well-drawn so that coupling stays low, dependencies stay traceable, and change
 stays cheap. What matters is the **principle, not any one methodology**: how
-modules are **divided** into layers, how they **collaborate** across a boundary,
-and which way they **depend**. DDD, Feature-Sliced Design, and Clean Architecture
-are only *vocabularies* for these same two axes — borrow a name where it fits,
-but never make the work about a framework, and never impose a framework's
-tactical patterns where the codebase does not use them.
-
-These are concepts to **maintain continuously, together with the human** — a
-shared, living view of the structure, not a one-time artifact.
+modules are **divided**, how they **collaborate** across a boundary, and which
+way they **depend**. DDD, Feature-Sliced Design, and Clean Architecture only
+name these same two axes.
 
 ## Axis 1 — Vertical: domain boundaries
 
@@ -50,4 +45,5 @@ that carries one piece of behavior end to end.
   importing an outer/upper one — is a coupling defect. Flag it; do not add it.
 - **Match the vocabulary to the stack, not the reverse.** Server-side and
   client-side work may borrow different names for the same two axes; keep the
-  axes, let the names follow the codebase.
+  axes, let the names follow the codebase, and do not impose a framework's
+  tactical patterns where the codebase does not use them.

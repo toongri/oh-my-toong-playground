@@ -180,6 +180,7 @@ rules:
     - e2e-driver-usage
     - error-handling-docs
     - outbound-local-reference
+    - prose-clarity
     - toolchain-mise
     - component: codex-subagent-spawn
       platforms: [codex]
