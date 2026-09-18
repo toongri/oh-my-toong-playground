@@ -49,7 +49,7 @@ import {
 	reconcilePairManifest,
 	removeManifestPair,
 	readManifest,
-	type ManifestMutationHooks,
+	computeOrphans,
 } from "./lib/deploy-manifest.ts";
 import { DeployTransaction, type DeployMutationHooks } from "./lib/deploy-transaction.ts";
 import { resolveDocsTarget, detectDocsTargetCollisions } from "./lib/path-utils.ts";
@@ -509,12 +509,28 @@ export async function syncCategory(
 	const previousManifest = options?.reconcile !== false && !context.dryRun
 		? await readManifest(deployRoot)
 		: null;
+
+	// Deploy LOCATIONs (deployLocationForManifest) already backed up this run —
+	// by the item loop below, or by this helper itself — so an orphan removal
+	// never wipes a location's directory without a prior backup, and never
+	// backs the same location up twice. Only backs up when orphans are actually
+	// about to be removed there (computeOrphans), so a pair with nothing stale
+	// never triggers a needless directory copy.
+	const backedUpLocations = new Set<string>();
+	async function reconcileLocationWithBackup(location: string, declaredNames: string[], previousNames: string[]): Promise<void> {
+		if (computeOrphans(previousNames, declaredNames).length > 0 && !backedUpLocations.has(location)) {
+			await backupCategory(deployRoot, location, category, context.backupDest);
+			backedUpLocations.add(location);
+		}
+		await reconcilePairManifest(deployRoot, location, category, declaredNames, transaction ?? undefined);
+	}
+
 	if (section.items.length === 0) {
 		if (previousManifest !== null && options?.reconcile !== false && !context.dryRun) {
 			for (const pair of Object.keys(previousManifest)) {
 				const [location, pairCategory] = pair.split("/");
 				if (pairCategory === category) {
-					await reconcilePairManifest(deployRoot, location, category, [], transaction ?? undefined);
+					await reconcileLocationWithBackup(location, [], previousManifest[pair] ?? []);
 				}
 			}
 		}
@@ -710,6 +726,7 @@ export async function syncCategory(
 					context.backupDest,
 				);
 				preparedKeys.add(prepKey);
+				backedUpLocations.add(deployLocationForManifest(platform, category));
 			}
 
 			if (context.dryRun) {
@@ -756,7 +773,6 @@ export async function syncCategory(
 	// deployedNames is already keyed by deploy LOCATION (deployLocationForManifest),
 	// so no further mapping is needed here.
 	if (options?.reconcile !== false && !context.dryRun) {
-		const manifestMutationHooks: ManifestMutationHooks | undefined = transaction ?? undefined;
 		const locations = new Set<string>(deployedNames.keys());
 		if (previousManifest !== null) {
 			for (const pair of Object.keys(previousManifest)) {
@@ -771,12 +787,10 @@ export async function syncCategory(
 			}
 		}
 		for (const deployLocation of locations) {
-			await reconcilePairManifest(
-				deployRoot,
+			await reconcileLocationWithBackup(
 				deployLocation,
-				category,
 				[...(deployedNames.get(deployLocation) ?? new Set<string>())],
-				manifestMutationHooks,
+				previousManifest?.[`${deployLocation}/${category}`] ?? [],
 			);
 		}
 	}

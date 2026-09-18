@@ -1302,6 +1302,36 @@ describe("syncCategory", () => {
 		expect(afterSecond["codex/rules"]).toEqual(["c"]);
 	});
 
+	it("rules: narrowing a rule from [claude, codex] to [codex] backs up the removed claude copy before deleting it", async () => {
+		await writeFile(path.join(rootDir, "rules", "c.md"), "# C\n");
+		const claudeRulesDir = path.join(targetPath, ".claude", "rules");
+		const codexRulesDir = path.join(targetPath, ".codex", "rules");
+		await fs.mkdir(claudeRulesDir, { recursive: true });
+		await fs.mkdir(codexRulesDir, { recursive: true });
+		await writeFile(path.join(claudeRulesDir, "c.md"), "# C\n");
+		await writeFile(path.join(codexRulesDir, "c.md"), "# C\n");
+
+		const adapters = makeAdapterMap(["claude", "codex"]);
+		const firstSyncYaml: SyncYaml = {
+			path: targetPath,
+			rules: { items: [{ component: "c", platforms: ["claude", "codex"] }] },
+		};
+		await syncCategory(makeContext({ dryRun: false }), "rules", firstSyncYaml, adapters, rootDir, targetPath);
+
+		// Narrow the same rule to codex only — the claude location receives no
+		// items this run, so only the manifest-scoped orphan removal (not the
+		// item-loop backup) ever touches it.
+		const secondSyncYaml: SyncYaml = {
+			path: targetPath,
+			rules: { items: [{ component: "c", platforms: ["codex"] }] },
+		};
+		const context = makeContext({ dryRun: false });
+		await syncCategory(context, "rules", secondSyncYaml, adapters, rootDir, targetPath);
+
+		expect(await exists(path.join(claudeRulesDir, "c.md"))).toBe(false);
+		expect(await exists(path.join(context.backupDest, "claude", "rules", "c.md"))).toBe(true);
+	});
+
 	it("rules: explicit empty items removes the previously deployed rule while preserving a foreign file", async () => {
 		await writeFile(path.join(rootDir, "rules", "a.md"), "# A\n");
 		const claudeRulesDir = path.join(targetPath, ".claude", "rules");
@@ -1321,6 +1351,26 @@ describe("syncCategory", () => {
 		expect(await exists(path.join(claudeRulesDir, "a.md"))).toBe(false);
 		expect(await exists(path.join(claudeRulesDir, "manual-rule.md"))).toBe(true);
 		expect(JSON.parse(await readFile(path.join(targetPath, ".omt", "sync-manifest.json")))).toEqual({ "claude/rules": [] });
+	});
+
+	it("rules: explicit empty items backs up the removed rule before deleting it", async () => {
+		await writeFile(path.join(rootDir, "rules", "a.md"), "# A\n");
+		const claudeRulesDir = path.join(targetPath, ".claude", "rules");
+		await fs.mkdir(claudeRulesDir, { recursive: true });
+		await writeFile(path.join(claudeRulesDir, "a.md"), "# A\n");
+		await writeFile(path.join(targetPath, ".omt", "sync-manifest.json"), '{"claude/rules":["a"]}\n');
+
+		const adapters = makeAdapterMap(["claude"]);
+		const context = makeContext({ dryRun: false });
+		await syncCategory(
+			context,
+			"rules",
+			{ path: targetPath, rules: { platforms: ["claude"], items: [] } } as SyncYaml,
+			adapters, rootDir, targetPath,
+		);
+
+		expect(await exists(path.join(claudeRulesDir, "a.md"))).toBe(false);
+		expect(await exists(path.join(context.backupDest, "claude", "rules", "a.md"))).toBe(true);
 	});
 
 	it("rules: omission, reconcile:false, and dry-run each preserve prior state", async () => {
