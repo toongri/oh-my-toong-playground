@@ -21,9 +21,10 @@ meaning. No implicit carriers:
 Backward compatibility is never a reason to put a differently-meaning value
 into an existing variable or key. When the meaning changes, or a new meaning
 appears, add a new, explicitly named field or key, migrate every reader and
-writer to it, then remove the old one. If old and new must coexist for a
-period, each keeps its own name and its own meaning; convert between them at
-one explicit, named boundary (an adapter or mapping function), never by
+writer to it, then remove the old one. The next section covers readers you
+cannot migrate this way. If old and new must coexist for a period, each
+keeps its own name and its own meaning; convert between them at one
+explicit, named boundary (an adapter or mapping function), never by
 overloading the old key.
 
 When the contract itself must change, change it openly: rename it, retype
@@ -36,6 +37,34 @@ meaning drift while the name stays the same.
   until a real expiry is computed.
 - GOOD: add `householdId` alongside `userId`, dual-write each with its own
   meaning, migrate readers to `householdId`, then drop `userId`.
+
+## When client updates are not guaranteed
+
+Some clients cannot be forced to update (installed mobile apps, embedded or
+IoT device firmware, third-party API consumers, already-persisted messages).
+They keep sending and expecting the old contract indefinitely.
+
+Keep the old contract alive with its original meaning. Accept and return
+each field exactly as its contract defines it. Convert to and from the
+current internal model at the one explicit, named boundary this file
+already requires (an adapter or mapping function). The old contract's
+meaning stays frozen. Only the internal model moves.
+
+Never reinterpret an old field to carry the new meaning. Never make an old
+client's field double as the new one. Never let the internal model leak
+back out through an old field with a changed meaning. A new meaning reaches
+clients only through a new, explicitly named field, or a new contract
+version that updated clients opt into.
+
+When the old contract cannot express something the new model needs, state
+the default or derivation explicitly in the conversion function's code. Do
+not hide it behind a sentinel.
+
+- BAD: the server starts reading old clients' `userId` field as a household
+  id, because "new clients send households now".
+- GOOD: the v1 endpoint keeps accepting `userId` as a user id. A named
+  mapping function resolves the household internally. v2 adds an explicit
+  `householdId` field.
 
 The test: a reader who sees only the name must be able to state what every
 value stored there means, with no knowledge of the code's history.
