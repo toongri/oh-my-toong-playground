@@ -614,7 +614,7 @@ Briefly announce "Consulting Oracle for [reason]" before invocation.
 |---|---|
 | Multiple questions in one message | Confuses user, dilutes structured choice |
 | Bundling open questions into a list | Equivalent to compound AC — one weak answer hides issues |
-| Using AskUserQuestion for open-ended | Forces false structure; use plain text |
+| Forcing option lists onto an open-ended question | Forces false structure; use plain text |
 | Asking codebase facts | Use explore — never burden user |
 | Stopping at 2-3 questions | Premature; clearance, not count, is the gate |
 
@@ -1074,7 +1074,7 @@ When the user's invocation expresses explicit continuation intent — e.g. "하�
 bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" list-others
 ```
 
-If candidates exist, present them via AskUserQuestion with one option per candidate (labeled with the candidate's purpose and age — plan path or phase, plus started_at and idle time), plus a "start fresh" option. Proceed to the next step ONLY on an explicit user selection:
+If candidates exist, present them to the user with one option per candidate (labeled with the candidate's purpose and age — plan path or phase, plus started_at and idle time), plus a "start fresh" option. Proceed to the next step ONLY on an explicit user selection:
 
 - On candidate selection: run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" adopt --src <selected-sid>`, then run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" get` to read what was adopted, and resume normal flow from the restored state (restore reads the adopted plan file; re-run gates on the current artifact).
 - On "start fresh": proceed as a new planning session.

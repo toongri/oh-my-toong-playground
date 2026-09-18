@@ -101,7 +101,7 @@ digraph gate_task_creation {
 
 Immediately after session lock acquire (before Phase 0 Profile Interview), check whether `$OMT_DIR/collect-jd/config.yaml` exists and whether the `platform` field is fully set.
 
-- **Absent or `platform` unset/ambiguous**: AskUserQuestion is mandatory — collect 2 fields: `platform` + `how`:
+- **Absent or `platform` unset/ambiguous**: Asking the user is mandatory — collect 2 fields: `platform` + `how`:
   - `platform` example values: `filesystem` | `notion` | `google_drive` | `gist` | user-defined MCP name
   - `how`: free-form description of "where and how to store" (may include Notion page ID, table name, template file path, MCP call procedure, etc.)
   - When `platform: filesystem` is selected, additionally collect `storage_path` (suggest default: `$OMT_DIR/collect-jd/jobs/`; must be under `$OMT_DIR`; global/cross-project paths forbidden)
@@ -117,7 +117,7 @@ digraph storage_backend_interview {
 
   start [label="immediately after session lock acquire", shape=ellipse, style=filled, fillcolor=lightblue];
   check [label="config.yaml exists?\nplatform set?", shape=diamond];
-  ask [label="AskUserQuestion\n(collect platform + how)", style=filled, fillcolor=salmon];
+  ask [label="Ask user\n(collect platform + how)", style=filled, fillcolor=salmon];
   is_filesystem [label="platform == filesystem?", shape=diamond];
   ask_path [label="Collect storage_path\n(under $OMT_DIR?)", shape=diamond];
   reject_path [label="Reject + re-ask", style=filled, fillcolor=red, fontcolor=white];
@@ -154,7 +154,7 @@ storage_path: <absolute path, under $OMT_DIR — only when platform=filesystem>
 
 ### Rationalization Loopholes (MUST REJECT)
 
-- "It's the first run so just silent-save as default platform=filesystem" — ❌ AskUserQuestion is mandatory. Silent default strips the user of their decision.
+- "It's the first run so just silent-save as default platform=filesystem" — ❌ Asking the user is mandatory. Silent default strips the user of their decision.
 - "Even without config.yaml, save to $OMT_DIR/collect-jd/jobs/ and interview later" — ❌ Interview before saving. Order reversal forbidden.
 - "User already mentioned not to ask about storage_path" — ❌ Without an explicit request ("use config as-is"), interview is required. User's _absence_ ≠ _consent_.
 - "Re-interview every session even when config.yaml exists" — ❌ Once decided, use the existing config. Re-ask only on user request.
@@ -162,8 +162,8 @@ storage_path: <absolute path, under $OMT_DIR — only when platform=filesystem>
 
 ### Counterexample (normal flow)
 
-- First run → lock acquire → config.yaml absent → AskUserQuestion → user selects "filesystem, `$OMT_DIR/collect-jd/jobs/`" → `config.yaml` atomic write (`platform: filesystem`, `storage_path: $OMT_DIR/collect-jd/jobs/`) → enter Phase 0. ✓
-- First run → lock acquire → config.yaml absent → AskUserQuestion → user inputs "notion, page_id=abc123, template: JD_Template" → `config.yaml` atomic write (`platform: notion`, `how: "page_id=abc123, template: JD_Template, MCP: notion-mcp"`) → enter Phase 0. ✓
+- First run → lock acquire → config.yaml absent → ask user → user selects "filesystem, `$OMT_DIR/collect-jd/jobs/`" → `config.yaml` atomic write (`platform: filesystem`, `storage_path: $OMT_DIR/collect-jd/jobs/`) → enter Phase 0. ✓
+- First run → lock acquire → config.yaml absent → ask user → user inputs "notion, page_id=abc123, template: JD_Template" → `config.yaml` atomic write (`platform: notion`, `how: "page_id=abc123, template: JD_Template, MCP: notion-mcp"`) → enter Phase 0. ✓
 - Second run → lock acquire → config.yaml exists (platform: filesystem, storage_path: `$OMT_DIR/collect-jd/jobs/`) → load + validate OK → enter Phase 0 (interview skipped). ✓
 
 ---
@@ -221,7 +221,7 @@ Execute the following sequence at skill trigger time (first of all, before Phase
 
 The lock must be held throughout the entire session. This includes:
 
-- During `AskUserQuestion` calls (while waiting for user response).
+- While waiting for the user's response to a question.
 - During file editing, LLM calls, batch rescan, dedup calculations, and all other steps.
 - During any "quiet period" or "read-only period".
 
@@ -233,7 +233,7 @@ The lock must be held throughout the entire session. This includes:
 
 ### Rationalization Loopholes (MUST REJECT)
 
-- "While waiting for AskUserQuestion, release the lock temporarily and re-acquire when response arrives — isn't that more efficient?" — ❌ No. If another session modifies state while waiting for user response, the state that the skill reads at response-processing time becomes unpredictable. The cost of holding the lock is just 1 `.lock` file — essentially zero cost.
+- "While waiting for the user's answer, release the lock temporarily and re-acquire when response arrives — isn't that more efficient?" — ❌ No. If another session modifies state while waiting for user response, the state that the skill reads at response-processing time becomes unpredictable. The cost of holding the lock is just 1 `.lock` file — essentially zero cost.
 - "Dedup calculation is read-only, so it's fine to proceed without the lock during that period" — ❌ No. Even during read-only periods, if another session performs writes concurrently, dedup judgments based on a stale view can occur. Lock must be held during reads too.
 - "collect-jd from another project has no conflict, so per-project lock is unnecessary" — ❌ No. `$OMT_DIR/collect-jd/.lock` is already a per-project lock because `$OMT_DIR` is resolved per OMT_PROJECT. Different projects use separate `.lock` paths with no conflict. However, **multiple sessions within the same OMT_PROJECT** must abort.
 - "Batch processing is faster without the lock" — ❌ No. Risks of concurrent batch execution include: dedup judgment contamination, `last_checked_at` race conditions, `rules.yaml` races, etc. Speed improvement does not justify data integrity compromise. Batch is handled as a single session within collect-jd.
@@ -319,7 +319,7 @@ Before ANY JD ingest (URL · text · file · company name · batch rescan), chec
 **If `profile.yaml` is absent:**
 
 1. **Halt ingest immediately.** Do not call WebFetch, do not write JD files.
-2. Run a **3-round minimum** profile interview using `AskUserQuestion`. Each round covers one of:
+2. Run a **3-round minimum** profile interview with the user. Each round covers one of:
    - Round 1 — **Career history · current role · years of experience · preferred domains**
    - Round 2 — **Tech stack · strengths · areas currently being learned**
    - Round 3 — **Company · salary · location · remote work availability · exclusion-signal preferences**

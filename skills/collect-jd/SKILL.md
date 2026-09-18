@@ -36,7 +36,7 @@ All state under `$OMT_DIR/collect-jd/` only. `$OMT_DIR` is read from the environ
 
 ## Storage Backend Interview (MANDATORY)
 
-**Storage Backend Interview (MANDATORY)** — on first run, AskUserQuestion is mandatory to collect platform + how. Silent default to filesystem is forbidden.
+**Storage Backend Interview (MANDATORY)** — on first run, asking the user is mandatory to collect platform + how. Silent default to filesystem is forbidden.
 
 → Details: [reference/bootstrap.md](reference/bootstrap.md#storage-backend-interview)
 
@@ -58,7 +58,7 @@ Before each Ingest Path execution, **Phase 0 profile interview + Dedup L1/L2** m
 
 ## Sources Registration (MANDATORY)
 
-At session start, load `$OMT_DIR/collect-jd/sources.yaml`. If empty or absent, propose via a **single AskUserQuestion**: "Do you have JD source sites to register?" (skippable — not as mandatory as Profile Interview). When user provides a URL, atomic append with `{slug, name, careers_url, added_at, pagination, crawl_state, ingest}` structure.
+At session start, load `$OMT_DIR/collect-jd/sources.yaml`. If empty or absent, propose via a **single user question**: "Do you have JD source sites to register?" (skippable — not as mandatory as Profile Interview). When user provides a URL, atomic append with `{slug, name, careers_url, added_at, pagination, crawl_state, ingest}` structure.
 
 **Source-level Ingest Config (`ingest`)**: schema = `{detail_required_before_persist: bool}`. Default `false`. When `true`, the source's Full Coverage Ingest Protocol MUST run Tier 2 (detail body fetch) for every JD before persist — Tier 1 immediate persist is FORBIDDEN. See [Full Coverage Ingest Protocol](#full-coverage-ingest-protocol-mandatory-3-tier).
 
@@ -73,14 +73,14 @@ At session start, load `$OMT_DIR/collect-jd/sources.yaml`. If empty or absent, p
 **Single source of truth: `pagination.how`**. All listing discovery — first-time auto-detect, user-interview fallback, cached re-execution, invalidation re-interview — collapses into one algorithm `discover_listing(source)`.
 
 **Algorithm**:
-1. If `pagination.how` absent → try Tier A 9-pattern catalog → success: serialize as `how={origin: auto, pattern, params}`. fail: AskUserQuestion → `how={origin: interview, pattern, params, prose}`.
+1. If `pagination.how` absent → try Tier A 9-pattern catalog → success: serialize as `how={origin: auto, pattern, params}`. fail: ask the user → `how={origin: interview, pattern, params, prose}`.
 2. Execute `pagination.how`.
-3. On execution failure → invalidate per trigger table (transient: 1-retry; structural: immediate). Push current `how` to `previous_how` 3-slot ring → AskUserQuestion 3-option (new method / Tier A retry / skip). On retry-fail → **raise** (silent empty forbidden).
+3. On execution failure → invalidate per trigger table (transient: 1-retry; structural: immediate). Push current `how` to `previous_how` 3-slot ring → ask the user 3-option (new method / Tier A retry / skip). On retry-fail → **raise** (silent empty forbidden).
 
 **Schema**: `pagination.how = { origin: auto|interview, pattern: <13-enum>, params: {}, prose: <free-form> }`. `previous_how: []` inline ring (LRU, max 3). `invalidated_at: null` ISO timestamp.
 
 **CRITICAL**:
-- First-run discovery skipping Tier A 9-pattern catalog → AskUserQuestion shortcut **forbidden**.
+- First-run discovery skipping Tier A 9-pattern catalog → ask-the-user shortcut **forbidden**.
 - discover_listing returning empty `[]` on execution failure **forbidden** — must raise; caller skip-with-audit, no Per-Site Memory false-clean.
 - Coverage Verification fires after `was_invalidated: false` (success path) only. raise → skip Coverage + Per-Site Memory update.
 
@@ -131,7 +131,7 @@ Team-level granularity is also mandatory. When the body explicitly lists team la
 
 ## Phase 0: Profile Interview Required (MANDATORY)
 
-When `$OMT_DIR/collect-jd/profile/profile.yaml` is absent, a **minimum 3-round** profile interview (`AskUserQuestion`) is required before JD collection. Round 1: career history, years of experience, preferred domains. Round 2: tech stack, strengths. Round 3: company, salary, location, remote work, exclude preferences. After the interview, atomic write `profile.yaml` (includes `version: 1` field). If profile exists, proceed to normal collection. **5 rationalization patterns blocked** — urgency, being in a hurry, or having received a URL are none of them valid reasons to skip the interview.
+When `$OMT_DIR/collect-jd/profile/profile.yaml` is absent, a **minimum 3-round** profile interview (user interview) is required before JD collection. Round 1: career history, years of experience, preferred domains. Round 2: tech stack, strengths. Round 3: company, salary, location, remote work, exclude preferences. After the interview, atomic write `profile.yaml` (includes `version: 1` field). If profile exists, proceed to normal collection. **5 rationalization patterns blocked** — urgency, being in a hurry, or having received a URL are none of them valid reasons to skip the interview.
 
 → Details (rationalization loopholes, purpose explanation): [reference/bootstrap.md#phase-0-profile-interview-required](reference/bootstrap.md#phase-0-profile-interview-required)
 
@@ -157,7 +157,7 @@ Run dedup in L1 → L2 order before writing a new JD file (MANDATORY).
 
 - **Phase 1**: If same URL/slug pair exists in `jobs/**/*.md` → inherit status. Otherwise proceed to Phase 2.
 - **Phase 2**: Pinned prompt `reference/ambiguity-prompt.md`, temperature 0. `match` → `status: included` (auto). `mismatch` → `status: excluded` (auto, Exclude Flow rules apply). **`ambiguous` → auto-verdict forbidden; must proceed to Phase 3.**
-- **Phase 3**: `AskUserQuestion` — Korean question based on `missing_signals`. Options: include / exclude / defer. **Call immediately even in Batch mode**, no queuing.
+- **Phase 3**: ask the user — Korean question based on `missing_signals`. Options: include / exclude / defer. **Call immediately even in Batch mode**, no queuing.
 - Auto-decision audit trail: on auto-save, record `auto:<verdict>:<rules.yaml sha256 short 8>` in `reason_note`.
 
 > Note: Matching Loop is the verdict algorithm invoked inside each Full Coverage tier.
@@ -178,7 +178,7 @@ Process all JDs discovered from listing scrape without omission. Escalate in ord
 > **Why source-level (not per-JD heuristic)**: Listing-level signals (e.g., "외 N개 계열사" suffix) cannot reliably detect body-only fan-out signals. The per-source declarative config is the canonical decision point — uniform within a source, no runtime branching per JD.
 
 - **Tier 2 — Detail Fetch Verification**: MANDATORY escalation when Tier 1 is ambiguous. Playwright `browser_navigate` → extract body → re-judge. Persist when judgment is clear.
-- **Tier 3 — User Interview**: MANDATORY `AskUserQuestion` when ambiguity persists after Tier 2 (Korean question based on missing_signals, options: include/exclude/defer).
+- **Tier 3 — User Interview**: MANDATORY asking the user when ambiguity persists after Tier 2 (Korean question based on missing_signals, options: include/exclude/defer).
 
 **CRITICAL**:
 - Obligation to obtain full anchor.innerText. Parsing only the title and ignoring stack labels is forbidden.
@@ -234,19 +234,19 @@ Two fields required when saving a JD: `role_title_verbatim` (verbatim original t
 
 ## YAML Robustness
 
-On parse failure for any state YAML (profile/taxonomy/rules/tags/sources/config): no crash. Copy original to `<file>.bak.<ISO8601>` once → `AskUserQuestion` with 2 options (edit manually [default] / reset to default [data loss warning]). Automatic deletion or cleanup of user data is forbidden.
+On parse failure for any state YAML (profile/taxonomy/rules/tags/sources/config): no crash. Copy original to `<file>.bak.<ISO8601>` once → ask the user with 2 options (edit manually [default] / reset to default [data loss warning]). Automatic deletion or cleanup of user data is forbidden.
 
 → Details: [reference/ingest-and-curation.md#yaml-robustness](reference/ingest-and-curation.md#yaml-robustness)
 
 ## Company-Name Ingest
 
-Ingest path #4 (company name only) operates **only within sites registered in `sources.yaml`**. For unregistered companies → **WebFetch/open-web search is absolutely forbidden**; trigger `AskUserQuestion` with "공식 채용 페이지 URL 을 알려주세요". When user provides a URL, append to `sources.yaml` then proceed with standard flow. Blacklist supported.
+Ingest path #4 (company name only) operates **only within sites registered in `sources.yaml`**. For unregistered companies → **WebFetch/open-web search is absolutely forbidden**; trigger a user question with "공식 채용 페이지 URL 을 알려주세요". When user provides a URL, append to `sources.yaml` then proceed with standard flow. Blacklist supported.
 
 → Details: [reference/dedup-and-discovery.md#company-name-ingest](reference/dedup-and-discovery.md#company-name-ingest)
 
 ## Rules Re-evaluation
 
-Re-derive `rules.yaml` based on today's collection results. Trigger phrases: "오늘 수집 정리해줘" / "오늘 본 JD로 규칙 업데이트" / "규칙 재평가" / "rules 다시 뽑아줘" / auto-propose when 1 or more include·exclude occur within a session. **Scope**: only JD files where the date portion of `last_checked_at` is today (excluding manual-edited files). **Workflow**: (1) load scope + store `rules.yaml.sha256.before` in memory (2) LLM call (temperature 0) → generate proposed rules (3) atomic write `rules.yaml.proposed` (`.tmp` → rename, includes `version:1` + `_proposed_at` + `_based_on`) (4) display diff + AskUserQuestion (`approve` / `reject` / `edit manually`) (5) on approve, **race check required**: recompute sha256 of `rules.yaml` → if mismatch with `before`, abort (6) race OK → overwrite `rules.yaml` (atomic write, excluding `_proposed_at`/`_based_on`) + remove `.proposed`. If 0 JDs today, stop immediately. Overwriting `rules.yaml` directly without approve is forbidden.
+Re-derive `rules.yaml` based on today's collection results. Trigger phrases: "오늘 수집 정리해줘" / "오늘 본 JD로 규칙 업데이트" / "규칙 재평가" / "rules 다시 뽑아줘" / auto-propose when 1 or more include·exclude occur within a session. **Scope**: only JD files where the date portion of `last_checked_at` is today (excluding manual-edited files). **Workflow**: (1) load scope + store `rules.yaml.sha256.before` in memory (2) LLM call (temperature 0) → generate proposed rules (3) atomic write `rules.yaml.proposed` (`.tmp` → rename, includes `version:1` + `_proposed_at` + `_based_on`) (4) display diff + ask the user (`approve` / `reject` / `edit manually`) (5) on approve, **race check required**: recompute sha256 of `rules.yaml` → if mismatch with `before`, abort (6) race OK → overwrite `rules.yaml` (atomic write, excluding `_proposed_at`/`_based_on`) + remove `.proposed`. If 0 JDs today, stop immediately. Overwriting `rules.yaml` directly without approve is forbidden.
 
 → Details: [reference/ingest-and-curation.md#rules-re-evaluation](reference/ingest-and-curation.md#rules-re-evaluation)
 

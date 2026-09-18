@@ -35,7 +35,7 @@ Interview contract: Ask one user decision at a time. Present detected target-bra
 | Running `gh pr create` without user confirmation | User must approve PR creation | Always confirm before running |
 | Reading git diff file contents during PR description writing | Heavy context loading | Use git metadata + explore only (exception: Step 0-C conflict resolution) |
 | Detecting only default branch | Stacked branches show massive diff against wrong base | Compare merge-base across all remote branches and present candidate table |
-| Auto-selecting target branch | PR written against unintended target | Always confirm via AskUserQuestion — no auto-skip |
+| Auto-selecting target branch | PR written against unintended target | Always confirm with the user — no auto-skip |
 | Ignoring diverge | PR written against stale base | Sync via merge/rebase in Step 0-B |
 | Ignoring conflicts | PR proceeds in incomplete state | Settle every conflict per `{conflict-policy}` in Step 0-C |
 | Fixing question count | Required questions vary by context | Adaptive via Clearance Checklist |

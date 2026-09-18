@@ -28,7 +28,7 @@ This skill needs the following information:
 **Invocation patterns:**
 
 - **Invoked by another skill**: The caller passes the file path and protection rules as context
-- **Invoked directly by the user**: Identify the HTML file path from the conversation or confirm with AskUserQuestion
+- **Invoked directly by the user**: Identify the HTML file path from the conversation or confirm with the user
 
 ---
 
@@ -38,7 +38,7 @@ This skill needs the following information:
 
 Check the path of the HTML file to review.
 - When invoked by another skill: Use the path supplied by the caller
-- When invoked directly by the user: Identify it from conversation context or confirm with AskUserQuestion
+- When invoked directly by the user: Identify it from conversation context or confirm with the user
 
 ### Step 2: Start the Review Job
 

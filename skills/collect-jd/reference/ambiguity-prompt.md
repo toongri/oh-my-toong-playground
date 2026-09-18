@@ -4,7 +4,7 @@
 
 An LLM predicate that returns a `match | mismatch | ambiguous` verdict for each JD in the history → rules → filter matching loop.
 
-`AskUserQuestion` is called only when the verdict is `ambiguous`. `match` and `mismatch` finalize the status automatically with no user intervention.
+The user is asked only when the verdict is `ambiguous`. `match` and `mismatch` finalize the status automatically with no user intervention.
 
 ---
 
@@ -59,7 +59,7 @@ The LLM must output only the JSON below. Any preamble, markdown, or text outside
 |---|---|---|
 | `match` | `status: included` finalized automatically | Rules conditions clearly satisfied |
 | `mismatch` | `status: excluded` finalized automatically. `tags`: derived from `violated_rules` — each entry is slugified and appended per the Exclude Flow tags.yaml protocol. `reason_note`: `auto:mismatch:<rules.yaml sha256 short 8>` (follows the Matching Loop Auto-decision audit trail rule). **Verbatim user utterance must NOT be substituted — user utterance is only used in the manual exclude path** | Rules conditions clearly violated |
-| `ambiguous` | **AskUserQuestion call is MANDATORY**. Include `missing_signals` in the question. Status remains tentatively `pending` | Required signals absent or only partial information exists |
+| `ambiguous` | **Asking the user is MANDATORY**. Include `missing_signals` in the question. Status remains tentatively `pending` | Required signals absent or only partial information exists |
 
 If `missing_signals` is empty on an `ambiguous` response, treat it as an implementation error.
 

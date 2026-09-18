@@ -33,7 +33,7 @@ When the user's invocation expresses explicit continuation intent — e.g. "하�
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts list-others
 ```
 
-If candidates exist, present them via AskUserQuestion with one option per candidate (labeled with the candidate's initial idea and age — purpose and idle time from the state), plus a "start fresh" option. Proceed to the next step ONLY on an explicit user selection:
+If candidates exist, present them to the user with one option per candidate (labeled with the candidate's initial idea and age — purpose and idle time from the state), plus a "start fresh" option. Proceed to the next step ONLY on an explicit user selection:
 
 - On candidate selection: run `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts adopt --src <selected-sid>`, then resume the interview from the adopted state's last completed round (read state via `get` after adoption).
 - On "start fresh": proceed to Phase 1 as a new interview.

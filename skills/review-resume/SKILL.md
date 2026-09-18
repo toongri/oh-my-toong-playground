@@ -222,7 +222,7 @@ Not all processing output belongs in the terminal. The following categories defi
 
 **Shown to user:**
 - Phase completion markers (`[Phase N/10: OOO complete]`)
-- Interview questions (AskUserQuestion interactions)
+- Interview questions (user interactions)
 - User-choice prompts (strategic options, alternative selection, approval gates)
 - Feedback summaries that require a user response
 
@@ -474,7 +474,7 @@ When tech-claim-examiner returns REQUEST_CHANGES, follow the branch that matches
 **interview-possible mode:**
 
 1. Present `interview_hints` to the user as-is, in source bullet language, item by item
-2. Convert Interview Hints into specific questions → conduct interview via AskUserQuestion
+2. Convert Interview Hints into specific questions → conduct the interview with the user
    - One question per message
    - Apply 4-Stage Bypass Protocol (references/experience-mining.md)
 3. Source confirmed → regenerate 2-3 alternatives → re-dispatch to examiner
@@ -648,7 +648,7 @@ Fallback: when the resume has no evaluable project entries, emit 평가 대상 �
 Open the HTML report and ask the user to review it. Do not proceed to any next step until the user explicitly declares "no feedback." This rule applies regardless of invocation context.
 </critical>
 
-After opening the report, use `AskUserQuestion` to collect feedback. Ambiguous responses → re-ask. Section-specific feedback → re-enter Phase 9 for that section. Apply feedback → regenerate HTML → loop until explicit "no feedback."
+After opening the report, collect feedback from the user. Ambiguous responses → re-ask. Section-specific feedback → re-enter Phase 9 for that section. Apply feedback → regenerate HTML → loop until explicit "no feedback."
 
 ### Note Accumulate
 

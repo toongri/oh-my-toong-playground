@@ -286,7 +286,7 @@ Use the explore agent to understand codebase patterns and structure. For archite
 
 1. **One question at a time** -- never bundle multiple questions. This rule applies globally; request each later decision only when its prerequisite state exists, and wait for the answer before dependent actions.
 2. **Adaptive question count** -- repeat until Clearance Checklist is all YES. Could be 1-2 if user provides enough upfront, or 5-6+ for complex changes
-3. **AskUserQuestion = structured choices**, plain text = open-ended questions
+3. **Deciding among options = always propose several alternatives, each with its trade-offs**, plain text = open-ended questions
 4. **Context Brokering** -- if the codebase can answer it, use explore instead of asking
 5. **No shortcut from prior sessions** -- memory, plans, and previous session context do not replace the interview. Always start from git metadata + explore
 
@@ -294,9 +294,9 @@ Use the explore agent to understand codebase patterns and structure. For archite
 
 | Situation | Method | Reason |
 |-----------|--------|--------|
-| Decision with 2-4 clear options | AskUserQuestion | Provide structured choices |
+| Decision with 2-4 clear options | Propose alternatives | Present structured choices, each with trade-offs |
 | Open/subjective question | plain text | Free-form answer needed |
-| Yes/No confirmation | plain text | AskUserQuestion is overkill |
+| Yes/No confirmation | plain text | No alternatives to compare |
 
 ### Question Quality Standard
 
@@ -457,7 +457,7 @@ For a split sub-PR, resolve its branch → worktree mapping from Step 5 and bind
 If `{branch-convention}` exists (Step 1 survey) and the current branch name does not match it:
 
 1. Skip when the branch already exists on origin (`git ls-remote --heads origin {current-branch}` non-empty) — renaming a pushed branch orphans the remote copy
-2. Otherwise propose a convention-conforming name via AskUserQuestion:
+2. Otherwise propose a convention-conforming name, presenting the rename and keeping the current name as alternatives:
    - **{proposed-name}으로 변경**: `git branch -m {proposed-name}` then push under the new name
    - **현재 이름 유지**: push as-is
 

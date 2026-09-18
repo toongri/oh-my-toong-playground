@@ -101,13 +101,13 @@ Call the pinned prompt in `reference/ambiguity-prompt.md` at **temperature 0**. 
 
 - `verdict == "match"` → `status: included` (auto)
 - `verdict == "mismatch"` → `status: excluded` (auto, but per S4 rule `tags` + `reason_note` required — derive the violated rule name as tag)
-- **`verdict == "ambiguous"` → auto-verdict forbidden.** Must call `AskUserQuestion` (Phase 3).
+- **`verdict == "ambiguous"` → auto-verdict forbidden.** Must ask the user (Phase 3).
 
 On JSON parse failure, retry once. On 2nd failure → conservative `verdict: ambiguous` + `missing_signals: ["llm_parse_failure"]` → enter Phase 3.
 
 ### Phase 3: Ask the user (ambiguous only)
 
-Compose Korean question based on `missing_signals`. When calling `AskUserQuestion`:
+Compose Korean question based on `missing_signals`. When asking the user:
 
 - Question focuses on **core decision signal** (e.g., "이 JD 의 원격 근무 정책을 확인하고 싶어요. 원격 가능이면 include, 불가능이면 exclude 로 저장할까요?")
 - Options: `include`, `exclude`, `defer` (= save as `status: ambiguous`, re-evaluate in subsequent batch)
@@ -152,7 +152,7 @@ Matching Loop and Full Coverage Ingest Protocol are **orthogonal concerns** that
 |---|---|
 | Tier 1 (Listing Metadata) | Matching Loop Phase 1→2 (auto-verdict if unambiguous) |
 | Tier 2 (Detail Fetch) | Matching Loop Phase 1→2 re-run on enriched signals |
-| Tier 3 (User Interview) | Matching Loop Phase 3 (AskUserQuestion with missing_signals) |
+| Tier 3 (User Interview) | Matching Loop Phase 3 (ask user with missing_signals) |
 
 ---
 
@@ -203,7 +203,7 @@ Tier 1 immediate persist is allowed ONLY when `sources.yaml.<source>.ingest.deta
 #### Tier 3 — User Interview
 
 - **Trigger condition**: Ambiguity persists after Tier 2.
-- **Procedure**: MANDATORY `AskUserQuestion` — Korean question based on `missing_signals`, options `include` / `exclude` / `defer`.
+- **Procedure**: MANDATORY user question — Korean question based on `missing_signals`, options `include` / `exclude` / `defer`.
 - **Result**: After receiving user answer, finalize status. If defer: `status: ambiguous` + `reason_note: "deferred due to <missing>"`.
 
 #### Batch Completion condition
@@ -281,7 +281,7 @@ Second occurrence of the same partial-batch pattern after a prior 2026-04-25 vio
 - **Tier 1 verdicts computed** for all 234 (saved to `/tmp/toss-verdict-...json`): 48 match / 4 ambiguous_explicit / 151 ambiguous_outside_primary / 28 ambiguous_no_tags.
 - **Violation**: Persisted only 3 of 48 match-bucket items, dropped 45 unwritten and 183 ambiguous unescalated. Did not declare `batch_run_completed=true`, but stopped Phase 7 mid-update with a "demonstration sample is sufficient" rationalization.
 - **Verbatim rationalizations used**: "GREEN_LIVE 증명용 sample 이면 충분", "전체는 다음 round 에 user 주도로", "partial_sample_run note 남기면 audit trail 보존됨", "batch_run_completed=true 선언 안 했으니 위반 아님".
-- **Correct behavior**: Persist all 48 match-bucket items in Phase 6 atomic writes. Escalate the 183 ambiguous items to Tier 2 (Playwright detail fetch) and, when still ambiguous, to Tier 3 (`AskUserQuestion`). Only then enter Phase 7. Lock release in Phase 8 must verify `processed_count == discovered_count`.
+- **Correct behavior**: Persist all 48 match-bucket items in Phase 6 atomic writes. Escalate the 183 ambiguous items to Tier 2 (Playwright detail fetch) and, when still ambiguous, to Tier 3 (ask the user). Only then enter Phase 7. Lock release in Phase 8 must verify `processed_count == discovered_count`.
 
 ### Red Flags — STOP and Process Remaining
 
@@ -312,7 +312,7 @@ When saving with `status: excluded`, the approach differs by entry path. **Both 
 
 **Path 2 — Auto Exclude (Matching Loop Phase 2 returns `verdict: mismatch`)**:
 - `reason_note`: `auto:mismatch:<rules.yaml sha256 short 8>` (Matching Loop Auto-decision audit trail rule — see ambiguity-prompt.md:59)
-- `tags`: Apply slugify() to the violated rule name returned by LLM then save. If not in `tags.yaml`, auto-append (`count: 1`, `description: "auto-derived from rules violation"`, `first_used: <ISO>`). Skip user AskUserQuestion (auto path)
+- `tags`: Apply slugify() to the violated rule name returned by LLM then save. If not in `tags.yaml`, auto-append (`count: 1`, `description: "auto-derived from rules violation"`, `first_used: <ISO>`). Skip asking the user (auto path)
 - Emergent tag interview is **skipped** (LLM already determined the rules violation name)
 
 Common:
@@ -326,7 +326,7 @@ Common:
 1. **Collect reason:** Ask user "왜 제외하는지 한 줄로 설명해주세요". Answer becomes `reason_note` verbatim.
 2. **Derive tag:**
    - If `tags.yaml` is empty or has no relevant tag: "이 이유를 태그로 남겨두면 비슷한 JD 를 다음번에 자동 제외할 수 있어요. 태그 이름을 지어주시겠어요? (예: `seniority-mismatch`, `commute-too-long`)" — user provides free-form, LLM slugifies and appends to `tags.yaml`.
-   - If `tags.yaml` has a relevant tag: present top-3 candidates + "create new" option. AskUserQuestion.
+   - If `tags.yaml` has a relevant tag: present top-3 candidates + "create new" option. Ask the user.
 3. **Update tags.yaml:** If new tag selected, append `{slug: <slug>, description: <original text>, first_used: <ISO date>, count: 1}` to `tags.yaml`. If reusing existing tag, `count += 1`.
 4. **Save frontmatter:** `status: excluded`, `tags: [<slug>, ...]`, `reason_note: <verbatim>` atomic write.
 
@@ -356,7 +356,7 @@ tags:
 - "Reusing existing tag is tedious so always create new" — ❌ Present top-3 candidates first.
 - "Use placeholder like `excluded` instead of reason_note" — ❌ User utterance verbatim required.
 - "Just change `status: excluded` and add tags later" — ❌ Atomic write, both fields must be saved simultaneously.
-- "LLM auto-generates slug arbitrarily to avoid tag naming" — ❌ User confirmation required (AskUserQuestion).
+- "LLM auto-generates slug arbitrarily to avoid tag naming" — ❌ User confirmation required.
 - "auto-mismatch but record user utterance verbatim in reason_note" — ❌ Auto path uses `auto:mismatch:<sha>` format. See Matching Loop Auto-decision audit trail.
 - "manual exclude but fills reason_note with `auto:mismatch:<sha>` format" — ❌ Manual path requires user utterance verbatim.
 
@@ -428,7 +428,7 @@ For detected manual-edited files:
 
 ### Exception: user explicitly forces re-evaluation
 
-If user uses explicit phrases like "강제 재평가해" or "manual edit 무시하고 다시 해", lift the skip. But in this case, skill first asks a confirmation question (`AskUserQuestion`) — "수동 편집 N 건을 덮어쓸까요?". Default answer: "건너뛰기" (safe side).
+If user uses explicit phrases like "강제 재평가해" or "manual edit 무시하고 다시 해", lift the skip. But in this case, skill first asks the user for confirmation — "수동 편집 N 건을 덮어쓸까요?". Default answer: "건너뛰기" (safe side).
 
 ### Interaction with other rules
 
@@ -489,7 +489,7 @@ Before saving WebFetch · file · text ingest results as a **valid JD**, pass th
 
 ### Exception: user override
 
-When user explicitly says "강제 저장" or "이상해도 일단 저장해", ask confirmation (`AskUserQuestion`) — "body 가 짧은데 정말 저장할까요?". Default answer: "건너뛰기". If user selects "저장", save with `status: pending` + `fingerprint_check: pending` + `reason_note: "manual override (low-confidence ingest)"`.
+When user explicitly says "강제 저장" or "이상해도 일단 저장해", ask the user for confirmation — "body 가 짧은데 정말 저장할까요?". Default answer: "건너뛰기". If user selects "저장", save with `status: pending` + `fingerprint_check: pending` + `reason_note: "manual override (low-confidence ingest)"`.
 
 ### Rationalization Loopholes (MUST REJECT)
 
@@ -641,7 +641,7 @@ When reading/writing any state YAML under `$OMT_DIR/collect-jd/` (`profile/profi
 
 1. **Detect parse failure** (catch exception from yq / js-yaml / bun YAML parser)
 2. Copy original file to `<file>.bak.<ISO8601-filename-safe>` (e.g., `tags.yaml` → `tags.yaml.bak.2026-04-22T15-30-00Z`)
-3. Present 2 options to user via `AskUserQuestion`:
+3. Present 2 options to the user:
    - **edit manually**: "Edit `<file>` and press enter" — after user confirms, retry [default]
    - **reset to default**: Recreate with skill's canonical default (e.g., `taxonomy.yaml` → 9 roles from plan, `rules.yaml` → `{}`). **Data loss warning**. Not the default choice.
 4. After one of the 2 options completes, continue skill. If user says "stop", graceful shutdown + lock release.
@@ -659,7 +659,7 @@ When reading/writing any state YAML under `$OMT_DIR/collect-jd/` (`profile/profi
 
 ### Counterexample
 
-- `tags.yaml` broken braces → parse failure → `tags.yaml.bak.<ts>` created → `AskUserQuestion`: edit manually / reset to default → user selects "edit manually" + edits file → normal load on skill re-run → batch continues. No data loss.
+- `tags.yaml` broken braces → parse failure → `tags.yaml.bak.<ts>` created → ask user: edit manually / reset to default → user selects "edit manually" + edits file → normal load on skill re-run → batch continues. No data loss.
 - `rules.yaml` is empty file → parse failure (or `null` returned) → backup (0-byte file also backed up) → suggest reset to default (`rules.yaml: {}`) → user approves → recreate + continue.
 
 ---
@@ -691,8 +691,8 @@ Rules Re-evaluation procedure is entered when any of the following applies:
 2. Store the sha256 of `rules.yaml` at read time (`rules.yaml.sha256.before`) in memory (for step 6 race check).
 3. LLM call (temperature 0, pinned prompt — separate reference document to be added in future; currently spec-level only) to generate proposed rules.
 4. `$OMT_DIR/collect-jd/rules.yaml.proposed` atomic write (`.tmp` → rename). Contents: new rules body + `version: 1` + `_proposed_at: <ISO8601>` + `_based_on: [<jd_file_paths>]` meta included.
-5. Display diff + `AskUserQuestion` (options: `approve`, `reject`, `edit manually`).
-6. On approve: race condition check — recompute sha256 of current `rules.yaml` → compare with `rules.yaml.sha256.before`. If mismatch, abort + `AskUserQuestion` "manual edit detected during that period — discard proposed or re-derive?".
+5. Display diff + ask the user (options: `approve`, `reject`, `edit manually`).
+6. On approve: race condition check — recompute sha256 of current `rules.yaml` → compare with `rules.yaml.sha256.before`. If mismatch, abort + ask the user "manual edit detected during that period — discard proposed or re-derive?".
 7. Race OK → overwrite `rules.yaml` with proposed body (atomic write, excluding `_proposed_at`/`_based_on`). Remove `.proposed` file.
 8. When Reversal occurs based on these rules afterward, append `(rules_reeval:<sha short 8>)` suffix to `reason_note`. (Already specified in Reversal section — cross-reference)
 
