@@ -70,7 +70,7 @@ On a non-falsifiable request, take exactly ONE of these two remediation outcomes
 bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts list-others
 ```
 
-If candidates exist, present them via AskUserQuestion with one option per candidate (labeled with the candidate's purpose and age — e.g. "ship X — started 2026-06-10, 3 hours idle"), plus a "start fresh" option. Proceed to the next step ONLY on an explicit user selection:
+If candidates exist, present them to the user with one option per candidate (labeled with the candidate's purpose and age — e.g. "ship X — started 2026-06-10, 3 hours idle"), plus a "start fresh" option. Proceed to the next step ONLY on an explicit user selection:
 
 - On candidate selection: run `bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts adopt --src <selected-sid>`, then run `bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts get` to read what was adopted, and resume from the restored state — if `phase` is `planning`, resume planning from the adopted Story set and `resume_summary`; if `phase` is `pursuing`, continue pursuit at the adopted `iteration`. Do NOT re-seed via `set --phase planning` from the new invocation's text.
 - On "start fresh": proceed as a new ultragoal.

@@ -44,7 +44,7 @@ GOOD:
 
 Carry settled decisions forward from a deep-interview spec with their evidence and source IDs. For example, an approval's immutable version may be settled while retention depends on a still-open deletion requirement. Ask the deletion scenario first; do not reopen version identity without evidence that invalidates it. Compare real alternatives against the same normal, failure, and change cases, and record why the rejected approach loses under the agreed constraints.
 
-For complex technical decisions, provide rich context via markdown BEFORE asking AskUserQuestion.
+For complex technical decisions, provide rich context via markdown BEFORE asking the question.
 
 **Structure:**
 1. **Current State** — What exists now
@@ -52,11 +52,11 @@ For complex technical decisions, provide rich context via markdown BEFORE asking
 3. **Existing Project Patterns** — Relevant code, prior decisions
 4. **Option Analysis** — For each option: behavior, tradeoffs, code impact
 5. **Recommendation** — Suggested option with rationale
-6. **AskUserQuestion** — Single question with 2-3 options
+6. **Question** — Single question proposing 2-3 alternatives, each with its trade-offs
 
 **Rules:**
 - One question at a time (sequential interview)
-- Markdown provides depth, AskUserQuestion provides choice
+- Markdown provides depth, the alternatives provide choice
 - Question must be independently understandable
 - Options need descriptions explaining consequences
 

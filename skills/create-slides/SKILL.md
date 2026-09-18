@@ -33,7 +33,7 @@ Analyze the user's input first. Input can take various forms:
 
 ### Step 1: User Confirmation (Required)
 
-After analyzing the content, **you must propose all the following items together using AskUserQuestion and obtain user confirmation.**
+After analyzing the content, **you must propose all the following items together, each as multiple alternatives with their trade-offs, and obtain user confirmation.**
 **This procedure cannot be skipped.** Present the AI's inferred choices, but the user makes the final decision.
 The question may be skipped only if the user already specified every item in the request (e.g., "다크 + frontend-design + 8장으로").
 

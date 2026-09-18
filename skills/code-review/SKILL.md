@@ -236,7 +236,7 @@ This is not adversarial — it is refusing to silently produce a worse review.
 
 | Situation | Method |
 |-----------|--------|
-| 2-4 structured choices (review scope, focus areas) | AskUserQuestion tool |
+| 2-4 structured choices (review scope, focus areas) | Propose alternatives, each with trade-offs |
 | Free-form / subjective (intent, alternatives, constraints, concerns) | Plain text question |
 
 **One question per message.** Never bundle. Wait for the answer before the next question.
