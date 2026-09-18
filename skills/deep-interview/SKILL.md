@@ -74,7 +74,7 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
    - Enumerate ALL topology components the parsed idea implies — do NOT narrow to a single slice. A component is a subsystem that can be interviewed and scored somewhat independently (neither forces the other to be built first; cross-cutting integration glue such as webhooks, shared identity, or event wiring is NOT itself a component). Judge this for brownfield from both the user's framing and the step-3 explore summary (codebase coupling); for greenfield (no explore), judge it from the idea prose alone. A single-system idea still enumerates as one component — Round 0 always runs, whether the count is 1 or N.
    - **Prefer 1-6 components.** If more than 6 candidates appear, group siblings at the highest useful level and note the grouping rationale — the group, not each member, becomes the interview component (every active component is scored on all 6 dimensions each round, so an ungrouped wide list multiplies interview floor pressure without adding clarity).
    - **Name each component for the behavior it owns** — a verb or action (`read-switch`, `backfill`, `write-path`), not a storage noun that reads as a datastore. `write-store` reads as a database rather than the write path it names; prefer `write-path` / `dual-write`. The name is what the user confirms and what every later section refers back to, so an ambiguous one propagates.
-   - Surface the full enumerated list to the user via `AskUserQuestion`: name each component, describe how it relates to the others, and ask the user to **confirm** the list, **add** a component you missed, **merge** two that are really one, **split** one that is really two, or **defer** a component out of this interview's scope.
+   - Surface the full enumerated list to the user: name each component, describe how it relates to the others, and ask the user to **confirm** the list, **add** a component you missed, **merge** two that are really one, **split** one that is really two, or **defer** a component out of this interview's scope.
    - Lock the confirmed list into state — every enumerated component, active or deferred, is recorded:
      ```bash
      bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts set-topology \
@@ -469,7 +469,7 @@ When all design branches are settled or explicitly delegated/deferred without co
 
 After the Closure Audit passes, crystallize the confirmed design. An incomplete interview requested early uses Draft delivery above instead.
 
-0. **Confirm and persist the output shape** before composing the spec or routing. Via `AskUserQuestion`, confirm exactly one output shape: `task-tickets`, `ai-execution-plan`, or `domain-output`; a vague prose description or synonym is not a valid value. After the user confirms, persist it before any route selection:
+0. **Confirm and persist the output shape** before composing the spec or routing. Propose the output shapes, each with its trade-offs, and confirm exactly one output shape: `task-tickets`, `ai-execution-plan`, or `domain-output`; a vague prose description or synonym is not a valid value. After the user confirms, persist it before any route selection:
 
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
@@ -588,7 +588,7 @@ This is the normal-completion checklist. A paused interview or delivered DRAFT r
 - [ ] presentation authored per [presentation.md](presentation.md), rendered to `$OMT_DIR/deep-interview/{slug}.presentation.html`, submitted with `submit-presentation`, and accepted by `update --current-phase handoff` (current source/HTML hashes; self-audit passed)
 - [ ] Spec includes: goal, constraints, invariants, acceptance criteria, Approach & Design Decisions, clarity breakdown, transcript
 - [ ] Token `<deep-interview-done/>` emitted in the final assistant message before handoff
-- [ ] Execution bridge presented via AskUserQuestion, or the user's execution deferral honored
+- [ ] Execution bridge presented as alternatives with their trade-offs, or the user's execution deferral honored
 - [ ] Selected execution mode invoked via Skill() when execution was selected (never direct implementation)
 - [ ] State cleaned up only after completed handoff; unfinished draft/paused state preserved
 - [ ] Brownfield confirmation questions cite repo evidence (file/path/pattern) before asking the user to decide
