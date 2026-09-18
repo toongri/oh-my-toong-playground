@@ -320,6 +320,27 @@ describe("deploy-manifest 모듈", () => {
 				"codex/scripts": ["y"],
 			});
 		});
+
+		it("excludes an unsafe declared name (nested/name) from what it writes, and the record stays readable for later orphan cleanup", async () => {
+			const deployRoot = join(tmpDir, "reconcile-excludes-unsafe-names");
+			const categoryDir = join(deployRoot, ".claude", "skills");
+			await mkdir(categoryDir, { recursive: true });
+			await writeFile(join(categoryDir, "ok.md"), "# ok");
+
+			await reconcilePairManifest(deployRoot, "claude", "skills", ["ok", "nested/name"]);
+
+			// readManifest would collapse the whole file to BOOTSTRAP (null) had the
+			// unsafe name been written, so a non-null result here already proves the
+			// exclusion; the array further shows only the safe name was kept.
+			expect(await readManifest(deployRoot)).toEqual({ "claude/skills": ["ok"] });
+
+			// The record from the first reconcile must still be readable, so this
+			// second reconcile can compute "ok" as an orphan of the new declared set
+			// and actually delete it.
+			await reconcilePairManifest(deployRoot, "claude", "skills", ["nested/name"]);
+
+			expect(stat(join(categoryDir, "ok.md"))).rejects.toThrow();
+		});
 	});
 
 	describe("removeManifestPair", () => {

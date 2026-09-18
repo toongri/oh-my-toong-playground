@@ -169,7 +169,12 @@ export async function reconcilePairManifest(
 	}
 
 	const next: ManifestData = previous !== null ? { ...previous } : {};
-	next[key] = declaredNames;
+	// Drop names readManifest's isSafeSegment would reject (e.g. a nested
+	// "dir/name" from a project-scoped component reference): writing one would
+	// make the whole manifest unreadable next run, and a nested name couldn't
+	// be cleaned up by removeOrphans anyway, since it only compares the
+	// category directory's top-level entries.
+	next[key] = declaredNames.filter(isSafeSegment);
 	const target = manifestPath(deployRoot);
 	await runMutation(hooks, target, () => writeManifest(deployRoot, next));
 }
