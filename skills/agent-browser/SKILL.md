@@ -5,7 +5,7 @@ allowed-tools: Bash(agent-browser:*), Bash(npx agent-browser:*)
 hidden: true
 ---
 
-<!-- Vendored from https://github.com/vercel-labs/agent-browser/blob/main/skills/agent-browser/SKILL.md on 2026-06-25. Do not edit in place; re-vendor from source. -->
+<!-- Vendored from https://github.com/vercel-labs/agent-browser/blob/main/skills/agent-browser/SKILL.md on 2026-09-18. Do not edit in place; re-vendor from source. -->
 
 # agent-browser
 
@@ -32,7 +32,9 @@ Load a specialized skill when the task falls outside browser web pages:
 agent-browser skills get electron          # Electron desktop apps (VS Code, Slack, Discord, Figma, ...)
 agent-browser skills get slack             # Slack workspace automation
 agent-browser skills get dogfood           # Exploratory testing / QA / bug hunts
+agent-browser skills get derive-client     # Record a HAR, derive a standalone API client for a site
 agent-browser skills get vercel-sandbox    # agent-browser inside Vercel Sandbox microVMs
+agent-browser skills get protected-vercel-deployments  # Access protected Vercel deployments
 agent-browser skills get agentcore         # AWS Bedrock AgentCore cloud browsers
 ```
 

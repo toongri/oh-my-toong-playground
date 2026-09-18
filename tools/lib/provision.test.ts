@@ -193,26 +193,26 @@ describe("sync.yaml provision: agent-device 버전 readiness 체크", () => {
 		return d;
 	}
 
-	it("0.19.9 설치본 — exit != 0 (프로비저닝 필요)", () => {
+	it("0.21.5 설치본 — 경계값 직전, exit != 0 (프로비저닝 필요)", () => {
 		const check = findCheckByCommandSubstring(loadRootProvisionItems(), "agent-device");
 		const dir = newStubDir();
-		writeStub(dir, "agent-device", "#!/bin/sh\necho '0.19.9'\n");
+		writeStub(dir, "agent-device", "#!/bin/sh\necho '0.21.5'\n");
 
 		expect(runCheck(check, dir)).not.toBe(0);
 	});
 
-	it("0.20.0 설치본 — 경계값, exit 0 (통과)", () => {
+	it("0.21.6 설치본 — 경계값, exit 0 (통과)", () => {
 		const check = findCheckByCommandSubstring(loadRootProvisionItems(), "agent-device");
 		const dir = newStubDir();
-		writeStub(dir, "agent-device", "#!/bin/sh\necho '0.20.0'\n");
+		writeStub(dir, "agent-device", "#!/bin/sh\necho '0.21.6'\n");
 
 		expect(runCheck(check, dir)).toBe(0);
 	});
 
-	it("0.20.2 설치본 — exit 0 (통과)", () => {
+	it("0.22.0 설치본 — exit 0 (통과)", () => {
 		const check = findCheckByCommandSubstring(loadRootProvisionItems(), "agent-device");
 		const dir = newStubDir();
-		writeStub(dir, "agent-device", "#!/bin/sh\necho '0.20.2'\n");
+		writeStub(dir, "agent-device", "#!/bin/sh\necho '0.22.0'\n");
 
 		expect(runCheck(check, dir)).toBe(0);
 	});
