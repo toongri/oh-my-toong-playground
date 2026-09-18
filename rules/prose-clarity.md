@@ -45,12 +45,4 @@ stilted output. When a rule would make the text worse, break it.
 
 ## What this does not fix
 
-This fixes form, not content. Clean prose is not a true claim. Grounding a
-claim to its object, leading with the conclusion, and cutting validation codas
-belong to answer-grounding, not here.
-
-## Detail lives in skills
-
-For Korean-specific AI-writing patterns, load the humanizer skill. For a full
-document review (type → architecture → sentence), load technical-writing. This
-rule is the always-on system; those skills are the on-demand deep review.
+This fixes form, not content. Clean prose is not a true claim.
