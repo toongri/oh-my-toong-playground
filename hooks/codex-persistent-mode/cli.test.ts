@@ -922,12 +922,11 @@ describe("codex-persistent-mode cli", () => {
 			expect(stdout).toBe("");
 		});
 
-		// runtime-leak fix: the Stop hook's own OUTPUT must never hardcode the
-		// Claude-only AskUserQuestion tool name — this reader passes
-		// askToolName: "request_user_input" (Codex's real analog) into the
-		// shared makeDecision core (lib/persistent-mode-core/decision.ts), which
-		// defaults to "AskUserQuestion" only when the field is omitted (Claude).
-		test("block reason names request_user_input, never AskUserQuestion (Codex ask-tool vocabulary)", async () => {
+		// The Stop hook's own OUTPUT never hardcodes a platform tool name — the
+		// shared makeDecision core (lib/persistent-mode-core/decision.ts) points
+		// at "a question tool call" generically, so the same message is correct
+		// on Claude and Codex alike.
+		test("block reason names no platform tool (tool-agnostic ask line)", async () => {
 			const sid = "sid-ask-tool-vocabulary";
 			writeFileSync(
 				mirrorPath(omtDir, sid),
@@ -937,8 +936,9 @@ describe("codex-persistent-mode cli", () => {
 			expect(exitCode).toBe(0);
 			const parsed = JSON.parse(stdout);
 			expect(parsed.decision).toBe("block");
-			expect(parsed.reason).toContain("request_user_input");
+			expect(parsed.reason).toContain("question tool call");
 			expect(parsed.reason).not.toContain("AskUserQuestion");
+			expect(parsed.reason).not.toContain("request_user_input");
 		});
 	});
 

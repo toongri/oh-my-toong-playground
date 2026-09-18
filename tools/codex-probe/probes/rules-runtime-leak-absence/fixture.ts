@@ -1,7 +1,8 @@
 /**
  * Synthetic rule fixture — owned entirely by this probe, not one of this
- * repo's real rules/*.md. A synthetic source (rather than, say,
- * rules/continuation-contract.md) is deliberate: it packs ALL FOUR literals
+ * repo's real rules/*.md. A synthetic source (its sentence is a synthetic
+ * rule body modeled on a retired continuation-handling rule, not a live
+ * one) is deliberate: it packs ALL FOUR literals
  * spec AC line 76 names (`AskUserQuestion`, `TaskOutput`, `TaskCreate`,
  * `subagent_type`) into ONE rule file, and carries its own unique sentinel
  * for the positive control — so this probe's result never depends on which
