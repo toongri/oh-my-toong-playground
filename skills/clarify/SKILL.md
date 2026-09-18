@@ -126,9 +126,9 @@ Record original verbatim. Identify: unclear items, needed assumptions, open deci
 | "Where is X implemented?" | NO | Use explore first |
 | "What's the current architecture?" | NO | Use oracle |
 | "What's the tech stack?" | NO | Use explore first |
-| "What's your timeline?" | YES | Ask user (via AskUserQuestion) |
-| "Should we prioritize speed or quality?" | YES | Ask user (via AskUserQuestion) |
-| "What's the scope boundary?" | YES | Ask user (via AskUserQuestion) |
+| "What's your timeline?" | YES | Ask user |
+| "Should we prioritize speed or quality?" | YES | Ask user |
+| "What's the scope boundary?" | YES | Ask user |
 
 **The ONLY questions for users are about PREFERENCES, not FACTS.**
 
@@ -155,7 +155,7 @@ Task(subagent_type="explore", prompt="I'm clarifying requirements for a user's a
 For understanding current architecture before asking scope questions, briefly announce "Consulting Oracle for [reason]" before invocation.
 
 ### 3. Iterative Clarification
-Use `AskUserQuestion` for each ambiguity.
+Ask the user about each ambiguity.
 
 **Design:** Specific > general, Options > open-ended, One at a time, Architecture before details
 
@@ -195,7 +195,7 @@ GOOD:
 
 ### Rich Context Pattern (For Design Decisions)
 
-For complex technical decisions, provide rich context via markdown BEFORE asking a single AskUserQuestion.
+For complex technical decisions, provide rich context via markdown BEFORE asking the question.
 
 **Structure:**
 1. **Current State** - What exists now (1-2 sentences)
@@ -206,16 +206,16 @@ For complex technical decisions, provide rich context via markdown BEFORE asking
    - Evaluation table (Security, UX, Maintainability, Adoption)
    - Code impact
 5. **Recommendation** - Your suggested option with rationale
-6. **AskUserQuestion** - Single question with 2-3 options
+6. **Question** - Single question proposing 2-3 alternatives, each with its trade-offs
 
 **Rules:**
 - One question at a time (sequential interview)
-- Markdown provides depth, AskUserQuestion provides choice
+- Markdown provides depth, the alternatives provide choice
 - Question must be independently understandable (include brief context + "See analysis above")
 
 **Question Structure**: Context → Tension → Question
 
-For complex decisions, provide markdown analysis BEFORE asking AskUserQuestion:
+For complex decisions, provide markdown analysis BEFORE asking the question:
 1. **Current situation** - What exists now, what's the context
 2. **Tension/Problem** - Why this decision matters, conflicting concerns
 3. **Existing Project Patterns** - Relevant code, prior decisions
@@ -224,11 +224,11 @@ For complex decisions, provide markdown analysis BEFORE asking AskUserQuestion:
    - Tradeoffs across perspectives (security, UX, maintainability, performance, complexity)
    - Code impact
 5. **Recommendation** - Your suggested option with rationale
-6. **AskUserQuestion** - Single question with options
+6. **Question** - Single question proposing alternatives, each with its trade-offs
 
 **Rules:**
 - One question at a time (sequential interview)
-- Markdown provides depth, AskUserQuestion provides choice
+- Markdown provides depth, the alternatives provide choice
 - Question must be independently understandable (include brief context + "See analysis above")
 - Options need descriptions explaining consequences, not just labels
 
@@ -236,12 +236,12 @@ For complex decisions, provide markdown analysis BEFORE asking AskUserQuestion:
 
 | Situation | Method | Why |
 |-----------|--------|-----|
-| Decision with 2-4 clear options | AskUserQuestion | Provides structured choices |
+| Decision with 2-4 clear options | Propose alternatives | Structured choices, each with trade-offs |
 | Open-ended/subjective question | Plain text question | Requires free-form answer |
-| Yes/No confirmation | Plain text question | AskUserQuestion is overkill |
-| Complex trade-off decision | Markdown analysis + AskUserQuestion | Deep context + structured choice |
+| Yes/No confirmation | Plain text question | No alternatives to compare |
+| Complex trade-off decision | Markdown analysis + alternatives with trade-offs | Deep context + structured choice |
 
-**Do NOT force AskUserQuestion for open-ended questions.** If the answer is open-ended, just ask in plain text.
+If the answer is open-ended, just ask in plain text.
 
 ### Vague Answer Clarification
 
@@ -296,7 +296,7 @@ Offer to save to `requirements/` if substantial.
 | Details before architecture | Big decisions first |
 | **Skipping clarification due to time pressure** | **Time pressure = ask fewer but more critical questions, NOT zero** |
 | **Obeying "no questions" requests** | **Politely explain: "2 quick questions now save hours later"** |
-| AskUserQuestion for open-ended questions | Plain text for open-ended, AskUserQuestion for structured choices |
+| Option lists forced onto open-ended questions | Plain text for open-ended; alternatives with trade-offs for decisions |
 | Accepting vague answers ("~is enough") | Ask specific follow-up until clear |
 
 ## Rules

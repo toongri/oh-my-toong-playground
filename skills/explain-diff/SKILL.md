@@ -438,7 +438,7 @@ second quiz or replace the required why/purpose question.
 
 ### Running it
 
-Pose a question in **plain prose and end the turn.** Do not use `AskUserQuestion` — the moment options are visible, what is measured drops from recall to recognition.
+Pose a question in **plain prose and end the turn.** Show no answer options — the moment options are visible, what is measured drops from recall to recognition.
 
 ```bash
 $CLI ask

@@ -12,7 +12,7 @@ Collaboratively source, refine, and complete resume problem-solving entries with
 ## Principles
 
 - **Delegate scoring**: All evaluation goes to `tech-claim-examiner`. This skill only checks pass/fail thresholds
-- **Free-form discussion**: Never force structured choices in AskUserQuestion. Use open-ended questions
+- **Free-form discussion**: Never force structured choices. Use open-ended questions
 - **Critical partner**: Do not blindly accept user input. Challenge, propose alternatives, surface trade-offs. When the user proposes a content direction change, state your assessment before applying it:
   - BAD: User: "파티션 설계 내용도 넣자" → "좋아, 반영할게" → structural_verdict FAIL (scanability low: detail spill)
   - GOOD: User: "파티션 설계 내용도 넣자" → "structural_verdict 기준상 design rationale 없는 구현 디테일로 읽힐 가능성이 높다 — 넣을까, 한 문장 언급으로 깊이를 암시할까?"
@@ -46,7 +46,7 @@ digraph resume_forge {
    - **External sources**: company Notion (MCP), Jira/Linear, file system docs, Slack threads, past Claude sessions, reference resumes — whatever the user can provide access to
    - **Iterate**: propose candidate problems from what you've gathered, get user feedback, mine more, propose again. This loop continues until enough good problems are found — NOT a one-shot questionnaire
    - Save digested analysis to `$OMT_DIR/review-resume/forge-references/`. Record filenames in state JSON `sources` array
-3. **Target count** — AskUserQuestion: how many scenarios? (skip if resuming and count already set)
+3. **Target count** — ask the user: how many scenarios? (skip if resuming and count already set)
 4. **Create/update session state** — `$OMT_DIR/state/resume-forge-{sessionId}.json` (see State section)
 
 ---
@@ -61,8 +61,8 @@ Iterate per scenario:
 digraph loop1 {
     rankdir=TB;
     draft [shape=box, label="Draft problem\n(domain + user input)"];
-    discuss [shape=box, label="Discuss with user\n(AskUserQuestion)", style=filled, fillcolor=lightyellow];
-    confirm [shape=box, label="Confirm with user\n(AskUserQuestion:\n이걸로 제출할까?)", style=filled, fillcolor=lightyellow];
+    discuss [shape=box, label="Discuss with user", style=filled, fillcolor=lightyellow];
+    confirm [shape=box, label="Confirm with user\n(이걸로 제출할까?)", style=filled, fillcolor=lightyellow];
     exam [shape=box, label="Submit to\ntech-claim-examiner", style=filled, fillcolor=orange];
     check [shape=diamond, label="verdicts.a2_causal_honesty\n== PASS?"];
     save [shape=box, label="Save to drafts/", style=filled, fillcolor=lightgreen];
@@ -79,7 +79,7 @@ digraph loop1 {
 }
 ```
 
-**Confirmation Gate** — After discussing the problem definition with the user, show the complete draft and ask via AskUserQuestion: "이 문제 정의로 examiner에게 제출할까요?" User responds:
+**Confirmation Gate** — After discussing the problem definition with the user, show the complete draft and ask the user: "이 문제 정의로 examiner에게 제출할까요?" User responds:
 - **"제출" / 확인**: Proceed to examiner
 - **"아직"**: Return to discuss — refine together, then confirm again. This is NOT "다음" (skip). "아직" means "keep improving this scenario"; "다음" means "skip to next scenario"
 
@@ -117,9 +117,9 @@ Pick from drafts/ one by one (skip scenarios where `loop2.status == "passed"`), 
 digraph loop2 {
     rankdir=TB;
     pick [shape=box, label="Pick a draft"];
-    interview [shape=box, label="Interview: solution strategy\n(AskUserQuestion)", style=filled, fillcolor=lightyellow];
+    interview [shape=box, label="Interview: solution strategy", style=filled, fillcolor=lightyellow];
     show [shape=box, label="Show full entry\n(problem+challenge+solution+result)"];
-    confirm [shape=box, label="Confirm with user\n(AskUserQuestion:\n이 엔트리로 확정할까?)", style=filled, fillcolor=lightyellow];
+    confirm [shape=box, label="Confirm with user\n(이 엔트리로 확정할까?)", style=filled, fillcolor=lightyellow];
     exam [shape=box, label="Submit to\ntech-claim-examiner\n(full Input Format)", style=filled, fillcolor=orange];
     check [shape=diamond, label="Final Verdict\nAPPROVE?"];
     save [shape=box, label="Save to\nproblem-solving/", style=filled, fillcolor=lightgreen];
@@ -145,7 +145,7 @@ digraph loop2 {
 }
 ```
 
-**Confirmation Gate (post-APPROVE confirm)** — After examiner returns `final_verdict == APPROVE`, ask via AskUserQuestion: "이 엔트리로 확정하시겠습니까?" User responds:
+**Confirmation Gate (post-APPROVE confirm)** — After examiner returns `final_verdict == APPROVE`, ask the user: "이 엔트리로 확정하시겠습니까?" User responds:
 - **"확정" / 확인**: Save to problem-solving/ and update state
 - **"아직"**: Return to interview — dig deeper into solution details, refine the entry, then re-dispatch to examiner. This is NOT "다음" (skip). "아직" means "keep improving this entry"; "다음" means "skip to next scenario"
 - **"다음"**: Skip current scenario (stays in drafts/, state remains `pending`), move to next
@@ -412,7 +412,7 @@ Entries that fail:
 
 | Don't | Why |
 |---|---|
-| Force structured choices in AskUserQuestion | Users prefer free-form feedback. Closed questions limit discussion |
+| Force structured choices | Users prefer free-form feedback. Closed questions limit discussion |
 | Show problem/solution in fragments | Without full context, discussion is inefficient. Always show complete text |
 | Blindly accept user opinions | User says "add X" → "좋아 반영할게" → examiner FAIL → wasted cycle. State your assessment first: agree with reasoning, or flag the risk and propose alternatives |
 | Judge examiner scoring criteria yourself | Scoring is the examiner's job. This skill only checks pass/fail |

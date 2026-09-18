@@ -625,7 +625,7 @@ After generating the HTML report in Phase 10, provide a loop that allows the use
 ```
 Phase 10 HTML generated + browser opened
     ↓
-User review → AskUserQuestion
+User review → ask the user
 "Have you reviewed the full resume? Let me know if there is anything you'd like to revise."
     ↓
 Feedback present?
