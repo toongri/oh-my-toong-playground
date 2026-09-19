@@ -11,8 +11,9 @@ import type { DeployMutationHooks } from "../lib/deploy-transaction.ts";
  *   . "$SOME_VAR/relative/path.sh"
  *   # omt-hook-dep: relative/path.sh|relative/path.mjs
  * Captures the relative path (after the variable reference, or from the
- * explicit directive), resolves it under hooksSourceDir, and recurses (with
- * cycle detection). The directive covers companion files referenced only
+ * explicit directive), resolves it under hooksSourceDir — a `source` path
+ * that is absent there is retried against the sourcing file's own directory —
+ * and recurses (with cycle detection). The directive covers companion files referenced only
  * inside a string (e.g. an injected instruction), which the `source`/`.`
  * pattern can't see.
  *
@@ -102,13 +103,23 @@ export async function resolveShellDependencies(
 		// Exclude test files
 		if (relPath.endsWith("_test.sh")) continue;
 
-		const absPath = path.join(hooksSourceDir, relPath);
-
-		// Check existence
-		try {
-			await fs.stat(absPath);
-		} catch {
-			logWarn(`Shell dependency not found, skipping: ${absPath}`);
+		// The variable's value is unknown to a static scan: a hook sources from
+		// the hooks root ("$HOOKS_DIR/lib/x.sh"), a lib file from its own
+		// directory ("$_lib_dir/../x.sh"). Try the hooks root first, then the
+		// sourcing file's directory; never leave the hooks root.
+		const candidates = [
+			path.resolve(hooksSourceDir, relPath),
+			path.resolve(path.dirname(filePath), relPath),
+		].filter((candidate) => !path.relative(hooksRoot, candidate).startsWith(".."));
+		let absPath: string | undefined;
+		for (const candidate of candidates) {
+			if (await fs.stat(candidate).then(() => true, () => false)) {
+				absPath = candidate;
+				break;
+			}
+		}
+		if (!absPath) {
+			logWarn(`Shell dependency not found, skipping: ${relPath} (sourced by ${filePath})`);
 			continue;
 		}
 
