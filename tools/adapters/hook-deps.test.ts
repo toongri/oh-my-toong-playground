@@ -136,6 +136,29 @@ describe("resolveShellDependencies", () => {
 		expect(deps.length).toBe(2);
 	});
 
+	it("lib 파일이 자기 디렉토리 기준으로 source한 sibling·상위 파일을 의존성으로 반환", async () => {
+		const sibling = path.join(hooksDir, "lib", "sibling.sh");
+		const parent = path.join(hooksDir, "parent-core.sh");
+		const core = path.join(hooksDir, "lib", "core.sh");
+		await writeFile(sibling, "# sibling\n");
+		await writeFile(parent, "# parent\n");
+		await writeFile(core, '. "$_lib_dir/../parent-core.sh"\n. "$_lib_dir/sibling.sh"\n');
+
+		const entryFile = path.join(hooksDir, "entry.sh");
+		await writeFile(entryFile, 'source "$HOOKS_DIR/lib/core.sh"\n');
+
+		const deps = await resolveShellDependencies(entryFile, hooksDir);
+		expect(deps.sort()).toEqual([core, sibling, parent].sort());
+	});
+
+	it("source한 파일 디렉토리 기준 경로가 hooks root를 벗어나면 의존성에서 제외", async () => {
+		await writeFile(path.join(tmpDir, "outside.sh"), "# outside\n");
+		const entryFile = path.join(hooksDir, "entry.sh");
+		await writeFile(entryFile, 'source "$HOOKS_DIR/../outside.sh"\n');
+
+		expect(await resolveShellDependencies(entryFile, hooksDir)).toEqual([]);
+	});
+
 	it("존재하지 않는 파일 참조 시 graceful skip (나머지 의존성 반환)", async () => {
 		const existingFile = path.join(hooksDir, "lib", "exists.sh");
 		await writeFile(existingFile, "# exists");
