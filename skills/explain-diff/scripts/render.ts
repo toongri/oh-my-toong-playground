@@ -46,23 +46,36 @@ export function slugify(text: string): string {
 const MERMAID_FENCE = /```mermaid\n([\s\S]*?)```/g;
 
 /**
- * Rewrites a mermaid SVG's `width="100%"` root attribute to its viewBox pixel
- * width so a wide diagram renders at natural size and its figure scrolls, rather
- * than the SVG shrinking to the column and collapsing its labels to a few
- * illegible pixels. `width="100%"` is a presentation attribute that CSS
- * `width:auto`/`max-content` cannot reliably override on a percentage-sized SVG,
- * so the width is fixed here at build time from the ground truth already in the
- * markup — the viewBox. Left unchanged when there is no `width="100%"` or no
- * parseable viewBox width (a diagram mmdc already sized in px keeps that size).
+ * Rewrites a mermaid SVG's root width to its viewBox pixel width so a wide
+ * diagram renders at natural size and its figure can fit or scroll it. Mermaid
+ * can emit `width="10"` when the viewBox origin is non-zero; preserving that
+ * value collapses the diagram to an almost invisible strip. Read the viewBox
+ * from the root tag only, because marker elements have their own viewBox.
  */
 export function normalizeSvgWidth(svg: string): string {
-	const viewBox = svg.match(/viewBox="0 0 ([\d.]+) [\d.]+"/);
-	if (!viewBox) return svg;
-	const width = Math.ceil(Number(viewBox[1]));
-	if (!Number.isFinite(width) || width <= 0) return svg;
+	const rootTag = svg.match(/^<svg\b[^>]*>/)?.[0];
+	if (!rootTag) return svg;
+	const viewBox = rootTag
+		.match(/\bviewBox=(['"])(.*?)\1/)?.[2]
+		?.trim()
+		.split(/[\s,]+/)
+		.map(Number);
+	const viewBoxWidth = viewBox?.[2];
+	if (
+		viewBox?.length !== 4 ||
+		viewBoxWidth === undefined ||
+		!Number.isFinite(viewBoxWidth) ||
+		viewBoxWidth <= 0
+	) {
+		return svg;
+	}
+	const width = Math.ceil(viewBoxWidth);
+	const normalizedRoot = /\swidth=(['"])[^"']*\1/.test(rootTag)
+		? rootTag.replace(/\swidth=(['"])[^"']*\1/, ` width="${width}"`)
+		: rootTag.replace(/^<svg\b/, `<svg width="${width}"`);
 	return (
 		svg
-			.replace(/(<svg\b[^>]*?)\swidth="100%"/, `$1 width="${width}"`)
+			.replace(/^<svg\b[^>]*>/, normalizedRoot)
 			// mmdc bakes an inline `max-width:<px>` on the root <svg>. An inline style beats a
 			// stylesheet rule, so both `.dz-scroll svg{max-width:100%}` (fit) and `.dz-view …
 			// svg{max-width:none}` (zoom) are overridden and the SVG renders at natural width,

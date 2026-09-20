@@ -247,6 +247,21 @@ describe("컴포넌트 CSS — 렌더러가 시각 언어를 소유한다", () =
 describe("넓은 mermaid 폭 정규화 (normalizeSvgWidth)", () => {
 	const wide = `<svg id="mmd-0" width="100%" class="flowchart" style="max-width: 2261.48px;" viewBox="0 0 2261.484375 94">x</svg>`;
 
+	test("중첩 marker의 viewBox가 아니라 루트 SVG의 viewBox 폭을 사용한다", () => {
+		const svg =
+			'<svg width="100%" viewBox="-23.609375 0 1467.28125 244">' +
+			'<defs><marker viewBox="0 0 10 10" /></defs></svg>';
+
+		expect(normalizeSvgWidth(svg)).toContain('width="1468"');
+	});
+
+	test("viewBox 원점이 0이 아니어도 Mermaid의 작은 width를 자연 폭으로 고친다", () => {
+		const svg =
+			'<svg width="10" viewBox="0.7037296295166016 0 1350.8125 268.27227783203125"></svg>';
+
+		expect(normalizeSvgWidth(svg)).toContain('width="1351"');
+	});
+
 	test('width="100%" 를 viewBox 자연폭(px)으로 재작성한다 — 넓은 다이어그램이 축소되지 않는다', () => {
 		const out = normalizeSvgWidth(wide);
 		expect(out).toContain('width="2262"');
