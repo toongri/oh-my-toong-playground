@@ -224,7 +224,7 @@ On create-intent recovery, use only a verified intent-to-child association. When
 
 Terminal `complete` and `manual-reconciliation-required` intents remain durable in the journal and continue to appear in `list --pending` until an explicit `receipt-ack`. The caller must durably retain the `taskIdentities` result from every create/update or recovery, then acknowledge the exact receipt: use the exact `parentId` and `designAnchor`, plus the create `taskKey` and exact optional `childId` (or the update `childId`). `receipt-ack` alone compacts/unlinks the acknowledged intent; it does not perform PM writes. Task journals and recovery artifacts are excluded from generic `SESSION_ARTIFACT_PREFIXES` TTL deletion; their recognized names are recognition-only to the state-liveness unclassified-file classifier. Preserve them for explicit recovery.
 
-The lock claim owner is fully initialized before atomic publication; retry transient empty release. A stale empty legacy lock may be reclaimed. Preserve malformed or live owner locks and fail acquisition boundedly when they remain held.
+The lock claim owner is fully initialized before atomic publication, together with a pid-named `owner.<pid>` marker; a lock is released or reclaimed from a dead owner only by first unlinking that marker, so a stale waiter cannot delete a lock that has since changed hands. Retry transient empty release. A stale empty legacy lock may be reclaimed. Preserve malformed or live owner locks and fail acquisition boundedly when they remain held.
 
 #### Durable update-intent protocol
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { execFileSync, spawn } from "child_process";
+import { execFileSync, spawn, spawnSync } from "child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "fs";
 import { join, resolve } from "path";
 import {
@@ -571,6 +571,37 @@ describe("task write journal", () => {
 		expect(Date.now() - started).toBeLessThan(900);
 		expect(readFileSync(`${lockPath}/owner`, "utf8")).toBe(`${process.pid}\n`);
 		expect(existsSync(journalPath(sid))).toBe(false);
+	});
+
+	test("does not reclaim a lock whose pid marker belongs to another process, even when owner names a dead pid", () => {
+		// The state a waiter acts on after it read a dead owner's pid and the lock
+		// then changed hands: deleting by the stale pid must not remove the new holder's lock.
+		setup();
+		const lockPath = `${journalPath(sid)}.lock`;
+		const deadPid = spawnSync("bun", ["-e", ""]).pid;
+		mkdirSync(lockPath, { recursive: true });
+		writeFileSync(`${lockPath}/owner`, `${deadPid}\n`, "utf8");
+		writeFileSync(`${lockPath}/owner.${process.pid}`, "", "utf8");
+		const modulePath = resolve("skills/craft-tasks/scripts/task-write-journal.ts");
+		expect(() => execFileSync("bun", ["-e", `import { createPrepare } from ${JSON.stringify(modulePath)}; createPrepare({ parentId: "p", designAnchor: "a", creationPayload: { body: "b", relations: [] } });`], {
+			env: { ...process.env, OMT_DIR: omtDir, OMT_SESSION_ID: sid },
+			stdio: "ignore",
+			timeout: 2000,
+		})).toThrow();
+		expect(existsSync(`${lockPath}/owner.${process.pid}`)).toBe(true);
+		expect(existsSync(journalPath(sid))).toBe(false);
+	});
+
+	test("reclaims a lock whose owner and pid marker both name a dead process", () => {
+		setup();
+		const lockPath = `${journalPath(sid)}.lock`;
+		const deadPid = spawnSync("bun", ["-e", ""]).pid;
+		mkdirSync(lockPath, { recursive: true });
+		writeFileSync(`${lockPath}/owner`, `${deadPid}\n`, "utf8");
+		writeFileSync(`${lockPath}/owner.${deadPid}`, "", "utf8");
+		const prepared = createPrepare({ parentId, designAnchor: anchor, creationPayload: { body: "b", relations: [] } });
+		expect(prepared.state).toBe("prepared");
+		expect(existsSync(lockPath)).toBe(false);
 	});
 
 	test("lists pending intents from another session without changing journals", () => {
