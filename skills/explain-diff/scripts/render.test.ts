@@ -2,6 +2,8 @@ import { execFileSync } from "child_process";
 import { describe, expect, test } from "bun:test";
 import { mmdcRenderSvg, normalizeSvgWidth, renderToHtml, slugify, zoomableFigure } from "./render";
 
+const MMDC_TEST_TIMEOUT_MS = 60_000;
+
 function mmdcAvailable(): boolean {
 	try {
 		execFileSync("mmdc", ["--version"], { stdio: "ignore" });
@@ -199,6 +201,8 @@ describe("mmdc 결정성 — 렌더 게이트의 재현 비교 전제", () => {
 			const src = "classDiagram\n  class Tool { execute() }\n  class Helper { run() }\n  Tool --> Helper\n";
 			expect(mmdcRenderSvg(src, 0)).toBe(mmdcRenderSvg(src, 0));
 		},
+		// 실제 mmdc는 headless Chromium을 띄운다. 전체 테스트가 도는 부하에서는 bun 기본 5초를 넘긴다.
+		MMDC_TEST_TIMEOUT_MS,
 	);
 });
 
@@ -380,5 +384,7 @@ describe("라벨 클리핑 방지 — mmdc htmlLabels:false", () => {
 			const textContent = svg.replace(/<[^>]+>/g, "");
 			expect(textContent).toContain("findActiveSmartSubscriptionSupplementsByHousehold");
 		},
+		// 실제 mmdc는 headless Chromium을 띄운다. 전체 테스트가 도는 부하에서는 bun 기본 5초를 넘긴다.
+		MMDC_TEST_TIMEOUT_MS,
 	);
 });

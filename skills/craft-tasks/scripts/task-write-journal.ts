@@ -186,6 +186,29 @@ function parseOwnerPid(raw: string): number | undefined {
 	return Number.isSafeInteger(pid) ? pid : undefined;
 }
 
+function ownerMarker(pid: number): string { return `owner.${pid}`; }
+
+/**
+ * Removes a lock (or claim) directory only while it still belongs to `pid`.
+ * The pid-named marker is unlinked first: a name that encodes the owner makes
+ * that unlink an atomic compare-and-delete. A waiter that read a dead owner's
+ * pid, then lost the CPU while the lock changed hands, fails here instead of
+ * deleting the new holder's lock. The directory cannot change hands afterwards,
+ * because a claim can only be renamed over an empty directory.
+ */
+function removeOwnedLock(lockPath: string, pid: number): void {
+	try { unlinkSync(`${lockPath}/${ownerMarker(pid)}`); } catch { return; }
+	try { unlinkSync(`${lockPath}/owner`); } catch { /* best effort */ }
+	try { rmdirSync(lockPath); } catch { /* a claim may already have replaced the emptied directory */ }
+}
+
+/** A claim path is unique to its creator, so it needs no ownership check. */
+function removeClaim(claimPath: string, pid: number): void {
+	try { unlinkSync(`${claimPath}/${ownerMarker(pid)}`); } catch { /* best effort */ }
+	try { unlinkSync(`${claimPath}/owner`); } catch { /* best effort */ }
+	try { rmdirSync(claimPath); } catch { /* best effort */ }
+}
+
 function removeEmptyLegacyLock(lockPath: string): boolean {
 	try {
 		if (Date.now() - statSync(lockPath).mtimeMs <= LOCK_INITIALIZATION_GRACE_MS) return false;
@@ -221,10 +244,7 @@ function cleanAbandonedClaims(lockPath: string): void {
 		try { ownerPid = parseOwnerPid(readFileSync(`${claimPath}/owner`, "utf8")); } catch { continue; }
 		if (ownerPid === undefined) continue;
 		try { process.kill(ownerPid, 0); } catch (error) {
-			if (hasErrorCode(error, "ESRCH")) {
-				try { unlinkSync(`${claimPath}/owner`); } catch { /* best effort */ }
-				try { rmdirSync(claimPath); } catch { /* best effort */ }
-			}
+			if (hasErrorCode(error, "ESRCH")) removeClaim(claimPath, ownerPid);
 		}
 	}
 }
@@ -240,6 +260,7 @@ function withJournalLock<T>(sessionId: string | undefined, operation: () => T): 
 		try {
 			mkdirSync(claimPath);
 			writeFileSync(`${claimPath}/owner`, `${process.pid}\n`, "utf8");
+			writeFileSync(`${claimPath}/${ownerMarker(process.pid)}`, "", "utf8");
 			try {
 				if (!isFreshEmptyLegacyLock(lockPath)) {
 					renameSync(claimPath, lockPath);
@@ -250,16 +271,10 @@ function withJournalLock<T>(sessionId: string | undefined, operation: () => T): 
 			}
 			if (published) {
 				try { return operation(); }
-				finally {
-					try { unlinkSync(`${lockPath}/owner`); } catch { /* best effort */ }
-					try { rmdirSync(lockPath); } catch { /* best effort */ }
-				}
+				finally { removeOwnedLock(lockPath, process.pid); }
 			}
 		} finally {
-			if (!published) {
-				try { unlinkSync(`${claimPath}/owner`); } catch { /* best effort */ }
-				try { rmdirSync(claimPath); } catch { /* best effort */ }
-			}
+			if (!published) removeClaim(claimPath, process.pid);
 		}
 
 		if (!existsSync(lockPath)) continue;
@@ -275,10 +290,14 @@ function withJournalLock<T>(sessionId: string | undefined, operation: () => T): 
 		}
 		const ownerPid = parseOwnerPid(ownerContents);
 		if (ownerPid === undefined) throw new Error("Journal lock has a malformed or missing owner");
+		const hasMarker = existsSync(`${lockPath}/${ownerMarker(ownerPid)}`);
 		try { process.kill(ownerPid, 0); } catch (error) {
 			if (hasErrorCode(error, "ESRCH")) {
-				try { unlinkSync(`${lockPath}/owner`); } catch { /* best effort */ }
-				try { rmdirSync(lockPath); } catch { /* another waiter may have reclaimed it */ }
+				if (hasMarker) removeOwnedLock(lockPath, ownerPid);
+				else {
+					try { unlinkSync(`${lockPath}/owner`); } catch { /* best effort */ }
+					try { rmdirSync(lockPath); } catch { /* another waiter may have reclaimed it */ }
+				}
 				continue;
 			}
 		}

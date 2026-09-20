@@ -379,6 +379,7 @@ describe("durable task-write runtime contract", () => {
 		const text = sectionBetween(craftTasks, "#### Durable create-intent protocol", "#### Durable update-intent protocol");
 		expect(text).toContain("lock claim owner is fully initialized before atomic publication");
 		expect(text).toContain("retry transient empty release");
+		expect(text).toContain("only by first unlinking that marker");
 		expect(text).toContain("stale empty legacy lock may be reclaimed");
 		expect(text).toContain("Preserve malformed or live owner locks");
 		expect(text).toContain("fail acquisition boundedly");
