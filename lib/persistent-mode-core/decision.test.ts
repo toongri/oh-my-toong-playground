@@ -1425,6 +1425,33 @@ describe("makeDecision", () => {
 			expect(after.awaiting_user).toBe(true);
 		});
 
+		it("awaiting_user=true wins over same-turn progress (explicit pause is honored)", async () => {
+			const head = execFileSync("git", ["rev-parse", "HEAD"], {
+				cwd: projectRoot,
+				encoding: "utf8",
+			}).trim();
+			await writeUltragoal({
+				active: true,
+				phase: "pursuing",
+				awaiting_user: true,
+				iteration: 4,
+				max_iterations: 10,
+				last_seen_head: head,
+				outcome: "objective",
+			});
+			// Same-turn progress: a diff-carrying commit that would otherwise reset the counter.
+			await writeFile(join(projectRoot, "progress-pause"), "progress-pause");
+			execFileSync("git", ["add", "progress-pause"], { cwd: projectRoot });
+			execFileSync("git", ["commit", "-qm", "progress-pause"], { cwd: projectRoot });
+			const result = makeDecision(createContext());
+			// The explicit human-gate pause wins; the turn may end and the pause is not consumed.
+			expect(result).toEqual({ continue: true });
+			const after = await readUltragoalFile();
+			expect(after.awaiting_user).toBe(true);
+			expect(after.phase).toBe("pursuing");
+			expect(after.iteration).toBe(4);
+		});
+
 		it("renewal-required (active:false) allows stop without counting no-progress", async () => {
 			await writeUltragoal({
 				active: false,

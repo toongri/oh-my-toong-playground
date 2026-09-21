@@ -505,22 +505,23 @@ export function makeDecision(context: DecisionContext): HookOutput {
 					: {}),
 			};
 			// Human-gate pause (set via `await-user`): the loop posed a question only the
-			// user can resolve (a wrong plan/requirement, or an unsafe boundary) and no new
-			// progress has landed. ALLOW the turn to end WITHOUT counting no-progress and
-			// WITHOUT re-prompting — an intentional yield, not completion. This is the ONE
-			// Stop-allowed pause ultragoal has; every other non-pursuing park (renewal-required,
-			// budget_limited) reaches the fall-through below via active:false. No isProgressLive
-			// guard: allowing Stop is already the non-wedging outcome, so a stale flag cannot
-			// wedge, and the flag is ephemeral — any steering/progress write clears it
-			// (mergeWriteLocked defaults awaiting_user → false), as does force-complete.
-			const humanGatePause = ultragoal.awaiting_user === true && !progress.progressed;
+			// user can resolve (a wrong plan/requirement, or an unsafe boundary). The flag is
+			// the loop's LATEST deliberate intent, so it wins even when progress landed earlier
+			// in the SAME turn (the documented sequence is "do the work, THEN await-user" — a
+			// commit or story change made just before the question must not swallow the pause).
+			// ALLOW the turn to end WITHOUT counting no-progress and WITHOUT re-prompting — an
+			// intentional yield, not completion. This is the ONE Stop-allowed pause ultragoal
+			// has; every other non-pursuing park (renewal-required, budget_limited) reaches the
+			// fall-through below via active:false. No isProgressLive guard: allowing Stop is
+			// already the non-wedging outcome, so a stale flag cannot wedge, and the flag is
+			// ephemeral — the next resume's steering write clears it (mergeWriteLocked defaults
+			// awaiting_user → false), as does force-complete.
+			const humanGatePause = ultragoal.awaiting_user === true;
 			if (!humanGatePause) {
 				if (progress.progressed) {
 					const message = buildUltragoalContinuationMessage(ultragoal, 0);
 					try {
-						// Clear any human-gate pause too: observed progress means the user
-						// answered and the loop resumed, so the yield is over.
-						updateUltragoalState(sessionId, { iteration: 0, awaiting_user: false, ...persistedFingerprint });
+						updateUltragoalState(sessionId, { iteration: 0, ...persistedFingerprint });
 						cleanupBlockCountFiles(stateDir, attemptId);
 						return formatBlockOutput(message);
 					} catch {
