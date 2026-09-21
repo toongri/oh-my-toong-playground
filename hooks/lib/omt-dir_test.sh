@@ -148,6 +148,12 @@ test_all_worktree_paths_resolve_to_canonical_name() {
         # skip bare worktree entry; its path is tested in AC (a)
         path=""
         ;;
+      "prunable"*)
+        # skip a dead registration. Its directory can still exist with the
+        # .git file gone, so the [ -d ] guard below does not catch it, and
+        # omt-dir.sh correctly resolves such a path as non-git.
+        path=""
+        ;;
       "")
         if [ -n "$path" ]; then
           worktree_paths=("${worktree_paths[@]+"${worktree_paths[@]}"}" "$path")
