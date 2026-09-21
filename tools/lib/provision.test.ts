@@ -353,3 +353,55 @@ describe("sync.yaml provision: mmdc Chrome headless shell smoke 체크", () => {
 		expect(runCheck(smokeCheck(), dir)).toBe(0);
 	});
 });
+
+describe("sync.yaml provision: psql readiness 체크", () => {
+	const tmpdirs: string[] = [];
+
+	afterEach(() => {
+		for (const d of tmpdirs.splice(0)) {
+			try {
+				fs.rmSync(d, { recursive: true, force: true });
+			} catch {
+				// best-effort
+			}
+		}
+	});
+
+	function newStubDir(): string {
+		const d = fs.mkdtempSync(path.join(os.tmpdir(), "provision-check-test-"));
+		tmpdirs.push(d);
+		return d;
+	}
+
+	function psqlCheck(): string {
+		return findCheckByCommandSubstring(loadRootProvisionItems(), "brew install libpq");
+	}
+
+	it("psql도 brew도 없음 — exit != 0 (프로비저닝 필요)", () => {
+		expect(runCheck(psqlCheck(), newStubDir())).not.toBe(0);
+	});
+
+	it("psql이 PATH에 있음 — exit 0 (통과)", () => {
+		const dir = newStubDir();
+		writeStub(dir, "psql", "#!/bin/sh\nexit 0\n");
+
+		expect(runCheck(psqlCheck(), dir)).toBe(0);
+	});
+
+	it("PATH에는 없지만 keg-only libpq 아래에 psql이 있음 — exit 0 (통과)", () => {
+		const dir = newStubDir();
+		const prefix = path.join(dir, "libpq-prefix");
+		fs.mkdirSync(path.join(prefix, "bin"), { recursive: true });
+		writeStub(path.join(prefix, "bin"), "psql", "#!/bin/sh\nexit 0\n");
+		writeStub(dir, "brew", `#!/bin/sh\n[ "$1" = "--prefix" ] && echo "${prefix}"\n`);
+
+		expect(runCheck(psqlCheck(), dir)).toBe(0);
+	});
+
+	it("brew는 있지만 libpq 아래에 psql이 없음 — exit != 0 (프로비저닝 필요)", () => {
+		const dir = newStubDir();
+		writeStub(dir, "brew", `#!/bin/sh\n[ "$1" = "--prefix" ] && echo "${path.join(dir, "missing")}"\n`);
+
+		expect(runCheck(psqlCheck(), dir)).not.toBe(0);
+	});
+});
