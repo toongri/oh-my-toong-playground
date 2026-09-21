@@ -68,8 +68,20 @@ review_dispatch_gate_core_run() {
     # pursuing are intentionally no-ops: they must not consume review budget.
     # A present-but-malformed state is different from no state and fails closed.
     if ! printf '%s' "$state_out" | jq -e '. != null and .active == true and .phase == "pursuing"' > /dev/null 2>&1; then
-        if [ -n "$omt_dir" ] && [ -f "${omt_dir}/ultragoal-state-${sid}.json" ] && ! jq -e 'type == "object" and (.active == false or .phase == "planning" or .phase == "renewal-required" or .phase == "budget_limited" or .phase == "blocked" or .phase == "complete")' "${omt_dir}/ultragoal-state-${sid}.json" > /dev/null 2>&1; then
-            _rdg_deny '코드 리뷰 dispatch 상태가 손상되었습니다. 안전하게 중단하고 상태를 확인하세요.'
+        if [ -n "$omt_dir" ] && [ -f "${omt_dir}/ultragoal-state-${sid}.json" ]; then
+            # A pursuit parked at renewal-required has ALREADY exhausted its review
+            # budget. The folded `get` reads active:false as null, so the pursuing
+            # gate above never reaches claim-review-dispatch and the dispatch would
+            # slip through unguarded. Keep denying here until the user renews
+            # (→ pursuing) or force-completes (→ complete). Read-only — no claim, so
+            # the exhausted counters stay put.
+            if jq -e 'type == "object" and .phase == "renewal-required"' "${omt_dir}/ultragoal-state-${sid}.json" > /dev/null 2>&1; then
+                _rdg_deny '코드 리뷰 예산이 소진되어 pursuit가 renewal-required 상태입니다(정지 허용, no-progress 미집계). 사용자에게 계속할지 마무리할지 물으세요. 계속하려면 approve-review-dispatch-renewal 명령어를, 강제로 마무리하려면 force-complete 명령어를 제시하고 사용자가 직접 실행하도록 요청하세요 (두 명령 모두 AI 실행은 차단됩니다).'
+                return 0
+            fi
+            if ! jq -e 'type == "object" and (.active == false or .phase == "planning" or .phase == "renewal-required" or .phase == "budget_limited" or .phase == "blocked" or .phase == "complete")' "${omt_dir}/ultragoal-state-${sid}.json" > /dev/null 2>&1; then
+                _rdg_deny '코드 리뷰 dispatch 상태가 손상되었습니다. 안전하게 중단하고 상태를 확인하세요.'
+            fi
         fi
         return 0
     fi
