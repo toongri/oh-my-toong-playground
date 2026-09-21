@@ -600,7 +600,10 @@ describe("codex-persistent-mode cli", () => {
 			makeChildDb(home, sid, rollout);
 			writeUltragoalState(omtDir, sid);
 			for (let i = 0; i < 10; i++) {
-				await runCli("stop", stopPayload(sid, projectDir), omtDir, { CODEX_HOME: home });
+				const stop = await runCli("stop", stopPayload(sid, projectDir), omtDir, { CODEX_HOME: home });
+				// 감지기는 fail-open이라 sqlite3 호출이나 rollout 읽기가 실패하면 자식을 0으로 세고,
+				// 그러면 아래 iteration 단언이 원인 없이 실패한다. 진단 줄을 먼저 단언해 원인을 남긴다.
+				expect(stop.stderr).not.toContain("child detector failed");
 				const state = JSON.parse(readFileSync(join(omtDir, `ultragoal-state-${sid}.json`), "utf8"));
 				expect(state.iteration).toBe(0);
 				expect(state.phase).toBe("pursuing");
