@@ -103,6 +103,11 @@ skills:
     - component: pin-setup
       platforms: [claude, codex]
     - scan-pdf-to-notes
+    # 스킬 본문은 래퍼(scripts/read-db.ts) 호출뿐이다. 래퍼는 Node 내장 모듈만 쓰고
+    # ${CLAUDE_SKILL_DIR}는 codex에서 절대경로로 구워지므로 두 플랫폼에서 같게
+    # 동작한다. psql은 위 provision 항목이 설치한다.
+    - component: read-db
+      platforms: [claude, codex]
     - component: craft-issue
       platforms: [claude, codex]
     - humanizer
