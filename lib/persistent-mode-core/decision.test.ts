@@ -3004,6 +3004,35 @@ describe("QA Stop-gate decision table", () => {
 		expect(fs.existsSync(join(stateDir, `block-count-qa-${sid}`))).toBe(false);
 	});
 
+	it("qa awaiting_user pause: a live human-gate yield allows stop and resets the counter", async () => {
+		// An incomplete chain (broken cell) would normally block. With awaiting_user set
+		// at a human gate (e.g. a waive decision only the user may make) and the cycle
+		// progress-live, the Stop gate yields WITHOUT spinning the no-progress counter —
+		// the same escape the review-budget renewal-required park needs.
+		const state = completeQa("APPROVE");
+		(state.cells as Array<Record<string, unknown>>)[0].status = null;
+		state.awaiting_user = true;
+		state.last_touched_at = new Date().toISOString();
+		writeQaState(state);
+		await writeFile(join(stateDir, `block-count-qa-${sid}`), "3");
+		expect(makeDecision(context())).toEqual({ continue: true });
+		expect(fs.existsSync(join(stateDir, `block-count-qa-${sid}`))).toBe(false);
+	});
+
+	it("qa awaiting_user pause: a progress-stale pause still blocks (no permanent escape)", () => {
+		// An abandoned pause (awaiting_user=true, idle past TTL) must not open the gate
+		// forever — it falls through to the ordinary block branch, and only the
+		// block-count cap eventually releases a genuinely wedged session.
+		const state = completeQa("APPROVE");
+		(state.cells as Array<Record<string, unknown>>)[0].status = null;
+		state.awaiting_user = true;
+		state.last_touched_at = "2020-01-01T00:00:00+00:00";
+		writeQaState(state);
+		const result = makeDecision(context());
+		expect(result.decision).toBe("block");
+		expect(result.reason).toContain("qa");
+	});
+
 	for (const verdict of [null, "APPROVE", "COMMENT", "REQUEST_CHANGES"] as const) {
 		it(`qa default block: ${verdict ?? "null"} verdict with false predicate`, () => {
 			const state = completeQa(verdict ?? "APPROVE");

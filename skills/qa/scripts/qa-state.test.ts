@@ -11,6 +11,7 @@ import {
 	incCycle,
 	completeQa,
 	setVerdict,
+	setAwaitingUser,
 	resolveStatePath,
 	type QaState,
 } from "./qa-state.ts";
@@ -171,6 +172,26 @@ describe("qa state: terminal completion (P2 finding 1 — no active:false resurr
 		// but the underlying file still exists (inactive, not deleted)
 		expect(existsSync(resolveStatePath(S))).toBe(true);
 		expect(rawState().active).toBe(false);
+	});
+});
+
+describe("qa state: awaiting_user pause (human-gate yield)", () => {
+	test("setAwaitingUser sets awaiting_user=true on a live cycle", () => {
+		setQaState(S, { phase: "PLAN" });
+		setAwaitingUser(S);
+		expect(rawState().awaiting_user).toBe(true);
+	});
+
+	test("any later progress write auto-clears awaiting_user", () => {
+		setQaState(S, { phase: "PLAN" });
+		setAwaitingUser(S);
+		expect(rawState().awaiting_user).toBe(true);
+		advancePhase(S, "PLAN");
+		expect(rawState().awaiting_user).toBe(false);
+	});
+
+	test("setAwaitingUser refuses when no active cycle exists", () => {
+		expect(() => setAwaitingUser("no-such-session")).toThrow(/no active QA cycle/);
 	});
 });
 

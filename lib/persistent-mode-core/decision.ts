@@ -814,6 +814,19 @@ export function makeDecision(context: DecisionContext): HookOutput {
 
 		if ((allowApprove || allowComment || allowRequestChanges) && qaReportComplete(qaState, qaProbe)) {
 			cleanupBlockCountFiles(stateDir, qaAttemptId);
+		} else if (qaState.awaiting_user === true && isProgressLive(qaState, nowEpoch)) {
+			// Stop-allowed pause for THIS family: the model posed a plain-text question at
+			// a human gate (e.g. a waive decision only the user may make) and set
+			// awaiting_user via `qa-state.ts await-user`. An intentional yield, NOT a
+			// verdict — the cycle stays active and resumes (awaiting_user auto-cleared by
+			// the next progress write) on the user's reply. Reset the block count: a
+			// legitimate pause is not a failure. A progress-stale pause fails isProgressLive
+			// and falls through to the block branch, so only the cap releases a wedged one.
+			//
+			// FALL THROUGH — do NOT `return formatContinueOutput()`: a bare continue would
+			// short-circuit the explain-diff/skill-chain gates below (same reasoning as the
+			// prometheus/deep-interview pauses above).
+			cleanupBlockCountFiles(stateDir, qaAttemptId);
 		} else if (escaped) {
 			cleanupBlockCountFiles(stateDir, qaAttemptId);
 			return formatContinueOutput();
