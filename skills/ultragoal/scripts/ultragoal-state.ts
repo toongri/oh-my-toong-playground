@@ -1920,8 +1920,13 @@ export function claimReviewDispatch(sessionId: string): ReviewDispatchClaim {
 				// Park the pursuit in an explicit, named gate instead of leaving it in
 				// `pursuing` where the Stop hook would spin the no-progress counter while
 				// the AI can only wait for a user-only action. `active:false` makes the
-				// Stop branch fall through (allow stop, no counting); the ONLY exits are
-				// `approve-review-dispatch-renewal` (→ pursuing, cap+5) and `force-complete`.
+				// Stop branch fall through (allow stop, no counting). The only exits that GRANT
+				// MORE REVIEW BUDGET are the user-only `approve-review-dispatch-renewal`
+				// (→ pursuing, cap+5) and `force-complete` (ends the pursuit). A re-plan
+				// (`set --phase planning`) may still leave this phase to fix a wrong plan — that
+				// path is deliberately preserved — but it keeps the exhausted counters
+				// (setGoalState), so it grants NO new dispatches: the next claim re-parks here
+				// until the user acts. The budget gate is therefore structural.
 				mergeWriteLocked(sessionId, stateFilePath, {
 					phase: "renewal-required",
 					active: false,
