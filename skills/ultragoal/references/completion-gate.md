@@ -167,13 +167,15 @@ The command refuses a missing or empty `--rationale`, and any `--ref` with no ma
 
 Before an active `phase=pursuing` code-reviewer dispatch, the Claude and Codex `PreToolUse` hooks automatically run `claim-review-dispatch`; an allowed claim persists `used += 1` before dispatch. The initial cap is 5. Per-story dispatches, non-reviewer dispatches, and any non-pursuing state are unaffected. The hooks do not change `code-review` behavior; they only decide whether the already-planned code-reviewer dispatch may proceed.
 
-At the cap, the hook denies the next dispatch and the AI must ask the user whether to **마무리** or **계속**. Renewal is for another REQUEST_CHANGES round or an absent/failed reviewer submission; it never turns COMMENT or APPROVE into a terminal re-review. “마무리” cannot waive an unresolved item; when the gate fails it means stop incomplete. To continue, the orchestrator presents this command and the **user** runs it — in their terminal, or by prefixing it with `!` in the prompt:
+At the cap, `claim-review-dispatch` denies the next dispatch AND parks the pursuit in `phase=renewal-required` (`active=false`) — a named gate, not the `pursuing` state. This parking is the fix for the old wedge: from `pursuing`, every prose report-and-stop while waiting on the user counted as a no-progress Stop, so the loop spun to the `max_iterations` cap (`budget_limited`) and demanded a SECOND user-only command just to undo a watchdog that never should have fired. In `renewal-required` the Stop hook allows the turn to end and counts nothing. Present the user the two exits — continue or finish — and let the turn end; do not narrate in a loop.
+
+Renewal is for another REQUEST_CHANGES round or an absent/failed reviewer submission; it never turns COMMENT or APPROVE into a terminal re-review. "마무리" cannot waive an unresolved item; when the gate fails it means stop incomplete. To continue, the orchestrator presents this command and the **user** runs it — in their terminal, or by prefixing it with `!` in the prompt:
 
 ```
 bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts approve-review-dispatch-renewal
 ```
 
-A `PreToolUse` guard denies this command on the orchestrator's own Bash path on both platforms, so "only after explicit user approval" is enforced by the harness rather than by the orchestrator's restraint. Each approval adds `cap += 5`; the hook alone calls `claim-review-dispatch`; the orchestrator must never edit the counters itself.
+Renewal adds `cap += 5` AND restores `phase=pursuing`/`active=true`, so the loop resumes and can run the review the renewal was granted for. To finish instead, the user runs `force-complete` (see below). A `PreToolUse` guard denies both commands on the orchestrator's own Bash path on both platforms, so "only after explicit user approval" is enforced by the harness rather than by the orchestrator's restraint. The hook alone calls `claim-review-dispatch`; the orchestrator must never edit the counters itself.
 
 The routing table above applies at every round. A reviewer-only retry consumes the same budget as a post-repair review; a retry never becomes a repair assignment merely because the budget is low. COMMENT and APPROVE deny any terminal re-review request, including after user budget renewal.
 
@@ -240,7 +242,7 @@ On either condition: run `set-blocked --reason "<blocker>"`, report the blocker 
 
 ### Force-complete: the user's escape hatch, not yours
 
-When a pursuit is genuinely stuck — `blocked`, `budget_limited` with no useful recovery, or otherwise never satisfying the two-lane gate above — the user (never you) may force it to `phase=complete` directly:
+When a pursuit is genuinely stuck — `blocked`, `budget_limited` with no useful recovery, parked in `renewal-required` where the user chooses to finish rather than renew, or otherwise never satisfying the two-lane gate above — the user (never you) may force it to `phase=complete` directly:
 
 ```
 bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts force-complete --reason '<why this is being force-completed>'

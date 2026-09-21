@@ -21,6 +21,7 @@
  *   set --phase <phase> [--target <text>]
  *   advance-phase <phase>
  *   inc-cycle
+ *   await-user
  *   complete
  *   get
  */
@@ -429,6 +430,10 @@ function mergeWriteUnlocked(sessionId: string, next: Partial<ChainState>): QaSta
 				: DEFAULT_MAX_CYCLES,
 		target: next.target ?? prior.target ?? "",
 		started_at: prior.started_at ?? seedStartedAt(),
+		// Recomputed every write: true only when THIS write carried awaiting_user, so
+		// any later progress write auto-clears the human-gate pause (mirrors prometheus'
+		// `set --await-user` and explain-diff's grade clearing awaiting_answer).
+		awaiting_user: next.awaiting_user === true,
 	};
 	const chain: QaStateSeed = { ...prior, ...partial };
 	for (const [key, value] of Object.entries(next)) {
@@ -832,6 +837,19 @@ export function setVerdict(sessionId: string, verdict: string): void {
 	});
 }
 
+/**
+ * Marks a legitimate pause at a human-decision gate: the model posed a plain-text
+ * question the user must answer (e.g. whether to waive a cell) and is about to yield
+ * the turn. The Stop gate then allows the turn to end WITHOUT a verdict, and the next
+ * progress write auto-clears the flag. Refuses when no live QA cycle exists — a pause
+ * is meaningless without an in-flight verification.
+ */
+export function setAwaitingUser(sessionId: string): void {
+	const prior = readPrior(sessionId);
+	if (prior.active !== true) throw new Error("await-user: refused — no active QA cycle");
+	mergeWrite(sessionId, { awaiting_user: true });
+}
+
 export function waiveCell(sessionId: string, opts: { story: string; cls: number; sub?: string; reason: string }): void {
 	const selector = validateCellSelector(opts.story, opts.cls, opts.sub);
 	const reason = nonEmpty(opts.reason, "reason");
@@ -875,6 +893,7 @@ export function startQa(sessionId: string, target: string): void {
 		const reset: QaStateSeed = {
 			...prior,
 			active: true,
+			awaiting_user: false,
 			phase: "PRE-FLIGHT",
 			phase_max: 0,
 			cycle: 0,
@@ -1040,6 +1059,7 @@ const ROSTER: CliCommand[] = [
 	},
 	{ name: "record-run-check", authority: "ai", effect: "records one of the three per-run checks" },
 	{ name: "set-verdict", authority: "ai", effect: "persists the cycle verdict" },
+	{ name: "await-user", authority: "ai", effect: "pauses at a human-decision gate; Stop-allowed, auto-cleared next write" },
 	{ name: "start", authority: "ai", effect: "creates or re-enters the guarded state for a target" },
 	{ name: "set-acceptance", authority: "ai", effect: "records the acceptance criteria array" },
 	{
@@ -1152,6 +1172,8 @@ function main(): void {
 					process.exit(1);
 				}
 				setVerdict(sessionId, verdict);
+			} else if (subcommand === "await-user") {
+				setAwaitingUser(sessionId);
 			} else if (subcommand === "start") {
 				startQa(sessionId, requiredArg(args, "target"));
 			} else if (subcommand === "set-acceptance") {

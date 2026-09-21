@@ -189,9 +189,24 @@ test_jq_absent_allows() {
     assert_allow "$out" "$rc" "jq absent"
 }
 
+test_renewal_required_keeps_denying_without_claim() {
+    local out rc=0 state_file
+    state_file="$OMT_DIR/ultragoal-state-$OMT_SESSION_ID.json"
+    # Parked after budget exhaustion: active:false, phase renewal-required, used==cap.
+    # The folded `get` reads this as null, so the pursuing gate never claims — the
+    # dispatch must still be denied here until the user renews or force-completes.
+    printf '%s' '{"active":false,"phase":"renewal-required","iteration":3,"max_iterations":10,"review_dispatch_used":5,"review_dispatch_cap":5,"started_at":"2026-01-01T00:00:00","last_touched_at":"2026-01-01T00:00:00"}' > "$state_file"
+    out=$(payload "collaborationspawn_agent" "code-reviewer" | run_hook) || rc=$?
+    assert_deny "$out" "$rc" "renewal-required parked" || return 1
+    printf '%s' "$out" | grep -q 'approve-review-dispatch-renewal' || return 1
+    # Read-only deny: the exhausted counter is not mutated.
+    [ "$(jq -r '.review_dispatch_used' "$state_file")" = "5" ]
+}
+
 main() {
     run_test test_allowed_mixed_case_namespaced_claim_increments
     run_test test_sixth_denied_without_increment
+    run_test test_renewal_required_keeps_denying_without_claim
     run_test test_completion_eligible_denied
     run_test test_planning_nonreviewer_and_nontool_pass
     run_test test_malformed_state_denies_safely

@@ -156,6 +156,15 @@ export interface QaDerived {
 /** Raw state shape shared by the CLI and the Stop hook. */
 export interface QaChainState {
 	active?: boolean;
+	/**
+	 * Set true by `qa-state.ts await-user` when a plain-text question is posed at a
+	 * human-decision gate (e.g. a waive decision only the user may make); recomputed
+	 * to false by any later progress write (mergeWrite derives it from `next` on
+	 * every write). The Stop gate reads it as a legitimate pause and allows the turn
+	 * to end WITHOUT a verdict, resuming on the user's reply. It never marks
+	 * completion; only a satisfied verdict + reviewed report does.
+	 */
+	awaiting_user?: boolean;
 	phase?: QaPhase;
 	cycle?: number;
 	phase_max?: number;

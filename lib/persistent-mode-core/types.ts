@@ -115,9 +115,11 @@ export interface PrometheusState {
  * many additional SKILL-only fields (outcome, verification_surface, etc.);
  * the hook only consults this subset.
  *
- * `active === false` signals a terminal state (complete/blocked/budget_limited).
- * The active-folded helper `readGoalState` returns null for terminal states,
- * so the goal pursuit branch never re-enters a finished goal. However, the
+ * `active === false` signals a state the pursuit branch does not re-enter:
+ * terminal (complete/blocked) or a user-gated pause (budget_limited awaiting
+ * `resume-pursuit`, renewal-required awaiting `approve-review-dispatch-renewal`).
+ * The active-folded helper `readGoalState` returns null for all of them,
+ * so the goal pursuit branch never re-enters a finished or parked goal. However, the
  * baseline-todo path reads terminal states via `readGoalStateRaw` (M3): a
  * goal that has reached any terminal phase still owns the session lifecycle
  * and suppresses the baseline-todo continuation, preventing spurious re-blocks
@@ -126,10 +128,20 @@ export interface PrometheusState {
  */
 export interface GoalState {
 	active: boolean;
-	phase: "planning" | "pursuing" | "budget_limited" | "blocked" | "complete";
+	phase: "planning" | "pursuing" | "renewal-required" | "budget_limited" | "blocked" | "complete";
 	objective_verdict: "APPROVE" | "REQUEST_CHANGES" | "COMMENT" | "absent";
 	iteration: number;
 	max_iterations: number;
+	/**
+	 * Human-gate pause flag (ultragoal only). Set by `ultragoal-state.ts await-user`
+	 * when the loop posed a plain-text question the user alone can resolve (a wrong
+	 * plan/requirement, or an unsafe boundary). While true and progress-live, the
+	 * ultragoal Stop branch ALLOWS the turn to end WITHOUT counting no-progress — an
+	 * intentional yield, not completion. Cleared by any subsequent steering/progress
+	 * write (mergeWriteLocked defaults it to false) or by force-complete. Absent on
+	 * legacy states — fail closed to "not paused" (blocks/counts, as before).
+	 */
+	awaiting_user?: boolean;
 	/** Continuation-objective text (hook-consumed): the desired end state. */
 	outcome?: string;
 	/** Continuation-objective text (hook-consumed): how completion is verified. */

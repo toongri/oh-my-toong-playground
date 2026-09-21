@@ -33,6 +33,8 @@
  *       [--blocked-stop ..] [--plan-path ..] [--resume-summary ..]
  *       [--completion-evidence p1,p2] [--codex-goal-objective <text>]
  *   resume-pursuit                            (user-only recovery from budget_limited)
+ *   await-user                                (orchestrator; Stop-allowed human-gate pause,
+ *                                          no no-progress counting — see setAwaitingUser below)
  *   force-complete --reason <text>       (user-only escape hatch: forces phase=complete
  *                                          from any non-complete phase, bypassing every
  *                                          completion gate — see forceComplete below)
@@ -77,7 +79,13 @@ import {
 import { renderHelp, type CliCommand } from "@lib/cli-help";
 import { deliverableRefusalBody } from "@lib/deliverable-refusal";
 
-export type GoalPhase = "planning" | "pursuing" | "budget_limited" | "blocked" | "complete";
+export type GoalPhase =
+	| "planning"
+	| "pursuing"
+	| "renewal-required"
+	| "budget_limited"
+	| "blocked"
+	| "complete";
 export type ObjectiveVerdict = "APPROVE" | "REQUEST_CHANGES" | "COMMENT" | "absent";
 export type StoryStatus = "unconfirmed" | "confirmed" | "retired";
 
@@ -163,6 +171,14 @@ export interface GoalState {
 	plan_path: string;
 	resume_summary: string;
 	budget_limit_notified: boolean;
+	/**
+	 * Human-gate pause flag. Set true ONLY by `await-user` when the loop needs the
+	 * user to resolve a wrong plan/requirement (or an unsafe boundary). The Stop
+	 * hook reads it as a legitimate pause: the turn may end without counting
+	 * no-progress. Ephemeral — mergeWriteLocked defaults it to false, so ANY
+	 * subsequent steering/progress write clears it; force-complete also clears it.
+	 */
+	awaiting_user?: boolean;
 	blocked_reason: string;
 	completion_evidence_paths: string[];
 	/** Present-but-unused placeholder; no migration logic. */
@@ -342,6 +358,11 @@ function mergeWriteLocked(sessionId: string, stateFilePath: string, next: Partia
 		plan_path: next.plan_path ?? prior.plan_path ?? "",
 		resume_summary: normalize(next.resume_summary ?? prior.resume_summary ?? ""),
 		budget_limit_notified: next.budget_limit_notified ?? prior.budget_limit_notified ?? false,
+		// Ephemeral human-gate pause: DEFAULT to false (not `?? prior`), so every
+		// ordinary steering/progress write clears it and only the explicit `await-user`
+		// write (which passes awaiting_user:true) can set it. This is the single
+		// clear-point that guarantees a pause never lingers past the AI resuming work.
+		awaiting_user: next.awaiting_user ?? false,
 		blocked_reason: next.blocked_reason ?? prior.blocked_reason ?? "",
 		completion_evidence_paths:
 			next.completion_evidence_paths ?? prior.completion_evidence_paths ?? [],
@@ -405,7 +426,7 @@ function parseClaimableState(raw: string): Partial<GoalState> | null {
 	try {
 		const state: unknown = JSON.parse(raw);
 		if (!isRecord(state)) return null;
-		const phases = ["planning", "pursuing", "budget_limited", "blocked", "complete"] as const;
+		const phases = ["planning", "pursuing", "renewal-required", "budget_limited", "blocked", "complete"] as const;
 		if (
 			typeof state.active !== "boolean" ||
 			!isOneOf(state.phase, phases) ||
@@ -451,6 +472,7 @@ export function readGoalStateRaw(sessionId: string): GoalState | null {
 		const VALID_PHASES: string[] = [
 			"planning",
 			"pursuing",
+			"renewal-required",
 			"budget_limited",
 			"blocked",
 			"complete",
@@ -584,7 +606,7 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 	if (!isOneOf(opts.phase, SETTABLE_PHASES)) {
 		throw new Error(
 			`set: phase must be one of ${SETTABLE_PHASES.join("|")} (got "${opts.phase}"). ` +
-				`complete is request-complete-only; budget_limited/blocked are system-only.`,
+				`complete is request-complete-only; renewal-required/budget_limited/blocked are system-only.`,
 		);
 	}
 	if (opts.non_goals !== undefined) {
@@ -711,12 +733,25 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 				// leaving ordinary merge writes' preservation behavior unchanged.
 				next.forced_complete = undefined;
 				next.forced_reason = undefined;
-				// A terminal prior state can remain on disk for the same session. Its review
-				// dispatch budget and approval hash belong to the completed/blocked pursuit,
-				// never to the fresh one being planned now.
-				next.review_dispatch_used = 0;
-				next.review_dispatch_cap = DEFAULT_REVIEW_DISPATCH_CAP;
-				next.approved_review_artifact_sha256 = "";
+				// The review-dispatch budget is a USER-GATED resource: once a pursuit exhausts it
+				// (used >= cap) it parks in `renewal-required`, whose only sanctioned exits are the
+				// user-only `approve-review-dispatch-renewal` (+5) and `force-complete`. A re-plan of
+				// that SAME, non-terminal objective must NOT silently refill the budget — that would
+				// hand the orchestrator five fresh dispatches with no user action, escaping the gate
+				// (directly, or via a `renewal-required` → `set-blocked` → re-plan hop, since
+				// `set-blocked` carries the counters forward). So refill only when the prior budget
+				// was NOT exhausted, or the prior pursuit actually completed (a genuinely new
+				// objective); a fresh seed has no prior counters and refills normally.
+				const priorBudgetExhausted =
+					prior.phase !== "complete" &&
+					validNonNegativeInteger(prior.review_dispatch_used) &&
+					validNonNegativeInteger(prior.review_dispatch_cap) &&
+					prior.review_dispatch_used >= prior.review_dispatch_cap;
+				if (!priorBudgetExhausted) {
+					next.review_dispatch_used = 0;
+					next.review_dispatch_cap = DEFAULT_REVIEW_DISPATCH_CAP;
+					next.approved_review_artifact_sha256 = "";
+				}
 			}
 			mergeWriteLocked(sessionId, stateFilePath, next);
 		});
@@ -779,7 +814,7 @@ export function resumePursuit(sessionId: string): void {
 
 /**
  * User-only escape hatch: forcibly completes a stuck ultragoal from ANY
- * non-terminal-complete phase (planning/pursuing/budget_limited/blocked),
+ * non-terminal-complete phase (planning/pursuing/renewal-required/budget_limited/blocked),
  * bypassing every gate `requestComplete` enforces — no verdict check, no
  * per-story artifact check, no code-review lane, no completion-evidence check.
  * That bypass is the entire point of this command; it exists only because the
@@ -818,6 +853,34 @@ export function forceComplete(sessionId: string, reason: string): void {
 			forced_complete: true,
 			forced_reason: normalize(reason),
 		});
+	});
+}
+
+/**
+ * Orchestrator-usable human-gate pause: marks the live pursuit as awaiting a
+ * user decision the loop cannot make itself (a wrong plan/requirement, or an
+ * unsafe boundary). Sets `awaiting_user=true` while STAYING in `pursuing`/`active`
+ * — this is a temporary yield, not `set-blocked` (terminal) nor completion. The
+ * Stop hook then allows the turn to end without counting no-progress. The flag is
+ * ephemeral: the next steering/progress write (mergeWriteLocked defaults it to
+ * false) or force-complete clears it, so the pause never outlives the resume.
+ *
+ * Refuses unless the pursuit is live (`active` and `phase=pursuing`) — pausing a
+ * non-pursuing state is meaningless and would wedge nothing useful.
+ */
+export function setAwaitingUser(sessionId: string): void {
+	const stateFilePath = resolveStatePath(sessionId);
+	withStateLock(stateFilePath, () => {
+		const raw = readFileOrNull(stateFilePath);
+		if (raw === null) throw new Error("await-user: refused — state file is absent");
+		const prior = parseClaimableState(raw);
+		if (prior === null) throw new Error("await-user: refused — state is corrupt or invalid");
+		if (prior.active !== true || prior.phase !== "pursuing") {
+			throw new Error(
+				`await-user: refused — a live pursuit is required (active pursuing; got active=${String(prior.active)}, phase="${String(prior.phase)}")`,
+			);
+		}
+		mergeWriteLocked(sessionId, stateFilePath, { awaiting_user: true });
 	});
 }
 
@@ -1853,7 +1916,23 @@ export function claimReviewDispatch(sessionId: string): ReviewDispatchClaim {
 				const result = getReviewResult(sessionId);
 				if (result.verdict === "APPROVE" || result.verdict === "COMMENT") return { allowed: false, reason: "completion_eligible", used, cap };
 			}
-			if (used >= cap) return { allowed: false, reason: "budget_exhausted", used, cap };
+			if (used >= cap) {
+				// Park the pursuit in an explicit, named gate instead of leaving it in
+				// `pursuing` where the Stop hook would spin the no-progress counter while
+				// the AI can only wait for a user-only action. `active:false` makes the
+				// Stop branch fall through (allow stop, no counting). The only exits that GRANT
+				// MORE REVIEW BUDGET are the user-only `approve-review-dispatch-renewal`
+				// (→ pursuing, cap+5) and `force-complete` (ends the pursuit). A re-plan
+				// (`set --phase planning`) may still leave this phase to fix a wrong plan — that
+				// path is deliberately preserved — but it keeps the exhausted counters
+				// (setGoalState), so it grants NO new dispatches: the next claim re-parks here
+				// until the user acts. The budget gate is therefore structural.
+				mergeWriteLocked(sessionId, stateFilePath, {
+					phase: "renewal-required",
+					active: false,
+				});
+				return { allowed: false, reason: "budget_exhausted", used, cap };
+			}
 
 
 			const state = mergeWriteLocked(sessionId, stateFilePath, {
@@ -1872,12 +1951,15 @@ export function claimReviewDispatch(sessionId: string): ReviewDispatchClaim {
 }
 
 /**
- * User-authorized renewal: extends the cap under the same lock, and hashes the
- * current conventional artifact when a valid one exists. An absent or invalid
- * artifact does NOT block renewal — five dispatches can all die before writing
- * any artifact, and renewal is the only in-band recovery from that cap
- * exhaustion (the hash is simply left untouched; the claim-side
- * completion-eligible deny only ever fires on a valid eligible artifact).
+ * User-authorized renewal: extends the cap by five under the same lock, restores
+ * `phase=pursuing`/`active=true` (recovering the `renewal-required` gate a
+ * budget-exhausted claim parked), and hashes the current conventional artifact
+ * when a valid one exists. Accepted from a live `pursuing` loop or from
+ * `renewal-required`; refused from any other phase. An absent or invalid artifact
+ * does NOT block renewal — five dispatches can all die before writing any
+ * artifact, and renewal is the only in-band recovery from that cap exhaustion
+ * (the hash is simply left untouched; the claim-side completion-eligible deny only
+ * ever fires on a valid eligible artifact).
  */
 export function approveReviewDispatchRenewal(sessionId: string): ReviewDispatchClaim {
 	const stateFilePath = resolveStatePath(sessionId);
@@ -1891,10 +1973,14 @@ export function approveReviewDispatchRenewal(sessionId: string): ReviewDispatchC
 			}
 			const prior = parseClaimableState(rawState);
 			if (prior === null) return { allowed: false, reason: "failure", used: 0, cap: 0 };
-			// Renewal is only meaningful for an active review loop. The caller's
-			// authorization is advisory while it waits for this lock, so re-check
-			// the live state before extending the cap or recording an artifact hash.
-			if (!prior.active || prior.phase !== "pursuing") {
+			// Renewal is meaningful in exactly two states: a live `pursuing` loop
+			// (proactive top-up), or the `renewal-required` gate a budget-exhausted
+			// claim parked (the in-band recovery). Any other phase — planning,
+			// budget_limited, blocked, complete — refuses. The caller's authorization
+			// is advisory while it waits for this lock, so re-check the live state.
+			const canRenew =
+				(prior.active === true && prior.phase === "pursuing") || prior.phase === "renewal-required";
+			if (!canRenew) {
 				return { allowed: false, reason: "failure", used: 0, cap: 0 };
 			}
 			const used = validNonNegativeInteger(prior.review_dispatch_used)
@@ -1903,7 +1989,13 @@ export function approveReviewDispatchRenewal(sessionId: string): ReviewDispatchC
 			const cap = validNonNegativeInteger(prior.review_dispatch_cap)
 				? prior.review_dispatch_cap
 				: DEFAULT_REVIEW_DISPATCH_CAP;
+			// Restore the pursuit alongside the cap bump: renewing FROM renewal-required
+			// must re-arm `pursuing`/`active` so the loop resumes and can dispatch the
+			// review the renewal was granted for. Renewing from `pursuing` re-writes the
+			// same values (no-op).
 			const state = mergeWriteLocked(sessionId, stateFilePath, {
+				phase: "pursuing",
+				active: true,
 				review_dispatch_cap: cap + DEFAULT_REVIEW_DISPATCH_CAP,
 				...(reviewed === null ? {} : { approved_review_artifact_sha256: sha256(reviewed.raw) }),
 			});
@@ -2512,7 +2604,12 @@ const ROSTER: CliCommand[] = [
 	{
 		name: "approve-review-dispatch-renewal",
 		authority: "user",
-		effect: "adds 5 to the review-dispatch cap",
+		effect: "adds 5 to the review-dispatch cap and resumes a renewal-required pursuit",
+	},
+	{
+		name: "await-user",
+		authority: "ai",
+		effect: "marks the pursuit awaiting a user decision (wrong plan/requirement); Stop-allowed pause, no no-progress counting",
 	},
 	{
 		name: "dismiss-review-finding",
@@ -2760,6 +2857,8 @@ function main(): void {
 			setVerdict(sessionId, v);
 		} else if (subcommand === "resume-pursuit") {
 			resumePursuit(sessionId);
+		} else if (subcommand === "await-user") {
+			setAwaitingUser(sessionId);
 		} else if (subcommand === "force-complete") {
 			forceComplete(sessionId, strFlagOrBlank(args["reason"]));
 		} else if (subcommand === "set-blocked") {

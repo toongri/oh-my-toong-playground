@@ -1406,6 +1406,67 @@ describe("makeDecision", () => {
 			expect(after.active).toBe(false);
 		});
 
+		it("awaiting_user=true allows stop without counting no-progress or writing state", async () => {
+			await writeUltragoal({
+				active: true,
+				phase: "pursuing",
+				awaiting_user: true,
+				iteration: 4,
+				max_iterations: 10,
+				outcome: "objective",
+			});
+			const result = makeDecision(createContext());
+			// Human-gate pause → turn may end; the ultragoal branch does not block.
+			expect(result).toEqual({ continue: true });
+			const after = await readUltragoalFile();
+			// The counter did NOT advance and the pause was not consumed.
+			expect(after.iteration).toBe(4);
+			expect(after.phase).toBe("pursuing");
+			expect(after.awaiting_user).toBe(true);
+		});
+
+		it("awaiting_user=true wins over same-turn progress (explicit pause is honored)", async () => {
+			const head = execFileSync("git", ["rev-parse", "HEAD"], {
+				cwd: projectRoot,
+				encoding: "utf8",
+			}).trim();
+			await writeUltragoal({
+				active: true,
+				phase: "pursuing",
+				awaiting_user: true,
+				iteration: 4,
+				max_iterations: 10,
+				last_seen_head: head,
+				outcome: "objective",
+			});
+			// Same-turn progress: a diff-carrying commit that would otherwise reset the counter.
+			await writeFile(join(projectRoot, "progress-pause"), "progress-pause");
+			execFileSync("git", ["add", "progress-pause"], { cwd: projectRoot });
+			execFileSync("git", ["commit", "-qm", "progress-pause"], { cwd: projectRoot });
+			const result = makeDecision(createContext());
+			// The explicit human-gate pause wins; the turn may end and the pause is not consumed.
+			expect(result).toEqual({ continue: true });
+			const after = await readUltragoalFile();
+			expect(after.awaiting_user).toBe(true);
+			expect(after.phase).toBe("pursuing");
+			expect(after.iteration).toBe(4);
+		});
+
+		it("renewal-required (active:false) allows stop without counting no-progress", async () => {
+			await writeUltragoal({
+				active: false,
+				phase: "renewal-required",
+				iteration: 7,
+				max_iterations: 10,
+				outcome: "objective",
+			});
+			const result = makeDecision(createContext());
+			expect(result).toEqual({ continue: true });
+			const after = await readUltragoalFile();
+			expect(after.iteration).toBe(7);
+			expect(after.phase).toBe("renewal-required");
+		});
+
 		it("diff commit resets no-progress counter", async () => {
 			const head = execFileSync("git", ["rev-parse", "HEAD"], {
 				cwd: projectRoot,
@@ -2968,6 +3029,35 @@ describe("QA Stop-gate decision table", () => {
 		// when the chain legitimately completes (allow), not by a yield token.
 		expect(makeDecision(context())).toEqual({ continue: true });
 		expect(fs.existsSync(join(stateDir, `block-count-qa-${sid}`))).toBe(false);
+	});
+
+	it("qa awaiting_user pause: a live human-gate yield allows stop and resets the counter", async () => {
+		// An incomplete chain (broken cell) would normally block. With awaiting_user set
+		// at a human gate (e.g. a waive decision only the user may make) and the cycle
+		// progress-live, the Stop gate yields WITHOUT spinning the no-progress counter —
+		// the same escape the review-budget renewal-required park needs.
+		const state = completeQa("APPROVE");
+		(state.cells as Array<Record<string, unknown>>)[0].status = null;
+		state.awaiting_user = true;
+		state.last_touched_at = new Date().toISOString();
+		writeQaState(state);
+		await writeFile(join(stateDir, `block-count-qa-${sid}`), "3");
+		expect(makeDecision(context())).toEqual({ continue: true });
+		expect(fs.existsSync(join(stateDir, `block-count-qa-${sid}`))).toBe(false);
+	});
+
+	it("qa awaiting_user pause: a progress-stale pause still blocks (no permanent escape)", () => {
+		// An abandoned pause (awaiting_user=true, idle past TTL) must not open the gate
+		// forever — it falls through to the ordinary block branch, and only the
+		// block-count cap eventually releases a genuinely wedged session.
+		const state = completeQa("APPROVE");
+		(state.cells as Array<Record<string, unknown>>)[0].status = null;
+		state.awaiting_user = true;
+		state.last_touched_at = "2020-01-01T00:00:00+00:00";
+		writeQaState(state);
+		const result = makeDecision(context());
+		expect(result.decision).toBe("block");
+		expect(result.reason).toContain("qa");
 	});
 
 	for (const verdict of [null, "APPROVE", "COMMENT", "REQUEST_CHANGES"] as const) {
