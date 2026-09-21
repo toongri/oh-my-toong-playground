@@ -535,7 +535,7 @@ describe("settings.mcps 배관", () => {
 		);
 		const argvPath = path.join(tmpDir, "codex-argv.txt");
 		const stubPath = path.join(binDir, "codex");
-		fs.writeFileSync(stubPath, '#!/bin/sh\nprintf "%s\\n" "$@" > "$STUB_CODEX_ARGV"\n', "utf8");
+		fs.writeFileSync(stubPath, '#!/bin/sh\nprintf "%s\\n" "$@" > "$STUB_CODEX_ARGV.tmp" && mv "$STUB_CODEX_ARGV.tmp" "$STUB_CODEX_ARGV"\n', "utf8");
 		fs.chmodSync(stubPath, 0o755);
 		const env = {
 			...process.env,
