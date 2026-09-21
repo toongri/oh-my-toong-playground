@@ -81,9 +81,10 @@ export function readGoalState(sessionId: string): GoalState | null {
 }
 
 // Active-agnostic probe: returns the parsed goal-state even when active=false
-// (terminal phases complete/blocked/budget_limited), so the hook can suppress
-// the baseline-todo branch for ANY goal phase. Null on absent or malformed;
-// never throws. Distinct from readGoalState, which folds active:false -> null.
+// (terminal complete/blocked, or the parked budget_limited/renewal-required
+// pauses), so the hook can suppress the baseline-todo branch for ANY goal phase.
+// Null on absent or malformed; never throws. Distinct from readGoalState, which
+// folds active:false -> null.
 export function readGoalStateRaw(sessionId: string): GoalState | null {
 	const path = join(getOmtDir(), `goal-state-${sessionId}.json`);
 	const content = readFileOrNull(path);
@@ -95,7 +96,7 @@ export function readGoalStateRaw(sessionId: string): GoalState | null {
 		// never let garbage drive the loop (cap bypass) or suppress baseline-todo. Validate
 		// only the load-bearing fields the decision tree branches/arithmetic on; a VALID
 		// terminal state (active:false + well-formed fields) still returns so M3 suppression holds.
-		const phases = ["planning", "pursuing", "budget_limited", "blocked", "complete"];
+		const phases = ["planning", "pursuing", "renewal-required", "budget_limited", "blocked", "complete"];
 		if (
 			typeof s.active !== "boolean" ||
 			!phases.includes(s.phase) ||
@@ -171,9 +172,10 @@ export function readUltragoalState(sessionId: string): UltragoalState | null {
 }
 
 // Active-agnostic probe: returns the parsed ultragoal-state even when active=false
-// (terminal phases complete/blocked/budget_limited), so the hook can suppress
-// the baseline-todo branch for ANY ultragoal phase. Null on absent or malformed;
-// never throws. Distinct from readUltragoalState, which folds active:false -> null.
+// (terminal complete/blocked, or the parked budget_limited/renewal-required
+// pauses), so the hook can suppress the baseline-todo branch for ANY ultragoal
+// phase. Null on absent or malformed; never throws. Distinct from
+// readUltragoalState, which folds active:false -> null.
 // Mirrors readGoalStateRaw (see its comment for the schema-guard rationale).
 export function readUltragoalStateRaw(sessionId: string): UltragoalState | null {
 	const path = join(getOmtDir(), `ultragoal-state-${sessionId}.json`);
@@ -182,7 +184,7 @@ export function readUltragoalStateRaw(sessionId: string): UltragoalState | null 
 
 	try {
 		const s: UltragoalState = JSON.parse(content);
-		const phases = ["planning", "pursuing", "budget_limited", "blocked", "complete"];
+		const phases = ["planning", "pursuing", "renewal-required", "budget_limited", "blocked", "complete"];
 		if (
 			typeof s.active !== "boolean" ||
 			!phases.includes(s.phase) ||

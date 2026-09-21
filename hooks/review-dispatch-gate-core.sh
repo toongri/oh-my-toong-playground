@@ -68,7 +68,7 @@ review_dispatch_gate_core_run() {
     # pursuing are intentionally no-ops: they must not consume review budget.
     # A present-but-malformed state is different from no state and fails closed.
     if ! printf '%s' "$state_out" | jq -e '. != null and .active == true and .phase == "pursuing"' > /dev/null 2>&1; then
-        if [ -n "$omt_dir" ] && [ -f "${omt_dir}/ultragoal-state-${sid}.json" ] && ! jq -e 'type == "object" and (.active == false or .phase == "planning" or .phase == "budget_limited" or .phase == "blocked" or .phase == "complete")' "${omt_dir}/ultragoal-state-${sid}.json" > /dev/null 2>&1; then
+        if [ -n "$omt_dir" ] && [ -f "${omt_dir}/ultragoal-state-${sid}.json" ] && ! jq -e 'type == "object" and (.active == false or .phase == "planning" or .phase == "renewal-required" or .phase == "budget_limited" or .phase == "blocked" or .phase == "complete")' "${omt_dir}/ultragoal-state-${sid}.json" > /dev/null 2>&1; then
             _rdg_deny '코드 리뷰 dispatch 상태가 손상되었습니다. 안전하게 중단하고 상태를 확인하세요.'
         fi
         return 0
@@ -89,7 +89,7 @@ review_dispatch_gate_core_run() {
     reason=$(printf '%s' "$claim_out" | jq -r '.reason // "failure"' 2>/dev/null) || reason="failure"
     case "$reason" in
         budget_exhausted)
-            _rdg_deny '코드 리뷰 예산이 소진되었습니다. 사용자에게 마무리할지 계속할지 물으세요. 계속하기로 하면 approve-review-dispatch-renewal 명령어를 제시하고 사용자가 직접 실행하도록 요청하세요 (AI 실행은 차단됩니다).'
+            _rdg_deny '코드 리뷰 예산이 소진되어 pursuit가 renewal-required 상태로 전환됐습니다(정지 허용, no-progress 미집계). 사용자에게 계속할지 마무리할지 물으세요. 계속하려면 approve-review-dispatch-renewal 명령어를, 강제로 마무리하려면 force-complete 명령어를 제시하고 사용자가 직접 실행하도록 요청하세요 (두 명령 모두 AI 실행은 차단됩니다).'
             ;;
         completion_eligible)
             _rdg_deny '현재 코드 리뷰는 완료 가능 상태입니다. 추가 리뷰를 예약하지 말고 get-review-result로 최종 결과를 확인한 뒤 request-complete를 진행하세요.'

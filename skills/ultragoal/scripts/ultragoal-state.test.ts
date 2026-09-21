@@ -19,6 +19,7 @@ import {
 	setGoalState,
 	setBudgetLimited,
 	resumePursuit,
+	setAwaitingUser,
 	forceComplete,
 	setBlocked,
 	requestComplete,
@@ -218,6 +219,49 @@ describe("review dispatch budget", () => {
 		const approved = runCliCaptured("approve-review-dispatch-renewal");
 		expect(approved.status).toBe(0);
 		expect(JSON.parse(approved.stdout)).toMatchObject({ allowed: true, cap: 10 });
+	});
+
+	test("budget exhaustion parks the pursuit in renewal-required (active:false)", () => {
+		for (let used = 1; used <= 5; used += 1) claimReviewDispatch(S);
+		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "budget_exhausted", used: 5, cap: 5 });
+		const parked = rawState();
+		expect(parked.phase).toBe("renewal-required");
+		expect(parked.active).toBe(false);
+	});
+
+	test("renewal recovers a renewal-required pursuit to pursuing and adds five", () => {
+		for (let used = 1; used <= 6; used += 1) claimReviewDispatch(S);
+		expect(rawState().phase).toBe("renewal-required");
+		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: true, reason: "allowed", used: 5, cap: 10 });
+		const resumed = rawState();
+		expect(resumed.phase).toBe("pursuing");
+		expect(resumed.active).toBe(true);
+		// The renewed slot is now usable — the review the renewal was granted for can run.
+		expect(claimReviewDispatch(S)).toMatchObject({ allowed: true, reason: "allowed", used: 6, cap: 10 });
+	});
+
+	test("force-complete escapes a renewal-required pursuit", () => {
+		for (let used = 1; used <= 6; used += 1) claimReviewDispatch(S);
+		expect(rawState().phase).toBe("renewal-required");
+		forceComplete(S, "user decided to finish");
+		const done = rawState();
+		expect(done.phase).toBe("complete");
+		expect(done.forced_complete).toBe(true);
+	});
+
+	test("await-user marks a live pursuit awaiting; the next steering write clears it", () => {
+		setAwaitingUser(S);
+		expect(rawState().awaiting_user).toBe(true);
+		// Ephemeral: any ordinary steering/progress write resets awaiting_user to false.
+		setVerdict(S, "REQUEST_CHANGES");
+		expect(rawState().awaiting_user).toBe(false);
+	});
+
+	test("await-user refuses when the pursuit is not live", () => {
+		setGoalState(S, { phase: "planning" });
+		expect(() => setAwaitingUser(S)).toThrow(/live pursuit is required/);
+		setBudgetLimited(S);
+		expect(() => setAwaitingUser(S)).toThrow(/live pursuit is required/);
 	});
 });
 

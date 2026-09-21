@@ -504,60 +504,79 @@ export function makeDecision(context: DecisionContext): HookOutput {
 					? { last_seen_stories_digest: progress.newFingerprint.last_seen_stories_digest }
 					: {}),
 			};
-			if (progress.progressed) {
-				const message = buildUltragoalContinuationMessage(ultragoal, 0);
+			// Human-gate pause (set via `await-user`): the loop posed a question only the
+			// user can resolve (a wrong plan/requirement, or an unsafe boundary) and no new
+			// progress has landed. ALLOW the turn to end WITHOUT counting no-progress and
+			// WITHOUT re-prompting — an intentional yield, not completion. This is the ONE
+			// Stop-allowed pause ultragoal has; every other non-pursuing park (renewal-required,
+			// budget_limited) reaches the fall-through below via active:false. No isProgressLive
+			// guard: allowing Stop is already the non-wedging outcome, so a stale flag cannot
+			// wedge, and the flag is ephemeral — any steering/progress write clears it
+			// (mergeWriteLocked defaults awaiting_user → false), as does force-complete.
+			const humanGatePause = ultragoal.awaiting_user === true && !progress.progressed;
+			if (!humanGatePause) {
+				if (progress.progressed) {
+					const message = buildUltragoalContinuationMessage(ultragoal, 0);
+					try {
+						// Clear any human-gate pause too: observed progress means the user
+						// answered and the loop resumed, so the yield is over.
+						updateUltragoalState(sessionId, { iteration: 0, awaiting_user: false, ...persistedFingerprint });
+						cleanupBlockCountFiles(stateDir, attemptId);
+						return formatBlockOutput(message);
+					} catch {
+						/* fall through to the write-failure escape below */
+					}
+				}
+				// Budget remains. verdict in {APPROVE, REQUEST_CHANGES, COMMENT, absent} → block +
+				// continuation + iteration++: the loop itself writes
+				// objective_verdict via set-verdict, so trusting it here would let the loop stop
+				// itself before request-complete's gate ever runs.
+				const newIteration = Math.min(ultragoal.iteration + 1, ultragoal.max_iterations);
+				if (newIteration >= ultragoal.max_iterations) {
+					const limited = { ...ultragoal, iteration: newIteration };
+					const message = buildUltragoalNoProgressLimitMessage(limited);
+					try {
+						updateUltragoalState(sessionId, {
+							...fingerprintPatch,
+							iteration: newIteration,
+							phase: "budget_limited",
+							active: false,
+							budget_limit_notified: true,
+						});
+					} catch {
+						/* M1 */
+					}
+					return formatBlockOutput(message);
+				}
+				const message = buildUltragoalContinuationMessage(ultragoal, newIteration); // build FIRST (E1)
+				let writeOk = true;
+				// M1: swallow write failure — STILL block, never degrade to continue.
 				try {
-					updateUltragoalState(sessionId, { iteration: 0, ...persistedFingerprint });
+					updateUltragoalState(sessionId, { ...fingerprintPatch, iteration: newIteration });
+				} catch {
+					writeOk = false;
+				}
+				if (writeOk) {
+					// Progress made (iteration advanced on disk) → reset the write-failure stuck-counter
+					// so a normally-progressing ultragoal NEVER spuriously escapes, no matter how long it runs.
 					cleanupBlockCountFiles(stateDir, attemptId);
 					return formatBlockOutput(message);
-				} catch {
-					/* fall through to the write-failure escape below */
 				}
-			}
-			// Budget remains. verdict in {APPROVE, REQUEST_CHANGES, COMMENT, absent} → block +
-			// continuation + iteration++: the loop itself writes
-			// objective_verdict via set-verdict, so trusting it here would let the loop stop
-			// itself before request-complete's gate ever runs.
-			const newIteration = Math.min(ultragoal.iteration + 1, ultragoal.max_iterations);
-			if (newIteration >= ultragoal.max_iterations) {
-				const limited = { ...ultragoal, iteration: newIteration };
-				const message = buildUltragoalNoProgressLimitMessage(limited);
-				try {
-					updateUltragoalState(sessionId, {
-						...fingerprintPatch,
-						iteration: newIteration,
-						phase: "budget_limited",
-						active: false,
-						budget_limit_notified: true,
-					});
-				} catch {
-					/* M1 */
+				// B-4: the write FAILED — use the shared block-count as a write-failure
+				// escape so a SUSTAINED write failure cannot block forever. Soft-escape only — never
+				// a completion claim, and it writes NOTHING to the ultragoal-state file.
+				if (getBlockCount(stateDir, attemptId) >= MAX_BLOCK_COUNT) {
+					cleanupBlockCountFiles(stateDir, attemptId);
+					return formatContinueOutput();
 				}
+				incrementBlockCount(stateDir, attemptId);
 				return formatBlockOutput(message);
 			}
-			const message = buildUltragoalContinuationMessage(ultragoal, newIteration); // build FIRST (E1)
-			let writeOk = true;
-			// M1: swallow write failure — STILL block, never degrade to continue.
-			try {
-				updateUltragoalState(sessionId, { ...fingerprintPatch, iteration: newIteration });
-			} catch {
-				writeOk = false;
-			}
-			if (writeOk) {
-				// Progress made (iteration advanced on disk) → reset the write-failure stuck-counter
-				// so a normally-progressing ultragoal NEVER spuriously escapes, no matter how long it runs.
-				cleanupBlockCountFiles(stateDir, attemptId);
-				return formatBlockOutput(message);
-			}
-			// B-4: the write FAILED — use the shared block-count as a write-failure
-			// escape so a SUSTAINED write failure cannot block forever. Soft-escape only — never
-			// a completion claim, and it writes NOTHING to the ultragoal-state file.
-			if (getBlockCount(stateDir, attemptId) >= MAX_BLOCK_COUNT) {
-				cleanupBlockCountFiles(stateDir, attemptId);
-				return formatContinueOutput();
-			}
-			incrementBlockCount(stateDir, attemptId);
-			return formatBlockOutput(message);
+			// humanGatePause → allow the turn to end. A legitimate pause is not a failure,
+			// so reset this family's write-failure block counter and fall through (no return):
+			// a bare continue here would short-circuit the deep-interview/prometheus/qa/
+			// explain-diff/skill-chain gates below, exactly as their own awaiting-pause branches avoid.
+			cleanupBlockCountFiles(stateDir, attemptId);
 		}
 		// Active non-pursuing phase OR terminal inactive: ultragoal owns its own
 		// lifecycle and neither blocks nor completes here — fall through. The GC-axis

@@ -1406,6 +1406,40 @@ describe("makeDecision", () => {
 			expect(after.active).toBe(false);
 		});
 
+		it("awaiting_user=true allows stop without counting no-progress or writing state", async () => {
+			await writeUltragoal({
+				active: true,
+				phase: "pursuing",
+				awaiting_user: true,
+				iteration: 4,
+				max_iterations: 10,
+				outcome: "objective",
+			});
+			const result = makeDecision(createContext());
+			// Human-gate pause → turn may end; the ultragoal branch does not block.
+			expect(result).toEqual({ continue: true });
+			const after = await readUltragoalFile();
+			// The counter did NOT advance and the pause was not consumed.
+			expect(after.iteration).toBe(4);
+			expect(after.phase).toBe("pursuing");
+			expect(after.awaiting_user).toBe(true);
+		});
+
+		it("renewal-required (active:false) allows stop without counting no-progress", async () => {
+			await writeUltragoal({
+				active: false,
+				phase: "renewal-required",
+				iteration: 7,
+				max_iterations: 10,
+				outcome: "objective",
+			});
+			const result = makeDecision(createContext());
+			expect(result).toEqual({ continue: true });
+			const after = await readUltragoalFile();
+			expect(after.iteration).toBe(7);
+			expect(after.phase).toBe("renewal-required");
+		});
+
 		it("diff commit resets no-progress counter", async () => {
 			const head = execFileSync("git", ["rev-parse", "HEAD"], {
 				cwd: projectRoot,
