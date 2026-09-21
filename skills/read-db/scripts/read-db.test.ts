@@ -101,12 +101,15 @@ describe("read-db.ts", () => {
 		const c = setup({ psqlOnPath: true });
 		expect(c.run(["app-prd-ro", "select 1"]).status).toBe(0);
 		const lines = callLogLines(c);
-		for (const expected of ["ARG=service=app-prd-ro", "ARG=-w", "ARG=-X", "ARG=--csv", "ARG=ON_ERROR_STOP=1", "ARG=select 1"]) {
+		for (const expected of ["ARG=-w", "ARG=-X", "ARG=--csv", "ARG=ON_ERROR_STOP=1", "ARG=select 1"]) {
 			expect(lines).toContain(expected);
 		}
-		const pgOptions = lines.find((line) => line.startsWith("PGOPTIONS="));
-		expect(pgOptions).toContain("default_transaction_read_only=on");
-		expect(pgOptions).toContain("statement_timeout=15000");
+		// 안전 옵션은 접속 파라미터로 넘긴다. PGOPTIONS 환경변수는 서비스 섹션에 options=가
+		// 있으면 libpq가 통째로 무시하므로, 읽기 전용과 시간 제한이 조용히 사라진다.
+		expect(lines).toContain(
+			"ARG=service=app-prd-ro options='-c default_transaction_read_only=on -c statement_timeout=15000 -c lock_timeout=3000'",
+		);
+		expect(lines).toContain("PGOPTIONS=");
 	});
 
 	// 접속 문자열(비밀번호 포함 가능)이 psql 인자로 들어가지 않는다.

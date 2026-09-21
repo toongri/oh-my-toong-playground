@@ -44,7 +44,8 @@ output capped at ${maxRows} rows (READ_DB_MAX_ROWS).
 
 services in ${serviceFile}:
 ${services.length > 0 ? services.map((name) => `  ${name}\n`).join("") : "  (none)\n"}
-add a service (only names ending in -ro are accepted):
+add a service (only names ending in -ro are accepted; an options= line in the
+section is not applied, because the wrapper sets its own session options):
   1. ${serviceFile}
        [<app>-<env>-ro]
        host=<host>
@@ -116,17 +117,21 @@ if (import.meta.main) {
 
 	// lazy: 결과 전체를 메모리에 받은 뒤 자른다(64MB 상한). 서버는 행 상한과 무관하게 전체
 	// 결과를 보내므로, 큰 결과는 SQL의 LIMIT으로 줄인다. 상한을 자주 넘으면 스트리밍으로 바꾼다.
+	// 안전 옵션은 접속 파라미터로 넘긴다. PGOPTIONS 환경변수로 넘기면, 서비스 섹션에
+	// options=가 하나라도 있을 때(예: search_path) libpq가 환경변수 쪽을 통째로 무시해
+	// 읽기 전용과 시간 제한이 조용히 사라진다. 명시한 접속 파라미터는 서비스 파일 값보다
+	// 우선하므로, 서비스 섹션의 options=는 이 래퍼에서 적용되지 않는다.
+	const safetyOptions = `-c default_transaction_read_only=on -c statement_timeout=${timeoutMs} -c lock_timeout=3000`;
 	const result = spawnSync(
 		findPsql(),
 		// -w: 비밀번호가 ~/.pgpass에 없으면 프롬프트로 멈추지 않고 바로 실패한다.
-		[`service=${service}`, "-w", "-X", "-A", "--csv", "-v", "ON_ERROR_STOP=1", "-P", "pager=off", "-c", statement],
+		[`service=${service} options='${safetyOptions}'`, "-w", "-X", "-A", "--csv", "-v", "ON_ERROR_STOP=1", "-P", "pager=off", "-c", statement],
 		{
 			encoding: "utf8",
 			maxBuffer: 64 * 1024 * 1024,
 			stdio: ["ignore", "pipe", "inherit"],
 			env: {
 				...process.env,
-				PGOPTIONS: `-c default_transaction_read_only=on -c statement_timeout=${timeoutMs} -c lock_timeout=3000`,
 				PGAPPNAME: "read-db",
 				PGCONNECT_TIMEOUT: "10",
 			},
