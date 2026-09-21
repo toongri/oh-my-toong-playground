@@ -733,12 +733,25 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 				// leaving ordinary merge writes' preservation behavior unchanged.
 				next.forced_complete = undefined;
 				next.forced_reason = undefined;
-				// A terminal prior state can remain on disk for the same session. Its review
-				// dispatch budget and approval hash belong to the completed/blocked pursuit,
-				// never to the fresh one being planned now.
-				next.review_dispatch_used = 0;
-				next.review_dispatch_cap = DEFAULT_REVIEW_DISPATCH_CAP;
-				next.approved_review_artifact_sha256 = "";
+				// The review-dispatch budget is a USER-GATED resource: once a pursuit exhausts it
+				// (used >= cap) it parks in `renewal-required`, whose only sanctioned exits are the
+				// user-only `approve-review-dispatch-renewal` (+5) and `force-complete`. A re-plan of
+				// that SAME, non-terminal objective must NOT silently refill the budget — that would
+				// hand the orchestrator five fresh dispatches with no user action, escaping the gate
+				// (directly, or via a `renewal-required` → `set-blocked` → re-plan hop, since
+				// `set-blocked` carries the counters forward). So refill only when the prior budget
+				// was NOT exhausted, or the prior pursuit actually completed (a genuinely new
+				// objective); a fresh seed has no prior counters and refills normally.
+				const priorBudgetExhausted =
+					prior.phase !== "complete" &&
+					validNonNegativeInteger(prior.review_dispatch_used) &&
+					validNonNegativeInteger(prior.review_dispatch_cap) &&
+					prior.review_dispatch_used >= prior.review_dispatch_cap;
+				if (!priorBudgetExhausted) {
+					next.review_dispatch_used = 0;
+					next.review_dispatch_cap = DEFAULT_REVIEW_DISPATCH_CAP;
+					next.approved_review_artifact_sha256 = "";
+				}
 			}
 			mergeWriteLocked(sessionId, stateFilePath, next);
 		});

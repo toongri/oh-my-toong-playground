@@ -249,6 +249,30 @@ describe("review dispatch budget", () => {
 		expect(done.forced_complete).toBe(true);
 	});
 
+	test("re-plan from renewal-required does not refill the exhausted review budget (gate stays structural)", () => {
+		for (let used = 1; used <= 6; used += 1) claimReviewDispatch(S);
+		expect(rawState().phase).toBe("renewal-required");
+		// The AI-usable re-plan setter must not become a third exit that hands out a fresh
+		// budget — only approve-review-dispatch-renewal / force-complete may release the gate.
+		setGoalState(S, { phase: "planning" });
+		expect(rawState().review_dispatch_used).toBe(5);
+		expect(rawState().review_dispatch_cap).toBe(5);
+		// Re-plan stays available (phase is planning), but the review gate still holds: going
+		// pursuing and claiming re-parks in renewal-required rather than granting a dispatch.
+		setGoalState(S, { phase: "pursuing" });
+		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "budget_exhausted" });
+		expect(rawState().phase).toBe("renewal-required");
+	});
+
+	test("re-plan from renewal-required via a set-blocked hop still does not refill the budget", () => {
+		for (let used = 1; used <= 6; used += 1) claimReviewDispatch(S);
+		expect(rawState().phase).toBe("renewal-required");
+		setBlocked(S, "trying to launder the exhausted budget");
+		setGoalState(S, { phase: "planning" });
+		expect(rawState().review_dispatch_used).toBe(5);
+		expect(rawState().review_dispatch_cap).toBe(5);
+	});
+
 	test("await-user marks a live pursuit awaiting; the next steering write clears it", () => {
 		setAwaitingUser(S);
 		expect(rawState().awaiting_user).toBe(true);
