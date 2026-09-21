@@ -14,6 +14,10 @@ This page covers two categories of skills. **Utility skills** support the develo
 
 The HUD displays Oh-My-Toong operational state in real time inside Claude Code's statusLine. Running `/hud setup` checks for Bun and jq, then updates the `statusLine` key in `settings.local.json` to point at the HUD script. Displayed elements include context window usage, running subagent count, Todo completion status, and the active skill name. `/hud restore` recovers the original statusLine configuration that was backed up on first setup. Because all paths are resolved via `${CLAUDE_SKILL_DIR}` self-location, the skill behaves identically whether deployed user-globally or project-locally.
 
+### read-db
+
+The skill for read-only lookups of real PostgreSQL data. Every lookup goes through the wrapper script `scripts/read-db.ts <service> "<sql>"`. The target is given only as a service name from `~/.pg_service.conf`, and libpq reads the password from `~/.pgpass`, so the connection string never appears in command arguments, environment, or output. The wrapper accepts only services whose name ends in `-ro`, opens the session with `default_transaction_read_only=on`, and allows one SELECT-family statement per call. It also sets a 15-second `statement_timeout` and caps output at 200 rows. `--list` prints the services available on the machine. Service definitions and passwords are per-machine files and never enter this repository. `psql` is installed from Homebrew `libpq` by a provision item in the root `sync.yaml`.
+
 ### E2E Drivers
 
 Choose the driver and skill together based on the surface under test. Use `agent-browser` for web pages, browser pages, and Electron desktop apps; use `agent-device` for iOS, tvOS, macOS, Android, and Vega OS TV apps. Always load the matching skill before invoking either CLI. This document does not duplicate `agent-device` CLI syntax: after loading the skill, consult the installed version's runtime help. `dogfood` is the workflow for exploratory mobile QA performed with `agent-device`.

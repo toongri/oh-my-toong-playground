@@ -52,7 +52,7 @@ oh-my-toong is an **agent central-management project**. It keeps skills, agents,
 
 ## Documentation
 
-The details of the library's skills (46) and agents (12) live under `docs/`.
+The details of the library's skills (47) and agents (12) live under `docs/`.
 
 | Doc | Contents |
 |-----|----------|
@@ -62,7 +62,7 @@ The details of the library's skills (46) and agents (12) live under `docs/`.
 | [Research](docs/skills/research.en.md) | ultraresearch · insane-browsing — saturation research engine and blocked-source browsing |
 | [Authoring/Utilities](docs/skills/authoring.en.md) | create-slides · technical-writing · technical-copywriting · humanizer · make-pr · scan-pdf-to-notes · git-master |
 | [Knowledge Graph (pins)](docs/skills/knowledge-graph-pins.en.md) | pins knowledge graph — pin-setup · record · query · audit · wrap-up |
-| [Utilities & Personal Workflows](docs/skills/utilities-personal.en.md) | agent-device · agent-browser · dogfood · hud · resume · jd · mock-interview, etc. |
+| [Utilities & Personal Workflows](docs/skills/utilities-personal.en.md) | agent-device · agent-browser · dogfood · hud · read-db · resume · jd · mock-interview, etc. |
 | [Orchestration Guide](docs/ORCHESTRATION.en.md) | deep-interview → craft-tasks → optional prometheus → ultragoal → sisyphus workflow (sisyphus is ultragoal's internal executor, not a direct route) and usage |
 | [Model Assignment](docs/model-assignment.en.md) | Per-agent model tier principles and `model-map` substitution rules |
 | [Platform YAML Configuration Deployment](docs/platform-yaml-config-deployment.en.md) | Deployment, merge, and deletion rules for platform-specific settings, hooks, and MCPs |

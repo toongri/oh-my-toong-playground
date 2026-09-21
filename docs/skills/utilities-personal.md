@@ -14,6 +14,10 @@
 
 HUD는 Claude Code의 statusLine에 Oh-My-Toong 운영 상태를 실시간으로 표시합니다. `/hud setup`을 실행하면 Bun과 jq의 설치 여부를 확인한 뒤 `settings.local.json`의 `statusLine` 키를 HUD 스크립트 경로로 업데이트합니다. 표시 항목은 컨텍스트 창 사용량, 실행 중인 서브에이전트 수, Todo 완료 상태, 현재 활성 스킬 이름입니다. `/hud restore`는 첫 설정 시 백업해 둔 원래 statusLine 설정을 복원합니다. `${CLAUDE_SKILL_DIR}` 기반의 자기 위치 참조(self-location) 덕분에 사용자 전역 또는 프로젝트 로컬 배포 모두 동일하게 동작합니다.
 
+### read-db
+
+PostgreSQL의 실제 데이터를 읽기 전용으로 조회할 때 쓰는 스킬입니다. 조회는 모두 래퍼 스크립트 `scripts/read-db.ts <service> "<sql>"`를 거칩니다. 접속 대상은 `~/.pg_service.conf`의 서비스 이름으로만 받고 비밀번호는 `~/.pgpass`에서 libpq가 직접 읽으므로, 접속 문자열이 명령 인자·환경·출력 어디에도 나타나지 않습니다. 래퍼는 이름이 `-ro`로 끝나는 서비스만 받고, 세션을 `default_transaction_read_only=on`으로 열며, 호출당 SELECT 계열 한 문장만 허용합니다. `statement_timeout` 15초와 출력 200행 상한도 래퍼가 겁니다. `--list`는 이 머신에서 조회 가능한 서비스를 출력합니다. 서비스 정의와 비밀번호는 머신별 파일이라 이 저장소에 들어가지 않습니다. `psql`은 루트 `sync.yaml`의 provision 항목이 Homebrew `libpq`로 설치합니다.
+
 ### E2E 드라이버
 
 E2E 상호작용은 대상 표면에 따라 드라이버와 스킬을 함께 선택합니다. 웹·브라우저 페이지와 Electron 데스크톱 앱에는 `agent-browser`를, iOS·tvOS·macOS·Android·Vega OS TV 앱에는 `agent-device`를 사용합니다. 두 CLI를 실행하기 전에는 항상 해당 스킬을 먼저 로드합니다. `agent-device`의 구체적인 CLI 구문은 이 문서에 복제하지 않으며, 스킬을 로드한 뒤 설치된 버전의 runtime help에서 확인합니다. `dogfood`는 모바일 앱의 탐색적 QA를 `agent-device`로 수행하는 워크플로우입니다.
