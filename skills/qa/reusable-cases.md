@@ -23,11 +23,12 @@ not a substitute for this story-level contract.
 
 At PLAN, use `listQaCases` and `getQaCase` through the QA case functions (or
 the repository `qa-cases.ts list` / `qa-cases.ts get <id>` commands) when the
-store is configured. Replay matching known cases first, then use the
-current feature map and code/spec discovery to author new paths. Always add
-new, failed, stale, or uncovered paths to the six-axis scenario plan; a case
-listing or a green replay is not boundary proof. A case failure remains a
-failure and is recorded as such; do not relabel it as expected, flaky, or pass.
+store is configured. Treat matching known cases as planning input: use their
+paths, assertions, and reset details to author the complete current-cycle
+story/cell chain, including new, failed, stale, or uncovered paths and all six
+classes. Do not execute replay during PLAN. A case listing is not boundary
+proof; a case failure remains a failure and is recorded as such, never
+relabeled as expected, flaky, or pass.
 
 Known cases are hints about an executable path, not permission to narrow the
 cycle. Preserve the six classes plus `cls1/hang-timeout` and
@@ -71,8 +72,9 @@ saving metadata never executes a runner or copies product files.
 
 ## Replaying a saved case
 
-After the current QA state has an active, complete actor → story → cell chain,
-use the replay wrapper for a known saved case:
+After PLAN has authored the complete current-cycle chain and the QA state has
+an active, `chainComplete` actor → story → cell chain, use the replay wrapper
+for a known saved case before exploratory driving of the remaining paths:
 
 ```sh
 bun "${CLAUDE_SKILL_DIR}/scripts/qa-replay.ts" \

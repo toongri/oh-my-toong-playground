@@ -138,12 +138,18 @@ describe("reusable case guidance contract", () => {
 		expect(skillMd).toContain("--acceptance-criteria");
 	});
 
-	test("known cases replay first but do not narrow six-axis exploration", () => {
+	test("known cases inform PLAN before chain-gated replay and six-axis exploration", () => {
 		expect(reusableCasesMd).toContain("listQaCases");
 		expect(reusableCasesMd).toContain("getQaCase");
-		expect(reusableCasesMd).toContain("Replay matching known cases first");
+		expect(reusableCasesMd).toContain("planning input");
+		expect(reusableCasesMd).toContain("Do not execute replay during PLAN");
+		expect(reusableCasesMd).toContain("chainComplete");
 		expect(reusableCasesMd).toContain("failed, stale, or uncovered");
 		expect(reusableCasesMd).toContain("six classes");
+		const plan = reusableCasesMd.indexOf("Do not execute replay during PLAN");
+		const handsOn = reusableCasesMd.indexOf("After PLAN has authored");
+		expect(plan).toBeGreaterThan(-1);
+		expect(handsOn).toBeGreaterThan(plan);
 	});
 
 	test("optional storage has remembered unconfigured, configured, and disabled states", () => {
@@ -162,7 +168,8 @@ describe("reusable case guidance contract", () => {
 		expect(reusableCasesMd).toContain("Reset the application and");
 		expect(reusableCasesMd).toContain("independently rerun");
 		expect(reusableCasesMd).toContain("same assertions");
-		expect(reusableCasesMd).toContain("case failure remains a\nfailure");
+		expect(reusableCasesMd).toContain("case failure remains a");
+		expect(reusableCasesMd).toContain("failure and is recorded as such");
 	});
 
 	test("saved cases use the active-chain replay wrapper and receipt contract", () => {
