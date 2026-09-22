@@ -11,6 +11,9 @@
 git ref `c6059f66`이며, 이를 별도 복사한 도구는 아직 없다. 따라서 평가자는
 ref를 immutable baseline으로 참조만 하고 baseline 파일을 고쳐 쓰지 않는다.
 
+실제 수동 관찰 결과와 프롬프트 차이·인과성 제한은 [`results.md`](./results.md)에
+기록한다.
+
 ## 실행 설계
 
 주 시나리오에 대해 fresh control 5개와 candidate 5개를 실행한다. control에는
