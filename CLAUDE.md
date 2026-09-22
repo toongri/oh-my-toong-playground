@@ -92,22 +92,6 @@ oh-my-toong/
 └── sync.yaml        # Root sync definition (+ projects/*/sync.yaml per project)
 ```
 
-### Feature Map
-
-The common `lib/feature-map` library is exposed through the Claude/Codex-deployed
-`scripts/feature-map/feature-map.ts` CLI. Use `help`, `--help`, or `help <command>`
-to discover `query`, `get`, `save`, `validate`, `status`, and `configure`; commands
-resolve the manifest themselves, so callers do not need to know its path. The fixed
-manifest at `~/.feature-maps/<project-key>/manifest.yaml` is independent of
-`OMT_DIR`: sibling worktrees share a key derived from the canonical Git common
-directory, while distinct clones get different keys. The first actual lookup
-bootstraps `storage: null` and returns `storage_not_configured` with an
-`ask_user_for_storage` next action; the agent asks the user to agree on an
-arbitrary data location before `configure`. The CLI/API is noninteractive; data
-is one Markdown+YAML file per feature. `get`
-returns the source path and revision, `save` checks the expected revision, and
-direct reads/edits remain supported with `validate` available afterward.
-
 ### Sync System (Core Feature)
 
 The sync tool (`tools/sync.ts`) reads `sync.yaml` files and deploys components to target project directories (`.claude/`, `.gemini/`, `.codex/`).
