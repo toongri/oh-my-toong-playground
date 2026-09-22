@@ -1,4 +1,4 @@
-import { renderHelp, type CliCommand } from "@lib/cli-help";
+import { renderHelp, type CliCommand } from "@lib/cli-help.ts";
 
 export type FeatureMapCommand = CliCommand & {
 	usage: string;

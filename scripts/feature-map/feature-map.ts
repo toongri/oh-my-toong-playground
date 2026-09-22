@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 
 import {
@@ -11,10 +11,10 @@ import {
 	saveFeature,
 	validateFeatureMap,
 	type FeatureMapOptions,
-} from "@lib/feature-map/index";
+} from "@lib/feature-map/index.ts";
 import { renderFeatureMapHelp, FEATURE_MAP_COMMANDS } from "./help.ts";
 
-export type { FeatureMapOptions } from "@lib/feature-map/index";
+export type { FeatureMapOptions } from "@lib/feature-map/index.ts";
 export type FeatureMapCliResult = { exitCode: number; stdout: string; stderr: string };
 
 type Parsed = { command: string; positionals: string[]; values: Record<string, string>; help: boolean };
@@ -126,7 +126,9 @@ export function runFeatureMapCli(args: string[], options: FeatureMapOptions = {}
 	}
 }
 
-const isEntryPoint = typeof Bun !== "undefined" ? Bun.main === fileURLToPath(import.meta.url) : process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isEntryPoint = typeof Bun !== "undefined"
+	? Bun.main === fileURLToPath(import.meta.url)
+	: process.argv[1] !== undefined && realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url));
 if (isEntryPoint) {
 	const result = runFeatureMapCli(process.argv.slice(2));
 	process.stdout.write(result.stdout);
