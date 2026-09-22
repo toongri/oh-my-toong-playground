@@ -1,6 +1,6 @@
 ---
 name: qa
-description: Use when verifying a code change through a standalone adversarial e2e cycle — drives the changed surface for real (curl/agent-browser/agent-device/bash) and attacks it across 6 coverage axes + 3 per-run checks (failure/boundary/injection/interruption/misleading-success/idempotency), owning diagnosis→fix→re-verify to green via `oracle` (diagnosis) and `sisyphus-junior` (fix) before issuing a binary APPROVE/REQUEST_CHANGES verdict.
+description: Use when a code change needs standalone adversarial end-to-end verification at a real actor boundary via curl/agent-browser/agent-device/bash, including arrival paths, state transitions, lifecycle variants, failure, malformed input, interruption, misleading success, or idempotency risks.
 ---
 
 <Role>
@@ -72,6 +72,20 @@ At cycle entry, create or re-enter the guarded state with `bun ${CLAUDE_SKILL_DI
 
 Two ordered outputs. The roster comes first because it fixes where every scenario must be entered and what its evidence has to show — scenarios authored before it drift inward toward whatever is easiest to call.
 
+#### PLAN.0 — Feature-map context hook
+
+Before rebuilding product context, read the QA-local [feature-map.md](feature-map.md) contract and discover its commands (`feature-map.ts help`, `feature-map.ts query`):
+
+```bash
+bun "${CLAUDE_SKILL_DIR}/scripts/feature-map/feature-map.ts" help
+bun "${CLAUDE_SKILL_DIR}/scripts/feature-map/feature-map.ts" help query
+bun "${CLAUDE_SKILL_DIR}/scripts/feature-map/feature-map.ts" query --text "<changed surface>" --project .
+```
+
+The map is persistent input, not a scope ceiling and not spec authority. Re-check current code and product/spec discovery, including omitted arrival paths, state-change writers, and lifecycle paths; keep expected contract and observed implementation separate. Use the returned absolute `path` and `revision` as provenance, never an inferred local path or remembered revision. If the CLI reports `storage_not_configured` with `ask_user_for_storage`, ask the user for a storage location; do not choose a default. While that human-required decision is pending, continue current-code/spec discovery and other PLAN work unless the gate itself is required to proceed. A missing feature (`feature_not_found`) is distinct from an unconfigured store. A corrupt, invalid, unreadable, or unavailable configured store is a runtime error: do not reset or fallback; retain the error and continue the current-code/spec investigation where possible.
+
+Do not report a map/storage problem as a product behavior failure. Classify the observation as one of `map drift/document`, `tool failure`, `product behavior failure`, or `environment block`; only the last two can describe the product under test, and the evidence must support that classification.
+
 #### PLAN.1 — Actor Roster, before any scenario
 
 Enumerate every actor the changed surface serves and pin each one's boundary, as `actor · boundary · driver · reachable`:
@@ -84,6 +98,25 @@ Enumerate every actor the changed surface serves and pin each one's boundary, as
 A change with no UI still has actors. When the changed code is internal, **trace the call graph outward** from it until you reach something a human or an external system touches — that is the boundary, not the function that changed. Emit the result as the `## Actor Roster` output section.
 
 Record the roster in state before authoring scenarios. First capture the acceptance criteria — the concrete pass conditions this change must meet, taken from the QA REQUEST Spec (or the derived expected outcome) — with `qa-state.ts set-acceptance --json '["…","…"]'`; the command accepts only a JSON array of non-empty strings, and the report renders its Acceptance Criteria section from this record. Then add each actor with `qa-state.ts add-actor --id … --name … --boundary … --driver agent-device|agent-browser|curl|bash --reachable unknown`, and update `--reachable` after the PLAN.1 probe. Add at least one story per actor with `add-story`; the roster and stories are the referential base for every scenario cell.
+
+After each story exists, record the feature-map lookup as planning context (not execution-verified fact), before BASELINE begins:
+
+```bash
+bun "${CLAUDE_SKILL_DIR}/scripts/qa-state.ts" record-story-provenance \
+  --story ID --json '{"features":[{"id":"stock.view","revision":"<getrevision>","entrypoints":["push"],"states":["new-user"]}],"code_ref":"<commit/build id plus dirty diff evidence>"}'
+```
+
+The `revision` must match the live feature-map file. Feature labels are not metadata membership. Legacy, missing, or unverified maps do not permit fabricated IDs: retain code/spec discovery and evidence and report the story as not recorded. After each FIX cycle, recheck the live map and rerecord planning provenance.
+
+#### Story Planning Context (PLAN output)
+
+Add one separate row per story beside the roster/scenario planning output. This is planning context, not a new scenario field or execution evidence:
+
+| story id | map lookup status | feature id@revision or not recorded(reason) | planned entrypoints/states | code_ref |
+|---|---|---|---|---|
+| `<story-id>` | `pending` / `notfound` / `error` / `ok` | `<id>@<live-revision>` or `not recorded(<reason>)` | `<entrypoints>` / `<states>` | `<commit/build id + dirty diff evidence>` |
+
+A PLAN-only lookup that has not reached an actual `get` remains `pending`; never invent an ID or revision. Planned labels are allowed as hypotheses, but do not turn them into membership. After the story is created and the actual `get` result is available, use the existing `record-story-provenance` command to record the row. Keep this context table separate from the original six-field scenario table.
 
 **The roster spans the actor's journey, not the diff (CRITICAL).** Never QA only the platform where the change landed. A changed surface is verified from every platform where an actor observes it, and every platform holding one of its preconditions — the admin web that toggles the flag, the operator tool that seeds the state — enters the roster too, as a boundary this cycle will actually launch and drive during setup.
 
@@ -266,6 +299,10 @@ A `continue` invocation reads this state and resumes at the last recorded phase/
 
 The chain-recording surface is: `set-acceptance`, `add-actor`, `add-story`, `author-cell`, `record-baseline`, `record-cell`, `review-evidence`, and `record-run-check`. Use `set-verdict APPROVE|COMMENT|REQUEST_CHANGES` to persist the verdict; `waive --story … --cls … --reason "…"` is a **user-only** exception and is denied on the AI Bash path. When the cycle needs a user decision you cannot make yourself — a `waive` judgment, or any question only the user can answer — ask it in plain text, then run `await-user` and end the turn. That parks the Stop gate WITHOUT spinning the no-progress counter (the pause is not a failure), and the next progress write auto-clears it when you resume on the user's reply. For a no-risk-surface cycle, use `declare-inert --reason "…"`. Run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts help` to see the full command roster and which are user-only. Runtime gates consume the persisted chain/record predicates: the phase funnel blocks BASELINE until the roster→story→cell chain is complete, the driver guards block `agent-device`/`agent-browser`/`curl`/`bash` while the roster is incomplete or once BASELINE has been reached with an incomplete chain (PLAN reachability probes remain available), and the Stop gate validates the raw state on both Claude and Codex. Direct writes to `qa-state-*.json` are denied; use the CLI.
 
+#### STATE/post-run feature-map maintenance
+
+After the run, update a map only from observations verified at the actor boundary. An actual failure, regression, or evidence may be retained as such; keep expected contract and actual observation separate and never normalize a failure into expected or pass. If the observation is reusable, write a concise reusable regression recipe (arrival path, precondition, action, expected result, evidence reference). Use the feature-map guide's `get`/`save --expect <live-revision>` conflict protocol: re-`get` before reconciling a conflict, never blind-overwrite, and never auto-configure storage. If storage is unconfigured or the user has not chosen a location, keep the draft and report it as not recorded.
+
 Once the cycle concludes (any EXIT outcome — Goal Met, max_cycles, or Safety), first run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts set-verdict <APPROVE|COMMENT|REQUEST_CHANGES>`, then run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-report.ts --session <id> --out <path> [--narrative <json-file>]`, open the rendered HTML and verify all claim images remain legible, run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts review-report --path <html>`, dispatch the `presentation-reviewer`, handle its verdict, then run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts complete`, and only then report the verdict prose. The renderer records the HTML/state identity; `review-report` records the visual inspection attestation. Editing the HTML or recorded facts requires re-render and re-review. `complete` is gated by the same predicates as Stop and refuses an unrecorded or falsely approved cycle; it marks an earned terminal state inactive so the finished cycle is not resurrected as "in progress" in a later session.
 
 **Presentation review (required, after `review-report`, before `complete`).** Dispatch the `presentation-reviewer` agent to contrast the report's reader-facing presentation layer against the actual evidence and the material this cycle verified against. It is skill-agnostic, so assemble the bundle:
@@ -387,6 +424,14 @@ The report file is self-contained: inline `<style>`, zero runtime `<script>`, no
 
 One row per actor the changed surface serves, from PLAN.1. `boundary` names an interface an actor touches — never a function, class, or module. `reachable` is `yes` or the obstacle plus the deepest reachable point toward that boundary. On a PRE-FLIGHT fail-fast the cycle never reaches PLAN, so this section is absent rather than empty — same as the scenario roster below.
 
+## Story Planning Context
+
+| story id | map lookup status | feature id@revision or not recorded(reason) | planned entrypoints/states | code_ref |
+|---|---|---|---|---|
+| [PLAN table row] | pending / notfound / error / ok | id@revision or not recorded(reason) | planned entrypoints/states | commit/build + dirty diff evidence |
+
+This PLAN-only context row is separate from the six-field scenario shape. `pending` means lookup has not reached `get`; it carries no invented ID/revision, although planned labels may be listed. After story creation plus actual `get`, record successful feature refs with `record-story-provenance`; after a FIX cycle, recheck and rerecord them. State and HTML persist only successful feature refs, `code_ref`, cycle, and feature absence; pending/notfound/error reasons remain in the final Markdown Story Planning Context rather than being promised as state or HTML fields.
+
 ## Scenarios Executed
 
 | # | source | actor | driven-at | preconditions | steps | expected | result | evidence | why-needed | priority |
@@ -447,6 +492,9 @@ EVIDENCE:   per-scenario before/action/after at the actor's boundary; launch/spl
 BASELINE:   build/test/lint green. See stage1-commands.md
 MATRIX:     6 categories — failure paths, boundary/malformed input, injection, interruption, misleading success, idempotency. Breadth via scenario-authoring.md, depth via stage3-handson.md
 USE-CASE:   Layer D — build the product-context map from the repo, then walk arrival paths · adjacent state transitions · lifecycle stances; each axis present in the map yields scenarios, and the coverage delta names all three
+MAP:        PLAN first calls the QA-local feature-map CLI (`help`/`help query`/`query`); distinguish storage_not_configured + ask_user_for_storage, feature_not_found, and corrupt/unavailable storage; no default or reset; lookup first, then recheck current code/spec and omitted paths; map input is not a scope ceiling or spec authority; keep expected vs observed separate
+PROVENANCE: after `add-story`, record map lookup as planning context via `record-story-provenance` before BASELINE; live-file revision + code_ref are mandatory; labels are not membership; legacy/no-map → no fabricated IDs, keep discovery/evidence and report not recorded
+MAP-MAINT:  STATE/post-run only verified observations; expected vs actual remain separate; reusable regression recipe; `get` then `save --expect`, reconcile conflicts, never auto-configure; unconfigured storage → keep draft
 DRIVERS:    API→curl, Frontend→agent-browser (fallback playwright, if available), Mobile/native UI→agent-device (load its skill first; use runtime help guidance), CLI→bash. No tmux.
 LOOP:       DIAGNOSIS→oracle (fresh, read-only) | FIX→sisyphus-junior (commits own scoped fix, never git commit -a) | RE-VERIFY→qa, full re-run, distrust fixer
 EXIT:       Goal Met / max_cycles=5 / Safety
