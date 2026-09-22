@@ -22,8 +22,8 @@ not a substitute for this story-level contract.
 ## Selection and exploration
 
 At PLAN, use `listQaCases` and `getQaCase` through the QA case functions (or
-the equivalent `qa-cases list` / `qa-cases get <id>` commands) when the store
-is configured. Replay matching known cases first, then use the
+the repository `qa-cases.ts list` / `qa-cases.ts get <id>` commands) when the
+store is configured. Replay matching known cases first, then use the
 current feature map and code/spec discovery to author new paths. Always add
 new, failed, stale, or uncovered paths to the six-axis scenario plan; a case
 listing or a green replay is not boundary proof. A case failure remains a
@@ -69,9 +69,49 @@ JSON_PATH --expect new|SHA256`. Run
 `bun "${CLAUDE_SKILL_DIR}/scripts/qa-cases.ts" help` for complete options;
 saving metadata never executes a runner or copies product files.
 
+## Replaying a saved case
+
+After the current QA state has an active, complete actor → story → cell chain,
+use the replay wrapper for a known saved case:
+
+```sh
+bun "${CLAUDE_SKILL_DIR}/scripts/qa-replay.ts" \
+  --case CASE_ID --story STORY_ID --cls 1 \
+  --project /absolute/project \
+  --code-ref COMMIT_OR_BUILD_REF \
+  --reset-confirmed "the saved reset description"
+```
+
+Use `--sub hang-timeout|flaky-green` when selecting one of those authored
+cells. `--allow-project-cwd` is required when the saved `execution_cwd` is the
+product project; otherwise save an absolute external cwd or `{artifacts}`.
+Relative `native_files` resolve from the canonical repository root resolved for
+the project; absolute references are accepted when present.
+`{artifacts}` expands argv and execution cwd into the run directory, and the
+runner receives `QA_ARTIFACTS_DIR` pointing there. The run output is routed to
+that directory as `stdout.log`, `stderr.log`, and a new `receipt.json`; existing
+artifacts are never overwritten.
+Review the runner's flags/output/config first: native runners are not sandboxed.
+
+The wrapper checks the saved case revision, actor surface, linked acceptance
+criteria, reset confirmation, and current-cycle authored cell. It requires the
+active `chainComplete` gate. A successful runner produces a receipt with
+`qa_result: "not-recorded"`; it never records a QA cell PASS. A failed runner
+returns a non-zero exit status and remains a failure. Case metadata is saved
+only by the case helper; replay executes the saved native runner and writes its
+receipt/artifacts, not new case metadata.
+
+If the manifest is awaiting a storage decision, ask once and remember the
+approved external or explicitly opted-in project location, or remember
+`disabled`; an invalid configured manifest is an error, not an automatic reset
+or fallback.
+
 ## Curating a case
 
-After a successful run, curate only a useful, reproducible case: retain its
+For first curation, author the native draft and independently rerun it with
+assertions from the real boundary **before** registering metadata with
+`saveQaCase`. For known saved cases, use the replay wrapper above. Curate only
+a useful, reproducible case: retain its
 goal, GWT, AC links, actor surface, exact runner, working directory, native
 files, reset instructions, and feature refs. Reset the application and
 independently rerun the saved recipe with the same assertions from the real

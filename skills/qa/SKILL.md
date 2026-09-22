@@ -24,7 +24,8 @@ qa is **standalone and stateful**. A single invocation owns the whole cycle — 
 For optional executable-case reuse and its storage contract, read
 [reusable-cases.md](reusable-cases.md). It defines the story GWT/AC contract,
 known-case-first selection, external-manifest states, native driver formats,
-and the independent reset/re-run required before a case is reusable.
+the `qa-replay.ts` wrapper, and the independent reset/re-run required before a
+case is reusable.
 
 The caller composes a QA REQUEST using this structure:
 
@@ -502,7 +503,7 @@ USE-CASE:   Layer D — build the product-context map from the repo, then walk a
 MAP:        PLAN first calls the QA-local feature-map CLI (`help`/`help query`/`query`); distinguish storage_not_configured + ask_user_for_storage, feature_not_found, and corrupt/unavailable storage; no default or reset; lookup first, then recheck current code/spec and omitted paths; map input is not a scope ceiling or spec authority; keep expected vs observed separate
 PROVENANCE: after `add-story`, record map lookup as planning context via `record-story-provenance` before BASELINE; live-file revision + code_ref are mandatory; labels are not membership; legacy/no-map → no fabricated IDs, keep discovery/evidence and report not recorded
 MAP-MAINT:  STATE/post-run only verified observations; expected vs actual remain separate; reusable regression recipe; `get` then `save --expect`, reconcile conflicts, never auto-configure; unconfigured storage → keep draft
-CASES:      optional known-case replay first via QA case functions; story goal/Given/When/Then/AC is still required; new/failed/uncovered paths remain in the six-axis plan; external manifest only, with unconfigured→ask once, configured→use approved location, disabled→remember opt-out and continue QA; save only after reset + independent assertion rerun; native `.ad`/agent-browser·Playwright/Maestro formats remain native; traces/recordings/JUnit are not executable proof
+CASES:      optional known-case replay first via QA case functions and `bun "${CLAUDE_SKILL_DIR}/scripts/qa-replay.ts" --case ... --story ... --cls ... --project ... --code-ref ... --reset-confirmed ...`; active chainComplete required; story goal/Given/When/Then/AC is still required; new/failed/uncovered paths remain in the six-axis plan; external manifest only, with unconfigured→ask once for external/project-opt-in/disabled, configured approval remembered, invalid config = error; `{artifacts}` + QA_ARTIFACTS_DIR route output; receipt `qa_result:not-recorded`, runner failure nonzero, no automatic PASS; save only after reset + independent assertion rerun; native `.ad`/agent-browser·Playwright/Maestro formats remain native; traces/recordings/JUnit are not executable proof
 DRIVERS:    API→curl, Frontend→agent-browser (fallback playwright, if available), Mobile/native UI→agent-device (load its skill first; use runtime help guidance), CLI→bash. No tmux.
 LOOP:       DIAGNOSIS→oracle (fresh, read-only) | FIX→sisyphus-junior (commits own scoped fix, never git commit -a) | RE-VERIFY→qa, full re-run, distrust fixer
 EXIT:       Goal Met / max_cycles=5 / Safety

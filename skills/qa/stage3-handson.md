@@ -13,6 +13,22 @@ executable case or real-boundary proof. After a successful candidate run, reset
 the app and independently rerun it with the same assertions before curating it
 as reusable (see [reusable-cases.md](reusable-cases.md)).
 
+For a saved case, use the repository replay wrapper after the active
+actor→story→cell chain is complete:
+
+```bash
+bun "${CLAUDE_SKILL_DIR}/scripts/qa-replay.ts" \
+  --case CASE_ID --story STORY_ID --cls 1 \
+  --project /absolute/project --code-ref COMMIT_OR_BUILD_REF \
+  --reset-confirmed "the saved reset description"
+```
+
+Read `bun "${CLAUDE_SKILL_DIR}/scripts/qa-replay.ts" --help` first. The
+wrapper supports optional `--sub hang-timeout|flaky-green` and
+`--allow-project-cwd`; it expands `{artifacts}`, sets `QA_ARTIFACTS_DIR`, and
+emits a receipt without recording a QA PASS. A failed runner exits non-zero.
+Inspect runner flags/output/config because native runners are not sandboxed.
+
 ---
 
 ## Step 3.1: Determine Applicability

@@ -165,6 +165,21 @@ describe("reusable case guidance contract", () => {
 		expect(reusableCasesMd).toContain("case failure remains a\nfailure");
 	});
 
+	test("saved cases use the active-chain replay wrapper and receipt contract", () => {
+		expect(reusableCasesMd).toContain('bun "${CLAUDE_SKILL_DIR}/scripts/qa-replay.ts"');
+		expect(reusableCasesMd).toContain("--case CASE_ID");
+		expect(reusableCasesMd).toContain("--story STORY_ID");
+		expect(reusableCasesMd).toContain("--cls 1");
+		expect(reusableCasesMd).toContain("--project /absolute/project");
+		expect(reusableCasesMd).toContain("--code-ref COMMIT_OR_BUILD_REF");
+		expect(reusableCasesMd).toContain("--reset-confirmed");
+		expect(reusableCasesMd).toContain("chainComplete");
+		expect(reusableCasesMd).toContain('qa_result: "not-recorded"');
+		expect(reusableCasesMd).toContain("non-zero exit status");
+		expect(reusableCasesMd).toContain("QA_ARTIFACTS_DIR");
+		expect(reusableCasesMd).toContain("not sandboxed");
+	});
+
 	test("native runner formats and boundary evidence cannot be bypassed", () => {
 		expect(reusableCasesMd).toContain(".ad");
 		expect(reusableCasesMd).toContain("Maestro YAML");
