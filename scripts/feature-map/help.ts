@@ -35,7 +35,7 @@ export const FEATURE_MAP_COMMANDS: FeatureMapCommand[] = [
 		usage: "save --file PATH --expect <new|sha256> [--project DIR]",
 		effect: "validates and saves one feature map with an expected revision",
 		details:
-			"The input must be Markdown with YAML front matter and a nonblank body, including schema_version: 1, id, and title. The CLI accepts --expect new for a new file or a raw 64-character SHA-256 revision for an update; the library API uses null for a new file. A mismatch is a conflict and never overwrites the file. CLI/API writers use locks and expected-revision guards; direct edits remain allowed and can be checked with validate.",
+			"The input must be Markdown with YAML front matter and a nonblank body, including schema_version: 1, id, and title. The --file PATH is resolved relative to the invocation working directory, independently of --project. The CLI accepts --expect new for a new file or a raw 64-character SHA-256 revision for an update; the library API uses null for a new file. A mismatch is a conflict and never overwrites the file. CLI/API writers use locks and expected-revision guards; direct edits remain allowed and can be checked with validate.",
 		examples: [
 			"bun scripts/feature-map/feature-map.ts save --file ./stock.view.md --expect new --project .",
 			"bun scripts/feature-map/feature-map.ts save --file ./stock.view.md --expect <revision-from-get> --project .",
@@ -47,7 +47,7 @@ export const FEATURE_MAP_COMMANDS: FeatureMapCommand[] = [
 		usage: "validate [--project DIR]",
 		effect: "checks feature-map files and their Markdown schema",
 		details:
-			"Validates front matter, required fields, nonblank Markdown bodies, file structure, and preservation-compatible extension fields. Run it after directly reading or editing a feature file.",
+			"Validates front matter, required fields, nonblank Markdown bodies, filename/id matches, duplicate feature IDs, and dangling state_changed_by references. It returns valid or invalid; run it after directly reading or editing a feature file.",
 		examples: ["bun scripts/feature-map/feature-map.ts validate --project ."],
 	},
 	{
@@ -56,7 +56,7 @@ export const FEATURE_MAP_COMMANDS: FeatureMapCommand[] = [
 		usage: "status [--project DIR]",
 		effect: "reports manifest and storage configuration status",
 		details:
-			"Uses the fixed ~/.feature-maps/<project-key>/manifest.yaml location. The first lookup bootstraps storage: null and returns not_found, reason storage_not_configured, next_action ask_user_for_storage. A configured but unreadable or corrupt store is a runtime error and is never auto-reset.",
+			"Uses the fixed ~/.feature-maps/<project-key>/manifest.yaml location. The first lookup bootstraps storage: null and returns not_found, reason storage_not_configured, next_action ask_user_for_storage. It checks the manifest and configured storage directory accessibility; an invalid manifest or unavailable configured directory is a runtime error and is never auto-reset. Invalid feature files are reported by validate, not status.",
 		examples: ["bun scripts/feature-map/feature-map.ts status --project ."],
 	},
 	{

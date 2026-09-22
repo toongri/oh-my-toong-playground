@@ -37,7 +37,18 @@ describe("feature-map 도움말", () => {
 		expect(help).toContain("schema_version: 1");
 		expect(help).toContain("raw 64-character SHA-256");
 		expect(help).toContain("library API uses null");
+		expect(help).toContain("invocation working directory");
 		expect(help).not.toContain("feature-map configure");
+	});
+
+	test("validate와 status의 검사 범위를 구분해 설명한다", () => {
+		const validate = renderFeatureMapHelp("validate");
+		const status = renderFeatureMapHelp("status");
+		expect(validate).toContain("filename/id matches");
+		expect(validate).toContain("duplicate feature IDs");
+		expect(validate).toContain("dangling state_changed_by references");
+		expect(status).toContain("manifest and configured storage directory accessibility");
+		expect(status).toContain("Invalid feature files are reported by validate, not status");
 	});
 
 	test("configure는 사용자 동의를 안내하지만 user-only로 표시하지 않는다", () => {
