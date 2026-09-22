@@ -283,7 +283,7 @@ describe("qa-state CLI wiring", () => {
 		expect(savedReview.cell_snapshot).toContain("story-1");
 		run('add-actor --id actor-1 --boundary "another user boundary" --reachable yes');
 		expect(rawState().cells[0].evidence_review).toBeUndefined();
-		run(`review-evidence --story story-1 --cls 1 --json-file ${reviewFile}`);
+		expect(() => run(`review-evidence --story story-1 --cls 1 --json-file ${reviewFile}`)).toThrow(/executed current-cycle cell with evidence/);
 		run('add-actor --id actor-2 --name "Other" --boundary "other home" --driver agent-browser --reachable yes');
 		run("add-story --id story-1 --actor actor-2 --goal 'Check supplements' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'");
 		expect(rawState().cells[0].evidence_review).toBeUndefined();
@@ -886,6 +886,56 @@ describe("help subcommand", () => {
 	test("prints without a session id set (session-independent discovery)", () => {
 		const out = run("help", { OMT_SESSION_ID: "", CODEX_THREAD_ID: "" });
 		expect(out).toContain("qa-state commands:");
+	});
+
+	test("JUnit XML roots are not boundary evidence but normal API XML remains valid", () => {
+		const authorCompleteChain = () => { run("set --phase PLAN"); run("set-acceptance --json '[\"home shows today supplements\"]'"); run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes'); run("add-story --id story-1 --actor actor-1 --goal 'Check supplements' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'"); for (const cls of [1, 2, 3, 4, 5, 6]) run(`author-cell --story story-1 --cls ${cls} --attack-point "attack ${cls}" --priority ${cls === 1 ? "H" : "L"}`); };
+		authorCompleteChain();
+		const junit = join(tmpDir, "junit.xml");
+		for (const root of ["testsuite", "testsuites"]) {
+			writeFileSync(junit, `<${root} tests="1" failures="0"><testcase /></${root}>`);
+			expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${junit} --evidence-surface bash`)).toThrow(/unit\/integration test-runner report/);
+			writeFileSync(junit, `\n  <${root} tests="1" failures="0"/>\n`);
+			expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${junit} --evidence-surface bash`)).toThrow(/unit\/integration test-runner report/);
+		}
+		writeFileSync(junit, '<?xml version="1.0"?><testsuite tests="1" failures="0"><testcase /></testsuite>');
+		expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${junit} --evidence-surface bash`)).toThrow(/unit\/integration test-runner report/);
+		writeFileSync(junit, '<?xml version="1.0"?>\n<response>\n  <testsuite>normal API payload</testsuite>\n</response>');
+		expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${junit} --evidence-surface bash`)).not.toThrow();
+		writeFileSync(junit, '<response><testsuite>normal API payload</testsuite></response>');
+		expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${junit} --evidence-surface bash`)).not.toThrow();
+		writeFileSync(junit, `${" ".repeat(5000)}<response><testsuite>normal API payload</testsuite></response>`);
+		expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${junit} --evidence-surface bash`)).not.toThrow();
+	});
+
+	test("actor change only invalidates current-cycle execution and keeps history", () => {
+		const authorCompleteChain = () => { run("set --phase PLAN"); run("set-acceptance --json '[\"home shows today supplements\"]'"); run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes'); run("add-story --id story-1 --actor actor-1 --goal 'Check supplements' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'"); for (const cls of [1, 2, 3, 4, 5, 6]) run(`author-cell --story story-1 --cls ${cls} --attack-point "attack ${cls}" --priority ${cls === 1 ? "H" : "L"}`); };
+	authorCompleteChain();
+	run("record-cell --story story-1 --cls 1 --status pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash");
+	run("inc-cycle");
+	run("author-cell --story story-1 --cls 1 --attack-point 'current attack' --priority H");
+	run("record-cell --story story-1 --cls 1 --status pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash");
+	run('add-actor --id actor-2 --name "Other" --boundary "other home" --driver bash --reachable yes');
+	run("add-story --id story-1 --actor actor-2 --goal 'Check supplements' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'");
+	const cells = rawState().cells.filter((cell: any) => cell.story === "story-1" && cell.cls === 1);
+	expect(cells.find((cell: any) => cell.cycle === 0)?.status).toBe("pass");
+	expect(cells.find((cell: any) => cell.cycle === 1)?.status).toBeUndefined();
+	});
+
+	test("actor change invalidates current-cycle execution while retaining authored cell", () => {
+		const authorCompleteChain = () => { run("set --phase PLAN"); run("set-acceptance --json '[\"home shows today supplements\"]'"); run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes'); run("add-story --id story-1 --actor actor-1 --goal 'Check supplements' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'"); for (const cls of [1, 2, 3, 4, 5, 6]) run(`author-cell --story story-1 --cls ${cls} --attack-point "attack ${cls}" --priority ${cls === 1 ? "H" : "L"}`); };
+		authorCompleteChain();
+		run("record-cell --story story-1 --cls 1 --status pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash");
+		const before = rawState().cells.find((cell: any) => cell.story === "story-1" && cell.cls === 1);
+		run('add-actor --id actor-2 --name "Other" --boundary "other home" --driver bash --reachable yes');
+		run("add-story --id story-1 --actor actor-2 --goal 'Check supplements' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'");
+		const after = rawState().cells.find((cell: any) => cell.story === "story-1" && cell.cls === 1);
+		expect(after.attack_point).toBe(before.attack_point);
+		expect(after.priority).toBe(before.priority);
+		expect(after.status).toBeUndefined();
+		expect(after.evidence).toBeUndefined();
+		expect(after.evidence_review).toBeUndefined();
+		expect(after.case_run).toBeUndefined();
 	});
 });
 

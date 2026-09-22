@@ -26,7 +26,7 @@
  *   get
  */
 
-import { closeSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, rmSync, statSync } from "fs";
+import { closeSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, rmSync, statSync } from "fs";
 import { execSync } from "child_process";
 import { createHash } from "crypto";
 import { dirname, extname, isAbsolute, relative, resolve } from "path";
@@ -172,6 +172,7 @@ const TEST_RUNNER_SIGNATURES: RegExp[] = [
 	/^--- (PASS|FAIL):/m, // go test -v
 	/^(ok|FAIL)\s+\S+\s+([\d.]+s|\(cached\))(?:\s+coverage:\s+[\d.]+%\s+of\s+statements)?\s*$/m, // go test summary (incl. cached reuse and coverage)
 	/^\?\s+\S+\s+\[no test files\]\s*$/m, // go test package with no test files
+	/^\s*(?:<\?xml[\s\S]*?\?>\s*|<!--[\s\S]*?-->\s*)*<(?:testsuite|testsuites)(?:\s|\/?>)/, // JUnit XML root (allow declaration/comments)
 ];
 
 // Prefix scanned for a test-runner signature. A report's summary/banner always
@@ -568,10 +569,11 @@ export function addActor(sessionId: string, opts: AddActorOpts): void {
 	if (index >= 0) actors[index] = actor;
 	else actors.push(actor);
 	const changedBoundary = existing && (existing.boundary !== boundary || existing.driver !== driver);
+	const cycle = currentCycle(prior);
 	const affectedStories = new Set((prior.stories ?? []).filter((story) => (story.actor ?? story.actor_id) === id).map((story) => story.id));
 	const cells = changedBoundary ? (prior.cells ?? []).map((cell) => {
-		if (!affectedStories.has(cell.story)) return cell;
-		const { evidence_review: _review, ...record } = cell;
+		if (!affectedStories.has(cell.story) || cell.cycle !== cycle) return cell;
+		const { status: _status, na_reason: _naReason, evidence: _evidence, evidence_review: _review, case_run: _caseRun, ...record } = cell;
 		return record;
 	}) : prior.cells;
 	mergeWrite(sessionId, { actors, ...(changedBoundary ? { cells } : {}) });
@@ -633,9 +635,10 @@ export function addStory(sessionId: string, opts: AddStoryOpts): void {
 			stories[index] = { ...existing, ...next };
 		} else stories.push(next);
 		const changedActor = index >= 0 && (prior.stories?.[index]?.actor ?? prior.stories?.[index]?.actor_id) !== actor;
+		const cycle = currentCycle(prior);
 		const cells = changedActor ? (prior.cells ?? []).map((cell) => {
-			if (cell.story !== id) return cell;
-			const { evidence_review: _review, ...record } = cell;
+			if (cell.story !== id || cell.cycle !== cycle) return cell;
+			const { status: _status, na_reason: _naReason, evidence: _evidence, evidence_review: _review, case_run: _caseRun, ...record } = cell;
 			return record;
 		}) : prior.cells;
 		mergeWriteUnlocked(sessionId, { stories, ...(changedActor ? { cells } : {}) });
@@ -847,9 +850,13 @@ function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector:
 	const receipt = readQaCaseRunReceipt(absoluteReceipt);
 	const story = (prior.stories ?? []).find((candidate) => candidate.id === selector.story);
 	if (receipt.session_id !== sessionId || receipt.story_id !== selector.story || receipt.cycle !== currentCycle(prior) || !receipt.cell || receipt.cell.cls !== selector.cls || (receipt.cell.sub ?? undefined) !== selector.sub) throw new Error("case-run receipt does not match the current session/story/cell/cycle");
+	const actorId = story?.actor ?? story?.actor_id;
+	if (!actorId || receipt.actor_id !== actorId) throw new Error("case-run receipt actor does not match current story actor");
+	const actor = (prior.actors ?? []).find((candidate) => candidate.id === actorId);
+	if (!actor?.boundary || receipt.actor_boundary !== actor.boundary) throw new Error("case-run receipt actor boundary does not match current actor");
 	if (receipt.code_ref.trim() === "" || receipt.case_path.trim() === "") throw new Error("case-run receipt metadata is incomplete");
 	if (!story?.contract || receipt.story_contract_sha256 !== createHash("sha256").update(JSON.stringify(story.contract)).digest("hex")) throw new Error("case-run receipt story contract does not match current story");
-	if (status === "pass" && (receipt.exit_status.code !== 0 || receipt.exit_status.signal !== null || receipt.exit_status.timedout || receipt.exit_status.max_buffer_exceeded)) throw new Error("pass case-run requires a zero, non-timeout runner result");
+	if (status === "pass" && (receipt.start_error !== undefined || receipt.exit_status.code !== 0 || receipt.exit_status.signal !== null || receipt.exit_status.timedout || receipt.exit_status.max_buffer_exceeded)) throw new Error("pass case-run requires a zero, non-timeout runner result");
 	const caseBytes = readFileSync(receipt.case_path);
 	if (createHash("sha256").update(caseBytes).digest("hex") !== receipt.case_revision) throw new Error("case-run case metadata revision mismatch");
 	const recordValue: unknown = JSON.parse(caseBytes.toString("utf8"));
@@ -866,9 +873,12 @@ function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector:
 	const files: Record<string, string> = {};
 	const addFile = (filePath: string, expectedHash?: string) => {
 		const canonical = realpathSync(filePath);
+		if (resolve(filePath) !== canonical || lstatSync(filePath).isSymbolicLink()) throw new Error("case-run symlink evidence is not allowed; use the canonical artifact path");
 		const rest = relative(runRoot, canonical);
 		if (rest.startsWith("..") || isAbsolute(rest)) throw new Error("case-run evidence must be inside its attempt directory");
-		if (canonical === realpathSync(receipt.artifact_paths.receipt) || canonical === realpathSync(receipt.artifact_paths.stdout) || canonical === realpathSync(receipt.artifact_paths.stderr)) throw new Error("case-run receipt/logs cannot substitute boundary evidence");
+		const evidenceStat = statSync(filePath);
+		const reserved = [receipt.artifact_paths.receipt, receipt.artifact_paths.stdout, receipt.artifact_paths.stderr].map((reservedPath) => statSync(reservedPath));
+		if (reserved.some((reservedStat) => reservedStat.dev === evidenceStat.dev && reservedStat.ino === evidenceStat.ino)) throw new Error("case-run receipt/logs cannot substitute boundary evidence");
 		const hash = createHash("sha256").update(readFileSync(canonical)).digest("hex");
 		if (expectedHash && hash !== expectedHash) throw new Error("case-run artifact hash mismatch");
 		files[canonical] = hash;

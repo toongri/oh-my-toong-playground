@@ -1,6 +1,6 @@
 import { expect, test, beforeEach, afterEach } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -38,7 +38,7 @@ test("실행 receipt를 현재 셀에 boundary evidence와 함께 바인딩한�
 	const storyHash = createHash("sha256").update(JSON.stringify(state.stories[0].contract)).digest("hex");
 	const bytes = readFileSync(casePath);
 	mkdirSync(join(root, "store"), { recursive: true });
-	const result = await runQaCase(record, { casePath, caseRevision: createHash("sha256").update(bytes).digest("hex"), projectRoot: root, storeLocation: join(root, "store"), codeRef: "code", resetConfirmed: "reset", sessionId: sid, storyId: "story", cellClass: 1, cycle: 0, storyContractSha256: storyHash });
+	const result = await runQaCase(record, { casePath, caseRevision: createHash("sha256").update(bytes).digest("hex"), projectRoot: root, storeLocation: join(root, "store"), codeRef: "code", resetConfirmed: "reset", sessionId: sid, storyId: "story", actorId: "actor", actorBoundary: "terminal", cellClass: 1, cycle: 0, storyContractSha256: storyHash });
 	const boundary = join(result.runDirectory, "boundary.txt");
 	recordCell(sid, { story: "story", cls: 1, status: "pass", evidencePath: boundary, evidenceSurface: "bash", caseRun: result.receipt.artifact_paths.receipt });
 	const persisted = readQaState(sid)?.cells?.find((cell) => cell.story === "story" && cell.cls === 1);
@@ -61,13 +61,13 @@ async function bindingFixture() {
 	authorCell(sid, { story: "story", cls: 1, attackPoint: "run", priority: "H" });
 	const casePath = join(root, "case.json");
 	const nativePath = join(root, "native.txt"); writeFileSync(nativePath, "native");
-	const record: QaCaseRecord = { id: "case", title: "case", goal: "run", given: ["case exists"], when: ["run"], then: ["result observed"], acceptance_criteria: ["runner result observed"], surface: "bash", runner: [process.execPath, "-e", "require('fs').writeFileSync(process.env.QA_ARTIFACTS_DIR + '/boundary.txt', 'observed')"], execution_cwd: "{artifacts}", native_files: [nativePath], reset_description: "reset" };
+	const record: QaCaseRecord = { id: "case", title: "case", goal: "run", given: ["case exists"], when: ["run"], then: ["result observed"], acceptance_criteria: ["runner result observed"], surface: "bash", runner: [process.execPath, "-e", "require('fs').writeFileSync(process.env.QA_ARTIFACTS_DIR + '/boundary.txt', 'observed'); process.stdout.write('runner log')"], execution_cwd: "{artifacts}", native_files: [nativePath], reset_description: "reset" };
 	writeFileSync(casePath, JSON.stringify(record));
 	const state = readQaState(sid)!;
 	const storyHash = createHash("sha256").update(JSON.stringify(state.stories![0]!.contract)).digest("hex");
 	const bytes = readFileSync(casePath);
 	const store = join(root, "store"); mkdirSync(store, { recursive: true });
-	const result = await runQaCase(record, { casePath, caseRevision: createHash("sha256").update(bytes).digest("hex"), projectRoot: root, storeLocation: store, codeRef: "code", resetConfirmed: "reset", sessionId: sid, storyId: "story", cellClass: 1, cycle: 0, storyContractSha256: storyHash });
+	const result = await runQaCase(record, { casePath, caseRevision: createHash("sha256").update(bytes).digest("hex"), projectRoot: root, storeLocation: store, codeRef: "code", resetConfirmed: "reset", sessionId: sid, storyId: "story", actorId: "actor", actorBoundary: "terminal", cellClass: 1, cycle: 0, storyContractSha256: storyHash });
 	const receiptPath = result.receipt.artifact_paths.receipt;
 	return { result, receiptPath, boundary: join(result.runDirectory, "boundary.txt"), casePath, nativePath };
 }
@@ -81,6 +81,9 @@ test("receipt metadata mismatch and failed execution cannot bind", async () => {
 		["contract", (r) => { r.story_contract_sha256 = "a".repeat(64); }, /story contract/],
 		["surface", (r) => { r.surface = "curl"; }, /identity or surface/],
 		["case", (r) => { r.case_id = "other"; }, /identity or surface/],
+		["actor", (r) => { r.actor_id = "other"; }, /actor/],
+		["missing-actor", (r) => { delete r.actor_id; }, /actor/],
+		["missing-boundary", (r) => { delete r.actor_boundary; }, /actor boundary/],
 		["native-list", (r) => { r.native_files = [{ path: "/tmp/native", sha256: "a".repeat(64) }]; }, /native file list/],
 		["exit", (r) => { r.exit_status = { code: 1, signal: null, timedout: false, max_buffer_exceeded: false }; }, /zero, non-timeout/],
 		["timeout", (r) => { r.exit_status = { code: null, signal: "SIGKILL", timedout: true, max_buffer_exceeded: false }; }, /zero, non-timeout/],
@@ -94,6 +97,27 @@ test("receipt metadata mismatch and failed execution cannot bind", async () => {
 		rmSync(root, { recursive: true, force: true });
 		root = mkdtempSync(join(tmpdir(), "qa-case-binding-")); process.env.OMT_DIR = join(root, "omt");
 	}
+});
+
+test("pass binding rejects a start_error receipt", async () => {
+	const fixture = await bindingFixture();
+	const receipt = JSON.parse(readFileSync(fixture.receiptPath, "utf8")) as Record<string, unknown>;
+	receipt.start_error = { message: "runner failed to start" };
+	writeFileSync(fixture.receiptPath, JSON.stringify(receipt));
+	expect(() => recordCell(sid, { story: "story", cls: 1, status: "pass", evidencePath: fixture.boundary, evidenceSurface: "bash", caseRun: fixture.receiptPath })).toThrow(/zero, non-timeout/);
+});
+
+test("old same-driver receipt cannot bind after story actor changes", async () => {
+	const fixture = await bindingFixture();
+	addActor(sid, { id: "actor-2", name: "Other", boundary: "other home", driver: "bash", reachable: "yes" });
+	addStory(sid, { id: "story", actor: "actor-2", contract: { goal: "run", given: ["case exists"], when: ["run"], then: ["result observed"], acceptance_criteria: [0] } });
+	expect(() => recordCell(sid, { story: "story", cls: 1, status: "pass", evidencePath: fixture.boundary, evidenceSurface: "bash", caseRun: fixture.receiptPath })).toThrow(/actor/);
+});
+
+test("old receipt cannot bind after same-id actor boundary changes", async () => {
+	const fixture = await bindingFixture();
+	addActor(sid, { id: "actor", boundary: "changed boundary", reachable: "yes" });
+	expect(() => recordCell(sid, { story: "story", cls: 1, status: "pass", evidencePath: fixture.boundary, evidenceSurface: "bash", caseRun: fixture.receiptPath })).toThrow(/actor boundary/);
 });
 
 test("case와 native asset가 receipt 이후 변경되면 binding을 거부한다", async () => {
@@ -118,4 +142,20 @@ test("receipt artifact path가 run 밖을 가리키면 binding을 거부한다",
 	receipt.artifact_paths = { ...(receipt.artifact_paths as Record<string, unknown>), stdout: join(root, "outside.log") };
 	writeFileSync(fixture.receiptPath, JSON.stringify(receipt));
 	expect(() => recordCell(sid, { story: "story", cls: 1, status: "pass", evidencePath: fixture.boundary, evidenceSurface: "bash", caseRun: fixture.receiptPath })).toThrow(/outside its run directory/);
+});
+
+test("reserved stdout hardlink과 symlink evidence는 boundary로 binding하지 않는다", async () => {
+	const hardlinkFixture = await bindingFixture();
+	const hardlink = join(hardlinkFixture.result.runDirectory, "hardlink.txt");
+	linkSync(hardlinkFixture.result.receipt.artifact_paths.stdout, hardlink);
+	expect(() => recordCell(sid, { story: "story", cls: 1, status: "pass", evidencePath: hardlink, evidenceSurface: "bash", caseRun: hardlinkFixture.receiptPath })).toThrow(/receipt\/logs cannot substitute/);
+	rmSync(root, { recursive: true, force: true }); root = mkdtempSync(join(tmpdir(), "qa-case-binding-")); process.env.OMT_DIR = join(root, "omt");
+	const symlinkFixture = await bindingFixture();
+	const symlink = join(symlinkFixture.result.runDirectory, "latest.txt");
+	symlinkSync(symlinkFixture.boundary, symlink);
+	expect(() => recordCell(sid, { story: "story", cls: 1, status: "pass", evidencePath: symlink, evidenceSurface: "bash", caseRun: symlinkFixture.receiptPath })).toThrow(/symlink evidence/);
+	rmSync(root, { recursive: true, force: true }); root = mkdtempSync(join(tmpdir(), "qa-case-binding-")); process.env.OMT_DIR = join(root, "omt");
+	const parentSymlinkFixture = await bindingFixture();
+	const alias = join(parentSymlinkFixture.result.runDirectory, "alias"); symlinkSync(parentSymlinkFixture.result.runDirectory, alias);
+	expect(() => recordCell(sid, { story: "story", cls: 1, status: "pass", evidencePath: join(alias, "boundary.txt"), evidenceSurface: "bash", caseRun: parentSymlinkFixture.receiptPath })).toThrow(/symlink evidence/);
 });
