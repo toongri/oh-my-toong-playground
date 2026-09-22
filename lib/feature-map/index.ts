@@ -1,3 +1,3 @@
-export * from "@lib/feature-map/schema";
-export * from "@lib/feature-map/manifest";
-export * from "@lib/feature-map/storage";
+export * from "@lib/feature-map/schema.ts";
+export * from "@lib/feature-map/manifest.ts";
+export * from "@lib/feature-map/storage.ts";

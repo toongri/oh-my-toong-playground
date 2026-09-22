@@ -2,9 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { accessSync, constants, lstatSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
-import { withStateLock } from "@lib/persistent-mode-core/state-lock";
-import { ensureFeatureMapManifest, type FeatureMapOptions } from "@lib/feature-map/manifest";
-import { parseFeature, serializeFeature, validateFeature, type FeatureDocument, type FeatureMetadata } from "@lib/feature-map/schema";
+import { withStateLock } from "@lib/persistent-mode-core/state-lock.ts";
+import { ensureFeatureMapManifest, type FeatureMapOptions } from "@lib/feature-map/manifest.ts";
+import { parseFeature, serializeFeature, validateFeature, type FeatureDocument, type FeatureMetadata } from "@lib/feature-map/schema.ts";
 
 export type FeatureSummary = { id: string; title: string; path: string; revision: string; metadata: FeatureMetadata };
 export type StoredFeature = FeatureDocument & { path: string; revision: string };
