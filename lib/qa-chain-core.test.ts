@@ -8,12 +8,16 @@ import {
 	cycleUntouched,
 	driverGateArmed,
 	evidenceReviewSnapshot,
+	qaReportComplete,
+	qaReportSnapshot,
 	recordComplete,
 	requiredCells,
 	rosterComplete,
 	type QaCell,
 	type QaChainState,
 	type QaEvidence,
+	type QaFeatureRef,
+	type QaStoryProvenance,
 	type QaStory,
 } from "./qa-chain-core";
 
@@ -335,5 +339,43 @@ describe("qa chain core: additive schema extension (3-slot evidence + structured
 		expect(recordComplete(withFields, probe)).toBe(true);
 		expect(approveOk(withFields, probe)).toBe(true);
 		expect(commentOk(withFields, probe)).toBe(true);
+	});
+});
+
+describe("QA 체인 코어: 스토리 provenance", () => {
+	test("스토리 provenance 변경은 리포트 스냅샷을 무효화함", () => {
+		const state = authoredState();
+		state.report = {
+			path: "/report.html",
+			sha256: "a".repeat(64),
+			state_snapshot: qaReportSnapshot(state),
+			reviewed: true,
+		};
+		expect(qaReportComplete(state, probe)).toBe(true);
+
+		const feature: QaFeatureRef = {
+			id: "stock.view",
+			revision: "b".repeat(64),
+			entrypoints: ["push"],
+			states: ["new-user"],
+		};
+		const provenance: QaStoryProvenance = {
+			features: [feature],
+			code_ref: "dirty-diff:abc;build:build-1",
+			cycle: 2,
+		};
+		state.stories[0].provenance = provenance;
+		expect(qaReportComplete(state, probe)).toBe(false);
+	});
+
+	test("provenance가 없는 기존 스토리는 리포트 완료 동작을 유지함", () => {
+		const state = authoredState();
+		state.report = {
+			path: "/report.html",
+			sha256: "a".repeat(64),
+			state_snapshot: qaReportSnapshot(state),
+			reviewed: true,
+		};
+		expect(qaReportComplete(state, probe)).toBe(true);
 	});
 });
