@@ -22,6 +22,7 @@ export interface QaCaseRunContext {
 	maxBuffer?: number;
 	allowProjectCwd?: boolean;
 	actorId?: string;
+	actorBoundary?: string;
 }
 
 export interface QaCaseRunReceipt {
@@ -37,6 +38,7 @@ export interface QaCaseRunReceipt {
 	code_ref: string;
 	project_root: string;
 	actor_id?: string;
+	actor_boundary?: string;
 	case_path: string;
 	cycle: number;
 	native_files: Array<{ path: string; sha256: string }>;
@@ -168,6 +170,7 @@ export async function runQaCase(record: QaCaseRecord, context: QaCaseRunContext)
 		...(context.cellClass !== undefined ? { cell: { cls: context.cellClass, ...(context.cellSub ? { sub: context.cellSub } : {}) } } : {}),
 		...(context.storyContractSha256 ? { story_contract_sha256: context.storyContractSha256 } : {}),
 		...(context.actorId ? { actor_id: context.actorId } : {}),
+		...(context.actorBoundary ? { actor_boundary: context.actorBoundary } : {}),
 		...(startError ? { start_error: startError } : {}),
 	};
 	writeImmutable(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
@@ -191,6 +194,7 @@ export function validateQaCaseRunReceipt(value: unknown): asserts value is QaCas
 	}
 	if (value.session_id !== undefined && !nonblank(value.session_id)) throw new Error("qa replay: invalid run receipt");
 	if (value.actor_id !== undefined && !nonblank(value.actor_id)) throw new Error("qa replay: invalid run receipt");
+	if (value.actor_boundary !== undefined && !nonblank(value.actor_boundary)) throw new Error("qa replay: invalid run receipt");
 	if (value.story_id !== undefined && !nonblank(value.story_id)) throw new Error("qa replay: invalid run receipt");
 	if (value.cell !== undefined) {
 		if (!isRecord(value.cell) || typeof value.cell.cls !== "number" || !Number.isInteger(value.cell.cls) || value.cell.cls < 1 || value.cell.cls > 6 || (value.cell.sub !== undefined && value.cell.sub !== "hang-timeout" && value.cell.sub !== "flaky-green")) throw new Error("qa replay: invalid run receipt");

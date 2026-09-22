@@ -74,6 +74,8 @@ describe("qa replay CLI", () => {
 		saveCase(root, record, home);
 		const receipt = await replayFromCli(["--case", "cli-case", "--story", "story", "--cls", "1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home });
 		expect((receipt as { qa_result: string }).qa_result).toBe("not-recorded");
+		expect((receipt as { actor_id: string }).actor_id).toBe("actor");
+		expect((receipt as { actor_boundary: string }).actor_boundary).toBe("terminal");
 	});
 
 	test("surface와 AC mismatch는 runner 실행 전에 거부하고 disabled store는 실행하지 않는다", async () => {

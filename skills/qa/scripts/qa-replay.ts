@@ -100,6 +100,7 @@ export async function replayFromCli(args: string[] = process.argv.slice(2), opti
 		cellSub: sub === "hang-timeout" || sub === "flaky-green" ? sub : undefined,
 		cycle: state.cycle,
 		storyContractSha256: story.contract ? createHash("sha256").update(JSON.stringify(story.contract)).digest("hex") : undefined,
+		actorBoundary: actor.boundary,
 		allowProjectCwd: parsed["allow-project-cwd"] === true,
 	});
 	process.stdout.write(`${JSON.stringify(result.receipt)}\n`);
