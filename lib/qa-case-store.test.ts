@@ -21,7 +21,7 @@ const roots: string[] = [];
 function tempDir(): string {
 	const root = mkdtempSync(join(tmpdir(), "qa-case-store-"));
 	roots.push(root);
-	return root;
+	return realpathSync(root);
 }
 function repo(name = "repo"): string {
 	const root = join(tempDir(), name);
@@ -93,7 +93,39 @@ describe("qa case store", () => {
 		const outside = tempDir();
 		const link = join(outside, "link");
 		symlinkSync(join(cwd, "inside"), link);
-		expect(() => configureQaCaseStore(link, { cwd, home })).toThrow(/allow-project-storage/);
+		expect(() => configureQaCaseStore(link, { cwd, home })).toThrow(/symlink/);
+	});
+
+	test("configure는 선택한 leaf 또는 ancestor symlink를 canonicalize하지 않고 거부한다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		const outside = tempDir();
+		const leaf = join(tempDir(), "leaf-link");
+		symlinkSync(outside, leaf);
+		expect(() => configureQaCaseStore(leaf, { cwd, home, allowProjectStorage: true })).toThrow(/symlink/);
+		const parent = join(tempDir(), "parent-link");
+		symlinkSync(outside, parent);
+		expect(() => configureQaCaseStore(join(parent, "nested"), { cwd, home, allowProjectStorage: true })).toThrow(/symlink/);
+	});
+
+	test("present location은 dormant mode에서도 symlink면 검증 오류를 낸다", () => {
+		for (const mode of ["unconfigured", "disabled"] as const) {
+			const cwd = repo(mode);
+			const home = tempDir();
+			const target = tempDir();
+			const link = join(tempDir(), `${mode}-link`);
+			symlinkSync(target, link);
+			const context = resolveQaCaseContext({ cwd, home });
+			mkdirSync(join(home, ".qa-cases", context.projectKey), { recursive: true });
+			const raw = `version: 1\nproject: ${context.projectKey}\nmode: ${mode}\nlocation: ${link}\n`;
+			writeFileSync(context.manifestPath, raw);
+			expect(() => getQaCaseStoreStatus({ cwd, home })).toThrow(/symlink/);
+			expect(readFileSync(context.manifestPath, "utf8")).toBe(raw);
+			if (mode === "disabled") {
+				expect(() => disableQaCaseStore({ cwd, home })).toThrow(/symlink/);
+				expect(readFileSync(context.manifestPath, "utf8")).toBe(raw);
+			}
+		}
 	});
 
 	test("project-local approval을 manifest에 기록하고 이후 canonical path가 project로 바뀌면 거부한다", () => {
