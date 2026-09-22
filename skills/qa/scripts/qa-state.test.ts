@@ -15,6 +15,7 @@ import {
 	resolveStatePath,
 	type QaState,
 } from "./qa-state.ts";
+import { chainComplete, approveOk } from "@lib/qa-chain-core";
 
 let tmpDir: string;
 const originalOmtDir = process.env.OMT_DIR;
@@ -95,6 +96,21 @@ describe("qa state: seed shape", () => {
 });
 
 describe("qa state: phase/target round-trip", () => {
+	test("legacy story without contract remains readable but cannot become execution-ready", () => {
+		setQaState(S, { phase: "PLAN" });
+		const legacy = rawState();
+		legacy.acceptance_criteria = undefined;
+		legacy.actors = [{ id: "actor", name: "User", boundary: "home", driver: "bash", reachable: "yes" }];
+		legacy.stories = [{ id: "story", actor: "actor" }];
+		writeFileSync(resolveStatePath(S), JSON.stringify(legacy));
+		const readable = readQaState(S)!;
+		expect(readable.stories?.[0]?.contract).toBeUndefined();
+		expect(chainComplete(readable)).toBe(false);
+		expect(approveOk(readable, () => ({ exists: false, size: 0 }))).toBe(false);
+		incCycle(S);
+		expect(chainComplete(readQaState(S)!)).toBe(false);
+	});
+
 	test("set then get round-trips phase and target; cycle stays 0", () => {
 		setQaState(S, { phase: "PLAN", target: "verify feature X" });
 		const state = readQaState(S)!;
@@ -204,13 +220,46 @@ describe("qa-state CLI wiring", () => {
 	const run = (cmd: string) => execSync(`bun ${script} ${cmd}`, { encoding: "utf8", env: process.env });
 	const authorCompleteChain = () => {
 		run("set --phase PLAN");
+		run("set-acceptance --json '[\"home shows today supplements\"]'");
 		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
-		run('add-story --id story-1 --actor actor-1');
+		run("add-story --id story-1 --actor actor-1 --goal 'Check supplements' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'");
 		for (const [cls, sub] of [[1, ""], [2, ""], [3, ""], [4, ""], [5, ""], [6, ""], [1, "hang-timeout"], [5, "flaky-green"]] as const) {
 			const suffix = sub ? ` --sub ${sub}` : "";
 			run(`author-cell --story story-1 --cls ${cls}${suffix} --attack-point "attack ${cls} ${sub}" --priority ${cls === 1 ? "H" : "L"}`);
 		}
 	};
+
+	test("새 CLI story는 구조화 계약과 AC 링크가 없으면 거부한다", () => {
+		run("set --phase PLAN");
+		run("set-acceptance --json '[\"home shows today supplements\"]'");
+		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
+		expect(() => run('add-story --id story-1 --actor actor-1')).toThrow();
+		run("add-story --id story-1 --actor actor-1 --goal 'Check supplements' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'");
+		expect(rawState().stories[0].contract).toEqual({
+			goal: "Check supplements",
+			given: ["program exists"],
+			when: ["open home"],
+			then: ["today supplements are shown"],
+			acceptance_criteria: [0],
+		});
+	});
+
+	test("이미 증거가 있는 story의 계약 변경은 현재 cycle에서 거부한다", () => {
+		run("set --phase PLAN");
+		run("set-acceptance --json '[\"home shows today supplements\"]'");
+		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
+		run("add-story --id story-1 --actor actor-1 --goal 'Check supplements' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'");
+		run('author-cell --story story-1 --cls 1 --attack-point "attack" --priority H');
+		run('record-baseline --story story-1 --result fail --note "observed"');
+		expect(() => run("add-story --id story-1 --actor actor-1 --goal 'Changed intent' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'"),).toThrow(/cannot change an evidenced story contract/);
+	});
+
+	test("현재 cycle evidence 이후 참조된 AC 텍스트 변경은 거부한다", () => {
+		authorCompleteChain();
+		run('record-baseline --story story-1 --result fail --note "observed"');
+		expect(() => run("set-acceptance --json '[\"rewritten AC\"]'")).toThrow(/cannot change referenced acceptance criteria/);
+		expect(rawState().acceptance_criteria).toEqual(["home shows today supplements"]);
+	});
 
 	test("화면 액터는 텍스트 근거만으로 성공을 기록할 수 없음", () => {
 		authorCompleteChain();
@@ -236,7 +285,7 @@ describe("qa-state CLI wiring", () => {
 		expect(rawState().cells[0].evidence_review).toBeUndefined();
 		run(`review-evidence --story story-1 --cls 1 --json-file ${reviewFile}`);
 		run('add-actor --id actor-2 --name "Other" --boundary "other home" --driver agent-browser --reachable yes');
-		run('add-story --id story-1 --actor actor-2');
+		run("add-story --id story-1 --actor actor-2 --goal 'Check supplements' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'");
 		expect(rawState().cells[0].evidence_review).toBeUndefined();
 		writeFileSync(reviewFile, JSON.stringify([{ claim: "오류 안내 표시", verdict: "supported", observation: "보임", gap: "", sources: [] }]));
 		expect(() => run(`review-evidence --story story-1 --cls 1 --json-file ${reviewFile}`)).toThrow();
@@ -688,10 +737,11 @@ describe("qa-state CLI wiring", () => {
 
 	test("derived: every successful chain write persists recomputed flags", () => {
 		run("set --phase PLAN");
+		run("set-acceptance --json '[\"home shows today supplements\"]'");
 		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
 		const afterActor = rawState();
 		expect(afterActor.derived).toMatchObject({ chain_complete: false, driver_gate_armed: true });
-		run('add-story --id story-1 --actor actor-1');
+		run("add-story --id story-1 --actor actor-1 --goal 'Check supplements' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'");
 		expect(rawState()).toHaveProperty("derived.chain_complete");
 	});
 
@@ -718,8 +768,9 @@ describe("qa-state CLI wiring", () => {
 
 	test("author-cell records the optional structured scenario fields", () => {
 		run("set --phase PLAN");
+		run("set-acceptance --json '[\"home shows today supplements\"]'");
 		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
-		run('add-story --id story-1 --actor actor-1');
+		run("add-story --id story-1 --actor actor-1 --goal 'Check supplements' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'");
 		run(
 			'author-cell --story story-1 --cls 1 --attack-point "attack" --priority H ' +
 				'--why-needed "covers gap" --source self-authored',
@@ -747,8 +798,9 @@ describe("qa-state CLI wiring", () => {
 
 	test("record-cell round-trips driven-at, scenario fields, and 3-slot evidence", () => {
 		run("set --phase PLAN");
+		run("set-acceptance --json '[\"home shows today supplements\"]'");
 		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
-		run('add-story --id story-1 --actor actor-1');
+		run("add-story --id story-1 --actor actor-1 --goal 'Check supplements' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'");
 		run('author-cell --story story-1 --cls 1 --attack-point "attack" --priority H');
 		run(
 			"record-cell --story story-1 --cls 1 --status pass " +
@@ -773,8 +825,9 @@ describe("qa-state CLI wiring", () => {
 
 	test("record-cell records the 3-slot evidence on a FAIL cell too (no pass-evidence required)", () => {
 		run("set --phase PLAN");
+		run("set-acceptance --json '[\"home shows today supplements\"]'");
 		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
-		run('add-story --id story-1 --actor actor-1');
+		run("add-story --id story-1 --actor actor-1 --goal 'Check supplements' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'");
 		run('author-cell --story story-1 --cls 1 --attack-point "attack" --priority H');
 		run(
 			"record-cell --story story-1 --cls 1 --status fail --na-reason ignored " +
@@ -789,8 +842,9 @@ describe("qa-state CLI wiring", () => {
 
 	test("record-cell rejects an invalid --source value", () => {
 		run("set --phase PLAN");
+		run("set-acceptance --json '[\"home shows today supplements\"]'");
 		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
-		run('add-story --id story-1 --actor actor-1');
+		run("add-story --id story-1 --actor actor-1 --goal 'Check supplements' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'");
 		run('author-cell --story story-1 --cls 1 --attack-point "attack" --priority H');
 		expect(() => run("record-cell --story story-1 --cls 1 --status fail --na-reason x --source bogus")).toThrow();
 	});

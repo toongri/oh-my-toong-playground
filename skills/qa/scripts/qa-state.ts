@@ -53,6 +53,7 @@ import {
 	evidenceReviewSnapshot,
 	qaReportSnapshot,
 	qaReportComplete,
+	storyContractValid,
 	rosterComplete,
 	type QaActor,
 	type QaBaseline,
@@ -63,6 +64,7 @@ import {
 	type QaRunCheckHistory,
 	type QaRunChecks,
 	type QaStory,
+	type QaStoryContract,
 	type QaStoryProvenance,
 	type QaWaive,
 	type QaInert,
@@ -574,6 +576,35 @@ export function addActor(sessionId: string, opts: AddActorOpts): void {
 export interface AddStoryOpts {
 	id: string;
 	actor: string;
+	contract?: QaStoryContract;
+}
+
+function parseContractArray(value: unknown, field: string): string[] {
+	if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+		throw new Error(`add-story: ${field} must be a JSON array of strings`);
+	}
+	return value.map((item) => nonEmpty(item, `${field} item`));
+}
+
+function parseIntegerArray(value: unknown, field: string): number[] {
+	if (!Array.isArray(value) || !value.length || !value.every((item): item is number => typeof item === "number" && Number.isInteger(item))) {
+		throw new Error(`add-story: ${field} must be a non-empty JSON array of integer indices`);
+	}
+	return [...value];
+}
+
+function validateStoryContract(value: unknown, acceptanceCriteria: string[]): QaStoryContract {
+	if (!isRecord(value)) throw new Error("add-story: contract is required");
+	const goal = nonEmpty(value.goal, "goal");
+	const given = parseContractArray(value.given, "given");
+	const when = parseContractArray(value.when, "when");
+	const then = parseContractArray(value.then, "then");
+	const acceptance_criteria = parseIntegerArray(value.acceptance_criteria, "acceptance-criteria");
+	const contract: QaStoryContract = { goal, given, when, then, acceptance_criteria };
+	if (!storyContractValid({ id: "contract", contract }, acceptanceCriteria)) {
+		throw new Error("add-story: acceptance-criteria indices must reference nonblank session acceptance criteria");
+	}
+	return contract;
 }
 
 export function addStory(sessionId: string, opts: AddStoryOpts): void {
@@ -583,11 +614,21 @@ export function addStory(sessionId: string, opts: AddStoryOpts): void {
 	if (!(prior.actors ?? []).some((candidate) => candidate.id === actor)) {
 		throw new Error(`add-story: unknown actor "${actor}"`);
 	}
+	const contract = opts.contract === undefined ? undefined : validateStoryContract(opts.contract, prior.acceptance_criteria ?? []);
+	if (contract === undefined) throw new Error("add-story: goal, given, when, then, and acceptance-criteria are required");
 	const stories = [...(prior.stories ?? [])];
-	const next: QaStory = { id, actor };
 	const index = stories.findIndex((candidate) => candidate.id === id);
-	if (index >= 0) stories[index] = { ...stories[index], ...next };
-	else stories.push(next);
+	const existing = index >= 0 ? stories[index] : undefined;
+	const next: QaStory = { id, actor, ...(contract ? { contract } : existing?.contract ? { contract: existing.contract } : {}) };
+	if (index >= 0) {
+		if (contract && JSON.stringify(existing?.contract) !== JSON.stringify(contract)) {
+			const cycle = currentCycle(prior);
+			const evidenced = existing?.baseline?.cycle === cycle || (prior.cells ?? []).some((cell) =>
+				cell.story === id && cell.cycle === cycle && (cell.status !== undefined || cell.evidence !== undefined));
+			if (evidenced) throw new Error("add-story: cannot change an evidenced story contract; start the next FIX cycle");
+		}
+		stories[index] = { ...existing, ...next };
+	} else stories.push(next);
 	const changedActor = index >= 0 && (prior.stories?.[index]?.actor ?? prior.stories?.[index]?.actor_id) !== actor;
 	const cells = changedActor ? (prior.cells ?? []).map((cell) => {
 		if (cell.story !== id) return cell;
@@ -990,6 +1031,22 @@ export function setAcceptance(sessionId: string, criteria: string[]): void {
 		throw new Error("set-acceptance: every acceptance item must be a string");
 	}
 	const cleaned = criteria.map((item) => nonEmpty(item, "acceptance item"));
+	const prior = readPrior(sessionId);
+	const cycle = currentCycle(prior);
+	for (const story of prior.stories ?? []) {
+		const evidenced = story.baseline?.cycle === cycle || (prior.cells ?? []).some((cell) =>
+			cell.story === story.id && cell.cycle === cycle && (cell.status !== undefined || cell.evidence !== undefined));
+		if (evidenced && story.contract) {
+			for (const index of story.contract.acceptance_criteria) {
+				if (prior.acceptance_criteria?.[index] !== cleaned[index]) {
+					throw new Error("set-acceptance: cannot change referenced acceptance criteria after current-cycle evidence");
+				}
+			}
+		}
+		if (story.contract && !storyContractValid(story, cleaned)) {
+			throw new Error("set-acceptance: existing story contract has an invalid acceptance-criteria link");
+		}
+	}
 	mergeWrite(sessionId, { acceptance_criteria: cleaned });
 }
 
@@ -1164,7 +1221,7 @@ const ROSTER: CliCommand[] = [
 	{ name: "advance-phase", authority: "ai", effect: "advances to the named phase (chain-gated)" },
 	{ name: "inc-cycle", authority: "ai", effect: "increments the fix-loop cycle counter" },
 	{ name: "add-actor", authority: "ai", effect: "adds one actor to the roster" },
-	{ name: "add-story", authority: "ai", effect: "adds one story for an actor" },
+	{ name: "add-story", authority: "ai", effect: "adds a story with goal, given/when/then JSON arrays, and acceptance-criteria index links" },
 	{ name: "record-story-provenance", authority: "ai", effect: "records JSON {features:[{id,revision,entrypoints,states}],code_ref}; features non-empty, entrypoints/states may be empty" },
 	{ name: "author-cell", authority: "ai", effect: "authors one scenario cell's attack plan" },
 	{ name: "record-baseline", authority: "ai", effect: "records a story's BASELINE result" },
@@ -1241,7 +1298,21 @@ function main(): void {
 					reachable: requiredArg(args, "reachable"),
 				});
 			} else if (subcommand === "add-story") {
-				addStory(sessionId, { id: requiredArg(args, "id"), actor: str(args["actor"]) ?? str(args["actor-id"]) ?? "" });
+				const parseJsonArg = (name: string): unknown => {
+					try { return JSON.parse(requiredArg(args, name)); }
+					catch (error) { throw new Error(`add-story: ${name} must be valid JSON`, { cause: error }); }
+				};
+				addStory(sessionId, {
+					id: requiredArg(args, "id"),
+					actor: str(args["actor"]) ?? str(args["actor-id"]) ?? "",
+					contract: {
+						goal: requiredArg(args, "goal"),
+					given: parseContractArray(parseJsonArg("given"), "given"),
+					when: parseContractArray(parseJsonArg("when"), "when"),
+					then: parseContractArray(parseJsonArg("then"), "then"),
+					acceptance_criteria: parseIntegerArray(parseJsonArg("acceptance-criteria"), "acceptance-criteria"),
+					},
+				});
 			} else if (subcommand === "record-story-provenance") {
 				const input = JSON.parse(requiredArg(args, "json"));
 				recordStoryProvenance(sessionId, requiredArg(args, "story"), input, { cwd: str(args["project"]) });

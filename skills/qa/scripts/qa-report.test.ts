@@ -1411,8 +1411,9 @@ describe("qa-report CLI", () => {
 
 	test("writes a self-contained HTML file for a session with a recorded roster", () => {
 		runState("set --phase PLAN");
+		runState("set-acceptance --json '[\"The home boundary shows the requested result\"]'");
 		runState('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
-		runState("add-story --id story-1 --actor actor-1");
+		runState("add-story --id story-1 --actor actor-1 --goal 'Verify home result' --given '[\"The program exists\"]' --when '[\"The user opens home\"]' --then '[\"The requested result is shown\"]' --acceptance-criteria '[0]'");
 		runState('author-cell --story story-1 --cls 1 --attack-point "attack" --priority H');
 		runState(
 			"record-cell --story story-1 --cls 1 --status pass " +

@@ -67,15 +67,44 @@ export interface QaStoryProvenance {
 	cycle: number;
 }
 
+/** Structured user-story intent. acceptance_criteria contains zero-based links
+ * into the session-level acceptance_criteria array. */
+export interface QaStoryContract {
+	goal: string;
+	given: string[];
+	when: string[];
+	then: string[];
+	acceptance_criteria: number[];
+}
+
 export interface QaStory {
 	id: string;
 	/** Actor id; `actor_id` is accepted as the serialized spelling too. */
 	actor?: string;
 	actor_id?: string;
+	/** New stories carry an explicit intent contract; absent means legacy data. */
+	contract?: QaStoryContract;
 	baseline?: QaBaseline | null;
 	baseline_history?: QaBaseline[];
 	provenance?: QaStoryProvenance;
 	provenance_history?: QaStoryProvenance[];
+}
+
+function nonblank(value: unknown): value is string {
+	return typeof value === "string" && value.trim().length > 0;
+}
+
+/** Validates a new structured story contract without inventing legacy intent. */
+export function storyContractValid(story: QaStory, acceptanceCriteria: string[] = []): boolean {
+	const contract = story.contract;
+	if (!contract || !nonblank(contract.goal)) return false;
+	if (!Array.isArray(contract.given) || !contract.given.length || !contract.given.every(nonblank)) return false;
+	if (!Array.isArray(contract.when) || !contract.when.length || !contract.when.every(nonblank)) return false;
+	if (!Array.isArray(contract.then) || !contract.then.length || !contract.then.every(nonblank)) return false;
+	if (!Array.isArray(contract.acceptance_criteria) || !contract.acceptance_criteria.length) return false;
+	return contract.acceptance_criteria.every(
+		(index) => Number.isInteger(index) && index >= 0 && index < acceptanceCriteria.length && nonblank(acceptanceCriteria[index]),
+	);
 }
 
 export interface QaCell {
@@ -320,6 +349,10 @@ export function chainComplete(state: QaChainState): boolean {
 	const stories = state.stories ?? [];
 	if (!rosterComplete(state)) return false;
 	if (stories.some((story) => !actorFor(state, story))) return false;
+	// Execution readiness always requires an explicit story contract. Historical
+	// records remain readable through the state/view APIs, but cannot authorize a
+	// new execution or verdict without being re-authored in a fresh cycle.
+	if (stories.some((story) => !storyContractValid(story, state.acceptance_criteria ?? []))) return false;
 	return stories.every((story) => {
 		const required = requiredCells({ ...state, stories: [story] });
 		const authored = required.every((cell) => {

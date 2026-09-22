@@ -18,6 +18,7 @@ import {
 	resolveStatePath,
 	setQaState,
 	startQa,
+	setAcceptance,
 } from "./qa-state.ts";
 
 test("검증된 feature provenance를 현재 cycle에 기록한다", () => {
@@ -40,6 +41,7 @@ test("검증된 feature provenance를 현재 cycle에 기록한다", () => {
 		);
 		if (saved.status !== "ok" || !saved.feature) throw new Error("feature setup failed");
 		setQaState(sid, { phase: "PLAN" });
+		setAcceptance(sid, ["story acceptance"]);
 		addActor(sid, {
 			id: "actor",
 			name: "Actor",
@@ -47,7 +49,7 @@ test("검증된 feature provenance를 현재 cycle에 기록한다", () => {
 			driver: "bash",
 			reachable: "yes",
 		});
-		addStory(sid, { id: "story", actor: "actor" });
+		addStory(sid, { id: "story", actor: "actor", contract: { goal: "goal", given: ["given"], when: ["when"], then: ["then"], acceptance_criteria: [0] } });
 		recordStoryProvenance(
 			sid,
 			"story",
@@ -85,6 +87,7 @@ test("새 cycle의 동일 payload는 재바인딩하고 이전 cycle을 history�
 	try {
 		const saved = setupFeature(home, cwd);
 		setQaState("cycle", { phase: "PLAN" });
+		setAcceptance("cycle", ["story acceptance"]);
 		addActor("cycle", {
 			id: "actor",
 			name: "Actor",
@@ -92,7 +95,7 @@ test("새 cycle의 동일 payload는 재바인딩하고 이전 cycle을 history�
 			driver: "bash",
 			reachable: "yes",
 		});
-		addStory("cycle", { id: "story", actor: "actor" });
+		addStory("cycle", { id: "story", actor: "actor", contract: { goal: "goal", given: ["given"], when: ["when"], then: ["then"], acceptance_criteria: [0] } });
 		const input = {
 			features: [{ id: "feature-a", revision: saved.revision, entrypoints: [], states: [] }],
 			code_ref: "git:abc",
@@ -122,6 +125,7 @@ test("baseline 또는 결과 기록 뒤 최초 provenance 바인딩을 거부한
 	try {
 		const saved = setupFeature(home, cwd);
 		setQaState("gate", { phase: "PLAN" });
+		setAcceptance("gate", ["story acceptance"]);
 		addActor("gate", {
 			id: "actor",
 			name: "Actor",
@@ -129,7 +133,7 @@ test("baseline 또는 결과 기록 뒤 최초 provenance 바인딩을 거부한
 			driver: "bash",
 			reachable: "yes",
 		});
-		addStory("gate", { id: "story", actor: "actor" });
+		addStory("gate", { id: "story", actor: "actor", contract: { goal: "goal", given: ["given"], when: ["when"], then: ["then"], acceptance_criteria: [0] } });
 		const input = {
 			features: [{ id: "feature-a", revision: saved.revision, entrypoints: [], states: [] }],
 			code_ref: "git:abc",
@@ -176,8 +180,9 @@ function makeFixture(sid: string) {
 	process.env.OMT_DIR = omt;
 	const saved = setupFeature(home, cwd);
 	setQaState(sid, { phase: "PLAN" });
+	setAcceptance(sid, ["story acceptance"]);
 	addActor(sid, { id: "actor", name: "Actor", boundary: "CLI", driver: "bash", reachable: "yes" });
-	addStory(sid, { id: "story", actor: "actor" });
+	addStory(sid, { id: "story", actor: "actor", contract: { goal: "goal", given: ["given"], when: ["when"], then: ["then"], acceptance_criteria: [0] } });
 	const input = (extra: Record<string, unknown> = {}) => ({
 		features: [
 			{ id: "feature-a", revision: saved.revision, entrypoints: [], states: [], ...extra },
