@@ -93,6 +93,67 @@ const validImageReader: EvidenceReader = (path) =>
 	path.endsWith(".png") ? { kind: "image", dataUri: "data:image/png;base64,iVBORw0KGgoAAAAAAAAAAAAAAAAAAAAA" } : { kind: "text", content: `contents of ${path}` };
 
 describe("qa-report renderer", () => {
+	test("현재 cycle provenance를 감사 기록으로 렌더하고 계획 맥락임을 명시함", () => {
+		const view = baseView({
+			cycle: 3,
+			stories: [{
+				id: "story-1",
+				actor: "actor-1",
+				provenance: {
+					cycle: 3,
+					code_ref: "commit-abc + dirty diff",
+					features: [{ id: "stock-view", revision: "rev-7", entrypoints: ["Home App"], states: ["empty", "ready"] }],
+				},
+			}],
+		});
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const audit = html.slice(html.indexOf("시나리오 상세 기록"));
+		expect(audit).toContain("provenance");
+		expect(audit).toContain("현재 · cycle 3");
+		expect(audit).toContain("stock-view");
+		expect(audit).toContain("rev-7");
+		expect(audit).toContain("Home App");
+		expect(audit).toContain("empty, ready");
+		expect(audit).toContain("commit-abc + dirty diff");
+		expect(audit).toContain("실행 증거가 아닌 계획 맥락");
+		expect(audit).toContain("진입 경로·상태는 이번 QA의 계획 항목이며 지도에 등록된 항목임을 뜻하지 않습니다.");
+		expect(audit).toContain('href="#audit-story-story-1"');
+		expect(audit.match(/href="#audit-story-story-1"/g)?.length).toBe(1);
+		expect(audit).toContain('aria-label="story story-1 기존 기록으로 이동"');
+		expect(audit).not.toContain("<summary>현재 cycle provenance");
+	});
+
+	test("provenance가 없거나 stale이면 기록되지 않음으로 표시하고 previous cycle을 통과로 표시하지 않음", () => {
+		const view = baseView({
+			cycle: 3,
+			stories: [
+				{ id: "story-1", actor: "actor-1", provenance: { cycle: 2, code_ref: "old", features: [{ id: "old-feature", revision: "old-rev", entrypoints: [], states: [] }] }, provenance_history: [{ cycle: 3, code_ref: "same-cycle-before-baseline", features: [] }, { cycle: 1, code_ref: "older", features: [] }] },
+				{ id: "story-2", actor: "actor-1" },
+			],
+		});
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const audit = html.slice(html.indexOf("시나리오 상세 기록"));
+		expect(audit).toContain("provenance 기록 없음");
+		expect(audit).toContain("이전 기록");
+		expect(audit).toContain("cycle 3");
+		expect(audit).not.toContain("previous cycle provenance");
+		expect(audit).toContain("old-feature");
+		const provenance = audit.slice(audit.indexOf("Story provenance"), audit.indexOf("Failures &amp; Mismatches"));
+		expect(provenance).not.toContain("badge-pass");
+	});
+
+	test("provenance 텍스트와 story 링크 대상을 HTML escape함", () => {
+		const view = baseView({
+			cycle: 1,
+			stories: [{ id: "story<1>", actor: "actor-1", provenance: { cycle: 1, code_ref: 'ref"><script>alert(1)</script>', features: [{ id: "<feature>", revision: "<rev>", entrypoints: ["<entry>"], states: ["<state>"] }] } }],
+			cells: [{ ...baseView().cells![0], story: "story<1>" }],
+		});
+		const html = renderQaReport(view, {}, fakeReader)!;
+		expect(html).toContain("&lt;feature&gt;");
+		expect(html).toContain("ref&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;");
+		expect(html).not.toContain("<script>alert(1)</script>");
+		expect(html).toContain('href="#audit-story-story&lt;1&gt;"');
+	});
 	test("여러 주장이 같은 보조 이미지를 인용하면 한 번만 표시한다", () => {
 		const view = baseView();
 		view.cells = view.cells!.slice(0, 1);
