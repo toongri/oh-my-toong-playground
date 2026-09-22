@@ -198,6 +198,9 @@ rules:
     - error-handling-docs
     - outbound-local-reference
     - prose-clarity
+    # DB 조회는 read-db 스킬로만. 위 skills의 read-db와 짝이며, 스킬이 배포되는
+    # claude·codex 두 축 모두에서 원시 postgres MCP·psql 직결을 금지한다.
+    - read-db-usage
     - toolchain-mise
     - component: codex-subagent-spawn
       platforms: [codex]
