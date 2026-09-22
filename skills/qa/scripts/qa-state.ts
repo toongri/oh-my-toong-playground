@@ -63,10 +63,12 @@ import {
 	type QaRunCheckHistory,
 	type QaRunChecks,
 	type QaStory,
+	type QaStoryProvenance,
 	type QaWaive,
 	type QaInert,
 	type QaEvidenceClaim,
 } from "@lib/qa-chain-core";
+import { getFeature, type FeatureMapOptions } from "@lib/feature-map/index.ts";
 
 const DEFAULT_MAX_CYCLES = 5;
 
@@ -595,6 +597,116 @@ export function addStory(sessionId: string, opts: AddStoryOpts): void {
 	mergeWrite(sessionId, { stories, ...(changedActor ? { cells } : {}) });
 }
 
+export type RecordStoryProvenanceOptions = FeatureMapOptions;
+
+const FEATURE_ID_PATTERN = /^[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const REVISION_PATTERN = /^[a-f0-9]{64}$/;
+
+function provenanceInput(value: unknown): {
+	features: Array<{ id: string; revision: string; entrypoints: string[]; states: string[] }>;
+	code_ref: string;
+} {
+	if (!isRecord(value)) throw new Error("record-story-provenance: JSON must be an object");
+	if (!Array.isArray(value.features) || value.features.length === 0)
+		throw new Error("record-story-provenance: features must be a non-empty array");
+	if (typeof value.code_ref !== "string" || value.code_ref.trim() === "")
+		throw new Error("record-story-provenance: code_ref must be a nonblank string");
+	const seen = new Set<string>();
+	const features = value.features.map((raw, index) => {
+		if (!isRecord(raw))
+			throw new Error(`record-story-provenance: features[${index}] must be an object`);
+		const id = raw.id;
+		if (typeof id !== "string" || !FEATURE_ID_PATTERN.test(id))
+			throw new Error(
+				`record-story-provenance: features[${index}].id must be a safe lower ASCII identifier`,
+			);
+		if (seen.has(id)) throw new Error(`record-story-provenance: duplicate feature id "${id}"`);
+		seen.add(id);
+		if (typeof raw.revision !== "string" || !REVISION_PATTERN.test(raw.revision))
+			throw new Error(
+				`record-story-provenance: features[${index}].revision must be 64 lowercase hexadecimal characters`,
+			);
+		const labels = (field: "entrypoints" | "states"): string[] => {
+			const value = raw[field];
+			if (
+				!Array.isArray(value) ||
+				!value.every((label): label is string => typeof label === "string" && label.trim() !== "")
+			) {
+				throw new Error(
+					`record-story-provenance: features[${index}].${field} must be an array of nonblank strings`,
+				);
+			}
+			return [...value];
+		};
+		return {
+			id,
+			revision: raw.revision,
+			entrypoints: labels("entrypoints"),
+			states: labels("states"),
+		};
+	});
+	return { features, code_ref: value.code_ref };
+}
+
+/** Records the exact feature-map revisions used by a story, without membership claims. */
+export function recordStoryProvenance(
+	sessionId: string,
+	storyId: string,
+	input: unknown,
+	options: RecordStoryProvenanceOptions = {},
+): void {
+	const id = nonEmpty(storyId, "story");
+	const payload = provenanceInput(input);
+	// Resolve every feature before touching the QA state. This makes all map errors
+	// fail atomically and deliberately refuses stale revisions.
+	for (const ref of payload.features) {
+		const result = getFeature(ref.id, options);
+		if (result.status !== "ok")
+			throw new Error(
+				`record-story-provenance: feature "${ref.id}" is unavailable (${result.status === "not_found" ? result.reason : "unavailable"})`,
+			);
+		if (result.feature.revision !== ref.revision)
+			throw new Error(
+				`record-story-provenance: feature "${ref.id}" revision mismatch; supplied revision is not current`,
+			);
+	}
+	withStateLock(resolveStatePath(sessionId), () => {
+		const prior = readPrior(sessionId);
+		const stories = [...(prior.stories ?? [])];
+		const index = stories.findIndex((story) => story.id === id);
+		if (index < 0) throw new Error(`record-story-provenance: unknown story "${id}"`);
+		const existing = stories[index];
+		const cycle = currentCycle(prior);
+		const next: QaStoryProvenance = { ...payload, cycle };
+		if (existing.provenance && JSON.stringify(existing.provenance) === JSON.stringify(next)) return;
+		const currentCells = (prior.cells ?? []).some(
+			(cell) =>
+				cell.story === id &&
+				cell.cycle === cycle &&
+				cell.status !== undefined &&
+				cell.status !== null,
+		);
+		const currentBaseline = existing.baseline?.cycle === cycle;
+		if (currentBaseline || currentCells) {
+			throw new Error(
+				"record-story-provenance: cannot change provenance after the current story baseline or recorded cells; start the next FIX cycle",
+			);
+		}
+		const history = existing.provenance_history ? [...existing.provenance_history] : [];
+		if (
+			existing.provenance &&
+			JSON.stringify(history.at(-1)) !== JSON.stringify(existing.provenance)
+		)
+			history.push(existing.provenance);
+		stories[index] = {
+			...existing,
+			provenance: next,
+			...(history.length ? { provenance_history: history } : {}),
+		};
+		mergeWriteUnlocked(sessionId, { stories });
+	});
+}
+
 function validateCellSelector(story: string, cls: unknown, sub: string | undefined): { story: string; cls: number; sub?: "hang-timeout" | "flaky-green" } {
 	const storyId = nonEmpty(story, "story");
 	const classNumber = typeof cls === "number" ? cls : Number(cls);
@@ -972,10 +1084,19 @@ export function readQaView(sessionId: string): QaView | null {
 	const waives = state.waives ?? [];
 	const currentWaives = waives.filter((waive) => waive.cycle === cycle);
 	const currentInert = state.inert?.cycle === undefined || state.inert.cycle === cycle ? state.inert : undefined;
-	const stories = (state.stories ?? []).map((story) => ({
-		...story,
-		baseline: isPriorCycleRecord(story.baseline, cycle) ? null : story.baseline,
-	}));
+	const stories = (state.stories ?? []).map((story) => {
+		const currentProvenance = story.provenance?.cycle === cycle ? story.provenance : undefined;
+		const priorProvenance = story.provenance && !currentProvenance &&
+			!(story.provenance_history ?? []).some((item) => JSON.stringify(item) === JSON.stringify(story.provenance))
+			? [...(story.provenance_history ?? []), story.provenance]
+			: story.provenance_history;
+		return {
+			...story,
+			baseline: isPriorCycleRecord(story.baseline, cycle) ? null : story.baseline,
+			provenance: currentProvenance,
+			...(priorProvenance ? { provenance_history: priorProvenance } : {}),
+		};
+	});
 	const runChecks = state.run_checks
 		? {
 				stale_state: isPriorCycleRecord(state.run_checks.stale_state, cycle) ? null : state.run_checks.stale_state,
@@ -1044,6 +1165,7 @@ const ROSTER: CliCommand[] = [
 	{ name: "inc-cycle", authority: "ai", effect: "increments the fix-loop cycle counter" },
 	{ name: "add-actor", authority: "ai", effect: "adds one actor to the roster" },
 	{ name: "add-story", authority: "ai", effect: "adds one story for an actor" },
+	{ name: "record-story-provenance", authority: "ai", effect: "records JSON {features:[{id,revision,entrypoints,states}],code_ref}; features non-empty, entrypoints/states may be empty" },
 	{ name: "author-cell", authority: "ai", effect: "authors one scenario cell's attack plan" },
 	{ name: "record-baseline", authority: "ai", effect: "records a story's BASELINE result" },
 	{ name: "record-cell", authority: "ai", effect: "records one scenario cell's execution result" },
@@ -1120,6 +1242,9 @@ function main(): void {
 				});
 			} else if (subcommand === "add-story") {
 				addStory(sessionId, { id: requiredArg(args, "id"), actor: str(args["actor"]) ?? str(args["actor-id"]) ?? "" });
+			} else if (subcommand === "record-story-provenance") {
+				const input = JSON.parse(requiredArg(args, "json"));
+				recordStoryProvenance(sessionId, requiredArg(args, "story"), input, { cwd: str(args["project"]) });
 			} else if (subcommand === "author-cell") {
 				authorCell(sessionId, {
 					story: requiredArg(args, "story"),
