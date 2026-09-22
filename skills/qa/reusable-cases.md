@@ -101,6 +101,31 @@ returns a non-zero exit status and remains a failure. Case metadata is saved
 only by the case helper; replay executes the saved native runner and writes its
 receipt/artifacts, not new case metadata.
 
+After inspecting the receipt and capturing actual boundary evidence under the
+same attempt directory, bind the execution record to the cell with the existing
+state command (keeping the normal evidence arguments and visual requirements):
+
+```sh
+bun "${CLAUDE_SKILL_DIR}/scripts/qa-state.ts" record-cell \
+  --story STORY_ID --cls 1 --status pass \
+  --evidence-path "$ATTEMPT_DIR/boundary.json" \
+  --evidence-surface bash \
+  --case-run "$ATTEMPT_DIR/receipt.json"
+```
+
+`--case-run` is provenance, not PASS evidence. Binding rejects a stale or
+mismatched receipt (session, story, cell/sub, cycle, story-contract hash,
+case identity/revision, actor surface, native-file hashes, logs, receipt, or
+artifact hashes), and rejects receipt/log files as substitutes for boundary
+evidence. The evidence file(s) must be inside the attempt directory and their
+hashes are recorded. Visual cells still require separate before/action/after
+captures and evidence review; manual `record-cell` without `--case-run` remains
+valid when no saved case is being replayed.
+
+`--reset-confirmed` only confirms the saved reset description; it does not run
+the reset. Native runners remain unsandboxed, so inspect their flags/output and
+configuration before replay.
+
 If the manifest is awaiting a storage decision, ask once and remember the
 approved external or explicitly opted-in project location, or remember
 `disabled`; an invalid configured manifest is an error, not an automatic reset

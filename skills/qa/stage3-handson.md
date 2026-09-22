@@ -28,6 +28,11 @@ wrapper supports optional `--sub hang-timeout|flaky-green` and
 `--allow-project-cwd`; it expands `{artifacts}`, sets `QA_ARTIFACTS_DIR`, and
 emits a receipt without recording a QA PASS. A failed runner exits non-zero.
 Inspect runner flags/output/config because native runners are not sandboxed.
+Afterward, capture actual boundary evidence inside the attempt directory and
+pass the receipt to `qa-state.ts record-cell --case-run RECEIPT`; receipt/log
+files cannot substitute for that evidence. Session/story/cell/cycle,
+story-contract, case/native-file, and artifact hashes must still match, and
+visual cells retain their before/action/after and evidence-review requirements.
 
 ---
 

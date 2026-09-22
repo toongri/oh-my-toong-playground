@@ -24,8 +24,8 @@ qa is **standalone and stateful**. A single invocation owns the whole cycle — 
 For optional executable-case reuse and its storage contract, read
 [reusable-cases.md](reusable-cases.md). It defines the story GWT/AC contract,
 known-case-first selection, external-manifest states, native driver formats,
-the `qa-replay.ts` wrapper, and the independent reset/re-run required before a
-case is reusable.
+the `qa-replay.ts` wrapper, `record-cell --case-run RECEIPT` binding, and the
+independent reset/re-run required before a case is reusable.
 
 The caller composes a QA REQUEST using this structure:
 

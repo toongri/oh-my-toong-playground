@@ -180,6 +180,21 @@ describe("reusable case guidance contract", () => {
 		expect(reusableCasesMd).toContain("not sandboxed");
 	});
 
+	test("case-run receipt binding remains provenance, not boundary PASS evidence", () => {
+		expect(skillMd).toContain("record-cell --case-run RECEIPT");
+		expect(reusableCasesMd).toContain("actual boundary evidence under the");
+		expect(reusableCasesMd).toContain("--case-run");
+		expect(reusableCasesMd).toContain("qa_result: \"not-recorded\"");
+		expect(reusableCasesMd).toContain("receipt/log");
+		expect(reusableCasesMd).toContain("as substitutes for boundary");
+		expect(reusableCasesMd).toContain("session, story, cell/sub, cycle");
+		expect(reusableCasesMd).toContain("story-contract");
+		expect(reusableCasesMd).toContain("native-file");
+		expect(reusableCasesMd).toContain("artifact hashes");
+		expect(reusableCasesMd).toContain("--reset-confirmed` only");
+		expect(reusableCasesMd).toContain("does not run");
+	});
+
 	test("native runner formats and boundary evidence cannot be bypassed", () => {
 		expect(reusableCasesMd).toContain(".ad");
 		expect(reusableCasesMd).toContain("Maestro YAML");
