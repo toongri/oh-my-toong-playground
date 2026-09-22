@@ -28,6 +28,7 @@ oh-my-toong is an **agent central-management project**. It keeps skills, agents,
 ## Features
 
 - **Central library** — version-control skills, agents, hooks, rules, and docs in one repository
+- **Feature Map** — use the shared `lib/feature-map` library and the `scripts/feature-map/feature-map.ts` CLI deployed to Claude/Codex to `query`, `get`, `save`, `validate`, `status`, and `configure` per-feature Markdown+YAML maps. The first actual lookup bootstraps the OMT_DIR-independent `~/.feature-maps/<project-key>/manifest.yaml` with `storage: null` and returns `storage_not_configured` so the agent can ask the user to agree on a data location; `get` returns the path and revision, while `save` checks the revision.
 - **Declarative sync** — deploy only the components you need into a target project's `.claude/` via `sync.yaml`
 - **Per-project differentiation** — override global components with project-specific conventions via upward search
 - **Orphan cleanup** — remove only agents/skills/scripts/rules OMT recorded as deployed, once they drop from the declaration; files it never deployed are left alone

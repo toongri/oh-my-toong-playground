@@ -28,6 +28,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 ## 주요 기능
 
 - **중앙 라이브러리** — 스킬, 에이전트, 훅, 룰, 문서를 한 저장소에서 버전 관리
+- **Feature Map** — `lib/feature-map` 공용 라이브러리와 Claude/Codex에 배포되는 `scripts/feature-map/feature-map.ts` CLI로 기능별 Markdown+YAML 맵을 `query`·`get`·`save`·`validate`·`status`·`configure`합니다. 첫 실제 조회는 OMT_DIR과 독립적인 `~/.feature-maps/<project-key>/manifest.yaml`을 `storage: null`로 bootstrap하고 `storage_not_configured` 결과로 에이전트가 저장 위치 동의를 요청하게 하며, `get`은 경로·revision을 반환하고 `save`는 revision을 확인합니다.
 - **선언적 동기화** — `sync.yaml`로 필요한 컴포넌트만 대상 프로젝트의 `.claude/`로 배포
 - **프로젝트별 분화** — 상향 탐색으로 글로벌 컴포넌트 위에 프로젝트 고유 컨벤션 오버라이드
 - **고아 정리** — OMT가 배포했다고 기록한 agents/skills/scripts/rules만 선언에서 빠지면 다음 sync 때 대상에서 지워짐. 배포한 적 없는 파일은 그대로 둠
