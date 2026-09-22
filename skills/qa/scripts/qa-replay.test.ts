@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { replayFromCli } from "./qa-replay.ts";
@@ -41,6 +41,16 @@ describe("qa replay CLI", () => {
 		expect(output).toContain("not sandboxed");
 	});
 
+	test("CLI exit wrapper는 lookup 상태를 실패로 전달하고 help/null은 성공으로 둔다", () => {
+		const script = "import { replayExitCode } from './skills/qa/scripts/qa-replay.ts'; const value = JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify(value)+'\\n'); process.exit(replayExitCode(value));";
+		for (const status of ["unconfigured", "disabled", "not_found"]) {
+			const value = JSON.stringify({ status });
+			expect(() => execFileSync("bun", ["-e", script, value], { encoding: "utf8", cwd: process.cwd() })).toThrow();
+		}
+		const help = execFileSync("bun", ["-e", script, "null"], { encoding: "utf8", cwd: process.cwd() });
+		expect(help.trim()).toBe("null");
+	});
+
 	test("불완전 chain에서는 native runner를 실행하지 않는다", async () => {
 		const root = mkdtempSync(join(tmpdir(), "qa-replay-cli-"));
 		roots.push(root);
@@ -51,7 +61,8 @@ describe("qa replay CLI", () => {
 	});
 
 	test("완전한 CLI chain에서 case를 실행하고 receipt를 반환한다", async () => {
-		const root = mkdtempSync(join(tmpdir(), "qa-replay-valid-")); roots.push(root);
+		const rawRoot = mkdtempSync(join(tmpdir(), "qa-replay-valid-")); roots.push(rawRoot);
+		const root = realpathSync(rawRoot);
 		const store = join(root, "store");
 		process.env.OMT_DIR = join(root, "omt"); process.env.OMT_SESSION_ID = "valid-session";
 		const home = join(root, "home");
@@ -66,7 +77,8 @@ describe("qa replay CLI", () => {
 	});
 
 	test("surface와 AC mismatch는 runner 실행 전에 거부하고 disabled store는 실행하지 않는다", async () => {
-		const root = mkdtempSync(join(tmpdir(), "qa-replay-gates-")); roots.push(root);
+		const rawRoot = mkdtempSync(join(tmpdir(), "qa-replay-gates-")); roots.push(rawRoot);
+		const root = realpathSync(rawRoot);
 		const store = join(root, "store");
 		process.env.OMT_DIR = join(root, "omt"); process.env.OMT_SESSION_ID = "gate-session";
 		const home = join(root, "home");

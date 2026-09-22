@@ -31,15 +31,18 @@ function help(): string {
 		"Runs the saved native case only after the active QA actor→story→cell chain is complete.",
 		"The reset confirmation must exactly equal the saved reset_description.",
 		"Runner success creates a receipt but never records a QA cell PASS.",
+		"Unconfigured, disabled, or missing cases print structured status and exit nonzero; --help exits zero.",
+		"Runner start failures retain bounded logs and a failed receipt with start_error.",
 		"Native runners are not sandboxed; review intended output paths and flags/config before execution.",
 		"Relative native_files references resolve from --project; absolute references are accepted when present.",
 	].join("\n") + "\n";
 }
 function fail(message: string): never { throw new Error(`qa-replay: ${message}`); }
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null; }
-function receiptFailed(value: unknown): boolean {
-	if (!isRecord(value) || !isRecord(value.exit_status)) return false;
-	return value.exit_status.code !== 0 || value.exit_status.signal !== null || value.exit_status.timedout === true || value.exit_status.max_buffer_exceeded === true;
+export function replayExitCode(value: unknown): number {
+	if (value === null) return 0;
+	if (!isRecord(value) || !isRecord(value.exit_status)) return 1;
+	return value.exit_status.code !== 0 || value.exit_status.signal !== null || value.exit_status.timedout === true || value.exit_status.max_buffer_exceeded === true ? 1 : 0;
 }
 function selectedCell(state: NonNullable<ReturnType<typeof readQaState>>, story: string, cls: number, sub: string | undefined): QaCell | undefined {
 	return (state.cells ?? []).find((cell) => cell.story === story && cell.cls === cls && (cell.sub ?? undefined) === sub && cell.cycle === state.cycle);
@@ -92,6 +95,7 @@ export async function replayFromCli(args: string[] = process.argv.slice(2), opti
 		resetConfirmed: required(parsed, "reset-confirmed"),
 		sessionId,
 		storyId,
+		actorId: actor.id,
 		cellClass: cls,
 		cellSub: sub === "hang-timeout" || sub === "flaky-green" ? sub : undefined,
 		cycle: state.cycle,
@@ -104,6 +108,6 @@ export async function replayFromCli(args: string[] = process.argv.slice(2), opti
 
 if (import.meta.main) {
 	replayFromCli().then((receipt) => {
-		if (receiptFailed(receipt)) process.exitCode = 1;
+		process.exitCode = replayExitCode(receipt);
 	}).catch((error) => { process.stderr.write(`${String(error)}\n`); process.exit(1); });
 }

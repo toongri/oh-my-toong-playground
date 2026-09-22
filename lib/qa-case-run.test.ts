@@ -142,4 +142,15 @@ describe("qa case native replay", () => {
 		expect(readFileSync(result.receipt.artifact_paths.stdout)).toEqual(Buffer.from([255, 0, 1]));
 		expect(readQaCaseRunReceipt(result.receipt.artifact_paths.receipt)).toEqual(result.receipt);
 	});
+
+	test("runner 시작 실패도 로그와 start_error receipt를 남긴다", async () => {
+		const root = tempDir();
+		const result = await runQaCase(record(root, [join(root, "missing-runner")]), context(root, { actorId: "actor-1" }));
+		expect(result.receipt.exit_status.code).toBeNull();
+		expect(result.receipt.start_error?.message).toContain("ENOENT");
+		expect(result.receipt.actor_id).toBe("actor-1");
+		expect(readQaCaseRunReceipt(result.receipt.artifact_paths.receipt).start_error?.code).toBe("ENOENT");
+		expect(readFileSync(result.receipt.artifact_paths.stdout)).toEqual(Buffer.alloc(0));
+		expect(readFileSync(result.receipt.artifact_paths.stderr)).toEqual(Buffer.alloc(0));
+	});
 });

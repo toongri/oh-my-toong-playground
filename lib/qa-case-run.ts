@@ -21,6 +21,7 @@ export interface QaCaseRunContext {
 	timeoutMs?: number;
 	maxBuffer?: number;
 	allowProjectCwd?: boolean;
+	actorId?: string;
 }
 
 export interface QaCaseRunReceipt {
@@ -35,6 +36,7 @@ export interface QaCaseRunReceipt {
 	qa_result: "not-recorded";
 	code_ref: string;
 	project_root: string;
+	actor_id?: string;
 	case_path: string;
 	cycle: number;
 	native_files: Array<{ path: string; sha256: string }>;
@@ -46,6 +48,7 @@ export interface QaCaseRunReceipt {
 	story_id?: string;
 	cell?: { cls: number; sub?: "hang-timeout" | "flaky-green" };
 	story_contract_sha256?: string;
+	start_error?: { message: string; code?: string };
 }
 
 export interface QaCaseRunResult { receipt: QaCaseRunReceipt; runDirectory: string; }
@@ -124,7 +127,8 @@ export async function runQaCase(record: QaCaseRecord, context: QaCaseRunContext)
 	} catch (error) {
 		throw new Error(`qa replay: failed to start runner`, { cause: error });
 	}
-	const status = await new Promise<{ code: number | null; signal: string | null }>((resolveStatus, reject) => {
+	let startError: { message: string; code?: string } | undefined;
+	const status = await new Promise<{ code: number | null; signal: string | null }>((resolveStatus) => {
 		let settled = false;
 		let stopping = false;
 		const finish = (value: { code: number | null; signal: string | null }) => { if (!settled) { settled = true; resolveStatus(value); } };
@@ -141,7 +145,7 @@ export async function runQaCase(record: QaCaseRecord, context: QaCaseRunContext)
 		};
 		child.stdout.on("data", (chunk: Buffer) => { stdout = collect(stdout, chunk); });
 		child.stderr.on("data", (chunk: Buffer) => { stderr = collect(stderr, chunk); });
-		child.once("error", (error) => { cleanup(); if (!settled) { settled = true; reject(error); } });
+		child.once("error", (error: NodeJS.ErrnoException) => { startError = { message: error.message, ...(typeof error.code === "string" ? { code: error.code } : {}) }; cleanup(); finish({ code: null, signal: null }); });
 		child.once("close", (code, signal) => { cleanup(); finish({ code, signal }); });
 		watchdog.unref();
 	});
@@ -163,6 +167,8 @@ export async function runQaCase(record: QaCaseRecord, context: QaCaseRunContext)
 		...(context.storyId ? { story_id: context.storyId } : {}),
 		...(context.cellClass !== undefined ? { cell: { cls: context.cellClass, ...(context.cellSub ? { sub: context.cellSub } : {}) } } : {}),
 		...(context.storyContractSha256 ? { story_contract_sha256: context.storyContractSha256 } : {}),
+		...(context.actorId ? { actor_id: context.actorId } : {}),
+		...(startError ? { start_error: startError } : {}),
 	};
 	writeImmutable(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
 	return { receipt, runDirectory };
@@ -184,11 +190,13 @@ export function validateQaCaseRunReceipt(value: unknown): asserts value is QaCas
 		throw new Error("qa replay: invalid run receipt");
 	}
 	if (value.session_id !== undefined && !nonblank(value.session_id)) throw new Error("qa replay: invalid run receipt");
+	if (value.actor_id !== undefined && !nonblank(value.actor_id)) throw new Error("qa replay: invalid run receipt");
 	if (value.story_id !== undefined && !nonblank(value.story_id)) throw new Error("qa replay: invalid run receipt");
 	if (value.cell !== undefined) {
 		if (!isRecord(value.cell) || typeof value.cell.cls !== "number" || !Number.isInteger(value.cell.cls) || value.cell.cls < 1 || value.cell.cls > 6 || (value.cell.sub !== undefined && value.cell.sub !== "hang-timeout" && value.cell.sub !== "flaky-green")) throw new Error("qa replay: invalid run receipt");
 	}
 	if (value.story_contract_sha256 !== undefined && !sha(value.story_contract_sha256)) throw new Error("qa replay: invalid run receipt");
+	if (value.start_error !== undefined && (!isRecord(value.start_error) || !nonblank(value.start_error.message) || (value.start_error.code !== undefined && !nonblank(value.start_error.code)))) throw new Error("qa replay: invalid run receipt");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
