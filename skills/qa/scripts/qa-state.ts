@@ -26,10 +26,10 @@
  *   get
  */
 
-import { closeSync, mkdirSync, openSync, readFileSync, readSync, rmSync, statSync } from "fs";
+import { closeSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, rmSync, statSync } from "fs";
 import { execSync } from "child_process";
 import { createHash } from "crypto";
-import { extname, resolve } from "path";
+import { dirname, extname, isAbsolute, relative, resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
 import {
 	mergeWithHeartbeat,
@@ -58,11 +58,13 @@ import {
 	type QaActor,
 	type QaBaseline,
 	type QaCell,
+	type QaCaseRunBinding,
 	type QaChainState,
 	type QaDriver,
 	type QaPhase,
 	type QaRunCheckHistory,
 	type QaRunChecks,
+	type QaResult,
 	type QaStory,
 	type QaStoryContract,
 	type QaStoryProvenance,
@@ -71,6 +73,8 @@ import {
 	type QaEvidenceClaim,
 } from "@lib/qa-chain-core";
 import { getFeature, type FeatureMapOptions } from "@lib/feature-map/index.ts";
+import { readQaCaseRunReceipt } from "@lib/qa-case-run.ts";
+import { validateQaCase } from "@lib/qa-case-store.ts";
 
 const DEFAULT_MAX_CYCLES = 5;
 
@@ -834,9 +838,53 @@ export interface RecordCellOpts extends ScenarioFieldOpts, EvidenceSlotOpts {
 	naReason?: string;
 	evidencePath?: string;
 	evidenceSurface?: string;
+	caseRun?: string;
 }
 
-export function recordCell(sessionId: string, opts: RecordCellOpts): void {
+function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector: { story: string; cls: number; sub?: "hang-timeout" | "flaky-green" }, status: QaResult, evidence: QaCell["evidence"], path: string, driver: QaDriver): QaCaseRunBinding {
+	if (status === "na") throw new Error("case-run cannot be attached to an na cell");
+	const absoluteReceipt = resolve(path);
+	const receipt = readQaCaseRunReceipt(absoluteReceipt);
+	const story = (prior.stories ?? []).find((candidate) => candidate.id === selector.story);
+	if (receipt.session_id !== sessionId || receipt.story_id !== selector.story || receipt.cycle !== currentCycle(prior) || !receipt.cell || receipt.cell.cls !== selector.cls || (receipt.cell.sub ?? undefined) !== selector.sub) throw new Error("case-run receipt does not match the current session/story/cell/cycle");
+	if (receipt.code_ref.trim() === "" || receipt.case_path.trim() === "") throw new Error("case-run receipt metadata is incomplete");
+	if (!story?.contract || receipt.story_contract_sha256 !== createHash("sha256").update(JSON.stringify(story.contract)).digest("hex")) throw new Error("case-run receipt story contract does not match current story");
+	if (status === "pass" && (receipt.exit_status.code !== 0 || receipt.exit_status.signal !== null || receipt.exit_status.timedout || receipt.exit_status.max_buffer_exceeded)) throw new Error("pass case-run requires a zero, non-timeout runner result");
+	const caseBytes = readFileSync(receipt.case_path);
+	if (createHash("sha256").update(caseBytes).digest("hex") !== receipt.case_revision) throw new Error("case-run case metadata revision mismatch");
+	const recordValue: unknown = JSON.parse(caseBytes.toString("utf8"));
+	validateQaCase(recordValue);
+	if (receipt.case_id !== recordValue.id || receipt.surface !== recordValue.surface || recordValue.surface !== driver) throw new Error("case-run case identity or surface does not match actor driver");
+	const linkedCriteria = (story?.contract?.acceptance_criteria ?? []).map((index) => prior.acceptance_criteria?.[index]).filter((value): value is string => typeof value === "string");
+	if (!recordValue.acceptance_criteria.every((criterion) => linkedCriteria.includes(criterion))) throw new Error("case-run acceptance criteria are not linked to the story");
+	const runRoot = realpathSync(dirname(receipt.artifact_paths.receipt));
+	const expectedNative = (recordValue.native_files ?? []).map((file) => resolve(receipt.project_root, file));
+	if (expectedNative.length !== receipt.native_files.length || expectedNative.some((file, index) => {
+		const native = receipt.native_files[index];
+		return !native || resolve(native.path) !== file;
+	})) throw new Error("case-run native file list does not match case metadata");
+	const files: Record<string, string> = {};
+	const addFile = (filePath: string, expectedHash?: string) => {
+		const canonical = realpathSync(filePath);
+		const rest = relative(runRoot, canonical);
+		if (rest.startsWith("..") || isAbsolute(rest)) throw new Error("case-run evidence must be inside its attempt directory");
+		if (canonical === realpathSync(receipt.artifact_paths.receipt) || canonical === realpathSync(receipt.artifact_paths.stdout) || canonical === realpathSync(receipt.artifact_paths.stderr)) throw new Error("case-run receipt/logs cannot substitute boundary evidence");
+		const hash = createHash("sha256").update(readFileSync(canonical)).digest("hex");
+		if (expectedHash && hash !== expectedHash) throw new Error("case-run artifact hash mismatch");
+		files[canonical] = hash;
+	};
+	files[resolve(receipt.artifact_paths.receipt)] = createHash("sha256").update(readFileSync(receipt.artifact_paths.receipt)).digest("hex");
+	files[resolve(receipt.case_path)] = receipt.case_revision;
+	for (const native of receipt.native_files) { if (createHash("sha256").update(readFileSync(native.path)).digest("hex") !== native.sha256) throw new Error("case-run native file hash mismatch"); files[resolve(native.path)] = native.sha256; }
+	files[resolve(receipt.artifact_paths.stdout)] = receipt.artifact_paths.stdout_sha256;
+	files[resolve(receipt.artifact_paths.stderr)] = receipt.artifact_paths.stderr_sha256;
+	if (!evidence) throw new Error("case-run binding still requires actual boundary evidence");
+	const evidencePaths: string[] = [];
+	for (const evidencePath of [evidence.path, evidence.before, evidence.action, evidence.after].filter((value): value is string => Boolean(value))) { addFile(evidencePath); evidencePaths.push(realpathSync(evidencePath)); }
+	return { case_id: receipt.case_id, attempt_id: receipt.attempt_id, code_ref: receipt.code_ref, receipt_path: resolve(receipt.artifact_paths.receipt), files, evidence_paths: evidencePaths };
+}
+
+function recordCellUnlocked(sessionId: string, opts: RecordCellOpts): void {
 	const selector = validateCellSelector(opts.story, opts.cls, opts.sub);
 	if (!isOneOf(opts.status, RESULTS)) throw new Error(`status must be one of ${RESULTS.join("|")}`);
 	const prior = readPrior(sessionId);
@@ -871,6 +919,7 @@ export function recordCell(sessionId: string, opts: RecordCellOpts): void {
 	if ((opts.status === "pass" || opts.status === "fail") && isVisualDriver(actorDriver(prior, selector.story)) && !visualEvidenceComplete(evidence, stateProbe)) {
 		throw new Error("visual cell requires separate before/after screenshot files and an action record; capture the asserted screen, then record-cell again");
 	}
+	const binding = opts.caseRun ? caseRunBinding(prior, sessionId, selector, opts.status, evidence, opts.caseRun, actorDriver(prior, selector.story)) : undefined;
 	const next: QaCell = {
 		...selector,
 		attack_point: authored.attack_point,
@@ -881,11 +930,16 @@ export function recordCell(sessionId: string, opts: RecordCellOpts): void {
 		...pickScenarioFields(authored),
 		...scenarioPatch,
 		...(evidence ? { evidence } : {}),
+		...(binding ? { case_run: binding } : {}),
 	};
 	const cells = [...(prior.cells ?? [])];
 	const index = cells.findIndex((cell) => cell.cycle === cycle && sameCell(cell, selector));
 	cells[index] = next;
-	mergeWrite(sessionId, { cells });
+	mergeWriteUnlocked(sessionId, { cells });
+}
+
+export function recordCell(sessionId: string, opts: RecordCellOpts): void {
+	withStateLock(resolveStatePath(sessionId), () => recordCellUnlocked(sessionId, opts));
 }
 
 /** Store a judgment made by opening the raw evidence; never infer it from filenames. */
@@ -1227,7 +1281,7 @@ const ROSTER: CliCommand[] = [
 	{ name: "record-story-provenance", authority: "ai", effect: "records JSON {features:[{id,revision,entrypoints,states}],code_ref}; features non-empty, entrypoints/states may be empty" },
 	{ name: "author-cell", authority: "ai", effect: "authors one scenario cell's attack plan" },
 	{ name: "record-baseline", authority: "ai", effect: "records a story's BASELINE result" },
-	{ name: "record-cell", authority: "ai", effect: "records one scenario cell's execution result" },
+	{ name: "record-cell", authority: "ai", effect: "records one scenario cell's execution result; optional --case-run RECEIPT binds replay provenance" },
 	{
 		name: "review-evidence",
 		authority: "ai",
@@ -1352,6 +1406,7 @@ function main(): void {
 					evidenceBefore: str(args["evidence-before"]),
 					evidenceAction: str(args["evidence-action"]),
 					evidenceAfter: str(args["evidence-after"]),
+					caseRun: str(args["case-run"]),
 				});
 			} else if (subcommand === "review-evidence") {
 				reviewEvidence(sessionId, requiredArg(args, "story"), Number(requiredArg(args, "cls")), str(args["sub"]), JSON.parse(readFileSync(requiredArg(args, "json-file"), "utf8")));

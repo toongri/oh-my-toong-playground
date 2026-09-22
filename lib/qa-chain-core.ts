@@ -118,6 +118,7 @@ export interface QaCell {
 	na_reason?: string;
 	evidence?: QaEvidence;
 	evidence_review?: QaEvidenceReview;
+	case_run?: QaCaseRunBinding;
 	cycle?: number;
 	/**
 	 * Optional scenario detail. When present, the evidence-review snapshot binds
@@ -126,6 +127,15 @@ export interface QaCell {
 	driven_at?: string;
 	why_needed?: string;
 	source?: "self-authored" | "caller-provided";
+}
+
+export interface QaCaseRunBinding {
+	case_id: string;
+	attempt_id: string;
+	code_ref: string;
+	receipt_path: string;
+	files: Record<string, string>;
+	evidence_paths: string[];
 }
 
 export interface QaEvidenceClaim {
@@ -159,6 +169,18 @@ export function evidenceReviewComplete(cell: QaCell, probe: EvidenceProbe): bool
 		return paths.filter((path): path is string => !!path).every((path) => {
 			const file = probe(path);
 			return file.exists && file.size > 0 && /^[a-f0-9]{64}$/.test(review.files?.[path] ?? "") && file.sha256 === review.files[path];
+		});
+	} catch { return false; }
+}
+
+export function caseRunBindingComplete(cell: QaCell, probe: EvidenceProbe): boolean {
+	if (!cell.case_run || typeof cell.case_run !== "object" || !cell.case_run.case_id || !cell.case_run.attempt_id || !cell.case_run.code_ref || !cell.case_run.receipt_path || !cell.case_run.files || typeof cell.case_run.files !== "object" || Array.isArray(cell.case_run.files) || !Object.keys(cell.case_run.files).length) return false;
+	try {
+		const binding = cell.case_run;
+		const required = [binding.receipt_path, cell.evidence?.path, cell.evidence?.before, cell.evidence?.action, cell.evidence?.after].filter((path): path is string => typeof path === "string" && path.trim() !== "");
+		return required.every((path) => Object.prototype.hasOwnProperty.call(binding.files, path)) && Object.entries(binding.files).every(([path, hash]) => {
+			const file = probe(path);
+			return file.exists && /^[a-f0-9]{64}$/.test(hash) && file.sha256 === hash;
 		});
 	} catch { return false; }
 }
@@ -379,6 +401,7 @@ export function recordComplete(state: QaChainState, probe: EvidenceProbe): boole
 		const cell = currentCell(state, required);
 		if (!cell || cell.status === null || cell.status === undefined || cell.cycle !== currentCycle(state)) return false;
 		if (cell.status === "na" && !cell.na_reason) return false;
+		if (cell.case_run && !caseRunBindingComplete(cell, probe)) return false;
 		const story = stories.find((candidate) => candidate.id === required.story);
 			if ((cell.status === "pass" || cell.status === "fail") && isVisualDriver(story ? actorFor(state, story)?.driver : undefined) && !visualEvidenceComplete(cell.evidence, probe)) return false;
 			if ((cell.status === "pass" || cell.status === "fail") && isVisualDriver(story ? actorFor(state, story)?.driver : undefined) && !evidenceReviewComplete(cell, probe)) return false;

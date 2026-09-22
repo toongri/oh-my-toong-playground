@@ -10,6 +10,7 @@ import {
 	evidenceReviewSnapshot,
 	qaReportComplete,
 	qaReportSnapshot,
+	caseRunBindingComplete,
 	recordComplete,
 	requiredCells,
 	rosterComplete,
@@ -100,6 +101,15 @@ describe("qa chain core", () => {
 		delete state.stories[0].contract;
 		expect(chainComplete(state)).toBe(false);
 		expect(approveOk(state, probe)).toBe(false);
+	});
+	test("bound case-run files must remain present and hash-stable", () => {
+		const cell: QaCell = { story: "s", cls: 1, status: "fail", cycle: 0, case_run: { case_id: "case", attempt_id: "attempt", code_ref: "code", receipt_path: "/receipt", files: { "/receipt": "a".repeat(64), "/evidence": "a".repeat(64) }, evidence_paths: ["/evidence"] } };
+		expect(caseRunBindingComplete(cell, () => ({ exists: true, size: 1, sha256: "a".repeat(64) }))).toBe(true);
+		expect(caseRunBindingComplete(cell, () => ({ exists: true, size: 1, sha256: "b".repeat(64) }))).toBe(false);
+		cell.evidence = { path: "/changed-evidence", surface: "bash" };
+		expect(caseRunBindingComplete(cell, () => ({ exists: true, size: 1, sha256: "a".repeat(64) }))).toBe(false);
+		cell.case_run!.files = "malformed" as unknown as Record<string, string>;
+		expect(caseRunBindingComplete(cell, () => ({ exists: true, size: 1, sha256: "a".repeat(64) }))).toBe(false);
 	});
 
 	test("이미지 파일만 있고 주장 검토가 없으면 승인하지 않음", () => {

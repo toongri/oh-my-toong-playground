@@ -34,6 +34,7 @@ export interface QaCaseRunReceipt {
 	exit_status: { code: number | null; signal: string | null; timedout: boolean; max_buffer_exceeded: boolean };
 	qa_result: "not-recorded";
 	code_ref: string;
+	project_root: string;
 	case_path: string;
 	cycle: number;
 	native_files: Array<{ path: string; sha256: string }>;
@@ -154,7 +155,7 @@ export async function runQaCase(record: QaCaseRecord, context: QaCaseRunContext)
 		version: 1, case_id: record.id, case_revision: context.caseRevision, attempt_id: attemptId,
 		surface: record.surface, argv, cwd,
 		exit_status: { ...status, timedout, max_buffer_exceeded: maxBufferExceeded },
-		qa_result: "not-recorded", code_ref: context.codeRef, native_files: nativeFiles,
+		qa_result: "not-recorded", code_ref: context.codeRef, project_root: resolve(context.projectRoot), native_files: nativeFiles,
 		reset_confirmation: context.resetConfirmed, started_at: startedAt, finished_at: new Date().toISOString(),
 		case_path: context.casePath, cycle: context.cycle,
 		artifact_paths: { stdout: stdoutPath, stderr: stderrPath, receipt: receiptPath, stdout_sha256: sha256(stdout), stderr_sha256: sha256(stderr) },
@@ -179,7 +180,7 @@ export function readQaCaseRunReceipt(path: string): QaCaseRunReceipt {
 }
 
 export function validateQaCaseRunReceipt(value: unknown): asserts value is QaCaseRunReceipt {
-	if (!isRecord(value) || value.version !== 1 || !nonblank(value.case_id) || !sha(value.case_revision) || !nonblank(value.attempt_id) || !isSurface(value.surface) || !isArgv(value.argv) || !nonblank(value.cwd) || !isExitStatus(value.exit_status) || !nonblank(value.code_ref) || !nonblank(value.case_path) || typeof value.cycle !== "number" || !Number.isInteger(value.cycle) || value.cycle < 0 || !isNativeFiles(value.native_files) || !validDate(value.started_at) || !validDate(value.finished_at) || !nonblank(value.reset_confirmation) || value.qa_result !== "not-recorded" || !isArtifactPaths(value.artifact_paths)) {
+	if (!isRecord(value) || value.version !== 1 || !nonblank(value.case_id) || !sha(value.case_revision) || !nonblank(value.attempt_id) || !isSurface(value.surface) || !isArgv(value.argv) || !nonblank(value.cwd) || !isExitStatus(value.exit_status) || !nonblank(value.code_ref) || !nonblank(value.project_root) || !nonblank(value.case_path) || typeof value.cycle !== "number" || !Number.isInteger(value.cycle) || value.cycle < 0 || !isNativeFiles(value.native_files) || !validDate(value.started_at) || !validDate(value.finished_at) || !nonblank(value.reset_confirmation) || value.qa_result !== "not-recorded" || !isArtifactPaths(value.artifact_paths)) {
 		throw new Error("qa replay: invalid run receipt");
 	}
 	if (value.session_id !== undefined && !nonblank(value.session_id)) throw new Error("qa replay: invalid run receipt");
