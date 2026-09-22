@@ -96,6 +96,7 @@ function nonblank(value: unknown): value is string {
 
 /** Validates a new structured story contract without inventing legacy intent. */
 export function storyContractValid(story: QaStory, acceptanceCriteria: string[] = []): boolean {
+	if (!Array.isArray(acceptanceCriteria) || !acceptanceCriteria.every(nonblank)) return false;
 	const contract = story.contract;
 	if (!contract || !nonblank(contract.goal)) return false;
 	if (!Array.isArray(contract.given) || !contract.given.length || !contract.given.every(nonblank)) return false;

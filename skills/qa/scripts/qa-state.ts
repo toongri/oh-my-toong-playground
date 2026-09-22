@@ -610,32 +610,32 @@ function validateStoryContract(value: unknown, acceptanceCriteria: string[]): Qa
 export function addStory(sessionId: string, opts: AddStoryOpts): void {
 	const id = nonEmpty(opts.id, "id");
 	const actor = nonEmpty(opts.actor, "actor");
-	const prior = readPrior(sessionId);
-	if (!(prior.actors ?? []).some((candidate) => candidate.id === actor)) {
-		throw new Error(`add-story: unknown actor "${actor}"`);
-	}
-	const contract = opts.contract === undefined ? undefined : validateStoryContract(opts.contract, prior.acceptance_criteria ?? []);
-	if (contract === undefined) throw new Error("add-story: goal, given, when, then, and acceptance-criteria are required");
-	const stories = [...(prior.stories ?? [])];
-	const index = stories.findIndex((candidate) => candidate.id === id);
-	const existing = index >= 0 ? stories[index] : undefined;
-	const next: QaStory = { id, actor, ...(contract ? { contract } : existing?.contract ? { contract: existing.contract } : {}) };
-	if (index >= 0) {
-		if (contract && JSON.stringify(existing?.contract) !== JSON.stringify(contract)) {
-			const cycle = currentCycle(prior);
-			const evidenced = existing?.baseline?.cycle === cycle || (prior.cells ?? []).some((cell) =>
-				cell.story === id && cell.cycle === cycle && (cell.status !== undefined || cell.evidence !== undefined));
-			if (evidenced) throw new Error("add-story: cannot change an evidenced story contract; start the next FIX cycle");
-		}
-		stories[index] = { ...existing, ...next };
-	} else stories.push(next);
-	const changedActor = index >= 0 && (prior.stories?.[index]?.actor ?? prior.stories?.[index]?.actor_id) !== actor;
-	const cells = changedActor ? (prior.cells ?? []).map((cell) => {
-		if (cell.story !== id) return cell;
-		const { evidence_review: _review, ...record } = cell;
-		return record;
-	}) : prior.cells;
-	mergeWrite(sessionId, { stories, ...(changedActor ? { cells } : {}) });
+	withStateLock(resolveStatePath(sessionId), () => {
+		const prior = readPrior(sessionId);
+		if (!(prior.actors ?? []).some((candidate) => candidate.id === actor)) throw new Error(`add-story: unknown actor "${actor}"`);
+		const contract = opts.contract === undefined ? undefined : validateStoryContract(opts.contract, prior.acceptance_criteria ?? []);
+		if (contract === undefined) throw new Error("add-story: goal, given, when, then, and acceptance-criteria are required");
+		const stories = [...(prior.stories ?? [])];
+		const index = stories.findIndex((candidate) => candidate.id === id);
+		const existing = index >= 0 ? stories[index] : undefined;
+		const next: QaStory = { id, actor, ...(contract ? { contract } : existing?.contract ? { contract: existing.contract } : {}) };
+		if (index >= 0) {
+			if (contract && JSON.stringify(existing?.contract) !== JSON.stringify(contract)) {
+				const cycle = currentCycle(prior);
+				const evidenced = existing?.baseline?.cycle === cycle || (prior.cells ?? []).some((cell) =>
+					cell.story === id && cell.cycle === cycle && (cell.status !== undefined || cell.evidence !== undefined));
+				if (evidenced) throw new Error("add-story: cannot change an evidenced story contract; start the next FIX cycle");
+			}
+			stories[index] = { ...existing, ...next };
+		} else stories.push(next);
+		const changedActor = index >= 0 && (prior.stories?.[index]?.actor ?? prior.stories?.[index]?.actor_id) !== actor;
+		const cells = changedActor ? (prior.cells ?? []).map((cell) => {
+			if (cell.story !== id) return cell;
+			const { evidence_review: _review, ...record } = cell;
+			return record;
+		}) : prior.cells;
+		mergeWriteUnlocked(sessionId, { stories, ...(changedActor ? { cells } : {}) });
+	});
 }
 
 export type RecordStoryProvenanceOptions = FeatureMapOptions;
@@ -1031,23 +1031,25 @@ export function setAcceptance(sessionId: string, criteria: string[]): void {
 		throw new Error("set-acceptance: every acceptance item must be a string");
 	}
 	const cleaned = criteria.map((item) => nonEmpty(item, "acceptance item"));
-	const prior = readPrior(sessionId);
-	const cycle = currentCycle(prior);
-	for (const story of prior.stories ?? []) {
-		const evidenced = story.baseline?.cycle === cycle || (prior.cells ?? []).some((cell) =>
-			cell.story === story.id && cell.cycle === cycle && (cell.status !== undefined || cell.evidence !== undefined));
-		if (evidenced && story.contract) {
-			for (const index of story.contract.acceptance_criteria) {
-				if (prior.acceptance_criteria?.[index] !== cleaned[index]) {
-					throw new Error("set-acceptance: cannot change referenced acceptance criteria after current-cycle evidence");
+	withStateLock(resolveStatePath(sessionId), () => {
+		const prior = readPrior(sessionId);
+		const cycle = currentCycle(prior);
+		for (const story of prior.stories ?? []) {
+			const evidenced = story.baseline?.cycle === cycle || (prior.cells ?? []).some((cell) =>
+				cell.story === story.id && cell.cycle === cycle && (cell.status !== undefined || cell.evidence !== undefined));
+			if (evidenced && story.contract) {
+				for (const index of story.contract.acceptance_criteria) {
+					if (prior.acceptance_criteria?.[index] !== cleaned[index]) {
+						throw new Error("set-acceptance: cannot change referenced acceptance criteria after current-cycle evidence");
+					}
 				}
 			}
+			if (story.contract && !storyContractValid(story, cleaned)) {
+				throw new Error("set-acceptance: existing story contract has an invalid acceptance-criteria link");
+			}
 		}
-		if (story.contract && !storyContractValid(story, cleaned)) {
-			throw new Error("set-acceptance: existing story contract has an invalid acceptance-criteria link");
-		}
-	}
-	mergeWrite(sessionId, { acceptance_criteria: cleaned });
+		mergeWriteUnlocked(sessionId, { acceptance_criteria: cleaned });
+	});
 }
 
 /** Re-enters a session with a fresh, empty QA cycle. */

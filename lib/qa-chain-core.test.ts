@@ -90,6 +90,11 @@ describe("qa chain core", () => {
 		story.contract.then = ["   "];
 		expect(storyContractValid(story, state.acceptance_criteria)).toBe(false);
 	});
+	test("malformed persisted acceptance criteria fail closed while story remains readable", () => {
+		const state = authoredState();
+		expect(storyContractValid(state.stories[0], "A" as unknown as string[])).toBe(false);
+		expect(chainComplete({ ...state, acceptance_criteria: "A" as unknown as string[] })).toBe(false);
+	});
 	test("new-cycle readiness rejects a missing story contract", () => {
 		const state = authoredState();
 		delete state.stories[0].contract;
