@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runQaCasesCli } from "./qa-cases.ts";
@@ -10,5 +10,16 @@ function repo(): string { const root = mkdtempSync(join(tmpdir(), "qa-cases-cli-
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 describe("qa-cases CLI", () => {
 	test("help and status return JSON-compatible operational output", () => { const cwd = repo(); const home = mkdtempSync(join(tmpdir(), "qa-cases-home-")); roots.push(home); expect(runQaCasesCli(["help"]).stdout).toContain("configure --location ABSOLUTE_PATH"); const status = runQaCasesCli(["status", "--project", cwd], { cwd, home }); expect(status.exitCode).toBe(0); expect(JSON.parse(status.stdout).status).toBe("unconfigured"); });
-	test("configure requires explicit project-storage opt-in and save accepts JSON metadata only", () => { const cwd = repo(); const home = mkdtempSync(join(tmpdir(), "qa-cases-home-")); roots.push(home); const location = join(mkdtempSync(join(tmpdir(), "qa-cases-store-")), "store"); const configured = runQaCasesCli(["configure", "--location", location, "--project", cwd], { cwd, home }); expect(configured.exitCode).toBe(0); });
+	test("configure는 project-local 저장을 거부하고 명시적 opt-in 후 save는 실행하지 않는다", () => {
+		const cwd = repo(); const home = mkdtempSync(join(tmpdir(), "qa-cases-home-")); roots.push(home);
+		const rejected = runQaCasesCli(["configure", "--location", join(cwd, "qa-cases"), "--project", cwd], { cwd, home });
+		expect(rejected.exitCode).toBe(1);
+		const location = join(mkdtempSync(join(tmpdir(), "qa-cases-store-")), "store");
+		expect(runQaCasesCli(["configure", "--location", location, "--project", cwd], { cwd, home }).exitCode).toBe(0);
+		const runner = join(cwd, "runner.sh"); const native = join(cwd, "native.json"); const input = join(cwd, "case.json");
+		writeFileSync(runner, "sentinel-runner"); writeFileSync(native, "sentinel-native");
+		writeFileSync(input, JSON.stringify({ id: "cli-case", title: "CLI case", goal: "metadata only", given: ["ready"], when: ["save"], then: ["stored"], acceptance_criteria: ["one"], surface: "bash", runner: [runner], execution_cwd: "project-root", native_files: [native], reset_description: "remove case" }));
+		const saved = runQaCasesCli(["save", "--file", input, "--expect", "new", "--project", cwd], { cwd, home });
+		expect(saved.exitCode).toBe(0); expect(readFileSync(runner, "utf8")).toBe("sentinel-runner"); expect(readFileSync(native, "utf8")).toBe("sentinel-native");
+	});
 });

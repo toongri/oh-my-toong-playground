@@ -96,6 +96,71 @@ describe("qa case store", () => {
 		expect(() => configureQaCaseStore(link, { cwd, home })).toThrow(/allow-project-storage/);
 	});
 
+	test("project-local approval을 manifest에 기록하고 이후 canonical path가 project로 바뀌면 거부한다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		const location = join(cwd, "qa-cases");
+		const configured = configureQaCaseStore(location, { cwd, home, allowProjectStorage: true });
+		expect(configured.status).toBe("configured");
+		expect(readFileSync(resolveQaCaseContext({ cwd, home }).manifestPath, "utf8")).toContain("allow_project_storage: true");
+		rmSync(location, { recursive: true, force: true });
+		symlinkSync(cwd, location);
+		expect(() => getQaCaseStoreStatus({ cwd, home })).toThrow(/project-local|symlink/);
+	});
+
+	test("fixed manifest parent symlink를 따라 product tree에 bootstrap하지 않는다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		mkdirSync(home, { recursive: true });
+		const qaCases = join(home, ".qa-cases");
+		symlinkSync(cwd, qaCases);
+		expect(() => getQaCaseStoreStatus({ cwd, home })).toThrow(/symlink/);
+		expect(existsSync(join(cwd, ".qa-cases"))).toBe(false);
+	});
+
+	test("configure와 disable도 fixed manifest parent symlink를 우회하지 않는다", () => {
+		for (const operation of ["configure", "disable"] as const) {
+			const cwd = repo(operation);
+			const home = tempDir();
+			const qaCases = join(home, ".qa-cases");
+			symlinkSync(cwd, qaCases);
+			const invoke = () => operation === "configure"
+				? configureQaCaseStore(join(tempDir(), "store"), { cwd, home })
+				: disableQaCaseStore({ cwd, home });
+			expect(invoke).toThrow(/symlink/);
+			expect(existsSync(join(cwd, ".qa-cases"))).toBe(false);
+		}
+	});
+
+	test("disabled/unconfigured manifest의 malformed location도 원문을 보존하고 거부한다", () => {
+		for (const mode of ["disabled", "unconfigured"]) {
+			const cwd = repo(mode);
+			const home = tempDir();
+			const context = resolveQaCaseContext({ cwd, home });
+			mkdirSync(join(home, ".qa-cases", context.projectKey), { recursive: true });
+			const raw = `version: 1\nproject: ${context.projectKey}\nmode: ${mode}\nlocation: [broken\n`;
+			writeFileSync(context.manifestPath, raw);
+			expect(() => getQaCaseStoreStatus({ cwd, home })).toThrow();
+			expect(readFileSync(context.manifestPath, "utf8")).toBe(raw);
+		}
+	});
+
+	test("configured manifest의 location 누락은 configure/disable에서 원문을 보존하고 거부한다", () => {
+		for (const operation of ["configure", "disable"] as const) {
+			const cwd = repo(operation);
+			const home = tempDir();
+			const context = resolveQaCaseContext({ cwd, home });
+			mkdirSync(join(home, ".qa-cases", context.projectKey), { recursive: true });
+			const raw = `version: 1\nproject: ${context.projectKey}\nmode: configured\n`;
+			writeFileSync(context.manifestPath, raw);
+			const invoke = () => operation === "configure"
+				? configureQaCaseStore(join(tempDir(), "store"), { cwd, home })
+				: disableQaCaseStore({ cwd, home });
+			expect(invoke).toThrow(/location/);
+			expect(readFileSync(context.manifestPath, "utf8")).toBe(raw);
+		}
+	});
+
 	test("disable은 설정을 기억하고 케이스 API는 명시적 disabled 상태를 반환한다", () => {
 		const cwd = repo();
 		const home = tempDir();

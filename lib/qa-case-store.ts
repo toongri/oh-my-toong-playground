@@ -24,7 +24,7 @@ export interface QaCaseRecord {
 	feature_refs?: string[];
 }
 export interface QaCaseContext { projectKey: string; projectRoot: string; manifestPath: string; }
-export type QaCaseManifest = { version: 1; project: string; mode: "unconfigured" | "disabled" | "configured"; location?: string };
+export type QaCaseManifest = { version: 1; project: string; mode: "unconfigured" | "disabled" | "configured"; location?: string; allow_project_storage?: boolean };
 export type QaCaseStoreOptions = FeatureMapOptions;
 export type QaCaseStatus =
 	| { status: "unconfigured"; mode: "unconfigured"; project: string; manifestPath: string }
@@ -52,14 +52,17 @@ function validateManifest(value: Record<string, unknown>, context: QaCaseContext
 	if (value.version !== 1) throw new Error("qa-cases: unsupported manifest version");
 	if (value.project !== context.projectKey) throw new Error("qa-cases: manifest project does not match context");
 	if (value.mode !== "unconfigured" && value.mode !== "disabled" && value.mode !== "configured") throw new Error("qa-cases: invalid manifest mode");
-	if (value.mode === "configured" && (typeof value.location !== "string" || !isAbsolute(value.location) || value.location.trim() === "")) throw new Error("qa-cases: configured manifest requires an absolute location");
-	return { version: 1, project: context.projectKey, mode: value.mode, ...(typeof value.location === "string" ? { location: value.location } : {}) };
+	if (value.mode === "configured" && value.location === undefined) throw new Error("qa-cases: configured manifest requires a location");
+	if (value.location !== undefined && (typeof value.location !== "string" || !isAbsolute(value.location) || value.location.trim() === "")) throw new Error("qa-cases: manifest location must be an absolute nonblank path");
+	if (value.allow_project_storage !== undefined && typeof value.allow_project_storage !== "boolean") throw new Error("qa-cases: allow_project_storage must be boolean");
+	return { version: 1, project: context.projectKey, mode: value.mode, ...(typeof value.location === "string" ? { location: value.location } : {}), ...(typeof value.allow_project_storage === "boolean" ? { allow_project_storage: value.allow_project_storage } : {}) };
 }
 function writeAtomic(path: string, content: string): void {
 	const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
 	try { writeFileSync(temporary, content, "utf8"); renameSync(temporary, path); } finally { try { unlinkSync(temporary); } catch { /* renamed */ } }
 }
 function ensureManifest(context: QaCaseContext): { context: QaCaseContext; manifest: QaCaseManifest; raw: Record<string, unknown> } {
+	assertNoSymlinkComponents("/", context.manifestPath);
 	mkdirSync(dirname(context.manifestPath), { recursive: true });
 	return withStateLock(context.manifestPath, () => {
 		return readOrCreateManifest(context);
@@ -86,13 +89,19 @@ function statusFrom(result: ReturnType<typeof ensureManifest>): QaCaseStatus {
 	if (result.manifest.mode === "unconfigured") return { ...base, status: "unconfigured", mode: "unconfigured" };
 	if (result.manifest.mode === "disabled") return { ...base, status: "disabled", mode: "disabled", ...(result.manifest.location ? { location: result.manifest.location } : {}) };
 	if (!result.manifest.location) throw new Error("qa-cases: configured manifest has no location");
-	return { ...base, status: "configured", mode: "configured", location: assertDirectory(result.manifest.location) };
+	assertNoSymlinkComponents("/", result.manifest.location);
+	const location = assertDirectory(result.manifest.location);
+	if (!result.manifest.allow_project_storage && inside(result.context.projectRoot, location)) throw new Error("qa-cases: persisted project-local storage requires explicit approval");
+	return { ...base, status: "configured", mode: "configured", location };
 }
 function configured(options: QaCaseStoreOptions): { result: ReturnType<typeof ensureManifest>; location?: string } {
 	const result = ensureManifest(resolveQaCaseContext(options));
 	if (result.manifest.mode !== "configured") return { result };
 	if (!result.manifest.location) throw new Error("qa-cases: configured manifest has no location");
-	return { result, location: assertDirectory(result.manifest.location) };
+	assertNoSymlinkComponents("/", result.manifest.location);
+	const location = assertDirectory(result.manifest.location);
+	if (!result.manifest.allow_project_storage && inside(result.context.projectRoot, location)) throw new Error("qa-cases: persisted project-local storage requires explicit approval");
+	return { result, location };
 }
 
 export function getQaCaseStoreStatus(options: QaCaseStoreOptions = {}): QaCaseStatus { return statusFrom(ensureManifest(resolveQaCaseContext(options))); }
@@ -100,6 +109,7 @@ export function getQaCaseStoreStatus(options: QaCaseStoreOptions = {}): QaCaseSt
 export function configureQaCaseStore(location: string, options: QaCaseStoreOptions & { allowProjectStorage?: boolean } = {}): QaCaseStatus {
 	if (!isAbsolute(location)) throw new Error("qa-cases: storage location must be absolute");
 	const context = resolveQaCaseContext(options);
+	assertNoSymlinkComponents("/", context.manifestPath);
 	let normalizedLocation = location;
 	try { normalizedLocation = join(realpathSync(dirname(location)), basename(location)); } catch { /* nearest existing ancestor is used for new paths */ }
 	let explicitLinkTarget: string | undefined;
@@ -130,6 +140,7 @@ export function configureQaCaseStore(location: string, options: QaCaseStoreOptio
 		const raw = ensured.raw;
 		raw.mode = "configured";
 		raw.location = actual;
+		raw.allow_project_storage = options.allowProjectStorage === true;
 		raw.version = 1;
 		raw.project = context.projectKey;
 		writeAtomic(context.manifestPath, stringify(raw));
@@ -139,6 +150,7 @@ export function configureQaCaseStore(location: string, options: QaCaseStoreOptio
 
 export function disableQaCaseStore(options: QaCaseStoreOptions = {}): QaCaseStatus {
 	const context = resolveQaCaseContext(options);
+	assertNoSymlinkComponents("/", context.manifestPath);
 	let result: QaCaseStatus | undefined;
 	mkdirSync(dirname(context.manifestPath), { recursive: true });
 	withStateLock(context.manifestPath, () => {
