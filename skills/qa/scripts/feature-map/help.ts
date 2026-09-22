@@ -16,8 +16,8 @@ export const FEATURE_MAP_COMMANDS: FeatureMapCommand[] = [
 		details:
 			"Returns matching summaries with the absolute source path and current revision. It first looks up the fixed manifest; an unconfigured store returns not_found with reason storage_not_configured and next_action ask_user_for_storage.",
 		examples: [
-			"bun scripts/feature-map/feature-map.ts query --text inventory --project .",
-			"bun scripts/feature-map/feature-map.ts query --changed-by product --project .",
+			"bun skills/qa/scripts/feature-map/feature-map.ts query --text inventory --project .",
+			"bun skills/qa/scripts/feature-map/feature-map.ts query --changed-by product --project .",
 		],
 	},
 	{
@@ -27,7 +27,7 @@ export const FEATURE_MAP_COMMANDS: FeatureMapCommand[] = [
 		effect: "reads one feature map",
 		details:
 			"Returns the complete Markdown document plus its absolute source path and current revision. A missing feature is not_found with reason feature_not_found; an unconfigured store is reported separately.",
-		examples: ["bun scripts/feature-map/feature-map.ts get stock.view --project ."],
+		examples: ["bun skills/qa/scripts/feature-map/feature-map.ts get stock.view --project ."],
 	},
 	{
 		name: "save",
@@ -37,8 +37,8 @@ export const FEATURE_MAP_COMMANDS: FeatureMapCommand[] = [
 		details:
 			"The input must be Markdown with YAML front matter and a nonblank body, including schema_version: 1, id, and title. The --file PATH is resolved relative to the invocation working directory, independently of --project. The CLI accepts --expect new for a new file or a raw 64-character SHA-256 revision for an update; the library API uses null for a new file. A mismatch is a conflict and never overwrites the file. CLI/API writers use locks and expected-revision guards; direct edits remain allowed and can be checked with validate.",
 		examples: [
-			"bun scripts/feature-map/feature-map.ts save --file ./stock.view.md --expect new --project .",
-			"bun scripts/feature-map/feature-map.ts save --file ./stock.view.md --expect <revision-from-get> --project .",
+			"bun skills/qa/scripts/feature-map/feature-map.ts save --file ./stock.view.md --expect new --project .",
+			"bun skills/qa/scripts/feature-map/feature-map.ts save --file ./stock.view.md --expect <revision-from-get> --project .",
 		],
 	},
 	{
@@ -48,7 +48,7 @@ export const FEATURE_MAP_COMMANDS: FeatureMapCommand[] = [
 		effect: "checks feature-map files and their Markdown schema",
 		details:
 			"Validates front matter, required fields, nonblank Markdown bodies, filename/id matches, duplicate feature IDs, and dangling state_changed_by references. It returns valid or invalid; run it after directly reading or editing a feature file.",
-		examples: ["bun scripts/feature-map/feature-map.ts validate --project ."],
+		examples: ["bun skills/qa/scripts/feature-map/feature-map.ts validate --project ."],
 	},
 	{
 		name: "status",
@@ -57,7 +57,7 @@ export const FEATURE_MAP_COMMANDS: FeatureMapCommand[] = [
 		effect: "reports manifest and storage configuration status",
 		details:
 			"Uses the fixed ~/.feature-maps/<project-key>/manifest.yaml location. The first lookup bootstraps storage: null and returns not_found, reason storage_not_configured, next_action ask_user_for_storage. It checks the manifest and configured storage directory accessibility; an invalid manifest or unavailable configured directory is a runtime error and is never auto-reset. Invalid feature files are reported by validate, not status.",
-		examples: ["bun scripts/feature-map/feature-map.ts status --project ."],
+		examples: ["bun skills/qa/scripts/feature-map/feature-map.ts status --project ."],
 	},
 	{
 		name: "configure",
@@ -67,15 +67,15 @@ export const FEATURE_MAP_COMMANDS: FeatureMapCommand[] = [
 		details:
 			"ask the user to agree on a storage location first, then run this command. relative paths resolve against the manifest directory. The chosen missing directory is created; no data migration is performed.",
 		examples: [
-			"bun scripts/feature-map/feature-map.ts configure --location ./docs/features --project .",
+			"bun skills/qa/scripts/feature-map/feature-map.ts configure --location ./docs/features --project .",
 		],
 	},
 ];
 
 const OVERVIEW_GUIDANCE = `
 Run the source CLI directly:
-  bun scripts/feature-map/feature-map.ts help
-  bun scripts/feature-map/feature-map.ts --help
+  bun skills/qa/scripts/feature-map/feature-map.ts help
+  bun skills/qa/scripts/feature-map/feature-map.ts --help
 
 Every non-help command accepts --project DIR. status, query, and get first look up
 the fixed ~/.feature-maps/<project-key>/manifest.yaml. The first lookup may create
@@ -104,13 +104,13 @@ function commandHelp(command: FeatureMapCommand): string {
 	return [
 		`feature-map ${command.name}`,
 		"",
-	`Usage: feature-map ${command.usage}`,
+		`Usage: feature-map ${command.usage}`,
 		"",
-	`Effect: ${command.effect}`,
+		`Effect: ${command.effect}`,
 		"",
-	command.details,
+		command.details,
 		"",
-	"Examples:",
+		"Examples:",
 		examples,
 		"",
 	].join("\n");

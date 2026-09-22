@@ -12,7 +12,7 @@ describe("feature-map 도움말", () => {
 		const help = renderFeatureMapHelp();
 		expect(help).toContain("feature-map commands:");
 		expect(help).toContain("AI-USABLE");
-		expect(help).toContain("bun scripts/feature-map/feature-map.ts help");
+		expect(help).toContain("bun skills/qa/scripts/feature-map/feature-map.ts help");
 		expect(help).toContain("feature-map query [--text TEXT] [--changed-by ID] [--project DIR]");
 		expect(help).toContain('"status": "ok"');
 		expect(help).toContain("0: success or expected not_found");

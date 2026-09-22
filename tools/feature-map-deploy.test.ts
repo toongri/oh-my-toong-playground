@@ -64,9 +64,9 @@ async function runWorkflow(runtime: "bun" | "node", script: string, cwd: string,
 describe("기능 지도 배포 회귀", () => {
 	it("Claude/Codex 배포본을 등록하고 Bun/Node에서 실행한다", async () => {
 		const rootSync = await readAndExpandSyncYaml(path.join(repoRoot, "sync.yaml"));
-		expect(rootSync?.scripts?.items).toContainEqual({ component: "feature-map", platforms: ["claude", "codex"] });
-		expect(rootSync?.rules?.items).toContainEqual({ component: "feature-map", platforms: ["claude", "codex"] });
-		expect(rootSync?.docs?.items).toContain("components/feature-map");
+		expect(rootSync?.scripts?.items ?? []).not.toContainEqual({ component: "feature-map", platforms: ["claude", "codex"] });
+		expect(rootSync?.rules?.items ?? []).not.toContainEqual({ component: "feature-map", platforms: ["claude", "codex"] });
+		expect(rootSync?.docs?.items ?? []).not.toContain("components/feature-map");
 
 		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "omt-feature-map-deploy-"));
 		const target = path.join(tmpDir, "target");
@@ -74,7 +74,7 @@ describe("기능 지도 배포 회귀", () => {
 		await fs.mkdir(target, { recursive: true });
 		await writeFile(
 			yaml,
-			[`path: ${target}`, "platforms: [claude, codex]", "scripts:", "  items:", "    - component: feature-map", "      platforms: [claude, codex]", "rules:", "  items:", "    - component: feature-map", "      platforms: [claude, codex]", "docs:", "  items:", "    - components/feature-map", ""].join("\n"),
+			[`path: ${target}`, "platforms: [claude, codex]", "skills:", "  items:", "    - component: qa", "      platforms: [claude, codex]", ""].join("\n"),
 		);
 		const previousOmtDir = process.env.OMT_DIR;
 		process.env.OMT_DIR = path.join(tmpDir, "omt");
@@ -85,8 +85,8 @@ describe("기능 지도 배포 회귀", () => {
 			]);
 			await processYaml(createContext(false), yaml, adapters, repoRoot);
 
-			for (const [platform, dir] of [["claude", ".claude"], ["codex", ".codex"]] as const) {
-				const script = path.join(target, dir, "scripts", "feature-map", "feature-map.ts");
+			for (const [platform, dir] of [["claude", ".claude"], ["codex", ".agents"]] as const) {
+				const script = path.join(target, dir, "skills", "qa", "scripts", "feature-map", "feature-map.ts");
 				const lib = path.join(target, dir, "lib", "feature-map", "index.ts");
 				expect(await fs.readFile(script, "utf8")).not.toContain("@lib/");
 				expect(await fs.stat(lib)).toBeTruthy();
@@ -94,8 +94,9 @@ describe("기능 지도 배포 회귀", () => {
 				for (const file of await readTsFiles(path.join(target, dir, "lib"))) {
 					expect(await fs.readFile(file, "utf8")).not.toContain("@lib/");
 				}
-				expect(await fs.stat(path.join(target, dir, "rules", "feature-map.md"))).toBeTruthy();
-				expect(await fs.stat(path.join(target, "docs", "components", "feature-map.md"))).toBeTruthy();
+				expect(await fs.stat(path.join(target, dir, "scripts", "feature-map")).then(() => false).catch(() => true)).toBe(true);
+				expect(await fs.stat(path.join(target, dir, "rules", "feature-map.md")).then(() => false).catch(() => true)).toBe(true);
+				expect(await fs.stat(path.join(target, "docs", "components", "feature-map.md")).then(() => false).catch(() => true)).toBe(true);
 				for (const runtime of ["bun", "node"] as const) {
 					const flowDir = path.join(tmpDir, `${platform}-${runtime}`);
 					const flowHome = path.join(flowDir, "home");
