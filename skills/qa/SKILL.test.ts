@@ -34,6 +34,10 @@ const presentationMd = readFileSync(
 	join(import.meta.dir, "presentation.md"),
 	"utf8",
 );
+const reusableCasesMd = readFileSync(
+	join(import.meta.dir, "reusable-cases.md"),
+	"utf8",
+);
 
 describe("Feature Map provenance 계약", () => {
 	test("PLAN이 제품 맥락 재구성 전에 QA-local feature-map CLI를 조회함", () => {
@@ -120,6 +124,60 @@ describe("Scenario authoring feature-map 계층", () => {
 		expect(scenarioAuthoringMd).toContain("lookup first");
 		expect(scenarioAuthoringMd).not.toContain("from the repo, not from the QA REQUEST");
 		expect(scenarioAuthoringMd).not.toContain("when available");
+	});
+});
+
+describe("reusable case guidance contract", () => {
+	test("stories require structured GWT and acceptance-criteria links", () => {
+		expect(reusableCasesMd).toContain("goal");
+		expect(reusableCasesMd).toContain("given");
+		expect(reusableCasesMd).toContain("when");
+		expect(reusableCasesMd).toContain("then");
+		expect(reusableCasesMd).toContain("acceptance-criteria");
+		expect(skillMd).toContain("--goal");
+		expect(skillMd).toContain("--acceptance-criteria");
+	});
+
+	test("known cases replay first but do not narrow six-axis exploration", () => {
+		expect(reusableCasesMd).toContain("listQaCases");
+		expect(reusableCasesMd).toContain("getQaCase");
+		expect(reusableCasesMd).toContain("Replay matching known cases first");
+		expect(reusableCasesMd).toContain("failed, stale, or uncovered");
+		expect(reusableCasesMd).toContain("six classes");
+	});
+
+	test("optional storage has remembered unconfigured, configured, and disabled states", () => {
+		expect(reusableCasesMd).toContain("unconfigured");
+		expect(reusableCasesMd).toContain("configured");
+		expect(reusableCasesMd).toContain("disabled");
+		expect(reusableCasesMd).toContain("ask once");
+		expect(reusableCasesMd).toContain("does not ask again");
+		expect(reusableCasesMd).toContain("getQaCaseStoreStatus");
+		expect(reusableCasesMd).toContain("configureQaCaseStore");
+		expect(reusableCasesMd).toContain("disableQaCaseStore");
+		expect(reusableCasesMd).toContain("Do not create\nproject-local product files");
+	});
+
+	test("successful curation requires reset and independent assertion rerun", () => {
+		expect(reusableCasesMd).toContain("Reset the application and");
+		expect(reusableCasesMd).toContain("independently rerun");
+		expect(reusableCasesMd).toContain("same assertions");
+		expect(reusableCasesMd).toContain("case failure remains a\nfailure");
+	});
+
+	test("native runner formats and boundary evidence cannot be bypassed", () => {
+		expect(reusableCasesMd).toContain(".ad");
+		expect(reusableCasesMd).toContain("Maestro YAML");
+		expect(reusableCasesMd).toContain("Cucumber");
+		expect(reusableCasesMd).toContain("trace, recording, or JUnit XML");
+		expect(reusableCasesMd).toContain('bun "${CLAUDE_SKILL_DIR}/scripts/qa-cases.ts" help');
+		expect(reusableCasesMd).toContain(': "${QA_CASE_FILE:?Set an absolute case path in the agreed store}"');
+		expect(reusableCasesMd).toContain("agent-device session save-script");
+		expect(reusableCasesMd).toContain("agent-device replay");
+		expect(reusableCasesMd).not.toContain("\npress ");
+		expect(reusableCasesMd).not.toContain("\nreplay ");
+		expect(stage3Md).toContain("Do not relabel an agent-browser or");
+		expect(stage3Md).toContain("agent-device run as `bash`");
 	});
 });
 
@@ -434,7 +492,7 @@ describe("new-prose: stage3-handson.md risk-surface + hardening rows", () => {
 		expect(frontendSection).toContain("outside the checked worktree");
 		expect(frontendSection).toContain("manifest, lockfile");
 		expect(frontendSection).toContain("node_modules");
-		expect(frontendSection).toContain("before CHECK");
+		expect(frontendSection).toContain("explicit user opt-in");
 	});
 });
 
@@ -1577,8 +1635,8 @@ describe("new-prose: stack/seed/auth info is mined from repo docs and scripts", 
 describe("new-prose: bootstrap ladder installs a missing tool local-first, global-fallback", () => {
 	test("a new bootstrap rung installs a missing required tool rather than skipping the scenario", () => {
 		expect(skillMd).toContain("Required tool missing locally");
-		expect(skillMd).toContain("project-local");
-		expect(skillMd).toContain("no machine mutation");
+		expect(skillMd).toContain("ephemeral project-scoped runtime directory outside the checked worktree");
+		expect(skillMd).toContain("product manifests, lockfiles, config");
 	});
 
 	test("the rung falls back to a global install only when project-local is impossible, then substitutes on failure", () => {
@@ -1610,8 +1668,8 @@ describe("strip: the old blanket 'Do NOT install' global-machine ban is gone", (
 describe("new-prose: stage3-handson.md carries the local-first/global-fallback/substitution install policy", () => {
 	test("agent-browser absence installs project-local first, global fallback second", () => {
 		expect(stage3Md).toContain("install it rather than skip the scenario");
-		expect(stage3Md).toContain("project-local first");
-		expect(stage3Md).toContain("falling back to a global install only if a project-local install is not possible");
+		expect(stage3Md).toContain("external ephemeral runtime directory");
+		expect(stage3Md).toContain("falling back to a global install only if the tool cannot run in that directory");
 	});
 
 	test("the offline-safety reason justifies local-first ordering, not a ban", () => {
@@ -1620,7 +1678,7 @@ describe("new-prose: stage3-handson.md carries the local-first/global-fallback/s
 	});
 
 	test("playwright absence follows the same install-before-fallback policy", () => {
-		expect(stage3Md).toContain("install it — project-local first, global only if project-local is not possible");
+		expect(stage3Md).toContain("install it — in the same external ephemeral runtime directory");
 		expect(stage3Md).toContain("recorded as a substitution, not an unattempted skip");
 	});
 });
