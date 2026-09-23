@@ -47,7 +47,7 @@ function postToolUsePayload(
 		transcript_path: null,
 		cwd,
 		hook_event_name: "PostToolUse",
-		model: "gpt-5.6-sol",
+		model: "gpt-6-sol",
 		permission_mode: "auto",
 		tool_name: toolName,
 		tool_input: toolInput,
