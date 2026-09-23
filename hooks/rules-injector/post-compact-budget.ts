@@ -26,17 +26,17 @@ const FALLBACK_CONTEXT_WINDOW_TOKENS = 200_000;
 // below. Do not empty this array — registered models get precise sizing.
 const MODEL_CONTEXT_BUDGETS: readonly ModelContextBudget[] = [
 	{
-		slug: "gpt-5.6-sol",
+		slug: "gpt-6-astra",
 		contextWindowTokens: 272_000,
 		effectivePercent: DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
 	},
 	{
-		slug: "gpt-5.6-terra",
+		slug: "gpt-6-sol",
 		contextWindowTokens: 272_000,
 		effectivePercent: DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
 	},
 	{
-		slug: "gpt-5.6-luna",
+		slug: "gpt-6-luna",
 		contextWindowTokens: 272_000,
 		effectivePercent: DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
 	},

@@ -57,26 +57,26 @@ function makeConfig(): PiRulesConfig {
 }
 
 // ===========================================================================
-// gpt-5.6 계열(sol/terra/luna) 272k 등록 — 신규
+// gpt-6 계열(astra/sol/luna) 272k 등록 — 신규
 // ===========================================================================
 
-test("gpt-5.6-sol 슬러그는 272k 컨텍스트 윈도우 기준 `maxResultChars`를 산출한다", () => {
+test("gpt-6-astra 슬러그는 272k 컨텍스트 윈도우 기준 `maxResultChars`를 산출한다", () => {
 	const transcriptPath = makeTranscript();
-	const result = withPostCompactBudget(makeConfig(), { model: "gpt-5.6-sol", transcriptPath });
+	const result = withPostCompactBudget(makeConfig(), { model: "gpt-6-astra", transcriptPath });
 	// floor(272000*95/100)=258400; reserved=max(8000, floor(258400*5/100)=12920)=12920;
 	// injectable=258400-12920-100=245380; maxResultChars=floor(245380*2)=490760.
 	expect(result.maxResultChars).toBe(490_760);
 });
 
-test("gpt-5.6-terra 슬러그는 272k 컨텍스트 윈도우 기준 `maxResultChars`를 산출한다", () => {
+test("gpt-6-sol 슬러그는 272k 컨텍스트 윈도우 기준 `maxResultChars`를 산출한다", () => {
 	const transcriptPath = makeTranscript();
-	const result = withPostCompactBudget(makeConfig(), { model: "gpt-5.6-terra", transcriptPath });
+	const result = withPostCompactBudget(makeConfig(), { model: "gpt-6-sol", transcriptPath });
 	expect(result.maxResultChars).toBe(490_760);
 });
 
-test("gpt-5.6-luna 슬러그는 272k 컨텍스트 윈도우 기준 `maxResultChars`를 산출한다", () => {
+test("gpt-6-luna 슬러그는 272k 컨텍스트 윈도우 기준 `maxResultChars`를 산출한다", () => {
 	const transcriptPath = makeTranscript();
-	const result = withPostCompactBudget(makeConfig(), { model: "gpt-5.6-luna", transcriptPath });
+	const result = withPostCompactBudget(makeConfig(), { model: "gpt-6-luna", transcriptPath });
 	expect(result.maxResultChars).toBe(490_760);
 });
 
@@ -107,10 +107,10 @@ test("미등록 슬러그(gpt-4.9-nonexistent)는 여전히 200k fallback을 탄
 // 272k 경로가 200k fallback 경로보다 명확히 크다 — 등록 vs 미등록 나란히 대조
 // ===========================================================================
 
-test("`gpt-5.6-sol`(272k 등록)의 결과는 `gpt-4.9-nonexistent`(200k fallback)보다 명확히 크다", () => {
+test("`gpt-6-astra`(272k 등록)의 결과는 `gpt-4.9-nonexistent`(200k fallback)보다 명확히 크다", () => {
 	const transcriptPath = makeTranscript();
 	const registered = withPostCompactBudget(makeConfig(), {
-		model: "gpt-5.6-sol",
+		model: "gpt-6-astra",
 		transcriptPath,
 	});
 	const fallback = withPostCompactBudget(makeConfig(), {
