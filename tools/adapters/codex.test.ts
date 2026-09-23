@@ -179,7 +179,7 @@ describe("CodexAdapter", () => {
 					"",
 				].join("\n"),
 			);
-			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } } };
+			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-6-sol", effort: "high" } } };
 			const targetBase = path.join(tmpDir, "target");
 
 			await adapter.syncAgentsDirect(targetBase, "oracle", sourceFile, [], [], false, modelMap);
@@ -198,7 +198,7 @@ describe("CodexAdapter", () => {
 			expect(parsed.developer_instructions).toBe(
 				"You are the Oracle agent. Follow the diagnose skill exactly.",
 			);
-			expect(parsed.model).toBe("gpt-5.6-sol");
+			expect(parsed.model).toBe("gpt-6-sol");
 			expect(parsed.model_reasoning_effort).toBe("high");
 		});
 
@@ -222,7 +222,7 @@ describe("CodexAdapter", () => {
 					"",
 				].join("\n"),
 			);
-			const modelMap: ModelMap = { tiers: { sonnet: { model: "gpt-5.6-sol", effort: "medium" } } };
+			const modelMap: ModelMap = { tiers: { sonnet: { model: "gpt-6-sol", effort: "medium" } } };
 			const targetBase = path.join(tmpDir, "target");
 
 			await adapter.syncAgentsDirect(
@@ -264,7 +264,7 @@ describe("CodexAdapter", () => {
 					"",
 				].join("\n"),
 			);
-			const modelMap: ModelMap = { tiers: { sonnet: { model: "gpt-5.6-sol", effort: "medium" } } };
+			const modelMap: ModelMap = { tiers: { sonnet: { model: "gpt-6-sol", effort: "medium" } } };
 			const targetBase = path.join(tmpDir, "target");
 
 			await adapter.syncAgentsDirect(targetBase, "explore", sourceFile, [], [], false, modelMap);
@@ -300,7 +300,7 @@ describe("CodexAdapter", () => {
 					"",
 				].join("\n"),
 			);
-			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } } };
+			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-6-sol", effort: "high" } } };
 			const targetBase = path.join(tmpDir, "target");
 
 			await adapter.syncAgentsDirect(targetBase, "metis", sourceFile, [], [], false, modelMap);
@@ -326,7 +326,7 @@ describe("CodexAdapter", () => {
 					"",
 				].join("\n"),
 			);
-			const modelMap: ModelMap = { tiers: { sonnet: { model: "gpt-5.6-sol", effort: "medium" } } };
+			const modelMap: ModelMap = { tiers: { sonnet: { model: "gpt-6-sol", effort: "medium" } } };
 			const targetBase = path.join(tmpDir, "target");
 
 			await adapter.syncAgentsDirect(
@@ -367,7 +367,7 @@ describe("CodexAdapter", () => {
 					"",
 				].join("\n"),
 			);
-			const modelMap: ModelMap = { tiers: { sonnet: { model: "gpt-5.6-sol", effort: "medium" } } };
+			const modelMap: ModelMap = { tiers: { sonnet: { model: "gpt-6-sol", effort: "medium" } } };
 			const targetBase = path.join(tmpDir, "target");
 
 			await adapter.syncAgentsDirect(
@@ -403,7 +403,7 @@ describe("CodexAdapter", () => {
 					"",
 				].join("\n"),
 			);
-			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } } };
+			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-6-sol", effort: "high" } } };
 			const targetBase = path.join(tmpDir, "target");
 
 			await adapter.syncAgentsDirect(targetBase, "code-reviewer", sourceFile, [], [], false, modelMap);
@@ -436,7 +436,7 @@ describe("CodexAdapter", () => {
 					"",
 				].join("\n"),
 			);
-			const modelMap: ModelMap = { tiers: { sonnet: { model: "gpt-5.6-sol", effort: "medium" } } };
+			const modelMap: ModelMap = { tiers: { sonnet: { model: "gpt-6-sol", effort: "medium" } } };
 			const targetBase = path.join(tmpDir, "target");
 
 			await adapter.syncAgentsDirect(
@@ -462,19 +462,19 @@ describe("CodexAdapter", () => {
 			// Still valid TOML, and the untouched fields are exactly untouched.
 			const parsed = parse(content) as Record<string, unknown>;
 			expect(parsed.name).toBe("sisyphus-junior");
-			expect(parsed.model).toBe("gpt-5.6-sol");
+			expect(parsed.model).toBe("gpt-6-sol");
 			expect(parsed.model_reasoning_effort).toBe("medium");
 			expect(parsed.developer_instructions).toContain("$prometheus");
 			expect(parsed.developer_instructions).toContain("agent_type");
 		});
 
-		it("resolves an opus-tier agent to gpt-5.6-sol + high effort via `syncAgentsDirect`", async () => {
+		it("resolves an opus-tier agent to gpt-6-sol + high effort via `syncAgentsDirect`", async () => {
 			const sourceFile = path.join(tmpDir, "oracle.md");
 			await fs.writeFile(
 				sourceFile,
 				"---\nname: oracle\ndescription: Diagnose things\nmodel: opus\n---\n\nBody text.\n",
 			);
-			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } } };
+			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-6-sol", effort: "high" } } };
 			const targetBase = path.join(tmpDir, "target");
 
 			await adapter.syncAgentsDirect(targetBase, "oracle", sourceFile, [], [], false, modelMap);
@@ -484,7 +484,7 @@ describe("CodexAdapter", () => {
 				"utf-8",
 			);
 			const parsed = parse(content) as Record<string, unknown>;
-			expect(parsed.model).toBe("gpt-5.6-sol");
+			expect(parsed.model).toBe("gpt-6-sol");
 			expect(parsed.model_reasoning_effort).toBe("high");
 		});
 
@@ -494,7 +494,7 @@ describe("CodexAdapter", () => {
 				sourceFile,
 				'---\nname: blank-description\ndescription: ""\nmodel: opus\n---\n\nBody text.\n',
 			);
-			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } } };
+			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-6-sol", effort: "high" } } };
 			const targetBase = path.join(tmpDir, "target");
 
 			await expect(
@@ -516,7 +516,7 @@ describe("CodexAdapter", () => {
 				sourceFile,
 				"---\nname: blank-body\ndescription: Has a description\nmodel: opus\n---\n\n   \n",
 			);
-			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } } };
+			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-6-sol", effort: "high" } } };
 			const targetBase = path.join(tmpDir, "target");
 
 			await expect(
@@ -1804,7 +1804,7 @@ describe("CodexAdapter", () => {
 			const yaml = {
 				config: { model: "o4-mini" },
 				mcps: { "server-a": { command: "npx" } },
-				"model-map": { tiers: { sonnet: { model: "gpt-5.6-sol" } } },
+				"model-map": { tiers: { sonnet: { model: "gpt-6-sol" } } },
 				hooks: { Notification: [{ component: sourceHookDir }] },
 			};
 			const writes: string[] = [];
@@ -1865,7 +1865,7 @@ describe("CodexAdapter", () => {
 				{
 					config: { model: "o4-mini" },
 					mcps: { "server-a": { command: "npx" } },
-					"model-map": { tiers: { sonnet: { model: "gpt-5.6-sol" } } },
+					"model-map": { tiers: { sonnet: { model: "gpt-6-sol" } } },
 					plugins: { absent: { state: "absent" } },
 				} as never,
 				true,
@@ -2120,38 +2120,38 @@ describe("CodexAdapter", () => {
 describe("resolveCodexAgentModel", () => {
 	it("resolves a tier to {model, model_reasoning_effort} via `resolveCodexAgentModel`", () => {
 		const modelMap: ModelMap = {
-			tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } },
+			tiers: { opus: { model: "gpt-6-sol", effort: "high" } },
 		};
 		const result = resolveCodexAgentModel(modelMap, "opus", "oracle.md");
-		expect(result).toEqual({ model: "gpt-5.6-sol", model_reasoning_effort: "high" });
+		expect(result).toEqual({ model: "gpt-6-sol", model_reasoning_effort: "high" });
 	});
 
 	it("omits model_reasoning_effort when the tier entry has no effort via `resolveCodexAgentModel`", () => {
-		const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol" } } };
+		const modelMap: ModelMap = { tiers: { opus: { model: "gpt-6-sol" } } };
 		const result = resolveCodexAgentModel(modelMap, "opus", "oracle.md");
-		expect(result).toEqual({ model: "gpt-5.6-sol" });
+		expect(result).toEqual({ model: "gpt-6-sol" });
 	});
 
 	it("prefers a per-agent override over the tier default via `resolveCodexAgentModel`", () => {
 		const modelMap: ModelMap = {
-			tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } },
-			agents: { oracle: { model: "gpt-5.6-sol-special", effort: "low" } },
+			tiers: { opus: { model: "gpt-6-sol", effort: "high" } },
+			agents: { oracle: { model: "gpt-6-sol-special", effort: "low" } },
 		};
 		const result = resolveCodexAgentModel(modelMap, "opus", "oracle.md", "oracle");
-		expect(result).toEqual({ model: "gpt-5.6-sol-special", model_reasoning_effort: "low" });
+		expect(result).toEqual({ model: "gpt-6-sol-special", model_reasoning_effort: "low" });
 	});
 
 	it("leaves a sibling agent without an override on the tier default via `resolveCodexAgentModel`", () => {
 		const modelMap: ModelMap = {
-			tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } },
-			agents: { oracle: { model: "gpt-5.6-sol-special", effort: "low" } },
+			tiers: { opus: { model: "gpt-6-sol", effort: "high" } },
+			agents: { oracle: { model: "gpt-6-sol-special", effort: "low" } },
 		};
 		const result = resolveCodexAgentModel(modelMap, "opus", "sisyphus.md", "sisyphus");
-		expect(result).toEqual({ model: "gpt-5.6-sol", model_reasoning_effort: "high" });
+		expect(result).toEqual({ model: "gpt-6-sol", model_reasoning_effort: "high" });
 	});
 
 	it("throws naming the agent file and tier when the tier is unmapped via `resolveCodexAgentModel`", () => {
-		const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol" } } };
+		const modelMap: ModelMap = { tiers: { opus: { model: "gpt-6-sol" } } };
 		expect(() => resolveCodexAgentModel(modelMap, "sonnet", "oracle.md")).toThrow(
 			/oracle\.md.*sonnet|sonnet.*oracle\.md/,
 		);
