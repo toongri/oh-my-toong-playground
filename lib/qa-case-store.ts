@@ -92,9 +92,9 @@ function validatePresentLocation(context: QaCaseContext, location: string, allow
 }
 function statusFrom(result: ReturnType<typeof ensureManifest>): QaCaseStatus {
 	const base = { project: result.context.projectKey, manifestPath: result.context.manifestPath };
+	if (result.manifest.mode === "disabled") return { ...base, status: "disabled", mode: "disabled", ...(result.manifest.location ? { location: result.manifest.location } : {}) };
 	const location = result.manifest.location ? validatePresentLocation(result.context, result.manifest.location, result.manifest.allow_project_storage === true) : undefined;
 	if (result.manifest.mode === "unconfigured") return { ...base, status: "unconfigured", mode: "unconfigured" };
-	if (result.manifest.mode === "disabled") return { ...base, status: "disabled", mode: "disabled", ...(location ? { location } : {}) };
 	if (!location) throw new Error("qa-cases: configured manifest has no location");
 	return { ...base, status: "configured", mode: "configured", location };
 }
@@ -142,7 +142,7 @@ export function configureQaCaseStore(location: string, options: QaCaseStoreOptio
 	mkdirSync(dirname(context.manifestPath), { recursive: true });
 	withStateLock(context.manifestPath, () => {
 		const ensured = readOrCreateManifest(context);
-		if (ensured.manifest.location) validatePresentLocation(ensured.context, ensured.manifest.location, ensured.manifest.allow_project_storage === true);
+		if (ensured.manifest.mode !== "disabled" && ensured.manifest.location) validatePresentLocation(ensured.context, ensured.manifest.location, ensured.manifest.allow_project_storage === true);
 		const raw = ensured.raw;
 		raw.mode = "configured";
 		raw.location = actual;
@@ -161,7 +161,6 @@ export function disableQaCaseStore(options: QaCaseStoreOptions = {}): QaCaseStat
 	mkdirSync(dirname(context.manifestPath), { recursive: true });
 	withStateLock(context.manifestPath, () => {
 		const ensured = readOrCreateManifest(context);
-		if (ensured.manifest.location) validatePresentLocation(ensured.context, ensured.manifest.location, ensured.manifest.allow_project_storage === true);
 		ensured.raw.mode = "disabled";
 		writeAtomic(ensured.context.manifestPath, stringify(ensured.raw));
 		result = statusFrom(readOrCreateManifest(ensured.context));

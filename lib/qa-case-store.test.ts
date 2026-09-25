@@ -108,24 +108,18 @@ describe("qa case store", () => {
 		expect(() => configureQaCaseStore(join(parent, "nested"), { cwd, home, allowProjectStorage: true })).toThrow(/symlink/);
 	});
 
-	test("present location은 dormant mode에서도 symlink면 검증 오류를 낸다", () => {
-		for (const mode of ["unconfigured", "disabled"] as const) {
-			const cwd = repo(mode);
-			const home = tempDir();
-			const target = tempDir();
-			const link = join(tempDir(), `${mode}-link`);
-			symlinkSync(target, link);
-			const context = resolveQaCaseContext({ cwd, home });
-			mkdirSync(join(home, ".qa-cases", context.projectKey), { recursive: true });
-			const raw = `version: 1\nproject: ${context.projectKey}\nmode: ${mode}\nlocation: ${link}\n`;
-			writeFileSync(context.manifestPath, raw);
-			expect(() => getQaCaseStoreStatus({ cwd, home })).toThrow(/symlink/);
-			expect(readFileSync(context.manifestPath, "utf8")).toBe(raw);
-			if (mode === "disabled") {
-				expect(() => disableQaCaseStore({ cwd, home })).toThrow(/symlink/);
-				expect(readFileSync(context.manifestPath, "utf8")).toBe(raw);
-			}
-		}
+	test("unconfigured manifest의 remembered symlink location은 검증 오류를 낸다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		const target = tempDir();
+		const link = join(tempDir(), "unconfigured-link");
+		symlinkSync(target, link);
+		const context = resolveQaCaseContext({ cwd, home });
+		mkdirSync(join(home, ".qa-cases", context.projectKey), { recursive: true });
+		const raw = `version: 1\nproject: ${context.projectKey}\nmode: unconfigured\nlocation: ${link}\n`;
+		writeFileSync(context.manifestPath, raw);
+		expect(() => getQaCaseStoreStatus({ cwd, home })).toThrow(/symlink/);
+		expect(readFileSync(context.manifestPath, "utf8")).toBe(raw);
 	});
 
 	test("project-local approval을 manifest에 기록하고 이후 canonical path가 project로 바뀌면 거부한다", () => {
@@ -201,6 +195,23 @@ describe("qa case store", () => {
 		const disabled = disableQaCaseStore({ cwd, home });
 		expect(disabled).toMatchObject({ status: "disabled", location: realpathSync(location) });
 		expect(listQaCases({ cwd, home })).toMatchObject({ status: "disabled" });
+	});
+
+	test("disabled mode는 사라진 remembered location을 건드리지 않고 case API와 disable을 허용한다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		const location = join(tempDir(), "cases");
+		configureQaCaseStore(location, { cwd, home });
+		rmSync(location, { recursive: true, force: true });
+
+		expect(() => getQaCaseStoreStatus({ cwd, home })).toThrow(/storage location is unavailable/);
+		expect(disableQaCaseStore({ cwd, home })).toMatchObject({ status: "disabled", location });
+		expect(listQaCases({ cwd, home })).toMatchObject({ status: "disabled", location });
+		expect(getQaCase("missing", { cwd, home })).toMatchObject({ status: "disabled", location });
+		const replacement = join(tempDir(), "replacement");
+		expect(configureQaCaseStore(replacement, { cwd, home })).toMatchObject({ status: "configured", location: realpathSync(replacement) });
+		expect(existsSync(location)).toBe(false);
+		expect(existsSync(replacement)).toBe(true);
 	});
 
 	test("save/get/list는 JSON record를 저장하고 expected revision 충돌을 막는다", () => {
