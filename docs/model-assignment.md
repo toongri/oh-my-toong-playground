@@ -79,7 +79,7 @@ verdict를 자기가 만드는 것처럼 보이지만 실제로는 `skills/insan
 에이전트의 등급은 `agents/<name>.md` frontmatter의 `model:` 한 필드가 유일한 출처다.
 
 Codex의 `code-reviewer`는 비용 중심 모드로 `codex.yaml`의 개별 override를 통해
-`gpt-5.6-sol` + `medium`을 사용한다. 공통 opus 등급과 다른 플랫폼 배정은 유지하며,
+`gpt-6-sol` + `medium`을 사용한다. 공통 opus 등급과 다른 플랫폼 배정은 유지하며,
 현재 어떤 tier도 이 모델·effort 조합을 표현하지 않아 개별 매핑을 사용한다. merge 후
 `make sync` 시 반영된다.
 
@@ -91,10 +91,13 @@ Codex의 `code-reviewer`는 비용 중심 모드로 `codex.yaml`의 개별 overr
 
 `fable`이 그 문턱을 넘은 근거는 부재 판정 원칙이고, 그 원칙은 Opus로는 표현되지 않는
 배정을 하나 만든다. 이 등급은 두 배포면 모두에서 실제로 갈린다 — claude는
-`claude-fable-5` vs Opus 5, codex의 기본 tier 경로는 `gpt-5.6-sol` vs
-`gpt-5.6-terra`다(2026-08-04 재배정 이후. 그전에는 codex에 `gpt-5.6-sol` 위가 없어
-`fable`과 `opus`가 같은 모델로 떨어지는 플랫폼 비대칭이 있었다). Codex의 `metis`는
-`gpt-6-astra` 모델과 `effort: high`를 명시적으로 사용한다.
+`claude-fable-5` vs Opus 5.5, codex의 기본 tier 경로는 `gpt-6-astra` vs
+`gpt-6-sol`이다(2026-08-04 재배정 이후. 그전에는 codex에 `gpt-5.6-sol` 위가 없어
+`fable`과 `opus`가 같은 모델로 떨어지는 플랫폼 비대칭이 있었다. 2026-09-23 GPT-6
+재배정으로 tier 모델 id가 `gpt-6-astra`/`gpt-6-sol`/`gpt-6-luna`로 바뀌었고, opus는
+이 ChatGPT 계정의 Codex에서 사용 불가(400)인 `gpt-6-terra` 대신 `gpt-6-sol`로
+옮겨졌다). Codex의 `metis`는 이제 개별 override 없이 `fable` tier를 통해
+`gpt-6-astra`에 도달한다 — tier 값과 동일해져 직접 지정하던 override는 제거됐다.
 
 ## 등급을 실제 모델로 치환하는 규칙
 
@@ -105,11 +108,11 @@ Codex의 `code-reviewer`는 비용 중심 모드로 `codex.yaml`의 개별 overr
 ```yaml
 model-map:
   tiers:
-    fable:  { model: gpt-5.6-sol, effort: high }
-    opus:   { model: gpt-5.6-terra, effort: high }
-    sonnet: { model: gpt-5.6-luna, effort: medium }
+    fable:  { model: gpt-6-astra, effort: high }
+    opus:   { model: gpt-6-sol, effort: high }
+    sonnet: { model: gpt-6-luna, effort: medium }
   agents:
-    mnemosyne: { model: gpt-5.6-luna, effort: low }
+    mnemosyne: { model: gpt-6-luna, effort: low }
 ```
 
 **현재 effort는 초기 역할 기반 정책이다.** 측정으로 최적값을 확정한 것이 아니라, 생성·탐색·
@@ -215,7 +218,7 @@ Claude 시절 frontmatter `model: haiku`를 코덱스 슬러그로 기계 번역
 - **상류다.** 인터뷰 질문과 설계의 입력이라, 품질 저하가 하류로 전파되면서 출처 추적이
   끊긴다.
 
-다만 `gpt-5.6-terra`에서 effort를 낮췄을 때 실제로 무엇이 얼마나 나빠지는지에 대한 측정
+다만 `gpt-6-sol`에서 effort를 낮췄을 때 실제로 무엇이 얼마나 나빠지는지에 대한 측정
 데이터는 어디에도 없다. 그래서 이 결정의 근거는 "medium이 옳다"가 아니라 "내릴 근거가
 없다"이며, 측정이 생기면 다시 열릴 수 있다.
 
@@ -239,8 +242,8 @@ Claude 시절 frontmatter `model: haiku`를 코덱스 슬러그로 기계 번역
   따라 `fork_turns: "none"`과 비어 있지 않은 `agent_type`을 명시한다. 일반 작업은
   `default`, 전문 작업은 정확한 custom role 이름을 사용한다. OMT의 `explore`와
   네이티브 `explorer`는 서로 다른 role이다. role 선택은 대화 이력 정책과 구분한다.
-  세 티어는 `gpt-5.6-sol`(`fable`)·`gpt-5.6-terra`(`opus`)·
-  `gpt-5.6-luna`(`sonnet`)로 각각 갈린다 — 어느 티어든 `codex.yaml`에서 지우면
+  세 티어는 `gpt-6-astra`(`fable`)·`gpt-6-sol`(`opus`)·
+  `gpt-6-luna`(`sonnet`)로 각각 갈린다 — 어느 티어든 `codex.yaml`에서 지우면
   `assertMappedTier`가 그 티어를 쓰는 에이전트의 codex 배포를 하드 실패시킨다
   (예: `fable` 삭제 → `metis` 실패).
 - **opencode** — 에이전트가 배포되지 않는다(`config.yaml`의 `feature-platforms.agents`가

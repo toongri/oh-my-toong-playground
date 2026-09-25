@@ -718,7 +718,7 @@ const VALID_MODEL_MAP_ENTRY_FIELDS = new Set(["model", "effort"]);
  *
  * This is the UNION of every model's `supported_reasoning_levels` as probed from
  * `~/.codex/models_cache.json`, not a per-model list: `ultra` exists only on
- * gpt-5.6-sol/terra and `max` only on those plus gpt-5.6-luna, while
+ * gpt-6-astra/gpt-6-sol and `max` only on those plus gpt-6-luna, while
  * low/medium/high/xhigh are universal. Validating per model would mean reading
  * that cache, which is a machine-local file — `make validate` must not depend on
  * one host's cache, so the union is hardcoded here the same way `codex-versions`

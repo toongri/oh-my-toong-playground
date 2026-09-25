@@ -1564,7 +1564,7 @@ describe("validateModelMapCoverage — G3-5 unmapped tier positive control", () 
 model-map:
   tiers:
     sonnet:
-      model: gpt-5.6-sol
+      model: gpt-6-sol
 `,
 		);
 		writeYaml(
@@ -1602,7 +1602,7 @@ agents:
 model-map:
   tiers:
     sonnet:
-      model: gpt-5.6-sol
+      model: gpt-6-sol
 `,
 		);
 		writeYaml(
@@ -1651,7 +1651,7 @@ describe("validateModelMapCoverage — G3-6 non-empty positive control", () => {
 model-map:
   tiers:
     sonnet:
-      model: gpt-5.6-sol
+      model: gpt-6-sol
 `,
 		);
 		writeYaml(

@@ -88,7 +88,7 @@ verdict, but the verdict actually comes from the `Verdict` enum in
 The single source of truth for an agent's tier is the `model:` field in
 `agents/<name>.md` frontmatter.
 
-Codex `code-reviewer` uses `gpt-5.6-sol` with `medium` effort through a per-agent
+Codex `code-reviewer` uses `gpt-6-sol` with `medium` effort through a per-agent
 override in `codex.yaml` as a deliberate cost-focused mode. Its shared opus tier and
 other platform assignments stay unchanged. No current tier expresses this model/effort
 pair, so it uses an individual mapping. It takes effect through `make sync` after merge.
@@ -102,11 +102,15 @@ tiers" is not enough.
 
 What cleared that bar for `fable` is the absence-judgment principle, which produces
 one assignment that opus cannot express. The tier now differentiates on both deploy
-surfaces — `claude-fable-5` vs Opus 5 on claude, and the default codex tier path is
-`gpt-5.6-sol` vs `gpt-5.6-terra` (since the 2026-08-04 remap; before it codex had
+surfaces — `claude-fable-5` vs Opus 5.5 on claude, and the default codex tier path is
+`gpt-6-astra` vs `gpt-6-sol` (since the 2026-08-04 remap; before it codex had
 nothing above `gpt-5.6-sol`, so `fable` and `opus` fell to the same model — the first
-platform asymmetry the tier vocabulary had admitted). Codex `metis` is explicitly
-assigned `gpt-6-astra` with high effort.
+platform asymmetry the tier vocabulary had admitted. A further 2026-09-23 GPT-6 remap
+renamed the tier models to `gpt-6-astra`/`gpt-6-sol`/`gpt-6-luna`, and moved opus off
+`gpt-6-terra` — unavailable on this ChatGPT account's Codex (400) — onto `gpt-6-sol`).
+Codex `metis` now reaches `gpt-6-astra` through the `fable` tier itself; the per-agent
+override that once pointed it there directly was removed once the tier matched it
+exactly.
 
 ## Substituting a tier into a concrete model
 
@@ -117,9 +121,9 @@ Handled by `model-map` in each `{platform}.yaml`.
 ```yaml
 model-map:
   tiers:
-    fable:  { model: gpt-5.6-sol }
-    opus:   { model: gpt-5.6-terra, effort: high }
-    sonnet: { model: gpt-5.6-luna }
+    fable:  { model: gpt-6-astra }
+    opus:   { model: gpt-6-sol, effort: high }
+    sonnet: { model: gpt-6-luna }
 ```
 
 **A tier normally sets the model only.** Omitting `effort` leaves
@@ -242,7 +246,7 @@ more than the size:
   propagates downstream with the trail broken.
 
 That said, no measurement exists anywhere of what actually degrades, and by how
-much, when effort is lowered on `gpt-5.6-terra`. So this decision rests on "there
+much, when effort is lowered on `gpt-6-sol`. So this decision rests on "there
 is no basis to lower them", not on "medium is correct" — and it reopens if
 measurement appears.
 
@@ -256,7 +260,7 @@ measurement appears.
   after deploy and observe which model ran.
 - **codex** — the `model` key in a role TOML beats the model given by the session
   or CLI. The deployed value is the value at run time. The three tiers resolve to
-  `gpt-5.6-sol` (`fable`), `gpt-5.6-terra` (`opus`), and `gpt-5.6-luna` (`sonnet`)
+  `gpt-6-astra` (`fable`), `gpt-6-sol` (`opus`), and `gpt-6-luna` (`sonnet`)
   respectively — deleting any tier from `codex.yaml` makes `assertMappedTier`
   hard-fail the codex deploy of every agent on that tier (e.g. deleting `fable`
   fails `metis`).
