@@ -85,11 +85,17 @@ export function queryFeatureMap(criteria: { text?: string; changedBy?: string } 
 }
 
 export function getFeature(id: string, options: FeatureMapOptions = {}): { status: "ok"; feature: StoredFeature } | FeatureMapStatus | FeatureNotFound {
-  if (typeof id !== "string" || !/^[a-z0-9]+(?:[.-][a-z0-9]+)*$/.test(id)) throw new Error("feature-map: id must be a safe lower ASCII identifier");
-  const result = configured(options);
-  if (!result.location) return notConfigured(result);
-  const root = requireRoot(result);
-  const path = featurePath(root, id);
+	assertFeatureId(id);
+	const result = configured(options);
+	if (!result.location) return notConfigured(result);
+	return getFeatureAtRoot(id, requireRoot(result));
+}
+
+type GetFeatureResult = ReturnType<typeof getFeature>;
+
+function getFeatureAtRoot(id: string, root: string): GetFeatureResult {
+	assertFeatureId(id);
+	const path = featurePath(root, id);
   if (isSymlink(path)) throw new Error(`feature-map: symlink feature file is not allowed: ${path}`);
   try {
     const bytes = readFileSync(path);
@@ -100,6 +106,22 @@ export function getFeature(id: string, options: FeatureMapOptions = {}): { statu
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return { status: "not_found" as const, reason: "feature_not_found" as const };
     throw error;
   }
+}
+
+function assertFeatureId(id: string): void {
+	if (typeof id !== "string" || !/^[a-z0-9]+(?:[.-][a-z0-9]+)*$/.test(id)) throw new Error("feature-map: id must be a safe lower ASCII identifier");
+}
+
+type Synchronous<T> = T extends PromiseLike<unknown> ? never : T;
+
+export function withFeatureMapReadLock<T>(
+	options: FeatureMapOptions = {},
+	callback: (readFeature: (id: string) => GetFeatureResult) => Synchronous<T>,
+): T | StorageNotConfigured {
+	const result = configured(options);
+	if (!result.location) return notConfigured(result);
+	const root = requireRoot(result);
+	return withStateLock(join(root, ".feature-map-state"), () => callback((id) => getFeatureAtRoot(id, root)));
 }
 
 export function saveFeature(input: FeatureDocument & { expectedRevision: string | null }, options: FeatureMapOptions = {}): { status: "ok"; feature: StoredFeature } | StorageNotConfigured | { status: "conflict"; reason: "revision_mismatch"; expectedRevision: string | null; actualRevision: string | null; path: string } {

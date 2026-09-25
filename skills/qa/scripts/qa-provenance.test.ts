@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { configureFeatureMap, saveFeature } from "@lib/feature-map/index.ts";
+import { configureFeatureMap, getFeature, saveFeature, withFeatureMapReadLock } from "@lib/feature-map/index.ts";
 import {
 	addActor,
 	addStory,
@@ -267,6 +267,84 @@ test("stale revision은 raw state를 바꾸지 않는다", () => {
 		expect(f.bytes()).toBe(before);
 	} finally {
 		f.cleanup();
+	}
+});
+
+test("feature lock 대기 중 feature가 바뀌면 provenance를 기록하지 않는다", async () => {
+	const f = makeFixture("provenance-race");
+	const featurePath = join(f.home, "features", "feature-a.md");
+	const featureLock = join(f.home, "features", ".feature-map-state.lock");
+	const qaLock = `${resolveStatePath(f.sid)}.lock`;
+	const before = f.bytes();
+	mkdirSync(featureLock);
+	const script = `
+		import { recordStoryProvenance } from ${JSON.stringify(new URL("./qa-state.ts", import.meta.url).pathname)};
+		try {
+			recordStoryProvenance(${JSON.stringify(f.sid)}, "story", ${JSON.stringify(f.input())}, ${JSON.stringify({ cwd: f.cwd, home: f.home })});
+			console.log("OK");
+			process.exit(2);
+		} catch (error) {
+			console.log(error instanceof Error ? error.message : String(error));
+		}
+	`;
+	const child = spawn(process.execPath, ["-e", script], {
+		env: { ...process.env, OMT_DIR: f.omt },
+		stdio: ["ignore", "pipe", "pipe"],
+	});
+	let output = "";
+	child.stdout.on("data", (chunk) => { output += chunk.toString(); });
+	child.stderr.on("data", (chunk) => { output += chunk.toString(); });
+	try {
+		const deadline = Date.now() + 2000;
+		while (!(existsSync(qaLock) && child.exitCode === null) && Date.now() < deadline) {
+			await new Promise((resolve) => setTimeout(resolve, 10));
+		}
+		if (!existsSync(qaLock)) throw new Error(`QA lock barrier not reached; exit=${child.exitCode}; output=${output}`);
+		expect(child.exitCode).toBeNull();
+		writeFileSync(featurePath, readFileSync(featurePath, "utf8").replace("body", "changed"));
+		rmSync(featureLock, { recursive: true, force: true });
+		const exitCode = await new Promise<number | null>((resolve) => child.once("close", resolve));
+		expect(exitCode).toBe(0);
+		expect(output).toMatch(/revision mismatch/);
+		expect(f.bytes()).toBe(before);
+	} finally {
+		rmSync(featureLock, { recursive: true, force: true });
+		if (child.exitCode === null) child.kill();
+		f.cleanup();
+	}
+});
+
+test("locked reader는 callback 중 manifest가 바뀌어도 처음 root를 읽는다", () => {
+	const home = mkdtempSync(join(tmpdir(), "qa-provenance-home-"));
+	const cwd = mkdtempSync(join(tmpdir(), "qa-provenance-cwd-"));
+	try {
+		const rootA = join(home, "features-a");
+		const rootB = join(home, "features-b");
+		configureFeatureMap(rootA, { cwd, home });
+		const savedA = saveFeature(
+			{ metadata: { schema_version: 1, id: "feature-a", title: "A" }, body: "root A", expectedRevision: null },
+			{ cwd, home },
+		);
+		configureFeatureMap(rootB, { cwd, home });
+		const savedB = saveFeature(
+			{ metadata: { schema_version: 1, id: "feature-a", title: "B" }, body: "root B", expectedRevision: null },
+			{ cwd, home },
+		);
+		if (savedA.status !== "ok" || savedB.status !== "ok") throw new Error("feature setup failed");
+		configureFeatureMap(rootA, { cwd, home });
+
+		withFeatureMapReadLock({ cwd, home }, (readFeature) => {
+			configureFeatureMap(rootB, { cwd, home });
+			const result = readFeature("feature-a");
+			expect(result.status).toBe("ok");
+			if (result.status === "ok") expect(result.feature.body.trim()).toBe("root A");
+		});
+		const current = getFeature("feature-a", { cwd, home });
+		expect(current.status).toBe("ok");
+		if (current.status === "ok") expect(current.feature.body.trim()).toBe("root B");
+	} finally {
+		rmSync(home, { recursive: true, force: true });
+		rmSync(cwd, { recursive: true, force: true });
 	}
 });
 
