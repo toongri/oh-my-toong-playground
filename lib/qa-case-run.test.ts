@@ -60,6 +60,14 @@ describe("qa case native replay", () => {
 		expect(readQaCaseRunReceipt(result.receipt.artifact_paths.receipt)).toEqual(result.receipt);
 	});
 
+	test("반환된 receipt digest는 기록된 정확한 receipt bytes와 일치한다", async () => {
+		const root = tempDir();
+		const result = await runQaCase(record(root, [process.execPath, "-e", "process.exit(19)"]), context(root));
+		const receiptBytes = readFileSync(result.receipt.artifact_paths.receipt);
+		const returned = result as typeof result & { receiptSha256: string };
+		expect(returned.receiptSha256).toBe(createHash("sha256").update(receiptBytes).digest("hex"));
+	});
+
 	test("실패를 QA 통과로 변환하지 않고 기록한다", async () => {
 		const root = tempDir();
 		const result = await runQaCase(record(root, [process.execPath, "-e", "process.stderr.write('bad'); process.exit(7)"]), context(root));

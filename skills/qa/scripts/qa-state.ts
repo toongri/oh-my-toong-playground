@@ -73,7 +73,7 @@ import {
 	type QaEvidenceClaim,
 } from "@lib/qa-chain-core";
 import { getFeature, type FeatureMapOptions } from "@lib/feature-map/index.ts";
-import { readQaCaseRunReceipt } from "@lib/qa-case-run.ts";
+import { readQaCaseRunReceiptSnapshot } from "@lib/qa-case-run.ts";
 import { validateQaCase } from "@lib/qa-case-store.ts";
 
 const DEFAULT_MAX_CYCLES = 5;
@@ -91,6 +91,14 @@ export interface QaState extends QaChainState {
 	started_at: string;
 	/** Refreshed on every write (heartbeat). */
 	last_touched_at: string;
+	/** Receipt byte snapshots explicitly trusted for later case-run binding. */
+	trusted_receipts?: QaTrustedReceipt[];
+}
+
+export interface QaTrustedReceipt {
+	attempt_id: string;
+	receipt_path: string;
+	sha256: string;
 }
 
 type ChainState = QaState & QaChainState;
@@ -478,6 +486,26 @@ function mergeWrite(sessionId: string, next: Partial<ChainState>): QaState {
 	return withStateLock(resolveStatePath(sessionId), () => mergeWriteUnlocked(sessionId, next));
 }
 
+/** Registers the exact receipt bytes produced by a case run under the QA state lock. */
+export function registerQaCaseRunReceipt(sessionId: string, receiptPath: string, attemptId: string, receiptSha256: string): QaTrustedReceipt {
+	const stateFilePath = resolveStatePath(sessionId);
+	return withStateLock(stateFilePath, () => {
+		const canonicalPath = realpathSync(resolve(receiptPath));
+		const snapshot = readQaCaseRunReceiptSnapshot(canonicalPath);
+		if (snapshot.receipt.attempt_id !== attemptId) throw new Error("qa-state: receipt attempt does not match runner output");
+		if (snapshot.sha256 !== receiptSha256) throw new Error("qa-state: receipt digest does not match runner output snapshot");
+		const trusted: QaTrustedReceipt = { attempt_id: attemptId, receipt_path: canonicalPath, sha256: receiptSha256 };
+		const prior = readPrior(sessionId);
+		const existing = (prior.trusted_receipts ?? []).find((entry) => entry.attempt_id === trusted.attempt_id);
+		if (existing) {
+			if (existing.receipt_path !== trusted.receipt_path || existing.sha256 !== trusted.sha256) throw new Error("qa-state: receipt attempt is already registered with a different snapshot");
+			return existing;
+		}
+		mergeWriteUnlocked(sessionId, { trusted_receipts: [...(prior.trusted_receipts ?? []), trusted] });
+		return trusted;
+	});
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -847,7 +875,9 @@ export interface RecordCellOpts extends ScenarioFieldOpts, EvidenceSlotOpts {
 function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector: { story: string; cls: number; sub?: "hang-timeout" | "flaky-green" }, status: QaResult, evidence: QaCell["evidence"], path: string, driver: QaDriver): QaCaseRunBinding {
 	if (status === "na") throw new Error("case-run cannot be attached to an na cell");
 	const absoluteReceipt = resolve(path);
-	const receipt = readQaCaseRunReceipt(absoluteReceipt);
+	const snapshot = readQaCaseRunReceiptSnapshot(absoluteReceipt);
+	const receipt = snapshot.receipt;
+	const canonicalReceipt = realpathSync(absoluteReceipt);
 	const story = (prior.stories ?? []).find((candidate) => candidate.id === selector.story);
 	if (receipt.session_id !== sessionId || receipt.story_id !== selector.story || receipt.cycle !== currentCycle(prior) || !receipt.cell || receipt.cell.cls !== selector.cls || (receipt.cell.sub ?? undefined) !== selector.sub) throw new Error("case-run receipt does not match the current session/story/cell/cycle");
 	const actorId = story?.actor ?? story?.actor_id;
@@ -856,7 +886,6 @@ function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector:
 	if (!actor?.boundary || receipt.actor_boundary !== actor.boundary) throw new Error("case-run receipt actor boundary does not match current actor");
 	if (receipt.code_ref.trim() === "" || receipt.case_path.trim() === "") throw new Error("case-run receipt metadata is incomplete");
 	if (!story?.contract || receipt.story_contract_sha256 !== createHash("sha256").update(JSON.stringify(story.contract)).digest("hex")) throw new Error("case-run receipt story contract does not match current story");
-	if (status === "pass" && (receipt.start_error !== undefined || receipt.exit_status.code !== 0 || receipt.exit_status.signal !== null || receipt.exit_status.timedout || receipt.exit_status.max_buffer_exceeded)) throw new Error("pass case-run requires a zero, non-timeout runner result");
 	const caseBytes = readFileSync(receipt.case_path);
 	if (createHash("sha256").update(caseBytes).digest("hex") !== receipt.case_revision) throw new Error("case-run case metadata revision mismatch");
 	const recordValue: unknown = JSON.parse(caseBytes.toString("utf8"));
@@ -870,6 +899,11 @@ function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector:
 		const native = receipt.native_files[index];
 		return !native || resolve(native.path) !== file;
 	})) throw new Error("case-run native file list does not match case metadata");
+	const trusted = (prior.trusted_receipts ?? []).find((entry) => entry.attempt_id === receipt.attempt_id);
+	if (!trusted) throw new Error("case-run receipt has no trusted registration");
+	if (trusted.receipt_path !== canonicalReceipt || trusted.attempt_id !== receipt.attempt_id) throw new Error("case-run receipt trusted registration does not match canonical path or attempt");
+	if (trusted.sha256 !== snapshot.sha256) throw new Error("case-run receipt digest does not match trusted registration");
+	if (status === "pass" && (receipt.start_error !== undefined || receipt.exit_status.code !== 0 || receipt.exit_status.signal !== null || receipt.exit_status.timedout || receipt.exit_status.max_buffer_exceeded)) throw new Error("pass case-run requires a zero, non-timeout runner result");
 	const files: Record<string, string> = {};
 	const addFile = (filePath: string, expectedHash?: string) => {
 		const canonical = realpathSync(filePath);
@@ -883,7 +917,7 @@ function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector:
 		if (expectedHash && hash !== expectedHash) throw new Error("case-run artifact hash mismatch");
 		files[canonical] = hash;
 	};
-	files[resolve(receipt.artifact_paths.receipt)] = createHash("sha256").update(readFileSync(receipt.artifact_paths.receipt)).digest("hex");
+	files[canonicalReceipt] = snapshot.sha256;
 	files[resolve(receipt.case_path)] = receipt.case_revision;
 	for (const native of receipt.native_files) { if (createHash("sha256").update(readFileSync(native.path)).digest("hex") !== native.sha256) throw new Error("case-run native file hash mismatch"); files[resolve(native.path)] = native.sha256; }
 	files[resolve(receipt.artifact_paths.stdout)] = receipt.artifact_paths.stdout_sha256;

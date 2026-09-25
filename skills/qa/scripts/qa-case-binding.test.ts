@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { runQaCase } from "@lib/qa-case-run.ts";
 import { caseRunBindingComplete } from "@lib/qa-chain-core.ts";
 import type { QaCaseRecord } from "@lib/qa-case-store.ts";
-import { addActor, addStory, authorCell, readQaState, recordCell, setAcceptance, setQaState } from "./qa-state.ts";
+import { addActor, addStory, authorCell, readQaState, recordCell, registerQaCaseRunReceipt, setAcceptance, setQaState } from "./qa-state.ts";
 
 let root: string;
 const oldOmt = process.env.OMT_DIR;
@@ -39,6 +39,7 @@ test("실행 receipt를 현재 셀에 boundary evidence와 함께 바인딩한�
 	const bytes = readFileSync(casePath);
 	mkdirSync(join(root, "store"), { recursive: true });
 	const result = await runQaCase(record, { casePath, caseRevision: createHash("sha256").update(bytes).digest("hex"), projectRoot: root, storeLocation: join(root, "store"), codeRef: "code", resetConfirmed: "reset", sessionId: sid, storyId: "story", actorId: "actor", actorBoundary: "terminal", cellClass: 1, cycle: 0, storyContractSha256: storyHash });
+	registerQaCaseRunReceipt(sid, result.receipt.artifact_paths.receipt, result.receipt.attempt_id, result.receiptSha256);
 	const boundary = join(result.runDirectory, "boundary.txt");
 	recordCell(sid, { story: "story", cls: 1, status: "pass", evidencePath: boundary, evidenceSurface: "bash", caseRun: result.receipt.artifact_paths.receipt });
 	const persisted = readQaState(sid)?.cells?.find((cell) => cell.story === "story" && cell.cls === 1);
@@ -46,6 +47,7 @@ test("실행 receipt를 현재 셀에 boundary evidence와 함께 바인딩한�
 	expect(persisted?.case_run?.case_id).toBe("case");
 	expect(persisted?.case_run?.receipt_path).toBe(result.receipt.artifact_paths.receipt);
 	expect(persisted?.case_run?.evidence_paths).toContain(boundary);
+	expect(persisted?.case_run?.files[result.receipt.artifact_paths.receipt]).toBe(createHash("sha256").update(readFileSync(result.receipt.artifact_paths.receipt)).digest("hex"));
 	expect(result.receipt.qa_result).toBe("not-recorded");
 	const probe = (path: string) => { try { const bytes = readFileSync(path); return { exists: true, size: statSync(path).size, sha256: createHash("sha256").update(bytes).digest("hex") }; } catch { return { exists: false, size: 0, sha256: "" }; } };
 	expect(caseRunBindingComplete(persisted!, probe)).toBe(true);
@@ -53,7 +55,45 @@ test("실행 receipt를 현재 셀에 boundary evidence와 함께 바인딩한�
 	expect(caseRunBindingComplete(persisted!, probe)).toBe(false);
 });
 
-async function bindingFixture() {
+test("원본 digest로 등록된 receipt가 exit status 변조 후 PASS로 바인딩되지 않는다", async () => {
+	const fixture = await bindingFixture(true, 19);
+	const originalBytes = readFileSync(fixture.receiptPath);
+	const receipt = JSON.parse(originalBytes.toString("utf8")) as Record<string, unknown>;
+	receipt.exit_status = { code: 0, signal: null, timedout: false, max_buffer_exceeded: false };
+	writeFileSync(fixture.receiptPath, JSON.stringify(receipt));
+
+	expect(() => recordCell(sid, { story: "story", cls: 1, status: "pass", evidencePath: fixture.boundary, evidenceSurface: "bash", caseRun: fixture.receiptPath })).toThrow(/trusted receipt|digest|registration/);
+	expect(readQaState(sid)?.cells?.find((cell) => cell.story === "story" && cell.cls === 1)?.status).toBeUndefined();
+});
+
+test("등록되지 않은 receipt는 case-run provenance로 바인딩되지 않는다", async () => {
+	const fixture = await bindingFixture(false);
+	const statePath = join(process.env.OMT_DIR!, `qa-state-${sid}.json`);
+	const state = JSON.parse(readFileSync(statePath, "utf8")) as Record<string, unknown>;
+	delete state.trusted_receipts;
+	writeFileSync(statePath, JSON.stringify(state));
+	expect(() => recordCell(sid, { story: "story", cls: 1, status: "pass", evidencePath: fixture.boundary, evidenceSurface: "bash", caseRun: fixture.receiptPath })).toThrow(/no trusted registration/);
+});
+
+test("등록 전에 receipt가 변조되면 runner 원본 digest와 달라 등록을 거부한다", async () => {
+	const fixture = await bindingFixture(false);
+	const original = { attempt_id: fixture.result.receipt.attempt_id, receipt_path: fixture.receiptPath, digest: createHash("sha256").update(readFileSync(fixture.receiptPath)).digest("hex") };
+	writeFileSync(fixture.receiptPath, `${JSON.stringify({ ...fixture.result.receipt, exit_status: { code: 0, signal: null, timedout: false, max_buffer_exceeded: false } })}\n`);
+	expect(() => registerQaCaseRunReceipt(sid, original.receipt_path, original.attempt_id, fixture.result.receiptSha256)).toThrow(/digest|snapshot|runner/);
+	expect(readQaState(sid)?.trusted_receipts).toBeUndefined();
+});
+
+test("trusted receipt의 canonical path와 attempt가 다르면 바인딩하지 않는다", async () => {
+	const fixture = await bindingFixture();
+	const statePath = join(process.env.OMT_DIR!, `qa-state-${sid}.json`);
+	const state = JSON.parse(readFileSync(statePath, "utf8")) as Record<string, unknown>;
+	const trusted = state.trusted_receipts as Array<Record<string, unknown>>;
+	trusted[0]!.receipt_path = join(root, "other-receipt.json");
+	writeFileSync(statePath, JSON.stringify(state));
+	expect(() => recordCell(sid, { story: "story", cls: 1, status: "pass", evidencePath: fixture.boundary, evidenceSurface: "bash", caseRun: fixture.receiptPath })).toThrow(/canonical path or attempt/);
+});
+
+async function bindingFixture(register = true, exitCode = 0) {
 	setQaState(sid, { phase: "PLAN" });
 	setAcceptance(sid, ["runner result observed"]);
 	addActor(sid, { id: "actor", name: "User", boundary: "terminal", driver: "bash", reachable: "yes" });
@@ -61,7 +101,7 @@ async function bindingFixture() {
 	authorCell(sid, { story: "story", cls: 1, attackPoint: "run", priority: "H" });
 	const casePath = join(root, "case.json");
 	const nativePath = join(root, "native.txt"); writeFileSync(nativePath, "native");
-	const record: QaCaseRecord = { id: "case", title: "case", goal: "run", given: ["case exists"], when: ["run"], then: ["result observed"], acceptance_criteria: ["runner result observed"], surface: "bash", runner: [process.execPath, "-e", "require('fs').writeFileSync(process.env.QA_ARTIFACTS_DIR + '/boundary.txt', 'observed'); process.stdout.write('runner log')"], execution_cwd: "{artifacts}", native_files: [nativePath], reset_description: "reset" };
+	const record: QaCaseRecord = { id: "case", title: "case", goal: "run", given: ["case exists"], when: ["run"], then: ["result observed"], acceptance_criteria: ["runner result observed"], surface: "bash", runner: [process.execPath, "-e", `require('fs').writeFileSync(process.env.QA_ARTIFACTS_DIR + '/boundary.txt', 'observed'); process.stdout.write('runner log'); process.exitCode=${exitCode}`], execution_cwd: "{artifacts}", native_files: [nativePath], reset_description: "reset" };
 	writeFileSync(casePath, JSON.stringify(record));
 	const state = readQaState(sid)!;
 	const storyHash = createHash("sha256").update(JSON.stringify(state.stories![0]!.contract)).digest("hex");
@@ -69,6 +109,7 @@ async function bindingFixture() {
 	const store = join(root, "store"); mkdirSync(store, { recursive: true });
 	const result = await runQaCase(record, { casePath, caseRevision: createHash("sha256").update(bytes).digest("hex"), projectRoot: root, storeLocation: store, codeRef: "code", resetConfirmed: "reset", sessionId: sid, storyId: "story", actorId: "actor", actorBoundary: "terminal", cellClass: 1, cycle: 0, storyContractSha256: storyHash });
 	const receiptPath = result.receipt.artifact_paths.receipt;
+	if (register) registerQaCaseRunReceipt(sid, receiptPath, result.receipt.attempt_id, result.receiptSha256);
 	return { result, receiptPath, boundary: join(result.runDirectory, "boundary.txt"), casePath, nativePath };
 }
 
@@ -85,8 +126,8 @@ test("receipt metadata mismatch and failed execution cannot bind", async () => {
 		["missing-actor", (r) => { delete r.actor_id; }, /actor/],
 		["missing-boundary", (r) => { delete r.actor_boundary; }, /actor boundary/],
 		["native-list", (r) => { r.native_files = [{ path: "/tmp/native", sha256: "a".repeat(64) }]; }, /native file list/],
-		["exit", (r) => { r.exit_status = { code: 1, signal: null, timedout: false, max_buffer_exceeded: false }; }, /zero, non-timeout/],
-		["timeout", (r) => { r.exit_status = { code: null, signal: "SIGKILL", timedout: true, max_buffer_exceeded: false }; }, /zero, non-timeout/],
+		["exit", (r) => { r.exit_status = { code: 1, signal: null, timedout: false, max_buffer_exceeded: false }; }, /digest|zero, non-timeout/],
+		["timeout", (r) => { r.exit_status = { code: null, signal: "SIGKILL", timedout: true, max_buffer_exceeded: false }; }, /digest|zero, non-timeout/],
 	];
 	for (const [, mutate, expected] of fields) {
 		const fixture = await bindingFixture();
@@ -104,7 +145,7 @@ test("pass binding rejects a start_error receipt", async () => {
 	const receipt = JSON.parse(readFileSync(fixture.receiptPath, "utf8")) as Record<string, unknown>;
 	receipt.start_error = { message: "runner failed to start" };
 	writeFileSync(fixture.receiptPath, JSON.stringify(receipt));
-	expect(() => recordCell(sid, { story: "story", cls: 1, status: "pass", evidencePath: fixture.boundary, evidenceSurface: "bash", caseRun: fixture.receiptPath })).toThrow(/zero, non-timeout/);
+	expect(() => recordCell(sid, { story: "story", cls: 1, status: "pass", evidencePath: fixture.boundary, evidenceSurface: "bash", caseRun: fixture.receiptPath })).toThrow(/digest|zero, non-timeout/);
 });
 
 test("old same-driver receipt cannot bind after story actor changes", async () => {

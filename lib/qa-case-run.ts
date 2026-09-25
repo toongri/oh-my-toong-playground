@@ -53,7 +53,13 @@ export interface QaCaseRunReceipt {
 	start_error?: { message: string; code?: string };
 }
 
-export interface QaCaseRunResult { receipt: QaCaseRunReceipt; runDirectory: string; }
+export interface QaCaseRunResult { receipt: QaCaseRunReceipt; runDirectory: string; receiptSha256: string; }
+
+export interface QaCaseRunReceiptSnapshot {
+	receipt: QaCaseRunReceipt;
+	bytes: Buffer;
+	sha256: string;
+}
 
 function sha256(bytes: Buffer): string { return createHash("sha256").update(bytes).digest("hex"); }
 function readRevision(path: string): string { return sha256(readFileSync(path)); }
@@ -173,19 +179,26 @@ export async function runQaCase(record: QaCaseRecord, context: QaCaseRunContext)
 		...(context.actorBoundary ? { actor_boundary: context.actorBoundary } : {}),
 		...(startError ? { start_error: startError } : {}),
 	};
-	writeImmutable(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
-	return { receipt, runDirectory };
+	const receiptBytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`, "utf8");
+	writeImmutable(receiptPath, receiptBytes);
+	return { receipt, runDirectory, receiptSha256: sha256(receiptBytes) };
 }
 
 export function readQaCaseRunReceipt(path: string): QaCaseRunReceipt {
-	const value: unknown = JSON.parse(readFileSync(path, "utf8"));
+	return readQaCaseRunReceiptSnapshot(path).receipt;
+}
+
+/** Reads and validates the receipt from one byte snapshot for binding. */
+export function readQaCaseRunReceiptSnapshot(path: string): QaCaseRunReceiptSnapshot {
+	const bytes = readFileSync(path);
+	const value: unknown = JSON.parse(bytes.toString("utf8"));
 	validateQaCaseRunReceipt(value);
 	const runDirectory = realpathSync(dirname(path));
 	if (resolve(value.artifact_paths.receipt) !== resolve(path) || resolve(value.artifact_paths.stdout) !== join(runDirectory, "stdout.log") || resolve(value.artifact_paths.stderr) !== join(runDirectory, "stderr.log")) throw new Error("qa replay: receipt artifact paths are outside its run directory or do not match the receipt path");
 	if (sha256(readFileSync(value.artifact_paths.stdout)) !== value.artifact_paths.stdout_sha256 || sha256(readFileSync(value.artifact_paths.stderr)) !== value.artifact_paths.stderr_sha256) {
 		throw new Error("qa replay: run artifact hash mismatch");
 	}
-	return value;
+	return { receipt: value, bytes, sha256: sha256(bytes) };
 }
 
 export function validateQaCaseRunReceipt(value: unknown): asserts value is QaCaseRunReceipt {
