@@ -51,6 +51,22 @@ export interface QaBaseline {
 	cycle?: number;
 }
 
+export interface QaFeatureRef {
+	id: string;
+	revision: string;
+	/** Coverage labels from current code / the QA plan; not a membership claim. */
+	entrypoints: string[];
+	/** Coverage labels from current code / the QA plan; not a membership claim. */
+	states: string[];
+}
+
+export interface QaStoryProvenance {
+	features: QaFeatureRef[];
+	/** Tested-code version, including dirty diff and build identity; not just a path. */
+	code_ref: string;
+	cycle: number;
+}
+
 export interface QaStory {
 	id: string;
 	/** Actor id; `actor_id` is accepted as the serialized spelling too. */
@@ -58,6 +74,8 @@ export interface QaStory {
 	actor_id?: string;
 	baseline?: QaBaseline | null;
 	baseline_history?: QaBaseline[];
+	provenance?: QaStoryProvenance;
+	provenance_history?: QaStoryProvenance[];
 }
 
 export interface QaCell {

@@ -66,13 +66,13 @@ Stance sharpens a roster actor; it never replaces one:
 
 Risk derivation (Layer A) finds where a silent failure is expensive; it does not enumerate how the product is actually used. Layer D walks the changed surface the way real usage reaches and mutates it, so the scenario set reads like the product's life, not just its attack surface.
 
-**Build the product-context map first — from the repo, not from the QA REQUEST.** The QA REQUEST rarely hands over a feature map; derive it by reading the code around the changed surface: navigation/route definitions, deeplink and push-notification handlers, and every writer of the data the surface displays. The map answers three questions, and each axis below derives scenarios from one of them:
+**Use persistent feature-map input plus current-code discovery.** Feature-map lookup first, using its CLI contract; this supplies the product-context map. Then re-check the code around the changed surface: navigation/route definitions, deeplink and push-notification handlers, and every writer of the data the surface displays. A map is an input, not a scope ceiling or spec authority; re-check current code/spec for omitted arrival paths, state-change writers, and lifecycle paths. Keep expected contract and observed implementation separate. The map answers three questions, and each axis below derives scenarios from one of them:
 
 1. **Arrival paths** — every distinct way an actor reaches the changed surface in production: direct navigation, deeplink/push entry, redirects from other flows. When the map shows an arrival path other than direct navigation, at least one scenario enters through it.
 2. **Adjacent state transitions** — every product action elsewhere that changes what the changed surface shows (the writers of its data: a dispense that decrements stock, a bottle replacement that resets it). When the map shows such a writer, at least one scenario drives the writer action first and then observes the changed surface, asserting the transition landed rather than a cached prior state.
 3. **Lifecycle stances** — the states a real account passes through: freshly onboarded (empty or partial data), established daily use, just after a maintenance action. When these states differ in what the surface shows, each distinct state gets a scenario.
 
-Each Layer D scenario is a multi-step realistic flow, still entered at its actor's boundary (Layer C) and still written in the six-field shape; its `why-needed` names the use-case axis it covers. The coverage-delta line names all three axes and which are covered or uncovered — an axis silently absent from the roster is an authoring omission, not a delta.
+Each Layer D scenario is a multi-step realistic flow, still entered at the actor's boundary (Layer C) and **not a replacement for the six-field scenario shape**; its `why-needed` names the use-case axis it covers. The coverage-delta line names all three axes and which are covered or uncovered — an axis silently absent from the roster is an authoring omission, not a delta. An omitted slot, arrival path, state transition, or lifecycle stance is an authoring omission, not permission to narrow scope.
 
 ---
 

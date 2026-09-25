@@ -637,6 +637,7 @@ function renderScenarios(view: QaView, narrative: QaReportNarrative, readEvidenc
  */
 function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvidence: EvidenceReader, context: EvidenceRenderContext): string {
 	const cells = (view.stories ?? []).flatMap((story) => cellsForStory(view, story.id));
+	const storyAnchors = new Set<string>();
 	const rows = cells
 		.map((cell) => {
 			const n = narrative.scenarios?.[cellKey(cell)];
@@ -651,8 +652,10 @@ function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvi
 				(cell.na_reason ? `<br><span class="audit-note">${escapeHtml(cell.na_reason)}</span>` : "") +
 				(n?.expectedVsActual ? `<br><span class="audit-note">${escapeHtml(n.expectedVsActual)}</span>` : "") +
 				(n?.oracleDiagnosis ? `<br><span class="audit-note">${escapeHtml(n.oracleDiagnosis)}</span>` : "");
+			const storyAnchor = storyAnchors.has(cell.story) ? "" : ` id="audit-story-${escapeHtml(cell.story)}"`;
+			storyAnchors.add(cell.story);
 			return (
-					`<tr><td class="audit-story"><code>${escapeHtml(cell.story)}</code></td>` +
+					`<tr${storyAnchor}><td class="audit-story"><code>${escapeHtml(cell.story)}</code></td>` +
 					`<td class="audit-coverage">cls ${escapeHtml(String(cell.cls))}${cell.sub ? `/${escapeHtml(cell.sub)}` : ""} — ${escapeHtml(CLS_LABEL[cell.cls] ?? "")}</td>` +
 					`<td>${escapeHtml(cell.attack_point ?? "")}${cell.why_needed ? `<br><span class="audit-note">${escapeHtml(cell.why_needed)}</span>` : ""}</td>` +
 					`<td class="audit-boundary">${escapeHtml(boundary ?? "")}${driver ? `<br><span class="audit-note">${escapeHtml(driver)}</span>` : ""}</td>` +
@@ -664,7 +667,39 @@ function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvi
 	const table = rows
 		? `<table tabindex="0"><thead><tr><th class="audit-story">story</th><th class="audit-coverage">coverage (cls)</th><th>attack point</th><th class="audit-boundary">driven at</th><th>result</th><th>evidence</th></tr></thead><tbody>${rows}</tbody></table>`
 		: `<p class="evidence-note">기록된 시나리오 셀 없음</p>`;
-	return `<h2>시나리오 상세 기록 (감사)</h2>${table}${renderRawEvidence(cells, readEvidence, context)}${renderBaselineAudit(view, readEvidence, context)}`;
+	return `<h2>시나리오 상세 기록 (감사)</h2>${table}${renderStoryProvenance(view, storyAnchors)}${renderRawEvidence(cells, readEvidence, context)}${renderBaselineAudit(view, readEvidence, context)}`;
+}
+
+/**
+ * Renders recorded story-to-code context without presenting it as execution
+ * evidence. A provenance record is current-cycle context only when its cycle
+ * matches the report cycle; stale records and history remain visibly labelled
+ * as previous-cycle context and never receive a result/pass treatment.
+ */
+function renderStoryProvenance(view: QaView, storyAnchors: Set<string>): string {
+	const cycle = currentCycle(view);
+	const records = (view.stories ?? []).map((story) => {
+		const current = story.provenance?.cycle === cycle ? story.provenance : undefined;
+		const previous = [
+			...(story.provenance && story.provenance.cycle !== cycle ? [story.provenance] : []),
+			...(story.provenance_history ?? []),
+		];
+		const storyLink = storyAnchors.has(story.id)
+			? ` <a class="audit-story-link" href="#audit-story-${escapeHtml(story.id)}" aria-label="story ${escapeHtml(story.id)} 기존 기록으로 이동">기존 기록으로 이동</a>`
+			: "";
+		const renderRecord = (record: NonNullable<typeof story.provenance>, label: string): string => {
+			const features = record.features.length
+				? `<ul>${record.features.map((feature) => `<li><code>${escapeHtml(feature.id)}</code> · revision <code>${escapeHtml(feature.revision)}</code> · planned entrypoints: ${escapeHtml(feature.entrypoints.join(", ") || "—")} · planned states: ${escapeHtml(feature.states.join(", ") || "—")}</li>`).join("")}</ul>`
+				: `<p class="evidence-note">기록된 feature 없음</p>`;
+			return `<details class="raw-evidence"><summary>${escapeHtml(label)} · cycle ${escapeHtml(String(record.cycle))}</summary><p><strong>code_ref</strong>: <code>${escapeHtml(record.code_ref)}</code></p>${features}</details>`;
+		};
+		const body = current
+			? renderRecord(current, "현재")
+			: `<p class="evidence-note">provenance 기록 없음 — 현재 cycle ${escapeHtml(String(cycle))}과 일치하는 기록이 없습니다</p>`;
+		const history = previous.map((record) => renderRecord(record, "이전 기록")).join("");
+		return `<div class="provenance-record"><p><strong>story <code>${escapeHtml(story.id)}</code></strong>${storyLink}</p>${body}${history}</div>`;
+	}).join("");
+	return `<h3>Story provenance (감사 맥락)</h3><p class="evidence-note">provenance는 실행 증거가 아닌 계획 맥락입니다. 진입 경로·상태는 이번 QA의 계획 항목이며 지도에 등록된 항목임을 뜻하지 않습니다.</p>${records || `<p class="evidence-note">기록된 story 없음</p>`}`;
 }
 
 /**
@@ -999,6 +1034,8 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .audit-story { min-width: 6rem; white-space: nowrap; word-break: keep-all; }
 .audit-coverage { min-width: 11rem; word-break: keep-all; overflow-wrap: normal; }
 .audit-boundary { min-width: 12rem; word-break: keep-all; overflow-wrap: normal; }
+.audit-story-link { color: var(--accent); text-decoration: underline; }
+.audit-story-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .affected-user, .scenario-flow, .ac-map { margin: 1rem 0; padding: 0.85rem 1rem; border: 1px solid var(--rule); border-radius: 10px; }
 .affected-user h3, .scenario-flow h3, .ac-map h3 { margin-top: 0; }
 .satisfied-yes { color: var(--pass); border-color: var(--pass); }

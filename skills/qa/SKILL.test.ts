@@ -35,6 +35,94 @@ const presentationMd = readFileSync(
 	"utf8",
 );
 
+describe("Feature Map provenance 계약", () => {
+	test("PLAN이 제품 맥락 재구성 전에 QA-local feature-map CLI를 조회함", () => {
+		expect(skillMd).toContain("feature-map.ts query");
+		expect(skillMd).toContain("feature-map.ts help");
+	});
+
+	test("feature-map 조회가 미설정·부재·손상 저장소를 구분함", () => {
+		expect(skillMd).toContain("storage_not_configured");
+		expect(skillMd).toContain("feature_not_found");
+		expect(skillMd).toContain("corrupt");
+		expect(skillMd).toContain("ask_user_for_storage");
+		expect(skillMd).toContain("no default");
+	});
+
+	test("map 입력을 현재 코드/spec과 대조하고 범위 상한으로 쓰지 않음", () => {
+		expect(skillMd).toContain("not a scope ceiling");
+		expect(skillMd).toContain("not spec authority");
+		expect(skillMd).toContain("expected contract and observed implementation separate");
+		expect(skillMd).toContain("omitted");
+	});
+
+	test("story provenance가 story 생성 후 기록되는 계획 맥락임", () => {
+		expect(skillMd).toContain("record-story-provenance");
+		expect(skillMd).toContain("--story ID");
+		expect(skillMd).toContain('"features"');
+		expect(skillMd).toContain('"code_ref"');
+		expect(skillMd).toContain("planning context");
+		expect(skillMd).toContain("after `add-story`");
+		expect(skillMd).toContain("before BASELINE");
+	});
+
+	test("legacy·미기록 map은 조작된 ID 없이 discovery 근거를 보존함", () => {
+		expect(skillMd).toContain("fabricated IDs");
+		expect(skillMd).toContain("not recorded");
+		expect(skillMd).toContain("labels are not metadata membership");
+	});
+
+	test("map·도구 실패와 제품 동작 실패를 별도 분류함", () => {
+		expect(skillMd).toContain("map drift/document");
+		expect(skillMd).toContain("tool failure");
+		expect(skillMd).toContain("product behavior failure");
+		expect(skillMd).toContain("environment block");
+	});
+
+	test("STATE 유지보수는 검증된 관찰만 기록하고 초안을 보존함", () => {
+		expect(skillMd).toContain("STATE/post-run");
+		expect(skillMd).toContain("only verified observations");
+		expect(skillMd).toContain("keep the draft");
+		expect(skillMd).toContain("save --expect");
+		expect(skillMd).toContain("re-`get` before reconciling a conflict");
+		expect(skillMd).toContain("reusable regression recipe");
+	});
+
+	test("PLAN 출력에 story별 별도 feature-map 계획 맥락 슬롯이 있음", () => {
+		expect(skillMd).toContain("Story Planning Context");
+		expect(skillMd).toContain("map lookup status");
+		expect(skillMd).toContain("pending / notfound / error / ok");
+		expect(skillMd).toContain("feature id@revision or not recorded(reason)");
+		expect(skillMd).toContain("planned entrypoints/states");
+		expect(skillMd).toContain("code_ref");
+		expect(skillMd).toContain("PLAN-only lookup");
+		expect(skillMd).toContain("planned labels");
+		expect(skillMd).toContain("not a new scenario field");
+	});
+
+	test("계획 맥락 슬롯은 FIX cycle 후 재확인·재기록을 요구함", () => {
+		expect(skillMd).toContain("After each FIX cycle, recheck the live map and rerecord");
+	});
+
+	test("post-run 유지보수가 실제 실패와 pass 정규화를 구분함", () => {
+		expect(skillMd).toContain("actual failure, regression, or evidence");
+		expect(skillMd).toContain("never normalize a failure into expected or pass");
+		expect(skillMd).toContain("successful feature refs");
+		expect(skillMd).toContain("pending/notfound/error reasons remain in the final Markdown");
+	});
+});
+
+describe("Scenario authoring feature-map 계층", () => {
+	test("Layer D가 map을 영속 입력과 현재 코드 탐색으로 취급함", () => {
+		expect(scenarioAuthoringMd).toContain("persistent feature-map input");
+		expect(scenarioAuthoringMd).toContain("current-code discovery");
+		expect(scenarioAuthoringMd).toContain("not a replacement for the six-field scenario shape");
+		expect(scenarioAuthoringMd).toContain("lookup first");
+		expect(scenarioAuthoringMd).not.toContain("from the repo, not from the QA REQUEST");
+		expect(scenarioAuthoringMd).not.toContain("when available");
+	});
+});
+
 // ---------------------------------------------------------------------------
 // NEW-PROSE: cycle phase vocabulary (must FAIL before rewrite — RED)
 // ---------------------------------------------------------------------------
@@ -1319,7 +1407,9 @@ describe("new-prose: product use-case breadth is a required derivation axis", ()
 	test("Layer D exists and mandates building the product-context map from the repo", () => {
 		expect(scenarioAuthoringMd).toContain("Layer D — Product Use-Case Breadth");
 		expect(scenarioAuthoringMd).toContain("product-context map");
-		expect(scenarioAuthoringMd).toContain("from the repo, not from the QA REQUEST");
+		expect(scenarioAuthoringMd).toContain("Feature-map lookup first");
+		expect(scenarioAuthoringMd).toContain("re-check the code");
+		expect(scenarioAuthoringMd).not.toContain("from the repo, not from the QA REQUEST");
 	});
 
 	test("the three use-case axes are named as conditional requirements", () => {
