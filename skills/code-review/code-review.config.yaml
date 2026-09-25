@@ -34,11 +34,11 @@ chunk-review:
     # `settings.deny.subagents: true` is what emits `agents.enabled=false`, which strips codex's
     # subagent tool descriptions (spawn_agent etc.) from the session entirely, so a finder can't
     # spawn subagents even if asked to.
-    # Note: codex uses bare model ids (no `openai/` prefix). 2026-08-02 스모크로
-    # gpt-5.6-sol(low/medium)·gpt-5.6-luna(xhigh/max)·gpt-5.6-terra(high/xhigh)
+    # Note: codex uses bare model ids (no `openai/` prefix). 2026-09-23 스모크로
+    # gpt-6-sol(medium/high)·gpt-6-luna(low/medium/xhigh/max)·gpt-6-astra(high)
     # 전 조합의 codex 수용을 확인했다. codex에는 unsupported model id의 자동
     # fallback이 없다 — 모델 교체 시 반드시 사전 스모크를 거칠 것. 긴급 폴백은
-    # 전 앵글 `gpt-5.6-sol`/medium(직전 검증 구성).
+    # 전 앵글 `gpt-6-sol`/medium(직전 검증 구성).
     # Change one member's `model`/`command` to run that angle on a different model/CLI.
     #
     # Angle set: 4 angles, each asking a distinct question about the diff —
@@ -48,28 +48,28 @@ chunk-review:
     # asked for actually done, and is it actually verified).
     - name: correctness
       command: codex exec -c service_tier=fast
-      model: gpt-5.6-luna
+      model: gpt-6-luna
       emoji: "\U0001F517"
       color: "CYAN"
       effort_level: xhigh
       output_format: json
     - name: regression
       command: codex exec -c service_tier=fast
-      model: gpt-5.6-luna
+      model: gpt-6-luna
       emoji: "\U0001F5D1"
       color: "MAGENTA"
       effort_level: xhigh
       output_format: json
     - name: cleanup
       command: codex exec -c service_tier=fast
-      model: gpt-5.6-luna
+      model: gpt-6-luna
       emoji: "\U0001F9F9"
       color: "YELLOW"
       effort_level: xhigh
       output_format: json
     - name: requirement
       command: codex exec -c service_tier=fast
-      model: gpt-5.6-luna
+      model: gpt-6-luna
       emoji: "\U0001F4CB"
       color: "GREEN"
       effort_level: max

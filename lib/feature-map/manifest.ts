@@ -150,10 +150,18 @@ function assertReadableDirectory(path: string): void {
 
 function gitOutput(cwd: string, args: string[]): string | undefined {
 	try {
-		return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-	} catch {
-		return undefined;
+		return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+	} catch (error) {
+		const stderr = getGitStderr(error);
+		if (/fatal:\s+not a git repository\b/i.test(stderr)) return undefined;
+		const detail = stderr.trim() || (error instanceof Error ? error.message : String(error));
+		throw new Error(`feature-map: git ${args.join(" ")} failed: ${detail}`, { cause: error });
 	}
+}
+
+function getGitStderr(error: unknown): string {
+	if (!isRecord(error) || typeof error.stderr !== "string") return "";
+	return error.stderr;
 }
 
 function realpath(path: string): string {

@@ -1562,7 +1562,7 @@ describe("syncCategory", () => {
 		};
 
 		const adapters = makeAdapterMap(["codex"]);
-		const rootMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } } };
+		const rootMap: ModelMap = { tiers: { opus: { model: "gpt-6-sol", effort: "high" } } };
 		// context.modelMaps stays empty (per-scope YAML never populated it); only
 		// rootModelMaps carries the codex map, mirroring the real gap: project
 		// agents deploy with no project codex.yaml, so only the root map is reachable.
@@ -1877,13 +1877,13 @@ describe("loadRootModelMaps", () => {
 	it("returns the codex model-map parsed from the repo root's codex.yaml", async () => {
 		await writeFile(
 			path.join(tmpDir, "codex.yaml"),
-			"model-map:\n  tiers:\n    opus:\n      model: gpt-5.6-sol\n      effort: high\n",
+			"model-map:\n  tiers:\n    opus:\n      model: gpt-6-sol\n      effort: high\n",
 		);
 
 		const result = await loadRootModelMaps(tmpDir);
 
 		expect(result.get("codex")).toEqual({
-			tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } },
+			tiers: { opus: { model: "gpt-6-sol", effort: "high" } },
 		});
 	});
 

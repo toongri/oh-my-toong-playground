@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { configureFeatureMap } from "@lib/feature-map/manifest";
-import { getFeature, getFeatureMapStatus, queryFeatureMap, saveFeature, validateFeatureMap } from "@lib/feature-map/storage";
+import { getFeature, getFeatureMapStatus, queryFeatureMap, saveFeature, validateFeatureMap, withFeatureMapReadLock } from "@lib/feature-map/storage";
 
 const roots: string[] = [];
 function temp(): string { const p = mkdtempSync(join(tmpdir(), "feature-map-storage-")); roots.push(p); return p; }
@@ -18,6 +18,17 @@ describe("feature-map storage", () => {
     const cwd = repo(); const home = temp();
     expect(getFeatureMapStatus({ cwd, home })).toEqual(expect.objectContaining({ status: "not_found", reason: "storage_not_configured", next_action: "ask_user_for_storage" }));
   });
+
+  test("미설정 상태에서도 잘못된 feature ID를 먼저 거부한다", () => {
+    const cwd = repo(); const home = temp();
+    expect(() => getFeature("INVALID ID", { cwd, home })).toThrow("feature-map: id must be a safe lower ASCII identifier");
+  });
+
+  function assertSynchronousCallbackType(): void {
+    // @ts-expect-error Async callbacks can resume after the lock is released.
+    withFeatureMapReadLock({}, async () => undefined);
+  }
+  void assertSynchronousCallbackType;
 
   test("새 문서를 저장하고 revision으로 읽는다", () => {
     const cwd = repo(); const home = temp();

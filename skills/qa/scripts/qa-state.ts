@@ -72,9 +72,10 @@ import {
 	type QaInert,
 	type QaEvidenceClaim,
 } from "@lib/qa-chain-core";
-import { getFeature, type FeatureMapOptions } from "@lib/feature-map/index.ts";
+import { withFeatureMapReadLock, type FeatureMapOptions } from "@lib/feature-map/index.ts";
 import { readQaCaseRunReceiptSnapshot } from "@lib/qa-case-run.ts";
 import { validateQaCase } from "@lib/qa-case-store.ts";
+
 
 const DEFAULT_MAX_CYCLES = 5;
 
@@ -733,53 +734,58 @@ export function recordStoryProvenance(
 ): void {
 	const id = nonEmpty(storyId, "story");
 	const payload = provenanceInput(input);
-	// Resolve every feature before touching the QA state. This makes all map errors
-	// fail atomically and deliberately refuses stale revisions.
-	for (const ref of payload.features) {
-		const result = getFeature(ref.id, options);
-		if (result.status !== "ok")
-			throw new Error(
-				`record-story-provenance: feature "${ref.id}" is unavailable (${result.status === "not_found" ? result.reason : "unavailable"})`,
-			);
-		if (result.feature.revision !== ref.revision)
-			throw new Error(
-				`record-story-provenance: feature "${ref.id}" revision mismatch; supplied revision is not current`,
-			);
-	}
 	withStateLock(resolveStatePath(sessionId), () => {
-		const prior = readPrior(sessionId);
-		const stories = [...(prior.stories ?? [])];
-		const index = stories.findIndex((story) => story.id === id);
-		if (index < 0) throw new Error(`record-story-provenance: unknown story "${id}"`);
-		const existing = stories[index];
-		const cycle = currentCycle(prior);
-		const next: QaStoryProvenance = { ...payload, cycle };
-		if (existing.provenance && JSON.stringify(existing.provenance) === JSON.stringify(next)) return;
-		const currentCells = (prior.cells ?? []).some(
-			(cell) =>
-				cell.story === id &&
-				cell.cycle === cycle &&
-				cell.status !== undefined &&
-				cell.status !== null,
-		);
-		const currentBaseline = existing.baseline?.cycle === cycle;
-		if (currentBaseline || currentCells) {
-			throw new Error(
-				"record-story-provenance: cannot change provenance after the current story baseline or recorded cells; start the next FIX cycle",
+		const locked = withFeatureMapReadLock(options, (readFeature) => {
+			// Resolve every feature while both locks are held. This makes map errors
+			// fail atomically and prevents a revision from changing before persistence.
+			for (const ref of payload.features) {
+				const result = readFeature(ref.id);
+				if (result.status !== "ok")
+					throw new Error(
+						`record-story-provenance: feature "${ref.id}" is unavailable (${result.status === "not_found" ? result.reason : "unavailable"})`,
+					);
+				if (result.feature.revision !== ref.revision)
+					throw new Error(
+						`record-story-provenance: feature "${ref.id}" revision mismatch; supplied revision is not current`,
+					);
+			}
+			const prior = readPrior(sessionId);
+			const stories = [...(prior.stories ?? [])];
+			const index = stories.findIndex((story) => story.id === id);
+			if (index < 0) throw new Error(`record-story-provenance: unknown story "${id}"`);
+			const existing = stories[index];
+			const cycle = currentCycle(prior);
+			const next: QaStoryProvenance = { ...payload, cycle };
+			if (existing.provenance && JSON.stringify(existing.provenance) === JSON.stringify(next)) return;
+			const currentCells = (prior.cells ?? []).some(
+				(cell) =>
+					cell.story === id &&
+					cell.cycle === cycle &&
+					cell.status !== undefined &&
+					cell.status !== null,
 			);
+			const currentBaseline = existing.baseline?.cycle === cycle;
+			if (currentBaseline || currentCells) {
+				throw new Error(
+					"record-story-provenance: cannot change provenance after the current story baseline or recorded cells; start the next FIX cycle",
+				);
+			}
+			const history = existing.provenance_history ? [...existing.provenance_history] : [];
+			if (
+				existing.provenance &&
+				JSON.stringify(history.at(-1)) !== JSON.stringify(existing.provenance)
+			)
+				history.push(existing.provenance);
+			stories[index] = {
+				...existing,
+				provenance: next,
+				...(history.length ? { provenance_history: history } : {}),
+			};
+			mergeWriteUnlocked(sessionId, { stories });
+		});
+		if (locked && locked.status === "not_found") {
+			throw new Error("record-story-provenance: feature map storage is not configured");
 		}
-		const history = existing.provenance_history ? [...existing.provenance_history] : [];
-		if (
-			existing.provenance &&
-			JSON.stringify(history.at(-1)) !== JSON.stringify(existing.provenance)
-		)
-			history.push(existing.provenance);
-		stories[index] = {
-			...existing,
-			provenance: next,
-			...(history.length ? { provenance_history: history } : {}),
-		};
-		mergeWriteUnlocked(sessionId, { stories });
 	});
 }
 

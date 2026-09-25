@@ -1294,10 +1294,10 @@ describe("validatePlatformYaml — model-map 섹션 검증", () => {
 model-map:
   tiers:
     opus:
-      model: gpt-5.6-sol
+      model: gpt-6-sol
       effort: high
     sonnet:
-      model: gpt-5.6-sol
+      model: gpt-6-sol
       effort: medium
 `,
 		);
@@ -1313,7 +1313,7 @@ model-map:
 model-map:
   tiers:
     opus:
-      model: gpt-5.6-sol
+      model: gpt-6-sol
       effort: hgih
 `,
 		);
@@ -1330,7 +1330,7 @@ model-map:
 model-map:
   tiers:
     opus:
-      model: gpt-5.6-sol
+      model: gpt-6-sol
       effort: ${effort}
 `,
 			);
