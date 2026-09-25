@@ -42,6 +42,24 @@ describe("feature-map manifest", () => {
     expect(readFileSync(first.context.manifestPath, "utf8")).toBe(before);
   });
 
+  test("Git 저장소가 아닌 디렉터리는 cwd를 프로젝트로 사용한다", () => {
+    const cwd = tempDir();
+    const home = tempDir();
+
+    const result = ensureFeatureMapManifest({ cwd, home });
+
+    expect(result.context.projectRoot).toBe(realpathSync(cwd));
+    expect(result.manifest.storage).toBeNull();
+  });
+
+  test("손상된 Git 설정 오류는 비저장소 fallback으로 숨기지 않는다", () => {
+    const cwd = gitRepo();
+    writeFileSync(join(cwd, ".git", "config"), "[core\n");
+    const home = tempDir();
+
+    expect(() => ensureFeatureMapManifest({ cwd, home })).toThrow(/git|config/i);
+  });
+
   test("상대 location을 매니페스트 디렉터리에 해석하고 하위 디렉터리를 만든다", () => {
     const cwd = gitRepo();
     const home = tempDir();
