@@ -5,7 +5,7 @@ import { chainComplete, type QaCell, type QaStory } from "@lib/qa-chain-core.ts"
 import { getQaCase, getQaCaseStoreStatus, resolveQaCaseContext, type QaCaseRecord, type QaCaseStoreOptions } from "@lib/qa-case-store.ts";
 import { runQaCase } from "@lib/qa-case-run.ts";
 import { resolveSessionIdOrThrow } from "@lib/state-core";
-import { readQaState } from "./qa-state.ts";
+import { readQaState, registerQaCaseRunReceipt } from "./qa-state.ts";
 
 function parseArgs(args: string[]): Record<string, string | boolean> {
 	const result: Record<string, string | boolean> = {};
@@ -103,6 +103,7 @@ export async function replayFromCli(args: string[] = process.argv.slice(2), opti
 		actorBoundary: actor.boundary,
 		allowProjectCwd: parsed["allow-project-cwd"] === true,
 	});
+	registerQaCaseRunReceipt(sessionId, result.receipt.artifact_paths.receipt, result.receipt.attempt_id, result.receiptSha256);
 	process.stdout.write(`${JSON.stringify(result.receipt)}\n`);
 	return result.receipt;
 }

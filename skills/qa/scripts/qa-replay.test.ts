@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { replayFromCli } from "./qa-replay.ts";
-import { addActor, addStory, authorCell, incCycle, setAcceptance, setQaState } from "./qa-state.ts";
+import { dirname, join } from "node:path";
+import type { QaCaseRunReceipt } from "@lib/qa-case-run.ts";
 import { configureQaCaseStore, disableQaCaseStore, saveQaCase, type QaCaseRecord } from "@lib/qa-case-store.ts";
+import { replayFromCli } from "./qa-replay.ts";
+import { addActor, addStory, authorCell, incCycle, readQaState, recordCell, setAcceptance, setQaState } from "./qa-state.ts";
 
 const roots: string[] = [];
 const manifestDirs: string[] = [];
@@ -76,6 +78,42 @@ describe("qa replay CLI", () => {
 		expect((receipt as { qa_result: string }).qa_result).toBe("not-recorded");
 		expect((receipt as { actor_id: string }).actor_id).toBe("actor");
 		expect((receipt as { actor_boundary: string }).actor_boundary).toBe("terminal");
+	});
+
+	test("CLI replay가 runner 원본 receipt digest를 등록하고 변조 receipt의 PASS 바인딩을 거부한다", async () => {
+		const rawRoot = mkdtempSync(join(tmpdir(), "qa-replay-trusted-receipt-")); roots.push(rawRoot);
+		const root = realpathSync(rawRoot);
+		const store = join(root, "store");
+		const session = "trusted-receipt-session";
+		process.env.OMT_DIR = join(root, "omt"); process.env.OMT_SESSION_ID = session;
+		const home = join(root, "home");
+		mkdirSync(home, { recursive: true });
+		const configured = configureQaCaseStore(store, { cwd: root, home, allowProjectStorage: true });
+		manifestDirs.push(join(configured.manifestPath, ".."));
+		readyChain(session);
+		const record: QaCaseRecord = {
+			id: "trusted-receipt-case", title: "CLI", goal: "run", given: ["case exists"], when: ["run"], then: ["observed"],
+			acceptance_criteria: ["The runner boundary is observed"], surface: "bash",
+			runner: [process.execPath, "-e", "require('fs').writeFileSync(process.env.QA_ARTIFACTS_DIR + '/boundary.txt', 'observed'); process.exit(19)"],
+			execution_cwd: "{artifacts}", native_files: [], reset_description: "reset",
+		};
+		saveCase(root, record, home);
+
+		const receipt = await replayFromCli(["--case", record.id, "--story", "story", "--cls", "1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home }) as QaCaseRunReceipt;
+		const state = readQaState(session)!;
+		const trusted = state.trusted_receipts?.find((entry) => entry.attempt_id === receipt.attempt_id);
+		expect(trusted).toEqual({ attempt_id: receipt.attempt_id, receipt_path: receipt.artifact_paths.receipt, sha256: expect.any(String) });
+		expect(trusted?.sha256).toBe(createHash("sha256").update(readFileSync(receipt.artifact_paths.receipt)).digest("hex"));
+		expect(receipt.qa_result).toBe("not-recorded");
+		expect(receipt.exit_status.code).toBe(19);
+
+		const mutated = JSON.parse(readFileSync(receipt.artifact_paths.receipt, "utf8")) as QaCaseRunReceipt;
+		mutated.exit_status = { code: 0, signal: null, timedout: false, max_buffer_exceeded: false };
+		delete mutated.start_error;
+		writeFileSync(receipt.artifact_paths.receipt, JSON.stringify(mutated));
+		const boundary = join(dirname(receipt.artifact_paths.receipt), "boundary.txt");
+		expect(() => recordCell(session, { story: "story", cls: 1, status: "pass", evidencePath: boundary, evidenceSurface: "bash", caseRun: receipt.artifact_paths.receipt })).toThrow(/digest does not match trusted registration/);
+		expect(readQaState(session)?.cells?.find((cell) => cell.story === "story" && cell.cls === 1)?.status).toBeUndefined();
 	});
 
 	test("surface와 AC mismatch는 runner 실행 전에 거부하고 disabled store는 실행하지 않는다", async () => {
