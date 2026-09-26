@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import {
 	acquireDevice,
 	type DeviceDeps,
 	recordResource,
 	releaseResource,
+	resolveResourcesPath,
 	unreleasedResources,
 	unreleasedResourcesRefusal,
 } from "./session-resources.ts";
@@ -45,6 +47,18 @@ describe("session resources", () => {
 		expect(releaseResource(SID, "srv").released_at).toBeString();
 		expect(unreleasedResources(SID)).toEqual([]);
 		expect(unreleasedResourcesRefusal(SID, "qa-state.ts")).toBe("");
+	});
+
+	test("stop 명령은 레지스트리 락 밖에서 실행된다", () => {
+		const lock = `${resolveResourcesPath(SID)}.lock`;
+		recordResource(SID, { id: "srv", kind: "server", stop: `test ! -e '${lock}'` });
+		expect(releaseResource(SID, "srv").released_at).toBeString();
+	});
+
+	test("손상된 레지스트리는 빈 목록으로 읽지 않고 거부한다", () => {
+		writeFileSync(resolveResourcesPath(SID), "{");
+		expect(() => unreleasedResources(SID)).toThrow("not a JSON array");
+		expect(() => recordResource(SID, { id: "x", kind: "server", stop: "true" })).toThrow("not a JSON array");
 	});
 
 	test("빈 필드 기록과 없는 id 해제는 거부된다", () => {
@@ -98,5 +112,26 @@ describe("acquireDevice", () => {
 	test("잘못된 platform과 빈 base는 거부된다", () => {
 		expect(() => acquireDevice(SID, { platform: "tvos", base: "x" }, fakeDeps({}))).toThrow("--platform must be ios or android");
 		expect(() => acquireDevice(SID, { platform: "ios", base: " " }, fakeDeps({}))).toThrow("--base is required");
+	});
+
+	test("iOS stop은 simctl list가 실패하면 삭제된 것으로 보지 않는다", () => {
+		const deps = fakeDeps({ "simctl create": { status: 0, stdout: "UDID-9\n" } });
+		acquireDevice(SID, { platform: "ios", base: "iPhone 17 Pro" }, deps);
+		const stub = (name: string, body: string) => {
+			const bin = join(dir, name);
+			mkdirSync(bin);
+			writeFileSync(join(bin, "xcrun"), `#!/bin/bash\n${body}\n`);
+			chmodSync(join(bin, "xcrun"), 0o755);
+			return bin;
+		};
+		const [{ stop }] = unreleasedResources(SID);
+		const runStop = (bin: string) =>
+			spawnSync("bash", ["-c", stop], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } }).status;
+		// shutdown, delete, and list all fail: the simulator's fate is unknown.
+		expect(runStop(stub("broken", "exit 1"))).not.toBe(0);
+		// delete fails but list succeeds without the UDID: it is gone.
+		expect(runStop(stub("gone", '[ "$2" = list ] && echo "iPhone (OTHER)" && exit 0; exit 1'))).toBe(0);
+		// delete fails and list still shows the UDID: it survives.
+		expect(runStop(stub("present", '[ "$2" = list ] && echo "iPhone (UDID-9)" && exit 0; exit 1'))).not.toBe(0);
 	});
 });

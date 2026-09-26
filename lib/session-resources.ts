@@ -33,15 +33,25 @@ export function resolveResourcesPath(sessionId: string): string {
 	return `${getOmtDir()}/session-resources-${sessionId}.json`;
 }
 
-/** Fail-closed read: an absent or corrupt file reads as no resources. */
+/**
+ * An absent file means no resources. A malformed one throws: reading it as
+ * empty would let the completion gates pass while recorded processes still run.
+ */
 function readAll(path: string): SessionResource[] {
 	if (!existsSync(path)) return [];
+	let parsed: unknown;
 	try {
-		const parsed = JSON.parse(readFileSync(path, "utf8"));
-		return Array.isArray(parsed) ? parsed : [];
+		parsed = JSON.parse(readFileSync(path, "utf8"));
 	} catch {
-		return [];
+		parsed = undefined;
 	}
+	if (!Array.isArray(parsed)) {
+		throw new Error(
+			`session resources: refused — the registry ${path} is not a JSON array, so running resources cannot be known. ` +
+				"Stop any simulator, emulator, or server this session started by hand, then remove that file.",
+		);
+	}
+	return parsed;
 }
 
 function writeAll(path: string, resources: SessionResource[]): void {
@@ -70,26 +80,34 @@ export function recordResource(sessionId: string, input: { id: string; kind: str
  * Runs the recorded stop command and marks the resource released only when it
  * exits 0. Throws with the command's output otherwise; the entry stays
  * unreleased so the completion gate keeps blocking.
+ *
+ * The stop command runs outside the registry lock: it can take up to
+ * STOP_TIMEOUT_MS, longer than state-lock's stale window, and a lock reclaimed
+ * mid-command would let this call overwrite a concurrent record.
  */
 export function releaseResource(sessionId: string, id: string): SessionResource {
 	const path = resolveResourcesPath(sessionId);
+	const target = withStateLock(path, () => readAll(path).find((r) => r.id === id));
+	if (!target) throw new Error(`release-resource: refused — no recorded resource with id "${id}"`);
+	if (target.released_at) return target;
+	const run = spawnSync("bash", ["-c", target.stop], { encoding: "utf8", timeout: STOP_TIMEOUT_MS });
+	if (run.status !== 0) {
+		const out = `${run.stdout ?? ""}${run.stderr ?? ""}`.trim() || String(run.error ?? "no output");
+		throw new Error(
+			`release-resource: stop command for "${id}" failed (exit ${String(run.status)}); the resource stays unreleased.\n` +
+				`  command: ${target.stop}\n  output: ${out}\n` +
+				"Fix the stop command or stop the resource another way, then re-record it with a working --stop and release again.",
+		);
+	}
 	return withStateLock(path, () => {
 		const all = readAll(path);
-		const target = all.find((r) => r.id === id);
-		if (!target) throw new Error(`release-resource: refused — no recorded resource with id "${id}"`);
-		if (target.released_at) return target;
-		const run = spawnSync("bash", ["-c", target.stop], { encoding: "utf8", timeout: STOP_TIMEOUT_MS });
-		if (run.status !== 0) {
-			const out = `${run.stdout ?? ""}${run.stderr ?? ""}`.trim() || String(run.error ?? "no output");
-			throw new Error(
-				`release-resource: stop command for "${id}" failed (exit ${String(run.status)}); the resource stays unreleased.\n` +
-					`  command: ${target.stop}\n  output: ${out}\n` +
-					"Fix the stop command or stop the resource another way, then re-record it with a working --stop and release again.",
-			);
-		}
-		target.released_at = new Date().toISOString();
+		// Only the recording this stop command belonged to; a re-record of the same
+		// id during the command is a restarted resource and stays unreleased.
+		const current = all.find((r) => r.id === id && r.recorded_at === target.recorded_at);
+		if (!current) return target;
+		current.released_at ??= new Date().toISOString();
 		writeAll(path, all);
-		return target;
+		return current;
 	});
 }
 
@@ -183,7 +201,8 @@ export function acquireDevice(
 		recordResource(sessionId, {
 			id: udid,
 			kind: "simulator",
-			stop: `xcrun simctl shutdown ${udid} >/dev/null 2>&1; xcrun simctl delete ${udid} 2>/dev/null || ! xcrun simctl list devices | grep -q ${udid}`,
+			// Absence counts as deleted only when the listing itself succeeded.
+			stop: `xcrun simctl shutdown ${udid} >/dev/null 2>&1; xcrun simctl delete ${udid} 2>/dev/null || { listed=$(xcrun simctl list devices) && ! printf '%s' "$listed" | grep -q ${udid}; }`,
 		});
 		const booted = deps.run("xcrun", ["simctl", "bootstatus", udid, "-b"]);
 		if (booted.status !== 0) throw failed(`boot of recorded simulator ${udid} (release it with release-resource)`, booted);
