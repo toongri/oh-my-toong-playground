@@ -84,6 +84,11 @@ bun "${CLAUDE_SKILL_DIR}/scripts/qa-replay.ts" \
   --reset-confirmed "the saved reset description"
 ```
 
+When a run needs more headroom, pass `--timeout-ms <ms>` and/or
+`--max-buffer <bytes>` to raise its per-run limits. The runner accepts finite,
+positive numbers; when omitted, the defaults remain 120000 ms and 1048576
+bytes.
+
 Use `--sub hang-timeout|flaky-green` when selecting one of those authored
 cells. `--allow-project-cwd` is required when the saved `execution_cwd` is the
 product project; otherwise save an absolute external cwd or `{artifacts}`.
