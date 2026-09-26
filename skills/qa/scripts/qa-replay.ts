@@ -24,9 +24,17 @@ function required(args: Record<string, string | boolean>, key: string): string {
 	if (typeof value !== "string" || value.trim() === "") throw new Error(`--${key} is required`);
 	return value;
 }
+function optionalPositiveNumber(args: Record<string, string | boolean>, key: string): number | undefined {
+	const value = args[key];
+	if (value === undefined) return undefined;
+	if (typeof value !== "string" || value.trim() === "") throw new Error(`--${key} must be a finite positive number`);
+	const parsed = Number(value);
+	if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(`--${key} must be a finite positive number`);
+	return parsed;
+}
 function help(): string {
 	return [
-		"Usage: qa-replay.ts --case ID --story ID --cls N [--sub SUB] --project DIR --code-ref STR --reset-confirmed STR [--allow-project-cwd]",
+		"Usage: qa-replay.ts --case ID --story ID --cls N [--sub SUB] --project DIR --code-ref STR --reset-confirmed STR [--timeout-ms N] [--max-buffer N] [--allow-project-cwd]",
 		"",
 		"Runs the saved native case only after the active QA actor→story→cell chain is complete.",
 		"The reset confirmation must exactly equal the saved reset_description.",
@@ -68,6 +76,8 @@ export async function replayFromCli(args: string[] = process.argv.slice(2), opti
 	const story = selectedStory(state, storyId);
 	const cls = Number(required(parsed, "cls"));
 	if (!Number.isInteger(cls) || cls < 1 || cls > 6) fail("--cls must be an integer from 1 to 6");
+	const timeoutMs = optionalPositiveNumber(parsed, "timeout-ms");
+	const maxBuffer = optionalPositiveNumber(parsed, "max-buffer");
 	const sub = typeof parsed.sub === "string" ? parsed.sub : undefined;
 	if (sub !== undefined && sub !== "hang-timeout" && sub !== "flaky-green") fail("--sub must be hang-timeout or flaky-green");
 	const cell = selectedCell(state, storyId, cls, sub);
@@ -101,6 +111,8 @@ export async function replayFromCli(args: string[] = process.argv.slice(2), opti
 		cellSub: sub === "hang-timeout" || sub === "flaky-green" ? sub : undefined,
 		cycle: state.cycle,
 		storyContractSha256: story.contract ? createHash("sha256").update(JSON.stringify(story.contract)).digest("hex") : undefined,
+		timeoutMs,
+		maxBuffer,
 		actorBoundary: actor.boundary,
 		allowProjectCwd: parsed["allow-project-cwd"] === true,
 	});
