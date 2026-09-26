@@ -71,6 +71,16 @@ describe("session resources", () => {
 		expect(unreleasedResources("src")).toHaveLength(1);
 	});
 
+	test("채택할 때 원래 세션의 해제된 기록이 이 세션의 실행 중인 같은 id를 덮지 않는다", () => {
+		recordResource("src", { id: "emulator-5554", kind: "emulator", stop: "true" });
+		releaseResource("src", "emulator-5554");
+		recordResource("src", { id: "srv", kind: "server", stop: "true" });
+		recordResource(SID, { id: "emulator-5554", kind: "emulator", stop: "true" });
+		adoptResources("src", SID, () => {});
+		expect(unreleasedResources(SID).map((r) => r.id).sort()).toEqual(["emulator-5554", "srv"]);
+		expect(unreleasedResources("src")).toEqual([]);
+	});
+
 	test("빈 필드 기록과 없는 id 해제는 거부된다", () => {
 		expect(() => recordResource(SID, { id: "x", kind: "emulator", stop: " " })).toThrow("--stop is required");
 		expect(() => releaseResource(SID, "missing")).toThrow("no recorded resource");

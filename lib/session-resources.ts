@@ -131,14 +131,20 @@ export function adoptResources(srcSid: string, dstSid: string, adoptState: () =>
 	}
 	adoptState();
 	if (!existsSync(srcPath)) return;
-	const moved = withStateLock(srcPath, () => readAll(srcPath));
-	withStateLock(dstPath, () => {
-		const kept = readAll(dstPath).filter((d) => !moved.some((r) => r.id === d.id));
-		writeAll(dstPath, [...kept, ...moved]);
+	// The source lock is held until the file is gone, so a record-resource from a
+	// still-running source executor cannot land between the copy and the removal.
+	withStateLock(srcPath, () => {
+		// Released entries carry no obligation; moving them could shadow a
+		// destination entry that is still running under the same id.
+		const pending = readAll(srcPath).filter((r) => !r.released_at);
+		withStateLock(dstPath, () => {
+			const kept = readAll(dstPath).filter((d) => !pending.some((r) => r.id === d.id));
+			writeAll(dstPath, [...kept, ...pending]);
+		});
+		// Removed only after the destination holds every entry, so a crash between
+		// the two leaves a duplicate rather than a lost stop command.
+		rmSync(srcPath, { force: true });
 	});
-	// Removed only after the destination holds every entry, so a crash between
-	// the two leaves a duplicate rather than a lost stop command.
-	rmSync(srcPath, { force: true });
 }
 
 export function unreleasedResources(sessionId: string): SessionResource[] {
