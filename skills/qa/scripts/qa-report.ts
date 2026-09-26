@@ -833,6 +833,15 @@ function renderFailures(view: QaView, narrative: QaReportNarrative): string {
 	return `<h2>Failures &amp; Mismatches</h2>${body}`;
 }
 
+// Waives are AI-runnable, so the reader must see them before any finding: a
+// verdict that passed only because cells were waived reads differently.
+function renderWaiveBanner(view: QaView): string {
+	const count = view.verdict_report?.waives?.length ?? 0;
+	return count === 0
+		? ""
+		: `<p class="gap waive-banner">면제된 셀 ${count}건 — 이 셀들은 검증하지 않고 판정에서 제외했습니다. 셀별 사유는 Verdict 섹션의 Waives 목록에 있습니다.</p>`;
+}
+
 function renderVerdict(view: QaView): string {
 	const report = view.verdict_report;
 	const waives = (report?.waives ?? [])
@@ -928,6 +937,7 @@ export function renderQaReport(
 		// 그림), who is affected (액터), what we observed per scenario (시나리오·근거) —
 		// then the record-faithful audit below (per-cell detail, technical roster,
 		// failures, verdict, evidence files).
+		renderWaiveBanner(view),
 		renderOverview(narrative),
 			renderRequirementFulfillment(view, narrative, unverified),
 		renderBigPicture(narrative.presentation, renderMermaid, onMermaidRenderError),

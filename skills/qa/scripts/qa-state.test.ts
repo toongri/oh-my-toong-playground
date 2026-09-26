@@ -860,15 +860,16 @@ describe("help subcommand", () => {
 	const run = (cmd: string, env?: Record<string, string>) =>
 		execSync(`bun ${script} ${cmd}`, { encoding: "utf8", env: { ...process.env, ...env } });
 
-	test("waive is listed under USER-ONLY", () => {
+	test("waive is AI-usable and qa has no user-only command", () => {
 		const out = run("help");
-		const userSection = out.slice(out.indexOf("USER-ONLY"), out.indexOf("SYSTEM-ONLY"));
-		expect(userSection).toContain("waive");
+		expect(out).not.toContain("USER-ONLY");
+		const aiSection = out.slice(out.indexOf("AI-USABLE"), out.indexOf("SYSTEM-ONLY"));
+		expect(aiSection).toContain("waive —");
 	});
 
 	test("set and get are listed under AI-USABLE", () => {
 		const out = run("help");
-		const aiSection = out.slice(out.indexOf("AI-USABLE"), out.indexOf("USER-ONLY"));
+		const aiSection = out.slice(out.indexOf("AI-USABLE"), out.indexOf("SYSTEM-ONLY"));
 		expect(aiSection).toContain("set —");
 		expect(aiSection).toContain("get —");
 	});

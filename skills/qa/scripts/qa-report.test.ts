@@ -882,6 +882,24 @@ describe("qa-report renderer", () => {
 		expect(verdict).toContain("story-1/1/hang-timeout");
 	});
 
+	test("puts a waive banner above the overview only when the cycle has waives", () => {
+		const waived = renderQaReport(
+			baseView({
+				verdict_report: {
+					verdict: "APPROVE",
+					cycle: 0,
+					waives: [{ story: "story-1", cls: 1, reason: "known harness limit" }],
+				},
+			}),
+			{},
+			fakeReader,
+		)!;
+		const banner = waived.indexOf("면제된 셀 1건");
+		expect(banner).toBeGreaterThan(-1);
+		expect(banner).toBeLessThan(waived.indexOf("<h2>Verdict"));
+		expect(renderQaReport(baseView(), {}, fakeReader)!).not.toContain("면제된 셀");
+	});
+
 	test("renders the verdict from state", () => {
 		const html = renderQaReport(baseView(), {}, fakeReader)!;
 		expect(html).toContain("COMMENT");
