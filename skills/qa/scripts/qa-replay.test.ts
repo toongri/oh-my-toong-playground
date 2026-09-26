@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -36,11 +36,18 @@ function saveCase(root: string, record: QaCaseRecord, home: string): void {
 	if (result.status !== "ok") throw new Error("case fixture was not saved");
 }
 
+function runCli(args: string[], env: NodeJS.ProcessEnv): { status: number | null; stdout: string; stderr: string } {
+	const result = spawnSync("bun", ["skills/qa/scripts/qa-replay.ts", ...args], { encoding: "utf8", env });
+	return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+}
+
 describe("qa replay CLI", () => {
 	test("도움말에 chain gate와 비샌드박스 경고를 표시한다", () => {
 		const output = execFileSync("bun", ["skills/qa/scripts/qa-replay.ts", "--help"], { encoding: "utf8" });
 		expect(output).toContain("actor→story→cell");
 		expect(output).toContain("not sandboxed");
+		expect(output).toContain("--timeout-ms N");
+		expect(output).toContain("--max-buffer N");
 	});
 
 	test("CLI exit wrapper는 lookup 상태를 실패로 전달하고 help/null은 성공으로 둔다", () => {
@@ -60,6 +67,17 @@ describe("qa replay CLI", () => {
 		process.env.OMT_DIR = join(root, "omt");
 		process.env.OMT_SESSION_ID = session;
 		await expect(replayFromCli(["--case", "cli-case", "--story", "story", "--cls", "1", "--project", process.cwd(), "--code-ref", "code", "--reset-confirmed", "reset"])).rejects.toThrow(/active QA state|chainComplete/);
+	});
+
+	test("잘못된 timeout과 buffer 제한값은 case lookup 전에 거부한다", async () => {
+		const rawRoot = mkdtempSync(join(tmpdir(), "qa-replay-cli-invalid-limits-")); roots.push(rawRoot);
+		const root = realpathSync(rawRoot);
+		const session = "cli-invalid-limits-session";
+		process.env.OMT_DIR = join(root, "omt"); process.env.OMT_SESSION_ID = session;
+		readyChain(session); setQaState(session, { phase: "BASELINE" });
+		const baseArgs = ["--case", "missing-case", "--story", "story", "--cls", "1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"];
+		await expect(replayFromCli([...baseArgs, "--timeout-ms", "0"])).rejects.toThrow("--timeout-ms must be a finite positive number");
+		await expect(replayFromCli([...baseArgs, "--max-buffer", "Infinity"])).rejects.toThrow("--max-buffer must be a finite positive number");
 	});
 
 	test("PLAN 단계에서는 replay를 막고 BASELINE부터 허용한다", async () => {
@@ -99,6 +117,52 @@ describe("qa replay CLI", () => {
 		expect((receipt as { qa_result: string }).qa_result).toBe("not-recorded");
 		expect((receipt as { actor_id: string }).actor_id).toBe("actor");
 		expect((receipt as { actor_boundary: string }).actor_boundary).toBe("terminal");
+	});
+
+	test("CLI의 --timeout-ms가 timedout receipt를 기록한다", () => {
+		const rawRoot = mkdtempSync(join(tmpdir(), "qa-replay-cli-timeout-")); roots.push(rawRoot);
+		const root = realpathSync(rawRoot);
+		const store = join(root, "store");
+		const session = "cli-timeout-session";
+		const home = join(root, "home");
+		process.env.OMT_DIR = join(root, "omt"); process.env.OMT_SESSION_ID = session;
+		mkdirSync(home, { recursive: true });
+		const configured = configureQaCaseStore(store, { cwd: root, home, allowProjectStorage: true });
+		manifestDirs.push(join(configured.manifestPath, ".."));
+		readyChain(session); setQaState(session, { phase: "BASELINE" });
+		const record: QaCaseRecord = {
+			id: "cli-timeout-case", title: "CLI timeout", goal: "run", given: ["case exists"], when: ["run"], then: ["timed out"],
+			acceptance_criteria: ["The runner boundary is observed"], surface: "bash",
+			runner: [process.execPath, "-e", "setTimeout(() => {}, 1000)"], execution_cwd: "{artifacts}", native_files: [], reset_description: "reset",
+		};
+		saveCase(root, record, home);
+		const result = runCli(["--case", record.id, "--story", "story", "--cls", "1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset", "--timeout-ms", "25"], { ...process.env, HOME: home });
+		expect(result.status).toBe(1);
+		const receipt = JSON.parse(result.stdout) as QaCaseRunReceipt;
+		expect(receipt.exit_status.timedout).toBe(true);
+	});
+
+	test("CLI의 --max-buffer가 max_buffer_exceeded receipt를 기록한다", () => {
+		const rawRoot = mkdtempSync(join(tmpdir(), "qa-replay-cli-buffer-")); roots.push(rawRoot);
+		const root = realpathSync(rawRoot);
+		const store = join(root, "store");
+		const session = "cli-buffer-session";
+		const home = join(root, "home");
+		process.env.OMT_DIR = join(root, "omt"); process.env.OMT_SESSION_ID = session;
+		mkdirSync(home, { recursive: true });
+		const configured = configureQaCaseStore(store, { cwd: root, home, allowProjectStorage: true });
+		manifestDirs.push(join(configured.manifestPath, ".."));
+		readyChain(session); setQaState(session, { phase: "BASELINE" });
+		const record: QaCaseRecord = {
+			id: "cli-buffer-case", title: "CLI buffer", goal: "run", given: ["case exists"], when: ["run"], then: ["buffer exceeded"],
+			acceptance_criteria: ["The runner boundary is observed"], surface: "bash",
+			runner: [process.execPath, "-e", "process.stdout.write('x'.repeat(1024))"], execution_cwd: "{artifacts}", native_files: [], reset_description: "reset",
+		};
+		saveCase(root, record, home);
+		const result = runCli(["--case", record.id, "--story", "story", "--cls", "1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset", "--max-buffer", "128"], { ...process.env, HOME: home });
+		expect(result.status).toBe(1);
+		const receipt = JSON.parse(result.stdout) as QaCaseRunReceipt;
+		expect(receipt.exit_status.max_buffer_exceeded).toBe(true);
 	});
 
 	test("CLI replay가 runner 원본 receipt digest를 등록하고 변조 receipt의 PASS 바인딩을 거부한다", async () => {

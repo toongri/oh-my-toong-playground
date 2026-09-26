@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { accessSync, constants, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { homedir } from "node:os";
 import { parseDocument, stringify } from "yaml";
 
@@ -77,7 +77,7 @@ function readOrCreateManifest(context: QaCaseContext): { context: QaCaseContext;
 			return { context, manifest: { version: 1, project: context.projectKey, mode: "unconfigured" }, raw };
 		}
 }
-function inside(root: string, candidate: string): boolean { const rest = relative(root, candidate); return rest === "" || (!rest.startsWith("..") && !isAbsolute(rest)); }
+function inside(root: string, candidate: string): boolean { const rest = relative(root, candidate); return rest === "" || (rest !== ".." && !rest.startsWith(`..${sep}`) && !isAbsolute(rest)); }
 function insideLexical(root: string, candidate: string): boolean { return candidate === root || candidate.startsWith(`${root}/`); }
 function canonical(path: string): string { return realpathSync(path); }
 function assertDirectory(path: string, writable = false): string {

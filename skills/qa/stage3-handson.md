@@ -23,6 +23,11 @@ bun "${CLAUDE_SKILL_DIR}/scripts/qa-replay.ts" \
   --reset-confirmed "the saved reset description"
 ```
 
+When a run needs more headroom, pass `--timeout-ms <ms>` and/or
+`--max-buffer <bytes>` to raise its per-run limits. The runner accepts finite,
+positive numbers; when omitted, the defaults remain 120000 ms and 1048576
+bytes.
+
 Read `bun "${CLAUDE_SKILL_DIR}/scripts/qa-replay.ts" --help` first. The
 wrapper supports optional `--sub hang-timeout|flaky-green` and
 `--allow-project-cwd`; it expands `{artifacts}`, sets `QA_ARTIFACTS_DIR`, and
