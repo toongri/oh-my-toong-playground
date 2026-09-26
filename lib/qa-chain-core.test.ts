@@ -10,9 +10,11 @@ import {
 	evidenceReviewSnapshot,
 	qaReportComplete,
 	qaReportSnapshot,
+	caseRunBindingComplete,
 	recordComplete,
 	requiredCells,
 	rosterComplete,
+	storyContractValid,
 	type QaCell,
 	type QaChainState,
 	type QaEvidence,
@@ -42,8 +44,9 @@ function authoredState(): CompleteFixture {
 		phase: "PLAN",
 		cycle: 2,
 		phase_max: BASELINE_INDEX,
+		acceptance_criteria: ["오늘의 보충제가 표시된다"],
 		actors: [{ id: "a1", name: "Mobile", boundary: "device", driver: "agent-device", reachable: "yes" }],
-		stories: [{ id: "s1", actor: "a1", baseline: { result: "pass", cycle: 2, evidence: { path: "/base", surface: "agent-device" } } }],
+		stories: [{ id: "s1", actor: "a1", contract: { goal: "보충제를 확인한다", given: ["프로그램이 있다"], when: ["홈을 연다"], then: ["오늘의 보충제가 표시된다"], acceptance_criteria: [0] }, baseline: { result: "pass", cycle: 2, evidence: { path: "/base", surface: "agent-device" } } }],
 		cells: [],
 		run_checks: {
 			stale_state: { result: "pass", cycle: 2 },
@@ -73,6 +76,42 @@ function authoredState(): CompleteFixture {
 }
 
 describe("qa chain core", () => {
+	test("structured story contract requires nonblank goal and GWT entries", () => {
+		const state = authoredState();
+		const story = state.stories[0];
+		story.contract = {
+			goal: "사용자가 보충제를 확인한다",
+			given: ["프로그램이 존재한다"],
+			when: ["사용자가 홈을 연다"],
+			then: ["오늘의 보충제가 표시된다"],
+			acceptance_criteria: [0],
+		};
+		state.acceptance_criteria = ["홈에서 오늘의 보충제를 확인할 수 있다"];
+		expect(storyContractValid(story, state.acceptance_criteria)).toBe(true);
+		story.contract.then = ["   "];
+		expect(storyContractValid(story, state.acceptance_criteria)).toBe(false);
+	});
+	test("malformed persisted acceptance criteria fail closed while story remains readable", () => {
+		const state = authoredState();
+		expect(storyContractValid(state.stories[0], "A" as unknown as string[])).toBe(false);
+		expect(chainComplete({ ...state, acceptance_criteria: "A" as unknown as string[] })).toBe(false);
+	});
+	test("new-cycle readiness rejects a missing story contract", () => {
+		const state = authoredState();
+		delete state.stories[0].contract;
+		expect(chainComplete(state)).toBe(false);
+		expect(approveOk(state, probe)).toBe(false);
+	});
+	test("bound case-run files must remain present and hash-stable", () => {
+		const cell: QaCell = { story: "s", cls: 1, status: "fail", cycle: 0, case_run: { case_id: "case", attempt_id: "attempt", code_ref: "code", receipt_path: "/receipt", files: { "/receipt": "a".repeat(64), "/evidence": "a".repeat(64) }, evidence_paths: ["/evidence"] } };
+		expect(caseRunBindingComplete(cell, () => ({ exists: true, size: 1, sha256: "a".repeat(64) }))).toBe(true);
+		expect(caseRunBindingComplete(cell, () => ({ exists: true, size: 1, sha256: "b".repeat(64) }))).toBe(false);
+		cell.evidence = { path: "/changed-evidence", surface: "bash" };
+		expect(caseRunBindingComplete(cell, () => ({ exists: true, size: 1, sha256: "a".repeat(64) }))).toBe(false);
+		cell.case_run!.files = "malformed" as unknown as Record<string, string>;
+		expect(caseRunBindingComplete(cell, () => ({ exists: true, size: 1, sha256: "a".repeat(64) }))).toBe(false);
+	});
+
 	test("이미지 파일만 있고 주장 검토가 없으면 승인하지 않음", () => {
 		const state = authoredState();
 		delete state.cells[0].evidence_review;

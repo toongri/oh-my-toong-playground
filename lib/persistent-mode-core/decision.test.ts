@@ -2901,12 +2901,20 @@ describe("QA Stop-gate decision table", () => {
 			active: true,
 			phase: "BASELINE",
 			phase_max: 2,
+			acceptance_criteria: ["The boundary records the expected result"],
 			cycle: 0,
 			actors: [{ id: "actor-1", name: "Actor", boundary: "local boundary", driver: "bash", reachable: "yes" }],
 			stories: [
 				{
 					id: "story-1",
 					actor: "actor-1",
+					contract: {
+						goal: "Verify the user boundary",
+						given: ["The actor can reach the boundary"],
+						when: ["The actor performs the scenario"],
+						then: ["The expected result is observed"],
+						acceptance_criteria: [0],
+					},
 					baseline: {
 						result: "pass",
 						cycle: 0,

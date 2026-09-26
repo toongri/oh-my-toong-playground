@@ -26,10 +26,10 @@
  *   get
  */
 
-import { closeSync, mkdirSync, openSync, readFileSync, readSync, rmSync, statSync } from "fs";
+import { closeSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, rmSync, statSync } from "fs";
 import { execSync } from "child_process";
 import { createHash } from "crypto";
-import { extname, resolve } from "path";
+import { dirname, extname, isAbsolute, relative, resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
 import {
 	mergeWithHeartbeat,
@@ -53,22 +53,29 @@ import {
 	evidenceReviewSnapshot,
 	qaReportSnapshot,
 	qaReportComplete,
+	storyContractValid,
 	rosterComplete,
 	type QaActor,
 	type QaBaseline,
 	type QaCell,
+	type QaCaseRunBinding,
 	type QaChainState,
 	type QaDriver,
 	type QaPhase,
 	type QaRunCheckHistory,
 	type QaRunChecks,
+	type QaResult,
 	type QaStory,
+	type QaStoryContract,
 	type QaStoryProvenance,
 	type QaWaive,
 	type QaInert,
 	type QaEvidenceClaim,
 } from "@lib/qa-chain-core";
 import { withFeatureMapReadLock, type FeatureMapOptions } from "@lib/feature-map/index.ts";
+import { readQaCaseRunReceiptSnapshot } from "@lib/qa-case-run.ts";
+import { validateQaCase } from "@lib/qa-case-store.ts";
+
 
 const DEFAULT_MAX_CYCLES = 5;
 
@@ -85,6 +92,14 @@ export interface QaState extends QaChainState {
 	started_at: string;
 	/** Refreshed on every write (heartbeat). */
 	last_touched_at: string;
+	/** Receipt byte snapshots explicitly trusted for later case-run binding. */
+	trusted_receipts?: QaTrustedReceipt[];
+}
+
+export interface QaTrustedReceipt {
+	attempt_id: string;
+	receipt_path: string;
+	sha256: string;
 }
 
 type ChainState = QaState & QaChainState;
@@ -166,6 +181,7 @@ const TEST_RUNNER_SIGNATURES: RegExp[] = [
 	/^--- (PASS|FAIL):/m, // go test -v
 	/^(ok|FAIL)\s+\S+\s+([\d.]+s|\(cached\))(?:\s+coverage:\s+[\d.]+%\s+of\s+statements)?\s*$/m, // go test summary (incl. cached reuse and coverage)
 	/^\?\s+\S+\s+\[no test files\]\s*$/m, // go test package with no test files
+	/^\s*(?:<\?xml[\s\S]*?\?>\s*|<!--[\s\S]*?-->\s*)*<(?:testsuite|testsuites)(?:\s|\/?>)/, // JUnit XML root (allow declaration/comments)
 ];
 
 // Prefix scanned for a test-runner signature. A report's summary/banner always
@@ -471,6 +487,26 @@ function mergeWrite(sessionId: string, next: Partial<ChainState>): QaState {
 	return withStateLock(resolveStatePath(sessionId), () => mergeWriteUnlocked(sessionId, next));
 }
 
+/** Registers the exact receipt bytes produced by a case run under the QA state lock. */
+export function registerQaCaseRunReceipt(sessionId: string, receiptPath: string, attemptId: string, receiptSha256: string): QaTrustedReceipt {
+	const stateFilePath = resolveStatePath(sessionId);
+	return withStateLock(stateFilePath, () => {
+		const canonicalPath = realpathSync(resolve(receiptPath));
+		const snapshot = readQaCaseRunReceiptSnapshot(canonicalPath);
+		if (snapshot.receipt.attempt_id !== attemptId) throw new Error("qa-state: receipt attempt does not match runner output");
+		if (snapshot.sha256 !== receiptSha256) throw new Error("qa-state: receipt digest does not match runner output snapshot");
+		const trusted: QaTrustedReceipt = { attempt_id: attemptId, receipt_path: canonicalPath, sha256: receiptSha256 };
+		const prior = readPrior(sessionId);
+		const existing = (prior.trusted_receipts ?? []).find((entry) => entry.attempt_id === trusted.attempt_id);
+		if (existing) {
+			if (existing.receipt_path !== trusted.receipt_path || existing.sha256 !== trusted.sha256) throw new Error("qa-state: receipt attempt is already registered with a different snapshot");
+			return existing;
+		}
+		mergeWriteUnlocked(sessionId, { trusted_receipts: [...(prior.trusted_receipts ?? []), trusted] });
+		return trusted;
+	});
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -562,10 +598,11 @@ export function addActor(sessionId: string, opts: AddActorOpts): void {
 	if (index >= 0) actors[index] = actor;
 	else actors.push(actor);
 	const changedBoundary = existing && (existing.boundary !== boundary || existing.driver !== driver);
+	const cycle = currentCycle(prior);
 	const affectedStories = new Set((prior.stories ?? []).filter((story) => (story.actor ?? story.actor_id) === id).map((story) => story.id));
 	const cells = changedBoundary ? (prior.cells ?? []).map((cell) => {
-		if (!affectedStories.has(cell.story)) return cell;
-		const { evidence_review: _review, ...record } = cell;
+		if (!affectedStories.has(cell.story) || cell.cycle !== cycle) return cell;
+		const { status: _status, na_reason: _naReason, evidence: _evidence, evidence_review: _review, case_run: _caseRun, ...record } = cell;
 		return record;
 	}) : prior.cells;
 	mergeWrite(sessionId, { actors, ...(changedBoundary ? { cells } : {}) });
@@ -574,27 +611,67 @@ export function addActor(sessionId: string, opts: AddActorOpts): void {
 export interface AddStoryOpts {
 	id: string;
 	actor: string;
+	contract?: QaStoryContract;
+}
+
+function parseContractArray(value: unknown, field: string): string[] {
+	if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+		throw new Error(`add-story: ${field} must be a JSON array of strings`);
+	}
+	return value.map((item) => nonEmpty(item, `${field} item`));
+}
+
+function parseIntegerArray(value: unknown, field: string): number[] {
+	if (!Array.isArray(value) || !value.length || !value.every((item): item is number => typeof item === "number" && Number.isInteger(item))) {
+		throw new Error(`add-story: ${field} must be a non-empty JSON array of integer indices`);
+	}
+	return [...value];
+}
+
+function validateStoryContract(value: unknown, acceptanceCriteria: string[]): QaStoryContract {
+	if (!isRecord(value)) throw new Error("add-story: contract is required");
+	const goal = nonEmpty(value.goal, "goal");
+	const given = parseContractArray(value.given, "given");
+	const when = parseContractArray(value.when, "when");
+	const then = parseContractArray(value.then, "then");
+	const acceptance_criteria = parseIntegerArray(value.acceptance_criteria, "acceptance-criteria");
+	const contract: QaStoryContract = { goal, given, when, then, acceptance_criteria };
+	if (!storyContractValid({ id: "contract", contract }, acceptanceCriteria)) {
+		throw new Error("add-story: acceptance-criteria indices must reference nonblank session acceptance criteria");
+	}
+	return contract;
 }
 
 export function addStory(sessionId: string, opts: AddStoryOpts): void {
 	const id = nonEmpty(opts.id, "id");
 	const actor = nonEmpty(opts.actor, "actor");
-	const prior = readPrior(sessionId);
-	if (!(prior.actors ?? []).some((candidate) => candidate.id === actor)) {
-		throw new Error(`add-story: unknown actor "${actor}"`);
-	}
-	const stories = [...(prior.stories ?? [])];
-	const next: QaStory = { id, actor };
-	const index = stories.findIndex((candidate) => candidate.id === id);
-	if (index >= 0) stories[index] = { ...stories[index], ...next };
-	else stories.push(next);
-	const changedActor = index >= 0 && (prior.stories?.[index]?.actor ?? prior.stories?.[index]?.actor_id) !== actor;
-	const cells = changedActor ? (prior.cells ?? []).map((cell) => {
-		if (cell.story !== id) return cell;
-		const { evidence_review: _review, ...record } = cell;
-		return record;
-	}) : prior.cells;
-	mergeWrite(sessionId, { stories, ...(changedActor ? { cells } : {}) });
+	withStateLock(resolveStatePath(sessionId), () => {
+		const prior = readPrior(sessionId);
+		if (!(prior.actors ?? []).some((candidate) => candidate.id === actor)) throw new Error(`add-story: unknown actor "${actor}"`);
+		const contract = opts.contract === undefined ? undefined : validateStoryContract(opts.contract, prior.acceptance_criteria ?? []);
+		if (contract === undefined) throw new Error("add-story: goal, given, when, then, and acceptance-criteria are required");
+		const stories = [...(prior.stories ?? [])];
+		const index = stories.findIndex((candidate) => candidate.id === id);
+		const existing = index >= 0 ? stories[index] : undefined;
+		const next: QaStory = { id, actor, ...(contract ? { contract } : existing?.contract ? { contract: existing.contract } : {}) };
+		if (index >= 0) {
+			if (contract && JSON.stringify(existing?.contract) !== JSON.stringify(contract)) {
+				const cycle = currentCycle(prior);
+				const evidenced = existing?.baseline?.cycle === cycle || (prior.cells ?? []).some((cell) =>
+					cell.story === id && cell.cycle === cycle && (cell.status !== undefined || cell.evidence !== undefined));
+				if (evidenced) throw new Error("add-story: cannot change an evidenced story contract; start the next FIX cycle");
+			}
+			stories[index] = { ...existing, ...next };
+		} else stories.push(next);
+		const changedActor = index >= 0 && (prior.stories?.[index]?.actor ?? prior.stories?.[index]?.actor_id) !== actor;
+		const cycle = currentCycle(prior);
+		const cells = changedActor ? (prior.cells ?? []).map((cell) => {
+			if (cell.story !== id || cell.cycle !== cycle) return cell;
+			const { status: _status, na_reason: _naReason, evidence: _evidence, evidence_review: _review, case_run: _caseRun, ...record } = cell;
+			return record;
+		}) : prior.cells;
+		mergeWriteUnlocked(sessionId, { stories, ...(changedActor ? { cells } : {}) });
+	});
 }
 
 export type RecordStoryProvenanceOptions = FeatureMapOptions;
@@ -798,9 +875,66 @@ export interface RecordCellOpts extends ScenarioFieldOpts, EvidenceSlotOpts {
 	naReason?: string;
 	evidencePath?: string;
 	evidenceSurface?: string;
+	caseRun?: string;
 }
 
-export function recordCell(sessionId: string, opts: RecordCellOpts): void {
+function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector: { story: string; cls: number; sub?: "hang-timeout" | "flaky-green" }, status: QaResult, evidence: QaCell["evidence"], path: string, driver: QaDriver): QaCaseRunBinding {
+	if (status === "na") throw new Error("case-run cannot be attached to an na cell");
+	const absoluteReceipt = resolve(path);
+	const snapshot = readQaCaseRunReceiptSnapshot(absoluteReceipt);
+	const receipt = snapshot.receipt;
+	const canonicalReceipt = realpathSync(absoluteReceipt);
+	const story = (prior.stories ?? []).find((candidate) => candidate.id === selector.story);
+	if (receipt.session_id !== sessionId || receipt.story_id !== selector.story || receipt.cycle !== currentCycle(prior) || !receipt.cell || receipt.cell.cls !== selector.cls || (receipt.cell.sub ?? undefined) !== selector.sub) throw new Error("case-run receipt does not match the current session/story/cell/cycle");
+	const actorId = story?.actor ?? story?.actor_id;
+	if (!actorId || receipt.actor_id !== actorId) throw new Error("case-run receipt actor does not match current story actor");
+	const actor = (prior.actors ?? []).find((candidate) => candidate.id === actorId);
+	if (!actor?.boundary || receipt.actor_boundary !== actor.boundary) throw new Error("case-run receipt actor boundary does not match current actor");
+	if (receipt.code_ref.trim() === "" || receipt.case_path.trim() === "") throw new Error("case-run receipt metadata is incomplete");
+	if (!story?.contract || receipt.story_contract_sha256 !== createHash("sha256").update(JSON.stringify(story.contract)).digest("hex")) throw new Error("case-run receipt story contract does not match current story");
+	const caseBytes = readFileSync(receipt.case_path);
+	if (createHash("sha256").update(caseBytes).digest("hex") !== receipt.case_revision) throw new Error("case-run case metadata revision mismatch");
+	const recordValue: unknown = JSON.parse(caseBytes.toString("utf8"));
+	validateQaCase(recordValue);
+	if (receipt.case_id !== recordValue.id || receipt.surface !== recordValue.surface || recordValue.surface !== driver) throw new Error("case-run case identity or surface does not match actor driver");
+	const linkedCriteria = (story?.contract?.acceptance_criteria ?? []).map((index) => prior.acceptance_criteria?.[index]).filter((value): value is string => typeof value === "string");
+	if (!recordValue.acceptance_criteria.every((criterion) => linkedCriteria.includes(criterion))) throw new Error("case-run acceptance criteria are not linked to the story");
+	const runRoot = realpathSync(dirname(receipt.artifact_paths.receipt));
+	const expectedNative = (recordValue.native_files ?? []).map((file) => resolve(receipt.project_root, file));
+	if (expectedNative.length !== receipt.native_files.length || expectedNative.some((file, index) => {
+		const native = receipt.native_files[index];
+		return !native || resolve(native.path) !== file;
+	})) throw new Error("case-run native file list does not match case metadata");
+	const trusted = (prior.trusted_receipts ?? []).find((entry) => entry.attempt_id === receipt.attempt_id);
+	if (!trusted) throw new Error("case-run receipt has no trusted registration");
+	if (trusted.receipt_path !== canonicalReceipt || trusted.attempt_id !== receipt.attempt_id) throw new Error("case-run receipt trusted registration does not match canonical path or attempt");
+	if (trusted.sha256 !== snapshot.sha256) throw new Error("case-run receipt digest does not match trusted registration");
+	if (status === "pass" && (receipt.start_error !== undefined || receipt.exit_status.code !== 0 || receipt.exit_status.signal !== null || receipt.exit_status.timedout || receipt.exit_status.max_buffer_exceeded)) throw new Error("pass case-run requires a zero, non-timeout runner result");
+	const files: Record<string, string> = {};
+	const addFile = (filePath: string, expectedHash?: string) => {
+		const canonical = realpathSync(filePath);
+		if (resolve(filePath) !== canonical || lstatSync(filePath).isSymbolicLink()) throw new Error("case-run symlink evidence is not allowed; use the canonical artifact path");
+		const rest = relative(runRoot, canonical);
+		if (rest.startsWith("..") || isAbsolute(rest)) throw new Error("case-run evidence must be inside its attempt directory");
+		const evidenceStat = statSync(filePath);
+		const reserved = [receipt.artifact_paths.receipt, receipt.artifact_paths.stdout, receipt.artifact_paths.stderr].map((reservedPath) => statSync(reservedPath));
+		if (reserved.some((reservedStat) => reservedStat.dev === evidenceStat.dev && reservedStat.ino === evidenceStat.ino)) throw new Error("case-run receipt/logs cannot substitute boundary evidence");
+		const hash = createHash("sha256").update(readFileSync(canonical)).digest("hex");
+		if (expectedHash && hash !== expectedHash) throw new Error("case-run artifact hash mismatch");
+		files[canonical] = hash;
+	};
+	files[canonicalReceipt] = snapshot.sha256;
+	files[resolve(receipt.case_path)] = receipt.case_revision;
+	for (const native of receipt.native_files) { if (createHash("sha256").update(readFileSync(native.path)).digest("hex") !== native.sha256) throw new Error("case-run native file hash mismatch"); files[resolve(native.path)] = native.sha256; }
+	files[resolve(receipt.artifact_paths.stdout)] = receipt.artifact_paths.stdout_sha256;
+	files[resolve(receipt.artifact_paths.stderr)] = receipt.artifact_paths.stderr_sha256;
+	if (!evidence) throw new Error("case-run binding still requires actual boundary evidence");
+	const evidencePaths: string[] = [];
+	for (const evidencePath of [evidence.path, evidence.before, evidence.action, evidence.after].filter((value): value is string => Boolean(value))) { addFile(evidencePath); evidencePaths.push(realpathSync(evidencePath)); }
+	return { case_id: receipt.case_id, attempt_id: receipt.attempt_id, code_ref: receipt.code_ref, receipt_path: resolve(receipt.artifact_paths.receipt), files, evidence_paths: evidencePaths };
+}
+
+function recordCellUnlocked(sessionId: string, opts: RecordCellOpts): void {
 	const selector = validateCellSelector(opts.story, opts.cls, opts.sub);
 	if (!isOneOf(opts.status, RESULTS)) throw new Error(`status must be one of ${RESULTS.join("|")}`);
 	const prior = readPrior(sessionId);
@@ -835,6 +969,7 @@ export function recordCell(sessionId: string, opts: RecordCellOpts): void {
 	if ((opts.status === "pass" || opts.status === "fail") && isVisualDriver(actorDriver(prior, selector.story)) && !visualEvidenceComplete(evidence, stateProbe)) {
 		throw new Error("visual cell requires separate before/after screenshot files and an action record; capture the asserted screen, then record-cell again");
 	}
+	const binding = opts.caseRun ? caseRunBinding(prior, sessionId, selector, opts.status, evidence, opts.caseRun, actorDriver(prior, selector.story)) : undefined;
 	const next: QaCell = {
 		...selector,
 		attack_point: authored.attack_point,
@@ -845,11 +980,16 @@ export function recordCell(sessionId: string, opts: RecordCellOpts): void {
 		...pickScenarioFields(authored),
 		...scenarioPatch,
 		...(evidence ? { evidence } : {}),
+		...(binding ? { case_run: binding } : {}),
 	};
 	const cells = [...(prior.cells ?? [])];
 	const index = cells.findIndex((cell) => cell.cycle === cycle && sameCell(cell, selector));
 	cells[index] = next;
-	mergeWrite(sessionId, { cells });
+	mergeWriteUnlocked(sessionId, { cells });
+}
+
+export function recordCell(sessionId: string, opts: RecordCellOpts): void {
+	withStateLock(resolveStatePath(sessionId), () => recordCellUnlocked(sessionId, opts));
 }
 
 /** Store a judgment made by opening the raw evidence; never infer it from filenames. */
@@ -995,7 +1135,25 @@ export function setAcceptance(sessionId: string, criteria: string[]): void {
 		throw new Error("set-acceptance: every acceptance item must be a string");
 	}
 	const cleaned = criteria.map((item) => nonEmpty(item, "acceptance item"));
-	mergeWrite(sessionId, { acceptance_criteria: cleaned });
+	withStateLock(resolveStatePath(sessionId), () => {
+		const prior = readPrior(sessionId);
+		const cycle = currentCycle(prior);
+		for (const story of prior.stories ?? []) {
+			const evidenced = story.baseline?.cycle === cycle || (prior.cells ?? []).some((cell) =>
+				cell.story === story.id && cell.cycle === cycle && (cell.status !== undefined || cell.evidence !== undefined));
+			if (evidenced && story.contract) {
+				for (const index of story.contract.acceptance_criteria) {
+					if (prior.acceptance_criteria?.[index] !== cleaned[index]) {
+						throw new Error("set-acceptance: cannot change referenced acceptance criteria after current-cycle evidence");
+					}
+				}
+			}
+			if (story.contract && !storyContractValid(story, cleaned)) {
+				throw new Error("set-acceptance: existing story contract has an invalid acceptance-criteria link");
+			}
+		}
+		mergeWriteUnlocked(sessionId, { acceptance_criteria: cleaned });
+	});
 }
 
 /** Re-enters a session with a fresh, empty QA cycle. */
@@ -1024,6 +1182,7 @@ export function startQa(sessionId: string, target: string): void {
 			waives: [],
 			acceptance_criteria: [],
 			verdict: null,
+			trusted_receipts: [],
 		};
 		delete reset.inert;
 		delete reset.report;
@@ -1169,11 +1328,11 @@ const ROSTER: CliCommand[] = [
 	{ name: "advance-phase", authority: "ai", effect: "advances to the named phase (chain-gated)" },
 	{ name: "inc-cycle", authority: "ai", effect: "increments the fix-loop cycle counter" },
 	{ name: "add-actor", authority: "ai", effect: "adds one actor to the roster" },
-	{ name: "add-story", authority: "ai", effect: "adds one story for an actor" },
+	{ name: "add-story", authority: "ai", effect: "adds a story with goal, given/when/then JSON arrays, and acceptance-criteria index links" },
 	{ name: "record-story-provenance", authority: "ai", effect: "records JSON {features:[{id,revision,entrypoints,states}],code_ref}; features non-empty, entrypoints/states may be empty" },
 	{ name: "author-cell", authority: "ai", effect: "authors one scenario cell's attack plan" },
 	{ name: "record-baseline", authority: "ai", effect: "records a story's BASELINE result" },
-	{ name: "record-cell", authority: "ai", effect: "records one scenario cell's execution result" },
+	{ name: "record-cell", authority: "ai", effect: "records one scenario cell's execution result; optional --case-run RECEIPT binds replay provenance" },
 	{
 		name: "review-evidence",
 		authority: "ai",
@@ -1246,7 +1405,21 @@ function main(): void {
 					reachable: requiredArg(args, "reachable"),
 				});
 			} else if (subcommand === "add-story") {
-				addStory(sessionId, { id: requiredArg(args, "id"), actor: str(args["actor"]) ?? str(args["actor-id"]) ?? "" });
+				const parseJsonArg = (name: string): unknown => {
+					try { return JSON.parse(requiredArg(args, name)); }
+					catch (error) { throw new Error(`add-story: ${name} must be valid JSON`, { cause: error }); }
+				};
+				addStory(sessionId, {
+					id: requiredArg(args, "id"),
+					actor: str(args["actor"]) ?? str(args["actor-id"]) ?? "",
+					contract: {
+						goal: requiredArg(args, "goal"),
+					given: parseContractArray(parseJsonArg("given"), "given"),
+					when: parseContractArray(parseJsonArg("when"), "when"),
+					then: parseContractArray(parseJsonArg("then"), "then"),
+					acceptance_criteria: parseIntegerArray(parseJsonArg("acceptance-criteria"), "acceptance-criteria"),
+					},
+				});
 			} else if (subcommand === "record-story-provenance") {
 				const input = JSON.parse(requiredArg(args, "json"));
 				recordStoryProvenance(sessionId, requiredArg(args, "story"), input, { cwd: str(args["project"]) });
@@ -1284,6 +1457,7 @@ function main(): void {
 					evidenceBefore: str(args["evidence-before"]),
 					evidenceAction: str(args["evidence-action"]),
 					evidenceAfter: str(args["evidence-after"]),
+					caseRun: str(args["case-run"]),
 				});
 			} else if (subcommand === "review-evidence") {
 				reviewEvidence(sessionId, requiredArg(args, "story"), Number(requiredArg(args, "cls")), str(args["sub"]), JSON.parse(readFileSync(requiredArg(args, "json-file"), "utf8")));

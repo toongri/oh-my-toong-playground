@@ -35,6 +35,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 - **Codex 설정 소유권 추적** — 기본 `.codex/config.toml`을 유지하고, 주석과 무관하게 `.omt/codex-config-state.json`에서 관리할 키와 마지막 적용 값을 추적합니다. 기존 키는 명시적으로 관리 대상으로 채택해야 하며, 충돌 시 사용자 설정을 보존합니다. `make sync-dry`도 실제 대상에서 채택 필요 여부와 충돌을 확인합니다([플랫폼 YAML 설정 배포](docs/platform-yaml-config-deployment.md) 참고).
 - **표면별 E2E 라우팅** — 웹/Electron은 `agent-browser`, iOS·tvOS·macOS·Android·Vega OS TV는 `agent-device`로 검증
 - **QA 강제 게이트** — qa가 액터 로스터→스토리→셀→기록→판정→완료 사슬을 채우기 전 단계 전환·드라이버·Stop을 강제하고(PLAN 도달성 탐색은 허용), Claude/Codex의 `qa-driver-guard.sh`·`codex-qa-driver-guard.sh`와 Codex `codex-qa-seed.sh`가 같은 상태를 집행. 화면 결과는 주장별 근거 검토와 파일 일치가 필수이며, 최종 HTML 검토를 기록해야 완료
+- **QA 스토리 계약과 선택적 재사용 케이스** — 새 스토리는 목표·비어 있지 않은 Given/When/Then 배열과 0부터 시작하는 acceptance-criteria 링크를 갖춰야 하며, 기존 기록은 읽을 수 있지만 새 실행 준비가 된 것으로 간주하지 않음. 현재 사이클에 증거가 있으면 계약 변경은 거부됨. 선택적 케이스 저장소는 `qa-cases.ts`로 고정된 외부 `~/.qa-cases/<projectKey>/manifest.yaml`에 포인터·모드만 기록하고, 케이스 메타데이터와 자산은 승인된 위치에 저장하며 `unconfigured`·`disabled`·`configured` 상태를 명시적으로 관리함. 프로젝트 파일은 명시적 opt-in 없이는 만들지 않으며, 네이티브 `.ad`·agent-browser/Playwright·Maestro 형식은 유지함. `qa-replay.ts --help`로 확인할 수 있는 replay는 현재 세션의 완료된 actor→story→cell 체인과 현재 story/cell/cycle 및 해시를 확인하고 receipt를 만들지만 PASS를 기록하지 않으며, 실제 경계 증거와 함께 `qa-state.ts record-cell --case-run`으로 선택적으로 연결함([재사용 QA 케이스](skills/qa/reusable-cases.md) 참고)
 - **Ultragoal 최종 리뷰 수렴** — 우선순위로 수렴: HIGH는 수리·검사·fresh review, MEDIUM은 수리·검사(재리뷰 없음), LOW는 기록만 수행. 결정적 CLI는 COMMENT/APPROVE dispatch·재리뷰를 거부하고 5회 dispatch 창을 유지
 - **Codex protected-skill trust boundary** — `disable-model-invocation: true` 스킬은 사용자가 명시한 `$skill` UserPromptSubmit에서만 본문이 주입되고, 직접 `SKILL.md` shell read는 차단되며, invocation marker는 authorization이 아닙니다([리뷰/품질](docs/skills/review-quality.md) 참고)
 - **세션 원장** — 구조화된 체크포인트와 record를 기록하고 `resolve`/`supersede`(완료·대체) lifecycle로 상태를 추적합니다. `Now`는 최신 체크포인트로 교체될 수 있지만 나머지 durable 원본 이력은 보존합니다. 훅이 compaction 이벤트 뒤 현재 상태를 안내문 포함 UTF-8 7000바이트 이내로 자동 복구하며, Codex 0.153.4 수동 compaction에서 `PostCompact` → `SessionStart(source=compact)` 순서를 검증했습니다. 네이티브 compaction trigger 자체는 바꾸지 않습니다([세션 ledger 운영 가이드](docs/session-ledger.md) 참고).
@@ -57,7 +58,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 | 문서 | 내용 |
 |------|------|
 | [코어 파이프라인](docs/skills/core-pipeline.md) | 정의→기획→실행→검증 파이프라인 (deep-interview → craft-tasks → 선택적 prometheus → ultragoal → sisyphus; sisyphus는 ultragoal의 내부 실행자이며 직접 경로가 아님) + 위임 에이전트 13종 |
-| [리뷰/품질](docs/skills/review-quality.md) | code-review · design-review · slides-review · qa · explain-diff |
+| [리뷰/품질](docs/skills/review-quality.md) | code-review · design-review · slides-review · qa · explain-diff (선택적 reusable QA 케이스는 [가이드](skills/qa/reusable-cases.md)) |
 | [프론트엔드 디자인](docs/skills/frontend-design.md) | frontend · visual-qa — 웹 UI 설계·구현과 렌더링 결과 독립 검증 |
 | [리서치](docs/skills/research.md) | ultraresearch · insane-browsing — 포화 리서치 엔진과 차단 소스 브라우징 |
 | [문서/콘텐츠·유틸](docs/skills/authoring.md) | create-slides · technical-writing · technical-copywriting · humanizer · make-pr · scan-pdf-to-notes · git-master |

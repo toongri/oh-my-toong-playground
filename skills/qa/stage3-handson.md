@@ -4,6 +4,36 @@
 
 Verify behavior by actually running the change, entered at the boundary from the Actor Roster. This is not optional when applicable.
 
+When a reusable case is selected, replay its recorded runner at its recorded
+surface before exploring additional paths. Do not relabel an agent-browser or
+agent-device run as `bash` to bypass visual review or evidence requirements.
+Saved `.ad`, browser/Playwright, and Maestro YAML artifacts keep their native
+formats; a trace, recording, or JUnit XML is supporting output, never the
+executable case or real-boundary proof. After a successful candidate run, reset
+the app and independently rerun it with the same assertions before curating it
+as reusable (see [reusable-cases.md](reusable-cases.md)).
+
+For a saved case, use the repository replay wrapper after the active
+actor→story→cell chain is complete:
+
+```bash
+bun "${CLAUDE_SKILL_DIR}/scripts/qa-replay.ts" \
+  --case CASE_ID --story STORY_ID --cls 1 \
+  --project /absolute/project --code-ref COMMIT_OR_BUILD_REF \
+  --reset-confirmed "the saved reset description"
+```
+
+Read `bun "${CLAUDE_SKILL_DIR}/scripts/qa-replay.ts" --help` first. The
+wrapper supports optional `--sub hang-timeout|flaky-green` and
+`--allow-project-cwd`; it expands `{artifacts}`, sets `QA_ARTIFACTS_DIR`, and
+emits a receipt without recording a QA PASS. A failed runner exits non-zero.
+Inspect runner flags/output/config because native runners are not sandboxed.
+Afterward, capture actual boundary evidence inside the attempt directory and
+pass the receipt to `qa-state.ts record-cell --case-run RECEIPT`; receipt/log
+files cannot substitute for that evidence. Session/story/cell/cycle,
+story-contract, case/native-file, and artifact hashes must still match, and
+visual cells retain their before/action/after and evidence-review requirements.
+
 ---
 
 ## Step 3.1: Determine Applicability
@@ -118,9 +148,9 @@ Apply the corresponding row's primitives based on the change type detected in St
 
 **Primary path — agent-browser (attempt-then-fallback rule):**
 
-**Worktree hygiene:** A browser-tool install is setup state, not a change under verification. Use an ephemeral project-local install directory outside the checked worktree, with its own `node_modules` and executable path, so the target repository's manifest, lockfile, and node_modules are untouched. If the install mechanism does touch the checked worktree, restore only those installer-created files before CHECK and verify the clean-state result again. Apply this rule to both agent-browser and Playwright.
+**Worktree hygiene:** A browser-tool install is setup state, not a change under verification. Check existing installed tools first; when installation is needed, use an ephemeral project-scoped runtime directory outside the checked worktree, with its own `node_modules` and executable path, so the target repository's manifest, lockfile, config, and node_modules remain untouched. Touching those product files requires explicit user opt-in and is never repaired by write-then-cleanup as the default. Apply this rule to both agent-browser and Playwright.
 
-1. Check the CLI is available: `command -v agent-browser`. If it is missing, install it rather than skip the scenario — project-local first (a devDependency or a project-scoped local bin, no machine mutation), falling back to a global install only if a project-local install is not possible for this tool; use the ephemeral directory above for the project-local path. If even the global install fails (offline, locked-down), record that failure as the substituted hop and use the Playwright fallback path below instead of declaring the scenario unreachable. Local-first exists because a global install can hang or fail in offline/locked-down environments — it is a safety order, not a ban.
+1. Check the CLI is available: `command -v agent-browser`. If it is missing, install it rather than skip the scenario — use the external ephemeral runtime directory above (not a product devDependency or manifest edit), falling back to a global install only if the tool cannot run in that directory; use the same external directory for the project-scoped bin and dependencies. If even the global install fails (offline, locked-down), record that failure as the substituted hop and use the Playwright fallback path below instead of declaring the scenario unreachable. Local-first exists because a global install can hang or fail in offline/locked-down environments — it is a safety order, not a ban.
 2. Open the affected page:
    ```bash
    agent-browser open <url>
@@ -151,7 +181,7 @@ Apply the corresponding row's primitives based on the change type detected in St
 
 **Fallback path — playwright, only if available (optional):**
 
-If an agent-browser step returns a non-zero exit code or the required assertion cannot be expressed via the agent-browser CLI, and a playwright is available in this environment (however it's supplied), use it to verify that check instead — document the failure reason in evidence. If no playwright is available, install it — project-local first, global only if project-local is not possible — in the same ephemeral directory outside the checked worktree before falling back to reporting that check as verification-unavailable; only an install failure (offline, locked-down) earns that fallback, recorded as a substitution, not an unattempted skip. Any target manifest, lockfile, or `node_modules` changes must be restored before CHECK.
+If an agent-browser step returns a non-zero exit code or the required assertion cannot be expressed via the agent-browser CLI, and a playwright is available in this environment (however it's supplied), use it to verify that check instead — document the failure reason in evidence. If no playwright is available, install it — in the same external ephemeral runtime directory outside the checked worktree — before falling back to reporting that check as verification-unavailable; only an install failure (offline, locked-down) earns that fallback, recorded as a substitution, not an unattempted skip. Do not edit the target manifest, lockfile, config, or `node_modules` without explicit opt-in.
 
 ### Verification Criteria
 

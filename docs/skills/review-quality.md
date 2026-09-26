@@ -110,6 +110,12 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 
 **강제되는 기록 사슬**: PLAN에서 액터 로스터를 고정한 뒤 액터마다 스토리를 만들고, 각 스토리에서 6개 커버리지 축과 `hang-timeout`(1번 축), `flaky-green`(5번 축) 하위 셀을 파생합니다. 셀의 공격 지점·우선순위와 baseline·셀·실행 단위 결과를 상태 CLI에 기록해야 다음 단계로 진행할 수 있습니다. `set-acceptance`는 비어 있지 않은 문자열만 담은 JSON 배열을 받습니다. 이 사슬의 완결성·참조 무결성·현재 사이클 증거는 phase funnel과 Claude/Codex Stop 게이트가 검사하며, 로스터가 없거나 BASELINE 이후 기록이 비어 있으면 드라이버도 차단합니다(PLAN 도달성 탐색은 허용).
 
+**스토리 계약**: 새 `add-story`는 목표(`goal`), 비어 있지 않은 문자열 배열인 `given`·`when`·`then`, 그리고 세션 acceptance criterion을 가리키는 0부터 시작하는 `acceptance-criteria` 링크를 모두 요구합니다. 계약이 없는 기존 기록은 읽을 수 있지만 새 실행 준비가 된 기록으로 취급하지 않습니다. 현재 사이클에 증거가 있으면 계약 변경은 거부됩니다.
+
+**선택적 reusable cases**: `qa-cases.ts`의 `help`·`status`·`configure`·`disable`·`list`·`get`·`save` 명령은 고정된 외부 `~/.qa-cases/<projectKey>/manifest.yaml`에 저장소 포인터와 모드를 기록하고, 승인된 위치에 케이스 메타데이터와 자산을 저장합니다. 저장소는 `unconfigured`·`disabled`·`configured` 세 상태를 가지며, 사용자가 명시적으로 opt-in하지 않는 한 프로젝트 파일을 만들지 않습니다. 기존 `.ad`, agent-browser/Playwright, Maestro 형식은 그대로 유지합니다. 자세한 계약과 사용법은 [QA Reusable Cases](../../skills/qa/reusable-cases.md)를 참고하세요.
+
+**Replay와 선택적 연결**: `qa-replay.ts --help`로 명령을 확인할 수 있습니다. replay는 활성 세션의 완료된 actor→story→cell 체인과 reset 확인 후 저장된 케이스 revision을 실행 전 확인하고 저장된 네이티브 runner를 실행합니다. 실행 중 케이스 revision을 다시 검사하고 현재 네이티브 파일과 스토리 계약의 해시를 receipt에 기록하며, `qa_result: not-recorded` receipt만 만들 뿐 PASS를 기록하지 않습니다. 실제 경계 증거를 별도로 수집한 뒤 `qa-state.ts record-cell --case-run RECEIPT`로 선택 연결할 수 있으며, 이 연결이 세션·스토리·셀/sub·cycle·계약·케이스·네이티브 파일·artifact의 현재값과 해시를 대조하고 receipt/log를 경계 증거로 대체하지 못하게 합니다. runner는 sandbox되지 않고 reset도 자동 실행하지 않으며, 시각 셀은 기존 before/action/after 캡처와 evidence review를 계속 요구합니다.
+
 **종료와 예외**: `APPROVE`/`COMMENT`는 모든 필수 기록과 증거가 predicate를 통과해야 하며, `REQUEST_CHANGES`는 정직한 실패 기록 또는 실제 실행 전 fail-fast에 열려 있습니다. 셀 waive는 사유가 필요한 사용자 전용 명령이고 AI 경로에서 거부됩니다. `qa-state-*.json` 직접 쓰기도 차단되며, `set-verdict` → `qa-report` → HTML inspect → `review-report` → `presentation-reviewer` dispatch/handle → `complete` 순서로 상태를 닫은 뒤에만 결과를 보고합니다. Codex는 자체 시드 훅으로 같은 상태 파일과 런타임 게이트를 확보합니다.
 
 **액터 경계 원칙**: 시나리오를 쓰기 전에 먼저 **Actor Roster**를 고정합니다 — 액터 · 그 액터가 실제로 손대는 경계(화면·엔드포인트·CLI 명령) · 그 경계에 닿는 드라이버 · 도달 가능 여부. 함수·클래스·내부 모듈은 경계가 아닙니다. **직접 작성한(self-authored)** 시나리오는 모두 액터의 경계에서 진입해 실행하고, 경계에 도달할 수 없으면 **닿지 않는 마지막 홉만 fake로 대체**해 그 위 계층은 전부 실행합니다. 그것마저 불가능하면 PASS가 아니라 `NOT-RUN`이며, `H` 우선순위 시나리오가 `NOT-RUN`으로 남으면 APPROVE가 막힙니다. **호출자가 준(caller-provided)** 시나리오는 이 재배치에서 면제되어 호출자가 고른 계층 그대로 verbatim 실행하지만, 공개 의무까지 면제되지는 않습니다 — 실제 진입한 계층을 `driven-at`에 기록하고 그 위 계층에 대해서는 아무것도 주장하지 않습니다.

@@ -67,15 +67,45 @@ export interface QaStoryProvenance {
 	cycle: number;
 }
 
+/** Structured user-story intent. acceptance_criteria contains zero-based links
+ * into the session-level acceptance_criteria array. */
+export interface QaStoryContract {
+	goal: string;
+	given: string[];
+	when: string[];
+	then: string[];
+	acceptance_criteria: number[];
+}
+
 export interface QaStory {
 	id: string;
 	/** Actor id; `actor_id` is accepted as the serialized spelling too. */
 	actor?: string;
 	actor_id?: string;
+	/** New stories carry an explicit intent contract; absent means legacy data. */
+	contract?: QaStoryContract;
 	baseline?: QaBaseline | null;
 	baseline_history?: QaBaseline[];
 	provenance?: QaStoryProvenance;
 	provenance_history?: QaStoryProvenance[];
+}
+
+function nonblank(value: unknown): value is string {
+	return typeof value === "string" && value.trim().length > 0;
+}
+
+/** Validates a new structured story contract without inventing legacy intent. */
+export function storyContractValid(story: QaStory, acceptanceCriteria: string[] = []): boolean {
+	if (!Array.isArray(acceptanceCriteria) || !acceptanceCriteria.every(nonblank)) return false;
+	const contract = story.contract;
+	if (!contract || !nonblank(contract.goal)) return false;
+	if (!Array.isArray(contract.given) || !contract.given.length || !contract.given.every(nonblank)) return false;
+	if (!Array.isArray(contract.when) || !contract.when.length || !contract.when.every(nonblank)) return false;
+	if (!Array.isArray(contract.then) || !contract.then.length || !contract.then.every(nonblank)) return false;
+	if (!Array.isArray(contract.acceptance_criteria) || !contract.acceptance_criteria.length) return false;
+	return contract.acceptance_criteria.every(
+		(index) => Number.isInteger(index) && index >= 0 && index < acceptanceCriteria.length && nonblank(acceptanceCriteria[index]),
+	);
 }
 
 export interface QaCell {
@@ -88,6 +118,7 @@ export interface QaCell {
 	na_reason?: string;
 	evidence?: QaEvidence;
 	evidence_review?: QaEvidenceReview;
+	case_run?: QaCaseRunBinding;
 	cycle?: number;
 	/**
 	 * Optional scenario detail. When present, the evidence-review snapshot binds
@@ -96,6 +127,15 @@ export interface QaCell {
 	driven_at?: string;
 	why_needed?: string;
 	source?: "self-authored" | "caller-provided";
+}
+
+export interface QaCaseRunBinding {
+	case_id: string;
+	attempt_id: string;
+	code_ref: string;
+	receipt_path: string;
+	files: Record<string, string>;
+	evidence_paths: string[];
 }
 
 export interface QaEvidenceClaim {
@@ -129,6 +169,18 @@ export function evidenceReviewComplete(cell: QaCell, probe: EvidenceProbe): bool
 		return paths.filter((path): path is string => !!path).every((path) => {
 			const file = probe(path);
 			return file.exists && file.size > 0 && /^[a-f0-9]{64}$/.test(review.files?.[path] ?? "") && file.sha256 === review.files[path];
+		});
+	} catch { return false; }
+}
+
+export function caseRunBindingComplete(cell: QaCell, probe: EvidenceProbe): boolean {
+	if (!cell.case_run || typeof cell.case_run !== "object" || !cell.case_run.case_id || !cell.case_run.attempt_id || !cell.case_run.code_ref || !cell.case_run.receipt_path || !cell.case_run.files || typeof cell.case_run.files !== "object" || Array.isArray(cell.case_run.files) || !Object.keys(cell.case_run.files).length) return false;
+	try {
+		const binding = cell.case_run;
+		const required = [binding.receipt_path, cell.evidence?.path, cell.evidence?.before, cell.evidence?.action, cell.evidence?.after].filter((path): path is string => typeof path === "string" && path.trim() !== "");
+		return required.every((path) => Object.prototype.hasOwnProperty.call(binding.files, path)) && Object.entries(binding.files).every(([path, hash]) => {
+			const file = probe(path);
+			return file.exists && /^[a-f0-9]{64}$/.test(hash) && file.sha256 === hash;
 		});
 	} catch { return false; }
 }
@@ -320,6 +372,10 @@ export function chainComplete(state: QaChainState): boolean {
 	const stories = state.stories ?? [];
 	if (!rosterComplete(state)) return false;
 	if (stories.some((story) => !actorFor(state, story))) return false;
+	// Execution readiness always requires an explicit story contract. Historical
+	// records remain readable through the state/view APIs, but cannot authorize a
+	// new execution or verdict without being re-authored in a fresh cycle.
+	if (stories.some((story) => !storyContractValid(story, state.acceptance_criteria ?? []))) return false;
 	return stories.every((story) => {
 		const required = requiredCells({ ...state, stories: [story] });
 		const authored = required.every((cell) => {
@@ -345,6 +401,7 @@ export function recordComplete(state: QaChainState, probe: EvidenceProbe): boole
 		const cell = currentCell(state, required);
 		if (!cell || cell.status === null || cell.status === undefined || cell.cycle !== currentCycle(state)) return false;
 		if (cell.status === "na" && !cell.na_reason) return false;
+		if (cell.case_run && !caseRunBindingComplete(cell, probe)) return false;
 		const story = stories.find((candidate) => candidate.id === required.story);
 			if ((cell.status === "pass" || cell.status === "fail") && isVisualDriver(story ? actorFor(state, story)?.driver : undefined) && !visualEvidenceComplete(cell.evidence, probe)) return false;
 			if ((cell.status === "pass" || cell.status === "fail") && isVisualDriver(story ? actorFor(state, story)?.driver : undefined) && !evidenceReviewComplete(cell, probe)) return false;
