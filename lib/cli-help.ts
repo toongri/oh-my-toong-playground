@@ -23,7 +23,7 @@ const SECTIONS: { authority: CliCommandAuthority; header: string }[] = [
 	{ authority: "ai", header: "AI-USABLE" },
 	{
 		authority: "user",
-		header: "USER-ONLY (AI must NOT run these — present the command and ask the user to run it)",
+		header: "USER-ONLY (AI must NOT run these — show the user the full command and your reason, then end the turn and wait)",
 	},
 	{ authority: "system", header: "SYSTEM-ONLY (internal; not for manual use)" },
 	{ authority: "hook", header: "HOOK-ONLY (invoked by hooks, not manually)" },
