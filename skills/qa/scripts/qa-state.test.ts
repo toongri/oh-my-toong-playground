@@ -1,3 +1,4 @@
+import { recordResource, releaseResource } from "@lib/session-resources";
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from "fs";
 import { execSync } from "child_process";
@@ -187,6 +188,20 @@ describe("qa state: terminal completion (P2 finding 1 — no active:false resurr
 		expect(readQaState(S)).toBeNull();
 		// but the underlying file still exists (inactive, not deleted)
 		expect(existsSync(resolveStatePath(S))).toBe(true);
+		expect(rawState().active).toBe(false);
+	});
+});
+
+describe("qa state: background resource gate", () => {
+	test("complete refuses while a recorded resource is unreleased, then succeeds after release", () => {
+		setQaState(S, { phase: "PRE-FLIGHT" });
+		advancePhase(S, "PLAN");
+		setVerdict(S, "REQUEST_CHANGES");
+		recordResource(S, { id: "emulator-5554", kind: "emulator", stop: "true" });
+		expect(() => completeQa(S)).toThrow("qa-state.ts release-resource --id emulator-5554");
+		expect(rawState().active).not.toBe(false);
+		releaseResource(S, "emulator-5554");
+		completeQa(S);
 		expect(rawState().active).toBe(false);
 	});
 });

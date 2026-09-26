@@ -216,6 +216,8 @@ flowchart TB
 
 `ultragoal` pursuit `iteration` counts consecutive Stops with no observed progress. A diff-carrying commit or Story status transition resets it to `0`; Stops waiting for background work do not consume it. At `max_iterations` (default 10), pursuit soft-stops as non-complete `budget_limited`, preserves state, and dispatches no new work. After in-flight work drains and the completion gate is checked, the AI may run `resume-pursuit --reason <next action>` to restore `pursuing` at iteration 0; the reason is recorded. `blocked` is separate and occurs only for B1 (no actionable incomplete work) or the configured `blocked-stop` predicate.
 
+**Background resource gate**: A story gets a simulator or emulator only through `acquire-device`, which creates a session-owned device and records it; a dev server is recorded with `record-resource --id --kind --stop <stop command>`. Both are stopped with `release-resource --id`. While any resource is unreleased, `request-complete` refuses and lists each one with its release command.
+
 ---
 
 ## 6. Supporting Skills

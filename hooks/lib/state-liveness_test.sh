@@ -2249,17 +2249,17 @@ test_state_prefixes_exactly_six_managed() {
 # unnoticed by every other test in this file.
 # =============================================================================
 
-test_session_artifact_prefixes_exactly_six_managed() {
+test_session_artifact_prefixes_exactly_seven_managed() {
   local count
   count=$(printf '%s\n' $SESSION_ARTIFACT_PREFIXES | grep -c '.' 2>/dev/null || true)
-  if [ "$count" -ne 6 ]; then
-    echo "  ASSERTION FAILED: SESSION_ARTIFACT_PREFIXES must have exactly 6 entries, found $count"
+  if [ "$count" -ne 7 ]; then
+    echo "  ASSERTION FAILED: SESSION_ARTIFACT_PREFIXES must have exactly 7 entries, found $count"
     echo "  SESSION_ARTIFACT_PREFIXES=$SESSION_ARTIFACT_PREFIXES"
     return 1
   fi
 
   local prefix
-  for prefix in codex-todo- state/block-count- goal-verdict- goal-codereview- ultragoal-verdict- ultragoal-codereview-; do
+  for prefix in codex-todo- state/block-count- goal-verdict- goal-codereview- ultragoal-verdict- ultragoal-codereview- session-resources-; do
     local n
     n=$(printf '%s\n' $SESSION_ARTIFACT_PREFIXES | grep -c "^${prefix}\$" 2>/dev/null || true)
     if [ "$n" -ne 1 ]; then
@@ -2438,7 +2438,7 @@ run_test test_reap_dead_state_files_rm_failure_not_echoed_and_reported
 run_test test_reap_session_artifacts_rm_failure_not_echoed_and_reported
 run_test test_harmless_conditions_do_not_trip_set_e
 run_test test_state_prefixes_exactly_six_managed
-run_test test_session_artifact_prefixes_exactly_six_managed
+run_test test_session_artifact_prefixes_exactly_seven_managed
 run_test test_ttl_parity_with_state_core_ts
 run_test test_ttl_allowlist_no_stray_literals
 

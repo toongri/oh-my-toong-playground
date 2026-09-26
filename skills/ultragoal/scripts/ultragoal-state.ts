@@ -78,6 +78,13 @@ import {
 } from "@lib/state-core";
 import { renderHelp, type CliCommand } from "@lib/cli-help";
 import { deliverableRefusalBody } from "@lib/deliverable-refusal";
+import {
+	acquireDevice,
+	recordResource,
+	releaseResource,
+	unreleasedResources,
+	unreleasedResourcesRefusal,
+} from "@lib/session-resources";
 
 export type GoalPhase =
 	| "planning"
@@ -2268,6 +2275,9 @@ function extractCodexGoalStatus(snapshot: Record<string, unknown>): string | und
  * over a prior budget_limited (complete-wins, ADR-7).
  */
 export function requestComplete(sessionId: string, codexGoalArg?: string): boolean {
+	// A background resource (emulator, server) started in this session and not
+	// released keeps the pursuit from completing; the CLI names each one.
+	if (unreleasedResources(sessionId).length > 0) return false;
 	ensureSeed("ultragoal", sessionId);
 	const stateFilePath = resolveStatePath(sessionId);
 	return withStateLock(stateFilePath, () => {
@@ -2704,7 +2714,22 @@ const ROSTER: CliCommand[] = [
 	{
 		name: "request-complete",
 		authority: "ai",
-		effect: "gated transition to phase=complete",
+		effect: "gated transition to phase=complete; refuses while a recorded background resource is unreleased",
+	},
+	{
+		name: "acquire-device",
+		authority: "ai",
+		effect: "starts a simulator/emulator owned by this session (--platform ios|android --base <device type|AVD> [--runtime <id>]) and records it; prints IOS_UDID=/ANDROID_SERIAL=",
+	},
+	{
+		name: "record-resource",
+		authority: "ai",
+		effect: "records a background resource a story started (--id --kind --stop <command>); request-complete refuses until it is released",
+	},
+	{
+		name: "release-resource",
+		authority: "ai",
+		effect: "runs the recorded stop command for --id and marks it released only when the command exits 0",
 	},
 	{ name: "get-review-result", authority: "ai", effect: "reads the code-review result" },
 	{
@@ -2934,7 +2959,28 @@ function main(): void {
 			forceComplete(sessionId, strFlagOrBlank(args["reason"]));
 		} else if (subcommand === "set-blocked") {
 			setBlocked(sessionId, strFlagOrBlank(args["reason"]));
+		} else if (subcommand === "acquire-device") {
+			const platform = strFlagOrBlank(args["platform"]);
+			const id = acquireDevice(sessionId, { platform, base: strFlagOrBlank(args["base"]), runtime: str(args["runtime"]) });
+			process.stdout.write(
+				`${platform === "ios" ? "IOS_UDID" : "ANDROID_SERIAL"}=${id}\nacquired and recorded: this device belongs to this session only. Export the line above, and release it with release-resource --id ${id} at cleanup.\n`,
+			);
+		} else if (subcommand === "record-resource") {
+			recordResource(sessionId, {
+				id: strFlagOrBlank(args["id"]),
+				kind: strFlagOrBlank(args["kind"]),
+				stop: strFlagOrBlank(args["stop"]),
+			});
+			process.stdout.write("recorded: request-complete refuses until this resource is released with release-resource.\n");
+		} else if (subcommand === "release-resource") {
+			const released = releaseResource(sessionId, strFlagOrBlank(args["id"]));
+			process.stdout.write(`released: ${released.kind} "${released.id}" stopped (stop command exited 0).\n`);
 		} else if (subcommand === "request-complete") {
+			const running = unreleasedResourcesRefusal(sessionId, "ultragoal-state.ts");
+			if (running !== "") {
+				process.stderr.write(`request-complete: ${running}\n`);
+				process.exit(1);
+			}
 			const codexGoalArg = resolveStdinValue(str(args["codex-goal-json"]));
 			const ok = requestComplete(sessionId, codexGoalArg);
 			if (!ok) {
