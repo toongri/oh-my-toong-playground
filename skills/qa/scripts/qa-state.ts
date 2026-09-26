@@ -1182,6 +1182,7 @@ export function startQa(sessionId: string, target: string): void {
 			waives: [],
 			acceptance_criteria: [],
 			verdict: null,
+			trusted_receipts: [],
 		};
 		delete reset.inert;
 		delete reset.report;

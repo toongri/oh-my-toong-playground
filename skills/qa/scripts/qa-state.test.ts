@@ -523,6 +523,7 @@ describe("qa-state CLI wiring", () => {
 		run("complete");
 		const completed = rawState();
 		completed.report = { path: "/old.html", sha256: "a".repeat(64), state_snapshot: "old", reviewed: true };
+		completed.trusted_receipts = [{ attempt_id: "old-attempt", receipt_path: "/old/receipt.json", sha256: "b".repeat(64) }];
 		writeFileSync(resolveStatePath(S), JSON.stringify(completed));
 		run('start --target "second cycle"');
 		const reset = rawState();
@@ -534,6 +535,7 @@ describe("qa-state CLI wiring", () => {
 		expect(reset.cycle).toBe(0);
 		expect(reset.acceptance_criteria).toEqual([]);
 		expect(reset.report).toBeUndefined();
+		expect(reset.trusted_receipts).toEqual([]);
 		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
 		const before = readFileSync(resolveStatePath(S), "utf8");
 		expect(() => run('start --target "launder"')).toThrow();
