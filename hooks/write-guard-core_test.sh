@@ -543,13 +543,10 @@ test_negative_double_space_nondangerous_allows() {
 # =============================================================================
 # write_guard_core_check_user_authorized_command <command-segment>
 #
-# ultragoal exposes two state mutations the SKILL's own authority table marks
-# "orchestrator, only after explicit user approval": approve-review-dispatch-
-# renewal (extends the review budget) and dismiss-review-finding (removes a
-# blocking finding from the completion gate). Both were enforced by prose
-# alone -- the AI could run either unprompted and clear its own gate. This
-# guard makes the authorization structural: the AI's own Bash path is denied,
-# so the command reaches the CLI only when the user runs it.
+# Only force-complete stays user-only: it bypasses every completion gate. The
+# recovery commands (approve-review-dispatch-renewal, resume-pursuit,
+# dismiss-review-finding, qa waive) are AI-runnable with a recorded reason --
+# the ALLOW tests below pin that they are no longer denied.
 #
 # ALLOW cases (get/status/request-complete/set-verdict) are the negative
 # control -- without them a deny guard cannot be told apart from "deny every
@@ -558,47 +555,9 @@ test_negative_double_space_nondangerous_allows() {
 UGCLI="bun /Users/x/.claude/skills/ultragoal/scripts/ultragoal-state.ts"
 QACLI="bun /Users/x/.claude/skills/qa/scripts/qa-state.ts"
 
-test_user_authorized_qa_waive_denies() {
-    local out
-    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
-        "$QACLI waive --story s1 --cls 1 --reason 'blocked'")
-    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-        return 0
-    else
-        echo "ASSERTION FAILED qa-waive: expected deny, got '$out'"
-        return 1
-    fi
-}
 
-test_user_authorized_qa_waive_reverse_order_denies() {
-    local out
-    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
-        "sub=waive; $QACLI \"\$sub\" --story s1 --cls 1 --reason blocked")
-    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-        return 0
-    else
-        echo "ASSERTION FAILED qa-waive-reverse: expected deny, got '$out'"
-        return 1
-    fi
-}
 
-test_user_authorized_qa_record_cell_noncollision_allows() {
-    local out
-    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
-        "$QACLI record-cell --story s1 --cls 1 --status na --na-reason 'device unreachable'")
-    if [ -z "$out" ]; then return 0; fi
-    echo "ASSERTION FAILED qa-record-cell: expected allow, got '$out'"
-    return 1
-}
 
-test_user_authorized_qa_record_cell_waive_collision_denies() {
-    local out
-    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
-        "$QACLI record-cell --story s1 --cls 1 --status na --na-reason 'waive requested upstream'")
-    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then return 0; fi
-    echo "ASSERTION FAILED qa-record-cell-collision: expected deny, got '$out'"
-    return 1
-}
 
 test_qa_state_exact_path_denies() {
     local out
@@ -910,76 +869,38 @@ test_deep_interview_state_naive_prefix_mismatch_allows() {
     return 1
 }
 
-test_user_authorized_dismiss_review_finding_denies() {
-    local out
-    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
-        "$UGCLI dismiss-review-finding --ref src/auth.ts:142 --class correctness --rationale x")
-    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-        return 0
-    else
-        echo "ASSERTION FAILED user-authorized-dismiss: expected deny, got '$out'"
-        return 1
-    fi
+
+
+
+
+
+
+test_ai_runnable_recovery_commands_allow() {
+    local cmd out
+    for cmd in \
+        "$UGCLI approve-review-dispatch-renewal --reason x" \
+        "$UGCLI resume-pursuit --reason x" \
+        "$UGCLI dismiss-review-finding --ref a --class correctness --rationale x" \
+        "$QACLI waive --story s1 --cls 1 --reason x"; do
+        out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ "$cmd")
+        if [ -n "$out" ]; then
+            echo "ASSERTION FAILED ai-runnable '$cmd': expected allow, got '$out'"
+            return 1
+        fi
+    done
 }
 
-test_user_authorized_approve_renewal_denies() {
+# The deny must give the next move: show the command, park with await-user,
+# end the turn. An AI told only "denied" routes around the gate instead.
+test_user_authorized_deny_explains_next_move() {
     local out
     out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
-        "$UGCLI approve-review-dispatch-renewal")
-    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        "$UGCLI force-complete --reason x")
+    if printf '%s' "$out" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("await-user") and test("턴을 끝내")' > /dev/null; then
         return 0
-    else
-        echo "ASSERTION FAILED user-authorized-renewal: expected deny, got '$out'"
-        return 1
     fi
-}
-
-test_user_authorized_resume_pursuit_denies() {
-    local out
-    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
-        "$UGCLI resume-pursuit")
-    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-        return 0
-    else
-        echo "ASSERTION FAILED user-authorized-resume-pursuit: expected deny, got '$out'"
-        return 1
-    fi
-}
-
-test_user_authorized_resume_pursuit_variable_indirection_denies() {
-    local out
-    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
-        "sub=resume-pursuit; $UGCLI \"\$sub\"")
-    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-        return 0
-    else
-        echo "ASSERTION FAILED user-authorized-resume-pursuit-variable-indirection: expected deny, got '$out'"
-        return 1
-    fi
-}
-
-test_user_authorized_resume_pursuit_reverse_order_denies() {
-    local out
-    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
-        "s=resume-pursuit && $UGCLI \"\$s\"")
-    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-        return 0
-    else
-        echo "ASSERTION FAILED user-authorized-resume-pursuit-reverse-order: expected deny, got '$out'"
-        return 1
-    fi
-}
-
-test_user_authorized_resume_pursuit_whitespace_run_denies() {
-    local out
-    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
-        "$UGCLI  resume-pursuit   --reason x")
-    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-        return 0
-    else
-        echo "ASSERTION FAILED user-authorized-resume-pursuit-whitespace-run: expected deny, got '$out'"
-        return 1
-    fi
+    echo "ASSERTION FAILED user-authorized-deny-message: expected await-user + end-turn guidance in valid JSON, got '$out'"
+    return 1
 }
 
 test_user_authorized_force_complete_denies() {
@@ -1030,64 +951,9 @@ test_user_authorized_force_complete_whitespace_run_denies() {
     fi
 }
 
-# Whitespace-run tolerance, same hazard the dangerous-command guard fixed: a
-# real shell treats any run of spaces/tabs as one separator, so a literal
-# single-space pattern would silently ALLOW the identical command.
-# Indirection bypass: the subcommand name reaches the CLI through a variable, so
-# it never sits next to the script path in the command text -- and a `;` puts the
-# two tokens in different chain segments. Matching requires both tokens anywhere
-# in the WHOLE command, in either order, precisely so this shape is covered.
-test_user_authorized_variable_indirection_denies() {
-    local out
-    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
-        "sub=dismiss-review-finding; $UGCLI \"\$sub\" --ref a --class correctness --rationale x")
-    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-        return 0
-    else
-        echo "ASSERTION FAILED user-authorized-variable-indirection: expected deny, got '$out'"
-        return 1
-    fi
-}
 
-# Same shape for the renewal sibling, and with the subcommand token appearing
-# BEFORE the script path -- the assignment-first ordering the bypass produces.
-test_user_authorized_reverse_order_denies() {
-    local out
-    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
-        "s=approve-review-dispatch-renewal && $UGCLI \"\$s\"")
-    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-        return 0
-    else
-        echo "ASSERTION FAILED user-authorized-reverse-order: expected deny, got '$out'"
-        return 1
-    fi
-}
 
-test_user_authorized_whitespace_run_denies() {
-    local out
-    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
-        "$UGCLI  dismiss-review-finding   --ref a --class correctness --rationale x")
-    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-        return 0
-    else
-        echo "ASSERTION FAILED user-authorized-whitespace-run: expected deny, got '$out'"
-        return 1
-    fi
-}
 
-# The deny must name the user-run route; an AI told only "denied" has no next
-# move and will either retry or abandon a legitimate user request.
-test_user_authorized_deny_names_user_run_route() {
-    local out
-    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
-        "$UGCLI dismiss-review-finding --ref a --class correctness --rationale x")
-    if printf '%s' "$out" | grep -q '사용자'; then
-        return 0
-    else
-        echo "ASSERTION FAILED user-authorized-deny-message: expected the user-run route in the reason, got '$out'"
-        return 1
-    fi
-}
 
 test_negative_ultragoal_get_allows() {
     local out
@@ -1795,20 +1661,12 @@ main() {
     run_test test_dangerous_rm_rf_double_space_denies
     run_test test_dangerous_rm_rf_tab_denies
     run_test test_dangerous_git_push_force_multispace_denies
-    run_test test_user_authorized_dismiss_review_finding_denies
-    run_test test_user_authorized_approve_renewal_denies
-    run_test test_user_authorized_resume_pursuit_denies
-    run_test test_user_authorized_resume_pursuit_variable_indirection_denies
-    run_test test_user_authorized_resume_pursuit_reverse_order_denies
-    run_test test_user_authorized_resume_pursuit_whitespace_run_denies
+    run_test test_ai_runnable_recovery_commands_allow
+    run_test test_user_authorized_deny_explains_next_move
     run_test test_user_authorized_force_complete_denies
     run_test test_user_authorized_force_complete_variable_indirection_denies
     run_test test_user_authorized_force_complete_reverse_order_denies
     run_test test_user_authorized_force_complete_whitespace_run_denies
-    run_test test_user_authorized_qa_waive_denies
-    run_test test_user_authorized_qa_waive_reverse_order_denies
-    run_test test_user_authorized_qa_record_cell_noncollision_allows
-    run_test test_user_authorized_qa_record_cell_waive_collision_denies
     run_test test_qa_state_exact_path_denies
     run_test test_qa_state_other_session_allows
     run_test test_marker_current_session_suffix_denies
@@ -1842,10 +1700,6 @@ main() {
     run_test test_deep_interview_state_glob_other_session_allows
     run_test test_deep_interview_state_bun_cli_invocation_allows
     run_test test_deep_interview_state_naive_prefix_mismatch_allows
-    run_test test_user_authorized_variable_indirection_denies
-    run_test test_user_authorized_reverse_order_denies
-    run_test test_user_authorized_whitespace_run_denies
-    run_test test_user_authorized_deny_names_user_run_route
     run_test test_negative_ultragoal_get_allows
     run_test test_negative_ultragoal_request_complete_allows
     run_test test_negative_ultragoal_set_verdict_allows

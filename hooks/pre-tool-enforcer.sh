@@ -353,8 +353,8 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
                 printf '%s\n' "$_wg_submit_out"
                 exit 0
             fi
-            # User-authorized ultragoal-state subcommands (approve-review-dispatch-
-            # renewal / dismiss-review-finding). Runs on the WHOLE masked command,
+            # User-only ultragoal-state subcommand guard (see
+            # write_guard_core_check_user_authorized_command). Runs on the WHOLE masked command,
             # deliberately OUTSIDE the segment loop below: a `sub=<subcommand>;`
             # assignment puts the subcommand name in a different chain segment from
             # the script path, so a per-segment check never sees both. Masked rather
