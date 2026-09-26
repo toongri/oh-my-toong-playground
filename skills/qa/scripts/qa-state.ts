@@ -39,6 +39,7 @@ import {
 	STATE_PREFIX,
 } from "@lib/state-core";
 import { renderHelp, type CliCommand } from "@lib/cli-help";
+import { acquireDevice, recordResource, releaseResource, unreleasedResourcesRefusal } from "@lib/session-resources";
 import {
 	BASELINE_INDEX,
 	QA_PHASES,
@@ -1207,6 +1208,10 @@ export function startQa(sessionId: string, target: string): void {
  * session-start restore banner on the next session.
  */
 export function completeQa(sessionId: string): void {
+	// Background resources (emulators, servers) this session started must be
+	// stopped before the cycle closes; the CLEANUP prose alone left them running.
+	const running = unreleasedResourcesRefusal(sessionId, "qa-state.ts");
+	if (running !== "") throw new Error(`complete: ${running}`);
 	withStateLock(resolveStatePath(sessionId), () => {
 		ensureSeed("qa", sessionId);
 		const prior = readPrior(sessionId);
@@ -1355,6 +1360,21 @@ const ROSTER: CliCommand[] = [
 	},
 	{ name: "declare-inert", authority: "ai", effect: "declares a no-risk-surface cycle" },
 	{
+		name: "acquire-device",
+		authority: "ai",
+		effect: "starts a simulator/emulator owned by this session (--platform ios|android --base <device type|AVD> [--runtime <id>]) and records it; prints IOS_UDID=/ANDROID_SERIAL=",
+	},
+	{
+		name: "record-resource",
+		authority: "ai",
+		effect: "records a background resource this run started (--id --kind --stop <command>); complete refuses until it is released",
+	},
+	{
+		name: "release-resource",
+		authority: "ai",
+		effect: "runs the recorded stop command for --id and marks it released only when the command exits 0",
+	},
+	{
 		name: "complete",
 		authority: "ai",
 		effect: "marks the finished, gate-satisfied cycle inactive",
@@ -1493,6 +1513,22 @@ function main(): void {
 				process.stdout.write(
 					"waived: the cell no longer blocks APPROVE. The reason is recorded, and the report lists this waive in a banner above the findings. Name it in your final message to the user.\n",
 				);
+			} else if (subcommand === "acquire-device") {
+				const platform = requiredArg(args, "platform");
+				const id = acquireDevice(sessionId, { platform, base: requiredArg(args, "base"), runtime: str(args["runtime"]) });
+				process.stdout.write(
+					`${platform === "ios" ? "IOS_UDID" : "ANDROID_SERIAL"}=${id}\nacquired and recorded: this device belongs to this session only. Export the line above, and release it with release-resource --id ${id} at cleanup.\n`,
+				);
+			} else if (subcommand === "record-resource") {
+				recordResource(sessionId, {
+					id: requiredArg(args, "id"),
+					kind: requiredArg(args, "kind"),
+					stop: requiredArg(args, "stop"),
+				});
+				process.stdout.write("recorded: complete refuses until this resource is released with release-resource.\n");
+			} else if (subcommand === "release-resource") {
+				const released = releaseResource(sessionId, requiredArg(args, "id"));
+				process.stdout.write(`released: ${released.kind} "${released.id}" stopped (stop command exited 0).\n`);
 			} else if (subcommand === "declare-inert") {
 				declareInert(sessionId, requiredArg(args, "reason"));
 			} else if (subcommand === "complete") {
