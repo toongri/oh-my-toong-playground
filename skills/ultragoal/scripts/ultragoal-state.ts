@@ -80,6 +80,7 @@ import { renderHelp, type CliCommand } from "@lib/cli-help";
 import { deliverableRefusalBody } from "@lib/deliverable-refusal";
 import {
 	acquireDevice,
+	adoptResources,
 	recordResource,
 	releaseResource,
 	unreleasedResources,
@@ -3098,7 +3099,7 @@ function main(): void {
 				process.stderr.write("adopt: --src <sid> is required\n");
 				process.exit(1);
 			}
-			adopt("ultragoal", srcSid);
+			adoptResources(srcSid, sessionId, () => adopt("ultragoal", srcSid));
 			// codex_goal_objective is thread-scoped state: Codex's native create_goal/
 			// update_goal tools write to a DB row keyed by thread_id (PRIMARY KEY), and
 			// the adopting session runs in a different runtime/thread that has no way

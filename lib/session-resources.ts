@@ -10,7 +10,7 @@
  * State file: ${OMT_DIR}/session-resources-${sessionId}.json
  */
 
-import { closeSync, existsSync, openSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -109,6 +109,36 @@ export function releaseResource(sessionId: string, id: string): SessionResource 
 		writeAll(path, all);
 		return current;
 	});
+}
+
+/**
+ * Adopting another session's pursuit also adopts the resources it started:
+ * otherwise they stay keyed to the source session and the adopting session's
+ * completion gate never sees them. Runs `adoptState` between a conflict check
+ * and the registry move, so a refused adoption moves nothing. Stop commands
+ * keep working after the move because Android ownership is the source
+ * session's tag on the process itself.
+ */
+export function adoptResources(srcSid: string, dstSid: string, adoptState: () => void): void {
+	const srcPath = resolveResourcesPath(srcSid);
+	const dstPath = resolveResourcesPath(dstSid);
+	const clash = unreleasedResources(srcSid).filter((r) => unreleasedResources(dstSid).some((d) => d.id === r.id));
+	if (clash.length > 0) {
+		throw new Error(
+			`adopt: refused — both sessions hold an unreleased resource with id ${clash.map((r) => `"${r.id}"`).join(", ")}. ` +
+				"Release it in one of the sessions first.",
+		);
+	}
+	adoptState();
+	if (!existsSync(srcPath)) return;
+	const moved = withStateLock(srcPath, () => readAll(srcPath));
+	withStateLock(dstPath, () => {
+		const kept = readAll(dstPath).filter((d) => !moved.some((r) => r.id === d.id));
+		writeAll(dstPath, [...kept, ...moved]);
+	});
+	// Removed only after the destination holds every entry, so a crash between
+	// the two leaves a duplicate rather than a lost stop command.
+	rmSync(srcPath, { force: true });
 }
 
 export function unreleasedResources(sessionId: string): SessionResource[] {

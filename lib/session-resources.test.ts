@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import {
 	acquireDevice,
+	adoptResources,
 	type DeviceDeps,
 	recordResource,
 	releaseResource,
@@ -59,6 +60,15 @@ describe("session resources", () => {
 		writeFileSync(resolveResourcesPath(SID), "{");
 		expect(() => unreleasedResources(SID)).toThrow("not a JSON array");
 		expect(() => recordResource(SID, { id: "x", kind: "server", stop: "true" })).toThrow("not a JSON array");
+	});
+
+	test("같은 id의 미해제 자원이 양쪽에 있으면 상태 채택 전에 거부한다", () => {
+		recordResource("src", { id: "emulator-5554", kind: "emulator", stop: "true" });
+		recordResource(SID, { id: "emulator-5554", kind: "emulator", stop: "true" });
+		let adopted = false;
+		expect(() => adoptResources("src", SID, () => { adopted = true; })).toThrow("both sessions hold");
+		expect(adopted).toBe(false);
+		expect(unreleasedResources("src")).toHaveLength(1);
 	});
 
 	test("빈 필드 기록과 없는 id 해제는 거부된다", () => {

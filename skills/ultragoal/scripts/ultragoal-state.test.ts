@@ -1,4 +1,4 @@
-import { recordResource, releaseResource } from "@lib/session-resources";
+import { recordResource, releaseResource, unreleasedResources } from "@lib/session-resources";
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import {
 	mkdtempSync,
@@ -1360,6 +1360,15 @@ describe("adoption: list-others + adopt (goal CLI)", () => {
 		const log = readFileSync(`${tmpDir}/adoption.log`, "utf8");
 		expect(log).toContain("ultragoal");
 		expect(log).toContain("A -> B");
+	});
+
+	test("adopt carries the source session's unreleased resources to the adopting session", () => {
+		writeLiveGoalState("A", "purpose P");
+		writePristineGoalState("B");
+		recordResource("A", { id: "emulator-5554", kind: "emulator", stop: "true" });
+		runCli("adopt --src A", { OMT_SESSION_ID: "B" });
+		expect(unreleasedResources("B").map((r) => r.id)).toEqual(["emulator-5554"]);
+		expect(existsSync(`${tmpDir}/session-resources-A.json`)).toBe(false);
 	});
 
 	// (F6-cli) adopt refused on ACTIVE non-pristine current; both files unchanged
