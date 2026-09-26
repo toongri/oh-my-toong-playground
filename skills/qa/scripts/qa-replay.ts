@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 
-import { chainComplete, type QaCell, type QaStory } from "@lib/qa-chain-core.ts";
+import { BASELINE_INDEX, chainComplete, type QaCell, type QaStory } from "@lib/qa-chain-core.ts";
 import { getQaCase, getQaCaseStoreStatus, resolveQaCaseContext, type QaCaseRecord, type QaCaseStoreOptions } from "@lib/qa-case-store.ts";
 import { runQaCase } from "@lib/qa-case-run.ts";
 import { resolveSessionIdOrThrow } from "@lib/state-core";
@@ -62,6 +62,7 @@ export async function replayFromCli(args: string[] = process.argv.slice(2), opti
 	const sessionId = resolveSessionIdOrThrow();
 	const state = readQaState(sessionId);
 	if (!state || state.active !== true) fail("active QA state is required");
+	if ((state.phase_max ?? 0) < BASELINE_INDEX) fail("QA replay requires the active cycle to have left PLAN (BASELINE or later)");
 	if (!chainComplete(state)) fail("QA actor→story→cell chainComplete gate is not satisfied");
 	const storyId = required(parsed, "story");
 	const story = selectedStory(state, storyId);

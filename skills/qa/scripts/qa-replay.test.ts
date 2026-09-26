@@ -62,6 +62,26 @@ describe("qa replay CLI", () => {
 		await expect(replayFromCli(["--case", "cli-case", "--story", "story", "--cls", "1", "--project", process.cwd(), "--code-ref", "code", "--reset-confirmed", "reset"])).rejects.toThrow(/active QA state|chainComplete/);
 	});
 
+	test("PLAN 단계에서는 replay를 막고 BASELINE부터 허용한다", async () => {
+		const rawRoot = mkdtempSync(join(tmpdir(), "qa-replay-phase-guard-")); roots.push(rawRoot);
+		const root = realpathSync(rawRoot);
+		const store = join(root, "store");
+		const session = "phase-guard-session";
+		process.env.OMT_DIR = join(root, "omt"); process.env.OMT_SESSION_ID = session;
+		const home = join(root, "home");
+		mkdirSync(home, { recursive: true });
+		const configured = configureQaCaseStore(store, { cwd: root, home, allowProjectStorage: true });
+		manifestDirs.push(join(configured.manifestPath, ".."));
+		readyChain(session);
+		const record: QaCaseRecord = { id: "phase-guard-case", title: "CLI", goal: "run", given: ["case exists"], when: ["run"], then: ["observed"], acceptance_criteria: ["The runner boundary is observed"], surface: "bash", runner: [process.execPath, "-e", "process.stdout.write('ok')"], execution_cwd: "{artifacts}", native_files: [], reset_description: "reset" };
+		saveCase(root, record, home);
+
+		await expect(replayFromCli(["--case", record.id, "--story", "story", "--cls", "1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home })).rejects.toThrow(/left PLAN|BASELINE/);
+		setQaState(session, { phase: "BASELINE" });
+		const receipt = await replayFromCli(["--case", record.id, "--story", "story", "--cls", "1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home });
+		expect((receipt as { qa_result: string }).qa_result).toBe("not-recorded");
+	});
+
 	test("완전한 CLI chain에서 case를 실행하고 receipt를 반환한다", async () => {
 		const rawRoot = mkdtempSync(join(tmpdir(), "qa-replay-valid-")); roots.push(rawRoot);
 		const root = realpathSync(rawRoot);
@@ -72,6 +92,7 @@ describe("qa replay CLI", () => {
 		const configured = configureQaCaseStore(store, { cwd: root, home, allowProjectStorage: true });
 		manifestDirs.push(join(configured.manifestPath, ".."));
 		readyChain("valid-session");
+		setQaState("valid-session", { phase: "BASELINE" });
 		const record: QaCaseRecord = { id: "cli-case", title: "CLI", goal: "run", given: ["case exists"], when: ["run"], then: ["observed"], acceptance_criteria: ["The runner boundary is observed"], surface: "bash", runner: [process.execPath, "-e", "process.stdout.write('ok')"], execution_cwd: "{artifacts}", native_files: [], reset_description: "reset" };
 		saveCase(root, record, home);
 		const receipt = await replayFromCli(["--case", "cli-case", "--story", "story", "--cls", "1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home });
@@ -91,6 +112,7 @@ describe("qa replay CLI", () => {
 		const configured = configureQaCaseStore(store, { cwd: root, home, allowProjectStorage: true });
 		manifestDirs.push(join(configured.manifestPath, ".."));
 		readyChain(session);
+		setQaState(session, { phase: "BASELINE" });
 		const record: QaCaseRecord = {
 			id: "trusted-receipt-case", title: "CLI", goal: "run", given: ["case exists"], when: ["run"], then: ["observed"],
 			acceptance_criteria: ["The runner boundary is observed"], surface: "bash",
@@ -125,6 +147,7 @@ describe("qa replay CLI", () => {
 		mkdirSync(home, { recursive: true });
 		const configured = configureQaCaseStore(store, { cwd: root, home, allowProjectStorage: true });
 		manifestDirs.push(join(configured.manifestPath, "..")); readyChain("gate-session");
+		setQaState("gate-session", { phase: "BASELINE" });
 		const base: QaCaseRecord = { id: "gate-case", title: "CLI", goal: "run", given: ["case exists"], when: ["run"], then: ["observed"], acceptance_criteria: ["wrong AC"], surface: "curl", runner: [process.execPath, "-e", "process.exit(99)"], execution_cwd: "{artifacts}", native_files: [], reset_description: "reset" };
 		saveCase(root, base, home);
 		await expect(replayFromCli(["--case", "gate-case", "--story", "story", "--cls", "1", "--project", root, "--code-ref", "code", "--reset-confirmed", "reset"], { home })).rejects.toThrow(/surface/);
