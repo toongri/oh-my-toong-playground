@@ -1,3 +1,4 @@
+import { recordResource, releaseResource, unreleasedResources } from "@lib/session-resources";
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import {
 	mkdtempSync,
@@ -554,6 +555,42 @@ describe("goal state", () => {
 	});
 
 	// AC #5 — complete-wins
+	test("request-complete refuses while a recorded background resource is unreleased", () => {
+		setGoalState(S, {
+			phase: "planning",
+			outcome: "complete-wins test",
+			verification_surface: "v",
+		});
+		setSingleStory(S); // auto-confirms one story
+		setGoalState(S, { phase: "pursuing", completion_evidence_paths: [`${tmpDir}/done.md`] });
+		setVerdict(S, "APPROVE");
+		writeFileSync(
+			`${tmpDir}/ultragoal-verdict-${S}.json`,
+			JSON.stringify({
+				objective_verdict: "APPROVE",
+				stories: [{ id: "S1", verdict: "APPROVE", evidence_refs: ["done.md"] }],
+				verifier: "orchestrator",
+				at: "2026-06-12T00:00:00",
+			}),
+			"utf8",
+		);
+		setBudgetLimited(S);
+		expect(rawState().phase).toBe("budget_limited");
+
+		// APPROVE-backed request-complete must win over the prior budget_limited
+		writeCodeReviewArtifact(S, {
+			status: "COMPLETE",
+			findings: [],
+			reviewer: "code-reviewer",
+			at: "2026-06-12T00:00:00",
+		});
+		recordResource(S, { id: "emulator-5554", kind: "emulator", stop: "true" });
+		expect(requestComplete(S)).toBe(false);
+		expect(rawState().phase).not.toBe("complete");
+		releaseResource(S, "emulator-5554");
+		expect(requestComplete(S)).toBe(true);
+	});
+
 	test("request-complete wins over prior budget_limited when verdict APPROVE", () => {
 		setGoalState(S, {
 			phase: "planning",
@@ -1323,6 +1360,15 @@ describe("adoption: list-others + adopt (goal CLI)", () => {
 		const log = readFileSync(`${tmpDir}/adoption.log`, "utf8");
 		expect(log).toContain("ultragoal");
 		expect(log).toContain("A -> B");
+	});
+
+	test("adopt carries the source session's unreleased resources to the adopting session", () => {
+		writeLiveGoalState("A", "purpose P");
+		writePristineGoalState("B");
+		recordResource("A", { id: "emulator-5554", kind: "emulator", stop: "true" });
+		runCli("adopt --src A", { OMT_SESSION_ID: "B" });
+		expect(unreleasedResources("B").map((r) => r.id)).toEqual(["emulator-5554"]);
+		expect(existsSync(`${tmpDir}/session-resources-A.json`)).toBe(false);
 	});
 
 	// (F6-cli) adopt refused on ACTIVE non-pristine current; both files unchanged

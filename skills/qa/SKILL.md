@@ -293,7 +293,18 @@ Loop back to CHECK. Continue until an EXIT condition below fires.
 
 ### CLEANUP
 
-Kill every process and remove every artifact this cycle spawned (background servers, simulators/emulators started for ADVERSARIAL E2E, temp files) — regardless of whether the cycle ended in PASS or an EXIT condition. A leaked process corrupts the next run. **Never remove a path supplied through `--evidence-path`**, regardless of whether it came from a caller, a required-verification entry, or a self-authored scenario; completion re-probes every passing cell and baseline evidence path.
+Every background resource this cycle starts is recorded, together with the command that stops it:
+
+- **Simulator or emulator**: get it only through `acquire-device` (stage3-handson.md, Modality Setup). The command creates a device owned by this session and records it. A device that is already booted may belong to another concurrent session or to the user. Do not reuse it unless the user names it, and never record or stop it.
+- **Server or other process**: record it right after it starts:
+
+```
+bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts record-resource --id <pid> --kind server --stop 'kill <pid> 2>/dev/null; for _ in $(seq 50); do kill -0 <pid> 2>/dev/null || exit 0; sleep 0.2; done; exit 1'
+```
+
+The stop command succeeds only once the process is gone: it signals, then waits up to 10 s for the PID to disappear, and it also succeeds when the server already exited. A bare `kill <pid>` only sends a signal, and it fails on a server that already crashed.
+
+CLEANUP releases each recorded resource with `release-resource --id <id>`, which runs the stop command and records the release only when it exits 0. `complete` refuses while any resource is unreleased and names each one, whether the cycle ended in PASS or an EXIT condition. Remove temp files this cycle created as well. A leaked process corrupts the next run. **Never remove a path supplied through `--evidence-path`**, regardless of whether it came from a caller, a required-verification entry, or a self-authored scenario; completion re-probes every passing cell and baseline evidence path.
 
 ### STATE
 

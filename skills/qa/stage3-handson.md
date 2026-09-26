@@ -89,8 +89,9 @@ ADVERSARIAL E2E Result: SKIPPED (internal logic only / non-code change)
 
 The QA executor owns target selection and variable export; do not assume a caller has already set these values. Complete the applicable setup before invoking the first modality primitive:
 
-- **iOS Simulator**: discover a compatible target with `xcrun simctl list devices available`, assign its selected identifier (`IOS_UDID="<selected simulator UDID>"`), verify it is non-empty, then run `export IOS_UDID`. Only after this assignment/export may the executor run `xcrun simctl bootstatus "$IOS_UDID" -b`.
-- **Android Emulator**: discover an available AVD/device with `emulator -list-avds` and `adb devices`, assign the selected emulator serial (`ANDROID_SERIAL="emulator-<port>"`), verify it is non-empty, then run `export ANDROID_SERIAL`. Only after this assignment/export may the executor run `adb -s "$ANDROID_SERIAL" get-state` or other serial-scoped commands.
+- **iOS Simulator**: run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts acquire-device --platform ios --base "<device type from xcrun simctl list devicetypes>"`. It creates a simulator named for this session, records it, boots it, and prints `IOS_UDID=<udid>`. Run `export IOS_UDID=<udid>` with the printed value before any `$IOS_UDID` command.
+- **Android Emulator**: run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts acquire-device --platform android --base <AVD from emulator -list-avds>`. It starts a read-only instance of that AVD on a free port, tagged with this session, records it, waits for boot, and prints `ANDROID_SERIAL=emulator-<port>`. Run `export ANDROID_SERIAL=emulator-<port>` with the printed value before any serial-scoped `adb -s "$ANDROID_SERIAL"` command.
+- Other QA sessions run at the same time on this machine, so a simulator or emulator that is already booted may belong to one of them. Always acquire this cycle's own device. Use an existing device only when the user names it, and then neither record nor stop it.
 - **Per-AC evidence output**: before each AC that emits a report, resolve a fresh path using QA's Evidence Path Priority, assign it (`evidence_xml="<resolved evidence path>"`), verify its parent directory, then run `export evidence_xml`. Execute that AC with `$evidence_xml`; repeat resolution/export for every AC so one AC never inherits another AC's evidence path.
 
 ### Stop
@@ -118,10 +119,10 @@ The lifecycle steps above describe the general pattern. Each modality requires s
 | Modality | Start | Wait for ready | Stop |
 |----------|-------|----------------|------|
 | HTTP server | `run_in_background` with start command | health check endpoint, port listening, or startup log | `kill <pid>` of background process |
-| iOS Simulator | `xcrun simctl bootstatus "$IOS_UDID" -b` (idempotent) | bootstatus returns 0 | `xcrun simctl shutdown "$IOS_UDID"` (delete only when created per-workspace) |
-| Android Emulator | `emulator -avd <name> ... >/tmp/emulator-<port>.log 2>&1 &` | `adb -s "$ANDROID_SERIAL" get-state` + `adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed` with bounded `SECONDS` deadline | `adb -s "$ANDROID_SERIAL" emu kill` |
+| iOS Simulator | `qa-state.ts acquire-device --platform ios --base "<device type>"` | included in acquire-device (bootstatus) | `qa-state.ts release-resource --id "$IOS_UDID"` (shuts down and deletes the session simulator) |
+| Android Emulator | `qa-state.ts acquire-device --platform android --base <AVD>` | included in acquire-device (`sys.boot_completed`, bounded) | `qa-state.ts release-resource --id "$ANDROID_SERIAL"` (kills the emulator only if it still carries this session's tag) |
 
-Apply the corresponding row's primitives based on the change type detected in Step 3.1. Mobile modalities use Step 3.5 procedures, which expand on these primitives.
+Apply the corresponding row's primitives based on the change type detected in Step 3.1. Mobile modalities use Step 3.5 procedures, which expand on these primitives. Simulators and emulators are recorded by `acquire-device` itself. For an HTTP server, record it right after Start with `qa-state.ts record-resource --id <pid> --kind server --stop 'kill <pid> 2>/dev/null; for _ in $(seq 50); do kill -0 <pid> 2>/dev/null || exit 0; sleep 0.2; done; exit 1'` (the stop succeeds only once the PID is gone, see SKILL.md CLEANUP), and stop it with `qa-state.ts release-resource --id <pid>` (see SKILL.md CLEANUP).
 
 ---
 

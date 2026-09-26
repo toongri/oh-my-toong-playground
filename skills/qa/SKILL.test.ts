@@ -436,14 +436,14 @@ describe("reverse-reference: QA contracts do not depend on Prometheus links", ()
 		expect(lifecycleSection).toContain("$evidence_xml");
 	});
 
-	test("iOS executor discovers, assigns, and exports IOS_UDID before use", () => {
+	test("iOS executor acquires a session-owned simulator and exports IOS_UDID before use", () => {
 		const lifecycleStart = stage3Md.indexOf("## Step 3.2: Server / Application Lifecycle");
 		const lifecycleEnd = stage3Md.indexOf("## Step 3.3: API Verification", lifecycleStart + 1);
 		const lifecycleSection = stage3Md.slice(lifecycleStart, lifecycleEnd);
-		const discovery = lifecycleSection.indexOf("xcrun simctl list devices available");
+		const discovery = lifecycleSection.indexOf("acquire-device --platform ios");
 		const assignment = lifecycleSection.indexOf("IOS_UDID=");
 		const exportStep = lifecycleSection.indexOf("export IOS_UDID");
-		const firstUse = lifecycleSection.indexOf('xcrun simctl bootstatus "$IOS_UDID" -b');
+		const firstUse = lifecycleSection.indexOf('release-resource --id "$IOS_UDID"');
 
 		expect(discovery).toBeGreaterThanOrEqual(0);
 		expect(assignment).toBeGreaterThan(discovery);
@@ -451,14 +451,14 @@ describe("reverse-reference: QA contracts do not depend on Prometheus links", ()
 		expect(firstUse).toBeGreaterThan(exportStep);
 	});
 
-	test("Android executor discovers, assigns, and exports ANDROID_SERIAL before use", () => {
+	test("Android executor acquires a session-owned emulator and exports ANDROID_SERIAL before use", () => {
 		const lifecycleStart = stage3Md.indexOf("## Step 3.2: Server / Application Lifecycle");
 		const lifecycleEnd = stage3Md.indexOf("## Step 3.3: API Verification", lifecycleStart + 1);
 		const lifecycleSection = stage3Md.slice(lifecycleStart, lifecycleEnd);
-		const discovery = lifecycleSection.indexOf("adb devices");
+		const discovery = lifecycleSection.indexOf("acquire-device --platform android");
 		const assignment = lifecycleSection.indexOf("ANDROID_SERIAL=");
 		const exportStep = lifecycleSection.indexOf("export ANDROID_SERIAL");
-		const firstUse = lifecycleSection.indexOf('adb -s "$ANDROID_SERIAL" get-state');
+		const firstUse = lifecycleSection.indexOf('adb -s "$ANDROID_SERIAL"', exportStep);
 
 		expect(discovery).toBeGreaterThanOrEqual(0);
 		expect(assignment).toBeGreaterThan(discovery);

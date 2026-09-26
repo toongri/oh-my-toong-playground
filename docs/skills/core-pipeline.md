@@ -216,6 +216,8 @@ flowchart TB
 
 `ultragoal` pursuit의 `iteration`은 진전이 관찰되지 않은 Stop의 연속 횟수입니다. diff를 포함한 커밋이나 Story 상태 전환은 카운터를 `0`으로 리셋하고, 백그라운드 작업을 기다리는 Stop은 소비하지 않습니다. `max_iterations`(기본 10)에 도달하면 새 작업 없이 상태를 보존한 비완료 `budget_limited`로 소프트 정지합니다. 진행 중 작업을 비우고 completion gate를 확인한 뒤 AI가 `resume-pursuit --reason <다음 행동>`을 실행해 `pursuing`과 iteration 0을 복원할 수 있고, 이유는 기록됩니다. `blocked`는 별도이며 B1(실행 가능한 미완료 항목 없음) 또는 설정한 `blocked-stop` 조건에서만 발생합니다.
 
+**백그라운드 자원 게이트**: Story가 쓰는 시뮬레이터·에뮬레이터는 `acquire-device`로 세션 전용 기기를 만들어 자동 기록하고, 개발 서버는 `record-resource --id --kind --stop <정지 명령>`으로 기록합니다. 둘 다 `release-resource --id`로 정지합니다. 해제되지 않은 자원이 남아 있으면 `request-complete`가 자원 이름과 해제 명령을 나열하며 거부합니다.
+
 ---
 
 ## 6. 보조 스킬
