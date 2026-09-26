@@ -87,6 +87,14 @@ describe("qa case store", () => {
 		expect(existsSync(location)).toBe(false);
 	});
 
+	test("project-local child name이 ..로 시작해도 opt-in 없이 거부하고 디렉터리를 만들지 않는다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		const location = join(cwd, "..qa-cases");
+		expect(() => configureQaCaseStore(location, { cwd, home })).toThrow(/allow-project-storage/);
+		expect(existsSync(location)).toBe(false);
+	});
+
 	test("project 내부 symlink target도 opt-in 없이 거부한다", () => {
 		const cwd = repo();
 		const home = tempDir();
