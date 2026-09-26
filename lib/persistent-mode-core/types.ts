@@ -116,7 +116,7 @@ export interface PrometheusState {
  * the hook only consults this subset.
  *
  * `active === false` signals a state the pursuit branch does not re-enter:
- * terminal (complete/blocked) or a user-gated pause (budget_limited awaiting
+ * terminal (complete/blocked) or a parked pause (budget_limited awaiting
  * `resume-pursuit`, renewal-required awaiting `approve-review-dispatch-renewal`).
  * The active-folded helper `readGoalState` returns null for all of them,
  * so the goal pursuit branch never re-enters a finished or parked goal. However, the

@@ -368,19 +368,20 @@ describe("identity: frontmatter and state-namespace point at ultragoal, not goal
 });
 
 describe("review dispatch budget runtime contract", () => {
-	test("State CLI table distinguishes automatic claim from user-approved renewal", () => {
+	test("State CLI table distinguishes automatic claim from recorded renewal and user-only force-complete", () => {
 		expect(skillMd).toContain("`claim-review-dispatch` | PreToolUse hook only");
 		expect(skillMd).toContain("The initial cap is 5");
-		// The renewal row's authority is "user only", enforced by a PreToolUse guard on
-		// the orchestrator's Bash path — not "orchestrator, after the user approves",
-		// which left the approval to the orchestrator's own restraint.
+		// Renewal is orchestrator-run with a recorded reason: denying it did not stop the
+		// AI (it drove the terminal or routed around the gate) and left no record.
 		expect(skillMd).toContain(
-			"`approve-review-dispatch-renewal` | **user only** — a PreToolUse guard denies it on the orchestrator's Bash path",
+			"`approve-review-dispatch-renewal --reason <text>` | orchestrator — `--reason` required; recorded in `budget_extensions`",
 		);
 		expect(skillMd).toContain("Adds exactly 5");
 		expect(skillMd).toContain(
-			"when a valid code-review artifact exists, also records the SHA-256 of its exact raw bytes as the user-approved marker",
+			"when a valid code-review artifact exists, also records the SHA-256 of its exact raw bytes as the approved-artifact marker",
 		);
+		expect(skillMd).toContain("`force-complete --reason <text>` | **user only**");
+		expect(skillMd).toContain("**Overrides are recorded, not hidden.**");
 	});
 
 	test("completion reference pins the five-round Claude/Codex hook contract and exact renewal command", () => {
@@ -388,7 +389,7 @@ describe("review dispatch budget runtime contract", () => {
 		expect(completionGateMd).toContain("Claude and Codex `PreToolUse` hooks automatically run `claim-review-dispatch`");
 		expect(completionGateMd).toContain("The initial cap is 5");
 		expect(completionGateMd).toContain(
-		"bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts approve-review-dispatch-renewal",
+		"bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts approve-review-dispatch-renewal --reason",
 	);
 	});
 

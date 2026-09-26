@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { execFileSync, spawn } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 
 import { configureFeatureMap, getFeature, saveFeature, withFeatureMapReadLock } from "@lib/feature-map/index.ts";
 import {
@@ -283,7 +284,7 @@ test("feature lock 대기 중 feature가 바뀌면 provenance를 기록하지 �
 	const before = f.bytes();
 	mkdirSync(featureLock);
 	const script = `
-		import { recordStoryProvenance } from ${JSON.stringify(new URL("./qa-state.ts", import.meta.url).pathname)};
+		import { recordStoryProvenance } from ${JSON.stringify(fileURLToPath(new URL("./qa-state.ts", import.meta.url)))};
 		try {
 			recordStoryProvenance(${JSON.stringify(f.sid)}, "story", ${JSON.stringify(f.input())}, ${JSON.stringify({ cwd: f.cwd, home: f.home })});
 			console.log("OK");

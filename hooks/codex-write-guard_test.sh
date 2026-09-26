@@ -1471,63 +1471,23 @@ test_ac_dangerous_exec_command_rm_rf_denies() {
     fi
 }
 
-# User-authorized ultragoal-state command wiring: the Codex shim must route the
-# whole Bash command through the shared deny for resume-pursuit, including the
-# same indirection/order/whitespace shapes covered by the core tests.
-test_user_authorized_resume_pursuit_direct_denies() {
+# resume-pursuit is AI-runnable (recorded in budget_extensions); the Codex shim
+# must let it through. force-complete below stays denied.
+test_resume_pursuit_allowed_through_codex_shim() {
     new_sandbox
     local cmd out result=0
-    cmd="bun /Users/x/.claude/skills/ultragoal/scripts/ultragoal-state.ts resume-pursuit"
+    cmd="bun /Users/x/.claude/skills/ultragoal/scripts/ultragoal-state.ts resume-pursuit --reason x"
     out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
-    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-        echo "ASSERTION FAILED user-authorized-resume-pursuit-direct: expected deny, got '$out'"
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED resume-pursuit-allowed: expected allow, got '$out'"
         result=1
     fi
     rm -rf "$SBX"
     return "$result"
 }
 
-test_user_authorized_resume_pursuit_variable_indirection_denies() {
-    new_sandbox
-    local cmd out result=0
-    cmd='sub=resume-pursuit; bun /Users/x/.claude/skills/ultragoal/scripts/ultragoal-state.ts "$sub"'
-    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
-    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-        echo "ASSERTION FAILED user-authorized-resume-pursuit-variable-indirection: expected deny, got '$out'"
-        result=1
-    fi
-    rm -rf "$SBX"
-    return "$result"
-}
-
-test_user_authorized_resume_pursuit_reverse_order_denies() {
-    new_sandbox
-    local cmd out result=0
-    cmd='s=resume-pursuit && bun /Users/x/.claude/skills/ultragoal/scripts/ultragoal-state.ts "$s"'
-    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
-    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-        echo "ASSERTION FAILED user-authorized-resume-pursuit-reverse-order: expected deny, got '$out'"
-        result=1
-    fi
-    rm -rf "$SBX"
-    return "$result"
-}
-
-test_user_authorized_resume_pursuit_whitespace_run_denies() {
-    new_sandbox
-    local cmd out result=0
-    cmd='bun  /Users/x/.claude/skills/ultragoal/scripts/ultragoal-state.ts   resume-pursuit   --reason x'
-    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
-    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-        echo "ASSERTION FAILED user-authorized-resume-pursuit-whitespace-run: expected deny, got '$out'"
-        result=1
-    fi
-    rm -rf "$SBX"
-    return "$result"
-}
-
-# force-complete mirrors resume-pursuit's wiring test: same direct/indirection/
-# order/whitespace shapes must all deny through the Codex shim.
+# force-complete wiring: direct/indirection/order/whitespace shapes must all
+# deny through the Codex shim.
 test_user_authorized_force_complete_direct_denies() {
     new_sandbox
     local cmd out result=0
@@ -3084,25 +3044,21 @@ test_deep_interview_cli_path_allowed() {
     assert_allow "$out" "$rc" "deep-interview-cli-path"
 }
 
-test_qa_waive_denied_jq() {
+test_qa_waive_allowed_jq() {
     new_sandbox
     local out rc=0
     out=$(printf '{"tool_name":"Bash","tool_input":{"command":"bun skills/qa/scripts/qa-state.ts waive --story s1 --cls 1 --reason blocked"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook) || rc=$?
     rm -rf "$SBX"
-    if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then return 0; fi
-    echo "ASSERTION FAILED qa-waive-jq: rc=$rc out='$out'"
-    return 1
+    assert_allow "$out" "$rc" "qa-waive-jq"
 }
 
-test_qa_waive_denied_nojq() {
+test_qa_waive_allowed_nojq() {
     new_sandbox
     local out rc=0
     new_jq_less_bin
     out=$(printf '{"tool_name":"Bash","tool_input":{"command":"bun skills/qa/scripts/qa-state.ts waive --story s1 --cls 1 --reason blocked"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook_nojq) || rc=$?
     rm -rf "$SBX"
-    if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then return 0; fi
-    echo "ASSERTION FAILED qa-waive-nojq: rc=$rc out='$out'"
-    return 1
+    assert_allow "$out" "$rc" "qa-waive-nojq"
 }
 
 # =============================================================================
@@ -3394,10 +3350,7 @@ main() {
     run_test test_ac_dangerous_rm_rf_denies
     run_test test_ac_dangerous_git_push_force_denies
     run_test test_ac_dangerous_exec_command_rm_rf_denies
-    run_test test_user_authorized_resume_pursuit_direct_denies
-    run_test test_user_authorized_resume_pursuit_variable_indirection_denies
-    run_test test_user_authorized_resume_pursuit_reverse_order_denies
-    run_test test_user_authorized_resume_pursuit_whitespace_run_denies
+    run_test test_resume_pursuit_allowed_through_codex_shim
     run_test test_user_authorized_force_complete_direct_denies
     run_test test_user_authorized_force_complete_variable_indirection_denies
     run_test test_user_authorized_force_complete_reverse_order_denies
@@ -3470,8 +3423,8 @@ main() {
     run_test test_prometheus_cli_path_allowed
     run_test test_deep_interview_state_direct_write_denied
     run_test test_deep_interview_cli_path_allowed
-    run_test test_qa_waive_denied_jq
-    run_test test_qa_waive_denied_nojq
+    run_test test_qa_waive_allowed_jq
+    run_test test_qa_waive_allowed_nojq
     run_test test_codereview_shell_command_mv_source_denies
     run_test test_codereview_shell_command_cp_source_allows
     run_test test_ledger_shell_command_mv_source_denies

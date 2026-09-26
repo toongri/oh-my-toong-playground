@@ -152,7 +152,7 @@ Questions have no count limit and resolve prerequisite decisions first. Each ans
 #### Iteration budget, no-progress, and resume
 
 - During pursuit, `iteration` counts consecutive Stops with no observed progress. A diff-carrying commit or Story status transition resets it to `0`; Stops that wait for background work are not counted.
-- Reaching `max_iterations` (default 10) soft-stops without dispatching new work as non-complete `budget_limited`, preserving state. After in-flight work drains and the completion gate is checked, only the user may run `resume-pursuit` to restore `pursuing` with `iteration=0`.
+- Reaching `max_iterations` (default 10) soft-stops without dispatching new work as non-complete `budget_limited`, preserving state. After in-flight work drains and the completion gate is checked, the AI may run `resume-pursuit --reason <next action>` to restore `pursuing` with `iteration=0`; the reason is recorded.
 - `blocked` is separate: it is reported only for B1 (no actionable incomplete work) or when the configured `blocked-stop` predicate is met.
 
 #### Final review result contract
@@ -228,7 +228,7 @@ With a plan ready, `/ultragoal` sequentially dispatches its stories to `/sisyphu
 5. **Commit**: on APPROVE/COMMENT, mnemosyne is dispatched to commit that task's changes
 6. **Iteration**: Continues until all stories and tasks pass review
 
-`ultragoal`'s `iteration` counts consecutive no-progress Stops and resets to 0 on a diff-carrying commit or Story status transition; waiting for background work does not consume it. At `max_iterations` (default 10), it soft-stops as non-complete `budget_limited`, preserves state, and dispatches no new work. After in-flight work drains and the completion gate is checked, only the user-run `resume-pursuit` restores `pursuing` at iteration 0. `blocked` is separate and occurs only for B1 (no actionable incomplete work) or the configured `blocked-stop` predicate.
+`ultragoal`'s `iteration` counts consecutive no-progress Stops and resets to 0 on a diff-carrying commit or Story status transition; waiting for background work does not consume it. At `max_iterations` (default 10), it soft-stops as non-complete `budget_limited`, preserves state, and dispatches no new work. After in-flight work drains and the completion gate is checked, the AI may run `resume-pursuit --reason` to restore `pursuing` at iteration 0; the reason is recorded. `blocked` is separate and occurs only for B1 (no actionable incomplete work) or the configured `blocked-stop` predicate.
 
 ---
 

@@ -1320,8 +1320,8 @@ function requiredArg(args: Record<string, string | boolean>, name: string): stri
 /**
  * Single source of truth for this CLI's command roster: every subcommand `main()`
  * dispatches, tagged with who may run it. `help` prints this via renderHelp() so the
- * AI can see, before acting, which commands it may run itself versus which are
- * user-only (`waive` is denied on the AI's Bash path — see hooks/write-guard-core.sh).
+ * AI can see, before acting, which commands it may run itself. Every qa command is
+ * AI-runnable; `waive` records its reason, and the report shows each waive at the top.
  */
 const ROSTER: CliCommand[] = [
 	{ name: "set", authority: "ai", effect: "writes phase/target state" },
@@ -1350,8 +1350,8 @@ const ROSTER: CliCommand[] = [
 	{ name: "set-acceptance", authority: "ai", effect: "records the acceptance criteria array" },
 	{
 		name: "waive",
-		authority: "user",
-		effect: "waives one cell's requirement with a reason",
+		authority: "ai",
+		effect: "waives one cell's requirement with a recorded reason; the report lists every waive above the findings",
 	},
 	{ name: "declare-inert", authority: "ai", effect: "declares a no-risk-surface cycle" },
 	{
@@ -1490,6 +1490,9 @@ function main(): void {
 					sub: str(args["sub"]),
 					reason: requiredArg(args, "reason"),
 				});
+				process.stdout.write(
+					"waived: the cell no longer blocks APPROVE. The reason is recorded, and the report lists this waive in a banner above the findings. Name it in your final message to the user.\n",
+				);
 			} else if (subcommand === "declare-inert") {
 				declareInert(sessionId, requiredArg(args, "reason"));
 			} else if (subcommand === "complete") {

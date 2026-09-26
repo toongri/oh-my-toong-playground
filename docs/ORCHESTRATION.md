@@ -152,7 +152,7 @@ flowchart TD
 #### 반복 예산·진전 없음·재개
 
 - pursuit 중 `iteration`은 진전이 관찰되지 않은 Stop의 연속 횟수입니다. diff를 포함한 커밋이나 Story 상태 전환이 발생하면 `0`으로 리셋되며, 백그라운드 작업을 기다리는 Stop은 집계하지 않습니다.
-- `max_iterations`(기본 10)에 도달하면 새 작업을 디스패치하지 않고 상태를 보존한 비완료 `budget_limited`로 소프트 정지합니다. 진행 중 작업을 비운 뒤 completion gate를 확인하고, 사용자만 `resume-pursuit`를 실행해 `pursuing`과 `iteration=0`을 복원할 수 있습니다.
+- `max_iterations`(기본 10)에 도달하면 새 작업을 디스패치하지 않고 상태를 보존한 비완료 `budget_limited`로 소프트 정지합니다. 진행 중 작업을 비운 뒤 completion gate를 확인하고, AI가 `resume-pursuit --reason <다음 행동>`을 실행해 `pursuing`과 `iteration=0`을 복원할 수 있고, 이유는 기록됩니다.
 - `blocked`는 별도 경로입니다. 실행 가능한 미완료 항목이 없는 B1이거나 설정한 `blocked-stop` 조건이 충족될 때만 보고합니다.
 
 #### 최종 리뷰 결과 계약
@@ -228,7 +228,7 @@ Consumer는 먼저 scope를 판정합니다. `OUT_OF_SCOPE`는 비차단 NOTE로
 5. **커밋**: APPROVE/COMMENT가 나오면 mnemosyne을 디스패치해 해당 태스크의 변경을 커밋
 6. **반복**: 모든 스토리와 태스크가 리뷰를 통과할 때까지 계속
 
-`ultragoal`의 `iteration`은 진전 없는 Stop의 연속 횟수이며, diff-carrying commit 또는 Story 상태 전환에서 0으로 돌아갑니다. 백그라운드 작업 대기는 소비하지 않습니다. `max_iterations`(기본 10)에 도달하면 상태를 보존한 비완료 `budget_limited`로 소프트 정지하고 새 작업을 디스패치하지 않습니다. 진행 중 작업과 completion gate를 확인한 뒤 사용자만 `resume-pursuit`로 `pursuing` 및 iteration 0을 복원합니다. `blocked`는 B1(실행 가능한 미완료 항목 없음) 또는 설정한 `blocked-stop`일 때만 별도로 발생합니다.
+`ultragoal`의 `iteration`은 진전 없는 Stop의 연속 횟수이며, diff-carrying commit 또는 Story 상태 전환에서 0으로 돌아갑니다. 백그라운드 작업 대기는 소비하지 않습니다. `max_iterations`(기본 10)에 도달하면 상태를 보존한 비완료 `budget_limited`로 소프트 정지하고 새 작업을 디스패치하지 않습니다. 진행 중 작업과 completion gate를 확인한 뒤 AI가 `resume-pursuit --reason`으로 `pursuing` 및 iteration 0을 복원하며, 이유는 기록됩니다. `blocked`는 B1(실행 가능한 미완료 항목 없음) 또는 설정한 `blocked-stop`일 때만 별도로 발생합니다.
 
 ---
 

@@ -72,11 +72,11 @@ review_dispatch_gate_core_run() {
             # A pursuit parked at renewal-required has ALREADY exhausted its review
             # budget. The folded `get` reads active:false as null, so the pursuing
             # gate above never reaches claim-review-dispatch and the dispatch would
-            # slip through unguarded. Keep denying here until the user renews
-            # (→ pursuing) or force-completes (→ complete). Read-only — no claim, so
+            # slip through unguarded. Keep denying here until a renewal
+            # (→ pursuing) or a user force-complete (→ complete). Read-only — no claim, so
             # the exhausted counters stay put.
             if jq -e 'type == "object" and .phase == "renewal-required"' "${omt_dir}/ultragoal-state-${sid}.json" > /dev/null 2>&1; then
-                _rdg_deny '코드 리뷰 예산이 소진되어 pursuit가 renewal-required 상태입니다(정지 허용, no-progress 미집계). 사용자에게 계속할지 마무리할지 물으세요. 계속하려면 approve-review-dispatch-renewal 명령어를, 강제로 마무리하려면 force-complete 명령어를 제시하고 사용자가 직접 실행하도록 요청하세요 (두 명령 모두 AI 실행은 차단됩니다).'
+                _rdg_deny '코드 리뷰 예산(리뷰 dispatch 최대 횟수)이 이미 소진되어 pursuit가 renewal-required 상태입니다. 이번 리뷰 dispatch는 실행되지 않았습니다. 판단 기준: 직전 리뷰 이후 코드가 바뀌어 새 리뷰가 꼭 필요하면 approve-review-dispatch-renewal --reason \"<새 리뷰가 필요한 이유>\"를 직접 실행하세요. 예산이 5 늘고 pursuing으로 돌아가며, 사유는 state의 budget_extensions에 남아 완료 보고에 나옵니다. 그다음 리뷰를 다시 dispatch하세요. 리뷰를 더 돌려도 진전이 없다고 판단되면 사용자에게 상황과 force-complete 명령어 전문을 보여 주고 턴을 끝내세요(force-complete는 사용자만 실행합니다).'
                 return 0
             fi
             if ! jq -e 'type == "object" and (.active == false or .phase == "planning" or .phase == "renewal-required" or .phase == "budget_limited" or .phase == "blocked" or .phase == "complete")' "${omt_dir}/ultragoal-state-${sid}.json" > /dev/null 2>&1; then
@@ -101,7 +101,7 @@ review_dispatch_gate_core_run() {
     reason=$(printf '%s' "$claim_out" | jq -r '.reason // "failure"' 2>/dev/null) || reason="failure"
     case "$reason" in
         budget_exhausted)
-            _rdg_deny '코드 리뷰 예산이 소진되어 pursuit가 renewal-required 상태로 전환됐습니다(정지 허용, no-progress 미집계). 사용자에게 계속할지 마무리할지 물으세요. 계속하려면 approve-review-dispatch-renewal 명령어를, 강제로 마무리하려면 force-complete 명령어를 제시하고 사용자가 직접 실행하도록 요청하세요 (두 명령 모두 AI 실행은 차단됩니다).'
+            _rdg_deny '코드 리뷰 예산(리뷰 dispatch 최대 횟수)이 방금 소진되어 pursuit가 renewal-required 상태로 바뀌었습니다. 이번 리뷰 dispatch는 실행되지 않았습니다. 판단 기준: 직전 리뷰 이후 코드가 바뀌어 새 리뷰가 꼭 필요하면 approve-review-dispatch-renewal --reason \"<새 리뷰가 필요한 이유>\"를 직접 실행하세요. 예산이 5 늘고 pursuing으로 돌아가며, 사유는 state의 budget_extensions에 남아 완료 보고에 나옵니다. 그다음 리뷰를 다시 dispatch하세요. 리뷰를 더 돌려도 진전이 없다고 판단되면 사용자에게 상황과 force-complete 명령어 전문을 보여 주고 턴을 끝내세요(force-complete는 사용자만 실행합니다).'
             ;;
         completion_eligible)
             _rdg_deny '현재 코드 리뷰는 완료 가능 상태입니다. 추가 리뷰를 예약하지 말고 get-review-result로 최종 결과를 확인한 뒤 request-complete를 진행하세요.'

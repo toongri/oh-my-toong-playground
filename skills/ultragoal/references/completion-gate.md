@@ -137,47 +137,47 @@ An old artifact without this contract must be re-reviewed. The orchestrator neve
 
 **Red flags:** a repair list containing an excluded item; a story added from review feedback alone; a changed non-goal to obtain approval; completing with an unresolved in-scope HIGH or MEDIUM item. Stop that action and apply admission again.
 
-### Wrong blocking finding: propose a dismissal
+### Wrong blocking finding: dismiss it with a quoted refutation
 
-An admitted `IN_SCOPE` + `CONFIRMED` HIGH finding blocks completion structurally. When such a finding is **wrong**, propose a user-authorized dismissal with a quoted refutation. Dismissal applies only to a confirmed in-scope blocking HIGH finding; it never expands to MEDIUM or other priorities.
+An admitted `IN_SCOPE` + `CONFIRMED` HIGH finding blocks completion structurally. When such a finding is **wrong**, dismiss it with a quoted refutation. Dismissal applies only to a confirmed in-scope blocking HIGH finding; it never expands to MEDIUM or other priorities.
 
-**Trigger — when you can quote the refutation.** After reading a blocking HIGH finding, go to the cited `file:line` and look for the line, guard, or invariant that makes its failure scenario unreachable. If you can quote one, propose a dismissal on your next turn. If you cannot quote one, keep its scope and priority routing: confirmed HIGH items go to sisyphus; MEDIUM items follow the bounded COMMENT repair; LOW items remain notes. Scope disagreement is resolved by the independent reviewer against the frozen contract, not by repairing excluded work. Disagreeing with a finding you cannot refute in a quoted line is not a trigger.
+**Trigger — when you can quote the refutation.** After reading a blocking HIGH finding, go to the cited `file:line` and look for the line, guard, or invariant that makes its failure scenario unreachable. If you can quote one, dismiss it. If you cannot quote one, keep its scope and priority routing: confirmed HIGH items go to sisyphus; MEDIUM items follow the bounded COMMENT repair; LOW items remain notes. Scope disagreement is resolved by the independent reviewer against the frozen contract, not by repairing excluded work. Disagreeing with a finding you cannot refute in a quoted line is not a trigger.
 
-**The proposal carries four parts, in this order:**
+**Your report of the dismissal carries four parts, in this order:**
 
 1. The finding as the reviewer stated it — its `ref`, its `class`, and its claim in one line.
 2. The refuting quote — the exact source line, with its own `file:line`.
 3. Why that line makes the reviewer's failure scenario unreachable.
-4. The exact command for the **user** to run — in their terminal, or by prefixing it with `!` in the prompt:
+4. The exact command you ran:
 
 ```
 bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts dismiss-review-finding \
   --ref '<file:line>' --class <correctness|regression|cleanup|requirement-gap> --rationale '<the refutation from part 3>'
 ```
 
-Then stop and wait. **You never run this command yourself** — a `PreToolUse` guard denies it on your Bash path on both Claude and Codex, so the authorization is structural rather than a rule you are trusted to follow. The same guard covers `approve-review-dispatch-renewal` for the same reason: both let this loop clear its own completion gate.
+Run it yourself, then continue. The rationale is recorded, and `request-complete` lists the dismissal so it reaches the final report with its four parts.
 
 **Scope of one dismissal.** It removes exactly one finding from the blocking set — remaining `CONFIRMED` blocking findings still block, and each needs its own proposal. It is pinned to the current artifact's exact bytes, so it lapses when the next review round writes a new artifact; a genuine defect that later appears at the same `file:line` blocks normally.
 
-The command refuses a missing or empty `--rationale`, and any `--ref` with no matching admitted `IN_SCOPE` + `CONFIRMED` finding in the current artifact — so a dismissal cannot be issued ahead of the finding it answers. PLAUSIBLE, OUT_OF_SCOPE, and UNKNOWN findings cannot be dismissed. It also refuses when the artifact holds **more than one** admitted `IN_SCOPE` finding at that same `ref` and `class`: a dismissal cannot tell them apart, so clearing one would clear the other too. Report both findings to the user instead; the block stands until the review round that produced them is superseded.
+The command refuses a missing or empty `--rationale`, and any `--ref` with no matching admitted `IN_SCOPE` + `CONFIRMED` finding in the current artifact — so a dismissal cannot be issued ahead of the finding it answers. PLAUSIBLE, OUT_OF_SCOPE, and UNKNOWN findings cannot be dismissed. It also refuses when the artifact holds **more than one** admitted `IN_SCOPE` finding at that same `ref` and `class`: a dismissal cannot tell them apart, so clearing one would clear the other too. Report both findings to the user; the block stands until the review round that produced them is superseded.
 
-**After the dismissal.** Re-run the completion check. If no blocking finding remains, proceed to `request-complete`; the dismissed finding is still reported in the completion summary, with its rationale. If the user declines the proposal, retain the finding and its scope/validity routing. Declining dismissal does not authorize a non-goal or turn a plausible claim into a confirmed defect.
+**After the dismissal.** Re-run the completion check. If no blocking finding remains, proceed to `request-complete`; the dismissed finding is still reported in the completion summary, with its rationale. If the user rejects a dismissal, the finding is blocking again: route it by scope and validity, and the next review round supersedes the dismissal. A rejection does not authorize a non-goal or turn a plausible claim into a confirmed defect.
 
 ### Five-round review dispatch budget
 
 Before an active `phase=pursuing` code-reviewer dispatch, the Claude and Codex `PreToolUse` hooks automatically run `claim-review-dispatch`; an allowed claim persists `used += 1` before dispatch. The initial cap is 5. Per-story dispatches, non-reviewer dispatches, and any non-pursuing state are unaffected. The hooks do not change `code-review` behavior; they only decide whether the already-planned code-reviewer dispatch may proceed.
 
-At the cap, `claim-review-dispatch` denies the next dispatch AND parks the pursuit in `phase=renewal-required` (`active=false`) — a named gate, not the `pursuing` state. This parking is the fix for the old wedge: from `pursuing`, every prose report-and-stop while waiting on the user counted as a no-progress Stop, so the loop spun to the `max_iterations` cap (`budget_limited`) and demanded a SECOND user-only command just to undo a watchdog that never should have fired. In `renewal-required` the Stop hook allows the turn to end and counts nothing. Present the user the two exits — continue or finish — and let the turn end; do not narrate in a loop.
+At the cap, `claim-review-dispatch` denies the next dispatch AND parks the pursuit in `phase=renewal-required` (`active=false`) — a named gate, not the `pursuing` state. This parking is the fix for the old wedge: from `pursuing`, every prose report-and-stop while waiting on the user counted as a no-progress Stop, so the loop spun to the `max_iterations` cap (`budget_limited`) and demanded a SECOND user-only command just to undo a watchdog that never should have fired. In `renewal-required` the Stop hook allows the turn to end and counts nothing. Decide: if a fresh review is owed, renew and continue; if more rounds will not converge, show the user the `force-complete` command and end the turn. Do not narrate in a loop.
 
-Renewal is for another REQUEST_CHANGES round or an absent/failed reviewer submission; it never turns COMMENT or APPROVE into a terminal re-review. "마무리" cannot waive an unresolved item; when the gate fails it means stop incomplete. To continue, the orchestrator presents this command and the **user** runs it — in their terminal, or by prefixing it with `!` in the prompt:
+Renewal is for another REQUEST_CHANGES round or an absent/failed reviewer submission; it never turns COMMENT or APPROVE into a terminal re-review. "마무리" cannot waive an unresolved item; when the gate fails it means stop incomplete. To continue, run this yourself with the reason another round is needed:
 
 ```
-bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts approve-review-dispatch-renewal
+bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts approve-review-dispatch-renewal --reason '<why another review round is needed>'
 ```
 
-Renewal adds `cap += 5` AND restores `phase=pursuing`/`active=true`, so the loop resumes and can run the review the renewal was granted for. To finish instead, the user runs `force-complete` (see below). A `PreToolUse` guard denies both commands on the orchestrator's own Bash path on both platforms, so "only after explicit user approval" is enforced by the harness rather than by the orchestrator's restraint. The hook alone calls `claim-review-dispatch`; the orchestrator must never edit the counters itself.
+Renewal adds `cap += 5` AND restores `phase=pursuing`/`active=true`, so the loop resumes and can run the review the renewal was granted for. The reason is recorded in `budget_extensions`, and `request-complete` lists it for the final report. To finish instead, the user runs `force-complete` (see below) — the only command here a `PreToolUse` guard denies on your Bash path. The hook alone calls `claim-review-dispatch`; the orchestrator must never edit the counters itself.
 
-The routing table above applies at every round. A reviewer-only retry consumes the same budget as a post-repair review; a retry never becomes a repair assignment merely because the budget is low. COMMENT and APPROVE deny any terminal re-review request, including after user budget renewal.
+The routing table above applies at every round. A reviewer-only retry consumes the same budget as a post-repair review; a retry never becomes a repair assignment merely because the budget is low. COMMENT and APPROVE deny any terminal re-review request, including after a renewal.
 
 **Completion fires ONLY on an objective-lane APPROVE AND an objective-scope Evidence Audit pass.** A **COMMENT verdict is NOT sufficient** for completion — `request-complete` requires `objective_verdict=APPROVE`. COMMENT is a soft pass: no blocking issue but non-blocking notes remain; address those notes and re-verify until APPROVE. **On an APPROVE,** the Evidence Audit applies the verify-the-verifier shape to your own check: confirm the verdict HOLDS UP by reading the evidence you collected (does it demonstrate the verification surface was met?). If the evidence is missing or does not demonstrate the verification surface, it is an Evidence Gap → continue pursuit, do not complete.
 
@@ -205,7 +205,7 @@ Use stdin (`-`) with a **quoted** heredoc here too: the snapshot echoes the regi
 
 **Omitting `--codex-goal-json` when it is required is a refusal, not a silent pass.** Once `set --codex-goal-objective` has armed the cross-check, a missing, unparseable, or non-matching snapshot leaves `phase` at `pursuing` — the safe, never-false-complete direction — and `request-complete`'s own refusal message names this condition, so read that message rather than retrying the same call.
 
-Evidence is recorded BEFORE the verdict flips so the full gate (verdict + evidence + per-story artifact checks) is satisfiable the moment `objective_verdict=APPROVE` appears. `request-complete` is the ONLY path to `phase=complete` — the hook layer never writes `complete` (the no-progress cap reached → `budget_limited` block). A `budget_limited` state does not bar `request-complete` in the same turn: drain any in-flight delegated work, harvest and commit its results, then run the completion gate; completion wins over a prior `budget_limited` when every gate passes. Do not dispatch new stories or interrupt running executors during this drain. If the gate is refused, report the blocker honestly and stop; the user can recover the preserved pursuit by running `bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts resume-pursuit`, which restores `pursuing` and resets the no-progress counter to `0`.
+Evidence is recorded BEFORE the verdict flips so the full gate (verdict + evidence + per-story artifact checks) is satisfiable the moment `objective_verdict=APPROVE` appears. `request-complete` is the ONLY path to `phase=complete` — the hook layer never writes `complete` (the no-progress cap reached → `budget_limited` block). A `budget_limited` state does not bar `request-complete` in the same turn: drain any in-flight delegated work, harvest and commit its results, then run the completion gate; completion wins over a prior `budget_limited` when every gate passes. Do not dispatch new stories or interrupt running executors during this drain. If the gate is refused and you can name the next concrete action that will produce progress, run `bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts resume-pursuit --reason '<that action>'`, which restores `pursuing`, resets the no-progress counter to `0`, and records the reason. Otherwise report the blocker honestly and stop.
 
 APPROVE alone does NOT leave the ultragoal pursuit pursuing/active — the `request-complete` handoff is what transitions to terminal `complete` (and it is structurally gated on completion-evidence, so a write that never reached the gate cannot false-complete).
 
@@ -233,7 +233,7 @@ Every non-APPROVE verdict drives a concrete action within the frozen scope:
 
 ### Blocked-stop
 
-Pursuit stops as blocked (non-complete) ONLY on a decidable, point-in-time predicate. The no-progress cap is a separate soft-stop: consecutive Stops without a diff-carrying commit or story transition accumulate toward `max_iterations`, while observed progress resets the counter; reaching the cap yields `budget_limited`, preserves state, and requires user-run `resume-pursuit` after any drain. Exactly two conditions trip blocked:
+Pursuit stops as blocked (non-complete) ONLY on a decidable, point-in-time predicate. The no-progress cap is a separate soft-stop: consecutive Stops without a diff-carrying commit or story transition accumulate toward `max_iterations`, while observed progress resets the counter; reaching the cap yields `budget_limited`, preserves state, and resumes only through `resume-pursuit --reason` after any drain. Exactly two conditions trip blocked:
 
 - **B1** — the objective self-check names NO actionable incomplete work item while the objective is still unmet (no valid progress path: nothing to re-dispatch and the verification surface is not satisfied).
 - **B2** — the captured **blocked-stop** slot's objective-specific condition is met.
@@ -248,4 +248,4 @@ When a pursuit is genuinely stuck — `blocked`, `budget_limited` with no useful
 bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts force-complete --reason '<why this is being force-completed>'
 ```
 
-**You never run this command yourself** — the same `PreToolUse` guard that denies `resume-pursuit`, `dismiss-review-finding`, and `approve-review-dispatch-renewal` on your Bash path also denies `force-complete`, so this authorization is structural, not a rule you are trusted to follow. If you believe force-completion is warranted, report why and give the user the command to run; do not propose working around the gate any other way. It bypasses every gate this document describes — the objective self-check, the per-story artifact checks, and the code-review lane — by design, so it is not a substitute for actually satisfying them when satisfying them is possible.
+**You never run this command yourself** — it is the one ultragoal command a `PreToolUse` guard denies on your Bash path, because only the user decides to finish without passing the gates. If you believe force-completion is warranted: show the user why and the exact command, run `await-user` if the pursuit is still pursuing, and end the turn. Never reach `complete` another way (computer use, a state-file edit, another shell). It bypasses every gate this document describes — the objective self-check, the per-story artifact checks, and the code-review lane — by design, so it is not a substitute for actually satisfying them when satisfying them is possible.

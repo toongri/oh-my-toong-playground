@@ -20,7 +20,7 @@ describe("renderHelp", () => {
 		const out = renderHelp("my-cli", ROSTER);
 		expect(out).toContain("AI-USABLE");
 		expect(out).toContain(
-			"USER-ONLY (AI must NOT run these — present the command and ask the user to run it)",
+			"USER-ONLY (AI must NOT run these — show the user the full command and your reason, then end the turn and wait)",
 		);
 		expect(out).toContain("SYSTEM-ONLY (internal; not for manual use)");
 		expect(out).toContain("HOOK-ONLY (invoked by hooks, not manually)");
@@ -42,7 +42,7 @@ describe("renderHelp", () => {
 		const userSectionStart = out.indexOf("USER-ONLY");
 		const nextSectionStart = out.indexOf("SYSTEM-ONLY");
 		const userSection = out.slice(userSectionStart, nextSectionStart);
-		expect(userSection).toContain("present the command and ask the user to run it");
+		expect(userSection).toContain("show the user the full command and your reason, then end the turn and wait");
 		expect(userSection).toContain("force-complete — forces completion");
 		expect(userSection).toContain("resume-pursuit — resumes a paused pursuit");
 	});

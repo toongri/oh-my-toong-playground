@@ -848,11 +848,11 @@ hg_bash_json() {
     printf '%s' "$1" | jq -Rs '{tool_name: "Bash", tool_input: {command: .}}'
 }
 
-test_user_authorized_resume_pursuit_reaches_claude_shared_guard() {
+test_resume_pursuit_allowed_through_claude_shared_guard() {
     local out
-    out=$(printf '%s' "$(hg_bash_json 'bun /Users/x/.claude/skills/ultragoal/scripts/ultragoal-state.ts resume-pursuit')" \
+    out=$(printf '%s' "$(hg_bash_json 'bun /Users/x/.claude/skills/ultragoal/scripts/ultragoal-state.ts resume-pursuit --reason x')" \
         | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
-    hg_is_deny "$out" || { echo "ASSERTION FAILED Claude resume-pursuit wiring: expected shared deny. Got: $out"; return 1; }
+    hg_is_allow "$out" || { echo "ASSERTION FAILED Claude resume-pursuit wiring: expected allow. Got: $out"; return 1; }
 }
 
 test_user_authorized_force_complete_reaches_claude_shared_guard() {
@@ -2062,7 +2062,7 @@ main() {
     run_test test_wg_s1_quoted_paren_in_substitution_ledger_rm_denied
     run_test test_wg_s2_substitution_closing_paren_adjacent_ledger_rm_denied
     run_test test_wg_s3_substitution_nonledger_allows
-    run_test test_user_authorized_resume_pursuit_reaches_claude_shared_guard
+    run_test test_resume_pursuit_allowed_through_claude_shared_guard
     run_test test_user_authorized_force_complete_reaches_claude_shared_guard
 
     # Defect 5 -- Claude<->Codex ledger-guard parity (double-quote masking)

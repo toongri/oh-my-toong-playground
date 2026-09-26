@@ -55,11 +55,11 @@ _wg_core_codereview_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUs
 # Deny JSON for write_guard_core_check_user_authorized_command below. A THIRD
 # distinct sentence: this is not "wrong writer" but "wrong actor entirely" --
 # the command is legitimate, and only the human may issue it. The reason text
-# must name the user-run route, because an AI told only "denied" has no next
-# move and will either retry the same call or abandon a request the user
-# actually made. Single source of truth so both platform shims emit
-# byte-identical deny text.
-_wg_core_user_authorized_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: 이 명령은 사용자만 실행할 수 있습니다. AI는 실행하지 말고, 근거와 함께 명령어 전문을 제시한 뒤 사용자가 직접 실행하도록 요청하세요 (터미널에서 직접, 또는 프롬프트에 ! 를 붙여서)."}}'
+# explains what the command does, why the human owns it, and the exact next
+# move (show the command, park via await-user, end the turn). An AI told only
+# "denied" has no next move and routes around the gate instead. Single source
+# of truth so both platform shims emit byte-identical deny text.
+_wg_core_user_authorized_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: force-complete는 사용자만 실행할 수 있습니다. 이 명령은 verdict·스토리·코드 리뷰·완료 근거 게이트를 모두 건너뛰고 pursuit를 complete로 만듭니다. 그래서 끝낼지 말지는 사용자가 정합니다. 다음 순서로 진행하세요: (1) 게이트를 통과하지 못한 이유와 명령어 전문(--reason 포함)을 사용자에게 보여 주세요. (2) pursuit가 pursuing 상태면 await-user를 실행하세요. (3) 턴을 끝내고 사용자의 답을 기다리세요. 다른 경로(다른 셸, 터미널 입력, 상태 파일 수정)로 같은 결과를 만들지 마세요. 사용자는 터미널에서 직접, 또는 프롬프트 앞에 ! 를 붙여 실행합니다."}}'
 
 # Deny JSON for the reviewer-only submit-review publisher route. The publisher
 # hides artifact writes, so this gate protects the command's caller identity.
@@ -300,57 +300,37 @@ write_guard_core_check_dangerous_command() {
 }
 
 # write_guard_core_check_user_authorized_command <command-segment>
-# Denies the four ultragoal-state subcommands whose authority row reads
-# "orchestrator, only after explicit user approval":
-#   approve-review-dispatch-renewal -- extends the code-review dispatch budget
-#   dismiss-review-finding          -- removes a blocking finding from the gate
-#   resume-pursuit                  -- resumes a previously paused pursuit
-#   force-complete                  -- forces phase=complete, bypassing every gate
-# All four let the loop clear its own completion gate, so leaving them to prose
-# ("run this only after the user approves") makes the authorization
-# vigilance-based -- the exact property ultragoal/SKILL.md rejects for its
-# other gates. Denying the AI's Bash path makes it structural instead: the
-# command reaches the CLI only when the human runs it.
+# Denies the one ultragoal-state subcommand only the human may run:
+#   force-complete -- forces phase=complete, bypassing every completion gate
+# The other recovery commands (approve-review-dispatch-renewal, resume-pursuit,
+# dismiss-review-finding, qa waive) are AI-runnable: each requires a reason and
+# is recorded in state, so the final report shows it. Blocking them did not
+# stop the AI -- it drove the terminal through computer use or routed around
+# the gate -- and it left no record of the override.
 #
-# Unlike rm -rf / git push --force, Claude has NO native permissions.deny
-# entry for these, so this hook is the only layer on BOTH platforms -- not a
-# Codex-side emulation of a declarative rule that already exists on Claude.
+# Claude has NO native permissions.deny entry for this, so this hook is the
+# only layer on BOTH platforms.
 #
 # Takes the WHOLE masked command, never a single chain segment, and matches when
-# the script name and a guarded subcommand BOTH appear, in either order. Requiring
-# adjacency (`ultragoal-state.ts dismiss-review-finding`) matched only one spelling:
-# `sub=dismiss-review-finding; bun <path>/ultragoal-state.ts "$sub"` reaches the
-# CLI identically, yet the hook sees unexpanded text where the two tokens are
-# neither adjacent nor even in the same `;`-separated segment. Order-free
-# whole-command matching covers that shape; a NAME the command computes rather
-# than spells (base64, string concat) still passes -- this raises the cost of
-# bypass, it does not make bypass impossible.
+# the script name and the subcommand BOTH appear, in either order. Requiring
+# adjacency matched only one spelling: `sub=force-complete; bun
+# <path>/ultragoal-state.ts "$sub"` reaches the CLI identically. A NAME the
+# command computes rather than spells (base64, string concat) still passes --
+# this raises the cost of bypass, it does not make bypass impossible.
 #
-# Prose that merely mentions a subcommand name -- telling the user which command
-# to run -- carries no script path and stays allowed; without that, reporting the
-# denial would itself be denied.
+# Prose that merely mentions the subcommand name -- telling the user which
+# command to run -- carries no script path and stays allowed; without that,
+# reporting the denial would itself be denied.
 write_guard_core_check_user_authorized_command() {
     local seg="$1"
-    # Same normalization the dangerous-command guard applies, for the same
-    # reason: a real shell treats any run of spaces/tabs as one separator, so
-    # a literal single-space pattern would silently ALLOW `... ultragoal-state.ts
-    # <TAB> dismiss-review-finding`, which executes identically.
+    # A real shell treats any run of spaces/tabs as one separator; collapse
+    # them so a tab-separated spelling matches the same way.
     seg="${seg#"${seg%%[![:space:]]*}"}"
     seg="$(printf '%s' "$seg" | tr -s '[:space:]' ' ')"
     case "$seg" in
         *"ultragoal-state.ts"*)
             case "$seg" in
-                *"dismiss-review-finding"* | *"approve-review-dispatch-renewal"* | *"resume-pursuit"* | *"force-complete"*)
-                    printf '%s\n' "$_wg_core_user_authorized_deny_json"
-                    return 0
-                    ;;
-            esac
-            ;;
-    esac
-    case "$seg" in
-        *"qa-state.ts"*)
-            case "$seg" in
-                *"waive"*)
+                *"force-complete"*)
                     printf '%s\n' "$_wg_core_user_authorized_deny_json"
                     return 0
                     ;;

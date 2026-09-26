@@ -200,7 +200,7 @@ describe("priority routing", () => {
 		writeReview([]);
 		expect(state.getReviewResult(SID).verdict).toBe("APPROVE");
 		expect(state.claimReviewDispatch(SID).reason).toBe("completion_eligible");
-		expect(state.approveReviewDispatchRenewal(SID).allowed).toBe(true);
+		expect(state.approveReviewDispatchRenewal(SID, "code changed after the last review").allowed).toBe(true);
 		expect(state.claimReviewDispatch(SID).reason).toBe("completion_eligible");
 		writeReview([finding({ priority: undefined, assessment: undefined })], "INCONCLUSIVE");
 		expect(state.claimReviewDispatch(SID).allowed).toBe(true);
