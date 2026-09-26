@@ -206,7 +206,7 @@ describe("리뷰 제출 reducer", () => {
 		expect(result.verdict).toBe("APPROVE");
 		expect(requestComplete(SID)).toBe(true);
 		// Terminal state rejects renewal; a live-pursuit renewal also cannot bypass APPROVE.
-		expect(approveReviewDispatchRenewal(SID).allowed).toBe(false);
+		expect(approveReviewDispatchRenewal(SID, "code changed after the last review").allowed).toBe(false);
 	});
 
 	test("re-plan은 COMMENT resolution과 아티팩트를 초기화한다", () => {

@@ -20,8 +20,8 @@
  *   - `request-complete` is the ONLY GATED path to phase=complete, and it is gated on
  *     `objective_verdict=APPROVE` AND completion-evidence being present.
  *   - `force-complete` is the ONE deliberate exception: a user-only escape hatch
- *     (denied on the orchestrator's Bash path by the shared write guard, same as
- *     `resume-pursuit`) that writes phase=complete from any non-complete phase
+ *     (denied on the orchestrator's Bash path by the shared write guard) that
+ *     writes phase=complete from any non-complete phase
  *     with every gate above bypassed by design — an approved override, not a hole.
  *   - `set-verdict` is the ONLY writer of objective_verdict.
  *   - `set-blocked` (orchestrator) records only phase=blocked and active=false;
@@ -32,7 +32,7 @@
  *       [--constraints ..] [--boundaries ..] [--non-goals ..] [--max-iterations <n>]
  *       [--blocked-stop ..] [--plan-path ..] [--resume-summary ..]
  *       [--completion-evidence p1,p2] [--codex-goal-objective <text>]
- *   resume-pursuit                            (user-only recovery from budget_limited)
+ *   resume-pursuit --reason <text>            (recovery from budget_limited; recorded)
  *   await-user                                (orchestrator; Stop-allowed human-gate pause,
  *                                          no no-progress counting — see setAwaitingUser below)
  *   force-complete --reason <text>       (user-only escape hatch: forces phase=complete
@@ -126,7 +126,20 @@ export interface Story {
 	split_into?: string[];
 }
 /**
- * One user-authorized dismissal of a wrong code-review finding.
+ * One recorded extension of a pursuit budget, with the reason the caller gave.
+ * `review-dispatch` = approve-review-dispatch-renewal (+5 review dispatches);
+ * `no-progress` = resume-pursuit (no-progress counter reset from budget_limited).
+ * Both are AI-runnable, so this record — not an authorization gate — is what
+ * makes each extension visible: request-complete prints it for the final report.
+ */
+export interface BudgetExtension {
+	kind: "review-dispatch" | "no-progress";
+	reason: string;
+	at: string;
+}
+
+/**
+ * One recorded dismissal of a wrong code-review finding.
  *
  * `artifact_sha256` pins the dismissal to the exact artifact bytes it was issued
  * against — the same byte-pinning `approved_review_artifact_sha256` uses for
@@ -187,12 +200,18 @@ export interface GoalState {
 	last_touched_at: string;
 	/** Code-review dispatches atomically reserved by hook-facing callers. */
 	review_dispatch_used: number;
-	/** Initial five-review allowance; explicit user approval adds exactly five. */
+	/** Initial five-review allowance; each approve-review-dispatch-renewal adds exactly five. */
 	review_dispatch_cap: number;
 	/** SHA-256 of the exact approved code-review artifact bytes, or empty when unapproved. */
 	approved_review_artifact_sha256: string;
 	/**
-	 * User-authorized dismissals of individual blocking code-review findings —
+	 * Recorded budget extensions (review-dispatch renewals and no-progress resumes),
+	 * oldest first. Absent field reads as [] (backward-compatible). Writers:
+	 * approveReviewDispatchRenewal, resumePursuit.
+	 */
+	budget_extensions?: BudgetExtension[];
+	/**
+	 * Recorded dismissals of individual blocking code-review findings —
 	 * the escape hatch for a WRONG review. Recorded here and never in the
 	 * code-review artifact, which the write guard reserves for the code-reviewer
 	 * subagent. Absent field reads as [] (backward-compatible).
@@ -389,9 +408,12 @@ function mergeWriteLocked(sessionId: string, stateFilePath: string, next: Partia
 			next.approved_review_artifact_sha256 ?? prior.approved_review_artifact_sha256 ?? "",
 		// Same silent-drop hazard the `stories` field above carries: enumerate here or
 		// every unrelated write wipes the recorded dismissals and re-blocks a completion
-		// the user already unblocked. Sole writer: dismissReviewFinding.
+		// already unblocked. Sole writer: dismissReviewFinding.
 		dismissed_review_findings:
 			next.dismissed_review_findings ?? prior.dismissed_review_findings ?? [],
+		// Same silent-drop hazard: the extension record must survive unrelated writes or
+		// the completion report loses it. Writers: approveReviewDispatchRenewal, resumePursuit.
+		budget_extensions: next.budget_extensions ?? prior.budget_extensions ?? [],
 		review_resolution: "review_resolution" in next ? next.review_resolution : prior.review_resolution,
 		// Same D-5 hazard class as last_seen_head/last_seen_stories_digest above: forced_complete
 		// is the sole load-bearing marker distinguishing a force-complete write from an ordinary
@@ -733,11 +755,12 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 				// leaving ordinary merge writes' preservation behavior unchanged.
 				next.forced_complete = undefined;
 				next.forced_reason = undefined;
-				// The review-dispatch budget is a USER-GATED resource: once a pursuit exhausts it
-				// (used >= cap) it parks in `renewal-required`, whose only sanctioned exits are the
-				// user-only `approve-review-dispatch-renewal` (+5) and `force-complete`. A re-plan of
-				// that SAME, non-terminal objective must NOT silently refill the budget — that would
-				// hand the orchestrator five fresh dispatches with no user action, escaping the gate
+				// The review-dispatch budget is a RECORDED resource: once a pursuit exhausts it
+				// (used >= cap) it parks in `renewal-required`, whose only sanctioned exits are
+				// `approve-review-dispatch-renewal --reason` (+5, recorded) and the user-only
+				// `force-complete`. A re-plan of that SAME, non-terminal objective must NOT silently
+				// refill the budget — that would hand the orchestrator five fresh dispatches with no
+				// recorded renewal, escaping the gate
 				// (directly, or via a `renewal-required` → `set-blocked` → re-plan hop, since
 				// `set-blocked` carries the counters forward). So refill only when the prior budget
 				// was NOT exhausted, or the prior pursuit actually completed (a genuinely new
@@ -751,6 +774,7 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 					next.review_dispatch_used = 0;
 					next.review_dispatch_cap = DEFAULT_REVIEW_DISPATCH_CAP;
 					next.approved_review_artifact_sha256 = "";
+					next.budget_extensions = [];
 				}
 			}
 			mergeWriteLocked(sessionId, stateFilePath, next);
@@ -790,10 +814,17 @@ export function setBudgetLimited(sessionId: string): void {
 }
 
 /**
- * User-only recovery edge: budget_limited → pursuing. This is deliberately a
- * strict raw read/validate/write path: it never seeds or performs a generic merge.
+ * Recovery edge: budget_limited → pursuing. AI-runnable; the required reason is
+ * appended to `budget_extensions` so the completion report shows every resume.
+ * This is deliberately a strict raw read/validate/write path: it never seeds or
+ * performs a generic merge.
  */
-export function resumePursuit(sessionId: string): void {
+export function resumePursuit(sessionId: string, reason: string): void {
+	if (reason.trim() === "") {
+		throw new Error(
+			"resume-pursuit: refused — --reason is required (the next concrete action that will produce progress, and why the last Stops made none)",
+		);
+	}
 	const stateFilePath = resolveStatePath(sessionId);
 	withStateLock(stateFilePath, () => {
 		const raw = readFileOrNull(stateFilePath);
@@ -808,6 +839,10 @@ export function resumePursuit(sessionId: string): void {
 			active: true,
 			iteration: 0,
 			budget_limit_notified: false,
+			budget_extensions: [
+				...readBudgetExtensions(prior),
+				{ kind: "no-progress", reason: normalize(reason), at: new Date().toISOString() },
+			],
 		});
 	});
 }
@@ -1918,15 +1953,15 @@ export function claimReviewDispatch(sessionId: string): ReviewDispatchClaim {
 			}
 			if (used >= cap) {
 				// Park the pursuit in an explicit, named gate instead of leaving it in
-				// `pursuing` where the Stop hook would spin the no-progress counter while
-				// the AI can only wait for a user-only action. `active:false` makes the
-				// Stop branch fall through (allow stop, no counting). The only exits that GRANT
-				// MORE REVIEW BUDGET are the user-only `approve-review-dispatch-renewal`
-				// (→ pursuing, cap+5) and `force-complete` (ends the pursuit). A re-plan
-				// (`set --phase planning`) may still leave this phase to fix a wrong plan — that
-				// path is deliberately preserved — but it keeps the exhausted counters
-				// (setGoalState), so it grants NO new dispatches: the next claim re-parks here
-				// until the user acts. The budget gate is therefore structural.
+				// `pursuing` where the Stop hook would spin the no-progress counter.
+				// `active:false` makes the Stop branch fall through (allow stop, no
+				// counting). The only exits that GRANT MORE REVIEW BUDGET are
+				// `approve-review-dispatch-renewal --reason` (→ pursuing, cap+5, recorded in
+				// budget_extensions) and the user-only `force-complete` (ends the pursuit). A
+				// re-plan (`set --phase planning`) may still leave this phase to fix a wrong
+				// plan — that path is deliberately preserved — but it keeps the exhausted
+				// counters (setGoalState), so it grants NO new dispatches: the next claim
+				// re-parks here until a recorded renewal. The budget gate is therefore structural.
 				mergeWriteLocked(sessionId, stateFilePath, {
 					phase: "renewal-required",
 					active: false,
@@ -1951,7 +1986,7 @@ export function claimReviewDispatch(sessionId: string): ReviewDispatchClaim {
 }
 
 /**
- * User-authorized renewal: extends the cap by five under the same lock, restores
+ * Renewal: extends the cap by five under the same lock, restores
  * `phase=pursuing`/`active=true` (recovering the `renewal-required` gate a
  * budget-exhausted claim parked), and hashes the current conventional artifact
  * when a valid one exists. Accepted from a live `pursuing` loop or from
@@ -1961,7 +1996,10 @@ export function claimReviewDispatch(sessionId: string): ReviewDispatchClaim {
  * (the hash is simply left untouched; the claim-side completion-eligible deny only
  * ever fires on a valid eligible artifact).
  */
-export function approveReviewDispatchRenewal(sessionId: string): ReviewDispatchClaim {
+export function approveReviewDispatchRenewal(sessionId: string, reason: string): ReviewDispatchClaim {
+	// A renewal spends more review budget; an unexplained one leaves no way to tell a
+	// needed re-review from a loop. The reason lands in budget_extensions.
+	if (reason.trim() === "") return { allowed: false, reason: "failure", used: 0, cap: 0 };
 	const stateFilePath = resolveStatePath(sessionId);
 	try {
 		ensureSeed("ultragoal", sessionId);
@@ -1998,6 +2036,10 @@ export function approveReviewDispatchRenewal(sessionId: string): ReviewDispatchC
 				active: true,
 				review_dispatch_cap: cap + DEFAULT_REVIEW_DISPATCH_CAP,
 				...(reviewed === null ? {} : { approved_review_artifact_sha256: sha256(reviewed.raw) }),
+				budget_extensions: [
+					...readBudgetExtensions(prior),
+					{ kind: "review-dispatch", reason: normalize(reason), at: new Date().toISOString() },
+				],
 			});
 			return { allowed: true, reason: "allowed", used, cap: state.review_dispatch_cap };
 		});
@@ -2006,13 +2048,35 @@ export function approveReviewDispatchRenewal(sessionId: string): ReviewDispatchC
 	}
 }
 
+/** Fail-closed read: a corrupt non-array on disk yields zero extensions, never a throw. */
+function readBudgetExtensions(prior: Partial<GoalState>): BudgetExtension[] {
+	return Array.isArray(prior.budget_extensions) ? prior.budget_extensions : [];
+}
+
+/**
+ * Human-readable list of the overrides recorded for this pursuit — budget
+ * extensions and dismissed review findings. request-complete prints it so the
+ * orchestrator carries it into the final report; empty string when none.
+ */
+export function renderOverrideSummary(state: Partial<GoalState>): string {
+	const lines: string[] = [];
+	for (const e of readBudgetExtensions(state)) {
+		const what = e.kind === "review-dispatch" ? "review budget +5 (approve-review-dispatch-renewal)" : "no-progress counter reset (resume-pursuit)";
+		lines.push(`  - ${what} at ${e.at}: ${e.reason}`);
+	}
+	for (const d of readDismissals(state)) {
+		lines.push(`  - dismissed ${d.class} finding at ${d.ref} (dismiss-review-finding): ${d.rationale}`);
+	}
+	return lines.length === 0 ? "" : lines.join("\n");
+}
+
 /** Fail-closed read: a corrupt non-array on disk yields zero dismissals, never a throw. */
 function readDismissals(prior: Partial<GoalState>): DismissedReviewFinding[] {
 	return Array.isArray(prior.dismissed_review_findings) ? prior.dismissed_review_findings : [];
 }
 
 /**
- * User-authorized dismissal of ONE wrong blocking code-review finding — the only
+ * Dismissal of ONE wrong blocking code-review finding — the only
  * in-band recovery from a false-positive review, which otherwise makes the objective
  * permanently uncompletable (the alternatives being to edit correct code to satisfy a
  * wrong review, or to abandon the pursuit via set-blocked).
@@ -2596,15 +2660,19 @@ function strFlagOrBlank(v: string | boolean | undefined): string {
  * Single source of truth for this CLI's command roster: every subcommand `main()`
  * dispatches, tagged with who may run it. `help` prints this via renderHelp() so the
  * AI can see, before acting, which commands it may run itself versus which are
- * user-only (a PreToolUse guard denies them on the AI's Bash path — see SKILL.md's
- * State CLI authority table) or hook-only (never invoked manually).
+ * user-only (force-complete; a PreToolUse guard denies it on the AI's Bash path — see
+ * SKILL.md's State CLI authority table) or hook-only (never invoked manually).
  */
 const ROSTER: CliCommand[] = [
-	{ name: "resume-pursuit", authority: "user", effect: "recovers a budget_limited pursuit" },
+	{
+		name: "resume-pursuit",
+		authority: "ai",
+		effect: "recovers a budget_limited pursuit; --reason required, recorded in budget_extensions",
+	},
 	{
 		name: "approve-review-dispatch-renewal",
-		authority: "user",
-		effect: "adds 5 to the review-dispatch cap and resumes a renewal-required pursuit",
+		authority: "ai",
+		effect: "adds 5 to the review-dispatch cap and resumes a renewal-required pursuit; --reason required, recorded in budget_extensions",
 	},
 	{
 		name: "await-user",
@@ -2613,8 +2681,8 @@ const ROSTER: CliCommand[] = [
 	},
 	{
 		name: "dismiss-review-finding",
-		authority: "user",
-		effect: "removes one wrong admitted code-review finding from the completion gate",
+		authority: "ai",
+		effect: "removes one wrong admitted code-review finding from the completion gate; --rationale recorded",
 	},
 	{
 		name: "force-complete",
@@ -2856,7 +2924,10 @@ function main(): void {
 			}
 			setVerdict(sessionId, v);
 		} else if (subcommand === "resume-pursuit") {
-			resumePursuit(sessionId);
+			resumePursuit(sessionId, strFlagOrBlank(args["reason"]));
+			process.stdout.write(
+				"resumed: phase=pursuing, no-progress counter reset to 0. The reason is recorded in budget_extensions and request-complete will list it for the final report. Take the next action you named now.\n",
+			);
 		} else if (subcommand === "await-user") {
 			setAwaitingUser(sessionId);
 		} else if (subcommand === "force-complete") {
@@ -2892,6 +2963,12 @@ function main(): void {
 				}
 				process.exit(1);
 			}
+			const overrides = renderOverrideSummary(readPrior(sessionId));
+			process.stdout.write(
+				overrides === ""
+					? "complete: every gate passed with no recorded overrides.\n"
+					: `complete. Recorded overrides — list each one, with its reason, at the top of your final report to the user:\n${overrides}\n`,
+			);
 		} else if (subcommand === "claim-review-dispatch") {
 			const result = claimReviewDispatch(sessionId);
 			process.stdout.write(JSON.stringify(result) + "\n");
@@ -2917,9 +2994,20 @@ function main(): void {
 			const result = recordCommentResolution(sessionId, hash, rawEvidence.split(",").map((p) => p.trim()).filter(Boolean));
 			process.stdout.write(JSON.stringify(result) + "\n");
 		} else if (subcommand === "approve-review-dispatch-renewal") {
-			const result = approveReviewDispatchRenewal(sessionId);
+			const renewalReason = strFlagOrBlank(args["reason"]);
+			const result = approveReviewDispatchRenewal(sessionId, renewalReason);
 			process.stdout.write(JSON.stringify(result) + "\n");
-			if (!result.allowed) process.exit(1);
+			if (!result.allowed) {
+				process.stderr.write(
+					renewalReason.trim() === ""
+						? 'approve-review-dispatch-renewal: refused — --reason is required (why one more review round is needed, e.g. "code changed after the last REQUEST_CHANGES")\n'
+						: "approve-review-dispatch-renewal: refused — renewal needs a live pursuing pursuit or phase=renewal-required. Run get to see the current phase.\n",
+				);
+				process.exit(1);
+			}
+			process.stderr.write(
+				`renewed: review-dispatch cap is now ${result.cap} (used ${result.used}); phase=pursuing. The reason is recorded in budget_extensions and request-complete will list it for the final report. Dispatch the review again.\n`,
+			);
 		} else if (subcommand === "dismiss-review-finding") {
 			const ref = str(args["ref"]) ?? "";
 			const findingClass = str(args["class"]) ?? "";
@@ -2945,7 +3033,9 @@ function main(): void {
 				);
 				process.exit(1);
 			}
-			process.stdout.write(`dismissed ${findingClass} finding at ${ref}\n`);
+			process.stdout.write(
+				`dismissed ${findingClass} finding at ${ref}. The rationale is recorded and request-complete will list it for the final report. The dismissal lapses when the next review round writes a new artifact.\n`,
+			);
 		} else if (subcommand === "get") {
 			process.stdout.write(JSON.stringify(readGoalGet(sessionId)) + "\n");
 		} else if (subcommand === "list-others") {

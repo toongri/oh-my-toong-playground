@@ -41,6 +41,7 @@ import {
 	scopeContractSha256,
 	claimReviewDispatch,
 	approveReviewDispatchRenewal,
+	renderOverrideSummary,
 	type Story,
 } from "./ultragoal-state.ts";
 
@@ -122,7 +123,7 @@ describe("review dispatch budget", () => {
 	test("APPROVE artifact remains terminal after renewal and exact-byte approval", () => {
 		writeCleanReview();
 		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "completion_eligible", used: 0, cap: 5 });
-		const approval = approveReviewDispatchRenewal(S);
+		const approval = approveReviewDispatchRenewal(S, "code changed after the last review");
 		expect(approval).toMatchObject({ allowed: true, reason: "allowed", used: 0, cap: 10 });
 		expect(rawState().approved_review_artifact_sha256).toMatch(/^[0-9a-f]{64}$/);
 		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "completion_eligible", used: 0, cap: 10 });
@@ -136,11 +137,29 @@ describe("review dispatch budget", () => {
 		expect(claimReviewDispatch(S)).toMatchObject({ allowed: true, reason: "allowed", used: 1, cap: 5 });
 	});
 
+	test("renewal refuses a blank reason without changing the cap", () => {
+		const before = rawState().review_dispatch_cap;
+		expect(approveReviewDispatchRenewal(S, "  ")).toEqual({ allowed: false, reason: "failure", used: 0, cap: 0 });
+		expect(rawState().review_dispatch_cap).toBe(before);
+		expect(rawState().budget_extensions ?? []).toEqual([]);
+	});
+
+	test("renewal records its reason in budget_extensions and the override summary", () => {
+		approveReviewDispatchRenewal(S, "code changed after the last review");
+		expect(rawState().budget_extensions).toMatchObject([
+			{ kind: "review-dispatch", reason: "code changed after the last review" },
+		]);
+		expect(renderOverrideSummary(rawState())).toContain(
+			"review budget +5 (approve-review-dispatch-renewal)",
+		);
+		expect(renderOverrideSummary({})).toBe("");
+	});
+
 	test("absent or malformed artifact still renews the cap without touching the approval hash", () => {
-		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: true, reason: "allowed", cap: 10 });
+		expect(approveReviewDispatchRenewal(S, "code changed after the last review")).toMatchObject({ allowed: true, reason: "allowed", cap: 10 });
 		expect(rawState().approved_review_artifact_sha256).toBe("");
 		writeFileSync(codeReviewArtifactPath(S), "not json", "utf8");
-		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: true, reason: "allowed", cap: 15 });
+		expect(approveReviewDispatchRenewal(S, "code changed after the last review")).toMatchObject({ allowed: true, reason: "allowed", cap: 15 });
 		expect(rawState().approved_review_artifact_sha256).toBe("");
 
 		writeFileSync(resolveStatePath(S), "{broken", "utf8");
@@ -152,17 +171,17 @@ describe("review dispatch budget", () => {
 			expect(claimReviewDispatch(S)).toMatchObject({ allowed: true, reason: "allowed", used, cap: 5 });
 		}
 		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "budget_exhausted", used: 5, cap: 5 });
-		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: true, reason: "allowed", used: 5, cap: 10 });
+		expect(approveReviewDispatchRenewal(S, "code changed after the last review")).toMatchObject({ allowed: true, reason: "allowed", used: 5, cap: 10 });
 		expect(claimReviewDispatch(S)).toMatchObject({ allowed: true, reason: "allowed", used: 6, cap: 10 });
 	});
 
 	test("renewal only extends an active pursuit and preserves cap and hash otherwise", () => {
 		writeCleanReview();
-		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: true, reason: "allowed", cap: 10 });
+		expect(approveReviewDispatchRenewal(S, "code changed after the last review")).toMatchObject({ allowed: true, reason: "allowed", cap: 10 });
 
 		setGoalState(S, { phase: "planning" });
 		const planning = rawState();
-		expect(approveReviewDispatchRenewal(S)).toEqual({ allowed: false, reason: "failure", used: 0, cap: 0 });
+		expect(approveReviewDispatchRenewal(S, "code changed after the last review")).toEqual({ allowed: false, reason: "failure", used: 0, cap: 0 });
 		expect(rawState()).toMatchObject({
 			review_dispatch_cap: planning.review_dispatch_cap,
 			approved_review_artifact_sha256: planning.approved_review_artifact_sha256,
@@ -170,7 +189,7 @@ describe("review dispatch budget", () => {
 
 		setBudgetLimited(S);
 		const budgetLimited = rawState();
-		expect(approveReviewDispatchRenewal(S)).toEqual({ allowed: false, reason: "failure", used: 0, cap: 0 });
+		expect(approveReviewDispatchRenewal(S, "code changed after the last review")).toEqual({ allowed: false, reason: "failure", used: 0, cap: 0 });
 		expect(rawState()).toMatchObject({
 			review_dispatch_cap: budgetLimited.review_dispatch_cap,
 			approved_review_artifact_sha256: budgetLimited.approved_review_artifact_sha256,
@@ -179,7 +198,7 @@ describe("review dispatch budget", () => {
 
 	test("fresh pursuit resets inherited review dispatch budget and approval hash", () => {
 		writeCleanReview();
-		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: true, cap: 10 });
+		expect(approveReviewDispatchRenewal(S, "code changed after the last review")).toMatchObject({ allowed: true, cap: 10 });
 		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "completion_eligible", used: 0, cap: 10 });
 
 		setBudgetLimited(S);
@@ -216,7 +235,7 @@ describe("review dispatch budget", () => {
 		const denied = runCliCaptured("claim-review-dispatch");
 		expect(denied.status).not.toBe(0);
 		expect(JSON.parse(denied.stdout)).toMatchObject({ allowed: false, reason: "completion_eligible" });
-		const approved = runCliCaptured("approve-review-dispatch-renewal");
+		const approved = runCliCaptured("approve-review-dispatch-renewal --reason re-review");
 		expect(approved.status).toBe(0);
 		expect(JSON.parse(approved.stdout)).toMatchObject({ allowed: true, cap: 10 });
 	});
@@ -232,7 +251,7 @@ describe("review dispatch budget", () => {
 	test("renewal recovers a renewal-required pursuit to pursuing and adds five", () => {
 		for (let used = 1; used <= 6; used += 1) claimReviewDispatch(S);
 		expect(rawState().phase).toBe("renewal-required");
-		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: true, reason: "allowed", used: 5, cap: 10 });
+		expect(approveReviewDispatchRenewal(S, "code changed after the last review")).toMatchObject({ allowed: true, reason: "allowed", used: 5, cap: 10 });
 		const resumed = rawState();
 		expect(resumed.phase).toBe("pursuing");
 		expect(resumed.active).toBe(true);
@@ -1440,7 +1459,7 @@ describe("recovery-and-guards: resume-pursuit", () => {
 		setGoalState(S, { phase: "planning", outcome: "keep me", resume_summary: "summary" });
 		setStories(S, [{ id: "S1", story: "story", acceptance_criteria: ["works"], verification_surface: "tests", status: "confirmed" }]);
 		setBudgetLimited(S);
-		resumePursuit(S);
+		resumePursuit(S, "commit the pending fix");
 		const state = rawState();
 		expect(state).toMatchObject({ phase: "pursuing", active: true, iteration: 0, budget_limit_notified: false, outcome: "keep me", resume_summary: "summary" });
 		expect(state.stories).toHaveLength(1);
@@ -1453,24 +1472,44 @@ describe("recovery-and-guards: resume-pursuit", () => {
 		const prior = JSON.parse(readFileSync(path, "utf8"));
 		writeFileSync(path, JSON.stringify({ ...prior, last_touched_at: stale, progress_touched_at: stale }), "utf8");
 
-		resumePursuit(S);
+		resumePursuit(S, "commit the pending fix");
 		const resumed = JSON.parse(readFileSync(path, "utf8"));
 		expect(resumed.last_touched_at).not.toBe(stale);
 		expect(resumed.progress_touched_at).not.toBe(stale);
+	});
+
+	test("resume-pursuit refuses a blank reason and leaves state untouched", () => {
+		setBudgetLimited(S);
+		const before = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => resumePursuit(S, "   ")).toThrow("--reason is required");
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+	});
+
+	test("resume-pursuit appends its reason to budget_extensions", () => {
+		setBudgetLimited(S);
+		resumePursuit(S, "commit the pending fix");
+		setBudgetLimited(S);
+		resumePursuit(S, "retry after the flaky fixture fix");
+		const extensions = rawState().budget_extensions;
+		expect(extensions.map((e: { kind: string; reason: string }) => [e.kind, e.reason])).toEqual([
+			["no-progress", "commit the pending fix"],
+			["no-progress", "retry after the flaky fixture fix"],
+		]);
+		expect(renderOverrideSummary(rawState())).toContain(": commit the pending fix");
 	});
 
 	test("resume-pursuit refuses outside budget_limited", () => {
 		for (const phase of ["pursuing", "blocked", "complete"] as const) {
 			writeFileSync(resolveStatePath(S), JSON.stringify({ ...rawState(), phase, active: phase === "pursuing" }), "utf8");
 			const before = readFileSync(resolveStatePath(S), "utf8");
-			expect(() => resumePursuit(S)).toThrow();
+			expect(() => resumePursuit(S, "commit the pending fix")).toThrow();
 			expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
 		}
 		rmSync(resolveStatePath(S));
-		expect(() => resumePursuit(S)).toThrow();
+		expect(() => resumePursuit(S, "commit the pending fix")).toThrow();
 		expect(existsSync(resolveStatePath(S))).toBe(false);
 		writeFileSync(resolveStatePath(S), "{broken", "utf8");
-		expect(() => resumePursuit(S)).toThrow();
+		expect(() => resumePursuit(S, "commit the pending fix")).toThrow();
 		expect(readFileSync(resolveStatePath(S), "utf8")).toBe("{broken");
 	});
 
@@ -1480,7 +1519,7 @@ describe("recovery-and-guards: resume-pursuit", () => {
 		mkdirSync(lock);
 		writeFileSync(`${lock}/owner.json`, JSON.stringify({ ownerPid: process.pid, token: "live", startedAt: Date.now() }), "utf8");
 		const before = readFileSync(resolveStatePath(S), "utf8");
-		expect(() => resumePursuit(S)).toThrow();
+		expect(() => resumePursuit(S, "commit the pending fix")).toThrow();
 		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
 		expect(existsSync(lock)).toBe(true);
 		rmSync(lock, { recursive: true, force: true });
@@ -1488,7 +1527,7 @@ describe("recovery-and-guards: resume-pursuit", () => {
 
 	test("CLI registers resume-pursuit usage and succeeds", () => {
 		setBudgetLimited(S);
-		expect(runCli("resume-pursuit")).toBe("");
+		expect(runCli("resume-pursuit --reason commit-the-pending-fix")).toContain("resumed: phase=pursuing");
 		const usage = runCliCaptured("unknown");
 		expect(usage.stderr).toContain("resume-pursuit");
 	});
