@@ -109,6 +109,16 @@ describe("acquireDevice", () => {
 		expect(releaseResource(SID, "emulator-5554").released_at).toBeString();
 	});
 
+	test("Android는 serial이 부팅돼도 이 세션의 태그 프로세스가 없으면 획득 실패로 본다", () => {
+		const deps = fakeDeps({
+			"devices": { status: 0, stdout: "" },
+			"sys.boot_completed": { status: 0, stdout: "1" },
+			"qemu.omt.session": { status: 1, stdout: "" },
+		});
+		expect(() => acquireDevice(SID, { platform: "android", base: "Pixel" }, deps)).toThrow("exited before booting");
+		expect(unreleasedResources(SID)[0].id).toBe("emulator-5554");
+	});
+
 	test("잘못된 platform과 빈 base는 거부된다", () => {
 		expect(() => acquireDevice(SID, { platform: "tvos", base: "x" }, fakeDeps({}))).toThrow("--platform must be ios or android");
 		expect(() => acquireDevice(SID, { platform: "ios", base: " " }, fakeDeps({}))).toThrow("--base is required");

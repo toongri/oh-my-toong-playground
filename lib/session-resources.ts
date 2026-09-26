@@ -216,8 +216,10 @@ export function acquireDevice(
 	const port = EMULATOR_PORTS.find((p) => !used.has(p));
 	if (port === undefined) throw new Error("acquire-device: refused — every emulator console port 5554-5584 is in use");
 	// lazy: two sessions picking the same free port in the same instant collide;
-	// the loser's emulator exits, its boot wait fails loud, and its ownership-checked
-	// stop is a no-op. Add a cross-session port lock if that shows up in practice.
+	// the loser's emulator exits, the ownership check in the boot wait below makes
+	// the loser fail instead of adopting the winner's serial, and the loser's
+	// ownership-checked stop is a no-op. Add a cross-session port lock if that
+	// collision shows up in practice.
 	const serial = `emulator-${port}`;
 	const tag = `qemu.omt.session=${sessionId}`;
 	deps.launchDetached(
@@ -231,8 +233,19 @@ export function acquireDevice(
 		kind: "emulator",
 		stop: `if pgrep -f '[-]port ${port} -prop ${tag}' >/dev/null; then '${adb}' -s ${serial} emu kill; fi`,
 	});
+	// The serial is shared by whoever holds the port, so a booted serial proves
+	// nothing on its own; this session's tagged emulator process must still exist.
+	const owned = () => deps.run("pgrep", ["-f", `[-]port ${port} -prop ${tag}`]).status === 0;
 	const deadline = Date.now() + BOOT_TIMEOUT_MS;
-	while (deps.run(adb, ["-s", serial, "shell", "getprop", "sys.boot_completed"]).stdout.trim() !== "1") {
+	for (;;) {
+		const booted = deps.run(adb, ["-s", serial, "shell", "getprop", "sys.boot_completed"]).stdout.trim() === "1";
+		if (!owned()) {
+			throw new Error(
+				`acquire-device: this session's emulator on port ${port} exited before booting (another session likely took the port). ` +
+					`Run release-resource --id ${serial} (it stops nothing that is not ours), then run acquire-device again.`,
+			);
+		}
+		if (booted) break;
 		if (Date.now() > deadline) {
 			throw new Error(`acquire-device: recorded emulator ${serial} did not finish booting in ${BOOT_TIMEOUT_MS / 1000}s; release it with release-resource`);
 		}

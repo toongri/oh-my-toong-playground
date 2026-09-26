@@ -122,7 +122,7 @@ The lifecycle steps above describe the general pattern. Each modality requires s
 | iOS Simulator | `qa-state.ts acquire-device --platform ios --base "<device type>"` | included in acquire-device (bootstatus) | `qa-state.ts release-resource --id "$IOS_UDID"` (shuts down and deletes the session simulator) |
 | Android Emulator | `qa-state.ts acquire-device --platform android --base <AVD>` | included in acquire-device (`sys.boot_completed`, bounded) | `qa-state.ts release-resource --id "$ANDROID_SERIAL"` (kills the emulator only if it still carries this session's tag) |
 
-Apply the corresponding row's primitives based on the change type detected in Step 3.1. Mobile modalities use Step 3.5 procedures, which expand on these primitives. Simulators and emulators are recorded by `acquire-device` itself. For an HTTP server, record it right after Start with `qa-state.ts record-resource --id <pid> --kind server --stop 'kill <pid>'`, and stop it with `qa-state.ts release-resource --id <pid>` (see SKILL.md CLEANUP).
+Apply the corresponding row's primitives based on the change type detected in Step 3.1. Mobile modalities use Step 3.5 procedures, which expand on these primitives. Simulators and emulators are recorded by `acquire-device` itself. For an HTTP server, record it right after Start with `qa-state.ts record-resource --id <pid> --kind server --stop 'kill <pid> 2>/dev/null; for _ in $(seq 50); do kill -0 <pid> 2>/dev/null || exit 0; sleep 0.2; done; exit 1'` (the stop succeeds only once the PID is gone, see SKILL.md CLEANUP), and stop it with `qa-state.ts release-resource --id <pid>` (see SKILL.md CLEANUP).
 
 ---
 
