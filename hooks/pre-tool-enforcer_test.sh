@@ -104,7 +104,7 @@ test_taskoutput_is_blocked() {
     output=$(printf '%s' '{"tool_name":"TaskOutput","tool_input":{}}' \
         | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
 
-    if echo "$output" | grep -q '"continue"[[:space:]]*:[[:space:]]*false'; then
+    if echo "$output" | jq -e '.hookSpecificOutput.hookEventName == "PreToolUse" and .hookSpecificOutput.permissionDecision == "deny" and (.hookSpecificOutput.permissionDecisionReason | test("TaskOutput")) and (has("continue") | not)' >/dev/null; then
         return 0
     else
         echo "ASSERTION FAILED: TaskOutput should be blocked"
