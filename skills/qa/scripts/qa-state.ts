@@ -29,7 +29,7 @@
 import { closeSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, rmSync, statSync } from "fs";
 import { execSync } from "child_process";
 import { createHash } from "crypto";
-import { dirname, isAbsolute, relative, resolve } from "path";
+import { dirname, extname, isAbsolute, relative, resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
 import {
 	mergeWithHeartbeat,
@@ -158,6 +158,80 @@ function probePlainFile(path: string): string {
 	})();
 	if (size <= 0) throw new Error(`evidence-path is empty: ${absolute}`);
 	return absolute;
+}
+
+// Signatures of a unit/integration test-RUNNER report (vitest, jest, pytest,
+// mocha, go test, JUnit XML). A test run is valid scenario evidence only under
+// the explicit `test` evidence surface; recorded under an actor driver's
+// surface (curl, bash, ...) it would read as that driver's observation, so the
+// surface would claim a medium the evidence does not have. Images and other
+// binaries can never be a test log, so they are skipped by extension.
+const TEST_RUNNER_SIGNATURES: RegExp[] = [
+	/\bRUN\s+v\d+\.\d+\.\d+/, // vitest banner
+	/\bTest Files\s+\d+\s+(passed|failed)/, // vitest summary
+	/\bTests\s+\d+\s+(passed|failed)/, // vitest / generic summary
+	/\bTest Suites:\s+\d+\s+(passed|failed|total)/, // jest
+	/^PASS\s+.+\.(test|spec)\.[cm]?[jt]sx?/m, // jest per-file
+	/\b\d+\s+passing\b/, // mocha
+	/^\s*\d+ (pass|fail)\s*$/m, // bun:test summary
+	/^\s*ℹ\s+(tests|suites|pass|fail|cancelled|skipped|todo)\s+\d+\s*$/m, // node:test spec summary
+	/^\s*ℹ\s+duration_ms\s+\d+(?:\.\d+)?\s*$/m, // node:test spec duration
+	/=+\s*(test session starts|\d+ (passed|failed|error|errors|skipped|xfailed|xpassed|deselected))/, // pytest banner / normal summary
+	/^\s*\d+ (passed|failed|error|errors|skipped|xfailed|xpassed|deselected)\b[^\n]*\bin [\d.]+s/m, // pytest quiet summary (no === banner; covers fail/error too)
+	/^--- (PASS|FAIL):/m, // go test -v
+	/^(ok|FAIL)\s+\S+\s+([\d.]+s|\(cached\))(?:\s+coverage:\s+[\d.]+%\s+of\s+statements)?\s*$/m, // go test summary (incl. cached reuse and coverage)
+	/^\?\s+\S+\s+\[no test files\]\s*$/m, // go test package with no test files
+	/^\s*(?:<\?xml[\s\S]*?\?>\s*|<!--[\s\S]*?-->\s*)*<(?:testsuite|testsuites)(?:\s|\/?>)/, // JUnit XML root (allow declaration/comments)
+];
+
+// Prefix scanned for a test-runner signature. A report's summary/banner always
+// lands well within this window, so a longer capture need never be read in full.
+const EVIDENCE_SCAN_BYTES = 65536;
+
+const NON_TEXT_EVIDENCE_EXT = new Set([
+	".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".pdf",
+	".mp4", ".mov", ".webm", ".zip", ".ico", ".woff", ".woff2",
+]);
+
+/**
+ * Keeps the evidence surface honest: a file that reads as a test-runner report
+ * must be recorded with `--evidence-surface test`. Read-capped and
+ * image-skipping so the check stays cheap on screenshots and API captures.
+ */
+function assertTestReportUsesTestSurface(absolute: string): void {
+	if (NON_TEXT_EVIDENCE_EXT.has(extname(absolute).toLowerCase())) return;
+	let scanned: string;
+	try {
+		// Scan a bounded HEAD and TAIL — never the whole file. record-cell imposes no
+		// evidence-size limit, so decoding the entire capture (as readFileSync would)
+		// could exhaust memory. A test-runner BANNER sits at the head while its SUMMARY
+		// (`1 passed in ...`, `ok pkg`, `N passing`) sits at the tail, so a large log
+		// with either at an end must still be caught; the unscanned middle is the
+		// documented blind spot of a bounded read.
+		const fd = openSync(absolute, "r");
+		try {
+			const size = statSync(absolute).size;
+			const readAt = (offset: number, length: number): string => {
+				const buf = Buffer.alloc(length);
+				const n = readSync(fd, buf, 0, length, offset);
+				return buf.subarray(0, n).toString("utf8");
+			};
+			scanned =
+				size <= 2 * EVIDENCE_SCAN_BYTES
+					? readAt(0, size)
+					: readAt(0, EVIDENCE_SCAN_BYTES) + "\n" + readAt(size - EVIDENCE_SCAN_BYTES, EVIDENCE_SCAN_BYTES);
+		} finally {
+			closeSync(fd);
+		}
+	} catch {
+		return; // unreadable/binary — probe* already validated existence+size
+	}
+	if (TEST_RUNNER_SIGNATURES.some((re) => re.test(scanned))) {
+		throw new Error(
+			`evidence "${absolute}" is a test-runner report; record it with --evidence-surface ${TEST_EVIDENCE_SURFACE} ` +
+				`so it is not read as an actor-driver observation. See skills/qa/SKILL.md → The cheapest proof.`,
+		);
+	}
 }
 
 const SCENARIO_SOURCES = ["self-authored", "caller-provided"] as const;
@@ -877,6 +951,11 @@ function recordCellUnlocked(sessionId: string, opts: RecordCellOpts): void {
 			...(slots.after !== undefined ? { after: slots.after } : {}),
 		};
 	}
+	if (evidence && evidence.surface !== TEST_EVIDENCE_SURFACE) {
+		for (const p of [evidence.path, evidence.before, evidence.action, evidence.after]) {
+			if (p) assertTestReportUsesTestSurface(p);
+		}
+	}
 	if ((opts.status === "pass" || opts.status === "fail") && cellNeedsVisualProof({ evidence }, actorDriver(prior, selector.story)) && !visualEvidenceComplete(evidence, stateProbe)) {
 		throw new Error("visual cell requires separate before/after screenshot files and an action record; capture the asserted screen, then record-cell again");
 	}
@@ -1150,19 +1229,24 @@ export function completeQa(sessionId: string): void {
  */
 export function forceCompleteQa(sessionId: string, reason: string): { id: string; kind: string; error: string }[] {
 	if (reason.trim() === "") throw new Error("force-complete: refused — --reason is required (why this cycle is being forcibly completed)");
-	const prior = readPrior(sessionId);
-	if (prior.active !== true) throw new Error("force-complete: refused — no active qa cycle");
+	// Claim the cycle and fix the resource list in one locked step, BEFORE the slow
+	// stop commands run: a `start` that lands while they run then sees an inactive
+	// cycle, opens its own, and clears the forced marker — instead of this call
+	// marking that new cycle forced afterwards.
+	const claimed = withStateLock(resolveStatePath(sessionId), () => {
+		const prior = readPrior(sessionId);
+		if (prior.active !== true) throw new Error("force-complete: refused — no active qa cycle");
+		mergeWriteUnlocked(sessionId, { active: false, forced_complete: true, forced_reason: reason.trim() });
+		return unreleasedResources(sessionId);
+	});
 	const failed: { id: string; kind: string; error: string }[] = [];
-	for (const resource of unreleasedResources(sessionId)) {
+	for (const resource of claimed) {
 		try {
 			releaseResource(sessionId, resource.id);
 		} catch (e) {
 			failed.push({ id: resource.id, kind: resource.kind, error: String(e) });
 		}
 	}
-	withStateLock(resolveStatePath(sessionId), () => {
-		mergeWriteUnlocked(sessionId, { active: false, forced_complete: true, forced_reason: reason.trim() });
-	});
 	return failed;
 }
 

@@ -235,6 +235,22 @@ describe("qa state: user-only force-complete", () => {
 		expect(rawState().active).toBe(false);
 	});
 
+	test("a start that lands while resources are being released keeps its new cycle active", () => {
+		setQaState(S, { phase: "PLAN" });
+		const script = join(import.meta.dir, "qa-state.ts");
+		// The stop command itself opens the next cycle, the way a concurrent
+		// session would during a slow release. The stop shell does not inherit
+		// this test's process.env edits, so the isolated OMT_DIR/session are
+		// passed explicitly — otherwise it writes to the developer's real session.
+		const env = `OMT_DIR='${tmpDir}' OMT_SESSION_ID='${S}'`;
+		recordResource(S, { id: "sim-racing", kind: "simulator", stop: `${env} bun ${script} start --target next-cycle >/dev/null` });
+		expect(forceCompleteQa(S, "user ended the cycle")).toEqual([]);
+		const raw = rawState();
+		expect(raw.active).toBe(true);
+		expect(raw.target).toBe("next-cycle");
+		expect(raw.forced_complete).toBeUndefined();
+	});
+
 	test("a fresh start clears the forced marker", () => {
 		setQaState(S, { phase: "PLAN" });
 		forceCompleteQa(S, "done");
@@ -376,6 +392,17 @@ describe("qa-state CLI wiring", () => {
 			).not.toThrow();
 			const cell = rawState().cells.find((c: any) => c.story === "story-1" && c.cls === 1 && c.cycle === 0);
 			expect(cell.evidence.surface).toBe("test");
+		});
+
+		// A test log under the actor driver's surface would read as that driver's
+		// observation (e.g. "observed via curl"); the surface must name the medium.
+		test(`record-cell REJECTS a ${name} report under the actor driver's surface`, () => {
+			authorCompleteChain();
+			const logPath = join(tmpDir, `cls1-${name}-driver-surface.txt`);
+			writeFileSync(logPath, report);
+			expect(() =>
+				run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface bash`),
+			).toThrow(/--evidence-surface test/);
 		});
 	}
 
@@ -860,12 +887,12 @@ describe("help subcommand", () => {
 		expect(out).toContain("qa-state commands:");
 	});
 
-	test("JUnit XML content no longer blocks record-cell evidence under either the actor driver or evidence-surface test", () => {
+	test("JUnit XML is cell evidence only under evidence-surface test, never under the actor driver", () => {
 		const authorCompleteChain = () => { run("set --phase PLAN"); run("set-acceptance --json '[\"home shows today supplements\"]'"); run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes'); run("add-story --id story-1 --actor actor-1 --goal 'Check supplements' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'"); for (const cls of [1, 2, 3, 4, 5, 6]) run(`author-cell --story story-1 --cls ${cls} --attack-point "attack ${cls}" --priority ${cls === 1 ? "H" : "L"}`); };
 		authorCompleteChain();
 		const junit = join(tmpDir, "junit.xml");
 		writeFileSync(junit, '<?xml version="1.0"?><testsuite tests="1" failures="0"><testcase /></testsuite>');
-		expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${junit} --evidence-surface bash`)).not.toThrow();
+		expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${junit} --evidence-surface bash`)).toThrow(/--evidence-surface test/);
 		run("inc-cycle");
 		run("author-cell --story story-1 --cls 1 --attack-point 'current attack' --priority H");
 		expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${junit} --evidence-surface test`)).not.toThrow();
