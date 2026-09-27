@@ -6,7 +6,7 @@ hooks:
       timeout: 30
   PostToolUse:
     - component: oh-my-toong:sync-schema-validator.sh
-      matcher: "Edit(**/sync.yaml)"
+      matcher: "Edit|Write|MultiEdit"
       timeout: 30
 
 plugins:
