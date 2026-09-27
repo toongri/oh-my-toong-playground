@@ -1,5 +1,7 @@
 # Precondition Bootstrap — A Missing Precondition Is Work, Not an Obstacle
 
+> **Superseded in part by [economy-scenario.md](economy-scenario.md).** The honesty rules recorded here still hold (no harness call or launch screen claimed as the actor's path; a missing precondition is work). The rules that forced every scenario onto the user's screen, rejected automated tests as evidence, or required launching every precondition platform were removed.
+
 **Purpose**: RED-phase test for the qa skill's precondition-bootstrap ladder (`SKILL.md` ADVERSARIAL E2E, ahead of *Boundary substitution*) and the journey-not-diff roster rule (`SKILL.md` PLAN.1). It measures whether a verifier facing missing preconditions — an undeployed environment, no seed data, no account, a precondition settable only on another platform — bootstraps them and drives the real path, instead of declaring the boundary unreachable and shrinking the scenario into a mock substitution or a `NOT-RUN`.
 
 **Origin**: Observed live failure, not a synthetic plant. A real qa cycle (Codex runtime, v2 stock-screen change) treated "Stage API not deployed" as a boundary obstacle, substituted the API hop with a mock, and issued APPROVE — while a local backend, DB, and Metro were already running. The user collapsed it with one question. Human/agent-run documentation form, mirroring `skills/qa/tests/actor-boundary-scenario.md`.

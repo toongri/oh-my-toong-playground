@@ -1,5 +1,7 @@
 # Actor Boundary — Where the Scenario Is Driven and What the Evidence Shows
 
+> **Superseded in part by [economy-scenario.md](economy-scenario.md).** The honesty rules recorded here still hold (no harness call or launch screen claimed as the actor's path; a missing precondition is work). The rules that forced every scenario onto the user's screen, rejected automated tests as evidence, or required launching every precondition platform were removed.
+
 **Purpose**: RED-phase test for the qa skill's Actor Roster (`SKILL.md` PLAN.1), the boundary-substitution rule (`SKILL.md` ADVERSARIAL E2E), and the actor-perspective evidence contract (`SKILL.md` Evidence Saving Protocol). It measures whether a verifier enters the change at the interface a real actor touches — and captures what that actor would observe — instead of calling the changed function directly from a harness and reporting the run as end-to-end.
 
 **Origin**: Observed live failure, not a synthetic plant. A real qa cycle (`acme-home`, evidence slug `b2c5560-adversarial-qa`, 33m 54s) issued an E2E APPROVE for a dispenser slot-selection change and the user's first question — "e2e 한것치고 이미지파일이 많지는 않네?" — collapsed it. The verbatim baseline is recorded below and is the RED this test freezes. Human/agent-run documentation form, mirroring `skills/qa/tests/scenario-authoring-derivation-scenario.md`.

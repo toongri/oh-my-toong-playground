@@ -623,7 +623,9 @@ describe("preserved: 6 coverage axes adversarial matrix intent", () => {
 
 describe("preserved: inline modality drivers, no tmux", () => {
 	test("description and driver table route mobile/native UI through agent-device", () => {
-		expect(skillMd).toContain("curl/agent-browser/agent-device/bash");
+		expect(skillMd).toContain(
+			"`agent-device` / `agent-browser` / `curl` / `bash`",
+		);
 		expect(skillMd).toContain("| Mobile / native UI | `agent-device` |");
 	});
 
@@ -646,12 +648,6 @@ describe("preserved: inline modality drivers, no tmux", () => {
 });
 
 describe("QA standards: adversarial scenarios are never skipped for setup cost", () => {
-	test("QA Standards require every authored scenario and its evidence regardless of setup cost", () => {
-		expect(skillMd).toContain(
-			"Setup cost—including starting multiple local apps or seeding local databases—is never a reason to skip adversarial scenarios: run every authored scenario and retain its evidence proving correct development.",
-		);
-	});
-
 	test("BASELINE rationalization rebuttal preserves the same rule", () => {
 		expect(stage1Md).toContain(
 			"Setup cost is never a reason to skip adversarial scenarios. Run every authored scenario and retain evidence proving correct development.",
@@ -843,16 +839,6 @@ describe("new-prose: Actor Roster is produced before scenarios", () => {
 		expect(skillMd).toContain("`actor · boundary · driver · reachable`");
 	});
 
-	test("an inner code unit is explicitly disqualified as a boundary", () => {
-		expect(skillMd).toContain(
-			"A function, a class, or an internal module is never a boundary",
-		);
-	});
-
-	test("an internal change is required to trace outward to a real boundary", () => {
-		expect(skillMd).toContain("trace the call graph outward");
-	});
-
 	test("the Output Format carries an ## Actor Roster section", () => {
 		expect(skillMd).toContain("## Actor Roster");
 	});
@@ -866,13 +852,15 @@ describe("new-prose: Actor Roster is produced before scenarios", () => {
 describe("new-prose: boundary-entry rule and substitution", () => {
 	test("direct invocation of the changed unit is named a unit check, not a scenario run", () => {
 		expect(skillMd).toContain(
-			"Calling the changed function, class, or module directly is a unit check, not a scenario run",
+			"A harness you wrote to call the changed function is a unit check, not a scenario",
 		);
 	});
 
 	test("boundary substitution replaces only the unreachable hop", () => {
 		expect(skillMd).toContain("Boundary substitution");
-		expect(skillMd).toContain("replacing only the unreachable hop");
+		expect(skillMd).toContain(
+			"Fake only a hop you cannot reach — absent hardware, an off-network third party",
+		);
 	});
 
 	test("an unrunnable scenario is NOT-RUN rather than PASS", () => {
@@ -880,12 +868,14 @@ describe("new-prose: boundary-entry rule and substitution", () => {
 	});
 
 	test("a recorded coverage delta is not a substitute for running the scenario", () => {
-		expect(skillMd).toContain("never a substitute for running it");
+		expect(skillMd).toContain(
+			"An obstacle declared without the attempts behind it is evasion, not a coverage delta",
+		);
 	});
 
 	test("depth honesty forbids merging evidence sets collected at different depths", () => {
 		expect(skillMd).toContain(
-			"Evidence sets collected at different depths never merge into a deeper claim",
+			"Evidence from two depths never merges into a deeper claim",
 		);
 	});
 
@@ -897,9 +887,10 @@ describe("new-prose: boundary-entry rule and substitution", () => {
 	});
 
 	test("boundary-evasion rationalizations are answered in a red-flag table", () => {
-		expect(skillMd).toContain("Red Flags — Boundary Evasion");
-		expect(skillMd).toContain("closest real entry point");
-		expect(skillMd).toContain("the app launches");
+		expect(skillMd).toContain("#### Red Flags");
+		expect(skillMd).toContain(
+			'"The app launches, so the change works" | Show the screen where the change is.',
+		);
 	});
 });
 
@@ -963,31 +954,10 @@ describe("new-prose: approval is gated on boundary depth", () => {
 // boundary is `unverified`, never a green pass (three-layer contract)
 // ---------------------------------------------------------------------------
 
-describe("new-prose: test-runner logs are never scenario evidence", () => {
-	test("SKILL.md forbids a test-runner report as a cell's evidence", () => {
-		expect(skillMd).toContain(
-			"A scenario cell's evidence is a boundary OBSERVATION — a test-runner report is never it",
-		);
-		expect(skillMd).toContain("`record-cell` mechanically rejects a test-runner report");
-	});
-
-	test("SKILL.md excludes the app's own test suite from boundary substitution", () => {
-		expect(skillMd).toContain(
-			"Substitution replaces one unreachable hop — it never swaps the boundary for the app's test suite",
-		);
-		expect(skillMd).toContain("the requirement it covers is **unverified**");
-	});
-
-	test("scenario-authoring.md ties an unreachable boundary to NOT-RUN + unverified", () => {
-		expect(scenarioAuthoringMd).toContain(
-			"test-runner report (`vitest`/`jest`/`pytest`/`go test` output) is **never** a scenario's evidence",
-		);
-		expect(scenarioAuthoringMd).toContain("the scenario is `NOT-RUN`");
-	});
-
+describe("new-prose: a qualifying automated test is proof; an unreachable boundary is unverified", () => {
 	test("presentation.md maps an undriven user boundary to the loud unverified verdict", () => {
 		expect(presentationMd).toContain('unverified (`unverified`)');
-		expect(presentationMd).toContain("미검증 — 유저 경계 미구동");
+		expect(presentationMd).toContain('renders loud "미검증"');
 	});
 
 	// 쓰기 전에 소개 — 무맥락 PO가 생소한 제품/도메인 엔티티를 첫 등장에서 이해하도록,
@@ -997,29 +967,6 @@ describe("new-prose: test-runner logs are never scenario evidence", () => {
 		// 제품/도메인 언어로만 — 코드 심볼은 reader view에서 제거되므로 소개 대상이 아니다.
 		expect(presentationMd).toContain("product/user language");
 		expect(presentationMd).toContain("code symbols");
-	});
-});
-
-// ---------------------------------------------------------------------------
-// NEW-PROSE: NOT-RUN is physical impossibility only — setup cost / time-box
-// never justifies it; a caller's time-box does not override
-// ---------------------------------------------------------------------------
-
-describe("new-prose: setup cost never justifies NOT-RUN", () => {
-	test("SKILL.md reserves NOT-RUN for physical impossibility, not setup amount", () => {
-		expect(skillMd).toContain("NOT-RUN is reserved for physical impossibility, never for setup cost");
-		expect(skillMd).toContain(
-			"The amount of bootstrap work — full local stack, manual DB inserts, minting QA accounts and memberships",
-		);
-	});
-
-	test("SKILL.md rejects a caller-imposed time-box as an override", () => {
-		expect(skillMd).toContain("There is no time-box in this skill");
-		expect(skillMd).toContain("If someone (even the caller) tells you to time-box, that instruction does not override this");
-	});
-
-	test("SKILL.md treats absent seed data as rung 2/3 work, not a NOT-RUN verdict", () => {
-		expect(skillMd).toContain("Absent data is rung 2/3 work, not a verdict");
 	});
 });
 
@@ -1120,17 +1067,14 @@ describe("new-prose: requirement mappings are structurally grounded", () => {
 // ---------------------------------------------------------------------------
 
 describe("final-check: each scenario's observation names its medium (screen vs API/CLI)", () => {
-	test("CHECK phase forces a per-scenario medium self-check with the API-only carve-out", () => {
+	test("CHECK phase forces a per-scenario medium self-check", () => {
 		const checkStart = skillMd.indexOf("### CHECK");
 		expect(checkStart).not.toBe(-1);
 		const checkEnd = skillMd.indexOf("### DIAGNOSIS", checkStart + 1);
 		expect(checkEnd).not.toBe(-1);
 		const check = skillMd.slice(checkStart, checkEnd);
-		expect(check).toContain("name the medium it was observed through");
-		expect(check).toContain(
-			"an API or CLI reading never stands in for a screen observation",
-		);
-		expect(check).toContain("no user-facing surface exists yet");
+		expect(check).toContain("Does each observation name its medium");
+		expect(check).toContain("claim only what that medium proves");
 	});
 
 	test("presentation self-audit carries the medium final-check item", () => {
@@ -1139,11 +1083,11 @@ describe("final-check: each scenario's observation names its medium (screen vs A
 
 	test("presentation red flag catches an API reading dressed as a screen observation", () => {
 		expect(presentationMd).toContain(
-			"A human actor's scenario is observed only through an API/CLI response but reads as if the screen was driven",
+			'An observation says "the user saw" but no screen was captured → name the real medium (API response, test)',
 		);
 	});
 
-	test("SKILL.md ends with an explicit checkbox completion checklist carrying the medium gate", () => {
+	test("SKILL.md ends with an explicit checkbox completion checklist carrying the cheapest-proof gate", () => {
 		const idx = skillMd.indexOf("## Final Checklist");
 		expect(idx).not.toBe(-1);
 		// it is placed LAST — after Quick Reference — so it lands at the bottom
@@ -1156,10 +1100,10 @@ describe("final-check: each scenario's observation names its medium (screen vs A
 		const boxes = checklist.match(/- \[ \]/g) ?? [];
 		expect(boxes.length).toBeGreaterThanOrEqual(5);
 		expect(boxes.length).toBeLessThanOrEqual(6);
-		// the medium gate rides on the list, with the API-only carve-out
-		expect(checklist).toContain("names the medium it was observed through");
-		expect(checklist).toContain("`unverified` at the screen");
-		expect(checklist).toContain("API-only");
+		// the economy gate rides on the list: cheapest proof, no more claimed
+		expect(checklist).toContain(
+			"Each proof was the cheapest that proves it, and claims no more",
+		);
 		// the QA gate is the adversarial E2E at the boundary
 		expect(checklist).toContain("ADVERSARIAL E2E");
 		// build/test/lint is an upstream phase gate, not a verdict-time item —
@@ -1179,12 +1123,6 @@ describe("final-check: each scenario's observation names its medium (screen vs A
 describe("new-prose: scenario-authoring actor layer carries the boundary", () => {
 	test("the actor layer takes its actors from the Actor Roster", () => {
 		expect(scenarioAuthoringMd).toContain("Actor Roster");
-	});
-
-	test("steps are required to begin at the actor's boundary", () => {
-		expect(scenarioAuthoringMd).toContain(
-			"steps begin at that actor's boundary",
-		);
 	});
 });
 
@@ -1302,14 +1240,19 @@ describe("new-prose: the soft-pass carve-out is reachable and unambiguously scop
 });
 
 describe("new-prose: the boundary rule does not override verbatim caller scenarios", () => {
-	test("the boundary rule is scoped to self-authored scenarios", () => {
-		expect(skillMd).toContain("Every **self-authored** scenario is executed");
+	test("the derivation framework is scoped to self-authored scenarios", () => {
+		expect(skillMd).toContain(
+			"the derivation framework below governs only scenarios qa self-authors",
+		);
 	});
 
 	test("a caller-provided scenario is exempt from relocation but not from disclosure", () => {
-		expect(skillMd).toContain("exempt from relocation");
-		expect(skillMd).toContain("not exempt from disclosure");
-		expect(skillMd).toContain("supports no claim above that layer");
+		expect(skillMd).toContain(
+			"it never rewrites what the caller handed in",
+		);
+		expect(skillMd).toContain(
+			"record that layer as its `driven-at`, and it proves nothing above it",
+		);
 	});
 
 	// The public docs promised unconditional relocation, which a caller
@@ -1318,7 +1261,7 @@ describe("new-prose: the boundary rule does not override verbatim caller scenari
 		const docsDir = join(import.meta.dir, "..", "..", "docs", "skills");
 		for (const file of ["review-quality.md", "review-quality.en.md"]) {
 			const doc = readFileSync(join(docsDir, file), "utf8");
-			expect(doc).toContain("caller-provided");
+			expect(doc.toLowerCase()).toContain("caller-provided");
 			expect(doc).toContain("driven-at");
 			expect(doc).not.toContain(
 				"Every scenario is entered at its actor's boundary",
@@ -1338,23 +1281,6 @@ describe("new-prose: B subset-of A has a reading when A is absent", () => {
 });
 
 describe("new-prose: precondition bootstrap precedes unreachability", () => {
-	test("the bootstrap ladder gates the word unreachable", () => {
-		expect(skillMd).toContain("Precondition bootstrap (CRITICAL)");
-		expect(skillMd).toContain(
-			"A missing precondition is work to do, not an obstacle to record",
-		);
-		expect(skillMd).toContain(
-			"one still unreachable after the bootstrap ladder above",
-		);
-	});
-
-	test("each rung names its bootstrap, not a surrender", () => {
-		expect(skillMd).toContain("non-deployment is an environment choice");
-		expect(skillMd).toContain("create seed data");
-		expect(skillMd).toContain("mint a test token");
-		expect(skillMd).toContain("launch that platform too");
-	});
-
 	// The old example list taught the failure: it named a bootstrappable
 	// obstacle (a missing credential) as a legitimate unreachable boundary.
 	test("a missing credential is no longer an example of an unreachable boundary", () => {
@@ -1363,26 +1289,20 @@ describe("new-prose: precondition bootstrap precedes unreachability", () => {
 		);
 	});
 
-	test("the roster spans the journey, not the diff", () => {
+	test("an obstacle declared without the attempts behind it is evasion, not a coverage delta", () => {
 		expect(skillMd).toContain(
-			"Never QA only the platform where the change landed",
+			"An obstacle declared without the attempts behind it is evasion, not a coverage delta",
 		);
 	});
 
-	test("undeclared rung attempts are named boundary evasion", () => {
-		expect(skillMd).toContain("boundary evasion, not a coverage delta");
-	});
-
-	// The local-fallback rung must not swallow deployment-targeted QA: when the
+	// The local-fallback path must not swallow deployment-targeted QA: when the
 	// QA REQUEST verifies the deployment itself, a stage 404 is the failure
 	// under test, and a local stack cannot stand in for the deployed artifact.
-	test("rung 1 branches on what the QA REQUEST verifies", () => {
-		expect(skillMd).not.toContain(
-			"no deploy permission) → the deployed environment was never the boundary",
-		);
+	test("bootstrap branches on what the QA REQUEST verifies", () => {
 		expect(skillMd).toContain("verifies the deployment itself");
-		expect(skillMd).toContain("the deployed environment IS the boundary");
-		expect(skillMd).toContain("never a precondition to bootstrap around");
+		expect(skillMd).toContain(
+			"the deployed environment is the surface and its failure is the FAIL",
+		);
 	});
 
 	test("the public docs carry the bootstrap ladder, in both languages", () => {
@@ -1426,72 +1346,37 @@ describe("new-prose: documented provisioning protocol precedes improvisation", (
 		);
 	});
 
-	test("the bootstrap ladder gates improvisation behind the documented protocol", () => {
-		expect(skillMd).toContain("Documented protocol first — before any rung below");
+	test("bootstrap gates improvisation behind the documented protocol", () => {
 		expect(skillMd).toContain(
-			"only when the project documents no such account or tool",
+			"where a documented path exists it is what you attempt first",
+		);
+		expect(skillMd).toContain(
+			"the improvise options are the fallback for when it is absent or, once tried, unusable",
 		);
 	});
 
-	test("rung 3 leads with the pre-provisioned account, not signup", () => {
+	test("provisioning leads with the pre-provisioned account, not signup", () => {
 		expect(skillMd).toContain(
-			"first use the pre-provisioned QA account the documented protocol prescribes",
+			"before trying** a pre-provisioned account or QA seeding tool the project does document for that state is a wrong detour, not a bootstrap",
 		);
-	});
-
-	test("red flags name the manual-onboarding and dummy-cred detours", () => {
-		expect(skillMd).toContain("so I'll run onboarding to create it");
-		expect(skillMd).toContain("so I'll inject dummy creds and keep going");
 	});
 });
 
 // ---------------------------------------------------------------------------
-// NEW-PROSE: local-first stance — stand up an isolated stack you own; a local
-// startup config gap is a fix, not a stop; a shared/fragile env is neither a
-// blocker nor something to corrupt.
+// NEW-PROSE: a missing or misconfigured local env is bootstrap work, not a
+// stop — the verifier supplies the missing config on its own isolated
+// instance rather than abandoning local QA.
 // Origin: a live failure where the verifier abandoned local QA because the
 // local backend would not boot (config gap) and the local stack was shared.
 // See tests/precondition-bootstrap-scenario.md (surrender #8 / P9).
 // ---------------------------------------------------------------------------
 
-describe("new-prose: local-first stance stands up an isolated stack, never surrenders", () => {
-	test("the local-first stance is stated as a bootstrap posture", () => {
-		expect(skillMd).toContain("Local-first stance");
-		expect(skillMd).toContain("stand up an isolated stack you own");
-	});
-
-	test("a local startup config gap is bootstrap work, not a stop", () => {
-		expect(skillMd).toContain("A local stack that fails to boot on a missing or misconfigured env");
-		expect(skillMd).toContain("a startup config gap is bootstrap work, not a stop");
-	});
-
-	test("env-setup commands/docs are read and applied", () => {
-		expect(skillMd).toContain("environment-setup commands and docs");
-	});
-
-	test("standup is necessity-driven, not a fixed checklist tied to what changed", () => {
-		// Comment ①: a component comes up because a scenario depends on it, not
-		// because it was the thing changed; a command-boundary change may have no
-		// service/db/bundler to stand up at all.
+describe("new-prose: a local env gap is bootstrap work, never a stop", () => {
+	test("a missing precondition is work, and missing env config is supplied, not a stop", () => {
+		expect(skillMd).toContain("A missing precondition is work, not an obstacle");
 		expect(skillMd).toContain(
-			"Stand up whatever the scenario needs to run and to give you that control — never a fixed checklist",
+			"supplying any missing env config yourself",
 		);
-		expect(skillMd).toContain(
-			"not because it was the thing that changed",
-		);
-		expect(skillMd).toContain(
-			"may have no service, database, or bundler behind it at all",
-		);
-	});
-
-	test("a shared/fragile env is neither a blocker nor something to corrupt", () => {
-		expect(skillMd).toContain("neither a blocker");
-		expect(skillMd).toContain("nor something you corrupt");
-	});
-
-	test("red flags name the won't-start and shared-stack surrenders", () => {
-		expect(skillMd).toContain("so I stopped");
-		expect(skillMd).toContain("so I left it alone and didn't run local QA");
 	});
 });
 
@@ -1642,13 +1527,10 @@ describe("new-prose: HTML report is the canonical deliverable", () => {
 // ---------------------------------------------------------------------------
 
 describe("new-prose: stack/seed/auth info is mined from repo docs and scripts", () => {
-	test("bootstrap rung 1 mines docs/scripts for how to stand up the stack", () => {
-		expect(skillMd).toContain("mine the project's own docs and scripts for it");
-		expect(skillMd).toContain("before asking the user or declaring the precondition unreachable");
-	});
-
-	test("bootstrap rung 2 mines docs/scripts for the seed procedure", () => {
-		expect(skillMd).toContain("when the seeding procedure itself is not already known, mine README");
+	test("provisioning-protocol lookup mines docs/scripts for how to stand up the stack", () => {
+		expect(skillMd).toContain(
+			"mine `README`/`CONTRIBUTING`, `docs/`, `rules/`, `Makefile`, `docker-compose*.yml`, `scripts/`",
+		);
 	});
 
 	test("stage1-commands.md Discovery Order mines docker-compose and scripts/", () => {
@@ -1669,25 +1551,9 @@ describe("new-prose: stack/seed/auth info is mined from repo docs and scripts", 
 // blanket "Do NOT install" global-machine ban (RED)
 // ---------------------------------------------------------------------------
 
-describe("new-prose: bootstrap ladder installs a missing tool local-first, global-fallback", () => {
-	test("a new bootstrap rung installs a missing required tool rather than skipping the scenario", () => {
-		expect(skillMd).toContain("Required tool missing locally");
-		expect(skillMd).toContain("ephemeral project-scoped runtime directory outside the checked worktree");
-		expect(skillMd).toContain("product manifests, lockfiles, config");
-	});
-
-	test("the rung falls back to a global install only when project-local is impossible, then substitutes on failure", () => {
-		expect(skillMd).toContain("try a **global** install");
-		expect(skillMd).toContain("substitute *only that hop*");
-	});
-
-	test("the install rung never uses rm -rf or a force flag", () => {
-		const rungStart = skillMd.indexOf("**Required tool missing locally**");
-		expect(rungStart).not.toBe(-1);
-		const rungEnd = skillMd.indexOf("\n\n", rungStart);
-		expect(rungEnd).toBeGreaterThan(rungStart);
-		const rungSection = skillMd.slice(rungStart, rungEnd);
-		expect(rungSection).toContain("Never use `rm -rf` or a force flag");
+describe("new-prose: a missing required tool is installed outside the worktree, not skipped", () => {
+	test("SKILL.md installs a missing required tool outside the worktree rather than skipping the scenario", () => {
+		expect(skillMd).toContain("Install a missing tool outside the worktree.");
 	});
 });
 
@@ -1717,5 +1583,49 @@ describe("new-prose: stage3-handson.md carries the local-first/global-fallback/s
 	test("playwright absence follows the same install-before-fallback policy", () => {
 		expect(stage3Md).toContain("install it — in the same external ephemeral runtime directory");
 		expect(stage3Md).toContain("recorded as a substitution, not an unattempted skip");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// NEW-PROSE: the economy principle replaces the old "always verify at the
+// user's boundary / never QA only the diff's platform / test-runner reports
+// are never scenario evidence" doctrine. qa now proves each story by the
+// cheapest means that actually proves it, and cheap never means skipped.
+// ---------------------------------------------------------------------------
+
+describe("new-prose: economy principle replaces the always-boundary doctrine", () => {
+	test("SKILL.md states the economy principle up front", () => {
+		expect(skillMd).toContain("**Economy principle:**");
+		expect(skillMd).toContain("Cheap never means skipped.");
+	});
+
+	test("PLAN.1 names the cheapest-proof rules by surface", () => {
+		expect(skillMd).toContain("#### The cheapest proof");
+		expect(skillMd).toContain(
+			"A client whose code did not change needs no screen.",
+		);
+		expect(skillMd).toContain("--evidence-surface test");
+		expect(skillMd).toContain("A device is the costliest tool.");
+		expect(skillMd).toContain(
+			"A platform whose code did not change is not under test.",
+		);
+	});
+
+	test("the old always-verify-every-platform doctrine is gone", () => {
+		expect(skillMd).not.toContain("never QA only");
+		expect(skillMd).not.toContain("Never QA only");
+		expect(skillMd).not.toContain("is NEVER a cell's evidence");
+		expect(skillMd).not.toContain(
+			"an API or CLI reading never stands in for a screen observation",
+		);
+	});
+
+	test("a RED/GREEN scenario record exists for the economy principle", () => {
+		const economyScenarioMd = readFileSync(
+			join(import.meta.dir, "tests", "economy-scenario.md"),
+			"utf8",
+		);
+		expect(economyScenarioMd).toContain("## RED");
+		expect(economyScenarioMd).toContain("## GREEN");
 	});
 });

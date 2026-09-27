@@ -2,7 +2,7 @@
 
 > **Applicability**: this is the detail target for SKILL.md's ADVERSARIAL E2E phase, which activates whenever the change touches a **risk surface** — user-facing or internal — and whenever the caller provided executable scenarios. Only a genuinely inert refactor skips it.
 
-Verify behavior by actually running the change, entered at the boundary from the Actor Roster. This is not optional when applicable.
+Verify behavior by actually running the change at the verification surface from the Actor Roster — the cheapest one that proves each scenario (SKILL.md, *The cheapest proof*).
 
 When a reusable case is selected, replay its recorded runner at its recorded
 surface before exploring additional paths. Do not relabel an agent-browser or
@@ -55,13 +55,13 @@ The applicability gate is not "is the surface user-facing?" — it is **does the
 | UI, page, component, frontend, render | Frontend | Verify with `agent-browser` (fallback: `playwright`, if available) |
 | iOS, tvOS, macOS, Android, and Vega OS TV apps; simulator, emulator | Native app | Verify with `agent-device` |
 | CLI command, terminal output, TUI, interactive | CLI / TUI | Verify with interactive Bash |
-| Feature-flag-gated logic, payment/notification resolver internals, permission/state-transition branch — no direct UI/API entry point but touches a **risk surface** | Internal / risk surface | Do NOT skip — trace the call graph outward to the actor's real boundary (screen, endpoint, job trigger), derive scenarios via [scenario-authoring.md] Layer A→B→C, then drive from that boundary |
+| Feature-flag-gated logic, payment/notification resolver internals, permission/state-transition branch — no direct UI/API entry point but touches a **risk surface** | Internal / risk surface | Do NOT skip — prove it at the nearest endpoint or job trigger that reaches the branch, or with a test that asserts the branch's outcome; derive scenarios via [scenario-authoring.md] Layer A→B→C |
 | Refactoring, internal logic, utility, helper, config that touches **no risk surface** (pure refactor, no behavior/branch change) | Internal only | **Skip ADVERSARIAL E2E** — unless caller-provided executable scenarios are present; in that case, run them verbatim (no adversarial matrix — no risk surface touched) |
 | Documentation, markdown, comments only | Non-code | **Skip ADVERSARIAL E2E** — unless caller-provided executable scenarios are present; in that case, run them verbatim (no adversarial matrix — no risk surface touched) |
 
 ### When Multiple Types Apply
 
-If changes span multiple types (e.g., API + Frontend), verify each applicable type independently.
+If changes span multiple types (e.g., API + Frontend), verify each changed type at its own surface. A type the diff did not change is not verified.
 
 ### Skip Documentation
 
@@ -91,6 +91,7 @@ The QA executor owns target selection and variable export; do not assume a calle
 
 - **iOS Simulator**: run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts acquire-device --platform ios --base "<device type from xcrun simctl list devicetypes>"`. It creates a simulator named for this session, records it, boots it, and prints `IOS_UDID=<udid>`. Run `export IOS_UDID=<udid>` with the printed value before any `$IOS_UDID` command.
 - **Android Emulator**: run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts acquire-device --platform android --base <AVD from emulator -list-avds>`. It starts a read-only instance of that AVD on a free port, tagged with this session, records it, waits for boot, and prints `ANDROID_SERIAL=emulator-<port>`. Run `export ANDROID_SERIAL=emulator-<port>` with the printed value before any serial-scoped `adb -s "$ANDROID_SERIAL"` command.
+- Acquire a device only when a scenario needs a rendered mobile screen, and only one at a time: finish every screen scenario on it, then release it before moving on.
 - Other QA sessions run at the same time on this machine, so a simulator or emulator that is already booted may belong to one of them. Always acquire this cycle's own device. Use an existing device only when the user names it, and then neither record nor stop it.
 - **Per-AC evidence output**: before each AC that emits a report, resolve a fresh path using QA's Evidence Path Priority, assign it (`evidence_xml="<resolved evidence path>"`), verify its parent directory, then run `export evidence_xml`. Execute that AC with `$evidence_xml`; repeat resolution/export for every AC so one AC never inherits another AC's evidence path.
 
@@ -313,7 +314,7 @@ The stop-driving classes exist so an expensive cycle is not spent against a surf
 
 ## Adversarial Scenario Matrix
 
-This matrix is the **hostile-depth** dimension applied to scenarios already derived by breadth in [scenario-authoring.md] — see that file's `Breadth Then Depth`. Do not skip straight to this matrix on an undifferentiated changed-file list, and run each row from the scenario's actor boundary, not against the changed unit.
+This matrix is the **hostile-depth** dimension applied to scenarios already derived by breadth in [scenario-authoring.md] — see that file's `Breadth Then Depth`. Do not skip straight to this matrix on an undifferentiated changed-file list, and run each row at the scenario's verification surface, not from an ad-hoc harness around the changed unit.
 
 Hands-on verification is not "run the happy path once." A change is only verified when it survives hostile probing. When running these checks, adopt the mindset of a malicious or careless user: someone who ignores documentation, pastes garbage data, skips required fields, and actively tries to confuse or break the system. After the modality procedures above confirm the happy path, run the adversarial checks below. Each category names what a hostile check looks like so a verifier running hands-on knows what to probe — pick the rows that apply to the change under review and actually execute them, do not reason about them on paper.
 

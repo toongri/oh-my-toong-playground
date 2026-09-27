@@ -53,9 +53,9 @@ Reproduction-gate categories:
 
 ---
 
-## Layer C — Actor and Its Boundary
+## Layer C — Actor and Its Verification Surface
 
-Every derived scenario takes its actor from the **Actor Roster** pinned at PLAN.1 (`SKILL.md`), which already names that actor's boundary and driver. Two things follow, and derivation must honor both: the actor's stance decides what `expected` means, and its boundary decides where the scenario starts — **steps begin at that actor's boundary**, never at the changed function.
+Every derived scenario takes its actor from the **Actor Roster** pinned at PLAN.1 (`SKILL.md`), which already names that actor's verification surface and driver. The actor's stance decides what `expected` means; the surface decides where the steps begin.
 
 Stance sharpens a roster actor; it never replaces one:
 
@@ -78,7 +78,7 @@ Risk derivation (Layer A) finds where a silent failure is expensive; it does not
 2. **Adjacent state transitions** — every product action elsewhere that changes what the changed surface shows (the writers of its data: a dispense that decrements stock, a bottle replacement that resets it). When the map shows such a writer, at least one scenario drives the writer action first and then observes the changed surface, asserting the transition landed rather than a cached prior state.
 3. **Lifecycle stances** — the states a real account passes through: freshly onboarded (empty or partial data), established daily use, just after a maintenance action. When these states differ in what the surface shows, each distinct state gets a scenario.
 
-Each Layer D scenario is a multi-step realistic flow, still entered at the actor's boundary (Layer C) and **not a replacement for the six-field scenario shape**; its `why-needed` names the use-case axis it covers. The coverage-delta line names all three axes and which are covered or uncovered — an axis silently absent from the roster is an authoring omission, not a delta. An omitted slot, arrival path, state transition, or lifecycle stance is an authoring omission, not permission to narrow scope.
+Each Layer D scenario is a multi-step realistic flow, still entered at the actor's verification surface (Layer C) and **not a replacement for the six-field scenario shape**; its `why-needed` names the use-case axis it covers. The coverage-delta line names all three axes and which are covered or uncovered — an axis silently absent from the roster is an authoring omission, not a delta. An omitted slot, arrival path, state transition, or lifecycle stance is an authoring omission, not permission to narrow scope.
 
 ---
 
@@ -88,10 +88,10 @@ Every self-authored scenario is written in this six-field shape, in this order:
 
 `actor · preconditions · steps · expected · why-needed · priority`
 
-1. **actor** — from Layer C: the roster actor plus its stance, carrying the boundary the steps must start at.
+1. **actor** — from Layer C: the roster actor plus its stance, carrying the surface the steps start at.
 2. **preconditions** — the reproduction gate from Layer B (or the literal `none`).
-3. **steps** — the concrete action sequence to execute, entered at the actor's boundary.
-4. **expected** — the observable outcome that proves pass or fail, stated at the actor's boundary (what renders on the screen / device / API response). The evidence that later backs this scenario is that same boundary observation — a screenshot, a rendered final state, an actual API response. A unit/integration test-runner report (`vitest`/`jest`/`pytest`/`go test` output) is **never** a scenario's evidence: it proves code in isolation, not the user boundary, and `record-cell` mechanically rejects it. If the boundary is genuinely unreachable (absent hardware, off-network third party), the scenario is `NOT-RUN`, recorded as `na` with a reason, and the requirement it covers is **unverified** — never marked pass on a green test suite.
+3. **steps** — the concrete action sequence to execute, entered at the actor's verification surface.
+4. **expected** — the observable outcome that proves pass or fail at the surface (what the screen shows, what the API returns). Its evidence is that observation, or an automated test that asserts this exact outcome (`--evidence-surface test`). If it cannot be proven at all, the scenario is `NOT-RUN`, recorded as `na` with a reason, and its requirement is **unverified**.
 5. **why-needed** — **mandatory.** States the reason this scenario exists — mostly "what automation/e2e already misses" from the Layer A2 coverage-gap judgment. A scenario without a `why-needed` field is incomplete; this is what separates a derived scenario from a mechanically-generated one.
 6. **priority** — the `H/M/L` value from Layer A3.
 
