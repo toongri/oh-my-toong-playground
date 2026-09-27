@@ -915,6 +915,29 @@ test_user_authorized_force_complete_denies() {
     fi
 }
 
+# qa has its own user-only escape hatch with the same deny-and-hand-over contract.
+test_user_authorized_qa_force_complete_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "$QACLI force-complete --reason x")
+    if printf '%s' "$out" | jq -e '.hookSpecificOutput.permissionDecision == "deny" and (.hookSpecificOutput.permissionDecisionReason | test("await-user") and test("턴을 끝내"))' > /dev/null; then
+        return 0
+    fi
+    echo "ASSERTION FAILED user-authorized-qa-force-complete: expected deny with await-user guidance, got '$out'"
+    return 1
+}
+
+test_user_authorized_qa_other_commands_allow() {
+    local out cmd
+    for cmd in "$QACLI get" "$QACLI complete" "$QACLI release-resource --id 123"; do
+        out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ "$cmd")
+        if [ -n "$out" ]; then
+            echo "ASSERTION FAILED qa ai-runnable '$cmd': expected allow, got '$out'"
+            return 1
+        fi
+    done
+}
+
 test_user_authorized_force_complete_variable_indirection_denies() {
     local out
     out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
@@ -1664,6 +1687,8 @@ main() {
     run_test test_ai_runnable_recovery_commands_allow
     run_test test_user_authorized_deny_explains_next_move
     run_test test_user_authorized_force_complete_denies
+    run_test test_user_authorized_qa_force_complete_denies
+    run_test test_user_authorized_qa_other_commands_allow
     run_test test_user_authorized_force_complete_variable_indirection_denies
     run_test test_user_authorized_force_complete_reverse_order_denies
     run_test test_user_authorized_force_complete_whitespace_run_denies

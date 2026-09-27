@@ -39,7 +39,7 @@ import {
 	STATE_PREFIX,
 } from "@lib/state-core";
 import { renderHelp, type CliCommand } from "@lib/cli-help";
-import { acquireDevice, recordResource, releaseResource, unreleasedResourcesRefusal } from "@lib/session-resources";
+import { acquireDevice, recordResource, releaseResource, unreleasedResources, unreleasedResourcesRefusal } from "@lib/session-resources";
 import {
 	BASELINE_INDEX,
 	QA_PHASES,
@@ -1097,6 +1097,8 @@ export function startQa(sessionId: string, target: string): void {
 		};
 		delete reset.inert;
 		delete reset.report;
+		delete reset.forced_complete;
+		delete reset.forced_reason;
 		delete reset.run_checks_history;
 		reset.derived = {
 			chain_complete: chainComplete(reset),
@@ -1136,6 +1138,32 @@ export function completeQa(sessionId: string): void {
 		}
 		mergeWriteUnlocked(sessionId, { active: false });
 	});
+}
+
+/**
+ * User-only escape hatch: ends a cycle the gates will not let close. Skips every
+ * verdict/record/report gate, but still tries to stop each background resource
+ * this session started — a leaked simulator is the cost this skill exists to
+ * avoid. A resource whose stop command fails does not block the user's decision;
+ * it is returned so the CLI can name it. Refuses without a reason, and on a cycle
+ * that is already inactive.
+ */
+export function forceCompleteQa(sessionId: string, reason: string): { id: string; kind: string; error: string }[] {
+	if (reason.trim() === "") throw new Error("force-complete: refused — --reason is required (why this cycle is being forcibly completed)");
+	const prior = readPrior(sessionId);
+	if (prior.active !== true) throw new Error("force-complete: refused — no active qa cycle");
+	const failed: { id: string; kind: string; error: string }[] = [];
+	for (const resource of unreleasedResources(sessionId)) {
+		try {
+			releaseResource(sessionId, resource.id);
+		} catch (e) {
+			failed.push({ id: resource.id, kind: resource.kind, error: String(e) });
+		}
+	}
+	withStateLock(resolveStatePath(sessionId), () => {
+		mergeWriteUnlocked(sessionId, { active: false, forced_complete: true, forced_reason: reason.trim() });
+	});
+	return failed;
 }
 
 export type QaView = QaState & {
@@ -1290,6 +1318,11 @@ const ROSTER: CliCommand[] = [
 		effect: "marks the finished, gate-satisfied cycle inactive",
 	},
 	{ name: "get", authority: "ai", effect: "reads the full recorded chain/view" },
+	{
+		name: "force-complete",
+		authority: "user",
+		effect: "ends the active cycle without its gates (--reason required); still releases recorded resources and lists any that failed to stop",
+	},
 ];
 
 function main(): void {
@@ -1443,6 +1476,12 @@ function main(): void {
 				declareInert(sessionId, requiredArg(args, "reason"));
 			} else if (subcommand === "complete") {
 			completeQa(sessionId);
+		} else if (subcommand === "force-complete") {
+			const failed = forceCompleteQa(sessionId, requiredArg(args, "reason"));
+			process.stdout.write("force-completed: the qa cycle is inactive; the reason is recorded in state.\n");
+			for (const f of failed) {
+				process.stderr.write(`warning: ${f.kind} "${f.id}" is still running — its stop command failed. Stop it manually.\n  ${f.error}\n`);
+			}
 		} else if (subcommand === "get") {
 			process.stdout.write(JSON.stringify(readQaView(sessionId)) + "\n");
 		} else {

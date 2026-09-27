@@ -3000,6 +3000,24 @@ describe("QA Stop-gate decision table", () => {
 		expect(makeDecision(context())).toEqual({ continue: true });
 	});
 
+	it("qa force-completed cycle allows stop without verdict, record, or report", () => {
+		const state = completeQa("APPROVE");
+		state.verdict = null;
+		state.active = false;
+		state.forced_complete = true;
+		state.forced_reason = "user ended the cycle";
+		writeQaState(state, sid, false);
+		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("qa forced marker on a still-active cycle does not open Stop", () => {
+		const state = completeQa("APPROVE");
+		state.verdict = null;
+		state.forced_complete = true;
+		writeQaState(state, sid, false);
+		expect(makeDecision(context())).toMatchObject({ decision: "block" });
+	});
+
 	it("qa inactive untouched REQUEST_CHANGES allows stop", () => {
 		writeQaState({ active: false, phase: "PRE-FLIGHT", phase_max: 0, cycle: 0, verdict: "REQUEST_CHANGES", actors: [], stories: [], cells: [], run_checks: {} });
 		expect(makeDecision(context())).toEqual({ continue: true });

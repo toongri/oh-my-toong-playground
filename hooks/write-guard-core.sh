@@ -60,6 +60,7 @@ _wg_core_codereview_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUs
 # "denied" has no next move and routes around the gate instead. Single source
 # of truth so both platform shims emit byte-identical deny text.
 _wg_core_user_authorized_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: force-complete는 사용자만 실행할 수 있습니다. 이 명령은 verdict·스토리·코드 리뷰·완료 근거 게이트를 모두 건너뛰고 pursuit를 complete로 만듭니다. 그래서 끝낼지 말지는 사용자가 정합니다. 다음 순서로 진행하세요: (1) 게이트를 통과하지 못한 이유와 명령어 전문(--reason 포함)을 사용자에게 보여 주세요. (2) pursuit가 pursuing 상태면 await-user를 실행하세요. (3) 턴을 끝내고 사용자의 답을 기다리세요. 다른 경로(다른 셸, 터미널 입력, 상태 파일 수정)로 같은 결과를 만들지 마세요. 사용자는 터미널에서 직접, 또는 프롬프트 앞에 ! 를 붙여 실행합니다."}}'
+_wg_core_qa_user_authorized_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: qa force-complete는 사용자만 실행할 수 있습니다. 이 명령은 판정·기록·리포트 게이트를 모두 건너뛰고 qa 사이클을 끝냅니다. 그래서 끝낼지 말지는 사용자가 정합니다. 다음 순서로 진행하세요: (1) 게이트를 통과하지 못한 이유와 명령어 전문(--reason 포함)을 사용자에게 보여 주세요. (2) await-user를 실행하세요. (3) 턴을 끝내고 사용자의 답을 기다리세요. 다른 경로(다른 셸, 터미널 입력, 상태 파일 수정)로 같은 결과를 만들지 마세요. 사용자는 터미널에서 직접, 또는 프롬프트 앞에 ! 를 붙여 실행합니다."}}'
 
 # Deny JSON for the reviewer-only submit-review publisher route. The publisher
 # hides artifact writes, so this gate protects the command's caller identity.
@@ -300,8 +301,9 @@ write_guard_core_check_dangerous_command() {
 }
 
 # write_guard_core_check_user_authorized_command <command-segment>
-# Denies the one ultragoal-state subcommand only the human may run:
-#   force-complete -- forces phase=complete, bypassing every completion gate
+# Denies the subcommands only the human may run:
+#   ultragoal-state force-complete -- forces phase=complete, bypassing every completion gate
+#   qa-state force-complete        -- ends the qa cycle, bypassing every verdict/record gate
 # The other recovery commands (approve-review-dispatch-renewal, resume-pursuit,
 # dismiss-review-finding, qa waive) are AI-runnable: each requires a reason and
 # is recorded in state, so the final report shows it. Blocking them did not
@@ -332,6 +334,14 @@ write_guard_core_check_user_authorized_command() {
             case "$seg" in
                 *"force-complete"*)
                     printf '%s\n' "$_wg_core_user_authorized_deny_json"
+                    return 0
+                    ;;
+            esac
+            ;;
+        *"qa-state.ts"*)
+            case "$seg" in
+                *"force-complete"*)
+                    printf '%s\n' "$_wg_core_qa_user_authorized_deny_json"
                     return 0
                     ;;
             esac

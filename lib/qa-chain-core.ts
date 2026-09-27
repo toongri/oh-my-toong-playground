@@ -258,6 +258,9 @@ export interface QaChainState {
 	acceptance_criteria?: string[];
 	derived?: QaDerived;
 	report?: { path: string; sha256: string; state_snapshot: string; reviewed: boolean };
+	/** Set only by the user-only `force-complete`: the cycle ended without its gates. */
+	forced_complete?: boolean;
+	forced_reason?: string;
 	[key: string]: unknown;
 }
 

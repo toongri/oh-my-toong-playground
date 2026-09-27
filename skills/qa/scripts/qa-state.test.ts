@@ -1,4 +1,4 @@
-import { recordResource, releaseResource } from "@lib/session-resources";
+import { recordResource, releaseResource, unreleasedResources } from "@lib/session-resources";
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from "fs";
 import { execSync } from "child_process";
@@ -11,6 +11,8 @@ import {
 	advancePhase,
 	incCycle,
 	completeQa,
+	forceCompleteQa,
+	startQa,
 	setVerdict,
 	setAwaitingUser,
 	resolveStatePath,
@@ -203,6 +205,44 @@ describe("qa state: background resource gate", () => {
 		releaseResource(S, "emulator-5554");
 		completeQa(S);
 		expect(rawState().active).toBe(false);
+	});
+});
+
+describe("qa state: user-only force-complete", () => {
+	test("ends an ungated cycle inactive and records the reason", () => {
+		setQaState(S, { phase: "PLAN", target: "stuck" });
+		forceCompleteQa(S, "  gates keep failing on a harness limit  ");
+		const raw = rawState();
+		expect(raw.active).toBe(false);
+		expect(raw.forced_complete).toBe(true);
+		expect(raw.forced_reason).toBe("gates keep failing on a harness limit");
+	});
+
+	test("refuses without a reason, and on an inactive cycle", () => {
+		setQaState(S, { phase: "PLAN" });
+		expect(() => forceCompleteQa(S, "  ")).toThrow("--reason is required");
+		forceCompleteQa(S, "done");
+		expect(() => forceCompleteQa(S, "again")).toThrow("no active qa cycle");
+	});
+
+	test("releases resources it can, and returns the ones whose stop command failed without blocking", () => {
+		setQaState(S, { phase: "PLAN" });
+		recordResource(S, { id: "sim-ok", kind: "simulator", stop: "true" });
+		recordResource(S, { id: "emu-stuck", kind: "emulator", stop: "exit 3" });
+		const failed = forceCompleteQa(S, "user ended the cycle");
+		expect(failed.map((f) => f.id)).toEqual(["emu-stuck"]);
+		expect(unreleasedResources(S).map((r) => r.id)).toEqual(["emu-stuck"]);
+		expect(rawState().active).toBe(false);
+	});
+
+	test("a fresh start clears the forced marker", () => {
+		setQaState(S, { phase: "PLAN" });
+		forceCompleteQa(S, "done");
+		startQa(S, "next target");
+		const raw = rawState();
+		expect(raw.active).toBe(true);
+		expect(raw.forced_complete).toBeUndefined();
+		expect(raw.forced_reason).toBeUndefined();
 	});
 });
 
@@ -785,11 +825,15 @@ describe("help subcommand", () => {
 	const run = (cmd: string, env?: Record<string, string>) =>
 		execSync(`bun ${script} ${cmd}`, { encoding: "utf8", env: { ...process.env, ...env } });
 
-	test("waive is AI-usable and qa has no user-only command", () => {
+	test("waive is AI-usable and force-complete is the only user-only command", () => {
 		const out = run("help");
-		expect(out).not.toContain("USER-ONLY");
-		const aiSection = out.slice(out.indexOf("AI-USABLE"), out.indexOf("SYSTEM-ONLY"));
+		const aiSection = out.slice(out.indexOf("AI-USABLE"), out.indexOf("USER-ONLY"));
+		const userSection = out.slice(out.indexOf("USER-ONLY"));
 		expect(aiSection).toContain("waive —");
+		expect(aiSection).not.toContain("force-complete —");
+		expect(userSection.trim().split("\n").filter((line) => line.startsWith("  "))).toEqual([
+			expect.stringContaining("force-complete —"),
+		]);
 	});
 
 	test("set and get are listed under AI-USABLE", () => {
