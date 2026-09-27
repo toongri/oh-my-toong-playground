@@ -104,7 +104,8 @@ function ensureSource(s) { if (!["user", "agent", "hook"].includes(s)) fail("sou
 
 function renderBlocks(blocks, max, offset) {
   const canonical = Buffer.from(`${blocks.join("\n")}\n`, "utf8");
-  if (!Number.isInteger(offset) || offset < 0 || offset > canonical.length || (offset < canonical.length && (canonical[offset] & 0xc0) === 0x80)) fail("--offset is not a UTF-8 boundary");
+  if (!Number.isInteger(offset) || offset < 0 || (offset < canonical.length && (canonical[offset] & 0xc0) === 0x80)) fail("--offset is not a UTF-8 boundary");
+  if (offset > canonical.length) fail(`--offset ${offset} is past the end of this query's output (${canonical.length} bytes); a continuation offset is valid only with the same query that printed it`);
   if (offset === canonical.length) return "";
   let end = Math.min(canonical.length, offset + max);
   const boundary = (n) => n === canonical.length || n === 0 || (canonical[n] & 0xc0) !== 0x80;

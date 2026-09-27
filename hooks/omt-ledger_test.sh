@@ -735,6 +735,30 @@ test_paged_projection_reassembles_byte_for_byte() {
     fi
 }
 
+test_offset_errors_are_query_specific() {
+    local i out offset now_out now_len err payload prefix_len
+    i=1
+    while [ "$i" -le 4 ]; do
+        printf 'long payload %s with 한글' "$i" | "$LEDGER_SCRIPT" record Decisions --id "crossq-$i" --source hook --scope s >/dev/null
+        i=$((i + 1))
+    done
+    out=$("$LEDGER_SCRIPT" recover --max-bytes 200)
+    offset=$(echo "$out" | sed -n 's/^continuation: offset=\([0-9][0-9]*\).*/\1/p')
+    [ -n "$offset" ] || { echo "ASSERTION FAILED: setup did not produce a continuation offset"; return 1; }
+    now_out=$("$LEDGER_SCRIPT" read --section Now)
+    now_len=$(printf '%s' "$now_out" | wc -c | tr -d ' ')
+    [ "$offset" -gt "$now_len" ] || { echo "ASSERTION FAILED: recovered offset must exceed the unrelated query's output for this test to be meaningful"; return 1; }
+    err=$("$LEDGER_SCRIPT" read --section Now --offset "$offset" 2>&1 1>/dev/null)
+    assert_output_contains_local "$err" "is past the end of this query's output" "an offset carried over from a different query's continuation footer must report the mismatch, not a UTF-8 boundary claim" || return 1
+    if echo "$err" | grep -qF 'not a UTF-8 boundary'; then echo "ASSERTION FAILED: cross-query offset must not be misreported as a UTF-8 boundary error"; return 1; fi
+
+    payload=$(printf '한%.0s' $(seq 1 3))
+    printf '%s' "$payload" | "$LEDGER_SCRIPT" record Decisions --id utf8off --source hook --scope s >/dev/null
+    prefix_len=$(printf 'id: utf8off\nsource: hook\nscope: s\nstatus: active\nrefs: none\npayload:\n' | wc -c | tr -d ' ')
+    err=$("$LEDGER_SCRIPT" read --id utf8off --offset "$((prefix_len + 1))" 2>&1 1>/dev/null)
+    assert_output_contains_local "$err" 'not a UTF-8 boundary' "an offset landing on a UTF-8 continuation byte within the same query must still report a boundary error" || return 1
+}
+
 test_checkpoint_override_and_read_only_behavior() {
     local ledger before after
     printf '%s' '{"goal":"g","scope":"s","user_updates":"u","done":"d","pending":"p","next":"n","refs":[]}' | "$LEDGER_SCRIPT" checkpoint
@@ -817,6 +841,7 @@ main() {
     run_test test_lifecycle_survives_now_and_checkpoint_and_recovery_is_active_only
     run_test test_long_utf8_pages_are_bounded_and_progress
     run_test test_paged_projection_reassembles_byte_for_byte
+    run_test test_offset_errors_are_query_specific
     run_test test_checkpoint_override_and_read_only_behavior
     run_test test_adjacent_section_and_checkpoint_projection_and_sentinel_literal
     run_test test_many_structured_records_project_with_statuses
