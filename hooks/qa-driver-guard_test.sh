@@ -46,7 +46,7 @@ run_hook() {
 
 assert_denied() {
     local out="$1" label="$2"
-    printf '%s' "$out" | jq -e '.continue == false and (.reason | test("QA driver gate"; "i") and test("agent-device"; "i") and test("agent-browser"; "i") and test("curl"; "i") and test("bash"; "i"))' >/dev/null \
+    printf '%s' "$out" | jq -e '.hookSpecificOutput.hookEventName == "PreToolUse" and .hookSpecificOutput.permissionDecision == "deny" and (has("continue") | not) and (.hookSpecificOutput.permissionDecisionReason | test("QA driver gate"; "i") and test("agent-device"; "i") and test("agent-browser"; "i") and test("curl"; "i") and test("bash"; "i"))' >/dev/null \
         || { echo "ASSERTION FAILED $label: expected Claude deny, got '$out'"; return 1; }
 }
 

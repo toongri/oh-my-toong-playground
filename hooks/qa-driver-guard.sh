@@ -35,5 +35,12 @@ armed=$(jq -r 'if .derived.driver_gate_armed == true then "true" else "false" en
 qa_driver_command_is_e2e "$command" || exit 0
 
 reason=$(qa_driver_deny_reason)
-jq -n --arg reason "$reason" '{continue:false,reason:$reason}'
+jq -nc --arg reason "$reason" '
+    {
+        hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: $reason
+        }
+    }'
 exit 0
