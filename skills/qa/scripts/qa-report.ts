@@ -20,7 +20,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from "os";
 import { dirname, extname, join, resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
-import { requiredCells, isVisualDriver, evidenceReviewComplete, type QaBaseline, type QaCell, type QaResult, type QaRunCheck, type QaStory } from "@lib/qa-chain-core";
+import { requiredCells, cellNeedsVisualProof, evidenceReviewComplete, type QaBaseline, type QaCell, type QaResult, type QaRunCheck, type QaStory } from "@lib/qa-chain-core";
 import { readQaView, recordRenderedReport, stateProbe, type QaView } from "./qa-state.ts";
 
 // Keep individual evidence files small enough to inspect, and cap the total
@@ -572,7 +572,7 @@ function renderScenarios(view: QaView, narrative: QaReportNarrative, readEvidenc
 					// the same file is not rendered — and budget-counted — twice on one
 					// card. Card-local only: the same screenshot shared by a DIFFERENT card
 					// still renders there (imageSlot is per-card, not de-duped globally).
-					const claims = isVisualDriver(actor?.driver) ? cell.evidence_review?.claims : undefined;
+					const claims = cellNeedsVisualProof(cell, actor?.driver) ? cell.evidence_review?.claims : undefined;
 					const beforeBlock = imageSlot("행동 전 화면", e?.before, readEvidence, context);
 					const primaryPaths = new Set([e?.before, e?.action, e?.after, e?.path]);
 					const claimImage = (path: string, label: string): string => {
@@ -900,17 +900,18 @@ export function renderQaReport(
 		return { exists: bytes.length > 0, size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
 	};
 	for (const story of view.stories ?? []) {
-		if (!isVisualDriver(actorFor(view, story)?.driver)) continue;
+		const actor = actorFor(view, story);
 		for (const cell of cellsForStory(view, story.id)) {
+			if (!cellNeedsVisualProof(cell, actor?.driver)) continue;
 			if ((cell.status === "pass" || cell.status === "fail") && !evidenceReviewComplete(cell, probe)) unverified.add(cellKey(cell));
 		}
 	}
 	if (strictVisualEvidence) {
 		for (const story of view.stories ?? []) {
 			const actor = view.actors?.find((candidate) => candidate.id === (story.actor ?? story.actor_id));
-			if (!isVisualDriver(actor?.driver)) continue;
 			for (const cell of cellsForStory(view, story.id)) {
 				if (cell.status !== "pass" && cell.status !== "fail") continue;
+				if (!cellNeedsVisualProof(cell, actor?.driver)) continue;
 				for (const source of cell.evidence_review?.claims.flatMap((claim) => claim.sources) ?? []) {
 					const embed = readEvidence(source.path);
 					if (embed.kind === "missing" || embed.kind === "too-large") throw new Error(`visual claim evidence not embeddable for ${cellKey(cell)}: ${source.path}; record a bounded source and review again`);

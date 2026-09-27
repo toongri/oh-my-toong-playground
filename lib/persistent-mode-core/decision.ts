@@ -815,6 +815,9 @@ export function makeDecision(context: DecisionContext): HookOutput {
 
 		if ((allowApprove || allowComment || allowRequestChanges) && qaReportComplete(qaState, qaProbe)) {
 			cleanupBlockCountFiles(stateDir, qaAttemptId);
+		} else if (qaState.forced_complete === true && qaState.active === false) {
+			// The user ended this cycle with `force-complete`; its gates no longer apply.
+			cleanupBlockCountFiles(stateDir, qaAttemptId);
 		} else if (qaState.awaiting_user === true && isProgressLive(qaState, nowEpoch)) {
 			// Stop-allowed pause for THIS family: the model posed a plain-text question at
 			// a human gate (e.g. a waive decision only the user may make) and set

@@ -39,7 +39,7 @@ import {
 	STATE_PREFIX,
 } from "@lib/state-core";
 import { renderHelp, type CliCommand } from "@lib/cli-help";
-import { acquireDevice, recordResource, releaseResource, unreleasedResourcesRefusal } from "@lib/session-resources";
+import { acquireDevice, recordResource, releaseResource, unreleasedResources, unreleasedResourcesRefusal } from "@lib/session-resources";
 import {
 	BASELINE_INDEX,
 	QA_PHASES,
@@ -49,8 +49,9 @@ import {
 	cycleUntouched,
 	driverGateArmed,
 	recordComplete,
-	isVisualDriver,
+	cellNeedsVisualProof,
 	visualEvidenceComplete,
+	TEST_EVIDENCE_SURFACE,
 	evidenceReviewSnapshot,
 	qaReportSnapshot,
 	qaReportComplete,
@@ -133,7 +134,7 @@ function currentCycle(state: Partial<ChainState>): number {
 
 function probeEvidence(path: string, surface: string, driver: QaDriver): string {
 	const absolute = resolve(path);
-	if (surface !== driver) throw new Error(`evidence-surface must match actor driver "${driver}"`);
+	if (surface !== driver && surface !== TEST_EVIDENCE_SURFACE) throw new Error(`evidence-surface must match actor driver "${driver}" or be "${TEST_EVIDENCE_SURFACE}" (an automated test run)`);
 	const size = (() => {
 		try {
 			return statSync(absolute).size;
@@ -160,13 +161,11 @@ function probePlainFile(path: string): string {
 }
 
 // Signatures of a unit/integration test-RUNNER report (vitest, jest, pytest,
-// mocha, go test). A scenario cell's evidence must be a user-boundary
-// observation — a rendered screen/device capture, the client-received API
-// response, or the terminal a CLI user actually operates. A test-runner report
-// proves code in isolation, NOT the boundary an actor touches, so it can never
-// stand as a cell's proof. (BASELINE evidence is exempt — build/test/lint logs
-// are its whole point — so this is enforced only on record-cell.) Images and
-// other binaries can never be a test log, so they are skipped by extension.
+// mocha, go test, JUnit XML). A test run is valid scenario evidence only under
+// the explicit `test` evidence surface; recorded under an actor driver's
+// surface (curl, bash, ...) it would read as that driver's observation, so the
+// surface would claim a medium the evidence does not have. Images and other
+// binaries can never be a test log, so they are skipped by extension.
 const TEST_RUNNER_SIGNATURES: RegExp[] = [
 	/\bRUN\s+v\d+\.\d+\.\d+/, // vitest banner
 	/\bTest Files\s+\d+\s+(passed|failed)/, // vitest summary
@@ -195,13 +194,11 @@ const NON_TEXT_EVIDENCE_EXT = new Set([
 ]);
 
 /**
- * Guards a scenario cell's evidence against being a test-runner report masquerading
- * as user-boundary proof — the failure the QA presentation exists to prevent (a PO
- * shown `vitest run … exit=0` as "requirement met"). Throws when the file's content
- * matches a unit/integration test-runner report. Read-capped and image-skipping so
- * the check is cheap and never fires on a screenshot / API-response capture.
+ * Keeps the evidence surface honest: a file that reads as a test-runner report
+ * must be recorded with `--evidence-surface test`. Read-capped and
+ * image-skipping so the check stays cheap on screenshots and API captures.
  */
-function assertBoundaryObservation(absolute: string): void {
+function assertTestReportUsesTestSurface(absolute: string): void {
 	if (NON_TEXT_EVIDENCE_EXT.has(extname(absolute).toLowerCase())) return;
 	let scanned: string;
 	try {
@@ -231,13 +228,8 @@ function assertBoundaryObservation(absolute: string): void {
 	}
 	if (TEST_RUNNER_SIGNATURES.some((re) => re.test(scanned))) {
 		throw new Error(
-			`evidence "${absolute}" is a unit/integration test-runner report, which proves code in ` +
-				`isolation — NOT the user boundary. A scenario cell's evidence must be a boundary ` +
-				`observation: the rendered screen/device state, the client-received API response, or the ` +
-				`terminal a CLI user actually operates. If the real boundary is unreachable, record the ` +
-				`scenario as a NOT-RUN coverage delta — never as pass/na backed by a test log. ` +
-				`(BASELINE build/test/lint logs are exempt; this guard is for ADVERSARIAL E2E cells.) ` +
-				`See skills/qa/SKILL.md → ADVERSARIAL E2E / Boundary substitution.`,
+			`evidence "${absolute}" is a test-runner report; record it with --evidence-surface ${TEST_EVIDENCE_SURFACE} ` +
+				`so it is not read as an actor-driver observation. See skills/qa/SKILL.md → The cheapest proof.`,
 		);
 	}
 }
@@ -959,15 +951,12 @@ function recordCellUnlocked(sessionId: string, opts: RecordCellOpts): void {
 			...(slots.after !== undefined ? { after: slots.after } : {}),
 		};
 	}
-	// A cell's evidence is a user-boundary observation — never a test-runner report.
-	// Enforced here (record-cell), not on record-baseline where test/build/lint logs
-	// are the expected evidence.
-	if (evidence) {
+	if (evidence && evidence.surface !== TEST_EVIDENCE_SURFACE) {
 		for (const p of [evidence.path, evidence.before, evidence.action, evidence.after]) {
-			if (p) assertBoundaryObservation(p);
+			if (p) assertTestReportUsesTestSurface(p);
 		}
 	}
-	if ((opts.status === "pass" || opts.status === "fail") && isVisualDriver(actorDriver(prior, selector.story)) && !visualEvidenceComplete(evidence, stateProbe)) {
+	if ((opts.status === "pass" || opts.status === "fail") && cellNeedsVisualProof({ evidence }, actorDriver(prior, selector.story)) && !visualEvidenceComplete(evidence, stateProbe)) {
 		throw new Error("visual cell requires separate before/after screenshot files and an action record; capture the asserted screen, then record-cell again");
 	}
 	const binding = opts.caseRun ? caseRunBinding(prior, sessionId, selector, opts.status, evidence, opts.caseRun, actorDriver(prior, selector.story)) : undefined;
@@ -1187,6 +1176,8 @@ export function startQa(sessionId: string, target: string): void {
 		};
 		delete reset.inert;
 		delete reset.report;
+		delete reset.forced_complete;
+		delete reset.forced_reason;
 		delete reset.run_checks_history;
 		reset.derived = {
 			chain_complete: chainComplete(reset),
@@ -1226,6 +1217,37 @@ export function completeQa(sessionId: string): void {
 		}
 		mergeWriteUnlocked(sessionId, { active: false });
 	});
+}
+
+/**
+ * User-only escape hatch: ends a cycle the gates will not let close. Skips every
+ * verdict/record/report gate, but still tries to stop each background resource
+ * this session started — a leaked simulator is the cost this skill exists to
+ * avoid. A resource whose stop command fails does not block the user's decision;
+ * it is returned so the CLI can name it. Refuses without a reason, and on a cycle
+ * that is already inactive.
+ */
+export function forceCompleteQa(sessionId: string, reason: string): { id: string; kind: string; error: string }[] {
+	if (reason.trim() === "") throw new Error("force-complete: refused — --reason is required (why this cycle is being forcibly completed)");
+	// Claim the cycle and fix the resource list in one locked step, BEFORE the slow
+	// stop commands run: a `start` that lands while they run then sees an inactive
+	// cycle, opens its own, and clears the forced marker — instead of this call
+	// marking that new cycle forced afterwards.
+	const claimed = withStateLock(resolveStatePath(sessionId), () => {
+		const prior = readPrior(sessionId);
+		if (prior.active !== true) throw new Error("force-complete: refused — no active qa cycle");
+		mergeWriteUnlocked(sessionId, { active: false, forced_complete: true, forced_reason: reason.trim() });
+		return unreleasedResources(sessionId);
+	});
+	const failed: { id: string; kind: string; error: string }[] = [];
+	for (const resource of claimed) {
+		try {
+			releaseResource(sessionId, resource.id);
+		} catch (e) {
+			failed.push({ id: resource.id, kind: resource.kind, error: String(e) });
+		}
+	}
+	return failed;
 }
 
 export type QaView = QaState & {
@@ -1337,7 +1359,7 @@ const ROSTER: CliCommand[] = [
 	{ name: "record-story-provenance", authority: "ai", effect: "records JSON {features:[{id,revision,entrypoints,states}],code_ref}; features non-empty, entrypoints/states may be empty" },
 	{ name: "author-cell", authority: "ai", effect: "authors one scenario cell's attack plan" },
 	{ name: "record-baseline", authority: "ai", effect: "records a story's BASELINE result" },
-	{ name: "record-cell", authority: "ai", effect: "records one scenario cell's execution result; optional --case-run RECEIPT binds replay provenance" },
+	{ name: "record-cell", authority: "ai", effect: "records one scenario cell's execution result; --evidence-surface accepts the actor's own driver or \"test\" for an automated test run that exercises the scenario; optional --case-run RECEIPT binds replay provenance" },
 	{
 		name: "review-evidence",
 		authority: "ai",
@@ -1380,6 +1402,11 @@ const ROSTER: CliCommand[] = [
 		effect: "marks the finished, gate-satisfied cycle inactive",
 	},
 	{ name: "get", authority: "ai", effect: "reads the full recorded chain/view" },
+	{
+		name: "force-complete",
+		authority: "user",
+		effect: "ends the active cycle without its gates (--reason required); still releases recorded resources and lists any that failed to stop",
+	},
 ];
 
 function main(): void {
@@ -1533,6 +1560,12 @@ function main(): void {
 				declareInert(sessionId, requiredArg(args, "reason"));
 			} else if (subcommand === "complete") {
 			completeQa(sessionId);
+		} else if (subcommand === "force-complete") {
+			const failed = forceCompleteQa(sessionId, requiredArg(args, "reason"));
+			process.stdout.write("force-completed: the qa cycle is inactive; the reason is recorded in state.\n");
+			for (const f of failed) {
+				process.stderr.write(`warning: ${f.kind} "${f.id}" is still running — its stop command failed. Stop it manually.\n  ${f.error}\n`);
+			}
 		} else if (subcommand === "get") {
 			process.stdout.write(JSON.stringify(readQaView(sessionId)) + "\n");
 		} else {

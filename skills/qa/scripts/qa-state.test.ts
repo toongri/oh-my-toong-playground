@@ -1,4 +1,4 @@
-import { recordResource, releaseResource } from "@lib/session-resources";
+import { recordResource, releaseResource, unreleasedResources } from "@lib/session-resources";
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from "fs";
 import { execSync } from "child_process";
@@ -11,6 +11,8 @@ import {
 	advancePhase,
 	incCycle,
 	completeQa,
+	forceCompleteQa,
+	startQa,
 	setVerdict,
 	setAwaitingUser,
 	resolveStatePath,
@@ -206,6 +208,60 @@ describe("qa state: background resource gate", () => {
 	});
 });
 
+describe("qa state: user-only force-complete", () => {
+	test("ends an ungated cycle inactive and records the reason", () => {
+		setQaState(S, { phase: "PLAN", target: "stuck" });
+		forceCompleteQa(S, "  gates keep failing on a harness limit  ");
+		const raw = rawState();
+		expect(raw.active).toBe(false);
+		expect(raw.forced_complete).toBe(true);
+		expect(raw.forced_reason).toBe("gates keep failing on a harness limit");
+	});
+
+	test("refuses without a reason, and on an inactive cycle", () => {
+		setQaState(S, { phase: "PLAN" });
+		expect(() => forceCompleteQa(S, "  ")).toThrow("--reason is required");
+		forceCompleteQa(S, "done");
+		expect(() => forceCompleteQa(S, "again")).toThrow("no active qa cycle");
+	});
+
+	test("releases resources it can, and returns the ones whose stop command failed without blocking", () => {
+		setQaState(S, { phase: "PLAN" });
+		recordResource(S, { id: "sim-ok", kind: "simulator", stop: "true" });
+		recordResource(S, { id: "emu-stuck", kind: "emulator", stop: "exit 3" });
+		const failed = forceCompleteQa(S, "user ended the cycle");
+		expect(failed.map((f) => f.id)).toEqual(["emu-stuck"]);
+		expect(unreleasedResources(S).map((r) => r.id)).toEqual(["emu-stuck"]);
+		expect(rawState().active).toBe(false);
+	});
+
+	test("a start that lands while resources are being released keeps its new cycle active", () => {
+		setQaState(S, { phase: "PLAN" });
+		const script = join(import.meta.dir, "qa-state.ts");
+		// The stop command itself opens the next cycle, the way a concurrent
+		// session would during a slow release. The stop shell does not inherit
+		// this test's process.env edits, so the isolated OMT_DIR/session are
+		// passed explicitly — otherwise it writes to the developer's real session.
+		const env = `OMT_DIR='${tmpDir}' OMT_SESSION_ID='${S}'`;
+		recordResource(S, { id: "sim-racing", kind: "simulator", stop: `${env} bun ${script} start --target next-cycle >/dev/null` });
+		expect(forceCompleteQa(S, "user ended the cycle")).toEqual([]);
+		const raw = rawState();
+		expect(raw.active).toBe(true);
+		expect(raw.target).toBe("next-cycle");
+		expect(raw.forced_complete).toBeUndefined();
+	});
+
+	test("a fresh start clears the forced marker", () => {
+		setQaState(S, { phase: "PLAN" });
+		forceCompleteQa(S, "done");
+		startQa(S, "next target");
+		const raw = rawState();
+		expect(raw.active).toBe(true);
+		expect(raw.forced_complete).toBeUndefined();
+		expect(raw.forced_reason).toBeUndefined();
+	});
+});
+
 describe("qa state: awaiting_user pause (human-gate yield)", () => {
 	test("setAwaitingUser sets awaiting_user=true on a live cycle", () => {
 		setQaState(S, { phase: "PLAN" });
@@ -308,163 +364,84 @@ describe("qa-state CLI wiring", () => {
 		expect(() => run(`record-cell --story story-1 --cls 2 --status fail --evidence-before ${before} --evidence-action ${evidence} --evidence-after ${after}`)).toThrow();
 	});
 
-	// A cell's evidence must be a user-boundary observation, never a test-runner
-	// report. This is the failure the whole QA presentation exists to prevent:
-	// a PO shown `vitest run … exit=0` as proof a user-facing requirement is met.
-	// Fragments are concatenated at runtime so the assembled FILE matches the
-	// test-runner signatures, while THIS source file does not — otherwise the guard
-	// would fire on the many existing tests that use this source file as evidence.
+	// An automated test run (unit/integration/component/e2e) that exercises the
+	// scenario now counts as that cell's evidence when recorded under the
+	// explicit `test` evidence surface — efficient QA in place of always driving
+	// a UI/emulator. Fragments are concatenated at runtime so the assembled FILE
+	// matches real test-runner output, while THIS source file does not.
 	const VITEST_LOG =
 		" RUN  v" + "3.2.4 /Users/toong/repos/algocare-home/apps/backend\n\n" +
 		" ok test/domains/customer-label/delete-guard (7 tests)\n\n" +
 		" Test Fil" + "es  1 passed (1)\n      Test" + "s  1 passed | 6 skipped (7)\n   Duration  1.95s\nexit=0\n";
-	const BUN_TEST_SUMMARY =
-		"1 " + "pass\n" +
-		"0 " + "fail\n" +
-		"R" + "an 1 tests across 1 files.\n";
-	const NODE_TEST_REPORTER_SUMMARIES = [
-		"tests 1",
-		"suites 0",
-		"pass 1",
-		"fail 0",
-		"cancelled 0",
-		"skipped 0",
-		"todo 0",
-		"duration_ms 1.234",
-	];
-
-	test("record-cell REJECTS a test-runner report as cell evidence (a test log is not a user-boundary observation)", () => {
-		authorCompleteChain();
-		const logPath = join(tmpDir, "cls1-refuse.txt");
-		writeFileSync(logPath, VITEST_LOG);
-		expect(() =>
-			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface bash`),
-		).toThrow();
-		// the same leak through a supplementary slot on a FAIL cell is blocked too
-		expect(() =>
-			run(`record-cell --story story-1 --cls 2 --status fail --na-reason x --evidence-action ${logPath}`),
-		).toThrow();
-	});
-
-	test("record-cell은 Bun 네이티브 테스트 요약을 시나리오 증거로 거부한다", () => {
-		authorCompleteChain();
-		const logPath = join(tmpDir, "bun-test-summary.txt");
-		writeFileSync(logPath, BUN_TEST_SUMMARY);
-		expect(() =>
-			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface bash`),
-		).toThrow();
-	});
-
-	for (const [i, summary] of NODE_TEST_REPORTER_SUMMARIES.entries()) {
-		test(`record-cell REJECTS a Node test reporter summary line (${i}) as cell evidence`, () => {
-			authorCompleteChain();
-			const logPath = join(tmpDir, `node-test-summary-${i}.txt`);
-			writeFileSync(logPath, "ℹ " + summary + "\n");
-			expect(() =>
-				run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface bash`),
-			).toThrow();
-		});
-	}
-
-	// Quiet-mode pytest prints no `===` banner and its summary line names the
-	// outcome directly (`1 passed in 0.04s`, `1 failed in 0.04s`, `2 errors in
-	// 0.10s`). The earlier signature required a leading `=` and only recognized
-	// `passed`, so these slipped through and could back a green scenario with a
-	// test log — the exact laundering the guard exists to stop. Fragments are
-	// concatenated so THIS source file does not self-match.
 	const QUIET_PYTEST_PASS = "1 pass" + "ed in 0.04s\n";
-	const QUIET_PYTEST_FAIL = "1 fail" + "ed in 0.04s\n";
-	const QUIET_PYTEST_ERROR = "2 err" + "ors in 0.10s\n";
+	const JUNIT_REPORT = '<?xml version="1.0"?><testsuite tests="1" failures="0"><testcase /></testsuite>';
 
-	test("record-cell REJECTS a quiet-mode pytest summary (pass/fail/error, no === banner) as cell evidence", () => {
-		authorCompleteChain();
-		for (const [i, log] of [QUIET_PYTEST_PASS, QUIET_PYTEST_FAIL, QUIET_PYTEST_ERROR].entries()) {
-			const logPath = join(tmpDir, `quiet-pytest-${i}.txt`);
-			writeFileSync(logPath, log);
-			expect(() =>
-				run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface bash`),
-			).toThrow();
-		}
-	});
+	const AUTOMATED_TEST_REPORTS: Record<string, string> = {
+		vitest: VITEST_LOG,
+		pytest: QUIET_PYTEST_PASS,
+		junit: JUNIT_REPORT,
+	};
 
-	const PYTEST_BANNER_OUTCOMES = [
-		"pass" + "ed",
-		"fail" + "ed",
-		"err" + "or",
-		"err" + "ors",
-		"skip" + "ped",
-		"xfail" + "ed",
-		"xpass" + "ed",
-		"deselect" + "ed",
-	];
-
-	for (const [i, outcome] of PYTEST_BANNER_OUTCOMES.entries()) {
-		test(`record-cell REJECTS a bannered pytest ${outcome} outcome as cell evidence`, () => {
+	for (const [name, report] of Object.entries(AUTOMATED_TEST_REPORTS)) {
+		test(`record-cell ACCEPTS a ${name} report as pass evidence via evidence-surface test`, () => {
 			authorCompleteChain();
-			const logPath = join(tmpDir, `bannered-pytest-${i}.txt`);
-			writeFileSync(logPath, "===" + ` 1 ${outcome} in 0.04s ` + "===\n");
+			const logPath = join(tmpDir, `cls1-${name}-test-evidence.txt`);
+			writeFileSync(logPath, report);
+			expect(() =>
+				run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface test`),
+			).not.toThrow();
+			const cell = rawState().cells.find((c: any) => c.story === "story-1" && c.cls === 1 && c.cycle === 0);
+			expect(cell.evidence.surface).toBe("test");
+		});
+
+		// A test log under the actor driver's surface would read as that driver's
+		// observation (e.g. "observed via curl"); the surface must name the medium.
+		test(`record-cell REJECTS a ${name} report under the actor driver's surface`, () => {
+			authorCompleteChain();
+			const logPath = join(tmpDir, `cls1-${name}-driver-surface.txt`);
+			writeFileSync(logPath, report);
 			expect(() =>
 				run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface bash`),
-			).toThrow();
+			).toThrow(/--evidence-surface test/);
 		});
 	}
 
-	test("record-cell scans only the prefix but still REJECTS a signature within it on an oversized capture", () => {
+	test("record-cell REJECTS an evidence-surface that matches neither the actor driver nor \"test\"", () => {
 		authorCompleteChain();
-		// A test-runner signature in the first 64KB is caught even when the file is
-		// far larger — the guard reads only the inspected prefix, never the whole file.
-		const bigPath = join(tmpDir, "big-with-prefix-signature.txt");
-		writeFileSync(bigPath, VITEST_LOG + "x".repeat(200_000));
+		const logPath = join(tmpDir, "cls1-mismatched-surface.txt");
+		writeFileSync(logPath, "HTTP/1.1 200 OK\n\n{\"ok\":true}\n");
 		expect(() =>
-			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${bigPath} --evidence-surface bash`),
-		).toThrow();
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface curl`),
+		).toThrow(/evidence-surface must match actor driver/);
 	});
 
-	test("record-cell inspects the TAIL too: a trailing test-runner summary after a large body is still REJECTED", () => {
+	test("agent-device test-surface evidence needs no before/after or evidence review; recordComplete/approveOk accept it", () => {
 		authorCompleteChain();
-		// A test-runner summary sits at the END of the log. Reading only the head
-		// prefix misses it once the preceding output exceeds the window; the guard
-		// must inspect a bounded tail as well.
-		const p = join(tmpDir, "big-tail-summary.txt");
-		writeFileSync(p, "x".repeat(200_000) + "\n" + "1 pass" + "ed in 0.04s\n");
-		expect(() =>
-			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${p} --evidence-surface bash`),
-		).toThrow();
+		run('add-actor --id actor-1 --driver agent-device --reachable yes');
+		run(`record-baseline --story story-1 --result pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface test`);
+		for (const [cls, sub] of [[1, ""], [2, ""], [3, ""], [4, ""], [5, ""], [6, ""], [1, "hang-timeout"], [5, "flaky-green"]] as const) {
+			const suffix = sub ? ` --sub ${sub}` : "";
+			run(`record-cell --story story-1 --cls ${cls}${suffix} --status pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface test`);
+		}
+		run("record-run-check --check stale-state --result pass");
+		run("record-run-check --check dirty-worktree --result pass");
+		run("record-run-check --check flaky-rerun --result pass");
+		const cell = rawState().cells.find((c: any) => c.story === "story-1" && c.cls === 1 && !c.sub && c.cycle === 0);
+		expect(cell.evidence.before).toBeUndefined();
+		expect(cell.evidence_review).toBeUndefined();
+		expect(rawState().derived.record_complete).toBe(true);
+		expect(rawState().derived.approve_ok).toBe(true);
+		run("set-verdict APPROVE");
+		expect(rawState().verdict).toBe("APPROVE");
 	});
 
-	test("record-cell REJECTS a cached go test summary (ok pkg (cached), no numeric duration)", () => {
+	test("agent-device actor still requires before/after screenshots when evidence-surface is its own driver", () => {
 		authorCompleteChain();
-		const p = join(tmpDir, "go-cached.txt");
-		writeFileSync(p, "o" + "k  \tmy/pkg\t(cached)\n");
+		run('add-actor --id actor-1 --driver agent-device --reachable yes');
+		const logPath = join(tmpDir, "cls1-device-plain.txt");
+		writeFileSync(logPath, "device screen text dump");
 		expect(() =>
-			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${p} --evidence-surface bash`),
-		).toThrow();
-	});
-
-	test("record-cell은 Go coverage 요약을 시나리오 증거로 거부한다", () => {
-		authorCompleteChain();
-		const p = join(tmpDir, "go-coverage.txt");
-		writeFileSync(p, "ok example/pkg 0.123s coverage: " + "75.0% of statements\n");
-		expect(() =>
-			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${p} --evidence-surface bash`),
-		).toThrow();
-	});
-
-	test("record-cell REJECTS a Go package no-test summary", () => {
-		authorCompleteChain();
-		const p = join(tmpDir, "go-no-tests.txt");
-		writeFileSync(p, "? example/pkg [" + "no test" + " files]\n");
-		expect(() =>
-			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${p} --evidence-surface bash`),
-		).toThrow();
-	});
-
-	test("record-cell REJECTS a multiline Go package no-test summary", () => {
-		authorCompleteChain();
-		const p = join(tmpDir, "go-no-tests-multiline.txt");
-		writeFileSync(p, "go test ./...\n?\texample/pkg\t[" + "no test" + " files]\nfinished\n");
-		expect(() =>
-			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${p} --evidence-surface bash`),
+			run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${logPath} --evidence-surface agent-device`),
 		).toThrow();
 	});
 
@@ -875,11 +852,15 @@ describe("help subcommand", () => {
 	const run = (cmd: string, env?: Record<string, string>) =>
 		execSync(`bun ${script} ${cmd}`, { encoding: "utf8", env: { ...process.env, ...env } });
 
-	test("waive is AI-usable and qa has no user-only command", () => {
+	test("waive is AI-usable and force-complete is the only user-only command", () => {
 		const out = run("help");
-		expect(out).not.toContain("USER-ONLY");
-		const aiSection = out.slice(out.indexOf("AI-USABLE"), out.indexOf("SYSTEM-ONLY"));
+		const aiSection = out.slice(out.indexOf("AI-USABLE"), out.indexOf("USER-ONLY"));
+		const userSection = out.slice(out.indexOf("USER-ONLY"));
 		expect(aiSection).toContain("waive —");
+		expect(aiSection).not.toContain("force-complete —");
+		expect(userSection.trim().split("\n").filter((line) => line.startsWith("  "))).toEqual([
+			expect.stringContaining("force-complete —"),
+		]);
 	});
 
 	test("set and get are listed under AI-USABLE", () => {
@@ -906,24 +887,15 @@ describe("help subcommand", () => {
 		expect(out).toContain("qa-state commands:");
 	});
 
-	test("JUnit XML roots are not boundary evidence but normal API XML remains valid", () => {
+	test("JUnit XML is cell evidence only under evidence-surface test, never under the actor driver", () => {
 		const authorCompleteChain = () => { run("set --phase PLAN"); run("set-acceptance --json '[\"home shows today supplements\"]'"); run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes'); run("add-story --id story-1 --actor actor-1 --goal 'Check supplements' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'"); for (const cls of [1, 2, 3, 4, 5, 6]) run(`author-cell --story story-1 --cls ${cls} --attack-point "attack ${cls}" --priority ${cls === 1 ? "H" : "L"}`); };
 		authorCompleteChain();
 		const junit = join(tmpDir, "junit.xml");
-		for (const root of ["testsuite", "testsuites"]) {
-			writeFileSync(junit, `<${root} tests="1" failures="0"><testcase /></${root}>`);
-			expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${junit} --evidence-surface bash`)).toThrow(/unit\/integration test-runner report/);
-			writeFileSync(junit, `\n  <${root} tests="1" failures="0"/>\n`);
-			expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${junit} --evidence-surface bash`)).toThrow(/unit\/integration test-runner report/);
-		}
 		writeFileSync(junit, '<?xml version="1.0"?><testsuite tests="1" failures="0"><testcase /></testsuite>');
-		expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${junit} --evidence-surface bash`)).toThrow(/unit\/integration test-runner report/);
-		writeFileSync(junit, '<?xml version="1.0"?>\n<response>\n  <testsuite>normal API payload</testsuite>\n</response>');
-		expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${junit} --evidence-surface bash`)).not.toThrow();
-		writeFileSync(junit, '<response><testsuite>normal API payload</testsuite></response>');
-		expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${junit} --evidence-surface bash`)).not.toThrow();
-		writeFileSync(junit, `${" ".repeat(5000)}<response><testsuite>normal API payload</testsuite></response>`);
-		expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${junit} --evidence-surface bash`)).not.toThrow();
+		expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${junit} --evidence-surface bash`)).toThrow(/--evidence-surface test/);
+		run("inc-cycle");
+		run("author-cell --story story-1 --cls 1 --attack-point 'current attack' --priority H");
+		expect(() => run(`record-cell --story story-1 --cls 1 --status pass --evidence-path ${junit} --evidence-surface test`)).not.toThrow();
 	});
 
 	test("actor change only invalidates current-cycle execution and keeps history", () => {

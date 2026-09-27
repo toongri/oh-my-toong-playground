@@ -18,6 +18,14 @@ export type QaPhase = (typeof QA_PHASES)[number];
 export const BASELINE_INDEX = QA_PHASES.indexOf("BASELINE");
 
 export type QaDriver = "agent-device" | "agent-browser" | "curl" | "bash";
+
+/**
+ * Evidence surface for an automated test run (unit/integration/component/e2e
+ * test runner) that executed this cycle and exercises the scenario. Distinct
+ * from an actor driver: it is accepted alongside the actor's own driver
+ * wherever evidence surface is matched.
+ */
+export const TEST_EVIDENCE_SURFACE = "test";
 export type QaReachability = "yes" | "unknown" | (string & {});
 export type QaPriority = "H" | "M" | "L";
 export type QaResult = "pass" | "fail" | "na";
@@ -250,6 +258,9 @@ export interface QaChainState {
 	acceptance_criteria?: string[];
 	derived?: QaDerived;
 	report?: { path: string; sha256: string; state_snapshot: string; reviewed: boolean };
+	/** Set only by the user-only `force-complete`: the cycle ended without its gates. */
+	forced_complete?: boolean;
+	forced_reason?: string;
 	[key: string]: unknown;
 }
 
@@ -274,6 +285,16 @@ export type EvidenceProbe = (path: string) => { exists: boolean; size: number; i
 
 export function isVisualDriver(driver: string | undefined): boolean {
 	return driver === "agent-browser" || driver === "agent-device";
+}
+
+/**
+ * A cell needs before/after screenshots and an evidence review only when its
+ * OWN recorded evidence surface is visual — falling back to the actor's
+ * driver when the cell carries no evidence yet. A test-evidence cell (surface
+ * `test`) never needs visual proof, even under a visual-driver actor.
+ */
+export function cellNeedsVisualProof(cell: Pick<QaCell, "evidence">, actorDriver: string | undefined): boolean {
+	return isVisualDriver(cell.evidence?.surface ?? actorDriver);
 }
 
 /** Visual cells carry two separate captures and the actor's action record. */
@@ -342,7 +363,7 @@ function validEvidence(
 	cycle: number | undefined,
 	probe: EvidenceProbe,
 ): boolean {
-	if (!evidence || typeof evidence.path !== "string" || !evidence.path || evidence.surface !== driver) return false;
+	if (!evidence || typeof evidence.path !== "string" || !evidence.path || (evidence.surface !== driver && evidence.surface !== TEST_EVIDENCE_SURFACE)) return false;
 	if (cycle !== currentCycle(state)) return false;
 	try {
 		const inspected = probe(evidence.path);
@@ -403,9 +424,10 @@ export function recordComplete(state: QaChainState, probe: EvidenceProbe): boole
 		if (cell.status === "na" && !cell.na_reason) return false;
 		if (cell.case_run && !caseRunBindingComplete(cell, probe)) return false;
 		const story = stories.find((candidate) => candidate.id === required.story);
-			if ((cell.status === "pass" || cell.status === "fail") && isVisualDriver(story ? actorFor(state, story)?.driver : undefined) && !visualEvidenceComplete(cell.evidence, probe)) return false;
-			if ((cell.status === "pass" || cell.status === "fail") && isVisualDriver(story ? actorFor(state, story)?.driver : undefined) && !evidenceReviewComplete(cell, probe)) return false;
-		if (cell.status === "pass" && !validEvidence(state, cell.evidence, story ? actorFor(state, story)?.driver : undefined, cell.cycle, probe)) return false;
+		const actorDriver = story ? actorFor(state, story)?.driver : undefined;
+			if ((cell.status === "pass" || cell.status === "fail") && cellNeedsVisualProof(cell, actorDriver) && !visualEvidenceComplete(cell.evidence, probe)) return false;
+			if ((cell.status === "pass" || cell.status === "fail") && cellNeedsVisualProof(cell, actorDriver) && !evidenceReviewComplete(cell, probe)) return false;
+		if (cell.status === "pass" && !validEvidence(state, cell.evidence, actorDriver, cell.cycle, probe)) return false;
 	}
 	const checks = state.run_checks ?? {};
 	return (

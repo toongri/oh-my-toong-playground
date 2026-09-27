@@ -8,7 +8,7 @@ never dumbed down, big-picture diagrams — different subject: **users and their
 product experience, not functions and files.**
 
 ## Core principle — the completion condition is a person, not a document
-For a visual user boundary, the required scenario-card structure is **before image → actor action and observed explanation → after image**. Both images are captures from that scenario's actual software/device run. An authored observation accompanies them; it does not replace either image. API/text-CLI scenarios instead carry an observation grounded in the actual received response/output. A screenshot of a log is not UI proof.
+For a screen scenario, the required scenario-card structure is **before image → actor action and observed explanation → after image**. Both images are captures from that scenario's actual software/device run. An authored observation accompanies them; it does not replace either image. API/CLI and test scenarios instead carry an observation grounded in the received response, output, or the test's assertions. A screenshot of a log is not UI proof.
 
 The final `qa-report.ts` CLI validates visual images and observations before writing. Missing, unreadable, oversized, or cumulatively unembeddable images block the final report; a path-only placeholder does not satisfy visual proof. Optimize captures, update their recorded paths, and re-render. Inspect the actual HTML cards before completion, checking that each image shows the claimed actor, screen, and asserted state. Capture failure leaves an evidence gap, not an invented pass/fail or an `na` excuse.
 
@@ -96,15 +96,14 @@ the diff. Always:
    name who, first.
 2. **Describe how each user uses the product** (software + hardware) in scenarios
    related to this change — detailed and rich, at what they actually do and see.
-3. **Verify at the user boundary** — say whether the flow behaves as intended from
-   what the user observes on the screen / device / API response, **not** from unit
-   tests or build logs.
+3. **Say what was proven, in the user's terms** — whether the flow behaves as
+   intended, and through what: the screen, the API response the app receives, or a
+   named test that asserts it. Never a bare "tests passed".
 4. **Tie each requirement to a verdict** the PO can trust — met / not met /
    partial, connected to the scenarios and evidence that prove it.
 
-## Hard rule — stay at the user-observable boundary
-The narrative describes **only what the user does and observes** at their
-boundary — the screen they see, the device's behavior, the API response they get.
+## Hard rule — speak in what the user experiences
+The narrative describes **only what the user does and observes** — the screen they see, the device's behavior, the API response they get.
 Implementation mechanism is **banned from the narrative**: no caches, no
 identifiers or field names, no data types, no function names, no "compares X to
 Y internally." State the problem and the fix in what the user *experiences*.
@@ -112,7 +111,7 @@ Y internally." State the problem and the fix in what the user *experiences*.
 - BAD (implementation leaked): "The app re-fetches the latest Program at CTA time
   and compares it against the cache; the refetched `updatedAt` Date is a new
   instance, so the `programId` comparison misfires."
-- GOOD (user boundary): "Before, pressing the dispense button popped a 'program
+- GOOD (user experience): "Before, pressing the dispense button popped a 'program
   change detected' notice that kept reappearing no matter how many times you
   confirmed it — so you could never actually dispense. After, when nothing about
   your program actually changed, dispensing proceeds with no notice. When your
@@ -153,7 +152,7 @@ there is no separate actor-roster table).
 - **Per-scenario observation (`scenarios`, keyed by `<story>:<cls>:<sub>`, the
   cell key — write it under the top-level `scenarios` object, field `observed`)** —
   this is the reader's proof, **one per scenario**. For each verified scenario,
-  state in plain language what you did at that scenario's user boundary and what
+  state in plain language what you did in that scenario and what
   the real software rendered — "이 시나리오에서 이렇게 했더니 화면/응답이 이렇게
   되더라." The renderer draws ONE card per scenario, and every verified
   (pass/fail) scenario must carry a reader-visible real-software record:
@@ -184,11 +183,10 @@ there is no separate actor-roster table).
   at least one valid `na`. Missing/legacy/malformed/duplicate/stale/unknown/ineligible
   mappings fail closed to a visible neutral gap (`미판정`) rather than a green
   verdict. Prose evidence explains a verdict but cannot establish it. Use
-  **unverified (`unverified`)** — never `yes`/`partial` — when the requirement's user boundary could
-  not be driven (unreachable environment, a `NOT-RUN` scenario): it renders LOUDLY
-  as "미검증 — 유저 경계 미구동", so a PO reads it as *not done*, not as a mild
-  partial. A green test suite is never grounds for `yes`; only a user-boundary
-  observation is.
+  **unverified (`unverified`)** — never `yes`/`partial` — when the requirement could
+  not be proven (a `NOT-RUN` scenario): it renders LOUDLY, so a PO reads it as
+  *not done*, not as a mild partial. A green suite alone is never grounds for
+  `yes`; a scenario run or a named test that asserts the requirement is.
 
 ## Anchoring — no invention
 - **Do not invent a user the roster does not have.** If an affected user is
@@ -278,24 +276,21 @@ marker** (`class="gap"`) — what was skipped shows in the report.
 - [ ] Are **all** affected users defined (admin / product / conditional / partner)
       — and any missing one fixed with `add-actor`, not invented in prose?
 - [ ] Is each user's product (software + hardware) scenario flow rich and detailed,
-      **at the user boundary** — zero implementation mechanism (cache, id, type,
+      in what the user experiences — zero implementation mechanism (cache, id, type,
       function name), zero unit-test narration?
 - [ ] Does **every verified scenario** carry its own reader-visible record — an
       observation plus before/after images for visual boundaries, or a grounded observation for text boundaries — with none separated from
       its proof and none left a silent hole (a card with neither is a loud gap)?
-- [ ] Does **every scenario's** observation name its medium — a screen/device
-      capture, or an API/CLI response — and does that medium match the actor's
-      real boundary? A human actor read only through API/CLI is `unverified` at
-      the screen (not a green pass), unless no user-facing surface exists yet, in
-      which case the actor is declared an API/system client and API is its real
-      boundary.
+- [ ] Does **every scenario's** observation name its medium — a screen capture,
+      an API/CLI response, or a named test — and claim only what that medium
+      proves ("the app receives 3 days", not "the user saw 3 days" without a screen)?
 - [ ] Does the big-picture diagram carry the user flow, with a why + interpretation
       · zero gap markers?
 - [ ] Is each requirement mapped to a grounded verdict with a non-empty `cellRefs`
       array, exactly one current-cycle recorded cell per ref, and status invariants
       that match pass/fail/na · do invalid mappings fail closed to a visible neutral
       gap · does prose explain a verdict without establishing it · any requirement
-      whose user boundary was never driven marked `unverified` (never `yes`/`partial`)?
+      never proven marked `unverified` (never `yes`/`partial`)?
 - [ ] 쓰기 전에 소개 — every product/domain entity the reader meets (term/acronym/status
       label/coverage-axis name/diagram node) introduced in product language at first use ·
       no `cls`/internal jargon or code symbols in the reader view · zero invention/contradiction
@@ -312,22 +307,20 @@ works, and therefore whether the requirements were met?**
 | "This detail (cache, id, data type) explains why it broke." | The reader observes it as a screen/device/API behavior. State the problem and fix in what the user experiences, not the mechanism. |
 | "This user isn't in the roster, but they're affected — I'll add them in prose." | Roster defect. Fix it with `add-actor` so they enter verification. The renderer ignores prose invention. |
 | "Requirement mapping duplicates the AC section." | The AC section is just the text. The met/not-met verdict tied to evidence is what the PO needs. |
-| "The tests are green, so I'll show the PO the test output as proof the requirement is met." | A test-runner report proves code in isolation, never the user boundary. It is not scenario evidence and `record-cell` mechanically rejects it. Only a screen/device/API observation backs a `yes`. |
-| "The UI/admin wouldn't boot, so I ran the service's test suite and marked the requirement `yes`." | That is not the user boundary — the requirement is **unverified**. Mark `satisfied: "unverified"`; it renders loudly as not done. Never `yes`/`partial` on a green suite. |
+| "The tests are green, so the requirement is met." | Name the test that asserts it and say, in user terms, what it proves. A suite count proves nothing specific. |
 | "Prose is enough; no diagram needed." | The big picture is the strongest way to convey flow to a no-context reader — it is a required slot. |
 | "The scenario list is separate; evidence can live elsewhere." | Every scenario is shown with its evidence, even if the document grows heavy. |
 | "I drove it with curl, so pasting the curl/HTTP output is the evidence." | A PO cannot read `HTTP=404` or a JSON body as "it works." Convert it, **naming the medium**: "via the API we requested another user's item and got a not-found with no data leak." Raw curl belongs in the audit. |
-| "I converted the curl transcript to prose, so the screen actor's scenario passes." | Converting the words does not change the medium. If the actor is a human at a screen but you only read the result through an API/CLI, that scenario is `unverified` at the screen, not PASS — the conversion must say "observed via API," never "the user saw." The one exception: no screen exists yet (API-only change) — then declare the actor an API/system client, don't launder it as a human-screen observation. |
-| "Showing the test output proves the scenario ran." | A test log is not a scenario a PO reads. State the scenario and its outcome in words; the log stays in BASELINE/audit. |
+| "Showing the test output proves the scenario ran." | A test log is not something a PO reads. State the scenario and what the test asserts in words; the log stays in the audit. |
 
 ## Red flags — STOP
 - The presentation opens with "what I changed (code)" → rewrite from "who is affected (users)"
-- Implementation terms (cache, id, data type, function name) appear in a user narrative → rewrite at the user boundary
-- A user flow slot holds unit tests or build logs → replace with user-boundary observation
+- Implementation terms (cache, id, data type, function name) appear in a user narrative → rewrite in user terms
+- A user flow slot holds raw test or build logs → replace with what was proven, in words
 - A scenario shows a raw curl/HTTP/JSON dump (`HTTP=404`, `{"error":...}`, `table row count before=6`) as its proof → convert it to a natural-language "we ran this scenario and observed X"; the raw bytes belong in the audit section, not the reader
-- A requirement's user boundary was never driven but it reads `yes`/`partial` → mark `satisfied: "unverified"` (renders loud "미검증")
+- A requirement was never proven but it reads `yes`/`partial` → mark `satisfied: "unverified"` (renders loud "미검증")
 - A visual scenario lacks either an observation or before/after images → capture the missing asserted state, record its path, and render again. Text-boundary scenarios need a grounded `observed` explanation of the received output.
-- A human actor's scenario is observed only through an API/CLI response but reads as if the screen was driven → name the medium; a screen-boundary claim needs a screen/device capture. If no user-facing surface exists yet, declare the actor an API/system client — never let an API reading pass as a human-screen observation
+- An observation says "the user saw" but no screen was captured → name the real medium (API response, test)
 - Internal jargon (`cls`, source tags) is visible to the reader → remove it
 - The narrative names more users/scenarios/requirements than the records hold → invention; fix the records
 - A fulfillment verdict contradicts the recorded pass/fail → match the verification log
