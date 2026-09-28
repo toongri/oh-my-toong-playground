@@ -6,6 +6,7 @@ import {
 	renderIndex,
 	renderRef,
 	renderSession,
+	STYLE,
 	VIEWER_JS,
 	type ArchiveIndex,
 	type SessionData,
@@ -737,6 +738,50 @@ describe("레이아웃 골격", () => {
 		expect(sideCol?.querySelector(".side")).not.toBeNull();
 		expect(doc.querySelector(".main")).not.toBeNull();
 		expect(doc.querySelector(".main .my-feedback, .main .filter-bar")).not.toBeNull();
+	});
+
+	test("필터 바는 기본 상태에서 open이 아니다(모바일 접힘·1440 fold 확보, DESIGN §7)", () => {
+		const doc = parseHTML(renderSession(sampleData())).document;
+		const filterBar = doc.querySelector(".filter-bar");
+		expect(filterBar?.tagName.toLowerCase()).toBe("details");
+		expect(filterBar?.hasAttribute("open")).toBe(false);
+	});
+
+	test("목차는 모바일 접힘을 위해 토글 버튼+hidden 패널로 감싸이고, 데스크톱에서는 CSS로 항상 펼쳐진다(DESIGN §4)", () => {
+		const doc = parseHTML(renderSession(sampleData())).document;
+		const toggle = doc.querySelector(".toc-scroll .toc-toggle");
+		const panel = doc.querySelector(".toc-scroll .toc-panel");
+		expect(toggle?.textContent).toBe("목차");
+		expect(toggle?.getAttribute("aria-expanded")).toBe("false");
+		expect(toggle?.getAttribute("aria-controls")).toBe("toc-panel");
+		expect(panel?.id).toBe("toc-panel");
+		expect(panel?.hasAttribute("hidden")).toBe(true);
+		expect(panel?.querySelector(".toc")).not.toBeNull();
+	});
+
+	test("목차 토글 버튼을 누르면 패널이 펼쳐지고 aria-expanded가 갱신된다", () => {
+		const { doc } = mountViewer(renderSession(sampleData()), false);
+		const toggle = doc.querySelector(".toc-toggle");
+		const panel = doc.querySelector(".toc-panel");
+		expect(isHidden(panel)).toBe(true);
+		click(toggle);
+		expect(isHidden(panel)).toBe(false);
+		expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+		click(toggle);
+		expect(isHidden(panel)).toBe(true);
+		expect(toggle?.getAttribute("aria-expanded")).toBe("false");
+	});
+});
+
+describe("토큰·와이드 칩 (DESIGN §2, §15-10)", () => {
+	test("STYLE에는 raw #fff가 없다(모두 --bg 토큰을 쓴다)", () => {
+		expect(/#fff(?![0-9a-f])/i.test(STYLE)).toBe(false);
+	});
+
+	test("칩(.chip)은 줄바꿈 없이 한 줄을 유지한다", () => {
+		const chipRule = STYLE.match(/\.chip\s*\{[^}]*\}/)?.[0] ?? "";
+		expect(chipRule).toContain("white-space: nowrap");
+		expect(chipRule).toContain("flex-shrink: 0");
 	});
 });
 

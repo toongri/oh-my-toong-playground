@@ -405,7 +405,7 @@ function renderFilterBar(data: SessionData): string {
 		.filter((html) => html !== "")
 		.join("");
 	return (
-		`<details class="filter-bar" open>` +
+		`<details class="filter-bar">` +
 		`<summary>필터 (<span id="filter-count-label">0</span>)<span class="filter-summary-detail"></span></summary>` +
 		`<div class="filter-groups">${groups}</div>` +
 		`<button type="button" class="filter-reset">초기화</button>` +
@@ -471,8 +471,16 @@ function renderTabTopic(data: SessionData): string {
 	return `<div role="tabpanel" id="panel-topic" aria-labelledby="tab-topic" hidden>${groups}</div>`;
 }
 
+/**
+ * Wrapped in a JS-driven toggle (not `<details>`) so mobile can collapse it below "내 피드백"
+ * (DESIGN §4) while desktop always shows it. `<details>` was tried first, but Chromium hides a
+ * closed `<details>`'s content via an internal `content-visibility: hidden` that author CSS
+ * cannot re-show on its children — so a desktop-always-open override via CSS alone leaves the
+ * tabs unclickable (real layout rect, but not hit-testable). `[hidden]` has no such lock: it is
+ * plain `display: none` in the UA sheet, safely overridden by an ordinary author rule.
+ */
 function renderToc(data: SessionData): string {
-	return (
+	const toc =
 		`<div class="toc">` +
 		`<div role="tablist">` +
 		`<button type="button" role="tab" id="tab-match" aria-selected="true" aria-controls="panel-match">경기별</button>` +
@@ -480,6 +488,11 @@ function renderToc(data: SessionData): string {
 		`</div>` +
 		renderTabMatch(data) +
 		renderTabTopic(data) +
+		`</div>`;
+	return (
+		`<div class="toc-collapsible">` +
+		`<button type="button" class="toc-toggle" aria-expanded="false" aria-controls="toc-panel">목차</button>` +
+		`<div class="toc-panel" id="toc-panel" hidden>${toc}</div>` +
 		`</div>`
 	);
 }
@@ -827,7 +840,8 @@ export const STYLE = `
   --pos-fw-bg: #FBE7E4; --pos-fw-fg: #B23A2E;
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-6: 24px; --space-8: 32px;
   --radius-sm: 8px; --radius-md: 12px; --radius-full: 9999px;
-  --measure: 660px;
+  --measure: 660px; --archive-measure: 960px;
+  --player-control-bg: rgba(255,255,255,0.9);
   --sticky-player-h: 0px;
 }
 * { box-sizing: border-box; }
@@ -854,7 +868,7 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .header .date { color: var(--muted); font-size: 0.8125rem; margin: 0; }
 .footer { padding: var(--space-8) var(--space-6); color: var(--muted); font-size: 0.8125rem; }
 
-.layout { display: flex; align-items: flex-start; gap: var(--space-6); max-width: 1440px; margin: 0 auto; padding: var(--space-6); }
+.layout { display: flex; justify-content: center; align-items: flex-start; gap: var(--space-6); max-width: 1440px; margin: 0 auto; padding: var(--space-6); }
 
 .side-col { flex: 0 0 min(420px, 40%); position: sticky; top: var(--space-6);
   max-height: calc(100dvh - var(--space-6) * 2);
@@ -865,17 +879,18 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .player-media { position: absolute; inset: 0; }
 #yt-player, .player-media iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 #yt-player[hidden] { display: none; }
-.player-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); color: #fff; text-align: center; padding: var(--space-4); }
+.player-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); color: var(--bg); text-align: center; padding: var(--space-4); }
 .player-placeholder[hidden] { display: none; }
-.player-mini-bar { position: absolute; inset: 0; display: none; align-items: center; padding: 0 var(--space-3); color: #fff; font-size: 0.8125rem; font-weight: 600; background: var(--ink); }
+.player-mini-bar { position: absolute; inset: 0; display: none; align-items: center; padding: 0 var(--space-3); color: var(--bg); font-size: 0.8125rem; font-weight: 600; background: var(--ink); }
 .player-collapse { display: none; }
 
 .side { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--space-4); }
 .part-switch { flex-shrink: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .part-btn { min-height: 44px; padding: var(--space-2) var(--space-3); border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: var(--surface); font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
-.part-btn[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+.part-btn[aria-pressed="true"] { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 
 .toc-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.toc-toggle { min-height: 44px; padding: var(--space-2) var(--space-3); border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: var(--bg); font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
 .toc [role="tablist"] { display: flex; gap: var(--space-2); border-bottom: 1px solid var(--line); }
 .toc [role="tab"] { min-height: 44px; padding: var(--space-2) var(--space-3); font-size: 0.8125rem; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
 .toc [role="tab"][aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
@@ -893,8 +908,8 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .my-feedback-row { display: flex; gap: var(--space-2); overflow-x: auto; white-space: nowrap; padding-bottom: var(--space-1); }
 .pill { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 44px; padding: var(--space-2) var(--space-4); border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: var(--bg); font-size: 0.8125rem; font-weight: 600; cursor: pointer; flex-shrink: 0; }
 .pill .count { color: var(--muted); }
-.pill[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
-.pill[aria-pressed="true"] .count { color: #fff; }
+.pill[aria-pressed="true"] { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.pill[aria-pressed="true"] .count { color: var(--bg); }
 
 .filter-bar { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-4); }
 .filter-bar summary { cursor: pointer; font-size: 0.8125rem; font-weight: 600; min-height: 44px; display: flex; align-items: center; list-style: none; }
@@ -903,10 +918,11 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .filter-bar[open] summary { margin-bottom: var(--space-2); }
 .filter-groups { display: flex; flex-direction: column; gap: var(--space-3); }
 .filter-group-label { display: block; font-size: 0.8125rem; font-weight: 600; color: var(--muted); margin-bottom: var(--space-2); }
-.chip { display: inline-flex; align-items: center; padding: var(--space-1) var(--space-3); margin: 2px; border-radius: var(--radius-full); font-size: 0.8125rem; font-weight: 600; color: var(--ink); background: var(--surface-sunken); }
+.chip { display: inline-flex; align-items: center; padding: var(--space-1) var(--space-3); margin: var(--space-1); border-radius: var(--radius-full); font-size: 0.8125rem; font-weight: 600; color: var(--ink); background: var(--surface-sunken); white-space: nowrap; flex-shrink: 0; }
 .chip-filter { min-height: 44px; border: 1px solid var(--line-strong); cursor: pointer; background: var(--bg); }
-.chip-filter[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
-.pos-node { display: inline-flex; align-items: center; }
+.chip-filter[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.pos-tree { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.pos-node { display: inline-flex; align-items: center; white-space: nowrap; flex-shrink: 0; }
 .pos-children { margin-left: var(--space-3); display: inline-flex; flex-wrap: wrap; }
 .chip-overflow { color: var(--muted); }
 .filter-reset { min-height: 44px; padding: var(--space-2) var(--space-4); border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: var(--bg); font-weight: 600; cursor: pointer; margin-top: var(--space-3); }
@@ -928,7 +944,7 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .card > img { margin-top: var(--space-3); border: 1px solid var(--line); }
 .mention-badge { display: inline-block; margin: var(--space-2) 0 0; padding: var(--space-1) var(--space-3); border-radius: var(--radius-full); font-size: 0.8125rem; font-weight: 600; }
 .mention-badge[hidden] { display: none; }
-.mention-badge.mention-direct { background: var(--accent); color: #fff; }
+.mention-badge.mention-direct { background: var(--accent); color: var(--bg); }
 .mention-badge.mention-related { background: var(--surface-sunken); color: var(--muted); }
 .chip-row { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0; }
 .chip-pos-gk { background: var(--pos-gk-bg); color: var(--pos-gk-fg); }
@@ -946,35 +962,51 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .card-body p strong { font-weight: 700; color: inherit; }
 .card-body .body-frame { margin: 0; cursor: pointer; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-2); }
 .card-body .body-frame img { border-radius: var(--radius-sm); }
-.card-body .body-frame figcaption { display: flex; align-items: center; gap: var(--space-2); font-size: 0.875rem; font-weight: 500; color: var(--muted); margin-top: var(--space-2); }
-.zoom-link { font-weight: 600; }
+.card-body .body-frame figcaption { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); font-size: 0.875rem; font-weight: 500; color: var(--muted); margin-top: var(--space-2); }
+.zoom-link { font-weight: 600; white-space: nowrap; flex-shrink: 0; }
 
 .similar-list, .refs-list { font-size: 0.9375rem; margin: 0; padding-left: 1.1rem; }
 .ref-badges { display: inline-flex; gap: var(--space-1); }
 .badge { display: inline-block; background: var(--surface-sunken); color: var(--muted); font-size: 0.875rem; font-weight: 500; padding: 2px var(--space-2); border-radius: var(--radius-full); }
 .similar-date { color: var(--muted); font-size: 0.875rem; }
 .watch-link { display: inline-block; font-weight: 600; }
-.empty-state { text-align: center; color: var(--muted); padding: var(--space-8) 0; }
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); text-align: center; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-8) var(--space-6); }
 .empty-state[hidden] { display: none; }
+.empty-state .filter-reset { margin-top: 0; }
+
+/* Desktop (≥1024px): TOC stays always visible in the left column, ignoring the mobile
+   toggle's [hidden] attribute — an ordinary author rule safely beats the UA's plain
+   [hidden] display:none (unlike details, this has no content-visibility lock). */
+@media (min-width: 1024px) {
+  .toc-toggle { display: none; }
+  .toc-panel[hidden] { display: block; }
+}
 
 @media (max-width: 1023.98px) {
   .layout { flex-direction: column; padding: var(--space-4); gap: var(--space-4); }
   .side-col { display: contents; }
-  .side { position: static; max-height: none; display: block; }
-  .player-wrapper { position: sticky; top: 0; z-index: 10; aspect-ratio: auto; height: min(56.25vw, 200px); }
+  .side { display: contents; }
+  .main { display: contents; }
+  .player-wrapper { order: 1; position: sticky; top: 0; z-index: 10; aspect-ratio: auto; height: min(56.25vw, 200px); }
   .player-wrapper.is-collapsed { height: 44px; }
   .player-wrapper.is-collapsed .player-mini-bar { display: flex; }
   .player-collapse { display: block; position: absolute; right: var(--space-2); bottom: var(--space-2); z-index: 1;
     min-width: 44px; min-height: 44px; padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: rgba(255,255,255,0.9); color: var(--ink); font-size: 0.8125rem; font-weight: 600; }
-  .player-wrapper.is-collapsed .player-collapse { position: static; margin-left: auto; background: none; border: none; color: #fff; }
-  .toc-scroll { overflow-y: visible; }
-  .main { max-width: none; }
+    border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: var(--player-control-bg); color: var(--ink); font-size: 0.8125rem; font-weight: 600; }
+  .player-wrapper.is-collapsed .player-collapse { position: static; margin-left: auto; background: none; border: none; color: var(--bg); }
+  .part-switch { order: 2; }
+  .my-feedback { order: 3; }
+  .filter-bar { order: 4; }
+  .active-filters { order: 5; }
+  .result-count { order: 6; }
+  .card-list { order: 7; }
+  .empty-state { order: 8; }
+  .toc-scroll { order: 9; flex: 0 1 auto; overflow-y: visible; }
   .card { scroll-margin-top: calc(var(--sticky-player-h) + var(--space-4)); }
 }
 
-.archive-main, .ref-main { max-width: 960px; margin: 0 auto; padding: var(--space-6) var(--space-4); }
-.session-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-6); margin: var(--space-6) 0; }
+.archive-main, .ref-main { max-width: var(--archive-measure); margin: 0 auto; padding: var(--space-6) var(--space-4); }
+.session-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-6); margin: var(--space-6) 0; }
 .session-card { display: block; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-4); }
 .session-card .meta { color: var(--muted); font-size: 0.8125rem; }
 .topic-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-2); }
@@ -1464,6 +1496,17 @@ export const VIEWER_JS = `(function () {
     });
   }
 
+  function initTocToggle() {
+    var btn = document.querySelector(".toc-toggle");
+    var panel = document.querySelector(".toc-panel");
+    if (!btn || !panel) return;
+    btn.addEventListener("click", function () {
+      var expanded = btn.getAttribute("aria-expanded") === "true";
+      panel.hidden = expanded;
+      btn.setAttribute("aria-expanded", expanded ? "false" : "true");
+    });
+  }
+
   initChips();
   initReset();
   initMyFeedback();
@@ -1472,6 +1515,7 @@ export const VIEWER_JS = `(function () {
   initCardClicks();
   initPartButtons();
   initPlayerCollapse();
+  initTocToggle();
   applyFilters();
   syncPlayerHeight();
   if (typeof ResizeObserver !== "undefined") {
