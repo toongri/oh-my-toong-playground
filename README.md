@@ -39,7 +39,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 - **Ultragoal 최종 리뷰 수렴** — 우선순위로 수렴: HIGH는 수리·검사·fresh review, MEDIUM은 수리·검사(재리뷰 없음), LOW는 기록만 수행. 결정적 CLI는 COMMENT/APPROVE dispatch·재리뷰를 거부하고 5회 dispatch 창을 유지
 - **Codex protected-skill trust boundary** — `disable-model-invocation: true` 스킬은 사용자가 명시한 `$skill` UserPromptSubmit에서만 본문이 주입되고, 직접 `SKILL.md` shell read는 차단되며, invocation marker는 authorization이 아닙니다([리뷰/품질](docs/skills/review-quality.md) 참고)
 - **Compaction 조정** — `PreCompact` 훅(`compact-instructions.sh`)의 plain stdout이 Claude Code의 네이티브 compaction 요약 지시에 그대로 반영됩니다(JSON `hookSpecificOutput`은 이 이벤트에서 무시됨). 메인 세션에는 노이즈를 남기지 않고, 문구는 블라인드 채점 반복 실험으로 튜닝했습니다. Claude 전용이며 Codex 짝은 없습니다(Codex의 원격 compaction 경로는 `compact_prompt`를 적용하지 않음).
-- **Session ledger** — Claude Code와 Codex CLI가 같은 형식의 세션 기록을 씁니다. `PreCompact` 훅(`session-ledger/`)이 대화 기록을 스크립트로 결정론적으로 추출하고, headless `codex exec`(gpt-6-luna, effort max, fast tier)가 JSON 스키마를 채우게 합니다. 검증기가 사용자 인용·식별자·메시지 id를 원문과 대조해 위반을 되돌려 보내고(최대 3회), 끝내 실패하면 결정론적 최소 ledger를 씁니다. 결과는 `~/.omt/session-ledger/<session>.md`에 저장되고, compaction 직후 `SessionStart`가 앞부분과 전체 읽기 지시를 주입합니다. 메인 세션은 기록 호출을 하지 않으며, 요약기가 동기로 돌기 때문에 compaction이 수 분 걸릴 수 있습니다.
+- **Session ledger** — Claude Code와 Codex CLI가 같은 형식의 세션 기록을 씁니다. `PreCompact` 훅(`session-ledger/`)이 대화 기록을 스크립트로 결정론적으로 추출하고, headless `codex exec`(gpt-6-sol, effort low, fast tier)가 JSON 스키마를 채우게 합니다. 검증기가 사용자 인용·식별자·메시지 id를 원문과 대조해 위반을 되돌려 보내고(최대 3회), 끝내 실패하면 결정론적 최소 ledger를 씁니다. 결과는 `~/.omt/session-ledger/<session>.md`에 저장되고, compaction 직후 `SessionStart`가 앞부분과 전체 읽기 지시를 주입합니다. 메인 세션은 기록 호출을 하지 않으며, 요약기가 동기로 돌기 때문에 compaction이 보통 1~2분 더 걸립니다.
 
 ## 철학 — 왜 이 설계인가
 

@@ -519,7 +519,8 @@ export async function writeLedger(input: LedgerInput): Promise<LedgerResult> {
 /** Set on the summarizer's process so this hook, re-run by the nested session, does nothing. */
 export const WORKER_ENV = "OMT_LEDGER_WORKER";
 
-export function codexRunner(model = "gpt-6-luna", effort = "max"): ModelRunner {
+/** gpt-6-sol at low effort: in blind-judged replays it matched or beat gpt-6-luna max and native compaction, in a quarter of the time. */
+export function codexRunner(model = "gpt-6-sol", effort = "low"): ModelRunner {
 	return (prompt, timeoutMs) =>
 		new Promise((resolve) => {
 			const dir = mkdtempSync(join(tmpdir(), "omt-ledger-"));
