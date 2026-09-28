@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { normalizeUrl, refId } from "./core.ts";
 import { COMMANDS } from "./fc.ts";
 
 const FC_PATH = join(import.meta.dir, "fc.ts");
@@ -51,6 +53,29 @@ function run(args: string[], options: { cwd: string; home: string }): RunResult 
 		stderr: result.stderr.toString("utf8"),
 		exitCode: result.exitCode ?? 1,
 	};
+}
+
+/**
+ * Non-blocking variant of `run`, for a command whose subprocess calls back
+ * into a `Bun.serve` running in this same test process (verify-refs). A
+ * `Bun.spawnSync` here would block this process's single JS thread until the
+ * child exits, so the in-process server could never service the child's
+ * request — a self-deadlock. `Bun.spawn` + `await proc.exited` keeps the
+ * event loop free to run the server's `fetch` handler concurrently.
+ */
+async function runAsync(args: string[], options: { cwd: string; home: string }): Promise<RunResult> {
+	const proc = Bun.spawn(["bun", FC_PATH, ...args], {
+		cwd: options.cwd,
+		env: { ...process.env, HOME: options.home },
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	const [stdout, stderr, exitCode] = await Promise.all([
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+		proc.exited,
+	]);
+	return { stdout, stderr, exitCode };
 }
 
 describe("fc-feedback CLI", () => {
@@ -224,5 +249,414 @@ describe("fc-feedback CLI", () => {
 		const result = run(["not-a-real-command"], { cwd, home });
 		expect(result.exitCode).not.toBe(0);
 		expect(result.stderr).toContain("알 수 없는 명령");
+	});
+
+	// ── check plan ───────────────────────────────────────────────────────────
+
+	function planFixture(topicTag: string, memberIds: string[] = []): string {
+		return JSON.stringify({
+			session_title: "테스트 세션",
+			matches: [
+				{
+					title: "1경기",
+					topics: [
+						{
+							title: "빌드업 주제",
+							summary: "빌드업 상황 정리",
+							units: [
+								{
+									title: "유닛1",
+									start_line: 0,
+									end_line: 0,
+									position_tags: [],
+									topic_tags: [topicTag],
+									member_ids: memberIds,
+									key_frame_candidate_ids: [],
+								},
+							],
+						},
+					],
+				},
+			],
+		});
+	}
+
+	function linesFixture(): string {
+		return JSON.stringify([{ i: 0, video: "NUzEChn9EyI", start: 0, end: 5, text: "테스트 대사" }]);
+	}
+
+	test("check plan은 유효한 plan.json에서 exit 0과 plan.validated.json을 만든다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		const archive = repo("archive");
+		writeFileSync(join(archive, "taxonomy.yaml"), "version: 1\ntopics: [빌드업]\n");
+		const roster = rosterFile();
+		run(["config", "set", "--archive", archive, "--roster", roster, "--pages-url", "https://example.com/"], { cwd, home });
+
+		const work = tempDir();
+		writeFileSync(join(work, "lines.json"), linesFixture());
+		writeFileSync(join(work, "plan.json"), planFixture("빌드업"));
+
+		const result = run(["check", "plan", "--work", work], { cwd, home });
+		expect(result.exitCode).toBe(0);
+		const parsed = JSON.parse(result.stdout.trim());
+		expect(parsed.ok).toBe(true);
+		expect(parsed.pending).toBe(false);
+		expect(parsed.tableMd).toContain("유닛1");
+
+		const validated = JSON.parse(readFileSync(join(work, "plan.validated.json"), "utf8"));
+		expect(validated.units).toHaveLength(1);
+		expect(validated.units[0].id).toBe("u001");
+	});
+
+	test("check plan은 proposed_tags를 사용하면 exit 2로 보류한다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		const archive = repo("archive");
+		writeFileSync(join(archive, "taxonomy.yaml"), "version: 1\ntopics: [빌드업]\n");
+		const roster = rosterFile();
+		run(["config", "set", "--archive", archive, "--roster", roster, "--pages-url", "https://example.com/"], { cwd, home });
+
+		const work = tempDir();
+		writeFileSync(join(work, "lines.json"), linesFixture());
+		const plan = JSON.parse(planFixture("신규태그"));
+		plan.proposed_tags = [{ tag: "신규태그", reason: "새로운 유형" }];
+		writeFileSync(join(work, "plan.json"), JSON.stringify(plan));
+
+		const result = run(["check", "plan", "--work", work], { cwd, home });
+		expect(result.exitCode).toBe(2);
+		const parsed = JSON.parse(result.stdout.trim());
+		expect(parsed.pending).toBe(true);
+		expect(parsed.proposed).toEqual([{ tag: "신규태그", reason: "새로운 유형" }]);
+		expect(() => readFileSync(join(work, "plan.validated.json"), "utf8")).toThrow();
+	});
+
+	test("check plan은 무효한 plan.json에서 exit 1과 stderr JSON 오류를 낸다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		const archive = repo("archive");
+		writeFileSync(join(archive, "taxonomy.yaml"), "version: 1\ntopics: [빌드업]\n");
+		const roster = rosterFile();
+		run(["config", "set", "--archive", archive, "--roster", roster, "--pages-url", "https://example.com/"], { cwd, home });
+
+		const work = tempDir();
+		writeFileSync(join(work, "lines.json"), linesFixture());
+		const plan = JSON.parse(planFixture("빌드업"));
+		delete plan.session_title;
+		writeFileSync(join(work, "plan.json"), JSON.stringify(plan));
+
+		const result = run(["check", "plan", "--work", work], { cwd, home });
+		expect(result.exitCode).toBe(1);
+		expect(result.stdout).toBe("");
+		const errors = JSON.parse(result.stderr.trim());
+		expect(Array.isArray(errors)).toBe(true);
+		expect(errors.some((error: { path: string }) => error.path === "session_title")).toBe(true);
+	});
+
+	// ── taxonomy add ─────────────────────────────────────────────────────────
+
+	test("taxonomy add는 이미 있는 태그를 다시 추가해도 멱등이다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		const archive = repo("archive");
+		writeFileSync(join(archive, "taxonomy.yaml"), "version: 1\ntopics: [빌드업]\n");
+		const roster = rosterFile();
+		run(["config", "set", "--archive", archive, "--roster", roster, "--pages-url", "https://example.com/"], { cwd, home });
+		const work = tempDir();
+
+		const first = run(["taxonomy", "add", "빌드업", "새태그", "--work", work], { cwd, home });
+		expect(first.exitCode).toBe(0);
+		const firstParsed = JSON.parse(first.stdout.trim());
+		expect(firstParsed.added).toEqual(["새태그"]);
+		expect(firstParsed.already_present).toEqual(["빌드업"]);
+
+		const second = run(["taxonomy", "add", "빌드업", "새태그", "--work", work], { cwd, home });
+		expect(second.exitCode).toBe(0);
+		const secondParsed = JSON.parse(second.stdout.trim());
+		expect(secondParsed.added).toEqual([]);
+		expect(secondParsed.already_present.sort()).toEqual(["빌드업", "새태그"].sort());
+
+		const finalTaxonomy = Bun.YAML.parse(readFileSync(join(archive, "taxonomy.yaml"), "utf8")) as { topics: string[] };
+		expect(finalTaxonomy.topics.sort()).toEqual(["빌드업", "새태그"].sort());
+	});
+
+	test("disabled에서 taxonomy add 후 check plan은 exit 0이다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		run(["config", "disable"], { cwd, home });
+		const work = tempDir();
+
+		const add = run(["taxonomy", "add", "신규태그", "--work", work], { cwd, home });
+		expect(add.exitCode).toBe(0);
+
+		writeFileSync(join(work, "lines.json"), linesFixture());
+		writeFileSync(join(work, "plan.json"), planFixture("신규태그"));
+
+		const check = run(["check", "plan", "--work", work], { cwd, home });
+		expect(check.exitCode).toBe(0);
+		expect(readFileSync(join(work, "plan.validated.json"), "utf8")).toContain("신규태그");
+	});
+
+	test("번들 taxonomy.default.yaml의 sha256은 taxonomy add 후에도 변하지 않는다", () => {
+		const before = createHash("sha256").update(readFileSync(TAXONOMY_DEFAULT_PATH)).digest("hex");
+		const cwd = repo();
+		const home = tempDir();
+		run(["config", "disable"], { cwd, home });
+		const work = tempDir();
+		run(["taxonomy", "add", "임시태그", "--work", work], { cwd, home });
+		const after = createHash("sha256").update(readFileSync(TAXONOMY_DEFAULT_PATH)).digest("hex");
+		expect(after).toBe(before);
+	});
+
+	test("disabled 모드에서 명단 없이 member_ids가 비어있지 않으면 check plan은 exit 1이다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		run(["config", "disable"], { cwd, home });
+		const work = tempDir();
+
+		writeFileSync(join(work, "lines.json"), linesFixture());
+		writeFileSync(join(work, "plan.json"), planFixture("빌드업", ["ghost"]));
+
+		const result = run(["check", "plan", "--work", work], { cwd, home });
+		expect(result.exitCode).toBe(1);
+		const errors = JSON.parse(result.stderr.trim());
+		expect(errors.some((error: { path: string }) => error.path.includes("member_ids"))).toBe(true);
+	});
+
+	// ── frames ───────────────────────────────────────────────────────────────
+
+	test("frames는 plan.validated.json이 없으면 실패한다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		const work = tempDir();
+		const result = run(["frames", "--work", work], { cwd, home });
+		expect(result.exitCode).not.toBe(0);
+		expect(result.stderr).toContain("plan.validated.json");
+	});
+
+	// ── similar ──────────────────────────────────────────────────────────────
+
+	test("similar는 손으로 만든 index.json으로 similar-candidates.json을 만든다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		const archive = repo("archive");
+		const roster = rosterFile();
+		run(["config", "set", "--archive", archive, "--roster", roster, "--pages-url", "https://example.com/"], { cwd, home });
+
+		writeFileSync(
+			join(archive, "index.json"),
+			JSON.stringify({
+				version: 1,
+				updated_at: new Date().toISOString(),
+				sessions: [],
+				units: [
+					{
+						uid: "20230101-AAAAAAAAAAA#u001",
+						session: "20230101-AAAAAAAAAAA",
+						title: "과거 유닛",
+						date: "2023-01-01",
+						topic_tags: ["빌드업"],
+						position_tags: ["CB"],
+						member_ids: [],
+						href: "sessions/20230101-AAAAAAAAAAA/index.html#u001",
+					},
+				],
+				refs: [],
+			}),
+		);
+
+		const work = tempDir();
+		writeFileSync(
+			join(work, "session.json"),
+			JSON.stringify({
+				version: 1,
+				session_id: "20240104-NUzEChn9EyI",
+				created_at: new Date().toISOString(),
+				videos: [
+					{
+						id: "NUzEChn9EyI",
+						url: "https://youtu.be/NUzEChn9EyI",
+						part: 1,
+						title: "t",
+						channel: "c",
+						upload_date: "20240104",
+						duration: 100,
+						embeddable: true,
+						width: 640,
+						height: 480,
+						files: { audio: "a", video: "v", captions: null, captions_format: null, wav: null },
+					},
+				],
+			}),
+		);
+		writeFileSync(
+			join(work, "plan.validated.json"),
+			JSON.stringify({
+				version: 1,
+				session_title: "현재 세션",
+				matches: [{ id: "m1", title: "1경기", topics: [{ id: "m1-t1", title: "주제", summary: "요약", unit_ids: ["u001"] }] }],
+				units: [
+					{
+						id: "u001",
+						match_id: "m1",
+						topic_id: "m1-t1",
+						video: "NUzEChn9EyI",
+						start: 0,
+						end: 5,
+						title: "유닛1",
+						position_tags: ["CB"],
+						topic_tags: ["빌드업"],
+						member_ids: [],
+						key_frame_candidate_ids: [],
+					},
+				],
+			}),
+		);
+
+		const result = run(["similar", "--work", work], { cwd, home });
+		expect(result.exitCode).toBe(0);
+		const written = JSON.parse(readFileSync(join(work, "similar-candidates.json"), "utf8"));
+		expect(written.session_id).toBe("20240104-NUzEChn9EyI");
+		expect(written.units.u001).toHaveLength(1);
+		expect(written.units.u001[0].uid).toBe("20230101-AAAAAAAAAAA#u001");
+	});
+
+	test("disabled 모드의 similar는 index.json 없이 빈 결과를 쓴다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		run(["config", "disable"], { cwd, home });
+		const work = tempDir();
+		writeFileSync(
+			join(work, "session.json"),
+			JSON.stringify({
+				version: 1,
+				session_id: "20240104-NUzEChn9EyI",
+				created_at: new Date().toISOString(),
+				videos: [
+					{
+						id: "NUzEChn9EyI",
+						url: "https://youtu.be/NUzEChn9EyI",
+						part: 1,
+						title: "t",
+						channel: "c",
+						upload_date: "20240104",
+						duration: 100,
+						embeddable: true,
+						width: 640,
+						height: 480,
+						files: { audio: "a", video: "v", captions: null, captions_format: null, wav: null },
+					},
+				],
+			}),
+		);
+
+		const result = run(["similar", "--work", work], { cwd, home });
+		expect(result.exitCode).toBe(0);
+		const written = JSON.parse(readFileSync(join(work, "similar-candidates.json"), "utf8"));
+		expect(written).toEqual({ version: 1, session_id: "20240104-NUzEChn9EyI", units: {} });
+	});
+
+	// ── verify-refs ──────────────────────────────────────────────────────────
+
+	test("verify-refs는 200을 유지하고 301 체인을 따라가며 404는 제외하고 index.json의 참고자료는 재요청하지 않는다", async () => {
+		const hits: Record<string, number> = {};
+		const server = Bun.serve({
+			port: 0,
+			fetch(request) {
+				const url = new URL(request.url);
+				hits[url.pathname] = (hits[url.pathname] ?? 0) + 1;
+				if (url.pathname === "/ok") return new Response("ok", { status: 200 });
+				if (url.pathname === "/redirect1") return new Response(null, { status: 301, headers: { Location: "/redirect2" } });
+				if (url.pathname === "/redirect2") return new Response(null, { status: 301, headers: { Location: "/final" } });
+				if (url.pathname === "/final") return new Response("final", { status: 200 });
+				if (url.pathname === "/missing") return new Response("missing", { status: 404 });
+				if (url.pathname === "/reused") return new Response("reused", { status: 200 });
+				return new Response("not found", { status: 404 });
+			},
+		});
+
+		try {
+			const base = `http://127.0.0.1:${server.port}`;
+			const cwd = repo();
+			const home = tempDir();
+			const archive = repo("archive");
+			const roster = rosterFile();
+			run(["config", "set", "--archive", archive, "--roster", roster, "--pages-url", "https://example.com/"], { cwd, home });
+
+			const reusedUrl = `${base}/reused`;
+			writeFileSync(
+				join(archive, "index.json"),
+				JSON.stringify({
+					version: 1,
+					updated_at: new Date().toISOString(),
+					sessions: [],
+					units: [],
+					refs: [
+						{
+							id: refId(reusedUrl),
+							url: normalizeUrl(reusedUrl),
+							title: "재사용 문서",
+							lang: "ko",
+							kind: "tactics",
+							page: null,
+							first_session: "20230101-AAAAAAAAAAA",
+						},
+					],
+				}),
+			);
+
+			const work = tempDir();
+			writeFileSync(
+				join(work, "refs-draft.json"),
+				JSON.stringify({
+					version: 1,
+					refs: [
+						{ url: `${base}/ok`, title: "OK 문서", source_name: "테스트", lang: "ko", kind: "tactics", unit_ids: ["u001"] },
+						{
+							url: `${base}/redirect1`,
+							title: "리다이렉트 문서",
+							source_name: "테스트",
+							lang: "ko",
+							kind: "tactics",
+							unit_ids: ["u001"],
+						},
+						{
+							url: `${base}/missing`,
+							title: "없는 문서",
+							source_name: "테스트",
+							lang: "ko",
+							kind: "tactics",
+							unit_ids: ["u001"],
+						},
+						{ url: reusedUrl, title: "재사용 문서", source_name: "테스트", lang: "ko", kind: "tactics", unit_ids: ["u001"] },
+					],
+				}),
+			);
+
+			const result = await runAsync(["verify-refs", "--work", work], { cwd, home });
+			expect(result.exitCode).toBe(0);
+			const parsed = JSON.parse(result.stdout.trim());
+			expect(parsed.kept).toBe(3);
+			expect(parsed.dropped).toBe(1);
+
+			const verified = JSON.parse(readFileSync(join(work, "refs.verified.json"), "utf8"));
+			const byUrl = new Map(verified.refs.map((ref: { url: string }) => [ref.url, ref]));
+
+			const ok = byUrl.get(normalizeUrl(`${base}/ok`)) as { http_status: number; final_url: string } | undefined;
+			expect(ok?.http_status).toBe(200);
+			expect(ok?.final_url).toBe(normalizeUrl(`${base}/ok`));
+
+			const redirected = byUrl.get(normalizeUrl(`${base}/redirect1`)) as { final_url: string } | undefined;
+			expect(redirected?.final_url).toBe(normalizeUrl(`${base}/final`));
+
+			const reused = byUrl.get(normalizeUrl(reusedUrl)) as { reused: boolean; page: string | null } | undefined;
+			expect(reused?.reused).toBe(true);
+			expect(reused?.page).toBeNull();
+			expect(hits["/reused"]).toBeUndefined();
+
+			expect(verified.dropped).toEqual([{ url: `${base}/missing`, reason: "HTTP 404" }]);
+		} finally {
+			server.stop(true);
+		}
 	});
 });

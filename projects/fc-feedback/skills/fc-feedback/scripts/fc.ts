@@ -24,10 +24,36 @@ import {
 } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
+import { stringify } from "yaml";
+
 import { getOmtDir } from "@lib/omt-dir.ts";
 import { resolveSessionIdOrThrow } from "@lib/state-core.ts";
 
-import { parseRoster, SID_PATTERN, VID_PATTERN } from "./core.ts";
+import {
+	checkNotes,
+	checkPlan,
+	checkRefsDraft,
+	checkSimilarChoices,
+	isValidTag,
+	normalizeUrl,
+	parseRoster,
+	parseTaxonomy,
+	refId,
+	similarCandidates,
+	SID_PATTERN,
+	VID_PATTERN,
+	type CurrentUnit,
+	type Line,
+	type PastUnit,
+	type Roster,
+	type SimilarCandidate,
+	type SimilarCandidatesResult,
+	type Taxonomy,
+	type ValidatedMatch,
+	type ValidatedPlan,
+	type ValidatedTopic,
+	type ValidatedUnit,
+} from "./core.ts";
 import {
 	MEDIA_CONSTANTS,
 	buildLines,
@@ -70,6 +96,14 @@ export const COMMANDS: readonly CommandSpec[] = [
 	{ name: "transcribe", usage: "fc transcribe [--hq] [--captions-only]", description: "오디오를 wav로 변환하고 whisper/자막으로 lines.json을 만든다" },
 	{ name: "scan", usage: "fc scan", description: "무음/장면 후보를 병합하고 미리보기·컨택트시트를 만든다" },
 	{ name: "add-frame", usage: "fc add-frame --video <VID> --t <sec>", description: "수동 프레임 후보를 candidates.json에 추가하고 미리보기를 뽑는다" },
+	{ name: "check plan", usage: "fc check plan", description: "plan.json을 검증한다(exit 0 유효+plan.validated.json 생성, 2 보류, 1 무효)" },
+	{ name: "check notes", usage: "fc check notes", description: "notes.json을 plan.validated.json 기준으로 검증한다(exit 0/1)" },
+	{ name: "check similar", usage: "fc check similar", description: "similar-choices.json을 similar-candidates.json 기준으로 검증한다(exit 0/1)" },
+	{ name: "check refs", usage: "fc check refs", description: "refs-draft.json을 plan.validated.json 기준으로 검증한다(exit 0/1)" },
+	{ name: "taxonomy add", usage: "fc taxonomy add <tag...>", description: "taxonomy에 태그를 append-only·멱등으로 추가한다" },
+	{ name: "frames", usage: "fc frames", description: "검증된 유닛마다 시작 프레임과 notes의 핵심 프레임을 webp로 추출한다" },
+	{ name: "similar", usage: "fc similar", description: "아카이브 index.json을 기준으로 similar-candidates.json을 만든다" },
+	{ name: "verify-refs", usage: "fc verify-refs", description: "refs-draft.json의 URL을 정규화·검증해 refs.verified.json을 쓴다" },
 ];
 
 // ── unknown-narrowing + small validators ────────────────────────────────
@@ -98,6 +132,24 @@ function optionalString(value: unknown): string | undefined {
 
 function optionalBool(value: unknown, fallback: boolean): boolean {
 	return typeof value === "boolean" ? value : fallback;
+}
+
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
+function toStringArray(value: unknown, field: string): string[] {
+	if (!Array.isArray(value)) {
+		throw new Error(`fc-feedback: ${field}은(는) 배열이어야 합니다`);
+	}
+	return value.map((item, index) => str(item, `${field}[${index}]`));
+}
+
+function readJsonFile(path: string, label: string): unknown {
+	if (!existsSync(path)) {
+		throw new Error(`fc-feedback: ${label}이(가) 없습니다: ${path}`);
+	}
+	return JSON.parse(readFileSync(path, "utf8"));
 }
 
 // ── argv parsing ─────────────────────────────────────────────────────────
@@ -189,6 +241,46 @@ function ensureWorkDir(workDir: string, status: FcStatus): void {
 			copyFileSync(TAXONOMY_DEFAULT_PATH, dest);
 		}
 	}
+}
+
+// ── taxonomy/roster data sources (plan §12-2, §13.1-2) ───────────────────
+//
+// configured mode reads/writes the archive's taxonomy.yaml; every other mode
+// (disabled, unconfigured) reads/writes the work dir's own copy (seeded from
+// the bundled default by ensureWorkDir, never the bundled file itself).
+// roster comes from manifest.roster_path when set, otherwise there is no
+// roster (member_ids must then be empty — enforced by core.checkPlan).
+
+function taxonomyPath(workDir: string, status: FcStatus): string {
+	return status.mode === "configured" ? join(status.archive_repo_path, "taxonomy.yaml") : join(workDir, "taxonomy.yaml");
+}
+
+function loadTaxonomy(workDir: string, status: FcStatus): Taxonomy {
+	const path = taxonomyPath(workDir, status);
+	if (!existsSync(path)) {
+		throw new Error(`fc-feedback: taxonomy.yaml이 없습니다: ${path}`);
+	}
+	const parsed = parseTaxonomy(readFileSync(path, "utf8"));
+	if (!parsed.ok) {
+		throw new Error(
+			`fc-feedback: taxonomy.yaml이 유효하지 않습니다: ${parsed.errors.map((error) => `${error.path}: ${error.message}`).join("; ")}`,
+		);
+	}
+	return parsed.value;
+}
+
+function loadRoster(status: FcStatus): Roster | null {
+	const rosterPath = status.mode === "configured" || status.mode === "disabled" ? status.roster_path : undefined;
+	if (rosterPath === undefined) {
+		return null;
+	}
+	const parsed = parseRoster(readFileSync(rosterPath, "utf8"));
+	if (!parsed.ok) {
+		throw new Error(
+			`fc-feedback: roster.yaml이 유효하지 않습니다: ${parsed.errors.map((error) => `${error.path}: ${error.message}`).join("; ")}`,
+		);
+	}
+	return parsed.value;
 }
 
 // ── config commands ──────────────────────────────────────────────────────
@@ -800,6 +892,32 @@ function toCandidate(raw: unknown): Candidate {
 	};
 }
 
+function toLine(raw: unknown): Line {
+	if (!isRecord(raw)) {
+		throw new Error("fc-feedback: lines.json 항목이 올바르지 않습니다");
+	}
+	return {
+		i: num(raw.i, "line.i"),
+		video: str(raw.video, "line.video"),
+		start: num(raw.start, "line.start"),
+		end: num(raw.end, "line.end"),
+		text: str(raw.text, "line.text"),
+	};
+}
+
+/** lines.json is script-generated (transcribe) — this is structural coercion, not core.checkLines revalidation. */
+function readLines(workDir: string): Line[] {
+	const path = join(workDir, "lines.json");
+	if (!existsSync(path)) {
+		throw new Error("fc-feedback: lines.json이 없습니다 — 먼저 transcribe를 실행하세요");
+	}
+	const raw: unknown = JSON.parse(readFileSync(path, "utf8"));
+	if (!Array.isArray(raw)) {
+		throw new Error("fc-feedback: lines.json 형식이 올바르지 않습니다");
+	}
+	return raw.map(toLine);
+}
+
 function readCandidates(workDir: string): Candidate[] {
 	const path = join(workDir, "candidates.json");
 	if (!existsSync(path)) {
@@ -868,6 +986,551 @@ async function handleAddFrame(rest: readonly string[], workDir: string, status: 
 	return cmdAddFrame({ video: videoId, t }, workDir, status);
 }
 
+// ── plan.validated.json reading (plan §3) ───────────────────────────────
+//
+// plan.validated.json is our own output (written by `check plan`), but it is
+// still read back from disk as `unknown` — these are structural I/O readers,
+// not a `core.checkPlan` re-validation.
+
+function toValidatedUnit(raw: unknown): ValidatedUnit {
+	if (!isRecord(raw)) {
+		throw new Error("fc-feedback: plan.validated.json의 unit이 올바르지 않습니다");
+	}
+	return {
+		id: str(raw.id, "unit.id"),
+		match_id: str(raw.match_id, "unit.match_id"),
+		topic_id: str(raw.topic_id, "unit.topic_id"),
+		video: str(raw.video, "unit.video"),
+		start: num(raw.start, "unit.start"),
+		end: num(raw.end, "unit.end"),
+		title: str(raw.title, "unit.title"),
+		position_tags: toStringArray(raw.position_tags, "unit.position_tags"),
+		topic_tags: toStringArray(raw.topic_tags, "unit.topic_tags"),
+		member_ids: toStringArray(raw.member_ids, "unit.member_ids"),
+		key_frame_candidate_ids: toStringArray(raw.key_frame_candidate_ids, "unit.key_frame_candidate_ids"),
+	};
+}
+
+function toValidatedTopic(raw: unknown): ValidatedTopic {
+	if (!isRecord(raw)) {
+		throw new Error("fc-feedback: plan.validated.json의 topic이 올바르지 않습니다");
+	}
+	return {
+		id: str(raw.id, "topic.id"),
+		title: str(raw.title, "topic.title"),
+		summary: str(raw.summary, "topic.summary"),
+		unit_ids: toStringArray(raw.unit_ids, "topic.unit_ids"),
+	};
+}
+
+function toValidatedMatch(raw: unknown): ValidatedMatch {
+	if (!isRecord(raw) || !Array.isArray(raw.topics)) {
+		throw new Error("fc-feedback: plan.validated.json의 match가 올바르지 않습니다");
+	}
+	return {
+		id: str(raw.id, "match.id"),
+		title: str(raw.title, "match.title"),
+		topics: raw.topics.map(toValidatedTopic),
+	};
+}
+
+function toValidatedPlan(raw: unknown): ValidatedPlan {
+	if (!isRecord(raw) || !Array.isArray(raw.matches) || !Array.isArray(raw.units)) {
+		throw new Error("fc-feedback: plan.validated.json 형식이 올바르지 않습니다");
+	}
+	return {
+		version: 1,
+		session_title: str(raw.session_title, "session_title"),
+		matches: raw.matches.map(toValidatedMatch),
+		units: raw.units.map(toValidatedUnit),
+	};
+}
+
+// ── check plan|notes|similar|refs (plan §3, §7 T6) ──────────────────────
+//
+// Each `check` command validates one script/LLM-authored JSON artifact
+// against core.ts's `checkX` validators. Exit 0 = valid, 1 = invalid (errors
+// printed as JSON on stderr), and — plan only — 2 = pending (proposed tags
+// used, review gate must not proceed). Success prints one JSON line on
+// stdout; invalid never prints to stdout (contract: errors stay on stderr).
+
+function handleCheckPlan(workDir: string, status: FcStatus): number {
+	ensureWorkDir(workDir, status);
+	const plan = readJsonFile(join(workDir, "plan.json"), "plan.json");
+	const lines = readLines(workDir);
+	const candidates = readCandidates(workDir);
+	const taxonomy = loadTaxonomy(workDir, status);
+	const roster = loadRoster(status);
+	const result = checkPlan(plan, { lines, candidates, taxonomy, roster });
+	if (result.errors.length > 0) {
+		throw new Error(JSON.stringify(result.errors));
+	}
+	if (result.pending) {
+		printJson({ ok: true, pending: true, tableMd: result.tableMd, proposed: result.proposed });
+		return 2;
+	}
+	writeFileSync(join(workDir, "plan.validated.json"), `${JSON.stringify(result.validated, null, 2)}\n`);
+	printJson({ ok: true, pending: false, tableMd: result.tableMd, proposed: result.proposed });
+	return 0;
+}
+
+function handleCheckNotes(workDir: string, status: FcStatus): number {
+	ensureWorkDir(workDir, status);
+	const validated = toValidatedPlan(readJsonFile(join(workDir, "plan.validated.json"), "plan.validated.json"));
+	const notes = readJsonFile(join(workDir, "notes.json"), "notes.json");
+	const result = checkNotes(notes, validated);
+	if (result.errors.length > 0) {
+		throw new Error(JSON.stringify(result.errors));
+	}
+	printJson({ ok: true });
+	return 0;
+}
+
+function toSimilarCandidate(raw: unknown): SimilarCandidate {
+	if (!isRecord(raw)) {
+		throw new Error("fc-feedback: similar-candidates.json 항목이 올바르지 않습니다");
+	}
+	return {
+		uid: str(raw.uid, "candidate.uid"),
+		score: num(raw.score, "candidate.score"),
+		title: str(raw.title, "candidate.title"),
+		date: str(raw.date, "candidate.date"),
+		topic_tags: toStringArray(raw.topic_tags, "candidate.topic_tags"),
+		position_tags: toStringArray(raw.position_tags, "candidate.position_tags"),
+	};
+}
+
+function toSimilarCandidatesResult(raw: unknown): SimilarCandidatesResult {
+	if (!isRecord(raw) || !isRecord(raw.units)) {
+		throw new Error("fc-feedback: similar-candidates.json 형식이 올바르지 않습니다");
+	}
+	const result: SimilarCandidatesResult = {};
+	for (const [unitId, list] of Object.entries(raw.units)) {
+		if (!Array.isArray(list)) {
+			throw new Error(`fc-feedback: similar-candidates.json의 units.${unitId}가 배열이 아닙니다`);
+		}
+		result[unitId] = list.map(toSimilarCandidate);
+	}
+	return result;
+}
+
+function handleCheckSimilar(workDir: string, status: FcStatus): number {
+	ensureWorkDir(workDir, status);
+	const candidatesFile = toSimilarCandidatesResult(
+		readJsonFile(join(workDir, "similar-candidates.json"), "similar-candidates.json"),
+	);
+	const choices = readJsonFile(join(workDir, "similar-choices.json"), "similar-choices.json");
+	const result = checkSimilarChoices(choices, candidatesFile);
+	if (result.errors.length > 0) {
+		throw new Error(JSON.stringify(result.errors));
+	}
+	printJson({ ok: true });
+	return 0;
+}
+
+function handleCheckRefs(workDir: string, status: FcStatus): number {
+	ensureWorkDir(workDir, status);
+	const validated = toValidatedPlan(readJsonFile(join(workDir, "plan.validated.json"), "plan.validated.json"));
+	const draft = readJsonFile(join(workDir, "refs-draft.json"), "refs-draft.json");
+	const result = checkRefsDraft(draft, validated);
+	if (result.errors.length > 0) {
+		throw new Error(JSON.stringify(result.errors));
+	}
+	printJson({ ok: true });
+	return 0;
+}
+
+// ── taxonomy add (plan §13.1-2) ──────────────────────────────────────────
+
+interface TaxonomyAddResult {
+	path: string;
+	added: string[];
+	already_present: string[];
+}
+
+function handleTaxonomyAdd(tags: readonly string[], workDir: string, status: FcStatus): TaxonomyAddResult {
+	if (tags.length === 0) {
+		throw new Error("fc-feedback: taxonomy add에는 태그가 최소 1개 필요합니다");
+	}
+	ensureWorkDir(workDir, status);
+	const path = taxonomyPath(workDir, status);
+	const current = loadTaxonomy(workDir, status);
+	const topics = [...current.topics];
+	const added: string[] = [];
+	const alreadyPresent: string[] = [];
+	for (const tag of tags) {
+		if (!isValidTag(tag)) {
+			throw new Error(`fc-feedback: 유효하지 않은 태그입니다: ${tag}`);
+		}
+		if (topics.includes(tag)) {
+			alreadyPresent.push(tag);
+			continue;
+		}
+		topics.push(tag);
+		added.push(tag);
+	}
+	writeFileSync(path, stringify({ version: 1, topics }));
+	return { path, added, already_present: alreadyPresent };
+}
+
+// ── frames (plan §7 T6) ───────────────────────────────────────────────────
+//
+// One start frame per validated unit, plus one frame per notes.json key_frame
+// candidate — extracted via media.ffmpegFrameArgs into work dir img/. The
+// job list (planFrameJobs) is pure so it stays testable without ffmpeg.
+
+interface NoteKeyFrame {
+	candidate_id: string;
+}
+
+interface NotesFile {
+	units: Record<string, { key_frames: NoteKeyFrame[] }>;
+}
+
+function toNoteKeyFrame(raw: unknown): NoteKeyFrame {
+	if (!isRecord(raw)) {
+		throw new Error("fc-feedback: notes.json의 key_frames 항목이 올바르지 않습니다");
+	}
+	return { candidate_id: str(raw.candidate_id, "key_frame.candidate_id") };
+}
+
+function readNotes(workDir: string): NotesFile {
+	const raw = readJsonFile(join(workDir, "notes.json"), "notes.json");
+	if (!isRecord(raw) || !isRecord(raw.units)) {
+		throw new Error("fc-feedback: notes.json 형식이 올바르지 않습니다");
+	}
+	const units: NotesFile["units"] = {};
+	for (const [unitId, entry] of Object.entries(raw.units)) {
+		if (!isRecord(entry)) {
+			throw new Error(`fc-feedback: notes.json의 units.${unitId}가 올바르지 않습니다`);
+		}
+		units[unitId] = { key_frames: Array.isArray(entry.key_frames) ? entry.key_frames.map(toNoteKeyFrame) : [] };
+	}
+	return { units };
+}
+
+interface FrameJob {
+	id: string;
+	video: string;
+	t: number;
+}
+
+/** Pure job planner: one start-frame job per unit, plus one per notes.json key_frame whose candidate resolves. */
+function planFrameJobs(validated: ValidatedPlan, notes: NotesFile, candidates: readonly Candidate[]): FrameJob[] {
+	const candidateById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+	const jobs: FrameJob[] = [];
+	for (const unit of validated.units) {
+		jobs.push({ id: `${unit.id}-start`, video: unit.video, t: unit.start });
+		for (const frame of notes.units[unit.id]?.key_frames ?? []) {
+			const candidate = candidateById.get(frame.candidate_id);
+			if (candidate !== undefined) {
+				jobs.push({ id: `${unit.id}-${candidate.id}`, video: candidate.video, t: candidate.t });
+			}
+		}
+	}
+	return jobs;
+}
+
+async function cmdFrames(workDir: string, status: FcStatus): Promise<{ frames: number }> {
+	ensureWorkDir(workDir, status);
+	const validated = toValidatedPlan(readJsonFile(join(workDir, "plan.validated.json"), "plan.validated.json"));
+	const notes = readNotes(workDir);
+	const candidates = readCandidates(workDir);
+	const session = readSessionFile(workDir);
+	const jobs = planFrameJobs(validated, notes, candidates);
+
+	const imgDir = join(workDir, "img");
+	mkdirSync(imgDir, { recursive: true });
+
+	for (const job of jobs) {
+		const video = session.videos.find((entry) => entry.id === job.video);
+		if (video === undefined) {
+			throw new Error(`fc-feedback: session.json에 없는 video id입니다: ${job.video}`);
+		}
+		const videoPath = join(workDir, video.files.video);
+		const out = join(imgDir, `${job.id}.webp`);
+		const frameResult = await runCommand(ffmpegFrameArgs(videoPath, job.t, out));
+		if (frameResult.exitCode !== 0) {
+			throw new Error(`fc-feedback: 프레임 추출 실패(${job.id}): ${frameResult.stderr.trim()}`);
+		}
+	}
+
+	return { frames: jobs.length };
+}
+
+// ── similar (plan §4-D, §12-2) ───────────────────────────────────────────
+
+function toPastUnit(raw: unknown): PastUnit {
+	if (!isRecord(raw)) {
+		throw new Error("fc-feedback: index.json의 unit 항목이 올바르지 않습니다");
+	}
+	return {
+		uid: str(raw.uid, "unit.uid"),
+		session: str(raw.session, "unit.session"),
+		title: str(raw.title, "unit.title"),
+		date: str(raw.date, "unit.date"),
+		topic_tags: toStringArray(raw.topic_tags, "unit.topic_tags"),
+		position_tags: toStringArray(raw.position_tags, "unit.position_tags"),
+		member_ids: toStringArray(raw.member_ids, "unit.member_ids"),
+	};
+}
+
+function readPastUnitsFromIndex(archiveDir: string): PastUnit[] {
+	const path = join(archiveDir, "index.json");
+	if (!existsSync(path)) {
+		return [];
+	}
+	const raw: unknown = JSON.parse(readFileSync(path, "utf8"));
+	if (!isRecord(raw) || !Array.isArray(raw.units)) {
+		return [];
+	}
+	return raw.units.map(toPastUnit);
+}
+
+/** Disabled mode (or a configured archive with no index.json yet) skips similarity entirely (plan §12-2). */
+function cmdSimilar(workDir: string, status: FcStatus): { units: number; total_candidates: number } {
+	ensureWorkDir(workDir, status);
+	const session = readSessionFile(workDir);
+	let units: SimilarCandidatesResult = {};
+
+	if (status.mode === "configured" && existsSync(join(status.archive_repo_path, "index.json"))) {
+		const validated = toValidatedPlan(readJsonFile(join(workDir, "plan.validated.json"), "plan.validated.json"));
+		const currentUnits: CurrentUnit[] = validated.units.map((unit) => ({
+			id: unit.id,
+			session: session.session_id,
+			topic_tags: unit.topic_tags,
+			position_tags: unit.position_tags,
+			member_ids: unit.member_ids,
+		}));
+		units = similarCandidates(currentUnits, readPastUnitsFromIndex(status.archive_repo_path));
+	}
+
+	writeFileSync(
+		join(workDir, "similar-candidates.json"),
+		`${JSON.stringify({ version: 1, session_id: session.session_id, units }, null, 2)}\n`,
+	);
+	const totalCandidates = Object.values(units).reduce((sum, list) => sum + list.length, 0);
+	return { units: Object.keys(units).length, total_candidates: totalCandidates };
+}
+
+// ── verify-refs (plan §4-E) ───────────────────────────────────────────────
+
+interface Translation {
+	orig: string;
+	ko: string;
+}
+
+interface RefDraftEntry {
+	url: string;
+	title: string;
+	source_name: string;
+	lang: string;
+	kind: "eafc" | "tactics";
+	unit_ids: string[];
+	summary_ko?: string;
+	key_points_ko?: string[];
+	translations?: Translation[];
+}
+
+function toRefKind(value: unknown, path: string): "eafc" | "tactics" {
+	if (value !== "eafc" && value !== "tactics") {
+		throw new Error(`fc-feedback: ${path}는 "eafc" 또는 "tactics"여야 합니다`);
+	}
+	return value;
+}
+
+function toTranslation(raw: unknown): Translation {
+	if (!isRecord(raw)) {
+		throw new Error("fc-feedback: translations 항목이 올바르지 않습니다");
+	}
+	return { orig: str(raw.orig, "translation.orig"), ko: str(raw.ko, "translation.ko") };
+}
+
+function toRefDraftEntry(raw: unknown): RefDraftEntry {
+	if (!isRecord(raw)) {
+		throw new Error("fc-feedback: refs-draft.json 항목이 올바르지 않습니다");
+	}
+	const summaryKo = raw.summary_ko;
+	const keyPointsKo = raw.key_points_ko;
+	const translations = raw.translations;
+	return {
+		url: str(raw.url, "ref.url"),
+		title: str(raw.title, "ref.title"),
+		source_name: str(raw.source_name, "ref.source_name"),
+		lang: str(raw.lang, "ref.lang"),
+		kind: toRefKind(raw.kind, "ref.kind"),
+		unit_ids: toStringArray(raw.unit_ids, "ref.unit_ids"),
+		...(typeof summaryKo === "string" ? { summary_ko: summaryKo } : {}),
+		...(Array.isArray(keyPointsKo) ? { key_points_ko: toStringArray(keyPointsKo, "ref.key_points_ko") } : {}),
+		...(Array.isArray(translations) ? { translations: translations.map(toTranslation) } : {}),
+	};
+}
+
+function readRefsDraft(workDir: string): RefDraftEntry[] {
+	const raw = readJsonFile(join(workDir, "refs-draft.json"), "refs-draft.json");
+	if (!isRecord(raw) || !Array.isArray(raw.refs)) {
+		throw new Error("fc-feedback: refs-draft.json 형식이 올바르지 않습니다");
+	}
+	return raw.refs.map(toRefDraftEntry);
+}
+
+interface IndexRefEntry {
+	id: string;
+	page: string | null;
+}
+
+function toIndexRefEntry(raw: unknown): IndexRefEntry {
+	if (!isRecord(raw)) {
+		throw new Error("fc-feedback: index.json의 ref 항목이 올바르지 않습니다");
+	}
+	const page = raw.page;
+	return { id: str(raw.id, "ref.id"), page: page === null || page === undefined ? null : str(page, "ref.page") };
+}
+
+function readIndexRefs(archiveDir: string): IndexRefEntry[] {
+	const path = join(archiveDir, "index.json");
+	if (!existsSync(path)) {
+		return [];
+	}
+	const raw: unknown = JSON.parse(readFileSync(path, "utf8"));
+	if (!isRecord(raw) || !Array.isArray(raw.refs)) {
+		return [];
+	}
+	return raw.refs.map(toIndexRefEntry);
+}
+
+const HTTP_VERIFY_TIMEOUT_MS = 10_000;
+
+function isYoutubeWatchUrl(normalizedUrl: string): boolean {
+	return new URL(normalizedUrl).hostname === "www.youtube.com";
+}
+
+/** §4-E: YouTube verifies via oembed 200; everything else HEAD (GET on 403/405), redirects followed, 10s timeout. */
+async function verifyRefUrl(normalizedUrl: string): Promise<{ status: number; finalUrl: string }> {
+	if (isYoutubeWatchUrl(normalizedUrl)) {
+		const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(normalizedUrl)}&format=json`;
+		const response = await fetch(oembedUrl, { signal: AbortSignal.timeout(HTTP_VERIFY_TIMEOUT_MS) });
+		return { status: response.status, finalUrl: normalizedUrl };
+	}
+	let response = await fetch(normalizedUrl, {
+		method: "HEAD",
+		redirect: "follow",
+		signal: AbortSignal.timeout(HTTP_VERIFY_TIMEOUT_MS),
+	});
+	if (response.status === 405 || response.status === 403) {
+		response = await fetch(normalizedUrl, {
+			method: "GET",
+			redirect: "follow",
+			signal: AbortSignal.timeout(HTTP_VERIFY_TIMEOUT_MS),
+		});
+	}
+	return { status: response.status, finalUrl: response.url };
+}
+
+function isVerifiedStatus(status: number, youtube: boolean): boolean {
+	return youtube ? status === 200 : status >= 200 && status <= 399;
+}
+
+interface VerifiedRef {
+	id: string;
+	url: string;
+	final_url: string;
+	http_status: number;
+	checked_at: string;
+	reused: boolean;
+	page: string | null;
+	title: string;
+	source_name: string;
+	lang: string;
+	kind: "eafc" | "tactics";
+	unit_ids: string[];
+	summary_ko?: string;
+	key_points_ko?: string[];
+	translations?: Translation[];
+}
+
+interface DroppedRef {
+	url: string;
+	reason: string;
+}
+
+function draftMetadata(draft: RefDraftEntry): Pick<VerifiedRef, "summary_ko" | "key_points_ko" | "translations"> {
+	return {
+		...(draft.summary_ko !== undefined ? { summary_ko: draft.summary_ko } : {}),
+		...(draft.key_points_ko !== undefined ? { key_points_ko: draft.key_points_ko } : {}),
+		...(draft.translations !== undefined ? { translations: draft.translations } : {}),
+	};
+}
+
+async function cmdVerifyRefs(workDir: string, status: FcStatus): Promise<{ kept: number; dropped: number }> {
+	ensureWorkDir(workDir, status);
+	const drafts = readRefsDraft(workDir);
+	const indexRefs = status.mode === "configured" ? readIndexRefs(status.archive_repo_path) : [];
+
+	const refs: VerifiedRef[] = [];
+	const dropped: DroppedRef[] = [];
+
+	for (const draft of drafts) {
+		let normalized: string;
+		try {
+			normalized = normalizeUrl(draft.url);
+		} catch (error) {
+			dropped.push({ url: draft.url, reason: errorMessage(error) });
+			continue;
+		}
+		const id = refId(normalized);
+		const checkedAt = new Date().toISOString();
+		const existing = indexRefs.find((entry) => entry.id === id);
+
+		if (existing !== undefined) {
+			refs.push({
+				id,
+				url: normalized,
+				final_url: normalized,
+				http_status: 200,
+				checked_at: checkedAt,
+				reused: true,
+				page: existing.page,
+				title: draft.title,
+				source_name: draft.source_name,
+				lang: draft.lang,
+				kind: draft.kind,
+				unit_ids: draft.unit_ids,
+				...draftMetadata(draft),
+			});
+			continue;
+		}
+
+		try {
+			const { status: httpStatus, finalUrl } = await verifyRefUrl(normalized);
+			if (!isVerifiedStatus(httpStatus, isYoutubeWatchUrl(normalized))) {
+				dropped.push({ url: draft.url, reason: `HTTP ${httpStatus}` });
+				continue;
+			}
+			refs.push({
+				id,
+				url: normalized,
+				final_url: finalUrl,
+				http_status: httpStatus,
+				checked_at: checkedAt,
+				reused: false,
+				page: draft.lang === "ko" ? null : `refs/${id}.html`,
+				title: draft.title,
+				source_name: draft.source_name,
+				lang: draft.lang,
+				kind: draft.kind,
+				unit_ids: draft.unit_ids,
+				...draftMetadata(draft),
+			});
+		} catch (error) {
+			dropped.push({ url: draft.url, reason: errorMessage(error) });
+		}
+	}
+
+	writeFileSync(join(workDir, "refs.verified.json"), `${JSON.stringify({ version: 1, refs, dropped }, null, 2)}\n`);
+	return { kept: refs.length, dropped: dropped.length };
+}
+
 // ── dispatch ──────────────────────────────────────────────────────────────
 
 async function main(argv: readonly string[]): Promise<number> {
@@ -929,6 +1592,54 @@ async function main(argv: readonly string[]): Promise<number> {
 			const status = getFcStatus();
 			const workDir = resolveWorkDir(workOverride);
 			printJson(await handleAddFrame(rest, workDir, status));
+			return 0;
+		}
+		case "check plan": {
+			const { value: workOverride } = takeOption(matched.rest, "--work");
+			const status = getFcStatus();
+			return handleCheckPlan(resolveWorkDir(workOverride), status);
+		}
+		case "check notes": {
+			const { value: workOverride } = takeOption(matched.rest, "--work");
+			const status = getFcStatus();
+			return handleCheckNotes(resolveWorkDir(workOverride), status);
+		}
+		case "check similar": {
+			const { value: workOverride } = takeOption(matched.rest, "--work");
+			const status = getFcStatus();
+			return handleCheckSimilar(resolveWorkDir(workOverride), status);
+		}
+		case "check refs": {
+			const { value: workOverride } = takeOption(matched.rest, "--work");
+			const status = getFcStatus();
+			return handleCheckRefs(resolveWorkDir(workOverride), status);
+		}
+		case "taxonomy add": {
+			const { value: workOverride, rest } = takeOption(matched.rest, "--work");
+			const status = getFcStatus();
+			const workDir = resolveWorkDir(workOverride);
+			printJson(handleTaxonomyAdd(rest, workDir, status));
+			return 0;
+		}
+		case "frames": {
+			const { value: workOverride } = takeOption(matched.rest, "--work");
+			const status = getFcStatus();
+			const workDir = resolveWorkDir(workOverride);
+			printJson(await cmdFrames(workDir, status));
+			return 0;
+		}
+		case "similar": {
+			const { value: workOverride } = takeOption(matched.rest, "--work");
+			const status = getFcStatus();
+			const workDir = resolveWorkDir(workOverride);
+			printJson(cmdSimilar(workDir, status));
+			return 0;
+		}
+		case "verify-refs": {
+			const { value: workOverride } = takeOption(matched.rest, "--work");
+			const status = getFcStatus();
+			const workDir = resolveWorkDir(workOverride);
+			printJson(await cmdVerifyRefs(workDir, status));
 			return 0;
 		}
 		default: {
