@@ -38,6 +38,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 - **QA 스토리 계약과 선택적 재사용 케이스** — 새 스토리는 목표·비어 있지 않은 Given/When/Then 배열과 0부터 시작하는 acceptance-criteria 링크를 갖춰야 하며, 기존 기록은 읽을 수 있지만 새 실행 준비가 된 것으로 간주하지 않음. 현재 사이클에 증거가 있으면 계약 변경은 거부됨. 선택적 케이스 저장소는 `qa-cases.ts`로 고정된 외부 `~/.qa-cases/<projectKey>/manifest.yaml`에 포인터·모드만 기록하고, 케이스 메타데이터와 자산은 승인된 위치에 저장하며 `unconfigured`·`disabled`·`configured` 상태를 명시적으로 관리함. 프로젝트 파일은 명시적 opt-in 없이는 만들지 않으며, 네이티브 `.ad`·agent-browser/Playwright·Maestro 형식은 유지함. `qa-replay.ts --help`로 확인할 수 있는 replay는 현재 세션의 완료된 actor→story→cell 체인과 현재 story/cell/cycle 및 해시를 확인하고 receipt를 만들지만 PASS를 기록하지 않으며, 실제 경계 증거와 함께 `qa-state.ts record-cell --case-run`으로 선택적으로 연결함([재사용 QA 케이스](skills/qa/reusable-cases.md) 참고)
 - **Ultragoal 최종 리뷰 수렴** — 우선순위로 수렴: HIGH는 수리·검사·fresh review, MEDIUM은 수리·검사(재리뷰 없음), LOW는 기록만 수행. 결정적 CLI는 COMMENT/APPROVE dispatch·재리뷰를 거부하고 5회 dispatch 창을 유지
 - **Codex protected-skill trust boundary** — `disable-model-invocation: true` 스킬은 사용자가 명시한 `$skill` UserPromptSubmit에서만 본문이 주입되고, 직접 `SKILL.md` shell read는 차단되며, invocation marker는 authorization이 아닙니다([리뷰/품질](docs/skills/review-quality.md) 참고)
+- **Compaction 조정** — `PreCompact` 훅(`compact-instructions.sh`)의 plain stdout이 Claude Code의 네이티브 compaction 요약 지시에 그대로 반영됩니다(JSON `hookSpecificOutput`은 이 이벤트에서 무시됨). 메인 세션에는 노이즈를 남기지 않고, 문구는 블라인드 채점 반복 실험으로 튜닝했습니다. Claude 전용이며 Codex 짝은 없습니다(Codex의 원격 compaction 경로는 `compact_prompt`를 적용하지 않음).
 
 ## 철학 — 왜 이 설계인가
 

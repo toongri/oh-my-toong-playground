@@ -165,6 +165,7 @@ Ultragoal final-review consumers use scope-first admission: `OUT_OF_SCOPE` is a 
 - **Husky v9 lifecycle**: `package.json` declares `prepare: husky`; installation activates `.husky/_/` wrappers that route to the tracked plain `.husky/pre-commit` and `.husky/pre-push` files. `pre-commit` runs `bun run lint`; `pre-push` runs `bun run lint` followed by `make test`.
 
 - **session-start.sh**: Restores persistent mode state and garbage-collects `$OMT_DIR` on session start; emits an active, non-pristine explain-diff restoration banner while excluding the pristine initial seed
+- **compact-instructions.sh**: PreCompact hook — plain stdout is appended to Claude Code's native compaction summary instructions (a JSON `hookSpecificOutput` is ignored on this event); wording was tuned by blind-judged compaction replays. Claude-only, no Codex twin, since Codex's remote compaction path ignores `compact_prompt`.
 - **orphan-reaper.sh**: SessionStart hook — reaps `code-review` finder worker process groups left behind when a conductor never reached teardown
 - **hooks/lib/state-liveness.sh**: Shared TTL/liveness definitions for state-file and session-artifact garbage collection
 - **scripts/omt-cleanup/**: `~/.omt` cleanup CLI, dry-run by default, `--execute` required to delete

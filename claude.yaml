@@ -54,6 +54,12 @@ hooks:
       timeout: 10
     - component: orphan-reaper.sh
       timeout: 10
+  # PreCompact: plain stdout은 native compaction 요약 지시로 반영된다(JSON
+  # hookSpecificOutput은 무시됨). 문구는 블라인드 채점 반복 실험으로 튜닝했으니
+  # 재검증 없이 바꾸지 말 것.
+  PreCompact:
+    - component: compact-instructions.sh
+      timeout: 5
   Stop:
     - component: persistent-mode
       timeout: 15
