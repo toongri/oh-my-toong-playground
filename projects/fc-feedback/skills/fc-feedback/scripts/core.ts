@@ -556,6 +556,50 @@ export function localLinks(html: string): string[] {
 	return links;
 }
 
+// ── webp dimensions (plan §0-11: no ffprobe, so width/height for the card's
+// `<img>` must come from the file itself) ────────────────────────────────────
+
+function fourCc(bytes: Uint8Array, offset: number): string {
+	return String.fromCharCode(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]);
+}
+
+function readUint16LE(bytes: Uint8Array, offset: number): number {
+	return bytes[offset] + bytes[offset + 1] * 256;
+}
+
+function readUint24LE(bytes: Uint8Array, offset: number): number {
+	return bytes[offset] + bytes[offset + 1] * 256 + bytes[offset + 2] * 65536;
+}
+
+/**
+ * Width/height of a WebP file (RIFF/WEBP container). Supports the three
+ * sub-formats ffmpeg's `-c:v libwebp` can emit: simple lossy (`VP8 `), simple
+ * lossless (`VP8L`), and extended (`VP8X`).
+ */
+export function webpDimensions(bytes: Uint8Array): { width: number; height: number } {
+	if (bytes.length < 30 || fourCc(bytes, 0) !== "RIFF" || fourCc(bytes, 8) !== "WEBP") {
+		throw new Error("webp 파일이 아닙니다");
+	}
+	const format = fourCc(bytes, 12);
+	if (format === "VP8X") {
+		return { width: readUint24LE(bytes, 24) + 1, height: readUint24LE(bytes, 27) + 1 };
+	}
+	if (format === "VP8L") {
+		if (bytes[20] !== 0x2f) {
+			throw new Error("VP8L 시그니처가 올바르지 않습니다");
+		}
+		const bits = bytes[21] + bytes[22] * 256 + bytes[23] * 65536 + bytes[24] * 16777216;
+		return { width: (bits & 0x3fff) + 1, height: ((bits >>> 14) & 0x3fff) + 1 };
+	}
+	if (format === "VP8 ") {
+		if (bytes[23] !== 0x9d || bytes[24] !== 0x01 || bytes[25] !== 0x2a) {
+			throw new Error("VP8 시작 코드가 올바르지 않습니다");
+		}
+		return { width: readUint16LE(bytes, 26) & 0x3fff, height: readUint16LE(bytes, 28) & 0x3fff };
+	}
+	throw new Error(`지원하지 않는 webp 하위 포맷입니다: ${format}`);
+}
+
 // ── LLM/JSON check helpers (plan §3, §7 T3) ─────────────────────────────────
 //
 // `checkX` functions validate a JSON artifact that a script or an LLM writes

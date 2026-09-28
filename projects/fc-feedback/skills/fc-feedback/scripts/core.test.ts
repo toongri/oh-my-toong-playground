@@ -29,6 +29,7 @@ import {
 	related,
 	relatedMembers,
 	similarCandidates,
+	webpDimensions,
 	type CurrentUnit,
 	type PastUnit,
 	type Roster,
@@ -1262,5 +1263,81 @@ describe("checkRefsDraft", () => {
 		};
 		const result = checkRefsDraft(draft, fixtureValidated);
 		expect(findError(result.errors, "refs[3].unit_ids")).toBe(true);
+	});
+});
+
+describe("webpDimensions", () => {
+	function padTo30(bytes: number[]): Uint8Array {
+		const padded = [...bytes];
+		while (padded.length < 30) padded.push(0);
+		return new Uint8Array(padded);
+	}
+
+	test("simple lossy(VP8 ) 1x1 webp의 width/height를 읽는다", () => {
+		const bytes = padTo30([
+			0x52, 0x49, 0x46, 0x46, // RIFF
+			26, 0, 0, 0, // file size (LE)
+			0x57, 0x45, 0x42, 0x50, // WEBP
+			0x56, 0x50, 0x38, 0x20, // "VP8 "
+			14, 0, 0, 0, // chunk size (LE)
+			0x50, 0x01, 0x00, // frame tag
+			0x9d, 0x01, 0x2a, // start code
+			0x01, 0x00, // width=1
+			0x01, 0x00, // height=1
+		]);
+		expect(webpDimensions(bytes)).toEqual({ width: 1, height: 1 });
+	});
+
+	test("simple lossless(VP8L) webp의 width/height를 읽는다(width 2 height 3)", () => {
+		// width_minus_one=1, height_minus_one=2 → bits = 1 | (2<<14)
+		const bits = 1 | (2 << 14);
+		const bytes = padTo30([
+			0x52, 0x49, 0x46, 0x46,
+			0, 0, 0, 0,
+			0x57, 0x45, 0x42, 0x50,
+			0x56, 0x50, 0x38, 0x4c, // "VP8L"
+			5, 0, 0, 0,
+			0x2f, // signature
+			bits & 0xff,
+			(bits >>> 8) & 0xff,
+			(bits >>> 16) & 0xff,
+			(bits >>> 24) & 0xff,
+		]);
+		expect(webpDimensions(bytes)).toEqual({ width: 2, height: 3 });
+	});
+
+	test("extended(VP8X) webp의 width/height를 읽는다(width 100 height 200)", () => {
+		const widthMinusOne = 99;
+		const heightMinusOne = 199;
+		const bytes = padTo30([
+			0x52, 0x49, 0x46, 0x46,
+			0, 0, 0, 0,
+			0x57, 0x45, 0x42, 0x50,
+			0x56, 0x50, 0x38, 0x58, // "VP8X"
+			10, 0, 0, 0,
+			0x00, // flags
+			0x00, 0x00, 0x00, // reserved
+			widthMinusOne & 0xff,
+			(widthMinusOne >>> 8) & 0xff,
+			(widthMinusOne >>> 16) & 0xff,
+			heightMinusOne & 0xff,
+			(heightMinusOne >>> 8) & 0xff,
+			(heightMinusOne >>> 16) & 0xff,
+		]);
+		expect(webpDimensions(bytes)).toEqual({ width: 100, height: 200 });
+	});
+
+	test("RIFF/WEBP 시그니처가 없으면 에러를 낸다", () => {
+		expect(() => webpDimensions(padTo30([0, 0, 0, 0]))).toThrow();
+	});
+
+	test("알 수 없는 하위 포맷이면 에러를 낸다", () => {
+		const bytes = padTo30([
+			0x52, 0x49, 0x46, 0x46,
+			0, 0, 0, 0,
+			0x57, 0x45, 0x42, 0x50,
+			0x41, 0x42, 0x43, 0x44, // "ABCD" (알 수 없는 포맷)
+		]);
+		expect(() => webpDimensions(bytes)).toThrow();
 	});
 });
