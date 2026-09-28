@@ -323,38 +323,10 @@ assert_state() {
 	fi
 }
 
-# filter-empty-and only: brings the picked filters (.active-filters, the
-# closed-chip summary row) and the resulting empty-state message (with its
-# own reset button) into one shot together. The fully open filter-bar panel
-# is tall enough (DESIGN.md §7: position + topic + mention groups) that on
-# some viewports it alone pushes the empty state below the fold even when
-# scrolled to the top of the page, so this collapses the panel to just its
-# closed summary line first (".active-filters" below it still shows both
-# picked chips) and re-checks; if even that does not fit, it prioritizes
-# showing the empty-state panel and its reset button, scrolling past the top
-# of the filter summary if it must.
-finalize_empty_and_view() {
-	eval_or_die "finalize_empty_and_view failed" >/dev/null <<'JS'
-(function () {
-  var fb = document.querySelector("details.filter-bar");
-  var es = document.querySelector(".empty-state");
-  if (!fb || !es) { throw new Error(".filter-bar or .empty-state missing"); }
-  function fits() { return es.getBoundingClientRect().bottom <= window.innerHeight; }
-  fb.scrollIntoView({block: "start"});
-  if (fits()) { return "open"; }
-  if (fb.hasAttribute("open")) { fb.querySelector("summary").click(); }
-  fb.scrollIntoView({block: "start"});
-  if (fits()) { return "closed"; }
-  es.scrollIntoView({block: "end"});
-  return "empty-state-priority";
-})()
-JS
-}
-
 # Opens the filter bar before a chip/reset click needs its content
 # hit-testable. render.ts renders `<details class="filter-bar">` closed
 # (no `open` attribute) at every width (DESIGN.md §7): everything inside it,
-# including the chip buttons and its static "초기화" reset button, sits under
+# including the chip buttons and its static "전체 해제" reset button, sits under
 # a closed <details>'s content-visibility lock and cannot be clicked until
 # the <summary> is clicked open. No-op when already open.
 ensure_filter_bar_open() {
@@ -414,10 +386,15 @@ JS
 # first in DOM/flex order) lands at the top of the viewport instead --
 # letting reviewers see the "포지션 관련(참고)" badge itself, which the
 # my-feedback shot above never scrolls far enough to foreground.
-# filter-empty-and (§7, two different groups AND to 0) picks position `FB`
-# (3 cards: u002/u004/u005, topics 빌드업/오버래핑) + topic `마무리` (3
-# cards: u013/u014/u015) -- both options individually non-empty, their AND
-# is empty, matching §7's own worked example ("포지션 GK AND 주제 빌드업").
+# filter-empty-and (id kept per DESIGN.md §14's row name, but the state it
+# shows changed): filter options are becoming live, selection-aware facets --
+# an option that would AND down to 0 against the currently active selections
+# is now shown disabled (`disabled` + `aria-disabled="true"`, count "(0)"),
+# never hidden, so it can no longer be clicked to actually reach a 0-result
+# AND the way the old two-click "FB then 마무리" sequence did. This state now
+# selects only position `FB` (3 cards: u002/u004/u005, topics 빌드업/오버래핑)
+# and captures the resulting disabled `마무리` topic option (topic `마무리`:
+# u013/u014/u015, disjoint from FB's cards) instead of an empty-state panel.
 # scroll-mid-390 (state scroll-near-end) and scroll-mid-1440 (state
 # scroll-mid) share one capture id family but drive different scroll depths:
 # DESIGN.md v2 §14 row 19 requires 390px to scroll to the LAST card (sticky
@@ -482,15 +459,29 @@ JS
 JS
 		;;
 	filter-empty-and)
+		# Selects position FB only (topic 마무리 would AND it down to 0, so under
+		# the live selection-aware facets it renders disabled + "(0)" instead of
+		# hidden -- clicking it is no longer possible, so this state captures the
+		# disabled option itself rather than a two-click empty-state panel.
 		ensure_filter_bar_open
 		click_scrolled '.chip-filter[data-group="position"][data-value="FB"]'
-		click_scrolled '.chip-filter[data-group="topic"][data-value="마무리"]'
 		assert_state "filter-empty-and" <<'JS'
-document.querySelector('.chip-filter[data-group="position"][data-value="FB"]').getAttribute("aria-pressed") === "true" &&
-document.querySelector('.chip-filter[data-group="topic"][data-value="마무리"]').getAttribute("aria-pressed") === "true" &&
-!document.querySelector(".empty-state").hasAttribute("hidden")
+(function () {
+  var pos = document.querySelector('.chip-filter[data-group="position"][data-value="FB"]');
+  var topic = document.querySelector('.chip-filter[data-group="topic"][data-value="마무리"]');
+  if (!pos || pos.getAttribute("aria-pressed") !== "true" || !topic) return false;
+  var m = topic.textContent.match(/\((\d+)\)/);
+  return topic.hasAttribute("disabled") && topic.getAttribute("aria-disabled") === "true" && !!m && m[1] === "0";
+})()
 JS
-		finalize_empty_and_view
+		eval_or_die "filter-empty-and: scrolling the disabled 마무리 option into view failed" >/dev/null <<'JS'
+(function () {
+  var topic = document.querySelector('.chip-filter[data-group="topic"][data-value="마무리"]');
+  if (!topic) { throw new Error("마무리 topic chip not found"); }
+  topic.scrollIntoView({block: "center", inline: "center"});
+  return true;
+})()
+JS
 		;;
 	seek-part1)
 		wait_yt_api 20000
@@ -507,9 +498,62 @@ JS
 		printf '%s' 'var cards = document.querySelectorAll(".card"); if (cards.length) { cards[cards.length - 1].scrollIntoView({block: "end"}); }' | ab eval --stdin >/dev/null
 		;;
 	body-frames-closeup)
-		# u008 has 3 body-frame blocks (candidates c004/c005/c006), the most
-		# of any unit in this fixture.
-		printf '%s' 'var el = document.getElementById("u008"); if (el) { el.scrollIntoView({block: "start"}); }' | ab eval --stdin >/dev/null
+		# u008 has 3 body-frame blocks (candidates c004/c005/c006), the most of
+		# any unit in this fixture. Scrolling to the card's own top (old
+		# behavior) can leave the frame whose caption actually wraps to 2+
+		# lines -- the case the 3-column figcaption grid (§15-10) exists for --
+		# below the fold. Instead, measure each frame's caption in-page and
+		# center whichever one wraps at the current viewport (falling back to
+		# the tallest caption when none wraps, e.g. at 1440px, which still
+		# frames the multi-frame area per the reviewer's note).
+		frame_t="$(eval_or_die "picking a body-frame to center for body-frames-closeup failed" <<'JS'
+(function () {
+  var card = document.getElementById("u008");
+  if (!card) { throw new Error("u008 not found"); }
+  var frames = card.querySelectorAll(".body-frame");
+  if (frames.length === 0) { throw new Error("u008 has no .body-frame blocks"); }
+  var best = frames[0];
+  var bestWraps = false;
+  var bestHeight = -1;
+  for (var i = 0; i < frames.length; i++) {
+    var caption = frames[i].querySelector(".body-frame-caption");
+    if (!caption) continue;
+    var rect = caption.getBoundingClientRect();
+    var lineHeight = parseFloat(getComputedStyle(caption).lineHeight) || rect.height;
+    var wraps = lineHeight > 0 && rect.height > lineHeight * 1.3;
+    if (wraps && !bestWraps) {
+      best = frames[i];
+      bestWraps = true;
+      bestHeight = rect.height;
+    } else if (!bestWraps && rect.height > bestHeight) {
+      best = frames[i];
+      bestHeight = rect.height;
+    }
+  }
+  best.scrollIntoView({block: "center", inline: "center"});
+  return best.getAttribute("data-frame-t");
+})()
+JS
+		)"
+		assert_state "body-frames-closeup" <<JS
+(function () {
+  var frame = document.querySelector('#u008 .body-frame[data-frame-t="' + $frame_t + '"]');
+  if (!frame) return false;
+  var frameRect = frame.getBoundingClientRect();
+  if (frameRect.bottom <= 0 || frameRect.top >= window.innerHeight) return false;
+  var seekBtn = frame.querySelector(".seek-btn");
+  var zoomLink = frame.querySelector(".zoom-link");
+  if (!seekBtn || seekBtn.offsetParent === null) return false;
+  if (!zoomLink || zoomLink.offsetParent === null) return false;
+  if (window.innerWidth <= 390) {
+    var caption = frame.querySelector(".body-frame-caption");
+    var rect = caption.getBoundingClientRect();
+    var lineHeight = parseFloat(getComputedStyle(caption).lineHeight) || rect.height;
+    if (!(lineHeight > 0 && rect.height > lineHeight * 1.3)) return false;
+  }
+  return true;
+})()
+JS
 		;;
 	*)
 		echo "capture.sh: unknown state: $1" >&2
@@ -661,8 +705,8 @@ done
 
 # ── evidence-integrity guard: two different ids must never share a sha256 ──
 # The defect this whole file's drive_state hardening (click_scrolled,
-# assert_state, finalize_empty_and_view above) exists to catch surfaced as
-# exactly this: a click that silently no-op'd left a screenshot byte-for-byte
+# assert_state above) exists to catch surfaced as exactly this: a click that
+# silently no-op'd left a screenshot byte-for-byte
 # identical to an earlier, different state's screenshot. Even with the
 # per-state assertions in place, this is a second, independent net over the
 # whole manifest -- any two DIFFERENT ids ending up with the same sha256 is
@@ -772,13 +816,42 @@ JS
 	ab click '.toc-item[data-target="u008"]' >/dev/null
 	pass="$(eval_js <<JS
 document.body.dataset.video === $before_video &&
-document.getElementById("u008").classList.contains("card--highlighted")
+document.getElementById("u008").classList.contains("card--highlighted") &&
+document.querySelector('.toc-item[data-target="u008"]').classList.contains("is-current")
 JS
 	)"
-	add_check "목차 클릭은 대상 카드를 스크롤·강조하고 영상 전환(seek)은 발생시키지 않는다(§8)" dom "$pass" ""
+	add_check "목차 클릭은 대상 카드와 그 목차 항목에 강조 상태(card--highlighted/is-current)를 주고 영상 전환(seek)은 발생시키지 않는다(§8)" dom "$pass" ""
 
 	ensure_filter_bar_open
 	ab click '.chip-filter[data-group="position"][data-value="FB"]' >/dev/null
+
+	# ── DESIGN.md §8: a TOC group (match/topic/tag) whose every .toc-item is
+	# hidden by the active filter must itself be hidden, not just its items.
+	# Position FB only matches u002/u004/u005 (all in match 1's two topic
+	# groups), so match 2/3's toc-match-group (and every toc-topic-group under
+	# them) must have zero visible .toc-item children and be hidden, while at
+	# least one group stays visible -- proving the hidden/visible split is
+	# real, not every group collapsing (or none).
+	pass="$(eval_js <<'JS'
+(function () {
+  var groups = document.querySelectorAll(".toc-match-group, .toc-topic-group, .toc-tag-group");
+  if (groups.length === 0) return false;
+  var consistent = true;
+  var anyHidden = false;
+  var anyVisible = false;
+  for (var i = 0; i < groups.length; i++) {
+    var hasVisibleItem = groups[i].querySelector(".toc-item:not([hidden])") !== null;
+    var isHidden = groups[i].hasAttribute("hidden");
+    if (hasVisibleItem === isHidden) consistent = false;
+    if (isHidden) anyHidden = true;
+    else anyVisible = true;
+  }
+  return consistent && anyHidden && anyVisible;
+})()
+JS
+	)"
+	add_check "필터로 모든 항목이 숨겨진 TOC 그룹은 그 그룹 헤더도 함께 숨는다(§8)" dom "$pass" ""
+
 	ab click '.filter-reset' >/dev/null
 	pass="$(eval_js <<'JS'
 document.getElementById("visible-count").textContent === document.getElementById("total-count").textContent
@@ -816,6 +889,50 @@ document.querySelector('.part-btn[data-video="NUzEChn9EyI"]').getAttribute("aria
 JS
 	)"
 	add_check "본문 프레임(다른 파트) 클릭은 그 프레임이 속한 video로 전환한다(카드 시작이 아니라 프레임 자체가 대상, §5-7, §9)" dom "$pass" ""
+
+	# ── DESIGN.md §5/§13: the card-head `.seek-btn` (current video is
+	# yn-qm7lM5p4 from the previous check) routes through the same seek path
+	# as clicking the card itself -- u002 is a different video (NUzEChn9EyI),
+	# so a real switch (dom-observable via body.dataset.video) proves the
+	# button, not just the figure/card area, triggers seek. This whole block
+	# ends back on yn-qm7lM5p4 (u013's video) so downstream checks that assume
+	# that pre-existing ending state (e.g. the drag-select check below, run on
+	# u003, itself on NUzEChn9EyI) keep working -- the keyboard check runs in
+	# the middle, switching to yn-qm7lM5p4 via a DIFFERENT card's header
+	# button, so the final body-frame-button check's same-video seek leaves
+	# the video there rather than switching back to NUzEChn9EyI.
+	ab click '#u002 .card-head .seek-btn' >/dev/null
+	pass="$(eval_js <<'JS'
+document.body.dataset.video === "NUzEChn9EyI"
+JS
+	)"
+	add_check "카드 헤더의 seek-btn 클릭은 카드 시작 시각으로 seek한다(§5, §13)" dom "$pass" ""
+
+	# ── DESIGN.md §5/§13: seek-btn is a real <button>, so it must be reachable
+	# and activatable via keyboard, not just click -- u013's card-head seek-btn
+	# (a different video than the one just loaded above) proves Enter on a
+	# focused seek-btn triggers the same seek as a mouse click.
+	ab focus '#u013 .card-head .seek-btn' >/dev/null
+	ab press Enter >/dev/null
+	pass="$(eval_js <<'JS'
+document.body.dataset.video === "yn-qm7lM5p4"
+JS
+	)"
+	add_check "seek-btn을 키보드로 포커스한 뒤 Enter를 누르면 마우스 클릭과 같은 seek가 실행된다(§5, §13)" dom "$pass" ""
+
+	# ── DESIGN.md §5-7/§13: the body-frame's OWN `.seek-btn` button (not just
+	# clicking the figure, already covered above) seeks to that frame's own
+	# time -- u013's second frame (data-frame-t=633, same one the figure-click
+	# check above avoids c008 for) is the same video the keyboard check above
+	# just loaded, so this proves the button seeks within the current video
+	# too, not only across a video switch.
+	ab click '#u013 .body-frame[data-frame-t="633"] .seek-btn' >/dev/null
+	pass="$(eval_js <<'JS'
+document.body.dataset.video === "yn-qm7lM5p4" &&
+document.querySelector('.part-btn[data-video="yn-qm7lM5p4"]').getAttribute("aria-pressed") === "true"
+JS
+	)"
+	add_check "본문 프레임의 seek-btn 버튼 클릭은 그 프레임의 시각으로 seek한다(§5-7, §13)" dom "$pass" ""
 
 	# ── DESIGN.md §6: "내 피드백"에서 팀원 1명을 선택하면 relatedMembers 카드만
 	# 남는다. yoon-fb matches u002/u004/u005 (직접 언급 u004 + 포지션 관련
@@ -896,33 +1013,127 @@ JS
 	)"
 	add_check "카드 안 텍스트를 드래그 선택한 상태의 클릭은 seek를 실행하지 않는다(§5, §13)" dom "$pass" ""
 
-	# ── DESIGN.md §7: 서로 다른 두 그룹(포지션 FB + 주제 마무리)의 AND는 0건.
+	# ── DESIGN.md §7 (live, selection-aware facets): selecting position FB
+	# makes topic 마무리 (disjoint from FB's cards) AND down to 0, so it must
+	# render disabled + "(0)" instead of being hidden or clickable -- the old
+	# two-click "FB then 마무리" AND-to-0 sequence this superseded is no longer
+	# reachable via a click once 마무리 is disabled.
 	ab click '.chip-filter[data-group="position"][data-value="FB"]' >/dev/null
-	ab click '.chip-filter[data-group="topic"][data-value="마무리"]' >/dev/null
 	pass="$(eval_js <<'JS'
-document.getElementById("visible-count").textContent === "0" &&
-!document.querySelector(".empty-state").hasAttribute("hidden")
+(function () {
+  var topic = document.querySelector('.chip-filter[data-group="topic"][data-value="마무리"]');
+  if (!topic) return false;
+  var m = topic.textContent.match(/\((\d+)\)/);
+  return topic.hasAttribute("disabled") && topic.getAttribute("aria-disabled") === "true" && !!m && m[1] === "0";
+})()
 JS
 	)"
-	add_check "서로 다른 두 그룹의 AND 조합이 0건이면 빈 상태가 표시된다(§7, §11, §15-5)" dom "$pass" ""
+	add_check "다른 그룹 선택 시 0건이 되는 옵션은 비활성(disabled)으로 보인다(§7)" dom "$pass" ""
 
 	pass="$(eval_js <<'JS'
 (function () {
   var pos = document.querySelector('.chip-filter[data-group="position"][data-value="FB"]');
-  var topic = document.querySelector('.chip-filter[data-group="topic"][data-value="마무리"]');
   return !!pos && pos.getAttribute("aria-pressed") === "true" &&
-    !!topic && topic.getAttribute("aria-pressed") === "true";
+    !pos.hasAttribute("disabled") && pos.getAttribute("aria-disabled") !== "true";
 })()
 JS
 	)"
-	add_check "AND 조합이 0건이 되어도 선택된 필터 옵션은 필터 바에서 사라지지 않는다(§7)" dom "$pass" ""
+	add_check "선택된 옵션은 비활성화되지 않는다(§7)" dom "$pass" ""
 
 	ab click '.filter-reset' >/dev/null
 
-	# ── DESIGN.md §5-7/§15-6: "확대" 링크는 이미지 원본을 새 탭으로 연다.
+	# ── DESIGN.md §6/§7/§11: a real, deterministic empty-result "내 피드백"+필터
+	# combo -- topic 역습 (u010/u011/u012) selected FIRST, then "내 피드백"
+	# 송민재 (song-cb, relatedMembers u001/u006, disjoint from 역습) ANDs to 0.
+	# Order matters under live facet counts (§7): 역습's count is computed
+	# against whatever else is active, so selecting 송민재 first instead
+	# disables 역습 (checked below) rather than letting it be clicked into a
+	# 0-result AND -- this is a hard check, not a search, since the render
+	# agent confirmed this exact path.
+	click_scrolled '.chip-filter[data-group="topic"][data-value="역습"]'
+	click_scrolled '.pill.pill-mine[data-group="mine"][data-value="song-cb"]'
 	pass="$(eval_js <<'JS'
 (function () {
-  var link = document.querySelector(".zoom-link");
+  var topic = document.querySelector('.chip-filter[data-group="topic"][data-value="역습"]');
+  var pill = document.querySelector('.pill.pill-mine[data-group="mine"][data-value="song-cb"]');
+  var visible = document.getElementById("visible-count");
+  var empty = document.querySelector(".empty-state");
+  var cardList = document.querySelector(".card-list");
+  return !!topic && topic.getAttribute("aria-pressed") === "true" &&
+    !!pill && pill.getAttribute("aria-pressed") === "true" &&
+    !!visible && visible.textContent === "0" &&
+    !!empty && !empty.hasAttribute("hidden") &&
+    !!cardList && cardList.hasAttribute("hidden");
+})()
+JS
+	)"
+	add_check "\"내 피드백\"과 필터 옵션의 AND 조합이 0건이면 빈 상태가 표시되고 카드 목록이 숨는다(§6, §7, §11)" dom "$pass" ""
+
+	ab click '.filter-reset' >/dev/null
+
+	# ── DESIGN.md §6/§7: reverse order (내 피드백 먼저) blocks the same AND via
+	# disabling instead -- 역습's live count against 송민재's relatedMembers is
+	# 0, so it must render disabled + "(0)", never clickable into a 0-result
+	# state the other way around.
+	click_scrolled '.pill.pill-mine[data-group="mine"][data-value="song-cb"]'
+	pass="$(eval_js <<'JS'
+(function () {
+  var topic = document.querySelector('.chip-filter[data-group="topic"][data-value="역습"]');
+  if (!topic) return false;
+  var m = topic.textContent.match(/\((\d+)\)/);
+  return topic.hasAttribute("disabled") && topic.getAttribute("aria-disabled") === "true" && !!m && m[1] === "0";
+})()
+JS
+	)"
+	add_check "역순 선택(\"내 피드백\" 먼저)에서는 그 조합이 0건이 되는 필터 옵션이 비활성화된다(§6, §7)" dom "$pass" ""
+
+	ab click '.filter-reset' >/dev/null
+
+	# ── DESIGN.md §5-4/§15-6: the representative start image's own "확대" link
+	# (`.card-image .zoom-link`) opens the original image in a new tab and does
+	# not seek -- distinct from the body-frame's own zoom-link below, since a
+	# card's start image sits before any body-frame in the DOM (a bare
+	# `.zoom-link` selector would otherwise always match this one first).
+	pass="$(eval_js <<'JS'
+(function () {
+  var link = document.querySelector(".card-image .zoom-link");
+  return !!link &&
+    /img\/.*\.webp$/.test(link.getAttribute("href") || "") &&
+    link.getAttribute("target") === "_blank" &&
+    (link.getAttribute("rel") || "").indexOf("noopener") !== -1;
+})()
+JS
+	)"
+	add_check "대표 시작 이미지의 \"확대\" 링크는 이미지 원본(img/*.webp)을 새 탭으로 연다(§5-4, §15-6)" dom "$pass" ""
+
+	# A real `<a href>`'s default navigation runs even for a synthetic (untrusted)
+	# dispatchEvent, asynchronously, just not before this eval call's own return
+	# value is computed -- an earlier version of this check dispatched the click
+	# with no guard against that and the browser navigated away to the image a
+	# moment later, corrupting every check that ran after it. A capture-phase
+	# listener that calls preventDefault() before the event bubbles to
+	# onCardListClick blocks that navigation while leaving the guard's own
+	# closest("a")-based seek-avoidance logic (which does not depend on
+	# preventDefault) fully exercised.
+	pass="$(eval_js <<'JS'
+(function () {
+  var link = document.querySelector(".card-image .zoom-link");
+  if (!link) return false;
+  var beforeVideo = document.body.dataset.video;
+  function blockNav(e) { e.preventDefault(); }
+  link.addEventListener("click", blockNav, true);
+  link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+  link.removeEventListener("click", blockNav, true);
+  return document.body.dataset.video === beforeVideo;
+})()
+JS
+	)"
+	add_check "대표 시작 이미지의 \"확대\" 링크 클릭은 seek를 실행하지 않는다(§5-4, §9)" dom "$pass" ""
+
+	# ── DESIGN.md §5-7/§15-6: the body-frame's own "확대" link, same contract.
+	pass="$(eval_js <<'JS'
+(function () {
+  var link = document.querySelector(".body-frame .zoom-link");
   return !!link &&
     /img\/.*\.webp$/.test(link.getAttribute("href") || "") &&
     link.getAttribute("target") === "_blank" &&
@@ -931,6 +1142,22 @@ JS
 JS
 	)"
 	add_check "본문 프레임의 \"확대\" 링크는 이미지 원본(img/*.webp)을 새 탭으로 연다(§5-7, §15-6)" dom "$pass" ""
+
+	# Same navigation-blocking guard as the start-image check above.
+	pass="$(eval_js <<'JS'
+(function () {
+  var link = document.querySelector(".body-frame .zoom-link");
+  if (!link) return false;
+  var beforeVideo = document.body.dataset.video;
+  function blockNav(e) { e.preventDefault(); }
+  link.addEventListener("click", blockNav, true);
+  link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+  link.removeEventListener("click", blockNav, true);
+  return document.body.dataset.video === beforeVideo;
+})()
+JS
+	)"
+	add_check "본문 프레임의 \"확대\" 링크 클릭은 seek를 실행하지 않는다(§5-7, §9)" dom "$pass" ""
 }
 
 # ── 1024px 미만 전용 dom 체크: 플레이어 접기, 모바일 sticky 유지 (§4, §14) ──
@@ -965,13 +1192,44 @@ JS
 	)"
 	add_check "390에서 목차 토글이 aria-expanded를 전환한다(§13)" dom "$pass" ""
 
+	# ── DESIGN.md §4/§8: clicking a TOC item scrolls its target card into
+	# view, landing below the sticky player (`scroll-margin-top` uses
+	# `--sticky-player-h`) rather than hidden behind it, and gives both the
+	# card and its own TOC item the highlight/current state the contract names
+	# (card--highlighted / is-current) without seeking -- u015 (the last card)
+	# is used so scrollIntoView actually has to move the page. The toc panel
+	# opened by the toggle check above is what makes the item hittable here.
+	before_video_mobile="$(eval_js <<'JS'
+document.body.dataset.video
+JS
+	)"
+	click_scrolled '.toc-item[data-target="u015"]'
+	pass="$(eval_js <<JS
+(function () {
+  var player = document.querySelector(".player-wrapper");
+  var card = document.getElementById("u015");
+  var tocItem = document.querySelector('.toc-item[data-target="u015"]');
+  if (!player || !card || !tocItem) return false;
+  var playerBottom = player.getBoundingClientRect().bottom;
+  var cardTop = card.getBoundingClientRect().top;
+  return cardTop >= playerBottom - 1 &&
+    cardTop <= window.innerHeight &&
+    card.classList.contains("card--highlighted") &&
+    tocItem.classList.contains("is-current") &&
+    document.body.dataset.video === $before_video_mobile;
+})()
+JS
+	)"
+	add_check "390에서 목차 클릭은 대상 카드를 sticky 플레이어 아래로 스크롤해 강조하고 seek는 발생시키지 않는다(§4, §8)" dom "$pass" ""
+
 	ab click '.player-collapse' >/dev/null
 	pass="$(eval_js <<'JS'
 document.querySelector(".player-collapse").getAttribute("aria-expanded") === "false" &&
-document.querySelector(".player-wrapper").classList.contains("is-collapsed")
+document.querySelector(".player-wrapper").classList.contains("is-collapsed") &&
+Math.abs(document.querySelector(".player-wrapper").getBoundingClientRect().height - 44) <= 1
 JS
 	)"
-	add_check "\"플레이어 접기\" 버튼을 누르면 aria-expanded가 false로 전환되고 .player-wrapper.is-collapsed가 적용된다(§4, §13)" dom "$pass" ""
+	add_check "\"플레이어 접기\" 버튼을 누르면 aria-expanded가 false로 전환되고 .player-wrapper.is-collapsed가 적용되며 높이가 44px(±1)가 된다(§4, §13)" dom "$pass" ""
 
 	printf '%s' 'var cards = document.querySelectorAll(".card"); if (cards.length) { cards[cards.length - 1].scrollIntoView({block: "end"}); }' | ab eval --stdin >/dev/null
 	pass="$(eval_js <<'JS'
@@ -1051,6 +1309,77 @@ run_player_checks() {
 		add_check "본문 프레임 클릭 후 fcPlayer.getCurrentTime()이 그 프레임의 시각(카드 시작 시각이 아님)과 ±1초 이내로 일치한다" player_api true ""
 	else
 		add_check "본문 프레임 클릭 후 fcPlayer.getCurrentTime()이 그 프레임의 시각(카드 시작 시각이 아님)과 ±1초 이내로 일치한다" player_api false "헤드리스 환경에서 YouTube 플레이어 초기화/재생이 제한되어 판정 불가(네트워크 또는 재생 정책 제약)"
+	fi
+
+	# ── DESIGN.md §5/§13: the card-head seek-btn's own seek precision -- u006
+	# (part 1, start=780) is a different video than the one just loaded above
+	# (yn-qm7lM5p4), so this also exercises the button's loadVideoById path.
+	header_seek_btn_pass=false
+	if [ "$api_ready" = true ]; then
+		ab click '#u006 .card-head .seek-btn' >/dev/null
+		if ab wait --fn "window.fcPlayer && window.fcPlayer.getVideoData && window.fcPlayer.getVideoData().video_id === 'NUzEChn9EyI' && typeof window.fcPlayer.getCurrentTime === 'function' && Math.abs(window.fcPlayer.getCurrentTime() - 780) <= 2" --timeout "$switch_timeout" >/dev/null 2>&1; then
+			header_seek_btn_pass=true
+		fi
+	fi
+	if [ "$HEADED" = true ]; then
+		add_check "카드 헤더 seek-btn 클릭 후 fcPlayer.getCurrentTime()이 카드 시작 시각과 ±2초 이내로 일치한다(§5, §13)" player_api "$header_seek_btn_pass" ""
+	elif [ "$header_seek_btn_pass" = true ]; then
+		add_check "카드 헤더 seek-btn 클릭 후 fcPlayer.getCurrentTime()이 카드 시작 시각과 ±2초 이내로 일치한다(§5, §13)" player_api true ""
+	else
+		add_check "카드 헤더 seek-btn 클릭 후 fcPlayer.getCurrentTime()이 카드 시작 시각과 ±2초 이내로 일치한다(§5, §13)" player_api false "헤드리스 환경에서 YouTube 플레이어 초기화/재생이 제한되어 판정 불가(네트워크 또는 재생 정책 제약)"
+	fi
+
+	# ── DESIGN.md §5-7/§13: the body-frame's own seek-btn button's seek
+	# precision -- u008's second frame (t=1083, same video just loaded above,
+	# so this exercises the same-video seekTo path rather than loadVideoById).
+	frame_seek_btn_pass=false
+	if [ "$api_ready" = true ]; then
+		ab click '#u008 .body-frame[data-frame-t="1083"] .seek-btn' >/dev/null
+		if ab wait --fn "window.fcPlayer && typeof window.fcPlayer.getCurrentTime === 'function' && Math.abs(window.fcPlayer.getCurrentTime() - 1083) <= 1" --timeout "$switch_timeout" >/dev/null 2>&1; then
+			frame_seek_btn_pass=true
+		fi
+	fi
+	if [ "$HEADED" = true ]; then
+		add_check "본문 프레임의 seek-btn 버튼 클릭 후 fcPlayer.getCurrentTime()이 그 프레임의 시각과 ±1초 이내로 일치한다(§5-7, §13)" player_api "$frame_seek_btn_pass" ""
+	elif [ "$frame_seek_btn_pass" = true ]; then
+		add_check "본문 프레임의 seek-btn 버튼 클릭 후 fcPlayer.getCurrentTime()이 그 프레임의 시각과 ±1초 이내로 일치한다(§5-7, §13)" player_api true ""
+	else
+		add_check "본문 프레임의 seek-btn 버튼 클릭 후 fcPlayer.getCurrentTime()이 그 프레임의 시각과 ±1초 이내로 일치한다(§5-7, §13)" player_api false "헤드리스 환경에서 YouTube 플레이어 초기화/재생이 제한되어 판정 불가(네트워크 또는 재생 정책 제약)"
+	fi
+
+	# ── DESIGN.md §8: a TOC click must not seek -- fcPlayer's own current time
+	# and loaded video_id (the two real playback signals, unlike the dom-level
+	# body.dataset.video check in run_dom_checks) must stay exactly where the
+	# body-frame seek-btn check above left them.
+	toc_no_seek_pass=false
+	if [ "$api_ready" = true ]; then
+		time_before="$(eval_js <<'JS'
+window.fcPlayer && typeof window.fcPlayer.getCurrentTime === "function" ? window.fcPlayer.getCurrentTime() : null
+JS
+		)"
+		video_before="$(eval_js <<'JS'
+window.fcPlayer && window.fcPlayer.getVideoData ? window.fcPlayer.getVideoData().video_id : null
+JS
+		)"
+		ab click '.toc-item[data-target="u002"]' >/dev/null
+		toc_no_seek_pass="$(eval_js <<JS
+(function () {
+  var before = $time_before;
+  var videoBefore = $video_before;
+  if (before === null || videoBefore === null || !window.fcPlayer || typeof window.fcPlayer.getCurrentTime !== "function") return false;
+  var after = window.fcPlayer.getCurrentTime();
+  var videoAfter = window.fcPlayer.getVideoData ? window.fcPlayer.getVideoData().video_id : null;
+  return Math.abs(after - before) <= 1 && videoAfter === videoBefore;
+})()
+JS
+		)"
+	fi
+	if [ "$HEADED" = true ]; then
+		add_check "목차 클릭 후 fcPlayer의 재생 시각/video_id가 변하지 않는다(seek 미발생, §8)" player_api "$toc_no_seek_pass" ""
+	elif [ "$toc_no_seek_pass" = true ]; then
+		add_check "목차 클릭 후 fcPlayer의 재생 시각/video_id가 변하지 않는다(seek 미발생, §8)" player_api true ""
+	else
+		add_check "목차 클릭 후 fcPlayer의 재생 시각/video_id가 변하지 않는다(seek 미발생, §8)" player_api false "헤드리스 환경에서 YouTube 플레이어 초기화/재생이 제한되어 판정 불가(네트워크 또는 재생 정책 제약)"
 	fi
 }
 
