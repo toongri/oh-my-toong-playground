@@ -47,6 +47,12 @@ QA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS_DIR="$(cd "$QA_DIR/../.." && pwd)"
 FC_TS="$SCRIPTS_DIR/fc.ts"
 
+# Captured before HOME is reassigned to the sandbox below: FC_QA_MEDIA_DIR's default lives
+# under the real user's cache, never under the sandboxed $HOME. Read-only -- gen_frame only
+# ever reads from here, never writes.
+REAL_HOME="$HOME"
+FC_QA_MEDIA_DIR="${FC_QA_MEDIA_DIR:-$REAL_HOME/.cache/fc-feedback-eval}"
+
 mkdir -p "$1"
 OUT="$(cd "$1" && pwd)"
 
@@ -71,15 +77,62 @@ fc() {
 }
 
 gen_frame() {
-	# gen_frame <out-webp> <seed-seconds> -- a synthetic (or, with FC_QA_VIDEO
-	# set to a local video file, real) single-frame webp for the QA fixture.
+	# gen_frame <out-webp> <video-id> <time-seconds> -- a single-frame webp for the QA
+	# fixture. Uses the REAL cached video at FC_QA_MEDIA_DIR/<video-id>/video/* (read-only)
+	# when present, extracting the frame at the given time; falls back to a synthetic frame
+	# (still varied by <time-seconds>) when that video isn't cached locally.
 	local out="$1"
-	local seed="$2"
-	if [ -n "${FC_QA_VIDEO:-}" ] && [ -f "${FC_QA_VIDEO:-}" ]; then
-		ffmpeg -y -hide_banner -loglevel error -ss "$seed" -i "$FC_QA_VIDEO" -frames:v 1 -c:v libwebp "$out"
+	local video_id="$2"
+	local t="$3"
+	local real
+	# `|| true`: a missing video dir makes `find` exit non-zero, which -- combined with
+	# pipefail -- would otherwise trip `set -e` on every fallback-path video, not just report
+	# "no local file" via an empty $real.
+	real="$(find "$FC_QA_MEDIA_DIR/$video_id/video" -type f 2>/dev/null | head -n 1)" || true
+	if [ -n "$real" ]; then
+		# -nostdin: gen_frame runs inside a `while read < <(jq ...)` loop -- without it,
+		# ffmpeg reads from the very same stdin/pipe the loop's `read` is consuming from
+		# and steals bytes from the next line, corrupting later iterations' fields.
+		ffmpeg -nostdin -y -hide_banner -loglevel error -ss "$t" -i "$real" -frames:v 1 -c:v libwebp "$out"
 	else
-		ffmpeg -y -hide_banner -loglevel error -f lavfi -i "testsrc2=size=320x180:rate=1" -ss "$seed" -frames:v 1 -c:v libwebp "$out"
+		ffmpeg -nostdin -y -hide_banner -loglevel error -f lavfi -i "testsrc2=size=320x180:rate=1" -ss "$t" -frames:v 1 -c:v libwebp "$out"
 	fi
+}
+
+gen_frames_for_unit_starts() {
+	# gen_frames_for_unit_starts <work-dir> -- generates <work-dir>/img/<uNNN>-start.webp for
+	# every unit in <work-dir>/plan.json's flattened matches[].topics[].units[] order, at the
+	# video+time its lines.json start_line gives (plan §7 T10's "start image = unit start").
+	local work="$1"
+	local uid video t
+	while IFS=$'\t' read -r uid video t; do
+		gen_frame "$work/img/${uid}-start.webp" "$video" "$t"
+	done < <(jq -r --slurpfile lines "$work/lines.json" '
+		[.matches[].topics[].units[]] as $units
+		| range(0; $units | length) as $i
+		| $units[$i] as $u
+		| $lines[0][$u.start_line] as $l
+		| ("u" + ("000" + (($i + 1) | tostring))[-3:]) + "\t" + $l.video + "\t" + ($l.start | tostring)
+	' "$work/plan.json")
+}
+
+gen_frames_for_candidates() {
+	# gen_frames_for_candidates <work-dir> -- generates <work-dir>/img/<uNNN>-<cNNN>.webp for
+	# every unit/candidate pair named in <work-dir>/plan.json's key_frame_candidate_ids, at
+	# that candidate's own video+time from candidates.json ("body frame = frame t").
+	local work="$1"
+	local uid cid video t
+	while IFS=$'\t' read -r uid cid video t; do
+		gen_frame "$work/img/${uid}-${cid}.webp" "$video" "$t"
+	done < <(jq -r --slurpfile cands "$work/candidates.json" '
+		[.matches[].topics[].units[]] as $units
+		| range(0; $units | length) as $i
+		| $units[$i] as $u
+		| ("u" + ("000" + (($i + 1) | tostring))[-3:]) as $uid
+		| ($u.key_frame_candidate_ids // [])[] as $cid
+		| ($cands[0][] | select(.id == $cid)) as $c
+		| $uid + "\t" + $cid + "\t" + $c.video + "\t" + ($c.t | tostring)
+	' "$work/plan.json")
 }
 
 # ── 1/8: empty archive (init-archive only, empty-state capture) ────────────
@@ -114,11 +167,7 @@ fc similar --work "$WORK_PAST" >/dev/null
 fc check similar --work "$WORK_PAST" >/dev/null
 fc check refs --work "$WORK_PAST" >/dev/null
 
-seed=0
-for u in u001 u002 u003; do
-	gen_frame "$WORK_PAST/img/${u}-start.webp" "$seed"
-	seed=$((seed + 3))
-done
+gen_frames_for_unit_starts "$WORK_PAST"
 
 fc render --work "$WORK_PAST" >/dev/null
 
@@ -152,16 +201,8 @@ fi
 fc check similar --work "$WORK_CUR" >/dev/null
 fc check refs --work "$WORK_CUR" >/dev/null
 
-seed=0
-for u in u001 u002 u003 u004 u005 u006 u007 u008 u009 u010 u011 u012 u013 u014 u015; do
-	gen_frame "$WORK_CUR/img/${u}-start.webp" "$seed"
-	seed=$((seed + 3))
-done
-for pair in "u001 c001" "u004 c002" "u004 c003" "u008 c004" "u008 c005" "u008 c006" "u011 c007" "u013 c008" "u013 c009"; do
-	set -- $pair
-	gen_frame "$WORK_CUR/img/${1}-${2}.webp" "$seed"
-	seed=$((seed + 3))
-done
+gen_frames_for_unit_starts "$WORK_CUR"
+gen_frames_for_candidates "$WORK_CUR"
 
 fc render --work "$WORK_CUR" >/dev/null
 
@@ -200,7 +241,7 @@ fc2 check notes --work "$WORK_DISABLED" >/dev/null
 fc2 similar --work "$WORK_DISABLED" >/dev/null
 fc2 check similar --work "$WORK_DISABLED" >/dev/null
 fc2 check refs --work "$WORK_DISABLED" >/dev/null
-gen_frame "$WORK_DISABLED/img/u001-start.webp" 0
+gen_frames_for_unit_starts "$WORK_DISABLED"
 fc2 render --site-only --work "$WORK_DISABLED" >/dev/null
 
 rm -rf "$OUT/disabled-mode"
@@ -220,7 +261,7 @@ fc2 check notes --work "$WORK_EMBED" >/dev/null
 fc2 similar --work "$WORK_EMBED" >/dev/null
 fc2 check similar --work "$WORK_EMBED" >/dev/null
 fc2 check refs --work "$WORK_EMBED" >/dev/null
-gen_frame "$WORK_EMBED/img/u001-start.webp" 0
+gen_frames_for_unit_starts "$WORK_EMBED"
 fc2 render --site-only --work "$WORK_EMBED" >/dev/null
 
 rm -rf "$OUT/embed-blocked"
