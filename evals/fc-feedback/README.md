@@ -124,16 +124,44 @@ evals/fc-feedback/
 
 ## 환경 스모크
 
-<!-- SMOKE task(§14.1, MC-R0 이전) 결과를 여기에 기록한다. 두 모델(luna max, sol med)
-각각에 대해:
-1. 웹 검색 1회 후 run.jsonl에서 결과 URL을 jq로 추출 가능한지
-2. cand/c001.jpg 이미지를 보고 내용을 기술할 수 있는지(view_image)
-3. `bun <스킬>/scripts/fc.ts config status`가 exit 0인지
-4. 외부 URL HEAD 요청이 200을 받는지
-5. ffmpeg·uvx 실행이 되는지
-아직 실행 전이다. -->
+2026-09-28 관측(§14.1, MC-R0 이전). 두 모델 모두 아래 명령으로 실행했다.
 
-(미기록)
+```
+codex exec --skip-git-repo-check -m <model> -c model_reasoning_effort=<effort> \
+  --dangerously-bypass-approvals-and-sandbox --json -C <dir> - < prompt
+```
+
+- luna: `-m gpt-6-luna -c model_reasoning_effort=max` — exit 0, 이벤트 19개
+- sol: `-m gpt-6-sol -c model_reasoning_effort=medium` — exit 0, 이벤트 13개
+
+| 점검 항목 | luna max | sol med |
+| --- | --- | --- |
+| 웹 검색 후 결과 URL을 jq로 추출 | 성공 | 성공 |
+| cand/c001.jpg 이미지 보기(OBS 오버레이가 있는 게임 화면을 정확히 기술) | 성공 | 성공 |
+| `bun <스킬>/scripts/fc.ts config status` | exit 0 | exit 0 |
+| 외부 URL(oembed) HEAD 요청 | 200 | 200 |
+| ffmpeg·uvx 실행 가능 | 가능(`ffmpeg version 6.0`, `uvx 0.11.7`) | 가능(`ffmpeg version 6.0`, `uvx 0.11.7`) |
+
+**이벤트 스트림 형태.** 한 줄에 JSON 객체 하나 —
+`{"type": "thread.started"|"turn.started"|"item.started"|"item.completed"|"turn.completed", "item": {...}}`.
+관측된 `item.type` 값:
+
+- `agent_message` — `.item.text`
+- `command_execution` — `.item.command`(예: `/bin/zsh -lc '<cmd>'`),
+  `.item.exit_code`(item.started에서는 null, item.completed에서는 정수)
+- `web_search` — `.item.query`, `.item.action.{type,query}`, 완료 시
+  `.item.results[]`(각 원소는 domain, ref_id, snippet, title, type, url 키를 가짐)
+
+**웹 검색 URL 추출.** 결과 URL은 `.item.results[].url`에서 직접 뽑을 수 있었다:
+
+```
+jq -r 'select(.item.type=="web_search" and .item.results) | .item.results[].url'
+```
+
+이 방식("URL ⊆ tool 결과")이 통과했으므로, 문자열 부분일치로 찾는 폴백 규칙은
+쓸 필요가 없었다 — 다만 폴백 규칙 자체는 그대로 남겨 둔다(`harness/score.ts`의
+`collectStrings` 전수 문자열 순회가 이미 `.item.results[].url`을 포함해 별도
+web_search 추출기 없이도 커버한다).
 
 ## 결과
 

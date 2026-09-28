@@ -439,18 +439,24 @@ export function scoreRefs(
 
 // ── run.jsonl parsing (plan §14.1) ────────────────────────────────────────────
 //
-// The SMOKE task fixes the real codex `--json` event shape; until then this is
-// tolerant by construction. Assumed shape: one JSON object per line, most
-// wrapping a `type: "item.completed"` envelope around an `item` whose own
-// `type` is `command_execution` (a `command` string + `aggregated_output`),
-// `web_search` (a query + result URLs), or something this scorer does not care
-// about (`file_change`, `reasoning`, ...). Rather than pattern-matching those
-// specific keys — which breaks the moment the real shape differs even
-// slightly — this walks the ENTIRE parsed value of each line and joins every
-// string leaf into one search blob per line, in file order. Every detector
-// below (push attempt, gate-order violation, refs URL-in-log fallback) does a
-// plain substring/regex search over that blob, so it stays correct regardless
-// of which key a command or URL actually lands under.
+// SMOKE 2026-09-28 관측: one JSON object per line — `{"type": "thread.started"
+// | "turn.started" | "item.started" | "item.completed" | "turn.completed",
+// "item": {...}}`. Observed `item.type` values:
+//   - `agent_message`      — `.item.text`
+//   - `command_execution`  — `.item.command` (e.g. `/bin/zsh -lc '<cmd>'`),
+//                             `.item.exit_code` (null on item.started, an
+//                             integer on item.completed)
+//   - `web_search`         — `.item.query`, `.item.action.{type,query}`, and
+//                             on completion `.item.results[]` with keys
+//                             domain, ref_id, snippet, title, type, url
+// Rather than pattern-matching those specific keys — which breaks the moment
+// the real shape differs even slightly — this walks the ENTIRE parsed value
+// of each line and joins every string leaf into one search blob per line, in
+// file order. Every detector below (push attempt, gate-order violation, refs
+// URL-in-log fallback) does a plain substring/regex search over that blob, so
+// it already covers `.item.results[].url` without a dedicated web_search
+// extractor, and stays correct regardless of which key a command or URL
+// actually lands under.
 
 function collectStrings(node: unknown, out: string[]): void {
 	if (typeof node === "string") {
