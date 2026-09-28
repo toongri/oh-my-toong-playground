@@ -229,6 +229,7 @@ interface ViewerWindow {
 	};
 	YT?: { Player: typeof StubPlayer; loaded: boolean };
 	onYouTubeIframeAPIReady?: () => void;
+	getSelection?: () => { toString: () => string };
 }
 
 /** Runs VIEWER_JS via the `new Function("window","document","YT", src)` harness (source now reads `window.YT`, so this also sets `win.YT`). */
@@ -267,6 +268,10 @@ function click(el: Element | null | undefined): void {
 function clickChip(doc: Document, group: string, value: string): void {
 	const selector = `.chip-filter[data-group="${group}"][data-value="${value}"]`;
 	click(doc.querySelector(selector));
+}
+
+function clickMinePill(doc: Document, value: string): void {
+	click(doc.querySelector(`.pill-mine[data-value="${value}"]`));
 }
 
 function isHidden(el: Element | null): boolean {
@@ -516,26 +521,26 @@ describe("카드 해부", () => {
 		expect(figure?.querySelector("figcaption")?.textContent).toContain(frameBlock?.caption ?? "");
 	});
 
-	test("관련 팀원 목록은 relatedMembers 결과와 같다", () => {
+	test("언급된 팀원 줄은 member_ids를, 관련 팀원 줄은 relatedMembers \\ member_ids를 보인다(DESIGN §5 item 6/8)", () => {
 		const data = sampleData();
 		const doc = parseHTML(renderSession(data)).document;
 
-		const expectedU001 = relatedMembers(
-			{ member_ids: ["hong"], position_tags: ["FB"] },
-			ROSTER,
-		).map((member) => member.name);
-		const textU001 =
+		// u001: member_ids=["hong"], relatedMembers=hong(직접 언급)+kim(FB 포지션 관련) — 차집합은 kim만 남는다.
+		const mentionedU001 =
+			doc.getElementById("u001")?.querySelector(".mentioned-members")?.textContent ?? "";
+		expect(mentionedU001).toBe("언급: 홍길동");
+		const relatedU001 =
 			doc.getElementById("u001")?.querySelector(".related-members")?.textContent ?? "";
-		expect(expectedU001.length).toBeGreaterThan(0);
-		for (const name of expectedU001) expect(textU001).toContain(name);
+		expect(relatedU001).toBe("관련: 김철수");
 
+		// u002: member_ids=[]이므로 "언급된 팀원" 줄 자체가 렌더되지 않고, relatedMembers 전체가 관련 줄에 남는다.
+		expect(doc.getElementById("u002")?.querySelector(".mentioned-members")).toBeNull();
 		const expectedU002 = relatedMembers({ member_ids: [], position_tags: ["GK"] }, ROSTER).map(
 			(member) => member.name,
 		);
-		const textU002 =
+		const relatedU002 =
 			doc.getElementById("u002")?.querySelector(".related-members")?.textContent ?? "";
-		expect(expectedU002).toEqual(["박영희"]);
-		for (const name of expectedU002) expect(textU002).toContain(name);
+		expect(relatedU002).toBe(`관련: ${expectedU002.join(", ")}`);
 	});
 
 	test("유사 과거 피드백은 세션 날짜와 링크를 가진다", () => {
@@ -646,9 +651,10 @@ describe("필터", () => {
 		expect(isHidden(doc.getElementById("u002"))).toBe(true); // 피지컬만
 	});
 
-	test("필터 결과 0건이면 빈 상태를 보인다", () => {
+	test("서로 다른 두 그룹 조합이 0건이면 빈 상태를 보인다(filter-empty-and, DESIGN §14)", () => {
 		const { doc } = mountViewer(renderSession(sampleData()), false);
-		clickChip(doc, "mention", "park"); // park는 어떤 unit의 member_ids에도 없음
+		clickChip(doc, "position", "GK"); // u002만 해당
+		clickChip(doc, "topic", "빌드업"); // u002는 피지컬 태그라 겹치지 않음 → AND 0건
 		expect(isHidden(doc.querySelector(".card-list"))).toBe(true);
 		expect(isHidden(doc.querySelector(".toc"))).toBe(true);
 		const emptyState = doc.querySelector(".empty-state");
@@ -717,5 +723,179 @@ describe("영상 전환", () => {
 		win.matchMedia = () => ({ matches: false, addListener: () => {}, removeListener: () => {} });
 		expect(() => runViewer(win, undefined)).not.toThrow();
 		expect(typeof win.onYouTubeIframeAPIReady).toBe("function");
+	});
+});
+
+// ── layout skeleton (DESIGN §4) ──────────────────────────────────────────
+
+describe("레이아웃 골격", () => {
+	test("side-col은 player-wrapper와 side를 함께 묶고, main은 단일 wrapper다", () => {
+		const doc = parseHTML(renderSession(sampleData())).document;
+		const sideCol = doc.querySelector(".side-col");
+		expect(sideCol).not.toBeNull();
+		expect(sideCol?.querySelector(".player-wrapper")).not.toBeNull();
+		expect(sideCol?.querySelector(".side")).not.toBeNull();
+		expect(doc.querySelector(".main")).not.toBeNull();
+		expect(doc.querySelector(".main .my-feedback, .main .filter-bar")).not.toBeNull();
+	});
+});
+
+// ── 필터 옵션: 결과 0건 숨김 · 빌드 시점 고정 (DESIGN §7) ────────────────────
+
+describe("필터 옵션 — 결과 0건 숨김 · 카운트 고정", () => {
+	test("결과가 없는 포지션 노드(MF)는 렌더되지 않고, 있는 노드는 카운트를 보인다", () => {
+		const doc = parseHTML(renderSession(sampleData())).document;
+		const values = [...doc.querySelectorAll('.chip-filter[data-group="position"]')].map((el) =>
+			el.getAttribute("data-value"),
+		);
+		expect(values).not.toContain("MF");
+		const fb = doc.querySelector('.chip-filter[data-group="position"][data-value="FB"]');
+		expect(fb?.textContent).toContain("(1)");
+	});
+
+	test("언급이 없는 팀원(park·kim)은 언급 선수 옵션에 나타나지 않는다", () => {
+		const doc = parseHTML(renderSession(sampleData())).document;
+		const values = [...doc.querySelectorAll('.chip-filter[data-group="mention"]')].map((el) =>
+			el.getAttribute("data-value"),
+		);
+		expect(values).toContain("hong");
+		expect(values).toContain("choi");
+		expect(values).not.toContain("park");
+		expect(values).not.toContain("kim");
+	});
+
+	test("선택된 옵션은 다른 그룹과의 AND로 0건이 되어도 필터 바에서 사라지지 않는다", () => {
+		const { doc } = mountViewer(renderSession(sampleData()), false);
+		clickChip(doc, "position", "GK");
+		clickChip(doc, "topic", "빌드업");
+		const gkChip = doc.querySelector('.chip-filter[data-group="position"][data-value="GK"]');
+		expect(gkChip).not.toBeNull();
+		expect(gkChip?.getAttribute("aria-pressed")).toBe("true");
+	});
+});
+
+// ── 내 피드백 (DESIGN §6) ──────────────────────────────────────────────────
+
+describe("내 피드백", () => {
+	test("결과가 있는 팀원만 pill로 노출된다", () => {
+		const data = sampleData();
+		const doc = parseHTML(renderSession(data)).document;
+		const expectedIds = new Set(data.units.flatMap((unit) => unit.related_member_ids));
+		const pillIds = [...doc.querySelectorAll(".pill-mine")].map((el) => el.getAttribute("data-value"));
+		expect(new Set(pillIds)).toEqual(expectedIds);
+	});
+
+	test("선택 시 relatedMembers 카드만 남고 결과 수가 갱신된다", () => {
+		const data = sampleData();
+		const { doc } = mountViewer(renderSession(data), false);
+		clickMinePill(doc, "kim");
+		const visibleIds = data.units.filter((unit) => unit.related_member_ids.includes("kim")).map((unit) => unit.id);
+		for (const unit of data.units) {
+			expect(isHidden(doc.getElementById(unit.id))).toBe(!visibleIds.includes(unit.id));
+		}
+		expect(doc.getElementById("visible-count")?.textContent).toBe(String(visibleIds.length));
+	});
+
+	test("배지는 data-member-ids/data-related-ids 기준으로 직접 언급과 포지션 관련(참고)을 구분한다", () => {
+		const data = sampleData();
+		const { doc } = mountViewer(renderSession(data), false);
+
+		// kim: u001의 member_ids에는 없지만 FB 포지션으로 related_member_ids에는 있다 → "포지션 관련(참고)".
+		clickMinePill(doc, "kim");
+		const badgeU001Kim = doc.getElementById("u001")?.querySelector(".mention-badge");
+		expect(badgeU001Kim?.textContent).toBe("포지션 관련(참고)");
+		expect(badgeU001Kim?.classList.contains("mention-related")).toBe(true);
+		expect(isHidden(doc.getElementById("u002")?.querySelector(".mention-badge") ?? null)).toBe(true);
+
+		clickMinePill(doc, "kim"); // 토글 해제
+		clickMinePill(doc, "hong"); // hong: u001의 member_ids에 직접 있다 → "직접 언급".
+		const badgeU001Hong = doc.getElementById("u001")?.querySelector(".mention-badge");
+		expect(badgeU001Hong?.textContent).toBe("직접 언급");
+		expect(badgeU001Hong?.classList.contains("mention-direct")).toBe(true);
+	});
+
+	test("선택 시 언급/관련 목록에서 해당 이름만 mark.mine으로 강조된다", () => {
+		const { doc } = mountViewer(renderSession(sampleData()), false);
+		clickMinePill(doc, "hong");
+		const mark = doc.getElementById("u001")?.querySelector('.member-name[data-member-id="hong"]');
+		expect(mark?.tagName.toLowerCase()).toBe("mark");
+		expect(mark?.classList.contains("mine")).toBe(true);
+	});
+});
+
+// ── 플레이어 접기 (DESIGN §4) ──────────────────────────────────────────────
+
+describe("플레이어 접기", () => {
+	test("aria-expanded를 토글하고 wrapper에 is-collapsed 클래스를 붙인다", () => {
+		const { doc } = mountViewer(renderSession(sampleData()), false);
+		const btn = doc.querySelector(".player-collapse");
+		expect(btn?.getAttribute("aria-expanded")).toBe("true");
+		expect(btn?.textContent).toBe("플레이어 접기");
+
+		click(btn);
+
+		expect(btn?.getAttribute("aria-expanded")).toBe("false");
+		expect(btn?.textContent).toBe("펼치기");
+		expect(doc.querySelector(".player-wrapper")?.classList.contains("is-collapsed")).toBe(true);
+	});
+});
+
+// ── 텍스트 선택 가드 · 확대 링크 (DESIGN §5, §13) ──────────────────────────
+
+describe("텍스트 선택 가드 · 확대 링크", () => {
+	test("VIEWER_JS는 getSelection이 비어있지 않으면 카드 클릭 seek를 실행하지 않는다", () => {
+		expect(VIEWER_JS).toContain("getSelection");
+
+		const data = sampleData();
+		data.units[0].body = [
+			{ type: "text", text: "문단" },
+			{ type: "frame", src: "img/u001-c001.webp", width: 1280, height: 720, t: 760, caption: "장면" },
+		];
+		const dom = parseHTML(renderSession(data));
+		const win = dom as unknown as ViewerWindow;
+		win.Element.prototype.scrollIntoView = () => {};
+		win.matchMedia = () => ({ matches: false, addListener: () => {}, removeListener: () => {} });
+		win.getSelection = () => ({ toString: () => "선택된 텍스트" });
+		runViewer(win, { Player: StubPlayer, loaded: true });
+		const stub = win.fcPlayer instanceof StubPlayer ? win.fcPlayer : null;
+		stub?.fireReady();
+
+		click(win.document.getElementById("u001"));
+		expect(stub?.calls.length ?? -1).toBe(0);
+	});
+
+	test("본문 프레임의 확대 링크는 새 탭·noopener로 원본을 열고 data-frame-t로 seek한다", () => {
+		const data = sampleData();
+		const doc = parseHTML(renderSession(data)).document;
+		const frameBlock = data.units[2].body.find(
+			(block): block is UnitBodyFrameBlock => block.type === "frame",
+		);
+		expect(frameBlock).toBeDefined();
+		const figure = doc.getElementById("u003")?.querySelector(".body-frame");
+		expect(figure?.getAttribute("data-frame-t")).toBe(String(frameBlock?.t));
+		const zoom = figure?.querySelector("a.zoom-link");
+		expect(zoom?.textContent).toBe("확대");
+		expect(zoom?.getAttribute("target")).toBe("_blank");
+		expect(zoom?.getAttribute("rel")).toBe("noopener");
+		expect(zoom?.getAttribute("href")).toBe(frameBlock?.src);
+	});
+});
+
+// ── disabled 모드 (DESIGN §11) ─────────────────────────────────────────────
+
+describe("disabled 모드(명단 없음)", () => {
+	test("명단이 없으면 내 피드백·언급 선수 필터·언급/관련 줄·멘션 배지가 렌더되지 않는다", () => {
+		const data = sampleData();
+		data.members = [];
+		for (const unit of data.units) {
+			unit.member_ids = [];
+			unit.related_member_ids = [];
+		}
+		const doc = parseHTML(renderSession(data)).document;
+		expect(doc.querySelector(".my-feedback")).toBeNull();
+		expect(doc.querySelector('.filter-group[data-role="filter-mention"]')).toBeNull();
+		expect(doc.querySelector(".mentioned-members")).toBeNull();
+		expect(doc.querySelector(".related-members")).toBeNull();
+		expect(doc.querySelector(".mention-badge")).toBeNull();
 	});
 });

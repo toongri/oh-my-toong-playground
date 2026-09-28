@@ -1,7 +1,8 @@
 /**
  * fc-feedback HTML renderer — session viewer, archive index page, reference
- * page (plan §1, §5; DESIGN.md is the design-intent contract this file
- * implements literally).
+ * page. `DESIGN.md`(v2) is the design-intent contract this file implements
+ * literally; each render function's header comment names the section(s) it
+ * carries out.
  *
  * Every interpolated string goes through `escapeHtml`, every attribute is
  * double-quoted, styling is one inline `<style>` (STYLE) with no external
@@ -14,16 +15,15 @@
  *
  * Two documented gap-fills beyond the plan §3 data.json text (flagged in the
  * implementer's report, not silent deviations):
- * - `UnitSimilar` adds `date`: DESIGN.md §4 item 8 requires showing the past
+ * - `UnitSimilar` adds `date`: DESIGN.md §5 item 9 requires showing the past
  *   session's date next to a similar-feedback link, and core.ts's own
  *   `SimilarCandidate` already carries `date` — the plan's abbreviated
  *   `similar[{uid,title,href}]` text omitted a field the sibling module and
  *   the design both need.
- * - The card root carries `data-related-ids` and `data-embeddable` in
- *   addition to DESIGN.md §4's listed `data-video data-start data-pos
- *   data-topics data-member-ids`: the "팀원 관련" filter (§6) and the
- *   per-video embeddable-placeholder switch (§7) are both explicit,
- *   already-specified behaviors that have no other data hook to read from.
+ * - The card root carries `data-embeddable` in addition to DESIGN.md §5's
+ *   listed `data-video data-start data-pos data-topics data-member-ids
+ *   data-related-ids`: the per-video embeddable-placeholder switch (§9) has
+ *   no other data hook to read from.
  */
 import { anc, boldSpans, formatTime, PARENT, posClosure } from "./core.ts";
 
@@ -54,13 +54,13 @@ export interface UnitImages {
 	start: UnitStartImage;
 }
 
-/** A body paragraph (plan §16-1/2): text is escaped, `**bold**` spans become `<strong>`. */
+/** A body paragraph (DESIGN §5 item 7): text is escaped, `**bold**` spans become `<strong>`. */
 export interface UnitBodyTextBlock {
 	type: "text";
 	text: string;
 }
 
-/** A body frame (plan §16-1/2): clicking it seeks the card's video to `t`. */
+/** A body frame (DESIGN §5 item 7): clicking it seeks the card's video to `t`. */
 export interface UnitBodyFrameBlock {
 	type: "frame";
 	src: string;
@@ -80,7 +80,7 @@ export interface UnitSimilar {
 	href: string;
 }
 
-/** `href` is `null` for a `lang: "ko"` ref (no summary page is generated, plan §3/§4). */
+/** `href` is `null` for a `lang: "ko"` ref (no summary page is generated, DESIGN §5/§12). */
 export interface UnitRef {
 	id: string;
 	title: string;
@@ -182,7 +182,7 @@ export interface RefTranslation {
 	ko: string;
 }
 
-/** A `refs.verified.json` entry for a non-`ko` ref, the input to `renderRef` (plan §3, DESIGN §10). */
+/** A `refs.verified.json` entry for a non-`ko` ref, the input to `renderRef` (plan §3, DESIGN §12). */
 export interface RefPageData {
 	id: string;
 	title: string;
@@ -204,10 +204,10 @@ function escapeHtml(value: string): string {
 		.replace(/"/g, "&quot;");
 }
 
-// ── position tree display order (DESIGN.md §6) ──────────────────────────────
+// ── position tree display order (DESIGN.md §7) ──────────────────────────────
 //
 // core.ts's `PARENT` map already lists each parent's children in the exact
-// order DESIGN.md §6 specifies (CB,FB / LB,RB,LWB,RWB / CDM,CM,CAM,LM,RM /
+// order DESIGN.md §7 implies (CB,FB / LB,RB,LWB,RWB / CDM,CM,CAM,LM,RM /
 // ST,CF,LW,RW,LF,RF) — this only adds the root ordering, which `PARENT` does
 // not carry (roots have no parent entry).
 
@@ -241,77 +241,179 @@ function memberName(members: readonly SessionMemberInfo[], id: string): string {
 	return members.find((member) => member.id === id)?.name ?? id;
 }
 
-function memberGamertag(members: readonly SessionMemberInfo[], id: string): string {
-	return members.find((member) => member.id === id)?.gamertag ?? id;
-}
-
-// ── position filter tree (DESIGN.md §6) ─────────────────────────────────────
-
-function renderPositionNode(tag: string): string {
-	const children = childrenOf(tag);
-	const button = `<button type="button" class="chip chip-filter" data-group="position" data-value="${escapeHtml(tag)}" aria-pressed="false">${escapeHtml(tag)}</button>`;
-	if (children.length === 0) {
-		return `<span class="pos-node">${button}</span>`;
+/** First-appearance order of `topic_tags` across a list of units/index entries (used by the topic facet, TOC "주제별" tab, and the archive's topic index — DESIGN §7/§8/§12). */
+function firstAppearanceTags(items: ReadonlyArray<{ topic_tags: readonly string[] }>): string[] {
+	const tags: string[] = [];
+	for (const item of items) {
+		for (const tag of item.topic_tags) {
+			if (!tags.includes(tag)) tags.push(tag);
+		}
 	}
-	return `<span class="pos-node">${button}<span class="pos-children">${children.map(renderPositionNode).join("")}</span></span>`;
+	return tags;
 }
 
-function renderPositionFilterGroup(): string {
+// ── facet counts, computed once at build time (DESIGN.md §7) ───────────────
+//
+// Every count below is fixed from the full session at build time — it never
+// depends on what else is selected, and it never changes at runtime. That is
+// what lets the client hide zero-result options up front and keep a selected
+// option visible even if an AND with another group drops it to zero results.
+
+/** Per-position-tag count = number of units whose `posClosure(position_tags)` contains that tag (ancestors+descendants both count, DESIGN §7). */
+function countPositionNodes(data: SessionData): Map<string, number> {
+	const counts = new Map<string, number>();
+	for (const unit of data.units) {
+		for (const tag of posClosure(unit.position_tags)) {
+			counts.set(tag, (counts.get(tag) ?? 0) + 1);
+		}
+	}
+	return counts;
+}
+
+function countTopicTags(data: SessionData): Map<string, number> {
+	const counts = new Map<string, number>();
+	for (const unit of data.units) {
+		for (const tag of unit.topic_tags) {
+			counts.set(tag, (counts.get(tag) ?? 0) + 1);
+		}
+	}
+	return counts;
+}
+
+function countMentionMembers(data: SessionData): Map<string, number> {
+	const counts = new Map<string, number>();
+	for (const unit of data.units) {
+		for (const id of unit.member_ids) {
+			counts.set(id, (counts.get(id) ?? 0) + 1);
+		}
+	}
+	return counts;
+}
+
+/** `relatedMembers(unit)` occurrence count per member — the basis for both the "내 피드백" pill count (§6) and pill eligibility (only members with ≥1 count get a pill). */
+function countRelatedMembers(data: SessionData): Map<string, number> {
+	const counts = new Map<string, number>();
+	for (const unit of data.units) {
+		for (const id of unit.related_member_ids) {
+			counts.set(id, (counts.get(id) ?? 0) + 1);
+		}
+	}
+	return counts;
+}
+
+// ── 내 피드백 (DESIGN.md §6) ─────────────────────────────────────────────
+
+function renderMyFeedbackNav(data: SessionData): string {
+	if (data.members.length === 0) {
+		return "";
+	}
+	const counts = countRelatedMembers(data);
+	const eligible = data.members.filter((member) => (counts.get(member.id) ?? 0) > 0);
+	if (eligible.length === 0) {
+		return "";
+	}
+	const pills = eligible
+		.map((member) => {
+			const count = counts.get(member.id) ?? 0;
+			return (
+				`<button type="button" class="pill pill-mine" data-group="mine" data-value="${escapeHtml(member.id)}" aria-pressed="false" role="listitem">` +
+				`${escapeHtml(member.name)} <span class="count">${count}</span></button>`
+			);
+		})
+		.join("");
+	return (
+		`<nav class="my-feedback" aria-label="내 피드백">` +
+		`<span class="my-feedback-label">내 피드백</span>` +
+		`<div class="my-feedback-row" role="list">${pills}</div>` +
+		`</nav>`
+	);
+}
+
+// ── 필터 바 (DESIGN.md §7) ───────────────────────────────────────────────
+
+function renderPositionNode(tag: string, counts: Map<string, number>): string {
+	const count = counts.get(tag) ?? 0;
+	if (count === 0) {
+		return "";
+	}
+	const childHtml = childrenOf(tag)
+		.map((child) => renderPositionNode(child, counts))
+		.join("");
+	const button =
+		`<button type="button" class="chip chip-filter" data-group="position" data-value="${escapeHtml(tag)}" aria-pressed="false">` +
+		`${escapeHtml(tag)} (${count})</button>`;
+	return childHtml
+		? `<span class="pos-node">${button}<span class="pos-children">${childHtml}</span></span>`
+		: `<span class="pos-node">${button}</span>`;
+}
+
+function renderPositionFacetGroup(data: SessionData): string {
+	const counts = countPositionNodes(data);
+	const roots = POSITION_ROOTS.map((root) => renderPositionNode(root, counts)).join("");
+	if (roots === "") {
+		return "";
+	}
 	return (
 		`<div class="filter-group" data-role="filter-position">` +
 		`<span class="filter-group-label">포지션</span>` +
-		`<div class="pos-tree">${POSITION_ROOTS.map(renderPositionNode).join("")}</div>` +
+		`<div class="pos-tree">${roots}</div>` +
 		`</div>`
 	);
 }
 
-function renderTopicFilterGroup(data: SessionData): string {
-	const tags: string[] = [];
-	for (const unit of data.units) {
-		for (const tag of unit.topic_tags) {
-			if (!tags.includes(tag)) tags.push(tag);
-		}
+function renderTopicFacetGroup(data: SessionData): string {
+	const counts = countTopicTags(data);
+	const tags = firstAppearanceTags(data.units);
+	if (tags.length === 0) {
+		return "";
 	}
 	const chips = tags
-		.map(
-			(tag) =>
-				`<button type="button" class="chip chip-filter" data-group="topic" data-value="${escapeHtml(tag)}" aria-pressed="false">${escapeHtml(tag)}</button>`,
-		)
+		.map((tag) => {
+			const count = counts.get(tag) ?? 0;
+			return (
+				`<button type="button" class="chip chip-filter" data-group="topic" data-value="${escapeHtml(tag)}" aria-pressed="false">` +
+				`${escapeHtml(tag)} (${count})</button>`
+			);
+		})
 		.join("");
 	return `<div class="filter-group" data-role="filter-topic"><span class="filter-group-label">주제</span>${chips}</div>`;
 }
 
-function renderMemberFilterGroup(
-	data: SessionData,
-	group: "mention" | "related",
-	label: string,
-): string {
+function renderMentionFacetGroup(data: SessionData): string {
 	if (data.members.length === 0) {
 		return "";
 	}
-	const chips = data.members
-		.map(
-			(member) =>
-				`<button type="button" class="chip chip-filter" data-group="${group}" data-value="${escapeHtml(member.id)}" aria-pressed="false">${escapeHtml(member.name)}</button>`,
-		)
+	const counts = countMentionMembers(data);
+	const eligible = data.members.filter((member) => (counts.get(member.id) ?? 0) > 0);
+	if (eligible.length === 0) {
+		return "";
+	}
+	const chips = eligible
+		.map((member) => {
+			const count = counts.get(member.id) ?? 0;
+			return (
+				`<button type="button" class="chip chip-filter" data-group="mention" data-value="${escapeHtml(member.id)}" data-label="${escapeHtml(member.name)}" aria-pressed="false">` +
+				`${escapeHtml(member.name)} (${count})</button>`
+			);
+		})
 		.join("");
-	return `<div class="filter-group" data-role="filter-${group}"><span class="filter-group-label">${escapeHtml(label)}</span>${chips}</div>`;
+	return `<div class="filter-group" data-role="filter-mention"><span class="filter-group-label">언급 선수</span>${chips}</div>`;
 }
 
 function renderFilterBar(data: SessionData): string {
+	const groups = [renderPositionFacetGroup(data), renderTopicFacetGroup(data), renderMentionFacetGroup(data)]
+		.filter((html) => html !== "")
+		.join("");
 	return (
 		`<details class="filter-bar" open>` +
-		`<summary>필터 (<span id="filter-count-label">0</span>)</summary>` +
-		renderPositionFilterGroup() +
-		renderTopicFilterGroup(data) +
-		renderMemberFilterGroup(data, "mention", "언급 선수") +
-		renderMemberFilterGroup(data, "related", "팀원 관련") +
+		`<summary>필터 (<span id="filter-count-label">0</span>)<span class="filter-summary-detail"></span></summary>` +
+		`<div class="filter-groups">${groups}</div>` +
 		`<button type="button" class="filter-reset">초기화</button>` +
 		`</details>`
 	);
 }
 
-// ── TOC tabs (DESIGN.md §5) ──────────────────────────────────────────────
+// ── TOC tabs (DESIGN.md §8) ──────────────────────────────────────────────
 
 function tocItemAttrs(unit: SessionUnit): string {
 	return (
@@ -351,12 +453,7 @@ function renderTabMatch(data: SessionData): string {
 }
 
 function renderTabTopic(data: SessionData): string {
-	const tags: string[] = [];
-	for (const unit of data.units) {
-		for (const tag of unit.topic_tags) {
-			if (!tags.includes(tag)) tags.push(tag);
-		}
-	}
+	const tags = firstAppearanceTags(data.units);
 	const groups = tags
 		.map((tag) => {
 			const units = data.units.filter((unit) => unit.topic_tags.includes(tag));
@@ -367,8 +464,7 @@ function renderTabTopic(data: SessionData): string {
 				)
 				.join("");
 			return (
-				`<div class="toc-tag-group"><h2>${escapeHtml(tag)} (${units.length})</h2>` +
-				`<ul>${items}</ul></div>`
+				`<div class="toc-tag-group"><h2>${escapeHtml(tag)} (${units.length})</h2>` + `<ul>${items}</ul></div>`
 			);
 		})
 		.join("");
@@ -388,19 +484,25 @@ function renderToc(data: SessionData): string {
 	);
 }
 
-// ── player + part switch (DESIGN.md §3, §7) ──────────────────────────────
+// ── player + part switch (DESIGN.md §4, §9) ──────────────────────────────
 
 function renderPlayerWrapper(data: SessionData): string {
 	const initial = data.videos[0];
 	const initialId = initial?.id ?? "";
 	const initialEmbeddable = initial?.embeddable ?? false;
+	const multiPart = data.videos.length > 1;
+	const miniBarPrefix = multiPart && initial !== undefined ? `Part ${initial.part} · ` : "";
 	return (
 		`<div class="player-wrapper">` +
+		`<div class="player-media" id="player-media">` +
 		`<div id="yt-player" data-video="${escapeHtml(initialId)}" data-embeddable="${initialEmbeddable ? "true" : "false"}"${initialEmbeddable ? "" : " hidden"}></div>` +
 		`<div class="player-placeholder"${initialEmbeddable ? " hidden" : ""}>` +
 		`<p>이 영상은 임베드를 지원하지 않습니다.</p>` +
 		`<a class="player-placeholder-link" href="https://youtu.be/${escapeHtml(initialId)}?t=0" target="_blank" rel="noopener">유튜브에서 시청 ↗</a>` +
 		`</div>` +
+		`<div class="player-mini-bar"><span class="player-mini-bar-text">▶ ${escapeHtml(miniBarPrefix)}0:00</span></div>` +
+		`</div>` +
+		`<button type="button" class="player-collapse" aria-expanded="true" aria-controls="player-media">플레이어 접기</button>` +
 		`</div>`
 	);
 }
@@ -418,7 +520,7 @@ function renderPartSwitch(data: SessionData): string {
 	return `<div class="part-switch">${buttons}</div>`;
 }
 
-// ── card (DESIGN.md §4) ──────────────────────────────────────────────────
+// ── card (DESIGN.md §5) ──────────────────────────────────────────────────
 
 interface CardContext {
 	matchById: Map<string, SessionMatch>;
@@ -437,29 +539,51 @@ function renderCardHead(unit: SessionUnit, ctx: CardContext): string {
 		match !== undefined && topic !== undefined
 			? `<span class="breadcrumb">${escapeHtml(match.title)}<span aria-hidden="true"> › </span>${escapeHtml(topic.title)}</span>`
 			: "";
-	return (
-		`<div class="card-head">` +
-		chip("chip-time", formatTime(unit.start)) +
-		partChip +
-		breadcrumb +
-		`</div>`
-	);
+	return `<div class="card-head">` + chip("chip-time", formatTime(unit.start)) + partChip + breadcrumb + `</div>`;
 }
 
+const MAX_CHIP_ROW_TAGS = 6;
+
+/** Position + topic chips only, capped at 6 with a "+N" overflow chip — `@멘션` moved to its own line (DESIGN §5 item 5/6). */
 function renderChipRow(unit: SessionUnit): string {
-	const positionChips = unit.position_tags.map((tag) => chip(positionChipClass(tag), tag)).join("");
-	const topicChips = unit.topic_tags.map((tag) => chip("chip-topic", tag)).join("");
-	const mentionChips = unit.member_ids.map((id) => chip("chip-mention", `@${id}`)).join("");
-	return `<div class="chip-row">${positionChips}${topicChips}${mentionChips}</div>`;
+	const tags = [
+		...unit.position_tags.map((tag) => ({ cls: positionChipClass(tag), label: tag })),
+		...unit.topic_tags.map((tag) => ({ cls: "chip-topic", label: tag })),
+	];
+	const shown = tags.slice(0, MAX_CHIP_ROW_TAGS);
+	const overflow = tags.length - shown.length;
+	const chips = shown.map((tag) => chip(tag.cls, tag.label)).join("");
+	const overflowChip =
+		overflow > 0
+			? `<span class="chip chip-overflow" aria-label="추가 태그 ${overflow}개">+${overflow}</span>`
+			: "";
+	return `<div class="chip-row">${chips}${overflowChip}</div>`;
 }
 
-function renderMentionChips(unit: SessionUnit, members: readonly SessionMemberInfo[]): string {
-	return unit.member_ids
-		.map((id) => chip("chip-mention", `@${memberGamertag(members, id)}`))
-		.join("");
+/** A member name wrapped for the "내 피드백" name highlight (DESIGN §5 "내 피드백 상태의 이름 강조") — unstyled by default, `.mine` is toggled by VIEWER_JS. */
+function renderMemberNameMark(id: string, name: string): string {
+	return `<mark class="member-name" data-member-id="${escapeHtml(id)}">${escapeHtml(name)}</mark>`;
 }
 
-/** A body text block: escape first, then turn only `boldSpans` bold segments into `<strong>` (plan §16-3). */
+function renderMentionedLine(unit: SessionUnit, members: readonly SessionMemberInfo[]): string {
+	if (unit.member_ids.length === 0) {
+		return "";
+	}
+	const names = unit.member_ids.map((id) => renderMemberNameMark(id, memberName(members, id))).join(", ");
+	return `<p class="mentioned-members">언급: ${names}</p>`;
+}
+
+/** `relatedMembers(unit) \ member_ids` — the set difference DESIGN §5 item 8 requires (already-shown mentions aren't repeated). */
+function renderRelatedLine(unit: SessionUnit, members: readonly SessionMemberInfo[]): string {
+	const ids = unit.related_member_ids.filter((id) => !unit.member_ids.includes(id));
+	if (ids.length === 0) {
+		return "";
+	}
+	const names = ids.map((id) => renderMemberNameMark(id, memberName(members, id))).join(", ");
+	return `<p class="related-members">관련: ${names}</p>`;
+}
+
+/** A body text block: escape first, then turn only `boldSpans` bold segments into `<strong>` (DESIGN §5 item 7). */
 function renderBodyText(text: string): string {
 	const html = boldSpans(text)
 		.map((span) => (span.bold ? `<strong>${escapeHtml(span.text)}</strong>` : escapeHtml(span.text)))
@@ -467,12 +591,13 @@ function renderBodyText(text: string): string {
 	return `<p>${html}</p>`;
 }
 
-/** A body frame: figure+figcaption with a time chip, `data-t` read by VIEWER_JS's click-to-seek. */
+/** A body frame: figure+figcaption with a time chip and a "확대" new-tab link, `data-frame-t` read by VIEWER_JS's click-to-seek (DESIGN §5 item 7). */
 function renderBodyFrame(block: UnitBodyFrameBlock): string {
 	return (
-		`<figure class="body-frame" data-t="${block.t}">` +
+		`<figure class="body-frame" data-frame-t="${block.t}">` +
 		`<img src="${escapeHtml(block.src)}" width="${block.width}" height="${block.height}" loading="lazy" alt="${escapeHtml(block.caption)}">` +
-		`<figcaption>${chip("chip-time", formatTime(block.t))}${escapeHtml(block.caption)}</figcaption>` +
+		`<figcaption>${chip("chip-time", formatTime(block.t))}${escapeHtml(block.caption)} ` +
+		`<a href="${escapeHtml(block.src)}" target="_blank" rel="noopener" class="zoom-link" aria-label="이미지 원본 크게 보기">확대</a></figcaption>` +
 		`</figure>`
 	);
 }
@@ -518,10 +643,11 @@ function renderRefsList(refs: UnitRef[]): string {
 	return `<ul class="refs-list">${items}</ul>`;
 }
 
+/** Card field order per DESIGN §5: header → title → mention badge → image → tag row → mentioned members → body → related members → similar → refs → watch link. */
 function renderCard(unit: SessionUnit, ctx: CardContext): string {
 	const video = ctx.videoById.get(unit.video);
 	const startImage = unit.images.start;
-	const relatedNames = unit.related_member_ids.map((id) => memberName(ctx.members, id));
+	const hasRoster = ctx.members.length > 0;
 	return (
 		`<article class="card" id="${escapeHtml(unit.id)}" ` +
 		`data-video="${escapeHtml(unit.video)}" data-start="${unit.start}" ` +
@@ -532,13 +658,12 @@ function renderCard(unit: SessionUnit, ctx: CardContext): string {
 		`data-embeddable="${(video?.embeddable ?? true) ? "true" : "false"}">` +
 		renderCardHead(unit, ctx) +
 		`<h3>${escapeHtml(unit.title)}</h3>` +
+		(hasRoster ? `<p class="mention-badge" hidden></p>` : "") +
 		`<img src="${escapeHtml(startImage.src)}" width="${startImage.width}" height="${startImage.height}" alt="">` +
 		renderChipRow(unit) +
-		renderMentionChips(unit, ctx.members) +
-		(relatedNames.length > 0
-			? `<p class="related-members">관련 팀원: ${relatedNames.map((name) => escapeHtml(name)).join(", ")}</p>`
-			: "") +
+		(hasRoster ? renderMentionedLine(unit, ctx.members) : "") +
 		renderBody(unit.body) +
+		(hasRoster ? renderRelatedLine(unit, ctx.members) : "") +
 		renderSimilarList(unit.similar) +
 		renderRefsList(unit.refs) +
 		`<a class="watch-link" href="${escapeHtml(unit.watch_url)}" target="_blank" rel="noopener">유튜브에서 보기 ↗</a>` +
@@ -565,16 +690,13 @@ ${scripts}</body>
 `;
 }
 
-const FOOTER_NOTICE =
-	"팀 내부 피드백용 비공식 정리 문서입니다. 영상 저작권은 원 게시자에게 있습니다.";
+const FOOTER_NOTICE = "팀 내부 피드백용 비공식 정리 문서입니다. 영상 저작권은 원 게시자에게 있습니다.";
 
-// ── renderSession (DESIGN.md §3–§9) ──────────────────────────────────────
+// ── renderSession (DESIGN.md §4–§11) ──────────────────────────────────────
 
 export function renderSession(data: SessionData): string {
 	const matchById = new Map(data.matches.map((match) => [match.id, match]));
-	const topicById = new Map(
-		data.matches.flatMap((match) => match.topics.map((topic) => [topic.id, topic])),
-	);
+	const topicById = new Map(data.matches.flatMap((match) => match.topics.map((topic) => [topic.id, topic])));
 	const videoById = new Map(data.videos.map((video) => [video.id, video]));
 	const ctx: CardContext = {
 		matchById,
@@ -587,30 +709,34 @@ export function renderSession(data: SessionData): string {
 	const total = data.units.length;
 	const cards = data.units.map((unit) => renderCard(unit, ctx)).join("");
 
-	const body =
-		`<div class="layout">` +
-		`<header class="header"><h1>${escapeHtml(data.title)}</h1><p class="date">${escapeHtml(data.date)}</p></header>` +
-		`<div class="side">${renderPlayerWrapper(data)}${renderPartSwitch(data)}${renderToc(data)}</div>` +
+	const sideCol =
+		`<div class="side-col">` +
+		renderPlayerWrapper(data) +
+		`<aside class="side">${renderPartSwitch(data)}<div class="toc-scroll">${renderToc(data)}</div></aside>` +
+		`</div>`;
+
+	const main =
+		`<div class="main">` +
+		renderMyFeedbackNav(data) +
 		renderFilterBar(data) +
+		`<div class="active-filters" hidden></div>` +
 		`<p class="result-count">피드백 <span id="visible-count">${total}</span>/<span id="total-count">${total}</span></p>` +
 		`<div class="card-list">${cards}</div>` +
 		`<p class="empty-state" hidden>조건에 맞는 피드백이 없어요 <button type="button" class="filter-reset">초기화</button></p>` +
-		`<footer class="footer"><p>${escapeHtml(FOOTER_NOTICE)}</p></footer>` +
 		`</div>`;
 
-	const scripts =
-		`<script>${VIEWER_JS}</script>\n` +
-		`<script src="https://www.youtube.com/iframe_api" async></script>\n`;
+	const body =
+		`<header class="header"><h1>${escapeHtml(data.title)}</h1><p class="date">${escapeHtml(data.date)}</p></header>` +
+		`<div class="layout">${sideCol}${main}</div>` +
+		`<footer class="footer"><p>${escapeHtml(FOOTER_NOTICE)}</p></footer>`;
 
-	return pageShell(
-		data.title,
-		` data-video="${escapeHtml(data.videos[0]?.id ?? "")}"`,
-		body,
-		scripts,
-	);
+	const scripts =
+		`<script>${VIEWER_JS}</script>\n` + `<script src="https://www.youtube.com/iframe_api" async></script>\n`;
+
+	return pageShell(data.title, ` data-video="${escapeHtml(data.videos[0]?.id ?? "")}"`, body, scripts);
 }
 
-// ── renderIndex (DESIGN.md §10) ──────────────────────────────────────────
+// ── renderIndex (DESIGN.md §12) ──────────────────────────────────────────
 
 function renderSessionCard(entry: IndexSessionEntry): string {
 	const tags = entry.topic_tags.map((tag) => chip("chip-topic", tag)).join("");
@@ -628,12 +754,7 @@ function renderIndexByTopic(index: ArchiveIndex): string {
 	if (index.units.length === 0) {
 		return "";
 	}
-	const tags: string[] = [];
-	for (const unit of index.units) {
-		for (const tag of unit.topic_tags) {
-			if (!tags.includes(tag)) tags.push(tag);
-		}
-	}
+	const tags = firstAppearanceTags(index.units);
 	const groups = tags
 		.map((tag) => {
 			const units = index.units.filter((unit) => unit.topic_tags.includes(tag));
@@ -664,7 +785,7 @@ export function renderIndex(index: ArchiveIndex): string {
 	return pageShell("fc-feedback 아카이브", "", html, "");
 }
 
-// ── renderRef (DESIGN.md §10) ─────────────────────────────────────────────
+// ── renderRef (DESIGN.md §12) ─────────────────────────────────────────────
 
 const MAX_TRANSLATION_ROWS = 5;
 
@@ -692,19 +813,21 @@ export function renderRef(ref: RefPageData): string {
 	return pageShell(ref.title, "", html, "");
 }
 
-// ── STYLE (DESIGN.md §1 tokens, §2 breakpoints, §3 layout, §11 a11y) ────────
+// ── STYLE (DESIGN.md §2 tokens, §3 breakpoints, §4 layout, §13 a11y) ────────
 
 export const STYLE = `
 :root {
   --bg: #FFFFFF; --surface: #F6F8F7; --surface-sunken: #EFF2F0;
-  --ink: #14181C; --muted: #57606A; --line: #E3E6E8;
-  --accent: #1E7A46; --accent-hover: #145C34; --focus: #1E7A46;
+  --ink: #14181C; --muted: #57606A;
+  --line: #E3E6E8; --line-strong: #838B93;
+  --accent: #1E7A46; --accent-hover: #145C34; --mine-tint: #E3F3E9; --focus: #1E7A46;
   --pos-gk-bg: #FDF1D8; --pos-gk-fg: #8A5A00;
   --pos-df-bg: #E4EEFC; --pos-df-fg: #1451B0;
   --pos-mf-bg: #E7F0EE; --pos-mf-fg: #0F6B5C;
   --pos-fw-bg: #FBE7E4; --pos-fw-fg: #B23A2E;
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-6: 24px; --space-8: 32px;
   --radius-sm: 8px; --radius-md: 12px; --radius-full: 9999px;
+  --measure: 660px;
   --sticky-player-h: 0px;
 }
 * { box-sizing: border-box; }
@@ -712,113 +835,160 @@ html, body { background: var(--bg); color: var(--ink); }
 body {
   margin: 0;
   font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
-  font-size: 15px; line-height: 1.6;
+  font-size: 1rem; line-height: 1.6;
   word-break: keep-all; overflow-wrap: anywhere; line-break: strict;
 }
-h1, h2, h3 { text-wrap: balance; word-break: keep-all; overflow-wrap: anywhere; line-break: strict; margin: 0 0 var(--space-2); }
+h1, h2, h3 { text-wrap: balance; word-break: keep-all; overflow-wrap: anywhere; line-break: strict; margin: 0 0 var(--space-2); font-weight: 700; }
 p, dd, li, figcaption { text-wrap: pretty; word-break: keep-all; overflow-wrap: anywhere; line-break: strict; }
-h1 { font-size: 1.75rem; font-weight: 700; line-height: 1.3; }
-h2 { font-size: 1.25rem; font-weight: 600; line-height: 1.4; }
-h3 { font-size: 1.125rem; font-weight: 600; line-height: 1.45; }
+h1 { font-size: 1.75rem; line-height: 1.3; }
+h2 { font-size: 1.375rem; line-height: 1.35; }
+h3 { font-size: 1.25rem; line-height: 1.4; }
 a { color: var(--accent); }
 a:hover { color: var(--accent-hover); }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 button { font: inherit; color: inherit; background: none; border: none; }
 img { display: block; max-width: 100%; height: auto; border-radius: var(--radius-sm); }
 
-.layout { display: grid; grid-template-columns: minmax(420px, 44%) 1fr; gap: var(--space-6); padding: var(--space-6); max-width: 1440px; margin: 0 auto; }
-.side { grid-column: 1; grid-row: 1 / -1; position: sticky; top: 0; height: 100dvh; overflow: auto; display: flex; flex-direction: column; gap: var(--space-4); }
-.header, .filter-bar, .result-count, .card-list, .empty-state, .footer { grid-column: 2; }
+.header, .footer { max-width: 1440px; margin: 0 auto; padding-left: var(--space-6); padding-right: var(--space-6); }
+.header { padding-top: var(--space-6); }
+.header .date { color: var(--muted); font-size: 0.8125rem; margin: 0; }
+.footer { padding: var(--space-8) var(--space-6); color: var(--muted); font-size: 0.8125rem; }
 
-.player-wrapper { position: relative; aspect-ratio: 16 / 9; background: var(--ink); border-radius: var(--radius-sm); overflow: hidden; box-shadow: 0 2px 8px rgba(20,24,28,0.08); }
-#yt-player, .player-wrapper iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.layout { display: flex; align-items: flex-start; gap: var(--space-6); max-width: 1440px; margin: 0 auto; padding: var(--space-6); }
+
+.side-col { flex: 0 0 min(420px, 40%); position: sticky; top: var(--space-6);
+  max-height: calc(100dvh - var(--space-6) * 2);
+  display: flex; flex-direction: column; gap: var(--space-4); }
+.player-wrapper { flex-shrink: 0; width: 100%; aspect-ratio: 16 / 9; position: relative;
+  background: var(--ink); border-radius: var(--radius-sm); overflow: hidden;
+  box-shadow: 0 2px 8px rgba(20,24,28,0.08); }
+.player-media { position: absolute; inset: 0; }
+#yt-player, .player-media iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 #yt-player[hidden] { display: none; }
 .player-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); color: #fff; text-align: center; padding: var(--space-4); }
 .player-placeholder[hidden] { display: none; }
+.player-mini-bar { position: absolute; inset: 0; display: none; align-items: center; padding: 0 var(--space-3); color: #fff; font-size: 0.8125rem; font-weight: 600; background: var(--ink); }
+.player-collapse { display: none; }
 
-.part-switch { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.part-btn { min-height: 44px; padding: var(--space-2) var(--space-3); border-radius: var(--radius-full); border: 1px solid var(--line); background: var(--surface); font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
+.side { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--space-4); }
+.part-switch { flex-shrink: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.part-btn { min-height: 44px; padding: var(--space-2) var(--space-3); border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: var(--surface); font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
 .part-btn[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
 
+.toc-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .toc [role="tablist"] { display: flex; gap: var(--space-2); border-bottom: 1px solid var(--line); }
 .toc [role="tab"] { min-height: 44px; padding: var(--space-2) var(--space-3); font-size: 0.8125rem; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
 .toc [role="tab"][aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
 .toc [role="tabpanel"][hidden] { display: none; }
-.toc-topic-group, .toc-tag-group, .toc-match-group { margin: var(--space-4) 0; }
-.toc-summary { font-size: 0.9375rem; color: var(--muted); margin: var(--space-1) 0 var(--space-2); }
+.toc-topic-group, .toc-tag-group, .toc-match-group { margin: var(--space-6) 0 0; }
+.toc-summary { font-size: 0.875rem; color: var(--muted); margin: var(--space-1) 0 var(--space-2); }
 .toc ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
-.toc-item { display: block; min-height: 44px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); }
+.toc-item { display: block; min-height: 44px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-size: 0.875rem; }
 .toc-item[hidden] { display: none; }
 
-.header { padding-top: var(--space-6); }
-.header .date { color: var(--muted); font-size: 0.8125rem; margin: 0; }
+.main { flex: 1 1 auto; min-width: 0; max-width: var(--measure); display: flex; flex-direction: column; gap: var(--space-8); }
 
-.filter-bar { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-4); margin: var(--space-4) 0; }
-.filter-bar summary { cursor: pointer; font-size: 0.8125rem; font-weight: 600; min-height: 44px; display: flex; align-items: center; }
-.filter-group { margin: var(--space-3) 0; }
+.my-feedback { display: flex; flex-direction: column; gap: var(--space-2); }
+.my-feedback-label { font-size: 0.8125rem; font-weight: 700; }
+.my-feedback-row { display: flex; gap: var(--space-2); overflow-x: auto; white-space: nowrap; padding-bottom: var(--space-1); }
+.pill { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 44px; padding: var(--space-2) var(--space-4); border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: var(--bg); font-size: 0.8125rem; font-weight: 600; cursor: pointer; flex-shrink: 0; }
+.pill .count { color: var(--muted); }
+.pill[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+.pill[aria-pressed="true"] .count { color: #fff; }
+
+.filter-bar { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-4); }
+.filter-bar summary { cursor: pointer; font-size: 0.8125rem; font-weight: 600; min-height: 44px; display: flex; align-items: center; list-style: none; }
+.filter-bar summary::-webkit-details-marker { display: none; }
+.filter-summary-detail { color: var(--muted); font-weight: 400; margin-left: var(--space-1); }
+.filter-bar[open] summary { margin-bottom: var(--space-2); }
+.filter-groups { display: flex; flex-direction: column; gap: var(--space-3); }
 .filter-group-label { display: block; font-size: 0.8125rem; font-weight: 600; color: var(--muted); margin-bottom: var(--space-2); }
 .chip { display: inline-flex; align-items: center; padding: var(--space-1) var(--space-3); margin: 2px; border-radius: var(--radius-full); font-size: 0.8125rem; font-weight: 600; color: var(--ink); background: var(--surface-sunken); }
-.chip-filter { min-height: 44px; border: 1px solid var(--line); cursor: pointer; }
+.chip-filter { min-height: 44px; border: 1px solid var(--line-strong); cursor: pointer; background: var(--bg); }
 .chip-filter[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
 .pos-node { display: inline-flex; align-items: center; }
 .pos-children { margin-left: var(--space-3); display: inline-flex; flex-wrap: wrap; }
-.filter-reset { min-height: 44px; padding: var(--space-2) var(--space-4); border-radius: var(--radius-full); border: 1px solid var(--line); background: var(--bg); font-weight: 600; cursor: pointer; }
+.chip-overflow { color: var(--muted); }
+.filter-reset { min-height: 44px; padding: var(--space-2) var(--space-4); border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: var(--bg); font-weight: 600; cursor: pointer; margin-top: var(--space-3); }
+
+.active-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.active-filters[hidden] { display: none; }
+.chip-active { gap: var(--space-1); }
+.chip-remove { font-size: 0.875rem; line-height: 1; cursor: pointer; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+
 .result-count { font-size: 0.8125rem; color: var(--muted); }
 
 .card-list { display: flex; flex-direction: column; gap: var(--space-6); }
-.card { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-4); cursor: pointer; scroll-margin-top: calc(var(--sticky-player-h) + var(--space-4)); }
+.card { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-4); cursor: pointer; scroll-margin-top: var(--space-4); }
 .card[hidden] { display: none; }
 .card--highlighted { border-color: var(--accent); border-width: 2px; }
 .card-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-2); }
 .chip-time, .chip-part { background: var(--surface-sunken); }
 .breadcrumb { color: var(--muted); font-size: 0.8125rem; }
-.chip-row { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0; }
+.card > img { margin-top: var(--space-3); border: 1px solid var(--line); }
+.mention-badge { display: inline-block; margin: var(--space-2) 0 0; padding: var(--space-1) var(--space-3); border-radius: var(--radius-full); font-size: 0.8125rem; font-weight: 600; }
+.mention-badge[hidden] { display: none; }
+.mention-badge.mention-direct { background: var(--accent); color: #fff; }
+.mention-badge.mention-related { background: var(--surface-sunken); color: var(--muted); }
+.chip-row { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0; }
 .chip-pos-gk { background: var(--pos-gk-bg); color: var(--pos-gk-fg); }
 .chip-pos-df { background: var(--pos-df-bg); color: var(--pos-df-fg); }
 .chip-pos-mf { background: var(--pos-mf-bg); color: var(--pos-mf-fg); }
 .chip-pos-fw { background: var(--pos-fw-bg); color: var(--pos-fw-fg); }
-.related-members { font-size: 0.8125rem; color: var(--muted); }
-.card-body { display: flex; flex-direction: column; gap: var(--space-3); margin: var(--space-4) 0; }
-.card-body p { margin: 0; font-size: 1rem; line-height: 1.7; }
-.card-body .body-frame { margin: 0; cursor: pointer; }
-.card-body .body-frame figcaption { display: flex; align-items: center; gap: var(--space-2); font-size: 0.8125rem; color: var(--muted); margin-top: var(--space-1); }
-.similar-list, .refs-list { font-size: 0.9375rem; margin: var(--space-4) 0; padding-left: 1.1rem; }
+.mentioned-members, .related-members { font-size: 0.8125rem; color: var(--muted); margin: var(--space-2) 0 0; }
+.member-name { background: none; color: inherit; padding: 0; border-radius: 0; font-weight: inherit; }
+.member-name.mine { background: var(--mine-tint); border-radius: var(--radius-sm); padding: 0 var(--space-1); font-weight: 600; }
+
+.card-body { margin-top: var(--space-3); display: flex; flex-direction: column; }
+.card-body > * + * { margin-top: var(--space-4); }
+.card-body > * + .body-frame { margin-top: var(--space-6); }
+.card-body p { margin: 0; font-size: 1.0625rem; line-height: 1.7; }
+.card-body p strong { font-weight: 700; color: inherit; }
+.card-body .body-frame { margin: 0; cursor: pointer; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-2); }
+.card-body .body-frame img { border-radius: var(--radius-sm); }
+.card-body .body-frame figcaption { display: flex; align-items: center; gap: var(--space-2); font-size: 0.875rem; font-weight: 500; color: var(--muted); margin-top: var(--space-2); }
+.zoom-link { font-weight: 600; }
+
+.similar-list, .refs-list { font-size: 0.9375rem; margin: 0; padding-left: 1.1rem; }
 .ref-badges { display: inline-flex; gap: var(--space-1); }
-.badge { display: inline-block; background: var(--surface-sunken); color: var(--muted); font-size: 0.75rem; font-weight: 500; padding: 2px var(--space-2); border-radius: var(--radius-full); }
-.watch-link { display: inline-block; margin-top: var(--space-2); font-weight: 600; }
+.badge { display: inline-block; background: var(--surface-sunken); color: var(--muted); font-size: 0.875rem; font-weight: 500; padding: 2px var(--space-2); border-radius: var(--radius-full); }
+.similar-date { color: var(--muted); font-size: 0.875rem; }
+.watch-link { display: inline-block; font-weight: 600; }
 .empty-state { text-align: center; color: var(--muted); padding: var(--space-8) 0; }
 .empty-state[hidden] { display: none; }
-.footer { padding: var(--space-8) 0; color: var(--muted); font-size: 0.8125rem; }
 
 @media (max-width: 1023.98px) {
-  .layout { display: flex; flex-direction: column; padding: var(--space-4); }
-  .side { display: contents; }
-  .header { order: 0; }
-  .part-switch { order: 1; }
-  .player-wrapper { order: 2; position: sticky; top: 0; z-index: 10; }
-  .toc { order: 3; }
-  .filter-bar { order: 4; }
-  .result-count { order: 5; }
-  .card-list { order: 6; }
-  .empty-state { order: 6; }
-  .footer { order: 7; }
+  .layout { flex-direction: column; padding: var(--space-4); gap: var(--space-4); }
+  .side-col { display: contents; }
+  .side { position: static; max-height: none; display: block; }
+  .player-wrapper { position: sticky; top: 0; z-index: 10; aspect-ratio: auto; height: min(56.25vw, 200px); }
+  .player-wrapper.is-collapsed { height: 44px; }
+  .player-wrapper.is-collapsed .player-mini-bar { display: flex; }
+  .player-collapse { display: block; position: absolute; right: var(--space-2); bottom: var(--space-2); z-index: 1;
+    min-width: 44px; min-height: 44px; padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: rgba(255,255,255,0.9); color: var(--ink); font-size: 0.8125rem; font-weight: 600; }
+  .player-wrapper.is-collapsed .player-collapse { position: static; margin-left: auto; background: none; border: none; color: #fff; }
+  .toc-scroll { overflow-y: visible; }
+  .main { max-width: none; }
+  .card { scroll-margin-top: calc(var(--sticky-player-h) + var(--space-4)); }
 }
 
 .archive-main, .ref-main { max-width: 960px; margin: 0 auto; padding: var(--space-6) var(--space-4); }
 .session-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-6); margin: var(--space-6) 0; }
-.session-card { display: block; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-4); }
+.session-card { display: block; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-4); }
 .session-card .meta { color: var(--muted); font-size: 0.8125rem; }
 .topic-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-2); }
+.summary-ko { font-size: 1.0625rem; line-height: 1.7; }
 .translations-table { width: 100%; border-collapse: collapse; margin: var(--space-4) 0; }
 .translations-table th, .translations-table td { border: 1px solid var(--line); padding: var(--space-2); vertical-align: top; font-size: 0.9375rem; text-align: left; }
 `;
 
-// ── VIEWER_JS (DESIGN.md §5–§7) ──────────────────────────────────────────
+// ── VIEWER_JS (DESIGN.md §5–§9) ──────────────────────────────────────────
 //
 // Static string, no interpolation. Reads only server-rendered `data-*`
-// attributes (plan §1/§7 item 8/9). Session page loads this BEFORE the
-// `iframe_api` script; init runs immediately when `window.YT && YT.loaded`,
-// else it registers `window.onYouTubeIframeAPIReady` (plan §7/§12 item 8).
+// attributes. Session page loads this BEFORE the `iframe_api` script; init
+// runs immediately when `window.YT && YT.loaded`, else it registers
+// `window.onYouTubeIframeAPIReady` (DESIGN §9).
 
 export const VIEWER_JS = `(function () {
   "use strict";
@@ -841,16 +1011,7 @@ export const VIEWER_JS = `(function () {
     return false;
   }
 
-  var selected = { position: null, topic: [], mention: null, related: null };
-
-  function activeFilterCount() {
-    var n = 0;
-    if (selected.position) n = n + 1;
-    if (selected.topic.length > 0) n = n + 1;
-    if (selected.mention) n = n + 1;
-    if (selected.related) n = n + 1;
-    return n;
-  }
+  var selected = { position: null, topic: [], mention: null, mine: null };
 
   function elementMatches(el) {
     var pos = el.getAttribute("data-pos") || "";
@@ -860,8 +1021,128 @@ export const VIEWER_JS = `(function () {
     if (selected.position && !hasToken(pos, selected.position)) return false;
     if (selected.topic.length > 0 && !anyToken(topics, selected.topic)) return false;
     if (selected.mention && !hasToken(memberIds, selected.mention)) return false;
-    if (selected.related && !hasToken(relatedIds, selected.related)) return false;
+    if (selected.mine && !hasToken(relatedIds, selected.mine)) return false;
     return true;
+  }
+
+  function mentionLabel(id) {
+    var chipEl = document.querySelector('.chip-filter[data-group="mention"][data-value="' + id + '"]');
+    return chipEl ? chipEl.getAttribute("data-label") || id : id;
+  }
+
+  function removeFilter(group, value) {
+    if (group === "position") {
+      selected.position = null;
+      setSinglePressed("position", null);
+    } else if (group === "topic") {
+      var idx = selected.topic.indexOf(value);
+      if (idx !== -1) selected.topic.splice(idx, 1);
+      var chipEl = document.querySelector('.chip-filter[data-group="topic"][data-value="' + value + '"]');
+      if (chipEl) chipEl.setAttribute("aria-pressed", "false");
+    } else if (group === "mention") {
+      selected.mention = null;
+      setSinglePressed("mention", null);
+    }
+    applyFilters();
+  }
+
+  function appendActiveChip(container, group, value, label) {
+    var span = document.createElement("span");
+    span.className = "chip chip-active";
+    span.appendChild(document.createTextNode(label));
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "chip-remove";
+    btn.setAttribute("aria-label", "필터 해제: " + label);
+    btn.textContent = "\\u00D7";
+    btn.addEventListener("click", function () {
+      removeFilter(group, value);
+    });
+    span.appendChild(btn);
+    container.appendChild(span);
+  }
+
+  function renderActiveFilters() {
+    var container = document.querySelector(".active-filters");
+    if (!container) return;
+    container.textContent = "";
+    var hasAny = false;
+    if (selected.position) {
+      appendActiveChip(container, "position", selected.position, "포지션: " + selected.position);
+      hasAny = true;
+    }
+    for (var i = 0; i < selected.topic.length; i++) {
+      appendActiveChip(container, "topic", selected.topic[i], "주제: " + selected.topic[i]);
+      hasAny = true;
+    }
+    if (selected.mention) {
+      appendActiveChip(container, "mention", selected.mention, "언급 선수: " + mentionLabel(selected.mention));
+      hasAny = true;
+    }
+    if (hasAny) {
+      var resetBtn = document.createElement("button");
+      resetBtn.type = "button";
+      resetBtn.className = "filter-reset";
+      resetBtn.textContent = "전체 해제";
+      resetBtn.addEventListener("click", resetFilters);
+      container.appendChild(resetBtn);
+      container.removeAttribute("hidden");
+    } else {
+      container.setAttribute("hidden", "");
+    }
+  }
+
+  function updateFilterSummary() {
+    var countLabel = document.getElementById("filter-count-label");
+    var detail = document.querySelector(".filter-summary-detail");
+    var n = 0;
+    var parts = [];
+    if (selected.position) {
+      n = n + 1;
+      parts.push("포지션 " + selected.position);
+    }
+    if (selected.topic.length > 0) {
+      n = n + 1;
+      parts.push("주제 " + selected.topic.join(", "));
+    }
+    if (selected.mention) {
+      n = n + 1;
+      parts.push("언급 선수 " + mentionLabel(selected.mention));
+    }
+    if (countLabel) countLabel.textContent = String(n);
+    if (detail) detail.textContent = parts.length > 0 ? " · " + parts.join(", ") : "";
+  }
+
+  function updateMentionBadgesAndMarks() {
+    var mine = selected.mine;
+    var cards = document.querySelectorAll(".card");
+    for (var i = 0; i < cards.length; i++) {
+      var card = cards[i];
+      var badge = card.querySelector(".mention-badge");
+      if (badge) {
+        if (mine && hasToken(card.getAttribute("data-member-ids") || "", mine)) {
+          badge.textContent = "직접 언급";
+          badge.className = "mention-badge mention-direct";
+          badge.removeAttribute("hidden");
+        } else if (mine && hasToken(card.getAttribute("data-related-ids") || "", mine)) {
+          badge.textContent = "포지션 관련(참고)";
+          badge.className = "mention-badge mention-related";
+          badge.removeAttribute("hidden");
+        } else {
+          badge.textContent = "";
+          badge.className = "mention-badge";
+          badge.setAttribute("hidden", "");
+        }
+      }
+      var marks = card.querySelectorAll(".member-name");
+      for (var j = 0; j < marks.length; j++) {
+        if (mine && marks[j].getAttribute("data-member-id") === mine) {
+          marks[j].classList.add("mine");
+        } else {
+          marks[j].classList.remove("mine");
+        }
+      }
+    }
   }
 
   function applyFilters() {
@@ -900,8 +1181,9 @@ export const VIEWER_JS = `(function () {
       if (resultCount) resultCount.removeAttribute("hidden");
       if (emptyState) emptyState.setAttribute("hidden", "");
     }
-    var filterCountLabel = document.getElementById("filter-count-label");
-    if (filterCountLabel) filterCountLabel.textContent = String(activeFilterCount());
+    updateMentionBadgesAndMarks();
+    renderActiveFilters();
+    updateFilterSummary();
   }
 
   function setSinglePressed(group, value) {
@@ -939,10 +1221,29 @@ export const VIEWER_JS = `(function () {
     }
   }
 
+  function onMinePillClick(event) {
+    var pillEl = event.currentTarget;
+    var value = pillEl.getAttribute("data-value");
+    var next = selected.mine === value ? null : value;
+    selected.mine = next;
+    var pills = document.querySelectorAll(".pill-mine");
+    for (var i = 0; i < pills.length; i++) {
+      pills[i].setAttribute("aria-pressed", pills[i].getAttribute("data-value") === next ? "true" : "false");
+    }
+    applyFilters();
+  }
+
+  function initMyFeedback() {
+    var pills = document.querySelectorAll(".pill-mine");
+    for (var i = 0; i < pills.length; i++) pills[i].addEventListener("click", onMinePillClick);
+  }
+
   function resetFilters() {
-    selected = { position: null, topic: [], mention: null, related: null };
+    selected = { position: null, topic: [], mention: null, mine: null };
     var chips = document.querySelectorAll(".chip-filter[data-group]");
     for (var i = 0; i < chips.length; i++) chips[i].setAttribute("aria-pressed", "false");
+    var pills = document.querySelectorAll(".pill-mine");
+    for (var j = 0; j < pills.length; j++) pills[j].setAttribute("aria-pressed", "false");
     applyFilters();
   }
 
@@ -989,7 +1290,7 @@ export const VIEWER_JS = `(function () {
     for (var i = 0; i < items.length; i++) items[i].addEventListener("click", onTocItemClick);
   }
 
-  // ── video player (DESIGN.md §7) ──────────────────────────────────────
+  // ── video player (DESIGN.md §9) ──────────────────────────────────────
 
   var playerEl = document.getElementById("yt-player");
   var initialEmbeddable = playerEl ? playerEl.getAttribute("data-embeddable") === "true" : false;
@@ -1046,12 +1347,35 @@ export const VIEWER_JS = `(function () {
     }
   }
 
+  function clientFormatTime(seconds) {
+    var total = Math.floor(seconds);
+    var s = total % 60;
+    var totalMinutes = Math.floor(total / 60);
+    var pad = function (n) {
+      return n < 10 ? "0" + n : String(n);
+    };
+    if (total < 3600) return totalMinutes + ":" + pad(s);
+    var h = Math.floor(totalMinutes / 60);
+    var m = totalMinutes % 60;
+    return h + ":" + pad(m) + ":" + pad(s);
+  }
+
+  function updateMiniBar() {
+    var textEl = document.querySelector(".player-mini-bar-text");
+    if (!textEl) return;
+    var time = window.fcPlayer && typeof window.fcPlayer.getCurrentTime === "function" ? window.fcPlayer.getCurrentTime() : 0;
+    var partBtn = document.querySelector('.part-btn[aria-pressed="true"]');
+    var partLabel = partBtn ? partBtn.textContent : "";
+    textEl.textContent = "\\u25B6 " + (partLabel ? partLabel + " · " : "") + clientFormatTime(time);
+  }
+
   function switchTo(videoId, start, embeddable) {
     document.body.dataset.video = videoId;
     if (!embeddable) {
       currentVideo = videoId;
       syncPartButtons();
       showPlaceholder(videoId, start);
+      updateMiniBar();
       return;
     }
     showPlayer();
@@ -1060,6 +1384,7 @@ export const VIEWER_JS = `(function () {
       syncPartButtons();
       ensurePlayer(videoId);
       if (start > 0) enqueueOrRun(function (player) { player.seekTo(start, true); });
+      updateMiniBar();
       return;
     }
     if (videoId === currentVideo) {
@@ -1074,6 +1399,7 @@ export const VIEWER_JS = `(function () {
       });
     }
     syncPartButtons();
+    updateMiniBar();
   }
 
   function initPlayer() {
@@ -1086,6 +1412,8 @@ export const VIEWER_JS = `(function () {
   }
 
   function onCardListClick(event) {
+    var selectionText = typeof window.getSelection === "function" ? window.getSelection().toString() : "";
+    if (selectionText !== "") return;
     var interactive = event.target.closest ? event.target.closest("a, button, summary") : null;
     if (interactive) return;
     var card = event.target.closest ? event.target.closest(".card") : null;
@@ -1094,7 +1422,7 @@ export const VIEWER_JS = `(function () {
     if (!video) return;
     var frame = event.target.closest ? event.target.closest(".body-frame") : null;
     var start = frame
-      ? Number(frame.getAttribute("data-t") || "0")
+      ? Number(frame.getAttribute("data-frame-t") || "0")
       : Number(card.getAttribute("data-start") || "0");
     var embeddable = card.getAttribute("data-embeddable") === "true";
     switchTo(video, start, embeddable);
@@ -1123,12 +1451,27 @@ export const VIEWER_JS = `(function () {
     document.documentElement.style.setProperty("--sticky-player-h", wrapper.offsetHeight + "px");
   }
 
+  function initPlayerCollapse() {
+    var btn = document.querySelector(".player-collapse");
+    var wrapper = document.querySelector(".player-wrapper");
+    if (!btn || !wrapper) return;
+    btn.addEventListener("click", function () {
+      var collapsed = wrapper.classList.toggle("is-collapsed");
+      btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      btn.textContent = collapsed ? "펼치기" : "플레이어 접기";
+      if (collapsed) updateMiniBar();
+      syncPlayerHeight();
+    });
+  }
+
   initChips();
   initReset();
+  initMyFeedback();
   initTabs();
   initToc();
   initCardClicks();
   initPartButtons();
+  initPlayerCollapse();
   applyFilters();
   syncPlayerHeight();
   if (typeof ResizeObserver !== "undefined") {
