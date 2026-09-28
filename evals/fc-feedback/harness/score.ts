@@ -25,7 +25,8 @@
  *   refs-draft.json      — this run's authored refs (url, lang, summary_ko, ...)
  *   refs.verified.json   — refs-draft augmented with http_status by verify-refs
  * Reads from <run-dir> directly:
- *   run.jsonl            — codex `--json` event stream (see parseRunEvents below)
+ *   run.jsonl            — codex `--json` event stream (see extractCommandExecutions/
+ *                           parseRunEvents below)
  * Reads from the path given via --judge:
  *   judge.md             — presentation-reviewer output; last line must be
  *                           "SCORE specificity=<0-15> fidelity=<0-15> readability=<0-10>"
@@ -34,13 +35,28 @@
  *   { version: 1, video: string, units: [{ start_line, end_line, start,
  *     topic_tags[], position_tags[], member_ids[] }] }
  *
- * Gate (plan §15-4): re-runs `fc.ts check plan|notes|similar|refs --work <work-dir>` before
- * anything else. Any non-zero exit zeroes the total, but the rest of the breakdown is still
+ * Gate (plan §15-4): re-runs `fc.ts check plan|notes|similar|refs` against a throwaway COPY
+ * of the work dir, giving every spawned fc.ts process the SAME cwd and env the run itself
+ * used (<run-dir>) — otherwise fc.ts resolves its config manifest from the scorer's own cwd
+ * instead of the run's, landing on "unconfigured" and failing every check regardless of
+ * whether the run's plan was actually valid. See the "gate" section below for the exact
+ * contract. Any non-zero exit zeroes the total, but the rest of the breakdown is still
  * computed and reported (tagged gate_failed) for diagnosis. The gate's process-spawning sits
  * behind the CheckRunner interface so tests never spawn fc.ts.
+ *
+ * Discipline penalties (push attempt, gate-order violation) are computed from commands the
+ * run actually EXECUTED (run.jsonl's command_execution items), never from conversational
+ * text, tool output, or aggregated_output — see "executed-command extraction" below.
+ *
+ * Contamination detection flags a run that read, searched, or had returned to it this eval's
+ * own design/answer material (evals/fc-feedback/, the repo's projects/fc-feedback/ SOURCE
+ * tree, a saved plan under ~/.omt/**\/plans/fc-feedback*, or another run's temp dir) — see
+ * the "contamination detection" section below. A contaminated run keeps its score but is
+ * marked excluded_from_comparison.
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -68,15 +84,24 @@ function readJsonFile(path: string): unknown {
 	}
 }
 
+// ── repo root (dynamic — never hardcode an absolute path) ───────────────────
+
+function repoRootDir(): string {
+	const here = dirname(fileURLToPath(import.meta.url));
+	return resolve(here, "../../..");
+}
+
+const REPO_ROOT = repoRootDir();
+
 // ── work dir resolution (run.sh writes the session label, plan §15-1/§15-4) ─
 
 const SESSION_LABEL_FILE = ".fc-eval-session";
 
 /** run.sh writes the OMT_SESSION_ID label it used into <run-dir>/.fc-eval-session because
  * score.ts runs afterwards in a separate process, with none of run.sh's exported env vars.
- * fc.ts's default --work dir is ${OMT_DIR}/fc-feedback/${OMT_SESSION_ID}, and run.sh sets
- * OMT_DIR to <run-dir>/omt, so the work dir is always <run-dir>/omt/fc-feedback/<label>. */
-function resolveWorkDir(runDir: string): string {
+ * Also used by the gate's CheckRunner to reconstruct the same OMT_SESSION_ID for re-run
+ * fc.ts processes. */
+function readSessionLabel(runDir: string): string {
 	const labelPath = join(runDir, SESSION_LABEL_FILE);
 	if (!existsSync(labelPath)) {
 		throw new Error(
@@ -87,7 +112,13 @@ function resolveWorkDir(runDir: string): string {
 	if (label.length === 0) {
 		throw new Error(`work dir를 찾을 수 없습니다: ${labelPath}가 비어 있습니다`);
 	}
-	return join(runDir, "omt", "fc-feedback", label);
+	return label;
+}
+
+/** fc.ts's default --work dir is ${OMT_DIR}/fc-feedback/${OMT_SESSION_ID}, and run.sh sets
+ * OMT_DIR to <run-dir>/omt, so the work dir is always <run-dir>/omt/fc-feedback/<label>. */
+function resolveWorkDir(runDir: string): string {
+	return join(runDir, "omt", "fc-feedback", readSessionLabel(runDir));
 }
 
 // ── gold format (plan §14.6) ─────────────────────────────────────────────────
@@ -445,18 +476,31 @@ export function scoreRefs(
 //   - `agent_message`      — `.item.text`
 //   - `command_execution`  — `.item.command` (e.g. `/bin/zsh -lc '<cmd>'`),
 //                             `.item.exit_code` (null on item.started, an
-//                             integer on item.completed)
+//                             integer on item.completed), `.item.id`,
+//                             `.item.aggregated_output` (present once completed)
 //   - `web_search`         — `.item.query`, `.item.action.{type,query}`, and
 //                             on completion `.item.results[]` with keys
 //                             domain, ref_id, snippet, title, type, url
-// Rather than pattern-matching those specific keys — which breaks the moment
-// the real shape differs even slightly — this walks the ENTIRE parsed value
-// of each line and joins every string leaf into one search blob per line, in
-// file order. Every detector below (push attempt, gate-order violation, refs
-// URL-in-log fallback) does a plain substring/regex search over that blob, so
-// it already covers `.item.results[].url` without a dedicated web_search
-// extractor, and stays correct regardless of which key a command or URL
-// actually lands under.
+//
+// Two different questions need two different views of this stream:
+//
+// 1. "What did every string in this run say, anywhere?" — parseRunEvents walks
+//    the ENTIRE parsed value of each line and joins every string leaf into one
+//    search blob per line. Used only for the refs URL-in-log fallback (plan
+//    §14.3's rubric text explicitly allows any tool-output text as evidence a
+//    URL was used), which is deliberately broad.
+//
+// 2. "What commands did the run actually EXECUTE?" — extractCommandExecutions
+//    looks ONLY at command_execution items' `.command` field, deduped by
+//    item id (a started+completed pair is the same execution, counted once).
+//    Discipline penalties (push attempt, gate-order violation) and
+//    contamination detection use ONLY this list — never the blob above —
+//    because the blob also contains conversational text, aggregated command
+//    output, and web-search results, any of which can innocently mention
+//    "git push" or a forbidden path without the run ever having executed or
+//    read it (SMOKE 2026-09-29: exactly this false-positive was observed —
+//    every "git push" hit in four real round-0 runs came from `cat`-ing
+//    CLAUDE.md/rubric.md, never an executed command).
 
 function collectStrings(node: unknown, out: string[]): void {
 	if (typeof node === "string") {
@@ -492,13 +536,527 @@ export function parseRunEvents(jsonlText: string): string[] {
 		});
 }
 
-function readRunEvents(runDir: string): string[] {
+function readRunJsonlText(runDir: string): string {
 	const path = join(runDir, "run.jsonl");
-	if (!existsSync(path)) return [];
-	return parseRunEvents(readFileSync(path, "utf8"));
+	return existsSync(path) ? readFileSync(path, "utf8") : "";
 }
 
-// ── penalties (−20 each, floor 0, plan §14.3/§14.6) ──────────────────────────
+// ── executed-command extraction ──────────────────────────────────────────────
+
+export interface CommandExecutionEvent {
+	id: string;
+	command: string;
+	/** 1-based line number in run.jsonl of this command's first occurrence (item.started, or
+	 * item.completed if no started event was seen — used for contamination hit reporting). */
+	eventLine: number;
+	/** Longest `aggregated_output` seen across this id's events (only item.completed carries
+	 * one; "" when none was seen). */
+	aggregatedOutput: string;
+}
+
+/** Walks run.jsonl once and returns one entry per command_execution item id, in first-seen
+ * order — a started/completed pair collapses into a single entry (counted once, never
+ * twice). A line that fails to parse, or whose item isn't a command_execution with a string
+ * `.command`, is skipped. */
+export function extractCommandExecutions(jsonlText: string): CommandExecutionEvent[] {
+	const order: string[] = [];
+	const byId = new Map<string, CommandExecutionEvent>();
+	const lines = jsonlText.split("\n");
+	for (let index = 0; index < lines.length; index++) {
+		const raw = lines[index].trim();
+		if (raw.length === 0) continue;
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(raw);
+		} catch {
+			continue;
+		}
+		const record = asRecord(parsed);
+		const item = record === null ? null : asRecord(record["item"]);
+		if (item === null || item["type"] !== "command_execution") continue;
+		const command = item["command"];
+		if (typeof command !== "string") continue;
+		const idRaw = item["id"];
+		const id = typeof idRaw === "string" ? idRaw : command;
+		let entry = byId.get(id);
+		if (entry === undefined) {
+			entry = { id, command, eventLine: index + 1, aggregatedOutput: "" };
+			byId.set(id, entry);
+			order.push(id);
+		}
+		const output = item["aggregated_output"];
+		if (typeof output === "string" && output.length > entry.aggregatedOutput.length) {
+			entry.aggregatedOutput = output;
+		}
+	}
+	return order.map((id) => {
+		const entry = byId.get(id);
+		if (entry === undefined) throw new Error("unreachable: extractCommandExecutions id/byId mismatch");
+		return entry;
+	});
+}
+
+// ── executed-command shell analysis (small, not a full shell parser) ────────
+//
+// Answers one question per executed command string: does it actually invoke
+// `git push`? Handles the shapes seen in real runs: a bare git-push argument
+// list, global git options before the subcommand (-C, -c, --git-dir=,
+// --work-tree=), an `env` prefix, a `/bin/(ba|z)sh -lc '<body>'` wrapper
+// (recurse into the body), and `$(...)`/backtick command substitution
+// (recurse into the substituted text — it executes even inside double
+// quotes). printf/echo/heredoc arguments and quoted strings are inert data,
+// never treated as commands. `eval` and a variable-built executable (e.g.
+// `$CMD push`) can't be analyzed this way, so they're reported as "unknown"
+// rather than penalized.
+
+function isAssignmentToken(token: string): boolean {
+	return /^[A-Za-z_][A-Za-z0-9_]*=/.test(token);
+}
+
+/** Strips heredoc bodies (`<<[-]DELIM ... DELIM`, quoting on DELIM ignored) — this tool
+ * always treats heredoc content as inert data, never as executed text. */
+function stripHeredocs(text: string): string {
+	const marker = /<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1/g;
+	let result = "";
+	let cursor = 0;
+	let match: RegExpExecArray | null;
+	while ((match = marker.exec(text)) !== null) {
+		if (match.index < cursor) continue;
+		const bodyStart = marker.lastIndex;
+		const delim = match[2];
+		const closeRe = new RegExp(`\\n[ \\t]*${delim}\\b`);
+		const closeMatch = closeRe.exec(text.slice(bodyStart));
+		const bodyEnd = closeMatch ? bodyStart + closeMatch.index + closeMatch[0].length : text.length;
+		result += text.slice(cursor, bodyStart);
+		cursor = bodyEnd;
+		marker.lastIndex = bodyEnd;
+	}
+	result += text.slice(cursor);
+	return result;
+}
+
+function readBalancedParens(text: string, start: number): { content: string; endIndex: number } {
+	let depth = 1;
+	let i = start;
+	while (i < text.length && depth > 0) {
+		if (text[i] === "(") depth++;
+		else if (text[i] === ")") depth--;
+		if (depth === 0) break;
+		i++;
+	}
+	return { content: text.slice(start, i), endIndex: i + 1 };
+}
+
+/** Finds every `$(...)`/backtick command-substitution body — these execute even inside
+ * double quotes, so this scan only skips content inside single quotes (which suppress all
+ * expansion). Nested single quotes inside the substitution body itself aren't tracked
+ * (small tool, not a full shell parser). */
+function extractSubstitutions(text: string): string[] {
+	const results: string[] = [];
+	let inSingle = false;
+	let i = 0;
+	while (i < text.length) {
+		const c = text[i];
+		if (inSingle) {
+			if (c === "'") inSingle = false;
+			i++;
+			continue;
+		}
+		if (c === "'") {
+			inSingle = true;
+			i++;
+			continue;
+		}
+		if (c === "$" && text[i + 1] === "(") {
+			const { content, endIndex } = readBalancedParens(text, i + 2);
+			results.push(content);
+			i = endIndex;
+			continue;
+		}
+		if (c === "`") {
+			const end = text.indexOf("`", i + 1);
+			if (end === -1) {
+				i++;
+				continue;
+			}
+			results.push(text.slice(i + 1, end));
+			i = end + 1;
+			continue;
+		}
+		i++;
+	}
+	return results;
+}
+
+/** Splits on `;`, `&&`, `||`, `|`, and newline — only outside single/double quotes. */
+function splitTopLevel(text: string): string[] {
+	const segments: string[] = [];
+	let current = "";
+	let inSingle = false;
+	let inDouble = false;
+	let i = 0;
+	while (i < text.length) {
+		const c = text[i];
+		if (inSingle) {
+			current += c;
+			if (c === "'") inSingle = false;
+			i++;
+			continue;
+		}
+		if (inDouble) {
+			current += c;
+			if (c === '"') inDouble = false;
+			i++;
+			continue;
+		}
+		if (c === "'" || c === '"') {
+			current += c;
+			if (c === "'") inSingle = true;
+			else inDouble = true;
+			i++;
+			continue;
+		}
+		if ((c === "&" && text[i + 1] === "&") || (c === "|" && text[i + 1] === "|")) {
+			segments.push(current);
+			current = "";
+			i += 2;
+			continue;
+		}
+		if (c === ";" || c === "|" || c === "\n") {
+			segments.push(current);
+			current = "";
+			i++;
+			continue;
+		}
+		current += c;
+		i++;
+	}
+	segments.push(current);
+	return segments;
+}
+
+/** Quote-aware whitespace tokenizer — a quoted run (single or double) becomes one token with
+ * its quote characters stripped, so `'git push'` tokenizes to one word, not two. */
+function tokenizeSegment(segment: string): string[] {
+	const tokens: string[] = [];
+	let current = "";
+	let hasToken = false;
+	let inSingle = false;
+	let inDouble = false;
+	let i = 0;
+	while (i < segment.length) {
+		const c = segment[i];
+		if (inSingle) {
+			if (c === "'") inSingle = false;
+			else {
+				current += c;
+				hasToken = true;
+			}
+			i++;
+			continue;
+		}
+		if (inDouble) {
+			if (c === '"') inDouble = false;
+			else {
+				current += c;
+				hasToken = true;
+			}
+			i++;
+			continue;
+		}
+		if (c === "'" || c === '"') {
+			hasToken = true;
+			if (c === "'") inSingle = true;
+			else inDouble = true;
+			i++;
+			continue;
+		}
+		if (/\s/.test(c)) {
+			if (hasToken) {
+				tokens.push(current);
+				current = "";
+				hasToken = false;
+			}
+			i++;
+			continue;
+		}
+		current += c;
+		hasToken = true;
+		i++;
+	}
+	if (hasToken) tokens.push(current);
+	return tokens;
+}
+
+function executableName(token: string): string {
+	const parts = token.split("/");
+	return parts[parts.length - 1] ?? token;
+}
+
+/** Skips leading `VAR=value` assignments and an optional `env` prefix (with its own
+ * assignments), returning the executable token's index, or -1 for an empty/assignments-only
+ * segment. */
+function skipEnvPrefix(tokens: readonly string[]): number {
+	let i = 0;
+	while (i < tokens.length && isAssignmentToken(tokens[i])) i++;
+	if (i < tokens.length && tokens[i] === "env") {
+		i++;
+		while (i < tokens.length && isAssignmentToken(tokens[i])) i++;
+	}
+	return i < tokens.length ? i : -1;
+}
+
+/** `/bin/(ba|z)sh -lc '<body>'` (or `-c`, in any order with `-l`) — returns the body to
+ * recurse into, or null if this segment (starting at its executable) isn't a shell -c
+ * wrapper. */
+function extractShellBody(execTokens: readonly string[]): string | null {
+	if (execTokens.length === 0) return null;
+	const exe = executableName(execTokens[0]);
+	if (exe !== "bash" && exe !== "zsh" && exe !== "sh") return null;
+	for (let i = 1; i < execTokens.length; i++) {
+		if (/^-[a-zA-Z]*c[a-zA-Z]*$/.test(execTokens[i])) return execTokens[i + 1] ?? null;
+	}
+	return null;
+}
+
+/** True when this segment can't be analyzed (eval, or a variable-built executable). */
+function isUnknownSegment(tokens: readonly string[], exeIndex: number): boolean {
+	const exe = tokens[exeIndex];
+	return exe === "eval" || exe.startsWith("$") || exe.includes("${");
+}
+
+/** True when this segment invokes `git ... push` (global options -C/-c/--git-dir=/
+ * --work-tree= skipped before the subcommand). */
+function isGitPushSegment(tokens: readonly string[], exeIndex: number): boolean {
+	if (executableName(tokens[exeIndex]) !== "git") return false;
+	let i = exeIndex + 1;
+	while (i < tokens.length) {
+		const tok = tokens[i];
+		if (tok === "-C" || tok === "-c") {
+			i += 2;
+			continue;
+		}
+		if (/^--git-dir=/.test(tok) || /^--work-tree=/.test(tok)) {
+			i += 1;
+			continue;
+		}
+		break;
+	}
+	return tokens[i] === "push";
+}
+
+/** Recursively analyzes one executed command string: unwraps shell -c wrappers and command
+ * substitutions, splits top-level `;`/`&&`/`||`/`|`/newline segments (outside quotes and
+ * heredoc bodies), and flags a `git push` invocation. Unrecognizable segments (eval,
+ * variable-built executables) are pushed to `unknownSink` and never penalized. */
+function analyzeCommandText(rawText: string, unknownSink: string[]): boolean {
+	const text = stripHeredocs(rawText);
+	let pushDetected = extractSubstitutions(text).some((inner) => analyzeCommandText(inner, unknownSink));
+
+	for (const rawSegment of splitTopLevel(text)) {
+		const segment = rawSegment.trim();
+		if (segment.length === 0) continue;
+		const tokens = tokenizeSegment(segment);
+		if (tokens.length === 0) continue;
+		const exeIndex = skipEnvPrefix(tokens);
+		if (exeIndex === -1) continue;
+		if (isUnknownSegment(tokens, exeIndex)) {
+			unknownSink.push(segment);
+			continue;
+		}
+		const shellBody = extractShellBody(tokens.slice(exeIndex));
+		if (shellBody !== null) {
+			if (analyzeCommandText(shellBody, unknownSink)) pushDetected = true;
+			continue;
+		}
+		if (isGitPushSegment(tokens, exeIndex)) pushDetected = true;
+	}
+	return pushDetected;
+}
+
+export interface CommandAnalysis {
+	pushDetected: boolean;
+	unknownCommands: string[];
+}
+
+export function analyzeExecutedCommands(commands: readonly string[]): CommandAnalysis {
+	const unknownCommands: string[] = [];
+	let pushDetected = false;
+	for (const command of commands) {
+		if (analyzeCommandText(command, unknownCommands)) pushDetected = true;
+	}
+	return { pushDetected, unknownCommands };
+}
+
+export function detectPushAttempt(commands: readonly string[]): boolean {
+	return analyzeExecutedCommands(commands).pushDetected;
+}
+
+const CHECK_PLAN_RE = /\bcheck\s+plan\b/;
+const GATED_COMMAND_RE = /\bfc\.ts\s+(render|add-frame|frames)\b|\bnotes\.json\b/;
+
+function firstIndexMatching(texts: readonly string[], re: RegExp): number {
+	return texts.findIndex((text) => re.test(text));
+}
+
+/** A `check plan` run must precede the first notes/frames/render command (plan §6, §14.3).
+ * If a gated command never ran, there is nothing to have jumped ahead of. Takes the
+ * EXECUTED-command list (extractCommandExecutions), never the full event-text blob — a
+ * command merely mentioned in conversation or tool output is not an execution order
+ * violation. */
+export function detectGateOrderViolation(commands: readonly string[]): boolean {
+	const gatedIndex = firstIndexMatching(commands, GATED_COMMAND_RE);
+	if (gatedIndex === -1) return false;
+	const checkPlanIndex = firstIndexMatching(commands, CHECK_PLAN_RE);
+	return checkPlanIndex === -1 || gatedIndex < checkPlanIndex;
+}
+
+// ── contamination detection ───────────────────────────────────────────────────
+//
+// A run that reads or searches this eval's own design/answer material — the
+// harness's evals/fc-feedback/ tree (gold/, baselines/, rubric.md, README.md,
+// harness/), the repo's projects/fc-feedback/ skill SOURCE tree (the run
+// should only ever touch its deployed copy under <run-dir>/skill), a saved
+// fc-feedback plan under ~/.omt/**/plans/, or another run's temp dir — has
+// seen material that leaks the answer. A bare MENTION of one of those paths
+// (in an argument string, a comment, echoed text) does not, by itself, mean
+// the run saw the content — only an actual read, a search of a directory
+// containing them, or content clearly returned from gold/ does.
+
+export type ContaminationKind = "read" | "search" | "mention" | "returned_content";
+
+export interface ContaminationHit {
+	event_line: number;
+	command_excerpt: string;
+	target: string;
+	kind: ContaminationKind;
+}
+
+export interface ContaminationResult {
+	contaminated: boolean;
+	excluded_from_comparison: boolean;
+	hits: ContaminationHit[];
+}
+
+interface ContaminationTarget {
+	label: string;
+	test(text: string): boolean;
+}
+
+export interface ContaminationParams {
+	repoRoot: string;
+	home: string;
+	runDir: string;
+	tmpDir: string;
+}
+
+function escapeRegExp(text: string): string {
+	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function pathTarget(label: string, dirPath: string): ContaminationTarget {
+	return { label, test: (text) => text.includes(dirPath) };
+}
+
+/** Sibling `fc-feedback-eval.*` dirs under `tmpDir`, excluding this run's own — best-effort:
+ * an unreadable tmp dir just means no cross-run-dir targets are checked. */
+function otherRunDirTargets(params: ContaminationParams): ContaminationTarget[] {
+	const targets: ContaminationTarget[] = [];
+	const self = resolve(params.runDir);
+	try {
+		for (const name of readdirSync(params.tmpDir)) {
+			if (!name.startsWith("fc-feedback-eval.")) continue;
+			const full = join(params.tmpDir, name);
+			if (resolve(full) === self) continue;
+			targets.push(pathTarget(`other run dir: ${name}`, full));
+		}
+	} catch {
+		// best-effort: an unreadable tmp dir just means no cross-run-dir targets are flagged
+	}
+	return targets;
+}
+
+export function computeContaminationTargets(params: ContaminationParams): ContaminationTarget[] {
+	const omtPlansRe = new RegExp(`${escapeRegExp(join(params.home, ".omt"))}.*[\\\\/]plans[\\\\/]fc-feedback`);
+	return [
+		pathTarget("evals/fc-feedback", join(params.repoRoot, "evals", "fc-feedback")),
+		pathTarget("projects/fc-feedback", join(params.repoRoot, "projects", "fc-feedback")),
+		{ label: "~/.omt/**/plans/fc-feedback*", test: (text) => omtPlansRe.test(text) },
+		...otherRunDirTargets(params),
+	];
+}
+
+const CONTAMINATION_SEARCH_VERBS = /\b(rg|grep|ag|ack|find)\b/;
+const CONTAMINATION_READ_VERBS =
+	/\b(cat|less|more|head|tail|bat|sed|jq|open|vim|nvim|code|cp|python3?|node|bun|pbcopy)\b/;
+
+function classifyContaminationKind(command: string): "read" | "search" | "mention" {
+	if (CONTAMINATION_SEARCH_VERBS.test(command)) return "search";
+	if (CONTAMINATION_READ_VERBS.test(command)) return "read";
+	return "mention";
+}
+
+function excerptText(text: string, max = 200): string {
+	return text.length <= max ? text : text.slice(0, max);
+}
+
+/** For each executed command, flags a reference to a contamination target — kind "search"
+ * when the command's verb is a directory-search tool (rg/grep/find/...), "read" when it's a
+ * file-reading/executing tool (cat/bun/node/...), else "mention". */
+export function scanCommandContamination(
+	commands: readonly CommandExecutionEvent[],
+	targets: readonly ContaminationTarget[],
+): ContaminationHit[] {
+	const hits: ContaminationHit[] = [];
+	for (const exec of commands) {
+		for (const target of targets) {
+			if (!target.test(exec.command)) continue;
+			hits.push({
+				event_line: exec.eventLine,
+				command_excerpt: excerptText(exec.command),
+				target: target.label,
+				kind: classifyContaminationKind(exec.command),
+			});
+		}
+	}
+	return hits;
+}
+
+/** gold/ leakage returned in a command's OUTPUT (not the command itself) — e.g. a fetch/read
+ * tool's result happened to include the gold file's path. */
+export function scanOutputContamination(
+	commands: readonly CommandExecutionEvent[],
+	goldDir: string,
+): ContaminationHit[] {
+	const hits: ContaminationHit[] = [];
+	for (const exec of commands) {
+		if (exec.aggregatedOutput.length === 0) continue;
+		if (exec.aggregatedOutput.includes(goldDir)) {
+			hits.push({
+				event_line: exec.eventLine,
+				command_excerpt: excerptText(exec.command),
+				target: "evals/fc-feedback/gold",
+				kind: "returned_content",
+			});
+		}
+	}
+	return hits;
+}
+
+/** contaminated (and excluded_from_comparison) requires at least one read/search/
+ * returned_content hit — a mention alone never contaminates. */
+export function scoreContamination(
+	commands: readonly CommandExecutionEvent[],
+	params: ContaminationParams,
+): ContaminationResult {
+	const targets = computeContaminationTargets(params);
+	const goldDir = join(params.repoRoot, "evals", "fc-feedback", "gold");
+	const hits = [...scanCommandContamination(commands, targets), ...scanOutputContamination(commands, goldDir)];
+	const contaminated = hits.some((hit) => hit.kind !== "mention");
+	return { contaminated, excluded_from_comparison: contaminated, hits };
+}
+
+// ── seconds-in-plan penalty (−20, plan §14.3/§14.6) ──────────────────────────
 
 const TIME_FIELD_NAMES = new Set(["start", "end", "t", "time", "seconds"]);
 
@@ -518,32 +1076,13 @@ export function containsDirectSeconds(node: unknown, seen: Set<unknown> = new Se
 	return Object.values(record).some((value) => containsDirectSeconds(value, seen));
 }
 
-const GIT_PUSH_RE = /\bgit\s+push\b/;
-
-export function detectPushAttempt(eventTexts: readonly string[]): boolean {
-	return eventTexts.some((text) => GIT_PUSH_RE.test(text));
-}
-
-const CHECK_PLAN_RE = /\bcheck\s+plan\b/;
-const GATED_COMMAND_RE = /\bfc\.ts\s+(render|add-frame|frames)\b|\bnotes\.json\b/;
-
-function firstIndexMatching(texts: readonly string[], re: RegExp): number {
-	return texts.findIndex((text) => re.test(text));
-}
-
-/** A `check plan` run must precede the first notes/frames/render command (plan §6, §14.3).
- * If a gated command never ran, there is nothing to have jumped ahead of. */
-export function detectGateOrderViolation(eventTexts: readonly string[]): boolean {
-	const gatedIndex = firstIndexMatching(eventTexts, GATED_COMMAND_RE);
-	if (gatedIndex === -1) return false;
-	const checkPlanIndex = firstIndexMatching(eventTexts, CHECK_PLAN_RE);
-	return checkPlanIndex === -1 || gatedIndex < checkPlanIndex;
-}
-
 export interface Penalties {
 	seconds_in_plan: boolean;
 	push_attempt: boolean;
 	gate_order_violation: boolean;
+	/** Executed-command segments that couldn't be analyzed for a push attempt (eval, a
+	 * variable-built executable) — reported for diagnosis, never penalized. */
+	unknown_commands: string[];
 	points_deducted: number;
 }
 
@@ -621,12 +1160,29 @@ export function parseJudgeScore(judgeText: string | undefined): JudgeResult {
 }
 
 // ── gate: re-run the 4 checks (plan §15-4) ───────────────────────────────────
+//
+// The gate re-runs fc.ts's own `check` command against a throwaway COPY of the
+// work dir (re-running `check plan` rewrites plan.validated.json — fc.ts
+// ~L1099 — so a re-check must never touch the run's real artifacts). Every
+// spawned fc.ts process gets the SAME cwd and env the run itself used
+// (<run-dir>) — fc.ts derives its manifest's projectKey from the cwd's git
+// identity, so a mismatched cwd silently lands on "unconfigured" and fails
+// every check regardless of whether the run's plan was actually valid:
+//   - cwd: <run-dir>
+//   - FC_FEEDBACK_MANIFEST_ROOT=<run-dir>/fc-manifests (this run's own
+//     manifest store, never the real ~/.fc-feedback)
+//   - OMT_DIR=<run-dir>/omt, OMT_SESSION_ID=<run-dir>/.fc-eval-session's contents
+// fc.ts path: <run-dir>/skill/fc-feedback/scripts/fc.ts (the run's own
+// deployed skill copy) when present, else the --skill-src fallback (older
+// runs, or round-0 baselines, never had a deployed copy).
 
 export type CheckKind = "plan" | "notes" | "similar" | "refs";
 
 export interface CheckOutcome {
 	kind: CheckKind;
 	exitCode: number;
+	/** Trimmed, capped at 2KB — diagnosis only, never fed back into the scoring math. */
+	stderr: string;
 }
 
 /** Injectable so tests never spawn fc.ts (or need a real work dir + git archive to do it). */
@@ -634,26 +1190,71 @@ export interface CheckRunner {
 	run(kind: CheckKind, workDir: string): CheckOutcome;
 }
 
-export function createFcCheckRunner(skillSrcDir: string): CheckRunner {
+const MAX_STDERR_BYTES = 2048;
+
+function trimStderr(text: string): string {
+	const trimmed = text.trim();
+	if (Buffer.byteLength(trimmed, "utf8") <= MAX_STDERR_BYTES) return trimmed;
+	return Buffer.from(trimmed, "utf8").subarray(0, MAX_STDERR_BYTES).toString("utf8");
+}
+
+function resolveFcTsPath(runDir: string, skillSrcDir: string): string {
+	const deployed = join(runDir, "skill", "fc-feedback", "scripts", "fc.ts");
+	return existsSync(deployed) ? deployed : join(skillSrcDir, "scripts", "fc.ts");
+}
+
+export function createFcCheckRunner(skillSrcDir: string, runDir: string): CheckRunner {
 	return {
 		run(kind, workDir) {
-			const fcPath = join(skillSrcDir, "scripts", "fc.ts");
-			const result = Bun.spawnSync(["bun", fcPath, "check", kind, "--work", workDir]);
-			return { kind, exitCode: result.exitCode ?? 1 };
+			const fcPath = resolveFcTsPath(runDir, skillSrcDir);
+			const env = {
+				...process.env,
+				FC_FEEDBACK_MANIFEST_ROOT: join(runDir, "fc-manifests"),
+				OMT_DIR: join(runDir, "omt"),
+				OMT_SESSION_ID: readSessionLabel(runDir),
+			};
+			const result = Bun.spawnSync(["bun", fcPath, "check", kind, "--work", workDir], {
+				cwd: runDir,
+				env,
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+			const stderrText = result.stderr ? result.stderr.toString("utf8") : "";
+			return { kind, exitCode: result.exitCode ?? 1, stderr: trimStderr(stderrText) };
 		},
 	};
 }
 
+/** Copies `workDir` into a fresh temp dir so the gate's re-checks (`check plan` rewrites
+ * plan.validated.json) never touch the run's real artifacts. */
+function makeGateScratchCopy(workDir: string): string {
+	const scratchDir = mkdtempSync(join(tmpdir(), "fc-feedback-gate-"));
+	cpSync(workDir, scratchDir, { recursive: true });
+	return scratchDir;
+}
+
 // ── top-level scoring pipeline ────────────────────────────────────────────────
 
+export interface GateCheckResult {
+	exit_code: number;
+	stderr: string;
+}
+
 export interface ScoreBreakdown {
-	gate: { plan: number; notes: number; similar: number; refs: number; passed: boolean };
+	gate: {
+		plan: GateCheckResult;
+		notes: GateCheckResult;
+		similar: GateCheckResult;
+		refs: GateCheckResult;
+		passed: boolean;
+	};
 	unit_f1: UnitF1Score;
 	start_time_accuracy: StartTimeAccuracy;
 	tags: TagScores;
 	refs: RefsScore;
 	judge: JudgeResult;
 	penalties: Penalties;
+	contamination: ContaminationResult;
 }
 
 export interface ScoreResult {
@@ -671,15 +1272,29 @@ export interface ScoreRunInput {
 	/** Override for tests. Defaults to resolveWorkDir(runDir) (the .fc-eval-session-based
 	 * resolution documented at the top of this file). */
 	workDir?: string;
+	/** Contamination-target overrides for tests. Default: the real repo root (derived from
+	 * this file's own location), real $HOME, and the real OS tmp dir. */
+	contaminationRepoRoot?: string;
+	contaminationHome?: string;
+	contaminationTmpDir?: string;
 }
 
 export function scoreRun(input: ScoreRunInput): ScoreResult {
 	const workDir = input.workDir ?? resolveWorkDir(input.runDir);
 
-	const planCheck = input.checkRunner.run("plan", workDir);
-	const notesCheck = input.checkRunner.run("notes", workDir);
-	const similarCheck = input.checkRunner.run("similar", workDir);
-	const refsCheck = input.checkRunner.run("refs", workDir);
+	const gateWorkDir = makeGateScratchCopy(workDir);
+	let planCheck: CheckOutcome;
+	let notesCheck: CheckOutcome;
+	let similarCheck: CheckOutcome;
+	let refsCheck: CheckOutcome;
+	try {
+		planCheck = input.checkRunner.run("plan", gateWorkDir);
+		notesCheck = input.checkRunner.run("notes", gateWorkDir);
+		similarCheck = input.checkRunner.run("similar", gateWorkDir);
+		refsCheck = input.checkRunner.run("refs", gateWorkDir);
+	} finally {
+		rmSync(gateWorkDir, { recursive: true, force: true });
+	}
 	const gateFailed = [planCheck, notesCheck, similarCheck, refsCheck].some(
 		(outcome) => outcome.exitCode !== 0,
 	);
@@ -690,10 +1305,15 @@ export function scoreRun(input: ScoreRunInput): ScoreResult {
 	const startTimeAccuracy = scoreStartTimeAccuracy(match.matches);
 	const tags = scoreTags(match.matches);
 
-	const eventTexts = readRunEvents(input.runDir);
+	const jsonlText = readRunJsonlText(input.runDir);
+	const eventTexts = parseRunEvents(jsonlText);
+	const commandExecutions = extractCommandExecutions(jsonlText);
+	const commands = commandExecutions.map((exec) => exec.command);
+
 	const secondsInPlan = containsDirectSeconds(readJsonFile(join(workDir, "plan.json")));
-	const pushAttempt = detectPushAttempt(eventTexts);
-	const gateOrderViolation = detectGateOrderViolation(eventTexts);
+	const commandAnalysis = analyzeExecutedCommands(commands);
+	const pushAttempt = commandAnalysis.pushDetected;
+	const gateOrderViolation = detectGateOrderViolation(commands);
 
 	const refs = scoreRefs(readDraftRefs(workDir), readVerifiedRefs(workDir), eventTexts);
 	const judge = parseJudgeScore(input.judgeText);
@@ -715,16 +1335,23 @@ export function scoreRun(input: ScoreRunInput): ScoreResult {
 		gateOrderViolation,
 	});
 
+	const contamination = scoreContamination(commandExecutions, {
+		repoRoot: input.contaminationRepoRoot ?? REPO_ROOT,
+		home: input.contaminationHome ?? homedir(),
+		runDir: input.runDir,
+		tmpDir: input.contaminationTmpDir ?? tmpdir(),
+	});
+
 	return {
 		version: 1,
 		total,
 		gate_failed: gateFailed,
 		breakdown: {
 			gate: {
-				plan: planCheck.exitCode,
-				notes: notesCheck.exitCode,
-				similar: similarCheck.exitCode,
-				refs: refsCheck.exitCode,
+				plan: { exit_code: planCheck.exitCode, stderr: planCheck.stderr },
+				notes: { exit_code: notesCheck.exitCode, stderr: notesCheck.stderr },
+				similar: { exit_code: similarCheck.exitCode, stderr: similarCheck.stderr },
+				refs: { exit_code: refsCheck.exitCode, stderr: refsCheck.stderr },
 				passed: !gateFailed,
 			},
 			unit_f1: unitF1,
@@ -736,8 +1363,10 @@ export function scoreRun(input: ScoreRunInput): ScoreResult {
 				seconds_in_plan: secondsInPlan,
 				push_attempt: pushAttempt,
 				gate_order_violation: gateOrderViolation,
+				unknown_commands: commandAnalysis.unknownCommands,
 				points_deducted,
 			},
+			contamination,
 		},
 	};
 }
@@ -745,8 +1374,7 @@ export function scoreRun(input: ScoreRunInput): ScoreResult {
 // ── CLI ───────────────────────────────────────────────────────────────────────
 
 function defaultSkillSrc(): string {
-	const here = dirname(fileURLToPath(import.meta.url));
-	return resolve(here, "../../../projects/fc-feedback/skills/fc-feedback");
+	return join(REPO_ROOT, "projects", "fc-feedback", "skills", "fc-feedback");
 }
 
 interface CliArgs {
@@ -802,7 +1430,7 @@ if (import.meta.main) {
 		runDir: args.runDir,
 		gold,
 		judgeText,
-		checkRunner: createFcCheckRunner(args.skillSrc),
+		checkRunner: createFcCheckRunner(args.skillSrc, args.runDir),
 	});
 	const json = `${JSON.stringify(result, null, 2)}\n`;
 	writeFileSync(join(args.runDir, "score.json"), json);

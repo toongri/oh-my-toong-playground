@@ -1,28 +1,48 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+	cpSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import {
 	type CheckOutcome,
 	type CheckRunner,
+	type CommandExecutionEvent,
 	type Gold,
 	type PredictedUnit,
+	analyzeExecutedCommands,
 	combineTotal,
+	computeContaminationTargets,
 	containsDirectSeconds,
+	createFcCheckRunner,
 	detectGateOrderViolation,
 	detectPushAttempt,
+	extractCommandExecutions,
 	matchUnits,
 	parseCliArgs,
 	parseGold,
 	parseJudgeScore,
 	parseRunEvents,
+	scanCommandContamination,
+	scanOutputContamination,
+	scoreContamination,
 	scoreRefs,
 	scoreRun,
 	scoreStartTimeAccuracy,
 	scoreTags,
 	scoreUnitF1,
 } from "./score.ts";
+
+const SKILL_SRC_DIR = resolve(import.meta.dir, "../../../projects/fc-feedback/skills/fc-feedback");
+/** Same derivation score.ts's own repoRootDir() uses (this file sits next to score.ts). */
+const REPO_ROOT_FOR_TEST = resolve(import.meta.dir, "../../..");
 
 // ── fixtures ──────────────────────────────────────────────────────────────────
 
@@ -247,12 +267,90 @@ describe("run.jsonl 파싱", () => {
 	});
 });
 
-describe("규율 위반 탐지", () => {
-	test("git push 명령이 어디에 있든 탐지한다", () => {
-		expect(detectPushAttempt(["fc.ts render", "echo hi"])).toBe(false);
-		expect(detectPushAttempt(["fc.ts render", "git push origin main"])).toBe(true);
+describe("실행된 명령 추출(item id 중복 제거)", () => {
+	test("started/completed 쌍은 하나로 합치고 aggregated_output은 completed에서 가져온다", () => {
+		const jsonl = [
+			JSON.stringify({
+				type: "item.started",
+				item: { id: "item_1", type: "command_execution", command: "git status", exit_code: null },
+			}),
+			JSON.stringify({
+				type: "item.completed",
+				item: {
+					id: "item_1",
+					type: "command_execution",
+					command: "git status",
+					exit_code: 0,
+					aggregated_output: "nothing to commit",
+				},
+			}),
+		].join("\n");
+		const commands = extractCommandExecutions(jsonl);
+		expect(commands).toHaveLength(1);
+		expect(commands[0]).toEqual({
+			id: "item_1",
+			command: "git status",
+			eventLine: 1,
+			aggregatedOutput: "nothing to commit",
+		});
 	});
 
+	test("command_execution이 아닌 이벤트(agent_message 등)는 무시한다", () => {
+		const jsonl = JSON.stringify({
+			type: "item.completed",
+			item: { type: "agent_message", text: "git push origin main을 언급만 했다" },
+		});
+		expect(extractCommandExecutions(jsonl)).toHaveLength(0);
+	});
+});
+
+describe("규율 위반 탐지: push 시도(실행된 명령만 검사, plan §14.3 수정)", () => {
+	test("실제로 실행된 git push는 형태와 무관하게 탐지한다", () => {
+		expect(detectPushAttempt(["git push origin main"])).toBe(true);
+		expect(detectPushAttempt(["/usr/bin/git -C archive push"])).toBe(true);
+		expect(detectPushAttempt(["env X=1 git -c advice.detachedHead=false push"])).toBe(true);
+		expect(detectPushAttempt(["/bin/zsh -lc 'git push origin main'"])).toBe(true);
+		expect(detectPushAttempt(['echo "$(git push origin main)"'])).toBe(true);
+	});
+
+	test("git push를 실행하지 않은 명령은 탐지되지 않는다", () => {
+		expect(detectPushAttempt(["printf '%s' 'Never execute git push'"])).toBe(false);
+		expect(detectPushAttempt(["cat <<'EOF'\ngit push origin main\nEOF\n"])).toBe(false);
+		expect(detectPushAttempt(["git log --grep='git push'"])).toBe(false);
+		expect(detectPushAttempt(["fc.ts render", "echo hi"])).toBe(false);
+	});
+
+	test("aggregated_output/agent_message에만 등장하는 git push는 탐지 대상에서 아예 빠진다", () => {
+		// score.ts는 eventTexts 블롭이 아니라 extractCommandExecutions의 command만 본다 —
+		// 이 테스트는 그 경계를 직접 확인한다(§14.3 SMOKE: 네 번의 실제 round-0 실행 모두
+		// CLAUDE.md/rubric.md를 cat한 출력에서만 "git push"가 발견됐고, 실행된 명령은 0건이었다).
+		const jsonl = [
+			JSON.stringify({
+				type: "item.completed",
+				item: {
+					type: "command_execution",
+					id: "item_1",
+					command: "cat rubric.md",
+					aggregated_output: "- `git push` 시도(`run.jsonl`의 명령 실행 이벤트에서 검출)",
+				},
+			}),
+		].join("\n");
+		const commands = extractCommandExecutions(jsonl).map((exec) => exec.command);
+		expect(detectPushAttempt(commands)).toBe(false);
+	});
+
+	test("eval·변수로 만들어진 실행 파일은 unknown으로 보고하고 감점하지 않는다", () => {
+		const result = analyzeExecutedCommands(["eval \"$(cat script.sh)\"", "$CMD push"]);
+		expect(result.pushDetected).toBe(false);
+		expect(result.unknownCommands).toEqual(["eval \"$(cat script.sh)\"", "$CMD push"]);
+	});
+
+	test("중복 실행(같은 명령이 여러 번)이어도 탐지 결과는 한 번 계산한 것과 같다", () => {
+		expect(detectPushAttempt(["git push origin main", "git push origin main"])).toBe(true);
+	});
+});
+
+describe("규율 위반 탐지: gate 순서(실행된 명령만 검사, plan §14.3 수정)", () => {
 	test("check plan보다 먼저 render/frames가 실행되면 위반이다", () => {
 		expect(detectGateOrderViolation(["fc.ts render", "bun fc.ts check plan --work ."])).toBe(true);
 		expect(detectGateOrderViolation(["bun fc.ts check plan --work .", "fc.ts render"])).toBe(false);
@@ -441,6 +539,170 @@ describe("CLI 인자 파싱", () => {
 	});
 });
 
+// ── 오염(contamination) 탐지 ──────────────────────────────────────────────────
+
+function commandEvent(
+	command: string,
+	overrides: Partial<CommandExecutionEvent> = {},
+): CommandExecutionEvent {
+	return { id: "item_1", command, eventLine: 1, aggregatedOutput: "", ...overrides };
+}
+
+describe("오염 탐지", () => {
+	test("evals/fc-feedback 원본을 읽는 명령(cat)은 kind=read다", () => {
+		const repoRoot = tempDir();
+		const runDir = tempDir();
+		const targets = computeContaminationTargets({
+			repoRoot,
+			home: tempDir(),
+			runDir,
+			tmpDir: tempDir(),
+		});
+		const hits = scanCommandContamination(
+			[commandEvent(`cat ${join(repoRoot, "evals", "fc-feedback", "rubric.md")}`)],
+			targets,
+		);
+		expect(hits).toHaveLength(1);
+		expect(hits[0]).toEqual({
+			event_line: 1,
+			command_excerpt: `cat ${join(repoRoot, "evals", "fc-feedback", "rubric.md")}`,
+			target: "evals/fc-feedback",
+			kind: "read",
+		});
+	});
+
+	test("projects/fc-feedback 원본 디렉터리를 rg로 검색하면 kind=search다", () => {
+		const repoRoot = tempDir();
+		const runDir = tempDir();
+		const targets = computeContaminationTargets({
+			repoRoot,
+			home: tempDir(),
+			runDir,
+			tmpDir: tempDir(),
+		});
+		const hits = scanCommandContamination(
+			[commandEvent(`rg -n "check plan" ${join(repoRoot, "projects", "fc-feedback")}`)],
+			targets,
+		);
+		expect(hits.some((hit) => hit.kind === "search" && hit.target === "projects/fc-feedback")).toBe(
+			true,
+		);
+	});
+
+	test("단순 언급(echo)은 kind=mention이고, mention만 있으면 오염으로 보지 않는다", () => {
+		const repoRoot = tempDir();
+		const runDir = tempDir();
+		const targets = computeContaminationTargets({
+			repoRoot,
+			home: tempDir(),
+			runDir,
+			tmpDir: tempDir(),
+		});
+		const hits = scanCommandContamination(
+			[commandEvent(`echo "참고: ${join(repoRoot, "evals", "fc-feedback", "README.md")}"`)],
+			targets,
+		);
+		expect(hits).toHaveLength(1);
+		expect(hits[0]?.kind).toBe("mention");
+		const result = scoreContamination([commandEvent(`echo "참고: ${join(repoRoot, "evals", "fc-feedback", "README.md")}"`)], {
+			repoRoot,
+			home: tempDir(),
+			runDir,
+			tmpDir: tempDir(),
+		});
+		expect(result.contaminated).toBe(false);
+		expect(result.excluded_from_comparison).toBe(false);
+	});
+
+	test("명령 출력(aggregated_output)에 gold/ 경로가 되돌아오면 kind=returned_content다", () => {
+		const repoRoot = tempDir();
+		const goldDir = join(repoRoot, "evals", "fc-feedback", "gold");
+		const hits = scanOutputContamination(
+			[commandEvent("some-tool fetch", { aggregatedOutput: `결과: ${join(goldDir, "NUzEChn9EyI.units.json")}` })],
+			goldDir,
+		);
+		expect(hits).toHaveLength(1);
+		expect(hits[0]).toEqual({
+			event_line: 1,
+			command_excerpt: "some-tool fetch",
+			target: "evals/fc-feedback/gold",
+			kind: "returned_content",
+		});
+	});
+
+	test("~/.omt/**/plans/fc-feedback* 아래 저장된 계획을 참조하면 탐지된다", () => {
+		const repoRoot = tempDir();
+		const home = tempDir();
+		const runDir = tempDir();
+		const targets = computeContaminationTargets({ repoRoot, home, runDir, tmpDir: tempDir() });
+		const planPath = join(home, ".omt", "oh-my-toong-playground", "plans", "fc-feedback-scorer.md");
+		const hits = scanCommandContamination([commandEvent(`cat ${planPath}`)], targets);
+		expect(hits.some((hit) => hit.target === "~/.omt/**/plans/fc-feedback*")).toBe(true);
+	});
+
+	test("다른 run의 fc-feedback-eval.* 임시 디렉터리를 읽으면 탐지되고, 자기 자신은 대상에서 빠진다", () => {
+		const repoRoot = tempDir();
+		const home = tempDir();
+		const tmpRoot = tempDir();
+		const selfRunDir = join(tmpRoot, "fc-feedback-eval.self123");
+		const otherRunDir = join(tmpRoot, "fc-feedback-eval.other456");
+		mkdirSync(selfRunDir, { recursive: true });
+		mkdirSync(otherRunDir, { recursive: true });
+		const targets = computeContaminationTargets({ repoRoot, home, runDir: selfRunDir, tmpDir: tmpRoot });
+		expect(targets.some((target) => target.label.includes("self123"))).toBe(false);
+		const hits = scanCommandContamination(
+			[commandEvent(`cat ${join(otherRunDir, "plan.json")}`)],
+			targets,
+		);
+		expect(hits.some((hit) => hit.target.includes("other456") && hit.kind === "read")).toBe(true);
+	});
+
+	test("read/search/returned_content 중 하나라도 있으면 contaminated와 excluded_from_comparison이 true다", () => {
+		const repoRoot = tempDir();
+		const home = tempDir();
+		const runDir = tempDir();
+		const result = scoreContamination(
+			[commandEvent(`cat ${join(repoRoot, "projects", "fc-feedback", "skills", "fc-feedback", "scripts", "fc.ts")}`)],
+			{ repoRoot, home, runDir, tmpDir: tempDir() },
+		);
+		expect(result.contaminated).toBe(true);
+		expect(result.excluded_from_comparison).toBe(true);
+	});
+});
+
+// ── 게이트: 실제 fc.ts check 재실행(통합) ─────────────────────────────────────
+//
+// createFcCheckRunner가 실제로 만드는 cwd/env(FC_FEEDBACK_MANIFEST_ROOT,
+// OMT_DIR, OMT_SESSION_ID)가 다른 cwd에서도 유효한 work dir를 exit 0으로
+// 통과시키는지 REAL fc.ts로 확인한다 — score.ts 자신의 cwd(이 테스트 프로세스의
+// cwd)와 실행되는 fc.ts의 cwd(runDir)가 다르다는 점이 §14.3 수정의 핵심이다.
+// FC_FEEDBACK_MANIFEST_ROOT를 임시 디렉터리로 지정해 실제 ~/.fc-feedback은
+// 절대 건드리지 않는다.
+
+describe("게이트: 실제 fc.ts check 재실행(통합)", () => {
+	test("다른 cwd에서도 FC_FEEDBACK_MANIFEST_ROOT/OMT_DIR/OMT_SESSION_ID를 지정하면 유효한 work dir는 exit 0이다", () => {
+		const runDir = tempDir();
+		writeFileSync(join(runDir, ".fc-eval-session"), "score-it-session\n");
+
+		const fixtureDir = join(SKILL_SRC_DIR, "scripts", "__fixtures__", "qa", "work-disabled");
+		const workDirCopy = join(runDir, "work");
+		mkdirSync(workDirCopy, { recursive: true });
+		cpSync(fixtureDir, workDirCopy, { recursive: true });
+		// "disabled" 모드(config disable) 없이도 loadTaxonomy가 통과하도록 unconfigured
+		// 모드에서 taxonomyPath가 보는 workDir/taxonomy.yaml을 직접 준비해 둔다.
+		writeFileSync(
+			join(workDirCopy, "taxonomy.yaml"),
+			readFileSync(join(SKILL_SRC_DIR, "scripts", "taxonomy.default.yaml")),
+		);
+
+		const checkRunner = createFcCheckRunner(SKILL_SRC_DIR, runDir);
+		const outcome = checkRunner.run("plan", workDirCopy);
+
+		expect(outcome.exitCode).toBe(0);
+		expect(outcome.stderr).toBe("");
+	});
+});
+
 // ── scoreRun 통합 ─────────────────────────────────────────────────────────────
 //
 // Mirrors run.sh's real layout (plan §15-1/§15-4): OMT_DIR=<run-dir>/omt,
@@ -450,12 +712,32 @@ describe("CLI 인자 파싱", () => {
 
 function stubCheckRunner(
 	exitCodes: Partial<Record<CheckOutcome["kind"], number>> = {},
+	stderrs: Partial<Record<CheckOutcome["kind"], string>> = {},
 ): CheckRunner {
 	return {
 		run(kind) {
-			return { kind, exitCode: exitCodes[kind] ?? 0 };
+			return { kind, exitCode: exitCodes[kind] ?? 0, stderr: stderrs[kind] ?? "" };
 		},
 	};
+}
+
+/** Serializes one command_execution item.completed event, matching the real shape
+ * (`.item.id`, `.item.command`, optional `.item.aggregated_output`) observed in run.jsonl. */
+function commandExecutionLine(
+	id: string,
+	command: string,
+	aggregatedOutput = "",
+): string {
+	return JSON.stringify({
+		type: "item.completed",
+		item: {
+			id,
+			type: "command_execution",
+			command,
+			exit_code: 0,
+			...(aggregatedOutput.length > 0 ? { aggregated_output: aggregatedOutput } : {}),
+		},
+	});
 }
 
 /** Writes run.sh's session-label file and returns the work dir it points at (created). */
@@ -480,12 +762,24 @@ describe("scoreRun 통합", () => {
 		expect(result.gate_failed).toBe(true);
 		expect(result.total).toBe(0);
 		expect(result.breakdown.gate).toEqual({
-			plan: 0,
-			notes: 0,
-			similar: 0,
-			refs: 1,
+			plan: { exit_code: 0, stderr: "" },
+			notes: { exit_code: 0, stderr: "" },
+			similar: { exit_code: 0, stderr: "" },
+			refs: { exit_code: 1, stderr: "" },
 			passed: false,
 		});
+	});
+
+	test("checkRunner가 보고한 stderr를 breakdown에 그대로 기록한다", () => {
+		const runDir = tempDir();
+		writeSessionLabel(runDir);
+		const result = scoreRun({
+			runDir,
+			gold: gold([]),
+			judgeText: undefined,
+			checkRunner: stubCheckRunner({ plan: 1 }, { plan: "plan.json: 잘못된 태그입니다" }),
+		});
+		expect(result.breakdown.gate.plan).toEqual({ exit_code: 1, stderr: "plan.json: 잘못된 태그입니다" });
 	});
 
 	test("모든 게이트 통과 + 완전 매칭 + 유효한 judge면 자동 60점과 judge 점수를 합산한다", () => {
@@ -525,15 +819,12 @@ describe("scoreRun 통합", () => {
 		expect(result.total).toBe(90);
 	});
 
-	test("run.jsonl에 git push가 있으면 20점을 깎는다", () => {
+	test("run.jsonl에 실제로 실행된 git push 명령이 있으면 20점을 깎는다", () => {
 		const runDir = tempDir();
 		const workDir = writeSessionLabel(runDir);
 		writeFileSync(join(workDir, "plan.validated.json"), JSON.stringify({ units: [] }));
 		// run.jsonl은 run_dir 바로 아래(run.sh: run_jsonl="$run_dir/run.jsonl") — work dir 무관.
-		writeFileSync(
-			join(runDir, "run.jsonl"),
-			`${JSON.stringify({ item: { command: "git push origin main" } })}\n`,
-		);
+		writeFileSync(join(runDir, "run.jsonl"), `${commandExecutionLine("item_1", "git push origin main")}\n`);
 		const result = scoreRun({
 			runDir,
 			gold: gold([]),
@@ -542,6 +833,68 @@ describe("scoreRun 통합", () => {
 		});
 		expect(result.breakdown.penalties.push_attempt).toBe(true);
 		expect(result.breakdown.penalties.points_deducted).toBe(20);
+	});
+
+	test("git push는 aggregated_output에만 등장하고 실행된 명령이 아니면 감점하지 않는다", () => {
+		const runDir = tempDir();
+		const workDir = writeSessionLabel(runDir);
+		writeFileSync(join(workDir, "plan.validated.json"), JSON.stringify({ units: [] }));
+		writeFileSync(
+			join(runDir, "run.jsonl"),
+			`${commandExecutionLine("item_1", "cat rubric.md", "`git push` 시도(run.jsonl의 명령 실행 이벤트에서 검출)")}\n`,
+		);
+		const result = scoreRun({
+			runDir,
+			gold: gold([]),
+			judgeText: "SCORE specificity=0 fidelity=0 readability=0",
+			checkRunner: stubCheckRunner(),
+		});
+		expect(result.breakdown.penalties.push_attempt).toBe(false);
+		expect(result.breakdown.penalties.points_deducted).toBe(0);
+	});
+
+	test("render를 언급하는 설명 텍스트(agent_message)는 gate 순서 위반으로 보지 않는다", () => {
+		const runDir = tempDir();
+		const workDir = writeSessionLabel(runDir);
+		writeFileSync(join(workDir, "plan.validated.json"), JSON.stringify({ units: [] }));
+		writeFileSync(
+			join(runDir, "run.jsonl"),
+			[
+				JSON.stringify({
+					type: "item.completed",
+					item: { type: "agent_message", text: "이제 fc.ts render를 실행할 계획이다" },
+				}),
+				commandExecutionLine("item_1", "bun fc.ts check plan --work ."),
+				commandExecutionLine("item_2", "bun fc.ts render --work ."),
+			].join("\n"),
+		);
+		const result = scoreRun({
+			runDir,
+			gold: gold([]),
+			judgeText: "SCORE specificity=0 fidelity=0 readability=0",
+			checkRunner: stubCheckRunner(),
+		});
+		expect(result.breakdown.penalties.gate_order_violation).toBe(false);
+	});
+
+	test("오염된 실행(evals/fc-feedback 원본을 cat)은 총점은 유지한 채 excluded_from_comparison만 켠다", () => {
+		const runDir = tempDir();
+		const workDir = writeSessionLabel(runDir);
+		writeFileSync(join(workDir, "plan.validated.json"), JSON.stringify({ units: [] }));
+		writeFileSync(
+			join(runDir, "run.jsonl"),
+			`${commandExecutionLine("item_1", `cat ${join(REPO_ROOT_FOR_TEST, "evals", "fc-feedback", "rubric.md")}`)}\n`,
+		);
+		const cleanResult = scoreRun({
+			runDir,
+			gold: gold([]),
+			judgeText: "SCORE specificity=15 fidelity=15 readability=10",
+			checkRunner: stubCheckRunner(),
+		});
+		expect(cleanResult.breakdown.contamination.contaminated).toBe(true);
+		expect(cleanResult.breakdown.contamination.excluded_from_comparison).toBe(true);
+		expect(cleanResult.breakdown.contamination.hits[0]?.kind).toBe("read");
+		expect(cleanResult.total).toBe(40);
 	});
 
 	test(".fc-eval-session이 없으면 work dir를 찾을 수 없다는 명확한 에러를 던진다", () => {
