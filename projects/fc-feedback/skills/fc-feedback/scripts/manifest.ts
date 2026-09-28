@@ -17,6 +17,15 @@
  *
  * roster_path is checked here only for "exists + parses as YAML" (Bun.YAML).
  * Its member/roster schema is validated later by core.ts, not here (§12-5).
+ *
+ * Manifest root override: by default the manifest lives under
+ * `<home>/.fc-feedback/<projectKey>/manifest.yaml`. Setting the
+ * `FC_FEEDBACK_MANIFEST_ROOT` env var to a nonblank absolute path replaces
+ * `<home>/.fc-feedback` with that path (the value IS the manifest root, not a
+ * home directory). A relative value is rejected. Precedence: the programmatic
+ * `manifestRoot` option, then `FC_FEEDBACK_MANIFEST_ROOT`, then
+ * `<home>/.fc-feedback`. (DESIGN.md is at its line cap, so this note lives
+ * here instead of there.)
  */
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -28,7 +37,10 @@ import { parseDocument, stringify } from "yaml";
 import { resolveFeatureMapContext, type FeatureMapOptions } from "@lib/feature-map/manifest.ts";
 import { withStateLock } from "@lib/persistent-mode-core/state-lock.ts";
 
-export type FcContextOptions = FeatureMapOptions;
+export interface FcContextOptions extends FeatureMapOptions {
+	/** Overrides the manifest root directory (replaces `<home>/.fc-feedback`); takes precedence over `FC_FEEDBACK_MANIFEST_ROOT`. */
+	manifestRoot?: string;
+}
 
 export interface FcContext {
 	projectKey: string;
@@ -52,10 +64,24 @@ export type FcStatus =
 	| { status: "disabled"; mode: "disabled"; project: string; manifestPath: string; archive_repo_path?: string; roster_path?: string; pages_base_url?: string }
 	| { status: "configured"; mode: "configured"; project: string; manifestPath: string; archive_repo_path: string; roster_path: string; pages_base_url: string };
 
+/** Precedence: options.manifestRoot > FC_FEEDBACK_MANIFEST_ROOT env var > `<home>/.fc-feedback`. */
+function resolveManifestRoot(options: FcContextOptions): string {
+	if (options.manifestRoot !== undefined && options.manifestRoot !== "") {
+		if (!isAbsolute(options.manifestRoot)) throw new Error("fc-feedback: manifestRoot must be absolute");
+		return options.manifestRoot;
+	}
+	const envRoot = process.env.FC_FEEDBACK_MANIFEST_ROOT;
+	if (envRoot !== undefined && envRoot !== "") {
+		if (!isAbsolute(envRoot)) throw new Error("fc-feedback: FC_FEEDBACK_MANIFEST_ROOT must be absolute");
+		return envRoot;
+	}
+	return join(realpathSync(options.home ?? homedir()), ".fc-feedback");
+}
+
 export function resolveFcContext(options: FcContextOptions = {}): FcContext {
 	const feature = resolveFeatureMapContext(options);
-	const home = realpathSync(options.home ?? homedir());
-	return { projectKey: feature.projectKey, projectRoot: feature.projectRoot, manifestPath: join(home, ".fc-feedback", feature.projectKey, "manifest.yaml") };
+	const root = resolveManifestRoot(options);
+	return { projectKey: feature.projectKey, projectRoot: feature.projectRoot, manifestPath: join(root, feature.projectKey, "manifest.yaml") };
 }
 
 function isMissing(error: unknown): boolean {

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -24,7 +24,16 @@ function rosterFile(content = "members:\n  - id: hong\n    name: 홍길동\n"): 
 	return path;
 }
 
-afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
+// Snapshots the ambient value (normally unset) so tests that set
+// FC_FEEDBACK_MANIFEST_ROOT never leak it into later tests or the real shell env,
+// mirroring how fc.test.ts's run() isolates HOME per child process.
+const ORIGINAL_MANIFEST_ROOT_ENV = process.env.FC_FEEDBACK_MANIFEST_ROOT;
+
+afterEach(() => {
+	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+	if (ORIGINAL_MANIFEST_ROOT_ENV === undefined) delete process.env.FC_FEEDBACK_MANIFEST_ROOT;
+	else process.env.FC_FEEDBACK_MANIFEST_ROOT = ORIGINAL_MANIFEST_ROOT_ENV;
+});
 
 describe("fc-feedback manifest", () => {
 	test("없는 manifest는 unconfigured로 생성되고 다시 읽어도 유지된다", () => {
@@ -127,5 +136,46 @@ describe("fc-feedback manifest", () => {
 		const roster = rosterFile();
 		configureFc({ archive, roster, pagesUrl: "https://example.com/" }, { cwd, home });
 		expect(requireConfigured({ cwd, home })).toMatchObject({ status: "configured", archive_repo_path: archive, roster_path: roster });
+	});
+
+	test("FC_FEEDBACK_MANIFEST_ROOT을 설정하면 그 경로 아래에 쓰이고 HOME의 .fc-feedback에는 아무것도 생기지 않는다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		const manifestRoot = tempDir();
+		process.env.FC_FEEDBACK_MANIFEST_ROOT = manifestRoot;
+		const archive = repo("archive");
+		const roster = rosterFile();
+		const status = configureFc({ archive, roster, pagesUrl: "https://example.com/" }, { cwd, home });
+		expect(status.manifestPath.startsWith(manifestRoot)).toBe(true);
+		expect(status).toEqual(getFcStatus({ cwd, home }));
+		expect(readFileSync(status.manifestPath, "utf8")).toContain("mode: configured");
+		expect(existsSync(join(home, ".fc-feedback"))).toBe(false);
+	});
+
+	test("FC_FEEDBACK_MANIFEST_ROOT이 상대경로면 거부한다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		process.env.FC_FEEDBACK_MANIFEST_ROOT = "relative/manifest-root";
+		expect(() => getFcStatus({ cwd, home })).toThrow(/absolute/);
+	});
+
+	test("FC_FEEDBACK_MANIFEST_ROOT이 없으면 기존처럼 <home>/.fc-feedback 아래에 저장된다", () => {
+		delete process.env.FC_FEEDBACK_MANIFEST_ROOT;
+		const cwd = repo();
+		const home = tempDir();
+		const status = getFcStatus({ cwd, home });
+		expect(resolveFcContext({ cwd, home }).manifestPath.startsWith(join(home, ".fc-feedback"))).toBe(true);
+		expect(status.status).toBe("unconfigured");
+	});
+
+	test("options.manifestRoot은 FC_FEEDBACK_MANIFEST_ROOT보다 우선한다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		const envRoot = tempDir();
+		const optionRoot = tempDir();
+		process.env.FC_FEEDBACK_MANIFEST_ROOT = envRoot;
+		const context = resolveFcContext({ cwd, home, manifestRoot: optionRoot });
+		expect(context.manifestPath.startsWith(optionRoot)).toBe(true);
+		expect(context.manifestPath.startsWith(envRoot)).toBe(false);
 	});
 });
