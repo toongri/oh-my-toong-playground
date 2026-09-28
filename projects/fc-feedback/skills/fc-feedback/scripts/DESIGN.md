@@ -5,51 +5,34 @@
 반복 검수한다(승인까지 무한 루프). 모든 색상·간격·반경·타입 크기는 아래 토큰에서 나오며,
 토큰에 없는 값을 코드에 쓰면 먼저 이 문서에 토큰을 추가한다.
 
-**v2는 패치가 아니라 재설계다.** 계기는 두 가지다. 첫째, 사용자가 v1 화면을 "너무 구리다"고
-판정했다 — 문제/누구/대신 3칸 구조(dl, definition list)로는 복잡한 축구 장면을 담지 못했고,
-포지션 필터가 결과 0건인 선택지까지 전부 보여줘 눌러도 소용없는 버튼이 많았다. 둘째, 1차 시각
-QA(visual-qa)가 v1 레이아웃에서 구조적 결함 두 가지를 확정했다 — (A) 1024px 이상에서 sticky
-영상 플레이어가 목차 길이에 따라 높이 0으로 무너지는 현상, (B) 헤더와 본문 사이에 뷰포트
-높이만큼(약 858px)의 빈 공백이 생겨 필터 바·카드 목록·푸터가 전부 스크롤해야만 보이는 현상.
-두 결함 모두 v1의 "grid에서 `.side`가 `grid-row: 1 / -1`로 여러 행에 걸치고, 동시에
-`overflow: auto` flex 컬럼 안의 플레이어 박스에 `flex-shrink: 0`이 빠진" 구조 자체에서
-나왔다. v2는 이 구조 자체를 버리고 §3의 레이아웃으로 교체해, 같은 결함이 재발할 수 없게 한다.
+**v2는 패치가 아니라 재설계다.** 계기는 두 가지다. 첫째, 사용자가 v1의 문제/누구/대신
+3칸 구조(dl)가 복잡한 축구 장면을 담지 못하고 결과 0건 필터 버튼이 많다고 "너무 구리다"고
+판정했다. 둘째, 1차 시각 QA가 v1의 grid 레이아웃(`.side`의 `grid-row: 1 / -1` 행-걸침 +
+`overflow: auto` 컬럼 안 `flex-shrink: 0` 누락)에서 구조적 결함 두 가지를 확정했다 —
+(A) sticky 플레이어가 목차 길이에 따라 높이 0으로 무너짐, (B) 헤더-본문 사이 뷰포트
+높이만큼의 빈 공백. v2는 이 grid 구조 자체를 버리고 §4의 flex 레이아웃으로 교체해, 같은
+결함 클래스가 재발할 수 없게 한다.
 
 ## 0. 리서치 로그
 
 v1의 임베디드 참조(notion/linear.app 구조 문법)와 라이트 테마·단일 액센트·시스템 폰트 결정은
-그대로 유지한다. v2 재설계를 위해 추가로 확인한 근거:
-
-- **전술 분석 아티클**(Coaches' Voice, https://learning.coachesvoice.com/cv/arsenal-tactics-mikel-arteta-2025/):
-  이미지는 직전 문단의 시각 증거로 본문 컬럼 전체 폭에 삽입, 핵심 선수 이름은 첫 등장에만
-  볼드, 문단은 3–8문장 단위. → §5 "문단+프레임 인터리브, 볼드는 `**text**`만" 규칙 근거.
-- **영상 리뷰 도구**(Hudl/Loom/Veo/YouTube 챕터): 클립 1개=노트 1개 1:1 대응, 타임스탬프
-  클릭 시크, 플레이어는 항상 노트 옆 고정. → §3 레이아웃, §5 프레임 클릭 시크 근거.
-- **필터 UX**(Baymard, https://baymard.com/blog/ecommerce-filter-ui,
-  https://baymard.com/blog/how-to-design-applied-filters): 옵션 개수 표시가 가장 효과적,
-  결과 0건 옵션은 숨기거나 비활성화, 활성 필터는 칩으로 상시 노출(×+전체 해제). 가로 스크롤
-  칩 목록은 오른쪽이 살짝 잘려 "더 있음"을 암시. → §6, §7 근거.
-- **한글 본문 타이포**(KRDS, https://www.krds.go.kr/html/site/style/style_03.html,
-  https://lqez.github.io/blog/hangul-typo-on-web.html): 본문 17px, 행간 1.6–1.8, `word-break:
-  keep-all`. → §1 타입 스케일 근거(기존 15px 본문을 17px로 올림).
-- **카드 밀도**: 태그는 6개까지만 보이고 나머지는 "+N"으로 묶으며, 칩은 배경 대비 4.5:1 이상,
-  색만으로 상태를 구분하지 않는다.
-- 커밋한 방향: v1의 "조용한 리딩 문서" 방향은 유지하되, 노트는 **문단과 사진이 섞인 짧은
-  기사**가 되고, 팀원은 **자기 이름을 눌러 자기 피드백만** 볼 수 있는 것이 가장 눈에 띄는
-  동작이 된다.
+그대로 유지한다. v2 재설계 근거: 전술 분석 아티클(Coaches' Voice, 이미지=직전 문단의 시각
+증거로 본문 컬럼 전체 폭 삽입, 볼드는 선수 이름 첫 등장에만, §5 근거) · 영상 리뷰 도구
+(Hudl/Loom/Veo, 클립 1개=노트 1개, 타임스탬프 클릭 시크, §5) · 필터 UX(Baymard, 개수 표시,
+0건 숨김, 활성 필터 칩+전체 해제, §6·§7) · 한글 타이포(KRDS, 본문 17px/행간 1.6–1.8/
+`keep-all`, §1) · 카드 밀도(태그 6개+"+N", 칩 대비 4.5:1 이상). 커밋한 방향: 노트는
+**문단과 사진이 섞인 짧은 기사**, 팀원은 **자기 이름을 눌러 자기 피드백만** 보는 것이 가장
+눈에 띄는 동작이 된다.
 
 ## 1. 원칙 (우선순위 순서)
 
 아래 순서는 화면을 만들 때 충돌이 생기면 위 항목이 아래 항목을 이긴다는 뜻이다.
 
-1. **팀원별 명확성이 최우선이다.** "내 피드백" 동선(§4) — 자기 이름을 선택해 자기 피드백만
+1. **팀원별 명확성이 최우선이다.** "내 피드백" 동선(§6) — 자기 이름을 선택해 자기 피드백만
    골라보는 것 — 은 일반 필터(§7)와 시각적으로 분리된, 화면에서 가장 눈에 띄는 컨트롤이다.
-   각 이름 옆에 그 팀원에게 해당하는 피드백 개수를 보여, 누르기 전에도 "나에게 몇 건 있는지"를
-   알 수 있다. 어떤 팀원이든 자기 화면을 열고 자기 이름을 1회 탭하면 그 즉시 자기 개선점만
-   보여야 한다.
+   이름 옆 개수로 누르기 전에도 건수를 알 수 있고, 1회 탭으로 그 즉시 자기 개선점만 보인다.
 2. **본문 가독성이 두 번째다.** 노트는 요약이 아니라 잘 정리된 문단이다 — 영상을 보지 않아도
-   문단과 사진만으로 장면의 윤곽을 알 수 있어야 한다. 강조는 `**볼드**`만 쓰고, 색·밑줄·이탤릭
-   등 다른 강조 수단을 섞지 않는다(§5).
+   문단과 사진만으로 장면의 윤곽을 알 수 있어야 한다. 강조는 `**볼드**`만 쓴다(§5).
 3. **이미지는 증거다.** 대표 시작 이미지와 본문 중 프레임은 장식이 아니라 "이 장면이 실제로
    이랬다"는 증거이므로, 읽기 컬럼 전체 폭으로 크게 보이고 캡션(시간 칩 포함)을 반드시 단다.
 4. **내비게이션은 그다음이다.** 목차(§8)·필터(§7)·영상 전환(§9)은 위 세 원칙을 방해하지 않는
@@ -75,8 +58,8 @@ v1의 임베디드 참조(notion/linear.app 구조 문법)와 라이트 테마·
 | 보더(강조) | `--line-strong` | `#838B93` | 칩·pill·버튼·part 전환 버튼·details summary 등 **인터랙티브 컨트롤**의 경계 전용. 흰 배경 대비 3.45:1(≥3:1 충족) |
 | 액센트 | `--accent` | `#1E7A46` | 링크, 활성 탭/버튼/칩/pill, 포커스 (흰 배경 대비 5.3:1) |
 | 액센트 hover | `--accent-hover` | `#145C34` | 액센트 요소 hover/active |
-| 액센트 틴트 | `--mine-tint` | `#E3F3E9` | "내 피드백" 선택 시 본문 이름 강조(§4)만. 액센트를 옅게 희석한 값이며 독립된 두 번째 색이 아니다 |
-| 포커스 링 | `--focus` | `#1E7A46` | `outline` 색 (§12 접근성) |
+| 액센트 틴트 | `--mine-tint` | `#E3F3E9` | "내 피드백" 선택 시 본문 이름 강조(§5)만. 액센트를 옅게 희석한 값이며 독립된 두 번째 색이 아니다 |
+| 포커스 링 | `--focus` | `#1E7A46` | `outline` 색 (§13 접근성) |
 | 플레이어 컨트롤 배경 | `--player-control-bg` | `rgba(255,255,255,0.9)` | 1024px 미만에서 영상 위에 얹히는 "플레이어 접기" 버튼의 반투명 배경 전용(영상 어디에 겹쳐도 텍스트 대비를 확보하려고 반투명 흰색을 쓴다) |
 | 포지션 GK | `--pos-gk-bg` / `--pos-gk-fg` | `#FDF1D8` / `#8A5A00` | GK 칩 배경/글자 |
 | 포지션 DF | `--pos-df-bg` / `--pos-df-fg` | `#E4EEFC` / `#1451B0` | DF 칩 배경/글자 |
@@ -84,7 +67,7 @@ v1의 임베디드 참조(notion/linear.app 구조 문법)와 라이트 테마·
 | 포지션 FW | `--pos-fw-bg` / `--pos-fw-fg` | `#FBE7E4` / `#B23A2E` | FW 칩 배경/글자 |
 
 규칙: 포지션 4색은 GK/DF/MF/FW 칩 전용이며 다른 용도(상태 표시 등)에 재사용하지 않는다.
-`--mine-tint`는 §4의 이름 강조 한 곳에만 쓴다 — 두 번째 액센트가 아니라 첫 번째 액센트의
+`--mine-tint`는 §5의 이름 강조 한 곳에만 쓴다 — 두 번째 액센트가 아니라 첫 번째 액센트의
 옅은 변형이다. 이 표에 없는 raw hex는 코드에 쓰지 않는다.
 
 ### 간격 (base 4px) · 반경
@@ -97,9 +80,6 @@ v1의 임베디드 참조(notion/linear.app 구조 문법)와 라이트 테마·
 | `--space-4` | 16px | 카드 내부 패딩, 섹션 사이 기본 간격, **본문 문단 사이 간격**(§5) |
 | `--space-6` | 24px | 카드 사이 간격, 레이아웃 컬럼 gap, **본문 문단→프레임 간격**(§5) |
 | `--space-8` | 32px | 섹션(헤더/내 피드백/필터/카드 목록/푸터) 사이 큰 간격 |
-
-| 토큰 | 값 | 용도 |
-|---|---|---|
 | `--radius-sm` | 8px | 카드, 입력, 이미지, figure |
 | `--radius-md` | 12px | 패널, details |
 | `--radius-full` | 9999px | 칩, pill, 필터 리셋 버튼 |
@@ -131,6 +111,7 @@ UI 라벨만 13–14px까지 허용한다. 행간은 Body 1.7을 최소로 유�
 |---|---|---|
 | `--measure` | 660px | 읽기 컬럼(`.main`) 전체 폭 상한. 문단과 figure 모두 이 폭 안에서 렌더되므로 "본문 가독성"과 "이미지는 읽기 컬럼 전체 폭"이 서로 충돌하지 않는다 |
 | `--archive-measure` | 960px | 아카이브 첫 페이지·참고자료 페이지(`.archive-main`, `.ref-main`)의 폭 상한. 세션 뷰어의 2컬럼 레이아웃이 없는 목록형 페이지라 `--measure`보다 넓게 잡는다 |
+| `--content-max` | `calc(420px + var(--space-6) + var(--measure))` | `.header`/`.footer`/`.layout`의 공통 폭 상한(§4). `.side-col` 최대 폭(420px)+컬럼 gap+`--measure`를 그대로 더해, 헤더·본문·푸터가 항상 같은 좌우 폭·왼쪽 끝을 공유하게 한다 |
 
 `--measure`는 660–680px 권장 범위의 하한을 택한 값이며 720px을 넘기면 차단 결함이다(§13).
 
@@ -181,11 +162,11 @@ v1의 결함(§0)은 grid의 `grid-row: 1 / -1` 행-걸침과 `overflow: auto` f
 
 목차는 `<details>`가 아니라 `.toc-toggle`(`aria-expanded` 버튼) + `.toc-panel`(`hidden`
 속성) 조합으로 감싼다 — 닫힌 `<details>`는 크로미움이 내부적으로 `content-visibility: hidden`을
-걸어, 자식에 `display: block`을 강제해도 클릭이 안 되는 유령 레이아웃만 남는다(실측 확인:
-rect는 있지만 `elementFromPoint`가 다른 조상을 반환). `[hidden]`은 UA 시트의 평범한
-`display: none`이라 작성자 CSS로 안전하게 덮어쓸 수 있다. 1024px 미만은 `hidden` 기본
-포함으로 닫힘(§1 원칙 1), 1024px 이상은 `.toc-toggle`을 숨기고 `.toc-panel[hidden]`을
-`display: block`으로 강제해 속성과 무관하게 항상 펼쳐 보여준다.
+걸어, 자식에 `display: block`을 강제해도 클릭이 안 되는 유령 레이아웃만 남기기 때문이다
+(`[hidden]`은 평범한 `display: none`이라 안전하게 덮어쓸 수 있다). 1024px 미만은 `hidden`
+기본 포함으로 닫힘(§1 원칙 1), 1024px 이상은 `.toc-toggle`을 숨기고 `.toc-panel[hidden]`을
+`display: block`으로 강제해 항상 펼쳐 보여준다. `.toc-toggle`의 닫힌 모양은 §7 필터 바
+`summary`와 같은 전체 폭 한 줄(라벨 왼쪽, `▾`/`▴` 오른쪽, `min-height: 44px`)이다.
 
 `header`와 `footer`는 `.layout` 바깥의 독립된 형제 요소다 — v1처럼 소스 순서를 강제하려고
 `order`/`display: contents`를 쓸 필요가 없다. 헤더가 항상 최상단에, 푸터가 항상 최하단에
@@ -194,7 +175,8 @@ rect는 있지만 `elementFromPoint`가 다른 조상을 반환). `[hidden]`은 
 ### 1024px 이상 (좌: 플레이어+목차, 우: 읽기 컬럼)
 
 ```
-.layout   { display: flex; justify-content: center; align-items: flex-start; gap: var(--space-6); }
+.header, .footer, .layout { max-width: var(--content-max); margin: 0 auto; }
+.layout   { display: flex; align-items: flex-start; gap: var(--space-6); }
 .side-col { flex: 0 0 min(420px, 40%); position: sticky; top: var(--space-6);
             max-height: calc(100dvh - var(--space-6) * 2);
             display: flex; flex-direction: column; gap: var(--space-4); }
@@ -215,13 +197,17 @@ rect는 있지만 `elementFromPoint`가 다른 조상을 반환). `[hidden]`은 
 
 플레이어를 좌측 독립 컬럼에 고정한 이유: 영상과 읽기 컬럼이 같은 스크롤 맥락을 공유하지 않게 해, "카드를 스크롤했더니 플레이어가 밀려 사라진다/찌그러진다"는 v1식 결함을 구조적으로 막는다(손 닿는 곳에 항상 플레이어가 있어야 한다는 §0 근거).
 
-`.layout`의 `justify-content: center`: 1440px에서 `.side-col`+`.main`(660px 상한) 합계가 가용 폭보다 작아 남는 공간(약 288px)이 생기면 기본값 `flex-start`는 이를 전부 `.main` 오른쪽에 몰아 §15-10 차단 기준(160px)을 넘긴다. `center`는 좌우로 반씩(약 144px) 나눠 기준 아래로 낮추며, 남는 공간이 없는 1024px에는 영향이 없다.
+**단일 정렬 축**(§2 `--content-max`): `.header`/`.footer`/`.layout` 셋 다 같은
+`--content-max` 상한+`margin: 0 auto`를 써서 항상 같은 왼쪽·오른쪽 끝을 공유한다. 이전엔
+헤더/푸터가 별도 상한(1440px)을 써 `.layout`과 다른 왼쪽 끝이 생겼다 — `--content-max`가
+`.side-col`+gap+`--measure`를 정확히 더한 값이라 1440px에서도 남는 공간이 생기지 않는다.
 
 ### 1024px 미만 (단일 컬럼, sticky 플레이어)
 
 ```
 @media (max-width: 1023.98px) {
-  .layout   { flex-direction: column; }
+  .layout   { flex-direction: column; align-items: stretch; }
+  .header, .footer { padding-left: var(--space-4); padding-right: var(--space-4); }
   .side-col, .side, .main { display: contents; }
   .player-wrapper { order: 1; position: sticky; top: 0; z-index: 10;
                      aspect-ratio: auto; height: min(56.25vw, 200px); }
@@ -231,6 +217,12 @@ rect는 있지만 `elementFromPoint`가 다른 조상을 반환). `[hidden]`은 
   .toc-scroll { overflow-y: visible; } /* .toc-panel이 hidden으로 접히므로 자체 스크롤 불필요 */
 }
 ```
+
+`align-items: stretch`(기본값 `flex-start` 대체): 필터 바·목차 토글의 닫힌 줄, 활성 필터
+줄, 빈 상태 패널이 모두 `.layout`의 flex 아이템이므로, `stretch`가 없으면 내용 폭만큼만
+좁게 그려져 필터/목차 토글이 작은 알약 모양이 된다(390px 결함). `--content-max`가 없는
+1024px 미만에서는 `.header`/`.footer`의 좌우 패딩을 `--space-4`로 직접 줘 본문 폭과
+맞춘다(위 §4 마크업 골격 참고).
 
 **왜 세 wrapper를 모두 `display: contents`로 지우는가**: v1은 플레이어를 짧은 `.side`에 가둬 sticky containing block이 카드 구간에서 끊겼다. v2는 `.side-col`·`.side`·`.main`을 전부 지워 모든 섹션을 `.layout`(전체 스크롤 길이) 하나의 flex 아이템으로 만들어 containing block을 넓히는 동시에, 마크업 순서와 무관하게 위 `order`만으로 재배치할 수 있게 한다 — 2차 시각 QA가 지적한 "목차가 '내 피드백'보다 먼저 나와 약 1950px 아래로 밀린다" 결함이 이걸로 없어진다. 목차를 맨 뒤(order 9)에 둔 것은 §1 원칙 4(내비게이션은 그다음)를 따른 것이다.
 
@@ -273,27 +265,19 @@ pill·버튼·part 전환 버튼·details summary)은 `1px solid var(--line-stro
 
 ## 5. 카드 해부 (노트 v2)
 
-카드 루트는 `<article class="card" data-video data-start data-pos data-topics
-data-member-ids data-related-ids>`. `data-member-ids`는 `member_ids`를, `data-related-ids`는
-`relatedMembers(unit)`(직접 언급 ∪ 포지션 관련, `data-member-ids`의 상위집합)을 공백으로
-구분한 id 목록으로 담는다 — 멘션 배지(아래 3번)의 판정 근거다. `a`/`button`/`summary`/
-`figure` 태그가 아닌 카드 영역 클릭은 그 카드의 시작 시각으로 `seek`한다(카드 전체가 클릭
-타깃, §12 탭 타깃 44px 규칙). 단 `window.getSelection().toString()`이 비어 있지 않으면
-(사용자가 카드 안 텍스트를 드래그 선택 중이면) 그 클릭에서는 `seek`를 실행하지 않는다 —
-문장을 드래그해 복사하려는 조작을 방해하지 않기 위함이다(§13).
+카드 루트는 `<article class="card" data-video data-start data-pos data-topics data-member-ids data-related-ids>`. `data-member-ids`는 `member_ids`를, `data-related-ids`는 `relatedMembers(unit)`(직접 언급 ∪ 포지션 관련, `data-member-ids`의 상위집합)을 `|`로 구분한 id 목록으로 담는다 — `data-pos`/`data-topics`도 같은 구분자다. 주제 태그는 공백을 포함할 수 있어(`core.ts`의 `isValidTag`) 공백 구분자는 단독 선택 시 매칭이 깨지므로, 태그에 쓸 수 없는 `|`를 쓴다. 멘션 배지(아래 3번)는 이 목록에서 id 존재만 확인하면 된다. `a`/`button`/`summary`/`figure` 태그가 아닌 카드 영역 클릭은 그 카드의 시작 시각으로 `seek`한다(카드 전체가 클릭 타깃, §13 탭 타깃 44px 규칙). 헤더 줄(1번)의 시간 칩은 `<button class="seek-btn">`(예 "0:30부터 재생")이라 키보드로도 같은 seek를 실행할 수 있다 — 카드 자체는 포커스 불가 요소라 탭 스톱을 늘리지 않으면서 키보드 접근을 보장한다(§13). 단 `window.getSelection().toString()`이 비어 있지 않으면(사용자가 카드 안 텍스트를 드래그 선택 중이면) 그 클릭에서는 `seek`를 실행하지 않는다 — 문장을 드래그해 복사하려는 조작을 방해하지 않기 위함이다(§13).
 
 카드 내부 순서:
 
 1. **헤더 줄**: 시간 칩(▶ 아이콘 + `m:ss`/`h:mm:ss`, 3600초 기준 분기) + 파트 칩(다중 파트
-   세션에서만) + 브레드크럼(`경기 › 주제`, `›`는 `aria-hidden`). 전부 Label 크기(13px, §2
-   타입 스케일)로 작게 유지해 시각적 무게가 제목·본문(2번·7번)에 쏠리게 한다 — 헤더 메타
-   자체가 본문과 경쟁하는 크기·색을 갖지 않는다.
+   세션에서만) + 브레드크럼(`경기 › 주제`, `›`는 `aria-hidden`). 전부 Label 크기(13px)로
+   작게 유지해 시각적 무게가 제목·본문(2·7번)에 쏠리게 한다.
 2. **제목**: `<h3>` 유닛 제목.
 3. **멘션 배지**: "내 피드백"(§6)에서 팀원을 선택했을 때만 제목 바로 아래 배지 1개를
-   보인다 — `data-member-ids`에 있으면 "직접 언급"(`background: var(--accent); color: #fff;`),
-   없지만 `data-related-ids`에는 있으면 "포지션 관련(참고)"(`background: var(--surface-sunken);
-   color: var(--muted);`, 같은 크기에 톤만 낮춤). 미선택 상태에서는 렌더하지 않는다.
-   VIEWER_JS는 두 data 목록에서 팀원 id를 찾기만 하면 되고, 포지션 트리를 순회할 필요가 없다.
+   보인다 — `data-member-ids`에 있으면 "직접 언급"(`background: var(--accent); color:
+   var(--bg);` 채움), 없지만 `data-related-ids`에는 있으면 "포지션 관련(참고)"(`background:
+   var(--bg); color: var(--muted); border: 1px solid var(--line);` 아웃라인) — 채움 vs
+   아웃라인으로 자기 잘못과 참고용을 한눈에 구분한다. 미선택 상태에서는 렌더하지 않는다.
 4. **대표 시작 이미지**: `<img>`에 실제 프레임의 width/height 속성을 그대로 써 레이아웃
    시프트를 막는다(CLS 없음). 클릭 시 시작 시각으로 seek(카드 공통 클릭 규칙에 포함).
    폭은 `.card` 전체 폭(=읽기 컬럼 폭, §2 `--measure`).
@@ -309,8 +293,8 @@ data-member-ids data-related-ids>`. `data-member-ids`는 `member_ids`를, `data-
      그 외 마크다운(이탤릭, 링크, 목록 등)은 변환하지 않고 문자 그대로 남긴다. 개행은
      블록 경계로만 쓰고 블록 내부 `\n`은 없다(블록 하나 = 문단 하나).
    - `{type:"frame", src, width, height, t, caption}` → `<figure class="body-frame"
-     data-frame-t="{t}"><img src width height loading="lazy"><figcaption>{시간 칩}
-     {caption} <a href="{src}" target="_blank" rel="noopener" class="zoom-link"
+     data-frame-t="{t}"><img src width height loading="lazy"><figcaption>{시간 칩,
+     `.seek-btn` 버튼} {caption} <a href="{src}" target="_blank" rel="noopener" class="zoom-link"
      aria-label="이미지 원본 크게 보기">확대</a></figcaption></figure>`. 폭은 `.card`/`.main`
      전체 폭(§2 `--measure`). `figure`(또는 `img`) 클릭은 `data-frame-t` 값으로 seek한다(카드
      시작 시각이 아니라 **그 프레임의 시각**). "확대" 링크 클릭은 이벤트가 버블링돼도 seek
@@ -342,13 +326,11 @@ data-member-ids data-related-ids>`. `data-member-ids`는 `member_ids`를, `data-
 ### "내 피드백" 상태의 이름 강조
 
 "내 피드백"(§6)에서 팀원 X를 선택했을 때, 카드의 "언급된 팀원"·"관련 팀원" 두 줄에서 X의
-이름만 `<mark class="mine">X</mark>`로 감싼다. 스타일은
-`background: var(--mine-tint); border-radius: var(--radius-sm); padding: 0 var(--space-1);
-font-weight: 600; color: inherit;` 하나뿐이다. **본문 자유 텍스트(문단) 안의 이름은 강조하지
-않는다** — 부분 문자열 오매칭(예: "지우"가 다른 단어에 포함) 위험을 피하려고 구조화된 두
-목록에서만 강조한다. 카드 제목 아래 멘션 배지(§5 3번)와는 다른 신호다 — 배지는 카드와
-선택한 팀원의 관계(직접 언급/포지션 관련)를, 이 강조는 목록 속 어느 이름이 그 사람인지를
-보여준다.
+이름만 `<mark class="mine">X</mark>`(`background: var(--mine-tint); border-radius:
+var(--radius-sm); padding: 0 var(--space-1); font-weight: 600; color: inherit;`)로 감싼다.
+**본문 자유 텍스트 안의 이름은 강조하지 않는다** — 부분 문자열 오매칭 위험을 피해 구조화된
+두 목록에서만 강조한다. 멘션 배지(3번)와는 다른 신호다: 배지는 카드-팀원 관계를, 이 강조는
+목록 속 이름 위치를 보여준다.
 
 ## 6. 내 피드백 (신규 · 프라이머리 컨트롤)
 
@@ -358,12 +340,17 @@ font-weight: 600; color: inherit;` 하나뿐이다. **본문 자유 텍스트(�
 <nav class="my-feedback" aria-label="내 피드백">
   <span class="my-feedback-label">내 피드백</span>
   <div class="my-feedback-row" role="list">
-    <button type="button" class="pill pill-mine" data-group="mine" data-value="m003"
-            aria-pressed="false" role="listitem">한지우 <span class="count">3</span></button>
+    <div role="listitem">
+      <button type="button" class="pill pill-mine" data-group="mine" data-value="m003"
+              aria-pressed="false">한지우 <span class="count">3</span></button>
+    </div>
     ...
   </div>
 </nav>
 ```
+
+`role="listitem"`은 버튼 자신이 아니라 감싸는 `<div>`가 갖는다(§13) — 버튼은 list semantics를
+겸하지 않고 오직 pill 인터랙션만 표현한다.
 
 - 표시 대상은 **이 세션에서 관련 결과가 1건 이상인 팀원만**이다(§7의 0건-숨김 규칙과 동일
   원칙). 순서는 명단(roster) 등록 순서를 그대로 쓴다.
@@ -379,13 +366,17 @@ font-weight: 600; color: inherit;` 하나뿐이다. **본문 자유 텍스트(�
 - 선택 시: 카드 목록이 그 팀원의 `relatedMembers(unit)`에 해당하는 카드만 남기고, 결과 수가
   "피드백 n/m"으로 갱신되며, §5의 이름 강조와 멘션 배지("직접 언급"/"포지션 관련(참고)")가
   카드마다 적용돼 자기 잘못과 참고용을 구분해 보여준다. 이것이 필터 그룹들과 **AND**로
-  결합되는 다섯 번째 조건이다(§7).
-- pill의 최소 히트 영역은 44×44px(§12 접근성)다.
+  결합되는 다섯 번째 조건이다(§7). **30초 기준**(§15 판정 기준 2): 직접 언급 카드가 포지션
+  관련 카드보다 먼저 보여야 팀원이 근거를 빨리 찾는다 — VIEWER_JS가 `.card-list`에
+  `.mine-active`를, 직접 언급 카드에 `.is-direct`를 토글하고, `.card-list.mine-active
+  .card:not(.is-direct) { order: 1; }`(카드 목록은 flex column)로 DOM 순서를 바꾸지 않은 채
+  직접 언급 카드를 시각적으로 앞세운다. 각 그룹 내부는 원래 시간순을 유지한다(flex `order`는
+  동순위 항목의 소스 순서를 보존한다). 선택 해제 시 두 클래스 모두 제거한다.
+- pill의 최소 히트 영역은 44×44px(§13 접근성)다.
 
-이 컨트롤이 필터 바 안이 아니라 별도 섹션인 이유(§1 원칙 1): 팀원이 "내 피드백을 보고 싶다"는
-의도는 "포지션이 DF인 것만 보고 싶다" 같은 일반 필터링 의도와 다르다 — 훨씬 빈번하고, 항상
-먼저 눈에 띄어야 한다. 필터 바의 `<details>` 접힘(모든 폭에서 기본 닫힘, §7) 안에 숨기지
-않고 언제나 펼쳐진 채로 둔다.
+이 컨트롤이 필터 바 안이 아니라 별도 섹션인 이유(§1 원칙 1): "내 피드백을 보고 싶다"는
+의도는 일반 필터링 의도보다 훨씬 빈번해 항상 먼저 눈에 띄어야 한다 — 필터 바의 기본 닫힘
+(§7) 안에 숨기지 않고 언제나 펼쳐 둔다.
 
 ## 7. 필터 바
 
@@ -399,23 +390,11 @@ font-weight: 600; color: inherit;` 하나뿐이다. **본문 자유 텍스트(�
 
 ### 결과 0건 옵션은 렌더하지 않는다
 
-세 그룹 모두, **이 세션에서 결과가 1건 이상인 옵션만 DOM에 렌더한다.** 결과 0건인 옵션은
-비활성화(disabled)로 보여주는 것이 아니라 **애초에 렌더하지 않는다** — 눌러보고서야 결과가
-없다는 걸 알게 하지 않는다(§1 원칙 4). 각 옵션 라벨 옆에 개수를 괄호로 표시한다(예
-"빌드업 (5)").
+세 그룹 모두, **이 세션에서 결과가 1건 이상인 옵션만 DOM에 렌더한다.** 결과 0건인 옵션은 비활성화(disabled)로 보여주는 것이 아니라 **애초에 렌더하지 않는다** — 눌러보고서야 결과가 없다는 걸 알게 하지 않는다(§1 원칙 4). 각 옵션 라벨 옆에 개수를 괄호로 표시한다(예 "빌드업 (5)").
 
-**옵션·개수는 세 그룹 모두 빌드 시점에 세션 전체(m건) 기준으로 한 번만 계산해 고정한다** —
-다른 그룹에서 무엇을 선택했는지와 무관하다. 실시간으로 바뀌는 것은 카드 목록의 표시 여부
-(그룹 간 AND, 주제 그룹 내부 OR)뿐이고, 옵션 존재·개수 숫자는 다시 계산되지 않는다. 그래서
-**한 번 선택된 옵션은 다른 그룹과의 AND로 카드 목록이 0건이 되어도 필터 바에서 사라지지
-않는다** — 빌드 시점 고정이라 사라지거나 다시 나타나는 것은 카드 목록뿐이다.
+**옵션·개수는 세 그룹 모두 빌드 시점에 세션 전체(m건) 기준으로 한 번만 계산해 고정한다** — 다른 그룹 선택과 무관하다. 실시간으로 바뀌는 것은 카드 목록의 표시 여부(그룹 간 AND, 주제 내부 OR)뿐이라, **한 번 선택된 옵션은 AND로 카드 목록이 0건이 되어도 필터 바에서 사라지지 않는다.**
 
-- **포지션 트리**: 빌드 시점에 이 세션의 유닛들로부터 결과 있는 리프 노드를 구하고, 그
-  조상 노드를 전부 포함해 가지치기한 트리만 렌더한다(예: FB 태그가 하나도 없으면 FB/LB/RB/
-  LWB/RWB 노드는 트리에서 완전히 빠지고, DF는 CB만 있어도 CB의 조상이므로 남는다). 각 노드의
-  개수는 `posClosure(node)`(자기 자신+조상+자손 폐포)에 해당하는 카드 수다. 폐포 자체는 v1과
-  동일하게 유지: `posClosure(unit) = ∪(anc(t) ∪ desc(t))`, FB 선택은 LB 태그 카드를 포함하고
-  역도 성립하되, CB와 LB처럼 공통 조상만 있는 가지는 서로 매칭하지 않는다.
+- **포지션 트리**: 빌드 시점에 결과 있는 리프 노드 + 그 조상만 가지치기해 렌더한다(예: FB 태그가 없으면 FB/LB/RB/LWB/RWB는 전부 빠지고, DF는 CB만 있어도 조상이라 남는다). 각 노드의 개수는 `posClosure(node) = ∪(anc(t) ∪ desc(t))`(자기 자신+조상+자손 폐포) 카드 수 — FB 선택은 LB 태그 카드를 포함하고 역도 성립하되, CB·LB처럼 공통 조상만 있는 가지는 매칭하지 않는다. 노드는 `min-width: 0; max-width: 100%; flex-wrap: wrap;`로 모바일 폭 안에서 줄바꿈한다 — `overflow: hidden`으로 잘라내지 않는다(390px 칩 잘림 결함 방지).
 - **주제**: 이 세션에서 1건 이상 쓰인 태그만 옵션으로 렌더하고, 각 옵션에 개수를 표시한다.
 - **언급 선수**: `member_ids`에 1번이라도 등장한 팀원만 옵션으로 렌더하고, 등장 유닛 수를
   개수로 표시한다.
@@ -431,6 +410,10 @@ font-weight: 600; color: inherit;` 하나뿐이다. **본문 자유 텍스트(�
 
 - **결과 수**: "피드백 n/m"(n=현재 표시, m=전체).
 - **기본 접힘(모든 폭)**: 필터 바 전체가 `<details><summary>필터 (n)</summary>...</details>`로, `open` 없이 기본 닫힘이다(§6 "내 피드백"은 접히지 않는다). 2차 시각 QA에서 데스크톱 기본값이던 `open`이 1440×900·1024×768 모두 카드 목록을 fold 밖으로 밀어내는 것이 확인돼 모바일·데스크톱 모두 기본 닫힘으로 통일했다(필터는 §1 원칙 4의 보조 도구). `n`은 활성 그룹 수(포지션/주제/언급 선수, 주제는 태그 개수와 무관하게 1). `<summary>`는 요약도 보여 닫힌 채로도 무엇이 걸려 있는지 알 수 있다(예 "필터 (2) · 포지션 FB, 주제 빌드업").
+- **닫힌 줄 모양(모든 폭)**: `summary`는 `justify-content: space-between`인 전체 폭 한 줄
+  (라벨 왼쪽, `▾`/`▴` 오른쪽, `min-height: 44px`, §4의 `.toc-toggle`과 동일)이고, 패딩은
+  `[open]`일 때만 안쪽 콘텐츠에 준다 — 닫힌 상태가 세로로 길쭉한 상자가 아니라 요약 한 줄로
+  보이게 한다. 1024px 미만은 `.layout`의 `align-items: stretch`(§4)로 이 줄도 전체 폭이다.
 - **빈 상태는 AND 조합이 0건일 때만 나온다.** 단일 옵션은 항상 결과 1건 이상만 노출되므로
   절대 그 자체로는 0건이 될 수 없다 — 0건은 "포지션 GK AND 주제 빌드업"처럼 서로 다른
   그룹을 동시에 고를 때만 생긴다. 0건이면 카드 목록과 목차 항목이 모두 사라지고 §10의 빈
@@ -449,8 +432,15 @@ aria-controls="...">`로 구현한다:
 항목은 시간 칩 + 제목만 한 줄로 짧게 보인다(카드 전체 내용을 목차에 복제하지 않는다).
 
 TOC 항목 클릭은 **seek하지 않는다** — 대상 카드로 스크롤(`scrollIntoView`,
-`scroll-margin-top` 적용) 후 `.card--highlighted`(`--accent` 보더 2px, 600ms 후 제거)를
-잠깐 준다. 필터·"내 피드백"으로 숨겨진 카드에 해당하는 TOC 항목은 함께 숨긴다.
+`scroll-margin-top` 적용) 후 `.card--highlighted`(`--accent` 보더 2px, 600ms 후 제거)와
+그 TOC 항목의 `.is-current`(같은 600ms에 제거)를 함께 준다. 필터·"내 피드백"으로 숨겨진
+카드에 해당하는 TOC 항목은 함께 숨긴다 — 항목을 숨긴 결과 그 경기/주제 그룹에 보이는 항목이
+0개가 되면, 그룹 헤더(`.toc-match-group`/`.toc-topic-group`/`.toc-tag-group`)도 함께
+숨긴다. `:has()`에 기대지 않고 매 `applyFilters` 호출마다 각 그룹을 순회해
+`querySelector(".toc-item:not([hidden])")` 유무로 `hidden` 속성을 직접 토글한다(구형
+엔진 호환). 목차 링크는 평소 `color: var(--muted); text-decoration: none;`이고
+hover/focus/`.is-current`에서만 `--accent`+밑줄을 받는다 — 필터 칩과 달리 안 읽은 링크처럼
+차분하게 둔다.
 
 ## 9. 영상 전환
 
@@ -466,10 +456,16 @@ TOC 항목 클릭은 **seek하지 않는다** — 대상 카드로 스크롤(`sc
   일 때만 즉시 플레이어를 생성한다. `window.YT`를 선언 없이 bare identifier로 읽으면 아직
   `iframe_api` 스크립트가 로드되지 않은 시점에 `ReferenceError`가 나 `else` 분기의
   `window.onYouTubeIframeAPIReady` 등록 자체가 실행되지 않는 사고로 이어진다 — 반드시
-  `typeof`/전역 존재 확인을 거친 뒤 읽는다.
+  `typeof`/전역 존재 확인을 거친 뒤 읽는다. 같은 이유로 "생성 시도함" 플래그(`playerCreated`)는
+  `new window.YT.Player(...)`가 실제로 실행된 뒤에만 true로 바꾼다 — 미리 true로 두면
+  `window.YT`가 아직 없어 생성이 실패했을 때도 재시도 자체가 막혀, 나중에 API가 로드돼도
+  플레이어가 영원히 안 만들어지는 결함으로 이어진다(REAL BUG, 회귀 테스트로 고정).
 - **스크립트 로드 순서**: `VIEWER_JS`를 `iframe_api` 스크립트보다 **먼저** 로드한다.
 - **테스트 훅**: `document.body.dataset.video`(현재 재생 중인 videoId)와 `window.fcPlayer`
   (YT.Player 인스턴스)를 항상 최신 상태로 유지한다.
+- **접힌 미니 바 시각 갱신**(§4 플레이어 접기): 접힌 동안만 1초 간격으로 현재 재생 시각을
+  다시 읽어 미니 바 텍스트를 갱신한다. 펼치면 그 interval을 즉시 clear한다 — 펼쳐진 동안은
+  실제 플레이어가 보이므로 별도 텍스트 갱신이 필요 없다.
 - **임베드 불가 플레이스홀더**: 영상별로 판정한다. `embeddable: false`면 iframe 대신
   플레이스홀더(썸네일 또는 텍스트 카드 + "유튜브에서 시청 ↗")를 보인다. 카드에서 전환한
   경우 새 탭 링크는 그 카드의 시작 시각을 가리킨다. 각 카드의 "유튜브에서 보기 ↗"(§5)는
@@ -509,11 +505,9 @@ keep-all`/`text-wrap:pretty`는 조사·어미 분리나 "-지 못하다" 같은
 disabled 모드에서 명단이 없으면 alias 정규화를 생략하고, similar는 빈 결과로 건너뛰며,
 `render --site-only`로 로컬 사이트만 만들어 아카이브의 `index.json`은 갱신하지 않는다.
 
-**빈 상태의 시각적 처리(2차 시각 QA)**: 필터 빈 상태와 빈 아카이브는 같은 `.empty-state`
-클래스를 공유하며, 맨 텍스트만 있던 v2 초판과 달리 `--surface`+`--line`+`--radius-md`의
-틴트 패널로 감싸고 안내 문구·리셋 버튼을 세로 `--space-4` 간격으로 가운데 정렬한다 — 리셋이
-있는 필터 빈 상태는 버튼이 독립된 줄로 분리돼 보이고, 리셋이 없는 빈 아카이브는 문구만
-같은 패널 안에서 정렬된다.
+**빈 상태의 시각적 처리**: 필터 빈 상태와 빈 아카이브는 같은 `.empty-state` 클래스를
+공유하며, `--surface`+`--line`+`--radius-md` 틴트 패널로 감싸고 안내 문구·리셋 버튼을 세로
+`--space-4` 간격으로 가운데 정렬한다(리셋 없는 빈 아카이브는 문구만).
 
 ## 12. 아카이브 첫 페이지 / 참고자료 페이지
 
@@ -524,17 +518,24 @@ disabled 모드에서 명단이 없으면 alias 정규화를 생략하고, simil
 ### 아카이브 첫 페이지
 
 - 세션 카드를 최신순(날짜 desc)으로 나열: 날짜, 제목, 파트 수, 피드백 개수, 주제 칩 목록.
-  타입 스케일·색·간격 토큰은 세션 뷰어와 동일하다(§2).
+  타입 스케일·색·간격 토큰은 세션 뷰어와 동일하다(§2). 카드 전체가 클릭 타깃이지만
+  `color: var(--ink); text-decoration: none;`로 카드 전체에 밑줄을 걸지 않는다 — 날짜는
+  `--muted`로 작게, 제목만 hover/focus 시 `--accent` 색+밑줄을 받는다(밑줄이 클릭 타깃
+  경계가 아니라 제목 하나를 가리키게 한다).
 - "주제별 전체 피드백" 링크 — 아카이브 전체를 가로지르는 주제별 뷰로 이동.
 - 빈 상태는 §11 참고(같은 렌더러 출력이어야 한다).
-- 푸터 고지: "팀 내부 피드백용 비공식 정리 문서입니다. 영상 저작권은 원 게시자에게
-  있습니다." — 세션 페이지 푸터와 동일 문구.
+- 푸터 고지: "팀 내부 피드백용 비공식 정리 문서입니다. 영상 저작권은 원게시자에게
+  있습니다."(원문 그대로 — "원 게시자"로 띄어 쓰면 390px에서 "원"이 고아 줄로 남는다, §10) —
+  세션 페이지 푸터와 동일 문구.
 
 ### 참고자료(refs) 페이지
 
 - 제목, `kind`(`eafc`/`tactics`) 배지 + 언어 배지, 원문 링크("원문 ↗", 새 탭).
-- 한국어 요약(`summary_ko`), 핵심 포인트 목록(`key_points_ko`).
-- 원문 | 한국어 2열 표(`translations[]`, 최대 5행).
+- 한국어 요약(`summary_ko`), 핵심 포인트 목록(`key_points_ko`) — Body 크기(1.0625rem/1.7,
+  §2)로 세션 카드 본문과 같은 가독성을 준다(요약이라고 작게 줄이지 않는다).
+- 원문 | 한국어 2열 표(`translations[]`, 최대 5행). 헤더 셀은 Caption(0.875rem/700),
+  본문 셀은 Body(1.0625rem/1.7). `border: 0; border-bottom: 1px solid var(--line);
+  padding: var(--space-3);`로 셀 경계를 구분선 하나로 단순화한다.
 - "아카이브로 돌아가기" 링크.
 - `ko` 언어 참고자료는 이 페이지 자체가 생성되지 않는다(§5 참고자료 규칙과 동일 이유).
 
@@ -548,12 +549,15 @@ disabled 모드에서 명단이 없으면 alias 정규화를 생략하고, simil
   `--line`(1.25:1)이 아니라 `--line-strong`(3.45:1, §2)을 쓴다. 장식용 구분선(카드/이미지/
   figure 테두리)만 `--line`을 쓴다.
 - **탭 타깃**: 버튼, 탭, 칩, pill, part 전환 버튼, "플레이어 접기" 버튼, `.toc-toggle`,
-  details summary의 클릭 가능 영역은 최소 44×44px.
+  `.seek-btn`, details summary의 클릭 가능 영역은 최소 44×44px(작은 시간 칩처럼 시각 크기를
+  키울 수 없으면 `::after`로 중앙 정렬된 확장 히트 영역을 쓴다).
 - 목차 탭은 `role="tablist"`/`role="tab"`/`aria-selected`를 정확히 따른다. 파트 전환 버튼과
   필터/`내 피드백` pill은 `aria-pressed`를, "플레이어 접기" 버튼과 `.toc-toggle`은
-  `aria-expanded`를 쓴다. 이 셋은 스크린리더 사용자에게 현재 선택·펼침 상태를 전달하는
-  유일한 수단이므로 시각
+  `aria-expanded`를 쓴다 — 스크린리더에 선택·펼침 상태를 전달하는 유일한 수단이므로 시각
   스타일만으로 대체하지 않는다.
+- **리스트 semantics는 인터랙션 요소와 분리한다**: "내 피드백" pill의 `role="listitem"`은
+  버튼 자신이 아니라 감싸는 `<div>`가 갖는다(§6) — 버튼이 list semantics까지 겸하면
+  스크린리더가 같은 요소를 버튼과 목록 항목 두 가지로 동시에 안내해야 한다.
 - **텍스트 선택과 seek**: `window.getSelection().toString()`이 비어 있지 않은 동안의 카드
   클릭은 seek를 실행하지 않는다(§5, 드래그 선택 방해 방지).
 
@@ -564,10 +568,7 @@ disabled 모드에서 명단이 없으면 alias 정규화를 생략하고, simil
 전체 판정 대상의 열거는 항상 아래 35개다. 뷰어 상태 캡처는 파트가 2개인 현재 세션 fixture를
 쓴다(`disabled-mode`/`embed-blocked`는 각자 필요한 별도 fixture, 아래 참고).
 
-v1의 12상태 중 "toc-match"(default와 항상 동일 화면이라 낭비)는 "body-frames-closeup"으로,
-"filter-empty-gk"(§7 규칙상 0건 팀원은 옵션 자체에 없어 재현 불가)는 "filter-empty-and"로
-바꿨다. "filter-member"는 §6 "내 피드백"으로 승격·개명해 같은 자리를 쓴다. `disabled-mode`
-(§11)·`embed-blocked`(§9)는 v2 신규로 34·35번에 추가했다.
+`disabled-mode`(§11)·`embed-blocked`(§9)는 v2 신규로 34·35번에 추가했다.
 
 | # | id | page | state | viewport |
 |---|---|---|---|---|
@@ -577,8 +578,8 @@ v1의 12상태 중 "toc-match"(default와 항상 동일 화면이라 낭비)는 
 | 4 | `toc-topic-1440` | session | 목차 "주제별" 탭 활성 | 1440×900 |
 | 5 | `filter-position-390` | session | 포지션 필터 `FB` 선택 | 390×844 |
 | 6 | `filter-position-1440` | session | 포지션 필터 `FB` 선택 | 1440×900 |
-| 7 | `filter-topic-multi-390` | session | 주제 필터 "빌드업"+"전환/역습" 다중 선택(OR) | 390×844 |
-| 8 | `filter-topic-multi-1440` | session | 주제 필터 "빌드업"+"전환/역습" 다중 선택(OR) | 1440×900 |
+| 7 | `filter-topic-multi-390` | session | 주제 필터 "수비전환"+"역습" 다중 선택(OR) | 390×844 |
+| 8 | `filter-topic-multi-1440` | session | 주제 필터 "수비전환"+"역습" 다중 선택(OR) | 1440×900 |
 | 9 | `filter-mention-390` | session | 언급 선수 필터 선택 | 390×844 |
 | 10 | `filter-mention-1440` | session | 언급 선수 필터 선택 | 1440×900 |
 | 11 | `my-feedback-390` | session | "내 피드백"에서 팀원 1명 선택(§6) | 390×844 |
@@ -617,20 +618,20 @@ null}` 형태로 기록한다. `kind: "dom"` 항목은 `skipped_reason`을 허�
 
 `dom` 항목(v1에서 이어받는 것 + v2 신규):
 
-- 카드 클릭 후 `document.body.dataset.video`가 해당 카드의 videoId와 일치.
-- 다른 파트 카드 클릭 후 해당 파트 버튼만 `aria-pressed="true"`.
-- 목차 클릭 후 대상 카드로 스크롤·강조되며 seek는 발생하지 않음.
-- 필터 리셋 후 결과 수가 전체 m으로 복귀, 탭 `aria-selected` 전환.
-- **결과 0건인 옵션은 DOM에 렌더되지 않는다**(예: 이 세션에 GK 태그가 없으면 포지션 트리에
-  GK 노드 자체가 없음을 확인).
+- 카드 클릭 후 `document.body.dataset.video`가 해당 카드의 videoId와 일치, 다른 파트 카드
+  클릭 후 해당 파트 버튼만 `aria-pressed="true"`.
+- 목차 클릭 후 대상 카드로 스크롤·강조(`.card--highlighted`+TOC `.is-current`)되며 seek는
+  발생하지 않음. 필터로 숨겨져 보이는 항목이 0개인 TOC 그룹은 그룹 헤더도 함께 숨음.
+- 필터 리셋 후 결과 수가 전체 m으로 복귀, 탭 `aria-selected` 전환. **결과 0건인 옵션은
+  DOM에 렌더되지 않는다**(예: GK 태그가 없으면 포지션 트리에 GK 노드 자체가 없음). **필터
+  옵션 고정**: AND 조합이 0건이 되어도 선택된 옵션이 사라지지 않는다.
 - **본문 프레임 클릭은 `data-frame-t` 값으로 seek한다**(카드의 시작 시각이 아니라 그
-  프레임의 시각인지 확인).
-- **"내 피드백"에서 팀원 1명 선택 시 그 팀원의 `relatedMembers` 카드만 남고 결과 수가
-  정확한 개수로 갱신된다.**
-- **멘션 배지**: `data-member-ids`에 있으면 "직접 언급", 없이 `data-related-ids`에만 있으면
-  "포지션 관련(참고)" 배지를 보인다.
+  프레임의 시각). 헤더 줄·프레임의 `.seek-btn` 클릭도 같은 seek를 실행한다.
+- **"내 피드백"에서 팀원 1명 선택 시** 그 팀원의 `relatedMembers` 카드만 남고 결과 수가
+  정확히 갱신되며, `.card-list.mine-active`에서 `.is-direct`(직접 언급) 카드가 먼저 온다.
+  **멘션 배지**는 `data-member-ids`면 "직접 언급", `data-related-ids`만이면 "포지션
+  관련(참고)"를 보인다.
 - **텍스트 선택 중 seek 무시**: 드래그 선택 중인 카드를 클릭해도 재생 상태가 바뀌지 않는다.
-- **필터 옵션 고정**: AND 조합이 0건이 되어도 선택된 옵션이 DOM에서 사라지지 않는다.
 - **모바일 sticky 유지**: 390px에서 카드 목록 끝까지 스크롤해도 `.player-wrapper` 고정이
   유지된다(펼침 시 상단, 접힘 시 44px).
 

@@ -233,6 +233,19 @@ interface ViewerWindow {
 	getSelection?: () => { toString: () => string };
 }
 
+/**
+ * linkedom's `parseHTML()` result shares custom-property storage across separate calls within
+ * one process (a plain `win.someAdHocProp = x` write on one parsed document is readable, and
+ * deletable, from every OTHER `parseHTML()` result too) — confirmed by direct repro, not by the
+ * DOM API surface itself. So the `window` passed into VIEWER_JS is a fresh plain object carrying
+ * only the real `document`/`Element` from that parse; every ad hoc global (YT, fcPlayer,
+ * onYouTubeIframeAPIReady, matchMedia, getSelection) is then an own property of THIS plain
+ * object, never of the leaky parse result, so tests can't see another test's leftover state.
+ */
+function makeWindow(dom: ReturnType<typeof parseHTML>): ViewerWindow {
+	return { document: dom.document, Element: dom.Element };
+}
+
 /** Runs VIEWER_JS via the `new Function("window","document","YT", src)` harness (source now reads `window.YT`, so this also sets `win.YT`). */
 function runViewer(win: ViewerWindow, yt: { Player: typeof StubPlayer; loaded: boolean } | undefined): void {
 	const run = new Function("window", "document", "YT", VIEWER_JS) as (
@@ -252,7 +265,7 @@ function mountViewer(
 	ytLoaded: boolean,
 ): { win: ViewerWindow; doc: Document; stub: StubPlayer | null } {
 	const dom = parseHTML(html);
-	const win = dom as unknown as ViewerWindow;
+	const win = makeWindow(dom);
 	win.Element.prototype.scrollIntoView = () => {};
 	win.matchMedia = () => ({ matches: false, addListener: () => {}, removeListener: () => {} });
 	runViewer(win, { Player: StubPlayer, loaded: ytLoaded });
@@ -436,7 +449,7 @@ describe("스크립트 개수 · noindex · 카드 수 · data-pos", () => {
 		const doc = parseHTML(renderSession(data)).document;
 		for (const unit of data.units) {
 			const card = doc.getElementById(unit.id);
-			const actual = (card?.getAttribute("data-pos") ?? "").split(" ").filter(Boolean).sort();
+			const actual = (card?.getAttribute("data-pos") ?? "").split("|").filter(Boolean).sort();
 			const expected = posClosure(unit.position_tags).sort();
 			expect(actual).toEqual(expected);
 		}
@@ -629,6 +642,25 @@ describe("목차 탭", () => {
 		expect(isHidden(doc.getElementById("panel-topic"))).toBe(false);
 		expect(isHidden(doc.getElementById("panel-match"))).toBe(true);
 	});
+
+	test("목차 항목은 시각 칩을 함께 보인다(DESIGN §8)", () => {
+		const doc = parseHTML(renderSession(sampleData())).document;
+		const item = doc.querySelector('#panel-match .toc-item[data-target="u001"]');
+		expect(item?.querySelector(".chip-time")?.textContent).toBe("12:34");
+	});
+
+	test("필터로 결과가 없어진 목차 그룹은 숨겨진다(DESIGN §8, :has() 의존 없이 JS로 계산)", () => {
+		const { doc } = mountViewer(renderSession(sampleData()), false);
+		clickChip(doc, "position", "GK"); // u002(피지컬/빌드업 아님)만 해당
+		const buildupGroup = [...doc.querySelectorAll("#panel-topic .toc-tag-group")].find((group) =>
+			group.querySelector("h2")?.textContent?.startsWith("빌드업"),
+		);
+		expect(isHidden(buildupGroup ?? null)).toBe(true); // u001, u003 모두 숨겨짐
+		const physicalGroup = [...doc.querySelectorAll("#panel-match .toc-topic-group")].find(
+			(group) => group.querySelector("h3")?.textContent === "피지컬 싸움",
+		);
+		expect(isHidden(physicalGroup ?? null)).toBe(false); // u002는 남아있음
+	});
 });
 
 // ── filters ─────────────────────────────────────────────────────────────
@@ -671,6 +703,15 @@ describe("필터", () => {
 		expect(isHidden(doc.getElementById("u001"))).toBe(false);
 		expect(isHidden(doc.getElementById("u002"))).toBe(false);
 		expect(isHidden(doc.getElementById("u003"))).toBe(false);
+	});
+
+	test("공백을 포함한 주제 태그도 단독 선택 시 정상적으로 매칭된다(core.ts의 isValidTag는 공백을 허용, '|' 구분자로 인코딩)", () => {
+		const data = sampleData();
+		data.units[0].topic_tags = ["전환 역습"];
+		const { doc } = mountViewer(renderSession(data), false);
+		clickChip(doc, "topic", "전환 역습");
+		expect(isHidden(doc.getElementById("u001"))).toBe(false);
+		expect(isHidden(doc.getElementById("u002"))).toBe(true);
 	});
 });
 
@@ -719,11 +760,34 @@ describe("영상 전환", () => {
 
 	test("YT가 정의되기 전에 로드돼도 onYouTubeIframeAPIReady를 등록한다", () => {
 		const dom = parseHTML(renderSession(sampleData()));
-		const win = dom as unknown as ViewerWindow;
+		const win = makeWindow(dom);
 		win.Element.prototype.scrollIntoView = () => {};
 		win.matchMedia = () => ({ matches: false, addListener: () => {}, removeListener: () => {} });
 		expect(() => runViewer(win, undefined)).not.toThrow();
 		expect(typeof win.onYouTubeIframeAPIReady).toBe("function");
+	});
+
+	test("API 로드 전 카드 클릭도 이후 ready가 오면 플레이어가 생성되고 큐가 재생된다(REAL BUG 회귀)", () => {
+		const dom = parseHTML(renderSession(sampleData()));
+		const win = makeWindow(dom);
+		win.Element.prototype.scrollIntoView = () => {};
+		win.matchMedia = () => ({ matches: false, addListener: () => {}, removeListener: () => {} });
+		runViewer(win, undefined); // window.YT가 아예 없는 콜드 로드 상태에서 시작
+
+		click(win.document.getElementById("u002")); // Part 2 카드 — 아직 YT가 없어 ensurePlayer는 아무 것도 못 한다.
+		expect(win.fcPlayer).toBeUndefined();
+
+		win.YT = { Player: StubPlayer, loaded: true }; // iframe_api 스크립트가 뒤늦게 로드됨
+		expect(typeof win.onYouTubeIframeAPIReady).toBe("function");
+		win.onYouTubeIframeAPIReady?.();
+
+		const stub = win.fcPlayer instanceof StubPlayer ? win.fcPlayer : null;
+		expect(stub).not.toBeNull();
+		expect(stub?.videoId).toBe("BBBBBBBBBBB"); // 클릭 시점의 currentVideo로 생성돼야 한다(초기 비디오가 아니라).
+
+		stub?.fireReady(); // 큐에 쌓여 있던, 클릭 시점의 seekTo(3725)가 재생돼야 한다.
+		const seekCall = stub?.calls.find((call) => call.method === "seekTo");
+		expect(seekCall?.args[0]).toBe(3725);
 	});
 });
 
@@ -866,6 +930,26 @@ describe("내 피드백", () => {
 		expect(mark?.tagName.toLowerCase()).toBe("mark");
 		expect(mark?.classList.contains("mine")).toBe(true);
 	});
+
+	test('"내 피드백" 선택 시 card-list에 mine-active가, 직접 언급 카드에만 is-direct가 붙는다(30초 기준, DESIGN §6)', () => {
+		const { doc } = mountViewer(renderSession(sampleData()), false);
+
+		clickMinePill(doc, "kim"); // kim: u001에 포지션(FB) 관련만 있고 직접 언급은 없다.
+		expect(doc.querySelector(".card-list")?.classList.contains("mine-active")).toBe(true);
+		expect(doc.getElementById("u001")?.classList.contains("is-direct")).toBe(false);
+
+		clickMinePill(doc, "kim"); // 토글 해제
+		clickMinePill(doc, "hong"); // hong: u001의 member_ids에 직접 있다.
+		expect(doc.getElementById("u001")?.classList.contains("is-direct")).toBe(true);
+
+		clickMinePill(doc, "hong"); // 해제 시 둘 다 지워진다.
+		expect(doc.querySelector(".card-list")?.classList.contains("mine-active")).toBe(false);
+		expect(doc.getElementById("u001")?.classList.contains("is-direct")).toBe(false);
+	});
+
+	test("STYLE은 mine-active 상태에서 직접 언급이 아닌 카드에 order:1을 주어 위로 뜨지 않게 한다(DESIGN §6)", () => {
+		expect(STYLE).toMatch(/\.card-list\.mine-active\s+\.card:not\(\.is-direct\)\s*\{\s*order:\s*1;?\s*\}/);
+	});
 });
 
 // ── 플레이어 접기 (DESIGN §4) ──────────────────────────────────────────────
@@ -897,7 +981,7 @@ describe("텍스트 선택 가드 · 확대 링크", () => {
 			{ type: "frame", src: "img/u001-c001.webp", width: 1280, height: 720, t: 760, caption: "장면" },
 		];
 		const dom = parseHTML(renderSession(data));
-		const win = dom as unknown as ViewerWindow;
+		const win = makeWindow(dom);
 		win.Element.prototype.scrollIntoView = () => {};
 		win.matchMedia = () => ({ matches: false, addListener: () => {}, removeListener: () => {} });
 		win.getSelection = () => ({ toString: () => "선택된 텍스트" });
@@ -942,5 +1026,61 @@ describe("disabled 모드(명단 없음)", () => {
 		expect(doc.querySelector(".mentioned-members")).toBeNull();
 		expect(doc.querySelector(".related-members")).toBeNull();
 		expect(doc.querySelector(".mention-badge")).toBeNull();
+	});
+});
+
+// ── 키보드 접근성: seek 버튼 · 내 피드백 리스트 시맨틱 (DESIGN §13) ──────────────
+
+describe("키보드 접근성", () => {
+	test("카드 헤더 시각 칩은 버튼이며 클릭하면 카드 시작 시각으로 seek한다", () => {
+		const { doc, stub } = mountViewer(renderSession(sampleData()), true);
+		stub?.fireReady();
+		const btn = doc.querySelector("#u001 .card-head .seek-btn");
+		expect(btn?.tagName.toLowerCase()).toBe("button");
+		expect(btn?.getAttribute("aria-label")).toBe("12:34부터 재생");
+
+		click(btn);
+
+		const seekCall = stub?.calls.find((call) => call.method === "seekTo");
+		expect(seekCall?.args[0]).toBe(754);
+	});
+
+	test("본문 프레임의 시각 칩도 버튼이며 그 프레임의 시각을 data-seek-t로 갖는다", () => {
+		const data = sampleData();
+		const doc = parseHTML(renderSession(data)).document;
+		const frameBlock = data.units[2].body.find(
+			(block): block is UnitBodyFrameBlock => block.type === "frame",
+		);
+		const btn = doc.getElementById("u003")?.querySelector(".body-frame .seek-btn");
+		expect(btn?.tagName.toLowerCase()).toBe("button");
+		expect(btn?.getAttribute("data-seek-t")).toBe(String(frameBlock?.t));
+	});
+
+	test('"내 피드백" pill 자신은 role="listitem"을 갖지 않고, 감싸는 요소가 그 역할을 갖는다(DESIGN §6/§13)', () => {
+		const doc = parseHTML(renderSession(sampleData())).document;
+		const pill = doc.querySelector(".pill-mine");
+		expect(pill?.hasAttribute("role")).toBe(false);
+		expect(pill?.parentElement?.getAttribute("role")).toBe("listitem");
+		expect(doc.querySelector(".my-feedback-row")?.getAttribute("role")).toBe("list");
+	});
+});
+
+// ── 제목 줄바꿈 방지 (DESIGN §10) ────────────────────────────────────────────
+
+describe("제목의 한글단어(영문) 줄바꿈 방지", () => {
+	test('"비활성(disabled)"처럼 괄호 앞에서 줄바꿈되지 않도록 nobr로 감싼다', () => {
+		const data = sampleData();
+		data.title = "QA 비활성(disabled) 모드 세션";
+		data.units[0].title = "QA 비활성(disabled) 모드 세션";
+		const doc = parseHTML(renderSession(data)).document;
+
+		const h1 = doc.querySelector(".header h1");
+		expect(h1?.innerHTML).toContain('<span class="nobr">비활성(disabled)</span>');
+
+		const cardTitle = doc.getElementById("u001")?.querySelector("h3");
+		expect(cardTitle?.innerHTML).toContain('<span class="nobr">비활성(disabled)</span>');
+
+		const tocItem = doc.querySelector('#panel-match .toc-item[data-target="u001"]');
+		expect(tocItem?.innerHTML).toContain('<span class="nobr">비활성(disabled)</span>');
 	});
 });

@@ -204,6 +204,16 @@ function escapeHtml(value: string): string {
 		.replace(/"/g, "&quot;");
 }
 
+/**
+ * Wraps each "한글단어(영문...)"-shaped token — e.g. "비활성(disabled)" — in
+ * `<span class="nobr">` so `word-break: keep-all` can't still split it right before the "("
+ * (DESIGN §10). Titles only (h1/card title/TOC/archive card title); takes already-escaped
+ * text, since escaping never touches the parentheses this matches on.
+ */
+function wrapNobr(escaped: string): string {
+	return escaped.replace(/\S+\([^)\s]{1,20}\)/g, (match) => `<span class="nobr">${match}</span>`);
+}
+
 // ── position tree display order (DESIGN.md §7) ──────────────────────────────
 //
 // core.ts's `PARENT` map already lists each parent's children in the exact
@@ -227,6 +237,19 @@ function positionRoot(tag: string): string {
 
 function chip(className: string, label: string): string {
 	return `<span class="chip ${className}">${escapeHtml(label)}</span>`;
+}
+
+/**
+ * A keyboard-reachable seek control (DESIGN §5/§13): renders the time label as a real
+ * `<button>` instead of a decorative `<span>` so seeking works without a mouse, while the
+ * card/frame area itself stays clickable too — `onCardListClick` reads `data-seek-t` first.
+ */
+function seekTimeButton(seconds: number): string {
+	const label = formatTime(seconds);
+	return (
+		`<button type="button" class="chip chip-time seek-btn" data-seek-t="${seconds}" ` +
+		`aria-label="${escapeHtml(label)}부터 재생">${escapeHtml(label)}</button>`
+	);
 }
 
 function positionChipClass(tag: string): string {
@@ -315,9 +338,11 @@ function renderMyFeedbackNav(data: SessionData): string {
 	const pills = eligible
 		.map((member) => {
 			const count = counts.get(member.id) ?? 0;
+			// `role="listitem"` sits on this wrapper, not the button itself (DESIGN §6/§13):
+			// an interactive control cannot also carry a structural list-item role.
 			return (
-				`<button type="button" class="pill pill-mine" data-group="mine" data-value="${escapeHtml(member.id)}" aria-pressed="false" role="listitem">` +
-				`${escapeHtml(member.name)} <span class="count">${count}</span></button>`
+				`<div role="listitem"><button type="button" class="pill pill-mine" data-group="mine" data-value="${escapeHtml(member.id)}" aria-pressed="false">` +
+				`${escapeHtml(member.name)} <span class="count">${count}</span></button></div>`
 			);
 		})
 		.join("");
@@ -406,7 +431,7 @@ function renderFilterBar(data: SessionData): string {
 		.join("");
 	return (
 		`<details class="filter-bar">` +
-		`<summary>필터 (<span id="filter-count-label">0</span>)<span class="filter-summary-detail"></span></summary>` +
+		`<summary><span class="filter-summary-label">필터 (<span id="filter-count-label">0</span>)<span class="filter-summary-detail"></span></span></summary>` +
 		`<div class="filter-groups">${groups}</div>` +
 		`<button type="button" class="filter-reset">초기화</button>` +
 		`</details>`
@@ -418,11 +443,16 @@ function renderFilterBar(data: SessionData): string {
 function tocItemAttrs(unit: SessionUnit): string {
 	return (
 		`data-target="${escapeHtml(unit.id)}" ` +
-		`data-pos="${escapeHtml(posClosure(unit.position_tags).join(" "))}" ` +
-		`data-topics="${escapeHtml(unit.topic_tags.join(" "))}" ` +
-		`data-member-ids="${escapeHtml(unit.member_ids.join(" "))}" ` +
-		`data-related-ids="${escapeHtml(unit.related_member_ids.join(" "))}"`
+		`data-pos="${escapeHtml(posClosure(unit.position_tags).join("|"))}" ` +
+		`data-topics="${escapeHtml(unit.topic_tags.join("|"))}" ` +
+		`data-member-ids="${escapeHtml(unit.member_ids.join("|"))}" ` +
+		`data-related-ids="${escapeHtml(unit.related_member_ids.join("|"))}"`
 	);
+}
+
+/** TOC item label: time chip (non-interactive, TOC click never seeks — DESIGN §8) + title. */
+function tocItemLabel(unit: SessionUnit): string {
+	return `${chip("chip-time", formatTime(unit.start))} ${wrapNobr(escapeHtml(unit.title))}`;
 }
 
 function renderTabMatch(data: SessionData): string {
@@ -436,7 +466,7 @@ function renderTabMatch(data: SessionData): string {
 						.filter((unit): unit is SessionUnit => unit !== undefined)
 						.map(
 							(unit) =>
-								`<li><a class="toc-item" href="#${escapeHtml(unit.id)}" ${tocItemAttrs(unit)}>${escapeHtml(unit.title)}</a></li>`,
+								`<li><a class="toc-item" href="#${escapeHtml(unit.id)}" ${tocItemAttrs(unit)}>${tocItemLabel(unit)}</a></li>`,
 						)
 						.join("");
 					return (
@@ -460,7 +490,7 @@ function renderTabTopic(data: SessionData): string {
 			const items = units
 				.map(
 					(unit) =>
-						`<li><a class="toc-item" href="#${escapeHtml(unit.id)}" ${tocItemAttrs(unit)}>${escapeHtml(unit.title)}</a></li>`,
+						`<li><a class="toc-item" href="#${escapeHtml(unit.id)}" ${tocItemAttrs(unit)}>${tocItemLabel(unit)}</a></li>`,
 				)
 				.join("");
 			return (
@@ -552,7 +582,7 @@ function renderCardHead(unit: SessionUnit, ctx: CardContext): string {
 		match !== undefined && topic !== undefined
 			? `<span class="breadcrumb">${escapeHtml(match.title)}<span aria-hidden="true"> › </span>${escapeHtml(topic.title)}</span>`
 			: "";
-	return `<div class="card-head">` + chip("chip-time", formatTime(unit.start)) + partChip + breadcrumb + `</div>`;
+	return `<div class="card-head">` + seekTimeButton(unit.start) + partChip + breadcrumb + `</div>`;
 }
 
 const MAX_CHIP_ROW_TAGS = 6;
@@ -609,7 +639,7 @@ function renderBodyFrame(block: UnitBodyFrameBlock): string {
 	return (
 		`<figure class="body-frame" data-frame-t="${block.t}">` +
 		`<img src="${escapeHtml(block.src)}" width="${block.width}" height="${block.height}" loading="lazy" alt="${escapeHtml(block.caption)}">` +
-		`<figcaption>${chip("chip-time", formatTime(block.t))}${escapeHtml(block.caption)} ` +
+		`<figcaption>${seekTimeButton(block.t)}${escapeHtml(block.caption)} ` +
 		`<a href="${escapeHtml(block.src)}" target="_blank" rel="noopener" class="zoom-link" aria-label="이미지 원본 크게 보기">확대</a></figcaption>` +
 		`</figure>`
 	);
@@ -664,13 +694,13 @@ function renderCard(unit: SessionUnit, ctx: CardContext): string {
 	return (
 		`<article class="card" id="${escapeHtml(unit.id)}" ` +
 		`data-video="${escapeHtml(unit.video)}" data-start="${unit.start}" ` +
-		`data-pos="${escapeHtml(posClosure(unit.position_tags).join(" "))}" ` +
-		`data-topics="${escapeHtml(unit.topic_tags.join(" "))}" ` +
-		`data-member-ids="${escapeHtml(unit.member_ids.join(" "))}" ` +
-		`data-related-ids="${escapeHtml(unit.related_member_ids.join(" "))}" ` +
+		`data-pos="${escapeHtml(posClosure(unit.position_tags).join("|"))}" ` +
+		`data-topics="${escapeHtml(unit.topic_tags.join("|"))}" ` +
+		`data-member-ids="${escapeHtml(unit.member_ids.join("|"))}" ` +
+		`data-related-ids="${escapeHtml(unit.related_member_ids.join("|"))}" ` +
 		`data-embeddable="${(video?.embeddable ?? true) ? "true" : "false"}">` +
 		renderCardHead(unit, ctx) +
-		`<h3>${escapeHtml(unit.title)}</h3>` +
+		`<h3>${wrapNobr(escapeHtml(unit.title))}</h3>` +
 		(hasRoster ? `<p class="mention-badge" hidden></p>` : "") +
 		`<img src="${escapeHtml(startImage.src)}" width="${startImage.width}" height="${startImage.height}" alt="">` +
 		renderChipRow(unit) +
@@ -703,7 +733,7 @@ ${scripts}</body>
 `;
 }
 
-const FOOTER_NOTICE = "팀 내부 피드백용 비공식 정리 문서입니다. 영상 저작권은 원 게시자에게 있습니다.";
+const FOOTER_NOTICE = "팀 내부 피드백용 비공식 정리 문서입니다. 영상 저작권은 원게시자에게 있습니다.";
 
 // ── renderSession (DESIGN.md §4–§11) ──────────────────────────────────────
 
@@ -739,7 +769,7 @@ export function renderSession(data: SessionData): string {
 		`</div>`;
 
 	const body =
-		`<header class="header"><h1>${escapeHtml(data.title)}</h1><p class="date">${escapeHtml(data.date)}</p></header>` +
+		`<header class="header"><h1>${wrapNobr(escapeHtml(data.title))}</h1><p class="date">${escapeHtml(data.date)}</p></header>` +
 		`<div class="layout">${sideCol}${main}</div>` +
 		`<footer class="footer"><p>${escapeHtml(FOOTER_NOTICE)}</p></footer>`;
 
@@ -756,7 +786,7 @@ function renderSessionCard(entry: IndexSessionEntry): string {
 	return (
 		`<a class="session-card" href="${escapeHtml(entry.href)}">` +
 		`<p class="date">${escapeHtml(entry.date)}</p>` +
-		`<h2>${escapeHtml(entry.title)}</h2>` +
+		`<h2>${wrapNobr(escapeHtml(entry.title))}</h2>` +
 		`<p class="meta">${entry.videos}파트 · 피드백 ${entry.unit_count}개</p>` +
 		`<div class="topic-tags">${tags}</div>` +
 		`</a>`
@@ -811,7 +841,7 @@ export function renderRef(ref: RefPageData): string {
 
 	const html =
 		`<main class="ref-main">` +
-		`<h1>${escapeHtml(ref.title)}</h1>` +
+		`<h1>${wrapNobr(escapeHtml(ref.title))}</h1>` +
 		`<p class="ref-badges"><span class="badge">${escapeHtml(ref.kind)}</span>` +
 		`<span class="badge">${escapeHtml(ref.lang.toUpperCase())}</span></p>` +
 		`<p><a href="${escapeHtml(ref.url)}" target="_blank" rel="noopener">원문 ↗</a></p>` +
@@ -841,6 +871,7 @@ export const STYLE = `
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-6: 24px; --space-8: 32px;
   --radius-sm: 8px; --radius-md: 12px; --radius-full: 9999px;
   --measure: 660px; --archive-measure: 960px;
+  --content-max: calc(420px + var(--space-6) + var(--measure));
   --player-control-bg: rgba(255,255,255,0.9);
   --sticky-player-h: 0px;
 }
@@ -849,10 +880,11 @@ html, body { background: var(--bg); color: var(--ink); }
 body {
   margin: 0;
   font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
-  font-size: 1rem; line-height: 1.6;
+  line-height: 1.6;
   word-break: keep-all; overflow-wrap: anywhere; line-break: strict;
 }
 h1, h2, h3 { text-wrap: balance; word-break: keep-all; overflow-wrap: anywhere; line-break: strict; margin: 0 0 var(--space-2); font-weight: 700; }
+.nobr { white-space: nowrap; }
 p, dd, li, figcaption { text-wrap: pretty; word-break: keep-all; overflow-wrap: anywhere; line-break: strict; }
 h1 { font-size: 1.75rem; line-height: 1.3; }
 h2 { font-size: 1.375rem; line-height: 1.35; }
@@ -863,12 +895,13 @@ a:hover { color: var(--accent-hover); }
 button { font: inherit; color: inherit; background: none; border: none; }
 img { display: block; max-width: 100%; height: auto; border-radius: var(--radius-sm); }
 
-.header, .footer { max-width: 1440px; margin: 0 auto; padding-left: var(--space-6); padding-right: var(--space-6); }
+.header, .footer { max-width: var(--content-max); margin: 0 auto; padding-left: var(--space-6); padding-right: var(--space-6); }
 .header { padding-top: var(--space-6); }
 .header .date { color: var(--muted); font-size: 0.8125rem; margin: 0; }
 .footer { padding: var(--space-8) var(--space-6); color: var(--muted); font-size: 0.8125rem; }
+.archive-main > .footer { padding: var(--space-8) 0 0; }
 
-.layout { display: flex; justify-content: center; align-items: flex-start; gap: var(--space-6); max-width: 1440px; margin: 0 auto; padding: var(--space-6); }
+.layout { display: flex; align-items: flex-start; gap: var(--space-6); max-width: var(--content-max); margin: 0 auto; padding: var(--space-6); }
 
 .side-col { flex: 0 0 min(420px, 40%); position: sticky; top: var(--space-6);
   max-height: calc(100dvh - var(--space-6) * 2);
@@ -881,6 +914,9 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 #yt-player[hidden] { display: none; }
 .player-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); color: var(--bg); text-align: center; padding: var(--space-4); }
 .player-placeholder[hidden] { display: none; }
+/* The generic a{color:var(--accent)} rule fails contrast on this dark background
+   (DESIGN §15-9) — --bg is already documented for white text over ink/accent (§2). */
+.player-placeholder-link { color: var(--bg); font-weight: 600; text-decoration: underline; }
 .player-mini-bar { position: absolute; inset: 0; display: none; align-items: center; padding: 0 var(--space-3); color: var(--bg); font-size: 0.8125rem; font-weight: 600; background: var(--ink); }
 .player-collapse { display: none; }
 
@@ -890,62 +926,96 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .part-btn[aria-pressed="true"] { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 
 .toc-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-.toc-toggle { min-height: 44px; padding: var(--space-2) var(--space-3); border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: var(--bg); font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
+/* Full-width row matching the closed filter bar's row (DESIGN §7/§8/§13) — only ever
+   visible below 1024px (the ≥1024px override further down hides it), so this rule needs
+   no separate mobile-only copy of its own. */
+.toc-toggle { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  width: 100%; min-height: 44px; padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md); border: 1px solid var(--line-strong); background: var(--surface);
+  font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
+.toc-toggle::after { content: "▾"; color: var(--muted); flex-shrink: 0; }
+.toc-toggle[aria-expanded="true"]::after { content: "▴"; }
 .toc [role="tablist"] { display: flex; gap: var(--space-2); border-bottom: 1px solid var(--line); }
-.toc [role="tab"] { min-height: 44px; padding: var(--space-2) var(--space-3); font-size: 0.8125rem; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
+.toc [role="tab"] { min-height: 44px; padding: var(--space-2) var(--space-3); font-size: 0.8125rem; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 1px solid transparent; }
 .toc [role="tab"][aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
 .toc [role="tabpanel"][hidden] { display: none; }
 .toc-topic-group, .toc-tag-group, .toc-match-group { margin: var(--space-6) 0 0; }
+.toc-topic-group[hidden], .toc-tag-group[hidden], .toc-match-group[hidden] { display: none; }
 .toc-summary { font-size: 0.875rem; color: var(--muted); margin: var(--space-1) 0 var(--space-2); }
 .toc ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
-.toc-item { display: block; min-height: 44px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-size: 0.875rem; }
+.toc-item { display: block; min-height: 44px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-size: 0.875rem; color: var(--muted); text-decoration: none; }
+.toc-item .chip-time { margin-right: var(--space-2); }
+.toc-item:hover, .toc-item:focus-visible, .toc-item.is-current { color: var(--accent); text-decoration: underline; }
 .toc-item[hidden] { display: none; }
 
-.main { flex: 1 1 auto; min-width: 0; max-width: var(--measure); display: flex; flex-direction: column; gap: var(--space-8); }
+.main { flex: 1 1 auto; min-width: 0; max-width: var(--measure); display: flex; flex-direction: column; gap: var(--space-4); }
 
 .my-feedback { display: flex; flex-direction: column; gap: var(--space-2); }
 .my-feedback-label { font-size: 0.8125rem; font-weight: 700; }
 .my-feedback-row { display: flex; gap: var(--space-2); overflow-x: auto; white-space: nowrap; padding-bottom: var(--space-1); }
+/* role="listitem" wrapper (DESIGN §6/§13) — display:contents would drop the box
+   these tests inspect, so it stays an ordinary inline-flex item instead. */
+.my-feedback-row [role="listitem"] { display: inline-flex; flex-shrink: 0; }
 .pill { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 44px; padding: var(--space-2) var(--space-4); border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: var(--bg); font-size: 0.8125rem; font-weight: 600; cursor: pointer; flex-shrink: 0; }
 .pill .count { color: var(--muted); }
 .pill[aria-pressed="true"] { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 .pill[aria-pressed="true"] .count { color: var(--bg); }
 
-.filter-bar { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-4); }
-.filter-bar summary { cursor: pointer; font-size: 0.8125rem; font-weight: 600; min-height: 44px; display: flex; align-items: center; list-style: none; }
+/* Padding lives on the summary (both states) and only on .filter-groups/.filter-reset
+   when open (DESIGN §7) — a closed filter bar is a single compact row on every width. */
+.filter-bar { background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-md); }
+.filter-bar summary { cursor: pointer; font-size: 0.8125rem; font-weight: 600; min-height: 44px;
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  list-style: none; padding: var(--space-3) var(--space-4); }
 .filter-bar summary::-webkit-details-marker { display: none; }
+.filter-bar summary::after { content: "▾"; color: var(--muted); flex-shrink: 0; }
+.filter-bar[open] summary::after { content: "▴"; }
 .filter-summary-detail { color: var(--muted); font-weight: 400; margin-left: var(--space-1); }
-.filter-bar[open] summary { margin-bottom: var(--space-2); }
+.filter-bar[open] { padding: 0 var(--space-4) var(--space-4); }
 .filter-groups { display: flex; flex-direction: column; gap: var(--space-3); }
 .filter-group-label { display: block; font-size: 0.8125rem; font-weight: 600; color: var(--muted); margin-bottom: var(--space-2); }
 .chip { display: inline-flex; align-items: center; padding: var(--space-1) var(--space-3); margin: var(--space-1); border-radius: var(--radius-full); font-size: 0.8125rem; font-weight: 600; color: var(--ink); background: var(--surface-sunken); white-space: nowrap; flex-shrink: 0; }
 .chip-filter { min-height: 44px; border: 1px solid var(--line-strong); cursor: pointer; background: var(--bg); }
 .chip-filter[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
-.pos-tree { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-.pos-node { display: inline-flex; align-items: center; white-space: nowrap; flex-shrink: 0; }
-.pos-children { margin-left: var(--space-3); display: inline-flex; flex-wrap: wrap; }
+/* Nested position nodes wrap within the viewport instead of forcing a fixed-width single
+   line off-screen (DESIGN §7/§15-5); chip margin is reset per node since the tree's own
+   gap already spaces siblings — keeping both would double the gap (DESIGN §2). */
+.pos-tree { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; max-width: 100%; }
+.pos-node { display: inline-flex; flex-wrap: wrap; align-items: center; min-width: 0; max-width: 100%; }
+.pos-node .chip { margin: 0; }
+.pos-children { margin-left: var(--space-3); display: inline-flex; flex-wrap: wrap; gap: var(--space-2); min-width: 0; max-width: 100%; }
 .chip-overflow { color: var(--muted); }
 .filter-reset { min-height: 44px; padding: var(--space-2) var(--space-4); border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: var(--bg); font-weight: 600; cursor: pointer; margin-top: var(--space-3); }
 
 .active-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .active-filters[hidden] { display: none; }
+.active-filters .filter-reset { margin-top: 0; }
 .chip-active { gap: var(--space-1); }
 .chip-remove { font-size: 0.875rem; line-height: 1; cursor: pointer; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
 
-.result-count { font-size: 0.8125rem; color: var(--muted); }
+.result-count { font-size: 0.8125rem; color: var(--muted); margin: 0; }
 
 .card-list { display: flex; flex-direction: column; gap: var(--space-6); }
+/* 30-second criterion (DESIGN §6): direct-mention cards float above position-related ones
+   via flex order, not DOM reordering; flex's sort is stable so each group stays in its
+   original chronological order. */
+.card-list.mine-active .card:not(.is-direct) { order: 1; }
 .card { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-4); cursor: pointer; scroll-margin-top: var(--space-4); }
 .card[hidden] { display: none; }
 .card--highlighted { border-color: var(--accent); border-width: 2px; }
 .card-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-2); }
 .chip-time, .chip-part { background: var(--surface-sunken); }
+/* Keyboard-reachable seek control (DESIGN §5/§13): keeps the chip's small visual
+   footprint while expanding its hit area to the 44px minimum via an invisible
+   centered pseudo-element, instead of inflating the compact header row's own size. */
+.seek-btn { cursor: pointer; position: relative; }
+.seek-btn::after { content: ""; position: absolute; top: 50%; left: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
 .breadcrumb { color: var(--muted); font-size: 0.8125rem; }
-.card > img { margin-top: var(--space-3); border: 1px solid var(--line); }
+.card > img { margin-top: var(--space-3); width: 100%; height: auto; border: 1px solid var(--line); }
 .mention-badge { display: inline-block; margin: var(--space-2) 0 0; padding: var(--space-1) var(--space-3); border-radius: var(--radius-full); font-size: 0.8125rem; font-weight: 600; }
 .mention-badge[hidden] { display: none; }
 .mention-badge.mention-direct { background: var(--accent); color: var(--bg); }
-.mention-badge.mention-related { background: var(--surface-sunken); color: var(--muted); }
+.mention-badge.mention-related { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
 .chip-row { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0; }
 .chip-pos-gk { background: var(--pos-gk-bg); color: var(--pos-gk-fg); }
 .chip-pos-df { background: var(--pos-df-bg); color: var(--pos-df-fg); }
@@ -955,19 +1025,26 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .member-name { background: none; color: inherit; padding: 0; border-radius: 0; font-weight: inherit; }
 .member-name.mine { background: var(--mine-tint); border-radius: var(--radius-sm); padding: 0 var(--space-1); font-weight: 600; }
 
+/* Resets first, spacing second (DESIGN §5 "본문 간격"): .card-body > p + p / > * +
+   .body-frame / > .body-frame + * each carry a class or element more than the reset
+   selectors they must beat, so the cascade wins by specificity, not by source order —
+   except the two .body-frame rules below, which are equal-specificity and so do rely
+   on appearing after their own reset (paragraph-to-paragraph 16px, anything-to-frame 24px). */
 .card-body { margin-top: var(--space-3); display: flex; flex-direction: column; }
-.card-body > * + * { margin-top: var(--space-4); }
-.card-body > * + .body-frame { margin-top: var(--space-6); }
-.card-body p { margin: 0; font-size: 1.0625rem; line-height: 1.7; }
+.card-body > p, .card-body > .body-frame { margin: 0; }
+.card-body p { font-size: 1.0625rem; line-height: 1.7; }
 .card-body p strong { font-weight: 700; color: inherit; }
-.card-body .body-frame { margin: 0; cursor: pointer; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-2); }
-.card-body .body-frame img { border-radius: var(--radius-sm); }
+.card-body > p + p { margin-top: var(--space-4); }
+.card-body > * + .body-frame { margin-top: var(--space-6); }
+.card-body > .body-frame + * { margin-top: var(--space-6); }
+.card-body .body-frame { cursor: pointer; border-radius: var(--radius-sm); }
+.card-body .body-frame img { width: 100%; height: auto; border-radius: var(--radius-sm); }
 .card-body .body-frame figcaption { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); font-size: 0.875rem; font-weight: 500; color: var(--muted); margin-top: var(--space-2); }
 .zoom-link { font-weight: 600; white-space: nowrap; flex-shrink: 0; }
 
-.similar-list, .refs-list { font-size: 0.9375rem; margin: 0; padding-left: 1.1rem; }
+.similar-list, .refs-list { font-size: 0.875rem; margin: 0; }
 .ref-badges { display: inline-flex; gap: var(--space-1); }
-.badge { display: inline-block; background: var(--surface-sunken); color: var(--muted); font-size: 0.875rem; font-weight: 500; padding: 2px var(--space-2); border-radius: var(--radius-full); }
+.badge { display: inline-block; background: var(--surface-sunken); color: var(--muted); font-size: 0.875rem; font-weight: 500; padding: var(--space-1) var(--space-2); border-radius: var(--radius-full); }
 .similar-date { color: var(--muted); font-size: 0.875rem; }
 .watch-link { display: inline-block; font-weight: 600; }
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); text-align: center; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-8) var(--space-6); }
@@ -983,7 +1060,8 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 }
 
 @media (max-width: 1023.98px) {
-  .layout { flex-direction: column; padding: var(--space-4); gap: var(--space-4); }
+  .layout { flex-direction: column; align-items: stretch; padding: var(--space-4); gap: var(--space-4); }
+  .header, .footer { padding-left: var(--space-4); padding-right: var(--space-4); }
   .side-col { display: contents; }
   .side { display: contents; }
   .main { display: contents; }
@@ -1007,12 +1085,20 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 
 .archive-main, .ref-main { max-width: var(--archive-measure); margin: 0 auto; padding: var(--space-6) var(--space-4); }
 .session-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-6); margin: var(--space-6) 0; }
-.session-card { display: block; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-4); }
+/* The whole card is the link (DESIGN §5-style "카드 전체가 클릭 타깃"); accent/underline
+   is reserved for the title on hover/focus so the card doesn't read as underlined body
+   text everywhere (§15-10). */
+.session-card { display: block; background: var(--bg); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: var(--space-4); color: var(--ink); text-decoration: none; }
+.session-card .date { color: var(--muted); font-size: 0.8125rem; margin: 0; }
 .session-card .meta { color: var(--muted); font-size: 0.8125rem; }
+.session-card h2 { text-decoration: none; }
+.session-card:hover h2, .session-card:focus-visible h2 { color: var(--accent); text-decoration: underline; }
 .topic-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-2); }
 .summary-ko { font-size: 1.0625rem; line-height: 1.7; }
+.key-points { font-size: 1.0625rem; line-height: 1.7; margin: var(--space-4) 0; }
 .translations-table { width: 100%; border-collapse: collapse; margin: var(--space-4) 0; }
-.translations-table th, .translations-table td { border: 1px solid var(--line); padding: var(--space-2); vertical-align: top; font-size: 0.9375rem; text-align: left; }
+.translations-table th { font-size: 0.875rem; font-weight: 700; text-align: left; vertical-align: top; padding: var(--space-3); border: 0; border-bottom: 1px solid var(--line); }
+.translations-table td { font-size: 1.0625rem; line-height: 1.7; text-align: left; vertical-align: top; padding: var(--space-3); border: 0; border-bottom: 1px solid var(--line); }
 `;
 
 // ── VIEWER_JS (DESIGN.md §5–§9) ──────────────────────────────────────────
@@ -1025,9 +1111,11 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 export const VIEWER_JS = `(function () {
   "use strict";
 
+  // Tags may contain spaces (core.ts's isValidTag only forbids "|"), so the id/tag lists in
+  // data-pos/data-topics/data-member-ids/data-related-ids are "|"-joined, not space-joined.
   function hasToken(value, token) {
     if (!value) return false;
-    var parts = value.split(" ");
+    var parts = value.split("|");
     for (var i = 0; i < parts.length; i++) {
       if (parts[i] === token) return true;
     }
@@ -1036,7 +1124,7 @@ export const VIEWER_JS = `(function () {
 
   function anyToken(value, tokens) {
     if (!value) return false;
-    var parts = value.split(" ");
+    var parts = value.split("|");
     for (var i = 0; i < parts.length; i++) {
       if (tokens.indexOf(parts[i]) !== -1) return true;
     }
@@ -1145,14 +1233,25 @@ export const VIEWER_JS = `(function () {
     if (detail) detail.textContent = parts.length > 0 ? " · " + parts.join(", ") : "";
   }
 
+  // Also toggles .is-direct on each card and .mine-active on .card-list (DESIGN §6's
+  // 30-second criterion): CSS order then floats direct-mention cards above position-related
+  // ones while flex's stable sort keeps each group in its original chronological (DOM) order
+  // — no DOM reordering. Clears both on deselect (mine falsy skips every classList.add call).
   function updateMentionBadgesAndMarks() {
     var mine = selected.mine;
+    var cardList = document.querySelector(".card-list");
+    if (cardList) {
+      if (mine) cardList.classList.add("mine-active");
+      else cardList.classList.remove("mine-active");
+    }
     var cards = document.querySelectorAll(".card");
     for (var i = 0; i < cards.length; i++) {
       var card = cards[i];
+      var isDirect = mine !== null && hasToken(card.getAttribute("data-member-ids") || "", mine);
+      card.classList.toggle("is-direct", isDirect);
       var badge = card.querySelector(".mention-badge");
       if (badge) {
-        if (mine && hasToken(card.getAttribute("data-member-ids") || "", mine)) {
+        if (isDirect) {
           badge.textContent = "직접 언급";
           badge.className = "mention-badge mention-direct";
           badge.removeAttribute("hidden");
@@ -1177,6 +1276,21 @@ export const VIEWER_JS = `(function () {
     }
   }
 
+  // Hides a TOC group heading (match/topic/tag) once none of its .toc-item children are
+  // visible (DESIGN §8) — computed here rather than left to a CSS :has() selector so it
+  // works the same regardless of :has() support.
+  function hideEmptyTocGroups() {
+    var groups = document.querySelectorAll(".toc-match-group, .toc-topic-group, .toc-tag-group");
+    for (var i = 0; i < groups.length; i++) {
+      var hasVisible = groups[i].querySelector(".toc-item:not([hidden])") !== null;
+      if (hasVisible) {
+        groups[i].removeAttribute("hidden");
+      } else {
+        groups[i].setAttribute("hidden", "");
+      }
+    }
+  }
+
   function applyFilters() {
     var cards = document.querySelectorAll(".card");
     var visible = 0;
@@ -1196,6 +1310,7 @@ export const VIEWER_JS = `(function () {
         tocItems[j].setAttribute("hidden", "");
       }
     }
+    hideEmptyTocGroups();
     var visibleCountEl = document.getElementById("visible-count");
     if (visibleCountEl) visibleCountEl.textContent = String(visible);
     var cardList = document.querySelector(".card-list");
@@ -1307,13 +1422,16 @@ export const VIEWER_JS = `(function () {
 
   function onTocItemClick(event) {
     event.preventDefault();
-    var targetId = event.currentTarget.getAttribute("data-target");
+    var tocItem = event.currentTarget;
+    var targetId = tocItem.getAttribute("data-target");
     var targetCard = targetId ? document.getElementById(targetId) : null;
     if (!targetCard) return;
     if (typeof targetCard.scrollIntoView === "function") targetCard.scrollIntoView({ block: "start" });
     targetCard.classList.add("card--highlighted");
+    tocItem.classList.add("is-current");
     setTimeout(function () {
       targetCard.classList.remove("card--highlighted");
+      tocItem.classList.remove("is-current");
     }, 600);
   }
 
@@ -1327,6 +1445,7 @@ export const VIEWER_JS = `(function () {
   var playerEl = document.getElementById("yt-player");
   var initialEmbeddable = playerEl ? playerEl.getAttribute("data-embeddable") === "true" : false;
   var currentVideo = document.body.dataset.video || null;
+  var currentEmbeddable = initialEmbeddable;
   var playerReady = false;
   var playerCreated = false;
   var pendingQueue = [];
@@ -1347,8 +1466,17 @@ export const VIEWER_JS = `(function () {
     for (var i = 0; i < queue.length; i++) queue[i](window.fcPlayer);
   }
 
+  function canCreatePlayer() {
+    return typeof window.YT !== "undefined" && window.YT && typeof window.YT.Player === "function";
+  }
+
+  // playerCreated flips to true only once construction actually runs — flipping it
+  // beforehand (as a naive re-entrancy guard would) means a click that arrives before the
+  // iframe_api script has loaded a bare window.YT permanently skips player creation,
+  // because the later onYouTubeIframeAPIReady -> initPlayer() call sees the guard already
+  // set and never retries (REAL BUG, DESIGN §9 cold-load hazard).
   function ensurePlayer(videoId) {
-    if (playerCreated) return;
+    if (playerCreated || !canCreatePlayer()) return;
     playerCreated = true;
     window.fcPlayer = new window.YT.Player("yt-player", {
       videoId: videoId,
@@ -1403,6 +1531,7 @@ export const VIEWER_JS = `(function () {
 
   function switchTo(videoId, start, embeddable) {
     document.body.dataset.video = videoId;
+    currentEmbeddable = embeddable;
     if (!embeddable) {
       currentVideo = videoId;
       syncPartButtons();
@@ -1434,8 +1563,12 @@ export const VIEWER_JS = `(function () {
     updateMiniBar();
   }
 
+  // Re-run on every onYouTubeIframeAPIReady call this session can reach (only once for a
+  // normal cold load, but also from the "no YT at all yet" regression test/hazard above) —
+  // it must create the player for whatever video is CURRENT now, not the page's initial one,
+  // since a pre-ready click may already have switched currentVideo/currentEmbeddable.
   function initPlayer() {
-    if (initialEmbeddable && currentVideo) {
+    if (currentEmbeddable && currentVideo) {
       ensurePlayer(currentVideo);
     } else if (currentVideo) {
       showPlaceholder(currentVideo, 0);
@@ -1446,16 +1579,22 @@ export const VIEWER_JS = `(function () {
   function onCardListClick(event) {
     var selectionText = typeof window.getSelection === "function" ? window.getSelection().toString() : "";
     if (selectionText !== "") return;
+    var seekBtn = event.target.closest ? event.target.closest(".seek-btn") : null;
     var interactive = event.target.closest ? event.target.closest("a, button, summary") : null;
-    if (interactive) return;
+    if (interactive && !seekBtn) return; // other interactive elements (e.g. 확대 link) opt out
     var card = event.target.closest ? event.target.closest(".card") : null;
     if (!card) return;
     var video = card.getAttribute("data-video");
     if (!video) return;
-    var frame = event.target.closest ? event.target.closest(".body-frame") : null;
-    var start = frame
-      ? Number(frame.getAttribute("data-frame-t") || "0")
-      : Number(card.getAttribute("data-start") || "0");
+    var start;
+    if (seekBtn) {
+      start = Number(seekBtn.getAttribute("data-seek-t") || "0");
+    } else {
+      var frame = event.target.closest ? event.target.closest(".body-frame") : null;
+      start = frame
+        ? Number(frame.getAttribute("data-frame-t") || "0")
+        : Number(card.getAttribute("data-start") || "0");
+    }
     var embeddable = card.getAttribute("data-embeddable") === "true";
     switchTo(video, start, embeddable);
   }
@@ -1483,6 +1622,8 @@ export const VIEWER_JS = `(function () {
     document.documentElement.style.setProperty("--sticky-player-h", wrapper.offsetHeight + "px");
   }
 
+  var miniBarInterval = null;
+
   function initPlayerCollapse() {
     var btn = document.querySelector(".player-collapse");
     var wrapper = document.querySelector(".player-wrapper");
@@ -1491,7 +1632,19 @@ export const VIEWER_JS = `(function () {
       var collapsed = wrapper.classList.toggle("is-collapsed");
       btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
       btn.textContent = collapsed ? "펼치기" : "플레이어 접기";
-      if (collapsed) updateMiniBar();
+      if (miniBarInterval !== null) {
+        clearInterval(miniBarInterval);
+        miniBarInterval = null;
+      }
+      if (collapsed) {
+        updateMiniBar();
+        // The mini bar's time otherwise never advances during playback (DESIGN §4's "▶
+        // 현재 파트 + 현재 재생 시각" implies a live clock) — only ticks while collapsed.
+        miniBarInterval = setInterval(updateMiniBar, 1000);
+        // Node/Bun timers (unlike a browser's numeric id) support unref(); this only
+        // keeps a test process's event loop from waiting on a collapsed-and-forgotten mock.
+        if (miniBarInterval && typeof miniBarInterval.unref === "function") miniBarInterval.unref();
+      }
       syncPlayerHeight();
     });
   }
