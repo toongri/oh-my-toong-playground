@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "url": "https://example.com/eafc/en/build-up-play-guide",
+      "title": "Build-Up Play Guide",
+      "source_name": "EAFC Tactics Hub (EN)",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u002"
+      ],
+      "summary_ko": "후방 빌드업 시 센터백과 풀백의 각도 형성 원칙을 설명하는 영문 전술 가이드.",
+      "key_points_ko": [
+        "압박 전 원터치 처리 우선",
+        "풀백은 한 라인 내려와 각을 만들 것"
+      ],
+      "translations": [
+        {
+          "orig": "Play out from the back with clear passing angles.",
+          "ko": "명확한 패스 각도를 만들며 후방에서 빌드업하라."
+        }
+      ]
+    },
+    {
+      "url": "https://example.com/eafc/ja/overlap-timing",
+      "title": "オーバーラップのタイミング講座",
+      "source_name": "EAFC 戦術ラボ (JA)",
+      "lang": "ja",
+      "kind": "tactics",
+      "unit_ids": [
+        "u004",
+        "u005"
+      ],
+      "summary_ko": "풀백 오버래핑 타이밍과 크로스 연계를 설명하는 일본어 전술 자료.",
+      "key_points_ko": [
+        "윙어가 안으로 좁힐 때 오버래핑 시작",
+        "박스 진입 즉시 크로스"
+      ],
+      "translations": [
+        {
+          "orig": "オーバーラップは相手の視野外から始める。",
+          "ko": "오버래핑은 상대 시야 밖에서 시작한다."
+        }
+      ]
+    },
+    {
+      "url": "https://example.com/eafc/ko/counter-attack-finishing",
+      "title": "역습 마무리 훈련법",
+      "source_name": "EAFC 국내 커뮤니티",
+      "lang": "ko",
+      "kind": "eafc",
+      "unit_ids": [
+        "u011",
+        "u013"
+      ]
+    }
+  ]
+}

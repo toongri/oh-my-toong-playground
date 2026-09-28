@@ -1,0 +1,56 @@
+[
+  {
+    "id": "c001",
+    "video": "NUzEChn9EyI",
+    "t": 30,
+    "kind": "manual"
+  },
+  {
+    "id": "c002",
+    "video": "NUzEChn9EyI",
+    "t": 480,
+    "kind": "manual"
+  },
+  {
+    "id": "c003",
+    "video": "NUzEChn9EyI",
+    "t": 483,
+    "kind": "manual"
+  },
+  {
+    "id": "c004",
+    "video": "NUzEChn9EyI",
+    "t": 1080,
+    "kind": "manual"
+  },
+  {
+    "id": "c005",
+    "video": "NUzEChn9EyI",
+    "t": 1083,
+    "kind": "manual"
+  },
+  {
+    "id": "c006",
+    "video": "NUzEChn9EyI",
+    "t": 1086,
+    "kind": "manual"
+  },
+  {
+    "id": "c007",
+    "video": "yn-qm7lM5p4",
+    "t": 330,
+    "kind": "manual"
+  },
+  {
+    "id": "c008",
+    "video": "yn-qm7lM5p4",
+    "t": 630,
+    "kind": "manual"
+  },
+  {
+    "id": "c009",
+    "video": "yn-qm7lM5p4",
+    "t": 633,
+    "kind": "manual"
+  }
+]

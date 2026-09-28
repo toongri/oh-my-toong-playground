@@ -1,0 +1,27 @@
+# fc-feedback QA fixture roster — fictional names, for visual-QA capture only.
+# baek-gk (GK)는 어떤 유닛에도 태그/언급되지 않아 "팀원 관련" 필터의 빈 상태(§9)를 만든다.
+members:
+  - id: baek-gk
+    name: 백기영
+    gamertag: BaekGK
+    positions: [GK]
+  - id: song-cb
+    name: 송민재
+    gamertag: SongCB
+    positions: [CB]
+    aliases: [민재]
+  - id: yoon-fb
+    name: 윤도훈
+    gamertag: YoonFB
+    positions: [FB]
+    aliases: [도훈]
+  - id: cho-mf
+    name: 조현식
+    gamertag: ChoMF
+    positions: [CM]
+    aliases: [현식]
+  - id: han-fw
+    name: 한지우
+    gamertag: HanFW
+    positions: [ST]
+    aliases: [지우]

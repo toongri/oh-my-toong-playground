@@ -10,6 +10,7 @@ import { COMMANDS } from "./fc.ts";
 
 const FC_PATH = join(import.meta.dir, "fc.ts");
 const TAXONOMY_DEFAULT_PATH = join(import.meta.dir, "taxonomy.default.yaml");
+const QA_FIXTURES_DIR = join(import.meta.dir, "__fixtures__", "qa");
 
 const roots: string[] = [];
 function tempDir(): string {
@@ -27,6 +28,21 @@ function rosterFile(content = "members:\n  - id: hong\n    name: 홍길동\n    
 	const path = join(tempDir(), "roster.yaml");
 	writeFileSync(path, content);
 	return path;
+}
+/** Copies a QA fixture work dir's static JSON files (no img/, no *.validated.json) into `destDir`. */
+function copyQaWorkFiles(srcDir: string, destDir: string): void {
+	for (const name of [
+		"session.json",
+		"lines.json",
+		"candidates.json",
+		"plan.json",
+		"notes.json",
+		"similar-choices.json",
+		"refs-draft.json",
+		"refs.verified.json",
+	]) {
+		writeFileSync(join(destDir, name), readFileSync(join(srcDir, name)));
+	}
 }
 
 afterEach(() => {
@@ -873,5 +889,85 @@ describe("fc-feedback CLI", () => {
 
 		const logAfter = execFileSync("git", ["-C", archive, "log", "--oneline"], { encoding: "utf8" });
 		expect(logAfter).toBe(logBefore);
+	});
+
+	// ── QA 픽스처(__fixtures__/qa) ───────────────────────────────────────────
+	//
+	// build.sh (visual-qa 캡처용, 네트워크·ffmpeg 필요)의 검증 단계만 여기서도
+	// 반복한다: check plan/notes/similar/refs가 고정 fixture에 대해 exit 0을
+	// 내는지, similar-candidates.json이 similar-candidates.expected.json과
+	// 정확히 일치하는지. 이미지는 tinyWebp() 1x1로 대체해 네트워크 없이 빠르게 돈다.
+
+	test("QA 픽스처는 check plan/notes/similar/refs를 모두 통과한다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		const archive = repo("archive");
+		run(["init-archive", "--archive", archive], { cwd, home });
+		writeFileSync(join(archive, "taxonomy.yaml"), readFileSync(join(QA_FIXTURES_DIR, "archive-seed", "taxonomy.yaml")));
+		const rosterPath = join(archive, "roster.yaml");
+		writeFileSync(rosterPath, readFileSync(join(QA_FIXTURES_DIR, "archive-seed", "roster.yaml")));
+
+		const configured = run(
+			["config", "set", "--archive", archive, "--roster", rosterPath, "--pages-url", "https://example.com/"],
+			{ cwd, home },
+		);
+		expect(configured.exitCode).toBe(0);
+
+		// past: 단일 파트 세션, 아카이브에 먼저 렌더되어 similar의 비교 대상이 된다.
+		const workPast = tempDir();
+		copyQaWorkFiles(join(QA_FIXTURES_DIR, "work-past"), workPast);
+		expect(run(["check", "plan", "--work", workPast], { cwd, home }).exitCode).toBe(0);
+		expect(run(["check", "notes", "--work", workPast], { cwd, home }).exitCode).toBe(0);
+		expect(run(["similar", "--work", workPast], { cwd, home }).exitCode).toBe(0);
+		expect(run(["check", "similar", "--work", workPast], { cwd, home }).exitCode).toBe(0);
+		expect(run(["check", "refs", "--work", workPast], { cwd, home }).exitCode).toBe(0);
+
+		const pastPlan = JSON.parse(readFileSync(join(workPast, "plan.validated.json"), "utf8"));
+		const pastImgDir = join(workPast, "img");
+		mkdirSync(pastImgDir, { recursive: true });
+		for (const unit of pastPlan.units as { id: string }[]) {
+			writeFileSync(join(pastImgDir, `${unit.id}-start.webp`), tinyWebp());
+		}
+		const pastRendered = run(["render", "--work", workPast], { cwd, home });
+		expect(pastRendered.exitCode).toBe(0);
+
+		// current: 2파트 세션. "세트피스"는 archive-seed taxonomy에 없으므로
+		// taxonomy add로 먼저 승인한 뒤 check plan을 돌린다(pending 게이트를 타지 않음).
+		const workCurrent = tempDir();
+		copyQaWorkFiles(join(QA_FIXTURES_DIR, "work-current"), workCurrent);
+		expect(run(["taxonomy", "add", "세트피스", "--work", workCurrent], { cwd, home }).exitCode).toBe(0);
+		expect(run(["check", "plan", "--work", workCurrent], { cwd, home }).exitCode).toBe(0);
+		expect(run(["check", "notes", "--work", workCurrent], { cwd, home }).exitCode).toBe(0);
+		expect(run(["similar", "--work", workCurrent], { cwd, home }).exitCode).toBe(0);
+
+		const expectedSimilar = JSON.parse(readFileSync(join(QA_FIXTURES_DIR, "similar-candidates.expected.json"), "utf8"));
+		const actualSimilar = JSON.parse(readFileSync(join(workCurrent, "similar-candidates.json"), "utf8"));
+		expect(actualSimilar).toEqual(expectedSimilar);
+
+		expect(run(["check", "similar", "--work", workCurrent], { cwd, home }).exitCode).toBe(0);
+		expect(run(["check", "refs", "--work", workCurrent], { cwd, home }).exitCode).toBe(0);
+
+		const currentPlan = JSON.parse(readFileSync(join(workCurrent, "plan.validated.json"), "utf8"));
+		expect(currentPlan.units.length).toBeGreaterThanOrEqual(14);
+		expect(currentPlan.matches.length).toBeGreaterThanOrEqual(3);
+
+		const currentImgDir = join(workCurrent, "img");
+		mkdirSync(currentImgDir, { recursive: true });
+		for (const unit of currentPlan.units as { id: string }[]) {
+			writeFileSync(join(currentImgDir, `${unit.id}-start.webp`), tinyWebp());
+		}
+		const notes = JSON.parse(readFileSync(join(workCurrent, "notes.json"), "utf8")) as {
+			units: Record<string, { key_frames: { candidate_id: string }[] }>;
+		};
+		for (const [unitId, entry] of Object.entries(notes.units)) {
+			for (const frame of entry.key_frames) {
+				writeFileSync(join(currentImgDir, `${unitId}-${frame.candidate_id}.webp`), tinyWebp());
+			}
+		}
+
+		const currentRendered = run(["render", "--work", workCurrent], { cwd, home });
+		expect(currentRendered.exitCode).toBe(0);
+		const currentParsed = JSON.parse(currentRendered.stdout.trim());
+		expect(currentParsed.broken_links).toBe(0);
 	});
 });

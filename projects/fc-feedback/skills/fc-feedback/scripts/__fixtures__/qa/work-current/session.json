@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "session_id": "20240104-NUzEChn9EyI",
+  "created_at": "2024-01-05T00:00:00.000Z",
+  "videos": [
+    {
+      "id": "NUzEChn9EyI",
+      "url": "https://youtu.be/NUzEChn9EyI",
+      "part": 1,
+      "title": "EAFC24 프로클럽 커뮤니티 C.E.F. / FC Barcelona 팀 연습 (24.1.4) - Part 3 (피드백)",
+      "channel": "타임제이",
+      "upload_date": "20240104",
+      "duration": 1348,
+      "embeddable": true,
+      "width": 854,
+      "height": 460,
+      "files": {
+        "audio": "media/audio/NUzEChn9EyI.m4a",
+        "video": "media/video/NUzEChn9EyI.mp4",
+        "captions": null,
+        "captions_format": null,
+        "wav": null
+      }
+    },
+    {
+      "id": "yn-qm7lM5p4",
+      "url": "https://youtu.be/yn-qm7lM5p4",
+      "part": 2,
+      "title": "EAFC24 프로클럽 커뮤니티 C.E.F. / FC Barcelona 팀 연습 (24.1.4) - Part 2",
+      "channel": "타임제이",
+      "upload_date": "20240104",
+      "duration": 1101,
+      "embeddable": true,
+      "width": 854,
+      "height": 460,
+      "files": {
+        "audio": "media/audio/yn-qm7lM5p4.m4a",
+        "video": "media/video/yn-qm7lM5p4.mp4",
+        "captions": null,
+        "captions_format": null,
+        "wav": null
+      }
+    }
+  ]
+}
