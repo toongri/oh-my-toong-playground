@@ -22,6 +22,7 @@
 # 여기서 열리지 않은 프로젝트의 실체는 toong-dotfiles(private)의 omt/projects/ 가
 # 들고 있고, 그쪽 bin/omt-apply 가 각 워크트리로 복사한다.
 /projects/*/
+!/projects/fc-feedback/
 !/projects/loop-pack-fe-l2-vol1/
 !/projects/loopers-kotlin-spring-template/
 !/projects/oh-my-resume/
