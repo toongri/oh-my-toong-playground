@@ -55,20 +55,27 @@ evals/fc-feedback/
 
 `fixtures/`는 다음 네 가지로 구성된다.
 
-- `roster.cef.yaml` — 평가용 명단(실제 발행용이 아니다). 샘플 영상(C.E.F. / FC Barcelona
-  팀 연습, 2024-01-04 Part 3, `https://www.youtube.com/watch?v=NUzEChn9EyI`)에서 HUD
-  스코어보드와 텔레스트레이터 라벨로 확인한 게이머태그만 담았다 — `TIMEJ`(코치),
-  `Gerrard_CEF`, `CEF_VandeVen`. 포지션은 전부 코치 발화·화면 속 위치로만 추정한 것이라
-  파일 안에 `# 추정` 주석을 달아 뒀다. sha256:
-  `00de81cf81372b9a66081df3b9f2ec094ba5c43ccb655d5ca2318cbd4c9a9791`
+- `roster.cef.yaml` — 평가용 명단(실제 발행용이 아니다). 화면 게이머태그가 확인된 3명
+  — 샘플 영상(C.E.F. / FC Barcelona 팀 연습, 2024-01-04 Part 3,
+  `https://www.youtube.com/watch?v=NUzEChn9EyI`)의 HUD 스코어보드·텔레스트레이터
+  라벨로 확인한 `TIMEJ`(코치), `Gerrard_CEF`, `CEF_VandeVen` — 에 더해, 사용자 확인
+  (2026-09-28)으로 코치 음성 언급만 근거로 추가한 13명(화면 게이머태그 미확인,
+  `gamertag: CEF_<로마자>` placeholder, 근거는 `gold/README.md` §5)까지 총 16명이다.
+  포지션은 전부 코치 발화·화면 속 위치로만 추정한 것이라 파일 안에 `# 추정` 주석을
+  달아 뒀다. sha256:
+  `f8b6279fea9092bf202d0fa4bc7efb6e135a7ee7a17cc2b95f1513761a8ef63a`
 - `work-NUzEChn9EyI/` — 위 샘플 영상의 `fetch`→`transcribe`→`scan` 산출물
   (`session.json`, `lines.json`, `candidates.json`, `sheets.json`, `cand/*.jpg`,
-  `sheets/*.jpg`). 190줄, 후보 52개, 컨택트시트 5장. `lines.json` sha256:
-  `44b0973b277f5e27a43c20b01f6e4f8baf3a493c4406d13697b11d7bd308f012`
+  `sheets/*.jpg`). 190줄, 후보 52개, 컨택트시트 5장. `lines.json`은 위 roster 확장에
+  맞춰 2026-09-28에 alias 정규화만 다시 실행해 재생성했다(줄 수·`i`/`start`/`end`는
+  기존과 동일, 텍스트 6곳만 변경 — 상세는 `gold/README.md` §7). sha256:
+  `d259302a346105925b8936ed198322fcd1436549e6aa0406da6d2a77d1cbbf76`
 - `work-yn-qm7lM5p4/` — held-out 영상(같은 채널의 다른 파트,
   `https://www.youtube.com/watch?v=yn-qm7lM5p4`, gold 없이 심사 점수만 반영해 샘플
   과적합을 감지하는 용도, plan §13.3) 산출물. 구성은 위와 동일, 92줄, 후보 45개,
-  컨택트시트 5장. `lines.json` sha256:
+  컨택트시트 5장. `lines.json`도 위 roster 확장에 맞춰 2026-09-28에 재생성해 확인했다
+  — 이 영상 발화에는 새로 추가된 alias가 없어 줄 수·`i`/`start`/`end`·텍스트 전부
+  기존과 바이트 단위로 동일했다. sha256(변경 없음):
   `e5b5b1c400ef9db0478ae0485f51b8cc35fbf1b867328fe890f101552b28fef2`
 - `archive-seed/` — 같은 채널의 과거 영상(2024-01-03 Part 1,
   `https://www.youtube.com/watch?v=XkM_tS2Id8Q`) 세션 1개(유닛 2개)를 미리 렌더해 둔
