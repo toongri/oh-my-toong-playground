@@ -208,6 +208,12 @@ describe("검증기", () => {
 		expect(text("다음으로 `/repo/기존-프로그램-문제/apps/slot-distribution.ts`를 수정한다.")).toEqual([]);
 	});
 
+	test("다음 단계는 승인을 단정하지 않고 인용한 사용자 문구를 보여준다", () => {
+		const markdown = renderLedger(ledgerJson(), [], new Map());
+		expect(markdown).toContain('1. Run the tests. Approval cited: U1 "로그인 버그 고쳐줘".');
+		expect(markdown).not.toContain("No further confirmation needed");
+	});
+
 	test("승인 근거 없이 확인 불필요로 표시한 다음 단계는 거부한다", () => {
 		const step = { step: "Run the deploy", authorized_by: "", authorization_quote: "", needs_user_confirmation: false };
 		const violations = validateLedger(ledgerJson({ next_steps: [step] }), ctx());

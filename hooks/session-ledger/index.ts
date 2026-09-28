@@ -149,7 +149,7 @@ export function sessionStartContext(platform: Platform, input: HookInput, home?:
 		: `The complete ledger is below (also saved at ${path}).`;
 	return [
 		"[SESSION LEDGER]",
-		"Your context was just compacted. This ledger was written from the full transcript before compaction, with every user quote and identifier checked against it. Where the compaction summary and this ledger disagree, trust the ledger.",
+		"Your context was just compacted. This ledger was written from the full transcript before compaction, with every user quote and identifier checked against it. Where the compaction summary and this ledger disagree, trust the ledger. An approval cited in a next step is the summarizer's reading of the quoted user message: before a commit, push, deletion, or any command that acts outside the repository, read that user message yourself and confirm it covers the action.",
 		order,
 		"",
 		head,

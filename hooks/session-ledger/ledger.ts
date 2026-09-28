@@ -146,9 +146,10 @@ export function renderFields(d: LedgerJson, withAppendixNote = false): string {
 		"## 3. Next steps",
 	];
 	d.next_steps.forEach((s, i) => {
-		const auth = s.authorized_by ? ` (authorized by ${s.authorized_by})` : "";
-		const confirm = s.needs_user_confirmation ? " **Ask the user first.**" : " No further confirmation needed.";
-		o.push(`${i + 1}. ${s.step}${auth}.${confirm}`);
+		// The summarizer only claims that a quote covers the step; show the quote so the reader judges it.
+		const cited = s.authorized_by ? ` Approval cited: ${s.authorized_by} "${s.authorization_quote}".` : "";
+		const confirm = s.needs_user_confirmation ? " **Ask the user first.**" : "";
+		o.push(`${i + 1}. ${s.step}.${cited}${confirm}`);
 	});
 	o.push("");
 	if (d.working_rules.length > 0) {
@@ -433,7 +434,7 @@ export function validateLedger(d: LedgerJson, ctx: ValidationContext): string[] 
 		);
 	}
 
-	// "No further confirmation needed" is rendered for the main agent to act on, so it must rest on user words.
+	// A step the reader may run without asking must at least cite user words.
 	const unauthorized = d.next_steps.filter((s) => !s.needs_user_confirmation && !s.authorized_by).map((s) => s.step.slice(0, 80));
 	if (unauthorized.length > 0) {
 		v.push(
