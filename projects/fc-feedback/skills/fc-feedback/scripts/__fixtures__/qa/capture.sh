@@ -268,6 +268,89 @@ eval_js() {
 	printf '%s' "$out" | jq -c '.data.result'
 }
 
+# Like eval_js, but for state-mutating JS whose own failure must never be
+# swallowed: aborts the whole capture run (clear message on stderr) instead
+# of degrading to a non-fatal `false`. $1 is a short label used only in that
+# abort message.
+eval_or_die() {
+	out="$(ab eval --stdin --json)"
+	if [ "$(printf '%s' "$out" | jq -r '.success')" != "true" ]; then
+		echo "capture.sh: $1: $(printf '%s' "$out" | jq -r '.error')" >&2
+		exit 1
+	fi
+	printf '%s' "$out" | jq -c '.data.result'
+}
+
+# Clicks a CSS selector after first scrolling its center into the viewport.
+# Root cause of the mobile (390px) multi-click filter defect this exists to
+# fix: a plain `ab click` only auto-scrolls a target enough to satisfy its
+# own "not covered" check, which can leave the element's actual click point
+# outside `window.innerHeight` once the sticky `.player-wrapper`
+# (position:sticky; top:0, render.ts's mobile media query) has already
+# claimed the top of the viewport and an earlier click reflowed the chip
+# list (counts/labels update on every filter change). Confirmed live: after
+# such a scroll, the target chip's own getBoundingClientRect() center sits
+# past innerHeight, document.elementFromPoint() there returns null, and
+# `ab click` still reports success even though the dispatched click hit
+# nothing -- so the resulting screenshot silently shows the pre-click state.
+# Forcing `scrollIntoView({block: "center"})` first keeps the click point
+# well clear of both viewport edges (top sticky player, bottom fold) before
+# `ab click` ever runs.
+click_scrolled() {
+	sel="$1"
+	eval_or_die "pre-click scrollIntoView failed for '$sel'" >/dev/null <<EOF
+(function () {
+  var el = document.querySelector('$sel');
+  if (!el) { throw new Error('element not found: $sel'); }
+  el.scrollIntoView({block: "center", inline: "center"});
+  return true;
+})()
+EOF
+	ab click "$sel" >/dev/null
+}
+
+# Aborts the whole capture run if the JS boolean predicate given on stdin is
+# not exactly true, naming $1 (a short state label) in the message. Called
+# right after driving an interactive state so a wrong-state screenshot can
+# never be written -- this is the detection half of the fix (click_scrolled
+# above is the prevention half): even a click that lands correctly is
+# confirmed to have actually taken effect before take_shot ever runs.
+assert_state() {
+	pass="$(eval_or_die "state assertion for '$1' errored")"
+	if [ "$pass" != "true" ]; then
+		echo "capture.sh: state assertion failed for '$1': predicate evaluated to $pass, not true" >&2
+		exit 1
+	fi
+}
+
+# filter-empty-and only: brings the picked filters (.active-filters, the
+# closed-chip summary row) and the resulting empty-state message (with its
+# own reset button) into one shot together. The fully open filter-bar panel
+# is tall enough (DESIGN.md §7: position + topic + mention groups) that on
+# some viewports it alone pushes the empty state below the fold even when
+# scrolled to the top of the page, so this collapses the panel to just its
+# closed summary line first (".active-filters" below it still shows both
+# picked chips) and re-checks; if even that does not fit, it prioritizes
+# showing the empty-state panel and its reset button, scrolling past the top
+# of the filter summary if it must.
+finalize_empty_and_view() {
+	eval_or_die "finalize_empty_and_view failed" >/dev/null <<'JS'
+(function () {
+  var fb = document.querySelector("details.filter-bar");
+  var es = document.querySelector(".empty-state");
+  if (!fb || !es) { throw new Error(".filter-bar or .empty-state missing"); }
+  function fits() { return es.getBoundingClientRect().bottom <= window.innerHeight; }
+  fb.scrollIntoView({block: "start"});
+  if (fits()) { return "open"; }
+  if (fb.hasAttribute("open")) { fb.querySelector("summary").click(); }
+  fb.scrollIntoView({block: "start"});
+  if (fits()) { return "closed"; }
+  es.scrollIntoView({block: "end"});
+  return "empty-state-priority";
+})()
+JS
+}
+
 # Opens the filter bar before a chip/reset click needs its content
 # hit-testable. render.ts renders `<details class="filter-bar">` closed
 # (no `open` attribute) at every width (DESIGN.md §7): everything inside it,
@@ -283,7 +366,7 @@ ensure_filter_bar_open() {
 JS
 	)"
 	if [ "$is_open" != "true" ]; then
-		ab click '.filter-bar summary' >/dev/null
+		click_scrolled '.filter-bar summary'
 	fi
 }
 
@@ -303,7 +386,7 @@ ensure_toc_open() {
 JS
 	)"
 	if [ "$needs_toggle" = "true" ]; then
-		ab click '.toc-toggle' >/dev/null
+		click_scrolled '.toc-toggle'
 	fi
 }
 
@@ -340,26 +423,47 @@ drive_state() {
 	default | full-page) : ;;
 	toc-topic)
 		ensure_toc_open
-		ab click '#tab-topic' >/dev/null
+		click_scrolled '#tab-topic'
 		;;
 	filter-position-fb)
 		ensure_filter_bar_open
-		ab click '.chip-filter[data-group="position"][data-value="FB"]' >/dev/null
+		click_scrolled '.chip-filter[data-group="position"][data-value="FB"]'
+		assert_state "filter-position-fb" <<'JS'
+document.querySelector('.chip-filter[data-group="position"][data-value="FB"]').getAttribute("aria-pressed") === "true"
+JS
 		;;
 	filter-topic-multi)
 		ensure_filter_bar_open
-		ab click '.chip-filter[data-group="topic"][data-value="수비전환"]' >/dev/null
-		ab click '.chip-filter[data-group="topic"][data-value="역습"]' >/dev/null
+		click_scrolled '.chip-filter[data-group="topic"][data-value="수비전환"]'
+		click_scrolled '.chip-filter[data-group="topic"][data-value="역습"]'
+		assert_state "filter-topic-multi" <<'JS'
+document.querySelector('.chip-filter[data-group="topic"][data-value="수비전환"]').getAttribute("aria-pressed") === "true" &&
+document.querySelector('.chip-filter[data-group="topic"][data-value="역습"]').getAttribute("aria-pressed") === "true"
+JS
 		;;
 	filter-mention)
 		ensure_filter_bar_open
-		ab click '.chip-filter[data-group="mention"][data-value="han-fw"]' >/dev/null
+		click_scrolled '.chip-filter[data-group="mention"][data-value="han-fw"]'
+		assert_state "filter-mention" <<'JS'
+document.querySelector('.chip-filter[data-group="mention"][data-value="han-fw"]').getAttribute("aria-pressed") === "true"
+JS
 		;;
-	my-feedback) ab click '.pill.pill-mine[data-group="mine"][data-value="yoon-fb"]' >/dev/null ;;
+	my-feedback)
+		click_scrolled '.pill.pill-mine[data-group="mine"][data-value="yoon-fb"]'
+		assert_state "my-feedback" <<'JS'
+document.querySelector('.pill.pill-mine[data-group="mine"][data-value="yoon-fb"]').getAttribute("aria-pressed") === "true"
+JS
+		;;
 	filter-empty-and)
 		ensure_filter_bar_open
-		ab click '.chip-filter[data-group="position"][data-value="FB"]' >/dev/null
-		ab click '.chip-filter[data-group="topic"][data-value="마무리"]' >/dev/null
+		click_scrolled '.chip-filter[data-group="position"][data-value="FB"]'
+		click_scrolled '.chip-filter[data-group="topic"][data-value="마무리"]'
+		assert_state "filter-empty-and" <<'JS'
+document.querySelector('.chip-filter[data-group="position"][data-value="FB"]').getAttribute("aria-pressed") === "true" &&
+document.querySelector('.chip-filter[data-group="topic"][data-value="마무리"]').getAttribute("aria-pressed") === "true" &&
+!document.querySelector(".empty-state").hasAttribute("hidden")
+JS
+		finalize_empty_and_view
 		;;
 	seek-part1)
 		wait_yt_api 20000
@@ -526,6 +630,22 @@ for f in $(jq -r '.[] | .file' "$SHOTS/capture-manifest.json"); do
 	fi
 done
 
+# ── evidence-integrity guard: two different ids must never share a sha256 ──
+# The defect this whole file's drive_state hardening (click_scrolled,
+# assert_state, finalize_empty_and_view above) exists to catch surfaced as
+# exactly this: a click that silently no-op'd left a screenshot byte-for-byte
+# identical to an earlier, different state's screenshot. Even with the
+# per-state assertions in place, this is a second, independent net over the
+# whole manifest -- any two DIFFERENT ids ending up with the same sha256 is
+# still a capture bug, never a legitimate outcome (no two of the 35 fixed
+# shots are meant to render identically), so it aborts loudly rather than
+# publishing silently-wrong evidence.
+DUP_HASHES="$(jq -c '[group_by(.sha256)[] | select(length > 1) | {sha256: .[0].sha256, ids: [.[].id]}]' "$SHOTS/capture-manifest.json")"
+if [ "$(printf '%s' "$DUP_HASHES" | jq 'length')" -gt 0 ]; then
+	echo "capture.sh: capture-manifest.json has different ids sharing an identical sha256 (a click likely silently no-op'd): $DUP_HASHES" >&2
+	exit 1
+fi
+
 # ── functional checks (DESIGN.md v2 §14 "기능 검사") ───────────────────────
 # Always run in full regardless of --only: independent of which screenshot
 # ids were reshot, and cheap next to the 35 screenshots above.
@@ -650,12 +770,16 @@ JS
 	# a different part than the current one first, so the video switching
 	# itself (dom-observable via the two documented test hooks, §9) proves
 	# the frame -- not the card's own start -- drove the target: the exact
-	# ±2s seek-time precision (frame time vs. card start time, both landing
+	# ±1s seek-time precision (frame time vs. card start time, both landing
 	# on the same video) is left to the player_api check below, which is the
 	# only one of the two official test hooks (§9: body.dataset.video,
-	# window.fcPlayer) that exposes actual seek time.
+	# window.fcPlayer) that exposes actual seek time. Targets u013's SECOND
+	# body-frame (candidate c009, data-frame-t=633) rather than its first
+	# (c008, data-frame-t=630): c008's time coincides with u013's own
+	# data-start=630, so a click that wrongly seeks to the card's start time
+	# instead of the frame's would still pass a check built on c008.
 	ab click '.part-btn[data-video="NUzEChn9EyI"]' >/dev/null
-	ab click '#u013 .body-frame' >/dev/null
+	ab click '#u013 .body-frame[data-frame-t="633"]' >/dev/null
 	pass="$(eval_js <<'JS'
 document.body.dataset.video === "yn-qm7lM5p4" &&
 document.querySelector('.part-btn[data-video="yn-qm7lM5p4"]').getAttribute("aria-pressed") === "true" &&
@@ -859,23 +983,24 @@ run_player_checks() {
 		add_check "파트 전환 후 fcPlayer.getVideoData().video_id가 목표 파트의 videoId와 일치한다" player_api false "헤드리스 환경에서 YouTube 플레이어 초기화/재생이 제한되어 판정 불가(네트워크 또는 재생 정책 제약)"
 	fi
 
-	# ── DESIGN.md §5-7/§9: 본문 프레임 클릭은 프레임 자체의 시각(u013의 첫
-	# 프레임, candidate c008, t=630)으로 seek해야 한다 -- 카드(u013) 시작
-	# 시각이 아니라.
+	# ── DESIGN.md §5-7/§9: 본문 프레임 클릭은 프레임 자체의 시각(u013의 두
+	# 번째 프레임, candidate c009, t=633)으로 seek해야 한다 -- 카드(u013)
+	# 시작 시각이 아니라. c008(t=630)은 쓰지 않는다: u013의 data-start도
+	# 630이라 카드 시작으로 잘못 seek해도 이 체크를 통과해버린다.
 	frame_pass=false
 	if [ "$api_ready" = true ]; then
 		ab click '.part-btn[data-video="NUzEChn9EyI"]' >/dev/null
-		ab click '#u013 .body-frame' >/dev/null
-		if ab wait --fn "window.fcPlayer && typeof window.fcPlayer.getCurrentTime === 'function' && Math.abs(window.fcPlayer.getCurrentTime() - 630) <= 2" --timeout "$switch_timeout" >/dev/null 2>&1; then
+		ab click '#u013 .body-frame[data-frame-t="633"]' >/dev/null
+		if ab wait --fn "window.fcPlayer && typeof window.fcPlayer.getCurrentTime === 'function' && Math.abs(window.fcPlayer.getCurrentTime() - 633) <= 1" --timeout "$switch_timeout" >/dev/null 2>&1; then
 			frame_pass=true
 		fi
 	fi
 	if [ "$HEADED" = true ]; then
-		add_check "본문 프레임 클릭 후 fcPlayer.getCurrentTime()이 그 프레임의 시각(카드 시작 시각이 아님)과 ±2초 이내로 일치한다" player_api "$frame_pass" ""
+		add_check "본문 프레임 클릭 후 fcPlayer.getCurrentTime()이 그 프레임의 시각(카드 시작 시각이 아님)과 ±1초 이내로 일치한다" player_api "$frame_pass" ""
 	elif [ "$frame_pass" = true ]; then
-		add_check "본문 프레임 클릭 후 fcPlayer.getCurrentTime()이 그 프레임의 시각(카드 시작 시각이 아님)과 ±2초 이내로 일치한다" player_api true ""
+		add_check "본문 프레임 클릭 후 fcPlayer.getCurrentTime()이 그 프레임의 시각(카드 시작 시각이 아님)과 ±1초 이내로 일치한다" player_api true ""
 	else
-		add_check "본문 프레임 클릭 후 fcPlayer.getCurrentTime()이 그 프레임의 시각(카드 시작 시각이 아님)과 ±2초 이내로 일치한다" player_api false "헤드리스 환경에서 YouTube 플레이어 초기화/재생이 제한되어 판정 불가(네트워크 또는 재생 정책 제약)"
+		add_check "본문 프레임 클릭 후 fcPlayer.getCurrentTime()이 그 프레임의 시각(카드 시작 시각이 아님)과 ±1초 이내로 일치한다" player_api false "헤드리스 환경에서 YouTube 플레이어 초기화/재생이 제한되어 판정 불가(네트워크 또는 재생 정책 제약)"
 	fi
 }
 
