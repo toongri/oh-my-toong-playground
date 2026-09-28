@@ -51,6 +51,64 @@ evals/fc-feedback/
 `refs.verified.json`, `data.json`, `taxonomy.yaml`(아카이브 사본), `lines.json`,
 `score.json`, `judge.md`, `run.jsonl.gz`(gzip 원본, 요약본이 아니다)를 남긴다.
 
+## 입력 고정 (plan §15-2/§15-3, EVAL-PREP)
+
+`fixtures/`는 다음 네 가지로 구성된다.
+
+- `roster.cef.yaml` — 평가용 명단(실제 발행용이 아니다). 샘플 영상(C.E.F. / FC Barcelona
+  팀 연습, 2024-01-04 Part 3, `https://www.youtube.com/watch?v=NUzEChn9EyI`)에서 HUD
+  스코어보드와 텔레스트레이터 라벨로 확인한 게이머태그만 담았다 — `TIMEJ`(코치),
+  `Gerrard_CEF`, `CEF_VandeVen`. 포지션은 전부 코치 발화·화면 속 위치로만 추정한 것이라
+  파일 안에 `# 추정` 주석을 달아 뒀다. sha256:
+  `00de81cf81372b9a66081df3b9f2ec094ba5c43ccb655d5ca2318cbd4c9a9791`
+- `work-NUzEChn9EyI/` — 위 샘플 영상의 `fetch`→`transcribe`→`scan` 산출물
+  (`session.json`, `lines.json`, `candidates.json`, `sheets.json`, `cand/*.jpg`,
+  `sheets/*.jpg`). 190줄, 후보 52개, 컨택트시트 5장. `lines.json` sha256:
+  `44b0973b277f5e27a43c20b01f6e4f8baf3a493c4406d13697b11d7bd308f012`
+- `work-yn-qm7lM5p4/` — held-out 영상(같은 채널의 다른 파트,
+  `https://www.youtube.com/watch?v=yn-qm7lM5p4`, gold 없이 심사 점수만 반영해 샘플
+  과적합을 감지하는 용도, plan §13.3) 산출물. 구성은 위와 동일, 92줄, 후보 45개,
+  컨택트시트 5장. `lines.json` sha256:
+  `e5b5b1c400ef9db0478ae0485f51b8cc35fbf1b867328fe890f101552b28fef2`
+- `archive-seed/` — 같은 채널의 과거 영상(2024-01-03 Part 1,
+  `https://www.youtube.com/watch?v=XkM_tS2Id8Q`) 세션 1개(유닛 2개)를 미리 렌더해 둔
+  아카이브 시드. `taxonomy.yaml`은 스킬 번들 기본값(`scripts/taxonomy.default.yaml`)
+  그대로이고 `roster.yaml`은 `roster.cef.yaml`과 내용이 같다. `index.json`의
+  `sessions`가 1개 이상이어야 유사도(similar) 단계가 실제로 비교할 대상을 갖는다.
+  `.git/`은 들어 있지 않다 — `harness/run.sh`가 복사한 뒤 매 반복마다 새로 `git init`한다.
+
+**미디어 캐시 규칙.** `work-*/session.json`의 `files.audio`/`files.video`/`files.wav`는
+`fc.ts fetch`/`transcribe`가 원래 쓰는 그대로 작업 폴더 상대경로
+(`media/audio/<id>.webm`, `media/video/<id>.webm`, `media/wav/<id>.wav`, …)로 남아
+있다 — 절대경로로 고쳐 쓰지 않았다. 오디오/영상 원본은 용량 때문에 커밋하지 않고,
+`${FC_EVAL_MEDIA_DIR:-$HOME/.cache/fc-feedback-eval}/<video-id>/`에 각 `work-*/`의
+`media/` 서브트리와 동일한 구조(`audio/`, `video/`, `captions/`, `wav/`)로 캐시해 둔다.
+`harness/run.sh`는 fixture를 실행용 작업 폴더로 복사한 직후 그 경로를 `<work_dir>/media`
+심볼릭 링크로 연결한다(`frames` 단계가 `session.json`의 상대경로를 통해 원본 영상을 다시
+여는 것까지 포함해 그대로 동작하도록). 캐시 디렉터리가 없으면 `run.sh`는 무엇을
+채워야 하는지 알려 주고 즉시 종료한다.
+
+**재생성 방법.**
+
+1. HOME/OMT_DIR/OMT_SESSION_ID를 임시 디렉터리로 격리하고, 임시 git 아카이브를
+   `roster.cef.yaml`로 `fc.ts config set`한 뒤(`configured` 모드), 영상별로
+   `fc.ts fetch <url>` → `transcribe` → `scan`을 실제로 실행한다.
+2. 이 macOS 환경에서는 `uvx`가 격리된 HOME 아래에서 uv가 관리하는 python을 찾지 못하고
+   오래된 시스템 python(3.9)으로 폴백해 `yt-dlp`가 깨지므로, `UV_PYTHON_INSTALL_DIR`/
+   `UV_CACHE_DIR`은 평소 uv 캐시 위치로, `UV_PYTHON`은 최신 `python3`으로 지정해서
+   실행한다. `deno`도 설치해 둔다(`yt-dlp`가 서명 추출용 JS 런타임이 없으면 일부 포맷을
+   403으로 거부한다).
+3. 생성된 작업 폴더에서 `session.json`/`lines.json`/`candidates.json`/`sheets.json`과
+   `cand/*.jpg`/`sheets/*.jpg`만 `fixtures/work-<video-id>/`로 복사한다.
+   `media/`(오디오·영상·자막·wav)는 위 미디어 캐시 경로로 옮기고 fixture에는 넣지 않는다.
+4. `archive-seed/`는 `fc.ts init-archive`로 뼈대를 만들고 `roster.yaml`을
+   `roster.cef.yaml` 내용으로 덮어쓴 뒤, 같은 채널의 과거 영상을 fetch→transcribe→scan하고
+   `plan.json`/`notes.json`을 직접 작성해 `check plan`/`check notes`를 통과시키고,
+   `similar-choices.json`(`{"version":1,"units":{}}`)과 `refs-draft.json`
+   (`{"version":1,"refs":[]}`)을 빈 값으로 두어 `check similar`/`check refs`를 통과시킨
+   뒤 `frames` → `verify-refs` → `render`로 만든다. 빌드용으로 잠깐 만든 `.git/`은
+   커밋 전에 제외한다.
+
 ## 종료·결정 규칙 (plan §14.4, 원문 그대로)
 
 - 반복: 회차마다 모델당 2회. 1회차에서 같은 스킬 버전 반복 간 점수 차 절댓값의 평균을

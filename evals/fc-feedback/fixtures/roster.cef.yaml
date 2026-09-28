@@ -1,0 +1,36 @@
+# fc-feedback 모델 비교 평가 전용 명단 — 실제 발행용 명단이 아니다(plan §14.6, §15-8).
+#
+# 샘플 영상(EAFC24 프로클럽 커뮤니티 C.E.F. / FC Barcelona 팀 연습, 2024-01-04 Part 3,
+# https://www.youtube.com/watch?v=NUzEChn9EyI)에서 실제로 확인 가능한 게이머태그만 담는다:
+# - HUD 스코어보드에 "9 TIMEJ"로 반복 노출(예: 00:01:04, 00:28:48, 00:48:36, 01:20:48 화면)
+# - 코치가 화면에 그린 텔레스트레이터 라벨 "Gerrard_CEF"(00:28:48)와
+#   "CEF_VandeVen"(00:19:30)
+# 코치 음성으로만 언급되고 게이머태그가 화면에 나타나지 않는 별명(예: 루미, 원제, 파인드,
+# 맥구 등)은 이 파일에 넣지 않았다 — 게이머태그가 실제로 보이는 인원만 포함한다는 §14.6
+# 원칙 때문이다.
+#
+# 포지션은 이 영상에 선발 포메이션/스쿼드 화면이 없어 전부 코치 발화와 화면 속 위치로만
+# 추정했다("# 추정" 주석). alias는 transcript.txt에 남은 ASR 오표기다.
+members:
+  - id: timej
+    name: TIMEJ
+    gamertag: TIMEJ
+    role: coach
+    positions:
+      - ST # 추정: HUD에 "9 TIMEJ"로 표기, 28:48·80:48 공격 전개 위치(선발 포지션 화면 없음)
+
+  - id: gerrard
+    name: Gerrard_CEF
+    gamertag: Gerrard_CEF
+    positions:
+      - CM # 추정: 28:48 센터서클 부근 위치 + 08:12 코치 발화("베라드 님이 여기서 탈압박
+        # 해서 앞으로 넣어도") 기준(선발 포지션 화면 없음)
+    aliases:
+      - 베라드
+      - 제라드
+
+  - id: vandeven
+    name: CEF_VandeVen
+    gamertag: CEF_VandeVen
+    positions:
+      - CB # 추정: 19:30 자책 경합 시 최종 수비 라인 부근 위치 기준(선발 포지션 화면 없음)
