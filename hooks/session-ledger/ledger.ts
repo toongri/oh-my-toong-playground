@@ -433,6 +433,14 @@ export function validateLedger(d: LedgerJson, ctx: ValidationContext): string[] 
 		);
 	}
 
+	// "No further confirmation needed" is rendered for the main agent to act on, so it must rest on user words.
+	const unauthorized = d.next_steps.filter((s) => !s.needs_user_confirmation && !s.authorized_by).map((s) => s.step.slice(0, 80));
+	if (unauthorized.length > 0) {
+		v.push(
+			`next_steps ${JSON.stringify(unauthorized)} set needs_user_confirmation to false without authorized_by; cite the U-id and quote whose words authorize each, or set needs_user_confirmation to true`,
+		);
+	}
+
 	const badProposals = d.approved_proposals.map((p) => p.proposal_id).filter((id) => !assistants.has(id));
 	if (badProposals.length > 0) {
 		v.push(

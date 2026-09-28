@@ -208,6 +208,14 @@ describe("검증기", () => {
 		expect(text("다음으로 `/repo/기존-프로그램-문제/apps/slot-distribution.ts`를 수정한다.")).toEqual([]);
 	});
 
+	test("승인 근거 없이 확인 불필요로 표시한 다음 단계는 거부한다", () => {
+		const step = { step: "Run the deploy", authorized_by: "", authorization_quote: "", needs_user_confirmation: false };
+		const violations = validateLedger(ledgerJson({ next_steps: [step] }), ctx());
+		expect(violations.some((x) => x.includes("without authorized_by"))).toBe(true);
+		const asking = validateLedger(ledgerJson({ next_steps: [{ ...step, needs_user_confirmation: true }] }), ctx());
+		expect(asking.some((x) => x.includes("without authorized_by"))).toBe(false);
+	});
+
 	test("깨진 경로 구간은 로그의 가장 가까운 구간으로 복원한다", () => {
 		const source = "cd /repo/기존-프로그램-문제/apps && cat slot-distribution.ts";
 		const garbled = ledgerJson({
