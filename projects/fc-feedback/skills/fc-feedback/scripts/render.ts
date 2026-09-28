@@ -215,41 +215,105 @@ function wrapNobr(escaped: string): string {
 }
 
 /**
+ * Every precomposed Hangul syllable (U+AC00-U+D7A3) encodes its final consonant (batchim) as
+ * (code - 0xAC00) % 28 - 0 is "no batchim", 4 is ㄴ, 8 is ㄹ (KS X 1001 batchim order). Real text
+ * glues via a fused syllable carrying that batchim ("앞당겨질" ends in 질 = ㄹ, "만든" ends in
+ * 든 = ㄴ) - the bare compatibility jamo ㄹ/ㄴ characters this replaced never occur standalone in
+ * prose, which was the bug (DESIGN §15-1 fix log). `hangulSyllablesWithFinal` expands the 19x21
+ * syllables sharing one batchim into a regex character class once, at module load.
+ */
+function hangulSyllablesWithFinal(finalIndex: number): string {
+	let chars = "";
+	for (let block = 0; block < 19 * 21; block++) {
+		chars += String.fromCodePoint(0xac00 + block * 28 + finalIndex);
+	}
+	return chars;
+}
+
+const RIEUL_BATCHIM = hangulSyllablesWithFinal(8); // ㄹ batchim, e.g. 할/질/올
+const NIEUN_BATCHIM = hangulSyllablesWithFinal(4); // ㄴ batchim, e.g. 든/간/본
+
+/**
  * Matches each bound Korean grammatical construction this file glues (DESIGN §10/§15-1):
- * negation (-지 못/않), -기(도/만) 전/시작/위해/때문, -다 보니/보면, -을/를/ㄹ 수 있/없 (both
- * spaces), -고 있/싶, -아/어 주/보/버리/놓, dependent noun 것 after -ㄴ/는/은/을, and a number
- * glued to its counter (초/분/번/명/개/m/골). `\S*` is bounded by whitespace on both sides, so
- * it never crosses into a neighboring word — an ordinary inter-word space between two
- * independent words (e.g. "수비 전환") matches none of these and stays breakable. An optional
- * `\*{0,2}` after the trigger character tolerates a bold span's closing "**" landing exactly
- * at the construction boundary (e.g. "**...하는**" 것"), the one run-boundary case this can
- * still catch by running on the raw text before `boldSpans()` splits on "**" — see
- * `glueKorean`'s own comment for the reason that ordering, not per-span application, is used.
- * A stem ending in a vowel-fused "ㄹ" syllable (e.g. "시도할 수 있다") is NOT covered — the
- * pattern is limited, as given, to a literal 을/를/ㄹ character, not a decomposed batchim.
+ * negation (-지 못/않), -기(도/만) 전/시작/위해/때문, -다 보니/보면, -을/를/(ㄹ batchim) 수 있/없
+ * (both spaces), -고 있/싶, -아/어 주/보/버리/놓, dependent noun 것 after -는/은/을/(ㄴ or ㄹ
+ * batchim), and a number glued to its counter (초/분/번/명/개/m/골). `\S*` is bounded by
+ * whitespace on both sides, so it never crosses into a neighboring word - an ordinary
+ * inter-word space between two independent words (e.g. "수비 전환") matches none of these and
+ * stays breakable. An optional `\*{0,2}` after the trigger character tolerates a bold span's
+ * closing "**" landing exactly at the construction boundary (e.g. "**...하는**" 것"), the one
+ * run-boundary case this can still catch by running on the raw text before `boldSpans()` splits
+ * on "**" - see `glueKorean`'s own comment for the reason that ordering, not per-span
+ * application, is used.
  */
 const GLUE_PATTERNS: readonly RegExp[] = [
 	/\S*지\*{0,2} (?:못|않)/g,
 	/\S*기(?:도|만)?\*{0,2} (?:전|시작|위해|때문)/g,
 	/\S*다\*{0,2} (?:보니|보면)/g,
-	/\S*[을를ㄹ]\*{0,2} 수 (?:있|없)/g,
+	new RegExp(`\\S*(?:을|를|[${RIEUL_BATCHIM}])\\*{0,2} 수 (?:있|없)`, "g"),
 	/\S*고\*{0,2} (?:있|싶)/g,
 	/\S*[아어]\*{0,2} (?:주|보|버리|놓)/g,
-	/\S*(?:ㄴ|는|은|을)\*{0,2} 것/g,
+	new RegExp(`\\S*(?:는|은|을|[${RIEUL_BATCHIM}${NIEUN_BATCHIM}])\\*{0,2} 것`, "g"),
 	/\d+ (?:초|분|번|명|개|m|골)/g,
 ];
+
+// A chained construction ("찾기 시작하다 보니", "-지 못하고 있는 것") can glue several
+// adjacent spaces in one pass, producing one unbreakable run long enough to blow past the
+// 390px column and force a mid-word overflow-wrap break instead (DESIGN §10/§15-1's own
+// "anywhere" fallback). MAX_GLUE_RUN caps how many characters (Korean syllables, counted at
+// the 17px Body size, DESIGN §2) a single NBSP-joined run may reach before this file gives one
+// of its internal joints back its ordinary breakable space - chosen so a run at the cap still
+// fits the 390px viewport's content column at Body size. lazy: fixed constant tuned for the
+// current type scale; revisit if §2's Body size or --measure changes.
+const MAX_GLUE_RUN = 14;
+const NBSP = "\u00a0";
+
+/** Un-glues the earliest joint that keeps `run` within `MAX_GLUE_RUN`, recursing on the remainder - pure, called only by `capGlueRunLength`. */
+function capGlueRun(run: string): string {
+	if (run.length <= MAX_GLUE_RUN) {
+		return run;
+	}
+	let breakAt = -1;
+	for (let i = Math.min(MAX_GLUE_RUN, run.length - 1); i >= 1; i--) {
+		if (run[i - 1] === NBSP) {
+			breakAt = i - 1;
+			break;
+		}
+	}
+	if (breakAt === -1) {
+		breakAt = run.indexOf(NBSP);
+	}
+	if (breakAt === -1) {
+		return run; // no internal joint at all - an already-unbreakable single word, leave it
+	}
+	return run.slice(0, breakAt) + " " + capGlueRun(run.slice(breakAt + 1));
+}
+
+/** Splits on the real (breakable) spaces `glueKorean`'s patterns left untouched, then caps each NBSP-joined run (§15-1's chaining hazard) independently. */
+function capGlueRunLength(text: string): string {
+	return text
+		.split(" ")
+		.map((run) => capGlueRun(run))
+		.join(" ");
+}
 
 /**
  * Replaces the ASCII space inside a bound grammatical construction with U+00A0 so
  * `word-break: keep-all`/`text-wrap: pretty` can't still split the pair mid-construction
- * (DESIGN §10/§15-1) — U+00A0 passes through `escapeHtml` untouched. Pure; run it on the RAW
+ * (DESIGN §10/§15-1) - U+00A0 passes through `escapeHtml` untouched. Pure; run it on the RAW
  * note text/caption/title BEFORE `boldSpans()` splits on "**", not per resulting span: "**"
  * markers are non-space and never block a match, so a construction whose boundary falls right
- * at a bold-span edge (e.g. "**하는** 것") is still glued — splitting first would lose that
- * cross-boundary case entirely (documented limitation avoided by ordering, not accepted).
+ * at a bold-span edge (e.g. "**하는** 것") is still glued - splitting first would lose that
+ * cross-boundary case entirely (documented limitation avoided by ordering, not accepted). The
+ * result then passes through `capGlueRunLength` once, since chained constructions can glue
+ * several patterns' spaces back to back into one over-long run (DESIGN §15-1).
  */
 export function glueKorean(text: string): string {
-	return GLUE_PATTERNS.reduce((acc, pattern) => acc.replace(pattern, (match) => match.replace(/ /g, " ")), text);
+	const glued = GLUE_PATTERNS.reduce(
+		(acc, pattern) => acc.replace(pattern, (match) => match.replace(/ /g, NBSP)),
+		text,
+	);
+	return capGlueRunLength(glued);
 }
 
 /** Card title / TOC label shared pipeline: glue bound constructions, then the existing escape+nobr treatment (DESIGN §5/§8/§10). */
@@ -399,7 +463,15 @@ function renderMyFeedbackNav(data: SessionData): string {
 
 // ── 필터 바 (DESIGN.md §7) ───────────────────────────────────────────────
 
-/** `isRoot` marks GK/DF/MF/FW with `.chip-pos-root` (DESIGN §15-5/§15-10) so the tree's two levels read differently at a glance — children (recursive calls below) never get it. */
+/**
+ * `isRoot` marks GK/DF/MF/FW with `.chip-pos-root` (DESIGN §15-5/§15-10) so the tree's two
+ * levels read differently at a glance — children (recursive calls below) never get it. A node
+ * with children renders as `.pos-node--branch`: its own chip in a fixed left column, its
+ * children wrapping in the row to the right (DESIGN §7) — the same two-column rule at every
+ * depth is what keeps a nested branch (FB > LB/RB/LWB/RWB) visually consistent with a root
+ * branch instead of every chip at every depth flowing into one mixed row. A childless node
+ * stays a plain `.pos-node` span (no row split needed).
+ */
 function renderPositionNode(tag: string, counts: Map<string, number>, isRoot: boolean): string {
 	const count = counts.get(tag) ?? 0;
 	if (count === 0) {
@@ -413,7 +485,7 @@ function renderPositionNode(tag: string, counts: Map<string, number>, isRoot: bo
 		`<button type="button" class="chip chip-filter${rootClass}" data-group="position" data-value="${escapeHtml(tag)}" aria-pressed="false">` +
 		`${escapeHtml(tag)} (${count})</button>`;
 	return childHtml
-		? `<span class="pos-node">${button}<span class="pos-children">${childHtml}</span></span>`
+		? `<div class="pos-node pos-node--branch">${button}<div class="pos-children">${childHtml}</div></div>`
 		: `<span class="pos-node">${button}</span>`;
 }
 
@@ -679,13 +751,20 @@ function renderBodyText(text: string): string {
 	return `<p>${html}</p>`;
 }
 
-/** A body frame: figure+figcaption with a time chip and a "확대" new-tab link, `data-frame-t` read by VIEWER_JS's click-to-seek (DESIGN §5 item 7). */
+/**
+ * A body frame: figure+figcaption with a time chip and a "확대" new-tab link, `data-frame-t`
+ * read by VIEWER_JS's click-to-seek (DESIGN §5 item 7). The caption text sits in its own
+ * `.body-frame-caption` span so the figcaption's grid (time chip | caption | 확대, §15-10) can
+ * size and wrap the middle column independently — without it, a long caption's own text node
+ * would be the layout's only wrappable unit and could push the time chip or "확대" onto their
+ * own lines instead of staying pinned to the row's edges.
+ */
 function renderBodyFrame(block: UnitBodyFrameBlock): string {
 	const caption = glueKorean(block.caption);
 	return (
 		`<figure class="body-frame" data-frame-t="${block.t}">` +
 		`<img src="${escapeHtml(block.src)}" width="${block.width}" height="${block.height}" loading="lazy" alt="${escapeHtml(caption)}">` +
-		`<figcaption>${seekTimeButton(block.t)}${escapeHtml(caption)} ` +
+		`<figcaption>${seekTimeButton(block.t)}<span class="body-frame-caption">${escapeHtml(caption)}</span>` +
 		`<a href="${escapeHtml(block.src)}" target="_blank" rel="noopener" class="zoom-link" aria-label="이미지 원본 크게 보기">확대</a></figcaption>` +
 		`</figure>`
 	);
@@ -732,12 +811,21 @@ function renderRefsList(refs: UnitRef[]): string {
 	return `<ul class="refs-list">${items}</ul>`;
 }
 
-/** Representative start image (DESIGN §5 item 4): same "확대" new-tab-to-source affordance as a body frame (item 7), excluded from seek by the existing `interactive`/`a` guard in `onCardListClick` — no VIEWER_JS change needed. Clicking the image itself still seeks to the card's start time (no `.body-frame`/`data-frame-t` on this figure). */
-function renderStartImage(image: UnitStartImage): string {
+/**
+ * Representative start image (DESIGN §5 item 4): same "확대" new-tab-to-source affordance as a
+ * body frame (item 7), excluded from seek by the existing `interactive`/`a` guard in
+ * `onCardListClick` — no VIEWER_JS change needed. Clicking the image itself still seeks to the
+ * card's start time (no `.body-frame`/`data-frame-t` on this figure). `tagsHtml` (the tag row,
+ * item 5) shares this figure's caption row with "확대" — tags left, link right — instead of
+ * sitting on its own line below: the two were previously two stacked rows with the link alone
+ * above the tags.
+ */
+function renderStartImage(image: UnitStartImage, tagsHtml: string): string {
 	return (
 		`<figure class="card-image">` +
 		`<img src="${escapeHtml(image.src)}" width="${image.width}" height="${image.height}" alt="">` +
-		`<figcaption><a href="${escapeHtml(image.src)}" target="_blank" rel="noopener" class="zoom-link" aria-label="이미지 원본 크게 보기">확대</a></figcaption>` +
+		`<figcaption>${tagsHtml}` +
+		`<a href="${escapeHtml(image.src)}" target="_blank" rel="noopener" class="zoom-link" aria-label="이미지 원본 크게 보기">확대</a></figcaption>` +
 		`</figure>`
 	);
 }
@@ -767,8 +855,7 @@ function renderCard(unit: SessionUnit, ctx: CardContext): string {
 		renderCardHead(unit, ctx) +
 		`<h3>${unitTitleHtml(unit.title)}</h3>` +
 		(hasRoster ? `<p class="mention-badge" hidden></p>` : "") +
-		renderStartImage(unit.images.start) +
-		renderChipRow(unit) +
+		renderStartImage(unit.images.start, renderChipRow(unit)) +
 		(hasRoster ? renderMentionedLine(unit, ctx.members) : "") +
 		renderBody(unit.body) +
 		(hasRoster ? renderRelatedLine(unit, ctx.members) : "") +
@@ -857,6 +944,14 @@ function renderSessionCard(entry: IndexSessionEntry): string {
 	);
 }
 
+/**
+ * Group headings render at the H3 scale (DESIGN §2), one level below this section's own H2 —
+ * previously both were `<h2>`, so a group title read with the same weight as the section title
+ * right above it. `#by-topic ul` gets the session TOC's own list language (no bullets,
+ * `.toc-item`'s muted/no-underline styling, `--space-1` row gap) — the bare `<ul>` had no
+ * ancestor `.toc` to pick up `.toc ul`'s reset, so it fell through to the browser default
+ * (bullets, ~40px indent), which is what read as unstyled default HTML.
+ */
 function renderIndexByTopic(index: ArchiveIndex): string {
 	if (index.units.length === 0) {
 		return "";
@@ -868,18 +963,22 @@ function renderIndexByTopic(index: ArchiveIndex): string {
 			const items = units
 				.map((unit) => `<li><a class="toc-item" href="${escapeHtml(unit.href)}">${escapeHtml(unit.title)}</a></li>`)
 				.join("");
-			return `<div class="toc-tag-group"><h2>${escapeHtml(tag)} (${units.length})</h2><ul>${items}</ul></div>`;
+			return `<div class="toc-tag-group"><h3>${escapeHtml(tag)} (${units.length})</h3><ul>${items}</ul></div>`;
 		})
 		.join("");
 	return `<section id="by-topic"><h2>주제별 전체 피드백</h2>${groups}</section>`;
 }
 
 export function renderIndex(index: ArchiveIndex): string {
+	// The jump link sits above the session grid, not directly over `#by-topic`'s own H2 of the
+	// same text — the two used to sit back to back and read as one heading repeated twice;
+	// separated by the whole session grid, the link now reads as ordinary top-of-page
+	// navigation and the section below keeps its own landmark heading.
 	const body =
 		index.sessions.length === 0
 			? `<p class="empty-state">아직 발행된 세션이 없어요.</p>`
-			: `<div class="session-grid">${index.sessions.map(renderSessionCard).join("")}</div>` +
-				`<p class="plain-link"><a href="#by-topic">주제별 전체 피드백</a></p>` +
+			: `<p class="plain-link"><a href="#by-topic">주제별 전체 피드백</a></p>` +
+				`<div class="session-grid">${index.sessions.map(renderSessionCard).join("")}</div>` +
 				renderIndexByTopic(index);
 
 	const html =
@@ -1013,13 +1112,16 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .toc-topic-group, .toc-tag-group, .toc-match-group { margin: var(--space-6) 0 0; }
 .toc-topic-group[hidden], .toc-tag-group[hidden], .toc-match-group[hidden] { display: none; }
 .toc-summary { font-size: 0.875rem; color: var(--muted); margin: var(--space-1) 0 var(--space-2); }
-.toc ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+/* Shared with the archive's #by-topic list (DESIGN §12), which has no .toc ancestor of its own
+   but reuses the same group/list classes and needs the same reset — without it the bare <ul>
+   fell through to the browser default (bullets, ~40px indent). */
+.toc ul, #by-topic ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
 .toc-item { display: block; min-height: 44px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-size: 0.875rem; color: var(--muted); text-decoration: none; }
 .toc-item .chip-time { margin-right: var(--space-2); }
 .toc-item:hover, .toc-item:focus-visible, .toc-item.is-current { color: var(--accent); text-decoration: underline; }
 .toc-item[hidden] { display: none; }
 
-.main { flex: 1 1 auto; min-width: 0; max-width: var(--measure); display: flex; flex-direction: column; gap: var(--space-4); }
+.main { flex: 1 1 auto; min-width: 0; max-width: var(--measure); display: flex; flex-direction: column; gap: var(--space-8); }
 
 .my-feedback { display: flex; flex-direction: column; gap: var(--space-2); }
 .my-feedback-label { font-size: 0.8125rem; font-weight: 700; }
@@ -1056,10 +1158,18 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 /* Nested position nodes wrap within the viewport instead of forcing a fixed-width single
    line off-screen (DESIGN §7/§15-5); chip margin is reset per node since the tree's own
    gap already spaces siblings — keeping both would double the gap (DESIGN §2). */
-.pos-tree { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; max-width: 100%; }
-.pos-node { display: inline-flex; flex-wrap: wrap; align-items: center; min-width: 0; max-width: 100%; }
+/* Each root is its own row — .pos-tree stacks branches in a column instead of letting every
+   root/child chip wrap into one mixed flow ("MF-CDM-CM-FW-ST-CF-LW" reading as a single line
+   at 1440px). */
+.pos-tree { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; max-width: 100%; }
+.pos-node { display: inline-flex; align-items: center; min-width: 0; max-width: 100%; }
 .pos-node .chip { margin: 0; }
-.pos-children { margin-left: var(--space-3); display: inline-flex; flex-wrap: wrap; gap: var(--space-2); min-width: 0; max-width: 100%; }
+/* Two-column row: the branch's own chip in a fixed-width left column, its children wrapping in
+   the right column — applied identically at every nesting depth, so a nested branch (e.g. FB's
+   own LB/RB/LWB/RWB row inside DF's children) reads with the same rule and indent as a root
+   branch, not a special case. */
+.pos-node--branch { display: grid; grid-template-columns: minmax(64px, max-content) minmax(0, 1fr); align-items: start; gap: var(--space-2); width: 100%; }
+.pos-children { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2); min-width: 0; max-width: 100%; }
 .chip-overflow { color: var(--muted); }
 .filter-reset { min-height: 44px; padding: var(--space-2) var(--space-4); border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: var(--bg); font-size: 0.8125rem; font-weight: 600; cursor: pointer; margin-top: var(--space-3); }
 
@@ -1089,7 +1199,10 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .breadcrumb { color: var(--muted); font-size: 0.8125rem; }
 .card-image { margin: var(--space-3) 0 0; }
 .card-image img { width: 100%; height: auto; border: 1px solid var(--line); }
-.card-image figcaption { display: flex; justify-content: flex-end; font-size: 0.875rem; font-weight: 500; color: var(--muted); margin-top: var(--space-2); }
+/* Tags (left) + 확대 (right) share one row instead of stacking on two — the tag box wraps
+   within its own space; 확대 keeps its fixed width via .zoom-link's own flex-shrink:0 below. */
+.card-image figcaption { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-2); font-size: 0.875rem; font-weight: 500; color: var(--muted); margin-top: var(--space-2); }
+.card-image figcaption .chip-row { margin: 0; min-width: 0; }
 .mention-badge { display: inline-block; margin: var(--space-2) 0 0; padding: var(--space-1) var(--space-3); border-radius: var(--radius-full); font-size: 0.8125rem; font-weight: 600; }
 .mention-badge[hidden] { display: none; }
 .mention-badge.mention-direct { background: var(--accent); color: var(--bg); }
@@ -1117,7 +1230,13 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .card-body > .body-frame + * { margin-top: var(--space-6); }
 .card-body .body-frame { cursor: pointer; border-radius: var(--radius-sm); }
 .card-body .body-frame img { width: 100%; height: auto; border-radius: var(--radius-sm); }
-.card-body .body-frame figcaption { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); font-size: 0.875rem; font-weight: 500; color: var(--muted); margin-top: var(--space-2); }
+/* Grid, not flex-wrap: a flex row let the caption text node be the
+   only wrap point, so depending on caption length the time chip / text / 확대 scattered across
+   1-4 lines. The fixed edge columns (time chip left, 확대 right) never wrap — only the middle
+   column does, via .body-frame-caption's own min-width:0 — so both controls stay pinned to the
+   row's edges at any caption length, top-aligned (align-items:start) even across wrapped lines. */
+.card-body .body-frame figcaption { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--space-2); font-size: 0.875rem; font-weight: 500; color: var(--muted); margin-top: var(--space-2); }
+.body-frame-caption { min-width: 0; }
 .zoom-link { font-weight: 600; white-space: nowrap; flex-shrink: 0; }
 
 /* Groups similar/refs as one metadata block, separated from the body above by a hairline
@@ -1128,7 +1247,10 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .ref-badges { display: inline-flex; gap: var(--space-1); }
 .badge { display: inline-block; background: var(--surface-sunken); color: var(--muted); font-size: 0.875rem; font-weight: 500; padding: var(--space-1) var(--space-2); border-radius: var(--radius-full); }
 .similar-date { color: var(--muted); font-size: 0.875rem; }
-.watch-link { display: inline-block; font-weight: 600; font-size: 0.8125rem; }
+/* margin-top (not conditional on .card-meta) reads as the card's own end block whether the
+   previous sibling is .card-meta or .card-body directly — without it the link ran on right
+   after the last paragraph as if it were part of it. */
+.watch-link { display: inline-block; font-weight: 600; font-size: 0.8125rem; margin-top: var(--space-4); }
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); text-align: center; font-size: 1.0625rem; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-8) var(--space-6); }
 .empty-state[hidden] { display: none; }
 .empty-state .filter-reset { margin-top: 0; }

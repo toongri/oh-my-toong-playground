@@ -1100,6 +1100,9 @@ describe("glueKorean — 묶인 문법 구성 공백을 nbsp로 치환", () => {
 		["-아/어 주", "코스를 잡아 주는 습관", "잡아 주는"],
 		["의존명사 것(-는 것)", "라인을 올리는 것을 원칙으로", "올리는 것을"],
 		["숫자+단위", "클리어링 이후 3 초를 가장 위험하게 본다", "3 초를"],
+		["-ㄹ 것(받침 ㄹ, 융합 음절로 감지)", "앞당겨질 것이다", "앞당겨질 것이다"],
+		["-ㄹ 수 있(받침 ㄹ, 양쪽 공백)", "할 수 있다", "할 수 있다"],
+		["-ㄴ 것(받침 ㄴ, 융합 음절로 감지)", "만든 것이", "만든 것이"],
 	])("%s: %s", (_label, input, expected) => {
 		expect(glueKorean(input)).toContain(expected);
 	});
@@ -1119,6 +1122,21 @@ describe("glueKorean — 묶인 문법 구성 공백을 nbsp로 치환", () => {
 		const doc = parseHTML(renderSession(data)).document;
 		const p = doc.getElementById("u001")?.querySelector(".card-body p");
 		expect(p?.textContent).toContain("선점하지 못한");
+	});
+
+	test("연쇄된 묶인 문법 구성(\"-기 시작 -다 보니\")은 이어지는 공백을 모두 nbsp로 붙인다(DESIGN §15-1)", () => {
+		expect(glueKorean("패스 코스를 찾기 시작하다 보니 이미 늦어 있었다")).toContain("찾기 시작하다 보니");
+	});
+
+	test("nbsp로 이어붙인 한 구간이 390px 컬럼 상한(14자)을 넘으면 그 안에서 다시 끊어진다(DESIGN §15-1 체이닝 상한)", () => {
+		const glued = glueKorean("받아들이지 못하고 있는 것을 놓쳤다");
+		const runs = glued.split(" ");
+		for (const run of runs) {
+			expect(run.length).toBeLessThanOrEqual(14);
+		}
+		// 원래라면 "받아들이지-못하고-있는-것을"이 하나로 이어붙어 15자가 되므로, 마지막 이음매가
+		// 도로 끊어져 "것을"이 별도 구간으로 남아야 한다(구간 경계 자체가 복원됨을 확인).
+		expect(runs).toContain("것을");
 	});
 });
 

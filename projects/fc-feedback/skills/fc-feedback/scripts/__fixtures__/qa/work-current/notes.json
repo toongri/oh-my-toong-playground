@@ -133,7 +133,7 @@
         {
           "type": "frame",
           "candidate_id": "c004",
-          "caption": "18:00, 볼을 빼앗긴 직후 — 아직 반응이 없다"
+          "caption": "볼을 빼앗긴 직후 — 아직 반응이 없다"
         },
         {
           "type": "text",
@@ -142,7 +142,7 @@
         {
           "type": "frame",
           "candidate_id": "c005",
-          "caption": "18:03, 압박을 시작하는 지점 — 상대는 이미 두 걸음 앞서 있다"
+          "caption": "압박을 시작하는 지점 — 상대는 이미 두 걸음 앞서 있다"
         },
         {
           "type": "text",
@@ -151,7 +151,7 @@
         {
           "type": "frame",
           "candidate_id": "c006",
-          "caption": "18:06, 커버가 완료된 지점"
+          "caption": "커버가 완료된 지점"
         },
         {
           "type": "text",

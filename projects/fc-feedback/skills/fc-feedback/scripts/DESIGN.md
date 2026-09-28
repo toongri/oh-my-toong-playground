@@ -278,13 +278,14 @@ pill·버튼·part 전환 버튼·details summary)은 `1px solid var(--line-stro
    var(--bg);` 채움), 없지만 `data-related-ids`에는 있으면 "포지션 관련(참고)"(`background:
    var(--bg); color: var(--muted); border: 1px solid var(--line);` 아웃라인) — 채움 vs
    아웃라인으로 자기 잘못과 참고용을 한눈에 구분한다. 미선택 상태에서는 렌더하지 않는다.
-4. **대표 시작 이미지**: `<img>`에 실제 프레임의 width/height 속성을 그대로 써 레이아웃
-   시프트를 막는다(CLS 없음). 클릭 시 시작 시각으로 seek(카드 공통 클릭 규칙에 포함).
-   폭은 `.card` 전체 폭(=읽기 컬럼 폭, §2 `--measure`).
+4. **대표 시작 이미지**: `<img>`에 실제 프레임의 width/height로 레이아웃 시프트를 막는다.
+   클릭 시 시작 시각으로 seek(카드 공통 클릭 규칙). 폭은 `.card` 전체 폭(§2 `--measure`).
+   figcaption은 태그 행(5번)과 한 줄 공유 — 태그 왼쪽, "확대"(새 탭 원본 링크) 오른쪽
+   (`justify-content: space-between`), 태그가 다음 줄로 밀리는 2줄 배치는 금지(§15-10).
 5. **태그 행**: 포지션 칩(`position_tags`, 루트 그룹 GK/DF/MF/FW 색) + 주제 칩(중립,
-   `--surface-sunken` 배경)을 원래 순서대로 이어 붙여 **최대 6개만 보이고**, 나머지는
-   `+N` 칩(중립색, 클릭 불가, 순수 카운트 표시) 하나로 묶는다. `@멘션` 칩은 이 행에
-   넣지 않는다(다음 항목으로 분리).
+   `--surface-sunken` 배경)을 원래 순서대로 이어 붙여 **최대 6개만 보이고**, 나머지는 `+N`
+   칩(중립색, 클릭 불가, 순수 카운트 표시) 하나로 묶는다. `@멘션` 칩은 이 행에 넣지 않는다
+   (다음 항목으로 분리). 4번 이미지의 figcaption 안에 렌더되지만 필드 순서는 그대로다.
 6. **언급된 팀원**: `member_ids`에 있는 팀원을 이름으로 나열("언급: 한지우, 윤도훈"). 비어
    있으면 이 줄 자체를 렌더하지 않는다(disabled 모드에서도 항상 생략, §10).
 7. **본문**: `unit.body`(blocks 배열)를 작성 순서 그대로 렌더한다. 노트 dl(문제/누구/대신)은
@@ -294,13 +295,15 @@ pill·버튼·part 전환 버튼·details summary)은 `1px solid var(--line-stro
      블록 경계로만 쓰고 블록 내부 `\n`은 없다(블록 하나 = 문단 하나).
    - `{type:"frame", src, width, height, t, caption}` → `<figure class="body-frame"
      data-frame-t="{t}"><img src width height loading="lazy"><figcaption>{시간 칩,
-     `.seek-btn` 버튼} {caption} <a href="{src}" target="_blank" rel="noopener" class="zoom-link"
-     aria-label="이미지 원본 크게 보기">확대</a></figcaption></figure>`. 폭은 `.card`/`.main`
-     전체 폭(§2 `--measure`). `figure`(또는 `img`) 클릭은 `data-frame-t` 값으로 seek한다(카드
-     시작 시각이 아니라 **그 프레임의 시각**). "확대" 링크 클릭은 이벤트가 버블링돼도 seek
-     핸들러가 `event.target.closest('a')`로 확인해 무시한다 — 원본을 새 탭으로 여는 것과
-     그 자리에서 seek하는 것은 다른 의도다. 캡션은 필수이며 비어 있으면 빌드 실패(build-time
-     검증).
+     `.seek-btn` 버튼}<span class="body-frame-caption">{caption}</span><a href="{src}"
+     target="_blank" rel="noopener" class="zoom-link" aria-label="이미지 원본 크게
+     보기">확대</a></figcaption></figure>`. 폭은 `.card`/`.main` 전체 폭(§2 `--measure`).
+     figcaption은 `auto minmax(0,1fr) auto` 3열 그리드 — 시간 칩·"확대"는 고정 폭, 캡션만
+     가운데 열에서 줄바꿈되며 상단 정렬 유지(`align-items: start`) — 캡션 길이에 따라 셋이
+     1~4줄로 흩어지던 결함(§15-10)을 막는다. `figure` 클릭은 `data-frame-t`로 seek한다(카드
+     시작 시각이 아니라 **그 프레임의 시각**). "확대" 클릭은 버블링돼도
+     `event.target.closest('a')`로 확인해 seek를 무시한다. 캡션은 필수(빌드 실패 검증)이며
+     시각을 다시 쓰지 않는다(시각 칩이 이미 표시).
 8. **관련 팀원**: `relatedMembers(unit) \ member_ids`(집합 차, 이미 "언급된 팀원"에 나온
    사람은 다시 보여주지 않는다)를 이름으로 나열("관련: 이름, 이름"). 결과가 비면 이 섹션
    자체를 렌더하지 않는다.
@@ -398,7 +401,7 @@ var(--radius-sm); padding: 0 var(--space-1); font-weight: 600; color: inherit;`)
 
 **옵션·개수는 세 그룹 모두 빌드 시점에 세션 전체(m건) 기준으로 한 번만 계산해 고정한다** — 다른 그룹 선택과 무관하다. 실시간으로 바뀌는 것은 카드 목록의 표시 여부(그룹 간 AND, 주제 내부 OR)뿐이라, **한 번 선택된 옵션은 AND로 카드 목록이 0건이 되어도 필터 바에서 사라지지 않는다.**
 
-- **포지션 트리**: 빌드 시점에 결과 있는 리프 노드 + 그 조상만 가지치기해 렌더한다(예: FB 태그가 없으면 FB/LB/RB/LWB/RWB는 전부 빠지고, DF는 CB만 있어도 조상이라 남는다). 각 노드의 개수는 `posClosure(node) = ∪(anc(t) ∪ desc(t))`(자기 자신+조상+자손 폐포) 카드 수 — FB 선택은 LB 태그 카드를 포함하고 역도 성립하되, CB·LB처럼 공통 조상만 있는 가지는 매칭하지 않는다. 노드는 `min-width: 0; max-width: 100%; flex-wrap: wrap;`로 모바일 폭 안에서 줄바꿈한다 — `overflow: hidden`으로 잘라내지 않는다(390px 칩 잘림 결함 방지).
+- **포지션 트리**: 빌드 시점에 결과 있는 리프 노드 + 그 조상만 가지치기해 렌더한다(예: FB 태그가 없으면 FB/LB/RB/LWB/RWB는 전부 빠지고, DF는 CB만 있어도 조상이라 남는다). 각 노드의 개수는 `posClosure(node) = ∪(anc(t) ∪ desc(t))`(자기 자신+조상+자손 폐포) 카드 수 — FB 선택은 LB 태그 카드를 포함하고 역도 성립하되, CB·LB처럼 공통 조상만 있는 가지는 매칭하지 않는다. 자식이 있는 노드(`.pos-node--branch`)는 2열 행이다 — 자기 칩이 왼쪽 고정 열, 자식들이 오른쪽 열에서 줄바꿈한다(`grid-template-columns: minmax(64px, max-content) minmax(0, 1fr)`). 뿌리(GK/DF/MF/FW) 각각은 `.pos-tree`(세로 flex column)에서 독립된 행이 되어, 1440px에서 모든 뿌리·자식 칩이 한 줄로 흘러 붙는 결함(§15-10)을 막는다. 이 2열 규칙은 깊이와 무관하게 동일해, FB의 자식(LB/RB/LWB/RWB)도 FB 자신의 오른쪽 열 안에서 같은 규칙·들여쓰기로 또 하나의 행을 이룬다. 자식 노드(leaf)는 `min-width: 0; max-width: 100%;`로 모바일 폭 안에서 줄바꿈한다 — `overflow: hidden`으로 잘라내지 않는다(390px 칩 잘림 결함 방지).
 - **주제**: 이 세션에서 1건 이상 쓰인 태그만 옵션으로 렌더하고, 각 옵션에 개수를 표시한다.
 - **언급 선수**: `member_ids`에 1번이라도 등장한 팀원만 옵션으로 렌더하고, 등장 유닛 수를
   개수로 표시한다.
@@ -490,7 +493,7 @@ font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothi
 | `line-break` | `strict` | 구두점이 줄 시작에 오지 않게 |
 | `text-wrap` | 제목 `balance`, 본문 `pretty` | 제목은 균형, 본문은 마지막 줄 orphan 방지 |
 
-최소 크기·행간은 §2 타입 스케일을 따른다(본문 16px 이상, 행간 1.6–1.7). `word-break: keep-all`/`text-wrap: pretty`는 단어 경계에서만 줄을 바꾸므로 부정(-지 못/않)·의존명사(수/것)·"-기 전/시작"·"-다 보니" 같은 **묶인 문법 구성**의 중간 줄바꿈까지는 막지 못한다 — `render.ts`의 `glueKorean()`이 그 구성 안의 공백을 U+00A0로 바꿔 렌더 단계에서 막는다(§15-1). 독립된 두 단어 사이의 통상적인 어절 줄바꿈(예 "수비 전환", "출발 신호")은 결함이 아니다 — 차단 판정은 묶인 문법 구성 한정이다. `visual-qa`의 CJK 검사(조사/어미 고아 줄, 주어-술어 분리, 연결어 중간 분리, 인용/출처 영문 줄바꿈, 제목 한 글자 고아 줄)는 전수 검사이며 표본 추출을 허용하지 않는다(§13).
+최소 크기·행간은 §2 타입 스케일을 따른다(본문 16px 이상, 행간 1.6–1.7). `word-break: keep-all`/`text-wrap: pretty`는 단어 경계에서만 줄을 바꾸므로 부정(-지 못/않)·의존명사(수/것)·"-기 전/시작"·"-다 보니" 같은 **묶인 문법 구성**의 중간 줄바꿈까지는 막지 못한다 — `render.ts`의 `glueKorean()`이 그 구성 안의 공백을 U+00A0로 바꿔 렌더 단계에서 막는다(§15-1). 받침 판정(-ㄹ/-ㄴ 관형사형, 예 "앞당겨질 것", "할 수 있다")은 융합 음절의 유니코드 코드포인트에서 종성 인덱스를 직접 계산해 감지한다 — 실제 문장에 나타나지 않는 낱자모 ㄹ/ㄴ 문자를 정규식에 직접 넣는 방식은 오탐이 아니라 미탐(never-matches) 버그였다. 여러 묶인 구성이 공백 하나 간격으로 연쇄되면(예 "찾기 시작하다 보니") 한 구간이 통째로 줄바꿈 불가능해질 수 있어, nbsp로 이어붙인 한 구간이 14자(390px 컬럼에서 Body 크기 기준)를 넘으면 그 안의 이음매 하나를 도로 공백으로 되돌려 끊는다(§15-1). 독립된 두 단어 사이의 통상적인 어절 줄바꿈(예 "수비 전환", "출발 신호")은 결함이 아니다 — 차단 판정은 묶인 문법 구성 한정이다. `visual-qa`의 CJK 검사(조사/어미 고아 줄, 주어-술어 분리, 연결어 중간 분리, 인용/출처 영문 줄바꿈, 제목 한 글자 고아 줄)는 전수 검사이며 표본 추출을 허용하지 않는다(§13).
 
 ## 11. 빈 상태
 
