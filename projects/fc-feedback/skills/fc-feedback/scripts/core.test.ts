@@ -10,7 +10,15 @@ import {
 	UID_PATTERN,
 	VID_PATTERN,
 	anc,
+	checkCandidates,
+	checkLines,
+	checkNotes,
+	checkPlan,
+	checkRefsDraft,
+	checkSession,
+	checkSimilarChoices,
 	desc,
+	formatTime,
 	isValidTag,
 	localLinks,
 	normalizeUrl,
@@ -24,6 +32,9 @@ import {
 	type CurrentUnit,
 	type PastUnit,
 	type Roster,
+	type SimilarCandidatesResult,
+	type Taxonomy,
+	type ValidatedPlan,
 } from "./core.ts";
 
 const TAXONOMY_DEFAULT_PATH = join(import.meta.dir, "taxonomy.default.yaml");
@@ -597,5 +608,659 @@ describe("localLinks", () => {
 
 	test("href/src가 없으면 빈 배열을 반환한다", () => {
 		expect(localLinks("<p>본문만 있음</p>")).toEqual([]);
+	});
+});
+
+// ── formatTime (DESIGN.md §4, plan §13.2-5) ──────────────────────────────────
+
+describe("formatTime", () => {
+	test("59분 59초는 m:ss로 표시한다(59:59)", () => {
+		expect(formatTime(3599)).toBe("59:59");
+	});
+
+	test("1시간이면 h:mm:ss로 표시한다(1:00:00)", () => {
+		expect(formatTime(3600)).toBe("1:00:00");
+	});
+
+	test("60분 미만은 분 앞에 0을 붙이지 않는다(0:05)", () => {
+		expect(formatTime(5)).toBe("0:05");
+	});
+});
+
+// ── session.json / lines.json / candidates.json 가드 (plan §3, §7 T3) ───────
+
+function makeRawSession(): any {
+	return {
+		version: 1,
+		session_id: "20240104-AAAAAAAAAAA",
+		created_at: "2024-01-04T10:00:00Z",
+		videos: [
+			{
+				id: "AAAAAAAAAAA",
+				url: "https://youtu.be/AAAAAAAAAAA",
+				part: 1,
+				title: "1부",
+				channel: "채널",
+				upload_date: "20240104",
+				duration: 60,
+				embeddable: true,
+				width: 854,
+				height: 480,
+				files: { audio: "a.wav", video: "a.mp4", captions: null, captions_format: null, wav: "a.wav" },
+			},
+			{
+				id: "BBBBBBBBBBB",
+				url: "https://youtu.be/BBBBBBBBBBB",
+				part: 2,
+				title: "2부",
+				channel: "채널",
+				upload_date: "20240104",
+				duration: 100,
+				embeddable: true,
+				width: 854,
+				height: 480,
+				files: { audio: "b.wav", video: "b.mp4", captions: null, captions_format: null, wav: "b.wav" },
+			},
+		],
+	};
+}
+
+function makeRawLines(): any[] {
+	return [
+		{ i: 0, video: "AAAAAAAAAAA", start: 0, end: 10, text: "안녕하세요" },
+		{ i: 1, video: "AAAAAAAAAAA", start: 10, end: 20, text: "다음 상황 보시죠" },
+		{ i: 2, video: "AAAAAAAAAAA", start: 20, end: 30, text: "골키퍼 배급 상황입니다" },
+		{ i: 3, video: "BBBBBBBBBBB", start: 0, end: 10, text: "2부 시작합니다" },
+		{ i: 4, video: "BBBBBBBBBBB", start: 10, end: 20, text: "크로스가 올라갑니다" },
+	];
+}
+
+function makeRawCandidates(): any[] {
+	return [
+		{ id: "c001", video: "AAAAAAAAAAA", t: 10, kind: "silence", dur: 3 },
+		{ id: "c002", video: "AAAAAAAAAAA", t: 25, kind: "scene" },
+		{ id: "c004", video: "AAAAAAAAAAA", t: 40, kind: "scene" },
+		{ id: "c003", video: "BBBBBBBBBBB", t: 5, kind: "interval" },
+	];
+}
+
+describe("checkSession", () => {
+	test("유효한 session.json을 파싱한다", () => {
+		const result = checkSession(makeRawSession());
+		expect(result.errors).toEqual([]);
+		expect(result.value.session_id).toBe("20240104-AAAAAAAAAAA");
+		expect(result.value.videos).toHaveLength(2);
+		expect(result.value.videos[0].part).toBe(1);
+	});
+
+	test("version이 1이 아니면 version 경로 에러를 낸다", () => {
+		const raw = makeRawSession();
+		raw.version = 2;
+		const result = checkSession(raw);
+		expect(findError(result.errors, "version")).toBe(true);
+	});
+
+	test("session_id 패턴이 아니면 session_id 경로 에러를 낸다", () => {
+		const raw = makeRawSession();
+		raw.session_id = "bad-id";
+		const result = checkSession(raw);
+		expect(findError(result.errors, "session_id")).toBe(true);
+	});
+
+	test("video의 id 패턴이 아니면 videos[n].id 경로 에러를 낸다", () => {
+		const raw = makeRawSession();
+		raw.videos[0].id = "short";
+		const result = checkSession(raw);
+		expect(findError(result.errors, "videos[0].id")).toBe(true);
+	});
+
+	test("video의 part가 URL 순서와 다르면 videos[n].part 경로 에러를 낸다", () => {
+		const raw = makeRawSession();
+		raw.videos[1].part = 5;
+		const result = checkSession(raw);
+		expect(findError(result.errors, "videos[1].part")).toBe(true);
+	});
+
+	test("files.audio가 비어있으면 videos[n].files.audio 경로 에러를 낸다", () => {
+		const raw = makeRawSession();
+		raw.videos[0].files.audio = "";
+		const result = checkSession(raw);
+		expect(findError(result.errors, "videos[0].files.audio")).toBe(true);
+	});
+});
+
+describe("checkLines", () => {
+	const session = checkSession(makeRawSession()).value;
+
+	test("유효한 lines.json을 파싱한다", () => {
+		const result = checkLines(makeRawLines(), session);
+		expect(result.errors).toEqual([]);
+		expect(result.value).toHaveLength(5);
+	});
+
+	test("i가 연속되지 않으면 [n].i 경로 에러를 낸다", () => {
+		const raw = makeRawLines();
+		raw[1].i = 5;
+		const result = checkLines(raw, session);
+		expect(findError(result.errors, "[1].i")).toBe(true);
+	});
+
+	test("end가 duration+1을 넘으면 [n].end 경로 에러를 낸다", () => {
+		const raw = makeRawLines();
+		raw[2].end = 100; // video의 duration은 60 -> 최대 61
+		const result = checkLines(raw, session);
+		expect(findError(result.errors, "[2].end")).toBe(true);
+	});
+
+	test("text가 비어있으면 [n].text 경로 에러를 낸다", () => {
+		const raw = makeRawLines();
+		raw[0].text = "   ";
+		const result = checkLines(raw, session);
+		expect(findError(result.errors, "[0].text")).toBe(true);
+	});
+
+	test("video가 파트 순서대로 그룹화되지 않으면 [n].video 경로 에러를 낸다", () => {
+		const raw = [
+			{ i: 0, video: "AAAAAAAAAAA", start: 0, end: 5, text: "a" },
+			{ i: 1, video: "BBBBBBBBBBB", start: 0, end: 5, text: "b" },
+			{ i: 2, video: "AAAAAAAAAAA", start: 6, end: 9, text: "c" },
+		];
+		const result = checkLines(raw, session);
+		expect(findError(result.errors, "[2].video")).toBe(true);
+	});
+
+	test("같은 video 그룹 내에서 start가 내림차순이면 [n].start 경로 에러를 낸다", () => {
+		const raw = [
+			{ i: 0, video: "AAAAAAAAAAA", start: 10, end: 20, text: "a" },
+			{ i: 1, video: "AAAAAAAAAAA", start: 5, end: 15, text: "b" },
+		];
+		const result = checkLines(raw, session);
+		expect(findError(result.errors, "[1].start")).toBe(true);
+	});
+});
+
+describe("checkCandidates", () => {
+	test("유효한 candidates.json을 파싱한다", () => {
+		const result = checkCandidates(makeRawCandidates());
+		expect(result.errors).toEqual([]);
+		expect(result.value).toHaveLength(4);
+	});
+
+	test("id 패턴이 아니면 [n].id 경로 에러를 낸다", () => {
+		const raw = makeRawCandidates();
+		raw[0].id = "bad";
+		const result = checkCandidates(raw);
+		expect(findError(result.errors, "[0].id")).toBe(true);
+	});
+
+	test("중복된 id는 [n].id 경로 에러를 낸다", () => {
+		const raw = [
+			{ id: "c001", video: "AAAAAAAAAAA", t: 1, kind: "scene" },
+			{ id: "c001", video: "AAAAAAAAAAA", t: 2, kind: "scene" },
+		];
+		const result = checkCandidates(raw);
+		expect(findError(result.errors, "[1].id")).toBe(true);
+	});
+
+	test("kind가 silence가 아닌데 dur가 있으면 [n].dur 경로 에러를 낸다", () => {
+		const raw = [{ id: "c001", video: "AAAAAAAAAAA", t: 1, kind: "scene", dur: 2 }];
+		const result = checkCandidates(raw);
+		expect(findError(result.errors, "[0].dur")).toBe(true);
+	});
+
+	test("video 그룹이 섞이면 [n].video 경로 에러를 낸다", () => {
+		const raw = [
+			{ id: "c010", video: "AAAAAAAAAAA", t: 1, kind: "scene" },
+			{ id: "c011", video: "BBBBBBBBBBB", t: 1, kind: "scene" },
+			{ id: "c012", video: "AAAAAAAAAAA", t: 2, kind: "scene" },
+		];
+		const result = checkCandidates(raw);
+		expect(findError(result.errors, "[2].video")).toBe(true);
+	});
+});
+
+// ── plan.json / plan.validated.json (checkPlan, plan §3, §7 T3) ─────────────
+
+const fixtureSession = checkSession(makeRawSession()).value;
+const fixtureLines = checkLines(makeRawLines(), fixtureSession).value;
+const fixtureCandidates = checkCandidates(makeRawCandidates()).value;
+const fixtureTaxonomy: Taxonomy = { version: 1, topics: ["빌드업", "탈압박"] };
+const fixtureRoster: Roster = {
+	members: [
+		{ id: "hong-gildong", name: "홍길동", gamertag: "HongGD", positions: ["CB"], aliases: [] },
+		{ id: "kim-cheolsu", name: "김철수", gamertag: "KimCS", positions: ["GK"], aliases: [] },
+	],
+};
+const fixtureContext = {
+	lines: fixtureLines,
+	candidates: fixtureCandidates,
+	taxonomy: fixtureTaxonomy,
+	roster: fixtureRoster,
+};
+
+function makeValidPlan(): any {
+	return {
+		version: 1,
+		session_title: "1월 4일 세션",
+		matches: [
+			{
+				title: "1경기",
+				topics: [
+					{
+						title: "빌드업 문제",
+						summary: "후방 빌드업이 불안정했다",
+						units: [
+							{
+								start_line: 0,
+								end_line: 1,
+								title: "센터백 패스 미스",
+								position_tags: ["CB"],
+								topic_tags: ["빌드업"],
+								member_ids: ["hong-gildong"],
+								key_frame_candidate_ids: ["c001"],
+							},
+							{
+								start_line: 2,
+								end_line: 2,
+								title: "골키퍼 배급",
+								position_tags: ["GK"],
+								topic_tags: ["탈압박"],
+								member_ids: [],
+								key_frame_candidate_ids: ["c002"],
+							},
+						],
+					},
+				],
+			},
+		],
+		proposed_tags: [],
+	};
+}
+
+describe("checkPlan", () => {
+	test("유효한 plan을 검증하면 에러가 없다", () => {
+		const result = checkPlan(makeValidPlan(), fixtureContext);
+		expect(result.errors).toEqual([]);
+		expect(result.pending).toBe(false);
+	});
+
+	test("validated는 문서 순서대로 m1/m1-t1/u001 id를 부여하고 start/end/video를 채운다", () => {
+		const result = checkPlan(makeValidPlan(), fixtureContext);
+		expect(result.validated.matches[0].id).toBe("m1");
+		expect(result.validated.matches[0].topics[0].id).toBe("m1-t1");
+		expect(result.validated.units.map((u) => u.id)).toEqual(["u001", "u002"]);
+		expect(result.validated.units[0]).toMatchObject({ video: "AAAAAAAAAAA", start: 0, end: 20 });
+		expect(result.validated.units[1]).toMatchObject({ video: "AAAAAAAAAAA", start: 20, end: 30 });
+	});
+
+	test("tableMd는 경기·시간·제목·포지션·주제·팀원 열로 게이트 표를 만든다(스냅샷)", () => {
+		const result = checkPlan(makeValidPlan(), fixtureContext);
+		const expected = [
+			"| 경기 | 시간 | 제목 | 포지션 | 주제 | 팀원 |",
+			"|---|---|---|---|---|---|",
+			"| 1경기 | 0:00 | 센터백 패스 미스 | CB | 빌드업 | 홍길동 |",
+			"| 1경기 | 0:20 | 골키퍼 배급 | GK | 탈압박 | - |",
+		].join("\n");
+		expect(result.tableMd).toBe(expected);
+	});
+
+	test("session_title이 비어있으면 session_title 경로 에러를 낸다", () => {
+		const plan = makeValidPlan();
+		plan.session_title = "";
+		const result = checkPlan(plan, fixtureContext);
+		expect(findError(result.errors, "session_title")).toBe(true);
+	});
+
+	test("session_title이 80자를 넘으면 session_title 경로 에러를 낸다", () => {
+		const plan = makeValidPlan();
+		plan.session_title = "가".repeat(81);
+		const result = checkPlan(plan, fixtureContext);
+		expect(findError(result.errors, "session_title")).toBe(true);
+	});
+
+	test("topic summary가 비어있으면 summary 경로 에러를 낸다", () => {
+		const plan = makeValidPlan();
+		plan.matches[0].topics[0].summary = "";
+		const result = checkPlan(plan, fixtureContext);
+		expect(findError(result.errors, "matches[0].topics[0].summary")).toBe(true);
+	});
+
+	test("match에 topic이 없으면 matches[n].topics 경로 에러를 낸다", () => {
+		const plan = makeValidPlan();
+		plan.matches[0].topics = [];
+		const result = checkPlan(plan, fixtureContext);
+		expect(findError(result.errors, "matches[0].topics")).toBe(true);
+	});
+
+	test("topic에 unit이 없으면 units 경로 에러를 낸다", () => {
+		const plan = makeValidPlan();
+		plan.matches[0].topics[0].units = [];
+		const result = checkPlan(plan, fixtureContext);
+		expect(findError(result.errors, "matches[0].topics[0].units")).toBe(true);
+	});
+
+	test("end_line이 lines.length 이상이면 end_line 경로 에러를 낸다(예시 경로)", () => {
+		const plan = makeValidPlan();
+		plan.matches[0].topics[0].units[1].end_line = 999;
+		const result = checkPlan(plan, fixtureContext);
+		expect(findError(result.errors, "matches[0].topics[0].units[1].end_line")).toBe(true);
+	});
+
+	test("start_line과 end_line이 다른 video면 end_line 경로 에러를 낸다", () => {
+		const plan = makeValidPlan();
+		plan.matches[0].topics[0].units[0].end_line = 3; // video B
+		const result = checkPlan(plan, fixtureContext);
+		expect(findError(result.errors, "matches[0].topics[0].units[0].end_line")).toBe(true);
+	});
+
+	test("같은 video 내에서 unit이 겹치면 start_line 경로 에러를 낸다", () => {
+		const plan = makeValidPlan();
+		plan.matches[0].topics[0].units[1].start_line = 1; // unit[0]의 end_line(1)과 겹침
+		const result = checkPlan(plan, fixtureContext);
+		expect(findError(result.errors, "matches[0].topics[0].units[1].start_line")).toBe(true);
+	});
+
+	test("포지션 트리에 없는 태그면 position_tags[n] 경로 에러를 낸다", () => {
+		const plan = makeValidPlan();
+		plan.matches[0].topics[0].units[0].position_tags = ["XX"];
+		const result = checkPlan(plan, fixtureContext);
+		expect(findError(result.errors, "matches[0].topics[0].units[0].position_tags[0]")).toBe(true);
+	});
+
+	test("topic_tags가 비어있으면 topic_tags 경로 에러를 낸다", () => {
+		const plan = makeValidPlan();
+		plan.matches[0].topics[0].units[0].topic_tags = [];
+		const result = checkPlan(plan, fixtureContext);
+		expect(findError(result.errors, "matches[0].topics[0].units[0].topic_tags")).toBe(true);
+	});
+
+	test("taxonomy에도 proposed_tags에도 없는 태그면 topic_tags[n] 경로 에러를 낸다", () => {
+		const plan = makeValidPlan();
+		plan.matches[0].topics[0].units[0].topic_tags = ["존재안함"];
+		const result = checkPlan(plan, fixtureContext);
+		expect(findError(result.errors, "matches[0].topics[0].units[0].topic_tags[0]")).toBe(true);
+	});
+
+	test("로스터에 없는 멤버면 member_ids[n] 경로 에러를 낸다", () => {
+		const plan = makeValidPlan();
+		plan.matches[0].topics[0].units[0].member_ids = ["nobody"];
+		const result = checkPlan(plan, fixtureContext);
+		expect(findError(result.errors, "matches[0].topics[0].units[0].member_ids[0]")).toBe(true);
+	});
+
+	test("roster가 null인데 member_ids가 있으면 member_ids[n] 경로 에러를 낸다(disabled)", () => {
+		const plan = makeValidPlan(); // unit[0].member_ids = ["hong-gildong"] (비어있지 않음)
+		const disabledContext = { ...fixtureContext, roster: null };
+		const result = checkPlan(plan, disabledContext);
+		expect(findError(result.errors, "matches[0].topics[0].units[0].member_ids[0]")).toBe(true);
+	});
+
+	test("존재하지 않는 candidate면 key_frame_candidate_ids[n] 경로 에러를 낸다", () => {
+		const plan = makeValidPlan();
+		plan.matches[0].topics[0].units[0].key_frame_candidate_ids = ["c999"];
+		const result = checkPlan(plan, fixtureContext);
+		expect(findError(result.errors, "matches[0].topics[0].units[0].key_frame_candidate_ids[0]")).toBe(true);
+	});
+
+	test("다른 video의 candidate면 key_frame_candidate_ids[n] 경로 에러를 낸다", () => {
+		const plan = makeValidPlan();
+		plan.matches[0].topics[0].units[0].key_frame_candidate_ids = ["c003"]; // video B
+		const result = checkPlan(plan, fixtureContext);
+		expect(findError(result.errors, "matches[0].topics[0].units[0].key_frame_candidate_ids[0]")).toBe(true);
+	});
+
+	test("unit 허용 범위(±5초)를 벗어난 candidate 시각이면 key_frame_candidate_ids[n] 경로 에러를 낸다", () => {
+		const plan = makeValidPlan();
+		plan.matches[0].topics[0].units[0].key_frame_candidate_ids = ["c004"]; // t=40, unit[0] 범위는 [-5,25]
+		const result = checkPlan(plan, fixtureContext);
+		expect(findError(result.errors, "matches[0].topics[0].units[0].key_frame_candidate_ids[0]")).toBe(true);
+	});
+
+	test("proposed_tags의 태그가 유효하지 않으면 proposed_tags[n].tag 경로 에러를 낸다", () => {
+		const plan = makeValidPlan();
+		plan.proposed_tags = [{ tag: "a|b", reason: "이유" }];
+		const result = checkPlan(plan, fixtureContext);
+		expect(findError(result.errors, "proposed_tags[0].tag")).toBe(true);
+	});
+
+	test("proposed_tags의 태그가 이미 taxonomy에 있으면 proposed_tags[n].tag 경로 에러를 낸다", () => {
+		const plan = makeValidPlan();
+		plan.proposed_tags = [{ tag: "빌드업", reason: "이유" }];
+		const result = checkPlan(plan, fixtureContext);
+		expect(findError(result.errors, "proposed_tags[0].tag")).toBe(true);
+	});
+
+	test("proposed 태그를 사용하면 pending이 true가 된다", () => {
+		const plan = makeValidPlan();
+		plan.proposed_tags = [{ tag: "역습저지", reason: "새 주제" }];
+		plan.matches[0].topics[0].units[0].topic_tags = ["역습저지"];
+		const result = checkPlan(plan, fixtureContext);
+		expect(result.errors).toEqual([]);
+		expect(result.pending).toBe(true);
+		expect(result.proposed).toEqual([{ tag: "역습저지", reason: "새 주제" }]);
+		expect(result.tableMd).toContain("제안 태그:");
+		expect(result.tableMd).toContain("- 역습저지 (새 주제)");
+	});
+});
+
+// ── notes.json (checkNotes, plan §3) ─────────────────────────────────────────
+
+const fixtureValidated: ValidatedPlan = checkPlan(makeValidPlan(), fixtureContext).validated;
+
+function makeValidNotes(): any {
+	return {
+		version: 1,
+		units: {
+			u001: {
+				problem: "센터백이 패스를 미스했습니다",
+				who: "홍길동",
+				instead: "빌드업 시 패스 각도를 열어야 합니다",
+				key_frames: [{ candidate_id: "c001", caption: "패스 미스 장면" }],
+			},
+			u002: {
+				problem: "골키퍼 배급이 느렸습니다",
+				who: "김철수",
+				instead: "더 빠르게 배급해야 합니다",
+				key_frames: [],
+			},
+		},
+	};
+}
+
+describe("checkNotes", () => {
+	test("유효한 notes를 검증하면 에러가 없다", () => {
+		const result = checkNotes(makeValidNotes(), fixtureValidated);
+		expect(result.errors).toEqual([]);
+	});
+
+	test("검증된 unit에 대응하는 노트가 없으면 units.<id> 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		delete notes.units.u002;
+		const result = checkNotes(notes, fixtureValidated);
+		expect(findError(result.errors, "units.u002")).toBe(true);
+	});
+
+	test("검증된 plan에 없는 unit id면 units.<id> 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u999 = { problem: "p", who: "w", instead: "i", key_frames: [] };
+		const result = checkNotes(notes, fixtureValidated);
+		expect(findError(result.errors, "units.u999")).toBe(true);
+	});
+
+	test("problem이 1200자를 넘으면 units.<id>.problem 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001.problem = "가".repeat(1201);
+		const result = checkNotes(notes, fixtureValidated);
+		expect(findError(result.errors, "units.u001.problem")).toBe(true);
+	});
+
+	test("key_frames가 4개를 넘으면 units.<id>.key_frames 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001.key_frames = Array.from({ length: 5 }, () => ({ candidate_id: "c001", caption: "x" }));
+		const result = checkNotes(notes, fixtureValidated);
+		expect(findError(result.errors, "units.u001.key_frames")).toBe(true);
+	});
+
+	test("key_frames의 candidate_id가 unit의 key_frame_candidate_ids에 없으면 candidate_id 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001.key_frames = [{ candidate_id: "c999", caption: "x" }];
+		const result = checkNotes(notes, fixtureValidated);
+		expect(findError(result.errors, "units.u001.key_frames[0].candidate_id")).toBe(true);
+	});
+
+	test("caption이 120자를 넘으면 caption 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001.key_frames = [{ candidate_id: "c001", caption: "가".repeat(121) }];
+		const result = checkNotes(notes, fixtureValidated);
+		expect(findError(result.errors, "units.u001.key_frames[0].caption")).toBe(true);
+	});
+});
+
+// ── similar-choices.json (checkSimilarChoices, plan §3) ──────────────────────
+
+const fixtureSimilarCandidates: SimilarCandidatesResult = {
+	u001: [
+		{ uid: "20230101-CCCCCCCCCCC#u001", score: 0.5, title: "과거1", date: "2023-01-01", topic_tags: ["빌드업"], position_tags: ["CB"] },
+		{ uid: "20230201-DDDDDDDDDDD#u001", score: 0.4, title: "과거2", date: "2023-02-01", topic_tags: ["빌드업"], position_tags: ["CB"] },
+	],
+	u002: [],
+};
+
+function makeValidChoices(): any {
+	return { version: 1, units: { u001: ["20230101-CCCCCCCCCCC#u001"] } };
+}
+
+describe("checkSimilarChoices", () => {
+	test("유효한 similar-choices를 검증하면 에러가 없다", () => {
+		const result = checkSimilarChoices(makeValidChoices(), fixtureSimilarCandidates);
+		expect(result.errors).toEqual([]);
+	});
+
+	test("후보 목록에 없는 uid면 units.<id>[n] 경로 에러를 낸다", () => {
+		const choices = makeValidChoices();
+		choices.units.u001 = ["20230101-ZZZZZZZZZZZ#u001"];
+		const result = checkSimilarChoices(choices, fixtureSimilarCandidates);
+		expect(findError(result.errors, "units.u001[0]")).toBe(true);
+	});
+
+	test("unit당 3개를 넘으면 units.<id> 경로 에러를 낸다", () => {
+		const choices = makeValidChoices();
+		choices.units.u001 = [
+			"20230101-CCCCCCCCCCC#u001",
+			"20230201-DDDDDDDDDDD#u001",
+			"20230301-EEEEEEEEEEE#u001",
+			"20230401-FFFFFFFFFFF#u001",
+		];
+		const result = checkSimilarChoices(choices, fixtureSimilarCandidates);
+		expect(findError(result.errors, "units.u001")).toBe(true);
+	});
+
+	test("중복된 uid면 units.<id>[n] 경로 에러를 낸다", () => {
+		const choices = makeValidChoices();
+		choices.units.u001 = ["20230101-CCCCCCCCCCC#u001", "20230101-CCCCCCCCCCC#u001"];
+		const result = checkSimilarChoices(choices, fixtureSimilarCandidates);
+		expect(findError(result.errors, "units.u001[1]")).toBe(true);
+	});
+});
+
+// ── refs-draft.json (checkRefsDraft, plan §3) ────────────────────────────────
+
+function makeValidRefsDraft(): any {
+	return {
+		version: 1,
+		refs: [
+			{
+				url: "https://example.com/tactics-article",
+				title: "전술 아티클",
+				source_name: "Example",
+				lang: "en",
+				kind: "tactics",
+				summary_ko: "한국어 요약입니다",
+				key_points_ko: ["포인트1"],
+				translations: [{ orig: "Some point", ko: "어떤 포인트" }],
+				unit_ids: ["u001"],
+			},
+		],
+	};
+}
+
+describe("checkRefsDraft", () => {
+	test("유효한 refs-draft를 검증하면 에러가 없다", () => {
+		const result = checkRefsDraft(makeValidRefsDraft(), fixtureValidated);
+		expect(result.errors).toEqual([]);
+	});
+
+	test("url이 http(s)가 아니면 refs[n].url 경로 에러를 낸다", () => {
+		const draft = makeValidRefsDraft();
+		draft.refs[0].url = "javascript:alert(1)";
+		const result = checkRefsDraft(draft, fixtureValidated);
+		expect(findError(result.errors, "refs[0].url")).toBe(true);
+	});
+
+	test("lang 패턴이 아니면 refs[n].lang 경로 에러를 낸다", () => {
+		const draft = makeValidRefsDraft();
+		draft.refs[0].lang = "eng";
+		const result = checkRefsDraft(draft, fixtureValidated);
+		expect(findError(result.errors, "refs[0].lang")).toBe(true);
+	});
+
+	test("kind가 eafc/tactics가 아니면 refs[n].kind 경로 에러를 낸다", () => {
+		const draft = makeValidRefsDraft();
+		draft.refs[0].kind = "other";
+		const result = checkRefsDraft(draft, fixtureValidated);
+		expect(findError(result.errors, "refs[0].kind")).toBe(true);
+	});
+
+	test("lang이 ko가 아닌데 summary_ko가 없으면 refs[n].summary_ko 경로 에러를 낸다", () => {
+		const draft = makeValidRefsDraft();
+		delete draft.refs[0].summary_ko;
+		const result = checkRefsDraft(draft, fixtureValidated);
+		expect(findError(result.errors, "refs[0].summary_ko")).toBe(true);
+	});
+
+	test("lang이 ko가 아닌데 key_points_ko가 없으면 refs[n].key_points_ko 경로 에러를 낸다", () => {
+		const draft = makeValidRefsDraft();
+		draft.refs[0].key_points_ko = [];
+		const result = checkRefsDraft(draft, fixtureValidated);
+		expect(findError(result.errors, "refs[0].key_points_ko")).toBe(true);
+	});
+
+	test("translations가 5개를 넘으면 refs[n].translations 경로 에러를 낸다", () => {
+		const draft = makeValidRefsDraft();
+		draft.refs[0].translations = Array.from({ length: 6 }, (_, i) => ({ orig: `o${i}`, ko: `k${i}` }));
+		const result = checkRefsDraft(draft, fixtureValidated);
+		expect(findError(result.errors, "refs[0].translations")).toBe(true);
+	});
+
+	test("unit_ids가 비어있으면 refs[n].unit_ids 경로 에러를 낸다", () => {
+		const draft = makeValidRefsDraft();
+		draft.refs[0].unit_ids = [];
+		const result = checkRefsDraft(draft, fixtureValidated);
+		expect(findError(result.errors, "refs[0].unit_ids")).toBe(true);
+	});
+
+	test("unit_ids에 존재하지 않는 id가 있으면 refs[n].unit_ids[m] 경로 에러를 낸다", () => {
+		const draft = makeValidRefsDraft();
+		draft.refs[0].unit_ids = ["u999"];
+		const result = checkRefsDraft(draft, fixtureValidated);
+		expect(findError(result.errors, "refs[0].unit_ids[0]")).toBe(true);
+	});
+
+	test("unit당 참고자료가 3개를 넘으면 refs[n].unit_ids 경로 에러를 낸다", () => {
+		const draft = {
+			version: 1,
+			refs: Array.from({ length: 4 }, (_, i) => ({
+				url: `https://example.com/ref-${i}`,
+				title: `참고자료 ${i}`,
+				source_name: "Example",
+				lang: "ko",
+				kind: "tactics",
+				key_points_ko: [],
+				translations: [],
+				unit_ids: ["u001"],
+			})),
+		};
+		const result = checkRefsDraft(draft, fixtureValidated);
+		expect(findError(result.errors, "refs[3].unit_ids")).toBe(true);
 	});
 });
