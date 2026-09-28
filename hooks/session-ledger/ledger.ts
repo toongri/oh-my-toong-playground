@@ -585,6 +585,24 @@ export async function writeLedger(input: LedgerInput): Promise<LedgerResult> {
 
 // ─── Model runner: headless Codex ───────────────────────────────────────────
 
+/** Codex features that give the model tools: shell, file viewing, browsers, apps, plugins, subagents, hooks. */
+const SUMMARIZER_DISABLED_FEATURES = [
+	"shell_tool",
+	"unified_exec",
+	"view_image",
+	"computer_use",
+	"browser_use",
+	"browser_use_external",
+	"in_app_browser",
+	"apps",
+	"plugins",
+	"multi_agent",
+	"image_generation",
+	"skill_search",
+	"goals",
+	"hooks",
+];
+
 /** Set on the summarizer's process so this hook, re-run by the nested session, does nothing. */
 export const WORKER_ENV = "OMT_LEDGER_WORKER";
 
@@ -606,6 +624,9 @@ export function codexRunner(model = "gpt-6-sol", effort = "low"): ModelRunner {
 				"--skip-git-repo-check",
 				"-s",
 				"read-only",
+				// The work log carries repository and tool text, so a prompt injection could steer the
+				// summarizer; read-only still reads any host file. It only fills a schema, so it gets no tools.
+				...SUMMARIZER_DISABLED_FEATURES.flatMap((feature) => ["--disable", feature]),
 				"--ephemeral",
 				"-C",
 				dir,
