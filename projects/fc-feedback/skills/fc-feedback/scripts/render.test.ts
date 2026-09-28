@@ -646,6 +646,43 @@ describe("카드 해부", () => {
 	});
 });
 
+// ── CJK 파이프라인 — titleHtml 라우팅 (DESIGN §10, 라운드8) ──────────────────
+
+describe("CJK 파이프라인 — titleHtml 라우팅", () => {
+	test("본문 프레임 캡션은 묶인 문법 구성의 공백을 nbsp로 치환한다(escapeHtml 대신 titleHtml 경유, 라운드8 회귀)", () => {
+		const data = sampleData();
+		data.units[2].body = [
+			{ type: "text", text: "문단" },
+			{
+				type: "frame",
+				src: "img/u003-c001.webp",
+				width: 1280,
+				height: 720,
+				t: 105,
+				caption: "좋은 각을 만들 것",
+			},
+		];
+		const doc = parseHTML(renderSession(data)).document;
+		const captionEl = doc.getElementById("u003")?.querySelector(".body-frame-caption");
+		expect(captionEl?.textContent).toBe(`좋은 각을 만들${NBSP}것`);
+	});
+
+	test("유사한 과거 피드백 제목도 묶인 문법 구성을 보호한다(escapeHtml 대신 titleHtml 경유, 라운드8 회귀)", () => {
+		const data = sampleData();
+		data.units[1].similar = [
+			{
+				uid: "20230101-XXXXXXXXXXX#u002",
+				title: "두 걸음 앞서는 위치선정",
+				date: "2023-01-01",
+				href: "../20230101-XXXXXXXXXXX/index.html#u002",
+			},
+		];
+		const doc = parseHTML(renderSession(data)).document;
+		const link = doc.getElementById("u002")?.querySelector(".similar-list a");
+		expect(link?.textContent).toBe(`두${NBSP}걸음 앞서는 위치선정`);
+	});
+});
+
 // ── TOC ────────────────────────────────────────────────────────────────────
 
 describe("목차 탭", () => {
@@ -857,6 +894,29 @@ describe("영상 전환", () => {
 		// 단일 슬롯이므로 Part 2 클릭(0초, 별도 seek 불필요)이 이를 완전히 대체한다.
 		expect(stub?.calls.some((call) => call.method === "seekTo")).toBe(false);
 		expect(stub?.calls.some((call) => call.method === "loadVideoById")).toBe(false);
+	});
+
+	test("pre-ready Part 버튼 클릭(0초, 같은 비디오)도 ready 시 playVideo를 호출해 재생을 시작한다(REAL BUG 회귀, 라운드8)", () => {
+		const { doc, stub } = mountViewer(renderSession(sampleData()), true);
+		// onPartButtonClick은 항상 switchTo(video, 0, ...)를 호출한다 — 이미 재생 중인 파트를 다시
+		// 눌러도 마찬가지다. 플레이어가 이미 같은 비디오로 생성된 채(mountViewer 초기화) ready 이전에
+		// 눌리면, start가 0이라 seekTo조차 실행되지 않는데 playVideo 호출도 없으면 플레이어가 idle
+		// 상태로 멈춰 있게 된다(§9 계약 위반).
+		const part1Btn = doc.querySelector('.part-btn[data-video="AAAAAAAAAAA"]');
+		click(part1Btn); // ready 전 — 아직 아무 것도 실행되지 않는다.
+		expect(stub?.calls.length ?? -1).toBe(0);
+
+		stub?.fireReady();
+		const methods = stub?.calls.map((call) => call.method) ?? [];
+		expect(methods.filter((m) => m === "playVideo").length).toBe(1);
+		expect(methods).not.toContain("seekTo");
+		expect(methods).not.toContain("loadVideoById");
+	});
+
+	test("onReady 시 대기 중인 액션이 없으면 아무 메서드도 호출하지 않는다(진행 중인 재생 상태를 건드리지 않는다)", () => {
+		const { stub } = mountViewer(renderSession(sampleData()), true);
+		stub?.fireReady(); // 클릭 없이 바로 ready — pendingAction이 애초에 없다.
+		expect(stub?.calls.length).toBe(0);
 	});
 });
 
@@ -1118,6 +1178,65 @@ describe("내 피드백", () => {
 	});
 });
 
+// ── 활성 필터 — 내 피드백 칩 (DESIGN §6/§7, 라운드8 시각 QA) ───────────────────
+
+describe("활성 필터 — 내 피드백 칩", () => {
+	test('"내 피드백" 선택 시 활성 필터 줄 맨 앞에 "내 피드백: {이름}" 칩이 나타나고, 그 줄이 보인다', () => {
+		const { doc } = mountViewer(renderSession(sampleData()), false);
+		clickChip(doc, "topic", "빌드업"); // 다른 그룹 칩이 먼저 있어도 mine 칩이 맨 앞이어야 한다
+		clickMinePill(doc, "hong");
+
+		const container = doc.querySelector(".active-filters");
+		expect(isHidden(container)).toBe(false);
+		const chips = [...(container?.querySelectorAll(".chip-active") ?? [])];
+		expect(chips[0]?.textContent).toContain("내 피드백: 홍길동");
+		expect(chips[1]?.textContent).toContain("주제: 빌드업");
+	});
+
+	test('"내 피드백" 선택만 있어도(다른 필터 그룹 선택 없이) 활성 필터 줄이 보인다', () => {
+		const { doc } = mountViewer(renderSession(sampleData()), false);
+		expect(isHidden(doc.querySelector(".active-filters"))).toBe(true); // 선택 전에는 숨김
+		clickMinePill(doc, "hong");
+		expect(isHidden(doc.querySelector(".active-filters"))).toBe(false);
+	});
+
+	test("칩의 × 클릭은 그 pill을 다시 누른 것과 동일하게 내 피드백 선택을 해제한다(aria-pressed·mine-active·배지·강조·패싯 카운트 모두 복원)", () => {
+		const { doc } = mountViewer(renderSession(sampleData()), false);
+
+		// choi는 u003(ST)만 관련이라, mine=choi 동안 hong(u001, FB)을 대상으로 하는 mention 칩은
+		// 0건으로 비활성화된다 — 위 "라이브 패싯 카운트" describe와 같은 판정 로직.
+		clickMinePill(doc, "choi");
+		const hongMention = doc.querySelector('.chip-filter[data-group="mention"][data-value="hong"]');
+		expect(hongMention?.querySelector(".chip-count")?.textContent).toBe("(0)");
+		expect(hongMention?.hasAttribute("disabled")).toBe(true);
+		expect(doc.querySelector(".card-list")?.classList.contains("mine-active")).toBe(true);
+
+		const removeBtn = doc.querySelector('.active-filters .chip-active .chip-remove');
+		expect(removeBtn).not.toBeNull();
+		click(removeBtn);
+
+		const choiPill = doc.querySelector('.pill-mine[data-value="choi"]');
+		expect(choiPill?.getAttribute("aria-pressed")).toBe("false");
+		expect(doc.querySelector(".card-list")?.classList.contains("mine-active")).toBe(false);
+		expect(isHidden(doc.querySelector(".active-filters"))).toBe(true);
+		expect(hongMention?.querySelector(".chip-count")?.textContent).toBe("(1)"); // 빌드 시점 카운트로 복원
+		expect(hongMention?.hasAttribute("disabled")).toBe(false);
+	});
+
+	test('"전체 해제"는 내 피드백 선택도 함께 지운다(필터 바·활성 필터 줄·빈 상태 버튼 공통)', () => {
+		const { doc } = mountViewer(renderSession(sampleData()), false);
+		clickMinePill(doc, "hong");
+		expect(doc.querySelector('.pill-mine[data-value="hong"]')?.getAttribute("aria-pressed")).toBe("true");
+
+		click(doc.querySelector(".filter-reset"));
+
+		expect(doc.querySelector('.pill-mine[data-value="hong"]')?.getAttribute("aria-pressed")).toBe("false");
+		expect(doc.querySelector(".card-list")?.classList.contains("mine-active")).toBe(false);
+		expect(isHidden(doc.querySelector(".active-filters"))).toBe(true);
+		expect(doc.getElementById("visible-count")?.textContent).toBe(String(sampleData().units.length));
+	});
+});
+
 // ── 플레이어 접기 (DESIGN §4) ──────────────────────────────────────────────
 
 describe("플레이어 접기", () => {
@@ -1149,6 +1268,13 @@ describe("플레이어 접기", () => {
 		for (const rule of rules) {
 			expect(rule).not.toMatch(/position:\s*absolute/);
 		}
+	});
+
+	test("STYLE은 1024px 미만 펼친 상태의 높이 계약을 .player-media(영상 ≤200px)와 .player-toolbar(44px)로 나눠 고정한다(DESIGN §4/§15-3, 라운드8: 전체 ≤244px)", () => {
+		const mediaRule = STYLE.match(/\.player-media\s*\{[^}]*height:\s*min\(56\.25vw,\s*200px\)[^}]*\}/);
+		expect(mediaRule).not.toBeNull();
+		const toolbarRule = STYLE.match(/\.player-toolbar\s*\{[^}]*min-height:\s*44px[^}]*\}/);
+		expect(toolbarRule).not.toBeNull();
 	});
 });
 
@@ -1209,6 +1335,22 @@ describe("disabled 모드(명단 없음)", () => {
 		expect(doc.querySelector(".mentioned-members")).toBeNull();
 		expect(doc.querySelector(".related-members")).toBeNull();
 		expect(doc.querySelector(".mention-badge")).toBeNull();
+	});
+
+	test("내 피드백 pill 자체가 없으므로 활성 필터 줄에도 '내 피드백:' 칩이 나타나지 않는다(DESIGN §6/§7)", () => {
+		const data = sampleData();
+		data.members = [];
+		for (const unit of data.units) {
+			unit.member_ids = [];
+			unit.related_member_ids = [];
+		}
+		const { doc } = mountViewer(renderSession(data), false);
+		expect(doc.querySelector(".pill-mine")).toBeNull();
+
+		clickChip(doc, "position", "FB");
+		const container = doc.querySelector(".active-filters");
+		expect(isHidden(container)).toBe(false); // 포지션 칩은 정상 노출된다
+		expect(container?.textContent).not.toContain("내 피드백:");
 	});
 });
 

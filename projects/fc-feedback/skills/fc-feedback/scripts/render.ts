@@ -371,8 +371,12 @@ function positionRoot(tag: string): string {
 
 // ── small render helpers ─────────────────────────────────────────────────
 
+// `chip()` renders both ASCII-only labels (time/part chips) and free-form Korean ones (topic
+// tags, §7/§12) through the same helper, so the label goes through titleHtml (glue->escape->nobr)
+// rather than a bare escapeHtml -- titleHtml is a no-op past `escapeHtml` on pure-ASCII input, so
+// the ASCII call sites are unaffected (round-8 review: this call site had bypassed titleHtml).
 function chip(className: string, label: string): string {
-	return `<span class="chip ${className}">${escapeHtml(label)}</span>`;
+	return `<span class="chip ${className}">${titleHtml(label)}</span>`;
 }
 
 /** The "(n)" count inside a facet chip, in its own span so VIEWER_JS can update it live (§7 live facet counts) without rebuilding the whole button. */
@@ -486,8 +490,8 @@ function renderMyFeedbackNav(data: SessionData): string {
 			// `role="listitem"` sits on this wrapper, not the button itself (DESIGN §6/§13):
 			// an interactive control cannot also carry a structural list-item role.
 			return (
-				`<div role="listitem"><button type="button" class="pill pill-mine" data-group="mine" data-value="${escapeHtml(member.id)}" aria-pressed="false">` +
-				`${escapeHtml(member.name)} <span class="count">${count}</span></button></div>`
+				`<div role="listitem"><button type="button" class="pill pill-mine" data-group="mine" data-value="${escapeHtml(member.id)}" data-label="${escapeHtml(member.name)}" aria-pressed="false">` +
+				`${titleHtml(member.name)} <span class="count">${count}</span></button></div>`
 			);
 		})
 		.join("");
@@ -519,6 +523,9 @@ function renderPositionNode(tag: string, counts: Map<string, number>, isRoot: bo
 		.map((child) => renderPositionNode(child, counts, false))
 		.join("");
 	const rootClass = isRoot ? " chip-pos-root" : "";
+	// Display label stays on escapeHtml, not titleHtml: `tag` is a position code (GK/DF/.../FB/CB/
+	// ...), a fixed ASCII vocabulary from core.ts's PARENT map -- it can never contain Hangul, so
+	// glue/nobr treatment has nothing to do (round-8 CJK pipeline review).
 	const button =
 		`<button type="button" class="chip chip-filter${rootClass}" data-group="position" data-value="${escapeHtml(tag)}" aria-pressed="false">` +
 		`${escapeHtml(tag)} ${chipCount(count)}</button>`;
@@ -550,9 +557,12 @@ function renderTopicFacetGroup(data: SessionData): string {
 	const chips = tags
 		.map((tag) => {
 			const count = counts.get(tag) ?? 0;
+			// data-value stays on escapeHtml (attribute); the visible label is free-form Korean
+			// (core.ts's isValidTag allows arbitrary text with spaces), so it goes through titleHtml
+			// (round-8 CJK pipeline review).
 			return (
 				`<button type="button" class="chip chip-filter" data-group="topic" data-value="${escapeHtml(tag)}" aria-pressed="false">` +
-				`${escapeHtml(tag)} ${chipCount(count)}</button>`
+				`${titleHtml(tag)} ${chipCount(count)}</button>`
 			);
 		})
 		.join("");
@@ -571,9 +581,11 @@ function renderMentionFacetGroup(data: SessionData): string {
 	const chips = eligible
 		.map((member) => {
 			const count = counts.get(member.id) ?? 0;
+			// data-value/data-label stay on escapeHtml (attributes); the visible name goes through
+			// titleHtml like every other displayed member name (round-8 CJK pipeline review).
 			return (
 				`<button type="button" class="chip chip-filter" data-group="mention" data-value="${escapeHtml(member.id)}" data-label="${escapeHtml(member.name)}" aria-pressed="false">` +
-				`${escapeHtml(member.name)} ${chipCount(count)}</button>`
+				`${titleHtml(member.name)} ${chipCount(count)}</button>`
 			);
 		})
 		.join("");
@@ -626,7 +638,7 @@ function renderTabMatch(data: SessionData): string {
 						.join("");
 					return (
 						`<div class="toc-topic-group"><h3>${titleHtml(topic.title)}</h3>` +
-						`<p class="toc-summary">${escapeHtml(topic.summary)}</p>` +
+						`<p class="toc-summary">${titleHtml(topic.summary)}</p>` +
 						`<ul>${items}</ul></div>`
 					);
 				})
@@ -762,7 +774,9 @@ function renderChipRow(unit: SessionUnit): string {
 
 /** A member name wrapped for the "내 피드백" name highlight (DESIGN §5 "내 피드백 상태의 이름 강조") — unstyled by default, `.mine` is toggled by VIEWER_JS. */
 function renderMemberNameMark(id: string, name: string): string {
-	return `<mark class="member-name" data-member-id="${escapeHtml(id)}">${escapeHtml(name)}</mark>`;
+	// data-member-id stays on escapeHtml (attribute); the visible name goes through titleHtml
+	// (round-8 CJK pipeline review).
+	return `<mark class="member-name" data-member-id="${escapeHtml(id)}">${titleHtml(name)}</mark>`;
 }
 
 function renderMentionedLine(unit: SessionUnit, members: readonly SessionMemberInfo[]): string {
@@ -783,7 +797,15 @@ function renderRelatedLine(unit: SessionUnit, members: readonly SessionMemberInf
 	return `<p class="related-members">관련: ${names}</p>`;
 }
 
-/** A body text block: glue bound constructions, escape, then turn only `boldSpans` bold segments into `<strong>` (DESIGN §5 item 7/§10). */
+/**
+ * A body text block: glue bound constructions, escape, then turn only `boldSpans` bold segments
+ * into `<strong>` (DESIGN §5 item 7/§10). Deliberately left off the shared `titleHtml()` pipeline
+ * (round-8 CJK pipeline review): titleHtml's single-string signature has no way to split a bold
+ * span, so it already re-implements glue+escape by hand per span here; adding wrapNobr's
+ * "한글(영문)" nobr-wrap on top is not required either -- §10 excludes ordinary body-paragraph
+ * word-wrap from the CJK check, and titleHtml's required-call-site list (§10) never names body
+ * prose.
+ */
 function renderBodyText(text: string): string {
 	const html = boldSpans(glueKorean(text))
 		.map((span) => (span.bold ? `<strong>${escapeHtml(span.text)}</strong>` : escapeHtml(span.text)))
@@ -800,11 +822,16 @@ function renderBodyText(text: string): string {
  * own lines instead of staying pinned to the row's edges.
  */
 function renderBodyFrame(block: UnitBodyFrameBlock): string {
+	// `alt` is an attribute -- a titleHtml() <span> inside it would just show as literal text, so
+	// it stays on glueKorean+escapeHtml (glue only, no nobr). The visible figcaption span has no
+	// such constraint, so it goes through the full titleHtml pipeline on the RAW caption (not the
+	// already-glued `caption` above -- glueKorean is idempotent in practice, but there is no
+	// reason to run it twice, round-8 CJK pipeline review).
 	const caption = glueKorean(block.caption);
 	return (
 		`<figure class="body-frame" data-frame-t="${block.t}">` +
 		`<img src="${escapeHtml(block.src)}" width="${block.width}" height="${block.height}" loading="lazy" alt="${escapeHtml(caption)}">` +
-		`<figcaption>${seekTimeButton(block.t)}<span class="body-frame-caption">${escapeHtml(caption)}</span>` +
+		`<figcaption>${seekTimeButton(block.t)}<span class="body-frame-caption">${titleHtml(block.caption)}</span>` +
 		`<a href="${escapeHtml(block.src)}" target="_blank" rel="noopener" class="zoom-link" aria-label="이미지 원본 크게 보기">확대</a></figcaption>` +
 		`</figure>`
 	);
@@ -821,10 +848,13 @@ function renderSimilarList(similar: UnitSimilar[]): string {
 	if (similar.length === 0) {
 		return "";
 	}
+	// href is an attribute (escapeHtml); date is an ISO date string, pure ASCII (escapeHtml);
+	// title is the past session's Korean title, so it goes through titleHtml (round-8 CJK
+	// pipeline review).
 	const items = similar
 		.map(
 			(entry) =>
-				`<li><a href="${escapeHtml(entry.href)}">${escapeHtml(entry.title)}</a> · <span class="similar-date">${escapeHtml(entry.date)}</span></li>`,
+				`<li><a href="${escapeHtml(entry.href)}">${titleHtml(entry.title)}</a> · <span class="similar-date">${escapeHtml(entry.date)}</span></li>`,
 		)
 		.join("");
 	return `<ul class="similar-list">${items}</ul>`;
@@ -838,8 +868,11 @@ function renderRefsList(refs: UnitRef[]): string {
 		.map((ref) => {
 			const summaryLink =
 				ref.lang !== "ko" && ref.href !== null ? `<a href="${escapeHtml(ref.href)}">요약</a> ` : "";
+			// ref.kind ("eafc"/"tactics") and ref.lang.toUpperCase() ("KO"/"EN") are fixed ASCII
+			// enums (escapeHtml); ref.title is the reference's Korean display title, so it goes
+			// through titleHtml (round-8 CJK pipeline review).
 			return (
-				`<li>${escapeHtml(ref.title)} ` +
+				`<li>${titleHtml(ref.title)} ` +
 				`<span class="ref-badges"><span class="badge">${escapeHtml(ref.kind)}</span>` +
 				`<span class="badge">${escapeHtml(ref.lang.toUpperCase())}</span></span> ` +
 				summaryLink +
@@ -908,6 +941,11 @@ function renderCard(unit: SessionUnit, ctx: CardContext): string {
 // ── shared page shell ────────────────────────────────────────────────────
 
 function pageShell(title: string, bodyAttrs: string, bodyHtml: string, scripts: string): string {
+	// title stays on escapeHtml, never titleHtml: <title> is RCDATA -- the <span class="nobr">
+	// wrapNobr() would insert renders as literal text instead of being parsed as an element, and
+	// a browser tab title is never line-wrapped in the first place, so glueKorean's whole reason
+	// to exist (protecting a bound construction from a mid-word line break) does not apply here
+	// either (round-8 CJK pipeline review: a structural exception, not a bypass).
 	return `<!doctype html>
 <html lang="ko">
 <head>
@@ -962,7 +1000,7 @@ export function renderSession(data: SessionData): string {
 	const body =
 		`<header class="header"><h1>${titleHtml(data.title)}</h1><p class="date">${escapeHtml(data.date)}</p></header>` +
 		`<div class="layout">${sideCol}${main}</div>` +
-		`<footer class="footer"><p>${escapeHtml(FOOTER_NOTICE)}</p></footer>`;
+		`<footer class="footer"><p>${titleHtml(FOOTER_NOTICE)}</p></footer>`;
 
 	const scripts =
 		`<script>${VIEWER_JS}</script>\n` + `<script src="https://www.youtube.com/iframe_api" async></script>\n`;
@@ -1025,7 +1063,7 @@ export function renderIndex(index: ArchiveIndex): string {
 		`<main class="archive-main">` +
 		`<h1>fc-feedback 아카이브</h1>` +
 		body +
-		`<footer class="footer"><p>${escapeHtml(FOOTER_NOTICE)}</p></footer>` +
+		`<footer class="footer"><p>${titleHtml(FOOTER_NOTICE)}</p></footer>` +
 		`</main>`;
 
 	return pageShell("fc-feedback 아카이브", "", html, "");
@@ -1506,6 +1544,30 @@ export const VIEWER_JS = `(function () {
     return chipEl ? chipEl.getAttribute("data-label") || id : id;
   }
 
+  // Same safe iteration as findChipByValue above, over the "내 피드백" pills instead of the
+  // filter-bar chips -- pills live in .pill-mine, not .chip-filter, so they need their own finder.
+  function findPillByValue(value) {
+    var pills = document.querySelectorAll(".pill-mine");
+    for (var i = 0; i < pills.length; i++) {
+      if (pills[i].getAttribute("data-value") === value) return pills[i];
+    }
+    return null;
+  }
+
+  function mineLabel(id) {
+    var pillEl = findPillByValue(id);
+    return pillEl ? pillEl.getAttribute("data-label") || id : id;
+  }
+
+  // Shared by onMinePillClick and removeFilter("mine", ...) so the active-filter chip's × always
+  // leaves pill aria-pressed in the exact same state as re-clicking the selected pill would.
+  function setMinePressed(value) {
+    var pills = document.querySelectorAll(".pill-mine");
+    for (var i = 0; i < pills.length; i++) {
+      pills[i].setAttribute("aria-pressed", pills[i].getAttribute("data-value") === value ? "true" : "false");
+    }
+  }
+
   function removeFilter(group, value) {
     if (group === "position") {
       selected.position = null;
@@ -1518,6 +1580,9 @@ export const VIEWER_JS = `(function () {
     } else if (group === "mention") {
       selected.mention = null;
       setSinglePressed("mention", null);
+    } else if (group === "mine") {
+      selected.mine = null;
+      setMinePressed(null);
     }
     applyFilters();
   }
@@ -1543,6 +1608,14 @@ export const VIEWER_JS = `(function () {
     if (!container) return;
     container.textContent = "";
     var hasAny = false;
+    // Mine goes first (DESIGN §6/§7): an empty AND-result can only happen through a combination
+    // with the "내 피드백" pill (facet chips alone can't reach 0, §7's live counts), so surfacing
+    // this cause ahead of the facet chips is what lets a reader spot it instead of just the "조건에
+    // 맞는 피드백이 없어요" empty state.
+    if (selected.mine) {
+      appendActiveChip(container, "mine", selected.mine, "내 피드백: " + mineLabel(selected.mine));
+      hasAny = true;
+    }
     if (selected.position) {
       appendActiveChip(container, "position", selected.position, "포지션: " + selected.position);
       hasAny = true;
@@ -1731,10 +1804,7 @@ export const VIEWER_JS = `(function () {
     var value = pillEl.getAttribute("data-value");
     var next = selected.mine === value ? null : value;
     selected.mine = next;
-    var pills = document.querySelectorAll(".pill-mine");
-    for (var i = 0; i < pills.length; i++) {
-      pills[i].setAttribute("aria-pressed", pills[i].getAttribute("data-value") === next ? "true" : "false");
-    }
+    setMinePressed(next);
     applyFilters();
   }
 
@@ -1824,9 +1894,14 @@ export const VIEWER_JS = `(function () {
     // video -- only that case needs an actual load; the common case (constructed with this
     // exact video already) just needs a seek, and only when a non-zero start was requested.
     if (action.videoId === window.fcPlayer.getVideoData().video_id) {
+      // Always play, even when start is 0 (e.g. a pre-ready Part-button click, always
+      // start=0 via onPartButtonClick -> switchTo) -- seekTo alone never starts playback, so
+      // without this call the player sits idle after onReady (REAL BUG, round-8 review,
+      // regression-tested below).
       if (action.start > 0) window.fcPlayer.seekTo(action.start, true);
+      window.fcPlayer.playVideo();
     } else {
-      window.fcPlayer.loadVideoById({ videoId: action.videoId, startSeconds: action.start });
+      window.fcPlayer.loadVideoById({ videoId: action.videoId, startSeconds: action.start }); // already starts playback
     }
   }
 

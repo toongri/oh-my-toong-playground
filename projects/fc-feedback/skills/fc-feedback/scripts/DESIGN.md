@@ -213,8 +213,10 @@ v1의 결함(§0)은 grid의 `grid-row: 1 / -1` 행-걸침과 `overflow: auto` f
   .header, .footer { padding-left: var(--space-4); padding-right: var(--space-4); }
   .side-col, .side, .main { display: contents; }
   .player-wrapper { order: 1; position: sticky; top: 0; z-index: 10;
-                     aspect-ratio: auto; height: min(56.25vw, 200px); }
-  .player-wrapper.is-collapsed { height: 44px; }
+                     aspect-ratio: auto; height: auto;
+                     display: flex; flex-direction: column; }
+  .player-media { height: min(56.25vw, 200px); } /* 펼침: 영상 ≤200px + 툴바 44px = 전체 ≤244px */
+  .player-wrapper.is-collapsed .player-media { height: 0; } /* 접힘: 툴바 44px만 남는다 */
   /* order 2~9: part-switch, my-feedback, filter-bar, active-filters,
      result-count, card-list, empty-state, toc-scroll(마지막, 접힘) */
   .toc-scroll { overflow-y: visible; } /* .toc-panel이 hidden으로 접히므로 자체 스크롤 불필요 */
@@ -229,7 +231,7 @@ v1의 결함(§0)은 grid의 `grid-row: 1 / -1` 행-걸침과 `overflow: auto` f
 
 **왜 세 wrapper를 모두 `display: contents`로 지우는가**: v1은 플레이어를 짧은 `.side`에 가둬 sticky containing block이 카드 구간에서 끊겼다. v2는 `.side-col`·`.side`·`.main`을 전부 지워 모든 섹션을 `.layout`(전체 스크롤 길이) 하나의 flex 아이템으로 만들어 containing block을 넓히는 동시에, 마크업 순서와 무관하게 위 `order`만으로 재배치할 수 있게 한다 — 2차 시각 QA가 지적한 "목차가 '내 피드백'보다 먼저 나와 약 1950px 아래로 밀린다" 결함이 이걸로 없어진다. 목차를 맨 뒤(order 9)에 둔 것은 §1 원칙 4(내비게이션은 그다음)를 따른 것이다.
 
-플레이어는 200px을 넘지 않아 세로로 긴 화면에서 뷰포트 절반을 차지하는 사고를 막는다. 필터 바(§7)는 모든 폭에서 기본 닫힘, 목차(§8)는 1024px 미만에서만 `.toc-panel[hidden]`으로 기본 닫힘이다. header/footer는 `.layout` 밖 실제 형제라 v1식 순서 강제가 필요 없다.
+펼친 상태의 sticky 플레이어 전체 높이(영상 `.player-media` ≤200px + 항상 보이는 `.player-toolbar` 44px, 아래 §4 "플레이어 접기" 참고)는 244px을 넘지 않아 세로로 긴 화면에서 뷰포트 절반을 차지하는 사고를 막는다 — iframe 위 오버레이를 금지하는 원칙(§4 "플레이어 접기")이 접기 버튼을 영상과 별도인 툴바 행으로 밀어냈으므로, 200px 계약은 영상 자체에만 적용되고 툴바 44px은 그 위에 더해진다. 필터 바(§7)는 모든 폭에서 기본 닫힘, 목차(§8)는 1024px 미만에서만 `.toc-panel[hidden]`으로 기본 닫힘이다. header/footer는 `.layout` 밖 실제 형제라 v1식 순서 강제가 필요 없다.
 
 ### 플레이어 접기(1024px 미만 전용)
 
@@ -380,7 +382,8 @@ var(--radius-sm); padding: 0 var(--space-1); font-weight: 600; color: inherit;`)
 
 이 컨트롤이 필터 바 안이 아니라 별도 섹션인 이유(§1 원칙 1): "내 피드백을 보고 싶다"는
 의도는 일반 필터링 의도보다 훨씬 빈번해 항상 먼저 눈에 띄어야 한다 — 필터 바의 기본 닫힘
-(§7) 안에 숨기지 않고 언제나 펼쳐 둔다.
+(§7) 안에 숨기지 않고 언제나 펼쳐 둔다. pill 선택은 §7 활성 필터 요약 줄에도 칩으로 나타난다
+(라운드8 시각 QA — 결과 0건이 이 선택과의 조합으로만 나오므로, 원인을 그 줄에서 함께 보여준다).
 
 ## 7. 필터 바
 
@@ -405,10 +408,12 @@ var(--radius-sm); padding: 0 var(--space-1); font-weight: 600; color: inherit;`)
 
 ### 활성 필터 요약
 
-필터 바 바로 아래(결과 수 위)에 활성 필터 칩을 상시 노출한다: 그룹마다 선택된 값을
-"라벨: 값" 칩으로 나열하고, 각 칩에 `×`(그 칩 하나만 해제) + 맨 끝에 "전체 해제" 버튼
-(`--radius-full` pill, §6의 "내 피드백" 선택도 함께 해제)을 둔다. 활성 필터가 없으면 이
-줄 자체를 렌더하지 않는다.
+필터 바 바로 아래(결과 수 위)에 활성 필터 칩을 상시 노출한다: §6 "내 피드백" 선택이 있으면
+"내 피드백: {이름}" 칩을 맨 앞에 먼저 두고, 그 뒤로 그룹마다 선택된 값을 "라벨: 값" 칩으로
+나열한다. 각 칩에 `×`(그 칩 하나만 해제 — 내 피드백 칩의 `×`는 §6 pill 재클릭과 동일하게
+동작) + 맨 끝에 "전체 해제" 버튼(`--radius-full` pill, §6의 "내 피드백" 선택도 함께 해제)을
+둔다. **내 피드백 선택만 있어도**(다른 그룹 선택 없이) 이 줄은 보인다 — 활성 필터가 전혀
+없을 때만 줄 자체를 렌더하지 않는다.
 
 ### 결과 수 · 기본 접힘 · 빈 상태
 
@@ -657,8 +662,8 @@ v2는 기존 Pass A/B(계약 준수)에 더해 **매 회차마다 아래 네 관
 2. **토큰 이탈**: §2에 없는 raw hex, 임의 px 간격/반경, §2 타입 스케일에 없는 폰트 크기.
 3. **레이아웃 계약 위반**(§4): 1024px 이상에서 `.player-wrapper`/`.part-switch`에
    `flex-shrink: 0`이 빠져 플레이어가 보이지 않거나 찌그러짐, `.main`이 단일 wrapper가
-   아니라 개별 요소로 흩어짐, 1024px 미만에서 sticky 플레이어 높이가 `min(56.25vw, 200px)`을
-   넘어 본문을 밀어냄, 카드가 sticky 플레이어에 가려짐(`scroll-margin-top` 누락/오계산),
+   아니라 개별 요소로 흩어짐, 1024px 미만에서 펼친 sticky 플레이어 전체 높이(영상+툴바)가
+   244px을 넘어 본문을 밀어냄, 카드가 sticky 플레이어에 가려짐(`scroll-margin-top` 누락/오계산),
    카드 스크롤 중 sticky 고정이 풀림(`.side-col`의 `display: contents` 누락 등), "플레이어
    접기" 버튼의 `aria-expanded` 불일치.
 4. **카드 필드 누락/순서 오류**(§5): 태그 행→언급된 팀원→본문→관련 팀원 순서가 아님, 시간
