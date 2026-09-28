@@ -60,7 +60,7 @@ v1의 임베디드 참조(notion/linear.app 구조 문법)와 라이트 테마·
 | 액센트 hover | `--accent-hover` | `#145C34` | 액센트 요소 hover/active |
 | 액센트 틴트 | `--mine-tint` | `#E3F3E9` | "내 피드백" 선택 시 본문 이름 강조(§5)만. 액센트를 옅게 희석한 값이며 독립된 두 번째 색이 아니다 |
 | 포커스 링 | `--focus` | `#1E7A46` | `outline` 색 (§13 접근성) |
-| 플레이어 컨트롤 배경 | `--player-control-bg` | `rgba(255,255,255,0.9)` | 1024px 미만에서 영상 위에 얹히는 "플레이어 접기" 버튼의 반투명 배경 전용(영상 어디에 겹쳐도 텍스트 대비를 확보하려고 반투명 흰색을 쓴다) |
+| 플레이어 컨트롤 배경 | `--player-control-bg` | `rgba(255,255,255,0.9)` | 1024px 미만에서 영상 아래 `.player-toolbar`(§4, 영상 위 오버레이가 아니다) 위에 놓이는 "플레이어 접기" 버튼의 반투명 배경 전용(어두운 툴바 배경 위에서도 텍스트 대비를 확보하려고 반투명 흰색을 쓴다) |
 | 포지션 GK | `--pos-gk-bg` / `--pos-gk-fg` | `#FDF1D8` / `#8A5A00` | GK 칩 배경/글자 |
 | 포지션 DF | `--pos-df-bg` / `--pos-df-fg` | `#E4EEFC` / `#1451B0` | DF 칩 배경/글자 |
 | 포지션 MF | `--pos-mf-bg` / `--pos-mf-fg` | `#E7F0EE` / `#0F6B5C` | MF 칩 배경/글자 |
@@ -138,9 +138,12 @@ v1의 결함(§0)은 grid의 `grid-row: 1 / -1` 행-걸침과 `overflow: auto` f
 <div class="layout">
   <div class="side-col">
     <div class="player-wrapper">
-      ...플레이어...
-      <button type="button" class="player-collapse" aria-expanded="true"
-              aria-controls="player-media">플레이어 접기</button>
+      ...플레이어(.player-media)...
+      <div class="player-toolbar">
+        <span class="player-mini-bar-text">...접힘 상태 표시...</span>
+        <button type="button" class="player-collapse" aria-expanded="true"
+                aria-controls="player-media">플레이어 접기</button>
+      </div>
     </div>
     <aside class="side">
       <div class="part-switch">...</div>
@@ -230,18 +233,12 @@ v1의 결함(§0)은 grid의 `grid-row: 1 / -1` 행-걸침과 `overflow: auto` f
 
 ### 플레이어 접기(1024px 미만 전용)
 
-`.player-wrapper` 안의 "플레이어 접기" 버튼(`aria-expanded`)을 누르면 플레이어가 44px 높이의
-미니 바로 접힌다:
+**플레이어 iframe 위에는 어떤 컨트롤도 겹쳐 두지 않는다(유튜브 자체 UI와 충돌)** — 라운드7 시각 QA가 우측 하단 오버레이 버튼과 유튜브 워터마크/진행 바의 충돌을 지적한 뒤의 원칙이다. `.player-wrapper`는 `.player-media`(영상)와 `.player-toolbar`(버튼 줄) 두 flex 자식을 세로로 쌓는다 — 버튼은 영상 위 오버레이가 아니라 영상 바로 아래 전체 폭 줄(오른쪽 정렬)에 항상 있다. "플레이어 접기" 버튼(`aria-expanded`)을 누르면 플레이어가 44px로 접힌다:
 
-- 접힌 상태: `.player-wrapper.is-collapsed`(`height: 44px`), 라벨은 "펼치기"로 바뀌고
-  `aria-expanded="false"`. 미니 바에는 "▶ 현재 파트 + 현재 재생 시각"만 보인다(예 "▶ Part 2 · 3:12").
-- iframe(유튜브 플레이어)은 접힌 상태에서도 DOM에서 유지한 채 높이만 44px로 줄인다(재생 유지) —
-  뗐다 붙이면 `iframe` 재로드로 재생 위치를 잃는다.
-- **접힘 상태는 in-page 상태다**(`localStorage`/쿠키 등 영속 저장소를 쓰지 않는다) — 새로고침
-  하거나 새로 열면 항상 펼쳐진 기본 상태(`aria-expanded="true"`)로 시작한다.
-- 버튼·미니 바 탭 영역은 44×44px 이상(§13)이며, 마크업(§4 골격)엔 항상 존재하되 1024px
-  이상에서는 `.player-collapse { display: none; }`로 CSS만 숨긴다 — 데스크톱은 이 기능으로
-  바뀌지 않는다.
+- 접힌 상태: `.player-wrapper.is-collapsed`, 라벨은 "펼치기", `aria-expanded="false"`. `.player-media`가 높이 0으로 접혀 `.player-toolbar` 한 줄(44px)만 `.player-wrapper` 전체가 된다 — 버튼만 있던 같은 줄 왼쪽에 "▶ 현재 파트 + 현재 재생 시각"(`.player-mini-bar-text`, 예 "▶ Part 2 · 3:12")이 나타난다.
+- iframe은 접힌 상태에서도 DOM에서 유지한 채 `.player-media`만 높이 0으로 줄인다(재생 유지) — 뗐다 붙이면 `iframe` 재로드로 재생 위치를 잃는다.
+- **접힘 상태는 in-page 상태다**(영속 저장소 없음) — 새로고침·재진입 시 항상 펼쳐진 기본 상태로 시작한다.
+- 버튼·툴바 탭 영역은 44×44px 이상(§13)이며, 마크업(§4 골격)엔 항상 존재하되 1024px 이상에서는 `.player-toolbar`/`.player-collapse` 둘 다 `display: none;`로 CSS만 숨긴다 — 데스크톱은 이 기능으로 바뀌지 않는다.
 
 ### 카드의 `scroll-margin-top` (1024px 미만 전용)
 
@@ -451,8 +448,7 @@ hover/focus/`.is-current`에서만 `--accent`+밑줄을 받는다 — 필터 칩
   - **같은 파트**(재생 중인 videoId와 대상 videoId가 같음): `player.seekTo(t, true);
     player.playVideo();`
   - **다른 파트**: `player.loadVideoById({ videoId, startSeconds: t });`(전환+seek 한 번에).
-- **onReady 이전 큐**: `onReady` 전에 클릭이 들어오면 seek/load 요청을 큐에 저장하고,
-  `onReady`에서 순서대로 flush한다.
+- **onReady 이전 대기**: `onReady` 전에 클릭이 들어오면 `{videoId, start}` 하나를 단일 슬롯에 저장한다 — 큐가 아니라 매 클릭이 이전 값을 통째로 대체하므로, 다른 파트를 잇따라 pre-ready 클릭해도 `onReady`에는 마지막 클릭의 목표만 적용된다(먼저 클릭한 파트의 stale seek가 나중 파트에 잘못 흘러드는 것을 막는다, REAL BUG 회귀 테스트로 고정).
 - **콜드 로드 안전한 초기화**: `VIEWER_JS` 초기화는 `window.YT !== undefined && window.YT.loaded`
   일 때만 즉시 플레이어를 생성한다. `window.YT`를 선언 없이 bare identifier로 읽으면 아직
   `iframe_api` 스크립트가 로드되지 않은 시점에 `ReferenceError`가 나 `else` 분기의
@@ -488,6 +484,8 @@ font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothi
 | `text-wrap` | 제목 `balance`, 본문 `pretty` | 제목은 균형, 본문은 마지막 줄 orphan 방지 |
 
 최소 크기·행간은 §2 타입 스케일을 따른다(본문 16px 이상, 행간 1.6–1.7). `word-break: keep-all`/`text-wrap: pretty`는 단어 경계에서만 줄을 바꾸므로 부정(-지 못/않)·의존명사(수/것과 그 축약형 게/거/걸/건/겁)·"-기 전/시작"·"-다 보니"·숫자(아라비아 숫자 또는 한/두/세... 고유어 수사)+단위 같은 **묶인 문법 구성**의 중간 줄바꿈까지는 막지 못한다 — `render.ts`의 `glueKorean()`이 그 구성 안의 공백을 U+00A0로 바꿔 렌더 단계에서 막는다(§15-1). 구성 경계에 `**` 볼드 마커가 붙어도(마커가 공백 앞에서 닫히든 공백 뒤에서 열리든) 같은 공백이 nbsp로 치환된다. 받침 판정(-ㄹ/-ㄴ 관형사형, 예 "앞당겨질 것", "할 수 있다")은 융합 음절의 유니코드 코드포인트에서 종성 인덱스를 직접 계산해 감지한다 — 실제 문장에 나타나지 않는 낱자모 ㄹ/ㄴ 문자를 정규식에 직접 넣는 방식은 오탐이 아니라 미탐(never-matches) 버그였다. 여러 묶인 구성이 공백 하나 간격으로 연쇄되면(예 "찾기 시작하다 보니") 한 구간이 통째로 줄바꿈 불가능해질 수 있어, nbsp로 이어붙인 한 구간이 14자(390px 컬럼에서 Body 크기 기준)를 넘으면 그 안의 이음매 하나를 도로 공백으로 되돌려 끊는다(§15-1). 독립된 두 단어 사이의 통상적인 어절 줄바꿈(예 "수비 전환", "출발 신호")은 결함이 아니다 — 차단 판정은 묶인 문법 구성 한정이다. `visual-qa`의 CJK 검사(조사/어미 고아 줄, 제목류의 주어-술어 분리, 연결어 중간 분리, 짧은 인용/출처 영문 줄바꿈, 제목 한 글자 고아 줄)는 전수 검사이며 표본 추출을 허용하지 않는다(§13) — 본문 문단·캡션의 통상적인 어절 줄바꿈과 §12 번역 표 원문 전체 문장의 줄바꿈은 검사 대상에서 제외한다(라운드6 CJK 검토: 둘 다 구조적으로 막을 수 없거나 막을 필요가 없는 일반 줄바꿈이다).
+
+전수 검사인 만큼 예외 사이트를 남기지 않는다: 세션/아카이브/참고자료 페이지가 렌더하는 모든 한글 표시 텍스트(제목·헤더·TOC 라벨·브레드크럼·참고자료 요약/핵심 포인트/번역 표 한국어 셀 포함, §12 원문 셀 제외)는 `render.ts`의 `titleHtml()` 하나(glue→escape→nobr)를 거친다 — 사이트별로 따로 `escapeHtml()`만 부르는 우회 경로를 만들지 않는다(라운드7 리뷰: 여러 곳이 이 경로를 놓치고 있었다).
 
 ## 11. 빈 상태
 
@@ -583,8 +581,8 @@ disabled 모드에서 명단이 없으면 alias 정규화를 생략하고, simil
 | 10 | `filter-mention-1440` | session | 언급 선수 필터 선택 | 1440×900 |
 | 11 | `my-feedback-390` | session | "내 피드백"에서 팀원 1명 선택(§6) | 390×844 |
 | 12 | `my-feedback-1440` | session | "내 피드백"에서 팀원 1명 선택(§6) | 1440×900 |
-| 13 | `filter-empty-and-390` | session | 서로 다른 두 그룹(예 포지션+주제) 조합 결과 0건 | 390×844 |
-| 14 | `filter-empty-and-1440` | session | 서로 다른 두 그룹(예 포지션+주제) 조합 결과 0건 | 1440×900 |
+| 13 | `filter-empty-and-390` | session | 필터 옵션 + "내 피드백" 조합 결과 0건(§7: 패싯끼리는 0건에 도달 불가) | 390×844 |
+| 14 | `filter-empty-and-1440` | session | 필터 옵션 + "내 피드백" 조합 결과 0건(§7: 패싯끼리는 0건에 도달 불가) | 1440×900 |
 | 15 | `seek-part1-390` | session | Part 1 카드 클릭 직후(seek 반영) | 390×844 |
 | 16 | `seek-part1-1440` | session | Part 1 카드 클릭 직후(seek 반영) | 1440×900 |
 | 17 | `switch-part2-390` | session | Part 2 카드 클릭 직후(영상 전환+seek 반영) | 390×844 |

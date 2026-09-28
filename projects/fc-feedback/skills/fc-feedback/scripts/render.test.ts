@@ -401,6 +401,23 @@ describe("escapeHtml 전면 적용", () => {
 		expect(cells.map((cell) => cell.getAttribute("data-label"))).toEqual(["원문", "한국어"]);
 	});
 
+	test("ref 페이지의 key_points_ko도 묶인 문법 구성 glue 파이프라인을 탄다(REAL BUG 회귀, 라운드7)", () => {
+		const doc = parseHTML(
+			renderRef({
+				id: "r-1",
+				title: "제목",
+				lang: "en",
+				kind: "eafc",
+				url: "https://example.com",
+				summary_ko: "요약",
+				key_points_ko: ["좋은 각을 만들 것"],
+				translations: [],
+			}),
+		).document;
+		const item = doc.querySelector(".key-points li");
+		expect(item?.textContent).toContain(`만들${NBSP}것`);
+	});
+
 	test("STYLE은 1024px 미만에서 번역 표를 라벨이 붙은 블록으로 세로 스택한다(라운드6 CJK 검토)", () => {
 		expect(STYLE).toMatch(/@media \(max-width: 1023\.98px\)[^]*?\.translations-table[^{]*\{[^}]*display:\s*block/);
 		expect(STYLE).toContain("content: attr(data-label)");
@@ -815,6 +832,32 @@ describe("영상 전환", () => {
 		const seekCall = stub?.calls.find((call) => call.method === "seekTo");
 		expect(seekCall?.args[0]).toBe(3725);
 	});
+
+	test("서로 다른 파트를 잇따라 pre-ready 클릭하면 마지막 클릭의 목표만 적용된다(REAL BUG 회귀, 라운드7)", () => {
+		const dom = parseHTML(renderSession(sampleData()));
+		const win = makeWindow(dom);
+		win.Element.prototype.scrollIntoView = () => {};
+		win.matchMedia = () => ({ matches: false, addListener: () => {}, removeListener: () => {} });
+		runViewer(win, undefined); // window.YT가 아예 없는 콜드 로드 상태에서 시작
+
+		click(win.document.getElementById("u001")); // Part 1 카드, 754초 — 아직 YT가 없어 대기만 한다.
+		const part2Btn = win.document.querySelector('.part-btn[data-video="BBBBBBBBBBB"]');
+		click(part2Btn); // Part 2 버튼, 0초 — 이 클릭의 목표가 이전 클릭의 목표를 대체해야 한다.
+		expect(win.fcPlayer).toBeUndefined();
+
+		win.YT = { Player: StubPlayer, loaded: true }; // iframe_api 스크립트가 뒤늦게 로드됨
+		win.onYouTubeIframeAPIReady?.();
+
+		const stub = win.fcPlayer instanceof StubPlayer ? win.fcPlayer : null;
+		expect(stub).not.toBeNull();
+		expect(stub?.videoId).toBe("BBBBBBBBBBB"); // 마지막 클릭(Part 2)의 비디오로 생성된다.
+
+		stub?.fireReady();
+		// 이전 클릭(Part 1, 754초)의 stale seekTo가 Part 2 재생에 흘러들어와선 안 된다 — 큐가 아니라
+		// 단일 슬롯이므로 Part 2 클릭(0초, 별도 seek 불필요)이 이를 완전히 대체한다.
+		expect(stub?.calls.some((call) => call.method === "seekTo")).toBe(false);
+		expect(stub?.calls.some((call) => call.method === "loadVideoById")).toBe(false);
+	});
 });
 
 // ── layout skeleton (DESIGN §4) ──────────────────────────────────────────
@@ -944,6 +987,20 @@ describe("라이브 패싯 카운트", () => {
 		expect(gkChip?.hasAttribute("disabled")).toBe(false); // 선택된 옵션이라 비활성화되지 않는다
 	});
 
+	test('태그 이름이 "constructor"여도 프로토타입 값이 아니라 정직한 카운트를 보이고 0건이면 비활성화된다(REAL BUG 회귀, 라운드7)', () => {
+		const data = sampleData();
+		data.units[0].topic_tags = ["constructor"]; // u001(FB) — 플레인 {} 카운트 조회라면 Object.prototype.constructor를 읽어올 위험이 있는 이름
+		const { doc } = mountViewer(renderSession(data), false);
+
+		const chip = doc.querySelector('.chip-filter[data-group="topic"][data-value="constructor"]');
+		expect(chip?.querySelector(".chip-count")?.textContent).toBe("(1)");
+
+		clickChip(doc, "position", "GK"); // u002만 해당 — u001(FB, constructor 태그)과 겹치지 않는다
+		expect(chip?.querySelector(".chip-count")?.textContent).toBe("(0)");
+		expect(chip?.hasAttribute("disabled")).toBe(true);
+		expect(chip?.getAttribute("aria-disabled")).toBe("true");
+	});
+
 	test("주제 그룹은 내부적으로 OR다 — 이미 선택된 옵션이 같은 그룹의 다른 옵션을 비활성화하지 않는다", () => {
 		const { doc } = mountViewer(renderSession(sampleData()), false);
 		clickChip(doc, "topic", "빌드업"); // u001, u003
@@ -968,6 +1025,27 @@ describe("라이브 패싯 카운트", () => {
 		const buildup = doc.querySelector('.chip-filter[data-group="topic"][data-value="빌드업"]');
 		expect(buildup?.querySelector(".chip-count")?.textContent).toBe("(2)"); // u001 + u003
 		expect(buildup?.hasAttribute("disabled")).toBe(false);
+	});
+
+	test('주제 태그에 큰따옴표가 있어도 활성 필터 칩의 × 버튼으로 정상 해제된다(REAL BUG 회귀, 라운드7)', () => {
+		const data = sampleData();
+		const quoted = '전환"역습'; // data-value에 "가 있으면 콘캣 CSS 셀렉터가 깨져 던지는 시나리오
+		data.units[2].topic_tags = [quoted]; // u003(ST)
+		const { doc } = mountViewer(renderSession(data), false);
+
+		const chip = [...doc.querySelectorAll('.chip-filter[data-group="topic"]')].find(
+			(el) => el.getAttribute("data-value") === quoted,
+		);
+		expect(chip).not.toBeUndefined();
+		click(chip);
+		expect(chip?.getAttribute("aria-pressed")).toBe("true");
+
+		const removeBtn = doc.querySelector(".active-filters .chip-remove");
+		expect(removeBtn).not.toBeNull();
+		expect(() => click(removeBtn)).not.toThrow();
+
+		expect(chip?.getAttribute("aria-pressed")).toBe("false");
+		expect(doc.querySelector(".active-filters")?.hasAttribute("hidden")).toBe(true);
 	});
 });
 
@@ -1054,6 +1132,23 @@ describe("플레이어 접기", () => {
 		expect(btn?.getAttribute("aria-expanded")).toBe("false");
 		expect(btn?.textContent).toBe("펼치기");
 		expect(doc.querySelector(".player-wrapper")?.classList.contains("is-collapsed")).toBe(true);
+	});
+
+	test("player-collapse는 iframe 위가 아니라 영상 아래 별도 toolbar 줄에 있다(마크업 순서, 라운드7 시각 QA)", () => {
+		const { doc } = mountViewer(renderSession(sampleData()), false);
+		const wrapper = doc.querySelector(".player-wrapper");
+		const children = Array.from(wrapper?.children ?? []);
+		expect(children.map((el) => el.className)).toEqual(["player-media", "player-toolbar"]);
+		expect(doc.querySelector(".player-toolbar .player-collapse")).not.toBeNull();
+		expect(doc.querySelector(".player-media .player-collapse")).toBeNull();
+	});
+
+	test("STYLE은 player-collapse를 iframe 위에 겹치는 position:absolute로 두지 않는다(DESIGN §4, 라운드7 시각 QA)", () => {
+		const rules = STYLE.match(/\.player-collapse\s*\{[^}]*\}/g) ?? [];
+		expect(rules.length).toBeGreaterThan(0);
+		for (const rule of rules) {
+			expect(rule).not.toMatch(/position:\s*absolute/);
+		}
 	});
 });
 
@@ -1171,6 +1266,14 @@ describe("제목의 한글단어(영문) 줄바꿈 방지", () => {
 		const tocItem = doc.querySelector('#panel-match .toc-item[data-target="u001"]');
 		expect(tocItem?.innerHTML).toContain('<span class="nobr">비활성(disabled)</span>');
 	});
+
+	test("카드 브레드크럼의 경기 제목도 묶인 문법 구성 glue 파이프라인을 탄다(REAL BUG 회귀, 라운드7)", () => {
+		const data = sampleData();
+		data.matches[0].title = "받아들이지 못한 경기";
+		const doc = parseHTML(renderSession(data)).document;
+		const breadcrumb = doc.getElementById("u001")?.querySelector(".breadcrumb");
+		expect(breadcrumb?.textContent).toContain(`받아들이지${NBSP}못한`);
+	});
 });
 
 // ── 한글 묶인 문법 구성 줄바꿈 방지 (DESIGN §10/§15-1) ───────────────────────
@@ -1197,6 +1300,11 @@ describe("glueKorean — 묶인 문법 구성 공백을 nbsp로 치환", () => {
 		["고유어 수사+단위(반 걸음)", "반 걸음씩 밀렸다", "반 걸음"],
 		["고유어 수사+단위(두 걸음)", "두 걸음 앞서 있다", "두 걸음"],
 		["고유어 수사+단위(세 번)", "세 번 시도했다", "세 번"],
+		["고유어 수사+단위(한 박자, 라운드7 시각 QA)", "한 박자씩 늦게 반응했다", "한 박자"],
+		["고유어 수사+단위(두 박자)", "두 박자 빠르게 움직였다", "두 박자"],
+		["고유어 수사+단위(한 발짝)", "한 발짝 먼저 움직였다", "한 발짝"],
+		["고유어 수사+단위(세 번째)", "세 번째 시도에서 성공했다", "세 번째"],
+		["고유어 수사+단위(두 터치)", "두 터치 만에 처리했다", "두 터치"],
 	])("%s: %s", (_label, input, expected) => {
 		expect(glueKorean(input)).toContain(expected);
 	});

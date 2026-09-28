@@ -207,8 +207,9 @@ function escapeHtml(value: string): string {
 /**
  * Wraps each "한글단어(영문...)"-shaped token — e.g. "비활성(disabled)" — in
  * `<span class="nobr">` so `word-break: keep-all` can't still split it right before the "("
- * (DESIGN §10). Titles only (h1/card title/TOC/archive card title); takes already-escaped
- * text, since escaping never touches the parentheses this matches on.
+ * (DESIGN §10). Used by `titleHtml` below, so every site that goes through that shared
+ * pipeline gets it, not just headings; takes already-escaped text, since escaping never
+ * touches the parentheses this matches on.
  */
 function wrapNobr(escaped: string): string {
 	return escaped.replace(/\S+\([^)\s]{1,20}\)/g, (match) => `<span class="nobr">${match}</span>`);
@@ -236,8 +237,9 @@ const NIEUN_BATCHIM = hangulSyllablesWithFinal(4); // ㄴ batchim, e.g. 든/간/
 /** Native-Korean numeral words this file glues to a following counter (item 6, round-6 CJK review), alongside plain Arabic digits. */
 const NATIVE_NUMERAL_WORDS = "반|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열|두세|서너|몇|여러";
 
-/** Counters a numeral glues to (round-6 CJK review) - a trailing particle on the counter (e.g. "걸음씩") is untouched: only the space before the counter needs gluing. */
-const COUNTER_WORDS = "걸음|번|명|개|초|분|칸|발|미터|m|차례|경기|세트|골|골대|포인트|점";
+/** Counters a numeral glues to (round-6/round-7 CJK review) - a trailing particle on the counter (e.g. "걸음씩") is untouched: only the space before the counter needs gluing. */
+const COUNTER_WORDS =
+	"걸음|번|명|개|초|분|칸|발|미터|m|차례|경기|세트|골|골대|포인트|점|박자|발짝|뼘|터치|번째|바퀴|야드|라인";
 
 /**
  * Matches each bound Korean grammatical construction this file glues (DESIGN §10/§15-1):
@@ -337,9 +339,15 @@ export function glueKorean(text: string): string {
 	return capGlueRunLength(glued);
 }
 
-/** Card title / TOC label shared pipeline: glue bound constructions, then the existing escape+nobr treatment (DESIGN §5/§8/§10). */
-function unitTitleHtml(title: string): string {
-	return wrapNobr(escapeHtml(glueKorean(title)));
+/**
+ * The one shared pipeline for rendering Korean display text (DESIGN §5/§8/§10/§12): glue bound
+ * constructions, escape, then wrap "한글(영문)"-shaped tokens. Every title/heading/label and
+ * every prose field (ref summary/key points/translation cells) routes through this single
+ * helper — not a per-site ad hoc `escapeHtml(text)` — so none of them can silently fall back to
+ * the untreated CJK line-break hazard (round-7 review: several call sites had).
+ */
+function titleHtml(text: string): string {
+	return wrapNobr(escapeHtml(glueKorean(text)));
 }
 
 // ── position tree display order (DESIGN.md §7) ──────────────────────────────
@@ -599,7 +607,7 @@ function tocItemAttrs(unit: SessionUnit): string {
 
 /** TOC item label: time chip (non-interactive, TOC click never seeks — DESIGN §8) + title. */
 function tocItemLabel(unit: SessionUnit): string {
-	return `${chip("chip-time", formatTime(unit.start))} ${unitTitleHtml(unit.title)}`;
+	return `${chip("chip-time", formatTime(unit.start))} ${titleHtml(unit.title)}`;
 }
 
 function renderTabMatch(data: SessionData): string {
@@ -617,13 +625,13 @@ function renderTabMatch(data: SessionData): string {
 						)
 						.join("");
 					return (
-						`<div class="toc-topic-group"><h3>${escapeHtml(topic.title)}</h3>` +
+						`<div class="toc-topic-group"><h3>${titleHtml(topic.title)}</h3>` +
 						`<p class="toc-summary">${escapeHtml(topic.summary)}</p>` +
 						`<ul>${items}</ul></div>`
 					);
 				})
 				.join("");
-			return `<div class="toc-match-group"><h2>${escapeHtml(match.title)}</h2>${topics}</div>`;
+			return `<div class="toc-match-group"><h2>${titleHtml(match.title)}</h2>${topics}</div>`;
 		})
 		.join("");
 	return `<div role="tabpanel" id="panel-match" aria-labelledby="tab-match">${groups}</div>`;
@@ -641,7 +649,7 @@ function renderTabTopic(data: SessionData): string {
 				)
 				.join("");
 			return (
-				`<div class="toc-tag-group"><h2>${escapeHtml(tag)} (${units.length})</h2>` + `<ul>${items}</ul></div>`
+				`<div class="toc-tag-group"><h2>${titleHtml(tag)} (${units.length})</h2>` + `<ul>${items}</ul></div>`
 			);
 		})
 		.join("");
@@ -690,9 +698,11 @@ function renderPlayerWrapper(data: SessionData): string {
 		`<p>이 영상은 임베드를 지원하지 않습니다.</p>` +
 		`<a class="player-placeholder-link" href="https://youtu.be/${escapeHtml(initialId)}?t=0" target="_blank" rel="noopener">유튜브에서 시청 ↗</a>` +
 		`</div>` +
-		`<div class="player-mini-bar"><span class="player-mini-bar-text">▶ ${escapeHtml(miniBarPrefix)}0:00</span></div>` +
 		`</div>` +
+		`<div class="player-toolbar">` +
+		`<span class="player-mini-bar-text">▶ ${escapeHtml(miniBarPrefix)}0:00</span>` +
 		`<button type="button" class="player-collapse" aria-expanded="true" aria-controls="player-media">플레이어 접기</button>` +
+		`</div>` +
 		`</div>`
 	);
 }
@@ -727,7 +737,7 @@ function renderCardHead(unit: SessionUnit, ctx: CardContext): string {
 	const topic = ctx.topicById.get(unit.topic_id);
 	const breadcrumb =
 		match !== undefined && topic !== undefined
-			? `<span class="breadcrumb">${escapeHtml(match.title)}<span aria-hidden="true"> › </span>${escapeHtml(topic.title)}</span>`
+			? `<span class="breadcrumb">${titleHtml(match.title)}<span aria-hidden="true"> › </span>${titleHtml(topic.title)}</span>`
 			: "";
 	return `<div class="card-head">` + seekTimeButton(unit.start) + partChip + breadcrumb + `</div>`;
 }
@@ -883,7 +893,7 @@ function renderCard(unit: SessionUnit, ctx: CardContext): string {
 		`data-related-ids="${escapeHtml(unit.related_member_ids.join("|"))}" ` +
 		`data-embeddable="${(video?.embeddable ?? true) ? "true" : "false"}">` +
 		renderCardHead(unit, ctx) +
-		`<h3>${unitTitleHtml(unit.title)}</h3>` +
+		`<h3>${titleHtml(unit.title)}</h3>` +
 		(hasRoster ? `<p class="mention-badge" hidden></p>` : "") +
 		renderStartImage(unit.images.start, renderChipRow(unit)) +
 		(hasRoster ? renderMentionedLine(unit, ctx.members) : "") +
@@ -950,7 +960,7 @@ export function renderSession(data: SessionData): string {
 		`</div>`;
 
 	const body =
-		`<header class="header"><h1>${wrapNobr(escapeHtml(data.title))}</h1><p class="date">${escapeHtml(data.date)}</p></header>` +
+		`<header class="header"><h1>${titleHtml(data.title)}</h1><p class="date">${escapeHtml(data.date)}</p></header>` +
 		`<div class="layout">${sideCol}${main}</div>` +
 		`<footer class="footer"><p>${escapeHtml(FOOTER_NOTICE)}</p></footer>`;
 
@@ -967,7 +977,7 @@ function renderSessionCard(entry: IndexSessionEntry): string {
 	return (
 		`<a class="session-card" href="${escapeHtml(entry.href)}">` +
 		`<p class="date">${escapeHtml(entry.date)}</p>` +
-		`<h2>${wrapNobr(escapeHtml(entry.title))}</h2>` +
+		`<h2>${titleHtml(entry.title)}</h2>` +
 		`<p class="meta">${entry.videos}파트 · 피드백 ${entry.unit_count}개</p>` +
 		`<div class="topic-tags">${tags}</div>` +
 		`</a>`
@@ -991,9 +1001,9 @@ function renderIndexByTopic(index: ArchiveIndex): string {
 		.map((tag) => {
 			const units = index.units.filter((unit) => unit.topic_tags.includes(tag));
 			const items = units
-				.map((unit) => `<li><a class="toc-item" href="${escapeHtml(unit.href)}">${escapeHtml(unit.title)}</a></li>`)
+				.map((unit) => `<li><a class="toc-item" href="${escapeHtml(unit.href)}">${titleHtml(unit.title)}</a></li>`)
 				.join("");
-			return `<div class="toc-tag-group"><h3>${escapeHtml(tag)} (${units.length})</h3><ul>${items}</ul></div>`;
+			return `<div class="toc-tag-group"><h3>${titleHtml(tag)} (${units.length})</h3><ul>${items}</ul></div>`;
 		})
 		.join("");
 	return `<section id="by-topic"><h2>주제별 전체 피드백</h2>${groups}</section>`;
@@ -1026,22 +1036,25 @@ export function renderIndex(index: ArchiveIndex): string {
 const MAX_TRANSLATION_ROWS = 5;
 
 export function renderRef(ref: RefPageData): string {
-	const keyPoints = ref.key_points_ko.map((point) => `<li>${escapeHtml(point)}</li>`).join("");
+	const keyPoints = ref.key_points_ko.map((point) => `<li>${titleHtml(point)}</li>`).join("");
+	// row.orig is the foreign-language original sentence (DESIGN §10/§12: excluded from the CJK
+	// glue treatment, since it isn't Korean); row.ko is the Korean translation and goes through
+	// the same pipeline as every other Korean display field.
 	const rows = ref.translations
 		.slice(0, MAX_TRANSLATION_ROWS)
 		.map(
 			(row) =>
-				`<tr><td data-label="원문">${escapeHtml(row.orig)}</td><td data-label="한국어">${escapeHtml(row.ko)}</td></tr>`,
+				`<tr><td data-label="원문">${escapeHtml(row.orig)}</td><td data-label="한국어">${titleHtml(row.ko)}</td></tr>`,
 		)
 		.join("");
 
 	const html =
 		`<main class="ref-main">` +
-		`<h1>${wrapNobr(escapeHtml(ref.title))}</h1>` +
+		`<h1>${titleHtml(ref.title)}</h1>` +
 		`<p class="ref-badges"><span class="badge">${escapeHtml(ref.kind)}</span>` +
 		`<span class="badge">${escapeHtml(ref.lang.toUpperCase())}</span></p>` +
 		`<p class="plain-link"><a href="${escapeHtml(ref.url)}" target="_blank" rel="noopener">원문 ↗</a></p>` +
-		`<p class="summary-ko">${escapeHtml(ref.summary_ko)}</p>` +
+		`<p class="summary-ko">${titleHtml(ref.summary_ko)}</p>` +
 		(keyPoints ? `<ul class="key-points">${keyPoints}</ul>` : "") +
 		(rows
 			? `<table class="translations-table"><thead><tr><th>원문</th><th>한국어</th></tr></thead><tbody>${rows}</tbody></table>`
@@ -1120,7 +1133,10 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 /* The generic a{color:var(--accent)} rule fails contrast on this dark background
    (DESIGN §15-9) — --bg is already documented for white text over ink/accent (§2). */
 .player-placeholder-link { color: var(--bg); font-weight: 600; text-decoration: underline; }
-.player-mini-bar { position: absolute; inset: 0; display: none; align-items: center; padding: 0 var(--space-3); color: var(--bg); font-size: 0.8125rem; font-weight: 600; background: var(--ink); }
+/* Thin row below the video, never overlaid on the iframe (DESIGN §4, round-7 visual QA) —
+   hidden at ≥1024px alongside .player-collapse, where the collapse feature doesn't exist. */
+.player-toolbar { display: none; }
+.player-mini-bar-text { display: none; }
 .player-collapse { display: none; }
 
 .side { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--space-4); }
@@ -1311,13 +1327,20 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
   .side-col { display: contents; }
   .side { display: contents; }
   .main { display: contents; }
-  .player-wrapper { order: 1; position: sticky; top: 0; z-index: 10; aspect-ratio: auto; height: min(56.25vw, 200px); }
-  .player-wrapper.is-collapsed { height: 44px; }
-  .player-wrapper.is-collapsed .player-mini-bar { display: flex; }
-  .player-collapse { display: block; position: absolute; right: var(--space-2); bottom: var(--space-2); z-index: 1;
+  /* No control overlays the iframe (DESIGN §4, round-7 visual QA): .player-wrapper stacks
+     the video and a thin toolbar row as separate flex children instead of absolutely
+     positioning the collapse button on top of the video. */
+  .player-wrapper { order: 1; position: sticky; top: 0; z-index: 10; aspect-ratio: auto; height: auto;
+    display: flex; flex-direction: column; }
+  .player-media { position: relative; inset: auto; flex-shrink: 0; height: min(56.25vw, 200px); }
+  .player-wrapper.is-collapsed .player-media { height: 0; }
+  .player-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2);
+    flex-shrink: 0; min-height: 44px; padding: 0 var(--space-3); background: var(--ink); }
+  .player-mini-bar-text { margin-right: auto; color: var(--bg); font-size: 0.8125rem; font-weight: 600; }
+  .player-wrapper.is-collapsed .player-mini-bar-text { display: block; }
+  .player-collapse { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
     min-width: 44px; min-height: 44px; padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: var(--player-control-bg); color: var(--ink); font-size: 0.8125rem; font-weight: 600; }
-  .player-wrapper.is-collapsed .player-collapse { position: static; margin-left: auto; background: none; border: none; color: var(--bg); }
   .part-switch { order: 2; }
   .my-feedback { order: 3; }
   .filter-bar { order: 4; }
@@ -1413,7 +1436,10 @@ export const VIEWER_JS = `(function () {
   // selection change; a group's own selection never restricts its own options' counts) ──────
 
   function computeFacetCounts(attr, group) {
-    var counts = {};
+    // A tag or member id equal to "constructor"/"__proto__" etc. must never read back a
+    // prototype value through a plain {} lookup -- Object.create(null) has no prototype chain
+    // to leak through (REAL BUG, round-7 review, regression-tested below).
+    var counts = Object.create(null);
     var cards = document.querySelectorAll(".card");
     for (var i = 0; i < cards.length; i++) {
       var card = cards[i];
@@ -1463,8 +1489,20 @@ export const VIEWER_JS = `(function () {
     applyFacetCounts("mention", "data-member-ids");
   }
 
+  // Finds a chip by (group, value) via iteration + getAttribute comparison, never a
+  // concatenated CSS-attribute-selector string -- a tag or member id containing a double quote
+  // would otherwise break out of the ["..."] selector and throw (REAL BUG, round-7 review,
+  // regression-tested below). setSinglePressed above already uses this same safe pattern.
+  function findChipByValue(group, value) {
+    var chips = document.querySelectorAll('.chip-filter[data-group="' + group + '"]');
+    for (var i = 0; i < chips.length; i++) {
+      if (chips[i].getAttribute("data-value") === value) return chips[i];
+    }
+    return null;
+  }
+
   function mentionLabel(id) {
-    var chipEl = document.querySelector('.chip-filter[data-group="mention"][data-value="' + id + '"]');
+    var chipEl = findChipByValue("mention", id);
     return chipEl ? chipEl.getAttribute("data-label") || id : id;
   }
 
@@ -1475,7 +1513,7 @@ export const VIEWER_JS = `(function () {
     } else if (group === "topic") {
       var idx = selected.topic.indexOf(value);
       if (idx !== -1) selected.topic.splice(idx, 1);
-      var chipEl = document.querySelector('.chip-filter[data-group="topic"][data-value="' + value + '"]');
+      var chipEl = findChipByValue("topic", value);
       if (chipEl) chipEl.setAttribute("aria-pressed", "false");
     } else if (group === "mention") {
       selected.mention = null;
@@ -1768,22 +1806,28 @@ export const VIEWER_JS = `(function () {
   var currentEmbeddable = initialEmbeddable;
   var playerReady = false;
   var playerCreated = false;
-  var pendingQueue = [];
-
-  function enqueueOrRun(action) {
-    if (playerReady && window.fcPlayer) {
-      action(window.fcPlayer);
-    } else {
-      pendingQueue.push(action);
-    }
-  }
+  // The desired {videoId, start} once ready — a single slot each pre-ready click REPLACES
+  // wholesale, never a queue of past clicks. Two pre-ready clicks on different parts (e.g. a
+  // Part1 card at 180s, then a Part2 button at 0s) must leave only the SECOND click's target
+  // to apply once ready; a queue that appended both would flush the stale first seekTo(180)
+  // right after the player loads Part2 (REAL BUG, round-7 review, regression-tested below).
+  var pendingAction = null;
 
   function onPlayerReady(event) {
     playerReady = true;
     window.fcPlayer = event.target;
-    var queue = pendingQueue;
-    pendingQueue = [];
-    for (var i = 0; i < queue.length; i++) queue[i](window.fcPlayer);
+    var action = pendingAction;
+    pendingAction = null;
+    if (!action) return;
+    // The player may have been constructed with an EARLIER click's video (construction only
+    // ever runs once) while a LATER pre-ready click retargeted pendingAction to a different
+    // video -- only that case needs an actual load; the common case (constructed with this
+    // exact video already) just needs a seek, and only when a non-zero start was requested.
+    if (action.videoId === window.fcPlayer.getVideoData().video_id) {
+      if (action.start > 0) window.fcPlayer.seekTo(action.start, true);
+    } else {
+      window.fcPlayer.loadVideoById({ videoId: action.videoId, startSeconds: action.start });
+    }
   }
 
   function canCreatePlayer() {
@@ -1864,20 +1908,21 @@ export const VIEWER_JS = `(function () {
       currentVideo = videoId;
       syncPartButtons();
       ensurePlayer(videoId);
-      if (start > 0) enqueueOrRun(function (player) { player.seekTo(start, true); });
+      pendingAction = { videoId: videoId, start: start }; // playerCreated was just false, so playerReady can't be true yet either.
       updateMiniBar();
       return;
     }
-    if (videoId === currentVideo) {
-      enqueueOrRun(function (player) {
-        player.seekTo(start, true);
-        player.playVideo();
-      });
+    if (playerReady && window.fcPlayer) {
+      if (videoId === currentVideo) {
+        window.fcPlayer.seekTo(start, true);
+        window.fcPlayer.playVideo();
+      } else {
+        currentVideo = videoId;
+        window.fcPlayer.loadVideoById({ videoId: videoId, startSeconds: start });
+      }
     } else {
       currentVideo = videoId;
-      enqueueOrRun(function (player) {
-        player.loadVideoById({ videoId: videoId, startSeconds: start });
-      });
+      pendingAction = { videoId: videoId, start: start };
     }
     syncPartButtons();
     updateMiniBar();
