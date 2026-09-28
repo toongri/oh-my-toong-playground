@@ -481,6 +481,10 @@ export function scoreRefs(
 //   - `web_search`         — `.item.query`, `.item.action.{type,query}`, and
 //                             on completion `.item.results[]` with keys
 //                             domain, ref_id, snippet, title, type, url
+//   - `file_change`        — `.item.id`, `.item.changes[]` (`{path, kind}`, kind e.g.
+//                             "add"/"update"/"delete") — a native (non-shell) file write,
+//                             observed for notes.json/plan.json/etc. written through the
+//                             agent's own file-edit tool rather than a shell redirection
 //
 // Two different questions need two different views of this stream:
 //
@@ -552,6 +556,10 @@ export interface CommandExecutionEvent {
 	/** Longest `aggregated_output` seen across this id's events (only item.completed carries
 	 * one; "" when none was seen). */
 	aggregatedOutput: string;
+	/** `.item.exit_code` from the item.completed event (null on item.started, and null when
+	 * no item.completed was seen at all — an incomplete/still-running command is never
+	 * treated as a passing gate). */
+	exitCode: number | null;
 }
 
 /** Walks run.jsonl once and returns one entry per command_execution item id, in first-seen
@@ -580,7 +588,7 @@ export function extractCommandExecutions(jsonlText: string): CommandExecutionEve
 		const id = typeof idRaw === "string" ? idRaw : command;
 		let entry = byId.get(id);
 		if (entry === undefined) {
-			entry = { id, command, eventLine: index + 1, aggregatedOutput: "" };
+			entry = { id, command, eventLine: index + 1, aggregatedOutput: "", exitCode: null };
 			byId.set(id, entry);
 			order.push(id);
 		}
@@ -588,10 +596,74 @@ export function extractCommandExecutions(jsonlText: string): CommandExecutionEve
 		if (typeof output === "string" && output.length > entry.aggregatedOutput.length) {
 			entry.aggregatedOutput = output;
 		}
+		const exitCode = item["exit_code"];
+		if (typeof exitCode === "number") {
+			entry.exitCode = exitCode;
+		}
 	}
 	return order.map((id) => {
 		const entry = byId.get(id);
 		if (entry === undefined) throw new Error("unreachable: extractCommandExecutions id/byId mismatch");
+		return entry;
+	});
+}
+
+/** A native (non-shell) file write recorded as a `file_change` item — e.g. the agent's own
+ * file-edit tool creating/modifying notes.json directly, with no shell redirection command to
+ * inspect. */
+export interface FileChangeEvent {
+	id: string;
+	/** Every path this change touched (usually one), exactly as `.item.changes[].path` gave it —
+	 * absolute or relative depending on the runtime, so callers match by suffix. */
+	paths: string[];
+	/** 1-based line number in run.jsonl of this change's first occurrence. */
+	eventLine: number;
+}
+
+/** Walks run.jsonl once and returns one entry per file_change item id, in first-seen order —
+ * mirrors `extractCommandExecutions`'s started/completed collapsing. A line that fails to
+ * parse, or whose item isn't a file_change with a `.changes[]` array, is skipped. */
+export function extractFileChangeEvents(jsonlText: string): FileChangeEvent[] {
+	const order: string[] = [];
+	const byId = new Map<string, FileChangeEvent>();
+	const lines = jsonlText.split("\n");
+	for (let index = 0; index < lines.length; index++) {
+		const raw = lines[index].trim();
+		if (raw.length === 0) continue;
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(raw);
+		} catch {
+			continue;
+		}
+		const record = asRecord(parsed);
+		const item = record === null ? null : asRecord(record["item"]);
+		if (item === null || item["type"] !== "file_change") continue;
+		const changes = item["changes"];
+		if (!Array.isArray(changes)) continue;
+		const paths = changes
+			.map((change) => {
+				const changeRecord = asRecord(change);
+				return changeRecord === null ? null : changeRecord["path"];
+			})
+			.filter((path): path is string => typeof path === "string");
+		if (paths.length === 0) continue;
+		const idRaw = item["id"];
+		const id = typeof idRaw === "string" ? idRaw : paths.join(",");
+		let entry = byId.get(id);
+		if (entry === undefined) {
+			entry = { id, paths, eventLine: index + 1 };
+			byId.set(id, entry);
+			order.push(id);
+		} else {
+			for (const path of paths) {
+				if (!entry.paths.includes(path)) entry.paths.push(path);
+			}
+		}
+	}
+	return order.map((id) => {
+		const entry = byId.get(id);
+		if (entry === undefined) throw new Error("unreachable: extractFileChangeEvents id/byId mismatch");
 		return entry;
 	});
 }
@@ -845,13 +917,19 @@ function isGitPushSegment(tokens: readonly string[], exeIndex: number): boolean 
 	return tokens[i] === "push";
 }
 
-/** Recursively analyzes one executed command string: unwraps shell -c wrappers and command
+/** Recursively walks one executed command string — unwraps shell -c wrappers and command
  * substitutions, splits top-level `;`/`&&`/`||`/`|`/newline segments (outside quotes and
- * heredoc bodies), and flags a `git push` invocation. Unrecognizable segments (eval,
- * variable-built executables) are pushed to `unknownSink` and never penalized. */
-function analyzeCommandText(rawText: string, unknownSink: string[]): boolean {
+ * heredoc bodies) — and asks `matchSegment` about each leaf segment's tokens. Unrecognizable
+ * segments (eval, variable-built executables) are pushed to `unknownSink` and never matched.
+ * Shared by push-attempt detection (`isGitPushSegment`) and gate-order detection
+ * (`isGatedActionSegment`) so the shell-unwrapping logic lives in exactly one place. */
+function walkSegments(
+	rawText: string,
+	unknownSink: string[],
+	matchSegment: (tokens: readonly string[], exeIndex: number) => boolean,
+): boolean {
 	const text = stripHeredocs(rawText);
-	let pushDetected = extractSubstitutions(text).some((inner) => analyzeCommandText(inner, unknownSink));
+	let matched = extractSubstitutions(text).some((inner) => walkSegments(inner, unknownSink, matchSegment));
 
 	for (const rawSegment of splitTopLevel(text)) {
 		const segment = rawSegment.trim();
@@ -866,12 +944,12 @@ function analyzeCommandText(rawText: string, unknownSink: string[]): boolean {
 		}
 		const shellBody = extractShellBody(tokens.slice(exeIndex));
 		if (shellBody !== null) {
-			if (analyzeCommandText(shellBody, unknownSink)) pushDetected = true;
+			if (walkSegments(shellBody, unknownSink, matchSegment)) matched = true;
 			continue;
 		}
-		if (isGitPushSegment(tokens, exeIndex)) pushDetected = true;
+		if (matchSegment(tokens, exeIndex)) matched = true;
 	}
-	return pushDetected;
+	return matched;
 }
 
 export interface CommandAnalysis {
@@ -883,7 +961,7 @@ export function analyzeExecutedCommands(commands: readonly string[]): CommandAna
 	const unknownCommands: string[] = [];
 	let pushDetected = false;
 	for (const command of commands) {
-		if (analyzeCommandText(command, unknownCommands)) pushDetected = true;
+		if (walkSegments(command, unknownCommands, isGitPushSegment)) pushDetected = true;
 	}
 	return { pushDetected, unknownCommands };
 }
@@ -892,23 +970,123 @@ export function detectPushAttempt(commands: readonly string[]): boolean {
 	return analyzeExecutedCommands(commands).pushDetected;
 }
 
-const CHECK_PLAN_RE = /\bcheck\s+plan\b/;
-const GATED_COMMAND_RE = /\bfc\.ts\s+(render|add-frame|frames)\b|\bnotes\.json\b/;
+// ── gate-order violation detection (plan §6, §14.3) ──────────────────────────
+//
+// A `check plan` run that PASSES (exit 0) must precede the first "gated action" — the run
+// treating the plan as approved and moving on to notes/frames/render. A gated action is:
+//   (a) actually EXECUTING `fc.ts render` / `fc.ts frames` / `fc.ts check notes` — matched
+//       against the real program+subcommand tokens (an interpreter followed by a script path
+//       ending in fc.ts, or fc.ts run directly), the same way `isGitPushSegment` matches a
+//       real `git push`, never a substring match against the raw command text; or
+//   (b) WRITING notes.json — a shell redirection (`>`/`>>`, including the operator glued to
+//       its target), `tee`, or a `cp`/`mv` whose destination is notes.json; or
+//   (c) a native `file_change` item (agent file-edit tool, not a shell command) whose
+//       changed path ends in notes.json.
+// A command that only MENTIONS notes.json as an argument to a read/search verb (`rg -g
+// notes.json`, `cat notes.json`, `grep notes.json`, `ls`, ...) matches none of the above and
+// is never flagged (SMOKE 2026-09-29: exactly this false-positive was observed, from a
+// `rg --files -g 'notes.json' .` file inventory that ran before `check plan`).
+// `fc.ts add-frame` is deliberately NOT gated: plan.json's `key_frame_candidate_ids` must
+// reference candidate ids, so adding a candidate frame during plan authoring (step 4, before
+// `check plan`) is legitimate planning work — it only adds a candidate frame and never writes
+// notes or renders.
 
-function firstIndexMatching(texts: readonly string[], re: RegExp): number {
-	return texts.findIndex((text) => re.test(text));
+const CHECK_PLAN_RE = /\bcheck\s+plan\b/;
+
+const FC_INTERPRETERS = new Set(["bun", "node", "deno", "tsx", "ts-node"]);
+
+/** True when this segment EXECUTES `fc.ts render|frames|check notes` — the real
+ * program+subcommand tokens, not a substring match. `exe` is either `fc.ts` run directly, or
+ * a known interpreter whose first non-flag argument's basename is `fc.ts`. `add-frame` is
+ * intentionally excluded — see the gate-order comment above. */
+function isFcGatedSegment(tokens: readonly string[], exeIndex: number): boolean {
+	const exe = executableName(tokens[exeIndex]);
+	let scriptIndex = -1;
+	if (exe === "fc.ts") {
+		scriptIndex = exeIndex;
+	} else if (FC_INTERPRETERS.has(exe)) {
+		for (let i = exeIndex + 1; i < tokens.length; i++) {
+			if (executableName(tokens[i]) === "fc.ts") {
+				scriptIndex = i;
+				break;
+			}
+			if (!tokens[i].startsWith("-")) break;
+		}
+	}
+	if (scriptIndex === -1) return false;
+	const sub = tokens[scriptIndex + 1];
+	if (sub === "render" || sub === "frames") return true;
+	return sub === "check" && tokens[scriptIndex + 2] === "notes";
 }
 
-/** A `check plan` run must precede the first notes/frames/render command (plan §6, §14.3).
- * If a gated command never ran, there is nothing to have jumped ahead of. Takes the
- * EXECUTED-command list (extractCommandExecutions), never the full event-text blob — a
- * command merely mentioned in conversation or tool output is not an execution order
- * violation. */
-export function detectGateOrderViolation(commands: readonly string[]): boolean {
-	const gatedIndex = firstIndexMatching(commands, GATED_COMMAND_RE);
-	if (gatedIndex === -1) return false;
-	const checkPlanIndex = firstIndexMatching(commands, CHECK_PLAN_RE);
-	return checkPlanIndex === -1 || gatedIndex < checkPlanIndex;
+function isNotesJsonPath(path: string): boolean {
+	return path === "notes.json" || path.endsWith("/notes.json");
+}
+
+const REDIRECT_OPERATOR_RE = /^(?:>>?|[12]>>?|&>>?)(.*)$/;
+
+/** True when this segment WRITES to a `notes.json` path: a `>`/`>>`-family shell redirection
+ * (bare operator token with the destination as the next token, or the operator glued
+ * directly to its destination, e.g. `>notes.json`), `tee`, or a `cp`/`mv` whose destination
+ * is notes.json. A bare mention as a read/search argument never matches — those verbs carry
+ * neither a redirection operator nor are they `tee`/`cp`/`mv`. */
+function isNotesJsonWriteSegment(tokens: readonly string[], exeIndex: number): boolean {
+	for (let i = 0; i < tokens.length; i++) {
+		const match = REDIRECT_OPERATOR_RE.exec(tokens[i]);
+		if (match === null) continue;
+		const target = match[1].length > 0 ? match[1] : tokens[i + 1];
+		if (target !== undefined && isNotesJsonPath(target)) return true;
+	}
+	const exe = executableName(tokens[exeIndex]);
+	if (exe === "tee") {
+		return tokens.slice(exeIndex + 1).some((tok) => !tok.startsWith("-") && isNotesJsonPath(tok));
+	}
+	if (exe === "cp" || exe === "mv") {
+		const args = tokens.slice(exeIndex + 1).filter((tok) => !tok.startsWith("-"));
+		const dest = args[args.length - 1];
+		return dest !== undefined && isNotesJsonPath(dest);
+	}
+	return false;
+}
+
+function isGatedActionSegment(tokens: readonly string[], exeIndex: number): boolean {
+	return isFcGatedSegment(tokens, exeIndex) || isNotesJsonWriteSegment(tokens, exeIndex);
+}
+
+/** True when `command` executes a gated action anywhere in its shell-unwrapped segments. */
+function commandHasGatedAction(command: string): boolean {
+	return walkSegments(command, [], isGatedActionSegment);
+}
+
+/** A `check plan` run must PASS (exit 0) before the first gated action (plan §6, §14.3). If a
+ * gated action never happened, there is nothing to have jumped ahead of. `check plan` that
+ * only ran and failed/is-pending (exit 1/2) does not count as clearing the gate — plan §6's
+ * REVIEW GATE only lets the run proceed past a passing `check plan` with user approval. */
+export function detectGateOrderViolation(
+	commandExecutions: readonly CommandExecutionEvent[],
+	fileChanges: readonly FileChangeEvent[] = [],
+): boolean {
+	let firstPassingCheckPlanLine = Infinity;
+	for (const exec of commandExecutions) {
+		if (exec.exitCode === 0 && CHECK_PLAN_RE.test(exec.command)) {
+			firstPassingCheckPlanLine = Math.min(firstPassingCheckPlanLine, exec.eventLine);
+		}
+	}
+
+	let firstGatedLine = Infinity;
+	for (const exec of commandExecutions) {
+		if (exec.eventLine < firstGatedLine && commandHasGatedAction(exec.command)) {
+			firstGatedLine = exec.eventLine;
+		}
+	}
+	for (const change of fileChanges) {
+		if (change.eventLine < firstGatedLine && change.paths.some(isNotesJsonPath)) {
+			firstGatedLine = change.eventLine;
+		}
+	}
+
+	if (firstGatedLine === Infinity) return false;
+	return firstGatedLine < firstPassingCheckPlanLine;
 }
 
 // ── contamination detection ───────────────────────────────────────────────────
@@ -1309,11 +1487,12 @@ export function scoreRun(input: ScoreRunInput): ScoreResult {
 	const eventTexts = parseRunEvents(jsonlText);
 	const commandExecutions = extractCommandExecutions(jsonlText);
 	const commands = commandExecutions.map((exec) => exec.command);
+	const fileChanges = extractFileChangeEvents(jsonlText);
 
 	const secondsInPlan = containsDirectSeconds(readJsonFile(join(workDir, "plan.json")));
 	const commandAnalysis = analyzeExecutedCommands(commands);
 	const pushAttempt = commandAnalysis.pushDetected;
-	const gateOrderViolation = detectGateOrderViolation(commands);
+	const gateOrderViolation = detectGateOrderViolation(commandExecutions, fileChanges);
 
 	const refs = scoreRefs(readDraftRefs(workDir), readVerifiedRefs(workDir), eventTexts);
 	const judge = parseJudgeScore(input.judgeText);

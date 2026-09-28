@@ -15,6 +15,7 @@ import {
 	type CheckOutcome,
 	type CheckRunner,
 	type CommandExecutionEvent,
+	type FileChangeEvent,
 	type Gold,
 	type PredictedUnit,
 	analyzeExecutedCommands,
@@ -25,6 +26,7 @@ import {
 	detectGateOrderViolation,
 	detectPushAttempt,
 	extractCommandExecutions,
+	extractFileChangeEvents,
 	matchUnits,
 	parseCliArgs,
 	parseGold,
@@ -292,6 +294,7 @@ describe("실행된 명령 추출(item id 중복 제거)", () => {
 			command: "git status",
 			eventLine: 1,
 			aggregatedOutput: "nothing to commit",
+			exitCode: 0,
 		});
 	});
 
@@ -301,6 +304,39 @@ describe("실행된 명령 추출(item id 중복 제거)", () => {
 			item: { type: "agent_message", text: "git push origin main을 언급만 했다" },
 		});
 		expect(extractCommandExecutions(jsonl)).toHaveLength(0);
+	});
+});
+
+describe("file_change 이벤트 추출(item id 중복 제거)", () => {
+	test("started/completed 쌍은 하나로 합치고 변경 경로를 모은다", () => {
+		const jsonl = [
+			JSON.stringify({
+				type: "item.started",
+				item: {
+					id: "item_1",
+					type: "file_change",
+					changes: [{ path: "/work/notes.json", kind: "add" }],
+				},
+			}),
+			JSON.stringify({
+				type: "item.completed",
+				item: {
+					id: "item_1",
+					type: "file_change",
+					changes: [{ path: "/work/notes.json", kind: "add" }],
+				},
+			}),
+		].join("\n");
+		const changes = extractFileChangeEvents(jsonl);
+		expect(changes).toEqual([{ id: "item_1", paths: ["/work/notes.json"], eventLine: 1 }]);
+	});
+
+	test("command_execution 등 다른 item.type은 무시한다", () => {
+		const jsonl = JSON.stringify({
+			type: "item.completed",
+			item: { type: "command_execution", id: "item_1", command: "cat notes.json" },
+		});
+		expect(extractFileChangeEvents(jsonl)).toHaveLength(0);
 	});
 });
 
@@ -350,18 +386,94 @@ describe("규율 위반 탐지: push 시도(실행된 명령만 검사, plan §1
 	});
 });
 
-describe("규율 위반 탐지: gate 순서(실행된 명령만 검사, plan §14.3 수정)", () => {
-	test("check plan보다 먼저 render/frames가 실행되면 위반이다", () => {
-		expect(detectGateOrderViolation(["fc.ts render", "bun fc.ts check plan --work ."])).toBe(true);
-		expect(detectGateOrderViolation(["bun fc.ts check plan --work .", "fc.ts render"])).toBe(false);
-		expect(detectGateOrderViolation(["bun fc.ts check notes --work .", "fc.ts add-frame"])).toBe(
-			true,
-		);
+describe("규율 위반 탐지: gate 순서(실행된 명령·file_change만 검사, plan §14.3 수정)", () => {
+	test("check plan보다 먼저 render가 실행되면 위반이다", () => {
+		expect(
+			detectGateOrderViolation([
+				commandEvent("fc.ts render", { eventLine: 1 }),
+				commandEvent("bun fc.ts check plan --work .", { eventLine: 2 }),
+			]),
+		).toBe(true);
+		expect(
+			detectGateOrderViolation([
+				commandEvent("bun fc.ts check plan --work .", { eventLine: 1 }),
+				commandEvent("fc.ts render", { eventLine: 2 }),
+			]),
+		).toBe(false);
+		expect(
+			detectGateOrderViolation([
+				commandEvent("bun fc.ts check notes --work .", { eventLine: 1 }),
+				commandEvent("fc.ts frames", { eventLine: 2 }),
+			]),
+		).toBe(true);
+	});
+
+	test("add-frame는 게이트 대상이 아니다 — check plan 통과 전에 실행돼도, 그 뒤 notes.json을 써도 위반이 아니다", () => {
+		// plan.json의 key_frame_candidate_ids는 후보 프레임 id를 참조해야 하므로, check plan 전
+		// 4단계(플랜 작성) 중의 add-frame 실행은 정당한 작업이다 — 후보 프레임만 추가할 뿐 notes를
+		// 쓰거나 렌더링하지 않는다.
+		expect(
+			detectGateOrderViolation([
+				commandEvent("fc.ts add-frame", { eventLine: 1, exitCode: 0 }),
+				commandEvent("bun fc.ts check plan --work .", { eventLine: 2, exitCode: 0 }),
+				commandEvent("cat > work/notes.json <<'JSON'\n{}\nJSON", { eventLine: 3 }),
+			]),
+		).toBe(false);
 	});
 
 	test("게이트 대상 명령을 아예 실행하지 않았으면 위반이 아니다", () => {
-		expect(detectGateOrderViolation(["bun fc.ts check plan --work ."])).toBe(false);
-		expect(detectGateOrderViolation(["echo hello"])).toBe(false);
+		expect(
+			detectGateOrderViolation([commandEvent("bun fc.ts check plan --work .", { eventLine: 1 })]),
+		).toBe(false);
+		expect(detectGateOrderViolation([commandEvent("echo hello", { eventLine: 1 })])).toBe(false);
+	});
+
+	test("notes.json을 언급만 하는 읽기/검색 명령은 게이트 위반이 아니다(substring 오탐 수정)", () => {
+		// SMOKE 2026-09-29 round-1 sol-2: 첫 명령이 `rg --files -g 'notes.json' .` 파일 목록
+		// 조회였다 — notes.json을 쓰지도, fc.ts를 실행하지도 않았으므로 위반이 아니다.
+		expect(
+			detectGateOrderViolation([
+				commandEvent("rg --files -g 'notes.json' .", { eventLine: 1 }),
+				commandEvent("bun fc.ts check plan --work .", { eventLine: 2 }),
+			]),
+		).toBe(false);
+	});
+
+	test("notes.json에 대한 셸 리다이렉션 쓰기는 check plan 전이면 위반이다", () => {
+		expect(
+			detectGateOrderViolation([
+				commandEvent("cat > work/notes.json <<'JSON'\n{}\nJSON", { eventLine: 1 }),
+				commandEvent("bun fc.ts check plan --work .", { eventLine: 2 }),
+			]),
+		).toBe(true);
+	});
+
+	test("file_change로 notes.json이 기록되면 check plan 전이면 위반이다", () => {
+		expect(
+			detectGateOrderViolation(
+				[commandEvent("bun fc.ts check plan --work .", { eventLine: 2 })],
+				[fileChangeEvent("/work/notes.json", { eventLine: 1 })],
+			),
+		).toBe(true);
+	});
+
+	test("check plan 통과 후의 render는 위반이 아니다", () => {
+		expect(
+			detectGateOrderViolation([
+				commandEvent("bun fc.ts check plan --work .", { eventLine: 1, exitCode: 0 }),
+				commandEvent("bun fc.ts render --work .", { eventLine: 2 }),
+			]),
+		).toBe(false);
+	});
+
+	test("check plan이 실패(exit 1)한 뒤 notes를 쓰고 나중에 통과해도 여전히 위반이다", () => {
+		expect(
+			detectGateOrderViolation([
+				commandEvent("bun fc.ts check plan --work .", { eventLine: 1, exitCode: 1 }),
+				commandEvent("cat > work/notes.json <<'JSON'\n{}\nJSON", { eventLine: 2 }),
+				commandEvent("bun fc.ts check plan --work .", { eventLine: 3, exitCode: 0 }),
+			]),
+		).toBe(true);
 	});
 
 	test("plan.json 어디든 start/end/t/time/seconds 같은 숫자 시간 필드가 있으면 감점 대상이다", () => {
@@ -545,7 +657,11 @@ function commandEvent(
 	command: string,
 	overrides: Partial<CommandExecutionEvent> = {},
 ): CommandExecutionEvent {
-	return { id: "item_1", command, eventLine: 1, aggregatedOutput: "", ...overrides };
+	return { id: "item_1", command, eventLine: 1, aggregatedOutput: "", exitCode: 0, ...overrides };
+}
+
+function fileChangeEvent(path: string, overrides: Partial<FileChangeEvent> = {}): FileChangeEvent {
+	return { id: "item_1", paths: [path], eventLine: 1, ...overrides };
 }
 
 describe("오염 탐지", () => {
