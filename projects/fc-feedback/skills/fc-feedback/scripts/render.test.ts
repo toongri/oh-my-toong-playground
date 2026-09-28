@@ -11,6 +11,7 @@ import {
 	type SessionData,
 	type SessionMemberInfo,
 	type SessionUnit,
+	type UnitBodyFrameBlock,
 } from "./render.ts";
 
 // ── fixtures ─────────────────────────────────────────────────────────────
@@ -49,10 +50,9 @@ function baseUnit(overrides: Partial<SessionUnit>): SessionUnit {
 		related_member_ids: relatedMembers({ member_ids: ["hong"], position_tags: ["FB"] }, ROSTER).map(
 			(member) => member.id,
 		),
-		note: { problem: "라인이 늘어짐", who: "홍길동", instead: "간격을 좁혀야 함" },
+		body: [{ type: "text", text: "라인이 **홍길동** 기준으로 늘어짐. 간격을 좁혀야 함" }],
 		images: {
 			start: { src: "img/u001-start.webp", width: 1280, height: 720 },
-			key: [],
 		},
 		similar: [],
 		refs: [],
@@ -77,13 +77,8 @@ function sampleData(): SessionData {
 		related_member_ids: relatedMembers({ member_ids: [], position_tags: ["GK"] }, ROSTER).map(
 			(member) => member.id,
 		),
-		note: {
-			problem: "캐칭이 불안정함",
-			who: "박영희",
-			instead: "펀칭 대신 캐칭 연습",
-			detail: "다음 세션에서 재확인",
-		},
-		images: { start: { src: "img/u002-start.webp", width: 1280, height: 720 }, key: [] },
+		body: [{ type: "text", text: "**박영희**의 캐칭이 불안정함. 펀칭 대신 캐칭 연습이 필요함" }],
+		images: { start: { src: "img/u002-start.webp", width: 1280, height: 720 } },
 		similar: [
 			{
 				uid: "20230101-XXXXXXXXXXX#u002",
@@ -118,10 +113,19 @@ function sampleData(): SessionData {
 		related_member_ids: relatedMembers({ member_ids: ["choi"], position_tags: ["ST"] }, ROSTER).map(
 			(member) => member.id,
 		),
-		note: { problem: "전환이 느림", who: "최민수", instead: "패스 템포를 올려야 함" },
+		body: [
+			{ type: "text", text: "**최민수**의 전환이 느림. 패스 템포를 올려야 함" },
+			{
+				type: "frame",
+				src: "img/u003-c001.webp",
+				width: 1280,
+				height: 720,
+				t: 105,
+				caption: "역습 시작 지점",
+			},
+		],
 		images: {
 			start: { src: "img/u003-start.webp", width: 1280, height: 720 },
-			key: [{ src: "img/u003-key1.webp", caption: "역습 시작 지점", t: 105 }],
 		},
 		watch_url: "https://youtu.be/AAAAAAAAAAA?t=100",
 	});
@@ -223,6 +227,21 @@ interface ViewerWindow {
 		addListener: () => void;
 		removeListener: () => void;
 	};
+	YT?: { Player: typeof StubPlayer; loaded: boolean };
+	onYouTubeIframeAPIReady?: () => void;
+}
+
+/** Runs VIEWER_JS via the `new Function("window","document","YT", src)` harness (source now reads `window.YT`, so this also sets `win.YT`). */
+function runViewer(win: ViewerWindow, yt: { Player: typeof StubPlayer; loaded: boolean } | undefined): void {
+	const run = new Function("window", "document", "YT", VIEWER_JS) as (
+		windowArg: unknown,
+		documentArg: unknown,
+		ytArg: unknown,
+	) => void;
+	if (yt !== undefined) {
+		win.YT = yt;
+	}
+	run(win, win.document, yt);
 }
 
 /** Parses `html` into a linkedom DOM, stubs scrollIntoView/matchMedia, and runs VIEWER_JS. */
@@ -234,13 +253,7 @@ function mountViewer(
 	const win = dom as unknown as ViewerWindow;
 	win.Element.prototype.scrollIntoView = () => {};
 	win.matchMedia = () => ({ matches: false, addListener: () => {}, removeListener: () => {} });
-	const yt = { Player: StubPlayer, loaded: ytLoaded };
-	const run = new Function("window", "document", "YT", VIEWER_JS) as (
-		windowArg: unknown,
-		documentArg: unknown,
-		ytArg: unknown,
-	) => void;
-	run(win, win.document, yt);
+	runViewer(win, { Player: StubPlayer, loaded: ytLoaded });
 	const stub = win.fcPlayer instanceof StubPlayer ? win.fcPlayer : null;
 	return { win, doc: win.document, stub };
 }
@@ -267,9 +280,10 @@ describe("escapeHtml 전면 적용", () => {
 		const data = sampleData();
 		data.title = XSS_PAYLOAD;
 		data.units[0].title = XSS_PAYLOAD;
-		data.units[0].note.problem = XSS_PAYLOAD;
-		data.units[0].note.who = XSS_PAYLOAD;
-		data.units[0].note.instead = XSS_PAYLOAD;
+		data.units[0].body = [
+			{ type: "text", text: XSS_PAYLOAD },
+			{ type: "frame", src: XSS_PAYLOAD, width: 100, height: 100, t: 1, caption: XSS_PAYLOAD },
+		];
 		data.units[0].topic_tags = [XSS_PAYLOAD];
 		data.units[0].member_ids = ["hong"];
 		data.members[0].name = XSS_PAYLOAD;
@@ -277,7 +291,6 @@ describe("escapeHtml 전면 적용", () => {
 		data.matches[0].title = XSS_PAYLOAD;
 		data.matches[0].topics[0].title = XSS_PAYLOAD;
 		data.matches[0].topics[0].summary = XSS_PAYLOAD;
-		data.units[0].images.key = [{ src: XSS_PAYLOAD, caption: XSS_PAYLOAD, t: 1 }];
 		data.units[0].similar = [
 			{ uid: "x", title: XSS_PAYLOAD, date: XSS_PAYLOAD, href: XSS_PAYLOAD },
 		];
@@ -455,23 +468,52 @@ describe("카드 해부", () => {
 		expect(img?.getAttribute("src")).toBe(data.units[0].images.start.src);
 	});
 
-	test("노트 dl은 문제·누구·대신 순서를 가진다", () => {
-		const doc = parseHTML(renderSession(sampleData())).document;
-		const card = doc.getElementById("u002"); // has an optional detail field too
-		const dl = card?.querySelector("dl.note-dl");
-		const labels = [...(dl?.querySelectorAll("dt") ?? [])].map((el) => el.textContent);
-		expect(labels).toEqual(["문제", "누구", "대신", "상세"]);
+	test("본문은 문단과 프레임을 작성 순서대로 렌더한다", () => {
+		const data = sampleData();
+		data.units[0].body = [
+			{ type: "text", text: "첫 문단" },
+			{ type: "frame", src: "img/u001-c001.webp", width: 1280, height: 720, t: 760, caption: "장면 1" },
+			{ type: "text", text: "둘째 문단" },
+		];
+		const doc = parseHTML(renderSession(data)).document;
+		const body = doc.getElementById("u001")?.querySelector(".card-body");
+		const tags = [...(body?.children ?? [])].map((el) => el.tagName.toLowerCase());
+		expect(tags).toEqual(["p", "figure", "p"]);
+	});
+
+	test("본문 굵게는 strong으로만 변환되고 나머지는 이스케이프된다", () => {
+		const data = sampleData();
+		data.units[0].body = [{ type: "text", text: "**<b>x</b>** y<script>" }];
+		const doc = parseHTML(renderSession(data)).document;
+		const p = doc.getElementById("u001")?.querySelector(".card-body p");
+		expect(p?.innerHTML).toBe("<strong>&lt;b&gt;x&lt;/b&gt;</strong> y&lt;script&gt;");
+	});
+
+	test("본문 프레임 클릭은 그 시각으로 seek한다", () => {
+		const data = sampleData();
+		data.units[0].body = [
+			{ type: "text", text: "문단입니다" },
+			{ type: "frame", src: "img/u001-c001.webp", width: 1280, height: 720, t: 760, caption: "장면" },
+		];
+		const { doc, stub } = mountViewer(renderSession(data), true);
+		stub?.fireReady();
+		click(doc.querySelector("#u001 .body-frame"));
+		const seekCall = stub?.calls.find((call) => call.method === "seekTo");
+		expect(seekCall?.args[0]).toBe(760);
+		expect(stub?.calls.some((call) => call.method === "playVideo")).toBe(true);
 	});
 
 	test("중요 이미지는 캡션과 함께 렌더된다", () => {
 		const data = sampleData();
 		const doc = parseHTML(renderSession(data)).document;
 		const card = doc.getElementById("u003");
-		const figure = card?.querySelector(".key-images figure");
-		expect(figure?.querySelector("img")?.getAttribute("src")).toBe(data.units[2].images.key[0].src);
-		expect(figure?.querySelector("figcaption")?.textContent).toBe(
-			data.units[2].images.key[0].caption,
+		const figure = card?.querySelector(".card-body .body-frame");
+		const frameBlock = data.units[2].body.find(
+			(block): block is UnitBodyFrameBlock => block.type === "frame",
 		);
+		expect(frameBlock).toBeDefined();
+		expect(figure?.querySelector("img")?.getAttribute("src")).toBe(frameBlock?.src);
+		expect(figure?.querySelector("figcaption")?.textContent).toContain(frameBlock?.caption ?? "");
 	});
 
 	test("관련 팀원 목록은 relatedMembers 결과와 같다", () => {
@@ -666,5 +708,14 @@ describe("영상 전환", () => {
 		const { doc } = mountViewer(renderSession(sampleData()), true);
 		click(doc.getElementById("u002"));
 		expect(doc.body.getAttribute("data-video")).toBe("BBBBBBBBBBB");
+	});
+
+	test("YT가 정의되기 전에 로드돼도 onYouTubeIframeAPIReady를 등록한다", () => {
+		const dom = parseHTML(renderSession(sampleData()));
+		const win = dom as unknown as ViewerWindow;
+		win.Element.prototype.scrollIntoView = () => {};
+		win.matchMedia = () => ({ matches: false, addListener: () => {}, removeListener: () => {} });
+		expect(() => runViewer(win, undefined)).not.toThrow();
+		expect(typeof win.onYouTubeIframeAPIReady).toBe("function");
 	});
 });

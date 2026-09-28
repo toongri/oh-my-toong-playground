@@ -200,6 +200,19 @@ describe("fc-feedback CLI", () => {
 		expect(() => readFileSync(join(archive, "robots.txt"), "utf8")).toThrow();
 	});
 
+	test("init-archive의 빈 index.html은 renderIndex로 렌더되어 footer 안내문과 viewport meta를 가진다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		const archive = tempDir();
+
+		const result = run(["init-archive", "--archive", archive], { cwd, home });
+		expect(result.exitCode).toBe(0);
+
+		const indexHtml = readFileSync(join(archive, "index.html"), "utf8");
+		expect(indexHtml).toContain("팀 내부 피드백용 비공식 정리 문서입니다");
+		expect(indexHtml).toContain('name="viewport"');
+	});
+
 	test("init-archive를 두 번 실행하면 두 번째는 전부 skipped로 멱등이다", () => {
 		const cwd = repo();
 		const home = tempDir();
@@ -773,9 +786,14 @@ describe("fc-feedback CLI", () => {
 		writeFileSync(
 			join(work, "notes.json"),
 			JSON.stringify({
-				version: 1,
+				version: 2,
 				units: {
-					u001: { problem: "문제", who: "누구", instead: "대신", key_frames: [{ candidate_id: "c001", caption: "캡션" }] },
+					u001: {
+						blocks: [
+							{ type: "text", text: "문제는 누구 때문이며 대신 이렇게 해야 함" },
+							{ type: "frame", candidate_id: "c001", caption: "캡션" },
+						],
+					},
 				},
 			}),
 		);
@@ -813,7 +831,10 @@ describe("fc-feedback CLI", () => {
 		const dataJson = JSON.parse(readFileSync(join(sessionDir, "data.json"), "utf8"));
 		expect(dataJson.units).toHaveLength(1);
 		expect(dataJson.units[0].images.start).toEqual({ src: "img/u001-start.webp", width: 1, height: 1 });
-		expect(dataJson.units[0].images.key).toEqual([{ src: "img/u001-c001.webp", caption: "캡션", t: 2 }]);
+		expect(dataJson.units[0].body).toEqual([
+			{ type: "text", text: "문제는 누구 때문이며 대신 이렇게 해야 함" },
+			{ type: "frame", src: "img/u001-c001.webp", width: 1, height: 1, t: 2, caption: "캡션" },
+		]);
 		expect(dataJson.units[0].uid).toBe(`${sessionId}#u001`);
 		expect(dataJson.units[0].watch_url).toBe("https://youtu.be/NUzEChn9EyI?t=0");
 
@@ -957,11 +978,13 @@ describe("fc-feedback CLI", () => {
 			writeFileSync(join(currentImgDir, `${unit.id}-start.webp`), tinyWebp());
 		}
 		const notes = JSON.parse(readFileSync(join(workCurrent, "notes.json"), "utf8")) as {
-			units: Record<string, { key_frames: { candidate_id: string }[] }>;
+			units: Record<string, { blocks: { type: string; candidate_id?: string }[] }>;
 		};
 		for (const [unitId, entry] of Object.entries(notes.units)) {
-			for (const frame of entry.key_frames) {
-				writeFileSync(join(currentImgDir, `${unitId}-${frame.candidate_id}.webp`), tinyWebp());
+			for (const block of entry.blocks) {
+				if (block.type === "frame" && block.candidate_id !== undefined) {
+					writeFileSync(join(currentImgDir, `${unitId}-${block.candidate_id}.webp`), tinyWebp());
+				}
 			}
 		}
 

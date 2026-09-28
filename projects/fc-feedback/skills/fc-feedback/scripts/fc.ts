@@ -51,6 +51,8 @@ import {
 	VID_PATTERN,
 	type CurrentUnit,
 	type Line,
+	type NoteBlock,
+	type NotesV2,
 	type PastUnit,
 	type Roster,
 	type SimilarCandidate,
@@ -97,8 +99,7 @@ import {
 	type SessionData,
 	type SessionMemberInfo,
 	type SessionUnit,
-	type UnitKeyImage,
-	type UnitNote,
+	type UnitBodyBlock,
 	type UnitRef,
 	type UnitSimilar,
 	type UnitStartImage,
@@ -338,18 +339,9 @@ function handleConfigSet(rest: readonly string[]): FcStatus {
 
 // ── init-archive ──────────────────────────────────────────────────────────
 
-const INDEX_HTML_PLACEHOLDER = `<!doctype html>
-<html lang="ko">
-<head>
-<meta charset="utf-8">
-<meta name="robots" content="noindex, nofollow">
-<title>fc-feedback</title>
-</head>
-<body>
-<p>아직 발행된 세션이 없어요.</p>
-</body>
-</html>
-`;
+function emptyIndexHtml(): string {
+	return renderIndex({ version: 1, updated_at: new Date().toISOString(), sessions: [], units: [], refs: [] });
+}
 
 const ROSTER_TEMPLATE = `# fc-feedback roster.yaml
 # members: 각 항목은 id(소문자/숫자/하이픈 시작), name, gamertag(대소문자 무시 유일),
@@ -379,7 +371,7 @@ function cmdInitArchive(archiveDir: string): InitArchiveResult {
 	const skipped: string[] = [];
 
 	const files: { name: string; content: () => string }[] = [
-		{ name: "index.html", content: () => INDEX_HTML_PLACEHOLDER },
+		{ name: "index.html", content: emptyIndexHtml },
 		{
 			name: "index.json",
 			content: () =>
@@ -1112,8 +1104,9 @@ function handleCheckPlan(workDir: string, status: FcStatus): number {
 function handleCheckNotes(workDir: string, status: FcStatus): number {
 	ensureWorkDir(workDir, status);
 	const validated = toValidatedPlan(readJsonFile(join(workDir, "plan.validated.json"), "plan.validated.json"));
+	const candidates = readCandidates(workDir);
 	const notes = readJsonFile(join(workDir, "notes.json"), "notes.json");
-	const result = checkNotes(notes, validated);
+	const result = checkNotes(notes, validated, candidates);
 	if (result.errors.length > 0) {
 		throw new Error(JSON.stringify(result.errors));
 	}
@@ -1208,65 +1201,49 @@ function handleTaxonomyAdd(tags: readonly string[], workDir: string, status: FcS
 	return { path, added, already_present: alreadyPresent };
 }
 
-// ── frames (plan §7 T6) ───────────────────────────────────────────────────
+// ── frames (plan §7 T6, notes v2 plan §16-1) ────────────────────────────────
 //
-// One start frame per validated unit, plus one frame per notes.json key_frame
-// candidate — extracted via media.ffmpegFrameArgs into work dir img/. The
-// job list (planFrameJobs) is pure so it stays testable without ffmpeg.
+// One start frame per validated unit, plus one frame per notes.json v2 frame
+// block — extracted via media.ffmpegFrameArgs into work dir img/. The job
+// list (planFrameJobs) is pure so it stays testable without ffmpeg.
 
-interface NoteKeyFrame {
-	candidate_id: string;
-	caption: string;
-}
-
-// note 항목은 candidate_id만 쓰는 cmdFrames와, problem/who/instead/detail까지 쓰는
-// cmdRender가 함께 읽는다(같은 notes.json을 두 번 다르게 파싱하지 않기 위해 한 타입으로 통합).
-interface NoteEntry {
-	problem: string;
-	who: string;
-	instead: string;
-	detail?: string;
-	key_frames: NoteKeyFrame[];
-}
-
-interface NotesFile {
-	units: Record<string, NoteEntry>;
-}
-
-function toNoteKeyFrame(raw: unknown): NoteKeyFrame {
+// blocks는 candidate_id만 쓰는 cmdFrames와, text/caption까지 쓰는 cmdRender가 함께
+// 읽는다(같은 notes.json을 두 번 다르게 파싱하지 않기 위해 core.ts의 NotesV2 모양을 그대로 쓴다).
+function toNoteBlock(raw: unknown, unitId: string, index: number): NoteBlock {
+	const path = `units.${unitId}.blocks[${index}]`;
 	if (!isRecord(raw)) {
-		throw new Error("fc-feedback: notes.json의 key_frames 항목이 올바르지 않습니다");
+		throw new Error(`fc-feedback: notes.json의 ${path}가 올바르지 않습니다`);
 	}
-	return {
-		candidate_id: str(raw.candidate_id, "key_frame.candidate_id"),
-		caption: typeof raw.caption === "string" ? raw.caption : "",
-	};
+	if (raw.type === "text") {
+		return { type: "text", text: str(raw.text, `${path}.text`) };
+	}
+	if (raw.type === "frame") {
+		return {
+			type: "frame",
+			candidate_id: str(raw.candidate_id, `${path}.candidate_id`),
+			caption: str(raw.caption, `${path}.caption`),
+		};
+	}
+	throw new Error(`fc-feedback: notes.json의 ${path}.type이 올바르지 않습니다`);
 }
 
-function toNoteEntry(raw: unknown, unitId: string): NoteEntry {
-	if (!isRecord(raw)) {
+function toNoteUnit(raw: unknown, unitId: string): { blocks: NoteBlock[] } {
+	if (!isRecord(raw) || !Array.isArray(raw.blocks)) {
 		throw new Error(`fc-feedback: notes.json의 units.${unitId}가 올바르지 않습니다`);
 	}
-	const detail = raw.detail;
-	return {
-		problem: str(raw.problem, `units.${unitId}.problem`),
-		who: str(raw.who, `units.${unitId}.who`),
-		instead: str(raw.instead, `units.${unitId}.instead`),
-		...(typeof detail === "string" ? { detail } : {}),
-		key_frames: Array.isArray(raw.key_frames) ? raw.key_frames.map(toNoteKeyFrame) : [],
-	};
+	return { blocks: raw.blocks.map((block, index) => toNoteBlock(block, unitId, index)) };
 }
 
-function readNotes(workDir: string): NotesFile {
+function readNotes(workDir: string): NotesV2 {
 	const raw = readJsonFile(join(workDir, "notes.json"), "notes.json");
 	if (!isRecord(raw) || !isRecord(raw.units)) {
 		throw new Error("fc-feedback: notes.json 형식이 올바르지 않습니다");
 	}
-	const units: NotesFile["units"] = {};
+	const units: NotesV2["units"] = {};
 	for (const [unitId, entry] of Object.entries(raw.units)) {
-		units[unitId] = toNoteEntry(entry, unitId);
+		units[unitId] = toNoteUnit(entry, unitId);
 	}
-	return { units };
+	return { version: 2, units };
 }
 
 interface FrameJob {
@@ -1275,14 +1252,17 @@ interface FrameJob {
 	t: number;
 }
 
-/** Pure job planner: one start-frame job per unit, plus one per notes.json key_frame whose candidate resolves. */
-function planFrameJobs(validated: ValidatedPlan, notes: NotesFile, candidates: readonly Candidate[]): FrameJob[] {
+/** Pure job planner: one start-frame job per unit, plus one per notes.json frame block whose candidate resolves. */
+function planFrameJobs(validated: ValidatedPlan, notes: NotesV2, candidates: readonly Candidate[]): FrameJob[] {
 	const candidateById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
 	const jobs: FrameJob[] = [];
 	for (const unit of validated.units) {
 		jobs.push({ id: `${unit.id}-start`, video: unit.video, t: unit.start });
-		for (const frame of notes.units[unit.id]?.key_frames ?? []) {
-			const candidate = candidateById.get(frame.candidate_id);
+		for (const block of notes.units[unit.id]?.blocks ?? []) {
+			if (block.type !== "frame") {
+				continue;
+			}
+			const candidate = candidateById.get(block.candidate_id);
 			if (candidate !== undefined) {
 				jobs.push({ id: `${unit.id}-${candidate.id}`, video: candidate.video, t: candidate.t });
 			}
@@ -1730,7 +1710,7 @@ interface BuildUnitContext {
 	workDir: string;
 	sessionId: string;
 	roster: Roster | null;
-	notes: NotesFile;
+	notes: NotesV2;
 	candidates: readonly Candidate[];
 	similarChoices: Record<string, string[]>;
 	indexUnitByUid: Map<string, IndexUnitEntry>;
@@ -1751,20 +1731,25 @@ function buildSessionUnit(unit: ValidatedUnit, ctx: BuildUnitContext): SessionUn
 	const startDims = webpDimensions(readFileSync(startPath));
 	const startImage: UnitStartImage = { src: `img/${unit.id}-start.webp`, width: startDims.width, height: startDims.height };
 
-	const keyImages: UnitKeyImage[] = note.key_frames.map((frame) => {
-		const candidate = candidateById.get(frame.candidate_id);
-		if (candidate === undefined) {
-			throw new Error(`fc-feedback: notes.json의 key_frame이 candidates.json에 없습니다: ${frame.candidate_id}`);
+	const body: UnitBodyBlock[] = note.blocks.map((block) => {
+		if (block.type === "text") {
+			return { type: "text", text: block.text };
 		}
-		return { src: `img/${unit.id}-${candidate.id}.webp`, caption: frame.caption, t: candidate.t };
+		const candidate = candidateById.get(block.candidate_id);
+		if (candidate === undefined) {
+			throw new Error(`fc-feedback: notes.json의 frame이 candidates.json에 없습니다: ${block.candidate_id}`);
+		}
+		const framePath = join(ctx.workDir, "img", `${unit.id}-${candidate.id}.webp`);
+		const frameDims = webpDimensions(readFileSync(framePath));
+		return {
+			type: "frame",
+			src: `img/${unit.id}-${candidate.id}.webp`,
+			width: frameDims.width,
+			height: frameDims.height,
+			t: candidate.t,
+			caption: block.caption,
+		};
 	});
-
-	const noteOut: UnitNote = {
-		problem: note.problem,
-		who: note.who,
-		instead: note.instead,
-		...(note.detail !== undefined ? { detail: note.detail } : {}),
-	};
 
 	const similar: UnitSimilar[] = (ctx.similarChoices[unit.id] ?? []).map((uid) => {
 		const entry = ctx.indexUnitByUid.get(uid);
@@ -1800,8 +1785,8 @@ function buildSessionUnit(unit: ValidatedUnit, ctx: BuildUnitContext): SessionUn
 		topic_tags: unit.topic_tags,
 		member_ids: unit.member_ids,
 		related_member_ids: relatedIds,
-		note: noteOut,
-		images: { start: startImage, key: keyImages },
+		body,
+		images: { start: startImage },
 		similar,
 		refs,
 		watch_url: `https://youtu.be/${unit.video}?t=${Math.floor(unit.start)}`,
@@ -1826,7 +1811,7 @@ function buildSessionData(workDir: string, status: FcStatus): SessionData {
 	const validated = planResult.validated;
 
 	const notesRaw = readJsonFile(join(workDir, "notes.json"), "notes.json");
-	const notesCheck = checkNotes(notesRaw, validated);
+	const notesCheck = checkNotes(notesRaw, validated, candidates);
 	if (notesCheck.errors.length > 0) {
 		throw new Error(JSON.stringify(notesCheck.errors));
 	}

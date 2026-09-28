@@ -25,7 +25,7 @@
  *   per-video embeddable-placeholder switch (§7) are both explicit,
  *   already-specified behaviors that have no other data hook to read from.
  */
-import { anc, formatTime, PARENT, posClosure } from "./core.ts";
+import { anc, boldSpans, formatTime, PARENT, posClosure } from "./core.ts";
 
 // ── input types (plan §3) ────────────────────────────────────────────────
 
@@ -50,23 +50,27 @@ export interface UnitStartImage {
 	height: number;
 }
 
-export interface UnitKeyImage {
-	src: string;
-	caption: string;
-	t: number;
-}
-
 export interface UnitImages {
 	start: UnitStartImage;
-	key: UnitKeyImage[];
 }
 
-export interface UnitNote {
-	problem: string;
-	who: string;
-	instead: string;
-	detail?: string;
+/** A body paragraph (plan §16-1/2): text is escaped, `**bold**` spans become `<strong>`. */
+export interface UnitBodyTextBlock {
+	type: "text";
+	text: string;
 }
+
+/** A body frame (plan §16-1/2): clicking it seeks the card's video to `t`. */
+export interface UnitBodyFrameBlock {
+	type: "frame";
+	src: string;
+	width: number;
+	height: number;
+	t: number;
+	caption: string;
+}
+
+export type UnitBodyBlock = UnitBodyTextBlock | UnitBodyFrameBlock;
 
 /** `similar[{uid,title,href}]` plus `date` — see the module doc's gap-fill note. */
 export interface UnitSimilar {
@@ -99,7 +103,7 @@ export interface SessionUnit {
 	topic_tags: string[];
 	member_ids: string[];
 	related_member_ids: string[];
-	note: UnitNote;
+	body: UnitBodyBlock[];
 	images: UnitImages;
 	similar: UnitSimilar[];
 	refs: UnitRef[];
@@ -198,11 +202,6 @@ function escapeHtml(value: string): string {
 		.replace(/</g, "&lt;")
 		.replace(/>/g, "&gt;")
 		.replace(/"/g, "&quot;");
-}
-
-/** Escapes, then turns `\n` into `<br>` (DESIGN.md §4 item 6: plain text, escape first). */
-function escapeMultiline(value: string): string {
-	return escapeHtml(value).replace(/\n/g, "<br>");
 }
 
 // ── position tree display order (DESIGN.md §6) ──────────────────────────────
@@ -460,30 +459,29 @@ function renderMentionChips(unit: SessionUnit, members: readonly SessionMemberIn
 		.join("");
 }
 
-function renderNoteDl(note: UnitNote): string {
-	const detail =
-		note.detail !== undefined ? `<dt>상세</dt><dd>${escapeMultiline(note.detail)}</dd>` : "";
+/** A body text block: escape first, then turn only `boldSpans` bold segments into `<strong>` (plan §16-3). */
+function renderBodyText(text: string): string {
+	const html = boldSpans(text)
+		.map((span) => (span.bold ? `<strong>${escapeHtml(span.text)}</strong>` : escapeHtml(span.text)))
+		.join("");
+	return `<p>${html}</p>`;
+}
+
+/** A body frame: figure+figcaption with a time chip, `data-t` read by VIEWER_JS's click-to-seek. */
+function renderBodyFrame(block: UnitBodyFrameBlock): string {
 	return (
-		`<dl class="note-dl">` +
-		`<dt>문제</dt><dd>${escapeMultiline(note.problem)}</dd>` +
-		`<dt>누구</dt><dd>${escapeMultiline(note.who)}</dd>` +
-		`<dt>대신</dt><dd>${escapeMultiline(note.instead)}</dd>` +
-		detail +
-		`</dl>`
+		`<figure class="body-frame" data-t="${block.t}">` +
+		`<img src="${escapeHtml(block.src)}" width="${block.width}" height="${block.height}" loading="lazy" alt="${escapeHtml(block.caption)}">` +
+		`<figcaption>${chip("chip-time", formatTime(block.t))}${escapeHtml(block.caption)}</figcaption>` +
+		`</figure>`
 	);
 }
 
-function renderKeyImages(images: UnitKeyImage[]): string {
-	if (images.length === 0) {
-		return "";
-	}
-	const figures = images
-		.map(
-			(image) =>
-				`<figure><img src="${escapeHtml(image.src)}" alt=""><figcaption>${escapeHtml(image.caption)}</figcaption></figure>`,
-		)
+function renderBody(body: UnitBodyBlock[]): string {
+	const blocks = body
+		.map((block) => (block.type === "text" ? renderBodyText(block.text) : renderBodyFrame(block)))
 		.join("");
-	return `<div class="key-images">${figures}</div>`;
+	return `<div class="card-body">${blocks}</div>`;
 }
 
 function renderSimilarList(similar: UnitSimilar[]): string {
@@ -540,8 +538,7 @@ function renderCard(unit: SessionUnit, ctx: CardContext): string {
 		(relatedNames.length > 0
 			? `<p class="related-members">관련 팀원: ${relatedNames.map((name) => escapeHtml(name)).join(", ")}</p>`
 			: "") +
-		renderNoteDl(unit.note) +
-		renderKeyImages(unit.images.key) +
+		renderBody(unit.body) +
 		renderSimilarList(unit.similar) +
 		renderRefsList(unit.refs) +
 		`<a class="watch-link" href="${escapeHtml(unit.watch_url)}" target="_blank" rel="noopener">유튜브에서 보기 ↗</a>` +
@@ -781,12 +778,10 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .chip-pos-mf { background: var(--pos-mf-bg); color: var(--pos-mf-fg); }
 .chip-pos-fw { background: var(--pos-fw-bg); color: var(--pos-fw-fg); }
 .related-members { font-size: 0.8125rem; color: var(--muted); }
-.note-dl { display: grid; grid-template-columns: auto 1fr; gap: var(--space-1) var(--space-3); font-size: 1rem; line-height: 1.7; margin: var(--space-4) 0; }
-.note-dl dt { font-weight: 600; color: var(--muted); }
-.note-dl dd { margin: 0; }
-.key-images { display: grid; grid-template-columns: 1fr; gap: var(--space-4); margin: var(--space-4) 0; }
-.key-images figure { margin: 0; }
-.key-images figcaption { font-size: 0.75rem; color: var(--muted); margin-top: var(--space-1); }
+.card-body { display: flex; flex-direction: column; gap: var(--space-3); margin: var(--space-4) 0; }
+.card-body p { margin: 0; font-size: 1rem; line-height: 1.7; }
+.card-body .body-frame { margin: 0; cursor: pointer; }
+.card-body .body-frame figcaption { display: flex; align-items: center; gap: var(--space-2); font-size: 0.8125rem; color: var(--muted); margin-top: var(--space-1); }
 .similar-list, .refs-list { font-size: 0.9375rem; margin: var(--space-4) 0; padding-left: 1.1rem; }
 .ref-badges { display: inline-flex; gap: var(--space-1); }
 .badge { display: inline-block; background: var(--surface-sunken); color: var(--muted); font-size: 0.75rem; font-weight: 500; padding: 2px var(--space-2); border-radius: var(--radius-full); }
@@ -795,9 +790,6 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .empty-state[hidden] { display: none; }
 .footer { padding: var(--space-8) 0; color: var(--muted); font-size: 0.8125rem; }
 
-@media (min-width: 1024px) {
-  .key-images { grid-template-columns: repeat(2, 1fr); }
-}
 @media (max-width: 1023.98px) {
   .layout { display: flex; flex-direction: column; padding: var(--space-4); }
   .side { display: contents; }
@@ -1025,7 +1017,7 @@ export const VIEWER_JS = `(function () {
   function ensurePlayer(videoId) {
     if (playerCreated) return;
     playerCreated = true;
-    window.fcPlayer = new YT.Player("yt-player", {
+    window.fcPlayer = new window.YT.Player("yt-player", {
       videoId: videoId,
       host: "https://www.youtube-nocookie.com",
       events: { onReady: onPlayerReady },
@@ -1100,7 +1092,10 @@ export const VIEWER_JS = `(function () {
     if (!card) return;
     var video = card.getAttribute("data-video");
     if (!video) return;
-    var start = Number(card.getAttribute("data-start") || "0");
+    var frame = event.target.closest ? event.target.closest(".body-frame") : null;
+    var start = frame
+      ? Number(frame.getAttribute("data-t") || "0")
+      : Number(card.getAttribute("data-start") || "0");
     var embeddable = card.getAttribute("data-embeddable") === "true";
     switchTo(video, start, embeddable);
   }
@@ -1141,7 +1136,7 @@ export const VIEWER_JS = `(function () {
     if (playerWrapperEl) new ResizeObserver(syncPlayerHeight).observe(playerWrapperEl);
   }
 
-  if (YT && YT.loaded) {
+  if (window.YT && window.YT.loaded) {
     initPlayer();
   } else {
     window.onYouTubeIframeAPIReady = initPlayer;
