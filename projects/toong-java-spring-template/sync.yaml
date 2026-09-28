@@ -29,7 +29,7 @@ skills:
     #     비-.md 파일을 전수 감사해 하네스 중립을 확인했고, 나온 결함은 고쳤다:
     #     prometheus는 getOmtDir()를 로컬 재구현해 OMT_DIR env가 없으면
     #     throw했는데 그 env는 Claude 전용 CLAUDE_ENV_FILE로만 전달되므로
-    #     (hooks/codex-ledger.sh:44-58) @lib/omt-dir의 공유 구현으로 교체했고,
+    #     (hooks/codex-qa-seed.sh:37-39) @lib/omt-dir의 공유 구현으로 교체했고,
     #     sisyphus의 skill-catalog는 .claude/skills만 보던 탐색을
     #     .agents/skills(codex 착지점)까지 보도록 넓혔다.
     - component: prometheus

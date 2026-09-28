@@ -212,45 +212,45 @@ describe("resolveShellDependencies", () => {
 	});
 
 	it("`# omt-hook-dep: <relpath>` 디렉티브 매칭 — 문자열 내부 참조라 source 정규식이 못 잡는 companion 파일도 의존성으로 반환", async () => {
-		const ledgerFile = path.join(hooksDir, "omt-ledger.sh");
-		await writeFile(ledgerFile, "#!/bin/bash\necho ledger\n");
+		const companionFile = path.join(hooksDir, "companion.sh");
+		await writeFile(companionFile, "#!/bin/bash\necho companion\n");
 
 		const entryFile = path.join(hooksDir, "session-start.sh");
 		await writeFile(
 			entryFile,
-			'#!/bin/bash\n# omt-hook-dep: omt-ledger.sh\necho ".claude/hooks/omt-ledger.sh append Foo"\n',
+			'#!/bin/bash\n# omt-hook-dep: companion.sh\necho ".claude/hooks/companion.sh append Foo"\n',
 		);
 
 		const deps = await resolveShellDependencies(entryFile, hooksDir);
-		expect(deps).toEqual([ledgerFile]);
+		expect(deps).toEqual([companionFile]);
 	});
 
 	it("omt-hook-dep 디렉티브가 가리키는 파일이 없으면 skip (throw 없음)", async () => {
 		const entryFile = path.join(hooksDir, "session-start.sh");
-		await writeFile(entryFile, "#!/bin/bash\n# omt-hook-dep: missing-ledger.sh\n");
+		await writeFile(entryFile, "#!/bin/bash\n# omt-hook-dep: missing-companion.sh\n");
 
 		const deps = await resolveShellDependencies(entryFile, hooksDir);
 		expect(deps).toEqual([]);
 	});
 
 	it("omt-hook-dep 디렉티브가 .mjs companion을 반환하고 JS는 재귀 스캔하지 않음", async () => {
-		const helperFile = path.join(hooksDir, "lib", "ledger-events.mjs");
+		const helperFile = path.join(hooksDir, "lib", "companion-events.mjs");
 		await writeFile(helperFile, 'const ignored = "# omt-hook-dep: hidden.sh";\n');
 
 		const entryFile = path.join(hooksDir, "session-start.sh");
-		await writeFile(entryFile, "#!/bin/bash\n# omt-hook-dep: lib/ledger-events.mjs\n");
+		await writeFile(entryFile, "#!/bin/bash\n# omt-hook-dep: lib/companion-events.mjs\n");
 
 		const deps = await resolveShellDependencies(entryFile, hooksDir);
 		expect(deps).toEqual([helperFile]);
 	});
 
 	it("동일한 .mjs 디렉티브를 반복해도 dependency를 중복 반환하지 않음", async () => {
-		const helperFile = path.join(hooksDir, "lib", "ledger-events.mjs");
-		await writeFile(helperFile, "export const ledger = true;\n");
+		const helperFile = path.join(hooksDir, "lib", "companion-events.mjs");
+		await writeFile(helperFile, "export const companion = true;\n");
 		const entryFile = path.join(hooksDir, "session-start.sh");
 		await writeFile(
 			entryFile,
-			"#!/bin/bash\n# omt-hook-dep: lib/ledger-events.mjs\n# omt-hook-dep: lib/ledger-events.mjs\n",
+			"#!/bin/bash\n# omt-hook-dep: lib/companion-events.mjs\n# omt-hook-dep: lib/companion-events.mjs\n",
 		);
 
 		const deps = await resolveShellDependencies(entryFile, hooksDir);
@@ -258,12 +258,12 @@ describe("resolveShellDependencies", () => {
 	});
 
 	it("두 shell dependency가 같은 .mjs companion을 선언해도 한 번만 반환함", async () => {
-		const helperFile = path.join(hooksDir, "lib", "ledger-events.mjs");
-		await writeFile(helperFile, "export const ledger = true;\n");
+		const helperFile = path.join(hooksDir, "lib", "companion-events.mjs");
+		await writeFile(helperFile, "export const companion = true;\n");
 		const firstShell = path.join(hooksDir, "lib", "first.sh");
 		const secondShell = path.join(hooksDir, "lib", "second.sh");
-		await writeFile(firstShell, "# omt-hook-dep: lib/ledger-events.mjs\n");
-		await writeFile(secondShell, "# omt-hook-dep: lib/ledger-events.mjs\n");
+		await writeFile(firstShell, "# omt-hook-dep: lib/companion-events.mjs\n");
+		await writeFile(secondShell, "# omt-hook-dep: lib/companion-events.mjs\n");
 		const entryFile = path.join(hooksDir, "session-start.sh");
 		await writeFile(
 			entryFile,
@@ -509,40 +509,40 @@ describe("syncShellDependencies", () => {
 	});
 
 	it("실제 temp deploy에서 shell이 선언한 .mjs companion을 복사함", async () => {
-		const helperFile = path.join(hooksDir, "lib", "ledger-events.mjs");
-		await writeFile(helperFile, "export const ledger = true;\n");
+		const helperFile = path.join(hooksDir, "lib", "companion-events.mjs");
+		await writeFile(helperFile, "export const companion = true;\n");
 		const entryFile = path.join(hooksDir, "session-start.sh");
-		await writeFile(entryFile, "#!/bin/bash\n# omt-hook-dep: lib/ledger-events.mjs\n");
+		await writeFile(entryFile, "#!/bin/bash\n# omt-hook-dep: lib/companion-events.mjs\n");
 
 		await syncShellDependencies(entryFile, hooksDir, targetDir, false);
 
-		const deployed = path.join(targetDir, "lib", "ledger-events.mjs");
-		expect(await fs.readFile(deployed, "utf8")).toBe("export const ledger = true;\n");
+		const deployed = path.join(targetDir, "lib", "companion-events.mjs");
+		expect(await fs.readFile(deployed, "utf8")).toBe("export const companion = true;\n");
 	});
 
 	it("dryRun=true 시 shell이 선언한 .mjs companion을 복사하지 않음", async () => {
-		const helperFile = path.join(hooksDir, "lib", "ledger-events.mjs");
-		await writeFile(helperFile, "export const ledger = true;\n");
+		const helperFile = path.join(hooksDir, "lib", "companion-events.mjs");
+		await writeFile(helperFile, "export const companion = true;\n");
 		const entryFile = path.join(hooksDir, "session-start.sh");
-		await writeFile(entryFile, "#!/bin/bash\n# omt-hook-dep: lib/ledger-events.mjs\n");
+		await writeFile(entryFile, "#!/bin/bash\n# omt-hook-dep: lib/companion-events.mjs\n");
 
 		await syncShellDependencies(entryFile, hooksDir, targetDir, true);
 
-		expect(await exists(path.join(targetDir, "lib", "ledger-events.mjs"))).toBe(false);
+		expect(await exists(path.join(targetDir, "lib", "companion-events.mjs"))).toBe(false);
 	});
 
 	it("hooks root 밖을 가리키는 companion symlink는 배포하지 않음", async () => {
-		const outsideFile = path.join(tmpDir, "outside-ledger-events.mjs");
+		const outsideFile = path.join(tmpDir, "outside-companion-events.mjs");
 		await writeFile(outsideFile, "export const secret = true;\n");
-		const linkedFile = path.join(hooksDir, "lib", "ledger-events.mjs");
+		const linkedFile = path.join(hooksDir, "lib", "companion-events.mjs");
 		await fs.mkdir(path.dirname(linkedFile), { recursive: true });
 		await fs.symlink(outsideFile, linkedFile);
 		const entryFile = path.join(hooksDir, "session-start.sh");
-		await writeFile(entryFile, "#!/bin/bash\n# omt-hook-dep: lib/ledger-events.mjs\n");
+		await writeFile(entryFile, "#!/bin/bash\n# omt-hook-dep: lib/companion-events.mjs\n");
 
 		await syncShellDependencies(entryFile, hooksDir, targetDir, false);
 
-		expect(await exists(path.join(targetDir, "lib", "ledger-events.mjs"))).toBe(false);
+		expect(await exists(path.join(targetDir, "lib", "companion-events.mjs"))).toBe(false);
 	});
 
 	it("dryRun=true 시 callback 호출 안 됨", async () => {
