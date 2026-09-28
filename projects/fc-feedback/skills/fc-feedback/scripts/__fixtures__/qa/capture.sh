@@ -24,7 +24,7 @@ set -euo pipefail
 #
 # Serves <out-dir> over HTTP (python3 -m http.server) because file:// breaks
 # the YouTube iframe embed. Drives the rendered pages with agent-browser
-# (skill: agent-browser) and writes exactly the 35 fixed shots (DESIGN.md v2
+# (skill: agent-browser) and writes exactly the 37 fixed shots (DESIGN.md v2
 # §14) + the functional checks §14/§15 enumerate.
 #
 # ── Selectors follow DESIGN.md's markup contract, not the current render.ts ──
@@ -390,7 +390,7 @@ JS
 	fi
 }
 
-# ── viewer interaction states (DESIGN.md v2 §14, 35 rows across 2+1 viewports) ─
+# ── viewer interaction states (DESIGN.md v2 §14, 37 rows across 2+1 viewports) ─
 #
 # filter-topic-multi drives "수비전환" + "역습": DESIGN.md's own example
 # ("빌드업" + "전환/역습") names topic tags that do not exist verbatim in
@@ -407,6 +407,13 @@ JS
 # cards (u002/u004/u005) -- one direct mention (u004, "직접 언급" badge) and
 # two via position-tree closure (u002/u005, "포지션 관련(참고)" badge) -- so
 # this state also exercises both mention-badge kinds in one screenshot.
+# my-feedback-related reuses the same yoon-fb selection but scrolls past the
+# direct-mention card (u004, floated to the top by the CSS `order` rule
+# render.ts's `.card-list.mine-active .card:not(.is-direct) { order: 1; }`
+# applies) so the first RELATED-badge card (u002 or u005, whichever sits
+# first in DOM/flex order) lands at the top of the viewport instead --
+# letting reviewers see the "포지션 관련(참고)" badge itself, which the
+# my-feedback shot above never scrolls far enough to foreground.
 # filter-empty-and (§7, two different groups AND to 0) picks position `FB`
 # (3 cards: u002/u004/u005, topics 빌드업/오버래핑) + topic `마무리` (3
 # cards: u013/u014/u015) -- both options individually non-empty, their AND
@@ -452,6 +459,26 @@ JS
 		click_scrolled '.pill.pill-mine[data-group="mine"][data-value="yoon-fb"]'
 		assert_state "my-feedback" <<'JS'
 document.querySelector('.pill.pill-mine[data-group="mine"][data-value="yoon-fb"]').getAttribute("aria-pressed") === "true"
+JS
+		;;
+	my-feedback-related)
+		click_scrolled '.pill.pill-mine[data-group="mine"][data-value="yoon-fb"]'
+		assert_state "my-feedback-related" <<'JS'
+(function () {
+  var pill = document.querySelector('.pill.pill-mine[data-group="mine"][data-value="yoon-fb"]');
+  if (!pill || pill.getAttribute("aria-pressed") !== "true") return false;
+  var cards = document.querySelectorAll(".card");
+  var target = null;
+  for (var i = 0; i < cards.length; i++) {
+    if (cards[i].hasAttribute("hidden")) continue;
+    var b = cards[i].querySelector(".mention-badge.mention-related");
+    if (b && !b.hasAttribute("hidden")) { target = cards[i]; break; }
+  }
+  if (!target) return false;
+  target.scrollIntoView({block: "start"});
+  var badge = target.querySelector(".mention-badge");
+  return !!badge && badge.textContent.trim() === "포지션 관련(참고)" && badge.offsetParent !== null;
+})()
 JS
 		;;
 	filter-empty-and)
@@ -500,7 +527,7 @@ take_shot() {
 	fi
 }
 
-# ── the 35 fixed shots (DESIGN.md v2 §14) ──────────────────────────────────
+# ── the 37 fixed shots (DESIGN.md v2 §14) ──────────────────────────────────
 # id|page-key|width|height|state
 SHOT_TABLE='
 default-390|viewer|390|844|default
@@ -515,6 +542,8 @@ filter-mention-390|viewer|390|844|filter-mention
 filter-mention-1440|viewer|1440|900|filter-mention
 my-feedback-390|viewer|390|844|my-feedback
 my-feedback-1440|viewer|1440|900|my-feedback
+my-feedback-related-390|viewer|390|844|my-feedback-related
+my-feedback-related-1440|viewer|1440|900|my-feedback-related
 filter-empty-and-390|viewer|390|844|filter-empty-and
 filter-empty-and-1440|viewer|1440|900|filter-empty-and
 seek-part1-390|viewer|390|844|seek-part1
@@ -618,8 +647,8 @@ EOF
 } | jq -s '.' >"$SHOTS/capture-manifest.json"
 
 manifest_len="$(jq 'length' "$SHOTS/capture-manifest.json")"
-if [ "$manifest_len" -ne 35 ]; then
-	echo "capture.sh: capture-manifest.json has $manifest_len entries, expected 35" >&2
+if [ "$manifest_len" -ne 37 ]; then
+	echo "capture.sh: capture-manifest.json has $manifest_len entries, expected 37" >&2
 	exit 1
 fi
 
@@ -637,7 +666,7 @@ done
 # identical to an earlier, different state's screenshot. Even with the
 # per-state assertions in place, this is a second, independent net over the
 # whole manifest -- any two DIFFERENT ids ending up with the same sha256 is
-# still a capture bug, never a legitimate outcome (no two of the 35 fixed
+# still a capture bug, never a legitimate outcome (no two of the 37 fixed
 # shots are meant to render identically), so it aborts loudly rather than
 # publishing silently-wrong evidence.
 DUP_HASHES="$(jq -c '[group_by(.sha256)[] | select(length > 1) | {sha256: .[0].sha256, ids: [.[].id]}]' "$SHOTS/capture-manifest.json")"
@@ -648,7 +677,7 @@ fi
 
 # ── functional checks (DESIGN.md v2 §14 "기능 검사") ───────────────────────
 # Always run in full regardless of --only: independent of which screenshot
-# ids were reshot, and cheap next to the 35 screenshots above.
+# ids were reshot, and cheap next to the 37 screenshots above.
 
 FUNCTIONAL_ENTRIES=()
 
@@ -812,6 +841,27 @@ JS
 JS
 	)"
 	add_check "\"내 피드백\" 선택 시 직접 언급/포지션 관련(참고) 멘션 배지가 올바르게 구분된다(§5-3)" dom "$pass" ""
+
+	# ── DESIGN.md §6: render.ts floats direct-mention cards above position-
+	# related ones via CSS `order` (`.card-list.mine-active
+	# .card:not(.is-direct) { order: 1; }`), not DOM reordering, so "first" here
+	# must compare rendered position (getBoundingClientRect().top), not DOM
+	# order.
+	pass="$(eval_js <<'JS'
+(function () {
+  var cards = Array.prototype.filter.call(document.querySelectorAll(".card"), function (c) {
+    return !c.hasAttribute("hidden");
+  });
+  if (cards.length === 0) return false;
+  cards.sort(function (a, b) {
+    return a.getBoundingClientRect().top - b.getBoundingClientRect().top;
+  });
+  var badge = cards[0].querySelector(".mention-badge.mention-direct");
+  return !!badge && !badge.hasAttribute("hidden");
+})()
+JS
+	)"
+	add_check "내 피드백 선택 시 직접 언급 카드가 참고 카드보다 먼저 보인다(§6)" dom "$pass" ""
 
 	ab click '.filter-reset' >/dev/null
 
