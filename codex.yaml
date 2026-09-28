@@ -81,6 +81,12 @@ hooks:
     - component: rules-injector
       type: command
       command: "bun run .codex/hooks/rules-injector/cli.ts hook session-start"
+    # Claude<->Codex parity: the same session-ledger component, told which
+    # transcript format to read. It injects only after a compaction.
+    - component: session-ledger
+      type: command
+      command: "bun run .codex/hooks/session-ledger/index.ts --platform codex"
+      timeout: 10
     # Claude<->Codex hook-parity: root claude.yaml registers pin-session-start
     # globally (SessionStart), so its Codex analog is global too. pin-session-
     # start needs no Codex-specific shim: its own logic already reads only
@@ -246,6 +252,15 @@ hooks:
     - component: codex-label-edit-warn.sh
       type: command
       matcher: "apply_patch|Edit|Write|edit|write|multiedit|multi_edit"
+  # The ledger is written synchronously before compaction (quality over speed,
+  # up to three summarizer attempts); the timeout must exceed its 25-minute
+  # internal deadline. Remote compaction ignores compact_prompt, so this ledger
+  # is Codex's only steerable record of the pre-compaction context.
+  PreCompact:
+    - component: session-ledger
+      type: command
+      command: "bun run .codex/hooks/session-ledger/index.ts --platform codex"
+      timeout: 1800
   PostCompact:
     - component: rules-injector
       type: command

@@ -1,0 +1,360 @@
+{
+ "type": "object",
+ "additionalProperties": false,
+ "required": [
+  "analysis_checklist",
+  "primary_request_and_intent",
+  "current_work",
+  "next_steps",
+  "working_rules",
+  "approved_proposals",
+  "decisions",
+  "rejected",
+  "unverified_results",
+  "open_questions",
+  "key_technical_concepts",
+  "files_and_code",
+  "errors_and_fixes",
+  "operational_gotchas",
+  "experiment_results",
+  "findings",
+  "pieces",
+  "pending"
+ ],
+ "properties": {
+  "analysis_checklist": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "primary_request_and_intent": {
+   "type": "string"
+  },
+  "current_work": {
+   "type": "string"
+  },
+  "next_steps": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "step",
+     "authorized_by",
+     "authorization_quote",
+     "needs_user_confirmation"
+    ],
+    "properties": {
+     "step": {
+      "type": "string"
+     },
+     "authorized_by": {
+      "type": "string"
+     },
+     "authorization_quote": {
+      "type": "string"
+     },
+     "needs_user_confirmation": {
+      "type": "boolean"
+     }
+    }
+   }
+  },
+  "working_rules": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "rule",
+     "source"
+    ],
+    "properties": {
+     "rule": {
+      "type": "string"
+     },
+     "source": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "approved_proposals": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "proposal_id",
+     "approved_by",
+     "approval_quote",
+     "approved_scope",
+     "excluded_or_changed",
+     "done",
+     "remaining"
+    ],
+    "properties": {
+     "proposal_id": {
+      "type": "string"
+     },
+     "approved_by": {
+      "type": "string"
+     },
+     "approval_quote": {
+      "type": "string"
+     },
+     "approved_scope": {
+      "type": "string"
+     },
+     "excluded_or_changed": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "done": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "remaining": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  },
+  "decisions": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "decision",
+     "rationale",
+     "decided_by",
+     "user_quote"
+    ],
+    "properties": {
+     "decision": {
+      "type": "string"
+     },
+     "rationale": {
+      "type": "string"
+     },
+     "decided_by": {
+      "type": "string"
+     },
+     "user_quote": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "rejected": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "item",
+     "reason"
+    ],
+    "properties": {
+     "item": {
+      "type": "string"
+     },
+     "reason": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "unverified_results": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "source",
+     "recommendations"
+    ],
+    "properties": {
+     "source": {
+      "type": "string"
+     },
+     "recommendations": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "recommendation",
+        "related_settled_items"
+       ],
+       "properties": {
+        "recommendation": {
+         "type": "string"
+        },
+        "related_settled_items": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "open_questions": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "key_technical_concepts": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "files_and_code": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "path",
+     "role",
+     "state",
+     "snippet"
+    ],
+    "properties": {
+     "path": {
+      "type": "string"
+     },
+     "role": {
+      "type": "string"
+     },
+     "state": {
+      "type": "string"
+     },
+     "snippet": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "errors_and_fixes": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "error",
+     "fix",
+     "user_feedback"
+    ],
+    "properties": {
+     "error": {
+      "type": "string"
+     },
+     "fix": {
+      "type": "string"
+     },
+     "user_feedback": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "operational_gotchas": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "trap",
+     "fix"
+    ],
+    "properties": {
+     "trap": {
+      "type": "string"
+     },
+     "fix": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "experiment_results": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "what",
+     "result"
+    ],
+    "properties": {
+     "what": {
+      "type": "string"
+     },
+     "result": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "findings": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "finding",
+     "evidence"
+    ],
+    "properties": {
+     "finding": {
+      "type": "string"
+     },
+     "evidence": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "pieces": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "path",
+     "contents"
+    ],
+    "properties": {
+     "path": {
+      "type": "string"
+     },
+     "contents": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "pending": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  }
+ }
+}
