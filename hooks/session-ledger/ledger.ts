@@ -322,15 +322,68 @@ export function unknownIdentifiers(d: LedgerJson, sourceText: string): string[] 
 			}
 		}
 	}
-	// The summarizer can garble a Korean path into look-alike letters of another script
-	// (`기존-프로그램-문제` → `기존-프로그램-խնդիր`); a letter the log never contains marks such a token.
 	for (const raw of rendered.split(/\s+/)) {
-		const foreign = [...raw].some(
-			(c) => /\p{L}/u.test(c) && !/[\p{Script=Latin}\p{Script=Hangul}\p{Script=Han}]/u.test(c) && !sourceText.includes(c),
-		);
-		if (foreign) bad.add(raw.replace(/^[`'"(]+|[`'",;:.)]+$/g, ""));
+		if (hasForeignLetter(raw, sourceText)) bad.add(raw.replace(/^[`'"(]+|[`'",;:.)]+$/g, ""));
 	}
 	return [...bad].sort();
+}
+
+/**
+ * The summarizer can garble a Korean path into look-alike letters of another script
+ * (`기존-프로그램-문제` → `기존-프로그램-խնդիր`), and a retry often garbles it again. A letter
+ * outside Latin, Hangul, and Han that the log never contains marks such a token.
+ */
+function hasForeignLetter(text: string, sourceText: string): boolean {
+	return [...text].some(
+		(c) => /\p{L}/u.test(c) && !/[\p{Script=Latin}\p{Script=Hangul}\p{Script=Han}]/u.test(c) && !sourceText.includes(c),
+	);
+}
+
+const TOKEN_DELIMITERS = /([\s`'"(),;:]+)/;
+
+/**
+ * Replaces each garbled path segment with a segment from the log, so a retry is not spent on it:
+ * the segment the log's paths put between the same neighbors (a translated `기존-프로그램-문제`
+ * is still framed by `algocare-home/` and `/apps`), else the closest spelling.
+ */
+export function repairForeignLetters(d: LedgerJson, sourceText: string): LedgerJson {
+	if (!hasForeignLetter(JSON.stringify(d), sourceText)) return d;
+	const betweenNeighbors = new Map<string, Set<string>>();
+	const spellings = new Set<string>();
+	for (const token of sourceText.split(TOKEN_DELIMITERS)) {
+		const segments = token.split("/");
+		segments.forEach((segment, i) => {
+			if (segment.length >= 2) spellings.add(segment);
+			if (i === 0 || i === segments.length - 1) return;
+			const key = `${segments[i - 1]}/${segments[i + 1]}`;
+			betweenNeighbors.set(key, (betweenNeighbors.get(key) ?? new Set()).add(segment));
+		});
+	}
+	const closestSpelling = (part: string) => {
+		let best: { segment: string; distance: number } | undefined;
+		for (const segment of spellings) {
+			if (Math.abs(segment.length - part.length) > part.length / 2) continue;
+			const distance = editDistance(segment, part);
+			if (!best || distance < best.distance) best = { segment, distance };
+		}
+		return best && best.distance <= Math.ceil(part.length / 2) ? best.segment : undefined;
+	};
+	const repairToken = (token: string) => {
+		const segments = token.split("/");
+		return segments
+			.map((segment, i) => {
+				if (!hasForeignLetter(segment, sourceText)) return segment;
+				const framed = betweenNeighbors.get(`${segments[i - 1] ?? ""}/${segments[i + 1] ?? ""}`);
+				if (i > 0 && i < segments.length - 1 && framed?.size === 1) return [...framed][0];
+				// Left unrepaired, the validator reports the token and the model gets another try.
+				return closestSpelling(segment) ?? segment;
+			})
+			.join("/");
+	};
+	const repaired: unknown = JSON.parse(JSON.stringify(d), (_key, value: unknown) =>
+		typeof value === "string" ? value.split(TOKEN_DELIMITERS).map(repairToken).join("") : value,
+	);
+	return isLedgerJson(repaired) ? repaired : d;
 }
 
 export function validateLedger(d: LedgerJson, ctx: ValidationContext): string[] {
@@ -495,7 +548,7 @@ export async function writeLedger(input: LedgerInput): Promise<LedgerResult> {
 			attempts.push({ n, secs, error: result.error ?? "no output" });
 			break;
 		}
-		const d = result.output;
+		const d = repairForeignLetters(result.output, ctx.sourceText);
 		const violations = validateLedger(d, ctx);
 		const size = Buffer.byteLength(renderFields(d));
 		attempts.push({ n, secs, bytes: size, violations });

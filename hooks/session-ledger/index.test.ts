@@ -12,6 +12,7 @@ import {
 	type ModelResult,
 	previousUsers,
 	renderLedger,
+	repairForeignLetters,
 	unknownIdentifiers,
 	validateLedger,
 	writeLedger,
@@ -205,6 +206,21 @@ describe("검증기", () => {
 			"/repo/기존-프로그램-խնդիր/apps/slot-distribution.ts",
 		]);
 		expect(text("다음으로 `/repo/기존-프로그램-문제/apps/slot-distribution.ts`를 수정한다.")).toEqual([]);
+	});
+
+	test("깨진 경로 구간은 로그의 가장 가까운 구간으로 복원한다", () => {
+		const source = "cd /repo/기존-프로그램-문제/apps && cat slot-distribution.ts";
+		const garbled = ledgerJson({
+			current_work: "Open `/repo/기존-프로แกรม-문제/apps/slot-distribution.ts` and `/repo/기존-프로그램-문зе/apps`.",
+		});
+		const repaired = repairForeignLetters(garbled, source);
+		expect(repaired.current_work).toBe(
+			"Open `/repo/기존-프로그램-문제/apps/slot-distribution.ts` and `/repo/기존-프로그램-문제/apps`.",
+		);
+		expect(unknownIdentifiers(repaired, source)).toEqual([]);
+		// A translated segment is too far to respell, but its neighbors in the log's paths still place it.
+		const translated = repairForeignLetters(ledgerJson({ current_work: "Open `/repo/կ_existing-프로그램-문제/apps`." }), source);
+		expect(translated.current_work).toBe("Open `/repo/기존-프로그램-문제/apps`.");
 	});
 
 	test("존재하지 않는 U-id와 제안 id를 거부한다", () => {
