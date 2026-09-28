@@ -1714,6 +1714,30 @@ export function checkNotes(
 	return { errors };
 }
 
+/**
+ * Non-blocking content-quality warnings for a structurally valid notes.json
+ * v2 (`checkNotes` must have already passed): a unit whose text blocks carry
+ * no `**bold**` pair (no marked action/assessment — may belong merged into a
+ * neighboring unit), and a unit with no `frame` block at all.
+ */
+export function noteWarnings(notes: NotesV2): string[] {
+	const warnings: string[] = [];
+	for (const [unitId, unit] of Object.entries(notes.units)) {
+		const hasBold = unit.blocks.some(
+			(block) => block.type === "text" && boldSpans(block.text).some((span) => span.bold),
+		);
+		if (!hasBold) {
+			warnings.push(
+				`fc-feedback: 경고 ${unitId}: 볼드 행동 없음 — 원문에 지시·평가가 없는 구간이면 인접 유닛에 합칠지 확인`,
+			);
+		}
+		if (!unit.blocks.some((block) => block.type === "frame")) {
+			warnings.push(`fc-feedback: 경고 ${unitId}: 프레임 없음`);
+		}
+	}
+	return warnings;
+}
+
 // ── similar-choices.json (plan §3) ──────────────────────────────────────────
 
 const MAX_SIMILAR_CHOICES_PER_UNIT = 3;

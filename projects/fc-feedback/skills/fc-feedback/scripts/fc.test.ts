@@ -382,6 +382,65 @@ describe("fc-feedback CLI", () => {
 		expect(errors.some((error: { path: string }) => error.path === "session_title")).toBe(true);
 	});
 
+	// ── check notes ──────────────────────────────────────────────────────────
+
+	function checkNotesWorkDir(cwd: string, home: string, archive: string): string {
+		writeFileSync(join(archive, "taxonomy.yaml"), "version: 1\ntopics: [빌드업]\n");
+		const roster = rosterFile();
+		run(["config", "set", "--archive", archive, "--roster", roster, "--pages-url", "https://example.com/"], { cwd, home });
+		const work = tempDir();
+		writeFileSync(join(work, "lines.json"), linesFixture());
+		writeFileSync(join(work, "plan.json"), planFixture("빌드업"));
+		expect(run(["check", "plan", "--work", work], { cwd, home }).exitCode).toBe(0);
+		return work;
+	}
+
+	test("check notes는 볼드도 frame도 없는 unit에서 exit 0을 유지하며 stderr에 두 경고를 모두 낸다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		const archive = repo("archive");
+		const work = checkNotesWorkDir(cwd, home, archive);
+		writeFileSync(
+			join(work, "notes.json"),
+			JSON.stringify({ version: 2, units: { u001: { blocks: [{ type: "text", text: "볼드도 프레임도 없는 문장입니다" }] } } }),
+		);
+
+		const result = run(["check", "notes", "--work", work], { cwd, home });
+		expect(result.exitCode).toBe(0);
+		expect(JSON.parse(result.stdout.trim())).toEqual({ ok: true });
+		expect(result.stderr).toContain(
+			"fc-feedback: 경고 u001: 볼드 행동 없음 — 원문에 지시·평가가 없는 구간이면 인접 유닛에 합칠지 확인",
+		);
+		expect(result.stderr).toContain("fc-feedback: 경고 u001: 프레임 없음");
+	});
+
+	test("check notes는 볼드와 frame이 모두 있는 unit에서 경고를 내지 않는다", () => {
+		const cwd = repo();
+		const home = tempDir();
+		const archive = repo("archive");
+		const work = checkNotesWorkDir(cwd, home, archive);
+		writeFileSync(join(work, "candidates.json"), JSON.stringify([{ id: "c001", video: "NUzEChn9EyI", t: 2, kind: "manual" }]));
+		writeFileSync(
+			join(work, "notes.json"),
+			JSON.stringify({
+				version: 2,
+				units: {
+					u001: {
+						blocks: [
+							{ type: "text", text: "**볼드** 문장입니다" },
+							{ type: "frame", candidate_id: "c001", caption: "장면" },
+						],
+					},
+				},
+			}),
+		);
+
+		const result = run(["check", "notes", "--work", work], { cwd, home });
+		expect(result.exitCode).toBe(0);
+		expect(JSON.parse(result.stdout.trim())).toEqual({ ok: true });
+		expect(result.stderr).toBe("");
+	});
+
 	// ── taxonomy add ─────────────────────────────────────────────────────────
 
 	test("taxonomy add는 이미 있는 태그를 다시 추가해도 멱등이다", () => {

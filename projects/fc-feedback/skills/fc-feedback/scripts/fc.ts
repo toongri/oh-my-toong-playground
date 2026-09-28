@@ -41,6 +41,7 @@ import {
 	isValidTag,
 	localLinks,
 	normalizeUrl,
+	noteWarnings,
 	parseRoster,
 	parseTaxonomy,
 	refId,
@@ -1109,6 +1110,9 @@ function handleCheckNotes(workDir: string, status: FcStatus): number {
 	const result = checkNotes(notes, validated, candidates);
 	if (result.errors.length > 0) {
 		throw new Error(JSON.stringify(result.errors));
+	}
+	for (const warning of noteWarnings(readNotes(workDir))) {
+		process.stderr.write(`${warning}\n`);
 	}
 	printJson({ ok: true });
 	return 0;

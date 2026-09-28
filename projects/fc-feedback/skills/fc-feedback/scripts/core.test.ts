@@ -23,6 +23,7 @@ import {
 	isValidTag,
 	localLinks,
 	normalizeUrl,
+	noteWarnings,
 	parseRoster,
 	parseTaxonomy,
 	posClosure,
@@ -1270,6 +1271,36 @@ describe("checkNotes", () => {
 		];
 		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
 		expect(findError(result.errors, "units.u001.blocks[1].caption")).toBe(true);
+	});
+});
+
+describe("noteWarnings", () => {
+	test("볼드 없는 text 블록만 있는 unit은 볼드 행동 없음 경고를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001 = { blocks: [{ type: "text", text: "볼드 없는 문장입니다" }] };
+		const warnings = noteWarnings(notes);
+		expect(warnings).toContain(
+			"fc-feedback: 경고 u001: 볼드 행동 없음 — 원문에 지시·평가가 없는 구간이면 인접 유닛에 합칠지 확인",
+		);
+	});
+
+	test("frame 블록이 없는 unit은 프레임 없음 경고를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001 = { blocks: [{ type: "text", text: "**볼드** 문장입니다" }] };
+		const warnings = noteWarnings(notes);
+		expect(warnings).toContain("fc-feedback: 경고 u001: 프레임 없음");
+	});
+
+	test("볼드·frame이 모두 있는 unit은 경고가 없다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001 = {
+			blocks: [
+				{ type: "text", text: "**볼드** 문장입니다" },
+				{ type: "frame", candidate_id: "c001", caption: "장면" },
+			],
+		};
+		const warnings = noteWarnings(notes).filter((warning) => warning.includes("u001"));
+		expect(warnings).toEqual([]);
 	});
 });
 
