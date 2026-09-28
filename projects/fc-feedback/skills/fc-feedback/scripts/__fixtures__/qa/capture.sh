@@ -2,15 +2,17 @@
 set -euo pipefail
 
 # fc-feedback visual-QA capture script (plan §7 T11, §12 item 6, §13.1 item 1,
-# §14.8; DESIGN.md §12/§13).
+# §14.8; DESIGN.md v2 §14/§15).
 #
 # Usage: capture.sh [--headed] <out-dir> <shots-dir> [--only id1,id2,...]
-#   <out-dir>    -- output of build.sh: <out-dir>/empty and <out-dir>/archive.
+#   <out-dir>    -- output of build.sh: <out-dir>/empty, <out-dir>/archive,
+#                   <out-dir>/disabled-mode, <out-dir>/embed-blocked.
 #   <shots-dir>  -- where PNGs + capture-manifest.json + functional.json land.
 #   --headed     -- run agent-browser with a visible browser. Required for the
 #                   approved-round headed re-check of the player_api items
-#                   (plan §13.1 item 1, §14.8): headed player_api checks must
-#                   be recorded pass/fail, never skipped.
+#                   (plan §13.1 item 1, §14.8; DESIGN.md §14): headed
+#                   player_api checks must be recorded pass/fail, never
+#                   skipped.
 #   --only ids   -- re-shoot only these capture-manifest ids; every other id
 #                   is carried over unchanged from an existing manifest in
 #                   <shots-dir> (its sha256/mtime kept, file kept on disk).
@@ -22,8 +24,26 @@ set -euo pipefail
 #
 # Serves <out-dir> over HTTP (python3 -m http.server) because file:// breaks
 # the YouTube iframe embed. Drives the rendered pages with agent-browser
-# (skill: agent-browser) and writes exactly the 33 fixed shots + functional
-# checks DESIGN.md §12 enumerates.
+# (skill: agent-browser) and writes exactly the 35 fixed shots (DESIGN.md v2
+# §14) + the functional checks §14/§15 enumerate.
+#
+# ── Selectors follow DESIGN.md's markup contract, not the current render.ts ──
+# render.ts is being rewritten to the v2 §4/§5/§6 contract by a parallel task
+# while this script is written, so the live HTML may not match it yet. Every
+# selector below is chosen to match a DESIGN.md-given name where the design
+# gives one verbatim (`.side-col`, `.player-wrapper`, `.player-collapse`,
+# `.body-frame`/`data-frame-t`, `.zoom-link`, `.card--highlighted`,
+# `.pill.pill-mine[data-group="mine"][data-value=...]`,
+# `data-member-ids`/`data-related-ids`, `role="tablist"`/`role="tab"`). For
+# markup DESIGN.md describes only behaviorally and never names a class for
+# (filter-bar chips, tabs, TOC items, the filter-reset button, the result
+# count, part-switch buttons, the mention badge, the card root's own `id`),
+# this script keeps the same names the project's pre-v2 render.ts already
+# uses (`.chip-filter[data-group][data-value]`, `#tab-match`/`#tab-topic`,
+# `.toc-item[data-target]`, `.filter-reset`, `#visible-count`/`#total-count`,
+# `.part-btn[data-video]`, `.card#<unitId>`, `.mention-badge`) since v2 does
+# not redefine or remove any of them -- only §4's layout wrappers, §5's card
+# anatomy, and §6's "내 피드백" primary control are new.
 #
 # ── A render.ts bug this script routes around without touching render.ts ──
 # VIEWER_JS's auto-init line is `if (YT && YT.loaded) { initPlayer(); } else
@@ -39,16 +59,16 @@ set -euo pipefail
 # stays empty (an empty black box) until a card or part button is clicked.
 # A click *does* work, because by the time a user can click, the async
 # script has normally already created `window.YT`, so the same bare `YT`
-# reference inside `ensurePlayer` no longer throws.
-#
-# This script does NOT edit render.ts. It captures the real, current
-# behavior for the `default`/`toc-*`/`filter-*`/`scroll-mid`/`full-page`
-# states (an empty player box, exactly what a real user's first load shows
-# today) and, only for the states/checks that already involve a click
-# (`seek-part1`, `switch-part2`, the two `player_api` functional checks),
+# reference inside `ensurePlayer` no longer throws. DESIGN.md §9 now spells
+# out the fix (`typeof`/global-existence check before reading `YT`), so this
+# workaround may become unnecessary once render.ts lands it -- until then,
+# this script captures the real, current behavior for the
+# `default`/`toc-*`/`filter-*`/`my-feedback`/`scroll-*`/`full-page` states
+# (an empty player box, exactly what a real user's first load shows today)
+# and, only for the states/checks that already involve a click (`seek-part1`,
+# `switch-part2`, the body-frame checks, the `player_api` functional checks),
 # waits for `window.YT.Player` to exist before clicking so that click's own
-# player creation does not race the same bug. See this task's final report
-# for the full finding, which is left for the user/orchestrator to act on.
+# player creation does not race the same bug.
 
 usage() {
 	cat <<'USAGE' >&2
@@ -109,8 +129,8 @@ mkdir -p "$2"
 OUT="$(cd "$1" && pwd)"
 SHOTS="$(cd "$2" && pwd)"
 
-if [ ! -d "$OUT/empty" ] || [ ! -d "$OUT/archive" ]; then
-	echo "capture.sh: $OUT does not look like a build.sh output (missing empty/ or archive/)" >&2
+if [ ! -d "$OUT/empty" ] || [ ! -d "$OUT/archive" ] || [ ! -d "$OUT/disabled-mode" ] || [ ! -d "$OUT/embed-blocked" ]; then
+	echo "capture.sh: $OUT does not look like a build.sh output (missing empty/, archive/, disabled-mode/ or embed-blocked/)" >&2
 	exit 1
 fi
 
@@ -160,15 +180,29 @@ fi
 
 ab() { agent-browser "${AB_FLAGS[@]+"${AB_FLAGS[@]}"}" --session "$SESSION" "$@"; }
 
-# The single English-language ref page id is derived from the fixture's own
-# archive/index.json rather than hardcoded, so a fixture edit that changes
-# the ref's URL (and therefore its sha256-derived id) cannot silently point
-# ref-en-* at a stale/missing page.
+# The single English-language ref page id, and the disabled-mode/embed-blocked
+# session ids, are all derived from the fixture's own build.sh output rather
+# than hardcoded, so a fixture edit that changes a session id cannot silently
+# point a page_url() case at a stale/missing page.
 REF_EN_PAGE="$(jq -r '[.refs[] | select(.lang == "en")][0].page // empty' "$OUT/archive/index.json")"
 if [ -z "$REF_EN_PAGE" ]; then
 	echo "capture.sh: no lang=en ref found in $OUT/archive/index.json" >&2
 	exit 1
 fi
+
+DISABLED_SESSION_DIR="$(find "$OUT/disabled-mode/sessions" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -n1)"
+if [ -z "$DISABLED_SESSION_DIR" ]; then
+	echo "capture.sh: no session directory found under $OUT/disabled-mode/sessions" >&2
+	exit 1
+fi
+DISABLED_SESSION_ID="$(basename "$DISABLED_SESSION_DIR")"
+
+EMBED_BLOCKED_SESSION_DIR="$(find "$OUT/embed-blocked/sessions" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -n1)"
+if [ -z "$EMBED_BLOCKED_SESSION_DIR" ]; then
+	echo "capture.sh: no session directory found under $OUT/embed-blocked/sessions" >&2
+	exit 1
+fi
+EMBED_BLOCKED_SESSION_ID="$(basename "$EMBED_BLOCKED_SESSION_DIR")"
 
 page_url() {
 	case "$1" in
@@ -177,6 +211,8 @@ page_url() {
 	archive) printf '%s' "$BASE/archive/index.html" ;;
 	archive-empty) printf '%s' "$BASE/empty/index.html" ;;
 	ref) printf '%s' "$BASE/archive/$REF_EN_PAGE" ;;
+	disabled) printf '%s' "$BASE/disabled-mode/sessions/$DISABLED_SESSION_ID/index.html" ;;
+	embed-blocked) printf '%s' "$BASE/embed-blocked/sessions/$EMBED_BLOCKED_SESSION_ID/index.html" ;;
 	*)
 		echo "capture.sh: unknown page key: $1" >&2
 		return 1
@@ -217,7 +253,7 @@ wait_yt_api() {
 	ab wait --fn "typeof window.YT !== 'undefined' && typeof window.YT.Player === 'function'" --timeout "$1" >/dev/null 2>&1 || true
 }
 
-# ── viewer interaction states (DESIGN.md §12, 12 states × 2 viewports) ─────
+# ── viewer interaction states (DESIGN.md v2 §14, 35 rows across 2+1 viewports) ─
 #
 # filter-topic-multi drives "수비전환" + "역습": DESIGN.md's own example
 # ("빌드업" + "전환/역습") names topic tags that do not exist verbatim in
@@ -225,17 +261,29 @@ wait_yt_api() {
 # 수비전환/마무리) or in work-current/plan.json's actual topic titles; 역습
 # ("전환/역습"'s counter-attack half) and 수비전환 ("전환" -- transition to
 # defense) are the closest existing pair and together select 6 of 15 cards
-# (u007..u011,u015), a non-trivial multi-select OR to capture.
-# filter-mention picks han-fw (한지우): 2 cards mention him directly.
-# filter-member picks yoon-fb (윤도훈): relatedMembers matches him on 3 cards
-# (u002/u004/u005) via position closure, not just direct mention, so this
-# state exercises the "관련 팀원" (position-based) filter path specifically.
-# filter-empty-gk picks baek-gk (백기영), the GK member the fixture roster
-# comments is tagged/mentioned nowhere -- the documented 0-result state.
+# (u007..u011,u015 by position-tree-independent topic OR), a non-trivial
+# multi-select OR to capture.
+# filter-mention (언급 선수, single-select, direct member_ids only) picks
+# han-fw (한지우): 2 cards mention him directly.
+# my-feedback (§6, single-select "내 피드백" primary control, relatedMembers
+# AND condition) picks yoon-fb (윤도훈): relatedMembers matches him on 3
+# cards (u002/u004/u005) -- one direct mention (u004, "직접 언급" badge) and
+# two via position-tree closure (u002/u005, "포지션 관련(참고)" badge) -- so
+# this state also exercises both mention-badge kinds in one screenshot.
+# filter-empty-and (§7, two different groups AND to 0) picks position `FB`
+# (3 cards: u002/u004/u005, topics 빌드업/오버래핑) + topic `마무리` (3
+# cards: u013/u014/u015) -- both options individually non-empty, their AND
+# is empty, matching §7's own worked example ("포지션 GK AND 주제 빌드업").
+# scroll-mid-390 (state scroll-near-end) and scroll-mid-1440 (state
+# scroll-mid) share one capture id family but drive different scroll depths:
+# DESIGN.md v2 §14 row 19 requires 390px to scroll to the LAST card (sticky
+# player must hold through the entire scroll range), while row 20 keeps the
+# 1440px mid-scroll of v1 (sticky player position check only, layout has no
+# scrolling player at that width in the first place -- §4's `.side-col` is
+# its own sticky column there).
 drive_state() {
 	case "$1" in
-	default | full-page | scroll-mid-noop) : ;;
-	toc-match) ab click '#tab-match' >/dev/null ;;
+	default | full-page) : ;;
 	toc-topic) ab click '#tab-topic' >/dev/null ;;
 	filter-position-fb) ab click '.chip-filter[data-group="position"][data-value="FB"]' >/dev/null ;;
 	filter-topic-multi)
@@ -243,8 +291,11 @@ drive_state() {
 		ab click '.chip-filter[data-group="topic"][data-value="역습"]' >/dev/null
 		;;
 	filter-mention) ab click '.chip-filter[data-group="mention"][data-value="han-fw"]' >/dev/null ;;
-	filter-member) ab click '.chip-filter[data-group="related"][data-value="yoon-fb"]' >/dev/null ;;
-	filter-empty-gk) ab click '.chip-filter[data-group="related"][data-value="baek-gk"]' >/dev/null ;;
+	my-feedback) ab click '.pill.pill-mine[data-group="mine"][data-value="yoon-fb"]' >/dev/null ;;
+	filter-empty-and)
+		ab click '.chip-filter[data-group="position"][data-value="FB"]' >/dev/null
+		ab click '.chip-filter[data-group="topic"][data-value="마무리"]' >/dev/null
+		;;
 	seek-part1)
 		wait_yt_api 20000
 		ab click '.card#u002' >/dev/null
@@ -255,6 +306,14 @@ drive_state() {
 		;;
 	scroll-mid)
 		printf '%s' 'window.scrollTo(0, Math.floor(document.body.scrollHeight / 2))' | ab eval --stdin >/dev/null
+		;;
+	scroll-near-end)
+		printf '%s' 'var cards = document.querySelectorAll(".card"); if (cards.length) { cards[cards.length - 1].scrollIntoView({block: "end"}); }' | ab eval --stdin >/dev/null
+		;;
+	body-frames-closeup)
+		# u008 has 3 body-frame blocks (candidates c004/c005/c006), the most
+		# of any unit in this fixture.
+		printf '%s' 'var el = document.getElementById("u008"); if (el) { el.scrollIntoView({block: "start"}); }' | ab eval --stdin >/dev/null
 		;;
 	*)
 		echo "capture.sh: unknown state: $1" >&2
@@ -272,34 +331,33 @@ take_shot() {
 	fi
 }
 
-# ── the 33 fixed shots (DESIGN.md §12) ─────────────────────────────────────
+# ── the 35 fixed shots (DESIGN.md v2 §14) ──────────────────────────────────
 # id|page-key|width|height|state
 SHOT_TABLE='
-default-390x844|viewer|390|844|default
-default-1440x900|viewer|1440|900|default
-default-1024x768|viewer|1024|768|default
-toc-match-390x844|viewer|390|844|toc-match
-toc-match-1440x900|viewer|1440|900|toc-match
-toc-topic-390x844|viewer|390|844|toc-topic
-toc-topic-1440x900|viewer|1440|900|toc-topic
-filter-position-fb-390x844|viewer|390|844|filter-position-fb
-filter-position-fb-1440x900|viewer|1440|900|filter-position-fb
-filter-topic-multi-390x844|viewer|390|844|filter-topic-multi
-filter-topic-multi-1440x900|viewer|1440|900|filter-topic-multi
-filter-mention-390x844|viewer|390|844|filter-mention
-filter-mention-1440x900|viewer|1440|900|filter-mention
-filter-member-390x844|viewer|390|844|filter-member
-filter-member-1440x900|viewer|1440|900|filter-member
-filter-empty-gk-390x844|viewer|390|844|filter-empty-gk
-filter-empty-gk-1440x900|viewer|1440|900|filter-empty-gk
-seek-part1-390x844|viewer|390|844|seek-part1
-seek-part1-1440x900|viewer|1440|900|seek-part1
-switch-part2-390x844|viewer|390|844|switch-part2
-switch-part2-1440x900|viewer|1440|900|switch-part2
-scroll-mid-390x844|viewer|390|844|scroll-mid
-scroll-mid-1440x900|viewer|1440|900|scroll-mid
-full-page-390x844|viewer|390|844|full-page
-full-page-1440x900|viewer|1440|900|full-page
+default-390|viewer|390|844|default
+default-1440|viewer|1440|900|default
+toc-topic-390|viewer|390|844|toc-topic
+toc-topic-1440|viewer|1440|900|toc-topic
+filter-position-390|viewer|390|844|filter-position-fb
+filter-position-1440|viewer|1440|900|filter-position-fb
+filter-topic-multi-390|viewer|390|844|filter-topic-multi
+filter-topic-multi-1440|viewer|1440|900|filter-topic-multi
+filter-mention-390|viewer|390|844|filter-mention
+filter-mention-1440|viewer|1440|900|filter-mention
+my-feedback-390|viewer|390|844|my-feedback
+my-feedback-1440|viewer|1440|900|my-feedback
+filter-empty-and-390|viewer|390|844|filter-empty-and
+filter-empty-and-1440|viewer|1440|900|filter-empty-and
+seek-part1-390|viewer|390|844|seek-part1
+seek-part1-1440|viewer|1440|900|seek-part1
+switch-part2-390|viewer|390|844|switch-part2
+switch-part2-1440|viewer|1440|900|switch-part2
+scroll-mid-390|viewer|390|844|scroll-near-end
+scroll-mid-1440|viewer|1440|900|scroll-mid
+body-frames-closeup-390|viewer|390|844|body-frames-closeup
+body-frames-closeup-1440|viewer|1440|900|body-frames-closeup
+full-page-390|viewer|390|844|full-page
+full-page-1440|viewer|1440|900|full-page
 past-session-390|past|390|844|default
 past-session-1440|past|1440|900|default
 archive-with-sessions-390|archive|390|844|default
@@ -308,6 +366,9 @@ archive-empty-390|archive-empty|390|844|default
 archive-empty-1440|archive-empty|1440|900|default
 ref-en-390|ref|390|844|default
 ref-en-1440|ref|1440|900|default
+default-1024x768|viewer|1024|768|default
+disabled-mode-390|disabled|390|844|default
+embed-blocked-390|embed-blocked|390|844|default
 '
 
 OLD_MANIFEST="$SHOTS/capture-manifest.json"
@@ -388,8 +449,8 @@ EOF
 } | jq -s '.' >"$SHOTS/capture-manifest.json"
 
 manifest_len="$(jq 'length' "$SHOTS/capture-manifest.json")"
-if [ "$manifest_len" -ne 33 ]; then
-	echo "capture.sh: capture-manifest.json has $manifest_len entries, expected 33" >&2
+if [ "$manifest_len" -ne 35 ]; then
+	echo "capture.sh: capture-manifest.json has $manifest_len entries, expected 35" >&2
 	exit 1
 fi
 
@@ -400,9 +461,9 @@ for f in $(jq -r '.[] | .file' "$SHOTS/capture-manifest.json"); do
 	fi
 done
 
-# ── functional checks (DESIGN.md §12 "기능 검사") ──────────────────────────
+# ── functional checks (DESIGN.md v2 §14 "기능 검사") ───────────────────────
 # Always run in full regardless of --only: independent of which screenshot
-# ids were reshot, and cheap next to the 33 screenshots above.
+# ids were reshot, and cheap next to the 35 screenshots above.
 
 FUNCTIONAL_ENTRIES=()
 
@@ -441,6 +502,33 @@ run_dom_checks() {
 	ab set viewport 1440 900 >/dev/null
 	ab open "$url" >/dev/null
 
+	# ── DESIGN.md §7/§15.5: 0-result options are never rendered, and every
+	# option that IS rendered shows a positive count. Checked on a fresh,
+	# unfiltered load since option existence/counts are fixed at build time
+	# (§7) and do not depend on interaction order.
+	pass="$(eval_js <<'JS'
+document.querySelector('.chip-filter[data-group="position"][data-value="GK"]') === null
+JS
+	)"
+	add_check "이 세션에 결과가 없는 포지션 옵션(GK)은 필터 트리에 렌더되지 않는다(§7, §15-5)" dom "$pass" ""
+
+	pass="$(eval_js <<'JS'
+(function () {
+  var chips = document.querySelectorAll('.chip-filter[data-group]');
+  for (var i = 0; i < chips.length; i++) {
+    var m = chips[i].textContent.match(/\((\d+)\)/);
+    if (!m || parseInt(m[1], 10) <= 0) return false;
+  }
+  var counts = document.querySelectorAll('.pill-mine .count');
+  for (var j = 0; j < counts.length; j++) {
+    if (!(parseInt(counts[j].textContent, 10) > 0)) return false;
+  }
+  return chips.length > 0;
+})()
+JS
+	)"
+	add_check "렌더된 모든 필터/\"내 피드백\" 옵션은 개수 표시가 0보다 크다(§1 원칙4, §6, §7)" dom "$pass" ""
+
 	ab click '.card#u002' >/dev/null
 	pass="$(eval_js <<'JS'
 document.body.dataset.video === "NUzEChn9EyI"
@@ -472,7 +560,7 @@ document.body.dataset.video === $before_video &&
 document.getElementById("u008").classList.contains("card--highlighted")
 JS
 	)"
-	add_check "목차 클릭은 대상 카드를 스크롤·강조하고 영상 전환(seek)은 발생시키지 않는다" dom "$pass" ""
+	add_check "목차 클릭은 대상 카드를 스크롤·강조하고 영상 전환(seek)은 발생시키지 않는다(§8)" dom "$pass" ""
 
 	ab click '.chip-filter[data-group="position"][data-value="FB"]' >/dev/null
 	ab click '.filter-reset' >/dev/null
@@ -489,6 +577,144 @@ document.getElementById("tab-match").getAttribute("aria-selected") === "false"
 JS
 	)"
 	add_check "탭 클릭 후 aria-selected가 전환된다" dom "$pass" ""
+
+	# ── DESIGN.md §5-7/§9: a body-frame click seeks the FRAME's own time, not
+	# the card's start time. u013 (part 2, video yn-qm7lM5p4) is forced to be
+	# a different part than the current one first, so the video switching
+	# itself (dom-observable via the two documented test hooks, §9) proves
+	# the frame -- not the card's own start -- drove the target: the exact
+	# ±2s seek-time precision (frame time vs. card start time, both landing
+	# on the same video) is left to the player_api check below, which is the
+	# only one of the two official test hooks (§9: body.dataset.video,
+	# window.fcPlayer) that exposes actual seek time.
+	ab click '.part-btn[data-video="NUzEChn9EyI"]' >/dev/null
+	ab click '#u013 .body-frame' >/dev/null
+	pass="$(eval_js <<'JS'
+document.body.dataset.video === "yn-qm7lM5p4" &&
+document.querySelector('.part-btn[data-video="yn-qm7lM5p4"]').getAttribute("aria-pressed") === "true" &&
+document.querySelector('.part-btn[data-video="NUzEChn9EyI"]').getAttribute("aria-pressed") === "false"
+JS
+	)"
+	add_check "본문 프레임(다른 파트) 클릭은 그 프레임이 속한 video로 전환한다(카드 시작이 아니라 프레임 자체가 대상, §5-7, §9)" dom "$pass" ""
+
+	# ── DESIGN.md §6: "내 피드백"에서 팀원 1명을 선택하면 relatedMembers 카드만
+	# 남는다. yoon-fb matches u002/u004/u005 (직접 언급 u004 + 포지션 관련
+	# u002/u005), 총 3건.
+	ab click '.pill.pill-mine[data-group="mine"][data-value="yoon-fb"]' >/dev/null
+	pass="$(eval_js <<'JS'
+document.getElementById("visible-count").textContent === "3" &&
+!document.getElementById("u002").hasAttribute("hidden") &&
+!document.getElementById("u004").hasAttribute("hidden") &&
+!document.getElementById("u005").hasAttribute("hidden") &&
+document.getElementById("u001").hasAttribute("hidden")
+JS
+	)"
+	add_check "\"내 피드백\"에서 팀원 1명을 선택하면 그 팀원의 relatedMembers 카드만 남고 결과 수가 갱신된다(§6)" dom "$pass" ""
+
+	pass="$(eval_js <<'JS'
+(function () {
+  var direct = document.querySelector("#u004 .mention-badge");
+  var positional = document.querySelector("#u002 .mention-badge") || document.querySelector("#u005 .mention-badge");
+  return !!direct && direct.textContent.trim() === "직접 언급" &&
+    !!positional && positional.textContent.trim() === "포지션 관련(참고)";
+})()
+JS
+	)"
+	add_check "\"내 피드백\" 선택 시 직접 언급/포지션 관련(참고) 멘션 배지가 올바르게 구분된다(§5-3)" dom "$pass" ""
+
+	ab click '.filter-reset' >/dev/null
+
+	# ── DESIGN.md §5/§13: 드래그로 텍스트를 선택 중인 카드를 클릭해도 seek가
+	# 실행되지 않는다.
+	pass="$(eval_js <<'JS'
+(function () {
+  var card = document.getElementById("u003");
+  var video = card.getAttribute("data-video");
+  var beforeVideo = document.body.dataset.video;
+  // the card's video must differ from the loaded one, or a real seek would
+  // be a same-value no-op and this check would pass without exercising
+  // anything -- fail loudly instead of degrading silently.
+  if (video === beforeVideo) return false;
+  var p = card.querySelector(".card-body p");
+  var range = document.createRange();
+  range.selectNodeContents(p);
+  var sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  // the selection must actually hold text, or onCardListClick's
+  // `getSelection().toString() !== ""` guard is never exercised.
+  if (sel.toString().length === 0) return false;
+  card.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+  var afterVideo = document.body.dataset.video;
+  var partBtn = document.querySelector('.part-btn[data-video="' + video + '"]');
+  var afterPressed = partBtn ? partBtn.getAttribute("aria-pressed") : null;
+  sel.removeAllRanges();
+  return beforeVideo === afterVideo && afterPressed === "false";
+})()
+JS
+	)"
+	add_check "카드 안 텍스트를 드래그 선택한 상태의 클릭은 seek를 실행하지 않는다(§5, §13)" dom "$pass" ""
+
+	# ── DESIGN.md §7: 서로 다른 두 그룹(포지션 FB + 주제 마무리)의 AND는 0건.
+	ab click '.chip-filter[data-group="position"][data-value="FB"]' >/dev/null
+	ab click '.chip-filter[data-group="topic"][data-value="마무리"]' >/dev/null
+	pass="$(eval_js <<'JS'
+document.getElementById("visible-count").textContent === "0" &&
+!document.querySelector(".empty-state").hasAttribute("hidden")
+JS
+	)"
+	add_check "서로 다른 두 그룹의 AND 조합이 0건이면 빈 상태가 표시된다(§7, §11, §15-5)" dom "$pass" ""
+
+	pass="$(eval_js <<'JS'
+(function () {
+  var pos = document.querySelector('.chip-filter[data-group="position"][data-value="FB"]');
+  var topic = document.querySelector('.chip-filter[data-group="topic"][data-value="마무리"]');
+  return !!pos && pos.getAttribute("aria-pressed") === "true" &&
+    !!topic && topic.getAttribute("aria-pressed") === "true";
+})()
+JS
+	)"
+	add_check "AND 조합이 0건이 되어도 선택된 필터 옵션은 필터 바에서 사라지지 않는다(§7)" dom "$pass" ""
+
+	ab click '.filter-reset' >/dev/null
+
+	# ── DESIGN.md §5-7/§15-6: "확대" 링크는 이미지 원본을 새 탭으로 연다.
+	pass="$(eval_js <<'JS'
+(function () {
+  var link = document.querySelector(".zoom-link");
+  return !!link &&
+    /img\/.*\.webp$/.test(link.getAttribute("href") || "") &&
+    link.getAttribute("target") === "_blank" &&
+    (link.getAttribute("rel") || "").indexOf("noopener") !== -1;
+})()
+JS
+	)"
+	add_check "본문 프레임의 \"확대\" 링크는 이미지 원본(img/*.webp)을 새 탭으로 연다(§5-7, §15-6)" dom "$pass" ""
+}
+
+# ── 1024px 미만 전용 dom 체크: 플레이어 접기, 모바일 sticky 유지 (§4, §14) ──
+run_mobile_dom_checks() {
+	url="$(page_url viewer)"
+	ab set viewport 390 844 >/dev/null
+	ab open "$url" >/dev/null
+
+	ab click '.player-collapse' >/dev/null
+	pass="$(eval_js <<'JS'
+document.querySelector(".player-collapse").getAttribute("aria-expanded") === "false" &&
+document.querySelector(".player-wrapper").classList.contains("is-collapsed")
+JS
+	)"
+	add_check "\"플레이어 접기\" 버튼을 누르면 aria-expanded가 false로 전환되고 .player-wrapper.is-collapsed가 적용된다(§4, §13)" dom "$pass" ""
+
+	printf '%s' 'var cards = document.querySelectorAll(".card"); if (cards.length) { cards[cards.length - 1].scrollIntoView({block: "end"}); }' | ab eval --stdin >/dev/null
+	pass="$(eval_js <<'JS'
+(function () {
+  var r = document.querySelector(".player-wrapper").getBoundingClientRect();
+  return r.top >= -2 && r.top <= 2 && r.height > 0;
+})()
+JS
+	)"
+	add_check "390px에서 카드 목록 끝까지 스크롤해도 .player-wrapper가 sticky로 고정 유지된다(§4, §14)" dom "$pass" ""
 }
 
 run_player_checks() {
@@ -539,9 +765,29 @@ run_player_checks() {
 	else
 		add_check "파트 전환 후 fcPlayer.getVideoData().video_id가 목표 파트의 videoId와 일치한다" player_api false "헤드리스 환경에서 YouTube 플레이어 초기화/재생이 제한되어 판정 불가(네트워크 또는 재생 정책 제약)"
 	fi
+
+	# ── DESIGN.md §5-7/§9: 본문 프레임 클릭은 프레임 자체의 시각(u013의 첫
+	# 프레임, candidate c008, t=630)으로 seek해야 한다 -- 카드(u013) 시작
+	# 시각이 아니라.
+	frame_pass=false
+	if [ "$api_ready" = true ]; then
+		ab click '.part-btn[data-video="NUzEChn9EyI"]' >/dev/null
+		ab click '#u013 .body-frame' >/dev/null
+		if ab wait --fn "window.fcPlayer && typeof window.fcPlayer.getCurrentTime === 'function' && Math.abs(window.fcPlayer.getCurrentTime() - 630) <= 2" --timeout "$switch_timeout" >/dev/null 2>&1; then
+			frame_pass=true
+		fi
+	fi
+	if [ "$HEADED" = true ]; then
+		add_check "본문 프레임 클릭 후 fcPlayer.getCurrentTime()이 그 프레임의 시각(카드 시작 시각이 아님)과 ±2초 이내로 일치한다" player_api "$frame_pass" ""
+	elif [ "$frame_pass" = true ]; then
+		add_check "본문 프레임 클릭 후 fcPlayer.getCurrentTime()이 그 프레임의 시각(카드 시작 시각이 아님)과 ±2초 이내로 일치한다" player_api true ""
+	else
+		add_check "본문 프레임 클릭 후 fcPlayer.getCurrentTime()이 그 프레임의 시각(카드 시작 시각이 아님)과 ±2초 이내로 일치한다" player_api false "헤드리스 환경에서 YouTube 플레이어 초기화/재생이 제한되어 판정 불가(네트워크 또는 재생 정책 제약)"
+	fi
 }
 
 run_dom_checks
+run_mobile_dom_checks
 run_player_checks
 
 {

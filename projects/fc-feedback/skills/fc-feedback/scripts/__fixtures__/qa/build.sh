@@ -18,15 +18,25 @@ set -euo pipefail
 # here only as real, embeddable, public YouTube ids for the viewer fixture.
 #
 # Usage: build.sh <out-dir>
-#   <out-dir>/empty    -- init-archive only (empty-archive capture state)
-#   <out-dir>/archive  -- full archive with the past + current sessions rendered
+#   <out-dir>/empty          -- init-archive only (empty-archive capture state)
+#   <out-dir>/archive        -- full archive with the past + current sessions rendered
+#   <out-dir>/disabled-mode  -- disabled-mode (no roster) site render, DESIGN.md
+#                               §14 row 34 (disabled-mode-390)
+#   <out-dir>/embed-blocked  -- disabled-mode site render of one embeddable:false
+#                               video, DESIGN.md §14 row 35 (embed-blocked-390)
 #
 # No network calls happen in this script: every LLM-stage JSON artifact
 # (plan.json, notes.json, similar-choices.json, refs-draft.json,
-# refs.verified.json) ships pre-written under work-past/ and work-current/,
-# and refs.verified.json ships already "verified" so verify-refs' HTTP path
-# is never exercised here. Idempotent: reruns against the same <out-dir>
-# rebuild it from scratch.
+# refs.verified.json) ships pre-written under work-past/, work-current/,
+# work-disabled/ and work-embed-blocked/, and refs.verified.json ships
+# already "verified" so verify-refs' HTTP path is never exercised here.
+# Idempotent: reruns against the same <out-dir> rebuild it from scratch.
+#
+# disabled-mode/ and embed-blocked/ are rendered through a second, isolated
+# HOME/OMT_DIR (never configured with an archive/roster) so `fc config
+# disable` carries forward no archive_repo_path/roster_path (manifest.ts
+# carryPaths) -- DESIGN.md §11's disabled mode requires member_ids to be
+# empty and no roster to exist at all, not merely a roster that goes unread.
 
 if [ "$#" -lt 1 ]; then
 	echo "usage: build.sh <out-dir>" >&2
@@ -72,12 +82,12 @@ gen_frame() {
 	fi
 }
 
-# ── 1/6: empty archive (init-archive only, empty-state capture) ────────────
-log "1/6 empty archive"
+# ── 1/8: empty archive (init-archive only, empty-state capture) ────────────
+log "1/8 empty archive"
 fc init-archive --archive "$OUT/empty" >/dev/null
 
-# ── 2/6: seed a fresh git archive from archive-seed/ ────────────────────────
-log "2/6 seeding archive"
+# ── 2/8: seed a fresh git archive from archive-seed/ ────────────────────────
+log "2/8 seeding archive"
 ARCHIVE="$OUT/archive"
 mkdir -p "$ARCHIVE"
 git init -q "$ARCHIVE"
@@ -89,8 +99,8 @@ git -C "$ARCHIVE" -c user.name=fc-feedback-qa -c user.email=fc-feedback-qa@examp
 
 fc config set --archive "$ARCHIVE" --roster "$ARCHIVE/roster.yaml" --pages-url "https://example.github.io/fc-feedback-qa/" >/dev/null
 
-# ── 3/6: render the past session (single part) ──────────────────────────────
-log "3/6 rendering past session"
+# ── 3/8: render the past session (single part) ──────────────────────────────
+log "3/8 rendering past session"
 WORK_PAST="$OUT/.work-past"
 rm -rf "$WORK_PAST"
 mkdir -p "$WORK_PAST/img"
@@ -112,8 +122,8 @@ done
 
 fc render --work "$WORK_PAST" >/dev/null
 
-# ── 4/6: current session -- approved proposed tag, then check plan ─────────
-log "4/6 checking current session (plan/notes)"
+# ── 4/8: current session -- approved proposed tag, then check plan ─────────
+log "4/8 checking current session (plan/notes)"
 WORK_CUR="$OUT/.work-current"
 rm -rf "$WORK_CUR"
 mkdir -p "$WORK_CUR/img"
@@ -130,8 +140,8 @@ fc taxonomy add 세트피스 --work "$WORK_CUR" >/dev/null
 fc check plan --work "$WORK_CUR" >/dev/null
 fc check notes --work "$WORK_CUR" >/dev/null
 
-# ── 5/6: similar-candidates.json must match the committed expected fixture ─
-log "5/6 similar (vs similar-candidates.expected.json)"
+# ── 5/8: similar-candidates.json must match the committed expected fixture ─
+log "5/8 similar (vs similar-candidates.expected.json)"
 fc similar --work "$WORK_CUR" >/dev/null
 if ! diff -u <(jq -S . "$QA_DIR/similar-candidates.expected.json") <(jq -S . "$WORK_CUR/similar-candidates.json") >"$OUT/.similar.diff" 2>&1; then
 	log "similar-candidates.json regressed vs similar-candidates.expected.json:"
@@ -155,6 +165,68 @@ done
 
 fc render --work "$WORK_CUR" >/dev/null
 
-# ── 6/6: publish-prep -- its JSON line is this script's final stdout line ──
-log "6/6 publish-prep"
+# ── 6/8 + 7/8: disabled-mode + embed-blocked (DESIGN.md §14 rows 34/35) ─────
+#
+# A second, isolated HOME/OMT_DIR that is never `config set` -- `fc config
+# disable` (manifest.ts disableFc) carries forward the PREVIOUS manifest's
+# archive_repo_path/roster_path (carryPaths), so reusing the already-
+# configured $HOME above would leave status.roster_path set and loadRoster
+# would still load a real roster even in disabled mode. Starting from a
+# manifest that has never been configured means disableFc carries forward
+# nothing, matching DESIGN.md §11's "명단이 없는" (no roster at all) disabled
+# mode rather than merely a configured roster that goes unread.
+HOME2="$OUT/.home-disabled"
+OMT2="$OUT/.omt-disabled"
+CWD2="$OUT/.cwd-disabled"
+mkdir -p "$HOME2" "$OMT2" "$CWD2"
+git init -q "$CWD2"
+
+fc2() {
+	(cd "$CWD2" && HOME="$HOME2" OMT_DIR="$OMT2" bun "$FC_TS" "$@")
+}
+
+fc2 config disable >/dev/null
+
+log "6/8 disabled-mode fixture (no roster)"
+WORK_DISABLED="$OUT/.work-disabled"
+rm -rf "$WORK_DISABLED"
+mkdir -p "$WORK_DISABLED/img"
+for f in session.json lines.json candidates.json plan.json notes.json similar-choices.json refs-draft.json refs.verified.json; do
+	cp "$QA_DIR/work-disabled/$f" "$WORK_DISABLED/$f"
+done
+
+fc2 check plan --work "$WORK_DISABLED" >/dev/null
+fc2 check notes --work "$WORK_DISABLED" >/dev/null
+fc2 similar --work "$WORK_DISABLED" >/dev/null
+fc2 check similar --work "$WORK_DISABLED" >/dev/null
+fc2 check refs --work "$WORK_DISABLED" >/dev/null
+gen_frame "$WORK_DISABLED/img/u001-start.webp" 0
+fc2 render --site-only --work "$WORK_DISABLED" >/dev/null
+
+rm -rf "$OUT/disabled-mode"
+mkdir -p "$OUT/disabled-mode"
+cp -R "$WORK_DISABLED/site/." "$OUT/disabled-mode/"
+
+log "7/8 embed-blocked fixture (embeddable:false)"
+WORK_EMBED="$OUT/.work-embed-blocked"
+rm -rf "$WORK_EMBED"
+mkdir -p "$WORK_EMBED/img"
+for f in session.json lines.json candidates.json plan.json notes.json similar-choices.json refs-draft.json refs.verified.json; do
+	cp "$QA_DIR/work-embed-blocked/$f" "$WORK_EMBED/$f"
+done
+
+fc2 check plan --work "$WORK_EMBED" >/dev/null
+fc2 check notes --work "$WORK_EMBED" >/dev/null
+fc2 similar --work "$WORK_EMBED" >/dev/null
+fc2 check similar --work "$WORK_EMBED" >/dev/null
+fc2 check refs --work "$WORK_EMBED" >/dev/null
+gen_frame "$WORK_EMBED/img/u001-start.webp" 0
+fc2 render --site-only --work "$WORK_EMBED" >/dev/null
+
+rm -rf "$OUT/embed-blocked"
+mkdir -p "$OUT/embed-blocked"
+cp -R "$WORK_EMBED/site/." "$OUT/embed-blocked/"
+
+# ── 8/8: publish-prep -- its JSON line is this script's final stdout line ──
+log "8/8 publish-prep"
 fc publish-prep
