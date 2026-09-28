@@ -171,6 +171,7 @@ function sampleData(): SessionData {
 // ── helpers ───────────────────────────────────────────────────────────────
 
 const XSS_PAYLOAD = '"><script>alert(1)</script>';
+const NBSP = " ";
 
 function scriptCount(html: string): number {
 	return parseHTML(html).document.querySelectorAll("script").length;
@@ -381,6 +382,28 @@ describe("escapeHtml 전면 적용", () => {
 		expect(html.includes(XSS_PAYLOAD)).toBe(false);
 		expect(html.includes("alert(1)")).toBe(true);
 		expect(scriptCount(html)).toBe(0);
+	});
+
+	test("번역 표의 각 셀은 data-label을 갖는다(<1024px 스택 레이아웃의 라벨 소스, 라운드6 CJK 검토)", () => {
+		const doc = parseHTML(
+			renderRef({
+				id: "r-1",
+				title: "제목",
+				lang: "en",
+				kind: "eafc",
+				url: "https://example.com",
+				summary_ko: "요약",
+				key_points_ko: [],
+				translations: [{ orig: "Play out from the back.", ko: "후방에서 빌드업하라." }],
+			}),
+		).document;
+		const cells = [...doc.querySelectorAll(".translations-table td")];
+		expect(cells.map((cell) => cell.getAttribute("data-label"))).toEqual(["원문", "한국어"]);
+	});
+
+	test("STYLE은 1024px 미만에서 번역 표를 라벨이 붙은 블록으로 세로 스택한다(라운드6 CJK 검토)", () => {
+		expect(STYLE).toMatch(/@media \(max-width: 1023\.98px\)[^]*?\.translations-table[^{]*\{[^}]*display:\s*block/);
+		expect(STYLE).toContain("content: attr(data-label)");
 	});
 });
 
@@ -685,10 +708,12 @@ describe("필터", () => {
 		expect(isHidden(doc.getElementById("u002"))).toBe(true); // 피지컬만
 	});
 
-	test("서로 다른 두 그룹 조합이 0건이면 빈 상태를 보인다(filter-empty-and, DESIGN §14)", () => {
+	test("필터 다음 내 피드백 조합이 0건이면 빈 상태를 보인다(filter-empty-and, DESIGN §14) — 패싯 칩 두 개만으로는 0건에 도달할 수 없다(§7 라이브 카운트, 아래 별도 describe)", () => {
 		const { doc } = mountViewer(renderSession(sampleData()), false);
-		clickChip(doc, "position", "GK"); // u002만 해당
-		clickChip(doc, "topic", "빌드업"); // u002는 피지컬 태그라 겹치지 않음 → AND 0건
+		// 주제 "피지컬"은 선택 시점에 u002만 해당(0건이 아니라 눌린다) — 패싯끼리는 서로를 미리
+		// 비활성화하므로, 0건에 도달하는 유일한 경로는 "내 피드백"(비활성화 대상이 아님)과의 조합이다.
+		clickChip(doc, "topic", "피지컬"); // u002만 해당
+		clickMinePill(doc, "choi"); // choi의 관련 유닛은 u003뿐 — 피지컬(u002)과 겹치지 않아 AND 0건
 		expect(isHidden(doc.querySelector(".card-list"))).toBe(true);
 		expect(isHidden(doc.querySelector(".toc"))).toBe(true);
 		const emptyState = doc.querySelector(".empty-state");
@@ -848,11 +873,15 @@ describe("토큰·와이드 칩 (DESIGN §2, §15-10)", () => {
 		expect(chipRule).toContain("white-space: nowrap");
 		expect(chipRule).toContain("flex-shrink: 0");
 	});
+
+	test(".card-list는 명시적 display(flex)를 갖는 요소라 [hidden] 전용 오버라이드가 없으면 UA [hidden]이 지지 않는다 — 0건일 때 flex 슬롯이 남아 빈 상태 위 여백이 배로 벌어지던 결함(라운드6 CJK 검토)", () => {
+		expect(STYLE).toMatch(/\.card-list\[hidden\]\s*\{\s*display:\s*none;?\s*\}/);
+	});
 });
 
-// ── 필터 옵션: 결과 0건 숨김 · 빌드 시점 고정 (DESIGN §7) ────────────────────
+// ── 필터 옵션: 세션 전체 0건 숨김 · 라이브 카운트 (DESIGN §7) ────────────────
 
-describe("필터 옵션 — 결과 0건 숨김 · 카운트 고정", () => {
+describe("필터 옵션 — 세션 전체 0건 숨김", () => {
 	test("결과가 없는 포지션 노드(MF)는 렌더되지 않고, 있는 노드는 카운트를 보인다", () => {
 		const doc = parseHTML(renderSession(sampleData())).document;
 		const values = [...doc.querySelectorAll('.chip-filter[data-group="position"]')].map((el) =>
@@ -874,13 +903,71 @@ describe("필터 옵션 — 결과 0건 숨김 · 카운트 고정", () => {
 		expect(values).not.toContain("kim");
 	});
 
-	test("선택된 옵션은 다른 그룹과의 AND로 0건이 되어도 필터 바에서 사라지지 않는다", () => {
+	test("선택된 옵션은 다른 조건과의 AND로 0건이 되어도 필터 바에서 사라지거나 비활성화되지 않는다", () => {
 		const { doc } = mountViewer(renderSession(sampleData()), false);
-		clickChip(doc, "position", "GK");
-		clickChip(doc, "topic", "빌드업");
+		clickChip(doc, "position", "GK"); // 선택 시점엔 u002 1건 — 눌린다
+		clickMinePill(doc, "choi"); // choi 관련 유닛은 u003(ST)뿐 — GK(u002)와 겹치지 않아 AND 0건
 		const gkChip = doc.querySelector('.chip-filter[data-group="position"][data-value="GK"]');
 		expect(gkChip).not.toBeNull();
 		expect(gkChip?.getAttribute("aria-pressed")).toBe("true");
+		expect(gkChip?.hasAttribute("disabled")).toBe(false); // 이미 선택된 옵션은 절대 비활성화하지 않는다(§7)
+	});
+});
+
+// ── 라이브 패싯 카운트 — 선택 조건 재계산·비활성화 (DESIGN §7, 사용자 요청 반영) ─────
+
+describe("라이브 패싯 카운트", () => {
+	test("다른 그룹 선택 시 옵션 카운트가 실시간으로 재계산되고, 0건 옵션은 비활성화된다", () => {
+		const { doc } = mountViewer(renderSession(sampleData()), false);
+		clickChip(doc, "position", "GK"); // u002(피지컬)만 해당
+
+		const buildup = doc.querySelector('.chip-filter[data-group="topic"][data-value="빌드업"]');
+		expect(buildup?.querySelector(".chip-count")?.textContent).toBe("(0)"); // GK와 겹치는 빌드업 카드 없음
+		expect(buildup?.hasAttribute("disabled")).toBe(true);
+		expect(buildup?.getAttribute("aria-disabled")).toBe("true");
+
+		const physical = doc.querySelector('.chip-filter[data-group="topic"][data-value="피지컬"]');
+		expect(physical?.querySelector(".chip-count")?.textContent).toBe("(1)"); // u002 그대로 살아있다
+		expect(physical?.hasAttribute("disabled")).toBe(false);
+
+		const hongMention = doc.querySelector('.chip-filter[data-group="mention"][data-value="hong"]');
+		expect(hongMention?.querySelector(".chip-count")?.textContent).toBe("(0)"); // hong은 u001(FB) 소속
+		expect(hongMention?.hasAttribute("disabled")).toBe(true);
+	});
+
+	test("이미 선택된 옵션은 절대 비활성화하지 않는다", () => {
+		const { doc } = mountViewer(renderSession(sampleData()), false);
+		clickChip(doc, "position", "GK");
+		clickMinePill(doc, "choi"); // GK(u002)와 choi 관련(u003)은 서로 겹치지 않는다
+		const gkChip = doc.querySelector('.chip-filter[data-group="position"][data-value="GK"]');
+		expect(gkChip?.querySelector(".chip-count")?.textContent).toBe("(0)"); // 카운트는 정직하게 0을 보이지만
+		expect(gkChip?.hasAttribute("disabled")).toBe(false); // 선택된 옵션이라 비활성화되지 않는다
+	});
+
+	test("주제 그룹은 내부적으로 OR다 — 이미 선택된 옵션이 같은 그룹의 다른 옵션을 비활성화하지 않는다", () => {
+		const { doc } = mountViewer(renderSession(sampleData()), false);
+		clickChip(doc, "topic", "빌드업"); // u001, u003
+		const transition = doc.querySelector('.chip-filter[data-group="topic"][data-value="전환"]');
+		expect(transition?.querySelector(".chip-count")?.textContent).toBe("(1)"); // u003 — 빌드업 선택의 영향을 받지 않는다
+		expect(transition?.hasAttribute("disabled")).toBe(false);
+	});
+
+	test("비활성화된 옵션은 클릭해도 선택되지 않는다", () => {
+		const { doc } = mountViewer(renderSession(sampleData()), false);
+		clickChip(doc, "position", "GK");
+		clickChip(doc, "topic", "빌드업"); // 이 시점에 이미 비활성화된 옵션 — 클릭이 무시돼야 한다
+		const buildup = doc.querySelector('.chip-filter[data-group="topic"][data-value="빌드업"]');
+		expect(buildup?.getAttribute("aria-pressed")).toBe("false");
+		expect(isHidden(doc.getElementById("u002"))).toBe(false); // GK 조건 그대로 — 0건이 되지 않았다
+	});
+
+	test("필터 해제 시 카운트가 선택 없음 상태(빌드 시점 카운트)로 복원된다", () => {
+		const { doc } = mountViewer(renderSession(sampleData()), false);
+		clickChip(doc, "position", "GK");
+		click(doc.querySelector(".filter-reset"));
+		const buildup = doc.querySelector('.chip-filter[data-group="topic"][data-value="빌드업"]');
+		expect(buildup?.querySelector(".chip-count")?.textContent).toBe("(2)"); // u001 + u003
+		expect(buildup?.hasAttribute("disabled")).toBe(false);
 	});
 });
 
@@ -1103,6 +1190,13 @@ describe("glueKorean — 묶인 문법 구성 공백을 nbsp로 치환", () => {
 		["-ㄹ 것(받침 ㄹ, 융합 음절로 감지)", "앞당겨질 것이다", "앞당겨질 것이다"],
 		["-ㄹ 수 있(받침 ㄹ, 양쪽 공백)", "할 수 있다", "할 수 있다"],
 		["-ㄴ 것(받침 ㄴ, 융합 음절로 감지)", "만든 것이", "만든 것이"],
+		["의존명사 게(것이 축약)", "줄이는 게 핵심이다", "줄이는 게"],
+		["의존명사 거(것 축약)", "할 거야", "할 거야"],
+		["의존명사 걸(것을 축약)", "하는 걸 알았다", "하는 걸"],
+		["의존명사 건(것은 축약)", "간 건 사실이다", "간 건"],
+		["고유어 수사+단위(반 걸음)", "반 걸음씩 밀렸다", "반 걸음"],
+		["고유어 수사+단위(두 걸음)", "두 걸음 앞서 있다", "두 걸음"],
+		["고유어 수사+단위(세 번)", "세 번 시도했다", "세 번"],
 	])("%s: %s", (_label, input, expected) => {
 		expect(glueKorean(input)).toContain(expected);
 	});
@@ -1114,6 +1208,23 @@ describe("glueKorean — 묶인 문법 구성 공백을 nbsp로 치환", () => {
 
 	test("볼드 마커(**) 경계에 걸친 구성도 boldSpans 분리 전에 적용돼 함께 붙는다", () => {
 		expect(glueKorean("**잡는** 것을 원칙으로")).toBe("**잡는** 것을 원칙으로");
+	});
+
+	test('여는 마커가 공백 바로 뒤에 와도 붙는다("하는 **것**", 라운드6 검토)', () => {
+		expect(glueKorean("하는 **것**을 원칙으로")).toBe(`하는${NBSP}**것**을 원칙으로`);
+	});
+
+	test('여는 마커가 "수 있" 구성의 앞쪽 공백 뒤에 와도 양쪽 다 붙는다("할 **수 있다**")', () => {
+		expect(glueKorean("할 **수 있다**")).toBe(`할${NBSP}**수${NBSP}있다**`);
+	});
+
+	test('닫는 마커가 공백 바로 앞에 오는 기존 지원도 계속 동작한다("**받아들이지** 못하고")', () => {
+		expect(glueKorean("**받아들이지** 못하고 있는 것을 놓쳤다")).toContain(`**받아들이지**${NBSP}못`);
+	});
+
+	test("캡은 **를 제외한 표시 글자 수 기준이다 — 마커까지 합친 raw 길이가 14자를 넘어도 표시 길이가 14자 이하면 끊지 않는다(라운드6 검토)", () => {
+		const glued = glueKorean("**앞당겨질 것**을 몇 번이고 강조했다");
+		expect(glued).toContain(`**앞당겨질${NBSP}것**을`);
 	});
 
 	test("nbsp는 escapeHtml을 그대로 통과한다(렌더된 본문 문단에서 확인)", () => {

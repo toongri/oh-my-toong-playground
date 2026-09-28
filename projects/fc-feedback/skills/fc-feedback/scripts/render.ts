@@ -233,28 +233,35 @@ function hangulSyllablesWithFinal(finalIndex: number): string {
 const RIEUL_BATCHIM = hangulSyllablesWithFinal(8); // ㄹ batchim, e.g. 할/질/올
 const NIEUN_BATCHIM = hangulSyllablesWithFinal(4); // ㄴ batchim, e.g. 든/간/본
 
+/** Native-Korean numeral words this file glues to a following counter (item 6, round-6 CJK review), alongside plain Arabic digits. */
+const NATIVE_NUMERAL_WORDS = "반|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열|두세|서너|몇|여러";
+
+/** Counters a numeral glues to (round-6 CJK review) - a trailing particle on the counter (e.g. "걸음씩") is untouched: only the space before the counter needs gluing. */
+const COUNTER_WORDS = "걸음|번|명|개|초|분|칸|발|미터|m|차례|경기|세트|골|골대|포인트|점";
+
 /**
  * Matches each bound Korean grammatical construction this file glues (DESIGN §10/§15-1):
  * negation (-지 못/않), -기(도/만) 전/시작/위해/때문, -다 보니/보면, -을/를/(ㄹ batchim) 수 있/없
- * (both spaces), -고 있/싶, -아/어 주/보/버리/놓, dependent noun 것 after -는/은/을/(ㄴ or ㄹ
- * batchim), and a number glued to its counter (초/분/번/명/개/m/골). `\S*` is bounded by
- * whitespace on both sides, so it never crosses into a neighboring word - an ordinary
- * inter-word space between two independent words (e.g. "수비 전환") matches none of these and
- * stays breakable. An optional `\*{0,2}` after the trigger character tolerates a bold span's
- * closing "**" landing exactly at the construction boundary (e.g. "**...하는**" 것"), the one
- * run-boundary case this can still catch by running on the raw text before `boldSpans()` splits
- * on "**" - see `glueKorean`'s own comment for the reason that ordering, not per-span
- * application, is used.
+ * (both spaces), -고 있/싶, -아/어 주/보/버리/놓, dependent noun 것/게/거/걸/건/겁(것이/것/것을/
+ * 것은의 축약형) after -는/은/을/(ㄴ or ㄹ batchim), and a numeral(숫자 또는 한/두/세... 고유어
+ * 수사) glued to its counter(초/분/번/명/개/걸음/... ). `\S*` is bounded by whitespace on both
+ * sides, so it never crosses into a neighboring word - an ordinary inter-word space between two
+ * independent words (e.g. "수비 전환") matches none of these and stays breakable. An optional
+ * `\*{0,2}` on EITHER side of the glued space tolerates a bold span's marker landing exactly at
+ * the construction boundary, whether the marker closes just before the space (e.g. "**하는**
+ * 것") or opens just after it (e.g. "하는 **것**") - the one run-boundary case this can still
+ * catch by running on the raw text before `boldSpans()` splits on "**" - see `glueKorean`'s own
+ * comment for the reason that ordering, not per-span application, is used.
  */
 const GLUE_PATTERNS: readonly RegExp[] = [
-	/\S*지\*{0,2} (?:못|않)/g,
-	/\S*기(?:도|만)?\*{0,2} (?:전|시작|위해|때문)/g,
-	/\S*다\*{0,2} (?:보니|보면)/g,
-	new RegExp(`\\S*(?:을|를|[${RIEUL_BATCHIM}])\\*{0,2} 수 (?:있|없)`, "g"),
-	/\S*고\*{0,2} (?:있|싶)/g,
-	/\S*[아어]\*{0,2} (?:주|보|버리|놓)/g,
-	new RegExp(`\\S*(?:는|은|을|[${RIEUL_BATCHIM}${NIEUN_BATCHIM}])\\*{0,2} 것`, "g"),
-	/\d+ (?:초|분|번|명|개|m|골)/g,
+	/\S*지\*{0,2} \*{0,2}(?:못|않)/g,
+	/\S*기(?:도|만)?\*{0,2} \*{0,2}(?:전|시작|위해|때문)/g,
+	/\S*다\*{0,2} \*{0,2}(?:보니|보면)/g,
+	new RegExp(`\\S*(?:을|를|[${RIEUL_BATCHIM}])\\*{0,2} \\*{0,2}수 \\*{0,2}(?:있|없)`, "g"),
+	/\S*고\*{0,2} \*{0,2}(?:있|싶)/g,
+	/\S*[아어]\*{0,2} \*{0,2}(?:주|보|버리|놓)/g,
+	new RegExp(`\\S*(?:는|은|을|[${RIEUL_BATCHIM}${NIEUN_BATCHIM}])\\*{0,2} \\*{0,2}(?:것|게|거|걸|건|겁)`, "g"),
+	new RegExp(`(?:\\d+|${NATIVE_NUMERAL_WORDS})\\*{0,2} \\*{0,2}(?:${COUNTER_WORDS})`, "g"),
 ];
 
 // A chained construction ("찾기 시작하다 보니", "-지 못하고 있는 것") can glue several
@@ -268,16 +275,30 @@ const GLUE_PATTERNS: readonly RegExp[] = [
 const MAX_GLUE_RUN = 14;
 const NBSP = "\u00a0";
 
-/** Un-glues the earliest joint that keeps `run` within `MAX_GLUE_RUN`, recursing on the remainder - pure, called only by `capGlueRunLength`. */
+/**
+ * `**` bold markers never render as glyphs (`boldSpans()` strips them into a `<strong>`
+ * boundary), so they must not count toward the 14-syllable cap - counting them made an
+ * over-long RAW run trigger a cap-split it didn't visually need, or land the split at the
+ * wrong spot (round-6 CJK review). NBSP counts as one ordinary character here, same as any
+ * other glyph - it already renders as a single space-width character.
+ */
+function displayLength(text: string): number {
+	return text.replace(/\*/g, "").length;
+}
+
+/** Un-glues the earliest joint that keeps `run`'s displayed length within `MAX_GLUE_RUN`, recursing on the remainder - pure, called only by `capGlueRunLength`. */
 function capGlueRun(run: string): string {
-	if (run.length <= MAX_GLUE_RUN) {
+	if (displayLength(run) <= MAX_GLUE_RUN) {
 		return run;
 	}
 	let breakAt = -1;
-	for (let i = Math.min(MAX_GLUE_RUN, run.length - 1); i >= 1; i--) {
-		if (run[i - 1] === NBSP) {
-			breakAt = i - 1;
-			break;
+	let shownBefore = 0; // displayLength(run.slice(0, i)) - the display count BEFORE position i
+	for (let i = 0; i < run.length; i++) {
+		if (run[i] === NBSP && shownBefore < MAX_GLUE_RUN) {
+			breakAt = i;
+		}
+		if (run[i] !== "*") {
+			shownBefore++;
 		}
 	}
 	if (breakAt === -1) {
@@ -346,6 +367,11 @@ function chip(className: string, label: string): string {
 	return `<span class="chip ${className}">${escapeHtml(label)}</span>`;
 }
 
+/** The "(n)" count inside a facet chip, in its own span so VIEWER_JS can update it live (§7 live facet counts) without rebuilding the whole button. */
+function chipCount(count: number): string {
+	return `<span class="chip-count">(${count})</span>`;
+}
+
 /**
  * A keyboard-reachable seek control (DESIGN §5/§13): renders the time label as a real
  * `<button>` instead of a decorative `<span>` so seeking works without a mouse, while the
@@ -382,12 +408,16 @@ function firstAppearanceTags(items: ReadonlyArray<{ topic_tags: readonly string[
 	return tags;
 }
 
-// ── facet counts, computed once at build time (DESIGN.md §7) ───────────────
+// ── facet counts, session-wide build-time pass (DESIGN.md §7) ──────────────
 //
-// Every count below is fixed from the full session at build time — it never
-// depends on what else is selected, and it never changes at runtime. That is
-// what lets the client hide zero-result options up front and keep a selected
-// option visible even if an AND with another group drops it to zero results.
+// Every count below is computed once from the full session at build time,
+// with no other group selected — this is what decides which options exist in
+// the DOM at all (an option with 0 here is never rendered) and what each
+// option's label shows before the visitor picks anything. Once a selection
+// exists, VIEWER_JS recomputes each OTHER option's count live against the
+// currently active conditions (§7's live faceted counts) and writes it into
+// that option's `.chip-count` span — this build-time pass only ever produces
+// the initial numbers.
 
 /** Per-position-tag count = number of units whose `posClosure(position_tags)` contains that tag (ancestors+descendants both count, DESIGN §7). */
 function countPositionNodes(data: SessionData): Map<string, number> {
@@ -483,7 +513,7 @@ function renderPositionNode(tag: string, counts: Map<string, number>, isRoot: bo
 	const rootClass = isRoot ? " chip-pos-root" : "";
 	const button =
 		`<button type="button" class="chip chip-filter${rootClass}" data-group="position" data-value="${escapeHtml(tag)}" aria-pressed="false">` +
-		`${escapeHtml(tag)} (${count})</button>`;
+		`${escapeHtml(tag)} ${chipCount(count)}</button>`;
 	return childHtml
 		? `<div class="pos-node pos-node--branch">${button}<div class="pos-children">${childHtml}</div></div>`
 		: `<span class="pos-node">${button}</span>`;
@@ -514,7 +544,7 @@ function renderTopicFacetGroup(data: SessionData): string {
 			const count = counts.get(tag) ?? 0;
 			return (
 				`<button type="button" class="chip chip-filter" data-group="topic" data-value="${escapeHtml(tag)}" aria-pressed="false">` +
-				`${escapeHtml(tag)} (${count})</button>`
+				`${escapeHtml(tag)} ${chipCount(count)}</button>`
 			);
 		})
 		.join("");
@@ -535,7 +565,7 @@ function renderMentionFacetGroup(data: SessionData): string {
 			const count = counts.get(member.id) ?? 0;
 			return (
 				`<button type="button" class="chip chip-filter" data-group="mention" data-value="${escapeHtml(member.id)}" data-label="${escapeHtml(member.name)}" aria-pressed="false">` +
-				`${escapeHtml(member.name)} (${count})</button>`
+				`${escapeHtml(member.name)} ${chipCount(count)}</button>`
 			);
 		})
 		.join("");
@@ -550,7 +580,7 @@ function renderFilterBar(data: SessionData): string {
 		`<details class="filter-bar">` +
 		`<summary><span class="filter-summary-label">필터 (<span id="filter-count-label">0</span>)<span class="filter-summary-detail"></span></span></summary>` +
 		`<div class="filter-groups">${groups}</div>` +
-		`<button type="button" class="filter-reset">초기화</button>` +
+		`<button type="button" class="filter-reset">전체 해제</button>` +
 		`</details>`
 	);
 }
@@ -916,7 +946,7 @@ export function renderSession(data: SessionData): string {
 		`<div class="active-filters" hidden></div>` +
 		`<p class="result-count">피드백 <span id="visible-count">${total}</span>/<span id="total-count">${total}</span></p>` +
 		`<div class="card-list">${cards}</div>` +
-		`<p class="empty-state" hidden>조건에 맞는 피드백이 없어요 <button type="button" class="filter-reset">초기화</button></p>` +
+		`<p class="empty-state" hidden>조건에 맞는 피드백이 없어요 <button type="button" class="filter-reset">전체 해제</button></p>` +
 		`</div>`;
 
 	const body =
@@ -999,7 +1029,10 @@ export function renderRef(ref: RefPageData): string {
 	const keyPoints = ref.key_points_ko.map((point) => `<li>${escapeHtml(point)}</li>`).join("");
 	const rows = ref.translations
 		.slice(0, MAX_TRANSLATION_ROWS)
-		.map((row) => `<tr><td>${escapeHtml(row.orig)}</td><td>${escapeHtml(row.ko)}</td></tr>`)
+		.map(
+			(row) =>
+				`<tr><td data-label="원문">${escapeHtml(row.orig)}</td><td data-label="한국어">${escapeHtml(row.ko)}</td></tr>`,
+		)
 		.join("");
 
 	const html =
@@ -1150,6 +1183,11 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .chip { display: inline-flex; align-items: center; padding: var(--space-1) var(--space-3); margin: var(--space-1); border-radius: var(--radius-full); font-size: 0.8125rem; font-weight: 600; color: var(--ink); background: var(--surface-sunken); white-space: nowrap; flex-shrink: 0; }
 .chip-filter { min-height: 44px; border: 1px solid var(--line-strong); cursor: pointer; background: var(--bg); }
 .chip-filter[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+/* Live count of 0 (§7): muted + not-allowed instead of removed, so the option keeps its slot
+   (no layout jump) but reads and behaves as unpressable — never true for an already-selected
+   option, which this same selector can't match since aria-pressed="true" never pairs with
+   disabled (VIEWER_JS's applyFacetCounts). */
+.chip-filter:disabled { cursor: not-allowed; opacity: 0.45; }
 /* Position tree root (GK/DF/MF/FW) vs. child (DESIGN §15-5/§15-10 "구분 안 되는 트리"):
    bolder weight + the same neutral fill used elsewhere for a filled-but-inactive chip
    (--surface-sunken, §2) reads as "this is a group", not a second accent color — the
@@ -1182,6 +1220,10 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .result-count { font-size: 0.8125rem; color: var(--muted); margin: 0; }
 
 .card-list { display: flex; flex-direction: column; gap: var(--space-6); }
+/* Without this, [hidden]'s UA display:none loses to this file's own explicit display:flex
+   above (author styles always beat the UA sheet) — the empty card list kept its flex slot at
+   0 results, doubling the gap above .empty-state (round-6 CJK review). */
+.card-list[hidden] { display: none; }
 /* 30-second criterion (DESIGN §6): direct-mention cards float above position-related ones
    via flex order, not DOM reordering; flex's sort is stable so each group stays in its
    original chronological order. */
@@ -1303,6 +1345,17 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .translations-table { width: 100%; border-collapse: collapse; margin: var(--space-4) 0; }
 .translations-table th { font-size: 0.875rem; font-weight: 700; text-align: left; vertical-align: top; padding: var(--space-3); border: 0; border-bottom: 1px solid var(--line); }
 .translations-table td { font-size: 1.0625rem; line-height: 1.7; text-align: left; vertical-align: top; padding: var(--space-3); border: 0; border-bottom: 1px solid var(--line); }
+/* <1024px (round-6 CJK review): a full English sentence in the narrow 원문 column has nowhere
+   to wrap but mid-word — stack 원문/한국어 as labeled blocks instead of columns so each gets
+   the full content width. Desktop keeps the 2-column table untouched. */
+@media (max-width: 1023.98px) {
+  .translations-table thead { display: none; }
+  .translations-table, .translations-table tbody, .translations-table tr, .translations-table td { display: block; width: 100%; }
+  .translations-table tr { margin-bottom: var(--space-4); }
+  .translations-table td { border-bottom: 0; padding: var(--space-2) 0; }
+  .translations-table td:first-child { border-bottom: 1px solid var(--line); padding-bottom: var(--space-3); margin-bottom: var(--space-2); }
+  .translations-table td::before { content: attr(data-label); display: block; font-size: 0.875rem; font-weight: 700; color: var(--muted); margin-bottom: var(--space-1); }
+}
 `;
 
 // ── VIEWER_JS (DESIGN.md §5–§9) ──────────────────────────────────────────
@@ -1337,16 +1390,77 @@ export const VIEWER_JS = `(function () {
 
   var selected = { position: null, topic: [], mention: null, mine: null };
 
-  function elementMatches(el) {
+  // "exceptGroup" leaves that one group's own condition out of the check — the basis for both
+  // ordinary card matching (exceptGroup null, all four conditions apply) and live facet counts
+  // (§7: a group's own selection never restricts its own options' counts).
+  function elementMatchesExcept(el, exceptGroup) {
     var pos = el.getAttribute("data-pos") || "";
     var topics = el.getAttribute("data-topics") || "";
     var memberIds = el.getAttribute("data-member-ids") || "";
     var relatedIds = el.getAttribute("data-related-ids") || "";
-    if (selected.position && !hasToken(pos, selected.position)) return false;
-    if (selected.topic.length > 0 && !anyToken(topics, selected.topic)) return false;
-    if (selected.mention && !hasToken(memberIds, selected.mention)) return false;
-    if (selected.mine && !hasToken(relatedIds, selected.mine)) return false;
+    if (exceptGroup !== "position" && selected.position && !hasToken(pos, selected.position)) return false;
+    if (exceptGroup !== "topic" && selected.topic.length > 0 && !anyToken(topics, selected.topic)) return false;
+    if (exceptGroup !== "mention" && selected.mention && !hasToken(memberIds, selected.mention)) return false;
+    if (exceptGroup !== "mine" && selected.mine && !hasToken(relatedIds, selected.mine)) return false;
     return true;
+  }
+
+  function elementMatches(el) {
+    return elementMatchesExcept(el, null);
+  }
+
+  // ── live facet counts (§7: recomputed against every OTHER active condition on each
+  // selection change; a group's own selection never restricts its own options' counts) ──────
+
+  function computeFacetCounts(attr, group) {
+    var counts = {};
+    var cards = document.querySelectorAll(".card");
+    for (var i = 0; i < cards.length; i++) {
+      var card = cards[i];
+      if (!elementMatchesExcept(card, group)) continue;
+      var raw = card.getAttribute(attr) || "";
+      if (raw === "") continue;
+      var parts = raw.split("|");
+      for (var j = 0; j < parts.length; j++) {
+        counts[parts[j]] = (counts[parts[j]] || 0) + 1;
+      }
+    }
+    return counts;
+  }
+
+  function isChipSelected(group, value) {
+    if (group === "topic") return selected.topic.indexOf(value) !== -1;
+    return selected[group] === value;
+  }
+
+  // A live count of 0 disables the option (disabled attribute + aria-disabled, muted style)
+  // instead of removing it — no layout jump, and it stops being clickable (§7's "can't reach 0
+  // results via facet chips alone"). An already-selected option is never disabled, so it can
+  // still be deselected once other selections push its own count to 0.
+  function applyFacetCounts(group, attr) {
+    var counts = computeFacetCounts(attr, group);
+    var chips = document.querySelectorAll('.chip-filter[data-group="' + group + '"]');
+    for (var i = 0; i < chips.length; i++) {
+      var chipEl = chips[i];
+      var value = chipEl.getAttribute("data-value");
+      var count = counts[value] || 0;
+      var countEl = chipEl.querySelector(".chip-count");
+      if (countEl) countEl.textContent = "(" + count + ")";
+      var disable = count === 0 && !isChipSelected(group, value);
+      if (disable) {
+        chipEl.setAttribute("disabled", "");
+        chipEl.setAttribute("aria-disabled", "true");
+      } else {
+        chipEl.removeAttribute("disabled");
+        chipEl.removeAttribute("aria-disabled");
+      }
+    }
+  }
+
+  function updateFacetCounts() {
+    applyFacetCounts("position", "data-pos");
+    applyFacetCounts("topic", "data-topics");
+    applyFacetCounts("mention", "data-member-ids");
   }
 
   function mentionLabel(id) {
@@ -1533,6 +1647,7 @@ export const VIEWER_JS = `(function () {
       if (emptyState) emptyState.setAttribute("hidden", "");
     }
     updateMentionBadgesAndMarks();
+    updateFacetCounts();
     renderActiveFilters();
     updateFilterSummary();
   }
@@ -1546,6 +1661,7 @@ export const VIEWER_JS = `(function () {
 
   function onChipClick(event) {
     var chipEl = event.currentTarget;
+    if (chipEl.hasAttribute("disabled")) return; // guard alongside the native disabled semantics, not instead of them
     var group = chipEl.getAttribute("data-group");
     var value = chipEl.getAttribute("data-value");
     if (group === "topic") {
