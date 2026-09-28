@@ -175,6 +175,33 @@ describe("buildLines — 별칭 정규화", () => {
 		});
 		expect(result.lines[0].text).toBe("C.E.F. 화이팅");
 	});
+
+	test("별칭이 이름의 접두사여도 이미 이름인 텍스트를 다시 치환하지 않는다", () => {
+		const segments: WhisperSegment[] = [
+			{ start: 0, end: 2, text: "파인드님 파인님", compression_ratio: 1 },
+		];
+		const result = buildLines({
+			videos: [{ id: "V1", part: 1, whisperSegments: segments, captions: null }],
+			aliases: [{ alias: "파인", name: "파인드" }],
+			mode: "asr",
+		});
+		expect(result.lines[0].text).toBe("파인드님 파인드님");
+	});
+
+	test("치환 결과가 다른 별칭에 다시 걸리지 않는다", () => {
+		const segments: WhisperSegment[] = [
+			{ start: 0, end: 2, text: "라마 나다", compression_ratio: 1 },
+		];
+		const result = buildLines({
+			videos: [{ id: "V1", part: 1, whisperSegments: segments, captions: null }],
+			aliases: [
+				{ alias: "라마", name: "가나다" },
+				{ alias: "나다", name: "확정" },
+			],
+			mode: "asr",
+		});
+		expect(result.lines[0].text).toBe("가나다 확정");
+	});
 });
 
 describe("buildLines — 여러 영상 정렬", () => {

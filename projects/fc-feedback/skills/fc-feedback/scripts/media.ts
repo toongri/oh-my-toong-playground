@@ -309,11 +309,28 @@ function expandLoopWindows(video: VideoInput, segments: WhisperSegment[]): LoopE
 	return { candidates, loops, replacedCount };
 }
 
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Replaces every alias with its member's name in one pass, so a replacement
+ * is never re-scanned by a shorter alias (e.g. name "파인드" + alias "파인"
+ * must not turn an already-correct "파인드" into "파인드드"). Each member's
+ * own name is added as a self-mapping alongside its aliases so, once
+ * patterns are tried longest-first, the full name matches before a shorter
+ * alias that happens to be its prefix.
+ */
 function applyAliases(text: string, aliases: AliasRule[]): string {
-	const sorted = [...aliases].sort((a, b) => b.alias.length - a.alias.length);
-	let result = text;
-	for (const rule of sorted) result = result.split(rule.alias).join(rule.name);
-	return result;
+	if (aliases.length === 0) return text;
+	const replacement = new Map<string, string>();
+	for (const rule of aliases) replacement.set(rule.alias, rule.name);
+	for (const rule of aliases) replacement.set(rule.name, rule.name);
+	const pattern = [...replacement.keys()]
+		.sort((a, b) => b.length - a.length)
+		.map((key) => escapeRegExp(key))
+		.join("|");
+	return text.replace(new RegExp(pattern, "g"), (match) => replacement.get(match) ?? match);
 }
 
 interface CollectedLine {
