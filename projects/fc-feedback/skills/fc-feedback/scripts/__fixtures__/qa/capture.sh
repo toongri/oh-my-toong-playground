@@ -45,30 +45,26 @@ set -euo pipefail
 # not redefine or remove any of them -- only §4's layout wrappers, §5's card
 # anatomy, and §6's "내 피드백" primary control are new.
 #
-# ── A render.ts bug this script routes around without touching render.ts ──
-# VIEWER_JS's auto-init line is `if (YT && YT.loaded) { initPlayer(); } else
-# { window.onYouTubeIframeAPIReady = initPlayer; }` (render.ts, end of
-# VIEWER_JS). `YT` is an *unqualified* identifier: before the async
-# `iframe_api` script has ever created `window.YT`, merely reading bare `YT`
-# throws `ReferenceError: YT is not defined` (confirmed live via a page
-# `window.addEventListener('error', ...)` trap -- see this task's report),
-# not "evaluates to undefined" the way `window.YT` would. That throw happens
-# synchronously during VIEWER_JS's own top-level run, so the `else` branch's
-# `window.onYouTubeIframeAPIReady = initPlayer;` assignment never executes,
-# and the player never auto-initializes on a plain page load -- `#yt-player`
-# stays empty (an empty black box) until a card or part button is clicked.
-# A click *does* work, because by the time a user can click, the async
-# script has normally already created `window.YT`, so the same bare `YT`
-# reference inside `ensurePlayer` no longer throws. DESIGN.md §9 now spells
-# out the fix (`typeof`/global-existence check before reading `YT`), so this
-# workaround may become unnecessary once render.ts lands it -- until then,
-# this script captures the real, current behavior for the
-# `default`/`toc-*`/`filter-*`/`my-feedback`/`scroll-*`/`full-page` states
-# (an empty player box, exactly what a real user's first load shows today)
-# and, only for the states/checks that already involve a click (`seek-part1`,
-# `switch-part2`, the body-frame checks, the `player_api` functional checks),
-# waits for `window.YT.Player` to exist before clicking so that click's own
-# player creation does not race the same bug.
+# ── A render.ts bug this script used to route around -- now fixed ──
+# VIEWER_JS's auto-init line used to read bare `YT` (`if (YT && YT.loaded)
+# { initPlayer(); } else { window.onYouTubeIframeAPIReady = initPlayer; }`):
+# before the async `iframe_api` script had ever created `window.YT`, reading
+# that unqualified identifier threw `ReferenceError: YT is not defined`
+# instead of evaluating to undefined, so the `else` branch's registration
+# never ran and the player never auto-initialized on a plain page load.
+# render.ts now reads `window.YT && window.YT.loaded` (DESIGN.md §9), so a
+# cold load with no `window.YT` yet registers `onYouTubeIframeAPIReady`
+# instead of throwing; render.test.ts regression-tests this directly
+# (`YT가 정의되기 전에 로드돼도 onYouTubeIframeAPIReady를 등록한다` and the
+# pre-ready click-queue tests that follow it, which start from
+# `runViewer(win, undefined)` -- a `window.YT`-absent cold load). This
+# script still captures the `default`/`toc-*`/`filter-*`/`my-feedback`/
+# `scroll-*`/`full-page` states before the async script has necessarily
+# finished loading (an empty player box, same as a real user's first paint)
+# and waits for `window.YT.Player` to exist before any click that creates
+# the player (`seek-part1`, `switch-part2`, the body-frame checks, the
+# `player_api` functional checks), simply because the iframe API loads
+# asynchronously -- not to dodge the bug above, which no longer exists.
 
 usage() {
 	cat <<'USAGE' >&2
@@ -386,15 +382,17 @@ JS
 # first in DOM/flex order) lands at the top of the viewport instead --
 # letting reviewers see the "포지션 관련(참고)" badge itself, which the
 # my-feedback shot above never scrolls far enough to foreground.
-# filter-empty-and (id kept per DESIGN.md §14's row name, but the state it
-# shows changed): filter options are becoming live, selection-aware facets --
-# an option that would AND down to 0 against the currently active selections
-# is now shown disabled (`disabled` + `aria-disabled="true"`, count "(0)"),
-# never hidden, so it can no longer be clicked to actually reach a 0-result
-# AND the way the old two-click "FB then 마무리" sequence did. This state now
-# selects only position `FB` (3 cards: u002/u004/u005, topics 빌드업/오버래핑)
-# and captures the resulting disabled `마무리` topic option (topic `마무리`:
-# u013/u014/u015, disjoint from FB's cards) instead of an empty-state panel.
+# filter-empty-and (round-7 visual QA: the prior drive never showed a real
+# 0-result state): two facet groups (position/topic/mention) can never AND
+# down to a literal 0 under live, selection-aware counts (§7) -- the option
+# that would zero out simply disables instead of hiding, so no combination
+# of filter-bar chips alone can reach the actual empty-state panel. The one
+# deterministic path is topic 역습 (u010/u011/u012) selected FIRST, then "내
+# 피드백" 송민재 (song-cb, relatedMembers u001/u006, disjoint from 역습) --
+# the same order and pair the functional check below relies on (order
+# matters under live facet counts: selecting 송민재 first instead disables
+# 역습, checked separately there). This now shows the real §11 empty state
+# (0 results, .empty-state visible, .card-list hidden), not a disabled chip.
 # scroll-mid-390 (state scroll-near-end) and scroll-mid-1440 (state
 # scroll-mid) share one capture id family but drive different scroll depths:
 # DESIGN.md v2 §14 row 19 requires 390px to scroll to the LAST card (sticky
@@ -459,26 +457,42 @@ JS
 JS
 		;;
 	filter-empty-and)
-		# Selects position FB only (topic 마무리 would AND it down to 0, so under
-		# the live selection-aware facets it renders disabled + "(0)" instead of
-		# hidden -- clicking it is no longer possible, so this state captures the
-		# disabled option itself rather than a two-click empty-state panel.
+		# Topic 역습 selected FIRST, then "내 피드백" 송민재 -- the deterministic
+		# 0-result AND the comment above this function explains.
 		ensure_filter_bar_open
-		click_scrolled '.chip-filter[data-group="position"][data-value="FB"]'
+		click_scrolled '.chip-filter[data-group="topic"][data-value="역습"]'
+		click_scrolled '.pill.pill-mine[data-group="mine"][data-value="song-cb"]'
 		assert_state "filter-empty-and" <<'JS'
 (function () {
-  var pos = document.querySelector('.chip-filter[data-group="position"][data-value="FB"]');
-  var topic = document.querySelector('.chip-filter[data-group="topic"][data-value="마무리"]');
-  if (!pos || pos.getAttribute("aria-pressed") !== "true" || !topic) return false;
-  var m = topic.textContent.match(/\((\d+)\)/);
-  return topic.hasAttribute("disabled") && topic.getAttribute("aria-disabled") === "true" && !!m && m[1] === "0";
+  var topic = document.querySelector('.chip-filter[data-group="topic"][data-value="역습"]');
+  var pill = document.querySelector('.pill.pill-mine[data-group="mine"][data-value="song-cb"]');
+  var visible = document.getElementById("visible-count");
+  var empty = document.querySelector(".empty-state");
+  var cardList = document.querySelector(".card-list");
+  return !!topic && topic.getAttribute("aria-pressed") === "true" &&
+    !!pill && pill.getAttribute("aria-pressed") === "true" &&
+    !!visible && visible.textContent === "0" &&
+    !!empty && !empty.hasAttribute("hidden") &&
+    !!cardList && cardList.hasAttribute("hidden");
 })()
 JS
-		eval_or_die "filter-empty-and: scrolling the disabled 마무리 option into view failed" >/dev/null <<'JS'
+		# Centers the active-filter row, then -- since a sticky mobile player can
+		# still cover its top edge after that generic centering -- nudges the
+		# scroll up until the row (and the empty-state panel right below it)
+		# clears the sticky player's own bottom edge (only sticky below 1024px).
+		eval_or_die "filter-empty-and: bringing the active-filter row and empty-state panel into view failed" >/dev/null <<'JS'
 (function () {
-  var topic = document.querySelector('.chip-filter[data-group="topic"][data-value="마무리"]');
-  if (!topic) { throw new Error("마무리 topic chip not found"); }
-  topic.scrollIntoView({block: "center", inline: "center"});
+  var activeFilters = document.querySelector(".active-filters");
+  var empty = document.querySelector(".empty-state");
+  if (!activeFilters) { throw new Error(".active-filters not found"); }
+  if (!empty) { throw new Error(".empty-state not found"); }
+  activeFilters.scrollIntoView({block: "center", inline: "center"});
+  var player = document.querySelector(".player-wrapper");
+  var stickyBottom = player && getComputedStyle(player).position === "sticky" ? player.getBoundingClientRect().bottom : 0;
+  var rect = activeFilters.getBoundingClientRect();
+  if (rect.top < stickyBottom) {
+    window.scrollBy(0, rect.top - stickyBottom - 16);
+  }
   return true;
 })()
 JS
@@ -921,18 +935,23 @@ JS
 	add_check "seek-btn을 키보드로 포커스한 뒤 Enter를 누르면 마우스 클릭과 같은 seek가 실행된다(§5, §13)" dom "$pass" ""
 
 	# ── DESIGN.md §5-7/§13: the body-frame's OWN `.seek-btn` button (not just
-	# clicking the figure, already covered above) seeks to that frame's own
-	# time -- u013's second frame (data-frame-t=633, same one the figure-click
-	# check above avoids c008 for) is the same video the keyboard check above
-	# just loaded, so this proves the button seeks within the current video
-	# too, not only across a video switch.
+	# clicking the figure, already covered above) resolves its own video/seek
+	# target correctly. Switches away to a DIFFERENT video (u002/NUzEChn9EyI)
+	# right before this click so the check is non-vacuous (round-7 review):
+	# the state right before this click would otherwise already BE
+	# yn-qm7lM5p4 (left there by the keyboard check above), so a no-op click
+	# -- the seek-btn's own closest(".seek-btn") resolution silently failing
+	# -- would leave dataset.video unchanged and still satisfy the assertion.
+	# Switching away first means only an ACTUAL click-driven switch can pass.
+	ab click '#u002 .card-head .seek-btn' >/dev/null
 	ab click '#u013 .body-frame[data-frame-t="633"] .seek-btn' >/dev/null
 	pass="$(eval_js <<'JS'
 document.body.dataset.video === "yn-qm7lM5p4" &&
-document.querySelector('.part-btn[data-video="yn-qm7lM5p4"]').getAttribute("aria-pressed") === "true"
+document.querySelector('.part-btn[data-video="yn-qm7lM5p4"]').getAttribute("aria-pressed") === "true" &&
+document.querySelector('.part-btn[data-video="NUzEChn9EyI"]').getAttribute("aria-pressed") === "false"
 JS
 	)"
-	add_check "본문 프레임의 seek-btn 버튼 클릭은 그 프레임의 시각으로 seek한다(§5-7, §13)" dom "$pass" ""
+	add_check "본문 프레임의 seek-btn 버튼 클릭은 그 프레임이 속한 video로 전환하고 시각으로 seek한다(§5-7, §13)" dom "$pass" ""
 
 	# ── DESIGN.md §6: "내 피드백"에서 팀원 1명을 선택하면 relatedMembers 카드만
 	# 남는다. yoon-fb matches u002/u004/u005 (직접 언급 u004 + 포지션 관련
@@ -1168,12 +1187,18 @@ run_mobile_dom_checks() {
 
 	# ── DESIGN.md §1/§4: mobile order puts .my-feedback (order 3) right after
 	# the player + part-switch, ahead of the filter bar, so it lands inside
-	# the first screen (844px) on a fresh load without any scrolling.
+	# the first screen (844px) on a fresh load without any scrolling. Checks
+	# the rect's own width/height too (round-7 review) -- a `display:none` or
+	# zero-size element still reports a `top` coordinate, so `top < 844`
+	# alone would pass even if the element were hidden.
 	pass="$(eval_js <<'JS'
-document.querySelector(".my-feedback").getBoundingClientRect().top < 844
+(function () {
+  var r = document.querySelector(".my-feedback").getBoundingClientRect();
+  return r.top < 844 && r.width > 0 && r.height > 0;
+})()
 JS
 	)"
-	add_check "390에서 내 피드백이 첫 화면(844px) 안에 보인다(§1, §4)" dom "$pass" ""
+	add_check "390에서 내 피드백이 첫 화면(844px) 안에 실제로 보인다(§1, §4)" dom "$pass" ""
 
 	# ── DESIGN.md §4/§13: `.toc-toggle`(aria-expanded) + `.toc-panel`(hidden)
 	# replace <details> for the TOC below 1024px; clicking the toggle must
@@ -1294,13 +1319,33 @@ run_player_checks() {
 	# ── DESIGN.md §5-7/§9: 본문 프레임 클릭은 프레임 자체의 시각(u013의 두
 	# 번째 프레임, candidate c009, t=633)으로 seek해야 한다 -- 카드(u013)
 	# 시작 시각이 아니라. c008(t=630)은 쓰지 않는다: u013의 data-start도
-	# 630이라 카드 시작으로 잘못 seek해도 이 체크를 통과해버린다.
+	# 630이라 카드 시작으로 잘못 seek해도 이 체크를 통과해버린다. Round-7
+	# review flagged that a wrong-but-nearby landing (630) could still drift
+	# into the ±1s window after 3s of ordinary playback during the wait's own
+	# polling -- but calling pauseVideo() on EVERY poll (the first fix tried)
+	# was verified live to itself break the real seek: repeatedly pausing a
+	# YouTube iframe player while a loadVideoById+seekTo is still settling
+	# leaves getCurrentTime() stuck at 0 (confirmed by hand against the real
+	# player, not the test stub). So instead: wait, WITHOUT touching
+	# pauseVideo, only for the player to report a nonzero time at all (i.e.
+	# the seek has landed somewhere), then take exactly one follow-up reading
+	# that pauses once and checks the value right then -- close enough to
+	# landing that a wrong 630 landing cannot yet have drifted into 633's
+	# window, while a correct 633 landing is already within it immediately.
 	frame_pass=false
 	if [ "$api_ready" = true ]; then
 		ab click '.part-btn[data-video="NUzEChn9EyI"]' >/dev/null
 		ab click '#u013 .body-frame[data-frame-t="633"]' >/dev/null
-		if ab wait --fn "window.fcPlayer && typeof window.fcPlayer.getCurrentTime === 'function' && Math.abs(window.fcPlayer.getCurrentTime() - 633) <= 1" --timeout "$switch_timeout" >/dev/null 2>&1; then
-			frame_pass=true
+		if ab wait --fn "window.fcPlayer && typeof window.fcPlayer.getCurrentTime === 'function' && window.fcPlayer.getCurrentTime() > 0" --timeout "$switch_timeout" >/dev/null 2>&1; then
+			frame_pass="$(eval_js <<'JS'
+(function () {
+  var p = window.fcPlayer;
+  if (!p || typeof p.pauseVideo !== "function" || typeof p.getCurrentTime !== "function") return false;
+  p.pauseVideo();
+  return Math.abs(p.getCurrentTime() - 633) <= 1;
+})()
+JS
+			)"
 		fi
 	fi
 	if [ "$HEADED" = true ]; then
@@ -1332,11 +1377,33 @@ run_player_checks() {
 	# ── DESIGN.md §5-7/§13: the body-frame's own seek-btn button's seek
 	# precision -- u008's second frame (t=1083, same video just loaded above,
 	# so this exercises the same-video seekTo path rather than loadVideoById).
+	# u008's own start (1080) is only 3s from this target, and the player is
+	# already mid-playback (nonzero time) BEFORE this click from the previous
+	# check, so unlike the 633 check above, "wait for nonzero time" would be
+	# vacuously true here too. Instead: read the time right before the click
+	# as a baseline, click, then wait -- WITHOUT touching pauseVideo, same
+	# reason as the 633 check above -- for the time to have actually jumped
+	# away from that baseline (confirms a real seek happened, not just
+	# continued playback), then take one follow-up reading that pauses once
+	# and checks the value right then, before drift could carry a
+	# wrong-but-nearby (1080) landing into the ±1s window.
 	frame_seek_btn_pass=false
 	if [ "$api_ready" = true ]; then
+		base_time="$(eval_js <<'JS'
+window.fcPlayer && typeof window.fcPlayer.getCurrentTime === "function" ? window.fcPlayer.getCurrentTime() : -1000
+JS
+		)"
 		ab click '#u008 .body-frame[data-frame-t="1083"] .seek-btn' >/dev/null
-		if ab wait --fn "window.fcPlayer && typeof window.fcPlayer.getCurrentTime === 'function' && Math.abs(window.fcPlayer.getCurrentTime() - 1083) <= 1" --timeout "$switch_timeout" >/dev/null 2>&1; then
-			frame_seek_btn_pass=true
+		if ab wait --fn "window.fcPlayer && typeof window.fcPlayer.getCurrentTime === 'function' && Math.abs(window.fcPlayer.getCurrentTime() - ($base_time)) > 2" --timeout "$switch_timeout" >/dev/null 2>&1; then
+			frame_seek_btn_pass="$(eval_js <<'JS'
+(function () {
+  var p = window.fcPlayer;
+  if (!p || typeof p.pauseVideo !== "function" || typeof p.getCurrentTime !== "function") return false;
+  p.pauseVideo();
+  return Math.abs(p.getCurrentTime() - 1083) <= 1;
+})()
+JS
+			)"
 		fi
 	fi
 	if [ "$HEADED" = true ]; then
