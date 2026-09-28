@@ -1454,41 +1454,236 @@ export function checkPlan(plan: unknown, context: CheckPlanContext): CheckPlanRe
 	return { errors, pending, validated, tableMd: tableLines.join("\n"), proposed };
 }
 
-// ── notes.json (plan §3) ─────────────────────────────────────────────────────
+// ── notes.json v2 (plan §16-1) ───────────────────────────────────────────────
 
-const NOTE_FIELD_MIN_LENGTH = 1;
-const NOTE_FIELD_MAX_LENGTH = 1200;
-const CAPTION_MAX_LENGTH = 120;
-const MAX_KEY_FRAMES_PER_UNIT = 4;
+export interface NoteTextBlock {
+	type: "text";
+	text: string;
+}
 
-function requireBoundedLength(
+export interface NoteFrameBlock {
+	type: "frame";
+	candidate_id: string;
+	caption: string;
+}
+
+export type NoteBlock = NoteTextBlock | NoteFrameBlock;
+
+export interface NotesV2 {
+	version: 2;
+	units: Record<string, { blocks: NoteBlock[] }>;
+}
+
+const NOTES_V1_REJECTED_MESSAGE = "notes v1 형식은 더 이상 지원하지 않습니다 — v2 blocks 형식으로 작성";
+const BLOCKS_MIN = 1;
+const BLOCKS_MAX = 20;
+const TEXT_MIN_LENGTH = 1;
+const TEXT_MAX_LENGTH = 800;
+const FRAME_CAPTION_MIN_LENGTH = 1;
+const FRAME_CAPTION_MAX_LENGTH = 120;
+const MAX_FRAMES_PER_UNIT = 6;
+
+function requireTrimmedBoundedLength(
 	raw: unknown,
 	min: number,
 	max: number,
 	path: string,
 	errors: ValidationError[],
 	message: string,
-): string {
-	if (typeof raw === "string" && raw.length >= min && raw.length <= max) {
-		return raw;
+): void {
+	if (typeof raw !== "string" || raw.trim().length < min || raw.trim().length > max) {
+		errors.push({ path, message });
 	}
-	errors.push({ path, message });
-	return "";
+}
+
+function requireNoNewline(raw: unknown, path: string, errors: ValidationError[], message: string): void {
+	if (typeof raw === "string" && /[\r\n]/.test(raw)) {
+		errors.push({ path, message });
+	}
+}
+
+/** Even count of `**` markers, each enclosed span non-empty/non-whitespace-only (no nesting by construction). */
+function requireBalancedBold(raw: unknown, path: string, errors: ValidationError[]): void {
+	if (typeof raw !== "string") {
+		return;
+	}
+	const segments = raw.split("**");
+	if (segments.length % 2 !== 1) {
+		errors.push({ path, message: "**는 짝을 이루어야 합니다" });
+		return;
+	}
+	segments.forEach((segment, index) => {
+		if (index % 2 === 1 && segment.trim() === "") {
+			errors.push({ path, message: "**로 감싼 내용은 비어 있지 않아야 합니다" });
+		}
+	});
 }
 
 /**
- * Validates notes.json against `validated` (the plan's validated units):
- * the note key set must equal the unit id set exactly, `problem`/`who`/
- * `instead` are 1–1200 characters, `detail` is optional, and `key_frames`
- * has at most 4 entries whose `candidate_id` is one of that unit's own
- * `key_frame_candidate_ids` and whose `caption` is at most 120 characters.
+ * Splits a validated text block (balanced, non-nested `**bold**` markers) into
+ * plain/bold segments in order, for `render.ts`/`fc.ts` to turn into markup.
  */
-export function checkNotes(notes: unknown, validated: ValidatedPlan): ErrorsResult {
+export function boldSpans(text: string): Array<{ bold: boolean; text: string }> {
+	const spans: Array<{ bold: boolean; text: string }> = [];
+	text.split("**").forEach((segment, index) => {
+		if (segment === "") {
+			return;
+		}
+		spans.push({ bold: index % 2 === 1, text: segment });
+	});
+	return spans;
+}
+
+function isNotesV1Shape(entry: Record<string, unknown>): boolean {
+	return "problem" in entry || "who" in entry || "instead" in entry || "key_frames" in entry;
+}
+
+function checkNoteTextBlock(blockRaw: Record<string, unknown>, path: string, errors: ValidationError[]): void {
+	const textPath = `${path}.text`;
+	requireTrimmedBoundedLength(
+		blockRaw.text,
+		TEXT_MIN_LENGTH,
+		TEXT_MAX_LENGTH,
+		textPath,
+		errors,
+		`text는 trim 후 ${TEXT_MIN_LENGTH}~${TEXT_MAX_LENGTH}자여야 합니다`,
+	);
+	requireNoNewline(blockRaw.text, textPath, errors, "text에는 개행 문자를 포함할 수 없습니다(블록=문단)");
+	requireBalancedBold(blockRaw.text, textPath, errors);
+}
+
+function checkNoteUnit(
+	entryRaw: unknown,
+	unit: ValidatedUnit,
+	candidates: readonly Candidate[],
+	path: string,
+	errors: ValidationError[],
+): void {
+	if (!isRecord(entryRaw)) {
+		errors.push({ path, message: "노트 항목은 객체여야 합니다" });
+		return;
+	}
+	if (!("blocks" in entryRaw) && isNotesV1Shape(entryRaw)) {
+		errors.push({ path, message: NOTES_V1_REJECTED_MESSAGE });
+		return;
+	}
+	if (!Array.isArray(entryRaw.blocks)) {
+		errors.push({ path: `${path}.blocks`, message: "blocks는 배열이어야 합니다" });
+		return;
+	}
+
+	const blocks = entryRaw.blocks;
+	if (blocks.length < BLOCKS_MIN || blocks.length > BLOCKS_MAX) {
+		errors.push({ path: `${path}.blocks`, message: `blocks는 ${BLOCKS_MIN}~${BLOCKS_MAX}개여야 합니다` });
+	}
+
+	const seenCandidateIds = new Set<string>();
+	let hasTextBlock = false;
+	let frameCount = 0;
+	let lastFrameT = -Infinity;
+
+	blocks.forEach((blockRaw, index) => {
+		const blockPath = `${path}.blocks[${index}]`;
+		if (!isRecord(blockRaw)) {
+			errors.push({ path: blockPath, message: "block 항목은 객체여야 합니다" });
+			return;
+		}
+
+		if (blockRaw.type === "text") {
+			hasTextBlock = true;
+			checkNoteTextBlock(blockRaw, blockPath, errors);
+			return;
+		}
+
+		if (blockRaw.type !== "frame") {
+			errors.push({ path: `${blockPath}.type`, message: 'type은 "text" 또는 "frame"이어야 합니다' });
+			return;
+		}
+
+		frameCount += 1;
+		const candidateId = typeof blockRaw.candidate_id === "string" ? blockRaw.candidate_id : "";
+		const candidatePath = `${blockPath}.candidate_id`;
+		const candidate = candidates.find((c) => c.id === candidateId);
+		if (candidate === undefined) {
+			errors.push({ path: candidatePath, message: `존재하지 않는 후보입니다: ${candidateId}` });
+		} else {
+			if (candidate.video !== unit.video) {
+				errors.push({ path: candidatePath, message: "unit과 다른 video의 후보입니다" });
+			}
+			if (
+				candidate.t < unit.start - KEY_FRAME_TOLERANCE_SECONDS ||
+				candidate.t > unit.end + KEY_FRAME_TOLERANCE_SECONDS
+			) {
+				errors.push({
+					path: candidatePath,
+					message: `허용 범위(unit ±${KEY_FRAME_TOLERANCE_SECONDS}초)를 벗어난 시각입니다: ${candidate.t}`,
+				});
+			}
+			if (seenCandidateIds.has(candidateId)) {
+				errors.push({ path: candidatePath, message: `unit 내에서 후보가 중복됩니다: ${candidateId}` });
+			} else {
+				seenCandidateIds.add(candidateId);
+			}
+			if (candidate.t < lastFrameT) {
+				errors.push({ path: candidatePath, message: "frame은 블록 순서대로 시각이 비감소해야 합니다" });
+			} else {
+				lastFrameT = candidate.t;
+			}
+		}
+
+		const captionPath = `${blockPath}.caption`;
+		requireTrimmedBoundedLength(
+			blockRaw.caption,
+			FRAME_CAPTION_MIN_LENGTH,
+			FRAME_CAPTION_MAX_LENGTH,
+			captionPath,
+			errors,
+			`caption은 trim 후 ${FRAME_CAPTION_MIN_LENGTH}~${FRAME_CAPTION_MAX_LENGTH}자여야 합니다`,
+		);
+		requireNoNewline(blockRaw.caption, captionPath, errors, "caption에는 개행 문자를 포함할 수 없습니다");
+	});
+
+	if (!hasTextBlock) {
+		errors.push({ path: `${path}.blocks`, message: "text 블록이 최소 1개 이상 있어야 합니다" });
+	}
+	if (frameCount > MAX_FRAMES_PER_UNIT) {
+		errors.push({
+			path: `${path}.blocks`,
+			message: `frame 블록은 unit당 최대 ${MAX_FRAMES_PER_UNIT}개까지 허용됩니다`,
+		});
+	}
+}
+
+/**
+ * Validates notes.json v2 against `validated` (the plan's validated units)
+ * and `candidates` (candidates.json): the note key set must equal the unit id
+ * set exactly, each unit's `blocks` has 1–20 entries with at least one `text`
+ * block, a `text` block is 1–800 characters after trim with no newlines and
+ * balanced non-empty `**bold**` markers, and a `frame` block (at most 6 per
+ * unit, no duplicate `candidate_id`, `t` non-decreasing in block order)
+ * references a same-video candidate within `[unit.start-5, unit.end+5]` and
+ * has a 1–120 character `caption` after trim with no newlines. notes v1
+ * (`problem`/`who`/`instead`/`key_frames`) is rejected explicitly.
+ */
+export function checkNotes(
+	notes: unknown,
+	validated: ValidatedPlan,
+	candidates: readonly Candidate[],
+): ErrorsResult {
 	const errors: ValidationError[] = [];
 	if (!isRecord(notes)) {
 		errors.push({ path: "", message: "notes.json은 객체여야 합니다" });
 		return { errors };
 	}
+
+	if (notes.version === 1) {
+		errors.push({ path: "version", message: NOTES_V1_REJECTED_MESSAGE });
+		return { errors };
+	}
+	if (notes.version !== 2) {
+		errors.push({ path: "version", message: "version은 2여야 합니다" });
+	}
+
 	if (!isRecord(notes.units)) {
 		errors.push({ path: "units", message: "units는 객체여야 합니다" });
 		return { errors };
@@ -1513,72 +1708,7 @@ export function checkNotes(notes: unknown, validated: ValidatedPlan): ErrorsResu
 			errors.push({ path: `units.${id}`, message: "검증된 plan에 없는 unit id입니다" });
 			continue;
 		}
-		const path = `units.${id}`;
-		const entry = unitsRaw[id];
-		if (!isRecord(entry)) {
-			errors.push({ path, message: "노트 항목은 객체여야 합니다" });
-			continue;
-		}
-
-		requireBoundedLength(
-			entry.problem,
-			NOTE_FIELD_MIN_LENGTH,
-			NOTE_FIELD_MAX_LENGTH,
-			`${path}.problem`,
-			errors,
-			`problem은 ${NOTE_FIELD_MIN_LENGTH}~${NOTE_FIELD_MAX_LENGTH}자여야 합니다`,
-		);
-		requireBoundedLength(
-			entry.who,
-			NOTE_FIELD_MIN_LENGTH,
-			NOTE_FIELD_MAX_LENGTH,
-			`${path}.who`,
-			errors,
-			`who는 ${NOTE_FIELD_MIN_LENGTH}~${NOTE_FIELD_MAX_LENGTH}자여야 합니다`,
-		);
-		requireBoundedLength(
-			entry.instead,
-			NOTE_FIELD_MIN_LENGTH,
-			NOTE_FIELD_MAX_LENGTH,
-			`${path}.instead`,
-			errors,
-			`instead는 ${NOTE_FIELD_MIN_LENGTH}~${NOTE_FIELD_MAX_LENGTH}자여야 합니다`,
-		);
-		if (entry.detail !== undefined && typeof entry.detail !== "string") {
-			errors.push({ path: `${path}.detail`, message: "detail은 문자열이어야 합니다" });
-		}
-
-		const allowedCandidateIds = new Set(unit.key_frame_candidate_ids);
-		if (!Array.isArray(entry.key_frames)) {
-			errors.push({ path: `${path}.key_frames`, message: "key_frames는 배열이어야 합니다" });
-			continue;
-		}
-		if (entry.key_frames.length > MAX_KEY_FRAMES_PER_UNIT) {
-			errors.push({
-				path: `${path}.key_frames`,
-				message: `key_frames는 최대 ${MAX_KEY_FRAMES_PER_UNIT}개까지 허용됩니다`,
-			});
-		}
-		entry.key_frames.forEach((frameRaw, frameIndex) => {
-			const framePath = `${path}.key_frames[${frameIndex}]`;
-			if (!isRecord(frameRaw)) {
-				errors.push({ path: framePath, message: "key_frames 항목은 객체여야 합니다" });
-				return;
-			}
-			const candidateId = typeof frameRaw.candidate_id === "string" ? frameRaw.candidate_id : "";
-			if (!allowedCandidateIds.has(candidateId)) {
-				errors.push({
-					path: `${framePath}.candidate_id`,
-					message: `unit의 key_frame_candidate_ids에 없는 후보입니다: ${candidateId}`,
-				});
-			}
-			if (typeof frameRaw.caption !== "string" || frameRaw.caption.length > CAPTION_MAX_LENGTH) {
-				errors.push({
-					path: `${framePath}.caption`,
-					message: `caption은 ${CAPTION_MAX_LENGTH}자 이하의 문자열이어야 합니다`,
-				});
-			}
-		});
+		checkNoteUnit(unitsRaw[id], unit, candidates, `units.${id}`, errors);
 	}
 
 	return { errors };

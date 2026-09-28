@@ -10,6 +10,7 @@ import {
 	UID_PATTERN,
 	VID_PATTERN,
 	anc,
+	boldSpans,
 	checkCandidates,
 	checkLines,
 	checkNotes,
@@ -1044,76 +1045,260 @@ describe("checkPlan", () => {
 	});
 });
 
-// ── notes.json (checkNotes, plan §3) ─────────────────────────────────────────
+// ── notes.json v2 (checkNotes, plan §16-1) ───────────────────────────────────
 
 const fixtureValidated: ValidatedPlan = checkPlan(makeValidPlan(), fixtureContext).validated;
 
+// u001: video A, [start=0,end=20] → 허용 범위 [-5,25]. u002: video A, [start=20,end=30] → [15,35].
+// fixtureCandidates: c001(A,t=10) c002(A,t=25) c004(A,t=40) c003(B,t=5).
+
 function makeValidNotes(): any {
 	return {
-		version: 1,
+		version: 2,
 		units: {
-			u001: {
-				problem: "센터백이 패스를 미스했습니다",
-				who: "홍길동",
-				instead: "빌드업 시 패스 각도를 열어야 합니다",
-				key_frames: [{ candidate_id: "c001", caption: "패스 미스 장면" }],
-			},
-			u002: {
-				problem: "골키퍼 배급이 느렸습니다",
-				who: "김철수",
-				instead: "더 빠르게 배급해야 합니다",
-				key_frames: [],
-			},
+			u001: { blocks: [{ type: "text", text: "센터백이 패스를 미스한 장면입니다" }] },
+			u002: { blocks: [{ type: "text", text: "골키퍼 배급이 느렸습니다" }] },
 		},
 	};
 }
 
 describe("checkNotes", () => {
-	test("유효한 notes를 검증하면 에러가 없다", () => {
-		const result = checkNotes(makeValidNotes(), fixtureValidated);
+	test("유효한 최소 notes(텍스트 블록 1개)를 검증하면 에러가 없다", () => {
+		const result = checkNotes(makeValidNotes(), fixtureValidated, fixtureCandidates);
 		expect(result.errors).toEqual([]);
+	});
+
+	test("텍스트+프레임 2개가 섞인 notes를 검증하면 에러가 없다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001 = {
+			blocks: [
+				{ type: "text", text: "센터백이 패스를 미스했습니다" },
+				{ type: "frame", candidate_id: "c001", caption: "패스 미스 순간" },
+				{ type: "text", text: "**빌드업** 각도가 좁았습니다" },
+				{ type: "frame", candidate_id: "c002", caption: "직후 상황" },
+			],
+		};
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		expect(result.errors).toEqual([]);
+	});
+
+	test("v1 형식(problem/who/instead/key_frames)이면 version 경로에 명시적 거부 메시지를 낸다", () => {
+		const v1 = {
+			version: 1,
+			units: {
+				u001: { problem: "p", who: "w", instead: "i", key_frames: [] },
+				u002: { problem: "p", who: "w", instead: "i", key_frames: [] },
+			},
+		};
+		const result = checkNotes(v1, fixtureValidated, fixtureCandidates);
+		const error = result.errors.find((e) => e.path === "version");
+		expect(error?.message).toBe("notes v1 형식은 더 이상 지원하지 않습니다 — v2 blocks 형식으로 작성");
+	});
+
+	test("version이 2가 아니면(1도 아니면) version 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.version = 3;
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		expect(findError(result.errors, "version")).toBe(true);
+	});
+
+	test("blocks 없이 problem/who/instead/key_frames만 있는 unit은 units.<id> 경로에 v1 거부 메시지를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001 = { problem: "p", who: "w", instead: "i", key_frames: [] };
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		const error = result.errors.find((e) => e.path === "units.u001");
+		expect(error?.message).toBe("notes v1 형식은 더 이상 지원하지 않습니다 — v2 blocks 형식으로 작성");
 	});
 
 	test("검증된 unit에 대응하는 노트가 없으면 units.<id> 경로 에러를 낸다", () => {
 		const notes = makeValidNotes();
 		delete notes.units.u002;
-		const result = checkNotes(notes, fixtureValidated);
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
 		expect(findError(result.errors, "units.u002")).toBe(true);
 	});
 
 	test("검증된 plan에 없는 unit id면 units.<id> 경로 에러를 낸다", () => {
 		const notes = makeValidNotes();
-		notes.units.u999 = { problem: "p", who: "w", instead: "i", key_frames: [] };
-		const result = checkNotes(notes, fixtureValidated);
+		notes.units.u999 = { blocks: [{ type: "text", text: "x" }] };
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
 		expect(findError(result.errors, "units.u999")).toBe(true);
 	});
 
-	test("problem이 1200자를 넘으면 units.<id>.problem 경로 에러를 낸다", () => {
+	test("blocks가 비어있으면 units.<id>.blocks 경로 에러를 낸다", () => {
 		const notes = makeValidNotes();
-		notes.units.u001.problem = "가".repeat(1201);
-		const result = checkNotes(notes, fixtureValidated);
-		expect(findError(result.errors, "units.u001.problem")).toBe(true);
+		notes.units.u001.blocks = [];
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		expect(findError(result.errors, "units.u001.blocks")).toBe(true);
 	});
 
-	test("key_frames가 4개를 넘으면 units.<id>.key_frames 경로 에러를 낸다", () => {
+	test("blocks가 20개를 넘으면 units.<id>.blocks 경로 에러를 낸다", () => {
 		const notes = makeValidNotes();
-		notes.units.u001.key_frames = Array.from({ length: 5 }, () => ({ candidate_id: "c001", caption: "x" }));
-		const result = checkNotes(notes, fixtureValidated);
-		expect(findError(result.errors, "units.u001.key_frames")).toBe(true);
+		notes.units.u001.blocks = Array.from({ length: 21 }, () => ({ type: "text", text: "문단" }));
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		expect(findError(result.errors, "units.u001.blocks")).toBe(true);
 	});
 
-	test("key_frames의 candidate_id가 unit의 key_frame_candidate_ids에 없으면 candidate_id 경로 에러를 낸다", () => {
+	test("text 블록이 하나도 없으면 units.<id>.blocks 경로 에러를 낸다", () => {
 		const notes = makeValidNotes();
-		notes.units.u001.key_frames = [{ candidate_id: "c999", caption: "x" }];
-		const result = checkNotes(notes, fixtureValidated);
-		expect(findError(result.errors, "units.u001.key_frames[0].candidate_id")).toBe(true);
+		notes.units.u001.blocks = [{ type: "frame", candidate_id: "c001", caption: "x" }];
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		expect(findError(result.errors, "units.u001.blocks")).toBe(true);
 	});
 
-	test("caption이 120자를 넘으면 caption 경로 에러를 낸다", () => {
+	test("text가 trim 후 비어있으면 units.<id>.blocks[n].text 경로 에러를 낸다", () => {
 		const notes = makeValidNotes();
-		notes.units.u001.key_frames = [{ candidate_id: "c001", caption: "가".repeat(121) }];
-		const result = checkNotes(notes, fixtureValidated);
-		expect(findError(result.errors, "units.u001.key_frames[0].caption")).toBe(true);
+		notes.units.u001.blocks = [{ type: "text", text: "   " }];
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		expect(findError(result.errors, "units.u001.blocks[0].text")).toBe(true);
+	});
+
+	test("text가 trim 후 800자를 넘으면 units.<id>.blocks[n].text 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001.blocks = [{ type: "text", text: "가".repeat(801) }];
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		expect(findError(result.errors, "units.u001.blocks[0].text")).toBe(true);
+	});
+
+	test("text에 개행이 있으면 units.<id>.blocks[n].text 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001.blocks = [{ type: "text", text: "첫 줄\n둘째 줄" }];
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		expect(findError(result.errors, "units.u001.blocks[0].text")).toBe(true);
+	});
+
+	test("**가 짝이 맞지 않으면 units.<id>.blocks[n].text 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001.blocks = [{ type: "text", text: "이것은 **닫히지 않음" }];
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		expect(findError(result.errors, "units.u001.blocks[0].text")).toBe(true);
+	});
+
+	test("**로 감싼 내용이 비어있으면 units.<id>.blocks[n].text 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001.blocks = [{ type: "text", text: "이것은 **** 비어있음" }];
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		expect(findError(result.errors, "units.u001.blocks[0].text")).toBe(true);
+	});
+
+	test("frame이 6개를 넘으면 units.<id>.blocks 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001.blocks = [
+			{ type: "text", text: "문단" },
+			...Array.from({ length: 7 }, () => ({ type: "frame", candidate_id: "c001", caption: "x" })),
+		];
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		expect(findError(result.errors, "units.u001.blocks")).toBe(true);
+	});
+
+	test("존재하지 않는 candidate면 units.<id>.blocks[n].candidate_id 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001.blocks = [
+			{ type: "text", text: "문단" },
+			{ type: "frame", candidate_id: "c999", caption: "x" },
+		];
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		expect(findError(result.errors, "units.u001.blocks[1].candidate_id")).toBe(true);
+	});
+
+	test("다른 video의 candidate면 units.<id>.blocks[n].candidate_id 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001.blocks = [
+			{ type: "text", text: "문단" },
+			{ type: "frame", candidate_id: "c003", caption: "x" }, // video B
+		];
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		expect(findError(result.errors, "units.u001.blocks[1].candidate_id")).toBe(true);
+	});
+
+	test("unit 허용 범위(±5초)를 벗어난 candidate면 units.<id>.blocks[n].candidate_id 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001.blocks = [
+			{ type: "text", text: "문단" },
+			{ type: "frame", candidate_id: "c004", caption: "x" }, // t=40, u001 범위는 [-5,25]
+		];
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		expect(findError(result.errors, "units.u001.blocks[1].candidate_id")).toBe(true);
+	});
+
+	test("unit 내에서 candidate_id가 중복되면 units.<id>.blocks[n].candidate_id 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001.blocks = [
+			{ type: "text", text: "문단" },
+			{ type: "frame", candidate_id: "c001", caption: "x" },
+			{ type: "frame", candidate_id: "c001", caption: "y" },
+		];
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		expect(findError(result.errors, "units.u001.blocks[2].candidate_id")).toBe(true);
+	});
+
+	test("블록 순서대로 candidate 시각이 감소하면 units.<id>.blocks[n].candidate_id 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001.blocks = [
+			{ type: "text", text: "문단" },
+			{ type: "frame", candidate_id: "c002", caption: "x" }, // t=25
+			{ type: "frame", candidate_id: "c001", caption: "y" }, // t=10 (감소)
+		];
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		expect(findError(result.errors, "units.u001.blocks[2].candidate_id")).toBe(true);
+	});
+
+	test("caption이 trim 후 비어있으면 units.<id>.blocks[n].caption 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001.blocks = [
+			{ type: "text", text: "문단" },
+			{ type: "frame", candidate_id: "c001", caption: "   " },
+		];
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		expect(findError(result.errors, "units.u001.blocks[1].caption")).toBe(true);
+	});
+
+	test("caption이 120자를 넘으면 units.<id>.blocks[n].caption 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001.blocks = [
+			{ type: "text", text: "문단" },
+			{ type: "frame", candidate_id: "c001", caption: "가".repeat(121) },
+		];
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		expect(findError(result.errors, "units.u001.blocks[1].caption")).toBe(true);
+	});
+
+	test("caption에 개행이 있으면 units.<id>.blocks[n].caption 경로 에러를 낸다", () => {
+		const notes = makeValidNotes();
+		notes.units.u001.blocks = [
+			{ type: "text", text: "문단" },
+			{ type: "frame", candidate_id: "c001", caption: "첫 줄\n둘째 줄" },
+		];
+		const result = checkNotes(notes, fixtureValidated, fixtureCandidates);
+		expect(findError(result.errors, "units.u001.blocks[1].caption")).toBe(true);
+	});
+});
+
+describe("boldSpans", () => {
+	test("볼드가 없으면 평문 구간 하나만 반환한다", () => {
+		expect(boldSpans("그냥 텍스트입니다")).toEqual([{ bold: false, text: "그냥 텍스트입니다" }]);
+	});
+
+	test("볼드 하나를 평문/볼드/평문 순서로 분리한다", () => {
+		expect(boldSpans("이것은 **강조**입니다")).toEqual([
+			{ bold: false, text: "이것은 " },
+			{ bold: true, text: "강조" },
+			{ bold: false, text: "입니다" },
+		]);
+	});
+
+	test("볼드 여러 개를 순서대로 분리한다", () => {
+		expect(boldSpans("**첫째** 그리고 **둘째**")).toEqual([
+			{ bold: true, text: "첫째" },
+			{ bold: false, text: " 그리고 " },
+			{ bold: true, text: "둘째" },
+		]);
+	});
+
+	test("사이 평문 없이 볼드가 연달아 있으면 볼드 구간 두 개를 반환한다", () => {
+		expect(boldSpans("**a****b**")).toEqual([
+			{ bold: true, text: "a" },
+			{ bold: true, text: "b" },
+		]);
 	});
 });
 
