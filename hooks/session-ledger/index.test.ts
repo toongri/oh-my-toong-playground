@@ -198,6 +198,15 @@ describe("검증기", () => {
 		expect(prose("A partial-rerun/child-process check, then a script-decided step.")).toEqual([]);
 	});
 
+	test("로그에 없는 문자 체계가 섞여 깨진 경로는 거부하고, 한글 설명은 허용한다", () => {
+		const source = "cd /repo/기존-프로그램-문제/apps && cat slot-distribution.ts";
+		const text = (current_work: string) => unknownIdentifiers(ledgerJson({ current_work }), source);
+		expect(text("Open `/repo/기존-프로그램-խնդիր/apps/slot-distribution.ts`.")).toEqual([
+			"/repo/기존-프로그램-խնդիր/apps/slot-distribution.ts",
+		]);
+		expect(text("다음으로 `/repo/기존-프로그램-문제/apps/slot-distribution.ts`를 수정한다.")).toEqual([]);
+	});
+
 	test("존재하지 않는 U-id와 제안 id를 거부한다", () => {
 		const d = ledgerJson({
 			approved_proposals: [

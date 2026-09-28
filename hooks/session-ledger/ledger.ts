@@ -322,6 +322,14 @@ export function unknownIdentifiers(d: LedgerJson, sourceText: string): string[] 
 			}
 		}
 	}
+	// The summarizer can garble a Korean path into look-alike letters of another script
+	// (`기존-프로그램-문제` → `기존-프로그램-խնդիր`); a letter the log never contains marks such a token.
+	for (const raw of rendered.split(/\s+/)) {
+		const foreign = [...raw].some(
+			(c) => /\p{L}/u.test(c) && !/[\p{Script=Latin}\p{Script=Hangul}\p{Script=Han}]/u.test(c) && !sourceText.includes(c),
+		);
+		if (foreign) bad.add(raw.replace(/^[`'"(]+|[`'",;:.)]+$/g, ""));
+	}
 	return [...bad].sort();
 }
 
