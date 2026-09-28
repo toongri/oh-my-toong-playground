@@ -253,6 +253,60 @@ wait_yt_api() {
 	ab wait --fn "typeof window.YT !== 'undefined' && typeof window.YT.Player === 'function'" --timeout "$1" >/dev/null 2>&1 || true
 }
 
+# Runs JS via `eval --stdin`, always returning valid JSON: `.data.result` on
+# success, or the JSON literal `false` (with the real error on stderr) so a
+# thrown/failed eval reads as a failing check instead of a null pass. Defined
+# here (rather than only where the functional checks run) because drive_state
+# below also needs it, to probe collapse state before an interaction.
+eval_js() {
+	out="$(ab eval --stdin --json)"
+	if [ "$(printf '%s' "$out" | jq -r '.success')" != "true" ]; then
+		echo "capture.sh: eval failed: $(printf '%s' "$out" | jq -r '.error')" >&2
+		printf 'false'
+		return 0
+	fi
+	printf '%s' "$out" | jq -c '.data.result'
+}
+
+# Opens the filter bar before a chip/reset click needs its content
+# hit-testable. render.ts renders `<details class="filter-bar">` closed
+# (no `open` attribute) at every width (DESIGN.md §7): everything inside it,
+# including the chip buttons and its static "초기화" reset button, sits under
+# a closed <details>'s content-visibility lock and cannot be clicked until
+# the <summary> is clicked open. No-op when already open.
+ensure_filter_bar_open() {
+	is_open="$(eval_js <<'JS'
+(function () {
+  var d = document.querySelector("details.filter-bar");
+  return !!d && d.hasAttribute("open");
+})()
+JS
+	)"
+	if [ "$is_open" != "true" ]; then
+		ab click '.filter-bar summary' >/dev/null
+	fi
+}
+
+# Opens the mobile TOC panel before a tab/TOC-item click inside it needs to be
+# hit-testable. render.ts wraps the TOC in `.toc-toggle`(aria-expanded) +
+# `.toc-panel`(hidden) below 1024px (DESIGN.md §4/§13); at 1024px+ the toggle
+# is CSS-hidden (`display: none`) and the panel is force-shown regardless of
+# its `hidden` attribute, so this is a no-op there (`offsetParent === null`
+# on the toggle short-circuits the click).
+ensure_toc_open() {
+	needs_toggle="$(eval_js <<'JS'
+(function () {
+  var btn = document.querySelector(".toc-toggle");
+  var panel = document.querySelector(".toc-panel");
+  return !!btn && !!panel && btn.offsetParent !== null && panel.hidden;
+})()
+JS
+	)"
+	if [ "$needs_toggle" = "true" ]; then
+		ab click '.toc-toggle' >/dev/null
+	fi
+}
+
 # ── viewer interaction states (DESIGN.md v2 §14, 35 rows across 2+1 viewports) ─
 #
 # filter-topic-multi drives "수비전환" + "역습": DESIGN.md's own example
@@ -284,15 +338,26 @@ wait_yt_api() {
 drive_state() {
 	case "$1" in
 	default | full-page) : ;;
-	toc-topic) ab click '#tab-topic' >/dev/null ;;
-	filter-position-fb) ab click '.chip-filter[data-group="position"][data-value="FB"]' >/dev/null ;;
+	toc-topic)
+		ensure_toc_open
+		ab click '#tab-topic' >/dev/null
+		;;
+	filter-position-fb)
+		ensure_filter_bar_open
+		ab click '.chip-filter[data-group="position"][data-value="FB"]' >/dev/null
+		;;
 	filter-topic-multi)
+		ensure_filter_bar_open
 		ab click '.chip-filter[data-group="topic"][data-value="수비전환"]' >/dev/null
 		ab click '.chip-filter[data-group="topic"][data-value="역습"]' >/dev/null
 		;;
-	filter-mention) ab click '.chip-filter[data-group="mention"][data-value="han-fw"]' >/dev/null ;;
+	filter-mention)
+		ensure_filter_bar_open
+		ab click '.chip-filter[data-group="mention"][data-value="han-fw"]' >/dev/null
+		;;
 	my-feedback) ab click '.pill.pill-mine[data-group="mine"][data-value="yoon-fb"]' >/dev/null ;;
 	filter-empty-and)
+		ensure_filter_bar_open
 		ab click '.chip-filter[data-group="position"][data-value="FB"]' >/dev/null
 		ab click '.chip-filter[data-group="topic"][data-value="마무리"]' >/dev/null
 		;;
@@ -484,23 +549,24 @@ add_check() {
 	FUNCTIONAL_ENTRIES+=("$entry")
 }
 
-# Runs JS via `eval --stdin`, always returning valid JSON: `.data.result` on
-# success, or the JSON literal `false` (with the real error on stderr) so a
-# thrown/failed eval reads as a failing check instead of a null pass.
-eval_js() {
-	out="$(ab eval --stdin --json)"
-	if [ "$(printf '%s' "$out" | jq -r '.success')" != "true" ]; then
-		echo "capture.sh: eval failed: $(printf '%s' "$out" | jq -r '.error')" >&2
-		printf 'false'
-		return 0
-	fi
-	printf '%s' "$out" | jq -c '.data.result'
-}
+# eval_js is defined earlier (drive_state also needs it, to probe collapse
+# state before an interaction).
 
 run_dom_checks() {
 	url="$(page_url viewer)"
 	ab set viewport 1440 900 >/dev/null
 	ab open "$url" >/dev/null
+
+	# ── DESIGN.md §7: the filter bar renders as a closed `<details>` at every
+	# width, checked here on the fresh load before anything opens it.
+	pass="$(eval_js <<'JS'
+(function () {
+  var d = document.querySelector("details.filter-bar");
+  return !!d && !d.hasAttribute("open");
+})()
+JS
+	)"
+	add_check "필터 바는 기본으로 접혀 있다(§7)" dom "$pass" ""
 
 	# ── DESIGN.md §7/§15.5: 0-result options are never rendered, and every
 	# option that IS rendered shows a positive count. Checked on a fresh,
@@ -562,6 +628,7 @@ JS
 	)"
 	add_check "목차 클릭은 대상 카드를 스크롤·강조하고 영상 전환(seek)은 발생시키지 않는다(§8)" dom "$pass" ""
 
+	ensure_filter_bar_open
 	ab click '.chip-filter[data-group="position"][data-value="FB"]' >/dev/null
 	ab click '.filter-reset' >/dev/null
 	pass="$(eval_js <<'JS'
@@ -697,6 +764,32 @@ run_mobile_dom_checks() {
 	url="$(page_url viewer)"
 	ab set viewport 390 844 >/dev/null
 	ab open "$url" >/dev/null
+
+	# ── DESIGN.md §1/§4: mobile order puts .my-feedback (order 3) right after
+	# the player + part-switch, ahead of the filter bar, so it lands inside
+	# the first screen (844px) on a fresh load without any scrolling.
+	pass="$(eval_js <<'JS'
+document.querySelector(".my-feedback").getBoundingClientRect().top < 844
+JS
+	)"
+	add_check "390에서 내 피드백이 첫 화면(844px) 안에 보인다(§1, §4)" dom "$pass" ""
+
+	# ── DESIGN.md §4/§13: `.toc-toggle`(aria-expanded) + `.toc-panel`(hidden)
+	# replace <details> for the TOC below 1024px; clicking the toggle must
+	# flip aria-expanded and reveal the panel.
+	pass="$(eval_js <<'JS'
+(function () {
+  var btn = document.querySelector(".toc-toggle");
+  var panel = document.querySelector(".toc-panel");
+  if (!btn || !panel) return false;
+  var before = btn.getAttribute("aria-expanded");
+  btn.click();
+  var afterExpanded = btn.getAttribute("aria-expanded");
+  return before === "false" && afterExpanded === "true" && panel.hidden === false;
+})()
+JS
+	)"
+	add_check "390에서 목차 토글이 aria-expanded를 전환한다(§13)" dom "$pass" ""
 
 	ab click '.player-collapse' >/dev/null
 	pass="$(eval_js <<'JS'
