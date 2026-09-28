@@ -249,6 +249,38 @@ wait_yt_api() {
 	ab wait --fn "typeof window.YT !== 'undefined' && typeof window.YT.Player === 'function'" --timeout "$1" >/dev/null 2>&1 || true
 }
 
+# Round-8 visual QA: seek-part1/switch-part2 used to shoot right after the click that starts a
+# seek/switch, before the async YouTube iframe had decoded or even buffered anything -- the
+# resulting PNGs showed a black frame (seek-part1) or a "0:00 / 0:00" spinner (switch-part2), even
+# though the click itself worked. This polls (loudly -- a real failure here means the seek/switch
+# never landed, unlike wait_yt_api's best-effort wait for states that have value either way) until
+# fcPlayer reports the target videoId, a currentTime within +/-2s of targetSeconds, AND a
+# playerState of playing/paused/buffering (1/2/3, i.e. actually progressing, not still unstarted/
+# cued) -- then pauses ONCE, after the target is confirmed reached, and settles briefly before the
+# caller shoots. Pausing on every poll instead of once at the end was tried and found (see the
+# frame-click comment in run_player_checks below) to itself break an in-flight loadVideoById, so
+# this never touches pauseVideo before the target state is fully confirmed.
+wait_player_target() {
+	label="$1"
+	video_id="$2"
+	target_seconds="$3"
+	timeout=20000
+	if [ "$HEADED" = true ]; then
+		timeout=45000
+	fi
+	if ! ab wait --fn "window.fcPlayer && window.fcPlayer.getVideoData && window.fcPlayer.getVideoData().video_id === '$video_id' && typeof window.fcPlayer.getCurrentTime === 'function' && Math.abs(window.fcPlayer.getCurrentTime() - $target_seconds) <= 2 && typeof window.fcPlayer.getPlayerState === 'function' && [1, 2, 3].indexOf(window.fcPlayer.getPlayerState()) !== -1" --timeout "$timeout" >/dev/null 2>&1; then
+		echo "capture.sh: $label: fcPlayer never reached videoId=$video_id, time~=${target_seconds}s, state in {playing,paused,buffering} within ${timeout}ms" >&2
+		exit 1
+	fi
+	eval_or_die "$label: pauseVideo() after reaching target failed" >/dev/null <<'JS'
+(function () {
+  window.fcPlayer.pauseVideo();
+  return true;
+})()
+JS
+	sleep 0.3
+}
+
 # Runs JS via `eval --stdin`, always returning valid JSON: `.data.result` on
 # success, or the JSON literal `false` (with the real error on stderr) so a
 # thrown/failed eval reads as a failing check instead of a null pass. Defined
@@ -458,7 +490,11 @@ JS
 		;;
 	filter-empty-and)
 		# Topic 역습 selected FIRST, then "내 피드백" 송민재 -- the deterministic
-		# 0-result AND the comment above this function explains.
+		# 0-result AND the comment above this function explains. Round-8 visual
+		# QA: the empty state alone doesn't tell a reader that their own "내
+		# 피드백" pick is half the cause, so render.ts now renders a "내 피드백:
+		# 송민재" chip first in .active-filters (DESIGN §6/§7) -- assert it's
+		# actually there and visible before shooting.
 		ensure_filter_bar_open
 		click_scrolled '.chip-filter[data-group="topic"][data-value="역습"]'
 		click_scrolled '.pill.pill-mine[data-group="mine"][data-value="song-cb"]'
@@ -469,11 +505,14 @@ JS
   var visible = document.getElementById("visible-count");
   var empty = document.querySelector(".empty-state");
   var cardList = document.querySelector(".card-list");
+  var mineChip = document.querySelector(".active-filters .chip-active");
   return !!topic && topic.getAttribute("aria-pressed") === "true" &&
     !!pill && pill.getAttribute("aria-pressed") === "true" &&
     !!visible && visible.textContent === "0" &&
     !!empty && !empty.hasAttribute("hidden") &&
-    !!cardList && cardList.hasAttribute("hidden");
+    !!cardList && cardList.hasAttribute("hidden") &&
+    !!mineChip && mineChip.textContent.indexOf("내 피드백: 송민재") === 0 &&
+    !document.querySelector(".active-filters").hasAttribute("hidden");
 })()
 JS
 		# Centers the active-filter row, then -- since a sticky mobile player can
@@ -499,11 +538,13 @@ JS
 		;;
 	seek-part1)
 		wait_yt_api 20000
-		ab click '.card#u002' >/dev/null
+		ab click '.card#u002' >/dev/null # u002 start=180 on part 1
+		wait_player_target "seek-part1" "NUzEChn9EyI" 180
 		;;
 	switch-part2)
 		wait_yt_api 20000
-		ab click '.card#u010' >/dev/null
+		ab click '.card#u010' >/dev/null # u010 = part 2 (yn-qm7lM5p4), start=180
+		wait_player_target "switch-part2" "yn-qm7lM5p4" 180
 		;;
 	scroll-mid)
 		printf '%s' 'window.scrollTo(0, Math.floor(document.body.scrollHeight / 2))' | ab eval --stdin >/dev/null
@@ -801,6 +842,20 @@ JS
 JS
 	)"
 	add_check "렌더된 모든 필터/\"내 피드백\" 옵션은 개수 표시가 0보다 크다(§1 원칙4, §6, §7)" dom "$pass" ""
+
+	# ── round-8 fix: this used to click #u002 straight off the fresh page load,
+	# but u002's videoId (NUzEChn9EyI) already equals the page's own initial
+	# default video -- a dead click handler would leave dataset.video
+	# untouched and still satisfy the assertion below vacuously. Switching to
+	# Part 2 first and confirming that switch really happened makes the
+	# follow-up #u002 click a genuine round trip: only a working handler can
+	# switch dataset.video back to Part 1's id.
+	ab click '.part-btn[data-video="yn-qm7lM5p4"]' >/dev/null
+	pass="$(eval_js <<'JS'
+document.body.dataset.video === "yn-qm7lM5p4"
+JS
+	)"
+	add_check "Part 2 버튼 클릭 후 body.dataset.video가 Part 2 videoId로 바뀐다(다음 카드 클릭 검사를 비-자명하게 만드는 전제)" dom "$pass" ""
 
 	ab click '.card#u002' >/dev/null
 	pass="$(eval_js <<'JS'
