@@ -1,0 +1,228 @@
+{
+  "version": 1,
+  "video": "NUzEChn9EyI",
+  "units": [
+    {
+      "start_line": 3,
+      "end_line": 19,
+      "start": 49.7,
+      "topic_tags": [
+        "빌드업"
+      ],
+      "position_tags": [
+        "ST",
+        "MF"
+      ],
+      "member_ids": [
+        "timej",
+        "bride"
+      ]
+    },
+    {
+      "start_line": 22,
+      "end_line": 34,
+      "start": 225.9,
+      "topic_tags": [
+        "조작/키사용"
+      ],
+      "position_tags": [
+        "MF"
+      ],
+      "member_ids": [
+        "taxi"
+      ]
+    },
+    {
+      "start_line": 36,
+      "end_line": 54,
+      "start": 344.68,
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "position_tags": [
+        "MF",
+        "FW"
+      ],
+      "member_ids": [
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "maekgu"
+      ]
+    },
+    {
+      "start_line": 55,
+      "end_line": 77,
+      "start": 463.08000000000004,
+      "topic_tags": [
+        "압박",
+        "탈압박",
+        "빌드업"
+      ],
+      "position_tags": [
+        "CM",
+        "FW"
+      ],
+      "member_ids": [
+        "gerrard",
+        "saembaek"
+      ]
+    },
+    {
+      "start_line": 78,
+      "end_line": 78,
+      "start": 545.7,
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "position_tags": [
+        "FW"
+      ],
+      "member_ids": [
+        "rumi"
+      ]
+    },
+    {
+      "start_line": 79,
+      "end_line": 97,
+      "start": 579.9399999999999,
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "position_tags": [
+        "ST"
+      ],
+      "member_ids": [
+        "timej"
+      ]
+    },
+    {
+      "start_line": 98,
+      "end_line": 99,
+      "start": 694.54,
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "position_tags": [],
+      "member_ids": []
+    },
+    {
+      "start_line": 104,
+      "end_line": 120,
+      "start": 791.0999999999999,
+      "topic_tags": [
+        "빌드업",
+        "크로스"
+      ],
+      "position_tags": [
+        "MF",
+        "FW"
+      ],
+      "member_ids": [
+        "giseun",
+        "jonjae"
+      ]
+    },
+    {
+      "start_line": 121,
+      "end_line": 136,
+      "start": 857.4799999999999,
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "position_tags": [
+        "FW",
+        "FB"
+      ],
+      "member_ids": [
+        "find",
+        "wonjeon"
+      ]
+    },
+    {
+      "start_line": 145,
+      "end_line": 154,
+      "start": 1071.64,
+      "topic_tags": [
+        "파이널서드",
+        "빌드업"
+      ],
+      "position_tags": [
+        "CAM"
+      ],
+      "member_ids": [
+        "spress"
+      ]
+    },
+    {
+      "start_line": 155,
+      "end_line": 157,
+      "start": 1128.4599999999998,
+      "topic_tags": [
+        "수비라인"
+      ],
+      "position_tags": [
+        "FB"
+      ],
+      "member_ids": [
+        "wonjeon"
+      ]
+    },
+    {
+      "start_line": 158,
+      "end_line": 162,
+      "start": 1155.22,
+      "topic_tags": [
+        "수비라인",
+        "빌드업"
+      ],
+      "position_tags": [
+        "FW"
+      ],
+      "member_ids": [
+        "find",
+        "rumi"
+      ]
+    },
+    {
+      "start_line": 163,
+      "end_line": 168,
+      "start": 1225.22,
+      "topic_tags": [
+        "파이널서드"
+      ],
+      "position_tags": [],
+      "member_ids": []
+    },
+    {
+      "start_line": 169,
+      "end_line": 182,
+      "start": 1258.6599999999999,
+      "topic_tags": [
+        "탈압박",
+        "포지셔닝"
+      ],
+      "position_tags": [
+        "FW"
+      ],
+      "member_ids": [
+        "maekgu"
+      ]
+    },
+    {
+      "start_line": 183,
+      "end_line": 187,
+      "start": 1307.66,
+      "topic_tags": [
+        "포지셔닝",
+        "빌드업"
+      ],
+      "position_tags": [],
+      "member_ids": []
+    }
+  ]
+}
