@@ -104,6 +104,13 @@ case "$fixture_name" in
 esac
 video_url="https://www.youtube.com/watch?v=${video_id}"
 
+# Committed work-dir fixtures never hold audio/video — session.json's
+# files.audio/video/wav stay relative ("media/audio/<id>.webm", …, already
+# written that way by fc.ts fetch/transcribe) and this cache dir supplies the
+# "media/" subtree fc.ts still opens directly during later steps (e.g.
+# cmdFrames re-reads video.files.video with ffmpeg — plan step 2/§15-2).
+media_cache_dir="${FC_EVAL_MEDIA_DIR:-$HOME/.cache/fc-feedback-eval}/$video_id"
+
 session_label="round${round}-${model_key}-rep${rep}"
 
 # ── run-dir + OMT/work-dir + temp archive setup ─────────────────────────────
@@ -135,6 +142,7 @@ trace "mktemp -d  # -> $run_dir"
 trace "touch \"$run_dir/$RUN_DIR_MARKER\"  # --cleanup refuses any dir without this marker"
 trace "mkdir -p \"$work_dir\"  # fc.ts default --work dir = \$OMT_DIR/fc-feedback/\$OMT_SESSION_ID"
 trace "cp -R \"$workdir_fixture/.\" \"$work_dir/\""
+trace "ln -s \"$media_cache_dir\" \"$work_dir/media\"  # not committed; see FC_EVAL_MEDIA_DIR in fixtures README"
 trace "echo \"$session_label\" > \"$run_dir/.fc-eval-session\"  # score.ts's only way to find work_dir afterwards"
 trace "mkdir -p \"$archive_dir\""
 trace "cp -R \"$ARCHIVE_SEED/.\" \"$archive_dir/\"  # if $ARCHIVE_SEED exists"
@@ -148,6 +156,11 @@ if [ "$dry_run" != "1" ]; then
 	touch "$run_dir/$RUN_DIR_MARKER"
 	mkdir -p "$work_dir"
 	cp -R "$workdir_fixture/." "$work_dir/"
+	if [ ! -d "$media_cache_dir" ]; then
+		echo "run.sh: media cache dir missing for $video_id: $media_cache_dir (set FC_EVAL_MEDIA_DIR, or populate \$HOME/.cache/fc-feedback-eval/$video_id -- see evals/fc-feedback/README.md)" >&2
+		exit 1
+	fi
+	ln -s "$media_cache_dir" "$work_dir/media"
 	echo "$session_label" > "$run_dir/.fc-eval-session"
 	mkdir -p "$archive_dir"
 	if [ -d "$ARCHIVE_SEED" ]; then
