@@ -106,32 +106,49 @@ video_url="https://www.youtube.com/watch?v=${video_id}"
 
 session_label="round${round}-${model_key}-rep${rep}"
 
-# ── run-dir + temp archive setup ────────────────────────────────────────────
-# Real run: fresh mktemp dirs, fixture copied in, temp remote-less git archive
-# (seeded from fixtures/archive-seed/ when present, so the similarity step has
-# a past session to compare against — plan §13.3).
+# ── run-dir + OMT/work-dir + temp archive setup ─────────────────────────────
+# fc.ts's default --work dir (the skill runs without --work under codex) is
+# ${OMT_DIR}/fc-feedback/${OMT_SESSION_ID} (projects/fc-feedback/skills/fc-feedback/
+# scripts/fc.ts resolveWorkDir). OMT_DIR/OMT_SESSION_ID must therefore be decided
+# BEFORE the fixture is copied in, so the fixture (lines.json, candidates.json, …)
+# lands exactly where fc.ts will look for it with no --work flag. The session
+# label is also written to run_dir/.fc-eval-session (a single line) because
+# score.ts runs later, in a separate process with none of this shell's exported
+# env vars, and needs the same label to reconstruct work_dir.
+# Real run: fresh mktemp run-dir, work_dir under it, fixture copied into
+# work_dir, temp remote-less git archive (seeded from fixtures/archive-seed/
+# when present, so the similarity step has a past session to compare against —
+# plan §13.3).
 # Dry run: placeholder paths only, nothing is created or touched.
 
 if [ "$dry_run" = "1" ]; then
 	run_dir="<run-dir>"
-	archive_dir="<run-dir>/archive"
 else
 	run_dir="$(mktemp -d "${TMPDIR:-/tmp}/fc-feedback-eval.XXXXXX")"
-	archive_dir="$run_dir/archive"
 fi
+
+omt_dir="$run_dir/omt"
+work_dir="$omt_dir/fc-feedback/$session_label"
+archive_dir="$run_dir/archive"
 
 trace "mktemp -d  # -> $run_dir"
 trace "touch \"$run_dir/$RUN_DIR_MARKER\"  # --cleanup refuses any dir without this marker"
-trace "cp -R \"$workdir_fixture/.\" \"$run_dir/\""
+trace "mkdir -p \"$work_dir\"  # fc.ts default --work dir = \$OMT_DIR/fc-feedback/\$OMT_SESSION_ID"
+trace "cp -R \"$workdir_fixture/.\" \"$work_dir/\""
+trace "echo \"$session_label\" > \"$run_dir/.fc-eval-session\"  # score.ts's only way to find work_dir afterwards"
 trace "mkdir -p \"$archive_dir\""
 trace "cp -R \"$ARCHIVE_SEED/.\" \"$archive_dir/\"  # if $ARCHIVE_SEED exists"
 trace "git -C \"$archive_dir\" init -q  # if $archive_dir/.git is missing"
 trace "git -C \"$archive_dir\" remote remove <name>  # for every configured remote (none expected)"
+trace "export OMT_DIR=\"$omt_dir\""
+trace "export OMT_SESSION_ID=\"$session_label\""
 
 if [ "$dry_run" != "1" ]; then
 	mkdir -p "$run_dir"
 	touch "$run_dir/$RUN_DIR_MARKER"
-	cp -R "$workdir_fixture/." "$run_dir/"
+	mkdir -p "$work_dir"
+	cp -R "$workdir_fixture/." "$work_dir/"
+	echo "$session_label" > "$run_dir/.fc-eval-session"
 	mkdir -p "$archive_dir"
 	if [ -d "$ARCHIVE_SEED" ]; then
 		cp -R "$ARCHIVE_SEED/." "$archive_dir/"
@@ -142,15 +159,6 @@ if [ "$dry_run" != "1" ]; then
 	for remote_name in $(git -C "$archive_dir" remote 2>/dev/null || true); do
 		git -C "$archive_dir" remote remove "$remote_name"
 	done
-fi
-
-omt_dir="$run_dir/omt"
-trace "mkdir -p \"$omt_dir\""
-trace "export OMT_DIR=\"$omt_dir\""
-trace "export OMT_SESSION_ID=\"$session_label\""
-
-if [ "$dry_run" != "1" ]; then
-	mkdir -p "$omt_dir"
 fi
 
 export OMT_DIR="$omt_dir"
@@ -216,7 +224,7 @@ trace "mkdir -p \"$dest\""
 
 work_artifacts="plan.json plan.validated.json notes.json similar-choices.json similar-candidates.json refs-draft.json refs.verified.json lines.json"
 for name in $work_artifacts; do
-	trace "cp \"$run_dir/$name\" \"$dest/$name\"  # if present"
+	trace "cp \"$work_dir/$name\" \"$dest/$name\"  # if present"
 done
 trace "cp \"$archive_dir/taxonomy.yaml\" \"$dest/taxonomy.yaml\"  # if present"
 trace "cp \"$archive_dir/sessions/<session_id>/data.json\" \"$dest/data.json\"  # if present"
@@ -225,14 +233,14 @@ trace "gzip -c \"$run_jsonl\" > \"$dest/run.jsonl.gz\""
 if [ "$dry_run" != "1" ]; then
 	mkdir -p "$dest"
 	for name in $work_artifacts; do
-		if [ -f "$run_dir/$name" ]; then
-			cp "$run_dir/$name" "$dest/$name"
+		if [ -f "$work_dir/$name" ]; then
+			cp "$work_dir/$name" "$dest/$name"
 		fi
 	done
 	if [ -f "$archive_dir/taxonomy.yaml" ]; then
 		cp "$archive_dir/taxonomy.yaml" "$dest/taxonomy.yaml"
 	fi
-	session_id="$(jq -r '.session_id // empty' "$run_dir/session.json" 2>/dev/null || true)"
+	session_id="$(jq -r '.session_id // empty' "$work_dir/session.json" 2>/dev/null || true)"
 	if [ -n "$session_id" ] && [ -f "$archive_dir/sessions/$session_id/data.json" ]; then
 		cp "$archive_dir/sessions/$session_id/data.json" "$dest/data.json"
 	fi
