@@ -39,11 +39,15 @@ evals/fc-feedback/
   baselines/           회차별 원본 보존(§14.7/§15-4/§15-5): round-{n}/<model>/rep{k}/
   rounds/              회차 요약 기록: round-{n}.md(점수표, luna 실패 목록, sol 비교)
   harness/
-    run.sh             한 반복 실행: run.sh [--dry-run] <round> <model-key> <rep> <workdir-fixture> [--no-skill]
-    score.ts           run-dir을 채점(gold F1, 태그 F1, 참고자료, 규율 위반 감점)
-    score.test.ts      score.ts 단위 테스트
+    run.sh                     한 반복 실행: run.sh [--dry-run] <round> <model-key> <rep> <workdir-fixture>
+                               [--no-skill] [--no-sandbox-isolation]
+    materialize-skill.ts       run-dir 안에 스킬을 codex 배포 형태(.agents/skills+.agents/lib)로
+                               복제(격리용 — 아래 "격리" 절)
+    materialize-skill.test.ts  materialize-skill.ts 단위 테스트
+    score.ts                   run-dir을 채점(gold F1, 태그 F1, 참고자료, 규율 위반 감점)
+    score.test.ts              score.ts 단위 테스트
     prompts/
-      eval-preamble.md 평가 모드 머리말(검토 게이트 자동 승인, 발행 게이트 거절)
+      eval-preamble.md         평가 모드 머리말(검토 게이트 자동 승인, 발행 게이트 거절, 경로 탐색 금지)
 ```
 
 `baselines/<round>/<model>/rep<k>/`에는 매 반복마다 `plan.json`, `plan.validated.json`,
@@ -169,6 +173,143 @@ jq -r 'select(.item.type=="web_search" and .item.results) | .item.results[].url'
 쓸 필요가 없었다 — 다만 폴백 규칙 자체는 그대로 남겨 둔다(`harness/score.ts`의
 `collectStrings` 전수 문자열 순회가 이미 `.item.results[].url`을 포함해 별도
 web_search 추출기 없이도 커버한다).
+
+## 격리
+
+실제 round-0 실행에서 관측된 문제: codex 실행(`--dangerously-bypass-approvals-and-sandbox`,
+cwd=임시 run-dir)이 레포의 `evals/fc-feedback` README·rubric·harness,
+`projects/fc-feedback`의 DESIGN.md, `~/.omt` 아래 오케스트레이터 plan/spec을 스스로
+찾아 읽었고, 한 실행은 레포 cwd에서 `fc.ts`를 직접 실행해 실제 `~/.fc-feedback`에 스텁을
+만들었다. 레포 위치가 새는 경로는 세 가지였다: (1) `eval-preamble.md`가 `evals/fc-feedback`
+경로와 "plan §"을 직접 언급, (2) `config set`에 넘기는 roster 경로가 레포 절대경로라
+`manifest.yaml`에 그대로 박히고 `fc config status`가 그걸 되돌려줌, (3) 1회차부터는
+`${CLAUDE_SKILL_DIR}` 치환이 레포 안 스킬 경로로 확장됨.
+
+### 경로 비식별화 (모든 실행에 적용)
+
+- **배포 형태 스킬 복제** (`materialize-skill.ts`) — `make sync`가 codex에 배포하는 것과
+  같은 모양으로 run-dir 안에 스킬을 복제한다: `<run-dir>/.agents/skills/fc-feedback/`
+  (SKILL.md·scripts/, 테스트·fixture 제외)와 그 형제 경로 `<run-dir>/.agents/lib/`(전이
+  `@lib/` 의존성 + 선언된 bare import 벤더링, 예: `yaml` → `.agents/lib/vendor/yaml.js`).
+  실제 sync 함수(`tools/sync.ts`의 `syncLib`, `tools/adapters/codex.ts`의
+  `CodexAdapter.syncSkillsDirect`)를 그대로 재사용하고, `run_dir`을 sync 대상 `path`처럼
+  취급한다 — 그래서 이 복제본은 실제 codex 배포 대상(sync target을 run-dir에 두었을 때)과
+  경로 모양이 정확히 같다. 0회차(`--no-skill`)는 이 복제를 아예 만들지 않는다(스킬이
+  없는 기준선이라는 전제를 지키기 위해).
+- **`${CLAUDE_SKILL_DIR}` 치환**이 위 복제 경로(`<run-dir>/.agents/skills/fc-feedback`)로
+  바뀐다 — 레포 안 소스 경로가 더 이상 프롬프트에 등장하지 않는다.
+- **roster 경로**는 `config set` 전에 `fixtures/roster.cef.yaml`을 `<run-dir>/roster.cef.yaml`로
+  복사한 뒤 그 경로를 넘긴다 — `manifest.yaml`과 `fc config status`가 노출하는 경로가
+  run-dir 안쪽으로 한정된다.
+- **prompt.txt 오염 검사** — 프롬프트를 다 만든 뒤 레포 루트 절대경로, `"evals/fc-feedback"`,
+  `"plan §"` 세 패턴을 grep하고, 하나라도 걸리면 실행을 중단한다(향후 SKILL.md 본문이
+  실수로 이런 문구를 담아도 잡아낸다).
+- **manifest 격리** — `FC_FEEDBACK_MANIFEST_ROOT=<run-dir>/fc-manifests`를 `config set`과
+  codex 프로세스 모두에 export한다(`projects/fc-feedback/skills/fc-feedback/scripts/manifest.ts`의
+  계약: 이 값이 있으면 `$HOME/.fc-feedback`을 완전히 대체한다). 예전에 있던 "실행 후
+  `~/.fc-feedback/<projectKey>` 삭제" 단계는 제거했다 — manifest가 애초에 run-dir 밖으로
+  나가지 않으므로 `run.sh --cleanup`이 run-dir을 지우면 같이 사라진다.
+- **병렬 회차 간 run-dir 격리는 이 permission profile로는 안 된다** — 여러 round/rep을
+  동시에 돌리면 각자의 run-dir이 `$TMPDIR/fc-feedback-eval.*` 형제 디렉터리로 생기는데,
+  permission profile은 "run-dir 자기 자신만 허용, 그 밖의 `fc-feedback-eval.*`는 전부
+  거부" 같은 glob 기반 예외를 표현하지 못한다(경로를 하나씩 나열해야 하는데, 동시에 도는
+  다른 run-dir 경로는 이 스크립트가 실행되는 시점에 알 수 없다). 대신 `harness/score.ts`의
+  기존 오염 감지기(`otherRunDirTargets`/`computeContaminationTargets`/`scoreContamination`)가
+  `run.jsonl`에 기록된 모든 명령을 검사해 다른 `fc-feedback-eval.*` run-dir을 건드린
+  명령이 있으면 오염으로 채점한다 — OS 수준 차단이 아니라 채점 시점 탐지로 커버하는
+  영역이다. (TMPDIR 자체를 거부하고 codex 프로세스의 `TMPDIR`을 run-dir 안쪽으로 재지정한
+  뒤 run-dir 경로만 다시 허용하는 "거부 안에 중첩 허용" 방식이 되는지는 조사하지 않았다 —
+  이번 범위에서는 위 채점-시점 탐지로 충분하다고 판단했다.)
+
+### OS 수준 read 제한 — 존재함, 연결함 (codex-cli 0.157.1)
+
+`codex exec --help`/`codex sandbox --help`/`~/.codex/config.toml` 조사 결과: codex는 내장
+프로필 세 개(`:read-only`/`:workspace`/`:danger-full-access`, `codex exec -s <mode>`와
+대응)만으로는 read를 막지 않는다 — 빌트인 세 프로필 모두 "쓰기·네트워크만 제한, 읽기는
+전체 허용"이며, `:workspace`로 레포와 `~/.omt`를 실제로 읽을 수 있음을 직접 확인했다.
+그런데 codex는 **커스텀 permission profile**(`codex-rs/config/src/permissions_toml.rs`의
+`PermissionProfileToml.filesystem`, 경로별 `"read"|"write"|"deny"`)을 지원하고, `deny`는
+읽기·쓰기를 모두 막는다. 거부 목록은 레포 루트 하나가 아니라, 이 워크트리가 속한
+**모든 워크트리의 공통 부모 디렉터리**(`git rev-parse --git-common-dir`의 결과에서 한 단계
+위 — bare 레포 + 형제 워크트리들이 함께 있는 디렉터리; 해석 실패 시 이 워크트리 루트로
+폴백)와, 실제 `$HOME/.omt`·`$HOME/.fc-feedback`·`$HOME/.claude`(Claude Code 프로젝트 대화
+기록)·`$HOME/.pins`, 그리고 이전 실행이나 이 작업을 오케스트레이션하는 세션 자체를 드러낼
+수 있는 `$HOME/.codex` 아래 대화 기록/이력 경로들(`sessions`, `archived_sessions`,
+`history.jsonl`, `session_index.jsonl`, `rollout-migrations`, `shell_snapshots`,
+`transcription-history.jsonl`, `dictation-history`)을 함께 담는다. `$HOME/.codex`의
+`auth.json`과 codex 자신의 런타임 상태(`goals_*.sqlite` 등 큐/메모리/목표 저장소)는
+의도적으로 거부 목록에서 뺐다 — codex가 이번 실행 자체를 인증하고 동작하는 데 쓰는
+경로라 막으면 실행이 깨질 수 있고, 대화/세션 이력만큼 민감한 정보를 담지 않는다는
+판단이다(과도하게 보수적으로 잡았으니, 더 좁혀도 된다는 뜻이지 더 넓혀야 한다는 뜻은
+아니다). `codex sandbox`(모델 호출 없는 로컬 seatbelt 실행기)로 실측 검증했다(스크래치
+run-dir 하나에 대해 9개 점검 전부 통과 — 6개 거부 경로는 전부 `Operation not permitted`로
+막혔고, run-dir 자신·미디어 캐시·네트워크 3개는 전부 성공):
+
+```
+perm="permissions.fc-eval-isolate={extends=\":workspace\",network={enabled=true},filesystem={\"<worktrees-parent>\"=\"deny\",\"$HOME/.omt\"=\"deny\",\"$HOME/.fc-feedback\"=\"deny\",\"$HOME/.claude\"=\"deny\",\"$HOME/.pins\"=\"deny\",\"$HOME/.codex/sessions\"=\"deny\", ...}}"
+
+codex sandbox -c "$perm" -P fc-eval-isolate -C <run-dir> -- cat <repo-root>/CLAUDE.md
+  -> cat: Operation not permitted   (exit 1 — <repo-root>는 <worktrees-parent> 아래에 있다)
+codex sandbox -c "$perm" -P fc-eval-isolate -C <run-dir> -- ls <worktrees-parent>
+  -> ls: Operation not permitted    (exit 1 — 이 레포의 다른 모든 워크트리도 함께 막힌다)
+codex sandbox -c "$perm" -P fc-eval-isolate -C <run-dir> -- ls "$HOME/.omt"
+  -> ls: Operation not permitted    (exit 1)
+codex sandbox -c "$perm" -P fc-eval-isolate -C <run-dir> -- ls "$HOME/.codex/sessions"
+  -> ls: Operation not permitted    (exit 1)
+codex sandbox -c "$perm" -P fc-eval-isolate -C <run-dir> -- ls "$HOME/.claude"
+  -> ls: Operation not permitted    (exit 1)
+codex sandbox -c "$perm" -P fc-eval-isolate -C <run-dir> -- ls "$HOME/.pins"
+  -> ls: Operation not permitted    (exit 1)
+codex sandbox -c "$perm" -P fc-eval-isolate -C <run-dir> -- cat <run-dir>/.fc-eval-run-dir
+  -> smoke-marker                   (exit 0)
+codex sandbox -c "$perm" -P fc-eval-isolate -C <run-dir> -- ls "$HOME/.cache/fc-feedback-eval/<video-id>"
+  -> audio captions video wav       (exit 0, 미디어 캐시는 그대로 읽힌다)
+codex sandbox -c "$perm" -P fc-eval-isolate -C <run-dir> -- curl -sI https://example.com
+  -> HTTP/2 200                     (exit 0, network={enabled=true}가 :workspace의
+                                      기본 network-restricted를 뒤집는다)
+```
+
+`-c permissions.<name>=<inline TOML>`과 `-c default_permissions=<name>`은 둘 다 일반
+`ConfigToml` 오버라이드라 `codex sandbox`(스모크용)와 `codex exec`(실제 실행) 양쪽에 같은
+방식으로 먹는다 — `codex exec`에는 `codex sandbox`의 `-P` 같은 전용 플래그가 없어서
+`default_permissions`로 활성 프로필을 고른다. `run.sh`는 이를 `--no-sandbox-isolation`으로
+끌 수 있는 기본 ON 플래그로 연결했다: 실제 `codex exec` 호출마다 (1) 위와 같은 4가지 점검을
+`codex sandbox`로(모델 호출 없이) 먼저 돌려 기대대로 막히고/뚫리는지 확인하고 실패하면
+실행 자체를 중단하며, (2) 통과하면 `--dangerously-bypass-approvals-and-sandbox` 대신 같은
+`-c` 오버라이드로 `codex exec`를 돌린다.
+
+**검증하지 못한 부분.** `codex sandbox`는 모델을 호출하지 않는 로컬 실행기라 반복
+검증했지만, 이 정책을 켠 채 실제로 model turn을 도는 `codex exec`(비용이 드는 실제 실행)는
+이번 범위에서 돌리지 않았다 — `codex exec`가 seatbelt 정책을 적용하는 실행 엔진은
+`codex sandbox`와 공유되므로(같은 `FileSystemSandboxPolicy`/seatbelt 실행기) read/write
+차단 동작 자체는 같은 근거로 신뢰할 수 있지만, sandbox가 막은 명령을 모델이 만났을 때
+`codex exec`의 승인 정책이 사람 입력을 기다리며 멈추는지는 직접 관측하지 못했다(`codex
+exec --help`에는 대화형 승인 프롬프트 관련 플래그가 없고, "non-interactively"라는 설명과
+맞물려 승인 대기 없이 실패를 모델에 그대로 보고할 것으로 추정한다). 다음 실제 회차
+실행 1회를 확인 실행으로 삼아 이 가정을 검증하는 것을 권장한다.
+
+`$HOME/.codex/sessions`를 거부 목록에 넣으면 codex 자신이 이번 실행의 세션/rollout을
+그 경로에 쓰는 동작과 충돌할 수 있어서(`deny`는 쓰기도 막는다), `codex exec`에
+`--ephemeral`(`--help` 설명: "Run without persisting session files to disk")을 함께
+붙여 애초에 그 경로에 아무것도 쓰지 않게 했다. `--ephemeral`이 세션 디렉터리 쓰기를
+정확히 어떤 내부 경로 단위로 끄는지는 codex-rs 소스에서 `history_mode` 게이팅까지는
+확인했지만 GitHub API 요청 한도에 걸려 더 깊이 추적하지 못했다 — `codex sandbox`
+스모크로는 `--ephemeral`의 쓰기-생략 동작 자체를 관측할 수 없다(스모크는 모델을 부르지
+않는 별도 실행기라 세션을 애초에 만들지 않는다). 다음 실제 실행 확인 때 `--ephemeral` +
+이 거부 목록 조합에서 codex가 정상 종료하는지(세션 쓰기 실패로 에러를 내지 않는지)를
+함께 확인하는 것을 권장한다.
+
+### 별도 방어선 (이번 범위 밖, 참고용)
+
+`harness/score.ts`는 이미 `git push` 시도·게이트 순서 위반을 감점 대상으로 채점한다
+(`detectPushAttempt`, `detectGateOrderViolation`). 여기 더해 오염 감지기
+(`computeContaminationTargets`/`scanCommandContamination`/`scoreContamination`)가
+`run.jsonl`에 기록된 모든 실행 명령을 검사해 `evals/fc-feedback`, `projects/fc-feedback`,
+`~/.omt/**/plans/fc-feedback*`, 그리고 다른 `fc-feedback-eval.*` run-dir(위 "병렬 회차 간
+run-dir 격리" 참고)을 실제로 읽거나 검색한 흔적이 있으면 `contaminated: true`로 채점에서
+제외한다(단순 언급만으로는 오염 처리하지 않는다 — 읽기/검색/출력에 실제로 등장해야 한다).
+이번 작업 범위는 harness(`run.sh`, `materialize-skill.ts`, `eval-preamble.md`)로 한정되어
+`score.ts` 자체는 건드리지 않았다.
 
 ## 결과
 
