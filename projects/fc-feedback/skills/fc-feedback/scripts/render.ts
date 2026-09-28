@@ -214,6 +214,49 @@ function wrapNobr(escaped: string): string {
 	return escaped.replace(/\S+\([^)\s]{1,20}\)/g, (match) => `<span class="nobr">${match}</span>`);
 }
 
+/**
+ * Matches each bound Korean grammatical construction this file glues (DESIGN §10/§15-1):
+ * negation (-지 못/않), -기(도/만) 전/시작/위해/때문, -다 보니/보면, -을/를/ㄹ 수 있/없 (both
+ * spaces), -고 있/싶, -아/어 주/보/버리/놓, dependent noun 것 after -ㄴ/는/은/을, and a number
+ * glued to its counter (초/분/번/명/개/m/골). `\S*` is bounded by whitespace on both sides, so
+ * it never crosses into a neighboring word — an ordinary inter-word space between two
+ * independent words (e.g. "수비 전환") matches none of these and stays breakable. An optional
+ * `\*{0,2}` after the trigger character tolerates a bold span's closing "**" landing exactly
+ * at the construction boundary (e.g. "**...하는**" 것"), the one run-boundary case this can
+ * still catch by running on the raw text before `boldSpans()` splits on "**" — see
+ * `glueKorean`'s own comment for the reason that ordering, not per-span application, is used.
+ * A stem ending in a vowel-fused "ㄹ" syllable (e.g. "시도할 수 있다") is NOT covered — the
+ * pattern is limited, as given, to a literal 을/를/ㄹ character, not a decomposed batchim.
+ */
+const GLUE_PATTERNS: readonly RegExp[] = [
+	/\S*지\*{0,2} (?:못|않)/g,
+	/\S*기(?:도|만)?\*{0,2} (?:전|시작|위해|때문)/g,
+	/\S*다\*{0,2} (?:보니|보면)/g,
+	/\S*[을를ㄹ]\*{0,2} 수 (?:있|없)/g,
+	/\S*고\*{0,2} (?:있|싶)/g,
+	/\S*[아어]\*{0,2} (?:주|보|버리|놓)/g,
+	/\S*(?:ㄴ|는|은|을)\*{0,2} 것/g,
+	/\d+ (?:초|분|번|명|개|m|골)/g,
+];
+
+/**
+ * Replaces the ASCII space inside a bound grammatical construction with U+00A0 so
+ * `word-break: keep-all`/`text-wrap: pretty` can't still split the pair mid-construction
+ * (DESIGN §10/§15-1) — U+00A0 passes through `escapeHtml` untouched. Pure; run it on the RAW
+ * note text/caption/title BEFORE `boldSpans()` splits on "**", not per resulting span: "**"
+ * markers are non-space and never block a match, so a construction whose boundary falls right
+ * at a bold-span edge (e.g. "**하는** 것") is still glued — splitting first would lose that
+ * cross-boundary case entirely (documented limitation avoided by ordering, not accepted).
+ */
+export function glueKorean(text: string): string {
+	return GLUE_PATTERNS.reduce((acc, pattern) => acc.replace(pattern, (match) => match.replace(/ /g, " ")), text);
+}
+
+/** Card title / TOC label shared pipeline: glue bound constructions, then the existing escape+nobr treatment (DESIGN §5/§8/§10). */
+function unitTitleHtml(title: string): string {
+	return wrapNobr(escapeHtml(glueKorean(title)));
+}
+
 // ── position tree display order (DESIGN.md §7) ──────────────────────────────
 //
 // core.ts's `PARENT` map already lists each parent's children in the exact
@@ -356,16 +399,18 @@ function renderMyFeedbackNav(data: SessionData): string {
 
 // ── 필터 바 (DESIGN.md §7) ───────────────────────────────────────────────
 
-function renderPositionNode(tag: string, counts: Map<string, number>): string {
+/** `isRoot` marks GK/DF/MF/FW with `.chip-pos-root` (DESIGN §15-5/§15-10) so the tree's two levels read differently at a glance — children (recursive calls below) never get it. */
+function renderPositionNode(tag: string, counts: Map<string, number>, isRoot: boolean): string {
 	const count = counts.get(tag) ?? 0;
 	if (count === 0) {
 		return "";
 	}
 	const childHtml = childrenOf(tag)
-		.map((child) => renderPositionNode(child, counts))
+		.map((child) => renderPositionNode(child, counts, false))
 		.join("");
+	const rootClass = isRoot ? " chip-pos-root" : "";
 	const button =
-		`<button type="button" class="chip chip-filter" data-group="position" data-value="${escapeHtml(tag)}" aria-pressed="false">` +
+		`<button type="button" class="chip chip-filter${rootClass}" data-group="position" data-value="${escapeHtml(tag)}" aria-pressed="false">` +
 		`${escapeHtml(tag)} (${count})</button>`;
 	return childHtml
 		? `<span class="pos-node">${button}<span class="pos-children">${childHtml}</span></span>`
@@ -374,7 +419,7 @@ function renderPositionNode(tag: string, counts: Map<string, number>): string {
 
 function renderPositionFacetGroup(data: SessionData): string {
 	const counts = countPositionNodes(data);
-	const roots = POSITION_ROOTS.map((root) => renderPositionNode(root, counts)).join("");
+	const roots = POSITION_ROOTS.map((root) => renderPositionNode(root, counts, true)).join("");
 	if (roots === "") {
 		return "";
 	}
@@ -452,7 +497,7 @@ function tocItemAttrs(unit: SessionUnit): string {
 
 /** TOC item label: time chip (non-interactive, TOC click never seeks — DESIGN §8) + title. */
 function tocItemLabel(unit: SessionUnit): string {
-	return `${chip("chip-time", formatTime(unit.start))} ${wrapNobr(escapeHtml(unit.title))}`;
+	return `${chip("chip-time", formatTime(unit.start))} ${unitTitleHtml(unit.title)}`;
 }
 
 function renderTabMatch(data: SessionData): string {
@@ -626,9 +671,9 @@ function renderRelatedLine(unit: SessionUnit, members: readonly SessionMemberInf
 	return `<p class="related-members">관련: ${names}</p>`;
 }
 
-/** A body text block: escape first, then turn only `boldSpans` bold segments into `<strong>` (DESIGN §5 item 7). */
+/** A body text block: glue bound constructions, escape, then turn only `boldSpans` bold segments into `<strong>` (DESIGN §5 item 7/§10). */
 function renderBodyText(text: string): string {
-	const html = boldSpans(text)
+	const html = boldSpans(glueKorean(text))
 		.map((span) => (span.bold ? `<strong>${escapeHtml(span.text)}</strong>` : escapeHtml(span.text)))
 		.join("");
 	return `<p>${html}</p>`;
@@ -636,10 +681,11 @@ function renderBodyText(text: string): string {
 
 /** A body frame: figure+figcaption with a time chip and a "확대" new-tab link, `data-frame-t` read by VIEWER_JS's click-to-seek (DESIGN §5 item 7). */
 function renderBodyFrame(block: UnitBodyFrameBlock): string {
+	const caption = glueKorean(block.caption);
 	return (
 		`<figure class="body-frame" data-frame-t="${block.t}">` +
-		`<img src="${escapeHtml(block.src)}" width="${block.width}" height="${block.height}" loading="lazy" alt="${escapeHtml(block.caption)}">` +
-		`<figcaption>${seekTimeButton(block.t)}${escapeHtml(block.caption)} ` +
+		`<img src="${escapeHtml(block.src)}" width="${block.width}" height="${block.height}" loading="lazy" alt="${escapeHtml(caption)}">` +
+		`<figcaption>${seekTimeButton(block.t)}${escapeHtml(caption)} ` +
 		`<a href="${escapeHtml(block.src)}" target="_blank" rel="noopener" class="zoom-link" aria-label="이미지 원본 크게 보기">확대</a></figcaption>` +
 		`</figure>`
 	);
@@ -686,10 +732,29 @@ function renderRefsList(refs: UnitRef[]): string {
 	return `<ul class="refs-list">${items}</ul>`;
 }
 
+/** Representative start image (DESIGN §5 item 4): same "확대" new-tab-to-source affordance as a body frame (item 7), excluded from seek by the existing `interactive`/`a` guard in `onCardListClick` — no VIEWER_JS change needed. Clicking the image itself still seeks to the card's start time (no `.body-frame`/`data-frame-t` on this figure). */
+function renderStartImage(image: UnitStartImage): string {
+	return (
+		`<figure class="card-image">` +
+		`<img src="${escapeHtml(image.src)}" width="${image.width}" height="${image.height}" alt="">` +
+		`<figcaption><a href="${escapeHtml(image.src)}" target="_blank" rel="noopener" class="zoom-link" aria-label="이미지 원본 크게 보기">확대</a></figcaption>` +
+		`</figure>`
+	);
+}
+
+/** Groups similar/refs (items 9/10) as one visually-separated metadata block below the body (item 6) — "" when both are empty, so no bare separator renders. */
+function renderMetaBlock(unit: SessionUnit): string {
+	const similar = renderSimilarList(unit.similar);
+	const refs = renderRefsList(unit.refs);
+	if (similar === "" && refs === "") {
+		return "";
+	}
+	return `<div class="card-meta">${similar}${refs}</div>`;
+}
+
 /** Card field order per DESIGN §5: header → title → mention badge → image → tag row → mentioned members → body → related members → similar → refs → watch link. */
 function renderCard(unit: SessionUnit, ctx: CardContext): string {
 	const video = ctx.videoById.get(unit.video);
-	const startImage = unit.images.start;
 	const hasRoster = ctx.members.length > 0;
 	return (
 		`<article class="card" id="${escapeHtml(unit.id)}" ` +
@@ -700,15 +765,14 @@ function renderCard(unit: SessionUnit, ctx: CardContext): string {
 		`data-related-ids="${escapeHtml(unit.related_member_ids.join("|"))}" ` +
 		`data-embeddable="${(video?.embeddable ?? true) ? "true" : "false"}">` +
 		renderCardHead(unit, ctx) +
-		`<h3>${wrapNobr(escapeHtml(unit.title))}</h3>` +
+		`<h3>${unitTitleHtml(unit.title)}</h3>` +
 		(hasRoster ? `<p class="mention-badge" hidden></p>` : "") +
-		`<img src="${escapeHtml(startImage.src)}" width="${startImage.width}" height="${startImage.height}" alt="">` +
+		renderStartImage(unit.images.start) +
 		renderChipRow(unit) +
 		(hasRoster ? renderMentionedLine(unit, ctx.members) : "") +
 		renderBody(unit.body) +
 		(hasRoster ? renderRelatedLine(unit, ctx.members) : "") +
-		renderSimilarList(unit.similar) +
-		renderRefsList(unit.refs) +
+		renderMetaBlock(unit) +
 		`<a class="watch-link" href="${escapeHtml(unit.watch_url)}" target="_blank" rel="noopener">유튜브에서 보기 ↗</a>` +
 		`</article>`
 	);
@@ -802,7 +866,7 @@ function renderIndexByTopic(index: ArchiveIndex): string {
 		.map((tag) => {
 			const units = index.units.filter((unit) => unit.topic_tags.includes(tag));
 			const items = units
-				.map((unit) => `<li><a href="${escapeHtml(unit.href)}">${escapeHtml(unit.title)}</a></li>`)
+				.map((unit) => `<li><a class="toc-item" href="${escapeHtml(unit.href)}">${escapeHtml(unit.title)}</a></li>`)
 				.join("");
 			return `<div class="toc-tag-group"><h2>${escapeHtml(tag)} (${units.length})</h2><ul>${items}</ul></div>`;
 		})
@@ -815,7 +879,7 @@ export function renderIndex(index: ArchiveIndex): string {
 		index.sessions.length === 0
 			? `<p class="empty-state">아직 발행된 세션이 없어요.</p>`
 			: `<div class="session-grid">${index.sessions.map(renderSessionCard).join("")}</div>` +
-				`<p><a href="#by-topic">주제별 전체 피드백</a></p>` +
+				`<p class="plain-link"><a href="#by-topic">주제별 전체 피드백</a></p>` +
 				renderIndexByTopic(index);
 
 	const html =
@@ -844,13 +908,13 @@ export function renderRef(ref: RefPageData): string {
 		`<h1>${wrapNobr(escapeHtml(ref.title))}</h1>` +
 		`<p class="ref-badges"><span class="badge">${escapeHtml(ref.kind)}</span>` +
 		`<span class="badge">${escapeHtml(ref.lang.toUpperCase())}</span></p>` +
-		`<p><a href="${escapeHtml(ref.url)}" target="_blank" rel="noopener">원문 ↗</a></p>` +
+		`<p class="plain-link"><a href="${escapeHtml(ref.url)}" target="_blank" rel="noopener">원문 ↗</a></p>` +
 		`<p class="summary-ko">${escapeHtml(ref.summary_ko)}</p>` +
 		(keyPoints ? `<ul class="key-points">${keyPoints}</ul>` : "") +
 		(rows
 			? `<table class="translations-table"><thead><tr><th>원문</th><th>한국어</th></tr></thead><tbody>${rows}</tbody></table>`
 			: "") +
-		`<p><a href="../index.html">아카이브로 돌아가기</a></p>` +
+		`<p class="plain-link"><a href="../index.html">아카이브로 돌아가기</a></p>` +
 		`</main>`;
 
 	return pageShell(ref.title, "", html, "");
@@ -877,10 +941,14 @@ export const STYLE = `
 }
 * { box-sizing: border-box; }
 html, body { background: var(--bg); color: var(--ink); }
+/* Body token (§2) as the page default, not just .card-body p's own rule below — so any
+   selector this file forgets to size explicitly computes to a real §2 value instead of the
+   untokened UA default (§15-2), verified by grepping STYLE for every rendered class. */
 body {
   margin: 0;
   font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
-  line-height: 1.6;
+  font-size: 1.0625rem;
+  line-height: 1.7;
   word-break: keep-all; overflow-wrap: anywhere; line-break: strict;
 }
 h1, h2, h3 { text-wrap: balance; word-break: keep-all; overflow-wrap: anywhere; line-break: strict; margin: 0 0 var(--space-2); font-weight: 700; }
@@ -891,6 +959,9 @@ h2 { font-size: 1.375rem; line-height: 1.35; }
 h3 { font-size: 1.25rem; line-height: 1.4; }
 a { color: var(--accent); }
 a:hover { color: var(--accent-hover); }
+/* Caption (§2), matching .toc-item — ref page's plain nav links and the archive's
+   "주제별 전체 피드백" link would otherwise inherit the Body default above (§15-2). */
+.plain-link { font-size: 0.875rem; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 button { font: inherit; color: inherit; background: none; border: none; }
 img { display: block; max-width: 100%; height: auto; border-radius: var(--radius-sm); }
@@ -977,6 +1048,11 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .chip { display: inline-flex; align-items: center; padding: var(--space-1) var(--space-3); margin: var(--space-1); border-radius: var(--radius-full); font-size: 0.8125rem; font-weight: 600; color: var(--ink); background: var(--surface-sunken); white-space: nowrap; flex-shrink: 0; }
 .chip-filter { min-height: 44px; border: 1px solid var(--line-strong); cursor: pointer; background: var(--bg); }
 .chip-filter[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+/* Position tree root (GK/DF/MF/FW) vs. child (DESIGN §15-5/§15-10 "구분 안 되는 트리"):
+   bolder weight + the same neutral fill used elsewhere for a filled-but-inactive chip
+   (--surface-sunken, §2) reads as "this is a group", not a second accent color — the
+   pressed rule above still wins on specificity so an active state looks the same either way. */
+.chip-pos-root { font-weight: 700; background: var(--surface-sunken); }
 /* Nested position nodes wrap within the viewport instead of forcing a fixed-width single
    line off-screen (DESIGN §7/§15-5); chip margin is reset per node since the tree's own
    gap already spaces siblings — keeping both would double the gap (DESIGN §2). */
@@ -985,7 +1061,7 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .pos-node .chip { margin: 0; }
 .pos-children { margin-left: var(--space-3); display: inline-flex; flex-wrap: wrap; gap: var(--space-2); min-width: 0; max-width: 100%; }
 .chip-overflow { color: var(--muted); }
-.filter-reset { min-height: 44px; padding: var(--space-2) var(--space-4); border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: var(--bg); font-weight: 600; cursor: pointer; margin-top: var(--space-3); }
+.filter-reset { min-height: 44px; padding: var(--space-2) var(--space-4); border-radius: var(--radius-full); border: 1px solid var(--line-strong); background: var(--bg); font-size: 0.8125rem; font-weight: 600; cursor: pointer; margin-top: var(--space-3); }
 
 .active-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .active-filters[hidden] { display: none; }
@@ -1011,7 +1087,9 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .seek-btn { cursor: pointer; position: relative; }
 .seek-btn::after { content: ""; position: absolute; top: 50%; left: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
 .breadcrumb { color: var(--muted); font-size: 0.8125rem; }
-.card > img { margin-top: var(--space-3); width: 100%; height: auto; border: 1px solid var(--line); }
+.card-image { margin: var(--space-3) 0 0; }
+.card-image img { width: 100%; height: auto; border: 1px solid var(--line); }
+.card-image figcaption { display: flex; justify-content: flex-end; font-size: 0.875rem; font-weight: 500; color: var(--muted); margin-top: var(--space-2); }
 .mention-badge { display: inline-block; margin: var(--space-2) 0 0; padding: var(--space-1) var(--space-3); border-radius: var(--radius-full); font-size: 0.8125rem; font-weight: 600; }
 .mention-badge[hidden] { display: none; }
 .mention-badge.mention-direct { background: var(--accent); color: var(--bg); }
@@ -1042,12 +1120,16 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .card-body .body-frame figcaption { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); font-size: 0.875rem; font-weight: 500; color: var(--muted); margin-top: var(--space-2); }
 .zoom-link { font-weight: 600; white-space: nowrap; flex-shrink: 0; }
 
+/* Groups similar/refs as one metadata block, separated from the body above by a hairline
+   (DESIGN §5 items 9/10, §15-10 "160px 넘는 빈 공백" is the opposite failure this guards
+   against — this is a small, deliberate gap, not a blank run). */
+.card-meta { margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: var(--space-2); }
 .similar-list, .refs-list { font-size: 0.875rem; margin: 0; }
 .ref-badges { display: inline-flex; gap: var(--space-1); }
 .badge { display: inline-block; background: var(--surface-sunken); color: var(--muted); font-size: 0.875rem; font-weight: 500; padding: var(--space-1) var(--space-2); border-radius: var(--radius-full); }
 .similar-date { color: var(--muted); font-size: 0.875rem; }
-.watch-link { display: inline-block; font-weight: 600; }
-.empty-state { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); text-align: center; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-8) var(--space-6); }
+.watch-link { display: inline-block; font-weight: 600; font-size: 0.8125rem; }
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); text-align: center; font-size: 1.0625rem; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-8) var(--space-6); }
 .empty-state[hidden] { display: none; }
 .empty-state .filter-reset { margin-top: 0; }
 

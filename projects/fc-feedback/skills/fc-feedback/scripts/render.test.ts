@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 
 import { posClosure, relatedMembers, type Member, type Roster } from "./core.ts";
 import {
+	glueKorean,
 	renderIndex,
 	renderRef,
 	renderSession,
@@ -1082,5 +1083,182 @@ describe("제목의 한글단어(영문) 줄바꿈 방지", () => {
 
 		const tocItem = doc.querySelector('#panel-match .toc-item[data-target="u001"]');
 		expect(tocItem?.innerHTML).toContain('<span class="nobr">비활성(disabled)</span>');
+	});
+});
+
+// ── 한글 묶인 문법 구성 줄바꿈 방지 (DESIGN §10/§15-1) ───────────────────────
+
+describe("glueKorean — 묶인 문법 구성 공백을 nbsp로 치환", () => {
+	test.each([
+		["부정(-지 못/않)", "리바운드 위치를 선점하지 못한 장면", "선점하지 못한"],
+		["-기(도) 전", "패스가 나가기도 전에 먼저 움직였다", "나가기도 전에"],
+		["-기 전", "윙어가 볼을 잡기 전부터 늦었다", "잡기 전부터"],
+		["-기 시작", "패스 코스를 찾기 시작해 늦었다", "찾기 시작해"],
+		["-다 보니", "세트피스 상황에만 집중하다 보니 늦었다", "집중하다 보니"],
+		["-을 수 있(양쪽 공백)", "탈취 직후 전방으로 패스를 찾을 수 있다", "찾을 수 있다"],
+		["-고 있", "압박을 피하고 있다", "피하고 있다"],
+		["-아/어 주", "코스를 잡아 주는 습관", "잡아 주는"],
+		["의존명사 것(-는 것)", "라인을 올리는 것을 원칙으로", "올리는 것을"],
+		["숫자+단위", "클리어링 이후 3 초를 가장 위험하게 본다", "3 초를"],
+	])("%s: %s", (_label, input, expected) => {
+		expect(glueKorean(input)).toContain(expected);
+	});
+
+	test('독립된 두 단어 사이의 통상적인 어절 공백("수비 전환")은 그대로 둔다', () => {
+		expect(glueKorean("수비 전환은 다음 훈련 과제다")).toContain("수비 전환");
+		expect(glueKorean("수비 전환은 다음 훈련 과제다")).not.toContain("수비 전환");
+	});
+
+	test("볼드 마커(**) 경계에 걸친 구성도 boldSpans 분리 전에 적용돼 함께 붙는다", () => {
+		expect(glueKorean("**잡는** 것을 원칙으로")).toBe("**잡는** 것을 원칙으로");
+	});
+
+	test("nbsp는 escapeHtml을 그대로 통과한다(렌더된 본문 문단에서 확인)", () => {
+		const data = sampleData();
+		data.units[0].body = [{ type: "text", text: "리바운드 위치를 선점하지 못한 장면이 나왔다." }];
+		const doc = parseHTML(renderSession(data)).document;
+		const p = doc.getElementById("u001")?.querySelector(".card-body p");
+		expect(p?.textContent).toContain("선점하지 못한");
+	});
+});
+
+// ── 타이포 토큰 — body 기본값·off-scale 방지 (DESIGN §2, §15-2) ───────────────
+
+describe("타이포 토큰 이탈 방지 (DESIGN §2, §15-2)", () => {
+	test("body는 Body 토큰(1.0625rem/1.7)을 기본값으로 갖는다", () => {
+		const bodyRule = STYLE.match(/^body\s*\{[^}]*\}/m)?.[0] ?? "";
+		expect(bodyRule).toContain("font-size: 1.0625rem");
+		expect(bodyRule).toContain("line-height: 1.7");
+	});
+
+	test.each([
+		[".watch-link", "0.8125rem"],
+		[".filter-reset", "0.8125rem"],
+		[".empty-state", "1.0625rem"],
+		[".plain-link", "0.875rem"],
+	])("%s는 §2 타입 스케일 값을 명시한다", (selector, size) => {
+		const escaped = selector.replace(".", "\\.");
+		const rule = STYLE.match(new RegExp(`${escaped}\\s*\\{[^}]*\\}`))?.[0] ?? "";
+		expect(rule).toContain(`font-size: ${size}`);
+	});
+
+	test("아카이브 주제별 링크와 참고자료 페이지의 평문 링크는 각각 .toc-item/.plain-link를 재사용한다", () => {
+		const index: ArchiveIndex = {
+			version: 1,
+			updated_at: "now",
+			sessions: [
+				{
+					id: "20240104-NUzEChn9EyI",
+					title: "1월 4일 세션",
+					date: "2024-01-04",
+					videos: 2,
+					unit_count: 1,
+					topic_tags: ["빌드업"],
+					href: "20240104-NUzEChn9EyI/index.html",
+				},
+			],
+			units: [
+				{
+					uid: "20240104-NUzEChn9EyI#u001",
+					session: "20240104-NUzEChn9EyI",
+					title: "빌드업 지적",
+					date: "2024-01-04",
+					position_tags: ["FB"],
+					topic_tags: ["빌드업"],
+					member_ids: [],
+					href: "../20240104-NUzEChn9EyI/index.html#u001",
+				},
+			],
+			refs: [],
+		};
+		const doc = parseHTML(renderIndex(index)).document;
+		expect(doc.querySelector("#by-topic li a")?.classList.contains("toc-item")).toBe(true);
+		expect(doc.querySelector('p a[href="#by-topic"]')?.closest("p")?.classList.contains("plain-link")).toBe(
+			true,
+		);
+
+		const refDoc = parseHTML(
+			renderRef({
+				id: "r-1",
+				title: "제목",
+				lang: "en",
+				kind: "eafc",
+				url: "https://example.com",
+				summary_ko: "요약",
+				key_points_ko: [],
+				translations: [],
+			}),
+		).document;
+		expect(refDoc.querySelector('a[href="https://example.com"]')?.closest("p")?.classList.contains("plain-link")).toBe(
+			true,
+		);
+		expect(refDoc.querySelector('a[href="../index.html"]')?.closest("p")?.classList.contains("plain-link")).toBe(
+			true,
+		);
+	});
+});
+
+// ── 대표 이미지 확대 링크 (DESIGN §5 item 4) ─────────────────────────────────
+
+describe("대표 시작 이미지 — 확대 링크", () => {
+	test("본문 프레임과 동일하게 새 탭·noopener 확대 링크를 가지며, 이미지 클릭은 카드 시작 시각으로 seek한다", () => {
+		const data = sampleData();
+		const { doc, stub } = mountViewer(renderSession(data), true);
+		stub?.fireReady();
+		const figure = doc.getElementById("u001")?.querySelector(".card-image");
+		const zoom = figure?.querySelector("a.zoom-link");
+		expect(zoom?.getAttribute("target")).toBe("_blank");
+		expect(zoom?.getAttribute("rel")).toBe("noopener");
+		expect(zoom?.getAttribute("href")).toBe(data.units[0].images.start.src);
+
+		click(figure?.querySelector("img"));
+		const seekCall = stub?.calls.find((call) => call.method === "seekTo");
+		expect(seekCall?.args[0]).toBe(data.units[0].start);
+	});
+});
+
+// ── 포지션 트리 시각 위계 (DESIGN §15-5/§15-10) ──────────────────────────────
+
+describe("포지션 필터 트리 — 루트/자식 시각 구분", () => {
+	test("루트 노드(DF/GK/FW)만 chip-pos-root를 갖고, 자식 노드(FB)는 갖지 않는다", () => {
+		const doc = parseHTML(renderSession(sampleData())).document;
+		const df = doc.querySelector('.chip-filter[data-group="position"][data-value="DF"]');
+		const gk = doc.querySelector('.chip-filter[data-group="position"][data-value="GK"]');
+		const fb = doc.querySelector('.chip-filter[data-group="position"][data-value="FB"]');
+		expect(df?.classList.contains("chip-pos-root")).toBe(true);
+		expect(gk?.classList.contains("chip-pos-root")).toBe(true);
+		expect(fb?.classList.contains("chip-pos-root")).toBe(false);
+	});
+
+	test("STYLE은 chip-pos-root에 굵은 글자와 표면 채움을 준다", () => {
+		const rule = STYLE.match(/\.chip-pos-root\s*\{[^}]*\}/)?.[0] ?? "";
+		expect(rule).toContain("font-weight: 700");
+		expect(rule).toContain("background: var(--surface-sunken)");
+	});
+});
+
+// ── 본문-메타 구획 간격 (DESIGN §5 items 9/10) ───────────────────────────────
+
+describe("본문과 유사/참고자료 사이 구획 간격", () => {
+	test("유사·참고자료가 있으면 card-meta로 묶여 상단 구분선을 갖는다", () => {
+		const doc = parseHTML(renderSession(sampleData())).document;
+		const meta = doc.getElementById("u002")?.querySelector(".card-meta");
+		expect(meta).not.toBeNull();
+		expect(meta?.querySelector(".similar-list")).not.toBeNull();
+		expect(meta?.querySelector(".refs-list")).not.toBeNull();
+	});
+
+	test("유사·참고자료가 모두 없으면 card-meta 자체를 렌더하지 않는다", () => {
+		const data = sampleData();
+		data.units[0].similar = [];
+		data.units[0].refs = [];
+		const doc = parseHTML(renderSession(data)).document;
+		expect(doc.getElementById("u001")?.querySelector(".card-meta")).toBeNull();
+	});
+
+	test("STYLE은 card-meta에 space-6 상단 여백과 line 구분선을 준다", () => {
+		const rule = STYLE.match(/\.card-meta\s*\{[^}]*\}/)?.[0] ?? "";
+		expect(rule).toContain("margin-top: var(--space-6)");
+		expect(rule).toContain("border-top: 1px solid var(--line)");
 	});
 });
