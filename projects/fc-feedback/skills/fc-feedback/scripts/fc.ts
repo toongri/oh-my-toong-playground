@@ -14,15 +14,19 @@
  * console.log — process.stdout.write only), diagnostics on stderr, and a
  * non-zero exit code on failure.
  */
+import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
 	copyFileSync,
 	existsSync,
 	mkdirSync,
 	readFileSync,
 	readdirSync,
+	renameSync,
+	rmSync,
 	writeFileSync,
 } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, posix, relative, resolve } from "node:path";
 
 import { stringify } from "yaml";
 
@@ -35,11 +39,14 @@ import {
 	checkRefsDraft,
 	checkSimilarChoices,
 	isValidTag,
+	localLinks,
 	normalizeUrl,
 	parseRoster,
 	parseTaxonomy,
 	refId,
+	relatedMembers,
 	similarCandidates,
+	webpDimensions,
 	SID_PATTERN,
 	VID_PATTERN,
 	type CurrentUnit,
@@ -77,7 +84,25 @@ import {
 	type VideoInput,
 	type WhisperSegment,
 } from "./media.ts";
-import { configureFc, disableFc, getFcStatus, type FcStatus } from "./manifest.ts";
+import { configureFc, disableFc, getFcStatus, requireConfigured, type FcStatus } from "./manifest.ts";
+import {
+	renderIndex,
+	renderRef,
+	renderSession,
+	type ArchiveIndex,
+	type IndexRefEntry,
+	type IndexSessionEntry,
+	type IndexUnitEntry,
+	type RefPageData,
+	type SessionData,
+	type SessionMemberInfo,
+	type SessionUnit,
+	type UnitKeyImage,
+	type UnitNote,
+	type UnitRef,
+	type UnitSimilar,
+	type UnitStartImage,
+} from "./render.ts";
 
 // ── CLI command table ───────────────────────────────────────────────────
 
@@ -104,6 +129,16 @@ export const COMMANDS: readonly CommandSpec[] = [
 	{ name: "frames", usage: "fc frames", description: "검증된 유닛마다 시작 프레임과 notes의 핵심 프레임을 webp로 추출한다" },
 	{ name: "similar", usage: "fc similar", description: "아카이브 index.json을 기준으로 similar-candidates.json을 만든다" },
 	{ name: "verify-refs", usage: "fc verify-refs", description: "refs-draft.json의 URL을 정규화·검증해 refs.verified.json을 쓴다" },
+	{
+		name: "render",
+		usage: "fc render [--site-only]",
+		description: "plan/notes/similar/refs를 재검증한 뒤 세션을 렌더한다(configured면 아카이브+index.json, disabled/--site-only면 <work>/site/)",
+	},
+	{
+		name: "publish-prep",
+		usage: "fc publish-prep",
+		description: "링크 검사와 git status --porcelain을 보고하고 커밋/푸시 명령을 제안한다(commit/push는 하지 않는다)",
+	},
 ];
 
 // ── unknown-narrowing + small validators ────────────────────────────────
@@ -1181,17 +1216,45 @@ function handleTaxonomyAdd(tags: readonly string[], workDir: string, status: FcS
 
 interface NoteKeyFrame {
 	candidate_id: string;
+	caption: string;
+}
+
+// note 항목은 candidate_id만 쓰는 cmdFrames와, problem/who/instead/detail까지 쓰는
+// cmdRender가 함께 읽는다(같은 notes.json을 두 번 다르게 파싱하지 않기 위해 한 타입으로 통합).
+interface NoteEntry {
+	problem: string;
+	who: string;
+	instead: string;
+	detail?: string;
+	key_frames: NoteKeyFrame[];
 }
 
 interface NotesFile {
-	units: Record<string, { key_frames: NoteKeyFrame[] }>;
+	units: Record<string, NoteEntry>;
 }
 
 function toNoteKeyFrame(raw: unknown): NoteKeyFrame {
 	if (!isRecord(raw)) {
 		throw new Error("fc-feedback: notes.json의 key_frames 항목이 올바르지 않습니다");
 	}
-	return { candidate_id: str(raw.candidate_id, "key_frame.candidate_id") };
+	return {
+		candidate_id: str(raw.candidate_id, "key_frame.candidate_id"),
+		caption: typeof raw.caption === "string" ? raw.caption : "",
+	};
+}
+
+function toNoteEntry(raw: unknown, unitId: string): NoteEntry {
+	if (!isRecord(raw)) {
+		throw new Error(`fc-feedback: notes.json의 units.${unitId}가 올바르지 않습니다`);
+	}
+	const detail = raw.detail;
+	return {
+		problem: str(raw.problem, `units.${unitId}.problem`),
+		who: str(raw.who, `units.${unitId}.who`),
+		instead: str(raw.instead, `units.${unitId}.instead`),
+		...(typeof detail === "string" ? { detail } : {}),
+		key_frames: Array.isArray(raw.key_frames) ? raw.key_frames.map(toNoteKeyFrame) : [],
+	};
 }
 
 function readNotes(workDir: string): NotesFile {
@@ -1201,10 +1264,7 @@ function readNotes(workDir: string): NotesFile {
 	}
 	const units: NotesFile["units"] = {};
 	for (const [unitId, entry] of Object.entries(raw.units)) {
-		if (!isRecord(entry)) {
-			throw new Error(`fc-feedback: notes.json의 units.${unitId}가 올바르지 않습니다`);
-		}
-		units[unitId] = { key_frames: Array.isArray(entry.key_frames) ? entry.key_frames.map(toNoteKeyFrame) : [] };
+		units[unitId] = toNoteEntry(entry, unitId);
 	}
 	return { units };
 }
@@ -1374,17 +1434,22 @@ function readRefsDraft(workDir: string): RefDraftEntry[] {
 	return raw.refs.map(toRefDraftEntry);
 }
 
-interface IndexRefEntry {
-	id: string;
-	page: string | null;
-}
-
+// render.ts의 전체 IndexRefEntry 모양으로 파싱한다: cmdVerifyRefs는 id/page만 쓰고,
+// cmdRender(readArchiveIndex)는 전체를 쓰지만 같은 index.json을 두 번 다르게 파싱하지 않는다.
 function toIndexRefEntry(raw: unknown): IndexRefEntry {
 	if (!isRecord(raw)) {
 		throw new Error("fc-feedback: index.json의 ref 항목이 올바르지 않습니다");
 	}
 	const page = raw.page;
-	return { id: str(raw.id, "ref.id"), page: page === null || page === undefined ? null : str(page, "ref.page") };
+	return {
+		id: str(raw.id, "ref.id"),
+		url: str(raw.url, "ref.url"),
+		title: str(raw.title, "ref.title"),
+		lang: str(raw.lang, "ref.lang"),
+		kind: toRefKind(raw.kind, "ref.kind"),
+		page: page === null || page === undefined ? null : str(page, "ref.page"),
+		first_session: str(raw.first_session, "ref.first_session"),
+	};
 }
 
 function readIndexRefs(archiveDir: string): IndexRefEntry[] {
@@ -1531,6 +1596,627 @@ async function cmdVerifyRefs(workDir: string, status: FcStatus): Promise<{ kept:
 	return { kept: refs.length, dropped: dropped.length };
 }
 
+// ── refs.verified.json reading (plan §3, T9) ────────────────────────────────
+//
+// Read back render's own verify-refs output as `unknown` — structural I/O,
+// not a `core.checkX` revalidation (there is no checkRefsVerified: the
+// LLM-authored artifact is refs-draft.json, already revalidated below).
+
+function toVerifiedRef(raw: unknown): VerifiedRef {
+	if (!isRecord(raw)) {
+		throw new Error("fc-feedback: refs.verified.json 항목이 올바르지 않습니다");
+	}
+	const summaryKo = raw.summary_ko;
+	const keyPointsKo = raw.key_points_ko;
+	const translations = raw.translations;
+	return {
+		id: str(raw.id, "ref.id"),
+		url: str(raw.url, "ref.url"),
+		final_url: str(raw.final_url, "ref.final_url"),
+		http_status: num(raw.http_status, "ref.http_status"),
+		checked_at: str(raw.checked_at, "ref.checked_at"),
+		reused: typeof raw.reused === "boolean" ? raw.reused : false,
+		page: raw.page === null || raw.page === undefined ? null : str(raw.page, "ref.page"),
+		title: str(raw.title, "ref.title"),
+		source_name: str(raw.source_name, "ref.source_name"),
+		lang: str(raw.lang, "ref.lang"),
+		kind: toRefKind(raw.kind, "ref.kind"),
+		unit_ids: toStringArray(raw.unit_ids, "ref.unit_ids"),
+		...(typeof summaryKo === "string" ? { summary_ko: summaryKo } : {}),
+		...(Array.isArray(keyPointsKo) ? { key_points_ko: toStringArray(keyPointsKo, "ref.key_points_ko") } : {}),
+		...(Array.isArray(translations) ? { translations: translations.map(toTranslation) } : {}),
+	};
+}
+
+function readVerifiedRefs(workDir: string): VerifiedRef[] {
+	const raw = readJsonFile(join(workDir, "refs.verified.json"), "refs.verified.json");
+	if (!isRecord(raw) || !Array.isArray(raw.refs)) {
+		throw new Error("fc-feedback: refs.verified.json 형식이 올바르지 않습니다");
+	}
+	return raw.refs.map(toVerifiedRef);
+}
+
+// ── similar-choices.json reading (plan §3, T9) ──────────────────────────────
+
+function toSimilarChoicesUnits(raw: unknown): Record<string, string[]> {
+	if (!isRecord(raw) || !isRecord(raw.units)) {
+		throw new Error("fc-feedback: similar-choices.json 형식이 올바르지 않습니다");
+	}
+	const result: Record<string, string[]> = {};
+	for (const [unitId, list] of Object.entries(raw.units)) {
+		result[unitId] = toStringArray(list, `units.${unitId}`);
+	}
+	return result;
+}
+
+// ── archive index.json reading (full shape, plan §3, T9) ───────────────────
+//
+// Distinct from `readIndexRefs`/`readPastUnitsFromIndex` above: those are
+// narrow, graceful (return [] when index.json is absent) readers for
+// `verify-refs`/`similar`. render/publish-prep need the whole file and
+// require it to already exist (a configured archive always has one, written
+// by init-archive) — so this throws instead of defaulting to empty.
+
+function toIndexSessionEntry(raw: unknown): IndexSessionEntry {
+	if (!isRecord(raw)) {
+		throw new Error("fc-feedback: index.json의 session 항목이 올바르지 않습니다");
+	}
+	return {
+		id: str(raw.id, "session.id"),
+		title: str(raw.title, "session.title"),
+		date: str(raw.date, "session.date"),
+		videos: num(raw.videos, "session.videos"),
+		unit_count: num(raw.unit_count, "session.unit_count"),
+		topic_tags: toStringArray(raw.topic_tags, "session.topic_tags"),
+		href: str(raw.href, "session.href"),
+	};
+}
+
+function toIndexUnitEntry(raw: unknown): IndexUnitEntry {
+	if (!isRecord(raw)) {
+		throw new Error("fc-feedback: index.json의 unit 항목이 올바르지 않습니다");
+	}
+	return {
+		uid: str(raw.uid, "unit.uid"),
+		session: str(raw.session, "unit.session"),
+		title: str(raw.title, "unit.title"),
+		date: str(raw.date, "unit.date"),
+		position_tags: toStringArray(raw.position_tags, "unit.position_tags"),
+		topic_tags: toStringArray(raw.topic_tags, "unit.topic_tags"),
+		member_ids: toStringArray(raw.member_ids, "unit.member_ids"),
+		href: str(raw.href, "unit.href"),
+	};
+}
+
+function readArchiveIndex(archiveDir: string): ArchiveIndex {
+	const raw = readJsonFile(join(archiveDir, "index.json"), "index.json");
+	if (!isRecord(raw) || !Array.isArray(raw.sessions) || !Array.isArray(raw.units) || !Array.isArray(raw.refs)) {
+		throw new Error("fc-feedback: index.json 형식이 올바르지 않습니다");
+	}
+	return {
+		version: 1,
+		updated_at: str(raw.updated_at, "updated_at"),
+		sessions: raw.sessions.map(toIndexSessionEntry),
+		units: raw.units.map(toIndexUnitEntry),
+		refs: raw.refs.map(toIndexRefEntry),
+	};
+}
+
+// ── render (plan §1, §3, §4-F, §7 T9) ───────────────────────────────────────
+
+function formatSessionDate(uploadDate: string): string {
+	if (!/^\d{8}$/.test(uploadDate)) {
+		throw new Error(`fc-feedback: upload_date 형식이 아닙니다: ${uploadDate}`);
+	}
+	return `${uploadDate.slice(0, 4)}-${uploadDate.slice(4, 6)}-${uploadDate.slice(6, 8)}`;
+}
+
+/**
+ * `rootRelativeHref` (e.g. `sessions/<sid>/index.html#u001` or `refs/<id>.html`,
+ * both archive-root-relative, plan §3) rewritten relative to the *current*
+ * session's own page at `sessions/<sessionId>/index.html` — used for both the
+ * similar-feedback cross-session link and the reference summary-page link, so
+ * neither needs its own ad hoc "../" counting.
+ */
+function sessionRelativeHref(sessionId: string, rootRelativeHref: string): string {
+	const hashIndex = rootRelativeHref.indexOf("#");
+	const pathPart = hashIndex === -1 ? rootRelativeHref : rootRelativeHref.slice(0, hashIndex);
+	const fragment = hashIndex === -1 ? "" : rootRelativeHref.slice(hashIndex);
+	const fromDir = posix.join("sessions", sessionId);
+	return `${posix.relative(fromDir, pathPart)}${fragment}`;
+}
+
+interface BuildUnitContext {
+	workDir: string;
+	sessionId: string;
+	roster: Roster | null;
+	notes: NotesFile;
+	candidates: readonly Candidate[];
+	similarChoices: Record<string, string[]>;
+	indexUnitByUid: Map<string, IndexUnitEntry>;
+	refsVerified: readonly VerifiedRef[];
+}
+
+function buildSessionUnit(unit: ValidatedUnit, ctx: BuildUnitContext): SessionUnit {
+	const note = ctx.notes.units[unit.id];
+	if (note === undefined) {
+		throw new Error(`fc-feedback: notes.json에 없는 unit입니다: ${unit.id}`);
+	}
+	const candidateById = new Map(ctx.candidates.map((candidate) => [candidate.id, candidate]));
+
+	const startPath = join(ctx.workDir, "img", `${unit.id}-start.webp`);
+	if (!existsSync(startPath)) {
+		throw new Error(`fc-feedback: 시작 프레임 이미지가 없습니다(frames를 먼저 실행하세요): ${startPath}`);
+	}
+	const startDims = webpDimensions(readFileSync(startPath));
+	const startImage: UnitStartImage = { src: `img/${unit.id}-start.webp`, width: startDims.width, height: startDims.height };
+
+	const keyImages: UnitKeyImage[] = note.key_frames.map((frame) => {
+		const candidate = candidateById.get(frame.candidate_id);
+		if (candidate === undefined) {
+			throw new Error(`fc-feedback: notes.json의 key_frame이 candidates.json에 없습니다: ${frame.candidate_id}`);
+		}
+		return { src: `img/${unit.id}-${candidate.id}.webp`, caption: frame.caption, t: candidate.t };
+	});
+
+	const noteOut: UnitNote = {
+		problem: note.problem,
+		who: note.who,
+		instead: note.instead,
+		...(note.detail !== undefined ? { detail: note.detail } : {}),
+	};
+
+	const similar: UnitSimilar[] = (ctx.similarChoices[unit.id] ?? []).map((uid) => {
+		const entry = ctx.indexUnitByUid.get(uid);
+		if (entry === undefined) {
+			throw new Error(`fc-feedback: similar-choices.json의 uid가 index.json에 없습니다: ${uid}`);
+		}
+		return { uid: entry.uid, title: entry.title, date: entry.date, href: sessionRelativeHref(ctx.sessionId, entry.href) };
+	});
+
+	const refs: UnitRef[] = ctx.refsVerified
+		.filter((ref) => ref.unit_ids.includes(unit.id))
+		.map((ref) => ({
+			id: ref.id,
+			title: ref.title,
+			lang: ref.lang,
+			kind: ref.kind,
+			href: ref.page === null ? null : sessionRelativeHref(ctx.sessionId, ref.page),
+			orig_url: ref.final_url,
+		}));
+
+	const relatedIds = ctx.roster !== null ? relatedMembers(unit, ctx.roster).map((member) => member.id) : [];
+
+	return {
+		id: unit.id,
+		uid: `${ctx.sessionId}#${unit.id}`,
+		match_id: unit.match_id,
+		topic_id: unit.topic_id,
+		video: unit.video,
+		start: unit.start,
+		end: unit.end,
+		title: unit.title,
+		position_tags: unit.position_tags,
+		topic_tags: unit.topic_tags,
+		member_ids: unit.member_ids,
+		related_member_ids: relatedIds,
+		note: noteOut,
+		images: { start: startImage, key: keyImages },
+		similar,
+		refs,
+		watch_url: `https://youtu.be/${unit.video}?t=${Math.floor(unit.start)}`,
+	};
+}
+
+/** Re-validates plan/notes/similar-choices/refs-draft (throws on the first invalid one) and builds `SessionData`. */
+function buildSessionData(workDir: string, status: FcStatus): SessionData {
+	const taxonomy = loadTaxonomy(workDir, status);
+	const roster = loadRoster(status);
+	const lines = readLines(workDir);
+	const candidates = readCandidates(workDir);
+
+	const planRaw = readJsonFile(join(workDir, "plan.json"), "plan.json");
+	const planResult = checkPlan(planRaw, { lines, candidates, taxonomy, roster });
+	if (planResult.errors.length > 0) {
+		throw new Error(JSON.stringify(planResult.errors));
+	}
+	if (planResult.pending) {
+		throw new Error("fc-feedback: plan.json에 미승인 proposed_tags가 남아있습니다 — taxonomy add 후 다시 check plan을 실행하세요");
+	}
+	const validated = planResult.validated;
+
+	const notesRaw = readJsonFile(join(workDir, "notes.json"), "notes.json");
+	const notesCheck = checkNotes(notesRaw, validated);
+	if (notesCheck.errors.length > 0) {
+		throw new Error(JSON.stringify(notesCheck.errors));
+	}
+	const notes = readNotes(workDir);
+
+	const similarCandidatesFile = toSimilarCandidatesResult(
+		readJsonFile(join(workDir, "similar-candidates.json"), "similar-candidates.json"),
+	);
+	const similarChoicesRaw = readJsonFile(join(workDir, "similar-choices.json"), "similar-choices.json");
+	const similarCheck = checkSimilarChoices(similarChoicesRaw, similarCandidatesFile);
+	if (similarCheck.errors.length > 0) {
+		throw new Error(JSON.stringify(similarCheck.errors));
+	}
+	const similarChoices = toSimilarChoicesUnits(similarChoicesRaw);
+
+	const refsDraftRaw = readJsonFile(join(workDir, "refs-draft.json"), "refs-draft.json");
+	const refsCheck = checkRefsDraft(refsDraftRaw, validated);
+	if (refsCheck.errors.length > 0) {
+		throw new Error(JSON.stringify(refsCheck.errors));
+	}
+	const refsVerified = readVerifiedRefs(workDir);
+
+	const session = readSessionFile(workDir);
+
+	const indexUnitByUid =
+		status.mode === "configured" && existsSync(join(status.archive_repo_path, "index.json"))
+			? new Map(readArchiveIndex(status.archive_repo_path).units.map((entry) => [entry.uid, entry]))
+			: new Map<string, IndexUnitEntry>();
+
+	const membersInfo: SessionMemberInfo[] =
+		roster !== null ? roster.members.map((member) => ({ id: member.id, name: member.name, gamertag: member.gamertag, positions: member.positions })) : [];
+
+	const ctx: BuildUnitContext = {
+		workDir,
+		sessionId: session.session_id,
+		roster,
+		notes,
+		candidates,
+		similarChoices,
+		indexUnitByUid,
+		refsVerified,
+	};
+	const units = validated.units.map((unit) => buildSessionUnit(unit, ctx));
+
+	return {
+		version: 1,
+		session_id: session.session_id,
+		title: validated.session_title,
+		date: formatSessionDate(session.videos[0]?.upload_date ?? ""),
+		generated_at: new Date().toISOString(),
+		pages_base_url: status.mode === "configured" ? status.pages_base_url : "",
+		videos: session.videos.map((video) => ({ id: video.id, part: video.part, embeddable: video.embeddable })),
+		members: membersInfo,
+		matches: validated.matches,
+		units,
+	};
+}
+
+function copyWebpFiles(sourceDir: string, destDir: string): void {
+	mkdirSync(destDir, { recursive: true });
+	let entries: string[];
+	try {
+		entries = readdirSync(sourceDir);
+	} catch {
+		entries = [];
+	}
+	for (const name of entries) {
+		if (name.endsWith(".webp")) {
+			copyFileSync(join(sourceDir, name), join(destDir, name));
+		}
+	}
+}
+
+/** Builds the session's tree in a temp dir, then atomically swaps it into `<root>/sessions/<sessionId>/`. */
+function writeSessionDirAtomic(root: string, sessionId: string, build: (dir: string) => void): void {
+	const sessionsDir = join(root, "sessions");
+	mkdirSync(sessionsDir, { recursive: true });
+	const tmpDir = join(sessionsDir, `.tmp-${sessionId}-${randomUUID()}`);
+	mkdirSync(tmpDir, { recursive: true });
+	build(tmpDir);
+
+	const finalDir = join(sessionsDir, sessionId);
+	if (existsSync(finalDir)) {
+		const backupDir = join(sessionsDir, `.old-${sessionId}-${randomUUID()}`);
+		renameSync(finalDir, backupDir);
+		renameSync(tmpDir, finalDir);
+		rmSync(backupDir, { recursive: true, force: true });
+	} else {
+		renameSync(tmpDir, finalDir);
+	}
+}
+
+/** Writes a `refs/<id>.html` page per non-`ko` ref (skipping already-archived reused ones when `skipReused`). */
+function writeRefPages(root: string, refsVerified: readonly VerifiedRef[], skipReused: boolean): void {
+	const nonKo = refsVerified.filter((ref) => ref.lang !== "ko" && !(skipReused && ref.reused));
+	if (nonKo.length === 0) {
+		return;
+	}
+	const refsDir = join(root, "refs");
+	mkdirSync(refsDir, { recursive: true });
+	for (const ref of nonKo) {
+		const page: RefPageData = {
+			id: ref.id,
+			title: ref.title,
+			lang: ref.lang,
+			kind: ref.kind,
+			url: ref.final_url,
+			summary_ko: ref.summary_ko ?? "",
+			key_points_ko: ref.key_points_ko ?? [],
+			translations: ref.translations ?? [],
+		};
+		writeFileSync(join(refsDir, `${ref.id}.html`), renderRef(page));
+	}
+}
+
+/** Replaces this session's entries in-place (idempotent) and additively merges refs (plan §3). */
+function rewriteArchiveIndex(archiveDir: string, sessionData: SessionData, refsVerified: readonly VerifiedRef[]): ArchiveIndex {
+	const existing = readArchiveIndex(archiveDir);
+	const sessionId = sessionData.session_id;
+
+	const keptSessions = existing.sessions.filter((entry) => entry.id !== sessionId);
+	const keptUnits = existing.units.filter((entry) => entry.session !== sessionId);
+
+	const topicTags: string[] = [];
+	for (const unit of sessionData.units) {
+		for (const tag of unit.topic_tags) {
+			if (!topicTags.includes(tag)) {
+				topicTags.push(tag);
+			}
+		}
+	}
+
+	const newSession: IndexSessionEntry = {
+		id: sessionId,
+		title: sessionData.title,
+		date: sessionData.date,
+		videos: sessionData.videos.length,
+		unit_count: sessionData.units.length,
+		topic_tags: topicTags,
+		href: `sessions/${sessionId}/index.html`,
+	};
+	const newUnits: IndexUnitEntry[] = sessionData.units.map((unit) => ({
+		uid: unit.uid,
+		session: sessionId,
+		title: unit.title,
+		date: sessionData.date,
+		position_tags: unit.position_tags,
+		topic_tags: unit.topic_tags,
+		member_ids: unit.member_ids,
+		href: `sessions/${sessionId}/index.html#${unit.id}`,
+	}));
+
+	const sessions = [...keptSessions, newSession].sort((a, b) => {
+		if (a.date !== b.date) {
+			return a.date < b.date ? 1 : -1; // date desc
+		}
+		if (a.id !== b.id) {
+			return a.id < b.id ? -1 : 1; // id asc
+		}
+		return 0;
+	});
+	const units = [...keptUnits, ...newUnits];
+
+	const existingRefIds = new Set(existing.refs.map((ref) => ref.id));
+	const newRefs: IndexRefEntry[] = refsVerified
+		.filter((ref) => !existingRefIds.has(ref.id))
+		.map((ref) => ({
+			id: ref.id,
+			url: ref.url,
+			title: ref.title,
+			lang: ref.lang,
+			kind: ref.kind,
+			page: ref.page,
+			first_session: sessionId,
+		}));
+	const refs = [...existing.refs, ...newRefs];
+
+	const index: ArchiveIndex = { version: 1, updated_at: new Date().toISOString(), sessions, units, refs };
+	writeFileSync(join(archiveDir, "index.json"), `${JSON.stringify(index, null, 2)}\n`);
+	writeFileSync(join(archiveDir, "index.html"), renderIndex(index));
+	return index;
+}
+
+interface BrokenLink {
+	page: string;
+	href: string;
+	reason: string;
+}
+
+function collectArchiveHtmlPages(archiveDir: string): string[] {
+	const pages: string[] = [];
+	if (existsSync(join(archiveDir, "index.html"))) {
+		pages.push("index.html");
+	}
+	const sessionsDir = join(archiveDir, "sessions");
+	if (existsSync(sessionsDir)) {
+		for (const name of readdirSync(sessionsDir)) {
+			if (name.startsWith(".")) {
+				continue;
+			}
+			if (existsSync(join(sessionsDir, name, "index.html"))) {
+				pages.push(posix.join("sessions", name, "index.html"));
+			}
+		}
+	}
+	const refsDir = join(archiveDir, "refs");
+	if (existsSync(refsDir)) {
+		for (const name of readdirSync(refsDir)) {
+			if (name.endsWith(".html")) {
+				pages.push(posix.join("refs", name));
+			}
+		}
+	}
+	return pages;
+}
+
+/** Plan §4-F: every relative href/src exists on disk; every `#uNNN` fragment resolves to a real index.json UID. */
+function escapeIdForRegExp(id: string): string {
+	return id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * A fragment (`#u001`, `#by-topic`, …) is resolved against the *target*
+ * page's own markup — every anchor a page renders (TOC self-links, the
+ * similar-feedback cross-session link, the archive index's "주제별" anchor)
+ * points at some element carrying that id, e.g. `renderCard`'s
+ * `id="${unit.id}"` — not specifically at a unit UID, so index.json's unit
+ * list is not the right membership check here.
+ */
+function checkArchiveLinks(archiveDir: string): BrokenLink[] {
+	const broken: BrokenLink[] = [];
+	const htmlCache = new Map<string, string | null>();
+
+	function readPageHtml(relPath: string): string | null {
+		const cached = htmlCache.get(relPath);
+		if (cached !== undefined) {
+			return cached;
+		}
+		const absPath = join(archiveDir, relPath);
+		const html = existsSync(absPath) ? readFileSync(absPath, "utf8") : null;
+		htmlCache.set(relPath, html);
+		return html;
+	}
+
+	function hasElementId(html: string, id: string): boolean {
+		return new RegExp(`\\bid="${escapeIdForRegExp(id)}"`).test(html);
+	}
+
+	for (const pageRelPath of collectArchiveHtmlPages(archiveDir)) {
+		const html = readPageHtml(pageRelPath);
+		if (html === null) {
+			continue;
+		}
+		const pageDir = posix.dirname(pageRelPath);
+
+		for (const link of localLinks(html)) {
+			if (link.startsWith("#")) {
+				if (!hasElementId(html, link.slice(1))) {
+					broken.push({ page: pageRelPath, href: link, reason: "알 수 없는 조각입니다" });
+				}
+				continue;
+			}
+
+			const hashIndex = link.indexOf("#");
+			const pathPart = hashIndex === -1 ? link : link.slice(0, hashIndex);
+			const fragment = hashIndex === -1 ? null : link.slice(hashIndex + 1);
+			const resolved = posix.normalize(posix.join(pageDir, pathPart));
+			if (!existsSync(join(archiveDir, resolved))) {
+				broken.push({ page: pageRelPath, href: link, reason: "파일이 없습니다" });
+				continue;
+			}
+			if (fragment !== null) {
+				const targetHtml = readPageHtml(resolved);
+				if (targetHtml === null || !hasElementId(targetHtml, fragment)) {
+					broken.push({ page: pageRelPath, href: link, reason: "알 수 없는 조각입니다" });
+				}
+			}
+		}
+	}
+	return broken;
+}
+
+interface RenderResult {
+	ok: true;
+	session_id: string;
+	units: number;
+	output: "archive" | "site";
+	path: string;
+	broken_links: number;
+}
+
+function renderToArchive(
+	status: Extract<FcStatus, { status: "configured" }>,
+	workDir: string,
+	sessionData: SessionData,
+	sessionHtml: string,
+): RenderResult {
+	const archiveDir = status.archive_repo_path;
+	const refsVerified = readVerifiedRefs(workDir);
+
+	writeSessionDirAtomic(archiveDir, sessionData.session_id, (dir) => {
+		writeFileSync(join(dir, "data.json"), `${JSON.stringify(sessionData, null, 2)}\n`);
+		writeFileSync(join(dir, "index.html"), sessionHtml);
+		copyWebpFiles(join(workDir, "img"), join(dir, "img"));
+	});
+	writeRefPages(archiveDir, refsVerified, true);
+	rewriteArchiveIndex(archiveDir, sessionData, refsVerified);
+
+	const broken = checkArchiveLinks(archiveDir);
+	if (broken.length > 0) {
+		throw new Error(JSON.stringify(broken));
+	}
+
+	return {
+		ok: true,
+		session_id: sessionData.session_id,
+		units: sessionData.units.length,
+		output: "archive",
+		path: join(archiveDir, "sessions", sessionData.session_id),
+		broken_links: 0,
+	};
+}
+
+/** Disabled mode or `--site-only`: a self-contained preview under `<work>/site/`, never the archive/index.json. */
+function renderSiteOnly(workDir: string, sessionData: SessionData, sessionHtml: string): RenderResult {
+	const siteDir = join(workDir, "site");
+	rmSync(siteDir, { recursive: true, force: true });
+	const refsVerified = readVerifiedRefs(workDir);
+
+	const sessionDir = join(siteDir, "sessions", sessionData.session_id);
+	mkdirSync(sessionDir, { recursive: true });
+	writeFileSync(join(sessionDir, "data.json"), `${JSON.stringify(sessionData, null, 2)}\n`);
+	writeFileSync(join(sessionDir, "index.html"), sessionHtml);
+	copyWebpFiles(join(workDir, "img"), join(sessionDir, "img"));
+	writeRefPages(siteDir, refsVerified, false);
+
+	return {
+		ok: true,
+		session_id: sessionData.session_id,
+		units: sessionData.units.length,
+		output: "site",
+		path: sessionDir,
+		broken_links: 0,
+	};
+}
+
+async function cmdRender(options: { siteOnly: boolean }, workDir: string, status: FcStatus): Promise<RenderResult> {
+	ensureWorkDir(workDir, status);
+	const sessionData = buildSessionData(workDir, status);
+	const sessionHtml = renderSession(sessionData);
+
+	if (options.siteOnly || status.status !== "configured") {
+		return renderSiteOnly(workDir, sessionData, sessionHtml);
+	}
+	return renderToArchive(status, workDir, sessionData, sessionHtml);
+}
+
+// ── publish-prep (plan §7 T9) ────────────────────────────────────────────────
+//
+// Read-only reporting: link check + `git status --porcelain` + suggested
+// commands as text. Never runs `git commit`/`git push` — that stays a human
+// decision behind the SKILL.md publish gate.
+
+interface PublishPrepResult {
+	ok: true;
+	broken_links: number;
+	git_status: string;
+	suggested_commands: string[];
+}
+
+function cmdPublishPrep(status: Extract<FcStatus, { status: "configured" }>): PublishPrepResult {
+	const archiveDir = status.archive_repo_path;
+	const broken = checkArchiveLinks(archiveDir);
+	if (broken.length > 0) {
+		throw new Error(JSON.stringify(broken));
+	}
+
+	const gitStatus = execFileSync("git", ["-C", archiveDir, "status", "--porcelain"], { encoding: "utf8" });
+	return {
+		ok: true,
+		broken_links: 0,
+		git_status: gitStatus,
+		suggested_commands: [
+			`git -C ${archiveDir} add -A`,
+			`git -C ${archiveDir} commit -m "fc-feedback: 세션 발행"`,
+			`git -C ${archiveDir} push`,
+		],
+	};
+}
+
 // ── dispatch ──────────────────────────────────────────────────────────────
 
 async function main(argv: readonly string[]): Promise<number> {
@@ -1640,6 +2326,18 @@ async function main(argv: readonly string[]): Promise<number> {
 			const status = getFcStatus();
 			const workDir = resolveWorkDir(workOverride);
 			printJson(await cmdVerifyRefs(workDir, status));
+			return 0;
+		}
+		case "render": {
+			const { value: workOverride, rest: r1 } = takeOption(matched.rest, "--work");
+			const { value: siteOnly } = takeFlag(r1, "--site-only");
+			const status = getFcStatus();
+			const workDir = resolveWorkDir(workOverride);
+			printJson(await cmdRender({ siteOnly }, workDir, status));
+			return 0;
+		}
+		case "publish-prep": {
+			printJson(cmdPublishPrep(requireConfigured()));
 			return 0;
 		}
 		default: {

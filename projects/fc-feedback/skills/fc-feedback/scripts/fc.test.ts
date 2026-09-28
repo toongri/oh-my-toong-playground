@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -658,5 +658,220 @@ describe("fc-feedback CLI", () => {
 		} finally {
 			server.stop(true);
 		}
+	});
+
+	// ── render / publish-prep ────────────────────────────────────────────────
+
+	const GIT_IDENTITY_ENV = {
+		GIT_AUTHOR_NAME: "테스트",
+		GIT_AUTHOR_EMAIL: "test@example.com",
+		GIT_COMMITTER_NAME: "테스트",
+		GIT_COMMITTER_EMAIL: "test@example.com",
+	};
+
+	/** 1x1 lossy(`VP8 `) webp — RIFF/WEBP 헤더 + VP8 프레임 태그/시작 코드/width=1/height=1. */
+	function tinyWebp(): Buffer {
+		return Buffer.from([
+			0x52, 0x49, 0x46, 0x46, // RIFF
+			26, 0, 0, 0, // file size (LE)
+			0x57, 0x45, 0x42, 0x50, // WEBP
+			0x56, 0x50, 0x38, 0x20, // "VP8 "
+			14, 0, 0, 0, // chunk size (LE)
+			0x50, 0x01, 0x00, // frame tag
+			0x9d, 0x01, 0x2a, // start code
+			0x01, 0x00, // width=1
+			0x01, 0x00, // height=1
+			0x00, 0x00, 0x00, 0x00, // padding
+		]);
+	}
+
+	function hashDir(dir: string): string {
+		const hash = createHash("sha256");
+		function walk(sub: string): void {
+			const entries = readdirSync(join(dir, sub), { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1));
+			for (const entry of entries) {
+				if (entry.name === ".git") {
+					continue;
+				}
+				const relPath = join(sub, entry.name);
+				if (entry.isDirectory()) {
+					walk(relPath);
+				} else {
+					hash.update(relPath);
+					hash.update(readFileSync(join(dir, relPath)));
+				}
+			}
+		}
+		walk(".");
+		return hash.digest("hex");
+	}
+
+	function withoutUpdatedAt(indexJsonText: string): unknown {
+		const parsed = JSON.parse(indexJsonText);
+		delete parsed.updated_at;
+		return parsed;
+	}
+
+	function buildRenderedFixture(): { cwd: string; home: string; archive: string; work: string; sessionId: string } {
+		const cwd = repo();
+		const home = tempDir();
+		const archive = repo("archive");
+		run(["init-archive", "--archive", archive], { cwd, home });
+		writeFileSync(join(archive, "taxonomy.yaml"), "version: 1\ntopics: [빌드업]\n");
+		execFileSync("git", ["-C", archive, "add", "-A"]);
+		execFileSync("git", ["-C", archive, "commit", "-q", "-m", "init"], { env: { ...process.env, ...GIT_IDENTITY_ENV } });
+
+		const roster = rosterFile();
+		run(["config", "set", "--archive", archive, "--roster", roster, "--pages-url", "https://example.com/"], { cwd, home });
+
+		const work = tempDir();
+		const sessionId = "20240104-NUzEChn9EyI";
+		writeFileSync(
+			join(work, "session.json"),
+			JSON.stringify({
+				version: 1,
+				session_id: sessionId,
+				created_at: new Date().toISOString(),
+				videos: [
+					{
+						id: "NUzEChn9EyI",
+						url: "https://youtu.be/NUzEChn9EyI",
+						part: 1,
+						title: "t",
+						channel: "c",
+						upload_date: "20240104",
+						duration: 100,
+						embeddable: true,
+						width: 640,
+						height: 480,
+						files: { audio: "a", video: "v", captions: null, captions_format: null, wav: null },
+					},
+				],
+			}),
+		);
+		writeFileSync(join(work, "lines.json"), linesFixture());
+		writeFileSync(join(work, "candidates.json"), JSON.stringify([{ id: "c001", video: "NUzEChn9EyI", t: 2, kind: "manual" }]));
+		const plan = JSON.parse(planFixture("빌드업"));
+		plan.matches[0].topics[0].units[0].key_frame_candidate_ids = ["c001"];
+		writeFileSync(join(work, "plan.json"), JSON.stringify(plan));
+		writeFileSync(
+			join(work, "notes.json"),
+			JSON.stringify({
+				version: 1,
+				units: {
+					u001: { problem: "문제", who: "누구", instead: "대신", key_frames: [{ candidate_id: "c001", caption: "캡션" }] },
+				},
+			}),
+		);
+		writeFileSync(
+			join(work, "similar-candidates.json"),
+			JSON.stringify({ version: 1, session_id: sessionId, units: { u001: [] } }),
+		);
+		writeFileSync(join(work, "similar-choices.json"), JSON.stringify({ version: 1, units: { u001: [] } }));
+		writeFileSync(join(work, "refs-draft.json"), JSON.stringify({ version: 1, refs: [] }));
+		writeFileSync(join(work, "refs.verified.json"), JSON.stringify({ version: 1, refs: [], dropped: [] }));
+
+		const imgDir = join(work, "img");
+		mkdirSync(imgDir, { recursive: true });
+		writeFileSync(join(imgDir, "u001-start.webp"), tinyWebp());
+		writeFileSync(join(imgDir, "u001-c001.webp"), tinyWebp());
+
+		return { cwd, home, archive, work, sessionId };
+	}
+
+	test("render은 최소 fixture로 세션을 아카이브에 렌더한다(broken_links 0)", () => {
+		const { cwd, home, archive, work, sessionId } = buildRenderedFixture();
+
+		const result = run(["render", "--work", work], { cwd, home });
+		expect(result.exitCode).toBe(0);
+		const parsed = JSON.parse(result.stdout.trim());
+		expect(parsed.ok).toBe(true);
+		expect(parsed.output).toBe("archive");
+		expect(parsed.units).toBe(1);
+		expect(parsed.broken_links).toBe(0);
+
+		const sessionDir = join(archive, "sessions", sessionId);
+		const sessionHtml = readFileSync(join(sessionDir, "index.html"), "utf8");
+		expect(sessionHtml).toContain("테스트 세션");
+
+		const dataJson = JSON.parse(readFileSync(join(sessionDir, "data.json"), "utf8"));
+		expect(dataJson.units).toHaveLength(1);
+		expect(dataJson.units[0].images.start).toEqual({ src: "img/u001-start.webp", width: 1, height: 1 });
+		expect(dataJson.units[0].images.key).toEqual([{ src: "img/u001-c001.webp", caption: "캡션", t: 2 }]);
+		expect(dataJson.units[0].uid).toBe(`${sessionId}#u001`);
+		expect(dataJson.units[0].watch_url).toBe("https://youtu.be/NUzEChn9EyI?t=0");
+
+		const index = JSON.parse(readFileSync(join(archive, "index.json"), "utf8"));
+		expect(index.sessions).toHaveLength(1);
+		expect(index.sessions[0].id).toBe(sessionId);
+		expect(index.units).toHaveLength(1);
+		expect(index.units[0].href).toBe(`sessions/${sessionId}/index.html#u001`);
+	});
+
+	test("같은 세션을 재렌더하면 index.json이(updated_at 제외) 동일하다", () => {
+		const { cwd, home, archive, work } = buildRenderedFixture();
+
+		const first = run(["render", "--work", work], { cwd, home });
+		expect(first.exitCode).toBe(0);
+		const before = withoutUpdatedAt(readFileSync(join(archive, "index.json"), "utf8"));
+
+		const second = run(["render", "--work", work], { cwd, home });
+		expect(second.exitCode).toBe(0);
+		const after = withoutUpdatedAt(readFileSync(join(archive, "index.json"), "utf8"));
+
+		expect(after).toEqual(before);
+	});
+
+	test("아카이브 이미지가 사라지면 publish-prep의 링크 검사가 깨진 링크로 실패한다", () => {
+		const { cwd, home, archive, work, sessionId } = buildRenderedFixture();
+		const rendered = run(["render", "--work", work], { cwd, home });
+		expect(rendered.exitCode).toBe(0);
+
+		rmSync(join(archive, "sessions", sessionId, "img", "u001-start.webp"));
+
+		const result = run(["publish-prep"], { cwd, home });
+		expect(result.exitCode).not.toBe(0);
+		const broken = JSON.parse(result.stderr.trim());
+		expect(Array.isArray(broken)).toBe(true);
+		expect(broken.length).toBeGreaterThan(0);
+	});
+
+	test("disabled 모드의 render --site-only는 아카이브를 건드리지 않는다(해시 불변)", () => {
+		const { cwd, home, archive, work } = buildRenderedFixture();
+		const before = hashDir(archive);
+
+		const disable = run(["config", "disable"], { cwd, home });
+		expect(disable.exitCode).toBe(0);
+
+		const result = run(["render", "--work", work, "--site-only"], { cwd, home });
+		expect(result.exitCode).toBe(0);
+		const parsed = JSON.parse(result.stdout.trim());
+		expect(parsed.ok).toBe(true);
+		expect(parsed.output).toBe("site");
+
+		const siteData = JSON.parse(readFileSync(join(work, "site", "sessions", parsed.session_id, "data.json"), "utf8"));
+		expect(siteData.units).toHaveLength(1);
+
+		const after = hashDir(archive);
+		expect(after).toBe(before);
+	});
+
+	test("publish-prep은 커밋을 만들지 않는다", () => {
+		const { cwd, home, archive, work } = buildRenderedFixture();
+		const rendered = run(["render", "--work", work], { cwd, home });
+		expect(rendered.exitCode).toBe(0);
+
+		const logBefore = execFileSync("git", ["-C", archive, "log", "--oneline"], { encoding: "utf8" });
+
+		const result = run(["publish-prep"], { cwd, home });
+		expect(result.exitCode).toBe(0);
+		const parsed = JSON.parse(result.stdout.trim());
+		expect(parsed.ok).toBe(true);
+		expect(parsed.broken_links).toBe(0);
+		expect(parsed.suggested_commands.length).toBeGreaterThan(0);
+		expect(parsed.git_status).toContain("index.json");
+
+		const logAfter = execFileSync("git", ["-C", archive, "log", "--oneline"], { encoding: "utf8" });
+		expect(logAfter).toBe(logBefore);
 	});
 });
