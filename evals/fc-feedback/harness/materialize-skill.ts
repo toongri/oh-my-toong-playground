@@ -37,10 +37,25 @@
  * does its own literal `${CLAUDE_SKILL_DIR}` substitution when it builds
  * prompt.txt; this wrapper only needs to hand it the right absolute path to
  * substitute in — the materialized skill dir, not the repo's source path.
+ *
+ * `materializeAgent` below does the same job for a single codex agent: the
+ * fc-feedback skill's SKILL.md instructs dispatching `presentation-reviewer`
+ * (a codex `spawn_agent` call) after notes are written, and that dispatch
+ * must resolve against an agent definition materialized INTO the run-dir
+ * (`<runDir>/.codex/agents/<name>.toml`, per tools/adapters/destinations.ts
+ * `codexDestination`'s "agents" case), never this machine's global `~/.codex`
+ * state (which a real eval run may not even have synced, or may have synced
+ * stale). Reuses CodexAdapter.syncAgentsDirect (tools/adapters/codex.ts
+ * `syncAgentsDirect`) for the md->toml translation — same emit-allowlist,
+ * leaf-spawn guard, and rewrite-rules pass a real sync would apply — and
+ * `loadRootModelMaps` (tools/sync.ts) to resolve the agent's frontmatter
+ * `model` tier (e.g. `opus`) through this repo's own `codex.yaml`
+ * `model-map.tiers`, exactly as a real sync would.
  */
 import path from "node:path";
-import { syncLib, type LibSourceRoots } from "../../../tools/sync.ts";
+import { loadRootModelMaps, syncLib, type LibSourceRoots } from "../../../tools/sync.ts";
 import { codexAdapter } from "../../../tools/adapters/codex.ts";
+import { planCategoryDestinationPaths } from "../../../tools/adapters/destinations.ts";
 import type { SyncContext } from "../../../tools/lib/types.ts";
 
 export interface MaterializeSkillOptions {
@@ -95,14 +110,54 @@ export async function materializeSkill(
 	return { skillDir: path.join(runDir, ".agents", "skills", skillName) };
 }
 
+export interface MaterializeAgentOptions {
+	/** Run-dir root; plays the role of a sync target `path`. */
+	runDir: string;
+	/** Repo root — where `codex.yaml` (and its `model-map.tiers`) lives. */
+	repoRoot: string;
+	/** Absolute path to the agent's SOURCE file (e.g. agents/presentation-reviewer.md). */
+	agentSourcePath: string;
+	/** Agent display name (e.g. "presentation-reviewer"). */
+	agentName: string;
+}
+
+export interface MaterializeAgentResult {
+	/** Absolute path to the materialized agent TOML: <runDir>/.codex/agents/<agentName>.toml. */
+	agentFile: string;
+}
+
+/**
+ * Materialize one codex agent into `runDir` in the exact shape a real codex
+ * sync target would receive it, so a `spawn_agent` dispatch for it resolves
+ * against the run-dir's own project-scoped `.codex/agents/`, independent of
+ * this machine's global `~/.codex` state.
+ */
+export async function materializeAgent(
+	options: MaterializeAgentOptions,
+): Promise<MaterializeAgentResult> {
+	const { runDir, repoRoot, agentSourcePath, agentName } = options;
+
+	const modelMap = (await loadRootModelMaps(repoRoot)).get("codex");
+	await codexAdapter.syncAgentsDirect(runDir, agentName, agentSourcePath, undefined, undefined, false, modelMap);
+
+	const [relativePath] = planCategoryDestinationPaths("codex", "agents", agentName);
+	return { agentFile: path.join(runDir, relativePath) };
+}
+
 if (import.meta.main) {
-	const [runDir, repoRoot, skillSourceDir, skillName] = process.argv.slice(2);
+	const [runDir, repoRoot, skillSourceDir, skillName, agentSourcePath, agentName] =
+		process.argv.slice(2);
 	if (!runDir || !repoRoot || !skillSourceDir || !skillName) {
 		console.error(
-			"usage: materialize-skill.ts <run-dir> <repo-root> <skill-source-dir> <skill-name>",
+			"usage: materialize-skill.ts <run-dir> <repo-root> <skill-source-dir> <skill-name> [<agent-source-path> <agent-name>]",
 		);
 		process.exit(1);
 	}
 	const result = await materializeSkill({ runDir, repoRoot, skillSourceDir, skillName });
 	process.stdout.write(`${result.skillDir}\n`);
+
+	if (agentSourcePath && agentName) {
+		const agentResult = await materializeAgent({ runDir, repoRoot, agentSourcePath, agentName });
+		process.stdout.write(`${agentResult.agentFile}\n`);
+	}
 }

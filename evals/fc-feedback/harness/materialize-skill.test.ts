@@ -2,11 +2,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parse as parseToml } from "smol-toml";
 
-import { materializeSkill } from "./materialize-skill.ts";
+import { materializeAgent, materializeSkill } from "./materialize-skill.ts";
 
 const REPO_ROOT = realpathSync(join(import.meta.dir, "..", "..", ".."));
 const SKILL_SOURCE_DIR = join(REPO_ROOT, "projects", "fc-feedback", "skills", "fc-feedback");
+const PRESENTATION_REVIEWER_SOURCE = join(REPO_ROOT, "agents", "presentation-reviewer.md");
 
 const roots: string[] = [];
 function tempDir(): string {
@@ -86,5 +88,31 @@ describe("materializeSkill", () => {
 		// The manifest path must resolve under the isolated root, never under the
 		// real $HOME/.fc-feedback.
 		expect(parsed.manifestPath.startsWith(manifestRoot)).toBe(true);
+	});
+});
+
+describe("materializeAgent", () => {
+	test("translates presentation-reviewer.md into <run-dir>/.codex/agents/presentation-reviewer.toml with the tier's model resolved", async () => {
+		const runDir = tempDir();
+
+		const result = await materializeAgent({
+			runDir,
+			repoRoot: REPO_ROOT,
+			agentSourcePath: PRESENTATION_REVIEWER_SOURCE,
+			agentName: "presentation-reviewer",
+		});
+
+		expect(result.agentFile).toBe(join(runDir, ".codex", "agents", "presentation-reviewer.toml"));
+
+		const tomlText = await Bun.file(result.agentFile).text();
+		const parsed = parseToml(tomlText) as Record<string, unknown>;
+
+		expect(parsed.name).toBe("presentation-reviewer");
+		// codex.yaml model-map.tiers.opus (agents/presentation-reviewer.md's frontmatter
+		// `model: opus`), not a per-agent override — presentation-reviewer has none.
+		expect(parsed.model).toBe("gpt-6-sol");
+		expect(parsed.model_reasoning_effort).toBe("high");
+		expect(typeof parsed.developer_instructions).toBe("string");
+		expect((parsed.developer_instructions as string).length).toBeGreaterThan(0);
 	});
 });

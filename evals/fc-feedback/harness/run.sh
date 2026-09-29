@@ -65,6 +65,8 @@ FC_TS="$SKILL_DIR/scripts/fc.ts"
 SKILL_MD="$SKILL_DIR/SKILL.md"
 MATERIALIZE_TS="$HARNESS_DIR/materialize-skill.ts"
 SKILL_NAME="fc-feedback"
+PRESENTATION_REVIEWER_SOURCE="$REPO_ROOT/agents/presentation-reviewer.md"
+PRESENTATION_REVIEWER_NAME="presentation-reviewer"
 ROSTER="$EVAL_DIR/fixtures/roster.cef.yaml"
 ARCHIVE_SEED="$EVAL_DIR/fixtures/archive-seed"
 BASELINES_DIR="$EVAL_DIR/baselines"
@@ -311,18 +313,23 @@ if [ "$dry_run" != "1" ]; then
 	(cd "$run_dir" && "${config_set_cmd[@]}")
 fi
 
-# ── materialize the skill into the run-dir (deployed codex layout) ─────────
+# ── materialize the skill (+ its dispatched presentation-reviewer agent)
+# into the run-dir (deployed codex layout) ─────────────────────────────────
 # Round 0 (--no-skill) deliberately gets none of this: the whole point of the
 # baseline is that the skill is absent, so nothing is materialized and
 # ${CLAUDE_SKILL_DIR} is never substituted (no SKILL.md body is injected for
-# --no-skill either — see the prompt-build step below).
+# --no-skill either — see the prompt-build step below). SKILL.md's step 6
+# dispatches `presentation-reviewer` as a codex `spawn_agent` call, so that
+# dispatch must resolve against an agent definition materialized into THIS
+# run-dir (<run_dir>/.codex/agents/presentation-reviewer.toml), never this
+# machine's global ~/.codex/agents/ state.
 
 skill_dir_for_prompt="$SKILL_DIR"
 if [ "$no_skill" != "1" ]; then
 	skill_dir_for_prompt="$run_dir/.agents/skills/$SKILL_NAME"
-	trace "bun \"$MATERIALIZE_TS\" \"$run_dir\" \"$REPO_ROOT\" \"$SKILL_DIR\" \"$SKILL_NAME\"  # -> $skill_dir_for_prompt (codex .agents/skills + sibling .agents/lib layout)"
+	trace "bun \"$MATERIALIZE_TS\" \"$run_dir\" \"$REPO_ROOT\" \"$SKILL_DIR\" \"$SKILL_NAME\" \"$PRESENTATION_REVIEWER_SOURCE\" \"$PRESENTATION_REVIEWER_NAME\"  # -> $skill_dir_for_prompt (codex .agents/skills + sibling .agents/lib layout) + \$run_dir/.codex/agents/$PRESENTATION_REVIEWER_NAME.toml"
 	if [ "$dry_run" != "1" ]; then
-		bun "$MATERIALIZE_TS" "$run_dir" "$REPO_ROOT" "$SKILL_DIR" "$SKILL_NAME" > /dev/null
+		bun "$MATERIALIZE_TS" "$run_dir" "$REPO_ROOT" "$SKILL_DIR" "$SKILL_NAME" "$PRESENTATION_REVIEWER_SOURCE" "$PRESENTATION_REVIEWER_NAME" > /dev/null
 	fi
 fi
 
