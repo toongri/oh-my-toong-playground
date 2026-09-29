@@ -1,0 +1,140 @@
+[
+  {
+    "id": "c001",
+    "video": "UplRRo4EvBo",
+    "t": 0,
+    "kind": "interval"
+  },
+  {
+    "id": "c002",
+    "video": "UplRRo4EvBo",
+    "t": 30,
+    "kind": "interval"
+  },
+  {
+    "id": "c003",
+    "video": "UplRRo4EvBo",
+    "t": 46.367,
+    "kind": "scene"
+  },
+  {
+    "id": "c004",
+    "video": "UplRRo4EvBo",
+    "t": 60,
+    "kind": "interval"
+  },
+  {
+    "id": "c005",
+    "video": "UplRRo4EvBo",
+    "t": 66.2,
+    "kind": "scene"
+  },
+  {
+    "id": "c006",
+    "video": "UplRRo4EvBo",
+    "t": 90,
+    "kind": "interval"
+  },
+  {
+    "id": "c007",
+    "video": "UplRRo4EvBo",
+    "t": 95.467,
+    "kind": "scene"
+  },
+  {
+    "id": "c008",
+    "video": "UplRRo4EvBo",
+    "t": 120,
+    "kind": "interval"
+  },
+  {
+    "id": "c009",
+    "video": "UplRRo4EvBo",
+    "t": 150,
+    "kind": "interval"
+  },
+  {
+    "id": "c010",
+    "video": "UplRRo4EvBo",
+    "t": 180,
+    "kind": "interval"
+  },
+  {
+    "id": "c011",
+    "video": "UplRRo4EvBo",
+    "t": 190.467,
+    "kind": "scene"
+  },
+  {
+    "id": "c012",
+    "video": "UplRRo4EvBo",
+    "t": 210.466,
+    "kind": "scene"
+  },
+  {
+    "id": "c013",
+    "video": "UplRRo4EvBo",
+    "t": 240,
+    "kind": "interval"
+  },
+  {
+    "id": "c014",
+    "video": "UplRRo4EvBo",
+    "t": 253.833,
+    "kind": "scene"
+  },
+  {
+    "id": "c015",
+    "video": "UplRRo4EvBo",
+    "t": 270,
+    "kind": "interval"
+  },
+  {
+    "id": "c016",
+    "video": "UplRRo4EvBo",
+    "t": 300,
+    "kind": "interval"
+  },
+  {
+    "id": "c017",
+    "video": "UplRRo4EvBo",
+    "t": 330,
+    "kind": "interval"
+  },
+  {
+    "id": "c018",
+    "video": "UplRRo4EvBo",
+    "t": 360,
+    "kind": "interval"
+  },
+  {
+    "id": "c019",
+    "video": "UplRRo4EvBo",
+    "t": 390,
+    "kind": "interval"
+  },
+  {
+    "id": "c020",
+    "video": "UplRRo4EvBo",
+    "t": 420,
+    "kind": "interval"
+  },
+  {
+    "id": "c021",
+    "video": "UplRRo4EvBo",
+    "t": 450,
+    "kind": "interval"
+  },
+  {
+    "id": "c022",
+    "video": "UplRRo4EvBo",
+    "t": 480,
+    "kind": "interval"
+  },
+  {
+    "id": "c023",
+    "video": "UplRRo4EvBo",
+    "t": 510,
+    "kind": "interval"
+  }
+]

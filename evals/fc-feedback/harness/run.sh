@@ -34,7 +34,7 @@
 #     run-dir, so this is a scoring-time catch, not an OS-level prevention.
 #
 # Usage:
-#   run.sh [--dry-run] <round> <model-key: luna|sol|opus> <rep> <workdir-fixture> [--no-skill] [--no-sandbox-isolation]
+#   run.sh [--dry-run] <round> <model-key: luna|sol|opus> <rep> <workdir-fixture> [--no-skill] [--no-sandbox-isolation] [--roster <file>]
 #   run.sh [--dry-run] --cleanup <run-dir>
 #   run.sh [--dry-run] --smoke-only <round> <model-key> <rep> <workdir-fixture> [...]
 #
@@ -52,6 +52,10 @@
 #   --no-sandbox-isolation  skip the sandbox-permission-profile isolation (and its pre-run
 #                           smoke); codex falls back to --dangerously-bypass-approvals-and-sandbox,
 #                           claude falls back to a plain (un-sandboxed) `claude -p` invocation
+#   --roster <file>         roster YAML to pass to `fc.ts config set --roster` (the run-dir-local
+#                           copy is still what config set actually sees — see "roster 경로"
+#                           below); defaults to fixtures/roster.cef.yaml when omitted. The file
+#                           must exist — run.sh exits immediately (non-zero) if it doesn't.
 #   --smoke-only            run every setup step through the pre-run sandbox smoke, print a
 #                           PASS/FAIL line per smoke check, then exit WITHOUT invoking the
 #                           model or preserving artifacts (a `--no-sandbox-isolation` run has
@@ -77,7 +81,7 @@ MATERIALIZE_TS="$HARNESS_DIR/materialize-skill.ts"
 SKILL_NAME="fc-feedback"
 PRESENTATION_REVIEWER_SOURCE="$REPO_ROOT/agents/presentation-reviewer.md"
 PRESENTATION_REVIEWER_NAME="presentation-reviewer"
-ROSTER="$EVAL_DIR/fixtures/roster.cef.yaml"
+DEFAULT_ROSTER="$EVAL_DIR/fixtures/roster.cef.yaml"
 ARCHIVE_SEED="$EVAL_DIR/fixtures/archive-seed"
 BASELINES_DIR="$EVAL_DIR/baselines"
 PAGES_URL="https://fc-feedback-eval.invalid/"
@@ -123,18 +127,22 @@ no_skill=0
 cleanup_mode=0
 isolate_reads=1
 smoke_only=0
+roster_arg=""
 positional=()
 
-for arg in "$@"; do
-	case "$arg" in
-		--dry-run) dry_run=1 ;;
-		--no-skill) no_skill=1 ;;
-		--no-sandbox-isolation) isolate_reads=0 ;;
-		--smoke-only) smoke_only=1 ;;
-		--cleanup) cleanup_mode=1 ;;
-		*) positional+=("$arg") ;;
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+		--dry-run) dry_run=1; shift ;;
+		--no-skill) no_skill=1; shift ;;
+		--no-sandbox-isolation) isolate_reads=0; shift ;;
+		--smoke-only) smoke_only=1; shift ;;
+		--cleanup) cleanup_mode=1; shift ;;
+		--roster) roster_arg="${2:?run.sh --roster: file required}"; shift 2 ;;
+		*) positional+=("$1"); shift ;;
 	esac
 done
+
+ROSTER="${roster_arg:-$DEFAULT_ROSTER}"
 
 trace() { echo "+ $*"; }
 
@@ -254,6 +262,11 @@ if [ "$cleanup_mode" = "1" ]; then
 	rm -rf "$target"
 	echo "cleaned up: $target"
 	exit 0
+fi
+
+if [ ! -f "$ROSTER" ]; then
+	echo "run.sh: no such roster file: $ROSTER" >&2
+	exit 1
 fi
 
 round="${positional[0]:?round required}"
@@ -682,10 +695,21 @@ if [ "$isolate_reads" = "1" ] && [ "$platform" = "claude" ]; then
 		fi
 
 		if smoke_out=$(printf 'Reply with the single word OK.' | codex sandbox -c "$PERM_PROFILE_OVERRIDE_CLAUDE" -P "$PERM_PROFILE_CLAUDE" -C "$run_dir" -- "${claude_env[@]}" "${claude_base_cmd[@]}" 2>&1); then
-			if printf '%s' "$smoke_out" | grep -q "OK"; then
+			# Parse the result line the same way the NO-probe check below does
+			# (jq -r 'select(.type=="result") | .result' + tail -n1) and compare
+			# it to exactly "OK", instead of `printf ... | grep -q "OK"`: under
+			# `set -o pipefail`, grep -q exits as soon as it matches, so the
+			# earlier printf can catch SIGPIPE (exit 141) and the pipeline reads
+			# as failed even though grep DID find "OK" — observed once on a
+			# 5.4KB smoke_out where "OK" also appeared inside an init line.
+			smoke_answer=""
+			if command -v jq >/dev/null 2>&1; then
+				smoke_answer=$(printf '%s' "$smoke_out" | jq -r 'select(.type=="result") | .result' 2>/dev/null | tail -n1)
+			fi
+			if [ "$smoke_answer" = "OK" ]; then
 				record_smoke "minimal claude -p call (OK)" 0
 			else
-				echo "run.sh: claude sandbox smoke FAILED — minimal claude -p call succeeded but did not output OK: $smoke_out" >&2
+				echo "run.sh: claude sandbox smoke FAILED — minimal claude -p call succeeded but did not output exactly OK: $smoke_out" >&2
 				record_smoke "minimal claude -p call (OK)" 1
 				claude_smoke_failed=1
 			fi

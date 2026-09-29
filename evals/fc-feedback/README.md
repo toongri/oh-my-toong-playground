@@ -40,7 +40,7 @@ evals/fc-feedback/
   rounds/              회차 요약 기록: round-{n}.md(점수표, luna 실패 목록, sol 비교)
   harness/
     run.sh                     한 반복 실행: run.sh [--dry-run] <round> <model-key> <rep> <workdir-fixture>
-                               [--no-skill] [--no-sandbox-isolation]
+                               [--no-skill] [--no-sandbox-isolation] [--roster <file>]
     materialize-skill.ts       run-dir 안에 스킬을 codex 배포 형태(.agents/skills+.agents/lib)로
                                복제(격리용 — 아래 "격리" 절)
     materialize-skill.test.ts  materialize-skill.ts 단위 테스트
@@ -57,7 +57,7 @@ evals/fc-feedback/
 
 ## 입력 고정 (plan §15-2/§15-3, EVAL-PREP)
 
-`fixtures/`는 다음 네 가지로 구성된다.
+`fixtures/`는 다음 일곱 가지로 구성된다.
 
 - `roster.cef.yaml` — 평가용 명단(실제 발행용이 아니다). 화면 게이머태그가 확인된 3명
   — 샘플 영상(C.E.F. / FC Barcelona 팀 연습, 2024-01-04 Part 3,
@@ -81,12 +81,36 @@ evals/fc-feedback/
   — 이 영상 발화에는 새로 추가된 alias가 없어 줄 수·`i`/`start`/`end`·텍스트 전부
   기존과 바이트 단위로 동일했다. sha256(변경 없음):
   `e5b5b1c400ef9db0478ae0485f51b8cc35fbf1b867328fe890f101552b28fef2`
+- `work-PIjy1eid3RU/` — held-out 영상(다른 채널 `E GIL`, 피파 프로클럽 신생팀 ATM
+  분석 피드백, `https://www.youtube.com/watch?v=PIjy1eid3RU`, gold 없이 심사
+  점수만 반영해 다른 팀에서의 다양성 평가 용도 — `roster.cef.yaml` 팀원은 등장하지
+  않는다) 산출물. 구성은 위와 동일, 1308줄, 후보 166개, 컨택트시트 18장(영상 길이
+  81분). 한국어 자동 자막이 있어 `transcribe`는 기본 동작대로 ASR(whisper) 결과를
+  자막 인접 단어로 교차 검증하며 진행했고(`removed.unsupported: 0`, 자막에 못 미치는
+  ASR 텍스트가 없었다는 뜻), loop(반복 환각) 없이 빈 텍스트 1개만 제거됐다. 마지막
+  줄의 end는 영상 길이의 100.0%(4859.38/4860초), 60초 넘는 빈 구간 0개.
+- `work-UplRRo4EvBo/` — held-out 영상(같은 채널, 피파 프로클럽 기술가이드 "공을
+  지키는 기본기", `https://www.youtube.com/watch?v=UplRRo4EvBo`, 용도는 위와 동일)
+  산출물. 구성은 위와 동일, 108줄, 후보 23개, 컨택트시트 3장(영상 길이 8분 45초).
+  한국어 자동 자막 있음, ASR+자막 교차 검증 기본 동작, 제거된 줄 없음
+  (`removed` 전부 0). 마지막 줄의 end는 영상 길이의 99.8%(524.16/525초), 60초 넘는
+  빈 구간 0개.
+- `work-Cd7Kf3WpQ24/` — held-out 영상(같은 채널, 풀백 수비 강의,
+  `https://www.youtube.com/watch?v=Cd7Kf3WpQ24`, 용도는 위와 동일) 산출물. 구성은
+  위와 동일, 572줄, 후보 71개, 컨택트시트 8장(영상 길이 35분 5초). 한국어 자동 자막
+  있음, ASR+자막 교차 검증 기본 동작, 제거된 줄 없음(`removed` 전부 0). 마지막 줄의
+  end는 영상 길이의 99.9%(2103.86/2105초), 60초 넘는 빈 구간 0개.
 - `archive-seed/` — 같은 채널의 과거 영상(2024-01-03 Part 1,
   `https://www.youtube.com/watch?v=XkM_tS2Id8Q`) 세션 1개(유닛 2개)를 미리 렌더해 둔
   아카이브 시드. `taxonomy.yaml`은 스킬 번들 기본값(`scripts/taxonomy.default.yaml`)
   그대로이고 `roster.yaml`은 `roster.cef.yaml`과 내용이 같다. `index.json`의
   `sessions`가 1개 이상이어야 유사도(similar) 단계가 실제로 비교할 대상을 갖는다.
   `.git/`은 들어 있지 않다 — `harness/run.sh`가 복사한 뒤 매 반복마다 새로 `git init`한다.
+
+**시트 파일 번호 정정.** 0~13회차에 쓰인 `work-*/sheets/`는 `scan` 단계의 off-by-one
+버그로 시트 파일 번호가 `sheets.json`보다 1 커서(모델이 `-000` 시트를 열지 못하고
+나머지 항목은 모두 한 칸 앞 시트를 보고 있었다) 이번에 파일명을 `sheets.json`에
+맞춰 정정했다.
 
 **미디어 캐시 규칙.** `work-*/session.json`의 `files.audio`/`files.video`/`files.wav`는
 `fc.ts fetch`/`transcribe`가 원래 쓰는 그대로 작업 폴더 상대경로
@@ -131,7 +155,7 @@ evals/fc-feedback/
 - held-out 영상 점수는 심사 40점만 별도 보고, 회차 평균에는 넣지 않음(과적합 경보용:
   held-out과 샘플의 심사 점수 차가 σ의 2배를 넘으면 보고).
 
-확정 모델은 이 문서와 SKILL.md의 "권장 실행 모델" 한 줄에 기록한다.
+확정 모델은 이 문서와 스킬 폴더의 README.md에 기록한다(SKILL.md에는 쓰지 않는다).
 
 ## 환경 스모크
 
@@ -198,9 +222,10 @@ cwd=임시 run-dir)이 레포의 `evals/fc-feedback` README·rubric·harness,
   없는 기준선이라는 전제를 지키기 위해).
 - **`${CLAUDE_SKILL_DIR}` 치환**이 위 복제 경로(`<run-dir>/.agents/skills/fc-feedback`)로
   바뀐다 — 레포 안 소스 경로가 더 이상 프롬프트에 등장하지 않는다.
-- **roster 경로**는 `config set` 전에 `fixtures/roster.cef.yaml`을 `<run-dir>/roster.cef.yaml`로
-  복사한 뒤 그 경로를 넘긴다 — `manifest.yaml`과 `fc config status`가 노출하는 경로가
-  run-dir 안쪽으로 한정된다.
+- **roster 경로**는 `config set` 전에 원본 roster 파일(`--roster <file>`로 지정하지 않으면
+  기본값 `fixtures/roster.cef.yaml`, 없는 파일을 지정하면 run.sh는 즉시 에러로 종료한다)을
+  `<run-dir>/roster.cef.yaml`로 복사한 뒤 그 경로를 넘긴다 — `manifest.yaml`과 `fc config
+  status`가 노출하는 경로가 run-dir 안쪽으로 한정된다.
 - **prompt.txt 오염 검사** — 프롬프트를 다 만든 뒤 레포 루트 절대경로, `"evals/fc-feedback"`,
   `"plan §"` 세 패턴을 grep하고, 하나라도 걸리면 실행을 중단한다(향후 SKILL.md 본문이
   실수로 이런 문구를 담아도 잡아낸다).

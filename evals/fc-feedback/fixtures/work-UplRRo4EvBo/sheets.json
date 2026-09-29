@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "sheets": [
+    {
+      "file": "UplRRo4EvBo-grid-000.jpg",
+      "video": "UplRRo4EvBo",
+      "kind": "grid",
+      "cols": 4,
+      "rows": 4,
+      "times": [
+        0,
+        30,
+        60,
+        90,
+        120,
+        150,
+        180,
+        210,
+        240,
+        270,
+        300,
+        330,
+        360,
+        390,
+        420,
+        450
+      ]
+    },
+    {
+      "file": "UplRRo4EvBo-grid-001.jpg",
+      "video": "UplRRo4EvBo",
+      "kind": "grid",
+      "cols": 4,
+      "rows": 4,
+      "times": [
+        480,
+        510
+      ]
+    },
+    {
+      "file": "UplRRo4EvBo-hud-000.jpg",
+      "video": "UplRRo4EvBo",
+      "kind": "hud",
+      "cols": 4,
+      "rows": 6,
+      "times": [
+        0,
+        30,
+        60,
+        90,
+        120,
+        150,
+        180,
+        210,
+        240,
+        270,
+        300,
+        330,
+        360,
+        390,
+        420,
+        450,
+        480,
+        510
+      ]
+    }
+  ]
+}
