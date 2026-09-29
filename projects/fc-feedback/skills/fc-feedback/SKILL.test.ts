@@ -176,8 +176,13 @@ describe("notes v2 작성 규칙(품질 핵심)", () => {
 		expect(skillMd).toContain("경기 시계가 리셋되면 새 경기");
 	});
 
-	test("이름을 부르지 않고 모두에게 통하는 원칙은 addressed_to_all: true로 표시한다는 규칙이 있다", () => {
+	test("포지션과 무관하게 모두에게 통하는 말은 addressed_to_all: true로 표시한다는 규칙이 있다", () => {
 		expect(skillMd).toContain("addressed_to_all: true");
+	});
+
+	test("불린 이름·지목된 포지션·전원 대상을 해당하면 함께 태그한다는 규칙이 있다", () => {
+		expect(skillMd).toContain("셋을 함께 넣는다");
+		expect(skillMd).toContain("지목된 포지션(\"풀백은…\")은 `position_tags`");
 	});
 });
 

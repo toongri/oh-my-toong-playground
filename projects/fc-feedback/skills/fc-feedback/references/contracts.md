@@ -33,14 +33,16 @@
 - `matches` ≥1, `topics` ≥1, `units` ≥1.
 - `start_line`/`end_line`: 0 이상 정수, `end_line < lines.length`, `start_line ≤ end_line`,
   같은 unit 안에서 같은 video, 같은 video 내에서 unit끼리 겹치지 않고 오름차순.
-- `position_tags`: 포지션 트리(GK/DF/MF/FW와 그 자손)에 있는 값만.
+- `position_tags`: 포지션 트리(GK/DF/MF/FW와 그 자손)에 있는 값만. 발화가 지목한
+  포지션을 담는다(member_ids·addressed_to_all과 함께 쓸 수 있음).
 - `topic_tags` ≥1개, 각 태그는 taxonomy에 있거나 `proposed_tags`(유효하고 taxonomy에 아직
   없는 것)에 있어야 함 — proposed 태그를 하나라도 쓰면 `pending`.
 - `member_ids`: roster가 있으면 그 id만 허용, **roster가 없는(disabled) 모드에서는 반드시
   빈 배열**이어야 함(비어 있지 않으면 에러).
 - `addressed_to_all`: 생략 가능(옛 plan.json 호환 — 생략하면 `false`), 있으면 boolean만
-  허용. 이름을 부르지 않고 모두에게 통하는 원칙을 말한 유닛에 `true`를 쓴다. roster가 없는
-  (disabled) 모드에서도 허용(member_ids와 달리 roster 유무와 무관).
+  허용. 포지션과 무관하게 모두에게 통하는 말을 한 유닛에 `true`를 쓴다 — 이름이 없다는
+  이유만으로 올리지 않으며, 불린 이름(`member_ids`)·지목된 포지션(`position_tags`)과 함께
+  쓸 수 있다. roster가 없는(disabled) 모드에서도 허용(member_ids와 달리 roster 유무와 무관).
 - `key_frame_candidate_ids`: `candidates.json`에 실제 있는 id, 같은 video,
   `t ∈ [unit.start-5, unit.end+5]`.
 - `proposed_tags[].tag`: 유효한 태그이고 taxonomy에 아직 없어야 함.
@@ -194,12 +196,15 @@ exit 0/1만. 통과 후 `verify-refs`가 URL을 정규화·HTTP 확인해 `refs.
 - 조건·인과의 방향이 원문과 같은가(뒤집히지 않았는가).
 - 원문에 없는 지시·해석을 단정하지 않았는가.
 - 이름을 근거 없이 역할명이나 "팀 전체"로 바꾸거나, 반대로 팀 전체를 가리키는
-  발언을 특정 인물의 개별 지시로 바꾸지 않았는가. 코치가 이름을 부르지 않고 모두에게
-  통하는 원칙을 말한 유닛("공을 가진 선수는…", "공이 없을 때는…" 류)은 `plan.json`의
+  발언을 특정 인물의 개별 지시로 바꾸지 않았는가. 코치가 포지션과 무관하게 모두에게
+  통하는 말("공을 가진 선수는…", "공이 없을 때는…" 류)을 한 유닛은 `plan.json`의
   `addressed_to_all: true`로 표시하고 본문에서도 "누구든 공을 가진 선수라면"처럼 모두에게
   하는 말임을 분명히 쓴다 — 이렇게 명시된 전원 대상은 대상 불명확으로 보지 않는다. 반대로
   특정 팀원에게 한 말을 근거 없이 전원으로 일반화해 `addressed_to_all: true`로 표시하지
   않는다.
+- 특정 포지션을 지목한 말("풀백은…" 류)에 `addressed_to_all`을 달지 않았는가 —
+  포지션 지목은 `position_tags`로 남긴다. 반대로 불린 이름(`member_ids`)이나 지목된
+  포지션(`position_tags`)을 빠뜨리지 않았는가 — 해당하는 대상은 함께 넣는다.
 - 유닛 첫 문단에서 볼드 행동을 할 사람이 드러나는가 — 원문이 부른 이름이나 프레임
   이름표로 확인되면 그 이름을 첫 문단에 쓴다. 확인되지 않으면 원문의 표현을 그대로
   쓰되, 문장에 함께 나온 다른 사람(패스 수신자 등)이 행동 주체로 읽히지 않게 한다.
