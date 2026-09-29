@@ -229,6 +229,12 @@ describe("SOURCE REVIEW — presentation-reviewer 원문 대조", () => {
 		expect(contractsMd).toContain("볼드가 평가어");
 		expect(contractsMd).toContain("실제로 한 잘못된 행동을 볼드로 짚는다");
 	});
+
+	test("원문 대조 리뷰 체크리스트가 장면의 공수 방향을 점검한다", () => {
+		expect(contractsMd).toContain("장면이 공격인지 수비인지");
+		expect(contractsMd).toContain("잘못이나 공로로 단정하지 않는다");
+		expect(contractsMd).toContain("key_frame_candidate_ids`가 가리키는 대표 프레임");
+	});
 });
 
 describe("플랫폼 중립 도구 표현", () => {
