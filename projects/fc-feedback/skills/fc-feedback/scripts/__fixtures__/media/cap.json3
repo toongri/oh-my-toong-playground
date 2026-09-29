@@ -1,0 +1,1082 @@
+{
+  "wireMagic": "pb3",
+  "pens": [
+    {}
+  ],
+  "wsWinStyles": [
+    {},
+    {
+      "mhModeHint": 2,
+      "juJustifCode": 0,
+      "sdScrollDir": 3
+    }
+  ],
+  "wpWinPositions": [
+    {},
+    {
+      "apPoint": 6,
+      "ahHorPos": 20,
+      "avVerPos": 100,
+      "rcRows": 2,
+      "ccCols": 40
+    }
+  ],
+  "events": [
+    {
+      "tStartMs": 0,
+      "dDurationMs": 1349799,
+      "id": 1,
+      "wpWinPosId": 1,
+      "wsWinStyleId": 1
+    },
+    {
+      "tStartMs": 590,
+      "dDurationMs": 3110,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "[음악]"
+        }
+      ]
+    },
+    {
+      "tStartMs": 9410,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 9420,
+      "dDurationMs": 5980,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "[음악]"
+        }
+      ]
+    },
+    {
+      "tStartMs": 11749,
+      "dDurationMs": 3651,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 11759,
+      "dDurationMs": 3641,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "수님",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 보실",
+          "tOffsetMs": 721,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 거면",
+          "tOffsetMs": 1000,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 보셔도",
+          "tOffsetMs": 1281,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 16910,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 16920,
+      "dDurationMs": 5800,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "돼요게",
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 19109,
+      "dDurationMs": 3611,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 19119,
+      "dDurationMs": 3601,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "되면은",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 맞춰야",
+          "tOffsetMs": 1000,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 되는",
+          "tOffsetMs": 1400,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 27750,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 27760,
+      "dDurationMs": 4200,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "내용이",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 수비",
+          "tOffsetMs": 1200,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 41570,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 41580,
+      "dDurationMs": 3109,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "[음악]"
+        }
+      ]
+    },
+    {
+      "tStartMs": 50830,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 50840,
+      "dDurationMs": 6760,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "위주로",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 판을",
+          "tOffsetMs": 1000,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 유도",
+          "tOffsetMs": 1920,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 라디",
+          "tOffsetMs": 2920,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 님에서",
+          "tOffsetMs": 3359,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 54549,
+      "dDurationMs": 3051,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 54559,
+      "dDurationMs": 3041,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "제쪽으로",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 오는",
+          "tOffsetMs": 441,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 볼이",
+          "tOffsetMs": 761,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 58910,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 58920,
+      "dDurationMs": 5680,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "많긴",
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 61790,
+      "dDurationMs": 2810,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 61800,
+      "dDurationMs": 6520,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "금",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 보면은",
+          "tOffsetMs": 759,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 64590,
+      "dDurationMs": 3730,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 64600,
+      "dDurationMs": 3720,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "이상해서",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 저를",
+          "tOffsetMs": 1000,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 74230,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 74240,
+      "dDurationMs": 6360,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "보시는데",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 봤으면",
+          "tOffsetMs": 1080,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 좋은",
+          "tOffsetMs": 2080,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 77190,
+      "dDurationMs": 3410,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 77200,
+      "dDurationMs": 5360,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "형태",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 왜냐면은",
+          "tOffsetMs": 1400,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 좁은",
+          "tOffsetMs": 2400,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 공간이",
+          "tOffsetMs": 2800,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 있는",
+          "tOffsetMs": 3239,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 80590,
+      "dDurationMs": 1970,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 80600,
+      "dDurationMs": 4060,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "사람에",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 주는",
+          "tOffsetMs": 640,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 82550,
+      "dDurationMs": 2110,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 82560,
+      "dDurationMs": 3559,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "것보다는",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 넓은",
+          "tOffsetMs": 1000,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 공",
+          "tOffsetMs": 1440,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 84650,
+      "dDurationMs": 1469,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 84660,
+      "dDurationMs": 5380,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "[음악]"
+        }
+      ]
+    },
+    {
+      "tStartMs": 86109,
+      "dDurationMs": 3931,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 86119,
+      "dDurationMs": 5000,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "사람한테를",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 운반하기도",
+          "tOffsetMs": 1000,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 쉽",
+          "tOffsetMs": 2000,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 그리고",
+          "tOffsetMs": 3000,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 로",
+          "tOffsetMs": 3761,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 90030,
+      "dDurationMs": 1089,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 90040,
+      "dDurationMs": 4280,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "운반하는",
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 91109,
+      "dDurationMs": 3211,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 91119,
+      "dDurationMs": 6000,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "동안",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 공",
+          "tOffsetMs": 1000,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 없는",
+          "tOffsetMs": 1401,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 사람은",
+          "tOffsetMs": 1640,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 올라갈",
+          "tOffsetMs": 2481,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 수",
+          "tOffsetMs": 2881,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 있는",
+          "tOffsetMs": 3040,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 94310,
+      "dDurationMs": 2809,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 94320,
+      "dDurationMs": 2799,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "시간점",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 여유가",
+          "tOffsetMs": 439,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 98190,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 98200,
+      "dDurationMs": 6840,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "있",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 은데",
+          "tOffsetMs": 1000,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 101710,
+      "dDurationMs": 3330,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 101720,
+      "dDurationMs": 3320,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "와",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 뒤로",
+          "tOffsetMs": 1000,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 118830,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 118840,
+      "dDurationMs": 3000,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "빼",
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 148750,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 148760,
+      "dDurationMs": 3000,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "먼터",
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 195710,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 195720,
+      "dDurationMs": 7320,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "뭔가",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 생",
+          "tOffsetMs": 280,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 기회가",
+          "tOffsetMs": 879,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 찬스가",
+          "tOffsetMs": 1239,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 생길",
+          "tOffsetMs": 1760,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 법",
+          "tOffsetMs": 2159,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 199390,
+      "dDurationMs": 3650,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 199400,
+      "dDurationMs": 3640,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "파면고",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 생법",
+          "tOffsetMs": 1000,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 208670,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 208680,
+      "dDurationMs": 3000,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "하면이고",
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 225750,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 225760,
+      "dDurationMs": 8360,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "거는",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 저희",
+          "tOffsetMs": 1000,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 팀에서",
+          "tOffsetMs": 1479,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 항상",
+          "tOffsetMs": 1800,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 하는",
+          "tOffsetMs": 2119,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 것",
+          "tOffsetMs": 2520,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 중",
+          "tOffsetMs": 2640,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 229149,
+      "dDurationMs": 4971,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 229159,
+      "dDurationMs": 9321,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "하데",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 내",
+          "tOffsetMs": 1000,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 주변",
+          "tOffsetMs": 1321,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 내",
+          "tOffsetMs": 2000,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 주변",
+          "tOffsetMs": 2241,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 팀",
+          "tOffsetMs": 2561,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 자꾸",
+          "tOffsetMs": 3000,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 볼을",
+          "tOffsetMs": 3321,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 234110,
+      "dDurationMs": 4370,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 234120,
+      "dDurationMs": 4360,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "잡으면",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 항상",
+          "tOffsetMs": 1000,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " ltk",
+          "tOffsetMs": 1240,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 쓰라고",
+          "tOffsetMs": 1880,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 238670,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 238680,
+      "dDurationMs": 3839,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "강조하거나",
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 240309,
+      "dDurationMs": 2210,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 240319,
+      "dDurationMs": 4760,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "키를",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 누르고",
+          "tOffsetMs": 681,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 움직이면",
+          "tOffsetMs": 961,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 내가",
+          "tOffsetMs": 1401,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 위로",
+          "tOffsetMs": 1961,
+          "acAsrConf": 0
+        }
+      ]
+    },
+    {
+      "tStartMs": 242509,
+      "dDurationMs": 2570,
+      "wWinId": 1,
+      "aAppend": 1,
+      "segs": [
+        {
+          "utf8": "\n"
+        }
+      ]
+    },
+    {
+      "tStartMs": 242519,
+      "dDurationMs": 5360,
+      "wWinId": 1,
+      "segs": [
+        {
+          "utf8": "움직이든",
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 아래로",
+          "tOffsetMs": 521,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 움직이든",
+          "tOffsetMs": 881,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 이렇게",
+          "tOffsetMs": 1881,
+          "acAsrConf": 0
+        },
+        {
+          "utf8": " 돌지",
+          "tOffsetMs": 2241,
+          "acAsrConf": 0
+        }
+      ]
+    }
+  ]
+}

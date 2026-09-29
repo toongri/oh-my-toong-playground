@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "session_id": "20240202-QAEmbedBlk1",
+  "created_at": "2024-02-02T00:00:00.000Z",
+  "videos": [
+    {
+      "id": "QAEmbedBlk1",
+      "url": "https://youtu.be/QAEmbedBlk1",
+      "part": 1,
+      "title": "QA 임베드 불가(embeddable:false) 확인용 세션",
+      "channel": "qa-fixture",
+      "upload_date": "20240202",
+      "duration": 120,
+      "embeddable": false,
+      "width": 854,
+      "height": 480,
+      "files": {
+        "audio": "media/audio/QAEmbedBlk1.m4a",
+        "video": "media/video/QAEmbedBlk1.mp4",
+        "captions": null,
+        "captions_format": null,
+        "wav": null
+      }
+    }
+  ]
+}

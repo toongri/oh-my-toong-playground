@@ -1,0 +1,26 @@
+{
+  "session_title": "QA 비활성(disabled) 모드 세션",
+  "matches": [
+    {
+      "title": "QA 경기",
+      "topics": [
+        {
+          "title": "QA 주제",
+          "summary": "명단(roster) 없이 렌더되는 disabled 모드 확인용 주제",
+          "units": [
+            {
+              "title": "명단 없는 확인용 유닛",
+              "start_line": 0,
+              "end_line": 0,
+              "position_tags": ["CB"],
+              "topic_tags": ["빌드업"],
+              "member_ids": [],
+              "key_frame_candidate_ids": [],
+              "addressed_to_all": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

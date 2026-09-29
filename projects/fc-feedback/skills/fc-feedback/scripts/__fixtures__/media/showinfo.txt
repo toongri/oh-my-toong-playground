@@ -1,0 +1,8 @@
+[Parsed_showinfo_1 @ 0x124605ef0] n:   0 pts: 720167 pts_time:720.167 duration:     33 duration_time:0.033   pos: 37919906 fmt:yuv420p sar:1/1 s:854x460 i:P iskey:0 type:P checksum:97F5CAD5
+[Parsed_showinfo_1 @ 0x124605ef0] n:   1 pts: 720767 pts_time:720.767 duration:     33 duration_time:0.033   pos: 37953755 fmt:yuv420p sar:1/1 s:854x460 i:P iskey:0 type:P checksum:05C3F93B
+[Parsed_showinfo_1 @ 0x124605ef0] n:   2 pts: 731800 pts_time:731.8   duration:     33 duration_time:0.033   pos: 38752548 fmt:yuv420p sar:1/1 s:854x460 i:P iskey:1 type:I checksum:7F3470E7
+[Parsed_showinfo_1 @ 0x124605ef0] n:   3 pts: 768167 pts_time:768.167 duration:     33 duration_time:0.033   pos: 40097409 fmt:yuv420p sar:1/1 s:854x460 i:P iskey:0 type:P checksum:85BF7276
+[Parsed_showinfo_1 @ 0x124605ef0] n:   4 pts:1118300 pts_time:1118.3  duration:     33 duration_time:0.033   pos: 58245875 fmt:yuv420p sar:1/1 s:854x460 i:P iskey:0 type:P checksum:2CBAAE2B
+[Parsed_showinfo_1 @ 0x124605ef0] n:   5 pts:1118800 pts_time:1118.8  duration:     33 duration_time:0.033   pos: 58287574 fmt:yuv420p sar:1/1 s:854x460 i:P iskey:1 type:I checksum:9120720E
+[Parsed_showinfo_1 @ 0x124605ef0] n:   6 pts:1119367 pts_time:1119.37 duration:     33 duration_time:0.033   pos: 58374244 fmt:yuv420p sar:1/1 s:854x460 i:P iskey:0 type:P checksum:78B912C5
+[Parsed_showinfo_1 @ 0x124605ef0] n:   7 pts:1119634 pts_time:1119.63 duration:     33 duration_time:0.033   pos: 58395512 fmt:yuv420p sar:1/1 s:854x460 i:P iskey:0 type:P checksum:103FE523
