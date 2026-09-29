@@ -34,18 +34,28 @@
 #     run-dir, so this is a scoring-time catch, not an OS-level prevention.
 #
 # Usage:
-#   run.sh [--dry-run] <round> <model-key: luna|sol> <rep> <workdir-fixture> [--no-skill] [--no-sandbox-isolation]
+#   run.sh [--dry-run] <round> <model-key: luna|sol|opus> <rep> <workdir-fixture> [--no-skill] [--no-sandbox-isolation]
 #   run.sh [--dry-run] --cleanup <run-dir>
+#   run.sh [--dry-run] --smoke-only <round> <model-key> <rep> <workdir-fixture> [...]
 #
 #   round                   round number (0 = writing-skills RED baseline, pass --no-skill)
-#   model-key               luna -> gpt-6-luna / model_reasoning_effort=max
-#                           sol  -> gpt-6-sol  / model_reasoning_effort=medium
+#   model-key               luna -> platform=codex, gpt-6-luna / model_reasoning_effort=max
+#                           sol  -> platform=codex, gpt-6-sol  / model_reasoning_effort=medium
+#                           opus -> platform=claude, claude-opus-5-5 / effort=high (Claude Code,
+#                                   run via `claude -p`, isolated with a claude-specific `codex
+#                                   sandbox` permission-profile override — see the "claude
+#                                   isolation" block below)
 #   rep                     repetition index within the round (2 per round per plan §14.4)
 #   workdir-fixture         path to a pre-built fetch/transcribe/scan work dir (copied, never mutated)
 #   --no-skill              omit the SKILL.md body from the prompt (round-0 baseline only);
 #                           the skill is also NOT materialized into the run-dir for round 0
-#   --no-sandbox-isolation  skip the codex permission-profile isolation (and its pre-run
-#                           smoke), falling back to --dangerously-bypass-approvals-and-sandbox
+#   --no-sandbox-isolation  skip the sandbox-permission-profile isolation (and its pre-run
+#                           smoke); codex falls back to --dangerously-bypass-approvals-and-sandbox,
+#                           claude falls back to a plain (un-sandboxed) `claude -p` invocation
+#   --smoke-only            run every setup step through the pre-run sandbox smoke, print a
+#                           PASS/FAIL line per smoke check, then exit WITHOUT invoking the
+#                           model or preserving artifacts (a `--no-sandbox-isolation` run has
+#                           no smoke to run and exits immediately after setup)
 #   --cleanup               delete a run-dir a previous run.sh call printed (score.ts
 #                           calls this once it is done reading the run-dir)
 #
@@ -112,6 +122,7 @@ dry_run=0
 no_skill=0
 cleanup_mode=0
 isolate_reads=1
+smoke_only=0
 positional=()
 
 for arg in "$@"; do
@@ -119,6 +130,7 @@ for arg in "$@"; do
 		--dry-run) dry_run=1 ;;
 		--no-skill) no_skill=1 ;;
 		--no-sandbox-isolation) isolate_reads=0 ;;
+		--smoke-only) smoke_only=1 ;;
 		--cleanup) cleanup_mode=1 ;;
 		*) positional+=("$arg") ;;
 	esac
@@ -169,6 +181,61 @@ for deny_path in "${deny_paths[@]}"; do
 done
 PERM_PROFILE_OVERRIDE="permissions.${PERM_PROFILE}={extends=\":workspace\",network={enabled=true},filesystem={${deny_fs_entries}}}"
 
+# claude (opus) isolation: the codex profile above denies the whole
+# $HOME/.claude tree, which would also deny Claude Code's own login/session
+# state that a real `claude -p` invocation needs to authenticate and run
+# (credentials, settings, plugin state, keychain-backed auth). A claude run
+# instead gets its own profile that keeps the rest of $HOME/.claude readable
+# and denies only the specific subpaths that could leak a prior session, this
+# machine's global CLAUDE.md, or its rules/skills/agents/docs into the eval —
+# the same worktrees/omt/fc-feedback/pins/codex-transcript denies above are
+# kept too. macOS Keychain access can still fail under the seatbelt sandbox;
+# that would surface as an auth failure in the claude smoke check below, not
+# as a filesystem leak.
+REAL_CLAUDE_PROJECTS="$REAL_CLAUDE_DIR/projects"
+REAL_CLAUDE_HISTORY="$REAL_CLAUDE_DIR/history.jsonl"
+REAL_CLAUDE_TODOS="$REAL_CLAUDE_DIR/todos"
+REAL_CLAUDE_SHELL_SNAPSHOTS="$REAL_CLAUDE_DIR/shell-snapshots"
+REAL_CLAUDE_FILE_HISTORY="$REAL_CLAUDE_DIR/file-history"
+REAL_CLAUDE_MD="$REAL_CLAUDE_DIR/CLAUDE.md"
+REAL_CLAUDE_RULES="$REAL_CLAUDE_DIR/rules"
+REAL_CLAUDE_SKILLS="$REAL_CLAUDE_DIR/skills"
+REAL_CLAUDE_AGENTS="$REAL_CLAUDE_DIR/agents"
+REAL_CLAUDE_DOCS="$REAL_CLAUDE_DIR/docs"
+PERM_PROFILE_CLAUDE="fc-eval-isolate-claude"
+deny_paths_claude=(
+	"$WORKTREES_PARENT"
+	"$REAL_OMT_DIR"
+	"$REAL_FC_FEEDBACK_HOME"
+	"$REAL_PINS_DIR"
+	"$HOME/.codex/sessions"
+	"$HOME/.codex/archived_sessions"
+	"$HOME/.codex/history.jsonl"
+	"$HOME/.codex/session_index.jsonl"
+	"$HOME/.codex/rollout-migrations"
+	"$HOME/.codex/shell_snapshots"
+	"$HOME/.codex/transcription-history.jsonl"
+	"$HOME/.codex/dictation-history"
+	"$REAL_CLAUDE_PROJECTS"
+	"$REAL_CLAUDE_HISTORY"
+	"$REAL_CLAUDE_TODOS"
+	"$REAL_CLAUDE_SHELL_SNAPSHOTS"
+	"$REAL_CLAUDE_FILE_HISTORY"
+	"$REAL_CLAUDE_MD"
+	"$REAL_CLAUDE_RULES"
+	"$REAL_CLAUDE_SKILLS"
+	"$REAL_CLAUDE_AGENTS"
+	"$REAL_CLAUDE_DOCS"
+)
+deny_fs_entries_claude=""
+for deny_path in "${deny_paths_claude[@]}"; do
+	if [ -n "$deny_fs_entries_claude" ]; then
+		deny_fs_entries_claude="${deny_fs_entries_claude},"
+	fi
+	deny_fs_entries_claude="${deny_fs_entries_claude}\"${deny_path}\"=\"deny\""
+done
+PERM_PROFILE_OVERRIDE_CLAUDE="permissions.${PERM_PROFILE_CLAUDE}={extends=\":workspace\",network={enabled=true},filesystem={${deny_fs_entries_claude}}}"
+
 RUN_DIR_MARKER=".fc-eval-run-dir"
 
 if [ "$cleanup_mode" = "1" ]; then
@@ -190,14 +257,15 @@ if [ "$cleanup_mode" = "1" ]; then
 fi
 
 round="${positional[0]:?round required}"
-model_key="${positional[1]:?model-key required: luna|sol}"
+model_key="${positional[1]:?model-key required: luna|sol|opus}"
 rep="${positional[2]:?rep required}"
 workdir_fixture="${positional[3]:?workdir-fixture required}"
 
 case "$model_key" in
-	luna) model="gpt-6-luna"; effort="max" ;;
-	sol) model="gpt-6-sol"; effort="medium" ;;
-	*) echo "run.sh: unknown model-key '$model_key' (expected luna|sol)" >&2; exit 1 ;;
+	luna) model="gpt-6-luna"; effort="max"; platform="codex" ;;
+	sol) model="gpt-6-sol"; effort="medium"; platform="codex" ;;
+	opus) model="claude-opus-5-5"; effort="high"; platform="claude" ;;
+	*) echo "run.sh: unknown model-key '$model_key' (expected luna|sol|opus)" >&2; exit 1 ;;
 esac
 
 if [ "$dry_run" != "1" ] && [ ! -d "$workdir_fixture" ]; then
@@ -314,22 +382,34 @@ if [ "$dry_run" != "1" ]; then
 fi
 
 # ── materialize the skill (+ its dispatched presentation-reviewer agent)
-# into the run-dir (deployed codex layout) ─────────────────────────────────
+# into the run-dir (deployed codex layout, or deployed claude layout for
+# platform=claude) ──────────────────────────────────────────────────────────
 # Round 0 (--no-skill) deliberately gets none of this: the whole point of the
 # baseline is that the skill is absent, so nothing is materialized and
 # ${CLAUDE_SKILL_DIR} is never substituted (no SKILL.md body is injected for
 # --no-skill either — see the prompt-build step below). SKILL.md's step 6
-# dispatches `presentation-reviewer` as a codex `spawn_agent` call, so that
-# dispatch must resolve against an agent definition materialized into THIS
-# run-dir (<run_dir>/.codex/agents/presentation-reviewer.toml), never this
-# machine's global ~/.codex/agents/ state.
+# dispatches `presentation-reviewer` as a codex `spawn_agent` call (an `Agent`
+# tool call for platform=claude), so that dispatch must resolve against an
+# agent definition materialized into THIS run-dir
+# (<run_dir>/.codex/agents/presentation-reviewer.toml for codex,
+# <run_dir>/.claude/agents/presentation-reviewer.md for claude), never this
+# machine's global ~/.codex/agents/ or ~/.claude/agents/ state.
 
 skill_dir_for_prompt="$SKILL_DIR"
 if [ "$no_skill" != "1" ]; then
-	skill_dir_for_prompt="$run_dir/.agents/skills/$SKILL_NAME"
-	trace "bun \"$MATERIALIZE_TS\" \"$run_dir\" \"$REPO_ROOT\" \"$SKILL_DIR\" \"$SKILL_NAME\" \"$PRESENTATION_REVIEWER_SOURCE\" \"$PRESENTATION_REVIEWER_NAME\"  # -> $skill_dir_for_prompt (codex .agents/skills + sibling .agents/lib layout) + \$run_dir/.codex/agents/$PRESENTATION_REVIEWER_NAME.toml"
+	if [ "$platform" = "claude" ]; then
+		skill_dir_for_prompt="$run_dir/.claude/skills/$SKILL_NAME"
+		materialize_cmd=(bun "$MATERIALIZE_TS" "$run_dir" "$REPO_ROOT" "$SKILL_DIR" "$SKILL_NAME" "$PRESENTATION_REVIEWER_SOURCE" "$PRESENTATION_REVIEWER_NAME" --platform "$platform")
+		trace "${materialize_cmd[*]}  # -> $skill_dir_for_prompt (claude .claude/skills + sibling .claude/lib layout) + \$run_dir/.claude/agents/$PRESENTATION_REVIEWER_NAME.md"
+	else
+		# Unchanged from before platform selection existed: no --platform flag,
+		# so materialize-skill.ts keeps defaulting to its "codex" shape.
+		skill_dir_for_prompt="$run_dir/.agents/skills/$SKILL_NAME"
+		materialize_cmd=(bun "$MATERIALIZE_TS" "$run_dir" "$REPO_ROOT" "$SKILL_DIR" "$SKILL_NAME" "$PRESENTATION_REVIEWER_SOURCE" "$PRESENTATION_REVIEWER_NAME")
+		trace "bun \"$MATERIALIZE_TS\" \"$run_dir\" \"$REPO_ROOT\" \"$SKILL_DIR\" \"$SKILL_NAME\" \"$PRESENTATION_REVIEWER_SOURCE\" \"$PRESENTATION_REVIEWER_NAME\"  # -> $skill_dir_for_prompt (codex .agents/skills + sibling .agents/lib layout) + \$run_dir/.codex/agents/$PRESENTATION_REVIEWER_NAME.toml"
+	fi
 	if [ "$dry_run" != "1" ]; then
-		bun "$MATERIALIZE_TS" "$run_dir" "$REPO_ROOT" "$SKILL_DIR" "$SKILL_NAME" "$PRESENTATION_REVIEWER_SOURCE" "$PRESENTATION_REVIEWER_NAME" > /dev/null
+		"${materialize_cmd[@]}" > /dev/null
 	fi
 fi
 
@@ -373,13 +453,77 @@ if [ "$dry_run" != "1" ]; then
 	fi
 fi
 
+# ── claude-settings.json (platform=claude only): a run-dir-local settings
+# file passed via --settings, kept separate from --setting-sources project
+# (which would instead read <run_dir>/.claude/settings.json — a different
+# file, so the two never collide). permissions.allow lists every tool the
+# skill needs, including the subagent-dispatch tool (materialized here under
+# both of its names — `Agent` is what this Claude Code build normalizes
+# permission rules to; `Task` is accepted as an input alias and normalizes to
+# the same rule, so listing both is redundant but harmless). permissions.deny
+# repeats every path denied at the OS level below (see PERM_PROFILE_CLAUDE)
+# as Read/Edit/Grep/Glob rules, as a second, app-level layer on top of the
+# seatbelt sandbox.
+if [ "$platform" = "claude" ]; then
+	claude_settings_file="$run_dir/claude-settings.json"
+	claude_deny_dirs=(
+		"$WORKTREES_PARENT" "$REAL_OMT_DIR" "$REAL_FC_FEEDBACK_HOME" "$REAL_PINS_DIR"
+		"$HOME/.codex/sessions" "$HOME/.codex/archived_sessions" "$HOME/.codex/rollout-migrations"
+		"$HOME/.codex/shell_snapshots" "$HOME/.codex/dictation-history"
+		"$REAL_CLAUDE_PROJECTS" "$REAL_CLAUDE_TODOS" "$REAL_CLAUDE_SHELL_SNAPSHOTS"
+		"$REAL_CLAUDE_FILE_HISTORY" "$REAL_CLAUDE_RULES" "$REAL_CLAUDE_SKILLS"
+		"$REAL_CLAUDE_AGENTS" "$REAL_CLAUDE_DOCS"
+	)
+	claude_deny_files=(
+		"$HOME/.codex/history.jsonl" "$HOME/.codex/session_index.jsonl" "$HOME/.codex/transcription-history.jsonl"
+		"$REAL_CLAUDE_HISTORY" "$REAL_CLAUDE_MD"
+	)
+	claude_deny_rules=()
+	for deny_path in "${claude_deny_dirs[@]}"; do
+		for deny_tool in Read Edit Grep Glob; do
+			claude_deny_rules+=("${deny_tool}(//${deny_path}/**)")
+		done
+	done
+	for deny_path in "${claude_deny_files[@]}"; do
+		for deny_tool in Read Edit Grep Glob; do
+			claude_deny_rules+=("${deny_tool}(//${deny_path})")
+		done
+	done
+	trace "jq -n ... > \"$claude_settings_file\"  # permissions.allow = Bash/Read/Edit/Write/Glob/Grep/WebSearch/WebFetch/Agent/Task, permissions.deny = ${#claude_deny_rules[@]} Read/Edit/Grep/Glob path rules"
+	if [ "$dry_run" != "1" ]; then
+		jq -n \
+			--argjson allow '["Bash","Read","Edit","Write","Glob","Grep","WebSearch","WebFetch","Agent","Task"]' \
+			--argjson deny "$(printf '%s\n' "${claude_deny_rules[@]}" | jq -R . | jq -s .)" \
+			'{permissions: {allow: $allow, deny: $deny}}' \
+			> "$claude_settings_file"
+	fi
+
+	# The claude invocation shape shared by the smoke checks below and the
+	# real run: CLAUDECODE="" so this nested claude doesn't see itself as
+	# already running inside a Claude Code session; ANTHROPIC_DEFAULT_OPUS_MODEL
+	# resolves the `opus` alias (and any internal opus default) to the pinned
+	# model under test; CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 keeps auto-memory
+	# writes out of this eval run. `env` is required (not a bare `VAR=val`
+	# prefix) because everything after `codex sandbox ... --` is exec'd as a
+	# literal argv, not interpreted by a shell.
+	claude_env=(env "CLAUDECODE=" "ANTHROPIC_DEFAULT_OPUS_MODEL=$model" "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1")
+	claude_base_cmd=(
+		claude -p --model "$model" --effort "$effort"
+		--output-format stream-json --verbose --no-session-persistence
+		--setting-sources project --strict-mcp-config --mcp-config "{\"mcpServers\":{}}"
+		--settings "$claude_settings_file" --permission-mode dontAsk
+	)
+fi
+
 # ── sandbox isolation: mandatory pre-run smoke (skipped with
 # --no-sandbox-isolation) ──────────────────────────────────────────────────
-# Runs the SAME permission profile the real codex exec call below will use,
-# through `codex sandbox` (no model call — a local seatbelt-policy debug
-# runner), and aborts the whole run if the policy doesn't behave as expected.
+# Runs the SAME permission profile the real codex exec call (or, for
+# platform=claude, the real `claude -p` call) below will use, through `codex
+# sandbox` (no model call for the codex checks — a local seatbelt-policy debug
+# runner; the claude checks below DO call the model, minimally), and aborts
+# the whole run if the policy doesn't behave as expected.
 
-if [ "$isolate_reads" = "1" ]; then
+if [ "$isolate_reads" = "1" ] && [ "$platform" = "codex" ]; then
 	trace "codex sandbox -c \"$PERM_PROFILE_OVERRIDE\" -P \"$PERM_PROFILE\" -C \"$run_dir\" -- cat \"$REPO_ROOT/CLAUDE.md\"  # must FAIL (Operation not permitted)"
 	trace "codex sandbox -c \"$PERM_PROFILE_OVERRIDE\" -P \"$PERM_PROFILE\" -C \"$run_dir\" -- ls \"$WORKTREES_PARENT\"  # must FAIL — denies every sibling worktree, not just this one"
 	trace "codex sandbox -c \"$PERM_PROFILE_OVERRIDE\" -P \"$PERM_PROFILE\" -C \"$run_dir\" -- ls \"$REAL_OMT_DIR\"  # must FAIL, if $REAL_OMT_DIR exists"
@@ -450,30 +594,216 @@ if [ "$isolate_reads" = "1" ]; then
 			echo "run.sh: aborting — sandbox isolation smoke check failed (pass --no-sandbox-isolation to fall back to --dangerously-bypass-approvals-and-sandbox, with no OS-level read isolation)" >&2
 			exit 1
 		fi
+
+		if [ "$smoke_only" = "1" ]; then
+			echo "run.sh: --smoke-only: all codex sandbox smoke checks PASSED"
+			exit 0
+		fi
 	fi
 fi
 
-# ── run codex exec (plan §15-1) ─────────────────────────────────────────────
+# ── claude sandbox isolation smoke (platform=claude only, skipped with
+# --no-sandbox-isolation) ────────────────────────────────────────────────────
+# Same idea as the codex smoke above — run the SAME profile (PERM_PROFILE_CLAUDE)
+# the real `claude -p` call below will use, through `codex sandbox`, and abort
+# if it doesn't behave as expected. Two checks additionally make a real (tiny,
+# cheap) model call, through the exact same isolation and CLI flags as the real
+# run, because a filesystem-only smoke can't catch an auth failure (e.g. macOS
+# Keychain access blocked by the seatbelt sandbox) that would otherwise only
+# surface once the real, expensive run is already underway.
+if [ "$isolate_reads" = "1" ] && [ "$platform" = "claude" ]; then
+	smoke_results=()
+	record_smoke() {
+		# $1=label $2=0(pass)/1(fail)
+		if [ "$2" = "0" ]; then
+			smoke_results+=("[PASS] $1")
+		else
+			smoke_results+=("[FAIL] $1")
+		fi
+	}
 
-# --ephemeral: denying $HOME/.codex/sessions above (deny blocks writes too, not
-# just reads) would otherwise fight codex's own rollout/session persistence
-# for THIS run; --ephemeral turns that persistence off (history_mode=None) so
-# there is nothing for codex to write there in the first place. See the
-# "격리" section of README.md for the residual-uncertainty note on this flag.
-run_jsonl="$run_dir/run.jsonl"
-if [ "$isolate_reads" = "1" ]; then
-	codex_cmd=(codex exec --skip-git-repo-check --ephemeral -m "$model" -c "model_reasoning_effort=$effort" -c "$PERM_PROFILE_OVERRIDE" -c "default_permissions=$PERM_PROFILE" --json -C "$run_dir" -)
-else
-	codex_cmd=(codex exec --skip-git-repo-check -m "$model" -c "model_reasoning_effort=$effort" --dangerously-bypass-approvals-and-sandbox --json -C "$run_dir" -)
+	trace "codex sandbox -c \"$PERM_PROFILE_OVERRIDE_CLAUDE\" -P \"$PERM_PROFILE_CLAUDE\" -C \"$run_dir\" -- cat \"$REAL_CLAUDE_MD\"  # must FAIL, if $REAL_CLAUDE_MD exists"
+	trace "codex sandbox -c \"$PERM_PROFILE_OVERRIDE_CLAUDE\" -P \"$PERM_PROFILE_CLAUDE\" -C \"$run_dir\" -- ls \"$REAL_CLAUDE_PROJECTS\"  # must FAIL, if $REAL_CLAUDE_PROJECTS exists"
+	trace "codex sandbox -c \"$PERM_PROFILE_OVERRIDE_CLAUDE\" -P \"$PERM_PROFILE_CLAUDE\" -C \"$run_dir\" -- ls \"$WORKTREES_PARENT\"  # must FAIL"
+	trace "codex sandbox -c \"$PERM_PROFILE_OVERRIDE_CLAUDE\" -P \"$PERM_PROFILE_CLAUDE\" -C \"$run_dir\" -- cat \"$run_dir/$RUN_DIR_MARKER\"  # must SUCCEED (run-dir read)"
+	trace "codex sandbox -c \"$PERM_PROFILE_OVERRIDE_CLAUDE\" -P \"$PERM_PROFILE_CLAUDE\" -C \"$run_dir\" -- sh -c 'echo ok > \"$run_dir/.fc-eval-smoke-write\" && cat \"$run_dir/.fc-eval-smoke-write\"'  # must SUCCEED (run-dir write)"
+	trace "printf 'Reply with the single word OK.' | codex sandbox -c \"$PERM_PROFILE_OVERRIDE_CLAUDE\" -P \"$PERM_PROFILE_CLAUDE\" -C \"$run_dir\" -- ${claude_env[*]} ${claude_base_cmd[*]}  # must SUCCEED and output must contain OK"
+	trace "printf 'Does your context contain any of these words: 디스펜서, 토출, BoostPack, Myalgo, \"Least-Code Ladder\"? Answer with exactly one word: YES or NO.' | codex sandbox -c \"$PERM_PROFILE_OVERRIDE_CLAUDE\" -P \"$PERM_PROFILE_CLAUDE\" -C \"$run_dir\" -- ${claude_env[*]} ${claude_base_cmd[*]}  # weak self-report evidence only — a failure (not-NO) aborts the run, but a pass is NOT proof the global CLAUDE.md was actually excluded"
+
+	if [ "$dry_run" != "1" ]; then
+		claude_smoke_failed=0
+
+		if smoke_out=$(codex sandbox -c "$PERM_PROFILE_OVERRIDE_CLAUDE" -P "$PERM_PROFILE_CLAUDE" -C "$run_dir" -- cat "$REAL_CLAUDE_MD" 2>&1); then
+			if [ -f "$REAL_CLAUDE_MD" ]; then
+				echo "run.sh: claude sandbox smoke FAILED — $REAL_CLAUDE_MD was readable inside the sandbox: $smoke_out" >&2
+				record_smoke "deny \$HOME/.claude/CLAUDE.md" 1
+				claude_smoke_failed=1
+			else
+				record_smoke "deny \$HOME/.claude/CLAUDE.md (file absent, vacuously denied)" 0
+			fi
+		else
+			record_smoke "deny \$HOME/.claude/CLAUDE.md" 0
+		fi
+
+		if smoke_out=$(codex sandbox -c "$PERM_PROFILE_OVERRIDE_CLAUDE" -P "$PERM_PROFILE_CLAUDE" -C "$run_dir" -- ls "$REAL_CLAUDE_PROJECTS" 2>&1); then
+			if [ -d "$REAL_CLAUDE_PROJECTS" ]; then
+				echo "run.sh: claude sandbox smoke FAILED — $REAL_CLAUDE_PROJECTS was readable inside the sandbox: $smoke_out" >&2
+				record_smoke "deny \$HOME/.claude/projects" 1
+				claude_smoke_failed=1
+			else
+				record_smoke "deny \$HOME/.claude/projects (dir absent, vacuously denied)" 0
+			fi
+		else
+			record_smoke "deny \$HOME/.claude/projects" 0
+		fi
+
+		if smoke_out=$(codex sandbox -c "$PERM_PROFILE_OVERRIDE_CLAUDE" -P "$PERM_PROFILE_CLAUDE" -C "$run_dir" -- ls "$WORKTREES_PARENT" 2>&1); then
+			echo "run.sh: claude sandbox smoke FAILED — the worktrees-parent dir was readable inside the sandbox: $smoke_out" >&2
+			record_smoke "deny worktrees-parent dir" 1
+			claude_smoke_failed=1
+		else
+			record_smoke "deny worktrees-parent dir" 0
+		fi
+
+		if smoke_out=$(codex sandbox -c "$PERM_PROFILE_OVERRIDE_CLAUDE" -P "$PERM_PROFILE_CLAUDE" -C "$run_dir" -- cat "$run_dir/$RUN_DIR_MARKER" 2>&1); then
+			record_smoke "run-dir read" 0
+		else
+			echo "run.sh: claude sandbox smoke FAILED — the run-dir was NOT readable inside the sandbox: $smoke_out" >&2
+			record_smoke "run-dir read" 1
+			claude_smoke_failed=1
+		fi
+
+		if smoke_out=$(codex sandbox -c "$PERM_PROFILE_OVERRIDE_CLAUDE" -P "$PERM_PROFILE_CLAUDE" -C "$run_dir" -- sh -c "echo ok > \"$run_dir/.fc-eval-smoke-write\" && cat \"$run_dir/.fc-eval-smoke-write\"" 2>&1); then
+			record_smoke "run-dir write" 0
+		else
+			echo "run.sh: claude sandbox smoke FAILED — the run-dir was NOT writable inside the sandbox: $smoke_out" >&2
+			record_smoke "run-dir write" 1
+			claude_smoke_failed=1
+		fi
+
+		if smoke_out=$(printf 'Reply with the single word OK.' | codex sandbox -c "$PERM_PROFILE_OVERRIDE_CLAUDE" -P "$PERM_PROFILE_CLAUDE" -C "$run_dir" -- "${claude_env[@]}" "${claude_base_cmd[@]}" 2>&1); then
+			if printf '%s' "$smoke_out" | grep -q "OK"; then
+				record_smoke "minimal claude -p call (OK)" 0
+			else
+				echo "run.sh: claude sandbox smoke FAILED — minimal claude -p call succeeded but did not output OK: $smoke_out" >&2
+				record_smoke "minimal claude -p call (OK)" 1
+				claude_smoke_failed=1
+			fi
+		else
+			echo "run.sh: claude sandbox smoke FAILED — minimal claude -p call failed (auth/keychain access blocked under the sandbox?): $smoke_out" >&2
+			record_smoke "minimal claude -p call (OK)" 1
+			claude_smoke_failed=1
+		fi
+
+		# Weak evidence only (the model self-reports on its own context) — a
+		# failure here still aborts the run, but a pass is not treated as a
+		# strong guarantee that the global CLAUDE.md was excluded. The probe
+		# words are ones that live only in the user's global CLAUDE.md/rules
+		# (not the company name), because the Claude account's own email
+		# domain already contains the company name and would false-positive.
+		if smoke_out=$(printf 'Does your context contain any of these words: 디스펜서, 토출, BoostPack, Myalgo, "Least-Code Ladder"? Answer with exactly one word: YES or NO.' | codex sandbox -c "$PERM_PROFILE_OVERRIDE_CLAUDE" -P "$PERM_PROFILE_CLAUDE" -C "$run_dir" -- "${claude_env[@]}" "${claude_base_cmd[@]}" 2>&1); then
+			smoke_answer=""
+			smoke_fail_reason=""
+			if ! command -v jq >/dev/null 2>&1; then
+				smoke_fail_reason="jq not available to extract the final result"
+			else
+				smoke_answer=$(printf '%s' "$smoke_out" | jq -r 'select(.type=="result") | .result' 2>/dev/null | tail -n1)
+				if [ -z "$smoke_answer" ]; then
+					smoke_fail_reason="no result line in stream-json output"
+				fi
+			fi
+
+			if [ -z "$smoke_fail_reason" ]; then
+				smoke_answer_norm=$(printf '%s' "$smoke_answer" | tr -d '*.' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr '[:lower:]' '[:upper:]')
+				if [ "$smoke_answer_norm" = "NO" ]; then
+					record_smoke "no probe wording (디스펜서/토출/BoostPack/Myalgo/Least-Code Ladder) in context (weak, self-reported)" 0
+				else
+					smoke_fail_reason="did not answer exactly NO"
+				fi
+			fi
+
+			if [ -n "$smoke_fail_reason" ]; then
+				smoke_evidence="$smoke_answer"
+				[ -z "$smoke_evidence" ] && smoke_evidence=$(printf '%s' "$smoke_out" | tail -n5)
+				echo "run.sh: claude sandbox smoke FAILED — context leak self-report: $smoke_fail_reason: $smoke_evidence" >&2
+				record_smoke "no probe wording (디스펜서/토출/BoostPack/Myalgo/Least-Code Ladder) in context (weak, self-reported)" 1
+				claude_smoke_failed=1
+			fi
+		else
+			echo "run.sh: claude sandbox smoke FAILED — context leak self-report call failed: $(printf '%s' "$smoke_out" | tail -n5)" >&2
+			record_smoke "no probe wording (디스펜서/토출/BoostPack/Myalgo/Least-Code Ladder) in context (weak, self-reported)" 1
+			claude_smoke_failed=1
+		fi
+
+		if [ "$smoke_only" = "1" ]; then
+			printf '%s\n' "${smoke_results[@]}"
+		fi
+
+		if [ "$claude_smoke_failed" = "1" ]; then
+			echo "run.sh: aborting — claude sandbox isolation smoke check failed (pass --no-sandbox-isolation to fall back to a plain, un-sandboxed claude -p invocation)" >&2
+			exit 1
+		fi
+
+		if [ "$smoke_only" = "1" ]; then
+			echo "run.sh: --smoke-only: all claude sandbox smoke checks PASSED"
+			exit 0
+		fi
+	fi
 fi
-trace "${codex_cmd[*]} < $prompt_file > $run_jsonl"
 
-codex_status=0
-if [ "$dry_run" != "1" ]; then
-	set +e
-	"${codex_cmd[@]}" < "$prompt_file" > "$run_jsonl"
-	codex_status=$?
-	set -e
+if [ "$smoke_only" = "1" ] && [ "$isolate_reads" != "1" ]; then
+	echo "run.sh: --smoke-only with --no-sandbox-isolation: nothing to smoke-test (isolation is off) — exiting without invoking the model"
+	exit 0
+fi
+
+# ── run the model (plan §15-1) ──────────────────────────────────────────────
+
+run_jsonl="$run_dir/run.jsonl"
+
+if [ "$platform" = "claude" ]; then
+	# Isolated: the same `codex sandbox` wrapper + PERM_PROFILE_CLAUDE profile
+	# the smoke above just verified, executing `claude -p` as its command with
+	# cwd=run_dir (`codex sandbox -C`). Non-isolated (--no-sandbox-isolation):
+	# a plain, un-sandboxed claude -p with cwd=run_dir via a subshell `cd`
+	# (`claude -p` has no cwd flag of its own).
+	if [ "$isolate_reads" = "1" ]; then
+		claude_cmd=(codex sandbox -c "$PERM_PROFILE_OVERRIDE_CLAUDE" -P "$PERM_PROFILE_CLAUDE" -C "$run_dir" -- "${claude_env[@]}" "${claude_base_cmd[@]}")
+		trace "${claude_cmd[*]} < $prompt_file > $run_jsonl"
+	else
+		trace "(cd \"$run_dir\" && ${claude_env[*]} ${claude_base_cmd[*]}) < $prompt_file > $run_jsonl"
+	fi
+
+	codex_status=0
+	if [ "$dry_run" != "1" ]; then
+		set +e
+		if [ "$isolate_reads" = "1" ]; then
+			"${claude_cmd[@]}" < "$prompt_file" > "$run_jsonl"
+		else
+			(cd "$run_dir" && "${claude_env[@]}" "${claude_base_cmd[@]}") < "$prompt_file" > "$run_jsonl"
+		fi
+		codex_status=$?
+		set -e
+	fi
+else
+	# --ephemeral: denying $HOME/.codex/sessions above (deny blocks writes too, not
+	# just reads) would otherwise fight codex's own rollout/session persistence
+	# for THIS run; --ephemeral turns that persistence off (history_mode=None) so
+	# there is nothing for codex to write there in the first place. See the
+	# "격리" section of README.md for the residual-uncertainty note on this flag.
+	if [ "$isolate_reads" = "1" ]; then
+		codex_cmd=(codex exec --skip-git-repo-check --ephemeral -m "$model" -c "model_reasoning_effort=$effort" -c "$PERM_PROFILE_OVERRIDE" -c "default_permissions=$PERM_PROFILE" --json -C "$run_dir" -)
+	else
+		codex_cmd=(codex exec --skip-git-repo-check -m "$model" -c "model_reasoning_effort=$effort" --dangerously-bypass-approvals-and-sandbox --json -C "$run_dir" -)
+	fi
+	trace "${codex_cmd[*]} < $prompt_file > $run_jsonl"
+
+	codex_status=0
+	if [ "$dry_run" != "1" ]; then
+		set +e
+		"${codex_cmd[@]}" < "$prompt_file" > "$run_jsonl"
+		codex_status=$?
+		set -e
+	fi
 fi
 
 # ── preserve artifacts (plan §14.7 + §15-4 + §15-5) ─────────────────────────
@@ -488,6 +818,9 @@ done
 trace "cp \"$archive_dir/taxonomy.yaml\" \"$dest/taxonomy.yaml\"  # if present"
 trace "cp \"$archive_dir/sessions/<session_id>/data.json\" \"$dest/data.json\"  # if present"
 trace "gzip -c \"$run_jsonl\" > \"$dest/run.jsonl.gz\""
+if [ "$platform" = "claude" ]; then
+	trace "jq -n ... > \"$dest/run-meta.json\"  # platform/model/effort + \`claude --version\`"
+fi
 
 if [ "$dry_run" != "1" ]; then
 	mkdir -p "$dest"
@@ -505,6 +838,16 @@ if [ "$dry_run" != "1" ]; then
 	fi
 	if [ -f "$run_jsonl" ]; then
 		gzip -c "$run_jsonl" > "$dest/run.jsonl.gz"
+	fi
+	if [ "$platform" = "claude" ]; then
+		claude_version="$(claude --version 2>/dev/null || true)"
+		jq -n \
+			--arg platform "$platform" \
+			--arg model "$model" \
+			--arg effort "$effort" \
+			--arg claude_version "$claude_version" \
+			'{platform: $platform, model: $model, effort: $effort, claude_version: $claude_version}' \
+			> "$dest/run-meta.json"
 	fi
 fi
 
