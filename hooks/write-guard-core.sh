@@ -5,13 +5,11 @@
 # PreToolUse hook. Holds TWO guard kinds, both built on the same
 # _wg_core_normpath / _wg_core_pathwise_glob_match primitives below:
 #
-# 1. Unconditional deny (codex-ledger-parity plan, TODO 2) --
-#    write_guard_core_run. Full-path EXACT match on the resolved
-#    current-session ledger or QA state, PLUS a glob candidate (contains *, ?,
-#    or [) whose pattern matches one of those resolved protected paths -- NEVER
-#    a bare "session-ledger-" substring (that loose match is
-#    hooks/pre-tool-enforcer.sh's superseded _wg_ledger_target_in_segment
-#    classifier, hooks/pre-tool-enforcer.sh:42-77).
+# 1. Unconditional deny -- write_guard_core_run. Full-path EXACT match on the
+#    resolved current-session skill state files (qa/explain-diff/goal/
+#    ultragoal/prometheus/deep-interview state, skill-invocation marker
+#    namespace), PLUS a glob candidate (contains *, ?, or [) whose pattern
+#    matches one of those resolved protected paths.
 #
 # 2. Identity-conditional allow (code-review-artifact-guard-core plan) --
 #    codereview_guard_core_run. Same anchor-match machinery, but the verdict
@@ -40,14 +38,11 @@
 # (hooks/pre-tool-enforcer.sh for Claude, hooks/codex-write-guard.sh for
 # Codex) source this core and call write_guard_core_run rather than building
 # their own deny text -- keep both platforms' deny output identical (AC5).
-_wg_core_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the durable session ledger (session-ledger-*.md). Use hooks/omt-ledger.sh append/now instead."}}'
 
-# Deny JSON for codereview_guard_core_run below. A DIFFERENT sentence from
-# _wg_core_deny_json on purpose: this is not "don't touch an append-only
-# ledger directly" -- it is "this artifact may only be authored by the
-# code-reviewer subagent". Kept as a single source of truth here so both
-# platform shims that call codereview_guard_core_run emit byte-identical deny
-# text -- pinned by hooks/codex-write-guard_test.sh's
+# Deny JSON for codereview_guard_core_run below. This is "this artifact may
+# only be authored by the code-reviewer subagent". Kept as a single source of
+# truth here so both platform shims that call codereview_guard_core_run emit
+# byte-identical deny text -- pinned by hooks/codex-write-guard_test.sh's
 # test_ac4_codex_claude_deny_json_byte_identical -- rather than duplicating
 # the wording.
 _wg_core_codereview_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: this code-review artifact (ultragoal-codereview-*.json / goal-codereview-*.json) may only be written by the code-reviewer subagent, not the orchestrator."}}'
@@ -105,12 +100,12 @@ _wg_core_marker_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","
 # guard fires on paths that do NOT exist yet -- the write/delete is what
 # would create them -- so realpath/readlink -f (which require the path to
 # exist, and are non-portable on BSD) would false-negative on exactly the
-# guarded case. Both the candidate and the ledger path pass through this
+# guarded case. Both the candidate and each protected path pass through this
 # before the EXACT compare, so a non-canonical spelling
-# ($OMT_DIR/./session-ledger-<sid>.md, //session-ledger, a/../session-ledger)
-# cannot bypass the anchor match. Symlink segments are NOT resolved (lexical
-# only) -- safe here because the ledger dir is a plain $HOME/.omt/<name>
-# directory, never a symlink.
+# ($OMT_DIR/./qa-state-<sid>.json, //qa-state, a/../qa-state) cannot bypass
+# the anchor match. Symlink segments are NOT resolved (lexical only) -- safe
+# here because $OMT_DIR is a plain $HOME/.omt/<name> directory, never a
+# symlink.
 _wg_core_normpath() {
     awk -v p="$1" 'BEGIN {
         abs = (substr(p, 1, 1) == "/")
@@ -192,10 +187,10 @@ _wg_core_norm_publisher_token() {
     _wg_core_norm_publisher_token_result="$normalized"
 }
 
-# _wg_core_pathwise_glob_match <candidate-pattern-path> <concrete-ledger-path>
+# _wg_core_pathwise_glob_match <candidate-pattern-path> <concrete-protected-path>
 # Component-wise glob match WITH depth (segment-count) equality: splits both
 # paths on '/' and compares segment-by-segment, using each candidate segment
-# AS a glob pattern against the corresponding ledger segment. Returns 0 (match
+# AS a glob pattern against the corresponding protected-path segment. Returns 0 (match
 # -> deny-worthy) only if EVERY segment matches AND both paths have the SAME
 # number of segments. This mirrors real shell pathname expansion, where '*'
 # matches within a single path segment and never spans '/' -- unlike a bash
@@ -216,7 +211,7 @@ _wg_core_pathwise_glob_match() {
         # Dotfile guard: with bash `dotglob` off (the shell default), a
         # leading '.' in a filename is matched ONLY by an explicit literal
         # '.' in the pattern -- never by a leading '*', '?', or '[...]'. So
-        # if the ledger segment is a dotfile (e.g. ".omt"), a candidate
+        # if the protected-path segment is a dotfile (e.g. ".omt"), a candidate
         # segment that doesn't itself start with a literal '.' cannot expand
         # onto it at real runtime; refuse the match before the glob check
         # below would otherwise wrongly allow it (bash `case` patterns DO
@@ -236,14 +231,13 @@ _wg_core_pathwise_glob_match() {
 # write_guard_core_run <OMT_DIR> <session_id>
 # Reads newline-separated already-absolutized candidate target paths on
 # stdin. Emits the deny JSON to stdout iff any candidate is FULL-PATH EXACT
-# equal to either current-session protected path (the ledger or
-# "$OMT_DIR/qa-state-<session_id>.json"), OR is a glob pattern (contains *, ?,
-# or [) that, used as a shell pattern, matches one of those resolved paths
-# (e.g. `rm "$OMT_DIR"/session-ledger-*.md` or
-# `rm "$OMT_DIR"/qa-state-*.json` never EXACT-matches but would still destroy
-# current-session state); else emits nothing (allow).
-# Claude<->Codex parity story 9/9: the second deny reason this core owns,
-# alongside the ledger deny above. Claude enforces this same policy natively
+# equal to a current-session protected state path (qa/explain-diff/goal/
+# ultragoal/prometheus/deep-interview state, or the skill-invocation marker
+# namespace), OR is a glob pattern (contains *, ?, or [) that, used as a shell
+# pattern, matches one of those resolved paths (e.g. `rm "$OMT_DIR"/qa-state-
+# *.json` never EXACT-matches but would still destroy current-session state);
+# else emits nothing (allow).
+# Claude<->Codex parity: Claude enforces the dangerous-command policy natively
 # via claude.yaml's declarative `permissions.deny` glob list (own product-UI
 # deny text, not authored by OMT and not mechanically reproducible here) --
 # Codex has no equivalent declarative primitive, so hooks/codex-write-guard.sh
@@ -687,8 +681,6 @@ _wg_core_drain_stdin() {
 write_guard_core_run() {
     local omt_dir="$1"
     local session_id="$2"
-    local ledger_path
-    ledger_path="$(_wg_core_normpath "$omt_dir/session-ledger-$session_id.md")"
     local qa_state_path
     qa_state_path="$(_wg_core_normpath "$omt_dir/qa-state-$session_id.json")"
     local explain_diff_state_path
@@ -749,36 +741,27 @@ write_guard_core_run() {
             _wg_core_drain_stdin
             return 0
         fi
-        if [ "$norm_candidate" = "$ledger_path" ]; then
-            printf '%s\n' "$_wg_core_deny_json"
-            _wg_core_drain_stdin
-            return 0
-        fi
-        # Glob candidate (e.g. `rm session-ledger-*.md` or
-        # `rm qa-state-*.json`): never EXACT-matches, but if the pattern
-        # matches either resolved protected path, running the command destroys
-        # the current ledger/QA state -> deny. Only globs that ACTUALLY match
-        # one of the two known current-session paths are denied; a non-matching
-        # glob stays allow, so no false block.
+        # Glob candidate (e.g. `rm qa-state-*.json`): never EXACT-matches, but
+        # if the pattern matches a resolved protected path, running the
+        # command destroys the current session state -> deny. Only globs that
+        # ACTUALLY match one of the known current-session paths are denied; a
+        # non-matching glob stays allow, so no false block.
         #
         # Match is component-wise WITH depth (segment-count) equality (see
         # _wg_core_pathwise_glob_match above): each candidate path segment is
-        # used as a glob pattern against the ledger's SAME-position segment,
-        # and the two paths must have the same segment count. This mirrors
-        # real shell pathname expansion, where '*' matches within one path
-        # segment only and never spans '/'. It correctly DENIES a glob
+        # used as a glob pattern against the protected path's SAME-position
+        # segment, and the two paths must have the same segment count. This
+        # mirrors real shell pathname expansion, where '*' matches within one
+        # path segment only and never spans '/'. It correctly DENIES a glob
         # segment anywhere in the path -- basename (e.g. "$OMT_DIR/*") or an
-        # intermediate directory component at the ledger's own depth (e.g.
-        # "$HOME/.omt/"*"/session-ledger-<sid>.md") -- while still ALLOWing
+        # intermediate directory component at the protected path's own depth
+        # (e.g. "$HOME/.omt/"*"/qa-state-<sid>.json") -- while still ALLOWing
         # an ancestor-level or depth-mismatched glob (e.g. "$HOME/*") whose
-        # '*' never actually reaches the nested ledger at real runtime.
+        # '*' never actually reaches the nested protected path at real
+        # runtime.
         case "$norm_candidate" in
             *[*?[]*)
-                if _wg_core_pathwise_glob_match "$norm_candidate" "$ledger_path"; then
-                    printf '%s\n' "$_wg_core_deny_json"
-                    _wg_core_drain_stdin
-                    return 0
-                elif _wg_core_pathwise_glob_match "$norm_candidate" "$qa_state_path"; then
+                if _wg_core_pathwise_glob_match "$norm_candidate" "$qa_state_path"; then
                     printf '%s\n' "$_wg_core_qa_state_deny_json"
                     _wg_core_drain_stdin
                     return 0

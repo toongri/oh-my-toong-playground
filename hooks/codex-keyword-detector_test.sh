@@ -193,8 +193,7 @@ test_analyze_output_has_no_grep_glob_lsp_literals() {
 test_missing_jq_fails_open() {
     # Build a PATH with every /usr/bin and /bin entry symlinked in EXCEPT
     # jq, so grep/tr/perl (needed by the shared core) stay resolvable while
-    # jq genuinely is not. Mirrors hooks/ledger-core_test.sh's
-    # test_qa_jq_absent technique. /bin/bash (absolute path) sidesteps a
+    # jq genuinely is not. /bin/bash (absolute path) sidesteps a
     # calling-shell PATH re-resolution of the `bash` command name itself.
     local jq_less_bin entry
     jq_less_bin=$(mktemp -d)

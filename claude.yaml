@@ -54,6 +54,21 @@ hooks:
       timeout: 10
     - component: orphan-reaper.sh
       timeout: 10
+    # compaction 직후(source=compact)에만 session-ledger 앞부분과 전체 읽기
+    # 지시를 주입한다. 다른 source에서는 아무것도 출력하지 않는다.
+    - component: session-ledger
+      timeout: 10
+  # PreCompact: plain stdout은 native compaction 요약 지시로 반영된다(JSON
+  # hookSpecificOutput은 무시됨). 문구는 블라인드 채점 반복 실험으로 튜닝했으니
+  # 재검증 없이 바꾸지 말 것.
+  PreCompact:
+    - component: compact-instructions.sh
+      timeout: 5
+    # session-ledger는 헤드리스 요약기(gpt-6-sol, effort low)를 동기로 돌린다. 보통
+    # 1~2분이지만 재시도 3회와 모델 지연에 대비해 내부 마감을 25분으로 두었으므로 timeout은 그보다 커야
+    # 한다. stdout은 요약 지시로 섞이므로 아무것도 출력하지 않는다.
+    - component: session-ledger
+      timeout: 1800
   Stop:
     - component: persistent-mode
       timeout: 15

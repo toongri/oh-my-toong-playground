@@ -70,62 +70,6 @@ fi
 
 MESSAGES=""
 
-# Ledger recording (every source) + compaction recovery (source==compact),
-# delegated to the shared cross-platform core (plan TODO 4: codex-ledger-
-# parity) so Claude and Codex emit identical ledger text from ONE
-# implementation. hooks/ledger-core.sh's Claude branch is byte-identical to
-# the pre-delegation inline text this call replaces. The result is
-# pre-escaped and spliced in ahead of MESSAGES at final-output time (below),
-# so it lands first in additionalContext -- matching where the recording
-# instruction always sat (it fires on every source, unlike the restore
-# blocks further down which are conditional on active state).
-# omt-hook-dep: ledger-core.sh
-source "$SCRIPT_DIR_SS/ledger-core.sh"
-
-# ledger-core.sh's stdin sid fallback (its 3rd precedence tier, used when
-# neither OMT_SESSION_ID nor CODEX_THREAD_ID is set in the environment --
-# the common case here, since CLAUDE_ENV_FILE is read by the harness AFTER
-# this hook exits, not during it) reads ONLY `.session_id` (snake_case).
-# Claude Code's actual SessionStart stdin uses `.sessionId` (camelCase) --
-# see the jq filter at the very top of this file, which already handles
-# both forms into $SESSION_ID. Feed ledger_core_run a copy of stdin with
-# `.session_id` normalized to that already-resolved value, so its fallback
-# tier works for Claude's real stdin shape instead of always falling
-# through to the empty-sid refusal.
-LEDGER_CORE_INPUT="$INPUT"
-if command -v jq &> /dev/null; then
-  LEDGER_CORE_INPUT=$(printf '%s' "$INPUT" | jq --arg sid "$SESSION_ID" '.session_id = $sid' 2>/dev/null) || LEDGER_CORE_INPUT="$INPUT"
-fi
-
-# Run in a subshell with OMT_SESSION_ID/CODEX_THREAD_ID cleared: this hook's
-# own stdin (normalized above into $SESSION_ID) is ALWAYS the authoritative
-# identity for its own SessionStart invocation -- ledger_core_run's env-first
-# precedence exists for later, separate omt-ledger.sh CLI calls the agent
-# makes via CLAUDE_ENV_FILE, not for this hook's own delegated call. Clearing
-# them here (subshell-local; nothing outside this command substitution is
-# affected) stops a stale/inherited OMT_SESSION_ID from shadowing the
-# resolved stdin sid.
-LEDGER_CORE_OUT=$(
-  unset OMT_SESSION_ID CODEX_THREAD_ID
-  printf '%s' "$LEDGER_CORE_INPUT" | ledger_core_run claude
-)
-LEDGER_DELEGATED_ESCAPED=""
-if [ -n "$LEDGER_CORE_OUT" ]; then
-  # Extract the already-escaped additionalContext value verbatim (no
-  # decode/re-encode) from ledger-core.sh's own JSON output template
-  # (`"additionalContext": "...."}}`, hooks/ledger-core.sh:205) via plain
-  # prefix/suffix stripping -- re-escaping it here would double-escape the
-  # quotes/backslashes ledger-core.sh's own sed/jq -Rs pipeline already
-  # produced.
-  LEDGER_DELEGATED_ESCAPED="${LEDGER_CORE_OUT#*\"additionalContext\": \"}"
-  # Suffix pattern held in a variable: a literal `}}` typed directly inside
-  # ${var%pattern} would close the expansion early (brace-matching reads the
-  # first unescaped `}` as the expansion's own terminator), silently leaving
-  # the trailing `"}}` un-stripped.
-  _lc_suffix='"}}'
-  LEDGER_DELEGATED_ESCAPED="${LEDGER_DELEGATED_ESCAPED%$_lc_suffix}"
-fi
-
 # GC: reap dead state files for the managed prefixes.
 # Liveness defined by hooks/lib/state-liveness.sh (ACTIVE_IDLE_TTL=6h, TERMINAL_TTL=30m).
 # The current session's state is always kept regardless of age.
@@ -135,32 +79,9 @@ GC_NOW=$(date +%s)
 # this hook's own stdout must stay session-invariant, so discard it here.
 reap_dead_state_files "$OMT_DIR" "$SESSION_ID" "$GC_NOW" 0 > /dev/null
 
-# Ledger GC (plan TODO 5): session-ledger-*.md is durable-append prose, not
-# JSON, so is_state_live's .active parsing does not apply -- liveness here is
-# mtime-only, using the same ACTIVE_IDLE_TTL SSOT sourced above. The current
-# session's ledger is kept unconditionally regardless of mtime age (mirrors
-# the sid-skip pattern in the state-GC loop above), since it may be idle
-# between appends without being dead.
-for ledger_file in "$OMT_DIR"/session-ledger-*.md; do
-  [ -f "$ledger_file" ] || continue
-  ledger_sid=$(basename "$ledger_file" .md)
-  ledger_sid="${ledger_sid#session-ledger-}"
-  if [ "$ledger_sid" = "$SESSION_ID" ]; then
-    continue
-  fi
-  ledger_mtime=$(stat -c %Y "$ledger_file" 2>/dev/null || stat -f %m "$ledger_file" 2>/dev/null || true)
-  [ -n "$ledger_mtime" ] || continue
-  ledger_age=$(( GC_NOW - ledger_mtime ))
-  if [ "$ledger_age" -ge "$ACTIVE_IDLE_TTL" ]; then
-    rm -f "$ledger_file"
-  fi
-done
-
 # GC: reap dead session-scoped artifacts (plan TODO 3: SessionStart artifact
 # GC + drift report), via the same shared liveness helper sourced above.
-# Must run after the ledger GC lane above, not before -- both consume $OMT_DIR
-# state, and this is the artifact lane's assigned position. Discard stdout for
-# the same reason as reap_dead_state_files above.
+# Discard stdout for the same reason as reap_dead_state_files above.
 #
 # Fail-open when identity could not be resolved: SESSION_ID falls back to the
 # literal "default" sentinel above (:21-23) whenever jq is absent or the
@@ -391,10 +312,6 @@ if [ -f "$OMT_DIR/explain-diff-state-${SESSION_ID}.json" ]; then
   fi
 fi
 
-# Compaction recovery (source==compact, ledger present) is now handled by the
-# ledger_core_run delegation above -- see the LEDGER_DELEGATED_ESCAPED block
-# near the top of this file.
-
 # Check for incomplete todos in global directory
 INCOMPLETE_COUNT=0
 TODOS_DIR="$HOME/.claude/todos"
@@ -423,13 +340,11 @@ if [ "$INCOMPLETE_COUNT" -gt 0 ]; then
   MESSAGES="$MESSAGES<session-restore>\n\n[PENDING TASKS DETECTED]\n\nYou have incomplete tasks from a previous session.\nPlease continue working on these tasks.\n\n</session-restore>\n\n---\n\n"
 fi
 
-# Output message if we have any restore content OR delegated ledger content.
-if [ -n "$MESSAGES" ] || [ -n "$LEDGER_DELEGATED_ESCAPED" ]; then
+# Output message if we have any restore content.
+if [ -n "$MESSAGES" ]; then
   # Escape for JSON
   MESSAGES_ESCAPED=$(echo "$MESSAGES" | sed 's/"/\\"/g')
-  # LEDGER_DELEGATED_ESCAPED is already JSON-string-escaped (see above) --
-  # prepend it as-is, ahead of MESSAGES_ESCAPED.
-  echo "{\"continue\": true, \"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"$LEDGER_DELEGATED_ESCAPED$MESSAGES_ESCAPED\"}}"
+  echo "{\"continue\": true, \"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"$MESSAGES_ESCAPED\"}}"
 else
   echo '{"continue": true}'
 fi

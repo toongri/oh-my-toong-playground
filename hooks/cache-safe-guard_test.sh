@@ -12,7 +12,7 @@
 #   5. \b\d+ incomplete tasks\b — task count
 #
 # Emitters under guard:
-#   - hooks/session-start.sh         (prometheus restore + pending + ledger recording instruction)
+#   - hooks/session-start.sh         (prometheus restore + pending)
 #   - hooks/resume-forge-start.sh    (restore block)
 # =============================================================================
 set -euo pipefail
@@ -184,7 +184,6 @@ SCRATCH_EOF
 # Emitter setup:
 #   session-start.sh  — active prometheus state (restore block)
 #                     + pending todos (pending-tasks block)
-#                     + static ledger recording instruction (TODO 3, every session)
 #   resume-forge-start.sh — active resume-forge state file (restore block)
 # =============================================================================
 test_cache_safe_guard_ac12_green() {
@@ -211,8 +210,7 @@ EOF
     printf '[{"id":"1","status":"pending"},{"id":"2","status":"pending"}]' \
         > "$TEST_HOME/.claude/todos/guard-todos.json"
 
-    # Capture session-start.sh stdout (all three blocks: prometheus + pending +
-    # static ledger recording instruction, which fires unconditionally every session)
+    # Capture session-start.sh stdout (both blocks: prometheus + pending)
     local ss_out
     ss_out=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' \
         | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
@@ -228,16 +226,6 @@ EOF
         echo "  ss_out: ${ss_out:0:400}"
         return 1
     fi
-    # Positive-assertion (plan TODO 3, TODO 9): the static ledger recording
-    # instruction fires on every session and must be part of the combined
-    # blob checked for cache-safety below -- proves the new emitter, not just
-    # the removed handoff pointer, is what this guard actually verifies.
-    if ! printf '%s' "$ss_out" | grep -qF 'LEDGER RECORDING'; then
-        echo "ASSERTION FAILED: session-start.sh must emit the LEDGER RECORDING instruction (TODO 3)"
-        echo "  ss_out: ${ss_out:0:400}"
-        return 1
-    fi
-
     # --- resume-forge-start.sh fixture: active resume-forge state ---
     # The restore block emits qualitative phrase ("in progress"), not filename or digit/digit.
     cat > "$TEST_OMT_DIR/state/resume-forge-guard-test.json" << 'EOF'

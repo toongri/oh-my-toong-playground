@@ -38,7 +38,8 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 - **QA 스토리 계약과 선택적 재사용 케이스** — 새 스토리는 목표·비어 있지 않은 Given/When/Then 배열과 0부터 시작하는 acceptance-criteria 링크를 갖춰야 하며, 기존 기록은 읽을 수 있지만 새 실행 준비가 된 것으로 간주하지 않음. 현재 사이클에 증거가 있으면 계약 변경은 거부됨. 선택적 케이스 저장소는 `qa-cases.ts`로 고정된 외부 `~/.qa-cases/<projectKey>/manifest.yaml`에 포인터·모드만 기록하고, 케이스 메타데이터와 자산은 승인된 위치에 저장하며 `unconfigured`·`disabled`·`configured` 상태를 명시적으로 관리함. 프로젝트 파일은 명시적 opt-in 없이는 만들지 않으며, 네이티브 `.ad`·agent-browser/Playwright·Maestro 형식은 유지함. `qa-replay.ts --help`로 확인할 수 있는 replay는 현재 세션의 완료된 actor→story→cell 체인과 현재 story/cell/cycle 및 해시를 확인하고 receipt를 만들지만 PASS를 기록하지 않으며, 실제 경계 증거와 함께 `qa-state.ts record-cell --case-run`으로 선택적으로 연결함([재사용 QA 케이스](skills/qa/reusable-cases.md) 참고)
 - **Ultragoal 최종 리뷰 수렴** — 우선순위로 수렴: HIGH는 수리·검사·fresh review, MEDIUM은 수리·검사(재리뷰 없음), LOW는 기록만 수행. 결정적 CLI는 COMMENT/APPROVE dispatch·재리뷰를 거부하고 5회 dispatch 창을 유지
 - **Codex protected-skill trust boundary** — `disable-model-invocation: true` 스킬은 사용자가 명시한 `$skill` UserPromptSubmit에서만 본문이 주입되고, 직접 `SKILL.md` shell read는 차단되며, invocation marker는 authorization이 아닙니다([리뷰/품질](docs/skills/review-quality.md) 참고)
-- **세션 원장** — 구조화된 체크포인트와 record를 기록하고 `resolve`/`supersede`(완료·대체) lifecycle로 상태를 추적합니다. `Now`는 최신 체크포인트로 교체될 수 있지만 나머지 durable 원본 이력은 보존합니다. 훅이 compaction 이벤트 뒤 현재 상태를 안내문 포함 UTF-8 7000바이트 이내로 자동 복구하며, Codex 0.153.4 수동 compaction에서 `PostCompact` → `SessionStart(source=compact)` 순서를 검증했습니다. 네이티브 compaction trigger 자체는 바꾸지 않습니다([세션 ledger 운영 가이드](docs/session-ledger.md) 참고).
+- **Compaction 조정** — `PreCompact` 훅(`compact-instructions.sh`)의 plain stdout이 Claude Code의 네이티브 compaction 요약 지시에 그대로 반영됩니다(JSON `hookSpecificOutput`은 이 이벤트에서 무시됨). 메인 세션에는 노이즈를 남기지 않고, 문구는 블라인드 채점 반복 실험으로 튜닝했습니다. Claude 전용이며 Codex 짝은 없습니다(Codex의 원격 compaction 경로는 `compact_prompt`를 적용하지 않음).
+- **Session ledger** — Claude Code와 Codex CLI가 같은 형식의 세션 기록을 씁니다. `PreCompact` 훅(`session-ledger/`)이 대화 기록을 스크립트로 결정론적으로 추출하고, headless `codex exec`(gpt-6-sol, effort low, fast tier)가 JSON 스키마를 채우게 합니다. 검증기가 사용자 인용·식별자·메시지 id를 원문과 대조해 위반을 되돌려 보내고(최대 3회), 끝내 실패하면 결정론적 최소 ledger를 씁니다. 결과는 `~/.omt/session-ledger/<session>.md`에 저장되고, compaction 직후 `SessionStart`가 앞부분과 전체 읽기 지시를 주입합니다. 메인 세션은 기록 호출을 하지 않으며, 요약기가 동기로 돌기 때문에 compaction이 보통 1~2분 더 걸립니다.
 
 ## 철학 — 왜 이 설계인가
 
@@ -68,14 +69,13 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 | [모델 배정](docs/model-assignment.md) | 에이전트별 모델 등급 배정 원칙과 `model-map` 치환 규칙 |
 | [플랫폼 YAML 설정 배포](docs/platform-yaml-config-deployment.md) | 플랫폼별 설정·훅·MCP의 배포·병합·삭제 규칙 |
 | [외부 반출 로컬 참조 게이트](docs/outbound-local-reference-gate.md) | 커밋·PR 생성/수정/댓글·Notion·Slack·Linear로 내보내는 로컬 경로 참조의 판정·범위·처방 |
-| [세션 ledger 운영 가이드](docs/session-ledger.md) | 구조화 checkpoint/record lifecycle, 원본 이력 보존, compaction 복구 및 Codex 이벤트 브리지 |
 
 ## Quick Start
 
 ### 사전 요구사항
 
 - Claude Code CLI 설치됨
-- Node.js v18+ (HUD 기능 및 Node 내장 모듈만 사용하는 `.mjs` 세션 ledger helper용)
+- Node.js v18+ (HUD 기능용)
 - `npm`/`npx` (Mermaid 렌더러 프로비저닝용)
 - `jq` (훅의 페이로드 파싱에 사용 — 대부분 없으면 차단하지 않지만, `codex-spawn-context-gate.sh`와 `codex-spawn-role-gate.sh`는 차단)
 - `sqlite3` (Codex detector가 `state_5.sqlite` 상태 데이터베이스를 조회하는 데 사용 — 없으면 detector가 0건을 세고 stderr에 진단 1건을 출력)

@@ -761,13 +761,7 @@ test_reap_session_artifacts_uses_own_now_epoch_not_internal_wall_clock() {
 # this form (the backup form STATE_PREFIXES's own `*.json` anchor, :16-19,
 # is what preserves it from deletion), so the reporter is the only place its
 # growth becomes visible — see the plan's decision record naming it
-# reporter-only. session-ledger-*.md is the one remaining classification-only
-# exception that DOES stay silent: it is reaped by its own dedicated,
-# `.md`-only lane in hooks/session-start.sh, not by this file's reap
-# functions, so it is deliberately absent from the deletion whitelist — a
-# non-`.md` session-ledger-* form is NOT exempted and must still surface as
-# drift. This exception changes what gets deleted — only what gets reported
-# as drift.
+# reporter-only.
 # =============================================================================
 
 test_list_unclassified_reports_genuine_drift_only() {
@@ -792,11 +786,6 @@ test_list_unclassified_reports_genuine_drift_only() {
   write_state "$d/codex-todo-$uuid.json" "{}"
   write_state "$d/state/block-count-$uuid" "1"
 
-  # Classification-only exception (not in either reap whitelist, but a known
-  # family reaped by its own dedicated lane per the doc comment above): must
-  # stay silent.
-  write_state "$d/session-ledger-$uuid.md" ""
-
   local out
   out=$(list_unclassified_session_files "$d")
   local n
@@ -818,39 +807,8 @@ test_list_unclassified_reports_genuine_drift_only() {
     fi
   done
 
-  if printf '%s' "$out" | grep -q 'goal-state-\|codex-todo-\|block-count-\|session-ledger-'; then
-    echo "  ASSERTION FAILED: unclassified report must stay silent on classified files, including the session-ledger classification-only exception"
-    echo "  got: $out"
-    return 1
-  fi
-
-  return 0
-}
-
-# Defect: the session-ledger classification exception was anchored on the
-# bare prefix (`session-ledger-*`), wider than the lane that actually reaps
-# it — hooks/session-start.sh's ledger loop is `.md`-only
-# (`session-ledger-*.md`). A non-`.md` form (e.g. an interrupted append's
-# `.tmp`) was silently exempted from drift reporting by that mismatch even
-# though no lane reaps it, so it would accumulate forever, invisibly.
-test_list_unclassified_reports_non_md_session_ledger_as_drift() {
-  local d="$TEST_TMP_DIR"
-  local uuid="7c9e6679-7425-40de-944b-e07fc1f90ae7"
-
-  write_state "$d/session-ledger-$uuid.tmp" ""
-  write_state "$d/session-ledger-$uuid.md" ""
-
-  local out
-  out=$(list_unclassified_session_files "$d")
-
-  if ! printf '%s' "$out" | grep -q "session-ledger-$uuid.tmp"; then
-    echo "  ASSERTION FAILED: a non-.md session-ledger-* file (e.g. an interrupted append's .tmp) must surface as drift — no lane reaps it"
-    echo "  got: $out"
-    return 1
-  fi
-
-  if printf '%s' "$out" | grep -q "session-ledger-$uuid.md"; then
-    echo "  ASSERTION FAILED: session-ledger-*.md must stay silent (reaped by hooks/session-start.sh's dedicated .md-only lane)"
+  if printf '%s' "$out" | grep -q 'goal-state-\|codex-todo-\|block-count-'; then
+    echo "  ASSERTION FAILED: unclassified report must stay silent on classified files"
     echo "  got: $out"
     return 1
   fi
@@ -2390,7 +2348,6 @@ run_test test_reap_session_artifacts_survives_live_session_in_glob_metachar_dir
 run_test test_list_live_session_ids_respects_provided_now_epoch_not_wall_clock
 run_test test_reap_session_artifacts_uses_own_now_epoch_not_internal_wall_clock
 run_test test_list_unclassified_reports_genuine_drift_only
-run_test test_list_unclassified_reports_non_md_session_ledger_as_drift
 run_test test_list_unclassified_reports_files_under_state_subdir_too
 run_test test_list_unclassified_ignores_non_uuid_shaped_files
 run_test test_list_unclassified_reports_all_four_plan_ac_forms

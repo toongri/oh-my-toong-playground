@@ -29,16 +29,17 @@ EOF
 fi
 
 # =============================================================================
-# Ledger write-guard (compaction-continuous-record plan, TODO 7, D5;
-# delegated to the shared core in codex-ledger-parity TODO 5): a best-effort
-# append-only guard for the durable session ledger ($OMT_DIR/session-ledger-
-# <sid>.md, hooks/omt-ledger.sh). This shim owns EXTRACTION of candidate
-# write-target paths from Claude's tool-input shape only (Write/Edit/
-# MultiEdit .tool_input.file_path; Bash .tool_input.command redirect/tee/dd/
-# cp/mv/sed -i/truncate/rm write-target). The full-path EXACT match against
-# the resolved current-session ledger, and the deny JSON, both live in
-# hooks/write-guard-core.sh (write_guard_core_run) so a candidate merely
-# containing "session-ledger-" as a substring is no longer enough to arm.
+# Skill state write-guard: a best-effort append-only guard for the current
+# session's skill state files ($OMT_DIR/qa-state-<sid>.json,
+# explain-diff-state-<sid>.json, goal-state-<sid>.json, ultragoal-state-
+# <sid>.json, prometheus-state-<sid>.json, deep-interview-active-state-
+# <sid>.json, and the codex-skill-invocation-marker-<sid>-* namespace). This
+# shim owns EXTRACTION of candidate write-target paths from Claude's
+# tool-input shape only (Write/Edit/MultiEdit .tool_input.file_path; Bash
+# .tool_input.command redirect/tee/dd/cp/mv/sed -i/truncate/rm write-target).
+# The full-path EXACT match against each resolved current-session state path,
+# and the deny JSON, both live in hooks/write-guard-core.sh
+# (write_guard_core_run).
 #
 # The same extracted candidate set also feeds a second, independent guard
 # (code-review-artifact-guard-core plan): identity-conditional protection for
@@ -59,13 +60,13 @@ source "$_wg_script_dir/review-dispatch-gate-core.sh"
 # are unwrapped there), so an extracted token still carries its quote
 # characters and must be unwrapped before an EXACT path comparison. A target
 # can also be assembled from multiple double-quoted SPANS glued together with
-# no separating whitespace (e.g. `"$OMT_DIR"/"session-ledger-$OMT_SESSION_ID
-# .md"`) -- the real shell concatenates adjacent quoted spans into one word
-# and drops every quote character, so stripping only the outer pair would
-# leave embedded quotes that break the byte-EXACT compare downstream.
-# Stripping all quote characters mirrors that real-shell behavior; a harmless
-# non-ledger candidate that happens to carry embedded quotes simply still
-# fails the EXACT match, so over-stripping here is not a bypass.
+# no separating whitespace (e.g. `"$OMT_DIR"/"qa-state-$OMT_SESSION_ID.json"`)
+# -- the real shell concatenates adjacent quoted spans into one word and
+# drops every quote character, so stripping only the outer pair would leave
+# embedded quotes that break the byte-EXACT compare downstream. Stripping all
+# quote characters mirrors that real-shell behavior; a harmless non-guarded
+# candidate that happens to carry embedded quotes simply still fails the
+# EXACT match, so over-stripping here is not a bypass.
 _wg_strip_dquotes() {
     local s="$1"
     s="${s//\"/}"
@@ -73,32 +74,32 @@ _wg_strip_dquotes() {
 }
 
 # _wg_absolutize <path> -- strip surrounding double quotes, expand the two
-# known ledger-path env-vars via pure bash literal substitution, then prefix
+# known state-path env-vars via pure bash literal substitution, then prefix
 # a relative path with the hook's cwd; an already-absolute path passes
 # through.
 #
 # Why: a candidate arrives as the LITERAL command text (e.g. "$OMT_DIR/
-# session-ledger-$OMT_SESSION_ID.md"), not what the real shell would expand
-# it to at execution time -- the old code recognized only a leading '/' as
+# qa-state-$OMT_SESSION_ID.json"), not what the real shell would expand it to
+# at execution time -- the old code recognized only a leading '/' as
 # absolute, so this literal was treated as RELATIVE and got $PWD prefixed
-# instead, never matching the resolved ledger path. hooks/omt-ledger.sh's
-# SessionStart recovery pointer teaches exactly this literal-env-var form,
+# instead, never matching the resolved protected path. A skill's own
+# SessionStart recovery pointer can teach exactly this literal-env-var form,
 # so it is the PRIMARY reproduction shape, not an edge case.
 #
 # ${p//find/replace} is a pure bash string substitution -- never eval/
 # envsubst, which would let an arbitrary $(...) or other variable reference
 # inside an untrusted Bash tool_input.command execute. OMT_DIR, OMT_SESSION_ID,
-# HOME, and a leading ~ are expanded: OMT_DIR/OMT_SESSION_ID compose the
-# ledger path directly (write_guard_core_run's ledger_path in
+# HOME, and a leading ~ are expanded: OMT_DIR/OMT_SESSION_ID compose each
+# protected state path directly (write_guard_core_run in
 # hooks/write-guard-core.sh), and $_wg_omt_dir is always
 # $HOME/.omt/<proj> -- so a $HOME- or ~-relative spelling of that same path
-# composes the identical ledger file and must be matched too, or it silently
-# bypasses the guard. PWD/CLAUDE_PROJECT_DIR/etc are still NOT expanded: they
-# do not compose the ledger path, so expanding them would be pure surface
-# with no guard benefit. The braced form (${VAR}) is substituted before the
-# bare $VAR form so substituting "$OMT_DIR" first would not leave a stray
-# "{}" around the resolved value inside "${OMT_DIR}". If HOME is unset/empty,
-# the $HOME token is simply dropped and the path won't match the ledger --
+# composes the identical protected file and must be matched too, or it
+# silently bypasses the guard. PWD/CLAUDE_PROJECT_DIR/etc are still NOT
+# expanded: they do not compose a protected path, so expanding them would be
+# pure surface with no guard benefit. The braced form (${VAR}) is substituted
+# before the bare $VAR form so substituting "$OMT_DIR" first would not leave
+# a stray "{}" around the resolved value inside "${OMT_DIR}". If HOME is
+# unset/empty, the $HOME token is simply dropped and the path won't match --
 # the safe direction (ALLOW), never a false block.
 #
 # KNOWN LIMITATION: a single-quoted reference (`rm '$OMT_DIR/...'`) is an
@@ -111,13 +112,13 @@ _wg_strip_dquotes() {
 # bypass.
 #
 # OUT OF SCOPE (best-effort literal-text scan, not a shell interpreter):
-# acknowledged, not fixed. cd into the ledger dir then a relative-path
-# write/delete; variable indirection (p=$OMT_DIR; rm "$p/session-ledger-...");
+# acknowledged, not fixed. cd into $OMT_DIR then a relative-path write/
+# delete; variable indirection (p=$OMT_DIR; rm "$p/qa-state-...");
 # parameter expansion other than the handled $OMT_DIR/$OMT_SESSION_ID/$HOME/~;
-# process substitution; brace expansion (rm session-ledger-{<sid>,x}.md);
-# ANSI-C $'...' quoting; adjacent/combined multi-target redirects glued
-# without whitespace (>a>b, >&file); and an OMT_DIR containing whitespace
-# (operand splitting).
+# process substitution; brace expansion (rm qa-state-{a,b}.json); ANSI-C
+# $'...' quoting; adjacent/combined multi-target redirects glued without
+# whitespace (>a>b, >&file); and an OMT_DIR containing whitespace (operand
+# splitting).
 _wg_absolutize() {
     local p
     p="$(_wg_strip_dquotes "$1")"
@@ -142,8 +143,8 @@ _wg_absolutize() {
 # `|` chain segment. Mirrors the write-vectors of the retired
 # _wg_ledger_target_in_segment classifier (redirect, tee/rm/truncate, dd of=,
 # sed -i, cp last-arg, mv every operand) but EXTRACTS the target instead of
-# testing it for a "session-ledger-" substring -- write_guard_core_run does an
-# EXACT full-path comparison, so a harmless non-ledger candidate simply never
+# testing it for a substring match -- write_guard_core_run does an EXACT
+# full-path comparison, so a harmless non-guarded candidate simply never
 # matches. `cp` and `mv` are separate arms below and are NOT interchangeable:
 # only `mv` destroys its source, so only `mv` extracts source operands.
 _wg_extract_bash_targets() {
@@ -157,9 +158,9 @@ _wg_extract_bash_targets() {
     first_word=$(echo "$seg" | awk '{print $1}')
     case "$first_word" in
         tee|rm|truncate)
-            # Every non-option operand, not just the last -- `rm <ledger>
+            # Every non-option operand, not just the last -- `rm <guarded>
             # <other>` used to extract only "<other>" ($NF), leaving the
-            # ledger operand unchecked whenever it wasn't the final argument.
+            # guarded operand unchecked whenever it wasn't the final argument.
             # Mirrors the already-correct Codex extractor
             # (_cwg_extract_shell_targets in hooks/codex-write-guard.sh).
             echo "$seg" | awk '{for(i=2;i<=NF;i++) if($i !~ /^-/) print $i}'
@@ -173,7 +174,7 @@ _wg_extract_bash_targets() {
                 # tee/rm/truncate fix above (`sed -i SCRIPT file1 file2` edits
                 # EVERY file operand in place, not just the final one). This
                 # over-extracts the SCRIPT operand too, which is harmless: it
-                # never EXACT-matches the ledger path.
+                # never EXACT-matches a guarded path.
                 echo "$seg" | awk '{for(i=2;i<=NF;i++) if($i !~ /^-/) print $i}'
             fi
             ;;
@@ -227,7 +228,7 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
         if [[ -n "$_wg_cmd" ]]; then
             # Single-quoted spans are inert shell literals -- but deleting them
             # wholesale (old approach) also erased REAL quoted write targets like
-            # `rm '/tmp/session-ledger-x.md'`. Quote-aware normalization instead:
+            # `rm '/tmp/qa-state-x.json'`. Quote-aware normalization instead:
             # drop the quote CHARACTERS but keep the quoted CONTENT visible, while
             # masking shell-active metachars (`> < | ; &`) that appear INSIDE quotes
             # -- so an in-quote `>` never reads as a live redirect (grep below) and
@@ -235,7 +236,7 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
             #
             # DOUBLE-quoted spans are masked too (CONFIRMED parity fix, both-
             # platform measurement): this file used to mask single quotes only,
-            # so `echo "note; rm <ledger>"` was read as a live `;`-chain and
+            # so `echo "note; rm <guarded>"` was read as a live `;`-chain and
             # DENIED here, while the Codex twin's _cwg_mask_quoted
             # (hooks/codex-write-guard.sh) already masked double-quoted spans
             # too and ALLOWED the identical command -- a same-command,
@@ -246,7 +247,7 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
             # pass-through that keeps an escaped `\"` from desyncing in-quote
             # tracking, and the `$( ... )`/backtick-span suspension (a `;`/
             # `rm` sitting inside a LIVE command substitution nested in double
-            # quotes -- e.g. `echo "$(true; rm <ledger>)"` -- is real shell
+            # quotes -- e.g. `echo "$(true; rm <guarded>)"` -- is real shell
             # code the outer shell actually executes, so masking must not hide
             # it) are ported verbatim from _cwg_mask_quoted's pre-existing
             # logic. Independently re-derived here, not sourced from that
@@ -281,7 +282,7 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
                         # NOT close the substitution. Untracked, it dropped
                         # dpdepth to 0, every separator behind it was then
                         # read as inside the OUTER double quotes and masked
-                        # away, and a chained `rm <ledger>` went unseen. The
+                        # away, and a chained `rm <guarded>` went unseen. The
                         # closing right-paren is emitted as a space because
                         # it is a token boundary at execution time, not part
                         # of the last word: glued on, it broke the whole-token
@@ -361,8 +362,9 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
             # than raw because the documented invocation quotes the script path
             # (`bun "${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts" <sub>`).
             # Shares this block's `_wg_sid`/`_wg_omt_dir` precondition with the
-            # ledger and code-review guards -- a payload that resolves neither
-            # already leaves all of them dark, so this adds no new dark path.
+            # state write-guard and code-review guards -- a payload that
+            # resolves neither already leaves all of them dark, so this adds
+            # no new dark path.
             _wg_ua_out=$(write_guard_core_check_user_authorized_command "$_wg_scan")
             if [[ -n "$_wg_ua_out" ]]; then
                 printf '%s\n' "$_wg_ua_out"
@@ -396,7 +398,7 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
         fi
 
         # Code-review artifact identity guard (code-review-artifact-guard-core
-        # plan): a SEPARATE gate from the unconditional ledger guard just
+        # plan): a SEPARATE gate from the unconditional state write-guard just
         # above, run on the SAME _wg_candidates -- the two are different
         # rule kinds (unconditional deny vs identity-conditional allow) so
         # they must fire independently rather than one being nested inside

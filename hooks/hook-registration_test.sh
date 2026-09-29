@@ -1,27 +1,26 @@
 #!/bin/bash
 # =============================================================================
-# Hook Registration Consistency Tests (plan TODO 9)
+# Hook Registration Consistency Tests
 #
 # Static registration audit across every deployed claude.yaml (+ codex.yaml/
-# gemini.yaml/opencode.yaml) in the repo. Guards the compaction-continuous-
-# record-ledger plan's cross-platform registration invariant:
+# gemini.yaml/opencode.yaml) in the repo:
 #   - Every claude.yaml target that registers session-start.sh under
 #     SessionStart must also register pre-tool-enforcer.sh under PreToolUse,
-#     and vice versa -- the ledger recording instruction (session-start.sh,
-#     TODO 3) and the ledger write-guard (pre-tool-enforcer.sh, TODO 7) are a
-#     matched pair; a target that opts into one without the other is a
-#     registration drift the plan's D5/D2 tradeoffs assume does not happen.
+#     and vice versa -- these two are OMT's core Claude hook pair (session
+#     init + state-file write guard), and a target that opts into one
+#     without the other is a registration drift.
 #     Targets that opt into NEITHER (e.g. oh-my-resume, which uses
 #     resume-forge-start.sh instead) are unaffected -- this is not a
 #     "every target must have both" mandate, only a pairing invariant.
-#   - No claude.yaml/codex.yaml/gemini.yaml/opencode.yaml anywhere in the
-#     repo registers a PreCompact hook (TODO 1 removed the LLM summarizer's
-#     sole registration site; nothing should re-register it).
+#   - Only the two root platform yamls register PreCompact: claude.yaml with
+#     compact-instructions.sh (plain stdout steers Claude Code's native
+#     compaction summary; Codex's remote compaction ignores compact_prompt)
+#     and session-ledger, and codex.yaml with session-ledger --platform codex.
+#     No projects/* yaml and no gemini.yaml/opencode.yaml registers PreCompact.
 #   - codex.yaml registers a PreToolUse guard (codex-write-guard.sh) -- Codex
 #     >= 0.144.1 enforces a pre-execution PreToolUse permissionDecision:"deny",
 #     falsifying the earlier assumption that Codex lacked this event; the
-#     ledger write-guard is wired there just like Claude's, alongside the
-#     SessionStart recording instruction (rules-injector).
+#     state-file write guard is wired there just like Claude's.
 #   - The five core Claude hooks (keyword-detector.sh, pre-tool-enforcer.sh,
 #     session-start.sh, orphan-reaper.sh, persistent-mode)
 #     are registered in
@@ -41,7 +40,7 @@
 #     The pairing invariant passes just as happily when the pair sits in four
 #     project files as when it sits at root, which is exactly how these drifted
 #     while their Codex counterparts (codex-write-guard.sh,
-#     codex-persistent-mode, codex-ledger.sh, rules-injector) were all global.
+#     codex-persistent-mode, rules-injector) were all global.
 # =============================================================================
 set -euo pipefail
 
@@ -150,13 +149,15 @@ test_session_start_and_write_guard_pair_witnessed_at_least_once() {
 }
 
 # =============================================================================
-# PreCompact removed everywhere -- root + every projects/*/{claude,codex,
-# gemini,opencode}.yaml.
-# =============================================================================
-test_precompact_removed_from_all_targets() {
+# PreCompact is registered only on the two root platform yamls: claude.yaml
+# (compact-instructions.sh + session-ledger) and codex.yaml (session-ledger).
+# No projects/* yaml and no gemini/opencode yaml may register PreCompact.
+test_precompact_registered_only_on_root_platform_yamls() {
     local f matches=""
     while IFS= read -r f; do
         [ -f "$f" ] || continue
+        [ "$f" = "$REPO_DIR/claude.yaml" ] && continue
+        [ "$f" = "$REPO_DIR/codex.yaml" ] && continue
         local m
         m=$(grep -n 'PreCompact' "$f" 2>/dev/null || true)
         if [ -n "$m" ]; then
@@ -165,8 +166,24 @@ test_precompact_removed_from_all_targets() {
     done < <(_all_platform_yaml_files)
 
     if [ -n "$matches" ]; then
-        echo "ASSERTION FAILED: PreCompact must be registered on 0 targets (plan TODO 1 removal)"
+        echo "ASSERTION FAILED: PreCompact must be registered only on the root claude.yaml and codex.yaml"
         echo "$matches"
+        return 1
+    fi
+
+    local block
+    block=$(_extract_hook_event_block "$REPO_DIR/claude.yaml" "PreCompact")
+    if ! echo "$block" | grep -qF 'component: compact-instructions.sh'; then
+        echo "ASSERTION FAILED: root claude.yaml must register compact-instructions.sh under PreCompact"
+        return 1
+    fi
+    if ! echo "$block" | grep -qF 'component: session-ledger'; then
+        echo "ASSERTION FAILED: root claude.yaml must register session-ledger under PreCompact"
+        return 1
+    fi
+    block=$(_extract_hook_event_block "$REPO_DIR/codex.yaml" "PreCompact")
+    if ! echo "$block" | grep -qF 'session-ledger/index.ts --platform codex'; then
+        echo "ASSERTION FAILED: root codex.yaml must register session-ledger --platform codex under PreCompact"
         return 1
     fi
     return 0
@@ -662,7 +679,7 @@ main() {
 
     run_test test_session_start_and_write_guard_paired_across_targets
     run_test test_session_start_and_write_guard_pair_witnessed_at_least_once
-    run_test test_precompact_removed_from_all_targets
+    run_test test_precompact_registered_only_on_root_platform_yamls
     run_test test_codex_yaml_has_pretooluse_guard
     run_test test_codex_skill_invocation_hooks_registered_with_runtime_matcher
     run_test test_codex_explain_diff_seed_not_registered_under_pretooluse

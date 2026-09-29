@@ -743,8 +743,7 @@ _artifact_age_live() {
 #
 # Session artifacts (codex-todo, goal-verdict, goal-codereview, ...) carry no
 # `active` field, so is_state_live's two-branch rule cannot apply to them.
-# Liveness here is mtime-only against ACTIVE_IDLE_TTL — the same rule and the
-# same reason as the session-ledger mtime loop in hooks/session-start.sh.
+# Liveness here is mtime-only against ACTIVE_IDLE_TTL.
 #
 # Thin wrapper: fetch (this function's own job) then judge (_artifact_age_live
 # above). Signature and behavior here are byte-for-byte what they were before
@@ -1278,15 +1277,6 @@ STAT_LINES
 #     recognizing it here as "belonging to its state family" (the pre-fix
 #     behavior) would defeat that — see the plan's decision record naming
 #     these four forms as reporter-only, never reap-whitelisted.
-#   - `session-ledger-*.md` is recognized as a known-managed family even
-#     though it is intentionally absent from SESSION_ARTIFACT_PREFIXES:
-#     hooks/session-start.sh reaps it through its own dedicated ledger lane
-#     (a `.md`-only glob, see that file), not through reap_session_artifacts,
-#     so adding it to that whitelist would make this file's own reap
-#     function delete it too. The exception is anchored to `.md` to match
-#     that lane exactly — a non-`.md` session-ledger-* form (e.g. an
-#     interrupted append's `.tmp`) is reaped by no lane and must surface as
-#     drift, not go silently unclassified.
 #   - `task-write-journal-<safe-session>.json`,
 #     `task-write-reconciliation-<safe-session>-<receipt-uuid>.json`, and
 #     `task-write-journal-<safe-session>.quarantine.<artifact-id>.json` are
@@ -1340,12 +1330,6 @@ list_unclassified_session_files() {
           ${prefix}*) classified=1; break ;;
         esac
       done
-    fi
-
-    if [ "$classified" = "0" ]; then
-      case "$relpath" in
-        session-ledger-*.md) classified=1 ;;
-      esac
     fi
 
     if [ "$classified" = "0" ]; then

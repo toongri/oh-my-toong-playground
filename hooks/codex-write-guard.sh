@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# Codex PreToolUse Write-Guard (codex-ledger-parity plan, TODO 7): a thin
+# Codex PreToolUse Write-Guard: a thin
 # Codex-specific shim that parses Codex write routes (apply_patch envelope,
 # Bash-embedded apply_patch heredoc, shell redirect/touch/tee/rm, native
 # Edit/Write/MultiEdit), resolves OMT_DIR/session_id, absolutizes candidate
@@ -26,14 +26,14 @@
 # used to catch are OUT OF SCOPE here and are not going to be chased with
 # more parsing. This shim is a best-effort literal-text scan, not a shell
 # interpreter, and cannot tractably catch:
-#   - cd into the ledger dir then a relative-path write/delete
-#     (`cd "$OMT_DIR" && rm session-ledger-$SID.md` -- relative target
+#   - cd into $OMT_DIR then a relative-path write/delete
+#     (`cd "$OMT_DIR" && rm qa-state-$SID.json` -- relative target
 #     resolved against a pre-`cd` cwd this hook never sees)
-#   - variable indirection (`p=$OMT_DIR; rm "$p/session-ledger-..."`)
+#   - variable indirection (`p=$OMT_DIR; rm "$p/qa-state-..."`)
 #   - parameter expansion other than the handled $OMT_DIR/$OMT_SESSION_ID/
 #     $CODEX_THREAD_ID/$HOME/~ (e.g. `> "${OMT_DIR%/}/..."`)
 #   - process substitution
-#   - brace expansion (`rm session-ledger-{<sid>,x}.md`)
+#   - brace expansion (`rm qa-state-{a,b}.json`)
 #   - ANSI-C $'...' quoting
 #   - adjacent/combined multi-target redirects glued without whitespace
 #     (`>a>b`, `>&file`)
@@ -60,7 +60,7 @@ input=$(cat)
 # shell-active metacharacters (`> < | ; &`) that appear INSIDE a
 # single-quoted OR double-quoted span by replacing them with a space, and
 # drops the quote CHARACTERS themselves while preserving the quoted CONTENT
-# -- so prose like `printf 'see foo > <ledger> here' | omt-ledger.sh append`
+# -- so prose like `printf 'see foo > <guarded> here' | some-cli append`
 # is never misread by the redirect/segment-splitter logic below as a live
 # redirect or a live `|`/`;`/`&` chain separator. Without single-quote
 # masking, ANY `>`/`;`/etc in the raw shell text -- quoted or not -- was
@@ -79,11 +79,11 @@ input=$(cat)
 # here disagreed with that real Claude behavior and denied it -- the
 # widened masker below is what makes this shim's verdict match Claude's
 # actual behavior, not a departure from it. The Claude-side _wg_scan used by
-# the ledger-guard route now masks double-quoted spans too (hooks/pre-tool-
-# enforcer.sh) -- it was single-quote-only until the parity fix, which is why
-# `echo "note; rm <ledger>"` was DENIED there while ALLOWED here. Measured
-# after the fix: both sides allow it, and both still DENY the unquoted
-# `echo hi; rm <ledger>`.
+# the state write-guard route now masks double-quoted spans too (hooks/pre-
+# tool-enforcer.sh) -- it was single-quote-only until the parity fix, which is
+# why `echo "note; rm <guarded>"` was DENIED there while ALLOWED here.
+# Measured after the fix: both sides allow it, and both still DENY the
+# unquoted `echo hi; rm <guarded>`.
 #
 # Nested-quote and escape handling (kept minimal, NOT a shell parser): a
 # single quote appearing literally inside a double-quoted span (and vice
@@ -335,7 +335,7 @@ _cwg_mask_quoted() {
 # two-pass result exactly, without masking anything twice.
 #
 # Scope note: this is called ONLY from the dangerous-command guard's own
-# command text, NOT from the ledger/code-review-artifact candidate
+# command text, NOT from the state-guard/code-review-artifact candidate
 # extraction route (_cwg_process_shell_text further below) -- that route's
 # OWN apply_patch-heredoc handling (_cwg_extract_heredoc_body) depends on
 # reading INTO a heredoc body to find `*** Update File:` headers, which
@@ -558,7 +558,7 @@ _cwg_dc_scan_dangerous() {
 # guard, same best-effort grep class as pre-tool-enforcer.sh's
 # extract_json_field (stops at the first unescaped-looking '"', so an
 # embedded escaped quote in the value is not handled). Everything else this
-# hook does (ledger guard, code-review artifact guard, apply_patch/Edit/
+# hook does (state write-guard, code-review artifact guard, apply_patch/Edit/
 # Write routes) still requires jq and stays fail-open on this path,
 # unchanged -- this is a floor under the one deny Codex has no other
 # mechanism for, not a full jq-free reimplementation of the hook.
@@ -597,8 +597,8 @@ fi
 # extractor hooks/rules-injector/tool-paths.ts:29 (toLowerCase()) -- Codex
 # has been observed sending native write tools under their lowercase form
 # (write/edit/multiedit/multi_edit), which the allow-list below used to miss
-# entirely, falling through to `exit 0` before ever reaching the ledger-path
-# check. macOS Bash 3.2 has no ${var,,}, so tr is used instead.
+# entirely, falling through to `exit 0` before ever reaching the
+# protected-path check. macOS Bash 3.2 has no ${var,,}, so tr is used instead.
 tool_name_raw=$(printf '%s' "$input" | jq -r '.tool_name // empty' 2>/dev/null) || tool_name_raw=""
 tool_name=$(printf '%s' "$tool_name_raw" | tr '[:upper:]' '[:lower:]')
 
@@ -608,10 +608,10 @@ case "$tool_name" in
 esac
 
 # Claude<->Codex parity story 9/9, AC2/AC4: dangerous-command guard (rm -rf,
-# git push --force) runs FIRST, independent of the ledger session-id/OMT_DIR
+# git push --force) runs FIRST, independent of the session-id/OMT_DIR
 # resolution below -- it needs neither. Deliberately placed before that
 # resolution block: a resolution failure there fail-OPENs via _cwg_halt
-# (exit 0, allow) because the LEDGER guard cannot do its job without a
+# (exit 0, allow) because the STATE write-guard cannot do its job without a
 # resolved session id -- but this dangerous-command guard has no such
 # dependency, and must not silently inherit that unrelated fail-open.
 #
@@ -677,18 +677,18 @@ stdin_sid=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null) || 
 
 # -----------------------------------------------------------------------------
 # Shared session-id precedence contract (the same resolution used by the
-# ledger-recording core and the omt-ledger.sh CLI self-resolution):
+# skill-state CLIs' own self-resolution, e.g. qa-state.ts/ultragoal-state.ts):
 # session_id = OMT_SESSION_ID ?? CODEX_THREAD_ID, STRICT EMPTY-ONLY coalescing
 # (present-but-empty falls through; present-but-unsafe REFUSES/HALTs).
 # Mismatch-halt: `stdin.session_id` is a cross-check against this resolved
 # sid -- a present-but-DIVERGENT stdin.session_id, or the total absence of a
-# resolvable sid (no OMT_SESSION_ID and no CODEX_THREAD_ID, so the CLI cannot
-# record to any ledger), triggers a loud-but-fail-open diagnostic (see
-# _cwg_halt below), not a hard block -- and not actually a wrong-ledger
-# guard either: both the ledger writer (omt-ledger.sh) and this guard
-# resolve the ledger path env-first (OMT_SESSION_ID ?? CODEX_THREAD_ID) and
-# never from stdin.session_id, so a divergent stdin sid can never point at
-# the wrong (or a nonexistent) ledger in the first place.
+# resolvable sid (no OMT_SESSION_ID and no CODEX_THREAD_ID, so a CLI cannot
+# resolve its own state file), triggers a loud-but-fail-open diagnostic (see
+# _cwg_halt below), not a hard block -- and not actually a wrong-state-file
+# guard either: both a skill-state CLI and this guard resolve their target
+# path env-first (OMT_SESSION_ID ?? CODEX_THREAD_ID) and never from
+# stdin.session_id, so a divergent stdin sid can never point at the wrong
+# (or a nonexistent) state file in the first place.
 # -----------------------------------------------------------------------------
 _cwg_charset_ok() {
     printf '%s' "$1" | grep -Eq '^[A-Za-z0-9_-]{1,200}$'
@@ -742,7 +742,7 @@ sid="$cli_sid"
 omt_dir="${OMT_DIR:-}"
 if [ -z "$omt_dir" ]; then
     if [ -z "$cwd" ]; then
-        _cwg_halt "OMT_DIR unset and stdin.cwd absent -- cannot resolve the ledger directory"
+        _cwg_halt "OMT_DIR unset and stdin.cwd absent -- cannot resolve the project's OMT directory"
     fi
     omt_dir=$(source "$SCRIPT_DIR/lib/omt-dir.sh" && unset OMT_DIR && resolve_omt_dir "$cwd")
 fi
@@ -828,10 +828,10 @@ _cwg_extract_shell_targets_bulk() {
             # digit/`&` immediately before `>` to skip fd-dups, but that same
             # exclusion also skipped the FILE-target forms `2>`/`&>` (a digit
             # or `&` sits right before `>` there too), silently ALLOWING a
-            # real ledger redirect through either form. write_guard_core_run
-            # does the actual EXACT match, so an over-extracted fd-dup
-            # operand (e.g. `&1` from `2>&1`) simply never matches the ledger
-            # path -- harmless.
+            # real protected-path redirect through either form.
+            # write_guard_core_run does the actual EXACT match, so an
+            # over-extracted fd-dup operand (e.g. `&1` from `2>&1`) simply
+            # never matches a protected path -- harmless.
             rem = line
             while (match(rem, />{1,2}[[:space:]]*[^[:space:]]+/)) {
                 tgt = substr(rem, RSTART, RLENGTH)
@@ -888,17 +888,17 @@ _cwg_extract_shell_targets_bulk() {
 # hooks/pre-tool-enforcer.sh:52-57) is correct only when the whole token is
 # ONE quoted span -- it under-strips a token built from several ADJACENT
 # quoted spans with no separating whitespace, e.g.
-# "$OMT_DIR"/"session-ledger-$OMT_SESSION_ID.md" (a single shell word, no
+# "$OMT_DIR"/"qa-state-$OMT_SESSION_ID.json" (a single shell word, no
 # space between the closing and opening quotes): stripping only the very
 # first and last quote character left the INNER quote characters (around the
 # literal `/`) embedded in the candidate, so after env-var substitution in
 # _cwg_absolutize the candidate carried stray `"` characters and never
-# full-path EXACT matched the real ledger path -- a silent bypass. Removing
-# every quote character unconditionally fixes this: a legitimate non-ledger
-# target loses its (already load-bearing-only-for-shell-parsing) quote
-# characters the same way and still resolves to its real path, so this is
-# over-removal that is harmless for write_guard_core_run's EXACT compare (a
-# ledger path itself never contains a quote character).
+# full-path EXACT matched the real protected path -- a silent bypass.
+# Removing every quote character unconditionally fixes this: a legitimate
+# non-guarded target loses its (already load-bearing-only-for-shell-parsing)
+# quote characters the same way and still resolves to its real path, so this
+# is over-removal that is harmless for write_guard_core_run's EXACT compare
+# (a guarded path itself never contains a quote character).
 #
 # ${s//\"/} / ${s//\'/} are pure bash parameter-expansion substitutions
 # (global, not first-match), Bash 3.2 compatible -- no eval/sed needed.
@@ -910,7 +910,7 @@ _cwg_strip_quotes() {
 }
 
 # _cwg_absolutize <path>
-# Strips surrounding quotes, expands the three known ledger-path env-vars
+# Strips surrounding quotes, expands the three known state-path env-vars
 # via pure bash literal substitution, then joins a relative path against the
 # resolved cwd; leaves an absolute path unchanged. write_guard_core_run
 # requires already-absolutized candidates (full-path EXACT match).
@@ -926,18 +926,18 @@ _cwg_strip_quotes() {
 # twin): $OMT_DIR -> $omt_dir; BOTH $OMT_SESSION_ID and $CODEX_THREAD_ID ->
 # $sid, because Codex's resolved session id is OMT_SESSION_ID ?? CODEX_
 # THREAD_ID (the cli_sid resolution above) -- either env-var spelling composes
-# the same real ledger path; and $HOME/${HOME}/a leading `~` -> env $HOME,
+# the same real protected path; and $HOME/${HOME}/a leading `~` -> env $HOME,
 # because the resolved omt_dir is ALWAYS $HOME/.omt/<proj> (lib/omt-dir.sh),
-# so a home-relative spelling of the ledger (`rm "$HOME/.omt/<proj>/
-# session-ledger-<sid>.md"`, `rm ~/.omt/<proj>/session-ledger-<sid>.md`)
-# composes the exact same real path and must resolve the same way -- leaving
-# $HOME/~ unexpanded let both forms bypass the guard (main's old substring
-# scan caught these; this was a regression). Expanding $HOME is a strict
+# so a home-relative spelling of a protected path (`rm "$HOME/.omt/<proj>/
+# qa-state-<sid>.json"`, `rm ~/.omt/<proj>/qa-state-<sid>.json`) composes the
+# exact same real path and must resolve the same way -- leaving $HOME/~
+# unexpanded let both forms bypass the guard (main's old substring scan
+# caught these; this was a regression). Expanding $HOME is a strict
 # widening of what can match, never a narrowing: an unset/empty $HOME makes
-# the substitution a no-op, which never accidentally equals the ledger path,
-# so the safe direction (no false block) holds either way. The braced form
-# (${VAR}) is substituted before the bare $VAR form to avoid a partial-match
-# artifact.
+# the substitution a no-op, which never accidentally equals a protected
+# path, so the safe direction (no false block) holds either way. The braced
+# form (${VAR}) is substituted before the bare $VAR form to avoid a
+# partial-match artifact.
 #
 # KNOWN LIMITATION: a single-quoted env-var reference (`rm '$OMT_DIR/...'`)
 # is an inert shell literal that never expands at real execution time
@@ -998,10 +998,10 @@ _cwg_process_shell_text() {
     # Quote-aware masking BEFORE chain-splitting and redirect/rm
     # extraction: without this, a `>` (or `|`/`;`/`&`) inside a single-
     # quoted string was read the same as a live shell metacharacter, so
-    # prose like `printf 'see foo > <ledger>' | omt-ledger.sh append`
+    # prose like `printf 'see foo > <guarded>' | some-cli append`
     # falsely matched the redirect classifier below and denied a
-    # legitimate ledger-append command. See _cwg_mask_quoted for the full
-    # rationale and its parity with the Claude twin's _wg_scan.
+    # legitimate command. See _cwg_mask_quoted for the full rationale and
+    # its parity with the Claude twin's _wg_scan.
     local masked
     masked=$(_cwg_mask_quoted "$shell_cmd")
 
@@ -1039,7 +1039,7 @@ case "$tool_name" in
         # carrying the target under .path/.filePath/.target/.targetPath/
         # .target_path bypass the guard entirely; reading more keys carries
         # no over-block risk since write_guard_core_run only denies on a
-        # full-path EXACT match against the resolved current-session ledger.
+        # full-path EXACT match against a resolved current-session protected path.
         for _cwg_key in file_path path filePath target targetPath target_path; do
             fp=$(printf '%s' "$input" | jq -r --arg k "$_cwg_key" '.tool_input[$k] // empty' 2>/dev/null) || fp=""
             _cwg_add_candidate "$fp"
@@ -1060,7 +1060,7 @@ case "$tool_name" in
         # Reading only .command let an input/patch/cmd-only payload bypass
         # the guard entirely; reading more keys carries no over-block risk
         # since write_guard_core_run only denies on a full-path EXACT match
-        # against the resolved current-session ledger.
+        # against a resolved current-session protected path.
         for _cwg_key in command input patch cmd; do
             patch_cmd=$(printf '%s' "$input" | jq -r --arg k "$_cwg_key" '.tool_input[$k] // empty' 2>/dev/null) || patch_cmd=""
             [ -n "$patch_cmd" ] || continue
@@ -1081,8 +1081,8 @@ case "$tool_name" in
         # Resolve relative write targets against the command's OWN working
         # directory -- tool_input.workdir ?? tool_input.cwd -- mirroring the
         # sibling extractor tool-paths.ts:44-46 (workdir ?? cwd) for command
-        # tools. Without this, a payload that sets workdir=<ledger dir> plus a
-        # relative target wrote the real ledger while _cwg_absolutize resolved
+        # tools. Without this, a payload that sets workdir=<protected dir> plus a
+        # relative target wrote the real protected path while _cwg_absolutize resolved
         # it against the hook-level cwd and the guard allowed it. Scope: this
         # shell route only; edit/write/apply_patch keep plain cwd, as
         # tool-paths.ts does. A relative workdir is itself resolved against the
@@ -1112,7 +1112,7 @@ esac
 # write_guard_core_run / codereview_guard_core_run dispatch): an unconditional
 # deny (write_guard_core_run) and a SEPARATE identity-conditional allow
 # (codereview_guard_core_run) -- different rule kinds, so neither is nested
-# inside the other. The ledger guard's output is now captured instead of
+# inside the other. The state write-guard's output is now captured instead of
 # streamed straight to stdout so a second judgment can run when it is empty;
 # printf '%s\n' on a non-empty capture reproduces the exact bytes
 # write_guard_core_run would have written directly (the trailing newline
@@ -1132,9 +1132,9 @@ esac
 # extraction in this file), and codereview_guard_core_run denies on "" the
 # same as any other non-"code-reviewer" value -- extraction failure must
 # never fall through to allow.
-_cwg_ledger_out=$(printf '%s' "$candidates_text" | write_guard_core_run "$omt_dir" "$sid")
-if [ -n "$_cwg_ledger_out" ]; then
-    printf '%s\n' "$_cwg_ledger_out"
+_cwg_state_guard_out=$(printf '%s' "$candidates_text" | write_guard_core_run "$omt_dir" "$sid")
+if [ -n "$_cwg_state_guard_out" ]; then
+    printf '%s\n' "$_cwg_state_guard_out"
     exit 0
 fi
 

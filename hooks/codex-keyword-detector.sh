@@ -13,8 +13,7 @@
 # uses; zero duplicated judgment logic), and emits Codex's UserPromptSubmit
 # envelope: {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
 # "additionalContext": ...}} -- no `continue` key (Codex-only contract,
-# mirrors hooks/rules-injector/hook-output.ts's formatAdditionalContextOutput
-# and hooks/codex-ledger.sh's continue-strip of the same shared-core output).
+# mirrors hooks/rules-injector/hook-output.ts's formatAdditionalContextOutput).
 #
 # No jq dependency for message emission: keyword-detector-core.sh's
 # kd_core_message_* functions print an ALREADY JSON-escaped value, so this

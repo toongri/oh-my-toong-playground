@@ -1006,18 +1006,18 @@ describe("syncHooksDirect", () => {
 	});
 
 	it("`# omt-hook-dep:` 디렉티브로 참조된 companion 파일을 함께 복사한다", async () => {
-		// session-start.sh references omt-ledger.sh only inside an injected string
+		// session-start.sh references companion.sh only inside an injected string
 		// (not a `source` statement), so the plain scanner would miss it without
 		// the explicit companion-dependency directive.
 		const hooksDir = path.join(tmpDir, "hooks");
 		await writeFile(
 			path.join(hooksDir, "session-start.sh"),
-			'#!/bin/bash\n# omt-hook-dep: omt-ledger.sh\necho "run .claude/hooks/omt-ledger.sh append Foo"\n',
+			'#!/bin/bash\n# omt-hook-dep: companion.sh\necho "run .claude/hooks/companion.sh append Foo"\n',
 			0o644,
 		);
 		await writeFile(
-			path.join(hooksDir, "omt-ledger.sh"),
-			"#!/bin/bash\necho ledger\n",
+			path.join(hooksDir, "companion.sh"),
+			"#!/bin/bash\necho companion\n",
 			0o644,
 		);
 
@@ -1028,7 +1028,7 @@ describe("syncHooksDirect", () => {
 		);
 
 		expect(await exists(path.join(targetPath, ".claude", "hooks", "session-start.sh"))).toBe(true);
-		expect(await exists(path.join(targetPath, ".claude", "hooks", "omt-ledger.sh"))).toBe(true);
+		expect(await exists(path.join(targetPath, ".claude", "hooks", "companion.sh"))).toBe(true);
 	});
 });
 
