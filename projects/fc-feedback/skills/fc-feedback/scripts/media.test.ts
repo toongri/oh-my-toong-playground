@@ -493,6 +493,8 @@ describe("ffmpeg argv", () => {
 			"video.webm",
 			"-vf",
 			"fps=1/30,scale=320:-2,tile=4x4",
+			"-start_number",
+			"0",
 			"sheet.jpg",
 		]);
 	});
@@ -505,8 +507,17 @@ describe("ffmpeg argv", () => {
 			"video.webm",
 			"-vf",
 			"fps=1/30,crop=iw*0.3:ih*0.14:0:0,scale=iw*2:-2,tile=4x6",
+			"-start_number",
+			"0",
 			"sheet.jpg",
 		]);
+	});
+
+	test("ffmpegSheetArgs는 image2 muxer 기본 start_number=1을 0으로 덮어써 sheets.json의 000 기준 파일명과 맞춘다", () => {
+		const args = ffmpegSheetArgs("video.webm", "grid", "sheet-%03d.jpg");
+		const outIndex = args.indexOf("sheet-%03d.jpg");
+		expect(args[outIndex - 2]).toBe("-start_number");
+		expect(args[outIndex - 1]).toBe("0");
 	});
 
 	test("silencedetectArgs는 MEDIA_CONSTANTS 임계값을 사용한다", () => {

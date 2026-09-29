@@ -740,7 +740,7 @@ export function ffmpegSheetArgs(video: string, kind: "grid" | "hud", out: string
 		kind === "grid"
 			? `fps=${MEDIA_CONSTANTS.sheet.grid.fps},scale=${MEDIA_CONSTANTS.sheet.grid.scale},tile=${MEDIA_CONSTANTS.sheet.grid.tile}`
 			: `fps=${MEDIA_CONSTANTS.sheet.hud.fps},crop=iw*${MEDIA_CONSTANTS.sheet.hud.cropWidthFraction}:ih*${MEDIA_CONSTANTS.sheet.hud.cropHeightFraction}:0:0,scale=${MEDIA_CONSTANTS.sheet.hud.scale},tile=${MEDIA_CONSTANTS.sheet.hud.tile}`;
-	return ["ffmpeg", "-y", "-i", video, "-vf", filter, out];
+	return ["ffmpeg", "-y", "-i", video, "-vf", filter, "-start_number", "0", out];
 }
 
 export function silencedetectArgs(input: string): string[] {
