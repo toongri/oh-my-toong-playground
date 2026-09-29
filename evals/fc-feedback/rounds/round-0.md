@@ -12,7 +12,9 @@ RED 기준선이다. 샘플 영상은 `NUzEChn9EyI`(gold: `evals/fc-feedback/gol
 
 첫 실행은 격리(isolation)가 갖춰지기 전에 돌린 진단용 실행이라 폐기했다. 원본은
 `evals/fc-feedback/baselines/round-0-contaminated/`에 그대로 보존해 뒀다(luna/sol
-각 rep1·rep2, `score.json` 없이 산출물만).
+각 rep1·rep2, `score.json` 없이 산출물만). 단, 커밋을 위해 실행 로그 안의 로컬
+경로(홈 디렉터리·임시 폴더·세션 스크래치 경로)는 `<HOME>`/`<TMPDIR>`/`<TMP>`/
+`<SCRATCH>` 자리표시자로 치환했다(채점 결과에는 영향 없음).
 
 관측된 문제:
 

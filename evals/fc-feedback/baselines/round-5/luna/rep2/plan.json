@@ -1,0 +1,397 @@
+{
+  "session_title": "C.E.F. FC Barcelona 경기 피드백 (2024.01.04)",
+  "matches": [
+    {
+      "title": "1경기 — BRO–FCB (1–4 요약 화면)",
+      "topics": [
+        {
+          "title": "넓은 공간으로 전개",
+          "summary": "브라이드에서 TIMEJ에게 오는 공이 많다는 장면을 짚으며, 좁은 공간의 선수보다 넓은 공간의 선수를 선택하면 공을 옮기기 쉽고 공 없는 선수도 올라갈 시간을 얻는다고 설명합니다.",
+          "units": [
+            {
+              "start_line": 4,
+              "end_line": 19,
+              "title": "좁은 공간보다 넓은 공간의 선수를 선택",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c004"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "LT 조작과 볼 보호",
+          "summary": "LT를 누르고 움직이는 조작으로 동작한 선수를 바라보며 계속 움직이는 방법을 설명합니다.",
+          "units": [
+            {
+              "start_line": 22,
+              "end_line": 34,
+              "title": "LT를 눌러 동작한 선수를 보며 움직이기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "조작/키사용",
+                "탈압박"
+              ],
+              "member_ids": [
+                "taxi"
+              ],
+              "key_frame_candidate_ids": [
+                "c010"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "역습에서 역할과 선택지 만들기",
+          "summary": "사인드가 낮게 있는 장면에서는 루미가 윙어 역할을 맡아야 하고, 역습에서는 지원해 패스 선택지를 두 개 열어야 한다고 짚습니다.",
+          "units": [
+            {
+              "start_line": 36,
+              "end_line": 40,
+              "title": "사인드가 낮을 때 루미가 윙어 역할 맡기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝",
+                "전환/역습"
+              ],
+              "member_ids": [
+                "jomin",
+                "find",
+                "rumi"
+              ],
+              "key_frame_candidate_ids": [
+                "c013"
+              ]
+            },
+            {
+              "start_line": 41,
+              "end_line": 51,
+              "title": "역습에서 두 패스 선택지를 열 수 있게 지원",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "find",
+                "maekgu",
+                "gipeu",
+                "yumi"
+              ],
+              "key_frame_candidate_ids": [
+                "c014"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "압박 전에 다시 받기",
+          "summary": "불필요한 동작을 줄이고, 압박이 들어오기 전에 뒤로 내준 뒤 LT를 눌러 다시 받을 수 있게 하라는 지시입니다.",
+          "units": [
+            {
+              "start_line": 55,
+              "end_line": 64,
+              "title": "압박 전에 뒤로 내주고 다시 받기",
+              "position_tags": [],
+              "topic_tags": [
+                "탈압박",
+                "조작/키사용"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c017"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "전진 패스와 수비 유인",
+          "summary": "수비 숫자가 적은 장면에서 제라드에게 무리하게 앞으로 넣어도 큰 이득이 없으므로, 샘백에게 보내 수비를 끌고 수비 숫자를 지우는 방법을 제안합니다.",
+          "units": [
+            {
+              "start_line": 65,
+              "end_line": 77,
+              "title": "앞으로 넣기보다 샘백에게 보내 수비를 끌기",
+              "position_tags": [
+                "CM",
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "탈압박"
+              ],
+              "member_ids": [
+                "gerrard",
+                "saembaek"
+              ],
+              "key_frame_candidate_ids": [
+                "c018"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "루미의 움직임",
+          "summary": "루미가 올라올 것으로 본 장면에서 멈춘 점을 짚습니다.",
+          "units": [
+            {
+              "start_line": 78,
+              "end_line": 78,
+              "title": "루미가 움직일 타이밍에 멈춘 장면",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "rumi"
+              ],
+              "key_frame_candidate_ids": [
+                "c053"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "좁은 공간과 전진 선택",
+          "summary": "오늘 유독 공을 던지는 빈도가 높았다고 평가하며, 좁은 공간에 바로 연결하기보다 직접 몰고 가 상대 한 명을 끌어 팀원이 올라올 시간을 벌라고 합니다. 우리 진영에서 빼앗기면 곧바로 역습을 맞을 수 있다는 위험도 짚습니다.",
+          "units": [
+            {
+              "start_line": 79,
+              "end_line": 97,
+              "title": "좁은 공간으로 받기보다 직접 몰고 나가기",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업",
+                "탈압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c022"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "폭을 넓힌 전개",
+          "summary": "상하로 넓게 벌리는 플레이가 필요하다고 평가합니다.",
+          "units": [
+            {
+              "start_line": 98,
+              "end_line": 99,
+              "title": "상하로 넓게 벌려 전개하기",
+              "position_tags": [],
+              "topic_tags": [
+                "포지셔닝",
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c024"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "넓은 공간의 침투 연결",
+          "summary": "막힌 상황에서 제라드에게 연결하면 존재가 넓은 공간을 활용해 몰고 들어가거나 크로스·컷백을 선택할 수 있다고 설명합니다.",
+          "units": [
+            {
+              "start_line": 104,
+              "end_line": 120,
+              "title": "제라드에게 연결해 존재의 넓은 공간 활용",
+              "position_tags": [
+                "CM",
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드",
+                "크로스"
+              ],
+              "member_ids": [
+                "gerrard",
+                "jonjae"
+              ],
+              "key_frame_candidate_ids": [
+                "c031"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "역습 시 위치 교대",
+          "summary": "원전이 전진할 때 사인드는 중앙으로 들어가고, TIMEJ는 뒤에서 중간 공간을 메우는 위치 관계를 설명합니다.",
+          "units": [
+            {
+              "start_line": 121,
+              "end_line": 134,
+              "title": "원전의 전진 동안 사인드가 중앙으로 들어가기",
+              "position_tags": [
+                "FB",
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "find",
+                "wonjeon"
+              ],
+              "key_frame_candidate_ids": [
+                "c033"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "2경기 — BRO–FCB (0–2 플레이 화면)",
+      "topics": [
+        {
+          "title": "대각 전개",
+          "summary": "넓은 공간에서 앞으로 뛰는 선수를 볼 여유를 만들고, 사이드에서 대각으로 빼주는 점이 중요하다고 설명합니다.",
+          "units": [
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "사이드에서 대각으로 빼주기",
+              "position_tags": [
+                "CAM"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "파이널서드"
+              ],
+              "member_ids": [
+                "spress"
+              ],
+              "key_frame_candidate_ids": [
+                "c039"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "수비 균형과 태클",
+          "summary": "원전이 한 번 균형을 무너뜨린 뒤 공을 빼앗으려고 태클을 눌렀다가 페널티를 내준 장면을 짚습니다.",
+          "units": [
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "균형이 무너진 뒤 태클을 눌러 페널티",
+              "position_tags": [
+                "FB"
+              ],
+              "topic_tags": [
+                "압박",
+                "수비라인"
+              ],
+              "member_ids": [
+                "wonjeon"
+              ],
+              "key_frame_candidate_ids": [
+                "c042"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "밀집 수비 대응",
+          "summary": "상대 수비가 촘촘하면 공격이 어렵기 때문에 뒤로 빼야 한다고 지시합니다.",
+          "units": [
+            {
+              "start_line": 158,
+              "end_line": 162,
+              "title": "상대 수비가 촘촘하면 뒤로 빼기",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c043"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "패스 높이 선택",
+          "summary": "하프에 넣을 때 땅으로 줄 수 있으면 땅으로 주고, 중간에 막힐 것 같을 때 띄우는 선택과 공간이 열렸을 때 더 높여 주는 선택을 비교합니다.",
+          "units": [
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "상황에 따라 땅볼과 띄운 패스 선택",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c045"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "돌파가 막혔을 때 재전개",
+          "summary": "맥구가 막힌 공간에서 같은 돌파를 반복하기보다 뒤로 안전하게 살리고, 뒤를 받치는 선수를 보거나 다른 연결 방식을 택해 플레이를 다양하게 하도록 제안합니다.",
+          "units": [
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "맥구는 막히면 같은 돌파 대신 안전하게 연결",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "탈압박",
+                "빌드업"
+              ],
+              "member_ids": [
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": [
+                "c046"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "경기 요점",
+          "summary": "대각을 봐야 할 때 놓치는 점과 상대 수비가 밀집했을 때 뒤로 빼는 점을 팀 전체가 다시 짚습니다.",
+          "units": [
+            {
+              "start_line": 184,
+              "end_line": 187,
+              "title": "대각선을 봐야 할 때와 밀집 수비 대응",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

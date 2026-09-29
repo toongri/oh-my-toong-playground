@@ -1,0 +1,254 @@
+{
+  "session_title": "EAFC24 C.E.F. FC Barcelona 팀 연습 1월 4일 Part 3 피드백",
+  "matches": [
+    {
+      "title": "FC Barcelona 팀 연습 경기",
+      "topics": [
+        {
+          "title": "팀 연습 피드백",
+          "summary": "공간을 쓰는 빌드업, 역습의 패스 선택지, 수비 균형과 밀집 수비 앞 후퇴를 점검한다. 마지막 총평은 대각 패스 확인과 밀집 수비 앞 후퇴다.",
+          "units": [
+            {
+              "start_line": 9,
+              "end_line": 19,
+              "title": "좁은 공간 대신 넓은 공간으로 연결",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c004"
+              ]
+            },
+            {
+              "start_line": 23,
+              "end_line": 29,
+              "title": "공을 잡을 때 LT를 이용한 방향 유지",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "조작/키사용"
+              ],
+              "member_ids": [
+                "taxi"
+              ],
+              "key_frame_candidate_ids": [
+                "c009"
+              ]
+            },
+            {
+              "start_line": 36,
+              "end_line": 50,
+              "title": "낮은 위치의 사인드를 대신해 측면 패스 길 열기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "jomin",
+                "find",
+                "rumi",
+                "gipeu",
+                "yumi",
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c013",
+                "c014"
+              ]
+            },
+            {
+              "start_line": 55,
+              "end_line": 77,
+              "title": "압박이 오기 전 뒤로 내주고 전진 경로 다시 찾기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "탈압박"
+              ],
+              "member_ids": [
+                "gerrard",
+                "saembaek"
+              ],
+              "key_frame_candidate_ids": [
+                "c017",
+                "c018"
+              ]
+            },
+            {
+              "start_line": 78,
+              "end_line": 78,
+              "title": "루미가 뛰어 나오지 않고 멈춘 장면",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "rumi"
+              ],
+              "key_frame_candidate_ids": [
+                "c053"
+              ]
+            },
+            {
+              "start_line": 79,
+              "end_line": 97,
+              "title": "우리 진영에서 더 몰고 가며 패스 시간 벌기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c021",
+                "c022",
+                "c023"
+              ]
+            },
+            {
+              "start_line": 104,
+              "end_line": 120,
+              "title": "막힌 중앙에서 넓은 공간의 선택지 보기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "파이널서드"
+              ],
+              "member_ids": [
+                "gerrard",
+                "jonjae",
+                "timej",
+                "giseun"
+              ],
+              "key_frame_candidate_ids": [
+                "c030"
+              ]
+            },
+            {
+              "start_line": 121,
+              "end_line": 134,
+              "title": "원전이 올라갈 때 사인드는 중앙으로",
+              "position_tags": [
+                "FW",
+                "FB"
+              ],
+              "topic_tags": [
+                "포지셔닝",
+                "파이널서드"
+              ],
+              "member_ids": [
+                "find",
+                "wonjeon",
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c032",
+                "c033"
+              ]
+            },
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "측면에서 대각으로 빼 중원의 시야 확보",
+              "position_tags": [
+                "CAM",
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "파이널서드"
+              ],
+              "member_ids": [
+                "spress"
+              ],
+              "key_frame_candidate_ids": [
+                "c039"
+              ]
+            },
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "원전의 경합 시도 뒤 페널티",
+              "position_tags": [
+                "FB"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [
+                "wonjeon"
+              ],
+              "key_frame_candidate_ids": [
+                "c042"
+              ]
+            },
+            {
+              "start_line": 158,
+              "end_line": 160,
+              "title": "촘촘한 수비 앞에서는 뒤로 빼기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드",
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c043"
+              ]
+            },
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "열린 패스 길은 땅볼로 연결",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c045"
+              ]
+            },
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "막힌 단독 돌파 대신 뒤로 살려 전개 바꾸기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "파이널서드"
+              ],
+              "member_ids": [
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

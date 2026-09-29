@@ -1,0 +1,33 @@
+{
+  "refs": [
+    {
+      "url": "https://www.ea.com/games/ea-sports-fc/amp/news/fc-24-gameplay-deepdive",
+      "title": "EA SPORTS FC™ 24 | Pitch Notes - Gameplay Deep Dive",
+      "source_name": "EA SPORTS",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA의 FC24 게임플레이 프로듀서가 Precision Pass, Effort Dribble, Controlled Sprint 등 게임플레이 기능을 소개하는 공식 자료입니다.",
+      "key_points_ko": [
+        "FC24에서 정밀 패스와 드리블·볼 컨트롤 관련 플레이 기능을 소개합니다.",
+        "영상의 장면 설명을 검증하는 자료가 아니라 FC24 기능을 이해하기 위한 배경 자료입니다."
+      ],
+      "translations": [],
+      "unit_ids": ["u002", "u006", "u009"]
+    },
+    {
+      "url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "title": "EA SPORTS FC™ 24 | Pitch Notes - PlayStyles Deep Dive",
+      "source_name": "EA SPORTS",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA 게임플레이 팀이 FC24 PlayStyles가 실드·볼 컨트롤·지면 패스·스루 패스·로브 패스 등에 주는 효과를 설명합니다.",
+      "key_points_ko": [
+        "Press Proven은 실드 상황의 힘과 볼 보호 효과를 높이는 PlayStyle로 소개됩니다.",
+        "Tiki Taka는 짧은 지면 패스, Incisive Pass는 스루 패스, Long Ball Pass는 로브 패스와 연결해 설명합니다.",
+        "이 자료는 일반 게임 메커니즘 설명이며 영상 속 특정 선수의 실제 행동을 입증하지 않습니다."
+      ],
+      "translations": [],
+      "unit_ids": ["u004", "u006", "u009", "u012", "u015"]
+    }
+  ]
+}

@@ -1,0 +1,604 @@
+{
+  "version": 1,
+  "session_id": "20240104-NUzEChn9EyI",
+  "title": "EAFC24 C.E.F. FC Barcelona 팀 연습 (24.1.4) Part 3 피드백",
+  "date": "2024-01-04",
+  "generated_at": "2026-09-28T21:54:37.190437+00:00",
+  "pages_base_url": "https://fc-feedback-eval.invalid/",
+  "videos": [
+    {
+      "id": "NUzEChn9EyI",
+      "part": 3,
+      "embeddable": true
+    }
+  ],
+  "members": [
+    {
+      "id": "timej",
+      "name": "TIMEJ",
+      "gamertag": "TIMEJ",
+      "positions": []
+    },
+    {
+      "id": "gerrard",
+      "name": "Gerrard_CEF",
+      "gamertag": "Gerrard_CEF",
+      "positions": []
+    },
+    {
+      "id": "vandeven",
+      "name": "CEF_VandeVen",
+      "gamertag": "CEF_VandeVen",
+      "positions": []
+    },
+    {
+      "id": "bride",
+      "name": "브라이드",
+      "gamertag": "CEF_Bride",
+      "positions": []
+    },
+    {
+      "id": "taxi",
+      "name": "택시",
+      "gamertag": "CEF_Taxi",
+      "positions": []
+    },
+    {
+      "id": "jomin",
+      "name": "조민",
+      "gamertag": "CEF_Jomin",
+      "positions": []
+    },
+    {
+      "id": "find",
+      "name": "사인드",
+      "gamertag": "CEF_Find",
+      "positions": []
+    },
+    {
+      "id": "rumi",
+      "name": "루미",
+      "gamertag": "CEF_Rumi",
+      "positions": []
+    },
+    {
+      "id": "gipeu",
+      "name": "기프",
+      "gamertag": "CEF_Gipeu",
+      "positions": []
+    },
+    {
+      "id": "yumi",
+      "name": "유미",
+      "gamertag": "CEF_Yumi",
+      "positions": []
+    },
+    {
+      "id": "saembaek",
+      "name": "샘백",
+      "gamertag": "CEF_Saembaek",
+      "positions": []
+    },
+    {
+      "id": "giseun",
+      "name": "기슨",
+      "gamertag": "CEF_Giseun",
+      "positions": []
+    },
+    {
+      "id": "jonjae",
+      "name": "존재",
+      "gamertag": "CEF_Jonjae",
+      "positions": []
+    },
+    {
+      "id": "wonjeon",
+      "name": "원전",
+      "gamertag": "CEF_Wonjeon",
+      "positions": []
+    },
+    {
+      "id": "spress",
+      "name": "스프레스",
+      "gamertag": "CEF_Spress",
+      "positions": []
+    },
+    {
+      "id": "maekgu",
+      "name": "맥구",
+      "gamertag": "CEF_Maekgu",
+      "positions": []
+    }
+  ],
+  "matches": [
+    {
+      "id": "m1",
+      "title": "영상 피드백",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "빌드업",
+          "summary": "빌드업 관련 피드백",
+          "unit_ids": [
+            "u001",
+            "u005",
+            "u006",
+            "u009",
+            "u011"
+          ]
+        },
+        {
+          "id": "m1-t2",
+          "title": "조작/키사용",
+          "summary": "조작/키사용 관련 피드백",
+          "unit_ids": [
+            "u002"
+          ]
+        },
+        {
+          "id": "m1-t3",
+          "title": "전환/역습",
+          "summary": "전환/역습 관련 피드백",
+          "unit_ids": [
+            "u003"
+          ]
+        },
+        {
+          "id": "m1-t4",
+          "title": "탈압박",
+          "summary": "탈압박 관련 피드백",
+          "unit_ids": [
+            "u004"
+          ]
+        },
+        {
+          "id": "m1-t5",
+          "title": "파이널서드",
+          "summary": "파이널서드 관련 피드백",
+          "unit_ids": [
+            "u007",
+            "u010",
+            "u012"
+          ]
+        },
+        {
+          "id": "m1-t6",
+          "title": "포지셔닝",
+          "summary": "포지셔닝 관련 피드백",
+          "unit_ids": [
+            "u008"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "uid": "20240104-NUzEChn9EyI#u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 79.1,
+      "end": 102.8,
+      "title": "넓은 공간을 먼저 찾아 전개",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "note": {
+        "problem": "좁은 공간의 동료에게 바로 연결하면 운반 공간이 부족하다.",
+        "who": "후방에서 패스를 선택하는 선수",
+        "instead": "공간이 넓은 쪽으로 먼저 보내고, 볼이 운반되는 동안 공 없는 선수는 전진할 시간을 만든다."
+      },
+      "images": {
+        "start": {
+          "src": "img/u001-representative.jpg",
+          "width": 854,
+          "height": 460
+        },
+        "key": []
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=79"
+    },
+    {
+      "id": "u002",
+      "uid": "20240104-NUzEChn9EyI#u002",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 235.1,
+      "end": 255.0,
+      "title": "LT로 패스 방향을 보며 움직이기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "조작/키사용"
+      ],
+      "member_ids": [
+        "taxi"
+      ],
+      "related_member_ids": [],
+      "note": {
+        "problem": "볼을 받기 전 몸을 돌리면 다음 동작이 느려진다.",
+        "who": "택시로 들리는 선수에게 한 조작 조언",
+        "instead": "LT를 누른 채 움직여 패스한 선수를 향한 자세를 유지하고, 첫 터치를 준비한다."
+      },
+      "images": {
+        "start": {
+          "src": "img/u002-representative.jpg",
+          "width": 854,
+          "height": 460
+        },
+        "key": []
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=235"
+    },
+    {
+      "id": "u003",
+      "uid": "20240104-NUzEChn9EyI#u003",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 357.4,
+      "end": 400.0,
+      "title": "역습에서 비어 있는 측면 채우기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "전환/역습"
+      ],
+      "member_ids": [
+        "rumi"
+      ],
+      "related_member_ids": [
+        "find",
+        "gipeu",
+        "yumi"
+      ],
+      "note": {
+        "problem": "측면 선수가 낮게 내려온 순간 다른 공격수가 폭을 채우지 않으면 패스 선택지가 줄어든다.",
+        "who": "루미",
+        "instead": "낮아진 동료 대신 윙어 위치로 뛰어 패스하는 선수에게 중앙과 측면의 두 선택지를 열어준다."
+      },
+      "images": {
+        "start": {
+          "src": "img/u003-representative.jpg",
+          "width": 854,
+          "height": 460
+        },
+        "key": []
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=357"
+    },
+    {
+      "id": "u004",
+      "uid": "20240104-NUzEChn9EyI#u004",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "NUzEChn9EyI",
+      "start": 463.1,
+      "end": 489.7,
+      "title": "압박을 예상하고 뒤로 내준 뒤 다시 받기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "탈압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "note": {
+        "problem": "볼이 오는 순간 이미 압박이 들어올 수 있는데 불필요한 동작을 더했다.",
+        "who": "패스를 받는 선수",
+        "instead": "한 번 뒤로 간결하게 내주고 LT로 자세를 잡아 다시 받을 각을 만든다."
+      },
+      "images": {
+        "start": {
+          "src": "img/u004-representative.jpg",
+          "width": 854,
+          "height": 460
+        },
+        "key": []
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=463"
+    },
+    {
+      "id": "u005",
+      "uid": "20240104-NUzEChn9EyI#u005",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 491.8,
+      "end": 526.0,
+      "title": "무리한 전진보다 수비를 끌어내기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "saembaek"
+      ],
+      "note": {
+        "problem": "앞쪽에 수비가 많은 상태에서 곧장 전진하면 공을 받은 선수의 다음 선택이 어렵다.",
+        "who": "중앙에서 전진 패스를 고르는 선수",
+        "instead": "옆 동료에게 먼저 연결해 수비를 움직인 뒤 전진 공간을 만든다."
+      },
+      "images": {
+        "start": {
+          "src": "img/u005-representative.jpg",
+          "width": 854,
+          "height": 460
+        },
+        "key": []
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=491"
+    },
+    {
+      "id": "u006",
+      "uid": "20240104-NUzEChn9EyI#u006",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 587.7,
+      "end": 658.8,
+      "title": "우리 진영에서는 운반으로 시간을 벌기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej"
+      ],
+      "note": {
+        "problem": "우리 진영에서 좁은 공간의 공격수에게 너무 일찍 보내면 공격 선택지가 적고 탈취 시 역습 위험이 생긴다.",
+        "who": "후방의 볼 운반자",
+        "instead": "조금 더 운반해 수비 한 명을 끌고, 동료가 높은 위치로 올라갈 시간을 준 뒤 패스한다."
+      },
+      "images": {
+        "start": {
+          "src": "img/u006-representative.jpg",
+          "width": 854,
+          "height": 460
+        },
+        "key": []
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=587"
+    },
+    {
+      "id": "u007",
+      "uid": "20240104-NUzEChn9EyI#u007",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "NUzEChn9EyI",
+      "start": 810.5,
+      "end": 839.0,
+      "title": "중앙이 막히면 넓은 쪽으로 전환",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard"
+      ],
+      "note": {
+        "problem": "공격 중앙이 완전히 막혀 직접 진입할 공간이 없다.",
+        "who": "공격 전개를 이어가는 선수",
+        "instead": "뒤쪽 동료를 거쳐 넓은 공간으로 전환하고, 그곳에서 운반·크로스·컷백을 고른다."
+      },
+      "images": {
+        "start": {
+          "src": "img/u007-representative.jpg",
+          "width": 854,
+          "height": 460
+        },
+        "key": []
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=810"
+    },
+    {
+      "id": "u008",
+      "uid": "20240104-NUzEChn9EyI#u008",
+      "match_id": "m1",
+      "topic_id": "m1-t6",
+      "video": "NUzEChn9EyI",
+      "start": 859.0,
+      "end": 901.0,
+      "title": "측면 돌파 때 중앙 침투로 역할 나누기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "find"
+      ],
+      "related_member_ids": [],
+      "note": {
+        "problem": "동료가 측면으로 볼을 운반하는 동안 같은 측면에 머무르면 중앙의 받을 자리가 비어 있다.",
+        "who": "사인드로 들리는 공격수",
+        "instead": "볼 운반자에게 측면을 맡기고 중앙으로 들어가며, 뒤의 선수는 중간 공간을 메운다."
+      },
+      "images": {
+        "start": {
+          "src": "img/u008-representative.jpg",
+          "width": 854,
+          "height": 460
+        },
+        "key": []
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=859"
+    },
+    {
+      "id": "u009",
+      "uid": "20240104-NUzEChn9EyI#u009",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 1081.6,
+      "end": 1104.0,
+      "title": "중원에 대각 패스 각 만들기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "note": {
+        "problem": "앞으로 뛰는 선수를 볼 여유가 없는 각으로 공격을 이어간다.",
+        "who": "중원으로 연결하는 선수",
+        "instead": "대각으로 빼 중원이 넓은 공간에서 전방 움직임을 보고 다음 패스를 고르게 한다."
+      },
+      "images": {
+        "start": {
+          "src": "img/u009-representative.jpg",
+          "width": 854,
+          "height": 460
+        },
+        "key": []
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1081"
+    },
+    {
+      "id": "u010",
+      "uid": "20240104-NUzEChn9EyI#u010",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "NUzEChn9EyI",
+      "start": 1155.2,
+      "end": 1181.0,
+      "title": "밀집 수비 앞에서는 뒤로 돌리기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "note": {
+        "problem": "상대 수비가 촘촘히 모여 있어 그대로는 공격을 완성하기 어렵다.",
+        "who": "전방의 볼 소유자",
+        "instead": "무리하게 파고들지 말고 뒤로 빼 공격 방향을 다시 만든다."
+      },
+      "images": {
+        "start": {
+          "src": "img/u010-representative.jpg",
+          "width": 854,
+          "height": 460
+        },
+        "key": []
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1155"
+    },
+    {
+      "id": "u011",
+      "uid": "20240104-NUzEChn9EyI#u011",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 1225.2,
+      "end": 1255.0,
+      "title": "열린 패스 길은 땅볼로 연결",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "note": {
+        "problem": "막히지 않은 패스 길에서도 띄운 공을 쓰면 받는 선수가 진행 속도를 살리기 어렵다.",
+        "who": "패스를 보내는 선수",
+        "instead": "패스 길이 열려 있으면 땅볼로 주고, 사이에 수비가 있어 막힐 때만 띄우는 선택을 검토한다."
+      },
+      "images": {
+        "start": {
+          "src": "img/u011-representative.jpg",
+          "width": 854,
+          "height": 460
+        },
+        "key": []
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1225"
+    },
+    {
+      "id": "u012",
+      "uid": "20240104-NUzEChn9EyI#u012",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "NUzEChn9EyI",
+      "start": 1268.6,
+      "end": 1303.0,
+      "title": "막힌 돌파는 뒤 지원으로 살리기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "파이널서드"
+      ],
+      "member_ids": [
+        "maekgu"
+      ],
+      "related_member_ids": [],
+      "note": {
+        "problem": "공간이 막혔는데도 같은 방식으로 계속 돌파하려 한다.",
+        "who": "맥구로 들리는 선수",
+        "instead": "뒤에서 받쳐주는 동료를 보고 안전하게 돌린 뒤 다른 전개를 선택한다."
+      },
+      "images": {
+        "start": {
+          "src": "img/u012-representative.jpg",
+          "width": 854,
+          "height": 460
+        },
+        "key": []
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1268"
+    }
+  ]
+}

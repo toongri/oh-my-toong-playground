@@ -1,0 +1,312 @@
+{
+  "session_title": "2024.01.04 CEF Barcelona 경기 피드백",
+  "matches": [
+    {
+      "title": "BROS VAMOS vs CEF Barcelona",
+      "topics": [
+        {
+          "title": "넓은 공간으로 연결하는 빌드업",
+          "summary": "브라이드에게서 TIMEJ 쪽으로 들어오는 공을 살펴보고, 넓은 공간으로 연결해 공을 운반하는 동안 동료가 올라갈 시간을 만드는 장면입니다.",
+          "units": [
+            {
+              "start_line": 3,
+              "end_line": 19,
+              "title": "좁은 곳보다 넓은 공간의 선수에게 연결하기",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c004"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "공을 받을 때 사용하는 LT 조작",
+          "summary": "LT 키를 누른 채 이동하며 공을 준 선수를 바라보는 조작을 설명합니다.",
+          "units": [
+            {
+              "start_line": 22,
+              "end_line": 29,
+              "title": "LT를 누른 채 움직이며 상대를 바라보기",
+              "position_tags": [],
+              "topic_tags": [
+                "조작/키사용"
+              ],
+              "member_ids": [
+                "taxi"
+              ],
+              "key_frame_candidate_ids": [
+                "c009"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "역습 때의 역할과 전진 움직임",
+          "summary": "역습에서 낮은 위치의 사인드 대신 루미가 윙어 역할을 맡고, 주변 선수들이 패스 선택지를 만드는 장면입니다.",
+          "units": [
+            {
+              "start_line": 36,
+              "end_line": 51,
+              "title": "사인드가 낮을 때 루미가 윙어 역할 맡기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "jomin",
+                "find",
+                "rumi",
+                "gipeu",
+                "yumi",
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": [
+                "c013",
+                "c014"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "압박 때 공을 뒤로 내주고 다시 받기",
+          "summary": "압박이 들어올 수 있는 순간 뒤로 내주고 LT로 돌려받거나, 샘백 쪽으로 연결해 수비를 끌어낼 선택을 다룹니다.",
+          "units": [
+            {
+              "start_line": 55,
+              "end_line": 77,
+              "title": "압박이 오면 뒤로 주고 샘백 쪽으로 연결하기",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업",
+                "탈압박",
+                "조작/키사용"
+              ],
+              "member_ids": [
+                "saembaek"
+              ],
+              "key_frame_candidate_ids": [
+                "c017"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "루미의 전진 움직임",
+          "summary": "루미가 멈춘 장면에서 기대한 전진 움직임을 짚습니다.",
+          "units": [
+            {
+              "start_line": 78,
+              "end_line": 78,
+              "title": "루미가 멈춘 장면의 전진 움직임",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "rumi"
+              ],
+              "key_frame_candidate_ids": [
+                "c053"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "운반과 패스로 전진 옵션 만들기",
+          "summary": "공을 운반해 전진 옵션을 만들고 패스로 공격을 이어가는 내용입니다. 마무리가 깔끔하지 않았다는 평가와 TIMEJ가 해야 할 플레이가 보이지 않는다고 말한 장면도 함께 다룹니다.",
+          "units": [
+            {
+              "start_line": 79,
+              "end_line": 97,
+              "title": "공을 몰고 상대를 끌어 TIMEJ의 전진 시간 만들기",
+              "position_tags": [
+                "ST"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "탈압박",
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c021",
+                "c022"
+              ]
+            },
+            {
+              "start_line": 98,
+              "end_line": 99,
+              "title": "상하로 넓게 벌려 전개하기",
+              "position_tags": [],
+              "topic_tags": [
+                "포지셔닝",
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c054"
+              ]
+            },
+            {
+              "start_line": 115,
+              "end_line": 120,
+              "title": "Gerrard_CEF에게 연결해 존재의 공간 활용하기",
+              "position_tags": [
+                "CM",
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "파이널서드",
+                "크로스"
+              ],
+              "member_ids": [
+                "gerrard",
+                "jonjae"
+              ],
+              "key_frame_candidate_ids": [
+                "c031"
+              ]
+            },
+            {
+              "start_line": 121,
+              "end_line": 136,
+              "title": "원전은 측면으로 올라가고 사인드는 중앙으로 들어가기",
+              "position_tags": [
+                "FB",
+                "FW",
+                "ST"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "find",
+                "wonjeon"
+              ],
+              "key_frame_candidate_ids": [
+                "c032",
+                "c033"
+              ]
+            },
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "중원에서 전진 주자를 향해 대각으로 빼주기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c039"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "압박 상황에서의 판단과 후방 연결",
+          "summary": "태클 뒤 페널티로 이어진 장면을 확인하고, 상대 수비가 촘촘할 때는 뒤로 연결하며 패스 방향과 돌파 선택을 바꾸는 장면입니다.",
+          "units": [
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "태클 뒤 페널티가 나온 장면",
+              "position_tags": [
+                "FB"
+              ],
+              "topic_tags": [
+                "수비라인",
+                "압박"
+              ],
+              "member_ids": [
+                "wonjeon"
+              ],
+              "key_frame_candidate_ids": [
+                "c055"
+              ]
+            },
+            {
+              "start_line": 158,
+              "end_line": 162,
+              "title": "상대 수비가 촘촘하면 뒤로 빼기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "find",
+                "rumi"
+              ],
+              "key_frame_candidate_ids": [
+                "c043"
+              ]
+            },
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "받는 속도를 살릴 지상 패스 선택하기",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c045"
+              ]
+            },
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "막히면 맥구가 안전하게 뒤로 살리기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "탈압박",
+                "빌드업",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": [
+                "c047"
+              ]
+            },
+            {
+              "start_line": 183,
+              "end_line": 187,
+              "title": "대각선 선택지를 놓치지 않고 밀집 수비에는 뒤로 빼기",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

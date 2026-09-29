@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T03:36:17.269Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u012"
+      ],
+      "summary_ko": "EA SPORTS FC의 패스 종류와 입력 방법을 설명한다.",
+      "key_points_ko": [
+        "그라운드 패스는 가까운 동료에게 직접 연결하고 점유를 유지하는 데 쓰인다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-cab2ebe63b",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "http_status": 200,
+      "checked_at": "2026-09-29T03:36:17.342Z",
+      "reused": false,
+      "page": "refs/r-cab2ebe63b.html",
+      "title": "How to coach passing in football",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u006",
+        "u013"
+      ],
+      "summary_ko": "공을 운반하거나 방향을 바꿔 유리한 패스 각도를 만드는 코칭 자료다.",
+      "key_points_ko": [
+        "공을 공간으로 운반하면 다음 패스를 위한 각도가 달라질 수 있다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-65bdced1f8",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/what-is-passing-in-football",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/what-is-passing-in-football",
+      "http_status": 200,
+      "checked_at": "2026-09-29T03:36:18.211Z",
+      "reused": false,
+      "page": "refs/r-65bdced1f8.html",
+      "title": "What is passing in football?",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u005",
+        "u007",
+        "u009",
+        "u011"
+      ],
+      "summary_ko": "축구의 패스와 방향 전환, 동료와의 연결을 설명한다.",
+      "key_points_ko": [
+        "대각 패스와 방향 전환은 수비 반대쪽의 동료를 찾는 선택이 될 수 있다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

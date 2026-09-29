@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "session_id": "20240104-yn-qm7lM5p4",
+  "units": {
+    "u001": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.5,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      }
+    ],
+    "u002": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.5,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      }
+    ]
+  }
+}

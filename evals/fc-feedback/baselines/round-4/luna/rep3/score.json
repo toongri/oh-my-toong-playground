@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "total": 81.56363101134144,
+  "gate_failed": false,
+  "breakdown": {
+    "gate": {
+      "plan": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "notes": {
+        "exit_code": 0,
+        "stderr": "fc-feedback: 경고 u016: 프레임 없음"
+      },
+      "similar": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "refs": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "passed": true
+    },
+    "unit_f1": {
+      "precision": 0.9375,
+      "recall": 1,
+      "f1": 0.967741935483871,
+      "points": 24.193548387096776,
+      "matched": 15,
+      "total_gold": 15,
+      "total_predicted": 16
+    },
+    "start_time_accuracy": {
+      "median_delta_s": 0,
+      "points": 10
+    },
+    "tags": {
+      "position": {
+        "precision": 0.7058823529411765,
+        "recall": 0.7058823529411765,
+        "f1": 0.7058823529411765,
+        "points": 3.5294117647058827
+      },
+      "topic": {
+        "precision": 0.6206896551724138,
+        "recall": 0.75,
+        "f1": 0.679245283018868,
+        "points": 3.3962264150943398
+      },
+      "member": {
+        "precision": 0.8695652173913043,
+        "recall": 0.9090909090909091,
+        "f1": 0.888888888888889,
+        "points": 4.444444444444445
+      }
+    },
+    "refs": {
+      "url_in_log": {
+        "fraction": 1,
+        "points": 4
+      },
+      "http_ratio": {
+        "fraction": 1,
+        "points": 3
+      },
+      "ko_summary": {
+        "fraction": 1,
+        "points": 3
+      }
+    },
+    "judge": {
+      "specificity": 9,
+      "fidelity": 10,
+      "readability": 7,
+      "points": 26,
+      "judge_invalid": false
+    },
+    "penalties": {
+      "seconds_in_plan": false,
+      "push_attempt": false,
+      "gate_order_violation": false,
+      "unknown_commands": [],
+      "points_deducted": 0
+    },
+    "contamination": {
+      "contaminated": false,
+      "excluded_from_comparison": false,
+      "hits": []
+    }
+  }
+}

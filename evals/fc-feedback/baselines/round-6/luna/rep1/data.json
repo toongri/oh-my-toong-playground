@@ -1,0 +1,1208 @@
+{
+  "version": 1,
+  "session_id": "20240104-NUzEChn9EyI",
+  "title": "2024.01.04 C.E.F. FC Barcelona 팀 연습 피드백",
+  "date": "2024-01-04",
+  "generated_at": "2026-09-29T01:55:46.275Z",
+  "pages_base_url": "https://fc-feedback-eval.invalid/",
+  "videos": [
+    {
+      "id": "NUzEChn9EyI",
+      "part": 1,
+      "embeddable": true
+    }
+  ],
+  "members": [
+    {
+      "id": "timej",
+      "name": "TIMEJ",
+      "gamertag": "TIMEJ",
+      "positions": [
+        "ST"
+      ]
+    },
+    {
+      "id": "gerrard",
+      "name": "Gerrard_CEF",
+      "gamertag": "Gerrard_CEF",
+      "positions": [
+        "CM"
+      ]
+    },
+    {
+      "id": "vandeven",
+      "name": "CEF_VandeVen",
+      "gamertag": "CEF_VandeVen",
+      "positions": [
+        "CB"
+      ]
+    },
+    {
+      "id": "bride",
+      "name": "브라이드",
+      "gamertag": "CEF_Bride",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "taxi",
+      "name": "택시",
+      "gamertag": "CEF_Taxi",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jomin",
+      "name": "조민",
+      "gamertag": "CEF_Jomin",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "find",
+      "name": "사인드",
+      "gamertag": "CEF_Find",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "rumi",
+      "name": "루미",
+      "gamertag": "CEF_Rumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "gipeu",
+      "name": "기프",
+      "gamertag": "CEF_Gipeu",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "yumi",
+      "name": "유미",
+      "gamertag": "CEF_Yumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "saembaek",
+      "name": "샘백",
+      "gamertag": "CEF_Saembaek",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "giseun",
+      "name": "기슨",
+      "gamertag": "CEF_Giseun",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jonjae",
+      "name": "존재",
+      "gamertag": "CEF_Jonjae",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "wonjeon",
+      "name": "원전",
+      "gamertag": "CEF_Wonjeon",
+      "positions": [
+        "FB"
+      ]
+    },
+    {
+      "id": "spress",
+      "name": "스프레스",
+      "gamertag": "CEF_Spress",
+      "positions": [
+        "CAM"
+      ]
+    },
+    {
+      "id": "maekgu",
+      "name": "맥구",
+      "gamertag": "CEF_Maekgu",
+      "positions": [
+        "FW"
+      ]
+    }
+  ],
+  "matches": [
+    {
+      "id": "m1",
+      "title": "FC Barcelona 연습 경기",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "넓은 공간을 활용한 패스",
+          "summary": "좁은 곳에 모인 선수보다 넓은 공간의 선수를 찾고, 막히면 뒤로 빼는 선택을 다룹니다.",
+          "unit_ids": [
+            "u001"
+          ]
+        },
+        {
+          "id": "m1-t2",
+          "title": "LT를 활용한 방향 전환",
+          "summary": "LT를 누른 채 움직일 때 몸을 돌리지 않고 특정 방향을 바라보며 움직이는 조작을 다룹니다.",
+          "unit_ids": [
+            "u002"
+          ]
+        },
+        {
+          "id": "m1-t3",
+          "title": "역습에서 역할 나누기",
+          "summary": "사인드가 낮게 위치한 역습에서 루미가 윙어 역할을 맡고, 패스 선택지를 둘 이상 열어 두는 장면을 다룹니다.",
+          "unit_ids": [
+            "u003"
+          ]
+        },
+        {
+          "id": "m1-t4",
+          "title": "압박 아래에서 공을 지키고 다시 전진하기",
+          "summary": "압박이 올 때 뒤로 내주고 다시 받는 방법, 전진 패스의 이득과 수비를 끌어내는 선택을 다룹니다.",
+          "unit_ids": [
+            "u004"
+          ]
+        },
+        {
+          "id": "m1-t5",
+          "title": "좁은 공간에서 운반해 전진하기",
+          "summary": "좁은 곳으로 바로 연결하기보다 공을 더 운반해 상대를 끌고, 넓게 벌려 플레이하는 내용을 다룹니다.",
+          "unit_ids": [
+            "u005",
+            "u006"
+          ]
+        },
+        {
+          "id": "m1-t6",
+          "title": "넓은 공간으로 공격 연결하기",
+          "summary": "열린 공간으로 공격을 연결해 전방 주자의 선택지를 만들고, 뒤에서 공간을 보완하는 장면을 다룹니다.",
+          "unit_ids": [
+            "u007",
+            "u008"
+          ]
+        },
+        {
+          "id": "m1-t7",
+          "title": "대각 패스로 전방 선택지 만들기",
+          "summary": "측면에서 대각으로 공을 빼 주면 미드필더가 넓은 공간으로 뛰는 선수를 볼 여유가 생긴다는 점을 다룹니다.",
+          "unit_ids": [
+            "u009"
+          ]
+        },
+        {
+          "id": "m1-t8",
+          "title": "밀집 수비 앞에서 판단하고 뒤를 보완하기",
+          "summary": "수비를 무리하게 뚫거나 태클을 시도하기보다 상황을 보고 뒤로 빼거나 공간을 보완하는 선택을 다룹니다.",
+          "unit_ids": [
+            "u010",
+            "u011"
+          ]
+        },
+        {
+          "id": "m1-t9",
+          "title": "받는 선수의 주행에 맞춰 패스하기",
+          "summary": "가능하면 땅으로 연결해 받는 선수가 오는 공의 속도를 살려 플레이하기 쉽게 만들고, 막힐 때 띄우는 선택을 다룹니다.",
+          "unit_ids": [
+            "u012"
+          ]
+        },
+        {
+          "id": "m1-t10",
+          "title": "막힌 돌파에서 선택 바꾸기",
+          "summary": "맥구가 같은 방식으로 돌파를 반복하기보다 뒤의 지원을 확인하고 패스를 활용하는 선택을 다룹니다.",
+          "unit_ids": [
+            "u013"
+          ]
+        },
+        {
+          "id": "m1-t11",
+          "title": "마무리 정리",
+          "summary": "오늘의 핵심을 후방 대각선 선택지와 밀집 수비 앞에서의 후퇴 패스로 정리합니다.",
+          "unit_ids": [
+            "u014"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "uid": "20240104-NUzEChn9EyI#u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 51.12,
+      "end": 103.42,
+      "title": "브라이드에서 TIMEJ로 오는 공과 넓은 공간 선택",
+      "position_tags": [
+        "MF",
+        "ST"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "bride",
+        "timej"
+      ],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "브라이드에게서 TIMEJ 쪽으로 오는 공이 많았고, **좁은 공간의 선수보다 넓은 공간의 선수에게 패스하기**를 강조합니다. 넓은 공간으로 공을 보내면 운반하기 쉽고, 공이 없는 선수는 올라갈 시간적 여유를 얻습니다. 좁은 곳에 온 상황에서는 **공을 뒤로 빼기**도 제시합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u001-c004.webp",
+          "width": 854,
+          "height": 460,
+          "t": 90,
+          "caption": "화면에 여러 파란 선이 넓게 이어지고, 중앙 쪽에는 짧은 붉은 선이 그려져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u001-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-1741507fba",
+          "title": "Session 10 Support and off-the-ball movements",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-1741507fba.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/sessions/support-and-off-the-ball-movements.php"
+        },
+        {
+          "id": "r-4adaaec4b4",
+          "title": "Combination play in the final third (Zamrat)",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-4adaaec4b4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=51"
+    },
+    {
+      "id": "u002",
+      "uid": "20240104-NUzEChn9EyI#u002",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 225.9,
+      "end": 269.58,
+      "title": "택시의 LT 조작과 턴 동작",
+      "position_tags": [
+        "MF",
+        "ST"
+      ],
+      "topic_tags": [
+        "조작/키사용",
+        "탈압박"
+      ],
+      "member_ids": [
+        "taxi",
+        "timej"
+      ],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "택시가 나온 공 받기 장면에서 **LT를 누른 채 움직이기**를 강조합니다. 위아래로 움직여도 몸을 바로 돌리지 않고 특정 방향을 향한 채 계속 움직일 수 있어, 공을 받을 때의 턴 동작에 활용합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u002-c009.webp",
+          "width": 854,
+          "height": 460,
+          "t": 240,
+          "caption": "중앙 부근 선수 한 명이 노란 원으로 표시되어 있고, 화면에 노란색 LT 표시가 그려져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u002-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-81135892ef",
+          "title": "EA SPORTS FC 24 | Pitch Notes - PlayStyles Deep Dive",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-81135892ef.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive"
+        },
+        {
+          "id": "r-9d58ba5381",
+          "title": "Michael Beale: Developing a technical hard drive",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-9d58ba5381.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/training-perspectives/outplaying-the-opponent-with-michael-beale/developing-a-technical-hard-drive.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=225"
+    },
+    {
+      "id": "u003",
+      "uid": "20240104-NUzEChn9EyI#u003",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 344.68,
+      "end": 402.72,
+      "title": "사인드가 낮게 있는 역습에서 루미의 윙어 역할",
+      "position_tags": [
+        "FW",
+        "ST"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "maekgu",
+        "timej"
+      ],
+      "related_member_ids": [
+        "timej",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "조민에게 아쉬운 점 하나를 짚는 장면에서 TIMEJ는 아래로 움직이는 자신의 동선을 말하고, 사인드가 낮을 때 **루미가 윙어 역할을 맡기**를 요구합니다. 역습에서는 공격 숫자와 패스 경로 선택지를 살려, **기프가 가까운 TIMEJ에게 주거나 유미를 선택할 수 있게 두 옵션 열기**가 필요합니다. **사인드나 맥구도 같은 방식으로 운영하기**를 덧붙입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u003-c013.webp",
+          "width": 854,
+          "height": 460,
+          "t": 360,
+          "caption": "화면 한가운데서 붉은 화살표가 왼쪽을 향하고, 뒤쪽에도 붉은 선이 그어져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u003-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-1741507fba",
+          "title": "Session 10 Support and off-the-ball movements",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-1741507fba.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/sessions/support-and-off-the-ball-movements.php"
+        },
+        {
+          "id": "r-4adaaec4b4",
+          "title": "Combination play in the final third (Zamrat)",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-4adaaec4b4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=344"
+    },
+    {
+      "id": "u004",
+      "uid": "20240104-NUzEChn9EyI#u004",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "NUzEChn9EyI",
+      "start": 463.08000000000004,
+      "end": 526.78,
+      "title": "Gerrard_CEF의 압박 회피와 샘백 활용",
+      "position_tags": [
+        "CM",
+        "FW",
+        "ST"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [
+        "gerrard",
+        "saembaek",
+        "timej"
+      ],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "Gerrard_CEF가 나오는 압박 장면은 가장 불필요한 동작으로 평가되고, **공을 깔끔하게 뒤로 내주고 LT를 눌러 다시 받기**가 제시됩니다. 공이 오는 순간부터 압박이 들어올 수 있었기 때문입니다. Gerrard_CEF가 여기서 탈압박한 뒤 앞으로 넣어도 얻는 것이 크지 않고, 수비 숫자가 적어 전진이 쉽지 않습니다. **샘백에게 보내 수비를 따라가게 하고 수비 숫자를 줄이기**가 대안이며, 그러면 TIMEJ가 하려는 플레이의 난이도가 낮아진다고 짚습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u004-c017.webp",
+          "width": 854,
+          "height": 460,
+          "t": 480,
+          "caption": "센터서클 안쪽에 Gerrard_CEF 이름표가 보이고, 주위에 흰 유니폼 선수들이 서 있다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u004-c018.webp",
+          "width": 854,
+          "height": 460,
+          "t": 510,
+          "caption": "중앙 부근에 붉은 화살표가 그려져 있고 화살촉은 왼쪽을 향한다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u004-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-1741507fba",
+          "title": "Session 10 Support and off-the-ball movements",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-1741507fba.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/sessions/support-and-off-the-ball-movements.php"
+        },
+        {
+          "id": "r-30f03201ce",
+          "title": "5v5 plus 3 small-sided game: Breaking the press and playing in behind",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-30f03201ce.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/build-and-progress/5v5-plus-3-small-sided-game-breaking-the-press-and-play-in-behind.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=463"
+    },
+    {
+      "id": "u005",
+      "uid": "20240104-NUzEChn9EyI#u005",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "NUzEChn9EyI",
+      "start": 579.9399999999999,
+      "end": 658.94,
+      "title": "좁은 곳에서 바로 주기보다 직접 운반해 상대를 끌기",
+      "position_tags": [
+        "ST"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "탈압박",
+        "전환/역습"
+      ],
+      "member_ids": [
+        "timej"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "TIMEJ가 좁은 공간에서 공을 받으면 선택지가 적으므로, 공을 가진 선수는 **조금 더 몰고 가 상대 한 명을 끌기**가 필요합니다. 오늘은 그런 전개가 특히 잦았다는 인상도 덧붙입니다. 상대 한 명을 끌면 주변 선수가 올라올 시간을 벌고 TIMEJ가 더 높은 진영으로 갈 수 있으며, 전개도 더 좋아 보입니다. TIMEJ에게 연결해 탈압박으로 풀어내면 좋지만, 우리 진영에서 공을 잃으면 곧바로 상대 역습을 맞는다고 짚습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u005-c021.webp",
+          "width": 854,
+          "height": 460,
+          "t": 600,
+          "caption": "윗쪽 중앙의 파란 유니폼 선수 앞에 붉은 선이 오른쪽으로 그어져 있고, 여러 선수가 중앙에 모여 있다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u005-c022.webp",
+          "width": 854,
+          "height": 460,
+          "t": 630,
+          "caption": "화면 중앙과 오른쪽에 붉은 화살표들이 그려져 있고, 중앙에는 흰 화살표가 위쪽을 향한다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u005-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-1741507fba",
+          "title": "Session 10 Support and off-the-ball movements",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-1741507fba.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/sessions/support-and-off-the-ball-movements.php"
+        },
+        {
+          "id": "r-4adaaec4b4",
+          "title": "Combination play in the final third (Zamrat)",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-4adaaec4b4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php"
+        },
+        {
+          "id": "r-30f03201ce",
+          "title": "5v5 plus 3 small-sided game: Breaking the press and playing in behind",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-30f03201ce.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/build-and-progress/5v5-plus-3-small-sided-game-breaking-the-press-and-play-in-behind.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=579"
+    },
+    {
+      "id": "u006",
+      "uid": "20240104-NUzEChn9EyI#u006",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "NUzEChn9EyI",
+      "start": 694.54,
+      "end": 699.54,
+      "title": "넓게 벌려 플레이하기",
+      "position_tags": [],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "body": [
+        {
+          "type": "text",
+          "text": "팀 전체는 이 장면에서 **넓게 벌려 플레이하기**가 필요해 보입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u006-c024.webp",
+          "width": 854,
+          "height": 460,
+          "t": 690,
+          "caption": "파란 유니폼 선수들이 화면 중앙과 오른쪽에 떨어져 서 있고, 흰 유니폼 선수들은 중앙 앞쪽에 모여 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u006-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-4adaaec4b4",
+          "title": "Combination play in the final third (Zamrat)",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-4adaaec4b4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=694"
+    },
+    {
+      "id": "u007",
+      "uid": "20240104-NUzEChn9EyI#u007",
+      "match_id": "m1",
+      "topic_id": "m1-t6",
+      "video": "NUzEChn9EyI",
+      "start": 810.48,
+      "end": 838.74,
+      "title": "Gerrard_CEF에게 연결해 존재가 넓은 공간 쓰기",
+      "position_tags": [
+        "CM",
+        "FW",
+        "ST"
+      ],
+      "topic_tags": [
+        "파이널서드",
+        "빌드업",
+        "크로스"
+      ],
+      "member_ids": [
+        "gerrard",
+        "jonjae",
+        "timej"
+      ],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "Gerrard_CEF와 존재가 나온 공격이 완전히 막힌 장면에서 **이 타이밍에 Gerrard_CEF에게 연결하기**를 선택지로 제시합니다. 그러면 존재가 넓은 공간을 활용할 수 있고, 공을 몰고 들어가 크로스나 컷백을 선택할 수 있습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u007-c030.webp",
+          "width": 854,
+          "height": 460,
+          "t": 810,
+          "caption": "페널티박스 안쪽의 파란 유니폼 두 선수가 파란 원으로 표시되어 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u007-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-4adaaec4b4",
+          "title": "Combination play in the final third (Zamrat)",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-4adaaec4b4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php"
+        },
+        {
+          "id": "r-30f03201ce",
+          "title": "5v5 plus 3 small-sided game: Breaking the press and playing in behind",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-30f03201ce.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/build-and-progress/5v5-plus-3-small-sided-game-breaking-the-press-and-play-in-behind.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=810"
+    },
+    {
+      "id": "u008",
+      "uid": "20240104-NUzEChn9EyI#u008",
+      "match_id": "m1",
+      "topic_id": "m1-t6",
+      "video": "NUzEChn9EyI",
+      "start": 857.4799999999999,
+      "end": 896.24,
+      "title": "원전의 전진에 맞춰 사인드는 중앙으로, TIMEJ는 뒤에서 보완",
+      "position_tags": [
+        "FB",
+        "FW",
+        "ST"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "전환/역습"
+      ],
+      "member_ids": [
+        "find",
+        "wonjeon",
+        "timej"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "wonjeon",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "사인드의 판단은 아쉽고, 원전이 올라갈 때 **사인드는 중앙으로 들어가기**가 필요합니다. 원전이 전진해 측면을 차지하고, TIMEJ는 위치가 낮으므로 **무작정 앞으로 뛰지 않고 뒤에서 중간 공간 메우기**를 짚습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u008-c033.webp",
+          "width": 854,
+          "height": 460,
+          "t": 900,
+          "caption": "화면 중앙 아래와 왼쪽의 선수들이 흰 선으로 원에 표시되어 있고, 흰 화살표가 오른쪽을 향한다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u008-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-4adaaec4b4",
+          "title": "Combination play in the final third (Zamrat)",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-4adaaec4b4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=857"
+    },
+    {
+      "id": "u009",
+      "uid": "20240104-NUzEChn9EyI#u009",
+      "match_id": "m1",
+      "topic_id": "m1-t7",
+      "video": "NUzEChn9EyI",
+      "start": 1071.64,
+      "end": 1104.5,
+      "title": "스프레스의 대각 패스로 전방 선택지 만들기",
+      "position_tags": [
+        "CAM",
+        "MF",
+        "FW"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "파이널서드"
+      ],
+      "member_ids": [
+        "spress"
+      ],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "스프레스에게 **측면에서 대각으로 빼주는 패스**를 강조합니다. 그러면 중원이 넓은 공간으로 앞으로 뛰는 선수를 볼 여유가 생기며, 팀 플레이에서 유효한 공격을 만들려는 취지도 덧붙입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u009-c039.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1080,
+          "caption": "중앙 오른쪽 선수 주위에 빨간 원이 있고, 그 오른편을 향해 붉은 선이 그어져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u009-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-1741507fba",
+          "title": "Session 10 Support and off-the-ball movements",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-1741507fba.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/sessions/support-and-off-the-ball-movements.php"
+        },
+        {
+          "id": "r-4adaaec4b4",
+          "title": "Combination play in the final third (Zamrat)",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-4adaaec4b4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1071"
+    },
+    {
+      "id": "u010",
+      "uid": "20240104-NUzEChn9EyI#u010",
+      "match_id": "m1",
+      "topic_id": "m1-t8",
+      "video": "NUzEChn9EyI",
+      "start": 1128.4599999999998,
+      "end": 1139.04,
+      "title": "원전의 태클 시도와 페널티",
+      "position_tags": [
+        "FB"
+      ],
+      "topic_tags": [
+        "압박"
+      ],
+      "member_ids": [
+        "wonjeon"
+      ],
+      "related_member_ids": [
+        "wonjeon"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "원전이 한 차례 균형을 무너뜨린 뒤 공을 빼앗으려고 태클을 시도했고, 그 과정에서 페널티가 나왔습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u010-c042.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1139.5,
+          "caption": "골대 앞에 심판과 파란색·흰색 유니폼 선수들이 서 있고, 시계는 78:36, 점수는 BRO 0–FCB 2로 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u010-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1128"
+    },
+    {
+      "id": "u011",
+      "uid": "20240104-NUzEChn9EyI#u011",
+      "match_id": "m1",
+      "topic_id": "m1-t8",
+      "video": "NUzEChn9EyI",
+      "start": 1155.22,
+      "end": 1178.12,
+      "title": "상대 수비가 촘촘하면 뒤로 빼기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "탈압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "body": [
+        {
+          "type": "text",
+          "text": "팀 전체는 상대 수비가 촘촘하면 공격을 이어 가기 어렵다고 평가하고, **망설임 없이 뒤로 빼기**를 지시합니다. 뒤쪽으로 공을 빼 주는 장면도 예로 듭니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u011-c043.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1170,
+          "caption": "화면 오른쪽 골대 앞에 흰색과 파란색 선수들이 모여 있고, 공이 문 앞에 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u011-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1155"
+    },
+    {
+      "id": "u012",
+      "uid": "20240104-NUzEChn9EyI#u012",
+      "match_id": "m1",
+      "topic_id": "m1-t9",
+      "video": "NUzEChn9EyI",
+      "start": 1225.22,
+      "end": 1246.94,
+      "title": "가능하면 땅으로 연결하고 막힐 때 띄우기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "body": [
+        {
+          "type": "text",
+          "text": "팀 전체는 하프에 넣어줄 때 **땅으로 줄 수 있으면 땅으로 주기**가 가장 좋다고 정리합니다. 받는 선수가 공이 오는 속도를 살려 이어가기 쉽기 때문이며, 중간에 막힐 것 같을 때는 **띄워 주기**를 선택합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u012-c045.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1230,
+          "caption": "화면 위쪽의 붉은 화살표가 오른쪽을 향하고, 그 아래 공 주변에 여러 선수가 서 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u012-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fda7030cfd",
+          "title": "France U17 Men training camp – Monday (activation)",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-fda7030cfd.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/youth-national-teams/france-u17-men/france-u-17-mens-training-camp-monday.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1225"
+    },
+    {
+      "id": "u013",
+      "uid": "20240104-NUzEChn9EyI#u013",
+      "match_id": "m1",
+      "topic_id": "m1-t10",
+      "video": "NUzEChn9EyI",
+      "start": 1258.6599999999999,
+      "end": 1305.48,
+      "title": "맥구의 돌파가 막히면 뒤를 살리고 선택 바꾸기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "포지셔닝",
+        "빌드업"
+      ],
+      "member_ids": [
+        "maekgu"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "맥구가 단독 돌파로 막힌 장면에서는 **같은 방식으로 다시 돌파하기보다 뒤로 안전하게 살리기**가 필요합니다. 뒤에서 받쳐주는 선수가 있어도 보지 못하는 경우가 있으므로, **뒤를 받치는 쪽에 내주고 오버랩을 올리기** 같은 선택으로 플레이 방식을 다양하게 가져갑니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u013-c046.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1260,
+          "caption": "페널티박스 앞과 안에 흰색과 파란색 선수가 여럿 서 있고, TIMEJ가 선택된 표시가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u013-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-1741507fba",
+          "title": "Session 10 Support and off-the-ball movements",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-1741507fba.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/sessions/support-and-off-the-ball-movements.php"
+        },
+        {
+          "id": "r-4adaaec4b4",
+          "title": "Combination play in the final third (Zamrat)",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-4adaaec4b4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1258"
+    },
+    {
+      "id": "u014",
+      "uid": "20240104-NUzEChn9EyI#u014",
+      "match_id": "m1",
+      "topic_id": "m1-t11",
+      "video": "NUzEChn9EyI",
+      "start": 1307.66,
+      "end": 1334.1,
+      "title": "후방 대각선을 확인하고 밀집 수비면 뒤로 빼기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "탈압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "body": [
+        {
+          "type": "text",
+          "text": "팀 전체의 오늘 핵심은 **후방 대각선 선택지가 있을 때 확인하기**와, 상대 수비가 밀집하면 **미련 없이 뒤로 빼기**입니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u014-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-4adaaec4b4",
+          "title": "Combination play in the final third (Zamrat)",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-4adaaec4b4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1307"
+    }
+  ]
+}

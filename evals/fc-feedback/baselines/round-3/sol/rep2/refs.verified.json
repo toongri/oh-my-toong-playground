@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-2add849eab",
+      "url": "https://learning.coachesvoice.com/cv/switches-of-play-football-tactics-explained",
+      "final_url": "https://learning.coachesvoice.com/cv/switches-of-play-football-tactics-explained/",
+      "http_status": 200,
+      "checked_at": "2026-09-28T23:20:21.691Z",
+      "reused": false,
+      "page": "refs/r-2add849eab.html",
+      "title": "Switch of play: football tactics explained",
+      "source_name": "Coaches' Voice",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u008",
+        "u012"
+      ],
+      "summary_ko": "상대가 한쪽으로 모였을 때 반대편 넓은 공간을 찾는 전환 플레이의 원칙을 설명한다.",
+      "key_points_ko": [
+        "폭을 유지하면 공 반대편 공간을 활용할 수 있다.",
+        "패스의 방향과 받는 선수의 움직임이 함께 맞아야 한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-36bf55ef43",
+      "url": "https://learning.coachesvoice.com/cv/attacking-transitions-football-tactics-explained-klopp-liverpool-mourinho",
+      "final_url": "https://learning.coachesvoice.com/cv/attacking-transitions-football-tactics-explained-klopp-liverpool-mourinho/",
+      "http_status": 200,
+      "checked_at": "2026-09-28T23:20:23.118Z",
+      "reused": false,
+      "page": "refs/r-36bf55ef43.html",
+      "title": "Attacking transitions: football tactics explained",
+      "source_name": "Coaches' Voice",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u003",
+        "u011"
+      ],
+      "summary_ko": "공격 전환에서 측면과 전방 주자의 높이·폭, 후방 지원이 패스 선택지를 만드는 방식을 설명한다.",
+      "key_points_ko": [
+        "윙어의 바깥쪽 또는 뒷공간 움직임은 전방 패스 대상이 된다.",
+        "뒤쪽 선수의 전진 지원은 다음 공격 선택지를 유지한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-06866c4174",
+      "url": "https://www.thefa.com/-/media/files/pdf/st-georges-park/fa-learning/playing-out-from-the-back-gk-phase-of-play.ashx?la=en",
+      "final_url": "https://www.thefa.com/-/media/files/pdf/st-georges-park/fa-learning/playing-out-from-the-back-gk-phase-of-play.ashx?la=en",
+      "http_status": 200,
+      "checked_at": "2026-09-28T23:20:23.946Z",
+      "reused": false,
+      "page": "refs/r-06866c4174.html",
+      "title": "UEFA B Playing Out From The Back (GK POP)",
+      "source_name": "The FA",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u005",
+        "u007"
+      ],
+      "summary_ko": "후방에서 공을 전개할 때 센터백의 운반과 미드필더의 지원 위치를 다루는 코칭 자료다.",
+      "key_points_ko": [
+        "센터백이 공을 운반하는 동안 미드필더가 빈 위치를 채운다.",
+        "후방 전개에는 센터백과 미드필더의 지원 모양이 중요하다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-28T23:20:24.609Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u015",
+        "u016"
+      ],
+      "summary_ko": "EA SPORTS FC에서 땅볼·스루·로빙 패스를 어느 공간과 움직임에 쓰는지 안내한다.",
+      "key_points_ko": [
+        "가까운 동료에게 연결할 길이 열려 있으면 땅볼 패스를 쓴다.",
+        "수비가 땅볼 경로를 막고 뒤 공간이 열려 있으면 로빙 스루 패스를 고려한다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

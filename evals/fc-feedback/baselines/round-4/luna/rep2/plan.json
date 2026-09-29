@@ -1,0 +1,179 @@
+{
+  "session_title": "C.E.F. 바르셀로나 팀 연습 피드백 (2024.01.04)",
+  "matches": [
+    {
+      "title": "BRO–FCB 경기",
+      "topics": [
+        {
+          "title": "초반: 패스와 지원 움직임",
+          "summary": "좁은 공간에서 공을 다루는 방법과 전방 지원 움직임을 짚습니다.",
+          "units": [
+            {
+              "start_line": 3,
+              "end_line": 19,
+              "title": "브라이드는 좁은 쪽보다 넓은 쪽으로 연결",
+              "position_tags": ["MF", "ST"],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": ["bride", "timej"],
+              "key_frame_candidate_ids": ["c004"]
+            },
+            {
+              "start_line": 22,
+              "end_line": 29,
+              "title": "택시는 LT를 누르고 방향을 유지하며 이동",
+              "position_tags": ["MF", "ST"],
+              "topic_tags": ["조작/키사용"],
+              "member_ids": ["taxi", "timej"],
+              "key_frame_candidate_ids": ["c009"]
+            },
+            {
+              "start_line": 31,
+              "end_line": 35,
+              "title": "스루패스 뒤에 템포를 높여 전진",
+              "position_tags": ["ST"],
+              "topic_tags": ["빌드업", "전환/역습"],
+              "member_ids": ["timej"],
+              "key_frame_candidate_ids": ["c011"]
+            },
+            {
+              "start_line": 36,
+              "end_line": 51,
+              "title": "역습에서 측면과 중앙의 지원 선택지를 열기",
+              "position_tags": ["FW", "ST"],
+              "topic_tags": ["전환/역습", "포지셔닝"],
+              "member_ids": ["jomin", "find", "rumi", "gipeu", "yumi", "timej", "maekgu"],
+              "key_frame_candidate_ids": ["c014"]
+            }
+          ]
+        },
+        {
+          "title": "중반: 전진과 압박 회피",
+          "summary": "상대 압박과 좁은 공간을 피해 전진하고, 팀이 올라올 시간을 만듭니다.",
+          "units": [
+            {
+              "start_line": 55,
+              "end_line": 77,
+              "title": "뒤로 내주고 리턴을 받아 전진 경로를 만들기",
+              "position_tags": ["FW", "ST"],
+              "topic_tags": ["탈압박", "빌드업"],
+              "member_ids": ["timej", "saembaek"],
+              "key_frame_candidate_ids": ["c018"]
+            },
+            {
+              "start_line": 78,
+              "end_line": 78,
+              "title": "루미는 예상된 침투 움직임을 멈추지 않기",
+              "position_tags": ["FW"],
+              "topic_tags": ["포지셔닝"],
+              "member_ids": ["rumi"],
+              "key_frame_candidate_ids": ["c053"]
+            },
+            {
+              "start_line": 79,
+              "end_line": 97,
+              "title": "공을 몰아 상대를 끌고 올라올 시간을 벌기",
+              "position_tags": ["ST"],
+              "topic_tags": ["탈압박", "빌드업"],
+              "member_ids": ["timej"],
+              "key_frame_candidate_ids": ["c021"]
+            },
+            {
+              "start_line": 98,
+              "end_line": 99,
+              "title": "상하로 폭을 넓혀 전개",
+              "position_tags": [],
+              "topic_tags": ["포지셔닝", "빌드업"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c024"]
+            }
+          ]
+        },
+        {
+          "title": "후반: 측면 전개와 위치 조정",
+          "summary": "넓은 공간의 공격 옵션과 선수별 위치 분담을 살펴봅니다.",
+          "units": [
+            {
+              "start_line": 115,
+              "end_line": 120,
+              "title": "제라드에게 연결해 존재의 넓은 공간 활용",
+              "position_tags": ["CM", "FW"],
+              "topic_tags": ["파이널서드", "크로스"],
+              "member_ids": ["gerrard", "jonjae"],
+              "key_frame_candidate_ids": ["c031"]
+            },
+            {
+              "start_line": 121,
+              "end_line": 134,
+              "title": "원전은 측면으로, 사인드는 중앙으로 움직이기",
+              "position_tags": ["FB", "FW", "ST"],
+              "topic_tags": ["포지셔닝", "전환/역습"],
+              "member_ids": ["wonjeon", "find", "timej"],
+              "key_frame_candidate_ids": ["c033"]
+            }
+          ]
+        },
+        {
+          "title": "후반: 전진 패스와 밀집 수비 대응",
+          "summary": "대각 전개와 안전한 후방 연결을 선택하고, 수비 상황에 따라 공격 방식을 바꿉니다.",
+          "units": [
+            {
+              "start_line": 149,
+              "end_line": 154,
+              "title": "측면에서 대각 패스로 전방 주자를 보기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c039"]
+            },
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "원전이 균형을 무너뜨린 뒤 페널티를 내준 장면",
+              "position_tags": ["FB"],
+              "topic_tags": ["압박", "수비라인"],
+              "member_ids": ["wonjeon"],
+              "key_frame_candidate_ids": ["c042"]
+            },
+            {
+              "start_line": 158,
+              "end_line": 160,
+              "title": "촘촘한 수비 앞에서는 뒤로 연결",
+              "position_tags": [],
+              "topic_tags": ["탈압박", "빌드업"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c043"]
+            },
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "가능하면 땅으로, 열려 있으면 전방으로 패스",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "크로스"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c045"]
+            },
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "맥구는 막히면 후방 지원과 다른 전개 선택",
+              "position_tags": ["FW"],
+              "topic_tags": ["탈압박", "포지셔닝"],
+              "member_ids": ["maekgu"],
+              "key_frame_candidate_ids": ["c046"]
+            },
+            {
+              "start_line": 184,
+              "end_line": 187,
+              "title": "대각 옵션을 보고 밀집 수비 앞에서 뒤로 빼기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "탈압박"],
+              "member_ids": [],
+              "key_frame_candidate_ids": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

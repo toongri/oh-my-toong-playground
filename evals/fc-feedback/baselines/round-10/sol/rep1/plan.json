@@ -1,0 +1,307 @@
+{
+  "session_title": "FC Barcelona 팀 연습 피드백 — 패스 선택과 공간 활용",
+  "matches": [
+    {
+      "title": "BRO 대 FCB 경기 전반과 후반 초반",
+      "topics": [
+        {
+          "title": "넓은 쪽으로 전개하기",
+          "summary": "좁은 공간의 수신자보다 넓은 공간의 동료를 찾아 공을 운반하고, 막히면 뒤로 돌린다.",
+          "units": [
+            {
+              "start_line": 9,
+              "end_line": 19,
+              "title": "좁은 공간 대신 넓은 쪽으로 패스",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c004"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "공을 받을 때 조작과 역습 동선",
+          "summary": "LT 조작으로 공을 바라보며 움직이고, 역습에서는 패스 선택지를 만드는 동선을 점검한다.",
+          "units": [
+            {
+              "start_line": 23,
+              "end_line": 29,
+              "title": "공 주변에서 LT를 누르고 움직이기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "조작/키사용"
+              ],
+              "member_ids": [
+                "taxi",
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c009"
+              ]
+            },
+            {
+              "start_line": 36,
+              "end_line": 51,
+              "title": "역습 때 윙어 자리와 두 패스 선택지 만들기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "jomin",
+                "find",
+                "rumi",
+                "gipeu",
+                "yumi",
+                "maekgu",
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c013",
+                "c014"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "압박 속 후방 전개",
+          "summary": "압박이 닿는 지점에서는 뒤로 연결하고, 수비를 끌어내는 패스와 충분한 운반으로 전진할 공간을 마련한다.",
+          "units": [
+            {
+              "start_line": 55,
+              "end_line": 77,
+              "title": "압박 앞에서 뒤로 내주고 샘백을 활용하기",
+              "position_tags": [
+                "CM"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "탈압박"
+              ],
+              "member_ids": [
+                "gerrard",
+                "saembaek",
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c017",
+                "c018"
+              ]
+            },
+            {
+              "start_line": 78,
+              "end_line": 78,
+              "title": "루미의 멈춘 움직임",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "rumi"
+              ],
+              "key_frame_candidate_ids": [
+                "c053"
+              ]
+            },
+            {
+              "start_line": 79,
+              "end_line": 97,
+              "title": "좁은 패스 전에 더 몰고 올라오기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "탈압박"
+              ],
+              "member_ids": [
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c021",
+                "c022"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "막힌 공격의 방향 전환",
+          "summary": "중앙이 막히면 넓은 공간과 측면을 활용하고, 상대 수비가 촘촘할 때는 무리하지 않고 뒤로 빼는 선택을 설명한다.",
+          "units": [
+            {
+              "start_line": 104,
+              "end_line": 120,
+              "title": "막힌 중앙에서 측면의 넓은 공간 찾기",
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "giseun",
+                "gerrard",
+                "jonjae",
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c030",
+                "c031"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "1–4로 표시된 별도 경기 장면",
+      "topics": [
+        {
+          "title": "측면과 중앙의 역습 배치",
+          "summary": "원전이 측면을 점유할 때 사인드의 중앙 침투와 TIMEJ의 뒤 공간 보완을 짚는다.",
+          "units": [
+            {
+              "start_line": 121,
+              "end_line": 136,
+              "title": "원전이 올라갈 때 사인드는 중앙으로",
+              "position_tags": [
+                "FW",
+                "FB"
+              ],
+              "topic_tags": [
+                "포지셔닝",
+                "전환/역습"
+              ],
+              "member_ids": [
+                "find",
+                "wonjeon",
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c032",
+                "c033"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "BRO 대 FCB 경기 후반의 추가 피드백",
+      "topics": [
+        {
+          "title": "대각 패스와 밀집 수비 앞 선택",
+          "summary": "중원 대각 패스, 페널티 지역 수비, 촘촘한 수비 앞의 후방 연결을 점검한다.",
+          "units": [
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "중원에서 대각으로 빼주기",
+              "position_tags": [
+                "CAM",
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "spress"
+              ],
+              "key_frame_candidate_ids": [
+                "c039"
+              ]
+            },
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "원전의 경합과 페널티",
+              "position_tags": [
+                "FB"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [
+                "wonjeon"
+              ],
+              "key_frame_candidate_ids": [
+                "c042"
+              ]
+            },
+            {
+              "start_line": 158,
+              "end_line": 160,
+              "title": "촘촘한 수비 앞에서 뒤로 빼기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c043"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "패스 높이와 막힌 돌파의 대안",
+          "summary": "열린 길에는 땅볼로 전달하고 돌파가 막히면 뒤의 지원을 활용한다.",
+          "units": [
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "패스 길이 열렸다면 땅으로 전달하기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c045"
+              ]
+            },
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "맥구는 막히면 뒤의 지원을 활용하기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드"
+              ],
+              "member_ids": [
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": [
+                "c046"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

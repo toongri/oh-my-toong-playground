@@ -1,0 +1,248 @@
+{
+  "session_title": "FC Barcelona 팀 연습 피드백 · 2024.1.4 Part 3",
+  "matches": [
+    {
+      "title": "BRO 대 FCB 연습 경기",
+      "topics": [
+        {
+          "title": "공간을 보고 전개하기",
+          "summary": "좁은 공간으로 급히 연결하기보다 넓은 공간의 동료에게 주고, 공을 운반할 시간을 활용해 다른 선수들이 올라가도록 한다.",
+          "units": [
+            {
+              "start_line": 5,
+              "end_line": 19,
+              "title": "좁은 곳보다 넓은 곳에 패스",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "bride",
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c004"
+              ]
+            },
+            {
+              "start_line": 22,
+              "end_line": 29,
+              "title": "공을 받을 준비에 LT 활용",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "조작/키사용"
+              ],
+              "member_ids": [
+                "taxi"
+              ],
+              "key_frame_candidate_ids": [
+                "c009"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "역습의 선택지와 안전한 빌드업",
+          "summary": "역습에는 윙의 전진으로 패스 선택지를 만들고, 자기 진영의 압박 상황에서는 무리한 전진보다 뒤로 내주거나 더 운반해 공간과 시간을 만든다.",
+          "units": [
+            {
+              "start_line": 36,
+              "end_line": 51,
+              "title": "역습에서 윙어가 올라가 패스 선택지 만들기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "find",
+                "rumi",
+                "gipeu",
+                "yumi",
+                "timej",
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": [
+                "c013"
+              ]
+            },
+            {
+              "start_line": 55,
+              "end_line": 77,
+              "title": "압박이 오면 뒤로 내주고 다시 받기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "탈압박"
+              ],
+              "member_ids": [
+                "gerrard",
+                "saembaek"
+              ],
+              "key_frame_candidate_ids": [
+                "c017"
+              ]
+            },
+            {
+              "start_line": 79,
+              "end_line": 97,
+              "title": "좁은 곳의 패스보다 운반으로 전진 시간 벌기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c021"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "막힌 공격에서 공간 바꾸기",
+          "summary": "공격이 막히면 공을 다른 쪽으로 전환하고, 측면 선수와 중앙 선수의 위치를 조정해 공격할 공간을 찾는다.",
+          "units": [
+            {
+              "start_line": 104,
+              "end_line": 120,
+              "title": "막힌 공격을 전환해 넓은 공간 이용",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "파이널서드"
+              ],
+              "member_ids": [
+                "gerrard",
+                "jonjae"
+              ],
+              "key_frame_candidate_ids": [
+                "c030"
+              ]
+            },
+            {
+              "start_line": 121,
+              "end_line": 136,
+              "title": "측면 돌파와 중앙 침투의 역할 나누기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝",
+                "파이널서드"
+              ],
+              "member_ids": [
+                "find",
+                "wonjeon",
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c032"
+              ]
+            },
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "측면에서 대각선으로 빼 중원 시야 만들기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "spress"
+              ],
+              "key_frame_candidate_ids": [
+                "c039"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "수비 판단과 패스 선택",
+          "summary": "공을 뺏으려는 조작이 페널티로 이어진 장면, 촘촘한 수비 앞에서 공을 뒤로 돌리는 판단, 패스 높이와 막힌 측면에서의 선택을 짚는다. 마지막 총평도 대각선 선택과 밀집 수비 앞의 후방 패스를 강조한다.",
+          "units": [
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "공을 뺏으려던 조작 뒤 페널티",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "압박"
+              ],
+              "member_ids": [
+                "wonjeon"
+              ],
+              "key_frame_candidate_ids": [
+                "c042"
+              ]
+            },
+            {
+              "start_line": 158,
+              "end_line": 160,
+              "title": "촘촘한 수비 앞에서는 뒤로 빼기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c043"
+              ]
+            },
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "공이 오는 속도를 살리는 땅볼 패스",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c045"
+              ]
+            },
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "막힌 측면에서 뒤를 보고 안전하게 살리기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": [
+                "c046"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

@@ -1,0 +1,30 @@
+{
+  "session_title": "C.E.F. 팀 연습 Part 3 — 공간 선택과 전개 판단",
+  "matches": [{
+    "title": "FC Barcelona 대 BRO 경기 피드백",
+    "topics": [
+      {"title":"넓은 공간과 받는 자세","summary":"브라이드에게서 TIMEJ 쪽으로 오는 공이 많았다는 관찰과 좁은 공간에서 뒤로 빼는 장면을 함께 다룬다.","units":[
+        {"start_line":9,"end_line":19,"title":"좁은 수신자보다 넓은 공간의 선수에게 연결","position_tags":["MF"],"topic_tags":["빌드업"],"member_ids":[],"key_frame_candidate_ids":["c004"]},
+        {"start_line":22,"end_line":29,"title":"LT로 공을 보며 움직이는 받는 자세","position_tags":["MF"],"topic_tags":["조작/키사용"],"member_ids":[],"key_frame_candidate_ids":["c009"]}
+      ]},
+      {"title":"역습에서 패스 선택지 만들기","summary":"스루패스로 전진하려던 발언과 루미가 뜨기를 기대했으나 멈춘 장면은 별도 교정 지시가 없어 이 주제에 남긴다.","units":[
+        {"start_line":36,"end_line":51,"title":"사인드가 낮을 때 루미의 윙어 움직임","position_tags":["FW"],"topic_tags":["전환/역습","포지셔닝"],"member_ids":["timej"],"key_frame_candidate_ids":["c013","c014"]}
+      ]},
+      {"title":"압박 앞에서 공을 되돌리고 운반하기","summary":"전방으로 서둘러 넣으면 수비 숫자에 비해 전진이 어려운 장면과, 좁은 공간의 TIMEJ에게 연결할 때 선택지가 적은 장면을 다룬다.","units":[
+        {"start_line":55,"end_line":77,"title":"압박이 오기 전 뒤로 내주고 다시 받기","position_tags":["MF"],"topic_tags":["탈압박","빌드업"],"member_ids":["gerrard"],"key_frame_candidate_ids":["c017","c018"]},
+        {"start_line":79,"end_line":97,"title":"좁은 패스 대신 더 몰고 가서 상대를 끌기","position_tags":["MF"],"topic_tags":["빌드업"],"member_ids":["timej"],"key_frame_candidate_ids":["c021","c022"]}
+      ]},
+      {"title":"막힌 공격에서 공간 재배치","summary":"득점 장면과 파울 장면은 결과로 기록하되, 원문에 없는 교정 행동을 붙이지 않는다.","units":[
+        {"start_line":104,"end_line":120,"title":"막히면 Gerrard_CEF를 거쳐 넓은 쪽 전개","position_tags":["MF"],"topic_tags":["빌드업","파이널서드"],"member_ids":["gerrard","timej"],"key_frame_candidate_ids":["c030","c031"]},
+        {"start_line":121,"end_line":134,"title":"사인드가 중앙으로 들어가는 자리 교대","position_tags":["FW"],"topic_tags":["포지셔닝"],"member_ids":["timej"],"key_frame_candidate_ids":["c032","c033"]},
+        {"start_line":145,"end_line":154,"title":"중원으로 대각 연결해 전방을 보게 하기","position_tags":["MF"],"topic_tags":["빌드업"],"member_ids":[],"key_frame_candidate_ids":["c039"]},
+        {"start_line":158,"end_line":160,"title":"촘촘한 수비 앞에서는 뒤로 빼기","position_tags":["MF"],"topic_tags":["빌드업"],"member_ids":[],"key_frame_candidate_ids":["c043"]}
+      ]},
+      {"title":"패스 높이와 막힌 측면 탈출","summary":"마지막 총평은 대각 패스를 봐야 할 때 못 본 점과 수비 밀집 시 뒤로 빼야 한다는 점을 짚는다.","units":[
+        {"start_line":163,"end_line":168,"title":"열려 있으면 받기 쉬운 땅볼로 연결","position_tags":["MF"],"topic_tags":["빌드업"],"member_ids":[],"key_frame_candidate_ids":["c045"]},
+        {"start_line":169,"end_line":182,"title":"측면이 막히면 뒤로 살리고 다른 선택지 찾기","position_tags":["FW"],"topic_tags":["빌드업"],"member_ids":[],"key_frame_candidate_ids":[]}
+      ]}
+    ]
+  }],
+  "proposed_tags": []
+}

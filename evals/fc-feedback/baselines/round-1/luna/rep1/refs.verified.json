@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-28T22:16:54.115Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA SPORTS Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u003",
+        "u013"
+      ],
+      "summary_ko": "EA의 패스 가이드는 가까운 동료와 점유를 이어갈 때 땅볼 패스를, 앞쪽 열린 공간으로 뛰는 동료에게는 스루패스를 권합니다.",
+      "key_points_ko": [
+        "스루패스는 뛰는 동료 앞의 공간을 향해 보내며, 수비 사이에 열린 패스 길이 있을 때 효과적입니다.",
+        "가까운 동료에게 짧게 연결하거나 점유를 지킬 때는 땅볼 패스를 사용합니다.",
+        "수비 사이로 무리하게 넣기보다 열린 패스 길을 찾으라고 안내합니다."
+      ]
+    },
+    {
+      "id": "r-52bf5832f4",
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/john-peacock-passing-and-receiving.php",
+      "final_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/john-peacock-passing-and-receiving.php",
+      "http_status": 200,
+      "checked_at": "2026-09-28T22:16:56.308Z",
+      "reused": false,
+      "page": "refs/r-52bf5832f4.html",
+      "title": "John Peacock: Passing and receiving",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u007",
+        "u008",
+        "u010"
+      ],
+      "summary_ko": "FIFA 트레이닝 자료는 넓은 폭을 사용해 중앙 혼잡을 줄이고, 열린 자세와 적절한 첫 터치로 패스 각도와 전진 경로를 만드는 방법을 설명합니다.",
+      "key_points_ko": [
+        "점유 시 경기장 폭을 넓게 사용하면 상대가 중앙에 몰리는 것을 막을 수 있습니다.",
+        "열린 자세로 주변 공간을 살피고, 패스를 받을 때 전진 패스 길을 만들어야 합니다.",
+        "압박을 받을 때 몸으로 상대를 막아 공을 보호하고 패스 각도를 확보할 수 있습니다."
+      ]
+    },
+    {
+      "id": "r-ba65614e0e",
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/playing-out-centrally.php",
+      "final_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/playing-out-centrally.php",
+      "http_status": 200,
+      "checked_at": "2026-09-28T22:16:58.105Z",
+      "reused": false,
+      "page": "refs/r-ba65614e0e.html",
+      "title": "Claire Lynne Smith: Playing out centrally under pressure",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u005",
+        "u008",
+        "u012",
+        "u014",
+        "u015"
+      ],
+      "summary_ko": "중앙에서 압박을 받으며 전개할 때 공이 없는 선수의 움직임, 미드필더의 침투 타이밍, 정확한 패스와 대각 패스 길이 중요하다고 설명합니다.",
+      "key_points_ko": [
+        "공을 가진 선수와 동료의 움직임이 공간과 패스 선택지를 만듭니다.",
+        "미드필더는 열린 패스 길을 만들 수 있도록 침투 타이밍을 맞춰야 합니다.",
+        "압박을 뚫을 때는 정확하고 빠른 패스와 대각 패스 길을 활용합니다."
+      ]
+    },
+    {
+      "id": "r-6f107281e7",
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/wing-play.php",
+      "final_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/wing-play.php",
+      "http_status": 200,
+      "checked_at": "2026-09-28T22:16:58.900Z",
+      "reused": false,
+      "page": "refs/r-6f107281e7.html",
+      "title": "Wing play (Boothroyd)",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u004",
+        "u009"
+      ],
+      "summary_ko": "폭을 유지하는 풀백, 안쪽으로 내려와 수비를 끌어내는 측면 미드필더, 서로의 움직임에 맞춘 침투가 조직적인 수비를 벌리는 방법으로 제시됩니다.",
+      "key_points_ko": [
+        "풀백은 측면 폭을 유지해 경기장을 넓히고 중앙 수비수에게 공간을 줄 수 있습니다.",
+        "측면 선수가 안쪽으로 움직이면 풀백이 올라갈 바깥 공간이 생길 수 있습니다.",
+        "패스와 침투의 타이밍을 동료 움직임에 맞추면 공격 조합이 매끄러워집니다."
+      ]
+    }
+  ],
+  "dropped": []
+}

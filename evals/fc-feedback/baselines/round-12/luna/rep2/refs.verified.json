@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T07:08:27.635Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u001",
+        "u003",
+        "u008",
+        "u012"
+      ],
+      "summary_ko": "동료의 움직임과 주변 공간에 따라 땅볼·스루·로브·드리븐 패스와 크로스를 고르는 EA 공식 안내입니다.",
+      "key_points_ko": [
+        "땅볼 패스는 가까운 동료에게 직접 연결하거나 짧은 패스를 이어 갈 때 쓸 수 있습니다.",
+        "스루패스는 달리는 동료 앞의 열린 공간을 겨냥합니다.",
+        "로브 패스는 공을 띄워 동료에게 보내며, 측면에서는 크로스로 쓸 수 있습니다.",
+        "로브 스루패스는 수비수 위로 보내 달리는 동료가 수비 뒤 공간으로 들어가게 할 수 있습니다.",
+        "드리븐 땅볼 패스는 공을 더 빠르게 전달할 때 쓸 수 있습니다."
+      ]
+    }
+  ],
+  "dropped": []
+}

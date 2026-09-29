@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T00:50:51.076Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u001",
+        "u003",
+        "u010",
+        "u015"
+      ],
+      "summary_ko": "EA SPORTS FC의 땅볼·스루·로빙 패스 사용 조건과 게임 내 조작 확인 경로를 설명한다.",
+      "key_points_ko": [
+        "가까운 동료에게 명확한 경로가 있으면 땅볼 패스를, 열린 공간으로 뛰는 동료에게는 스루패스를 제안한다.",
+        "패스 대상의 움직임과 주변 공간을 보고 패스 종류를 선택하도록 안내한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-5bd0801f0d",
+      "url": "https://community.thefa.com/coaching/b/insights-analysis-blogs/posts/two-player-connections-in-wide-areas",
+      "final_url": "https://community.thefa.com/coaching/b/insights-analysis-blogs/posts/two-player-connections-in-wide-areas",
+      "http_status": 200,
+      "checked_at": "2026-09-29T00:50:51.376Z",
+      "reused": false,
+      "page": "refs/r-5bd0801f0d.html",
+      "title": "Two player connections in wide areas",
+      "source_name": "England Football Learning",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u004",
+        "u008",
+        "u011",
+        "u016"
+      ],
+      "summary_ko": "측면에서 두 선수가 연결해 수비의 선택을 어렵게 만드는 움직임과 공을 운반하며 판단하는 방법을 분석한다.",
+      "key_points_ko": [
+        "대각 움직임은 수비수를 끌어내 공을 가진 선수에게 패스와 드리블 선택지를 만든다.",
+        "공을 운반하는 선수는 수비와 동료의 위치를 보며 연결 시점을 정한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-cab2ebe63b",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "http_status": 200,
+      "checked_at": "2026-09-29T00:50:52.372Z",
+      "reused": false,
+      "page": "refs/r-cab2ebe63b.html",
+      "title": "How to coach passing in football",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u006",
+        "u008",
+        "u012",
+        "u015"
+      ],
+      "summary_ko": "패스 여부와 시점은 선수의 위치, 주변 공간, 받는 선수의 컨트롤 가능성을 함께 보고 판단해야 한다고 설명한다.",
+      "key_points_ko": [
+        "공을 더 운반할지 곧바로 패스할지는 그 순간의 공간과 위치에 따라 정한다.",
+        "받는 선수가 쉽게 다룰 수 있는 정확한 패스가 다음 선택지를 늘린다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-732d783561",
+      "url": "https://www.uefa.com/uefachampionsleague/news/029d-1ed6577d678b-a8e995ccd337-1000--champions-league-performance-insights-the-art-of-wing-play",
+      "final_url": "https://www.uefa.com/errors/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T00:50:53.422Z",
+      "reused": false,
+      "page": "refs/r-732d783561.html",
+      "title": "Champions League Performance Insights: The art of wing play",
+      "source_name": "UEFA",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u004",
+        "u010",
+        "u011"
+      ],
+      "summary_ko": "측면 공격수의 크로스와 컷백 선택, 수비 사이 공간을 찾는 동료의 움직임을 실제 경기 사례로 분석한다.",
+      "key_points_ko": [
+        "측면에서 침투한 공격수는 컷백과 반대편 크로스 등 여러 선택을 가진다.",
+        "공이 오기 전 공격수의 위치 조정이 패스 길을 만든다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

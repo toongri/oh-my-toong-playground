@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-cab2ebe63b",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "http_status": 200,
+      "checked_at": "2026-09-29T03:53:39.572Z",
+      "reused": false,
+      "page": "refs/r-cab2ebe63b.html",
+      "title": "How to coach passing in football",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u006",
+        "u008",
+        "u014"
+      ],
+      "summary_ko": "패스를 서두르기보다 받는 선수와 공간, 압박 상황을 보고 적절한 패스 선택을 훈련하는 코칭 자료다.",
+      "key_points_ko": [
+        "공을 받는 위치와 패스의 질이 다음 플레이 선택에 영향을 준다.",
+        "압박을 받았다고 무조건 빨리 공을 처분하지 말고 유리한 위치를 찾는다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-eb5a0c60ef",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-defend-like-england-space-in-wide-areas",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-defend-like-england-space-in-wide-areas",
+      "http_status": 200,
+      "checked_at": "2026-09-29T03:53:40.315Z",
+      "reused": false,
+      "page": "refs/r-eb5a0c60ef.html",
+      "title": "How to defend like England: space in wide areas",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u004",
+        "u009",
+        "u011"
+      ],
+      "summary_ko": "수비가 한쪽에 모이면 반대쪽 넓은 공간을 이용할 수 있으며, 수비팀은 그 전환에 맞춰 대응해야 한다는 분석이다.",
+      "key_points_ko": [
+        "좁은 쪽에서 넓은 쪽으로 전환하면 측면 공간을 활용할 수 있다.",
+        "수비 라인이 압박과 공간 보호를 함께 판단해야 한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-9eb0cebdb3",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/in-possession-developing-receiving-skills",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/in-possession-developing-receiving-skills",
+      "http_status": 200,
+      "checked_at": "2026-09-29T03:53:40.705Z",
+      "reused": false,
+      "page": "refs/r-9eb0cebdb3.html",
+      "title": "In possession: developing receiving skills",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u002",
+        "u005",
+        "u014"
+      ],
+      "summary_ko": "공을 받는 선수의 몸 방향과 패스 무게가 다음 행동에 어떤 영향을 주는지 다루는 코칭 자료다.",
+      "key_points_ko": [
+        "받는 선수가 앞으로 전개할지 뒤로 연결할지 판단하도록 훈련한다.",
+        "패스의 무게와 받는 발 위치를 조절하면 다음 플레이를 돕는다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

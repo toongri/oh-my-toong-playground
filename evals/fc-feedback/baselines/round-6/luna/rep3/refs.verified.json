@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-2ed8e69587",
+      "url": "https://www.ea.com/pl-pl/games/ea-sports-fc/pitch-notes/news/fc-24-gameplay-deepdive",
+      "final_url": "https://www.ea.com/pl-pl/games/ea-sports-fc/pitch-notes/news/fc-24-gameplay-deepdive",
+      "http_status": 200,
+      "checked_at": "2026-09-29T02:09:43.576Z",
+      "reused": false,
+      "page": "refs/r-2ed8e69587.html",
+      "title": "EA SPORTS FC™ 24 | Na wirtualnym boisku – szczegółowe omówienie rozgrywki",
+      "source_name": "EA SPORTS FC",
+      "lang": "pl",
+      "kind": "eafc",
+      "unit_ids": [
+        "u002"
+      ],
+      "summary_ko": "EA의 FC24 게임플레이 심층 노트는 LT를 누르는 볼 보호 조작을 소개하고, 오래 누를수록 보호 효율이 낮아진다고 설명합니다.",
+      "key_points_ko": [
+        "L2 또는 LT로 공을 보호하는 조작을 안내합니다.",
+        "보호 버튼을 오래 누르면 공을 지키는 효율이 낮아질 수 있다고 설명합니다."
+      ]
+    },
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T02:09:44.361Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u001",
+        "u009",
+        "u014"
+      ],
+      "summary_ko": "EA Help는 지면 패스, 스루패스, 로빙 패스의 사용 상황을 안내합니다. 가까운 동료와 점유를 이어갈 때는 지면 패스, 달리는 동료 앞 공간이나 수비선 뒤 공간을 노릴 때는 스루패스를 설명합니다.",
+      "key_points_ko": [
+        "지면 패스는 가까운 동료와 짧게 연결해 점유를 유지하는 데 쓰입니다.",
+        "스루패스는 달리는 동료 앞 공간으로 보내며, 수비수 사이에 열린 패스 길이 있을 때 효과적입니다.",
+        "지면 패스 길이 막혔거나 수비선 뒤 공간이 있으면 로빙 스루패스를 고려할 수 있습니다."
+      ]
+    }
+  ],
+  "dropped": []
+}

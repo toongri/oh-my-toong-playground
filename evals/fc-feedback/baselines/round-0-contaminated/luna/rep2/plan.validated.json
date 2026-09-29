@@ -1,0 +1,471 @@
+{
+  "version": 1,
+  "session_title": "EAFC24 프로클럽 C.E.F. / FC Barcelona 팀 연습 (24.1.4) Part 3",
+  "matches": [
+    {
+      "id": "m1",
+      "title": "C.E.F. FC Barcelona 리그 경기",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "넓은 공간으로 전개",
+          "summary": "좁은 곳에 있는 선수에게 무리하게 넣기보다 넓게 열린 동료를 찾아 연결하고, 공을 옮기는 동안 다른 선수들이 전진할 시간을 확보합니다.",
+          "unit_ids": [
+            "u001"
+          ]
+        },
+        {
+          "id": "m1-t2",
+          "title": "상대를 마주 보는 볼 컨트롤",
+          "summary": "공을 받거나 운반할 때 LT를 누르면 이동 중에도 상대를 향한 자세를 유지해 다음 동작을 준비할 수 있습니다.",
+          "unit_ids": [
+            "u002"
+          ]
+        },
+        {
+          "id": "m1-t3",
+          "title": "전진 전환과 역습",
+          "summary": "전방 움직임을 확인해 빠르게 연결하고, 역습에서는 측면과 중앙의 역할을 나눠 두 개 이상의 패스 선택지를 만듭니다.",
+          "unit_ids": [
+            "u003",
+            "u004",
+            "u005"
+          ]
+        },
+        {
+          "id": "m1-t4",
+          "title": "압박을 벗어나는 점유",
+          "summary": "압박이 이미 붙은 상황에서 무리하게 전진하지 말고 안전한 패스로 압박을 피한 뒤, 동료의 움직임으로 수비를 끌어내 공간을 만듭니다.",
+          "unit_ids": [
+            "u006"
+          ]
+        },
+        {
+          "id": "m1-t5",
+          "title": "침투 타이밍",
+          "summary": "동료가 공간을 향해 연결할 것으로 예상되는 순간에는 멈추지 말고 움직임을 이어 갑니다.",
+          "unit_ids": [
+            "u007"
+          ]
+        },
+        {
+          "id": "m1-t6",
+          "title": "공을 운반해 수비를 움직이기",
+          "summary": "바로 패스해 좁은 곳에 동료를 가두기보다 공을 더 운반해 상대 한 명을 끌어내고, 동료의 전진 시간과 다음 선택지를 만듭니다. 자기 진영에서는 공을 잃었을 때의 역습 위험도 함께 고려합니다.",
+          "unit_ids": [
+            "u008"
+          ]
+        },
+        {
+          "id": "m1-t7",
+          "title": "공격 폭 넓히기",
+          "summary": "수평으로 폭을 넓혀 상대 수비를 벌리고, 열린 공간을 활용할 수 있게 합니다.",
+          "unit_ids": [
+            "u009"
+          ]
+        },
+        {
+          "id": "m1-t8",
+          "title": "파이널서드의 폭과 침투 옵션",
+          "summary": "전방이 막히면 넓은 쪽의 동료와 침투를 살피고, 풀백의 전진과 윙어의 중앙 이동을 조합해 크로스나 컷백 경로를 열어 둡니다.",
+          "unit_ids": [
+            "u010",
+            "u011"
+          ]
+        },
+        {
+          "id": "m1-t9",
+          "title": "대각 전개와 수비 균형 흔들기",
+          "summary": "측면에서 대각선으로 전방 주자를 찾고, 공을 운반해 상대 수비의 균형을 먼저 흔들면 압박과 수비 대응을 끌어낼 수 있습니다.",
+          "unit_ids": [
+            "u012",
+            "u013"
+          ]
+        },
+        {
+          "id": "m1-t10",
+          "title": "밀집 수비를 풀어내기",
+          "summary": "상대 수비가 촘촘하면 전방으로 억지로 찌르지 말고 뒤로 연결해 상대 블록을 다시 움직입니다.",
+          "unit_ids": [
+            "u014"
+          ]
+        },
+        {
+          "id": "m1-t11",
+          "title": "받는 사람의 속도 살리기",
+          "summary": "열린 전방 공간으로 패스할 때 땅볼을 우선해 받는 선수가 공의 진행 속도를 이어가며 다음 동작을 하기 쉽게 만듭니다.",
+          "unit_ids": [
+            "u015"
+          ]
+        },
+        {
+          "id": "m1-t12",
+          "title": "막힐 때 지원 방향 바꾸기",
+          "summary": "같은 방향의 돌파가 막히면 반복하지 말고 뒤쪽 지원을 확인해 안전하게 연결하거나 오버래핑 움직임을 활용해 공격 방식을 바꿉니다.",
+          "unit_ids": [
+            "u016"
+          ]
+        },
+        {
+          "id": "m1-t13",
+          "title": "경기 핵심 정리",
+          "summary": "대각선으로 움직이는 동료를 봐야 할 때 놓치지 않고, 수비가 밀집되면 미련 없이 뒤로 빼는 선택을 팀 전체의 기본 원칙으로 정리합니다.",
+          "unit_ids": [
+            "u017"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 51.12,
+      "end": 103.42,
+      "title": "좁은 곳보다 넓은 선수에게 연결",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [
+        "bride"
+      ],
+      "key_frame_candidate_ids": [
+        "c003"
+      ]
+    },
+    {
+      "id": "u002",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 225.9,
+      "end": 255.12,
+      "title": "LT로 바라보며 이동",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "조작/키사용"
+      ],
+      "member_ids": [
+        "taxi"
+      ],
+      "key_frame_candidate_ids": [
+        "c009"
+      ]
+    },
+    {
+      "id": "u003",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 270.58,
+      "end": 308.96,
+      "title": "침투 공간을 보고 빠르게 연결",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c010"
+      ]
+    },
+    {
+      "id": "u004",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 325.02,
+      "end": 326.66,
+      "title": "전진 기회를 늦추지 않기",
+      "position_tags": [],
+      "topic_tags": [
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c012"
+      ]
+    },
+    {
+      "id": "u005",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 344.68,
+      "end": 399.42,
+      "title": "역습 때 측면·중앙 옵션을 함께 열기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "전환/역습"
+      ],
+      "member_ids": [
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi"
+      ],
+      "key_frame_candidate_ids": [
+        "c014"
+      ]
+    },
+    {
+      "id": "u006",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "NUzEChn9EyI",
+      "start": 463.08000000000004,
+      "end": 526.78,
+      "title": "압박 앞에서 무리한 전진 패스 줄이기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [
+        "saembaek"
+      ],
+      "key_frame_candidate_ids": [
+        "c018"
+      ]
+    },
+    {
+      "id": "u007",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "NUzEChn9EyI",
+      "start": 545.7,
+      "end": 548,
+      "title": "공간으로 향하는 움직임 이어가기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "rumi"
+      ],
+      "key_frame_candidate_ids": []
+    },
+    {
+      "id": "u008",
+      "match_id": "m1",
+      "topic_id": "m1-t6",
+      "video": "NUzEChn9EyI",
+      "start": 579.9399999999999,
+      "end": 658.94,
+      "title": "운반으로 수비를 끌어내고 선택지 만들기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c021"
+      ]
+    },
+    {
+      "id": "u009",
+      "match_id": "m1",
+      "topic_id": "m1-t7",
+      "video": "NUzEChn9EyI",
+      "start": 694.54,
+      "end": 699.54,
+      "title": "수평으로 넓혀 공간 만들기",
+      "position_tags": [],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c024"
+      ]
+    },
+    {
+      "id": "u010",
+      "match_id": "m1",
+      "topic_id": "m1-t8",
+      "video": "NUzEChn9EyI",
+      "start": 791.0999999999999,
+      "end": 838.74,
+      "title": "넓은 공간을 살려 크로스·컷백 선택지 열기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "파이널서드",
+        "크로스"
+      ],
+      "member_ids": [
+        "giseun",
+        "gerrard",
+        "jonjae"
+      ],
+      "key_frame_candidate_ids": [
+        "c030"
+      ]
+    },
+    {
+      "id": "u011",
+      "match_id": "m1",
+      "topic_id": "m1-t8",
+      "video": "NUzEChn9EyI",
+      "start": 857.4799999999999,
+      "end": 913.88,
+      "title": "풀백은 바깥으로, 윙어는 중앙으로 움직이기",
+      "position_tags": [
+        "FB",
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "전환/역습"
+      ],
+      "member_ids": [
+        "find",
+        "wonjeon"
+      ],
+      "key_frame_candidate_ids": [
+        "c033"
+      ]
+    },
+    {
+      "id": "u012",
+      "match_id": "m1",
+      "topic_id": "m1-t9",
+      "video": "NUzEChn9EyI",
+      "start": 1071.64,
+      "end": 1104.5,
+      "title": "사이드에서 대각선으로 전방 주자 찾기",
+      "position_tags": [
+        "CAM"
+      ],
+      "topic_tags": [
+        "파이널서드",
+        "빌드업"
+      ],
+      "member_ids": [
+        "spress"
+      ],
+      "key_frame_candidate_ids": [
+        "c039"
+      ]
+    },
+    {
+      "id": "u013",
+      "match_id": "m1",
+      "topic_id": "m1-t9",
+      "video": "NUzEChn9EyI",
+      "start": 1128.4599999999998,
+      "end": 1139.04,
+      "title": "드리블로 수비 균형 흔들기",
+      "position_tags": [
+        "FB"
+      ],
+      "topic_tags": [
+        "탈압박"
+      ],
+      "member_ids": [
+        "wonjeon"
+      ],
+      "key_frame_candidate_ids": [
+        "c042"
+      ]
+    },
+    {
+      "id": "u014",
+      "match_id": "m1",
+      "topic_id": "m1-t10",
+      "video": "NUzEChn9EyI",
+      "start": 1155.22,
+      "end": 1191.56,
+      "title": "밀집 수비 앞에서 뒤로 순환",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [
+        "find",
+        "rumi"
+      ],
+      "key_frame_candidate_ids": [
+        "c043"
+      ]
+    },
+    {
+      "id": "u015",
+      "match_id": "m1",
+      "topic_id": "m1-t11",
+      "video": "NUzEChn9EyI",
+      "start": 1225.22,
+      "end": 1254.74,
+      "title": "전방에는 땅볼로 연결해 속도 살리기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c045"
+      ]
+    },
+    {
+      "id": "u016",
+      "match_id": "m1",
+      "topic_id": "m1-t12",
+      "video": "NUzEChn9EyI",
+      "start": 1258.6599999999999,
+      "end": 1305.48,
+      "title": "막히면 뒤로 연결해 다음 공격을 만들기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "maekgu"
+      ],
+      "key_frame_candidate_ids": [
+        "c049"
+      ]
+    },
+    {
+      "id": "u017",
+      "match_id": "m1",
+      "topic_id": "m1-t13",
+      "video": "NUzEChn9EyI",
+      "start": 1307.66,
+      "end": 1334.1,
+      "title": "대각 옵션을 보고 밀집 수비는 뒤로 풀기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": []
+    }
+  ]
+}

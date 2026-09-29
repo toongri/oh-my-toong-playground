@@ -1,0 +1,203 @@
+{
+  "session_title": "2024.01.04 FC Barcelona 팀 연습 피드백",
+  "matches": [
+    {
+      "title": "Bros Vamos vs CEF Barcelona 연습 경기",
+      "topics": [
+        {
+          "title": "점유와 연결 선택",
+          "summary": "넓은 공간으로의 연결, LT를 이용한 방향 유지, 뒤를 확인한 뒤 전진하려는 장면을 다룹니다.",
+          "units": [
+            {
+              "start_line": 3,
+              "end_line": 19,
+              "title": "좁은 쪽보다 넓은 쪽에 연결",
+              "position_tags": ["MF", "ST"],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": ["bride"],
+              "key_frame_candidate_ids": ["c004"]
+            },
+            {
+              "start_line": 22,
+              "end_line": 31,
+              "title": "LT로 몸 방향 유지",
+              "position_tags": ["MF", "ST"],
+              "topic_tags": ["조작/키사용", "탈압박"],
+              "member_ids": ["taxi"],
+              "key_frame_candidate_ids": ["c009"]
+            },
+            {
+              "start_line": 32,
+              "end_line": 35,
+              "title": "뒤를 보고 스루 패스 연결",
+              "position_tags": ["ST", "FW"],
+              "topic_tags": ["빌드업", "조작/키사용"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c011"]
+            }
+          ]
+        },
+        {
+          "title": "역습에서 역할 나누기",
+          "summary": "사인드가 낮게 위치한 장면에서 루미의 윙어 역할과 기프의 패스 선택지를 설명합니다.",
+          "units": [
+            {
+              "start_line": 36,
+              "end_line": 51,
+              "title": "역습 때 루미의 윙어 역할",
+              "position_tags": ["FW"],
+              "topic_tags": ["전환/역습", "포지셔닝"],
+              "member_ids": ["jomin", "find", "rumi", "gipeu", "yumi", "maekgu"],
+              "key_frame_candidate_ids": ["c014"]
+            }
+          ]
+        },
+        {
+          "title": "압박을 피하고 전진하기",
+          "summary": "압박이 오는 장면에서 뒤로 연결해 다시 받는 방법, 루미의 움직임, 공을 가진 선수의 운반 선택을 살펴봅니다.",
+          "units": [
+            {
+              "start_line": 55,
+              "end_line": 77,
+              "title": "압박 앞에서 뒤로 연결해 다시 받기",
+              "position_tags": ["CM", "FW"],
+              "topic_tags": ["탈압박", "빌드업"],
+              "member_ids": ["gerrard", "saembaek"],
+              "key_frame_candidate_ids": ["c018"]
+            },
+            {
+              "start_line": 78,
+              "end_line": 78,
+              "title": "루미의 전진 장면",
+              "position_tags": ["FW"],
+              "topic_tags": ["포지셔닝"],
+              "member_ids": ["rumi"],
+              "key_frame_candidate_ids": ["c053"]
+            },
+            {
+              "start_line": 79,
+              "end_line": 99,
+              "title": "운반으로 상대를 끌어내기",
+              "position_tags": ["MF", "ST"],
+              "topic_tags": ["빌드업", "전환/역습"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c021", "c024"]
+            }
+          ]
+        },
+        {
+          "title": "공격 장면과 기회 만들기",
+          "summary": "마무리 장면에 대한 평가, 넓은 공간을 쓰는 선수와 측면·중앙의 역할, 대각 전개를 다룹니다.",
+          "units": [
+            {
+              "start_line": 100,
+              "end_line": 103,
+              "title": "마무리 장면 평가",
+              "position_tags": ["FW"],
+              "topic_tags": ["파이널서드"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c026"]
+            },
+            {
+              "start_line": 104,
+              "end_line": 120,
+              "title": "존재가 넓은 공간을 활용하는 선택",
+              "position_tags": ["CM", "FW"],
+              "topic_tags": ["파이널서드", "빌드업"],
+              "member_ids": ["gerrard", "jonjae"],
+              "key_frame_candidate_ids": ["c030"]
+            },
+            {
+              "start_line": 121,
+              "end_line": 134,
+              "title": "원전의 전진과 사인드의 중앙 침투",
+              "position_tags": ["FB", "FW"],
+              "topic_tags": ["포지셔닝", "전환/역습"],
+              "member_ids": ["find", "wonjeon"],
+              "key_frame_candidate_ids": ["c033"]
+            },
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "대각 패스로 전방 선택지 보기",
+              "position_tags": ["CAM", "FW"],
+              "topic_tags": ["빌드업", "파이널서드"],
+              "member_ids": ["spress"],
+              "key_frame_candidate_ids": ["c039"]
+            }
+          ]
+        },
+        {
+          "title": "수비 상황 되짚기",
+          "summary": "원전이 공을 빼앗으려 한 장면을 확인합니다.",
+          "units": [
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "원전의 공 탈취 시도",
+              "position_tags": ["FB"],
+              "topic_tags": ["수비라인", "압박"],
+              "member_ids": ["wonjeon"],
+              "key_frame_candidate_ids": ["c042"]
+            }
+          ]
+        },
+        {
+          "title": "밀집 수비 대응과 패스 선택",
+          "summary": "상대 수비가 촘촘할 때 뒤로 빼는 선택과 땅볼·띄운 공의 차이를 설명합니다.",
+          "units": [
+            {
+              "start_line": 158,
+              "end_line": 162,
+              "title": "밀집 수비 앞에서 뒤로 빼기",
+              "position_tags": ["MF", "FW"],
+              "topic_tags": ["빌드업", "수비라인"],
+              "member_ids": ["find"],
+              "key_frame_candidate_ids": ["c043"]
+            },
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "하프 공간으로 땅볼 연결",
+              "position_tags": ["MF", "FW"],
+              "topic_tags": ["빌드업", "파이널서드"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c045"]
+            }
+          ]
+        },
+        {
+          "title": "막혔을 때 공격을 살리기",
+          "summary": "맥구가 돌파 공간을 찾기 어려운 장면에서 뒤쪽 지원을 보는 선택을 정리합니다.",
+          "units": [
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "맥구가 막혔을 때 뒤로 살리기",
+              "position_tags": ["FW"],
+              "topic_tags": ["포지셔닝", "탈압박"],
+              "member_ids": ["maekgu"],
+              "key_frame_candidate_ids": ["c046"]
+            }
+          ]
+        },
+        {
+          "title": "경기 마무리 원칙",
+          "summary": "수비가 밀집한 상황에서 공을 뒤로 빼는 팀 공통 선택을 되짚습니다.",
+          "units": [
+            {
+              "start_line": 183,
+              "end_line": 187,
+              "title": "밀집 수비에서는 뒤로 빼기",
+              "position_tags": ["MF", "FW"],
+              "topic_tags": ["빌드업"],
+              "member_ids": [],
+              "key_frame_candidate_ids": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

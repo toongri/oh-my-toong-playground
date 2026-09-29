@@ -1,0 +1,82 @@
+{
+  "refs": [
+    {
+      "url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "title": "EA SPORTS FC 24 | Pitch Notes - PlayStyles Deep Dive",
+      "source_name": "EA SPORTS",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA의 FC 24 PlayStyles 안내는 일부 Trickster+ 플레어 동작 입력을 LT + Fake Shot으로 표기합니다. 영상에서 설명한 LT 이동 동작 자체의 안내는 아니며 게임 조작 문맥 참고용입니다.",
+      "key_points_ko": [
+        "정지 상태에서 실행하는 Trickster+ 고유 플레어 애니메이션 입력으로 LT + Fake Shot을 표기합니다."
+      ],
+      "unit_ids": ["u002"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/sessions/support-and-off-the-ball-movements.php",
+      "title": "Session 10 Support and off-the-ball movements",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "FIFA 트레이닝 자료는 빌드업에서 공 주변에 패스 각을 만들고, 패스 뒤 공간으로 움직여 선택지를 여는 훈련을 소개합니다.",
+      "key_points_ko": [
+        "공을 가진 선수 주변에 여러 패스 각도를 만들고 열린 몸 방향으로 공을 받는 연습을 제시합니다.",
+        "패스한 뒤 공간으로 이동하거나 패스 각도를 여는 움직임을 권합니다."
+      ],
+      "unit_ids": ["u001", "u003", "u004", "u005", "u009", "u013"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php",
+      "title": "Combination play in the final third (Zamrat)",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "FIFA 트레이닝 자료는 전방에서 오프더볼 움직임, 패스 조합, 폭 활용, 지원 옵션으로 수비를 흔드는 훈련을 설명합니다.",
+      "key_points_ko": [
+        "공 없는 선수의 움직임으로 자신이나 동료가 쓸 공간을 만들고 전진을 돕도록 합니다.",
+        "공을 가진 동료를 지원해 선택지를 만들고, 폭을 사용해 수비를 넓게 벌리도록 합니다.",
+        "대각 패스, 오버랩, 원투 패스, 크로스와 컷백을 활용하는 훈련 예시를 담고 있습니다."
+      ],
+      "unit_ids": ["u001", "u003", "u005", "u006", "u007", "u008", "u009", "u013", "u014"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/build-and-progress/5v5-plus-3-small-sided-game-breaking-the-press-and-play-in-behind.php",
+      "title": "5v5 plus 3 small-sided game: Breaking the press and playing in behind",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "상대의 높은 압박을 빠른 조합과 오프더볼 움직임으로 넘고, 수비 뒤 공간으로 전진하는 훈련입니다.",
+      "key_points_ko": [
+        "공을 가진 선수가 압박을 넘길 수 있도록 수비 사이와 뒤쪽에 여러 움직임 선택지를 제공합니다.",
+        "압박을 빠르게 벗어나 수비 뒤로 패스할 공간을 찾는 것을 목표로 합니다."
+      ],
+      "unit_ids": ["u004", "u005", "u007"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/youth-national-teams/france-u17-men/france-u-17-mens-training-camp-monday.php",
+      "title": "France U17 Men training camp – Monday (activation)",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "프랑스 U17 훈련 자료는 받는 선수가 쉽게 이어 갈 수 있도록 땅볼 패스를 사용하고, 압박을 넘어야 할 때 띄운 패스를 선택하는 기준을 제시합니다.",
+      "key_points_ko": [
+        "가능할 때 땅볼로 패스하면 받는 선수가 공을 받기 쉽다고 설명합니다.",
+        "상대의 강한 압박을 넘기 위해 띄운 패스가 필요한 상황을 알아보도록 합니다."
+      ],
+      "unit_ids": ["u012"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/training-perspectives/outplaying-the-opponent-with-michael-beale/developing-a-technical-hard-drive.php",
+      "title": "Michael Beale: Developing a technical hard drive",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "FIFA 트레이닝 자료는 공 받기, 방향 전환, 압박을 받으며 공을 보호하고 빠져나오는 기술 훈련을 소개합니다.",
+      "key_points_ko": [
+        "몸 방향과 첫 터치를 이용해 공을 받고 전진 방향으로 돌아 나가는 연습을 다룹니다.",
+        "압박 아래에서 공을 보호하고 수비수 반대 방향으로 전환하는 훈련을 제시합니다."
+      ],
+      "unit_ids": ["u002"]
+    }
+  ]
+}

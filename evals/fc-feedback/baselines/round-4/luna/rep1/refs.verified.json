@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-14a1f3d390",
+      "url": "https://www.frostbite.com/en-gb/games/ea-sports-fc/pitch-notes/news/fc-24-gameplay-deepdive",
+      "final_url": "https://www.frostbite.com/en-gb/games/ea-sports-fc/pitch-notes/news/fc-24-gameplay-deepdive",
+      "http_status": 200,
+      "checked_at": "2026-09-29T00:30:14.257Z",
+      "reused": false,
+      "page": "refs/r-14a1f3d390.html",
+      "title": "EA SPORTS FC 24 | Pitch Notes - Gameplay Deep Dive",
+      "source_name": "Frostbite / Electronic Arts",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u002"
+      ],
+      "summary_ko": "EA의 FC 24 게임플레이 노트는 LT로 요청하는 Shield Pushback 등 공을 지키는 조작과 볼 컨트롤 요소를 다룹니다.",
+      "key_points_ko": [
+        "Xbox 입력에서 LT가 Shield Pushback 요청에 연결된다고 설명합니다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T00:30:15.386Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u007",
+        "u009",
+        "u012"
+      ],
+      "summary_ko": "EA 공식 패스 가이드는 지면·스루·로브·드리븐 패스를 상황에 맞게 고르는 방법을 안내합니다.",
+      "key_points_ko": [
+        "가까운 동료와 짧게 연결해 점유를 유지할 때는 ground pass를, 달려가는 동료 앞 공간에는 through pass를 권합니다.",
+        "패스 길이 열렸는지 확인하고 수비 사이로 무리하게 보내지 말라고 안내합니다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

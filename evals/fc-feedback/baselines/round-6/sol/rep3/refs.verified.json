@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-cab2ebe63b",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "http_status": 200,
+      "checked_at": "2026-09-29T01:19:23.184Z",
+      "reused": false,
+      "page": "refs/r-cab2ebe63b.html",
+      "title": "How to coach passing in football",
+      "source_name": "The FA — The Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u006",
+        "u009",
+        "u010"
+      ],
+      "summary_ko": "패스의 타이밍과 위치 선정, 공을 가진 채 수비수를 끌어내는 선택을 다루는 코칭 자료다.",
+      "key_points_ko": [
+        "패스 전에 공을 더 몰고 가면 수비수의 위치를 바꾸고 더 나은 선택을 만들 수 있다.",
+        "패스하는 선수와 받는 선수의 위치와 몸 방향이 가능한 패스를 좌우한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-f73a8df603",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-forward-movement",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-forward-movement",
+      "http_status": 200,
+      "checked_at": "2026-09-29T01:19:24.043Z",
+      "reused": false,
+      "page": "refs/r-f73a8df603.html",
+      "title": "How to coach forward movement",
+      "source_name": "The FA — The Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u003",
+        "u005",
+        "u008"
+      ],
+      "summary_ko": "공이 없는 공격수가 공간과 패스 길을 만들기 위해 움직임을 조정하는 방법을 설명한다.",
+      "key_points_ko": [
+        "공격수는 자신뿐 아니라 동료가 쓸 공간도 만들도록 움직인다.",
+        "공을 가진 동료의 상황에 따라 침투하거나 발밑 패스 선택지를 제공한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-81135892ef",
+      "url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "final_url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "http_status": 200,
+      "checked_at": "2026-09-29T01:19:24.596Z",
+      "reused": false,
+      "page": "refs/r-81135892ef.html",
+      "title": "EA SPORTS FC 24 | Pitch Notes - PlayStyles Deep Dive",
+      "source_name": "EA SPORTS FC",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u011"
+      ],
+      "summary_ko": "FC 24의 패스 관련 플레이스타일과 땅볼·스루 패스의 게임 내 특성을 소개한다.",
+      "key_points_ko": [
+        "Pinged Pass와 Tiki Taka는 땅볼 패스의 속도·품질 또는 받는 선수의 컨트롤과 관련된다.",
+        "Incisive Pass는 스루 패스의 정확도와 받는 선수의 컨트롤에 관련된다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

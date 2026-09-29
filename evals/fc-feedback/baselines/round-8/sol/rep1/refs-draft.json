@@ -1,0 +1,40 @@
+{
+  "refs": [
+    {
+      "url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "title": "EA SPORTS FC 24 | Pitch Notes - PlayStyles Deep Dive",
+      "source_name": "EA SPORTS",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA FC 24의 패스와 볼 컨트롤 플레이스타일이 게임 내 동작에 미치는 효과를 설명한다.",
+      "key_points_ko": [
+        "Pinged Pass는 땅볼 패스의 속도와 받는 선수의 트래핑 제어에 영향을 준다.",
+        "Press Proven은 공을 지키며 움직이는 능력과 드리블 터치에 영향을 준다."
+      ],
+      "translations": [],
+      "unit_ids": [
+        "u002",
+        "u004",
+        "u011"
+      ]
+    },
+    {
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-england-u15s-play-out-from-the-back",
+      "title": "How England U15s play out from the back",
+      "source_name": "The FA",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "압박 속에서 공을 받는 선수의 위치와 짧거나 긴 패스의 선택을 다룬 지도자 인터뷰다.",
+      "key_points_ko": [
+        "후방 빌드업은 압박 아래에서 수신자가 공을 다룰 위치를 확보하는 것과 연결된다.",
+        "짧은 패스만 고집하지 않고 앞선의 공간으로 보내는 선택도 상황에 따라 가능하다."
+      ],
+      "translations": [],
+      "unit_ids": [
+        "u001",
+        "u005",
+        "u006"
+      ]
+    }
+  ]
+}

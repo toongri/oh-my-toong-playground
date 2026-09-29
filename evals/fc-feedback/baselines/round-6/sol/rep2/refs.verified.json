@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-05a1414884",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/what-is-creating-the-attack",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/what-is-creating-the-attack",
+      "http_status": 200,
+      "checked_at": "2026-09-29T01:19:20.257Z",
+      "reused": false,
+      "page": "refs/r-05a1414884.html",
+      "title": "What is creating the attack?",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u003",
+        "u007",
+        "u008",
+        "u009"
+      ],
+      "summary_ko": "공격을 만들 때 공간 확보, 공을 가진 선수의 판단, 공 없는 선수의 지원 움직임을 함께 살피는 코칭 자료다.",
+      "key_points_ko": [
+        "팀과 개인의 공간 확보에는 퍼지는 위치와 움직임의 타이밍이 포함된다.",
+        "드리블·패스 판단과 공 없는 선수의 지원 움직임이 연결된다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-cab2ebe63b",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "http_status": 200,
+      "checked_at": "2026-09-29T01:19:21.210Z",
+      "reused": false,
+      "page": "refs/r-cab2ebe63b.html",
+      "title": "How to coach passing in football",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u004",
+        "u006",
+        "u011",
+        "u013"
+      ],
+      "summary_ko": "패스 타이밍과 상대를 끌어낸 뒤 패스하는 판단, 공을 더 지니면서 각도를 만드는 움직임을 설명한다.",
+      "key_points_ko": [
+        "압박이 왔다고 바로 공을 버리기보다 적절한 패스와 위치를 선택한다.",
+        "공을 몰고 공간으로 이동하거나 방향을 바꾸면 패스 각도가 달라진다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-f73a8df603",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-forward-movement",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-forward-movement",
+      "http_status": 200,
+      "checked_at": "2026-09-29T01:19:22.076Z",
+      "reused": false,
+      "page": "refs/r-f73a8df603.html",
+      "title": "How to coach forward movement",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u003",
+        "u005",
+        "u008"
+      ],
+      "summary_ko": "공격수가 공을 받기 전 빈 공간을 찾고 반복해서 위치를 조정하는 움직임을 다룬다.",
+      "key_points_ko": [
+        "공 없는 선수의 움직임은 자신과 동료에게 패스 공간을 만든다.",
+        "공을 가진 선수의 상황에 따라 앞으로 뛰거나 발밑으로 받을 위치를 선택한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-81135892ef",
+      "url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "final_url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "http_status": 200,
+      "checked_at": "2026-09-29T01:19:22.862Z",
+      "reused": false,
+      "page": "refs/r-81135892ef.html",
+      "title": "EA SPORTS FC 24 Pitch Notes — PlayStyles Deep Dive",
+      "source_name": "EA SPORTS FC",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u012"
+      ],
+      "summary_ko": "FC 24의 패스 관련 PlayStyle이 땅볼 패스와 로브 패스의 속도·정확도·수신에 미치는 효과를 설명한다.",
+      "key_points_ko": [
+        "Pinged Pass는 땅볼 패스의 속도와 수신자의 트래핑 품질에 영향을 준다.",
+        "Long Ball Pass는 로브 패스의 속도와 정확도에 영향을 준다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

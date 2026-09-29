@@ -1,0 +1,48 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA가 땅볼·스루·로빙 패스의 쓰임과 열린 패스 길을 고르는 기준을 설명한다.",
+      "key_points_ko": ["가까운 동료와 길이 열렸을 때 땅볼 패스를 활용한다.", "동료의 움직임과 주변 공간에 맞춰 패스 종류를 고른다."],
+      "translations": [],
+      "unit_ids": ["u001", "u007", "u012", "u013"]
+    },
+    {
+      "url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true",
+      "title": "FC Futures Practices",
+      "source_name": "EA SPORTS FC",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA의 연습 자료에서 막힌 패스 길에서 점유를 유지하는 연습과 동료의 침투에 맞춘 패스를 다룬다.",
+      "key_points_ko": ["패스 길이 막혔을 때 다른 연결 방식을 연습한다.", "침투 패스는 판단과 타이밍, 세기를 함께 다룬다."],
+      "translations": [],
+      "unit_ids": ["u003", "u004", "u011"]
+    },
+    {
+      "url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "title": "EA SPORTS FC 24 Pitch Notes: PlayStyles Deep Dive",
+      "source_name": "EA SPORTS FC",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "FC 24의 Jockey 플레이스타일이 수비 상황의 조키 이동 속도와 전환에 미치는 효과를 설명한다.",
+      "key_points_ko": ["Jockey 플레이스타일은 스프린트 조키 최고 속도와 일반 스프린트 전환 속도에 영향을 준다."],
+      "translations": [],
+      "unit_ids": ["u002"]
+    },
+    {
+      "url": "https://community.thefa.com/coaching/b/insights-analysis-blogs/posts/passing-positional-considerations-for-core-skills",
+      "title": "Passing: positional considerations for core skills",
+      "source_name": "England Football Learning",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "포지션과 압박 상황을 고려한 패스 선택, 상대 구조의 바깥 공간 활용을 다루는 코칭 자료다.",
+      "key_points_ko": ["압박과 포지션에 따라 패스 선택지가 달라진다.", "상대 수비 형태 바깥의 공간으로 방향을 바꿀 수 있다."],
+      "translations": [],
+      "unit_ids": ["u006", "u009"]
+    }
+  ]
+}

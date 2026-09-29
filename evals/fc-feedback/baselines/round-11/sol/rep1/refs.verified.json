@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-2add849eab",
+      "url": "https://learning.coachesvoice.com/cv/switches-of-play-football-tactics-explained",
+      "final_url": "https://learning.coachesvoice.com/cv/switches-of-play-football-tactics-explained/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T04:28:33.989Z",
+      "reused": false,
+      "page": "refs/r-2add849eab.html",
+      "title": "Switch of play: football tactics explained",
+      "source_name": "The Coaches' Voice",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u006",
+        "u008"
+      ],
+      "summary_ko": "공격 폭을 사용해 상대가 비운 측면 공간을 찾는 전술 설명이다.",
+      "key_points_ko": [
+        "폭을 유지하며 반대편과 바깥 공간의 선택지를 만든다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-5ea28faa01",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/in-possession-counter-attacking",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/in-possession-counter-attacking",
+      "http_status": 200,
+      "checked_at": "2026-09-29T04:28:35.354Z",
+      "reused": false,
+      "page": "refs/r-5ea28faa01.html",
+      "title": "In possession: counter-attacking",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u003",
+        "u005",
+        "u007"
+      ],
+      "summary_ko": "공 탈취 뒤 빠른 전진, 드리블, 공격 선수의 침투를 다루는 역습 훈련 자료다.",
+      "key_points_ko": [
+        "역습에서는 공을 가진 선수의 전진과 앞선 선수들의 움직임을 함께 살핀다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-cab2ebe63b",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "http_status": 200,
+      "checked_at": "2026-09-29T04:28:36.162Z",
+      "reused": false,
+      "page": "refs/r-cab2ebe63b.html",
+      "title": "How to coach passing in football",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u004",
+        "u005",
+        "u011",
+        "u012"
+      ],
+      "summary_ko": "수비수를 끌어낸 뒤 패스하거나 다음 달리기를 살리는 패스를 선택하는 법을 다룬다.",
+      "key_points_ko": [
+        "패스를 서두르기보다 수비수의 거리와 받는 선수의 다음 움직임을 본다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-81706b9d03",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/in-possession-width-for-deception",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/in-possession-width-for-deception",
+      "http_status": 200,
+      "checked_at": "2026-09-29T04:28:36.985Z",
+      "reused": false,
+      "page": "refs/r-81706b9d03.html",
+      "title": "In possession: width for deception",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u003",
+        "u007",
+        "u010"
+      ],
+      "summary_ko": "측면 폭을 이용해 중앙 공간을 만드는 훈련 자료다.",
+      "key_points_ko": [
+        "측면에 선 선수가 수비를 벌려 중앙의 다음 선택지를 만들 수 있다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-81135892ef",
+      "url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "final_url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "http_status": 200,
+      "checked_at": "2026-09-29T04:28:37.846Z",
+      "reused": false,
+      "page": "refs/r-81135892ef.html",
+      "title": "EA SPORTS FC 24 Pitch Notes: PlayStyles Deep Dive",
+      "source_name": "EA SPORTS FC",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u011"
+      ],
+      "summary_ko": "EA SPORTS FC 24의 패스 관련 플레이스타일과 땅볼 패스·높은 패스의 특성을 설명한다.",
+      "key_points_ko": [
+        "땅볼 패스와 높게 띄운 패스는 궤적과 받는 선수의 컨트롤 특성이 다르다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

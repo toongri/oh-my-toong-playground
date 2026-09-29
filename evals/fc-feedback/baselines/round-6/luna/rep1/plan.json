@@ -1,0 +1,203 @@
+{
+  "session_title": "2024.01.04 C.E.F. FC Barcelona 팀 연습 피드백",
+  "matches": [
+    {
+      "title": "FC Barcelona 연습 경기",
+      "topics": [
+        {
+          "title": "넓은 공간을 활용한 패스",
+          "summary": "좁은 곳에 모인 선수보다 넓은 공간의 선수를 찾고, 막히면 뒤로 빼는 선택을 다룹니다.",
+          "units": [
+            {
+              "start_line": 4,
+              "end_line": 19,
+              "title": "브라이드에서 TIMEJ로 오는 공과 넓은 공간 선택",
+              "position_tags": ["MF", "ST"],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": ["bride", "timej"],
+              "key_frame_candidate_ids": ["c004"]
+            }
+          ]
+        },
+        {
+          "title": "LT를 활용한 방향 전환",
+          "summary": "LT를 누른 채 움직일 때 몸을 돌리지 않고 특정 방향을 바라보며 움직이는 조작을 다룹니다.",
+          "units": [
+            {
+              "start_line": 22,
+              "end_line": 30,
+              "title": "택시의 LT 조작과 턴 동작",
+              "position_tags": ["MF", "ST"],
+              "topic_tags": ["조작/키사용", "탈압박"],
+              "member_ids": ["taxi", "timej"],
+              "key_frame_candidate_ids": ["c009"]
+            }
+          ]
+        },
+        {
+          "title": "역습에서 역할 나누기",
+          "summary": "사인드가 낮게 위치한 역습에서 루미가 윙어 역할을 맡고, 패스 선택지를 둘 이상 열어 두는 장면을 다룹니다.",
+          "units": [
+            {
+              "start_line": 36,
+              "end_line": 51,
+              "title": "사인드가 낮게 있는 역습에서 루미의 윙어 역할",
+              "position_tags": ["FW", "ST"],
+              "topic_tags": ["전환/역습", "포지셔닝"],
+              "member_ids": ["jomin", "find", "rumi", "gipeu", "yumi", "maekgu", "timej"],
+              "key_frame_candidate_ids": ["c013"]
+            }
+          ]
+        },
+        {
+          "title": "압박 아래에서 공을 지키고 다시 전진하기",
+          "summary": "압박이 올 때 뒤로 내주고 다시 받는 방법, 전진 패스의 이득과 수비를 끌어내는 선택을 다룹니다.",
+          "units": [
+            {
+              "start_line": 55,
+              "end_line": 77,
+              "title": "Gerrard_CEF의 압박 회피와 샘백 활용",
+              "position_tags": ["CM", "FW", "ST"],
+              "topic_tags": ["탈압박", "빌드업"],
+              "member_ids": ["gerrard", "saembaek", "timej"],
+              "key_frame_candidate_ids": ["c017", "c018"]
+            }
+          ]
+        },
+        {
+          "title": "좁은 공간에서 운반해 전진하기",
+          "summary": "좁은 곳으로 바로 연결하기보다 공을 더 운반해 상대를 끌고, 넓게 벌려 플레이하는 내용을 다룹니다.",
+          "units": [
+            {
+              "start_line": 79,
+              "end_line": 97,
+              "title": "좁은 곳에서 바로 주기보다 직접 운반해 상대를 끌기",
+              "position_tags": ["ST"],
+              "topic_tags": ["빌드업", "탈압박", "전환/역습"],
+              "member_ids": ["timej"],
+              "key_frame_candidate_ids": ["c021", "c022"]
+            },
+            {
+              "start_line": 98,
+              "end_line": 99,
+              "title": "넓게 벌려 플레이하기",
+              "position_tags": [],
+              "topic_tags": ["포지셔닝"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c024"]
+            }
+          ]
+        },
+        {
+          "title": "넓은 공간으로 공격 연결하기",
+          "summary": "열린 공간으로 공격을 연결해 전방 주자의 선택지를 만들고, 뒤에서 공간을 보완하는 장면을 다룹니다.",
+          "units": [
+            {
+              "start_line": 108,
+              "end_line": 120,
+              "title": "Gerrard_CEF에게 연결해 존재가 넓은 공간 쓰기",
+              "position_tags": ["CM", "FW", "ST"],
+              "topic_tags": ["파이널서드", "빌드업", "크로스"],
+              "member_ids": ["gerrard", "jonjae", "timej"],
+              "key_frame_candidate_ids": ["c030"]
+            },
+            {
+              "start_line": 121,
+              "end_line": 131,
+              "title": "원전의 전진에 맞춰 사인드는 중앙으로, TIMEJ는 뒤에서 보완",
+              "position_tags": ["FB", "FW", "ST"],
+              "topic_tags": ["포지셔닝", "전환/역습"],
+              "member_ids": ["find", "wonjeon", "timej"],
+              "key_frame_candidate_ids": ["c033"]
+            }
+          ]
+        },
+        {
+          "title": "대각 패스로 전방 선택지 만들기",
+          "summary": "측면에서 대각으로 공을 빼 주면 미드필더가 넓은 공간으로 뛰는 선수를 볼 여유가 생긴다는 점을 다룹니다.",
+          "units": [
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "스프레스의 대각 패스로 전방 선택지 만들기",
+              "position_tags": ["CAM", "MF", "FW"],
+              "topic_tags": ["빌드업", "파이널서드"],
+              "member_ids": ["spress"],
+              "key_frame_candidate_ids": ["c039"]
+            }
+          ]
+        },
+        {
+          "title": "밀집 수비 앞에서 판단하고 뒤를 보완하기",
+          "summary": "수비를 무리하게 뚫거나 태클을 시도하기보다 상황을 보고 뒤로 빼거나 공간을 보완하는 선택을 다룹니다.",
+          "units": [
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "원전의 태클 시도와 페널티",
+              "position_tags": ["FB"],
+              "topic_tags": ["압박"],
+              "member_ids": ["wonjeon"],
+              "key_frame_candidate_ids": ["c042"]
+            },
+            {
+              "start_line": 158,
+              "end_line": 160,
+              "title": "상대 수비가 촘촘하면 뒤로 빼기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "탈압박"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c043"]
+            }
+          ]
+        },
+        {
+          "title": "받는 선수의 주행에 맞춰 패스하기",
+          "summary": "가능하면 땅으로 연결해 받는 선수가 오는 공의 속도를 살려 플레이하기 쉽게 만들고, 막힐 때 띄우는 선택을 다룹니다.",
+          "units": [
+            {
+              "start_line": 163,
+              "end_line": 165,
+              "title": "가능하면 땅으로 연결하고 막힐 때 띄우기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "파이널서드"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c045"]
+            }
+          ]
+        },
+        {
+          "title": "막힌 돌파에서 선택 바꾸기",
+          "summary": "맥구가 같은 방식으로 돌파를 반복하기보다 뒤의 지원을 확인하고 패스를 활용하는 선택을 다룹니다.",
+          "units": [
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "맥구의 돌파가 막히면 뒤를 살리고 선택 바꾸기",
+              "position_tags": ["FW"],
+              "topic_tags": ["탈압박", "포지셔닝", "빌드업"],
+              "member_ids": ["maekgu"],
+              "key_frame_candidate_ids": ["c046"]
+            }
+          ]
+        },
+        {
+          "title": "마무리 정리",
+          "summary": "오늘의 핵심을 후방 대각선 선택지와 밀집 수비 앞에서의 후퇴 패스로 정리합니다.",
+          "units": [
+            {
+              "start_line": 183,
+              "end_line": 187,
+              "title": "후방 대각선을 확인하고 밀집 수비면 뒤로 빼기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "탈압박"],
+              "member_ids": [],
+              "key_frame_candidate_ids": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

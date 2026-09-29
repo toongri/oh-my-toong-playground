@@ -1,0 +1,338 @@
+{
+  "session_title": "C.E.F. FC Barcelona 팀 연습 피드백 · 2024.01.04 Part 3",
+  "matches": [
+    {
+      "title": "FC Barcelona 대 BRO · 연습 경기 피드백",
+      "topics": [
+        {
+          "title": "공간 선택과 공 받는 자세",
+          "summary": "좁은 곳보다 넓은 곳의 동료에게 연결하고, 공을 받을 때 LT로 몸의 방향을 유지한다.",
+          "units": [
+            {
+              "start_line": 5,
+              "end_line": 19,
+              "title": "좁은 곳 대신 넓은 공간으로 연결",
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "bride",
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c003",
+                "c004"
+              ]
+            },
+            {
+              "start_line": 23,
+              "end_line": 29,
+              "title": "택시의 공 받기와 LT 조작",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "조작/키사용"
+              ],
+              "member_ids": [
+                "taxi"
+              ],
+              "key_frame_candidate_ids": [
+                "c009"
+              ]
+            },
+            {
+              "start_line": 31,
+              "end_line": 34,
+              "title": "스루패스와 빠른 전진 선택 돌아보기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c053",
+                "c011"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "역습 때 패스 선택지 만들기",
+          "summary": "측면 역할과 침투 동선을 분담해 공을 가진 동료에게 선택지를 제공한다.",
+          "units": [
+            {
+              "start_line": 36,
+              "end_line": 51,
+              "title": "루미의 측면 침투로 두 패스 옵션 만들기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "jomin",
+                "find",
+                "rumi",
+                "gipeu",
+                "yumi",
+                "timej",
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": [
+                "c013",
+                "c014"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "압박을 피하는 후방 전개",
+          "summary": "압박이 들어오는 장면에서는 뒤로 연결하고, 전방 패스의 난도를 낮출 선택지를 찾는다.",
+          "units": [
+            {
+              "start_line": 55,
+              "end_line": 63,
+              "title": "공을 받기 전에 압박을 보고 뒤로 연결",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "압박",
+                "탈압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c017"
+              ]
+            },
+            {
+              "start_line": 65,
+              "end_line": 77,
+              "title": "무리한 전진 대신 샘백에게 연결",
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "gerrard",
+                "saembaek",
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c018"
+              ]
+            },
+            {
+              "start_line": 78,
+              "end_line": 78,
+              "title": "루미의 멈춘 움직임",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "rumi"
+              ],
+              "key_frame_candidate_ids": [
+                "c054"
+              ]
+            },
+            {
+              "start_line": 79,
+              "end_line": 97,
+              "title": "우리 진영에서 공을 더 운반한 뒤 연결",
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c021",
+                "c022"
+              ]
+            },
+            {
+              "start_line": 98,
+              "end_line": 99,
+              "title": "상하로 넓게 벌리는 움직임",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c024"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "공간 활용과 측면 진입",
+          "summary": "중앙이 막힌 장면에서는 넓은 공간을 찾아 전개하고, 원전의 측면 전진에 맞춰 사인드의 위치를 조정한다.",
+          "units": [
+            {
+              "start_line": 104,
+              "end_line": 120,
+              "title": "중앙이 막히면 Gerrard_CEF를 거쳐 넓은 공간으로",
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "크로스"
+              ],
+              "member_ids": [
+                "timej",
+                "giseun",
+                "gerrard",
+                "jonjae"
+              ],
+              "key_frame_candidate_ids": [
+                "c030",
+                "c031"
+              ]
+            },
+            {
+              "start_line": 121,
+              "end_line": 133,
+              "title": "원전의 측면 전진에 맞춰 사인드가 중앙으로",
+              "position_tags": [
+                "FB",
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "find",
+                "wonjeon",
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c032",
+                "c033"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "대각 연결과 수비 판단",
+          "summary": "앞으로 뛰는 동료를 볼 수 있도록 대각 연결을 찾는다. 수비 때 무리한 태클을, 공격 때 밀집 수비 앞에서의 선택을 돌아본다.",
+          "units": [
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "스프레스의 대각 연결로 중원에 시간 주기",
+              "position_tags": [
+                "CAM"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "spress"
+              ],
+              "key_frame_candidate_ids": [
+                "c039"
+              ]
+            },
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "원전의 태클과 페널티 장면",
+              "position_tags": [
+                "FB"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [
+                "wonjeon"
+              ],
+              "key_frame_candidate_ids": [
+                "c042"
+              ]
+            },
+            {
+              "start_line": 158,
+              "end_line": 160,
+              "title": "촘촘한 수비 앞에서 뒤로 빼기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c055",
+                "c043"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "패스 높이와 막힌 돌파의 대안",
+          "summary": "받는 동료가 속도를 살릴 수 있게 패스 높이를 선택하고, 막힌 돌파 대신 후방 옵션을 활용한다.",
+          "units": [
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "가능하면 땅으로 패스 연결",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c045"
+              ]
+            },
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "맥구의 막힌 돌파와 후방 선택지",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

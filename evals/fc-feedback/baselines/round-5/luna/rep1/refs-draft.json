@@ -1,0 +1,58 @@
+{
+  "refs": [
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/sessions/support-and-off-the-ball-movements.php",
+      "title": "Support and off-the-ball movements",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "FIFA 트레이닝 세션은 패스 각도를 만들고 압박을 벗어나기 위한 오프더볼 움직임과 지원 위치를 다룹니다.",
+      "key_points_ko": [
+        "공을 가진 선수 주변에서 여러 패스 각도를 만든다.",
+        "패스한 뒤 공간으로 움직이거나 패스 각도를 다시 연다.",
+        "한 구역이 혼잡하면 반대쪽으로 전환해 공간을 찾는다."
+      ],
+      "unit_ids": ["u001", "u003", "u006", "u007", "u008", "u009", "u010", "u014", "u015"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/build-and-progress/progressing-through-the-thirds.php",
+      "title": "Small-sided game: Progressing through the thirds",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "압박을 받는 빌드업에서 중앙 통로로 전진하고, 협력 패스와 받으러 나오는 움직임으로 압박선을 넘는 훈련입니다.",
+      "key_points_ko": [
+        "볼을 소유한 팀이 패스와 지원 움직임을 맞춰 전진한다.",
+        "앞선 압박을 벗어난 뒤 수적 우위를 활용해 다음 구역으로 연결한다."
+      ],
+      "unit_ids": ["u004", "u006", "u008", "u010"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/press-and-regain/8v7-team-game-compact-defending.php",
+      "title": "8v7 team game: Compact defending",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "수비 팀이 압박할 때 간격을 유지하고, 중앙 통로를 보호하며, 압박이 풀리면 함께 내려가고 옆으로 이동하는 훈련입니다.",
+      "key_points_ko": [
+        "수비 팀은 간격을 줄여 중앙의 진행 통로를 막는다.",
+        "압박선을 통과당하면 함께 물러나고 수비 형태를 다시 맞춘다.",
+        "공격 팀은 폭을 넓혀 수비가 커버해야 할 거리를 늘린다."
+      ],
+      "unit_ids": ["u007"]
+    },
+    {
+      "url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "title": "EA SPORTS FC 24 | Pitch Notes - PlayStyles Deep Dive",
+      "source_name": "EA SPORTS",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA의 FC 24 설명은 그라운드 패스와 로브 패스에 적용되는 인게임 패스 특성 및 공을 받는 동작의 차이를 정리합니다.",
+      "key_points_ko": [
+        "Pinged Pass는 일반 그라운드 패스의 속도와 정확도, 받는 선수의 컨트롤을 높인다.",
+        "Long Ball Pass는 로브 패스의 속도와 정확도, 궤적에 영향을 준다."
+      ],
+      "unit_ids": ["u013"]
+    }
+  ]
+}

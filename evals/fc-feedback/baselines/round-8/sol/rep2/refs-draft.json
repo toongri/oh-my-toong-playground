@@ -1,0 +1,48 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "동료의 움직임과 패스 길에 맞춰 땅볼, 스루, 띄운 패스를 구분하는 EA 공식 안내다.",
+      "key_points_ko": ["가까운 동료까지 패스 길이 열려 있으면 땅볼 패스를 권한다.", "수비수가 땅볼 패스 길을 막고 뒤 공간이 있으면 띄운 스루패스를 고려한다."],
+      "translations": [],
+      "unit_ids": ["u001", "u010"]
+    },
+    {
+      "url": "https://learn.englandfootball.com/articles-and-resources/coaching/resources/2025/On-around-and-away-from-the-ball",
+      "title": "On, around, and away from the ball",
+      "source_name": "England Football Learning",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "공을 가진 선수, 주변 동료, 공과 떨어진 팀 형태를 함께 관찰하는 코칭 틀을 설명한다.",
+      "key_points_ko": ["공 주변 동료가 패스 선택지를 어떻게 제공하는지 살핀다.", "공에서 떨어진 선수의 위치와 균형도 관찰한다."],
+      "translations": [],
+      "unit_ids": ["u003", "u007"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/building_from_the_back_skinner.php",
+      "title": "Building from the back",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "중앙이 좁거나 압박받는 상황에서 후방부터 전진하는 훈련과 코칭 포인트를 제시한다.",
+      "key_points_ko": ["수비수가 중앙에서 좁게 붙으면 넓은 쪽 패스를 찾아 전진한다.", "받는 선수가 다음 전진을 할 수 있는 발밑 패스를 강조한다."],
+      "translations": [],
+      "unit_ids": ["u001", "u008", "u009"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/game/game-analysis/transition-to-attacking/passing-the-press.php",
+      "title": "Passing the press",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "압박을 받는 선수가 뒤나 옆의 동료에게 연결해 시야와 시간을 가진 선수로 전개하는 방법을 분석한다.",
+      "key_points_ko": ["첫 패스가 뒤나 옆으로 향하면 더 넓은 시야를 가진 동료에게 공을 맡길 수 있다.", "패스를 받을 동료와 다음 출구를 제공할 선수의 위치가 중요하다."],
+      "translations": [],
+      "unit_ids": ["u004", "u005", "u006", "u011"]
+    }
+  ]
+}

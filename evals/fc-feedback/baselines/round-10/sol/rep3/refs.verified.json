@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T03:52:35.303Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u008",
+        "u013"
+      ],
+      "summary_ko": "EA SPORTS FC의 패스 조작과 패스 유형을 설명하는 공식 안내다.",
+      "key_points_ko": [
+        "상황에 따라 패스와 스루 패스 등 다양한 전달 방식을 선택할 수 있다.",
+        "긴 패스나 반대편 전환에는 입력 세기를 조절한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-6833f30a45",
+      "url": "https://community.thefa.com/coaching/podcasts/w/coachcast-transcripts/1196/episode-four-passing-and-receiving-with-lawrence-lok",
+      "final_url": "https://community.thefa.com/coaching/podcasts/w/coachcast-transcripts/1196/episode-four-passing-and-receiving-with-lawrence-lok",
+      "http_status": 200,
+      "checked_at": "2026-09-29T03:52:35.374Z",
+      "reused": false,
+      "page": "refs/r-6833f30a45.html",
+      "title": "Episode four: passing and receiving with Lawrence Lok",
+      "source_name": "The England Football Community",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u007",
+        "u010"
+      ],
+      "summary_ko": "패스와 볼 받기를 연습할 때 선수들이 거리와 각도, 타이밍, 속도를 판단하도록 돕는 코칭 대화다.",
+      "key_points_ko": [
+        "패스 연습에서 타이밍과 각도, 거리, 속도가 중요하다고 설명한다.",
+        "좁은 경기 상황을 통해 공간과 패스 선택을 경험하게 한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-eb5a0c60ef",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-defend-like-england-space-in-wide-areas",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-defend-like-england-space-in-wide-areas",
+      "http_status": 200,
+      "checked_at": "2026-09-29T03:52:36.153Z",
+      "reused": false,
+      "page": "refs/r-eb5a0c60ef.html",
+      "title": "How to defend like England: space in wide areas",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u003",
+        "u009"
+      ],
+      "summary_ko": "측면으로 공이 이동할 때 수비가 넓은 공간과 뒷공간을 지키는 선택을 분석한 자료다.",
+      "key_points_ko": [
+        "상대의 측면 전환에 따라 수비 위치를 조정한다.",
+        "전진 패스를 막고 최종 수비선 뒤 공간을 보호한다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

@@ -1,0 +1,270 @@
+{
+  "version": 1,
+  "session_id": "20240104-yn-qm7lM5p4",
+  "title": "EAFC24 프로클럽 C.E.F. / FC Barcelona 팀 연습 (24.1.4) - Part 2",
+  "date": "2024-01-04",
+  "generated_at": "2026-09-28T22:48:55.600Z",
+  "pages_base_url": "https://fc-feedback-eval.invalid/",
+  "videos": [
+    {
+      "id": "yn-qm7lM5p4",
+      "part": 1,
+      "embeddable": true
+    }
+  ],
+  "members": [
+    {
+      "id": "timej",
+      "name": "TIMEJ",
+      "gamertag": "TIMEJ",
+      "positions": [
+        "ST"
+      ]
+    },
+    {
+      "id": "gerrard",
+      "name": "Gerrard_CEF",
+      "gamertag": "Gerrard_CEF",
+      "positions": [
+        "CM"
+      ]
+    },
+    {
+      "id": "vandeven",
+      "name": "CEF_VandeVen",
+      "gamertag": "CEF_VandeVen",
+      "positions": [
+        "CB"
+      ]
+    },
+    {
+      "id": "bride",
+      "name": "브라이드",
+      "gamertag": "CEF_Bride",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "taxi",
+      "name": "택시",
+      "gamertag": "CEF_Taxi",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jomin",
+      "name": "조민",
+      "gamertag": "CEF_Jomin",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "find",
+      "name": "사인드",
+      "gamertag": "CEF_Find",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "rumi",
+      "name": "루미",
+      "gamertag": "CEF_Rumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "gipeu",
+      "name": "기프",
+      "gamertag": "CEF_Gipeu",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "yumi",
+      "name": "유미",
+      "gamertag": "CEF_Yumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "saembaek",
+      "name": "샘백",
+      "gamertag": "CEF_Saembaek",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "giseun",
+      "name": "기슨",
+      "gamertag": "CEF_Giseun",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jonjae",
+      "name": "존재",
+      "gamertag": "CEF_Jonjae",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "wonjeon",
+      "name": "원전",
+      "gamertag": "CEF_Wonjeon",
+      "positions": [
+        "FB"
+      ]
+    },
+    {
+      "id": "spress",
+      "name": "스프레스",
+      "gamertag": "CEF_Spress",
+      "positions": [
+        "CAM"
+      ]
+    },
+    {
+      "id": "maekgu",
+      "name": "맥구",
+      "gamertag": "CEF_Maekgu",
+      "positions": [
+        "FW"
+      ]
+    }
+  ],
+  "matches": [
+    {
+      "id": "m1",
+      "title": "리그 경기: BRO vs FCB",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "뒷대각을 활용한 공격 전개",
+          "summary": "팀에 뒷대각 선택을 더 살피고 앞으로만 보내지 않도록 요청하는 장면.",
+          "unit_ids": [
+            "u001",
+            "u002"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "uid": "20240104-yn-qm7lM5p4#u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "yn-qm7lM5p4",
+      "start": 422.88,
+      "end": 445.78,
+      "title": "뒷대각을 더 자주 보기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "body": [
+        {
+          "type": "text",
+          "text": "TIMEJ 코치는 팀에 **뒷대각을 좀 더 많이 보자고 요청합니다**."
+        },
+        {
+          "type": "frame",
+          "src": "img/u001-c046.webp",
+          "width": 854,
+          "height": 460,
+          "t": 424,
+          "caption": "33:56, 페널티 지역 안팎에 흰색 선수들과 남색 수비수들이 모여 있고 골문 앞에 골키퍼가 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u001-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-d0b2dea3ab",
+          "title": "Diagonal and vertical passing",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-d0b2dea3ab.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/diagonal-and-vertical-passing.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/yn-qm7lM5p4?t=422"
+    },
+    {
+      "id": "u002",
+      "uid": "20240104-yn-qm7lM5p4#u002",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "yn-qm7lM5p4",
+      "start": 816.36,
+      "end": 828.64,
+      "title": "앞으로만 보내지 말고 뒷대각 보기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "body": [
+        {
+          "type": "text",
+          "text": "TIMEJ 코치는 팀에 **뒷대각을 봐 달라고 요청합니다**."
+        },
+        {
+          "type": "frame",
+          "src": "img/u002-c047.webp",
+          "width": 854,
+          "height": 460,
+          "t": 818,
+          "caption": "73:46, 페널티 지역 안쪽에 흰색 선수들과 남색 수비수들이 모여 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u002-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-d0b2dea3ab",
+          "title": "Diagonal and vertical passing",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-d0b2dea3ab.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/diagonal-and-vertical-passing.php"
+        },
+        {
+          "id": "r-1741507fba",
+          "title": "Session 10 Support and off-the-ball movements",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-1741507fba.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/sessions/support-and-off-the-ball-movements.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/yn-qm7lM5p4?t=816"
+    }
+  ]
+}

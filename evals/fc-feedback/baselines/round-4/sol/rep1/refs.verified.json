@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T00:11:04.377Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u001",
+        "u007",
+        "u012"
+      ],
+      "summary_ko": "EA 공식 가이드가 땅볼, 스루, 로빙, 크로스 패스의 쓰임과 열린 패스 길을 찾는 기준을 설명한다.",
+      "key_points_ko": [
+        "가까운 동료에게 짧게 연결하고 점유를 유지할 때는 땅볼 패스를 쓴다.",
+        "수비수가 땅볼 패스 길을 막을 때는 로빙 스루 패스를 고려한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-81706b9d03",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/in-possession-width-for-deception",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/in-possession-width-for-deception",
+      "http_status": 200,
+      "checked_at": "2026-09-29T00:11:04.441Z",
+      "reused": false,
+      "page": "refs/r-81706b9d03.html",
+      "title": "SESSION: width for deception",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u003",
+        "u008"
+      ],
+      "summary_ko": "폭을 사용해 공간을 만들고 점유를 유지하며 득점 기회를 여는 코칭 세션이다.",
+      "key_points_ko": [
+        "측면의 폭을 이용해 중앙의 공간을 만든다.",
+        "넓은 공간을 활용하면서 점유를 유지하는 연습을 다룬다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-cab2ebe63b",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "http_status": 200,
+      "checked_at": "2026-09-29T00:11:05.147Z",
+      "reused": false,
+      "page": "refs/r-cab2ebe63b.html",
+      "title": "How to coach passing in football",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u005",
+        "u006",
+        "u009",
+        "u011",
+        "u013"
+      ],
+      "summary_ko": "패스 전에 주변을 살피고, 공을 가진 채 이동하며 각도를 만들고, 주고받는 선수의 위치를 조정하는 원칙을 설명한다.",
+      "key_points_ko": [
+        "압박을 받았다는 이유만으로 즉시 공을 버리기보다 더 나은 패스를 찾는다.",
+        "공을 가지고 공간으로 이동하면 패스 각도를 개선할 수 있다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-c7d02ad858",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/in-possession-building-the-attack",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/in-possession-building-the-attack",
+      "http_status": 200,
+      "checked_at": "2026-09-29T00:11:06.044Z",
+      "reused": false,
+      "page": "refs/r-c7d02ad858.html",
+      "title": "SESSION: building the attack",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u004",
+        "u005",
+        "u006",
+        "u011"
+      ],
+      "summary_ko": "상대 압박을 유도해 공간을 활용하고 뒤로 내려와 공격 전개를 지원하는 훈련 목표를 제시한다.",
+      "key_points_ko": [
+        "상대를 끌어내 공간을 활용한다.",
+        "뒤로 내려오는 지원 동작으로 공격 전개의 선택지를 만든다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

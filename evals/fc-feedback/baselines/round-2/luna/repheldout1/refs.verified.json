@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-d0b2dea3ab",
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/diagonal-and-vertical-passing.php",
+      "final_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/diagonal-and-vertical-passing.php",
+      "http_status": 200,
+      "checked_at": "2026-09-28T22:48:31.673Z",
+      "reused": false,
+      "page": "refs/r-d0b2dea3ab.html",
+      "title": "Diagonal and vertical passing",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u002"
+      ],
+      "summary_ko": "대각·수직 패스를 활용해 수비를 흔드는 패스와 움직임 훈련을 소개한다.",
+      "key_points_ko": [
+        "선수는 대각 패스 각을 만들고 수직으로 움직여 패스를 주고받는다.",
+        "동료가 대각 패스를 받을 공간으로 움직이면 공격 전개 선택지가 생긴다."
+      ]
+    },
+    {
+      "id": "r-1741507fba",
+      "url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/sessions/support-and-off-the-ball-movements.php",
+      "final_url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/sessions/support-and-off-the-ball-movements.php",
+      "http_status": 200,
+      "checked_at": "2026-09-28T22:48:32.997Z",
+      "reused": false,
+      "page": "refs/r-1741507fba.html",
+      "title": "Session 10 Support and off-the-ball movements",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u002"
+      ],
+      "summary_ko": "공을 가진 선수 주변에서 오프더볼 움직임과 패스 각을 만드는 훈련을 설명한다.",
+      "key_points_ko": [
+        "공을 가진 선수 주변에 다이아몬드 형태를 만들면 여러 패스 각을 제공할 수 있다.",
+        "패스한 선수도 공간으로 움직이거나 다음 패스 각을 열어야 한다."
+      ]
+    }
+  ],
+  "dropped": []
+}

@@ -1,0 +1,20 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA SPORTS FC Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA SPORTS FC의 패스 종류와 사용 상황을 안내하는 공식 가이드입니다.",
+      "key_points_ko": [
+        "짧은 조합과 점유 유지에는 가까운 동료에게 땅볼 패스를 연결할 수 있습니다.",
+        "동료가 달리는 앞 공간으로 패스를 넣을 때는 수비수 사이에 열린 패스 길이 있는지 살펴야 합니다.",
+        "측면에서 페널티 지역 안팎의 동료를 향해 로브 패스나 크로스를 선택할 수 있습니다.",
+        "땅볼 패스 길이 막혔거나 수비 라인 뒤에 공간이 있으면 로브 스루 패스를 고려할 수 있습니다."
+      ],
+      "translations": [],
+      "unit_ids": ["u001", "u008", "u010", "u013"]
+    }
+  ]
+}

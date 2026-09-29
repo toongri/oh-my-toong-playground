@@ -1,0 +1,37 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA의 패스 유형 안내. 열린 패스 길과 동료의 움직임에 따라 바닥 패스, 스루 패스, 띄운 패스를 구분한다.",
+      "key_points_ko": ["가까운 동료에게 바닥 패스를 쓰고, 수비수 사이의 열린 길을 확인한다.", "수비수가 바닥 패스 경로를 막을 때 띄운 스루 패스를 고려한다."],
+      "translations": [],
+      "unit_ids": ["u001", "u005", "u013"]
+    },
+    {
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "title": "How to coach passing in football",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "패스 전에 동료와 공간을 살피고, 공을 몰아 패스 각도를 만드는 판단을 다룬다.",
+      "key_points_ko": ["공을 가지고 있을 때도 주변을 살펴 동료와 빈 공간을 찾는다.", "공을 몰고 이동해 더 나은 패스 각도를 만들 수 있다."],
+      "translations": [],
+      "unit_ids": ["u007", "u010", "u012"]
+    },
+    {
+      "url": "https://www.thefa.com/bootroom/resources/coaching/attacking-and-counter-attacking",
+      "title": "Attacking and counter-attacking",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "공격과 역습 상황에서 빠른 전진 및 지원 움직임을 연습하는 코칭 자료다.",
+      "key_points_ko": ["공을 얻은 뒤 빠르게 공격으로 전환하는 연습을 제시한다."],
+      "translations": [],
+      "unit_ids": ["u003", "u008", "u009"]
+    }
+  ]
+}

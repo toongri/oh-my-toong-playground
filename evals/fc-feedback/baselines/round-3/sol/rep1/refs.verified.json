@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-b503dbba04",
+      "url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices",
+      "final_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices",
+      "http_status": 200,
+      "checked_at": "2026-09-28T23:20:00.799Z",
+      "reused": false,
+      "page": "refs/r-b503dbba04.html",
+      "title": "EA SPORTS FC™ - FC Futures - Practices",
+      "source_name": "EA SPORTS FC",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u001",
+        "u003",
+        "u005",
+        "u007",
+        "u008",
+        "u010",
+        "u013",
+        "u015"
+      ],
+      "summary_ko": "EA와 UEFA 코치가 함께 만든 훈련 자료로, 빈 공간의 동료를 찾는 패스와 패스 옵션을 만들며 점유를 유지하는 연습을 소개한다.",
+      "key_points_ko": [
+        "공을 받기 좋은 빈 공간의 동료를 찾는 판단을 연습한다.",
+        "동료가 패스 선택지를 제공하며 공을 순환시키는 연습을 소개한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-28T23:20:01.557Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u001",
+        "u009",
+        "u014"
+      ],
+      "summary_ko": "EA의 패스 가이드로, 가까운 동료에게 땅볼 패스를 쓰고 땅볼 길이 막혔을 때 띄운 스루패스를 고려하는 등 공간과 동료의 움직임에 따른 선택을 설명한다.",
+      "key_points_ko": [
+        "가까운 동료와 짧게 연결할 때 땅볼 패스를 쓴다.",
+        "수비수가 땅볼 경로를 막으면 띄운 스루패스를 고려할 수 있다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-b42c49e569",
+      "url": "https://www.uefa.com/uefaeuropaleague/news/0297-1d4cf55dc517-eee22d2b5c4d-1000--uefa-europa-league-performance-insights-how-tottenham-hotsp",
+      "final_url": "https://www.uefa.com/errors/",
+      "http_status": 200,
+      "checked_at": "2026-09-28T23:20:01.655Z",
+      "reused": false,
+      "page": "refs/r-b42c49e569.html",
+      "title": "UEFA Europa League Performance Insights: How Tottenham Hotspur came from behind to beat AZ Alkmaar and the variations used in the wide areas",
+      "source_name": "UEFA",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u003",
+        "u010"
+      ],
+      "summary_ko": "UEFA의 측면 공격 분석으로, 측면 선수가 수비수를 끌어당긴 뒤 겹쳐 뛰거나 안쪽으로 뛰는 동료에게 적절한 시점에 패스하는 움직임을 설명한다.",
+      "key_points_ko": [
+        "측면에서 수비수를 끌어들인 뒤 동료의 움직임에 맞춰 패스 시점을 고른다.",
+        "측면 폭을 유지하는 선수와 그 바깥으로 뛰는 선수의 움직임이 안쪽 연결 공간을 만들 수 있다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

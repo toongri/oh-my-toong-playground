@@ -1,0 +1,36 @@
+{
+  "refs": [
+    {
+      "url": "https://www.oneesports.gg/gaming/best-ea-fc-24-defending-tips-defenders/",
+      "title": "Best EA FC 24 defending tips to protect your goal with style",
+      "source_name": "ONE Esports",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA FC 24 수비 요령 정리. L2/LT 조키로 공을 가진 상대 가까이 붙어 선택지를 줄이고, 페널티 박스 안에서는 스탠딩 태클 타이밍이 어긋나면 페널티를 줄 위험이 크니 피하라고 조언한다.",
+      "key_points_ko": [
+        "L2/LT를 누르고 있으면 상대가 공을 가졌을 때 수비수가 공 가까이 붙는다",
+        "페널티 박스 안 스탠딩 태클은 타이밍이 틀리면 페널티 위험이 크다"
+      ],
+      "translations": [
+        { "orig": "avoid standing tackles within the penalty area because there's a high risk of getting a penalty if you time it wrong", "ko": "페널티 박스 안에서는 스탠딩 태클을 피하라. 타이밍이 틀리면 페널티를 줄 위험이 크다" }
+      ],
+      "unit_ids": ["u011"]
+    },
+    {
+      "url": "https://footballgpt.co/guides/coaching-switch-play-maximise-width-create-chances",
+      "title": "Coach switching play from pressure and space",
+      "source_name": "FootballGPT",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "전환 패스(스위치 플레이)를 언제 할지 가르치는 훈련 가이드. 전환은 단순히 반대편으로 길게 차는 것이 아니라 상대가 막은 곳과 다음에 플레이할 곳에 대한 대응이며, 전환 뒤 받는 선수에게 시간과 지원이 생겼는지까지 봐야 한다고 설명한다.",
+      "key_points_ko": [
+        "전환은 상대가 막은 쪽을 피해 다음에 플레이할 공간으로 공을 옮기는 선택이다",
+        "반대편으로 패스가 연결된 것만으로는 부족하고, 받는 선수에게 시간과 지원이 생겼는지가 중요하다"
+      ],
+      "translations": [
+        { "orig": "Switching play is not simply hitting a long pass from one side to the other.", "ko": "전환 패스는 단순히 한쪽에서 반대쪽으로 길게 차는 것이 아니다." }
+      ],
+      "unit_ids": ["u008", "u001"]
+    }
+  ]
+}

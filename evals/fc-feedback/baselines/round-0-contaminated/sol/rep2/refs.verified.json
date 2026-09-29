@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-0b56c5c7a8",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/euro-2020-trends---in-possession",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/euro-2020-trends---in-possession",
+      "http_status": 200,
+      "checked_at": "2026-09-28T20:22:05.618Z",
+      "reused": false,
+      "page": "refs/r-0b56c5c7a8.html",
+      "title": "Euro 2020 trends: in possession",
+      "source_name": "The FA / The Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u003",
+        "u006",
+        "u007"
+      ],
+      "summary_ko": "좁은 중앙으로 상대를 모은 뒤 측면의 넓은 공간을 활용하고, 공격 중에도 뒤의 수비 균형을 유지하는 사례를 설명한다.",
+      "key_points_ko": [
+        "상대가 중앙에 몰리면 바깥 공간과 침투 경로가 생긴다.",
+        "볼 뒤에 남는 지원 선수는 역습 대비와 재전개에 도움이 된다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-65bdced1f8",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/what-is-passing-in-football",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/what-is-passing-in-football",
+      "http_status": 200,
+      "checked_at": "2026-09-28T20:22:06.765Z",
+      "reused": false,
+      "page": "refs/r-65bdced1f8.html",
+      "title": "What is passing in football?",
+      "source_name": "The FA / The Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u004",
+        "u005",
+        "u008",
+        "u010",
+        "u011",
+        "u012"
+      ],
+      "summary_ko": "패스 전 주변을 살피고, 정확한 방향·세기·타이밍을 맞추는 기본 원칙과 압박을 벗기기 위한 판단을 설명한다.",
+      "key_points_ko": [
+        "패스할 곳을 먼저 확인하고 동료와 연결 가능한 각도를 찾는다.",
+        "성급한 패스보다 공을 더 소유해 더 좋은 타이밍을 만드는 선택도 가능하다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-81135892ef",
+      "url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "final_url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "http_status": 200,
+      "checked_at": "2026-09-29T00:33:14.055Z",
+      "reused": false,
+      "page": "refs/r-81135892ef.html",
+      "title": "EA SPORTS FC 24 | Pitch Notes - PlayStyles Deep Dive",
+      "source_name": "EA SPORTS",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u002",
+        "u005"
+      ],
+      "summary_ko": "EA SPORTS FC 24 개발팀이 PlayStyles와 PlayStyles+의 작동 방식을 설명하고 일부 고유 동작과 버튼 조합을 소개하는 개발자 노트입니다.",
+      "key_points_ko": [
+        "Trickster의 특정 고유 볼 롤 동작에 LT+RT 입력이 안내되어 있습니다.",
+        "PlayStyles가 선수의 경기 내 동작과 능력에 미치는 효과를 설명합니다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-b12d95caa9",
+      "url": "https://www.fifatrainingcentre.com/en/game/game-insights/using-wide-areas.php",
+      "final_url": "https://www.fifatrainingcentre.com/en/game/game-insights/using-wide-areas.php",
+      "http_status": 200,
+      "checked_at": "2026-09-29T00:33:16.756Z",
+      "reused": false,
+      "page": "refs/r-b12d95caa9.html",
+      "title": "Game Insights Episode 3: Using wide areas",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u004",
+        "u009",
+        "u010",
+        "u011"
+      ],
+      "summary_ko": "FIFA Training Centre가 측면 공격, 윙어와 풀백의 움직임 조합, 크로스와 컷백을 분석합니다.",
+      "key_points_ko": [
+        "중앙으로 상대를 끌어들인 뒤 넓은 측면의 공간을 활용하는 공격을 설명합니다.",
+        "풀백과 측면 선수의 오버래핑은 타이밍과 안쪽 움직임의 조합이 중요하다고 다룹니다.",
+        "측면 공격에서 크로스와 컷백, 페널티 구역 침투를 함께 설명합니다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-a63145cc94",
+      "url": "https://www.fifatrainingcentre.com/en/game/game-analysis/in-possession/switch-of-play.php",
+      "final_url": "https://www.fifatrainingcentre.com/en/game/game-analysis/in-possession/switch-of-play.php",
+      "http_status": 200,
+      "checked_at": "2026-09-29T00:33:18.150Z",
+      "reused": false,
+      "page": "refs/r-a63145cc94.html",
+      "title": "Switch of play",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u008",
+        "u013"
+      ],
+      "summary_ko": "좁은 수비를 상대로 경기장 폭을 활용해 플레이를 전환하고 수적 우위와 전진 공간을 만드는 원리를 설명합니다.",
+      "key_points_ko": [
+        "넓은 폭을 쓰면 반대쪽에서 공을 받을 선택지를 만들 수 있다고 설명합니다.",
+        "공격 지원 선수의 움직임이 전진과 수적 우위를 돕는다고 다룹니다.",
+        "상대가 좁게 조직된 경우, 측면 선수나 풀백이 넓게 서서 공을 받는 선택을 제시합니다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-25526eb3b7",
+      "url": "https://www.fifatrainingcentre.com/en/game/game-analysis/transition-to-attacking/the-counter-attack.php",
+      "final_url": "https://www.fifatrainingcentre.com/en/game/game-analysis/transition-to-attacking/the-counter-attack.php",
+      "http_status": 200,
+      "checked_at": "2026-09-29T00:33:18.804Z",
+      "reused": false,
+      "page": "refs/r-25526eb3b7.html",
+      "title": "The counter-attack",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u004",
+        "u007",
+        "u010"
+      ],
+      "summary_ko": "전환 직후의 빠른 전진, 공을 가진 선수의 운반, 동료의 오프더볼 움직임과 마지막 패스를 중심으로 역습을 설명합니다.",
+      "key_points_ko": [
+        "역습에는 공을 빠르게 앞으로 옮기고 공 없는 선수도 즉시 선택지를 제공해야 한다고 설명합니다.",
+        "측면 공격수는 상대를 넓게 벌리고 공간을 공략하는 역할을 할 수 있다고 다룹니다.",
+        "패스와 침투 움직임의 타이밍이 역습의 전개와 마무리에 중요하다고 설명합니다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

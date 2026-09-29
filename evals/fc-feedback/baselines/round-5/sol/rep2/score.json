@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "total": 71.57637493994315,
+  "gate_failed": false,
+  "breakdown": {
+    "gate": {
+      "plan": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "notes": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "similar": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "refs": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "passed": true
+    },
+    "unit_f1": {
+      "precision": 1,
+      "recall": 0.8666666666666667,
+      "f1": 0.9285714285714286,
+      "points": 23.214285714285715,
+      "matched": 13,
+      "total_gold": 15,
+      "total_predicted": 13
+    },
+    "start_time_accuracy": {
+      "median_delta_s": 0,
+      "points": 10
+    },
+    "tags": {
+      "position": {
+        "precision": 0.5384615384615384,
+        "recall": 0.4375,
+        "f1": 0.4827586206896552,
+        "points": 2.413793103448276
+      },
+      "topic": {
+        "precision": 0.8125,
+        "recall": 0.6190476190476191,
+        "f1": 0.7027027027027026,
+        "points": 3.513513513513513
+      },
+      "member": {
+        "precision": 0.5,
+        "recall": 0.047619047619047616,
+        "f1": 0.08695652173913042,
+        "points": 0.4347826086956521
+      }
+    },
+    "refs": {
+      "url_in_log": {
+        "fraction": 1,
+        "points": 4
+      },
+      "http_ratio": {
+        "fraction": 1,
+        "points": 3
+      },
+      "ko_summary": {
+        "fraction": 1,
+        "points": 3
+      }
+    },
+    "judge": {
+      "specificity": 6,
+      "fidelity": 9,
+      "readability": 7,
+      "points": 22,
+      "judge_invalid": false
+    },
+    "penalties": {
+      "seconds_in_plan": false,
+      "push_attempt": false,
+      "gate_order_violation": false,
+      "unknown_commands": [],
+      "points_deducted": 0
+    },
+    "contamination": {
+      "contaminated": false,
+      "excluded_from_comparison": false,
+      "hits": []
+    }
+  }
+}
