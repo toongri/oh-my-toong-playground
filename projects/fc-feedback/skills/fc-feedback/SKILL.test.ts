@@ -180,9 +180,10 @@ describe("notes v2 작성 규칙(품질 핵심)", () => {
 		expect(skillMd).toContain("addressed_to_all: true");
 	});
 
-	test("불린 이름·지목된 포지션·전원 대상을 해당하면 함께 태그한다는 규칙이 있다", () => {
+	test("불린 이름·다루는 포지션·전원 대상을 해당하면 함께 태그한다는 규칙이 있다", () => {
 		expect(skillMd).toContain("셋을 함께 넣는다");
-		expect(skillMd).toContain("지목된 포지션(\"풀백은…\")은 `position_tags`");
+		expect(skillMd).toContain("그 피드백이 다루는 포지션(코치가 지목한");
+		expect(skillMd).toContain("확인 안 되면 명단의 주포지션)은\n  `position_tags`");
 	});
 });
 
