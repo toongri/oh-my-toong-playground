@@ -1,0 +1,319 @@
+{
+  "session_title": "C.E.F. FC Barcelona 팀 연습 피드백 (24.1.4 Part 3)",
+  "matches": [
+    {
+      "title": "BROS VAMOS전 리그 경기 (FCB 2-1 승)",
+      "topics": [
+        {
+          "title": "전반 초반: 넓은 공간 쪽으로 패스하기와 LT 활용",
+          "summary": "전반 초반 두 장면으로, 모두 이 영상의 코치 TIMEJ가 설명한다. 패스를 좁은 곳의 선수보다 넓은 공간의 선수에게 주라는 지적과, 공을 받을 때 LT 키를 누르고 움직여 몸이 돌아가지 않게 하라는 조작 지적이 나온다. 이어진 19분대 장면에서는 TIMEJ가 자신이 넣은 스루패스를 돌아보지만 구체적인 지시로 이어지지는 않았다.",
+          "units": [
+            {
+              "start_line": 3,
+              "end_line": 19,
+              "title": "브라이드: 좁은 곳보다 넓은 공간의 선수에게 패스",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "bride"
+              ],
+              "key_frame_candidate_ids": [
+                "c004"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 22,
+              "end_line": 29,
+              "title": "택시: 공을 받을 때 LT 키로 몸 방향 유지",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "조작/키사용",
+                "탈압박"
+              ],
+              "member_ids": [
+                "taxi"
+              ],
+              "key_frame_candidate_ids": [
+                "c009"
+              ],
+              "addressed_to_all": false
+            }
+          ]
+        },
+        {
+          "title": "역습 때 폭을 벌려 패스 옵션 만들기",
+          "summary": "22분대 역습 장면에서 사인드가 낮게 내려와 있을 때 루미가 윙어 역할을 맡아 줘야 공을 가진 기프에게 두 개의 패스 옵션이 생긴다는 지적이다. 조민의 동선을 짚으며 시작해 사인드·맥구에게도 똑같이 적용된다고 덧붙인다.",
+          "units": [
+            {
+              "start_line": 36,
+              "end_line": 51,
+              "title": "역습 시 루미가 윙어 역할을 맡아 기프에게 두 개의 패스 옵션 만들어 주기",
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "jomin",
+                "find",
+                "rumi",
+                "gipeu",
+                "yumi",
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": [
+                "c059"
+              ],
+              "addressed_to_all": false
+            }
+          ]
+        },
+        {
+          "title": "우리 진영 볼 처리: 무리한 전진보다 안전한 선택",
+          "summary": "전반 28~40분대 장면들이다. 압박이 올 수 있는 상황에서 불필요한 동작 대신 뒤로 내주고 LT로 돌려받기, 크게 얻을 게 없는 전진 패스 대신 샘백 쪽으로 수비를 끌기, 뛰어 나갈 줄 알았던 순간 루미가 멈춘 장면, 우리 진영에서 쉽게 내주지 말고 몰고 나가 시간을 벌기, 상하로 넓게 벌리는 플레이가 다뤄진다. 앞뒤로 나온 혼잣말과 골 장면 감상에는 지시가 없었다.",
+          "units": [
+            {
+              "start_line": 55,
+              "end_line": 77,
+              "title": "Gerrard_CEF: 압박 전 뒤로 내주고 LT로 돌려받기, 전진 대신 샘백 활용",
+              "position_tags": [
+                "CM",
+                "FW"
+              ],
+              "topic_tags": [
+                "탈압박",
+                "빌드업",
+                "조작/키사용"
+              ],
+              "member_ids": [
+                "gerrard",
+                "saembaek"
+              ],
+              "key_frame_candidate_ids": [
+                "c018"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 78,
+              "end_line": 78,
+              "title": "루미: 뛰어 나갈 줄 알았던 순간에 멈춤",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "rumi"
+              ],
+              "key_frame_candidate_ids": [
+                "c063"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 79,
+              "end_line": 97,
+              "title": "우리 진영에서는 바로 내주지 말고 몰고 나가 시간 벌기",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업",
+                "탈압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c065"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 98,
+              "end_line": 99,
+              "title": "상하로 넓게 벌리는 플레이가 필요",
+              "position_tags": [],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c067"
+              ],
+              "addressed_to_all": true
+            }
+          ]
+        },
+        {
+          "title": "후반 공격 전개: 막히면 전환, 측면과 중앙 나눠 쓰기",
+          "summary": "후반 48~54분대 공격 장면이다. 앞이 완전히 막혔을 때 한 번에 반대쪽으로 넘겨 존재가 넓은 공간을 쓰게 하는 방법과, 원전이 올라가 측면을 차지할 때 사인드는 중앙으로 들어가야 했다는 판단 지적이 나온다. 뒤이어 나온 골 장면에는 지시가 없었다.",
+          "units": [
+            {
+              "start_line": 104,
+              "end_line": 120,
+              "title": "막히면 한 번에 반대로 넘겨 존재가 넓은 공간 쓰게 하기",
+              "position_tags": [
+                "MF",
+                "CM",
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "크로스"
+              ],
+              "member_ids": [
+                "giseun",
+                "gerrard",
+                "jonjae"
+              ],
+              "key_frame_candidate_ids": [
+                "c070"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 121,
+              "end_line": 133,
+              "title": "사인드: 원전이 측면을 먹을 때 중앙으로 들어가기",
+              "position_tags": [
+                "FW",
+                "FB"
+              ],
+              "topic_tags": [
+                "포지셔닝",
+                "파이널서드"
+              ],
+              "member_ids": [
+                "find",
+                "wonjeon"
+              ],
+              "key_frame_candidate_ids": [
+                "c073"
+              ],
+              "addressed_to_all": false
+            }
+          ]
+        },
+        {
+          "title": "후반 막판: 페널티 장면과 밀집 수비 대응",
+          "summary": "후반 70~90분대 장면과 마무리 총평이다. 측면에서 대각으로 빼 주기, 원전의 태클로 이어진 페널티, 수비가 촘촘하면 뒤로 빼기, 패스는 가능하면 땅으로, 막히면 돌파를 반복하지 말고 뒤로 살리기가 다뤄지고, 마지막에 대각 보기와 밀집 시 뒤로 빼기를 오늘의 두 가지 짚을 점으로 정리한다. 점수를 묻는 잡담에는 지시가 없었다.",
+          "units": [
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "스프레스: 측면에서 대각으로 빼 주기",
+              "position_tags": [
+                "CAM"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "파이널서드"
+              ],
+              "member_ids": [
+                "spress"
+              ],
+              "key_frame_candidate_ids": [
+                "c076"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "원전: 밸런스를 무너뜨린 뒤 태클을 눌러 페널티",
+              "position_tags": [
+                "FB"
+              ],
+              "topic_tags": [
+                "수비라인",
+                "조작/키사용"
+              ],
+              "member_ids": [
+                "wonjeon"
+              ],
+              "key_frame_candidate_ids": [
+                "c077"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 158,
+              "end_line": 162,
+              "title": "상대 수비가 촘촘하면 공격하지 말고 뒤로 빼기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드"
+              ],
+              "member_ids": [
+                "find",
+                "rumi"
+              ],
+              "key_frame_candidate_ids": [
+                "c079"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "패스는 가능하면 땅으로",
+              "position_tags": [],
+              "topic_tags": [
+                "파이널서드",
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c081"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "맥구: 막히면 같은 돌파 대신 뒤로 안전하게 살리기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드"
+              ],
+              "member_ids": [
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": [
+                "c083"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 183,
+              "end_line": 187,
+              "title": "총평: 대각 보기와 밀집 수비면 뒤로 빼기",
+              "position_tags": [],
+              "topic_tags": [
+                "파이널서드",
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [],
+              "addressed_to_all": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

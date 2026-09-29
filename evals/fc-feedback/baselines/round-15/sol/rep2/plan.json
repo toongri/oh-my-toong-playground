@@ -1,0 +1,48 @@
+{
+  "session_title": "FC Barcelona 팀 연습 경기 피드백 — 패스 선택과 공간 활용",
+  "matches": [{
+    "title": "BRO 대 FCB 연습 경기",
+    "topics": [
+      {"title":"넓은 공간으로 전개", "summary":"좁은 곳의 동료보다 넓은 공간의 동료를 보고, 공을 운반하는 동안 무볼 선수에게 전진할 시간을 준다.", "units":[
+        {"start_line":9,"end_line":19,"title":"좁은 곳보다 넓은 곳으로 패스", "position_tags":[],"topic_tags":["빌드업"],"member_ids":[],"key_frame_candidate_ids":["c004"],"addressed_to_all":true}
+      ]},
+      {"title":"공을 받을 때의 조작", "summary":"패스를 받을 때 몸의 방향을 유지하는 LT 조작을 짚는다.", "units":[
+        {"start_line":22,"end_line":29,"title":"LT로 공을 가진 선수 쪽을 바라보기", "position_tags":["MF"],"topic_tags":["조작/키사용"],"member_ids":["taxi"],"key_frame_candidate_ids":["c009"],"addressed_to_all":true}
+      ]},
+      {"title":"역습의 패스 경로", "summary":"사인드가 낮은 위치에 있을 때 루미가 윙어 역할을 맡아 기프에게 TIMEJ와 유미라는 패스 선택지를 열어야 한다.", "units":[
+        {"start_line":36,"end_line":51,"title":"루미의 측면 움직임으로 두 패스 길 열기", "position_tags":["MF","FW"],"topic_tags":["전환/역습","포지셔닝"],"member_ids":["jomin","find","rumi","gipeu","yumi","maekgu"],"key_frame_candidate_ids":["c013","c014"],"addressed_to_all":false}
+      ]},
+      {"title":"압박이 오는 전진 패스", "summary":"압박을 받을 때는 뒤로 내주고 다시 받을 길을 만들며, 무리한 전진보다 샘백을 거쳐 수비를 끌어내는 전개를 제안한다.", "units":[
+        {"start_line":55,"end_line":77,"title":"압박 앞에서 되돌리고 샘백을 활용하기", "position_tags":["CM","FW"],"topic_tags":["빌드업","탈압박"],"member_ids":["gerrard","saembaek"],"key_frame_candidate_ids":["c017","c018"],"addressed_to_all":false}
+      ]},
+      {"title":"전진 타이밍", "summary":"루미가 뛰어 들어갈 것으로 기대한 순간에 멈춘 장면을 짚는다.", "units":[
+        {"start_line":78,"end_line":78,"title":"루미의 멈춘 침투 움직임", "position_tags":["FW"],"topic_tags":["포지셔닝"],"member_ids":["rumi"],"key_frame_candidate_ids":["c053"],"addressed_to_all":false}
+      ]},
+      {"title":"자기 진영에서 공 운반", "summary":"좁은 공간의 코치에게 서둘러 주기보다 공을 더 운반해 상대를 끌고, 동료가 올라갈 시간을 벌어야 한다.", "units":[
+        {"start_line":79,"end_line":97,"title":"좁은 곳의 TIMEJ에게 서두르지 말고 몰고 가기", "position_tags":[],"topic_tags":["빌드업","탈압박"],"member_ids":[],"key_frame_candidate_ids":["c021","c022"],"addressed_to_all":false}
+      ]},
+      {"title":"막힌 공격의 전환", "summary":"한쪽이 막혔을 때 넓은 반대 공간을 활용하는 선택을 살핀다.", "units":[
+        {"start_line":104,"end_line":120,"title":"막힌 쪽에서 넓은 공간으로 전환", "position_tags":["MF","CM","FW"],"topic_tags":["전환/역습","파이널서드"],"member_ids":["giseun","gerrard","jonjae"],"key_frame_candidate_ids":["c030","c031"],"addressed_to_all":false}
+      ]},
+      {"title":"동료가 올라갈 때 위치 교대", "summary":"사인드의 위치 판단을 평가하고, 원전이 측면으로 올라갈 때 사인드가 중앙으로 들어오는 움직임을 제시한다.", "units":[
+        {"start_line":121,"end_line":133,"title":"원전이 올라갈 때 사인드는 중앙으로", "position_tags":["FW","FB"],"topic_tags":["포지셔닝","파이널서드"],"member_ids":["find","wonjeon"],"key_frame_candidate_ids":["c032","c033"],"addressed_to_all":false}
+      ]},
+      {"title":"대각 패스로 공간 열기", "summary":"측면에서 대각으로 내주어 중원이 넓은 공간에서 전방 선수를 볼 여유를 만든다.", "units":[
+        {"start_line":145,"end_line":154,"title":"측면에서 대각으로 내주기", "position_tags":["CAM"],"topic_tags":["빌드업"],"member_ids":["spress"],"key_frame_candidate_ids":["c039","c054"],"addressed_to_all":false}
+      ]},
+      {"title":"페널티를 부른 수비", "summary":"균형이 무너진 뒤 공을 빼앗으려 태클을 누른 장면과 페널티 결과를 짚는다.", "units":[
+        {"start_line":155,"end_line":157,"title":"원전의 태클과 페널티", "position_tags":["FB"],"topic_tags":["수비라인","조작/키사용"],"member_ids":["wonjeon"],"key_frame_candidate_ids":["c042"],"addressed_to_all":false}
+      ]},
+      {"title":"촘촘한 수비 앞 선택", "summary":"상대 수비가 밀집되면 공격을 고집하지 말고 뒤로 빼야 한다.", "units":[
+        {"start_line":158,"end_line":160,"title":"밀집 수비 앞에서 뒤로 빼기", "position_tags":[],"topic_tags":["빌드업"],"member_ids":[],"key_frame_candidate_ids":["c043"],"addressed_to_all":true}
+      ]},
+      {"title":"전방 패스의 높이", "summary":"땅볼로 줄 수 있는 전방 패스는 땅볼을 우선해 받는 선수가 공의 속도를 살리도록 한다.", "units":[
+        {"start_line":163,"end_line":168,"title":"열린 길에서는 띄우기보다 땅볼 패스", "position_tags":[],"topic_tags":["빌드업"],"member_ids":[],"key_frame_candidate_ids":["c045"],"addressed_to_all":true}
+      ]},
+      {"title":"막힌 돌파의 대안", "summary":"맥구가 공간이 막혔을 때 같은 돌파를 반복하기보다 뒤를 보고 안전하게 살리며 다른 전개를 시도해야 한다.", "units":[
+        {"start_line":169,"end_line":182,"title":"맥구의 막힌 돌파, 뒤로 살리는 선택", "position_tags":["FW"],"topic_tags":["탈압박","빌드업"],"member_ids":["maekgu"],"key_frame_candidate_ids":["c046"],"addressed_to_all":false}
+      ]}
+    ]
+  }],
+  "proposed_tags": []
+}

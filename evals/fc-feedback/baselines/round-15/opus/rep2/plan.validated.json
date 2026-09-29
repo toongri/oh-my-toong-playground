@@ -1,0 +1,399 @@
+{
+  "version": 1,
+  "session_title": "C.E.F. FC Barcelona 팀 연습 피드백 (24.1.4 Part 3)",
+  "matches": [
+    {
+      "id": "m1",
+      "title": "리그 경기 vs BRO (1:2 승)",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "공을 넓은 공간으로, LT로 받기",
+          "summary": "전반 초반 빌드업 장면에서 TIMEJ가 좁은 공간보다 넓은 공간의 동료에게 공을 주라는 것과, 택시가 공을 잡을 때 LT 키를 누르고 움직이라는 것을 짚었다. 이어서 TIMEJ가 뒤쪽을 보고 스루로 준 장면과 템포를 올려 빨리 전진하려 한 장면도 돌려 봤다.",
+          "unit_ids": [
+            "u001",
+            "u002"
+          ]
+        },
+        {
+          "id": "m1-t2",
+          "title": "역습·탈압박 때의 선택",
+          "summary": "역습에서 측면 공격수가 윙어 역할로 패스 길을 열어 주는 것, 압박이 오면 무리하게 앞으로 넣지 않는 것, 우리 진영에서는 그냥 내주고 돌아가기보다 더 몰고 가서 시간을 버는 것을 다뤘다. 중간에 골 장면을 보며 오늘 깔끔하게 들어간 골이 없다는 가벼운 평도 있었다.",
+          "unit_ids": [
+            "u003",
+            "u004",
+            "u005",
+            "u006",
+            "u007"
+          ]
+        },
+        {
+          "id": "m1-t3",
+          "title": "막혔을 때 반대쪽·넓은 공간 활용",
+          "summary": "후반 공격 장면에서 한쪽이 막히면 한 번에 전환해 넓은 공간을 쓰는 것, 측면 선수가 올라갈 때 다른 선수는 중앙으로 들어가는 것, 측면에서 대각으로 빼 주는 것을 다뤘다.",
+          "unit_ids": [
+            "u008",
+            "u009",
+            "u010"
+          ]
+        },
+        {
+          "id": "m1-t4",
+          "title": "페널티 장면과 공 처리 기본",
+          "summary": "원전의 태클로 페널티를 내준 장면, 수비가 촘촘할 때 뒤로 빼는 것, 땅볼 패스, 막혔을 때 혼자 돌파하지 않는 것을 짚고 오늘의 핵심 두 가지로 마무리했다.",
+          "unit_ids": [
+            "u011",
+            "u012",
+            "u013",
+            "u014",
+            "u015"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 49.7,
+      "end": 103.42,
+      "title": "브라이드: 좁은 곳의 동료보다 넓은 공간의 동료에게",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [
+        "bride"
+      ],
+      "key_frame_candidate_ids": [
+        "c055"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u002",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 225.9,
+      "end": 255.12,
+      "title": "택시가 공을 잡을 때 LT 키를 누르고 움직이기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "조작/키사용"
+      ],
+      "member_ids": [
+        "taxi"
+      ],
+      "key_frame_candidate_ids": [
+        "c058"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u003",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 344.68,
+      "end": 402.72,
+      "title": "역습 때 루미가 윙어 역할로 기프의 패스 옵션 두 개 열어 주기",
+      "position_tags": [
+        "FW",
+        "MF"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "maekgu"
+      ],
+      "key_frame_candidate_ids": [
+        "c060"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u004",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 463.08000000000004,
+      "end": 526.78,
+      "title": "Gerrard_CEF: 압박이 오면 뒤로 내주고, 앞 대신 샘백 쪽으로",
+      "position_tags": [
+        "CM",
+        "FW"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업",
+        "조작/키사용"
+      ],
+      "member_ids": [
+        "gerrard",
+        "saembaek"
+      ],
+      "key_frame_candidate_ids": [
+        "c064"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u005",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 545.7,
+      "end": 548,
+      "title": "루미가 뛸 줄 알았는데 멈춘 장면",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "rumi"
+      ],
+      "key_frame_candidate_ids": [
+        "c066"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u006",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 579.9399999999999,
+      "end": 658.94,
+      "title": "우리 진영에서는 내주고 돌아가기보다 더 몰고 가서 시간 벌기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "탈압박"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c068"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u007",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 694.54,
+      "end": 699.54,
+      "title": "상하로 넓게 벌리는 플레이가 필요",
+      "position_tags": [],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c070"
+      ],
+      "addressed_to_all": true
+    },
+    {
+      "id": "u008",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 791.0999999999999,
+      "end": 838.74,
+      "title": "막히면 Gerrard_CEF를 거쳐 한 번에 전환, 존재가 넓은 공간을 쓰게",
+      "position_tags": [
+        "FW",
+        "MF",
+        "CM"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "파이널서드",
+        "크로스"
+      ],
+      "member_ids": [
+        "giseun",
+        "jonjae",
+        "gerrard"
+      ],
+      "key_frame_candidate_ids": [
+        "c074"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u009",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 857.4799999999999,
+      "end": 927.1,
+      "title": "사인드: 원전이 측면으로 올라갈 때 중앙으로 들어가기",
+      "position_tags": [
+        "FW",
+        "FB"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "파이널서드"
+      ],
+      "member_ids": [
+        "find",
+        "wonjeon"
+      ],
+      "key_frame_candidate_ids": [
+        "c076"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u010",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 1071.64,
+      "end": 1104.5,
+      "title": "스프레스: 측면에서 대각으로 빼 주기",
+      "position_tags": [
+        "CAM"
+      ],
+      "topic_tags": [
+        "파이널서드",
+        "빌드업"
+      ],
+      "member_ids": [
+        "spress"
+      ],
+      "key_frame_candidate_ids": [
+        "c081"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u011",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "NUzEChn9EyI",
+      "start": 1128.4599999999998,
+      "end": 1139.04,
+      "title": "원전: 뺏으려고 태클을 눌렀다가 페널티",
+      "position_tags": [
+        "FB"
+      ],
+      "topic_tags": [
+        "수비라인",
+        "조작/키사용"
+      ],
+      "member_ids": [
+        "wonjeon"
+      ],
+      "key_frame_candidate_ids": [
+        "c083"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u012",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "NUzEChn9EyI",
+      "start": 1155.22,
+      "end": 1191.56,
+      "title": "상대 수비가 촘촘하면 공격하지 말고 뒤로 빼기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "파이널서드",
+        "빌드업"
+      ],
+      "member_ids": [
+        "find",
+        "rumi"
+      ],
+      "key_frame_candidate_ids": [
+        "c085"
+      ],
+      "addressed_to_all": true
+    },
+    {
+      "id": "u013",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "NUzEChn9EyI",
+      "start": 1225.22,
+      "end": 1254.74,
+      "title": "패스는 땅으로 줄 수 있으면 땅으로",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "조작/키사용"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c088"
+      ],
+      "addressed_to_all": true
+    },
+    {
+      "id": "u014",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "NUzEChn9EyI",
+      "start": 1258.6599999999999,
+      "end": 1305.48,
+      "title": "맥구: 막혔으면 혼자 돌파보다 뒤로 안전하게",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "파이널서드",
+        "탈압박"
+      ],
+      "member_ids": [
+        "maekgu"
+      ],
+      "key_frame_candidate_ids": [
+        "c089"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u015",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "NUzEChn9EyI",
+      "start": 1307.66,
+      "end": 1334.1,
+      "title": "오늘의 핵심: 대각 보기, 수비가 밀집되면 뒤로 빼기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c050"
+      ],
+      "addressed_to_all": true
+    }
+  ]
+}

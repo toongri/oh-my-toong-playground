@@ -1,0 +1,298 @@
+{
+  "session_title": "C.E.F. FC Barcelona 팀 연습 (24.1.4) Part 3 — TIMEJ 경기 피드백",
+  "matches": [
+    {
+      "title": "리그 경기 BRO 1-2 FCB",
+      "topics": [
+        {
+          "title": "전반: 넓은 공간 활용과 LT 키",
+          "summary": "화자는 9번 TIMEJ입니다. 전반 초반 장면으로, 브라이드의 패스 선택과 공 가진 동료 주변에서 LT 키를 누르고 움직이는 법을 짚습니다.",
+          "units": [
+            {
+              "start_line": 3,
+              "end_line": 19,
+              "title": "브라이드: 좁은 공간보다 넓은 공간에 있는 동료에게 패스",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "bride"
+              ],
+              "key_frame_candidate_ids": [
+                "c004"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 22,
+              "end_line": 29,
+              "title": "주변 동료가 공을 잡을 때 LT 키를 누르고 움직이기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "조작/키사용",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "taxi"
+              ],
+              "key_frame_candidate_ids": [
+                "c009"
+              ],
+              "addressed_to_all": true
+            }
+          ]
+        },
+        {
+          "title": "전반: 역습 역할과 탈압박 판단",
+          "summary": "역습 때 측면 역할, 압박 속에서 공을 다루는 방법, 좁은 공간으로 서두르는 패스 대신 몰고 가 시간을 버는 선택을 다룹니다.",
+          "units": [
+            {
+              "start_line": 36,
+              "end_line": 51,
+              "title": "역습 때 루미가 윙어 역할을 맡아 패스 선택지 두 개 열어주기",
+              "position_tags": [
+                "FW",
+                "MF"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "jomin",
+                "find",
+                "rumi",
+                "gipeu",
+                "yumi",
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": [
+                "c014"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 55,
+              "end_line": 77,
+              "title": "Gerrard_CEF: 압박 오면 뒤로 내주고 LT로 돌려받기, 전진 대신 샘백에게",
+              "position_tags": [
+                "CM",
+                "FW"
+              ],
+              "topic_tags": [
+                "탈압박",
+                "빌드업"
+              ],
+              "member_ids": [
+                "gerrard",
+                "saembaek"
+              ],
+              "key_frame_candidate_ids": [
+                "c018"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 78,
+              "end_line": 78,
+              "title": "루미: 뛰어나갈 줄 알았던 순간에 멈춤",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "rumi"
+              ],
+              "key_frame_candidate_ids": [
+                "c053"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 79,
+              "end_line": 97,
+              "title": "우리 진영에서는 좁은 곳의 TIMEJ에게 주기보다 더 몰고 가기",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업",
+                "탈압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c022"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 98,
+              "end_line": 99,
+              "title": "상하로 넓게 벌리는 플레이가 필요",
+              "position_tags": [],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c024"
+              ],
+              "addressed_to_all": true
+            }
+          ]
+        },
+        {
+          "title": "후반: 막혔을 때 전환과 측면·대각 활용",
+          "summary": "앞이 막혔을 때 한 번에 방향을 바꾸는 선택, 원전이 측면으로 올라갈 때 사인드의 중앙 침투, 스프레스의 대각 패스를 다룹니다.",
+          "units": [
+            {
+              "start_line": 104,
+              "end_line": 120,
+              "title": "앞이 막혔을 때 한 번에 전환해 존재가 넓은 공간 쓰기",
+              "position_tags": [
+                "MF",
+                "CM",
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "파이널서드"
+              ],
+              "member_ids": [
+                "giseun",
+                "gerrard",
+                "jonjae"
+              ],
+              "key_frame_candidate_ids": [
+                "c030"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 121,
+              "end_line": 136,
+              "title": "사인드: 원전이 측면으로 올라가면 중앙으로 들어가기",
+              "position_tags": [
+                "FW",
+                "FB"
+              ],
+              "topic_tags": [
+                "포지셔닝",
+                "파이널서드"
+              ],
+              "member_ids": [
+                "find",
+                "wonjeon"
+              ],
+              "key_frame_candidate_ids": [
+                "c033"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "스프레스: 측면에서 대각으로 빼주기",
+              "position_tags": [
+                "CAM"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "spress"
+              ],
+              "key_frame_candidate_ids": [
+                "c055"
+              ],
+              "addressed_to_all": false
+            }
+          ]
+        },
+        {
+          "title": "후반 막판: 태클 페널티와 공 살리기",
+          "summary": "원전의 태클이 페널티로 이어진 장면, 수비가 촘촘할 때 뒤로 빼기, 땅볼 패스, 맥구의 돌파 선택을 다룹니다. 마지막에 TIMEJ는 오늘 경기에서 짚을 점으로, 봐줘야 할 때 대각을 보지 못하는 것과 수비가 밀집돼 있으면 미련 없이 뒤로 빼는 것을 꼽습니다.",
+          "units": [
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "원전: 공을 뺏으려 태클을 눌렀다가 페널티",
+              "position_tags": [
+                "FB"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [
+                "wonjeon"
+              ],
+              "key_frame_candidate_ids": [
+                "c058"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 158,
+              "end_line": 162,
+              "title": "상대 수비가 촘촘하면 공격하지 말고 뒤로 빼기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "탈압박",
+                "빌드업"
+              ],
+              "member_ids": [
+                "find",
+                "rumi"
+              ],
+              "key_frame_candidate_ids": [
+                "c043"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "패스는 땅으로 줄 수 있으면 땅으로",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c045"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "맥구: 막히면 같은 방식의 돌파보다 뒤로 안전하게 살리기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "탈압박",
+                "파이널서드"
+              ],
+              "member_ids": [
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": [
+                "c046"
+              ],
+              "addressed_to_all": false
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

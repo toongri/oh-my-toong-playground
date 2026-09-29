@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T14:02:12.718Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u001",
+        "u007",
+        "u012",
+        "u013"
+      ],
+      "summary_ko": "EA 공식 패스 가이드로, 동료의 위치와 움직임에 따라 땅볼·스루·공중 패스를 고르는 기준을 설명한다.",
+      "key_points_ko": [
+        "가까운 동료와 패스 길이 열려 있으면 땅볼 패스를 쓴다.",
+        "수비수가 땅볼 길을 막을 때는 공중 스루패스를 고려한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-cab2ebe63b",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "http_status": 200,
+      "checked_at": "2026-09-29T14:02:12.821Z",
+      "reused": false,
+      "page": "refs/r-cab2ebe63b.html",
+      "title": "How to coach passing in football",
+      "source_name": "The FA",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u003",
+        "u004",
+        "u006",
+        "u009",
+        "u011"
+      ],
+      "summary_ko": "잉글랜드 축구협회의 패스 지도 글로, 패스 전 공간과 동료를 살피고 공을 더 운반해 더 나은 선택지를 만드는 판단을 다룬다.",
+      "key_points_ko": [
+        "압박을 받는다고 무조건 빨리 내주기보다 적절한 패스 선택을 본다.",
+        "공을 가진 선수와 받을 선수의 위치가 패스 가능성을 바꾼다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-5bd0801f0d",
+      "url": "https://community.thefa.com/coaching/b/insights-analysis-blogs/posts/two-player-connections-in-wide-areas",
+      "final_url": "https://community.thefa.com/coaching/b/insights-analysis-blogs/posts/two-player-connections-in-wide-areas",
+      "http_status": 200,
+      "checked_at": "2026-09-29T14:02:13.806Z",
+      "reused": false,
+      "page": "refs/r-5bd0801f0d.html",
+      "title": "Two player connections in wide areas",
+      "source_name": "England Football Learning",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u003",
+        "u007",
+        "u008",
+        "u009"
+      ],
+      "summary_ko": "측면의 두 선수가 서로 다른 움직임으로 패스 선택지를 만들고, 중앙과 측면의 간격을 활용하는 사례를 설명한다.",
+      "key_points_ko": [
+        "측면의 대각 움직임과 안쪽 동료의 연결로 공격 선택지를 늘릴 수 있다.",
+        "한쪽 공간이 막히면 다른 쪽의 넓은 공간을 활용할 수 있다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-eb5a0c60ef",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-defend-like-england-space-in-wide-areas",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-defend-like-england-space-in-wide-areas",
+      "http_status": 200,
+      "checked_at": "2026-09-29T14:02:14.718Z",
+      "reused": false,
+      "page": "refs/r-eb5a0c60ef.html",
+      "title": "How to defend like England: space in wide areas",
+      "source_name": "The FA",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u007",
+        "u011"
+      ],
+      "summary_ko": "상대의 압박과 밀집 수비가 공간을 어떻게 만들고 막는지 설명한다.",
+      "key_points_ko": [
+        "압박이 한쪽으로 쏠리면 다른 측면에 공간이 생길 수 있다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

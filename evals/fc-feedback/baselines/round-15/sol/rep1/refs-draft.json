@@ -1,0 +1,37 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA의 패스 안내는 짧은 땅볼 패스, 스루패스, 로빙 패스의 사용 상황을 동료 위치와 패스 경로에 따라 구분한다.",
+      "key_points_ko": ["가까운 동료에게 공을 직접 연결할 때 땅볼 패스를 쓴다.", "열린 패스 경로와 동료의 움직임을 보고 패스 종류를 선택한다."],
+      "translations": [],
+      "unit_ids": ["u001", "u008", "u013"]
+    },
+    {
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "title": "How to coach passing in football",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "FA의 코칭 글은 패스 시점, 공을 가진 상태에서 상대를 끌어내는 선택, 패서와 수신자의 위치를 설명한다.",
+      "key_points_ko": ["수비수를 가까이 끌어들인 뒤 패스할 시점을 판단한다.", "패서와 수신자의 위치 및 몸 방향이 가능한 패스를 바꾼다."],
+      "translations": [],
+      "unit_ids": ["u004", "u005", "u007", "u010", "u014"]
+    },
+    {
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-transition",
+      "title": "How to coach transition",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "FA의 전환 코칭 글은 역습에 나선 선수가 동료의 지원 움직임을 받아야 하며, 공을 잃은 직후의 수비 균형도 고려해야 한다고 설명한다.",
+      "key_points_ko": ["역습을 선택한 공격수 주변에 동료의 지원 움직임이 필요하다.", "공을 잃을 가능성을 고려해 팀의 균형을 유지한다."],
+      "translations": [],
+      "unit_ids": ["u003", "u006", "u009"]
+    }
+  ]
+}

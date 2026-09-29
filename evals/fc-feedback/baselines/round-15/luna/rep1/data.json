@@ -1,0 +1,1186 @@
+{
+  "version": 1,
+  "session_id": "20240104-NUzEChn9EyI",
+  "title": "프로클럽 경기 피드백: 전개와 압박 대응",
+  "date": "2024-01-04",
+  "generated_at": "2026-09-29T14:36:57.128Z",
+  "pages_base_url": "https://fc-feedback-eval.invalid/",
+  "videos": [
+    {
+      "id": "NUzEChn9EyI",
+      "part": 1,
+      "embeddable": true
+    }
+  ],
+  "members": [
+    {
+      "id": "timej",
+      "name": "TIMEJ",
+      "gamertag": "TIMEJ",
+      "positions": [
+        "ST"
+      ]
+    },
+    {
+      "id": "gerrard",
+      "name": "Gerrard_CEF",
+      "gamertag": "Gerrard_CEF",
+      "positions": [
+        "CM"
+      ]
+    },
+    {
+      "id": "vandeven",
+      "name": "CEF_VandeVen",
+      "gamertag": "CEF_VandeVen",
+      "positions": [
+        "CB"
+      ]
+    },
+    {
+      "id": "bride",
+      "name": "브라이드",
+      "gamertag": "CEF_Bride",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "taxi",
+      "name": "택시",
+      "gamertag": "CEF_Taxi",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jomin",
+      "name": "조민",
+      "gamertag": "CEF_Jomin",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "find",
+      "name": "사인드",
+      "gamertag": "CEF_Find",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "rumi",
+      "name": "루미",
+      "gamertag": "CEF_Rumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "gipeu",
+      "name": "기프",
+      "gamertag": "CEF_Gipeu",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "yumi",
+      "name": "유미",
+      "gamertag": "CEF_Yumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "saembaek",
+      "name": "샘백",
+      "gamertag": "CEF_Saembaek",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "giseun",
+      "name": "기슨",
+      "gamertag": "CEF_Giseun",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jonjae",
+      "name": "존재",
+      "gamertag": "CEF_Jonjae",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "wonjeon",
+      "name": "원전",
+      "gamertag": "CEF_Wonjeon",
+      "positions": [
+        "FB"
+      ]
+    },
+    {
+      "id": "spress",
+      "name": "스프레스",
+      "gamertag": "CEF_Spress",
+      "positions": [
+        "CAM"
+      ]
+    },
+    {
+      "id": "maekgu",
+      "name": "맥구",
+      "gamertag": "CEF_Maekgu",
+      "positions": [
+        "FW"
+      ]
+    }
+  ],
+  "matches": [
+    {
+      "id": "m1",
+      "title": "리그 경기 (BROS VAMOS vs CEF Barcelona)",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "넓은 공간 연결과 공을 받는 자세",
+          "summary": "좁은 곳의 동료보다 넓은 공간으로 연결하고, 공을 받을 때 LT를 사용하는 장면을 나눠 봅니다.",
+          "unit_ids": [
+            "u001",
+            "u002"
+          ]
+        },
+        {
+          "id": "m1-t2",
+          "title": "전환에서 윙어 옵션 만들기",
+          "summary": "조민의 장면에 아쉬운 점을 짚고, 사인드가 낮게 위치하면 루미가 윙어 역할을 해야 한다고 합니다. 그래야 기프가 TIMEJ에게 내주거나 유미를 선택할 수 있고, 사인드와 맥구도 같은 방식을 적용할 수 있습니다.",
+          "unit_ids": [
+            "u003"
+          ]
+        },
+        {
+          "id": "m1-t3",
+          "title": "압박을 피하며 전진할 시간 만들기",
+          "summary": "공이 올 때 압박을 받을 수 있는 상황에서 뒤로 내주고 LT로 다시 받는 선택을 짚습니다. Gerrard_CEF가 탈압박해 앞으로 넣어도 이득이 적고, 샘백에게 연결해 수비를 끌고 가면 수비 숫자와 다음 전개의 난이도를 낮출 수 있다고 설명합니다. 공을 가진 선수는 상대를 끌어내 동료가 올라올 시간을 만들되, 우리 진영에서 공을 잃지 말고 넓게 전개하라고 합니다.",
+          "unit_ids": [
+            "u004",
+            "u005",
+            "u006"
+          ]
+        },
+        {
+          "id": "m1-t4",
+          "title": "오늘 득점에 대한 평가",
+          "summary": "TIMEJ는 오늘 득점이 깔끔하지 않았다고 평가합니다.",
+          "unit_ids": [
+            "u007"
+          ]
+        },
+        {
+          "id": "m1-t5",
+          "title": "중앙과 측면을 잇는 공격 선택",
+          "summary": "Gerrard_CEF에게 연결한 뒤 존재가 넓은 공간을 활용하고, 공을 몰고 들어가 크로스나 컷백을 선택할 수 있다고 설명합니다. 측면·중앙의 움직임과 대각 패스도 짚습니다.",
+          "unit_ids": [
+            "u008",
+            "u009",
+            "u010"
+          ]
+        },
+        {
+          "id": "m1-t6",
+          "title": "밀집 수비 앞의 안전한 선택",
+          "summary": "원전이 태클을 눌렀다가 페널티를 내준 장면과, 상대 수비가 밀집하거나 공간이 닫힌 상황에서 뒤로 연결하고 공을 안전하게 살리는 방법을 정리합니다.",
+          "unit_ids": [
+            "u011",
+            "u012",
+            "u013",
+            "u014"
+          ]
+        },
+        {
+          "id": "m1-t7",
+          "title": "경기 요점 정리",
+          "summary": "대각 패스를 볼 때와 수비가 밀집해 뒤로 빼야 할 때를 마지막으로 다시 짚습니다.",
+          "unit_ids": [
+            "u015"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "uid": "20240104-NUzEChn9EyI#u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 79.06,
+      "end": 103.42,
+      "title": "좁은 곳이면 뒤로 빼고 넓은 곳으로 연결",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "좁은 곳의 동료보다 **넓은 공간의 동료에게 연결**하면 공을 운반하기 쉽고, 공이 없는 동료들이 올라올 시간을 벌 수 있습니다. 좁은 공간에 몰리면 **뒤로 빼야 한다**고 짚습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u001-c004.webp",
+          "width": 854,
+          "height": 460,
+          "t": 90,
+          "caption": "화면 왼쪽에서 중앙과 오른쪽을 잇는 파란 경로와 중앙의 빨간 화살표가 그려져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u001-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=79"
+    },
+    {
+      "id": "u002",
+      "uid": "20240104-NUzEChn9EyI#u002",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 235.06,
+      "end": 255.12,
+      "title": "LT를 누르고 방향을 유지하며 움직이기",
+      "position_tags": [],
+      "topic_tags": [
+        "조작/키사용"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 받은 선수가 위나 아래로 움직일 때 **LT를 누르면 몸을 돌리지 않고 한쪽을 바라본 채 움직일 수 있다**고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u002-c009.webp",
+          "width": 854,
+          "height": 460,
+          "t": 240,
+          "caption": "화면 중앙의 선수가 노란 원으로 표시되고, 옆에 노란색으로 LT가 적혀 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u002-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=235"
+    },
+    {
+      "id": "u003",
+      "uid": "20240104-NUzEChn9EyI#u003",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 344.68,
+      "end": 402.72,
+      "title": "역습 때 윙어 역할로 패스 선택지 만들기",
+      "position_tags": [
+        "MF",
+        "FW"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "maekgu"
+      ],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "역습에서 기프가 공을 가진 상황에 **루미가 윙어 역할로 움직여야 한다**고 합니다. 사인드가 낮은 위치에 있을 때 이런 움직임이 있어야 기프는 가까운 쪽의 코치 TIMEJ에게 내주거나 유미를 선택할 수 있어 두 패스 길이가 열립니다. TIMEJ는 조민의 장면에 아쉬운 점이 있다고 말하고, 사인드와 맥구도 같은 방식을 적용하라고 덧붙입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u003-c013.webp",
+          "width": 854,
+          "height": 460,
+          "t": 360,
+          "caption": "화면 중앙과 오른쪽에서 왼쪽을 향하는 빨간 화살표가 선수들 사이에 그려져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u003-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-068613b55f",
+          "title": "UEFA EURO 2024 Technical Report – Part One",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-068613b55f.html",
+          "orig_url": "https://editorial.uefa.com/resources/028f-1b6f7f14a391-e1beafb781cc-1000/euro2024_mini-tech-report_v7.pdf"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=344"
+    },
+    {
+      "id": "u004",
+      "uid": "20240104-NUzEChn9EyI#u004",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 463.08000000000004,
+      "end": 526.78,
+      "title": "압박을 피해 되돌려 받고 Gerrard_CEF의 전진 패스 판단하기",
+      "position_tags": [
+        "CM",
+        "FW"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "조작/키사용",
+        "빌드업"
+      ],
+      "member_ids": [
+        "gerrard",
+        "saembaek"
+      ],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "공이 올 때 압박을 받을 수 있는 상황에서 TIMEJ는 Gerrard_CEF에게 **뒤로 내주고 LT를 눌러 다시 받으라**고 합니다. Gerrard_CEF가 탈압박해 앞으로 넣어도 큰 이득이 없다고 보고, 그 전진 동작을 가장 불필요하다고 평가합니다. 샘백에게 연결해 수비를 끌고 가게 하면 수비 숫자를 줄이고 다음 전개 난이도를 낮출 수 있다고 권합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u004-c018.webp",
+          "width": 854,
+          "height": 460,
+          "t": 510,
+          "caption": "센터서클 부근에 Gerrard_CEF 이름표가 보이고, 그 앞에는 왼쪽을 향한 빨간 화살표가 그려져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u004-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-068613b55f",
+          "title": "UEFA EURO 2024 Technical Report – Part One",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-068613b55f.html",
+          "orig_url": "https://editorial.uefa.com/resources/028f-1b6f7f14a391-e1beafb781cc-1000/euro2024_mini-tech-report_v7.pdf"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=463"
+    },
+    {
+      "id": "u005",
+      "uid": "20240104-NUzEChn9EyI#u005",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 579.9399999999999,
+      "end": 658.94,
+      "title": "공을 몰아 상대를 끌고 동료의 전진 시간 만들기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "좁은 곳에서 TIMEJ에게 바로 내주면 선택지가 적으므로, **공을 가진 선수는 더 몰고 가 상대 한 명을 끌어내야 한다**고 합니다. 그러면 동료가 올라올 시간을 벌고 TIMEJ도 더 높은 진영으로 올라갈 수 있습니다. 성공해 TIMEJ에게 연결하면 TIMEJ가 탈압박해 풀어낼 수도 있지만, 우리 진영에서 공을 잃으면 바로 역습을 맞을 수 있다고 경계합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u005-c022.webp",
+          "width": 854,
+          "height": 460,
+          "t": 630,
+          "caption": "파란 선수들 사이로 여러 개의 빨간 화살표가 그려져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u005-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-068613b55f",
+          "title": "UEFA EURO 2024 Technical Report – Part One",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-068613b55f.html",
+          "orig_url": "https://editorial.uefa.com/resources/028f-1b6f7f14a391-e1beafb781cc-1000/euro2024_mini-tech-report_v7.pdf"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=579"
+    },
+    {
+      "id": "u006",
+      "uid": "20240104-NUzEChn9EyI#u006",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 694.54,
+      "end": 699.54,
+      "title": "넓게 벌려 플레이하기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "공격 장면에서 **넓게 벌려 플레이해야 한다**고 짚습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u006-c024.webp",
+          "width": 854,
+          "height": 460,
+          "t": 690,
+          "caption": "파란 선수들이 화면 좌우로 벌어져 있고 흰 선수들은 중앙 쪽에 모여 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u006-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u002",
+          "title": "베리나 포지션 상향 지시",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u002"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-068613b55f",
+          "title": "UEFA EURO 2024 Technical Report – Part One",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-068613b55f.html",
+          "orig_url": "https://editorial.uefa.com/resources/028f-1b6f7f14a391-e1beafb781cc-1000/euro2024_mini-tech-report_v7.pdf"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=694"
+    },
+    {
+      "id": "u007",
+      "uid": "20240104-NUzEChn9EyI#u007",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "NUzEChn9EyI",
+      "start": 719.54,
+      "end": 732.98,
+      "title": "깔끔하게 마무리된 골이 없었다는 평가",
+      "position_tags": [],
+      "topic_tags": [
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "TIMEJ는 오늘 **깔끔하게 들어간 득점이 없다고 평가**합니다. 오늘 골들이 지저분하게 들어갔다고 덧붙입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u007-c026.webp",
+          "width": 854,
+          "height": 460,
+          "t": 731.8,
+          "caption": "하프타임 화면 오른쪽 위에 45:00과 BROS VAMOS 0–1 CEF Barcelona가 표시되어 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u007-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=719"
+    },
+    {
+      "id": "u008",
+      "uid": "20240104-NUzEChn9EyI#u008",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "NUzEChn9EyI",
+      "start": 825.34,
+      "end": 838.74,
+      "title": "Gerrard_CEF에게 연결해 넓은 공간 활용하기",
+      "position_tags": [
+        "CM",
+        "FW"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "크로스"
+      ],
+      "member_ids": [
+        "gerrard",
+        "jonjae"
+      ],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "이 타이밍에 Gerrard_CEF에게 연결하면 **존재가 넓은 공간을 활용할 수 있다**고 설명합니다. 이어 존재가 공을 몰고 들어가 크로스나 컷백을 선택할 수 있다고 말합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u008-c031.webp",
+          "width": 854,
+          "height": 460,
+          "t": 840,
+          "caption": "오른쪽 페널티 구역 앞에 파란 공격수와 흰 수비수가 모여 있고 골문이 화면 오른쪽에 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u008-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-068613b55f",
+          "title": "UEFA EURO 2024 Technical Report – Part One",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-068613b55f.html",
+          "orig_url": "https://editorial.uefa.com/resources/028f-1b6f7f14a391-e1beafb781cc-1000/euro2024_mini-tech-report_v7.pdf"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=825"
+    },
+    {
+      "id": "u009",
+      "uid": "20240104-NUzEChn9EyI#u009",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "NUzEChn9EyI",
+      "start": 857.4799999999999,
+      "end": 913.88,
+      "title": "측면 전개 중 중앙을 메우고 침투 공간 열기",
+      "position_tags": [
+        "FW",
+        "FB"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "전환/역습"
+      ],
+      "member_ids": [
+        "find",
+        "wonjeon"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "wonjeon",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "원전이 공을 몰고 올라가는 장면에서 사인드의 판단이 아쉽다고 평가하고 **사인드는 중앙으로 들어간다**고 짚습니다. TIMEJ는 자신의 위치가 낮으므로 무작정 뛰어나가지 않고 중앙 공간을 메운다고 설명합니다. 이어 붉은 공간에 공을 주고 다른 선수가 들어가는 선택을 말한 뒤, 골이 났다고 반응합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u009-c033.webp",
+          "width": 854,
+          "height": 460,
+          "t": 900,
+          "caption": "선수 둘레에 흰 원 표시가 있고, 공이 있는 쪽에서 오른쪽 페널티 구역으로 향하는 흰 화살표가 그려져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u009-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u002",
+          "title": "베리나 포지션 상향 지시",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u002"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-068613b55f",
+          "title": "UEFA EURO 2024 Technical Report – Part One",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-068613b55f.html",
+          "orig_url": "https://editorial.uefa.com/resources/028f-1b6f7f14a391-e1beafb781cc-1000/euro2024_mini-tech-report_v7.pdf"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=857"
+    },
+    {
+      "id": "u010",
+      "uid": "20240104-NUzEChn9EyI#u010",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "NUzEChn9EyI",
+      "start": 1071.64,
+      "end": 1104.5,
+      "title": "측면에서 대각으로 연결해 전진자 찾기",
+      "position_tags": [
+        "CAM"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [
+        "spress"
+      ],
+      "related_member_ids": [
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "스프레스의 장면을 예로 들며, 측면에서 대각선으로 빼주면 중원이 넓은 공간에서 앞으로 뛰는 선수를 볼 여유가 생긴다고 설명합니다. 그래서 **측면에서 대각으로 연결하는 패스가 중요하다**고 짚습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u010-c039.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1080,
+          "caption": "화면 중앙 오른쪽의 파란 선수 둘레에 빨간 원이 있고, 오른쪽에 빨간 가로선이 그려져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u010-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-068613b55f",
+          "title": "UEFA EURO 2024 Technical Report – Part One",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-068613b55f.html",
+          "orig_url": "https://editorial.uefa.com/resources/028f-1b6f7f14a391-e1beafb781cc-1000/euro2024_mini-tech-report_v7.pdf"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1071"
+    },
+    {
+      "id": "u011",
+      "uid": "20240104-NUzEChn9EyI#u011",
+      "match_id": "m1",
+      "topic_id": "m1-t6",
+      "video": "NUzEChn9EyI",
+      "start": 1128.4599999999998,
+      "end": 1139.04,
+      "title": "원전이 태클하다 페널티를 내준 장면",
+      "position_tags": [
+        "FB"
+      ],
+      "topic_tags": [
+        "압박"
+      ],
+      "member_ids": [
+        "wonjeon"
+      ],
+      "related_member_ids": [
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "수비 상황에서 원전이 **한 번 밸런스를 무너뜨린 뒤 태클을 눌러 페널티를 내줬다**고 짚습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u011-c042.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1139.5,
+          "caption": "골대 앞에서 심판이 선수들 사이에 서 있고, 화면 왼쪽 위에는 0–2가 표시되어 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u011-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1128"
+    },
+    {
+      "id": "u012",
+      "uid": "20240104-NUzEChn9EyI#u012",
+      "match_id": "m1",
+      "topic_id": "m1-t6",
+      "video": "NUzEChn9EyI",
+      "start": 1155.22,
+      "end": 1191.56,
+      "title": "수비가 촘촘하면 뒤쪽으로 연결하기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "find",
+        "rumi"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "상대 수비가 촘촘해 공격하기 어렵다며 **뒤쪽 선수에게 공을 빼야 한다**고 말합니다. 이어 사인드가 이 장면을 봤을 것 같다고 하고, 루미가 붙잡힌 것 같다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u012-c043.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1170,
+          "caption": "골문 앞 페널티 구역에 파란 공격수와 흰 수비수가 모여 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u012-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-068613b55f",
+          "title": "UEFA EURO 2024 Technical Report – Part One",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-068613b55f.html",
+          "orig_url": "https://editorial.uefa.com/resources/028f-1b6f7f14a391-e1beafb781cc-1000/euro2024_mini-tech-report_v7.pdf"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1155"
+    },
+    {
+      "id": "u013",
+      "uid": "20240104-NUzEChn9EyI#u013",
+      "match_id": "m1",
+      "topic_id": "m1-t6",
+      "video": "NUzEChn9EyI",
+      "start": 1225.22,
+      "end": 1254.74,
+      "title": "하프 공간에 땅으로 연결해 공의 속도 살리기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "하프 공간으로 공을 넣을 때 받는 선수가 공이 오는 속도를 살려 플레이하려면 **가능하면 땅으로 연결하는 것이 가장 좋다**고 설명합니다. 띄운 공은 수비 사이에 막힐 수 있다고 덧붙입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u013-c045.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1230,
+          "caption": "화면 상단 중앙에서 오른쪽으로 향하는 빨간 화살표가 공격수와 수비수 사이에 그려져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u013-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1225"
+    },
+    {
+      "id": "u014",
+      "uid": "20240104-NUzEChn9EyI#u014",
+      "match_id": "m1",
+      "topic_id": "m1-t6",
+      "video": "NUzEChn9EyI",
+      "start": 1258.6599999999999,
+      "end": 1305.48,
+      "title": "돌파가 막히면 뒤로 연결해 공격 방식 바꾸기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [
+        "maekgu"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "맥구가 혼자 돌파하다 막힌 상황에서 **같은 방식으로 계속 돌파하기보다 뒤로 안전하게 연결하라**고 합니다. 뒤에서 받쳐주는 선수가 있어도 못 볼 때가 있으므로 그 선수에게 내주는 등 공격 방식을 다양하게 하라고 말합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u014-c046.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1260,
+          "caption": "페널티 구역 안에서 파란 공격수가 공을 잡고 있고, 여러 흰 수비수가 그 주변을 막고 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u014-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1258"
+    },
+    {
+      "id": "u015",
+      "uid": "20240104-NUzEChn9EyI#u015",
+      "match_id": "m1",
+      "topic_id": "m1-t7",
+      "video": "NUzEChn9EyI",
+      "start": 1317.18,
+      "end": 1334.1,
+      "title": "대각 패스를 보고 수비가 몰리면 뒤로 빼기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "경기 핵심으로 대각 패스가 보일 때 **봐줘야 할 순간을 놓치지 말아야 한다**고 정리합니다. 상대 수비가 밀집하면 **미련 없이 뒤로 빼야 한다**고 덧붙입니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u015-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-068613b55f",
+          "title": "UEFA EURO 2024 Technical Report – Part One",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-068613b55f.html",
+          "orig_url": "https://editorial.uefa.com/resources/028f-1b6f7f14a391-e1beafb781cc-1000/euro2024_mini-tech-report_v7.pdf"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1317"
+    }
+  ]
+}

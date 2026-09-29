@@ -1,0 +1,417 @@
+{
+  "version": 1,
+  "session_title": "C.E.F. FC Barcelona 팀 연습 2024-01-04 Part 3 피드백",
+  "matches": [
+    {
+      "id": "m1",
+      "title": "BRO 대 FCB 연습경기",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "넓은 공간으로 전개",
+          "summary": "좁은 곳의 동료보다 넓은 곳의 동료를 보고 공을 옮기는 선택을 짚는다.",
+          "unit_ids": [
+            "u001"
+          ]
+        },
+        {
+          "id": "m1-t2",
+          "title": "공을 받는 자세와 LT 조작",
+          "summary": "공을 받기 전 몸의 방향을 유지하며 움직이는 LT 조작을 설명한다.",
+          "unit_ids": [
+            "u002"
+          ]
+        },
+        {
+          "id": "m1-t3",
+          "title": "역습 때 패스 선택지 만들기",
+          "summary": "사인드가 낮게 있는 역습에서 루미의 윙어 역할과 공을 가진 선수에게 열어 줄 패스 경로를 설명한다.",
+          "unit_ids": [
+            "u003"
+          ]
+        },
+        {
+          "id": "m1-t4",
+          "title": "압박 속 전진 선택",
+          "summary": "압박이 오는 공을 곧장 전진시키는 판단과 뒤로 내준 뒤 다시 받는 선택을 비교한다.",
+          "unit_ids": [
+            "u004",
+            "u005"
+          ]
+        },
+        {
+          "id": "m1-t5",
+          "title": "전진 드리블과 패스 시점",
+          "summary": "루미가 멈춘 장면을 아쉬워한다. 이후 너무 이른 패스보다 공을 더 몰아 상대를 끌어낸 뒤 패스하자는 설명이 이어진다.",
+          "unit_ids": [
+            "u006",
+            "u007"
+          ]
+        },
+        {
+          "id": "m1-t6",
+          "title": "막힌 공격에서 방향 전환",
+          "summary": "한쪽이 막혔을 때 존재가 넓은 공간을 쓰는 선택을 짚는다.",
+          "unit_ids": [
+            "u008"
+          ]
+        },
+        {
+          "id": "m1-t7",
+          "title": "측면 오버래핑과 중앙 침투",
+          "summary": "원전이 올라오는 동안 사인드의 위치를 조정하고 TIMEJ가 뒤를 메우는 선택을 설명한다. 장면 끝의 득점 반응도 남긴다.",
+          "unit_ids": [
+            "u009"
+          ]
+        },
+        {
+          "id": "m1-t8",
+          "title": "중원에서 대각 패스",
+          "summary": "스프레스의 패스 선택을 계기로 중원이 넓은 공간의 전방 주자를 볼 수 있도록 대각으로 빼주는 움직임을 강조한다.",
+          "unit_ids": [
+            "u010"
+          ]
+        },
+        {
+          "id": "m1-t9",
+          "title": "수비 판단과 압박 대응",
+          "summary": "원전의 밸런스와 태클 판단, 촘촘한 수비를 상대한 공격의 후방 패스를 짚는다.",
+          "unit_ids": [
+            "u011",
+            "u012"
+          ]
+        },
+        {
+          "id": "m1-t10",
+          "title": "패스 방식과 돌파 중단",
+          "summary": "가능하면 땅볼로 주고, 맥구가 돌파 공간을 잃었을 때 뒤를 보는 선택을 정리한다.",
+          "unit_ids": [
+            "u013",
+            "u014"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 75.12,
+      "end": 103.42,
+      "title": "좁은 곳 대신 넓은 곳으로 패스",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c004"
+      ],
+      "addressed_to_all": true
+    },
+    {
+      "id": "u002",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 225.9,
+      "end": 255.12,
+      "title": "공을 받을 때 LT로 몸 방향 유지",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "조작/키사용"
+      ],
+      "member_ids": [
+        "taxi"
+      ],
+      "key_frame_candidate_ids": [
+        "c009"
+      ],
+      "addressed_to_all": true
+    },
+    {
+      "id": "u003",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 344.68,
+      "end": 402.72,
+      "title": "루미가 윙어 역할을 맡아 역습 경로 열기",
+      "position_tags": [
+        "FW",
+        "MF"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "maekgu"
+      ],
+      "key_frame_candidate_ids": [
+        "c013",
+        "c014"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u004",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "NUzEChn9EyI",
+      "start": 463.08000000000004,
+      "end": 489.72,
+      "title": "압박이 오면 뒤로 내주고 LT로 다시 받기",
+      "position_tags": [],
+      "topic_tags": [
+        "탈압박",
+        "조작/키사용"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c017"
+      ],
+      "addressed_to_all": true
+    },
+    {
+      "id": "u005",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "NUzEChn9EyI",
+      "start": 491.76,
+      "end": 526.78,
+      "title": "Gerrard_CEF의 무리한 전진보다 샘백 경유",
+      "position_tags": [
+        "CM",
+        "FW"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "탈압박"
+      ],
+      "member_ids": [
+        "gerrard",
+        "saembaek"
+      ],
+      "key_frame_candidate_ids": [
+        "c018"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u006",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "NUzEChn9EyI",
+      "start": 545.7,
+      "end": 548,
+      "title": "루미가 움직임을 멈춘 장면",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "rumi"
+      ],
+      "key_frame_candidate_ids": [
+        "c054"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u007",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "NUzEChn9EyI",
+      "start": 579.9399999999999,
+      "end": 658.94,
+      "title": "너무 이른 패스보다 공을 더 몰아 상대 끌기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "탈압박"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c021",
+        "c022"
+      ],
+      "addressed_to_all": true
+    },
+    {
+      "id": "u008",
+      "match_id": "m1",
+      "topic_id": "m1-t6",
+      "video": "NUzEChn9EyI",
+      "start": 791.0999999999999,
+      "end": 838.74,
+      "title": "막힌 쪽을 벗어나 존재의 넓은 공간 활용",
+      "position_tags": [
+        "MF",
+        "CM",
+        "FW",
+        "ST"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "크로스"
+      ],
+      "member_ids": [
+        "giseun",
+        "gerrard",
+        "jonjae",
+        "timej"
+      ],
+      "key_frame_candidate_ids": [
+        "c030",
+        "c031"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u009",
+      "match_id": "m1",
+      "topic_id": "m1-t7",
+      "video": "NUzEChn9EyI",
+      "start": 857.4799999999999,
+      "end": 935.94,
+      "title": "원전의 측면 전진에 맞춰 사인드가 중앙으로",
+      "position_tags": [
+        "FW",
+        "FB",
+        "ST"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "전환/역습"
+      ],
+      "member_ids": [
+        "find",
+        "wonjeon",
+        "timej"
+      ],
+      "key_frame_candidate_ids": [
+        "c032"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u010",
+      "match_id": "m1",
+      "topic_id": "m1-t8",
+      "video": "NUzEChn9EyI",
+      "start": 1071.64,
+      "end": 1104.5,
+      "title": "중원에 대각으로 빼서 전방 선택지 보기",
+      "position_tags": [
+        "CAM",
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "파이널서드"
+      ],
+      "member_ids": [
+        "spress"
+      ],
+      "key_frame_candidate_ids": [
+        "c039"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u011",
+      "match_id": "m1",
+      "topic_id": "m1-t9",
+      "video": "NUzEChn9EyI",
+      "start": 1128.4599999999998,
+      "end": 1139.04,
+      "title": "원전의 태클 시도와 페널티",
+      "position_tags": [
+        "FB"
+      ],
+      "topic_tags": [
+        "수비라인"
+      ],
+      "member_ids": [
+        "wonjeon"
+      ],
+      "key_frame_candidate_ids": [
+        "c053"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u012",
+      "match_id": "m1",
+      "topic_id": "m1-t9",
+      "video": "NUzEChn9EyI",
+      "start": 1155.22,
+      "end": 1178.12,
+      "title": "상대 수비가 촘촘하면 뒤로 빼기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c043"
+      ],
+      "addressed_to_all": true
+    },
+    {
+      "id": "u013",
+      "match_id": "m1",
+      "topic_id": "m1-t10",
+      "video": "NUzEChn9EyI",
+      "start": 1225.22,
+      "end": 1254.74,
+      "title": "받는 속도를 살리는 땅볼 패스",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c045"
+      ],
+      "addressed_to_all": true
+    },
+    {
+      "id": "u014",
+      "match_id": "m1",
+      "topic_id": "m1-t10",
+      "video": "NUzEChn9EyI",
+      "start": 1258.6599999999999,
+      "end": 1305.48,
+      "title": "맥구는 돌파가 막히면 뒤로 살리기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [
+        "maekgu"
+      ],
+      "key_frame_candidate_ids": [
+        "c046",
+        "c047"
+      ],
+      "addressed_to_all": false
+    }
+  ]
+}

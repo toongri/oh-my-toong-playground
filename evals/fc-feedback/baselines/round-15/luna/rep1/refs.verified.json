@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T14:36:51.558Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u001",
+        "u004",
+        "u008",
+        "u010",
+        "u012",
+        "u013",
+        "u014",
+        "u015"
+      ],
+      "summary_ko": "EA의 공식 패스 안내는 동료의 움직임과 공간에 맞춰 패스 종류를 선택하는 방법을 설명합니다.",
+      "key_points_ko": [
+        "짧은 연결과 점유 유지에는 땅볼 패스를, 달려가는 동료 앞 공간에는 열린 패스 길을 향한 스루 패스를 안내합니다.",
+        "측면에서 크로스를 올릴 수 있고, 수비수가 땅볼 길을 막으면 로빙 스루 패스를 고려하며, 빠른 전개에는 드리븐 땅볼 패스를 설명합니다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-068613b55f",
+      "url": "https://editorial.uefa.com/resources/028f-1b6f7f14a391-e1beafb781cc-1000/euro2024_mini-tech-report_v7.pdf",
+      "final_url": "https://editorial.uefa.com/resources/028f-1b6f7f14a391-e1beafb781cc-1000/euro2024_mini-tech-report_v7.pdf",
+      "http_status": 200,
+      "checked_at": "2026-09-29T14:36:51.636Z",
+      "reused": false,
+      "page": "refs/r-068613b55f.html",
+      "title": "UEFA EURO 2024 Technical Report – Part One",
+      "source_name": "UEFA",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u003",
+        "u004",
+        "u005",
+        "u006",
+        "u008",
+        "u009",
+        "u010",
+        "u012",
+        "u015"
+      ],
+      "summary_ko": "UEFA 기술 관찰자들이 EURO 2024 결승의 전술을 분석한 보고서입니다. 잉글랜드의 촘촘한 중앙 수비가 스페인의 중앙 전진을 제한한 장면과, 스페인이 중원 배치와 측면 연계를 바꿔 전진 패스 길을 만든 장면을 다룹니다.",
+      "key_points_ko": [
+        "잉글랜드는 미드필드와 수비 사이 간격을 좁혀 스페인의 중앙 전진 패스를 제한했습니다.",
+        "스페인은 하프타임 뒤 중원 배치를 바꾸고 측면 선수와 풀백을 연결해 공간과 전진 패스를 만들었습니다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

@@ -1,0 +1,6 @@
+{
+  "platform": "claude",
+  "model": "claude-opus-5-5",
+  "effort": "high",
+  "claude_version": "2.1.284 (Claude Code)"
+}

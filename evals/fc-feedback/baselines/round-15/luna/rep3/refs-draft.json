@@ -1,0 +1,77 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA SPORTS FC Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA의 패스 가이드는 짧은 연결과 점유 유지에는 그라운드 패스를, 수비수 위나 뒷공간으로 보낼 때는 로브 패스를 쓰는 기준을 설명합니다.",
+      "key_points_ko": [
+        "가까운 동료에게 짧게 연결할 때 그라운드 패스를 사용합니다.",
+        "수비수가 지면 패스 길을 막거나 뒷공간이 열렸을 때 로브 패스를 고려합니다.",
+        "받는 선수와 주변 공간에 맞춰 패스 종류와 세기를 고릅니다."
+      ],
+      "translations": [],
+      "unit_ids": [
+        "u013"
+      ]
+    },
+    {
+      "url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-career-deep-dive",
+      "title": "EA SPORTS FC™ 24 | Pitch Notes - Career Deep Dive",
+      "source_name": "EA SPORTS",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA FC 24의 윙 플레이 설명은 공을 가진 팀이 경기장 폭을 쓰고, 측면 공격수와 오버래핑하는 풀백을 통해 측면 공격을 전개하는 방식을 다룹니다.",
+      "key_points_ko": [
+        "윙 플레이는 경기장 폭을 활용해 측면 공격수에게 빠르게 공을 연결합니다.",
+        "풀백의 오버래핑으로 측면 공격에 추가 선택지를 만들 수 있습니다."
+      ],
+      "translations": [],
+      "unit_ids": [
+        "u001",
+        "u003",
+        "u007"
+      ]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/gygax-attacking-in-wide-areas.php",
+      "title": "Attacking in wide areas (Gygax)",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "FIFA Training Centre의 세션은 중앙에서 측면으로 공을 옮기고, 폭을 제공하는 움직임과 침투 타이밍으로 밀집 수비를 공략하는 방법을 설명합니다.",
+      "key_points_ko": [
+        "측면 공격수는 마지막 3분의 1에서 폭을 만들고 패스를 예측해 움직입니다.",
+        "중앙에서 측면으로 공을 옮기며 오버로드와 침투를 만들 수 있습니다.",
+        "페널티 지역에서 크로스나 컷백을 받을 선수가 서로 다른 구역을 차지해야 합니다."
+      ],
+      "translations": [],
+      "unit_ids": [
+        "u003",
+        "u008",
+        "u014"
+      ]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/john-peacock-passing-and-receiving.php",
+      "title": "Passing and receiving (John Peacock)",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "FIFA의 패스·퍼스트 터치 세션은 공을 받기 전에 주변을 살피고, 몸을 열어 반턴으로 받으면 더 많은 패스 선택지를 확보할 수 있다고 설명합니다.",
+      "key_points_ko": [
+        "공을 받기 전에 주변과 공간을 확인합니다.",
+        "몸을 열고 반턴으로 받으면 여러 방향으로 전개할 수 있습니다.",
+        "압박을 받을 때는 첫 터치로 공을 수비수에게서 멀리 두고 패스 길을 만듭니다."
+      ],
+      "translations": [],
+      "unit_ids": [
+        "u002",
+        "u004",
+        "u006"
+      ]
+    }
+  ]
+}
