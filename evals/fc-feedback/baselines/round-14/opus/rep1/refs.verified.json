@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-cd2e3bd750",
+      "url": "https://www.ea.com/able/resources/fifa/fifa-22/xbox-series-x/basic-controls",
+      "final_url": "https://www.ea.com/able/resources/fifa/fifa-22/xbox-series-x/basic-controls",
+      "http_status": 200,
+      "checked_at": "2026-09-29T13:16:40.363Z",
+      "reused": false,
+      "page": "refs/r-cd2e3bd750.html",
+      "title": "FIFA 22 Basic Controls (Xbox Series X)",
+      "source_name": "EA Accessibility (ea.com)",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u003",
+        "u028",
+        "u043"
+      ],
+      "summary_ko": "FIFA 22 Xbox 기본 조작표입니다. 코치가 언급한 RT(질주), LT(볼 보호/제킹), RB 조합, 스루·로빙 스루 패스 키를 확인할 수 있습니다.",
+      "key_points_ko": [
+        "질주: RT를 누른 채 방향 입력",
+        "볼 보호/제킹: LT를 누른 채 방향 입력",
+        "스루 패스는 Y, 로빙 스루 패스는 LB + Y",
+        "RB는 공격 시 낮고 빠른 패스(RB + A), 수비 시 즉시 강한 태클(RB + B) 등에 쓰임"
+      ],
+      "translations": [
+        {
+          "orig": "Shield/Jockey: LT (Hold Down) + Direction",
+          "ko": "볼 보호/제킹: LT를 누른 채 방향 입력"
+        },
+        {
+          "orig": "Lobbed Through Pass: LB + Y",
+          "ko": "로빙 스루 패스: LB + Y"
+        }
+      ]
+    },
+    {
+      "id": "r-cb729a62e8",
+      "url": "https://www.keengamer.com/articles/guides/fifa-22-beginners-guide-how-to-defend",
+      "final_url": "https://www.keengamer.com/articles/guides/fifa-22-beginners-guide-how-to-defend/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T13:16:40.782Z",
+      "reused": false,
+      "page": "refs/r-cb729a62e8.html",
+      "title": "FIFA 22 Beginner's Guide: How to Defend",
+      "source_name": "KeenGamer",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u023",
+        "u041",
+        "u044"
+      ],
+      "summary_ko": "FIFA 22 수비 입문 가이드로, 무작정 태클하러 달려들기보다 LT 제킹으로 상대 움직임을 따라가며 통제하고, 선수 전환과 위치 선정으로 패스길을 끊으라고 설명합니다.",
+      "key_points_ko": [
+        "제킹(LT)은 가장 핵심적인 수비 도구",
+        "태클하러 서두르기보다 제킹으로 상대를 통제",
+        "수동 선수 전환과 위치 선정으로 패스길 차단"
+      ],
+      "translations": [
+        {
+          "orig": "Jockeying is probably the most essential tool at your disposal",
+          "ko": "제킹은 아마 당신이 가진 가장 핵심적인 수비 도구다"
+        }
+      ]
+    },
+    {
+      "id": "r-b183537e71",
+      "url": "https://themastermindsite.com/2023/02/14/the-art-of-staying-onside",
+      "final_url": "https://themastermindsite.com/2023/02/14/the-art-of-staying-onside/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T13:16:42.263Z",
+      "reused": false,
+      "page": "refs/r-b183537e71.html",
+      "title": "The art of staying onside",
+      "source_name": "The Mastermind Site",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u031",
+        "u034",
+        "u053"
+      ],
+      "summary_ko": "공격수가 오프사이드에 걸리지 않는 방법을 다룬 전술 글입니다. 가장 가까운 수비수를 주시하고, 수비 라인에 맞춰 옆으로 휘어 달리다가 골문 쪽으로 꺾고, 더 깊은 위치에서 늦게 파고들라고 설명합니다.",
+      "key_points_ko": [
+        "가장 가까운 수비수를 시야 주변으로 계속 확인",
+        "처음부터 곧게 앞으로 달리지 말고 라인에 맞춰 휘어 달리기",
+        "더 깊은 위치에서 출발해 패스 순간 늦게 파고들기",
+        "수비 라인을 보지 않고 곧장 달리면 오프사이드에 걸린다"
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-a47dc83d1e",
+      "url": "https://learning.coachesvoice.com/cv/zonal-marking-football-tactics-explained-mourinho-conte-simeone",
+      "final_url": "https://learning.coachesvoice.com/cv/zonal-marking-football-tactics-explained-mourinho-conte-simeone/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T13:16:42.542Z",
+      "reused": false,
+      "page": "refs/r-a47dc83d1e.html",
+      "title": "Zonal marking: football tactics explained",
+      "source_name": "Coaches' Voice",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u013",
+        "u036",
+        "u048"
+      ],
+      "summary_ko": "지역 방어는 상대를 한 명씩 따라다니기보다 공간을 통제·수비하는 방식이며, 선수 간 가로·세로 간격을 좁혀 한 덩어리로 움직입니다. 수비수가 집중력을 잃거나 맡은 구역을 버리면 공격수가 파고들 틈이 생긴다고 설명합니다.",
+      "key_points_ko": [
+        "사람보다 공간을 우선 통제하는 수비 방식",
+        "가로·세로 간격을 좁힌 컴팩트한 수비 블록",
+        "맡은 구역을 버리면 구조에 틈이 생긴다"
+      ],
+      "translations": [
+        {
+          "orig": "prioritise controlling and defending spaces rather than matching the opposition player for player",
+          "ko": "상대를 한 명씩 맞상대하기보다 공간을 통제하고 지키는 것을 우선한다"
+        }
+      ]
+    },
+    {
+      "id": "r-821169b3d4",
+      "url": "https://guidetofootball.com/tactics/playing-out-from-the-back",
+      "final_url": "https://guidetofootball.com/tactics/playing-out-from-the-back/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T13:16:44.027Z",
+      "reused": false,
+      "page": "refs/r-821169b3d4.html",
+      "title": "Playing out from the back",
+      "source_name": "Guide to Football",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u007",
+        "u042"
+      ],
+      "summary_ko": "후방 빌드업은 골키퍼와 수비수의 짧은 패스로 공격을 시작하는 방식입니다. 상대가 강하게 압박하면 자기 진영에서 공을 잃을 위험이 가장 크고, 압박에 밀릴 때는 롱볼이 더 안전한 선택이라고 설명합니다.",
+      "key_points_ko": [
+        "골키퍼·수비수의 짧은 패스로 공격을 시작하는 방식",
+        "압박 속 패스 실수는 곧바로 실점으로 이어질 수 있다",
+        "압박에 밀리면 빌드업을 고집하는 팀도 롱볼로 전환한다"
+      ],
+      "translations": [
+        {
+          "orig": "If the press is winning, a long ball is the safer option",
+          "ko": "압박이 이기고 있다면 롱볼이 더 안전한 선택이다"
+        }
+      ]
+    }
+  ],
+  "dropped": []
+}

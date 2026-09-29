@@ -1,0 +1,153 @@
+{
+  "session_title": "C.E.F. FC Barcelona 팀 연습 피드백 (2024.1.4 Part 3)",
+  "matches": [
+    {
+      "title": "리그 경기 BRO전 (FCB 2–1 승)",
+      "topics": [
+        {
+          "title": "공 받는 동료를 위한 패스와 움직임",
+          "summary": "경기 초반, 좁은 공간보다 넓은 공간의 동료에게 주는 패스와 LT키를 쓴 움직임을 짚었다.",
+          "units": [
+            {
+              "start_line": 3, "end_line": 19,
+              "title": "브라이드의 패스, 좁은 곳보다 넓은 공간의 동료에게",
+              "position_tags": [], "topic_tags": ["빌드업"],
+              "member_ids": ["bride"], "key_frame_candidate_ids": ["c004"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 22, "end_line": 29,
+              "title": "택시가 공을 잡을 때 LT키 쓰기",
+              "position_tags": [], "topic_tags": ["조작/키사용", "포지셔닝"],
+              "member_ids": ["taxi"], "key_frame_candidate_ids": ["c054"],
+              "addressed_to_all": false
+            }
+          ]
+        },
+        {
+          "title": "역습과 압박 상황의 선택",
+          "summary": "역습에서 윙어 역할로 패스 선택지를 열어 주는 움직임, 압박이 들어오는 순간의 백패스와 앞쪽 전개 선택, 뛰어나갈 타이밍에 멈춘 장면을 다뤘다.",
+          "units": [
+            {
+              "start_line": 36, "end_line": 51,
+              "title": "역습 때 루미가 윙어 역할로 패스 선택지 열기",
+              "position_tags": [], "topic_tags": ["전환/역습", "포지셔닝"],
+              "member_ids": ["jomin", "find", "rumi", "gipeu", "yumi", "maekgu"],
+              "key_frame_candidate_ids": ["c013"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 55, "end_line": 77,
+              "title": "Gerrard_CEF, 압박 올 때 뒤로 내주고 LT로 돌려받기",
+              "position_tags": [], "topic_tags": ["탈압박", "빌드업"],
+              "member_ids": ["gerrard", "saembaek"], "key_frame_candidate_ids": ["c017"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 78, "end_line": 78,
+              "title": "루미, 뛰어나갈 줄 알았던 장면에서 멈춤",
+              "position_tags": [], "topic_tags": ["포지셔닝"],
+              "member_ids": ["rumi"], "key_frame_candidate_ids": ["c055"],
+              "addressed_to_all": false
+            }
+          ]
+        },
+        {
+          "title": "우리 진영에서의 볼 운반",
+          "summary": "우리 진영에서 공을 가진 선수가 좁은 곳의 TIMEJ에게 바로 주기보다 더 몰고 올라가는 선택과, 위아래로 넓게 벌리는 플레이를 주문했다.",
+          "units": [
+            {
+              "start_line": 79, "end_line": 97,
+              "title": "좁은 곳의 TIMEJ에게 주기보다 더 몰고 가서 한 명 끌어내기",
+              "position_tags": [], "topic_tags": ["빌드업", "탈압박"],
+              "member_ids": [], "key_frame_candidate_ids": ["c022"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 98, "end_line": 99,
+              "title": "위아래로 넓게 벌리는 플레이",
+              "position_tags": [], "topic_tags": ["포지셔닝"],
+              "member_ids": [], "key_frame_candidate_ids": ["c024"],
+              "addressed_to_all": true
+            }
+          ]
+        },
+        {
+          "title": "막힌 공격의 전환과 측면 활용",
+          "summary": "후반, 앞이 막혔을 때 한 번에 넘겨 넓은 공간을 쓰는 방법, 측면 선수가 올라갈 때 중앙으로 들어가는 판단, 측면에서 대각으로 빼 주는 패스를 짚었다.",
+          "units": [
+            {
+              "start_line": 104, "end_line": 120,
+              "title": "막혔을 때 Gerrard_CEF에게 줬다면 존재가 넓은 공간 활용",
+              "position_tags": [], "topic_tags": ["빌드업", "파이널서드", "크로스"],
+              "member_ids": ["giseun", "gerrard", "jonjae"], "key_frame_candidate_ids": ["c030"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 121, "end_line": 136,
+              "title": "사인드, 원전이 올라갈 때 중앙으로 들어가기",
+              "position_tags": [], "topic_tags": ["포지셔닝", "파이널서드"],
+              "member_ids": ["find", "wonjeon"], "key_frame_candidate_ids": ["c033"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 145, "end_line": 154,
+              "title": "스프레스, 측면에서 대각으로 빼 주기",
+              "position_tags": [], "topic_tags": ["빌드업", "파이널서드"],
+              "member_ids": ["spress"], "key_frame_candidate_ids": ["c056"],
+              "addressed_to_all": false
+            }
+          ]
+        },
+        {
+          "title": "페널티 장면과 밀집 수비 대응",
+          "summary": "뺏으려던 태클이 페널티로 이어진 장면과, 상대 수비가 촘촘할 때는 무리하지 말고 뒤로 빼라는 주문을 다뤘다.",
+          "units": [
+            {
+              "start_line": 155, "end_line": 157,
+              "title": "원전, 뺏으려고 누른 태클이 페널티로",
+              "position_tags": [], "topic_tags": ["수비라인", "압박"],
+              "member_ids": ["wonjeon"], "key_frame_candidate_ids": ["c042"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 158, "end_line": 162,
+              "title": "상대 수비가 촘촘하면 뒤로 빼기",
+              "position_tags": [], "topic_tags": ["빌드업", "파이널서드"],
+              "member_ids": ["find", "rumi"], "key_frame_candidate_ids": ["c043"],
+              "addressed_to_all": true
+            }
+          ]
+        },
+        {
+          "title": "패스 높이·돌파 선택과 총평",
+          "summary": "땅으로 줄 수 있을 때 땅볼로 넣는 패스, 막혔을 때 같은 돌파를 반복하지 않는 선택을 짚고, 오늘 경기에서 볼 두 가지를 총평으로 정리했다.",
+          "units": [
+            {
+              "start_line": 163, "end_line": 168,
+              "title": "땅으로 줄 수 있으면 땅볼로 넣어 주기",
+              "position_tags": [], "topic_tags": ["빌드업"],
+              "member_ids": [], "key_frame_candidate_ids": ["c045"],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 169, "end_line": 182,
+              "title": "맥구, 막혔으면 같은 돌파 대신 뒤로 안전하게",
+              "position_tags": [], "topic_tags": ["파이널서드", "탈압박"],
+              "member_ids": ["maekgu"], "key_frame_candidate_ids": ["c046"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 183, "end_line": 187,
+              "title": "총평: 대각 봐 주기, 밀집 수비엔 미련 없이 뒤로",
+              "position_tags": [], "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": [], "key_frame_candidate_ids": ["c050"],
+              "addressed_to_all": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

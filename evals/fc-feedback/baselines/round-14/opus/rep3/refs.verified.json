@@ -1,0 +1,123 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-ea6cc79bbb",
+      "url": "https://www.oneesports.gg/gaming/best-ea-fc-24-defending-tips-defenders",
+      "final_url": "https://www.oneesports.gg/gaming/best-ea-fc-24-defending-tips-defenders/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T12:53:39.435Z",
+      "reused": false,
+      "page": "refs/r-ea6cc79bbb.html",
+      "title": "Best EA FC 24 defending tips to protect your goal with style",
+      "source_name": "ONE Esports",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u011"
+      ],
+      "summary_ko": "EA FC 24 수비 요령 가이드. LT(L2)로 저키를 하며 상대에게 붙어 있고, 태클은 타이밍을 맞춰야 하며 페널티박스 안 스탠딩 태클은 타이밍이 어긋나면 페널티를 줄 위험이 크다고 설명한다.",
+      "key_points_ko": [
+        "LT(L2)를 누른 채 저키하면 상대가 공을 가졌을 때 수비수가 가까이 붙어 있게 된다.",
+        "페널티박스 안에서는 스탠딩 태클을 피하라 — 타이밍이 어긋나면 페널티 위험이 크다.",
+        "태클은 타이밍을 제대로 맞춰야 한다."
+      ],
+      "translations": [
+        {
+          "orig": "avoid standing tackles within the penalty area because there's a high risk of getting a penalty if you time it wrong",
+          "ko": "페널티박스 안에서는 스탠딩 태클을 피하라. 타이밍이 어긋나면 페널티를 줄 위험이 크다."
+        },
+        {
+          "orig": "Jockeying by holding L2/LT will make your players keep close to the ball whenever your opponent has it.",
+          "ko": "L2/LT를 눌러 저키하면 상대가 공을 가졌을 때 선수가 공 가까이 붙어 있게 된다."
+        }
+      ]
+    },
+    {
+      "id": "r-fd8f27e064",
+      "url": "https://keengamer.com/articles/guides/ea-fc-24-the-precision-passing-guide",
+      "final_url": "https://www.keengamer.com/articles/guides/ea-fc-24-the-precision-passing-guide/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T12:53:40.716Z",
+      "reused": false,
+      "page": "refs/r-fd8f27e064.html",
+      "title": "EA FC 24: The Precision Passing Guide",
+      "source_name": "KeenGamer",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u013"
+      ],
+      "summary_ko": "EA FC 24의 패스 종류별 쓰임새를 정리한 가이드. 땅볼(드리븐) 패스는 빠르게 측면을 바꾸는 데 좋고, 띄우는 패스와 로빙 스루는 수비가 뒤로 물러나거나 상대가 강하게 달려들 때 쓰는 선택지로 소개한다.",
+      "key_points_ko": [
+        "드리븐 땅볼 패스는 빠르고 효과적으로 측면을 바꾸는 방법이다.",
+        "띄우는 패스는 상대 수비가 골문 쪽으로 뛰며 물러나 라인 사이 공간이 생길 때 효과적이다.",
+        "로빙 스루는 상대가 달려들어 정확하게 줄 시간이 없을 때 쓴다."
+      ],
+      "translations": [
+        {
+          "orig": "the driven pass as a quick and effective way to switch the flanks",
+          "ko": "드리븐 패스는 측면을 바꾸는 빠르고 효과적인 방법"
+        }
+      ]
+    },
+    {
+      "id": "r-458cb8b5cb",
+      "url": "https://www.rfyouthsports.com/rfys/news/understanding-principles-of-play-in-football---width-and-depth",
+      "final_url": "https://www.rfyouthsports.com/rfys/news/understanding-principles-of-play-in-football---width-and-depth",
+      "http_status": 200,
+      "checked_at": "2026-09-29T12:53:42.595Z",
+      "reused": false,
+      "page": "refs/r-458cb8b5cb.html",
+      "title": "Understanding Principles of Play in Football - Width and Depth",
+      "source_name": "RF Youth Sports",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u007"
+      ],
+      "summary_ko": "공격 원리 중 폭(width)과 깊이(depth)를 설명하는 글. 폭은 측면을 써서 중앙에 모인 수비를 벌려 가운데 기회를 만드는 것이고, 깊이는 경기장을 세로로 길게 써서 상대를 끌어내고 라인 사이 공간을 만드는 것이라고 설명한다.",
+      "key_points_ko": [
+        "폭: 측면을 넓게 써서 상대 수비를 벌리고 중앙에 기회를 만든다.",
+        "깊이: 경기장을 세로로 길게 써서 상대를 끌어내고 그 뒤 공간에서 우위를 만든다.",
+        "공을 가졌을 때는 골키퍼를 빼고 모두가 공격수다."
+      ],
+      "translations": [
+        {
+          "orig": "It is used mainly to stretch the opposition in order to create chances in the middle",
+          "ko": "주로 상대를 벌려 가운데에서 기회를 만드는 데 쓰인다"
+        }
+      ]
+    },
+    {
+      "id": "r-dd1b07b40c",
+      "url": "https://fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php",
+      "final_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php",
+      "http_status": 200,
+      "checked_at": "2026-09-29T12:53:42.636Z",
+      "reused": false,
+      "page": "refs/r-dd1b07b40c.html",
+      "title": "Lamia Boumehdi: Technical foundations for switching play",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u008",
+        "u010"
+      ],
+      "summary_ko": "FIFA 트레이닝 센터의 전환 패스(스위칭 플레이) 훈련 세션. 한쪽 측면으로 공격해 압박을 끌어들인 뒤 반대편으로 공을 옮겨 생긴 공간을 쓰고, 경기장 폭 전체를 써서 수비 블록을 돌아 나가라고 설명한다.",
+      "key_points_ko": [
+        "한쪽에서 압박을 끌어들인 뒤 반대쪽으로 전환해 생긴 공간을 쓴다.",
+        "경기장 폭 전체로 상대를 벌리고 블록을 돌아 약한 쪽을 공략한다.",
+        "공간을 공략할 때는 상대가 수비를 회복할 시간이 없도록 패스에 속도를 싣는다."
+      ],
+      "translations": [
+        {
+          "orig": "Attack down one side of the pitch to attract pressure and then switch the play to exploit the space created on the other side.",
+          "ko": "한쪽 측면으로 공격해 압박을 끌어들인 뒤 반대편으로 전환해 생긴 공간을 공략하라."
+        }
+      ]
+    }
+  ],
+  "dropped": []
+}

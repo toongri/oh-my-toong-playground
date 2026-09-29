@@ -1,0 +1,19 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA 패스 가이드는 가까운 동료에게 짧게 연결할 때의 그라운드 패스, 달려가는 동료 앞 공간을 노리는 스루 패스, 수비수 위로 보내는 로빙 스루 패스의 쓰임을 구분한다.",
+      "key_points_ko": [
+        "스루 패스는 수비 사이에 열린 패스 통로가 있을 때 효과적이다.",
+        "지면 패스길이 막혔거나 수비선 뒤에 공간이 있을 때 로빙 스루 패스를 사용할 수 있다.",
+        "패스 종류와 세기는 동료의 움직임, 주변 공간, 목표까지 거리에 맞춘다."
+      ],
+      "translations": [],
+      "unit_ids": ["u009", "u011", "u012", "u014"]
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "session_title": "C.E.F. 바르셀로나 팀 연습 피드백 — 패스 선택과 공격 전개",
+  "matches": [{
+    "title": "팀 연습 경기",
+    "topics": [
+      {"title":"공간을 쓰는 패스와 공 운반","summary":"좁은 곳보다 넓은 곳에 패스하고 공이 이동하는 동안 공 없는 선수가 올라갈 시간을 벌자는 설명에 이어, 택시가 공을 잡는 장면의 LT 조작을 다룬다.","units":[
+        {"start_line":9,"end_line":19,"title":"좁은 공간 대신 넓은 공간의 선수에게 연결","position_tags":[],"topic_tags":["빌드업"],"member_ids":[],"addressed_to_all":true,"key_frame_candidate_ids":["c004"]},
+        {"start_line":22,"end_line":29,"title":"택시가 공을 잡는 장면에서 LT로 시선 유지","position_tags":[],"topic_tags":["조작/키사용"],"member_ids":["taxi"],"addressed_to_all":true,"key_frame_candidate_ids":["c009"]}
+      ]},
+      {"title":"역습에서 패스 선택지 만들기","summary":"측면 역할과 지원 동선을 조정해 공을 가진 선수의 패스 선택지를 늘리고, 무리한 전진 패스보다 뒤로 내준 뒤 다시 받는 방법을 설명한다.","units":[
+        {"start_line":36,"end_line":51,"title":"사인드가 낮으면 루미가 윙어 역할을 맡기","position_tags":["FW"],"topic_tags":["전환/역습","포지셔닝"],"member_ids":["jomin","find","rumi","gipeu","yumi","maekgu"],"addressed_to_all":false,"key_frame_candidate_ids":["c013","c014"]},
+        {"start_line":55,"end_line":77,"title":"압박 앞에서 뒤로 내주고 전진 패스를 다시 판단","position_tags":[],"topic_tags":["빌드업","탈압박"],"member_ids":["gerrard","saembaek"],"addressed_to_all":true,"key_frame_candidate_ids":["c017","c018"]},
+        {"start_line":78,"end_line":78,"title":"루미의 전진 움직임이 멈춘 장면","position_tags":[],"topic_tags":["포지셔닝"],"member_ids":["rumi"],"addressed_to_all":false,"key_frame_candidate_ids":["c053"]},
+        {"start_line":79,"end_line":97,"title":"좁은 수신자에게 바로 주기보다 공을 더 몰고 가기","position_tags":[],"topic_tags":["빌드업","탈압박"],"member_ids":[],"addressed_to_all":true,"key_frame_candidate_ids":["c021","c022"]},
+        {"start_line":98,"end_line":99,"title":"상하로 넓게 벌리는 플레이","position_tags":[],"topic_tags":["포지셔닝"],"member_ids":[],"addressed_to_all":true,"key_frame_candidate_ids":["c024"]}
+      ]},
+      {"title":"막힌 공격의 전환과 측면 활용","summary":"중원이 막힌 장면에서는 넓은 공간과 측면을 활용하고, 사인드와 원전의 움직임을 조정한다.","units":[
+        {"start_line":104,"end_line":120,"title":"중원이 막히면 넓은 쪽의 존재에게 전개","position_tags":[],"topic_tags":["빌드업","크로스"],"member_ids":["giseun","gerrard","jonjae"],"addressed_to_all":false,"key_frame_candidate_ids":["c030","c031"]},
+        {"start_line":121,"end_line":136,"title":"원전의 전진에 맞춰 사인드가 중앙으로 이동","position_tags":[],"topic_tags":["전환/역습","포지셔닝"],"member_ids":["find","wonjeon"],"addressed_to_all":false,"key_frame_candidate_ids":["c032","c033","c034"]},
+        {"start_line":145,"end_line":154,"title":"중원을 향한 대각 패스로 전진 선택지 만들기","position_tags":[],"topic_tags":["빌드업"],"member_ids":["spress"],"addressed_to_all":false,"key_frame_candidate_ids":["c039"]}
+      ]},
+      {"title":"수비와 패스의 세부 판단","summary":"원전의 태클 시도와 페널티 장면을 짚고, 밀집 수비 앞에서는 뒤로 돌리며, 가능한 땅볼 패스를 우선하자는 설명이 이어진다.","units":[
+        {"start_line":155,"end_line":157,"title":"원전의 태클 시도와 페널티","position_tags":[],"topic_tags":["수비라인"],"member_ids":["wonjeon"],"addressed_to_all":false,"key_frame_candidate_ids":["c042"]},
+        {"start_line":158,"end_line":160,"title":"촘촘한 상대 수비 앞에서는 뒤로 빼기","position_tags":[],"topic_tags":["빌드업"],"member_ids":[],"addressed_to_all":true,"key_frame_candidate_ids":["c043"]},
+        {"start_line":163,"end_line":168,"title":"가능하면 땅볼로 연결하기","position_tags":[],"topic_tags":["빌드업"],"member_ids":[],"addressed_to_all":true,"key_frame_candidate_ids":["c045"]},
+        {"start_line":169,"end_line":182,"title":"맥구는 돌파가 막히면 뒤쪽 지원을 보기","position_tags":[],"topic_tags":["파이널서드","빌드업"],"member_ids":["maekgu"],"addressed_to_all":false,"key_frame_candidate_ids":["c046","c047","c049"]}
+      ]}
+    ]
+  }],
+  "proposed_tags": []
+}

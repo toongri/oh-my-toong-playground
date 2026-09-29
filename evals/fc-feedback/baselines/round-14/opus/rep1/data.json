@@ -1,0 +1,3129 @@
+{
+  "version": 1,
+  "session_id": "20220331-PIjy1eid3RU",
+  "title": "신생팀 ATM 분석 피드백 — CLV5전(1-5) 후방 탈압박·공간 움직임",
+  "date": "2022-03-31",
+  "generated_at": "2026-09-29T13:16:48.199Z",
+  "pages_base_url": "https://fc-feedback-eval.invalid/",
+  "videos": [
+    {
+      "id": "PIjy1eid3RU",
+      "part": 1,
+      "embeddable": true
+    }
+  ],
+  "members": [
+    {
+      "id": "timej",
+      "name": "TIMEJ",
+      "gamertag": "TIMEJ",
+      "positions": [
+        "ST"
+      ]
+    },
+    {
+      "id": "gerrard",
+      "name": "Gerrard_CEF",
+      "gamertag": "Gerrard_CEF",
+      "positions": [
+        "CM"
+      ]
+    },
+    {
+      "id": "vandeven",
+      "name": "CEF_VandeVen",
+      "gamertag": "CEF_VandeVen",
+      "positions": [
+        "CB"
+      ]
+    },
+    {
+      "id": "bride",
+      "name": "브라이드",
+      "gamertag": "CEF_Bride",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "taxi",
+      "name": "택시",
+      "gamertag": "CEF_Taxi",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jomin",
+      "name": "조민",
+      "gamertag": "CEF_Jomin",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "find",
+      "name": "사인드",
+      "gamertag": "CEF_Find",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "rumi",
+      "name": "루미",
+      "gamertag": "CEF_Rumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "gipeu",
+      "name": "기프",
+      "gamertag": "CEF_Gipeu",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "yumi",
+      "name": "유미",
+      "gamertag": "CEF_Yumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "saembaek",
+      "name": "샘백",
+      "gamertag": "CEF_Saembaek",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "giseun",
+      "name": "기슨",
+      "gamertag": "CEF_Giseun",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jonjae",
+      "name": "존재",
+      "gamertag": "CEF_Jonjae",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "wonjeon",
+      "name": "원전",
+      "gamertag": "CEF_Wonjeon",
+      "positions": [
+        "FB"
+      ]
+    },
+    {
+      "id": "spress",
+      "name": "스프레스",
+      "gamertag": "CEF_Spress",
+      "positions": [
+        "CAM"
+      ]
+    },
+    {
+      "id": "maekgu",
+      "name": "맥구",
+      "gamertag": "CEF_Maekgu",
+      "positions": [
+        "FW"
+      ]
+    }
+  ],
+  "matches": [
+    {
+      "id": "m1",
+      "title": "220330 CLV5 vs ATM1 (CLV 5-1 ATM)",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "전반 초반: 볼 키핑과 탈출 경로",
+          "summary": "영상 첫머리에서 코치는 ATM의 의뢰로 이 경기를 분석한다고 밝히며, 중하위권 팀들이 공통으로 가진 문제를 해결하지 못하면 중하위권에 머물 수밖에 없다고 전제합니다. 초반 장면들에서는 터치가 길어지는 키핑, 1차원적인 패스길만 남아 상대에게 읽히는 상황, 공을 뺏은 뒤 나갈 길이 없는 구조를 짚습니다.",
+          "unit_ids": [
+            "u001",
+            "u002",
+            "u003",
+            "u004"
+          ]
+        },
+        {
+          "id": "m1-t2",
+          "title": "미드필더 수비가담과 빌드업 방식",
+          "summary": "상대가 공을 잡았을 때 미드필더들이 '관람'하지 말고 패스길을 먼저 막아야 한다는 지적과, 빌드업을 감당할 수 없는 팀이라면 골키퍼 숏패스 대신 롱킥으로 나가야 한다는 팀 차원의 조언입니다.",
+          "unit_ids": [
+            "u005",
+            "u006",
+            "u007"
+          ]
+        },
+        {
+          "id": "m1-t3",
+          "title": "윙·공격수의 공간 움직임과 스로인",
+          "summary": "압박을 벗어난 뒤 전진했을 때 윙이 사이드에 벌려만 있거나 무조건 앞으로만 뛰어 공을 가진 사람이 줄 곳이 없어지는 장면들입니다. 스로인에서도 움직임과 약속이 필요하고, 뒷공간을 공략할 사람과 공간으로 움직이는 공격수가 있어야 한다고 설명합니다.",
+          "unit_ids": [
+            "u008",
+            "u009",
+            "u010",
+            "u011",
+            "u012"
+          ]
+        },
+        {
+          "id": "m1-t4",
+          "title": "수비 공간 사수와 급한 패스",
+          "summary": "수비수가 공격 준비로 자기 공간을 버리거나 수비진이 좁게 서서 반대편이 비는 장면, 그리고 압박이 없는데도 급하게 패스해 잘리는 장면이 반복됩니다. 공격수가 수비수를 달고 앞으로만 뛰면 뒷사람이 줄 곳이 없다는 지적도 이어집니다.",
+          "unit_ids": [
+            "u013",
+            "u014",
+            "u015",
+            "u016",
+            "u017",
+            "u018"
+          ]
+        },
+        {
+          "id": "m1-t5",
+          "title": "침투 득점과 전반 막판 수비·탈압박",
+          "summary": "ATM이 스루패스로 득점한 장면을 예로 침투가 통하는 조건(공간, 가까운 거리, 직선)을 설명한 뒤, 자기 공간을 지키는 수비 기본, 수비수의 탈출과 걷어내기, 공격수·윙의 키핑과 스트라이커의 역할을 차례로 짚습니다.",
+          "unit_ids": [
+            "u019",
+            "u020",
+            "u021",
+            "u022",
+            "u023",
+            "u024",
+            "u025"
+          ]
+        },
+        {
+          "id": "m1-t6",
+          "title": "후반 초반: 윙의 판단과 스트라이커 침투",
+          "summary": "윙이 공을 끌며 선택지를 만들지 못해 단편적인 패스길이 수비에 읽히는 장면, 수비수가 뺏으려 달려들다 뒷공간을 내준 실점 장면, 스트라이커가 수비수에 붙은 채 직선으로 뛰어 공격을 지연시키고 오프사이드에 걸리는 장면을 다룹니다.",
+          "unit_ids": [
+            "u026",
+            "u027",
+            "u028",
+            "u029",
+            "u030",
+            "u031"
+          ]
+        },
+        {
+          "id": "m1-t7",
+          "title": "카운터 수비와 공격 템포",
+          "summary": "상대 카운터에서 뚫린 뒤 누가 쫓아가야 하는지와 라인 컨트롤, 카운터 때 사이드로 보내 전진하기와 윙어의 라인 타기, 카운터를 헌납했을 때 먼저 자기 공간부터 막는 원칙, 그리고 급하게 내준 무모한 패스들을 다룹니다.",
+          "unit_ids": [
+            "u032",
+            "u033",
+            "u034",
+            "u035",
+            "u036",
+            "u037"
+          ]
+        },
+        {
+          "id": "m1-t8",
+          "title": "압박 탈출을 위한 위치와 걷어내기",
+          "summary": "압박을 받을 때 앞 사람들이 위치를 잡아 주지 않으면 공을 앞으로 보낼 수 없다는 설명과, 패스각이 없을 때의 선택지(버티고 주고 나가기, 사이드, 걷어내기), 수비에서 터치가 길어진 상대를 바로 덮치는 판단, 빌드업이 안 되는 팀의 선택을 다룹니다.",
+          "unit_ids": [
+            "u038",
+            "u039",
+            "u040",
+            "u041",
+            "u042"
+          ]
+        },
+        {
+          "id": "m1-t9",
+          "title": "뻔한 패스와 자기 공간",
+          "summary": "첫 번째로 보이는 뻔한 패스길을 상대 풀백이 자르러 달려드는 장면, 뺏긴 뒤 달려들어 자기 공간을 비우는 수비, 미드필더의 조급함, 공을 뒤로 돌릴 수밖에 없는 위치 문제, 3백에서 한 공간에 사람이 몰려 실점한 장면을 다룹니다.",
+          "unit_ids": [
+            "u043",
+            "u044",
+            "u045",
+            "u046",
+            "u047",
+            "u048"
+          ]
+        },
+        {
+          "id": "m1-t10",
+          "title": "후반 막판: 침착한 패스와 지공 전환",
+          "summary": "압박이 없는데도 서두르는 패스, 공을 끊고도 앞에 줄 곳이 없어 뒤로 돌리는 흐름, 카운터에서 딜레이 끝에 수비가 내려앉은 장면과 공격수가 공간에서 앞에서 받아 줘야 한다는 설명, 윙이 미리 뛰어 패스길이 사라지는 장면으로 마무리됩니다. 영상 마지막에 코치는 이번 편에서는 후방에서 공을 자꾸 뺏기다 보니 공격 상황 피드백은 거의 할 수 없었다며, 공격에 들어가기 전에 공을 뺏기지 않고 어택킹 서드(상대 골문 쪽 3분의 1 구역)까지 보내는 것부터 우선해야 한다고 정리합니다.",
+          "unit_ids": [
+            "u049",
+            "u050",
+            "u051",
+            "u052",
+            "u053"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "uid": "20220331-PIjy1eid3RU#u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 47.4,
+      "end": 185.7,
+      "title": "키핑은 짧게, 윙은 벌려만 있지 말고 공간으로 움직여 패스길 만들기",
+      "position_tags": [
+        "LW",
+        "RW"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 선수의 키핑이 길어졌고, 이어서 공을 받고 돈 동료에게는 전진 패스길이 한 곳뿐이라 상대 풀백이 그 길을 막으며 달려들 준비를 하고 있는 장면입니다. 공을 가진 선수라면 누구든 **가속을 붙여야 할 때가 아니면 터치를 짧게** 가져가야 하고, 가속은 상대가 가까이 붙었을 때 붙여야 제칠 수 있습니다. 거리가 있으면 상대가 충분히 대응합니다."
+        },
+        {
+          "type": "text",
+          "text": "이 장면에서는 먼저 공을 가진 선수가 뺏기지 않는 것이 중요하고, 두 번째로 윙은 무조건 사이드에 **벌려 서 있기보다 빈 공간으로 움직여야** 합니다. 코치가 짚은 공간 중 한쪽은 밀어 넣을 수 없어 가로채일 확률이 높고, 로빙으로 찌르면 상대가 뒤로 방향을 바꿔 막아 전진 패스길이 사라집니다."
+        },
+        {
+          "type": "text",
+          "text": "전진 패스길이 없으면 미드필더와 후방은 공을 뒤로 돌릴 수밖에 없는데, 뒤에서도 압박이 들어와 거기서 뺏기면 더 위험합니다. 그래서 이 장면에서는 **동료 한 명이 다가와 패스길을 만들어 줬어야** 했습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u001-c003.webp",
+          "width": 640,
+          "height": 360,
+          "t": 60,
+          "caption": "전반 1:01(0-0), 센터서클 부근. 빨간 줄무늬가 ATM, 노란색이 CLV. 하단 ATM 이름표 10 PINKY"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u001-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=47"
+    },
+    {
+      "id": "u002",
+      "uid": "20220331-PIjy1eid3RU#u002",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 187.01999999999998,
+      "end": 293.22,
+      "title": "공을 뺏었을 때 나갈 길(뒷공간의 한 명)을 전술적으로 만들기",
+      "position_tags": [],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 상대 공격을 막아 공을 되찾았지만 모두 내려와 수비하던 탓에 줄 곳이 없어 재압박에 다시 뺏긴 장면입니다. 중앙 수비는 나쁘지 않았고 원톱의 수비가담도 좋았지만, 팀 전체가 **공을 뺏었을 때 나갈 길을 전술적으로 만들어 둬야** 합니다. 뒷공간 같은 곳에 **누군가 한 명 있어 줘야** 쉽게 받아 주고 밀어 넣으며 카운터로 나갈 수 있습니다."
+        },
+        {
+          "type": "text",
+          "text": "이 장면처럼 줄 곳이 없을 때 공을 가진 선수의 베스트는 **버티면서 그 공간으로 올라가 밀어 넣고 돌아 뛰며 탈출**하는 것이었습니다. 다만 여기서 안 뺏기는 것은 개인 기량이 필요한 부분이라고 덧붙입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u002-c009.webp",
+          "width": 640,
+          "height": 360,
+          "t": 240,
+          "caption": "전반 3:17(0-0), 공 주변에 양 팀 선수들이 몰려 있다. 하단 ATM 이름표 9 BAEBANG"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u002-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=187"
+    },
+    {
+      "id": "u003",
+      "uid": "20220331-PIjy1eid3RU#u003",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 300.42,
+      "end": 367.6,
+      "title": "패스를 예상해 RT를 떼고 받기, 터치를 짧게 하고 주고 빠져나가기",
+      "position_tags": [],
+      "topic_tags": [
+        "탈압박",
+        "조작/키사용"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "기습적으로 온 패스를 받으면서 터치가 길어져 상대가 붙었고, 공을 쳐서 빠져나가려다 간발의 차이로 실패한 장면입니다. 공을 받는 선수라면 누구든 패스가 올 상황을 예상해 **RT(질주 버튼)를 떼고 받고**, 받은 뒤에는 **터치를 짧게** 가져가야 합니다."
+        },
+        {
+          "type": "text",
+          "text": "받은 다음에는 상대가 압박해 올 때까지 확실한 패스길이 열리는지 보고, 붙어서 패스길이 없으면 **원터치로 주고 빠져나가야** 합니다. 코치는 이 장면의 베스트를 터치가 길어지지 않는 것, 그리고 주고 빠져나가는 것으로 정리합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u003-c012.webp",
+          "width": 640,
+          "height": 360,
+          "t": 330,
+          "caption": "전반 4:10(0-0), 오른쪽 페널티 박스 앞에 양 팀 선수들이 있다. 하단 ATM 이름표 14 GABI"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u003-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-cd2e3bd750",
+          "title": "FIFA 22 Basic Controls (Xbox Series X)",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-cd2e3bd750.html",
+          "orig_url": "https://www.ea.com/able/resources/fifa/fifa-22/xbox-series-x/basic-controls"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=300"
+    },
+    {
+      "id": "u004",
+      "uid": "20220331-PIjy1eid3RU#u004",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 374.48,
+      "end": 514.16,
+      "title": "상대 풀백이 못 붙게 뒷공간을 파고, 수비형 미드필더·풀백이 와서 패스길 만들기",
+      "position_tags": [
+        "CDM",
+        "FB"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 선수가 공을 받았지만 상대 풀백이 자기 뒷공간에 아무도 없어 마음 놓고 압박을 붙인 장면입니다. 첫째로 동료 한 명이 **뒤로 물러나지 말고 상대 풀백의 뒷공간을 파 줘야** 상대 풀백이 쉽게 전진해 붙지 못합니다. 그러면 공을 가진 선수에게 여유가 생기고 상대가 끌려 나와 중원 공간도 열립니다. 둘째로 **수비형 미드필더나 풀백이 다가와 길을 만들어** 패스를 돌릴 수 있게 해야 합니다."
+        },
+        {
+          "type": "text",
+          "text": "프로클럽에서는 제쳐서 들어가기가 쉽지 않아 이런 압박에서는 버티는 게 고작이고, 제치더라도 다른 상대가 뒤로 따라오고 있어 소용이 없습니다. 이런 움직임이 없으면 상대 미드필더들에게 패스길이 두 곳뿐인 게 다 보여 그 길을 끊으러 달려들고, 결국 공을 뒤로 돌릴 수밖에 없는데 상대 공격수들이 뒷길까지 막아 자연스럽게 뺏기게 됩니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u004-c015.webp",
+          "width": 640,
+          "height": 360,
+          "t": 420,
+          "caption": "전반 5:43(0-0), 센터서클 왼쪽 중원. 하단 ATM 이름표 14 LLORENTE"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u004-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u002",
+          "title": "베리나 포지션 상향 지시",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u002"
+        },
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=374"
+    },
+    {
+      "id": "u005",
+      "uid": "20220331-PIjy1eid3RU#u005",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 526.6,
+      "end": 603.44,
+      "title": "미드필더는 관람 대신 패스길 차단, 센터백이 부딪히고 미드필더가 압박해 양쪽 포위",
+      "position_tags": [
+        "MF",
+        "CB"
+      ],
+      "topic_tags": [
+        "압박",
+        "수비라인"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "vandeven",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "상대가 ATM 진영에서 공을 가진 상황에서 ATM 미드필더들이 상대가 없는 빈 공간을 지키며 지켜보기만 한 장면입니다. 미드필더들은 **관람하지 말고 상대의 패스길을 차단**해야 하고, **센터백은 이 상황에서 부딪혀** 막으면서 미드필더가 함께 압박해 **양쪽에서 포위**해야 합니다."
+        },
+        {
+          "type": "text",
+          "text": "센터백이 패스를 끊으려다 흘려 버리면 그 패스가 바로 실점으로 이어지기 때문입니다. 양쪽에서 포위되면 상대가 탈압박할 길이 많지 않다며, 코치는 이것이 미드필더 수비가담이 중요한 이유라고 강조합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u005-c020.webp",
+          "width": 640,
+          "height": 360,
+          "t": 570,
+          "caption": "전반 7:37(0-0), 오른쪽 ATM 골문 앞 페널티 박스에 양 팀 선수들이 있다. 하단 ATM 이름표 6 IT"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u005-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=526"
+    },
+    {
+      "id": "u006",
+      "uid": "20220331-PIjy1eid3RU#u006",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 613.14,
+      "end": 659.04,
+      "title": "같은 상황 반복: 미드필더가 끝까지 붙어 패스길을 먼저 막기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "같은 상황이 반복돼 상대가 공을 받았는데도 ATM 미드필더들은 지켜보기만 했고, 오프사이드가 아니었다면 바로 실점할 뻔했습니다. 미드필더는 **끝까지 붙어서, 상대가 들어오면 먼저 패스길을 막아야** 하고 **붙어서** 공을 잡은 상대가 아무것도 못 하게 만들어야 합니다. 빈자리를 지키고만 있으면 아무 의미가 없습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u006-c022.webp",
+          "width": 640,
+          "height": 360,
+          "t": 630,
+          "caption": "전반 9:29(0-0), 오른쪽 ATM 골문 앞 페널티 박스 주변. 하단 ATM 이름표 5 FERDINAND"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u006-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=613"
+    },
+    {
+      "id": "u007",
+      "uid": "20220331-PIjy1eid3RU#u007",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 663.38,
+      "end": 766.88,
+      "title": "빌드업을 감당 못하면 골키퍼 숏패스 대신 롱킥으로 나가기",
+      "position_tags": [
+        "GK"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 빌드업을 시도하다 오히려 독이 된 장면으로, 코치는 팀 전체에게 **빌드업을 감당할 수 없다면 골키퍼 숏패스로 시작하지 말고 롱킥으로 나가라**고 말합니다. 빌드업을 못하는 팀이 빌드업을 하면 상대에게 약점을 보여 줄 뿐이라는 평가입니다."
+        },
+        {
+          "type": "text",
+          "text": "빌드업이 되려면 공을 잘 끌고 나가다가 패스길이 열리면 주고받으며 움직임도 가져가야 하고, 키핑이 절대 길어지면 안 되며, 압박이 붙어도 천천히 패스길을 확보하면서 한 명 붙는 정도로는 뺏기지 않고 공을 지킬 수 있어야 합니다. 그게 안 되는 팀은 롱킥으로 나갈 수밖에 없고, 스트라이커를 사이드에 세우는 등 롱킥을 활용하는 여러 전술이 있다고 덧붙입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u007-c025.webp",
+          "width": 640,
+          "height": 360,
+          "t": 720,
+          "caption": "전반 10:02(0-0), 오른쪽 ATM 페널티 박스 안에서 ATM 선수가 공을 몰고 있다. 하단 ATM 이름표 J M GIMENEZ"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u007-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-821169b3d4",
+          "title": "Playing out from the back",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-821169b3d4.html",
+          "orig_url": "https://guidetofootball.com/tactics/playing-out-from-the-back/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=663"
+    },
+    {
+      "id": "u008",
+      "uid": "20220331-PIjy1eid3RU#u008",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 774,
+      "end": 909.54,
+      "title": "4-3에서 윙이 벌리고만 있으면 스트라이커가 줄 데가 없다",
+      "position_tags": [
+        "LW",
+        "RW",
+        "ST"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 압박을 잘 벗어나 전진해 공을 받은 장면인데, 4-3 포메이션에서 윙들이 사이드에 벌려만 있으면 스트라이커가 공을 잡아도 줄 곳이 뒤밖에 없습니다. 윙이 무조건 사이드에만 머무는 건 잘못이고, 윙은 **빈 공간으로 움직여 받아 주며** 버티고 돌아 뛰거나 주고 돌아 뛰는 식으로 패스길을 만들어야 합니다."
+        },
+        {
+          "type": "text",
+          "text": "줄 곳이 뒤뿐인데 상대가 뒷길까지 막으면 공격이 위태로워집니다. 이 장면에서는 뛰어 들어가 봤자 상대 무게중심이 그쪽에 잡혀 있어 받더라도 위태로웠기 때문에, 코치는 패스길 확보를 먼저 강조합니다."
+        },
+        {
+          "type": "text",
+          "text": "또 윙이 **무조건 앞으로만 뛰는 것**도 문제입니다. 상대 수비가 놓친 게 아니라 같이 뛰고 있으면 침투 패스는 성공 확률이 낮기 때문에, 바로, 또는 한 번 더 거쳐 득점 찬스가 나는 상황이 아니면 이런 침투 패스를 남발하지 말라는 지적입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u008-c029.webp",
+          "width": 640,
+          "height": 360,
+          "t": 840,
+          "caption": "전반 12:56(CLV 1-0), 하프라인 왼쪽에서 ATM 선수가 공을 가졌고 노란 CLV 선수들이 가까이 있다. 하단 ATM 이름표 10 PINKY"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u008-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=774"
+    },
+    {
+      "id": "u009",
+      "uid": "20220331-PIjy1eid3RU#u009",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 925.82,
+      "end": 978.98,
+      "title": "스로인도 스위칭하며 줄 각을 만들고 약속을 정하기",
+      "position_tags": [],
+      "topic_tags": [
+        "세트피스"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "아슬아슬했던 장면에 이어, 코치는 스로인 때도 실수가 나오면 안 된다고 짚습니다. 받을 선수들은 **계속 스위칭하며 정확히 줄 수 있는 각을 만들어 줘야** 하고, 팀 전체가 **스로인 약속을 만들거나** 열심히 움직여야 합니다."
+        },
+        {
+          "type": "text",
+          "text": "정확히 줄 수 있으면 넘겨서 앞으로 가거나 뒤로 빼서 돌리면 되지만, 가만히 서 있으면 패스길이 막혀 줄 곳이 없습니다. 그 상태에서 그냥 던지면 상대에게 공격 기회가 자연스럽게 넘어갑니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u009-c032.webp",
+          "width": 640,
+          "height": 360,
+          "t": 930,
+          "caption": "전반 14:13(CLV 1-0), 센터서클 왼쪽 아래(하프라인 왼쪽)에 양 팀 선수들이 모여 있다. 하단 ATM 이름표 10 PINKY"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u009-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=925"
+    },
+    {
+      "id": "u010",
+      "uid": "20220331-PIjy1eid3RU#u010",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 986.78,
+      "end": 1089.76,
+      "title": "롱킥으로 나온 뒤 큰 뒷공간을 공략할 사람이 없었다",
+      "position_tags": [],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 수비를 잘해 공을 끊었지만 탈출 경로가 없어 곧바로 동료에게 롱킥을 보냈고, 동료가 잘 받아 나오는 데까지는 성공한 장면입니다. 문제는 그다음으로, 큰 뒷공간이 났는데 팀에 **그 뒷공간을 공략할 사람이 꼭 있어야** 하는데 아무도 없어 공략하지 못했습니다."
+        },
+        {
+          "type": "text",
+          "text": "한 선수가 뛰어 들어가 봤자 이미 막혀 있는 상황이었고, 전진 패스길이 없어 공을 가진 선수가 오래 버텨야 하는 상황이 되면 그 선수는 매우 위태로울 수밖에 없습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u010-c035.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1020,
+          "caption": "전반 17:13(CLV 1-0), 오른쪽 ATM 페널티 박스 부근. 하단 ATM 이름표 14 GABI"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u010-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=986"
+    },
+    {
+      "id": "u011",
+      "uid": "20220331-PIjy1eid3RU#u011",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 1092.76,
+      "end": 1162.6,
+      "title": "윙은 안쪽으로 가는 척 바깥 공간으로, 못 빠지면 멈춰서 치고 나가기",
+      "position_tags": [
+        "LW",
+        "RW"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "탈압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 윙 쪽 선수가 무작정 반대쪽 공간으로 뛰어, 공을 가진 동료 입장에서는 줄 수가 없었던 장면입니다. 안쪽 길이 막힌 상황에서 윙은 **안으로 들어가는 척 수비를 끌어 놓다가 바깥쪽 공간으로 빠져나가야** 하고, 빠져나가지 못한다면 **더 가지 말고 중간에 멈춰 서야** 했습니다."
+        },
+        {
+          "type": "text",
+          "text": "멈추면 상대 압박이 들어오기 때문에 탈출 경로는 한쪽뿐이었고, 살아나려면 **그쪽으로 공을 쳐야** 했지만 치지 못했습니다. 공간을 이해하지 못하면 고립돼 뺏길 수밖에 없다는 평가입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u011-c038.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1110,
+          "caption": "전반 18:13(CLV 1-0), 센터서클 안팎에 양 팀 선수들이 모여 있다. 하단 ATM 이름표 14 LLORENTE"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u011-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1092"
+    },
+    {
+      "id": "u012",
+      "uid": "20220331-PIjy1eid3RU#u012",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 1172.1399999999999,
+      "end": 1302.8,
+      "title": "공이 끊긴 원인은 공 가진 선수가 아니라 동료의 위치",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 뒤로 돌린 뒤 불안하게나마 잘 빠져나와 공을 받았는데 곧바로 끊긴 장면으로, 원인은 공을 가진 선수가 아니라 동료의 위치였습니다. 전진하다 압박이 들어오면 **상대 뒷공간을 가장 먼저 공략해야** 하므로 **누군가 거기에 가 있어야** 공을 가진 선수가 옆으로 돌아서 밀어 넣을 수 있습니다."
+        },
+        {
+          "type": "text",
+          "text": "그 동료가 코치가 짚은 자리에 서 있으면 공을 가진 선수의 선택지가 뻔히 보여, 상대는 그 패스길만 막고 붙으면 됩니다. 그리고 공간 쪽으로 뛰어야 할 선수가 **빈 공간 쪽으로 뛰어야** 했는데 수비수를 단 채 직선으로 뛰어, 메시라도 뺏길 수밖에 없는 공격이 됐습니다."
+        },
+        {
+          "type": "text",
+          "text": "코치는 공격할 때는 공간으로 움직여야 하고 수비수를 달고 직선으로만 뛰면 공격이 진행될 수 없다며, 다른 팀들을 보면 보통 공을 뺏긴 사람을 지적하지만 정작 문제는 위치를 잘못 잡은 선수라고 강조합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u012-c042.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1230,
+          "caption": "전반 23:23(CLV 1-0), 하프라인 오른쪽(ATM 진영) 중원. 하단 ATM 이름표 8 GGAKA"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u012-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1172"
+    },
+    {
+      "id": "u013",
+      "uid": "20220331-PIjy1eid3RU#u013",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "PIjy1eid3RU",
+      "start": 1319.28,
+      "end": 1389.68,
+      "title": "수비 상황에서 풀백이 공격 준비로 자기 공간을 버렸다",
+      "position_tags": [
+        "FB",
+        "DF"
+      ],
+      "topic_tags": [
+        "수비라인"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "상대가 ATM 진영에서 공을 받은 수비 상황인데, ATM 풀백이 이미 공격으로 나갈 준비를 하며 자기 공간을 버렸고 다른 수비수의 뒷공간도 뚫린 장면입니다. 상대가 중거리 슛 대신 안쪽으로 밀어 넣었다면 바로 실점이었습니다. 수비 상황에서는 **포백 네 명이 각자 자기 공간을 무조건 사수**하고, 그 공간에 상대가 들어오면 **뒷공간을 제어하면서 붙어 완전히 제어**해야 합니다. 공간을 버리는 순간 그냥 뚫린다는 것이 수비의 기본이라고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u013-c046.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1350,
+          "caption": "전반 24:33(CLV 1-0), 오른쪽 ATM 페널티 박스 안팎에 양 팀 선수들이 몰려 있다. 하단 ATM 이름표 5 FERDINAND"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u013-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-a47dc83d1e",
+          "title": "Zonal marking: football tactics explained",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-a47dc83d1e.html",
+          "orig_url": "https://learning.coachesvoice.com/cv/zonal-marking-football-tactics-explained-mourinho-conte-simeone/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1319"
+    },
+    {
+      "id": "u014",
+      "uid": "20220331-PIjy1eid3RU#u014",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "PIjy1eid3RU",
+      "start": 1395.8000000000002,
+      "end": 1454.14,
+      "title": "압박이 없는데 너무 급했다: 상대 수비와 우리 공격수 움직임을 보고 패스 선택",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 선수가 압박이 전혀 없는 상태에서 공을 받았는데도 너무 급하게 패스해 상대에게 쉽게 잘린 장면입니다. 누구든 압박이 없을 때는 **상대 수비수의 무게중심과 우리 공격수의 움직임을 먼저 정확히 보고**, 공을 끌면서 코치가 짚은 쪽으로 갈지 앞에 길이 있으면 앞으로 줄지 **선택한 뒤 정확하게 패스**해야 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u014-c048.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1410,
+          "caption": "전반 25:04(CLV 1-0), 오른쪽 페널티 박스 앞 아크 부근. 하단 ATM 이름표 9 BAEBANG"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u014-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1395"
+    },
+    {
+      "id": "u015",
+      "uid": "20220331-PIjy1eid3RU#u015",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "PIjy1eid3RU",
+      "start": 1456.8,
+      "end": 1528.06,
+      "title": "공격수가 수비수를 달고 앞으로만 뛰었다: 뛰는 척 멈추거나 돌아 뛰기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "상대 수비가 앞으로 찔러 주는 패스를 노리고 잡으러 간 장면으로, 수비가 잘하기도 했지만 문제는 앞선의 ATM 선수가 수비수를 달고 생각 없이 앞으로만 뛴 것입니다. 상대 수비는 앞으로 찔러 주는 패스 외에 길이 없다는 걸 보고 그 패스를 잡으러 갔습니다. 이 선수는 **뛰는 척하다가 멈춰 서서** 코치가 짚은 쪽으로 와야 했습니다."
+        },
+        {
+          "type": "text",
+          "text": "상대가 따라 붙으면 더 붙거나 더 공간 쪽으로 움직이거나, **돌아 뛰어 빈 공간으로 빠질 때** 패스가 들어가도록 둘 중 하나를 해야 합니다. 수비수를 달고 앞으로만 뛰면 뒤에서 공을 가진 선수는 줄 곳이 없어 상대를 차례로 제치고 들어와야 하는데, 그건 매우 어렵습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u015-c050.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1470,
+          "caption": "전반 26:19(CLV 1-0), 센터서클 아래쪽에 선수들이 모여 있다. 하단 ATM 이름표 14 GABI"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u015-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1456"
+    },
+    {
+      "id": "u016",
+      "uid": "20220331-PIjy1eid3RU#u016",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "PIjy1eid3RU",
+      "start": 1533.78,
+      "end": 1607.5,
+      "title": "무게중심을 잘못 잡아 뚫림, 수비진은 공간을 하나씩 찍어 서기",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "수비라인"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 수비수가 무게중심을 잘못 잡아 상대에게 뚫린 장면으로, 상대가 파고드는 순간 **지체 없이 따라 들어가 공간을 막아야** 했지만 반응이 늦고 엉뚱하게 움직여 실패했습니다. 또 수비진이 너무 좁게 섰는데, **수비수 한 명 한 명이 첫 번째·두 번째·세 번째 공간을 하나씩 찍어 서야** 반대편이 비는 현상이 생기지 않습니다."
+        },
+        {
+          "type": "text",
+          "text": "공을 잡겠다고 들어오는 사람부터 잡으러 몰리면 반대편이 비고, 이 장면에서도 롱패스가 그쪽으로 날아갔다면 바로 실점이었습니다. 그쪽으로 롱패스가 가지 않아 살아난 장면입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u016-c053.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1560,
+          "caption": "전반 26:50(CLV 1-0), 센터서클 주변에 양 팀 선수들이 흩어져 있다. 하단 ATM 이름표 8 AUDI"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u016-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1533"
+    },
+    {
+      "id": "u017",
+      "uid": "20220331-PIjy1eid3RU#u017",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "PIjy1eid3RU",
+      "start": 1613.7399999999998,
+      "end": 1674.08,
+      "title": "패스길만 막힌 상황: 공을 끌면서 인지하고 판단하기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "탈압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 선수가 공을 잡아 바로 줄 수 있을 것 같았지만, 상대는 본인을 압박하지 않고 패스길만 막고 있었고 급하게 앞으로 주려다 미스가 난 장면입니다. 누구든 이럴 때는 **공을 좀 끌다가 길이 막힌 걸 확인하고 가야** 하며, 마음만 급해 앞으로만 주려 하면 강팀 상대로는 뺏길 수밖에 없습니다."
+        },
+        {
+          "type": "text",
+          "text": "누구든 **공을 받기 전에 상황을 인지하지 못했다면 받은 뒤에라도 인지하려고 노력**해야 합니다. 시간이 걸리는 만큼 **공을 끌면서 정확하게 판단하는 능력**을 길러야 한다는 것이 코치의 주문입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u017-c055.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1620,
+          "caption": "전반 27:59(CLV 1-0), 중원에서 선수 한 명이 쓰러져 있고 주변에 양 팀 선수들이 있다. 하단 ATM 이름표 10 PINKY"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u017-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1613"
+    },
+    {
+      "id": "u018",
+      "uid": "20220331-PIjy1eid3RU#u018",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "PIjy1eid3RU",
+      "start": 1677.12,
+      "end": 1742.44,
+      "title": "끊어낸 뒤 열린 숏패스길을 보고, 못 보면 등지고 버티기",
+      "position_tags": [],
+      "topic_tags": [
+        "탈압박",
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 공을 끊어낸 직후 압박이 들어오는 장면으로, 공을 끊어낸 선수는 공을 터치한 순간 이미 짧은 패스 길이 보였으니 **그쪽으로 탁 줘서 빠져나가야** 했는데, 다른 쪽을 먼저 보고 상대가 막고 있는 쪽으로 나아갔습니다. 상대는 롱패스가 오기를 기다리고 있었으므로 여기서는 **무조건 숏패스로 뚫고 들어가야** 했습니다."
+        },
+        {
+          "type": "text",
+          "text": "누구든 그 각을 못 봤다면 압박이 위협적이더라도 **한 번 등지고 버티며 공을 끌다가** 코치가 짚은 쪽으로 가거나 돌아 나가는 편이 차라리 낫습니다. 도저히 못 버티겠으면 길게 차서 탈출해야 하지만, 그러면 확률적으로 공격을 이어 가기는 어렵습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u018-c057.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1680,
+          "caption": "전반 29:11(CLV 1-0), 오른쪽 ATM 페널티 박스 안팎에 양 팀 선수들이 있다. 하단 ATM 이름표 99 BBUDI"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u018-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1677"
+    },
+    {
+      "id": "u019",
+      "uid": "20220331-PIjy1eid3RU#u019",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "PIjy1eid3RU",
+      "start": 1761.56,
+      "end": 1865.62,
+      "title": "스루패스 득점 장면: 공간과 가까운 거리가 있어야 들어가고, 직선이면 더 좋다",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 스루패스로 득점한 장면을 두고, 코치는 침투 패스가 들어가려면 **충분한 공간**과 **주는 사람·받는 사람의 가까운 거리**가 필요하고 **직선 각**이면 더 좋다고 짚습니다. 이 장면은 한 선수가 그 자리에 있어서 공간이 생겼고, 거리가 가깝고 직선 각이어서 쏙 들어갔으며, 뛰는 선수가 미리 직선으로 달리고 있어 상대가 스피드로 따라붙지 못했습니다. 다만 상대 수비가 먼저 붙어 몸으로 제압했다면 성공 확률은 떨어집니다. 그럴 때는 침투하는 선수가 **제압이 들어오며 열린 쪽 공간으로 돌아 뛰거나**, 공을 받은 선수가 **돌아 뛰는 동료를 기다리며 밀어 넣거나 공을 끌고 있는** 둘 중 하나를 해야 합니다. 이번에는 다행히 상대 수비가 붙지 않아 득점할 수 있었습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u019-c063.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1860,
+          "caption": "전반 31:55(CLV 1-0), 왼쪽 CLV 페널티 박스 앞에 선수들이 있다. 하단 ATM 이름표 9 BAEBANG"
+        },
+        {
+          "type": "frame",
+          "src": "img/u019-c064.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1863.97,
+          "caption": "득점 뒤 ATM 선수들이 모여 기뻐하는 장면. 등번호 10 PINKY와 8 GGAKA가 보인다"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u019-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1761"
+    },
+    {
+      "id": "u020",
+      "uid": "20220331-PIjy1eid3RU#u020",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "PIjy1eid3RU",
+      "start": 1870.0800000000002,
+      "end": 1935.38,
+      "title": "자기 공간을 지키는 수비, 미드필더가 놓친 장면",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "수비라인",
+        "압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 수비 상황에서 미드필더가 상대를 놓친 장면으로, 코치는 자신이 상대였다면 당연히 패스를 밀어 넣었을 것이고 그랬다면 바로 실점이었다고 말합니다. 누구든 수비할 때는 **자기 공간을 먼저 지키고, 그 공간에 들어온 상대를 제압**하는 것이 기본이며, 공간을 버리고 사람을 잡으러 가면 이렇게 됩니다. 특히 미드필더는 **끝까지 집중해서 상대를 제어**해야 한다고 강조합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u020-c065.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1890,
+          "caption": "전반 33:47(1-1), 오른쪽 ATM 페널티 박스 앞에 선수들이 있다. 하단 ATM 이름표 6 IT"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u020-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1870"
+    },
+    {
+      "id": "u021",
+      "uid": "20220331-PIjy1eid3RU#u021",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "PIjy1eid3RU",
+      "start": 1960.26,
+      "end": 2023.2,
+      "title": "수비수는 탈출길을 보고, 버티기 힘들고 길도 안 보이면 걷어내서 헤딩 싸움",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "수비라인"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 수비 진영에서 수비수의 탈출 선택을 다룬 장면입니다. 수비수의 베스트는 **탈출할 길을 보고 버티면서 빠져나가 공격으로 전환**시키는 것이고, 버티기도 힘들고 길도 안 보이면 **걷어내서 헤딩 싸움을 거는 것**이 차선책입니다. 여기서 뺏기면 이 장면처럼 매우 위험해지기 때문입니다."
+        },
+        {
+          "type": "text",
+          "text": "이어서 **수비는 공간부터 막아야** 하며, 뒷공간이 열리면 순식간에 뚫린다고 짚습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u021-c068.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1980,
+          "caption": "전반 38:49(1-1), 오른쪽 ATM 페널티 박스 안에 양 팀 선수들이 몰려 있다. 하단 ATM 이름표 4 J M GIMENEZ"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u021-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1960"
+    },
+    {
+      "id": "u022",
+      "uid": "20220331-PIjy1eid3RU#u022",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "PIjy1eid3RU",
+      "start": 2027.78,
+      "end": 2128.94,
+      "title": "공격수는 공을 지키다 돌아서 탈출, 윙은 공을 끌며 시간 벌기",
+      "position_tags": [
+        "FW",
+        "LW",
+        "RW"
+      ],
+      "topic_tags": [
+        "탈압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "코치는 지금처럼 공을 끌면서 패스길을 정확하게 확인하고 가야 한다고 짚습니다. 이어 ATM 선수가 공을 잘 받은 장면에서, 상대가 붙어 올 수 있고 패스길이 확실하지 않다면 **우선 공을 지키다가, 상대가 붙는 순간 휙 돌아서 탈출해 밀어 넣어야** 합니다. 공격수는 **탈압박과 공을 지키는 능력**을 어느 정도 갖춰야 하고, 공을 지키지 못하면 공격을 할 수 없습니다."
+        },
+        {
+          "type": "text",
+          "text": "특히 윙은 동료가 뒷공간으로 들어가거나 돌아서 커버 올 때까지 **공을 끌며 시간을 벌어 줘야** 하는 포지션이라 공을 끌지 못하면 윙을 하기 어렵고, 물론 패스가 열리면 바로바로 줘야 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u022-c071.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2070,
+          "caption": "전반 41:09(CLV 2-1), 센터서클 주변. 하단 ATM 이름표 14 LLORENTE"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u022-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2027"
+    },
+    {
+      "id": "u023",
+      "uid": "20220331-PIjy1eid3RU#u023",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "PIjy1eid3RU",
+      "start": 2138.08,
+      "end": 2166.54,
+      "title": "뺏으러 달려들 때는 상대가 받기 전이나 받은 직후에",
+      "position_tags": [],
+      "topic_tags": [
+        "압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 선수가 공을 완전히 제어한 상대에게 뺏으러 달려들었다가, 무게중심이 쏠린 순간 제쳐진 장면입니다. 누구든 수비할 때 **뺏으러 달려드는 타이밍은 상대가 공을 받기 전이나 받은 직후**가 가장 좋습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u023-c074.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2160,
+          "caption": "전반 41:54(CLV 2-1), 센터서클 위쪽에 선수들이 모여 있다. 하단 ATM 이름표 6 IT"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u023-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-cb729a62e8",
+          "title": "FIFA 22 Beginner's Guide: How to Defend",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-cb729a62e8.html",
+          "orig_url": "https://www.keengamer.com/articles/guides/fifa-22-beginners-guide-how-to-defend/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2138"
+    },
+    {
+      "id": "u024",
+      "uid": "20220331-PIjy1eid3RU#u024",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "PIjy1eid3RU",
+      "start": 2173.2000000000003,
+      "end": 2185.36,
+      "title": "터무니없는 실수: 공을 뒤쪽으로 끌면서 패스각 만들기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "어찌 보면 터무니없는 실수가 나온 장면으로, 누구든 공을 가지고 있을 때 이런 상황이라면 **공을 뒤쪽으로 끌면서 패스각을 만드는 것**이 좋다고 짚습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u024-c075.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2190,
+          "caption": "전반 추가시간 45:00+0:14(CLV 2-1), 중원에 양 팀 선수들이 흩어져 있다. 하단 ATM 이름표 8 GGAKA"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u024-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2173"
+    },
+    {
+      "id": "u025",
+      "uid": "20220331-PIjy1eid3RU#u025",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "PIjy1eid3RU",
+      "start": 2194.98,
+      "end": 2352.7,
+      "title": "스트라이커는 뒷길을 확인하고, 못 주면 압박 없는 쪽으로 끌며 버티기",
+      "position_tags": [
+        "ST"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "미드필더가 빨리 지원 와 준 덕에, 뒤와 옆이 막힌 ATM 선수가 살기 위해 패스했고, 그다음 길로 들어갔다가 빠져나오며 오프사이드를 피한 스트라이커가 공을 받았지만 압박을 이기지 못하고 뺏긴 장면입니다. 스트라이커는 **먼저 뒷길을 확인해, 열리면 뒤로 거쳐 돌아가는 역할**을 해야 합니다. 이 길을 놓치면 상대 수비수는 스트라이커가 줄 수 있는 길이 하나뿐인 걸 보고 주는 순간 뺏으려고 붙습니다."
+        },
+        {
+          "type": "text",
+          "text": "상대가 붙으면 공격수는 **치고 달려 나가** 따라오지 못하게 하고, 상대가 붙다가 움직이면 그때 주면 됩니다. 줄 수 없다면 **압박이 없는 쪽 공간으로 공을 잡고 몸으로 막으며 끌고 나가**, 돌아 뛰는 동료가 올 때까지 버티다 열리면 밀어 넣어야 합니다. 압박이 들어오는 쪽으로 공을 몰면 안 됩니다."
+        },
+        {
+          "type": "text",
+          "text": "이 장면은 압박을 이기지 못하고 나가다 공을 뺏긴 것으로, 코치는 개인 기량 부족이라고 평가합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u025-c078.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2280,
+          "caption": "전반 추가시간 45:00+0:57(CLV 2-1), 하프라인 왼쪽에 양 팀 선수들이 몰려 있다. 하단 ATM 이름표 9 BAEBANG"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u025-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2194"
+    },
+    {
+      "id": "u026",
+      "uid": "20220331-PIjy1eid3RU#u026",
+      "match_id": "m1",
+      "topic_id": "m1-t6",
+      "video": "PIjy1eid3RU",
+      "start": 2360.8,
+      "end": 2478,
+      "title": "윙의 선택지: 끌고 버티기·중원·반대편, 애매하면 더 끌기",
+      "position_tags": [
+        "LW",
+        "RW",
+        "FW"
+      ],
+      "topic_tags": [
+        "파이널서드",
+        "탈압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM의 공격이 진행되다 잘린 장면으로, 윙이 공을 끄는 사이 반대쪽은 막히고 줄 곳이 한 곳뿐이 되어 상대 수비수가 그 단편적인 패스길을 읽고 잡으러 와 뺏겼습니다. 윙은 **동료가 뒷공간으로 들어갈 때까지 끌고 버텨 밀어 넣거나**, 동료가 들어가며 수비를 끌면 **더 끌어서 중원으로 돌려 돌아 들어가거나, 반대 길이 열리면 반대로** 가는 패턴 중 하나를 골라야 합니다."
+        },
+        {
+          "type": "text",
+          "text": "이 장면에서는 상대 수비의 무게중심이 한쪽으로 잡혀 있어 원래 패스를 줘야 할 타이밍이 있었습니다. 공격수는 패스길이 열리면 중원으로 주되, 상대 무게중심을 보고 **애매하면 공을 더 끌면서** 돌아 뛰는 길이 열리면 밀어 넣고, 안 열리면 더 공간적으로 이동하며 상대를 끌어내고 돌아 들어가야 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u026-c082.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2400,
+          "caption": "후반 46:53(CLV 2-1), 오른쪽 CLV 페널티 박스 앞. 하단 ATM 이름표 14 GABI"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u026-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2360"
+    },
+    {
+      "id": "u027",
+      "uid": "20220331-PIjy1eid3RU#u027",
+      "match_id": "m1",
+      "topic_id": "m1-t6",
+      "video": "PIjy1eid3RU",
+      "start": 2489.38,
+      "end": 2511.24,
+      "title": "사이드에서 제껴 넣기보다 열렸을 때 중앙으로",
+      "position_tags": [
+        "LW",
+        "RW"
+      ],
+      "topic_tags": [
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "상대도 잘하지 못한 장면에서, 코치는 사이드에서 제쳐서 넣는 것은 확률이 매우 낮다며 윙은 **열렸을 때 공을 중앙으로 넣어야** 공격이 진행된다고 짚습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u027-c085.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2490,
+          "caption": "후반 47:35(CLV 2-1), 센터서클 아래쪽에 선수들이 흩어져 있다. 하단 ATM 이름표 5 FERDINAND"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u027-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2489"
+    },
+    {
+      "id": "u028",
+      "uid": "20220331-PIjy1eid3RU#u028",
+      "match_id": "m1",
+      "topic_id": "m1-t6",
+      "video": "PIjy1eid3RU",
+      "start": 2520.3,
+      "end": 2598.26,
+      "title": "뺏으려는 무게중심으로 달려들다 탈압박 당해 실점",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "수비라인",
+        "압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 수비가 먼저 몸으로 제어하지 못했고, 공이 멀어진 순간 확실히 압박했어야 했는데 실패해 상대 공격수가 공을 받은 장면입니다. 이후 수비수가 뺏으려고 무게중심을 앞으로 실은 채 달려들어 탈압박을 허용했고, 뒷공간이 열려 실점으로 이어졌습니다. 수비수는 **자리를 딱 지키면서 LT로 몸을 눌러 제압**했어야 했습니다."
+        },
+        {
+          "type": "text",
+          "text": "패스길이 막힌 공격수가 할 수 있는 것은 상대 무게중심을 이용한 탈압박뿐이고, 탈압박은 수비가 압박해 들어와야만 가능합니다. 수비가 가만히 지키고 있으면 공격수는 탈압박을 할 수 없습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u028-c088.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2580,
+          "caption": "후반 49:40(CLV 2-1), 왼쪽 ATM 페널티 박스 안에 양 팀 선수들이 있다. 하단 ATM 이름표 99 BBUDI"
+        },
+        {
+          "type": "frame",
+          "src": "img/u028-c089.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2596.1,
+          "caption": "49:55 CLV 3-1, 노란 유니폼 CLV 선수들(11번, 99번)이 득점을 기뻐하는 장면"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u028-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-cd2e3bd750",
+          "title": "FIFA 22 Basic Controls (Xbox Series X)",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-cd2e3bd750.html",
+          "orig_url": "https://www.ea.com/able/resources/fifa/fifa-22/xbox-series-x/basic-controls"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2520"
+    },
+    {
+      "id": "u029",
+      "uid": "20220331-PIjy1eid3RU#u029",
+      "match_id": "m1",
+      "topic_id": "m1-t6",
+      "video": "PIjy1eid3RU",
+      "start": 2608.28,
+      "end": 2675.46,
+      "title": "빈 공간으로 쭉 빠져주고, 공을 앞으로 보내도록 설계하기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 잘 빠져나온 뒤의 공격 장면으로, 들어가고 밀어 놓고 공을 밟는 흐름이 잘못됐고 이 장면의 ATM 선수는 **비어 있던 쪽 공간으로 쭉 빠져 줘야** 했습니다. 커버하러 간 선수 한 명이 길 하나를 막고 있었으므로, 코치가 짚은 쪽으로 가서 **밀어 놓고 빠져나가는** 것이 맞았습니다."
+        },
+        {
+          "type": "text",
+          "text": "앞길이 없어 뒤로 돌렸는데, 뒤로 돌리는 건 위험성이 매우 높아 여기서 실수로 뺏겼다면 또 실점이었고 천운이 살린 장면이라고 평가합니다. 그래서 팀 전체가 **공을 최대한 앞으로 보낼 수 있도록 전술적으로 설계**해 둬야 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u029-c091.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2640,
+          "caption": "후반 51:34(CLV 3-1), 하프라인 부근. 하단 ATM 이름표 14 LLORENTE"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u029-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2608"
+    },
+    {
+      "id": "u030",
+      "uid": "20220331-PIjy1eid3RU#u030",
+      "match_id": "m1",
+      "topic_id": "m1-t6",
+      "video": "PIjy1eid3RU",
+      "start": 2683.3,
+      "end": 2815.08,
+      "title": "스트라이커가 수비수에 붙은 채 직선으로 뛰었다: 공간에서 멈추기",
+      "position_tags": [
+        "ST"
+      ],
+      "topic_tags": [
+        "파이널서드",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 잘 빠져나와 공격을 전개하는 중에 스트라이커가 상대 수비수에 바짝 붙은 채 직선으로 뛴 장면으로, 코치는 좋은 움직임이 아니라고 평가합니다. 이 타이밍에 찔러 줄 수 있는 미드필더는 거의 없고, 받더라도 수비수가 스피드로 제쳐지지 않는 한 몸으로 틀어막아 곧바로 뺏을 수 있습니다. 스트라이커는 **뛰는 척하다가 빈 공간에서 멈춰 서야** 합니다."
+        },
+        {
+          "type": "text",
+          "text": "침투가 되려면 주는 사람과 뛰는 사람의 거리가 가깝고, 직선이면 더 좋으며, 공간이 확보돼 있어야 합니다. 공간에서 멈춰 원터치로 받은 뒤에는 동료가 뛰어 들어가는 사이 포백을 흔들며, 상대가 안 붙으면 앞을 보다가 주고 침투하고, 붙으면 동료가 돌아 뛸 때까지 버티다가 주고 돌아 뛰는 식의 여러 형태가 가능합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u030-c095.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2760,
+          "caption": "후반 53:18(CLV 3-1), 센터서클 주변에 양 팀 선수들이 있다. 하단 ATM 이름표 10 PINKY"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u030-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2683"
+    },
+    {
+      "id": "u031",
+      "uid": "20220331-PIjy1eid3RU#u031",
+      "match_id": "m1",
+      "topic_id": "m1-t6",
+      "video": "PIjy1eid3RU",
+      "start": 2817.24,
+      "end": 2917.68,
+      "title": "공격 지연과 오프사이드: 라인을 타며 걷다가 패스 순간 침투",
+      "position_tags": [
+        "ST",
+        "MF"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "스트라이커가 미리 직선으로 뛰어 앞쪽 패스길을 스스로 없애 미드필더가 앞으로 줄 수 없게 된 장면입니다. 공격수는 고수들처럼 **라인을 타고 천천히 걷다가 패스가 나가는 순간 침투**해야 오프사이드에 걸리지 않습니다. 또 카운터에서 공을 가진 선수는 **지연을 줄여 원터치로 빨리 전방에 보내야** 하는데, 상대 미드필더와 수비진이 도우러 올 때까지 지연될수록 성공 확률이 떨어지기 때문입니다."
+        },
+        {
+          "type": "text",
+          "text": "미리 직선으로만 뛰면 대놓고 오프사이드에 걸리고, 패스길이 하나 사라지면 공격이 계속 지연돼 뺏길 확률이 크게 높아집니다. 코치는 고수들이 각이 보이면 라인을 타고 있다가 패스 순간 침투하거나 RT·RB로 흘려 들어간다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u031-c099.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2880,
+          "caption": "후반 53:21(CLV 3-1), 센터서클 오른쪽에 선수들이 흩어져 있다. 하단 ATM 이름표 10 PINKY"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u031-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-b183537e71",
+          "title": "The art of staying onside",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-b183537e71.html",
+          "orig_url": "https://themastermindsite.com/2023/02/14/the-art-of-staying-onside/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2817"
+    },
+    {
+      "id": "u032",
+      "uid": "20220331-PIjy1eid3RU#u032",
+      "match_id": "m1",
+      "topic_id": "m1-t7",
+      "video": "PIjy1eid3RU",
+      "start": 2927.2400000000002,
+      "end": 3062.14,
+      "title": "카운터 수비: 먼저 갈 수 있는 사람이 잡고, 안 되면 라인으로 오프사이드 유도",
+      "position_tags": [
+        "DF",
+        "MF"
+      ],
+      "topic_tags": [
+        "수비라인",
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "vandeven",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "wonjeon",
+        "spress"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "상대 카운터에서 절묘한 패스가 들어가 ATM 수비 한 명이 뚫린 장면으로, 뚫린 선수는 이미 스피드 싸움에서 져 따라잡을 수 없었습니다. 이럴 때는 **먼저 갈 수 있는 사람이 그 상대를 잡아야** 하는데, 쫓아갈 수 있었던 선수가 계속 전력으로 따라가는 대신 다른 쪽으로 뛰어 버렸습니다. 끝까지 따라갔다면 상대가 받을 때 붙어서 제어할 수 있었을 것이라는 평가입니다."
+        },
+        {
+          "type": "text",
+          "text": "도와줄 사람이 없는 상황이라면, 수비수는 뒤로 물러나기보다 **라인을 일자로 맞춰 상대를 오프사이드로 유도**하고, 패스가 갈 길이 한쪽뿐이니 **주는 순간 바로 나와서 끊어 내는** 수비를 해야 막을 수 있습니다. 고수들은 이런 다음 상황을 눈치 빠르게 읽는다고 덧붙입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u032-c102.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2970,
+          "caption": "후반 55:13(CLV 3-1), 왼쪽 ATM 페널티 박스 안팎에 양 팀 선수들이 있다. 하단 ATM 이름표 10 PINKY"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u032-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2927"
+    },
+    {
+      "id": "u033",
+      "uid": "20220331-PIjy1eid3RU#u033",
+      "match_id": "m1",
+      "topic_id": "m1-t7",
+      "video": "PIjy1eid3RU",
+      "start": 3070.66,
+      "end": 3101.3,
+      "title": "무모한 패스로 공격 헌납: 끌면서 패스길 확보",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 선수의 무모한 패스로 상대에게 공격 기회를 그냥 내준 장면입니다. 누구든 패스길이 안 보이면 **공을 더 끌어서 볼 수 있게 만들고**, 압박이 붙으면 **공을 지키면서** 봐야 하며, **천천히 패스길을 확보**하는 게 좋습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u033-c106.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3090,
+          "caption": "후반 57:09(CLV 3-1), 센터서클 부근. 하단 ATM 이름표 9 BAEBANG"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u033-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3070"
+    },
+    {
+      "id": "u034",
+      "uid": "20220331-PIjy1eid3RU#u034",
+      "match_id": "m1",
+      "topic_id": "m1-t7",
+      "video": "PIjy1eid3RU",
+      "start": 3111.54,
+      "end": 3229.4,
+      "title": "카운터는 사이드로 보내 전진, 윙어는 직선으로 뛰지 말고 라인 타기",
+      "position_tags": [
+        "LW",
+        "RW",
+        "FW",
+        "DF"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "vandeven",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "wonjeon",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 선수가 미리 예측해 달려들어 공을 빼내 앞으로 보낸 장면입니다. 이렇게 공을 받으면 빈 공간이 세 군데 열리는데, 수비수도 마찬가지로 압박을 받을 때 가장 쉬운 탈출 방법은 사이드로 보내 전진하는 것이라 그 공을 받은 ATM 선수는 **사이드로 보내 전진**했어야 합니다. 그런데 윙어는 직선으로 뛰어 이미 오프사이드에 걸려 있었습니다."
+        },
+        {
+          "type": "text",
+          "text": "위치가 나쁘지 않았던 동료 한 명이 있었는데, 공을 받은 선수 눈에 그 동료가 안 보였던 것 같다고 덧붙입니다. 공격수는 무조건 앞으로 뛰지 말고 **라인을 타며 슬슬 걷다가 패스가 나가는 걸 보고 달리는 습관**을 들여야 뻔한 오프사이드에 걸리지 않습니다. 이 공간들을 활용하는 카운터는 전술적으로 미리 세워 둬야 한다고도 덧붙입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u034-c108.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3150,
+          "caption": "후반 59:44(CLV 3-1), 센터서클 안에 선수들이 모여 있고, 그 왼쪽에 빨간 유니폼 선수 한 명이 쓰러져 있다. 하단 ATM 이름표 9 BAEBANG"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u034-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-b183537e71",
+          "title": "The art of staying onside",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-b183537e71.html",
+          "orig_url": "https://themastermindsite.com/2023/02/14/the-art-of-staying-onside/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3111"
+    },
+    {
+      "id": "u035",
+      "uid": "20220331-PIjy1eid3RU#u035",
+      "match_id": "m1",
+      "topic_id": "m1-t7",
+      "video": "PIjy1eid3RU",
+      "start": 3232,
+      "end": 3267.38,
+      "title": "압박을 안 받으면 급하게 줄 필요 없다",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 선수가 또 급하게 패스한 장면입니다. 누구든 압박을 받지 않고 있으면 **급하게 줄 필요 없이 더 침착하게 공을 끌며 패스길을 봐야** 하고, 원래는 공을 받기 전에 봐야 하지만 못 봤다면 더 끌어서 정확하게 줘야 이런 상황이 나오지 않습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u035-c111.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3240,
+          "caption": "후반 60:06(CLV 3-1), 센터서클 왼쪽. 하단 ATM 이름표 6 IT"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u035-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3232"
+    },
+    {
+      "id": "u036",
+      "uid": "20220331-PIjy1eid3RU#u036",
+      "match_id": "m1",
+      "topic_id": "m1-t7",
+      "video": "PIjy1eid3RU",
+      "start": 3270.3999999999996,
+      "end": 3319.22,
+      "title": "카운터를 헌납하면 먼저 내려와 자기 공간부터 틀어막기",
+      "position_tags": [
+        "DF",
+        "FB"
+      ],
+      "topic_tags": [
+        "수비라인",
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 카운터를 내준 장면에서 풀백 자리가 비어 있고, 다른 선수 한 명도 자기 공간을 버리고 다른 곳으로 가 버렸습니다. 카운터를 내주는 순간 수비수들이 가장 먼저 할 일은 **빨리 내려와 자기 공간부터 틀어막고 포백을 먼저 완성**하는 것이며, 이것이 카운터를 제어할 확률이 가장 높은 방법입니다. 공간이 뚫리면 카운터는 막을 수 없습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u036-c113.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3300,
+          "caption": "후반 60:42(CLV 3-1), 왼쪽 ATM 페널티 박스 앞에 선수들이 몰려 있다. 하단 ATM 이름표 99 BBUDI"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u036-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-a47dc83d1e",
+          "title": "Zonal marking: football tactics explained",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-a47dc83d1e.html",
+          "orig_url": "https://learning.coachesvoice.com/cv/zonal-marking-football-tactics-explained-mourinho-conte-simeone/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3270"
+    },
+    {
+      "id": "u037",
+      "uid": "20220331-PIjy1eid3RU#u037",
+      "match_id": "m1",
+      "topic_id": "m1-t7",
+      "video": "PIjy1eid3RU",
+      "start": 3320.42,
+      "end": 3362.34,
+      "title": "위험한 패스: 압박이 없으면 더 침착하게 바라보기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM의 패스가 들어가긴 했지만 상대가 조금만 빨리 반응했어도 끊겨 카운터를 맞을 수 있었던 위험한 패스 장면입니다. 누구든 공을 잡았을 때 **압박이 안 붙으면 더 침착하게 바라보고**, 압박이 붙으면 고수들은 한 명 정도 붙여 놓고도 안 뺏기면서 패스각을 다 보며 전개한다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u037-c114.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3330,
+          "caption": "후반 62:01(CLV 4-1), 왼쪽 ATM 페널티 박스 부근. 하단 ATM 이름표 10 PINKY"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u037-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3320"
+    },
+    {
+      "id": "u038",
+      "uid": "20220331-PIjy1eid3RU#u038",
+      "match_id": "m1",
+      "topic_id": "m1-t8",
+      "video": "PIjy1eid3RU",
+      "start": 3365.3999999999996,
+      "end": 3557.68,
+      "title": "압박 탈출: 윙이 내려오면 한 명이 뒷공간을 파거나 길을 만들고 수비형 미드필더가 커버",
+      "position_tags": [
+        "CDM"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 선수가 공을 잡았지만 압박 속에 앞으로 보낼 곳이 없어 위험해진 장면으로, 첫째로 **코치가 짚은 공간에 아군이 먼저 들어가 있어야** 압박을 받는 선수가 돌아서 밀어 넣고 탈출할 수 있습니다. 이런 대형에서 윙이 내려오면 **코치가 짚은 선수가 빨리 올라가 뒷공간을 파 주고 수비형 미드필더가 올라와 커버**해 상대를 끌고 가 중원을 풀거나, **한 명이 길을 만들어 주고 수비형 미드필더가 커버**하는 둘 중 하나를 해야 압박에서 탈출할 수 있습니다."
+        },
+        {
+          "type": "text",
+          "text": "압박을 받는 선수가 계속 버틸 수는 없고, 뒤로 돌리면 상대가 계속 압박해 들어와 뺏기는 순간 카운터이므로 가장 안전한 건 앞으로 보내는 것인데, 앞 사람들이 제대로 움직여 주지 않으면 그럴 수 없습니다. 이 장면에서는 한 선수는 막혔고, 한쪽 공간은 활용하지 못했으며, 열린 곳이 있었는데도 주지 못했습니다. 공을 가진 선수는 **공을 끌면서 어느 쪽이 비었는지 확인하고 확실하게** 줘야 합니다."
+        },
+        {
+          "type": "text",
+          "text": "위치를 빨리 잡았는데도 상대가 정말 잘 막아 줄 곳이 없다면 그때는 뒤로 보내 반대쪽으로 빨리 가야 하지만, 공을 뒤로 보내는 건 분명히 위험성이 있어 앞으로 보낼 수 있는 각을 만들어 두는 것이 중요하다고 정리합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u038-c118.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3450,
+          "caption": "후반 62:21(CLV 4-1), 하프라인 왼쪽 중원. 하단 ATM 이름표 8 GGAKA"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u038-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3365"
+    },
+    {
+      "id": "u039",
+      "uid": "20220331-PIjy1eid3RU#u039",
+      "match_id": "m1",
+      "topic_id": "m1-t8",
+      "video": "PIjy1eid3RU",
+      "start": 3565.48,
+      "end": 3628.36,
+      "title": "패스각이 없을 때: 버티고 주고 나가기, 안 되면 걷어내기",
+      "position_tags": [],
+      "topic_tags": [
+        "탈압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 공을 끊어냈지만 받은 선수에게 상대가 붙어 패스각이 없던 위험한 장면입니다. 누구든 패스각이 없으면 각을 열고 나가거나, 패스를 주고 각을 열어 나가거나, 상대가 붙으면 사이드로 빼서 나가거나, 급하면 걷어내는 선택지가 있고, 가장 좋은 건 **버티고 주고 나가는 것**입니다."
+        },
+        {
+          "type": "text",
+          "text": "그게 힘들어 자꾸 뺏길 만큼 기본기가 부족하다면 걷어내는 게 차선책입니다. 거기서 뺏기면 위험하기 때문이며, 안 뺏기고 빌드업하는 게 최선이지만 그건 개인 역량의 문제라고 덧붙입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u039-c122.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3570,
+          "caption": "후반 63:46(CLV 4-1), 왼쪽 ATM 페널티 박스 안에 선수들이 있다. 하단 ATM 이름표 39 KIERMAIER"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u039-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3565"
+    },
+    {
+      "id": "u040",
+      "uid": "20220331-PIjy1eid3RU#u040",
+      "match_id": "m1",
+      "topic_id": "m1-t8",
+      "video": "PIjy1eid3RU",
+      "start": 3628.36,
+      "end": 3656.84,
+      "title": "뒷공간이 비었는데 아무도 없다: 동료가 들어갈 때까지 버티기",
+      "position_tags": [],
+      "topic_tags": [
+        "탈압박",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "누구든 공을 가진 선수라면 같은 상황에서 버텨 줘야 합니다. ATM 선수가 공을 받았을 때 상대 뒷공간이 크게 비어 있었는데 그곳에 아무도 없었던 장면입니다. 동료가 뒷공간으로 들어갈 때까지 **공을 가진 선수가 버티며 끌어 놓고**, 중원에 길이 있으면 밀어 넣고, 아니면 반대쪽으로 한 번에 보내는 식으로 풀어 가야 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u040-c124.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3630,
+          "caption": "후반 64:27(CLV 4-1), 왼쪽 페널티 박스와 센터서클 사이 아래쪽 중원. 하단 ATM 이름표 5 FERDINAND"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u040-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3628"
+    },
+    {
+      "id": "u041",
+      "uid": "20220331-PIjy1eid3RU#u041",
+      "match_id": "m1",
+      "topic_id": "m1-t8",
+      "video": "PIjy1eid3RU",
+      "start": 3659.8,
+      "end": 3729.5,
+      "title": "상대 터치가 길어지면 가까울 때 바로 덮치기",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 수비하는 중 상대의 터치가 길어진 장면으로, 이렇게 상대 터치가 길어지고 거리가 가까우면 가까이 있는 수비수는 **바로 태클하거나 튀어나가 뺏어야** 합니다. 뒷공간이 위험해 자리를 지키는 것이 기본적으로는 좋은 수비지만, 수비 고수들은 이런 순간 개인 능력으로 대처합니다. 다만 거리가 멀 때 튀어나가면 제쳐질 확률이 높습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u041-c126.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3690,
+          "caption": "후반 65:27(CLV 4-1), 왼쪽 ATM 페널티 박스 앞. 하단 ATM 이름표 5 FERDINAND"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u041-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-cb729a62e8",
+          "title": "FIFA 22 Beginner's Guide: How to Defend",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-cb729a62e8.html",
+          "orig_url": "https://www.keengamer.com/articles/guides/fifa-22-beginners-guide-how-to-defend/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3659"
+    },
+    {
+      "id": "u042",
+      "uid": "20220331-PIjy1eid3RU#u042",
+      "match_id": "m1",
+      "topic_id": "m1-t8",
+      "video": "PIjy1eid3RU",
+      "start": 3743.96,
+      "end": 3869.66,
+      "title": "잡자마자 주고 각 열고 나가기, 빌드업이 안 되면 골키퍼 롱킥",
+      "position_tags": [
+        "GK"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "탈압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 공을 끊어낸 직후 압박이 들어온 장면으로, 누구든 공을 끊어냈다면 베스트는 **공을 잡자마자 바로 주고 다시 받으면서 각을 열고 나가는 것**이었습니다. 윙이 뒷공간에 있으면 그쪽으로 나가는 게 제일 좋습니다."
+        },
+        {
+          "type": "text",
+          "text": "압박을 탈출하는 방법은 개인 능력으로 제치고 들어가는 것, 그리고 패스각이 보이면 바로바로 주고받으며 나가는 것 두 가지입니다. 포위되면 앞으로 나가기 힘들어 뒤로 돌려야 하는데, 빌드업이 잘 안 되는 팀이 공을 뒤로 돌리면 상대 카운터의 빌미가 됩니다. 그래서 **빌드업을 할 거라면 팀이 연습을 단단히 해야** 하고, 그게 아니면 **골키퍼에게 주고 골키퍼가 앞으로 길게 차게 하는** 편이 훨씬 나을 수 있다고 말합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u042-c129.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3780,
+          "caption": "후반 68:22(CLV 4-1), 중원에 양 팀 선수들이 흩어져 있다. 하단 ATM 이름표 14 LLORENTE"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u042-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-821169b3d4",
+          "title": "Playing out from the back",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-821169b3d4.html",
+          "orig_url": "https://guidetofootball.com/tactics/playing-out-from-the-back/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3743"
+    },
+    {
+      "id": "u043",
+      "uid": "20220331-PIjy1eid3RU#u043",
+      "match_id": "m1",
+      "topic_id": "m1-t9",
+      "video": "PIjy1eid3RU",
+      "start": 3875.5,
+      "end": 3972.58,
+      "title": "뻔한 첫 패스길은 잘린다, 풀백은 미니맵으로 윙어 움직임을 보고 스루 선택",
+      "position_tags": [
+        "FB",
+        "CM"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "조작/키사용"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM의 뻔한 패스를 상대 풀백이 자르러 달려든 장면으로, 프로클럽에서는 뻔한 패스를 주면 고수들에게 잘 잘립니다. 공을 가진 선수는 **첫 번째로 보이는 패스길은 무시하고 두 번째·세 번째 패스길로** 가야 고수들도 잘 못 자릅니다."
+        },
+        {
+          "type": "text",
+          "text": "윙어 쪽도 마찬가지로 상대가 붙어 오기 때문에, 윙어가 뛰기 시작하면 공을 가진 풀백은 **미니맵을 한 번씩 쳐다보며** 움직임을 확인해야 로빙 스루로 찌를지 그냥 스루로 줄지 감을 잡을 수 있습니다. 풀백에게 그런 대응 능력이 없다면 받아 주고 중앙 미드필더가 빨리 침투해 뒷공간을 공략하는 수밖에 없다고 덧붙입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u043-c134.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3930,
+          "caption": "후반 69:14(CLV 4-1), 하프라인 왼쪽. 하단 ATM 이름표 8 GGAKA"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u043-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-cd2e3bd750",
+          "title": "FIFA 22 Basic Controls (Xbox Series X)",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-cd2e3bd750.html",
+          "orig_url": "https://www.ea.com/able/resources/fifa/fifa-22/xbox-series-x/basic-controls"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3875"
+    },
+    {
+      "id": "u044",
+      "uid": "20220331-PIjy1eid3RU#u044",
+      "match_id": "m1",
+      "topic_id": "m1-t9",
+      "video": "PIjy1eid3RU",
+      "start": 3977.5,
+      "end": 4023.6,
+      "title": "뺏긴 뒤 달려들지 말고 내려와서 자기 공간부터",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "수비라인"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 공을 뺏긴 직후 수비수가 달려든 장면으로, 거리가 멀었고 본인 뒷공간을 노리는 상대까지 있어 달려들 타이밍이 전혀 아니었습니다. 공을 뺏기면 수비수들은 **달려들지 말고 빨리 내려와 네 명이 각자 자기 공간부터 사수**해야 이런 상황을 제어할 수 있습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u044-c137.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4020,
+          "caption": "후반 69:49(CLV 4-1), 왼쪽 ATM 페널티 박스 앞에 양 팀 선수들이 모여 있다. 하단 ATM 이름표 99 BBUDI"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u044-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-cb729a62e8",
+          "title": "FIFA 22 Beginner's Guide: How to Defend",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-cb729a62e8.html",
+          "orig_url": "https://www.keengamer.com/articles/guides/fifa-22-beginners-guide-how-to-defend/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3977"
+    },
+    {
+      "id": "u045",
+      "uid": "20220331-PIjy1eid3RU#u045",
+      "match_id": "m1",
+      "topic_id": "m1-t9",
+      "video": "PIjy1eid3RU",
+      "start": 4028.32,
+      "end": 4072.92,
+      "title": "마음이 급한 미드필더: 공간으로 길을 만들며 나아가기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 아슬아슬하게 공을 잡은 장면으로, 코치는 지금 ATM 미드필더들은 누구든 마음이 급해 동료가 뒷공간으로 뛰어들 때 찔러 줄 여유가 없다고 평가합니다. 이럴 때는 **공간으로 빨리 길을 만들어 주면서** 나아갈 수밖에 없습니다."
+        },
+        {
+          "type": "text",
+          "text": "또 빌드업 능력이 없으면 롱킥을 찾을 수밖에 없는데, 상대는 빌드업을 못하는 걸 보면 바로 압박하러 달려들기 때문입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u045-c138.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4050,
+          "caption": "후반 71:12(CLV 4-1), 하프라인 왼쪽 중원, 아래쪽 공 주변에 선수 몇 명이 모여 있다. 하단 ATM 이름표 14 LLORENTE"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u045-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4028"
+    },
+    {
+      "id": "u046",
+      "uid": "20220331-PIjy1eid3RU#u046",
+      "match_id": "m1",
+      "topic_id": "m1-t9",
+      "video": "PIjy1eid3RU",
+      "start": 4087.54,
+      "end": 4142.6,
+      "title": "되찾으려 달려들다 자기 공간을 비워 실점 위기, 포백 1대1 능력",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "수비라인"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "등지고 공을 지키던 ATM 선수는 버티기 어려우면 **빨리 걷어내야** 합니다. 이 장면에서는 공을 뺏긴 선수가 되찾으려 달려들면서 자기 공간을 비웠고, 그 자리를 메우러 다른 수비수가 커버를 오자 그 선수의 공간이 다시 열려 패스 한 번이면 바로 실점이 될 상황이 됐습니다."
+        },
+        {
+          "type": "text",
+          "text": "그래서 가장 우선은 포백 각자가 **1대1 상황에서 무너지지 않는 개인 기량을 갖추는 것**이며, 자기만 무너지지 않으면 포백이 무너질 가능성은 매우 적다고 강조합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u046-c140.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4110,
+          "caption": "후반 72:37(CLV 4-1), 왼쪽 ATM 페널티 박스 안팎에 양 팀 선수들이 몰려 있다. 하단 ATM 이름표 10 PINKY"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u046-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4087"
+    },
+    {
+      "id": "u047",
+      "uid": "20220331-PIjy1eid3RU#u047",
+      "match_id": "m1",
+      "topic_id": "m1-t9",
+      "video": "PIjy1eid3RU",
+      "start": 4150.860000000001,
+      "end": 4257.64,
+      "title": "뒷공간에 아무도 없어 뒤로 돌림: 뛰었어야 했고 더 침착하게",
+      "position_tags": [],
+      "topic_tags": [
+        "포지셔닝",
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 압박을 한 번 벗어났지만 다시 압박이 들어온 상태에서 상대 뒷공간에 아무도 없어 공을 뒤로 돌렸고, 뒤로 돌리면 계속 압박이 붙어 뺏기게 되는 장면입니다. 윙이 받으러 내려오는 상황이었으니 **다른 선수가 뒷공간에 들어가 있어야** 했고, 한 공간에 두 명이 있었던 만큼 **한 명은 돌아 뛰었어야** 했습니다. 동료가 커버하러 오면 되기 때문입니다."
+        },
+        {
+          "type": "text",
+          "text": "공을 가진 선수도 **더 침착하게 패스길을 봤어야** 합니다. 누구든 압박을 안 받는 상황에서는 좀 더 끌고 정확하게 패스길을 보고 주는 것이 중요하며, 받기 전에 인지하는 게 가장 좋지만 그럴 능력이 없다면 공을 끄는 능력부터 길러야 한다고 짚습니다. 코치는 공을 뒤로 돌리는 게 절대 좋은 선택이 아니라고도 강조합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u047-c143.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4200,
+          "caption": "후반 76:38(CLV 4-1), 하프라인 왼쪽 중원. 하단 ATM 이름표 6 IT"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u047-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4150"
+    },
+    {
+      "id": "u048",
+      "uid": "20220331-PIjy1eid3RU#u048",
+      "match_id": "m1",
+      "topic_id": "m1-t9",
+      "video": "PIjy1eid3RU",
+      "start": 4261.58,
+      "end": 4348.6,
+      "title": "3백에서 한 공간에 두 명이 몰려 사이드가 열린 실점",
+      "position_tags": [
+        "DF",
+        "CB"
+      ],
+      "topic_tags": [
+        "수비라인"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 수비수 한 명이 너무 나가 있어 돌아올 수 없게 되면서 남은 3백으로 막아야 했던 장면으로, 결국 사이드가 열려 슈팅을 허용하고 실점했습니다. 3백이라도 원칙은 같아서 **각자 맡은 공간을 지켜야** 합니다."
+        },
+        {
+          "type": "text",
+          "text": "이 장면에서 한 명은 자기 공간을, 한 명은 들어온 상대를 막고 있었고, 나머지 한 명의 공간에는 아무도 없어 당장 그 공간을 지킬 필요는 없었습니다(누군가 돌아 뛰면 바로 막아야 하지만요). 그런데 한 선수가 상황을 전혀 예측하지 못해 자기 공간을 두고 한쪽으로 쏠리면서 한 공간에 두세 명이 몰렸고, 그 사이 사이드가 열렸습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u048-c146.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4290,
+          "caption": "후반 77:23(CLV 4-1), 왼쪽 ATM 페널티 박스 앞. 스코어 아래 패스 수(126 대 129)와 정확도(83%, 77%)가 떠 있다. 하단 ATM 이름표 5 FERDINAND"
+        },
+        {
+          "type": "frame",
+          "src": "img/u048-c148.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4347.03,
+          "caption": "77:41 CLV 5-1, 노란 유니폼 CLV 47번 선수가 두 손을 들어 올리는 장면"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u048-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-a47dc83d1e",
+          "title": "Zonal marking: football tactics explained",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-a47dc83d1e.html",
+          "orig_url": "https://learning.coachesvoice.com/cv/zonal-marking-football-tactics-explained-mourinho-conte-simeone/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4261"
+    },
+    {
+      "id": "u049",
+      "uid": "20220331-PIjy1eid3RU#u049",
+      "match_id": "m1",
+      "topic_id": "m1-t10",
+      "video": "PIjy1eid3RU",
+      "start": 4356.02,
+      "end": 4389.54,
+      "title": "압박이 없는데 마음이 급하다: 더 끌고 확인해 패스미스 줄이기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "압박이 전혀 붙지 않았는데도 ATM 선수가 마음이 급해 열린 패스길을 보지 못한 장면입니다. 조금만 끌고 봤어도 패스길이 많았던 만큼, 누구든 **패스길이 정확히 안 보이면 공을 그만큼 더 끌고 확인**해야 패스미스가 줄어듭니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u049-c149.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4380,
+          "caption": "후반 78:45(CLV 5-1), 왼쪽 ATM 페널티 박스 앞. 하단 ATM 이름표 4 J M GIMENEZ"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u049-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4356"
+    },
+    {
+      "id": "u050",
+      "uid": "20220331-PIjy1eid3RU#u050",
+      "match_id": "m1",
+      "topic_id": "m1-t10",
+      "video": "PIjy1eid3RU",
+      "start": 4390.96,
+      "end": 4449.02,
+      "title": "끊고도 앞에 없어 뒤로 돌리는 흐름은 베스트가 아니다",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 공을 잘 끊었지만 앞으로 줄 곳이 없어 전진하지 못하고 **공을 뒤로 돌린** 장면으로, 이렇게 되면 상대가 압박하러 달려들고, 롱킥이 나오면 헤딩 싸움 끝에 뺏기게 됩니다. 코치는 공을 뒤로 돌리는 것은 베스트가 아니며, 공을 자꾸 뒤로 돌리는 팀은 안 풀리는 상황이 계속될 수밖에 없다고 평가합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u050-c150.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4410,
+          "caption": "후반 80:25(CLV 5-1), 왼쪽 페널티 박스와 센터서클 사이 중원. 하단 ATM 이름표 8 GGAKA"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u050-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4390"
+    },
+    {
+      "id": "u051",
+      "uid": "20220331-PIjy1eid3RU#u051",
+      "match_id": "m1",
+      "topic_id": "m1-t10",
+      "video": "PIjy1eid3RU",
+      "start": 4456.66,
+      "end": 4617.34,
+      "title": "카운터에서 공격수는 침투보다 공간에서 앞에서 받아주기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "몇 번의 딜레이로 상대 수비가 이미 다 내려앉은 가운데, ATM의 카운터에서 공을 가진 선수가 미니맵을 힐끔 보며 잘 받아 들어간 장면입니다. 이때 공격수는 한 방을 노리고 코치가 짚은 공간으로 침투하지 말고, 상대가 뒤로 물러나 있는 만큼 **공간에서 공을 앞에서 받아 주며 수비를 끌어내야** 합니다. 약팀들이 흔히 하는 한 방 침투 같은 단순한 공격은 수비가 완성된 강팀 상대로 성공 확률이 크게 떨어지기 때문입니다."
+        },
+        {
+          "type": "text",
+          "text": "받아 준 뒤에는 주고 돌아 뛰기, 다시 돌려주고 돌아 뛰기, 동료가 돌아 뛸 때까지 버티다 밀어 넣기, 상대가 지키고만 있으면 앞으로 끌고 나가기 같은 패턴으로 상대가 내려오기 전에 빨리 공격해야 합니다. 순간적으로 왔다 갔다 하며 받는 패턴은 받는 동시에 걸릴 수 있어 어택킹 서드(상대 골문 쪽 3분의 1 구역)에서 쓸 플레이이고, 이 장면처럼 골대까지 먼 상황에서는 확실하게 받아 주며 일단 공을 전진시키는 게 우선입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u051-c152.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4470,
+          "caption": "후반 84:04(CLV 5-1), 왼쪽 페널티 박스 앞과 중원에 선수들이 흩어져 있다. 하단 ATM 이름표 14 LLORENTE"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u051-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4456"
+    },
+    {
+      "id": "u052",
+      "uid": "20220331-PIjy1eid3RU#u052",
+      "match_id": "m1",
+      "topic_id": "m1-t10",
+      "video": "PIjy1eid3RU",
+      "start": 4619.4,
+      "end": 4711.08,
+      "title": "질질 끌다 사이드로: 동료가 중앙으로 빨리 들어와 주고받았어야",
+      "position_tags": [],
+      "topic_tags": [
+        "전환/역습",
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM의 공격이 너무 질질 끌린 끝에 공이 사이드로 간 장면입니다. 코치가 짚은 동료가 **중앙으로 빨리 들어와 빨리빨리 주고받았어야** 했는데 그러지 않아 앞길이 없어졌고, 미드필더는 어쩔 수 없이 사이드로 보낼 수밖에 없었습니다. 그 사이 상대가 모두 수비에 가담했고, 그러면 뚫을 수가 없습니다."
+        },
+        {
+          "type": "text",
+          "text": "모든 구기 종목은 카운터로 골을 넣는 게 가장 쉽기 때문에, 특히 약팀은 지공으로 바뀌면 성공 확률이 크게 떨어지고, 개인 수비 능력이 되는 팀이 모두 내려앉으면 어떤 팀이든 뚫기 매우 어렵다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u052-c158.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4650,
+          "caption": "후반 84:41(CLV 5-1), 센터서클 주변에 선수들이 흩어져 있다. 하단 ATM 이름표 10 PINKY"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u052-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4619"
+    },
+    {
+      "id": "u053",
+      "uid": "20220331-PIjy1eid3RU#u053",
+      "match_id": "m1",
+      "topic_id": "m1-t10",
+      "video": "PIjy1eid3RU",
+      "start": 4722.48,
+      "end": 4790.98,
+      "title": "윙은 미리 뛰지 말고 받아주거나 걷다가, 오프사이드는 최악",
+      "position_tags": [
+        "LW",
+        "RW"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 선수가 압박을 버티고 공을 밀어 넣었지만, 윙이 마음이 급해 앞으로만 뛰면서 패스길이 이미 사라져 버린 장면입니다. 이 상황에서 윙은 **미리 뛰지 말고 그 자리나 공간에서 받아 주거나, 천천히 걷거나 자리를 지키고 있어야** 하며, 패스가 나갈 때 뛰어도 늦지 않습니다."
+        },
+        {
+          "type": "text",
+          "text": "패스길이 사라지면 상대 풀백이 달려들어도 공을 가진 선수는 줄 곳이 없어 뺏길 확률이 크게 높아집니다. 특히 공격 상황에서 오프사이드는 최악이므로, 미리 뛰어 오프사이드에 걸리지 않아야 한다고 강조합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u053-c161.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4740,
+          "caption": "후반 89:18(CLV 5-1), 센터서클 안에 선수들이 모여 있다. 하단 ATM 이름표 14 GABI"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u053-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-b183537e71",
+          "title": "The art of staying onside",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-b183537e71.html",
+          "orig_url": "https://themastermindsite.com/2023/02/14/the-art-of-staying-onside/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4722"
+    }
+  ]
+}

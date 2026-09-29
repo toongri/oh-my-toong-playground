@@ -1,0 +1,470 @@
+{
+  "version": 1,
+  "session_id": "20220331-PIjy1eid3RU",
+  "units": {
+    "u001": [],
+    "u002": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.4,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      },
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u002",
+        "score": 0.25,
+        "title": "베리나 포지션 상향 지시",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "포지셔닝"
+        ],
+        "position_tags": [
+          "FB"
+        ]
+      }
+    ],
+    "u003": [],
+    "u004": [],
+    "u005": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u002",
+        "score": 0.37,
+        "title": "베리나 포지션 상향 지시",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "포지셔닝"
+        ],
+        "position_tags": [
+          "FB"
+        ]
+      },
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.31,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      }
+    ],
+    "u006": [],
+    "u007": [],
+    "u008": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.5,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      }
+    ],
+    "u009": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u002",
+        "score": 0.25,
+        "title": "베리나 포지션 상향 지시",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "포지셔닝"
+        ],
+        "position_tags": [
+          "FB"
+        ]
+      }
+    ],
+    "u010": [],
+    "u011": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u002",
+        "score": 0.25,
+        "title": "베리나 포지션 상향 지시",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "포지셔닝"
+        ],
+        "position_tags": [
+          "FB"
+        ]
+      }
+    ],
+    "u012": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u002",
+        "score": 0.25,
+        "title": "베리나 포지션 상향 지시",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "포지셔닝"
+        ],
+        "position_tags": [
+          "FB"
+        ]
+      }
+    ],
+    "u013": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u002",
+        "score": 0.25,
+        "title": "베리나 포지션 상향 지시",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "포지셔닝"
+        ],
+        "position_tags": [
+          "FB"
+        ]
+      }
+    ],
+    "u014": [],
+    "u015": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.8,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      }
+    ],
+    "u016": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u002",
+        "score": 0.25,
+        "title": "베리나 포지션 상향 지시",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "포지셔닝"
+        ],
+        "position_tags": [
+          "FB"
+        ]
+      }
+    ],
+    "u017": [],
+    "u018": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.55,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      }
+    ],
+    "u019": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.4,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      }
+    ],
+    "u020": [],
+    "u021": [],
+    "u022": [],
+    "u023": [],
+    "u024": [],
+    "u025": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.5,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      }
+    ],
+    "u026": [],
+    "u027": [],
+    "u028": [],
+    "u029": [],
+    "u030": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.4,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      },
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u002",
+        "score": 0.25,
+        "title": "베리나 포지션 상향 지시",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "포지셔닝"
+        ],
+        "position_tags": [
+          "FB"
+        ]
+      }
+    ],
+    "u031": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u002",
+        "score": 0.25,
+        "title": "베리나 포지션 상향 지시",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "포지셔닝"
+        ],
+        "position_tags": [
+          "FB"
+        ]
+      }
+    ],
+    "u032": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u002",
+        "score": 0.25,
+        "title": "베리나 포지션 상향 지시",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "포지셔닝"
+        ],
+        "position_tags": [
+          "FB"
+        ]
+      }
+    ],
+    "u033": [],
+    "u034": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.8,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      }
+    ],
+    "u035": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u002",
+        "score": 0.25,
+        "title": "베리나 포지션 상향 지시",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "포지셔닝"
+        ],
+        "position_tags": [
+          "FB"
+        ]
+      }
+    ],
+    "u036": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.5,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      }
+    ],
+    "u037": [],
+    "u038": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.5,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      }
+    ],
+    "u039": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.35,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      },
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u002",
+        "score": 0.25,
+        "title": "베리나 포지션 상향 지시",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "포지셔닝"
+        ],
+        "position_tags": [
+          "FB"
+        ]
+      }
+    ],
+    "u040": [],
+    "u041": [],
+    "u042": [],
+    "u043": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.4,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      }
+    ],
+    "u044": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.4,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      }
+    ],
+    "u045": [],
+    "u046": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.8,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      }
+    ],
+    "u047": [],
+    "u048": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.4,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      },
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u002",
+        "score": 0.25,
+        "title": "베리나 포지션 상향 지시",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "포지셔닝"
+        ],
+        "position_tags": [
+          "FB"
+        ]
+      }
+    ],
+    "u049": [],
+    "u050": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.5,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      }
+    ],
+    "u051": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u001",
+        "score": 0.5,
+        "title": "묶여있을 때 오버래핑 요청",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "빌드업"
+        ],
+        "position_tags": [
+          "MF"
+        ]
+      }
+    ],
+    "u052": [],
+    "u053": [
+      {
+        "uid": "20240103-XkM_tS2Id8Q#u002",
+        "score": 0.25,
+        "title": "베리나 포지션 상향 지시",
+        "date": "2024-01-03",
+        "topic_tags": [
+          "포지셔닝"
+        ],
+        "position_tags": [
+          "FB"
+        ]
+      }
+    ]
+  }
+}

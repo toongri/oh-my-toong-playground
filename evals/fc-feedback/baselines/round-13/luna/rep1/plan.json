@@ -1,0 +1,837 @@
+{
+  "session_title": "신생팀 ATM 경기 분석 피드백",
+  "matches": [
+    {
+      "title": "CLV 5–1 ATM",
+      "topics": [
+        {
+          "title": "볼을 지키고 압박을 빠져나오기",
+          "summary": "초반 장면에서 긴 키핑과 예측 가능한 패스길이 공을 잃는 원인으로 제시됩니다. 공을 받은 뒤 압박을 버티고, 주변 움직임으로 출구를 만들며, 팀의 빌드업 역량에 맞는 전개를 선택하는 피드백을 묶었습니다.",
+          "units": [
+            {
+              "start_line": 6,
+              "end_line": 24,
+              "title": "긴 키핑을 줄이고 가속 타이밍 잡기",
+              "position_tags": [],
+              "topic_tags": [
+                "조작/키사용",
+                "압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c004"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 25,
+              "end_line": 51,
+              "title": "윙이 폭만 유지하지 말고 패스길을 만들기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝",
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c006"
+              ]
+            },
+            {
+              "start_line": 52,
+              "end_line": 78,
+              "title": "공을 되찾은 뒤 나갈 길이 없어 재압박을 받음",
+              "position_tags": [],
+              "topic_tags": [
+                "전환/역습",
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c009"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 79,
+              "end_line": 109,
+              "title": "받기 전 RT를 떼고 짧은 터치로 압박을 벗어나기",
+              "position_tags": [],
+              "topic_tags": [
+                "조작/키사용",
+                "탈압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c012"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 110,
+              "end_line": 156,
+              "title": "뒷공간을 위협해 풀백의 압박을 늦추고 패스길 만들기",
+              "position_tags": [
+                "FW",
+                "MF"
+              ],
+              "topic_tags": [
+                "포지셔닝",
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c016"
+              ]
+            },
+            {
+              "start_line": 157,
+              "end_line": 185,
+              "title": "샘백이 압박에 나서고 미드필더가 함께 조이기",
+              "position_tags": [
+                "FW",
+                "MF"
+              ],
+              "topic_tags": [
+                "압박",
+                "수비라인"
+              ],
+              "member_ids": [
+                "saembaek"
+              ],
+              "key_frame_candidate_ids": [
+                "c020"
+              ]
+            },
+            {
+              "start_line": 186,
+              "end_line": 199,
+              "title": "미드필더가 관람하지 말고 패스길과 상대를 제어하기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "압박",
+                "수비라인"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c022"
+              ]
+            },
+            {
+              "start_line": 200,
+              "end_line": 243,
+              "title": "짧은 빌드업을 감당하기 어렵다면 롱킥 선택하기",
+              "position_tags": [
+                "GK"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c025"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 244,
+              "end_line": 289,
+              "title": "4-3 형태에서 윙이 공간으로 움직여 전진 패스길 만들기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝",
+                "파이널서드"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c029"
+              ]
+            },
+            {
+              "start_line": 290,
+              "end_line": 298,
+              "title": "스로인 상황에서 패스 각도 만들기",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c033"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 299,
+              "end_line": 308,
+              "title": "탈출 경로가 없을 때 공을 길게 보내 위험을 피함",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업",
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c034"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "공간을 만들어 패스와 침투 잇기",
+          "summary": "공격 장면에서는 빈 뒷공간과 중앙의 패스 선택지를 만들고, 수비에서는 맡은 공간을 유지하는 흐름을 다룹니다. 직선으로만 뛰거나 공 쪽으로 쏠리면 패스길이 닫히고 반대 공간이 열린다는 설명이 반복됩니다.",
+          "units": [
+            {
+              "start_line": 309,
+              "end_line": 347,
+              "title": "열린 뒷공간을 공략하고 막히면 바깥 공간에서 멈추기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝",
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c038"
+              ]
+            },
+            {
+              "start_line": 348,
+              "end_line": 398,
+              "title": "수비수를 달고 직선으로 뛰지 말고 공간으로 움직이기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝",
+                "파이널서드"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c042"
+              ]
+            },
+            {
+              "start_line": 399,
+              "end_line": 426,
+              "title": "수비 상황에서 풀백이 자기 공간을 먼저 지키기",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "수비라인",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c046"
+              ]
+            },
+            {
+              "start_line": 427,
+              "end_line": 464,
+              "title": "압박이 없을 때 급히 패스하지 말고 움직임을 확인하기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "탈압박",
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c050"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 465,
+              "end_line": 501,
+              "title": "수비는 공만 쫓지 말고 라인과 반대 공간 지키기",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "수비라인",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c054"
+              ]
+            },
+            {
+              "start_line": 502,
+              "end_line": 534,
+              "title": "받기 전후 패스길을 확인하고 침착하게 판단하기",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업",
+                "탈압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c058"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 535,
+              "end_line": 569,
+              "title": "침투 패스는 공간과 가까운 패서·주자가 필요함",
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "파이널서드"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c061"
+              ]
+            },
+            {
+              "start_line": 570,
+              "end_line": 579,
+              "title": "미드필더가 끝까지 상대를 제어해 실점 기회를 막기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "수비라인",
+                "압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c065"
+              ]
+            },
+            {
+              "start_line": 580,
+              "end_line": 598,
+              "title": "패스길을 보고 버티며 탈출하고, 어렵다면 걷어내기",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "수비라인",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c068"
+              ]
+            },
+            {
+              "start_line": 600,
+              "end_line": 620,
+              "title": "윙은 공을 지키며 동료가 뒷공간에 들어올 시간을 벌기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "탈압박",
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c071"
+              ]
+            },
+            {
+              "start_line": 621,
+              "end_line": 624,
+              "title": "공을 완전히 제어한 뒤 달려들면 제껴질 수 있음",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c074"
+              ]
+            },
+            {
+              "start_line": 625,
+              "end_line": 642,
+              "title": "다음 패스길을 만들고 스트라이커는 뒤쪽 연결도 보기",
+              "position_tags": [
+                "ST",
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c076"
+              ]
+            },
+            {
+              "start_line": 643,
+              "end_line": 671,
+              "title": "압박 없는 쪽으로 공을 지키며 돌아 뛸 동료를 기다리기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "탈압박",
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c079"
+              ]
+            },
+            {
+              "start_line": 672,
+              "end_line": 713,
+              "title": "수비수의 무게중심을 보고 패스하거나 공을 더 끌기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "탈압박",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c083"
+              ]
+            },
+            {
+              "start_line": 714,
+              "end_line": 717,
+              "title": "윙의 측면 돌파만 고집하지 말고 중앙 패스 타이밍 보기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c085"
+              ]
+            },
+            {
+              "start_line": 718,
+              "end_line": 740,
+              "title": "수비수가 공을 뺏으러 쏠리며 뒷공간을 내준 장면",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "수비라인",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c087"
+              ]
+            },
+            {
+              "start_line": 741,
+              "end_line": 760,
+              "title": "압박을 벗어난 뒤 열린 공간으로 빠져나가기",
+              "position_tags": [],
+              "topic_tags": [
+                "탈압박",
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c091"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 761,
+              "end_line": 791,
+              "title": "스트라이커는 직선 침투보다 공간에서 멈춰 받기",
+              "position_tags": [
+                "ST"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "파이널서드"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c094"
+              ]
+            },
+            {
+              "start_line": 792,
+              "end_line": 827,
+              "title": "역습을 늦추지 말고 윙은 패스 순간까지 오프사이드 피하기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c099"
+              ]
+            },
+            {
+              "start_line": 828,
+              "end_line": 869,
+              "title": "역습 수비에서 가장 가까운 선수가 주자를 맡고 라인 맞추기",
+              "position_tags": [
+                "DF",
+                "MF"
+              ],
+              "topic_tags": [
+                "수비라인",
+                "압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c103"
+              ]
+            },
+            {
+              "start_line": 870,
+              "end_line": 880,
+              "title": "공을 끊은 뒤 열린 공간을 보고 역습 전개하기",
+              "position_tags": [],
+              "topic_tags": [
+                "전환/역습",
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c107"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 881,
+              "end_line": 907,
+              "title": "윙은 미리 직선 침투하지 말고 패스길을 확인하기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝",
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c110"
+              ]
+            },
+            {
+              "start_line": 909,
+              "end_line": 930,
+              "title": "공을 잃으면 자기 공간부터 복구하고 패스도 서두르지 않기",
+              "position_tags": [
+                "DF",
+                "MF"
+              ],
+              "topic_tags": [
+                "수비라인",
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c113"
+              ]
+            },
+            {
+              "start_line": 932,
+              "end_line": 987,
+              "title": "전진 출구를 먼저 만들고 한 명은 뒷공간, 한 명은 커버",
+              "position_tags": [
+                "FW",
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c118"
+              ]
+            },
+            {
+              "start_line": 988,
+              "end_line": 1023,
+              "title": "압박을 받으면 각을 열어 탈출하고 뒷공간 움직임 기다리기",
+              "position_tags": [],
+              "topic_tags": [
+                "탈압박",
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c123"
+              ],
+              "addressed_to_all": true
+            }
+          ]
+        },
+        {
+          "title": "수비 전환과 후방 빌드업",
+          "summary": "후방에서 공을 잃을 위험과 압박을 다룹니다. 패스 선택지를 읽고 짧게 연결할 능력이 없다면 롱킥으로 위험을 낮추며, 수비 전환 때는 상대를 무작정 쫓기보다 자기 공간부터 복구하는 지침입니다.",
+          "units": [
+            {
+              "start_line": 1024,
+              "end_line": 1048,
+              "title": "상대의 긴 터치·가까운 공에서 압박하기",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "압박",
+                "수비라인"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c126"
+              ]
+            },
+            {
+              "start_line": 1049,
+              "end_line": 1078,
+              "title": "압박에서 각을 열어 나가고 포위되면 후방 연결 위험 따지기",
+              "position_tags": [
+                "DF",
+                "GK"
+              ],
+              "topic_tags": [
+                "탈압박",
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c130"
+              ]
+            },
+            {
+              "start_line": 1079,
+              "end_line": 1091,
+              "title": "뻔한 첫 패스 대신 두 번째 길과 미니맵 확인하기",
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c134"
+              ]
+            },
+            {
+              "start_line": 1092,
+              "end_line": 1108,
+              "title": "공을 잃으면 달려들기보다 자기 수비 공간부터 복구하기",
+              "position_tags": [
+                "DF",
+                "MF"
+              ],
+              "topic_tags": [
+                "수비라인",
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c136"
+              ]
+            },
+            {
+              "start_line": 1109,
+              "end_line": 1126,
+              "title": "빌드업이 어려우면 롱킥을 찾고 전진 공간을 열기",
+              "position_tags": [
+                "MF",
+                "GK"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c138"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 1127,
+              "end_line": 1140,
+              "title": "재압박으로 자기 공간을 비우지 말고 1대1 버티기",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "수비라인",
+                "압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c140"
+              ]
+            },
+            {
+              "start_line": 1141,
+              "end_line": 1164,
+              "title": "윙의 뒷공간 지원과 침착한 패스 선택이 필요함",
+              "position_tags": [
+                "FW",
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c143"
+              ]
+            },
+            {
+              "start_line": 1165,
+              "end_line": 1191,
+              "title": "3백은 상대 위치에 따라 공간을 맡고 한쪽 쏠림 막기",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "수비라인",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c147"
+              ]
+            },
+            {
+              "start_line": 1192,
+              "end_line": 1201,
+              "title": "압박이 없으면 공을 더 끌며 패스길을 확인하기",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c149"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 1202,
+              "end_line": 1215,
+              "title": "전진 길이 없어 뒤로만 돌리면 상대 압박에 걸림",
+              "position_tags": [
+                "MF",
+                "DF"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c150"
+              ]
+            },
+            {
+              "start_line": 1216,
+              "end_line": 1229,
+              "title": "전개가 지연되는 동안 수비가 다시 정렬됨",
+              "position_tags": [
+                "FW",
+                "MF"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c153"
+              ]
+            },
+            {
+              "start_line": 1230,
+              "end_line": 1251,
+              "title": "공을 먼저 전진시키고 공격 패턴을 이어가기",
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "파이널서드"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c156"
+              ]
+            },
+            {
+              "start_line": 1252,
+              "end_line": 1275,
+              "title": "공을 오래 끌어 사이드로 밀지 말고 중앙 지원 움직임 만들기",
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "파이널서드"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c159"
+              ]
+            },
+            {
+              "start_line": 1276,
+              "end_line": 1296,
+              "title": "윙은 미리 달리지 말고 패스·슈팅 순간까지 오프사이드 피하기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c162"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

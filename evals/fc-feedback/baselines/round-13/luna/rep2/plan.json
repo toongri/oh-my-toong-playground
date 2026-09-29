@@ -1,0 +1,182 @@
+{
+  "session_title": "EAFC24 프로클럽 C.E.F. FC 바르셀로나 연습 피드백 (2024.01.04)",
+  "matches": [
+    {
+      "title": "리그 경기 1 (BRO–FCB)",
+      "topics": [
+        {
+          "title": "공간과 공 보호를 위한 기본 선택",
+          "summary": "넓은 공간으로 패스해 전개하고, LT 조작으로 몸 방향을 유지하는 방법을 설명합니다.",
+          "units": [
+            {
+              "start_line": 12,
+              "end_line": 17,
+              "title": "좁은 곳보다 넓은 공간으로 패스",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": [],
+              "addressed_to_all": true,
+              "key_frame_candidate_ids": ["c004"]
+            },
+            {
+              "start_line": 23,
+              "end_line": 29,
+              "title": "택시가 LT를 누르고 방향을 유지하며 움직이기",
+              "position_tags": [],
+              "topic_tags": ["조작/키사용", "탈압박"],
+              "member_ids": ["taxi"],
+              "addressed_to_all": false,
+              "key_frame_candidate_ids": ["c009"]
+            }
+          ]
+        },
+        {
+          "title": "역습과 전진 전개",
+          "summary": "역습에서는 측면과 중앙의 역할을 나눠 패스 선택지를 만들고, 압박 앞에서 안전한 패스와 전진 패스의 이득을 따져 넓이를 확보합니다.",
+          "units": [
+            {
+              "start_line": 36,
+              "end_line": 51,
+              "title": "역습 때 위치를 나눠 패스 선택지 만들기",
+              "position_tags": ["MF", "FW"],
+              "topic_tags": ["전환/역습", "포지셔닝", "파이널서드"],
+              "member_ids": ["jomin", "find", "rumi", "gipeu", "yumi", "maekgu"],
+              "addressed_to_all": false,
+              "key_frame_candidate_ids": ["c013"]
+            },
+            {
+              "start_line": 55,
+              "end_line": 77,
+              "title": "압박을 받으면 뒤로 내주고 샘백을 활용",
+              "position_tags": ["CM", "ST", "FW"],
+              "topic_tags": ["탈압박", "빌드업", "조작/키사용"],
+              "member_ids": ["gerrard", "timej", "saembaek"],
+              "addressed_to_all": false,
+              "key_frame_candidate_ids": ["c017", "c018"]
+            },
+            {
+              "start_line": 79,
+              "end_line": 97,
+              "title": "공을 더 몰고 가 수비를 끌어낸 뒤 연결",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "탈압박", "전환/역습"],
+              "member_ids": [],
+              "addressed_to_all": true,
+              "key_frame_candidate_ids": ["c022"]
+            },
+            {
+              "start_line": 98,
+              "end_line": 99,
+              "title": "공격에서 폭을 넓게 쓰기",
+              "position_tags": [],
+              "topic_tags": ["포지셔닝", "빌드업"],
+              "member_ids": [],
+              "addressed_to_all": true,
+              "key_frame_candidate_ids": ["c024"]
+            },
+            {
+              "start_line": 104,
+              "end_line": 120,
+              "title": "중앙이 막히면 넓은 공간으로 연결",
+              "position_tags": ["CM", "FW"],
+              "topic_tags": ["파이널서드", "크로스", "빌드업"],
+              "member_ids": ["gerrard", "jonjae"],
+              "addressed_to_all": false,
+              "key_frame_candidate_ids": ["c031"]
+            }
+          ]
+        },
+        {
+          "title": "측면 전진과 역할 이동",
+          "summary": "원전이 측면으로 올라갈 때 사인드가 중앙으로 이동하고, TIMEJ는 뒤에서 중간 공간을 메우는 움직임을 설명합니다. 이 전개는 골로 이어집니다.",
+          "units": [
+            {
+              "start_line": 121,
+              "end_line": 134,
+              "title": "원전이 전진할 때 사인드의 중앙 이동",
+              "position_tags": ["FB", "FW"],
+              "topic_tags": ["포지셔닝", "전환/역습", "파이널서드"],
+              "member_ids": ["find", "wonjeon"],
+              "addressed_to_all": false,
+              "key_frame_candidate_ids": ["c033"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "리그 경기 2 (BRO–FCB)",
+      "topics": [
+        {
+          "title": "대각 패스로 전방 지원",
+          "summary": "측면에서 대각으로 연결해 중원이 넓은 공간으로 뛰는 선수를 볼 여유를 만드는 장면을 짚습니다.",
+          "units": [
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "대각 패스로 넓은 공간의 전방 주자 보기",
+              "position_tags": ["CAM"],
+              "topic_tags": ["빌드업", "파이널서드", "포지셔닝"],
+              "member_ids": ["spress"],
+              "addressed_to_all": false,
+              "key_frame_candidate_ids": ["c039"]
+            }
+          ]
+        },
+        {
+          "title": "수비 판단과 밀집 수비 대응",
+          "summary": "태클 시도로 페널티를 허용한 장면을 짚고, 상대 수비가 촘촘할 때는 공격을 밀어붙이지 말고 뒤로 빼라고 합니다.",
+          "units": [
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "태클 시도 뒤 페널티 허용",
+              "position_tags": ["FB"],
+              "topic_tags": ["압박", "수비라인"],
+              "member_ids": ["wonjeon"],
+              "addressed_to_all": false,
+              "key_frame_candidate_ids": ["c042"]
+            },
+            {
+              "start_line": 158,
+              "end_line": 160,
+              "title": "상대 수비가 촘촘하면 뒤로 빼기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": [],
+              "addressed_to_all": true,
+              "key_frame_candidate_ids": ["c043"]
+            }
+          ]
+        },
+        {
+          "title": "패스 종류와 돌파 대안",
+          "summary": "받는 사람이 공이 오는 속도를 살릴 수 있도록 땅볼 패스를 우선하고, 돌파 공간이 없으면 뒤로 안전하게 살리는 선택을 정리합니다.",
+          "units": [
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "하프에 공을 넣을 때 패스 높이 선택",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "파이널서드"],
+              "member_ids": [],
+              "addressed_to_all": true,
+              "key_frame_candidate_ids": ["c045"]
+            },
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "돌파가 막히면 뒤로 살려 전개 다양화",
+              "position_tags": ["FW"],
+              "topic_tags": ["탈압박", "빌드업", "포지셔닝"],
+              "member_ids": ["maekgu"],
+              "addressed_to_all": false,
+              "key_frame_candidate_ids": ["c046"]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

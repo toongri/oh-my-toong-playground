@@ -1,0 +1,37 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA SPORTS FC의 땅볼, 스루, 띄운 패스 용도와 패스 길 선택을 설명한다.",
+      "key_points_ko": ["가까운 동료에게 열린 길이 있으면 땅볼 패스를 사용한다.", "수비수가 땅볼 패스 길을 막을 때는 띄운 스루패스를 고려한다."],
+      "translations": [],
+      "unit_ids": ["u001", "u007", "u012"]
+    },
+    {
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "title": "How to coach passing in football",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "압박을 받자마자 공을 넘기기보다 공을 운반해 더 나은 패스 각도를 만들 수 있으며, 주는 선수와 받는 선수의 위치와 몸 방향이 선택지에 영향을 준다고 설명한다.",
+      "key_points_ko": ["공을 더 보유하고 전진해 패스 가능성을 넓힐 수 있다.", "패서와 수신자의 위치, 몸 방향을 함께 본다."],
+      "translations": [],
+      "unit_ids": ["u001", "u004", "u006", "u009", "u011", "u013"]
+    },
+    {
+      "url": "https://community.thefa.com/coaching/b/insights-analysis-blogs/posts/two-player-connections-in-wide-areas",
+      "title": "Two player connections in wide areas",
+      "source_name": "England Football Learning",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "측면에서 두 선수가 패스, 대각 움직임, 오버랩으로 연결되는 여러 방식을 경기 사례로 설명한다.",
+      "key_points_ko": ["측면의 연결에는 대각 침투와 오버랩 등 여러 움직임이 있다.", "측면 선수의 움직임이 중앙의 공간과 패스 선택지에 영향을 준다."],
+      "translations": [],
+      "unit_ids": ["u003", "u008", "u013"]
+    }
+  ]
+}

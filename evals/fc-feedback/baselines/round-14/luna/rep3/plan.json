@@ -1,0 +1,191 @@
+{
+  "session_title": "C.E.F. FC Barcelona 팀 연습 경기 피드백",
+  "matches": [
+    {
+      "title": "C.E.F. Barcelona vs Tottenham",
+      "topics": [
+        {
+          "title": "빈 공간으로 패스하고 LT로 방향 유지하기",
+          "summary": "좁은 공간의 선수보다 넓은 공간의 선수를 찾아 연결하고, 공이 없는 선수는 전진할 시간을 얻도록 한다. 공을 받을 때 LT를 활용해 동작한 사람을 바라보며 움직이는 조작도 설명한다.",
+          "units": [
+            {
+              "start_line": 4,
+              "end_line": 19,
+              "title": "넓은 공간의 선수에게 연결",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": ["bride"],
+              "key_frame_candidate_ids": ["c003"],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 22,
+              "end_line": 29,
+              "title": "LT를 눌러 동작한 사람을 바라보며 움직이기",
+              "position_tags": [],
+              "topic_tags": ["조작/키사용"],
+              "member_ids": ["taxi"],
+              "key_frame_candidate_ids": ["c009"],
+              "addressed_to_all": true
+            }
+          ]
+        },
+        {
+          "title": "역습에서 역할과 지원 동선",
+          "summary": "역습에서는 사인드가 낮게 내려오면 루미가 윙어 역할을 맡고, 기프가 TIMEJ나 유미를 선택해 전개를 돕는다. 별도 장면에서는 압박을 받자 뒤로 내주고 다시 받으라고 하며, 또 다른 장면에서는 공을 운반해 수비를 끌고 동료가 올라올 시간을 벌어야 한다고 한다. 폭을 넓히는 플레이도 필요하다.",
+          "units": [
+            {
+              "start_line": 36,
+              "end_line": 50,
+              "title": "낮은 사인드 뒤에서 루미가 윙어 역할 맡기",
+              "position_tags": ["FW"],
+              "topic_tags": ["전환/역습", "포지셔닝"],
+              "member_ids": ["jomin", "find", "rumi", "gipeu", "yumi"],
+              "key_frame_candidate_ids": ["c013"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 55,
+              "end_line": 75,
+              "title": "전진이 막힐 때 뒤로 내주고 탈압박",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "탈압박"],
+              "member_ids": ["gerrard", "saembaek"],
+              "key_frame_candidate_ids": ["c017"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 78,
+              "end_line": 78,
+              "title": "루미가 멈춘 장면",
+              "position_tags": [],
+              "topic_tags": ["전환/역습", "포지셔닝"],
+              "member_ids": ["rumi"],
+              "key_frame_candidate_ids": ["c053"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 79,
+              "end_line": 97,
+              "title": "공을 운반해 수비를 끌고 동료가 올라올 시간 확보",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "전환/역습"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c021"],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 98,
+              "end_line": 99,
+              "title": "상하로 넓게 벌려 전개",
+              "position_tags": [],
+              "topic_tags": ["포지셔닝"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c024"],
+              "addressed_to_all": true
+            }
+          ]
+        },
+        {
+          "title": "전환 패스와 넓은 공간 활용",
+          "summary": "공을 받을 선수와 넓은 공간으로 나가는 선수를 연결하고, 측면과 대각 전개로 크로스나 컷백을 선택할 수 있도록 한다.",
+          "units": [
+            {
+              "start_line": 104,
+              "end_line": 120,
+              "title": "Gerrard_CEF에게 연결해 존재가 넓은 공간 활용",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "전환/역습", "크로스"],
+              "member_ids": ["giseun", "gerrard", "jonjae"],
+              "key_frame_candidate_ids": ["c031"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 121,
+              "end_line": 134,
+              "title": "원전의 전진에 맞춰 사인드가 중앙으로 이동",
+              "position_tags": [],
+              "topic_tags": ["포지셔닝", "파이널서드"],
+              "member_ids": ["find", "wonjeon"],
+              "key_frame_candidate_ids": ["c033"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "대각 패스로 전진하는 선수를 보기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "전환/역습"],
+              "member_ids": ["spress"],
+              "key_frame_candidate_ids": ["c039"],
+              "addressed_to_all": true
+            }
+          ]
+        },
+        {
+          "title": "압박과 밀집 수비 대응",
+          "summary": "볼을 빼앗으려는 압박 뒤 페널티가 나온 장면을 짚고, 상대 수비가 촘촘하면 공격을 밀어붙이지 말고 뒤로 연결한다. 패스는 땅으로 줄 수 있을 때 땅볼을 우선한다.",
+          "units": [
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "볼을 뺏으려 한 뒤 페널티 상황 발생",
+              "position_tags": [],
+              "topic_tags": ["압박"],
+              "member_ids": ["wonjeon"],
+              "key_frame_candidate_ids": ["c042"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 158,
+              "end_line": 162,
+              "title": "상대 수비가 촘촘하면 뒤로 빼기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "압박"],
+              "member_ids": ["find", "rumi"],
+              "key_frame_candidate_ids": ["c043"],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "상황에 맞게 땅볼과 띄운 패스 선택",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "전환/역습"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c045"],
+              "addressed_to_all": true
+            }
+          ]
+        },
+        {
+          "title": "개인 돌파와 경기 총평",
+          "summary": "막힌 상황에서 같은 개인 돌파를 반복하기보다 뒤로 연결해 지원 플레이를 활용한다. 총평에서는 대각 패스를 봐야 할 때 놓치는 점과 수비 밀집 시 망설임 없이 뒤로 빼는 선택을 되짚는다.",
+          "units": [
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "맥구가 막혔을 때 뒤로 연결하고 오버래핑 활용",
+              "position_tags": [],
+              "topic_tags": ["포지셔닝", "빌드업"],
+              "member_ids": ["maekgu"],
+              "key_frame_candidate_ids": ["c046"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 183,
+              "end_line": 187,
+              "title": "대각 선택과 수비 밀집 시 후방 연결을 되짚기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": [],
+              "key_frame_candidate_ids": [],
+              "addressed_to_all": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

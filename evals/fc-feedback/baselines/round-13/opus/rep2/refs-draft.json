@@ -1,0 +1,54 @@
+{
+  "refs": [
+    {
+      "url": "https://www.oneesports.gg/gaming/best-ea-fc-24-defending-tips-defenders/",
+      "title": "Best EA FC 24 defending tips to protect your goal with style",
+      "source_name": "ONE Esports",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA FC 24 수비 팁 모음입니다. 페널티 박스 안에서는 타이밍을 잘못 맞추면 페널티를 줄 위험이 크니 스탠딩 태클을 피하라고 권합니다. L2/LT로 하는 조킹(jockey)도 다룹니다.",
+      "key_points_ko": [
+        "페널티 박스 안에서는 스탠딩 태클을 피한다. 타이밍이 어긋나면 페널티를 줄 위험이 크다.",
+        "L2/LT를 누르고 있으면 상대가 공을 가졌을 때 수비수가 공 가까이 붙어 따라간다(조킹)."
+      ],
+      "translations": [
+        { "orig": "Avoid standing tackles within the penalty area because there's a high risk of getting a penalty if you time it wrong.", "ko": "타이밍을 잘못 맞추면 페널티를 줄 위험이 크니 페널티 박스 안에서는 스탠딩 태클을 피하세요." },
+        { "orig": "Jockeying by holding L2/LT will make your players keep close to the ball whenever your opponent has it.", "ko": "L2/LT를 누르고 조킹하면 상대가 공을 가졌을 때 선수가 공 가까이 붙어 있게 됩니다." }
+      ],
+      "unit_ids": ["u011"]
+    },
+    {
+      "url": "https://footballgpt.co/guides/coaching-switch-play-maximise-width-create-chances",
+      "title": "Coach switching play from pressure and space",
+      "source_name": "FootballGPT",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "전환 패스(스위칭)를 언제 쓰는지 다루는 코칭 가이드입니다. 상대 수비가 공 주변으로 몰렸고 반대편에서 안전하게 받을 수 있을 때가 스위칭할 때이며, 폭(width)을 넓게 써야 전환이 효과를 낸다고 설명합니다.",
+      "key_points_ko": [
+        "스위칭은 단순한 롱패스가 아니다. 상대가 막은 곳을 보고 다음에 어디로 플레이할지 정하는 대응이다.",
+        "수비가 공 주변으로 몰리고 반대편이 열려 있을 때 전환한다.",
+        "폭을 넓게 써야 전환할 공간이 생긴다."
+      ],
+      "translations": [
+        { "orig": "Switching play is not simply hitting a long pass from one side to the other. It is a response to what the opposition has taken away and where the team can play next.", "ko": "스위칭은 한쪽에서 반대쪽으로 롱패스를 차는 것만이 아닙니다. 상대가 무엇을 막았는지, 팀이 다음에 어디로 플레이할 수 있는지에 대한 대응입니다." }
+      ],
+      "unit_ids": ["u008"]
+    },
+    {
+      "url": "https://www.sportplan.net/drills/Football/Passing-and-Receiving/Lofted-pass-rak10.jsp",
+      "title": "Football: Lofted pass",
+      "source_name": "Sportplan",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "띄우는 패스(로브 패스) 훈련 자료입니다. 띄우는 패스는 위험하고 쉽게 차단되니 가능하면 쉬운 선택인 땅볼 패스를 쓰라고 권합니다. 띄우는 패스는 걷어내기, 전환, 수비 뒤로 넘기기에 쓴다고 설명합니다.",
+      "key_points_ko": [
+        "띄우는 패스는 위험하고 쉽게 차단된다. 가능하면 땅으로 준다.",
+        "띄우는 패스는 걷어내기, 반대쪽 전환, 수비 라인 뒤로 넘길 때 유용하다."
+      ],
+      "translations": [
+        { "orig": "Lofted passes can be risky and easily intercepted. Where possible players should look to use the easy option and pass along the floor.", "ko": "띄우는 패스는 위험하고 쉽게 차단될 수 있습니다. 가능하면 쉬운 선택인 땅볼 패스를 쓰세요." }
+      ],
+      "unit_ids": ["u013"]
+    }
+  ]
+}

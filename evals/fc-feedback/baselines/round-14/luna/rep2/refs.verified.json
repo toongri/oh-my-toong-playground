@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T13:38:48.357Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u001",
+        "u008",
+        "u010",
+        "u012",
+        "u013"
+      ],
+      "summary_ko": "EA 공식 패스 가이드는 동료의 움직임과 공간, 패스 통로를 기준으로 그라운드 패스·스루 패스·로브 패스·크로스를 고르는 방법을 설명합니다.",
+      "key_points_ko": [
+        "가까운 동료에게 통로가 열려 있을 때는 그라운드 패스를 사용합니다.",
+        "수비 사이의 열린 통로를 찾고, 막힌 통로로 억지 패스를 보내지 않습니다.",
+        "측면에서는 페널티 구역 안팎의 동료를 향해 크로스할 수 있습니다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T13:03:52.533Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u004",
+        "u010",
+        "u012",
+        "u013"
+      ],
+      "summary_ko": "EA의 패스 가이드는 짧은 패스, 침투 패스, 로빙 패스의 사용 상황과 열린 패스 길을 찾는 방법을 설명합니다.",
+      "key_points_ko": [
+        "수비수 사이에 열린 패스 길이 없으면 억지로 패스하지 말고 열린 길을 찾으라고 안내합니다.",
+        "받는 선수가 달려가는 공간에 침투 패스를 보내고, 상황에 따라 땅볼·로빙 패스를 선택하도록 설명합니다."
+      ]
+    },
+    {
+      "id": "r-d5e207716b",
+      "url": "https://www.ea.com/games/ea-sports-fc/amp/news/fc-24-gameplay-deepdive",
+      "final_url": "https://www.ea.com/games/ea-sports-fc/amp/news/fc-24-gameplay-deepdive",
+      "http_status": 200,
+      "checked_at": "2026-09-29T13:03:52.687Z",
+      "reused": false,
+      "page": "refs/r-d5e207716b.html",
+      "title": "EA SPORTS FC™ 24 | Pitch Notes - Gameplay Deep Dive",
+      "source_name": "EA SPORTS FC",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u002"
+      ],
+      "summary_ko": "EA SPORTS FC 24 게임플레이 설명은 LT/L2를 이용한 볼 보호와 상대를 밀어내는 조작을 소개합니다.",
+      "key_points_ko": [
+        "LT/L2를 눌러 Shield Pushback을 요청하고, LT/L2를 누른 상태에서 공을 보호하는 기능을 설명합니다."
+      ]
+    },
+    {
+      "id": "r-09c0cd1231",
+      "url": "https://www.ea.com/games/ea-sports-fc/fc-pro/news/play-like-huge-gorilla",
+      "final_url": "https://www.ea.com/games/ea-sports-fc/fc-pro/news/play-like-huge-gorilla",
+      "http_status": 200,
+      "checked_at": "2026-09-29T13:03:53.828Z",
+      "reused": false,
+      "page": "refs/r-09c0cd1231.html",
+      "title": "Play like Huge Gorilla - FC Pro",
+      "source_name": "EA SPORTS FC Pro",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u007",
+        "u009",
+        "u014"
+      ],
+      "summary_ko": "FC Pro 전술 사례는 FC24에서 풀백의 오버랩 지시를 활용해 공격 전진 구역과 전방 연결에 참여시키는 방식을 소개합니다.",
+      "key_points_ko": [
+        "소개된 전술은 왼쪽 풀백을 균형 및 오버랩으로 두어 전진 구역에서 공격에 참여하고 전방 선수들과 연결하게 합니다."
+      ]
+    }
+  ],
+  "dropped": []
+}

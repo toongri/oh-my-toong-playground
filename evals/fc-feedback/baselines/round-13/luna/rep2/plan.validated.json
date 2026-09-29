@@ -1,0 +1,374 @@
+{
+  "version": 1,
+  "session_title": "EAFC24 프로클럽 C.E.F. FC 바르셀로나 연습 피드백 (2024.01.04)",
+  "matches": [
+    {
+      "id": "m1",
+      "title": "리그 경기 1 (BRO–FCB)",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "공간과 공 보호를 위한 기본 선택",
+          "summary": "넓은 공간으로 패스해 전개하고, LT 조작으로 몸 방향을 유지하는 방법을 설명합니다.",
+          "unit_ids": [
+            "u001",
+            "u002"
+          ]
+        },
+        {
+          "id": "m1-t2",
+          "title": "역습과 전진 전개",
+          "summary": "역습에서는 측면과 중앙의 역할을 나눠 패스 선택지를 만들고, 압박 앞에서 안전한 패스와 전진 패스의 이득을 따져 넓이를 확보합니다.",
+          "unit_ids": [
+            "u003",
+            "u004",
+            "u005",
+            "u006",
+            "u007"
+          ]
+        },
+        {
+          "id": "m1-t3",
+          "title": "측면 전진과 역할 이동",
+          "summary": "원전이 측면으로 올라갈 때 사인드가 중앙으로 이동하고, TIMEJ는 뒤에서 중간 공간을 메우는 움직임을 설명합니다. 이 전개는 골로 이어집니다.",
+          "unit_ids": [
+            "u008"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "m2",
+      "title": "리그 경기 2 (BRO–FCB)",
+      "topics": [
+        {
+          "id": "m2-t1",
+          "title": "대각 패스로 전방 지원",
+          "summary": "측면에서 대각으로 연결해 중원이 넓은 공간으로 뛰는 선수를 볼 여유를 만드는 장면을 짚습니다.",
+          "unit_ids": [
+            "u009"
+          ]
+        },
+        {
+          "id": "m2-t2",
+          "title": "수비 판단과 밀집 수비 대응",
+          "summary": "태클 시도로 페널티를 허용한 장면을 짚고, 상대 수비가 촘촘할 때는 공격을 밀어붙이지 말고 뒤로 빼라고 합니다.",
+          "unit_ids": [
+            "u010",
+            "u011"
+          ]
+        },
+        {
+          "id": "m2-t3",
+          "title": "패스 종류와 돌파 대안",
+          "summary": "받는 사람이 공이 오는 속도를 살릴 수 있도록 땅볼 패스를 우선하고, 돌파 공간이 없으면 뒤로 안전하게 살리는 선택을 정리합니다.",
+          "unit_ids": [
+            "u012",
+            "u013"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 79.06,
+      "end": 95.4,
+      "title": "좁은 곳보다 넓은 공간으로 패스",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c004"
+      ],
+      "addressed_to_all": true
+    },
+    {
+      "id": "u002",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 228.92,
+      "end": 255.12,
+      "title": "택시가 LT를 누르고 방향을 유지하며 움직이기",
+      "position_tags": [],
+      "topic_tags": [
+        "조작/키사용",
+        "탈압박"
+      ],
+      "member_ids": [
+        "taxi"
+      ],
+      "key_frame_candidate_ids": [
+        "c009"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u003",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 344.68,
+      "end": 402.72,
+      "title": "역습 때 위치를 나눠 패스 선택지 만들기",
+      "position_tags": [
+        "MF",
+        "FW"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝",
+        "파이널서드"
+      ],
+      "member_ids": [
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "maekgu"
+      ],
+      "key_frame_candidate_ids": [
+        "c013"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u004",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 463.08000000000004,
+      "end": 526.78,
+      "title": "압박을 받으면 뒤로 내주고 샘백을 활용",
+      "position_tags": [
+        "CM",
+        "ST",
+        "FW"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업",
+        "조작/키사용"
+      ],
+      "member_ids": [
+        "gerrard",
+        "timej",
+        "saembaek"
+      ],
+      "key_frame_candidate_ids": [
+        "c017",
+        "c018"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u005",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 579.9399999999999,
+      "end": 658.94,
+      "title": "공을 더 몰고 가 수비를 끌어낸 뒤 연결",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "탈압박",
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c022"
+      ],
+      "addressed_to_all": true
+    },
+    {
+      "id": "u006",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 694.54,
+      "end": 699.54,
+      "title": "공격에서 폭을 넓게 쓰기",
+      "position_tags": [],
+      "topic_tags": [
+        "포지셔닝",
+        "빌드업"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c024"
+      ],
+      "addressed_to_all": true
+    },
+    {
+      "id": "u007",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 791.0999999999999,
+      "end": 838.74,
+      "title": "중앙이 막히면 넓은 공간으로 연결",
+      "position_tags": [
+        "CM",
+        "FW"
+      ],
+      "topic_tags": [
+        "파이널서드",
+        "크로스",
+        "빌드업"
+      ],
+      "member_ids": [
+        "gerrard",
+        "jonjae"
+      ],
+      "key_frame_candidate_ids": [
+        "c031"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u008",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 857.4799999999999,
+      "end": 913.88,
+      "title": "원전이 전진할 때 사인드의 중앙 이동",
+      "position_tags": [
+        "FB",
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "전환/역습",
+        "파이널서드"
+      ],
+      "member_ids": [
+        "find",
+        "wonjeon"
+      ],
+      "key_frame_candidate_ids": [
+        "c033"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u009",
+      "match_id": "m2",
+      "topic_id": "m2-t1",
+      "video": "NUzEChn9EyI",
+      "start": 1071.64,
+      "end": 1104.5,
+      "title": "대각 패스로 넓은 공간의 전방 주자 보기",
+      "position_tags": [
+        "CAM"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "파이널서드",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "spress"
+      ],
+      "key_frame_candidate_ids": [
+        "c039"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u010",
+      "match_id": "m2",
+      "topic_id": "m2-t2",
+      "video": "NUzEChn9EyI",
+      "start": 1128.4599999999998,
+      "end": 1139.04,
+      "title": "태클 시도 뒤 페널티 허용",
+      "position_tags": [
+        "FB"
+      ],
+      "topic_tags": [
+        "압박",
+        "수비라인"
+      ],
+      "member_ids": [
+        "wonjeon"
+      ],
+      "key_frame_candidate_ids": [
+        "c042"
+      ],
+      "addressed_to_all": false
+    },
+    {
+      "id": "u011",
+      "match_id": "m2",
+      "topic_id": "m2-t2",
+      "video": "NUzEChn9EyI",
+      "start": 1155.22,
+      "end": 1178.12,
+      "title": "상대 수비가 촘촘하면 뒤로 빼기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c043"
+      ],
+      "addressed_to_all": true
+    },
+    {
+      "id": "u012",
+      "match_id": "m2",
+      "topic_id": "m2-t3",
+      "video": "NUzEChn9EyI",
+      "start": 1225.22,
+      "end": 1254.74,
+      "title": "하프에 공을 넣을 때 패스 높이 선택",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c045"
+      ],
+      "addressed_to_all": true
+    },
+    {
+      "id": "u013",
+      "match_id": "m2",
+      "topic_id": "m2-t3",
+      "video": "NUzEChn9EyI",
+      "start": 1258.6599999999999,
+      "end": 1305.48,
+      "title": "돌파가 막히면 뒤로 살려 전개 다양화",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "maekgu"
+      ],
+      "key_frame_candidate_ids": [
+        "c046"
+      ],
+      "addressed_to_all": false
+    }
+  ]
+}
