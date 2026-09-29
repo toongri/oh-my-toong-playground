@@ -163,9 +163,8 @@ describe("notes v2 작성 규칙(품질 핵심)", () => {
 		expect(skillMd).toContain("두괄식");
 	});
 
-	test("볼드는 다음 행동에만 쓰고 평가·결과는 평문으로 쓴다는 규칙이 있다", () => {
-		expect(skillMd).toContain('볼드는 다음에 할 **행동**("~하기", "~한다")에만 쓴다');
-		expect(skillMd).toContain("평가·결과를 평문으로");
+	test("볼드는 핵심 행동 하나에만 쓴다는 규칙이 있다", () => {
+		expect(skillMd).toContain("볼드는 그 문장의 핵심 행동/대상 하나에만 쓴다");
 	});
 
 	test("프레임 캡션은 실제로 보이는 것만 쓴다는 규칙이 있다", () => {
