@@ -28,9 +28,7 @@
       "position_tags": [
         "MF"
       ],
-      "member_ids": [
-        "taxi"
-      ]
+      "member_ids": []
     },
     {
       "start_line": 36,
@@ -49,7 +47,6 @@
         "find",
         "rumi",
         "gipeu",
-        "yumi",
         "maekgu"
       ]
     },
@@ -64,11 +61,10 @@
       ],
       "position_tags": [
         "CM",
-        "FW"
+        "CB"
       ],
       "member_ids": [
-        "gerrard",
-        "saembaek"
+        "gerrard"
       ]
     },
     {
