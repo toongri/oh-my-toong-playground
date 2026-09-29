@@ -857,10 +857,11 @@ function extractClaudeCommandExecutions(jsonlText: string): CommandExecutionEven
 	const { toolUses, resultsByToolUseId } = parseClaudeToolEvents(jsonlText);
 	const events: CommandExecutionEvent[] = [];
 	for (const toolUse of toolUses) {
+		const rawCommand = toolUse.input["command"];
 		const command =
 			toolUse.name === "Bash"
-				? typeof toolUse.input["command"] === "string"
-					? (toolUse.input["command"] as string)
+				? typeof rawCommand === "string"
+					? rawCommand
 					: null
 				: claudeReadLikeCommand(toolUse.name, toolUse.input);
 		if (command === null) continue;
