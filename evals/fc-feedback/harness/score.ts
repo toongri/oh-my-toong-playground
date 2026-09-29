@@ -25,8 +25,8 @@
  *   refs-draft.json      — this run's authored refs (url, lang, summary_ko, ...)
  *   refs.verified.json   — refs-draft augmented with http_status by verify-refs
  * Reads from <run-dir> directly:
- *   run.jsonl            — codex `--json` event stream (see extractCommandExecutions/
- *                           parseRunEvents below)
+ *   run.jsonl            — codex `--json` event stream, or Claude Code's `stream-json`
+ *                           (see extractCommandExecutions/extractWebResultTexts below)
  * Reads from the path given via --judge:
  *   judge.md             — presentation-reviewer output; last line must be
  *                           "SCORE specificity=<0-15> fidelity=<0-15> readability=<0-10>"
@@ -215,7 +215,18 @@ function readPredictedUnits(workDir: string): PredictedUnit[] {
 	});
 }
 
-// ── unit matching: greedy one-to-one by smallest |Δstart|, same video, ±15s ─
+// ── unit matching: maximum-cardinality bipartite match, same video, ±15s ────
+//
+// A pure greedy-by-smallest-delta assignment can strand matchable pairs: gold starts
+// [0, 14] vs predicted [10, 24] at tolerance 15 greedily takes 14↔10 (Δ4, the smallest
+// delta) and leaves 0 and 24 unmatched, even though 0↔10 + 14↔24 matches BOTH. Maximizing
+// match COUNT is the actual goal (plan §14.3's unit F1 wants every matchable pair
+// credited); minimizing total |Δ| only breaks ties among matchings that already tie on
+// count. Solved as a min-cost assignment problem (Hungarian algorithm): an eligible pair
+// costs its |Δ|, and every ineligible or padding pair costs a constant strictly greater
+// than the sum of all eligible deltas — so the optimal assignment always prefers one more
+// eligible pair over any amount of delta saved elsewhere, and only falls back to fewer
+// eligible pairs when no larger matching exists.
 
 export interface UnitMatch {
 	gold: GoldUnit;
@@ -229,38 +240,106 @@ export interface MatchResult {
 	totalPredicted: number;
 }
 
+/** Solves the square minimum-cost assignment problem (Kuhn–Munkres / Hungarian algorithm,
+ * O(n^3)) — returns, for each row, the 0-indexed column it's assigned to. `cost` must be an
+ * n×n matrix. Standard textbook formulation (1-indexed internally, 0 as the "no row/column
+ * yet" sentinel); sizes here are small (≤ ~30 gold units per video), so O(n^3) is fine. */
+function solveAssignment(cost: readonly (readonly number[])[]): number[] {
+	const n = cost.length;
+	const INF = Number.POSITIVE_INFINITY;
+	const u = new Array(n + 1).fill(0);
+	const v = new Array(n + 1).fill(0);
+	const rowOfCol = new Array(n + 1).fill(0); // rowOfCol[j] = 1-indexed row assigned to column j (0 = free)
+	const parentCol = new Array(n + 1).fill(0); // parentCol[j] = previous column on the augmenting path to j
+	for (let row = 1; row <= n; row++) {
+		rowOfCol[0] = row;
+		let col0 = 0;
+		const minCostToCol = new Array(n + 1).fill(INF);
+		const visited = new Array(n + 1).fill(false);
+		do {
+			visited[col0] = true;
+			const curRow = rowOfCol[col0];
+			let delta = INF;
+			let nextCol = -1;
+			for (let col = 1; col <= n; col++) {
+				if (visited[col]) continue;
+				const reduced = cost[curRow - 1][col - 1] - u[curRow] - v[col];
+				if (reduced < minCostToCol[col]) {
+					minCostToCol[col] = reduced;
+					parentCol[col] = col0;
+				}
+				if (minCostToCol[col] < delta) {
+					delta = minCostToCol[col];
+					nextCol = col;
+				}
+			}
+			for (let col = 0; col <= n; col++) {
+				if (visited[col]) {
+					u[rowOfCol[col]] += delta;
+					v[col] -= delta;
+				} else {
+					minCostToCol[col] -= delta;
+				}
+			}
+			col0 = nextCol;
+		} while (rowOfCol[col0] !== 0);
+		// Walk the augmenting path back to the root, reassigning each column on the way.
+		while (col0 !== 0) {
+			const parent = parentCol[col0];
+			rowOfCol[col0] = rowOfCol[parent];
+			col0 = parent;
+		}
+	}
+	const colOfRow = new Array(n).fill(-1);
+	for (let col = 1; col <= n; col++) {
+		if (rowOfCol[col] > 0) colOfRow[rowOfCol[col] - 1] = col - 1;
+	}
+	return colOfRow;
+}
+
 export function matchUnits(
 	gold: Gold,
 	predicted: readonly PredictedUnit[],
 	toleranceS = 15,
 ): MatchResult {
 	const candidates = predicted.filter((unit) => unit.video === gold.video);
-	const pairs: Array<{ goldIndex: number; predIndex: number; deltaS: number }> = [];
-	gold.units.forEach((goldUnit, goldIndex) => {
-		candidates.forEach((predUnit, predIndex) => {
-			const deltaS = Math.abs(predUnit.start - goldUnit.start);
-			if (deltaS <= toleranceS) pairs.push({ goldIndex, predIndex, deltaS });
-		});
-	});
-	// Deterministic tie-break: smallest delta first, then earliest gold/predicted index.
-	pairs.sort(
-		(a, b) => a.deltaS - b.deltaS || a.goldIndex - b.goldIndex || a.predIndex - b.predIndex,
-	);
+	const goldUnits = gold.units;
+	const size = Math.max(goldUnits.length, candidates.length);
+	if (size === 0) return { matches: [], totalGold: 0, totalPredicted: 0 };
 
-	const usedGold = new Set<number>();
-	const usedPred = new Set<number>();
-	const matches: UnitMatch[] = [];
-	for (const pair of pairs) {
-		if (usedGold.has(pair.goldIndex) || usedPred.has(pair.predIndex)) continue;
-		usedGold.add(pair.goldIndex);
-		usedPred.add(pair.predIndex);
-		matches.push({
-			gold: gold.units[pair.goldIndex],
-			predicted: candidates[pair.predIndex],
-			deltaS: pair.deltaS,
-		});
+	const deltaAt: number[][] = goldUnits.map((goldUnit) =>
+		candidates.map((predUnit) => Math.abs(predUnit.start - goldUnit.start)),
+	);
+	let eligibleDeltaSum = 0;
+	for (const row of deltaAt) {
+		for (const deltaS of row) {
+			if (deltaS <= toleranceS) eligibleDeltaSum += deltaS;
+		}
 	}
-	return { matches, totalGold: gold.units.length, totalPredicted: candidates.length };
+	// Strictly greater than any achievable sum of eligible deltas, so trading one eligible
+	// match for a padding/ineligible slot never lowers the total cost.
+	const ineligibleCost = eligibleDeltaSum + 1;
+
+	const cost: number[][] = [];
+	for (let i = 0; i < size; i++) {
+		const row: number[] = [];
+		for (let j = 0; j < size; j++) {
+			const eligible = i < goldUnits.length && j < candidates.length && deltaAt[i][j] <= toleranceS;
+			row.push(eligible ? deltaAt[i][j] : ineligibleCost);
+		}
+		cost.push(row);
+	}
+	const assignedCol = solveAssignment(cost);
+
+	// Iterating gold indices in ascending order keeps `matches` ordered by gold index.
+	const matches: UnitMatch[] = [];
+	for (let i = 0; i < goldUnits.length; i++) {
+		const j = assignedCol[i];
+		if (j < candidates.length && deltaAt[i][j] <= toleranceS) {
+			matches.push({ gold: goldUnits[i], predicted: candidates[j], deltaS: deltaAt[i][j] });
+		}
+	}
+	return { matches, totalGold: goldUnits.length, totalPredicted: candidates.length };
 }
 
 // ── unit F1 (×25, plan §14.3) ─────────────────────────────────────────────────
@@ -404,17 +483,29 @@ interface VerifiedRef {
 	http_status: number | undefined;
 }
 
-function readVerifiedRefs(workDir: string): VerifiedRef[] {
+export interface VerifiedRefs {
+	/** Refs verify-refs kept (didn't reject), with a numeric http_status when one was recorded. */
+	kept: readonly VerifiedRef[];
+	/** Count of refs verify-refs REJECTED (HTTP 4xx/5xx or a network error) and moved from
+	 * `refs` to `dropped: [{url, reason}]` — each one is a ref that was never actually
+	 * reachable, so it must count as one non-200–399 ref in the http-ratio denominator. */
+	droppedCount: number;
+}
+
+function readVerifiedRefs(workDir: string): VerifiedRefs {
 	const record = asRecord(readJsonFile(join(workDir, "refs.verified.json")));
-	if (record === null) return [];
+	if (record === null) return { kept: [], droppedCount: 0 };
 	const refs = record["refs"];
-	if (!Array.isArray(refs)) return [];
-	return refs.flatMap((raw) => {
-		const ref = asRecord(raw);
-		if (ref === null) return [];
-		const status = ref["http_status"];
-		return [{ http_status: typeof status === "number" ? status : undefined }];
-	});
+	const kept: VerifiedRef[] = Array.isArray(refs)
+		? refs.flatMap((raw) => {
+				const ref = asRecord(raw);
+				if (ref === null) return [];
+				const status = ref["http_status"];
+				return [{ http_status: typeof status === "number" ? status : undefined }];
+			})
+		: [];
+	const dropped = record["dropped"];
+	return { kept, droppedCount: Array.isArray(dropped) ? dropped.length : 0 };
 }
 
 export interface RefMetric {
@@ -432,8 +523,8 @@ export interface RefsScore {
  * to fall out of a division by zero, since a vacuous "no refs to check" is not a real pass). */
 export function scoreRefs(
 	draftRefs: readonly DraftRef[],
-	verifiedRefs: readonly VerifiedRef[],
-	eventTexts: readonly string[],
+	verifiedRefs: VerifiedRefs,
+	webResultTexts: readonly string[],
 ): RefsScore {
 	if (draftRefs.length === 0) {
 		return {
@@ -444,15 +535,20 @@ export function scoreRefs(
 	}
 
 	const foundInLog = draftRefs.filter((ref) =>
-		eventTexts.some((text) => text.includes(ref.url)),
+		webResultTexts.some((text) => text.includes(ref.url)),
 	).length;
 	const urlFraction = foundInLog / draftRefs.length;
 
-	const withStatus = verifiedRefs.filter((ref) => ref.http_status !== undefined);
+	const withStatus = verifiedRefs.kept.filter((ref) => ref.http_status !== undefined);
 	const okCount = withStatus.filter(
 		(ref) => ref.http_status !== undefined && ref.http_status >= 200 && ref.http_status <= 399,
 	).length;
-	const httpFraction = withStatus.length > 0 ? okCount / withStatus.length : 0;
+	// Denominator = every ref verify-refs actually judged: kept refs with a resolved status,
+	// PLUS every dropped ref (rejected outright as HTTP 4xx/5xx or a network error — never ok).
+	// Leaving dropped refs out let a run hide failures by having verify-refs drop them instead
+	// of recording a bad status.
+	const httpDenominator = withStatus.length + verifiedRefs.droppedCount;
+	const httpFraction = httpDenominator > 0 ? okCount / httpDenominator : 0;
 
 	// Vacuously true when every ref is already Korean — nothing required a summary.
 	const nonKoRefs = draftRefs.filter((ref) => ref.lang !== "ko");
@@ -486,21 +582,23 @@ export function scoreRefs(
 //                             observed for notes.json/plan.json/etc. written through the
 //                             agent's own file-edit tool rather than a shell redirection
 //
-// Two different questions need two different views of this stream:
+// Two different questions need two different views of this stream, and BOTH are narrow,
+// purpose-built extractions — neither one walks the raw text of every event indiscriminately:
 //
-// 1. "What did every string in this run say, anywhere?" — parseRunEvents walks
-//    the ENTIRE parsed value of each line and joins every string leaf into one
-//    search blob per line. Used only for the refs URL-in-log fallback (plan
-//    §14.3's rubric text explicitly allows any tool-output text as evidence a
-//    URL was used), which is deliberately broad.
+// 1. "Did the run actually find this ref's URL on the web?" — extractWebResultTexts looks
+//    ONLY at web-search/fetch TOOL RESULTS: a codex `web_search` item's `.item.results[]`
+//    (never `.item.action`, never command output), or a Claude `WebSearch`/`WebFetch`
+//    tool_use's matching tool_result text. A URL the model only wrote into an agent message,
+//    a command, or a file is not evidence it was actually found on the web — crediting that
+//    would let a run invent a URL and paste it somewhere the log happens to echo it.
 //
 // 2. "What commands did the run actually EXECUTE?" — extractCommandExecutions
 //    looks ONLY at command_execution items' `.command` field, deduped by
 //    item id (a started+completed pair is the same execution, counted once).
 //    Discipline penalties (push attempt, gate-order violation) and
-//    contamination detection use ONLY this list — never the blob above —
-//    because the blob also contains conversational text, aggregated command
-//    output, and web-search results, any of which can innocently mention
+//    contamination detection use ONLY this list — never agent-message or web-result
+//    text — because that text also contains conversational text, aggregated command
+//    output, and search-result snippets, any of which can innocently mention
 //    "git push" or a forbidden path without the run ever having executed or
 //    read it (SMOKE 2026-09-29: exactly this false-positive was observed —
 //    every "git push" hit in four real round-0 runs came from `cat`-ing
@@ -520,24 +618,31 @@ function collectStrings(node: unknown, out: string[]): void {
 	for (const value of Object.values(record)) collectStrings(value, out);
 }
 
-/** One search blob per non-empty run.jsonl line, in file order. A line that fails to
- * parse as JSON is kept verbatim so it stays searchable instead of silently vanishing. */
-export function parseRunEvents(jsonlText: string): string[] {
-	return jsonlText
-		.split("\n")
-		.map((line) => line.trim())
-		.filter((line) => line.length > 0)
-		.map((line) => {
-			let parsed: unknown;
-			try {
-				parsed = JSON.parse(line);
-			} catch {
-				return line;
-			}
-			const strings: string[] = [];
-			collectStrings(parsed, strings);
-			return strings.join("\n");
-		});
+/** Walks a CODEX-shaped run.jsonl once and returns one search blob per `web_search` item that
+ * carries a `.item.results[]` array (only the completion event does) — every string leaf of
+ * `results` only, joined per line, never `.item.action`/`.item.query` and never any other
+ * item type's text. */
+function extractCodexWebResultTexts(jsonlText: string): string[] {
+	const texts: string[] = [];
+	for (const rawLine of jsonlText.split("\n")) {
+		const line = rawLine.trim();
+		if (line.length === 0) continue;
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(line);
+		} catch {
+			continue;
+		}
+		const record = asRecord(parsed);
+		const item = record === null ? null : asRecord(record["item"]);
+		if (item === null || item["type"] !== "web_search") continue;
+		const results = item["results"];
+		if (!Array.isArray(results)) continue;
+		const strings: string[] = [];
+		collectStrings(results, strings);
+		if (strings.length > 0) texts.push(strings.join("\n"));
+	}
+	return texts;
 }
 
 function readRunJsonlText(runDir: string): string {
@@ -554,10 +659,10 @@ function readRunJsonlText(runDir: string): string {
 // `text`, ...) instead of codex's `.item`. Every command-execution/file-change/
 // contamination/gate-order/push consumer below needs the SAME internal shapes
 // (CommandExecutionEvent, FileChangeEvent) regardless of which harness produced
-// run.jsonl, so extractCommandExecutions/extractFileChangeEvents detect the
-// format once and dispatch to a per-format extractor — parseRunEvents (the
-// reference-URL blob above) needs no such dispatch: it already walks the whole
-// parsed value of any shape, codex or Claude alike.
+// run.jsonl, so extractCommandExecutions/extractFileChangeEvents/extractWebResultTexts
+// detect the format once and dispatch to a per-format extractor — web-result extraction
+// needs this dispatch too, since codex and Claude represent tool results completely
+// differently (`.item.results[]` vs a `tool_result` block keyed by tool name).
 
 export type RunLogFormat = "codex" | "claude";
 
@@ -891,6 +996,22 @@ function extractClaudeFileChangeEvents(jsonlText: string): FileChangeEvent[] {
 	return events;
 }
 
+const CLAUDE_WEB_TOOLS = new Set(["WebSearch", "WebFetch"]);
+
+/** Claude counterpart to `extractCodexWebResultTexts` — the tool_result text answering every
+ * `WebSearch`/`WebFetch` tool_use, one entry per tool_use, in first-seen JSONL line order.
+ * Never a Bash/Read/other tool's result, and never assistant message text. */
+function extractClaudeWebResultTexts(jsonlText: string): string[] {
+	const { toolUses, resultsByToolUseId } = parseClaudeToolEvents(jsonlText);
+	const texts: string[] = [];
+	for (const toolUse of toolUses) {
+		if (!CLAUDE_WEB_TOOLS.has(toolUse.name)) continue;
+		const result = resultsByToolUseId.get(toolUse.id);
+		if (result !== undefined && result.text.length > 0) texts.push(result.text);
+	}
+	return texts;
+}
+
 /** Walks run.jsonl once and returns one entry per executed command, in first-seen order —
  * dispatches to the codex or Claude extractor per `detectRunLogFormat` (see above). */
 export function extractCommandExecutions(jsonlText: string): CommandExecutionEvent[] {
@@ -905,6 +1026,17 @@ export function extractFileChangeEvents(jsonlText: string): FileChangeEvent[] {
 	return detectRunLogFormat(jsonlText) === "claude"
 		? extractClaudeFileChangeEvents(jsonlText)
 		: extractCodexFileChangeEvents(jsonlText);
+}
+
+/** Walks run.jsonl once and returns the URL-provenance text from web-search/fetch TOOL
+ * RESULTS ONLY, in first-seen order — dispatches to the codex or Claude extractor per
+ * `detectRunLogFormat` (see above). An agent message, an executed command, or a file write
+ * that happens to mention a URL is never included: only a real web tool result counts as
+ * evidence the run actually found that URL (plan §14.1/§14.3's url-in-log check). */
+export function extractWebResultTexts(jsonlText: string): string[] {
+	return detectRunLogFormat(jsonlText) === "claude"
+		? extractClaudeWebResultTexts(jsonlText)
+		: extractCodexWebResultTexts(jsonlText);
 }
 
 // ── executed-command shell analysis (small, not a full shell parser) ────────
@@ -1735,7 +1867,7 @@ export function scoreRun(input: ScoreRunInput): ScoreResult {
 	const tags = scoreTags(match.matches);
 
 	const jsonlText = readRunJsonlText(input.runDir);
-	const eventTexts = parseRunEvents(jsonlText);
+	const webResultTexts = extractWebResultTexts(jsonlText);
 	const commandExecutions = extractCommandExecutions(jsonlText);
 	const commands = commandExecutions.map((exec) => exec.command);
 	const fileChanges = extractFileChangeEvents(jsonlText);
@@ -1745,7 +1877,7 @@ export function scoreRun(input: ScoreRunInput): ScoreResult {
 	const pushAttempt = commandAnalysis.pushDetected;
 	const gateOrderViolation = detectGateOrderViolation(commandExecutions, fileChanges);
 
-	const refs = scoreRefs(readDraftRefs(workDir), readVerifiedRefs(workDir), eventTexts);
+	const refs = scoreRefs(readDraftRefs(workDir), readVerifiedRefs(workDir), webResultTexts);
 	const judge = parseJudgeScore(input.judgeText);
 
 	const rawTotal =

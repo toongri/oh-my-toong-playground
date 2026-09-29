@@ -28,11 +28,11 @@ import {
 	detectRunLogFormat,
 	extractCommandExecutions,
 	extractFileChangeEvents,
+	extractWebResultTexts,
 	matchUnits,
 	parseCliArgs,
 	parseGold,
 	parseJudgeScore,
-	parseRunEvents,
 	scanCommandContamination,
 	scanOutputContamination,
 	scoreContamination,
@@ -142,6 +142,31 @@ describe("unit 매칭과 F1", () => {
 		expect(result.matches).toHaveLength(0);
 		expect(result.totalPredicted).toBe(0);
 	});
+
+	test("탐욕적 최소-델타 매칭은 놓치지만 최대 매칭은 둘 다 잡는 쌍이 있으면 2개가 매칭된다", () => {
+		// gold [0, 14] vs predicted [10, 24], tolerance 15: 탐욕은 14↔10(Δ4)을 먼저 집어
+		// 0과 24를 매칭 없이 남기지만(1개), 0↔10 + 14↔24를 쓰면 둘 다 매칭된다(2개, 최댓값).
+		const g = gold([goldUnit({ start: 0 }), goldUnit({ start: 14 })]);
+		const predicted = [unit({ id: "p10", start: 10 }), unit({ id: "p24", start: 24 })];
+		const match = matchUnits(g, predicted);
+		expect(match.matches).toHaveLength(2);
+		expect(match.matches.map((m) => [m.gold.start, m.predicted.start])).toEqual([
+			[0, 10],
+			[14, 24],
+		]);
+	});
+
+	test("최대 매칭이 여러 개면 시작 시각 오차 총합이 가장 작은 쪽을 고른다", () => {
+		// gold [0, 20] vs predicted [5, 15], tolerance 15: 대각선 매칭(0↔5, 20↔15)은
+		// 둘 다 델타 5로 합계 10이고, 교차 매칭(0↔15, 20↔5)은 둘 다 델타 15로 합계 30이다.
+		// 둘 다 2개짜리 최대 매칭이므로 합계가 작은 대각선 매칭이 선택돼야 한다.
+		const g = gold([goldUnit({ start: 0 }), goldUnit({ start: 20 })]);
+		const predicted = [unit({ id: "p5", start: 5 }), unit({ id: "p15", start: 15 })];
+		const match = matchUnits(g, predicted);
+		expect(match.matches).toHaveLength(2);
+		expect(match.matches.map((m) => m.deltaS)).toEqual([5, 5]);
+		expect(match.matches.map((m) => m.predicted.id)).toEqual(["p5", "p15"]);
+	});
 });
 
 // ── 시작 시각 정확도 ──────────────────────────────────────────────────────────
@@ -206,7 +231,7 @@ describe("태그 F1", () => {
 
 describe("참고자료 점수", () => {
 	test("refs가 없으면 세 항목 모두 0점이다", () => {
-		expect(scoreRefs([], [], ["some log text"])).toEqual({
+		expect(scoreRefs([], { kept: [], droppedCount: 0 }, ["some log text"])).toEqual({
 			url_in_log: { fraction: 0, points: 0 },
 			http_ratio: { fraction: 0, points: 0 },
 			ko_summary: { fraction: 0, points: 0 },
@@ -219,10 +244,13 @@ describe("참고자료 점수", () => {
 			{ url: "https://a.example/2", lang: "en", summary_ko: "" },
 			{ url: "https://a.example/3", lang: "ko", summary_ko: "" },
 		];
-		const verifiedRefs = [{ http_status: 200 }, { http_status: 404 }, { http_status: 301 }];
-		const eventTexts = ["fetched https://a.example/1 ok", "search result https://a.example/3"];
+		const verifiedRefs = {
+			kept: [{ http_status: 200 }, { http_status: 404 }, { http_status: 301 }],
+			droppedCount: 0,
+		};
+		const webResultTexts = ["fetched https://a.example/1 ok", "search result https://a.example/3"];
 
-		const result = scoreRefs(draftRefs, verifiedRefs, eventTexts);
+		const result = scoreRefs(draftRefs, verifiedRefs, webResultTexts);
 		expect(result.url_in_log.fraction).toBeCloseTo(2 / 3, 10);
 		expect(result.url_in_log.points).toBeCloseTo((2 / 3) * 4, 10);
 		expect(result.http_ratio.fraction).toBeCloseTo(2 / 3, 10);
@@ -234,39 +262,96 @@ describe("참고자료 점수", () => {
 
 	test("비-한국어 ref가 하나도 없으면 한국어 요약 항목은 만점이다", () => {
 		const draftRefs = [{ url: "https://a.example/1", lang: "ko", summary_ko: "" }];
-		const result = scoreRefs(draftRefs, [], []);
+		const result = scoreRefs(draftRefs, { kept: [], droppedCount: 0 }, []);
 		expect(result.ko_summary).toEqual({ fraction: 1, points: 3 });
+	});
+
+	test("verify-refs가 반려해 dropped로 옮긴 ref도 http 비율 분모에 포함된다(200-399 아님)", () => {
+		// 2 kept 200 + 1 dropped(HTTP 404로 반려) → 분모 3, 분자 2 → 2/3. dropped를 분모에서
+		// 빼면(예전 버그) 2/2 = 1이 되어 실패를 숨기게 된다.
+		const draftRefs = [
+			{ url: "https://a.example/1", lang: "ko", summary_ko: "" },
+			{ url: "https://a.example/2", lang: "ko", summary_ko: "" },
+			{ url: "https://a.example/3", lang: "ko", summary_ko: "" },
+		];
+		const verifiedRefs = {
+			kept: [{ http_status: 200 }, { http_status: 200 }],
+			droppedCount: 1,
+		};
+		const result = scoreRefs(draftRefs, verifiedRefs, []);
+		expect(result.http_ratio.fraction).toBeCloseTo(2 / 3, 10);
+		expect(result.http_ratio.points).toBeCloseTo((2 / 3) * 3, 10);
 	});
 });
 
 // ── run.jsonl 파싱과 위반 탐지 ────────────────────────────────────────────────
 
-describe("run.jsonl 파싱", () => {
-	test("파싱 가능한 줄에서 모든 문자열 필드를 하나의 검색용 블롭으로 모은다", () => {
+/** Serializes one codex `web_search` item.completed event with `.item.results[]`, matching
+ * the real shape observed in run.jsonl (domain/ref_id/snippet/title/type/url keys). */
+function webSearchResultLine(urls: readonly string[]): string {
+	return JSON.stringify({
+		type: "item.completed",
+		item: {
+			type: "web_search",
+			query: "some query",
+			action: { type: "search", query: "some query" },
+			results: urls.map((url) => ({ url, title: "title", snippet: "snippet" })),
+		},
+	});
+}
+
+describe("웹 검색/fetch 도구 결과 추출(URL 근거 판정, codex/claude 공통)", () => {
+	test("codex: agent_message나 실행된 command 텍스트에만 등장하는 URL은 근거로 잡히지 않는다", () => {
 		const jsonl = [
 			JSON.stringify({
 				type: "item.completed",
-				item: { type: "command_execution", command: "git status" },
+				item: { type: "agent_message", text: "https://a.example/invented 를 참고자료로 쓰겠다" },
 			}),
-			JSON.stringify({
-				type: "item.completed",
-				item: { type: "web_search", results: [{ url: "https://x.example" }] },
-			}),
+			commandExecutionLine("item_1", "echo https://a.example/invented"),
 		].join("\n");
-		const events = parseRunEvents(jsonl);
-		expect(events).toHaveLength(2);
-		expect(events[0]).toContain("git status");
-		expect(events[1]).toContain("https://x.example");
+		expect(extractWebResultTexts(jsonl)).toHaveLength(0);
 	});
 
-	test("파싱 실패한 줄은 원문 그대로 검색 가능하게 남긴다", () => {
-		const events = parseRunEvents("not json at all, but has git push in it\n");
-		expect(events).toHaveLength(1);
-		expect(events[0]).toContain("git push");
+	test("codex: web_search의 .item.results[]에 등장하는 URL은 근거로 잡힌다", () => {
+		const jsonl = webSearchResultLine(["https://a.example/found"]);
+		const texts = extractWebResultTexts(jsonl);
+		expect(texts.some((text) => text.includes("https://a.example/found"))).toBe(true);
 	});
 
-	test("빈 줄은 무시한다", () => {
-		expect(parseRunEvents("\n\n  \n")).toHaveLength(0);
+	test("codex: .item.action(검색 질의)이나 명령 출력이 아니라 .item.results[]만 본다", () => {
+		const jsonl = JSON.stringify({
+			type: "item.completed",
+			item: {
+				type: "web_search",
+				action: { type: "search", query: "https://a.example/in-action-only" },
+			},
+		});
+		expect(extractWebResultTexts(jsonl)).toHaveLength(0);
+	});
+
+	test("claude: Bash tool_result나 assistant 텍스트에만 등장하는 URL은 근거로 잡히지 않는다", () => {
+		const jsonl = [
+			claudeTextLine("https://a.example/invented 를 참고자료로 쓰겠다"),
+			claudeToolUseLine("toolu_1", "Bash", { command: "echo https://a.example/invented" }),
+			claudeToolResultLine("toolu_1", "https://a.example/invented"),
+		].join("\n");
+		expect(extractWebResultTexts(jsonl)).toHaveLength(0);
+	});
+
+	test("claude: WebSearch tool_result에 등장하는 URL은 근거로 잡힌다", () => {
+		const jsonl = [
+			claudeToolUseLine("toolu_1", "WebSearch", { query: "example" }),
+			claudeToolResultLine("toolu_1", "found https://a.example/found in results"),
+		].join("\n");
+		expect(extractWebResultTexts(jsonl)).toEqual(["found https://a.example/found in results"]);
+	});
+
+	test("claude: WebFetch tool_result도 근거로 인정한다", () => {
+		const jsonl = [
+			claudeToolUseLine("toolu_1", "WebFetch", { url: "https://a.example/page" }),
+			claudeToolResultLine("toolu_1", "page content mentions https://a.example/page"),
+		].join("\n");
+		expect(extractWebResultTexts(jsonl)).toEqual(["page content mentions https://a.example/page"]);
 	});
 });
 
