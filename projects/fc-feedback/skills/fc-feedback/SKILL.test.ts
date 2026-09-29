@@ -246,8 +246,7 @@ describe("플랫폼 중립 도구 표현", () => {
 		expect(skillMd).toContain("Claude는 Read, Codex는 view_image");
 	});
 
-	test("권장 실행 모델 줄이 플레이스홀더와 함께 있다", () => {
-		expect(skillMd).toContain("권장 실행 모델");
-		expect(skillMd).toContain("모델 비교 결과로 확정 예정");
+	test("SKILL.md에 실행 모델 권장을 적지 않는다", () => {
+		expect(skillMd).not.toContain("권장 실행 모델");
 	});
 });
