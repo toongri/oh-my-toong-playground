@@ -25,6 +25,7 @@ import {
 	createFcCheckRunner,
 	detectGateOrderViolation,
 	detectPushAttempt,
+	detectRunLogFormat,
 	extractCommandExecutions,
 	extractFileChangeEvents,
 	matchUnits,
@@ -337,6 +338,157 @@ describe("file_change 이벤트 추출(item id 중복 제거)", () => {
 			item: { type: "command_execution", id: "item_1", command: "cat notes.json" },
 		});
 		expect(extractFileChangeEvents(jsonl)).toHaveLength(0);
+	});
+});
+
+// ── Claude stream-json (`claude -p --output-format stream-json --verbose`) ──
+
+function claudeToolUseLine(
+	id: string,
+	name: string,
+	input: Record<string, unknown>,
+	parentToolUseId: string | null = null,
+): string {
+	return JSON.stringify({
+		type: "assistant",
+		message: { role: "assistant", content: [{ type: "tool_use", id, name, input }] },
+		parent_tool_use_id: parentToolUseId,
+	});
+}
+
+function claudeTextLine(text: string): string {
+	return JSON.stringify({
+		type: "assistant",
+		message: { role: "assistant", content: [{ type: "text", text }] },
+		parent_tool_use_id: null,
+	});
+}
+
+function claudeToolResultLine(toolUseId: string, content: string, isError = false): string {
+	return JSON.stringify({
+		type: "user",
+		message: {
+			role: "user",
+			content: [{ type: "tool_result", tool_use_id: toolUseId, content, is_error: isError }],
+		},
+		parent_tool_use_id: null,
+	});
+}
+
+describe("Claude stream-json 정규화(codex 이벤트와 동일한 내부 자료형으로 변환)", () => {
+	test("run.jsonl의 형식(codex/claude)을 자동 판별한다", () => {
+		expect(detectRunLogFormat(commandExecutionLine("item_1", "git status"))).toBe("codex");
+		expect(detectRunLogFormat(claudeToolUseLine("toolu_1", "Bash", { command: "git status" }))).toBe(
+			"claude",
+		);
+		expect(detectRunLogFormat("")).toBe("codex");
+	});
+
+	test("Bash로 실행된 git push는 형식과 무관하게 push로 탐지된다", () => {
+		const jsonl = [
+			claudeToolUseLine("toolu_1", "Bash", { command: "git push origin main" }),
+			claudeToolResultLine("toolu_1", "Everything up-to-date"),
+		].join("\n");
+		const commands = extractCommandExecutions(jsonl);
+		expect(commands).toHaveLength(1);
+		expect(commands[0]).toMatchObject({
+			id: "toolu_1",
+			command: "git push origin main",
+			eventLine: 1,
+			aggregatedOutput: "Everything up-to-date",
+			exitCode: 0,
+		});
+		expect(detectPushAttempt(commands.map((c) => c.command))).toBe(true);
+	});
+
+	test("Write로 notes.json을 쓰면 file_change로 감지된다", () => {
+		const jsonl = claudeToolUseLine("toolu_1", "Write", {
+			file_path: "/work/notes.json",
+			content: "{}",
+		});
+		const changes = extractFileChangeEvents(jsonl);
+		expect(changes).toEqual([{ id: "toolu_1", paths: ["/work/notes.json"], eventLine: 1 }]);
+	});
+
+	test("Read로 금지 경로(evals/fc-feedback)를 읽으면 오염(kind=read)으로 감지된다", () => {
+		const repoRoot = REPO_ROOT_FOR_TEST;
+		const forbiddenPath = join(repoRoot, "evals", "fc-feedback", "rubric.md");
+		const jsonl = [
+			claudeToolUseLine("toolu_1", "Read", { file_path: forbiddenPath }),
+			claudeToolResultLine("toolu_1", "# rubric\n..."),
+		].join("\n");
+		const commandExecutions = extractCommandExecutions(jsonl);
+		const result = scoreContamination(commandExecutions, {
+			repoRoot,
+			home: tempDir(),
+			runDir: tempDir(),
+			tmpDir: tempDir(),
+		});
+		expect(result.contaminated).toBe(true);
+		expect(result.hits.some((hit) => hit.kind === "read" && hit.target === "evals/fc-feedback")).toBe(
+			true,
+		);
+	});
+
+	test("설명문 텍스트(type: text) 속 'git push' 언급은 명령으로 감지되지 않는다", () => {
+		const jsonl = claudeTextLine("이제 git push를 실행하겠습니다");
+		const commands = extractCommandExecutions(jsonl);
+		expect(commands).toHaveLength(0);
+		expect(detectPushAttempt(commands.map((c) => c.command))).toBe(false);
+	});
+
+	test("parent_tool_use_id가 있는 서브에이전트 이벤트도 포함한다", () => {
+		const jsonl = [
+			claudeToolUseLine("toolu_1", "Bash", { command: "git push origin main" }, "toolu_parent"),
+			claudeToolResultLine("toolu_1", "done"),
+		].join("\n");
+		const commands = extractCommandExecutions(jsonl);
+		expect(commands).toHaveLength(1);
+		expect(commands[0].command).toBe("git push origin main");
+	});
+
+	test("tool_result가 없거나 is_error:true면 exitCode는 null이다(실패를 exit 0으로 추정하지 않음)", () => {
+		const noResult = extractCommandExecutions(claudeToolUseLine("toolu_1", "Bash", { command: "echo hi" }));
+		expect(noResult[0].exitCode).toBeNull();
+
+		const failed = extractCommandExecutions(
+			[
+				claudeToolUseLine("toolu_1", "Bash", { command: "bun fc.ts check plan --work ." }),
+				claudeToolResultLine("toolu_1", "invalid tags", true),
+			].join("\n"),
+		);
+		expect(failed[0].exitCode).toBeNull();
+	});
+
+	test("기존 codex 형식 fixture의 채점 결과는 이 확장 이후에도 그대로다", () => {
+		// score.test.ts 상단 "실행된 명령 추출" 테스트와 동일한 codex fixture — 포맷 자동 판별이
+		// 추가된 뒤에도 codex 경로가 바이트 단위로 그대로인지 재확인한다.
+		const jsonl = [
+			JSON.stringify({
+				type: "item.started",
+				item: { id: "item_1", type: "command_execution", command: "git status", exit_code: null },
+			}),
+			JSON.stringify({
+				type: "item.completed",
+				item: {
+					id: "item_1",
+					type: "command_execution",
+					command: "git status",
+					exit_code: 0,
+					aggregated_output: "nothing to commit",
+				},
+			}),
+		].join("\n");
+		expect(detectRunLogFormat(jsonl)).toBe("codex");
+		expect(extractCommandExecutions(jsonl)).toEqual([
+			{
+				id: "item_1",
+				command: "git status",
+				eventLine: 1,
+				aggregatedOutput: "nothing to commit",
+				exitCode: 0,
+			},
+		]);
 	});
 });
 

@@ -545,6 +545,43 @@ function readRunJsonlText(runDir: string): string {
 	return existsSync(path) ? readFileSync(path, "utf8") : "";
 }
 
+// ── run.jsonl format detection (codex `--json` vs Claude Code `stream-json`) ─
+//
+// Claude Code's `claude -p --output-format stream-json --verbose` writes one JSON
+// object per line too, but shaped completely differently from codex: top-level
+// `type: "system" | "assistant" | "user" | "result"`, with `assistant`/`user`
+// lines carrying a `.message.content[]` array of blocks (`tool_use`, `tool_result`,
+// `text`, ...) instead of codex's `.item`. Every command-execution/file-change/
+// contamination/gate-order/push consumer below needs the SAME internal shapes
+// (CommandExecutionEvent, FileChangeEvent) regardless of which harness produced
+// run.jsonl, so extractCommandExecutions/extractFileChangeEvents detect the
+// format once and dispatch to a per-format extractor — parseRunEvents (the
+// reference-URL blob above) needs no such dispatch: it already walks the whole
+// parsed value of any shape, codex or Claude alike.
+
+export type RunLogFormat = "codex" | "claude";
+
+/** Detects the format from the first line that clearly commits to one shape
+ * (`.item` for codex, `.message` for Claude) — defaults to "codex" so an empty
+ * or fully-unparseable log never changes existing codex behavior. */
+export function detectRunLogFormat(jsonlText: string): RunLogFormat {
+	for (const rawLine of jsonlText.split("\n")) {
+		const line = rawLine.trim();
+		if (line.length === 0) continue;
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(line);
+		} catch {
+			continue;
+		}
+		const record = asRecord(parsed);
+		if (record === null) continue;
+		if (asRecord(record["item"]) !== null) return "codex";
+		if (asRecord(record["message"]) !== null) return "claude";
+	}
+	return "codex";
+}
+
 // ── executed-command extraction ──────────────────────────────────────────────
 
 export interface CommandExecutionEvent {
@@ -562,11 +599,11 @@ export interface CommandExecutionEvent {
 	exitCode: number | null;
 }
 
-/** Walks run.jsonl once and returns one entry per command_execution item id, in first-seen
- * order — a started/completed pair collapses into a single entry (counted once, never
- * twice). A line that fails to parse, or whose item isn't a command_execution with a string
- * `.command`, is skipped. */
-export function extractCommandExecutions(jsonlText: string): CommandExecutionEvent[] {
+/** Walks a CODEX-shaped run.jsonl once and returns one entry per command_execution item id,
+ * in first-seen order — a started/completed pair collapses into a single entry (counted
+ * once, never twice). A line that fails to parse, or whose item isn't a command_execution
+ * with a string `.command`, is skipped. */
+function extractCodexCommandExecutions(jsonlText: string): CommandExecutionEvent[] {
 	const order: string[] = [];
 	const byId = new Map<string, CommandExecutionEvent>();
 	const lines = jsonlText.split("\n");
@@ -620,10 +657,11 @@ export interface FileChangeEvent {
 	eventLine: number;
 }
 
-/** Walks run.jsonl once and returns one entry per file_change item id, in first-seen order —
- * mirrors `extractCommandExecutions`'s started/completed collapsing. A line that fails to
- * parse, or whose item isn't a file_change with a `.changes[]` array, is skipped. */
-export function extractFileChangeEvents(jsonlText: string): FileChangeEvent[] {
+/** Walks a CODEX-shaped run.jsonl once and returns one entry per file_change item id, in
+ * first-seen order — mirrors `extractCodexCommandExecutions`'s started/completed collapsing.
+ * A line that fails to parse, or whose item isn't a file_change with a `.changes[]` array, is
+ * skipped. */
+function extractCodexFileChangeEvents(jsonlText: string): FileChangeEvent[] {
 	const order: string[] = [];
 	const byId = new Map<string, FileChangeEvent>();
 	const lines = jsonlText.split("\n");
@@ -666,6 +704,206 @@ export function extractFileChangeEvents(jsonlText: string): FileChangeEvent[] {
 		if (entry === undefined) throw new Error("unreachable: extractFileChangeEvents id/byId mismatch");
 		return entry;
 	});
+}
+
+// ── Claude stream-json normalization ─────────────────────────────────────────
+//
+// Maps Claude Code's `stream-json` tool events onto the exact same
+// CommandExecutionEvent/FileChangeEvent shapes the codex extractors above
+// produce, so every downstream consumer (push detection, gate-order detection,
+// contamination scanning) stays format-agnostic:
+//   - `type: "assistant"` message content blocks: `type: "tool_use"` with
+//     `name: "Bash"` -> `.input.command` becomes the executed command, verbatim
+//     (real shell text, so the existing shell-segment walker above handles it
+//     unchanged); `Write`/`Edit`/`MultiEdit`/`NotebookEdit` -> `.input.file_path`
+//     becomes a file-change path; `Read`/`Grep`/`Glob` -> synthesized as a
+//     read/search-verb command (`cat <path>`/`grep <path>`/`find <path>`) so the
+//     UNCHANGED contamination classifier (CONTAMINATION_READ_VERBS/
+//     CONTAMINATION_SEARCH_VERBS below) recognizes them as "read"/"search" hits
+//     instead of a bare, non-contaminating "mention". A `parent_tool_use_id` on
+//     the line (a subagent's own tool call) does not exclude it — every
+//     assistant/user line is walked the same way regardless.
+//   - `type: "user"` message content blocks: `type: "tool_result"` is matched to
+//     its call by `tool_use_id`, giving the command its output text and
+//     completion status. Exit code is 0 only when a tool_result exists AND
+//     `is_error` is not true — a missing result or `is_error: true` both leave
+//     it `null` (never guess a specific nonzero code; detectGateOrderViolation
+//     only ever compares against exactly 0, so an unconfirmed/failed command
+//     correctly never counts as a passing `check plan`).
+// Ordering follows the JSONL line number of each event, same as the codex
+// extractors' `eventLine` (1-based, first-occurrence).
+
+interface ClaudeToolUseRecord {
+	id: string;
+	name: string;
+	input: Record<string, unknown>;
+	eventLine: number;
+}
+
+interface ClaudeToolResultRecord {
+	text: string;
+	isError: boolean;
+}
+
+/** `message.content` is an array of blocks for a tool_use/tool_result turn, but a plain string
+ * for an initial user prompt turn — the latter carries no blocks, so it yields none. */
+function claudeContentBlocks(message: unknown): Array<Record<string, unknown>> {
+	const messageRecord = asRecord(message);
+	const content = messageRecord === null ? undefined : messageRecord["content"];
+	if (!Array.isArray(content)) return [];
+	return content.flatMap((block) => {
+		const record = asRecord(block);
+		return record === null ? [] : [record];
+	});
+}
+
+/** A tool_result's `content` is either a plain string or an array of blocks (`{type:"text",
+ * text}`, ...) — joins every text block's text, same shape either way. */
+function claudeToolResultText(content: unknown): string {
+	if (typeof content === "string") return content;
+	if (!Array.isArray(content)) return "";
+	const parts: string[] = [];
+	for (const block of content) {
+		const record = asRecord(block);
+		const text = record === null ? undefined : record["text"];
+		if (typeof text === "string") parts.push(text);
+	}
+	return parts.join("\n");
+}
+
+/** Walks a CLAUDE-shaped run.jsonl once, collecting every tool_use call (in first-seen JSONL
+ * line order) and the first tool_result that answers each one (matched by `tool_use_id`). A
+ * line that fails to parse, or isn't an assistant/user message, is skipped. */
+function parseClaudeToolEvents(jsonlText: string): {
+	toolUses: ClaudeToolUseRecord[];
+	resultsByToolUseId: Map<string, ClaudeToolResultRecord>;
+} {
+	const toolUses: ClaudeToolUseRecord[] = [];
+	const resultsByToolUseId = new Map<string, ClaudeToolResultRecord>();
+	const lines = jsonlText.split("\n");
+	for (let index = 0; index < lines.length; index++) {
+		const raw = lines[index].trim();
+		if (raw.length === 0) continue;
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(raw);
+		} catch {
+			continue;
+		}
+		const record = asRecord(parsed);
+		if (record === null) continue;
+		if (record["type"] === "assistant") {
+			for (const block of claudeContentBlocks(record["message"])) {
+				if (block["type"] !== "tool_use") continue;
+				const id = block["id"];
+				const name = block["name"];
+				if (typeof id !== "string" || typeof name !== "string") continue;
+				toolUses.push({ id, name, input: asRecord(block["input"]) ?? {}, eventLine: index + 1 });
+			}
+		} else if (record["type"] === "user") {
+			for (const block of claudeContentBlocks(record["message"])) {
+				if (block["type"] !== "tool_result") continue;
+				const toolUseId = block["tool_use_id"];
+				if (typeof toolUseId !== "string" || resultsByToolUseId.has(toolUseId)) continue;
+				resultsByToolUseId.set(toolUseId, {
+					text: claudeToolResultText(block["content"]),
+					isError: block["is_error"] === true,
+				});
+			}
+		}
+	}
+	return { toolUses, resultsByToolUseId };
+}
+
+const CLAUDE_FILE_CHANGE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+
+/** `.input.file_path` names the changed file for every one of these tools except
+ * NotebookEdit, whose actual field is `.input.notebook_path`. */
+function claudeChangedFilePath(toolName: string, input: Record<string, unknown>): string | undefined {
+	const filePath = input["file_path"];
+	if (typeof filePath === "string" && filePath.length > 0) return filePath;
+	if (toolName === "NotebookEdit") {
+		const notebookPath = input["notebook_path"];
+		if (typeof notebookPath === "string" && notebookPath.length > 0) return notebookPath;
+	}
+	return undefined;
+}
+
+/** Read/Grep/Glob don't execute a shell command, but the eval's contamination detection is
+ * defined over executed COMMAND TEXT — so each is synthesized as its closest classic-Unix
+ * read/search verb (never a shell escape hazard: this text is only ever tested with
+ * `.includes()`/regex, never spawned) carrying whichever path-shaped argument the tool call
+ * has, so the UNCHANGED contamination classifier below sees a real "read"/"search" hit. */
+const CLAUDE_READ_LIKE_VERB: Record<string, string> = { Read: "cat", Grep: "grep", Glob: "find" };
+
+function claudeReadLikeCommand(toolName: string, input: Record<string, unknown>): string | null {
+	const verb = CLAUDE_READ_LIKE_VERB[toolName];
+	if (verb === undefined) return null;
+	const filePath = input["file_path"];
+	const path = input["path"];
+	const pattern = input["pattern"];
+	const pathArg =
+		(typeof filePath === "string" && filePath) ||
+		(typeof path === "string" && path) ||
+		(typeof pattern === "string" && pattern) ||
+		"";
+	return pathArg.length > 0 ? `${verb} ${pathArg}` : verb;
+}
+
+/** Claude counterpart to `extractCodexCommandExecutions` — one entry per Bash tool_use (its
+ * `.input.command`, verbatim) plus one synthesized entry per Read/Grep/Glob tool_use (see
+ * `claudeReadLikeCommand`), in first-seen JSONL line order. */
+function extractClaudeCommandExecutions(jsonlText: string): CommandExecutionEvent[] {
+	const { toolUses, resultsByToolUseId } = parseClaudeToolEvents(jsonlText);
+	const events: CommandExecutionEvent[] = [];
+	for (const toolUse of toolUses) {
+		const command =
+			toolUse.name === "Bash"
+				? typeof toolUse.input["command"] === "string"
+					? (toolUse.input["command"] as string)
+					: null
+				: claudeReadLikeCommand(toolUse.name, toolUse.input);
+		if (command === null) continue;
+		const result = resultsByToolUseId.get(toolUse.id);
+		events.push({
+			id: toolUse.id,
+			command,
+			eventLine: toolUse.eventLine,
+			aggregatedOutput: result?.text ?? "",
+			exitCode: result !== undefined && !result.isError ? 0 : null,
+		});
+	}
+	return events;
+}
+
+/** Claude counterpart to `extractCodexFileChangeEvents` — one entry per Write/Edit/MultiEdit/
+ * NotebookEdit tool_use with a resolvable path, in first-seen JSONL line order. */
+function extractClaudeFileChangeEvents(jsonlText: string): FileChangeEvent[] {
+	const { toolUses } = parseClaudeToolEvents(jsonlText);
+	const events: FileChangeEvent[] = [];
+	for (const toolUse of toolUses) {
+		if (!CLAUDE_FILE_CHANGE_TOOLS.has(toolUse.name)) continue;
+		const path = claudeChangedFilePath(toolUse.name, toolUse.input);
+		if (path === undefined) continue;
+		events.push({ id: toolUse.id, paths: [path], eventLine: toolUse.eventLine });
+	}
+	return events;
+}
+
+/** Walks run.jsonl once and returns one entry per executed command, in first-seen order —
+ * dispatches to the codex or Claude extractor per `detectRunLogFormat` (see above). */
+export function extractCommandExecutions(jsonlText: string): CommandExecutionEvent[] {
+	return detectRunLogFormat(jsonlText) === "claude"
+		? extractClaudeCommandExecutions(jsonlText)
+		: extractCodexCommandExecutions(jsonlText);
+}
+
+/** Walks run.jsonl once and returns one entry per native file change, in first-seen order —
+ * dispatches to the codex or Claude extractor per `detectRunLogFormat` (see above). */
+export function extractFileChangeEvents(jsonlText: string): FileChangeEvent[] {
+	return detectRunLogFormat(jsonlText) === "claude"
+		? extractClaudeFileChangeEvents(jsonlText)
+		: extractCodexFileChangeEvents(jsonlText);
 }
 
 // ── executed-command shell analysis (small, not a full shell parser) ────────
@@ -1376,9 +1614,21 @@ function trimStderr(text: string): string {
 	return Buffer.from(trimmed, "utf8").subarray(0, MAX_STDERR_BYTES).toString("utf8");
 }
 
+/** Deployed-copy locations to check, in priority order, before falling back to
+ * `--skill-src` — `skill/` is the original (and still first-priority) codex run.sh
+ * layout; `.agents/skills/` and `.claude/skills/` are materialize-skill.ts's codex
+ * and claude deploy shapes respectively (see materialize-skill.ts). */
+function candidateFcTsPaths(runDir: string): string[] {
+	return [
+		join(runDir, "skill", "fc-feedback", "scripts", "fc.ts"),
+		join(runDir, ".agents", "skills", "fc-feedback", "scripts", "fc.ts"),
+		join(runDir, ".claude", "skills", "fc-feedback", "scripts", "fc.ts"),
+	];
+}
+
 function resolveFcTsPath(runDir: string, skillSrcDir: string): string {
-	const deployed = join(runDir, "skill", "fc-feedback", "scripts", "fc.ts");
-	return existsSync(deployed) ? deployed : join(skillSrcDir, "scripts", "fc.ts");
+	const deployed = candidateFcTsPaths(runDir).find((candidate) => existsSync(candidate));
+	return deployed ?? join(skillSrcDir, "scripts", "fc.ts");
 }
 
 export function createFcCheckRunner(skillSrcDir: string, runDir: string): CheckRunner {
