@@ -219,6 +219,11 @@ describe("SOURCE REVIEW — presentation-reviewer 원문 대조", () => {
 		expect(contractsMd).toContain("sources");
 		expect(contractsMd).toContain("reader_persona");
 	});
+
+	test("원문 대조 리뷰 체크리스트가 무행동 유닛을 점검한다", () => {
+		expect(contractsMd).toContain("지시나 교정 행동이 원문에 없는 유닛");
+		expect(contractsMd).toContain("유닛 분할 기준 위반");
+	});
 });
 
 describe("플랫폼 중립 도구 표현", () => {
