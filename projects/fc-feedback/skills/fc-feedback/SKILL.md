@@ -54,6 +54,9 @@ description: Use when an EA FC (EA Sports FC)/football or futsal coaching-feedba
    (v2, 아래 참고)을 작성한다. 필요한 프레임이 후보에 없으면 `bun
    ${CLAUDE_SKILL_DIR}/scripts/fc.ts add-frame --video <VID> --t <sec>`로 추가한다.
    `bun ${CLAUDE_SKILL_DIR}/scripts/fc.ts check notes`로 검증.
+   **SOURCE REVIEW**: `check notes` 통과 후 `presentation-reviewer` 에이전트를
+   디스패치해 원문과 대조한다. 번들·루프는 `references/contracts.md`의 「원문 대조
+   리뷰 번들」을 따른다. `APPROVE`/`COMMENT`만 진행, 나머지는 고쳐 재디스패치한다.
 7. **frames**: `bun ${CLAUDE_SKILL_DIR}/scripts/fc.ts frames`.
 8. **similar**: `bun ${CLAUDE_SKILL_DIR}/scripts/fc.ts similar`로 후보를 만들고,
    후보 목록 안에서 유닛당 최대 3개를 골라 `similar-choices.json`을 쓴 뒤

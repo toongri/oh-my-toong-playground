@@ -207,6 +207,20 @@ describe("round-0 RED 기준선 실패 대응 (진입점/재개, bare fc 금지,
 	});
 });
 
+describe("SOURCE REVIEW — presentation-reviewer 원문 대조", () => {
+	test("notes 작성 단계(6단계)에 presentation-reviewer 디스패치가 명시되어 있다", () => {
+		expect(skillMd).toContain("SOURCE REVIEW");
+		expect(skillMd).toContain("presentation-reviewer");
+	});
+
+	test("contracts.md에 원문 대조 리뷰 번들 섹션이 있다", () => {
+		expect(contractsMd).toContain("원문 대조 리뷰 번들");
+		expect(contractsMd).toContain("presentation");
+		expect(contractsMd).toContain("sources");
+		expect(contractsMd).toContain("reader_persona");
+	});
+});
+
 describe("플랫폼 중립 도구 표현", () => {
 	test("web search/fetch 도구의 Claude/Codex 대응이 병기된다", () => {
 		expect(skillMd).toContain("Claude: WebSearch/WebFetch; Codex: web search");
