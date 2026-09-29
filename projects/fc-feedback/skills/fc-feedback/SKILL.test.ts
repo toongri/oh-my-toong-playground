@@ -219,6 +219,11 @@ describe("SOURCE REVIEW — presentation-reviewer 원문 대조", () => {
 		expect(contractsMd).toContain("sources");
 		expect(contractsMd).toContain("reader_persona");
 	});
+
+	test("원문 대조 리뷰 체크리스트가 첫 문단의 행동 주체를 점검한다", () => {
+		expect(contractsMd).toContain("볼드 행동을 할 사람이 드러나는가");
+		expect(contractsMd).toContain("행동 주체로 읽히지 않게 한다");
+	});
 });
 
 describe("플랫폼 중립 도구 표현", () => {
