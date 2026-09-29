@@ -224,6 +224,11 @@ describe("SOURCE REVIEW — presentation-reviewer 원문 대조", () => {
 		expect(contractsMd).toContain("볼드 행동을 할 사람이 드러나는가");
 		expect(contractsMd).toContain("행동 주체로 읽히지 않게 한다");
 	});
+
+	test("원문 대조 리뷰 체크리스트가 볼드 대상을 점검한다", () => {
+		expect(contractsMd).toContain("볼드가 평가어");
+		expect(contractsMd).toContain("실제로 한 잘못된 행동을 볼드로 짚는다");
+	});
 });
 
 describe("플랫폼 중립 도구 표현", () => {
