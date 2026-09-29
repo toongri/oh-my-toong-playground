@@ -1008,19 +1008,33 @@ JS
 	)"
 	add_check "본문 프레임의 seek-btn 버튼 클릭은 그 프레임이 속한 video로 전환하고 시각으로 seek한다(§5-7, §13)" dom "$pass" ""
 
-	# ── DESIGN.md §6: "내 피드백"에서 팀원 1명을 선택하면 relatedMembers 카드만
-	# 남는다. yoon-fb matches u002/u004/u005 (직접 언급 u004 + 포지션 관련
-	# u002/u005), 총 3건.
+	# ── DESIGN.md §6: "내 피드백"에서 팀원 1명을 선택하면 relatedMembers 카드
+	# (직접 언급 u004 + 포지션 관련 u002/u005) + addressed_to_all 카드(u003, 이름을
+	# 부르지 않고 모두에게 통하는 원칙)가 남는다. yoon-fb 기준 총 4건.
 	ab click '.pill.pill-mine[data-group="mine"][data-value="yoon-fb"]' >/dev/null
 	pass="$(eval_js <<'JS'
-document.getElementById("visible-count").textContent === "3" &&
+document.getElementById("visible-count").textContent === "4" &&
 !document.getElementById("u002").hasAttribute("hidden") &&
+!document.getElementById("u003").hasAttribute("hidden") &&
 !document.getElementById("u004").hasAttribute("hidden") &&
 !document.getElementById("u005").hasAttribute("hidden") &&
 document.getElementById("u001").hasAttribute("hidden")
 JS
 	)"
-	add_check "\"내 피드백\"에서 팀원 1명을 선택하면 그 팀원의 relatedMembers 카드만 남고 결과 수가 갱신된다(§6)" dom "$pass" ""
+	add_check "\"내 피드백\"에서 팀원 1명을 선택하면 그 팀원의 relatedMembers 카드와 전원 대상(addressed_to_all) 카드가 남고 결과 수가 갱신된다(§6)" dom "$pass" ""
+
+	# ── DESIGN.md §5-3/§6: u003은 member_ids도 position_tags도 비어 있고
+	# addressed_to_all만 true인 유닛 — 어떤 팀원을 선택해도 "직접 언급"도
+	# "포지션 관련(참고)"도 아닌 "전원" 배지를 보여야 한다.
+	pass="$(eval_js <<'JS'
+(function () {
+  var badge = document.querySelector("#u003 .mention-badge");
+  return !!badge && !badge.hasAttribute("hidden") && badge.textContent.trim() === "전원" &&
+    badge.classList.contains("mention-all") && !document.getElementById("u003").hasAttribute("hidden");
+})()
+JS
+	)"
+	add_check "\"내 피드백\" 선택 시 전원 대상 카드는 '전원' 멘션 배지를 보인다(§5-3, §6)" dom "$pass" ""
 
 	pass="$(eval_js <<'JS'
 (function () {
@@ -1322,6 +1336,25 @@ JS
 	add_check "390px에서 카드 목록 끝까지 스크롤해도 .player-wrapper가 sticky로 고정 유지된다(§4, §14)" dom "$pass" ""
 }
 
+run_disabled_mode_checks() {
+	url="$(page_url disabled)"
+	ab set viewport 390 844 >/dev/null
+	ab open "$url" >/dev/null
+
+	# ── DESIGN.md §5 item 6: an addressed_to_all unit renders a "대상: 전원"
+	# chip regardless of roster presence -- disabled-mode-390 (no roster) is
+	# exactly the case that would silently drop it if the chip were built
+	# from member data instead of the unit flag alone.
+	pass="$(eval_js <<'JS'
+(function () {
+  var chip = document.querySelector(".card .chip-addressed-all");
+  return !!chip && chip.textContent.trim() === "대상: 전원";
+})()
+JS
+	)"
+	add_check "disabled 모드(명단 없음)에서도 addressed_to_all 카드는 \"대상: 전원\" 칩을 보인다(§5-6, §10)" dom "$pass" ""
+}
+
 run_player_checks() {
 	url="$(page_url viewer)"
 	ab set viewport 1440 900 >/dev/null
@@ -1507,6 +1540,7 @@ JS
 
 run_dom_checks
 run_mobile_dom_checks
+run_disabled_mode_checks
 run_player_checks
 
 {

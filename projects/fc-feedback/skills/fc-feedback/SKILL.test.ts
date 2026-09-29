@@ -175,6 +175,10 @@ describe("notes v2 작성 규칙(품질 핵심)", () => {
 		expect(skillMd).toContain("15초 이상 무음");
 		expect(skillMd).toContain("경기 시계가 리셋되면 새 경기");
 	});
+
+	test("이름을 부르지 않고 모두에게 통하는 원칙은 addressed_to_all: true로 표시한다는 규칙이 있다", () => {
+		expect(skillMd).toContain("addressed_to_all: true");
+	});
 });
 
 describe("round-0 RED 기준선 실패 대응 (진입점/재개, bare fc 금지, render-only, publish-prep 도달)", () => {

@@ -1109,6 +1109,7 @@ export interface ValidatedUnit {
 	topic_tags: string[];
 	member_ids: string[];
 	key_frame_candidate_ids: string[];
+	addressed_to_all: boolean;
 }
 
 export interface ValidatedTopic {
@@ -1379,6 +1380,20 @@ export function checkPlan(plan: unknown, context: CheckPlanContext): CheckPlanRe
 								}
 							});
 
+							// addressed_to_all: 예전 plan.json 호환 — 필드가 없으면(옛 plan) false로 취급한다.
+							let addressed_to_all = false;
+							const addressedToAllRaw = unitRaw.addressed_to_all;
+							if (addressedToAllRaw !== undefined) {
+								if (typeof addressedToAllRaw !== "boolean") {
+									errors.push({
+										path: `${unitPath}.addressed_to_all`,
+										message: "addressed_to_all은 boolean이어야 합니다",
+									});
+								} else {
+									addressed_to_all = addressedToAllRaw;
+								}
+							}
+
 							const key_frame_candidate_ids = requireStringArray(
 								unitRaw.key_frame_candidate_ids,
 								`${unitPath}.key_frame_candidate_ids`,
@@ -1421,11 +1436,14 @@ export function checkPlan(plan: unknown, context: CheckPlanContext): CheckPlanRe
 								topic_tags,
 								member_ids,
 								key_frame_candidate_ids,
+								addressed_to_all,
 							});
 
-							const memberCell =
-								member_ids.length > 0
-									? escapeTableCell(member_ids.map((id) => memberDisplayName(id, roster)).join(", "))
+							const memberNames = member_ids.map((id) => memberDisplayName(id, roster));
+							const memberCell = addressed_to_all
+								? escapeTableCell(memberNames.length > 0 ? `전원 + ${memberNames.join(", ")}` : "전원")
+								: memberNames.length > 0
+									? escapeTableCell(memberNames.join(", "))
 									: "-";
 							rows.push(
 								`| ${escapeTableCell(matchTitle)} | ${formatTime(unitStart)} | ${escapeTableCell(unitTitle)} | ${

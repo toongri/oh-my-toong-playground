@@ -1036,6 +1036,7 @@ function toValidatedUnit(raw: unknown): ValidatedUnit {
 		topic_tags: toStringArray(raw.topic_tags, "unit.topic_tags"),
 		member_ids: toStringArray(raw.member_ids, "unit.member_ids"),
 		key_frame_candidate_ids: toStringArray(raw.key_frame_candidate_ids, "unit.key_frame_candidate_ids"),
+		addressed_to_all: optionalBool(raw.addressed_to_all, false),
 	};
 }
 
@@ -1789,6 +1790,7 @@ function buildSessionUnit(unit: ValidatedUnit, ctx: BuildUnitContext): SessionUn
 		topic_tags: unit.topic_tags,
 		member_ids: unit.member_ids,
 		related_member_ids: relatedIds,
+		addressed_to_all: unit.addressed_to_all,
 		body,
 		images: { start: startImage },
 		similar,

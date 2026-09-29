@@ -48,7 +48,8 @@
                 "오버래핑"
               ],
               "member_ids": [],
-              "key_frame_candidate_ids": []
+              "key_frame_candidate_ids": [],
+              "addressed_to_all": true
             }
           ]
         },

@@ -15,7 +15,8 @@
               "position_tags": ["CB"],
               "topic_tags": ["빌드업"],
               "member_ids": [],
-              "key_frame_candidate_ids": []
+              "key_frame_candidate_ids": [],
+              "addressed_to_all": true
             }
           ]
         }

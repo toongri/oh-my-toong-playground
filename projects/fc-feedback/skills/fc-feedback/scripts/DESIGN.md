@@ -264,7 +264,7 @@ pill·버튼·part 전환 버튼·details summary)은 `1px solid var(--line-stro
 
 ## 5. 카드 해부 (노트 v2)
 
-카드 루트는 `<article class="card" data-video data-start data-pos data-topics data-member-ids data-related-ids>`. `data-member-ids`는 `member_ids`를, `data-related-ids`는 `relatedMembers(unit)`(직접 언급 ∪ 포지션 관련, `data-member-ids`의 상위집합)을 `|`로 구분한 id 목록으로 담는다 — `data-pos`/`data-topics`도 같은 구분자다. 주제 태그는 공백을 포함할 수 있어(`core.ts`의 `isValidTag`) 공백 구분자는 단독 선택 시 매칭이 깨지므로, 태그에 쓸 수 없는 `|`를 쓴다. 멘션 배지(아래 3번)는 이 목록에서 id 존재만 확인하면 된다. `a`/`button`/`summary`/`figure` 태그가 아닌 카드 영역 클릭은 그 카드의 시작 시각으로 `seek`한다(카드 전체가 클릭 타깃, §13 탭 타깃 44px 규칙). 헤더 줄(1번)의 시간 칩은 `<button class="seek-btn">`(예 "0:30부터 재생")이라 키보드로도 같은 seek를 실행할 수 있다 — 카드 자체는 포커스 불가 요소라 탭 스톱을 늘리지 않으면서 키보드 접근을 보장한다(§13). 단 `window.getSelection().toString()`이 비어 있지 않으면(사용자가 카드 안 텍스트를 드래그 선택 중이면) 그 클릭에서는 `seek`를 실행하지 않는다 — 문장을 드래그해 복사하려는 조작을 방해하지 않기 위함이다(§13).
+카드 루트는 `<article class="card" data-video data-start data-pos data-topics data-member-ids data-related-ids data-addressed-to-all>`. `data-member-ids`는 `member_ids`를, `data-related-ids`는 `relatedMembers(unit)`(직접 언급 ∪ 포지션 관련, `data-member-ids`의 상위집합)을 `|`로 구분한 id 목록으로 담는다 — `data-pos`/`data-topics`도 같은 구분자다. `data-addressed-to-all`은 `unit.addressed_to_all`을 `"true"`/`"false"` 문자열로 그대로 담는다(`data-embeddable`과 같은 관례, 항상 명시). 주제 태그는 공백을 포함할 수 있어(`core.ts`의 `isValidTag`) 공백 구분자는 단독 선택 시 매칭이 깨지므로, 태그에 쓸 수 없는 `|`를 쓴다. 멘션 배지(아래 3번)는 이 목록에서 id 존재만 확인하면 된다. `a`/`button`/`summary`/`figure` 태그가 아닌 카드 영역 클릭은 그 카드의 시작 시각으로 `seek`한다(카드 전체가 클릭 타깃, §13 탭 타깃 44px 규칙). 헤더 줄(1번)의 시간 칩은 `<button class="seek-btn">`(예 "0:30부터 재생")이라 키보드로도 같은 seek를 실행할 수 있다 — 카드 자체는 포커스 불가 요소라 탭 스톱을 늘리지 않으면서 키보드 접근을 보장한다(§13). 단 `window.getSelection().toString()`이 비어 있지 않으면(사용자가 카드 안 텍스트를 드래그 선택 중이면) 그 클릭에서는 `seek`를 실행하지 않는다 — 문장을 드래그해 복사하려는 조작을 방해하지 않기 위함이다(§13).
 
 카드 내부 순서:
 
@@ -274,9 +274,11 @@ pill·버튼·part 전환 버튼·details summary)은 `1px solid var(--line-stro
 2. **제목**: `<h3>` 유닛 제목.
 3. **멘션 배지**: "내 피드백"(§6)에서 팀원을 선택했을 때만 제목 바로 아래 배지 1개를
    보인다 — `data-member-ids`에 있으면 "직접 언급"(`background: var(--accent); color:
-   var(--bg);` 채움), 없지만 `data-related-ids`에는 있으면 "포지션 관련(참고)"(`background:
-   var(--bg); color: var(--muted); border: 1px solid var(--line);` 아웃라인) — 채움 vs
-   아웃라인으로 자기 잘못과 참고용을 한눈에 구분한다. 미선택 상태에서는 렌더하지 않는다.
+   var(--bg);` 채움)이 최우선이고, 없지만 유닛이 `addressed_to_all`이면 "전원"(`background:
+   var(--bg); color: var(--muted); border: 1px solid var(--line);` 아웃라인, "포지션
+   관련(참고)"과 같은 토큰), 그 둘 다 아니지만 `data-related-ids`에는 있으면 "포지션
+   관련(참고)"(같은 아웃라인 스타일) — 채움 vs 아웃라인으로 자기 잘못과 참고용을 한눈에
+   구분한다. 미선택 상태에서는 렌더하지 않는다.
 4. **대표 시작 이미지**: `<img>`에 실제 프레임의 width/height로 레이아웃 시프트를 막는다.
    클릭 시 시작 시각으로 seek(카드 공통 클릭 규칙). 폭은 `.card` 전체 폭(§2 `--measure`).
    figcaption은 태그 행(5번)과 한 줄 공유 — 태그 왼쪽, "확대"(새 탭 원본 링크) 오른쪽
@@ -286,7 +288,11 @@ pill·버튼·part 전환 버튼·details summary)은 `1px solid var(--line-stro
    칩(중립색, 클릭 불가, 순수 카운트 표시) 하나로 묶는다. `@멘션` 칩은 이 행에 넣지 않는다
    (다음 항목으로 분리). 4번 이미지의 figcaption 안에 렌더되지만 필드 순서는 그대로다.
 6. **언급된 팀원**: `member_ids`에 있는 팀원을 이름으로 나열("언급: 한지우, 윤도훈"). 비어
-   있으면 이 줄 자체를 렌더하지 않는다(disabled 모드에서도 항상 생략, §10).
+   있으면 이 줄 자체를 렌더하지 않는다(disabled 모드에서도 항상 생략, §10). 이름을 부르지
+   않고 모두에게 통하는 원칙을 말하는 유닛(`addressed_to_all: true`)은 이 줄 바로 아래에
+   "대상: 전원" 칩(멘션 배지의 "포지션 관련(참고)"과 같은 아웃라인 토큰 재사용, 새 색 없음)을
+   추가로 렌더한다 — roster 유무와 무관하게(disabled 모드에서도) 렌더하며, "언급:" 줄과
+   함께 올 수 있다(이름 불린 팀원의 장면을 예로 들며 모두에게 원칙을 말하는 경우).
 7. **본문**: `unit.body`(blocks 배열)를 작성 순서 그대로 렌더한다. 노트 dl(문제/누구/대신)은
    v2에서 완전히 폐기한다.
    - `{type:"text", text}` → `<p>`. `text`를 escape한 뒤 `**굵게**`만 `<strong>`으로 바꾼다.
@@ -372,16 +378,22 @@ var(--radius-sm); padding: 0 var(--space-1); font-weight: 600; color: inherit;`)
 - 개수는 `relatedMembers(unit)`(직접 언급 ∪ 포지션 관련) 기준으로 그 팀원이 걸리는 유닛 수다
   — "팀원 관련" 필터(v1)와 같은 판정 로직이며, v2에서는 이것을 필터 바 안이 아니라 이 프라이머리
   컨트롤로 승격했다. 필터 바(§7)에는 더 이상 별도의 "팀원 관련" 그룹을 두지 않는다(중복 제거).
+  `addressed_to_all` 유닛은 "내 피드백"에서 어떤 팀원을 골라도 걸리므로(아래 선택 시 동작 참고)
+  모든 팀원의 개수에 1씩 가산한다 — `related_member_ids`만으로는 셀 수 없는 전원 대상의
+  포함 범위까지 반영해, **다른 필터가 걸리지 않은 상태에서** 그 팀원을 "내 피드백"으로
+  골랐을 때의 결과 수와 일치하도록 맞추기 위함이다(pill 숫자 자체는 §7의 패싯 칩과 달리
+  라이브 재계산 대상이 아니라 빌드 시점 카운트 그대로다, §7 참고).
 - pill 한 줄은 **가로 스크롤**(`overflow-x: auto; white-space: nowrap;`)이며 줄바꿈하지
   않는다 — 이름이 많아져도 세로로 불어나지 않고, 오른쪽이 살짝 잘려 보이는 것 자체가 "더
   있다"는 신호다(§0 Baymard 근거).
 - 활성 상태는 다른 칩과 같은 언어를 쓴다: `aria-pressed="true"`일 때
   `background: var(--accent); color: #fff; border-color: var(--accent);`. 단일 선택이며,
   이미 선택된 pill을 다시 누르면 선택이 풀린다(토글).
-- 선택 시: 카드 목록이 그 팀원의 `relatedMembers(unit)`에 해당하는 카드만 남기고, 결과 수가
-  "피드백 n/m"으로 갱신되며, §5의 이름 강조와 멘션 배지("직접 언급"/"포지션 관련(참고)")가
-  카드마다 적용돼 자기 잘못과 참고용을 구분해 보여준다. 이것이 필터 그룹들과 **AND**로
-  결합되는 다섯 번째 조건이다(§7). **30초 기준**(§15 판정 기준 2): 직접 언급 카드가 포지션
+- 선택 시: 카드 목록이 그 팀원의 `relatedMembers(unit)`에 해당하는 카드 **더하여
+  `addressed_to_all` 카드 전부**를 남기고, 결과 수가 "피드백 n/m"으로 갱신되며, §5의 이름
+  강조와 멘션 배지("직접 언급"/"전원"/"포지션 관련(참고)", `member_ids`에 선택한 팀원이
+  있으면 "직접 언급" 우선)가 카드마다 적용돼 자기 잘못·전원 대상·참고용을 구분해 보여준다.
+  이것이 필터 그룹들과 **AND**로 결합되는 다섯 번째 조건이다(§7). **30초 기준**(§15 판정 기준 2): 직접 언급 카드가 포지션
   관련 카드보다 먼저 보여야 팀원이 근거를 빨리 찾는다 — VIEWER_JS가 `.card-list`에
   `.mine-active`를, 직접 언급 카드에 `.is-direct`를 토글하고, `.card-list.mine-active
   .card:not(.is-direct) { order: 1; }`(카드 목록은 flex column)로 DOM 순서를 바꾸지 않은 채

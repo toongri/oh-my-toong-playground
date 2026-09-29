@@ -103,6 +103,7 @@ export interface SessionUnit {
 	topic_tags: string[];
 	member_ids: string[];
 	related_member_ids: string[];
+	addressed_to_all: boolean;
 	body: UnitBodyBlock[];
 	images: UnitImages;
 	similar: UnitSimilar[];
@@ -462,10 +463,16 @@ function countMentionMembers(data: SessionData): Map<string, number> {
 	return counts;
 }
 
-/** `relatedMembers(unit)` occurrence count per member — the basis for both the "내 피드백" pill count (§6) and pill eligibility (only members with ≥1 count get a pill). */
+/** `relatedMembers(unit)` occurrence count per member — the basis for both the "내 피드백" pill count (§6) and pill eligibility (only members with ≥1 count get a pill). A `addressed_to_all` unit matches every member when "내 피드백"로 선택되므로(§7 elementMatchesExcept), 모든 팀원에게 1건씩 가산한다 — `related_member_ids`는 따로 더하지 않는다(전원이 이미 그 집합을 포함하는 상위집합). */
 function countRelatedMembers(data: SessionData): Map<string, number> {
 	const counts = new Map<string, number>();
 	for (const unit of data.units) {
+		if (unit.addressed_to_all) {
+			for (const member of data.members) {
+				counts.set(member.id, (counts.get(member.id) ?? 0) + 1);
+			}
+			continue;
+		}
 		for (const id of unit.related_member_ids) {
 			counts.set(id, (counts.get(id) ?? 0) + 1);
 		}
@@ -613,7 +620,8 @@ function tocItemAttrs(unit: SessionUnit): string {
 		`data-pos="${escapeHtml(posClosure(unit.position_tags).join("|"))}" ` +
 		`data-topics="${escapeHtml(unit.topic_tags.join("|"))}" ` +
 		`data-member-ids="${escapeHtml(unit.member_ids.join("|"))}" ` +
-		`data-related-ids="${escapeHtml(unit.related_member_ids.join("|"))}"`
+		`data-related-ids="${escapeHtml(unit.related_member_ids.join("|"))}" ` +
+		`data-addressed-to-all="${unit.addressed_to_all ? "true" : "false"}"`
 	);
 }
 
@@ -787,6 +795,14 @@ function renderMentionedLine(unit: SessionUnit, members: readonly SessionMemberI
 	return `<p class="mentioned-members">언급: ${names}</p>`;
 }
 
+/** "전원 대상" 표시(DESIGN §5 item 6): 이름을 부르지 않고 모두에게 하는 원칙 유닛에 렌더한다 — 이름 불린 팀원이 함께 올 수도 있어 "언급:" 줄과 독립적으로, roster 유무와 무관하게(disabled 모드에서도) 렌더한다. */
+function renderAddressedAllLine(unit: SessionUnit): string {
+	if (!unit.addressed_to_all) {
+		return "";
+	}
+	return `<p class="mentioned-members addressed-all-line">${chip("chip-addressed-all", "대상: 전원")}</p>`;
+}
+
 /** Above this many related members, `renderRelatedLine` collapses into a `<details>` (mobile readability — 13–14-name rows were unreadable). */
 const MAX_RELATED_INLINE = 5;
 
@@ -942,12 +958,14 @@ function renderCard(unit: SessionUnit, ctx: CardContext): string {
 		`data-topics="${escapeHtml(unit.topic_tags.join("|"))}" ` +
 		`data-member-ids="${escapeHtml(unit.member_ids.join("|"))}" ` +
 		`data-related-ids="${escapeHtml(unit.related_member_ids.join("|"))}" ` +
+		`data-addressed-to-all="${unit.addressed_to_all ? "true" : "false"}" ` +
 		`data-embeddable="${(video?.embeddable ?? true) ? "true" : "false"}">` +
 		renderCardHead(unit, ctx) +
 		`<h3>${titleHtml(unit.title)}</h3>` +
 		(hasRoster ? `<p class="mention-badge" hidden></p>` : "") +
 		renderStartImage(unit.images.start, renderChipRow(unit)) +
 		(hasRoster ? renderMentionedLine(unit, ctx.members) : "") +
+		renderAddressedAllLine(unit) +
 		renderBody(unit.body) +
 		(hasRoster ? renderRelatedLine(unit, ctx.members) : "") +
 		renderMetaBlock(unit) +
@@ -1320,7 +1338,8 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .mention-badge { display: inline-block; margin: var(--space-2) 0 0; padding: var(--space-1) var(--space-3); border-radius: var(--radius-full); font-size: 0.8125rem; font-weight: 600; }
 .mention-badge[hidden] { display: none; }
 .mention-badge.mention-direct { background: var(--accent); color: var(--bg); }
-.mention-badge.mention-related { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
+.mention-badge.mention-related, .mention-badge.mention-all { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
+.chip-addressed-all { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
 .chip-row { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0; }
 .chip-pos-gk { background: var(--pos-gk-bg); color: var(--pos-gk-fg); }
 .chip-pos-df { background: var(--pos-df-bg); color: var(--pos-df-fg); }
@@ -1493,10 +1512,11 @@ export const VIEWER_JS = `(function () {
     var topics = el.getAttribute("data-topics") || "";
     var memberIds = el.getAttribute("data-member-ids") || "";
     var relatedIds = el.getAttribute("data-related-ids") || "";
+    var addressedToAll = el.getAttribute("data-addressed-to-all") === "true";
     if (exceptGroup !== "position" && selected.position && !hasToken(pos, selected.position)) return false;
     if (exceptGroup !== "topic" && selected.topic.length > 0 && !anyToken(topics, selected.topic)) return false;
     if (exceptGroup !== "mention" && selected.mention && !hasToken(memberIds, selected.mention)) return false;
-    if (exceptGroup !== "mine" && selected.mine && !hasToken(relatedIds, selected.mine)) return false;
+    if (exceptGroup !== "mine" && selected.mine && !addressedToAll && !hasToken(relatedIds, selected.mine)) return false;
     return true;
   }
 
@@ -1714,9 +1734,14 @@ export const VIEWER_JS = `(function () {
       card.classList.toggle("is-direct", isDirect);
       var badge = card.querySelector(".mention-badge");
       if (badge) {
+        var isAddressedToAll = card.getAttribute("data-addressed-to-all") === "true";
         if (isDirect) {
           badge.textContent = "직접 언급";
           badge.className = "mention-badge mention-direct";
+          badge.removeAttribute("hidden");
+        } else if (mine && isAddressedToAll) {
+          badge.textContent = "전원";
+          badge.className = "mention-badge mention-all";
           badge.removeAttribute("hidden");
         } else if (mine && hasToken(card.getAttribute("data-related-ids") || "", mine)) {
           badge.textContent = "포지션 관련(참고)";

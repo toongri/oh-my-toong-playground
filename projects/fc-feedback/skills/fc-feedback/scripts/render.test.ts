@@ -52,6 +52,7 @@ function baseUnit(overrides: Partial<SessionUnit>): SessionUnit {
 		related_member_ids: relatedMembers({ member_ids: ["hong"], position_tags: ["FB"] }, ROSTER).map(
 			(member) => member.id,
 		),
+		addressed_to_all: false,
 		body: [{ type: "text", text: "라인이 **홍길동** 기준으로 늘어짐. 간격을 좁혀야 함" }],
 		images: {
 			start: { src: "img/u001-start.webp", width: 1280, height: 720 },
@@ -596,6 +597,24 @@ describe("카드 해부", () => {
 		const relatedU002 =
 			doc.getElementById("u002")?.querySelector(".related-members")?.textContent ?? "";
 		expect(relatedU002).toBe(`관련: ${expectedU002.join(", ")}`);
+	});
+
+	test("addressed_to_all 유닛은 카드 루트에 data-addressed-to-all=\"true\"를 달고 '대상: 전원' 칩을 렌더한다(DESIGN §5 item 6)", () => {
+		const data = sampleData();
+		data.units[0].addressed_to_all = true;
+		const doc = parseHTML(renderSession(data)).document;
+		const card = doc.getElementById("u001");
+		expect(card?.getAttribute("data-addressed-to-all")).toBe("true");
+		expect(card?.querySelector(".addressed-all-line")?.textContent).toBe("대상: 전원");
+		// 이름 불린 팀원과 함께 올 수 있다 — "언급:" 줄과 "대상: 전원" 줄이 공존한다.
+		expect(card?.querySelector(".mentioned-members:not(.addressed-all-line)")?.textContent).toBe("언급: 홍길동");
+	});
+
+	test("addressed_to_all이 아닌 유닛은 data-addressed-to-all=\"false\"이고 '대상: 전원' 줄이 없다", () => {
+		const doc = parseHTML(renderSession(sampleData())).document;
+		const card = doc.getElementById("u001");
+		expect(card?.getAttribute("data-addressed-to-all")).toBe("false");
+		expect(card?.querySelector(".addressed-all-line")).toBeNull();
 	});
 
 	test("관련 팀원이 정확히 5명이면 여전히 <p> 한 줄로 전원이 나온다(모바일 가독성 상한 경계값)", () => {
@@ -1257,6 +1276,67 @@ describe("내 피드백", () => {
 	});
 });
 
+describe("전원 대상 유닛과 내 피드백", () => {
+	test("addressed_to_all 유닛은 누구를 선택해도 남는다(mine 필터 통과)", () => {
+		const data = sampleData();
+		data.units[1].addressed_to_all = true; // u002: member_ids=[], 특정 포지션과 무관한 원칙
+		for (const memberId of ["hong", "kim", "park", "choi"]) {
+			const { doc } = mountViewer(renderSession(data), false);
+			clickMinePill(doc, memberId);
+			expect(isHidden(doc.getElementById("u002"))).toBe(false);
+		}
+	});
+
+	test("다른 필터가 없는 상태에서 pill 옆 숫자는 addressed_to_all 유닛을 모든 대상 팀원에게 가산해 그 팀원만 선택했을 때의 결과 수와 일치한다", () => {
+		const data = sampleData();
+		data.units[1].addressed_to_all = true;
+		const { doc } = mountViewer(renderSession(data), false);
+		for (const memberId of ["hong", "kim", "park", "choi"]) {
+			const pill = doc.querySelector(`.pill-mine[data-value="${memberId}"]`);
+			const pillCount = Number(pill?.querySelector(".count")?.textContent);
+			clickMinePill(doc, memberId); // 선택
+			const visibleCount = Number(doc.getElementById("visible-count")?.textContent);
+			expect(pillCount).toBe(visibleCount);
+			clickMinePill(doc, memberId); // 해제(다음 팀원을 위해)
+		}
+	});
+
+	test("mine 선택 시 전원 카드는 '직접 언급'도 '포지션 관련(참고)'도 아닌 '전원' 배지를 보인다", () => {
+		const data = sampleData();
+		data.units[1].addressed_to_all = true; // u002: member_ids=[]
+		const { doc } = mountViewer(renderSession(data), false);
+		clickMinePill(doc, "hong"); // hong은 u002의 member_ids에도 related_member_ids에도 없다.
+		const badge = doc.getElementById("u002")?.querySelector(".mention-badge");
+		expect(badge?.textContent).toBe("전원");
+		expect(badge?.classList.contains("mention-all")).toBe(true);
+	});
+
+	test("addressed_to_all이어도 member_ids에 선택한 팀원이 있으면 '직접 언급'이 우선한다", () => {
+		const data = sampleData();
+		data.units[0].addressed_to_all = true;
+		data.units[0].member_ids = ["hong"]; // 이름 불린 팀원과 함께 온 전원 대상 원칙
+		const { doc } = mountViewer(renderSession(data), false);
+		clickMinePill(doc, "hong");
+		const badge = doc.getElementById("u001")?.querySelector(".mention-badge");
+		expect(badge?.textContent).toBe("직접 언급");
+		expect(badge?.classList.contains("mention-direct")).toBe(true);
+	});
+
+	test("addressed_to_all 유닛은 member_ids가 비어 있으면 '언급 선수' 필터 옵션에 걸리지 않는다(DESIGN §7)", () => {
+		const data = sampleData();
+		data.units[1].addressed_to_all = true; // u002: member_ids=[]
+		const doc = parseHTML(renderSession(data)).document;
+		const mentionValues = [...doc.querySelectorAll('.chip-filter[data-group="mention"]')].map((el) =>
+			el.getAttribute("data-value"),
+		);
+		// u002가 유일하게 "hong"을 언급하는 유닛이 되지 않도록, 다른 유닛의 member_ids로만 옵션이 구성되는지 확인한다.
+		for (const memberId of mentionValues) {
+			const unitsWithMember = data.units.filter((unit) => unit.member_ids.includes(memberId ?? ""));
+			expect(unitsWithMember.length).toBeGreaterThan(0);
+		}
+	});
+});
+
 // ── 활성 필터 — 내 피드백 칩 (DESIGN §6/§7, 라운드8 시각 QA) ───────────────────
 
 describe("활성 필터 — 내 피드백 칩", () => {
@@ -1413,6 +1493,22 @@ describe("disabled 모드(명단 없음)", () => {
 		expect(doc.querySelector('.filter-group[data-role="filter-mention"]')).toBeNull();
 		expect(doc.querySelector(".mentioned-members")).toBeNull();
 		expect(doc.querySelector(".related-members")).toBeNull();
+		expect(doc.querySelector(".mention-badge")).toBeNull();
+	});
+
+	test("명단이 없어도 addressed_to_all 카드는 \"대상: 전원\" 칩을 보이되 pill-mine과 멘션 배지는 없다(DESIGN §5-6/§10)", () => {
+		const data = sampleData();
+		data.members = [];
+		for (const unit of data.units) {
+			unit.member_ids = [];
+			unit.related_member_ids = [];
+		}
+		data.units[0].addressed_to_all = true;
+		const doc = parseHTML(renderSession(data)).document;
+
+		const chip = doc.getElementById("u001")?.querySelector(".chip-addressed-all");
+		expect(chip?.textContent).toBe("대상: 전원");
+		expect(doc.querySelector(".pill-mine")).toBeNull();
 		expect(doc.querySelector(".mention-badge")).toBeNull();
 	});
 

@@ -998,6 +998,50 @@ describe("checkPlan", () => {
 		expect(findError(result.errors, "matches[0].topics[0].units[0].member_ids[0]")).toBe(true);
 	});
 
+	test("addressed_to_all이 없으면 false로 취급한다(옛 plan 호환)", () => {
+		const plan = makeValidPlan();
+		const result = checkPlan(plan, fixtureContext);
+		expect(result.errors).toEqual([]);
+		expect(result.validated.units[0].addressed_to_all).toBe(false);
+	});
+
+	test("addressed_to_all이 true면 통과하고 validated에 반영한다", () => {
+		const plan = makeValidPlan();
+		plan.matches[0].topics[0].units[0].addressed_to_all = true;
+		const result = checkPlan(plan, fixtureContext);
+		expect(result.errors).toEqual([]);
+		expect(result.validated.units[0].addressed_to_all).toBe(true);
+	});
+
+	test("addressed_to_all이 boolean이 아니면 addressed_to_all 경로 에러를 낸다", () => {
+		const plan = makeValidPlan();
+		plan.matches[0].topics[0].units[0].addressed_to_all = "true";
+		const result = checkPlan(plan, fixtureContext);
+		expect(findError(result.errors, "matches[0].topics[0].units[0].addressed_to_all")).toBe(true);
+	});
+
+	test("roster가 null(disabled)이어도 addressed_to_all: true는 허용한다", () => {
+		const plan = makeValidPlan();
+		plan.matches[0].topics[0].units[0].member_ids = [];
+		plan.matches[0].topics[0].units[0].addressed_to_all = true;
+		plan.matches[0].topics[0].units[1].member_ids = [];
+		const disabledContext = { ...fixtureContext, roster: null };
+		const result = checkPlan(plan, disabledContext);
+		expect(result.errors).toEqual([]);
+		expect(result.validated.units[0].addressed_to_all).toBe(true);
+	});
+
+	test("게이트 표는 addressed_to_all 유닛의 팀원 칸에 '전원'을 표시한다(이름이 있으면 '전원 + 이름들')", () => {
+		const plan = makeValidPlan();
+		plan.matches[0].topics[0].units[0].addressed_to_all = true;
+		plan.matches[0].topics[0].units[1].addressed_to_all = true;
+		plan.matches[0].topics[0].units[1].member_ids = [];
+		const result = checkPlan(plan, fixtureContext);
+		const rows = result.tableMd.split("\n");
+		expect(rows[2]).toContain("전원 + 홍길동");
+		expect(rows[3]).toContain("| 전원 |");
+	});
+
 	test("존재하지 않는 candidate면 key_frame_candidate_ids[n] 경로 에러를 낸다", () => {
 		const plan = makeValidPlan();
 		plan.matches[0].topics[0].units[0].key_frame_candidate_ids = ["c999"];
