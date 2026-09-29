@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "total": 75.94570046723233,
+  "gate_failed": false,
+  "breakdown": {
+    "gate": {
+      "plan": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "notes": {
+        "exit_code": 0,
+        "stderr": "fc-feedback: 경고 u005: 볼드 행동 없음 — 원문에 지시·평가가 없는 구간이면 인접 유닛에 합칠지 확인\nfc-feedback: 경고 u008: 볼드 행동 없음 — 원문에 지시·평가가 없는 구간이면 인접 유닛에 합칠지 확인\nfc-feedback: 경고 u012: 볼드 행동 없음 — 원문에 지시·평가가 없는 구간이면 인접 유닛에 합칠지 확인"
+      },
+      "similar": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "refs": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "passed": true
+    },
+    "unit_f1": {
+      "precision": 0.875,
+      "recall": 0.9333333333333333,
+      "f1": 0.9032258064516129,
+      "points": 22.58064516129032,
+      "matched": 14,
+      "total_gold": 15,
+      "total_predicted": 16
+    },
+    "start_time_accuracy": {
+      "median_delta_s": 0,
+      "points": 10
+    },
+    "tags": {
+      "position": {
+        "precision": 0.7857142857142857,
+        "recall": 0.7333333333333333,
+        "f1": 0.7586206896551724,
+        "points": 3.793103448275862
+      },
+      "topic": {
+        "precision": 0.6296296296296297,
+        "recall": 0.7727272727272727,
+        "f1": 0.6938775510204083,
+        "points": 3.4693877551020416
+      },
+      "member": {
+        "precision": 0.8421052631578947,
+        "recall": 0.8,
+        "f1": 0.8205128205128205,
+        "points": 4.102564102564102
+      }
+    },
+    "refs": {
+      "url_in_log": {
+        "fraction": 1,
+        "points": 4
+      },
+      "http_ratio": {
+        "fraction": 1,
+        "points": 3
+      },
+      "ko_summary": {
+        "fraction": 1,
+        "points": 3
+      }
+    },
+    "judge": {
+      "specificity": 8,
+      "fidelity": 6,
+      "readability": 8,
+      "points": 22,
+      "judge_invalid": false
+    },
+    "penalties": {
+      "seconds_in_plan": false,
+      "push_attempt": false,
+      "gate_order_violation": false,
+      "unknown_commands": [],
+      "points_deducted": 0
+    },
+    "contamination": {
+      "contaminated": false,
+      "excluded_from_comparison": false,
+      "hits": []
+    }
+  }
+}

@@ -1,0 +1,937 @@
+{
+  "version": 1,
+  "session_id": "20240104-NUzEChn9EyI",
+  "title": "FC Barcelona 팀 연습 Part 3 — 피드백",
+  "date": "2024-01-04",
+  "generated_at": "2026-09-28T20:22:33.235Z",
+  "pages_base_url": "https://fc-feedback-eval.invalid/",
+  "videos": [
+    {
+      "id": "NUzEChn9EyI",
+      "part": 1,
+      "embeddable": true
+    }
+  ],
+  "members": [
+    {
+      "id": "timej",
+      "name": "TIMEJ",
+      "gamertag": "TIMEJ",
+      "positions": [
+        "ST"
+      ]
+    },
+    {
+      "id": "gerrard",
+      "name": "Gerrard_CEF",
+      "gamertag": "Gerrard_CEF",
+      "positions": [
+        "CM"
+      ]
+    },
+    {
+      "id": "vandeven",
+      "name": "CEF_VandeVen",
+      "gamertag": "CEF_VandeVen",
+      "positions": [
+        "CB"
+      ]
+    },
+    {
+      "id": "bride",
+      "name": "브라이드",
+      "gamertag": "CEF_Bride",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "taxi",
+      "name": "택시",
+      "gamertag": "CEF_Taxi",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jomin",
+      "name": "조민",
+      "gamertag": "CEF_Jomin",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "find",
+      "name": "사인드",
+      "gamertag": "CEF_Find",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "rumi",
+      "name": "루미",
+      "gamertag": "CEF_Rumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "gipeu",
+      "name": "기프",
+      "gamertag": "CEF_Gipeu",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "yumi",
+      "name": "유미",
+      "gamertag": "CEF_Yumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "saembaek",
+      "name": "샘백",
+      "gamertag": "CEF_Saembaek",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "giseun",
+      "name": "기슨",
+      "gamertag": "CEF_Giseun",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jonjae",
+      "name": "존재",
+      "gamertag": "CEF_Jonjae",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "wonjeon",
+      "name": "원전",
+      "gamertag": "CEF_Wonjeon",
+      "positions": [
+        "FB"
+      ]
+    },
+    {
+      "id": "spress",
+      "name": "스프레스",
+      "gamertag": "CEF_Spress",
+      "positions": [
+        "CAM"
+      ]
+    },
+    {
+      "id": "maekgu",
+      "name": "맥구",
+      "gamertag": "CEF_Maekgu",
+      "positions": [
+        "FW"
+      ]
+    }
+  ],
+  "matches": [
+    {
+      "id": "m1",
+      "title": "연습경기 피드백",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "초반 빌드업과 역습 준비",
+          "summary": "넓은 공간을 보고 받는 자세를 유지하며, 역습에는 동료의 패스 길을 만든다.",
+          "unit_ids": [
+            "u001",
+            "u002",
+            "u003"
+          ]
+        },
+        {
+          "id": "m1-t2",
+          "title": "압박을 풀며 공 운반하기",
+          "summary": "압박과 상대 수비 숫자를 보고 후방과 측면을 거쳐 안전하게 전진한다.",
+          "unit_ids": [
+            "u004",
+            "u005",
+            "u006"
+          ]
+        },
+        {
+          "id": "m1-t3",
+          "title": "중앙과 측면의 자리 교대",
+          "summary": "막힌 중앙의 방향을 바꾸고, 측면 동료의 움직임에 맞춰 중앙 공간을 채운다.",
+          "unit_ids": [
+            "u007",
+            "u008",
+            "u009"
+          ]
+        },
+        {
+          "id": "m1-t4",
+          "title": "밀집 수비 앞의 선택",
+          "summary": "길이 막히면 공을 뒤로 살리고 열린 땅볼 패스와 후방 지원을 활용한다.",
+          "unit_ids": [
+            "u010",
+            "u011",
+            "u012"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "uid": "20240104-NUzEChn9EyI#u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 53.02,
+      "end": 103.42,
+      "title": "좁은 쪽 대신 넓은 쪽으로 전개",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "좁은 공간에 있는 동료에게 바로 넣기보다 **넓은 공간의 동료에게 공을 옮겨 전개**하자. 코치는 그쪽으로 운반하면 공 없는 선수가 올라갈 시간도 생긴다고 설명했다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u001-c003.webp",
+          "width": 854,
+          "height": 460,
+          "t": 60,
+          "caption": "경기 화면에서 양 팀 선수가 중원과 측면에 벌어져 있다."
+        },
+        {
+          "type": "text",
+          "text": "공이 한쪽에 몰렸을 때는 좁은 쪽으로 무리해서 보내지 말고, 넓은 쪽을 먼저 찾는다. 코치가 말한 판단 기준은 패스 직후의 운반 공간과 동료의 전진 시간이다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u001-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-a63145cc94",
+          "title": "Switch of play",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-a63145cc94.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/game/game-analysis/in-possession/switch-of-play.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=53"
+    },
+    {
+      "id": "u002",
+      "uid": "20240104-NUzEChn9EyI#u002",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 225.9,
+      "end": 255.12,
+      "title": "LT로 패스 받을 자세 유지",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "조작/키사용"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "패스를 기다리는 선수는 **LT를 눌러 공 가진 선수를 바라보며 이동**하자. 코치는 위아래로 움직여도 몸이 돌아서지 않아 다음 패스를 받을 자세를 유지할 수 있다고 설명했다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u002-c009.webp",
+          "width": 854,
+          "height": 460,
+          "t": 240,
+          "caption": "상대 진영 앞에서 선수들이 간격을 두고 서 있는 경기 장면이다."
+        },
+        {
+          "type": "text",
+          "text": "단순히 정지한 채 받기보다 공을 보는 자세로 위치를 조정하는 조작 설명이다. 전사의 '포'는 공을 가리키는 맥락으로 읽되, 화면만으로 개별 선수의 키 입력은 확인할 수 없다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u002-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=225"
+    },
+    {
+      "id": "u003",
+      "uid": "20240104-NUzEChn9EyI#u003",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 344.68,
+      "end": 402.72,
+      "title": "역습 때 윙어 역할로 뛰어 두 패스 길 열기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "역습 때 낮은 위치에 있는 동료 대신 폭을 맡아야 하는 선수는 **윙어처럼 뛰어 패스 길을 둘로 만들자**. 코치는 루미에게 전진 움직임이 있어야 가까운 쪽과 먼 쪽 두 선택지가 열린다고 지적했다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u003-c013.webp",
+          "width": 854,
+          "height": 460,
+          "t": 360,
+          "caption": "공격 진영에서 선수들이 페널티 구역 앞과 측면에 나뉘어 있다."
+        },
+        {
+          "type": "text",
+          "text": "코치의 설명은 특정 패스를 강제하는 지시가 아니다. 공을 가진 선수가 가까운 동료에게 주거나 전방으로 보낼 수 있도록, 공 없는 선수가 먼저 달려 선택지를 만들어야 한다는 내용이다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u003-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=344"
+    },
+    {
+      "id": "u004",
+      "uid": "20240104-NUzEChn9EyI#u004",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 463.08000000000004,
+      "end": 489.72,
+      "title": "압박 앞에서 간단히 뒤로 주고 다시 받기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 받는 순간 압박이 들어올 장면에서는 **불필요한 동작 없이 뒤로 내주고 LT로 다시 받을 준비**를 하자. 코치는 이미 압박이 올 수 있었으므로 간단히 연결하는 편이 낫다고 말했다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u004-c017.webp",
+          "width": 854,
+          "height": 460,
+          "t": 480,
+          "caption": "중원 부근에서 공 주변으로 양 팀 선수가 모여 있다."
+        },
+        {
+          "type": "text",
+          "text": "이 판단의 근거는 수비가 실제로 압박할 수 있는 거리였다는 코치 설명이다. 공을 오래 소유하며 돌아서는 동작보다 뒤의 지원을 써서 다시 연결하는 순서를 권했다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u004-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=463"
+    },
+    {
+      "id": "u005",
+      "uid": "20240104-NUzEChn9EyI#u005",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 489.72,
+      "end": 526.78,
+      "title": "전진 패스보다 측면을 거쳐 수비 이동시키기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "탈압박"
+      ],
+      "member_ids": [
+        "gerrard"
+      ],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "제라드가 탈압박해 바로 앞으로 넣을 수 있어도 **수비가 많은 전방에 곧장 밀어 넣지 말고 측면을 거치자**. 코치는 측면으로 보내 수비를 따라 움직이게 하면 뒤이은 공격의 난도가 내려간다고 설명했다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u005-c018.webp",
+          "width": 854,
+          "height": 460,
+          "t": 510,
+          "caption": "중앙과 측면에 선수들이 나뉘어 있는 경기 화면이다."
+        },
+        {
+          "type": "text",
+          "text": "전방 패스가 가능한지만 볼 일이 아니다. 그 다음 공을 받을 선수 앞의 수비 숫자와 이동 경로를 함께 보고, 측면을 이용해 수비를 움직인 뒤 전진한다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u005-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-a63145cc94",
+          "title": "Switch of play",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-a63145cc94.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/game/game-analysis/in-possession/switch-of-play.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=489"
+    },
+    {
+      "id": "u006",
+      "uid": "20240104-NUzEChn9EyI#u006",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 579.9399999999999,
+      "end": 658.94,
+      "title": "자기 진영에서는 더 운반해 공간과 시간을 만들기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "자기 진영에서 좁은 쪽의 코치에게 곧바로 주기보다 **공을 조금 더 운반해 상대 한 명을 끌고 동료가 올라올 시간을 벌자**. 코치는 그 상태의 패스라면 받는 자신에게 선택지가 적다고 했다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u006-c021.webp",
+          "width": 854,
+          "height": 460,
+          "t": 600,
+          "caption": "하프라인 부근에서 공을 가진 선수 앞과 양 측면에 선수들이 배치돼 있다."
+        },
+        {
+          "type": "text",
+          "text": "전방 동료가 더 높은 위치에 도착하면 패스 이후의 선택도 넓어진다. 코치는 우리 진영에서 공을 빼앗겼을 때 즉시 역습을 맞는 위험도 근거로 들었다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u006-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-cab2ebe63b",
+          "title": "How to coach passing in football",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-cab2ebe63b.html",
+          "orig_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=579"
+    },
+    {
+      "id": "u007",
+      "uid": "20240104-NUzEChn9EyI#u007",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 791.0999999999999,
+      "end": 838.74,
+      "title": "막힌 중앙에서 넓은 쪽으로 방향 바꾸기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "파이널서드"
+      ],
+      "member_ids": [
+        "gerrard"
+      ],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "중앙 길이 완전히 막혔다면 **제라드 쪽으로 돌려 넓은 공간을 쓰는 선수에게 연결**하자. 코치는 그 뒤 공을 몰고 들어가거나 크로스·컷백을 고를 수 있다고 설명했다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u007-c030.webp",
+          "width": 854,
+          "height": 460,
+          "t": 810,
+          "caption": "화면의 표시 선과 원이 중앙과 측면의 선수 위치를 가리킨다."
+        },
+        {
+          "type": "text",
+          "text": "이 대목의 전사에는 선수 이름과 동작이 일부 부정확하게 적혀 있다. 확실한 지시는 막힌 중앙을 고집하지 않고 넓은 쪽으로 방향을 바꿔 다음 공격 선택을 남기는 것이다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u007-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-a63145cc94",
+          "title": "Switch of play",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-a63145cc94.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/game/game-analysis/in-possession/switch-of-play.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=791"
+    },
+    {
+      "id": "u008",
+      "uid": "20240104-NUzEChn9EyI#u008",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 857.4799999999999,
+      "end": 901.44,
+      "title": "측면 동료가 올라가면 중앙으로 이동",
+      "position_tags": [
+        "MF",
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "원전이 측면으로 공을 몰고 올라갈 때 사인드는 **같은 측면에 머물기보다 중앙으로 들어가 공간을 채우자**. 코치는 자신이 뒤의 낮은 위치를 메울 수 있으므로 두 선수가 같은 길을 쓸 필요가 없다고 설명했다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u008-c032.webp",
+          "width": 854,
+          "height": 460,
+          "t": 870,
+          "caption": "하프라인 근처에서 선수들이 중앙과 양쪽 터치라인 쪽에 나뉘어 있다."
+        },
+        {
+          "type": "text",
+          "text": "이 장면의 핵심은 공을 가진 측면 선수와 공 없는 선수의 자리 교대다. 코치는 측면을 비우고 중앙으로 이동하는 순서를 설명했다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u008-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=857"
+    },
+    {
+      "id": "u009",
+      "uid": "20240104-NUzEChn9EyI#u009",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 1071.64,
+      "end": 1104.5,
+      "title": "측면에서 대각 패스로 전진 시야 만들기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "측면에서 공을 잡았을 때는 **대각으로 빼 중원의 전진 시야를 열자**. 코치는 이 연결로 중원 선수가 넓은 공간에서 앞으로 뛰는 동료를 볼 여유를 얻는다고 설명했다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u009-c039.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1080,
+          "caption": "공격 방향 오른쪽 측면과 중앙에 선수들이 나뉘어 있다."
+        },
+        {
+          "type": "text",
+          "text": "코치는 앞서 나온 장면과 비슷한 패턴이라고 짚었다. 짧은 대각 연결의 목적은 패스 한 번으로 끝내는 것이 아니라 중원에서 다음 전진 패스를 볼 수 있게 하는 것이다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u009-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-a63145cc94",
+          "title": "Switch of play",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-a63145cc94.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/game/game-analysis/in-possession/switch-of-play.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1071"
+    },
+    {
+      "id": "u010",
+      "uid": "20240104-NUzEChn9EyI#u010",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "NUzEChn9EyI",
+      "start": 1155.22,
+      "end": 1191.56,
+      "title": "수비가 촘촘하면 뒤로 빼서 다시 시작",
+      "position_tags": [
+        "MF",
+        "FW"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "상대 수비가 촘촘하게 모인 앞에서는 **공격을 억지로 이어가지 말고 뒤로 빼자**. 코치는 이 배치에서는 공격할 수 없으니 후방으로 돌려야 한다고 명확히 말했다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u010-c043.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1170,
+          "caption": "페널티 구역 주변에 수비수와 공격수가 밀집해 있다."
+        },
+        {
+          "type": "text",
+          "text": "판단 기준은 앞쪽 공간이 열려 있는지다. 밀집된 수비에 계속 정면으로 들어가는 대신 후방 지원을 이용해 공격 방향을 다시 찾는다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u010-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1155"
+    },
+    {
+      "id": "u011",
+      "uid": "20240104-NUzEChn9EyI#u011",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "NUzEChn9EyI",
+      "start": 1225.22,
+      "end": 1254.74,
+      "title": "열린 패스 길에는 땅볼로 전달",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "조작/키사용"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "패스 길이 열려 있다면 **공을 띄우지 말고 땅볼로 전달**하자. 코치는 받는 선수가 공의 속도를 살려 이어서 움직이기 쉽기 때문이라고 설명했다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u011-c045.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1230,
+          "caption": "상대 진영 앞에서 패스를 주고받을 수 있는 선수들이 보인다."
+        },
+        {
+          "type": "text",
+          "text": "사이에 수비가 막아서 땅볼이 끊길 상황일 때만 띄우는 패스를 고려한다는 설명이다. 열린 길과 막힌 길을 구분하는 것이 이 단위의 조작 기준이다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u011-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-cab2ebe63b",
+          "title": "How to coach passing in football",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-cab2ebe63b.html",
+          "orig_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1225"
+    },
+    {
+      "id": "u012",
+      "uid": "20240104-NUzEChn9EyI#u012",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "NUzEChn9EyI",
+      "start": 1258.6599999999999,
+      "end": 1305.48,
+      "title": "돌파가 막히면 뒤의 지원을 활용",
+      "position_tags": [
+        "MF",
+        "FW"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "맥구는 돌파 길이 막혔을 때 **같은 방향으로 계속 밀지 말고 뒤의 동료에게 안전하게 살리자**. 코치는 후방에서 받쳐 주는 선수를 못 보고 반복해서 돌파하는 상황을 지적했다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u012-c047.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1280,
+          "caption": "상대 페널티 구역 앞에 여러 선수가 자리 잡고 있다."
+        },
+        {
+          "type": "text",
+          "text": "뒤로 준 다음에는 그 동료가 다시 공격을 전개할 수 있다. 코치가 마지막에 정리한 두 과제도 대각 방향의 패스 길을 보는 것과 밀집 수비 앞에서 미련 없이 뒤로 빼는 것이었다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u012-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-cab2ebe63b",
+          "title": "How to coach passing in football",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-cab2ebe63b.html",
+          "orig_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1258"
+    }
+  ]
+}

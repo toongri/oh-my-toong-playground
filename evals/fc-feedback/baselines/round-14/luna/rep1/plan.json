@@ -1,0 +1,205 @@
+{
+  "session_title": "EAFC24 프로클럽 커뮤니티 C.E.F. / FC Barcelona 팀 연습 (24.1.4) - Part 3 (피드백)",
+  "matches": [
+    {
+      "title": "Bros Vamos vs CEF Barcelona",
+      "topics": [
+        {
+          "title": "전개와 압박 대응",
+          "summary": "넓은 공간을 찾아 패스하고, 압박을 받기 전 공을 안전하게 이어가며, 역습 상황에서 전진 선택지를 만드는 장면을 정리합니다.",
+          "units": [
+            {
+              "start_line": 3,
+              "end_line": 19,
+              "title": "넓은 공간의 동료에게 연결하기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": ["bride"],
+              "key_frame_candidate_ids": ["c004"],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 22,
+              "end_line": 29,
+              "title": "LT로 상대를 바라보며 이동하기",
+              "position_tags": [],
+              "topic_tags": ["조작/키사용", "포지셔닝"],
+              "member_ids": ["taxi"],
+              "key_frame_candidate_ids": ["c009"],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 34,
+              "end_line": 35,
+              "title": "전진할 때 공을 붙잡지 않기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "전환/역습"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c012"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 36,
+              "end_line": 51,
+              "title": "역습에서 전진 선택지 열기",
+              "position_tags": ["FW"],
+              "topic_tags": ["전환/역습", "포지셔닝", "커뮤니케이션"],
+              "member_ids": ["jomin", "find", "rumi", "gipeu", "yumi", "maekgu"],
+              "key_frame_candidate_ids": ["c013", "c014"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 55,
+              "end_line": 77,
+              "title": "공이 올 때 압박을 보고 뒤로 내주기",
+              "position_tags": [],
+              "topic_tags": ["탈압박", "빌드업"],
+              "member_ids": ["gerrard", "saembaek"],
+              "key_frame_candidate_ids": ["c018"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 78,
+              "end_line": 78,
+              "title": "루미의 전진 움직임",
+              "position_tags": [],
+              "topic_tags": ["포지셔닝", "전환/역습"],
+              "member_ids": ["rumi"],
+              "key_frame_candidate_ids": ["c053"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 81,
+              "end_line": 97,
+              "title": "공을 운반해 동료의 전진 시간 만들기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "전환/역습"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c021", "c022"],
+              "addressed_to_all": false
+            }
+          ]
+        },
+        {
+          "title": "공격 위치와 마무리 선택",
+          "summary": "공격 폭을 넓히고, 막힌 장면에서는 연결할 선수를 바꾸며, 공을 받거나 전진하는 위치를 맞추는 장면을 정리합니다.",
+          "units": [
+            {
+              "start_line": 98,
+              "end_line": 99,
+              "title": "공격 폭을 넓혀 전개하기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c024"],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 100,
+              "end_line": 103,
+              "title": "매끄럽지 않았던 득점 평가",
+              "position_tags": [],
+              "topic_tags": ["파이널서드"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c026"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 104,
+              "end_line": 120,
+              "title": "막힌 공격에서 Gerrard_CEF에게 연결하기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "파이널서드"],
+              "member_ids": ["giseun", "gerrard", "jonjae"],
+              "key_frame_candidate_ids": ["c030", "c031"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 121,
+              "end_line": 136,
+              "title": "원전의 전진에 맞춰 중앙 메우기",
+              "position_tags": [],
+              "topic_tags": ["포지셔닝", "전환/역습"],
+              "member_ids": ["find", "wonjeon"],
+              "key_frame_candidate_ids": ["c033"],
+              "addressed_to_all": false
+            }
+          ]
+        },
+        {
+          "title": "후반 전개와 수비 판단",
+          "summary": "대각 패스와 땅볼 패스의 선택, 밀집 수비 앞에서의 후방 연결, 돌파가 막힌 뒤의 대안을 정리합니다.",
+          "units": [
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "대각 패스로 중원의 시야 열기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "파이널서드"],
+              "member_ids": ["spress"],
+              "key_frame_candidate_ids": ["c039"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "태클 시도 뒤 페널티 발생",
+              "position_tags": [],
+              "topic_tags": ["압박", "수비라인"],
+              "member_ids": ["wonjeon"],
+              "key_frame_candidate_ids": ["c042"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 158,
+              "end_line": 162,
+              "title": "수비가 밀집되면 뒤로 빼기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "파이널서드"],
+              "member_ids": ["find", "rumi"],
+              "key_frame_candidate_ids": ["c043"],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "전방에는 가능한 땅볼 패스",
+              "position_tags": [],
+              "topic_tags": ["크로스", "파이널서드"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c045"],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "막힌 돌파에서 안전한 후방 선택",
+              "position_tags": [],
+              "topic_tags": ["탈압박", "파이널서드"],
+              "member_ids": ["maekgu"],
+              "key_frame_candidate_ids": ["c046"],
+              "addressed_to_all": false
+            }
+          ]
+        },
+        {
+          "title": "경기 마무리 정리",
+          "summary": "대각을 봐야 할 때 놓치는 점과 상대 수비가 밀집됐을 때 뒤로 빼는 선택을 다시 짚습니다.",
+          "units": [
+            {
+              "start_line": 183,
+              "end_line": 187,
+              "title": "대각 선택과 후방 연결",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "파이널서드"],
+              "member_ids": [],
+              "key_frame_candidate_ids": [],
+              "addressed_to_all": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

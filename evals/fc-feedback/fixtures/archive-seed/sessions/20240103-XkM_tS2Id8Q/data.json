@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "session_id": "20240103-XkM_tS2Id8Q",
+  "title": "EAFC24 C.E.F. FC Barcelona 팀 연습 (24.1.3) Part 1",
+  "date": "2024-01-03",
+  "generated_at": "2026-09-28T11:01:11.731Z",
+  "pages_base_url": "https://fc-feedback-eval.invalid/",
+  "videos": [
+    {
+      "id": "XkM_tS2Id8Q",
+      "part": 1,
+      "embeddable": true
+    }
+  ],
+  "members": [
+    {
+      "id": "timej",
+      "name": "TIMEJ",
+      "gamertag": "TIMEJ",
+      "positions": [
+        "ST"
+      ]
+    },
+    {
+      "id": "gerrard",
+      "name": "Gerrard_CEF",
+      "gamertag": "Gerrard_CEF",
+      "positions": [
+        "CM"
+      ]
+    },
+    {
+      "id": "vandeven",
+      "name": "CEF_VandeVen",
+      "gamertag": "CEF_VandeVen",
+      "positions": [
+        "CB"
+      ]
+    }
+  ],
+  "matches": [
+    {
+      "id": "m1",
+      "title": "연습경기 1",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "빌드업 오버래핑 타이밍",
+          "summary": "마크된 상황에서 오버래핑 타이밍을 맞추는 장면.",
+          "unit_ids": [
+            "u001"
+          ]
+        },
+        {
+          "id": "m1-t2",
+          "title": "수비 라인 포지셔닝",
+          "summary": "베리나 선수의 수비 위치를 더 높이 가져가도록 지시.",
+          "unit_ids": [
+            "u002"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "uid": "20240103-XkM_tS2Id8Q#u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "XkM_tS2Id8Q",
+      "start": 359.82000000000005,
+      "end": 364.92,
+      "title": "묶여있을 때 오버래핑 요청",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard"
+      ],
+      "note": {
+        "problem": "마크된 상태에서 계속 볼을 잡고 버티려다 오버래핑 타이밍을 놓치는 장면이 나왔다.",
+        "who": "볼을 잡고 있던 미드필더",
+        "instead": "마크가 붙는 걸 느끼면 바로 오버래핑하는 동료에게 넘기고 침투 공간을 열어줘야 한다."
+      },
+      "images": {
+        "start": {
+          "src": "img/u001-start.webp",
+          "width": 854,
+          "height": 460
+        },
+        "key": []
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/XkM_tS2Id8Q?t=359"
+    },
+    {
+      "id": "u002",
+      "uid": "20240103-XkM_tS2Id8Q#u002",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "XkM_tS2Id8Q",
+      "start": 1527.22,
+      "end": 1533.08,
+      "title": "베리나 포지션 상향 지시",
+      "position_tags": [
+        "FB"
+      ],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "note": {
+        "problem": "베리나 선수가 수비 라인에서 필요 이상으로 낮은 위치를 유지해 전진 빌드업 합류가 늦었다.",
+        "who": "베리나",
+        "instead": "볼이 안정적으로 돌 때는 한 발짝 더 올라가서 다음 패스 각을 미리 만들어 둬야 한다."
+      },
+      "images": {
+        "start": {
+          "src": "img/u002-start.webp",
+          "width": 854,
+          "height": 460
+        },
+        "key": []
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/XkM_tS2Id8Q?t=1527"
+    }
+  ]
+}

@@ -1,0 +1,280 @@
+{
+  "session_title": "FC Barcelona 팀 연습 Part 3 — 공간 선택과 안전한 전개",
+  "matches": [
+    {
+      "title": "BRO 대 FCB 경기 피드백",
+      "topics": [
+        {
+          "title": "초반 전개와 패스 선택",
+          "summary": "넓은 공간을 찾는 패스와 LT 조작, TIMEJ 자신의 패스 선택을 돌아본다. TIMEJ는 뒤쪽을 보고 스루패스를 줬고, 템포를 올리려 W패스를 택한 자신의 플레이도 돌아본다.",
+          "units": [
+            {
+              "start_line": 5,
+              "end_line": 19,
+              "title": "좁은 곳 대신 넓은 공간의 선수에게 연결",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "bride",
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c003",
+                "c004"
+              ]
+            },
+            {
+              "start_line": 22,
+              "end_line": 29,
+              "title": "LT를 누르고 상대를 바라보며 움직이기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "조작/키사용"
+              ],
+              "member_ids": [
+                "taxi"
+              ],
+              "key_frame_candidate_ids": [
+                "c009"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "역습에서 선택지 만들기",
+          "summary": "루미가 측면에서 뛰어 기프의 두 패스 선택지를 열어야 한다.",
+          "units": [
+            {
+              "start_line": 36,
+              "end_line": 51,
+              "title": "루미가 측면으로 뛰어 기프의 두 선택지 열기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습"
+              ],
+              "member_ids": [
+                "jomin",
+                "find",
+                "rumi",
+                "gipeu",
+                "yumi",
+                "timej",
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": [
+                "c013",
+                "c014"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "압박을 벗어나 안전하게 전개하기",
+          "summary": "공을 받을 때 압박을 미리 보고 뒤로 내주며, 샘백을 활용한다.",
+          "units": [
+            {
+              "start_line": 55,
+              "end_line": 77,
+              "title": "압박이 올 때 뒤로 내주고 샘백을 활용하기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "탈압박"
+              ],
+              "member_ids": [
+                "gerrard",
+                "saembaek"
+              ],
+              "key_frame_candidate_ids": [
+                "c017",
+                "c018"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "루미의 움직임과 좁은 공간으로의 패스",
+          "summary": "루미가 멈춘 장면과 좁은 공간의 TIMEJ에게 일찍 주는 경향을 짚는다. 더 몰고 와 상대를 끌어낸다는 지시가 이어진다.",
+          "units": [
+            {
+              "start_line": 78,
+              "end_line": 78,
+              "title": "루미가 멈춘 역습 장면",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습"
+              ],
+              "member_ids": [
+                "rumi"
+              ],
+              "key_frame_candidate_ids": [
+                "c053"
+              ]
+            },
+            {
+              "start_line": 79,
+              "end_line": 97,
+              "title": "좁은 공간에 일찍 주지 말고 상대를 끌어내기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c021",
+                "c022"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "막힌 중앙에서 넓은 공간 활용",
+          "summary": "중앙이 막히면 넓은 공간을 활용하고, 사인드와 원전의 동선을 조정한다.",
+          "units": [
+            {
+              "start_line": 104,
+              "end_line": 120,
+              "title": "중앙이 막혔을 때 존재의 넓은 공간 활용",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드"
+              ],
+              "member_ids": [
+                "giseun",
+                "gerrard",
+                "jonjae",
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c030",
+                "c031"
+              ]
+            },
+            {
+              "start_line": 121,
+              "end_line": 133,
+              "title": "사인드가 중앙으로 들어가고 원전의 전진 살리기",
+              "position_tags": [
+                "FW",
+                "FB"
+              ],
+              "topic_tags": [
+                "전환/역습"
+              ],
+              "member_ids": [
+                "find",
+                "wonjeon",
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c032",
+                "c033"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "대각 전개와 수비 균형",
+          "summary": "중원에서 대각으로 빼주는 선택과 원전의 페널티 장면을 짚는다. 원전이 균형을 무너뜨리고 공을 빼앗으려다 페널티로 이어진 평가도 남긴다.",
+          "units": [
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "중원에서 앞으로 뛰는 선수를 볼 수 있게 대각으로 빼기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "spress"
+              ],
+              "key_frame_candidate_ids": [
+                "c039"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "밀집 수비와 패스의 높이",
+          "summary": "촘촘한 수비 앞에서는 뒤로 빼고, 열린 패스 길에는 땅볼로 연결한다.",
+          "units": [
+            {
+              "start_line": 158,
+              "end_line": 160,
+              "title": "촘촘한 수비 앞에서 뒤로 빼기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c043"
+              ]
+            },
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "열린 패스 길에는 땅볼로 연결하기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c045"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "맥구의 돌파 선택",
+          "summary": "단독 돌파가 막히면 뒤쪽 지원을 보고 공을 살리라고 한다. 마지막 총평에서 대각 패스와 뒤로 빼는 선택을 다시 강조한다.",
+          "units": [
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "맥구가 단독 돌파 대신 뒤를 보고 안전하게 살리기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드"
+              ],
+              "member_ids": [
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": [
+                "c046",
+                "c049"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

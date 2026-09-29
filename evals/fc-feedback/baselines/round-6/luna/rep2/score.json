@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "total": 79.13254825936315,
+  "gate_failed": false,
+  "breakdown": {
+    "gate": {
+      "plan": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "notes": {
+        "exit_code": 0,
+        "stderr": "fc-feedback: 경고 u005: 볼드 행동 없음 — 원문에 지시·평가가 없는 구간이면 인접 유닛에 합칠지 확인\nfc-feedback: 경고 u014: 프레임 없음"
+      },
+      "similar": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "refs": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "passed": true
+    },
+    "unit_f1": {
+      "precision": 1,
+      "recall": 0.9333333333333333,
+      "f1": 0.9655172413793104,
+      "points": 24.137931034482758,
+      "matched": 14,
+      "total_gold": 15,
+      "total_predicted": 14
+    },
+    "start_time_accuracy": {
+      "median_delta_s": 0,
+      "points": 10
+    },
+    "tags": {
+      "position": {
+        "precision": 0.7272727272727273,
+        "recall": 1,
+        "f1": 0.8421052631578948,
+        "points": 4.210526315789474
+      },
+      "topic": {
+        "precision": 0.7142857142857143,
+        "recall": 0.6521739130434783,
+        "f1": 0.6818181818181819,
+        "points": 3.409090909090909
+      },
+      "member": {
+        "precision": 0.7777777777777778,
+        "recall": 1,
+        "f1": 0.8750000000000001,
+        "points": 4.375000000000001
+      }
+    },
+    "refs": {
+      "url_in_log": {
+        "fraction": 1,
+        "points": 4
+      },
+      "http_ratio": {
+        "fraction": 1,
+        "points": 3
+      },
+      "ko_summary": {
+        "fraction": 1,
+        "points": 3
+      }
+    },
+    "judge": {
+      "specificity": 9,
+      "fidelity": 7,
+      "readability": 7,
+      "points": 23,
+      "judge_invalid": false
+    },
+    "penalties": {
+      "seconds_in_plan": false,
+      "push_attempt": false,
+      "gate_order_violation": false,
+      "unknown_commands": [],
+      "points_deducted": 0
+    },
+    "contamination": {
+      "contaminated": false,
+      "excluded_from_comparison": false,
+      "hits": []
+    }
+  }
+}

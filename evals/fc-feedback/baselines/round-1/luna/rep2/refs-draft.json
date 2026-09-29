@@ -1,0 +1,109 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA SPORTS FC Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA SPORTS FC 공식 패스 가이드는 땅볼·스루·로빙·크로스·드리븐 패스를 상황에 맞게 고르고, 열린 패스 길을 확인해 압박 사이로 무리하게 넣지 말라고 안내한다.",
+      "key_points_ko": [
+        "땅볼 패스는 가까운 동료와 짧게 연결하거나 점유를 유지할 때 쓴다.",
+        "스루 패스는 열린 공간으로 달리는 동료의 앞에 보낸다.",
+        "상대가 막지 않은 패스 길을 찾아 공을 보내고, 넓은 곳에서 크로스를 시도할 수 있다."
+      ],
+      "translations": [],
+      "unit_ids": ["u001", "u005", "u008", "u010", "u013", "u014"]
+    },
+    {
+      "url": "https://www.ea.com/games/ea-sports-fc/fc-pro/news/play-like-huge-gorilla",
+      "title": "Play like Huge Gorilla - FC Pro",
+      "source_name": "EA SPORTS FC Pro",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA FC Pro가 소개한 FC24 프로 전술 사례는 균형 빌드업과 전방 패스, 좌우 간격, 풀백의 오버랩을 활용해 공격 연결과 폭을 만든다.",
+      "key_points_ko": [
+        "넓이 설정과 선수 사이 간격으로 전방 선수들이 공간을 제한받지 않고 연결하도록 한다.",
+        "오버랩하는 풀백이 전방 선수와 연계하며 공격 폭을 보탠다.",
+        "전방 선수의 움직임과 팀의 수비 전환 역할도 전술 안에서 함께 조정한다."
+      ],
+      "translations": [],
+      "unit_ids": ["u001", "u003", "u007", "u009"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/game/game-analysis/in-possession/switch-of-play.php",
+      "title": "Switch of play - FIFA Training Centre",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "FIFA Training Centre는 상대가 중앙을 좁게 지킬 때 경기장 폭을 활용해 반대쪽으로 전환하고, 받는 선수와 지원 선수의 움직임으로 다음 공격 공간을 만드는 방법을 설명한다.",
+      "key_points_ko": [
+        "반대쪽에서 패스를 받을 선수도 미리 공간을 만들고 경기장 폭을 활용한다.",
+        "패스를 받을 선수의 지원 동료는 전진을 돕는 움직임으로 수적 우위를 만든다.",
+        "상대가 조직적으로 좁게 서 있으면 측면에서 받을 수 있도록 풀백이나 윙어가 넓게 선다."
+      ],
+      "translations": [],
+      "unit_ids": ["u001", "u003", "u006", "u007", "u009"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/game/game-analysis/transition-to-attacking/passing-the-press.php",
+      "title": "Passing the press - FIFA Training Centre",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "FIFA Training Centre의 압박 탈출 분석은 공을 가진 선수가 뒤나 옆으로 짧게 연결하고, 다음 선수가 시야를 확보해 패스나 운반으로 압박을 벗어나는 방법을 다룬다.",
+      "key_points_ko": [
+        "공을 받은 선수가 압박을 등지고 있으면 뒤나 옆으로 내주는 패스로 시야를 열 수 있다.",
+        "빠르고 침착한 패스 또는 운반으로 압박 선수를 지나 공간을 연다.",
+        "압박을 벗어난 뒤 전방으로 이어갈 선수와 빈 공간을 확인한다."
+      ],
+      "translations": [],
+      "unit_ids": ["u004", "u006", "u012", "u014"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/gygax-attacking-in-wide-areas.php",
+      "title": "01) Attacking in wide areas (Gygax) - FIFA Training Centre",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "FIFA Training Centre의 측면 공격 훈련은 공이 있을 때 폭을 제공하는 오프더볼 움직임과 전방 침투, 크로스·컷백 선택으로 중·낮은 수비 블록의 공간을 공략한다.",
+      "key_points_ko": [
+        "공을 가진 선수 없는 동료도 서로 다른 공간으로 움직여 패스 선택지가 된다.",
+        "측면에서 수적 우위와 coordinated runs를 만들어 수비 라인을 공략한다.",
+        "열린 공간을 인식하고 크로스나 컷백 뒤에 위치한 동료를 찾는다."
+      ],
+      "translations": [],
+      "unit_ids": ["u003", "u005", "u008", "u009"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/john-peacock-passing-and-receiving.php",
+      "title": "52) John Peacock: Passing and receiving - FIFA Training Centre",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "FIFA Training Centre의 패스·리시브 훈련은 열린 몸 방향과 하프턴으로 시야와 패스 선택지를 확보하고, 혼잡한 패스 길에서는 기다리거나 공간으로 옮겨 공을 잇는 방법을 설명한다.",
+      "key_points_ko": [
+        "받기 전에 주변을 살피고 몸을 열어 가능한 공간과 동료를 확인한다.",
+        "동료가 들어갈 곳이 혼잡하거나 패스 길에 장애물이 있으면 패스를 늦춘다.",
+        "공을 가진 팀은 경기장 폭을 활용해 상대가 중앙을 좁히지 못하게 한다."
+      ],
+      "translations": [],
+      "unit_ids": ["u002", "u013", "u014"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/diagonal-and-vertical-passing.php",
+      "title": "Anouschka Bernhard: Diagonal and vertical passing - FIFA Training Centre",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "FIFA Training Centre의 대각·수직 패스 훈련은 전방 패스로 수비 라인을 넘고, 대각 전개로 상대 수비를 벌려 공격 공간을 여는 방법을 다룬다.",
+      "key_points_ko": [
+        "대각 패스는 상대 수비를 벌리고 공격 선수에게 다른 각도의 공간을 만든다.",
+        "공을 가진 팀은 바깥 지원 선수를 활용해 수직·대각 패스 선택지를 유지한다.",
+        "공간으로 향하는 오프더볼 움직임은 수비수를 끌어내 패스 길을 연다."
+      ],
+      "translations": [],
+      "unit_ids": ["u010", "u013"]
+    }
+  ]
+}

@@ -1,0 +1,1126 @@
+{
+  "version": 1,
+  "session_id": "20240104-NUzEChn9EyI",
+  "title": "C.E.F. FC Barcelona 팀 연습 2024-01-04 Part 3 피드백",
+  "date": "2024-01-04",
+  "generated_at": "2026-09-29T14:05:37.727Z",
+  "pages_base_url": "https://fc-feedback-eval.invalid/",
+  "videos": [
+    {
+      "id": "NUzEChn9EyI",
+      "part": 1,
+      "embeddable": true
+    }
+  ],
+  "members": [
+    {
+      "id": "timej",
+      "name": "TIMEJ",
+      "gamertag": "TIMEJ",
+      "positions": [
+        "ST"
+      ]
+    },
+    {
+      "id": "gerrard",
+      "name": "Gerrard_CEF",
+      "gamertag": "Gerrard_CEF",
+      "positions": [
+        "CM"
+      ]
+    },
+    {
+      "id": "vandeven",
+      "name": "CEF_VandeVen",
+      "gamertag": "CEF_VandeVen",
+      "positions": [
+        "CB"
+      ]
+    },
+    {
+      "id": "bride",
+      "name": "브라이드",
+      "gamertag": "CEF_Bride",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "taxi",
+      "name": "택시",
+      "gamertag": "CEF_Taxi",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jomin",
+      "name": "조민",
+      "gamertag": "CEF_Jomin",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "find",
+      "name": "사인드",
+      "gamertag": "CEF_Find",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "rumi",
+      "name": "루미",
+      "gamertag": "CEF_Rumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "gipeu",
+      "name": "기프",
+      "gamertag": "CEF_Gipeu",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "yumi",
+      "name": "유미",
+      "gamertag": "CEF_Yumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "saembaek",
+      "name": "샘백",
+      "gamertag": "CEF_Saembaek",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "giseun",
+      "name": "기슨",
+      "gamertag": "CEF_Giseun",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jonjae",
+      "name": "존재",
+      "gamertag": "CEF_Jonjae",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "wonjeon",
+      "name": "원전",
+      "gamertag": "CEF_Wonjeon",
+      "positions": [
+        "FB"
+      ]
+    },
+    {
+      "id": "spress",
+      "name": "스프레스",
+      "gamertag": "CEF_Spress",
+      "positions": [
+        "CAM"
+      ]
+    },
+    {
+      "id": "maekgu",
+      "name": "맥구",
+      "gamertag": "CEF_Maekgu",
+      "positions": [
+        "FW"
+      ]
+    }
+  ],
+  "matches": [
+    {
+      "id": "m1",
+      "title": "BRO 대 FCB 연습경기",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "넓은 공간으로 전개",
+          "summary": "좁은 곳의 동료보다 넓은 곳의 동료를 보고 공을 옮기는 선택을 짚는다.",
+          "unit_ids": [
+            "u001"
+          ]
+        },
+        {
+          "id": "m1-t2",
+          "title": "공을 받는 자세와 LT 조작",
+          "summary": "공을 받기 전 몸의 방향을 유지하며 움직이는 LT 조작을 설명한다.",
+          "unit_ids": [
+            "u002"
+          ]
+        },
+        {
+          "id": "m1-t3",
+          "title": "역습 때 패스 선택지 만들기",
+          "summary": "사인드가 낮게 있는 역습에서 루미의 윙어 역할과 공을 가진 선수에게 열어 줄 패스 경로를 설명한다.",
+          "unit_ids": [
+            "u003"
+          ]
+        },
+        {
+          "id": "m1-t4",
+          "title": "압박 속 전진 선택",
+          "summary": "압박이 오는 공을 곧장 전진시키는 판단과 뒤로 내준 뒤 다시 받는 선택을 비교한다.",
+          "unit_ids": [
+            "u004",
+            "u005"
+          ]
+        },
+        {
+          "id": "m1-t5",
+          "title": "전진 드리블과 패스 시점",
+          "summary": "루미가 멈춘 장면을 아쉬워한다. 이후 너무 이른 패스보다 공을 더 몰아 상대를 끌어낸 뒤 패스하자는 설명이 이어진다.",
+          "unit_ids": [
+            "u006",
+            "u007"
+          ]
+        },
+        {
+          "id": "m1-t6",
+          "title": "막힌 공격에서 방향 전환",
+          "summary": "한쪽이 막혔을 때 존재가 넓은 공간을 쓰는 선택을 짚는다.",
+          "unit_ids": [
+            "u008"
+          ]
+        },
+        {
+          "id": "m1-t7",
+          "title": "측면 오버래핑과 중앙 침투",
+          "summary": "원전이 올라오는 동안 사인드의 위치를 조정하고 TIMEJ가 뒤를 메우는 선택을 설명한다. 장면 끝의 득점 반응도 남긴다.",
+          "unit_ids": [
+            "u009"
+          ]
+        },
+        {
+          "id": "m1-t8",
+          "title": "중원에서 대각 패스",
+          "summary": "스프레스의 패스 선택을 계기로 중원이 넓은 공간의 전방 주자를 볼 수 있도록 대각으로 빼주는 움직임을 강조한다.",
+          "unit_ids": [
+            "u010"
+          ]
+        },
+        {
+          "id": "m1-t9",
+          "title": "수비 판단과 압박 대응",
+          "summary": "원전의 밸런스와 태클 판단, 촘촘한 수비를 상대한 공격의 후방 패스를 짚는다.",
+          "unit_ids": [
+            "u011",
+            "u012"
+          ]
+        },
+        {
+          "id": "m1-t10",
+          "title": "패스 방식과 돌파 중단",
+          "summary": "가능하면 땅볼로 주고, 맥구가 돌파 공간을 잃었을 때 뒤를 보는 선택을 정리한다.",
+          "unit_ids": [
+            "u013",
+            "u014"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "uid": "20240104-NUzEChn9EyI#u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 75.12,
+      "end": 103.42,
+      "title": "좁은 곳 대신 넓은 곳으로 패스",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 좁은 공간의 동료에게 보내려는 장면에서는 누구든 공을 가진 선수라면 **넓은 공간의 동료에게 패스하는 선택**을 먼저 봐야 한다. 그쪽이 공을 운반하기 쉽고, 운반하는 동안 공이 없는 동료가 올라갈 시간도 생긴다는 설명이다."
+        },
+        {
+          "type": "text",
+          "text": "좁은 쪽으로 왔다가 다시 뒤로 빼는 선택도 짚었다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u001-c004.webp",
+          "width": 854,
+          "height": 460,
+          "t": 90,
+          "caption": "중원 주변의 흰색·남색 선수들과 코치 TIMEJ가 그린 파란 구역선, 붉은 화살표가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u001-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=75"
+    },
+    {
+      "id": "u002",
+      "uid": "20240104-NUzEChn9EyI#u002",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 225.9,
+      "end": 255.12,
+      "title": "공을 받을 때 LT로 몸 방향 유지",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "조작/키사용"
+      ],
+      "member_ids": [
+        "taxi"
+      ],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "택시가 코치 TIMEJ 주변에서 공을 잡는 상황을 예로 들며, 누구든 공을 받으려 움직일 때 **LT를 누른 채 몸의 방향을 유지하며 이동**하라는 지시다. 위아래로 움직여도 몸이 돌아가지 않는다는 설명이다."
+        },
+        {
+          "type": "text",
+          "text": "공을 받는 순간 몸이 돌아가는 동작을 줄이려는 조작이다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u002-c009.webp",
+          "width": 854,
+          "height": 460,
+          "t": 240,
+          "caption": "중앙선 근처 남색 선수에게 노란 원과 LT 표시가 그려져 있고, 오른쪽 위에 CEF_Rumi 이름표가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u002-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=225"
+    },
+    {
+      "id": "u003",
+      "uid": "20240104-NUzEChn9EyI#u003",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 344.68,
+      "end": 402.72,
+      "title": "루미가 윙어 역할을 맡아 역습 경로 열기",
+      "position_tags": [
+        "FW",
+        "MF"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "maekgu"
+      ],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "조민을 호명해 아쉬운 장면을 짚은 뒤, 사인드가 낮은 위치에 있을 때 루미가 **윙어 역할을 맡아 움직여야 한다**고 설명한다. TIMEJ가 아래로 들어가는 동선과 함께 역습에서 수적 우위를 살릴 상황이다."
+        },
+        {
+          "type": "text",
+          "text": "루미가 움직여야 기프가 가까운 TIMEJ에게 주거나 멀리 있는 유미를 고르는 두 선택지가 열린다. 공을 가진 선수에게 패스 경로와 선택지를 만들어 주라는 지시이며, 사인드와 맥구에게도 같은 원칙을 적용했다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u003-c013.webp",
+          "width": 854,
+          "height": 460,
+          "t": 360,
+          "caption": "남색 공격수가 왼쪽 페널티 지역 쪽으로 향하고, 코치의 붉은 화살표 두 개가 그 방향을 가리킨다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u003-c014.webp",
+          "width": 854,
+          "height": 460,
+          "t": 390,
+          "caption": "같은 장면에 붉은 화살표와 더불어 왼쪽 골문 쪽으로 이어지는 노란 곡선, 위쪽의 파란 화살표가 그려져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u003-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-dd463bc0fc",
+          "title": "How to coach transition",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-dd463bc0fc.html",
+          "orig_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-transition"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=344"
+    },
+    {
+      "id": "u004",
+      "uid": "20240104-NUzEChn9EyI#u004",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "NUzEChn9EyI",
+      "start": 463.08000000000004,
+      "end": 489.72,
+      "title": "압박이 오면 뒤로 내주고 LT로 다시 받기",
+      "position_tags": [],
+      "topic_tags": [
+        "탈압박",
+        "조작/키사용"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "공이 오는 순간 상대 압박이 가능한 장면에서, 받은 선수가 한 동작을 더 하는 것은 불필요하다는 평가다. 누구든 이 상황에서는 **뒤로 내주고 LT를 눌러 다시 받을 자세를 만드는 선택**이 좋다고 짚는다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u004-c017.webp",
+          "width": 854,
+          "height": 460,
+          "t": 480,
+          "caption": "중앙선 주변의 Gerrard_CEF 이름표와 남색·흰색 선수들이 보인다. 스코어는 0대0이다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u004-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-cab2ebe63b",
+          "title": "How to coach passing in football",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-cab2ebe63b.html",
+          "orig_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=463"
+    },
+    {
+      "id": "u005",
+      "uid": "20240104-NUzEChn9EyI#u005",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "NUzEChn9EyI",
+      "start": 491.76,
+      "end": 526.78,
+      "title": "Gerrard_CEF의 무리한 전진보다 샘백 경유",
+      "position_tags": [
+        "CM",
+        "FW"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "탈압박"
+      ],
+      "member_ids": [
+        "gerrard",
+        "saembaek"
+      ],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "Gerrard_CEF가 여기서 탈압박한 뒤 앞으로 넣더라도 큰 이득이 없고 전진이 어렵다는 평가다. 대신 **샘백에게 보내 상대 수비를 끌어내는 선택**을 제시한다."
+        },
+        {
+          "type": "text",
+          "text": "앞쪽의 수비 숫자를 줄이면 TIMEJ가 하려는 플레이의 난도가 낮아진다는 설명이다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u005-c018.webp",
+          "width": 854,
+          "height": 460,
+          "t": 510,
+          "caption": "중앙선 오른쪽에 Gerrard_CEF 이름표가 있고, 그 왼쪽의 남색 선수 쪽으로 붉은 화살표가 그려져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u005-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-cab2ebe63b",
+          "title": "How to coach passing in football",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-cab2ebe63b.html",
+          "orig_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=491"
+    },
+    {
+      "id": "u006",
+      "uid": "20240104-NUzEChn9EyI#u006",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "NUzEChn9EyI",
+      "start": 545.7,
+      "end": 548,
+      "title": "루미가 움직임을 멈춘 장면",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "rumi"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "루미가 계속 전진할 줄 알았지만 멈춘 것을 아쉬워한다. 루미에게 기대한 행동은 **움직임을 이어가는 것**이었다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u006-c054.webp",
+          "width": 854,
+          "height": 460,
+          "t": 546,
+          "caption": "중앙선 앞 남색 선수들이 흰색 수비수들 사이로 배치돼 있고, 노란 선택 표시가 중앙의 남색 선수 위에 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u006-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-dd463bc0fc",
+          "title": "How to coach transition",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-dd463bc0fc.html",
+          "orig_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-transition"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=545"
+    },
+    {
+      "id": "u007",
+      "uid": "20240104-NUzEChn9EyI#u007",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "NUzEChn9EyI",
+      "start": 579.9399999999999,
+      "end": 658.94,
+      "title": "너무 이른 패스보다 공을 더 몰아 상대 끌기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "탈압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "TIMEJ가 좁은 공간에서 받게 되는 이른 패스가 잦다는 평가다. 누구든 공을 가진 선수라면 **조금 더 몰고 가서 상대 한 명을 끌어낸 뒤 내주는 선택**을 하라는 지시다. 바로 패스하면 TIMEJ에게 연결되더라도 고를 수 있는 다음 옵션이 적다."
+        },
+        {
+          "type": "text",
+          "text": "공을 더 몰면 동료가 올라올 시간을 벌고 TIMEJ도 더 높은 위치로 갈 수 있다는 설명이다. TIMEJ가 받아 탈압박에 성공하는 경우도 있지만, 자기 진영에서 잃으면 바로 역습을 맞는 위험을 짚었다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u007-c021.webp",
+          "width": 854,
+          "height": 460,
+          "t": 600,
+          "caption": "중앙선 오른쪽에서 남색 선수들이 퍼져 있고, 흰색 수비수들이 전방에 모여 있다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u007-c022.webp",
+          "width": 854,
+          "height": 460,
+          "t": 630,
+          "caption": "같은 배치 위에 코치가 남색 선수 세 명의 이동 방향을 붉은 화살표로 그려 두었다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u007-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-cab2ebe63b",
+          "title": "How to coach passing in football",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-cab2ebe63b.html",
+          "orig_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=579"
+    },
+    {
+      "id": "u008",
+      "uid": "20240104-NUzEChn9EyI#u008",
+      "match_id": "m1",
+      "topic_id": "m1-t6",
+      "video": "NUzEChn9EyI",
+      "start": 791.0999999999999,
+      "end": 838.74,
+      "title": "막힌 쪽을 벗어나 존재의 넓은 공간 활용",
+      "position_tags": [
+        "MF",
+        "CM",
+        "FW",
+        "ST"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "크로스"
+      ],
+      "member_ids": [
+        "giseun",
+        "gerrard",
+        "jonjae",
+        "timej"
+      ],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "한쪽 공격이 완전히 막힌 장면에서는 **존재가 쓸 수 있는 넓은 공간으로 연결하는 선택**을 짚는다. TIMEJ나 기슨이 받는 상황을 이야기하면서, Gerrard_CEF 쪽으로 연결하면 존재가 넓은 공간을 쓸 수 있다고 설명한다."
+        },
+        {
+          "type": "text",
+          "text": "존재가 그 공간을 활용하면 몰고 들어가거나 크로스·컷백을 고를 수 있다는 설명이다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u008-c030.webp",
+          "width": 854,
+          "height": 460,
+          "t": 810,
+          "caption": "오른쪽 페널티 지역에 남색 공격수와 흰색 수비수가 모여 있고, 코치가 두 남색 선수를 파란 원으로 표시했다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u008-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=791"
+    },
+    {
+      "id": "u009",
+      "uid": "20240104-NUzEChn9EyI#u009",
+      "match_id": "m1",
+      "topic_id": "m1-t7",
+      "video": "NUzEChn9EyI",
+      "start": 857.4799999999999,
+      "end": 935.94,
+      "title": "원전의 측면 전진에 맞춰 사인드가 중앙으로",
+      "position_tags": [
+        "FW",
+        "FB",
+        "ST"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "전환/역습"
+      ],
+      "member_ids": [
+        "find",
+        "wonjeon",
+        "timej"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "wonjeon",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "원전이 측면으로 올라오는데 사인드가 자리를 잡은 판단은 아쉬웠다는 평가다. 원전이 올라가는 동안 사인드는 **중앙으로 들어가는 움직임**을 해야 한다고 짚는다."
+        },
+        {
+          "type": "text",
+          "text": "TIMEJ는 낮고 뒤에 있으므로 무작정 뛰어가기보다 비는 공간을 메우겠다고 설명한다. 장면 끝에는 골이 들어간 것에 놀라는 반응이 이어진다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u009-c032.webp",
+          "width": 854,
+          "height": 460,
+          "t": 870,
+          "caption": "남색 공격수들이 오른쪽으로 전개하고, 아래쪽 측면에는 CEF_Rumi 이름표가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u009-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u002",
+          "title": "베리나 포지션 상향 지시",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u002"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-dd463bc0fc",
+          "title": "How to coach transition",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-dd463bc0fc.html",
+          "orig_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-transition"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=857"
+    },
+    {
+      "id": "u010",
+      "uid": "20240104-NUzEChn9EyI#u010",
+      "match_id": "m1",
+      "topic_id": "m1-t8",
+      "video": "NUzEChn9EyI",
+      "start": 1071.64,
+      "end": 1104.5,
+      "title": "중원에 대각으로 빼서 전방 선택지 보기",
+      "position_tags": [
+        "CAM",
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "파이널서드"
+      ],
+      "member_ids": [
+        "spress"
+      ],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "스프레스가 패스를 넣는 장면을 보고, 중원이 넓은 공간에서 앞으로 뛰는 동료를 볼 여유가 생기도록 **대각으로 공을 빼주는 것**이 중요하다고 강조한다."
+        },
+        {
+          "type": "text",
+          "text": "앞선 장면과 비슷한 선택이라고 말하지만, 이 장면에서 확인되는 지시는 대각 방향으로 빼주는 움직임이다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u010-c039.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1080,
+          "caption": "오른쪽 페널티 지역 앞 남색 선수에게 붉은 원이 그려져 있고, 그 오른쪽으로 짧은 붉은 선이 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u010-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-cab2ebe63b",
+          "title": "How to coach passing in football",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-cab2ebe63b.html",
+          "orig_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1071"
+    },
+    {
+      "id": "u011",
+      "uid": "20240104-NUzEChn9EyI#u011",
+      "match_id": "m1",
+      "topic_id": "m1-t9",
+      "video": "NUzEChn9EyI",
+      "start": 1128.4599999999998,
+      "end": 1139.04,
+      "title": "원전의 태클 시도와 페널티",
+      "position_tags": [
+        "FB"
+      ],
+      "topic_tags": [
+        "수비라인"
+      ],
+      "member_ids": [
+        "wonjeon"
+      ],
+      "related_member_ids": [
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "원전이 한 번 균형을 잃은 뒤 공을 빼앗으려 **태클을 시도했고 페널티가 나온 장면**이다. 균형과 태클 판단을 함께 짚는 평가다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u011-c053.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1133,
+          "caption": "남색 선수가 왼쪽 페널티 지역 안에서 공을 몰고 있고, 흰색 선수가 가까이 따라붙어 있다. 스코어는 BRO 0, FCB 2다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u011-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1128"
+    },
+    {
+      "id": "u012",
+      "uid": "20240104-NUzEChn9EyI#u012",
+      "match_id": "m1",
+      "topic_id": "m1-t9",
+      "video": "NUzEChn9EyI",
+      "start": 1155.22,
+      "end": 1178.12,
+      "title": "상대 수비가 촘촘하면 뒤로 빼기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "상대 수비가 촘촘하게 모인 공격 장면에서는 누구든 공을 가진 선수라면 **무리하게 공격하지 말고 뒤로 빼야 한다**는 지시다. 뒤쪽 동료에게 내주는 움직임도 함께 짚는다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u012-c043.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1170,
+          "caption": "오른쪽 골문 앞에 흰색 수비수 여러 명과 남색 공격수가 모여 있다. 스코어는 BRO 1, FCB 2다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u012-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1155"
+    },
+    {
+      "id": "u013",
+      "uid": "20240104-NUzEChn9EyI#u013",
+      "match_id": "m1",
+      "topic_id": "m1-t10",
+      "video": "NUzEChn9EyI",
+      "start": 1225.22,
+      "end": 1254.74,
+      "title": "받는 속도를 살리는 땅볼 패스",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "패스를 넣을 때 땅으로 줄 수 있다면 누구든 **땅볼로 보내는 선택**이 가장 좋다는 지시다. 받는 선수가 공의 속도를 살려 플레이하기 쉽기 때문이다."
+        },
+        {
+          "type": "text",
+          "text": "사이가 막힐 것 같은 상황에는 띄우는 패스를 고려하지만, 길이 열려 있으면 땅볼이 낫다고 조건을 구분했다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u013-c045.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1230,
+          "caption": "오른쪽 측면의 남색 선수에서 페널티 지역 오른쪽으로 붉은 화살표가 그려져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u013-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1225"
+    },
+    {
+      "id": "u014",
+      "uid": "20240104-NUzEChn9EyI#u014",
+      "match_id": "m1",
+      "topic_id": "m1-t10",
+      "video": "NUzEChn9EyI",
+      "start": 1258.6599999999999,
+      "end": 1305.48,
+      "title": "맥구는 돌파가 막히면 뒤로 살리기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [
+        "maekgu"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "맥구가 혼자 돌파하다 공간이 막힌 장면에서는 **같은 방향으로 계속 돌파하지 말고 뒤로 안전하게 살리는 선택**이 필요하다는 평가다."
+        },
+        {
+          "type": "text",
+          "text": "뒤에서 받쳐 주는 동료를 보지 못할 때가 있다고 짚으며, 뒤로 연결해 다른 플레이를 만들 수 있다고 설명한다. 특정 수신자를 가리키는 후반 구절은 분명하지 않아 확정하지 않았다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u014-c046.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1260,
+          "caption": "오른쪽 페널티 지역 안의 남색 공격수가 흰색 수비수들 사이에 서 있고, 오른쪽 골문 앞에 골키퍼가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u014-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-cab2ebe63b",
+          "title": "How to coach passing in football",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-cab2ebe63b.html",
+          "orig_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1258"
+    }
+  ]
+}

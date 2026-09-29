@@ -1,0 +1,227 @@
+{
+  "session_title": "EAFC24 프로클럽 커뮤니티 C.E.F. / FC Barcelona 팀 연습 (24.1.4) - Part 3 (피드백)",
+  "matches": [
+    {
+      "title": "BROS VAMOS vs CEF Barcelona",
+      "topics": [
+        {
+          "title": "공간으로 연결하고 받기",
+          "summary": "좁은 공간의 선수에게 주기보다 넓은 공간의 선수에게 연결하고, 압박 상황에서는 LT 활용으로 공을 지키는 움직임을 다룹니다.",
+          "units": [
+            {
+              "start_line": 6,
+              "end_line": 19,
+              "title": "넓은 공간의 선수에게 패스하기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c004"]
+            },
+            {
+              "start_line": 22,
+              "end_line": 29,
+              "title": "압박 때 LT를 눌러 공을 지키기",
+              "position_tags": [],
+              "topic_tags": ["조작/키사용", "탈압박"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c009"]
+            }
+          ]
+        },
+        {
+          "title": "역습 때 역할과 선택지",
+          "summary": "사인드가 낮게 내려온 장면에서 루미가 윙어 역할을 맡고, 기프의 가까운 패스와 유미 선택으로 두 공격 옵션을 여는 장면입니다.",
+          "units": [
+            {
+              "start_line": 36,
+              "end_line": 51,
+              "title": "역습에서 루미의 윙어 역할과 두 선택지",
+              "position_tags": ["MF", "FW", "ST"],
+              "topic_tags": ["전환/역습", "포지셔닝"],
+              "member_ids": ["jomin", "find", "rumi", "gipeu", "yumi", "maekgu", "timej"],
+              "key_frame_candidate_ids": ["c013"]
+            }
+          ]
+        },
+        {
+          "title": "압박을 벗어나 전진 선택",
+          "summary": "받는 순간 압박을 읽어 뒤로 내주고 돌려받는 법, 전진 패스의 이점이 적은 장면에서 센터백으로 연결할 선택을 다룹니다.",
+          "units": [
+            {
+              "start_line": 55,
+              "end_line": 77,
+              "title": "압박 속에서 뒤로 내주고 센터백으로 재전개",
+              "position_tags": ["CM"],
+              "topic_tags": ["빌드업", "탈압박", "조작/키사용"],
+              "member_ids": ["gerrard"],
+              "key_frame_candidate_ids": ["c017", "c018"]
+            }
+          ]
+        },
+        {
+          "title": "루미의 움직임",
+          "summary": "루미가 움직일 것으로 예상했던 장면에서 멈춘 점을 평가합니다.",
+          "units": [
+            {
+              "start_line": 78,
+              "end_line": 78,
+              "title": "루미가 움직일 것으로 기대된 장면에서 멈춤",
+              "position_tags": ["FW"],
+              "topic_tags": ["포지셔닝"],
+              "member_ids": ["rumi"],
+              "key_frame_candidate_ids": ["c053"]
+            }
+          ]
+        },
+        {
+          "title": "원전의 전진 패스와 지원",
+          "summary": "원전의 전진 패스가 잦은 장면에서 공을 더 몰고 상대를 끌어 동료가 올라올 시간을 만드는 방법을 다룹니다.",
+          "units": [
+            {
+              "start_line": 79,
+              "end_line": 97,
+              "title": "원전의 전진 패스를 줄이고 시간을 만들기",
+              "position_tags": ["FB", "ST"],
+              "topic_tags": ["빌드업", "전환/역습"],
+              "member_ids": ["wonjeon", "timej"],
+              "key_frame_candidate_ids": ["c021"]
+            }
+          ]
+        },
+        {
+          "title": "공격 폭과 마무리",
+          "summary": "상하로 넓게 벌어지는 플레이와 득점 장면이 매끄럽지 않았다는 평가를 나눠 다룹니다.",
+          "units": [
+            {
+              "start_line": 98,
+              "end_line": 99,
+              "title": "상하로 넓게 벌어지는 플레이",
+              "position_tags": [],
+              "topic_tags": ["포지셔닝", "빌드업"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c024"]
+            },
+            {
+              "start_line": 100,
+              "end_line": 103,
+              "title": "깔끔하지 않은 득점 장면",
+              "position_tags": [],
+              "topic_tags": ["파이널서드"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c026"]
+            }
+          ]
+        },
+        {
+          "title": "공격이 막힌 장면의 연결",
+          "summary": "완전히 막힌 공격에서 Gerrard_CEF에게 연결해 존재(선수)가 넓은 공간을 활용하는 선택을 다룹니다.",
+          "units": [
+            {
+              "start_line": 108,
+              "end_line": 120,
+              "title": "Gerrard_CEF에서 존재(선수)로 연결하기",
+              "position_tags": ["CM", "FW"],
+              "topic_tags": ["빌드업", "파이널서드"],
+              "member_ids": ["gerrard", "jonjae"],
+              "key_frame_candidate_ids": ["c030"]
+            }
+          ]
+        },
+        {
+          "title": "역습 시 측면·중앙 배치",
+          "summary": "원전의 전진에 맞춰 사인드가 중앙으로 들어가고, TIMEJ는 낮은 위치에서 중앙을 메우는 역할을 설명합니다. 뒤이어 골이 나오며 판단에 대한 반응이 이어집니다.",
+          "units": [
+            {
+              "start_line": 121,
+              "end_line": 136,
+              "title": "원전이 올라갈 때 사인드는 중앙으로",
+              "position_tags": ["FW", "FB", "ST"],
+              "topic_tags": ["전환/역습", "포지셔닝"],
+              "member_ids": ["find", "wonjeon", "timej"],
+              "key_frame_candidate_ids": ["c033"]
+            }
+          ]
+        },
+        {
+          "title": "측면에서 대각으로 연결",
+          "summary": "중앙에서 전진하는 선수를 볼 수 있도록 측면에서 대각선으로 빼는 패스를 강조합니다.",
+          "units": [
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "측면에서 대각으로 빼는 패스",
+              "position_tags": ["CAM"],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": ["spress"],
+              "key_frame_candidate_ids": ["c039"]
+            }
+          ]
+        },
+        {
+          "title": "수비 압박과 후방 전개",
+          "summary": "원전의 태클이 페널티로 이어진 장면과 촘촘한 상대 수비 앞에서 후방으로 빼는 지시를 이어 다룹니다. 사인드는 루미가 상대에게 잡힌 듯한 상황을 봤는지 확인받습니다.",
+          "units": [
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "원전의 태클 뒤 페널티",
+              "position_tags": ["FB"],
+              "topic_tags": ["수비라인", "세트피스"],
+              "member_ids": ["wonjeon"],
+              "key_frame_candidate_ids": ["c042"]
+            },
+            {
+              "start_line": 158,
+              "end_line": 162,
+              "title": "밀집 수비 앞에서 뒤로 빼기",
+              "position_tags": ["FW"],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": ["find", "rumi"],
+              "key_frame_candidate_ids": ["c043"]
+            }
+          ]
+        },
+        {
+          "title": "패스 유형과 돌파 대안",
+          "summary": "땅볼 패스로 받는 선수가 공의 속도를 살리고, 돌파가 막히면 뒤로 안전하게 연결해 플레이 방식을 바꾸는 내용입니다.",
+          "units": [
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "가능하면 땅볼로 주기",
+              "position_tags": [],
+              "topic_tags": ["빌드업"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c045"]
+            },
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "맥구가 막히면 뒤로 살리기",
+              "position_tags": ["FW"],
+              "topic_tags": ["탈압박", "포지셔닝"],
+              "member_ids": ["maekgu"],
+              "key_frame_candidate_ids": ["c046"]
+            }
+          ]
+        },
+        {
+          "title": "오늘 경기의 핵심 정리",
+          "summary": "대각 선택을 봐야 할 때 놓치는 점과 상대 수비가 밀집될 때 지체 없이 뒤로 빼는 기준을 정리합니다.",
+          "units": [
+            {
+              "start_line": 183,
+              "end_line": 187,
+              "title": "대각 선택과 후방 전개",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c050"]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

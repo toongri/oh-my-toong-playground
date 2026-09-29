@@ -1,0 +1,86 @@
+{
+  "refs": [
+    {
+      "url": "https://cms.ggrecon.com/guides/ea-sports-fc-24-precision-pass/",
+      "title": "How to do a Precision Pass in EA FC 24",
+      "source_name": "GGRecon",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA FC 24의 프리시전 패스 세 가지(땅볼 스루, 로브, 감아 차는 땅볼 스루)의 조작과 쓰임새를 정리한 가이드다.",
+      "key_points_ko": [
+        "프리시전 패스(R1+△/Y)는 공격수가 곧장 달려들 수 있는 평평한 각도의 땅볼 스루패스에 쓴다.",
+        "프리시전 로브(R1+□/X)는 반대편으로 넘기는 전환 패스나 박스 안 크로스에 쓴다.",
+        "스웨브 프리시전 패스(L2+R1+△/Y)는 수비 라인을 돌아가는 감아 차는 땅볼 스루패스다."
+      ],
+      "translations": [
+        {
+          "orig": "Precision Pass",
+          "ko": "프리시전(정밀) 패스"
+        },
+        {
+          "orig": "Precision Lob",
+          "ko": "프리시전 로브(정밀 띄우는 패스)"
+        },
+        {
+          "orig": "Swerved Precision Pass",
+          "ko": "스웨브 프리시전 패스(감아 차는 정밀 패스)"
+        }
+      ],
+      "unit_ids": [
+        "u013",
+        "u008"
+      ]
+    },
+    {
+      "url": "https://learning.coachesvoice.com/cv/switches-of-play-football-tactics-explained/",
+      "title": "Switches of play: football tactics explained",
+      "source_name": "The Coaches' Voice",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "한쪽에 상대 수비가 몰리면 다른 쪽에 공간이 생기며, 반대편으로 곧바로 넘기는 전환 패스로 그 공간을 활용한다는 전술 해설이다.",
+      "key_points_ko": [
+        "상대가 공 쪽으로 몰려 압박하면 반대편에 공간이 남는다.",
+        "한쪽으로 상대를 끌어낸 뒤 반대 측면의 비어 있는 선수를 찾는다.",
+        "전환 패스는 패스의 세기와 각도, 그리고 받는 선수의 움직임이 함께 맞아야 한다."
+      ],
+      "translations": [
+        {
+          "orig": "switch of play",
+          "ko": "전환 패스(방향 전환)"
+        }
+      ],
+      "unit_ids": [
+        "u008",
+        "u010"
+      ]
+    },
+    {
+      "url": "https://www.icoachfootball.net/how-to-break-down-a-park-the-bus-low-block-3-tactical-patterns/",
+      "title": "How to Break Down a \"Park the Bus\" Low Block: 3 Tactical Patterns",
+      "source_name": "iCoachFootball",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "촘촘하게 내려앉은 수비를 상대로 폭과 깊이로 경기장을 넓히고, 템포 변화와 하프스페이스 공략으로 수비를 흔드는 방법을 다룬 글이다.",
+      "key_points_ko": [
+        "폭과 깊이를 갖춰 경기장을 넓히면 수비가 편하게 좌우로 움직이지 못한다.",
+        "느린 점유보다 빠르게 공을 돌려 상대를 움직이게 하는 것이 중요하다.",
+        "센터백과 풀백 사이의 하프스페이스를 노린다."
+      ],
+      "translations": [
+        {
+          "orig": "low block",
+          "ko": "내려앉은 밀집 수비"
+        },
+        {
+          "orig": "half-space",
+          "ko": "하프스페이스"
+        }
+      ],
+      "unit_ids": [
+        "u012",
+        "u015",
+        "u007"
+      ]
+    }
+  ]
+}

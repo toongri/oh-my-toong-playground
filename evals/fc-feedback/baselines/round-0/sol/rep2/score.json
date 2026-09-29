@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "total": 0,
+  "gate_failed": true,
+  "breakdown": {
+    "gate": {
+      "plan": {
+        "exit_code": 1,
+        "stderr": "fc-feedback: plan.json이(가) 없습니다: <TMPDIR>/fc-feedback-gate-fqWAOo/plan.json"
+      },
+      "notes": {
+        "exit_code": 1,
+        "stderr": "fc-feedback: plan.validated.json이(가) 없습니다: <TMPDIR>/fc-feedback-gate-fqWAOo/plan.validated.json"
+      },
+      "similar": {
+        "exit_code": 1,
+        "stderr": "fc-feedback: similar-candidates.json이(가) 없습니다: <TMPDIR>/fc-feedback-gate-fqWAOo/similar-candidates.json"
+      },
+      "refs": {
+        "exit_code": 1,
+        "stderr": "fc-feedback: plan.validated.json이(가) 없습니다: <TMPDIR>/fc-feedback-gate-fqWAOo/plan.validated.json"
+      },
+      "passed": false
+    },
+    "unit_f1": {
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "points": 0,
+      "matched": 0,
+      "total_gold": 15,
+      "total_predicted": 0
+    },
+    "start_time_accuracy": {
+      "median_delta_s": null,
+      "points": 0
+    },
+    "tags": {
+      "position": {
+        "precision": 0,
+        "recall": 0,
+        "f1": 0,
+        "points": 0
+      },
+      "topic": {
+        "precision": 0,
+        "recall": 0,
+        "f1": 0,
+        "points": 0
+      },
+      "member": {
+        "precision": 0,
+        "recall": 0,
+        "f1": 0,
+        "points": 0
+      }
+    },
+    "refs": {
+      "url_in_log": {
+        "fraction": 0,
+        "points": 0
+      },
+      "http_ratio": {
+        "fraction": 0,
+        "points": 0
+      },
+      "ko_summary": {
+        "fraction": 0,
+        "points": 0
+      }
+    },
+    "judge": {
+      "specificity": null,
+      "fidelity": null,
+      "readability": null,
+      "points": 0,
+      "judge_invalid": true
+    },
+    "penalties": {
+      "seconds_in_plan": false,
+      "push_attempt": false,
+      "gate_order_violation": false,
+      "unknown_commands": [],
+      "points_deducted": 0
+    },
+    "contamination": {
+      "contaminated": false,
+      "excluded_from_comparison": false,
+      "hits": []
+    }
+  }
+}

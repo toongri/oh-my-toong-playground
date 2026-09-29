@@ -1,0 +1,58 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC™",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA가 그라운드 패스, 스루 패스, 로브 패스의 용도와 패스 길 선택 기준을 설명한다.",
+      "key_points_ko": [
+        "가까운 동료와 연결할 때는 그라운드 패스를 사용할 수 있다.",
+        "수비 사이에 열린 패스 길과 동료의 움직임을 보고 패스 종류를 고른다."
+      ],
+      "translations": [],
+      "unit_ids": [
+        "u007",
+        "u012",
+        "u014"
+      ]
+    },
+    {
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-defend-like-england-space-in-wide-areas",
+      "title": "How to defend like England: space in wide areas",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "측면의 공간과 전환 상황에서 압박과 수비 형태가 어떻게 상호작용하는지 설명하는 FA 코칭 자료다.",
+      "key_points_ko": [
+        "한쪽에서 상대 압박을 벗어나 반대편 공간으로 전환하는 상황을 다룬다.",
+        "압박으로 공을 뒤로 돌리게 하면 수비가 형태를 회복할 시간을 얻는다."
+      ],
+      "translations": [],
+      "unit_ids": [
+        "u001",
+        "u004",
+        "u005"
+      ]
+    },
+    {
+      "url": "https://www.uefa.com/womenseuro/news/029b-1e51df1c1e48-8db3ef6a58b7-1000--women-s-euro-2025-analysis-how-spain-s-co-ordinated-attac/",
+      "title": "Women's EURO 2025 analysis: How Spain's co-ordinated attack broke Germany's resolve",
+      "source_name": "UEFA",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "UEFA의 경기 분석이 측면 풀백의 오버래핑, 가까운 패스 선택지와 제3자 움직임을 설명한다.",
+      "key_points_ko": [
+        "측면 수비수의 오버래핑으로 공간과 수적 우위를 만들 수 있다.",
+        "동료의 가까운 지원과 수비 뒤로 움직이는 선택지를 구분한다."
+      ],
+      "translations": [],
+      "unit_ids": [
+        "u003",
+        "u008",
+        "u011"
+      ]
+    }
+  ]
+}

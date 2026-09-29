@@ -1,0 +1,1356 @@
+{
+  "version": 1,
+  "session_id": "20240104-NUzEChn9EyI",
+  "title": "C.E.F. FC Barcelona 팀 연습 피드백 (2024.01.04)",
+  "date": "2024-01-04",
+  "generated_at": "2026-09-28T22:21:06.759Z",
+  "pages_base_url": "https://fc-feedback-eval.invalid/",
+  "videos": [
+    {
+      "id": "NUzEChn9EyI",
+      "part": 1,
+      "embeddable": true
+    }
+  ],
+  "members": [
+    {
+      "id": "timej",
+      "name": "TIMEJ",
+      "gamertag": "TIMEJ",
+      "positions": [
+        "ST"
+      ]
+    },
+    {
+      "id": "gerrard",
+      "name": "Gerrard_CEF",
+      "gamertag": "Gerrard_CEF",
+      "positions": [
+        "CM"
+      ]
+    },
+    {
+      "id": "vandeven",
+      "name": "CEF_VandeVen",
+      "gamertag": "CEF_VandeVen",
+      "positions": [
+        "CB"
+      ]
+    },
+    {
+      "id": "bride",
+      "name": "브라이드",
+      "gamertag": "CEF_Bride",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "taxi",
+      "name": "택시",
+      "gamertag": "CEF_Taxi",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jomin",
+      "name": "조민",
+      "gamertag": "CEF_Jomin",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "find",
+      "name": "사인드",
+      "gamertag": "CEF_Find",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "rumi",
+      "name": "루미",
+      "gamertag": "CEF_Rumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "gipeu",
+      "name": "기프",
+      "gamertag": "CEF_Gipeu",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "yumi",
+      "name": "유미",
+      "gamertag": "CEF_Yumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "saembaek",
+      "name": "샘백",
+      "gamertag": "CEF_Saembaek",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "giseun",
+      "name": "기슨",
+      "gamertag": "CEF_Giseun",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jonjae",
+      "name": "존재",
+      "gamertag": "CEF_Jonjae",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "wonjeon",
+      "name": "원전",
+      "gamertag": "CEF_Wonjeon",
+      "positions": [
+        "FB"
+      ]
+    },
+    {
+      "id": "spress",
+      "name": "스프레스",
+      "gamertag": "CEF_Spress",
+      "positions": [
+        "CAM"
+      ]
+    },
+    {
+      "id": "maekgu",
+      "name": "맥구",
+      "gamertag": "CEF_Maekgu",
+      "positions": [
+        "FW"
+      ]
+    }
+  ],
+  "matches": [
+    {
+      "id": "m1",
+      "title": "Bros Vamos vs CEF Barcelona",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "넓은 공간으로 전개하기",
+          "summary": "좁은 곳에 바로 넣기보다 열린 넓은 쪽으로 패스해 공을 옮기고, 공이 없는 선수들이 올라올 시간을 만든다.",
+          "unit_ids": [
+            "u001"
+          ]
+        },
+        {
+          "id": "m1-t2",
+          "title": "압박을 받는 상황의 조작과 전개",
+          "summary": "상대를 등지거나 급히 전진하기보다 몸 방향과 다음 패스 선택을 정리한다.",
+          "unit_ids": [
+            "u002"
+          ]
+        },
+        {
+          "id": "m1-t3",
+          "title": "역습 때 높낮이와 지원 선택지 만들기",
+          "summary": "한 선수가 내려오면 다른 선수가 측면 폭과 전방 높이를 채워 가까운 패스와 넓은 패스를 모두 연다.",
+          "unit_ids": [
+            "u003"
+          ]
+        },
+        {
+          "id": "m1-t4",
+          "title": "압박 아래서 안전하게 다시 연결하기",
+          "summary": "압박이 들어오기 전에 공을 내주고 다시 받는 동작을 써서 위험한 전진 패스를 줄인다.",
+          "unit_ids": [
+            "u004"
+          ]
+        },
+        {
+          "id": "m1-t5",
+          "title": "공이 없을 때 전방 움직임",
+          "summary": "공을 받을 수 있는 전방 공간이 열리면 멈추지 말고 침투 움직임을 이어간다.",
+          "unit_ids": [
+            "u005"
+          ]
+        },
+        {
+          "id": "m1-t6",
+          "title": "공을 운반해 상대 수비를 끌어내기",
+          "summary": "급히 좁은 곳으로 넣기보다 공을 몰고 상대 한 명을 끌어내 동료가 올라올 시간을 확보한다.",
+          "unit_ids": [
+            "u006"
+          ]
+        },
+        {
+          "id": "m1-t7",
+          "title": "공격 폭과 전진 선택지",
+          "summary": "세로와 가로로 폭을 벌려 상대 수비를 늘리고 넓은 쪽에서 전진할 길을 만든다.",
+          "unit_ids": [
+            "u007"
+          ]
+        },
+        {
+          "id": "m1-t8",
+          "title": "넓은 공간의 침투를 살리기",
+          "summary": "전방으로 달려드는 선수가 넓은 쪽을 활용할 수 있도록 패스 타이밍과 크로스·컷백 선택을 맞춘다.",
+          "unit_ids": [
+            "u008"
+          ]
+        },
+        {
+          "id": "m1-t9",
+          "title": "역습에서 측면과 중앙 역할 나누기",
+          "summary": "사인드가 낮은 위치에 있으면 루미가 윙어 역할을 맡고, 기프·유미에게 이어지는 두 패스 옵션을 유지한다.",
+          "unit_ids": [
+            "u009"
+          ]
+        },
+        {
+          "id": "m1-t10",
+          "title": "넓은 공간으로 대각 전개하기",
+          "summary": "중원이 전방 침투를 볼 시간을 만들 수 있도록 안쪽만 고집하지 말고 대각으로 공을 뺀다.",
+          "unit_ids": [
+            "u010"
+          ]
+        },
+        {
+          "id": "m1-t11",
+          "title": "수비 균형을 무너뜨린 뒤의 태클 선택",
+          "summary": "상대 균형을 흔든 다음 무리한 태클로 페널티 상황을 내주지 않도록 수비 동작을 조절한다.",
+          "unit_ids": [
+            "u011"
+          ]
+        },
+        {
+          "id": "m1-t12",
+          "title": "밀집 수비 앞에서 지원선 다시 찾기",
+          "summary": "상대가 촘촘히 서 있으면 전진만 고집하지 말고 뒤로 빼며 동료의 움직임을 확인한다.",
+          "unit_ids": [
+            "u012"
+          ]
+        },
+        {
+          "id": "m1-t13",
+          "title": "받는 선수의 속도를 살리는 패스",
+          "summary": "길이 열려 있으면 뜬 공보다 땅볼로 전달해 받는 선수가 공의 속도를 이어간다.",
+          "unit_ids": [
+            "u013"
+          ]
+        },
+        {
+          "id": "m1-t14",
+          "title": "돌파가 막힐 때의 안전한 재연결",
+          "summary": "혼자 같은 방향으로 돌파하지 말고 뒤의 지원과 대각 옵션을 확인해 공격을 이어간다.",
+          "unit_ids": [
+            "u014"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "uid": "20240104-NUzEChn9EyI#u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 49.7,
+      "end": 103.42,
+      "title": "좁은 쪽보다 넓은 쪽을 먼저 보기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "bride"
+      ],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "브라이드님, 좁은 곳에 있는 TIMEJ에게 곧장 주기보다 **넓은 공간의 동료에게 먼저 전개해 주세요**."
+        },
+        {
+          "type": "text",
+          "text": "좁은 공간보다 넓은 공간에 있는 선수에게 주면 공을 운반하기 쉽고, 공이 없는 동료가 올라올 시간을 벌 수 있다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u001-c004.webp",
+          "width": 854,
+          "height": 460,
+          "t": 90,
+          "caption": "화면에 파란 선으로 선수들의 폭과 패스 경로가 그려져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u001-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-09c0cd1231",
+          "title": "Play like Huge Gorilla - FC Pro",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-09c0cd1231.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-pro/news/play-like-huge-gorilla"
+        },
+        {
+          "id": "r-a63145cc94",
+          "title": "Switch of play - FIFA Training Centre",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-a63145cc94.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/game/game-analysis/in-possession/switch-of-play.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=49"
+    },
+    {
+      "id": "u002",
+      "uid": "20240104-NUzEChn9EyI#u002",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 225.9,
+      "end": 308.96,
+      "title": "LT로 몸 방향을 유지하고 다음 패스를 선택하기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "조작/키사용",
+        "탈압박"
+      ],
+      "member_ids": [
+        "taxi"
+      ],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "택시님, 압박을 받으며 움직일 때 **LT를 눌러 패스를 준 선수 쪽을 바라본 채 이동해 주세요**."
+        },
+        {
+          "type": "text",
+          "text": "LT를 유지하면 위아래로 움직여도 몸을 돌리지 않고 패스한 선수를 보며 움직일 수 있다는 설명입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u002-c009.webp",
+          "width": 854,
+          "height": 460,
+          "t": 240,
+          "caption": "공을 가진 파란 선수는 노란 원으로 표시되어 있고, 화면에는 LT 조작 메모가 그려져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u002-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-52bf5832f4",
+          "title": "52) John Peacock: Passing and receiving - FIFA Training Centre",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-52bf5832f4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/john-peacock-passing-and-receiving.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=225"
+    },
+    {
+      "id": "u003",
+      "uid": "20240104-NUzEChn9EyI#u003",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 344.68,
+      "end": 402.72,
+      "title": "낮게 내려온 사인드 뒤를 루미가 채우기",
+      "position_tags": [
+        "MF",
+        "FW"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi"
+      ],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "조민님, 사인드님이 낮게 내려오는 역습에서는 **루미님이 윙어 폭을 맡도록 역할을 나눠 주세요**."
+        },
+        {
+          "type": "text",
+          "text": "이렇게 하면 가까운 기프님에게 주는 길과 유미님을 선택하는 넓은 길, 두 가지 전개 선택지를 남길 수 있다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u003-c014.webp",
+          "width": 854,
+          "height": 460,
+          "t": 390,
+          "caption": "선수들의 위치를 원과 여러 색의 화살표로 표시해 전진 경로를 그려 놓았다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u003-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-09c0cd1231",
+          "title": "Play like Huge Gorilla - FC Pro",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-09c0cd1231.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-pro/news/play-like-huge-gorilla"
+        },
+        {
+          "id": "r-a63145cc94",
+          "title": "Switch of play - FIFA Training Centre",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-a63145cc94.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/game/game-analysis/in-possession/switch-of-play.php"
+        },
+        {
+          "id": "r-e20bf1527b",
+          "title": "01) Attacking in wide areas (Gygax) - FIFA Training Centre",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-e20bf1527b.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/gygax-attacking-in-wide-areas.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=344"
+    },
+    {
+      "id": "u004",
+      "uid": "20240104-NUzEChn9EyI#u004",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "NUzEChn9EyI",
+      "start": 463.08000000000004,
+      "end": 526.78,
+      "title": "압박이 오면 뒤로 내주고 다시 받기",
+      "position_tags": [
+        "CM"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [
+        "gerrard"
+      ],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "Gerrard_CEF님, 압박이 들어오기 전에 **뒤로 내준 공을 다시 받아 탈압박해 주세요**."
+        },
+        {
+          "type": "text",
+          "text": "전방에 수비가 모여 있으면 무리한 패스로 길을 막기보다, 안전하게 연결하고 상대 수비를 끌어내 전진 난도를 낮추라고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u004-c018.webp",
+          "width": 854,
+          "height": 460,
+          "t": 510,
+          "caption": "중앙의 Gerrard_CEF 선수에서 왼쪽으로 향하는 패스 방향 화살표가 표시되어 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u004-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-f4dda7d05b",
+          "title": "Passing the press - FIFA Training Centre",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-f4dda7d05b.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/game/game-analysis/transition-to-attacking/passing-the-press.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=463"
+    },
+    {
+      "id": "u005",
+      "uid": "20240104-NUzEChn9EyI#u005",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "NUzEChn9EyI",
+      "start": 545.7,
+      "end": 548,
+      "title": "패스가 나올 때 전방 움직임 이어가기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "rumi"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "루미님, 패스가 나올 수 있는 순간에는 **멈추지 말고 전방 움직임을 이어가 주세요**."
+        },
+        {
+          "type": "text",
+          "text": "코치는 이 장면에서 루미님이 침투할 것으로 봤지만 움직임을 멈췄다고 짚습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u005-c053.webp",
+          "width": 854,
+          "height": 460,
+          "t": 546,
+          "caption": "공을 가진 파란 팀 선수 주변에 흰 팀 수비수들이 있고, 오른쪽 전방에도 파란 선수가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u005-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-e20bf1527b",
+          "title": "01) Attacking in wide areas (Gygax) - FIFA Training Centre",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-e20bf1527b.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/gygax-attacking-in-wide-areas.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=545"
+    },
+    {
+      "id": "u006",
+      "uid": "20240104-NUzEChn9EyI#u006",
+      "match_id": "m1",
+      "topic_id": "m1-t6",
+      "video": "NUzEChn9EyI",
+      "start": 579.9399999999999,
+      "end": 658.94,
+      "title": "급한 전진 패스보다 운반으로 공간 만들기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 가진 선수는 TIMEJ에게 좁은 곳으로 바로 넣기보다 **직접 운반해 상대 한 명을 끌어내 주세요**."
+        },
+        {
+          "type": "text",
+          "text": "그 사이 동료가 전진할 시간을 벌고 TIMEJ도 더 높은 진영에서 받을 수 있습니다; 우리 진영에서 공을 잃으면 역습으로 이어질 위험도 함께 짚습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u006-c022.webp",
+          "width": 854,
+          "height": 460,
+          "t": 630,
+          "caption": "파란 팀 선수들의 위치에서 중앙과 측면으로 향하는 화살표가 그려져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u006-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-a63145cc94",
+          "title": "Switch of play - FIFA Training Centre",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-a63145cc94.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/game/game-analysis/in-possession/switch-of-play.php"
+        },
+        {
+          "id": "r-f4dda7d05b",
+          "title": "Passing the press - FIFA Training Centre",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-f4dda7d05b.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/game/game-analysis/transition-to-attacking/passing-the-press.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=579"
+    },
+    {
+      "id": "u007",
+      "uid": "20240104-NUzEChn9EyI#u007",
+      "match_id": "m1",
+      "topic_id": "m1-t7",
+      "video": "NUzEChn9EyI",
+      "start": 694.54,
+      "end": 699.54,
+      "title": "위아래 폭을 넓혀 공격하기",
+      "position_tags": [
+        "MF",
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "팀원 여러분, 공격할 때는 **위아래로 폭을 벌려 상대 수비를 늘려 주세요**."
+        },
+        {
+          "type": "text",
+          "text": "좁은 중앙에만 모이지 않고 세로와 가로로 넓게 서야 전진할 공간이 생긴다는 팀 전술 피드백입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u007-c024.webp",
+          "width": 854,
+          "height": 460,
+          "t": 690,
+          "caption": "파란 팀과 흰 팀 선수들이 중원 여러 구역에 간격을 두고 서 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u007-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-09c0cd1231",
+          "title": "Play like Huge Gorilla - FC Pro",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-09c0cd1231.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-pro/news/play-like-huge-gorilla"
+        },
+        {
+          "id": "r-a63145cc94",
+          "title": "Switch of play - FIFA Training Centre",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-a63145cc94.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/game/game-analysis/in-possession/switch-of-play.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=694"
+    },
+    {
+      "id": "u008",
+      "uid": "20240104-NUzEChn9EyI#u008",
+      "match_id": "m1",
+      "topic_id": "m1-t8",
+      "video": "NUzEChn9EyI",
+      "start": 791.0999999999999,
+      "end": 838.74,
+      "title": "존재가 넓은 공간을 활용하도록 연결하기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "파이널서드",
+        "크로스"
+      ],
+      "member_ids": [
+        "jonjae"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "존재님, 넓은 공간으로 전진할 때 **크로스와 컷백까지 이어갈 수 있도록 침투를 살려 주세요**."
+        },
+        {
+          "type": "text",
+          "text": "패스가 제때 들어가면 존재님이 넓은 공간을 활용해 안으로 몰고 들어가거나 크로스·컷백을 선택할 수 있다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u008-c030.webp",
+          "width": 854,
+          "height": 460,
+          "t": 810,
+          "caption": "상대 페널티 지역 앞의 파란 선수 두 명이 원으로 표시되어 있고 수비수들이 골문 앞에 서 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u008-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-e20bf1527b",
+          "title": "01) Attacking in wide areas (Gygax) - FIFA Training Centre",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-e20bf1527b.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/gygax-attacking-in-wide-areas.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=791"
+    },
+    {
+      "id": "u009",
+      "uid": "20240104-NUzEChn9EyI#u009",
+      "match_id": "m1",
+      "topic_id": "m1-t9",
+      "video": "NUzEChn9EyI",
+      "start": 857.4799999999999,
+      "end": 901.44,
+      "title": "사인드가 내려오면 루미가 측면을 채우기",
+      "position_tags": [
+        "FW",
+        "FB"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "wonjeon"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "wonjeon",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "사인드님, 본인이 낮게 내려와 공을 받으면 **루미님이 측면을 채우도록 중앙 진입 타이밍을 맞춰 주세요**."
+        },
+        {
+          "type": "text",
+          "text": "루미님이 윙어 역할을 맡으면 기프님에게 주는 가까운 패스와 유미님을 향한 전진 패스를 함께 열 수 있습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u009-c033.webp",
+          "width": 854,
+          "height": 460,
+          "t": 900,
+          "caption": "세 명의 파란 선수와 전방 이동 경로가 흰 원과 화살표로 표시되어 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u009-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u002",
+          "title": "베리나 포지션 상향 지시",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u002"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-09c0cd1231",
+          "title": "Play like Huge Gorilla - FC Pro",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-09c0cd1231.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-pro/news/play-like-huge-gorilla"
+        },
+        {
+          "id": "r-a63145cc94",
+          "title": "Switch of play - FIFA Training Centre",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-a63145cc94.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/game/game-analysis/in-possession/switch-of-play.php"
+        },
+        {
+          "id": "r-e20bf1527b",
+          "title": "01) Attacking in wide areas (Gygax) - FIFA Training Centre",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-e20bf1527b.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/gygax-attacking-in-wide-areas.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=857"
+    },
+    {
+      "id": "u010",
+      "uid": "20240104-NUzEChn9EyI#u010",
+      "match_id": "m1",
+      "topic_id": "m1-t10",
+      "video": "NUzEChn9EyI",
+      "start": 1071.64,
+      "end": 1104.5,
+      "title": "대각 패스로 넓은 쪽의 침투 살리기",
+      "position_tags": [
+        "CAM"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "파이널서드"
+      ],
+      "member_ids": [
+        "spress"
+      ],
+      "related_member_ids": [
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "스프레스님, 안쪽으로만 곧장 넣기 전에 **대각으로 공을 빼 넓은 쪽의 전진 주자를 살려 주세요**."
+        },
+        {
+          "type": "text",
+          "text": "중원이 넓은 공간으로 뛰는 동료를 볼 시간을 확보하고, 앞서 나온 장면처럼 대각 전개로 연결하는 것이 중요하다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u010-c039.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1080,
+          "caption": "파란 선수와 흰 선수가 중원부터 전방까지 여러 간격으로 퍼져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u010-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-d0b2dea3ab",
+          "title": "Anouschka Bernhard: Diagonal and vertical passing - FIFA Training Centre",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-d0b2dea3ab.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/diagonal-and-vertical-passing.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1071"
+    },
+    {
+      "id": "u011",
+      "uid": "20240104-NUzEChn9EyI#u011",
+      "match_id": "m1",
+      "topic_id": "m1-t11",
+      "video": "NUzEChn9EyI",
+      "start": 1128.4599999999998,
+      "end": 1139.04,
+      "title": "균형을 흔든 뒤 성급한 태클 피하기",
+      "position_tags": [
+        "FB"
+      ],
+      "topic_tags": [
+        "수비라인",
+        "압박"
+      ],
+      "member_ids": [
+        "wonjeon"
+      ],
+      "related_member_ids": [
+        "wonjeon"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "원전님, 수비 균형을 흔든 뒤에는 **성급한 태클을 피해주세요**."
+        },
+        {
+          "type": "text",
+          "text": "공을 뺏으려고 다시 태클을 시도한 뒤 페널티 상황으로 이어진 장면을 짚습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u011-c042.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1139.5,
+          "caption": "골문 앞에서 심판이 서 있고 파란 유니폼 선수와 흰 유니폼 선수가 마주보고 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u011-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1128"
+    },
+    {
+      "id": "u012",
+      "uid": "20240104-NUzEChn9EyI#u012",
+      "match_id": "m1",
+      "topic_id": "m1-t12",
+      "video": "NUzEChn9EyI",
+      "start": 1155.22,
+      "end": 1191.56,
+      "title": "루미가 막히면 뒤 지원을 확인하기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "find",
+        "rumi"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "사인드님, 상대 수비가 촘촘하면 **뒤로 빼서 루미님과 지원선을 다시 확인해 주세요**."
+        },
+        {
+          "type": "text",
+          "text": "코치는 루미님이 상대에게 잡힌 듯한 상황을 짚으며, 밀집 수비를 억지로 뚫기보다 뒤쪽 동료를 활용하라고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u012-c043.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1170,
+          "caption": "상대 페널티 지역 안에 파란 선수와 흰 수비수들이 여러 명 모여 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u012-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-f4dda7d05b",
+          "title": "Passing the press - FIFA Training Centre",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-f4dda7d05b.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/game/game-analysis/transition-to-attacking/passing-the-press.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1155"
+    },
+    {
+      "id": "u013",
+      "uid": "20240104-NUzEChn9EyI#u013",
+      "match_id": "m1",
+      "topic_id": "m1-t13",
+      "video": "NUzEChn9EyI",
+      "start": 1225.22,
+      "end": 1254.74,
+      "title": "열린 길에는 받기 쉬운 땅볼 연결하기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "패스하는 선수는 열린 길에서 받는 동료가 바로 이어갈 수 있도록 **가능하면 땅볼로 전달해 주세요**."
+        },
+        {
+          "type": "text",
+          "text": "뜨운 공은 상대 사이에 걸릴 수 있고, 땅볼은 받는 선수가 공이 오는 속도를 살려 다음 플레이를 하기 쉽다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u013-c045.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1230,
+          "caption": "추가 시간 화면에서 파란 선수의 오른쪽 전진 방향을 붉은 화살표로 표시해 두었다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u013-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-52bf5832f4",
+          "title": "52) John Peacock: Passing and receiving - FIFA Training Centre",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-52bf5832f4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/john-peacock-passing-and-receiving.php"
+        },
+        {
+          "id": "r-d0b2dea3ab",
+          "title": "Anouschka Bernhard: Diagonal and vertical passing - FIFA Training Centre",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-d0b2dea3ab.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/diagonal-and-vertical-passing.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1225"
+    },
+    {
+      "id": "u014",
+      "uid": "20240104-NUzEChn9EyI#u014",
+      "match_id": "m1",
+      "topic_id": "m1-t14",
+      "video": "NUzEChn9EyI",
+      "start": 1258.6599999999999,
+      "end": 1334.1,
+      "title": "막히면 뒤 지원에 내주고 다시 선택하기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [
+        "maekgu"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "맥구님, 돌파가 막히면 같은 방향을 고집하지 말고 **뒤에서 받쳐주는 동료에게 내준 뒤 다시 선택해 주세요**."
+        },
+        {
+          "type": "text",
+          "text": "택배님에게 연결해 오버랩을 살리거나 대각 옵션을 확인할 수 있습니다; 오늘 경기의 정리에서도 수비가 밀집되면 미련 없이 뒤로 빼라고 강조합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u014-c046.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1260,
+          "caption": "페널티 지역 주변에서 공을 가진 파란 선수와 여러 흰 수비수가 가까이 서 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u014-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-f4dda7d05b",
+          "title": "Passing the press - FIFA Training Centre",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-f4dda7d05b.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/game/game-analysis/transition-to-attacking/passing-the-press.php"
+        },
+        {
+          "id": "r-52bf5832f4",
+          "title": "52) John Peacock: Passing and receiving - FIFA Training Centre",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-52bf5832f4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/john-peacock-passing-and-receiving.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1258"
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "total": 79.4924534924535,
+  "gate_failed": false,
+  "breakdown": {
+    "gate": {
+      "plan": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "notes": {
+        "exit_code": 0,
+        "stderr": "fc-feedback: 경고 u013: 프레임 없음"
+      },
+      "similar": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "refs": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "passed": true
+    },
+    "unit_f1": {
+      "precision": 0.9230769230769231,
+      "recall": 0.8,
+      "f1": 0.8571428571428571,
+      "points": 21.428571428571427,
+      "matched": 12,
+      "total_gold": 15,
+      "total_predicted": 13
+    },
+    "start_time_accuracy": {
+      "median_delta_s": 0,
+      "points": 10
+    },
+    "tags": {
+      "position": {
+        "precision": 0.8,
+        "recall": 0.8,
+        "f1": 0.8000000000000002,
+        "points": 4.000000000000001
+      },
+      "topic": {
+        "precision": 0.6470588235294118,
+        "recall": 0.55,
+        "f1": 0.5945945945945946,
+        "points": 2.9729729729729732
+      },
+      "member": {
+        "precision": 0.75,
+        "recall": 0.9,
+        "f1": 0.8181818181818182,
+        "points": 4.090909090909091
+      }
+    },
+    "refs": {
+      "url_in_log": {
+        "fraction": 1,
+        "points": 4
+      },
+      "http_ratio": {
+        "fraction": 1,
+        "points": 3
+      },
+      "ko_summary": {
+        "fraction": 1,
+        "points": 3
+      }
+    },
+    "judge": {
+      "specificity": 10,
+      "fidelity": 9,
+      "readability": 8,
+      "points": 27,
+      "judge_invalid": false
+    },
+    "penalties": {
+      "seconds_in_plan": false,
+      "push_attempt": false,
+      "gate_order_violation": false,
+      "unknown_commands": [],
+      "points_deducted": 0
+    },
+    "contamination": {
+      "contaminated": false,
+      "excluded_from_comparison": false,
+      "hits": []
+    }
+  }
+}

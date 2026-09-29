@@ -1,0 +1,285 @@
+{
+  "session_title": "FC Barcelona 팀 연습 피드백: 전개 선택과 공간 활용",
+  "matches": [
+    {
+      "title": "FC Barcelona 팀 연습 경기",
+      "topics": [
+        {
+          "title": "전반: 패스 선택과 수비 자세",
+          "summary": "넓은 공간으로 연결하는 선택과 LT키를 사용한 근접 수비 자세를 짚는다.",
+          "units": [
+            {
+              "start_line": 4,
+              "end_line": 19,
+              "title": "좁은 곳보다 넓은 공간으로 연결",
+              "position_tags": [
+                "MF",
+                "ST"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "bride"
+              ],
+              "key_frame_candidate_ids": [
+                "c004"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 22,
+              "end_line": 29,
+              "title": "근접 수비에서 LT키로 상대를 바라보기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "조작/키사용",
+                "수비라인"
+              ],
+              "member_ids": [
+                "taxi"
+              ],
+              "key_frame_candidate_ids": [
+                "c009"
+              ],
+              "addressed_to_all": true
+            }
+          ]
+        },
+        {
+          "title": "중반: 역습 배치와 압박 탈출",
+      "summary": "역습에서 측면 역할과 패스 경로를 만들고, 압박을 받는 공은 뒤로 돌려 다시 전개한다. 우리 진영에서는 공을 더 몰아 공간을 넓힌다.",
+          "units": [
+            {
+              "start_line": 36,
+              "end_line": 51,
+              "title": "낮게 내려온 동료 대신 측면으로 뛰기",
+              "position_tags": [
+                "MF",
+                "FW",
+                "ST"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "jomin",
+                "find",
+                "rumi",
+                "gipeu",
+                "yumi",
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": [
+                "c013",
+                "c014"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 55,
+              "end_line": 77,
+              "title": "압박이 다가올 때 뒤로 내주고 다시 받기",
+              "position_tags": [
+                "CM",
+                "FW"
+              ],
+              "topic_tags": [
+                "탈압박",
+                "빌드업"
+              ],
+              "member_ids": [
+                "gerrard",
+                "saembaek"
+              ],
+              "key_frame_candidate_ids": [
+                "c017",
+                "c018"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 78,
+              "end_line": 78,
+              "title": "루미의 전진이 멈춘 장면",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "rumi"
+              ],
+              "key_frame_candidate_ids": [
+                "c053"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 79,
+              "end_line": 97,
+              "title": "우리 진영에서 서두른 연결보다 운반",
+              "position_tags": [
+                "ST"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c021",
+                "c022"
+              ],
+              "addressed_to_all": true
+            }
+          ]
+        },
+        {
+          "title": "후반: 공격 방향과 수비 균형",
+          "summary": "막힌 공격에서 측면과 뒤쪽 지원을 활용하고, 수비 조작으로 페널티가 나온 장면을 확인한다. 수비가 밀집하면 미련 없이 뒤로 빼는 선택을 반복해 강조한다.",
+          "units": [
+            {
+              "start_line": 104,
+              "end_line": 120,
+              "title": "막힌 중앙 대신 넓은 측면 활용",
+              "position_tags": [
+                "ST",
+                "MF",
+                "CM",
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드",
+                "빌드업"
+              ],
+              "member_ids": [
+                "giseun",
+                "gerrard",
+                "jonjae"
+              ],
+              "key_frame_candidate_ids": [
+                "c030",
+                "c031"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 121,
+              "end_line": 134,
+              "title": "원전이 측면을 차지하면 사인드는 중앙으로",
+              "position_tags": [
+                "FW",
+                "FB",
+                "ST"
+              ],
+              "topic_tags": [
+                "포지셔닝",
+                "파이널서드"
+              ],
+              "member_ids": [
+                "find",
+                "wonjeon"
+              ],
+              "key_frame_candidate_ids": [
+                "c032",
+                "c033"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "중원에 대각으로 빼서 전진 선택 만들기",
+              "position_tags": [
+                "CAM",
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "spress"
+              ],
+              "key_frame_candidate_ids": [
+                "c039"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "균형이 무너진 뒤 태클과 페널티",
+              "position_tags": [
+                "FB"
+              ],
+              "topic_tags": [
+                "수비라인",
+                "조작/키사용"
+              ],
+              "member_ids": [
+                "wonjeon"
+              ],
+              "key_frame_candidate_ids": [
+                "c042"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 158,
+              "end_line": 160,
+              "title": "상대 수비가 촘촘하면 뒤로 빼기",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c055"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "열린 패스 길은 땅볼로 연결",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업",
+                "조작/키사용"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c045"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "막힌 단독 돌파 대신 뒤쪽 지원 활용",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드",
+                "빌드업"
+              ],
+              "member_ids": [
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": [
+                "c056"
+              ],
+              "addressed_to_all": false
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

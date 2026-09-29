@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T02:51:15.901Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u012"
+      ],
+      "summary_ko": "받는 선수의 위치와 패스 경로에 따라 땅볼·스루·띄운 패스를 고르는 공식 가이드다.",
+      "key_points_ko": [
+        "가까운 동료에게 통로가 열려 있으면 땅볼 패스를 쓴다.",
+        "수비수가 땅볼 경로를 막을 때는 띄운 스루 패스를 고려한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-95cab878fe",
+      "url": "https://learn.englandfootball.com/articles-and-resources/coaching/resources/2022/How-to-use-space-in-your-sessions",
+      "final_url": "https://learn.englandfootball.com/articles-and-resources/coaching/resources/2022/How-to-use-space-in-your-sessions",
+      "http_status": 200,
+      "checked_at": "2026-09-29T02:51:15.977Z",
+      "reused": false,
+      "page": "refs/r-95cab878fe.html",
+      "title": "How to use space in your sessions",
+      "source_name": "England Football Learning",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u006",
+        "u011"
+      ],
+      "summary_ko": "훈련 공간의 폭과 깊이를 조절해 넓이 활용, 공의 전진, 뒤로 내주는 선택을 연습하는 자료다.",
+      "key_points_ko": [
+        "폭을 쓰면 측면 공간과 중앙의 틈을 만들 수 있다.",
+        "전진을 서두르면 뒤로 내주는 선택을 놓치기 쉽다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-a63145cc94",
+      "url": "https://www.fifatrainingcentre.com/en/game/game-analysis/in-possession/switch-of-play.php",
+      "final_url": "https://www.fifatrainingcentre.com/en/game/game-analysis/in-possession/switch-of-play.php",
+      "http_status": 200,
+      "checked_at": "2026-09-29T02:51:17.223Z",
+      "reused": false,
+      "page": "refs/r-a63145cc94.html",
+      "title": "Switch of play",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u003",
+        "u007",
+        "u009"
+      ],
+      "summary_ko": "반대편으로 전개하려면 패스하는 선수의 시간과 받는 선수의 공간, 지원 움직임이 필요하다고 설명한다.",
+      "key_points_ko": [
+        "넓은 폭을 활용해 받는 선수의 공간을 만든다.",
+        "받는 쪽의 지원 선수가 다음 전개를 준비한다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

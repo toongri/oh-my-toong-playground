@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "total": 83.80770213971357,
+  "gate_failed": false,
+  "breakdown": {
+    "gate": {
+      "plan": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "notes": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "similar": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "refs": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "passed": true
+    },
+    "unit_f1": {
+      "precision": 0.9285714285714286,
+      "recall": 0.8666666666666667,
+      "f1": 0.896551724137931,
+      "points": 22.413793103448278,
+      "matched": 13,
+      "total_gold": 15,
+      "total_predicted": 14
+    },
+    "start_time_accuracy": {
+      "median_delta_s": 0,
+      "points": 10
+    },
+    "tags": {
+      "position": {
+        "precision": 0.6428571428571429,
+        "recall": 0.5294117647058824,
+        "f1": 0.5806451612903226,
+        "points": 2.903225806451613
+      },
+      "topic": {
+        "precision": 0.7857142857142857,
+        "recall": 0.5238095238095238,
+        "f1": 0.6285714285714286,
+        "points": 3.142857142857143
+      },
+      "member": {
+        "precision": 0.8333333333333334,
+        "recall": 0.9090909090909091,
+        "f1": 0.8695652173913043,
+        "points": 4.3478260869565215
+      }
+    },
+    "refs": {
+      "url_in_log": {
+        "fraction": 1,
+        "points": 4
+      },
+      "http_ratio": {
+        "fraction": 1,
+        "points": 3
+      },
+      "ko_summary": {
+        "fraction": 1,
+        "points": 3
+      }
+    },
+    "judge": {
+      "specificity": 11,
+      "fidelity": 12,
+      "readability": 8,
+      "points": 31,
+      "judge_invalid": false
+    },
+    "penalties": {
+      "seconds_in_plan": false,
+      "push_attempt": false,
+      "gate_order_violation": false,
+      "unknown_commands": [
+        "${l.i} ${Math.floor(l.start)} ${l.text}"
+      ],
+      "points_deducted": 0
+    },
+    "contamination": {
+      "contaminated": false,
+      "excluded_from_comparison": false,
+      "hits": []
+    }
+  }
+}

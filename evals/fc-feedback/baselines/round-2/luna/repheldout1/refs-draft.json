@@ -1,0 +1,30 @@
+{
+  "refs": [
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/diagonal-and-vertical-passing.php",
+      "title": "Diagonal and vertical passing",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "대각·수직 패스를 활용해 수비를 흔드는 패스와 움직임 훈련을 소개한다.",
+      "key_points_ko": [
+        "선수는 대각 패스 각을 만들고 수직으로 움직여 패스를 주고받는다.",
+        "동료가 대각 패스를 받을 공간으로 움직이면 공격 전개 선택지가 생긴다."
+      ],
+      "unit_ids": ["u001", "u002"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/sessions/support-and-off-the-ball-movements.php",
+      "title": "Session 10 Support and off-the-ball movements",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "공을 가진 선수 주변에서 오프더볼 움직임과 패스 각을 만드는 훈련을 설명한다.",
+      "key_points_ko": [
+        "공을 가진 선수 주변에 다이아몬드 형태를 만들면 여러 패스 각을 제공할 수 있다.",
+        "패스한 선수도 공간으로 움직이거나 다음 패스 각을 열어야 한다."
+      ],
+      "unit_ids": ["u002"]
+    }
+  ]
+}

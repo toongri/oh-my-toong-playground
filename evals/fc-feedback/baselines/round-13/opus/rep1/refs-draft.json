@@ -1,0 +1,48 @@
+{
+ "refs": [
+  {
+   "url": "https://learning.coachesvoice.com/cv/zonal-marking-football-tactics-explained-mourinho-conte-simeone/",
+   "title": "Zonal Marking: Football Tactics Explained",
+   "source_name": "The Coaches' Voice",
+   "lang": "en",
+   "kind": "tactics",
+   "summary_ko": "지역 방어(존 마킹)는 상대 선수를 1대1로 따라가기보다 공간을 통제하는 수비 방식으로, 선수 간 거리를 가로·세로로 촘촘하게 유지하는 것이 핵심이라고 설명한다.",
+   "key_points_ko": ["수비수가 상대의 움직임에 끌려 자리를 비우지 않아 블록 안에 틈이 덜 생긴다", "촘촘함을 유지하려면 모든 선수가 계속 집중하고 동료와 소통해야 한다", "빠르고 날카로운 공격에는 넓은 지역이 노출될 수 있다는 약점이 있다"],
+   "translations": [{"orig": "Unlike with man-marking, gaps and pockets within a block are less likely to appear.", "ko": "대인 마킹과 달리 블록 안에 틈과 빈 공간이 생길 가능성이 적다."}, {"orig": "Maintaining compactness requires every player to always concentrate and stay in communication with their teammates.", "ko": "촘촘함을 유지하려면 모든 선수가 항상 집중하고 동료와 소통해야 한다."}],
+   "unit_ids": ["u014", "u037", "u049"]
+  },
+  {
+   "url": "https://guidetofootball.com/tactics/playing-out-from-the-back/",
+   "title": "Playing Out from the Back",
+   "source_name": "Guide to Football",
+   "lang": "en",
+   "kind": "tactics",
+   "summary_ko": "골키퍼와 수비수의 짧은 패스로 공격을 시작하는 후방 빌드업의 장점과 요구 조건, 위험을 정리하고, 강한 압박에 밀릴 때는 롱볼이 더 안전한 선택이 된다고 설명한다.",
+   "key_points_ko": ["후방 빌드업에는 기술 있는 수비수, 압박 속에서도 패스할 수 있는 골키퍼, 침착한 판단이 필요하다", "가장 큰 위험은 위험 지역에서 공을 잃는 것이다", "공격적인 압박에 밀리고 있다면 롱볼이 더 안전한 선택이 된다"],
+   "translations": [{"orig": "A goalkeeper who cannot pass under pressure is a major weakness for any team that wants to play out.", "ko": "압박 속에서 패스하지 못하는 골키퍼는 후방 빌드업을 하려는 팀에게 큰 약점이다."}, {"orig": "A misplaced pass under pressure can lead directly to a goal", "ko": "압박 속에서 나온 패스 실수는 곧바로 실점으로 이어질 수 있다"}],
+   "unit_ids": ["u008", "u043", "u046"]
+  },
+  {
+   "url": "https://www.keengamer.com/articles/guides/fifa-22-beginners-guide-how-to-defend/",
+   "title": "FIFA 22 Beginner's Guide: How to Defend",
+   "source_name": "KeenGamer",
+   "lang": "en",
+   "kind": "eafc",
+   "summary_ko": "FIFA 22 수비 기본기로 저지(L2/LT), 세컨드 맨 프레스(R1/RB), 수동 선수 전환, 수비 전술 조정 등을 소개하는 입문 가이드다.",
+   "key_points_ko": ["저지(L2/LT)는 상대 움직임에 맞춰 따라가며 방향 전환에 빠르게 반응하게 해 준다", "세컨드 맨 프레스(R1/RB)로 동료를 압박에 보내고 본인은 패스길을 끊을 수 있다", "역습을 막으려면 오른쪽 스틱으로 수비수를 직접 전환하는 것이 중요하다"],
+   "translations": [{"orig": "Jockeying is probably the most essential tool at your disposal after the traditional tackles.", "ko": "저지는 일반 태클 다음으로 가장 필수적인 도구일 것이다."}],
+   "unit_ids": ["u024", "u029", "u042"]
+  },
+  {
+   "url": "https://www.gamepressure.com/fifa-22/passes/z1ee61",
+   "title": "FIFA 22: Passes",
+   "source_name": "gamepressure.com",
+   "lang": "en",
+   "kind": "eafc",
+   "summary_ko": "FIFA 22의 패스 종류(짧은 땅볼 패스, 긴 땅볼 패스, 로빙 패스, 원터치 플레이, 스루패스, 로빙 스루패스 등)와 각각을 언제 쓰는지 정리한 가이드다.",
+   "key_points_ko": ["짧은 땅볼 패스는 가까운 동료를 정확히 겨냥해야 한다", "원터치 플레이는 가까운 선수끼리 받자마자 빠르게 주고받는 패스다", "스루패스는 수비 뒤로 빠져나간 선수에게, 로빙 스루패스는 수비 라인을 넘겨 찬스를 만들 때 쓴다"],
+   "translations": [{"orig": "A through ground pass aimed towards a player who got behind the opposing defenders is probably the best way of surprising the rival's defense.", "ko": "상대 수비 뒤로 빠져나간 선수를 겨냥한 땅볼 스루패스는 상대 수비를 놀라게 하는 가장 좋은 방법일 것이다."}],
+   "unit_ids": ["u020", "u031", "u044"]
+  }
+ ]
+}

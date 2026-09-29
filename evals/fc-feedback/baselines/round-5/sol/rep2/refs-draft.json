@@ -1,0 +1,42 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA SPORTS FC의 땅볼·스루·로브 패스 종류와 공간에 따른 선택을 설명한다.",
+      "key_points_ko": [
+        "동료 근처에 패스 길이 열려 있으면 땅볼 패스를 쓸 수 있다.",
+        "동료가 빈 공간으로 뛰면 스루 패스, 지상 패스 길이 막히면 띄운 스루 패스를 고려한다."
+      ],
+      "translations": [],
+      "unit_ids": [
+        "u001",
+        "u008",
+        "u012",
+        "u013"
+      ]
+    },
+    {
+      "url": "https://www.thefa.com/-/media/files/pdf/st-georges-park/fa-learning/playing-out-from-the-back-gk-phase-of-play.ashx?la=en",
+      "title": "UEFA B Playing Out From The Back",
+      "source_name": "The FA",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "후방 전개 훈련에서 수비와 미드필더의 위치, 볼 운반, 패스 지원을 다룬다.",
+      "key_points_ko": [
+        "센터백이 공을 운반하는 동안 수비형 미드필더가 공간을 채운다.",
+        "풀백은 넓고 높은 위치를 잡고 미드필더는 패스 지원 형태를 만든다."
+      ],
+      "translations": [],
+      "unit_ids": [
+        "u006",
+        "u009",
+        "u010",
+        "u011"
+      ]
+    }
+  ]
+}

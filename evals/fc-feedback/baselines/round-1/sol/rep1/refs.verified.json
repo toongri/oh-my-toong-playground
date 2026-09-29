@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-57cb843146",
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php",
+      "final_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php",
+      "http_status": 200,
+      "checked_at": "2026-09-28T22:03:45.646Z",
+      "reused": false,
+      "page": "refs/r-57cb843146.html",
+      "title": "Lamia Boumehdi: Technical foundations for switching play",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u003",
+        "u006",
+        "u008",
+        "u010"
+      ],
+      "summary_ko": "상대 수비가 밀집했을 때 폭을 넓히고 압박을 한쪽으로 유도한 뒤 반대편 공간을 활용하는 훈련이다.",
+      "key_points_ko": [
+        "폭과 깊이를 점유해 상대 수비 블록을 늘린다.",
+        "전진 패스가 막히면 안쪽이나 뒤로 다시 연결해 반대편을 연다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-bf40879539",
+      "url": "https://www.fifatrainingcentre.com/en/game/tournaments/olympic-football-tournament/2024/men/usa-methodical-build-up.php",
+      "final_url": "https://www.fifatrainingcentre.com/en/game/tournaments/olympic-football-tournament/2024/men/usa-methodical-build-up.php",
+      "http_status": 200,
+      "checked_at": "2026-09-28T22:03:46.914Z",
+      "reused": false,
+      "page": "refs/r-bf40879539.html",
+      "title": "The USA’s methodical build-up against New Zealand",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u004",
+        "u005",
+        "u007",
+        "u012"
+      ],
+      "summary_ko": "미국 대표팀의 후방 전개 사례를 통해 폭을 넓히고 위험한 전방 연결을 피하면서 압박을 푸는 방법을 설명한다.",
+      "key_points_ko": [
+        "넓은 대형과 열린 몸 방향이 수신 선택지를 늘린다.",
+        "받는 사람이 고립될 때는 공을 되돌리고 측면을 바꾼다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-81135892ef",
+      "url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "final_url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "http_status": 200,
+      "checked_at": "2026-09-28T22:03:47.225Z",
+      "reused": false,
+      "page": "refs/r-81135892ef.html",
+      "title": "EA SPORTS FC 24 Pitch Notes: PlayStyles Deep Dive",
+      "source_name": "EA SPORTS",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u002"
+      ],
+      "summary_ko": "EA SPORTS FC 24의 플레이스타일 중 조키 움직임과 관련된 게임 내 동작을 설명하는 공식 자료다.",
+      "key_points_ko": [
+        "조키 동작의 게임 내 특징을 확인할 수 있다.",
+        "영상의 LT 사용 설명과 관련된 게임 맥락을 제공한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-6f107281e7",
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/wing-play.php",
+      "final_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/wing-play.php",
+      "http_status": 200,
+      "checked_at": "2026-09-28T22:03:47.979Z",
+      "reused": false,
+      "page": "refs/r-6f107281e7.html",
+      "title": "Wing play",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u003",
+        "u007"
+      ],
+      "summary_ko": "측면 공격에서 풀백과 중앙 미드필더의 위치·움직임을 조정해 공간을 만드는 훈련이다.",
+      "key_points_ko": [
+        "풀백은 폭을 유지하며 동료의 움직임에 맞춘다.",
+        "중앙 선수가 내려오면 반대쪽 패스 길을 열 수 있다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-bf85b12c8a",
+      "url": "https://www.fifatrainingcentre.com/en/fwc2022/technical-and-tactical-analysis/use-of-wide-areas.php",
+      "final_url": "https://www.fifatrainingcentre.com/en/fwc2022/technical-and-tactical-analysis/use-of-wide-areas.php",
+      "http_status": 200,
+      "checked_at": "2026-09-28T22:03:48.504Z",
+      "reused": false,
+      "page": "refs/r-bf85b12c8a.html",
+      "title": "Use of wide areas to create goal-scoring opportunities",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u006",
+        "u011"
+      ],
+      "summary_ko": "측면 공간 활용과 크로스 종류를 분석하며 컷백을 포함한 공격 선택지를 설명한다.",
+      "key_points_ko": [
+        "측면에서 수비 대응 시간을 줄일 수 있다.",
+        "컷백은 골라인 근처에서 페널티 지역 안쪽으로 뒤로 내주는 패스다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

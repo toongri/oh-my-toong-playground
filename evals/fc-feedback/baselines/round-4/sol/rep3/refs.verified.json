@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T00:10:08.602Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u007",
+        "u012"
+      ],
+      "summary_ko": "EA SPORTS FC의 패스 종류와 방향·강도 조절, 크로스와 스루패스 사용을 설명한다.",
+      "key_points_ko": [
+        "패스 유형마다 입력과 궤도가 다르다.",
+        "크로스와 스루패스는 상황에 맞는 방향과 강도를 조절한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-f9244d1f00",
+      "url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-career-deep-dive",
+      "final_url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-career-deep-dive",
+      "http_status": 200,
+      "checked_at": "2026-09-29T00:10:08.792Z",
+      "reused": false,
+      "page": "refs/r-f9244d1f00.html",
+      "title": "EA SPORTS FC 24 Pitch Notes - Career Deep Dive",
+      "source_name": "Electronic Arts",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u001",
+        "u003",
+        "u008"
+      ],
+      "summary_ko": "FC 24의 전술 철학 중 측면 활용, 짧은 패스와 위치 교대, 역습의 공간 침투를 소개한다.",
+      "key_points_ko": [
+        "측면 활용은 폭과 오버래핑을 중시한다.",
+        "짧은 패스와 위치 교대로 침투 기회를 기다리는 전술도 설명한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-06866c4174",
+      "url": "https://www.thefa.com/-/media/files/pdf/st-georges-park/fa-learning/playing-out-from-the-back-gk-phase-of-play.ashx?la=en",
+      "final_url": "https://www.thefa.com/-/media/files/pdf/st-georges-park/fa-learning/playing-out-from-the-back-gk-phase-of-play.ashx?la=en",
+      "http_status": 200,
+      "checked_at": "2026-09-29T00:10:09.358Z",
+      "reused": false,
+      "page": "refs/r-06866c4174.html",
+      "title": "UEFA B Playing Out From The Back",
+      "source_name": "The Football Association",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u004",
+        "u005",
+        "u011"
+      ],
+      "summary_ko": "후방에서 공을 전개하는 훈련 자료로, 미드필더의 지원 형태와 전개 경로를 다룬다.",
+      "key_points_ko": [
+        "공을 가진 선수 주위의 지원 형태를 준비한다.",
+        "후방 전개 때 중앙 미드필더를 통한 연결을 연습한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-5bd0801f0d",
+      "url": "https://community.thefa.com/coaching/b/insights-analysis-blogs/posts/two-player-connections-in-wide-areas",
+      "final_url": "https://community.thefa.com/coaching/b/insights-analysis-blogs/posts/two-player-connections-in-wide-areas",
+      "http_status": 200,
+      "checked_at": "2026-09-29T00:10:09.413Z",
+      "reused": false,
+      "page": "refs/r-5bd0801f0d.html",
+      "title": "Two player connections in wide areas",
+      "source_name": "England Football Learning",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u003",
+        "u008",
+        "u009"
+      ],
+      "summary_ko": "측면에서 두 선수가 연결할 때의 움직임과 대각선 움직임, 오버래핑 등 여러 패턴을 분석한다.",
+      "key_points_ko": [
+        "측면의 두 선수는 다양한 이동 경로로 선택지를 만든다.",
+        "상대편으로 빠르게 전환하거나 역습하면 측면 수적 우위를 만들 수 있다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

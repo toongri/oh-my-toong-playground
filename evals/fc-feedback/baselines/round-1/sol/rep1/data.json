@@ -1,0 +1,1049 @@
+{
+  "version": 1,
+  "session_id": "20240104-NUzEChn9EyI",
+  "title": "C.E.F. FC Barcelona 팀 연습 Part 3 — 공간 활용과 안전한 전개",
+  "date": "2024-01-04",
+  "generated_at": "2026-09-28T22:03:55.039Z",
+  "pages_base_url": "https://fc-feedback-eval.invalid/",
+  "videos": [
+    {
+      "id": "NUzEChn9EyI",
+      "part": 1,
+      "embeddable": true
+    }
+  ],
+  "members": [
+    {
+      "id": "timej",
+      "name": "TIMEJ",
+      "gamertag": "TIMEJ",
+      "positions": [
+        "ST"
+      ]
+    },
+    {
+      "id": "gerrard",
+      "name": "Gerrard_CEF",
+      "gamertag": "Gerrard_CEF",
+      "positions": [
+        "CM"
+      ]
+    },
+    {
+      "id": "vandeven",
+      "name": "CEF_VandeVen",
+      "gamertag": "CEF_VandeVen",
+      "positions": [
+        "CB"
+      ]
+    },
+    {
+      "id": "bride",
+      "name": "브라이드",
+      "gamertag": "CEF_Bride",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "taxi",
+      "name": "택시",
+      "gamertag": "CEF_Taxi",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jomin",
+      "name": "조민",
+      "gamertag": "CEF_Jomin",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "find",
+      "name": "사인드",
+      "gamertag": "CEF_Find",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "rumi",
+      "name": "루미",
+      "gamertag": "CEF_Rumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "gipeu",
+      "name": "기프",
+      "gamertag": "CEF_Gipeu",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "yumi",
+      "name": "유미",
+      "gamertag": "CEF_Yumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "saembaek",
+      "name": "샘백",
+      "gamertag": "CEF_Saembaek",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "giseun",
+      "name": "기슨",
+      "gamertag": "CEF_Giseun",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jonjae",
+      "name": "존재",
+      "gamertag": "CEF_Jonjae",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "wonjeon",
+      "name": "원전",
+      "gamertag": "CEF_Wonjeon",
+      "positions": [
+        "FB"
+      ]
+    },
+    {
+      "id": "spress",
+      "name": "스프레스",
+      "gamertag": "CEF_Spress",
+      "positions": [
+        "CAM"
+      ]
+    },
+    {
+      "id": "maekgu",
+      "name": "맥구",
+      "gamertag": "CEF_Maekgu",
+      "positions": [
+        "FW"
+      ]
+    }
+  ],
+  "matches": [
+    {
+      "id": "m1",
+      "title": "BRO 대 FCB — 공격 전개와 수비 판단",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "넓은 공간으로 전개하고 패스 선택지 만들기",
+          "summary": "좁은 공간으로 서둘러 연결하기보다 공을 운반하고 측면 폭을 확보한다.",
+          "unit_ids": [
+            "u001",
+            "u002",
+            "u003",
+            "u004",
+            "u005",
+            "u006"
+          ]
+        },
+        {
+          "id": "m1-t2",
+          "title": "측면 회전과 수비 전환 판단",
+          "summary": "측면과 중앙의 역할을 바꾸고, 수비 밀집 시 공을 안전하게 되돌린다.",
+          "unit_ids": [
+            "u007",
+            "u008",
+            "u009",
+            "u010",
+            "u011",
+            "u012"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "uid": "20240104-NUzEChn9EyI#u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 51.12,
+      "end": 103.42,
+      "title": "브라이드의 패스를 넓은 공간으로 연결하기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [
+        "bride"
+      ],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "브라이드는 TIMEJ 쪽으로 바로 넣기 전에 **넓은 공간의 동료에게 먼저 연결**해 공을 운반할 길을 열어야 한다."
+        },
+        {
+          "type": "text",
+          "text": "코치는 좁은 공간의 선수보다 넓은 공간의 선수에게 주면 공을 옮기기 쉽고, 공이 이동하는 동안 공 없는 동료가 올라갈 시간이 생긴다고 설명한다. 아래 장면에는 중앙에 수비가 모이고 양쪽에 FCB 선수가 벌어져 있다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u001-c004.webp",
+          "width": 854,
+          "height": 460,
+          "t": 90,
+          "caption": "중앙의 선수 주변을 파란 선으로 표시하고, 왼쪽의 넓은 구역에도 파란 선을 그려 둔 화면."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u001-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-57cb843146",
+          "title": "Lamia Boumehdi: Technical foundations for switching play",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-57cb843146.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=51"
+    },
+    {
+      "id": "u002",
+      "uid": "20240104-NUzEChn9EyI#u002",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 225.9,
+      "end": 255.12,
+      "title": "근접 압박에서 LT로 상대를 바라보며 이동하기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "조작/키사용",
+        "탈압박"
+      ],
+      "member_ids": [
+        "taxi"
+      ],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "택시는 근처에서 상대가 공을 잡고 압박할 때 **LT를 누른 채 상대를 바라보며 이동**해 몸의 방향을 유지해야 한다."
+        },
+        {
+          "type": "text",
+          "text": "코치는 위아래로 움직일 때 몸이 불필요하게 돌아가지 않는 조작을 설명한다. 중앙선 부근의 표시된 선수와 LT 표기가 그 설명 대상이다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u002-c009.webp",
+          "width": 854,
+          "height": 460,
+          "t": 240,
+          "caption": "중앙선 위쪽의 FCB 선수에 노란 원이 있고, 바로 오른쪽에 노란색 LT 표기가 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u002-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-81135892ef",
+          "title": "EA SPORTS FC 24 Pitch Notes: PlayStyles Deep Dive",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-81135892ef.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=225"
+    },
+    {
+      "id": "u003",
+      "uid": "20240104-NUzEChn9EyI#u003",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 344.68,
+      "end": 402.72,
+      "title": "역습 때 루미가 측면 폭을 만들어 패스 선택지 늘리기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi"
+      ],
+      "related_member_ids": [
+        "timej",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "역습에서 사인드가 낮고 조민이 안쪽으로 움직이는 동안 루미는 **측면으로 달려 패스 길을 넓혀야** 기프가 TIMEJ와 유미 중 선택할 수 있다."
+        },
+        {
+          "type": "text",
+          "text": "코치는 공을 가진 사람에게 두 개의 선택지가 보이도록 측면 폭을 유지하라고 설명한다. 장면의 붉은 화살표는 중앙 침투, 노란 화살표는 왼쪽 측면을 돌아 들어가는 경로를 가리킨다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u003-c014.webp",
+          "width": 854,
+          "height": 460,
+          "t": 390,
+          "caption": "페널티 지역 앞 중앙에 붉은 화살표, 왼쪽 측면에서 안쪽으로 휘어지는 노란 화살표가 그려져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u003-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u002",
+          "title": "베리나 포지션 상향 지시",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u002"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-57cb843146",
+          "title": "Lamia Boumehdi: Technical foundations for switching play",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-57cb843146.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php"
+        },
+        {
+          "id": "r-6f107281e7",
+          "title": "Wing play",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-6f107281e7.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/wing-play.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=344"
+    },
+    {
+      "id": "u004",
+      "uid": "20240104-NUzEChn9EyI#u004",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 463.08000000000004,
+      "end": 526.78,
+      "title": "압박을 받기 전에 뒤로 돌리고 다시 받기",
+      "position_tags": [
+        "CM"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "탈압박"
+      ],
+      "member_ids": [
+        "gerrard",
+        "saembaek"
+      ],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "saembaek",
+        "giseun"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "Gerrard_CEF는 공이 도착할 때 압박을 예상하고 **뒤로 내준 뒤 LT로 다시 받을 자리**를 만들어야 한다."
+        },
+        {
+          "type": "text",
+          "text": "코치는 이 위치에서 무리하게 전진 패스를 넣으면 수비 숫자에 막힌다고 말한다. 샘백에게 보내 수비를 끌어낸 뒤 다시 연결하는 선택지도 제시한다. 화면의 센터서클 안 Gerrard_CEF와 왼쪽의 흰색 수비 간격을 확인할 수 있다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u004-c018.webp",
+          "width": 854,
+          "height": 460,
+          "t": 510,
+          "caption": "센터서클 오른쪽의 Gerrard_CEF와 왼쪽으로 향하는 붉은 화살표가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u004-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-bf40879539",
+          "title": "The USA’s methodical build-up against New Zealand",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-bf40879539.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/game/tournaments/olympic-football-tournament/2024/men/usa-methodical-build-up.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=463"
+    },
+    {
+      "id": "u005",
+      "uid": "20240104-NUzEChn9EyI#u005",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 545.7,
+      "end": 658.94,
+      "title": "공을 더 운반해 수비를 끌고 전진 시간 벌기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [
+        "rumi"
+      ],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "rumi",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "루미는 TIMEJ에게 좁은 공간에서 바로 주기보다 **공을 조금 더 몰아 상대 한 명을 끌고** 동료가 전진할 시간을 벌어야 한다."
+        },
+        {
+          "type": "text",
+          "text": "코치는 자기 진영에서 짧은 연결이 성공하더라도 TIMEJ가 받을 때 선택지가 적고, 빼앗기면 즉시 역습을 허용한다고 설명한다. 공격 방향 앞쪽에 흰색 수비가 모여 있고 FCB 선수들은 뒤와 측면에 분포한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u005-c022.webp",
+          "width": 854,
+          "height": 460,
+          "t": 630,
+          "caption": "중앙과 오른쪽의 FCB 선수에서 앞쪽으로 향하는 붉은 화살표와, 흰색 수비 앞의 파란 화살표가 그려져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u005-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-bf40879539",
+          "title": "The USA’s methodical build-up against New Zealand",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-bf40879539.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/game/tournaments/olympic-football-tournament/2024/men/usa-methodical-build-up.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=545"
+    },
+    {
+      "id": "u006",
+      "uid": "20240104-NUzEChn9EyI#u006",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 791.0999999999999,
+      "end": 838.74,
+      "title": "중앙이 막히면 대각으로 벌려 넓은 공간 쓰기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "gerrard",
+        "giseun",
+        "jonjae"
+      ],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "jonjae",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "Gerrard_CEF와 기슨은 중앙이 닫힌 상황에서 **대각으로 바깥쪽에 연결**해 존재가 넓은 공간에서 전진할 여유를 만들어야 한다."
+        },
+        {
+          "type": "text",
+          "text": "코치는 한 번에 좁은 중앙을 찌르기보다 측면으로 빼 주면 받는 사람이 크로스나 컷백을 고를 수 있다고 설명한다. 이 장면은 골문 앞 흰색 수비가 모인 상태와 바깥에 남은 FCB 선수를 보여 준다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u006-c030.webp",
+          "width": 854,
+          "height": 460,
+          "t": 810,
+          "caption": "상대 페널티 지역에 흰색 수비가 모여 있고, FCB 선수 두 명을 파란 원으로 표시했다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u006-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-57cb843146",
+          "title": "Lamia Boumehdi: Technical foundations for switching play",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-57cb843146.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php"
+        },
+        {
+          "id": "r-bf85b12c8a",
+          "title": "Use of wide areas to create goal-scoring opportunities",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-bf85b12c8a.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/fwc2022/technical-and-tactical-analysis/use-of-wide-areas.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=791"
+    },
+    {
+      "id": "u007",
+      "uid": "20240104-NUzEChn9EyI#u007",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 857.4799999999999,
+      "end": 901.44,
+      "title": "원전이 전진할 때 사인드가 중앙으로 들어가기",
+      "position_tags": [
+        "FB",
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "빌드업"
+      ],
+      "member_ids": [
+        "wonjeon",
+        "find"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "wonjeon",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "원전이 측면으로 전진할 때 사인드는 **중앙으로 들어가고**, 뒤에 남는 TIMEJ가 중앙 빈자리를 메우는 회전을 맞춰야 한다."
+        },
+        {
+          "type": "text",
+          "text": "코치는 원전의 전진 경로와 사인드의 안쪽 움직임이 겹치지 않아야 한다고 설명한다. 화면에 표시된 왼쪽 아래 측면 경로와 중앙의 두 원이 그 배치를 나타낸다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u007-c033.webp",
+          "width": 854,
+          "height": 460,
+          "t": 900,
+          "caption": "왼쪽 아래 FCB 선수에서 측면으로 이어지는 흰색 화살표와, 중앙의 FCB 선수 둘을 둘러싼 흰색 원이 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u007-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u002",
+          "title": "베리나 포지션 상향 지시",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u002"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-bf40879539",
+          "title": "The USA’s methodical build-up against New Zealand",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-bf40879539.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/game/tournaments/olympic-football-tournament/2024/men/usa-methodical-build-up.php"
+        },
+        {
+          "id": "r-6f107281e7",
+          "title": "Wing play",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-6f107281e7.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/wing-play.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=857"
+    },
+    {
+      "id": "u008",
+      "uid": "20240104-NUzEChn9EyI#u008",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 1071.64,
+      "end": 1104.5,
+      "title": "스프레스의 연결 뒤 대각 패스로 중원 열기",
+      "position_tags": [
+        "CAM"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [
+        "spress"
+      ],
+      "related_member_ids": [
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "스프레스는 측면의 패스를 이어받은 뒤 **중원으로 대각 연결**해 넓은 쪽을 향해 뛰는 동료를 볼 여유를 만들어야 한다."
+        },
+        {
+          "type": "text",
+          "text": "코치는 앞선 좁은 공간 패스 사례와 같은 판단이라고 말한다. 오른쪽 터치라인 근처에 선수들이 모여 있고, 그 안쪽의 표시된 FCB 선수가 다음 연결 지점을 가리킨다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u008-c039.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1080,
+          "caption": "오른쪽 측면 선수들 아래쪽의 FCB 선수를 붉은 원으로 둘렀고, 그 오른쪽에 짧은 붉은 선이 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u008-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-57cb843146",
+          "title": "Lamia Boumehdi: Technical foundations for switching play",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-57cb843146.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1071"
+    },
+    {
+      "id": "u009",
+      "uid": "20240104-NUzEChn9EyI#u009",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 1128.4599999999998,
+      "end": 1139.04,
+      "title": "원전의 경합에서 무리한 태클 피하기",
+      "position_tags": [
+        "FB"
+      ],
+      "topic_tags": [
+        "수비라인"
+      ],
+      "member_ids": [
+        "wonjeon"
+      ],
+      "related_member_ids": [
+        "wonjeon"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "원전은 페널티 지역 앞에서 상대의 균형이 무너져도 **태클 타이밍을 늦춰 경합을 유지**해야 한다."
+        },
+        {
+          "type": "text",
+          "text": "코치는 공을 빼앗으려 태클을 눌렀다가 페널티가 된 장면을 짚는다. 정지 화면에는 FCB 선수가 골문 앞 페널티 지역 안에서 공을 몰고 있고 흰색 수비가 바로 옆에 붙어 있다. 이 한 프레임만으로 파울 순간은 판정할 수 없다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u009-c053.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1134,
+          "caption": "FCB 선수가 페널티 지역 안쪽 왼편에서 공을 몰고, 흰색 선수가 바로 옆에서 추격한다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u009-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1128"
+    },
+    {
+      "id": "u010",
+      "uid": "20240104-NUzEChn9EyI#u010",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 1155.22,
+      "end": 1191.56,
+      "title": "촘촘한 상대 수비 앞에서 뒤로 빼기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [
+        "find",
+        "rumi"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "사인드와 루미는 상대 수비가 촘촘한 공격에서 **뒤로 빼서 다시 전개**할 공간을 만들어야 한다."
+        },
+        {
+          "type": "text",
+          "text": "코치는 밀집 수비를 보고는 그대로 공격할 수 없으니 공을 빼야 한다고 말한다. 화면에는 페널티 지역 앞쪽의 흰색 수비 여러 명과, 그 앞·측면의 FCB 선수들이 보인다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u010-c054.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1159,
+          "caption": "페널티 지역 앞과 오른쪽에 흰색 수비가 다수 서 있고, 아래쪽 측면에는 루미 표시가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u010-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-57cb843146",
+          "title": "Lamia Boumehdi: Technical foundations for switching play",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-57cb843146.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1155"
+    },
+    {
+      "id": "u011",
+      "uid": "20240104-NUzEChn9EyI#u011",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 1225.22,
+      "end": 1254.74,
+      "title": "열린 패스 길은 땅볼로 연결하기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [
+        "gerrard"
+      ],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "Gerrard_CEF를 포함한 패스 공급자는 전방 패스 길이 열렸다면 **받는 사람의 속도를 살릴 땅볼**로 연결해야 한다."
+        },
+        {
+          "type": "text",
+          "text": "코치는 공을 띄우는 선택은 사이가 막혔을 때 쓰고, 땅볼이 가능하면 받는 사람이 곧바로 플레이하기 쉽다고 설명한다. 화면에 오른쪽 전방으로 향하는 붉은 화살표가 그려져 있다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u011-c045.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1230,
+          "caption": "오른쪽 터치라인 근처 FCB 선수에서 전방의 빈 공간으로 향하는 붉은 화살표가 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u011-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-bf85b12c8a",
+          "title": "Use of wide areas to create goal-scoring opportunities",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-bf85b12c8a.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/fwc2022/technical-and-tactical-analysis/use-of-wide-areas.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1225"
+    },
+    {
+      "id": "u012",
+      "uid": "20240104-NUzEChn9EyI#u012",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 1258.6599999999999,
+      "end": 1305.48,
+      "title": "막힌 단독 돌파 대신 후방 지원을 사용하기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "maekgu"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "맥구는 전방이 막혔을 때 **뒤에서 받쳐 주는 동료에게 돌린 뒤** 다른 돌파 경로를 찾아야 한다."
+        },
+        {
+          "type": "text",
+          "text": "코치는 단독 돌파를 반복하기보다 뒤로 안전하게 살려 주고, 지원 선수가 올라오는 선택을 쓰라고 설명한다. 장면에서는 상대 페널티 지역 앞에 흰색 수비가 모여 있고 뒤쪽에 FCB 지원 선수들이 남아 있다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u012-c055.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1275,
+          "caption": "상대 페널티 지역 앞에 흰색 수비들이 밀집했고, 그 뒤쪽에 FCB 선수 여러 명이 벌어져 있다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u012-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-bf40879539",
+          "title": "The USA’s methodical build-up against New Zealand",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-bf40879539.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/game/tournaments/olympic-football-tournament/2024/men/usa-methodical-build-up.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1258"
+    }
+  ]
+}

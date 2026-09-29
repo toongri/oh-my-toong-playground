@@ -1,0 +1,639 @@
+{
+  "session_title": "ATM 프로클럽 경기: 후방 탈출과 공간 활용 피드백",
+  "matches": [
+    {
+      "title": "CLV 대 ATM 경기",
+      "topics": [
+        {
+          "title": "초반: 패스길과 수비 전환",
+          "summary": "긴 터치, 정해진 패스길, 전원 수비 뒤 비어 버린 역습 출구를 살핀다.",
+          "units": [
+            {
+              "start_line": 6,
+              "end_line": 24,
+              "title": "긴 터치와 읽히는 전진 패스",
+              "position_tags": [],
+              "topic_tags": [
+                "탈압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c004"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 25,
+              "end_line": 51,
+              "title": "윙이 공간을 바꿔 패스길 만들기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c006"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 54,
+              "end_line": 78,
+              "title": "수비 후 역습 출구를 남기기",
+              "position_tags": [],
+              "topic_tags": [
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c009"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 79,
+              "end_line": 109,
+              "title": "받기 전 감속과 원터치 탈압박",
+              "position_tags": [],
+              "topic_tags": [
+                "탈압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c012"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 110,
+              "end_line": 156,
+              "title": "풀백의 압박을 늦추는 뒷공간 침투",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c016"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 157,
+              "end_line": 199,
+              "title": "미드필더가 패스길을 먼저 차단하기",
+              "position_tags": [
+                "MF",
+                "CB"
+              ],
+              "topic_tags": [
+                "압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c021"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 200,
+              "end_line": 239,
+              "title": "빌드업을 감당하기 어려울 때의 골킥",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c025"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 240,
+              "end_line": 287,
+              "title": "윙은 벌리기만 하지 말고 받는 공간 찾기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c029"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 288,
+              "end_line": 299,
+              "title": "스로인에서 움직여 정확한 각 만들기",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c033"
+              ],
+              "addressed_to_all": true
+            }
+          ]
+        },
+        {
+          "title": "전반: 공간 점유와 수비 책임",
+          "summary": "공격수의 직선 주행과 후방 고립을 짚고 수비수·미드필더의 공간 책임을 구분한다.",
+          "units": [
+            {
+              "start_line": 300,
+              "end_line": 349,
+              "title": "롱킥 뒤 비어 있는 공간과 고립 탈출",
+              "position_tags": [],
+              "topic_tags": [
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c037"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 350,
+              "end_line": 399,
+              "title": "직선 침투 대신 수비수 뒤 공간으로",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c043"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 400,
+              "end_line": 426,
+              "title": "수비 중 풀백의 자기 공간 사수",
+              "position_tags": [
+                "FB",
+                "DF"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c046"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 427,
+              "end_line": 464,
+              "title": "압박이 없을 때 보고, 침투는 멈춰서 받기",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c050"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 465,
+              "end_line": 485,
+              "title": "수비 간격과 무게중심 바로잡기",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c053"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 486,
+              "end_line": 534,
+              "title": "패스각을 못 봤다면 버티며 다시 확인",
+              "position_tags": [],
+              "topic_tags": [
+                "탈압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c057"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 535,
+              "end_line": 570,
+              "title": "스루패스의 공간·거리와 대안",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c062"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 571,
+              "end_line": 599,
+              "title": "미드필더의 끝까지 따라가는 수비",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c067"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 600,
+              "end_line": 624,
+              "title": "윙의 키핑과 압박 탈출",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "탈압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c072"
+              ],
+              "addressed_to_all": false
+            }
+          ]
+        },
+        {
+          "title": "중반: 침투 선택과 수비 라인",
+          "summary": "압박 상황의 키핑, 스루패스의 조건, 역습 수비의 위치 선정을 살핀다.",
+          "units": [
+            {
+              "start_line": 625,
+              "end_line": 673,
+              "title": "스트라이커의 되돌림과 압박 반대 방향 키핑",
+              "position_tags": [
+                "ST"
+              ],
+              "topic_tags": [
+                "탈압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c078"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 674,
+              "end_line": 712,
+              "title": "읽히는 패스 대신 버티며 공간 이동",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c083"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 713,
+              "end_line": 740,
+              "title": "공을 뺏으려 돌진하다 실점한 수비",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c087"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 741,
+              "end_line": 760,
+              "title": "열린 측면으로 전진하고 위험한 후방 회피",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c091"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 761,
+              "end_line": 825,
+              "title": "스트라이커의 직선 침투와 오프사이드",
+              "position_tags": [
+                "ST"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c096"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 826,
+              "end_line": 865,
+              "title": "역습 수비에서 담당자와 라인 정하기",
+              "position_tags": [
+                "DF",
+                "MF"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c102"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 866,
+              "end_line": 899,
+              "title": "압박 탈출 뒤 측면으로, 윙은 직선 주행 자제",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c108"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 900,
+              "end_line": 925,
+              "title": "역습을 내줬을 때 수비 공간 복귀",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c112"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 926,
+              "end_line": 987,
+              "title": "후방 탈출의 전방 옵션과 침착한 패스",
+              "position_tags": [
+                "FW",
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c118"
+              ],
+              "addressed_to_all": false
+            }
+          ]
+        },
+        {
+          "title": "후반: 후방 탈출과 전방 옵션",
+          "summary": "후방 패스의 위험, 공간 복귀, 늦어진 역습과 오프사이드 선택을 정리한다.",
+          "units": [
+            {
+              "start_line": 988,
+              "end_line": 1023,
+              "title": "패스각이 없을 때 버티기와 걷어내기",
+              "position_tags": [],
+              "topic_tags": [
+                "탈압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c123"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 1024,
+              "end_line": 1048,
+              "title": "상대 긴 터치를 놓치지 않는 수비",
+              "position_tags": [
+                "FB",
+                "DF"
+              ],
+              "topic_tags": [
+                "압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c126"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 1049,
+              "end_line": 1078,
+              "title": "탈압박 직후 패스각을 열고 후방 위험 줄이기",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c130"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 1079,
+              "end_line": 1091,
+              "title": "뻔한 패스를 피하고 미니맵 확인하기",
+              "position_tags": [
+                "FB",
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c134"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 1092,
+              "end_line": 1108,
+              "title": "볼 상실 직후 달려들지 말고 자리 복귀",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c136"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 1109,
+              "end_line": 1126,
+              "title": "급한 미드필더를 위한 공간의 출구",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c138"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 1127,
+              "end_line": 1140,
+              "title": "공을 잃은 뒤 1대1과 커버 공간",
+              "position_tags": [
+                "FB"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c140"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 1141,
+              "end_line": 1164,
+              "title": "후방 패스보다 침투와 패스길 확인",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c143"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 1165,
+              "end_line": 1191,
+              "title": "3백 수비의 공간 중복과 열린 측면",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c147"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 1192,
+              "end_line": 1215,
+              "title": "서두른 패스와 출구 없는 후방 순환",
+              "position_tags": [],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c150"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 1216,
+              "end_line": 1275,
+              "title": "역습 지연 전에 앞에서 받고 전진하기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c156"
+              ],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 1276,
+              "end_line": 1296,
+              "title": "윙은 서서 받다가 패스 순간 뛰기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c162"
+              ],
+              "addressed_to_all": false
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

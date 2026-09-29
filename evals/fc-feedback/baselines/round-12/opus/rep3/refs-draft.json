@@ -1,0 +1,52 @@
+{
+  "refs": [
+    {
+      "url": "https://www.oneesports.gg/gaming/best-ea-fc-24-defending-tips-defenders/",
+      "title": "Best EA FC 24 defending tips to protect your goal with style",
+      "source_name": "ONE Esports",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA FC 24 수비 요령 모음. 전술 수비 설정, R1/RB 압박, L2/LT 조키(jockey), 페널티박스 안에서 위험한 태클 피하기 등을 다룹니다.",
+      "key_points_ko": [
+        "L2/LT를 누르고 조키하면 상대가 공을 가졌을 때 선수가 공 가까이 붙어 따라갑니다.",
+        "타이밍에 자신이 없다면 페널티박스 안에서는 스탠딩 태클을 피하라고 권합니다 — 타이밍이 틀리면 페널티를 내줄 위험이 큽니다."
+      ],
+      "translations": [
+        { "orig": "Unless you're really good at it, avoid standing tackles within the penalty area because there's a high risk of getting a penalty if you time it wrong.", "ko": "정말 능숙하지 않다면 페널티 에어리어 안에서는 스탠딩 태클을 피하세요. 타이밍이 틀리면 페널티를 내줄 위험이 큽니다." }
+      ],
+      "unit_ids": ["u011"]
+    },
+    {
+      "url": "https://redbull.com/au-en/ea-sports-fc-24-defense-tips-guide",
+      "title": "EA FC 24 Defense Tips: How to defend properly",
+      "source_name": "Red Bull",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA FC 24 수비 가이드. 일반 조키(L2/LT) 사용, 너무 공격적으로 달려들지 않고 기다리며 수비하기, 태클 타이밍을 다룹니다.",
+      "key_points_ko": [
+        "빠른 조키보다 일반 조키(L2/LT)로 상대 드리블을 버티라고 권합니다.",
+        "너무 공격적으로 수비하면 공간이 생기므로 기다리며 수비하라고 조언합니다."
+      ],
+      "translations": [
+        { "orig": "defend in a wait-and-see manner rather than too aggressively", "ko": "너무 공격적으로 나서기보다 지켜보며 기다리는 방식으로 수비하라" }
+      ],
+      "unit_ids": ["u011"]
+    },
+    {
+      "url": "https://www.footballgpt.co/blog/coaching-switch-play-maximise-width-create-chances",
+      "title": "Coach switching play from pressure and space",
+      "source_name": "FootballGPT",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "상대 압박과 빈 공간을 읽고 방향 전환(스위칭 플레이)을 언제 할지 가르치는 코칭 가이드입니다.",
+      "key_points_ko": [
+        "방향 전환은 단순히 반대편으로 길게 차는 것이 아니라, 상대가 막은 곳을 보고 다음에 어디로 플레이할지에 대한 대응입니다.",
+        "전환은 한 번의 패스로도 여러 번의 패스로도 할 수 있으며, 패스 길이보다 공간을 쓸 수 있는 선수에게 공이 가는지가 중요합니다."
+      ],
+      "translations": [
+        { "orig": "A switch can use one pass or several. The length of the pass matters less than whether the ball reaches a player who can use the space.", "ko": "전환은 패스 한 번으로도 여러 번으로도 할 수 있다. 패스 길이보다 공간을 쓸 수 있는 선수에게 공이 닿는지가 더 중요하다." }
+      ],
+      "unit_ids": ["u008", "u010"]
+    }
+  ]
+}

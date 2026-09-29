@@ -1,0 +1,59 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "동료의 움직임과 열린 패스 길에 맞춰 땅볼, 스루, 로빙 패스를 고르는 공식 안내다.",
+      "key_points_ko": ["가까운 동료에게 열린 길이 있으면 땅볼 패스를 사용한다.", "수비가 패스 길을 막으면 억지로 관통시키지 않고 열린 경로를 찾는다."],
+      "translations": [],
+      "unit_ids": ["u001", "u004", "u011"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/transition-to-attacking/opening-space-on-the-counter-attack.php",
+      "title": "Opening space on the counter-attack",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "역습에서 달리기와 패스의 타이밍, 측면 폭과 깊이를 함께 만드는 훈련이다.",
+      "key_points_ko": ["빠른 전진만큼 뒷공간 침투와 패스 시점이 중요하다.", "측면 폭과 대각선 움직임을 만들어 동료의 선택지를 늘린다."],
+      "translations": [],
+      "unit_ids": ["u003", "u007"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/gabriele-playing-out-from-the-back.php",
+      "title": "Playing out from the back",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "후방 전개에서 공을 순환해 빈 선수와 전진 공간을 찾는 훈련이다.",
+      "key_points_ko": ["공을 순환하며 상대의 위치를 움직여 열린 동료를 찾는다.", "전진할 공간이 생기면 공격 속도를 높인다."],
+      "translations": [],
+      "unit_ids": ["u005", "u008", "u010"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php",
+      "title": "Combination play in the final third",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "상대 최종 수비 앞에서 동료 지원, 폭 유지, 원투 패스로 공간을 여는 훈련이다.",
+      "key_points_ko": ["공 가진 선수 주변에서 패스 선택지를 만든다.", "측면 폭으로 수비를 벌리고 빈 공간을 이용한다."],
+      "translations": [],
+      "unit_ids": ["u006", "u010", "u012"]
+    },
+    {
+      "url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "title": "EA SPORTS FC 24 PlayStyles Deep Dive",
+      "source_name": "EA SPORTS FC",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "FC 24의 패스와 볼 컨트롤 PlayStyle 효과를 설명하는 공식 자료다.",
+      "key_points_ko": ["Pinged Pass는 땅볼 패스의 속도와 수신자의 볼 컨트롤 품질에 영향을 준다.", "Tiki Taka는 짧은 땅볼 패스의 정확도와 수신 품질을 높인다."],
+      "translations": [],
+      "unit_ids": ["u011"]
+    }
+  ]
+}

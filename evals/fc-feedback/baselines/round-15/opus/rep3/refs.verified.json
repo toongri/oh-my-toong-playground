@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-2add849eab",
+      "url": "https://learning.coachesvoice.com/cv/switches-of-play-football-tactics-explained",
+      "final_url": "https://learning.coachesvoice.com/cv/switches-of-play-football-tactics-explained/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T14:37:27.741Z",
+      "reused": false,
+      "page": "refs/r-2add849eab.html",
+      "title": "Switches of play: football tactics explained",
+      "source_name": "The Coaches' Voice",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u008",
+        "u010"
+      ],
+      "summary_ko": "한쪽에 상대 수비가 몰리면 다른 쪽에 공간이 생기며, 반대편으로 곧바로 넘기는 전환 패스로 그 공간을 활용한다는 전술 해설이다.",
+      "key_points_ko": [
+        "상대가 공 쪽으로 몰려 압박하면 반대편에 공간이 남는다.",
+        "한쪽으로 상대를 끌어낸 뒤 반대 측면의 비어 있는 선수를 찾는다.",
+        "전환 패스는 패스의 세기와 각도, 그리고 받는 선수의 움직임이 함께 맞아야 한다."
+      ],
+      "translations": [
+        {
+          "orig": "switch of play",
+          "ko": "전환 패스(방향 전환)"
+        }
+      ]
+    },
+    {
+      "id": "r-0d4e33514b",
+      "url": "https://www.icoachfootball.net/how-to-break-down-a-park-the-bus-low-block-3-tactical-patterns",
+      "final_url": "https://www.icoachfootball.net/how-to-break-down-a-park-the-bus-low-block-3-tactical-patterns/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T14:37:29.086Z",
+      "reused": false,
+      "page": "refs/r-0d4e33514b.html",
+      "title": "How to Break Down a \"Park the Bus\" Low Block: 3 Tactical Patterns",
+      "source_name": "iCoachFootball",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u012",
+        "u015",
+        "u007"
+      ],
+      "summary_ko": "촘촘하게 내려앉은 수비를 상대로 폭과 깊이로 경기장을 넓히고, 템포 변화와 하프스페이스 공략으로 수비를 흔드는 방법을 다룬 글이다.",
+      "key_points_ko": [
+        "폭과 깊이를 갖춰 경기장을 넓히면 수비가 편하게 좌우로 움직이지 못한다.",
+        "느린 점유보다 빠르게 공을 돌려 상대를 움직이게 하는 것이 중요하다.",
+        "센터백과 풀백 사이의 하프스페이스를 노린다."
+      ],
+      "translations": [
+        {
+          "orig": "low block",
+          "ko": "내려앉은 밀집 수비"
+        },
+        {
+          "orig": "half-space",
+          "ko": "하프스페이스"
+        }
+      ]
+    }
+  ],
+  "dropped": [
+    {
+      "url": "https://cms.ggrecon.com/guides/ea-sports-fc-24-precision-pass/",
+      "reason": "HTTP 404"
+    }
+  ]
+}

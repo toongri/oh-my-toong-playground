@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "session_id": "20211204-UplRRo4EvBo",
+  "created_at": "2026-09-29T10:28:36.301Z",
+  "videos": [
+    {
+      "id": "UplRRo4EvBo",
+      "url": "https://www.youtube.com/watch?v=UplRRo4EvBo",
+      "part": 1,
+      "title": "[피파 프로클럽 기술가이드]1.공을 지키는 기본기.",
+      "channel": "E GIL",
+      "upload_date": "20211204",
+      "duration": 525,
+      "embeddable": true,
+      "width": 640,
+      "height": 360,
+      "files": {
+        "audio": "media/audio/UplRRo4EvBo.webm",
+        "video": "media/video/UplRRo4EvBo.webm",
+        "captions": "media/captions/UplRRo4EvBo.ko.json3",
+        "captions_format": "json3",
+        "wav": "media/wav/UplRRo4EvBo.wav"
+      }
+    }
+  ]
+}

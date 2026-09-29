@@ -1,0 +1,37 @@
+{
+  "refs": [
+    {
+      "url": "https://www.fifatrainingcentre.com/en/game/game-analysis/in-possession/switch-of-play.php",
+      "title": "Switch of play",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "반대편 공간을 쓰려면 패서의 시간과 공간, 먼 쪽 수신자의 위치, 후속 지원 움직임을 함께 마련해야 한다는 전술 분석이다.",
+      "key_points_ko": ["좁은 수비 조직을 상대로 넓은 측면의 선수에게 연결하는 선택을 설명한다.", "패스 전 먼 쪽 수신자와 지원 선수의 움직임이 필요하다."],
+      "translations": [],
+      "unit_ids": ["u001", "u003", "u006", "u007", "u008", "u010"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/building_from_the_back_skinner.php",
+      "title": "Building from the back",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "압박 상황에서 볼 운반으로 상대를 끌어내고, 중앙이 붐비면 뒤로 돌려 측면 선택지를 찾는 빌드업 훈련이다.",
+      "key_points_ko": ["볼을 가진 선수가 여유가 있을 때 전진해 수비를 끌어낼 수 있다.", "중앙이 혼잡하면 뒤로 내준 뒤 측면으로 전개하는 방안을 제시한다."],
+      "translations": [],
+      "unit_ids": ["u001", "u004", "u005", "u006", "u007", "u012"]
+    },
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA SPORTS FC의 패스 종류를 정리하고, 동료의 움직임과 패스길에 맞춰 땅볼·스루·로브 패스를 선택하도록 안내한다.",
+      "key_points_ko": ["가까운 동료에게 패스길이 열려 있으면 땅볼 패스를 권한다.", "상대 수비를 억지로 통과시키기보다 열린 패스길을 찾도록 안내한다."],
+      "translations": [],
+      "unit_ids": ["u006", "u011", "u012"]
+    }
+  ]
+}

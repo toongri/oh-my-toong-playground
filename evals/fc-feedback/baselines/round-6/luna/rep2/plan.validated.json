@@ -1,0 +1,356 @@
+{
+  "version": 1,
+  "session_title": "C.E.F. Barcelona 팀 연습 피드백 (2024.1.4)",
+  "matches": [
+    {
+      "id": "m1",
+      "title": "BRO vs FC Barcelona",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "빌드업과 공격 전개 선택",
+          "summary": "넓은 공간을 찾는 패스, 압박을 벗어나는 선택, 역습 지원 위치와 공격 전개의 여러 선택지를 정리합니다.",
+          "unit_ids": [
+            "u001",
+            "u002",
+            "u003",
+            "u004",
+            "u005",
+            "u006",
+            "u007",
+            "u008",
+            "u009",
+            "u010",
+            "u011",
+            "u012",
+            "u013",
+            "u014"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 53.02,
+      "end": 103.42,
+      "title": "브라이드의 패스와 넓은 쪽 선택",
+      "position_tags": [
+        "MF",
+        "ST"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [
+        "bride",
+        "timej"
+      ],
+      "key_frame_candidate_ids": [
+        "c003",
+        "c004"
+      ]
+    },
+    {
+      "id": "u002",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 225.9,
+      "end": 255.12,
+      "title": "택시(선수)의 LT 조작",
+      "position_tags": [
+        "MF",
+        "ST"
+      ],
+      "topic_tags": [
+        "조작/키사용"
+      ],
+      "member_ids": [
+        "taxi",
+        "timej"
+      ],
+      "key_frame_candidate_ids": [
+        "c009"
+      ]
+    },
+    {
+      "id": "u003",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 344.68,
+      "end": 402.72,
+      "title": "역습 때 공격 숫자와 패스 루트 만들기",
+      "position_tags": [
+        "MF",
+        "FW",
+        "ST"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "maekgu",
+        "timej"
+      ],
+      "key_frame_candidate_ids": [
+        "c013",
+        "c014"
+      ]
+    },
+    {
+      "id": "u004",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 463.08000000000004,
+      "end": 526.78,
+      "title": "압박이 오면 뒤로 빼고 다시 받기",
+      "position_tags": [
+        "CM",
+        "FW",
+        "ST"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [
+        "gerrard",
+        "saembaek",
+        "timej"
+      ],
+      "key_frame_candidate_ids": [
+        "c017",
+        "c018"
+      ]
+    },
+    {
+      "id": "u005",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 545.7,
+      "end": 548,
+      "title": "루미가 올라오지 않고 멈춘 장면",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "rumi"
+      ],
+      "key_frame_candidate_ids": [
+        "c053"
+      ]
+    },
+    {
+      "id": "u006",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 579.9399999999999,
+      "end": 658.94,
+      "title": "공을 더 운반해 상대를 끌고 전진 시간 만들기",
+      "position_tags": [
+        "ST"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [
+        "timej"
+      ],
+      "key_frame_candidate_ids": [
+        "c021",
+        "c022"
+      ]
+    },
+    {
+      "id": "u007",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 694.54,
+      "end": 699.54,
+      "title": "넓게 벌려 전개하기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c024"
+      ]
+    },
+    {
+      "id": "u008",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 791.0999999999999,
+      "end": 838.74,
+      "title": "Gerrard_CEF를 거쳐 존재(선수)가 넓은 공간을 쓰도록 연결하기",
+      "position_tags": [
+        "CM",
+        "MF",
+        "FW",
+        "ST"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "파이널서드"
+      ],
+      "member_ids": [
+        "gerrard",
+        "giseun",
+        "jonjae",
+        "timej"
+      ],
+      "key_frame_candidate_ids": [
+        "c030",
+        "c031"
+      ]
+    },
+    {
+      "id": "u009",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 857.4799999999999,
+      "end": 913.88,
+      "title": "원전이 올라갈 때 사인드와 TIMEJ의 위치 정리",
+      "position_tags": [
+        "FB",
+        "FW",
+        "ST"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "find",
+        "wonjeon",
+        "timej"
+      ],
+      "key_frame_candidate_ids": [
+        "c032",
+        "c033",
+        "c054"
+      ]
+    },
+    {
+      "id": "u010",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 1071.64,
+      "end": 1104.5,
+      "title": "대각으로 빼서 전진하는 선수를 찾기",
+      "position_tags": [
+        "CAM"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "파이널서드"
+      ],
+      "member_ids": [
+        "spress"
+      ],
+      "key_frame_candidate_ids": [
+        "c039"
+      ]
+    },
+    {
+      "id": "u011",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 1155.22,
+      "end": 1191.56,
+      "title": "수비가 밀집하면 뒤로 빼기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "탈압박"
+      ],
+      "member_ids": [
+        "find",
+        "rumi"
+      ],
+      "key_frame_candidate_ids": [
+        "c043"
+      ]
+    },
+    {
+      "id": "u012",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 1225.22,
+      "end": 1254.74,
+      "title": "땅볼과 띄우는 패스 선택",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c045"
+      ]
+    },
+    {
+      "id": "u013",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 1258.6599999999999,
+      "end": 1305.48,
+      "title": "맥구가 막히면 뒤로 살려 다른 선택 만들기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "파이널서드"
+      ],
+      "member_ids": [
+        "maekgu"
+      ],
+      "key_frame_candidate_ids": [
+        "c046"
+      ]
+    },
+    {
+      "id": "u014",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 1317.18,
+      "end": 1334.1,
+      "title": "대각을 보고 밀집 수비 앞에서 뒤로 빼기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": []
+    }
+  ]
+}

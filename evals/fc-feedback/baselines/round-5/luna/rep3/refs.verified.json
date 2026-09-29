@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T01:24:26.404Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA SPORTS Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u001",
+        "u008",
+        "u013"
+      ],
+      "summary_ko": "EA의 패스 가이드는 지상 패스, 스루 패스, 로빙 패스와 크로스의 용도, 동료의 움직임과 공간에 따른 패스 선택을 설명합니다.",
+      "key_points_ko": [
+        "지상 패스는 가까운 동료와 짧게 연결하거나 점유를 유지할 때 사용합니다.",
+        "스루 패스는 열린 패스 길로 공간에 달려가는 동료에게 보냅니다.",
+        "수비수가 지상 패스 길을 막고 있거나 수비선 뒤 공간이 열려 있으면 로빙 스루 패스를 고려합니다."
+      ]
+    },
+    {
+      "id": "r-781abfef96",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/take-a-picture",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/take-a-picture",
+      "http_status": 200,
+      "checked_at": "2026-09-29T01:24:26.493Z",
+      "reused": false,
+      "page": "refs/r-781abfef96.html",
+      "title": "Take a picture",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u002",
+        "u006"
+      ],
+      "summary_ko": "The FA의 훈련 자료는 공을 받기 전에 주변을 살피고, 공을 받을 때 몸의 방향을 열어 패스 선택지를 보는 연습을 다룹니다.",
+      "key_points_ko": [
+        "공을 받기 전에 경기장을 살피는 것이 훈련 목표입니다.",
+        "몸 방향을 열면 공을 가진 선수와 주변 공간을 함께 보고 선택할 수 있습니다."
+      ]
+    },
+    {
+      "id": "r-cab2ebe63b",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "http_status": 200,
+      "checked_at": "2026-09-29T01:24:27.325Z",
+      "reused": false,
+      "page": "refs/r-cab2ebe63b.html",
+      "title": "How to coach passing in football",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u004",
+        "u006",
+        "u008",
+        "u010"
+      ],
+      "summary_ko": "The FA 자료는 패스 전에 수비를 끌어내는 타이밍, 공을 지키며 패스 각도를 만드는 움직임, 패서와 수신자의 위치 관계를 설명합니다.",
+      "key_points_ko": [
+        "패스하기 전에 수비수를 가까이 끌어들여 다음 선택을 열 수 있습니다.",
+        "공을 보유하며 앞으로 운반하거나 방향을 바꾸면 더 나은 패스 각도가 생길 수 있습니다.",
+        "패서와 수신자의 위치와 몸 방향이 가능한 패스 선택에 영향을 줍니다."
+      ]
+    },
+    {
+      "id": "r-e503fc7f42",
+      "url": "https://www.thefa.com/-/media/files/pdf/st-georges-park/fa-learning/passing-receiving-turning2.ashx?la=en",
+      "final_url": "https://www.thefa.com/-/media/files/pdf/st-georges-park/fa-learning/passing-receiving-turning2.ashx?la=en",
+      "http_status": 200,
+      "checked_at": "2026-09-29T01:24:27.904Z",
+      "reused": false,
+      "page": "refs/r-e503fc7f42.html",
+      "title": "Passing, Receiving, Turning",
+      "source_name": "The FA St George's Park",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u002",
+        "u009",
+        "u013"
+      ],
+      "summary_ko": "The FA의 훈련 자료는 패스 후 공을 받고 반턴으로 돌아 연결하는 연습과 중앙에서 벗어나 공을 받는 움직임을 다룹니다.",
+      "key_points_ko": [
+        "중앙 선수는 공을 받아 반턴으로 돌고 다음 선수에게 패스합니다.",
+        "중앙 선수는 패스를 받기 위해 중앙선에서 벗어나거나 구역 안에서 움직일 수 있습니다.",
+        "공을 받을 때 고개를 들어 패스 선택지를 확인하도록 안내합니다."
+      ]
+    }
+  ],
+  "dropped": []
+}

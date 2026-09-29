@@ -1,0 +1,60 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA SPORTS FC의 기본 패스 종류와 선택 기준을 설명하는 공식 가이드입니다.",
+      "key_points_ko": [
+        "가까운 동료에게 길이 열려 있으면 땅볼 패스를 사용합니다.",
+        "달려가는 동료의 앞 공간에는 스루 패스를 쓰고, 수비수가 땅볼 경로를 막으면 로빙 스루 패스를 고려합니다.",
+        "측면에서는 크로스를 사용할 수 있으며, 패스 속도와 받는 선수의 공간도 고려합니다."
+      ],
+      "unit_ids": ["u001", "u008", "u013"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/wing-play.php",
+      "title": "20) Wing play (Boothroyd) - FIFA Training Centre",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "조직적인 수비를 상대로 측면 공간과 선수 간 움직임을 활용해 공격 기회를 만드는 훈련 자료입니다.",
+      "key_points_ko": [
+        "풀백이 넓게 서면 상대 수비의 폭을 늘리고 공간을 만들 수 있습니다.",
+        "센터백·풀백·측면 미드필더가 움직임과 패스를 맞춰 측면 공간을 공략합니다.",
+        "상황에 맞춘 침투 타이밍과 위치 선택을 강조합니다."
+      ],
+      "unit_ids": ["u003", "u007", "u008", "u009"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/gygax-attacking-in-wide-areas.php",
+      "title": "01) Attacking in wide areas (Gygax) - FIFA Training Centre",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "낮은 수비 블록을 상대로 측면 공간을 활용하고 크로스·컷백 기회를 만드는 훈련 자료입니다.",
+      "key_points_ko": [
+        "측면에서 공을 가진 선수가 공격을 이어가고, 동료의 움직임으로 수비를 흔듭니다.",
+        "페널티 구역 안에서 크로스와 컷백을 받을 위치를 나눠 점유합니다.",
+        "빠른 패스와 적절한 침투 시점으로 측면 공격 선택지를 만듭니다."
+      ],
+      "unit_ids": ["u008"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/building_from_the_back_skinner.php",
+      "title": "15) Building from the back (Skinner) - FIFA Training Centre",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "상대의 위치와 압박에 따라 후방 빌드업 경로를 고르고, 측면 공간을 활용하는 훈련 자료입니다.",
+      "key_points_ko": [
+        "상대의 위치에 따라 첫 번째 또는 두 번째 패스선을 선택합니다.",
+        "풀백과 측면 통로를 활용해 전진 선택지를 늘리고 공간을 만듭니다.",
+        "공을 가진 선수는 주변 동료와 사용 가능한 공간을 보고 빠르게 선택합니다."
+      ],
+      "unit_ids": ["u001", "u004", "u012"]
+    }
+  ]
+}

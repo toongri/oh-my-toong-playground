@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA SPORTS FC Help",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA 공식 패스 가이드는 가까운 동료와 짧게 연결하거나 점유를 유지할 때는 땅볼 패스, 뛰어드는 동료 앞 공간으로는 스루패스, 지상 패스 길이 막혔거나 수비선 뒤 공간이 있을 때는 로빙 스루패스를 권한다.",
+      "key_points_ko": [
+        "땅볼 패스는 가까운 동료와 짧게 연결하고 점유를 유지할 때 쓴다.",
+        "스루패스는 뛰어드는 동료가 달려갈 앞 공간으로 넣고, 수비 사이 패스 길이 열렸을 때 효과적이다.",
+        "수비수가 지상 패스 길을 막거나 수비선 뒤 공간이 열렸으면 로빙 스루패스를 고려한다."
+      ],
+      "unit_ids": ["u003", "u007", "u015"]
+    },
+    {
+      "title": "Adrian Boothroyd: Movement patterns for wing play",
+      "source_name": "FIFA Training Centre",
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/wing-play.php",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "FIFA Training Centre의 측면 공격 세션은 와이드 미드필더가 수비선 앞에 내려와 수비수를 끌면 풀백이 측면 공간으로 올라가고, 동료들이 움직임을 맞춰 밀집 수비를 벌리는 패턴을 설명한다.",
+      "key_points_ko": [
+        "와이드 미드필더가 내려와 수비수를 끌면 풀백이 생긴 측면 공간으로 올라가 크로스를 만들 수 있다.",
+        "풀백은 넓게 서서 상대 수비를 벌리고, 팀원은 침투 시점을 맞춘다.",
+        "와이드 미드필더가 안으로 들어오면 풀백이 오버래핑해 바깥 공간을 활용할 수 있다."
+      ],
+      "unit_ids": ["u004", "u009", "u010", "u011", "u012"]
+    }
+  ]
+}

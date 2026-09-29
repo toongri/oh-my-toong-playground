@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-2ed8e69587",
+      "url": "https://www.ea.com/pl-pl/games/ea-sports-fc/pitch-notes/news/fc-24-gameplay-deepdive",
+      "final_url": "https://www.ea.com/pl-pl/games/ea-sports-fc/pitch-notes/news/fc-24-gameplay-deepdive",
+      "http_status": 200,
+      "checked_at": "2026-09-28T20:46:17.902Z",
+      "reused": false,
+      "page": "refs/r-2ed8e69587.html",
+      "title": "EA SPORTS FC™ 24 | Na wirtualnym boisku – szczegółowe omówienie rozgrywki",
+      "source_name": "EA SPORTS FC",
+      "lang": "pl",
+      "kind": "eafc",
+      "unit_ids": [
+        "u002",
+        "u006"
+      ],
+      "summary_ko": "FC 24 공식 Pitch Notes는 LT를 누른 실드 동작과 LT 입력으로 상대를 밀어내는 실드 푸시백을 설명합니다. 공을 지키며 자세를 유지하라는 조언의 조작 배경을 확인할 때 참고할 수 있습니다.",
+      "key_points_ko": [
+        "LT를 누른 채 실드 동작을 하고, LT 입력으로 실드 푸시백을 요청할 수 있다고 안내합니다.",
+        "실드 효과는 버튼을 오래 누를수록 감소하므로 공을 보호하는 동안 다음 선택도 살펴야 합니다."
+      ]
+    },
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-28T20:46:20.940Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA SPORTS FC Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u003",
+        "u004",
+        "u010",
+        "u012",
+        "u015",
+        "u017"
+      ],
+      "summary_ko": "EA Help는 패스 유형에 맞는 선택을 소개합니다. 땅볼은 가까운 동료와 짧게 연결하거나 점유를 유지할 때, 스루패스는 달리는 동료 앞 공간으로 보낼 때, 크로스는 측면에서 페널티 구역의 동료에게 보낼 때 사용합니다.",
+      "key_points_ko": [
+        "땅볼 패스는 가까운 동료와 짧은 연결 및 점유 유지에 적합합니다.",
+        "스루패스는 달리는 동료 앞 공간을 향하며, 수비 사이의 길이 열렸을 때 효과적입니다.",
+        "측면의 크로스는 페널티 구역 안팎에 있는 동료에게 연결할 때 사용합니다."
+      ]
+    },
+    {
+      "id": "r-57cb843146",
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php",
+      "final_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php",
+      "http_status": 200,
+      "checked_at": "2026-09-28T20:46:21.964Z",
+      "reused": false,
+      "page": "refs/r-57cb843146.html",
+      "title": "Lamia Boumehdi: Technical foundations for switching play",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u006",
+        "u008",
+        "u009",
+        "u014",
+        "u017"
+      ],
+      "summary_ko": "FIFA Training Centre는 넓이를 사용해 상대 수비를 한쪽으로 끌어낸 뒤, 반대편 공간으로 빠르게 전환해 밀집 수비를 공략하는 방법을 설명합니다. 점유를 되찾은 뒤 경기 폭을 넓히고 약한 쪽 공간을 활용하는 훈련도 소개합니다.",
+      "key_points_ko": [
+        "공격 폭 전체를 사용하면 수비를 늘리고 한쪽으로 끌어낼 수 있습니다.",
+        "한쪽에 압박을 모은 뒤 반대편으로 전환하면 상대 수비의 약한 쪽 공간을 활용할 수 있습니다.",
+        "밀집 수비 앞에서는 측면을 통해 압박을 우회하고, 전환 뒤에는 빠르게 전진하도록 안내합니다."
+      ]
+    },
+    {
+      "id": "r-4adaaec4b4",
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php",
+      "final_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php",
+      "http_status": 200,
+      "checked_at": "2026-09-28T20:46:23.281Z",
+      "reused": false,
+      "page": "refs/r-4adaaec4b4.html",
+      "title": "Abdelouahed Zamrat: Combining in the opposition half",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u003",
+        "u005",
+        "u007",
+        "u010",
+        "u011",
+        "u012",
+        "u014",
+        "u016"
+      ],
+      "summary_ko": "FIFA Training Centre는 오프더볼 침투 타이밍, 열린 몸 방향으로 받기, 원투·오버랩·언더랩과 공 가진 선수 주변의 지원을 통해 전방 선택지를 만들고 수비를 흔드는 방법을 설명합니다.",
+      "key_points_ko": [
+        "침투 타이밍을 맞추고 열린 몸 방향으로 받으면 패스나 드리블로 빠르게 전진할 수 있습니다.",
+        "원투, 오버랩, 언더랩과 공 가진 선수에 대한 지원은 수비를 무너뜨릴 선택지를 만듭니다.",
+        "측면 폭을 활용하고 풀백의 오버랩을 더하면 수비 뒤 공간과 크로스 기회를 만들 수 있습니다."
+      ]
+    }
+  ],
+  "dropped": []
+}

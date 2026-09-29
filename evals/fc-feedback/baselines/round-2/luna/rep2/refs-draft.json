@@ -1,0 +1,56 @@
+{
+  "refs": [
+    {
+      "url": "https://www.ea.com/games/ea-sports-fc/amp/news/fc-24-gameplay-deepdive",
+      "title": "EA SPORTS FC 24 | Pitch Notes - Gameplay Deep Dive",
+      "source_name": "Electronic Arts",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA 공식 FC 24 게임플레이 안내로 조작 표기와 정밀 패스, Effort Dribble, Controlled Sprint 등 게임 기능을 설명합니다.",
+      "key_points_ko": [
+        "EA는 조작 안내에서 LS를 Left Stick, RS를 Right Stick으로 표기합니다.",
+        "Precision Pass, Effort Dribble, Controlled Sprint를 FC 24의 게임플레이 기능으로 소개합니다."
+      ],
+      "unit_ids": ["u002"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/building_from_the_back_skinner.php",
+      "title": "Building from the back (Skinner)",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "후방에서 전방으로 전개할 때 지원 각도, 넓은 위치의 풀백, 공 운반과 패스 선택지를 다루는 코칭 세션입니다.",
+      "key_points_ko": [
+        "공을 가진 동료의 지원 각도와 주변 공간을 살펴 전진 패스 선택지를 만들라고 설명합니다.",
+        "중앙이 혼잡하면 수비로 공을 되돌리고 풀백이 넓은 공간에서 받을 수 있게 하는 방법을 제안합니다."
+      ],
+      "unit_ids": ["u001", "u013", "u017"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/playing-out-centrally.php",
+      "title": "Playing out centrally (Smith)",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "압박을 받는 중앙 빌드업에서 미드필더의 수신 자세와 움직임, 대각 패스 통로를 만드는 훈련을 설명합니다.",
+      "key_points_ko": [
+        "중앙 미드필더가 반턴으로 공을 받고 빠르게 전진하는 움직임을 다룹니다.",
+        "움직임의 타이밍과 대각 패스 통로가 압박을 벗어나 공간을 만드는 데 쓰인다고 설명합니다."
+      ],
+      "unit_ids": ["u008", "u017", "u020"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/wing-play.php",
+      "title": "Wing play (Boothroyd)",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "측면 미드필더와 풀백의 움직임을 맞춰 넓은 공간을 만들고, 조직된 수비를 상대로 기회를 만드는 코칭 세션입니다.",
+      "key_points_ko": [
+        "측면 미드필더의 움직임과 풀백의 오버래핑·폭 유지 조합을 설명합니다.",
+        "전방으로 뛰는 타이밍과 패스 방향을 맞춰 공격 전개를 이어가라고 제시합니다."
+      ],
+      "unit_ids": ["u006", "u014", "u015"]
+    }
+  ]
+}

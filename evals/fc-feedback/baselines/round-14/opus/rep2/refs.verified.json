@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-d989582c7e",
+      "url": "https://fussballs-newsletter-4ebdfb.beehiiv.com/p/counterattacking-effectively",
+      "final_url": "https://fussballs-newsletter-4ebdfb.beehiiv.com/p/counterattacking-effectively",
+      "http_status": 200,
+      "checked_at": "2026-09-29T13:11:43.704Z",
+      "reused": false,
+      "page": "refs/r-d989582c7e.html",
+      "title": "Counter-Attacking Effectively",
+      "source_name": "Fussball Coaches Newsletter",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u003"
+      ],
+      "summary_ko": "역습하는 팀은 깊이뿐 아니라 양쪽 측면의 폭을 만들어 공 가진 선수에게 여러 패스 옵션을 줘야 한다는 글이다. 한쪽에만 빈 선수가 있으면 수비가 그쪽으로 쉽게 이동할 수 있다고 설명한다.",
+      "key_points_ko": [
+        "역습 때 양 측면에 선수가 있으면 공 가진 선수에게 왼쪽·오른쪽 두 개의 패스 옵션이 생긴다",
+        "한쪽 측면에만 빈 선수가 있으면 수비는 그쪽으로만 옮기면 된다",
+        "측면 선수는 필요한 만큼 바깥으로, 가능한 한 안쪽으로 서서 폭과 골로 가는 길을 함께 유지한다"
+      ],
+      "translations": [
+        {
+          "orig": "This not only makes defending more difficult but also provides more options for the player on the ball.",
+          "ko": "이렇게 하면 수비가 더 어려워질 뿐 아니라 공을 가진 선수에게 더 많은 선택지가 생긴다."
+        }
+      ]
+    },
+    {
+      "id": "r-2add849eab",
+      "url": "https://learning.coachesvoice.com/cv/switches-of-play-football-tactics-explained",
+      "final_url": "https://learning.coachesvoice.com/cv/switches-of-play-football-tactics-explained/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T13:11:44.991Z",
+      "reused": false,
+      "page": "refs/r-2add849eab.html",
+      "title": "Switch of Play: Football Tactics Explained",
+      "source_name": "Coaches' Voice",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u009"
+      ],
+      "summary_ko": "공을 반대편 측면으로 빠르게 옮기는 전환 플레이를 설명하는 글이다. 수비가 공 있는 쪽으로 몰리면 반대편에 공간이 생기고, 전환 패스로 그 공간의 선수를 찾을 수 있다고 설명한다.",
+      "key_points_ko": [
+        "폭은 공격의 중요한 원칙이며 전환 플레이는 측면 공간을 활용하게 해 준다",
+        "수비가 한쪽으로 몰리면 반대편에 공간이 생긴다",
+        "정확한 패스와 받는 선수의 타이밍 맞춘 움직임이 핵심이다"
+      ],
+      "translations": [
+        {
+          "orig": "Width is an important attacking principle in football, and switches of play help teams to exploit space in the wide areas.",
+          "ko": "폭은 축구에서 중요한 공격 원칙이며, 전환 플레이는 팀이 측면 공간을 활용하도록 돕는다."
+        }
+      ]
+    },
+    {
+      "id": "r-ea6cc79bbb",
+      "url": "https://www.oneesports.gg/gaming/best-ea-fc-24-defending-tips-defenders",
+      "final_url": "https://www.oneesports.gg/gaming/best-ea-fc-24-defending-tips-defenders/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T13:11:46.094Z",
+      "reused": false,
+      "page": "refs/r-ea6cc79bbb.html",
+      "title": "Best EA FC 24 defending tips to protect your goal with style",
+      "source_name": "ONE Esports",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u012"
+      ],
+      "summary_ko": "EA FC 24 수비 요령 모음이다. 페널티 박스 안에서 스탠딩 태클은 타이밍이 어긋나면 페널티를 내줄 위험이 크니 피하고, LT(L2) 저지로 상대 가까이 붙어 있으라고 권한다.",
+      "key_points_ko": [
+        "페널티 박스 안에서는 스탠딩 태클 타이밍이 틀리면 페널티 위험이 크다",
+        "Intercept+·Anticipate+ 플레이스타일이 있는 선수의 스탠딩 태클이 더 안전하다",
+        "LT(L2)를 누르고 있으면 저지 상태로 공 가진 상대 가까이 붙어 있게 된다"
+      ],
+      "translations": [
+        {
+          "orig": "Unless you're really good at it, avoid standing tackles within the penalty area because there's a high risk of getting a penalty if you time it wrong.",
+          "ko": "정말 잘하는 게 아니라면 페널티 박스 안에서는 스탠딩 태클을 피하라. 타이밍이 틀리면 페널티를 내줄 위험이 크다."
+        }
+      ]
+    },
+    {
+      "id": "r-fd8f27e064",
+      "url": "https://keengamer.com/articles/guides/ea-fc-24-the-precision-passing-guide",
+      "final_url": "https://www.keengamer.com/articles/guides/ea-fc-24-the-precision-passing-guide/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T13:11:47.090Z",
+      "reused": false,
+      "page": "refs/r-fd8f27e064.html",
+      "title": "EA FC 24: The Precision Passing Guide",
+      "source_name": "KeenGamer",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u014"
+      ],
+      "summary_ko": "EA FC 24의 정밀 패스 종류를 정리한 가이드다. 강한 땅볼 패스는 공격 방향을 빠르게 바꾸는 데 쓰고, 띄우는 패스는 상대가 강하게 달려들어 정확히 줄 시간이 없을 때 쓴다고 설명한다.",
+      "key_points_ko": [
+        "R1/RB + X/A로 강한 땅볼 패스를 보내 공격 방향을 빠르게 바꿀 수 있다",
+        "띄우는 패스는 상대가 달려들어 시간이 없을 때 머리 위로 넘기는 용도다"
+      ],
+      "translations": [
+        {
+          "orig": "Using R1/RB + X/A allows you to execute a powerful along-the-ground pass that will swiftly change the point of attack by moving the opposition from side to side.",
+          "ko": "R1/RB + X/A를 쓰면 강한 땅볼 패스로 상대를 좌우로 흔들며 공격 지점을 빠르게 바꿀 수 있다."
+        }
+      ]
+    }
+  ],
+  "dropped": []
+}

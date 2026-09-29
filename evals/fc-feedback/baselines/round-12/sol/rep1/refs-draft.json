@@ -1,0 +1,48 @@
+{
+  "refs": [
+    {
+      "url": "https://www.thefa.com/bootroom/resources/coaching/what-is-passing-in-football",
+      "title": "What is passing in football?",
+      "source_name": "The FA · The Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "패스 전에 경기장을 살피고 동료와 연결하며 정확도, 강도, 타이밍을 판단하는 원칙을 설명한다.",
+      "key_points_ko": ["패스 선택 전에 가능한 경로를 살핀다.", "받는 동료에 맞는 패스의 강도와 타이밍을 고른다."],
+      "translations": [],
+      "unit_ids": ["u001", "u004", "u010", "u013"]
+    },
+    {
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-england-u15s-play-out-from-the-back",
+      "title": "How England U15s play out from the back",
+      "source_name": "The FA · The Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "후방에서 압박을 받을 때 침착하게 해결책을 찾고, 전진 패스를 할 공간과 순간을 판단하는 사례를 다룬다.",
+      "key_points_ko": ["압박 아래에서도 공을 받으며 전개할 해법을 찾는다.", "전방 공간으로 보낼 길이 열리면 그 선택을 활용한다."],
+      "translations": [],
+      "unit_ids": ["u004", "u006", "u012", "u014"]
+    },
+    {
+      "url": "https://www.uefa.com/under21/news/029a-1e0bc5d47a99-1db6b584df63-1000--2025-u21-euro-group-stage-analysis/",
+      "title": "2025 U21 EURO group stage analysis",
+      "source_name": "UEFA",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "측면 폭을 유지하고 플레이 방향을 바꾸면 밀집된 수비의 다른 쪽 공간을 활용할 수 있다는 경기 분석이다.",
+      "key_points_ko": ["공격에서 폭을 유지하면 수비를 벌리는 데 도움이 된다.", "한쪽에 몰린 수비를 보며 반대쪽 공간으로 전환한다."],
+      "translations": [],
+      "unit_ids": ["u001", "u007", "u008", "u010"]
+    },
+    {
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-transition",
+      "title": "How to coach transition",
+      "source_name": "The FA · The Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "공격과 수비가 바뀌는 순간 동료가 어떤 움직임으로 공을 가진 선수를 지원할지 훈련하는 방법을 설명한다.",
+      "key_points_ko": ["스루패스의 성공과 실패 모두에 대비해 주변 선수가 반응한다.", "전환 상황에서 공을 가진 선수를 뒤에서 지원한다."],
+      "translations": [],
+      "unit_ids": ["u003", "u009"]
+    }
+  ]
+}

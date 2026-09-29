@@ -1,0 +1,26 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA SPORTS FC의 땅볼·스루·로빙 패스 사용 조건과 연습 방법을 설명한다.",
+      "key_points_ko": ["가까운 동료와의 짧은 연결에는 땅볼 패스를 사용한다.", "수비수 사이 패스 길이와 동료의 움직임을 보고 패스 종류를 고른다."],
+      "translations": [],
+      "unit_ids": ["u001", "u007", "u012"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php",
+      "title": "Switching play (Lamia Boumehdi)",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "상대를 한쪽으로 끌어들인 뒤 반대쪽 공간으로 전환하는 훈련과 코칭 포인트를 제시한다.",
+      "key_points_ko": ["경기장 너비를 활용해 수비를 움직이고 빈 공간을 찾는다.", "한쪽에서 압박을 끌어 반대쪽의 공간을 활용한다."],
+      "translations": [],
+      "unit_ids": ["u001", "u006", "u009", "u011", "u013"]
+    }
+  ]
+}

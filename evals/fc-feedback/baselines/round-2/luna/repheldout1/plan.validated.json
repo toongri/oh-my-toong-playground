@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "session_title": "EAFC24 프로클럽 C.E.F. / FC Barcelona 팀 연습 (24.1.4) - Part 2",
+  "matches": [
+    {
+      "id": "m1",
+      "title": "리그 경기: BRO vs FCB",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "뒷대각을 활용한 공격 전개",
+          "summary": "팀에 뒷대각 선택을 더 살피고 앞으로만 보내지 않도록 요청하는 장면.",
+          "unit_ids": [
+            "u001",
+            "u002"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "yn-qm7lM5p4",
+      "start": 422.88,
+      "end": 445.78,
+      "title": "뒷대각을 더 자주 보기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c046"
+      ]
+    },
+    {
+      "id": "u002",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "yn-qm7lM5p4",
+      "start": 816.36,
+      "end": 828.64,
+      "title": "앞으로만 보내지 말고 뒷대각 보기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c047"
+      ]
+    }
+  ]
+}

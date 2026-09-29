@@ -1,0 +1,81 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA 공식 패스 안내는 패스 종류를 동료의 움직임과 열린 공간에 맞춰 고르는 방법을 다룬다.",
+      "key_points_ko": [
+        "스루패스는 달리는 동료 앞 공간과 수비 사이에 열린 패스길을 보고 선택한다.",
+        "패스 종류와 세기는 목표 선수의 위치와 주변 공간에 맞춘다."
+      ],
+      "unit_ids": [
+        "u002",
+        "u005",
+        "u009",
+        "u012",
+        "u013",
+        "u017",
+        "u018",
+        "u022",
+        "u023",
+        "u024",
+        "u028",
+        "u029",
+        "u033",
+        "u035",
+        "u036",
+        "u038",
+        "u039",
+        "u043",
+        "u047",
+        "u048",
+        "u050"
+      ]
+    },
+    {
+      "url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true",
+      "title": "EA SPORTS FC™ - FC Futures - Practices",
+      "source_name": "EA SPORTS FC Futures",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "EA의 FC Futures 연습 자료는 패스와 공 소유, 압박 지연, 수비 라인 유지, 공 탈취 뒤 역습 전개를 연습하는 실전형 훈련을 소개한다.",
+      "key_points_ko": [
+        "공을 받기 전 고개를 들고 공간의 동료를 선택하는 패스 훈련이 있다.",
+        "구역 수비로 상대를 늦추고, 팀이 복귀하도록 시간을 벌며, 공을 되찾은 뒤 역습하는 훈련이 제시된다.",
+        "수비 라인을 함께 지키고, 좁은 공간에서 공을 보호하며 패스 선택지를 만드는 연습이 포함된다."
+      ],
+      "unit_ids": [
+        "u003",
+        "u006",
+        "u007",
+        "u008",
+        "u010",
+        "u014",
+        "u016",
+        "u018",
+        "u019",
+        "u020",
+        "u021",
+        "u022",
+        "u025",
+        "u027",
+        "u028",
+        "u030",
+        "u031",
+        "u032",
+        "u034",
+        "u035",
+        "u037",
+        "u040",
+        "u041",
+        "u042",
+        "u044",
+        "u046",
+        "u049"
+      ]
+    }
+  ]
+}

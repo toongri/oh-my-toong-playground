@@ -1,0 +1,19 @@
+{
+  "session_title": "C.E.F. 바르셀로나 팀 연습 피드백 — 패스 선택과 공간 활용",
+  "matches": [{"title":"BRO 대 FCB 연습 경기","topics":[{"title":"패스 선택과 동료의 움직임","summary":"좁은 곳을 피한 전개, 역습에서 패스 선택지를 만드는 움직임, 수비 경합의 판단을 장면별로 짚는다.","units":[
+    {"start_line":9,"end_line":19,"title":"좁은 곳 대신 넓은 공간의 선수에게 연결","position_tags":["MF"],"topic_tags":["빌드업"],"member_ids":[],"key_frame_candidate_ids":["c053"]},
+    {"start_line":22,"end_line":29,"title":"공 주변에서 LT로 상대를 바라보며 움직이기","position_tags":["MF"],"topic_tags":["조작/키사용"],"member_ids":["taxi"],"key_frame_candidate_ids":["c009"]},
+    {"start_line":36,"end_line":51,"title":"루미가 윙어 역할을 맡아 역습 선택지 만들기","position_tags":["FW"],"topic_tags":["전환/역습","포지셔닝"],"member_ids":["jomin","find","rumi","gipeu","yumi"],"key_frame_candidate_ids":["c013","c014"]},
+    {"start_line":55,"end_line":77,"title":"압박이 오면 뒤로 내주고 다시 받기","position_tags":["MF"],"topic_tags":["탈압박","빌드업"],"member_ids":["gerrard","saembaek"],"key_frame_candidate_ids":["c017","c018"]},
+    {"start_line":78,"end_line":78,"title":"루미의 전진 움직임이 멈춘 장면","position_tags":["FW"],"topic_tags":["포지셔닝"],"member_ids":["rumi"],"key_frame_candidate_ids":["c054"]},
+    {"start_line":79,"end_line":97,"title":"좁은 곳으로 일찍 주지 말고 더 몰고 가기","position_tags":["MF"],"topic_tags":["빌드업"],"member_ids":[],"key_frame_candidate_ids":["c021","c022"]},
+    {"start_line":98,"end_line":99,"title":"상하로 넓게 벌려 플레이하기","position_tags":["MF"],"topic_tags":["포지셔닝"],"member_ids":[],"key_frame_candidate_ids":["c055"]},
+    {"start_line":104,"end_line":120,"title":"막힌 쪽에서 넓은 공간으로 연결","position_tags":["MF"],"topic_tags":["빌드업","파이널서드"],"member_ids":["giseun","jonjae"],"key_frame_candidate_ids":["c030","c031"]},
+    {"start_line":121,"end_line":133,"title":"원전이 올라갈 때 사인드는 중앙으로","position_tags":["FW","FB"],"topic_tags":["전환/역습","포지셔닝"],"member_ids":["find","wonjeon"],"key_frame_candidate_ids":["c032","c033"]},
+    {"start_line":145,"end_line":154,"title":"측면에서 대각으로 빼 중원의 시야 열기","position_tags":["MF"],"topic_tags":["빌드업"],"member_ids":["spress"],"key_frame_candidate_ids":["c039"]},
+    {"start_line":155,"end_line":157,"title":"원전의 태클 시도와 페널티","position_tags":["FB"],"topic_tags":["수비라인"],"member_ids":["wonjeon"],"key_frame_candidate_ids":["c042"]},
+    {"start_line":158,"end_line":160,"title":"촘촘한 수비 앞에서 뒤로 빼기","position_tags":["MF"],"topic_tags":["빌드업"],"member_ids":[],"key_frame_candidate_ids":["c043"]},
+    {"start_line":163,"end_line":168,"title":"열린 패스 길에는 땅볼로 연결","position_tags":["MF"],"topic_tags":["빌드업"],"member_ids":[],"key_frame_candidate_ids":["c045"]},
+    {"start_line":169,"end_line":182,"title":"맥구는 막힌 돌파 대신 뒤쪽 선택지 보기","position_tags":["FW"],"topic_tags":["빌드업","탈압박"],"member_ids":["maekgu"],"key_frame_candidate_ids":["c046","c049"]}
+  ]}]}],"proposed_tags":[]
+}

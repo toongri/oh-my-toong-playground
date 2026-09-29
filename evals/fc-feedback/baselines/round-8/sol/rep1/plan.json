@@ -1,0 +1,261 @@
+{
+  "session_title": "C.E.F. FC Barcelona 팀 연습 피드백 — 공간 활용과 안전한 전개",
+  "matches": [
+    {
+      "title": "BRO 대 FCB 연습 경기",
+      "topics": [
+        {
+          "title": "넓은 공간으로 전개하고 압박을 풀기",
+          "summary": "좁은 곳보다 넓은 곳으로 공을 보내고, 공을 받는 선수는 LT로 상대를 바라보며 움직이라는 피드백이다. 초반 브라이드에서 TIMEJ 쪽으로 오는 공이 많다는 관찰도 있었다.",
+          "units": [
+            {
+              "start_line": 9,
+              "end_line": 19,
+              "title": "좁은 공간 대신 넓은 공간의 선수에게 연결",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c004"
+              ]
+            },
+            {
+              "start_line": 22,
+              "end_line": 29,
+              "title": "공을 받을 때 LT로 상대를 바라보며 움직이기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "조작/키사용"
+              ],
+              "member_ids": [
+                "taxi"
+              ],
+              "key_frame_candidate_ids": [
+                "c009"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "역습에서 패스 선택지를 만들기",
+          "summary": "루미가 뛰어줄 것으로 예상했지만 멈춘 장면에 대한 아쉬움도 별도로 언급됐다.",
+          "units": [
+            {
+              "start_line": 36,
+              "end_line": 51,
+              "title": "사인드가 낮을 때 루미가 측면으로 뛰어 선택지 만들기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "jomin",
+                "find",
+                "rumi",
+                "gipeu",
+                "yumi",
+                "timej",
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": [
+                "c013",
+                "c014"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "압박을 받는 전진 패스와 드리블 선택",
+          "summary": "아군 진영에서 공을 빼앗기면 역습을 허용할 수 있다는 위험을 짚었다. 팀 전체에는 상하로 넓게 벌리는 플레이도 주문했다.",
+          "units": [
+            {
+              "start_line": 55,
+              "end_line": 63,
+              "title": "공이 오기 전 압박을 보고 뒤로 내준 뒤 LT로 돌려받기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "탈압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c017"
+              ]
+            },
+            {
+              "start_line": 65,
+              "end_line": 77,
+              "title": "무리한 전진보다 샘백을 거쳐 수비를 끌어내기",
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "gerrard",
+                "saembaek"
+              ],
+              "key_frame_candidate_ids": [
+                "c018"
+              ]
+            },
+            {
+              "start_line": 79,
+              "end_line": 97,
+              "title": "좁은 곳의 TIMEJ에게 바로 주기 전에 더 몰고 가기",
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "탈압박"
+              ],
+              "member_ids": [
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c021",
+                "c022"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "측면 공격과 중원의 패스 경로",
+          "summary": "전방이 막힌 장면에서는 다른 패스 경로를 살펴보라는 피드백이다.",
+          "units": [
+            {
+              "start_line": 104,
+              "end_line": 120,
+              "title": "막힌 전방 대신 Gerrard_CEF를 거쳐 존재의 넓은 공간 활용",
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "크로스"
+              ],
+              "member_ids": [
+                "timej",
+                "giseun",
+                "gerrard",
+                "jonjae"
+              ],
+              "key_frame_candidate_ids": [
+                "c030"
+              ]
+            },
+            {
+              "start_line": 121,
+              "end_line": 134,
+              "title": "원전이 측면으로 오를 때 사인드는 중앙으로",
+              "position_tags": [
+                "FW",
+                "FB"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "find",
+                "wonjeon",
+                "timej"
+              ],
+              "key_frame_candidate_ids": [
+                "c032"
+              ]
+            },
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "측면에서 대각으로 빼 중원이 앞으로 뛰는 선수를 보게 하기",
+              "position_tags": [
+                "MF",
+                "CAM"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "spress"
+              ],
+              "key_frame_candidate_ids": [
+                "c039"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "밀집 수비와 패스 방식",
+          "summary": "원전이 수비 균형을 무너뜨리고 태클을 눌렀다가 페널티로 이어진 장면도 지적됐다. 경기 끝 무렵 다시 강조한 핵심은 봐줘야 할 때 대각 경로를 보고, 수비가 밀집하면 뒤로 빼는 것이었다.",
+          "units": [
+            {
+              "start_line": 158,
+              "end_line": 160,
+              "title": "촘촘한 수비 앞에서는 뒤로 빼기",
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c043"
+              ]
+            },
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "받는 선수의 속도를 살리는 땅볼 패스",
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c045"
+              ]
+            },
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "맥구가 막혔을 때 뒤를 보고 안전하게 연결",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

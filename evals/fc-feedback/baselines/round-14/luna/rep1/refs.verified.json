@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T13:41:04.758Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA SPORTS FC Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u010",
+        "u012",
+        "u015"
+      ],
+      "summary_ko": "EA 공식 안내는 패스 종류를 동료의 움직임과 주변 공간에 맞춰 고르고, 가까운 동료에게는 땅볼 패스, 열린 공간으로 뛰는 선수에게는 스루 패스를 제안합니다.",
+      "key_points_ko": [
+        "땅볼 패스는 가까운 동료와 짧게 연결하고 공을 유지할 때 사용합니다.",
+        "스루 패스는 열린 공간으로 뛰는 동료를 향하며, 수비수 사이에 열린 패스 길이 있을 때 효과적입니다.",
+        "측면에서 페널티 지역 안팎의 동료를 향해 크로스할 수 있습니다.",
+        "패스 종류는 동료의 움직임과 주변 공간에 맞춰 선택합니다."
+      ]
+    }
+  ],
+  "dropped": []
+}

@@ -1,0 +1,3284 @@
+{
+  "version": 1,
+  "session_id": "20220331-PIjy1eid3RU",
+  "title": "신생팀 ATM 경기 분석 피드백",
+  "date": "2022-03-31",
+  "generated_at": "2026-09-29T11:27:38.820Z",
+  "pages_base_url": "https://fc-feedback-eval.invalid/",
+  "videos": [
+    {
+      "id": "PIjy1eid3RU",
+      "part": 1,
+      "embeddable": true
+    }
+  ],
+  "members": [
+    {
+      "id": "timej",
+      "name": "TIMEJ",
+      "gamertag": "TIMEJ",
+      "positions": [
+        "ST"
+      ]
+    },
+    {
+      "id": "gerrard",
+      "name": "Gerrard_CEF",
+      "gamertag": "Gerrard_CEF",
+      "positions": [
+        "CM"
+      ]
+    },
+    {
+      "id": "vandeven",
+      "name": "CEF_VandeVen",
+      "gamertag": "CEF_VandeVen",
+      "positions": [
+        "CB"
+      ]
+    },
+    {
+      "id": "bride",
+      "name": "브라이드",
+      "gamertag": "CEF_Bride",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "taxi",
+      "name": "택시",
+      "gamertag": "CEF_Taxi",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jomin",
+      "name": "조민",
+      "gamertag": "CEF_Jomin",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "find",
+      "name": "사인드",
+      "gamertag": "CEF_Find",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "rumi",
+      "name": "루미",
+      "gamertag": "CEF_Rumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "gipeu",
+      "name": "기프",
+      "gamertag": "CEF_Gipeu",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "yumi",
+      "name": "유미",
+      "gamertag": "CEF_Yumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "saembaek",
+      "name": "샘백",
+      "gamertag": "CEF_Saembaek",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "giseun",
+      "name": "기슨",
+      "gamertag": "CEF_Giseun",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jonjae",
+      "name": "존재",
+      "gamertag": "CEF_Jonjae",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "wonjeon",
+      "name": "원전",
+      "gamertag": "CEF_Wonjeon",
+      "positions": [
+        "FB"
+      ]
+    },
+    {
+      "id": "spress",
+      "name": "스프레스",
+      "gamertag": "CEF_Spress",
+      "positions": [
+        "CAM"
+      ]
+    },
+    {
+      "id": "maekgu",
+      "name": "맥구",
+      "gamertag": "CEF_Maekgu",
+      "positions": [
+        "FW"
+      ]
+    }
+  ],
+  "matches": [
+    {
+      "id": "m1",
+      "title": "CLV 5–1 ATM",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "볼을 지키고 압박을 빠져나오기",
+          "summary": "초반 장면에서 긴 키핑과 예측 가능한 패스길이 공을 잃는 원인으로 제시됩니다. 공을 받은 뒤 압박을 버티고, 주변 움직임으로 출구를 만들며, 팀의 빌드업 역량에 맞는 전개를 선택하는 피드백을 묶었습니다.",
+          "unit_ids": [
+            "u001",
+            "u002",
+            "u003",
+            "u004",
+            "u005",
+            "u006",
+            "u007",
+            "u008",
+            "u009",
+            "u010",
+            "u011"
+          ]
+        },
+        {
+          "id": "m1-t2",
+          "title": "공간을 만들어 패스와 침투 잇기",
+          "summary": "공격 장면에서는 빈 뒷공간과 중앙의 패스 선택지를 만들고, 수비에서는 맡은 공간을 유지하는 흐름을 다룹니다. 직선으로만 뛰거나 공 쪽으로 쏠리면 패스길이 닫히고 반대 공간이 열린다는 설명이 반복됩니다.",
+          "unit_ids": [
+            "u012",
+            "u013",
+            "u014",
+            "u015",
+            "u016",
+            "u017",
+            "u018",
+            "u019",
+            "u020",
+            "u021",
+            "u022",
+            "u023",
+            "u024",
+            "u025",
+            "u026",
+            "u027",
+            "u028",
+            "u029",
+            "u030",
+            "u031",
+            "u032",
+            "u033",
+            "u034",
+            "u035",
+            "u036"
+          ]
+        },
+        {
+          "id": "m1-t3",
+          "title": "수비 전환과 후방 빌드업",
+          "summary": "후방에서 공을 잃을 위험과 압박을 다룹니다. 패스 선택지를 읽고 짧게 연결할 능력이 없다면 롱킥으로 위험을 낮추며, 수비 전환 때는 상대를 무작정 쫓기보다 자기 공간부터 복구하는 지침입니다.",
+          "unit_ids": [
+            "u037",
+            "u038",
+            "u039",
+            "u040",
+            "u041",
+            "u042",
+            "u043",
+            "u044",
+            "u045",
+            "u046",
+            "u047",
+            "u048",
+            "u049",
+            "u050"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "uid": "20220331-PIjy1eid3RU#u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 47.4,
+      "end": 122.26,
+      "title": "긴 키핑을 줄이고 가속 타이밍 잡기",
+      "position_tags": [],
+      "topic_tags": [
+        "조작/키사용",
+        "압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "센터서클 부근에서 공을 가진 선수가 길게 키핑하는 장면입니다. **가속이 필요한 때가 아니면 터치를 짧게 해야 합니다.** 상대가 가까이 붙었을 때 가속하면 제칠 수 있지만, 거리가 남으면 상대가 대응할 수 있다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u001-c004.webp",
+          "width": 640,
+          "height": 360,
+          "t": 90,
+          "caption": "센터서클 오른쪽에서 양 팀 선수가 공 주변에 모여 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u001-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=47"
+    },
+    {
+      "id": "u002",
+      "uid": "20220331-PIjy1eid3RU#u002",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 126.74,
+      "end": 185.7,
+      "title": "윙이 폭만 유지하지 말고 패스길을 만들기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "상대 풀백이 공을 받는 선수 쪽으로 붙으며 전진 패스길을 읽습니다. **첫 번째로 보이는 패스길만 두지 말고 다른 선택지를 만들어야 합니다.** 상대가 다음 패스를 예상하면 미리 길을 막거나 달려들 수 있다고 짚습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u002-c006.webp",
+          "width": 640,
+          "height": 360,
+          "t": 150,
+          "caption": "센터서클 아래쪽에서 양 팀 선수가 공을 두고 경합합니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u002-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u002",
+          "title": "베리나 포지션 상향 지시",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u002"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=126"
+    },
+    {
+      "id": "u003",
+      "uid": "20220331-PIjy1eid3RU#u003",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 187.01999999999998,
+      "end": 293.22,
+      "title": "공을 되찾은 뒤 나갈 길이 없어 재압박을 받음",
+      "position_tags": [],
+      "topic_tags": [
+        "전환/역습",
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "상대 공격을 끊은 뒤에도 모두 내려와 있어 우리 팀의 전진 출구가 없습니다. **공을 되찾았을 때 나갈 길을 만들어야 합니다.** 다 내려와 있으면 재압박에 다시 빼앗기며, 이 장면에서는 공을 지키고 빈 공간으로 올라가 연결하는 것이 최선이지만 버티는 개인기도 필요하다고 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u003-c009.webp",
+          "width": 640,
+          "height": 360,
+          "t": 240,
+          "caption": "페널티박스 앞에 노란 선수와 빨강·파랑 수비수가 모여 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u003-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=187"
+    },
+    {
+      "id": "u004",
+      "uid": "20220331-PIjy1eid3RU#u004",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 300.42,
+      "end": 367.6,
+      "title": "받기 전 RT를 떼고 짧은 터치로 압박을 벗어나기",
+      "position_tags": [],
+      "topic_tags": [
+        "조작/키사용",
+        "탈압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "압박을 받는 선수가 긴 터치로 상대에게 붙잡히고, 탈출하려던 볼롤도 간발의 차이로 실패합니다. **패스를 예상해 RT를 떼고 짧은 터치로 받아야 합니다.** 압박이 붙기 전 패스길을 확인하고, 길이 닫히면 동료에게 주고 다시 빠져나오라는 지시입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u004-c012.webp",
+          "width": 640,
+          "height": 360,
+          "t": 330,
+          "caption": "오른쪽 페널티박스 앞에 공격수와 수비수가 밀집해 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u004-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=300"
+    },
+    {
+      "id": "u005",
+      "uid": "20220331-PIjy1eid3RU#u005",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 374.48,
+      "end": 514.16,
+      "title": "뒷공간을 위협해 풀백의 압박을 늦추고 패스길 만들기",
+      "position_tags": [
+        "FW",
+        "MF"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "상대 풀백이 자기 뒤에 위협이 없다고 보고 쉽게 압박하는 장면입니다. **공격수 한 명이 뒷공간을 파서 풀백의 전진을 늦춰야 합니다.** 그러면 중원의 공간이 열리고 수미나 풀백이 패스를 이어 줄 수 있지만, 움직임이 없으면 패스길이 적어져 쉽게 차단됩니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u005-c016.webp",
+          "width": 640,
+          "height": 360,
+          "t": 450,
+          "caption": "중앙선 위쪽에서 양 팀 선수가 공 주변으로 모입니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u005-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=374"
+    },
+    {
+      "id": "u006",
+      "uid": "20220331-PIjy1eid3RU#u006",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 526.6,
+      "end": 603.44,
+      "title": "샘백이 압박에 나서고 미드필더가 함께 조이기",
+      "position_tags": [
+        "FW",
+        "MF"
+      ],
+      "topic_tags": [
+        "압박",
+        "수비라인"
+      ],
+      "member_ids": [
+        "saembaek"
+      ],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "상대의 공 돌리기를 막아야 하는 상황에서 미드필더들은 패스길을 보고 있습니다. **샘백은 패스가 나갈 때 부딪쳐 차단하고, 미드필더들도 패스길을 막으며 양쪽에서 압박해야 합니다.** 샘백이 공을 흘리면 바로 실점할 수 있어, 미드필더들이 관람하지 말고 상대를 포위해야 한다고 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u006-c020.webp",
+          "width": 640,
+          "height": 360,
+          "t": 570,
+          "caption": "골문 앞 페널티박스 안에 공격수와 수비수가 모여 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u006-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=526"
+    },
+    {
+      "id": "u007",
+      "uid": "20220331-PIjy1eid3RU#u007",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 613.14,
+      "end": 659.04,
+      "title": "미드필더가 관람하지 말고 패스길과 상대를 제어하기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "압박",
+        "수비라인"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "상대가 공을 받은 뒤에도 미드필더들이 관람하듯 서 있습니다. **먼저 패스길을 막고, 들어오는 선수를 붙잡아야 합니다.** 자리를 지키기만 해서는 의미가 없으며, 코치 TIMEJ는 오프사이드가 아니었다면 바로 실점할 장면이었다고 평가합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u007-c022.webp",
+          "width": 640,
+          "height": 360,
+          "t": 630,
+          "caption": "오른쪽 페널티박스 안쪽에 선수들이 모여 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u007-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=613"
+    },
+    {
+      "id": "u008",
+      "uid": "20220331-PIjy1eid3RU#u008",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 663.38,
+      "end": 766.88,
+      "title": "짧은 빌드업을 감당하기 어렵다면 롱킥 선택하기",
+      "position_tags": [
+        "GK"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "골키퍼의 짧은 패스를 감당하지 못하는 팀은 빌드업 과정에서 약점을 드러냅니다. **짧은 패스를 안정적으로 지킬 능력이 없다면 롱킥으로 나가야 합니다.** 빌드업에는 공을 끌고 지키는 기술, 패스길과 움직임 등 요구조건이 많아 이를 못 갖췄다면 무리하지 말라고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u008-c025.webp",
+          "width": 640,
+          "height": 360,
+          "t": 720,
+          "caption": "페널티박스 앞에서 공 주변에 수비수와 공격수가 서 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u008-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=663"
+    },
+    {
+      "id": "u009",
+      "uid": "20220331-PIjy1eid3RU#u009",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 774,
+      "end": 909.54,
+      "title": "4-3 형태에서 윙이 공간으로 움직여 전진 패스길 만들기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "4-3 형태에서 윙이 계속 바깥에만 서면 공을 가진 선수에게 뒤로 가는 길만 남습니다. **윙은 폭만 유지하지 말고 공간으로 움직여야 합니다.** 수비수를 달고 무조건 앞으로 뛰는 스루패스는 성공률이 낮으므로, 받아 주거나 돌아 나와 패스길을 열라고 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u009-c029.webp",
+          "width": 640,
+          "height": 360,
+          "t": 840,
+          "caption": "중앙선 왼쪽에서 노란 선수와 빨강·파랑 선수가 공 주변에 모입니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u009-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u002",
+          "title": "베리나 포지션 상향 지시",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u002"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=774"
+    },
+    {
+      "id": "u010",
+      "uid": "20220331-PIjy1eid3RU#u010",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 925.82,
+      "end": 978.98,
+      "title": "스로인 상황에서 패스 각도 만들기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "스로인 상황에 동료들이 멈춰 있으면 던질 곳이 없습니다. **선수들은 약속된 움직임을 만들고 계속 움직여 패스 각을 열어야 합니다.** 가만히 서 있으면 길이 막히고, 급히 던지면 상대에게 공격 기회를 내준다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u010-c033.webp",
+          "width": 640,
+          "height": 360,
+          "t": 960,
+          "caption": "중앙선 근처에 양 팀 선수들이 공을 둘러싸고 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u010-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=925"
+    },
+    {
+      "id": "u011",
+      "uid": "20220331-PIjy1eid3RU#u011",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 986.78,
+      "end": 1017.1,
+      "title": "탈출 경로가 없을 때 공을 길게 보내 위험을 피함",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 되찾았지만 전진할 출구가 없어 길게 공을 보냅니다. **탈출 경로가 없다면 롱킥으로 위험 지역을 벗어나야 합니다.** 코치는 이 상황에서 짧게 연결할 길이 없었고, 결국 앞쪽으로 공을 차냈다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u011-c034.webp",
+          "width": 640,
+          "height": 360,
+          "t": 990,
+          "caption": "오른쪽 페널티박스 안에 양 팀 선수들이 모여 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u011-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=986"
+    },
+    {
+      "id": "u012",
+      "uid": "20220331-PIjy1eid3RU#u012",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 1027.56,
+      "end": 1162.6,
+      "title": "열린 뒷공간을 공략하고 막히면 바깥 공간에서 멈추기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "열린 뒷공간이 있지만 그곳에서 받을 선수가 없고, 직선 침투는 이미 막혀 있습니다. **안쪽으로 상대를 끌어 놓은 뒤 바깥 공간으로 빠져야 합니다.** 멈춰서 패스를 받을 위치를 잡고, 유일한 탈출 길이 열렸을 때는 그 패스를 보내야 했지만 이 장면에서는 놓쳤다고 짚습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u012-c038.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1110,
+          "caption": "센터서클 주변에서 선수들이 공을 두고 모여 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u012-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1027"
+    },
+    {
+      "id": "u013",
+      "uid": "20220331-PIjy1eid3RU#u013",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 1172.1399999999999,
+      "end": 1302.8,
+      "title": "수비수를 달고 직선으로 뛰지 말고 공간으로 움직이기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "공격수가 수비수를 달고 직선으로 뛰어 패스길이 끊긴 장면입니다. **공격수는 직선으로만 달리지 말고 빈 공간으로 움직여야 합니다.** 공을 잃은 선수만 탓하기보다 동료의 위치가 패스 선택을 제한했다는 점을 강조합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u013-c042.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1230,
+          "caption": "중앙선을 사이에 두고 선수들이 넓게 배치돼 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u013-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1172"
+    },
+    {
+      "id": "u014",
+      "uid": "20220331-PIjy1eid3RU#u014",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 1319.28,
+      "end": 1389.68,
+      "title": "수비 상황에서 풀백이 자기 공간을 먼저 지키기",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "수비라인",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "수비가 시작됐는데 풀백이 공격에 나가려 하며 자기 뒷공간을 비웁니다. **수비수는 자기 공간부터 지켜야 합니다.** 상대가 안쪽으로 들어가 패스했다면 실점할 수 있었고, 상대가 공간에 들어오면 뒤를 제어하며 붙어서 막아야 한다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u014-c046.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1350,
+          "caption": "페널티박스 안에 여러 공격수와 수비수가 있고 골키퍼가 골문 앞에 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u014-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1319"
+    },
+    {
+      "id": "u015",
+      "uid": "20220331-PIjy1eid3RU#u015",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 1395.8000000000002,
+      "end": 1528.06,
+      "title": "압박이 없을 때 급히 패스하지 말고 움직임을 확인하기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 받은 선수가 압박을 받지 않았는데도 급히 패스해 상대에게 쉽게 잘립니다. **공을 끌며 수비수와 동료의 움직임을 확인해야 합니다.** 공격수도 무작정 직선으로 달리지 말고 멈추거나 공간으로 움직여야 하며, 그래야 뒤에서 패스를 넣기 쉽다고 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u015-c050.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1470,
+          "caption": "센터서클 바깥에서 선수들이 공 주변에 모입니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u015-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1395"
+    },
+    {
+      "id": "u016",
+      "uid": "20220331-PIjy1eid3RU#u016",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 1533.78,
+      "end": 1646.02,
+      "title": "수비는 공만 쫓지 말고 라인과 반대 공간 지키기",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "수비라인",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "수비 반응이 늦고 수비진이 한쪽으로 좁게 모입니다. **수비수들은 각자 맡은 공간을 나눠 지켜야 합니다.** 공만 쫓으면 반대쪽이 비고, 코치는 그 틈에 롱패스가 왔다면 바로 실점할 수 있었다고 지적합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u016-c054.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1590,
+          "caption": "페널티박스 오른쪽 위에서 양 팀 선수들이 공 주변에 모입니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u016-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1533"
+    },
+    {
+      "id": "u017",
+      "uid": "20220331-PIjy1eid3RU#u017",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 1649.88,
+      "end": 1742.44,
+      "title": "받기 전후 패스길을 확인하고 침착하게 판단하기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "탈압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 가진 선수가 패스길을 충분히 보지 않고 서두르는 장면입니다. **공 받기 전에 주변을 읽고, 못 봤다면 공을 끌며 길을 확인해야 합니다.** 압박을 버티며 판단할 시간이 필요하고, 버티기 어렵다면 위험 지역에서 공을 걷어내는 것이 차선이라고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u017-c058.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1710,
+          "caption": "왼쪽 측면에서 공을 가진 선수와 수비수가 마주합니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u017-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1649"
+    },
+    {
+      "id": "u018",
+      "uid": "20220331-PIjy1eid3RU#u018",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 1761.56,
+      "end": 1865.62,
+      "title": "침투 패스는 공간과 가까운 패서·주자가 필요함",
+      "position_tags": [
+        "MF",
+        "FW"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "공간이 있고 패서와 침투자의 거리가 가까워 수비 뒤로 패스가 들어가 득점으로 이어집니다. **스루패스는 공간이 열렸을 때 가까운 거리와 직선 각도로 시도해야 합니다.** 수비가 몸으로 막으면 옆 공간으로 돌거나, 공을 받은 뒤 동료의 침투를 기다려야 한다고 덧붙입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u018-c061.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1800,
+          "caption": "중앙선 왼쪽에서 공을 가진 선수를 다른 선수가 따라붙습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u018-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1761"
+    },
+    {
+      "id": "u019",
+      "uid": "20220331-PIjy1eid3RU#u019",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 1870.0800000000002,
+      "end": 1935.38,
+      "title": "미드필더가 끝까지 상대를 제어해 실점 기회를 막기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "수비라인",
+        "압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "상대 공격수를 놓친 뒤 미드필더가 끝까지 따라가지 못합니다. **미드필더는 상대를 끝까지 제어해야 합니다.** 코치는 수비 가담과 집중이 중요하다고 말하며, 이 장면에서 패스가 들어갔다면 실점할 뻔했다고 짚습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u019-c065.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1890,
+          "caption": "페널티박스 오른쪽 가장자리에 공과 양 팀 선수가 모여 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u019-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1870"
+    },
+    {
+      "id": "u020",
+      "uid": "20220331-PIjy1eid3RU#u020",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 1960.26,
+      "end": 2023.2,
+      "title": "패스길을 보고 버티며 탈출하고, 어렵다면 걷어내기",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "수비라인",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "수비수가 뒷공간을 막아야 하는 상황입니다. **패스길을 정확히 보고 버티며 빠져나오는 것이 가장 좋습니다.** 그렇게 버티거나 길을 확인할 수 없다면 **공을 걷어내 헤딩 경합을 해야 합니다.** 공을 빼앗기면 위험해질 수 있어, 뒷공간부터 막아야 한다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u020-c068.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1980,
+          "caption": "페널티박스 중앙에 공격수와 수비수가 겹쳐 서 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u020-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1960"
+    },
+    {
+      "id": "u021",
+      "uid": "20220331-PIjy1eid3RU#u021",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 2034.08,
+      "end": 2128.94,
+      "title": "윙은 공을 지키며 동료가 뒷공간에 들어올 시간을 벌기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "압박을 받은 윙이 공을 잃기 전에 동료의 뒷공간 침투를 기다려야 합니다. **공을 지키며 돌아서 압박에서 벗어나야 합니다.** 패스가 열리면 바로 연결하되, 윙이 공을 끌어 지키지 못하면 동료가 올라올 시간을 벌 수 없다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u021-c071.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2070,
+          "caption": "센터서클 주변에 양 팀 선수가 펼쳐져 있고 몇 명이 공 주변에 모입니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u021-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2034"
+    },
+    {
+      "id": "u022",
+      "uid": "20220331-PIjy1eid3RU#u022",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 2138.08,
+      "end": 2166.54,
+      "title": "공을 완전히 제어한 뒤 달려들면 제껴질 수 있음",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 완전히 제어한 상대에게 뒤늦게 달려들며 제껴집니다. **압박은 상대가 공을 받기 전이나 받은 직후에 걸어야 합니다.** 공을 안정적으로 잡은 뒤에는 무게중심을 이용해 빠져나가기 쉬워진다고 말합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u022-c074.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2160,
+          "caption": "중앙선 오른쪽에 양 팀 선수가 간격을 두고 배치돼 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u022-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2138"
+    },
+    {
+      "id": "u023",
+      "uid": "20220331-PIjy1eid3RU#u023",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 2173.2000000000003,
+      "end": 2259.58,
+      "title": "다음 패스길을 만들고 스트라이커는 뒤쪽 연결도 보기",
+      "position_tags": [
+        "ST",
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 끌며 뒤쪽 패스 각을 만들었지만, 다음 연결길이 없으면 전진을 이어가기 어렵습니다. **스트라이커는 전진 각이 닫히면 뒤로 연결할 길도 확인해야 합니다.** 이번에는 다음 길이 있었고 오프사이드를 피한 뒤 빠져나왔지만, 각이 열리지 않을 때는 뒤로 거쳐 돌아가는 역할이 필요하다고 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u023-c076.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2220,
+          "caption": "하프라인 부근에서 선수들이 양쪽으로 펼쳐져 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u023-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2173"
+    },
+    {
+      "id": "u024",
+      "uid": "20220331-PIjy1eid3RU#u024",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 2261.32,
+      "end": 2352.7,
+      "title": "압박 없는 쪽으로 공을 지키며 돌아 뛸 동료를 기다리기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "수비수가 예상 가능한 패스길을 막아 붙자 공을 가진 공격수가 공을 지켜야 하는 상황입니다. **공격수는 압박이 없는 쪽으로 공을 끌고 몸으로 지키며, 돌아 뛰는 동료가 올 때까지 버텨야 합니다.** 이 장면에서는 압박을 이기지 못하고 공을 빼앗겼다고 평가합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u024-c079.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2310,
+          "caption": "중앙선 왼쪽에서 공 주변으로 양 팀 선수가 모입니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u024-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2261"
+    },
+    {
+      "id": "u025",
+      "uid": "20220331-PIjy1eid3RU#u025",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 2360.8,
+      "end": 2478,
+      "title": "수비수의 무게중심을 보고 패스하거나 공을 더 끌기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "공격수가 측면에서 공을 몰 때 수비수의 무게중심과 패스길을 읽어야 합니다. **수비수가 한쪽으로 쏠리면 반대 길로 패스하고, 애매하면 공을 더 끌어야 합니다.** 동료가 돌아 뛰는 길이 열리면 밀어 넣고, 길이 닫히면 공간을 바꾸며 상대를 끌어내라고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u025-c083.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2430,
+          "caption": "페널티박스 앞 왼쪽에서 노란 선수들이 공 주변에 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u025-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2360"
+    },
+    {
+      "id": "u026",
+      "uid": "20220331-PIjy1eid3RU#u026",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 2489.38,
+      "end": 2511.24,
+      "title": "윙의 측면 돌파만 고집하지 말고 중앙 패스 타이밍 보기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "파이널서드",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "측면에서 수비수를 제치고 들어가는 공격은 성공률이 낮다고 짚습니다. **윙은 공이 중앙으로 움직여 길이 열릴 때 안으로 들어가야 합니다.**"
+        },
+        {
+          "type": "frame",
+          "src": "img/u026-c085.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2490,
+          "caption": "중앙선 왼쪽 측면에서 공을 가진 선수가 상대 진영을 향합니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u026-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2489"
+    },
+    {
+      "id": "u027",
+      "uid": "20220331-PIjy1eid3RU#u027",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 2520.3,
+      "end": 2598.26,
+      "title": "수비수가 공을 뺏으러 쏠리며 뒷공간을 내준 장면",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "수비라인",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "수비수가 공을 뺏으려 달려들며 무게중심을 앞으로 옮긴 틈에 뒷공간이 열렸고, 실점으로 이어졌습니다. **수비수가 자리를 지키면 몸으로 눌러 상대를 제압할 수 있었지만, 앞으로 쏠리며 뒤 공간을 내줬습니다.** 상대가 달려드는 무게중심을 이용해 탈압박하면 작은 공간이 생긴다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u027-c087.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2550,
+          "caption": "왼쪽 페널티박스 안에 공격수와 수비수가 모여 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u027-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2520"
+    },
+    {
+      "id": "u028",
+      "uid": "20220331-PIjy1eid3RU#u028",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 2608.28,
+      "end": 2665.5,
+      "title": "압박을 벗어난 뒤 열린 공간으로 빠져나가기",
+      "position_tags": [],
+      "topic_tags": [
+        "탈압박",
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 가진 선수가 압박에서 빠져나왔지만, 빈 공간으로 움직이지 않고 공을 밀어 놓은 뒤 밟았습니다. **앞쪽 공간이 비었으면 그쪽으로 빠져야 하며, 길이 없으면 뒤로 돌릴 수 있지만 그 선택에는 큰 위험이 따릅니다.** 공을 잃었다면 실점으로 이어질 수 있었지만, 이번에는 운 좋게 위기를 넘겼다고 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u028-c091.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2640,
+          "caption": "중앙선과 센터서클이 보이고, 공은 화면 아래쪽 중앙 왼편에 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u028-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2608"
+    },
+    {
+      "id": "u029",
+      "uid": "20220331-PIjy1eid3RU#u029",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 2669,
+      "end": 2815.08,
+      "title": "스트라이커는 직선 침투보다 공간에서 멈춰 받기",
+      "position_tags": [
+        "ST"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "미드필더가 공을 받아 전개하는 동안 **스트라이커의 움직임은 좋지 않았습니다.** **패서와 주자의 거리가 가까워야 하고, 침투할 공간도 확보되어야 합니다.** 수비수와 공격수가 붙은 상태에서 직선으로 뛰는 것은 좋은 플레이가 아니며, 수비수가 떨어져 있으면 들어갈 수 있습니다. **붙어 있는 수비를 향해 직선으로 뛰지 말고, 뛰는 척한 뒤 공간에서 멈춰 공을 받아야 합니다.** 받은 뒤 수비가 붙지 않으면 앞을 보고 동료에게 패스한 뒤 직접 침투할 수 있습니다. 수비가 붙으면 동료가 돌아 뛸 때까지 버텨 연결하거나, 패스하고 침투하는 등 다른 패턴을 쓸 수 있다고 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u029-c094.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2730,
+          "caption": "센터서클과 중앙선이 보이고 양 팀 선수들이 중앙 부근에 펼쳐져 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u029-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2669"
+    },
+    {
+      "id": "u030",
+      "uid": "20220331-PIjy1eid3RU#u030",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 2817.24,
+      "end": 2917.68,
+      "title": "역습을 늦추지 말고 윙은 패스 순간까지 오프사이드 피하기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "역습에서 윙이 공보다 먼저 직선으로 뛰어 패스길이 사라집니다. **윙은 공간에서 기다리다가 패스가 나가는 순간 침투해야 합니다.** 공격 전개가 늦어질수록 수비가 복귀해 역습 성공률이 떨어지고, 미리 뛰면 오프사이드가 될 수 있다고 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u030-c099.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2880,
+          "caption": "중앙선 주변에 공을 향해 여러 선수가 움직입니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u030-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2817"
+    },
+    {
+      "id": "u031",
+      "uid": "20220331-PIjy1eid3RU#u031",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 2927.2400000000002,
+      "end": 3062.14,
+      "title": "역습 수비에서 가장 가까운 선수가 주자를 맡고 라인 맞추기",
+      "position_tags": [
+        "DF",
+        "MF"
+      ],
+      "topic_tags": [
+        "수비라인",
+        "압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "vandeven",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "wonjeon",
+        "spress"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "상대의 역습에서 한 선수가 뚫린 뒤 수비의 커버가 늦습니다. **가장 먼저 도울 수 있는 선수가 주자를 맡아야 합니다.** 나머지 수비는 라인을 맞춰 오프사이드를 유도하고, 패스가 나오는 순간 앞으로 나와 끊는 방법을 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u031-c103.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3000,
+          "caption": "페널티박스 왼쪽 앞에 수비수와 공격수가 모여 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u031-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2927"
+    },
+    {
+      "id": "u032",
+      "uid": "20220331-PIjy1eid3RU#u032",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 3070.66,
+      "end": 3148.92,
+      "title": "공을 끊은 뒤 열린 공간을 보고 역습 전개하기",
+      "position_tags": [],
+      "topic_tags": [
+        "전환/역습",
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 뺏은 뒤 상대 진영에 빈 공간이 열립니다. **카운터를 치려면 그 공간을 활용해야 합니다.** 전술적으로 미리 위치를 만들어 두면 공을 앞으로 보내고 공격으로 이어갈 수 있다고 말합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u032-c107.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3120,
+          "caption": "중앙 구역에서 양 팀 선수들이 공 주변에 모여 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u032-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3070"
+    },
+    {
+      "id": "u033",
+      "uid": "20220331-PIjy1eid3RU#u033",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 3150.18,
+      "end": 3261.7,
+      "title": "윙은 미리 직선 침투하지 말고 패스길을 확인하기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "윙이 직선으로 미리 뛰어 오프사이드 위치에 놓입니다. **패스길이 보이지 않으면 공을 더 끌고, 윙은 라인을 따라 천천히 기다려야 합니다.** 패스가 나가는 순간 뛰면 오프사이드와 패스미스를 줄일 수 있고, 압박이 없을 때도 급히 줄 필요 없이 먼저 길을 확인하라고 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u033-c110.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3210,
+          "caption": "센터서클 왼쪽에 넘어져 있는 선수와 공 주변의 선수들이 보입니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u033-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3150"
+    },
+    {
+      "id": "u034",
+      "uid": "20220331-PIjy1eid3RU#u034",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 3270.3999999999996,
+      "end": 3346.4,
+      "title": "공을 잃으면 자기 공간부터 복구하고 패스도 서두르지 않기",
+      "position_tags": [
+        "DF",
+        "MF"
+      ],
+      "topic_tags": [
+        "수비라인",
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "vandeven",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "wonjeon",
+        "spress"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "상대의 역습을 허용한 뒤 수비수들이 자기 공간을 비우고 따라갑니다. **공을 잃으면 먼저 내려와 수비 공간과 라인을 복구해야 합니다.** 공을 급히 전진시키는 패스도 위험했으며, 압박이 없다면 공을 더 침착하게 보고 정확히 보내야 한다고 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u034-c113.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3300,
+          "caption": "페널티박스 앞 왼쪽에 공과 선수들이 모여 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u034-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3270"
+    },
+    {
+      "id": "u035",
+      "uid": "20220331-PIjy1eid3RU#u035",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 3359.98,
+      "end": 3557.68,
+      "title": "전진 출구를 먼저 만들고 한 명은 뒷공간, 한 명은 커버",
+      "position_tags": [
+        "FW",
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 가진 선수가 압박을 받으며 공격을 이어가야 하는 상황입니다. **앞으로 공을 보내려면 앞쪽 아군이 먼저 움직여 패스길을 만들어야 합니다.** 윙이 내려오면 한 명이 뒷공간으로 뛰고 수비형 미드필더가 올라와 커버하거나, 한 선수가 길을 만들고 수비형 미드필더가 받쳐야 합니다. 뒤로만 돌리면 공격이 되지 않지만, 정말 길이 없으면 공을 잃지 않도록 뒤로 돌려 반대쪽으로 빠르게 가야 하며 후방 패스에는 위험이 따른다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u035-c118.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3450,
+          "caption": "중앙선 부근에서 양 팀 선수가 공 주변에 모여 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u035-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3359"
+    },
+    {
+      "id": "u036",
+      "uid": "20220331-PIjy1eid3RU#u036",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 3565.48,
+      "end": 3656.84,
+      "title": "압박을 받으면 각을 열어 탈출하고 뒷공간 움직임 기다리기",
+      "position_tags": [],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 가진 선수가 압박을 받아 패스각이 보이지 않습니다. **버티며 각을 열어 연결한 뒤 빠져나가는 것이 가장 좋습니다.** 계속 빼앗길 정도로 기술이 부족하다면 위험 지역에서 무리하지 말고 걷어내야 하며, 동료들은 뒷공간에서 받을 길을 만들어 시간을 벌어야 한다고 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u036-c123.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3600,
+          "caption": "페널티박스 왼쪽 앞에 공과 공격수·수비수가 모여 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u036-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3565"
+    },
+    {
+      "id": "u037",
+      "uid": "20220331-PIjy1eid3RU#u037",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 3659.8,
+      "end": 3729.5,
+      "title": "상대의 긴 터치·가까운 공에서 압박하기",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "압박",
+        "수비라인"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "수비수가 상대를 막아 서 있는데 상대의 터치가 길어집니다. **터치가 길거나 상대가 가까우면 바로 태클하거나 나가서 공을 빼앗아야 합니다.** 반대로 거리가 멀면 나가다 제쳐질 가능성이 높으므로 뒷공간을 지켜야 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u037-c126.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3690,
+          "caption": "페널티박스 왼쪽 바깥에서 노란 선수와 빨강·파랑 선수가 공 주변에 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u037-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3659"
+    },
+    {
+      "id": "u038",
+      "uid": "20220331-PIjy1eid3RU#u038",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 3743.96,
+      "end": 3869.66,
+      "title": "압박에서 각을 열어 나가고 포위되면 후방 연결 위험 따지기",
+      "position_tags": [
+        "DF",
+        "GK"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "압박을 벗어나려고 공을 돌려도 상대가 계속 따라붙어 전진이 막힙니다. **받자마자 짧게 주고 다시 받아 몸 방향을 열어 나가야 합니다.** 개인 능력으로 제치거나 보이는 패스 각으로 빠르게 주고받아 나갈 수 있지만, 포위돼 전진하기 어렵다면 뒤로 돌리는 수밖에 없고 위험합니다. **후방 빌드업이 어렵다면 골키퍼에게 공을 돌려 골키퍼가 앞으로 길게 보내게 해야 합니다.**"
+        },
+        {
+          "type": "frame",
+          "src": "img/u038-c130.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3810,
+          "caption": "중앙선 왼쪽에서 양 팀 선수가 공 주변으로 모입니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u038-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3743"
+    },
+    {
+      "id": "u039",
+      "uid": "20220331-PIjy1eid3RU#u039",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 3875.5,
+      "end": 3972.58,
+      "title": "뻔한 첫 패스 대신 두 번째 길과 미니맵 확인하기",
+      "position_tags": [
+        "MF",
+        "FW"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "첫 번째로 보이는 패스는 상대가 읽고 끊을 수 있습니다. **첫 패스 대신 두 번째·세 번째 길을 보고 선택해야 합니다.** 미니맵으로 윙의 움직임을 확인해 로빙 스루와 스루패스를 고르고, 풀백이 대응하지 못하면 중미가 침투해 뒷공간을 공략하라고 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u039-c134.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3930,
+          "caption": "수비 진영의 왼쪽 페널티박스 근처에 선수들이 펼쳐져 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u039-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        },
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u002",
+          "title": "베리나 포지션 상향 지시",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u002"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3875"
+    },
+    {
+      "id": "u040",
+      "uid": "20220331-PIjy1eid3RU#u040",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 3977.5,
+      "end": 4023.6,
+      "title": "공을 잃으면 달려들기보다 자기 수비 공간부터 복구하기",
+      "position_tags": [
+        "DF",
+        "MF"
+      ],
+      "topic_tags": [
+        "수비라인",
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "vandeven",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "wonjeon",
+        "spress"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 잃은 뒤 선수들이 곧바로 달려들어 자기 공간을 비웁니다. **먼저 내려와 자기 공간부터 지켜야 합니다.** 상대가 뒷공간으로 패스할 수 있고, 코치는 이 장면이 달려들 타이밍이 아니었다고 지적합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u040-c136.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3990,
+          "caption": "왼쪽 페널티박스 바깥에 수비수와 공격수가 모여 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u040-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3977"
+    },
+    {
+      "id": "u041",
+      "uid": "20220331-PIjy1eid3RU#u041",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 4028.32,
+      "end": 4072.92,
+      "title": "빌드업이 어려우면 롱킥을 찾고 전진 공간을 열기",
+      "position_tags": [
+        "MF",
+        "GK"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "상대 전방 압박에 쫓겨 미드필더가 침투하는 동료에게 정확한 패스를 넣을 여유가 없습니다. **빌드업 능력이 없다면 롱킥을 선택해야 합니다.** 공을 뺏은 뒤에는 빈 공간에 전진 길을 만들며 나아가야 한다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u041-c138.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4050,
+          "caption": "하프라인 왼쪽에서 공 주변으로 양 팀 선수가 다가옵니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u041-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4028"
+    },
+    {
+      "id": "u042",
+      "uid": "20220331-PIjy1eid3RU#u042",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 4087.54,
+      "end": 4142.6,
+      "title": "재압박으로 자기 공간을 비우지 말고 1대1 버티기",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "수비라인",
+        "압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 뺏기자 선수가 재압박하려 달려들며 자기 공간을 비웁니다. **무작정 달려들지 말고 1대1에서 버틸 수 있어야 합니다.** 동료가 커버하러 나오면 다른 공간이 열려 패스 한 번에 실점할 수 있다고 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u042-c140.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4110,
+          "caption": "왼쪽 페널티박스 안에 여러 공격수와 수비수가 모여 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u042-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4087"
+    },
+    {
+      "id": "u043",
+      "uid": "20220331-PIjy1eid3RU#u043",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 4150.860000000001,
+      "end": 4257.64,
+      "title": "윙의 뒷공간 지원과 침착한 패스 선택이 필요함",
+      "position_tags": [
+        "FW",
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "압박을 벗어난 뒤 뒷공간에 받을 윙이 없어 다시 뒤로 돌리고 압박을 받습니다. **윙은 뒷공간에서 받아 줄 준비를 해야 합니다.** 공을 가진 선수는 압박이 덜한 동안 패스길을 보고, 못 봤다면 더 끌며 침착하게 확인해야 패스 선택 실수를 줄일 수 있다고 말합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u043-c143.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4200,
+          "caption": "중앙선 부근에서 공을 가진 선수가 상대에게 다가갑니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u043-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4150"
+    },
+    {
+      "id": "u044",
+      "uid": "20220331-PIjy1eid3RU#u044",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 4261.58,
+      "end": 4348.6,
+      "title": "3백은 상대 위치에 따라 공간을 맡고 한쪽 쏠림 막기",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "수비라인",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "3백 수비에서 한 선수가 너무 나가 돌아올 수 없는 사이, 두세 명이 한 공간으로 쏠려 사이드가 열렸습니다. **담당 구역에 상대가 없으면 그 공간만 지킬 필요는 없지만, 상대가 돌아 뛰면 바로 그 공간을 막아야 합니다.** 한쪽에 몰려 반대편 슛을 막지 못했다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u044-c147.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4320,
+          "caption": "페널티박스 앞에서 노란 선수가 공을 향해 움직입니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u044-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4261"
+    },
+    {
+      "id": "u045",
+      "uid": "20220331-PIjy1eid3RU#u045",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 4356.02,
+      "end": 4389.54,
+      "title": "압박이 없으면 공을 더 끌며 패스길을 확인하기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "압박이 거의 없는데 공을 가진 선수가 급하게 움직이며 패스길을 놓칩니다. **압박이 없을 때는 공을 더 끌며 패스길을 확인해야 합니다.** 급하게 판단하면 패스 실수가 나오고, 한 번 더 보고 보내면 이를 줄일 수 있다고 말합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u045-c149.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4380,
+          "caption": "페널티박스 앞에 노란 선수와 빨강·파랑 수비수가 펼쳐져 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u045-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4356"
+    },
+    {
+      "id": "u046",
+      "uid": "20220331-PIjy1eid3RU#u046",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 4390.96,
+      "end": 4449.02,
+      "title": "전진 길이 없어 뒤로만 돌리면 상대 압박에 걸림",
+      "position_tags": [
+        "MF",
+        "DF"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "vandeven",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "wonjeon",
+        "spress"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 끊었지만 전진 패스길이 없어 뒤로 돌리고, 다시 긴 경합에 놓입니다. **뒤로만 돌리는 것이 최선의 전개는 아닙니다.** 전진 선택지가 없는데 후방 패스만 반복하면 상대가 압박을 걸고, 불안한 경합 끝에 공을 다시 내줄 수 있다고 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u046-c150.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4410,
+          "caption": "중앙선 왼쪽에서 양 팀 선수가 공 주변에 모여 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u046-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4390"
+    },
+    {
+      "id": "u047",
+      "uid": "20220331-PIjy1eid3RU#u047",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 4456.66,
+      "end": 4546.98,
+      "title": "전개가 지연되는 동안 수비가 다시 정렬됨",
+      "position_tags": [
+        "FW",
+        "MF"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "전개가 몇 차례 지연되는 사이 상대 수비가 모두 내려앉았습니다. **앞 공간에서 공을 받아 상대를 끌어내고, 동료에게 준 뒤 돌아 뛰며 다시 연결해야 합니다.** 동료가 돌아 뛸 때까지 버텨 밀어 넣을 수도 있고, 상대가 자리를 지키기만 하면 공을 앞으로 끌고 나가면 된다고 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u047-c153.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4500,
+          "caption": "중앙선 부근에서 공을 가진 빨강·파랑 선수에게 상대가 다가옵니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u047-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4456"
+    },
+    {
+      "id": "u048",
+      "uid": "20220331-PIjy1eid3RU#u048",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 4547.54,
+      "end": 4617.34,
+      "title": "공을 먼저 전진시키고 공격 패턴을 이어가기",
+      "position_tags": [
+        "MF",
+        "FW"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "공격이 전진한 뒤에도 공을 오래 끌면 상대 수비가 복귀합니다. **앞으로 나갈 길이 있으면 공을 먼저 전진시켜 빠르게 공격 패턴을 이어가야 합니다.** 전진할 선택지가 없으면 무리하지 말고 돌아가야 하며, 길이 열리면 동료에게 주거나 돌아 뛰는 선수에게 연결해 공격을 이어갈 수 있다고 합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u048-c156.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4590,
+          "caption": "화면 왼쪽에 중앙선과 센터서클이 보이고, 공을 가진 선수는 그 오른쪽에 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u048-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4547"
+    },
+    {
+      "id": "u049",
+      "uid": "20220331-PIjy1eid3RU#u049",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 4619.4,
+      "end": 4711.08,
+      "title": "공을 오래 끌어 사이드로 밀지 말고 중앙 지원 움직임 만들기",
+      "position_tags": [
+        "MF",
+        "FW"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "spress",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 오래 끌어 결국 사이드로 보냈지만 앞길이 막혀 미드필더의 선택지가 줄었습니다. **동료가 중앙으로 들어와 길을 만들고, 미드필더는 공을 지연 없이 연결해야 합니다.** 중앙으로 들어가지 않고 사이드로만 보내면 상대 수비가 가담해 공격을 뚫기 어려워집니다. 수비가 내려앉은 상대를 상대로는 지공보다 역습으로 득점하는 편이 쉽다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u049-c159.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4680,
+          "caption": "중앙선 왼쪽 위에 공이 떠 있고 선수들이 주변에서 움직입니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u049-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-53376360c3",
+          "title": "EA SPORTS FC™ - FC Futures - Practices",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-53376360c3.html",
+          "orig_url": "https://www.ea.com/games/ea-sports-fc/fc-futures/practices?isLocalized=true"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4619"
+    },
+    {
+      "id": "u050",
+      "uid": "20220331-PIjy1eid3RU#u050",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 4722.48,
+      "end": 4790.98,
+      "title": "윙은 미리 달리지 말고 패스·슈팅 순간까지 오프사이드 피하기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "파이널서드",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": false,
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 가진 선수는 압박을 버티고 공을 밀어 넣었지만, 윙이 먼저 뛰면서 패스길이 사라졌습니다. **윙은 미리 뛰지 말고 공간에서 기다리다가 패스나 슈팅 순간에 움직여야 합니다.** 천천히 걷거나 공간에서 받아도 늦지 않으며, 미리 달리면 오프사이드가 최악의 결과가 될 수 있다고 설명합니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u050-c162.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4770,
+          "caption": "센터서클 안쪽에서 양 팀 선수가 공을 두고 경합합니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u050-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4722"
+    }
+  ]
+}

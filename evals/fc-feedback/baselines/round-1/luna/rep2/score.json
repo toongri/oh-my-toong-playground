@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "total": 75.40907949386651,
+  "gate_failed": false,
+  "breakdown": {
+    "gate": {
+      "plan": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "notes": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "similar": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "refs": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "passed": true
+    },
+    "unit_f1": {
+      "precision": 1,
+      "recall": 0.9333333333333333,
+      "f1": 0.9655172413793104,
+      "points": 24.137931034482758,
+      "matched": 14,
+      "total_gold": 15,
+      "total_predicted": 14
+    },
+    "start_time_accuracy": {
+      "median_delta_s": 0,
+      "points": 10
+    },
+    "tags": {
+      "position": {
+        "precision": 0.7647058823529411,
+        "recall": 0.7647058823529411,
+        "f1": 0.7647058823529412,
+        "points": 3.823529411764706
+      },
+      "topic": {
+        "precision": 0.6071428571428571,
+        "recall": 0.7727272727272727,
+        "f1": 0.68,
+        "points": 3.4000000000000004
+      },
+      "member": {
+        "precision": 0.85,
+        "recall": 0.7727272727272727,
+        "f1": 0.8095238095238095,
+        "points": 4.0476190476190474
+      }
+    },
+    "refs": {
+      "url_in_log": {
+        "fraction": 1,
+        "points": 4
+      },
+      "http_ratio": {
+        "fraction": 1,
+        "points": 3
+      },
+      "ko_summary": {
+        "fraction": 1,
+        "points": 3
+      }
+    },
+    "judge": {
+      "specificity": 10,
+      "fidelity": 3,
+      "readability": 7,
+      "points": 20,
+      "judge_invalid": false
+    },
+    "penalties": {
+      "seconds_in_plan": false,
+      "push_attempt": false,
+      "gate_order_violation": false,
+      "unknown_commands": [
+        "${x.i}'\"\\\\t\"'${x.start.toFixed(1)}–${x.end.toFixed(1)}'\"\\\\t\"'${x.text}",
+        "${x.id}'\"\\\\t\"'${x.t}'\"\\\\t\"'${x.kind}",
+        "${u.id}'\"\\\\t\"'${u.start_line}-${u.end_line}'\"\\\\t\"'${u.start.toFixed(1)}-${u.end.toFixed(1)}'\"\\\\t\"'${u.key_frame_candidate_ids.join(\",\")}",
+        "${u.id}'\"\\\\t\"'${u.start.toFixed(1)}-${u.end.toFixed(1)}'\"\\\\t\"'${u.key_frame_candidate_ids.join(\",\")}"
+      ],
+      "points_deducted": 0
+    },
+    "contamination": {
+      "contaminated": false,
+      "excluded_from_comparison": false,
+      "hits": []
+    }
+  }
+}

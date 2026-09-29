@@ -1,0 +1,1337 @@
+{
+  "version": 1,
+  "session_id": "20240104-NUzEChn9EyI",
+  "title": "EAFC24 프로클럽 C.E.F. / FC Barcelona 팀 연습 (24.1.4) Part 3",
+  "date": "2024-01-04",
+  "generated_at": "2026-09-28T20:46:31.746Z",
+  "pages_base_url": "https://fc-feedback-eval.invalid/",
+  "videos": [
+    {
+      "id": "NUzEChn9EyI",
+      "part": 1,
+      "embeddable": true
+    }
+  ],
+  "members": [
+    {
+      "id": "timej",
+      "name": "TIMEJ",
+      "gamertag": "TIMEJ",
+      "positions": [
+        "ST"
+      ]
+    },
+    {
+      "id": "gerrard",
+      "name": "Gerrard_CEF",
+      "gamertag": "Gerrard_CEF",
+      "positions": [
+        "CM"
+      ]
+    },
+    {
+      "id": "vandeven",
+      "name": "CEF_VandeVen",
+      "gamertag": "CEF_VandeVen",
+      "positions": [
+        "CB"
+      ]
+    },
+    {
+      "id": "bride",
+      "name": "브라이드",
+      "gamertag": "CEF_Bride",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "taxi",
+      "name": "택시",
+      "gamertag": "CEF_Taxi",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jomin",
+      "name": "조민",
+      "gamertag": "CEF_Jomin",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "find",
+      "name": "사인드",
+      "gamertag": "CEF_Find",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "rumi",
+      "name": "루미",
+      "gamertag": "CEF_Rumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "gipeu",
+      "name": "기프",
+      "gamertag": "CEF_Gipeu",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "yumi",
+      "name": "유미",
+      "gamertag": "CEF_Yumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "saembaek",
+      "name": "샘백",
+      "gamertag": "CEF_Saembaek",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "giseun",
+      "name": "기슨",
+      "gamertag": "CEF_Giseun",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jonjae",
+      "name": "존재",
+      "gamertag": "CEF_Jonjae",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "wonjeon",
+      "name": "원전",
+      "gamertag": "CEF_Wonjeon",
+      "positions": [
+        "FB"
+      ]
+    },
+    {
+      "id": "spress",
+      "name": "스프레스",
+      "gamertag": "CEF_Spress",
+      "positions": [
+        "CAM"
+      ]
+    },
+    {
+      "id": "maekgu",
+      "name": "맥구",
+      "gamertag": "CEF_Maekgu",
+      "positions": [
+        "FW"
+      ]
+    }
+  ],
+  "matches": [
+    {
+      "id": "m1",
+      "title": "C.E.F. FC Barcelona 리그 경기",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "넓은 공간으로 전개",
+          "summary": "좁은 곳에 있는 선수에게 무리하게 넣기보다 넓게 열린 동료를 찾아 연결하고, 공을 옮기는 동안 다른 선수들이 전진할 시간을 확보합니다.",
+          "unit_ids": [
+            "u001"
+          ]
+        },
+        {
+          "id": "m1-t2",
+          "title": "상대를 마주 보는 볼 컨트롤",
+          "summary": "공을 받거나 운반할 때 LT를 누르면 이동 중에도 상대를 향한 자세를 유지해 다음 동작을 준비할 수 있습니다.",
+          "unit_ids": [
+            "u002"
+          ]
+        },
+        {
+          "id": "m1-t3",
+          "title": "전진 전환과 역습",
+          "summary": "전방 움직임을 확인해 빠르게 연결하고, 역습에서는 측면과 중앙의 역할을 나눠 두 개 이상의 패스 선택지를 만듭니다.",
+          "unit_ids": [
+            "u003",
+            "u004",
+            "u005"
+          ]
+        },
+        {
+          "id": "m1-t4",
+          "title": "압박을 벗어나는 점유",
+          "summary": "압박이 이미 붙은 상황에서 무리하게 전진하지 말고 안전한 패스로 압박을 피한 뒤, 동료의 움직임으로 수비를 끌어내 공간을 만듭니다.",
+          "unit_ids": [
+            "u006"
+          ]
+        },
+        {
+          "id": "m1-t5",
+          "title": "침투 타이밍",
+          "summary": "동료가 공간을 향해 연결할 것으로 예상되는 순간에는 멈추지 말고 움직임을 이어 갑니다.",
+          "unit_ids": [
+            "u007"
+          ]
+        },
+        {
+          "id": "m1-t6",
+          "title": "공을 운반해 수비를 움직이기",
+          "summary": "바로 패스해 좁은 곳에 동료를 가두기보다 공을 더 운반해 상대 한 명을 끌어내고, 동료의 전진 시간과 다음 선택지를 만듭니다. 자기 진영에서는 공을 잃었을 때의 역습 위험도 함께 고려합니다.",
+          "unit_ids": [
+            "u008"
+          ]
+        },
+        {
+          "id": "m1-t7",
+          "title": "공격 폭 넓히기",
+          "summary": "수평으로 폭을 넓혀 상대 수비를 벌리고, 열린 공간을 활용할 수 있게 합니다.",
+          "unit_ids": [
+            "u009"
+          ]
+        },
+        {
+          "id": "m1-t8",
+          "title": "파이널서드의 폭과 침투 옵션",
+          "summary": "전방이 막히면 넓은 쪽의 동료와 침투를 살피고, 풀백의 전진과 윙어의 중앙 이동을 조합해 크로스나 컷백 경로를 열어 둡니다.",
+          "unit_ids": [
+            "u010",
+            "u011"
+          ]
+        },
+        {
+          "id": "m1-t9",
+          "title": "대각 전개와 수비 균형 흔들기",
+          "summary": "측면에서 대각선으로 전방 주자를 찾고, 공을 운반해 상대 수비의 균형을 먼저 흔들면 압박과 수비 대응을 끌어낼 수 있습니다.",
+          "unit_ids": [
+            "u012",
+            "u013"
+          ]
+        },
+        {
+          "id": "m1-t10",
+          "title": "밀집 수비를 풀어내기",
+          "summary": "상대 수비가 촘촘하면 전방으로 억지로 찌르지 말고 뒤로 연결해 상대 블록을 다시 움직입니다.",
+          "unit_ids": [
+            "u014"
+          ]
+        },
+        {
+          "id": "m1-t11",
+          "title": "받는 사람의 속도 살리기",
+          "summary": "열린 전방 공간으로 패스할 때 땅볼을 우선해 받는 선수가 공의 진행 속도를 이어가며 다음 동작을 하기 쉽게 만듭니다.",
+          "unit_ids": [
+            "u015"
+          ]
+        },
+        {
+          "id": "m1-t12",
+          "title": "막힐 때 지원 방향 바꾸기",
+          "summary": "같은 방향의 돌파가 막히면 반복하지 말고 뒤쪽 지원을 확인해 안전하게 연결하거나 오버래핑 움직임을 활용해 공격 방식을 바꿉니다.",
+          "unit_ids": [
+            "u016"
+          ]
+        },
+        {
+          "id": "m1-t13",
+          "title": "경기 핵심 정리",
+          "summary": "대각선으로 움직이는 동료를 봐야 할 때 놓치지 않고, 수비가 밀집되면 미련 없이 뒤로 빼는 선택을 팀 전체의 기본 원칙으로 정리합니다.",
+          "unit_ids": [
+            "u017"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "uid": "20240104-NUzEChn9EyI#u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 51.12,
+      "end": 103.42,
+      "title": "좁은 곳보다 넓은 선수에게 연결",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [
+        "bride"
+      ],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "브라이드님에게서 TIMEJ 쪽으로 공이 길게 오는 장면이 반복됩니다. 바로 좁은 곳에 있는 선수에게 넣으면 받는 쪽이 압박에 갇힐 수 있으니, 먼저 넓게 서 있는 동료를 찾으세요. 공이 이동하는 동안 공이 없는 선수들은 올라갈 시간을 얻고, 길이 막히면 뒤로 빼서 다시 전개할 수 있습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u001-c003.webp",
+          "width": 854,
+          "height": 460,
+          "t": 60,
+          "caption": "좁은 중앙만 보지 않고 넓은 쪽의 동료를 찾는 장면"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u001-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-57cb843146",
+          "title": "Lamia Boumehdi: Technical foundations for switching play",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-57cb843146.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=51"
+    },
+    {
+      "id": "u002",
+      "uid": "20240104-NUzEChn9EyI#u002",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 225.9,
+      "end": 255.12,
+      "title": "LT로 바라보며 이동",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "조작/키사용"
+      ],
+      "member_ids": [
+        "taxi"
+      ],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "택시님이 가까운 공간에서 공을 다룰 때 LT를 누른 채 움직이면, 이동 중에도 상대를 바라보는 자세를 유지할 수 있습니다. 공을 받자마자 등을 지거나 급하게 방향을 틀기보다 몸의 방향을 지켜 두면 다음 패스나 전진 동작을 준비하기 쉽습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u002-c009.webp",
+          "width": 854,
+          "height": 460,
+          "t": 240,
+          "caption": "LT를 누른 채 상대를 바라보며 움직이는 장면"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u002-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-2ed8e69587",
+          "title": "EA SPORTS FC™ 24 | Na wirtualnym boisku – szczegółowe omówienie rozgrywki",
+          "lang": "pl",
+          "kind": "eafc",
+          "href": "../../refs/r-2ed8e69587.html",
+          "orig_url": "https://www.ea.com/pl-pl/games/ea-sports-fc/pitch-notes/news/fc-24-gameplay-deepdive"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=225"
+    },
+    {
+      "id": "u003",
+      "uid": "20240104-NUzEChn9EyI#u003",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 270.58,
+      "end": 308.96,
+      "title": "침투 공간을 보고 빠르게 연결",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "이 장면에서는 뒤쪽 움직임을 확인하고 스루패스로 전진시키려는 선택이 설명됩니다. 전방 침투가 시작되는 순간을 놓치지 않고 빠르게 연결하면 상대 수비가 자리를 잡기 전에 공격을 이어갈 수 있습니다. W 패스로 속도를 낼 때도 받는 선수의 움직임과 수비 간격을 보고 강도를 맞춰 주세요."
+        },
+        {
+          "type": "frame",
+          "src": "img/u003-c010.webp",
+          "width": 854,
+          "height": 460,
+          "t": 270,
+          "caption": "박스 앞에서 전방으로 빠르게 연결하려는 상황"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u003-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-4adaaec4b4",
+          "title": "Abdelouahed Zamrat: Combining in the opposition half",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-4adaaec4b4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=270"
+    },
+    {
+      "id": "u004",
+      "uid": "20240104-NUzEChn9EyI#u004",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 325.02,
+      "end": 326.66,
+      "title": "전진 기회를 늦추지 않기",
+      "position_tags": [],
+      "topic_tags": [
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 잡은 뒤 필요 이상으로 오래 붙들면 전진할 공간이 닫힙니다. 선택지가 보일 때는 한 번 더 끌고 가지 말고 빠르게 연결해 공격 속도를 살리세요."
+        },
+        {
+          "type": "frame",
+          "src": "img/u004-c012.webp",
+          "width": 854,
+          "height": 460,
+          "t": 330,
+          "caption": "측면에서 공을 운반하며 전진 경로를 살피는 장면"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u004-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=325"
+    },
+    {
+      "id": "u005",
+      "uid": "20240104-NUzEChn9EyI#u005",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 344.68,
+      "end": 399.42,
+      "title": "역습 때 측면·중앙 옵션을 함께 열기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "전환/역습"
+      ],
+      "member_ids": [
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi"
+      ],
+      "related_member_ids": [
+        "timej",
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "역습이 시작되면 사인드님이 낮게 내려와 있을 때 루미님이 윙어처럼 앞 공간으로 나가고, 기프님과 유미님은 서로 다른 패스 길을 만들어야 합니다. 모두 같은 선으로 달려들면 연결이 막히므로 한 명은 가까이 지원하고 다른 한 명은 뒷공간을 공격해 선택지를 두 갈래로 열어 두세요. 조민님에게는 이 역할 분담이 아쉬운 지점으로 설명됩니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u005-c014.webp",
+          "width": 854,
+          "height": 460,
+          "t": 390,
+          "caption": "측면 침투와 안쪽 침투로 나뉘는 역습 경로"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u005-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-4adaaec4b4",
+          "title": "Abdelouahed Zamrat: Combining in the opposition half",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-4adaaec4b4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=344"
+    },
+    {
+      "id": "u006",
+      "uid": "20240104-NUzEChn9EyI#u006",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "NUzEChn9EyI",
+      "start": 463.08000000000004,
+      "end": 526.78,
+      "title": "압박 앞에서 무리한 전진 패스 줄이기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [
+        "saembaek"
+      ],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "saembaek",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 받았을 때 이미 상대 압박이 붙었다면 앞으로 무리하게 찌르기보다 LT로 자세를 유지하고 뒤로 안전하게 내준 뒤 다시 받는 편이 낫습니다. 수비 숫자가 적고 전진 길도 막혀 있으면 강한 전진 패스의 이득이 작습니다. 샘백님을 넓은 쪽으로 보내 수비를 끌어내면 그 뒤의 빈 공간을 이용할 수 있습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u006-c018.webp",
+          "width": 854,
+          "height": 460,
+          "t": 510,
+          "caption": "압박을 받는 자리에서 뒤로 연결할 선택을 그린 장면"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u006-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-2ed8e69587",
+          "title": "EA SPORTS FC™ 24 | Na wirtualnym boisku – szczegółowe omówienie rozgrywki",
+          "lang": "pl",
+          "kind": "eafc",
+          "href": "../../refs/r-2ed8e69587.html",
+          "orig_url": "https://www.ea.com/pl-pl/games/ea-sports-fc/pitch-notes/news/fc-24-gameplay-deepdive"
+        },
+        {
+          "id": "r-57cb843146",
+          "title": "Lamia Boumehdi: Technical foundations for switching play",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-57cb843146.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=463"
+    },
+    {
+      "id": "u007",
+      "uid": "20240104-NUzEChn9EyI#u007",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "NUzEChn9EyI",
+      "start": 545.7,
+      "end": 548,
+      "title": "공간으로 향하는 움직임 이어가기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "rumi"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "루미님이 공간으로 나올 것으로 예상됐는데 움직임을 멈추면, 패스를 줄 수 있는 순간도 사라집니다. 연결을 기대한다면 먼저 공간으로 들어가 수비를 움직이고, 공이 오지 않을 때는 다음 선택지를 찾으며 움직임을 이어 가세요."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u007-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-4adaaec4b4",
+          "title": "Abdelouahed Zamrat: Combining in the opposition half",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-4adaaec4b4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=545"
+    },
+    {
+      "id": "u008",
+      "uid": "20240104-NUzEChn9EyI#u008",
+      "match_id": "m1",
+      "topic_id": "m1-t6",
+      "video": "NUzEChn9EyI",
+      "start": 579.9399999999999,
+      "end": 658.94,
+      "title": "운반으로 수비를 끌어내고 선택지 만들기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "공을 너무 일찍 TIMEJ에게 주면 좁은 위치에서 받아 다음 선택이 줄어들 수 있습니다. 공을 조금 더 운반해 상대 한 명을 끌어낸 뒤, 주변 선수들이 전진할 시간을 벌고 더 높은 위치에서 다시 연결하세요. 특히 자기 진영에서 공을 잃으면 바로 역습을 허용할 수 있으니, 무리한 돌파보다 잃어도 회복할 수 있는 방향을 먼저 고르세요."
+        },
+        {
+          "type": "frame",
+          "src": "img/u008-c021.webp",
+          "width": 854,
+          "height": 460,
+          "t": 600,
+          "caption": "공을 가진 선수와 주변 지원 선수의 간격을 살피는 장면"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u008-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-57cb843146",
+          "title": "Lamia Boumehdi: Technical foundations for switching play",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-57cb843146.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=579"
+    },
+    {
+      "id": "u009",
+      "uid": "20240104-NUzEChn9EyI#u009",
+      "match_id": "m1",
+      "topic_id": "m1-t7",
+      "video": "NUzEChn9EyI",
+      "start": 694.54,
+      "end": 699.54,
+      "title": "수평으로 넓혀 공간 만들기",
+      "position_tags": [],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "body": [
+        {
+          "type": "text",
+          "text": "모두 공 쪽으로 좁혀 들어가면 상대는 중앙을 모아 지키기 쉽습니다. 좌우로 공격 폭을 벌려 수비를 끌어내고, 비어 있는 쪽으로 패스 길을 만드세요."
+        },
+        {
+          "type": "frame",
+          "src": "img/u009-c024.webp",
+          "width": 854,
+          "height": 460,
+          "t": 690,
+          "caption": "양쪽 폭을 활용해 상대 수비를 벌릴 수 있는 배치"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u009-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u002",
+          "title": "베리나 포지션 상향 지시",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u002"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-57cb843146",
+          "title": "Lamia Boumehdi: Technical foundations for switching play",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-57cb843146.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=694"
+    },
+    {
+      "id": "u010",
+      "uid": "20240104-NUzEChn9EyI#u010",
+      "match_id": "m1",
+      "topic_id": "m1-t8",
+      "video": "NUzEChn9EyI",
+      "start": 791.0999999999999,
+      "end": 838.74,
+      "title": "넓은 공간을 살려 크로스·컷백 선택지 열기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "파이널서드",
+        "크로스"
+      ],
+      "member_ids": [
+        "giseun",
+        "gerrard",
+        "jonjae"
+      ],
+      "related_member_ids": [
+        "timej",
+        "gerrard",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "giseun",
+        "jonjae",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "상대가 중앙을 막았을 때는 무리하게 직접 넣기보다 넓은 공간의 동료를 찾으세요. 넓게 선 선수가 공을 받으면 크로스와 컷백을 선택할 수 있고, 안쪽으로 움직이는 선수도 마무리 위치에 들어갈 시간을 얻습니다. 기슨님이나 존재님 등 전방 옵션이 서 있는 공간을 먼저 살펴 가능한 패스 길을 고르세요."
+        },
+        {
+          "type": "frame",
+          "src": "img/u010-c030.webp",
+          "width": 854,
+          "height": 460,
+          "t": 810,
+          "caption": "박스 안의 선수와 바깥 지원 선택지를 함께 보는 장면"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u010-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-4adaaec4b4",
+          "title": "Abdelouahed Zamrat: Combining in the opposition half",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-4adaaec4b4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=791"
+    },
+    {
+      "id": "u011",
+      "uid": "20240104-NUzEChn9EyI#u011",
+      "match_id": "m1",
+      "topic_id": "m1-t8",
+      "video": "NUzEChn9EyI",
+      "start": 857.4799999999999,
+      "end": 913.88,
+      "title": "풀백은 바깥으로, 윙어는 중앙으로 움직이기",
+      "position_tags": [
+        "FB",
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "전환/역습"
+      ],
+      "member_ids": [
+        "find",
+        "wonjeon"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "wonjeon",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "원전님이 측면을 따라 올라갈 때 사인드님은 같은 바깥 길을 겹쳐 달리기보다 중앙으로 들어가야 합니다. TIMEJ는 뒤에 남아 가운데 공간을 메우면 바깥 전진, 중앙 침투, 후방 지원이 함께 살아납니다. 앞선 선수를 따라 무작정 뛰기보다 본인 역할과 팀 간격을 보고 움직이세요."
+        },
+        {
+          "type": "frame",
+          "src": "img/u011-c033.webp",
+          "width": 854,
+          "height": 460,
+          "t": 900,
+          "caption": "측면 오버랩과 중앙 침투, 후방 지원의 위치를 그린 장면"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u011-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u002",
+          "title": "베리나 포지션 상향 지시",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u002"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-4adaaec4b4",
+          "title": "Abdelouahed Zamrat: Combining in the opposition half",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-4adaaec4b4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=857"
+    },
+    {
+      "id": "u012",
+      "uid": "20240104-NUzEChn9EyI#u012",
+      "match_id": "m1",
+      "topic_id": "m1-t9",
+      "video": "NUzEChn9EyI",
+      "start": 1071.64,
+      "end": 1104.5,
+      "title": "사이드에서 대각선으로 전방 주자 찾기",
+      "position_tags": [
+        "CAM"
+      ],
+      "topic_tags": [
+        "파이널서드",
+        "빌드업"
+      ],
+      "member_ids": [
+        "spress"
+      ],
+      "related_member_ids": [
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "상대 측면에 수비가 모여 있더라도 공을 옆으로만 돌리면 전방 침투를 살리기 어렵습니다. 스프레스님은 앞쪽으로 뛰는 동료를 확인한 뒤 사이드에서 대각선으로 공을 연결해 보세요. 중원이 넓은 공간의 주자를 바라볼 여유를 얻고, 받는 선수도 전진 방향으로 다음 동작을 이어갈 수 있습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u012-c039.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1080,
+          "caption": "전방 주자를 향해 대각선으로 연결하는 패스 경로"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u012-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-4adaaec4b4",
+          "title": "Abdelouahed Zamrat: Combining in the opposition half",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-4adaaec4b4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1071"
+    },
+    {
+      "id": "u013",
+      "uid": "20240104-NUzEChn9EyI#u013",
+      "match_id": "m1",
+      "topic_id": "m1-t9",
+      "video": "NUzEChn9EyI",
+      "start": 1128.4599999999998,
+      "end": 1139.04,
+      "title": "드리블로 수비 균형 흔들기",
+      "position_tags": [
+        "FB"
+      ],
+      "topic_tags": [
+        "탈압박"
+      ],
+      "member_ids": [
+        "wonjeon"
+      ],
+      "related_member_ids": [
+        "wonjeon"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "원전님이 드리블로 상대 수비의 균형을 흔들자 뒤에 있던 수비수가 공을 뺏으려 태클에 반응했고, 이어 페널티 상황이 나왔습니다. 수비가 먼저 뛰어나오는 순간을 이용해 공을 전진시키면 파울을 얻거나 옆 공간을 열 수 있습니다. 먼저 상대를 움직이게 만드는 것이 핵심입니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u013-c042.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1139.5,
+          "caption": "수비 대응 뒤 페널티 상황이 된 장면"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u013-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1128"
+    },
+    {
+      "id": "u014",
+      "uid": "20240104-NUzEChn9EyI#u014",
+      "match_id": "m1",
+      "topic_id": "m1-t10",
+      "video": "NUzEChn9EyI",
+      "start": 1155.22,
+      "end": 1191.56,
+      "title": "밀집 수비 앞에서 뒤로 순환",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [
+        "find",
+        "rumi"
+      ],
+      "related_member_ids": [
+        "find",
+        "rumi"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "상대 수비가 촘촘하게 내려앉아 있으면 전방으로 억지 패스를 넣어도 받는 선수가 바로 막힙니다. 한 번 뒤로 빼 상대를 앞으로 끌어내고, 수비 블록이 움직인 뒤 다시 전진하세요. 루미님이 이미 묶여 있다면 그쪽으로 계속 넣기보다 안전한 후방 옵션을 활용하세요."
+        },
+        {
+          "type": "frame",
+          "src": "img/u014-c043.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1170,
+          "caption": "상대 수비가 박스 앞에 촘촘히 모여 있는 장면"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u014-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-57cb843146",
+          "title": "Lamia Boumehdi: Technical foundations for switching play",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-57cb843146.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php"
+        },
+        {
+          "id": "r-4adaaec4b4",
+          "title": "Abdelouahed Zamrat: Combining in the opposition half",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-4adaaec4b4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1155"
+    },
+    {
+      "id": "u015",
+      "uid": "20240104-NUzEChn9EyI#u015",
+      "match_id": "m1",
+      "topic_id": "m1-t11",
+      "video": "NUzEChn9EyI",
+      "start": 1225.22,
+      "end": 1254.74,
+      "title": "전방에는 땅볼로 연결해 속도 살리기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "전방으로 연결할 길이 열려 있다면 높게 띄우기보다 땅볼을 먼저 선택하세요. 받는 선수가 공의 진행 속도를 이어 가며 다음 동작을 하기 쉬워집니다. 높은 패스는 수비 사이에서 막힐 수 있으니, 열린 공간과 선수의 침투 방향을 확인해 패스 높이를 고르세요."
+        },
+        {
+          "type": "frame",
+          "src": "img/u015-c045.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1230,
+          "caption": "공격 지역에서 낮은 패스와 전방 연결을 고르는 장면"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u015-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1225"
+    },
+    {
+      "id": "u016",
+      "uid": "20240104-NUzEChn9EyI#u016",
+      "match_id": "m1",
+      "topic_id": "m1-t12",
+      "video": "NUzEChn9EyI",
+      "start": 1258.6599999999999,
+      "end": 1305.48,
+      "title": "막히면 뒤로 연결해 다음 공격을 만들기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "maekgu"
+      ],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "body": [
+        {
+          "type": "text",
+          "text": "맥구님이 상대를 앞에 둔 채 같은 방향으로 계속 돌파하면 공간이 없을 때 공을 잃기 쉽습니다. 뒤에서 받쳐 주는 선수를 확인해 안전하게 내주고, 바깥으로 겹쳐 올라오는 움직임을 활용해 다시 넓혀 보세요. 드리블만 반복하지 말고 짧은 패스와 후방 연결을 섞어 공격을 이어 가는 편이 좋습니다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u016-c049.webp",
+          "width": 854,
+          "height": 460,
+          "t": 1290,
+          "caption": "막힌 드리블 대신 지원 선수에게 연결할 수 있는 장면"
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u016-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-4adaaec4b4",
+          "title": "Abdelouahed Zamrat: Combining in the opposition half",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-4adaaec4b4.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1258"
+    },
+    {
+      "id": "u017",
+      "uid": "20240104-NUzEChn9EyI#u017",
+      "match_id": "m1",
+      "topic_id": "m1-t13",
+      "video": "NUzEChn9EyI",
+      "start": 1307.66,
+      "end": 1334.1,
+      "title": "대각 옵션을 보고 밀집 수비는 뒤로 풀기",
+      "position_tags": [],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "body": [
+        {
+          "type": "text",
+          "text": "마지막에 코치가 다시 정리한 기준은 두 가지입니다. 동료가 대각선으로 뛰어들 때 공을 가진 사람이 그 움직임을 보고 연결하고, 상대 수비가 촘촘하면 무리해서 찌르지 말고 뒤로 빼세요. 한 번 더 안전하게 돌리는 선택이 다음 공격을 다시 만들 수 있습니다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u017-start.webp",
+          "width": 854,
+          "height": 460
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC™: passing guide",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-57cb843146",
+          "title": "Lamia Boumehdi: Technical foundations for switching play",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-57cb843146.html",
+          "orig_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php"
+        }
+      ],
+      "watch_url": "https://youtu.be/NUzEChn9EyI?t=1307"
+    }
+  ]
+}

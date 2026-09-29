@@ -1,0 +1,47 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA SPORTS FC의 패스 종류와 사용 상황을 설명하는 공식 안내입니다.",
+      "key_points_ko": [
+        "가까운 동료에게 패스 길이 열려 있으면 지상 패스를, 동료가 빈 공간으로 달릴 때는 스루 패스를 권합니다.",
+        "수비 사이의 통로가 열려 있는지 확인하고, 수비수 사이로 무리하게 패스를 넣지 말라고 안내합니다.",
+        "수비수가 지상 패스 길을 막거나 수비선 뒤가 열렸을 때 로빙 스루 패스를 고려할 수 있습니다."
+      ],
+      "translations": [],
+      "unit_ids": ["u001", "u009", "u014", "u015"]
+    },
+    {
+      "url": "https://www.uefa.com/uefachampionsleague/news/029d-1ed6577d678b-a8e995ccd337-1000--champions-league-performance-insights-the-art-of-wing-play/",
+      "title": "Champions League Performance Insights: The art of wing play",
+      "source_name": "UEFA",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "UEFA 기술 관찰 자료로, 측면 공격에서 컷백·크로스·안쪽 침투 같은 선택을 분석합니다.",
+      "key_points_ko": [
+        "측면 선수는 컷백이나 반대편 크로스를 제공하거나 직접 안으로 들어오는 등 여러 공격 선택을 할 수 있습니다.",
+        "상대 수비와 공간에 따라 측면에서 어떤 선택을 하는지가 달라집니다."
+      ],
+      "translations": [],
+      "unit_ids": ["u004", "u009", "u010"]
+    },
+    {
+      "url": "https://www.uefa.com/uefachampionsleague/news/0282-1839121e5648-4e3e6286e1b8-1000--tactical-talking-points/",
+      "title": "2022/23 Champions League: Tactical talking points",
+      "source_name": "UEFA",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "UEFA 기술 관찰자들이 압박을 끌어낸 뒤 점유로 벗어나는 전개와 측면 활용을 설명합니다.",
+      "key_points_ko": [
+        "레알 마드리드는 점유를 이어가며 강한 압박을 무디게 하고, 상대 선수를 한쪽으로 끌어낸 뒤 반대쪽으로 전환했습니다.",
+        "공을 몰고 압박을 벗어나면 상대가 다시 압박하러 나오는 과정에서 다른 선수가 선택지로 열릴 수 있습니다."
+      ],
+      "translations": [],
+      "unit_ids": ["u005", "u007"]
+    }
+  ]
+}

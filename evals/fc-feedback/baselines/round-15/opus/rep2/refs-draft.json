@@ -1,0 +1,75 @@
+{
+  "refs": [
+    {
+      "url": "https://fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php",
+      "title": "Lamia Boumehdi: Technical foundations for switching play",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "한쪽 측면에서 공격해 상대 압박을 끌어들인 뒤 반대쪽으로 빠르게 전환해 생긴 공간을 공략하는 방법과 훈련 포인트를 다룬 FIFA 훈련 자료.",
+      "key_points_ko": [
+        "경기장 폭 전체를 써서 상대 수비를 넓게 벌린다",
+        "한쪽에서 압박을 끌어들인 다음 반대쪽 빈 공간으로 전환한다",
+        "공간을 공략할 때는 상대가 수비를 회복할 시간을 주지 않도록 빠른 패스로 전환한다"
+      ],
+      "translations": [
+        { "orig": "Attack down one side of the pitch to attract pressure and then switch the play to exploit the space created on the other side.", "ko": "한쪽 측면으로 공격해 압박을 끌어들인 뒤, 반대쪽에 생긴 공간을 공략하도록 전환한다." },
+        { "orig": "Passes should be hit with pace when players are trying to exploit space, so that they can deny the opponents time to recover defensively.", "ko": "공간을 공략하려 할 때는 패스에 속도를 실어 상대가 수비를 회복할 시간을 주지 않아야 한다." }
+      ],
+      "unit_ids": ["u008", "u010"]
+    },
+    {
+      "url": "https://www.oneesports.gg/gaming/best-ea-fc-24-defending-tips-defenders/",
+      "title": "Best EA FC 24 defending tips to protect your goal with style",
+      "source_name": "ONE Esports",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA FC 24 수비 요령 정리. 페널티 박스 안 스탠딩 태클은 타이밍이 어긋나면 페널티 위험이 크므로 피하고, L2/LT 조키로 상대에게 붙어 실수를 유도하라고 권한다.",
+      "key_points_ko": [
+        "페널티 박스 안에서는 스탠딩 태클을 피한다 — 타이밍이 틀리면 페널티 위험이 크다",
+        "L2/LT를 눌러 조키하면 상대가 공을 가졌을 때 선수가 공 가까이 붙는다",
+        "Intercept+·Anticipate+ 플레이스타일 선수의 태클이 더 안전하다"
+      ],
+      "translations": [
+        { "orig": "Avoid standing tackles within the penalty area because there's a high risk of getting a penalty if you time it wrong.", "ko": "타이밍을 틀리면 페널티를 내줄 위험이 크므로 페널티 박스 안에서는 스탠딩 태클을 피하라." },
+        { "orig": "Jockeying by holding L2/LT will make your players keep close to the ball whenever your opponent has it.", "ko": "L2/LT를 눌러 조키하면 상대가 공을 가졌을 때마다 선수가 공 가까이 붙어 있게 된다." }
+      ],
+      "unit_ids": ["u011"]
+    },
+    {
+      "url": "https://keengamer.com/articles/guides/ea-fc-24-the-precision-passing-guide/",
+      "title": "EA FC 24: The Precision Passing Guide",
+      "source_name": "KeenGamer",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA FC 24의 패스 종류(땅볼 정밀 패스, 정밀 로브, 로브 스루, 감아 차는 패스, 드리븐 패스, 땅볼 크로스)와 각각을 언제 쓰면 좋은지 설명하는 가이드.",
+      "key_points_ko": [
+        "땅볼 정밀 패스는 방향을 지정한 침투와 함께 공간을 공략할 때 쓴다",
+        "로브 스루는 상대가 강하게 압박할 때 수비 뒤로 공을 넘길 때 쓴다",
+        "드리븐 패스는 빠르고 강한 땅볼로 측면을 바꿔 공격 지점을 옮길 때 쓴다"
+      ],
+      "translations": [
+        { "orig": "The Precision Pass replaces the old threaded pass and is a welcome addition for attack-minded players.", "ko": "정밀 패스는 예전의 스레디드 패스를 대체하며, 공격적인 플레이어에게 반가운 추가 기능이다." }
+      ],
+      "unit_ids": ["u013"]
+    },
+    {
+      "url": "https://www.sportsessionplanner.com/s/leCKi/Attacking-the-Low-Block-through-Switches.html",
+      "title": "Attacking the Low Block through Switches",
+      "source_name": "Sport Session Planner",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "촘촘하게 내려앉은 수비(로우 블록)를 공 속도와 방향 전환으로 무너뜨리는 아카데미 훈련 세션. 미드필더가 공을 뒤로 돌려 순환시키며 측면 전개와 전환의 계기를 만든다.",
+      "key_points_ko": [
+        "공 속도와 방향 전환으로 로우 블록을 깬다",
+        "미드필더가 공을 순환시키며 윙어를 통한 측면 전개의 계기를 만든다",
+        "움직임의 타이밍을 맞춰 전환 뒤 생긴 공간을 공략한다"
+      ],
+      "translations": [
+        { "orig": "Breaking low blocks using ball speed and switching", "ko": "공 속도와 방향 전환으로 로우 블록 깨기" },
+        { "orig": "The 8s circulate the ball, trigger wide play via wingers, timing of movement", "ko": "8번(중앙 미드필더)들이 공을 순환시키고, 윙어를 통한 측면 전개를 촉발하며, 움직임의 타이밍을 맞춘다" }
+      ],
+      "unit_ids": ["u012", "u015"]
+    }
+  ]
+}

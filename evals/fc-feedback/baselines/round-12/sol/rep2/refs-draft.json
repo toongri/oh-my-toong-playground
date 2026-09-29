@@ -1,0 +1,6 @@
+{
+  "refs":[
+    {"url":"https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/","title":"How to pass in EA SPORTS FC™: passing guide","source_name":"EA Help","lang":"en","kind":"eafc","summary_ko":"EA의 패스 종류별 사용 상황 안내. 가까운 동료에게 땅볼 패스, 빈 공간으로 뛰는 동료에게 스루패스, 지상 패스 길이 막힐 때 로브 스루패스를 권한다.","key_points_ko":["가까운 동료와 짧게 연결하거나 점유를 유지할 때 땅볼 패스를 사용한다.","수비수가 지상 패스 길을 가리면 띄운 스루패스를 고려한다."],"translations":[],"unit_ids":["u001","u006","u011"]},
+    {"url":"https://www.thefa.com/bootroom/resources/coaching/in-possession-playing-out-and-through","title":"SESSION: playing out and through","source_name":"The FA Boot Room","lang":"en","kind":"tactics","summary_ko":"잉글랜드 축구협회의 전개 훈련 자료. 상대를 통과하거나 우회하거나 넘겨 전개하는 선택, 후방에서 중원으로 공을 옮기는 방법을 학습 목표로 제시한다.","key_points_ko":["상대 수비를 통과하거나 측면으로 우회하거나 넘기는 전개를 비교한다.","후방에서 중원으로 연결해 공격 기회를 만드는 훈련이다."],"translations":[],"unit_ids":["u004","u005","u008","u010"]}
+  ]
+}

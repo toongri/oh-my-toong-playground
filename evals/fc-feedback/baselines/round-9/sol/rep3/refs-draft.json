@@ -1,0 +1,31 @@
+{
+  "refs":[
+    {
+      "url":"https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title":"How to pass in EA SPORTS FC™: passing guide",
+      "source_name":"EA Help",
+      "lang":"en","kind":"eafc",
+      "summary_ko":"EA SPORTS FC의 땅볼·스루·로빙·빠른 땅볼 패스를 상황에 따라 선택하는 공식 안내다.",
+      "key_points_ko":["동료의 움직임과 주변 공간에 맞춰 패스 종류를 고른다.","통로가 열려 있을 때 땅볼 패스를 사용하고, 수비수가 땅볼 경로를 막으면 로빙 스루 패스를 고려한다."],
+      "translations":[],"unit_ids":["u012"]
+    },
+    {
+      "url":"https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php",
+      "title":"Switching play (Lamia Boumehdi)",
+      "source_name":"FIFA Training Centre",
+      "lang":"en","kind":"tactics",
+      "summary_ko":"밀집 수비 앞에서 경기장 너비를 쓰고, 압박을 한쪽으로 끌어낸 뒤 빈 공간을 찾는 훈련 자료다.",
+      "key_points_ko":["상대 압박을 끌어낸 뒤 다른 쪽 공간을 활용한다.","전진 통로가 막히면 뒤쪽 지원과 방향 전환을 통해 압박을 푼다."],
+      "translations":[],"unit_ids":["u001","u005","u006","u009","u011"]
+    },
+    {
+      "url":"https://www.fifatrainingcentre.com/en/game/game-analysis/in-possession/switch-of-play.php",
+      "title":"Switch of play",
+      "source_name":"FIFA Training Centre",
+      "lang":"en","kind":"tactics",
+      "summary_ko":"공을 가진 쪽과 반대쪽의 공간을 만들어 전환할 때 패서와 수신자에게 필요한 시간·위치·지원 움직임을 설명한다.",
+      "key_points_ko":["패서가 압박받지 않고 연결할 시간과 공간을 확보한다.","받는 선수와 지원 선수는 경기장 너비를 써서 선택지를 만든다."],
+      "translations":[],"unit_ids":["u001","u003","u008","u009"]
+    }
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "refs": [
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/build-and-progress/passing-circuit-receiving-under-pressure-and-moving-into-space.php",
+      "title": "Passing circuit: Receiving under pressure and moving into space",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "상대 압박을 받는 선수가 패스를 받아 몸 방향을 열고 공간으로 나아가는 연습을 설명합니다.",
+      "key_points_ko": [
+        "공간으로 움직이며 압박에서 벗어난 뒤 전진하는 상황을 연습합니다.",
+        "받는 선수는 몸을 옆으로 열고 첫 터치를 앞쪽으로 가져가도록 안내합니다."
+      ],
+      "unit_ids": ["u005", "u015"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/game/game-analysis/transition-to-attacking/passing-the-press.php",
+      "title": "Passing the press",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "압박을 벗어나는 패스 연결과 공을 가진 선수의 전진 운반 선택을 설명합니다.",
+      "key_points_ko": [
+        "압박을 받는 선수는 시야가 넓은 동료에게 짧게 뒤나 옆으로 연결할 수 있습니다.",
+        "전진 패스가 어렵다면 공을 몰고 공간으로 나아가는 선택도 다룹니다."
+      ],
+      "unit_ids": ["u005", "u007"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/training-perspectives/outplaying-the-opponent-with-michael-beale/michael-beale-outplaying-boxes-with-the-iniesta-game.php",
+      "title": "Michael Beale: Outplaying boxes with the “Iniesta game”",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "수비수를 끌어내 공간과 패스 길을 만들고, 공을 가진 선수를 빠르게 지원하는 방법을 다룹니다.",
+      "key_points_ko": [
+        "수비수를 유인하면 동료가 활용할 공간이나 패스 길이 열릴 수 있습니다.",
+        "패스 뒤 즉시 지원하고, 공이 없는 선수도 다음 전개를 위해 위치를 조정합니다."
+      ],
+      "unit_ids": ["u007", "u009", "u015"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/clubs-and-academies/english-academies/newcastle-u-15-developing-wide-attacking-patterns.php",
+      "title": "Newcastle U-15s: Developing wide attacking patterns",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "측면 공격에서 오버랩·언더랩·침투 움직임으로 공간과 수적 우위를 만드는 패턴을 설명합니다.",
+      "key_points_ko": [
+        "중앙으로 전개해 상대 수비를 좁히면 측면에 공간이 생길 수 있습니다.",
+        "오버랩과 타이밍을 맞춘 침투로 측면에서 2대1 상황을 만들 수 있습니다."
+      ],
+      "unit_ids": ["u004", "u010"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/game/game-analysis/in-possession/switch-of-play.php",
+      "title": "Switch of play",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "전환 패스로 상대 수비를 움직여 반대편 공간과 공격 선택지를 만드는 원리를 설명합니다.",
+      "key_points_ko": [
+        "패스할 선수에게 시간과 공간이 있어야 정확하게 전환할 수 있습니다.",
+        "반대편의 넓은 위치와 지원 움직임이 공격 전개를 돕습니다."
+      ],
+      "unit_ids": ["u001", "u011"]
+    },
+    {
+      "url": "https://www.ea.com/able/resources/ea-sports-fc/fc-24",
+      "title": "EA SPORTS FC™24 Accessibility Resources",
+      "source_name": "EA SPORTS",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA의 FC24 공식 안내로, 조작 설정·자동 선수 전환·패스 보조·컨트롤러 버튼 재배치 항목을 소개합니다.",
+      "key_points_ko": [
+        "컨트롤러 설정에서 고전 공격·수비 조작을 다른 버튼으로 재배치할 수 있습니다.",
+        "그라운드 패스와 로빙 패스 등 동작별 보조 설정을 조절할 수 있습니다."
+      ],
+      "unit_ids": ["u002"]
+    }
+  ]
+}

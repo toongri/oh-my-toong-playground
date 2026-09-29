@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T10:50:20.377Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u002",
+        "u004",
+        "u005",
+        "u009",
+        "u017",
+        "u018",
+        "u019",
+        "u023",
+        "u024",
+        "u026",
+        "u027",
+        "u031",
+        "u034",
+        "u038",
+        "u039"
+      ],
+      "summary_ko": "패스 종류와 열린 패스길, 동료의 움직임에 따른 선택을 설명하는 EA 공식 가이드. 영상의 전진 패스와 스루패스 피드백을 읽을 때 참고할 수 있다.",
+      "key_points_ko": [
+        "짧은 연결에는 근처 동료에게 보내는 그라운드 패스를 쓴다.",
+        "스루패스는 움직이는 동료 앞의 빈 공간과 열린 길을 겨냥한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-ed77175bdf",
+      "url": "https://theifab.com/laws/latest/offside",
+      "final_url": "https://theifab.com/laws/latest/offside/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T10:50:20.518Z",
+      "reused": false,
+      "page": "refs/r-ed77175bdf.html",
+      "title": "Law 11 - Offside",
+      "source_name": "IFAB",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u007",
+        "u023",
+        "u027",
+        "u028",
+        "u029",
+        "u040"
+      ],
+      "summary_ko": "오프사이드 위치와 관여 시점을 설명하는 축구 규칙 자료. 영상의 라인 유지와 침투 타이밍을 이해하기 위한 참고다.",
+      "key_points_ko": [
+        "오프사이드 위치 자체와 반칙 성립은 구별된다.",
+        "패스 순간의 위치와 플레이 관여가 중요하다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

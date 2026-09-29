@@ -1,0 +1,170 @@
+{
+  "session_title": "EAFC24 C.E.F. FC Barcelona 팀 연습 피드백 (2024-01-04)",
+  "matches": [
+    {
+      "title": "BROS VAMOS vs CEF Barcelona",
+      "topics": [
+        {
+          "title": "전개와 침투 선택",
+          "summary": "공을 좁은 곳에 억지로 넣지 않고 열린 공간을 찾으며, 패스가 나올 때 침투 선택지를 만듭니다.",
+          "units": [
+            {
+              "start_line": 3,
+              "end_line": 19,
+              "title": "좁은 쪽 대신 열린 공간 찾기",
+              "position_tags": ["MF"],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": ["bride"],
+              "key_frame_candidate_ids": ["c004"]
+            },
+            {
+              "start_line": 22,
+              "end_line": 29,
+              "title": "LT로 상대를 마주 보고 움직이기",
+              "position_tags": ["FW"],
+              "topic_tags": ["조작/키사용", "압박"],
+              "member_ids": ["rumi"],
+              "key_frame_candidate_ids": ["c009"]
+            },
+            {
+              "start_line": 31,
+              "end_line": 35,
+              "title": "스루패스가 나올 때 뒷공간으로 움직이기",
+              "position_tags": ["ST"],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": ["timej"],
+              "key_frame_candidate_ids": ["c011"]
+            }
+          ]
+        },
+        {
+          "title": "역습과 압박 탈출",
+          "summary": "동료가 낮게 내려오거나 압박이 붙을 때 역할을 나누고 안전한 지원 루트를 열어 둡니다.",
+          "units": [
+            {
+              "start_line": 36,
+              "end_line": 51,
+              "title": "낮은 위치를 보완해 측면 옵션 열기",
+              "position_tags": ["MF", "FW"],
+              "topic_tags": ["전환/역습", "포지셔닝"],
+              "member_ids": ["jomin", "find", "rumi", "gipeu"],
+              "key_frame_candidate_ids": ["c014"]
+            },
+            {
+              "start_line": 55,
+              "end_line": 77,
+              "title": "압박이 오면 뒤로 연결해 다시 전진하기",
+              "position_tags": ["CM"],
+              "topic_tags": ["탈압박", "빌드업"],
+              "member_ids": ["gerrard", "saembaek"],
+              "key_frame_candidate_ids": ["c017"]
+            },
+            {
+              "start_line": 78,
+              "end_line": 78,
+              "title": "공격 전개가 시작되면 침투 이어가기",
+              "position_tags": ["FW"],
+              "topic_tags": ["포지셔닝", "전환/역습"],
+              "member_ids": ["rumi"],
+              "key_frame_candidate_ids": ["c053"]
+            },
+            {
+              "start_line": 79,
+              "end_line": 99,
+              "title": "긴 공보다 직접 운반해 공간 만들기",
+              "position_tags": ["CM"],
+              "topic_tags": ["빌드업", "전환/역습"],
+              "member_ids": ["gerrard"],
+              "key_frame_candidate_ids": ["c024"]
+            }
+          ]
+        },
+        {
+          "title": "넓은 공간과 수비 선택",
+          "summary": "중앙이 막히면 넓은 쪽을 활용하고, 동료의 전진을 보완하며 수비 때는 균형을 지킵니다.",
+          "units": [
+            {
+              "start_line": 104,
+              "end_line": 120,
+              "title": "중앙이 막히면 넓은 쪽으로 연결하기",
+              "position_tags": ["MF", "FW"],
+              "topic_tags": ["빌드업", "파이널서드"],
+              "member_ids": ["giseun", "gerrard", "jonjae"],
+              "key_frame_candidate_ids": ["c030"]
+            },
+            {
+              "start_line": 121,
+              "end_line": 134,
+              "title": "풀백이 올라갈 때 중앙 공간 채우기",
+              "position_tags": ["FW", "FB"],
+              "topic_tags": ["포지셔닝", "전환/역습"],
+              "member_ids": ["find", "wonjeon"],
+              "key_frame_candidate_ids": ["c033"]
+            },
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "대각 패스로 넓은 공간의 주자 찾기",
+              "position_tags": ["CAM"],
+              "topic_tags": ["빌드업", "파이널서드"],
+              "member_ids": ["spress"],
+              "key_frame_candidate_ids": ["c039"]
+            },
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "수비 밸런스가 무너지면 태클을 아끼기",
+              "position_tags": ["FB"],
+              "topic_tags": ["압박", "수비라인"],
+              "member_ids": ["wonjeon"],
+              "key_frame_candidate_ids": ["c042"]
+            },
+            {
+              "start_line": 158,
+              "end_line": 162,
+              "title": "상대가 촘촘하면 뒤로 빼기",
+              "position_tags": ["FW"],
+              "topic_tags": ["탈압박", "빌드업"],
+              "member_ids": ["find", "rumi"],
+              "key_frame_candidate_ids": ["c043"]
+            }
+          ]
+        },
+        {
+          "title": "전방 연결과 안전한 재시작",
+          "summary": "받는 선수의 진행 방향을 살리는 패스를 택하고, 돌파가 막히면 후방 지원을 이용해 다시 공격합니다.",
+          "units": [
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "하프 공간에는 받을 사람의 속도를 살려 주기",
+              "position_tags": ["CAM"],
+              "topic_tags": ["파이널서드", "크로스"],
+              "member_ids": ["spress"],
+              "key_frame_candidate_ids": ["c045"]
+            },
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "돌파가 막히면 뒤에서 받쳐 주는 선수 활용하기",
+              "position_tags": ["FW"],
+              "topic_tags": ["탈압박", "포지셔닝"],
+              "member_ids": ["maekgu"],
+              "key_frame_candidate_ids": ["c046"]
+            },
+            {
+              "start_line": 183,
+              "end_line": 187,
+              "title": "밀집 수비 앞에서 미련 없이 후방 연결하기",
+              "position_tags": ["FW"],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": ["maekgu"],
+              "key_frame_candidate_ids": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

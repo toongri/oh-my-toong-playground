@@ -1,0 +1,364 @@
+{
+  "version": 1,
+  "session_title": "C.E.F. 팀 연습 경기 피드백 (2024-01-04)",
+  "matches": [
+    {
+      "title": "BRO VAMOS vs CEF Barcelona",
+      "topics": [
+        {
+          "title": "패스 방향과 수신 자세",
+          "summary": "좁은 공간에 갇힌 선수만 찾지 말고 넓은 선택지를 보고, 압박을 받으면 패스를 준 선수를 향해 몸을 열어 다시 연결한다.",
+          "units": [
+            {
+              "title": "좁은 곳보다 넓은 쪽으로 연결",
+              "start_line": 9,
+              "end_line": 19,
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "bride"
+              ],
+              "key_frame_candidate_ids": [
+                "c004"
+              ]
+            },
+            {
+              "title": "LT로 상대를 바라보며 움직이기",
+              "start_line": 24,
+              "end_line": 29,
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "조작/키사용",
+                "탈압박"
+              ],
+              "member_ids": [
+                "taxi"
+              ],
+              "key_frame_candidate_ids": [
+                "c009"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "전진 패스와 움직임",
+          "summary": "뒷공간으로 스루패스를 보낼 때는 수신자가 멈추지 않고 전진해 공격 속도를 이어간다.",
+          "units": [
+            {
+              "title": "스루패스가 나올 때 뒷공간으로 전진하기",
+              "start_line": 30,
+              "end_line": 35,
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "파이널서드"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c010",
+                "c011",
+                "c012"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "역습에서 측면 역할과 선택지",
+          "summary": "한 선수가 낮게 내려오면 다른 선수가 비어 있는 측면을 채우고, 공을 가진 선수는 수비를 끌어 동료가 고를 수 있는 패스 길을 연다.",
+          "units": [
+            {
+              "title": "윙어가 내려오면 다른 선수가 측면 채우기",
+              "start_line": 36,
+              "end_line": 40,
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "jomin",
+                "find",
+                "rumi"
+              ],
+              "key_frame_candidate_ids": [
+                "c013"
+              ]
+            },
+            {
+              "title": "역습 때 수비를 끌어 두 개의 패스 옵션 만들기",
+              "start_line": 41,
+              "end_line": 50,
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "빌드업"
+              ],
+              "member_ids": [
+                "gipeu",
+                "yumi"
+              ],
+              "key_frame_candidate_ids": [
+                "c014"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "압박에서 볼을 지키고 전진 연결",
+          "summary": "공을 오래 끌거나 막힌 중앙으로 억지 패스를 넣기보다 안전하게 돌려받고, 상대를 움직인 뒤 전진할 공간을 만든다.",
+          "units": [
+            {
+              "title": "불필요한 터닝 대신 원터치로 돌려받기",
+              "start_line": 55,
+              "end_line": 64,
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "탈압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c017"
+              ]
+            },
+            {
+              "title": "수적 열세인 중앙으로 억지 전진하지 않기",
+              "start_line": 65,
+              "end_line": 78,
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "전환/역습"
+              ],
+              "member_ids": [
+                "saembaek"
+              ],
+              "key_frame_candidate_ids": [
+                "c018",
+                "c019"
+              ]
+            },
+            {
+              "title": "공을 운반해 수비를 끌고 올라가기",
+              "start_line": 79,
+              "end_line": 97,
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "탈압박",
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c021",
+                "c022",
+                "c023"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "공격 폭 만들기",
+          "summary": "가운데에만 모이지 말고 세로와 가로로 간격을 벌려 다음 패스가 들어갈 공간을 만든다.",
+          "units": [
+            {
+              "title": "공격 폭을 넓혀 패스 길 만들기",
+              "start_line": 98,
+              "end_line": 99,
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c024"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "측면 전개와 침투 타이밍",
+          "summary": "앞이 막히면 바깥 공간을 사용하고, 풀백의 전진과 윙어의 안쪽 움직임을 맞춰 크로스나 컷백 선택지를 만든다.",
+          "units": [
+            {
+              "title": "막히면 바깥 공간으로 전개해 크로스·컷백 선택하기",
+              "start_line": 108,
+              "end_line": 120,
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드",
+                "크로스",
+                "빌드업"
+              ],
+              "member_ids": [
+                "gerrard",
+                "jonjae"
+              ],
+              "key_frame_candidate_ids": [
+                "c030"
+              ]
+            },
+            {
+              "title": "풀백이 올라갈 때 윙어는 안쪽, 후방은 공간 채우기",
+              "start_line": 121,
+              "end_line": 133,
+              "position_tags": [
+                "FB",
+                "FW",
+                "MF"
+              ],
+              "topic_tags": [
+                "포지셔닝",
+                "빌드업"
+              ],
+              "member_ids": [
+                "find",
+                "wonjeon"
+              ],
+              "key_frame_candidate_ids": [
+                "c032",
+                "c033"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "대각 전개로 전진 시간 만들기",
+          "summary": "좁은 쪽에 공을 고정하지 않고 대각선으로 빼 주면 중원이 고개를 들고 앞으로 뛰는 선수를 볼 여유가 생긴다.",
+          "units": [
+            {
+              "title": "대각 패스로 앞으로 뛸 선수 찾기",
+              "start_line": 145,
+              "end_line": 154,
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "파이널서드"
+              ],
+              "member_ids": [
+                "spress"
+              ],
+              "key_frame_candidate_ids": [
+                "c039"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "수비 균형과 공격 재정비",
+          "summary": "한 선수가 압박에 나설 때 함께 달려들어 균형을 무너뜨리지 않고, 상대 수비가 밀집하면 공을 뒤로 돌려 다시 전개한다.",
+          "units": [
+            {
+              "title": "동료가 압박 중일 때 균형 지키기",
+              "start_line": 155,
+              "end_line": 157,
+              "position_tags": [
+                "FB",
+                "DF"
+              ],
+              "topic_tags": [
+                "압박",
+                "수비라인"
+              ],
+              "member_ids": [
+                "wonjeon"
+              ],
+              "key_frame_candidate_ids": [
+                "c042"
+              ]
+            },
+            {
+              "title": "수비가 밀집하면 뒤로 빼서 다시 전개하기",
+              "start_line": 158,
+              "end_line": 160,
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드",
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c043"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "마지막 패스와 지원",
+          "summary": "받는 선수의 진행 방향을 살리는 패스를 선택하고, 돌파가 막히면 안전한 뒤쪽 연결이나 오버래핑으로 공격 방법을 바꾼다.",
+          "units": [
+            {
+              "title": "전방 패스는 땅볼로 주고 열린 경우만 띄우기",
+              "start_line": 163,
+              "end_line": 168,
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "파이널서드"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c045"
+              ]
+            },
+            {
+              "title": "돌파가 막히면 뒤로 연결하고 오버래핑 활용하기",
+              "start_line": 169,
+              "end_line": 182,
+              "position_tags": [
+                "FW",
+                "MF"
+              ],
+              "topic_tags": [
+                "탈압박",
+                "포지셔닝"
+              ],
+              "member_ids": [
+                "maekgu"
+              ],
+              "key_frame_candidate_ids": [
+                "c046"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

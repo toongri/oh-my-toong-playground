@@ -1,0 +1,49 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA SPORTS FC의 패스 가이드는 동료의 움직임과 주변 공간을 보고 지상 패스, 스루 패스, 로브 패스를 고르는 기본 원리를 설명합니다.",
+      "key_points_ko": [
+        "가까운 동료에게 짧게 연결하고 점유를 유지하려면 지상 패스를 사용합니다.",
+        "스루 패스는 달리는 동료 앞 공간을 겨냥하며, 수비수 사이의 패스 길이 열렸을 때 효과적입니다.",
+        "수비수가 지상 패스 길을 막거나 수비선 뒤에 공간이 있을 때 로브드 스루 패스를 고려합니다."
+      ],
+      "translations": [],
+      "unit_ids": ["u001", "u010", "u015"]
+    },
+    {
+      "url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "title": "EA SPORTS FC 24 | Pitch Notes - PlayStyles Deep Dive",
+      "source_name": "EA SPORTS FC",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA SPORTS FC 24 PlayStyles 심화 자료는 핑 패스, 인사이시브 패스, 롱 볼 패스의 지상·공중 패스 특성을 소개합니다.",
+      "key_points_ko": [
+        "Pinged Pass는 일반 지상 패스의 속도와 패스 품질을 높이고 받는 선수의 볼 컨트롤을 돕습니다.",
+        "Incisive Pass는 스루 패스의 정확도와 공을 받는 선수의 컨트롤을 개선합니다.",
+        "Long Ball Pass는 로브 패스의 속도와 정확도를 높이며, 수비선 뒤 공간을 향한 로브드 스루 패스의 궤적에도 영향을 줍니다."
+      ],
+      "translations": [],
+      "unit_ids": ["u010", "u015"]
+    },
+    {
+      "url": "https://www.ea.com/games/ea-sports-fc/fc-pro/news/play-like-huge-gorilla",
+      "title": "Play like Huge Gorilla - FC Pro",
+      "source_name": "EA SPORTS FC Pro",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "EA FC Pro의 전술 사례는 균형 빌드업, 측면 수비수의 오버랩, 공격 폭 설정으로 전방 연결과 공간 활용을 구성한 방식을 소개합니다.",
+      "key_points_ko": [
+        "왼쪽 풀백을 균형·오버랩으로 설정해 전방에서 공격수와 연결하도록 합니다.",
+        "공격 폭 50은 세 명의 공격수가 연결할 간격을 두면서 공간을 제한하지 않도록 설계됩니다.",
+        "균형 빌드업과 직접 패스를 이용해 상대 수비를 뒤로 밀어내는 전술 사례입니다."
+      ],
+      "translations": [],
+      "unit_ids": ["u009", "u011", "u012"]
+    }
+  ]
+}

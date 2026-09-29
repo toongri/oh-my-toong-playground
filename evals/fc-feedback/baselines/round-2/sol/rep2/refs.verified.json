@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-28T22:41:11.571Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u003",
+        "u015"
+      ],
+      "summary_ko": "EA SPORTS FC의 기본 패스와 땅볼 패스, 스루패스의 쓰임을 설명한다.",
+      "key_points_ko": [
+        "땅볼 패스는 가까운 팀원에게 직접 연결해 점유를 유지하는 데 쓴다.",
+        "조작 버튼은 플랫폼과 설정에 따라 달라 게임 안의 기본 조작 도움말에서 확인한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-6f107281e7",
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/wing-play.php",
+      "final_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/wing-play.php",
+      "http_status": 200,
+      "checked_at": "2026-09-28T22:41:11.645Z",
+      "reused": false,
+      "page": "refs/r-6f107281e7.html",
+      "title": "Movement patterns for wing play",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u004",
+        "u010"
+      ],
+      "summary_ko": "측면 미드필더와 풀백이 위치와 움직임을 맞춰 수비 조직을 흔드는 훈련을 소개한다.",
+      "key_points_ko": [
+        "측면 미드필더가 내려오면 풀백이 전진할 측면 공간이 생길 수 있다.",
+        "선수들의 침투 타이밍을 서로 맞추는 것이 핵심이다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-0bc1894aad",
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/building_from_the_back_skinner.php",
+      "final_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/building_from_the_back_skinner.php",
+      "http_status": 200,
+      "checked_at": "2026-09-28T22:41:12.448Z",
+      "reused": false,
+      "page": "refs/r-0bc1894aad.html",
+      "title": "Building from the back",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u005",
+        "u007"
+      ],
+      "summary_ko": "후방 빌드업에서 압박과 수비 위치를 보고 전진 경로와 넓은 공간을 선택하는 훈련이다.",
+      "key_points_ko": [
+        "수비 압박을 살피며 측면에서 받을 수 있는 위치를 만든다.",
+        "측면을 거쳐 전진하면 안쪽 공격 공간도 생길 수 있다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-da82871123",
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching--play.php",
+      "final_url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching--play.php",
+      "http_status": 200,
+      "checked_at": "2026-09-28T22:41:12.974Z",
+      "reused": false,
+      "page": "refs/r-da82871123.html",
+      "title": "Learning to switch the play through small-sided games",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u008",
+        "u011",
+        "u013",
+        "u017"
+      ],
+      "summary_ko": "밀집 수비를 상대로 폭을 유지하고 상황에 맞춰 대각 연결 또는 점유 유지를 선택하는 훈련이다.",
+      "key_points_ko": [
+        "경기장을 넓게 쓰면 반대편 공간으로 전환할 바탕이 된다.",
+        "전환할 길이 열리지 않으면 점유를 이어가는 선택도 고려한다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

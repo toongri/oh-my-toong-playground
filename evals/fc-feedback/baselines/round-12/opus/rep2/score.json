@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "total": 88.45219435736678,
+  "gate_failed": false,
+  "breakdown": {
+    "gate": {
+      "plan": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "notes": {
+        "exit_code": 0,
+        "stderr": "fc-feedback: 경고 u005: 프레임 없음\nfc-feedback: 경고 u014: 프레임 없음\nfc-feedback: 경고 u015: 프레임 없음"
+      },
+      "similar": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "refs": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "passed": true
+    },
+    "unit_f1": {
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "points": 25,
+      "matched": 15,
+      "total_gold": 15,
+      "total_predicted": 15
+    },
+    "start_time_accuracy": {
+      "median_delta_s": 0,
+      "points": 10
+    },
+    "tags": {
+      "position": {
+        "precision": 0.9166666666666666,
+        "recall": 0.6470588235294118,
+        "f1": 0.7586206896551724,
+        "points": 3.793103448275862
+      },
+      "topic": {
+        "precision": 0.75,
+        "recall": 0.625,
+        "f1": 0.6818181818181818,
+        "points": 3.4090909090909087
+      },
+      "member": {
+        "precision": 0.9444444444444444,
+        "recall": 0.7727272727272727,
+        "f1": 0.85,
+        "points": 4.25
+      }
+    },
+    "refs": {
+      "url_in_log": {
+        "fraction": 1,
+        "points": 4
+      },
+      "http_ratio": {
+        "fraction": 1,
+        "points": 3
+      },
+      "ko_summary": {
+        "fraction": 1,
+        "points": 3
+      }
+    },
+    "judge": {
+      "specificity": 11,
+      "fidelity": 13,
+      "readability": 8,
+      "points": 32,
+      "judge_invalid": false
+    },
+    "penalties": {
+      "seconds_in_plan": false,
+      "push_attempt": false,
+      "gate_order_violation": false,
+      "unknown_commands": [],
+      "points_deducted": 0
+    },
+    "contamination": {
+      "contaminated": false,
+      "excluded_from_comparison": false,
+      "hits": []
+    }
+  }
+}

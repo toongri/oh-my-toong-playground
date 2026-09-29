@@ -1,0 +1,185 @@
+{
+  "session_title": "넓은 공간을 찾고 공격 지원을 잇는 경기 피드백",
+  "matches": [
+    {
+      "title": "FCB vs BRO",
+      "topics": [
+        {
+          "title": "공간을 선택하고 전진하기",
+          "summary": "좁은 공간으로 급히 넣기보다 여유 있는 동료를 찾고, 공을 되돌려 받거나 역습 지원을 열어 전진하는 장면을 모았습니다.",
+          "units": [
+            {
+              "start_line": 3,
+              "end_line": 19,
+              "title": "넓은 공간 쪽으로 먼저 연결",
+              "position_tags": ["MF"],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": ["bride"],
+              "key_frame_candidate_ids": ["c004"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 22,
+              "end_line": 29,
+              "title": "LT를 누른 채 방향을 유지",
+              "position_tags": ["MF"],
+              "topic_tags": ["조작/키사용"],
+              "member_ids": ["taxi"],
+              "key_frame_candidate_ids": ["c009"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 36,
+              "end_line": 51,
+              "title": "역습에서 서로 다른 선택지 열기",
+              "position_tags": ["MF", "FW"],
+              "topic_tags": ["전환/역습", "포지셔닝"],
+              "member_ids": ["jomin", "find", "rumi", "gipeu", "yumi", "maekgu"],
+              "key_frame_candidate_ids": ["c013"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 55,
+              "end_line": 77,
+          "title": "뒤로 내주고 샘백으로 수비 끌기",
+              "position_tags": ["CM", "FW"],
+              "topic_tags": ["탈압박", "빌드업"],
+              "member_ids": ["gerrard", "saembaek"],
+              "key_frame_candidate_ids": ["c017"],
+              "addressed_to_all": false
+            }
+          ]
+        },
+        {
+          "title": "전진 움직임과 폭 만들기",
+          "summary": "공을 운반해 상대를 끌고 동료가 올라올 시간을 만들며, 중앙과 측면의 움직임을 나눠 넓은 공간을 활용합니다. 대각 패스는 중원이 전방 주자를 살필 여유를 만듭니다.",
+          "units": [
+            {
+              "start_line": 78,
+              "end_line": 78,
+              "title": "루미의 침투 타이밍",
+              "position_tags": ["FW"],
+              "topic_tags": ["포지셔닝"],
+              "member_ids": ["rumi"],
+              "key_frame_candidate_ids": ["c053"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 81,
+              "end_line": 97,
+              "title": "공을 더 운반해 수비를 끌기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "전환/역습"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c021"],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 98,
+              "end_line": 99,
+              "title": "상하로 폭을 넓혀 전개",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c024"],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 104,
+              "end_line": 120,
+              "title": "중앙이 막히면 넓은 공간 찾기",
+              "position_tags": ["CM", "FW"],
+              "topic_tags": ["빌드업", "파이널서드", "크로스"],
+              "member_ids": ["gerrard", "jonjae"],
+              "key_frame_candidate_ids": ["c030"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 121,
+              "end_line": 133,
+              "title": "측면 전진과 중앙 침투 나누기",
+              "position_tags": ["FB", "FW"],
+              "topic_tags": ["포지셔닝", "파이널서드", "전환/역습"],
+              "member_ids": ["find", "wonjeon"],
+              "key_frame_candidate_ids": ["c033"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "대각 패스로 전방 움직임 보기",
+              "position_tags": ["CAM"],
+              "topic_tags": ["빌드업", "파이널서드"],
+              "member_ids": ["spress"],
+              "key_frame_candidate_ids": ["c039"],
+              "addressed_to_all": false
+            }
+          ]
+        },
+        {
+          "title": "압박 앞 선택과 볼 관리",
+          "summary": "태클로 페널티를 내준 장면과 밀집 수비 앞의 선택을 살펴보고, 수비가 촘촘할 때의 패스와 돌파 대응을 정리합니다.",
+          "units": [
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "태클 시도 뒤 페널티 허용",
+              "position_tags": ["FB"],
+              "topic_tags": ["압박"],
+              "member_ids": ["wonjeon"],
+              "key_frame_candidate_ids": ["c042"],
+              "addressed_to_all": false
+            },
+            {
+              "start_line": 158,
+              "end_line": 160,
+              "title": "밀집 수비 앞에서는 뒤로 빼기",
+              "position_tags": [],
+              "topic_tags": ["빌드업"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c043"],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "가능하면 땅볼 패스로 연결",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "파이널서드"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c045"],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "돌파가 막히면 안전하게 다시 살리기",
+              "position_tags": ["FW"],
+              "topic_tags": ["탈압박", "빌드업"],
+              "member_ids": ["maekgu"],
+              "key_frame_candidate_ids": ["c046"],
+              "addressed_to_all": false
+            }
+          ]
+        },
+        {
+          "title": "경기 마무리 총평",
+          "summary": "대각 선택지를 봐야 할 때 놓치는 점과 상대 수비가 밀집했을 때 뒤로 빼는 원칙을 다시 말합니다.",
+          "units": [
+            {
+              "start_line": 184,
+              "end_line": 187,
+              "title": "대각 선택지를 보고 밀집 수비는 뒤로 빼기",
+              "position_tags": [],
+              "topic_tags": ["빌드업"],
+              "member_ids": [],
+              "key_frame_candidate_ids": [],
+              "addressed_to_all": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

@@ -1,0 +1,2407 @@
+{
+  "version": 1,
+  "session_id": "20220331-PIjy1eid3RU",
+  "title": "ATM 경기 분석 — 전진 패스길과 수비 공간",
+  "date": "2022-03-31",
+  "generated_at": "2026-09-29T10:56:36.669Z",
+  "pages_base_url": "https://fc-feedback-eval.invalid/",
+  "videos": [
+    {
+      "id": "PIjy1eid3RU",
+      "part": 1,
+      "embeddable": true
+    }
+  ],
+  "members": [
+    {
+      "id": "timej",
+      "name": "TIMEJ",
+      "gamertag": "TIMEJ",
+      "positions": [
+        "ST"
+      ]
+    },
+    {
+      "id": "gerrard",
+      "name": "Gerrard_CEF",
+      "gamertag": "Gerrard_CEF",
+      "positions": [
+        "CM"
+      ]
+    },
+    {
+      "id": "vandeven",
+      "name": "CEF_VandeVen",
+      "gamertag": "CEF_VandeVen",
+      "positions": [
+        "CB"
+      ]
+    },
+    {
+      "id": "bride",
+      "name": "브라이드",
+      "gamertag": "CEF_Bride",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "taxi",
+      "name": "택시",
+      "gamertag": "CEF_Taxi",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jomin",
+      "name": "조민",
+      "gamertag": "CEF_Jomin",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "find",
+      "name": "사인드",
+      "gamertag": "CEF_Find",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "rumi",
+      "name": "루미",
+      "gamertag": "CEF_Rumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "gipeu",
+      "name": "기프",
+      "gamertag": "CEF_Gipeu",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "yumi",
+      "name": "유미",
+      "gamertag": "CEF_Yumi",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "saembaek",
+      "name": "샘백",
+      "gamertag": "CEF_Saembaek",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "giseun",
+      "name": "기슨",
+      "gamertag": "CEF_Giseun",
+      "positions": [
+        "MF"
+      ]
+    },
+    {
+      "id": "jonjae",
+      "name": "존재",
+      "gamertag": "CEF_Jonjae",
+      "positions": [
+        "FW"
+      ]
+    },
+    {
+      "id": "wonjeon",
+      "name": "원전",
+      "gamertag": "CEF_Wonjeon",
+      "positions": [
+        "FB"
+      ]
+    },
+    {
+      "id": "spress",
+      "name": "스프레스",
+      "gamertag": "CEF_Spress",
+      "positions": [
+        "CAM"
+      ]
+    },
+    {
+      "id": "maekgu",
+      "name": "맥구",
+      "gamertag": "CEF_Maekgu",
+      "positions": [
+        "FW"
+      ]
+    }
+  ],
+  "matches": [
+    {
+      "id": "m1",
+      "title": "CLV vs ATM 한 경기",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "첫 터치와 압박",
+          "summary": "키핑 길이와 상대가 붙는 거리, 전진 패스길을 읽는 압박에 관한 초반 분석.",
+          "unit_ids": [
+            "u001",
+            "u002",
+            "u003",
+            "u004",
+            "u005",
+            "u006",
+            "u007",
+            "u008"
+          ]
+        },
+        {
+          "id": "m1-t2",
+          "title": "전진 패스와 수비 공간",
+          "summary": "윙의 공간 이동, 스로인, 수비수의 공간 책임을 이어서 설명한다.",
+          "unit_ids": [
+            "u009",
+            "u010",
+            "u011",
+            "u012",
+            "u013",
+            "u014",
+            "u015",
+            "u016",
+            "u017",
+            "u018"
+          ]
+        },
+        {
+          "id": "m1-t3",
+          "title": "침투와 전환의 선택",
+          "summary": "스루패스 조건, 미드필더 수비 가담, 윙과 스트라이커의 선택을 다룬다.",
+          "unit_ids": [
+            "u019",
+            "u020",
+            "u021",
+            "u022",
+            "u023",
+            "u024",
+            "u025",
+            "u026",
+            "u027"
+          ]
+        },
+        {
+          "id": "m1-t4",
+          "title": "후반의 반복 교정",
+          "summary": "카운터 수비와 볼 소유, 지원 움직임, 탈압박 판단을 반복해서 교정한다.",
+          "unit_ids": [
+            "u028",
+            "u029",
+            "u030",
+            "u031",
+            "u032",
+            "u033",
+            "u034",
+            "u035",
+            "u036",
+            "u037",
+            "u038",
+            "u039",
+            "u040"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "uid": "20220331-PIjy1eid3RU#u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 47.4,
+      "end": 74.12,
+      "title": "가속 전에는 터치를 짧게",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "조작/키사용"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM의 볼 소유자가 터치를 길게 가져가는 장면이다. 모두에게 **가속이 꼭 필요할 때를 빼고 터치를 짧게 하라**고 지적한다. 상대가 충분히 가까이 붙었을 때 가속해야 제칠 수 있다고 설명한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u001-c003.webp",
+          "width": 640,
+          "height": 360,
+          "t": 60,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u001-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=47"
+    },
+    {
+      "id": "u002",
+      "uid": "20220331-PIjy1eid3RU#u002",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 74.74,
+      "end": 185.7,
+      "title": "고정된 윙 위치가 패스길을 막는다",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM의 윙이 바깥에 고정되어 전진 패스길이 한정된 장면이다. 모두에게 **윙은 벌려 있기만 하지 말고 받을 공간으로 움직여 패스길을 만들라**고 주문한다. 상대 풀백은 뻔한 전진 패스와 짧은 패스를 읽고 붙는다. 막힌 방향으로 무리하게 찌르면 차단되고, 뒤로 돌려도 재압박을 받아 위험하다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u002-c005.webp",
+          "width": 640,
+          "height": 360,
+          "t": 120,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u002-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=74"
+    },
+    {
+      "id": "u003",
+      "uid": "20220331-PIjy1eid3RU#u003",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 204.16,
+      "end": 293.22,
+      "title": "공을 뺏은 뒤 나갈 길 만들기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 수비에 성공해도 전방 출구가 없어 재압박을 받는 장면이다. 모두에게 **공을 뺏은 뒤 전방에 받을 사람과 탈출 경로를 남겨두라**고 주문한다. 원톱의 수비 가담은 좋았지만 전원이 내려와 있었고, 가까운 패스 연결이 없어 다시 빼앗길 수 있었다. 출구가 없으면 볼 소유자는 버티며 공간으로 빠져나가야 한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u003-c009.webp",
+          "width": 640,
+          "height": 360,
+          "t": 240,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u003-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=204"
+    },
+    {
+      "id": "u004",
+      "uid": "20220331-PIjy1eid3RU#u004",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 303.53999999999996,
+      "end": 367.6,
+      "title": "받기 전 RT를 떼고 원터치로 탈출",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "탈압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM의 선수가 공을 받으며 터치를 길게 해 상대가 붙는 장면이다. 모두에게 **받기 전에 RT를 떼고 패스길을 확인한 뒤 원터치로 주고 빠져나오라**고 주문한다. 뒤늦게 볼롤로 빠져나가려 했지만 간발의 차이로 실패했다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u004-c012.webp",
+          "width": 640,
+          "height": 360,
+          "t": 330,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u004-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=303"
+    },
+    {
+      "id": "u005",
+      "uid": "20220331-PIjy1eid3RU#u005",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 374.48,
+      "end": 514.16,
+      "title": "풀백의 뒷공간을 공략해 중원 열기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM의 전진 패스길을 상대 풀백과 미드필더가 읽는 장면이다. 모두에게 **윙 한 명이 풀백 뒤 공간을 계속 파서 쉽게 전진 압박하지 못하게 하라**고 주문한다. 그래야 중원에 공간과 패스 지원이 생긴다. 움직임이 없으면 두 패스길이 읽히고 뒤로 돌린 공도 압박당한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u005-c016.webp",
+          "width": 640,
+          "height": 360,
+          "t": 450,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u005-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=374"
+    },
+    {
+      "id": "u006",
+      "uid": "20220331-PIjy1eid3RU#u006",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 526.6,
+      "end": 603.44,
+      "title": "미드필더의 패스길 차단과 협력 압박",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 수비할 때 미드필더가 떨어진 공간을 지켜 패스길을 허용하는 장면이다. 모두에게 **미드필더는 패스길을 끊고 동료와 함께 볼 소유자를 포위하라**고 주문한다. 최후방 한 명만 차단하려다 공이 흘러가면 바로 실점 위험이 있다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u006-c020.webp",
+          "width": 640,
+          "height": 360,
+          "t": 570,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u006-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=526"
+    },
+    {
+      "id": "u007",
+      "uid": "20220331-PIjy1eid3RU#u007",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 613.14,
+      "end": 659.04,
+      "title": "관람하지 말고 침투 길을 먼저 막기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "상대가 공을 받고 들어오는데 ATM 미드필더들이 지켜보는 장면이다. 모두에게 **침투자를 먼저 잡고 전방 패스길을 끝까지 막으라**고 주문한다. 공간에만 서 있으면 의미가 없고, 오프사이드가 아니었다면 실점각이었다고 평가한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u007-c022.webp",
+          "width": 640,
+          "height": 360,
+          "t": 630,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u007-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-ed77175bdf",
+          "title": "Law 11 - Offside",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-ed77175bdf.html",
+          "orig_url": "https://theifab.com/laws/latest/offside/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=613"
+    },
+    {
+      "id": "u008",
+      "uid": "20220331-PIjy1eid3RU#u008",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "PIjy1eid3RU",
+      "start": 663.38,
+      "end": 766.88,
+      "title": "감당할 수 없는 짧은 골킥 피하기",
+      "position_tags": [
+        "GK"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM의 짧은 골킥 뒤 후방 빌드업이 상대 압박에 노출되는 장면이다. 모두에게 **볼 보호와 패스 지원이 안 되면 짧은 골킥을 고집하지 말고 롱킥으로 나가라**고 주문한다. 짧게 나가려면 압박 속에서도 공을 지키고, 열린 패스길로 움직여야 한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u008-c025.webp",
+          "width": 640,
+          "height": 360,
+          "t": 720,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u008-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=663"
+    },
+    {
+      "id": "u009",
+      "uid": "20220331-PIjy1eid3RU#u009",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 774,
+      "end": 909.54,
+      "title": "윙은 벌려 서기보다 패스 받을 공간으로",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 전진한 뒤 윙이 바깥에만 있어 받을 곳이 좁아지는 장면이다. 모두에게 **윙은 안팎의 공간으로 움직여 받을 각을 만들라**고 주문한다. 앞만 보고 뛰는 침투 패스는 성공률이 낮으며, 득점 기회로 바로 이어질 상황이 아니면 남발하지 말라고 한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u009-c029.webp",
+          "width": 640,
+          "height": 360,
+          "t": 840,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u009-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=774"
+    },
+    {
+      "id": "u010",
+      "uid": "20220331-PIjy1eid3RU#u010",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 925.82,
+      "end": 978.98,
+      "title": "스로인 전에 받을 각 만들기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "세트피스"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM의 스로인에서 받는 선수가 서 있어 패스길이 막힌 장면이다. 모두에게 **받는 선수가 스위칭하며 정확히 던질 각을 만들라**고 주문한다. 각이 생기면 전진하거나 뒤로 돌릴 수 있지만, 가만히 서 있다가 급히 던지면 상대 공격 기회가 된다. 스로인 약속도 제안한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u010-c033.webp",
+          "width": 640,
+          "height": 360,
+          "t": 960,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u010-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=925"
+    },
+    {
+      "id": "u011",
+      "uid": "20220331-PIjy1eid3RU#u011",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 986.78,
+      "end": 1148.92,
+      "title": "롱킥 뒤 빈 뒷공간과 바깥 탈출",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 수비로 끊어낸 뒤 롱킥으로 나왔지만 전방 뒷공간을 쓰지 못하는 장면이다. 모두에게 **큰 뒷공간을 공략할 선수를 두고, 안쪽을 유인한 뒤 바깥으로 빠져나오라**고 주문한다. 패스길 없이 오래 버티면 볼 소유자가 위험해지고, 탈출 방향을 못 잡아 공을 잃을 수 있다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u011-c037.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1080,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u011-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=986"
+    },
+    {
+      "id": "u012",
+      "uid": "20220331-PIjy1eid3RU#u012",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 1183.52,
+      "end": 1302.8,
+      "title": "공 가진 선수보다 받는 선수의 위치",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 뒤로 돌린 뒤 패스가 끊기는 장면이다. 모두에게 **공을 가진 선수만 탓하지 말고 받는 선수가 수비수를 달고 직선으로 뛰는 위치를 고치라**고 주문한다. 뒷공간을 먼저 차지하고 공간으로 움직여야 전진 패스가 생긴다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u012-c042.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1230,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u012-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1183"
+    },
+    {
+      "id": "u013",
+      "uid": "20220331-PIjy1eid3RU#u013",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 1319.28,
+      "end": 1389.68,
+      "title": "풀백은 공격 전환보다 자기 공간 수비",
+      "position_tags": [
+        "FB"
+      ],
+      "topic_tags": [
+        "수비라인"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "wonjeon"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM의 풀백이 수비 중인데 앞으로 나갈 준비를 하며 자기 뒤 공간을 비우는 장면이다. 모두에게 **수비수는 먼저 자기 공간을 지키고 침투자가 들어오면 그 공간을 제어하라**고 주문한다. 상대가 안으로 연결했다면 바로 실점할 수 있었다고 지적한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u013-c046.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1350,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u013-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1319"
+    },
+    {
+      "id": "u014",
+      "uid": "20220331-PIjy1eid3RU#u014",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 1395.8000000000002,
+      "end": 1439.92,
+      "title": "압박이 없을 때 패스길 확인",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 압박받지 않는데도 급하게 패스해 차단되는 장면이다. 모두에게 **상대 수비와 공격수 움직임을 보고 패스길을 확인한 다음 선택하라**고 주문한다. 당장 압박이 없으므로 공을 더 끌 여유가 있었다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u014-c048.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1410,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u014-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1395"
+    },
+    {
+      "id": "u015",
+      "uid": "20220331-PIjy1eid3RU#u015",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 1443.2,
+      "end": 1528.06,
+      "title": "직선 침투를 멈추고 공간에 받아주기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 공격수가 수비수를 달고 앞으로만 뛰어 패스가 읽히는 장면이다. 모두에게 **뛰는 척하다가 멈춰 공간에서 받아주거나 수비수를 떼고 돌아 뛰라**고 주문한다. 계속 직선으로 뛰면 뒤의 동료는 찔러 줄 길이 없어 두 수비수를 제쳐야 한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u015-c051.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1500,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u015-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1443"
+    },
+    {
+      "id": "u016",
+      "uid": "20220331-PIjy1eid3RU#u016",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 1533.78,
+      "end": 1607.5,
+      "title": "수비선이 좁아지면 반대 공간이 열린다",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "수비라인"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 수비수가 반응이 늦고 수비선이 좁아져 반대편이 비는 장면이다. 모두에게 **뚫린 뒤에도 각자 맡은 공간을 나눠 지키라**고 주문한다. 공을 잡으려고 한쪽에 몰리면 롱패스 한 번에 반대 공간을 내주며, 이 장면은 상대가 슛을 택해 실점을 면했다고 평가한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u016-c053.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1560,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u016-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1533"
+    },
+    {
+      "id": "u017",
+      "uid": "20220331-PIjy1eid3RU#u017",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 1613.7399999999998,
+      "end": 1672.18,
+      "title": "패스길만 막혔을 때 공을 더 끌기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM의 볼 소유자가 압박받지 않고 패스길만 막힌 장면이다. 모두에게 **공을 더 끌며 막힌 길을 확인하고 다른 길을 찾으라**고 주문한다. 받기 전에 못 봤더라도 받은 뒤에는 판단해야 하며, 급하게 앞에 주려다 차단되는 실수가 반복됐다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u017-c056.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1650,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u017-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1613"
+    },
+    {
+      "id": "u018",
+      "uid": "20220331-PIjy1eid3RU#u018",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "PIjy1eid3RU",
+      "start": 1672.18,
+      "end": 1742.44,
+      "title": "롱패스 대기 압박은 짧은 패스로 탈출",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "탈압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 공을 끊었지만 상대가 롱패스를 기다리는 장면이다. 모두에게 **보이는 짧은 패스길을 먼저 찾아 압박을 탈출하라**고 주문한다. 그 길을 못 봤다면 등을 지고 버틴 뒤 방향을 바꾸고, 버틸 수 없다면 걷어내라고 한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u018-c058.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1710,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u018-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1672"
+    },
+    {
+      "id": "u019",
+      "uid": "20220331-PIjy1eid3RU#u019",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 1761.56,
+      "end": 1865.62,
+      "title": "스루패스 거리와 수비수 제압 상태",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "전방 스루패스로 공간을 공략하는 장면이다. 모두에게 **주는 선수와 받는 선수의 거리를 가깝게 하고 빈 공간이 있는 때에 찌르라**고 주문한다. 수비수가 이미 몸으로 받는 선수를 제압했다면 같은 패스를 고집하지 말고 돌아 뛰거나 공을 지키며 기다려야 한다. 이 장면은 수비가 붙지 않아 득점했다고 설명한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u019-c061.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1800,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u019-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1761"
+    },
+    {
+      "id": "u020",
+      "uid": "20220331-PIjy1eid3RU#u020",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 1874.76,
+      "end": 1935.38,
+      "title": "공간을 지키고 침투자를 끝까지 제어",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "수비라인"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 미드필더가 수비에서 침투자를 놓친 장면이다. 모두에게 **공간을 지키다가 상대가 들어오면 끝까지 따라 제어하라**고 주문한다. 상대가 바로 밀어 넣었다면 실점할 수 있었고, 미드필더의 수비 가담과 집중이 부족했다고 평가한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u020-c066.webp",
+          "width": 640,
+          "height": 360,
+          "t": 1920,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u020-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1874"
+    },
+    {
+      "id": "u021",
+      "uid": "20220331-PIjy1eid3RU#u021",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 1960.26,
+      "end": 2122.94,
+      "title": "수비수는 각을 보고 버티거나 걷어내기",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "탈압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 수비수가 후방에서 공을 잡고 탈출 길을 찾는 장면이다. 모두에게 **패스길을 보고 버티며 나가되, 볼 보호와 판단이 어려우면 걷어내라**고 주문한다. 뒤에서 뺏기면 위험하다. 이후 윙은 공을 지키며 동료가 뒷공간으로 들어갈 시간을 벌어야 한다고 덧붙인다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u021-c070.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2040,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u021-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=1960"
+    },
+    {
+      "id": "u022",
+      "uid": "20220331-PIjy1eid3RU#u022",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 2138.08,
+      "end": 2161.7,
+      "title": "공을 제어한 공격수에게 성급히 달려들지 않기",
+      "position_tags": [
+        "FB"
+      ],
+      "topic_tags": [
+        "압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "wonjeon"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "상대 공격수가 공을 완전히 제어한 뒤 ATM 수비가 빼앗으려 달려드는 장면이다. 모두에게 **볼을 받기 전이나 직후에 압박하고, 이미 제어한 뒤에는 성급히 달려들지 말라**고 주문한다. 무게중심이 앞으로 쏠리면 쉽게 제쳐진다고 평가한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u022-c074.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2160,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u022-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2138"
+    },
+    {
+      "id": "u023",
+      "uid": "20220331-PIjy1eid3RU#u023",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 2194.98,
+      "end": 2352.7,
+      "title": "스트라이커는 뒤 패스와 버티기 선택",
+      "position_tags": [
+        "ST"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 공을 연결해 스트라이커에게 전달하지만 다음 길이 막히는 장면이다. 모두에게 **스트라이커는 뒤 패스길을 확인하고, 막히면 압박 없는 쪽으로 공을 지키며 돌아 뛰는 동료를 기다리라**고 주문한다. 압박 방향으로 공을 몰아 결국 빼앗긴 점을 지적한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u023-c078.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2280,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u023-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-ed77175bdf",
+          "title": "Law 11 - Offside",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-ed77175bdf.html",
+          "orig_url": "https://theifab.com/laws/latest/offside/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2194"
+    },
+    {
+      "id": "u024",
+      "uid": "20220331-PIjy1eid3RU#u024",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 2360.8,
+      "end": 2478,
+      "title": "윙은 수비 무게중심을 보고 패스",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 윙이 볼을 끌다 읽힌 전진 패스를 주어 차단되는 장면이다. 모두에게 **상대 무게중심과 패스길을 보고 애매하면 더 끌며 다른 공간을 열라**고 주문한다. 뒤의 동료가 돌아 뛰는 길이나 반대편이 열릴 때 연결해야 하며, 한 가지 패스만 보이면 수비수가 먼저 차단한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u024-c083.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2430,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u024-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2360"
+    },
+    {
+      "id": "u025",
+      "uid": "20220331-PIjy1eid3RU#u025",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 2520.3,
+      "end": 2598.26,
+      "title": "성급한 탈취가 실점 공간을 만든다",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 수비가 공을 빼앗으려 앞으로 쏠려 뒤 공간이 열리는 장면이다. 모두에게 **공을 가진 상대를 무리하게 잡으려 들지 말고 몸으로 길과 공간을 제어하라**고 주문한다. 앞에 무게중심이 실리면서 뒷공간이 열렸고 실점으로 이어졌다고 평가한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u025-c087.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2550,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u025-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2520"
+    },
+    {
+      "id": "u026",
+      "uid": "20220331-PIjy1eid3RU#u026",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 2608.28,
+      "end": 2675.46,
+      "title": "열린 측면으로 전진해 뒷패스 위험 줄이기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 후방에서 나왔지만 전진할 빈 측면을 쓰지 못하고 뒤로 돌리는 장면이다. 모두에게 **열린 측면으로 나가 전방에 공을 보내라**고 주문한다. 막힌 뒤 패스는 빼앗기면 실점할 위험이 있었고, 이 장면은 운 좋게 넘어갔다고 평가한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u026-c091.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2640,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u026-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2608"
+    },
+    {
+      "id": "u027",
+      "uid": "20220331-PIjy1eid3RU#u027",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "PIjy1eid3RU",
+      "start": 2683.3,
+      "end": 2917.68,
+      "title": "스트라이커는 수비수 옆 직선 침투를 멈추기",
+      "position_tags": [
+        "ST"
+      ],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 스트라이커가 수비수 가까이에서 직선으로 침투해 패스길을 스스로 없애는 장면이다. 모두에게 **뛰는 척하다가 공간에 멈춰 받고, 패스가 나가는 순간 침투하라**고 주문한다. 수비수와 붙어 뛰면 받자마자 몸으로 막힐 수 있다. 패스 전에 미리 직선으로 뛰면 오프사이드에도 걸린다. 공격 지연은 역습 성공률도 낮춘다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u027-c096.webp",
+          "width": 640,
+          "height": 360,
+          "t": 2790,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u027-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        },
+        {
+          "id": "r-ed77175bdf",
+          "title": "Law 11 - Offside",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-ed77175bdf.html",
+          "orig_url": "https://theifab.com/laws/latest/offside/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2683"
+    },
+    {
+      "id": "u028",
+      "uid": "20220331-PIjy1eid3RU#u028",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "PIjy1eid3RU",
+      "start": 2927.2400000000002,
+      "end": 3062.14,
+      "title": "뚫린 뒤에는 커버와 오프사이드 라인 판단",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "수비라인"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 수비선이 상대 침투 뒤 누구를 잡을지 늦게 판단하는 장면이다. 모두에게 **먼저 따라갈 수 있는 선수가 침투자를 맡고, 불가능하면 라인을 맞춰 오프사이드를 유도하라**고 주문한다. 패스가 나갈 때 앞으로 나와 끊는 선택도 설명한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u028-c103.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3000,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u028-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-ed77175bdf",
+          "title": "Law 11 - Offside",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-ed77175bdf.html",
+          "orig_url": "https://theifab.com/laws/latest/offside/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=2927"
+    },
+    {
+      "id": "u029",
+      "uid": "20220331-PIjy1eid3RU#u029",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "PIjy1eid3RU",
+      "start": 3070.66,
+      "end": 3229.4,
+      "title": "급한 패스와 윙의 조기 침투",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 급한 패스로 공격권을 넘기고 윙은 미리 직선으로 뛰는 장면이다. 모두에게 **볼 소유자는 더 보고 패스하고, 윙은 라인을 타며 패스가 나갈 때 뛰라**고 주문한다. 사이드로 전진할 길을 찾지 못했고, 조기 침투는 오프사이드가 됐다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u029-c108.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3150,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u029-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-ed77175bdf",
+          "title": "Law 11 - Offside",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-ed77175bdf.html",
+          "orig_url": "https://theifab.com/laws/latest/offside/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3070"
+    },
+    {
+      "id": "u030",
+      "uid": "20220331-PIjy1eid3RU#u030",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "PIjy1eid3RU",
+      "start": 3232,
+      "end": 3362.34,
+      "title": "역습을 내주면 자기 수비 공간부터",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "수비라인"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 공격권을 잃자 수비수들이 상대를 쫓아 자기 공간을 비우는 장면이다. 모두에게 **먼저 내려와 각자 자기 수비 공간과 풀백 자리를 채우라**고 주문한다. 급한 전진 패스는 연결됐지만, 상대가 조금만 빨리 대응했다면 차단돼 다시 카운터를 내줄 위험이 있었다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u030-c113.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3300,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u030-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3232"
+    },
+    {
+      "id": "u031",
+      "uid": "20220331-PIjy1eid3RU#u031",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "PIjy1eid3RU",
+      "start": 3365.3999999999996,
+      "end": 3557.68,
+      "title": "윙이 내려오면 동료가 전진 길 만들기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM의 볼 소유자가 압박받는데 윙이 내려와 전방 받을 길이 없는 장면이다. 모두에게 **윙이 내려오면 다른 선수가 뒷공간을 파고 수비형 미드필더가 빈 자리를 메우라**고 주문한다. 또는 가까운 패스길을 만들어야 한다. 정말 길이 없을 때만 뒤로 돌려 반대편으로 빠르게 전환하라고 한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u031-c118.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3450,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u031-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3365"
+    },
+    {
+      "id": "u032",
+      "uid": "20220331-PIjy1eid3RU#u032",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "PIjy1eid3RU",
+      "start": 3565.48,
+      "end": 3656.84,
+      "title": "압박 속 패스각이 없으면 버티거나 걷어내기",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "탈압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 후방에서 공을 받고 상대가 붙어 패스각이 없는 장면이다. 모두에게 **가능하면 버티고 주고 나가며, 못 버티면 위험 지역에서 걷어내라**고 주문한다. 뒷공간이 비었는데도 기다릴 선수가 없어 전진 연결이 막힌 점도 지적한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u032-c123.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3600,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u032-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3565"
+    },
+    {
+      "id": "u033",
+      "uid": "20220331-PIjy1eid3RU#u033",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "PIjy1eid3RU",
+      "start": 3659.8,
+      "end": 3720.46,
+      "title": "상대의 긴 터치는 가까울 때만 압박",
+      "position_tags": [
+        "FB"
+      ],
+      "topic_tags": [
+        "압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "wonjeon"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "상대 공격수의 터치가 길어져 ATM 수비가 공에 접근할 수 있는 장면이다. 모두에게 **공이 가까이 벗어났을 때 태클하거나 먼저 빼앗으라**고 주문한다. 뒷공간을 지키는 원칙은 좋지만, 거리가 멀 때 무리하게 나오면 제쳐질 수 있다는 조건을 붙인다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u033-c126.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3690,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u033-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3659"
+    },
+    {
+      "id": "u034",
+      "uid": "20220331-PIjy1eid3RU#u034",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "PIjy1eid3RU",
+      "start": 3743.96,
+      "end": 3869.66,
+      "title": "탈압박은 빠른 패스와 열린 각",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "탈압박"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 공을 끊고 상대 압박을 받는 장면이다. 모두에게 **공을 잡자마자 열린 선수에게 주고 다시 각을 열어 나가라**고 주문한다. 개인 탈압박도 가능하지만 포위되기 전에 패스로 연결해야 하며, 후방 빌드업이 안 되면 골키퍼를 거쳐 길게 보내는 편을 제시한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u034-c130.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3810,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u034-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3743"
+    },
+    {
+      "id": "u035",
+      "uid": "20220331-PIjy1eid3RU#u035",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "PIjy1eid3RU",
+      "start": 3875.5,
+      "end": 4023.6,
+      "title": "뻔한 패스 뒤 실점 위험과 복귀",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "수비라인"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM의 뻔한 패스가 상대 풀백에게 읽히고 공을 잃는 장면이다. 모두에게 **첫 번째로 보이는 패스만 고집하지 말고 다른 길과 미니맵을 확인하라**고 주문한다. 잃은 뒤에는 달려들기보다 자기 수비 공간으로 복귀해야 한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u035-c135.webp",
+          "width": 640,
+          "height": 360,
+          "t": 3960,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u035-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=3875"
+    },
+    {
+      "id": "u036",
+      "uid": "20220331-PIjy1eid3RU#u036",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "PIjy1eid3RU",
+      "start": 4032.6800000000003,
+      "end": 4142.6,
+      "title": "공을 잃은 뒤 무리한 재압박 경계",
+      "position_tags": [
+        "FB"
+      ],
+      "topic_tags": [
+        "수비라인"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "wonjeon"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 공을 뺏긴 직후 되찾으려 달려들어 자기 수비 공간을 비우는 장면이다. 모두에게 **무리한 재압박보다 자기 공간을 먼저 지키라**고 주문한다. 동료가 커버하러 이동하면 그 동료의 공간까지 열려, 바로 실점할 수 있는 패스길이 생긴다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u036-c139.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4080,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u036-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4032"
+    },
+    {
+      "id": "u037",
+      "uid": "20220331-PIjy1eid3RU#u037",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "PIjy1eid3RU",
+      "start": 4150.860000000001,
+      "end": 4348.6,
+      "title": "윙 뒷공간과 3백의 공간 배분",
+      "position_tags": [
+        "DF"
+      ],
+      "topic_tags": [
+        "수비라인"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "vandeven",
+        "wonjeon"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 압박을 탈출하고도 윙이 받으러 내려왔지만 다른 선수가 전방 뒷공간에 없고, 뒤 수비는 한쪽에 몰리는 장면이다. 모두에게 **전방 뒷공간을 채우고, 3백에서는 상대가 들어온 공간을 나눠 막고, 비어 있는 담당 구역은 침투가 생길 때 다시 제어하라**고 주문한다. 한 공간에 여러 명이 몰려 반대 측면이 열렸고 상대 슛을 막지 못했다고 평가한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u037-c145.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4260,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u037-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4150"
+    },
+    {
+      "id": "u038",
+      "uid": "20220331-PIjy1eid3RU#u038",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "PIjy1eid3RU",
+      "start": 4356.02,
+      "end": 4449.02,
+      "title": "공간을 확인하고 후방 패스를 줄이기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "gerrard",
+        "bride",
+        "taxi",
+        "jomin",
+        "giseun",
+        "spress"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 압박받지 않는데도 급하게 패스하거나 공을 뒤로 돌리는 장면이다. 모두에게 **공을 더 끌며 열린 공간을 확인하고 정확히 전진하라**고 주문한다. 앞으로 받을 사람이 없으면 후방 패스가 반복되고 상대 압박과 헤딩 싸움 끝에 다시 빼앗긴다고 지적한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u038-c150.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4410,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u038-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [
+        {
+          "uid": "20240103-XkM_tS2Id8Q#u001",
+          "title": "묶여있을 때 오버래핑 요청",
+          "date": "2024-01-03",
+          "href": "../20240103-XkM_tS2Id8Q/index.html#u001"
+        }
+      ],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4356"
+    },
+    {
+      "id": "u039",
+      "uid": "20220331-PIjy1eid3RU#u039",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "PIjy1eid3RU",
+      "start": 4456.66,
+      "end": 4711.08,
+      "title": "카운터는 앞에서 받아 빠르게 연결",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM이 역습 기회를 잡았지만 전진을 늦춰 상대 수비가 내려앉는 장면이다. 모두에게 **전방 공간에서 먼저 받아 상대를 끌어내고, 주고 돌아 뛰며 빠르게 연결하라**고 주문한다. 필요하면 지키며 패스하거나 직접 전진할 수 있다. 오래 끌다 측면으로만 보내자 중앙 길이 사라졌고, 내려앉은 수비를 뚫기 어려워졌다고 평가한다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u039-c156.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4590,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u039-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-fa672b0eed",
+          "title": "How to pass in EA SPORTS FC",
+          "lang": "en",
+          "kind": "eafc",
+          "href": "../../refs/r-fa672b0eed.html",
+          "orig_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4456"
+    },
+    {
+      "id": "u040",
+      "uid": "20220331-PIjy1eid3RU#u040",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "PIjy1eid3RU",
+      "start": 4722.48,
+      "end": 4790.98,
+      "title": "윙은 패스 전 침투로 오프사이드 되지 않기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝"
+      ],
+      "member_ids": [],
+      "related_member_ids": [
+        "timej",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "saembaek",
+        "jonjae",
+        "maekgu"
+      ],
+      "addressed_to_all": true,
+      "body": [
+        {
+          "type": "text",
+          "text": "ATM 윙이 패스 전에 앞만 보고 뛰어 오프사이드가 되는 장면이다. 모두에게 **받을 공간에 머물며 패스가 나갈 때 침투하라**고 주문한다. 미리 뛰면 패스길도 없어지고 오프사이드 위험이 커진다."
+        },
+        {
+          "type": "frame",
+          "src": "img/u040-c162.webp",
+          "width": 640,
+          "height": 360,
+          "t": 4770,
+          "caption": "경기 화면에 노란색과 붉은색 유니폼의 선수들, 경기장과 스코어보드가 보인다."
+        }
+      ],
+      "images": {
+        "start": {
+          "src": "img/u040-start.webp",
+          "width": 640,
+          "height": 360
+        }
+      },
+      "similar": [],
+      "refs": [
+        {
+          "id": "r-ed77175bdf",
+          "title": "Law 11 - Offside",
+          "lang": "en",
+          "kind": "tactics",
+          "href": "../../refs/r-ed77175bdf.html",
+          "orig_url": "https://theifab.com/laws/latest/offside/"
+        }
+      ],
+      "watch_url": "https://youtu.be/PIjy1eid3RU?t=4722"
+    }
+  ]
+}

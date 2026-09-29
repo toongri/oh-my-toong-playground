@@ -1,0 +1,675 @@
+{
+  "session_title": "ATM 경기 분석 — 전진 패스길과 수비 공간",
+  "matches": [
+    {
+      "title": "CLV vs ATM 한 경기",
+      "topics": [
+        {
+          "title": "첫 터치와 압박",
+          "summary": "키핑 길이와 상대가 붙는 거리, 전진 패스길을 읽는 압박에 관한 초반 분석.",
+          "units": [
+            {
+              "start_line": 6,
+              "end_line": 8,
+              "title": "가속 전에는 터치를 짧게",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "조작/키사용"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c003"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 9,
+              "end_line": 51,
+              "title": "고정된 윙 위치가 패스길을 막는다",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c005"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 56,
+              "end_line": 78,
+              "title": "공을 뺏은 뒤 나갈 길 만들기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c009"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 80,
+              "end_line": 109,
+              "title": "받기 전 RT를 떼고 원터치로 탈출",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "탈압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c012"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 110,
+              "end_line": 156,
+              "title": "풀백의 뒷공간을 공략해 중원 열기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c016"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 157,
+              "end_line": 185,
+              "title": "미드필더의 패스길 차단과 협력 압박",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c020"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 186,
+              "end_line": 199,
+              "title": "관람하지 말고 침투 길을 먼저 막기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c022"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 200,
+              "end_line": 243,
+              "title": "감당할 수 없는 짧은 골킥 피하기",
+              "position_tags": [
+                "GK"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c025"
+              ],
+              "addressed_to_all": true
+            }
+          ]
+        },
+        {
+          "title": "전진 패스와 수비 공간",
+          "summary": "윙의 공간 이동, 스로인, 수비수의 공간 책임을 이어서 설명한다.",
+          "units": [
+            {
+              "start_line": 244,
+              "end_line": 289,
+              "title": "윙은 벌려 서기보다 패스 받을 공간으로",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c029"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 290,
+              "end_line": 298,
+              "title": "스로인 전에 받을 각 만들기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "세트피스"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c033"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 299,
+              "end_line": 344,
+              "title": "롱킥 뒤 빈 뒷공간과 바깥 탈출",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c037"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 351,
+              "end_line": 398,
+              "title": "공 가진 선수보다 받는 선수의 위치",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c042"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 399,
+              "end_line": 426,
+              "title": "풀백은 공격 전환보다 자기 공간 수비",
+              "position_tags": [
+                "FB"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c046"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 427,
+              "end_line": 439,
+              "title": "압박이 없을 때 패스길 확인",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c048"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 440,
+              "end_line": 464,
+              "title": "직선 침투를 멈추고 공간에 받아주기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c051"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 465,
+              "end_line": 487,
+              "title": "수비선이 좁아지면 반대 공간이 열린다",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c053"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 488,
+              "end_line": 508,
+              "title": "패스길만 막혔을 때 공을 더 끌기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c056"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 509,
+              "end_line": 534,
+              "title": "롱패스 대기 압박은 짧은 패스로 탈출",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "탈압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c058"
+              ],
+              "addressed_to_all": true
+            }
+          ]
+        },
+        {
+          "title": "침투와 전환의 선택",
+          "summary": "스루패스 조건, 미드필더 수비 가담, 윙과 스트라이커의 선택을 다룬다.",
+          "units": [
+            {
+              "start_line": 535,
+              "end_line": 569,
+              "title": "스루패스 거리와 수비수 제압 상태",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c061"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 571,
+              "end_line": 579,
+              "title": "공간을 지키고 침투자를 끝까지 제어",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c066"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 580,
+              "end_line": 619,
+              "title": "수비수는 각을 보고 버티거나 걷어내기",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "탈압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c070"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 621,
+              "end_line": 623,
+              "title": "공을 제어한 공격수에게 성급히 달려들지 않기",
+              "position_tags": [
+                "FB"
+              ],
+              "topic_tags": [
+                "압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c074"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 627,
+              "end_line": 671,
+              "title": "스트라이커는 뒤 패스와 버티기 선택",
+              "position_tags": [
+                "ST"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c078"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 672,
+              "end_line": 713,
+              "title": "윙은 수비 무게중심을 보고 패스",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "파이널서드"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c083"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 718,
+              "end_line": 740,
+              "title": "성급한 탈취가 실점 공간을 만든다",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c087"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 741,
+              "end_line": 761,
+              "title": "열린 측면으로 전진해 뒷패스 위험 줄이기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c091"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 762,
+              "end_line": 827,
+              "title": "스트라이커는 수비수 옆 직선 침투를 멈추기",
+              "position_tags": [
+                "ST"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c096"
+              ],
+              "addressed_to_all": true
+            }
+          ]
+        },
+        {
+          "title": "후반의 반복 교정",
+          "summary": "카운터 수비와 볼 소유, 지원 움직임, 탈압박 판단을 반복해서 교정한다.",
+          "units": [
+            {
+              "start_line": 828,
+              "end_line": 869,
+              "title": "뚫린 뒤에는 커버와 오프사이드 라인 판단",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c103"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 870,
+              "end_line": 896,
+              "title": "급한 패스와 윙의 조기 침투",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c108"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 897,
+              "end_line": 932,
+              "title": "역습을 내주면 자기 수비 공간부터",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c113"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 933,
+              "end_line": 987,
+              "title": "윙이 내려오면 동료가 전진 길 만들기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c118"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 988,
+              "end_line": 1023,
+              "title": "압박 속 패스각이 없으면 버티거나 걷어내기",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "탈압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c123"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 1024,
+              "end_line": 1046,
+              "title": "상대의 긴 터치는 가까울 때만 압박",
+              "position_tags": [
+                "FB"
+              ],
+              "topic_tags": [
+                "압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c126"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 1049,
+              "end_line": 1078,
+              "title": "탈압박은 빠른 패스와 열린 각",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "탈압박"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c130"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 1079,
+              "end_line": 1108,
+              "title": "뻔한 패스 뒤 실점 위험과 복귀",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c135"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 1110,
+              "end_line": 1140,
+              "title": "공을 잃은 뒤 무리한 재압박 경계",
+              "position_tags": [
+                "FB"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c139"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 1141,
+              "end_line": 1191,
+              "title": "윙 뒷공간과 3백의 공간 배분",
+              "position_tags": [
+                "DF"
+              ],
+              "topic_tags": [
+                "수비라인"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c145"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 1192,
+              "end_line": 1215,
+              "title": "공간을 확인하고 후방 패스를 줄이기",
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c150"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 1216,
+              "end_line": 1275,
+              "title": "카운터는 앞에서 받아 빠르게 연결",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c156"
+              ],
+              "addressed_to_all": true
+            },
+            {
+              "start_line": 1276,
+              "end_line": 1296,
+              "title": "윙은 패스 전 침투로 오프사이드 되지 않기",
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c162"
+              ],
+              "addressed_to_all": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

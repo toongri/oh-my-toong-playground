@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "total": 72.21904761904761,
+  "gate_failed": false,
+  "breakdown": {
+    "gate": {
+      "plan": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "notes": {
+        "exit_code": 0,
+        "stderr": "fc-feedback: 경고 u011: 볼드 행동 없음 — 원문에 지시·평가가 없는 구간이면 인접 유닛에 합칠지 확인\nfc-feedback: 경고 u015: 프레임 없음"
+      },
+      "similar": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "refs": {
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "passed": true
+    },
+    "unit_f1": {
+      "precision": 0.9333333333333333,
+      "recall": 0.9333333333333333,
+      "f1": 0.9333333333333333,
+      "points": 23.333333333333332,
+      "matched": 14,
+      "total_gold": 15,
+      "total_predicted": 15
+    },
+    "start_time_accuracy": {
+      "median_delta_s": 0,
+      "points": 10
+    },
+    "tags": {
+      "position": {
+        "precision": 0.8,
+        "recall": 0.5333333333333333,
+        "f1": 0.64,
+        "points": 3.2
+      },
+      "topic": {
+        "precision": 0.6071428571428571,
+        "recall": 0.7727272727272727,
+        "f1": 0.68,
+        "points": 3.4000000000000004
+      },
+      "member": {
+        "precision": 1,
+        "recall": 0.75,
+        "f1": 0.8571428571428571,
+        "points": 4.285714285714286
+      }
+    },
+    "refs": {
+      "url_in_log": {
+        "fraction": 1,
+        "points": 4
+      },
+      "http_ratio": {
+        "fraction": 1,
+        "points": 3
+      },
+      "ko_summary": {
+        "fraction": 1,
+        "points": 3
+      }
+    },
+    "judge": {
+      "specificity": 8,
+      "fidelity": 3,
+      "readability": 7,
+      "points": 18,
+      "judge_invalid": false
+    },
+    "penalties": {
+      "seconds_in_plan": false,
+      "push_attempt": false,
+      "gate_order_violation": false,
+      "unknown_commands": [],
+      "points_deducted": 0
+    },
+    "contamination": {
+      "contaminated": false,
+      "excluded_from_comparison": false,
+      "hits": []
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "refs": [
+    {
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "title": "How to coach passing in football",
+      "source_name": "The FA · The Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "패스 전 주변을 살피고, 수비수를 끌어낸 뒤 적절한 순간에 연결하는 판단과 받는 선수의 위치·몸 방향을 설명한다.",
+      "key_points_ko": [
+        "공을 가진 선수가 수비수를 끌어낸 뒤 패스하는 선택을 연습할 수 있다.",
+        "패스하는 선수와 받는 선수의 위치 및 몸 방향이 패스 선택지에 영향을 준다."
+      ],
+      "translations": [],
+      "unit_ids": [
+        "u001",
+        "u004",
+        "u008",
+        "u015"
+      ]
+    },
+    {
+      "url": "https://www.thefa.com/bootroom/resources/coaching/euro-2020-trends---in-possession",
+      "title": "Euro 2020 trends: in possession",
+      "source_name": "The FA · The Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "측면에서 폭을 확보하고 상대를 끌어낸 뒤 공간을 활용하는 공격 전개와 공 뒤쪽의 안전장치를 설명한다.",
+      "key_points_ko": [
+        "측면 폭을 활용하는 공격 연습을 권한다.",
+        "상대의 압박과 공간에 따라 공 뒤쪽의 지원도 고려한다."
+      ],
+      "translations": [],
+      "unit_ids": [
+        "u004",
+        "u009",
+        "u011"
+      ]
+    }
+  ]
+}

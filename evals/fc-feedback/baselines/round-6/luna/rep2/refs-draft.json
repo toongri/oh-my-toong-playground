@@ -1,0 +1,59 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA 공식 가이드는 EA SPORTS FC의 땅볼 패스, 스루 패스, 로빙 패스, 로빙 스루 패스와 드리븐 패스의 기본 용도를 구분합니다.",
+      "key_points_ko": [
+        "땅볼 패스는 가까운 동료와 짧게 연결하고 점유를 유지할 때 사용합니다.",
+        "스루 패스는 수비 사이에 열린 패스선이 있고 동료가 앞 공간으로 달릴 때 사용합니다.",
+        "로빙 스루 패스는 수비수가 땅볼 패스 경로를 막거나 수비선 뒤 공간이 열렸을 때 활용할 수 있습니다."
+      ],
+      "unit_ids": ["u008", "u012"]
+    },
+    {
+      "url": "https://www.thefa.com/bootroom/resources/coaching/in-possession-width-for-deception",
+      "title": "SESSION: width for deception",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "잉글랜드 축구협회의 코칭 세션은 넓은 플레이를 이용해 중앙 공간을 만들고, 공간을 공략하며, 점유를 유지하는 방법을 다룹니다.",
+      "key_points_ko": [
+        "넓은 플레이로 중앙 공간을 만들기",
+        "넓은 플레이로 공간을 공략하고 점유를 유지하기"
+      ],
+      "unit_ids": ["u001", "u007", "u008"]
+    },
+    {
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "title": "How to coach passing in football",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "잉글랜드 축구협회는 패스 성공에 필요한 탐색, 타이밍, 움직임, 위치 선정과 기술을 설명하며, 압박을 받자마자 공을 보내기보다 직접 운반해 수비수를 끌어낸 뒤 더 나은 패스 기회를 만들 수 있다고 안내합니다.",
+      "key_points_ko": [
+        "패스는 압박이 시작되자마자 무조건 보내는 것이 최선은 아닙니다.",
+        "공을 공간으로 운반하면 수비수를 끌어내고 패스 각도를 만들 수 있습니다.",
+        "패스하는 선수와 받는 선수의 위치, 방향, 타이밍이 가능한 선택지를 바꿉니다."
+      ],
+      "unit_ids": ["u004", "u006", "u010"]
+    },
+    {
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-forward-movement",
+      "title": "How to coach forward movement",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "잉글랜드 축구협회 코치는 전방 선수의 여러 움직임이 자신과 동료를 위한 공간을 만들며, 미드필더가 압박을 받을 때는 발밑에서 받을 수 있도록 내려와 선택지를 제공할 수 있다고 설명합니다.",
+      "key_points_ko": [
+        "전방 선수는 한 번의 움직임에 그치지 않고 공간을 만들고 활용할 수 있습니다.",
+        "움직임은 자신뿐 아니라 동료를 위한 공간도 만들 수 있습니다.",
+        "미드필더가 압박을 받으면 전방 선수가 내려와 발밑 패스 선택지를 제공할 수 있습니다."
+      ],
+      "unit_ids": ["u003", "u008"]
+    }
+  ]
+}

@@ -1,0 +1,440 @@
+{
+  "version": 1,
+  "session_title": "C.E.F. FC Barcelona 팀 연습 피드백 (2024.01.04)",
+  "matches": [
+    {
+      "id": "m1",
+      "title": "Bros Vamos vs CEF Barcelona",
+      "topics": [
+        {
+          "id": "m1-t1",
+          "title": "넓은 공간으로 전개하기",
+          "summary": "좁은 곳에 바로 넣기보다 열린 넓은 쪽으로 패스해 공을 옮기고, 공이 없는 선수들이 올라올 시간을 만든다.",
+          "unit_ids": [
+            "u001"
+          ]
+        },
+        {
+          "id": "m1-t2",
+          "title": "압박을 받는 상황의 조작과 전개",
+          "summary": "상대를 등지거나 급히 전진하기보다 몸 방향과 다음 패스 선택을 정리한다.",
+          "unit_ids": [
+            "u002"
+          ]
+        },
+        {
+          "id": "m1-t3",
+          "title": "역습 때 높낮이와 지원 선택지 만들기",
+          "summary": "한 선수가 내려오면 다른 선수가 측면 폭과 전방 높이를 채워 가까운 패스와 넓은 패스를 모두 연다.",
+          "unit_ids": [
+            "u003"
+          ]
+        },
+        {
+          "id": "m1-t4",
+          "title": "압박 아래서 안전하게 다시 연결하기",
+          "summary": "압박이 들어오기 전에 공을 내주고 다시 받는 동작을 써서 위험한 전진 패스를 줄인다.",
+          "unit_ids": [
+            "u004"
+          ]
+        },
+        {
+          "id": "m1-t5",
+          "title": "공이 없을 때 전방 움직임",
+          "summary": "공을 받을 수 있는 전방 공간이 열리면 멈추지 말고 침투 움직임을 이어간다.",
+          "unit_ids": [
+            "u005"
+          ]
+        },
+        {
+          "id": "m1-t6",
+          "title": "공을 운반해 상대 수비를 끌어내기",
+          "summary": "급히 좁은 곳으로 넣기보다 공을 몰고 상대 한 명을 끌어내 동료가 올라올 시간을 확보한다.",
+          "unit_ids": [
+            "u006"
+          ]
+        },
+        {
+          "id": "m1-t7",
+          "title": "공격 폭과 전진 선택지",
+          "summary": "세로와 가로로 폭을 벌려 상대 수비를 늘리고 넓은 쪽에서 전진할 길을 만든다.",
+          "unit_ids": [
+            "u007"
+          ]
+        },
+        {
+          "id": "m1-t8",
+          "title": "넓은 공간의 침투를 살리기",
+          "summary": "전방으로 달려드는 선수가 넓은 쪽을 활용할 수 있도록 패스 타이밍과 크로스·컷백 선택을 맞춘다.",
+          "unit_ids": [
+            "u008"
+          ]
+        },
+        {
+          "id": "m1-t9",
+          "title": "역습에서 측면과 중앙 역할 나누기",
+          "summary": "사인드가 낮은 위치에 있으면 루미가 윙어 역할을 맡고, 기프·유미에게 이어지는 두 패스 옵션을 유지한다.",
+          "unit_ids": [
+            "u009"
+          ]
+        },
+        {
+          "id": "m1-t10",
+          "title": "넓은 공간으로 대각 전개하기",
+          "summary": "중원이 전방 침투를 볼 시간을 만들 수 있도록 안쪽만 고집하지 말고 대각으로 공을 뺀다.",
+          "unit_ids": [
+            "u010"
+          ]
+        },
+        {
+          "id": "m1-t11",
+          "title": "수비 균형을 무너뜨린 뒤의 태클 선택",
+          "summary": "상대 균형을 흔든 다음 무리한 태클로 페널티 상황을 내주지 않도록 수비 동작을 조절한다.",
+          "unit_ids": [
+            "u011"
+          ]
+        },
+        {
+          "id": "m1-t12",
+          "title": "밀집 수비 앞에서 지원선 다시 찾기",
+          "summary": "상대가 촘촘히 서 있으면 전진만 고집하지 말고 뒤로 빼며 동료의 움직임을 확인한다.",
+          "unit_ids": [
+            "u012"
+          ]
+        },
+        {
+          "id": "m1-t13",
+          "title": "받는 선수의 속도를 살리는 패스",
+          "summary": "길이 열려 있으면 뜬 공보다 땅볼로 전달해 받는 선수가 공의 속도를 이어간다.",
+          "unit_ids": [
+            "u013"
+          ]
+        },
+        {
+          "id": "m1-t14",
+          "title": "돌파가 막힐 때의 안전한 재연결",
+          "summary": "혼자 같은 방향으로 돌파하지 말고 뒤의 지원과 대각 옵션을 확인해 공격을 이어간다.",
+          "unit_ids": [
+            "u014"
+          ]
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "u001",
+      "match_id": "m1",
+      "topic_id": "m1-t1",
+      "video": "NUzEChn9EyI",
+      "start": 49.7,
+      "end": 103.42,
+      "title": "좁은 쪽보다 넓은 쪽을 먼저 보기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "bride"
+      ],
+      "key_frame_candidate_ids": [
+        "c004"
+      ]
+    },
+    {
+      "id": "u002",
+      "match_id": "m1",
+      "topic_id": "m1-t2",
+      "video": "NUzEChn9EyI",
+      "start": 225.9,
+      "end": 308.96,
+      "title": "LT로 몸 방향을 유지하고 다음 패스를 선택하기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "조작/키사용",
+        "탈압박"
+      ],
+      "member_ids": [
+        "taxi"
+      ],
+      "key_frame_candidate_ids": [
+        "c009"
+      ]
+    },
+    {
+      "id": "u003",
+      "match_id": "m1",
+      "topic_id": "m1-t3",
+      "video": "NUzEChn9EyI",
+      "start": 344.68,
+      "end": 402.72,
+      "title": "낮게 내려온 사인드 뒤를 루미가 채우기",
+      "position_tags": [
+        "MF",
+        "FW"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "jomin",
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi"
+      ],
+      "key_frame_candidate_ids": [
+        "c014"
+      ]
+    },
+    {
+      "id": "u004",
+      "match_id": "m1",
+      "topic_id": "m1-t4",
+      "video": "NUzEChn9EyI",
+      "start": 463.08000000000004,
+      "end": 526.78,
+      "title": "압박이 오면 뒤로 내주고 다시 받기",
+      "position_tags": [
+        "CM"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [
+        "gerrard"
+      ],
+      "key_frame_candidate_ids": [
+        "c018"
+      ]
+    },
+    {
+      "id": "u005",
+      "match_id": "m1",
+      "topic_id": "m1-t5",
+      "video": "NUzEChn9EyI",
+      "start": 545.7,
+      "end": 548,
+      "title": "패스가 나올 때 전방 움직임 이어가기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "rumi"
+      ],
+      "key_frame_candidate_ids": [
+        "c053"
+      ]
+    },
+    {
+      "id": "u006",
+      "match_id": "m1",
+      "topic_id": "m1-t6",
+      "video": "NUzEChn9EyI",
+      "start": 579.9399999999999,
+      "end": 658.94,
+      "title": "급한 전진 패스보다 운반으로 공간 만들기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "전환/역습"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c022"
+      ]
+    },
+    {
+      "id": "u007",
+      "match_id": "m1",
+      "topic_id": "m1-t7",
+      "video": "NUzEChn9EyI",
+      "start": 694.54,
+      "end": 699.54,
+      "title": "위아래 폭을 넓혀 공격하기",
+      "position_tags": [
+        "MF",
+        "FW"
+      ],
+      "topic_tags": [
+        "포지셔닝",
+        "빌드업"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c024"
+      ]
+    },
+    {
+      "id": "u008",
+      "match_id": "m1",
+      "topic_id": "m1-t8",
+      "video": "NUzEChn9EyI",
+      "start": 791.0999999999999,
+      "end": 838.74,
+      "title": "존재가 넓은 공간을 활용하도록 연결하기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "파이널서드",
+        "크로스"
+      ],
+      "member_ids": [
+        "jonjae"
+      ],
+      "key_frame_candidate_ids": [
+        "c030"
+      ]
+    },
+    {
+      "id": "u009",
+      "match_id": "m1",
+      "topic_id": "m1-t9",
+      "video": "NUzEChn9EyI",
+      "start": 857.4799999999999,
+      "end": 901.44,
+      "title": "사인드가 내려오면 루미가 측면을 채우기",
+      "position_tags": [
+        "FW",
+        "FB"
+      ],
+      "topic_tags": [
+        "전환/역습",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "find",
+        "rumi",
+        "gipeu",
+        "yumi",
+        "wonjeon"
+      ],
+      "key_frame_candidate_ids": [
+        "c033"
+      ]
+    },
+    {
+      "id": "u010",
+      "match_id": "m1",
+      "topic_id": "m1-t10",
+      "video": "NUzEChn9EyI",
+      "start": 1071.64,
+      "end": 1104.5,
+      "title": "대각 패스로 넓은 쪽의 침투 살리기",
+      "position_tags": [
+        "CAM"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "파이널서드"
+      ],
+      "member_ids": [
+        "spress"
+      ],
+      "key_frame_candidate_ids": [
+        "c039"
+      ]
+    },
+    {
+      "id": "u011",
+      "match_id": "m1",
+      "topic_id": "m1-t11",
+      "video": "NUzEChn9EyI",
+      "start": 1128.4599999999998,
+      "end": 1139.04,
+      "title": "균형을 흔든 뒤 성급한 태클 피하기",
+      "position_tags": [
+        "FB"
+      ],
+      "topic_tags": [
+        "수비라인",
+        "압박"
+      ],
+      "member_ids": [
+        "wonjeon"
+      ],
+      "key_frame_candidate_ids": [
+        "c042"
+      ]
+    },
+    {
+      "id": "u012",
+      "match_id": "m1",
+      "topic_id": "m1-t12",
+      "video": "NUzEChn9EyI",
+      "start": 1155.22,
+      "end": 1191.56,
+      "title": "루미가 막히면 뒤 지원을 확인하기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "포지셔닝"
+      ],
+      "member_ids": [
+        "find",
+        "rumi"
+      ],
+      "key_frame_candidate_ids": [
+        "c043"
+      ]
+    },
+    {
+      "id": "u013",
+      "match_id": "m1",
+      "topic_id": "m1-t13",
+      "video": "NUzEChn9EyI",
+      "start": 1225.22,
+      "end": 1254.74,
+      "title": "열린 길에는 받기 쉬운 땅볼 연결하기",
+      "position_tags": [
+        "MF"
+      ],
+      "topic_tags": [
+        "빌드업",
+        "파이널서드"
+      ],
+      "member_ids": [],
+      "key_frame_candidate_ids": [
+        "c045"
+      ]
+    },
+    {
+      "id": "u014",
+      "match_id": "m1",
+      "topic_id": "m1-t14",
+      "video": "NUzEChn9EyI",
+      "start": 1258.6599999999999,
+      "end": 1334.1,
+      "title": "막히면 뒤 지원에 내주고 다시 선택하기",
+      "position_tags": [
+        "FW"
+      ],
+      "topic_tags": [
+        "탈압박",
+        "빌드업"
+      ],
+      "member_ids": [
+        "maekgu"
+      ],
+      "key_frame_candidate_ids": [
+        "c046"
+      ]
+    }
+  ]
+}

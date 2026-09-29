@@ -1,0 +1,206 @@
+{
+  "session_title": "C.E.F. FC Barcelona 팀 연습 피드백 — 2024.01.04 Part 3",
+  "matches": [
+    {
+      "title": "BRO vs CEF Barcelona — 1경기",
+      "topics": [
+        {
+          "title": "넓은 공간과 전환 선택",
+          "summary": "브라이드에게서 TIMEJ에게 오는 패스와 혼잡한 공간에서의 선택, LT·W 조작, 역습 때의 지원과 전진 판단을 짚습니다.",
+          "units": [
+            {
+              "start_line": 3,
+              "end_line": 19,
+              "title": "넓은 공간에 패스해 전진 시간 만들기",
+              "position_tags": ["ST", "MF"],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": ["bride", "timej"],
+              "key_frame_candidate_ids": ["c004"]
+            },
+            {
+              "start_line": 22,
+              "end_line": 30,
+              "title": "LT로 공을 지키며 방향 바꾸기",
+              "position_tags": ["MF", "ST"],
+              "topic_tags": ["조작/키사용", "탈압박"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c009"]
+            },
+            {
+              "start_line": 31,
+              "end_line": 35,
+              "title": "W로 빠르게 전진할 때 공을 끌지 않기",
+              "position_tags": ["ST"],
+              "topic_tags": ["조작/키사용", "전환/역습"],
+              "member_ids": ["timej"],
+              "key_frame_candidate_ids": ["c011"]
+            },
+            {
+              "start_line": 36,
+              "end_line": 51,
+              "title": "역습에서 폭과 패스 선택지 열기",
+              "position_tags": ["FW", "ST"],
+              "topic_tags": ["전환/역습", "포지셔닝", "빌드업"],
+              "member_ids": ["jomin", "find", "rumi", "gipeu", "timej", "yumi", "maekgu"],
+              "key_frame_candidate_ids": ["c014"]
+            },
+            {
+              "start_line": 52,
+              "end_line": 54,
+              "title": "패스 연결이 안 되는 장면 되묻기",
+              "position_tags": [],
+              "topic_tags": ["빌드업"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c015"]
+            },
+            {
+              "start_line": 55,
+              "end_line": 77,
+              "title": "압박을 피해 뒤로 연결한 뒤 수비를 끌어내기",
+              "position_tags": ["CM", "FW", "ST"],
+              "topic_tags": ["탈압박", "빌드업", "전환/역습"],
+              "member_ids": ["gerrard", "saembaek", "timej"],
+              "key_frame_candidate_ids": ["c018"]
+            },
+            {
+              "start_line": 78,
+              "end_line": 78,
+              "title": "루미의 달리기 멈춤",
+              "position_tags": ["FW"],
+              "topic_tags": ["포지셔닝", "전환/역습"],
+              "member_ids": ["rumi"],
+              "key_frame_candidate_ids": ["c053"]
+            },
+            {
+              "start_line": 79,
+              "end_line": 97,
+              "title": "직접 운반해 압박을 끌고 선택 시간 만들기",
+              "position_tags": [],
+              "topic_tags": ["탈압박", "전환/역습", "빌드업"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c022"]
+            }
+          ]
+        },
+        {
+          "title": "전개 폭과 슈팅 평가",
+          "summary": "넓게 벌려 전개해야 한다는 평가와 전반 공격의 마무리 장면을 돌아봅니다.",
+          "units": [
+            {
+              "start_line": 98,
+              "end_line": 99,
+              "title": "전개 폭을 넓히기",
+              "position_tags": [],
+              "topic_tags": ["빌드업"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c024"]
+            },
+            {
+              "start_line": 100,
+              "end_line": 103,
+              "title": "전반 공격의 마무리 질 평가",
+              "position_tags": [],
+              "topic_tags": ["파이널서드"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c026"]
+            }
+          ]
+        },
+        {
+          "title": "후반 공격 지원과 위치 교대",
+          "summary": "전방의 넓은 공간·크로스와 컷백 선택, 원전·사인드의 동선, 대각 패스로 전방 침투를 지원하는 장면을 정리합니다.",
+          "units": [
+            {
+              "start_line": 104,
+              "end_line": 120,
+              "title": "넓은 공간의 크로스·컷백 선택",
+              "position_tags": ["FW"],
+              "topic_tags": ["파이널서드", "크로스"],
+              "member_ids": ["gerrard", "giseun", "jonjae"],
+              "key_frame_candidate_ids": ["c031"]
+            },
+            {
+              "start_line": 121,
+              "end_line": 136,
+              "title": "사인드·원전의 동선과 중간 공간 채우기",
+              "position_tags": ["FB", "FW", "ST"],
+              "topic_tags": ["포지셔닝", "전환/역습", "수비라인"],
+              "member_ids": ["find", "wonjeon", "timej"],
+              "key_frame_candidate_ids": ["c033"]
+            },
+            {
+              "start_line": 137,
+              "end_line": 137,
+              "title": "선택지가 보이지 않는 상황",
+              "position_tags": ["ST"],
+              "topic_tags": ["탈압박"],
+              "member_ids": ["timej"],
+              "key_frame_candidate_ids": ["c036"]
+            },
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "대각 패스로 전방 침투 지원",
+              "position_tags": ["CAM", "MF", "FW"],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": ["spress"],
+              "key_frame_candidate_ids": ["c039"]
+            }
+          ]
+        },
+        {
+          "title": "수비 압박과 안전한 패스",
+          "summary": "태클 뒤의 판정 발언, 상대가 촘촘할 때 뒤로 푸는 선택, 땅볼·공중 패스, 맥구의 돌파 대신 안전한 연결과 마무리 요점을 다룹니다.",
+          "units": [
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "원전의 균형 붕괴 뒤 이어진 판정",
+              "position_tags": ["FB"],
+              "topic_tags": ["압박", "수비라인"],
+              "member_ids": ["wonjeon"],
+              "key_frame_candidate_ids": ["c042"]
+            },
+            {
+              "start_line": 158,
+              "end_line": 162,
+              "title": "수비가 촘촘할 때 후방으로 풀기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": ["find", "rumi"],
+              "key_frame_candidate_ids": ["c043"]
+            },
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "상황에 따른 땅볼·공중 패스",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "조작/키사용"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c045"]
+            },
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "막힌 돌파 대신 뒤로 살리고 오버랩 활용",
+              "position_tags": ["FW"],
+              "topic_tags": ["탈압박", "빌드업", "포지셔닝"],
+              "member_ids": ["maekgu"],
+              "key_frame_candidate_ids": ["c046"]
+            },
+            {
+              "start_line": 183,
+              "end_line": 187,
+              "title": "대각 옵션과 밀집 수비 대응 정리",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": [],
+              "key_frame_candidate_ids": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "url": "https://www.fifatrainingcentre.com/en/game/game-analysis/in-possession/switch-of-play.php",
+      "title": "Switch of play",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "상대가 좁게 정렬했을 때 폭을 쓰는 방향 전환이 공간을 여는 데 도움이 된다. 패스하는 선수와 반대편에서 받는 선수 모두 시간과 공간을 확보해야 한다.",
+      "key_points_ko": ["상대의 수비 대형을 먼저 보고 반대편의 넓은 공간을 찾는다.", "공을 받는 선수도 폭을 유지하며 받을 공간을 만든다."],
+      "unit_ids": ["u001", "u005", "u007", "u009"]
+    },
+    {
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-passing-in-football",
+      "title": "How to coach passing in football",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "패스 선택은 공을 받기 전후의 위치와 각도에 달려 있다. 공을 가진 선수가 빈 공간으로 전진해 더 나은 패스 각도를 만들 수도 있다.",
+      "key_points_ko": ["패스 전에 몸과 공의 위치를 조정해 유리한 각도를 만든다.", "빈 공간으로 공을 운반하는 것도 패스 선택지를 넓히는 방법이다."],
+      "unit_ids": ["u006", "u011", "u012"]
+    }
+  ]
+}

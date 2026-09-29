@@ -1,0 +1,73 @@
+{
+  "refs": [
+    {
+      "url": "https://www.ea.com/games/ea-sports-fc/amp/news/fc-24-gameplay-deepdive",
+      "title": "EA SPORTS FC™ 24 | Pitch Notes - Gameplay Deep Dive",
+      "source_name": "EA SPORTS",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA SPORTS FC 24 개발진의 공식 게임플레이 개요로 Precision Pass, Effort Dribble, Controlled Sprint를 새 기능으로 소개합니다. 영상의 FC24 조작·패스 피드백을 게임 버전의 맥락에서 살펴볼 때 참고하며, 각 장면의 플레이를 판정하는 근거로 쓰지는 않습니다.",
+      "key_points_ko": [
+        "FC24 게임플레이 팀이 정밀 패스, 노력 드리블, 컨트롤 스프린트 등 해당 버전의 신규 기능을 소개합니다.",
+        "페이지는 게임 기능 개요이며 영상 속 특정 버튼 입력을 설명하지 않습니다."
+      ],
+      "unit_ids": ["u002", "u003"]
+    },
+    {
+      "url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "title": "EA SPORTS FC™ 24 | Pitch Notes - PlayStyles Deep Dive",
+      "source_name": "EA SPORTS",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "FC24 공식 플레이스타일 설명은 짧은 땅볼·드리븐 패스·로빙 패스·스루 패스가 특정 플레이스타일에 따라 달라지는 효과를 정리합니다. 땅볼과 띄운 패스의 선택을 다룬 유닛에 게임 고유 메커닉 맥락을 더하되, 전술적으로 어느 패스가 늘 우월하다는 뜻은 아닙니다.",
+      "key_points_ko": [
+        "Tiki Taka는 짧은 땅볼 패스의 정확도와 수신자의 볼 컨트롤에 영향을 줍니다.",
+        "Long Ball Pass는 로빙 패스의 속도·정확도와 궤적에 영향을 줍니다.",
+        "Pinged Pass는 드리븐 패스의 속도와 정확도에 영향을 줍니다."
+      ],
+      "unit_ids": ["u017"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/diagonal-and-vertical-passing.php",
+      "title": "Anouschka Bernhard: Diagonal and vertical passing",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "FIFA 트레이닝 센터의 훈련 세션은 대각·수직 패스와 그 패스를 받을 선수의 움직임을 다룹니다. 대각 패스 길을 만드는 움직임과 전방 침투의 일반 축구 원칙을 설명하며 FC 게임 조작법을 다루지는 않습니다.",
+      "key_points_ko": [
+        "수비수에게서 떨어지거나 평행하게 움직여 대각 패스 길을 만들도록 제안합니다.",
+        "동료가 뛰어 들어가는 구역에 맞춰 대각 패스를 하고 움직이며 받는 연습을 제시합니다.",
+        "수직·대각 움직임으로 수비 라인을 통과하는 원칙을 설명합니다."
+      ],
+      "unit_ids": ["u001", "u014", "u019"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php",
+      "title": "Abdelouahed Zamrat: Combining in the opposition half",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "FIFA 트레이닝 센터 세션은 밀집 수비를 상대로 폭을 쓰고 공을 가진 동료를 지원하며 오버랩·조합 플레이로 공간을 만드는 원칙을 설명합니다. 넓은 전개와 지원 옵션을 다룬 유닛의 일반 전술 참고자료입니다.",
+      "key_points_ko": [
+        "공을 가진 동료를 지원해 패스 선택지를 제공하고 수적 우위를 만들도록 권합니다.",
+        "경기장 폭을 활용해 상대 수비 블록을 벌리고 중앙에 공간을 만드는 원칙을 설명합니다.",
+        "오버랩과 타이밍을 맞춘 오프더볼 움직임을 조합해 수비를 흔드는 연습을 제시합니다."
+      ],
+      "unit_ids": ["u004", "u009", "u011", "u018"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/transition-to-attacking/transition-into-attack.php",
+      "title": "Simon Jennings: Keeping it compact and transitioning into attack",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "FIFA 트레이닝 센터의 전환 세션은 공을 얻은 뒤 전방을 보고 빠르게 패스·전진하는 방법, 넓은 선수의 준비, 압박을 피해 공간을 여는 팀 움직임을 다룹니다. 영상 속 역습과 직접 운반 피드백에 일반 축구 맥락을 제공합니다.",
+      "key_points_ko": [
+        "공격 전환에서는 전방을 보고 패스와 달리기로 빠르게 나아가도록 제안합니다.",
+        "공을 가진 팀은 압박을 통과하거나 돌아가거나 넘겨서 플레이할 수 있다고 설명합니다.",
+        "넓은 선수는 중앙에서 공을 다룰 때도 전환을 위해 준비하고, 팀은 상대를 벌려 공간을 만들도록 권합니다."
+      ],
+      "unit_ids": ["u004", "u008"]
+    }
+  ]
+}

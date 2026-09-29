@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-2add849eab",
+      "url": "https://learning.coachesvoice.com/cv/switches-of-play-football-tactics-explained",
+      "final_url": "https://learning.coachesvoice.com/cv/switches-of-play-football-tactics-explained/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T09:54:22.925Z",
+      "reused": false,
+      "page": "refs/r-2add849eab.html",
+      "title": "Switch of play: football tactics explained",
+      "source_name": "The Coaches' Voice",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u007",
+        "u008"
+      ],
+      "summary_ko": "한쪽으로 수비가 몰렸을 때 반대편 넓은 공간으로 길게 넘기는 '방향 전환'을 설명한다. 정확한 패스, 받는 선수의 타이밍 맞춘 움직임, 빠른 첫 터치가 필요하다.",
+      "key_points_ko": [
+        "폭(width)은 중요한 공격 원칙이며, 방향 전환은 측면의 넓은 공간을 활용하게 해 준다.",
+        "공을 되찾은 직후 상대의 즉각적인 재압박을 피하는 데도 방향 전환이 쓰인다.",
+        "기술적으로 까다롭고, 부정확하면 위험 부담이 크다."
+      ],
+      "translations": [
+        {
+          "orig": "Width is an important attacking principle in football, and switches of play help teams to exploit space in the wide areas.",
+          "ko": "폭은 축구에서 중요한 공격 원칙이며, 방향 전환은 팀이 측면의 공간을 활용하도록 돕는다."
+        },
+        {
+          "orig": "Switching play also helps avoid counter-pressure immediately after possession is regained.",
+          "ko": "방향 전환은 공을 되찾은 직후의 재압박을 피하는 데도 도움이 된다."
+        }
+      ]
+    },
+    {
+      "id": "r-fd8f27e064",
+      "url": "https://keengamer.com/articles/guides/ea-fc-24-the-precision-passing-guide",
+      "final_url": "https://www.keengamer.com/articles/guides/ea-fc-24-the-precision-passing-guide/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T09:54:24.653Z",
+      "reused": false,
+      "page": "refs/r-fd8f27e064.html",
+      "title": "EA FC 24: The Precision Passing Guide",
+      "source_name": "KeenGamer",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u013"
+      ],
+      "summary_ko": "EA FC 24의 패스 종류(땅볼·로빙·드리븐)를 상황별로 정리한 가이드다. 땅볼 패스는 좌우로 공격 방향을 빠르게 바꾸는 데, 로빙 패스는 수비 라인 사이 공간을 노릴 때 쓰기 좋다고 설명한다.",
+      "key_points_ko": [
+        "강한 땅볼 패스는 상대를 좌우로 움직이게 하며 공격 지점을 빠르게 바꾼다.",
+        "띄우는 패스는 수비가 골대를 등지고 뛰며 라인 사이에 공간을 남길 때 효과적이다."
+      ],
+      "translations": [
+        {
+          "orig": "a powerful along-the-ground pass will swiftly change the point of attack by moving the opposition from side to side.",
+          "ko": "강한 땅볼 패스는 상대를 좌우로 흔들며 공격 지점을 빠르게 바꾼다."
+        }
+      ]
+    }
+  ],
+  "dropped": []
+}

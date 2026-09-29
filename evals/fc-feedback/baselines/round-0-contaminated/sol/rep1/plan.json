@@ -1,0 +1,231 @@
+{
+  "session_title": "FC Barcelona 팀 연습 Part 3 — 피드백",
+  "matches": [
+    {
+      "title": "연습경기 피드백",
+      "topics": [
+        {
+          "title": "초반 빌드업과 역습 준비",
+          "summary": "넓은 공간을 보고 받는 자세를 유지하며, 역습에는 동료의 패스 길을 만든다.",
+          "units": [
+            {
+              "title": "좁은 쪽 대신 넓은 쪽으로 전개",
+              "start_line": 5,
+              "end_line": 19,
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c003"
+              ]
+            },
+            {
+              "title": "LT로 패스 받을 자세 유지",
+              "start_line": 22,
+              "end_line": 29,
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "조작/키사용"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c009"
+              ]
+            },
+            {
+              "title": "역습 때 윙어 역할로 뛰어 두 패스 길 열기",
+              "start_line": 36,
+              "end_line": 51,
+              "position_tags": [
+                "FW"
+              ],
+              "topic_tags": [
+                "전환/역습",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c013"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "압박을 풀며 공 운반하기",
+          "summary": "압박과 상대 수비 숫자를 보고 후방과 측면을 거쳐 안전하게 전진한다.",
+          "units": [
+            {
+              "title": "압박 앞에서 간단히 뒤로 주고 다시 받기",
+              "start_line": 55,
+              "end_line": 63,
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "탈압박",
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c017"
+              ]
+            },
+            {
+              "title": "전진 패스보다 측면을 거쳐 수비 이동시키기",
+              "start_line": 64,
+              "end_line": 77,
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "탈압박"
+              ],
+              "member_ids": [
+                "gerrard"
+              ],
+              "key_frame_candidate_ids": [
+                "c018"
+              ]
+            },
+            {
+              "title": "자기 진영에서는 더 운반해 공간과 시간을 만들기",
+              "start_line": 79,
+              "end_line": 97,
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c021"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "중앙과 측면의 자리 교대",
+          "summary": "막힌 중앙의 방향을 바꾸고, 측면 동료의 움직임에 맞춰 중앙 공간을 채운다.",
+          "units": [
+            {
+              "title": "막힌 중앙에서 넓은 쪽으로 방향 바꾸기",
+              "start_line": 104,
+              "end_line": 120,
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "파이널서드"
+              ],
+              "member_ids": [
+                "gerrard"
+              ],
+              "key_frame_candidate_ids": [
+                "c030"
+              ]
+            },
+            {
+              "title": "측면 동료가 올라가면 중앙으로 이동",
+              "start_line": 121,
+              "end_line": 133,
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "포지셔닝",
+                "전환/역습"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c032"
+              ]
+            },
+            {
+              "title": "측면에서 대각 패스로 전진 시야 만들기",
+              "start_line": 145,
+              "end_line": 154,
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "포지셔닝"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c039"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "밀집 수비 앞의 선택",
+          "summary": "길이 막히면 공을 뒤로 살리고 열린 땅볼 패스와 후방 지원을 활용한다.",
+          "units": [
+            {
+              "title": "수비가 촘촘하면 뒤로 빼서 다시 시작",
+              "start_line": 158,
+              "end_line": 162,
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "파이널서드"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c043"
+              ]
+            },
+            {
+              "title": "열린 패스 길에는 땅볼로 전달",
+              "start_line": 163,
+              "end_line": 168,
+              "position_tags": [
+                "MF"
+              ],
+              "topic_tags": [
+                "빌드업",
+                "조작/키사용"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c045"
+              ]
+            },
+            {
+              "title": "돌파가 막히면 뒤의 지원을 활용",
+              "start_line": 169,
+              "end_line": 182,
+              "position_tags": [
+                "MF",
+                "FW"
+              ],
+              "topic_tags": [
+                "탈압박",
+                "빌드업"
+              ],
+              "member_ids": [],
+              "key_frame_candidate_ids": [
+                "c047"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

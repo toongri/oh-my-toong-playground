@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-fa672b0eed",
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass",
+      "final_url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T03:38:24.973Z",
+      "reused": false,
+      "page": "refs/r-fa672b0eed.html",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u001",
+        "u004",
+        "u008",
+        "u010",
+        "u013"
+      ],
+      "summary_ko": "EA SPORTS FC의 땅볼, 스루, 로빙 패스 선택과 열린 패스 경로 확인을 설명한다.",
+      "key_points_ko": [
+        "가까운 동료와 열린 경로에는 땅볼 패스를 쓴다.",
+        "수비 사이 경로가 막혔을 때 공중 패스를 고려한다.",
+        "동료의 움직임과 주변 공간에 맞춰 패스 종류를 고른다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-81706b9d03",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/in-possession-width-for-deception",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/in-possession-width-for-deception",
+      "http_status": 200,
+      "checked_at": "2026-09-29T03:38:25.046Z",
+      "reused": false,
+      "page": "refs/r-81706b9d03.html",
+      "title": "SESSION: width for deception",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u001",
+        "u003",
+        "u007",
+        "u009",
+        "u010"
+      ],
+      "summary_ko": "넓은 폭을 이용해 공간을 만들고 활용하며 점유를 유지하는 훈련의 목표를 소개한다.",
+      "key_points_ko": [
+        "측면 폭을 활용해 중앙 공간을 만든다.",
+        "넓은 공간을 이용해 공을 소유하고 공격 기회를 만든다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-2e95ce4d30",
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-england-u15s-play-out-from-the-back",
+      "final_url": "https://www.thefa.com/bootroom/resources/coaching/how-england-u15s-play-out-from-the-back",
+      "http_status": 200,
+      "checked_at": "2026-09-29T03:38:25.915Z",
+      "reused": false,
+      "page": "refs/r-2e95ce4d30.html",
+      "title": "How England U15s play out from the back",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u004",
+        "u006",
+        "u012",
+        "u014"
+      ],
+      "summary_ko": "압박 속에서도 침착하게 전개하고 상대를 끌어내 높은 위치에서 수적 우위를 만드는 빌드업 접근을 설명한다.",
+      "key_points_ko": [
+        "상대가 공 쪽으로 나오도록 유도해 높은 위치에서 수적 우위를 만든다.",
+        "압박을 받는 상황에서 공을 받아 해결책을 찾는 훈련을 강조한다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

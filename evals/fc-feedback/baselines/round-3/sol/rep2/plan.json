@@ -1,0 +1,33 @@
+{
+  "session_title": "C.E.F. FC Barcelona 팀 연습 Part 3 — 장면별 코칭 피드백",
+  "matches": [
+    {
+      "title": "BRO 대 FCB 연습 경기",
+      "topics": [
+        {
+          "title": "공간 선택과 전진 경로",
+          "summary": "공간이 좁을 때의 패스 선택, 역습 동선, 압박 상황의 안전한 전개, 수비 밀집 시 재순환을 장면별로 짚는다.",
+          "units": [
+            {"start_line":4,"end_line":19,"title":"좁은 곳 대신 넓은 공간으로 연결","position_tags":["MF"],"topic_tags":["빌드업"],"member_ids":[],"key_frame_candidate_ids":["c003","c004"]},
+            {"start_line":22,"end_line":29,"title":"공을 향해 움직일 때 LT로 몸 방향 유지","position_tags":["MF"],"topic_tags":["조작/키사용"],"member_ids":[],"key_frame_candidate_ids":["c009"]},
+            {"start_line":36,"end_line":51,"title":"역습에서 윙어 동선으로 패스 선택지 만들기","position_tags":["FW"],"topic_tags":["전환/역습","포지셔닝"],"member_ids":[],"key_frame_candidate_ids":["c013","c014"]},
+            {"start_line":55,"end_line":63,"title":"압박이 붙기 전에 뒤로 내주고 다시 받기","position_tags":["MF"],"topic_tags":["탈압박","빌드업"],"member_ids":[],"key_frame_candidate_ids":["c017"]},
+            {"start_line":64,"end_line":77,"title":"Gerrard_CEF의 전진 패스보다 뒤쪽 경로 활용","position_tags":["MF"],"topic_tags":["빌드업"],"member_ids":["gerrard"],"key_frame_candidate_ids":["c018"]},
+            {"start_line":78,"end_line":78,"title":"루미의 멈춘 전진 동선","position_tags":["FW"],"topic_tags":["포지셔닝"],"member_ids":[],"key_frame_candidate_ids":["c053"]},
+            {"start_line":79,"end_line":97,"title":"빠른 패스보다 운반으로 상대를 끌어내기","position_tags":["MF"],"topic_tags":["빌드업","탈압박"],"member_ids":[],"key_frame_candidate_ids":["c021","c022"]},
+            {"start_line":98,"end_line":99,"title":"상하로 넓게 벌리는 플레이","position_tags":["MF"],"topic_tags":["포지셔닝"],"member_ids":[],"key_frame_candidate_ids":["c024"]},
+            {"start_line":100,"end_line":103,"title":"깔끔하게 마무리되지 않은 득점 장면 평가","position_tags":["FW"],"topic_tags":["파이널서드"],"member_ids":[],"key_frame_candidate_ids":[]},
+            {"start_line":104,"end_line":120,"title":"막힌 공격에서 넓은 쪽으로 전환","position_tags":["MF"],"topic_tags":["빌드업","파이널서드"],"member_ids":["gerrard"],"key_frame_candidate_ids":["c030","c031"]},
+            {"start_line":121,"end_line":136,"title":"측면 전진 때 중앙과 후방 위치 채우기","position_tags":["MF","FW"],"topic_tags":["포지셔닝","전환/역습"],"member_ids":[],"key_frame_candidate_ids":["c032","c033"]},
+            {"start_line":145,"end_line":154,"title":"중원이 앞을 볼 수 있게 대각으로 빼주기","position_tags":["MF"],"topic_tags":["빌드업"],"member_ids":[],"key_frame_candidate_ids":["c039"]},
+            {"start_line":155,"end_line":157,"title":"밸런스를 잃은 뒤 태클과 페널티","position_tags":["DF"],"topic_tags":["수비라인"],"member_ids":[],"key_frame_candidate_ids":["c042"]},
+            {"start_line":158,"end_line":162,"title":"촘촘한 수비 앞에서 공을 뒤로 빼기","position_tags":["MF"],"topic_tags":["빌드업"],"member_ids":[],"key_frame_candidate_ids":["c043"]},
+            {"start_line":163,"end_line":168,"title":"열린 패스는 땅으로, 막힌 경우만 띄우기","position_tags":["MF"],"topic_tags":["파이널서드"],"member_ids":["gerrard"],"key_frame_candidate_ids":["c045"]},
+            {"start_line":169,"end_line":187,"title":"맥구의 막힌 돌파와 후방 선택지, 경기 총평","position_tags":["MF"],"topic_tags":["빌드업","커뮤니케이션"],"member_ids":[],"key_frame_candidate_ids":["c046"]}
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

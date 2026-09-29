@@ -1,0 +1,37 @@
+{
+  "refs": [
+    {
+      "url":"https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title":"How to pass in EA SPORTS FC™",
+      "source_name":"EA Help",
+      "lang":"en",
+      "kind":"eafc",
+      "summary_ko":"EA SPORTS FC의 땅볼·스루·로브 패스 용도와 패스 경로 선택을 설명한다.",
+      "key_points_ko":["가까운 동료와 짧게 연결할 때 땅볼 패스를 쓴다.","수비수가 땅볼 경로를 막을 때는 띄운 스루 패스를 고려한다."],
+      "translations":[],
+      "unit_ids":["u011","u012"]
+    },
+    {
+      "url":"https://www.thefa.com/bootroom/resources/coaching/how-spain-and-barcelona-play",
+      "title":"How Spain and Barcelona play",
+      "source_name":"The Football Association",
+      "lang":"en",
+      "kind":"tactics",
+      "summary_ko":"바르셀로나의 후방 전개와 패스 후 다시 받는 연결, 측면 전환을 분석한 코칭 자료다.",
+      "key_points_ko":["패스 후 위치를 조정해 다시 받는 연결을 반복한다.","중앙 점유 속에서도 빠른 측면 전환을 활용한다."],
+      "translations":[],
+      "unit_ids":["u004","u006"]
+    },
+    {
+      "url":"https://community.thefa.com/coaching/b/insights-analysis-blogs/posts/two-player-connections-in-wide-areas",
+      "title":"Two player connections in wide areas",
+      "source_name":"England Football Learning",
+      "lang":"en",
+      "kind":"tactics",
+      "summary_ko":"측면에서 두 선수가 움직임과 패스로 선택지를 만드는 패턴을 분석한다.",
+      "key_points_ko":["측면의 두 선수는 대각선 움직임과 패스 연결로 볼 소유자에게 선택지를 만든다.","공을 가진 선수가 상대를 끌어내면 동료가 받을 공간이 생길 수 있다."],
+      "translations":[],
+      "unit_ids":["u003","u007","u008"]
+    }
+  ]
+}

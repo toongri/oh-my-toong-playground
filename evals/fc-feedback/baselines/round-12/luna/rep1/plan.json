@@ -1,0 +1,155 @@
+{
+  "session_title": "C.E.F. 바르셀로나 팀 연습 피드백 · 2024.01.04",
+  "matches": [
+    {
+      "title": "BROS VAMOS vs CEF Barcelona",
+      "topics": [
+        {
+          "title": "전반: 공간 선택과 역할 조정",
+          "summary": "넓은 공간의 선수에게 연결하고, LT를 활용한 움직임과 역습 때의 측면 역할·패스 선택지를 짚습니다.",
+          "units": [
+            {
+              "start_line": 4,
+              "end_line": 19,
+              "title": "좁은 공간보다 넓은 공간의 선수를 선택",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c004"]
+            },
+            {
+              "start_line": 22,
+              "end_line": 29,
+              "title": "LT를 누르고 움직이는 동안 몸을 돌리지 않기",
+              "position_tags": [],
+              "topic_tags": ["조작/키사용", "포지셔닝"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c009"]
+            },
+            {
+              "start_line": 36,
+              "end_line": 51,
+              "title": "역습에서 루미의 측면 역할과 패스 선택지 만들기",
+              "position_tags": ["FW"],
+              "topic_tags": ["전환/역습", "포지셔닝"],
+              "member_ids": ["jomin", "find", "rumi", "gipeu", "yumi", "maekgu"],
+              "key_frame_candidate_ids": ["c013", "c014"]
+            },
+            {
+              "start_line": 55,
+              "end_line": 77,
+              "title": "압박을 받으면 뒤로 내주고 다시 받아 전진 경로를 고르기",
+              "position_tags": ["MF", "FW"],
+              "topic_tags": ["탈압박", "빌드업"],
+              "member_ids": ["gerrard", "saembaek"],
+              "key_frame_candidate_ids": ["c017", "c018"]
+            },
+            {
+              "start_line": 78,
+              "end_line": 78,
+              "title": "루미가 뛰리라 기대한 장면에서 멈춘 움직임",
+              "position_tags": ["FW"],
+              "topic_tags": ["포지셔닝", "전환/역습"],
+              "member_ids": ["rumi"],
+              "key_frame_candidate_ids": ["c053"]
+            },
+            {
+              "start_line": 79,
+              "end_line": 97,
+              "title": "직접 몰아 상대를 끌어내고 전진할 시간 만들기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "탈압박", "전환/역습"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c021", "c022"]
+            },
+            {
+              "start_line": 98,
+              "end_line": 99,
+              "title": "상하 폭을 넓혀 찢어 플레이하기",
+              "position_tags": [],
+              "topic_tags": ["포지셔닝", "빌드업"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c024"]
+            }
+          ]
+        },
+        {
+          "title": "후반: 공간 활용과 위치 조정",
+          "summary": "넓은 공간의 선수를 살리고, 원전의 측면 전진에 맞춰 사인드가 중앙으로 들어가는 위치 조정을 다룹니다.",
+          "units": [
+            {
+              "start_line": 104,
+              "end_line": 120,
+              "title": "넓은 공간의 선수를 살려 크로스·컷백 선택지 열기",
+              "position_tags": ["MF", "FW"],
+              "topic_tags": ["빌드업", "파이널서드", "크로스"],
+              "member_ids": ["gerrard", "jonjae"],
+              "key_frame_candidate_ids": ["c030", "c031"]
+            },
+            {
+              "start_line": 121,
+              "end_line": 136,
+              "title": "원전의 측면 전진에 맞춰 사인드는 중앙으로 들어가기",
+              "position_tags": ["DF", "FW"],
+              "topic_tags": ["포지셔닝", "전환/역습", "빌드업"],
+              "member_ids": ["find", "wonjeon"],
+              "key_frame_candidate_ids": ["c032", "c033", "c034"]
+            },
+            {
+              "start_line": 145,
+              "end_line": 154,
+              "title": "측면에서 대각 패스로 넓은 공간의 선수 보기",
+              "position_tags": ["CAM"],
+              "topic_tags": ["빌드업", "파이널서드"],
+              "member_ids": ["spress"],
+              "key_frame_candidate_ids": ["c039"]
+            }
+          ]
+        },
+        {
+          "title": "후반: 수비와 안전한 패스 판단",
+          "summary": "수비 균형이 무너진 태클 장면과, 촘촘한 수비 앞에서 뒤로 빼는 선택 및 패스 높낮이를 정리합니다. 마지막에는 대각 선택지를 볼 시점과 후퇴 원칙도 다시 확인합니다.",
+          "units": [
+            {
+              "start_line": 155,
+              "end_line": 157,
+              "title": "원전의 균형이 무너진 뒤 태클 시도와 페널티 장면",
+              "position_tags": ["DF"],
+              "topic_tags": ["압박", "수비라인"],
+              "member_ids": ["wonjeon"],
+              "key_frame_candidate_ids": ["c042"]
+            },
+            {
+              "start_line": 158,
+              "end_line": 160,
+              "title": "상대 수비가 촘촘하면 공격을 멈추고 뒤로 빼기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "포지셔닝"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c043"]
+            },
+            {
+              "start_line": 163,
+              "end_line": 168,
+              "title": "가능하면 땅으로 주고, 길이 열리면 띄워주기",
+              "position_tags": [],
+              "topic_tags": ["빌드업", "파이널서드"],
+              "member_ids": [],
+              "key_frame_candidate_ids": ["c045"]
+            },
+            {
+              "start_line": 169,
+              "end_line": 182,
+              "title": "막힌 상황에선 같은 돌파보다 안전하게 뒤로 연결하기",
+              "position_tags": ["FW"],
+              "topic_tags": ["탈압박", "빌드업", "포지셔닝"],
+              "member_ids": ["maekgu"],
+              "key_frame_candidate_ids": ["c046"]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "proposed_tags": []
+}

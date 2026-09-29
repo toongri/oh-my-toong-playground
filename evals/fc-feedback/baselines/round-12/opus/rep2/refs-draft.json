@@ -1,0 +1,71 @@
+{
+  "refs": [
+    {
+      "url": "https://learning.coachesvoice.com/cv/switches-of-play-football-tactics-explained/",
+      "title": "Switch of play: football tactics explained",
+      "source_name": "The Coaches' Voice",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "전환(스위치 오브 플레이)은 한쪽에 몰린 상대 수비를 피해 공을 반대쪽으로 한 번에 옮기는 패스로, 즉각적인 압박을 피하며 전진하고 측면 공간을 활용하는 방법이다.",
+      "key_points_ko": [
+        "상대를 한쪽으로 끌어들인 뒤 반대쪽으로 공을 옮긴다",
+        "상대가 촘촘하게 모여 있을 때 특히 효과적이다",
+        "측면 공간을 활용하는 공격 원칙인 폭(width)과 연결된다"
+      ],
+      "translations": [
+        { "orig": "Width is an important attacking principle in football, and switches of play help teams to exploit space in the wide areas.", "ko": "폭은 축구의 중요한 공격 원칙이며, 전환 패스는 팀이 측면 공간을 활용하도록 돕는다." },
+        { "orig": "The main focus of switching play is to help progress the ball forward by avoiding immediate pressure from the opposition.", "ko": "전환의 핵심은 상대의 즉각적인 압박을 피하면서 공을 앞으로 전진시키는 것이다." }
+      ],
+      "unit_ids": ["u008", "u015"]
+    },
+    {
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/switching_play.php",
+      "title": "Lamia Boumehdi: Technical foundations for switching play",
+      "source_name": "FIFA Training Centre",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "촘촘한 수비 블록을 깨기 위해 한쪽 측면으로 공격해 압박을 끌어들인 뒤 반대쪽으로 빠르게 전환하는 훈련 세션이다.",
+      "key_points_ko": [
+        "한쪽에서 압박을 끌어들이고 반대쪽의 생긴 공간으로 전환한다",
+        "경기장 전체 폭을 써서 수비를 벌린다"
+      ],
+      "translations": [
+        { "orig": "Attack down one side of the pitch to attract pressure and then switch the play to exploit the space created on the other side.", "ko": "한쪽 측면으로 공격해 압박을 끌어들인 뒤, 반대쪽에 생긴 공간을 활용하도록 전환하라." }
+      ],
+      "unit_ids": ["u008"]
+    },
+    {
+      "url": "https://fussballcoach.substack.com/p/counter-attacking-effectively",
+      "title": "Counter-Attacking Effectively",
+      "source_name": "Fussballcoach (Substack)",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "역습에서는 양쪽 측면에 공격수를 두어 폭을 만들고, 공을 가진 선수에게 패스 선택지를 늘려 수비가 중앙과 측면을 동시에 막지 못하게 해야 한다는 글이다.",
+      "key_points_ko": [
+        "역습에서도 양 측면에 폭을 만들어 수비를 벌린다",
+        "측면 선수는 필요한 만큼 바깥에, 가능한 만큼 안쪽에 선다",
+        "공을 가진 선수의 패스 선택지를 늘려 수비에 어려운 결정을 강요한다"
+      ],
+      "translations": [
+        { "orig": "Wide players should be positioned as far out as necessary and as far in as possible.", "ko": "측면 선수는 필요한 만큼 바깥에, 가능한 만큼 안쪽에 위치해야 한다." }
+      ],
+      "unit_ids": ["u003"]
+    },
+    {
+      "url": "https://www.gamepressure.com/ea-sports-fc-24/tips-and-tricks/z610f69",
+      "title": "EA Sports FC 24: Tips and tricks",
+      "source_name": "Gamepressure",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA FC 24 기본 팁 모음으로, 수비 시 파울을 피하는 태클 요령과 슬라이딩 자제, 패스를 미리 계획하고 막히면 다른 패스 경로를 찾는 법을 다룬다.",
+      "key_points_ko": [
+        "파울을 피하려면 기본 태클을 쓰고, 파울 위험이 없을 때만 슬라이딩한다",
+        "패스는 미리 계획하고 상대가 막고 있으면 다른 경로를 고려한다"
+      ],
+      "translations": [
+        { "orig": "it is worth planning passes in advance and performing them at a pace so as not to slow down the player's run", "ko": "패스를 미리 계획하고 선수의 달리는 흐름이 느려지지 않을 속도로 하는 것이 좋다" }
+      ],
+      "unit_ids": ["u011", "u012"]
+    }
+  ]
+}

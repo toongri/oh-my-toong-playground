@@ -1,0 +1,37 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA의 패스 안내는 가까운 동료와 열린 경로에는 땅볼 패스, 공간으로 달리는 동료에게는 스루 패스, 막힌 땅볼 경로 너머에는 로브 패스를 구분해 설명한다.",
+      "key_points_ko": ["패스 종류는 동료의 움직임과 주변 공간에 맞춰 고른다.", "수비 사이로 억지로 넣기보다 열린 패스 경로를 찾는다."],
+      "translations": [],
+      "unit_ids": ["u001", "u009", "u014"]
+    },
+    {
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-transition",
+      "title": "How to coach transition",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "잉글랜드 축구협회의 전환 지도 글은 역습에 나서는 선수에게 주변 동료의 지원 움직임이 필요하며, 공을 되찾기 전부터 다음 선택지를 생각해야 한다고 설명한다.",
+      "key_points_ko": ["역습 선수의 전진에는 동료의 지원 움직임이 따른다.", "공 소유가 바뀌기 전부터 가능한 선택지를 생각한다."],
+      "translations": [],
+      "unit_ids": ["u003"]
+    },
+    {
+      "url": "https://www.thefa.com/bootroom/resources/coaching/how-to-coach-forward-movement",
+      "title": "How to coach forward movement",
+      "source_name": "The FA Boot Room",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "잉글랜드 축구협회의 전방 움직임 지도 글은 공격수가 동료와 자신을 위한 공간을 만들도록 위치를 조정하고, 공을 가진 동료의 상황에 맞춰 움직임을 선택해야 한다고 설명한다.",
+      "key_points_ko": ["공이 없는 선수의 위치 변경은 동료를 위한 공간도 만든다.", "공을 가진 동료가 압박받을 때에는 발밑에서 받을 선택지를 제공할 수 있다."],
+      "translations": [],
+      "unit_ids": ["u003", "u006", "u010"]
+    }
+  ]
+}

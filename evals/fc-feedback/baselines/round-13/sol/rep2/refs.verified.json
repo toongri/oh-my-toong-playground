@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "refs": [
+    {
+      "id": "r-81135892ef",
+      "url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "final_url": "https://www.ea.com/games/ea-sports-fc/pitch-notes/news/fc-24-playstyles-deepdive",
+      "http_status": 200,
+      "checked_at": "2026-09-29T09:52:57.323Z",
+      "reused": false,
+      "page": "refs/r-81135892ef.html",
+      "title": "EA SPORTS FC 24 | Pitch Notes - PlayStyles Deep Dive",
+      "source_name": "EA SPORTS FC",
+      "lang": "en",
+      "kind": "eafc",
+      "unit_ids": [
+        "u002"
+      ],
+      "summary_ko": "EA가 FC 24의 PlayStyle 효과를 설명한 개발 노트다. Jockey 관련 수비 움직임 효과를 소개한다.",
+      "key_points_ko": [
+        "Jockey PlayStyle은 수비 중 Jockey 움직임에 관여한다.",
+        "이 자료는 LT 조작법 자체의 검증 자료가 아니라 게임 내 수비 메커니즘의 배경 자료다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-5bd0801f0d",
+      "url": "https://community.thefa.com/coaching/b/insights-analysis-blogs/posts/two-player-connections-in-wide-areas",
+      "final_url": "https://community.thefa.com/coaching/b/insights-analysis-blogs/posts/two-player-connections-in-wide-areas",
+      "http_status": 200,
+      "checked_at": "2026-09-29T09:52:58.644Z",
+      "reused": false,
+      "page": "refs/r-5bd0801f0d.html",
+      "title": "Two player connections in wide areas",
+      "source_name": "England Football Learning",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u003",
+        "u008",
+        "u009"
+      ],
+      "summary_ko": "잉글랜드 축구협회 코칭 자료가 측면의 두 선수 연결과 대각선 움직임, 오버래핑을 실제 경기 사례로 설명한다.",
+      "key_points_ko": [
+        "측면 선수들의 위치와 움직임이 공 소유자에게 여러 선택지를 만든다.",
+        "안쪽으로 파고들거나 바깥으로 돌아가는 움직임은 수비의 대응에 따라 선택한다."
+      ],
+      "translations": []
+    },
+    {
+      "id": "r-2e9d52bf55",
+      "url": "https://www.uefa.com/uefayouthleague/news/0298-1d98d77d9d5c-66c63bfa9e9a-1000--youth-league-semi-finalists-tactical-analysis-of-the-rol",
+      "final_url": "https://www.uefa.com/errors/",
+      "http_status": 200,
+      "checked_at": "2026-09-29T09:53:01.749Z",
+      "reused": false,
+      "page": "refs/r-2e9d52bf55.html",
+      "title": "Youth League semi-finalists: tactical analysis of full-backs and build-up",
+      "source_name": "UEFA",
+      "lang": "en",
+      "kind": "tactics",
+      "unit_ids": [
+        "u004",
+        "u005",
+        "u008"
+      ],
+      "summary_ko": "UEFA 기술 관찰자가 풀백과 윙어의 협력, 압박을 유도한 뒤 전개하는 선택, 페널티 박스 수비 판단을 경기 장면으로 설명한다.",
+      "key_points_ko": [
+        "풀백이 빌드업에서 전진할 때 윙어는 폭이나 높이를 조정해 패스 옵션을 돕는다.",
+        "압박 상황에서는 기다렸다가 연결할지, 수비 행동을 언제 시작할지 판단이 중요하다."
+      ],
+      "translations": []
+    }
+  ],
+  "dropped": []
+}

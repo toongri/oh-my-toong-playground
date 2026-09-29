@@ -1,0 +1,46 @@
+{
+  "refs": [
+    {
+      "url": "https://help.ea.com/en/articles/ea-sports-fc/how-to-pass/",
+      "title": "How to pass in EA SPORTS FC™: passing guide",
+      "source_name": "EA Help",
+      "lang": "en",
+      "kind": "eafc",
+      "summary_ko": "EA 공식 패스 가이드는 받는 선수의 움직임과 주변 공간에 따라 패스 종류를 고르는 방법을 설명합니다.",
+      "key_points_ko": [
+        "가까운 동료에게 명확한 패스 길이 있으면 땅볼 패스를 사용합니다.",
+        "빈 공간으로 뛰는 동료에게 스루 패스를 주고, 수비수를 억지로 통과시키기보다 열린 패스 길을 찾습니다.",
+        "드리븐 땅볼 패스는 공을 더 빠르게 보내므로 받는 선수 주변 공간을 고려해야 합니다."
+      ],
+      "unit_ids": ["u001", "u003", "u004", "u008", "u009", "u010", "u012", "u013", "u014"]
+    },
+    {
+      "url": "https://www.ea.com/en-au/games/ea-sports-fc/pitch-notes/news/fc-24-career-deep-dive",
+      "title": "EA SPORTS FC™ 24 | Pitch Notes - Career Deep Dive",
+      "source_name": "EA SPORTS FC",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "FC 24 커리어 모드의 전술 비전 설명으로, 윙 플레이·역습·티키타카가 경기 폭과 전방 침투를 어떻게 다루는지 정리합니다.",
+      "key_points_ko": [
+        "윙 플레이는 넓은 폭을 쓰고 풀백 오버래핑으로 측면 위협을 더합니다.",
+        "역습은 공을 되찾은 뒤 공격수가 수비 뒤 공간으로 뛰도록 전진합니다.",
+        "티키타카는 짧은 패스와 위치 교환으로 수비 사이 공간을 기다립니다."
+      ],
+      "unit_ids": ["u003", "u007", "u009", "u010"]
+    },
+    {
+      "url": "https://www.ea.com/games/ea-sports-fc/fc-pro/news/play-like-matiasbonanno9",
+      "title": "Play like Matias Bonanno",
+      "source_name": "EA SPORTS FC Pro",
+      "lang": "en",
+      "kind": "tactics",
+      "summary_ko": "EA FC Pro의 전술 소개는 풀백과 측면 CAM이 공격 폭을 만들고, 중원이 수비 전환을 대비해 중앙 구조를 지키는 구성을 설명합니다.",
+      "key_points_ko": [
+        "풀백은 전진할 때 공격 폭을 제공하고 측면을 지원합니다.",
+        "수비형 미드필더는 중앙을 지키고 패스 길을 차단해 역습에 대비합니다.",
+        "측면 CAM은 중앙과 측면에서 공격 선택지를 제공할 수 있습니다."
+      ],
+      "unit_ids": ["u007", "u008", "u009"]
+    }
+  ]
+}
