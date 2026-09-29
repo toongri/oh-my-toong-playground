@@ -598,6 +598,61 @@ describe("카드 해부", () => {
 		expect(relatedU002).toBe(`관련: ${expectedU002.join(", ")}`);
 	});
 
+	test("관련 팀원이 정확히 5명이면 여전히 <p> 한 줄로 전원이 나온다(모바일 가독성 상한 경계값)", () => {
+		const data = sampleData();
+		const extra = { id: "m5", name: "이영수", gamertag: "Lee", positions: ["CB"] };
+		data.members = [...data.members, extra];
+		data.units[0].member_ids = [];
+		data.units[0].related_member_ids = ["hong", "kim", "park", "choi", "m5"];
+		const doc = parseHTML(renderSession(data)).document;
+		const card = doc.getElementById("u001");
+		expect(card?.querySelector("details.related-members")).toBeNull();
+		const p = card?.querySelector("p.related-members");
+		expect(p?.textContent).toBe("관련: 홍길동, 김철수, 박영희, 최민수, 이영수");
+	});
+
+	test("관련 팀원이 6명 이상이면 <details>로 접혀 앞 4명 + '외 N명'만 보이고 나머지는 펼쳐야 보인다(모바일 가독성)", () => {
+		const data = sampleData();
+		const extra = [
+			{ id: "m5", name: "이영수", gamertag: "Lee", positions: ["CB"] },
+			{ id: "m6", name: "정하늘", gamertag: "Jung", positions: ["CB"] },
+			{ id: "m7", name: "오승민", gamertag: "Oh", positions: ["CB"] },
+		];
+		data.members = [...data.members, ...extra];
+		data.units[0].member_ids = [];
+		data.units[0].related_member_ids = ["hong", "kim", "park", "choi", "m5", "m6", "m7"];
+		const doc = parseHTML(renderSession(data)).document;
+		const card = doc.getElementById("u001");
+		expect(card?.querySelector("p.related-members")).toBeNull();
+		const details = card?.querySelector("details.related-members");
+		expect(details).not.toBeNull();
+		const summary = details?.querySelector("summary");
+		expect(summary?.textContent).toBe("관련: 홍길동, 김철수, 박영희, 최민수 외 3명");
+		expect(summary?.querySelector(".related-more")?.textContent).toBe(" 외 3명");
+		expect(summary?.querySelector('.member-name[data-member-id="m5"]')).toBeNull();
+		const rest = details?.querySelector(".related-rest");
+		expect(rest?.textContent).toBe("이영수, 정하늘, 오승민");
+		expect(rest?.textContent?.startsWith(",")).toBe(false);
+		for (const id of ["m5", "m6", "m7"]) {
+			const mark = details?.querySelector(`.member-name[data-member-id="${id}"]`);
+			expect(mark?.tagName.toLowerCase()).toBe("mark");
+			expect(summary?.contains(mark ?? null)).toBe(false);
+		}
+	});
+
+	test("관련 팀원 접힘 summary는 보이지 않는 44px 탭 확장 영역을 갖고, '외 N명'은 줄바꿈 없이 밑줄 전파도 막는다(DESIGN §13/§5 item 8)", () => {
+		const beforeRule = STYLE.match(/\.related-members summary::before\s*\{[^}]*\}/)?.[0] ?? "";
+		expect(beforeRule).toContain("position: absolute");
+		expect(beforeRule).toContain("top: -11px");
+		expect(beforeRule).toContain("bottom: -11px");
+		const openBeforeRule = STYLE.match(/\.related-members\[open\] summary::before\s*\{[^}]*\}/)?.[0] ?? "";
+		expect(openBeforeRule).toContain("bottom: 0");
+		const moreRule = STYLE.match(/\.related-more\s*\{[^}]*\}/)?.[0] ?? "";
+		expect(moreRule).toContain("white-space: nowrap");
+		const moreAfterRule = STYLE.match(/\.related-more::after\s*\{[^}]*\}/)?.[0] ?? "";
+		expect(moreAfterRule).toContain("display: inline-block");
+	});
+
 	test("유사 과거 피드백은 세션 날짜와 링크를 가진다", () => {
 		const data = sampleData();
 		const doc = parseHTML(renderSession(data)).document;
@@ -1155,6 +1210,30 @@ describe("내 피드백", () => {
 		const mark = doc.getElementById("u001")?.querySelector('.member-name[data-member-id="hong"]');
 		expect(mark?.tagName.toLowerCase()).toBe("mark");
 		expect(mark?.classList.contains("mine")).toBe(true);
+	});
+
+	test("접힌 관련 팀원 목록 안의 이름을 선택하면 details가 자동으로 펼쳐진다(강조가 가리지 않도록)", () => {
+		const data = sampleData();
+		const extra = [
+			{ id: "m5", name: "이영수", gamertag: "Lee", positions: ["CB"] },
+			{ id: "m6", name: "정하늘", gamertag: "Jung", positions: ["CB"] },
+			{ id: "m7", name: "오승민", gamertag: "Oh", positions: ["CB"] },
+		];
+		data.members = [...data.members, ...extra];
+		data.units[0].member_ids = [];
+		data.units[0].related_member_ids = ["hong", "kim", "park", "choi", "m5", "m6", "m7"];
+		const { doc } = mountViewer(renderSession(data), false);
+
+		const details = doc.getElementById("u001")?.querySelector("details.related-members");
+		expect(details?.hasAttribute("open")).toBe(false);
+
+		clickMinePill(doc, "m6"); // m6: 접힌 "외 3명" 안에 있는 이름
+		expect(details?.hasAttribute("open")).toBe(true);
+		const mark = details?.querySelector('.member-name[data-member-id="m6"]');
+		expect(mark?.classList.contains("mine")).toBe(true);
+
+		clickMinePill(doc, "m6"); // 토글 해제 — 선택 해제 시 자동으로 펼쳐진 details를 다시 접지 않는다
+		expect(details?.hasAttribute("open")).toBe(true);
 	});
 
 	test('"내 피드백" 선택 시 card-list에 mine-active가, 직접 언급 카드에만 is-direct가 붙는다(30초 기준, DESIGN §6)', () => {

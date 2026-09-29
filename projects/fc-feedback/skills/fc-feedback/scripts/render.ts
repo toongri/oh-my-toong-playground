@@ -787,14 +787,32 @@ function renderMentionedLine(unit: SessionUnit, members: readonly SessionMemberI
 	return `<p class="mentioned-members">언급: ${names}</p>`;
 }
 
-/** `relatedMembers(unit) \ member_ids` — the set difference DESIGN §5 item 8 requires (already-shown mentions aren't repeated). */
+/** Above this many related members, `renderRelatedLine` collapses into a `<details>` (mobile readability — 13–14-name rows were unreadable). */
+const MAX_RELATED_INLINE = 5;
+
+/** How many names stay visible in the collapsed `<summary>` before "외 N명". */
+const RELATED_SUMMARY_SHOWN = 4;
+
+/** `relatedMembers(unit) \ member_ids` — the set difference DESIGN §5 item 8 requires (already-shown mentions aren't repeated). At most `MAX_RELATED_INLINE` names renders as the plain `<p>` line; more collapses into a native `<details>` (no JS needed) showing the first `RELATED_SUMMARY_SHOWN` names + "외 N명", with the rest revealed on expand. */
 function renderRelatedLine(unit: SessionUnit, members: readonly SessionMemberInfo[]): string {
 	const ids = unit.related_member_ids.filter((id) => !unit.member_ids.includes(id));
 	if (ids.length === 0) {
 		return "";
 	}
-	const names = ids.map((id) => renderMemberNameMark(id, memberName(members, id))).join(", ");
-	return `<p class="related-members">관련: ${names}</p>`;
+	if (ids.length <= MAX_RELATED_INLINE) {
+		const names = ids.map((id) => renderMemberNameMark(id, memberName(members, id))).join(", ");
+		return `<p class="related-members">관련: ${names}</p>`;
+	}
+	const shownIds = ids.slice(0, RELATED_SUMMARY_SHOWN);
+	const restIds = ids.slice(RELATED_SUMMARY_SHOWN);
+	const shownNames = shownIds.map((id) => renderMemberNameMark(id, memberName(members, id))).join(", ");
+	const restNames = restIds.map((id) => renderMemberNameMark(id, memberName(members, id))).join(", ");
+	return (
+		`<details class="related-members">` +
+		`<summary>관련: ${shownNames}<span class="related-more"> 외 ${restIds.length}명</span></summary>` +
+		`<span class="related-rest">${restNames}</span>` +
+		`</details>`
+	);
 }
 
 /**
@@ -1309,6 +1327,22 @@ img { display: block; max-width: 100%; height: auto; border-radius: var(--radius
 .chip-pos-mf { background: var(--pos-mf-bg); color: var(--pos-mf-fg); }
 .chip-pos-fw { background: var(--pos-fw-bg); color: var(--pos-fw-fg); }
 .mentioned-members, .related-members { font-size: 0.8125rem; color: var(--muted); margin: var(--space-2) 0 0; }
+/* 접힘 요약(summary)의 탭 영역 최소 44px(DESIGN §13/§5 item 8) — .seek-btn(위)과 같은 기법으로
+   보이지 않는 ::before 확장 영역을 쓴다. summary 자체는 한 줄 텍스트로 남아 흐름 안 공간을
+   차지하지 않으므로, 펼친 뒤 나머지 줄(.related-rest)과 빈틈 없이 붙어 한 목록으로 읽힌다.
+   펼치면 나머지 이름 줄이 summary 바로 아래 붙으므로, 아래쪽 확장을 없애 그 줄 탭이
+   카드 seek(onCardListClick)로 가게 한다. */
+.related-members summary { cursor: pointer; list-style: none; position: relative; }
+.related-members summary::before { content: ""; position: absolute; left: 0; right: 0; top: -11px; bottom: -11px; }
+.related-members[open] summary::before { bottom: 0; }
+.related-members summary::-webkit-details-marker { display: none; }
+/* "외 N명"은 한 덩어리로 줄바꿈되지 않아야 하고(DESIGN §10 CJK), 펼칠 수 있다는 단서로
+   .filter-bar summary와 같은 규칙의 ▾를 붙인다 — 열리면 이 span 자체가 숨어 ▴는 필요 없다.
+   ::after를 inline-block으로 둬 부모 span의 점선 밑줄이 ▾로 전파되지 않게 막는다. */
+.related-more { text-decoration: underline dotted; white-space: nowrap; }
+.related-more::after { content: "▾"; color: var(--muted); text-decoration: none; display: inline-block; margin-left: 0.25em; }
+.related-members[open] .related-more { display: none; }
+.related-members[open] summary::after { content: ","; }
 .member-name { background: none; color: inherit; padding: 0; border-radius: 0; font-weight: inherit; }
 .member-name.mine { background: var(--mine-tint); border-radius: var(--radius-sm); padding: 0 var(--space-1); font-weight: 600; }
 
@@ -1700,6 +1734,14 @@ export const VIEWER_JS = `(function () {
           marks[j].classList.add("mine");
         } else {
           marks[j].classList.remove("mine");
+        }
+      }
+      // A collapsed "관련" <details> hides its .mine highlight, so open it once the
+      // selected member's mark lands inside it (never re-closed on deselect — minimal fix).
+      var relatedDetails = card.querySelectorAll("details.related-members");
+      for (var k = 0; k < relatedDetails.length; k++) {
+        if (relatedDetails[k].querySelector(".member-name.mine")) {
+          relatedDetails[k].setAttribute("open", "");
         }
       }
     }
