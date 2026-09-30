@@ -29,6 +29,13 @@ export const TEST_EVIDENCE_SURFACE = "test";
 export type QaReachability = "yes" | "unknown" | (string & {});
 export type QaPriority = "H" | "M" | "L";
 export type QaResult = "pass" | "fail" | "na";
+/**
+ * Cell outcome. `not_applicable`: the axis does not exist on this story's
+ * surface, fixed when the cell is first authored. `blocked`: execution was
+ * attempted and a structural limit stopped it. `na` is a legacy value (it mixed
+ * both meanings with "not run"); new records cannot write it.
+ */
+export type QaCellStatus = "pass" | "fail" | "not_applicable" | "blocked" | "na" | "waived";
 export type QaVerdict = "APPROVE" | "REQUEST_CHANGES" | "COMMENT" | null;
 
 export interface QaActor {
@@ -122,8 +129,12 @@ export interface QaCell {
 	sub?: "hang-timeout" | "flaky-green";
 	attack_point?: string;
 	priority?: QaPriority;
-	status?: QaResult | "waived" | null;
+	status?: QaCellStatus | null;
 	na_reason?: string;
+	/** Why this axis does not exist on the story's surface (status `not_applicable`). */
+	not_applicable_reason?: string;
+	/** The structural limit that stopped execution (status `blocked`). */
+	blocked?: QaBlocked;
 	evidence?: QaEvidence;
 	evidence_review?: QaEvidenceReview;
 	case_run?: QaCaseRunBinding;
@@ -135,6 +146,24 @@ export interface QaCell {
 	driven_at?: string;
 	why_needed?: string;
 	source?: "self-authored" | "caller-provided";
+}
+
+export interface QaBlocked {
+	obstacle: string;
+	/** Each attempt made to reach the surface, with its observed result. */
+	attempts: string[];
+	deepest_reachable: string;
+	/** File holding the attempts' actual output. */
+	attempt_log: string;
+}
+
+export function blockedRecordValid(blocked: QaBlocked | undefined, probe: EvidenceProbe): boolean {
+	if (!blocked || !nonblank(blocked.obstacle) || !nonblank(blocked.deepest_reachable) || !nonblank(blocked.attempt_log)) return false;
+	if (!Array.isArray(blocked.attempts) || !blocked.attempts.length || !blocked.attempts.every(nonblank)) return false;
+	try {
+		const file = probe(blocked.attempt_log);
+		return file.exists && file.size > 0;
+	} catch { return false; }
 }
 
 export interface QaCaseRunBinding {
@@ -422,6 +451,8 @@ export function recordComplete(state: QaChainState, probe: EvidenceProbe): boole
 		const cell = currentCell(state, required);
 		if (!cell || cell.status === null || cell.status === undefined || cell.cycle !== currentCycle(state)) return false;
 		if (cell.status === "na" && !cell.na_reason) return false;
+		if (cell.status === "not_applicable" && !nonblank(cell.not_applicable_reason)) return false;
+		if (cell.status === "blocked" && !blockedRecordValid(cell.blocked, probe)) return false;
 		if (cell.case_run && !caseRunBindingComplete(cell, probe)) return false;
 		const story = stories.find((candidate) => candidate.id === required.story);
 		const actorDriver = story ? actorFor(state, story)?.driver : undefined;
@@ -445,10 +476,14 @@ function inertNaAllowed(state: QaChainState): boolean {
 	return state.inert?.declared === true && allRequiredNa(state) && (state.inert.cycle === undefined || state.inert.cycle === currentCycle(state));
 }
 
+// Priority orders execution; it never decides whether an unexecuted cell may pass
+// the verdict gate. `not_applicable` and `blocked` resolve; legacy `na` keeps the
+// resolution it had when it was written.
 function resolvedForApprove(state: QaChainState, required: RequiredCell): boolean {
 	const cell = currentCell(state, required);
 	if (!cell) return false;
 	if (cell.status === "pass" || cell.status === "waived" || waived(state, required)) return true;
+	if (cell.status === "not_applicable" || cell.status === "blocked") return true;
 	if (cell.status !== "na") return false;
 	return cell.priority !== "H" || inertNaAllowed(state);
 }
@@ -456,9 +491,26 @@ function resolvedForApprove(state: QaChainState, required: RequiredCell): boolea
 function resolvedForComment(state: QaChainState, required: RequiredCell): boolean {
 	const cell = currentCell(state, required);
 	if (!cell) return false;
-	if (cell.status === "pass" || cell.status === "waived" || waived(state, required)) return true;
-	if (cell.priority !== "H") return true;
-	return cell.status === "na" && inertNaAllowed(state);
+	if (resolvedForApprove(state, required)) return true;
+	// Soft pass: a failed non-H row (the 50-74 nitpick band) permits COMMENT.
+	return cell.status === "fail" && cell.priority !== "H";
+}
+
+/**
+ * REQUEST_CHANGES asks for a product change, so it needs a recorded product
+ * failure: a failed current-cycle cell, baseline, stale-state, or flaky-rerun
+ * check. Unexecuted work is not a failure; it is work left to do. A dirty
+ * worktree is harness debris, not a product defect, so it does not count.
+ * Cells left unrun after a stop-driving failure do not block it.
+ */
+export function requestChangesOk(state: QaChainState, _probe: EvidenceProbe): boolean {
+	if (!chainComplete(state)) return false;
+	const checks = state.run_checks ?? {};
+	return (
+		requiredCells(state).some((required) => currentCell(state, required)?.status === "fail") ||
+		(state.stories ?? []).some((story) => result(story.baseline) === "fail") ||
+		[checks.stale_state, checks.flaky_rerun].some((check) => result(check) === "fail")
+	);
 }
 
 function baselinesPass(state: QaChainState): boolean {

@@ -408,7 +408,7 @@ function validateAcMapping(view: QaView, value: unknown): ValidAcMapping | null 
 		);
 		if (matches.length !== 1) return null;
 		const cell = matches[0];
-		if (cell.status !== "pass" && cell.status !== "fail" && cell.status !== "na") return null;
+		if (cell.status !== "pass" && cell.status !== "fail" && cell.status !== "na" && cell.status !== "blocked") return null;
 		if (cell.status === "na" && (typeof cell.na_reason !== "string" || cell.na_reason.trim() === "")) return null;
 		refs.push({ story, cls, ...(sub !== undefined ? { sub } : {}) });
 		cells.push(cell);
@@ -418,8 +418,8 @@ function validateAcMapping(view: QaView, value: unknown): ValidAcMapping | null 
 	const validStatus =
 		(satisfied === "yes" && statuses.every((status) => status === "pass")) ||
 		(satisfied === "no" && statuses.every((status) => status === "fail")) ||
-		(satisfied === "partial" && !statuses.includes("na") && statuses.includes("pass") && statuses.includes("fail")) ||
-		(satisfied === "unverified" && statuses.includes("na"));
+		(satisfied === "partial" && !statuses.includes("na") && !statuses.includes("blocked") && statuses.includes("pass") && statuses.includes("fail")) ||
+		(satisfied === "unverified" && (statuses.includes("na") || statuses.includes("blocked")));
 	if (!validStatus) return null;
 
 	return {
@@ -503,7 +503,7 @@ function renderRequirementFulfillment(view: QaView, narrative: QaReportNarrative
 // shows the axis NAME, never the internal `cls` number — a PO reads "입력 경계"
 // not "cls 2". Source of truth for the axes: skills/qa/scenario-authoring.md.
 const CLS_LABEL: Record<number, string> = {
-	1: "핵심·실패 경로",
+	1: "실패 경로",
 	2: "입력 경계·악성 입력",
 	3: "주입",
 	4: "중단·재개",
@@ -511,7 +511,7 @@ const CLS_LABEL: Record<number, string> = {
 	6: "멱등성",
 };
 
-const COVERAGE_MARK: Record<string, string> = { pass: "확인", fail: "실패", na: "해당없음", unverified: "미검증" };
+const COVERAGE_MARK: Record<string, string> = { pass: "확인", fail: "실패", na: "해당없음", not_applicable: "해당 없음", blocked: "검증 불가", unverified: "미검증" };
 const NOT_RUN_LABEL = "미검증 — 유저 경계 미구동 (NOT-RUN)";
 
 /**
@@ -560,6 +560,16 @@ function renderScenarios(view: QaView, narrative: QaReportNarrative, readEvidenc
 					const head =
 						`<div class="sc-head"><span class="sc-axis">${axis}</span>` +
 						`<span class="cov cov-${escapeHtml(readerStatus)}">${escapeHtml(COVERAGE_MARK[readerStatus] ?? readerStatus)}</span></div>`;
+					if (st === "not_applicable") {
+						return `<div class="scenario-card sc-not_applicable">${head}<div class="sc-body sc-muted">${escapeHtml(cell.not_applicable_reason ?? "")}</div></div>`;
+					}
+					if (st === "blocked") {
+						const observed = narrative.scenarios?.[cellKey(cell)]?.observed;
+						return `<div class="scenario-card sc-blocked">${head}<div class="sc-body">${gap(`검증 불가 — ${cell.blocked?.obstacle ?? ""}`)}` +
+							`<p class="sc-observed">확인한 가장 깊은 지점: ${escapeHtml(cell.blocked?.deepest_reachable ?? "")}</p>` +
+							(observed?.trim() ? `<p class="sc-observed">${escapeHtml(observed)}</p>` : "") +
+							`</div></div>`;
+					}
 					if (st === "na") {
 						if (quietInertNaRun) return `<div class="scenario-card sc-na">${head}<div class="sc-body sc-muted">해당없음</div></div>`;
 						return `<div class="scenario-card sc-unverified">${head}<div class="sc-body">${gap(NOT_RUN_LABEL)}</div></div>`;
@@ -603,7 +613,9 @@ function renderScenarios(view: QaView, narrative: QaReportNarrative, readEvidenc
 					? "fail"
 					: ss.includes("unverified") || (ss.includes("na") && !quietInertNaRun)
 						? "unverified"
-						: ss.includes("pass")
+						: ss.includes("blocked")
+							? "blocked"
+							: ss.includes("pass")
 							? "pass"
 							: (ss.find((s) => s) ?? "na");
 				return String(pick);
@@ -650,6 +662,13 @@ function renderScenarioAudit(view: QaView, narrative: QaReportNarrative, readEvi
 			const result =
 				statusBadge(cell.status) +
 				(cell.na_reason ? `<br><span class="audit-note">${escapeHtml(cell.na_reason)}</span>` : "") +
+				(cell.not_applicable_reason ? `<br><span class="audit-note">${escapeHtml(cell.not_applicable_reason)}</span>` : "") +
+				(cell.blocked
+					? `<br><span class="audit-note">obstacle: ${escapeHtml(cell.blocked.obstacle)}</span>` +
+						`<br><span class="audit-note">attempts: ${cell.blocked.attempts.map((attempt) => escapeHtml(attempt)).join(" / ")}</span>` +
+						`<br><span class="audit-note">deepest reachable: ${escapeHtml(cell.blocked.deepest_reachable)}</span>` +
+						`<br><span class="audit-note">attempt log: <code>${escapeHtml(cell.blocked.attempt_log)}</code></span>`
+					: "") +
 				(n?.expectedVsActual ? `<br><span class="audit-note">${escapeHtml(n.expectedVsActual)}</span>` : "") +
 				(n?.oracleDiagnosis ? `<br><span class="audit-note">${escapeHtml(n.oracleDiagnosis)}</span>` : "");
 			const storyAnchor = storyAnchors.has(cell.story) ? "" : ` id="audit-story-${escapeHtml(cell.story)}"`;
@@ -833,13 +852,19 @@ function renderFailures(view: QaView, narrative: QaReportNarrative): string {
 	return `<h2>Failures &amp; Mismatches</h2>${body}`;
 }
 
-// Waives are AI-runnable, so the reader must see them before any finding: a
-// verdict that passed only because cells were waived reads differently.
+// A verdict that passed with cells nobody could execute reads differently, so the
+// reader sees blocked cells (and legacy waives) before any finding.
 function renderWaiveBanner(view: QaView): string {
-	const count = view.verdict_report?.waives?.length ?? 0;
-	return count === 0
-		? ""
-		: `<p class="gap waive-banner">면제된 셀 ${count}건 — 이 셀들은 검증하지 않고 판정에서 제외했습니다. 셀별 사유는 Verdict 섹션의 Waives 목록에 있습니다.</p>`;
+	const waives = view.verdict_report?.waives?.length ?? 0;
+	const blocked = (view.cells ?? []).filter((cell) => cell.cycle === currentCycle(view) && cell.status === "blocked").length;
+	return (
+		(blocked === 0
+			? ""
+			: `<p class="gap waive-banner">검증 불가 셀 ${blocked}건 — 구조적 한계로 실행하지 못한 시나리오입니다. 판정은 이 셀들을 검증하지 않은 채 내려졌습니다. 시도 내역과 한계는 시나리오 상세 기록에 있습니다.</p>`) +
+		(waives === 0
+			? ""
+			: `<p class="gap waive-banner">면제된 셀 ${waives}건 — 이 셀들은 검증하지 않고 판정에서 제외했습니다. 셀별 사유는 Verdict 섹션의 Waives 목록에 있습니다.</p>`)
+	);
 }
 
 function renderVerdict(view: QaView): string {
@@ -1014,6 +1039,8 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .cov-fail { color: var(--fail); font-weight: 600; }
 .cov-unverified { color: var(--fail); font-weight: 600; }
 .cov-na { color: var(--muted); }
+.cov-not_applicable { color: var(--muted); }
+.cov-blocked { color: var(--fail); font-weight: 600; }
 .audit-note { color: var(--muted); font-size: 0.85rem; }
 .story-block { margin: 1.75rem 0; }
 .story-block > h3 { border-bottom: 1px solid var(--rule); padding-bottom: 0.3rem; }
@@ -1022,6 +1049,8 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .scenario-card.sc-pass { border-left-color: var(--pass); }
 .scenario-card.sc-fail { border-left-color: var(--fail); }
 .scenario-card.sc-unverified { border-left-color: var(--fail); }
+.scenario-card.sc-blocked { border-left-color: var(--fail); }
+.scenario-card.sc-not_applicable { border-left-color: var(--na); opacity: 0.75; }
 .scenario-card.sc-na { border-left-color: var(--na); opacity: 0.75; }
 .sc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.5rem; }
 .sc-axis { font-weight: 600; }

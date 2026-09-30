@@ -34,6 +34,7 @@ import { computeDerived, type ExplainDiffState } from "@lib/explain-diff-core";
 import { deliverableRefusalBody } from "@lib/deliverable-refusal";
 import {
 	approveOk,
+	requestChangesOk,
 	chainComplete,
 	commentOk,
 	cycleUntouched,
@@ -303,18 +304,18 @@ function buildQaContinuationMessage(
 			: verdict === "APPROVE"
 				? {
 					deliverable: "verdict-backing cell outcomes",
-					problem: "approveOk=false — APPROVE is unsupported while failed or undriven cells remain",
-					guideline: "SKILL.md (verdict rules — APPROVE / COMMENT / REQUEST_CHANGES)",
-					produce: "resolve or waive the failed cells, or downgrade the verdict",
-					submit: "qa-state.ts set-verdict REQUEST_CHANGES (or complete the failed cells)",
+					problem: "approveOk=false — APPROVE is unsupported while failed or unrecorded cells remain",
+					guideline: "SKILL.md (Approval Decision — verdicts follow recorded outcomes)",
+					produce: "execute and record the remaining cells, or record a cell blocked with the attempts that failed; set REQUEST_CHANGES only when a failure is recorded",
+					submit: "qa-state.ts record-cell (pass|fail|blocked), then qa-state.ts set-verdict <APPROVE|COMMENT|REQUEST_CHANGES> matching the recorded outcomes",
 				}
 				: verdict === "COMMENT"
 					? {
-						deliverable: "H-priority cell records",
-						problem: "commentOk=false — H-priority cells are unresolved",
-						guideline: "feedback-protocol.md (priority and verdict resolution)",
-						produce: "record every H-priority cell",
-						submit: "qa-state.ts record-cell for each H-priority cell",
+						deliverable: "cell records that support COMMENT",
+						problem: "commentOk=false — a cell is unresolved or an H-priority cell failed",
+						guideline: "SKILL.md (Approval Decision — verdicts follow recorded outcomes)",
+						produce: "record every remaining cell; an H-priority fail supports REQUEST_CHANGES, not COMMENT",
+						submit: "qa-state.ts record-cell, then qa-state.ts set-verdict matching the recorded outcomes",
 					}
 					: {
 						deliverable: "the missing QA outcome",
@@ -805,12 +806,11 @@ export function makeDecision(context: DecisionContext): HookOutput {
 		const untouched = cycleUntouched(qaState);
 		const approve = approveOk(qaState, qaProbe);
 		const comment = commentOk(qaState, qaProbe);
-		const complete = recordComplete(qaState, qaProbe);
 		const verdict = qaState.verdict ?? null;
 		const allowApprove = verdict === "APPROVE" && approve;
 		const allowComment = verdict === "COMMENT" && comment;
 		const allowRequestChanges =
-			verdict === "REQUEST_CHANGES" && (complete || untouched);
+			verdict === "REQUEST_CHANGES" && (requestChangesOk(qaState, qaProbe) || untouched);
 		const escaped = getBlockCount(stateDir, qaAttemptId) >= MAX_BLOCK_COUNT;
 
 		if ((allowApprove || allowComment || allowRequestChanges) && qaReportComplete(qaState, qaProbe)) {

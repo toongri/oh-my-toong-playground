@@ -2993,8 +2993,9 @@ describe("QA Stop-gate decision table", () => {
 		expect(makeDecision(context())).toEqual({ continue: true });
 	});
 
-	it("qa inactive completed REQUEST_CHANGES with recordComplete allows stop", () => {
+	it("qa inactive completed REQUEST_CHANGES with a recorded failure allows stop", () => {
 		const state = completeQa("REQUEST_CHANGES");
+		state.cells[1] = cell("story-1", 2, undefined, "fail");
 		state.active = false;
 		writeQaState(state);
 		expect(makeDecision(context())).toEqual({ continue: true });
@@ -3028,9 +3029,17 @@ describe("QA Stop-gate decision table", () => {
 		expect(makeDecision(context())).toEqual({ continue: true });
 	});
 
-	it("qa request-changes allow: recordComplete plus REQUEST_CHANGES", () => {
-		writeQaState(completeQa("REQUEST_CHANGES"));
+	it("qa request-changes allow: recordComplete plus a recorded failure", () => {
+		const state = completeQa("REQUEST_CHANGES");
+		state.cells[1] = cell("story-1", 2, undefined, "fail");
+		writeQaState(state);
 		expect(makeDecision(context())).toEqual({ continue: true });
+	});
+
+	it("qa REQUEST_CHANGES 판정은 제품 실패 기록이 없으면 Stop을 차단함", () => {
+		// dirty_worktree fail is harness debris, not a product failure.
+		writeQaState(completeQa("REQUEST_CHANGES"));
+		expect(makeDecision(context())).toMatchObject({ decision: "block" });
 	});
 
 	it("qa request-changes allow: cycleUntouched pre-flight fail-fast", () => {

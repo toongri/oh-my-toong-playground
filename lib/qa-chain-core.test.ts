@@ -12,6 +12,7 @@ import {
 	qaReportSnapshot,
 	caseRunBindingComplete,
 	recordComplete,
+	requestChangesOk,
 	requiredCells,
 	rosterComplete,
 	storyContractValid,
@@ -238,6 +239,35 @@ describe("qa chain core", () => {
 		state.run_checks.dirty_worktree = { result: "fail", cycle: 2 };
 		expect(approveOk(state, probe)).toBe(true);
 		expect(commentOk(state, probe)).toBe(true);
+	});
+
+	test("requestChangesOk는 제품 실패 기록을 요구하고 dirty-worktree 실패는 세지 않음", () => {
+		const state = authoredState();
+		state.run_checks.dirty_worktree = { result: "fail", cycle: 2 };
+		expect(requestChangesOk(state, probe)).toBe(false);
+		state.cells[1].status = "fail";
+		state.cells[1].evidence_review!.cell_snapshot = evidenceReviewSnapshot(state.cells[1]);
+		expect(requestChangesOk(state, probe)).toBe(true);
+	});
+
+	test("requestChangesOk는 실패 뒤 실행을 멈춘 미기록 칸이 남아도 허용함", () => {
+		const state = authoredState();
+		state.stories[0].baseline = { result: "fail", cycle: 2 };
+		state.cells = state.cells.map(({ status: _status, evidence: _evidence, evidence_review: _review, ...cell }) => cell);
+		expect(recordComplete(state, probe)).toBe(false);
+		expect(requestChangesOk(state, probe)).toBe(true);
+	});
+
+	test("blocked 칸은 시도 로그가 읽히고 시도 내역이 있을 때만 기록 완결로 인정되고 H여도 APPROVE를 막지 않음", () => {
+		const state = authoredState();
+		const { evidence: _evidence, evidence_review: _review, ...rest } = state.cells[0];
+		state.cells[0] = { ...rest, status: "blocked", blocked: { obstacle: "one connection", attempts: ["docker compose up → daemon down"], deepest_reachable: "PGlite", attempt_log: "/missing" } };
+		expect(recordComplete(state, probe)).toBe(false);
+		state.cells[0].blocked!.attempt_log = state.stories[0].baseline!.evidence!.path;
+		expect(recordComplete(state, probe)).toBe(true);
+		expect(approveOk(state, probe)).toBe(true);
+		state.cells[0].blocked!.attempts = [];
+		expect(recordComplete(state, probe)).toBe(false);
 	});
 
 	test("commentOk allows M/L failures but not H failures", () => {

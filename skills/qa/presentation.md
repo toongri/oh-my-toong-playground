@@ -167,7 +167,9 @@ there is no separate actor-roster table).
   card (a rendered screen a PO reads directly). The card does **not** surface the
   cell record's technical fields (`driven_at`, `attack_point`, `na_reason`, `cls`,
   the boundary code path); those live in the record-faithful audit section below.
-  `na` is the one status that needs no evidence.
+  A `blocked` card shows the structural limit and the deepest point reached; a
+  `not_applicable` card shows, muted, what is absent on the surface. For a
+  `blocked` cell, write `observed` as why it could not run, in product terms.
 - **Big picture (`bigPicture`)** — a mermaid diagram of the user flows / affected
   users, baked to inline SVG at build time. The strongest way to convey flow to a
   no-context reader.
@@ -177,14 +179,15 @@ there is no separate actor-roster table).
   separate section). Each entry must include a non-empty `cellRefs` array of
   `{story, cls, optional sub}` selectors. The renderer validates every ref against
   exactly one recorded current-cycle cell and its recorded status (`pass`, `fail`,
-  or `na`). The grounded status invariants are: `yes` requires every referenced
-  cell to be `pass`; `no` requires every referenced cell to be `fail`; `partial`
-  requires at least one `pass` and one `fail` and no `na`; `unverified` requires
-  at least one valid `na`. Missing/legacy/malformed/duplicate/stale/unknown/ineligible
+  `blocked`, or legacy `na`). The grounded status invariants are: `yes` requires
+  every referenced cell to be `pass`; `no` requires every referenced cell to be
+  `fail`; `partial` requires at least one `pass` and one `fail` and no
+  `blocked`/`na`; `unverified` requires at least one valid `blocked` (or legacy
+  `na`). A `not_applicable` cell cannot back an AC. Missing/legacy/malformed/duplicate/stale/unknown/ineligible
   mappings fail closed to a visible neutral gap (`미판정`) rather than a green
   verdict. Prose evidence explains a verdict but cannot establish it. Use
   **unverified (`unverified`)** — never `yes`/`partial` — when the requirement could
-  not be proven (a `NOT-RUN` scenario): it renders LOUDLY, so a PO reads it as
+  not be proven (a `blocked` scenario): it renders LOUDLY, so a PO reads it as
   *not done*, not as a mild partial. A green suite alone is never grounds for
   `yes`; a scenario run or a named test that asserts the requirement is.
 
@@ -288,7 +291,7 @@ marker** (`class="gap"`) — what was skipped shows in the report.
       · zero gap markers?
 - [ ] Is each requirement mapped to a grounded verdict with a non-empty `cellRefs`
       array, exactly one current-cycle recorded cell per ref, and status invariants
-      that match pass/fail/na · do invalid mappings fail closed to a visible neutral
+      that match pass/fail/blocked · do invalid mappings fail closed to a visible neutral
       gap · does prose explain a verdict without establishing it · any requirement
       never proven marked `unverified` (never `yes`/`partial`)?
 - [ ] 쓰기 전에 소개 — every product/domain entity the reader meets (term/acronym/status

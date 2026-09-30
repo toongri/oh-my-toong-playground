@@ -91,13 +91,30 @@ Every self-authored scenario is written in this six-field shape, in this order:
 1. **actor** — from Layer C: the roster actor plus its stance, carrying the surface the steps start at.
 2. **preconditions** — the reproduction gate from Layer B (or the literal `none`).
 3. **steps** — the concrete action sequence to execute, entered at the actor's verification surface.
-4. **expected** — the observable outcome that proves pass or fail at the surface (what the screen shows, what the API returns). Its evidence is that observation, or an automated test that asserts this exact outcome (`--evidence-surface test`). If it cannot be proven at all, the scenario is `NOT-RUN`, recorded as `na` with a reason, and its requirement is **unverified**.
+4. **expected** — the observable outcome that proves pass or fail at the surface (what the screen shows, what the API returns). Its evidence is that observation, or an automated test that asserts this exact outcome (`--evidence-surface test`). If a structural limit outside the change stops every attempt, the cell is recorded `blocked` with those attempts, and its requirement is **unverified**. A scenario you have not attempted stays unrecorded.
 5. **why-needed** — **mandatory.** States the reason this scenario exists — mostly "what automation/e2e already misses" from the Layer A2 coverage-gap judgment. A scenario without a `why-needed` field is incomplete; this is what separates a derived scenario from a mechanically-generated one.
 6. **priority** — the `H/M/L` value from Layer A3.
 
 Omitting any of the six fields, or leaving `why-needed` blank, makes the scenario non-conformant — go back and fill it before running it.
 
 When the scenario is committed to the qa state chain, its `priority` and attack content are recorded with `qa-state.ts author-cell --story <story-id> --cls <1..6> [--sub hang-timeout|flaky-green] --attack-point "<hostile probe>" --priority H|M|L`. The six bare classes are supplemented by `cls 1 / hang-timeout` and `cls 5 / flaky-green`; the state CLI is the machine-checkable record of the authored shape, while this document remains the derivation guide.
+
+### Per-Axis Cell Content
+
+Every story carries all eight cells. Each cell's attack point is that axis's hostile condition **applied to this story's changed path** — name the changed path inside the attack point. Mark a cell `--not-applicable` on its first `author-cell` only when the axis's condition cannot exist on the surface, and name what is absent. The CLI refuses `--not-applicable` on a cell once authored as applicable.
+
+| Cell | Author this hostile condition | `--not-applicable` only when | Off-target — re-aim, do not mark N/A |
+|---|---|---|---|
+| `1` failure path | Make a dependency the changed path calls fail (DB error, downstream 5xx, denied permission, missing reference row); assert no partial write, a clear error, the correct status/exit code | the changed path does no I/O and calls nothing that can fail | failing an unchanged component on its own path ("the DEVICE writer fails" for a SELF-writer change) |
+| `1/hang-timeout` | Hold a dependency or row lock the changed path waits on past its timeout; assert bounded cancellation, cleanup, no pending or silent green | the changed path has no blocking I/O and takes no lock | reproducing the limit in a harness that cannot hold two connections, then stopping — use the real dependency the repo documents |
+| `2` boundary / malformed | Edge and malformed values for every input the path consumes: request fields, CLI args, job params, and data it reads (empty set, NULL column, max int) | the path consumes no input and reads no variable data | probing only fields the change did not add or read |
+| `3` injection | A payload through a user- or data-controlled string that reaches an interpreter (SQL, shell, template, HTML, LLM prompt) | no user- or externally-controlled string reaches the path — name the schema (e.g. only UUID, enum, int fields and no stored free text rendered) | calling it N/A because "input validation is a different module" while a string still flows through the changed path |
+| `4` interruption / concurrency / dirty state | Kill mid-run and re-run; two concurrent runs; start from a half-written record; flip the flag or config mid-run | the path is one atomic read with no state | deferring it because the stack is "hard to set up" — setup is work, not a limit |
+| `5` misleading success | Check the real effect (row written, message delivered, file changed), not the 200 / "done" signal | never, for a path that writes or sends | re-asserting the success signal the test already checks |
+| `5/flaky-green` | Reset, then repeat the same probe with the same inputs; assert the same verdict and effect | never while cell `5` is applicable | citing the suite-wide flaky-rerun check instead of this probe |
+| `6` idempotency | Same input twice (retry, re-run the job for the same period, resend); assert no duplicate row, charge, or send — or the intended difference when the spec makes it non-idempotent | the path has no effect: a pure read with no cache or side effect | re-running an unchanged writer instead of the changed path |
+
+An off-target cell is re-aimed through the changed path, never marked N/A. Example: for a story comparing SELF and DEVICE snapshots where only the SELF writer changed, cell `1` becomes "SELF composition lookup fails mid-write; the parity reader sees no half-written SELF snapshot", not "the DEVICE writer fails".
 
 ---
 

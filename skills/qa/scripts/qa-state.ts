@@ -44,8 +44,10 @@ import {
 	BASELINE_INDEX,
 	QA_PHASES,
 	approveOk,
+	blockedRecordValid,
 	chainComplete,
 	commentOk,
+	requestChangesOk,
 	cycleUntouched,
 	driverGateArmed,
 	recordComplete,
@@ -59,14 +61,15 @@ import {
 	rosterComplete,
 	type QaActor,
 	type QaBaseline,
+	type QaBlocked,
 	type QaCell,
+	type QaCellStatus,
 	type QaCaseRunBinding,
 	type QaChainState,
 	type QaDriver,
 	type QaPhase,
 	type QaRunCheckHistory,
 	type QaRunChecks,
-	type QaResult,
 	type QaStory,
 	type QaStoryContract,
 	type QaStoryProvenance,
@@ -117,7 +120,7 @@ type QaStateSeed = Pick<
 
 const DRIVERS = ["agent-device", "agent-browser", "curl", "bash"] as const;
 const PRIORITIES = ["H", "M", "L"] as const;
-const RESULTS = ["pass", "fail", "na"] as const;
+const RESULTS = ["pass", "fail", "blocked"] as const;
 const BINARY_RESULTS = ["pass", "fail"] as const;
 const CHECKS = ["stale-state", "dirty-worktree", "flaky-rerun"] as const;
 const VERDICTS = ["APPROVE", "COMMENT", "REQUEST_CHANGES"] as const;
@@ -595,7 +598,8 @@ export function addActor(sessionId: string, opts: AddActorOpts): void {
 	const affectedStories = new Set((prior.stories ?? []).filter((story) => (story.actor ?? story.actor_id) === id).map((story) => story.id));
 	const cells = changedBoundary ? (prior.cells ?? []).map((cell) => {
 		if (!affectedStories.has(cell.story) || cell.cycle !== cycle) return cell;
-		const { status: _status, na_reason: _naReason, evidence: _evidence, evidence_review: _review, case_run: _caseRun, ...record } = cell;
+		if (cell.status === "not_applicable") return cell;
+		const { status: _status, na_reason: _naReason, blocked: _blocked, evidence: _evidence, evidence_review: _review, case_run: _caseRun, ...record } = cell;
 		return record;
 	}) : prior.cells;
 	mergeWrite(sessionId, { actors, ...(changedBoundary ? { cells } : {}) });
@@ -660,7 +664,8 @@ export function addStory(sessionId: string, opts: AddStoryOpts): void {
 		const cycle = currentCycle(prior);
 		const cells = changedActor ? (prior.cells ?? []).map((cell) => {
 			if (cell.story !== id || cell.cycle !== cycle) return cell;
-			const { status: _status, na_reason: _naReason, evidence: _evidence, evidence_review: _review, case_run: _caseRun, ...record } = cell;
+			if (cell.status === "not_applicable") return cell;
+			const { status: _status, na_reason: _naReason, blocked: _blocked, evidence: _evidence, evidence_review: _review, case_run: _caseRun, ...record } = cell;
 			return record;
 		}) : prior.cells;
 		mergeWriteUnlocked(sessionId, { stories, ...(changedActor ? { cells } : {}) });
@@ -802,6 +807,8 @@ export interface AuthorCellOpts extends ScenarioFieldOpts {
 	sub?: string;
 	attackPoint: string;
 	priority: string;
+	/** Why this axis does not exist on the story's surface. Accepted only on first authoring. */
+	notApplicable?: string;
 }
 
 export function authorCell(sessionId: string, opts: AuthorCellOpts): void {
@@ -813,7 +820,17 @@ export function authorCell(sessionId: string, opts: AuthorCellOpts): void {
 	const cycle = currentCycle(prior);
 	const cells = [...(prior.cells ?? [])];
 	const scenarioPatch = scenarioFieldPatch(opts);
-	const next: QaCell = { ...selector, attack_point: attackPoint, priority: opts.priority, cycle, ...scenarioPatch };
+	let notApplicable: Partial<QaCell> = {};
+	if (opts.notApplicable !== undefined) {
+		const reason = nonEmpty(opts.notApplicable, "not-applicable");
+		// Applicability is fixed when the cell is first authored. A cell once authored
+		// as applicable (in any cycle) is executed or recorded blocked, never re-scoped.
+		if (cells.some((cell) => sameCell(cell, selector) && cell.status !== "not_applicable")) {
+			throw new Error("author-cell: --not-applicable is accepted only when the cell is first authored; this cell was authored as applicable — execute it, or record-cell --status blocked with the attempts that failed");
+		}
+		notApplicable = { status: "not_applicable", not_applicable_reason: reason };
+	}
+	const next: QaCell = { ...selector, attack_point: attackPoint, priority: opts.priority, cycle, ...scenarioPatch, ...notApplicable };
 	const index = cells.findIndex((cell) => cell.cycle === cycle && sameCell(cell, selector));
 	if (index >= 0) cells[index] = next;
 	else cells.push(next);
@@ -865,14 +882,36 @@ export interface RecordCellOpts extends ScenarioFieldOpts, EvidenceSlotOpts {
 	cls: number;
 	sub?: string;
 	status: string;
-	naReason?: string;
+	obstacle?: string;
+	attempts?: string;
+	deepestReachable?: string;
+	attemptLog?: string;
 	evidencePath?: string;
 	evidenceSurface?: string;
 	caseRun?: string;
 }
 
-function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector: { story: string; cls: number; sub?: "hang-timeout" | "flaky-green" }, status: QaResult, evidence: QaCell["evidence"], path: string, driver: QaDriver): QaCaseRunBinding {
-	if (status === "na") throw new Error("case-run cannot be attached to an na cell");
+function blockedRecord(opts: RecordCellOpts): QaBlocked {
+	let attempts: unknown;
+	try {
+		attempts = JSON.parse(nonEmpty(opts.attempts, "attempts"));
+	} catch (error) {
+		if (error instanceof SyntaxError) throw new Error("attempts must be a JSON array of strings", { cause: error });
+		throw error;
+	}
+	if (!Array.isArray(attempts) || !attempts.length) throw new Error("blocked status requires attempts: a non-empty JSON array, one entry per attempt with its observed result");
+	const blocked: QaBlocked = {
+		obstacle: nonEmpty(opts.obstacle, "obstacle"),
+		attempts: attempts.map((item) => nonEmpty(item, "attempts item")),
+		deepest_reachable: nonEmpty(opts.deepestReachable, "deepest-reachable"),
+		attempt_log: probePlainFile(nonEmpty(opts.attemptLog, "attempt-log")),
+	};
+	if (!blockedRecordValid(blocked, stateProbe)) throw new Error("blocked status requires a readable, non-empty attempt-log");
+	return blocked;
+}
+
+function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector: { story: string; cls: number; sub?: "hang-timeout" | "flaky-green" }, status: QaCellStatus, evidence: QaCell["evidence"], path: string, driver: QaDriver): QaCaseRunBinding {
+	if (status !== "pass" && status !== "fail") throw new Error("case-run can be attached only to a pass or fail cell");
 	const absoluteReceipt = resolve(path);
 	const snapshot = readQaCaseRunReceiptSnapshot(absoluteReceipt);
 	const receipt = snapshot.receipt;
@@ -929,12 +968,14 @@ function caseRunBinding(prior: Partial<ChainState>, sessionId: string, selector:
 
 function recordCellUnlocked(sessionId: string, opts: RecordCellOpts): void {
 	const selector = validateCellSelector(opts.story, opts.cls, opts.sub);
+	if (opts.status === "na") throw new Error("status na is retired: fix an absent axis at authoring with author-cell --not-applicable, or record-cell --status blocked with the attempts that failed; an unexecuted cell stays unrecorded until you execute it");
+	if (opts.status === "not_applicable") throw new Error("not_applicable is decided when the cell is first authored: author-cell --not-applicable \"<why this axis does not exist on the surface>\"");
 	if (!isOneOf(opts.status, RESULTS)) throw new Error(`status must be one of ${RESULTS.join("|")}`);
 	const prior = readPrior(sessionId);
 	const cycle = currentCycle(prior);
 	const authored = (prior.cells ?? []).find((cell) => cell.cycle === cycle && sameCell(cell, selector));
 	if (!authored || !authored.attack_point || !authored.priority) throw new Error("record-cell requires an authored current-cycle cell");
-	if (opts.status === "na" && !opts.naReason?.trim()) throw new Error("na status requires na-reason");
+	const blocked = opts.status === "blocked" ? blockedRecord(opts) : undefined;
 	const scenarioPatch = scenarioFieldPatch(opts);
 	let evidence: QaCell["evidence"];
 	if (opts.status === "pass" || (opts.status === "fail" && opts.evidencePath && opts.evidenceSurface)) {
@@ -966,7 +1007,7 @@ function recordCellUnlocked(sessionId: string, opts: RecordCellOpts): void {
 		priority: authored.priority,
 		status: opts.status,
 		cycle,
-		...(opts.naReason !== undefined ? { na_reason: opts.naReason } : {}),
+		...(blocked ? { blocked } : {}),
 		...pickScenarioFields(authored),
 		...scenarioPatch,
 		...(evidence ? { evidence } : {}),
@@ -1075,10 +1116,13 @@ export function setVerdict(sessionId: string, verdict: string): void {
 		ensureSeed("qa", sessionId);
 		const prior = readPrior(sessionId);
 		if (verdict === "APPROVE" && !approveOk(prior, stateProbe)) {
-			throw new Error("set-verdict: APPROVE refused — approveOk is false; record/waive cells or use REQUEST_CHANGES");
+			throw new Error("set-verdict: APPROVE refused — approveOk is false; execute and record every remaining cell (pass/fail), or record-cell --status blocked with the attempts that failed");
 		}
 		if (verdict === "COMMENT" && !commentOk(prior, stateProbe)) {
-			throw new Error("set-verdict: COMMENT refused — commentOk is false; resolve all H-priority cells");
+			throw new Error("set-verdict: COMMENT refused — commentOk is false; every cell must be recorded, and only a non-H fail may remain");
+		}
+		if (verdict === "REQUEST_CHANGES" && !cycleUntouched(prior) && !requestChangesOk(prior, stateProbe)) {
+			throw new Error("set-verdict: REQUEST_CHANGES refused — it requires a recorded failure (a fail cell, baseline, or run check). Unexecuted cells are your remaining work, not a product defect: execute them, or record-cell --status blocked with the attempts that failed");
 		}
 		mergeWriteUnlocked(sessionId, { verdict });
 	});
@@ -1095,23 +1139,6 @@ export function setAwaitingUser(sessionId: string): void {
 	const prior = readPrior(sessionId);
 	if (prior.active !== true) throw new Error("await-user: refused — no active QA cycle");
 	mergeWrite(sessionId, { awaiting_user: true });
-}
-
-export function waiveCell(sessionId: string, opts: { story: string; cls: number; sub?: string; reason: string }): void {
-	const selector = validateCellSelector(opts.story, opts.cls, opts.sub);
-	const reason = nonEmpty(opts.reason, "reason");
-	const prior = readPrior(sessionId);
-	const cycle = currentCycle(prior);
-	if (!(prior.stories ?? []).some((story) => story.id === selector.story)) throw new Error(`waive: unknown story "${selector.story}"`);
-	if (!(prior.cells ?? []).some((cell) => cell.cycle === cycle && sameCell(cell, selector))) {
-		throw new Error("waive: cell must be authored in the current cycle");
-	}
-	const waives = [...(prior.waives ?? [])];
-	const next: QaWaive = { ...selector, cycle, reason };
-	const index = waives.findIndex((item) => item.cycle === cycle && sameCell(item, selector));
-	if (index >= 0) waives[index] = next;
-	else waives.push(next);
-	mergeWrite(sessionId, { waives });
 }
 
 export function declareInert(sessionId: string, reason: string): void {
@@ -1211,7 +1238,7 @@ export function completeQa(sessionId: string): void {
 		const canComplete =
 			(verdict === "APPROVE" && approveOk(prior, stateProbe)) ||
 			(verdict === "COMMENT" && commentOk(prior, stateProbe)) ||
-			(verdict === "REQUEST_CHANGES" && (recordComplete(prior, stateProbe) || cycleUntouched(prior)));
+			(verdict === "REQUEST_CHANGES" && (requestChangesOk(prior, stateProbe) || cycleUntouched(prior)));
 		if (!canComplete) {
 			throw new Error("complete: refused — unmet verdict/record predicate; run set-verdict after recording the current cycle");
 		}
@@ -1375,11 +1402,6 @@ const ROSTER: CliCommand[] = [
 	{ name: "await-user", authority: "ai", effect: "pauses at a human-decision gate; Stop-allowed, auto-cleared next write" },
 	{ name: "start", authority: "ai", effect: "creates or re-enters the guarded state for a target" },
 	{ name: "set-acceptance", authority: "ai", effect: "records the acceptance criteria array" },
-	{
-		name: "waive",
-		authority: "ai",
-		effect: "waives one cell's requirement with a recorded reason; the report lists every waive above the findings",
-	},
 	{ name: "declare-inert", authority: "ai", effect: "declares a no-risk-surface cycle" },
 	{
 		name: "acquire-device",
@@ -1477,6 +1499,7 @@ function main(): void {
 					sub: str(args["sub"]),
 					attackPoint: requiredArg(args, "attack-point"),
 					priority: requiredArg(args, "priority"),
+					notApplicable: str(args["not-applicable"]),
 					drivenAt: str(args["driven-at"]),
 					whyNeeded: str(args["why-needed"]),
 					source: str(args["source"]),
@@ -1495,7 +1518,10 @@ function main(): void {
 					cls: Number(requiredArg(args, "cls")),
 					sub: str(args["sub"]),
 					status: requiredArg(args, "status"),
-					naReason: str(args["na-reason"]),
+					obstacle: str(args["obstacle"]),
+					attempts: str(args["attempts"]),
+					deepestReachable: str(args["deepest-reachable"]),
+					attemptLog: str(args["attempt-log"]),
 					evidencePath: str(args["evidence-path"]),
 					evidenceSurface: str(args["evidence-surface"]),
 					drivenAt: str(args["driven-at"]),
@@ -1531,15 +1557,9 @@ function main(): void {
 				const parsed = JSON.parse(requiredArg(args, "json"));
 				setAcceptance(sessionId, parsed);
 			} else if (subcommand === "waive") {
-				waiveCell(sessionId, {
-					story: requiredArg(args, "story"),
-					cls: Number(requiredArg(args, "cls")),
-					sub: str(args["sub"]),
-					reason: requiredArg(args, "reason"),
-				});
-				process.stdout.write(
-					"waived: the cell no longer blocks APPROVE. The reason is recorded, and the report lists this waive in a banner above the findings. Name it in your final message to the user.\n",
-				);
+				// Retired: a reason-only exemption let an unexecuted cell pass the gate.
+				// Waives already persisted in state stay readable and keep resolving.
+				throw new Error("waive is retired: execute the cell, or record-cell --status blocked --obstacle … --attempts '[…]' --deepest-reachable … --attempt-log <file>");
 			} else if (subcommand === "acquire-device") {
 				const platform = requiredArg(args, "platform");
 				const id = acquireDevice(sessionId, { platform, base: requiredArg(args, "base"), runtime: str(args["runtime"]) });
