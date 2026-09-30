@@ -64,7 +64,7 @@ hooks:
   PreCompact:
     - component: compact-instructions.sh
       timeout: 5
-    # session-ledger는 헤드리스 요약기(gpt-6-sol, effort low)를 동기로 돌린다. 보통
+    # session-ledger는 헤드리스 요약기(gpt-6.1-sol, effort low)를 동기로 돌린다. 보통
     # 1~2분이지만 재시도 3회와 모델 지연에 대비해 내부 마감을 25분으로 두었으므로 timeout은 그보다 커야
     # 한다. stdout은 요약 지시로 섞이므로 아무것도 출력하지 않는다.
     - component: session-ledger

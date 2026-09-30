@@ -49,7 +49,7 @@ model-map:
       model: gpt-6-astra
       effort: high
     opus:
-      model: gpt-6-sol
+      model: gpt-6.1-sol
       effort: high
     sonnet:
       model: gpt-6-luna
@@ -71,7 +71,7 @@ model-map:
   agents:
     # Codex-only cost mode: no tier combines sol with medium effort.
     code-reviewer:
-      model: gpt-6-sol
+      model: gpt-6.1-sol
       effort: medium
     mnemosyne:
       model: gpt-6-luna
