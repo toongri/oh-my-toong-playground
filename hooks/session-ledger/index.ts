@@ -2,7 +2,7 @@
  * session-ledger hook — one ledger format for Claude Code and Codex CLI.
  *
  *   PreCompact    → extract the transcript deterministically, have a headless
- *                   summarizer (gpt-6-sol) fill the ledger schema, validate,
+ *                   summarizer (gpt-6.1-sol) fill the ledger schema, validate,
  *                   retry with feedback, write ~/.omt/session-ledger/<sid>.md.
  *                   Runs synchronously: the user chose quality over speed.
  *   SessionStart  → after a compaction, inject the ledger's head plus an order

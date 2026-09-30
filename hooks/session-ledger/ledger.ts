@@ -607,8 +607,8 @@ const SUMMARIZER_DISABLED_FEATURES = [
 /** Set on the summarizer's process so this hook, re-run by the nested session, does nothing. */
 export const WORKER_ENV = "OMT_LEDGER_WORKER";
 
-/** gpt-6-sol at low effort: in blind-judged replays it matched or beat gpt-6-luna max and native compaction, in a quarter of the time. */
-export function codexRunner(model = "gpt-6-sol", effort = "low"): ModelRunner {
+/** Default gpt-6.1-sol at low effort. Measured on its predecessor gpt-6-sol: in blind-judged replays it matched or beat gpt-6-luna max and native compaction, in a quarter of the time. */
+export function codexRunner(model = "gpt-6.1-sol", effort = "low"): ModelRunner {
 	return (prompt, timeoutMs) =>
 		new Promise((resolve) => {
 			const dir = mkdtempSync(join(tmpdir(), "omt-ledger-"));

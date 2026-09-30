@@ -68,9 +68,9 @@ test("gpt-6-astra 슬러그는 272k 컨텍스트 윈도우 기준 `maxResultChar
 	expect(result.maxResultChars).toBe(490_760);
 });
 
-test("gpt-6-sol 슬러그는 272k 컨텍스트 윈도우 기준 `maxResultChars`를 산출한다", () => {
+test("gpt-6.1-sol 슬러그는 272k 컨텍스트 윈도우 기준 `maxResultChars`를 산출한다", () => {
 	const transcriptPath = makeTranscript();
-	const result = withPostCompactBudget(makeConfig(), { model: "gpt-6-sol", transcriptPath });
+	const result = withPostCompactBudget(makeConfig(), { model: "gpt-6.1-sol", transcriptPath });
 	expect(result.maxResultChars).toBe(490_760);
 });
 
