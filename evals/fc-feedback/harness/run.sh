@@ -40,7 +40,7 @@
 #
 #   round                   round number (0 = writing-skills RED baseline, pass --no-skill)
 #   model-key               luna -> platform=codex, gpt-6-luna / model_reasoning_effort=max
-#                           sol  -> platform=codex, gpt-6-sol  / model_reasoning_effort=medium
+#                           sol  -> platform=codex, gpt-6.1-sol / model_reasoning_effort=medium
 #                           opus -> platform=claude, claude-opus-5-5 / effort=high (Claude Code,
 #                                   run via `claude -p`, isolated with a claude-specific `codex
 #                                   sandbox` permission-profile override — see the "claude
@@ -276,7 +276,7 @@ workdir_fixture="${positional[3]:?workdir-fixture required}"
 
 case "$model_key" in
 	luna) model="gpt-6-luna"; effort="max"; platform="codex" ;;
-	sol) model="gpt-6-sol"; effort="medium"; platform="codex" ;;
+	sol) model="gpt-6.1-sol"; effort="medium"; platform="codex" ;;
 	opus) model="claude-opus-5-5"; effort="high"; platform="claude" ;;
 	*) echo "run.sh: unknown model-key '$model_key' (expected luna|sol|opus)" >&2; exit 1 ;;
 esac

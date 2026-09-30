@@ -31,7 +31,7 @@ const MODEL_CONTEXT_BUDGETS: readonly ModelContextBudget[] = [
 		effectivePercent: DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
 	},
 	{
-		slug: "gpt-6-sol",
+		slug: "gpt-6.1-sol",
 		contextWindowTokens: 272_000,
 		effectivePercent: DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
 	},
