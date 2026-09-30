@@ -1201,35 +1201,19 @@ describe("output shape is an explicit persisted execution contract", () => {
 	});
 });
 
-describe("revision identity remains anchored to the established design", () => {
-	const phase1Start = skillMd.indexOf("## Phase 1: Initialize");
-	const phase2Start = skillMd.indexOf("## Phase 2: Interview Loop", phase1Start);
-	const phase1 = phase1Start === -1 ? "" : skillMd.slice(phase1Start, phase2Start === -1 ? undefined : phase2Start);
+describe("craft-tasks handoff carries no PM parent identity", () => {
 	const phase5Start = skillMd.indexOf("## Phase 5: Execution Bridge");
 	const phase5End = skillMd.indexOf("</Steps>", phase5Start);
 	const phase5 = phase5Start === -1 ? "" : skillMd.slice(phase5Start, phase5End === -1 ? undefined : phase5End);
 
-	test("a known-parent revision reuses or starts with both established identities", () => {
-		expect(phase1).toContain("revision of an existing PM parent");
-		expect(phase1).toContain("resume/adopt");
-		expect(phase1).toContain("--interview-id");
-		expect(phase1).toContain("--parent-id");
-		expect(phase1).toContain("Never pair a newly generated UUID/anchor with an old known parent");
+	test("the task-tickets route recommends craft-tasks and passes only the spec", () => {
+		expect(phase5).toContain('the `task-tickets` option invokes `Skill(skill: "craft-tasks")`;');
+		expect(phase5).toContain("with the spec file path as context");
 	});
 
-	test("unrecoverable identity is explicitly a new design without the old parent", () => {
-		expect(phase5).toContain("If the established identity cannot be recovered");
-		expect(phase5).toContain("omit the old `parentId`");
-		expect(phase5).toContain("let `craft-tasks` resolve/create a parent by the new anchor");
-		expect(phase5).toContain("do not claim it revises the old parent");
-	});
-
-	test("known-parent handoff copies the persisted parent identity before the handoff block", () => {
-		const identity = phase5.indexOf("persisted `state.parent_id`");
-		const handoff = phase5.indexOf("**`craft-tasks` parent handoff:**");
-		expect(identity).toBeGreaterThan(-1);
-		expect(handoff).toBeGreaterThan(identity);
-		expect(phase5).toContain("parentId MUST be copied from persisted `state.parent_id`");
+	test("deep-interview does not manage downstream parent or anchor identity", () => {
+		for (const removed of ["designAnchor", "design-anchor", "parentId", "parent_id", "--parent-id", "taskIdentities", "Revision identity"])
+			expect(skillMd).not.toContain(removed);
 	});
 });
 

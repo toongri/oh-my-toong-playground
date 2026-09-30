@@ -21,7 +21,7 @@ Is it a quick fix or simple task?
   |-- NO  -> Are the requirements clear?
               |-- NO  -> /deep-interview to crystallize a spec
                           |-- Need shareable, trackable implementation task tickets?
-                                |-- YES -> /craft-tasks to create/update tasks (parent handling via craft-issue)
+                                |-- YES -> /craft-tasks to create/update tasks
                                           -> /prometheus only when a task needs its own plan
                                           -> /ultragoal -> /sisyphus
                                 |-- NO  -> /ultragoal if exactly one topology component is active
@@ -45,7 +45,7 @@ Oh-My-Toong solves this by clearly separating roles:
 | Role | Agent | Responsibility |
 |------|-------|----------------|
 | **Definition** | deep-interview | Resolves ambiguity into a spec, NEVER writes code |
-| **Task ticketing** | craft-tasks | Creates and updates child tasks from a settled design; delegates parent handling to craft-issue |
+| **Task ticketing** | craft-tasks | Creates and updates child tasks under the decomposed issue from a settled design |
 | **Planning** | prometheus | Strategic planning, NEVER writes code |
 | **Story execution** | ultragoal | Sequentially dispatches plan stories to sisyphus |
 | **Execution** | sisyphus | Orchestrates via delegation, NEVER works alone |
@@ -72,8 +72,7 @@ flowchart TD
     end
 
     subgraph Task Ticket Phase
-        CraftTasks --> Parent["Handle parent<br/>via craft-issue"]
-        Parent --> ChildTickets["PM tool: materialize<br/>child task tickets"]
+        CraftTasks --> ChildTickets["PM tool: materialize<br/>child task tickets"]
         ChildTickets --> TaskPlan{Plan needed<br/>per task?}
     end
 
@@ -113,25 +112,9 @@ flowchart TD
 ### craft-tasks (The Task Ticket Materializer)
 
 - **Role**: Decomposes a settled design into shareable, trackable implementation task tickets for the team
-- **Constraint**: Use only after intent, approach, invariants, and boundary are settled. If you only need an AI-execution plan, use `prometheus` instead.
-- **Output**: Child task tickets materialized in the PM tool under a verified parent
-- **Workflow**: Uses the deep-interview spec to delegate parent handling to craft-issue, verifies the returned parent association, updates existing task bodies, and creates only missing tasks. The create/update runtime contract is defined by `skills/craft-tasks/SKILL.md` and `skills/craft-tasks/scripts/task-write-journal.ts`; the real PM API remains outside this repository's harness, as documented.
-
-#### PM write journal contract and recovery
-
-`task-write-journal.ts` records crash-atomic, session-scoped local orchestration intents in `$OMT_DIR/task-write-journal-<sessionId>.json`. The journal is local orchestration state, not a PM field, comment, or idempotency primitive, so the workflow invents neither a PM custom field nor a nonexistent idempotency primitive.
-
-`task-write-journal-<safe-session>.json`, `task-write-reconciliation-<safe-session>-<receiptId>.json`, and quarantined `task-write-journal-<safe-session>.quarantine.<artifactId>.json` are intentionally excluded from generic TTL cleanup by `SESSION_ARTIFACT_PREFIXES`. These filename families are for drift classification and recovery-entry recognition only and grant no deletion authority. Pending and malformed journal contents remain for explicit recovery, and malformed journal bytes are preserved as quarantine artifacts.
-
-`create-prepare` requires a nested `creationPayload` containing the exact creation fields for the selected PM binding. When Linear is selected, those fields are optional `title`, `description`, and optional `blockedBy`; other PM bindings pass their equivalent exact fields. It injects the verified `parentId` into the PM payload and strips the orchestration-only `designAnchor` and `identityComment` from that PM payload. It returns the exact resulting `creationPayload` unchanged for `save_issue` and returns the canonical `identityComment` as a separate field.
-
-For a new child, record the exact `save_issue` creation payload with `create-prepare` before calling `save_issue`. `create-prepare` validates and injects `parentId` into the exact `creationPayload`, then returns that payload unchanged for `save_issue` together with the canonical `identityComment` as a separate field. With Linear, retain the Linear-native payload containing `title`, `description`, and optional `blockedBy`; pass `identityComment` only as a separate comment. Verify the returned child’s `parentId` and exact `designAnchor`, then record its `childId` with `create-child` and send the separately stored `identityComment` through `create_comment`. `create-complete` verifies the association (`childId`, `parentId`, `designAnchor`); because PM does not return a nested `creationPayload`, the caller projects the PM re-read creation fields into the nested `creationPayload` passed to `create-complete`, which is then exactly deep-compared against the stored payload. It separately verifies that the PM re-read of the identity comment matches the stored `identityComment`; only then does it complete the intent. If `create-complete` receives the same verification for an already `complete` intent, it performs an idempotent complete replay and returns the existing result. If a response is lost, first use `get` to read the existing intent; when a recorded `childId` exists, re-read that child and the exact identity comment and retry only missing writes. If no verified result exists, call `manual-reconciliation`, record the terminal `manual-reconciliation-required` state, and stop. Never infer a child from title, description, time, or tree position, and never create a replacement child. Preserve the returned `taskIdentities` collection of `taskKey` and `childId` through the next handoff, and re-verify that retained identity before deleting a terminal receipt.
-
-Cross-session recovery starts with `list --pending`, then an explicit `sourceSessionId` selection, followed by `get <intentId> --source-session <sourceSessionId>` for that journal. `list --pending` is read-only and returns deterministic JSON ordered by journal file and intent ID; it discovers nonterminal intents and unacknowledged terminal intents retained as receipts. Matching malformed journals are surfaced as explicit error entries carrying their `sourceSessionId`. Any transition of an intent from another session must likewise pass `--source-session <sourceSessionId>` to `create-child`, `create-complete`, `update-mutation-written`, `update-complete`, `manual-reconciliation`, `manual-reconciliation-missing`, `quarantine-journal`, or `receipt-ack`. `create-prepare`, `update-prepare`, and `list` reject `--source-session`. Without that argument, lookup and transitions remain current-session-only. Preserve the required `taskIdentities` and re-verify the PM result before calling `receipt-ack <intentId>`; `parentId`, `designAnchor`, and create’s `taskKey` plus optional `childId`, or update’s `childId`, must exactly match the stored values before the terminal receipt and intent are removed. Automatic cross-session fallback, journal copying, and replacement creation are forbidden.
-
-For an existing child body or native-relation update, persist the exact `before`, `after`, and `changeComment` with `update-prepare` before the PM mutation. After the PM mutation and change-comment write, record `update-mutation-written`; re-read the body, relations, and change comment, then call `update-complete` only after those checks pass. On interruption, use `get` to preserve the intent’s change context and perform only missing writes. If no verified child or result exists, stop through the same terminal manual-reconciliation path. Repeated completion responses permit only an idempotent replay with the same verification values.
-
-A terminal transition does not compact or omit the terminal intent immediately. `complete` and `manual-reconciliation-required` intents remain in the journal as unacknowledged terminal receipts and are discoverable through `list --pending`. After re-verifying the retained `taskIdentities` and the exact PM association, call `receipt-ack` to remove that intent; acknowledging the last intent deletes the journal file. If the journal file is readable but the intent ID is absent, use `manual-reconciliation-missing <intentId>` to write a `manual-reconciliation-required` receipt. If the journal contains malformed JSON or a malformed journal shape, `quarantine-journal` preserves the exact original bytes in `.quarantine.<artifactId>.json` and writes a `manual-reconciliation-required` receipt. A filesystem/I/O read error is surfaced and stops without rename, receipt, or mutation. A normal quarantine receipt covers its referenced artifact, so that artifact is suppressed from `list --reconciliation`; only an artifact without a receipt is an orphan entry. A source session with a quarantine receipt or orphan quarantine artifact is sealed: new journal appends and prepares are rejected, so use a new session. `list --reconciliation` returns deterministic entries for receipts, receipt-less orphan artifacts, malformed receipts, and identity/JSON errors, ordered by `sourceSessionId` and receipt or artifact ID. Journal, reconciliation-receipt, and quarantine-artifact filename families are recognition-only and excluded from generic `SESSION_ARTIFACT_PREFIXES` TTL cleanup. The lock publishes its initialized owner atomically, retries a transient empty release, and reclaims a stale empty legacy lock. Malformed or live locks are preserved and fail within a bounded timeout. Never infer identity from title, description, time, or tree position, and never create a replacement task.
+- **Constraint**: Use only after intent, approach, invariants, and boundary are settled. The design may come from any source: a conversation, a document, or a deep-interview spec. If you only need an AI-execution plan, use `prometheus` instead.
+- **Output**: Child task tickets in the PM tool under the decomposed issue
+- **Workflow**: Extracts intent, approach, invariants, and boundary from the design, reads the issue's existing child tickets, and plans which to update, create, or leave. It writes only after the user confirms, then re-reads the children to verify the result. An interrupted run re-reads the existing children and makes only the missing writes. The runtime contract is `skills/craft-tasks/SKILL.md`.
 
 ### prometheus (The Planner)
 
@@ -203,11 +186,11 @@ When requirements are unclear, crystallize a spec with `/deep-interview` before 
 
 1. **One question at a time, without a count limit**: Settle prerequisites and follow the branches, counterexamples, and contradictions each answer reveals.
 2. **Closure audit**: Scores guide investigation. Resolve decisions that could change implementation, examine evidence/failure scenarios/residual assumptions, and confirm shared understanding. Respect a stop immediately; label early delivery DRAFT.
-3. **Spec finalization and route selection**: Save to `$OMT_DIR/deep-interview/{slug}.md`. In Phase 5, recommend `/craft-tasks` when the spec calls for shareable, trackable implementation task tickets. `craft-tasks` delegates parent handling to craft-issue and creates or updates child task tickets; use `/prometheus` only when an individual task needs an AI-execution plan. AI execution then runs through `/ultragoal` -> `/sisyphus`. When the spec only needs AI execution and no team-facing task tickets, preserve the existing route: recommend `/ultragoal` for exactly one active topology component, or `/prometheus` -> `/ultragoal` -> `/sisyphus` otherwise. Present the non-recommended skill as an explicit override.
+3. **Spec finalization and route selection**: Save to `$OMT_DIR/deep-interview/{slug}.md`. In Phase 5, recommend `/craft-tasks` when the spec calls for shareable, trackable implementation task tickets. `craft-tasks` creates or updates child task tickets under the decomposed issue; use `/prometheus` only when an individual task needs an AI-execution plan. AI execution then runs through `/ultragoal` -> `/sisyphus`. When the spec only needs AI execution and no team-facing task tickets, preserve the existing route: recommend `/ultragoal` for exactly one active topology component, or `/prometheus` -> `/ultragoal` -> `/sisyphus` otherwise. Present the non-recommended skill as an explicit override.
 
 ### Phase 1: Planning
 
-When a settled design must become shareable, trackable task tickets, use `/craft-tasks`. It delegates parent handling to craft-issue and creates or updates child tickets; use `/prometheus` only when an individual task needs an AI-execution plan.
+When a settled design must become shareable, trackable task tickets, use `/craft-tasks`. It creates or updates child tickets under the decomposed issue; use `/prometheus` only when an individual task needs an AI-execution plan.
 
 When requirements are clear and you only need an AI-execution plan, use `/prometheus`:
 
@@ -237,7 +220,7 @@ With a plan ready, `/ultragoal` sequentially dispatches its stories to `/sisyphu
 | Command | Purpose | Output |
 |---------|---------|--------|
 | `/deep-interview <idea>` | Crystallize a spec via ambiguity gating | `$OMT_DIR/deep-interview/{slug}.md` |
-| `/craft-tasks <spec>` | Create or update tasks from a settled design; delegate parent handling to craft-issue | Child task tickets in the PM tool |
+| `/craft-tasks <issue>` | Create or update tasks under the issue from a settled design | Child task tickets in the PM tool |
 | `/prometheus <task>` | Create work plan | `~/.omt/{OMT_PROJECT}/plans/*.md` |
 | `/ultragoal` | Sequentially dispatch plan stories to sisyphus | Story-by-story execution progress |
 | `/sisyphus` | Orchestrate execution of a dispatched story | Verified code changes |
@@ -267,7 +250,7 @@ If you find yourself repeatedly clarifying requirements during prometheus, answe
 
 ### 5. Single Plan Principle
 
-Keep one plan file per AI-execution scope. In the team-ticket route, craft-issue handles parents and craft-tasks creates and updates task tickets, while prometheus remains optional per task.
+Keep one plan file per AI-execution scope. In the team-ticket route, craft-tasks creates and updates task tickets under the issue, while prometheus remains optional per task.
 
 ---
 
@@ -276,7 +259,7 @@ Keep one plan file per AI-execution scope. In the team-ticket route, craft-issue
 | Problem | Solution |
 |---------|----------|
 | Prometheus keeps interviewing | It needs more context. Answer thoroughly or say "generate plan now". |
-| craft-tasks does not create child tickets | Check that intent, approach, invariants, and boundary are settled and that exactly one parent can be verified. |
+| craft-tasks does not create child tickets | Check that intent, approach, invariants, and boundary are settled and that the issue to decompose exists in the PM tool. |
 | Sisyphus won't stop | This is by design. ultragoal counts consecutive no-progress Stops and may soft-stop as `budget_limited` at `max_iterations` (default 10), preserving state. |
 | Inline verify keeps failing | Review the feedback carefully. The issues are real. |
 
