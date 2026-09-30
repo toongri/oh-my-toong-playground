@@ -15,10 +15,10 @@
  * Subcommands:
  *   init   [--initial-idea <text>] [--interview-id <id>] [--type greenfield|brownfield]
  *          [--current-phase <phase>] [--threshold <n>] [--codebase-context <text>]
- *          [--output-shape task-tickets|ai-execution-plan|domain-output] [--parent-id <id-or-url>]
+ *          [--output-shape task-tickets|ai-execution-plan|domain-output]
  *          Strict overlay of the rich shape into the EXISTING seed file.
  *   update [--current-phase <phase>] [--current-ambiguity <n>]
- *          [--output-shape task-tickets|ai-execution-plan|domain-output] [--parent-id <id-or-url>]
+ *          [--output-shape task-tickets|ai-execution-plan|domain-output]
  *          [--append-round '<json>'] [--append-ontology-snapshot '<json>']
  *          [--append-round-stdin] [--append-ontology-snapshot-stdin]
  *          [--challenge-mode <name>]
@@ -216,8 +216,6 @@ export interface DeepInterviewStateContent {
 	interview_id?: string;
 	/** Explicit execution output route; absent on legacy states. */
 	output_shape?: OutputShape;
-	/** Known PM parent identifier or URL for a settled design handoff; absent when unknown. */
-	parent_id?: string;
 	type?: "greenfield" | "brownfield";
 	initial_idea?: string;
 	initial_context_summary?: string | null;
@@ -324,7 +322,6 @@ export function initDeepInterviewState(
 		threshold?: number;
 		codebase_context?: string;
 		output_shape?: OutputShape;
-		parent_id?: string;
 	},
 ): void {
 	// Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
@@ -375,7 +372,6 @@ export function initDeepInterviewState(
 		...priorState,
 		interview_id: payload.interview_id ?? priorState.interview_id,
 		output_shape: payload.output_shape ?? priorState.output_shape,
-		parent_id: payload.parent_id ?? priorState.parent_id,
 		type: payload.type ?? priorState.type,
 		initial_idea: payload.initial_idea ?? priorState.initial_idea,
 		initial_context_summary: priorState.initial_context_summary ?? null,
@@ -421,7 +417,6 @@ export function updateDeepInterviewState(
 		append_ontology_snapshot?: unknown;
 		challenge_mode?: string;
 		output_shape?: OutputShape;
-		parent_id?: string;
 		/** Append one provenance record (evidence_id + label) to evidence_provenance. */
 		append_provenance_item?: EvidenceProvenanceItem;
 		/** Append one stance string to stance_history (ordered, NOT deduped). */
@@ -462,7 +457,6 @@ export function updateDeepInterviewState(
 		partial.append_ontology_snapshot !== undefined ||
 		partial.challenge_mode !== undefined ||
 		partial.output_shape !== undefined ||
-		partial.parent_id !== undefined ||
 		partial.append_provenance_item !== undefined ||
 		partial.append_stance !== undefined ||
 		partial.establish_fact !== undefined ||
@@ -477,9 +471,6 @@ export function updateDeepInterviewState(
 
 		if (partial.output_shape !== undefined) {
 			updatedState["output_shape"] = partial.output_shape;
-		}
-		if (partial.parent_id !== undefined) {
-			updatedState["parent_id"] = partial.parent_id;
 		}
 
 		if (partial.append_round !== undefined) {
@@ -1059,7 +1050,6 @@ function main(): void {
 				threshold: decimalFlag(str(args["threshold"]), "init", "--threshold"),
 				codebase_context: str(args["codebase-context"]),
 				output_shape: outputShapeFlag(args["output-shape"], "init"),
-				parent_id: str(args["parent-id"]),
 			});
 		} catch (e) {
 			process.stderr.write(`deep-interview-state init: ${String(e)}\n`);
@@ -1073,7 +1063,6 @@ function main(): void {
 		const appendSnapshotStdin = args["append-ontology-snapshot-stdin"] === true;
 		const challengeMode = str(args["challenge-mode"]);
 		const outputShape = outputShapeFlag(args["output-shape"], "update");
-		const parentId = str(args["parent-id"]);
 		const appendProvenanceItemRaw = str(args["append-provenance-item"]);
 		const appendStance = str(args["append-stance"]);
 
@@ -1207,7 +1196,6 @@ function main(): void {
 				append_ontology_snapshot: appendSnapshot,
 				challenge_mode: challengeMode,
 				output_shape: outputShape,
-				parent_id: parentId,
 				append_provenance_item: appendProvenanceItem,
 				append_stance: appendStance,
 				establish_fact: establishFact,
@@ -1306,9 +1294,9 @@ function main(): void {
 				"  submit-presentation --spec-path <spec.md> --html-path <presentation.html>\n" +
 				"  init   --initial-idea <text> [--interview-id <id>] [--type greenfield|brownfield]\n" +
 				"         [--current-phase <phase>] [--threshold <n>] [--codebase-context <text>]\n" +
-				"         [--output-shape task-tickets|ai-execution-plan|domain-output] [--parent-id <id-or-url>]\n" +
+				"         [--output-shape task-tickets|ai-execution-plan|domain-output]\n" +
 				"  update [--current-phase <phase>] [--current-ambiguity <n>]\n" +
-				"         [--output-shape task-tickets|ai-execution-plan|domain-output] [--parent-id <id-or-url>]\n" +
+				"         [--output-shape task-tickets|ai-execution-plan|domain-output]\n" +
 				"         [--append-round '<json>'] [--append-ontology-snapshot '<json>']\n" +
 				"         [--append-round-stdin]            (recommended for free-text: read JSON from stdin)\n" +
 				"         [--append-ontology-snapshot-stdin] (recommended for free-text: read JSON from stdin)\n" +

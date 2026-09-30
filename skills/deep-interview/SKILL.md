@@ -82,9 +82,6 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
      ```
    - Every named component is either **active** (scored across all 6 dimensions in Phase 2) or explicitly **deferred** (visible in `state.topology`, excluded from active-component floor pressure) — never silently dropped.
    - **Resume + legacy migration (topology-floor-evolution Stage 6, UC11)**: when resuming an interrupted session, `deep-interview-state.ts get`'s output carries a `migration_status` field derived from `computeTopologyMigrationStatus`. If `migration_status` is `legacy_missing` — this state predates the `topology` field entirely, never having run Round 0 — run this Round 0 gate now, before any further per-component scoring write, even if the resumed state already has rounds or a scored ambiguity from before topology existed. `current` means topology is already locked; resume straight into Phase 2 as usual.
-3.8. **Revision identity gate**:
-   - A revision of an existing PM parent must either resume/adopt the established interview state or start the current state with the established `interview_id` and `parent_id`. For the latter, pass both `--interview-id "<established interview_id>"` and `--parent-id "<established parent ID or URL>"` to `init`; do not generate a new UUID for a known parent.
-   - **Never pair a newly generated UUID/anchor with an old known parent.** If the established identity cannot be recovered, explicitly treat this as a new design: use a new interview ID, omit the old `parentId`, let `craft-tasks` resolve/create a parent by the new anchor, and do not claim it revises the old parent.
 4. **Initialize state** by invoking the CLI:
 
 ```bash
@@ -163,7 +160,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts set-nongoals \
 
 **User control:** stop/cancel pauses immediately and preserves state. An explicit request to deliver early uses **Draft delivery** below; it is not a passed interview or an execution-ready design. Do not lower scores, mark gaps resolved, or emit `<deep-interview-done/>` to make a draft pass the normal completion gate. Explicit delegation ("your call") lets the agent research, recommend, and record a choice with its basis; uncertainty ("I don't know yet") keeps the decision open. A defer records what is excluded now and what would reopen it. Resolve the user's intent with one focused question when these meanings are unclear.
 
-**Draft delivery:** read the current state and spec template, then save the available content to `$OMT_DIR/deep-interview/{slug}.draft.md` with Status DRAFT, the existing design anchor, the complete decision register, and unresolved decisions, owners, and consequences. An unknown owner or metadata value stays explicitly unknown; do not invent an output shape or ask another question when the user requested delivery without questions. This incomplete working document uses the template as an outline, not as a completed-spec validation claim. Share the draft and preserve interview state for resume. Draft delivery ends here: Phase 4's completed-spec self-review, presentation submission, handoff transition, completion token, and Phase 5 execution bridge apply only after normal closure. A request to defer execution after a completed interview still receives the full spec and presentation.
+**Draft delivery:** read the current state and spec template, then save the available content to `$OMT_DIR/deep-interview/{slug}.draft.md` with Status DRAFT, the complete decision register, and unresolved decisions, owners, and consequences. An unknown owner or metadata value stays explicitly unknown; do not invent an output shape or ask another question when the user requested delivery without questions. This incomplete working document uses the template as an outline, not as a completed-spec validation claim. Share the draft and preserve interview state for resume. Draft delivery ends here: Phase 4's completed-spec self-review, presentation submission, handoff transition, completion token, and Phase 5 execution bridge apply only after normal closure. A request to defer execution after a completed interview still receives the full spec and presentation.
 
 ### Step 2-head: Update the Decision Register
 
@@ -483,8 +480,6 @@ Wait for the update to succeed, then read state and use the exact persisted `sta
 
 1. **Generate the specification** with the prompt-safe transcript, using the current decision register for the Approach section, including evidence, rejected alternatives, tested counterexamples, and explicit assumptions. **Spec template: you MUST read `deep-interview-spec-template.md` now, before composing the spec.** Do not write the spec from memory.
 
-**Immutable design anchor:** read the persisted state before composing the spec and derive the one shared metadata value exactly as `design-anchor: deep-interview:<state.interview_id>`. The anchor is derived only from persisted state.interview_id, remains stable across resume, and is never from title, slug, timestamp, or hash. Put this exact value in the template's Metadata section; do not invent or normalize a second anchor.
-
 The Metadata `Output shape` value must be copied exactly from persisted `state.output_shape` and must be one of `task-tickets`, `ai-execution-plan`, or `domain-output`.
 
 **Boundary Map (required section).** The spec's `## Boundary Map` places each Topology part on the two boundary axes and **leads with a dependency diagram** (a mermaid `flowchart`, one `subgraph` per domain, arrows in their real direction with the cross-domain/violating edge marked, read as reading objective → diagram → interpretation), then a placement table carrying the **domain (vertical)** and the **layer/role (horizontal)** as **separate columns** — never one hand-written layer string, so two parts in the same domain on different use-cases are not mislabeled as different layers — plus responsibility, collaborators, and **affected vs modified**, and closes with a **Dependency direction** verdict (unidirectional per axis; flag any back-reference, cycle, or inner→outer import as a coupling defect). The diagram is the ONE mermaid fence permitted outside `## Diagrams` and is not counted by the coverage table. Vocabulary follows the `architecture-boundaries` rule — method names (DDD · FSD · Clean-arch) as vocabulary only, never a methodology mandate.
@@ -533,18 +528,6 @@ After the spec is written, read the state returned by `deep-interview-state.ts g
 - If `state.output_shape` is missing or invalid, stop and return to output-shape confirmation; do not infer a route.
 - **Rule 4:** Never recommend `sisyphus` directly — ultragoal uses it as the sole executor.
 
-**Revision identity decision — state this before the handoff:** for a revision of an existing PM parent, state whether the established interview state was resumed/adopted or the current state was started with the established `interview_id` and `parent_id` using `--interview-id` and `--parent-id`. Before the handoff, read state and use the persisted `state.parent_id` when it is available. Never pair a newly generated UUID/anchor with an old known parent. If the established identity cannot be recovered, state explicitly that this is a new design, omit the old `parentId`, let `craft-tasks` resolve/create a parent by the new anchor, and do not claim it revises the old parent.
-
-**`craft-tasks` parent handoff:** Carry the exact `designAnchor` from the spec Metadata unchanged into the downstream handoff:
-
-```text
-designAnchor: "design-anchor: deep-interview:<state.interview_id>"
-parentId: "<known parent ID or URL, when available>"
-taskIdentities: "<optional prior craft-tasks result: [{ taskKey, childId }] >"
-```
-
-The placeholder is replaced only with the persisted `state.interview_id`; never recompute it from the spec title, slug, timestamp, hash, or local session path. When a known PM parent exists, parentId MUST be copied from persisted `state.parent_id` when available; if it is known but not yet persisted, persist it with `update --parent-id` before constructing the handoff. When prior craft-tasks output exists, carry its optional `taskIdentities` collection unchanged so later maintenance can preserve keys even when the caller does not know every child ID, including preserving each immutable taskKey. When no parent is known, pass the spec and exact `designAnchor` alone and rely on `craft-tasks`' parent-resolution gate; this direct spec-only flow is valid. `craft-tasks` must resolve and verify the parent before reading or creating any child.
-
 **Question:** "Your spec is ready (ambiguity: {score}%). How would you like to proceed?"
 
 **Build the options like this** (recommended route first, tagged "(Recommended)", with a one-sentence rationale tied to THIS spec):
@@ -555,7 +538,7 @@ The placeholder is replaced only with the persisted `state.interview_id`; never 
 - When `prometheus` is recommended, offer `ultragoal` as an explicit override.
 - **Continue interviewing** — "Continue interviewing to improve clarity (current: {score}%)" → return to the Phase 2 loop.
 
-Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec file path as context (the `task-tickets` option invokes `Skill(skill: "craft-tasks")` and includes the persisted `state.parent_id` as `parentId` and any prior `taskIdentities` collection when available; the `ai-execution-plan` option invokes `Skill(skill: "prometheus")` or `Skill(skill: "ultragoal")` according to the active-component count; the `domain-output` option invokes the matching domain skill).
+Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec file path as context (the `task-tickets` option invokes `Skill(skill: "craft-tasks")`; the `ai-execution-plan` option invokes `Skill(skill: "prometheus")` or `Skill(skill: "ultragoal")` according to the active-component count; the `domain-output` option invokes the matching domain skill).
 
 **IMPORTANT:** On execution selection, **MUST** invoke the chosen skill via `Skill()`. Do NOT implement directly. The deep-interview agent is a requirements agent, not an execution agent. Pass the spec file path forward (and the prompt-safe summary, if the initial context was summarized) — never the raw oversized source material.
 
