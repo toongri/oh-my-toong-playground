@@ -863,8 +863,8 @@ describe("new-prose: boundary-entry rule and substitution", () => {
 		);
 	});
 
-	test("an unrunnable scenario is NOT-RUN rather than PASS", () => {
-		expect(skillMd).toContain("`NOT-RUN`, not PASS");
+	test("an unrunnable scenario is recorded blocked rather than PASS", () => {
+		expect(skillMd).toContain("record the cell `blocked` — never PASS");
 	});
 
 	test("a recorded coverage delta is not a substitute for running the scenario", () => {
@@ -927,12 +927,13 @@ describe("new-prose: actor-perspective evidence contract", () => {
 // ---------------------------------------------------------------------------
 
 describe("new-prose: approval is gated on boundary depth", () => {
-	test("an H-priority scenario left NOT-RUN blocks APPROVE", () => {
+	test("an unexecuted cell blocks every verdict regardless of priority", () => {
 		const guardStart = skillMd.indexOf("## Approval Decision");
 		expect(guardStart).not.toBe(-1);
-		expect(skillMd.slice(guardStart)).toContain(
-			"An `H`-priority scenario left `NOT-RUN` blocks APPROVE",
-		);
+		const approval = skillMd.slice(guardStart);
+		expect(approval).toContain("Priority orders execution; it never lets an unexecuted cell through");
+		expect(approval).toContain("refuses APPROVE and COMMENT while a cell is unrecorded");
+		expect(approval).toContain("the CLI refuses REQUEST_CHANGES without a recorded failure");
 	});
 
 	test("Quick Reference carries the actor-boundary and evidence lines", () => {
@@ -1012,15 +1013,15 @@ describe("new-prose: requirement mappings are structurally grounded", () => {
 		expect(mapping).toContain("exactly one recorded current-cycle cell");
 		expect(mapping).toContain("recorded status");
 		expect(mapping).toContain("`pass`, `fail`,");
-		expect(mapping).toContain("or `na`");
+		expect(mapping).toContain("`blocked`, or legacy `na`");
 	});
 
 	test("presentation.md defines grounded status invariants for all four verdicts", () => {
 		const mapping = mappingSection();
-		expect(mapping).toMatch(/`yes` requires every referenced\s+cell to be `pass`/);
-		expect(mapping).toMatch(/`no` requires every referenced\s+cell to be `fail`/);
-		expect(mapping).toMatch(/`partial`\s+requires at least one `pass` and one `fail` and no `na`/);
-		expect(mapping).toMatch(/`unverified` requires\s+at least one valid `na`/);
+		expect(mapping).toMatch(/`yes` requires\s+every referenced\s+cell to be `pass`/);
+		expect(mapping).toMatch(/`no` requires every referenced cell to be\s+`fail`/);
+		expect(mapping).toMatch(/`partial`\s+requires at least one `pass` and one `fail` and no\s+`blocked`\/`na`/);
+		expect(mapping).toMatch(/`unverified` requires at least one valid `blocked` \(or legacy\s+`na`\)/);
 	});
 
 	test("invalid mappings fail closed and prose cannot establish a verdict", () => {
