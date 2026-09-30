@@ -490,8 +490,7 @@ describe("qa-state CLI wiring", () => {
 		expect(out).toBe("null");
 	});
 
-	test("set-verdict refuses APPROVE with a fail cell, then accepts after a waiver", () => {
-		authorCompleteChain();
+	const recordAllPass = () => {
 		run("record-baseline --story story-1 --result pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash");
 		for (const [cls, sub] of [[1, ""], [2, ""], [3, ""], [4, ""], [5, ""], [6, ""], [1, "hang-timeout"], [5, "flaky-green"]] as const) {
 			const suffix = sub ? ` --sub ${sub}` : "";
@@ -500,13 +499,84 @@ describe("qa-state CLI wiring", () => {
 		run("record-run-check --check stale-state --result pass");
 		run("record-run-check --check dirty-worktree --result fail --note debris");
 		run("record-run-check --check flaky-rerun --result pass");
-		run("record-cell --story story-1 --cls 1 --status fail --na-reason ignored");
+	};
+
+	const writeAttemptLog = () => {
+		const log = join(tmpDir, "attempts.txt");
+		writeFileSync(log, "$ docker compose up -d postgres\nCannot connect to the Docker daemon\n");
+		return log;
+	};
+
+	test("set-verdict follows recorded outcomes: a fail cell refuses APPROVE and permits REQUEST_CHANGES", () => {
+		authorCompleteChain();
+		recordAllPass();
+		run("record-cell --story story-1 --cls 1 --status fail");
 		const before = readFileSync(resolveStatePath(S), "utf8");
 		expect(() => run("set-verdict APPROVE")).toThrow();
 		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
-		run('waive --story story-1 --cls 1 --reason "not applicable"');
+		run("set-verdict REQUEST_CHANGES");
+		expect(rawState().verdict).toBe("REQUEST_CHANGES");
+	});
+
+	test("REQUEST_CHANGES는 제품 실패 기록 없이 거부되고 거부 메시지가 남은 실행을 안내함", () => {
+		authorCompleteChain();
+		recordAllPass();
+		// dirty-worktree fail is harness debris; every cell passed.
+		const before = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => run("set-verdict REQUEST_CHANGES")).toThrow(/requires a recorded failure/);
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
 		run("set-verdict APPROVE");
 		expect(rawState().verdict).toBe("APPROVE");
+	});
+
+	test("미실행 칸이 남으면 APPROVE·COMMENT·REQUEST_CHANGES 모두 거부됨", () => {
+		authorCompleteChain();
+		run("record-baseline --story story-1 --result pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash");
+		run("record-cell --story story-1 --cls 2 --status pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash");
+		run("record-run-check --check stale-state --result pass");
+		run("record-run-check --check dirty-worktree --result pass");
+		run("record-run-check --check flaky-rerun --result pass");
+		for (const verdict of ["APPROVE", "COMMENT", "REQUEST_CHANGES"]) expect(() => run(`set-verdict ${verdict}`)).toThrow();
+		expect(rawState().verdict ?? null).toBeNull();
+	});
+
+	test("record-cell rejects the retired na status and a late not_applicable", () => {
+		authorCompleteChain();
+		expect(() => run("record-cell --story story-1 --cls 3 --status na --na-reason skipped")).toThrow(/na is retired/);
+		expect(() => run("record-cell --story story-1 --cls 3 --status not_applicable")).toThrow(/first authored/);
+	});
+
+	test("blocked requires obstacle, attempts, deepest-reachable, and a readable attempt log, then resolves APPROVE", () => {
+		authorCompleteChain();
+		recordAllPass();
+		const log = writeAttemptLog();
+		const base = "record-cell --story story-1 --cls 1 --sub hang-timeout --status blocked";
+		expect(() => run(base)).toThrow();
+		expect(() => run(`${base} --obstacle "PGlite has one connection" --attempts '[]' --deepest-reachable PGlite --attempt-log ${log}`)).toThrow(/attempts/);
+		expect(() => run(`${base} --obstacle "PGlite has one connection" --attempts '["docker compose up → daemon down"]' --deepest-reachable PGlite --attempt-log ${join(tmpDir, "missing.txt")}`)).toThrow();
+		run(`${base} --obstacle "PGlite has one connection" --attempts '["docker compose up → daemon down"]' --deepest-reachable PGlite --attempt-log ${log}`);
+		const cell = rawState().cells.find((candidate: any) => candidate.cls === 1 && candidate.sub === "hang-timeout");
+		expect(cell.status).toBe("blocked");
+		expect(cell.blocked).toEqual({ obstacle: "PGlite has one connection", attempts: ["docker compose up → daemon down"], deepest_reachable: "PGlite", attempt_log: log });
+		expect(() => run("set-verdict REQUEST_CHANGES")).toThrow();
+		run("set-verdict APPROVE");
+		expect(rawState().verdict).toBe("APPROVE");
+	});
+
+	test("not_applicable is accepted only when the cell is first authored", () => {
+		run("set --phase PLAN");
+		run("set-acceptance --json '[\"home shows today supplements\"]'");
+		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
+		run("add-story --id story-1 --actor actor-1 --goal 'Check supplements' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'");
+		run('author-cell --story story-1 --cls 3 --attack-point "no free-text input" --priority L --not-applicable "request schema has only UUID, enum, and int fields"');
+		const cell = rawState().cells.find((candidate: any) => candidate.cls === 3);
+		expect(cell.status).toBe("not_applicable");
+		expect(cell.not_applicable_reason).toContain("UUID");
+		run('author-cell --story story-1 --cls 4 --attack-point "kill mid-write" --priority M');
+		expect(() => run('author-cell --story story-1 --cls 4 --attack-point "kill mid-write" --priority M --not-applicable "out of scope"')).toThrow(/first authored/);
+		run("inc-cycle");
+		expect(() => run('author-cell --story story-1 --cls 4 --attack-point "kill mid-write" --priority M --not-applicable "out of scope"')).toThrow(/first authored/);
+		run('author-cell --story story-1 --cls 3 --attack-point "no free-text input" --priority L --not-applicable "request schema has only UUID, enum, and int fields"');
 	});
 
 	test("start resets a completed cycle and refuses to launder active work", () => {
@@ -563,75 +633,62 @@ describe("qa-state CLI wiring", () => {
 		expect(rawState().active).toBe(false);
 	});
 
-	test("waive and declare-inert require reasons and are surfaced in get report", () => {
+	test("waive is retired and declare-inert still requires a reason", () => {
 		authorCompleteChain();
-		expect(() => run("waive --story story-1 --cls 1")).toThrow();
-		run('waive --story story-1 --cls 1 --reason "user approved exception"');
+		expect(() => run('waive --story story-1 --cls 1 --reason "user approved exception"')).toThrow(/waive is retired/);
+		expect(rawState().waives ?? []).toEqual([]);
 		expect(() => run("declare-inert")).toThrow();
 		run('declare-inert --reason "refactor has no reachable risk surface"');
 		const view = JSON.parse(run("get"));
-		expect(view.verdict_report.waives[0].reason).toBe("user approved exception");
 		expect(view.verdict_report.inert.reason).toContain("no reachable");
 	});
 	test("이전 사이클 기록이 있어도 현재 보고서 제출이 가능함", () => {
 		authorCompleteChain();
-		run("record-cell --story story-1 --cls 1 --status na --na-reason setup");
+		run("record-cell --story story-1 --cls 1 --status fail");
 		run("inc-cycle");
 		const report = join(tmpDir, "next-cycle.html");
 		expect(() => execSync(`bun ${join(import.meta.dir, "qa-report.ts")} --session ${S} --out ${report}`, { env: process.env })).not.toThrow();
 		expect(rawState().report.path).toBe(report);
 	});
 
-	test("declare-inert all-na arm permits APPROVE but mixed pass/H-na does not", () => {
-		authorCompleteChain();
-		run("record-baseline --story story-1 --result pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash");
+	test("모든 칸이 작성 시점에 해당 없음이면 APPROVE가 가능함", () => {
+		run("set --phase PLAN");
+		run("set-acceptance --json '[\"home shows today supplements\"]'");
+		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
+		run("add-story --id story-1 --actor actor-1 --goal 'Check supplements' --given '[\"program exists\"]' --when '[\"open home\"]' --then '[\"today supplements are shown\"]' --acceptance-criteria '[0]'");
 		for (const [cls, sub] of [[1, ""], [2, ""], [3, ""], [4, ""], [5, ""], [6, ""], [1, "hang-timeout"], [5, "flaky-green"]] as const) {
 			const suffix = sub ? ` --sub ${sub}` : "";
-			run(`record-cell --story story-1 --cls ${cls}${suffix} --status na --na-reason "no risk surface"`);
+			run(`author-cell --story story-1 --cls ${cls}${suffix} --attack-point "attack ${cls}" --priority ${cls === 1 ? "H" : "L"} --not-applicable "rename-only refactor; no behavior reaches the surface"`);
 		}
+		run("record-baseline --story story-1 --result pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash");
 		run("record-run-check --check stale-state --result pass");
-		run("record-run-check --check dirty-worktree --result fail --note debris");
+		run("record-run-check --check dirty-worktree --result pass");
 		run("record-run-check --check flaky-rerun --result pass");
-		run('declare-inert --reason "nothing reachable"');
 		run("set-verdict APPROVE");
 		expect(rawState().verdict).toBe("APPROVE");
 		const report = join(tmpDir, "inert-report.html");
 		execSync(`bun ${join(import.meta.dir, "qa-report.ts")} --session ${S} --out ${report}`, { env: process.env });
 		run(`review-report --path ${report}`);
 		run("complete");
-		run('start --target "mixed inert"');
-		authorCompleteChain();
-		run("record-baseline --story story-1 --result pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash");
-		for (const [cls, sub] of [[1, ""], [2, ""], [3, ""], [4, ""], [5, ""], [6, ""], [1, "hang-timeout"], [5, "flaky-green"]] as const) {
-			const suffix = sub ? ` --sub ${sub}` : "";
-			const status = cls === 2 && !sub ? "pass" : "na";
-			const evidence = status === "pass" ? " --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash" : " --na-reason \"no risk surface\"";
-			run(`record-cell --story story-1 --cls ${cls}${suffix} --status ${status}${evidence}`);
-		}
-		run("record-run-check --check stale-state --result pass");
-		run("record-run-check --check dirty-worktree --result fail --note debris");
-		run("record-run-check --check flaky-rerun --result pass");
-		run('declare-inert --reason "mixed should fail"');
-		const before = readFileSync(resolveStatePath(S), "utf8");
-		expect(() => run("set-verdict APPROVE")).toThrow();
-		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+		expect(rawState().active).toBe(false);
 	});
 
-	test("lock serializes concurrent waive and record-cell writes", () => {
+	test("lock serializes concurrent blocked and pass record-cell writes", () => {
 		authorCompleteChain();
+		const log = writeAttemptLog();
 		const scriptPath = join(import.meta.dir, "qa-state.ts");
 		execSync(
-			`(bun ${scriptPath} waive --story story-1 --cls 1 --reason "parallel waiver" & bun ${scriptPath} record-cell --story story-1 --cls 2 --status pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash & wait)`,
+			`(bun ${scriptPath} record-cell --story story-1 --cls 1 --status blocked --obstacle "no daemon" --attempts '["docker compose up → daemon down"]' --deepest-reachable PGlite --attempt-log ${log} & bun ${scriptPath} record-cell --story story-1 --cls 2 --status pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash & wait)`,
 			{ encoding: "utf8", env: process.env, shell: "/bin/sh" },
 		);
 		const state = rawState();
-		expect(state.waives).toEqual([expect.objectContaining({ story: "story-1", cls: 1, reason: "parallel waiver" })]);
-		expect(state.cells.find((cell: any) => cell.story === "story-1" && cell.cls === 2).status).toBe("pass");
+		expect(state.cells.find((cell: any) => cell.story === "story-1" && cell.cls === 1 && !cell.sub).status).toBe("blocked");
+		expect(state.cells.find((cell: any) => cell.story === "story-1" && cell.cls === 2 && !cell.sub).status).toBe("pass");
 	});
 
 	test("get separates prior-cycle cell records from the current-cycle view", () => {
 		authorCompleteChain();
-		run("record-cell --story story-1 --cls 1 --status na --na-reason first-cycle");
+		run("record-cell --story story-1 --cls 1 --status fail");
 		run("inc-cycle");
 		run("author-cell --story story-1 --cls 1 --attack-point corrected --priority H");
 		const view = JSON.parse(run("get"));
@@ -852,11 +909,11 @@ describe("help subcommand", () => {
 	const run = (cmd: string, env?: Record<string, string>) =>
 		execSync(`bun ${script} ${cmd}`, { encoding: "utf8", env: { ...process.env, ...env } });
 
-	test("waive is AI-usable and force-complete is the only user-only command", () => {
+	test("retired waive is not listed and force-complete is the only user-only command", () => {
 		const out = run("help");
 		const aiSection = out.slice(out.indexOf("AI-USABLE"), out.indexOf("USER-ONLY"));
 		const userSection = out.slice(out.indexOf("USER-ONLY"));
-		expect(aiSection).toContain("waive —");
+		expect(aiSection).not.toContain("waive —");
 		expect(aiSection).not.toContain("force-complete —");
 		expect(userSection.trim().split("\n").filter((line) => line.startsWith("  "))).toEqual([
 			expect.stringContaining("force-complete —"),

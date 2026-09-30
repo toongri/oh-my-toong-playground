@@ -320,7 +320,7 @@ describe("qa-report renderer", () => {
 		const html = renderQaReport(view, {}, fakeReader)!;
 		const reader = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
 		// coverage axes shown by plain name, never the cls number
-		expect(reader).toContain("핵심·실패 경로");
+		expect(reader).toContain("실패 경로");
 		expect(reader).toContain("입력 경계·악성 입력");
 		expect(reader).not.toContain("cls 1");
 		expect(reader).not.toContain("cls 2");
@@ -432,7 +432,7 @@ describe("qa-report renderer", () => {
 		const audit = html.slice(html.indexOf("시나리오 상세 기록"));
 
 		expect(audit).toContain('<td class="audit-story"><code>story-1</code></td>');
-		expect(audit).toContain('<td class="audit-coverage">cls 1 — 핵심·실패 경로</td>');
+		expect(audit).toContain('<td class="audit-coverage">cls 1 — 실패 경로</td>');
 		expect(audit).toContain('<td class="audit-boundary">브라우저 경계 미구동<br>');
 		expect(html).toContain("table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.94rem; display: block; overflow-x: auto; }");
 		expect(html).toContain(".audit-story { min-width: 6rem; white-space: nowrap; word-break: keep-all; }");
@@ -505,8 +505,47 @@ describe("qa-report renderer", () => {
 		});
 		const html = renderQaReport(view, {}, fakeReader)!;
 		const scenarios = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
-		expect(scenarios).toContain("핵심·실패 경로 미검증");
-		expect(scenarios).not.toContain("핵심·실패 경로 확인");
+		expect(scenarios).toContain("실패 경로 미검증");
+		expect(scenarios).not.toContain("실패 경로 확인");
+	});
+
+	test("검증 불가 칸은 한계와 도달 지점을 리더에 보이고 시도 내역은 감사에 남기며 상단 배너로 알린다", () => {
+		const view = baseView({
+			cells: [
+				baseView().cells![0],
+				{
+					story: "story-1", cls: 1, sub: "hang-timeout", priority: "M", status: "blocked", cycle: 0,
+					blocked: { obstacle: "PGlite는 연결이 하나뿐임", attempts: ["docker compose up → daemon 없음"], deepest_reachable: "PGlite 단일 연결", attempt_log: "/evidence/attempts.txt" },
+				},
+			],
+		});
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const scenarios = html.slice(html.indexOf("<h2>유저 시나리오 · 근거"), html.indexOf("<h2>시나리오 상세 기록"));
+		expect(scenarios).toContain("검증 불가 — PGlite는 연결이 하나뿐임");
+		expect(scenarios).toContain("PGlite 단일 연결");
+		expect(scenarios).toContain("실패 경로 검증 불가");
+		expect(scenarios).not.toContain("docker compose up");
+		const audit = html.slice(html.indexOf("<h2>시나리오 상세 기록"));
+		expect(audit).toContain("docker compose up → daemon 없음");
+		expect(audit).toContain("/evidence/attempts.txt");
+		expect(html.indexOf("검증 불가 셀 1건")).toBeGreaterThan(-1);
+		expect(html.indexOf("검증 불가 셀 1건")).toBeLessThan(html.indexOf("<h2>Verdict"));
+	});
+
+	test("해당 없음 칸은 이유를 흐리게 보이고 미검증으로 표시하지 않는다", () => {
+		const view = baseView({
+			cells: [
+				baseView().cells![0],
+				{ story: "story-1", cls: 3, priority: "L", status: "not_applicable", not_applicable_reason: "요청에 자유 입력 문자열이 없음", cycle: 0 },
+			],
+		});
+		const html = renderQaReport(view, {}, fakeReader)!;
+		const scenarios = html.slice(html.indexOf("유저 시나리오 · 근거"), html.indexOf("시나리오 상세 기록"));
+		expect(scenarios).toContain("sc-not_applicable");
+		expect(scenarios).toContain("요청에 자유 입력 문자열이 없음");
+		expect(scenarios).toContain("주입 해당 없음");
+		expect(scenarios).not.toContain("주입 미검증");
+		expect(html).not.toContain("검증 불가 셀");
 	});
 
 	test("evidence 없는 na 시나리오의 감사 기록은 actor의 boundary와 driver를 fallback으로 보존한다", () => {
@@ -1082,7 +1121,7 @@ describe("qa-report presentation layer", () => {
 	});
 
 	test("accepts yes, no, partial, and unverified mappings when their current-cycle refs match the claimed status", () => {
-		const cell = (status: "pass" | "fail" | "na", cls: number) => ({
+		const cell = (status: "pass" | "fail" | "na" | "blocked", cls: number) => ({
 			story: "story-1",
 			cls,
 			priority: "M" as const,
@@ -1090,6 +1129,7 @@ describe("qa-report presentation layer", () => {
 			cycle: 0,
 			evidence: { path: "/evidence/after.png", surface: "agent-device", after: "/evidence/after.png" },
 			...(status === "na" ? { na_reason: "유저 경계에 도달하지 못함" } : {}),
+			...(status === "blocked" ? { blocked: { obstacle: "단일 연결", attempts: ["docker 없음"], deepest_reachable: "PGlite", attempt_log: "/evidence/attempts.txt" } } : {}),
 		});
 		const cases = [
 			{ satisfied: "yes" as const, cells: [cell("pass", 1)], refs: [{ story: "story-1", cls: 1 }] },
@@ -1100,6 +1140,7 @@ describe("qa-report presentation layer", () => {
 				refs: [{ story: "story-1", cls: 1 }, { story: "story-1", cls: 2 }],
 			},
 			{ satisfied: "unverified" as const, cells: [cell("na", 1)], refs: [{ story: "story-1", cls: 1 }] },
+			{ satisfied: "unverified" as const, cells: [cell("blocked", 1)], refs: [{ story: "story-1", cls: 1 }] },
 		];
 
 		for (const candidate of cases) {
