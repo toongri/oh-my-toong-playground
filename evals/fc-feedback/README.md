@@ -2,9 +2,10 @@
 
 fc-feedback 스킬(SKILL.md)을 writing-skills 기반으로 다듬어가는 동안, luna max
 (`gpt-6-luna` / `model_reasoning_effort=max`)를 최적화 대상으로 놓고 sol med
-(`gpt-6-sol` / `model_reasoning_effort=medium`)를 매 회차 비교군으로 나란히 돌려,
+(`gpt-6.1-sol` / `model_reasoning_effort=medium`)를 매 회차 비교군으로 나란히 돌려,
 최소 5회차 이상 문서 품질을 깎아가며 최종적으로 더 나은 모델을 확정하는 측정이다
 (plan §13.3, momus 3·4차 검토로 확정된 계약은 §14, §15 — 우선순위는 §15 > §14 > §13).
+sol 모델은 round-15까지 `gpt-6-sol`로 실행했고, 이후 회차부터 `gpt-6.1-sol`로 실행한다.
 
 이 트리는 **배포되지 않는다**. `sync.yaml`이 참조하는 컴포넌트 카테고리(`skills/`,
 `hooks/`, `scripts/`, `rules/`, `agents/`, `commands/`) 어디에도 속하지 않으므로 대상

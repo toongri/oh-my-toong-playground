@@ -164,7 +164,7 @@ describe("materializeAgent", () => {
 		expect(parsed.name).toBe("presentation-reviewer");
 		// codex.yaml model-map.tiers.opus (agents/presentation-reviewer.md's frontmatter
 		// `model: opus`), not a per-agent override — presentation-reviewer has none.
-		expect(parsed.model).toBe("gpt-6-sol");
+		expect(parsed.model).toBe("gpt-6.1-sol");
 		expect(parsed.model_reasoning_effort).toBe("high");
 		expect(typeof parsed.developer_instructions).toBe("string");
 		expect((parsed.developer_instructions as string).length).toBeGreaterThan(0);
