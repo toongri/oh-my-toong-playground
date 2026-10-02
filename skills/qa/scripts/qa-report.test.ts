@@ -496,8 +496,8 @@ describe("qa-report renderer", () => {
 		expect(html).toContain("table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.94rem; display: block; overflow-x: auto; }");
 		expect(html).toContain(".audit-story { min-width: 6rem; }");
 		expect(html).toContain(".audit-story code { white-space: normal; overflow-wrap: anywhere; }");
-		expect(html).toContain(".audit-coverage { min-width: 11rem; word-break: keep-all; overflow-wrap: normal; }");
-		expect(html).toContain(".audit-boundary { min-width: 12rem; word-break: keep-all; overflow-wrap: normal; }");
+		expect(html).toContain(".audit-coverage { min-width: 8rem; word-break: keep-all; overflow-wrap: normal; }");
+		expect(html).toContain(".audit-boundary { min-width: 12rem; word-break: keep-all; overflow-wrap: anywhere; }");
 	});
 
 	test("동작이 바뀌지 않는 변경으로 선언된 inert는 시나리오 섹션 머리에 안내로 표시함", () => {

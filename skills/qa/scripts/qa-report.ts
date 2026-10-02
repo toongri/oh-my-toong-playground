@@ -1019,8 +1019,8 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .gap-reference { white-space: nowrap; }
 .audit-story { min-width: 6rem; }
 .audit-story code { white-space: normal; overflow-wrap: anywhere; }
-.audit-coverage { min-width: 11rem; word-break: keep-all; overflow-wrap: normal; }
-.audit-boundary { min-width: 12rem; word-break: keep-all; overflow-wrap: normal; }
+.audit-coverage { min-width: 8rem; word-break: keep-all; overflow-wrap: normal; }
+.audit-boundary { min-width: 12rem; word-break: keep-all; overflow-wrap: anywhere; }
 .audit-evidence { display: block; margin-top: 0.4rem; font-size: 0.8rem; }
 .audit-evidence code { display: block; word-break: break-all; margin-top: 0.2rem; }
 .audit-story-link { color: var(--accent); text-decoration: underline; }
