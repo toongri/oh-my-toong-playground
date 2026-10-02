@@ -132,7 +132,7 @@ bun "${CLAUDE_SKILL_DIR}/scripts/qa-device-profiles.ts" get --project .
 
 Never guess a device size the user did not give or the project does not document.
 
-On each profile, the scenario's before/after screenshots must show that a person can read and use the changed screen: nothing clipped or overlapping, no horizontal scroll, no truncated Korean text, touch targets reachable. A broken layout on one profile is a `fail` for that profile's scenario.
+On each profile, the scenario's before/after screenshots must show that a person can read and use the changed screen: nothing clipped or overlapping, no horizontal scroll, no truncated Korean text, touch targets reachable. Its `review-evidence` carries one `kind: "layout"` claim that names each of those checks and what the capture shows for it ([presentation.md](presentation.md#claim-review-record)); the CLI refuses a profile review without it. A broken layout on one profile is a `fail` for that profile's scenario.
 
 #### The cheapest proof
 

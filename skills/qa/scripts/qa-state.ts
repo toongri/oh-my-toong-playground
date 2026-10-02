@@ -55,6 +55,7 @@ import {
 	visualEvidenceComplete,
 	CLIENT_IMPACTS,
 	RISK_AXES,
+	LAYOUT_CHECKS,
 	isRiskAxis,
 	TEST_EVIDENCE_SURFACE,
 	evidenceReviewSnapshot,
@@ -1111,8 +1112,16 @@ export function reviewEvidence(sessionId: string, story: string, scenarioId: str
 			if (typeof item.gap !== "string" || (item.verdict === "supported" ? item.gap !== "" : !item.gap.trim())) throw new Error("supported claims require empty gap; insufficient claims require recapture instructions");
 			if (!Array.isArray(item.sources) || item.sources.length === 0) throw new Error("claim requires inspected sources");
 			const sources = item.sources.map((source: { path?: unknown; location?: unknown }) => ({ path: probePlainFile(nonEmpty(source?.path, "source path")), location: nonEmpty(source?.location, "source location") }));
-			return { claim, observation, verdict: item.verdict, gap: item.gap, sources };
+			if (item.kind === undefined) return { claim, observation, verdict: item.verdict, gap: item.gap, sources };
+			if (item.kind !== "layout") throw new Error('claim kind must be "layout" when given');
+			const checked: unknown[] = Array.isArray(item.checked) ? item.checked : [];
+			const missing = LAYOUT_CHECKS.filter((check) => !checked.includes(check));
+			if (missing.length) throw new Error(`layout claim must record checked: ${missing.join(", ")}`);
+			return { claim, observation, verdict: item.verdict, gap: item.gap, sources, kind: "layout" as const, checked: [...LAYOUT_CHECKS] };
 		});
+		if (scenario.profile && !claims.some((claim) => claim.kind === "layout")) {
+			throw new Error(`profile scenario needs a layout claim for "${scenario.profile}": {"kind":"layout","checked":${JSON.stringify(LAYOUT_CHECKS)}, …} observing that nothing is clipped or overlapping, the page does not scroll sideways, and text wraps without breaking`);
+		}
 		if (new Set(claims.map((claim) => claim.claim.trim())).size !== claims.length) throw new Error("duplicate evidence claims");
 		const paths = [scenario.evidence.path, scenario.evidence.before, scenario.evidence.action, scenario.evidence.after, ...claims.flatMap((claim) => claim.sources.map((source) => source.path))];
 		const files: Record<string, string> = {};

@@ -43,6 +43,25 @@ claims; otherwise it names the missing proof and next capture. For example:
 ]
 ```
 
+A scenario on a device profile also needs one layout claim. It records that the
+after capture was checked for each breakage a person would hit at that size, and
+what the capture shows for each. The CLI refuses the review without it:
+
+```json
+{
+  "kind": "layout",
+  "checked": ["clipping", "overlap", "horizontal-scroll", "text-wrap"],
+  "claim": "노트북(1536×864)에서 바뀐 표를 읽고 쓸 수 있다",
+  "verdict": "supported",
+  "observation": "카테고리 열이 잘리지 않고 다른 열과 겹치지 않는다. 가로 스크롤이 없다. 한글 이름이 단어 중간에서 끊기지 않는다",
+  "gap": "",
+  "sources": [{ "path": "evidence/laptop-after.png", "location": "자가섭취 보유분 표" }]
+}
+```
+
+A broken layout is still a `supported` claim of what the capture shows; the
+scenario itself is recorded `fail`.
+
 The CLI persists the review and hashes the scenario's evidence plus every cited
 source. Re-recording the scenario, changing its scenario fields, actor assignment,
 actor boundary/driver, or evidence bytes invalidates the receipt. Review the new evidence and resubmit. These checks

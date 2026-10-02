@@ -220,7 +220,13 @@ export interface QaEvidenceClaim {
 	observation: string;
 	gap: string;
 	sources: Array<{ path: string; location: string }>;
+	/** "layout" marks the claim that a profile screen was checked for the LAYOUT_CHECKS breakages. */
+	kind?: "layout";
+	checked?: string[];
 }
+
+/** What a person-usable screen must be free of on each device profile. */
+export const LAYOUT_CHECKS = ["clipping", "overlap", "horizontal-scroll", "text-wrap"] as const;
 
 export interface QaEvidenceReview {
 	claims: QaEvidenceClaim[];

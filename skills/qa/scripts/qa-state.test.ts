@@ -23,6 +23,7 @@ import {
 	declareRiskNotApplicable,
 	readQaView,
 	recordScenario,
+	reviewEvidence,
 	setAcceptance,
 	type QaState,
 } from "./qa-state.ts";
@@ -440,6 +441,29 @@ describe("qa state: render actor device profiles", () => {
 		expect(() => recordScenario(S, { story: "story-1", scenario: "s1", status: "pass", evidencePath: log, evidenceSurface: "agent-browser" })).toThrow(/captured on device profile "phone-small"/);
 		// even an automated test run cannot stand in for the screen on a profile scenario
 		expect(() => recordScenario(S, { story: "story-1", scenario: "s1", status: "pass", evidencePath: log, evidenceSurface: "test" })).toThrow(/captured on device profile/);
+	});
+
+	test("profile 시나리오의 근거 검토는 잘림·겹침·가로 스크롤·줄바꿈을 점검한 layout claim이 있어야 한다", () => {
+		const { cwd, home } = profileFixture([PHONE]);
+		setQaState(S, { phase: "PLAN" });
+		setAcceptance(S, ["home shows today supplements"]);
+		addActor(S, { ...renderActor, profiles: ["phone-small"], project: cwd, home });
+		addStory(S, { id: "story-1", actor: "actor-1", contract: CONTRACT });
+		authorScenario(S, scenarioOpts("s1", "H", [1, 2, 3, 4, 5, 6], "phone-small"));
+		const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6dAAAAABJRU5ErkJggg==", "base64");
+		const before = join(tmpDir, "before.png");
+		const after = join(tmpDir, "after.png");
+		const action = join(tmpDir, "action.txt");
+		writeFileSync(before, png);
+		writeFileSync(after, png);
+		writeFileSync(action, "tapped the today tab");
+		recordScenario(S, { story: "story-1", scenario: "s1", status: "pass", evidencePath: after, evidenceSurface: "agent-browser", evidenceBefore: before, evidenceAction: action, evidenceAfter: after });
+		const content = { claim: "오늘 영양제가 보인다", verdict: "supported", observation: "목록에 3개", gap: "", sources: [{ path: after, location: "목록" }] };
+		const layout = { ...content, kind: "layout", claim: "작은 폰에서 읽고 누를 수 있다", checked: ["clipping", "overlap", "horizontal-scroll", "text-wrap"] };
+		expect(() => reviewEvidence(S, "story-1", "s1", [content])).toThrow(/layout claim .*phone-small/);
+		expect(() => reviewEvidence(S, "story-1", "s1", [content, { ...layout, checked: ["clipping"] }])).toThrow(/overlap, horizontal-scroll, text-wrap/);
+		reviewEvidence(S, "story-1", "s1", [content, layout]);
+		expect(rawState().scenarios[0].evidence_review.claims[1]).toMatchObject({ kind: "layout", checked: ["clipping", "overlap", "horizontal-scroll", "text-wrap"] });
 	});
 });
 
