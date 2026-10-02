@@ -119,3 +119,25 @@ codex 재개 뒤 9시간 가까이 돌았고, 대부분 증거 가림 처리와 
 경계(권장): 근거 검토 claim 문장이 카드에 그대로 나와 코드 심볼(`displayName`,
 `SelfIntakeSections.test.tsx:316-344`)과 영어 출처 라벨("Action/Observation:", "Recovery:")이 보인다.
 감사 표의 driven-at에도 영어 자유 문장이 있다. 다른 PR에서도 나오면 고친다.
+
+### r1 — #4413 commerce (런타임 bf301e0e, fast)
+
+판정 **실패**, 오염된 실행. 시나리오 30개 중 통과 24, 검증 불가 6. 판정을 기록하지 않았고 사용자에게
+강제 종료를 요청하며 멈췄다. 띄운 자원 20개는 모두 해제했다.
+
+- **하네스 오염.** 문맥 복구 뒤 전역 구버전 스킬(`~/.agents/skills/qa/SKILL.md`, presentation.md)을
+  열 번 넘게 읽고 인용했다. 격리 런타임은 전역 스킬을 목록에서 끌 뿐이고, 경로로 읽는 것은 막지 못한다.
+  → 실행 프롬프트에 이 워크트리의 `.agents/skills/qa`만 쓰고 전역 사본은 읽지 말라고 적었다. 다른
+  실행의 전역 읽기 횟수: #4438 r1 1회, 나머지 0회.
+- **A5.5 실패.** 검증 불가 6건(iPhone SE·갤럭시 360의 실제 키보드 동작)이 모두 기기 구동 문제다.
+  - Android: 처음에 세션 이름 없이 `agent-device open`을 실행해 `default-android` 세션이 생겼고, 그
+    세션이 확보한 에뮬레이터를 잡았다. 오류가 `agent-device close --session default-android`를
+    알려 줬는데 실행하지 않았다.
+  - iOS: 직접 만든 시뮬레이터를 지정하지 못해 다른 시뮬레이터에 연결됐다.
+  - 고친 것(96d46aab): `acquire-device`가 그 기기의 agent-device 플래그(`--serial|--udid`,
+    `--session qa-<id>`)를 출력한다. stage3-handson.md에 자기가 연 세션을 닫고 다시 시도하는 절차를,
+    SKILL.md에 red flag를 넣었다.
+- **A6.1 실패.** AC 4개가 미검증인데 COMMENT 판정으로 완료하지 않고 사용자에게 강제 종료를 요청했다.
+  스킬 규칙상 검증 불가가 남아도 COMMENT로 완료할 수 있다. 구버전 스킬을 읽은 뒤의 행동이라 오염의
+  결과로 보고, 다시 돌려서 확인한다.
+- B축은 판정 없는 초안 보고서라 채점하지 않았다.

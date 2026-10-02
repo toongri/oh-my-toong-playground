@@ -61,7 +61,7 @@ if [ -n "$resume_answer" ]; then
 	exit 0
 fi
 
-prompt="\$qa https://github.com/algo-care/algocare-home/pull/$pr 를 QA해줘. 이 워크트리는 그 PR이 main에 merge된 커밋이야."
+prompt="\$qa https://github.com/algo-care/algocare-home/pull/$pr 를 QA해줘. 이 워크트리는 그 PR이 main에 merge된 커밋이야. qa 스킬은 이 워크트리의 .agents/skills/qa 만 써. ~/.agents/skills/qa 와 ~/.codex/skills/qa 는 다른 버전이니 읽지 마."
 printf '%s\n' "$prompt" |
 	codex exec "${codex_flags[@]}" -C "$worktree" -o "$run_dir/last-message.md" - >"$run_dir/codex.jsonl" &
 codex_pid=$!
