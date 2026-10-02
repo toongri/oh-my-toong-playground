@@ -1,8 +1,10 @@
 # Scenario Authoring — Risk / Coverage-Gap Derivation
 
-> **Scope**: This framework governs scenarios the qa cycle **self-authors** for a QA REQUEST. It does not apply to caller-provided scenarios — those run verbatim, unchanged, exactly as handed in. Self-author scenarios are the ones this file teaches you to derive; the six-field shape and the three layers below exist to make derivation systematic instead of a mechanical sweep of the hostile-category matrix.
+> **Scope**: This framework governs scenarios the qa cycle **self-authors** for a QA REQUEST. It does not apply to caller-provided scenarios — those run verbatim, unchanged, exactly as handed in. Self-author scenarios are the ones this file teaches you to derive; the scenario shape and the layers below exist to make derivation systematic instead of a mechanical sweep of the hostile-category matrix.
 
-Before deriving cells, the story itself must carry a structured `goal` plus
+**A scenario is a user scenario.** It names an actor, what that actor does, and what that actor sees. "결제자가 마감 직후 재구매를 다시 결제한다 → 정가로 한 번만 결제된다" is a scenario. "cls 6 idempotency probe" is not: it names a risk, not a person doing something. Risks are tags on scenarios (see *Risk Tagging*).
+
+Before deriving scenarios, the story itself must carry a structured `goal` plus
 non-empty `given`, `when`, and `then` arrays, and one or more links to the
 session acceptance criteria. See [reusable-cases.md](reusable-cases.md). If
 matching executable cases exist, replay them first through QA's case functions;
@@ -29,7 +31,7 @@ For each candidate scenario, ask explicitly: **does automation / e2e already cat
 
 ### A3. Risk priority (H/M/L)
 
-Assign each surviving scenario a `H/M/L` priority based on the impact-mapping weight and the coverage-gap judgment: a high-risk domain with no automated coverage is `H`; a moderate-risk domain with partial coverage is `M`; a low-risk, low-blast-radius path with some existing coverage is `L`. Priority governs derivation output, not a depth budget — every derived scenario still gets a full six-field shape (see below) regardless of its priority letter.
+Assign each surviving scenario a `H/M/L` priority based on the impact-mapping weight and the coverage-gap judgment: a high-risk domain with no automated coverage is `H`; a moderate-risk domain with partial coverage is `M`; a low-risk, low-blast-radius path with some existing coverage is `L`. Priority governs derivation output, not a depth budget — every derived scenario still gets the full scenario shape (see below) regardless of its priority letter.
 
 **Applicability note**: impact mapping is not gated by "is this surface user-facing." A change that looks purely internal — logic hidden behind a feature flag, a resolver inside payment or notification, a permission/state-transition branch — still gets impact-mapped and derived if it touches a risk surface. Only a genuinely inert internal refactor that touches no risk surface is skipped.
 
@@ -60,7 +62,7 @@ Every derived scenario takes its actor from the **Actor Roster** pinned at PLAN.
 Stance sharpens a roster actor; it never replaces one:
 
 - **Normal user** — following the intended path, no ill intent, may still hit an edge case.
-- **Malicious user** — actively trying to break, bypass, or exploit the change.
+- **Malicious user** — actively trying to break, bypass, or exploit the change. When the change exposes an attack surface (a field that reaches an interpreter, an ID another household could guess, a permission boundary), the attacker is a roster actor of its own, with its own story: what they want ("다른 가구의 섭취 기록을 읽는다") and what the product must do to them ("403을 받고 아무 데이터도 보지 못한다").
 - **Careless user** — ignores instructions, skips fields, pastes garbage, double-clicks, retries impatiently.
 - **Specific role** — a named role in the system (household owner vs payer, admin vs member) whose permissions or state the scenario specifically probes.
 
@@ -78,43 +80,44 @@ Risk derivation (Layer A) finds where a silent failure is expensive; it does not
 2. **Adjacent state transitions** — every product action elsewhere that changes what the changed surface shows (the writers of its data: a dispense that decrements stock, a bottle replacement that resets it). When the map shows such a writer, at least one scenario drives the writer action first and then observes the changed surface, asserting the transition landed rather than a cached prior state.
 3. **Lifecycle stances** — the states a real account passes through: freshly onboarded (empty or partial data), established daily use, just after a maintenance action. When these states differ in what the surface shows, each distinct state gets a scenario.
 
-Each Layer D scenario is a multi-step realistic flow, still entered at the actor's verification surface (Layer C) and **not a replacement for the six-field scenario shape**; its `why-needed` names the use-case axis it covers. The coverage-delta line names all three axes and which are covered or uncovered — an axis silently absent from the roster is an authoring omission, not a delta. An omitted slot, arrival path, state transition, or lifecycle stance is an authoring omission, not permission to narrow scope.
+Each Layer D scenario is a multi-step realistic flow, still entered at the actor's verification surface (Layer C) and **not a replacement for the scenario shape**; its `why-needed` names the use-case axis it covers. The coverage-delta line names all three axes and which are covered or uncovered — an axis silently absent from the roster is an authoring omission, not a delta. An omitted slot, arrival path, state transition, or lifecycle stance is an authoring omission, not permission to narrow scope.
 
 ---
 
 ## Unified Scenario Shape
 
-Every self-authored scenario is written in this six-field shape, in this order:
+Every self-authored scenario is written in this shape, in this order:
 
-`actor · preconditions · steps · expected · why-needed · priority`
+`actor · title · preconditions · steps · expected · why-needed · priority · risks · profile`
 
-1. **actor** — from Layer C: the roster actor plus its stance, carrying the surface the steps start at.
-2. **preconditions** — the reproduction gate from Layer B (or the literal `none`).
-3. **steps** — the concrete action sequence to execute, entered at the actor's verification surface.
-4. **expected** — the observable outcome that proves pass or fail at the surface (what the screen shows, what the API returns). Its evidence is that observation, or an automated test that asserts this exact outcome (`--evidence-surface test`). If a structural limit outside the change stops every attempt, the cell is recorded `blocked` with those attempts, and its requirement is **unverified**. A scenario you have not attempted stays unrecorded.
-5. **why-needed** — **mandatory.** States the reason this scenario exists — mostly "what automation/e2e already misses" from the Layer A2 coverage-gap judgment. A scenario without a `why-needed` field is incomplete; this is what separates a derived scenario from a mechanically-generated one.
-6. **priority** — the `H/M/L` value from Layer A3.
+1. **actor** — from Layer C: the roster actor plus its stance, carrying the surface the steps start at. It is the actor of the story the scenario sits under.
+2. **title** — one sentence a PO can read: who does what, in Korean when the report is Korean ("가구 구성원이 디스펜서 앱에서 오늘 섭취 시간대를 연다").
+3. **preconditions** — the reproduction gate from Layer B (or the literal `none`).
+4. **steps** — the concrete action sequence to execute, entered at the actor's verification surface.
+5. **expected** — the observable outcome that proves pass or fail at the surface (what the screen shows, what the API returns). Its evidence is that observation, or an automated test that asserts this exact outcome (`--evidence-surface test`). If a structural limit outside the change stops every attempt, the scenario is recorded `blocked` with those attempts, and its requirement is **unverified**. A scenario you have not attempted stays unrecorded.
+6. **why-needed** — **mandatory.** States the reason this scenario exists — mostly "what automation/e2e already misses" from the Layer A2 coverage-gap judgment. A scenario without a `why-needed` field is incomplete; this is what separates a derived scenario from a mechanically-generated one.
+7. **priority** — the `H/M/L` value from Layer A3. Each story has at least one `H` scenario.
+8. **risks** — the adversarial risks (1..6) this scenario exercises, possibly none (see *Risk Tagging*).
+9. **profile** — for a story whose actor has `client_impact render`: the device profile this scenario runs on. Write one scenario per profile; they may share steps and differ only in the profile.
 
-Omitting any of the six fields, or leaving `why-needed` blank, makes the scenario non-conformant — go back and fill it before running it.
+Omitting a required field, or leaving `why-needed` blank, makes the scenario non-conformant — go back and fill it before running it.
 
-When the scenario is committed to the qa state chain, its `priority` and attack content are recorded with `qa-state.ts author-cell --story <story-id> --cls <1..6> [--sub hang-timeout|flaky-green] --attack-point "<hostile probe>" --priority H|M|L`. The six bare classes are supplemented by `cls 1 / hang-timeout` and `cls 5 / flaky-green`; the state CLI is the machine-checkable record of the authored shape, while this document remains the derivation guide.
+Commit each scenario to the qa state chain with `qa-state.ts author-scenario --story <story-id> --id <kebab-id> --title "…" --preconditions "…" --steps '["…"]' --expected "…" --why-needed "…" --priority H|M|L [--risks '[2,3]'] [--profile <id>]`. The state CLI is the machine-checkable record of the authored shape, while this document remains the derivation guide.
 
-### Per-Axis Cell Content
+### Risk Tagging
 
-Every story carries all eight cells. Each cell's attack point is that axis's hostile condition **applied to this story's changed path** — name the changed path inside the attack point. Mark a cell `--not-applicable` on its first `author-cell` only when the axis's condition cannot exist on the surface, and name what is absent. The CLI refuses `--not-applicable` on a cell once authored as applicable.
+The six risks give the scenario set its hostile depth. Each one enters as a user scenario — something a real actor does that walks into the risk — tagged with it. Across the whole change, every risk is exercised by at least one scenario, or declared not applicable once per cycle with what is absent on the changed surface (`qa-state.ts declare-risk-na --axis <n> --reason "…"`). Declare per change, not per story: one declaration covers every story, so the report folds it away instead of repeating it.
 
-| Cell | Author this hostile condition | `--not-applicable` only when | Off-target — re-aim, do not mark N/A |
+| Risk | A user scenario that exercises it | Declare not applicable only when | Off-target — re-aim, do not declare |
 |---|---|---|---|
-| `1` failure path | Make a dependency the changed path calls fail (DB error, downstream 5xx, denied permission, missing reference row); assert no partial write, a clear error, the correct status/exit code | the changed path does no I/O and calls nothing that can fail | failing an unchanged component on its own path ("the DEVICE writer fails" for a SELF-writer change) |
-| `1/hang-timeout` | Hold a dependency or row lock the changed path waits on past its timeout; assert bounded cancellation, cleanup, no pending or silent green | the changed path has no blocking I/O and takes no lock | reproducing the limit in a harness that cannot hold two connections, then stopping — use the real dependency the repo documents |
-| `2` boundary / malformed | Edge and malformed values for every input the path consumes: request fields, CLI args, job params, and data it reads (empty set, NULL column, max int) | the path consumes no input and reads no variable data | probing only fields the change did not add or read |
-| `3` injection | A payload through a user- or data-controlled string that reaches an interpreter (SQL, shell, template, HTML, LLM prompt) | no user- or externally-controlled string reaches the path — name the schema (e.g. only UUID, enum, int fields and no stored free text rendered) | calling it N/A because "input validation is a different module" while a string still flows through the changed path |
-| `4` interruption / concurrency / dirty state | Kill mid-run and re-run; two concurrent runs; start from a half-written record; flip the flag or config mid-run | the path is one atomic read with no state | deferring it because the stack is "hard to set up" — setup is work, not a limit |
-| `5` misleading success | Check the real effect (row written, message delivered, file changed), not the 200 / "done" signal | never, for a path that writes or sends | re-asserting the success signal the test already checks |
-| `5/flaky-green` | Reset, then repeat the same probe with the same inputs; assert the same verdict and effect | never while cell `5` is applicable | citing the suite-wide flaky-rerun check instead of this probe |
-| `6` idempotency | Same input twice (retry, re-run the job for the same period, resend); assert no duplicate row, charge, or send — or the intended difference when the spec makes it non-idempotent | the path has no effect: a pure read with no cache or side effect | re-running an unchanged writer instead of the changed path |
+| `1` failure path | The actor acts while a dependency the changed path calls fails (DB error, downstream 5xx, denied permission, missing reference row, a lock held past its timeout); they see a clear error, nothing is half-written, the status is correct | the changed path does no I/O and calls nothing that can fail | failing an unchanged component on its own path ("the DEVICE writer fails" for a SELF-writer change) |
+| `2` boundary / malformed | A careless actor sends edge and malformed values for an input the path consumes: request fields, CLI args, job params, and data it reads (empty set, NULL column, max int) | the path consumes no input and reads no variable data | probing only fields the change did not add or read |
+| `3` injection | An attacker actor puts a payload into a user- or data-controlled string that reaches an interpreter (SQL, shell, template, HTML, LLM prompt) | no user- or externally-controlled string reaches the path — name the schema (e.g. only UUID, enum, int fields and no stored free text rendered) | calling it N/A because "input validation is a different module" while a string still flows through the changed path |
+| `4` interruption / concurrency / dirty state | The actor's flow is cut mid-run and retried; two actors act at once; the actor starts from a half-written record; an operator flips the flag mid-run | the path is one atomic read with no state | deferring it because the stack is "hard to set up" — setup is work, not a limit |
+| `5` misleading success | The actor gets a success signal; the scenario checks the real effect (row written, message delivered, screen updated), not the 200 / "done" | never, for a path that writes or sends | re-asserting the success signal the test already checks |
+| `6` idempotency | The actor retries or resends the same thing (double tap, job re-run for the same period); no duplicate row, charge, or send — or the intended difference when the spec makes it non-idempotent | the path has no effect: a pure read with no cache or side effect | re-running an unchanged writer instead of the changed path |
 
-An off-target cell is re-aimed through the changed path, never marked N/A. Example: for a story comparing SELF and DEVICE snapshots where only the SELF writer changed, cell `1` becomes "SELF composition lookup fails mid-write; the parity reader sees no half-written SELF snapshot", not "the DEVICE writer fails".
+One scenario may carry several risks ("결제자가 네트워크가 끊긴 뒤 같은 결제를 다시 누른다" exercises 4 and 6). An off-target scenario is re-aimed through the changed path, never declared not applicable. Example: for a story comparing SELF and DEVICE snapshots where only the SELF writer changed, the failure-path scenario becomes "the SELF composition lookup fails mid-write; the parity reader sees no half-written SELF snapshot", not "the DEVICE writer fails".
 
 ---
 
@@ -123,16 +126,19 @@ An off-target cell is re-aimed through the changed path, never marked N/A. Examp
 **Change**: a new discount-percentage branch in the payment checkout flow, gated behind a feature flag rolled out to a `group` cohort during a KST business-hours time window (09:00–18:00 KST), affecting Smart Subscription resupply orders.
 
 - **actor**: specific role — a household `payer` (not the `owner`) at the app's Smart Subscription resupply checkout screen, the boundary every step below is entered from.
+- **title**: 결제자가 할인 마감 5분 전과 6분 후에 재구매를 결제한다.
 - **preconditions**: `feature flag` = `payment.discount_v2` enabled for the payer's cohort group; `time window` = request issued at 17:55 KST (5 minutes before the window closes) to probe the boundary.
 - **steps**: log in as the payer, trigger a Smart Subscription resupply checkout while the flag is enabled and the clock is inside the window, then repeat the same checkout request 6 minutes later (after 18:00 KST, window closed).
 - **expected**: the discount applies and the payment succeeds at 17:55 KST; at 18:06 KST the discount no longer applies and the checkout falls back to full price without erroring or double-charging.
 - **why-needed**: the existing payment e2e suite only exercises the flag-enabled, mid-window case — it never asserts the flag/window boundary transition, so a silent "discount still applies after the window closes" bug (double-honoring an expired promotion) would ship undetected.
 - **priority**: `H` — payment + feature-flag + time-window intersection, no existing automated coverage of the boundary transition.
+- **risks**: `[5, 6]` — the success screen must match the real charge, and the second checkout must not double-charge.
+- **profile**: none here — the change is in the server's pricing, so the payer's app has `client_impact contract` and the proof is the checkout API the app calls. Had the checkout screen's layout changed, this scenario would be written once per profile the app runs on.
 
-(The same shape applies to a dispenser-surface example — e.g., a `feature flag` + `time window`-gated firmware behavior change — or a notification-surface example — e.g., a flag-gated reminder message rollout that must not double-send across a KST/UTC boundary. Instantiate all six fields and a real gate the same way.)
+(The same shape applies to a dispenser-surface example — e.g., a `feature flag` + `time window`-gated firmware behavior change — or a notification-surface example — e.g., a flag-gated reminder message rollout that must not double-send across a KST/UTC boundary. Instantiate every field and a real gate the same way.)
 
 ---
 
 ## Breadth Then Depth
 
-Author in two passes, in this order. **Breadth first**: walk Layer A → B → C → D for the change under review to derive the full set of risk-covering and use-case-covering scenarios — this is what guarantees the scenario set covers the risk surface and the product's real usage, not just the files that changed. **Depth second**: once a scenario is derived with its six fields, subject it to the 6-axis `Adversarial Scenario Matrix` in `stage3-handson.md` — that matrix is the hostile-**depth** dimension applied to each scenario this file derives, not a replacement for derivation. Do not skip straight to the matrix on an undifferentiated changed-file list; derive first, then harden each derived scenario against the matrix's categories. Rows 7–9 are per-run checks and are recorded with `record-run-check`, not added as coverage axes.
+Author in two passes, in this order. **Breadth first**: walk Layer A → B → C → D for the change under review to derive the full set of risk-covering and use-case-covering scenarios — this is what guarantees the scenario set covers the risk surface and the product's real usage, not just the files that changed. **Depth second**: give the derived scenarios their hostile depth from the `Adversarial Scenario Matrix` in `stage3-handson.md` — add or extend user scenarios until every risk is tagged on one or declared not applicable (*Risk Tagging*). The matrix is the depth dimension, not a replacement for derivation. Do not skip straight to the matrix on an undifferentiated changed-file list; derive first, then harden. Rows 7–9 are per-run checks and are recorded with `record-run-check`, not added as coverage axes.

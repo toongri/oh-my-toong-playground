@@ -25,14 +25,14 @@ At PLAN, use `listQaCases` and `getQaCase` through the QA case functions (or
 the repository `qa-cases.ts list` / `qa-cases.ts get <id>` commands) when the
 store is configured. Treat matching known cases as planning input: use their
 paths, assertions, and reset details to author the complete current-cycle
-story/cell chain, including new, failed, stale, or uncovered paths and all six
-classes. Do not execute replay during PLAN. A case listing is not boundary
+story/scenario chain, including new, failed, stale, or uncovered paths and the
+risk coverage of all six risks. Do not execute replay during PLAN. A case listing is not boundary
 proof; a case failure remains a failure and is recorded as such, never
 relabeled as expected, flaky, or pass.
 
 Known cases are hints about an executable path, not permission to narrow the
-cycle. Preserve the six classes plus `cls1/hang-timeout` and
-`cls5/flaky-green`, and record evidence from the actor boundary. A trace, recording, or JUnit XML may support diagnosis but is not executable proof or
+cycle. Keep every risk covered by a scenario or declared not applicable, and
+record evidence from the actor boundary. A trace, recording, or JUnit XML may support diagnosis but is not executable proof or
 real-boundary evidence.
 
 ## Optional persistence and three states
@@ -73,12 +73,12 @@ saving metadata never executes a runner or copies product files.
 ## Replaying a saved case
 
 After PLAN has authored the complete current-cycle chain and the QA state has
-an active, `chainComplete` actor → story → cell chain, use the replay wrapper
+an active, `chainComplete` actor → story → scenario chain, use the replay wrapper
 for a known saved case before exploratory driving of the remaining paths:
 
 ```sh
 bun "${CLAUDE_SKILL_DIR}/scripts/qa-replay.ts" \
-  --case CASE_ID --story STORY_ID --cls 1 \
+  --case CASE_ID --story STORY_ID --scenario SCENARIO_ID \
   --project /absolute/project \
   --code-ref COMMIT_OR_BUILD_REF \
   --reset-confirmed "the saved reset description"
@@ -89,8 +89,8 @@ When a run needs more headroom, pass `--timeout-ms <ms>` and/or
 positive numbers; when omitted, the defaults remain 120000 ms and 1048576
 bytes.
 
-Use `--sub hang-timeout|flaky-green` when selecting one of those authored
-cells. `--allow-project-cwd` is required when the saved `execution_cwd` is the
+`--scenario` selects one authored scenario of the story.
+`--allow-project-cwd` is required when the saved `execution_cwd` is the
 product project; otherwise save an absolute external cwd or `{artifacts}`.
 Relative `native_files` resolve from the canonical repository root resolved for
 the project; absolute references are accepted when present.
@@ -101,32 +101,32 @@ artifacts are never overwritten.
 Review the runner's flags/output/config first: native runners are not sandboxed.
 
 The wrapper checks the saved case revision, actor surface, linked acceptance
-criteria, reset confirmation, and current-cycle authored cell. It requires the
+criteria, reset confirmation, and current-cycle authored scenario. It requires the
 active `chainComplete` gate. A successful runner produces a receipt with
-`qa_result: "not-recorded"`; it never records a QA cell PASS. A failed runner
+`qa_result: "not-recorded"`; it never records a QA scenario PASS. A failed runner
 returns a non-zero exit status and remains a failure. Case metadata is saved
 only by the case helper; replay executes the saved native runner and writes its
 receipt/artifacts, not new case metadata.
 
 After inspecting the receipt and capturing actual boundary evidence under the
-same attempt directory, bind the execution record to the cell with the existing
+same attempt directory, bind the execution record to the scenario with the existing
 state command (keeping the normal evidence arguments and visual requirements):
 
 ```sh
-bun "${CLAUDE_SKILL_DIR}/scripts/qa-state.ts" record-cell \
-  --story STORY_ID --cls 1 --status pass \
+bun "${CLAUDE_SKILL_DIR}/scripts/qa-state.ts" record-scenario \
+  --story STORY_ID --scenario SCENARIO_ID --status pass \
   --evidence-path "$ATTEMPT_DIR/boundary.json" \
   --evidence-surface bash \
   --case-run "$ATTEMPT_DIR/receipt.json"
 ```
 
 `--case-run` is provenance, not PASS evidence. Binding rejects a stale or
-mismatched receipt (session, story, cell/sub, cycle, story-contract hash,
+mismatched receipt (session, story, scenario, cycle, story-contract hash,
 case identity/revision, actor surface, native-file hashes, logs, receipt, or
 artifact hashes), and rejects receipt/log files as substitutes for boundary
 evidence. The evidence file(s) must be inside the attempt directory and their
-hashes are recorded. Visual cells still require separate before/action/after
-captures and evidence review; manual `record-cell` without `--case-run` remains
+hashes are recorded. Visual scenarios still require separate before/action/after
+captures and evidence review; manual `record-scenario` without `--case-run` remains
 valid when no saved case is being replayed.
 
 `--reset-confirmed` only confirms the saved reset description; it does not run

@@ -14,11 +14,11 @@ the app and independently rerun it with the same assertions before curating it
 as reusable (see [reusable-cases.md](reusable-cases.md)).
 
 For a saved case, use the repository replay wrapper after the active
-actor→story→cell chain is complete:
+actor→story→scenario chain is complete:
 
 ```bash
 bun "${CLAUDE_SKILL_DIR}/scripts/qa-replay.ts" \
-  --case CASE_ID --story STORY_ID --cls 1 \
+  --case CASE_ID --story STORY_ID --scenario SCENARIO_ID \
   --project /absolute/project --code-ref COMMIT_OR_BUILD_REF \
   --reset-confirmed "the saved reset description"
 ```
@@ -29,15 +29,14 @@ positive numbers; when omitted, the defaults remain 120000 ms and 1048576
 bytes.
 
 Read `bun "${CLAUDE_SKILL_DIR}/scripts/qa-replay.ts" --help` first. The
-wrapper supports optional `--sub hang-timeout|flaky-green` and
-`--allow-project-cwd`; it expands `{artifacts}`, sets `QA_ARTIFACTS_DIR`, and
+wrapper supports optional `--allow-project-cwd`; it expands `{artifacts}`, sets `QA_ARTIFACTS_DIR`, and
 emits a receipt without recording a QA PASS. A failed runner exits non-zero.
 Inspect runner flags/output/config because native runners are not sandboxed.
 Afterward, capture actual boundary evidence inside the attempt directory and
-pass the receipt to `qa-state.ts record-cell --case-run RECEIPT`; receipt/log
-files cannot substitute for that evidence. Session/story/cell/cycle,
+pass the receipt to `qa-state.ts record-scenario --case-run RECEIPT`; receipt/log
+files cannot substitute for that evidence. Session/story/scenario/cycle,
 story-contract, case/native-file, and artifact hashes must still match, and
-visual cells retain their before/action/after and evidence-review requirements.
+visual scenarios retain their before/action/after and evidence-review requirements.
 
 ---
 
@@ -200,6 +199,7 @@ If an agent-browser step returns a non-zero exit code or the required assertion 
 | Screenshot captured | Before/after captures of the asserted state, referenced in evidence — a landing or splash capture does not count |
 | CJK / glyph rendering | CJK characters, emoji, and non-ASCII glyphs render without replacement boxes or mojibake |
 | Layout overflow | No element overflows its container; horizontal scroll width does not exceed viewport width |
+| Device profile | Set the viewport to the scenario's profile (logical width × height from `qa-device-profiles.ts get`) before the before-capture; every check above holds at that size, and a person can read and tap the changed screen |
 
 ---
 
@@ -314,18 +314,18 @@ The stop-driving classes exist so an expensive cycle is not spent against a surf
 
 ## Adversarial Scenario Matrix
 
-This matrix is the **hostile-depth** dimension applied to scenarios already derived by breadth in [scenario-authoring.md] — see that file's `Breadth Then Depth`. Do not skip straight to this matrix on an undifferentiated changed-file list, and run each row at the scenario's verification surface, not from an ad-hoc harness around the changed unit.
+This matrix is the **hostile-depth** dimension applied to user scenarios already derived by breadth in [scenario-authoring.md] — see that file's `Breadth Then Depth`. Rows 1–6 are the six risks a user scenario is tagged with (`author-scenario --risks`); each enters as something an actor does — a careless user, an impatient retry, an attacker — never as a scenario titled after the risk. Do not skip straight to this matrix on an undifferentiated changed-file list, and run each row at the scenario's verification surface, not from an ad-hoc harness around the changed unit.
 
 Hands-on verification is not "run the happy path once." A change is only verified when it survives hostile probing. When running these checks, adopt the mindset of a malicious or careless user: someone who ignores documentation, pastes garbage data, skips required fields, and actively tries to confuse or break the system. After the modality procedures above confirm the happy path, run the adversarial checks below. Each category names what a hostile check looks like so a verifier running hands-on knows what to probe — pick the rows that apply to the change under review and actually execute them, do not reason about them on paper.
 
 | # | Category | What the adversarial check probes |
 |---|----------|-----------------------------------|
-| 1 | **Error / failure paths** | Force the failure branch (unreachable dependency, denied permission, invalid auth, exhausted quota) and assert it fails *safely*: no partial writes, a clear error message, and the correct status/exit code. A failure that silently half-completes is a defect. Also author and run the `hang-timeout` sub-item: hold the dependency or operation past its timeout, then verify bounded cancellation, cleanup, and a reasoned outcome rather than an indefinitely pending or silently green result. |
+| 1 | **Error / failure paths** | Force the failure branch (unreachable dependency, denied permission, invalid auth, exhausted quota) and assert it fails *safely*: no partial writes, a clear error message, and the correct status/exit code. A failure that silently half-completes is a defect. When the changed path waits on a dependency or a lock, holding it past its timeout is one of these failures: verify bounded cancellation, cleanup, and a reasoned outcome rather than an indefinitely pending or silently green result. |
 | 2 | **Boundary / malformed input** | Probe the `boundary\|malformed` surface: feed empty, zero, negative, oversized, wrong-type, encoding-edge (UTF-8 / null bytes / emoji), and off-by-one boundary values. Assert each is rejected or handled deterministically rather than crashing or coercing silently. |
 | 3 | **Injection** | Send SQL / command / prompt injection payloads through every user-controlled field (query params, body, headers, file names, LLM prompts). Assert the payload is neutralized, not interpreted. |
 | 4 | **Interruption–cancel–resume + dirty initial state** | Kill or cancel the operation mid-flight, then re-run it; trigger concurrent executions, rapid repeated calls, and out-of-order sequencing; also start it from a dirty/partial prior state (leftover lock file, half-written record, stale session). Assert it recovers to a consistent state rather than compounding corruption. |
-| 5 | **Misleading success** (OWASP LLM09) | Distrust a green check / `200` / `"done"` that does not reflect real success. Verify the *actual effect* — the row was written, the file changed on disk, the message was delivered — not the success signal the system reports. An overconfident success claim is itself the bug. Also author and run the `flaky-green` (lucky-green) sub-item: repeat the same probe under the same inputs and confirm a reported pass is stable and backed by the effect, not a timing-dependent lucky result. |
+| 5 | **Misleading success** (OWASP LLM09) | Distrust a green check / `200` / `"done"` that does not reflect real success. Verify the *actual effect* — the row was written, the file changed on disk, the message was delivered — not the success signal the system reports. An overconfident success claim is itself the bug. |
 | 6 | **Idempotency / re-run** | Run the operation twice with identical inputs and assert no duplicate records, double charges, or corruption. **By-design exception**: some operations are intentionally non-idempotent (append-only logs, "send another reminder", incrementing counters). When the spec marks an operation as intended to differ on re-run, repeated effects are an acceptable exception, not a defect — confirm against the intended behavior rather than flagging it. |
 | 7 | **stale-state** (source vs. packaged / build-artifact staleness) | Verify against the actually deployed/packaged artifact — build cache, bundled dist, compiled binary, container image — not just the source tree; a source-correct change can still ship stale bytes. This is distinct from row 4: row 4 is a dirty *runtime* state (a corrupted mid-operation record inside the running system); row 7 is stale *build artifacts* (the wrong bytes were packaged/deployed in the first place). Record this per run with `qa-state.ts record-run-check --check stale-state --result pass|fail`. |
 | 8 | **dirty-worktree** (git / harness debris) | Check the repo/worktree the verification run itself leaves behind — a stray test file, an uncommitted debug print, a leftover git stash, a temporary branch the harness created. Temporary-harness debris is not a product defect, but it must be noticed and cleaned up, not silently committed. This is distinct from row 4: row 4 is dirty *application* state; row 8 is debris the *harness/verifier* leaves in the repo. Record this per run with `qa-state.ts record-run-check --check dirty-worktree --result pass|fail --note "…"` when it fails. |
-| 9 | **flaky-rerun** (non-deterministic pass/fail) | Run the identical check 2-3 times with identical inputs and assert the pass/fail verdict is stable across runs. A verdict that flips between runs (race condition, order-dependent test, timing-sensitive assertion) is itself a defect. This is distinct from row 6: row 6 asks whether re-running produces duplicate/corrupted *effects*; row 9 asks whether re-running produces a consistent *verdict* on the same effects. Record this per run with `qa-state.ts record-run-check --check flaky-rerun --result pass|fail`. |
+| 9 | **flaky-rerun** (does the same scenario give the same result twice?) | After the scenarios are recorded, reset the state each `H` scenario starts from, then drive those `H` scenarios once more at their boundary with the same inputs, and compare the result and the effect with the first run. A result that flips (race condition, order dependence, timing) is a defect. This is a second real run, not a re-read of a cached one: a build-tool cache (turbo, nx, gradle) replays the earlier output without running anything, so a cache hit proves nothing about stability, and forcing a cache bypass (`--force` and equivalents) is forbidden. When a scenario's proof is an automated test, run that test file through its own runner (`pytest path::case`, `bunx vitest run file`), which has no result cache. This is distinct from row 6: row 6 asks whether re-running produces duplicate/corrupted *effects*; row 9 asks whether re-running produces a consistent *result*. Record this per run with `qa-state.ts record-run-check --check flaky-rerun --result pass|fail`, naming the re-driven scenarios in `--note`. |

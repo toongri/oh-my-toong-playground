@@ -137,7 +137,7 @@ Feature Map은 기존 QA 절차에 연결한다. 새 프레임워크나 임의 a
 - actor-boundary evidence: [SKILL.md#evidence-saving-protocol](SKILL.md#evidence-saving-protocol) 및 [stage3-handson.md#adversarial-scenario-matrix](stage3-handson.md#adversarial-scenario-matrix)
 - cycle stop/cleanup: [SKILL.md#cleanup](SKILL.md#cleanup) 및 stage3-handson의 lifecycle failure/stop 지침
 
-story를 생성한 뒤, story baseline과 cell 결과를 기록하기 전에 Feature Map
+story를 생성한 뒤, story baseline과 시나리오 결과를 기록하기 전에 Feature Map
 provenance를 기록한다. `get`/`query` 직후의 최신 revision을 사용하고, 반환된
 revision은 도구가 현재 값인지 검증한다.
 
@@ -148,7 +148,7 @@ revision은 도구가 현재 값인지 검증한다.
 ```
 
 이 기록은 QA coverage/current-code discovery를 설명하며 Feature Map metadata의
-membership을 선언하지 않는다. 새로 발견한 path도 기록할 수 있다. baseline/cells
+membership을 선언하지 않는다. 새로 발견한 path도 기록할 수 있다. baseline/시나리오
 이전에 실행하고, 결과가 나온 뒤에는 rebind하지 않는다. 새 fix cycle이면 새
 provenance를 다시 기록한다. 맵을 사용할 수 없는 legacy/no-map 실행에서는
 feature ID를 꾸며내지 말고 일반 QA evidence에 discovery와 code-ref를 남긴다.

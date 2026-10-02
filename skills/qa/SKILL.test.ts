@@ -120,7 +120,7 @@ describe("Scenario authoring feature-map 계층", () => {
 	test("Layer D가 map을 영속 입력과 현재 코드 탐색으로 취급함", () => {
 		expect(scenarioAuthoringMd).toContain("persistent feature-map input");
 		expect(scenarioAuthoringMd).toContain("current-code discovery");
-		expect(scenarioAuthoringMd).toContain("not a replacement for the six-field scenario shape");
+		expect(scenarioAuthoringMd).toContain("not a replacement for the scenario shape");
 		expect(scenarioAuthoringMd).toContain("lookup first");
 		expect(scenarioAuthoringMd).not.toContain("from the repo, not from the QA REQUEST");
 		expect(scenarioAuthoringMd).not.toContain("when available");
@@ -145,7 +145,7 @@ describe("reusable case guidance contract", () => {
 		expect(reusableCasesMd).toContain("Do not execute replay during PLAN");
 		expect(reusableCasesMd).toContain("chainComplete");
 		expect(reusableCasesMd).toContain("failed, stale, or uncovered");
-		expect(reusableCasesMd).toContain("six classes");
+		expect(reusableCasesMd).toContain("risk coverage of all six risks");
 		const plan = reusableCasesMd.indexOf("Do not execute replay during PLAN");
 		const handsOn = reusableCasesMd.indexOf("After PLAN has authored");
 		expect(plan).toBeGreaterThan(-1);
@@ -176,7 +176,7 @@ describe("reusable case guidance contract", () => {
 		expect(reusableCasesMd).toContain('bun "${CLAUDE_SKILL_DIR}/scripts/qa-replay.ts"');
 		expect(reusableCasesMd).toContain("--case CASE_ID");
 		expect(reusableCasesMd).toContain("--story STORY_ID");
-		expect(reusableCasesMd).toContain("--cls 1");
+		expect(reusableCasesMd).toContain("--scenario SCENARIO_ID");
 		expect(reusableCasesMd).toContain("--project /absolute/project");
 		expect(reusableCasesMd).toContain("--code-ref COMMIT_OR_BUILD_REF");
 		expect(reusableCasesMd).toContain("--reset-confirmed");
@@ -188,13 +188,13 @@ describe("reusable case guidance contract", () => {
 	});
 
 	test("case-run receipt binding remains provenance, not boundary PASS evidence", () => {
-		expect(skillMd).toContain("record-cell --case-run RECEIPT");
+		expect(skillMd).toContain("record-scenario --case-run RECEIPT");
 		expect(reusableCasesMd).toContain("actual boundary evidence under the");
 		expect(reusableCasesMd).toContain("--case-run");
 		expect(reusableCasesMd).toContain("qa_result: \"not-recorded\"");
 		expect(reusableCasesMd).toContain("receipt/log");
 		expect(reusableCasesMd).toContain("as substitutes for boundary");
-		expect(reusableCasesMd).toContain("session, story, cell/sub, cycle");
+		expect(reusableCasesMd).toContain("session, story, scenario, cycle");
 		expect(reusableCasesMd).toContain("story-contract");
 		expect(reusableCasesMd).toContain("native-file");
 		expect(reusableCasesMd).toContain("artifact hashes");
@@ -703,9 +703,9 @@ describe("structural-integrity: scenario-authoring.md pointer resolves to a real
 		);
 	});
 
-	test("the six-field scenario shape is enumerated in order in scenario-authoring.md", () => {
+	test("the scenario shape is enumerated in order in scenario-authoring.md", () => {
 		expect(scenarioAuthoringMd).toContain(
-			"`actor · preconditions · steps · expected · why-needed · priority`",
+			"`actor · title · preconditions · steps · expected · why-needed · priority · risks · profile`",
 		);
 	});
 });
@@ -721,7 +721,7 @@ describe("new-prose: Scenarios Executed roster (roster axis)", () => {
 
 	test("the roster header appears in the pinned order, carrying driven-at and evidence", () => {
 		expect(skillMd).toContain(
-			"| # | source | actor | driven-at | preconditions | steps | expected | result | evidence | why-needed | priority |",
+			"| # | source | actor | scenario | profile | risks | driven-at | preconditions | steps | expected | result | evidence | why-needed | priority |",
 		);
 	});
 
@@ -835,8 +835,8 @@ describe("new-prose: Actor Roster is produced before scenarios", () => {
 		expect(planSection).toContain("before any scenario");
 	});
 
-	test("the roster row shape names actor, boundary, driver, and reachability", () => {
-		expect(skillMd).toContain("`actor · boundary · driver · reachable`");
+	test("the roster row shape names actor, boundary, driver, client impact, profiles, and reachability", () => {
+		expect(skillMd).toContain("`actor · boundary · driver · client impact · profiles · reachable`");
 	});
 
 	test("the Output Format carries an ## Actor Roster section", () => {
@@ -864,7 +864,7 @@ describe("new-prose: boundary-entry rule and substitution", () => {
 	});
 
 	test("an unrunnable scenario is recorded blocked rather than PASS", () => {
-		expect(skillMd).toContain("record the cell `blocked` — never PASS");
+		expect(skillMd).toContain("record the scenario `blocked` — never PASS");
 	});
 
 	test("a recorded coverage delta is not a substitute for running the scenario", () => {
@@ -927,12 +927,12 @@ describe("new-prose: actor-perspective evidence contract", () => {
 // ---------------------------------------------------------------------------
 
 describe("new-prose: approval is gated on boundary depth", () => {
-	test("an unexecuted cell blocks every verdict regardless of priority", () => {
+	test("an unexecuted scenario blocks every verdict regardless of priority", () => {
 		const guardStart = skillMd.indexOf("## Approval Decision");
 		expect(guardStart).not.toBe(-1);
 		const approval = skillMd.slice(guardStart);
-		expect(approval).toContain("Priority orders execution; it never lets an unexecuted cell through");
-		expect(approval).toContain("refuses APPROVE and COMMENT while a cell is unrecorded");
+		expect(approval).toContain("Priority orders execution; it never lets an unexecuted scenario through");
+		expect(approval).toContain("refuses APPROVE and COMMENT while a scenario is unrecorded");
 		expect(approval).toContain("the CLI refuses REQUEST_CHANGES without a recorded failure");
 	});
 
@@ -1006,22 +1006,21 @@ describe("new-prose: requirement mappings are structurally grounded", () => {
 		return presentationMd.slice(start, end);
 	};
 
-	test("presentation.md requires non-empty cellRefs and exactly one current-cycle recorded cell per ref", () => {
+	test("presentation.md requires non-empty scenarioRefs and exactly one current-cycle recorded scenario per ref", () => {
 		const mapping = mappingSection();
-		expect(mapping).toContain("non-empty `cellRefs` array");
-		expect(mapping).toContain("{story, cls, optional sub}");
-		expect(mapping).toContain("exactly one recorded current-cycle cell");
+		expect(mapping).toContain("non-empty `scenarioRefs` array");
+		expect(mapping).toContain("{story, scenario}");
+		expect(mapping).toContain("exactly one recorded current-cycle scenario");
 		expect(mapping).toContain("recorded status");
-		expect(mapping).toContain("`pass`, `fail`,");
-		expect(mapping).toContain("`blocked`, or legacy `na`");
+		expect(mapping).toContain("`fail`, or `blocked`");
 	});
 
 	test("presentation.md defines grounded status invariants for all four verdicts", () => {
 		const mapping = mappingSection();
-		expect(mapping).toMatch(/`yes` requires\s+every referenced\s+cell to be `pass`/);
-		expect(mapping).toMatch(/`no` requires every referenced cell to be\s+`fail`/);
-		expect(mapping).toMatch(/`partial`\s+requires at least one `pass` and one `fail` and no\s+`blocked`\/`na`/);
-		expect(mapping).toMatch(/`unverified` requires at least one valid `blocked` \(or legacy\s+`na`\)/);
+		expect(mapping).toMatch(/`yes` requires\s+every referenced\s+scenario to be `pass`/);
+		expect(mapping).toMatch(/`no` requires every referenced scenario to be\s+`fail`/);
+		expect(mapping).toMatch(/`partial`\s+requires at least one `pass` and one `fail` and no\s+`blocked`/);
+		expect(mapping).toMatch(/`unverified` requires at least one valid `blocked`/);
 	});
 
 	test("invalid mappings fail closed and prose cannot establish a verdict", () => {
@@ -1031,13 +1030,13 @@ describe("new-prose: requirement mappings are structurally grounded", () => {
 		expect(mapping).toContain("Prose evidence explains a verdict but cannot establish it");
 	});
 
-	test("the JSON example shows the structured cellRefs shape", () => {
-		const start = presentationMd.lastIndexOf("```json", presentationMd.indexOf('"cellRefs": [{ "story": "<story-id>"'));
+	test("the JSON example shows the structured scenarioRefs shape", () => {
+		const start = presentationMd.lastIndexOf("```json", presentationMd.indexOf('"scenarioRefs": [{ "story": "<story-id>"'));
 		const end = presentationMd.indexOf("```", start + 7);
 		expect(start).not.toBe(-1);
 		expect(end).toBeGreaterThan(start);
 		const example = presentationMd.slice(start, end);
-		expect(example).toContain('"cellRefs": [{ "story": "<story-id>", "cls": 1 }]');
+		expect(example).toContain('"scenarioRefs": [{ "story": "<story-id>", "scenario": "<scenario-id>" }]');
 	});
 
 	test("the HTML Report and Final Checklist repeat the structural grounding gate", () => {
@@ -1046,13 +1045,13 @@ describe("new-prose: requirement mappings are structurally grounded", () => {
 		expect(htmlStart).not.toBe(-1);
 		expect(htmlEnd).toBeGreaterThan(htmlStart);
 		const htmlReport = skillMd.slice(htmlStart, htmlEnd);
-		expect(htmlReport).toContain("non-empty `cellRefs` array");
-		expect(htmlReport).toContain("exactly one recorded current-cycle cell");
+		expect(htmlReport).toContain("non-empty `scenarioRefs` array");
+		expect(htmlReport).toContain("exactly one recorded current-cycle scenario");
 		expect(htmlReport).toContain("visible neutral gap");
 		expect(htmlReport).toContain("Prose evidence explains a verdict but cannot establish it");
 
 		const checklist = skillMd.slice(skillMd.indexOf("## Final Checklist"));
-		expect(checklist).toContain("every `requirementMapping` entry has a non-empty `cellRefs`");
+		expect(checklist).toContain("every `requirementMapping` entry has a non-empty `scenarioRefs`");
 		expect(checklist).toContain("Prose evidence explains a verdict but cannot establish it");
 	});
 });
@@ -1476,7 +1475,7 @@ describe("new-prose: HTML report is the canonical deliverable", () => {
 
 	test("acceptance criteria are captured at PLAN via set-acceptance so the report renders them from records", () => {
 		expect(skillMd).toContain("set-acceptance");
-		expect(skillMd).toContain("the report renders its Acceptance Criteria section from this record");
+		expect(skillMd).toContain("the report renders its acceptance-criteria section from this record");
 	});
 
 	test("실행 설명과 필수 근거 검토 기록의 저장 위치를 구분함", () => {
@@ -1486,11 +1485,11 @@ describe("new-prose: HTML report is the canonical deliverable", () => {
 		expect(skillMd).toContain("never persisted to qa-state");
 	});
 
-	test("the reader scenario section is story-level and clean; cls/attack_point/driven_at live in the audit section", () => {
-		expect(skillMd).toContain("the current-cycle baseline plus each scenario's `before` / `action` / `after` and recorded `evidence.path`");
-		expect(skillMd).toContain("the six adversarial axes by name, never the `cls` number");
+	test("the reader scenario section is story-level and clean; risks/driven_at live in the audit section", () => {
+		expect(skillMd).toContain("each scenario's `before` / `action` / `after` and recorded `evidence.path`");
+		expect(skillMd).toContain("It shows risks by plain name, never by number");
 		expect(skillMd).toContain("시나리오 상세 기록 (감사)");
-		expect(skillMd).toContain("omits the cell record's implementation-flavored fields");
+		expect(skillMd).toContain("deliberately omits implementation-flavored fields");
 	});
 
 	test("the report caps evidence embedding per file and cumulatively", () => {
