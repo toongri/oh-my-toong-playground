@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs the qa skill under test headlessly on one algocare-home PR with codex
-# (gpt-6-luna, reasoning effort max, no sandbox, hooks run without a trust prompt), so its run and report can be
+# (gpt-6-luna, reasoning effort max, fast service tier, no sandbox, hooks run without a trust prompt), so its run and report can be
 # graded against evals/qa-green/criteria.md.
 #
 #   run.sh <pr-number> <run-label>            start a fresh run on ~/.omt/qa-green/current
@@ -52,7 +52,7 @@ export CODEX_HOME="$rt/codex-home"
 # The caller's OMT session must not leak in; codex resolves its own from the worktree.
 unset OMT_DIR OMT_PROJECT OMT_SESSION_ID
 
-codex_flags=(--skip-git-repo-check -m gpt-6-luna -c model_reasoning_effort=max --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --json)
+codex_flags=(--skip-git-repo-check -m gpt-6-luna -c model_reasoning_effort=max -c service_tier=fast --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --json)
 
 if [ -n "$resume_answer" ]; then
 	session_id="$(cat "$run_dir/session-id")"

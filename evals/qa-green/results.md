@@ -1,7 +1,7 @@
 # QA GREEN 실행 기록
 
 [criteria.md](./criteria.md)의 기준으로 채점한다. 실행은 [harness/run.sh](./harness/run.sh)로 한 번에
-PR 하나나 둘씩 한다. 모델은 codex `gpt-6-luna`, 추론 강도 `max`, 샌드박스 없음이다.
+PR 하나나 둘씩 한다. 모델은 codex `gpt-6-luna`, 추론 강도 `max`, 샌드박스 없음이다. #4442 r1 이후 실행은 fast 서비스 등급(`service_tier=fast`)을 쓴다.
 
 ## 대상 PR
 
