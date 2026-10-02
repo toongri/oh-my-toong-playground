@@ -868,6 +868,9 @@ export function renderQaReport(
 		}
 	}
 	if (strictVisualEvidence) {
+		// The summary line, banner and AC board render the QA result; the overview describes the change itself.
+		const overviewResult = narrative.presentation?.overview?.match(/APPROVE|COMMENT|REQUEST_CHANGES|판정|검증 불가|미검증|신뢰도/);
+		if (overviewResult) throw new Error(`기능 개요 (presentation.overview) must describe the change, not the QA result ("${overviewResult[0]}"); the summary line, banner and AC board already show it`);
 		for (const story of view.stories ?? []) {
 			const actor = actorFor(view, story);
 			for (const scenario of scenariosForStory(view, story.id)) {

@@ -153,11 +153,14 @@ cards) → then the record-faithful **감사** sections (시나리오 상세 기
 each scenario's technical boundary + driver — failures, verdict, evidence files;
 there is no separate actor-roster table).
 
-- **Feature overview (`overview`)** — what this change is and why, in product
-  language (the problem and stakes), never code. Short paragraphs or a list, one
-  fact each: what changed for whom, what is on or off in production, what was out
-  of scope. The verdict already sits in the summary line above; do not pack the
-  verdict, the blocked points, and the rollout state into one paragraph.
+- **Feature overview (`overview`)** — the change itself, in product language,
+  never code. Write two to four sentences, one fact each, in this order: who uses
+  which part of the product; what this change makes different for them; the
+  problem it fixes. Add one sentence on what is on or off in production only when
+  the change ships behind a flag or a staged rollout. The QA result has its own
+  places: the summary line (verdict and counts), the banner (blocked scenarios)
+  and the AC board (each requirement). The final render refuses an overview that
+  carries a verdict, "검증 불가", "미검증" or a confidence score.
 - **Affected users (`affectedUsers`, keyed by actor id)** — the roster and the
   affected-users narrative are the **same actors** (same ids), merged into ONE
   block per actor: **there is no separate actor-roster table.** For each recorded
