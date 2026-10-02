@@ -25,3 +25,43 @@ iPhone Duo 접힘 466×678·펼침 626×890), iPad Air 11 세로·가로, 데스
 ## 회차별 결과
 
 (실행할 때마다 PR별로 A축·B축 판정, 실패 항목과 근거, 고친 것을 덧붙인다.)
+
+### 1회차 무효 (round1)
+
+하네스가 호출한 Claude 세션의 `OMT_SESSION_ID`를 codex에 넘겨서 #4444와 #4438이 상태 파일 하나를
+같이 썼다. 두 실행을 멈추고 무효로 했다. 하네스가 `OMT_DIR`·`OMT_PROJECT`·`OMT_SESSION_ID`를 지우고
+codex를 띄우게 고친 뒤 `r1`로 다시 돌렸다.
+
+### r1 — #4444 backend (런타임 325e5a17)
+
+판정 **실패** (B축 MUST 1건). QA 판정은 APPROVE, 시나리오 8개(통과 7, 검증 불가 1).
+
+A축은 MUST를 모두 통과했다.
+
+- A1: AC 4개가 PR 본문의 의도(예약 제거, 수동 실행 경로 유지, 위키 수정, 배포 후 확인 조건)를 한국어
+  관찰 결과로 덮는다. 스토리에 goal과 Given/When/Then이 있다.
+- A2: 액터는 운영자 1명, `none`. 앱·디스펜서·커머스·어드민 코드는 이 예약을 읽지 않는다(diff는
+  `schedules.ts` 7줄 삭제와 위키뿐).
+- A3: 제목이 모두 "운영자가 …한다"이다. 위험 1·2·4·5·6은 시나리오 태그, 3은 "고정 key·cron·JobName만
+  쓴다"로 N/A 선언했고 diff와 맞다. why-needed가 시나리오마다 다르다.
+- A5: 격리 Redis에 구 예약을 심고 실제 cron-worker를 띄워 제거를 확인했다(전후 파일 있음). 동시 기동
+  2대도 실제로 돌렸다. 삭제 실패·메타데이터 손상은 `--evidence-surface test`로, 해당 테스트
+  (`schedule-reconciler.test.ts` 87·104행)가 기대를 단언한다. 9/30 운영 구간은 OpenSearch 403으로
+  `blocked`, 시도 10건과 attempt log가 있다. PR 본문의 배포 후 확인 조건이 운영 로그라서 운영 계정
+  읽기 조회는 근거가 있다. 자원 9개를 기록하고 모두 해제했다.
+- A6: blocked 1건은 해결 상태라 APPROVE가 게이트와 맞다. flaky-rerun은 H 시나리오를 격리 Redis에서
+  다시 몰았고 테스트는 vitest를 직접 재실행했다.
+
+B축 실패 항목:
+
+- **B5.3 실패.** 감사 표가 1280px에서 958px로 본문(792px)을 넘어 결과·증거 열이 표 안 가로 스크롤
+  뒤로 숨었다. 원인은 렌더러 `.audit-story { white-space: nowrap }`이 긴 스토리 id
+  (`daily_parity_schedule_lifecycle`)를 한 줄로 고정한 것. → `.audit-story code`가 줄바꿈되게 고쳤다
+  (주입 확인: 792/792).
+- B4(권장 수준 결함): 검증 불가 카드 끝에 "presentation.md 참조"가 붙었다. 저자용 누락 표시(`gap()`)를
+  막힘 안내에 재사용한 탓. presentation-reviewer도 COMMENT로 지적했다. → 막힘 안내는 참조 없이 렌더.
+- B5.4(경계): 제목이 "QA Report — QA GitHub PR #4444 (merge commit in current worktree)"로 영어였다.
+  → 제목을 "QA 보고서 —"로, SKILL.md에 target을 보고서 언어의 변경 이름으로 쓰라고 추가.
+
+그 밖의 B축(판정 요약줄, 배너, AC 판정과 scenarioRefs, 액터 블록, 접힌 N/A, 375px 가로 스크롤 없음,
+다크 모드 다이어그램)은 통과다.
