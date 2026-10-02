@@ -238,6 +238,10 @@ describe("qa chain core", () => {
 		const unprofiled = authoredState();
 		delete unprofiled.scenarios[1].profile;
 		expect(chainComplete(unprofiled)).toBe(false);
+		const extra = authoredState();
+		const { profile: _profile, ...offScreen } = scenario("s3", "phone", "M", []);
+		extra.scenarios.push({ ...offScreen, id: "s3", evidence: { path: "/evidence/s3.log", surface: "test" } });
+		expect(chainComplete(extra)).toBe(true);
 		const server = serverState();
 		server.scenarios[0].profile = "phone";
 		expect(chainComplete(server)).toBe(false);

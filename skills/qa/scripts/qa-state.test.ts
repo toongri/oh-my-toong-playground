@@ -414,9 +414,10 @@ describe("qa state: render actor device profiles", () => {
 		setAcceptance(S, ["home shows today supplements"]);
 		addActor(S, { ...renderActor, profiles: ["phone-small", "tablet-portrait"], project: cwd, home });
 		addStory(S, { id: "story-1", actor: "actor-1", contract: CONTRACT });
-		// the render actor needs --profile, and only one of its own profiles
-		expect(() => authorScenario(S, scenarioOpts("s1", "H", [1, 2, 3, 4, 5, 6]))).toThrow(/--profile must be one of phone-small\|tablet-portrait/);
-		expect(() => authorScenario(S, scenarioOpts("s1", "H", [1, 2, 3, 4, 5, 6], "watch"))).toThrow(/--profile must be one of/);
+		// a profile must be one of the actor's own; a scenario proven off-screen carries none
+		expect(() => authorScenario(S, scenarioOpts("s1", "H", [1, 2, 3, 4, 5, 6], "watch"))).toThrow(/--profile must be one of phone-small\|tablet-portrait/);
+		authorScenario(S, scenarioOpts("s0", "M", []));
+		expect(chainOk()).toBe(false); // no profile is covered yet
 		authorScenario(S, scenarioOpts("s1", "H", [1, 2, 3, 4, 5, 6], "phone-small"));
 		expect(rawState().derived.roster_complete).toBe(true);
 		expect(chainOk()).toBe(false); // tablet-portrait has no scenario
@@ -439,8 +440,13 @@ describe("qa state: render actor device profiles", () => {
 		const log = join(tmpDir, "screen.log");
 		writeFileSync(log, "screen text dump");
 		expect(() => recordScenario(S, { story: "story-1", scenario: "s1", status: "pass", evidencePath: log, evidenceSurface: "agent-browser" })).toThrow(/captured on device profile "phone-small"/);
-		// even an automated test run cannot stand in for the screen on a profile scenario
-		expect(() => recordScenario(S, { story: "story-1", scenario: "s1", status: "pass", evidencePath: log, evidenceSurface: "test" })).toThrow(/captured on device profile/);
+		// an automated test run renders at no screen size, so it cannot prove a profile scenario, screenshots or not
+		const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6dAAAAABJRU5ErkJggg==", "base64");
+		const before = join(tmpDir, "context-before.png");
+		const after = join(tmpDir, "context-after.png");
+		writeFileSync(before, png);
+		writeFileSync(after, png);
+		expect(() => recordScenario(S, { story: "story-1", scenario: "s1", status: "pass", evidencePath: log, evidenceSurface: "test", evidenceBefore: before, evidenceAction: log, evidenceAfter: after })).toThrow(/device profile "phone-small" is proven on the screen/);
 	});
 
 	test("profile 시나리오의 근거 검토는 잘림·겹침·가로 스크롤·줄바꿈을 점검한 layout claim이 있어야 한다", () => {

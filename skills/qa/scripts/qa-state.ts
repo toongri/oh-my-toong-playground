@@ -870,7 +870,7 @@ export function authorScenario(sessionId: string, opts: AuthorScenarioOpts): voi
 		if (!(prior.stories ?? []).some((candidate) => candidate.id === story)) throw new Error(`author-scenario: unknown story "${story}"`);
 		const actor = storyActor(prior, story);
 		if (actor.client_impact === "render") {
-			if (!opts.profile || !(actor.profiles ?? []).includes(opts.profile)) throw new Error(`author-scenario: actor "${actor.id}" renders a changed screen; --profile must be one of ${(actor.profiles ?? []).join("|")}`);
+			if (opts.profile !== undefined && !(actor.profiles ?? []).includes(opts.profile)) throw new Error(`author-scenario: --profile must be one of ${(actor.profiles ?? []).join("|")}, the device profiles of actor "${actor.id}"`);
 		} else if (opts.profile !== undefined) {
 			throw new Error(`author-scenario: --profile applies only to a client-impact render actor; "${actor.id}" is ${actor.client_impact ?? "unset"}`);
 		}
@@ -1073,6 +1073,9 @@ function recordScenarioUnlocked(sessionId: string, opts: RecordScenarioOpts): vo
 		for (const p of [evidence.path, evidence.before, evidence.action, evidence.after]) {
 			if (p) assertTestReportUsesTestSurface(p);
 		}
+	}
+	if (authored.profile && evidence?.surface === TEST_EVIDENCE_SURFACE) {
+		throw new Error(`device profile "${authored.profile}" is proven on the screen at that size; an automated test run renders at no screen size. Drive this scenario on the screen, or author an off-screen scenario without --profile`);
 	}
 	if ((opts.status === "pass" || opts.status === "fail") && scenarioNeedsVisualProof({ evidence, profile: authored.profile }, driver) && !visualEvidenceComplete(evidence, stateProbe)) {
 		throw new Error(`visual scenario requires separate before/after screenshot files and an action record${authored.profile ? ` captured on device profile "${authored.profile}"` : ""}; capture the asserted screen, then record-scenario again`);

@@ -156,7 +156,8 @@ export function isRiskAxis(value: unknown): value is QaRiskAxis {
  * malformed input · 3 injection · 4 interruption/concurrency · 5 misleading
  * success · 6 idempotency) this scenario exercises; a plain happy path carries
  * none. `profile` is the device profile the scenario runs on, set only for a
- * story whose actor's client rendering changed (`client_impact: render`).
+ * story whose actor's client rendering changed (`client_impact: render`), and
+ * only on a scenario driven on the screen; one proven off-screen carries none.
  */
 export interface QaScenario {
 	story: string;
@@ -475,7 +476,7 @@ function storyScenariosComplete(state: QaChainState, story: QaStory): boolean {
 	if (actor?.client_impact !== "render") return scenarios.every((scenario) => !scenario.profile);
 	const profiles = actor.profiles ?? [];
 	return (
-		scenarios.every((scenario) => !!scenario.profile && profiles.includes(scenario.profile)) &&
+		scenarios.every((scenario) => !scenario.profile || profiles.includes(scenario.profile)) &&
 		profiles.every((profile) => scenarios.some((scenario) => scenario.profile === profile))
 	);
 }
