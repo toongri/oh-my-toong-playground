@@ -267,6 +267,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts record-scenario --story … --scenar
 | "Pairing needs a code from the device, so skip that actor" | Ask the user for the code (`await-user`). A human step is work you request, not an obstacle. |
 | "A Fold is about 345 dp wide, I'll use that" | Read the project's device profiles. If none exist, ask the user and save them. Never guess a size. |
 | "The component test proves the fallback; I'll attach a nearby screenshot for the profile" | A screenshot that does not show the outcome is not evidence. Prove that scenario with the test and no profile, or make the state happen on screen and capture it. |
+| "agent-device says the device is in use / ambiguous, so the scenario is blocked" | Drive the device `acquire-device` gave you with the flags it printed. A session you opened yourself is closed with `agent-device close --session <name>`. |
 | "The layout looks fine on my one emulator" | A `render` actor is proven on every profile it runs on. One screen size proves one profile. |
 | "This story needs an injection scenario, an idempotency scenario, …" | Write what a user does. Tag the risks it exercises; declare a risk not applicable once, for the whole change, when nothing on the changed surface can carry it. |
 

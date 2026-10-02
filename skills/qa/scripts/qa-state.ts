@@ -1653,8 +1653,11 @@ function main(): void {
 			} else if (subcommand === "acquire-device") {
 				const platform = requiredArg(args, "platform");
 				const id = acquireDevice(sessionId, { platform, base: requiredArg(args, "base"), runtime: str(args["runtime"]) });
+				const flags = `--platform ${platform} ${platform === "ios" ? "--udid" : "--serial"} ${id} --session qa-${id}`;
 				process.stdout.write(
-					`${platform === "ios" ? "IOS_UDID" : "ANDROID_SERIAL"}=${id}\nacquired and recorded: this device belongs to this session only. Export the line above, and release it with release-resource --id ${id} at cleanup.\n`,
+					`${platform === "ios" ? "IOS_UDID" : "ANDROID_SERIAL"}=${id}\nacquired and recorded: this device belongs to this session only. Export the line above, and release it with release-resource --id ${id} at cleanup.\n` +
+						`drive it with these flags on every agent-device command: ${flags} (a web page: agent-device open <url> ${flags}). ` +
+						`If a command reports the device held by a session you opened, run agent-device close --session <that name> and retry; that is a driver step, not a blocked reason.\n`,
 				);
 			} else if (subcommand === "record-resource") {
 				recordResource(sessionId, {
