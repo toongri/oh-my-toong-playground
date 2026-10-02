@@ -43,6 +43,8 @@ ln -sfn "$runtime/skills/qa" "$worktree/.agents/skills/qa"
 exclude="$(git -C "$worktree" rev-parse --path-format=absolute --git-common-dir)/info/exclude"
 grep -qxF '/.agents/skills/qa' "$exclude" 2>/dev/null || echo '/.agents/skills/qa' >>"$exclude"
 export CODEX_HOME="$HOME/.omt/qa-green/codex-home"
+# The caller's OMT session must not leak in; codex resolves its own from the worktree.
+unset OMT_DIR OMT_PROJECT OMT_SESSION_ID
 cp "$runtime/.omt-commit" "$run_dir/runtime-commit"
 
 codex_flags=(--skip-git-repo-check -m gpt-6-luna -c model_reasoning_effort=max --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --json)
