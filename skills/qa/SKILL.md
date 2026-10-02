@@ -157,6 +157,8 @@ Record the roster in state before authoring scenarios. First capture the accepta
 
 **A step only a person can do is not an obstacle.** A pairing code shown on a physical dispenser, an OTP sent to a real phone, a consent tap on a production account: ask the user for it in plain text, run `await-user`, and end the turn. Never leave `reachable` at "waiting for input" and close the cycle, and never record the scenario `blocked` for it.
 
+**A limit you set yourself is not an obstacle either.** When a runbook makes you ask before you build, install or run, put into that one request every action the H scenarios need, and name the data each one writes: "open the pairing screen on STG, which issues one pairing nonce". A scenario blocked by a scope you proposed is a question you did not ask. Ask it with `await-user`.
+
 After each story exists, record the feature-map lookup as planning context (not execution-verified fact), before BASELINE begins:
 
 ```bash
@@ -268,6 +270,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts record-scenario --story … --scenar
 | "A Fold is about 345 dp wide, I'll use that" | Read the project's device profiles. If none exist, ask the user and save them. Never guess a size. |
 | "The component test proves the fallback; I'll attach a nearby screenshot for the profile" | A screenshot that does not show the outcome is not evidence. Prove that scenario with the test and no profile, or make the state happen on screen and capture it. |
 | "agent-device says the device is in use / ambiguous, so the scenario is blocked" | Drive the device `acquire-device` gave you with the flags it printed. A session you opened yourself is closed with `agent-device close --session <name>`. |
+| "The approved scope says no server writes, so the QR scenario is blocked" | You wrote that scope. Ask for the one write the scenario needs (`await-user`). |
 | "The layout looks fine on my one emulator" | A `render` actor is proven on every profile it runs on. One screen size proves one profile. |
 | "This story needs an injection scenario, an idempotency scenario, …" | Write what a user does. Tag the risks it exercises; declare a risk not applicable once, for the whole change, when nothing on the changed surface can carry it. |
 
