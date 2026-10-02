@@ -36,6 +36,15 @@ if [ ! -d "$worktree" ]; then
 	if [ -f "$source_worktree/.env.local" ]; then cp "$source_worktree/.env.local" "$worktree/.env.local"; fi
 fi
 
+# The skill under test comes from the isolated runtime (runtime.sh), never the global copy.
+runtime="$HOME/.omt/qa-green/runtime"
+[ -f "$runtime/.omt-commit" ] || { echo "run runtime.sh <commit> first" >&2; exit 1; }
+ln -sfn "$runtime/skills/qa" "$worktree/.agents/skills/qa"
+exclude="$(git -C "$worktree" rev-parse --path-format=absolute --git-common-dir)/info/exclude"
+grep -qxF '/.agents/skills/qa' "$exclude" 2>/dev/null || echo '/.agents/skills/qa' >>"$exclude"
+export CODEX_HOME="$HOME/.omt/qa-green/codex-home"
+cp "$runtime/.omt-commit" "$run_dir/runtime-commit"
+
 codex_flags=(--skip-git-repo-check -m gpt-6-luna -c model_reasoning_effort=max --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --json)
 
 if [ -n "$resume_answer" ]; then
