@@ -122,7 +122,7 @@ A `render` actor is verified on each screen size its client must stay usable on,
 bun "${CLAUDE_SKILL_DIR}/scripts/qa-device-profiles.ts" get --project .
 ```
 
-- `status: "ok"` → use those profiles. Pick the ones the actor's client runs on (a phone app does not run on a 1440 px desktop).
+- `status: "ok"` → use those profiles. Pick every profile whose platform the actor's client ships on: a React Native or Flutter app ships on `ios` and `android`, so it takes the profiles of both; a phone app does not run on a 1440 px desktop. The project's QA runbook names the platforms it ships.
 - `status: "unconfigured"` (first run for this project, or a new machine) → the result carries the built-in `defaults` (phones, Galaxy Z Fold8 and iPhone Duo folded/unfolded, iPad portrait/landscape, laptop, FHD and 21:9 desktops). Ask the user once: show that list and ask which platforms the project ships and which screens it must support. Then:
   - The user accepts the list or does not know → `set --defaults`.
   - The user gives a list → `set --file <json>`.
@@ -131,6 +131,14 @@ bun "${CLAUDE_SKILL_DIR}/scripts/qa-device-profiles.ts" get --project .
   - `upsert --json '{"id":…,"label":…,"platform":…,"width":…,"height":…}'` → change a size, or add a project screen (a kiosk, an embedded device) from its documented resolution.
 
 Never guess a device size the user did not give or the project does not document.
+
+A profile is a logical screen size, not a device model; its label only names it. Drive each profile at that size:
+
+- Web → the browser viewport, `set viewport <width> <height>`.
+- Native app → one platform is enough for layout unless native or platform-branching code changed (the same rule as for behavior). Size that platform's device to each profile:
+  - Android emulator → any size: `adb shell wm density 480` and `adb shell wm size <width×3>x<height×3>` give exactly width × height dp; `wm size reset` and `wm density reset` when done.
+  - iOS simulator → an installed device type whose logical size equals the profile (`xcrun simctl list devicetypes`). A size no installed type has goes on the Android emulator.
+- Record the device and the size in `driven-at`. A model name that is not installed is not an obstacle; the size is what you prove.
 
 On each profile, the scenario's before/after screenshots must show that a person can read and use the changed screen: nothing clipped or overlapping, no horizontal scroll, no truncated Korean text, touch targets reachable. Its `review-evidence` carries one `kind: "layout"` claim that names each of those checks and what the capture shows for it ([presentation.md](presentation.md#claim-review-record)); the CLI refuses a profile review without it. A broken layout on one profile is a `fail` for that profile's scenario.
 
@@ -244,7 +252,9 @@ bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts record-scenario --story … --scenar
 | Thought | Reality |
 |---------|---------|
 | "Only the server changed, but users see it on the app — boot a simulator" | `curl` the API. The app is not under test. |
-| "It's React Native — check iOS and Android" | One platform, unless native or platform-branching code changed. |
+| "It's React Native — check iOS and Android" | One platform, unless native or platform-branching code changed. Device profiles still cover every size the app ships to: size that one platform's device to each. |
+| "The iPhone Duo / newest model isn't installed, so that profile is blocked" | A profile is a size. Use an installed device of that size, or size the Android emulator to it. |
+| "The secure field won't take input / a dev error overlay covers the button, so login is blocked" | That is a driver obstacle, not a limit outside the change. Try the driver's other input path, dismiss the overlay, the other platform, and the login or deep link the project documents. `blocked` lists those attempts. |
 | "A test already asserts this, but I'll drive it by hand too" | Cite the test. Spend the effort on what it doesn't cover. |
 | "The flag lives in the admin web — launch it" | Set it through the API, a seed, or the DB. |
 | "Keep the device up until CLEANUP" | Release it now. |
