@@ -280,18 +280,18 @@ function buildQaContinuationMessage(
 	const refusal = !chainComplete(state)
 		? {
 			deliverable: "actor roster and scenario chain",
-			problem: "chainComplete=false — the actor roster / stories / scenario cells are not authored",
-			guideline: "scenario-authoring.md (actor roster, story, and scenario-cell authoring)",
-			produce: "author the actor roster, stories, and scenario cells for every user boundary",
-			submit: "qa-state.ts add-actor / add-story / author-cell",
+			problem: "chainComplete=false — the actor roster / stories / user scenarios / risk coverage are not authored",
+			guideline: "scenario-authoring.md (actor roster, story, user-scenario, and risk-coverage authoring)",
+			produce: "author the actor roster, stories, and user scenarios for every user boundary; cover each risk axis with a scenario or declare it not applicable",
+			submit: "qa-state.ts add-actor / add-story / author-scenario / declare-risk-na",
 		}
 		: !recordComplete(state, probe)
 			? {
 				deliverable: "recorded scenario evidence",
-				problem: "recordComplete=false — baseline / cell evidence / per-run checks are not recorded",
+				problem: "recordComplete=false — baseline / scenario evidence / per-run checks are not recorded",
 				guideline: "stage3-handson.md (adversarial e2e execution and boundary-observation evidence)",
-				produce: "drive the real boundary and record each cell's boundary-observation evidence plus the per-run checks",
-				submit: "qa-state.ts record-baseline / record-cell / review-evidence / record-run-check",
+				produce: "drive the real boundary and record each scenario's boundary-observation evidence plus the per-run checks",
+				submit: "qa-state.ts record-baseline / record-scenario / review-evidence / record-run-check",
 			}
 			: !qaReportComplete(state, probe)
 				? {
@@ -303,19 +303,19 @@ function buildQaContinuationMessage(
 				}
 			: verdict === "APPROVE"
 				? {
-					deliverable: "verdict-backing cell outcomes",
-					problem: "approveOk=false — APPROVE is unsupported while failed or unrecorded cells remain",
+					deliverable: "verdict-backing scenario outcomes",
+					problem: "approveOk=false — APPROVE is unsupported while failed or unrecorded scenarios remain",
 					guideline: "SKILL.md (Approval Decision — verdicts follow recorded outcomes)",
-					produce: "execute and record the remaining cells, or record a cell blocked with the attempts that failed; set REQUEST_CHANGES only when a failure is recorded",
-					submit: "qa-state.ts record-cell (pass|fail|blocked), then qa-state.ts set-verdict <APPROVE|COMMENT|REQUEST_CHANGES> matching the recorded outcomes",
+					produce: "execute and record the remaining scenarios, or record a scenario blocked with the attempts that failed; set REQUEST_CHANGES only when a failure is recorded",
+					submit: "qa-state.ts record-scenario (pass|fail|blocked), then qa-state.ts set-verdict <APPROVE|COMMENT|REQUEST_CHANGES> matching the recorded outcomes",
 				}
 				: verdict === "COMMENT"
 					? {
-						deliverable: "cell records that support COMMENT",
-						problem: "commentOk=false — a cell is unresolved or an H-priority cell failed",
+						deliverable: "scenario records that support COMMENT",
+						problem: "commentOk=false — a scenario is unresolved or an H-priority scenario failed",
 						guideline: "SKILL.md (Approval Decision — verdicts follow recorded outcomes)",
-						produce: "record every remaining cell; an H-priority fail supports REQUEST_CHANGES, not COMMENT",
-						submit: "qa-state.ts record-cell, then qa-state.ts set-verdict matching the recorded outcomes",
+						produce: "record every remaining scenario; an H-priority fail supports REQUEST_CHANGES, not COMMENT",
+						submit: "qa-state.ts record-scenario, then qa-state.ts set-verdict matching the recorded outcomes",
 					}
 					: {
 						deliverable: "the missing QA outcome",

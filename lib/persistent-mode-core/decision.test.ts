@@ -2883,13 +2883,17 @@ describe("QA Stop-gate decision table", () => {
 		await rm(testDir, { recursive: true, force: true });
 	});
 
-	function cell(story: string, cls: number, sub?: "hang-timeout" | "flaky-green", status: "pass" | "fail" | "na" | null = "pass"): Record<string, any> {
+	function scenario(story: string, id: string, risks: number[], status: "pass" | "fail" | "blocked" | null = "pass"): Record<string, any> {
 		return {
 			story,
-			cls,
-			...(sub ? { sub } : {}),
-			attack_point: `attack ${cls}${sub ? ` ${sub}` : ""}`,
-			priority: cls === 1 ? "H" : "M",
+			id,
+			title: `scenario ${id}`,
+			preconditions: "The actor can reach the boundary",
+			steps: ["The actor performs the scenario"],
+			expected: "The expected result is observed",
+			why_needed: "Covers the changed behavior",
+			priority: id === "happy" ? "H" : "M",
+			risks,
 			status,
 			cycle: 0,
 			...(status === "pass" ? { evidence: { path: evidencePath, surface: "bash" } } : {}),
@@ -2903,7 +2907,7 @@ describe("QA Stop-gate decision table", () => {
 			phase_max: 2,
 			acceptance_criteria: ["The boundary records the expected result"],
 			cycle: 0,
-			actors: [{ id: "actor-1", name: "Actor", boundary: "local boundary", driver: "bash", reachable: "yes" }],
+			actors: [{ id: "actor-1", name: "Actor", boundary: "local boundary", driver: "bash", reachable: "yes", client_impact: "none", client_impact_reason: "no client reads this boundary" }],
 			stories: [
 				{
 					id: "story-1",
@@ -2922,15 +2926,10 @@ describe("QA Stop-gate decision table", () => {
 					},
 				},
 			],
-			cells: [
-				cell("story-1", 1),
-				cell("story-1", 2),
-				cell("story-1", 3),
-				cell("story-1", 4),
-				cell("story-1", 5),
-				cell("story-1", 6),
-				cell("story-1", 1, "hang-timeout"),
-				cell("story-1", 5, "flaky-green"),
+			scenarios: [
+				scenario("story-1", "happy", [1]),
+				scenario("story-1", "bad-input", [2, 3]),
+				scenario("story-1", "interrupted", [4, 5, 6]),
 			],
 			run_checks: {
 				stale_state: { result: "pass", cycle: 0 },
@@ -2995,7 +2994,7 @@ describe("QA Stop-gate decision table", () => {
 
 	it("qa inactive completed REQUEST_CHANGES with a recorded failure allows stop", () => {
 		const state = completeQa("REQUEST_CHANGES");
-		state.cells[1] = cell("story-1", 2, undefined, "fail");
+		state.scenarios[1] = scenario("story-1", "bad-input", [2, 3], "fail");
 		state.active = false;
 		writeQaState(state);
 		expect(makeDecision(context())).toEqual({ continue: true });
@@ -3020,7 +3019,7 @@ describe("QA Stop-gate decision table", () => {
 	});
 
 	it("qa inactive untouched REQUEST_CHANGES allows stop", () => {
-		writeQaState({ active: false, phase: "PRE-FLIGHT", phase_max: 0, cycle: 0, verdict: "REQUEST_CHANGES", actors: [], stories: [], cells: [], run_checks: {} });
+		writeQaState({ active: false, phase: "PRE-FLIGHT", phase_max: 0, cycle: 0, verdict: "REQUEST_CHANGES", actors: [], stories: [], scenarios: [], run_checks: {} });
 		expect(makeDecision(context())).toEqual({ continue: true });
 	});
 
@@ -3031,7 +3030,7 @@ describe("QA Stop-gate decision table", () => {
 
 	it("qa request-changes allow: recordComplete plus a recorded failure", () => {
 		const state = completeQa("REQUEST_CHANGES");
-		state.cells[1] = cell("story-1", 2, undefined, "fail");
+		state.scenarios[1] = scenario("story-1", "bad-input", [2, 3], "fail");
 		writeQaState(state);
 		expect(makeDecision(context())).toEqual({ continue: true });
 	});
@@ -3043,13 +3042,13 @@ describe("QA Stop-gate decision table", () => {
 	});
 
 	it("qa request-changes allow: cycleUntouched pre-flight fail-fast", () => {
-		writeQaState({ active: true, phase: "PRE-FLIGHT", phase_max: 0, cycle: 0, verdict: "REQUEST_CHANGES", actors: [], stories: [], cells: [], run_checks: {} });
+		writeQaState({ active: true, phase: "PRE-FLIGHT", phase_max: 0, cycle: 0, verdict: "REQUEST_CHANGES", actors: [], stories: [], scenarios: [], run_checks: {} });
 		expect(makeDecision(context())).toEqual({ continue: true });
 	});
 
 	it("qa wedge: block-count >= MAX_BLOCK_COUNT allows stop without making approveOk true", async () => {
 		const state = completeQa("APPROVE");
-		(state.cells as Array<Record<string, unknown>>)[0].status = null;
+		(state.scenarios as Array<Record<string, unknown>>)[0].status = null;
 		writeQaState(state);
 		await writeFile(join(stateDir, `block-count-qa-${sid}`), "5");
 		expect(approveOk(state as never, (path) => ({ exists: fs.existsSync(path), size: fs.statSync(path).size }))).toBe(false);
@@ -3072,7 +3071,7 @@ describe("QA Stop-gate decision table", () => {
 		// progress-live, the Stop gate yields WITHOUT spinning the no-progress counter —
 		// the same escape the review-budget renewal-required park needs.
 		const state = completeQa("APPROVE");
-		(state.cells as Array<Record<string, unknown>>)[0].status = null;
+		(state.scenarios as Array<Record<string, unknown>>)[0].status = null;
 		state.awaiting_user = true;
 		state.last_touched_at = new Date().toISOString();
 		writeQaState(state);
@@ -3086,7 +3085,7 @@ describe("QA Stop-gate decision table", () => {
 		// forever — it falls through to the ordinary block branch, and only the
 		// block-count cap eventually releases a genuinely wedged session.
 		const state = completeQa("APPROVE");
-		(state.cells as Array<Record<string, unknown>>)[0].status = null;
+		(state.scenarios as Array<Record<string, unknown>>)[0].status = null;
 		state.awaiting_user = true;
 		state.last_touched_at = "2020-01-01T00:00:00+00:00";
 		writeQaState(state);
@@ -3099,7 +3098,7 @@ describe("QA Stop-gate decision table", () => {
 		it(`qa default block: ${verdict ?? "null"} verdict with false predicate`, () => {
 			const state = completeQa(verdict ?? "APPROVE");
 			state.verdict = verdict;
-			(state.cells as Array<Record<string, unknown>>)[0].status = null;
+			(state.scenarios as Array<Record<string, unknown>>)[0].status = null;
 			writeQaState(state);
 			const result = makeDecision(context());
 			expect(result.decision).toBe("block");
@@ -3110,7 +3109,7 @@ describe("QA Stop-gate decision table", () => {
 	it("qa block message carries the study-the-guideline contract clause", () => {
 		const state = completeQa("APPROVE");
 		state.verdict = "APPROVE";
-		(state.cells as Array<Record<string, unknown>>)[0].status = null;
+		(state.scenarios as Array<Record<string, unknown>>)[0].status = null;
 		writeQaState(state);
 		const reason = makeDecision(context()).reason ?? "";
 		expect(reason).toContain("Study the guideline");
@@ -3125,7 +3124,7 @@ describe("QA Stop-gate decision table", () => {
 			cycle: 0,
 			actors: [],
 			stories: [],
-			cells: [],
+			scenarios: [],
 			run_checks: {
 				stale_state: { result: "pass", cycle: 0 },
 				dirty_worktree: { result: "pass", cycle: 0 },
@@ -3139,13 +3138,13 @@ describe("QA Stop-gate decision table", () => {
 	it("qa inactive forged: touched inactive state with no allow arm blocks", () => {
 		const state = completeQa("REQUEST_CHANGES");
 		state.active = false;
-		(state.cells as Array<Record<string, unknown>>)[0].status = null;
+		(state.scenarios as Array<Record<string, unknown>>)[0].status = null;
 		writeQaState(state);
 		expect(makeDecision(context())).toMatchObject({ decision: "block" });
 	});
 
 	it("qa inactive legacy: inactive untouched state does not block", () => {
-		writeQaState({ active: false, phase: "PRE-FLIGHT", cycle: 0, actors: [], stories: [], cells: [], run_checks: {}, verdict: null });
+		writeQaState({ active: false, phase: "PRE-FLIGHT", cycle: 0, actors: [], stories: [], scenarios: [], run_checks: {}, verdict: null });
 		expect(makeDecision(context())).toEqual({ continue: true });
 	});
 
@@ -3156,7 +3155,7 @@ describe("QA Stop-gate decision table", () => {
 	it("qa reset: partial work cannot claim REQUEST_CHANGES fail-fast", () => {
 		const state = completeQa("REQUEST_CHANGES");
 		state.stories = [{ id: "story-1", actor: "actor-1", baseline: null }];
-		state.cells = [cell("story-1", 1)];
+		state.scenarios = [scenario("story-1", "happy", [1])];
 		writeQaState(state);
 		expect(makeDecision(context())).toMatchObject({ decision: "block" });
 	});
@@ -3165,7 +3164,7 @@ describe("QA Stop-gate decision table", () => {
 		const state = completeQa("APPROVE");
 		state.phase = "PLAN";
 		state.phase_max = 1;
-		for (const current of state.cells as Array<Record<string, unknown>>) current.status = null;
+		for (const current of state.scenarios as Array<Record<string, unknown>>) current.status = null;
 		writeQaState(state);
 		expect(makeDecision(context())).toMatchObject({ decision: "block" });
 	});
@@ -3173,7 +3172,7 @@ describe("QA Stop-gate decision table", () => {
 	it("qa partial: recorded work with incomplete chain blocks under REQUEST_CHANGES", () => {
 		const state = completeQa("REQUEST_CHANGES");
 		state.stories = [{ id: "story-1", actor: "actor-1", baseline: null }];
-		state.cells = [cell("story-1", 1)];
+		state.scenarios = [scenario("story-1", "happy", [1])];
 		writeQaState(state);
 		expect(makeDecision(context())).toMatchObject({ decision: "block" });
 	});
@@ -3183,7 +3182,7 @@ describe("QA Stop-gate decision table", () => {
 		fs.writeFileSync(tempEvidence, "evidence");
 		const state = completeQa("APPROVE");
 		state.stories = [{ id: "story-1", actor: "actor-1", baseline: { result: "pass", cycle: 0, evidence: { path: tempEvidence, surface: "bash" } } }];
-		state.cells = (state.cells as Array<Record<string, unknown>>).map((current) => ({ ...current, evidence: { path: tempEvidence, surface: "bash" } }));
+		state.scenarios = (state.scenarios as Array<Record<string, unknown>>).map((current) => ({ ...current, evidence: { path: tempEvidence, surface: "bash" } }));
 		writeQaState(state);
 		fs.unlinkSync(tempEvidence);
 		expect(makeDecision(context())).toMatchObject({ decision: "block" });
@@ -3206,7 +3205,7 @@ describe("QA Stop-gate decision table", () => {
 				baseline: { result: "pass", cycle: 0, evidence: { path: actionEvidence, surface: "agent-browser" } },
 			},
 		];
-		state.cells = (state.cells as Array<Record<string, any>>).map((current, index) => {
+		state.scenarios = (state.scenarios as Array<Record<string, any>>).map((current, index) => {
 			if (index !== 0) return { ...current, status: "waived" };
 			const evidence = {
 				path: actionEvidence,

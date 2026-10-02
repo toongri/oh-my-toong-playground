@@ -14,8 +14,7 @@ export interface QaCaseRunContext {
 	resetConfirmed: string;
 	sessionId?: string;
 	storyId?: string;
-	cellClass?: number;
-	cellSub?: "hang-timeout" | "flaky-green";
+	scenarioId?: string;
 	cycle: number;
 	storyContractSha256?: string;
 	timeoutMs?: number;
@@ -48,6 +47,9 @@ export interface QaCaseRunReceipt {
 	artifact_paths: { stdout: string; stderr: string; receipt: string; stdout_sha256: string; stderr_sha256: string };
 	session_id?: string;
 	story_id?: string;
+	/** The QA scenario this run belongs to. */
+	scenario_id?: string;
+	/** Legacy receipts (before scenarios) named an adversarial-axis cell; readable, never bindable. */
 	cell?: { cls: number; sub?: "hang-timeout" | "flaky-green" };
 	story_contract_sha256?: string;
 	start_error?: { message: string; code?: string };
@@ -173,7 +175,7 @@ export async function runQaCase(record: QaCaseRecord, context: QaCaseRunContext)
 		artifact_paths: { stdout: stdoutPath, stderr: stderrPath, receipt: receiptPath, stdout_sha256: sha256(stdout), stderr_sha256: sha256(stderr) },
 		...(context.sessionId ? { session_id: context.sessionId } : {}),
 		...(context.storyId ? { story_id: context.storyId } : {}),
-		...(context.cellClass !== undefined ? { cell: { cls: context.cellClass, ...(context.cellSub ? { sub: context.cellSub } : {}) } } : {}),
+		...(context.scenarioId ? { scenario_id: context.scenarioId } : {}),
 		...(context.storyContractSha256 ? { story_contract_sha256: context.storyContractSha256 } : {}),
 		...(context.actorId ? { actor_id: context.actorId } : {}),
 		...(context.actorBoundary ? { actor_boundary: context.actorBoundary } : {}),
@@ -209,6 +211,7 @@ export function validateQaCaseRunReceipt(value: unknown): asserts value is QaCas
 	if (value.actor_id !== undefined && !nonblank(value.actor_id)) throw new Error("qa replay: invalid run receipt");
 	if (value.actor_boundary !== undefined && !nonblank(value.actor_boundary)) throw new Error("qa replay: invalid run receipt");
 	if (value.story_id !== undefined && !nonblank(value.story_id)) throw new Error("qa replay: invalid run receipt");
+	if (value.scenario_id !== undefined && !nonblank(value.scenario_id)) throw new Error("qa replay: invalid run receipt");
 	if (value.cell !== undefined) {
 		if (!isRecord(value.cell) || typeof value.cell.cls !== "number" || !Number.isInteger(value.cell.cls) || value.cell.cls < 1 || value.cell.cls > 6 || (value.cell.sub !== undefined && value.cell.sub !== "hang-timeout" && value.cell.sub !== "flaky-green")) throw new Error("qa replay: invalid run receipt");
 	}

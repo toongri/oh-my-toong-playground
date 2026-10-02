@@ -30,13 +30,21 @@ export type QaReachability = "yes" | "unknown" | (string & {});
 export type QaPriority = "H" | "M" | "L";
 export type QaResult = "pass" | "fail" | "na";
 /**
- * Cell outcome. `not_applicable`: the axis does not exist on this story's
- * surface, fixed when the cell is first authored. `blocked`: execution was
- * attempted and a structural limit stopped it. `na` is a legacy value (it mixed
- * both meanings with "not run"); new records cannot write it.
+ * Scenario outcome. `blocked`: execution was attempted and a structural limit
+ * outside the change stopped it. A scenario with no status is open work.
  */
-export type QaCellStatus = "pass" | "fail" | "not_applicable" | "blocked" | "na" | "waived";
+export type QaScenarioStatus = "pass" | "fail" | "blocked";
 export type QaVerdict = "APPROVE" | "REQUEST_CHANGES" | "COMMENT" | null;
+
+/**
+ * How this change reaches a client that renders the actor's result.
+ * `none`: no client renders it (a job, a document, a CLI). `contract`: a client
+ * renders it, but its rendering code did not change; the proof is the client's
+ * own request at its real boundary. `render`: the client's rendering changed;
+ * the proof is the screen, on every device profile the actor names.
+ */
+export const CLIENT_IMPACTS = ["none", "contract", "render"] as const;
+export type QaClientImpact = (typeof CLIENT_IMPACTS)[number];
 
 export interface QaActor {
 	id: string;
@@ -44,6 +52,19 @@ export interface QaActor {
 	boundary?: string;
 	driver?: QaDriver;
 	reachable?: QaReachability;
+	client_impact?: QaClientImpact;
+	client_impact_reason?: string;
+	/** Device profile ids (from state.device_profiles); required for `render`. */
+	profiles?: string[];
+}
+
+/** A screen size the project's clients must stay usable on, copied from the project manifest. */
+export interface QaDeviceProfile {
+	id: string;
+	label: string;
+	platform: "web" | "ios" | "android";
+	width: number;
+	height: number;
 }
 
 export interface QaEvidence {
@@ -123,29 +144,47 @@ export function storyContractValid(story: QaStory, acceptanceCriteria: string[] 
 	);
 }
 
-export interface QaCell {
+export const RISK_AXES = [1, 2, 3, 4, 5, 6] as const;
+export type QaRiskAxis = (typeof RISK_AXES)[number];
+export function isRiskAxis(value: unknown): value is QaRiskAxis {
+	return RISK_AXES.some((axis) => axis === value);
+}
+
+/**
+ * One user scenario under a story: who does what, in which state, and what they
+ * must observe. `risks` names the adversarial axes (1 failure path · 2 boundary/
+ * malformed input · 3 injection · 4 interruption/concurrency · 5 misleading
+ * success · 6 idempotency) this scenario exercises; a plain happy path carries
+ * none. `profile` is the device profile the scenario runs on, set only for a
+ * story whose actor's client rendering changed (`client_impact: render`).
+ */
+export interface QaScenario {
 	story: string;
-	cls: number;
-	sub?: "hang-timeout" | "flaky-green";
-	attack_point?: string;
+	id: string;
+	title?: string;
+	preconditions?: string;
+	steps?: string[];
+	expected?: string;
+	why_needed?: string;
 	priority?: QaPriority;
-	status?: QaCellStatus | null;
-	na_reason?: string;
-	/** Why this axis does not exist on the story's surface (status `not_applicable`). */
-	not_applicable_reason?: string;
+	risks?: number[];
+	profile?: string;
+	status?: QaScenarioStatus | null;
 	/** The structural limit that stopped execution (status `blocked`). */
 	blocked?: QaBlocked;
 	evidence?: QaEvidence;
 	evidence_review?: QaEvidenceReview;
 	case_run?: QaCaseRunBinding;
 	cycle?: number;
-	/**
-	 * Optional scenario detail. When present, the evidence-review snapshot binds
-	 * these fields too; changing the scenario requires a fresh review.
-	 */
 	driven_at?: string;
-	why_needed?: string;
 	source?: "self-authored" | "caller-provided";
+}
+
+/** An adversarial axis that no scenario of this change can exercise, declared once per cycle. */
+export interface QaRiskNotApplicable {
+	axis: number;
+	reason: string;
+	cycle: number;
 }
 
 export interface QaBlocked {
@@ -190,13 +229,13 @@ export interface QaEvidenceReview {
 	files: Record<string, string>;
 }
 
-export function evidenceReviewSnapshot(cell: QaCell): string {
-	const { evidence_review: _review, ...record } = cell;
+export function evidenceReviewSnapshot(scenario: QaScenario): string {
+	const { evidence_review: _review, ...record } = scenario;
 	return JSON.stringify(record);
 }
 
 /** Structural receipt only: the reviewer, not this predicate, judges pixels. */
-export function evidenceReviewComplete(cell: QaCell, probe: EvidenceProbe): boolean {
+export function evidenceReviewComplete(cell: QaScenario, probe: EvidenceProbe): boolean {
 	const review = cell.evidence_review;
 	if (!review || review.cell_snapshot !== evidenceReviewSnapshot(cell) || !Array.isArray(review.claims) || !review.claims.length) return false;
 	const nonblank = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
@@ -210,7 +249,7 @@ export function evidenceReviewComplete(cell: QaCell, probe: EvidenceProbe): bool
 	} catch { return false; }
 }
 
-export function caseRunBindingComplete(cell: QaCell, probe: EvidenceProbe): boolean {
+export function caseRunBindingComplete(cell: QaScenario, probe: EvidenceProbe): boolean {
 	if (!cell.case_run || typeof cell.case_run !== "object" || !cell.case_run.case_id || !cell.case_run.attempt_id || !cell.case_run.code_ref || !cell.case_run.receipt_path || !cell.case_run.files || typeof cell.case_run.files !== "object" || Array.isArray(cell.case_run.files) || !Object.keys(cell.case_run.files).length) return false;
 	try {
 		const binding = cell.case_run;
@@ -237,14 +276,6 @@ export interface QaRunChecks {
 
 export type QaRunCheckHistory = Partial<Record<"stale-state" | "dirty-worktree" | "flaky-rerun", QaRunCheck[]>>;
 
-export interface QaWaive {
-	story: string;
-	cls: number;
-	sub?: "hang-timeout" | "flaky-green";
-	reason?: string;
-	cycle?: number;
-}
-
 export interface QaInert {
 	declared?: boolean;
 	reason?: string;
@@ -265,7 +296,7 @@ export interface QaChainState {
 	active?: boolean;
 	/**
 	 * Set true by `qa-state.ts await-user` when a plain-text question is posed at a
-	 * human-decision gate (e.g. a waive decision only the user may make); recomputed
+	 * human-decision gate (e.g. a question about the requirement itself); recomputed
 	 * to false by any later progress write (mergeWrite derives it from `next` on
 	 * every write). The Stop gate reads it as a legitimate pause and allows the turn
 	 * to end WITHOUT a verdict, resuming on the user's reply. It never marks
@@ -277,10 +308,11 @@ export interface QaChainState {
 	phase_max?: number;
 	actors?: QaActor[];
 	stories?: QaStory[];
-	cells?: QaCell[];
+	scenarios?: QaScenario[];
+	risk_not_applicable?: QaRiskNotApplicable[];
+	device_profiles?: QaDeviceProfile[];
 	run_checks?: QaRunChecks | null;
 	run_checks_history?: QaRunCheckHistory;
-	waives?: QaWaive[];
 	inert?: QaInert;
 	verdict?: QaVerdict;
 	/** Acceptance criteria captured at PLAN; rendered by the report from records. */
@@ -294,7 +326,7 @@ export interface QaChainState {
 }
 
 export function qaReportSnapshot(state: QaChainState): string {
-	return JSON.stringify([state.target, state.cycle, state.acceptance_criteria, state.actors, state.stories, state.cells, state.run_checks, state.waives, state.inert, state.verdict]);
+	return JSON.stringify([state.target, state.cycle, state.acceptance_criteria, state.actors, state.stories, state.scenarios, state.risk_not_applicable, state.device_profiles, state.run_checks, state.inert, state.verdict]);
 }
 
 export function qaReportComplete(state: QaChainState, probe: EvidenceProbe): boolean {
@@ -316,17 +348,18 @@ export function isVisualDriver(driver: string | undefined): boolean {
 	return driver === "agent-browser" || driver === "agent-device";
 }
 
+
 /**
- * A cell needs before/after screenshots and an evidence review only when its
- * OWN recorded evidence surface is visual — falling back to the actor's
- * driver when the cell carries no evidence yet. A test-evidence cell (surface
- * `test`) never needs visual proof, even under a visual-driver actor.
+ * A scenario needs before/after screenshots and an evidence review when it runs
+ * on a device profile, or when its OWN recorded evidence surface is visual —
+ * falling back to the actor's driver when it carries no evidence yet. A
+ * test-evidence scenario without a profile never needs visual proof.
  */
-export function cellNeedsVisualProof(cell: Pick<QaCell, "evidence">, actorDriver: string | undefined): boolean {
-	return isVisualDriver(cell.evidence?.surface ?? actorDriver);
+export function scenarioNeedsVisualProof(scenario: Pick<QaScenario, "evidence" | "profile">, actorDriver: string | undefined): boolean {
+	return nonblank(scenario.profile) || isVisualDriver(scenario.evidence?.surface ?? actorDriver);
 }
 
-/** Visual cells carry two separate captures and the actor's action record. */
+/** Visual scenarios carry two separate captures and the actor's action record. */
 export function visualEvidenceComplete(evidence: QaEvidence | undefined, probe: EvidenceProbe): boolean {
 	if (!evidence?.before || !evidence.action || !evidence.after || evidence.before === evidence.after) return false;
 	try {
@@ -335,26 +368,6 @@ export function visualEvidenceComplete(evidence: QaEvidence | undefined, probe: 
 			return file.exists && file.size > 0 && (index === 1 || (/\.(png|jpe?g|webp|gif)$/i.test(path) && file.image !== false));
 		});
 	} catch { return false; }
-}
-
-export interface RequiredCell {
-	story: string;
-	cls: number;
-	sub?: "hang-timeout" | "flaky-green";
-}
-
-export function requiredCells(state: QaChainState): RequiredCell[] {
-	const cells: RequiredCell[] = [];
-	for (const story of state.stories ?? []) {
-		for (const cls of [1, 2, 3, 4, 5, 6]) cells.push({ story: story.id, cls });
-		cells.push({ story: story.id, cls: 1, sub: "hang-timeout" });
-		cells.push({ story: story.id, cls: 5, sub: "flaky-green" });
-	}
-	return cells;
-}
-
-function key(cell: Pick<QaCell, "story" | "cls" | "sub">): string {
-	return `${cell.story}:${cell.cls}:${cell.sub ?? ""}`;
 }
 
 function actorId(story: QaStory): string | undefined {
@@ -370,8 +383,9 @@ function currentCycle(state: QaChainState): number {
 	return typeof state.cycle === "number" ? state.cycle : 0;
 }
 
-function currentCell(state: QaChainState, required: RequiredCell): QaCell | undefined {
-	return (state.cells ?? []).find((cell) => key(cell) === key(required) && cell.cycle === currentCycle(state));
+/** Scenarios authored for the current cycle; earlier cycles stay in the raw record for audit. */
+export function currentScenarios(state: QaChainState): QaScenario[] {
+	return (state.scenarios ?? []).filter((scenario) => scenario.cycle === currentCycle(state));
 }
 
 function result(value: QaRunCheck | QaResult | null | undefined): QaResult | null {
@@ -402,10 +416,14 @@ function validEvidence(
 	}
 }
 
-function waived(state: QaChainState, required: RequiredCell): boolean {
-	return (state.waives ?? []).some(
-		(waive) => waive.cycle === currentCycle(state) && key(waive) === key(required),
-	);
+/** An actor row is complete when its surface, driver, and client impact are pinned. */
+export function actorComplete(state: QaChainState, actor: QaActor): boolean {
+	if (!nonblank(actor.id) || !nonblank(actor.boundary) || !actor.driver) return false;
+	if (!actor.client_impact || !CLIENT_IMPACTS.includes(actor.client_impact) || !nonblank(actor.client_impact_reason)) return false;
+	const profiles = actor.profiles ?? [];
+	if (actor.client_impact !== "render") return profiles.length === 0;
+	const known = new Set((state.device_profiles ?? []).map((profile) => profile.id));
+	return isVisualDriver(actor.driver) && profiles.length > 0 && profiles.every((id) => known.has(id));
 }
 
 export function rosterComplete(state: QaChainState): boolean {
@@ -413,8 +431,46 @@ export function rosterComplete(state: QaChainState): boolean {
 	const stories = state.stories ?? [];
 	return (
 		actors.length > 0 &&
-		actors.every((actor) => !!actor.id && !!actor.boundary && !!actor.driver) &&
+		actors.every((actor) => actorComplete(state, actor)) &&
 		actors.every((actor) => stories.some((story) => actorId(story) === actor.id))
+	);
+}
+
+/** The six authored fields a scenario must carry before it can run. */
+export function scenarioAuthored(scenario: QaScenario): boolean {
+	const risks = scenario.risks ?? [];
+	return (
+		nonblank(scenario.id) &&
+		nonblank(scenario.title) &&
+		nonblank(scenario.preconditions) &&
+		Array.isArray(scenario.steps) && scenario.steps.length > 0 && scenario.steps.every(nonblank) &&
+		nonblank(scenario.expected) &&
+		nonblank(scenario.why_needed) &&
+		!!scenario.priority &&
+		Array.isArray(risks) && risks.every(isRiskAxis) && new Set(risks).size === risks.length
+	);
+}
+
+function inertDeclared(state: QaChainState): boolean {
+	return state.inert?.declared === true && (state.inert.cycle === undefined || state.inert.cycle === currentCycle(state));
+}
+
+/** Each adversarial axis is exercised by a current scenario or declared not applicable this cycle. */
+export function riskCoverageComplete(state: QaChainState): boolean {
+	const scenarios = currentScenarios(state);
+	const declared = (state.risk_not_applicable ?? []).filter((entry) => entry.cycle === currentCycle(state) && nonblank(entry.reason));
+	return RISK_AXES.every((axis) => scenarios.some((scenario) => (scenario.risks ?? []).includes(axis)) || declared.some((entry) => entry.axis === axis));
+}
+
+function storyScenariosComplete(state: QaChainState, story: QaStory): boolean {
+	const actor = actorFor(state, story);
+	const scenarios = currentScenarios(state).filter((scenario) => scenario.story === story.id);
+	if (!scenarios.length || !scenarios.every(scenarioAuthored) || !scenarios.some((scenario) => scenario.priority === "H")) return false;
+	if (actor?.client_impact !== "render") return scenarios.every((scenario) => !scenario.profile);
+	const profiles = actor.profiles ?? [];
+	return (
+		scenarios.every((scenario) => !!scenario.profile && profiles.includes(scenario.profile)) &&
+		profiles.every((profile) => scenarios.some((scenario) => scenario.profile === profile))
 	);
 }
 
@@ -426,17 +482,13 @@ export function chainComplete(state: QaChainState): boolean {
 	// records remain readable through the state/view APIs, but cannot authorize a
 	// new execution or verdict without being re-authored in a fresh cycle.
 	if (stories.some((story) => !storyContractValid(story, state.acceptance_criteria ?? []))) return false;
-	return stories.every((story) => {
-		const required = requiredCells({ ...state, stories: [story] });
-		const authored = required.every((cell) => {
-			const actual = currentCell(state, cell);
-			return !!actual && typeof actual.attack_point === "string" && actual.attack_point.trim() !== "" && !!actual.priority;
-		});
-		return authored && required.some((cell) => {
-			const actual = currentCell(state, cell);
-			return actual?.priority === "H";
-		});
-	});
+	if (inertDeclared(state)) return currentScenarios(state).length === 0;
+	if (currentScenarios(state).some((scenario) => !stories.some((story) => story.id === scenario.story))) return false;
+	return stories.every((story) => storyScenariosComplete(state, story)) && riskCoverageComplete(state);
+}
+
+function storyFor(state: QaChainState, scenario: QaScenario): QaStory | undefined {
+	return (state.stories ?? []).find((story) => story.id === scenario.story);
 }
 
 export function recordComplete(state: QaChainState, probe: EvidenceProbe): boolean {
@@ -447,18 +499,16 @@ export function recordComplete(state: QaChainState, probe: EvidenceProbe): boole
 		if (!baseline || baseline.cycle !== currentCycle(state) || result(baseline) === null) return false;
 		if (result(baseline) === "pass" && !validEvidence(state, baseline.evidence, actor?.driver, baseline.cycle, probe)) return false;
 	}
-	for (const required of requiredCells(state)) {
-		const cell = currentCell(state, required);
-		if (!cell || cell.status === null || cell.status === undefined || cell.cycle !== currentCycle(state)) return false;
-		if (cell.status === "na" && !cell.na_reason) return false;
-		if (cell.status === "not_applicable" && !nonblank(cell.not_applicable_reason)) return false;
-		if (cell.status === "blocked" && !blockedRecordValid(cell.blocked, probe)) return false;
-		if (cell.case_run && !caseRunBindingComplete(cell, probe)) return false;
-		const story = stories.find((candidate) => candidate.id === required.story);
-		const actorDriver = story ? actorFor(state, story)?.driver : undefined;
-			if ((cell.status === "pass" || cell.status === "fail") && cellNeedsVisualProof(cell, actorDriver) && !visualEvidenceComplete(cell.evidence, probe)) return false;
-			if ((cell.status === "pass" || cell.status === "fail") && cellNeedsVisualProof(cell, actorDriver) && !evidenceReviewComplete(cell, probe)) return false;
-		if (cell.status === "pass" && !validEvidence(state, cell.evidence, actorDriver, cell.cycle, probe)) return false;
+	for (const scenario of currentScenarios(state)) {
+		if (scenario.status !== "pass" && scenario.status !== "fail" && scenario.status !== "blocked") return false;
+		if (scenario.status === "blocked" && !blockedRecordValid(scenario.blocked, probe)) return false;
+		if (scenario.case_run && !caseRunBindingComplete(scenario, probe)) return false;
+		const story = storyFor(state, scenario);
+		const driver = story ? actorFor(state, story)?.driver : undefined;
+		if (scenario.status !== "blocked" && scenarioNeedsVisualProof(scenario, driver)) {
+			if (!visualEvidenceComplete(scenario.evidence, probe) || !evidenceReviewComplete(scenario, probe)) return false;
+		}
+		if (scenario.status === "pass" && !validEvidence(state, scenario.evidence, driver, scenario.cycle, probe)) return false;
 	}
 	const checks = state.run_checks ?? {};
 	return (
@@ -468,87 +518,53 @@ export function recordComplete(state: QaChainState, probe: EvidenceProbe): boole
 	);
 }
 
-function allRequiredNa(state: QaChainState): boolean {
-	return requiredCells(state).length > 0 && requiredCells(state).every((required) => currentCell(state, required)?.status === "na");
-}
-
-function inertNaAllowed(state: QaChainState): boolean {
-	return state.inert?.declared === true && allRequiredNa(state) && (state.inert.cycle === undefined || state.inert.cycle === currentCycle(state));
-}
-
-// Priority orders execution; it never decides whether an unexecuted cell may pass
-// the verdict gate. `not_applicable` and `blocked` resolve; legacy `na` keeps the
-// resolution it had when it was written.
-function resolvedForApprove(state: QaChainState, required: RequiredCell): boolean {
-	const cell = currentCell(state, required);
-	if (!cell) return false;
-	if (cell.status === "pass" || cell.status === "waived" || waived(state, required)) return true;
-	if (cell.status === "not_applicable" || cell.status === "blocked") return true;
-	if (cell.status !== "na") return false;
-	return cell.priority !== "H" || inertNaAllowed(state);
-}
-
-function resolvedForComment(state: QaChainState, required: RequiredCell): boolean {
-	const cell = currentCell(state, required);
-	if (!cell) return false;
-	if (resolvedForApprove(state, required)) return true;
-	// Soft pass: a failed non-H row (the 50-74 nitpick band) permits COMMENT.
-	return cell.status === "fail" && cell.priority !== "H";
-}
-
 /**
  * REQUEST_CHANGES asks for a product change, so it needs a recorded product
- * failure: a failed current-cycle cell, baseline, stale-state, or flaky-rerun
- * check. Unexecuted work is not a failure; it is work left to do. A dirty
- * worktree is harness debris, not a product defect, so it does not count.
- * Cells left unrun after a stop-driving failure do not block it.
+ * failure: a failed current-cycle scenario, baseline, stale-state, or
+ * flaky-rerun check. Unexecuted work is not a failure; it is work left to do. A
+ * dirty worktree is harness debris, not a product defect, so it does not count.
+ * Scenarios left unrun after a stop-driving failure do not block it.
  */
 export function requestChangesOk(state: QaChainState, _probe: EvidenceProbe): boolean {
 	if (!chainComplete(state)) return false;
 	const checks = state.run_checks ?? {};
 	return (
-		requiredCells(state).some((required) => currentCell(state, required)?.status === "fail") ||
+		currentScenarios(state).some((scenario) => scenario.status === "fail") ||
 		(state.stories ?? []).some((story) => result(story.baseline) === "fail") ||
 		[checks.stale_state, checks.flaky_rerun].some((check) => result(check) === "fail")
 	);
 }
 
-function baselinesPass(state: QaChainState): boolean {
-	return (state.stories ?? []).every((story) => result(story.baseline) === "pass");
+function verdictGround(state: QaChainState, probe: EvidenceProbe): boolean {
+	const checks = state.run_checks ?? {};
+	return (
+		chainComplete(state) &&
+		recordComplete(state, probe) &&
+		result(checks.stale_state) === "pass" &&
+		result(checks.flaky_rerun) === "pass" &&
+		(state.stories ?? []).every((story) => result(story.baseline) === "pass")
+	);
 }
 
+// Priority orders execution; it never decides whether an unexecuted scenario may
+// pass the verdict gate. A `blocked` scenario resolves, and the report names it.
 export function approveOk(state: QaChainState, probe: EvidenceProbe): boolean {
-	const checks = state.run_checks ?? {};
-	return (
-		chainComplete(state) &&
-		recordComplete(state, probe) &&
-		result(checks.stale_state) === "pass" &&
-		result(checks.flaky_rerun) === "pass" &&
-		baselinesPass(state) &&
-		requiredCells(state).every((cell) => resolvedForApprove(state, cell))
-	);
+	return verdictGround(state, probe) && currentScenarios(state).every((scenario) => scenario.status === "pass" || scenario.status === "blocked");
 }
 
+/** Soft pass: a failed non-H scenario (the 50-74 nitpick band) permits COMMENT. */
 export function commentOk(state: QaChainState, probe: EvidenceProbe): boolean {
-	const checks = state.run_checks ?? {};
-	return (
-		chainComplete(state) &&
-		recordComplete(state, probe) &&
-		result(checks.stale_state) === "pass" &&
-		result(checks.flaky_rerun) === "pass" &&
-		baselinesPass(state) &&
-		requiredCells(state).every((cell) => resolvedForComment(state, cell))
-	);
+	return verdictGround(state, probe) && currentScenarios(state).every((scenario) => scenario.status !== "fail" || scenario.priority !== "H");
 }
 
 export function cycleUntouched(state: Partial<QaChainState>): boolean {
 	const actors = state.actors ?? [];
 	const stories = state.stories ?? [];
-	const cells = state.cells ?? [];
+	const scenarios = state.scenarios ?? [];
 	const records = stories.some((story) => story.baseline !== null && story.baseline !== undefined) ||
-		cells.some((cell) => cell.status !== null && cell.status !== undefined || cell.evidence !== null && cell.evidence !== undefined) ||
+		scenarios.some((scenario) => scenario.status !== null && scenario.status !== undefined || scenario.evidence !== null && scenario.evidence !== undefined) ||
 		Object.values(state.run_checks ?? {}).some((check) => check !== null && check !== undefined);
-	return actors.length === 0 && stories.length === 0 && cells.length === 0 && !records;
+	return actors.length === 0 && stories.length === 0 && scenarios.length === 0 && !records;
 }
 
 export function driverGateArmed(state: QaChainState): boolean {

@@ -9,18 +9,22 @@ import { configureFeatureMap, getFeature, saveFeature, withFeatureMapReadLock } 
 import {
 	addActor,
 	addStory,
-	authorCell,
+	authorScenario,
 	incCycle,
 	readQaState,
 	readQaView,
 	recordBaseline,
-	recordCell,
+	recordScenario,
 	recordStoryProvenance,
 	resolveStatePath,
 	setQaState,
 	startQa,
 	setAcceptance,
 } from "./qa-state.ts";
+
+function scenarioOpts() {
+	return { story: "story", id: "s1", title: "attack", preconditions: "feature is ready", steps: ["run the CLI"], expected: "result observed", whyNeeded: "covers the change", priority: "H", risks: [1] };
+}
 
 test("검증된 feature provenance를 현재 cycle에 기록한다", () => {
 	const home = mkdtempSync(join(tmpdir(), "qa-provenance-home-"));
@@ -48,7 +52,7 @@ test("검증된 feature provenance를 현재 cycle에 기록한다", () => {
 			name: "Actor",
 			boundary: "CLI",
 			driver: "bash",
-			reachable: "yes",
+			reachable: "yes", clientImpact: "none", clientImpactReason: "CLI output only; no client renders it",
 		});
 		addStory(sid, { id: "story", actor: "actor", contract: { goal: "goal", given: ["given"], when: ["when"], then: ["then"], acceptance_criteria: [0] } });
 		recordStoryProvenance(
@@ -94,7 +98,7 @@ test("새 cycle의 동일 payload는 재바인딩하고 이전 cycle을 history�
 			name: "Actor",
 			boundary: "CLI",
 			driver: "bash",
-			reachable: "yes",
+			reachable: "yes", clientImpact: "none", clientImpactReason: "CLI output only; no client renders it",
 		});
 		addStory("cycle", { id: "story", actor: "actor", contract: { goal: "goal", given: ["given"], when: ["when"], then: ["then"], acceptance_criteria: [0] } });
 		const input = {
@@ -132,7 +136,7 @@ test("baseline 또는 결과 기록 뒤 최초 provenance 바인딩을 거부한
 			name: "Actor",
 			boundary: "CLI",
 			driver: "bash",
-			reachable: "yes",
+			reachable: "yes", clientImpact: "none", clientImpactReason: "CLI output only; no client renders it",
 		});
 		addStory("gate", { id: "story", actor: "actor", contract: { goal: "goal", given: ["given"], when: ["when"], then: ["then"], acceptance_criteria: [0] } });
 		const input = {
@@ -144,8 +148,8 @@ test("baseline 또는 결과 기록 뒤 최초 provenance 바인딩을 거부한
 			/cannot change provenance/,
 		);
 		incCycle("gate");
-		authorCell("gate", { story: "story", cls: 1, attackPoint: "attack", priority: "H" });
-		recordCell("gate", { story: "story", cls: 1, status: "fail" });
+		authorScenario("gate", scenarioOpts());
+		recordScenario("gate", { story: "story", scenario: "s1", status: "fail" });
 		expect(() => recordStoryProvenance("gate", "story", input, { cwd, home })).toThrow(
 			/cannot change provenance/,
 		);
@@ -182,7 +186,7 @@ function makeFixture(sid: string) {
 	const saved = setupFeature(home, cwd);
 	setQaState(sid, { phase: "PLAN" });
 	setAcceptance(sid, ["story acceptance"]);
-	addActor(sid, { id: "actor", name: "Actor", boundary: "CLI", driver: "bash", reachable: "yes" });
+	addActor(sid, { id: "actor", name: "Actor", boundary: "CLI", driver: "bash", reachable: "yes", clientImpact: "none", clientImpactReason: "CLI output only; no client renders it" });
 	addStory(sid, { id: "story", actor: "actor", contract: { goal: "goal", given: ["given"], when: ["when"], then: ["then"], acceptance_criteria: [0] } });
 	const input = (extra: Record<string, unknown> = {}) => ({
 		features: [
@@ -447,8 +451,8 @@ test("결과 이후 context 변경은 거부되고 raw state를 보존한다", (
 	try {
 		recordStoryProvenance(f.sid, "story", f.input(), { cwd: f.cwd, home: f.home });
 		incCycle(f.sid);
-		authorCell(f.sid, { story: "story", cls: 1, attackPoint: "attack", priority: "H" });
-		recordCell(f.sid, { story: "story", cls: 1, status: "fail" });
+		authorScenario(f.sid, scenarioOpts());
+		recordScenario(f.sid, { story: "story", scenario: "s1", status: "fail" });
 		const before = f.bytes();
 		expect(() =>
 			recordStoryProvenance(
@@ -464,12 +468,12 @@ test("결과 이후 context 변경은 거부되고 raw state를 보존한다", (
 	}
 });
 
-test("결과 없는 authored-only cell은 provenance 변경을 허용한다", () => {
+test("결과 없는 authored-only scenario은 provenance 변경을 허용한다", () => {
 	const f = makeFixture("authored");
 	try {
 		recordStoryProvenance(f.sid, "story", f.input(), { cwd: f.cwd, home: f.home });
 		incCycle(f.sid);
-		authorCell(f.sid, { story: "story", cls: 1, attackPoint: "attack", priority: "H" });
+		authorScenario(f.sid, scenarioOpts());
 		expect(() =>
 			recordStoryProvenance(
 				f.sid,
