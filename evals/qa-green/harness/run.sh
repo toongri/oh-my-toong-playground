@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# Runs the deployed qa skill headlessly on one algocare-home PR with codex
+# Runs the qa skill under test headlessly on one algocare-home PR with codex
 # (gpt-6-luna, reasoning effort max, no sandbox, hooks run without a trust prompt), so its run and report can be
 # graded against evals/qa-green/criteria.md.
 #
-#   run.sh <pr-number> <run-label>            start a fresh run
+#   run.sh <pr-number> <run-label>            start a fresh run on ~/.omt/qa-green/current
 #   run.sh <pr-number> <run-label> --resume "<answer>"
-#                                             answer an await-user question and continue
+#                                             continue that run on the runtime it started with
 #
 # The PR is checked out detached at its merge commit in its own algocare-home
 # worktree (~/repos/algocare-home/qa-green-<pr>), with the developer's root
 # .env.local copied in. Everything else (install, local stack, seeds) is the qa
 # skill's own bootstrap work, so it is graded rather than prepared here.
 #
-# Output: ~/.omt/qa-green/<pr>/<run-label>/{codex.jsonl,last-message.md,session-id}
+# Output: ~/.omt/qa-green/<pr>/<run-label>/{codex.jsonl,last-message.md,session-id,runtime}
+# session-id is written as soon as codex starts, so a run cut off midway can still be resumed.
 # Run one or two PRs at a time; each may start emulators and a local stack.
 set -euo pipefail
 
@@ -36,16 +37,20 @@ if [ ! -d "$worktree" ]; then
 	if [ -f "$source_worktree/.env.local" ]; then cp "$source_worktree/.env.local" "$worktree/.env.local"; fi
 fi
 
-# The skill under test comes from the isolated runtime (runtime.sh), never the global copy.
-runtime="$HOME/.omt/qa-green/runtime"
-[ -f "$runtime/.omt-commit" ] || { echo "run runtime.sh <commit> first" >&2; exit 1; }
-ln -sfn "$runtime/skills/qa" "$worktree/.agents/skills/qa"
+# The skill under test comes from an isolated runtime (runtime.sh), never the global copy.
+# A resumed run keeps the runtime it started with.
+if [ -n "$resume_answer" ]; then
+	rt="$(cat "$run_dir/runtime")"
+else
+	rt="$(cd "$HOME/.omt/qa-green/current" && pwd -P)" || { echo "run runtime.sh <commit> first" >&2; exit 1; }
+	echo "$rt" >"$run_dir/runtime"
+fi
+ln -sfn "$rt/src/skills/qa" "$worktree/.agents/skills/qa"
 exclude="$(git -C "$worktree" rev-parse --path-format=absolute --git-common-dir)/info/exclude"
 grep -qxF '/.agents/skills/qa' "$exclude" 2>/dev/null || echo '/.agents/skills/qa' >>"$exclude"
-export CODEX_HOME="$HOME/.omt/qa-green/codex-home"
+export CODEX_HOME="$rt/codex-home"
 # The caller's OMT session must not leak in; codex resolves its own from the worktree.
 unset OMT_DIR OMT_PROJECT OMT_SESSION_ID
-cp "$runtime/.omt-commit" "$run_dir/runtime-commit"
 
 codex_flags=(--skip-git-repo-check -m gpt-6-luna -c model_reasoning_effort=max --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --json)
 
@@ -58,5 +63,8 @@ fi
 
 prompt="\$qa https://github.com/algo-care/algocare-home/pull/$pr 를 QA해줘. 이 워크트리는 그 PR이 main에 merge된 커밋이야."
 printf '%s\n' "$prompt" |
-	codex exec "${codex_flags[@]}" -C "$worktree" -o "$run_dir/last-message.md" - >"$run_dir/codex.jsonl"
+	codex exec "${codex_flags[@]}" -C "$worktree" -o "$run_dir/last-message.md" - >"$run_dir/codex.jsonl" &
+codex_pid=$!
+until grep -q '"thread.started"' "$run_dir/codex.jsonl" 2>/dev/null || ! kill -0 "$codex_pid" 2>/dev/null; do sleep 2; done
 jq -r 'select(.type == "thread.started") | .thread_id' "$run_dir/codex.jsonl" | head -n 1 >"$run_dir/session-id"
+wait "$codex_pid"
