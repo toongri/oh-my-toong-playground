@@ -136,6 +136,17 @@ function nonEmpty(value: unknown, field: string): string {
 	return value;
 }
 
+/** camelCase (`displayName`) or snake_case (`deep_link_value`) — a code name, not something a reader sees. */
+const CODE_IDENTIFIER = /\b(?:[a-z]{2,}[A-Z][a-z]\w*|[a-z]+_[a-z]\w*)/;
+
+/** Reader-facing prose: the report shows it to a PO, so it names what the user sees, never a code identifier. */
+function readerProse(value: unknown, field: string): string {
+	const text = nonEmpty(value, field);
+	const identifier = text.match(CODE_IDENTIFIER);
+	if (identifier) throw new Error(`${field} names the code identifier "${identifier[0]}"; write what the user or operator sees instead`);
+	return text;
+}
+
 function currentCycle(state: Partial<ChainState>): number {
 	return typeof state.cycle === "number" && Number.isInteger(state.cycle) ? state.cycle : 0;
 }
@@ -610,7 +621,7 @@ export function addActor(sessionId: string, opts: AddActorOpts): void {
 	if (!name || !boundary) throw new Error("name and boundary are required for a new actor");
 	if (!isOneOf(driver, DRIVERS)) throw new Error(`driver must be one of ${DRIVERS.join("|")}`);
 	if (!isOneOf(clientImpact, CLIENT_IMPACTS)) throw new Error(`client-impact must be one of ${CLIENT_IMPACTS.join("|")}: none (no client renders this actor's result), contract (a client renders it but its rendering code did not change), render (the client's rendering changed)`);
-	const reason = nonEmpty(clientImpactReason, "client-impact-reason");
+	const reason = readerProse(clientImpactReason, "client-impact-reason");
 	let deviceProfiles = prior.device_profiles ?? [];
 	if (clientImpact === "render") {
 		if (driver !== "agent-browser" && driver !== "agent-device") throw new Error("client-impact render needs a screen driver (agent-browser|agent-device): the proof is the rendered screen");
@@ -654,7 +665,7 @@ function parseIntegerArray(value: unknown, field: string): number[] {
 
 function validateStoryContract(value: unknown, acceptanceCriteria: string[]): QaStoryContract {
 	if (!isRecord(value)) throw new Error("add-story: contract is required");
-	const goal = nonEmpty(value.goal, "goal");
+	const goal = readerProse(value.goal, "goal");
 	const given = parseContractArray(value.given, "given");
 	const when = parseContractArray(value.when, "when");
 	const then = parseContractArray(value.then, "then");
@@ -1234,7 +1245,7 @@ export function setAcceptance(sessionId: string, criteria: string[]): void {
 	if (!criteria.every((item) => typeof item === "string")) {
 		throw new Error("set-acceptance: every acceptance item must be a string");
 	}
-	const cleaned = criteria.map((item) => nonEmpty(item, "acceptance item"));
+	const cleaned = criteria.map((item) => readerProse(item, "acceptance item"));
 	withStateLock(resolveStatePath(sessionId), () => {
 		const prior = readPrior(sessionId);
 		const cycle = currentCycle(prior);

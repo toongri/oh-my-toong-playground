@@ -425,6 +425,17 @@ describe("qa state: render actor device profiles", () => {
 		expect(chainOk()).toBe(true);
 	});
 
+	test("AC·스토리 목표·클라이언트 영향 사유에 코드 식별자를 쓰면 거부한다", () => {
+		const { cwd, home } = profileFixture([PHONE]);
+		setQaState(S, { phase: "PLAN" });
+		expect(() => setAcceptance(S, ["보유분 표에 응답 맵의 displayName이 보인다"])).toThrow(/acceptance item.*"displayName"/);
+		expect(() => setAcceptance(S, ["딥링크 deep_link_value가 페어링 화면을 연다"])).toThrow(/"deep_link_value"/);
+		setAcceptance(S, ["iPhone과 macOS 사용자가 보유분 표에서 카테고리 이름을 본다"]);
+		expect(() => addActor(S, { ...renderActor, clientImpactReason: "SelfIntakeSections가 supplementCategories를 읽는다", profiles: ["phone-small"], project: cwd, home })).toThrow(/client-impact-reason.*"supplementCategories"/);
+		addActor(S, { ...renderActor, profiles: ["phone-small"], project: cwd, home });
+		expect(() => addStory(S, { id: "story-1", actor: "actor-1", contract: { ...CONTRACT, goal: "운영자가 getJobs 응답을 확인한다" } })).toThrow(/goal.*"getJobs"/);
+	});
+
 	test("render 아닌 액터의 story에 --profile을 주면 거부한다", () => {
 		seedStoryApi();
 		expect(() => authorScenario(S, scenarioOpts("s1", "H", [1], "phone-small"))).toThrow(/applies only to a client-impact render actor/);
