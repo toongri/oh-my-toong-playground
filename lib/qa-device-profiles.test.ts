@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { readDeviceProfiles, saveDeviceProfiles, validateDeviceProfiles } from "./qa-device-profiles";
+import { DEFAULT_DEVICE_PROFILES, readDeviceProfiles, removeDeviceProfile, saveDeviceProfiles, upsertDeviceProfile, validateDeviceProfiles } from "./qa-device-profiles";
 
 const roots: string[] = [];
 function fixture(): { home: string; cwd: string } {
@@ -23,10 +23,39 @@ const PROFILES = [
 ];
 
 describe("기기 프로필 저장소", () => {
-	test("저장된 프로필이 없으면 사용자에게 물어보라는 상태를 돌려줌", () => {
+	test("저장된 프로필이 없으면 기본 목록과 함께 사용자에게 물어보라는 상태를 돌려줌", () => {
 		const result = readDeviceProfiles(fixture());
 		expect(result.status).toBe("unconfigured");
-		if (result.status === "unconfigured") expect(result.ask_user).toContain("Ask the user");
+		if (result.status === "unconfigured") {
+			expect(result.ask_user).toContain("Ask the user");
+			expect(result.defaults).toEqual(DEFAULT_DEVICE_PROFILES);
+		}
+	});
+
+	test("기본 목록은 그대로 저장할 수 있고 폰·폴더블·태블릿·데스크톱을 모두 담음", () => {
+		expect(validateDeviceProfiles(DEFAULT_DEVICE_PROFILES)).toEqual([...DEFAULT_DEVICE_PROFILES]);
+		const ids = DEFAULT_DEVICE_PROFILES.map((profile) => profile.id);
+		for (const id of ["iphone-se", "fold8-cover", "fold8-main", "iphone-duo-unfolded", "ipad-portrait", "desktop-ultrawide"]) expect(ids).toContain(id);
+	});
+
+	test("프로젝트가 지원하지 않는 기기는 지우고, 크기는 고치고, 전용 화면은 추가함", () => {
+		const options = fixture();
+		saveDeviceProfiles(PROFILES, options);
+		removeDeviceProfile("fold-folded", options);
+		upsertDeviceProfile({ ...PROFILES[0], height: 668 }, options);
+		upsertDeviceProfile({ id: "kiosk", label: "매장 키오스크", platform: "android", width: 1080, height: 1920 }, options);
+		const result = readDeviceProfiles(options);
+		if (result.status !== "ok") throw new Error("expected ok");
+		expect(result.profiles.map((profile) => [profile.id, profile.height])).toEqual([["iphone-se", 668], ["kiosk", 1920]]);
+	});
+
+	test("저장 전 편집, 없는 id 삭제, 마지막 프로필 삭제는 거부함", () => {
+		const options = fixture();
+		expect(() => removeDeviceProfile("iphone-se", options)).toThrow("set --defaults");
+		expect(() => upsertDeviceProfile(PROFILES[0], options)).toThrow("set --defaults");
+		saveDeviceProfiles([PROFILES[0]], options);
+		expect(() => removeDeviceProfile("nope", options)).toThrow("no saved profile");
+		expect(() => removeDeviceProfile("iphone-se", options)).toThrow("last saved profile");
 	});
 
 	test("저장한 프로필을 프로젝트 단위로 다시 읽음", () => {

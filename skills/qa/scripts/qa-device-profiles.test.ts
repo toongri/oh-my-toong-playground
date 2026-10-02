@@ -34,6 +34,28 @@ describe("qa-device-profiles CLI", () => {
 		expect(after.profiles[0].id).toBe("phone-small");
 	});
 
+	test("모르겠다는 답에는 기본 목록을 저장하고, 프로젝트에 맞게 지우고 고치고 더함", () => {
+		const options = fixture();
+		const defaults = JSON.parse(runQaDeviceProfilesCli(["defaults"], options).stdout).profiles;
+		expect(runQaDeviceProfilesCli(["set", "--defaults"], options).exitCode).toBe(0);
+		expect(runQaDeviceProfilesCli(["remove", "desktop-ultrawide"], options).exitCode).toBe(0);
+		const kiosk = { id: "kiosk", label: "매장 키오스크", platform: "android", width: 1080, height: 1920 };
+		expect(runQaDeviceProfilesCli(["upsert", "--json", JSON.stringify(kiosk)], options).exitCode).toBe(0);
+		expect(runQaDeviceProfilesCli(["upsert", "--json", JSON.stringify({ ...defaults[0], width: 376 })], options).exitCode).toBe(0);
+
+		const saved = JSON.parse(runQaDeviceProfilesCli(["get"], options).stdout).profiles;
+		expect(saved).toHaveLength(defaults.length);
+		expect(saved.some((profile: { id: string }) => profile.id === "desktop-ultrawide")).toBe(false);
+		expect(saved.at(-1)).toEqual(kiosk);
+		expect(saved[0].width).toBe(376);
+	});
+
+	test("set은 --defaults와 --file 중 정확히 하나만 받음", () => {
+		const options = fixture();
+		expect(runQaDeviceProfilesCli(["set"], options).stderr).toContain("exactly one");
+		expect(runQaDeviceProfilesCli(["set", "--defaults", "--file", "x.json"], options).stderr).toContain("exactly one");
+	});
+
 	test("잘못된 입력은 저장하지 않고 오류로 끝남", () => {
 		const options = fixture();
 		const file = join(options.cwd, "profiles.json");

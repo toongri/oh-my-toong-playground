@@ -123,7 +123,14 @@ bun "${CLAUDE_SKILL_DIR}/scripts/qa-device-profiles.ts" get --project .
 ```
 
 - `status: "ok"` → use those profiles. Pick the ones the actor's client runs on (a phone app does not run on a 1440 px desktop).
-- `status: "unconfigured"` → ask the user once for the list (id, label, platform web|ios|android, logical width × height — e.g. small phone, large phone, foldable folded and unfolded, tablet portrait and landscape, desktop), save it with `qa-device-profiles.ts set --file <json>`, and continue. Never guess a device size.
+- `status: "unconfigured"` (first run for this project, or a new machine) → the result carries the built-in `defaults` (phones, Galaxy Z Fold8 and iPhone Duo folded/unfolded, iPad portrait/landscape, laptop, FHD and 21:9 desktops). Ask the user once: show that list and ask which platforms the project ships and which screens it must support. Then:
+  - The user accepts the list or does not know → `set --defaults`.
+  - The user gives a list → `set --file <json>`.
+- Fit a saved list to the project whenever the user or the project docs say so:
+  - `remove <id>` → a platform or device the project does not ship (no desktop for an app-only project).
+  - `upsert --json '{"id":…,"label":…,"platform":…,"width":…,"height":…}'` → change a size, or add a project screen (a kiosk, an embedded device) from its documented resolution.
+
+Never guess a device size the user did not give or the project does not document.
 
 On each profile, the scenario's before/after screenshots must show that a person can read and use the changed screen: nothing clipped or overlapping, no horizontal scroll, no truncated Korean text, touch targets reachable. A broken layout on one profile is a `fail` for that profile's scenario.
 
@@ -546,7 +553,7 @@ CHECK:      a FAILED row blocks, except a self-authored M/L row scoring 50-74 = 
 ECONOMY:    verify the change's stories and scenarios by the cheapest means that proves them. Server-only → curl the API; UI → one browser/device; a test asserting the scenario is proof (--evidence-surface test); device only for screen claims, released at once. Unchanged platforms are not under test
 INPUT:      read the plan/issue/spec/PR yourself; write ACs as user-observable outcomes in the report language. A state file or summary is never the source of requirements
 ACTOR:      Actor Roster before scenarios — actor · boundary (verification surface) · driver · client impact (none|contract|render + reason) · profiles · reachable. One actor per client that reads what changed; "screen unchanged" means contract, never an inward boundary. Human-only step (pairing code, OTP) → await-user. Substitute only an unreachable hop and record driven-at; otherwise record blocked (obstacle + attempts + deepest reachable + attempt log), never PASS
-PROFILES:   render actors are proven on every device profile they run on; profiles come from qa-device-profiles.ts get; unconfigured → ask the user once, save with set, never guess sizes. Each profile: before/after screenshots, readable and unbroken
+PROFILES:   render actors are proven on every device profile they run on; profiles come from qa-device-profiles.ts get; unconfigured → show the defaults and ask once; "don't know" → set --defaults; prune/fix/add with remove / upsert; never guess sizes. Each profile: before/after screenshots, readable and unbroken
 SCENARIOS:  user scenarios under stories (author-scenario): what the actor does and sees; ≥1 H per story; risks 1..6 are tags; each risk covered by a scenario or declare-risk-na once per cycle. States: pass/fail · blocked · unrecorded (open work). author-cell, record-cell, waive, na, not_applicable are retired
 VERDICT:    REQUEST_CHANGES needs a recorded product failure; APPROVE needs every scenario pass/blocked; any unrecorded scenario with no failure = no verdict yet
 BOOTSTRAP:  set up only what the chosen surface needs — isolated local instance, documented QA accounts/seeders first, cross-platform preconditions via API/seed/DB. When the QA REQUEST verifies the deployment itself, its failure is the FAIL
