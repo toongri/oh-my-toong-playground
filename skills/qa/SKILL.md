@@ -76,7 +76,7 @@ A **behavior-invisible contract check** — a narrow exception to qa's dynamic-o
 
 **On violation: immediate REQUEST_CHANGES, cycle NOT executed** — fail-fast. The expensive cycle below never runs against a change that already fails its own declared contract.
 
-At cycle entry, create or re-enter the guarded state with `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts start --target "<what is being verified>"`. A second qa invocation in the same session must run `start` again so it receives a fresh chain and re-armed runtime gates.
+At cycle entry, create or re-enter the guarded state with `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts start --target "<what is being verified>"`. The target is the report's title, so write it in the report language as the change a reader recognizes — e.g. `PR #4444 섭취 대조 작업의 매일 04:50 예약 제거` — not a checkout description. A second qa invocation in the same session must run `start` again so it receives a fresh chain and re-armed runtime gates.
 
 ### PLAN
 

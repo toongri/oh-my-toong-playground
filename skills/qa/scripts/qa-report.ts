@@ -502,7 +502,7 @@ function renderScenarioCard(view: QaView, scenario: QaScenario, actor: QaActor |
 		riskTags(scenario);
 	const observed = narrative.scenarios?.[key]?.observed;
 	if (scenario.status === "blocked") {
-		return `<div class="scenario-card sc-blocked">${head}<div class="sc-body">${plan}${gap(`검증 불가 — ${scenario.blocked?.obstacle ?? ""}`)}` +
+		return `<div class="scenario-card sc-blocked">${head}<div class="sc-body">${plan}<p class="gap">${escapeHtml(`검증 불가 — ${scenario.blocked?.obstacle ?? ""}`)}</p>` +
 			`<p class="sc-observed">확인한 가장 깊은 지점: ${escapeHtml(scenario.blocked?.deepest_reachable ?? "")}</p>` +
 			(observed?.trim() ? `<p class="sc-observed">${escapeHtml(observed)}</p>` : "") +
 			`</div></div>`;
@@ -889,7 +889,7 @@ export function renderQaReport(
 			}
 		}
 	}
-	const title = `QA Report — ${view.target || view.phase}`;
+	const title = `QA 보고서 — ${view.target || view.phase}`;
 	const evidenceContext: EvidenceRenderContext = { embeddedBytes: 0, renderedPaths: new Set(), strictVisualEvidence };
 	const body = [
 		`<h1>${escapeHtml(title)}</h1>`,
@@ -1017,7 +1017,8 @@ img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(-
 .presentation { margin-bottom: 1rem; }
 .gap { color: var(--fail); background: var(--code-bg); border: 1px dashed var(--fail); border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.92rem; }
 .gap-reference { white-space: nowrap; }
-.audit-story { min-width: 6rem; white-space: nowrap; word-break: keep-all; }
+.audit-story { min-width: 6rem; }
+.audit-story code { white-space: normal; overflow-wrap: anywhere; }
 .audit-coverage { min-width: 11rem; word-break: keep-all; overflow-wrap: normal; }
 .audit-boundary { min-width: 12rem; word-break: keep-all; overflow-wrap: normal; }
 .audit-evidence { display: block; margin-top: 0.4rem; font-size: 0.8rem; }

@@ -494,7 +494,8 @@ describe("qa-report renderer", () => {
 		expect(audit).toContain('<td class="audit-coverage">H · 1 실패 경로</td>');
 		expect(audit).toContain('<td class="audit-boundary">브라우저 경계 미구동<br>');
 		expect(html).toContain("table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.94rem; display: block; overflow-x: auto; }");
-		expect(html).toContain(".audit-story { min-width: 6rem; white-space: nowrap; word-break: keep-all; }");
+		expect(html).toContain(".audit-story { min-width: 6rem; }");
+		expect(html).toContain(".audit-story code { white-space: normal; overflow-wrap: anywhere; }");
 		expect(html).toContain(".audit-coverage { min-width: 11rem; word-break: keep-all; overflow-wrap: normal; }");
 		expect(html).toContain(".audit-boundary { min-width: 12rem; word-break: keep-all; overflow-wrap: normal; }");
 	});
@@ -523,6 +524,7 @@ describe("qa-report renderer", () => {
 		const scenarios = html.slice(html.indexOf("<h2>유저 시나리오 · 근거"), html.indexOf("<h2>시나리오 상세 기록"));
 		expect(scenarios).toContain('class="scenario-card sc-blocked"');
 		expect(scenarios).toContain("검증 불가 — PGlite는 연결이 하나뿐임");
+		expect(scenarios.slice(scenarios.indexOf('class="scenario-card sc-blocked"'))).not.toContain("presentation.md 참조");
 		expect(scenarios).toContain("확인한 가장 깊은 지점: PGlite 단일 연결");
 		expect(scenarios).toContain("다룬 위험: 중단·동시 실행");
 		expect(scenarios).not.toContain("docker compose up");
