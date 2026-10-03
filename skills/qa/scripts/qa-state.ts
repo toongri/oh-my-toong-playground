@@ -136,8 +136,12 @@ function nonEmpty(value: unknown, field: string): string {
 	return value;
 }
 
-/** camelCase (`displayName`) or snake_case (`deep_link_value`) — a code name, not something a reader sees. */
-const CODE_IDENTIFIER = /\b(?:[a-z]{2,}[A-Z][a-z]\w*|[a-z]+_[a-z]\w*)/;
+/**
+ * camelCase (`displayName`), snake_case (`deep_link_value`) or a three-part PascalCase
+ * component name (`JoinStepLayout`) — a code name, not something a reader sees.
+ * Two-part brand names (AlgoCare, OneLink) stay allowed.
+ */
+const CODE_IDENTIFIER = /\b(?:[a-z]{2,}[A-Z][a-z]\w*|[a-z]+_[a-z]\w*|[A-Z][a-z]+(?:[A-Z][a-z]+){2,})/;
 
 /** Reader-facing prose: the report shows it to a PO, so it names what the user sees, never a code identifier. */
 function readerProse(value: unknown, field: string): string {

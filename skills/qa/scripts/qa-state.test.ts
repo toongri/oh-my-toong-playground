@@ -430,8 +430,9 @@ describe("qa state: render actor device profiles", () => {
 		setQaState(S, { phase: "PLAN" });
 		expect(() => setAcceptance(S, ["보유분 표에 응답 맵의 displayName이 보인다"])).toThrow(/acceptance item.*"displayName"/);
 		expect(() => setAcceptance(S, ["딥링크 deep_link_value가 페어링 화면을 연다"])).toThrow(/"deep_link_value"/);
-		setAcceptance(S, ["iPhone과 macOS 사용자가 보유분 표에서 카테고리 이름을 본다"]);
-		expect(() => addActor(S, { ...renderActor, clientImpactReason: "SelfIntakeSections가 supplementCategories를 읽는다", profiles: ["phone-small"], project: cwd, home })).toThrow(/client-impact-reason.*"supplementCategories"/);
+		expect(() => setAcceptance(S, ["JoinStepLayout이 키보드 위에 남는다"])).toThrow(/"JoinStepLayout"/);
+		setAcceptance(S, ["iPhone과 macOS 사용자가 AlgoCare 앱과 OneLink·AppsFlyer 링크로 보유분 표에서 카테고리 이름을 본다"]);
+		expect(() => addActor(S, { ...renderActor, clientImpactReason: "SelfIntakeSections가 supplementCategories를 읽는다", profiles: ["phone-small"], project: cwd, home })).toThrow(/client-impact-reason names the code identifier "SelfIntakeSections"/);
 		addActor(S, { ...renderActor, profiles: ["phone-small"], project: cwd, home });
 		expect(() => addStory(S, { id: "story-1", actor: "actor-1", contract: { ...CONTRACT, goal: "운영자가 getJobs 응답을 확인한다" } })).toThrow(/goal.*"getJobs"/);
 	});
