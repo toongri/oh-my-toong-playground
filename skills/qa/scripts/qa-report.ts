@@ -21,7 +21,7 @@ import { tmpdir } from "os";
 import { dirname, extname, join, resolve } from "path";
 import { getOmtDir } from "@lib/omt-dir";
 import { RISK_AXES, scenarioNeedsVisualProof, evidenceReviewComplete, type QaActor, type QaBaseline, type QaResult, type QaRunCheck, type QaScenario, type QaStory } from "@lib/qa-chain-core";
-import { readQaView, recordRenderedReport, stateProbe, type QaView } from "./qa-state.ts";
+import { CODE_IDENTIFIER, readQaView, recordRenderedReport, stateProbe, type QaView } from "./qa-state.ts";
 
 // Keep individual evidence files small enough to inspect, and cap the total
 // embedded payload so a full scenario matrix cannot produce an impractical
@@ -871,6 +871,19 @@ export function renderQaReport(
 		// The summary line, banner and AC board render the QA result; the overview describes the change itself.
 		const overviewResult = narrative.presentation?.overview?.match(/APPROVE|COMMENT|REQUEST_CHANGES|판정|검증 불가|미검증|신뢰도/);
 		if (overviewResult) throw new Error(`기능 개요 (presentation.overview) must describe the change, not the QA result ("${overviewResult[0]}"); the summary line, banner and AC board already show it`);
+		// Reader prose names what the user sees; file and code names belong to the audit section.
+		const p = narrative.presentation;
+		const readerProse: [string, string | undefined][] = [
+			["presentation.overview", p?.overview],
+			...Object.entries(p?.requirementMapping ?? {}).map(([index, entry]): [string, string | undefined] => [`presentation.requirementMapping.${index}.evidence`, entry.evidence]),
+			...Object.entries(p?.affectedUsers ?? {}).map(([id, text]): [string, string | undefined] => [`presentation.affectedUsers.${id}`, text]),
+			...Object.entries(p?.scenarioFlows ?? {}).map(([id, text]): [string, string | undefined] => [`presentation.scenarioFlows.${id}`, text]),
+			...Object.entries(narrative.scenarios ?? {}).map(([key, entry]): [string, string | undefined] => [`scenarios.${key}.observed`, entry.observed]),
+		];
+		for (const [field, text] of readerProse) {
+			const identifier = text?.match(CODE_IDENTIFIER);
+			if (identifier) throw new Error(`${field} names the code identifier "${identifier[0]}"; write what the reader sees (a test is "보유분 표 화면 테스트", not its file name)`);
+		}
 		for (const story of view.stories ?? []) {
 			const actor = actorFor(view, story);
 			for (const scenario of scenariosForStory(view, story.id)) {

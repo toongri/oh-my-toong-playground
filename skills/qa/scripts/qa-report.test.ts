@@ -1113,6 +1113,19 @@ describe("qa-report presentation layer", () => {
 		expect(() => renderQaReport(baseView(), { presentation: { overview: "운영자는 매일 새벽 자동 대조 작업에 기대지 않고 필요할 때 직접 실행한다." } }, fakeReader, fakeMermaid, undefined, true)).not.toThrow(/기능 개요/);
 	});
 
+	test("최종 보고서의 독자용 문장에 코드 이름을 쓰면 렌더를 거부한다", () => {
+		const reject = [
+			{ presentation: { requirementMapping: { "0": { satisfied: "yes" as const, scenarioRefs: [], evidence: "SelfIntakeSections.test.tsx 검증이 번호 표시를 확인한다." } } } },
+			{ presentation: { affectedUsers: { a: "운영자는 supplementCategories 맵을 본다." } } },
+			{ scenarios: { "s/x": { observed: "localStorage의 실행 표시가 비어 있었다." } } },
+		];
+		for (const narrative of reject) {
+			expect(() => renderQaReport(baseView(), narrative, fakeReader, fakeMermaid, undefined, true)).toThrow(/names the code identifier/);
+		}
+		const plain = { presentation: { requirementMapping: { "0": { satisfied: "yes" as const, scenarioRefs: [], evidence: "보유분 표 화면 테스트가 번호 표시를 확인한다." } } } };
+		expect(() => renderQaReport(baseView(), plain, fakeReader, fakeMermaid, undefined, true)).not.toThrow(/names the code identifier/);
+	});
+
 	test("공백만 있는 기능 개요 서사는 누락 gap으로 렌더한다", () => {
 		const html = renderQaReport(baseView(), { presentation: { overview: " \t\n " } }, fakeReader, fakeMermaid)!;
 		const overview = html.slice(html.indexOf("기능 개요"), html.indexOf(AC_START));

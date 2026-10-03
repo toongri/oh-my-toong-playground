@@ -214,7 +214,10 @@ there is no separate actor-roster table).
   `blocked`; `unverified` requires at least one valid `blocked`. Missing/legacy/malformed/duplicate/stale/unknown/ineligible
   mappings fail closed to a visible neutral gap (`미판정`) rather than a green
   verdict. Prose evidence explains a verdict but cannot establish it, so it names
-  only what the referenced scenarios show. A test that proves part of the
+  only what the referenced scenarios show, in reader words: a test is named by what
+  it checks ("보유분 표 화면 테스트"), never by its file name. The final render
+  refuses a code name in the overview, AC evidence, actor and story prose, and card
+  observations. A test that proves part of the
   criterion is a scenario recorded with `--evidence-surface test` and listed in
   `scenarioRefs`. Use
   **unverified (`unverified`)** — never `yes`/`partial` — when the requirement could
