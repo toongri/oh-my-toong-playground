@@ -352,3 +352,24 @@ REQUEST_CHANGES인 채로 `complete` 없이 끝났다.
   코드는 그대로"). 결과는 도달 배지와 시나리오 카드가 보여 준다.
 - 정리 중 런북이 중지하지 말라는 `emulator-5554`를 종료했다고 스스로 보고했다. 자기가 획득한 기기였는지는 기록으로
   확인하지 못했다.
+
+### r4 — #4345 dispenser (런타임 66752e96, fast)
+
+판정 **실패** (A5.5, A6.3·A6.2). QA 판정은 REQUEST_CHANGES이고 8개 중 통과 2, 실패 2, 막힘 4다. `complete`까지 갔다.
+
+- 크게 나아졌다. 저장소의 가상 메인보드로 디스펜서를 띄워 v1(601×961)·v2(667×1117) 두 프로필에서 실제 QR 화면을
+  캡처하고 디코드했다. QR이 STG 연결 주소·기기 연결 경로·시뮬레이터 기기 정보·유효한 nonce를 담는 것을 확인했다
+  (caecc8ff의 "저장소 하드웨어 시뮬레이터 우선" 규칙이 효과를 냈다). 두 프로필 시나리오에 layout claim이 있다.
+  승인 요청에는 STG 가구에 연결이 남을 수 있다는 것까지 적었다. 보고서는 감사 표 792/832, 375px 가로 스크롤 없음,
+  용어 설명이 붙은 제품 언어 개요로 B축을 통과한다.
+- **A5.5 실패.** 휴대폰 앱 시나리오 2개(H 하나)가 "StageDebug는 평문 통신 정책으로 JS 번들을 못 받고, StageRelease는
+  서명 키 storeFile이 없다"로 막혔다. 릴리스 서명은 `android/keystore.properties`가 있을 때만 설정되고, 저장소에
+  `android/app/debug.keystore`가 있다. 로컬 설정 파일 하나로 서명할 수 있는 설정 문제다.
+- **A6.3 실패.** 실패 2건 모두 확정된 제품 결함이 아니다.
+  - `store-link-redirect`(H): "OneLink 응답의 스토어 referrer에 페어링 경로·nonce가 없다"를 실패로 기록했다. 앱은 지연
+    딥링크를 AppsFlyer SDK의 `appsFlyer.onDeepLink`로 받는다(`apps/mobile/src/presentation/navigation/linkingSubscribe.ts`
+    351행). referrer는 앱이 읽는 경로가 아니다.
+  - `qr-service-recovery`(M): 자동 재시도를 기대했지만, QA 스스로 "PR·현행 동작·런북이 보장하지 않는다"고 적었다.
+  - 보고서는 "실패 2건은 제품 결함 수가 아니다"라고 설명하면서 그 실패로 REQUEST_CHANGES를 냈다(A6.2).
+  → 고친 것: SKILL.md red flag 세 줄. 릴리스 서명·번들 로딩은 로컬 설정 작업이다. 값이 없다는 실패는 클라이언트가 실제로
+  읽는 경로에서 증명한다. `expected`는 PR·스펙·런북이 약속한 것으로만 쓴다.
