@@ -29,7 +29,7 @@ known-case-first selection, external-manifest states, native driver formats,
 the `qa-replay.ts` wrapper, `record-scenario --case-run RECEIPT` binding, and the
 independent reset/re-run required before a case is reusable.
 
-**Inputs.** qa accepts a plan, issue, spec, PR, or a QA REQUEST. Whatever arrives, qa reads the source material itself — the plan/issue/spec text and the diff — and authors the acceptance criteria and stories from it. An earlier state file, a previous report, or a caller's summary is never the source of requirements; a `goal` qa did not write from the source is a defect. Write each acceptance criterion as an outcome a user or operator can observe ("가구 구성원 앱의 섭취 시간대가 새 기록 기준으로 표시된다"), in the report's language (Korean by default), never as an implementation sentence ("IntakeReadRepo returns …"). One criterion holds one outcome: write "담은 영양제가 앞에 모인다" and "담지 않은 영양제의 순서는 그대로다" as two criteria, so each gets its own verdict and its own proving scenario.
+**Inputs.** qa accepts a plan, issue, spec, PR, or a QA REQUEST. Whatever arrives, qa reads the source material itself — the plan/issue/spec text and the diff — and authors the acceptance criteria and stories from it. An earlier state file, a previous report, or a caller's summary is never the source of requirements; a `goal` qa did not write from the source is a defect. Write each acceptance criterion as an outcome a user or operator can observe ("가구 구성원 앱의 섭취 시간대가 새 기록 기준으로 표시된다"), in the report's language (Korean by default), never as an implementation sentence ("IntakeReadRepo returns …"). One criterion holds one outcome: write "담은 영양제가 앞에 모인다" and "담지 않은 영양제의 순서는 그대로다" as two criteria, so each gets its own verdict and its own proving scenario. Take the criteria from every item the source lists under what it changed, including what it says it keeps (a job left for on-demand runs) and the docs an operator follows; each item gets a criterion. A kept path is proven by running it, not by its unchanged code.
 
 A caller that has one composes a QA REQUEST using this structure:
 
@@ -342,7 +342,7 @@ Loop back to CHECK. Continue until an EXIT condition below fires.
 Every background resource this cycle starts is recorded, together with the command that stops it:
 
 - **Simulator or emulator**: get it only through `acquire-device` (stage3-handson.md, Modality Setup), and only when a claim needs a rendered mobile screen. The command creates a device owned by this session and records it. Release it as soon as its scenarios are recorded. A device that is already booted may belong to another concurrent session or to the user. Do not reuse it unless the user names it, and never record or stop it.
-- **Server or other process**: record it right after it starts:
+- **Server or other process**: record it right after it starts. A tool that leaves its own daemon behind (`agent-react-devtools`, a Metro that a run script started) counts too: find that PID after the call and record it.
 
 ```
 bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts record-resource --id <pid> --kind server --stop 'kill <pid> 2>/dev/null; for _ in $(seq 50); do kill -0 <pid> 2>/dev/null || exit 0; sleep 0.2; done; exit 1'
