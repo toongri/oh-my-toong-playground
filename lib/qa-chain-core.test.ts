@@ -316,14 +316,16 @@ describe("qa chain core", () => {
 		expect(recordComplete(state, probe)).toBe(false);
 		expect(requestChangesOk(state, probe)).toBe(true);
 	});
-	test("blocked 시나리오는 시도 로그가 읽히고 시도 내역이 있을 때만 기록 완결로 인정되고 H여도 APPROVE를 막지 않음", () => {
+	test("blocked 시나리오는 시도 로그가 읽히고 시도 내역이 있을 때만 기록 완결로 인정되고 H이면 APPROVE 대신 COMMENT만 허용", () => {
 		const state = serverState();
 		const { evidence: _evidence, ...rest } = state.scenarios[0];
 		state.scenarios[0] = { ...rest, status: "blocked", blocked: { obstacle: "페어링 코드 입력 필요", attempts: ["pairing → 코드 입력 대기"], deepest_reachable: "서비스 테스트", attempt_log: "/missing" } };
 		expect(recordComplete(state, probe)).toBe(false);
 		state.scenarios[0].blocked!.attempt_log = "/attempts.log";
 		expect(recordComplete(state, probe)).toBe(true);
-		expect(approveOk(state, probe)).toBe(true);
+		expect(state.scenarios[0].priority).toBe("H");
+		expect(approveOk(state, probe)).toBe(false);
+		expect(commentOk(state, probe)).toBe(true);
 		state.scenarios[0].blocked!.attempts = [];
 		expect(recordComplete(state, probe)).toBe(false);
 	});

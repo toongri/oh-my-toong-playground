@@ -550,7 +550,8 @@ A risk that nothing on the changed surface can carry is not a scenario state: it
 | PRE-FLIGHT contract violation | **REQUEST_CHANGES** (MUST-NOT-DO / B⊆A violated, cycle not executed) |
 | A recorded product failure: a failed scenario, baseline, stale-state, or flaky-rerun check (unresolved after the loop, or a stop-driving failure) | **REQUEST_CHANGES** — name the failure and its evidence |
 | CHECK soft-passes: every scenario recorded; the only failures are self-authored `M`/`L` rows in the 50–74 nitpick band | **COMMENT** (never APPROVE — the failed row stays FAIL in the roster) |
-| Every scenario `pass` or `blocked`; baseline and run checks green | **APPROVE** (or **COMMENT** to surface LOW notes). Each `blocked` scenario is named in the report banner and in your final message |
+| Every scenario `pass`, or `blocked` at M/L priority; baseline and run checks green | **APPROVE** (or **COMMENT** to surface LOW notes). Each `blocked` scenario is named in the report banner and in your final message |
+| An H scenario `blocked`, no failure | **COMMENT**: its requirement is unproven, so the CLI refuses APPROVE |
 | Any scenario unrecorded and no recorded failure | **No verdict.** Execute the remaining scenarios, cheapest proof first. A request to hurry or wrap up means execute faster, not stop. Only when the user explicitly says to stop verifying or to defer the rest: say which scenarios remain and why, show `force-complete`, run `await-user`, and end the turn |
 
 REQUEST_CHANGES is a request to change the product. Work you did not do is not a product defect: the CLI refuses REQUEST_CHANGES without a recorded failure, and refuses APPROVE and COMMENT while a scenario is unrecorded. The verdict never describes the cycle as end-to-end unless the roster's `driven-at` values say it was.

@@ -953,11 +953,11 @@ describe("qa-report client impact and device profiles", () => {
 		const section = actorsSection(renderQaReport(view, {}, fakeReader)!);
 		const lines = section.match(/<p class="client-impact">.*?<\/p>/g)!;
 		expect(lines.length).toBe(3);
-		expect(lines[0]).toContain("화면 증거 필요 — 클라이언트 화면이 바뀌어 기기 프로필마다 화면으로 검증함");
+		expect(lines[0]).toContain("검증 방법: 기기 프로필마다 화면 캡처 — 클라이언트 화면이 바뀜");
 		expect(lines[0]).toContain("재고 카드 레이아웃이 바뀜");
-		expect(lines[1]).toContain("화면 증거 불필요 — 클라이언트 화면 코드는 그대로이고, 클라이언트가 실제로 보내는 요청으로 검증함");
+		expect(lines[1]).toContain("검증 방법: 클라이언트가 실제로 보내는 요청 — 클라이언트 화면 코드는 그대로");
 		expect(lines[1]).toContain("어드민 화면 코드는 그대로임");
-		expect(lines[2]).toContain("화면 증거 불필요 — 이 유저의 결과를 그리는 클라이언트가 없음");
+		expect(lines[2]).toContain("검증 방법: 화면 없이 확인 — 이 유저의 결과를 그리는 클라이언트가 없음");
 		expect(lines[2]).toContain("결과를 그리는 클라이언트가 없음");
 	});
 

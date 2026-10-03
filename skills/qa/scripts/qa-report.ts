@@ -407,9 +407,9 @@ function renderOverview(narrative: QaReportNarrative): string {
  * and live in the record-faithful Actor Roster audit table below.
  */
 const CLIENT_IMPACT_LABEL: Record<string, string> = {
-	none: "화면 증거 불필요 — 이 유저의 결과를 그리는 클라이언트가 없음",
-	contract: "화면 증거 불필요 — 클라이언트 화면 코드는 그대로이고, 클라이언트가 실제로 보내는 요청으로 검증함",
-	render: "화면 증거 필요 — 클라이언트 화면이 바뀌어 기기 프로필마다 화면으로 검증함",
+	none: "검증 방법: 화면 없이 확인 — 이 유저의 결과를 그리는 클라이언트가 없음",
+	contract: "검증 방법: 클라이언트가 실제로 보내는 요청 — 클라이언트 화면 코드는 그대로",
+	render: "검증 방법: 기기 프로필마다 화면 캡처 — 클라이언트 화면이 바뀜",
 };
 
 function profileLabel(view: QaView, id: string): string {

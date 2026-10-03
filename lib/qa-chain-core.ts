@@ -556,7 +556,8 @@ function verdictGround(state: QaChainState, probe: EvidenceProbe): boolean {
 // Priority orders execution; it never decides whether an unexecuted scenario may
 // pass the verdict gate. A `blocked` scenario resolves, and the report names it.
 export function approveOk(state: QaChainState, probe: EvidenceProbe): boolean {
-	return verdictGround(state, probe) && currentScenarios(state).every((scenario) => scenario.status === "pass" || scenario.status === "blocked");
+	// A blocked H scenario leaves its requirement unproven: COMMENT at most, never APPROVE.
+	return verdictGround(state, probe) && currentScenarios(state).every((scenario) => scenario.status === "pass" || (scenario.status === "blocked" && scenario.priority !== "H"));
 }
 
 /** Soft pass: a failed non-H scenario (the 50-74 nitpick band) permits COMMENT. */
