@@ -235,7 +235,7 @@ A **caller-provided** scenario runs verbatim at whatever layer it enters; record
 
 **Bootstrap only what the surface needs.** A missing precondition is work, not an obstacle. Verify an undeployed change on an isolated local instance you own, supplying any missing env config yourself. Take accounts and data from the project's documented QA provisioning first (see [stage1-commands.md] Discovery Order); only when none exists, seed rows, sign up, or mint a token. Install a missing tool outside the worktree. When the QA REQUEST verifies the deployment itself, the deployed environment is the surface and its failure is the FAIL.
 
-**Boundary substitution.** Fake only a hop you cannot reach — absent hardware, an off-network third party — and record it in `driven-at`. A step a person can do for you (a pairing code, an OTP) is not such a hop: ask for it with `await-user`. If even substitution is impossible, record the scenario `blocked` — never PASS — with the structural limit and the attempts that hit it:
+**Boundary substitution.** Fake only a hop you cannot reach — absent hardware, an off-network third party — and record it in `driven-at`. For absent hardware, first look for the simulator the repo ships for it (a virtual mainboard, a mock device server, a `scripts/emulator/` directory and its README) and run its setup on your acquired device; that is the project's own substitute. A step a person can do for you (a pairing code, an OTP) is not such a hop: ask for it with `await-user`. If even substitution is impossible, record the scenario `blocked` — never PASS — with the structural limit and the attempts that hit it:
 
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts record-scenario --story … --scenario … --status blocked \
@@ -270,6 +270,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts record-scenario --story … --scenar
 | "A Fold is about 345 dp wide, I'll use that" | Read the project's device profiles. If none exist, ask the user and save them. Never guess a size. |
 | "The component test proves the fallback; I'll attach a nearby screenshot for the profile" | A screenshot that does not show the outcome is not evidence. Prove that scenario with the test and no profile, or make the state happen on screen and capture it. |
 | "agent-device says the device is in use / ambiguous, so the scenario is blocked" | Drive the device `acquire-device` gave you with the flags it printed. A session you opened yourself is closed with `agent-device close --session <name>`. |
+| "The emulator has no controller or hardware ID, so the device screen is blocked" | Search the repo for its own hardware simulator and run its setup steps on the acquired device. `blocked` names that search and where its setup failed. |
 | "The documented seeder cannot make this data state, so the scenario is blocked" | The documented path came first; it is not the only path. Write the rows yourself on the stack you own (SQL, its API, a fixture script). `blocked` needs a limit that your own seeding cannot pass either. |
 | "The approved scope says no server writes, so the QR scenario is blocked" | You wrote that scope. Ask for the one write the scenario needs (`await-user`). |
 | "The layout looks fine on my one emulator" | A `render` actor is proven on every profile it runs on. One screen size proves one profile. |
